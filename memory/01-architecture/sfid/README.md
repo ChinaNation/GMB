@@ -183,7 +183,6 @@ curl http://127.0.0.1:8899/api/v1/health
 - `GET /api/v1/chain/reward/state`：查询某公钥绑定奖励状态机当前状态。
 - `POST /api/v1/bind/request`：提交公钥绑定申请（支持回调字段，见下）。
 - `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证，重复查询不会生成新 `nonce`。
-- `GET /api/v1/bind/result`：`signature` 为 Runtime 凭证签名，`sfid_signature` 为历史兼容字段（旧 JSON 绑定证明签名）。
 - `POST /api/v1/vote/verify`：查询公钥当前投票资格（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
 - 接口鉴权：仅允许区块链调用方访问，请求必须携带：
   - `x-chain-token`

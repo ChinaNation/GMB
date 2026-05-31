@@ -82,8 +82,7 @@ class QrSigner {
       throw QrSignException(QrSignErrorCode.invalidFormat, e.message);
     }
     if (env.kind != QrKind.signRequest) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, '二维码类型不是签名请求');
+      throw const QrSignException(QrSignErrorCode.invalidField, '二维码类型不是签名请求');
     }
     final body = env.body as SignRequestBody;
     _validateRequestId(env.id!);
@@ -153,33 +152,27 @@ class QrSigner {
 
   void _validateRequestId(String requestId) {
     if (!_idPattern.hasMatch(requestId)) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, 'id 格式错误');
+      throw const QrSignException(QrSignErrorCode.invalidField, 'id 格式错误');
     }
   }
 
   void _validateAddress(String address) {
     if (!_addressPattern.hasMatch(address)) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, 'address 格式错误');
+      throw const QrSignException(QrSignErrorCode.invalidField, 'address 格式错误');
     }
   }
 
   void _validateHexField(String value, String field) {
-    // feedback_pubkey_format_rule 铁律: 内部统一 0x 小写 hex。
-    // 拒绝裸 hex, 强制 0x 前缀。SignRequestBody.fromJson 同要求。
+    // sign_request 机读字段统一使用 0x hex,拒绝裸 hex。
     if (!value.startsWith('0x')) {
-      throw QrSignException(
-          QrSignErrorCode.invalidField, '$field 必须以 0x 开头');
+      throw QrSignException(QrSignErrorCode.invalidField, '$field 必须以 0x 开头');
     }
     final text = value.substring(2);
     if (text.isEmpty || text.length.isOdd) {
-      throw QrSignException(
-          QrSignErrorCode.invalidField, '$field 必须是偶数字节 hex');
+      throw QrSignException(QrSignErrorCode.invalidField, '$field 必须是偶数字节 hex');
     }
     if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(text)) {
-      throw QrSignException(
-          QrSignErrorCode.invalidField, '$field 必须是合法 hex');
+      throw QrSignException(QrSignErrorCode.invalidField, '$field 必须是合法 hex');
     }
   }
 
@@ -193,24 +186,21 @@ class QrSigner {
           QrSignErrorCode.invalidField, 'expires_at 必须晚于 issued_at');
     }
     if (expiresAt - issuedAt > maxTtlSeconds) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, 'TTL 超过 300 秒');
+      throw const QrSignException(QrSignErrorCode.invalidField, 'TTL 超过 300 秒');
     }
     if (issuedAt > now + maxClockSkewSeconds) {
       throw const QrSignException(
           QrSignErrorCode.invalidField, 'issued_at 超出设备时间范围');
     }
     if (expiresAt < now) {
-      throw const QrSignException(
-          QrSignErrorCode.expired, '交易签名请求已过期');
+      throw const QrSignException(QrSignErrorCode.expired, '交易签名请求已过期');
     }
   }
 
   int _now() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   static List<int> _hexToBytes(String input) {
-    final text =
-        input.startsWith('0x') ? input.substring(2) : input;
+    final text = input.startsWith('0x') ? input.substring(2) : input;
     if (text.isEmpty || text.length.isOdd) return const <int>[];
     return List<int>.generate(
       text.length ~/ 2,

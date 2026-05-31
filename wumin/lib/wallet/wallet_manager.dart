@@ -447,24 +447,13 @@ class WalletManager {
   Future<void> _writeMnemonic(int walletIndex, String mnemonic) async {
     // AES-256-GCM 加密后存储
     final encrypted = await MnemonicCipher.encrypt(mnemonic);
-    await _secureStorage.write(key: _mnemonicKey(walletIndex), value: encrypted);
+    await _secureStorage.write(
+        key: _mnemonicKey(walletIndex), value: encrypted);
   }
 
   Future<String?> _readMnemonic(int walletIndex) async {
     final stored = await _secureStorage.read(key: _mnemonicKey(walletIndex));
     if (stored == null) return null;
-
-    // 兼容旧版明文格式：检测到明文则自动迁移为加密格式，
-    // 迁移后从密文重新解密返回，不直接返回明文引用。
-    if (!MnemonicCipher.isEncrypted(stored)) {
-      final encrypted = await MnemonicCipher.encrypt(stored);
-      await _secureStorage.write(
-        key: _mnemonicKey(walletIndex),
-        value: encrypted,
-      );
-      return MnemonicCipher.decrypt(encrypted);
-    }
-
     return MnemonicCipher.decrypt(stored);
   }
 
@@ -544,10 +533,8 @@ class WalletManager {
     late int walletIndex;
     late int newSortOrder;
     await isar.writeTxn(() async {
-      final rows = await isar.walletProfileEntitys
-          .where()
-          .sortByWalletIndex()
-          .findAll();
+      final rows =
+          await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
       final used = rows.map((e) => e.walletIndex).toSet();
       walletIndex = 1;
       while (used.contains(walletIndex)) {
@@ -667,13 +654,10 @@ class WalletManager {
       createdAtMillis: row.createdAtMillis,
       source: row.source,
       signMode: row.signMode,
-      groupNames: row.groupNames.isEmpty
-          ? const []
-          : row.groupNames.split(','),
+      groupNames: row.groupNames.isEmpty ? const [] : row.groupNames.split(','),
       sortOrder: row.sortOrder,
     );
   }
-
 }
 
 class _DerivedWallet {

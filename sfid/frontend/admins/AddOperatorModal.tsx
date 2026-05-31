@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { Button, Form, Input, Modal, Select } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../common/ScanAccountModal';
+import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 
 interface AddOperatorModalProps {
@@ -38,12 +39,14 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
         title={<div style={{ textAlign: 'center', width: '100%' }}>新增市级管理员</div>}
         open={addOperatorOpen}
         onCancel={() => {
+          if (addOperatorLoading) return;
           addOperatorForm.resetFields();
           setAddOperatorOpen(false);
         }}
         footer={[
           <Button
             key="cancel"
+            disabled={addOperatorLoading}
             onClick={() => {
               addOperatorForm.resetFields();
               setAddOperatorOpen(false);
@@ -61,6 +64,9 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
           </Button>,
         ]}
         destroyOnClose
+        closable={!addOperatorLoading}
+        maskClosable={!addOperatorLoading}
+        zIndex={SFID_MODAL_Z_INDEX.business}
       >
         <Form
           form={addOperatorForm}

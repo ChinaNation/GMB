@@ -53,6 +53,18 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
+  String ss58FromBytes(List<int> bytes) => Keyring().encodeAddress(bytes, 2027);
+
+  String ss58FromHex(String value) {
+    final clean = value.startsWith('0x') ? value.substring(2) : value;
+    final bytes = List<int>.generate(
+      clean.length ~/ 2,
+      (i) => int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16),
+      growable: false,
+    );
+    return ss58FromBytes(bytes);
+  }
+
   group('PayloadDecoder', () {
     test('decodes transfer_keep_alive (pallet=2 call=3)', () {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
@@ -175,25 +187,24 @@ void main() {
       expect(decoded.fields['province'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
-        '0x${adminPubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        ss58FromBytes(adminPubkey),
       );
     });
 
-    test('cast_referendum 旧 SCALE 字节流(无 province/admin)拒绝解码', () {
-      // ADR-008 step3 后 SCALE 必须含新字段。旧字节流长度不足 → null。
-      // feedback_no_compatibility:不留兼容垫片,老凭证不识别即拒绝。
+    test('cast_referendum 缺少 province/admin 时拒绝解码', () {
+      // ADR-008 step3 后 SCALE 必须含新字段。缺字段字节流长度不足 → null。
       final payload = Uint8List.fromList([
         0x17, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0,
         ...List.filled(32, 0),
         0,
         0,
-        1, // 旧版只到 approve, 长度 = 45
+        1, // 只到 approve,长度 = 45。
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex);
-      expect(decoded, isNull, reason: '旧凭证长度 45 < 78 必须被拒绝, 防止白盲签');
+      expect(decoded, isNull, reason: '凭证长度 45 < 78 必须被拒绝');
     });
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
@@ -224,9 +235,46 @@ void main() {
       expect(PayloadDecoder.decode('0x02'), isNull);
     });
 
-    // spec_version 门控测试已删:strict 两色模式独家把关,decoder 不再因 spec_version
-    // 拒绝解码;chain pallet 索引若变(如新 spec 重排),decoder 解析到错 action ↔
-    // display.action 不一致 → mismatched → 禁止签名,无需 spec_version 锁布局。
+    test('decodes sfid_admin_action with SS58 review fields', () {
+      final actor = '0x${List.filled(32, '11').join()}';
+      final target = '0x${List.filled(32, '22').join()}';
+      final payload = jsonEncode({
+        'domain': 'sfid_admin_governance',
+        'qr_proto': 'WUMIN_QR_V1',
+        'action_id': 'admin-action-test',
+        'action_type': 'PASSKEY_REGISTER',
+        'actor_pubkey': actor,
+        'actor_province': '广东省',
+        'target': target,
+        'request_hash': '0x${List.filled(32, '33').join()}',
+        'before_hash': 'none',
+        'after_hash': '0x${List.filled(32, '44').join()}',
+        'expires_at': 1779984120,
+      });
+
+      final decoded = PayloadDecoder.decode(hexOf(utf8.encode(payload)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'sfid_admin_action');
+      expect(decoded.fields['action_type'], '更新 Passkey');
+      expect(decoded.reviewFields['actor_pubkey'], ss58FromHex(actor));
+      expect(decoded.reviewFields['target'], ss58FromHex(target));
+      expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
+    });
+
+    test('decodes archive_delete with SS58 review fields', () {
+      final admin = '0x${List.filled(32, '22').join()}';
+      final payload =
+          'CPMS_ARCHIVE_DELETE_V1|adc_test|archive_internal|ARCHIVE123|$admin|1779984120';
+
+      final decoded = PayloadDecoder.decode(hexOf(utf8.encode(payload)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'archive_delete');
+      expect(decoded.fields['admin_pubkey'], ss58FromHex(admin));
+      expect(decoded.reviewFields['admin_pubkey'], ss58FromHex(admin));
+      expect(decoded.reviewFields.containsKey('archive_id'), isFalse);
+    });
 
     test('decodes clearing bank register node call', () {
       const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
@@ -362,7 +410,7 @@ void main() {
       expect(decoded!.fields['institution'], '中枢省储备委员会');
     });
 
-    test('rejects legacy naked subject for propose_sweep_to_main', () {
+    test('rejects naked subject for propose_sweep_to_main', () {
       const sfidNumber = 'GFR-LN001-CB0X-944805165-2026';
       final idBytes = List<int>.filled(48, 0);
       final idChars = sfidNumber.codeUnits;
@@ -399,7 +447,10 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_transfer');
-      expect(decoded.fields['institution'], startsWith('机构账户 66666666'));
+      expect(
+        decoded.fields['institution'],
+        '机构账户 ${ss58FromBytes(institutionAccount)}',
+      );
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], 'test');
     });
@@ -514,7 +565,7 @@ void main() {
     });
 
     test('rejects deleted business wrappers (pallet=19/14/12/16)', () {
-      // Phase 4 物理删除的旧 call_index 不应再被解码识别。
+      // Phase 4 物理删除的 call_index 不应再被解码识别。
       final cases = <List<int>>[
         [0x13, 0x03], // execute_transfer
         [0x13, 0x04], // execute_safety_fund_transfer
@@ -567,7 +618,7 @@ void main() {
       expect(decoded.summary, contains('管理员集合变更'));
     });
 
-    test('rejects legacy propose_admin_set_change without new_threshold', () {
+    test('rejects propose_admin_set_change without new_threshold', () {
       final subject = subjectIdFromAccount(
         0x03,
         List<int>.generate(32, (i) => 0x80 + i),
@@ -665,26 +716,8 @@ void main() {
       expect(decoded.fields['org'], '其他机构账户');
       expect(decoded.fields['subject'],
           '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
-      expect(decoded.fields['pubkey'], '0x${'aa' * 32}');
-    });
-
-    test('rejects legacy admin activation payload', () {
-      final payload = Uint8List.fromList([
-        ...utf8.encode('GMB_ACTIVATE'),
-        ...utf8.encode('GFR-LN001-CB0X-944805165-2026'),
-        ...List<int>.filled(48 - 'GFR-LN001-CB0X-944805165-2026'.length, 0),
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        ...List<int>.filled(16, 0),
-      ]);
-
-      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+      expect(decoded.fields['pubkey'], ss58FromBytes(pubkey));
+      expect(decoded.reviewFields['pubkey'], ss58FromBytes(pubkey));
     });
 
     test('decodes institution-account admin set change org labels', () {
@@ -800,7 +833,7 @@ void main() {
     //   (走 PopulationSnapshotVerifier 双层签发)
     // -----------------------------------------------------------------------
 
-    List<int> buildProposeCreateInstitutionPayload({bool legacyTail = false}) {
+    List<int> buildProposeCreateInstitutionPayload({bool extraTail = false}) {
       List<int> u128Le(BigInt value) {
         final out = List<int>.filled(16, 0);
         var tmp = value;
@@ -864,7 +897,7 @@ void main() {
         // ★ signer_admin_pubkey: [u8;32]
         ...signerAdminPubkey,
       ];
-      if (legacyTail) {
+      if (extraTail) {
         final a3 = utf8.encode('SFR');
         final subType = utf8.encode('SHENG_BANK');
         payload.addAll([
@@ -902,16 +935,16 @@ void main() {
       expect(decoded.fields['province'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
-        '0x${signerAdminPubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        ss58FromBytes(signerAdminPubkey),
       );
     });
 
-    test('propose_create_institution 带旧尾字段时拒绝解码', () {
+    test('propose_create_institution 带多余尾字段时拒绝解码', () {
       final payload = Uint8List.fromList(
-          buildProposeCreateInstitutionPayload(legacyTail: true));
+          buildProposeCreateInstitutionPayload(extraTail: true));
       final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNull,
-          reason: 'P-TX-001 禁止 a3/sub_type/parent_sfid_number 旧尾字段');
+          reason: 'P-TX-001 禁止 a3/sub_type/parent_sfid_number 多余尾字段');
     });
 
     test('decodes current propose_create_personal with regular_threshold field',
@@ -945,7 +978,7 @@ void main() {
       expect(decoded.fields.containsKey('threshold'), isFalse);
     });
 
-    test('rejects old propose_create_personal without regular_threshold', () {
+    test('rejects propose_create_personal without regular_threshold', () {
       final name = utf8.encode('家庭基金');
       final admins = [
         List<int>.filled(32, 0x11),
@@ -992,9 +1025,7 @@ void main() {
       expect(decoded, isNull);
     });
 
-    test(
-        'rejects legacy propose_create_personal with admin_count and threshold',
-        () {
+    test('rejects propose_create_personal with admin_count and threshold', () {
       final name = utf8.encode('家庭基金');
       final admins = [
         List<int>.filled(32, 0x11),
@@ -1061,8 +1092,10 @@ void main() {
       expect(decoded.fields['approve'], 'true');
       expect(decoded.fields['province'],
           (caseEntry['fields'] as Map)['province_utf8']);
-      expect(decoded.fields['signer_admin_pubkey'],
-          (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
+      expect(
+          decoded.fields['signer_admin_pubkey'],
+          ss58FromHex((caseEntry['fields'] as Map)['signer_admin_pubkey_hex']
+              as String));
     });
 
     // 协议升级 fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
@@ -1078,8 +1111,10 @@ void main() {
       expect(decoded!.action, 'propose_resolution_issuance');
       expect(decoded.fields['province'],
           (caseEntry['fields'] as Map)['province_utf8']);
-      expect(decoded.fields['signer_admin_pubkey'],
-          (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
+      expect(
+          decoded.fields['signer_admin_pubkey'],
+          ss58FromHex((caseEntry['fields'] as Map)['signer_admin_pubkey_hex']
+              as String));
       expect(decoded.fields['eligible_total'],
           (caseEntry['fields'] as Map)['eligible_total'].toString());
       expect(decoded.fields['allocation_count'], '2');
@@ -1147,7 +1182,7 @@ void main() {
       expect(decoded.fields['province'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
-        '0x${signerAdmin.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        ss58FromBytes(signerAdmin),
       );
     });
   });

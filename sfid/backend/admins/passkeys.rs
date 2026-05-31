@@ -23,7 +23,7 @@ use crate::crypto::pubkey::same_admin_pubkey;
 use crate::models::{
     AdminPasskeyCredential, AdminPasskeyRegistrationChallenge, AdminPasskeyStatus,
 };
-use crate::qr::{build_sign_request, display_field as field};
+use crate::qr::{build_sign_request, display_account, display_field as field};
 use crate::*;
 
 pub(crate) const ADMIN_ACTION_TTL_SECONDS: i64 = 300;
@@ -154,10 +154,16 @@ pub(crate) async fn start_passkey_registration(
         vec![
             field("action_type", "操作", "更新 Passkey"),
             field("province", "省份", province.as_str()),
-            field("actor_pubkey", "管理员", ctx.admin_pubkey.as_str()),
-            field("target", "目标账户", ctx.admin_pubkey.as_str()),
-            field("after_hash", "变更后", request_hash.as_str()),
-            field("payload_hash", "负载哈希", payload_hash.as_str()),
+            field(
+                "actor_pubkey",
+                "管理员",
+                display_account(ctx.admin_pubkey.as_str()).as_str(),
+            ),
+            field(
+                "target",
+                "目标账户",
+                display_account(ctx.admin_pubkey.as_str()).as_str(),
+            ),
         ],
     ) {
         Ok(v) => v,

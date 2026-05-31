@@ -12,7 +12,6 @@ import 'package:wumin/qr/bodies/sign_request_body.dart';
 import 'package:wumin/signer/qr_signer.dart';
 import 'package:wumin/wallet/wallet_manager.dart';
 
-
 SignRequestEnvelope _buildTestRequest({
   required String requestId,
   required String address,
@@ -48,8 +47,7 @@ void main() {
       hotWallet = (await walletManager.getWalletByIndex(1))!;
     });
 
-    test(
-        'signParsedRequest should sign matched internal_vote (统一入口)',
+    test('signParsedRequest should sign matched internal_vote (统一入口)',
         () async {
       // 所有管理员投票走 InternalVote(22).cast(0)
       // payload = [0x16][0x00][u64 LE proposal_id=1][bool approve=1]
@@ -88,9 +86,6 @@ void main() {
         isTrue,
       );
     });
-
-    // spec_version 门控测试已删:strict 两色模式独家把关,
-    // 任何 spec_version 都尝试解码,布局变了 strict 模式自然拦下来。
 
     test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
       // decode 成功但 display.action 和 decoded.action 不一致 → 红色拒签。
@@ -132,12 +127,14 @@ void main() {
         requestId: 'offline-req-test-known',
         address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
-        payloadHex: '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0491',
+        payloadHex:
+            '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0491',
         display: const SignDisplay(
           action: 'transfer',
           summary: 'test transfer',
           fields: [
-            SignDisplayField(key: 'amount_yuan', label: '金额', value: '0.01 GMB'),
+            SignDisplayField(
+                key: 'amount_yuan', label: '金额', value: '0.01 GMB'),
           ],
         ),
       );
@@ -188,8 +185,7 @@ bool _verifySr25519({
     final signature = sr25519.Signature.fromBytes(
       Uint8List.fromList(_hexToBytes(signatureHex)),
     );
-    final (verified, _) =
-        sr25519.Sr25519.verify(publicKey, signature, message);
+    final (verified, _) = sr25519.Sr25519.verify(publicKey, signature, message);
     return verified;
   } catch (_) {
     return false;
@@ -197,10 +193,9 @@ bool _verifySr25519({
 }
 
 List<int> _hexToBytes(String input) {
-  final text =
-      (input.startsWith('0x') || input.startsWith('0X'))
-          ? input.substring(2)
-          : input;
+  final text = (input.startsWith('0x') || input.startsWith('0X'))
+      ? input.substring(2)
+      : input;
   if (text.isEmpty || text.length.isOdd) return const <int>[];
   return List<int>.generate(
     text.length ~/ 2,

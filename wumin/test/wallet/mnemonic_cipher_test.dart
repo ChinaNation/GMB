@@ -44,32 +44,13 @@ void main() {
       expect(d2, mnemonic);
     });
 
-    test('isEncrypted 正确识别加密密文', () async {
-      const mnemonic = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
-      final encrypted = await MnemonicCipher.encrypt(mnemonic);
-      expect(MnemonicCipher.isEncrypted(encrypted), isTrue);
-    });
-
-    test('isEncrypted 正确识别明文助记词', () {
-      const plaintext =
-          'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
-      expect(MnemonicCipher.isEncrypted(plaintext), isFalse);
-    });
-
-    test('isEncrypted 对空字符串返回 false', () {
-      expect(MnemonicCipher.isEncrypted(''), isFalse);
-    });
-
-    test('isEncrypted 对短字符串返回 false', () {
-      expect(MnemonicCipher.isEncrypted('abc'), isFalse);
-    });
-
     test('解密被篡改的密文抛出异常', () async {
       const mnemonic = 'test mnemonic words here only for testing';
       final encrypted = await MnemonicCipher.encrypt(mnemonic);
 
       // 篡改密文中的一个字符
-      final tampered = '${encrypted.substring(0, 10)}X${encrypted.substring(11)}';
+      final tampered =
+          '${encrypted.substring(0, 10)}X${encrypted.substring(11)}';
       expect(
         () => MnemonicCipher.decrypt(tampered),
         throwsA(isA<FormatException>()),

@@ -9,7 +9,7 @@
 
 mod sign_request;
 
-pub(crate) use sign_request::{build_sign_request, display_field};
+pub(crate) use sign_request::{build_sign_request, display_account, display_field};
 
 use serde::{Deserialize, Serialize};
 

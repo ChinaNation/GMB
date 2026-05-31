@@ -1,0 +1,7 @@
+// 中文注释:SFID 前端弹窗层级统一表。业务弹窗保持在底层,
+// Passkey 后续冷钱包签名弹窗必须盖住所有编辑/确认弹窗。
+export const SFID_MODAL_Z_INDEX = {
+  business: 1000,
+  accountScan: 1600,
+  securitySignature: 3000,
+} as const;

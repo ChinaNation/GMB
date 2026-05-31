@@ -5,25 +5,22 @@
 `lib/signer` 是签名能力的独立模块，统一承载：
 
 - 手机本机签名（私钥/助记词在手机本地）
-- 扫码签名协议（手机不存私钥，外部设备签名）
+- 扫码签名请求与回执结构校验
 
 设计原则：
 
 - `wallet` 管钱包与密钥材料生命周期
 - `signer` 管签名算法与签名协议
-- `login`、`onchain` 只编排流程，不直接写签名细节
+- `login`、`onchain`、`myid` 只编排流程，不直接写签名细节
+- 冷钱包离线解码和独立确认由 `wumin/lib/signer/` 承担，wuminapp 不实现冷钱包签名放行规则
 
 ## 2. 目录结构
 
 ```text
 lib/signer/
 ├── local_signer.dart
-├── offline_sign_service.dart
-├── payload_decoder.dart
 ├── qr_signer.dart
-├── signer.dart
-├── system_signature_verifier.dart
-└── SIGNER_TECHNICAL.md
+└── signer.dart
 ```
 
 ## 3. 本机签名（LocalSigner）
@@ -56,7 +53,7 @@ lib/signer/
 - 定义请求/回执数据结构与校验
 - 校验 request/response 关键信息一致性（`request_id`、`account`、`payload_hash`）
 - 校验过期时间、时钟偏差、hex 字段合法性
-- 请求包含 `display` 字段（人可读交易摘要），解决 V1 盲签问题
+- 请求包含 `display` 字段，作为人可读提示和业务独立校验输入
 
 ### CPMS 档案钱包账户
 
@@ -80,80 +77,30 @@ wuminapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `WUMI
 
 说明：
 
-- 协议编解码与校验能力已接入登录、链上交易、治理等业务页面
-- `QrSignSessionPage` 负责在线手机展示请求二维码并扫描回执
-- `QrOfflineSignPage` 负责离线设备扫描请求并展示签名回执二维码
-- V2 相比 V1 新增：请求端 `display` 字段、回执端 `payload_hash` 字段（`scope` 已移除）
+- 协议编解码与基础校验能力已接入登录、链上交易、治理、电子护照等业务页面。
+- `QrSignSessionPage` 负责在线手机展示请求二维码并扫描外部签名回执。
+- wuminapp 不接收“无法独立验证但仍允许签名”的冷钱包结果；外部签名设备必须按 wumin 的两色规则独立验证后返回回执。
+- `display` 不是签名内容，真实签名对象始终是 `payload_hex` 解码后的原始字节。
 
-### 4.1 离线签名执行服务（OfflineSignService）
+### 4.1 SFID 电子护照绑定签名
 
-文件：`offline_sign_service.dart`
-
-职责：
-
-- 解析在线设备展示的 `sign_request`
-- 校验请求中的 `account/pubkey` 与当前本机热钱包完全一致
-- 调用 `PayloadDecoder` 独立解码 payload，与 `display` 交叉验证
-- 拒绝 `display` 与 payload 解码结果不一致的请求（防盲签欺骗）
-- 调用 `WalletManager.signWithWallet()` 在本机完成签名
-- 生成统一 `sign_response` 回执二维码数据（含 `payload_hash`）
-
-### 4.2 Payload 解码器（PayloadDecoder）
-
-文件：`payload_decoder.dart`
+文件：`lib/my/myid/myid_sign_page.dart`
 
 职责：
 
-- 独立解码 Substrate SCALE 编码的 call data，用于离线设备交叉验证
-- 按 `pallet_index + call_index` 识别交易类型
-- 返回 `DecodedPayload`（`action`、`summary`、`fields`）或 `null`（未知类型）
+- 校验 `sign_request.body.pubkey` 与当前钱包公钥一致。
+- 校验 `sign_request.body.account` 与当前钱包 SS58 地址一致。
+- 校验 `display.action = citizen_bind`。
+- 独立解析 `payload_hex` 中的 `sfid-citizen-bind-v1` 业务原文。
+- 校验业务原文中的 `wallet_pubkey` 与当前钱包公钥一致。
+- 若请求包含 `display.fields`，逐项校验 `mode / archive_no / voting_eligible / citizen_status / wallet_address` 与业务原文一致。
+- 校验通过后才使用当前钱包对 `payload_hex` 原始字节签名。
 
-已支持的 payload 解码：
+### 4.2 冷钱包签名边界
 
-| 类型 | action | 说明 |
-| --- | --- | --- |
-| `GMB_ACTIVATE_SUBJECT_V1` 内层 payload | `activate_admin_subject` | subject 级管理员激活签名，字段为 `org / subject / pubkey` |
-| Balances(2) / transfer_keep_alive(3) | `transfer` | 转账 |
-| DuoqianTransfer(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
-| InternalVote(22) / cast(0) | `internal_vote` | 内部投票(管理员一人一票,统一入口) |
-| JointVote(23) / cast_admin(0) | `joint_vote` | 联合投票管理员阶段 |
-| JointVote(23) / cast_referendum(1) | `cast_referendum` | 联合投票第二阶段的联合公投，不属于独立 citizen-vote |
-| RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | 协议升级提案（大 WASM 哈希直签例外，不做 SCALE 展开） |
-| RuntimeUpgrade(13) / developer(2) | `developer_direct_upgrade` | 开发期协议直升（大 WASM 哈希直签例外，不做 SCALE 展开） |
-| OffchainTransaction(21) / bind(30) | `bind_clearing_bank` | 绑定清算行 |
-| OffchainTransaction(21) / deposit(31) | `deposit_clearing_bank` | 清算行充值 |
-| OffchainTransaction(21) / withdraw(32) | `withdraw_clearing_bank` | 清算行提现 |
-| OffchainTransaction(21) / switch(33) | `switch_clearing_bank` | 切换清算行 |
-| OffchainTransaction(21) / register(50) | `register_clearing_bank` | 声明清算行节点 |
-| OffchainTransaction(21) / update_endpoint(51) | `update_clearing_bank_endpoint` | 更新清算行节点端点 |
-| OffchainTransaction(21) / unregister(52) | `unregister_clearing_bank` | 注销清算行节点 |
-| `GMB_DECRYPT_V1` 内层 payload | `decrypt_admin` | 管理员解密清算密钥挑战签名 |
-
-AdminsChange(12) / `propose_admin_set_change(0)` 当前只接受新载荷：
-
-```text
-[12][0][org:u8][subject:48][Compact<N>][new_admins:N*32][new_threshold:u32_le]
-```
-
-冷钱包必须拒绝缺少 `new_threshold` 的旧载荷，也必须拒绝解码后仍有尾部多余字节。display 字段固定为 `org / subject / new_admins / new_threshold`，与 wuminapp 逐字比对。
-
-交叉验证三态（`DisplayMatchStatus`）：
-
-- `matched`（绿色）— 解码成功且 action 一致，用户可放心签名
-- `mismatched`（红色）— 解码成功但 action 不一致，**阻止签名**
-- `decodeFailed`（黄色）— 无法解码（未知 pallet），仅展示 display 内容，允许签名
-
-### 4.2 登录系统签名验证（LoginSystemSignatureVerifier）
-
-文件：`system_signature_verifier.dart`
-
-职责：
-
-- 用二维码中的 `sys_pubkey` 验证 `sys_sig`
-- 从链上读取 `SfidSystem::SfidMainAccount`，得到当前 SFID 主验签公钥
-- `sfid` 场景校验二维码公钥与链上当前 SFID 公钥一致
-- `cpms` 场景校验 `sys_cert` 是否由链上 SFID 当前公钥签发
-- 对 CPMS 证书时间窗口做覆盖校验，拒绝挑战有效期超出证书范围的请求
+- wumin 冷钱包负责独立解码链上 call data、SFID 管理员操作、CPMS 档案删除等签名请求。
+- wumin 冷钱包只能在独立验证通过时绿色放行，不能独立验证或展示字段不一致时红色拒签。
+- wuminapp 只负责展示在线请求二维码、扫描回执、校验 `request_id / pubkey / payload_hash / signature` 后提交业务。
 
 ## 5. 协议口径（WUMIN_QR_V1）
 
@@ -170,7 +117,7 @@ AdminsChange(12) / `propose_admin_set_change(0)` 当前只接受新载荷：
 - `payload_hex`
 - `issued_at`
 - `expires_at`
-- `display` — **V2 新增**，人可读交易摘要（`Map`），必须包含 `action` 和 `summary`
+- `display` — 人可读交易摘要（`Map`），必须包含 `action` 和 `summary`
 
 `GMB_DECRYPT_V1` 不是新的二维码协议。它只是在 `WUMIN_QR_V1` 的
 `payload_hex` 内部给"管理员解密清算密钥"挑战签名使用的业务域前缀,用于让冷钱包
@@ -187,7 +134,7 @@ AdminsChange(12) / `propose_admin_set_change(0)` 当前只接受新载荷：
 - `sig_alg = sr25519`
 - `signature`
 - `signed_at`
-- `payload_hash` — **V2 新增**，SHA-256(payload bytes)，防止 payload 被篡改
+- `payload_hash` — SHA-256(payload bytes)，防止 payload 被篡改
 
 ## 6. 与其他模块关系
 
@@ -197,11 +144,11 @@ AdminsChange(12) / `propose_admin_set_change(0)` 当前只接受新载荷：
 - `qr/login`：
   - 负责挑战解析、防重放、系统签名验证、签名前确认
   - 热钱包通过 `WalletManager.signUtf8WithWallet()` 本机签名
-  - 冷钱包通过 `QrSigner + OfflineSignService` 完成外部签名
+  - 冷钱包通过 `QrSigner + QrSignSessionPage` 发起外部签名会话，由 wumin 独立验证后返回回执
 - `onchain`：
   - 负责交易草稿校验、prepare/submit/status 编排
   - 热钱包通过 `WalletManager.signWithWallet()` 本机签名
-  - 冷钱包通过 `QrSigner + QrSignSessionPage + OfflineSignService` 完成外部签名
+  - 冷钱包通过 `QrSigner + QrSignSessionPage` 发起外部签名会话，由 wumin 校验 payload/display 后签名
 - `governance`（规划）：
   - 负责提案/投票业务字段编排
   - 通过 `Signer` 完成链上交易签名
@@ -247,8 +194,8 @@ WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
 - 扫码回执必须校验 `request_id` 和 `payload_hash`，拒绝错配签名或 payload 被篡改
 - 仅支持 `sr25519`，避免算法混淆
 - 治理相关 `nonce/signature` 字段必须校验字节长度上限（当前 64）
-- 离线设备必须独立解码 payload 并与 display 交叉验证，防盲签欺骗
-- display 与 payload 解码结果 action 不一致时阻止签名
+- 离线设备必须独立解码 payload 并与 display 交叉验证，不能独立验证时不得返回可用回执
+- display 与 payload 解码结果 action 不一致时必须阻止签名
 
 ## 9. 后续扩展点
 

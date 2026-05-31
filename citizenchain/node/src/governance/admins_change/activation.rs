@@ -333,7 +333,7 @@ pub async fn build_activate_admin_request(
         "fields": [
             { "key": "org", "label": "组织类型", "value": qr_org_display_value(state.org) },
             { "key": "subject", "label": "管理员主体", "value": format!("0x{}", state.subject_id_hex) },
-            { "key": "pubkey", "label": "管理员公钥", "value": format!("0x{pubkey_clean}") }
+            { "key": "pubkey", "label": "管理员公钥", "value": account_ss58.clone() }
         ]
     });
 

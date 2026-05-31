@@ -83,7 +83,6 @@ class PopulationSnapshotResponse {
   final String province;
 
   /// 签发本凭证的省管理员 admin pubkey(0x 小写 hex,32 字节)。
-  /// feedback_pubkey_format_rule.md:内部统一 0x 小写 hex。
   final String signerAdminPubkey;
 }
 
@@ -268,7 +267,7 @@ class ApiClient {
       throw Exception(
           'population snapshot 缺少 signer_admin_pubkey 字段(ADR-008 step3 必填)');
     }
-    // feedback_pubkey_format_rule.md:统一 0x 小写 hex。
+    // 机读字段统一为 0x 小写 hex。
     final signerAdminPubkey = signerAdminPubkeyRaw.startsWith('0x')
         ? signerAdminPubkeyRaw.toLowerCase()
         : '0x${signerAdminPubkeyRaw.toLowerCase()}';

@@ -4,8 +4,8 @@
 //   - PUBLIC_SECURITY / GOV_INSTITUTION → 默认布局(机构信息+CPMS+账户列表)
 // 修改某类机构的布局只需改对应模块,不影响其他类型。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Card, Col, Descriptions, message, Modal, QRCode, Row, Tag, Typography } from 'antd';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Button, Card, Col, Descriptions, message, Row, Tag, Typography } from 'antd';
 import { A3_LABEL, INSTITUTION_CODE_LABEL } from './locks';
 import {
   deleteAccount,
@@ -29,7 +29,7 @@ import {
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { startCameraScanner } from '../utils/cameraScanner';
+import { WuminSignatureModal } from '../common/WuminSignatureModal';
 
 interface Props {
   auth: AdminAuth;
@@ -62,19 +62,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
   const [cpmsSite, setCpmsSite] = useState<CpmsSiteRow | null>(null);
   const [cpmsBusy, setCpmsBusy] = useState(false);
   const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
-  const [securityScannerActive, setSecurityScannerActive] = useState(false);
-  const [securityScannerReady, setSecurityScannerReady] = useState(false);
-  const securityVideoRef = useRef<HTMLVideoElement | null>(null);
-  const securityScannerCleanupRef = useRef<(() => void) | null>(null);
-
-  const stopSecurityScanner = useCallback(() => {
-    if (securityScannerCleanupRef.current) {
-      securityScannerCleanupRef.current();
-      securityScannerCleanupRef.current = null;
-    }
-    setSecurityScannerReady(false);
-    setSecurityScannerActive(false);
-  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -102,7 +89,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
         resolve,
         reject,
       });
-      setSecurityScannerActive(true);
     });
   };
 
@@ -120,28 +106,13 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
       });
       securityModal.resolve(grant);
       setSecurityModal(null);
-      stopSecurityScanner();
     } catch (err) {
       securityModal.reject(err);
       message.error(err instanceof Error ? err.message : '签名回执处理失败');
     } finally {
       setCpmsBusy(false);
     }
-  }, [auth, securityModal, stopSecurityScanner]);
-
-  useEffect(() => {
-    if (!securityScannerActive || !securityVideoRef.current) return;
-    securityScannerCleanupRef.current = startCameraScanner(
-      securityVideoRef.current,
-      (raw) => void handleSecuritySignedResponse(raw),
-      () => setSecurityScannerReady(true),
-      (msg) => {
-        message.error(msg);
-        stopSecurityScanner();
-      },
-    );
-    return () => stopSecurityScanner();
-  }, [handleSecuritySignedResponse, securityScannerActive, stopSecurityScanner]);
+  }, [auth, securityModal]);
 
   const inst = detail?.institution;
   const accounts = detail?.accounts || [];
@@ -324,33 +295,22 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
           )}
         </>
       )}
-      <Modal
+      <WuminSignatureModal
         title="冷钱包签名确认"
         open={!!securityModal}
         onCancel={() => {
           securityModal?.reject(new Error('已取消签名确认'));
           setSecurityModal(null);
-          stopSecurityScanner();
         }}
-        footer={null}
-        destroyOnClose
-        width={460}
-      >
-        {securityModal && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <QRCode value={securityModal.signRequest} size={220} />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              使用省管理员冷钱包扫描后，再扫描签名回执。
-            </Typography.Text>
-            <div style={{ width: 260, height: 180, background: '#111827', borderRadius: 8, overflow: 'hidden' }}>
-              <video ref={securityVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-            </div>
-            <Button onClick={() => setSecurityScannerActive((v) => !v)} loading={cpmsBusy}>
-              {securityScannerActive ? (securityScannerReady ? '扫描中' : '摄像头初始化中') : '扫描签名回执'}
-            </Button>
-          </div>
-        )}
-      </Modal>
+        qrTitle="签名二维码"
+        qrValue={securityModal?.signRequest}
+        qrHint="使用省管理员冷钱包扫码签名"
+        scannerHint="扫描冷钱包生成的签名回执二维码"
+        scannerDisabled={cpmsBusy}
+        scannerLoading={cpmsBusy}
+        onDetected={handleSecuritySignedResponse}
+        onScannerError={(msg) => message.error(msg)}
+      />
     </div>
   );
 };

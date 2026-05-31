@@ -3,8 +3,7 @@ import 'package:wumin/signer/pallet_registry.dart';
 
 void main() {
   group('PalletRegistry', () {
-    // spec_version 门控测试已删:strict 两色模式独家把关,
-    // PalletRegistry.supportedSpecVersions / isSupported 也已物理移除。
+    // PalletRegistry 只登记 pallet/call 索引,放行由 decoder 两色识别决定。
 
     test('pallet 索引常量已定义且互不相同', () {
       final pallets = {

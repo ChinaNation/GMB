@@ -2,7 +2,7 @@
 // 生成/重新生成时先由本人冷钱包确认,再创建浏览器 Passkey 并落库。
 
 import { useCallback, useState } from 'react';
-import { Button, message } from 'antd';
+import { Badge, Button, message } from 'antd';
 import type { ButtonProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
@@ -34,6 +34,20 @@ export function Passkey({
   const { auth, setAuth } = useAuth();
   const [passkeyStart, setPasskeyStart] = useState<PasskeyStartOutput | null>(null);
   const [loading, setLoading] = useState(false);
+  // 中文注释:首次登录且未绑定 Passkey 时,只在“本人”的可点击更新密钥按钮上提示红点。
+  const showRequiredBadge = auth?.passkey_bound === false && !disabled;
+  const requiredBadgeDot = (
+    <span
+      style={{
+        display: 'block',
+        width: 12,
+        height: 12,
+        borderRadius: '50%',
+        background: '#ff4d4f',
+        boxShadow: '0 0 0 2px #fff',
+      }}
+    />
+  );
 
   const openRegistration = async () => {
     if (!auth) return;
@@ -83,18 +97,25 @@ export function Passkey({
     }
   }, [auth, onCompleted, passkeyStart, setAuth]);
 
+  const updateButton = (
+    <Button
+      size={size}
+      type={type}
+      disabled={disabled}
+      loading={loading}
+      onClick={() => void openRegistration()}
+    >
+      {buttonText}
+    </Button>
+  );
+
   return (
     <>
-      <Button
-        size={size}
-        type={type}
-        disabled={disabled}
-        loading={loading}
-        onClick={() => void openRegistration()}
-      >
-        {buttonText}
-      </Button>
-
+      {showRequiredBadge ? (
+        <Badge count={requiredBadgeDot} offset={[-2, 2]}>
+          {updateButton}
+        </Badge>
+      ) : updateButton}
       <WuminSignatureModal
         title="Passkey 冷钱包确认"
         open={!!passkeyStart}

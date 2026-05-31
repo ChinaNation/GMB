@@ -25,9 +25,6 @@ class SignRequestBody implements QrBody {
       };
 
   /// 反序列化 sign_request body。
-  ///
-  /// 注:历史上有 `spec_version` 字段(用于 decoder 锁布局),已随 strict 两色模式
-  /// 独家把关而废弃。新 envelope 不再带此字段;旧 envelope 的字段在解析时被忽略。
   static SignRequestBody fromJson(Map<String, dynamic> data) {
     final address = data['address'];
     final pubkey = data['pubkey'];
@@ -108,8 +105,8 @@ class SignDisplay {
 class SignDisplayField {
   const SignDisplayField({this.key, required this.label, required this.value});
 
-  /// 可选的英文字段标识，用于与 PayloadDecoder 解码结果交叉比对。
-  /// 链端 signing.rs 会发送此字段，wumin/wuminapp 生成时可省略。
+  /// 中文注释：可选的英文字段标识，用于与 PayloadDecoder 解码结果交叉比对。
+  /// 所有在线端生成 sign_request 时都应按 action registry 对齐。
   final String? key;
   final String label;
   final String value;

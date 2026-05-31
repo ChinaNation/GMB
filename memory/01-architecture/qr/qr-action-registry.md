@@ -126,10 +126,11 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | payload 结构 | fields(顺序固定) | 签发方 | 用途 |
 |---|---|---|---|---|
-| `activate_admin` | `GMB_ACTIVATE`(12B) + `sfid_number`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `sfid_number` | node_ui / sfid 后端 | 管理员激活 |
+| `activate_admin_subject` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `subject_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / wuminapp | subject 级管理员激活 |
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
-| `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `archive_id`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
-| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `province`, `actor_pubkey`, `target`, `before_hash`, `after_hash`, `payload_hash` | sfid 后端 | 省管理员治理 Passkey 后的冷钱包确认 |
+| `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | wuminapp 电子护照绑定签名 |
+| `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
+| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `province`, `actor_pubkey`, `target` | sfid 后端 | 省管理员治理和 Passkey 更新冷钱包确认 |
 
 ## 二、字段渲染规则
 
@@ -142,7 +143,8 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `org` | u8 / u32 机构代号 | 机构中文名;找不到时回退为 `机构<raw>` |
 | `institution` | 48B sfid_number | 优先转机构中文名;找不到时回退原 sfid_number |
 | `wasm_size` | u32 字节 | `"X.XX MB"` 或 `"X KB"` |
-| `wasm_hash` / `signer_admin_pubkey` / `admin_pubkey` / `new_key` | 32 字节 | `0x<64hex>` 小写 |
+| `pubkey` / `signer_admin_pubkey` / `admin_pubkey` / `actor_pubkey` / `old_admin` / `new_admin` | 32 字节账户/公钥 | 人机展示为 SS58,prefix = 2027 |
+| `wasm_hash` / `new_key` / `payload_hash` | 32 字节哈希或非账户密钥 | `0x<64hex>` 小写;默认不进入普通确认字段 |
 | `reason` / `remark` / `account_name` / `institution_name` / `sfid_number` / `province` / `peer_id` / `rpc_domain` / `new_domain` | UTF-8 | 原字符串;UI 可截断展示,签名原文不截断 |
 | `admin_count` | u32 | 十进制字符串 |
 | `threshold` | u32 | `"<threshold>/<admin_count>"` |
@@ -152,9 +154,10 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 1. `display.action` 必须与 decoder 输出的 `decoded.action` 逐字相等。
 2. `display.fields[*].key` 必须与本表 fields 列逐字相等;禁止大小写变体、别名和回退 key。
-3. 字段顺序必须等于本表顺序、decoder 输出顺序和 UI 展示顺序。
-4. `amount_<account_name>` 是 `propose_create_institution` 的动态字段,`<account_name>` 必须等于 call data 中账户名称原文。
-5. 未列入本表的 action 不得进入生产 `sign_request`。
+3. `display.fields` 中出现的 key/value 必须与 decoder 验真字段逐字一致;未出现的机器字段不展示。
+4. 冷钱包 UI 展示顺序以 decoder 的 `reviewFields` 为准,只展示中文业务字段和 SS58 地址。
+5. `amount_<account_name>` 是 `propose_create_institution` 的动态字段,`<account_name>` 必须等于 call data 中账户名称原文。
+6. 未列入本表的 action 不得进入生产 `sign_request`。
 
 ## 四、新增或修改 action 流程
 

@@ -70,7 +70,7 @@ class ActivationService {
 
   final InstitutionAdminService _adminService;
 
-  /// v3 只保存 subject 语义；旧 v1/v2 激活记录不读取、不迁移。
+  /// 只保存 subject 语义的当前激活记录。
   static const _storageKey = 'activated_admins_v3';
 
   /// subject 级管理员激活 payload 前缀。
@@ -153,9 +153,7 @@ class ActivationService {
     final account = Keyring().encodeAddress(pkBytes, 2027);
 
     final payload = _buildActivatePayload(identity, pk);
-    // feedback_pubkey_format_rule 铁律: 内部统一 0x 小写 hex。
-    // wumin SignRequestBody.fromJson 严格要求 pubkey / payload_hex
-    // 以 0x 开头,缺前缀会抛 "签名请求解析失败"(2026-04-22 修复)。
+    // sign_request 机读字段使用 0x hex,display 人读字段使用 SS58。
     final payloadHex = '0x${_bytesToHex(payload)}';
 
     final signer = QrSigner();
@@ -174,7 +172,7 @@ class ActivationService {
               key: 'subject',
               label: '管理员主体',
               value: '0x${identity.subjectIdHex}'),
-          SignDisplayField(key: 'pubkey', label: '管理员公钥', value: '0x$pk'),
+          SignDisplayField(key: 'pubkey', label: '管理员公钥', value: account),
         ],
       ),
     );

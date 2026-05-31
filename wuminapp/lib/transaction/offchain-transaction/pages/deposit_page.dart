@@ -10,7 +10,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 /// 中文注释:
 /// - 调链上 `deposit(amount)`(call_index 31)。
 /// - 链上费按金额 0.1% 最低 0.1 元(链上资金交易,由 `OnchainTxAmountExtractor` 处理)。
-/// - 本步仅支持热钱包,冷钱包 QR 签名留 Step 2。
+/// - 本步仅支持热钱包;冷钱包必须等充值 payload 可独立展示和验证后再接入。
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key, required this.wallet});
 
@@ -109,7 +109,7 @@ class _DepositPageState extends State<DepositPage> {
     }
     if (!wallet.isHotWallet) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Step 1 暂仅支持热钱包充值;冷钱包路径 Step 2 接入')),
+        const SnackBar(content: Text('当前仅支持热钱包充值；冷钱包充值需可独立验证的签名协议')),
       );
       return;
     }

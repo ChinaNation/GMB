@@ -2,16 +2,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
-import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
 import 'package:wuminapp_mobile/rpc/sfid_public.dart';
-import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/models/payment_intent.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-/// 扫码支付清算体系 Step 2c-i:**扫码付款确认页**(替代已删除的 `offchain_pay_page.dart`)。
+/// 扫码支付清算体系付款确认页。
 ///
 /// 中文注释:
 /// - 入口:`offchain_scan_flow.dart` 扫商户码成功后跳转过来
@@ -43,7 +40,7 @@ class OffchainClearingPayPage extends StatefulWidget {
     this.memo,
   });
 
-  /// 付款方当前钱包(仅支持热钱包,冷钱包流程 Step 2c-iii)。
+  /// 付款方当前钱包(仅支持热钱包)。
   final WalletProfile wallet;
 
   /// 商户 QR `UserTransferBody.address` 收款方地址(SS58 或 0x hex pubkey)。
@@ -233,7 +230,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         expiresAt: _currentBlockNumber + _expiresInBlocks,
       );
 
-      // 8. 签名:热钱包直签 / 冷钱包走 QR 两段握手(Step 2c-iii)
+      // 8. 签名:热钱包直签;冷钱包不能独立验证 PaymentIntent hash,必须拒绝。
       final sig = await _signSigningHash(
         signingHash: intent.signingHash(),
         amountFen: amountFen,
@@ -428,12 +425,8 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
   ///
   /// - 热钱包:先走 `WalletManager.authenticateForSigning`(生物/密码) +
   ///   `signWithWalletNoAuth(walletIndex, signingHash)` 直接返 64 字节签名。
-  /// - 冷钱包:用 `QrSigner` 构造 `sign_request` envelope(`payload_hex` = 32
-  ///   字节 signing_hash),通过 `QrSignSessionPage` 两段 QR 握手:热钱包展示
-  ///   `sign_request` → wumin 冷钱包扫码 → 显示交易详情(action=`offchain_clearing_pay`)
-  ///   → 冷钱包 sr25519 签名 → 生成 `sign_response` QR → 热钱包扫码取签名。
-  /// - 冷钱包对 `payload_hex` **盲签**(只把 32 字节当字节流处理),与
-  ///   `NodePaymentIntent` 的 SCALE 布局解耦,无需修改 wumin 冷钱包 app。
+  /// - 清算行付款 payload 当前是 32 字节 signing_hash,冷钱包无法从 hash 独立还原
+  ///   PaymentIntent 业务字段,因此不生成离线签名二维码。
   Future<Uint8List> _signSigningHash({
     required Uint8List signingHash,
     required BigInt amountFen,
@@ -446,49 +439,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
       return manager.signWithWalletNoAuth(wallet.walletIndex, signingHash);
     }
 
-    // 冷钱包路径
-    final qrSigner = QrSigner();
-    final requestId = QrSigner.generateRequestId(prefix: 'offchain-pay-');
-    final request = qrSigner.buildRequest(
-      requestId: requestId,
-      address: wallet.address,
-      pubkey: '0x${wallet.pubkeyHex}',
-      payloadHex: bytesToHex(signingHash),
-      display: SignDisplay(
-        action: 'offchain_clearing_pay',
-        summary: '清算行扫码付款 ${_fenToYuan(amountFen)} 元 → ${widget.toAddress}',
-        fields: [
-          SignDisplayField(label: '金额', value: '${_fenToYuan(amountFen)} 元'),
-          SignDisplayField(label: '手续费', value: '${_fenToYuan(feeFen)} 元'),
-          SignDisplayField(
-            label: '合计扣款',
-            value: '${_fenToYuan(amountFen + feeFen)} 元',
-          ),
-          SignDisplayField(label: '收款方', value: widget.toAddress),
-          SignDisplayField(
-            label: '收款清算行',
-            value: widget.recipientBankSfidNumber,
-          ),
-        ],
-      ),
-    );
-    final requestJson = qrSigner.encodeRequest(request);
-
-    if (!mounted) throw Exception('页面已关闭');
-    final response = await Navigator.push<SignResponseEnvelope>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => QrSignSessionPage(
-          request: request,
-          requestJson: requestJson,
-          expectedPubkey: '0x${wallet.pubkeyHex}',
-        ),
-      ),
-    );
-    if (response == null) {
-      throw Exception('签名已取消');
-    }
-    return hexToBytes(response.body.signature);
+    throw Exception('清算行付款签名必须使用本机热钱包；冷钱包无法独立验证付款 hash');
   }
 
   /// 分转元(两位小数)。本地化展示,不参与任何链上金额计算。

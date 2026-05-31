@@ -1,8 +1,7 @@
 //! sr25519 pubkey 规范化与等值比较
 //!
 //! 中文注释:这是跨业务通用的 sr25519 公钥工具,归入 `crypto`。
-//! 内部统一 0x 小写 hex,前端展示 SS58(prefix=2027),禁止混用——
-//! 见 feedback_pubkey_format_rule.md。
+//! 内部统一 0x 小写 hex,前端展示 SS58(prefix=2027),禁止混用。
 
 use crate::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
 

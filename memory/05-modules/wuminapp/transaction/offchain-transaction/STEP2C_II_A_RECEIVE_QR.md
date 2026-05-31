@@ -9,7 +9,7 @@
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2C_I_PAY_PAGE.md`(付款端新版)
 - **后续**:`STEP2C_II_B_BALANCE_SUBSCRIBE.md`(WS 订阅 `PaymentSettled` 实时推送,
-  取代当前 5 秒轮询)与 `STEP2C_III_COLD_WALLET.md`(冷钱包两段握手)
+  取代当前 5 秒轮询)
 
 ---
 
@@ -87,7 +87,7 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 }
 ```
 
-付款方 `offchain_clearing_pay_page`(Step 2c-i)扫到后:
+付款方 `offchain_pay_page` 扫到后:
 - `toAddress = body.address`
 - `recipientBankSfidNumber = body.bank`
 - `initialAmountYuan = body.amount`
@@ -153,7 +153,7 @@ All tests passed!  (5 个)
 
 - **Step 2c-ii-b**:WS 订阅 `PaymentSettled` 事件推送,取代轮询;收到支付时 Toast
   通知 + 动画高亮
-- **Step 2c-iii**:冷钱包扫签两段握手,让冷钱包也能付款
+- **冷钱包支付**:必须先改为可独立验证的 PaymentIntent 原文签名协议，再接入 QR 签名
 - **Step 3**:SFID 后端补"按主账户反查 sfid_number"API,移除本步本地缓存依赖;
   加历史收款列表(从 `PaymentSettled` 事件构建)
 - **UI 精修**:中央 logo 留白 / 保存到相册 / 分享 / 识别粘贴板

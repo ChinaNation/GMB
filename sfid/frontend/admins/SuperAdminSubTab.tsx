@@ -6,6 +6,7 @@ import { Button, Form, Input, Modal, Space, Table, Typography, message } from 'a
 import { useAuth } from '../hooks/useAuth';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../common/ScanAccountModal';
+import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
 import type { ShengAdminRow } from './api';
 import type { AdminActionType } from './admin_security_api';
 import { sameHexPubkey } from './shengAdminUtils';
@@ -86,6 +87,7 @@ export function SuperAdminSubTab({
       title: <div style={{ textAlign: 'center', width: '100%' }}>编辑省级管理员</div>,
       icon: null,
       centered: true,
+      zIndex: SFID_MODAL_Z_INDEX.business,
       content: (
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <div>
@@ -139,6 +141,7 @@ export function SuperAdminSubTab({
       title: <div style={{ textAlign: 'center', width: '100%' }}>删除省级管理员</div>,
       icon: null,
       centered: true,
+      zIndex: SFID_MODAL_Z_INDEX.business,
       content: (
         <div style={{ textAlign: 'center' }}>
           <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该省级管理员?</Typography.Paragraph>
@@ -214,13 +217,18 @@ export function SuperAdminSubTab({
         centered
         destroyOnClose
         confirmLoading={addLoading}
+        cancelButtonProps={{ disabled: addLoading }}
         okText="确认新增"
         cancelText="取消"
         onOk={() => form.submit()}
         onCancel={() => {
+          if (addLoading) return;
           form.resetFields();
           setAddOpen(false);
         }}
+        closable={!addLoading}
+        maskClosable={!addLoading}
+        zIndex={SFID_MODAL_Z_INDEX.business}
       >
         <Form form={form} layout="vertical" onFinish={submitAdd}>
           <Form.Item

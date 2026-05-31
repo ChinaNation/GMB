@@ -7,6 +7,7 @@ import { Button, Modal, Typography } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import { startCameraScanner } from '../utils/cameraScanner';
+import { SFID_MODAL_Z_INDEX } from './modalStack';
 
 export function ScanAccountModal(props: {
   open: boolean;
@@ -98,6 +99,7 @@ export function ScanAccountModal(props: {
       ]}
       destroyOnClose
       width={420}
+      zIndex={SFID_MODAL_Z_INDEX.accountScan}
     >
       <div
         style={{

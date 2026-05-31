@@ -6,7 +6,7 @@
   `node/src/governance/` 里的所有老分支/入口。dev 链统一 setCode 升级,不做
   `on_runtime_upgrade` migration。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
-- **前置**:`STEP2B_IV_A_CLEANUP.md`(节点侧老省储行 .rs 清理)+ `STEP2C_III_COLD_WALLET.md`
+- **前置**:`STEP2B_IV_A_CLEANUP.md`(节点侧老省储行 .rs 清理)
 - **后续**:Layer B 自动化 E2E / 跨行 ghost account 修复
 
 ---

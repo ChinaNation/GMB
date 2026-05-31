@@ -180,13 +180,13 @@ lib/
 - **冷钱包**：
   1. `LoginService.buildExternalSignRequest()` 将登录签名原文包装为 `QrSignRequest`
   2. 在线手机导航到 `QrSignSessionPage` 展示请求二维码
-  3. 离线设备进入 `QrOfflineSignPage` 扫描请求，通过 `OfflineSignService` 交叉验证 display 与 payload 后调用本机热钱包签名
+  3. wumin 离线设备扫描请求，独立验证 payload 与 display 后使用冷钱包私钥签名
   4. 在线手机扫描回执后，`LoginService.buildReceiptFromSignature()` 校验签名（含 `payload_hash`）并生成登录回执
 
 ### 4.7 链上支付签名（由 onchain 调用）
 
 - **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainPaymentService`（seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其与当前 `WalletProfile.pubkeyHex` 完全一致，不一致直接拒绝签名
-- **冷钱包**：构造 `QrSignRequest`（含 `display` 字段）→ 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用离线设备扫码签名（离线端通过 `PayloadDecoder` 独立解码 payload 并与 display 交叉验证）→ 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey + payload_hash` → 签名回调注入
+- **冷钱包**：构造 `QrSignRequest`（含 `display` 字段）→ 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用 wumin 离线设备扫码签名（离线端独立解码 payload 并与 display 交叉验证）→ 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey + payload_hash` → 签名回调注入
 
 `OnchainPaymentService.submitTransfer()` 接受 `sign` 回调参数，由 UI 层根据 `signMode` 提供不同实现。
 
@@ -253,7 +253,7 @@ lib/
 
 1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
 2. 二维码：`WUMIN_QR_V1 kind=user_contact`，`body.address` 为当前钱包 SS58 地址，下载按钮浮在二维码正中间（半透明圆形背景）
-3. 热钱包额外显示“离线签名”按钮，进入 `QrOfflineSignPage`
+3. 冷钱包离线签名入口由 `wumin` 承担；wuminapp 钱包详情页不承载 `QrOfflineSignPage`
 4. 地址+复制：地址居中两行显示，复制图标在右侧
 5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
 6. 最近交易记录：最多显示 5 条，显示与完整列表一致的状态标签，点击单条进入交易详情

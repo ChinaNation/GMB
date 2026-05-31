@@ -7,6 +7,7 @@
 // 4. 构造 sign_response envelope
 // 5. 展示回执二维码，等管理端扫描
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -68,6 +69,10 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       if (requestPubkey != expectedPubkey) {
         throw Exception('签名请求中的公钥与当前钱包不一致');
       }
+      if (request.body.address.trim() != widget.wallet.address.trim()) {
+        throw Exception('签名请求中的地址与当前钱包不一致');
+      }
+      _verifyCitizenBindRequest(request);
 
       // 热钱包签名
       final payloadBytes =
@@ -252,6 +257,33 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       ],
     );
   }
+
+  void _verifyCitizenBindRequest(SignRequestEnvelope request) {
+    final body = request.body;
+    if (body.display.action != 'citizen_bind') {
+      throw Exception('只能签名身份ID绑定请求');
+    }
+    final decoded = _CitizenBindPayload.decode(body.payloadHex);
+    if (decoded.walletPubkey.toLowerCase() != body.pubkey.toLowerCase()) {
+      throw Exception('绑定载荷中的钱包公钥与签名请求不一致');
+    }
+
+    final expected = <String, String>{
+      'mode': decoded.modeLabel,
+      'archive_no': decoded.archiveNo,
+      'voting_eligible': decoded.votingEligibleLabel,
+      'citizen_status': decoded.citizenStatusLabel,
+      'wallet_address': body.address,
+    };
+    for (final field in body.display.fields) {
+      final key = field.key;
+      if (key == null) continue;
+      final expectedValue = expected[key];
+      if (expectedValue != null && expectedValue != field.value) {
+        throw Exception('签名请求展示字段与真实绑定载荷不一致');
+      }
+    }
+  }
 }
 
 class _MyIdScanCornerPainter extends CustomPainter {
@@ -289,4 +321,45 @@ List<int> _hexToBytes(String input) {
     result.add(int.parse(hex.substring(i, i + 2), radix: 16));
   }
   return result;
+}
+
+class _CitizenBindPayload {
+  const _CitizenBindPayload({
+    required this.archiveNo,
+    required this.modeLabel,
+    required this.votingEligibleLabel,
+    required this.citizenStatusLabel,
+    required this.walletPubkey,
+  });
+
+  final String archiveNo;
+  final String modeLabel;
+  final String votingEligibleLabel;
+  final String citizenStatusLabel;
+  final String walletPubkey;
+
+  static _CitizenBindPayload decode(String payloadHex) {
+    final text = utf8.decode(_hexToBytes(payloadHex), allowMalformed: false);
+    final parts = text.split('|');
+    if (parts.length != 11 || parts[0] != 'sfid-citizen-bind-v1') {
+      throw Exception('无法独立验证身份ID绑定载荷');
+    }
+    final mode = parts[2];
+    final archiveNo = parts[3];
+    final citizenStatus = parts[4];
+    final votingEligible = parts[5];
+    final walletPubkey = parts[9];
+    if (archiveNo.isEmpty || walletPubkey.isEmpty) {
+      throw Exception('身份ID绑定载荷缺少必要字段');
+    }
+    return _CitizenBindPayload(
+      archiveNo: archiveNo,
+      modeLabel: mode == 'replace' ? '更换绑定' : '新增身份ID绑定',
+      votingEligibleLabel: votingEligible == 'true' ? '有' : '无',
+      citizenStatusLabel: citizenStatus == 'NORMAL' ? '正常' : '注销',
+      walletPubkey: walletPubkey.startsWith('0x')
+          ? walletPubkey.toLowerCase()
+          : '0x${walletPubkey.toLowerCase()}',
+    );
+  }
 }
