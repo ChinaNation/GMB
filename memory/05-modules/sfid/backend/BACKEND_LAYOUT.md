@@ -44,7 +44,7 @@ sfid/backend/
 ├── institutions/              # 机构创建、机构资料、账户名称、机构链查询 chain_duoqian_info.rs
 ├── login/                     # 管理员登录、扫码登录、鉴权守卫、签名校验
 ├── models/                    # 全局共享模型、角色、响应包装、Store 结构
-├── qr/                        # QR 协议辅助
+├── qr/                        # QR 协议辅助,含统一 sign_request 构造
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
 ├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
 ├── admins/                    # 省/市管理员治理和安全分级,含 actions.rs / passkeys.rs / 冷钱包 grant
@@ -82,6 +82,11 @@ sfid/backend/
   `SFID_PASSKEY_ORIGIN` 和可选 `SFID_PASSKEY_ALLOWED_ORIGINS`;未配置时开发默认
   `localhost / http://localhost:5179`,生产环境 `SFID_ENV=prod|production` 启动期强制
   `sfid.crcfrcn.com / https://sfid.crcfrcn.com`。
+- Passkey 注册流程固定为 `register/start -> register/confirm -> register/complete`;
+  `start` 只生成 `WUMIN_QR_V1 / sign_request` 冷钱包签名请求,`confirm` 验证 sr25519 回执后
+  才生成 WebAuthn creation options,`complete` 完成浏览器凭据 attestation 并替换当前管理员有效 Passkey。
+- 通用 `WUMIN_QR_V1 / sign_request` envelope 构造归 `qr/sign_request.rs`;业务模块只传入
+  已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。
 - CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归省级管理员;
   市级管理员不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。
@@ -100,6 +105,8 @@ sfid/backend/
 - `store_shards/` 只保留进程内按省缓存访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
 - `db/migrations/015_store_reset.sql` 明确删除旧整包 JSON 表,不做旧数据迁移。
+- `db/migrations/016_finalize_admin_no_status.sql` 明确删除 `admins` 的旧状态字段和
+  云端管理员签名字段,并把管理员查询视图收口为 `v_sheng_admins / v_shi_admins`。
 
 ## 验收口径
 

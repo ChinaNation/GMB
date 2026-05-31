@@ -867,8 +867,8 @@ fn main() {
                 post(admins::passkeys::start_passkey_registration),
             )
             .route(
-                "/api/v1/admin/passkeys/register/attest",
-                post(admins::passkeys::attest_passkey_registration),
+                "/api/v1/admin/passkeys/register/confirm",
+                post(admins::passkeys::confirm_passkey_registration),
             )
             .route(
                 "/api/v1/admin/passkeys/register/complete",

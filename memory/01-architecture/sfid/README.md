@@ -38,6 +38,12 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 4. 登录页轮询 challenge 结果，成功后自动登录。
 5. 权限校验以后端 RBAC 为准，前端菜单控制仅用于展示。
 
+## 管理员 Passkey
+1. 管理员 Passkey 只用于浏览器端二次确认，业务签名算法仍为冷钱包 sr25519。
+2. 更新 Passkey 必须先扫描 `WUMIN_QR_V1 / sign_request` 并完成当前管理员冷钱包签名确认。
+3. 冷钱包确认通过后，浏览器才创建 WebAuthn Passkey 凭据；后端只在最终 `complete` 成功后替换当前管理员有效 Passkey。
+4. 登录页、Passkey 更新和管理员重要操作共用同一套“左二维码 + 右扫码窗口”的签名 UI。
+
 ## 仓库结构
 - `frontend/`：管理员前端网站（React + TypeScript + Vite + Ant Design）
 - `backend/`：后端 API（Rust + Axum）
@@ -72,6 +78,10 @@ docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/009_runtime_
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/010_drop_plaintext_pii_columns.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/011_tx_indexer.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/012_rename_roles.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/013_rename_roles_sheng_shi.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/014_finalize_admin_roles.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/015_store_reset.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/016_finalize_admin_no_status.sql
 ```
 
 ### 2) 启动后端
@@ -93,7 +103,7 @@ cargo run
 ```bash
 ./sfid-run.sh
 ```
-说明：脚本会加载 `.env.dev.local`，并同时启动后端与前端开发服务。
+说明：脚本会加载 `.env.dev.local`，先停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程并执行本地最终结构清理，再同时启动后端与前端开发服务。
 
 ### 3) 启动前端开发模式
 ```bash
@@ -101,7 +111,7 @@ cd frontend
 npm install
 npm run dev
 ```
-默认地址：`http://127.0.0.1:5179`
+默认地址：`http://localhost:5179`
 
 ### 4) 健康检查
 ```bash
@@ -121,6 +131,7 @@ curl http://127.0.0.1:8899/api/v1/health
 2. `provinces`
 3. `sheng_admin_scope`
 4. `shi_admin_scope`
+- `admins` 当前目标结构不包含 `status`、`encrypted_signing_privkey`、`signing_pubkey`、`signing_created_at`；管理员删除即失效，业务签名只由各自冷钱包完成。
 - 管理员查询视图：
 1. `v_sheng_admins`
 2. `v_shi_admins`

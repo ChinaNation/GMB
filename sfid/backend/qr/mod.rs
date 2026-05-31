@@ -7,6 +7,10 @@
 //! envelope 字段逐字节一致。本模块仅定义 SFID 后端需要的 kind
 //! (login_challenge / login_receipt),其余 kind 后端不参与。
 
+mod sign_request;
+
+pub(crate) use sign_request::{build_sign_request, display_field};
+
 use serde::{Deserialize, Serialize};
 
 pub const WUMIN_QR_V1: &str = "WUMIN_QR_V1";

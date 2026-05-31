@@ -90,8 +90,8 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 
 - `GET /api/v1/admin/sheng-admins` 是省级管理员列表接口,归
   `admins::catalog`,不是链交互。
-- `POST /api/v1/admin/passkeys/register/*` 是管理员 Passkey 注册流程,归
-  `admins::passkeys`,不是链交互。
+- `POST /api/v1/admin/passkeys/register/start|confirm|complete` 是管理员 Passkey 注册流程,
+  归 `admins::passkeys`,不是链交互。
 - `POST /api/v1/admin/actions/*` 是管理员治理安全动作流程,归
   `admins::actions`,不是链交互。
 - 省管理员云端代签端点已删除;不得恢复为兼容入口。
