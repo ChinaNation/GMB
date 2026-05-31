@@ -46,6 +46,9 @@ if [[ ! -f /etc/sfid/sfid.env ]]; then
   cat > /etc/sfid/sfid.env <<'ENVEOF'
 # SFID 后端监听
 SFID_BIND_ADDR=127.0.0.1:8899
+SFID_ENV=production
+SFID_PASSKEY_RP_ID=sfid.crcfrcn.com
+SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com
 
 # 生产请指向主库（不要写备库），并使用 verify-full
 DATABASE_URL=postgres://sfid_app:CHANGE_ME_APP_PASSWORD@PRIMARY_DB_FQDN:5432/sfid_prod?sslmode=verify-full

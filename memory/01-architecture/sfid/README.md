@@ -220,6 +220,10 @@ curl http://127.0.0.1:8899/api/v1/health
   - `http://127.0.0.1:5173`
   - `http://localhost:5173`
 - 生产请配置 `SFID_CORS_ALLOWED_ORIGINS`（逗号分隔，禁止 `*`）。
+- Passkey 本地开发必须使用 `http://localhost:5179` 打开前端;`sfid/.env.dev.local`
+  默认配置 `SFID_PASSKEY_RP_ID=localhost` 与
+  `SFID_PASSKEY_ORIGIN=http://localhost:5179`。生产环境必须固定为
+  `sfid.crcfrcn.com / https://sfid.crcfrcn.com`。
 
 ## 公开查询接口（Token 鉴权）
 - `GET /api/v1/public/identity/search?archive_no=...`

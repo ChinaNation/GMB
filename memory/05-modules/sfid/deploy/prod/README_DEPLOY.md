@@ -107,6 +107,19 @@ server {
 - `SFID_DEPLOY_HEALTHCHECK_URL`：默认 `http://127.0.0.1:8899/api/v1/health`
 - `SFID_FRONTEND_API_BASE_URL`：默认 `/api`
 
+### Passkey 生产域名约束
+
+生产 `/etc/sfid/sfid.env` 必须固定:
+
+```bash
+SFID_ENV=production
+SFID_PASSKEY_RP_ID=sfid.crcfrcn.com
+SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com
+```
+
+后端启动期会校验生产环境 Passkey 域名,不得把 `localhost`、`127.0.0.1`、
+局域网 IP 或其它 origin 混入生产配置。
+
 ### 自动部署行为
 1. GitHub Actions 构建 `sfid-backend`
 2. 构建 `frontend/dist`

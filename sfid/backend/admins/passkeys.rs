@@ -28,9 +28,21 @@ use crate::*;
 
 pub(crate) const ADMIN_ACTION_TTL_SECONDS: i64 = 300;
 
-const PASSKEY_RP_ID: &str = "sfid.crcfrcn.com";
-const PASSKEY_ORIGIN: &str = "https://sfid.crcfrcn.com";
+const PROD_PASSKEY_RP_ID: &str = "sfid.crcfrcn.com";
+const PROD_PASSKEY_ORIGIN: &str = "https://sfid.crcfrcn.com";
+const DEV_PASSKEY_RP_ID: &str = "localhost";
+const DEV_PASSKEY_ORIGIN: &str = "http://localhost:5179";
+const ENV_PASSKEY_RP_ID: &str = "SFID_PASSKEY_RP_ID";
+const ENV_PASSKEY_ORIGIN: &str = "SFID_PASSKEY_ORIGIN";
+const ENV_PASSKEY_ALLOWED_ORIGINS: &str = "SFID_PASSKEY_ALLOWED_ORIGINS";
 const ADMIN_SIGN_ACTION: &str = "sfid_admin_action";
+
+#[derive(Debug, Clone)]
+struct PasskeyWebauthnConfig {
+    rp_id: String,
+    origins: Vec<String>,
+    production: bool,
+}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PasskeyStartInput {
@@ -423,32 +435,145 @@ pub(crate) async fn complete_passkey_registration(
 }
 
 pub(crate) fn webauthn() -> Result<Webauthn, axum::response::Response> {
-    let origin = Url::parse(PASSKEY_ORIGIN).map_err(|_| {
+    let config = passkey_webauthn_config().map_err(|err| {
+        tracing::error!(error = %err, "passkey configuration invalid");
         api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             1503,
-            "passkey origin invalid",
+            "passkey configuration invalid",
         )
     })?;
-    WebauthnBuilder::new(PASSKEY_RP_ID, &origin)
-        .map_err(|err| {
-            tracing::error!(error = %err, "webauthn builder failed");
-            api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1503,
-                "passkey configuration invalid",
-            )
-        })?
+    build_webauthn(&config).map_err(|err| {
+        tracing::error!(error = %err, "webauthn build failed");
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1503,
+            "passkey configuration invalid",
+        )
+    })
+}
+
+pub(crate) fn validate_passkey_configuration() -> Result<(), String> {
+    let config = passkey_webauthn_config()?;
+    build_webauthn(&config).map(|_| ())
+}
+
+fn passkey_webauthn_config() -> Result<PasskeyWebauthnConfig, String> {
+    let production = is_production_env();
+    let rp_id = optional_env(ENV_PASSKEY_RP_ID).unwrap_or_else(|| {
+        if production {
+            PROD_PASSKEY_RP_ID.to_string()
+        } else {
+            DEV_PASSKEY_RP_ID.to_string()
+        }
+    });
+    let default_origin = if production {
+        PROD_PASSKEY_ORIGIN
+    } else {
+        DEV_PASSKEY_ORIGIN
+    };
+    let origins = configured_passkey_origins(default_origin);
+    let config = PasskeyWebauthnConfig {
+        rp_id,
+        origins,
+        production,
+    };
+    validate_passkey_config(&config)?;
+    Ok(config)
+}
+
+fn configured_passkey_origins(default_origin: &str) -> Vec<String> {
+    let configured = optional_env(ENV_PASSKEY_ORIGIN)
+        .into_iter()
+        .chain(
+            optional_env(ENV_PASSKEY_ALLOWED_ORIGINS)
+                .into_iter()
+                .flat_map(|raw| {
+                    raw.split(',')
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                }),
+        )
+        .collect::<Vec<_>>();
+    let origins = if configured.is_empty() {
+        vec![default_origin.to_string()]
+    } else {
+        configured
+    };
+    origins.into_iter().fold(Vec::new(), |mut acc, origin| {
+        if !acc.iter().any(|existing| existing == &origin) {
+            acc.push(origin);
+        }
+        acc
+    })
+}
+
+fn validate_passkey_config(config: &PasskeyWebauthnConfig) -> Result<(), String> {
+    if config.rp_id.trim().is_empty() {
+        return Err(format!("{ENV_PASSKEY_RP_ID} must not be empty"));
+    }
+    if config.origins.is_empty() {
+        return Err("passkey origins must not be empty".to_string());
+    }
+    for origin in &config.origins {
+        let parsed = Url::parse(origin).map_err(|_| format!("passkey origin invalid: {origin}"))?;
+        match parsed.scheme() {
+            "http" | "https" => {}
+            other => return Err(format!("passkey origin scheme unsupported: {other}")),
+        }
+        if config.production && parsed.scheme() != "https" {
+            return Err("production passkey origin must use https".to_string());
+        }
+    }
+    if config.production {
+        if config.rp_id != PROD_PASSKEY_RP_ID {
+            return Err(format!(
+                "production {ENV_PASSKEY_RP_ID} must be {PROD_PASSKEY_RP_ID}"
+            ));
+        }
+        if config.origins.len() != 1 || config.origins[0] != PROD_PASSKEY_ORIGIN {
+            return Err(format!(
+                "production passkey origin must be exactly {PROD_PASSKEY_ORIGIN}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn build_webauthn(config: &PasskeyWebauthnConfig) -> Result<Webauthn, String> {
+    let origins = config
+        .origins
+        .iter()
+        .map(|origin| Url::parse(origin).map_err(|_| format!("passkey origin invalid: {origin}")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let Some(primary_origin) = origins.first() else {
+        return Err("passkey origins must not be empty".to_string());
+    };
+    let mut builder = WebauthnBuilder::new(config.rp_id.as_str(), primary_origin)
+        .map_err(|err| format!("webauthn builder failed: {err}"))?;
+    for origin in origins.iter().skip(1) {
+        builder = builder.append_allowed_origin(origin);
+    }
+    builder
         .rp_name("SFID")
         .build()
-        .map_err(|err| {
-            tracing::error!(error = %err, "webauthn build failed");
-            api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1503,
-                "passkey configuration invalid",
-            )
-        })
+        .map_err(|err| format!("webauthn build failed: {err}"))
+}
+
+fn is_production_env() -> bool {
+    optional_env("SFID_ENV")
+        .or_else(|| optional_env("ENV"))
+        .map(|value| value.eq_ignore_ascii_case("prod") || value.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
+fn optional_env(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 pub(crate) fn active_passkeys(store: &Store, admin_pubkey: &str) -> Vec<Passkey> {
@@ -620,4 +745,44 @@ pub(crate) fn update_passkey_usage(
     let _ = record.passkey.update_credential(auth_result);
     record.last_used_at = Some(now);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev_localhost_passkey_config_builds() {
+        let config = PasskeyWebauthnConfig {
+            rp_id: DEV_PASSKEY_RP_ID.to_string(),
+            origins: vec![DEV_PASSKEY_ORIGIN.to_string()],
+            production: false,
+        };
+
+        validate_passkey_config(&config).expect("dev localhost passkey config should be valid");
+        build_webauthn(&config).expect("dev localhost passkey webauthn should build");
+    }
+
+    #[test]
+    fn production_passkey_config_rejects_localhost() {
+        let config = PasskeyWebauthnConfig {
+            rp_id: DEV_PASSKEY_RP_ID.to_string(),
+            origins: vec![DEV_PASSKEY_ORIGIN.to_string()],
+            production: true,
+        };
+
+        assert!(validate_passkey_config(&config).is_err());
+    }
+
+    #[test]
+    fn production_passkey_config_accepts_official_domain() {
+        let config = PasskeyWebauthnConfig {
+            rp_id: PROD_PASSKEY_RP_ID.to_string(),
+            origins: vec![PROD_PASSKEY_ORIGIN.to_string()],
+            production: true,
+        };
+
+        validate_passkey_config(&config).expect("production passkey config should be valid");
+        build_webauthn(&config).expect("production passkey webauthn should build");
+    }
 }

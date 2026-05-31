@@ -1102,6 +1102,12 @@ fn main() {
             .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
         info!("chain genesis hash initialized");
 
+        // 中文注释:Passkey 绑定必须受 WebAuthn RP ID / Origin 约束;
+        // 生产环境在启动期强制校验为 sfid.crcfrcn.com。
+        admins::passkeys::validate_passkey_configuration()
+            .unwrap_or_else(|e| panic!("invalid SFID Passkey configuration: {e}"));
+        info!("passkey webauthn configuration validated");
+
         // 中文注释:省级管理员采用同级模型;43 个初始省级管理员只作为
         // 不可删除安全根,新增省级管理员走 admins 安全动作落本地管理表。
 

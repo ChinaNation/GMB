@@ -44,3 +44,4 @@
 - 2026-05-31:后端将 Passkey 注册与 WebAuthn 辅助从 `admins/actions.rs` 拆到 `admins/passkeys.rs`,原 API 路径不变。
 - 2026-05-31:前端 Passkey 工具改名为 `admins/Passkey.tsx`,省管理员新增账户扫码入口改为图标按钮。
 - 2026-05-31:注册局子 tab 改为“省管理员列表”,顶部管理员身份展示改为“角色 · 姓名”。
+- 2026-05-31:Passkey WebAuthn 域名配置改为环境变量,开发默认 `localhost`,生产强制 `sfid.crcfrcn.com`。
