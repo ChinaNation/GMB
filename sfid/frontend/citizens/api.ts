@@ -25,6 +25,13 @@ export type CitizenRow = {
   bind_status: 'PENDING' | 'BOUND';
 };
 
+export type PageResult<T> = {
+  items: T[];
+  page_size: number;
+  next_cursor?: string | null;
+  has_more: boolean;
+};
+
 export type CitizenBindChallengeResult = {
   challenge_id: string;
   challenge_text: string;
@@ -101,9 +108,18 @@ export type CpmsStatusExportImportResult = {
   unmatched_release_records: string[];
 };
 
-export async function listCitizens(auth: AdminAuth, keyword?: string): Promise<CitizenRow[]> {
-  const q = keyword ? `?keyword=${encodeURIComponent(keyword)}` : '';
-  return request<CitizenRow[]>(`/api/v1/admin/citizens${q}`, {
+export async function listCitizens(
+  auth: AdminAuth,
+  keyword: string,
+  cursor?: string | null,
+  pageSize = 50,
+): Promise<PageResult<CitizenRow>> {
+  const params = new URLSearchParams({
+    keyword,
+    page_size: String(pageSize),
+  });
+  if (cursor) params.set('cursor', cursor);
+  return request<PageResult<CitizenRow>>(`/api/v1/admin/citizens?${params.toString()}`, {
     headers: adminHeaders(auth),
   });
 }

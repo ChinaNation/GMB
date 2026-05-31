@@ -19,6 +19,7 @@ BACKUP_TIMER_SRC="${PAYLOAD_DIR}/systemd/cpms-backup.timer"
 NGINX_SRC="${PAYLOAD_DIR}/nginx/cpms.conf"
 CERT_SCRIPT_SRC="${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
 DEBS_DIR="${PAYLOAD_DIR}/debs"
+MANIFEST_SRC="${PAYLOAD_DIR}/manifest.env"
 
 check_payload() {
   if [[ ! -x "${BIN_SRC}" ]]; then
@@ -37,6 +38,10 @@ check_payload() {
     echo "ERROR: missing systemd service file"
     exit 1
   fi
+  if [[ ! -f "${MANIFEST_SRC}" ]]; then
+    echo "ERROR: missing package manifest at ${MANIFEST_SRC}"
+    exit 1
+  fi
   if [[ ! -f "${NGINX_SRC}" || ! -f "${CERT_SCRIPT_SRC}" ]]; then
     echo "ERROR: missing nginx or certificate payload"
     exit 1
@@ -47,11 +52,39 @@ check_payload() {
   fi
 }
 
+load_manifest() {
+  source "${MANIFEST_SRC}"
+  if [[ "${CPMS_PACKAGE_OS:-}" != "ubuntu24" ]]; then
+    echo "ERROR: unsupported package OS: ${CPMS_PACKAGE_OS:-missing}"
+    exit 1
+  fi
+  case "${CPMS_PACKAGE_ARCH:-}" in
+    amd64|arm64)
+      ;;
+    *)
+      echo "ERROR: unsupported package arch: ${CPMS_PACKAGE_ARCH:-missing}"
+      exit 1
+      ;;
+  esac
+}
+
+current_debian_arch() {
+  if command -v dpkg >/dev/null 2>&1; then
+    dpkg --print-architecture
+    return 0
+  fi
+  case "$(uname -m)" in
+    x86_64|amd64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) uname -m ;;
+  esac
+}
+
 check_os() {
   local arch
-  arch="$(uname -m)"
-  if [[ "${arch}" != "x86_64" && "${arch}" != "amd64" ]]; then
-    echo "ERROR: cpms-ubuntu24-amd64.run only supports amd64"
+  arch="$(current_debian_arch)"
+  if [[ "${arch}" != "${CPMS_PACKAGE_ARCH}" ]]; then
+    echo "ERROR: ${CPMS_PACKAGE_NAME:-cpms-ubuntu24-${CPMS_PACKAGE_ARCH}.run} only supports ${CPMS_PACKAGE_ARCH}; current architecture is ${arch}"
     exit 1
   fi
   if [[ ! -f /etc/os-release ]]; then
@@ -61,7 +94,7 @@ check_os() {
   # 中文注释：安装包只面向 Ubuntu Server 24.04 LTS，避免在未知系统上半安装。
   source /etc/os-release
   if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "24.04" ]]; then
-    echo "ERROR: this installer requires Ubuntu 24.04 amd64"
+    echo "ERROR: this installer requires Ubuntu 24.04 ${CPMS_PACKAGE_ARCH}"
     exit 1
   fi
 }
@@ -75,7 +108,7 @@ install_offline_deps() {
   if ! dpkg -i /opt/cpms/offline-debs/*.deb; then
     if ! dpkg --configure -a; then
       echo "ERROR: offline deb dependency closure is incomplete"
-      echo "Please rebuild cpms-ubuntu24-amd64.run with the full Ubuntu 24.04 dependency closure."
+      echo "Please rebuild ${CPMS_PACKAGE_NAME:-cpms-ubuntu24-${CPMS_PACKAGE_ARCH}.run} with the full Ubuntu 24.04 ${CPMS_PACKAGE_ARCH} dependency closure."
       exit 1
     fi
   fi
@@ -129,7 +162,7 @@ setup_database() {
     db_password="${db_password%@127.0.0.1:5432/${db_name}}"
     key_encrypt_secret="${CPMS_KEY_ENCRYPT_SECRET:-}"
     if [[ "${db_password}" == "${CPMS_DATABASE_URL:-}" || -z "${key_encrypt_secret}" ]]; then
-      echo "ERROR: existing /etc/cpms/cpms-backend.env is not a cpms-ubuntu24-amd64 env file"
+      echo "ERROR: existing /etc/cpms/cpms-backend.env is not a valid CPMS installer env file"
       exit 1
     fi
   else
@@ -223,6 +256,7 @@ EOF
 
 main() {
   check_payload
+  load_manifest
   check_os
   install_offline_deps
   ensure_postgres_service

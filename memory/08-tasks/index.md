@@ -56,6 +56,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260531-cpms-ci-arm64-installer.md`
 - `memory/08-tasks/done/20260531-cpms-ci-clean-ubuntu-debs.md`
 - `memory/08-tasks/done/20260531-cpms-ubuntu24-offline-installer.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`

@@ -36,8 +36,8 @@
 
 短期登录状态由 CPMS 本机 PostgreSQL 承载。`sessions.access_token` 只写入
 `cpms_session` HttpOnly Cookie，前端不再保存 token。Cookie 默认不设置浏览器 Max-Age，
-实际空闲过期以数据库 `sessions.expires_at` 为准；正式 `cpms-ubuntu24-amd64.run` 离线安装
-通过 nginx 提供 `https://www.cpms.com/`，并设置 `CPMS_COOKIE_SECURE=true` 给 Cookie 增加
+实际空闲过期以数据库 `sessions.expires_at` 为准；正式 `cpms-ubuntu24-amd64.run` 或
+`cpms-ubuntu24-arm64.run` 离线安装通过 nginx 提供 `https://www.cpms.com/`，并设置 `CPMS_COOKIE_SECURE=true` 给 Cookie 增加
 `Secure`。定时清理逻辑删除过期 session、过期 challenge 和超时二维码登录结果。
 
 ## 5. 安全约束

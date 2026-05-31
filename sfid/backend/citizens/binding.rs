@@ -325,6 +325,21 @@ pub(crate) async fn citizen_bind(
     };
 
     let record = store.citizen_records.get(&cid).cloned().unwrap();
+    if let Err(e) = state.store.upsert_citizen_row(&record) {
+        tracing::error!(error = %e, "citizen row upsert failed");
+        if e.contains("duplicate key") {
+            return api_error(
+                StatusCode::CONFLICT,
+                1005,
+                "citizen unique key already exists",
+            );
+        }
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "citizen row write failed",
+        );
+    }
     append_audit_log_with_meta(
         &mut store,
         "CITIZEN_BIND",

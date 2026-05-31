@@ -22,6 +22,9 @@ export function CitizensView() {
   const { auth, capabilities } = useAuth();
   const [rows, setRows] = useState<CitizenRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
 
   // 绑定弹窗控制(state 仅持有 open + 当前 record,其它细节在 Modal 组件内)
   const [bindModalOpen, setBindModalOpen] = useState(false);
@@ -29,14 +32,21 @@ export function CitizensView() {
   const [detailRecord, setDetailRecord] = useState<CitizenRow | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
-  const refreshList = async (keyword?: string, silent?: boolean) => {
+  const refreshList = async (keyword: string, cursor?: string | null, silent?: boolean) => {
     if (!auth) return;
+    const exact = keyword.trim();
+    if (!exact) {
+      setRows([]);
+      setNextCursor(null);
+      return;
+    }
     setLoading(true);
     try {
-      const raw = await listCitizens(auth, keyword);
-      const list = Array.isArray(raw) ? raw : [];
+      const raw = await listCitizens(auth, exact, cursor);
+      const list = raw.items;
       setRows(list);
-      if (keyword && list.length === 0) {
+      setNextCursor(raw.next_cursor ?? null);
+      if (list.length === 0) {
         Modal.warning({
           title: '查询结果',
           content: '没有的公民信息',
@@ -56,11 +66,13 @@ export function CitizensView() {
   useEffect(() => {
     if (!auth) {
       setRows([]);
+      setSearchKeyword('');
+      setNextCursor(null);
+      setCursorStack([]);
       setBindModalOpen(false);
       setImportModalOpen(false);
       return;
     }
-    void refreshList(undefined, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
 
@@ -74,7 +86,24 @@ export function CitizensView() {
         // 非 SS58 格式,保留原值
       }
     }
+    setSearchKeyword(keyword);
+    setCursorStack([]);
     await refreshList(keyword);
+  };
+
+  const onNextPage = async () => {
+    if (!nextCursor || !searchKeyword) return;
+    setCursorStack((prev) => [...prev, nextCursor]);
+    await refreshList(searchKeyword, nextCursor, true);
+  };
+
+  const onPrevPage = async () => {
+    if (!searchKeyword || cursorStack.length === 0) return;
+    const stack = [...cursorStack];
+    stack.pop();
+    const prevCursor = stack.length > 0 ? stack[stack.length - 1] : null;
+    setCursorStack(stack);
+    await refreshList(searchKeyword, prevCursor, true);
   };
 
   const openBindModal = (record: CitizenRow | null) => {
@@ -197,7 +226,7 @@ export function CitizensView() {
           rowKey={(r) => `${r.id}`}
           dataSource={rows}
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
           columns={citizenColumns}
           onRow={(record) => ({
             onClick: (event) => {
@@ -209,6 +238,14 @@ export function CitizensView() {
             style: { cursor: 'pointer' },
           })}
         />
+        <Space style={{ marginTop: 12 }}>
+          <Button disabled={loading || cursorStack.length === 0} onClick={onPrevPage}>
+            上一页
+          </Button>
+          <Button disabled={loading || !nextCursor} onClick={onNextPage}>
+            下一页
+          </Button>
+        </Space>
       </Card>
 
       <Modal
@@ -242,7 +279,7 @@ export function CitizensView() {
           open={bindModalOpen}
           record={bindTargetRecord}
           onClose={() => setBindModalOpen(false)}
-          onBound={() => refreshList(undefined, true)}
+          onBound={() => refreshList(searchKeyword, null, true)}
         />
       )}
 
@@ -250,7 +287,7 @@ export function CitizensView() {
         auth={auth}
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
-        onImported={() => refreshList(undefined, true)}
+        onImported={() => refreshList(searchKeyword, null, true)}
       />
     </>
   );

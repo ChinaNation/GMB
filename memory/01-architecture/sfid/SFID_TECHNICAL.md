@@ -209,6 +209,9 @@
 4. `store_cpms`：CPMS 安装授权、`install_secret`、授权状态和 `cpms_pubkey_hash` 主数据。
 5. `store_institutions`：机构、机构账户和资料库快照。
 6. `store_ops`：登录 challenge/session、审计、链路幂等和服务指标。
+7. `sfid_citizens`：管理员端公民精确查询行表，按 `province_code / city_code / created_at / id` 建索引。
+8. `sfid_institutions`：管理员端机构精确查询行表，按 `category / province / city / created_at / id` 建索引。
+9. `sfid_institution_accounts`：机构账户行表，用于机构列表账户数和账户精确写入。
 ### 8.2 关键约束
 - `admins.admin_pubkey` 全局唯一。
 - 管理员新增入口必须共用全局公钥查重逻辑，重复时区分“已是省级管理员 / 已是市级管理员”。
@@ -219,6 +222,8 @@
 - `archive_no` 与 `sfid_code` 首次绑定后永久绑定，不允许解绑、不允许换档案号、不允许把同一档案号绑定到其他身份ID，也不允许把同一身份ID改绑到其他档案号；后续只允许使用同一 `archive_no` 的 ARCHIVE 档案码更换 `wallet_pubkey / wallet_address`。
 - `citizen_id` 仅是 SFID 后端内部自增记录主键，用于管理端定位记录和 replace 请求，不是对用户展示的身份ID；对外身份ID字段固定为 `sfid_code`。
 - 启动清理：历史非 `BOUND` 公民记录及其 `archive_no / sfid_code / wallet_pubkey` 反向索引必须在服务启动时物理剔除，公民列表和查询接口不得暴露半绑定数据。
+- 管理员端大数据列表不得默认返回全量。公民首页、私权机构列表、公权机构列表必须走精确查询；接口返回 `{ items, page_size, next_cursor, has_more }`，不得依赖前端本地分页承载大数据。
+- 精确写入由数据库唯一约束兜底：`sfid_citizens.archive_no / sfid_code / wallet_pubkey / wallet_address` 唯一，`sfid_institutions.sfid_number` 唯一，`sfid_institution_accounts(sfid_number, account_name)` 唯一。
 
 ### 8.3 状态机
 - `audit_logs.result`：`SUCCESS | FAILED`

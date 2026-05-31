@@ -2,9 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="${ROOT_DIR}/dist/cpms-ubuntu24-amd64"
-PAYLOAD_DIR="${OUT_DIR}/payload"
-RUN_FILE="${ROOT_DIR}/dist/cpms-ubuntu24-amd64.run"
+PACKAGE_ARCH="amd64"
 RUNTIME_PACKAGES=(
   postgresql
   postgresql-client
@@ -15,18 +13,64 @@ RUNTIME_PACKAGES=(
   openssh-client
 )
 
+usage() {
+  echo "Usage: $0 [--arch amd64|arm64]"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --arch)
+      PACKAGE_ARCH="${2:-}"
+      shift 2
+      ;;
+    --arch=*)
+      PACKAGE_ARCH="${1#--arch=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+case "${PACKAGE_ARCH}" in
+  amd64)
+    DOCKER_PLATFORM="linux/amd64"
+    ;;
+  arm64)
+    DOCKER_PLATFORM="linux/arm64"
+    ;;
+  *)
+    echo "ERROR: unsupported package arch: ${PACKAGE_ARCH}"
+    usage
+    exit 1
+    ;;
+esac
+
+PACKAGE_BASENAME="cpms-ubuntu24-${PACKAGE_ARCH}"
+OUT_DIR="${ROOT_DIR}/dist/${PACKAGE_BASENAME}"
+PAYLOAD_DIR="${OUT_DIR}/payload"
+RUN_FILE="${ROOT_DIR}/dist/${PACKAGE_BASENAME}.run"
+SHA256_FILE="${RUN_FILE}.sha256"
+
 collect_offline_debs() {
   if ! command -v docker >/dev/null 2>&1; then
-    echo "ERROR: cpms-ubuntu24-amd64.run must be built with Docker available."
+    echo "ERROR: ${PACKAGE_BASENAME}.run must be built with Docker available."
     exit 1
   fi
 
-  echo "[4/8] Download Ubuntu 24.04 offline deb closure in clean container"
+  echo "[4/8] Download Ubuntu 24.04 ${PACKAGE_ARCH} offline deb closure in clean container"
   mkdir -p "${PAYLOAD_DIR}/debs"
   rm -f "${PAYLOAD_DIR}/debs"/*.deb
 
   # 中文注释：依赖闭包必须在官方 ubuntu:24.04 容器内解析，不能读取 GitHub runner 主机 apt 源。
-  docker run --rm --platform linux/amd64 \
+  docker run --rm --platform "${DOCKER_PLATFORM}" \
     -e CPMS_RUNTIME_PACKAGES="${RUNTIME_PACKAGES[*]}" \
     -e HOST_UID="$(id -u)" \
     -e HOST_GID="$(id -g)" \
@@ -92,8 +136,8 @@ collect_offline_debs() {
 }
 
 create_run_installer() {
-  echo "[8/8] Create cpms-ubuntu24-amd64.run"
-  rm -f "${RUN_FILE}"
+  echo "[8/8] Create ${PACKAGE_BASENAME}.run"
+  rm -f "${RUN_FILE}" "${SHA256_FILE}"
   cat >"${RUN_FILE}" <<'HEADER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -117,6 +161,7 @@ __CPMS_PAYLOAD_BELOW__
 HEADER
   tar -C "${OUT_DIR}" -cz . >>"${RUN_FILE}"
   chmod 0755 "${RUN_FILE}"
+  (cd "$(dirname "${RUN_FILE}")" && sha256sum "$(basename "${RUN_FILE}")" >"$(basename "${SHA256_FILE}")")
 }
 
 # 中文注释：行政区数据由 CPMS 后端编译期直接引用 sfid/backend/sfid 唯一源，
@@ -131,7 +176,7 @@ fi
 (cd "${ROOT_DIR}/frontend" && npm run build)
 
 echo "[3/8] Prepare installer layout"
-rm -rf "${OUT_DIR}" "${RUN_FILE}"
+rm -rf "${OUT_DIR}" "${RUN_FILE}" "${SHA256_FILE}"
 mkdir -p \
   "${PAYLOAD_DIR}/bin" \
   "${PAYLOAD_DIR}/db" \
@@ -139,6 +184,11 @@ mkdir -p \
   "${PAYLOAD_DIR}/systemd" \
   "${PAYLOAD_DIR}/nginx" \
   "${PAYLOAD_DIR}/certs"
+cat >"${PAYLOAD_DIR}/manifest.env" <<EOF
+CPMS_PACKAGE_NAME=${PACKAGE_BASENAME}.run
+CPMS_PACKAGE_OS=ubuntu24
+CPMS_PACKAGE_ARCH=${PACKAGE_ARCH}
+EOF
 
 collect_offline_debs
 
@@ -167,6 +217,7 @@ chmod +x \
   "${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
 
 echo "[7/8] Validate payload"
+test -f "${PAYLOAD_DIR}/manifest.env"
 test -f "${PAYLOAD_DIR}/frontend/index.html"
 test -f "${PAYLOAD_DIR}/nginx/cpms.conf"
 test -f "${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
@@ -178,3 +229,4 @@ echo
 echo "Done."
 echo "Installer directory: ${OUT_DIR}"
 echo "Installer package: ${RUN_FILE}"
+echo "Installer checksum: ${SHA256_FILE}"

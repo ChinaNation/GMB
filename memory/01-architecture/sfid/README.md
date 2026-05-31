@@ -109,6 +109,11 @@ curl http://127.0.0.1:8899/api/v1/health
 2. `store_cpms`：CPMS 安装授权、授权状态和公钥哈希。
 3. `store_institutions`：机构、账户和资料库快照。
 4. `store_ops`：登录 challenge/session、管理员 Passkey、审计、链路幂等和指标。
+- 面向管理员浏览器的大数据查询使用独立行表：
+1. `sfid_citizens`：公民身份精确查询和游标分页。
+2. `sfid_institutions`：私权/公权/公安局机构精确查询和游标分页。
+3. `sfid_institution_accounts`：机构账户数量和账户行数据。
+- 首页和机构页不得默认拉取全量数据；管理员必须输入档案号、身份ID、投票账户、机构 SFID 或机构名称等精确条件后，后端只返回当前权限范围内命中的分页结果。
 - 管理员采用结构化分表：
 1. `admins`
 2. `provinces`

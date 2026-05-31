@@ -45,81 +45,40 @@ pub(crate) async fn admin_list_citizens(
         })
         .map(|c| c.code.to_string());
 
-    let keyword = query.keyword.unwrap_or_default().trim().to_lowercase();
-    let limit = query.limit.unwrap_or(100).clamp(1, 500);
-    let offset = query.offset.unwrap_or(0);
-
-    let store = match store_read_or_500(&state) {
+    let keyword = query.keyword.unwrap_or_default();
+    let page_size = query.page_size.or(query.limit).unwrap_or(50).clamp(1, 100);
+    if query.offset.unwrap_or(0) > 0 {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "offset pagination is not supported",
+        );
+    }
+    let page = match state.store.list_citizens_exact(
+        keyword.as_str(),
+        scope_province_code.as_deref(),
+        scope_city_code.as_deref(),
+        query.cursor.as_deref(),
+        page_size,
+    ) {
         Ok(v) => v,
-        Err(resp) => return resp,
+        Err(e) if e == "invalid page cursor" => {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor")
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "admin_list_citizens failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            );
+        }
     };
-    let mut rows: Vec<CitizenRow> = Vec::new();
-
-    // 中文注释:新流程只有 ARCHIVE + wuminapp 签名完成后才形成可展示公民记录。
-    // 历史开发期遗留的半绑定记录不进入列表，避免把不可用状态暴露给后台。
-    for record in store.citizen_records.values() {
-        if record.bind_status() != CitizenBindStatus::Bound {
-            continue;
-        }
-        if let Some(province_code) = scope_province_code.as_deref() {
-            if record.province_code.as_deref() != Some(province_code) {
-                continue;
-            }
-        }
-        if let Some(city_code) = scope_city_code.as_deref() {
-            if record.city_code.as_deref() != Some(city_code) {
-                continue;
-            }
-        }
-        rows.push(CitizenRow {
-            id: record.id,
-            wallet_pubkey: record.wallet_pubkey.clone(),
-            wallet_address: record.wallet_address.clone(),
-            archive_no: record.archive_no.clone(),
-            sfid_code: record.sfid_code.clone(),
-            citizen_status: record.citizen_status.clone(),
-            voting_eligible: record.voting_eligible,
-            vote_status: record.computed_vote_status(),
-            identity_status: record.computed_identity_status(),
-            valid_from: record.archive_valid_from.clone(),
-            valid_until: record.archive_valid_until.clone(),
-            status_updated_at: record.status_updated_at,
-            bind_status: record.bind_status(),
-        });
-    }
-
-    rows.sort_by_key(|r| r.id);
-
-    if !keyword.is_empty() {
-        rows.retain(|r| {
-            r.wallet_address
-                .as_ref()
-                .map(|v| v.to_lowercase().contains(&keyword))
-                .unwrap_or(false)
-                || r.wallet_pubkey
-                    .as_ref()
-                    .map(|v| v.to_lowercase().contains(&keyword))
-                    .unwrap_or(false)
-                || r.archive_no
-                    .as_ref()
-                    .map(|v| v.to_lowercase().contains(&keyword))
-                    .unwrap_or(false)
-                || r.sfid_code
-                    .as_ref()
-                    .map(|v| v.to_lowercase().contains(&keyword))
-                    .unwrap_or(false)
-        });
-    }
-    let rows = rows
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect::<Vec<_>>();
 
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: rows,
+        data: page,
     })
     .into_response()
 }
