@@ -1,6 +1,6 @@
 # CITIZENS 模块技术文档
 
-- 最后更新:2026-05-30
+- 最后更新:2026-05-31
 - 任务卡:
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
 
@@ -24,7 +24,7 @@
 - `model.rs`
   - 公民电子护照记录、`bind_status`、绑定 DTO、状态扫码 QR 载荷。
 - `handler.rs`
-  - `admin_list_citizens`：后台公民列表。
+  - `admin_list_citizens`：后台公民精确查询和游标分页。
   - `public_identity_search`：公开身份查询。
 - `status.rs`
   - `admin_cpms_status_scan`：CPMS 站点扫公民状态。
@@ -65,8 +65,10 @@
 - `citizen_status` 当前只允许 `NORMAL / REVOKED`；`REVOKED` 表示 CPMS 软删除注销，必须对应 `voting_eligible=false`。
 - CPMS 年度 `CPMS_STATUS_EXPORT` 导入时，`citizen_binding_records` 按 `archive_no` 覆盖已有 SFID 绑定记录的钱包地址、公民状态和投票资格，但不自动生成新的身份 ID；`binding_release_records` 用于释放档案号、身份 ID、钱包地址三者绑定关系，不处理 CPMS 护照号。
 - SFID 导入年度报告前必须校验 CPMS 授权处于 `ACTIVE`、CPMS 公钥已经由档案码验真绑定、`records_hash` 与签名均正确；同一 CPMS 同一年度只允许导入相同 `records_hash`。
-- 后台公民列表、绑定 challenge、年度报告导入均按管理员省/市 scope 过滤:
+- 后台公民精确查询、绑定 challenge、年度报告导入均按管理员省/市 scope 过滤:
   省级管理员只看本省,市级管理员只操作本市。
+- 管理员端公民查询不默认返回任何全量列表；必须输入投票账户、档案号或身份ID，后端返回 `{ items, page_size, next_cursor, has_more }`。
+- `sfid_citizens` 是管理员浏览器查询用行表；绑定完成后同步写入，唯一约束保证 `archive_no / sfid_code / wallet_pubkey / wallet_address` 一对一。
 - 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。

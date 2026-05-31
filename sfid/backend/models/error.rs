@@ -10,6 +10,14 @@ pub(crate) struct ApiResponse<T: Serialize> {
 }
 
 #[derive(Serialize)]
+pub(crate) struct PageResult<T: Serialize> {
+    pub(crate) items: Vec<T>,
+    pub(crate) page_size: usize,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) has_more: bool,
+}
+
+#[derive(Serialize)]
 pub(crate) struct ApiError {
     pub(crate) code: u32,
     /// 中文注释:稳定业务错误码给前端判断逻辑使用;message 只给用户展示。

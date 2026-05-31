@@ -98,6 +98,13 @@ export interface InstitutionListRow {
   created_by_role?: string | null;
 }
 
+export interface PageResult<T> {
+  items: T[];
+  page_size: number;
+  next_cursor?: string | null;
+  has_more: boolean;
+}
+
 export interface InstitutionDetail {
   institution: MultisigInstitution;
   accounts: MultisigAccount[];
@@ -184,8 +191,10 @@ export interface ListInstitutionsQuery {
   category?: InstitutionCategory;
   province?: string;
   city?: string;
-  /** 模糊搜索关键字:匹配机构名称或 SFID 子串(大小写不敏感);空=不过滤 */
+  /** 精确搜索关键字:匹配机构名称或 SFID;空=返回空页 */
   q?: string;
+  cursor?: string | null;
+  page_size?: number;
 }
 
 // ─── API 调用 ─────────────────────────────────────────────────
@@ -255,21 +264,23 @@ export async function createAccount(
 }
 
 /**
- * 按 scope(登录管理员角色/省/市)返回机构列表。
- * 可选 category / province / city 二次过滤。
+ * 按 scope(登录管理员角色/省/市)精确查询机构。
+ * 空查询返回空页,避免浏览器加载大范围数据。
  */
 export async function listInstitutions(
   auth: AdminAuth,
   query?: ListInstitutionsQuery
-): Promise<InstitutionListRow[]> {
+): Promise<PageResult<InstitutionListRow>> {
   const params = new URLSearchParams();
   if (query?.category) params.set('category', query.category);
   if (query?.province) params.set('province', query.province);
   if (query?.city) params.set('city', query.city);
   if (query?.q && query.q.trim()) params.set('q', query.q.trim());
+  if (query?.cursor) params.set('cursor', query.cursor);
+  if (query?.page_size) params.set('page_size', String(query.page_size));
   const qs = params.toString();
   const path = qs ? `/api/v1/institution/list?${qs}` : '/api/v1/institution/list';
-  return adminRequest<InstitutionListRow[]>(path, auth);
+  return adminRequest<PageResult<InstitutionListRow>>(path, auth);
 }
 
 /**

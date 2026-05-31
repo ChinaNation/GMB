@@ -3,7 +3,7 @@
 // 整行可点击 → 进机构详情页。不显示"操作"列。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { message, Table, Tag, Typography } from 'antd';
+import { Button, message, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   listInstitutions,
@@ -47,19 +47,31 @@ export const InstitutionListTable: React.FC<Props> = ({
 }) => {
   const [rows, setRows] = useState<InstitutionListRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
 
-  useEffect(() => {
+  const loadRows = (cursor?: string | null) => {
+    const exactQuery = searchQuery?.trim() ?? '';
+    if (!exactQuery) {
+      setRows([]);
+      setNextCursor(null);
+      return () => {};
+    }
     let cancelled = false;
     setLoading(true);
-    // 中文注释:city 为空时传 undefined,后端按省过滤即可
     listInstitutions(auth, {
       category,
       province,
       city: city || undefined,
-      q: searchQuery && searchQuery.trim() ? searchQuery.trim() : undefined,
+      q: exactQuery,
+      cursor,
+      page_size: 50,
     })
       .then((data) => {
-        if (!cancelled) setRows(data);
+        if (!cancelled) {
+          setRows(data.items);
+          setNextCursor(data.next_cursor ?? null);
+        }
       })
       .catch((err) => {
         if (!cancelled) message.error(err instanceof Error ? err.message : '加载机构列表失败');
@@ -70,7 +82,27 @@ export const InstitutionListTable: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
+  };
+
+  useEffect(() => {
+    setCursorStack([]);
+    return loadRows(null);
   }, [auth.access_token, category, province, city, refreshKey, searchQuery]);
+
+  const onNextPage = () => {
+    if (!nextCursor) return;
+    setCursorStack((prev) => [...prev, nextCursor]);
+    loadRows(nextCursor);
+  };
+
+  const onPrevPage = () => {
+    if (cursorStack.length === 0) return;
+    const stack = [...cursorStack];
+    stack.pop();
+    const prevCursor = stack.length > 0 ? stack[stack.length - 1] : null;
+    setCursorStack(stack);
+    loadRows(prevCursor);
+  };
 
   // 中文注释:"创建用户"列仅对**私权机构**展示。
   // 公安局由后端 reconcile 批量生成,created_by 不具人类语义;
@@ -147,7 +179,7 @@ export const InstitutionListTable: React.FC<Props> = ({
         rowKey={(r) => r.sfid_number}
         loading={loading}
         dataSource={rows}
-        pagination={{ pageSize: 10 }}
+        pagination={false}
         // 中文注释:整行可点击,跳详情页。
         onRow={(row) => ({
           onClick: () => onSelectInstitution?.(row.sfid_number),
@@ -155,6 +187,14 @@ export const InstitutionListTable: React.FC<Props> = ({
         })}
         columns={columns}
       />
+      <Space style={{ marginTop: 12 }}>
+        <Button disabled={loading || cursorStack.length === 0} onClick={onPrevPage}>
+          上一页
+        </Button>
+        <Button disabled={loading || !nextCursor} onClick={onNextPage}>
+          下一页
+        </Button>
+      </Space>
     </div>
   );
 };

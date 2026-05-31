@@ -19,8 +19,16 @@ concurrency:
 
 jobs:
   build:
-    name: CPMS 编译、测试与打包
-    runs-on: ubuntu-24.04
+    name: CPMS ${{ matrix.arch }} 编译与测试
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -39,7 +47,7 @@ jobs:
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "cpms-backend"
+          shared-key: "cpms-backend-${{ matrix.arch }}"
           workspaces: cpms/backend -> target
 
       # ── 后端 ──
@@ -60,26 +68,17 @@ jobs:
         working-directory: cpms/frontend
         run: npm run build
 
-      # ── 构建 Ubuntu 24.04 离线一体安装包 ──
-      - name: 构建 cpms-ubuntu24-amd64.run
-        run: bash cpms/scripts/build_linux_host_installer.sh
-
-      - name: 清理旧 artifact
+      # ── 手动运行才构建正式离线安装包；push / pull_request 只做 CI 校验 ──
+      - name: 构建 cpms-ubuntu24-${{ matrix.arch }}.run
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name == "CPMS") | .id' \
-          | while read -r id; do
-              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
-            done
+        run: bash cpms/scripts/build_linux_host_installer.sh --arch "${{ matrix.arch }}"
 
-      - name: 上传 cpms-ubuntu24-amd64.run
+      - name: 上传 cpms-ubuntu24-${{ matrix.arch }}.run
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: CPMS
-          path: cpms/dist/cpms-ubuntu24-amd64.run
+          name: cpms-ubuntu24-${{ matrix.arch }}
+          path: |
+            cpms/dist/cpms-ubuntu24-${{ matrix.arch }}.run
+            cpms/dist/cpms-ubuntu24-${{ matrix.arch }}.run.sha256
           retention-days: 30

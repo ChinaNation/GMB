@@ -240,6 +240,22 @@ async fn insert_default_accounts_best_effort(
                 });
         }
     }
+    for name in DEFAULT_ACCOUNT_NAMES {
+        let account = MultisigAccount {
+            sfid_number: sfid_number.to_string(),
+            account_name: (*name).to_string(),
+            duoqian_address: derive_duoqian_address(sfid_number, name),
+            chain_status: MultisigChainStatus::NotOnChain,
+            chain_synced_at: None,
+            chain_tx_hash: None,
+            chain_block_number: None,
+            created_by: created_by.to_string(),
+            created_at: now,
+        };
+        if let Err(e) = state.store.upsert_institution_account_row(&account) {
+            tracing::warn!(sfid = sfid_number, account = *name, error = %e, "institution account row upsert failed");
+        }
+    }
 }
 
 /// 两段提交 audit_log(机构/账户版)。
@@ -567,6 +583,14 @@ pub(crate) async fn create_institution(
                 );
             }
         }
+        if let Err(e) = state.store.upsert_institution_row(&inst) {
+            tracing::error!(error = %e, "institution row upsert failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "institution row write failed",
+            );
+        }
 
         // 同步写模块 Store 快照,供审计与管理员反查读取同一份机构快照。
         {
@@ -815,6 +839,14 @@ pub(crate) async fn update_institution(
             &format!("shard write: {e}"),
         );
     }
+    if let Err(e) = state.store.upsert_institution_row(&updated) {
+        tracing::error!(error = %e, "institution row upsert failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "institution row write failed",
+        );
+    }
 
     // 同步写模块 Store 快照。
     {
@@ -973,6 +1005,14 @@ pub(crate) async fn create_account(
             &format!("shard write: {e}"),
         );
     }
+    if let Err(e) = state.store.upsert_institution_account_row(&account) {
+        tracing::error!(error = %e, "institution account row upsert failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "institution account row write failed",
+        );
+    }
 
     // 中文注释:同步写模块 Store 快照,保持后台反查与审计读取口径一致。
     {
@@ -1021,10 +1061,11 @@ pub(crate) struct ListInstitutionQuery {
     pub category: Option<String>,
     pub province: Option<String>,
     pub city: Option<String>,
-    /// 模糊搜索关键字:匹配 institution_name 或 sfid_number 子串(大小写不敏感)。
-    /// 为空或缺省时返回 scope 范围内全量。
-    /// scope(密钥=全国 / 省级=本省 / 市级=本市)由上游 `filter_by_scope` 自动保证。
+    /// 精确搜索关键字:匹配 institution_name 或 sfid_number。
+    /// 为空或缺省时返回空页,避免管理员登录后拉取大范围数据。
     pub q: Option<String>,
+    pub cursor: Option<String>,
+    pub page_size: Option<usize>,
 }
 
 pub(crate) async fn list_institutions(
@@ -1037,170 +1078,64 @@ pub(crate) async fn list_institutions(
         Err(resp) => return resp,
     };
     let scope = get_visible_scope(&ctx);
-
-    // 中文注释:从进程内分片缓存收集机构列表。
-    // scope 确定需要扫描哪些省:ShengAdmin/ShiAdmin 只看锁定省。
-    let target_provinces: Vec<String> = if let Some(ref locked) = scope.locked_province {
-        vec![locked.clone()]
-    } else {
-        PROVINCES.iter().map(|p| p.name.to_string()).collect()
+    let empty_page = || PageResult::<InstitutionListRow> {
+        items: Vec::new(),
+        page_size: query.page_size.unwrap_or(50).clamp(1, 100),
+        next_cursor: None,
+        has_more: false,
     };
-
-    // 预先从模块 Store 快照构建 admin pubkey → (name, role_str) 反查表。
-    // 用于 InstitutionListRow.created_by_name / created_by_role 填充
-    // 归一化 key:去 0x 前缀 + 转小写,匹配 created_by 的格式
-    // 中文注释:当前只剩 ShengAdmin / ShiAdmin 两角色。
-    let admin_lookup: std::collections::HashMap<String, (Option<String>, &'static str)> =
-        match state.store.read() {
-            Ok(store) => store
-                .admin_users_by_pubkey
-                .values()
-                .filter_map(|u| {
-                    let key = normalize_admin_pubkey(&u.admin_pubkey)?;
-                    let role_str: &'static str = match u.role {
-                        crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
-                        crate::models::AdminRole::ShiAdmin => "SHI_ADMIN",
-                    };
-                    let name_opt = if u.admin_name.trim().is_empty() {
-                        None
-                    } else {
-                        Some(u.admin_name.clone())
-                    };
-                    Some((key, (name_opt, role_str)))
-                })
-                .collect(),
-            Err(e) => {
-                tracing::warn!(error = %e, "list_institutions: admin_users lookup read failed");
-                std::collections::HashMap::new()
-            }
-        };
-
-    let query_category = query.category.clone();
-    let query_province = query.province.clone();
-    let query_city = query.city.clone();
-    // 模糊关键字统一小写参与比较
-    let query_q: Option<String> = query
-        .q
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_lowercase());
-    let scope_clone = scope.clone();
-    let mut rows: Vec<InstitutionListRow> = Vec::new();
-    for prov in &target_provinces {
-        let q_cat = query_category.clone();
-        let q_prov = query_province.clone();
-        let q_city = query_city.clone();
-        let q_kw = query_q.clone();
-        let sc = scope_clone.clone();
-        let read_result = state
-            .sharded_store
-            .read_province(prov, move |shard| {
-                // 预计算 sfid_number → 账户数,避免 O(n*m) 遍历
-                let account_counts: std::collections::HashMap<&str, usize> = {
-                    let mut map = std::collections::HashMap::new();
-                    for acc in shard.multisig_accounts.values() {
-                        *map.entry(acc.sfid_number.as_str()).or_default() += 1;
-                    }
-                    map
-                };
-                let mut province_rows: Vec<InstitutionListRow> = Vec::new();
-                for inst in shard.multisig_institutions.values() {
-                    if !sc.includes_province(&inst.province) || !sc.includes_city(&inst.city) {
-                        continue;
-                    }
-                    // 中文注释:任务卡 6 bug fix — 前端传的是 SCREAMING_SNAKE_CASE
-                    if let Some(ref cat) = q_cat {
-                        let target = match cat.trim().to_ascii_uppercase().as_str() {
-                            "PUBLIC_SECURITY" | "PUBLICSECURITY" => {
-                                Some(crate::sfid::InstitutionCategory::PublicSecurity)
-                            }
-                            "GOV_INSTITUTION" | "GOVINSTITUTION" => {
-                                Some(crate::sfid::InstitutionCategory::GovInstitution)
-                            }
-                            "PRIVATE_INSTITUTION" | "PRIVATEINSTITUTION" => {
-                                Some(crate::sfid::InstitutionCategory::PrivateInstitution)
-                            }
-                            _ => None,
-                        };
-                        match target {
-                            Some(t) if inst.category == t => {}
-                            _ => continue,
-                        }
-                    }
-                    if q_prov.as_deref().map_or(false, |p| inst.province != p) {
-                        continue;
-                    }
-                    if q_city.as_deref().map_or(false, |c| inst.city != c) {
-                        continue;
-                    }
-                    // 模糊关键字:匹配 sfid_number 子串或 institution_name 子串(大小写不敏感)
-                    if let Some(ref kw) = q_kw {
-                        let sfid_lc = inst.sfid_number.to_lowercase();
-                        let name_lc = inst
-                            .institution_name
-                            .as_deref()
-                            .map(|n| n.to_lowercase())
-                            .unwrap_or_default();
-                        if !sfid_lc.contains(kw) && !name_lc.contains(kw) {
-                            continue;
-                        }
-                    }
-                    let account_count = account_counts
-                        .get(inst.sfid_number.as_str())
-                        .copied()
-                        .unwrap_or(0);
-                    province_rows.push(InstitutionListRow {
-                        sfid_number: inst.sfid_number.clone(),
-                        institution_name: inst.institution_name.clone(),
-                        category: inst.category,
-                        // above: institution_name 为 Option<String>;两步式私权机构未命名时为 None
-                        a3: inst.a3.clone(),
-                        p1: inst.p1.clone(),
-                        province: inst.province.clone(),
-                        city: inst.city.clone(),
-                        institution_code: inst.institution_code.clone(),
-                        sub_type: inst.sub_type.clone(),
-                        parent_sfid_number: inst.parent_sfid_number.clone(),
-                        chain_status: inst.chain_status.clone(),
-                        account_count,
-                        created_at: inst.created_at,
-                        // 两个字段由外层循环根据 admin_lookup 反查填充(无法跨 shard 闭包传入)
-                        created_by_name: None,
-                        created_by_role: Some(inst.created_by.clone()),
-                    });
-                }
-                province_rows
+    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province) {
+        if locked != requested {
+            return Json(ApiResponse {
+                code: 0,
+                message: "ok".to_string(),
+                data: empty_page(),
             })
-            .await;
-        match read_result {
-            Ok(prows) => rows.extend(prows),
-            Err(e) => {
-                tracing::warn!(province = %prov, error = %e, "shard read failed in list_institutions");
-            }
+            .into_response();
         }
     }
-    rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    // ── 反查 created_by → (姓名, 角色) ──
-    // 上面 shard 闭包里临时把 created_by pubkey 塞进了 created_by_role,这里归一化
-    // + 查 admin_lookup;未命中则两字段均置 None(前端显示"未知")
-    for row in rows.iter_mut() {
-        let raw_created_by = row.created_by_role.take();
-        let Some(raw) = raw_created_by else { continue };
-        let Some(norm) = normalize_admin_pubkey(&raw) else {
-            continue;
-        };
-        if let Some((name_opt, role)) = admin_lookup.get(&norm) {
-            row.created_by_name = name_opt.clone();
-            row.created_by_role = Some((*role).to_string());
+    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city) {
+        if locked != requested {
+            return Json(ApiResponse {
+                code: 0,
+                message: "ok".to_string(),
+                data: empty_page(),
+            })
+            .into_response();
         }
     }
+    let province = scope
+        .locked_province
+        .as_deref()
+        .or(query.province.as_deref());
+    let city = scope.locked_city.as_deref().or(query.city.as_deref());
+    let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
+    let page = match state.store.list_institutions_exact(
+        query.category.as_deref(),
+        province,
+        city,
+        query.q.as_deref().unwrap_or(""),
+        query.cursor.as_deref(),
+        page_size,
+    ) {
+        Ok(v) => v,
+        Err(e) if e == "invalid page cursor" => {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor")
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "list_institutions failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "institution query failed",
+            );
+        }
+    };
 
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: rows,
+        data: page,
     })
     .into_response()
 }

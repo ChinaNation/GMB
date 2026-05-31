@@ -200,6 +200,8 @@ pub(crate) struct CitizenBindOutput {
 #[derive(Deserialize)]
 pub(crate) struct CitizensQuery {
     pub(crate) keyword: Option<String>,
+    pub(crate) cursor: Option<String>,
+    pub(crate) page_size: Option<usize>,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
 }

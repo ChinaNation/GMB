@@ -91,6 +91,7 @@ sfid/frontend/
 - “上传二维码”按钮保持纯文字按钮;同一按钮组内的“开启扫码”没有图标,上传入口也不得额外增加图标。
 - `citizens/CitizensView.tsx` 公民列表中 `sfid_code` 列标题显示为“身份ID”,不改变底层字段名。
 - `citizens/CitizensView.tsx` 公民列表中 `wallet_address` 列标题显示为“投票账户”；列表状态列显示“投票状态”，由 `citizen_status + voting_eligible` 计算。
+- `citizens/CitizensView.tsx` 登录后不得自动加载公民全量列表；管理员输入投票账户、档案号或身份ID后，前端调用服务端精确查询并使用 `next_cursor` 翻页。
 - 公民详情只展示“身份ID / 档案号 / 投票账户 / 绑定状态 / 选举权利 / 公民状态 / 有效期”，不得接收或展示签发地市归属。
 - 公民身份列表右上角提供“导入年度报告”按钮，位于“新增身份ID绑定”左侧，开放给所有已登录管理员；导入弹窗只接收 CPMS 导出的 `CPMS_STATUS_EXPORT` JSON。
 - 更换绑定弹窗的当前记录摘要只展示“档案号 / 身份ID / 投票账户”；签名请求摘要使用“选举权利 / 公民状态 / 投票账户”。
@@ -98,6 +99,7 @@ sfid/frontend/
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
+- `institutions/InstitutionListTable.tsx` 不做本地分页承载大数据；机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。
 
 ## 管理员目录规则
 
