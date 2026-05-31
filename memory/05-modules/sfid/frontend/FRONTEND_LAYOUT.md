@@ -99,6 +99,8 @@ sfid/frontend/
 - 删除市管理员确认弹窗必须展示 SS58 地址,不直接展示 hex 公钥。
 - 旧省管理员签名维护页不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
+- 本地开发的 Vite host 固定为 `localhost`;Passkey 开发配置依赖
+  `http://localhost:5179`,不得用 `127.0.0.1` 或局域网 IP 打开前端注册 Passkey。
 
 ## 链交互目录规则
 

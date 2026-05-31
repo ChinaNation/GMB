@@ -161,6 +161,10 @@
 - 管理员登录仍使用冷钱包 sr25519 challenge 签名，管理员私钥不上传、不落库。
 - 省管理员治理写操作使用 Passkey + 既有 `WUMIN_QR_V1 / sign_request` 冷钱包 sr25519 签名，业务域为 `sfid_admin_governance`，不新增二维码协议。
 - 后端只保存 Passkey 可验证公钥凭据和短期挑战状态，不保存省管理员云端业务私钥。
+- Passkey WebAuthn 域名由后端环境变量控制:开发默认 `SFID_PASSKEY_RP_ID=localhost`
+  与 `SFID_PASSKEY_ORIGIN=http://localhost:5179`;生产环境 `SFID_ENV=prod|production`
+  时启动期强制 `SFID_PASSKEY_RP_ID=sfid.crcfrcn.com` 且
+  `SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com`,不得混入 localhost、IP 或其它 origin。
 - 机构登记与机构链交互在 `institutions`，公民电子护照绑定/投票凭证在 `citizens`。
 - CPMS 授权方案：每个市公安局机构 `sfid_number` 对应一个 INSTALL 授权。
 - SFID 信任库存储维度：`sfid_number + install_secret_hash + cpms_pubkey_hash`，按机构隔离验真。

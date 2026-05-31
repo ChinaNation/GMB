@@ -78,6 +78,10 @@ sfid/backend/
 - 一般业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
   提供 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;重要业务写操作必须再叠加
   当前管理员冷钱包 sr25519 签名。
+- `admins/passkeys.rs` 的 WebAuthn 配置读取 `SFID_PASSKEY_RP_ID`、
+  `SFID_PASSKEY_ORIGIN` 和可选 `SFID_PASSKEY_ALLOWED_ORIGINS`;未配置时开发默认
+  `localhost / http://localhost:5179`,生产环境 `SFID_ENV=prod|production` 启动期强制
+  `sfid.crcfrcn.com / https://sfid.crcfrcn.com`。
 - CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归省级管理员;
   市级管理员不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。
