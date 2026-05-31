@@ -1,7 +1,7 @@
 -- 013_rename_roles_sheng_shi.sql
 -- 角色命名最终统一:INSTITUTION_ADMIN → SHENG_ADMIN, SYSTEM_ADMIN → SHI_ADMIN
 -- 对应 Rust 枚举 AdminRole::{ShengAdmin, ShiAdmin}
--- 对应代码目录 super-admins/ → sheng-admins/, operator-admins/ → shi-admins/
+-- 当前代码目录已统一收口为 admins/
 -- 见任务卡:memory/08-tasks/open/20260408-sfid-三角色命名统一-任务卡0.5.md
 
 BEGIN;

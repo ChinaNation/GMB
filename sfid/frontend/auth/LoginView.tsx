@@ -94,6 +94,7 @@ export function LoginView() {
           admin_name: status.admin.admin_name,
           admin_province: status.admin.admin_province ?? null,
           admin_city: status.admin.admin_city ?? null,
+          passkey_bound: status.admin.passkey_bound,
         };
         setAuth(nextAuth);
         writeStoredAuth(nextAuth);
@@ -157,6 +158,7 @@ export function LoginView() {
             admin_name: status.admin.admin_name,
             admin_province: status.admin.admin_province ?? null,
             admin_city: status.admin.admin_city ?? null,
+            passkey_bound: status.admin.passkey_bound,
           };
           setAuth(nextAuth);
           writeStoredAuth(nextAuth);

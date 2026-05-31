@@ -132,11 +132,11 @@ SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `sfid/backend/app_core/`:跨业务底层工具,含 `chain_*` 通用链工具。
 - `sfid/backend/citizens/`:公民身份业务和公民链交互 `chain_*`。
 - `sfid/backend/institutions/`:机构本地管理和机构链交互 `chain_duoqian_info*`。
-- `sfid/backend/sheng_admins/`:省管理员后台业务和省管理员链交互 `chain_*`。
+- `sfid/backend/admins/`:省/市管理员治理、Passkey 注册与冷钱包挑战写操作。
 - `sfid/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `sfid/frontend/sfid/`:SFID 元数据 API。
 - `sfid/frontend/institutions/`:机构页面、机构 API 和 `chain_duoqian_info.ts`。
-- `sfid/frontend/sheng_admins/`:省管理员页面、API 和 `chain_*` 链交互页面/API。
+- `sfid/frontend/admins/`:省/市管理员页面、API、Passkey 与冷钱包挑战前端流程。
 
 同名对齐规则:
 

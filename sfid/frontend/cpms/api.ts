@@ -4,6 +4,9 @@
 
 import type { AdminAuth } from '../auth/types';
 import { adminRequest } from '../utils/http';
+import type { AdminSecurityGrantOutput } from '../admins/admin_security_api';
+
+const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
 export type GenerateCpmsInstallResult = {
   sfid_number: string;
@@ -57,10 +60,11 @@ export async function getCpmsSiteByInstitution(
 export async function generateCpmsInstallQr(
   auth: AdminAuth,
   payload: { province?: string; city: string; institution: string },
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<GenerateCpmsInstallResult> {
   return adminRequest<GenerateCpmsInstallResult>('/api/v1/admin/cpms-keys/sfid/generate', auth, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: securityGrant.grant_id },
     body: JSON.stringify(payload),
   });
 }
@@ -78,11 +82,15 @@ export async function verifyArchive(
 }
 
 /** 注销未使用安装令牌。 */
-export async function revokeInstallToken(auth: AdminAuth, sfidNumber: string): Promise<string> {
+export async function revokeInstallToken(
+  auth: AdminAuth,
+  sfidNumber: string,
+  securityGrant: AdminSecurityGrantOutput,
+): Promise<string> {
   return adminRequest<string>(
     `/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/revoke-token`,
     auth,
-    { method: 'POST' },
+    { method: 'POST', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
   );
 }
 
@@ -90,11 +98,12 @@ export async function revokeInstallToken(auth: AdminAuth, sfidNumber: string): P
 export async function reissueInstallToken(
   auth: AdminAuth,
   sfidNumber: string,
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<GenerateCpmsInstallResult> {
   return adminRequest<GenerateCpmsInstallResult>(
     `/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/reissue`,
     auth,
-    { method: 'POST' },
+    { method: 'POST', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
   );
 }
 
@@ -112,20 +121,28 @@ export async function listCpmsSites(auth: AdminAuth): Promise<CpmsSiteRow[]> {
 export async function disableCpmsKeys(
   auth: AdminAuth,
   sfidNumber: string,
-  reason?: string,
+  reason: string | undefined,
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<CpmsSiteRow> {
   return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/disable`, auth, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      [SECURITY_GRANT_HEADER]: securityGrant.grant_id,
+    },
     body: JSON.stringify({ reason }),
   });
 }
 
 /** 启用已禁用的 CPMS 站点密钥。 */
-export async function enableCpmsKeys(auth: AdminAuth, sfidNumber: string): Promise<CpmsSiteRow> {
+export async function enableCpmsKeys(
+  auth: AdminAuth,
+  sfidNumber: string,
+  securityGrant: AdminSecurityGrantOutput,
+): Promise<CpmsSiteRow> {
   return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/enable`, auth, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: securityGrant.grant_id },
     body: JSON.stringify({}),
   });
 }
@@ -134,18 +151,27 @@ export async function enableCpmsKeys(auth: AdminAuth, sfidNumber: string): Promi
 export async function revokeCpmsKeys(
   auth: AdminAuth,
   sfidNumber: string,
-  reason?: string,
+  reason: string | undefined,
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<CpmsSiteRow> {
   return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/revoke`, auth, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      [SECURITY_GRANT_HEADER]: securityGrant.grant_id,
+    },
     body: JSON.stringify({ reason }),
   });
 }
 
 /** 删除 CPMS 站点密钥记录。 */
-export async function deleteCpmsKeys(auth: AdminAuth, sfidNumber: string): Promise<string> {
+export async function deleteCpmsKeys(
+  auth: AdminAuth,
+  sfidNumber: string,
+  securityGrant: AdminSecurityGrantOutput,
+): Promise<string> {
   return adminRequest<string>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}`, auth, {
     method: 'DELETE',
+    headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id },
   });
 }

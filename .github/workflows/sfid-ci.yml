@@ -23,15 +23,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        # 固定使用 Node.js 24,与项目 package.json engines 和 GitHub Actions node24 运行时一致。
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: sfid/frontend/package-lock.json
 

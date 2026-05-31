@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use webauthn_rs::prelude::{Passkey, PasskeyAuthentication, PasskeyRegistration};
 use zeroize::Zeroize;
 
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
@@ -86,11 +87,21 @@ pub(crate) struct Store {
     pub(crate) cpms_status_export_imports: HashMap<String, CpmsStatusExportImportRecord>,
     pub(crate) admin_users_by_pubkey: HashMap<String, super::role::AdminUser>,
     pub(crate) sheng_admin_province_by_pubkey: HashMap<String, String>,
-    /// 中文注释:省管理员一主两备的 SFID 本地备用槽记录。
-    /// main 仍来自内置省级管理员基线;backup_1 / backup_2 先在 SFID 本地保存,
-    /// 后续链上更换省管理员能力落地后再对齐链上真相。
+    /// 中文注释:省/市管理员的 Passkey 凭据,只保存服务端可验证的公钥凭据。
     #[serde(default)]
-    pub(crate) sheng_admin_rosters: HashMap<String, ShengAdminRosterLocal>,
+    pub(crate) admin_passkeys_by_credential_id: HashMap<String, AdminPasskeyCredential>,
+    /// 中文注释:Passkey 注册必须先完成 WebAuthn attestation,再由冷钱包签名确认。
+    #[serde(default)]
+    pub(crate) admin_passkey_registration_challenges:
+        HashMap<String, AdminPasskeyRegistrationChallenge>,
+    /// 中文注释:管理员写操作的安全挑战。省管理员治理和省/市业务写操作
+    /// 共用这一组 Passkey/冷钱包挑战,提交后一次性消费。
+    #[serde(default)]
+    pub(crate) admin_action_challenges: HashMap<String, AdminActionChallenge>,
+    /// 中文注释:业务写接口使用的短期一次性授权。前端先完成 Passkey 或
+    /// Passkey+冷钱包签名,再把 grant id 放入 x-sfid-security-grant 请求头。
+    #[serde(default)]
+    pub(crate) admin_security_grants: HashMap<String, AdminSecurityGrant>,
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
@@ -117,25 +128,93 @@ pub(crate) struct Store {
     pub(crate) next_document_id: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub(crate) struct ShengAdminRosterLocal {
-    pub(crate) backup_1: Option<ShengAdminSlotLocal>,
-    pub(crate) backup_2: Option<ShengAdminSlotLocal>,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum AdminPasskeyStatus {
+    Active,
+    Revoked,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ShengAdminSlotLocal {
+pub(crate) struct AdminPasskeyCredential {
+    pub(crate) credential_id: String,
     pub(crate) admin_pubkey: String,
-    pub(crate) admin_name: String,
-    pub(crate) created_by: String,
+    pub(crate) label: String,
+    pub(crate) passkey: Passkey,
+    pub(crate) status: AdminPasskeyStatus,
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
-    pub(crate) updated_at: Option<DateTime<Utc>>,
+    pub(crate) last_used_at: Option<DateTime<Utc>>,
 }
 
-// 中文注释:旧签名轮换 DTO 已删除。省级 3-tier 名册由 chain runtime 上
-// `ShengAdmins` storage 持有真相,SFID 不再维护本地签名轮换流程。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AdminPasskeyRegistrationChallenge {
+    pub(crate) registration_id: String,
+    pub(crate) admin_pubkey: String,
+    pub(crate) admin_name: String,
+    pub(crate) label: String,
+    pub(crate) webauthn_state: PasskeyRegistration,
+    #[serde(default)]
+    pub(crate) pending_passkey: Option<Passkey>,
+    #[serde(default)]
+    pub(crate) credential_id: Option<String>,
+    #[serde(default)]
+    pub(crate) payload_text: Option<String>,
+    #[serde(default)]
+    pub(crate) payload_hash: Option<String>,
+    pub(crate) issued_at: DateTime<Utc>,
+    pub(crate) expires_at: DateTime<Utc>,
+    #[serde(default)]
+    pub(crate) consumed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AdminActionChallenge {
+    pub(crate) action_id: String,
+    pub(crate) action_type: String,
+    pub(crate) actor_pubkey: String,
+    pub(crate) actor_role: super::role::AdminRole,
+    pub(crate) actor_province: String,
+    #[serde(default)]
+    pub(crate) actor_city: Option<String>,
+    pub(crate) security_level: AdminSecurityLevel,
+    pub(crate) target: String,
+    pub(crate) payload_text: String,
+    pub(crate) payload_hash: String,
+    pub(crate) before_hash: String,
+    pub(crate) after_hash: String,
+    pub(crate) request_payload: serde_json::Value,
+    pub(crate) webauthn_state: PasskeyAuthentication,
+    pub(crate) issued_at: DateTime<Utc>,
+    pub(crate) expires_at: DateTime<Utc>,
+    #[serde(default)]
+    pub(crate) consumed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum AdminSecurityLevel {
+    General,
+    Important,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AdminSecurityGrant {
+    pub(crate) grant_id: String,
+    pub(crate) action_type: String,
+    pub(crate) actor_pubkey: String,
+    pub(crate) actor_role: super::role::AdminRole,
+    pub(crate) actor_province: String,
+    #[serde(default)]
+    pub(crate) actor_city: Option<String>,
+    pub(crate) security_level: AdminSecurityLevel,
+    pub(crate) target: String,
+    pub(crate) payload_hash: String,
+    pub(crate) issued_at: DateTime<Utc>,
+    pub(crate) expires_at: DateTime<Utc>,
+    #[serde(default)]
+    pub(crate) consumed: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AuditLogEntry {

@@ -1,7 +1,7 @@
-//! 中文注释:省管理员 3-tier 名册的 SFID 后端本地基线。
+//! 中文注释:省级管理员初始安全根的 SFID 后端本地基线。
 //!
-//! `sfid::province` 只负责 SFID 号码所需的省市代码;本文件负责省管理员
-//! main 公钥、main/backup_1/backup_2 三槽模型和登录归属判断。
+//! `sfid::province` 只负责 SFID 号码所需的省市代码;本文件只负责 43 省
+//! 初始省级管理员公钥和登录归属判断。新增省级管理员存入 `admins` 表。
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ShengAdminMain {
@@ -72,52 +72,8 @@ pub(crate) fn sheng_admin_display_name(pubkey: &str) -> Option<String> {
     Some(format!("{province_name}省级管理员"))
 }
 
-/// 省管理员槽位。链上 storage `ShengAdmins[Province][Slot]` 同语义。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Slot {
-    Main,
-    Backup1,
-    Backup2,
-}
-
-/// 某省当前生效的三槽管理员公钥。
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProvinceAdmins {
-    pub(crate) main: [u8; 32],
-    pub(crate) backup_1: Option<[u8; 32]>,
-    pub(crate) backup_2: Option<[u8; 32]>,
-}
-
-#[allow(dead_code)]
-impl ProvinceAdmins {
-    pub(crate) fn from_main(main: [u8; 32]) -> Self {
-        Self {
-            main,
-            backup_1: None,
-            backup_2: None,
-        }
-    }
-
-    pub(crate) fn slot_of(&self, pubkey: &[u8; 32]) -> Option<Slot> {
-        if &self.main == pubkey {
-            return Some(Slot::Main);
-        }
-        if let Some(b) = self.backup_1.as_ref() {
-            if b == pubkey {
-                return Some(Slot::Backup1);
-            }
-        }
-        if let Some(b) = self.backup_2.as_ref() {
-            if b == pubkey {
-                return Some(Slot::Backup2);
-            }
-        }
-        None
-    }
-}
-
 /// 把 0x 小写 hex 字符串解析为 32 字节 pubkey。失败返回 None。
+#[allow(dead_code)]
 pub(crate) fn pubkey_from_hex(hex: &str) -> Option<[u8; 32]> {
     let trimmed = hex
         .trim()
@@ -131,25 +87,4 @@ pub(crate) fn pubkey_from_hex(hex: &str) -> Option<[u8; 32]> {
     let mut out = [0u8; 32];
     out.copy_from_slice(&raw);
     Some(out)
-}
-
-/// 中文注释:链上 backup 公钥 pull 尚未切真,当前固定返回空槽。
-#[allow(dead_code)]
-pub(crate) fn fetch_backup_admins(_province: &str) -> [Option<[u8; 32]>; 2] {
-    tracing::warn!("fetch_backup_admins mocked, awaiting chain pull");
-    [None, None]
-}
-
-#[allow(dead_code)]
-pub(crate) fn province_admins_for(province_name: &str) -> Option<ProvinceAdmins> {
-    let p = SHENG_ADMIN_MAINS
-        .iter()
-        .find(|p| p.province == province_name)?;
-    let main = pubkey_from_hex(p.pubkey)?;
-    let [b1, b2] = fetch_backup_admins(province_name);
-    Some(ProvinceAdmins {
-        main,
-        backup_1: b1,
-        backup_2: b2,
-    })
 }

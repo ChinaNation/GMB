@@ -8,8 +8,8 @@ use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use sp_core::Pair;
 
+use crate::admins::province_admins::sheng_admin_display_name;
 use crate::crypto::pubkey::same_admin_pubkey;
-use crate::sheng_admins::province_admins::sheng_admin_display_name;
 use crate::*;
 
 pub(crate) fn verify_admin_signature(
@@ -58,7 +58,7 @@ pub(super) fn build_login_qr_system_signature(
     expires_at: i64,
 ) -> Result<(String, String), String> {
     // ADR-008 Phase 23e:登录二维码的"系统签名"由 SFID main signer(全局唯一)产出。
-    // signer 仍是 SFID main(SFID_SIGNING_SEED_HEX 派生),与省管理员 3-tier 无关。
+    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与省/市管理员冷钱包无关。
     let main_seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
         .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
     let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
@@ -164,13 +164,7 @@ pub(super) fn cleanup_expired_challenges(store: &mut Store, now: DateTime<Utc>) 
     });
 }
 
-/// 中文注释：清理过期/空闲超时的 admin session。
-///
-/// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 8：
-/// 返回本次被驱逐的 ShengAdmin session 所属 province 列表，供外层调用
-/// `state.sheng_admin_signing_cache.unload_province` 释放内存 Pair。
-/// ADR-008 Phase 23e 后:cache 已迁到 `sheng_admins::signing_cache::ShengSigningCache`,
-/// `unload_province` 会清理本省所有 3-tier slot 的 keypair。
+/// 中文注释:清理过期/空闲超时的 admin session。
 #[allow(dead_code)]
 fn cleanup_admin_sessions(
     store: &mut Store,

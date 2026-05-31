@@ -6,7 +6,7 @@
 //   DISABLED → 暂停接收该授权签发的档案码
 //   REVOKED  → 不再接收该授权签发的档案码
 
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Input, message, Modal, Popconfirm, QRCode, Tag, Typography } from 'antd';
 import {
   disableCpmsKeys,
@@ -17,6 +17,15 @@ import {
 } from './api';
 import type { AdminAuth } from '../auth/types';
 import { downloadQr } from '../utils/downloadQr';
+import {
+  commitAdminAction,
+  getPasskeyAssertion,
+  prepareAdminAction,
+  type AdminActionType,
+  type AdminSecurityGrantOutput,
+} from '../admins/admin_security_api';
+import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
+import { startCameraScanner } from '../utils/cameraScanner';
 
 interface Props {
   auth: AdminAuth;
@@ -26,6 +35,15 @@ interface Props {
 }
 
 type CpmsSiteStatus = 'PENDING' | 'ACTIVE' | 'DISABLED' | 'REVOKED';
+
+type SecurityModalState = {
+  actionId: string;
+  signRequest: string;
+  payloadHash: string;
+  passkeyAssertion: unknown;
+  resolve: (value: AdminSecurityGrantOutput) => void;
+  reject: (reason?: unknown) => void;
+};
 
 function siteStatusTag(status: CpmsSiteStatus | undefined) {
   switch (status) {
@@ -40,12 +58,89 @@ function siteStatusTag(status: CpmsSiteStatus | undefined) {
 export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged }) => {
   const [busy, setBusy] = useState(false);
   const qrRef = useRef<HTMLDivElement | null>(null);
+  const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
+  const [securityScannerActive, setSecurityScannerActive] = useState(false);
+  const [securityScannerReady, setSecurityScannerReady] = useState(false);
+  const securityVideoRef = useRef<HTMLVideoElement | null>(null);
+  const securityScannerCleanupRef = useRef<(() => void) | null>(null);
   const status = (site.status || 'PENDING') as CpmsSiteStatus;
+
+  const stopSecurityScanner = useCallback(() => {
+    if (securityScannerCleanupRef.current) {
+      securityScannerCleanupRef.current();
+      securityScannerCleanupRef.current = null;
+    }
+    setSecurityScannerReady(false);
+    setSecurityScannerActive(false);
+  }, []);
+
+  const runImportantAction = async (
+    actionType: AdminActionType,
+    payload: unknown,
+  ): Promise<AdminSecurityGrantOutput> => {
+    const prepared = await prepareAdminAction(auth, actionType, payload);
+    if (prepared.security_level !== 'IMPORTANT' || !prepared.sign_request) {
+      throw new Error('该操作缺少冷钱包签名请求');
+    }
+    const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
+    return new Promise<AdminSecurityGrantOutput>((resolve, reject) => {
+      setSecurityModal({
+        actionId: prepared.action_id,
+        signRequest: prepared.sign_request || '',
+        payloadHash: prepared.payload_hash,
+        passkeyAssertion,
+        resolve,
+        reject,
+      });
+      setSecurityScannerActive(true);
+    });
+  };
+
+  const handleSecuritySignedResponse = useCallback(async (raw: string) => {
+    if (!securityModal) return;
+    setBusy(true);
+    try {
+      const signed = parseSignedReceiptPayload(raw, securityModal.actionId);
+      if (signed.challenge_id !== securityModal.actionId) {
+        throw new Error('签名回执与当前请求不匹配');
+      }
+      const grant = await commitAdminAction<AdminSecurityGrantOutput>(auth, {
+        action_id: securityModal.actionId,
+        passkey_assertion: securityModal.passkeyAssertion,
+        signer_pubkey: signed.signer_pubkey,
+        signature: signed.signature,
+        payload_hash: signed.payload_hash,
+      });
+      securityModal.resolve(grant);
+      setSecurityModal(null);
+      stopSecurityScanner();
+    } catch (err) {
+      securityModal.reject(err);
+      message.error(err instanceof Error ? err.message : '签名回执处理失败');
+    } finally {
+      setBusy(false);
+    }
+  }, [auth, securityModal, stopSecurityScanner]);
+
+  useEffect(() => {
+    if (!securityScannerActive || !securityVideoRef.current) return;
+    securityScannerCleanupRef.current = startCameraScanner(
+      securityVideoRef.current,
+      (raw) => void handleSecuritySignedResponse(raw),
+      () => setSecurityScannerReady(true),
+      (msg) => {
+        message.error(msg);
+        stopSecurityScanner();
+      },
+    );
+    return () => stopSecurityScanner();
+  }, [handleSecuritySignedResponse, securityScannerActive, stopSecurityScanner]);
 
   const onReissue = async () => {
     setBusy(true);
     try {
-      await reissueInstallToken(auth, site.sfid_number);
+      const grant = await runImportantAction('CPMS_REISSUE_INSTALL_TOKEN', { target: site.sfid_number });
+      await reissueInstallToken(auth, site.sfid_number, grant);
       message.success('已重发安装令牌');
       onChanged();
     } catch (err) {
@@ -56,9 +151,14 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const onDisable = async () => {
       const reason = await askReason('请输入禁用原因(可选)');
     if (reason === null) return;
+    const normalizedReason = reason.trim();
     setBusy(true);
     try {
-      await disableCpmsKeys(auth, site.sfid_number, reason || undefined);
+      const grant = await runImportantAction('CPMS_DISABLE_KEYS', {
+        target: site.sfid_number,
+        reason: normalizedReason,
+      });
+      await disableCpmsKeys(auth, site.sfid_number, normalizedReason || undefined, grant);
       message.success('已禁用');
       onChanged();
     } catch (err) {
@@ -69,7 +169,11 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const onEnable = async () => {
     setBusy(true);
     try {
-      await enableCpmsKeys(auth, site.sfid_number);
+      const grant = await runImportantAction('CPMS_ENABLE_KEYS', {
+        target: site.sfid_number,
+        reason: '',
+      });
+      await enableCpmsKeys(auth, site.sfid_number, grant);
       message.success('已启用');
       onChanged();
     } catch (err) {
@@ -80,9 +184,14 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const onRevoke = async () => {
     const reason = await askReason('请输入吊销原因(可选)');
     if (reason === null) return;
+    const normalizedReason = reason.trim();
     setBusy(true);
     try {
-      await revokeCpmsKeys(auth, site.sfid_number, reason || undefined);
+      const grant = await runImportantAction('CPMS_REVOKE_KEYS', {
+        target: site.sfid_number,
+        reason: normalizedReason,
+      });
+      await revokeCpmsKeys(auth, site.sfid_number, normalizedReason || undefined, grant);
       message.success('已吊销');
       onChanged();
     } catch (err) {
@@ -191,6 +300,33 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
           )}
         </div>
       </div>
+      <Modal
+        title="冷钱包签名确认"
+        open={!!securityModal}
+        onCancel={() => {
+          securityModal?.reject(new Error('已取消签名确认'));
+          setSecurityModal(null);
+          stopSecurityScanner();
+        }}
+        footer={null}
+        destroyOnClose
+        width={460}
+      >
+        {securityModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <QRCode value={securityModal.signRequest} size={220} />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              使用管理员冷钱包扫描后，再扫描签名回执。
+            </Typography.Text>
+            <div style={{ width: 260, height: 180, background: '#111827', borderRadius: 8, overflow: 'hidden' }}>
+              <video ref={securityVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+            </div>
+            <Button onClick={() => setSecurityScannerActive((v) => !v)} loading={busy}>
+              {securityScannerActive ? (securityScannerReady ? '扫描中' : '摄像头初始化中') : '扫描签名回执'}
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

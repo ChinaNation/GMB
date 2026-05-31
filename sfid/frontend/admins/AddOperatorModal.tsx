@@ -19,7 +19,6 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
     addOperatorForm,
     operatorCities,
     operatorCitiesLoading,
-    selectedShengAdmin,
     selectedCity,
     onCreateOperator,
     accountScanTarget,
@@ -71,7 +70,6 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
               operator_name: values.operator_name,
               operator_pubkey: values.operator_pubkey,
               city: values.operator_city,
-              created_by: selectedShengAdmin?.admin_pubkey,
             })
           }
         >

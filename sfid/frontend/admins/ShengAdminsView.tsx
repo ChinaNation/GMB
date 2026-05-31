@@ -4,19 +4,20 @@
 //   - 省管理员: 市列表 → 市详情(该市管理员列表)
 //   - 市管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
 
-import { useEffect, useState } from 'react';
-import { Form, Input, Modal, Select, Space, message } from 'antd';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Form, Input, Modal, QRCode, Space, Typography, message } from 'antd';
+import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
-import type { OperatorRow } from '../shi_admins/api';
+import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
 import type { SfidCityItem } from '../sfid/api';
+import { listOperators } from './operators_api';
 import {
-  createOperator,
-  deleteOperator,
-  listOperators,
-  updateOperator,
-  updateOperatorStatus,
-} from '../shi_admins/api';
+  commitAdminAction,
+  getPasskeyAssertion,
+  prepareAdminAction,
+  type AdminActionType,
+} from './admin_security_api';
 import { listShengAdmins } from './api';
 import { listSfidCities } from '../sfid/api';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
@@ -24,12 +25,30 @@ import { sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
 import { ShengAdminListView } from './ShengAdminListView';
 import { ProvinceDetailView } from './ProvinceDetailView';
+import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
+import { startCameraScanner } from '../utils/cameraScanner';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng_admin 列表分支(全省网格);
   /// 'system-settings' = 注册局分支(省份网格 / 机构详情页)
   mode: 'list' | 'system-settings';
 }
+
+type AdminActionModalState = {
+  actionId: string;
+  signRequest: string;
+  payloadHash: string;
+  passkeyAssertion: unknown;
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
+};
+
+const centeredConfirmFooter: ModalProps['footer'] = (_originNode, { OkBtn, CancelBtn }) => (
+  <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+    <CancelBtn />
+    <OkBtn />
+  </div>
+);
 
 export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const { auth } = useAuth();
@@ -53,6 +72,21 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [accountScanTarget, setAccountScanTarget] = useState<AccountScanTarget>(null);
 
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
+  const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
+  const [adminActionLoading, setAdminActionLoading] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false);
+  const [scannerReady, setScannerReady] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cleanupScannerRef = useRef<(() => void) | null>(null);
+
+  const stopScanner = useCallback(() => {
+    if (cleanupScannerRef.current) {
+      cleanupScannerRef.current();
+      cleanupScannerRef.current = null;
+    }
+    setScannerReady(false);
+    setScannerActive(false);
+  }, []);
 
   // ── 数据加载 ──
 
@@ -133,7 +167,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       return;
     }
     setOperatorCities([]);
-    setAdminDetailTab('operators');
+    setAdminDetailTab(auth.passkey_bound === false && auth.role === 'SHENG_ADMIN' ? 'super-admin' : 'operators');
     setOperatorListPage(1);
     setOperatorCitiesLoading(true);
     let cancelled = false;
@@ -153,9 +187,81 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShengAdmin?.admin_pubkey, auth?.access_token]);
 
+  useEffect(() => () => stopScanner(), [stopScanner]);
+
+  useEffect(() => {
+    if (!scannerActive || !videoRef.current) return;
+    cleanupScannerRef.current = startCameraScanner(
+      videoRef.current,
+      (raw) => {
+        stopScanner();
+        void handleAdminActionSignedResponse(raw);
+      },
+      () => setScannerReady(true),
+      (msg) => {
+        message.error(msg);
+        stopScanner();
+      },
+    );
+    return () => stopScanner();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scannerActive, stopScanner]);
+
+  const runSecuredAction = async <T,>(actionType: AdminActionType, payload: unknown): Promise<T> => {
+    if (!auth) throw new Error('请先登录');
+    setAdminActionLoading(true);
+    try {
+      const prepared = await prepareAdminAction(auth, actionType, payload);
+      const signRequest = prepared.sign_request;
+      if (!signRequest) throw new Error('该治理操作缺少冷钱包签名请求');
+      const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
+      return await new Promise<T>((resolve, reject) => {
+        setAdminActionModal({
+          actionId: prepared.action_id,
+          signRequest,
+          payloadHash: prepared.payload_hash,
+          passkeyAssertion,
+          resolve: resolve as (value: unknown) => void,
+          reject,
+        });
+      });
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleAdminActionSignedResponse = async (raw: string) => {
+    if (!auth || !adminActionModal) return;
+    setAdminActionLoading(true);
+    try {
+      const signed = parseSignedReceiptPayload(raw, adminActionModal.actionId);
+      if (signed.challenge_id !== adminActionModal.actionId) {
+        throw new Error('签名回执与当前请求不匹配');
+      }
+      if (!signed.signer_pubkey || !signed.payload_hash) {
+        throw new Error('签名回执缺少 signer_pubkey 或 payload_hash');
+      }
+      const result = await commitAdminAction(auth, {
+        action_id: adminActionModal.actionId,
+        passkey_assertion: adminActionModal.passkeyAssertion,
+        signer_pubkey: signed.signer_pubkey,
+        signature: signed.signature,
+        payload_hash: signed.payload_hash,
+      });
+      adminActionModal.resolve(result);
+      setAdminActionModal(null);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '签名回执处理失败';
+      message.error(msg);
+      adminActionModal.reject(error);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
   // ── 事件处理 ──
 
-  const onCreateOperator = async (values: { operator_pubkey: string; operator_name: string; city?: string; created_by?: string }) => {
+  const onCreateOperator = async (values: { operator_pubkey: string; operator_name: string; city?: string }) => {
     if (!auth) return;
     const inputAddr = values.operator_pubkey?.trim();
     const admin_name = values.operator_name?.trim();
@@ -181,7 +287,11 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     }
     setAddOperatorLoading(true);
     try {
-      const created = await createOperator(auth, { admin_pubkey, admin_name, city, created_by: values.created_by });
+      const created = await runSecuredAction<OperatorRow>('CREATE_OPERATOR', {
+        admin_pubkey,
+        admin_name,
+        city,
+      });
       message.success('管理员新增成功');
       addOperatorForm.resetFields();
       setAddOperatorOpen(false);
@@ -198,87 +308,52 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     }
   };
 
-  const onToggleOperatorStatus = async (row: OperatorRow) => {
-    if (!auth) return;
-    const target = row.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
-    setOperatorsLoading(true);
-    try {
-      await updateOperatorStatus(auth, row.id, target);
-      message.success(target === 'ACTIVE' ? '已启用市级管理员' : '已停用市级管理员');
-      await refreshOperators();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '更新市级管理员状态失败';
-      message.error(msg);
-    } finally {
-      setOperatorsLoading(false);
-    }
-  };
-
   const onUpdateOperator = (row: OperatorRow) => {
     if (!auth) return;
     let nextName = row.admin_name;
-    let nextAddr = tryEncodeSs58(row.admin_pubkey);
-    let nextCity = row.city;
-    const cityOptions = operatorCities
-      .filter((c) => c.code !== '000')
-      .map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }));
+    const ss58Address = tryEncodeSs58(row.admin_pubkey);
     Modal.confirm({
-      title: '修改市级管理员',
+      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市级管理员</div>,
+      icon: null,
+      centered: true,
+      footer: centeredConfirmFooter,
       content: (
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Input
-            defaultValue={row.admin_name}
-            placeholder="请输入管理员姓名"
-            onChange={(event) => {
-              nextName = event.target.value;
-            }}
-          />
-          <Select
-            defaultValue={row.city || undefined}
-            placeholder="请选择市"
-            style={{ width: '100%' }}
-            options={cityOptions}
-            onChange={(value: string) => {
-              nextCity = value;
-            }}
-          />
-          <Input
-            defaultValue={tryEncodeSs58(row.admin_pubkey)}
-            placeholder="请输入新的管理员账户(SS58)"
-            onChange={(event) => {
-              nextAddr = event.target.value;
-            }}
-          />
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <div>
+            <Typography.Text type="secondary">管理员姓名</Typography.Text>
+            <Input
+              defaultValue={row.admin_name}
+              placeholder="请输入管理员姓名"
+              style={{ marginTop: 6 }}
+              onChange={(event) => {
+                nextName = event.target.value;
+              }}
+            />
+          </div>
+          <div>
+            <Typography.Text type="secondary">账户地址</Typography.Text>
+            <Input
+              value={ss58Address}
+              disabled
+              style={{ marginTop: 6 }}
+            />
+          </div>
         </Space>
       ),
       okText: '确认修改',
       cancelText: '取消',
       onOk: async () => {
         const admin_name = nextName.trim();
-        const inputAddr = nextAddr.trim();
-        const city = (nextCity || '').trim();
         if (!admin_name) {
           message.error('请输入管理员姓名');
           throw new Error('admin_name is required');
         }
-        if (!inputAddr) {
-          message.error('请输入管理员账户');
-          throw new Error('admin_pubkey is required');
-        }
-        if (!city) {
-          message.error('请选择市');
-          throw new Error('city is required');
-        }
-        let admin_pubkey: string;
-        try {
-          admin_pubkey = decodeSs58(inputAddr);
-        } catch (err) {
-          message.error(err instanceof Error ? err.message : '账户格式无效');
-          throw err;
-        }
         setOperatorsLoading(true);
         try {
-          await updateOperator(auth, row.id, { admin_name, admin_pubkey, city });
+          await runSecuredAction<OperatorRow>('UPDATE_OPERATOR', {
+            id: row.id,
+            admin_name,
+          });
           message.success('市级管理员信息已更新');
           await refreshOperators();
         } catch (err) {
@@ -294,16 +369,25 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
 
   const onDeleteOperator = (row: OperatorRow) => {
     if (!auth) return;
+    const ss58Address = tryEncodeSs58(row.admin_pubkey);
     Modal.confirm({
-      title: '删除市级管理员',
-      content: `确认删除该市级管理员?\n${row.admin_pubkey}`,
+      title: <div style={{ textAlign: 'center', width: '100%' }}>删除市级管理员</div>,
+      icon: null,
+      centered: true,
+      footer: centeredConfirmFooter,
+      content: (
+        <div style={{ textAlign: 'center' }}>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该市级管理员?</Typography.Paragraph>
+          <Typography.Text code style={{ wordBreak: 'break-all' }}>{ss58Address}</Typography.Text>
+        </div>
+      ),
       okText: '确认删除',
       okButtonProps: { danger: true },
       cancelText: '取消',
       onOk: async () => {
         setOperatorsLoading(true);
         try {
-          await deleteOperator(auth, row.id);
+          await runSecuredAction('DELETE_OPERATOR', { id: row.id });
           message.success('市级管理员已删除');
           await refreshOperators();
         } catch (err) {
@@ -321,6 +405,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const shared: ShengAdminSharedState = {
     shengAdmins,
     shengAdminsLoading,
+    refreshShengAdmins,
     selectedShengAdmin,
     setSelectedShengAdmin,
     selectedCity,
@@ -340,15 +425,49 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     setAccountScanTarget,
     addOperatorForm,
     onCreateOperator,
-    onToggleOperatorStatus,
     onUpdateOperator,
     onDeleteOperator,
+    runSecuredAction,
   };
 
   // ── 渲染:按 mode 分派 ──
 
-  if (mode === 'list') {
-    return <ShengAdminListView state={shared} />;
-  }
-  return <ProvinceDetailView state={shared} />;
+  const content = mode === 'list'
+    ? <ShengAdminListView state={shared} />
+    : <ProvinceDetailView state={shared} />;
+
+  return (
+    <>
+      {content}
+      <Modal
+        title="冷钱包签名确认"
+        open={!!adminActionModal}
+        onCancel={() => {
+          stopScanner();
+          adminActionModal?.reject(new Error('admin action cancelled'));
+          setAdminActionModal(null);
+        }}
+        footer={null}
+        destroyOnClose
+      >
+        {adminActionModal ? (
+          <Space direction="vertical" size={12} style={{ width: '100%', alignItems: 'center' }}>
+            <Typography.Text type="secondary">使用当前省管理员冷钱包扫描并签名。</Typography.Text>
+            <QRCode value={adminActionModal.signRequest} size={260} color="#134e4a" />
+            <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0f172a', borderRadius: 8, overflow: 'hidden' }}>
+              <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {!scannerReady ? (
+                <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#e5e7eb' }}>
+                  {scannerActive ? '摄像头初始化中...' : '摄像头未开启'}
+                </div>
+              ) : null}
+            </div>
+            <Button onClick={() => setScannerActive((v) => !v)} loading={adminActionLoading}>
+              {scannerActive ? '停止扫码' : '开启扫码'}
+            </Button>
+          </Space>
+        ) : null}
+      </Modal>
+    </>
+  );
 }

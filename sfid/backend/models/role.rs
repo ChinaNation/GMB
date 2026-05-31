@@ -1,27 +1,20 @@
-//! 中文注释:管理员角色 / 状态 / 实体 + Operator 列表与维护接口 DTO。
+//! 中文注释:管理员角色 / 实体 + 管理员列表与维护接口 DTO。
 //!
 //! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
-//! 省管理员 3-tier 自治(main / backup_1 / backup_2),不再有"全国超级管理员"。
+//! 省级管理员不再区分主/备;代码内置初始省级管理员只承担不可删除安全根职责。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // 中文注释:两种管理员角色(ADR-008 后)
-//   - ShengAdmin → 省级管理员(每省 3 人 main/backup_1/backup_2,自治) 目录 sheng_admins/
-//   - ShiAdmin   → 市级管理员(每市 N 人)                              目录 shi_admins/
+//   - ShengAdmin → 省级管理员(每省 N 人;内置初始管理员不可删除) 目录 admins/
+//   - ShiAdmin   → 市级管理员(每市 N 人)                         目录 admins/
 // 序列化为 SHENG_ADMIN / SHI_ADMIN,数据库字段值同。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {
     ShengAdmin,
     ShiAdmin,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(crate) enum AdminStatus {
-    Active,
-    Disabled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +24,7 @@ pub(crate) struct AdminUser {
     #[serde(default)]
     pub(crate) admin_name: String,
     pub(crate) role: AdminRole,
-    pub(crate) status: AdminStatus,
+    /// 中文注释:初始省级管理员由代码内置,不可删除;后续新增管理员为 false。
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
@@ -40,27 +33,14 @@ pub(crate) struct AdminUser {
     /// ShiAdmin 所属的市名称（仅 ShiAdmin 必填，其他角色为空字符串）
     #[serde(default)]
     pub(crate) city: String,
-    /// 中文注释:仅 ShengAdmin 使用。AES-256-GCM 加密的省签名私钥种子(32 字节明文)。
-    /// ADR-008 后 3-tier 模型下,seed 持久化已搬到 `sheng_admins/signing_seed_store.rs`
-    /// (按 (province, admin_pubkey) 二级文件路径加密落盘),本字段只保留
-    /// 页面展示所需的历史元数据,不再承载签名私钥来源。
-    #[serde(default)]
-    pub(crate) encrypted_signing_privkey: Option<String>,
-    /// 中文注释:仅 ShengAdmin 使用。对应签名公钥 hex(便于对账/UI 显示)。
-    #[serde(default)]
-    pub(crate) signing_pubkey: Option<String>,
-    /// 签名密钥生成时间(仅 ShengAdmin,bootstrap 时写入)。
-    #[serde(default)]
-    pub(crate) signing_created_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct OperatorRow {
     pub(crate) id: u64,
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
     pub(crate) role: AdminRole,
-    pub(crate) status: AdminStatus,
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
     pub(crate) created_by_name: String,
@@ -76,11 +56,8 @@ pub(crate) struct OperatorListOutput {
     pub(crate) rows: Vec<OperatorRow>,
 }
 
-// 机构管理员对外行（API 序列化）。
-//
-// SFID 业务语义：机构是永久存在的（43 个省份固定），机构管理员只是当前
-// 替机构发声的人；不存在"停用"的机构管理员（被替换即彻底失效）。
-// 因此对外暴露的行**不带 status 字段**。
+// 省级管理员对外行(API 序列化)。
+// 中文注释:管理员只有存在/删除,不存在停用状态。
 #[derive(Serialize)]
 pub(crate) struct ShengAdminRow {
     pub(crate) id: u64,
@@ -89,18 +66,12 @@ pub(crate) struct ShengAdminRow {
     pub(crate) admin_name: String,
     pub(crate) built_in: bool,
     pub(crate) created_at: DateTime<Utc>,
-    /// 最近一次更新时间（含签名密钥 bootstrap），None 表示从未更新
+    /// 最近一次更新时间，None 表示从未更新
     #[serde(default)]
     pub(crate) updated_at: Option<DateTime<Utc>>,
-    // 链上签名 pubkey：None 表示该省登录管理员尚未首次 bootstrap
-    #[serde(default)]
-    pub(crate) signing_pubkey: Option<String>,
-    /// 签名密钥生成时间
-    #[serde(default)]
-    pub(crate) signing_created_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CreateOperatorInput {
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
@@ -117,18 +88,4 @@ pub(crate) struct CreateOperatorInput {
 pub(crate) struct ListQuery {
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct UpdateOperatorInput {
-    pub(crate) admin_pubkey: Option<String>,
-    pub(crate) admin_name: Option<String>,
-    /// 可选：修改 ShiAdmin 所属的市，必须属于该 operator 所属机构的省份（不可为省辖市）
-    #[serde(default)]
-    pub(crate) city: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct UpdateOperatorStatusInput {
-    pub(crate) status: AdminStatus,
 }

@@ -76,6 +76,7 @@ export const InstitutionListTable: React.FC<Props> = ({
   // 公安局由后端 reconcile 批量生成,created_by 不具人类语义;
   // 公权机构本轮未做两步式改造,暂不展示(下一步再加)。
   const showCreatedByColumn = category === 'PRIVATE_INSTITUTION';
+  const showClearingEligibleColumn = category === 'PRIVATE_INSTITUTION';
 
   const columns = useMemo<ColumnsType<InstitutionListRow>>(() => {
     const cols: ColumnsType<InstitutionListRow> = [
@@ -95,10 +96,10 @@ export const InstitutionListTable: React.FC<Props> = ({
         width: 90,
         align: 'center',
       },
-      // 清算行资格 badge(2026-04-24, ADR-007):
-      // SFR + JOINT_STOCK 直接判定(列表行字段足够);FFR 因列表行无 parent 字段不在此渲染,
-      // 详情页有完整 parent 信息后再判定。
-      {
+    ];
+    if (showClearingEligibleColumn) {
+      // 中文注释:清算行资格只属于私权机构;公安局和公权机构列表不得展示该列。
+      cols.push({
         title: '清算行资格',
         key: 'clearing_eligible',
         width: 130,
@@ -106,8 +107,8 @@ export const InstitutionListTable: React.FC<Props> = ({
           isSelfEligibleClearingBank(r) ? (
             <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
           ) : null,
-      },
-    ];
+      });
+    }
     if (showCreatedByColumn) {
       cols.push({
         title: '创建用户',
@@ -138,7 +139,7 @@ export const InstitutionListTable: React.FC<Props> = ({
       });
     }
     return cols;
-  }, [showCreatedByColumn]);
+  }, [showClearingEligibleColumn, showCreatedByColumn]);
 
   return (
     <div>

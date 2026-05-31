@@ -227,7 +227,7 @@ pub(crate) struct AppState {
 
 ### Phase 4(水平扩展:多实例 sticky routing)
 - 前置 nginx,consistent hash by province
-- 3 实例起步,链事件订阅同步省级 signer cache
+- 3 实例起步,管理员治理短期挑战走共享持久化/会话层同步
 - 可承载:**50K+ 并发 SHI_ADMIN**(目标达成)
 - **工作量**:2~3 天(主要是运维 + 链事件订阅实现)
 - 新任务卡 ID 建议:`20260412-sfid-horizontal-scale`
@@ -244,8 +244,8 @@ pub(crate) struct AppState {
 
 | 决策 | 选择 | 原因 |
 |---|---|---|
-| 签名密钥隔离粒度 | **按省(43 份)** | 匹配业务行政边界 + 链上审计可追溯 + 运维成本合理 |
-| 密钥冗余 | **无冗余(1 key per province)** | 用户明确简化 + 轮换 = 替换,不需要备份 |
+| 管理员治理确认 | **Passkey + 冷钱包 sr25519** | 管理员私钥不落浏览器和云端,高危写操作可审计 |
+| 省级管理员私钥 | **仅冷钱包离线保存** | 云端不保存省管理员业务 signer / seed / cache |
 | 加密算法 | **AES-256-GCM + HKDF-SHA256** | 用户拍板统一 |
 | 链端升级方式 | **on-chain setCode** | `feedback_chainspec_frozen` 铁律 |
 | 批处理粒度 | **50 tx / batch** | 链 weight 上限约束下的最大聚合量 |
@@ -262,7 +262,7 @@ pub(crate) struct AppState {
 | 风险 | 等级 | 缓解 |
 |---|---|---|
 | 链端 batch extrinsic weight 估算错误 → block 被拒 | 高 | 压测时用多种 batch size 找到真实上限,代码里硬编码保守值 |
-| 省级 signer 私钥在 3 个后端实例之间不同步(密钥轮换后) | 高 | 链事件订阅 + 轮询 fallback,最终一致性窗口 <10 秒 |
+| 管理员治理 challenge 在多实例间不可见 | 高 | 使用共享持久化/会话层保存短期挑战,按 action_id 定位 |
 | 某省 queue 堆积 >10K 条 → 内存爆 | 中 | 软限流 + 熔断 + 持久化 queue(可选) |
 | 后端实例重启 → queue 里未 flush 的 jobs 丢失 | 中 | 入队前先 WAL 到 PG,实例启动时恢复 |
 | 链上 nonce 与后端预期 nonce 不一致(重启后) | 中 | 启动时拉链上 nonce 作为初始值,不信本地 cache |
@@ -291,11 +291,11 @@ pub(crate) struct AppState {
 | `citizenchain/frame/sfid-system/src/lib.rs` | 1 | 新增 ShengAdminPubkey storage + extrinsic + verifier |
 | `citizenchain/frame/sfid-system/src/lib.rs` | 3 | 新增 `register_sfid_institution_batch` extrinsic |
 | `sfid/backend/models/mod.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
-| `sfid/backend/sheng_admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
+| `sfid/backend/admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
 | `sfid/backend/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
 | `sfid/backend/models/store.rs`(新建) | 2 | 43 shard 数据结构 |
 | `sfid/backend/store_shards/pg_backend.rs` | 2 | append-only WAL 写 shard changes |
-| `sfid/backend/sheng_admins/institutions.rs` | 3 | 改 submit 为入队 |
+| `sfid/backend/admins/institutions.rs` | 3 | 改 submit 为入队 |
 | `sfid/backend/store_shards/`(新建) | 3 | 省级 flush task + batch 聚合 |
 | `sfid/backend/Cargo.toml` | 3 | 加 `crossbeam-queue` 依赖 |
 | `sfid/frontend/<feature>/api.ts` | 3 | 增加任务状态轮询接口 |

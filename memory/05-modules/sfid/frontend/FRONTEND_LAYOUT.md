@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-05-28
+- 最后更新:2026-05-31
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
@@ -14,6 +14,11 @@
   - `memory/08-tasks/done/20260525-sfid-bind-sign-request-wumin-scan.md`
   - `memory/08-tasks/done/20260525-sfid-bind-copy-myid-scan-square.md`
   - `memory/08-tasks/done/20260525-175008-sfid绑定签名回执与wuminapp启动anr修复.md`
+  - `memory/08-tasks/open/20260530-sfid-admins-module-unify.md`
+  - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
+  - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
+  - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
+  - `memory/08-tasks/open/20260531-sfid-admin-model-no-status.md`
 
 ## 当前边界
 
@@ -34,8 +39,7 @@ sfid/frontend/
 ├── institutions/              # 机构本地管理页面、institutions/api.ts、chain_duoqian_info.ts
 ├── qr/
 ├── sfid/                      # SFID 元数据 API,如省市/A3/机构类型选项
-├── sheng_admins/              # 省管理员/市管理员页面、roster_api.ts、signing_keys_api.ts
-├── shi_admins/                # 市管理员页面、shi_admins/api.ts
+├── admins/                    # 省/市管理员页面、AdminPasskeyTool.tsx、operators_api.ts、admin_security_api.ts
 ├── theme/
 └── utils/                     # 通用工具,http.ts 只放请求封装,不放业务 API
 ```
@@ -51,10 +55,12 @@ sfid/frontend/
 - 机构本地管理接口放 `institutions/api.ts`。机构与区块链交互继续放 `institutions/chain_duoqian_info.ts`。
 - CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
-- 省管理员本地后台接口放 `sheng_admins/api.ts`;一主两备展示接口放
-  `sheng_admins/roster_api.ts`;本人 signing seed 生成/更换接口放
-  `sheng_admins/signing_keys_api.ts`。
-- 市管理员操作员接口放 `shi_admins/api.ts`。
+- 省/市管理员本地后台接口统一放 `admins/`;省管理员目录接口放 `admins/api.ts`,
+  市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/AdminPasskeyTool.tsx`。
+- 管理员一般业务写操作不得直接裸调用 CRUD 端点;必须先通过
+  `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
+- 管理员重要写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
+  `WUMIN_QR_V1` 冷钱包签名流程取得一次性 grant。
 
 ## 公民绑定弹窗 UI 口径
 
@@ -77,17 +83,21 @@ sfid/frontend/
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
 
-## 省管理员目录规则
+## 管理员目录规则
 
-- `sheng_admins/`:放普通后台业务页面,例如省管理员列表、注册局视图、市管理员维护。
-- 注册局-省级管理员页面由 `SuperAdminSubTab.tsx` 承接,竖向展示一主两备 3 个板块。
-- 空备用管理员卡片只提供“扫码填入账户”的新增入口。
-- `roster_api.ts` 做页面展示查询和本地备用管理员保存,不是链交互。
-- `signing_keys_api.ts` 只做本人本地 signing seed 生成/更换,不是链交互。
-- 省管理员只有“更换省管理员/主备交换”后续接入区块链时,才允许新增
-  `chain_replace_admin.ts`。
+- `admins/`:放省级管理员列表、注册局视图、市管理员维护和管理员安全写操作。
+- 注册局-省级管理员页面由 `SuperAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
+- 省级管理员不再区分主管理员/备用管理员;仅内置初始省级管理员拥有删除新增省级管理员的权限。
+- `operators_api.ts` 只保留市管理员列表读取。
+- `admin_security_api.ts` 负责 Passkey 注册、写操作 prepare/commit、浏览器 WebAuthn、
+  一般业务 grant 和冷钱包签名回执提交。
+- 省级管理员和市级管理员都在管理员列表操作栏通过“更新密钥”使用 `AdminPasskeyTool.tsx`
+  生成或重新生成本人 Passkey。
+- 省级管理员新增/编辑/删除、市管理员新增/编辑/删除都必须走 `runSecuredAction`。
+- 管理员列表不得展示状态栏,也不得保留启用/停用按钮。
+- 编辑市管理员只允许调整管理员姓名;账户地址和市归属只读展示,不得在前端提交修改。
+- 删除市管理员确认弹窗必须展示 SS58 地址,不直接展示 hex 公钥。
 - `省管理员名册`、`激活签名`、`rotate 签名` 不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
-- 省管理员槽位 `ShengSlot` 放在 `sheng_admins/types.ts`,不再放全局 `types/`。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
 
 ## 链交互目录规则
@@ -99,13 +109,14 @@ sfid/frontend/
 |---|---|---|
 | `institutions/chain_duoqian_info.ts` | `institutions/chain_duoqian_info.rs` | 机构查询、注册信息凭证、清算行信息 |
 
-省管理员一主两备展示和本人 signing seed 生成/更换不列入链交互表。
+省/市管理员治理 Passkey/冷钱包挑战不列入链交互表。
 CPMS 系统管理也不列入链交互表,归 `cpms/`。
 
 ### `institutions/chain_duoqian_info.ts` 边界
 
 - 不放 SFID 内部机构创建/修改页面,这些仍归 `frontend/institutions/`。
 - 不再提供“备案”按钮、备案弹窗或备案状态组件。
+- 机构列表的“清算行资格”列只在私权机构 Tab 显示;公安局和公权机构列表不得展示该列。
 - 当前封装公开查询:
   - `getInstitutionInfo(sfidNumber)`:机构展示详情。
   - `getInstitutionRegistrationInfo(sfidNumber)`:链端注册信息凭证。
@@ -129,8 +140,7 @@ CPMS 系统管理也不列入链交互表,归 `cpms/`。
   "institutions",
   "qr",
   "sfid",
-  "sheng_admins",
-  "shi_admins",
+  "admins",
   "theme",
   "utils"
 ]

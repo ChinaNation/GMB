@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{AdminRole, AdminStatus};
+use crate::AdminRole;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LoginChallenge {
@@ -42,7 +42,6 @@ pub(crate) struct QrLoginResultRecord {
     pub(crate) expire_at: DateTime<Utc>,
     pub(crate) admin_pubkey: String,
     pub(crate) role: AdminRole,
-    pub(crate) status: AdminStatus,
     pub(crate) created_at: DateTime<Utc>,
 }
 
@@ -54,6 +53,8 @@ pub(crate) struct AdminAuthContext {
     pub(crate) admin_province: Option<String>,
     /// 仅 ShiAdmin 有值：该操作员登记的市（用于多签列表按市过滤、生成时强制锁定）
     pub(crate) admin_city: Option<String>,
+    /// 中文注释:当前登录管理员是否已绑定有效 Passkey;前端据此强制进入管理员列表更新密钥。
+    pub(crate) passkey_bound: bool,
 }
 
 #[derive(Serialize)]
@@ -64,6 +65,7 @@ pub(crate) struct AdminAuthOutput {
     pub(crate) admin_name: String,
     pub(crate) admin_province: Option<String>,
     pub(crate) admin_city: Option<String>,
+    pub(crate) passkey_bound: bool,
 }
 
 #[derive(Deserialize)]
@@ -75,10 +77,10 @@ pub(crate) struct AdminIdentifyInput {
 pub(crate) struct AdminIdentifyOutput {
     pub(crate) admin_pubkey: String,
     pub(crate) role: AdminRole,
-    pub(crate) status: AdminStatus,
     pub(crate) admin_name: String,
     pub(crate) admin_province: Option<String>,
     pub(crate) admin_city: Option<String>,
+    pub(crate) passkey_bound: bool,
 }
 
 #[derive(Deserialize)]

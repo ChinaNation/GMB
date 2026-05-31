@@ -16,10 +16,34 @@ pub(crate) async fn admin_list_citizens(
     headers: HeaderMap,
     Query(query): Query<CitizensQuery>,
 ) -> impl IntoResponse {
-    let _auth_ctx = match require_admin_any(&state, &headers) {
+    let auth_ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let scope_province_code = auth_ctx
+        .admin_province
+        .as_deref()
+        .and_then(|name| {
+            crate::sfid::province::provinces()
+                .iter()
+                .find(|p| p.name == name)
+        })
+        .map(|p| p.code.to_string());
+    let scope_city_code = auth_ctx
+        .admin_city
+        .as_deref()
+        .and_then(|city_name| {
+            auth_ctx
+                .admin_province
+                .as_deref()
+                .and_then(|province_name| {
+                    crate::sfid::province::provinces()
+                        .iter()
+                        .find(|p| p.name == province_name)
+                        .and_then(|p| p.cities.iter().find(|c| c.name == city_name))
+                })
+        })
+        .map(|c| c.code.to_string());
 
     let keyword = query.keyword.unwrap_or_default().trim().to_lowercase();
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
@@ -36,6 +60,16 @@ pub(crate) async fn admin_list_citizens(
     for record in store.citizen_records.values() {
         if record.bind_status() != CitizenBindStatus::Bound {
             continue;
+        }
+        if let Some(province_code) = scope_province_code.as_deref() {
+            if record.province_code.as_deref() != Some(province_code) {
+                continue;
+            }
+        }
+        if let Some(city_code) = scope_city_code.as_deref() {
+            if record.city_code.as_deref() != Some(city_code) {
+                continue;
+            }
         }
         rows.push(CitizenRow {
             id: record.id,

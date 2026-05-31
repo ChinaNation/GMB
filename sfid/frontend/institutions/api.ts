@@ -4,6 +4,9 @@
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, adminRequest } from '../utils/http';
+import { createGeneralSecurityGrant } from '../admins/admin_security_api';
+
+const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
 export type InstitutionCategory = 'PUBLIC_SECURITY' | 'GOV_INSTITUTION' | 'PRIVATE_INSTITUTION';
 
@@ -208,9 +211,19 @@ export async function createInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput
 ): Promise<CreateInstitutionOutput> {
+  const grantPayload = {
+    a3: input.a3,
+    p1: input.p1 ?? null,
+    province: input.province ?? null,
+    city: input.city,
+    institution: input.institution,
+    institution_name: input.institution_name ?? null,
+    sub_type: null,
+  };
+  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload);
   return adminRequest<CreateInstitutionOutput>('/api/v1/institution/create', auth, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
     body: JSON.stringify(input),
   });
 }
@@ -225,12 +238,14 @@ export async function createAccount(
   sfidNumber: string,
   accountName: string
 ): Promise<CreateAccountOutput> {
+  const grantPayload = { target: sfidNumber, sfid_number: sfidNumber, account_name: accountName };
+  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_CREATE_ACCOUNT', grantPayload);
   return adminRequest<CreateAccountOutput>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/account/create`,
     auth,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
       body: JSON.stringify({ account_name: accountName }),
     }
   );
@@ -279,12 +294,20 @@ export async function updateInstitution(
   sfidNumber: string,
   input: UpdateInstitutionInput,
 ): Promise<MultisigInstitution> {
+  const grantPayload = {
+    target: sfidNumber,
+    sfid_number: sfidNumber,
+    institution_name: input.institution_name ?? null,
+    sub_type: input.sub_type ?? null,
+    parent_sfid_number: input.parent_sfid_number ?? null,
+  };
+  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_UPDATE', grantPayload);
   return adminRequest<MultisigInstitution>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}`,
     auth,
     {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
       body: JSON.stringify(input),
     },
   );
@@ -326,10 +349,15 @@ export async function reconcilePublicSecurity(
   province?: string
 ): Promise<ReconcileReport[]> {
   const qs = province ? `?province=${encodeURIComponent(province)}` : '';
+  const target = province?.trim() || '*';
+  const grant = await createGeneralSecurityGrant(auth, 'PUBLIC_SECURITY_RECONCILE', {
+    target,
+    province: province ?? null,
+  });
   return adminRequest<ReconcileReport[]>(
     `/api/v1/public-security/reconcile${qs}`,
     auth,
-    { method: 'POST' }
+    { method: 'POST', headers: { [SECURITY_GRANT_HEADER]: grant.grant_id } }
   );
 }
 
@@ -341,10 +369,12 @@ export async function deleteAccount(
   sfidNumber: string,
   accountName: string
 ): Promise<{ deleted: boolean }> {
+  const grantPayload = { target: sfidNumber, sfid_number: sfidNumber, account_name: accountName };
+  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_DELETE_ACCOUNT', grantPayload);
   return adminRequest<{ deleted: boolean }>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/account/${encodeURIComponent(accountName)}`,
     auth,
-    { method: 'DELETE' }
+    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: grant.grant_id } }
   );
 }
 
@@ -368,6 +398,13 @@ export async function uploadDocument(
   file: File,
   docType: string,
 ): Promise<InstitutionDocument> {
+  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_UPLOAD_DOCUMENT', {
+    target: sfidNumber,
+    sfid_number: sfidNumber,
+    file_name: file.name,
+    doc_type: docType,
+    file_size: file.size,
+  });
   const formData = new FormData();
   formData.append('file', file);
   formData.append('doc_type', docType);
@@ -376,6 +413,7 @@ export async function uploadDocument(
     auth,
     {
       method: 'POST',
+      headers: { [SECURITY_GRANT_HEADER]: grant.grant_id },
       body: formData,
       // 不设 content-type,让浏览器自动设置 multipart boundary
     },
@@ -409,9 +447,14 @@ export async function deleteDocument(
   sfidNumber: string,
   docId: number,
 ): Promise<void> {
+  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_DELETE_DOCUMENT', {
+    target: sfidNumber,
+    sfid_number: sfidNumber,
+    doc_id: String(docId),
+  });
   await adminRequest<string>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/documents/${docId}`,
     auth,
-    { method: 'DELETE' },
+    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: grant.grant_id } },
   );
 }

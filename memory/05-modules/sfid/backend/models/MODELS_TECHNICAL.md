@@ -1,9 +1,11 @@
 # MODELS 模块技术文档
 
-- 最后更新:2026-05-25
+- 最后更新:2026-05-31
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
+  - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
+  - `memory/08-tasks/open/20260531-sfid-admin-model-no-status.md`
 
 ## 1. 模块定位
 
@@ -17,7 +19,7 @@
 sfid/backend/models/
 ├── mod.rs      # 全局共享模型 facade
 ├── error.rs    # ApiResponse / ApiError / HealthData
-├── role.rs     # AdminRole / AdminStatus / AdminUser / 操作员 DTO
+├── role.rs     # AdminRole / AdminUser / 省级管理员与市级管理员 DTO
 └── store.rs    # Store 聚合体类型、审计、指标、链请求回执、回调、奖励、投票缓存
 ```
 
@@ -44,6 +46,11 @@ sfid/backend/institutions/model.rs
 - `Store` 仍作为内存聚合体类型使用,但持久化由 `main.rs` 拆到
   `store_citizens / store_cpms / store_institutions / store_ops` 四张模块快照表。
 - `Store` 可以引用业务模块模型,但业务 DTO 不反向塞回 `models`。
+- 管理员安全分级的跨模块共享状态放在 `Store`:
+  - `admin_passkeys_by_credential_id`:省/市管理员浏览器 Passkey 凭据。
+  - `admin_passkey_registration_challenges`:Passkey 绑定过程中的 WebAuthn + 冷钱包确认挑战。
+  - `admin_action_challenges`:管理员治理和业务安全动作 prepare 阶段的短期挑战。
+  - `admin_security_grants`:业务写接口消费的一次性短期授权。
 
 ## 5. 铁律
 

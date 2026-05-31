@@ -22,6 +22,7 @@ use std::{
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+mod admins;
 mod app_core;
 mod audit;
 mod citizens;
@@ -35,7 +36,6 @@ mod models;
 mod qr;
 mod scope;
 mod sfid;
-mod sheng_admins;
 mod store_shards;
 
 pub(crate) use app_core::http_security::*;
@@ -43,11 +43,9 @@ pub(crate) use app_core::runtime_ops::*;
 pub(crate) use citizens::model::*;
 pub(crate) use cpms::model::*;
 pub(crate) use cpms::scope::in_scope_cpms_site;
-#[cfg(test)]
-pub(crate) use login::verify_admin_signature;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_admin_write, require_sheng_admin, AdminSession, LoginChallenge, QrLoginResultRecord,
+    require_sheng_admin, AdminSession, LoginChallenge, QrLoginResultRecord,
 };
 pub(crate) use models::*;
 pub(crate) use sfid::model::*;
@@ -56,10 +54,6 @@ pub(crate) use sfid::model::*;
 struct AppState {
     store: StoreHandle,
     rate_limit_redis: Arc<RedisClient>,
-    /// 中文注释:省管理员 3-tier 签名 keypair 进程内缓存(ADR-008 Phase 23e)。
-    /// 缓存按 (province, admin_pubkey) 二级 key 持有 3 把独立 keypair,
-    /// seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管。
-    pub(crate) sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache>,
     /// 中文注释:按省分片的进程内缓存。Postgres 持久化已改为模块 Store 表,
     /// 这里不再写旧 `store_shards` JSONB 表。
     #[allow(dead_code)]
@@ -223,7 +217,10 @@ struct OpsStoreSnapshot {
     next_seq: u64,
     next_audit_seq: u64,
     next_admin_user_id: u64,
-    sheng_admin_rosters: HashMap<String, ShengAdminRosterLocal>,
+    admin_passkeys_by_credential_id: HashMap<String, AdminPasskeyCredential>,
+    admin_passkey_registration_challenges: HashMap<String, AdminPasskeyRegistrationChallenge>,
+    admin_action_challenges: HashMap<String, AdminActionChallenge>,
+    admin_security_grants: HashMap<String, AdminSecurityGrant>,
     /// 中文注释:登录 challenge/session/扫码结果必须跨请求可读;
     /// 本任务将它们收敛到 ops 模块快照,不再依赖旧 runtime cache 表。
     login_challenges: HashMap<String, LoginChallenge>,
@@ -242,7 +239,12 @@ impl OpsStoreSnapshot {
             next_seq: store.next_seq,
             next_audit_seq: store.next_audit_seq,
             next_admin_user_id: store.next_admin_user_id,
-            sheng_admin_rosters: store.sheng_admin_rosters.clone(),
+            admin_passkeys_by_credential_id: store.admin_passkeys_by_credential_id.clone(),
+            admin_passkey_registration_challenges: store
+                .admin_passkey_registration_challenges
+                .clone(),
+            admin_action_challenges: store.admin_action_challenges.clone(),
+            admin_security_grants: store.admin_security_grants.clone(),
             login_challenges: store.login_challenges.clone(),
             qr_login_results: store.qr_login_results.clone(),
             admin_sessions: store.admin_sessions.clone(),
@@ -258,7 +260,10 @@ impl OpsStoreSnapshot {
         store.next_seq = self.next_seq;
         store.next_audit_seq = self.next_audit_seq;
         store.next_admin_user_id = self.next_admin_user_id;
-        store.sheng_admin_rosters = self.sheng_admin_rosters;
+        store.admin_passkeys_by_credential_id = self.admin_passkeys_by_credential_id;
+        store.admin_passkey_registration_challenges = self.admin_passkey_registration_challenges;
+        store.admin_action_challenges = self.admin_action_challenges;
+        store.admin_security_grants = self.admin_security_grants;
         store.login_challenges = self.login_challenges;
         store.qr_login_results = self.qr_login_results;
         store.admin_sessions = self.admin_sessions;
@@ -307,24 +312,10 @@ impl StoreBackend {
         }
     }
 
-    fn parse_admin_status(status: &str) -> AdminStatus {
-        match status {
-            "DISABLED" => AdminStatus::Disabled,
-            _ => AdminStatus::Active,
-        }
-    }
-
     fn admin_role_text(role: &AdminRole) -> &'static str {
         match role {
             AdminRole::ShengAdmin => "SHENG_ADMIN",
             AdminRole::ShiAdmin => "SHI_ADMIN",
-        }
-    }
-
-    fn admin_status_text(status: &AdminStatus) -> &'static str {
-        match status {
-            AdminStatus::Active => "ACTIVE",
-            AdminStatus::Disabled => "DISABLED",
         }
     }
 
@@ -387,7 +378,7 @@ impl StoreBackend {
 
         let admin_rows = conn
             .query(
-                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey, signing_created_at
+                "SELECT admin_id, admin_pubkey, admin_name, role, built_in, created_by, created_at, updated_at, city
                  FROM admins",
                 &[],
             )
@@ -397,15 +388,11 @@ impl StoreBackend {
             let admin_pubkey: String = row.get(1);
             let admin_name: String = row.get(2);
             let role_text: String = row.get(3);
-            let status_text: String = row.get(4);
-            let built_in: bool = row.get(5);
-            let created_by: String = row.get(6);
-            let created_at: DateTime<Utc> = row.get(7);
-            let updated_at: Option<DateTime<Utc>> = row.get(8);
-            let city: String = row.get(9);
-            let encrypted_signing_privkey: Option<String> = row.get(10);
-            let signing_pubkey: Option<String> = row.get(11);
-            let signing_created_at: Option<DateTime<Utc>> = row.get(12);
+            let built_in: bool = row.get(4);
+            let created_by: String = row.get(5);
+            let created_at: DateTime<Utc> = row.get(6);
+            let updated_at: Option<DateTime<Utc>> = row.get(7);
+            let city: String = row.get(8);
             store.admin_users_by_pubkey.insert(
                 admin_pubkey.clone(),
                 AdminUser {
@@ -413,15 +400,11 @@ impl StoreBackend {
                     admin_pubkey,
                     admin_name,
                     role: Self::parse_admin_role(role_text.as_str()),
-                    status: Self::parse_admin_status(status_text.as_str()),
                     built_in,
                     created_by,
                     created_at,
                     updated_at,
                     city,
-                    encrypted_signing_privkey,
-                    signing_pubkey,
-                    signing_created_at,
                 },
             );
         }
@@ -480,23 +463,19 @@ impl StoreBackend {
         for admin in store.admin_users_by_pubkey.values() {
             let row = tx
                 .query_one(
-                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey, signing_created_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, built_in, created_by, created_at, updated_at, city)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                      RETURNING admin_id",
                     &[
                         &(admin.id as i64),
                         &admin.admin_pubkey,
                         &admin.admin_name,
                         &Self::admin_role_text(&admin.role),
-                        &Self::admin_status_text(&admin.status),
                         &admin.built_in,
                         &admin.created_by,
                         &admin.created_at,
                         &admin.updated_at.unwrap_or(admin.created_at),
                         &admin.city,
-                        &admin.encrypted_signing_privkey,
-                        &admin.signing_pubkey,
-                        &admin.signing_created_at,
                     ],
                 )
                 .map_err(|e| format!("insert admins failed: {e}"))?;
@@ -639,13 +618,7 @@ impl StoreHandle {
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
                  ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
-                 ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS encrypted_signing_privkey TEXT;
-                 ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS signing_pubkey TEXT;
-                 ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS signing_created_at TIMESTAMPTZ;",
+                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
             let mut clients = Vec::with_capacity(pool_size);
@@ -750,9 +723,8 @@ fn main() {
     let redis_client = RedisClient::open(redis_url.as_str())
         .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
 
-    // ADR-008 Phase 23e:启动期仅校验 SFID_SIGNING_SEED_HEX 可解码(供 login QR 系统签名 +
-    // sheng_signer master KEK 派生用),不再把 seed / pubkey / 多份 known_key_seeds 装到
-    // AppState。SFID main signer 由 `crate::crypto::sr25519` helper 按需从环境变量加载。
+    // 中文注释:启动期仅校验 SFID_SIGNING_SEED_HEX 可解码,供登录二维码系统签名使用。
+    // 省管理员业务治理签名只走各自冷钱包,后端不再保存或缓存省级私钥。
     {
         let seed_hex = required_env("SFID_SIGNING_SEED_HEX");
         crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
@@ -773,12 +745,6 @@ fn main() {
         );
     }
     let store = StoreHandle::from_database_url(database_url.as_str()).expect("init store handle");
-    // ADR-008 Phase 23e:省管理员 3-tier 签名 keypair 内存缓存。
-    // 缓存 key = (province, admin_pubkey_bytes),由各省 admin 登录时按需载入。
-    // seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管,wrap key 走 SFID_MASTER_KEK_HEX
-    // (fallback SFID_SIGNING_SEED_HEX)+ HKDF。本进程不再持有"全局 SFID MAIN signer Pair"。
-    let sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache> =
-        Arc::new(sheng_admins::signing_cache::ShengSigningCache::new());
     // 中文注释:ShardedStore 现在只作为进程内分片缓存。
     // 主数据由模块 Store 表保存;旧 `store_shards` Postgres 整包分片已删除。
     let sharded_store: Arc<store_shards::ShardedStore> = {
@@ -789,11 +755,10 @@ fn main() {
     let state = AppState {
         store,
         rate_limit_redis: Arc::new(redis_client),
-        sheng_admin_signing_cache,
         sharded_store,
     };
-    seed_sheng_admins(&state);
-    sync_builtin_sheng_admins(&state);
+    seed_builtin_province_admins(&state);
+    sync_builtin_province_admins(&state);
     info!("initialized runtime state with defaults");
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
@@ -896,21 +861,30 @@ fn main() {
             );
 
         let admin_routes = Router::new()
+            .route("/api/v1/admin/operators", get(admins::list_operators))
             .route(
-                "/api/v1/admin/operators",
-                get(sheng_admins::list_operators).post(sheng_admins::create_operator),
+                "/api/v1/admin/passkeys/register/start",
+                post(admins::actions::start_passkey_registration),
             )
             .route(
-                "/api/v1/admin/operators/:id",
-                put(sheng_admins::update_operator).delete(sheng_admins::delete_operator),
+                "/api/v1/admin/passkeys/register/attest",
+                post(admins::actions::attest_passkey_registration),
             )
             .route(
-                "/api/v1/admin/operators/:id/status",
-                put(sheng_admins::update_operator_status),
+                "/api/v1/admin/passkeys/register/complete",
+                post(admins::actions::complete_passkey_registration),
+            )
+            .route(
+                "/api/v1/admin/actions/prepare",
+                post(admins::actions::prepare_admin_action),
+            )
+            .route(
+                "/api/v1/admin/actions/commit",
+                post(admins::actions::commit_admin_action),
             )
             .route(
                 "/api/v1/admin/sheng-admins",
-                get(sheng_admins::list_sheng_admins),
+                get(admins::list_province_admins),
             )
             .route("/api/v1/admin/cpms-keys", get(cpms::list_cpms_keys))
             .route(
@@ -1007,8 +981,6 @@ fn main() {
                 "/api/v1/institution/:sfid_number/documents/:doc_id",
                 delete(institutions::handler::delete_document),
             )
-            // ADR-008 Phase 23e:`/api/v1/admin/debug/bootstrap-signer` 已下架,
-            // bootstrap 行为已由 login::bootstrap_sheng_signing_pair 同步触发,无需诊断端点。
             // 任务卡 6:公安局跟 sfid 工具市清单对账
             .route(
                 "/api/v1/public-security/reconcile",
@@ -1039,24 +1011,6 @@ fn main() {
             .route(
                 "/api/v1/admin/sfid/cities",
                 get(sfid::admin::admin_sfid_cities),
-            )
-            // 中文注释:旧签名轮换端点已下架,链上 ShengAdmins/ShengSigningPubkey 是真相。
-            // ─── ADR-008:省管理员 3-tier 名册展示 + 本人签名密钥生成/更换 ───
-            .route(
-                "/api/v1/admin/sheng-admin/roster",
-                get(sheng_admins::roster::list_roster_admin),
-            )
-            .route(
-                "/api/v1/admin/sheng-admin/backup",
-                post(sheng_admins::roster::set_backup_admin),
-            )
-            .route(
-                "/api/v1/admin/sheng-signer/prepare",
-                post(sheng_admins::signing_keys::prepare),
-            )
-            .route(
-                "/api/v1/admin/sheng-signer/submit",
-                post(sheng_admins::signing_keys::submit),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -1141,17 +1095,15 @@ fn main() {
             .layer(build_cors_layer())
             .with_state(app_state);
 
-        // 中文注释：SFID 现在以“链上三把公钥 + 本地主私钥”作为唯一真相；
-        // 启动前必须完成创世哈希初始化、同步链上 keyring，并确认本地主私钥
-        // 派生出的公钥就是链上当前 main 公钥，否则拒绝提供签名服务。
+        // 中文注释:SFID 后端启动时只初始化链 genesis;管理员业务签名由
+        // 各省/市管理员自己的冷钱包完成,后端不持有管理员业务私钥。
         app_core::chain_runtime::init_genesis_hash_from_chain()
             .await
             .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
         info!("chain genesis hash initialized");
 
-        // 中文注释:链上旧签名名册同步与 main signer 校验全部下架。
-        // 省管理员 3-tier 真相在链上 `ShengAdmins[Province][Slot]` storage,
-        // SFID 内部 cache 由各省 admin 登录时按需 bootstrap。
+        // 中文注释:省级管理员不再区分主/备;43 个初始省级管理员只作为
+        // 不可删除安全根,新增省级管理员走 admins 安全动作落本地管理表。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
         let addr = resolve_backend_bind_addr().expect("resolve sfid backend bind address");
@@ -1246,6 +1198,3 @@ pub(crate) fn store_write_or_500(
 
 #[cfg(test)]
 mod main_tests;
-
-// ADR-008 Phase 23e:`debug_bootstrap_signer` 端点已下架。bootstrap 行为由
-// `login::bootstrap_sheng_signing_pair` 在登录验签成功后同步触发,无需诊断端点。

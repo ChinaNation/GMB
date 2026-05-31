@@ -39,6 +39,7 @@ use chrono::Utc;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::admins::actions::{require_admin_security_grant, AdminActionType};
 use crate::app_core::runtime_ops::append_audit_log;
 use crate::crypto::pubkey::normalize_admin_pubkey;
 use crate::institutions::model::{
@@ -55,7 +56,7 @@ use crate::institutions::service::{
 };
 use crate::institutions::store;
 use crate::institutions::{InstitutionChainStatus, MultisigChainStatus};
-use crate::login::require_admin_any;
+use crate::login::{require_admin_any, require_sheng_admin, AdminAuthContext};
 use crate::models::ApiResponse;
 use crate::scope::{filter_by_scope, get_visible_scope};
 use crate::sfid::province::{province_name_by_code, PROVINCES};
@@ -110,6 +111,28 @@ fn resolve_province_from_sfid_number(sfid_number: &str) -> Option<String> {
         return None;
     }
     province_name_by_code(&code).map(|n| n.to_string())
+}
+
+/// 中文注释:机构资料库的所有文档入口必须先确认机构存在,再按省/市管理员 scope 放行。
+fn ensure_institution_visible_to_admin(
+    inst: &MultisigInstitution,
+    ctx: &AdminAuthContext,
+) -> Result<(), axum::response::Response> {
+    if let Some(ref locked_province) = ctx.admin_province {
+        if inst.province != *locked_province {
+            return Err(api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "province out of scope",
+            ));
+        }
+    }
+    if let Some(ref locked_city) = ctx.admin_city {
+        if inst.city != *locked_city {
+            return Err(api_error(StatusCode::FORBIDDEN, 1003, "city out of scope"));
+        }
+    }
+    Ok(())
 }
 
 /// 反查 `created_by` pubkey → (管理员姓名, 角色枚举字符串)。
@@ -321,6 +344,25 @@ pub(crate) async fn create_institution(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let grant_payload = serde_json::json!({
+        "a3": input.a3.clone(),
+        "p1": input.p1.clone(),
+        "province": input.province.clone(),
+        "city": input.city.clone(),
+        "institution": input.institution.clone(),
+        "institution_name": input.institution_name.clone(),
+        "sub_type": input.sub_type.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::InstitutionCreate,
+        "*",
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     let scope = get_visible_scope(&ctx);
 
     let a3 = input.a3.trim().to_string();
@@ -600,6 +642,23 @@ pub(crate) async fn update_institution(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let grant_payload = serde_json::json!({
+        "target": sfid_number.clone(),
+        "sfid_number": sfid_number.clone(),
+        "institution_name": input.institution_name.clone(),
+        "sub_type": input.sub_type.clone(),
+        "parent_sfid_number": input.parent_sfid_number.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::InstitutionUpdate,
+        sfid_number.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     let scope = get_visible_scope(&ctx);
 
     let province = match resolve_province_from_sfid_number(&sfid_number) {
@@ -803,6 +862,21 @@ pub(crate) async fn create_account(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let grant_payload = serde_json::json!({
+        "target": sfid_number.clone(),
+        "sfid_number": sfid_number.clone(),
+        "account_name": input.account_name.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::InstitutionCreateAccount,
+        sfid_number.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     let scope = get_visible_scope(&ctx);
 
     let account_name = match validate_account_name(&input.account_name) {
@@ -1435,6 +1509,21 @@ pub(crate) async fn delete_account(
             "账户仍在链上或处于上链中,不能在 SFID 系统删除",
         );
     }
+    let grant_payload = serde_json::json!({
+        "target": sfid_number.clone(),
+        "sfid_number": sfid_number.clone(),
+        "account_name": account_name.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::InstitutionDeleteAccount,
+        sfid_number.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
 
     // 写:删除账户
     let sfid_number_w = sfid_number.clone();
@@ -1510,10 +1599,31 @@ pub(crate) async fn reconcile_public_security(
     headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<ReconcilePublicSecurityQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_admin_any(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let grant_target = query
+        .province
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("*")
+        .to_string();
+    let grant_payload = serde_json::json!({
+        "target": grant_target.clone(),
+        "province": query.province.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::PublicSecurityReconcile,
+        grant_target.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     let scope = get_visible_scope(&ctx);
 
     let mut store_guard = match store_write_or_500(&state) {
@@ -1582,13 +1692,21 @@ pub(crate) async fn list_documents(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_admin_any(&state, &headers) {
-        return resp;
-    }
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let store = match store_read_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let inst = match store.multisig_institutions.get(&sfid_number) {
+        Some(v) => v,
+        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+    };
+    if let Err(resp) = ensure_institution_visible_to_admin(inst, &ctx) {
+        return resp;
+    }
     let mut docs: Vec<&InstitutionDocument> = store
         .institution_documents
         .values()
@@ -1626,15 +1744,8 @@ pub(crate) async fn upload_document(
             Some(v) => v,
             None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
         };
-        if let Some(ref locked_province) = ctx.admin_province {
-            if inst.province != *locked_province {
-                return api_error(StatusCode::FORBIDDEN, 1003, "province out of scope");
-            }
-        }
-        if let Some(ref locked_city) = ctx.admin_city {
-            if inst.city != *locked_city {
-                return api_error(StatusCode::FORBIDDEN, 1003, "city out of scope");
-            }
+        if let Err(resp) = ensure_institution_visible_to_admin(inst, &ctx) {
+            return resp;
         }
     }
 
@@ -1689,6 +1800,23 @@ pub(crate) async fn upload_document(
     // 10MB 限制
     if file_data.len() > 10 * 1024 * 1024 {
         return api_error(StatusCode::BAD_REQUEST, 1001, "文件大小不能超过 10MB");
+    }
+    let grant_payload = serde_json::json!({
+        "target": sfid_number.clone(),
+        "sfid_number": sfid_number.clone(),
+        "file_name": file_name.clone(),
+        "doc_type": doc_type.clone(),
+        "file_size": file_data.len(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::InstitutionUploadDocument,
+        sfid_number.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
     }
 
     // 写文件到 data/documents/{sfid_number}/
@@ -1749,13 +1877,21 @@ pub(crate) async fn download_document(
     headers: HeaderMap,
     Path((sfid_number, doc_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_admin_any(&state, &headers) {
-        return resp;
-    }
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let store = match store_read_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let inst = match store.multisig_institutions.get(&sfid_number) {
+        Some(v) => v,
+        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+    };
+    if let Err(resp) = ensure_institution_visible_to_admin(inst, &ctx) {
+        return resp;
+    }
     let doc = match store.institution_documents.get(&doc_id) {
         Some(d) if d.sfid_number == sfid_number => d.clone(),
         _ => return api_error(StatusCode::NOT_FOUND, 1004, "document not found"),
@@ -1805,24 +1941,42 @@ pub(crate) async fn delete_document(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // scope 权限校验
+    // 中文注释:删除前先校验机构存在、scope 和文档归属,再消费一次性安全授权。
     {
         let store = match store_read_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        if let Some(inst) = store.multisig_institutions.get(&sfid_number) {
-            if let Some(ref locked_province) = ctx.admin_province {
-                if inst.province != *locked_province {
-                    return api_error(StatusCode::FORBIDDEN, 1003, "province out of scope");
-                }
-            }
-            if let Some(ref locked_city) = ctx.admin_city {
-                if inst.city != *locked_city {
-                    return api_error(StatusCode::FORBIDDEN, 1003, "city out of scope");
-                }
-            }
+        let inst = match store.multisig_institutions.get(&sfid_number) {
+            Some(v) => v,
+            None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+        };
+        if let Err(resp) = ensure_institution_visible_to_admin(inst, &ctx) {
+            return resp;
         }
+        let doc_exists = store
+            .institution_documents
+            .get(&doc_id)
+            .map(|d| d.sfid_number == sfid_number)
+            .unwrap_or(false);
+        if !doc_exists {
+            return api_error(StatusCode::NOT_FOUND, 1004, "document not found");
+        }
+    }
+    let grant_payload = serde_json::json!({
+        "target": sfid_number.clone(),
+        "sfid_number": sfid_number.clone(),
+        "doc_id": doc_id.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::InstitutionDeleteDocument,
+        sfid_number.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
     }
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,

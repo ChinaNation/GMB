@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
@@ -67,11 +68,16 @@ class PayloadDecoder {
   static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
     'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
   );
+  static const String _sfidAdminActionDomain = 'sfid_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {
     // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
     try {
       final raw = _hexToBytes(payloadHex);
+      final adminAction = _decodeSfidAdminAction(raw);
+      if (adminAction != null) {
+        return adminAction;
+      }
       if (raw.length ==
               _activateSubjectPrefix.length + 48 + 1 + 1 + 32 + 8 + 16 &&
           _hasPrefix(raw, _activateSubjectPrefix)) {
@@ -173,8 +179,8 @@ class PayloadDecoder {
       // ── OrganizationManage(17) ──
       // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
       // propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
-      // register_sfid_institution(call=2) 由 sfid 后端 ShengSigningPubkey 直签,
-      // 不走冷钱包,decoder 不覆盖。
+      // register_sfid_institution(call=2) 当前不作为冷钱包 action 暴露;
+      // SFID 机构注册凭证等待市管理员业务签名流程接入后再恢复。
       // propose_create_institution(call=5) 由 wuminapp 在线端构造、走冷钱包扫码签名;
       // ADR-008 step2b/step2d 凭证带 (province, signer_admin_pubkey) 双层匹配字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
@@ -377,6 +383,65 @@ class PayloadDecoder {
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  static DecodedPayload? _decodeSfidAdminAction(Uint8List raw) {
+    try {
+      final text = utf8.decode(raw);
+      final value = jsonDecode(text);
+      if (value is! Map<String, dynamic>) return null;
+      if (value['domain'] != _sfidAdminActionDomain) return null;
+      if (value['qr_proto'] != 'WUMIN_QR_V1') return null;
+      final actionType = value['action_type'];
+      final province = value['actor_province'];
+      final actorPubkey = value['actor_pubkey'];
+      final target = value['target'];
+      final beforeHash = value['before_hash'];
+      final afterHash = value['after_hash'];
+      if (actionType is! String ||
+          province is! String ||
+          actorPubkey is! String ||
+          target is! String ||
+          beforeHash is! String ||
+          afterHash is! String) {
+        return null;
+      }
+      final payloadHash = '0x${sha256.convert(raw).toString()}';
+      return DecodedPayload(
+        action: 'sfid_admin_action',
+        summary: 'SFID 管理员治理',
+        fields: <String, String>{
+          'action_type': _sfidAdminActionLabel(actionType),
+          'province': province,
+          'actor_pubkey': actorPubkey,
+          'target': target,
+          'before_hash': beforeHash,
+          'after_hash': afterHash,
+          'payload_hash': payloadHash,
+        },
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _sfidAdminActionLabel(String actionType) {
+    switch (actionType) {
+      case 'PASSKEY_REGISTER':
+        return '绑定 Passkey';
+      case 'CREATE_OPERATOR':
+        return '新增市级管理员';
+      case 'UPDATE_OPERATOR':
+        return '修改市级管理员';
+      case 'SET_OPERATOR_STATUS':
+        return '停用/启用市级管理员';
+      case 'DELETE_OPERATOR':
+        return '删除市级管理员';
+      case 'SET_BACKUP_ADMIN':
+        return '新增/更换备用省管理员';
+      default:
+        return actionType;
     }
   }
 

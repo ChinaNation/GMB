@@ -1,10 +1,12 @@
 # CPMS_TECHNICAL
 
-- 最后更新:2026-05-28
+- 最后更新:2026-05-31
 - 任务卡:
   - `memory/08-tasks/open/20260516-sfid-cpms-install-archive.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
+  - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
+  - `memory/08-tasks/done/20260531-sfid-permission-closeout.md`
 
 ## 0. 模块边界
 
@@ -17,7 +19,9 @@
 - 查询、禁用、启用、吊销、删除 CPMS 授权。
 - 按机构 `sfid_number` 反查对应 CPMS 授权记录。
 
-该模块服务于公安局机构详情页,但不属于省管理员目录。省管理员只是调用这些接口的授权角色。
+该模块服务于公安局机构详情页,但不属于省管理员目录。CPMS 安装授权、安装码
+重签发、禁用、启用、吊销、删除均只允许省级管理员操作;市级管理员不得操作
+CPMS 授权治理。
 
 ## 1. 当前目录
 
@@ -44,6 +48,15 @@ sfid/backend/cpms/
 | `PUT /api/v1/admin/cpms-keys/:sfid_number/enable` | `cpms::enable_cpms_keys` | 启用已禁用授权 |
 | `PUT /api/v1/admin/cpms-keys/:sfid_number/revoke` | `cpms::revoke_cpms_keys` | 吊销授权 |
 
+写权限分级:
+
+- 查询与 ARCHIVE 验真:省级管理员登录态 + 省域 scope。
+- 安装码签发、作废、重签发、禁用、启用、吊销、删除:必须先在
+  `admins/actions.rs` 完成 Passkey + 当前省管理员冷钱包 sr25519 签名,
+  再携带一次性 `x-sfid-security-grant` 调用本模块接口。
+- 前端 `cpms/api.ts` 中禁用、启用、吊销、删除、重签发等重要操作的 API
+  封装必须把安全授权声明为必填参数,不得通过可选 header 旁路类型检查。
+
 ## 3. 验真链路
 
 1. 解析 `ARCHIVE`，强制 `proto=SFID_CPMS_V1`、`type=ARCHIVE`。
@@ -64,4 +77,4 @@ sfid/backend/cpms/
   install_token_status` 更新都必须先落 `store_cpms`，再覆盖运行缓存。
 - ARCHIVE 验真入口为 `cpms::verify_cpms_archive_qr`，公民绑定复用同一入口。
 - CPMS 授权省域判断归 `cpms::scope`。
-- 不得再从 `sheng_admins` 引用 CPMS handler。
+- 不得从管理员治理目录引用或复刻 CPMS handler。

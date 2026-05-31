@@ -111,18 +111,19 @@ curl http://127.0.0.1:8899/api/v1/health
 
 ## 数据库说明（当前）
 - 本项目当前使用 PostgreSQL。
-- 运行态拆分为：
-1. `runtime_cache_entries`：按键分片运行态缓存（JSONB）。
-2. `runtime_misc`：运行杂项（JSONB）。
-3. `runtime_meta`：签名种子与公钥元信息（JSONB）。
-- 管理员与密钥采用结构化分表：
+- 运行态按模块快照表拆分：
+1. `store_citizens`：公民绑定、状态扫码和投票缓存。
+2. `store_cpms`：CPMS 安装授权、授权状态和公钥哈希。
+3. `store_institutions`：机构、账户和资料库快照。
+4. `store_ops`：登录 challenge/session、管理员 Passkey、审计、链路幂等和指标。
+- 管理员采用结构化分表：
 1. `admins`
 2. `provinces`
 3. `sheng_admin_scope`
 4. `shi_admin_scope`
-- 兼容视图：
-2. `v_sheng_admins`
-3. `v_shi_admins`
+- 管理员查询视图：
+1. `v_sheng_admins`
+2. `v_shi_admins`
 - 链路一致性与防重放表：
 1. `chain_idempotency_requests`
 2. `binding_unique_locks`
@@ -130,6 +131,8 @@ curl http://127.0.0.1:8899/api/v1/health
 - 已下线内容：
 1. `backend/data/runtime_state.json`
 2. `runtime_store`
+3. `runtime_misc`
+4. `runtime_cache_entries`
 
 ## 常见故障排查
 - 前端提示 `Failed to fetch` 或 `curl` 返回 `Empty reply from server`：

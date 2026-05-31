@@ -68,8 +68,8 @@ WHERE super_admin_id IN (SELECT admin_id FROM admins WHERE role = 'SUPER_ADMIN')
 DELETE FROM super_admin_scope;
 DELETE FROM admins WHERE role = 'SUPER_ADMIN';
 
-INSERT INTO admins(admin_pubkey, role, status, built_in, created_by, created_at)
-SELECT admin_pubkey, 'SUPER_ADMIN', 'ACTIVE', TRUE, 'SYSTEM', now()
+INSERT INTO admins(admin_pubkey, role, built_in, created_by, created_at)
+SELECT admin_pubkey, 'SUPER_ADMIN', TRUE, 'SYSTEM', now()
 FROM tmp_super_admin_catalog
 ORDER BY scope_no;
 

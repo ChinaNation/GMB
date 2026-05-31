@@ -23,8 +23,7 @@
     "institutions",
     "qr",
     "sfid",
-    "sheng_admins",
-    "shi_admins",
+    "admins",
     "theme",
     "utils"
   ]

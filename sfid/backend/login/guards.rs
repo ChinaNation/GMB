@@ -1,19 +1,21 @@
-//! 登录会话鉴权守卫与省管理员签名密钥 bootstrap。
+//! 登录会话鉴权守卫。
 //!
-//! 业务模块只通过 `require_admin_any`、`require_admin_write`、`require_sheng_admin`
-//! 获取认证上下文,不直接读取 session 缓存。
+//! 业务模块只通过 `require_admin_any`、`require_sheng_admin` 获取认证上下文,
+//! 写操作的 Passkey/冷钱包级别由 admins::actions 的安全 grant 单独校验。
 
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{DateTime, Duration, Utc};
 use std::sync::atomic::{AtomicI64, Ordering};
 use tracing::warn;
 
+use crate::admins::province_admins::sheng_admin_province;
+use crate::crypto::pubkey::same_admin_pubkey;
+use crate::models::AdminPasskeyStatus;
 use crate::scope::admin_province::province_scope_for_role;
-use crate::sheng_admins::province_admins::sheng_admin_province;
 use crate::*;
 
 use super::model::AdminAuthContext;
-use super::signature::{build_admin_display_name, parse_sr25519_pubkey_bytes};
+use super::signature::build_admin_display_name;
 
 /// 中文注释:admin_auth 优先从进程内 GlobalShard 读取会话和管理员缓存。
 /// 未命中时只短读模块 Store 快照,避免认证链路长期持有写锁。
@@ -37,17 +39,9 @@ pub(super) fn admin_auth(
         if now_ts - last > 60 {
             LAST_CLEANUP.store(now_ts, Ordering::Relaxed);
             let ss = state.sharded_store.clone();
-            let cache = state.sheng_admin_signing_cache.clone();
             tokio::task::spawn(async move {
-                if let Ok(evicted) =
-                    cleanup_sessions_from_global(&ss, Utc::now(), shi_idle_timeout_minutes).await
-                {
-                    // ADR-008(2026-05-01)Phase 23e:每省 3-tier,需要按 province 整省驱逐
-                    // (退化:本省任一 admin slot 被驱逐 → 本省 cache 全清)。
-                    for province in evicted {
-                        cache.unload_province(province.as_str());
-                    }
-                }
+                let _ =
+                    cleanup_sessions_from_global(&ss, Utc::now(), shi_idle_timeout_minutes).await;
             });
         }
 
@@ -139,7 +133,6 @@ pub(super) fn admin_auth(
                     return Some((
                         user.admin_pubkey.clone(),
                         user.role.clone(),
-                        user.status.clone(),
                         user.admin_name.clone(),
                         user.city.clone(),
                         user.created_by.clone(),
@@ -156,44 +149,31 @@ pub(super) fn admin_auth(
 
         // GlobalShard 命中:ShengAdmin(或已同步的 ShiAdmin)
         // 未命中:兜底读取模块 Store 快照(ShiAdmin 可能尚未同步到 GlobalShard)
-        let (
-            admin_pubkey,
-            role,
-            status,
-            admin_name,
-            _city_raw,
-            _created_by,
-            admin_province,
-            admin_city,
-        ) = if let Some(info) = user_info {
-            info
-        } else {
-            // 兜底:从模块 Store 快照读(只拿读锁)
-            let store = store_read_or_500(state)?;
-            let Some(user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
-                return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
-            };
-            let province = province_scope_for_role(&store, &user.admin_pubkey, &user.role);
-            let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
-                Some(user.city.clone())
+        let (admin_pubkey, role, admin_name, _city_raw, _created_by, admin_province, admin_city) =
+            if let Some(info) = user_info {
+                info
             } else {
-                None
+                // 兜底:从模块 Store 快照读(只拿读锁)
+                let store = store_read_or_500(state)?;
+                let Some(user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
+                    return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
+                };
+                let province = province_scope_for_role(&store, &user.admin_pubkey, &user.role);
+                let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
+                    Some(user.city.clone())
+                } else {
+                    None
+                };
+                (
+                    user.admin_pubkey.clone(),
+                    user.role.clone(),
+                    user.admin_name.clone(),
+                    user.city.clone(),
+                    user.created_by.clone(),
+                    province,
+                    city,
+                )
             };
-            (
-                user.admin_pubkey.clone(),
-                user.role.clone(),
-                user.status.clone(),
-                user.admin_name.clone(),
-                user.city.clone(),
-                user.created_by.clone(),
-                province,
-                city,
-            )
-        };
-
-        if status != AdminStatus::Active {
-            return Err(api_error(StatusCode::FORBIDDEN, 2003, "admin disabled"));
-        }
 
         // 二角色统一:优先使用 admin_name(真实姓名),空则 fallback 到角色默认名
         let display_name = {
@@ -204,6 +184,16 @@ pub(super) fn admin_auth(
                 build_admin_display_name(&admin_pubkey, &role, admin_province.as_deref())
             }
         };
+        let passkey_bound = {
+            let store = store_read_or_500(state)?;
+            store
+                .admin_passkeys_by_credential_id
+                .values()
+                .any(|record| {
+                    record.status == AdminPasskeyStatus::Active
+                        && same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey.as_str())
+                })
+        };
 
         return Ok(AdminAuthContext {
             admin_pubkey,
@@ -211,6 +201,7 @@ pub(super) fn admin_auth(
             admin_name: display_name,
             admin_province,
             admin_city,
+            passkey_bound,
         });
     }
 
@@ -228,20 +219,12 @@ async fn cleanup_sessions_from_global(
     store: &std::sync::Arc<crate::store_shards::ShardedStore>,
     now: DateTime<Utc>,
     shi_idle_timeout_minutes: i64,
-) -> Result<Vec<String>, String> {
-    let mut evicted_provinces: Vec<String> = Vec::new();
+) -> Result<(), String> {
     store
         .write_global(|g| {
-            let mut evicted_sheng_pubkeys: Vec<String> = Vec::new();
-            let mut remaining_sheng_pubkeys: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
-
             g.admin_sessions.retain(|_, session| {
                 // expire_at 硬上限对所有角色生效
                 if now > session.expire_at {
-                    if session.role == AdminRole::ShengAdmin {
-                        evicted_sheng_pubkeys.push(session.admin_pubkey.clone());
-                    }
                     return false;
                 }
                 // idle 超时仅 ShiAdmin
@@ -249,9 +232,6 @@ async fn cleanup_sessions_from_global(
                     && now > session.last_active_at + Duration::minutes(shi_idle_timeout_minutes)
                 {
                     return false;
-                }
-                if session.role == AdminRole::ShengAdmin {
-                    remaining_sheng_pubkeys.insert(session.admin_pubkey.clone());
                 }
                 true
             });
@@ -272,31 +252,13 @@ async fn cleanup_sessions_from_global(
                     .collect::<Vec<_>>();
                 entries.sort_by_key(|(_, last_active, _, _)| *last_active);
                 let overflow = g.admin_sessions.len() - max_sessions;
-                for (token, _, role, pubkey) in entries.into_iter().take(overflow) {
+                for (token, _, _, _) in entries.into_iter().take(overflow) {
                     g.admin_sessions.remove(&token);
-                    if role == AdminRole::ShengAdmin {
-                        evicted_sheng_pubkeys.push(pubkey);
-                    }
-                }
-                remaining_sheng_pubkeys.clear();
-                for (_, s) in g.admin_sessions.iter() {
-                    if s.role == AdminRole::ShengAdmin {
-                        remaining_sheng_pubkeys.insert(s.admin_pubkey.clone());
-                    }
-                }
-            }
-
-            for pubkey in evicted_sheng_pubkeys {
-                if remaining_sheng_pubkeys.contains(&pubkey) {
-                    continue;
-                }
-                if let Some(province) = g.sheng_admin_province_by_pubkey.get(&pubkey) {
-                    evicted_provinces.push(province.clone());
                 }
             }
         })
         .await?;
-    Ok(evicted_provinces)
+    Ok(())
 }
 
 pub(crate) fn require_admin_any(
@@ -306,14 +268,7 @@ pub(crate) fn require_admin_any(
     admin_auth(state, headers)
 }
 
-pub(crate) fn require_admin_write(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AdminAuthContext, axum::response::Response> {
-    admin_auth(state, headers)
-}
-
-/// 中文注释:require_sheng_admin —— 机构管理类操作只允许 ShengAdmin。
+/// 中文注释:require_sheng_admin —— 省级治理与 CPMS 授权治理只允许 ShengAdmin。
 pub(crate) fn require_sheng_admin(
     state: &AppState,
     headers: &HeaderMap,
@@ -334,45 +289,6 @@ pub(crate) fn require_sheng_admin(
         ));
     }
     Ok(ctx)
-}
-
-/// 中文注释:ADR-008 Phase 23e —— 把 (province, admin_pubkey) 的签名 keypair
-/// 加载到进程内 cache。失败仅 warn,登录流程继续(运维下次登录会自然重试)。
-pub(super) fn bootstrap_sheng_signing_pair(
-    state: &AppState,
-    admin_pubkey_hex: &str,
-    province: &str,
-) {
-    let Some(pubkey_bytes) = parse_sr25519_pubkey_bytes(admin_pubkey_hex) else {
-        tracing::warn!(
-            province,
-            admin_pubkey = admin_pubkey_hex,
-            "bootstrap sheng signer skipped: invalid admin_pubkey hex"
-        );
-        return;
-    };
-    match crate::sheng_admins::signing_keys::ensure_signing_keypair(
-        state.sheng_admin_signing_cache.as_ref(),
-        province,
-        &pubkey_bytes,
-    ) {
-        Ok(pair) => {
-            let signing_pubkey = crate::sheng_admins::signing_keys::pair_signing_pubkey_hex(&pair);
-            crate::sheng_admins::signing_keys::record_signing_metadata(
-                state,
-                admin_pubkey_hex,
-                signing_pubkey.as_str(),
-                Utc::now(),
-                false,
-            );
-            tracing::info!(
-                province,
-                signing_pubkey = %signing_pubkey,
-                "sheng signer ready for province"
-            );
-        }
-        Err(e) => tracing::error!(province, error = %e, "bootstrap sheng signer failed"),
-    }
 }
 
 pub(super) fn bearer_token(headers: &HeaderMap) -> Option<String> {

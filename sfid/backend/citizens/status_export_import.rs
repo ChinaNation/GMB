@@ -15,6 +15,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+use crate::admins::actions::{require_admin_security_grant, AdminActionType};
 use crate::citizens::binding::{pubkey_hex_to_ss58, ss58_to_pubkey_hex};
 use crate::login::AdminAuthContext;
 use crate::*;
@@ -123,9 +124,24 @@ pub(crate) async fn admin_import_cpms_status_export(
         Err(resp) => return resp,
     };
     let file = input.export_file;
-    if let Err((status, code, message)) =
-        validate_cpms_status_export(&state, &file, ctx.admin_province.as_deref()).await
-    {
+    let grant_payload = serde_json::json!({
+        "target": file.sfid_number.clone(),
+        "sfid_number": file.sfid_number.clone(),
+        "export_year": file.export_year,
+        "export_batch_id": file.export_batch_id.clone(),
+        "records_hash": file.records_hash.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CpmsStatusImportConfirm,
+        file.sfid_number.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
+    if let Err((status, code, message)) = validate_cpms_status_export(&state, &file, &ctx).await {
         return api_error(status, code, message.as_str());
     }
 
@@ -215,7 +231,7 @@ pub(crate) async fn admin_import_cpms_status_export(
 async fn validate_cpms_status_export(
     state: &AppState,
     file: &CpmsStatusExportFile,
-    admin_province_scope: Option<&str>,
+    ctx: &AdminAuthContext,
 ) -> Result<(), (StatusCode, u32, String)> {
     validate_export_header(file)?;
     validate_export_records(file)?;
@@ -238,12 +254,21 @@ async fn validate_cpms_status_export(
                 "cpms install authorization not found".to_string(),
             ))?
     };
-    if !in_scope_cpms_site(&site, admin_province_scope) {
+    if !in_scope_cpms_site(&site, ctx.admin_province.as_deref()) {
         return Err((
             StatusCode::FORBIDDEN,
             1003,
             "cannot manage other province institutions".to_string(),
         ));
+    }
+    if let Some(city) = ctx.admin_city.as_deref() {
+        if site.city_name != city {
+            return Err((
+                StatusCode::FORBIDDEN,
+                1003,
+                "cannot manage other city institutions".to_string(),
+            ));
+        }
     }
     if site.status != CpmsSiteStatus::Active
         || site.install_token_status == InstallTokenStatus::Revoked
@@ -870,6 +895,7 @@ mod tests {
             admin_name: "管理员".to_string(),
             admin_province: None,
             admin_city: None,
+            passkey_bound: false,
         };
         let output = apply_import_plan(&mut store, &ctx, &file, plan);
         assert_eq!(output.updated_binding_records, 1);
