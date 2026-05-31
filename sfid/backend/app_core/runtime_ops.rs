@@ -1,110 +1,163 @@
 use chrono::Utc;
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use crate::admins::province_admins::sheng_admin_mains;
+use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::*;
 
-/// 首次初始化：从 admins/province_admins.rs 硬编码数据创建 43 个内置省管理员。
-pub(crate) fn seed_builtin_province_admins(state: &AppState) {
+/// 中文注释:启动时以 `admins/province_admins.rs` 为初始省级管理员唯一真源。
+pub(crate) fn ensure_builtin_province_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!(error = %e, "seed_builtin_province_admins: store RwLock poisoned — initialization skipped");
+            tracing::error!(error = %e, "ensure_builtin_province_admins: store write failed");
             return;
         }
     };
-    if !store.admin_users_by_pubkey.is_empty() {
-        return;
-    }
-    let now = Utc::now();
-    for (idx, item) in sheng_admin_mains().iter().enumerate() {
-        let pubkey = item.pubkey.to_string();
-        store.admin_users_by_pubkey.insert(
-            pubkey.clone(),
-            AdminUser {
-                id: (idx as u64) + 1,
-                admin_pubkey: pubkey,
-                admin_name: String::new(),
-                role: AdminRole::ShengAdmin,
-                built_in: true,
-                created_by: "SYSTEM".to_string(),
-                created_at: now,
-                updated_at: Some(now),
-                city: String::new(),
-            },
-        );
-        store
-            .sheng_admin_province_by_pubkey
-            .insert(item.pubkey.to_string(), item.province.to_string());
-    }
+    ensure_builtin_province_admins_in_store(&mut store);
 }
 
-/// 从 DB 加载后，补充 province_admins.rs 中新增的省管理员（DB 中缺失的）
-/// - DB 是唯一真实数据源，已有省份的公钥不会被覆盖
-/// - 只补缺：province_admins.rs 中有但 DB 中没有的省份，用默认公钥创建
-/// - 同时修正 role 字段（旧 DB 可能存的是 ShengAdmin）
-pub(crate) fn sync_builtin_province_admins(state: &AppState) {
-    let mut store = match state.store.write() {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::error!(error = %e, "sync_builtin_province_admins: store RwLock poisoned — sync skipped");
-            return;
-        }
-    };
+fn ensure_builtin_province_admins_in_store(store: &mut Store) {
     let now = Utc::now();
-
-    // 修正已有机构管理员的 role（从旧 DB 加载可能是错误的 role）
-    let institution_pubkeys: Vec<String> = store
-        .sheng_admin_province_by_pubkey
-        .keys()
-        .cloned()
+    let source_pubkeys: HashSet<String> = sheng_admin_mains()
+        .iter()
+        .map(|item| normalized_admin_pubkey_key(item.pubkey))
         .collect();
-    for pubkey in &institution_pubkeys {
-        if let Some(user) = store.admin_users_by_pubkey.get_mut(pubkey) {
-            if user.role != AdminRole::ShengAdmin {
-                user.role = AdminRole::ShengAdmin;
+
+    let stale_builtin_pubkeys = store
+        .admin_users_by_pubkey
+        .iter()
+        .filter_map(|(pubkey, user)| {
+            let is_stale = user.role == AdminRole::ShengAdmin
+                && user.built_in
+                && !source_pubkeys.contains(&normalized_admin_pubkey_key(pubkey));
+            is_stale.then(|| {
+                let province = store
+                    .sheng_admin_province_by_pubkey
+                    .iter()
+                    .find(|(candidate, _)| same_admin_pubkey(candidate.as_str(), pubkey.as_str()))
+                    .map(|(_, province)| province.clone());
+                (pubkey.clone(), province)
+            })
+        })
+        .collect::<Vec<_>>();
+    for (pubkey, province) in stale_builtin_pubkeys {
+        let source_pubkey = province.as_deref().and_then(source_pubkey_for_province);
+        store.admin_users_by_pubkey.remove(&pubkey);
+        store
+            .sheng_admin_province_by_pubkey
+            .retain(|candidate, _| !same_admin_pubkey(candidate, pubkey.as_str()));
+        remove_admin_runtime_state(store, pubkey.as_str());
+        if let Some(source_pubkey) = source_pubkey {
+            for user in store.admin_users_by_pubkey.values_mut() {
+                if user.role == AdminRole::ShiAdmin
+                    && same_admin_pubkey(user.created_by.as_str(), pubkey.as_str())
+                {
+                    user.created_by = source_pubkey.to_string();
+                    user.updated_at = Some(now);
+                }
             }
         }
     }
 
-    // 补充 DB 中缺失的省份（province_admins.rs 有但 DB 没有的）
-    let existing_provinces: std::collections::HashSet<String> = store
-        .sheng_admin_province_by_pubkey
-        .values()
-        .cloned()
-        .collect();
-
-    for item in sheng_admin_mains().iter() {
-        let province = item.province.to_string();
-        if existing_provinces.contains(&province) {
-            continue; // DB 已有该省份，不覆盖
-        }
-        // DB 中缺失该省份，用 province.rs 的默认公钥创建
+    for (idx, item) in sheng_admin_mains().iter().enumerate() {
         let pubkey = item.pubkey.to_string();
-        let max_id = store
+        let existing_key = store
             .admin_users_by_pubkey
-            .values()
-            .map(|u| u.id)
-            .max()
-            .unwrap_or(0);
-        store.admin_users_by_pubkey.insert(
-            pubkey.clone(),
-            AdminUser {
-                id: max_id + 1,
+            .keys()
+            .find(|candidate| same_admin_pubkey(candidate.as_str(), item.pubkey))
+            .cloned();
+        let mut user = existing_key
+            .and_then(|key| store.admin_users_by_pubkey.remove(&key))
+            .unwrap_or_else(|| AdminUser {
+                id: (idx as u64) + 1,
                 admin_pubkey: pubkey.clone(),
-                admin_name: String::new(),
+                admin_name: format!("{}省级管理员", item.province),
                 role: AdminRole::ShengAdmin,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
                 updated_at: Some(now),
                 city: String::new(),
-            },
-        );
+            });
+        user.admin_pubkey = pubkey.clone();
+        if user.admin_name.trim().is_empty() {
+            user.admin_name = format!("{}省级管理员", item.province);
+        }
+        user.role = AdminRole::ShengAdmin;
+        user.built_in = true;
+        user.created_by = "SYSTEM".to_string();
+        user.updated_at = Some(now);
+        user.city.clear();
+        store.admin_users_by_pubkey.insert(pubkey.clone(), user);
         store
             .sheng_admin_province_by_pubkey
-            .insert(pubkey, province);
+            .retain(|candidate, _| !same_admin_pubkey(candidate.as_str(), item.pubkey));
+        store
+            .sheng_admin_province_by_pubkey
+            .insert(pubkey, item.province.to_string());
     }
+
+    let active_sheng_pubkeys: HashSet<String> = store
+        .admin_users_by_pubkey
+        .iter()
+        .filter_map(|(pubkey, user)| {
+            (user.role == AdminRole::ShengAdmin).then(|| normalized_admin_pubkey_key(pubkey))
+        })
+        .collect();
+    store
+        .sheng_admin_province_by_pubkey
+        .retain(|pubkey, _| active_sheng_pubkeys.contains(&normalized_admin_pubkey_key(pubkey)));
+
+    let max_id = store
+        .admin_users_by_pubkey
+        .values()
+        .map(|user| user.id)
+        .max()
+        .unwrap_or(0);
+    if store.next_admin_user_id <= max_id {
+        store.next_admin_user_id = max_id + 1;
+    }
+}
+
+fn normalized_admin_pubkey_key(pubkey: &str) -> String {
+    normalize_admin_pubkey(pubkey)
+        .unwrap_or_else(|| pubkey.trim().to_string())
+        .to_ascii_lowercase()
+}
+
+fn source_pubkey_for_province(province: &str) -> Option<&'static str> {
+    sheng_admin_mains()
+        .iter()
+        .find(|item| item.province == province)
+        .map(|item| item.pubkey)
+}
+
+fn remove_admin_runtime_state(store: &mut Store, pubkey: &str) {
+    store
+        .admin_sessions
+        .retain(|_, session| !same_admin_pubkey(session.admin_pubkey.as_str(), pubkey));
+    store
+        .admin_passkeys_by_credential_id
+        .retain(|_, record| !same_admin_pubkey(record.admin_pubkey.as_str(), pubkey));
+    store
+        .admin_passkey_registration_challenges
+        .retain(|_, challenge| !same_admin_pubkey(challenge.admin_pubkey.as_str(), pubkey));
+    store
+        .admin_action_challenges
+        .retain(|_, challenge| !same_admin_pubkey(challenge.actor_pubkey.as_str(), pubkey));
+    store
+        .admin_security_grants
+        .retain(|_, grant| !same_admin_pubkey(grant.actor_pubkey.as_str(), pubkey));
+    store
+        .login_challenges
+        .retain(|_, challenge| !same_admin_pubkey(challenge.admin_pubkey.as_str(), pubkey));
+    store
+        .qr_login_results
+        .retain(|_, result| !same_admin_pubkey(result.admin_pubkey.as_str(), pubkey));
 }
 
 #[allow(dead_code)]

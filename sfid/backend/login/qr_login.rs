@@ -256,7 +256,7 @@ pub(crate) async fn admin_auth_qr_complete(
         .admin_sessions
         .insert(access_token.clone(), new_session_qr.clone());
 
-    // Phase 2 admin_auth 迁移:QR 登录成功后同步写 GlobalShard session
+    // 中文注释:QR 登录成功后同步写 GlobalShard session,供鉴权守卫快速读取。
     {
         let ss = state.sharded_store.clone();
         let token_for_shard = access_token.clone();

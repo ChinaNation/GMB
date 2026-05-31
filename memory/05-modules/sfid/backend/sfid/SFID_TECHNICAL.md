@@ -22,10 +22,8 @@
   - `SFID_NUMBER_MAX_BYTES` / `SFID_NUMBER_SEGMENT_*` 常量(任务卡 1 从 sheng-admins/institutions.rs 搬回)
 - `a3.rs`
   - `A3` 枚举(GMR/ZRR/ZNR/GFR/SFR/FFR)+ `from_str` / `as_code` / `label_zh` / `all_a3`
-  - 兼容 legacy `resolve_a3(&str) -> Result<&'static str>`
 - `institution_code.rs`
   - `InstitutionCode` 枚举(ZG/ZF/LF/SF/JC/JY/CB/CH/TG)
-  - 兼容 legacy `resolve_org_type`
 - `category.rs`
   - `InstitutionCategory` 枚举(PublicSecurity / GovInstitution / PrivateInstitution)
   - `classify(a3, code, name)`:机构分类函数(任务卡 2 使用)
@@ -38,7 +36,7 @@
 - 43 省初始省级管理员公钥与省份归属已移出本模块,统一位于
   `backend/admins/province_admins.rs`;新增省级管理员归 `backend/admins/` 管理。
 - `admin.rs`
-  - 管理端 SFID 业务接口实现(legacy,`admin_generate_sfid` / `admin_sfid_meta` / `admin_sfid_cities`)
+  - 管理端 SFID 元信息与城市列表接口。
 - `model.rs`
   - 管理端 SFID 元信息 DTO(`AdminSfidMetaOutput` / `AdminSfidCitiesQuery` 等),
     不再放在全局 `models`。

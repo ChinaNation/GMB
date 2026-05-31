@@ -46,8 +46,7 @@ sfid/backend/login/
 - 会话缓存:`admin_sessions`,登录后同步写入进程内 GlobalShard。
 - 挑战缓存:`login_challenges`。
 - 二维码登录结果缓存:`qr_login_results`。
-- 登录短期状态持久化归 `store_ops` 模块快照表,不再进入旧
-  `runtime_cache_entries / runtime_misc`。
+- 登录短期状态持久化归 `store_ops` 模块快照表。
 
 ## 5. 核心流程
 

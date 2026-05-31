@@ -21,7 +21,7 @@
 //! - [`validator`]        — SFID 号格式校验
 //! - [`generator`]        — SFID 号生成
 //! - [`model`]            — SFID admin 元信息 DTO
-//! - [`admin`]            — SFID admin 相关(legacy)
+//! - [`admin`]            — SFID 管理端元信息接口
 
 pub mod a3;
 pub(crate) mod admin;

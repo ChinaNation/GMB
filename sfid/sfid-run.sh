@@ -18,7 +18,6 @@ SFID_HEALTHCHECK_URL="${SFID_HEALTHCHECK_URL:-http://${SFID_BIND_ADDR}/api/v1/he
 SFID_PORT="${SFID_BIND_ADDR##*:}"
 SFID_FRONTEND_PORT="${SFID_FRONTEND_PORT:-5179}"
 SFID_LAUNCHD_LABEL="${SFID_LAUNCHD_LABEL:-com.gmb.sfid-backend}"
-LOCAL_SCHEMA_FIX="$ROOT_DIR/backend/db/migrations/016_finalize_admin_no_status.sql"
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -85,18 +84,6 @@ stop_launchd_backend() {
       || true
     sleep 1
   fi
-}
-
-apply_local_schema_fix() {
-  if [[ ! -f "$LOCAL_SCHEMA_FIX" ]]; then
-    return 0
-  fi
-  if ! command -v psql >/dev/null 2>&1; then
-    echo "psql not found; cannot apply local schema fix."
-    return 1
-  fi
-  echo "Applying local SFID schema finalizer..."
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$LOCAL_SCHEMA_FIX" >/dev/null
 }
 
 launch_backend() {
@@ -190,7 +177,6 @@ fi
 stop_launchd_backend
 stop_port_listeners "$SFID_FRONTEND_PORT" "frontend"
 stop_port_listeners "$SFID_PORT" "backend"
-apply_local_schema_fix
 
 # 中文注释:不要用 `cargo run` 常驻服务,否则 Ctrl-C 后真实后端二进制可能被孤儿化。
 (cd "$ROOT_DIR" && cargo build --manifest-path backend/Cargo.toml)

@@ -318,7 +318,7 @@ pub(crate) async fn admin_auth_verify(
     // 中文注释:先释放写锁,避免后续异步同步 GlobalShard 时持有 StoreWriteGuard。
     drop(store);
 
-    // Phase 2 admin_auth 迁移:登录成功后同步写 GlobalShard session
+    // 中文注释:登录成功后同步写 GlobalShard session,供鉴权守卫快速读取。
     {
         let ss = state.sharded_store.clone();
         let token_for_shard = access_token.clone();

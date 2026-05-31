@@ -54,8 +54,7 @@ pub(crate) use sfid::model::*;
 struct AppState {
     store: StoreHandle,
     rate_limit_redis: Arc<RedisClient>,
-    /// 中文注释:按省分片的进程内缓存。Postgres 持久化已改为模块 Store 表,
-    /// 这里不再写旧 `store_shards` JSONB 表。
+    /// 中文注释:按省分片的进程内缓存。Postgres 持久化只写模块 Store 表。
     #[allow(dead_code)]
     pub(crate) sharded_store: Arc<store_shards::ShardedStore>,
 }
@@ -316,12 +315,12 @@ impl StoreBackend {
         })
     }
 
-    fn parse_admin_role(role: &str) -> AdminRole {
-        // 中文注释:当前只接受 SHENG_ADMIN / SHI_ADMIN;无法识别时降级到最严范围。
+    fn parse_admin_role(role: &str) -> Result<AdminRole, String> {
+        // 中文注释:当前只接受 SHENG_ADMIN / SHI_ADMIN;数据库出现未知角色直接拒绝启动。
         match role {
-            "SHENG_ADMIN" => AdminRole::ShengAdmin,
-            "SHI_ADMIN" => AdminRole::ShiAdmin,
-            _ => AdminRole::ShiAdmin,
+            "SHENG_ADMIN" => Ok(AdminRole::ShengAdmin),
+            "SHI_ADMIN" => Ok(AdminRole::ShiAdmin),
+            _ => Err(format!("invalid admin role in database: {role}")),
         }
     }
 
@@ -346,15 +345,7 @@ impl StoreBackend {
         let payload: serde_json::Value = row.get(0);
         match serde_json::from_value(payload) {
             Ok(snapshot) => Ok(snapshot),
-            Err(err) => {
-                // 中文注释:模块快照结构不匹配时直接丢弃该模块状态。
-                // 用户已确认本次 Store 重构不做旧数据迁移和旧格式兼容。
-                let delete_sql = format!("DELETE FROM {table} WHERE id = 1");
-                conn.execute(delete_sql.as_str(), &[])
-                    .map_err(|e| format!("delete invalid {table} snapshot failed: {e}"))?;
-                warn!(table, error = %err, "dropped invalid module store snapshot");
-                Ok(T::default())
-            }
+            Err(err) => Err(format!("decode {table} snapshot failed: {err}")),
         }
     }
 
@@ -412,7 +403,7 @@ impl StoreBackend {
                     id: u64::try_from(id).unwrap_or(0),
                     admin_pubkey,
                     admin_name,
-                    role: Self::parse_admin_role(role_text.as_str()),
+                    role: Self::parse_admin_role(role_text.as_str())?,
                     built_in,
                     created_by,
                     created_at,
@@ -437,8 +428,6 @@ impl StoreBackend {
                 .sheng_admin_province_by_pubkey
                 .insert(pubkey, province);
         }
-
-        // ADR-008 Phase 23e(2026-05-01):旧全局密钥环表和内存状态已删除。
 
         Ok(store)
     }
@@ -538,10 +527,99 @@ impl StoreBackend {
             .map_err(|e| format!("insert shi_admin_scope failed: {e}"))?;
         }
 
-        // ADR-008 Phase 23e:旧全局密钥环状态已删,不再写兼容表。
-
         tx.commit()
             .map_err(|e| format!("commit admin sync transaction failed: {e}"))?;
+        Ok(())
+    }
+
+    fn init_current_schema(conn: &mut postgres::Client) -> Result<(), String> {
+        // 中文注释:SFID 还未发行正式版,启动时只创建当前目标结构;不执行历史 SQL 脚本。
+        conn.batch_execute(
+            "CREATE TABLE IF NOT EXISTS provinces (
+                province_name TEXT PRIMARY KEY
+             );
+
+             CREATE TABLE IF NOT EXISTS admins (
+                admin_id BIGINT PRIMARY KEY,
+                admin_pubkey TEXT NOT NULL UNIQUE,
+                admin_name TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('SHENG_ADMIN', 'SHI_ADMIN')),
+                built_in BOOLEAN NOT NULL DEFAULT FALSE,
+                created_by TEXT NOT NULL DEFAULT 'SYSTEM',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ,
+                city TEXT NOT NULL DEFAULT ''
+             );
+             CREATE INDEX IF NOT EXISTS idx_admins_role ON admins(role);
+
+             CREATE TABLE IF NOT EXISTS sheng_admin_scope (
+                admin_id BIGINT PRIMARY KEY REFERENCES admins(admin_id) ON DELETE CASCADE,
+                province_name TEXT NOT NULL REFERENCES provinces(province_name) ON DELETE RESTRICT
+             );
+             CREATE INDEX IF NOT EXISTS idx_sheng_admin_scope_province_name
+                ON sheng_admin_scope(province_name);
+
+             CREATE TABLE IF NOT EXISTS shi_admin_scope (
+                admin_id BIGINT PRIMARY KEY REFERENCES admins(admin_id) ON DELETE CASCADE,
+                sheng_admin_id BIGINT NOT NULL REFERENCES admins(admin_id) ON DELETE RESTRICT,
+                province_name TEXT NULL REFERENCES provinces(province_name) ON DELETE RESTRICT
+             );
+             CREATE INDEX IF NOT EXISTS idx_shi_admin_scope_sheng
+                ON shi_admin_scope(sheng_admin_id);
+
+             CREATE TABLE IF NOT EXISTS store_citizens (
+                id SMALLINT PRIMARY KEY CHECK (id = 1),
+                payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE TABLE IF NOT EXISTS store_cpms (
+                id SMALLINT PRIMARY KEY CHECK (id = 1),
+                payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE TABLE IF NOT EXISTS store_institutions (
+                id SMALLINT PRIMARY KEY CHECK (id = 1),
+                payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE TABLE IF NOT EXISTS store_ops (
+                id SMALLINT PRIMARY KEY CHECK (id = 1),
+                payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+
+             CREATE TABLE IF NOT EXISTS tx_records (
+                id BIGSERIAL PRIMARY KEY,
+                block_number BIGINT NOT NULL,
+                extrinsic_index SMALLINT,
+                event_index SMALLINT NOT NULL,
+                tx_type TEXT NOT NULL,
+                from_address TEXT,
+                to_address TEXT,
+                amount_fen BIGINT NOT NULL,
+                fee_fen BIGINT,
+                block_timestamp TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE INDEX IF NOT EXISTS idx_tx_records_from
+                ON tx_records (from_address, block_number DESC);
+             CREATE INDEX IF NOT EXISTS idx_tx_records_to
+                ON tx_records (to_address, block_number DESC);
+             CREATE INDEX IF NOT EXISTS idx_tx_records_block
+                ON tx_records (block_number DESC);
+             CREATE INDEX IF NOT EXISTS idx_tx_records_type
+                ON tx_records (tx_type);
+
+             CREATE TABLE IF NOT EXISTS tx_indexer_state (
+                id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+                last_indexed_block BIGINT NOT NULL DEFAULT 0,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             INSERT INTO tx_indexer_state (id, last_indexed_block)
+             VALUES (1, 0)
+             ON CONFLICT (id) DO NOTHING;",
+        )
+        .map_err(|e| format!("init current schema failed: {e}"))?;
         Ok(())
     }
 
@@ -600,50 +678,7 @@ impl StoreHandle {
         let handle = thread::spawn(move || {
             let mut bootstrap = postgres::Client::connect(db_url.as_str(), postgres::NoTls)
                 .map_err(|e| format!("connect postgres failed: {e}"))?;
-            bootstrap
-                .batch_execute(
-                    "DROP TABLE IF EXISTS runtime_store;
-                 DROP TABLE IF EXISTS runtime_misc;
-                 DROP TABLE IF EXISTS runtime_cache_entries;
-                 DROP TABLE IF EXISTS store_shards;
-                 CREATE TABLE IF NOT EXISTS store_citizens (
-                    id SMALLINT PRIMARY KEY CHECK (id = 1),
-                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                 );
-                 CREATE TABLE IF NOT EXISTS store_cpms (
-                    id SMALLINT PRIMARY KEY CHECK (id = 1),
-                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                 );
-                 CREATE TABLE IF NOT EXISTS store_institutions (
-                    id SMALLINT PRIMARY KEY CHECK (id = 1),
-                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                 );
-                 CREATE TABLE IF NOT EXISTS store_ops (
-                    id SMALLINT PRIMARY KEY CHECK (id = 1),
-                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                 );
-                 ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS admin_name TEXT NOT NULL DEFAULT '';
-                 ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-                 ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
-                 ALTER TABLE IF EXISTS sheng_admin_scope
-                   DROP CONSTRAINT IF EXISTS sheng_admin_scope_province_name_key;
-                 DROP INDEX IF EXISTS sheng_admin_scope_province_name_key;
-                 DO $$
-                 BEGIN
-                   IF to_regclass('public.sheng_admin_scope') IS NOT NULL THEN
-                     CREATE INDEX IF NOT EXISTS idx_sheng_admin_scope_province_name
-                       ON sheng_admin_scope(province_name);
-                   END IF;
-                 END $$;",
-                )
-                .map_err(|e| format!("init runtime tables failed: {e}"))?;
+            StoreBackend::init_current_schema(&mut bootstrap)?;
             let mut clients = Vec::with_capacity(pool_size);
             clients.push(Mutex::new(bootstrap));
             for _ in 1..pool_size {
@@ -768,8 +803,7 @@ fn main() {
         );
     }
     let store = StoreHandle::from_database_url(database_url.as_str()).expect("init store handle");
-    // 中文注释:ShardedStore 现在只作为进程内分片缓存。
-    // 主数据由模块 Store 表保存;旧 `store_shards` Postgres 整包分片已删除。
+    // 中文注释:ShardedStore 只作为进程内分片缓存,主数据由模块 Store 表保存。
     let sharded_store: Arc<store_shards::ShardedStore> = {
         let backend: Arc<dyn store_shards::backend::ShardBackend> =
             Arc::new(store_shards::backend::MemoryShardBackend::new());
@@ -780,8 +814,7 @@ fn main() {
         rate_limit_redis: Arc::new(redis_client),
         sharded_store,
     };
-    seed_builtin_province_admins(&state);
-    sync_builtin_province_admins(&state);
+    ensure_builtin_province_admins(&state);
     info!("initialized runtime state with defaults");
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
@@ -792,9 +825,8 @@ fn main() {
         .build()
         .expect("build tokio runtime");
     runtime.block_on(async move {
-        // 中文注释:启动时只从进程内 ShardedStore 后端加载空缓存。
-        // 旧持久化分片迁移已删除;数据从模块 Store 快照装入后,
-        // 通过 sync_public_security_to_sharded 等函数同步到进程内缓存。
+        // 中文注释:启动时只从进程内 ShardedStore 后端加载空缓存;
+        // 数据从模块 Store 快照装入后同步到进程内缓存。
         {
             if let Err(e) = state.sharded_store.bootstrap_global().await {
                 warn!(error = %e, "sharded store bootstrap_global failed");

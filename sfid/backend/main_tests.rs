@@ -47,7 +47,7 @@ fn build_test_state() -> AppState {
             }
         },
     };
-    seed_builtin_province_admins(&state);
+    ensure_builtin_province_admins(&state);
     state
 }
 

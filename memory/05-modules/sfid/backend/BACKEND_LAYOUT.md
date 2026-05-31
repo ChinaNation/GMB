@@ -48,8 +48,8 @@ sfid/backend/
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
 ├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
 ├── admins/                    # 省/市管理员治理和安全分级,含 operation_auth.rs / actions.rs / passkeys.rs
-├── store_shards/              # 进程内省分片缓存,不再持久化到旧 store_shards 表
-├── db/                        # 数据库迁移和 seed,不是 Rust 源码模块
+├── store_shards/              # 进程内省分片缓存
+├── db/                        # 数据库辅助目录,不是 Rust 源码模块
 ├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
 ├── tests/                     # 集成/e2e 测试
 └── target/                    # Cargo 构建产物,不得纳入源码整理
@@ -99,8 +99,6 @@ sfid/backend/
 
 ## Store 边界
 
-- SFID 后端不再使用旧 `runtime_store`、`runtime_misc`、`runtime_cache_entries`
-  或旧 `store_shards` JSONB 表保存整包 Store。
 - 当前持久化按模块快照表拆分:
   - `store_citizens`:公民记录、绑定 challenge、状态扫码短期池、投票缓存。
   - `store_cpms`:CPMS 安装授权和授权状态。
@@ -109,9 +107,8 @@ sfid/backend/
     同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
 - `store_shards/` 只保留进程内按省缓存访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
-- `db/migrations/015_store_reset.sql` 明确删除旧整包 JSON 表,不做旧数据迁移。
-- `db/migrations/016_finalize_admin_no_status.sql` 明确删除 `admins` 的旧状态字段和
-  云端管理员签名字段,并把管理员查询视图收口为 `v_sheng_admins / v_shi_admins`。
+- 数据库当前目标结构由 `main.rs` 启动时创建；初始省级管理员唯一真源为
+  `admins/province_admins.rs`。
 
 ## 验收口径
 

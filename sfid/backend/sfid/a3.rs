@@ -25,8 +25,7 @@ pub enum A3 {
 }
 
 impl A3 {
-    /// 从字符串解析(兼容英文代码和中文全称)。
-    /// 与 legacy `resolve_a3(&str) -> Result<&'static str>` 语义等价。
+    /// 从字符串解析英文代码或中文全称。
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim() {
             "GMR" | "公民人" => Some(Self::GMR),
@@ -39,7 +38,7 @@ impl A3 {
         }
     }
 
-    /// 返回 sfid 码里使用的 3 字符代码(与 legacy `resolve_a3` 返回值一致)。
+    /// 返回 sfid 码里使用的 3 字符代码。
     pub fn as_code(self) -> &'static str {
         match self {
             Self::GMR => "GMR",
@@ -69,14 +68,6 @@ pub fn all_a3() -> &'static [A3] {
     &[A3::GMR, A3::ZRR, A3::ZNR, A3::GFR, A3::SFR, A3::FFR]
 }
 
-/// 中文注释:legacy 字符串接口,供 `generator.rs` 继续调用保持行为不变。
-/// 新代码应使用 `A3::from_str` + `.as_code()`。
-pub(super) fn resolve_a3(a3: &str) -> Result<&'static str, &'static str> {
-    A3::from_str(a3)
-        .map(|v| v.as_code())
-        .ok_or("a3 must be one of GMR/ZRR/ZNR/GFR/SFR/FFR")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,9 +81,9 @@ mod tests {
     }
 
     #[test]
-    fn as_code_matches_legacy() {
+    fn as_code_returns_protocol_code() {
         for a3 in all_a3() {
-            assert_eq!(resolve_a3(a3.as_code()).unwrap(), a3.as_code());
+            assert_eq!(A3::from_str(a3.as_code()).unwrap().as_code(), a3.as_code());
         }
     }
 }

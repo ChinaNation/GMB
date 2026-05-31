@@ -12,8 +12,8 @@
 use blake2::{digest::consts::U32, Blake2b, Digest};
 use chrono::Utc;
 
-use crate::sfid::a3::resolve_a3;
-use crate::sfid::institution_code::resolve_org_type;
+use crate::sfid::a3::A3;
+use crate::sfid::institution_code::InstitutionCode;
 use crate::sfid::province::{city_code_by_name, province_code_by_name};
 
 type Blake2b256 = Blake2b<U32>;
@@ -65,27 +65,42 @@ pub fn generate_sfid_code(input: GenerateSfidInput<'_>) -> Result<String, &'stat
         return Err("account_pubkey, a3, province, city, institution are required");
     }
 
-    let a3 = resolve_a3(input.a3)?;
-    let t2 = resolve_org_type(input.institution)?;
+    let a3 = A3::from_str(input.a3).ok_or("a3 must be one of GMR/ZRR/ZNR/GFR/SFR/FFR")?;
+    let t2 = InstitutionCode::from_str(input.institution)
+        .ok_or("institution must be one of ZG/ZF/LF/SF/JC/JY/CB/CH/TG")?;
     let p1 = match a3 {
-        "GMR" | "ZRR" => "1",
-        "GFR" => "0",
-        "ZNR" | "SFR" | "FFR" => resolve_p1(input.p1)?,
-        _ => return Err("a3 not supported"),
+        A3::GMR | A3::ZRR => "1",
+        A3::GFR => "0",
+        A3::ZNR | A3::SFR | A3::FFR => resolve_p1(input.p1)?,
     };
-    if a3 == "GFR" && !matches!(t2, "ZF" | "LF" | "SF" | "JC" | "JY" | "CB") {
+    if a3 == A3::GFR
+        && !matches!(
+            t2,
+            InstitutionCode::ZF
+                | InstitutionCode::LF
+                | InstitutionCode::SF
+                | InstitutionCode::JC
+                | InstitutionCode::JY
+                | InstitutionCode::CB
+        )
+    {
         return Err("GFR requires institution in ZF/LF/SF/JC/JY/CB");
     }
-    if matches!(a3, "GMR" | "ZNR") && t2 != "ZG" {
+    if matches!(a3, A3::GMR | A3::ZNR) && t2 != InstitutionCode::ZG {
         return Err("GMR/ZNR requires institution ZG");
     }
-    if a3 == "ZRR" && t2 != "TG" {
+    if a3 == A3::ZRR && t2 != InstitutionCode::TG {
         return Err("ZRR requires institution TG");
     }
-    if a3 == "SFR" && !matches!(t2, "ZG" | "CH" | "TG") {
+    if a3 == A3::SFR
+        && !matches!(
+            t2,
+            InstitutionCode::ZG | InstitutionCode::CH | InstitutionCode::TG
+        )
+    {
         return Err("SFR requires institution in ZG/CH/TG");
     }
-    if a3 == "FFR" && !matches!(t2, "ZG" | "TG") {
+    if a3 == A3::FFR && !matches!(t2, InstitutionCode::ZG | InstitutionCode::TG) {
         return Err("FFR requires institution in ZG/TG");
     }
     // 中文注释:D4 段只取年份(2026-05-07 改造,从 D8 缩为 D4)。
@@ -96,18 +111,20 @@ pub fn generate_sfid_code(input: GenerateSfidInput<'_>) -> Result<String, &'stat
         .ok_or("province not found in code table")?
         .to_string();
     // 中文注释:公民人/自然人/智能人的公开编码只精确到省,市级段统一固定为 000。
-    let city_code = if matches!(a3, "GMR" | "ZRR" | "ZNR") {
+    let city_code = if matches!(a3, A3::GMR | A3::ZRR | A3::ZNR) {
         RESERVED_PROVINCE_CITY_CODE.to_string()
     } else {
         city_code_by_name(input.province, input.city)
             .ok_or("city not found in province code table")?
             .to_string()
     };
-    let normalized_city_for_hash = if matches!(a3, "GMR" | "ZRR" | "ZNR") {
+    let normalized_city_for_hash = if matches!(a3, A3::GMR | A3::ZRR | A3::ZNR) {
         RESERVED_PROVINCE_CITY_CODE
     } else {
         input.city
     };
+    let a3 = a3.as_code();
+    let t2 = t2.as_code();
     let r5 = format!("{province_code}{city_code}");
     let n9 = format!(
         "{:09}",

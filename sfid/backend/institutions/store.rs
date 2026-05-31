@@ -107,7 +107,7 @@ pub fn count_accounts_of_institution(store: &Store, sfid_number: &str) -> usize 
         .count()
 }
 
-/// 返回所有账户(用于迁移等场景,慎用)。
+/// 返回所有账户(用于批量读取等场景,慎用)。
 pub fn all_accounts(store: &Store) -> Vec<MultisigAccount> {
     store.multisig_accounts.values().cloned().collect()
 }

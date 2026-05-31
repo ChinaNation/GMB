@@ -33,8 +33,7 @@ pub enum InstitutionCode {
 }
 
 impl InstitutionCode {
-    /// 从字符串解析(兼容英文代码和中文全称)。
-    /// 与 legacy `resolve_org_type(&str) -> Result<&'static str>` 语义等价。
+    /// 从字符串解析英文代码或中文全称。
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim() {
             "ZG" | "中国" => Some(Self::ZG),
@@ -50,7 +49,7 @@ impl InstitutionCode {
         }
     }
 
-    /// 返回 sfid 码里使用的 2 字符代码(与 legacy `resolve_org_type` 返回值一致)。
+    /// 返回 sfid 码里使用的 2 字符代码。
     pub fn as_code(self) -> &'static str {
         match self {
             Self::ZG => "ZG",
@@ -79,13 +78,6 @@ impl InstitutionCode {
             Self::TG => "他国",
         }
     }
-}
-
-/// 中文注释:legacy 字符串接口,供 `generator.rs` 继续调用保持行为不变。
-pub(super) fn resolve_org_type(institution: &str) -> Result<&'static str, &'static str> {
-    InstitutionCode::from_str(institution)
-        .map(|v| v.as_code())
-        .ok_or("institution must be one of ZG/ZF/LF/SF/JC/JY/CB/CH/TG")
 }
 
 #[cfg(test)]

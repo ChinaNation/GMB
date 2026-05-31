@@ -147,9 +147,8 @@
 - `Redis`（可选，用于限流和缓存）
 - 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端按模块写入 `store_citizens / store_cpms / store_institutions / store_ops`，运行缓存启动时从这些主数据恢复。
 - SFID main 系统签名缓存：仅服务登录二维码系统签名与自动链路凭证签名,不得用于省级管理员治理代签。
-- 旧文件态与旧整包表状态说明：
-1. 不再使用 `backend/data/runtime_state.json`。
-2. 不再使用 `runtime_store`（已由迁移脚本下线并拆分）。
+- 数据库结构由后端启动时创建当前目标结构；初始省级管理员只读取
+  `backend/admins/province_admins.rs`。
 - 当前管理员与密钥结构化表：
 1. `admins`
 2. `provinces`
@@ -210,16 +209,12 @@
 4. `store_cpms`：CPMS 安装授权、`install_secret`、授权状态和 `cpms_pubkey_hash` 主数据。
 5. `store_institutions`：机构、机构账户和资料库快照。
 6. `store_ops`：登录 challenge/session、审计、链路幂等和服务指标。
-- 管理员视图：
-2. `v_sheng_admins`
-3. `v_shi_admins`
-
 ### 8.2 关键约束
 - `admins.admin_pubkey` 全局唯一。
 - 管理员新增入口必须共用全局公钥查重逻辑，重复时区分“已是省级管理员 / 已是市级管理员”。
 - `sheng_admin_scope` 记录省级管理员与省份归属；同一省最多 5 名省级管理员，数据库不得对 `province_name` 设置唯一约束。
 - 市级管理员数量由后端按 `省份 + 市名` 强制限制，同一省同一市最多 30 名 `SHI_ADMIN`；市名可能跨省重复，统计时不得只按市名计数。
-- `chain_idempotency_requests` 双唯一：`(route_key, request_id)` 与 `(route_key, nonce)`。
+- 链路幂等与防重放由 `store_ops.chain_requests_by_key / chain_nonce_seen` 维护 24 小时窗口。
 - 公民电子护照绑定唯一关系：`archive_no / sfid_code / wallet_pubkey` 三者一对一。
 - `archive_no` 与 `sfid_code` 首次绑定后永久绑定，不允许解绑、不允许换档案号、不允许把同一档案号绑定到其他身份ID，也不允许把同一身份ID改绑到其他档案号；后续只允许使用同一 `archive_no` 的 ARCHIVE 档案码更换 `wallet_pubkey / wallet_address`。
 - `citizen_id` 仅是 SFID 后端内部自增记录主键，用于管理端定位记录和 replace 请求，不是对用户展示的身份ID；对外身份ID字段固定为 `sfid_code`。
@@ -298,7 +293,6 @@
   - 签名值：`hex(blake2b_mac_256(blake2b_256(SFID_CHAIN_SIGNING_SECRET), payload))`
 - 幂等与防重放：
   - 进程内：`chain_requests_by_key + chain_nonce_seen`（24 小时窗口）。
-  - 数据库：`chain_idempotency_requests(route_key, request_id|nonce)` 双唯一约束。
 - 投票资格规则：以 CPMS 档案码中的 `citizen_status + voting_eligible` 为准；公民状态异常或无选举资格时不可投票。
 - `/api/v1/vote/verify` 使用 5 秒短缓存（按 `account_pubkey + proposal_id`），状态变更/绑定变更会即时失效缓存。
 - 绑定凭证刷新规则：若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化 Runtime 凭证不一致，会自动重签发并覆盖持久化凭证。
@@ -491,7 +485,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 本地开发启动最小条件：
 1. PostgreSQL 可达（示例：`docker` 容器 `sfid-pg` 映射 `127.0.0.1:5432`）。
 2. 后端环境变量设置 `DATABASE_URL`。
-3. `./sfid-run.sh` 会在启动前停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程，并对本地库执行 `016_finalize_admin_no_status.sql` 最终结构清理。
+3. `./sfid-run.sh` 会在启动前停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程。
 4. 前端必须使用 `http://localhost:5179` 打开；Passkey 开发配置不接受 `127.0.0.1:5179`。
 - 安全相关关键环境变量：
 1. `SFID_CHAIN_TOKEN`：区块链接口静态 Token。
@@ -501,8 +495,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 5. `SFID_KEY_ID`：签名 key id（必填）。
 6. `SFID_RUNTIME_META_KEY`：运行态元数据加密密钥（必填）。
 7. `SFID_CORS_ALLOWED_ORIGINS`：CORS 来源白名单（逗号分隔，禁止 `*`）。
-8. `SFID_PII_KEY`：仅部署脚本兼容保留，非后端启动强依赖。
-9. `SFID_APP_TOKEN`：移动端（wuminapp）App API 鉴权 Token（与 `SFID_CHAIN_TOKEN` 独立，不可混用）。
+8. `SFID_APP_TOKEN`：移动端（wuminapp）App API 鉴权 Token（与 `SFID_CHAIN_TOKEN` 独立，不可混用）。
 - 常见故障排查：
 1. 前端提示 `Failed to fetch` 且 `curl` 返回 `Empty reply from server`：优先检查后端进程是否 panic。
 2. 日志出现 `AddrInUse`：说明 `8899` 端口被旧进程占用，先清理占用进程再启动。
@@ -597,25 +590,8 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 完成模块 Store 拆分：`store_citizens / store_cpms / store_institutions / store_ops`。
 - 运行缓存只作为进程内加速层，启动时从模块 Store 主数据恢复，不再作为持久化真源。
 - CPMS 授权、电子护照绑定、机构账户和登录审计按模块快照持久化。
-- 交付物：`backend/db/migrations`、初始化器代码、数据字典。
-- 当前落地迁移：
-  - `backend/db/migrations/001_init_sfid.sql`
-  - `backend/db/migrations/002_runtime_store.sql`
-  - `backend/db/migrations/003_admin_role_partition.sql`
-  - `backend/db/migrations/004_finalize_no_runtime_store.sql`
-  - `backend/db/migrations/005_drop_sfid_prefix.sql`
-  - `backend/db/migrations/006_sheng_admin_catalog.sql`
-  - `backend/db/migrations/007_refresh_admin_views.sql`
-  - `backend/db/migrations/008_chain_idempotency_reward_state.sql`
-  - `backend/db/migrations/009_runtime_cache_and_pii_encryption.sql`
-  - `backend/db/migrations/010_drop_plaintext_pii_columns.sql`
-  - `backend/db/migrations/011_tx_indexer.sql`
-  - `backend/db/migrations/012_rename_roles.sql`
-  - `backend/db/migrations/013_rename_roles_sheng_shi.sql`
-  - `backend/db/migrations/014_finalize_admin_roles.sql`
-  - `backend/db/migrations/015_store_reset.sql`
-  - `backend/db/migrations/016_finalize_admin_no_status.sql`
-- 验收标准：重复执行迁移可幂等，视图和约束稳定可查询。
+- 交付物：启动期当前结构初始化、数据字典。
+- 验收标准：全新 PostgreSQL 库启动后可直接创建当前目标结构；初始省级管理员只来自 `province_admins.rs`。
 
 ### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）
 - 实现认证链路：`identify -> challenge -> verify`。

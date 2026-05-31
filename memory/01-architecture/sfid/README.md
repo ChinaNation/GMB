@@ -47,7 +47,7 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 ## 仓库结构
 - `frontend/`：管理员前端网站（React + TypeScript + Vite + Ant Design）
 - `backend/`：后端 API（Rust + Axum）
-- `backend/db/`：数据库迁移与初始化数据
+- `backend/db/`：数据库辅助目录；当前结构由后端启动时直接创建。
 - `backend/scripts/`：后端脚本（联调/冒烟）
 - `backend/tests/`：后端测试（integration/e2e）
 - `deploy/`：环境部署配置（dev/staging/prod）
@@ -64,25 +64,8 @@ docker run -d --name sfid-pg \
   postgres:16
 ```
 
-### 1) 执行数据库迁移
-```bash
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/001_init_sfid.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/002_runtime_store.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/003_admin_role_partition.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/004_finalize_no_runtime_store.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/005_drop_sfid_prefix.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/006_sheng_admin_catalog.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/007_refresh_admin_views.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/008_chain_idempotency_reward_state.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/009_runtime_cache_and_pii_encryption.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/010_drop_plaintext_pii_columns.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/011_tx_indexer.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/012_rename_roles.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/013_rename_roles_sheng_shi.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/014_finalize_admin_roles.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/015_store_reset.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/016_finalize_admin_no_status.sql
-```
+### 1) 数据库结构
+SFID 尚未正式发行，后端启动时直接创建当前目标结构，不再执行独立 SQL 脚本。
 
 ### 2) 启动后端
 ```bash
@@ -103,7 +86,7 @@ cargo run
 ```bash
 ./sfid-run.sh
 ```
-说明：脚本会加载 `.env.dev.local`，先停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程并执行本地最终结构清理，再同时启动后端与前端开发服务。
+说明：脚本会加载 `.env.dev.local`，先停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程，再同时启动后端与前端开发服务。
 
 ### 3) 启动前端开发模式
 ```bash
@@ -132,18 +115,6 @@ curl http://127.0.0.1:8899/api/v1/health
 3. `sheng_admin_scope`
 4. `shi_admin_scope`
 - `admins` 当前目标结构不包含 `status`、`encrypted_signing_privkey`、`signing_pubkey`、`signing_created_at`；管理员删除即失效，业务签名只由各自冷钱包完成。
-- 管理员查询视图：
-1. `v_sheng_admins`
-2. `v_shi_admins`
-- 链路一致性与防重放表：
-1. `chain_idempotency_requests`
-2. `binding_unique_locks`
-3. `bind_reward_states`
-- 已下线内容：
-1. `backend/data/runtime_state.json`
-2. `runtime_store`
-3. `runtime_misc`
-4. `runtime_cache_entries`
 
 ## 常见故障排查
 - 前端提示 `Failed to fetch` 或 `curl` 返回 `Empty reply from server`：
@@ -217,8 +188,8 @@ curl http://127.0.0.1:8899/api/v1/health
 - 链端验签公钥来自链上 storage `SfidSystem::SfidMainAccount`(创世写入 + 链上 `rotate_sfid_keys` extrinsic 维护),不再走 HTTP 拉取。历史 `/api/v1/attestor/public-key` 端点 0 caller,2026-05-01 一并下架。
 
 ### 已实现的稳定性增强
-- 幂等与防重放：链路接口统一 `request_id/nonce/timestamp` 校验，并写入数据库幂等表 `chain_idempotency_requests`。
-- 并发一致性：绑定确认前落库 `binding_unique_locks`（`account_pubkey`、`archive_index` 双唯一），避免双绑竞态。
+- 幂等与防重放：链路接口统一 `request_id/nonce/timestamp` 校验，进程内保留 24 小时请求键与 nonce 窗口。
+- 并发一致性：绑定确认前在 Store 中校验 `archive_no / sfid_code / wallet_pubkey` 三者唯一，避免双绑竞态。
 - 奖励状态机：`PENDING -> RETRY_WAITING/FAILED -> REWARDED`，由 `chain/reward/ack` 驱动。
 - 投票资格短缓存：`/vote/verify` 5 秒缓存，状态变更/绑定变更即时失效。
 - 可观测：`/api/v1/health` 仅返回基础存活字段（`service/status/checked_at`），内部指标仅保留在审计和内部日志。
