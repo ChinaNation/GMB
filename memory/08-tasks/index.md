@@ -56,6 +56,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260531-cpms-installer-db-pdf.md`
 - `memory/08-tasks/done/20260531-cpms-ci-arm64-installer.md`
 - `memory/08-tasks/done/20260531-cpms-ci-clean-ubuntu-debs.md`
 - `memory/08-tasks/done/20260531-cpms-ubuntu24-offline-installer.md`
@@ -399,5 +400,6 @@
 - `memory/08-tasks/done/20260531-sfid-permission-closeout.md`
 - `memory/08-tasks/done/20260531-sfid-signature-modal-stack.md`
 - `memory/08-tasks/done/20260531-sfid-signature-scan-loading.md`
+- `memory/08-tasks/done/20260531-sfid-deterministic-meta-cache-pagination.md`
 - `memory/08-tasks/done/20260531-统一签名协议复查残留修复.md`
 - `memory/08-tasks/done/20260531-统一签名协议整改.md`

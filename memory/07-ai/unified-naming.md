@@ -88,6 +88,10 @@
 | `wumin/` | 冷钱包 | wumin | 离线签名、扫码识别和冷钱包 UI |
 | `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
 | `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
+| `wuminapp/lib/im/` | wuminapp 信息 | wuminapp-im | wuminapp 信息 Tab、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
+| `wuminapp/android/im/` | Android 信息近场 | android-im | wuminapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
+| `wuminapp/ios/im/` | iOS 信息近场 | ios-im | wuminapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
+| `citizenchain/node/src/im/` | 通信全节点 IM | node-im | 通信全节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
 | `website/` | 官网 | website | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
 | `citizenchain/runtime/primitives/src/CitizenConstitution.html` | 公民宪法真源 | citizen-constitution-source | 公民宪法 HTML 唯一真源，编入 runtime WASM，修改后必须通过 runtime 升级生效 |

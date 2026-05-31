@@ -193,7 +193,19 @@ pub(crate) async fn admin_import_cpms_status_export(
             return api_error(StatusCode::CONFLICT, 1005, message.as_str());
         }
     };
+    let affected_citizen_ids: Vec<u64> = plan
+        .updates
+        .iter()
+        .map(|item| item.citizen_id)
+        .chain(plan.releases.iter().map(|item| item.citizen_id))
+        .collect();
     let output = apply_import_plan(&mut store, &ctx, &file, plan);
+    // 中文注释:管理员公民列表读取 sfid_citizens 行表;CPMS 年度导入改动 Store 后,
+    // 必须把受影响记录同步写入查询行表,否则精确检索会读到旧状态或空结果。
+    let changed_records: Vec<_> = affected_citizen_ids
+        .iter()
+        .filter_map(|id| store.citizen_records.get(id).cloned())
+        .collect();
     store.cpms_status_export_imports.insert(
         import_key,
         CpmsStatusExportImportRecord {
@@ -220,6 +232,18 @@ pub(crate) async fn admin_import_cpms_status_export(
             output.unmatched_release_records.len()
         ),
     );
+    drop(store);
+
+    for record in changed_records {
+        if let Err(e) = state.store.upsert_citizen_row(&record) {
+            tracing::error!(citizen_id = record.id, error = %e, "citizen row upsert failed after CPMS status import");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen row write failed",
+            );
+        }
+    }
 
     Json(ApiResponse {
         code: 0,

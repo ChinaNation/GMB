@@ -81,4 +81,5 @@ jobs:
           path: |
             cpms/dist/cpms-ubuntu24-${{ matrix.arch }}.run
             cpms/dist/cpms-ubuntu24-${{ matrix.arch }}.run.sha256
+            cpms/docs/CPMS安装配置手册.pdf
           retention-days: 30

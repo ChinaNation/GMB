@@ -1290,6 +1290,32 @@ impl StoreHandle {
         }
     }
 
+    pub(crate) fn delete_institution_account_row(
+        &self,
+        sfid_number: &str,
+        account_name: &str,
+    ) -> Result<(), String> {
+        match &self.backend {
+            StoreBackend::Memory(_) => Ok(()),
+            StoreBackend::Postgres {
+                clients,
+                next_client_idx,
+            } => {
+                let sfid_number = sfid_number.to_string();
+                let account_name = account_name.to_string();
+                StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
+                    conn.execute(
+                        "DELETE FROM sfid_institution_accounts
+                         WHERE sfid_number = $1 AND account_name = $2",
+                        &[&sfid_number, &account_name],
+                    )
+                    .map_err(|e| format!("delete sfid_institution_accounts failed: {e}"))?;
+                    Ok(())
+                })
+            }
+        }
+    }
+
     pub(crate) fn list_institutions_exact(
         &self,
         category: Option<&str>,
@@ -1798,6 +1824,10 @@ fn main() {
             .route(
                 "/api/v1/public-security/reconcile",
                 post(institutions::handler::reconcile_public_security),
+            )
+            .route(
+                "/api/v1/institutions/public-security",
+                get(institutions::handler::list_public_security_institutions),
             )
             .route(
                 "/api/v1/admin/citizens/cpms-status-export/import",

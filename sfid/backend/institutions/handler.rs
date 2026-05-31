@@ -17,6 +17,7 @@
 //! - GET    /api/v1/institution/:sfid_number/documents/:doc_id/download → download_document
 //! - DELETE /api/v1/institution/:sfid_number/documents/:doc_id → delete_document
 //! - POST   /api/v1/public-security/reconcile             → reconcile_public_security
+//! - GET    /api/v1/institutions/public-security           → list_public_security_institutions
 //!
 //! ## 已搬迁(2026-05-01 chain/ 重构)
 //!
@@ -61,7 +62,9 @@ use crate::login::{require_admin_any, require_sheng_admin, AdminAuthContext};
 use crate::models::ApiResponse;
 use crate::scope::{filter_by_scope, get_visible_scope};
 use crate::sfid::province::{province_name_by_code, PROVINCES};
-use crate::sfid::{generate_sfid_code, validate_sfid_number_format, GenerateSfidInput};
+use crate::sfid::{
+    generate_sfid_code, validate_sfid_number_format, GenerateSfidInput, InstitutionCategory,
+};
 use crate::*;
 
 const MAX_PROVINCE_CHARS: usize = 100;
@@ -1078,6 +1081,23 @@ pub(crate) async fn list_institutions(
         Err(resp) => return resp,
     };
     let scope = get_visible_scope(&ctx);
+    let category = match query.category.as_deref() {
+        Some("PRIVATE_INSTITUTION") | Some("GOV_INSTITUTION") => query.category.as_deref(),
+        Some("PUBLIC_SECURITY") => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "public security uses /api/v1/institutions/public-security",
+            )
+        }
+        _ => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "institution category is required",
+            )
+        }
+    };
     let empty_page = || PageResult::<InstitutionListRow> {
         items: Vec::new(),
         page_size: query.page_size.unwrap_or(50).clamp(1, 100),
@@ -1111,7 +1131,7 @@ pub(crate) async fn list_institutions(
     let city = scope.locked_city.as_deref().or(query.city.as_deref());
     let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
     let page = match state.store.list_institutions_exact(
-        query.category.as_deref(),
+        category,
         province,
         city,
         query.q.as_deref().unwrap_or(""),
@@ -1138,6 +1158,182 @@ pub(crate) async fn list_institutions(
         data: page,
     })
     .into_response()
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ListPublicSecurityQuery {
+    pub cursor: Option<String>,
+    pub page_size: Option<usize>,
+}
+
+/// GET /api/v1/institutions/public-security
+///
+/// 中文注释:公安局是按 sfid 省市代码确定性生成的机构,不是普通公权机构搜索结果。
+/// 该接口不接收搜索词:省级管理员返回本省全部市级公安局,市级管理员返回本市公安局。
+pub(crate) async fn list_public_security_institutions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<ListPublicSecurityQuery>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let Some(province) = ctx.admin_province.as_deref() else {
+        return api_error(StatusCode::FORBIDDEN, 1003, "province scope required");
+    };
+    let city_scope = ctx.admin_city.as_deref();
+    let page_size = query.page_size.unwrap_or(300).clamp(1, 300);
+    let offset = match query
+        .cursor
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(raw) => match raw.parse::<usize>() {
+            Ok(v) => v,
+            Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor"),
+        },
+        None => 0,
+    };
+
+    let snapshot = match ensure_public_security_snapshot(&state, province).await {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let mut rows: Vec<InstitutionListRow> = snapshot
+        .into_iter()
+        .filter(|(inst, _)| city_scope.map_or(true, |city| inst.city == city))
+        .map(|(inst, accounts)| institution_row_from_record(&inst, accounts.len(), None, None))
+        .collect();
+    rows.sort_by(|a, b| {
+        a.city
+            .cmp(&b.city)
+            .then_with(|| a.sfid_number.cmp(&b.sfid_number))
+    });
+    let total = rows.len();
+    let items: Vec<InstitutionListRow> = rows.into_iter().skip(offset).take(page_size).collect();
+    let next_offset = offset.saturating_add(items.len());
+    let has_more = next_offset < total;
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: PageResult {
+            items,
+            page_size,
+            next_cursor: has_more.then(|| next_offset.to_string()),
+            has_more,
+        },
+    })
+    .into_response()
+}
+
+async fn ensure_public_security_snapshot(
+    state: &AppState,
+    province: &str,
+) -> Result<Vec<(MultisigInstitution, Vec<MultisigAccount>)>, axum::response::Response> {
+    let snapshot = {
+        let mut store = store_write_or_500(state)?;
+        backfill_public_security_city_codes(&mut store);
+        reconcile_public_security_for_province(&mut store, province, "SYSTEM");
+        let sfids: Vec<String> = store
+            .multisig_institutions
+            .values()
+            .filter(|inst| {
+                matches!(inst.category, InstitutionCategory::PublicSecurity)
+                    && inst.province == province
+            })
+            .map(|inst| inst.sfid_number.clone())
+            .collect();
+        for sfid in &sfids {
+            crate::institutions::service::insert_default_accounts_into_global_store(
+                &mut store, sfid, "SYSTEM",
+            );
+        }
+        store
+            .multisig_institutions
+            .values()
+            .filter(|inst| {
+                matches!(inst.category, InstitutionCategory::PublicSecurity)
+                    && inst.province == province
+            })
+            .cloned()
+            .map(|inst| {
+                let accounts = store
+                    .multisig_accounts
+                    .values()
+                    .filter(|acc| acc.sfid_number == inst.sfid_number)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                (inst, accounts)
+            })
+            .collect::<Vec<_>>()
+    };
+
+    for (inst, accounts) in &snapshot {
+        if let Err(e) = state.store.upsert_institution_row(inst) {
+            tracing::error!(sfid = %inst.sfid_number, error = %e, "public security row upsert failed");
+            return Err(api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "public security row write failed",
+            ));
+        }
+        for account in accounts {
+            if let Err(e) = state.store.upsert_institution_account_row(account) {
+                tracing::error!(sfid = %account.sfid_number, account = %account.account_name, error = %e, "public security account row upsert failed");
+                return Err(api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "public security account row write failed",
+                ));
+            }
+        }
+    }
+
+    let snapshot_for_shard = snapshot.clone();
+    let active_sfids: std::collections::HashSet<String> = snapshot_for_shard
+        .iter()
+        .map(|(inst, _)| inst.sfid_number.clone())
+        .collect();
+    let province_owned = province.to_string();
+    if let Err(e) = state
+        .sharded_store
+        .write_province(province, move |shard| {
+            let stale_sfids: std::collections::HashSet<String> = shard
+                .multisig_institutions
+                .values()
+                .filter(|inst| {
+                    matches!(inst.category, InstitutionCategory::PublicSecurity)
+                        && inst.province == province_owned
+                        && !active_sfids.contains(&inst.sfid_number)
+                })
+                .map(|inst| inst.sfid_number.clone())
+                .collect();
+            if !stale_sfids.is_empty() {
+                shard
+                    .multisig_institutions
+                    .retain(|sfid, _| !stale_sfids.contains(sfid));
+                shard
+                    .multisig_accounts
+                    .retain(|_, acc| !stale_sfids.contains(&acc.sfid_number));
+            }
+            for (inst, accounts) in snapshot_for_shard {
+                shard
+                    .multisig_institutions
+                    .insert(inst.sfid_number.clone(), inst);
+                for account in accounts {
+                    let key = account_key_to_string(&account.sfid_number, &account.account_name);
+                    shard.multisig_accounts.insert(key, account);
+                }
+            }
+        })
+        .await
+    {
+        tracing::warn!(province = %province, error = %e, "public security shard sync failed");
+    }
+
+    Ok(snapshot)
 }
 
 // ─── 3b. 法人机构搜索(FFR 详情页"所属法人"选择器用)───────────
@@ -1494,6 +1690,17 @@ pub(crate) async fn delete_account(
                 tracing::warn!(error = %e, "module store snapshot write failed (account delete, shard already committed)");
             }
         }
+    }
+    if let Err(e) = state
+        .store
+        .delete_institution_account_row(&sfid_number, &account_name)
+    {
+        tracing::error!(sfid = %sfid_number, account = %account_name, error = %e, "institution account row delete failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "institution account row delete failed",
+        );
     }
 
     append_inst_audit_log_best_effort(

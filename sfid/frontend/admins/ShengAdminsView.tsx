@@ -20,7 +20,7 @@ import {
   type AdminActionType,
 } from './admin_security_api';
 import { listShengAdmins } from './api';
-import { listSfidCities } from '../sfid/api';
+import { loadCachedSfidCities } from '../sfid/metaCache';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
@@ -161,7 +161,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     setOperatorListPage(1);
     setOperatorCitiesLoading(true);
     let cancelled = false;
-    listSfidCities(auth, selectedShengAdmin.province)
+    loadCachedSfidCities(auth, selectedShengAdmin.province)
       .then((rows) => {
         if (!cancelled) setOperatorCities(rows);
       })

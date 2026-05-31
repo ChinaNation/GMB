@@ -1,10 +1,11 @@
 // 中文注释:某省的 N 市卡片网格 — 共享组件。
-// 按省拉取城市清单(走现有 listSfidCities API),点击某市回调外部。
+// 按省读取确定性城市清单,优先命中本地缓存;点击某市回调外部。
 // 过滤掉 code="000" 的"本省统一"占位。
 
 import React, { useEffect, useState } from 'react';
 import type { AdminAuth } from '../auth/types';
-import { listSfidCities, type SfidCityItem } from '../sfid/api';
+import type { SfidCityItem } from '../sfid/api';
+import { loadCachedSfidCities } from '../sfid/metaCache';
 
 interface Props {
   auth: AdminAuth;
@@ -32,7 +33,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province, onPick }) => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listSfidCities(auth, province)
+    loadCachedSfidCities(auth, province)
       .then((rows) => {
         if (cancelled) return;
         setCities(rows.filter((c) => c.code !== '000'));
