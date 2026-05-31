@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { listArchives, type ArchiveListParams } from './api';
 import { listTowns } from '../address/api';
 import { installStatus } from '../initialize/api';
+import DateInput from '../components/DateInput';
 import type { Town } from '../address/types';
 import type { Archive } from './types';
 
@@ -137,7 +138,7 @@ export default function ArchiveList() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input className="form-input" style={{ width: 408 }} placeholder="请输入姓名、护照号、档案号检索" value={draftValue} onChange={e => setDraftValue(e.target.value)} />
-          <input className="form-input" style={{ width: 150 }} type="date" value={draftBirthDate} onChange={e => setDraftBirthDate(e.target.value)} />
+          <DateInput style={{ width: 150 }} value={draftBirthDate} onChange={setDraftBirthDate} />
           <button className="btn btn--blue" onClick={applySearch}>搜索</button>
           <button className="btn btn--ghost" onClick={() => { setDraftValue(''); setDraftBirthDate(''); setFilters({ value: '', birthDate: '' }); resetToFirstPage(); }}>清空</button>
         </div>

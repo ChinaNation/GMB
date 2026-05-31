@@ -16,37 +16,76 @@ SERVICE_SRC="${PAYLOAD_DIR}/systemd/cpms-backend.service"
 BACKUP_SCRIPT_SRC="${PAYLOAD_DIR}/bin/backup_to_storage.sh"
 BACKUP_SERVICE_SRC="${PAYLOAD_DIR}/systemd/cpms-backup.service"
 BACKUP_TIMER_SRC="${PAYLOAD_DIR}/systemd/cpms-backup.timer"
+NGINX_SRC="${PAYLOAD_DIR}/nginx/cpms.conf"
+CERT_SCRIPT_SRC="${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
+DEBS_DIR="${PAYLOAD_DIR}/debs"
 
-if [[ ! -x "${BIN_SRC}" ]]; then
-  echo "ERROR: missing backend binary at ${BIN_SRC}"
-  exit 1
-fi
-if [[ ! -f "${FRONTEND_SRC}/index.html" ]]; then
-  echo "ERROR: missing frontend static payload at ${FRONTEND_SRC}"
-  exit 1
-fi
-if [[ ! -f "${SCHEMA_SQL}" || ! -f "${SEED_SQL}" ]]; then
-  echo "ERROR: missing database sql payload"
-  exit 1
-fi
-if [[ ! -f "${SERVICE_SRC}" ]]; then
-  echo "ERROR: missing systemd service file"
-  exit 1
-fi
-
-install_postgres() {
-  if command -v psql >/dev/null 2>&1; then
-    return 0
-  fi
-  if command -v apt-get >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y postgresql postgresql-client
-  else
-    echo "ERROR: only Debian/Ubuntu are supported by this installer."
-    echo "Install PostgreSQL manually, then rerun installer."
+check_payload() {
+  if [[ ! -x "${BIN_SRC}" ]]; then
+    echo "ERROR: missing backend binary at ${BIN_SRC}"
     exit 1
   fi
+  if [[ ! -f "${FRONTEND_SRC}/index.html" ]]; then
+    echo "ERROR: missing frontend static payload at ${FRONTEND_SRC}"
+    exit 1
+  fi
+  if [[ ! -f "${SCHEMA_SQL}" || ! -f "${SEED_SQL}" ]]; then
+    echo "ERROR: missing database sql payload"
+    exit 1
+  fi
+  if [[ ! -f "${SERVICE_SRC}" ]]; then
+    echo "ERROR: missing systemd service file"
+    exit 1
+  fi
+  if [[ ! -f "${NGINX_SRC}" || ! -f "${CERT_SCRIPT_SRC}" ]]; then
+    echo "ERROR: missing nginx or certificate payload"
+    exit 1
+  fi
+  if ! compgen -G "${DEBS_DIR}/*.deb" >/dev/null; then
+    echo "ERROR: missing offline deb payload at ${DEBS_DIR}"
+    exit 1
+  fi
+}
+
+check_os() {
+  local arch
+  arch="$(uname -m)"
+  if [[ "${arch}" != "x86_64" && "${arch}" != "amd64" ]]; then
+    echo "ERROR: cpms-ubuntu24-amd64.run only supports amd64"
+    exit 1
+  fi
+  if [[ ! -f /etc/os-release ]]; then
+    echo "ERROR: unsupported Linux distribution"
+    exit 1
+  fi
+  # 中文注释：安装包只面向 Ubuntu Server 24.04 LTS，避免在未知系统上半安装。
+  source /etc/os-release
+  if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "24.04" ]]; then
+    echo "ERROR: this installer requires Ubuntu 24.04 amd64"
+    exit 1
+  fi
+}
+
+install_offline_deps() {
+  export DEBIAN_FRONTEND=noninteractive
+  install -d -m 0755 /opt/cpms/offline-debs
+  cp -f "${DEBS_DIR}"/*.deb /opt/cpms/offline-debs/
+
+  # 中文注释：这里只使用安装包内置 deb，不执行 apt-get update，不读取外部网络源。
+  if ! dpkg -i /opt/cpms/offline-debs/*.deb; then
+    if ! dpkg --configure -a; then
+      echo "ERROR: offline deb dependency closure is incomplete"
+      echo "Please rebuild cpms-ubuntu24-amd64.run with the full Ubuntu 24.04 dependency closure."
+      exit 1
+    fi
+  fi
+
+  for cmd in psql pg_dump nginx openssl rsync ssh; do
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
+      echo "ERROR: missing runtime command after offline install: ${cmd}"
+      exit 1
+    fi
+  done
 }
 
 ensure_postgres_service() {
@@ -60,19 +99,11 @@ ensure_cpms_user() {
 }
 
 generate_password() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 24
-  else
-    tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 32
-  fi
+  openssl rand -hex 24
 }
 
 generate_secret_hex32() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 32
-  else
-    od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
-  fi
+  openssl rand -hex 32
 }
 
 setup_database() {
@@ -80,21 +111,47 @@ setup_database() {
   local db_user="cpms"
   local db_password
   local key_encrypt_secret
-  db_password="$(generate_password)"
-  key_encrypt_secret="$(generate_secret_hex32)"
 
   install -d -m 0750 /etc/cpms
-  cat >/etc/cpms/cpms-backend.env <<EOF
-CPMS_BIND=0.0.0.0:8080
+  install -d -m 0750 -o cpms -g cpms /var/lib/cpms/runtime
+  install -d -m 0750 -o cpms -g cpms /var/lib/cpms/materials
+  install -d -m 0750 /var/backups/cpms
+
+  if [[ -f /etc/cpms/cpms-backend.env ]]; then
+    set -a
+    source /etc/cpms/cpms-backend.env
+    set +a
+    if [[ -z "${CPMS_DATABASE_URL:-}" ]]; then
+      echo "ERROR: existing /etc/cpms/cpms-backend.env is missing CPMS_DATABASE_URL"
+      exit 1
+    fi
+    db_password="${CPMS_DATABASE_URL#postgresql://${db_user}:}"
+    db_password="${db_password%@127.0.0.1:5432/${db_name}}"
+    key_encrypt_secret="${CPMS_KEY_ENCRYPT_SECRET:-}"
+    if [[ "${db_password}" == "${CPMS_DATABASE_URL:-}" || -z "${key_encrypt_secret}" ]]; then
+      echo "ERROR: existing /etc/cpms/cpms-backend.env is not a cpms-ubuntu24-amd64 env file"
+      exit 1
+    fi
+  else
+    db_password="$(generate_password)"
+    key_encrypt_secret="$(generate_secret_hex32)"
+    cat >/etc/cpms/cpms-backend.env <<EOF
+CPMS_BIND=127.0.0.1:8080
 CPMS_DATABASE_URL=postgresql://${db_user}:${db_password}@127.0.0.1:5432/${db_name}
 CPMS_KEY_ENCRYPT_SECRET=${key_encrypt_secret}
 CPMS_FRONTEND_DIR=/opt/cpms/frontend
+CPMS_MATERIALS_DIR=/var/lib/cpms/materials
+CPMS_COOKIE_SECURE=true
 EOF
+  fi
   chmod 0600 /etc/cpms/cpms-backend.env
   chown root:cpms /etc/cpms/cpms-backend.env
 
-  su - postgres -c "psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='${db_user}'\" | grep -q 1" \
-    || su - postgres -c "psql -c \"CREATE ROLE ${db_user} WITH LOGIN PASSWORD '${db_password}';\""
+  if su - postgres -c "psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='${db_user}'\" | grep -q 1"; then
+    su - postgres -c "psql -c \"ALTER ROLE ${db_user} WITH LOGIN PASSWORD '${db_password}';\""
+  else
+    su - postgres -c "psql -c \"CREATE ROLE ${db_user} WITH LOGIN PASSWORD '${db_password}';\""
+  fi
   su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='${db_name}'\" | grep -q 1" \
     || su - postgres -c "psql -c \"CREATE DATABASE ${db_name} OWNER ${db_user};\""
 
@@ -105,8 +162,8 @@ EOF
 install_backend() {
   install -d -m 0755 /opt/cpms/bin
   install -d -m 0755 /opt/cpms/frontend
-  install -d -m 0750 /var/lib/cpms/runtime
   install -m 0755 "${BIN_SRC}" /opt/cpms/bin/cpms-backend
+  install -m 0755 "${CERT_SCRIPT_SRC}" /opt/cpms/bin/generate_cpms_certs.sh
   rm -rf /opt/cpms/frontend/*
   cp -R "${FRONTEND_SRC}/." /opt/cpms/frontend/
   if [[ -f "${BACKUP_SCRIPT_SRC}" ]]; then
@@ -114,6 +171,20 @@ install_backend() {
   fi
   chown -R root:root /opt/cpms/frontend
   chown -R cpms:cpms /var/lib/cpms
+}
+
+install_certs() {
+  /opt/cpms/bin/generate_cpms_certs.sh
+}
+
+configure_nginx() {
+  install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled
+  install -m 0644 "${NGINX_SRC}" /etc/nginx/sites-available/cpms.conf
+  rm -f /etc/nginx/sites-enabled/default
+  ln -sfn /etc/nginx/sites-available/cpms.conf /etc/nginx/sites-enabled/cpms.conf
+  nginx -t
+  systemctl enable --now nginx
+  systemctl reload nginx
 }
 
 install_service() {
@@ -132,18 +203,18 @@ prepare_backup_env() {
   install -d -m 0750 /etc/cpms
   if [[ ! -f /etc/cpms/backup.env ]]; then
     cat >/etc/cpms/backup.env <<'EOF'
-# Storage computer SSH address
+# 备份存储机 SSH 地址
 STORAGE_HOST=CHANGE_ME
 STORAGE_PORT=22
 STORAGE_USER=CHANGE_ME
 
-# Absolute remote directory path, e.g. /data/cpms-backups
+# 备份存储机上的绝对目录，例如 /data/cpms-backups
 STORAGE_PATH=/data/cpms-backups
 
-# Keep remote backups forever when set to 0
+# 远端保留天数；0 表示永久保留
 RETENTION_DAYS=0
 
-# Keep local backups forever when set to 0
+# 本机保留天数；0 表示永久保留
 LOCAL_RETENTION_DAYS=0
 EOF
     chmod 0600 /etc/cpms/backup.env
@@ -151,17 +222,23 @@ EOF
 }
 
 main() {
-  install_postgres
+  check_payload
+  check_os
+  install_offline_deps
   ensure_postgres_service
   ensure_cpms_user
   setup_database
   install_backend
+  install_certs
   install_service
+  configure_nginx
   prepare_backup_env
 
   echo "CPMS host install complete."
-  echo "Login page: http://<host-lan-ip>:8080/login"
+  echo "Login page: https://www.cpms.com/login"
+  echo "Root CA certificate: /etc/cpms/certs/cpms-root-ca.crt"
   echo "Service status: systemctl status cpms-backend"
+  echo "Nginx status: systemctl status nginx"
   echo "Backup config: /etc/cpms/backup.env"
   echo "Enable backup timer after config: systemctl enable --now cpms-backup.timer"
 }

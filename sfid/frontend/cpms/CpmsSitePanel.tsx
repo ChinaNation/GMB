@@ -60,14 +60,15 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const [busy, setBusy] = useState(false);
   const qrRef = useRef<HTMLDivElement | null>(null);
   const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
+  const [securityCommitLoading, setSecurityCommitLoading] = useState(false);
   const status = (site.status || 'PENDING') as CpmsSiteStatus;
 
-  const runImportantAction = async (
+  const runPasskeyChallengeAction = async (
     actionType: AdminActionType,
     payload: unknown,
   ): Promise<AdminSecurityGrantOutput> => {
     const prepared = await prepareAdminAction(auth, actionType, payload);
-    if (prepared.security_level !== 'IMPORTANT' || !prepared.sign_request) {
+    if (prepared.auth_type !== 'PASSKEY_CHALLENGE' || !prepared.sign_request) {
       throw new Error('该操作缺少冷钱包签名请求');
     }
     const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
@@ -85,7 +86,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
 
   const handleSecuritySignedResponse = useCallback(async (raw: string) => {
     if (!securityModal) return;
-    setBusy(true);
+    setSecurityCommitLoading(true);
     try {
       const signed = parseSignedReceiptPayload(raw, securityModal.actionId);
       if (signed.challenge_id !== securityModal.actionId) {
@@ -104,14 +105,14 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
       securityModal.reject(err);
       message.error(err instanceof Error ? err.message : '签名回执处理失败');
     } finally {
-      setBusy(false);
+      setSecurityCommitLoading(false);
     }
   }, [auth, securityModal]);
 
   const onReissue = async () => {
     setBusy(true);
     try {
-      const grant = await runImportantAction('CPMS_REISSUE_INSTALL_TOKEN', { target: site.sfid_number });
+      const grant = await runPasskeyChallengeAction('CPMS_REISSUE_INSTALL_TOKEN', { target: site.sfid_number });
       await reissueInstallToken(auth, site.sfid_number, grant);
       message.success('已重发安装令牌');
       onChanged();
@@ -126,7 +127,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
     const normalizedReason = reason.trim();
     setBusy(true);
     try {
-      const grant = await runImportantAction('CPMS_DISABLE_KEYS', {
+      const grant = await runPasskeyChallengeAction('CPMS_DISABLE_KEYS', {
         target: site.sfid_number,
         reason: normalizedReason,
       });
@@ -141,7 +142,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const onEnable = async () => {
     setBusy(true);
     try {
-      const grant = await runImportantAction('CPMS_ENABLE_KEYS', {
+      const grant = await runPasskeyChallengeAction('CPMS_ENABLE_KEYS', {
         target: site.sfid_number,
         reason: '',
       });
@@ -159,7 +160,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
     const normalizedReason = reason.trim();
     setBusy(true);
     try {
-      const grant = await runImportantAction('CPMS_REVOKE_KEYS', {
+      const grant = await runPasskeyChallengeAction('CPMS_REVOKE_KEYS', {
         target: site.sfid_number,
         reason: normalizedReason,
       });
@@ -278,13 +279,14 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         onCancel={() => {
           securityModal?.reject(new Error('已取消签名确认'));
           setSecurityModal(null);
+          setSecurityCommitLoading(false);
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
         qrHint="使用管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
-        scannerDisabled={busy}
-        scannerLoading={busy}
+        scannerDisabled={securityCommitLoading}
+        scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}
         onScannerError={(msg) => message.error(msg)}
       />

@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     name: CPMS 编译、测试与打包
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -60,55 +60,9 @@ jobs:
         working-directory: cpms/frontend
         run: npm run build
 
-      # ── 构建 .deb 安装包 ──
-      - name: 构建 CPMS.deb
-        run: |
-          DEB_ROOT="deb-pkg"
-          mkdir -p "$DEB_ROOT/DEBIAN"
-          mkdir -p "$DEB_ROOT/opt/cpms/bin"
-          mkdir -p "$DEB_ROOT/opt/cpms/frontend"
-
-          # 后端二进制
-          cp cpms/backend/target/release/cpms-backend "$DEB_ROOT/opt/cpms/bin/"
-          chmod 755 "$DEB_ROOT/opt/cpms/bin/cpms-backend"
-
-          # 前端静态文件（后端直接 serve）
-          cp -r cpms/frontend/dist/* "$DEB_ROOT/opt/cpms/frontend/"
-
-          # deb 控制文件
-          cat > "$DEB_ROOT/DEBIAN/control" << 'EOF'
-          Package: cpms
-          Version: 1.0.0
-          Section: web
-          Priority: optional
-          Architecture: amd64
-          Depends: postgresql
-          Maintainer: GMB <noreply@gmb.org>
-          Description: CPMS 公民护照管理系统
-           离线公民护照管理系统，安装后通过浏览器访问。
-          EOF
-
-          # 安装后脚本
-          cat > "$DEB_ROOT/DEBIAN/postinst" << 'POSTINST'
-          #!/bin/bash
-          set -e
-          if [ ! -f /opt/cpms/.env ]; then
-            cat > /opt/cpms/.env << 'ENVEOF'
-          CPMS_ENV=production
-          CPMS_DATABASE_URL=postgres://cpms:cpms_pwd@127.0.0.1:5432/cpms
-          CPMS_BIND=0.0.0.0:8080
-          CPMS_FRONTEND_DIR=/opt/cpms/frontend
-          ENVEOF
-            echo "请编辑 /opt/cpms/.env 配置环境变量"
-          fi
-          echo "CPMS 安装完成。启动: cd /opt/cpms && source .env && bin/cpms-backend"
-          echo "浏览器访问: http://<本机IP>:8080"
-          POSTINST
-          chmod 755 "$DEB_ROOT/DEBIAN/postinst"
-
-          # 构建 deb
-          dpkg-deb --build "$DEB_ROOT" CPMS.deb
-          echo "产出: CPMS.deb ($(du -h CPMS.deb | cut -f1))"
+      # ── 构建 Ubuntu 24.04 离线一体安装包 ──
+      - name: 构建 cpms-ubuntu24-amd64.run
+        run: bash cpms/scripts/build_linux_host_installer.sh
 
       - name: 清理旧 artifact
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -121,11 +75,11 @@ jobs:
               gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
             done
 
-      - name: 上传 CPMS.deb
+      - name: 上传 cpms-ubuntu24-amd64.run
         if: ${{ github.event_name == 'workflow_dispatch' }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: CPMS
-          path: CPMS.deb
+          path: cpms/dist/cpms-ubuntu24-amd64.run
           retention-days: 30

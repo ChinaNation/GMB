@@ -1,7 +1,7 @@
 # SFID 错误码规范
 
-- 最后更新:2026-05-26
-- 任务卡:`memory/08-tasks/open/20260526-error-codes.md`
+- 最后更新:2026-05-31
+- 任务卡:`memory/08-tasks/done/20260531-sfid-shi-admin-city-limit.md`
 
 ## 1. 总原则
 
@@ -80,6 +80,20 @@ SFID HTTP 状态码只表达协议层结果,稳定业务错误码使用响应体
 | `SFID_CITIZEN_ARCHIVE_PUBKEY_MISMATCH` | 422 | CPMS 本机公钥与已绑定授权不一致 |
 | `SFID_CITIZEN_QR_EXPIRED` | 410 | CPMS 状态 QR 已过期 |
 | `SFID_CITIZEN_QR_HEADER_INVALID` | 400 | CPMS 状态 QR 头部字段非法 |
+
+### 管理员账号
+
+| error_code | HTTP | 含义 |
+|---|---:|---|
+| `SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` | 409 | 管理员公钥已作为省级管理员存在 |
+| `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN` | 409 | 管理员公钥已作为市级管理员存在 |
+| `SFID_ADMIN_SHENG_ADMIN_PROVINCE_LIMIT_REACHED` | 409 | 本省省级管理员已达到 5 人上限 |
+| `SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED` | 409 | 本市市级管理员已达到 30 人上限 |
+| `SFID_STORE_PERSIST_FAILED` | 500 | 写操作持久化失败，接口不得返回业务成功 |
+
+管理员公钥全局唯一。新增省级管理员或市级管理员时，后端必须先按规范化公钥查全局
+`admins` 账号表；命中后按已有角色返回上述稳定错误码，前端按新增目标角色展示中文提示。
+省级管理员每省最多 5 人，市级管理员每省每市最多 30 人，达到上限时必须在后端拒绝新增。
 
 ## 4. 前端处理规则
 

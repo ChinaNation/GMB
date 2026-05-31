@@ -253,9 +253,14 @@ async fn create_archive(
         ));
     }
 
-    let voting = dangan::normalize_voting_eligible(&citizen_status, req.voting_eligible);
-
     let now_ts = Utc::now().timestamp();
+    let voting = dangan::resolve_voting_eligible(
+        &citizen_status,
+        birth_date,
+        req.voting_eligible,
+        true,
+        now_ts,
+    )?;
     let valid_from = dangan::archive_valid_from(now_ts);
     let valid_until =
         dangan::archive_valid_until(now_ts, dangan::archive_validity_years(now_ts, birth_date));
@@ -558,7 +563,7 @@ async fn save_archive_wallet(
     let result = sqlx::query(
         "UPDATE archives
          SET wallet_address=$1, wallet_pubkey=$2, wallet_sig_alg='sr25519',
-             wallet_bound_at=$3, wallet_bound_by=$4, archive_qr_payload='', updated_at=$5
+             wallet_bound_at=$3, wallet_bound_by=$4, updated_at=$5
          WHERE archive_id=$6 AND status <> 'DELETED'",
     )
     .bind(wallet_address)
@@ -583,6 +588,7 @@ async fn save_archive_wallet(
     if result.rows_affected() == 0 {
         return Err(err(StatusCode::NOT_FOUND, 3004, "archive not found"));
     }
+    dangan::clear_archive_qr_payload(&state, &archive_id, now).await?;
 
     write_audit(
         &state,
@@ -599,7 +605,7 @@ async fn save_archive_wallet(
     Ok(Json(ok(archive)))
 }
 
-/// 编辑公民档案。修改后自动重新生成 ARCHIVE 二维码。
+/// 编辑公民档案。实名字段变更后清空旧 ARCHIVE 二维码，等待更新按钮重新签发。
 async fn update_archive(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -662,30 +668,25 @@ async fn update_archive(
         archive.citizen_status = v;
         archive.citizen_status_updated_at = Utc::now().timestamp();
     }
-    if let Some(v) = req.voting_eligible {
+    let requested_voting = req.voting_eligible;
+    if let Some(v) = requested_voting {
         archive.voting_eligible = v;
     }
-    archive.voting_eligible =
-        dangan::normalize_voting_eligible(&archive.citizen_status, Some(archive.voting_eligible));
+    let birth_date = validate_birth_date(&archive.birth_date)?;
+    archive.voting_eligible = dangan::resolve_voting_eligible(
+        &archive.citizen_status,
+        birth_date,
+        requested_voting,
+        archive.voting_eligible,
+        Utc::now().timestamp(),
+    )?;
 
     archive.updated_at = Utc::now().timestamp();
 
-    // 中文注释:只有已保存钱包地址的档案才允许签出 ARCHIVE;编辑实名字段时保留该硬门槛。
-    archive.archive_qr_payload = if archive_has_wallet(&archive) {
-        let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
-        serde_json::to_string(&archive_qr).map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "archive qr encode failed",
-            )
-        })?
-    } else {
-        String::new()
-    };
+    archive.archive_qr_payload = String::new();
 
     sqlx::query(
-        "UPDATE archives SET last_name=$1, first_name=$2, birth_date=$3::DATE, gender_code=$4, height_cm=$5, town_code=$6, village_id=$7, address=$8, citizen_status=$9, voting_eligible=$10, citizen_status_updated_at=$11, archive_qr_payload=$12, updated_at=$13 WHERE archive_id=$14",
+        "UPDATE archives SET last_name=$1, first_name=$2, birth_date=$3::DATE, gender_code=$4, height_cm=$5, town_code=$6, village_id=$7, address=$8, citizen_status=$9, voting_eligible=$10, citizen_status_updated_at=$11, updated_at=$12 WHERE archive_id=$13",
     )
     .bind(&archive.last_name)
     .bind(&archive.first_name)
@@ -698,12 +699,12 @@ async fn update_archive(
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
     .bind(archive.citizen_status_updated_at)
-    .bind(&archive.archive_qr_payload)
     .bind(archive.updated_at)
     .bind(&archive_id)
     .execute(&state.db)
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "update archive failed"))?;
+    dangan::clear_archive_qr_payload(&state, &archive_id, archive.updated_at).await?;
 
     Ok(Json(ok(archive)))
 }
@@ -716,6 +717,7 @@ async fn generate_archive_qr(
     let ctx = authz::require_archive_admin(&state, &headers).await?;
     let archive = fetch_archive_by_id(&state, &archive_id).await?;
     ensure_archive_not_deleted(&archive)?;
+    ensure_archive_qr_ready(&state, &archive).await?;
 
     let qr_payload = dangan::build_archive_qr_payload(&state, &archive).await?;
     let qr_content = serde_json::to_string(&qr_payload)
@@ -768,6 +770,7 @@ async fn print_archive_qr(
     let ctx = authz::require_archive_admin(&state, &headers).await?;
     let archive = fetch_archive_by_id(&state, &archive_id).await?;
     ensure_archive_not_deleted(&archive)?;
+    ensure_archive_qr_ready(&state, &archive).await?;
 
     let qr_payload = dangan::build_archive_qr_payload(&state, &archive).await?;
 
@@ -1352,17 +1355,6 @@ fn ensure_archive_not_deleted(archive: &Archive) -> Result<(), (StatusCode, Json
     Ok(())
 }
 
-fn archive_has_wallet(archive: &Archive) -> bool {
-    archive
-        .wallet_address
-        .as_deref()
-        .is_some_and(|v| !v.trim().is_empty())
-        && archive
-            .wallet_pubkey
-            .as_deref()
-            .is_some_and(|v| !v.trim().is_empty())
-}
-
 fn build_archive_delete_payload(
     challenge_id: &str,
     archive_id: &str,
@@ -1438,6 +1430,127 @@ fn normalize_pubkey_hex(value: &str) -> Option<String> {
 fn payload_sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     format!("0x{}", hex::encode(digest))
+}
+
+async fn ensure_archive_qr_ready(
+    state: &AppState,
+    archive: &Archive,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    ensure_required_text(&archive.last_name, "archive qr requires last_name")?;
+    ensure_required_text(&archive.first_name, "archive qr requires first_name")?;
+    if archive.gender_code != "M" && archive.gender_code != "W" {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive qr requires gender",
+        ));
+    }
+    let height = archive
+        .height_cm
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "archive qr requires height"))?;
+    validate_height_cm(height)?;
+    let birth_date = validate_birth_date(&archive.birth_date)?;
+    ensure_required_text(&archive.passport_no, "archive qr requires passport_no")?;
+    validate_required_date(&archive.valid_from, "archive qr requires valid_from")?;
+    validate_required_date(&archive.valid_until, "archive qr requires valid_until")?;
+    ensure_required_text(&archive.province_code, "archive qr requires province")?;
+    ensure_required_text(&archive.city_code, "archive qr requires city")?;
+    if archive.citizen_status != dangan::CITIZEN_STATUS_NORMAL {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive qr requires normal citizen_status",
+        ));
+    }
+    if !archive.voting_eligible {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive qr requires voting_eligible",
+        ));
+    }
+    if !dangan::is_voting_age_at(Utc::now().timestamp(), birth_date) {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive qr requires age 16",
+        ));
+    }
+    ensure_required_text(
+        archive.wallet_address.as_deref().unwrap_or_default(),
+        "archive qr requires wallet_address",
+    )?;
+    ensure_required_text(
+        archive.wallet_pubkey.as_deref().unwrap_or_default(),
+        "archive qr requires wallet_pubkey",
+    )?;
+    ensure_archive_qr_materials_ready(state, &archive.archive_id).await
+}
+
+async fn ensure_archive_qr_materials_ready(
+    state: &AppState,
+    archive_id: &str,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    let rows = sqlx::query(
+        "SELECT material_type, COUNT(*) AS count
+         FROM archive_materials
+         WHERE archive_id = $1
+           AND deleted_at IS NULL
+           AND material_type IN ('PHOTO', 'BIRTH_CERTIFICATE')
+         GROUP BY material_type",
+    )
+    .bind(archive_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query archive materials failed",
+        )
+    })?;
+
+    let mut has_photo = false;
+    let mut has_birth_certificate = false;
+    for row in rows {
+        let material_type: String = row.get("material_type");
+        let count: i64 = row.get("count");
+        if material_type == "PHOTO" && count > 0 {
+            has_photo = true;
+        }
+        if material_type == "BIRTH_CERTIFICATE" && count > 0 {
+            has_birth_certificate = true;
+        }
+    }
+    if !has_photo {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive qr requires photo",
+        ));
+    }
+    if !has_birth_certificate {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive qr requires birth_certificate",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_required_text(value: &str, message: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
+    if value.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, message));
+    }
+    Ok(())
+}
+
+fn validate_required_date(value: &str, message: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
+    if value.trim().is_empty() || NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").is_err() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, message));
+    }
+    Ok(())
 }
 
 fn validate_birth_date(value: &str) -> Result<NaiveDate, (StatusCode, Json<ApiError>)> {

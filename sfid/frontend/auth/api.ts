@@ -58,12 +58,6 @@ export type AdminQrLoginStatus = {
   admin?: AdminIdentifyResult;
 };
 
-export type AdminDemoSignResult = {
-  challenge_id: string;
-  admin_pubkey: string;
-  signature: string;
-};
-
 export async function identifyAdmin(identityQr: string): Promise<AdminIdentifyResult> {
   return request<AdminIdentifyResult>('/api/v1/admin/auth/identify', {
     method: 'POST',
@@ -128,17 +122,6 @@ export async function verifyAdminChallenge(input: {
   signature: string;
 }): Promise<AdminVerifyResult> {
   return request<AdminVerifyResult>('/api/v1/admin/auth/verify', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-}
-
-export async function demoSignChallenge(input: {
-  challenge_id: string;
-  admin_pubkey: string;
-}): Promise<AdminDemoSignResult> {
-  return request<AdminDemoSignResult>('/api/v1/admin/auth/demo-sign', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

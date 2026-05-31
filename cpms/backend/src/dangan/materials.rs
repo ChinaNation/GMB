@@ -215,6 +215,7 @@ async fn upload_material(
             "material file store failed",
         ));
     }
+    super::clear_archive_qr_payload(&state, &archive_id, now).await?;
 
     write_audit(
         &state,
@@ -319,6 +320,7 @@ async fn delete_material(
     if result.rows_affected() != 1 {
         return Err(err(StatusCode::NOT_FOUND, 4040, "material not found"));
     }
+    super::clear_archive_qr_payload(&state, &archive_id, now).await?;
 
     write_audit(
         &state,

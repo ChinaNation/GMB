@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{err, initialize, ApiError, AppState};
 
 use super::{
-    active_archive_sign_key, normalize_voting_eligible, sign_archive_payload_with_secret,
+    active_archive_sign_key, effective_voting_eligible, sign_archive_payload_with_secret,
     CITIZEN_STATUS_REVOKED,
 };
 
@@ -79,25 +79,26 @@ pub(crate) async fn build_and_record_cpms_status_export(
     state: &AppState,
 ) -> Result<CpmsStatusExportFile, (StatusCode, Json<ApiError>)> {
     let now = Utc::now();
-    let export_year = resolve_pending_export_year(state, now)
-        .await?
-        .ok_or_else(|| {
-            err(
-                StatusCode::CONFLICT,
-                3018,
-                "annual status export not required",
-            )
-        })?;
-    if let Some(export_file) = load_recorded_status_export(state, export_year).await? {
-        return Ok(export_file);
-    }
+    let export_year = resolve_export_year(state, now).await?.ok_or_else(|| {
+        err(
+            StatusCode::CONFLICT,
+            3018,
+            "annual status export not required",
+        )
+    })?;
     let export_file = build_cpms_status_export(state, export_year, now).await?;
 
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO cpms_status_exports
          (export_year, export_batch_id, exported_at, records_hash, citizen_binding_records_count, binding_release_records_count, export_file)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (export_year) DO NOTHING",
+         ON CONFLICT (export_year) DO UPDATE SET
+           export_batch_id = EXCLUDED.export_batch_id,
+           exported_at = EXCLUDED.exported_at,
+           records_hash = EXCLUDED.records_hash,
+           citizen_binding_records_count = EXCLUDED.citizen_binding_records_count,
+           binding_release_records_count = EXCLUDED.binding_release_records_count,
+           export_file = EXCLUDED.export_file",
     )
     .bind(export_year)
     .bind(&export_file.export_batch_id)
@@ -110,19 +111,7 @@ pub(crate) async fn build_and_record_cpms_status_export(
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "record annual status export failed"))?;
 
-    if result.rows_affected() == 1 {
-        return Ok(export_file);
-    }
-
-    load_recorded_status_export(state, export_year)
-        .await?
-        .ok_or_else(|| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "load annual status export failed",
-            )
-        })
+    Ok(export_file)
 }
 
 pub(crate) async fn status_export_state(
@@ -162,7 +151,7 @@ async fn build_cpms_status_export(
     }
 
     let (start_ts, end_ts) = export_year_bounds(export_year)?;
-    let citizen_binding_records = load_citizen_binding_records(state).await?;
+    let citizen_binding_records = load_citizen_binding_records(state, now.timestamp()).await?;
     let binding_release_records = load_binding_release_records(state, start_ts, end_ts).await?;
     let exported_at = now.timestamp();
     let export_batch_id = format!("cse_{}", Uuid::new_v4().simple());
@@ -196,9 +185,10 @@ async fn build_cpms_status_export(
 
 async fn load_citizen_binding_records(
     state: &AppState,
+    checked_at: i64,
 ) -> Result<Vec<CpmsCitizenBindingRecord>, (StatusCode, Json<ApiError>)> {
     let rows = sqlx::query(
-        "SELECT archive_no, status, citizen_status, voting_eligible,
+        "SELECT archive_no, status, birth_date::TEXT AS birth_date, citizen_status, voting_eligible,
                 COALESCE(citizen_status_updated_at, updated_at) AS status_updated_at,
                 wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg, 'sr25519') AS wallet_sig_alg,
                 COALESCE(wallet_bound_at, updated_at) AS wallet_bound_at
@@ -227,6 +217,15 @@ async fn load_citizen_binding_records(
                 raw_citizen_status
             };
             super::validate_citizen_status(&citizen_status)?;
+            let birth_date_text: String = row.get("birth_date");
+            let birth_date =
+                NaiveDate::parse_from_str(&birth_date_text, "%Y-%m-%d").map_err(|_| {
+                    err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        "invalid birth_date",
+                    )
+                })?;
             let requested_voting = row.try_get::<bool, _>("voting_eligible").ok();
             let wallet_sig_alg: String = row.get("wallet_sig_alg");
             if wallet_sig_alg != "sr25519" {
@@ -243,7 +242,13 @@ async fn load_citizen_binding_records(
                 wallet_sig_alg,
                 wallet_bound_at: row.get("wallet_bound_at"),
                 citizen_status: citizen_status.clone(),
-                voting_eligible: normalize_voting_eligible(&citizen_status, requested_voting),
+                voting_eligible: effective_voting_eligible(
+                    &citizen_status,
+                    birth_date,
+                    requested_voting,
+                    true,
+                    checked_at,
+                ),
                 status_updated_at: row.get("status_updated_at"),
             })
         })
@@ -284,36 +289,6 @@ async fn load_binding_release_records(
         .collect())
 }
 
-async fn load_recorded_status_export(
-    state: &AppState,
-    export_year: i32,
-) -> Result<Option<CpmsStatusExportFile>, (StatusCode, Json<ApiError>)> {
-    let row = sqlx::query("SELECT export_file FROM cpms_status_exports WHERE export_year = $1")
-        .bind(export_year)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "query annual status export failed",
-            )
-        })?;
-
-    row.map(|r| {
-        r.try_get::<sqlx::types::Json<CpmsStatusExportFile>, _>("export_file")
-            .map(|v| v.0)
-            .map_err(|_| {
-                err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    5001,
-                    "decode annual status export failed",
-                )
-            })
-    })
-    .transpose()
-}
-
 fn records_hash(
     citizen_binding_records: &[CpmsCitizenBindingRecord],
     binding_release_records: &[CpmsBindingReleaseRecord],
@@ -352,7 +327,7 @@ async fn resolve_status_export_state(
 ) -> Result<CpmsStatusExportState, (StatusCode, Json<ApiError>)> {
     let first_export_year = load_first_export_year(state).await?;
     let latest_exportable_year = latest_exportable_year(now);
-    let pending_export_year = match first_export_year {
+    let missing_export_year = match first_export_year {
         Some(first_year) if first_year <= latest_exportable_year => {
             let exported_years =
                 load_exported_years(state, first_year, latest_exportable_year).await?;
@@ -360,14 +335,22 @@ async fn resolve_status_export_state(
         }
         _ => None,
     };
-    let operator_lock_active = pending_export_year
+    let operator_lock_active = missing_export_year
         .map(|year| is_operator_lock_active(now, year))
         .unwrap_or(false);
     let exported = match first_export_year {
-        Some(first_year) if first_year <= latest_exportable_year => pending_export_year.is_none(),
+        Some(first_year) if first_year <= latest_exportable_year => missing_export_year.is_none(),
         _ => false,
     };
-    let disabled_reason = if pending_export_year.is_some() {
+    let export_year = match (missing_export_year, exported, first_export_year) {
+        (Some(year), _, _) => Some(year),
+        (None, true, _) => Some(latest_exportable_year),
+        (None, false, Some(first_year)) if first_year <= latest_exportable_year => {
+            Some(latest_exportable_year)
+        }
+        _ => None,
+    };
+    let disabled_reason = if export_year.is_some() {
         None
     } else if first_export_year.is_none() {
         Some("system not initialized".to_string())
@@ -377,12 +360,12 @@ async fn resolve_status_export_state(
 
     Ok(CpmsStatusExportState {
         now_utc: now.timestamp(),
-        pending_export_year,
-        can_export: pending_export_year.is_some(),
-        reminder_active: pending_export_year.is_some(),
+        pending_export_year: export_year,
+        can_export: export_year.is_some(),
+        reminder_active: missing_export_year.is_some(),
         operator_lock_active,
         exported,
-        next_export_available_at: pending_export_year
+        next_export_available_at: missing_export_year
             .is_none()
             .then(|| next_export_available_at(now))
             .transpose()?,
@@ -390,7 +373,7 @@ async fn resolve_status_export_state(
     })
 }
 
-async fn resolve_pending_export_year(
+async fn resolve_export_year(
     state: &AppState,
     now: DateTime<Utc>,
 ) -> Result<Option<i32>, (StatusCode, Json<ApiError>)> {

@@ -1,4 +1,4 @@
-// 摄像头 QR 扫码 + 图片 QR 识别 通用工具。
+// 摄像头 QR 扫码通用工具。
 // 基于浏览器原生 BarcodeDetector API,不依赖任何第三方库。
 
 type BarcodeDetectorLike = {
@@ -10,14 +10,14 @@ type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorL
  * 启动摄像头 BarcodeDetector 扫码。
  *
  * @param videoEl 已挂载的 `<video>` 元素
- * @param onDetected 扫到 QR 时触发(调用后自动停止轮询,调用方决定是否 cleanup)
+ * @param onDetected 扫到 QR 时触发；返回 false 时继续轮询，其他返回值表示本次扫码已被消费
  * @param onReady 摄像头流就绪时触发
  * @param onError 摄像头打开失败 / 浏览器不支持时触发
  * @returns cleanup 函数
  */
 export function startCameraScanner(
   videoEl: HTMLVideoElement,
-  onDetected: (raw: string) => void,
+  onDetected: (raw: string) => boolean | void,
   onReady: () => void,
   onError: (msg: string) => void,
 ): () => void {
@@ -51,8 +51,10 @@ export function startCameraScanner(
           const codes = await detector.detect(videoEl);
           const raw = codes[0]?.rawValue?.trim();
           if (raw) {
-            window.clearInterval(timer);
-            onDetected(raw);
+            const accepted = onDetected(raw);
+            if (accepted !== false) {
+              window.clearInterval(timer);
+            }
           }
         } catch {
           /* ignore frame errors */
@@ -70,25 +72,4 @@ export function startCameraScanner(
       stream.getTracks().forEach((t) => t.stop());
     }
   };
-}
-
-/**
- * 从图片文件识别 QR 码(用于"上传二维码"场景)。
- * 基于 BarcodeDetector,不依赖 qr-scanner 库。
- */
-export async function scanImageQr(file: File): Promise<string> {
-  const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-  if (!win.BarcodeDetector) {
-    throw new Error('当前浏览器不支持二维码识别');
-  }
-  const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-  const bitmap = await createImageBitmap(file);
-  try {
-    const codes = await detector.detect(bitmap);
-    const raw = codes[0]?.rawValue?.trim();
-    if (!raw) throw new Error('未识别到二维码，请确认图片中包含有效的二维码');
-    return raw;
-  } finally {
-    bitmap.close();
-  }
 }

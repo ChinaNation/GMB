@@ -76,4 +76,4 @@
 ## 6. 历史
 
 - 2026-04-08 任务卡 1(`08-tasks/done/20260408-sfid-模块补全-任务卡1.md`):补全 a3/institution_code/cities/category/validator/generator 子文件,所有 SFID 工具归位此模块
-- 2026-04-08 任务卡 0.5:`super_admin_*` → `sheng_admin_*` 相关函数重命名
+- 2026-04-08 任务卡 0.5:省级管理员相关函数统一收口到 `sheng_admin_*` 命名

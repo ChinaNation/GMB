@@ -26,6 +26,7 @@ import {
   commitAdminAction,
   getPasskeyAssertion,
   prepareAdminAction,
+  type AdminActionType,
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
@@ -61,6 +62,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
   // ── CPMS 站点状态(仅公安局机构使用) ──
   const [cpmsSite, setCpmsSite] = useState<CpmsSiteRow | null>(null);
   const [cpmsBusy, setCpmsBusy] = useState(false);
+  const [securityCommitLoading, setSecurityCommitLoading] = useState(false);
   const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
 
   const load = useCallback(() => {
@@ -75,9 +77,12 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
     load();
   }, [load]);
 
-  const runCpmsIssueGrant = async (payload: unknown): Promise<AdminSecurityGrantOutput> => {
-    const prepared = await prepareAdminAction(auth, 'CPMS_ISSUE_INSTALL_CODE', payload);
-    if (prepared.security_level !== 'IMPORTANT' || !prepared.sign_request) {
+  const runPasskeyChallengeGrant = async (
+    actionType: AdminActionType,
+    payload: unknown,
+  ): Promise<AdminSecurityGrantOutput> => {
+    const prepared = await prepareAdminAction(auth, actionType, payload);
+    if (prepared.auth_type !== 'PASSKEY_CHALLENGE' || !prepared.sign_request) {
       throw new Error('该操作缺少冷钱包签名请求');
     }
     const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
@@ -94,9 +99,12 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
 
   const handleSecuritySignedResponse = useCallback(async (raw: string) => {
     if (!securityModal) return;
-    setCpmsBusy(true);
+    setSecurityCommitLoading(true);
     try {
       const signed = parseSignedReceiptPayload(raw, securityModal.actionId);
+      if (signed.challenge_id !== securityModal.actionId) {
+        throw new Error('签名回执与当前请求不匹配');
+      }
       const grant = await commitAdminAction<AdminSecurityGrantOutput>(auth, {
         action_id: securityModal.actionId,
         passkey_assertion: securityModal.passkeyAssertion,
@@ -110,7 +118,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
       securityModal.reject(err);
       message.error(err instanceof Error ? err.message : '签名回执处理失败');
     } finally {
-      setCpmsBusy(false);
+      setSecurityCommitLoading(false);
     }
   }, [auth, securityModal]);
 
@@ -140,7 +148,12 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
 
   const onDeleteAccount = async (accountName: string) => {
     try {
-      await deleteAccount(auth, sfidNumber, accountName);
+      const grant = await runPasskeyChallengeGrant('INSTITUTION_DELETE_ACCOUNT', {
+        target: sfidNumber,
+        sfid_number: sfidNumber,
+        account_name: accountName,
+      });
+      await deleteAccount(auth, sfidNumber, accountName, grant);
       message.success(`账户 "${accountName}" 已删除`);
       load();
     } catch (err) {
@@ -157,7 +170,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
         city: inst.city,
         institution: inst.institution_code,
       };
-      const grant = await runCpmsIssueGrant(payload);
+      const grant = await runPasskeyChallengeGrant('CPMS_ISSUE_INSTALL_CODE', payload);
       const result = await generateCpmsInstallQr(auth, payload, grant);
       setCpmsSite({
         sfid_number: result.sfid_number,
@@ -204,6 +217,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
               loading={loading}
               onReload={load}
               onDeleteAccount={onDeleteAccount}
+              createPasskeyChallengeGrant={runPasskeyChallengeGrant}
             />
           ) : (
             <>
@@ -301,13 +315,14 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
         onCancel={() => {
           securityModal?.reject(new Error('已取消签名确认'));
           setSecurityModal(null);
+          setSecurityCommitLoading(false);
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
         qrHint="使用省管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
-        scannerDisabled={cpmsBusy}
-        scannerLoading={cpmsBusy}
+        scannerDisabled={securityCommitLoading}
+        scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}
         onScannerError={(msg) => message.error(msg)}
       />

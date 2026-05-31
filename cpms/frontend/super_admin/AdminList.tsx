@@ -1,12 +1,12 @@
 // 管理员列表。
 // 新增管理员：标题右侧内联展开姓名+账户输入框，账户输入框右侧扫码图标。
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as api from './api';
 import type { AdminRole, AdminUser } from './types';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import type { UserContactBody } from '../qr/wuminQr';
-import { startCameraScanner } from '../qr/cameraScanner';
+import CameraQrScanner from '../qr/CameraQrScanner';
 import { ScanIcon } from '../components/ScanIcon';
 
 export default function AdminList() {
@@ -21,10 +21,7 @@ export default function AdminList() {
   const [error, setError] = useState('');
   // 扫码弹窗
   const [scanOpen, setScanOpen] = useState(false);
-  const [scanReady, setScanReady] = useState(false);
   const [scanError, setScanError] = useState('');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scanCleanupRef = useRef<(() => void) | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,44 +97,22 @@ export default function AdminList() {
     setNewPubkey('');
   };
 
-  // ── 扫码 ──
-  const stopScanner = () => {
-    if (scanCleanupRef.current) {
-      scanCleanupRef.current();
-      scanCleanupRef.current = null;
+  const handleAdminQrScanned = (raw: string) => {
+    try {
+      const env = parseQrEnvelope(raw);
+      if (env.kind !== 'user_contact') {
+        setScanError(`需要扫描公民名片（user_contact），当前为 ${env.kind}`);
+        return false;
+      }
+      const { address } = env.body as UserContactBody;
+      setNewPubkey(address.trim());
+      setScanOpen(false);
+      return true;
+    } catch (e) {
+      setScanError(e instanceof QrParseError ? e.message : '二维码格式无效');
+      return false;
     }
-    setScanReady(false);
   };
-
-  useEffect(() => {
-    if (!scanOpen || !videoRef.current) {
-      stopScanner();
-      return;
-    }
-    const video = videoRef.current;
-    const cleanup = startCameraScanner(
-      video,
-      (raw) => {
-        try {
-          const env = parseQrEnvelope(raw);
-          if (env.kind !== 'user_contact') {
-            setScanError(`需要扫描公民名片（user_contact），当前为 ${env.kind}`);
-            return;
-          }
-          const { address } = env.body as UserContactBody;
-          setNewPubkey(address.trim());
-          setScanOpen(false);
-          stopScanner();
-        } catch (e) {
-          setScanError(e instanceof QrParseError ? e.message : '二维码格式无效');
-        }
-      },
-      () => { setScanReady(true); },
-      (msg) => { setScanError(msg); },
-    );
-    scanCleanupRef.current = cleanup;
-    return () => stopScanner();
-  }, [scanOpen]);
 
   return (
     <div className="card">
@@ -265,24 +240,15 @@ export default function AdminList() {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ fontSize: 16, fontWeight: 600 }}>扫描公民名片二维码</div>
-            <div style={{
-              width: 280, height: 280,
-              background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-              borderRadius: 12, overflow: 'hidden',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              position: 'relative',
-            }}>
-              <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-              {!scanReady && (
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'rgba(255,255,255,0.5)', fontSize: 13,
-                }}>
-                  摄像头初始化中...
-                </div>
-              )}
-            </div>
+            <CameraQrScanner
+              active={scanOpen}
+              onActiveChange={active => setScanOpen(active)}
+              onDetected={handleAdminQrScanned}
+              onError={setScanError}
+              size={280}
+              showButton={false}
+              loadingText="摄像头初始化中..."
+            />
             {scanError && <div style={{ color: 'var(--color-danger)', fontSize: 12 }}>{scanError}</div>}
             <button className="btn btn--ghost btn--sm" onClick={() => setScanOpen(false)}>关闭</button>
           </div>

@@ -94,12 +94,12 @@ pub(crate) struct Store {
     #[serde(default)]
     pub(crate) admin_passkey_registration_challenges:
         HashMap<String, AdminPasskeyRegistrationChallenge>,
-    /// 中文注释:管理员写操作的安全挑战。省管理员治理和省/市业务写操作
-    /// 共用这一组 Passkey/冷钱包挑战,提交后一次性消费。
+    /// 中文注释:管理员 PASSKEY/PASSKEY_CHALLENGE 写操作的短期安全挑战,
+    /// 提交后一次性消费;LOGIN_STATE 操作不进入这里。
     #[serde(default)]
     pub(crate) admin_action_challenges: HashMap<String, AdminActionChallenge>,
-    /// 中文注释:业务写接口使用的短期一次性授权。前端先完成 Passkey 或
-    /// Passkey+冷钱包签名,再把 grant id 放入 x-sfid-security-grant 请求头。
+    /// 中文注释:业务写接口使用的短期一次性授权。前端先按操作类型完成
+    /// PASSKEY 或 PASSKEY_CHALLENGE,再把 grant id 放入 x-sfid-security-grant 请求头。
     #[serde(default)]
     pub(crate) admin_security_grants: HashMap<String, AdminSecurityGrant>,
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
@@ -175,7 +175,7 @@ pub(crate) struct AdminActionChallenge {
     pub(crate) actor_province: String,
     #[serde(default)]
     pub(crate) actor_city: Option<String>,
-    pub(crate) security_level: AdminSecurityLevel,
+    pub(crate) auth_type: crate::admins::operation_auth::AdminOperationAuth,
     pub(crate) target: String,
     pub(crate) payload_text: String,
     pub(crate) payload_hash: String,
@@ -189,13 +189,6 @@ pub(crate) struct AdminActionChallenge {
     pub(crate) consumed: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(crate) enum AdminSecurityLevel {
-    General,
-    Important,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminSecurityGrant {
     pub(crate) grant_id: String,
@@ -205,7 +198,7 @@ pub(crate) struct AdminSecurityGrant {
     pub(crate) actor_province: String,
     #[serde(default)]
     pub(crate) actor_city: Option<String>,
-    pub(crate) security_level: AdminSecurityLevel,
+    pub(crate) auth_type: crate::admins::operation_auth::AdminOperationAuth,
     pub(crate) target: String,
     pub(crate) payload_hash: String,
     pub(crate) issued_at: DateTime<Utc>,

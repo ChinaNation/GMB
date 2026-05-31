@@ -5,20 +5,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listTowns, listVillages } from '../address/api';
 import { installStatus } from '../initialize/api';
+import DateInput, { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
 import { createArchive } from './api';
 import type { Town, Village } from '../address/types';
 
-function formatLocalYmd(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export default function ArchiveCreate() {
   const navigate = useNavigate();
-  const today = formatLocalYmd(new Date());
-  const maxBirthDate = formatLocalYmd(new Date(Date.now() - 24 * 60 * 60 * 1000));
   const [provinceCode, setProvinceCode] = useState('');
   const [cityCode, setCityCode] = useState('');
   const [provinceName, setProvinceName] = useState('');
@@ -64,14 +56,21 @@ export default function ArchiveCreate() {
   }, [selectedTown]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const setBirthDate = (value: string) => {
+    setForm(f => ({
+      ...f,
+      birth_date: value,
+      voting_eligible: isAtLeastAgeYmd(value, 16) ? f.voting_eligible : false,
+    }));
+  };
   const setCitizenStatus = (value: string) => {
     setForm(f => ({
       ...f,
       citizen_status: value,
-      voting_eligible: value === 'REVOKED' ? false : f.voting_eligible,
+      voting_eligible: value === 'REVOKED' || !isAtLeastAgeYmd(f.birth_date, 16) ? false : f.voting_eligible,
     }));
   };
-  const isValidBirthDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value < today;
+  const canSetVotingEligible = form.citizen_status === 'NORMAL' && isAtLeastAgeYmd(form.birth_date, 16);
   const isValidHeight = (value: string) => {
     const n = Number(value);
     return Number.isFinite(n) && n >= 30 && n <= 260;
@@ -80,7 +79,8 @@ export default function ArchiveCreate() {
   const handleSubmit = async () => {
     if (!form.last_name.trim()) { setError('请输入姓氏'); return; }
     if (!form.first_name.trim()) { setError('请输入名字'); return; }
-    if (!isValidBirthDate(form.birth_date)) { setError('请选择正确的出生日期'); return; }
+    if (!isPastYmd(form.birth_date)) { setError('请选择正确的出生日期'); return; }
+    if (form.voting_eligible && !isAtLeastAgeYmd(form.birth_date, 16)) { setError('未满16周岁的公民不能设置为有选举资格'); return; }
     if (!form.gender_code) { setError('请选择性别'); return; }
     if (!isValidHeight(form.height_cm)) { setError('请输入正确的身高'); return; }
     if (!provinceCode || !cityCode) { setError('省市信息未加载'); return; }
@@ -144,7 +144,7 @@ export default function ArchiveCreate() {
         <div className="form-group"><label>名字 *</label><input className="form-input" value={form.first_name} onChange={e => set('first_name', e.target.value)} /></div>
       </div>
       <div className="form-row">
-        <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={maxBirthDate} value={form.birth_date} onChange={e => set('birth_date', e.target.value)} /></div>
+        <div className="form-group"><label>出生日期 *</label><DateInput value={form.birth_date} onChange={setBirthDate} required /></div>
         <div className="form-group">
           <label>性别 *</label>
           <select className="form-input" value={form.gender_code} onChange={e => set('gender_code', e.target.value)}>
@@ -166,9 +166,9 @@ export default function ArchiveCreate() {
           <label>选举资格 *</label>
           <select
             className="form-input"
-            value={String(form.citizen_status === 'REVOKED' ? false : form.voting_eligible)}
+            value={String(canSetVotingEligible ? form.voting_eligible : false)}
             onChange={e => setForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}
-            disabled={form.citizen_status === 'REVOKED'}
+            disabled={!canSetVotingEligible}
           >
             <option value="true">有选举资格</option>
             <option value="false">无选举资格</option>

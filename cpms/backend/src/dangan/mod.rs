@@ -140,6 +140,29 @@ pub(crate) async fn build_archive_qr_payload(
     })
 }
 
+pub(crate) async fn clear_archive_qr_payload(
+    state: &AppState,
+    archive_id: &str,
+    updated_at: i64,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    // 中文注释：任何会改变 ARCHIVE 真实性的档案资料变更，都统一删除旧档案码，等待“更新”重新签发。
+    sqlx::query(
+        "UPDATE archives SET archive_qr_payload = '', updated_at = $1 WHERE archive_id = $2",
+    )
+    .bind(updated_at)
+    .bind(archive_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "clear archive qr failed",
+        )
+    })?;
+    Ok(())
+}
+
 async fn active_archive_sign_key(
     state: &AppState,
 ) -> Result<QrSignKeyRuntime, (StatusCode, Json<ApiError>)> {
@@ -247,9 +270,47 @@ pub(crate) fn validate_citizen_status(status: &str) -> Result<(), (StatusCode, J
     }
 }
 
-pub(crate) fn normalize_voting_eligible(citizen_status: &str, requested: Option<bool>) -> bool {
-    // 中文注释：注销公民没有投票资格；正常公民允许独立配置有或没有投票资格。
-    citizen_status == CITIZEN_STATUS_NORMAL && requested.unwrap_or(true)
+pub(crate) fn effective_voting_eligible(
+    citizen_status: &str,
+    birth_date: NaiveDate,
+    requested: Option<bool>,
+    default_normal: bool,
+    checked_at: i64,
+) -> bool {
+    // 中文注释：投票资格以公民状态和 16 周岁年龄线共同生效，避免未成年人进入 SFID 投票账户。
+    citizen_status == CITIZEN_STATUS_NORMAL
+        && is_voting_age_at(checked_at, birth_date)
+        && requested.unwrap_or(default_normal)
+}
+
+pub(crate) fn resolve_voting_eligible(
+    citizen_status: &str,
+    birth_date: NaiveDate,
+    requested: Option<bool>,
+    default_normal: bool,
+    checked_at: i64,
+) -> Result<bool, (StatusCode, Json<ApiError>)> {
+    if citizen_status == CITIZEN_STATUS_NORMAL
+        && requested == Some(true)
+        && !is_voting_age_at(checked_at, birth_date)
+    {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "voting_eligible requires age 16",
+        ));
+    }
+    Ok(effective_voting_eligible(
+        citizen_status,
+        birth_date,
+        requested,
+        default_normal,
+        checked_at,
+    ))
+}
+
+pub(crate) fn is_voting_age_at(timestamp: i64, birth_date: NaiveDate) -> bool {
+    age_at(timestamp, birth_date) >= 16
 }
 
 pub(crate) fn archive_valid_from(created_at: i64) -> String {
@@ -267,7 +328,16 @@ pub(crate) fn archive_valid_until(created_at: i64, years: i32) -> String {
 }
 
 pub(crate) fn archive_validity_years(created_at: i64, birth_date: NaiveDate) -> i32 {
-    let today = archive_date(created_at);
+    // 中文注释：创建档案当天已满 16 周岁签发 10 年有效期，未满 16 周岁签发 5 年。
+    if is_voting_age_at(created_at, birth_date) {
+        10
+    } else {
+        5
+    }
+}
+
+fn age_at(timestamp: i64, birth_date: NaiveDate) -> i32 {
+    let today = archive_date(timestamp);
     let birthday_this_year =
         NaiveDate::from_ymd_opt(today.year(), birth_date.month(), birth_date.day())
             .or_else(|| NaiveDate::from_ymd_opt(today.year(), 2, 28))
@@ -276,12 +346,7 @@ pub(crate) fn archive_validity_years(created_at: i64, birth_date: NaiveDate) -> 
     if today < birthday_this_year {
         age -= 1;
     }
-    // 中文注释：创建档案当天已满 16 周岁签发 10 年有效期，未满 16 周岁签发 5 年。
-    if age >= 16 {
-        10
-    } else {
-        5
-    }
+    age
 }
 
 fn archive_date(timestamp: i64) -> NaiveDate {
@@ -364,5 +429,21 @@ mod tests {
 
         assert_eq!(archive_validity_years(now, under_16), 5);
         assert_eq!(archive_validity_years(now, exactly_16), 10);
+        assert!(!is_voting_age_at(now, under_16));
+        assert!(is_voting_age_at(now, exactly_16));
+    }
+
+    #[test]
+    fn under_16_citizen_cannot_be_voting_eligible() {
+        let now = DateTime::parse_from_rfc3339("2026-05-24T00:00:00Z")
+            .unwrap()
+            .timestamp();
+        let under_16 = NaiveDate::from_ymd_opt(2010, 5, 25).unwrap();
+
+        assert!(resolve_voting_eligible("NORMAL", under_16, Some(true), true, now).is_err());
+        assert!(matches!(
+            resolve_voting_eligible("NORMAL", under_16, None, true, now),
+            Ok(false)
+        ));
     }
 }

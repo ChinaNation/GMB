@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import * as api from './api';
 import type { InstallStatus } from './types';
-import { startCameraScanner, scanImageQr } from '../qr/cameraScanner';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import type { UserContactBody } from '../qr/wuminQr';
-import { ScanIcon } from '../components/ScanIcon';
+import CameraQrScanner from '../qr/CameraQrScanner';
 
 // CPMS 初始化页面。
 // 三个事实状态步骤：1.扫描 INSTALL 安装码  2.绑定管理员  3.完成（可直接签发 ARCHIVE）
@@ -16,15 +15,8 @@ export default function InstallPage() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
-  const [scannerReady, setScannerReady] = useState(false);
   const [bindScannerActive, setBindScannerActive] = useState(false);
-  const [bindScannerReady, setBindScannerReady] = useState(false);
   const [bindLoading, setBindLoading] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scanCleanupRef = useRef<(() => void) | null>(null);
-  const bindVideoRef = useRef<HTMLVideoElement | null>(null);
-  const bindScanCleanupRef = useRef<(() => void) | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
     try {
@@ -37,60 +29,11 @@ export default function InstallPage() {
 
   useEffect(() => { load(); }, []);
 
-  const stopScanner = () => {
-    if (scanCleanupRef.current) {
-      scanCleanupRef.current();
-      scanCleanupRef.current = null;
-    }
-    setScannerReady(false);
-  };
-
-  useEffect(() => {
-    if (!scannerActive || !videoRef.current) {
-      stopScanner();
-      return;
-    }
-    const video = videoRef.current;
-    const cleanup = startCameraScanner(
-      video,
-      (raw) => { handleQr1Scanned(raw); },
-      () => { setScannerReady(true); },
-      (msg) => { setError(msg); setScannerActive(false); },
-    );
-    scanCleanupRef.current = cleanup;
-    return () => stopScanner();
-  }, [scannerActive]);
-
-  const stopBindScanner = () => {
-    if (bindScanCleanupRef.current) {
-      bindScanCleanupRef.current();
-      bindScanCleanupRef.current = null;
-    }
-    setBindScannerReady(false);
-  };
-
-  useEffect(() => {
-    if (!bindScannerActive || !bindVideoRef.current) {
-      stopBindScanner();
-      return;
-    }
-    const video = bindVideoRef.current;
-    const cleanup = startCameraScanner(
-      video,
-      (raw) => { handleBindScanned(raw); },
-      () => { setBindScannerReady(true); },
-      (msg) => { setError(msg); setBindScannerActive(false); },
-    );
-    bindScanCleanupRef.current = cleanup;
-    return () => stopBindScanner();
-  }, [bindScannerActive]);
-
   const handleBindScanned = async (raw: string) => {
     setError('');
     setMsg('');
     setBindLoading(true);
     setBindScannerActive(false);
-    stopBindScanner();
     try {
       // WUMIN_QR_V1 统一协议：解析 user_contact envelope，取 address（SS58）
       const env = parseQrEnvelope(raw);
@@ -112,24 +55,11 @@ export default function InstallPage() {
     setBindLoading(false);
   };
 
-  const onUploadQrImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (!file) return;
-    try {
-      const raw = await scanImageQr(file);
-      await handleQr1Scanned(raw);
-    } catch {
-      setError('未识别到二维码，请确认图片中包含有效的二维码');
-    }
-  };
-
   const handleQr1Scanned = async (qrContent: string) => {
     setError('');
     setMsg('');
     setLoading(true);
     setScannerActive(false);
-    stopScanner();
     try {
       const res = await api.installInitialize(qrContent);
       if (res.data) {
@@ -179,51 +109,17 @@ export default function InstallPage() {
           {currentStep === 1 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
               <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>扫描 SFID 安装授权二维码</div>
-              <div style={{
-                width: '80%',
-                maxWidth: 280,
-                aspectRatio: '1 / 1',
-                background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-                borderRadius: 16,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                margin: '12px auto',
-                border: '2px solid #334155',
-              }}>
-                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-                {!scannerReady && !scannerActive && (
-                  <div style={{
-                    position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center', gap: 8,
-                    cursor: 'pointer', userSelect: 'none',
-                  }} onClick={() => setScannerActive(true)}>
-                    <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
-                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                      点击开启摄像头扫码
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div style={{ textAlign: 'center', marginTop: 8 }}>
-                <button
-                  className="btn btn--primary"
-                  onClick={() => setScannerActive(v => !v)}
-                  disabled={loading}
-                >
-                  {loading ? '处理中...' : scannerActive ? '停止扫码' : '开启扫码'}
-                </button>
-                <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={onUploadQrImage} />
-                <button
-                  className="btn btn--ghost"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={loading}
-                  style={{ marginLeft: 8 }}
-                >
-                  上传二维码
-                </button>
+              <div style={{ margin: '12px auto' }}>
+                <CameraQrScanner
+                  active={scannerActive}
+                  onActiveChange={setScannerActive}
+                  onDetected={handleQr1Scanned}
+                  onError={setError}
+                  buttonLabel={loading ? '处理中...' : '开启扫码'}
+                  idleText="点击开启摄像头扫码"
+                  busy={loading}
+                  size={280}
+                />
               </div>
             </div>
           )}
@@ -234,42 +130,17 @@ export default function InstallPage() {
               <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
                 打开公民钱包，展示钱包二维码，用摄像头扫码读取账户地址
               </div>
-              <div style={{
-                width: '80%',
-                maxWidth: 280,
-                aspectRatio: '1 / 1',
-                background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-                borderRadius: 16,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                margin: '12px auto',
-                border: '2px solid #334155',
-              }}>
-                <video ref={bindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-                {!bindScannerReady && !bindScannerActive && (
-                  <div style={{
-                    position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center', gap: 8,
-                    cursor: 'pointer', userSelect: 'none',
-                  }} onClick={() => setBindScannerActive(true)}>
-                    <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
-                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                      点击开启摄像头扫码
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div style={{ textAlign: 'center', marginTop: 8 }}>
-                <button
-                  className="btn btn--primary"
-                  onClick={() => setBindScannerActive(v => !v)}
-                  disabled={bindLoading}
-                >
-                  {bindLoading ? '绑定中...' : bindScannerActive ? '停止扫码' : '开启扫码'}
-                </button>
+              <div style={{ margin: '12px auto' }}>
+                <CameraQrScanner
+                  active={bindScannerActive}
+                  onActiveChange={setBindScannerActive}
+                  onDetected={handleBindScanned}
+                  onError={setError}
+                  buttonLabel={bindLoading ? '绑定中...' : '开启扫码'}
+                  idleText="点击开启摄像头扫码"
+                  busy={bindLoading}
+                  size={280}
+                />
               </div>
             </div>
           )}

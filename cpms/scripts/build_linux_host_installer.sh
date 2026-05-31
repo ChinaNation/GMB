@@ -2,25 +2,107 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="${ROOT_DIR}/dist/cpms-host-linux-x64"
+OUT_DIR="${ROOT_DIR}/dist/cpms-ubuntu24-amd64"
 PAYLOAD_DIR="${OUT_DIR}/payload"
+RUN_FILE="${ROOT_DIR}/dist/cpms-ubuntu24-amd64.run"
+RUNTIME_PACKAGES=(
+  postgresql
+  postgresql-client
+  nginx
+  openssl
+  ca-certificates
+  rsync
+  openssh-client
+)
+
+collect_offline_debs() {
+  if ! command -v apt-get >/dev/null 2>&1 || ! command -v apt-cache >/dev/null 2>&1; then
+    echo "ERROR: cpms-ubuntu24-amd64.run must be built on Ubuntu 24.04 with apt available."
+    exit 1
+  fi
+
+  echo "[4/8] Download Ubuntu 24.04 offline deb closure"
+  mkdir -p "${PAYLOAD_DIR}/debs"
+  (
+    cd "${PAYLOAD_DIR}/debs"
+    sudo apt-get update
+    mapfile -t packages < <(
+      {
+        printf '%s\n' "${RUNTIME_PACKAGES[@]}"
+        apt-cache depends --recurse \
+          --no-recommends \
+          --no-suggests \
+          --no-conflicts \
+          --no-breaks \
+          --no-replaces \
+          --no-enhances \
+          "${RUNTIME_PACKAGES[@]}" \
+        | sed -n 's/^[[:space:]]*PreDepends:[[:space:]]*//p; s/^[[:space:]]*Depends:[[:space:]]*//p' \
+        | sed 's/[<>]//g; s/|//g' \
+        | awk '{print $1}' \
+        | sed 's/:any$//'
+      } | sort -u | while read -r pkg; do
+        if apt-cache show "${pkg}" >/dev/null 2>&1; then
+          printf '%s\n' "${pkg}"
+        fi
+      done
+    )
+    sudo apt-get download "${packages[@]}"
+  )
+}
+
+create_run_installer() {
+  echo "[8/8] Create cpms-ubuntu24-amd64.run"
+  rm -f "${RUN_FILE}"
+  cat >"${RUN_FILE}" <<'HEADER'
+#!/usr/bin/env bash
+set -euo pipefail
+
+TMP_DIR="$(mktemp -d /tmp/cpms-installer.XXXXXX)"
+cleanup() {
+  rm -rf "${TMP_DIR}"
+}
+trap cleanup EXIT
+
+ARCHIVE_LINE="$(awk '/^__CPMS_PAYLOAD_BELOW__$/ {print NR + 1; exit 0}' "$0")"
+if [[ -z "${ARCHIVE_LINE}" ]]; then
+  echo "ERROR: installer payload marker not found"
+  exit 1
+fi
+
+tail -n +"${ARCHIVE_LINE}" "$0" | tar -xz -C "${TMP_DIR}"
+exec bash "${TMP_DIR}/install_host.sh" "$@"
+exit 0
+__CPMS_PAYLOAD_BELOW__
+HEADER
+  tar -C "${OUT_DIR}" -cz . >>"${RUN_FILE}"
+  chmod 0755 "${RUN_FILE}"
+}
 
 # 中文注释：行政区数据由 CPMS 后端编译期直接引用 sfid/backend/sfid 唯一源，
 # 打包脚本不得再把 province.rs 或 city_codes 写入 CPMS 源码树。
-echo "[1/5] Build backend release binary"
+echo "[1/8] Build backend release binary"
 cargo build --release --manifest-path "${ROOT_DIR}/backend/Cargo.toml"
 
-echo "[2/5] Build frontend static files"
+echo "[2/8] Build frontend static files"
 if [[ ! -d "${ROOT_DIR}/frontend/node_modules" ]]; then
   (cd "${ROOT_DIR}/frontend" && npm ci)
 fi
 (cd "${ROOT_DIR}/frontend" && npm run build)
 
-echo "[3/5] Prepare installer layout"
-rm -rf "${OUT_DIR}"
-mkdir -p "${PAYLOAD_DIR}/bin" "${PAYLOAD_DIR}/db" "${PAYLOAD_DIR}/frontend" "${PAYLOAD_DIR}/systemd"
+echo "[3/8] Prepare installer layout"
+rm -rf "${OUT_DIR}" "${RUN_FILE}"
+mkdir -p \
+  "${PAYLOAD_DIR}/bin" \
+  "${PAYLOAD_DIR}/db" \
+  "${PAYLOAD_DIR}/frontend" \
+  "${PAYLOAD_DIR}/systemd" \
+  "${PAYLOAD_DIR}/nginx" \
+  "${PAYLOAD_DIR}/certs"
 
-echo "[4/5] Copy payload files"
+collect_offline_debs
+
+echo "[5/8] Copy payload files"
 cp "${ROOT_DIR}/backend/target/release/cpms-backend" "${PAYLOAD_DIR}/bin/cpms-backend"
 cp "${ROOT_DIR}/deploy/linux/backup_to_storage.sh" "${PAYLOAD_DIR}/bin/backup_to_storage.sh"
 cp "${ROOT_DIR}/backend/db/schema.sql" "${PAYLOAD_DIR}/db/schema.sql"
@@ -29,21 +111,30 @@ cp -R "${ROOT_DIR}/frontend/dist/." "${PAYLOAD_DIR}/frontend/"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backend.service" "${PAYLOAD_DIR}/systemd/cpms-backend.service"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backup.service" "${PAYLOAD_DIR}/systemd/cpms-backup.service"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backup.timer" "${PAYLOAD_DIR}/systemd/cpms-backup.timer"
+cp "${ROOT_DIR}/deploy/linux/nginx/cpms.conf" "${PAYLOAD_DIR}/nginx/cpms.conf"
+cp "${ROOT_DIR}/deploy/linux/certs/generate_cpms_certs.sh" "${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
 cp "${ROOT_DIR}/deploy/linux/install_host.sh" "${OUT_DIR}/install_host.sh"
 cp "${ROOT_DIR}/deploy/linux/uninstall_host.sh" "${OUT_DIR}/uninstall_host.sh"
 cp "${ROOT_DIR}/deploy/linux/install_backup_timer.sh" "${OUT_DIR}/install_backup_timer.sh"
 
+echo "[6/8] Normalize executable bits"
 chmod +x \
   "${OUT_DIR}/install_host.sh" \
   "${OUT_DIR}/uninstall_host.sh" \
   "${OUT_DIR}/install_backup_timer.sh" \
   "${PAYLOAD_DIR}/bin/cpms-backend" \
-  "${PAYLOAD_DIR}/bin/backup_to_storage.sh"
+  "${PAYLOAD_DIR}/bin/backup_to_storage.sh" \
+  "${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
 
-echo "[5/5] Create archive"
-tar -C "${ROOT_DIR}/dist" -czf "${ROOT_DIR}/dist/cpms-host-linux-x64.tar.gz" "cpms-host-linux-x64"
+echo "[7/8] Validate payload"
+test -f "${PAYLOAD_DIR}/frontend/index.html"
+test -f "${PAYLOAD_DIR}/nginx/cpms.conf"
+test -f "${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
+compgen -G "${PAYLOAD_DIR}/debs/*.deb" >/dev/null
+
+create_run_installer
 
 echo
 echo "Done."
 echo "Installer directory: ${OUT_DIR}"
-echo "Installer archive: ${ROOT_DIR}/dist/cpms-host-linux-x64.tar.gz"
+echo "Installer package: ${RUN_FILE}"

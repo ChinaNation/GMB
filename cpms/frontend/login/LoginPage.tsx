@@ -3,13 +3,12 @@
 // 右侧摄像头扫码 → 扫描手机签名回执 → 完成登录
 
 import { useState, useEffect, useRef } from 'react';
-import { ScanIcon } from '../components/ScanIcon';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../authz/AuthProvider';
 import * as api from './api';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
-import { startCameraScanner } from '../qr/cameraScanner';
+import CameraQrScanner from '../qr/CameraQrScanner';
 import type { SessionUser } from '../common/types';
 
 export default function LoginPage() {
@@ -25,20 +24,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
-  const [scannerReady, setScannerReady] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scanCleanupRef = useRef<(() => void) | null>(null);
   const pollingRef = useRef<number | null>(null);
   const loggedInRef = useRef(false);
-
-  const stopScanner = () => {
-    if (scanCleanupRef.current) {
-      scanCleanupRef.current();
-      scanCleanupRef.current = null;
-    }
-    setScannerReady(false);
-  };
 
   const stopPolling = () => {
     if (pollingRef.current !== null) {
@@ -51,14 +39,13 @@ export default function LoginPage() {
     if (loggedInRef.current) return;
     loggedInRef.current = true;
     stopPolling();
-    stopScanner();
     setScannerActive(false);
     login(user);
     navigate('/admin');
   };
 
   useEffect(() => {
-    return () => { stopScanner(); stopPolling(); };
+    return () => { stopPolling(); };
   }, []);
 
   const handleGenerateQr = async () => {
@@ -90,23 +77,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  // 摄像头扫码
-  useEffect(() => {
-    if (!scannerActive || !qrChallenge || !videoRef.current) {
-      stopScanner();
-      return;
-    }
-    const video = videoRef.current;
-    const cleanup = startCameraScanner(
-      video,
-      (raw) => { handleReceiptScanned(raw); },
-      () => { setScannerReady(true); },
-      (msg) => { setError(msg); setScannerActive(false); },
-    );
-    scanCleanupRef.current = cleanup;
-    return () => stopScanner();
-  }, [scannerActive, qrChallenge]);
 
   const handleReceiptScanned = async (raw: string) => {
     if (!qrChallenge) return;
@@ -222,47 +192,23 @@ export default function LoginPage() {
             {/* 右侧：扫码窗口 */}
             <div style={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 12 }}>扫码窗口</div>
-              <div style={{
-                width: 260, height: 260,
-                background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-                borderRadius: 16,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                border: '2px solid #334155',
-              }}>
-                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-                {!scannerReady && (
-                  <div style={{
-                    position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center', gap: 8,
-                  }}>
-                    <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
-                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                      {scannerActive ? '摄像头初始化中...' : '等待开启摄像头'}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                开启摄像头扫描签名回执二维码
-              </div>
-              <button
-                className="btn btn--ghost"
-                style={{ width: 200, marginTop: 10 }}
-                onClick={() => {
-                  if (!qrChallenge) {
-                    setError('请先生成登录二维码');
-                    return;
+              <CameraQrScanner
+                active={scannerActive}
+                onActiveChange={(active) => {
+                  if (active) {
+                    if (!qrChallenge) {
+                      setError('请先生成登录二维码');
+                      return;
+                    }
+                    setError('');
                   }
-                  setScannerActive(v => !v);
+                  setScannerActive(active);
                 }}
-                disabled={scanSubmitting}
-              >
-                {scannerActive ? '停止扫码' : '开启扫码'}
-              </button>
+                onDetected={handleReceiptScanned}
+                onError={setError}
+                hint="开启摄像头扫描签名回执二维码"
+                busy={scanSubmitting}
+              />
             </div>
           </div>
         </div>

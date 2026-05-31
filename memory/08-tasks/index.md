@@ -56,9 +56,7 @@
 
 ## done
 
-- `memory/08-tasks/done/20260531-sfid-signature-modal-stack.md`
-- `memory/08-tasks/done/20260531-统一签名协议复查残留修复.md`
-- `memory/08-tasks/done/20260531-统一签名协议整改.md`
+- `memory/08-tasks/done/20260531-cpms-ubuntu24-offline-installer.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -391,6 +389,13 @@
 - `memory/08-tasks/done/20260530-cpms-dangan-cursor-pagination.md`
 - `memory/08-tasks/done/20260530-cpms-migration-baseline-cleanup.md`
 - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
+- `memory/08-tasks/done/20260531-092106-统一-sfid-管理端权限命名为-login-state-passkey-passkey-challenge-新增-admins-operation-auth-调整删除机构账户-文档为通.md`
+- `memory/08-tasks/done/20260531-cpms档案码生成完整性校验.md`
+- `memory/08-tasks/done/20260531-cpms日期输入统一组件.md`
 - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
 - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
 - `memory/08-tasks/done/20260531-sfid-permission-closeout.md`
+- `memory/08-tasks/done/20260531-sfid-signature-modal-stack.md`
+- `memory/08-tasks/done/20260531-sfid-signature-scan-loading.md`
+- `memory/08-tasks/done/20260531-统一签名协议复查残留修复.md`
+- `memory/08-tasks/done/20260531-统一签名协议整改.md`
