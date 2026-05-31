@@ -13,7 +13,7 @@
   - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
   - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
-  - `memory/08-tasks/open/20260531-sfid-admin-model-no-status.md`
+  - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
 
 ## 当前边界
 
@@ -47,7 +47,7 @@ sfid/backend/
 ├── qr/                        # QR 协议辅助
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
 ├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
-├── admins/                    # 省/市管理员治理和安全分级,含 Passkey / 冷钱包 grant
+├── admins/                    # 省/市管理员治理和安全分级,含 actions.rs / passkeys.rs / 冷钱包 grant
 ├── store_shards/              # 进程内省分片缓存,不再持久化到旧 store_shards 表
 ├── db/                        # 数据库迁移和 seed,不是 Rust 源码模块
 ├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
@@ -63,19 +63,21 @@ sfid/backend/
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
 - CPMS 系统管理归 `sfid/backend/cpms/`,不得放入管理员目录。
 - 后端不再维护旧省级/市级管理员双目录;
-  省级管理员名册、市级管理员列表和管理员治理写入口统一归 `admins/`。
+  省级管理员列表、市级管理员列表和管理员治理写入口统一归 `admins/`。
 - 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,SFID 元信息 DTO 归
   `sfid/model.rs`,不得塞回 `models/`。
 - `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或 pubkey 工具。
 - 省管理员治理写操作不得直接在 `operators.rs` 或 `catalog.rs` 暴露写 handler;
-  必须统一走 `admins/actions.rs` 的 Passkey + `WUMIN_QR_V1` 冷钱包签名挑战。
+  必须统一走 `admins/actions.rs` 的治理动作入口,Passkey 注册与 WebAuthn 工具归
+  `admins/passkeys.rs`。
 - 市级管理员地址属于身份根,`UPDATE_OPERATOR` 不接收 `admin_pubkey`;修改市级管理员
   只允许调整管理员姓名。
-- 省级管理员不再区分主管理员/备用管理员;新增、编辑、删除省级管理员统一走
+- 省级管理员采用同级模型;新增、编辑、删除省级管理员统一走
   `CREATE_SHENG_ADMIN / UPDATE_SHENG_ADMIN / DELETE_SHENG_ADMIN` 安全动作。
 - 管理员不存在停用状态字段;删除管理员时必须同步清理会话、Passkey、短期挑战和安全 grant。
-- 一般业务写操作必须先在 `admins/actions.rs` 完成 Passkey 验证并换取一次性
-  `x-sfid-security-grant`;重要业务写操作必须再叠加当前管理员冷钱包 sr25519 签名。
+- 一般业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
+  提供 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;重要业务写操作必须再叠加
+  当前管理员冷钱包 sr25519 签名。
 - CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归省级管理员;
   市级管理员不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。

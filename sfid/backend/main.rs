@@ -864,15 +864,15 @@ fn main() {
             .route("/api/v1/admin/operators", get(admins::list_operators))
             .route(
                 "/api/v1/admin/passkeys/register/start",
-                post(admins::actions::start_passkey_registration),
+                post(admins::passkeys::start_passkey_registration),
             )
             .route(
                 "/api/v1/admin/passkeys/register/attest",
-                post(admins::actions::attest_passkey_registration),
+                post(admins::passkeys::attest_passkey_registration),
             )
             .route(
                 "/api/v1/admin/passkeys/register/complete",
-                post(admins::actions::complete_passkey_registration),
+                post(admins::passkeys::complete_passkey_registration),
             )
             .route(
                 "/api/v1/admin/actions/prepare",
@@ -1102,7 +1102,7 @@ fn main() {
             .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
         info!("chain genesis hash initialized");
 
-        // 中文注释:省级管理员不再区分主/备;43 个初始省级管理员只作为
+        // 中文注释:省级管理员采用同级模型;43 个初始省级管理员只作为
         // 不可删除安全根,新增省级管理员走 admins 安全动作落本地管理表。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。

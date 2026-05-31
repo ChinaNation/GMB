@@ -40,7 +40,7 @@
 ### 4.1 管理员类型
 - 省级管理员（`SHENG_ADMIN`）：
 1. 每省有 1 个代码内置初始省级管理员，初始管理员只承担不可删除安全根职责。
-2. 每省可新增 N 个省级管理员，不再区分主管理员、备用省级管理员。
+2. 每省可新增 N 个省级管理员，所有省级管理员采用同级模型。
 3. 查看市级管理员列表只需要有效登录态。
 4. 新增、编辑、删除市级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
 5. 新增、编辑省级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
@@ -173,7 +173,8 @@
 - `backend/citizens/binding.rs`：公民电子护照绑定 challenge 与 wuminapp 签名验签。
 - `backend/citizens/chain_vote.rs`：公民投票凭证。
 - `backend/citizens/chain_joint_vote.rs`：联合投票人口快照凭证。
-- `backend/admins/actions.rs`：省/市管理员治理写操作的 Passkey + 冷钱包挑战入口。
+- `backend/admins/passkeys.rs`：管理员 Passkey 注册、WebAuthn 配置、凭据使用记录和短期挑战清理。
+- `backend/admins/actions.rs`：省/市管理员治理写操作 prepare/commit 与一次性安全 grant 入口。
 - `backend/app_core/chain_*.rs`：跨业务链底层工具。
 - `backend/sfid/admin.rs`：管理端 SFID 生成、元数据与城市列表查询业务。
 - `backend/scope/*.rs`：省域隔离、审计范围和 CPMS 站点范围判定。
@@ -233,7 +234,7 @@
 - 市级管理员接口口径补充：`GET /api/v1/admin/operators` 列表返回 `admin_name` 与 `created_by_name`；新增、编辑、删除不再暴露直接 CRUD 路由，统一通过 `/api/v1/admin/actions/prepare` 和 `/api/v1/admin/actions/commit`。
 - 省级管理员列表接口：`GET /api/v1/admin/sheng-admins`。
 - 省级管理员治理动作：`CREATE_SHENG_ADMIN / UPDATE_SHENG_ADMIN / DELETE_SHENG_ADMIN`。
-- Passkey 注册接口：`POST /api/v1/admin/passkeys/register/start`、`/attest`、`/complete`。
+- Passkey 注册接口：`POST /api/v1/admin/passkeys/register/start`、`/attest`、`/complete`，由 `admins::passkeys` 承接。
 - 管理员治理写操作接口：`POST /api/v1/admin/actions/prepare` 生成 WebAuthn assertion 选项和 `WUMIN_QR_V1 / sign_request`；`POST /api/v1/admin/actions/commit` 同时校验 Passkey assertion 与 sr25519 签名回执后落库。
 
 ### 9.6 省级管理员基线与变更策略（当前）

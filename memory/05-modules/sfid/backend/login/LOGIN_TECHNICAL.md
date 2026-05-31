@@ -78,8 +78,9 @@ sfid/backend/login/
 - `require_admin_session_middleware`:Axum 路由层会话校验中间件。
 
 写权限不再由登录守卫表达。一般写操作必须先通过 `admins/actions.rs`
-完成 Passkey 验证并换取一次性 `x-sfid-security-grant`;重要写操作必须在
-Passkey 基础上再完成当前管理员冷钱包 sr25519 签名。
+发起安全动作,并由 `admins/passkeys.rs` 完成 WebAuthn 验证后换取一次性
+`x-sfid-security-grant`;重要写操作必须在 Passkey 基础上再完成当前管理员
+冷钱包 sr25519 签名。
 
 ## 7. 边界规则
 
@@ -88,4 +89,5 @@ Passkey 基础上再完成当前管理员冷钱包 sr25519 签名。
   `require_sheng_admin` 获取认证上下文。
 - 角色范围过滤放在 `scope`,不放回 `login`。
 - 省/市管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
-- 管理员高危写操作的 Passkey 与冷钱包挑战归 `admins/actions.rs`,不得放回登录目录。
+- 管理员高危写操作归 `admins/actions.rs`,Passkey 注册和 WebAuthn 工具归
+  `admins/passkeys.rs`,不得放回登录目录。

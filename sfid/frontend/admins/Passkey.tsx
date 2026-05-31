@@ -16,7 +16,7 @@ import {
   type PasskeyAttestOutput,
 } from './admin_security_api';
 
-export interface AdminPasskeyToolProps {
+export interface PasskeyProps {
   buttonText?: string;
   disabled?: boolean;
   size?: ButtonProps['size'];
@@ -24,13 +24,13 @@ export interface AdminPasskeyToolProps {
   onCompleted?: () => void;
 }
 
-export function AdminPasskeyTool({
+export function Passkey({
   buttonText = '更新密钥',
   disabled = false,
   size,
   type,
   onCompleted,
-}: AdminPasskeyToolProps) {
+}: PasskeyProps) {
   const { auth, setAuth } = useAuth();
   const [passkeyAttest, setPasskeyAttest] = useState<PasskeyAttestOutput | null>(null);
   const [loading, setLoading] = useState(false);

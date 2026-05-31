@@ -1,7 +1,7 @@
 //! 中文注释:管理员角色 / 实体 + 管理员列表与维护接口 DTO。
 //!
 //! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
-//! 省级管理员不再区分主/备;代码内置初始省级管理员只承担不可删除安全根职责。
+//! 省级管理员采用同级模型;代码内置初始省级管理员只承担不可删除安全根职责。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
