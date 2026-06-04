@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-06-03
+- 最后更新:2026-06-04
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
@@ -23,6 +23,7 @@
   - `memory/08-tasks/open/20260601-sfid-official-institutions.md`
   - `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
   - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
+  - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
 
 ## 当前边界
 
@@ -37,16 +38,16 @@ sfid/frontend/
 ├── vite-env.d.ts
 ├── accounts/                  # 机构账户组件
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
+├── china/                     # 行政区元数据 API 和确定性列表/详情缓存
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
-├── common/                    # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗和机构共享表单
+├── core/                      # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗、QR 协议和机构共享表单
 │   └── institution/           # 公权/私权共用机构新增表单,不承载业务 API
+│   └── qr/                    # WUMIN_QR_V1 前端解析器
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── docs/                      # 机构资料库前端出口
 ├── gov/                       # 公权机构页面入口,前后端统一使用 gov 命名
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
 ├── private/                   # 私权机构页面入口
-├── qr/
-├── sfid/                      # SFID 元数据 API,如省市/A3/机构类型选项
 ├── subjects/                  # 身份主体共享类型、字段标签和链端公开查询封装
 ├── admins/                    # 省/市管理员页面、Passkey.tsx、operators_api.ts、admin_security_api.ts
 ├── theme/
@@ -60,7 +61,8 @@ sfid/frontend/
 - `utils/http.ts` 收到 `401` 必须抛 `AuthExpiredError` 并触发全局退出;其他业务错误抛
   `ApiError`,页面按 `errorCode` 展示,不得返回 `undefined as T`。
 - 登录/会话接口放 `auth/api.ts`;登录态和角色类型放 `auth/types.ts`。
-- SFID 元数据接口放 `sfid/api.ts`,用于省份、市、A3、机构类型等跨页面选择项。
+- 行政区和编码元数据接口放 `china/api.ts`;省市清单走 `/api/v1/admin/china/cities`,
+  编码选项走 `/api/v1/admin/number/meta`。
 - `subjects/api.ts` 只保留跨公权/私权共用的数据类型和公共边界;业务 CRUD API
   分别放 `gov/api.ts`、`private/api.ts`、`accounts/api.ts`、`docs/api.ts`。
   机构与区块链交互继续放 `subjects/chain_duoqian_info.ts`。
@@ -73,12 +75,14 @@ sfid/frontend/
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 省/市管理员本地后台接口统一放 `admins/`;省管理员目录接口放 `admins/api.ts`,
   市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
-- `common/WuminSignaturePanel.tsx` 与 `common/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
+- `core/WuminSignaturePanel.tsx` 与 `core/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
-- `common/institution/CreateInstitutionForm.tsx` 是公权/私权新增弹窗唯一表单实现;
+- `core/institution/CreateInstitutionForm.tsx` 是公权/私权新增弹窗唯一表单实现;
   `gov/GovCreateModal.tsx` 和 `private/PrivateCreateModal.tsx` 只做本模块 API 注入,不得再复制表单逻辑。
-- `common/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
+- `core/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 冷钱包签名弹窗固定在最高安全层。
+- `core/qr/wuminQr.ts` 是前端 WUMIN_QR_V1 envelope 解析唯一入口;不得恢复独立
+  `frontend/qr/` 目录。
 - 管理端权限类型统一为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`;前端类型必须与后端
   `admins/operation_auth.rs` 对齐,不得恢复二级权限命名。
 - `PASSKEY` 业务写操作不得直接裸调用 CRUD 端点;必须先通过
@@ -116,11 +120,11 @@ sfid/frontend/
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
-- `sfid/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
-- `common/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
+- `china/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
+- `core/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
 - `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 只承载公安局和公权机构确定性列表,进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
 - 公权机构 tab 不再提供普通公权机构新增入口；右上角按钮文案固定为“新增”。
-- `common/institution/CreateInstitutionForm.tsx` 中公权新增只允许 `GFR/JY`,填写的是学校名称,不得出现所属学校 SFID。
+- `core/institution/CreateInstitutionForm.tsx` 中公权新增只允许 `GFR/JY`,填写的是学校名称,不得出现所属学校 SFID。
 - 公权机构和私权机构新增选项中 `JY` 文案均显示为“教育委员会 (JY)”；选择 `JY` 时名称字段标签显示为“学校名称”。
 - 机构链上状态前端只保留“未注册 / 已注册 / 已注销”,不得出现第四状态筛选或文案。
 
@@ -190,15 +194,14 @@ CPMS 系统管理也不列入链交互表,归 `cpms/`。
   "vite-env.d.ts",
   "auth",
   "accounts",
+  "china",
   "citizens",
-  "common",
+  "core",
   "cpms",
   "docs",
   "gov",
   "hooks",
   "private",
-  "qr",
-  "sfid",
   "subjects",
   "admins",
   "theme",

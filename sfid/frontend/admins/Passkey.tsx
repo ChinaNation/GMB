@@ -7,7 +7,7 @@ import type { ButtonProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../common/WuminSignatureModal';
+import { WuminSignatureModal } from '../core/WuminSignatureModal';
 import {
   confirmPasskeyRegistration,
   completePasskeyRegistration,

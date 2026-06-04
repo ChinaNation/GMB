@@ -83,7 +83,7 @@
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
 | `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
-| `sfid/backend/sfid_number/` | SFID 编码协议 | sfid-number | SFID 后端身份号码格式、A3、机构码、分类、生成和校验唯一源码目录 |
+| `sfid/backend/number/` | 身份 ID 编码协议 | number | SFID 后端身份号码格式、A3、机构码、分类、生成和校验唯一源码目录 |
 | `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `wumin/` | 冷钱包 | wumin | 离线签名、扫码识别和冷钱包 UI |
 | `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
@@ -260,27 +260,26 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `sfid/backend/app_core/` | 应用核心 | app-core | 后端启动、路由和跨模块核心能力 |
+| `sfid/backend/core/` | 应用核心 | core | 后端启动、路由、HTTP 响应、HTTP 安全、跨模块核心能力和通用链工具 |
 | `sfid/backend/citizens/` | 公民 | citizens | 公民身份与资料管理 |
 | `sfid/backend/cpms/` | CPMS 对接 | cpms | SFID 与 CPMS 对接能力 |
 | `sfid/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
-| `sfid/backend/db/` | 数据库 | db | 数据库连接和迁移边界 |
 | `sfid/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
 | `sfid/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
 | `sfid/backend/private/` | 私权机构 | private | 学校、盈利性私权机构、非盈利私权机构和私权新增接口 |
 | `sfid/backend/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
 | `sfid/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
 | `sfid/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
-| `sfid/backend/login/` | 登录 | login | 管理端登录和认证 |
-| `sfid/backend/models/` | 数据模型 | models | 后端共享数据模型 |
-| `sfid/backend/qr/` | QR | qr | 后端二维码生成和解析 |
+| `sfid/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
+| `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 省级管理员、市级管理员和管理员列表 DTO |
+| `sfid/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
+| `sfid/backend/core/qr/` | QR | core-qr | 后端 WUMIN_QR_V1 协议辅助和统一 sign_request 构造 |
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
-| `sfid/backend/scripts/` | 脚本 | scripts | 后端维护脚本 |
-| `sfid/backend/sfid_number/` | SFID 编码协议 | sfid-number | 身份号码格式、A3、机构码、分类、生成和校验规则 |
+| `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、A3、机构码、分类、生成和校验规则 |
 | `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
 | `sfid/backend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战写操作 |
 | `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
-| `sfid/backend/store_shards/` | 存储分片 | store-shards | 存储分片相关能力 |
+| `sfid/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
 | `sfid/backend/tests/` | 测试 | tests | 后端测试 |
 
 ### SFID 前端目录
@@ -290,7 +289,7 @@
 | `sfid/frontend/assets/` | 静态资产 | assets | 图片、字体等前端静态资产 |
 | `sfid/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
 | `sfid/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
-| `sfid/frontend/common/` | 通用组件 | common | 前端通用组件和共享 UI |
+| `sfid/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、冷钱包签名面板和 QR 工具 |
 | `sfid/frontend/cpms/` | CPMS 对接 | cpms | CPMS 对接界面 |
 | `sfid/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
 | `sfid/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
@@ -298,8 +297,8 @@
 | `sfid/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
 | `sfid/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
 | `sfid/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
-| `sfid/frontend/qr/` | QR | qr | 二维码界面和工具 |
-| `sfid/frontend/sfid/` | SFID 核心 | sfid-core | SFID 核心展示和工具 |
+| `sfid/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 WUMIN_QR_V1 工具 |
+| `sfid/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
 | `sfid/frontend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战前端流程 |
 | `sfid/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
 | `sfid/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |

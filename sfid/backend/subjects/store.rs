@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use crate::models::Store;
+use crate::store::Store;
 use crate::subjects::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
 
 // ─── 机构 ────────────────────────────────────────────────────────

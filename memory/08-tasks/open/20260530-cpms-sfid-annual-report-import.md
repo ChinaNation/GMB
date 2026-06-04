@@ -10,7 +10,7 @@ CPMS 年度报告以 CPMS 为公民档案号、钱包地址、公民状态、投
 - `cpms/backend/db`：收口年度报告计数字段命名，不保留旧导出字段作为当前基准。
 - `cpms/frontend/super_admin`：同步年度报告前端类型字段。
 - `sfid/backend/citizens`：新增年度报告导入 handler，覆盖同档案号绑定状态并处理硬删除释放。
-- `sfid/backend/models`：增加导入幂等记录持久化字段。
+- `sfid/backend/store`：在所属 Store 模型中增加导入幂等记录持久化字段。
 - `sfid/backend/main.rs`：挂载 SFID 导入年度报告 API，移除旧 CPMS 状态扫码路由残留。
 - `sfid/frontend/citizens`：在公民身份列表增加导入年度报告按钮和导入弹窗，清理旧状态扫码残留。
 - `memory/05-modules/cpms`：更新 CPMS 年度报告导出协议和边界文档。

@@ -1,11 +1,12 @@
 # SFID 后端链交互归属规则
 
-- 最后更新:2026-05-31
+- 最后更新:2026-06-04
 - 任务卡:
   - `memory/08-tasks/open/20260502-sfid-chain目录归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-sfid-institutions粗粒度整合.md`
   - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
+  - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
 
 ## 0. 结论
 
@@ -22,8 +23,8 @@ SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 ch
 | 机构查询、注册信息凭证、账户列表、清算行候选 DTO 与 handler | `sfid/backend/subjects/chain_duoqian_info.rs` |
 | 公民投票凭证 | `sfid/backend/citizens/chain_vote.rs` |
 | 联合投票人口快照凭证 | `sfid/backend/citizens/chain_joint_vote.rs` |
-| 通用链凭证/SCALE/genesis hash | `sfid/backend/app_core/chain_runtime.rs` |
-| 通用链 RPC URL | `sfid/backend/app_core/chain_url.rs` |
+| 通用链凭证/SCALE/genesis hash | `sfid/backend/core/chain_runtime.rs` |
+| 通用链 RPC URL | `sfid/backend/core/chain_url.rs` |
 
 管理员模块当前没有活跃 `chain_*.rs` 文件。省级管理员只负责管理员治理,
 写操作统一走 `admins/actions.rs` 的安全动作入口与 `admins/passkeys.rs` 的
@@ -41,7 +42,7 @@ CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理归
   - 主体公开查询 -> `subjects/chain_*`
   - 公民 -> `citizens/chain_*`
   - 管理员治理链交互 -> `admins/chain_*`
-- 只有跨业务复用的链底层工具允许放在 `app_core/chain_*`。
+- 只有跨业务复用的链底层工具允许放在 `core/chain_*`。
 - `main.rs` 路由只能引用业务模块下的 `chain_*` 文件,不得引用独立 `chain::*`。
 
 ## 3. 机构注册信息凭证

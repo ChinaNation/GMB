@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use webauthn_rs::prelude::{PublicKeyCredential, RequestChallengeResponse};
 
+use crate::admins::login::AdminAuthContext;
 use crate::admins::operation_auth::{
     ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
 };
@@ -30,10 +31,9 @@ use crate::admins::passkeys::{
     AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
 };
 use crate::admins::province_admins::sheng_admin_province;
+use crate::admins::security_model::{AdminActionChallenge, AdminSecurityGrant};
+use crate::core::qr::{build_sign_request, display_account, display_field as field};
 use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
-use crate::login::AdminAuthContext;
-use crate::models::{AdminActionChallenge, AdminSecurityGrant};
-use crate::qr::{build_sign_request, display_account, display_field as field};
 use crate::*;
 
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
@@ -192,7 +192,7 @@ pub(crate) async fn prepare_admin_action(
         if preview.auth_type == AdminOperationAuth::PasskeyChallenge {
             let payload_text = signed_payload_text(AdminSignedPayload {
                 domain: "sfid_admin_governance",
-                qr_proto: crate::qr::WUMIN_QR_V1,
+                qr_proto: crate::core::qr::WUMIN_QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
                 actor_pubkey: ctx.admin_pubkey.as_str(),

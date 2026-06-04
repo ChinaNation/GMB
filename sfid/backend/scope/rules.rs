@@ -7,8 +7,8 @@
 //! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
 //! 见 `feedback_sfid_three_roles_naming.md` 的角色命名铁律。
 
-use crate::login::AdminAuthContext;
-use crate::models::AdminRole;
+use crate::admins::login::AdminAuthContext;
+use crate::admins::model::AdminRole;
 
 /// 登录管理员可见的数据范围。
 #[derive(Debug, Clone)]

@@ -18,8 +18,8 @@ SFID
 - memory/07-ai/module-checklists/sfid.md
 - memory/07-ai/module-definition-of-done/sfid.md
 - memory/05-modules/sfid/backend/subjects/SUBJECTS_TECHNICAL.md
-- memory/05-modules/sfid/backend/sfid_number/SFID_NUMBER_TECHNICAL.md
-- memory/05-modules/sfid/backend/models/MODELS_TECHNICAL.md
+- memory/05-modules/sfid/backend/number/NUMBER_TECHNICAL.md
+- memory/05-modules/sfid/backend/store/STORE_TECHNICAL.md
 - memory/05-modules/sfid/frontend/FRONTEND_LAYOUT.md
 
 必须遵守：
@@ -58,9 +58,9 @@ SFID
 - sfid/backend/gov/：调整公权自动目录、公安局对账和确定性列表接口，涉及代码、中文注释和残留清理。
 - sfid/backend/private/：调整学校机构创建和私权机构创建规则，涉及代码、中文注释和残留清理。
 - sfid/backend/subjects/：调整机构共享模型、状态、详情和链端公开查询，涉及代码、中文注释和残留清理。
-- sfid/backend/sfid_number/：调整 SFID 生成规则和机构选项说明，允许教育委员会 `JY` 对应学校机构，涉及代码和中文注释。
-- sfid/backend/models/：如共享 Store 序列化字段需要补充，限制在现有模型边界内修改。
-- sfid/frontend/gov/、sfid/frontend/private/、sfid/frontend/common/institution/：调整新增入口、选项、状态文案、公共表单和 API 类型，涉及前端代码。
+- sfid/backend/number/：调整 SFID 生成规则和机构选项说明，允许教育委员会 `JY` 对应学校机构，涉及代码和中文注释。
+- sfid/backend/store/：如共享 Store 序列化字段需要补充，限制在现有模型边界内修改。
+- sfid/frontend/gov/、sfid/frontend/private/、sfid/frontend/core/institution/：调整新增入口、选项、状态文案、公共表单和 API 类型，涉及前端代码。
 - memory/05-modules/sfid/：同步技术文档，涉及文档。
 
 验收标准：

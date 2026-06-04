@@ -29,4 +29,4 @@ SFID 侧 CPMS 两码方案已经改为直接使用公安局机构 `sfid_number` 
 
 - `memory/05-modules/sfid/SFID-CPMS-QR-v1.md`
 - `sfid/backend/cpms/handler.rs::generate_cpms_install_qr`
-- `sfid/backend/app_core/runtime_ops.rs::cleanup_orphan_cpms_sites`
+- `sfid/backend/core/runtime_ops.rs::cleanup_orphan_cpms_sites`

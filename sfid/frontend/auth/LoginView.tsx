@@ -8,7 +8,7 @@ import { QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
-import { WuminSignaturePanel } from '../common/WuminSignaturePanel';
+import { WuminSignaturePanel } from '../core/WuminSignaturePanel';
 import type { AdminAuth } from './types';
 import type { AdminQrChallengeResult } from './api';
 import {

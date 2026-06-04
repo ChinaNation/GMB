@@ -14,9 +14,9 @@ use sha2::Digest;
 use uuid::Uuid;
 
 use crate::admins::actions::require_admin_security_grant;
+use crate::admins::login::AdminAuthContext;
 use crate::admins::operation_auth::AdminActionType;
 use crate::cpms::CpmsArchiveCodePayload;
-use crate::login::AdminAuthContext;
 use crate::*;
 
 const BIND_CHALLENGE_TTL_SECONDS: i64 = 300;
@@ -292,7 +292,7 @@ pub(crate) async fn citizen_bind(
         );
     }
 
-    let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&wallet_pubkey) {
+    let pubkey_bytes = match crate::admins::login::parse_sr25519_pubkey_bytes(&wallet_pubkey) {
         Some(v) => v,
         None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid wallet_pubkey"),
     };
@@ -694,7 +694,7 @@ fn build_citizen_bind_sign_request(
         "确认新增身份ID绑定"
     };
     let sign_request = serde_json::json!({
-        "proto": crate::qr::WUMIN_QR_V1,
+        "proto": crate::core::qr::WUMIN_QR_V1,
         "kind": "sign_request",
         "id": challenge_id,
         "issued_at": issued_at.timestamp(),
@@ -731,18 +731,17 @@ fn generate_unique_citizen_sfid(
         } else {
             format!("{}#{retry}", wallet_pubkey)
         };
-        let candidate =
-            match crate::sfid_number::generate_sfid_code(crate::sfid_number::GenerateSfidInput {
-                account_pubkey: attempt_pubkey.as_str(),
-                a3: "GMR",
-                p1: "1",
-                province: province_name,
-                city: "省辖市",
-                institution: "ZG",
-            }) {
-                Ok(v) => v,
-                Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
-            };
+        let candidate = match crate::number::generate_sfid_code(crate::number::GenerateSfidInput {
+            account_pubkey: attempt_pubkey.as_str(),
+            a3: "GMR",
+            p1: "1",
+            province: province_name,
+            city: "省辖市",
+            institution: "ZG",
+        }) {
+            Ok(v) => v,
+            Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
+        };
         if !store.citizen_id_by_sfid_code.contains_key(&candidate) {
             return Ok(candidate);
         }

@@ -19,11 +19,11 @@ use webauthn_rs::prelude::{
     RegisterPublicKeyCredential, Url, Webauthn, WebauthnBuilder,
 };
 
-use crate::crypto::pubkey::same_admin_pubkey;
-use crate::models::{
+use crate::admins::security_model::{
     AdminPasskeyCredential, AdminPasskeyRegistrationChallenge, AdminPasskeyStatus,
 };
-use crate::qr::{build_sign_request, display_account, display_field as field};
+use crate::core::qr::{build_sign_request, display_account, display_field as field};
+use crate::crypto::pubkey::same_admin_pubkey;
 use crate::*;
 
 pub(crate) const ADMIN_ACTION_TTL_SECONDS: i64 = 300;
@@ -132,7 +132,7 @@ pub(crate) async fn start_passkey_registration(
     let province = ctx.admin_province.clone().unwrap_or_default();
     let payload_text = signed_payload_text(AdminSignedPayload {
         domain: "sfid_admin_governance",
-        qr_proto: crate::qr::WUMIN_QR_V1,
+        qr_proto: crate::core::qr::WUMIN_QR_V1,
         action_id: registration_id.as_str(),
         action_type: "PASSKEY_REGISTER",
         actor_pubkey: ctx.admin_pubkey.as_str(),
@@ -647,7 +647,7 @@ pub(crate) fn verify_cold_wallet_signature(
             "payload hash mismatch",
         ));
     }
-    if !crate::login::verify_admin_signature(signer_pubkey, payload_text, signature) {
+    if !crate::admins::login::verify_admin_signature(signer_pubkey, payload_text, signature) {
         return Err(api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             2004,

@@ -16,7 +16,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::china::provinces;
-use crate::models::ApiResponse;
+use crate::core::response::ApiResponse;
 use crate::subjects::http::{
     resolve_province_from_sfid_number, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
 };
@@ -37,7 +37,7 @@ pub(crate) struct AppInstitutionDetail {
     pub(crate) sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) institution_name: Option<String>,
-    pub(crate) category: crate::sfid_number::InstitutionCategory,
+    pub(crate) category: crate::number::InstitutionCategory,
     pub(crate) a3: String,
     pub(crate) p1: String,
     pub(crate) province: String,
@@ -66,7 +66,7 @@ pub(crate) struct AppInstitutionSearchQuery {
 pub(crate) struct AppInstitutionSearchRow {
     pub(crate) sfid_number: String,
     pub(crate) institution_name: Option<String>,
-    pub(crate) category: crate::sfid_number::InstitutionCategory,
+    pub(crate) category: crate::number::InstitutionCategory,
     pub(crate) a3: String,
     pub(crate) province: String,
     pub(crate) city: String,

@@ -70,7 +70,7 @@ sfid/backend/cpms/
 ## 4. 归属说明
 
 - `CpmsSiteKeys` 等数据结构归 `cpms/model.rs`。
-- CPMS 授权主数据写入 `store_cpms` 模块快照表；`store_shards/` 只保留进程内省分片缓存。
+- CPMS 授权主数据写入 `store_cpms` 模块快照表；`store/` 只保留进程内省分片缓存。
 - SFID 启动时必须把 `store_cpms.cpms_site_keys` 恢复到 `sharded_store`，否则 ARCHIVE
   验真无法扫描到授权记录，会误报 `geo_seal cannot be decrypted`。
 - CPMS 本机公钥绑定状态不得只写 `sharded_store`；任何 `cpms_pubkey_hash / status /

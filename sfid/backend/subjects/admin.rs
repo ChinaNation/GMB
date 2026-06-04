@@ -20,14 +20,14 @@ use axum::{
 use serde::Serialize;
 
 use crate::admins::actions::require_admin_security_grant;
+use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
 use crate::china::provinces;
-use crate::login::require_admin_any;
-use crate::models::ApiResponse;
+use crate::core::response::ApiResponse;
 use crate::scope::get_visible_scope;
 use crate::subjects::http::{
-    append_inst_audit_log_best_effort, resolve_created_by, resolve_province_from_sfid_number,
-    service_error_to_response,
+    append_inst_audit_log_best_effort, cache_institution_detail_best_effort, resolve_created_by,
+    resolve_province_from_sfid_number, service_error_to_response,
 };
 use crate::subjects::model::{InstitutionDetailOutput, MultisigAccount, UpdateInstitutionInput};
 use crate::subjects::service::{
@@ -150,7 +150,20 @@ pub(crate) async fn update_institution(
         .await;
     let existing = match read_result {
         Ok(Some(v)) => v,
-        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+        Ok(None) => match crate::subjects::http::read_institution_with_accounts_from_store(
+            &state,
+            &sfid_number,
+        ) {
+            Ok(Some((inst, accounts))) => {
+                cache_institution_detail_best_effort(&state, &inst, &accounts).await;
+                inst
+            }
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+            Err(e) => {
+                tracing::warn!(sfid = %sfid_number, error = %e, "institution fallback read failed");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+            }
+        },
         Err(e) => {
             return api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -456,9 +469,22 @@ pub(crate) async fn get_institution(
             )
         }
     };
-    let inst = match inst_opt {
-        Some(i) => i,
-        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+    let (inst, accounts) = match inst_opt {
+        Some(i) => (i, accounts),
+        None => match crate::subjects::http::read_institution_with_accounts_from_store(
+            &state,
+            &sfid_number,
+        ) {
+            Ok(Some((inst, accounts))) => {
+                cache_institution_detail_best_effort(&state, &inst, &accounts).await;
+                (inst, accounts)
+            }
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+            Err(e) => {
+                tracing::warn!(sfid = %sfid_number, error = %e, "institution fallback read failed");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+            }
+        },
     };
     if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");

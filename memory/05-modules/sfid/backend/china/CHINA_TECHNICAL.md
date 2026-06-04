@@ -30,7 +30,7 @@ villages:  716219
 - `province_code_by_name(name)`:省名转省码。
 - `city_code_by_name(province_name, city_name)`:省名 + 市名转市码。
 - `province_name_by_code(code)`:省码转省名。
-- `china::admin::admin_sfid_cities`:管理端城市列表接口。
+- `china::admin::admin_china_cities`:管理端城市列表接口。
 
 镇村数据保存在 SQLite 中,当前运行时只加载省市层级;后续需要镇村下钻时必须继续从
 SQLite 查询,不得再把镇村生成回 Rust 源码。
@@ -51,7 +51,7 @@ sfid/backend/china/
 
 ```text
 test -f sfid/backend/china/data/china.sqlite
-test ! -d sfid/backend/sfid
+test ! -d sfid/sfid
 rg "city_codes|PROVINCES" sfid/backend -g '*.rs'
 cd sfid/backend && cargo check
 ```

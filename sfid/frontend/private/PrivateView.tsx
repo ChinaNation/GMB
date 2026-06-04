@@ -11,15 +11,15 @@
 import React, { useState } from 'react';
 import { Button, Card, Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import { ProvinceGrid } from '../common/ProvinceGrid';
-import { CityGrid } from '../common/CityGrid';
+import { ProvinceGrid } from '../core/ProvinceGrid';
+import { CityGrid } from '../core/CityGrid';
 import { PrivateListTable } from './PrivateListTable';
 import { PrivateCreateModal } from './PrivateCreateModal';
 import { PrivateDetailPage } from './PrivateDetailPage';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
-import type { SfidMetaResult } from '../sfid/api';
-import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
+import type { SfidMetaResult } from '../china/api';
+import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 
 interface Props {
   auth: AdminAuth;

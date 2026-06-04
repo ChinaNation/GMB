@@ -13,10 +13,10 @@ use chrono::{NaiveDate, Utc};
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 
-// 中文注释:SFID 工具统一从 crate::sfid_number 拿,见 feedback_sfid_module_is_single_entry.md
+// 中文注释:SFID 工具统一从 crate::number 拿,见 feedback_sfid_module_is_single_entry.md
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::operation_auth::AdminActionType;
-use crate::sfid_number::validate_sfid_number_format;
+use crate::number::validate_sfid_number_format;
 use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
@@ -1241,8 +1241,10 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
 
-    let cpms_pubkey = crate::login::parse_sr25519_pubkey_bytes(archive_code.cpms_pubkey.as_str())
-        .ok_or((
+    let cpms_pubkey = crate::admins::login::parse_sr25519_pubkey_bytes(
+        archive_code.cpms_pubkey.as_str(),
+    )
+    .ok_or((
         StatusCode::BAD_REQUEST,
         1001,
         "cpms_pubkey format invalid".to_string(),
@@ -1405,7 +1407,7 @@ fn find_site_in_shard_by_geo_seal(
     geo_seal: &str,
     archive_no: &str,
     cpms_pubkey: &str,
-    shard: &crate::store_shards::StoreShard,
+    shard: &crate::store::StoreShard,
 ) -> Option<(CpmsSiteKeys, CpmsGeoSealClaims)> {
     for site in shard.cpms_site_keys.values() {
         if site.install_secret.trim().is_empty() {
@@ -1623,8 +1625,8 @@ fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
     }
 }
 
-// 中文注释:`validate_sfid_number_format` 和 SFID_NUMBER_* 常量已搬到
-// `crate::sfid_number::validator`,本文件通过 import 使用。见任务卡 1。
+// 中文注释:`validate_sfid_number_format` 和 SFID_NUMBER_* 常量由
+// `crate::number::validator` 统一提供,本文件通过 import 使用。
 
 fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteStatus) -> bool {
     matches!(

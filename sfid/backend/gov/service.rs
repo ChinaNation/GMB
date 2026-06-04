@@ -10,8 +10,8 @@ use chrono::Utc;
 use std::collections::HashSet;
 
 use crate::china::provinces;
-use crate::models::Store;
-use crate::sfid_number::{generate_sfid_code, GenerateSfidInput, InstitutionCategory};
+use crate::number::{generate_sfid_code, GenerateSfidInput, InstitutionCategory};
+use crate::store::Store;
 use crate::subjects::model::{InstitutionLevel, InstitutionSource, MultisigInstitution};
 use crate::subjects::service::insert_default_accounts_into_global_store;
 use crate::subjects::InstitutionChainStatus;
@@ -53,10 +53,28 @@ pub struct ReconcileReport {
 pub struct OfficialReconcileReport {
     pub inserted: usize,
     pub updated: usize,
+    pub account_inserted: usize,
     pub removed: usize,
     pub total_after: usize,
+    pub target_sfids: Vec<String>,
     pub touched_sfids: Vec<String>,
     pub removed_sfids: Vec<String>,
+}
+
+/// 自动公权机构对账范围。
+///
+/// 中文注释:正常服务启动不再调用普通公权机构全量对账。该范围只供显式初始化、
+/// 省级行政区变更、市级行政区变更命令使用,避免每次启动重写全部持久化数据。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OfficialReconcileScope {
+    All,
+    Province {
+        province_code: String,
+    },
+    City {
+        province_code: String,
+        city_code: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -201,6 +219,22 @@ fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
     }
 
     targets
+}
+
+fn target_in_scope(target: &OfficialInstitutionTarget, scope: &OfficialReconcileScope) -> bool {
+    match scope {
+        OfficialReconcileScope::All => true,
+        OfficialReconcileScope::Province { province_code } => {
+            target.province_code.eq_ignore_ascii_case(province_code)
+        }
+        OfficialReconcileScope::City {
+            province_code,
+            city_code,
+        } => {
+            target.province_code.eq_ignore_ascii_case(province_code)
+                && target.city_code.eq_ignore_ascii_case(city_code)
+        }
+    }
 }
 
 fn push_constant_target(
@@ -492,11 +526,28 @@ fn is_manual_school_institution(inst: &MultisigInstitution) -> bool {
 fn should_remove_from_official_directory(
     inst: &MultisigInstitution,
     target_sfids: &HashSet<String>,
+    scope: &OfficialReconcileScope,
 ) -> bool {
     if target_sfids.contains(&inst.sfid_number)
         || matches!(inst.category, InstitutionCategory::PublicSecurity)
         || is_manual_school_institution(inst)
     {
+        return false;
+    }
+    let in_scope = match scope {
+        OfficialReconcileScope::All => true,
+        OfficialReconcileScope::Province { province_code } => {
+            inst.province_code.eq_ignore_ascii_case(province_code)
+        }
+        OfficialReconcileScope::City {
+            province_code,
+            city_code,
+        } => {
+            inst.province_code.eq_ignore_ascii_case(province_code)
+                && inst.city_code.eq_ignore_ascii_case(city_code)
+        }
+    };
+    if !in_scope {
         return false;
     }
     matches!(inst.source, Some(InstitutionSource::Auto))
@@ -508,8 +559,15 @@ fn should_remove_from_official_directory(
 /// 中文注释:机构唯一身份仍然只有 `sfid_number`。城市模板机构为了应对市名变化,
 /// reconcile 只在内存计算阶段按 `(source, level, province_code, city_code, institution_code)`
 /// 找现有记录,找到后更新名称但不改 sfid_number,不会把这个匹配键保存成第二身份。
-pub fn reconcile_official_institutions(store: &mut Store, actor: &str) -> OfficialReconcileReport {
-    let targets = official_institution_targets();
+pub fn reconcile_official_institutions_in_scope(
+    store: &mut Store,
+    actor: &str,
+    scope: OfficialReconcileScope,
+) -> OfficialReconcileReport {
+    let targets = official_institution_targets()
+        .into_iter()
+        .filter(|target| target_in_scope(target, &scope))
+        .collect::<Vec<_>>();
     let mut report = OfficialReconcileReport::default();
     let mut touched = HashSet::<String>::new();
     let mut target_sfids = HashSet::<String>::new();
@@ -517,11 +575,11 @@ pub fn reconcile_official_institutions(store: &mut Store, actor: &str) -> Offici
     for target in &targets {
         let sfid_number = resolve_official_target_sfid(store, target);
         target_sfids.insert(sfid_number.clone());
-        touched.insert(sfid_number.clone());
 
         if let Some(existing) = store.multisig_institutions.get_mut(&sfid_number) {
             if apply_official_target(existing, target) {
                 report.updated += 1;
+                touched.insert(sfid_number.clone());
             }
         } else {
             let inst = new_official_institution(sfid_number.clone(), target, actor);
@@ -529,14 +587,20 @@ pub fn reconcile_official_institutions(store: &mut Store, actor: &str) -> Offici
                 .multisig_institutions
                 .insert(sfid_number.clone(), inst);
             report.inserted += 1;
+            touched.insert(sfid_number.clone());
         }
-        insert_default_accounts_into_global_store(store, &sfid_number, actor);
+        let account_inserted =
+            insert_default_accounts_into_global_store(store, &sfid_number, actor);
+        if account_inserted > 0 {
+            report.account_inserted += account_inserted;
+            touched.insert(sfid_number.clone());
+        }
     }
 
     let to_remove: Vec<String> = store
         .multisig_institutions
         .values()
-        .filter(|inst| should_remove_from_official_directory(inst, &target_sfids))
+        .filter(|inst| should_remove_from_official_directory(inst, &target_sfids, &scope))
         .map(|inst| inst.sfid_number.clone())
         .collect();
     for sfid in to_remove {
@@ -556,6 +620,8 @@ pub fn reconcile_official_institutions(store: &mut Store, actor: &str) -> Offici
                 && !matches!(inst.category, InstitutionCategory::PublicSecurity)
         })
         .count();
+    report.target_sfids = target_sfids.into_iter().collect();
+    report.target_sfids.sort();
     report.touched_sfids = touched.into_iter().collect();
     report.touched_sfids.sort();
     report.removed_sfids.sort();

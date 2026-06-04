@@ -26,12 +26,14 @@ use chrono::Utc;
 use serde::Serialize;
 
 use crate::admins::actions::require_admin_security_grant;
+use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
-use crate::login::require_admin_any;
-use crate::models::ApiResponse;
+use crate::core::response::ApiResponse;
 use crate::scope::get_visible_scope;
 use crate::subjects::http::{
-    append_inst_audit_log_best_effort, resolve_province_from_sfid_number, service_error_to_response,
+    append_inst_audit_log_best_effort, cache_institution_detail_best_effort,
+    read_institution_with_accounts_from_store, resolve_province_from_sfid_number,
+    service_error_to_response,
 };
 use crate::subjects::model::{
     account_key_to_string, CreateAccountInput, CreateAccountOutput, MultisigAccount,
@@ -101,7 +103,7 @@ pub(crate) async fn create_account(
             (inst_clone, acc_exists)
         })
         .await;
-    let (inst_opt, acc_exists) = match read_result {
+    let (inst_opt, mut acc_exists) = match read_result {
         Ok(v) => v,
         Err(e) => {
             return api_error(
@@ -113,7 +115,20 @@ pub(crate) async fn create_account(
     };
     let inst = match inst_opt {
         Some(i) => i,
-        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+        None => match read_institution_with_accounts_from_store(&state, &sfid_number) {
+            Ok(Some((inst, accounts))) => {
+                acc_exists = accounts
+                    .iter()
+                    .any(|account| account.account_name == account_name);
+                cache_institution_detail_best_effort(&state, &inst, &accounts).await;
+                inst
+            }
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+            Err(e) => {
+                tracing::warn!(sfid = %sfid_number, error = %e, "institution fallback read failed");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+            }
+        },
     };
     if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
         return api_error(
@@ -261,9 +276,19 @@ pub(crate) async fn list_accounts(
             )
         }
     };
-    let inst = match inst_opt {
-        Some(i) => i,
-        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+    let (inst, accounts) = match inst_opt {
+        Some(i) => (i, accounts),
+        None => match read_institution_with_accounts_from_store(&state, &sfid_number) {
+            Ok(Some((inst, accounts))) => {
+                cache_institution_detail_best_effort(&state, &inst, &accounts).await;
+                (inst, accounts)
+            }
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+            Err(e) => {
+                tracing::warn!(sfid = %sfid_number, error = %e, "institution fallback read failed");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+            }
+        },
     };
     if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
@@ -337,9 +362,27 @@ pub(crate) async fn delete_account(
             (inst, account)
         })
         .await;
+    let fallback_loaded = matches!(&read_result, Ok((None, _)));
     let (inst, account) = match read_result {
         Ok((Some(i), Some(a))) => (i, a),
-        Ok((None, _)) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+        Ok((None, _)) => match read_institution_with_accounts_from_store(&state, &sfid_number) {
+            Ok(Some((inst, accounts))) => {
+                let account = accounts
+                    .iter()
+                    .find(|item| item.account_name == account_name)
+                    .cloned();
+                cache_institution_detail_best_effort(&state, &inst, &accounts).await;
+                match account {
+                    Some(account) => (inst, account),
+                    None => return api_error(StatusCode::NOT_FOUND, 1004, "account not found"),
+                }
+            }
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+            Err(e) => {
+                tracing::warn!(sfid = %sfid_number, error = %e, "institution fallback read failed");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+            }
+        },
         Ok((Some(_), None)) => return api_error(StatusCode::NOT_FOUND, 1004, "account not found"),
         Err(e) => {
             return api_error(
@@ -386,7 +429,10 @@ pub(crate) async fn delete_account(
         })
         .await;
     match remove_result {
-        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "account not found"),
+        Ok(None) if !fallback_loaded => {
+            return api_error(StatusCode::NOT_FOUND, 1004, "account not found")
+        }
+        Ok(None) => {}
         Err(e) => {
             return api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,

@@ -47,8 +47,6 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 ## 仓库结构
 - `frontend/`：管理员前端网站（React + TypeScript + Vite + Ant Design）
 - `backend/`：后端 API（Rust + Axum）
-- `backend/db/`：数据库辅助目录；当前结构由后端启动时直接创建。
-- `backend/scripts/`：后端脚本（联调/冒烟）
 - `backend/tests/`：后端测试（integration/e2e）
 - `deploy/`：环境部署配置（dev/staging/prod）
 - `memory/01-architecture/sfid/SFID_TECHNICAL.md`：完整技术开发文档（流程、架构、数据、接口、安全、验收）
@@ -82,11 +80,33 @@ cargo run
 默认地址：`http://127.0.0.1:8899`
 说明：区块链接口必须携带请求头 `x-chain-token` 和 `x-chain-signature`。
 
+### 2.0) 自动公权机构初始化
+自动公权机构是数据库持久化目录，正常启动不再全量生成或全量写库。
+
+首次空库部署或需要强制补齐目标行表时执行：
+```bash
+cd backend
+cargo run -- init-gov
+```
+
+行政区划变化时只对目标范围执行局部对账：
+```bash
+cd backend
+cargo run -- reconcile-gov-province --province GD
+cargo run -- reconcile-gov-city --province GD --city 001
+```
+
+说明：
+1. `init-gov` 按 `backend/china` 行政区划和 citizenchain 宪法常量生成一次自动公权机构。
+2. 局部对账只更新对应省或市的自动公权机构。
+3. 行政区改名不改变既有机构的 `sfid_number`、账户、链状态和创建时间。
+4. 生产部署必须使用持久化 PostgreSQL；不得把自动公权机构依赖容器临时库保存。
+
 ### 2.1) 一键启动前后端（开发）
 ```bash
 ./sfid-run.sh
 ```
-说明：脚本会加载 `.env.dev.local`，先停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程，再同时启动后端与前端开发服务。
+说明：脚本会加载 `.env.dev.local`，先停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程，再同时启动后端与前端开发服务。普通公权机构不会在脚本启动时全量重建；需要初始化时先单独执行 `cargo run -- init-gov`。
 
 ### 3) 启动前端开发模式
 ```bash
@@ -116,6 +136,7 @@ curl http://127.0.0.1:8899/api/v1/health
 4. `accounts / docs`：机构账户和资料库分表。
 - 首页和普通机构页不得默认拉取全量数据；公民只能输入档案号、身份ID、投票账户地址或投票账户公钥精确检索，私权机构只能输入机构 SFID 或机构名称精确检索。
 - 公安局是确定性机构，不属于普通公权机构搜索列表；管理员进入公安局 tab 后由 `/api/v1/institutions/public-security` 按登录省市权限返回，前端首次获取后仅作为展示缓存写入本地。
+- 普通自动公权机构由 `init-gov` 或局部 `reconcile-gov-*` 命令写入 `subjects/gov/ids/accounts`。后端正常启动只读取持久化数据，不在健康检查前全量 upsert 自动公权机构。
 - 管理员采用结构化分表：
 1. `admins`
 2. `provinces`
@@ -220,8 +241,9 @@ curl http://127.0.0.1:8899/api/v1/health
 - 请求头必须包含：`x-public-search-token: <SFID_PUBLIC_SEARCH_TOKEN>`
 - 返回：`found`、`archive_no`、`identity_code`、`account_pubkey`
 
-## 测试说明（真实登录）
-- `backend/scripts/smoke.sh` 需要外部提供真实管理员 `ADMIN_TOKEN`（通过真实钱包登录获取）。
+## 测试说明
+- 后端使用 `cargo check --manifest-path sfid/backend/Cargo.toml` 做基础编译检查。
+- 前端使用 `npm run build` 做 TypeScript 与 Vite 构建检查。
 
 详细设计与完整接口定义见 `SFID_TECHNICAL.md`。
 优化优先级清单（P0/P1/P2）见 `SFID_TECHNICAL.md` 第 15 章。
