@@ -27,12 +27,12 @@ import {
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../common/WuminSignatureModal';
+import { WuminSignatureModal } from '../core/WuminSignatureModal';
 import {
   institutionDetailCacheKey,
   readCachedInstitutionDetail,
   writeCachedInstitutionDetail,
-} from '../sfid/metaCache';
+} from '../china/metaCache';
 
 interface Props {
   auth: AdminAuth;

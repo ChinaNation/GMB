@@ -25,23 +25,19 @@ use uuid::Uuid;
 
 mod accounts;
 mod admins;
-mod app_core;
 mod audit;
 mod china;
 mod citizens;
+mod core;
 mod cpms;
 mod crypto;
 mod docs;
 mod gov;
 mod indexer;
-mod login;
-mod models;
+mod number;
 mod private;
-#[allow(dead_code)]
-mod qr;
 mod scope;
-mod sfid_number;
-mod store_shards;
+mod store;
 mod subjects;
 
 #[cfg(test)]
@@ -51,17 +47,21 @@ mod genesis {
     pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378;
 }
 
-pub(crate) use app_core::http_security::*;
-pub(crate) use app_core::runtime_ops::*;
-pub(crate) use citizens::model::*;
-pub(crate) use cpms::model::*;
-pub(crate) use cpms::scope::in_scope_cpms_site;
-pub(crate) use login::{
+pub(crate) use crate::core::http_security::*;
+pub(crate) use crate::core::response::*;
+pub(crate) use crate::core::runtime_ops::*;
+pub(crate) use admins::login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
     require_sheng_admin, AdminSession, LoginChallenge, QrLoginResultRecord,
 };
-pub(crate) use models::*;
-pub(crate) use sfid_number::model::*;
+pub(crate) use admins::model::*;
+pub(crate) use admins::security_model::*;
+pub(crate) use audit::AuditLogEntry;
+pub(crate) use citizens::model::*;
+pub(crate) use cpms::model::*;
+pub(crate) use cpms::scope::in_scope_cpms_site;
+pub(crate) use number::model::*;
+pub(crate) use store::model::*;
 
 #[derive(Clone)]
 struct AppState {
@@ -69,7 +69,7 @@ struct AppState {
     rate_limit_redis: Arc<RedisClient>,
     /// 中文注释:按省分片的进程内缓存。Postgres 持久化只写模块 Store 表。
     #[allow(dead_code)]
-    pub(crate) sharded_store: Arc<store_shards::ShardedStore>,
+    pub(crate) sharded_store: Arc<store::ShardedStore>,
 }
 
 #[derive(Clone)]
@@ -101,6 +101,7 @@ struct StoreReadGuard {
 struct StoreWriteGuard {
     store: Store,
     backend: StoreBackend,
+    persist_on_drop: bool,
     _write_guard: tokio::sync::OwnedMutexGuard<()>,
 }
 
@@ -160,21 +161,19 @@ fn citizen_bind_status_text(status: &CitizenBindStatus) -> &'static str {
     }
 }
 
-fn institution_category_text(category: crate::sfid_number::InstitutionCategory) -> &'static str {
+fn institution_category_text(category: crate::number::InstitutionCategory) -> &'static str {
     match category {
-        crate::sfid_number::InstitutionCategory::PublicSecurity => "PUBLIC_SECURITY",
-        crate::sfid_number::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
-        crate::sfid_number::InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
+        crate::number::InstitutionCategory::PublicSecurity => "PUBLIC_SECURITY",
+        crate::number::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
+        crate::number::InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
     }
 }
 
-fn institution_category_from_text(
-    category: &str,
-) -> Option<crate::sfid_number::InstitutionCategory> {
+fn institution_category_from_text(category: &str) -> Option<crate::number::InstitutionCategory> {
     match category {
-        "PUBLIC_SECURITY" => Some(crate::sfid_number::InstitutionCategory::PublicSecurity),
-        "GOV_INSTITUTION" => Some(crate::sfid_number::InstitutionCategory::GovInstitution),
-        "PRIVATE_INSTITUTION" => Some(crate::sfid_number::InstitutionCategory::PrivateInstitution),
+        "PUBLIC_SECURITY" => Some(crate::number::InstitutionCategory::PublicSecurity),
+        "GOV_INSTITUTION" => Some(crate::number::InstitutionCategory::GovInstitution),
+        "PRIVATE_INSTITUTION" => Some(crate::number::InstitutionCategory::PrivateInstitution),
         _ => None,
     }
 }
@@ -490,6 +489,10 @@ impl std::ops::DerefMut for StoreWriteGuard {
 }
 
 impl StoreWriteGuard {
+    pub(crate) fn skip_persist_on_drop(&mut self) {
+        self.persist_on_drop = false;
+    }
+
     pub(crate) fn persist_or_500(&self) -> Result<(), axum::response::Response> {
         self.backend.save_store(&self.store).map_err(|err| {
             error!(error = %err, "store persist failed before response");
@@ -504,6 +507,9 @@ impl StoreWriteGuard {
 
 impl Drop for StoreWriteGuard {
     fn drop(&mut self) {
+        if !self.persist_on_drop {
+            return;
+        }
         if let Err(err) = self.backend.save_store(&self.store) {
             // 持久化失败是严重事件:数据可能丢失。升级为 error! 并计入 metrics。
             error!(error = %err, "CRITICAL: failed to persist store to database — data may be lost on restart");
@@ -1608,9 +1614,9 @@ impl StoreHandle {
         inst: &crate::subjects::MultisigInstitution,
     ) -> Result<(), String> {
         let kind = match inst.category {
-            crate::sfid_number::InstitutionCategory::PrivateInstitution => "PRIVATE",
-            crate::sfid_number::InstitutionCategory::PublicSecurity
-            | crate::sfid_number::InstitutionCategory::GovInstitution => "PUBLIC",
+            crate::number::InstitutionCategory::PrivateInstitution => "PRIVATE",
+            crate::number::InstitutionCategory::PublicSecurity
+            | crate::number::InstitutionCategory::GovInstitution => "PUBLIC",
         };
         let is_national =
             inst.institution_level == Some(crate::subjects::InstitutionLevel::National);
@@ -1706,7 +1712,7 @@ impl StoreHandle {
         .map_err(|e| format!("upsert subjects failed: {e}"))?;
 
         match inst.category {
-            crate::sfid_number::InstitutionCategory::PrivateInstitution => {
+            crate::number::InstitutionCategory::PrivateInstitution => {
                 Self::delete_target_rows_outside_scope(
                     conn,
                     "private",
@@ -1753,8 +1759,8 @@ impl StoreHandle {
                 )
                 .map_err(|e| format!("upsert private failed: {e}"))?;
             }
-            crate::sfid_number::InstitutionCategory::PublicSecurity
-            | crate::sfid_number::InstitutionCategory::GovInstitution => {
+            crate::number::InstitutionCategory::PublicSecurity
+            | crate::number::InstitutionCategory::GovInstitution => {
                 Self::delete_target_rows_outside_scope(
                     conn,
                     "gov",
@@ -2150,7 +2156,7 @@ impl StoreHandle {
                     .multisig_institutions
                     .values()
                     .filter(|inst| {
-                        inst.category == crate::sfid_number::InstitutionCategory::PublicSecurity
+                        inst.category == crate::number::InstitutionCategory::PublicSecurity
                     })
                     .filter(|inst| inst.province_code == p_code)
                     .filter(|inst| c_code.map_or(true, |v| inst.city_code == v))
@@ -2235,7 +2241,7 @@ impl StoreHandle {
                     .multisig_institutions
                     .values()
                     .filter(|inst| {
-                        inst.category == crate::sfid_number::InstitutionCategory::GovInstitution
+                        inst.category == crate::number::InstitutionCategory::GovInstitution
                     })
                     .filter(|inst| inst.province_code == p_code)
                     .filter(|inst| c_code.map_or(true, |v| inst.city_code == v))
@@ -2339,6 +2345,7 @@ impl StoreHandle {
         Ok(StoreWriteGuard {
             store: self.backend.load_store()?,
             backend: self.backend.clone(),
+            persist_on_drop: true,
             _write_guard: write_guard,
         })
     }
@@ -2384,6 +2391,92 @@ fn disable_core_dumps() {
     }
 }
 
+#[derive(Debug, Clone)]
+enum BackendCommand {
+    Serve,
+    InitGov,
+    ReconcileGovProvince {
+        province_code: String,
+    },
+    ReconcileGovCity {
+        province_code: String,
+        city_code: String,
+    },
+}
+
+fn parse_backend_command() -> BackendCommand {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let Some(command) = args.first().map(String::as_str) else {
+        return BackendCommand::Serve;
+    };
+    match command {
+        "serve" => BackendCommand::Serve,
+        "init-gov" => BackendCommand::InitGov,
+        "reconcile-gov-province" => {
+            let province_code = parse_cli_option(&args, "--province")
+                .unwrap_or_else(|| panic!("reconcile-gov-province requires --province <code>"));
+            BackendCommand::ReconcileGovProvince { province_code }
+        }
+        "reconcile-gov-city" => {
+            let province_code = parse_cli_option(&args, "--province")
+                .unwrap_or_else(|| panic!("reconcile-gov-city requires --province <code>"));
+            let city_code = parse_cli_option(&args, "--city")
+                .unwrap_or_else(|| panic!("reconcile-gov-city requires --city <code>"));
+            BackendCommand::ReconcileGovCity {
+                province_code,
+                city_code,
+            }
+        }
+        other => panic!("unknown sfid-backend command: {other}"),
+    }
+}
+
+fn parse_cli_option(args: &[String], name: &str) -> Option<String> {
+    args.windows(2)
+        .find(|pair| pair[0] == name)
+        .map(|pair| pair[1].trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool {
+    use crate::gov::service::OfficialReconcileScope;
+
+    let (scope, force_row_sync, label) = match command {
+        BackendCommand::Serve => return false,
+        BackendCommand::InitGov => (OfficialReconcileScope::All, true, "init-gov"),
+        BackendCommand::ReconcileGovProvince { province_code } => (
+            OfficialReconcileScope::Province { province_code },
+            false,
+            "reconcile-gov-province",
+        ),
+        BackendCommand::ReconcileGovCity {
+            province_code,
+            city_code,
+        } => (
+            OfficialReconcileScope::City {
+                province_code,
+                city_code,
+            },
+            false,
+            "reconcile-gov-city",
+        ),
+    };
+    let report =
+        core::runtime_ops::reconcile_official_institutions_explicit(state, scope, force_row_sync);
+    info!(
+        command = label,
+        inserted = report.inserted,
+        updated = report.updated,
+        account_inserted = report.account_inserted,
+        removed = report.removed,
+        total_after = report.total_after,
+        touched = report.touched_sfids.len(),
+        targets = report.target_sfids.len(),
+        "sfid gov directory command finished"
+    );
+    true
+}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter("info")
@@ -2391,6 +2484,7 @@ fn main() {
         .compact()
         .init();
     disable_core_dumps();
+    let command = parse_backend_command();
 
     let redis_url = required_env("SFID_REDIS_URL");
     let redis_client = RedisClient::open(redis_url.as_str())
@@ -2419,10 +2513,10 @@ fn main() {
     }
     let store = StoreHandle::from_database_url(database_url.as_str()).expect("init store handle");
     // 中文注释:ShardedStore 只作为进程内分片缓存,主数据由模块 Store 表保存。
-    let sharded_store: Arc<store_shards::ShardedStore> = {
-        let backend: Arc<dyn store_shards::backend::ShardBackend> =
-            Arc::new(store_shards::backend::MemoryShardBackend::new());
-        Arc::new(store_shards::ShardedStore::new(backend))
+    let sharded_store: Arc<store::ShardedStore> = {
+        let backend: Arc<dyn store::backend::ShardBackend> =
+            Arc::new(store::backend::MemoryShardBackend::new());
+        Arc::new(store::ShardedStore::new(backend))
     };
     let state = AppState {
         store,
@@ -2432,10 +2526,13 @@ fn main() {
     ensure_builtin_province_admins(&state);
     info!("initialized runtime state with defaults");
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
-    app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
-    // 中文注释:启动对账普通公权/宪法机构目录;机构身份只使用 sfid_number。
-    app_core::runtime_ops::backfill_and_reconcile_official_institutions(&state);
-    app_core::runtime_ops::cleanup_stale_citizen_bind_records(&state);
+    core::runtime_ops::backfill_and_reconcile_public_security(&state);
+    if run_gov_directory_command(&state, command.clone()) {
+        return;
+    }
+    // 中文注释:普通公权/宪法机构目录是持久化数据,正常启动只读数据库,
+    // 不再于健康检查前执行全量生成和逐条 upsert。
+    core::runtime_ops::cleanup_stale_citizen_bind_records(&state);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -2495,41 +2592,49 @@ fn main() {
             }
         }
 
-        // 中文注释:启动后把模块 Store 快照里的机构同步到进程内分片缓存,
-        // 保证详情页/账户列表按省读取时能看到最新机构和账户。
-        app_core::runtime_ops::sync_institutions_to_sharded(&state).await;
+        // 中文注释:机构主数据保存在数据库,列表查询直接带省/市范围查行表。
+        // 这里不再全量同步机构分片,避免持久化目录在 HTTP 监听前整包进内存。
 
         // 中文注释:启动后把 store_cpms 持久化授权恢复到分片缓存,供 ARCHIVE geo_seal 验真扫描。
-        app_core::runtime_ops::sync_cpms_sites_to_sharded(&state).await;
+        core::runtime_ops::sync_cpms_sites_to_sharded(&state).await;
 
         // 中文注释:CPMS 授权站点缓存为异步分片访问,恢复缓存后再清理孤儿授权。
-        app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
+        core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
 
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 
         let auth_routes = Router::new()
-            .route("/api/v1/admin/auth/check", get(login::admin_auth_check))
-            .route("/api/v1/admin/auth/logout", post(login::admin_logout))
+            .route(
+                "/api/v1/admin/auth/check",
+                get(admins::login::admin_auth_check),
+            )
+            .route(
+                "/api/v1/admin/auth/logout",
+                post(admins::login::admin_logout),
+            )
             .route(
                 "/api/v1/admin/auth/identify",
-                post(login::admin_auth_identify),
+                post(admins::login::admin_auth_identify),
             )
             .route(
                 "/api/v1/admin/auth/challenge",
-                post(login::admin_auth_challenge),
+                post(admins::login::admin_auth_challenge),
             )
-            .route("/api/v1/admin/auth/verify", post(login::admin_auth_verify))
+            .route(
+                "/api/v1/admin/auth/verify",
+                post(admins::login::admin_auth_verify),
+            )
             .route(
                 "/api/v1/admin/auth/qr/challenge",
-                post(login::admin_auth_qr_challenge),
+                post(admins::login::admin_auth_qr_challenge),
             )
             .route(
                 "/api/v1/admin/auth/qr/complete",
-                post(login::admin_auth_qr_complete),
+                post(admins::login::admin_auth_qr_complete),
             )
             .route(
                 "/api/v1/admin/auth/qr/result",
-                get(login::admin_auth_qr_result),
+                get(admins::login::admin_auth_qr_result),
             );
 
         let admin_routes = Router::new()
@@ -2695,16 +2800,16 @@ fn main() {
                 post(citizens::binding::citizen_bind),
             )
             .route(
-                "/api/v1/admin/sfid/meta",
-                get(sfid_number::admin::admin_sfid_meta),
+                "/api/v1/admin/number/meta",
+                get(number::admin::admin_number_meta),
             )
             .route(
-                "/api/v1/admin/sfid/cities",
-                get(china::admin::admin_sfid_cities),
+                "/api/v1/admin/china/cities",
+                get(china::admin::admin_china_cities),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                login::require_admin_session_middleware,
+                admins::login::require_admin_session_middleware,
             ));
 
         // 中文注释:历史 chain_routes(/vote/verify、/chain/voters/count、/chain/binding/validate、
@@ -2787,7 +2892,7 @@ fn main() {
 
         // 中文注释:SFID 后端启动时只初始化链 genesis;管理员业务签名由
         // 各省/市管理员自己的冷钱包完成,后端不持有管理员业务私钥。
-        app_core::chain_runtime::init_genesis_hash_from_chain()
+        core::chain_runtime::init_genesis_hash_from_chain()
             .await
             .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
         info!("chain genesis hash initialized");

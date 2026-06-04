@@ -45,7 +45,7 @@ mod tests {
 
     use chrono::Utc;
 
-    use crate::sfid_number::InstitutionCategory;
+    use crate::number::InstitutionCategory;
     use crate::subjects::InstitutionChainStatus;
 
     // ─── 清算行资格白名单(ADR-007)─────────────────────────────

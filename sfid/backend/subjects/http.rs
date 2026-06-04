@@ -6,10 +6,10 @@
 use axum::http::StatusCode;
 
 use crate::accounts::derive::derive_duoqian_address;
-use crate::app_core::runtime_ops::append_audit_log;
+use crate::admins::login::AdminAuthContext;
 use crate::china::province_name_by_code;
+use crate::core::runtime_ops::append_audit_log;
 use crate::crypto::pubkey::normalize_admin_pubkey;
-use crate::login::AdminAuthContext;
 use crate::subjects::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
 use crate::subjects::service::{ServiceError, DEFAULT_ACCOUNT_NAMES};
 use crate::subjects::MultisigChainStatus;
@@ -108,8 +108,8 @@ pub(crate) fn resolve_created_by(
         };
         if user_norm == norm {
             let role_str = match user.role {
-                crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
-                crate::models::AdminRole::ShiAdmin => "SHI_ADMIN",
+                crate::admins::model::AdminRole::ShengAdmin => "SHENG_ADMIN",
+                crate::admins::model::AdminRole::ShiAdmin => "SHI_ADMIN",
             };
             let name_opt = if user.admin_name.trim().is_empty() {
                 None
@@ -120,6 +120,53 @@ pub(crate) fn resolve_created_by(
         }
     }
     (None, None)
+}
+
+/// 按需从持久化 Store 快照读取机构和账户。
+///
+/// 中文注释:后端启动不再全量把自动公权机构同步进分片缓存。详情页/账户页遇到
+/// 分片未命中时,按 `sfid_number` 从持久化主数据读取一次,再由调用方按需回填分片。
+pub(crate) fn read_institution_with_accounts_from_store(
+    state: &AppState,
+    sfid_number: &str,
+) -> Result<Option<(MultisigInstitution, Vec<MultisigAccount>)>, String> {
+    let store = state.store.read()?;
+    let Some(inst) = store.multisig_institutions.get(sfid_number).cloned() else {
+        return Ok(None);
+    };
+    let accounts = store
+        .multisig_accounts
+        .values()
+        .filter(|account| account.sfid_number == sfid_number)
+        .cloned()
+        .collect::<Vec<_>>();
+    Ok(Some((inst, accounts)))
+}
+
+/// 将按需读取到的机构回填分片缓存。
+pub(crate) async fn cache_institution_detail_best_effort(
+    state: &AppState,
+    inst: &MultisigInstitution,
+    accounts: &[MultisigAccount],
+) {
+    let province = inst.province.clone();
+    let inst_for_cache = inst.clone();
+    let accounts_for_cache = accounts.to_vec();
+    if let Err(e) = state
+        .sharded_store
+        .write_province(&province, move |shard| {
+            shard
+                .multisig_institutions
+                .insert(inst_for_cache.sfid_number.clone(), inst_for_cache);
+            for account in accounts_for_cache {
+                let key = account_key_to_string(&account.sfid_number, &account.account_name);
+                shard.multisig_accounts.insert(key, account);
+            }
+        })
+        .await
+    {
+        tracing::warn!(province = %province, error = %e, "cache institution detail failed");
+    }
 }
 
 /// 给机构写入默认账户(`主账户` / `费用账户`)的未上链本地记录。

@@ -11,7 +11,7 @@ import { useAuth } from '../hooks/useAuth';
 import type { AdminAuth } from '../auth/types';
 import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
-import type { SfidCityItem } from '../sfid/api';
+import type { SfidCityItem } from '../china/api';
 import { listOperators, updateOperatorName } from './operators_api';
 import {
   commitAdminAction,
@@ -21,15 +21,15 @@ import {
   type AdminActionType,
 } from './admin_security_api';
 import { listShengAdmins } from './api';
-import { loadCachedSfidCities, readCachedSfidCities } from '../sfid/metaCache';
+import { loadCachedSfidCities, readCachedSfidCities } from '../china/metaCache';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
 import { ShengAdminListView } from './ShengAdminListView';
 import { ProvinceDetailView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../common/WuminSignatureModal';
-import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
+import { WuminSignatureModal } from '../core/WuminSignatureModal';
+import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng_admin 列表分支(全省网格);

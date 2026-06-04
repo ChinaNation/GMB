@@ -25,8 +25,8 @@ import {
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../common/WuminSignatureModal';
-import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
+import { WuminSignatureModal } from '../core/WuminSignatureModal';
+import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
 
 interface Props {
   auth: AdminAuth;

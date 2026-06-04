@@ -8,10 +8,10 @@ use axum::{
 };
 
 use crate::china::provinces;
-use crate::sfid_number::model::{AdminSfidCitiesQuery, SfidCityItem};
+use crate::number::model::{AdminSfidCitiesQuery, SfidCityItem};
 use crate::*;
 
-pub(crate) async fn admin_sfid_cities(
+pub(crate) async fn admin_china_cities(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<AdminSfidCitiesQuery>,

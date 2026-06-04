@@ -17,7 +17,7 @@ import {
   readCachedPublicSecurityRows,
   writeCachedOfficialInstitutionRows,
   writeCachedPublicSecurityRows,
-} from '../sfid/metaCache';
+} from '../china/metaCache';
 
 const DETERMINISTIC_PAGE_SIZE = 20;
 

@@ -1,6 +1,6 @@
 # SFID 后端目录布局
 
-- 最后更新:2026-06-03
+- 最后更新:2026-06-04
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
@@ -16,6 +16,7 @@
   - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
   - `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
   - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
+  - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
 
 ## 当前边界
 
@@ -38,27 +39,24 @@ sfid/backend/
 ├── main.rs                    # Axum 路由、AppState、StoreHandle 等后端入口
 ├── main_tests.rs              # main.rs 的测试模块
 ├── accounts/                  # 机构账户入口
-├── app_core/                  # 跨业务底层工具,含 HTTP 安全、运行期工具、chain_* 通用链工具
+├── admins/                    # 省/市管理员治理、安全动作、Passkey 与登录认证
+│   └── login/                 # 管理员登录、扫码登录、鉴权守卫、签名校验
 ├── audit.rs                   # 审计日志查询 handler
 ├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
+├── core/                      # 跨业务底层工具,含 HTTP 响应、HTTP 安全、运行期工具、chain_*、QR 协议
+│   └── qr/                    # WUMIN_QR_V1 协议辅助和统一 sign_request 构造
 ├── cpms/                      # CPMS 安装授权、ARCHIVE 验真、档案导入、站点状态治理
 ├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
 ├── china/                     # 中国行政区划 SQLite 真源和省市查询接口
 ├── docs/                      # 机构资料库入口
 ├── gov/                       # 公权机构入口,含公安局和普通公权确定性列表路由归属
 ├── indexer/                   # 链事件解析与索引 worker
-├── login/                     # 管理员登录、扫码登录、鉴权守卫、签名校验
-├── models/                    # 全局共享模型、角色、响应包装、Store 结构
+├── number/                    # 身份 ID 编码协议,A3/机构码/生成/校验/admin 编码元信息 DTO
 ├── private/                   # 私权机构入口,含学校/盈利/非盈利/非法人机构路由归属
-├── qr/                        # QR 协议辅助,含统一 sign_request 构造
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
-├── sfid_number/               # SFID 编码协议,A3/机构码/生成/校验/admin 元信息 DTO
-├── admins/                    # 省/市管理员治理和安全分级,含 operation_auth.rs / actions.rs / passkeys.rs
-├── store_shards/              # 进程内省分片缓存
+├── store/                     # Store 聚合体、省级进程内分片缓存和存储边界模型
 ├── subjects/                  # 身份主体共享模型、目标分区表、主体详情、非法人能力
 │   └── uninorg/               # 非法人机构从属关系能力
-├── db/                        # 数据库辅助目录,不是 Rust 源码模块
-├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
 ├── tests/                     # 集成/e2e 测试
 └── target/                    # Cargo 构建产物,不得纳入源码整理
 ```
@@ -74,8 +72,11 @@ sfid/backend/
   省级管理员列表、市级管理员列表和管理员治理写入口统一归 `admins/`。
 - 公权机构前后端目录统一命名为 `gov`;后端不得再另建 `public` 或 `registry_admins`。
 - 私权机构归 `private`;公民继续使用 `citizens`;智能人功能当前不上线,不得预建智能人目录或表。
-- 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,SFID 元信息 DTO 归
-  `sfid_number/model.rs`,不得塞回 `models/`。
+- 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,编码元信息 DTO 归
+  `number/model.rs`,不得恢复或塞回 `models/`。
+- HTTP 响应包装归 `core/response.rs`;Store 聚合体归 `store/model.rs`;
+  管理员角色/列表 DTO 归 `admins/model.rs`;管理员 Passkey 和安全挑战模型归
+  `admins/security_model.rs`;审计日志行模型归 `audit.rs`。
 - 行政区划唯一真源归 `china/`;不得恢复 `sfid/`、`province.rs`、`cities.rs`
   或 `city_codes/*.rs` 静态表。
 - 非法人机构能力归 `subjects/uninorg/`;不得放在单侧 `gov/` 或 `private/`。
@@ -102,13 +103,14 @@ sfid/backend/
 - Passkey 注册流程固定为 `register/start -> register/confirm -> register/complete`;
   `start` 只生成 `WUMIN_QR_V1 / sign_request` 冷钱包签名请求,`confirm` 验证 sr25519 回执后
   才生成 WebAuthn creation options,`complete` 完成浏览器凭据 attestation 并替换当前管理员有效 Passkey。
-- 通用 `WUMIN_QR_V1 / sign_request` envelope 构造归 `qr/sign_request.rs`;业务模块只传入
+- 通用 `WUMIN_QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
   已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
   `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
 - CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归省级管理员;
   市级管理员不得通过 CPMS handler 操作授权治理。
-- 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。
-- 非源码目录 `db/`、`scripts/`、`tests/`、`target/` 不参与业务模块平铺。
+- 跨模块链底层工具只允许放在 `sfid/backend/core/chain_*`。
+- 非源码目录 `tests/`、`target/` 不参与业务模块平铺;后端源码根下不得恢复空的
+  `db/` 或 `scripts/` 目录。
 
 ## Store 边界
 
@@ -118,7 +120,7 @@ sfid/backend/
   - `store_subjects`:机构、账户、机构资料文档。
   - `store_ops`:登录 challenge/session、扫码登录结果、审计、链幂等、回调任务、指标。
     同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
-- `store_shards/` 只保留进程内按省缓存访问 API,用于减少 handler 的跨省扫描和锁竞争;
+- `store/` 内的分片缓存只保留进程内按省访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
 - 数据库当前目标结构由 `main.rs` 启动时创建；初始省级管理员唯一真源为
   `admins/province_admins.rs`。
@@ -148,6 +150,11 @@ test ! -d sfid/backend/src
 test ! -d sfid/backend/chain
 test ! -d sfid/backend/institutions
 test ! -d sfid/backend/sfid
+test ! -d sfid/backend/sfid_number
+test ! -d sfid/backend/store_shards
+test ! -d sfid/backend/models
+test ! -d sfid/backend/login
+test ! -d sfid/backend/qr
 rg "mod chain;|crate::chain|chain::" sfid/backend -g '*.rs'
 cd sfid/backend && cargo fmt && cargo check
 ```

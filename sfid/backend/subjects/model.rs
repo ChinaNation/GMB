@@ -16,8 +16,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::number::InstitutionCategory;
 use crate::scope::HasProvinceCity;
-use crate::sfid_number::InstitutionCategory;
 
 // ── 机构 / 账户链上状态 ───────────────────────────────────────
 

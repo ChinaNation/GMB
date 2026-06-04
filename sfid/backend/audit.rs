@@ -9,9 +9,26 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::*;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AuditLogEntry {
+    pub(crate) seq: u64,
+    pub(crate) action: String,
+    pub(crate) actor_pubkey: String,
+    pub(crate) target_pubkey: Option<String>,
+    pub(crate) target_archive_no: Option<String>,
+    #[serde(default)]
+    pub(crate) request_id: Option<String>,
+    #[serde(default)]
+    pub(crate) actor_ip: Option<String>,
+    pub(crate) result: String,
+    pub(crate) detail: String,
+    pub(crate) created_at: DateTime<Utc>,
+}
 
 #[derive(Deserialize)]
 pub(crate) struct AuditLogsQuery {

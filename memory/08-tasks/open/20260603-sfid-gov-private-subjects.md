@@ -51,7 +51,7 @@ SFID
 - 已将私权机构精确列表改为按登录 scope 解析 `p_code / c_code` 后查询目标分区表,不再按中文省市字段或内存全量过滤。
 - 已新增公安局和公权机构确定性列表 StoreHandle 只读查询,GET 接口不再执行 backfill、reconcile、写库或分片同步。
 - 已将 `gov/private/accounts/docs/subjects` 重复的 HTTP helper 抽到 `sfid/backend/subjects/http.rs`,并清理旧复制函数。
-- 已将公权/私权新增弹窗表单抽到 `sfid/frontend/common/institution/CreateInstitutionForm.tsx`,`gov` 与 `private` 仅保留 API 包装。
+- 已将公权/私权新增弹窗表单抽到 `sfid/frontend/core/institution/CreateInstitutionForm.tsx`,`gov` 与 `private` 仅保留 API 包装。
 - 已修复注册局页签中“省管理员列表”首次点击被加载流程重置回市列表的问题。
 - 已更新 SFID 后端布局、前端布局、技术总览、统一命名、统一协议和相关活跃任务/决策文档。
 - 已再次运行 `cargo check`、`npm run build`。

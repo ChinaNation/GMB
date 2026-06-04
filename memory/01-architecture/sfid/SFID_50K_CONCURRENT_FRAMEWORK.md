@@ -138,7 +138,7 @@ pub(crate) struct AppState {
 
 **目标结构**:
 - 以当前目标结构为基线继续拆分热路径表。
-- `store_shards` 仍只作为进程内缓存;需要持久化时按业务表设计,不恢复整包分片表。
+- `store` 只承载进程内缓存与分省读写入口;需要持久化时按业务表设计,不恢复整包分片表。
 
 ### 层 3:后端 —— 水平扩展(多进程 / 多实例)
 
@@ -287,13 +287,13 @@ pub(crate) struct AppState {
 |---|---|---|
 | `citizenchain/frame/sfid-system/src/lib.rs` | 1 | 新增 ShengAdminPubkey storage + extrinsic + verifier |
 | `citizenchain/frame/sfid-system/src/lib.rs` | 3 | 新增 `register_sfid_institution_batch` extrinsic |
-| `sfid/backend/models/mod.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
+| `sfid/backend/admins/model.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
 | `sfid/backend/admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
-| `sfid/backend/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
-| `sfid/backend/models/store.rs`(新建) | 2 | 43 shard 数据结构 |
+| `sfid/backend/core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
+| `sfid/backend/store/model.rs` | 2 | 43 shard 数据结构 |
 | `sfid/backend/<feature>/` | 2 | 按业务归属新增结构化热路径表 |
 | `sfid/backend/subjects/chain_duoqian_info.rs` | 3 | 机构注册提交改为入队状态查询 |
-| `sfid/backend/store_shards/`(新建) | 3 | 省级 flush task + batch 聚合 |
+| `sfid/backend/store/` | 3 | 省级 flush task + batch 聚合 |
 | `sfid/backend/Cargo.toml` | 3 | 加 `crossbeam-queue` 依赖 |
 | `sfid/frontend/<feature>/api.ts` | 3 | 增加任务状态轮询接口 |
 | `sfid/frontend/subjects/` | 3 | UI 改"已提交,等待上链"状态显示 |

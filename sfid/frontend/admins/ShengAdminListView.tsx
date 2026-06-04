@@ -2,7 +2,7 @@
 
 import { Card, Table } from 'antd';
 import type { ShengAdminRow } from './api';
-import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
+import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 import { tryEncodeSs58 } from '../utils/ss58';
 

@@ -7,8 +7,8 @@
 
 use chrono::Utc;
 
-use crate::models::Store;
-use crate::sfid_number::{classify, InstitutionCategory, InstitutionCode, A3};
+use crate::number::{classify, InstitutionCategory, InstitutionCode, A3};
+use crate::store::Store;
 use crate::subjects::model::MultisigAccount;
 use crate::subjects::store;
 use crate::subjects::MultisigChainStatus;
@@ -234,30 +234,37 @@ pub fn insert_default_accounts_into_global_store(
     store: &mut Store,
     sfid_number: &str,
     actor: &str,
-) {
+) -> usize {
+    use std::collections::hash_map::Entry;
+
     use crate::accounts::derive::derive_duoqian_address;
     use crate::subjects::model::{account_key_to_string, MultisigAccount};
 
     let now = Utc::now();
+    let mut inserted = 0usize;
     for name in DEFAULT_ACCOUNT_NAMES {
         let key = account_key_to_string(sfid_number, name);
         // DUOQIAN_V1 本地派生:主账户和费用账户地址由 sfid_number 稳定决定。
         let addr = derive_duoqian_address(sfid_number, name);
-        store
-            .multisig_accounts
-            .entry(key)
-            .or_insert_with(|| MultisigAccount {
-                sfid_number: sfid_number.to_string(),
-                account_name: (*name).to_string(),
-                duoqian_address: addr,
-                chain_status: MultisigChainStatus::NotOnChain,
-                chain_synced_at: None,
-                chain_tx_hash: None,
-                chain_block_number: None,
-                created_by: actor.to_string(),
-                created_at: now,
-            });
+        match store.multisig_accounts.entry(key) {
+            Entry::Occupied(_) => {}
+            Entry::Vacant(entry) => {
+                entry.insert(MultisigAccount {
+                    sfid_number: sfid_number.to_string(),
+                    account_name: (*name).to_string(),
+                    duoqian_address: addr,
+                    chain_status: MultisigChainStatus::NotOnChain,
+                    chain_synced_at: None,
+                    chain_tx_hash: None,
+                    chain_block_number: None,
+                    created_by: actor.to_string(),
+                    created_at: now,
+                });
+                inserted += 1;
+            }
+        }
     }
+    inserted
 }
 
 #[cfg(test)]

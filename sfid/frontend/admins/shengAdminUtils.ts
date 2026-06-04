@@ -1,7 +1,7 @@
 // 省级管理员视图共享工具函数与类型
 
 import type { FormInstance } from 'antd';
-import type { SfidCityItem } from '../sfid/api';
+import type { SfidCityItem } from '../china/api';
 import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
 import type { AdminActionType } from './admin_security_api';

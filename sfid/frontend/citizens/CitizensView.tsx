@@ -12,7 +12,7 @@ import {
 } from './api';
 import { decodeSs58 } from '../utils/ss58';
 import { useAuth } from '../hooks/useAuth';
-import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
+import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { BindModal } from './BindModal';
 import { StatusExportImportModal } from './StatusExportImportModal';
 

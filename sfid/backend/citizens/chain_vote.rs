@@ -15,7 +15,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::app_core::chain_runtime::build_vote_credential;
+use crate::core::chain_runtime::build_vote_credential;
 use crate::*;
 
 #[derive(Deserialize)]

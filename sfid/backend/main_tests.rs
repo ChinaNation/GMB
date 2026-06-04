@@ -5,7 +5,7 @@
 //   2. SFID/Bind 工具函数。
 
 use super::*;
-use crate::login::AdminSession;
+use crate::admins::login::AdminSession;
 use axum::{
     body::to_bytes,
     extract::{Query, State},
@@ -36,10 +36,10 @@ fn build_test_state() -> AppState {
         sharded_store: {
             #[cfg(test)]
             {
-                Arc::new(store_shards::ShardedStore::new(Arc::new(
-                    store_shards::backend::MockShardBackend::new(),
-                )
-                    as Arc<dyn store_shards::backend::ShardBackend>))
+                Arc::new(store::ShardedStore::new(
+                    Arc::new(store::backend::MockShardBackend::new())
+                        as Arc<dyn store::backend::ShardBackend>,
+                ))
             }
             #[cfg(not(test))]
             {
@@ -286,9 +286,9 @@ fn admin_pubkey_duplicate_error_codes_are_role_specific() {
 async fn qr_login_non_admin_should_be_rejected() {
     let state = build_test_state();
 
-    let challenge_resp = login::admin_auth_qr_challenge(
+    let challenge_resp = admins::login::admin_auth_qr_challenge(
         State(state.clone()),
-        Json(login::AdminQrChallengeInput {
+        Json(admins::login::AdminQrChallengeInput {
             origin: Some("http://127.0.0.1:5179".to_string()),
             domain: None,
             session_id: Some("sid-query-test".to_string()),
@@ -314,9 +314,9 @@ async fn qr_login_non_admin_should_be_rejected() {
     let (query_pubkey, _) = sign_with_test_sr25519(11, "dummy");
     let login_msg = qr_login_sign_message(&challenge_payload, &query_pubkey);
     let (_, signature) = sign_with_test_sr25519(11, &login_msg);
-    let complete_resp = login::admin_auth_qr_complete(
+    let complete_resp = admins::login::admin_auth_qr_complete(
         State(state.clone()),
-        Json(login::AdminQrCompleteInput {
+        Json(admins::login::AdminQrCompleteInput {
             challenge_id: challenge_id.clone(),
             session_id: Some(session_id.clone()),
             admin_pubkey: query_pubkey,
@@ -335,9 +335,9 @@ async fn qr_login_non_admin_should_be_rejected() {
 async fn qr_login_sheng_admin_keeps_write_permission() {
     let state = build_test_state();
 
-    let challenge_resp = login::admin_auth_qr_challenge(
+    let challenge_resp = admins::login::admin_auth_qr_challenge(
         State(state.clone()),
-        Json(login::AdminQrChallengeInput {
+        Json(admins::login::AdminQrChallengeInput {
             origin: Some("http://127.0.0.1:5179".to_string()),
             domain: None,
             session_id: Some("sid-admin-test".to_string()),
@@ -380,9 +380,9 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
             },
         );
     }
-    let complete_resp = login::admin_auth_qr_complete(
+    let complete_resp = admins::login::admin_auth_qr_complete(
         State(state.clone()),
-        Json(login::AdminQrCompleteInput {
+        Json(admins::login::AdminQrCompleteInput {
             challenge_id: challenge_id.clone(),
             session_id: Some(session_id.clone()),
             admin_pubkey,
@@ -394,9 +394,9 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
     .into_response();
     assert_eq!(complete_resp.status(), StatusCode::OK);
 
-    let result_resp = login::admin_auth_qr_result(
+    let result_resp = admins::login::admin_auth_qr_result(
         State(state.clone()),
-        Query(login::AdminQrResultQuery {
+        Query(admins::login::AdminQrResultQuery {
             challenge_id,
             session_id,
         }),
@@ -441,9 +441,9 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
 async fn qr_login_rejects_signer_admin_mismatch() {
     let state = build_test_state();
 
-    let challenge_resp = login::admin_auth_qr_challenge(
+    let challenge_resp = admins::login::admin_auth_qr_challenge(
         State(state.clone()),
-        Json(login::AdminQrChallengeInput {
+        Json(admins::login::AdminQrChallengeInput {
             origin: Some("http://127.0.0.1:5179".to_string()),
             domain: None,
             session_id: Some("sid-mismatch-test".to_string()),
@@ -500,9 +500,9 @@ async fn qr_login_rejects_signer_admin_mismatch() {
         );
     }
 
-    let complete_resp = login::admin_auth_qr_complete(
+    let complete_resp = admins::login::admin_auth_qr_complete(
         State(state),
-        Json(login::AdminQrCompleteInput {
+        Json(admins::login::AdminQrCompleteInput {
             challenge_id,
             session_id: Some(session_id),
             admin_pubkey: login_pubkey,
@@ -591,7 +591,7 @@ async fn require_admin_any_should_allow_remaining_two_roles() {
 #[test]
 fn parse_sr25519_pubkey_accepts_0x_prefix() {
     let key = "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
-    let parsed = login::parse_sr25519_pubkey(key).expect("parse pubkey");
+    let parsed = admins::login::parse_sr25519_pubkey(key).expect("parse pubkey");
     assert_eq!(
         parsed,
         "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
@@ -602,15 +602,17 @@ fn parse_sr25519_pubkey_accepts_0x_prefix() {
 fn verify_admin_signature_accepts_0x_signature_prefix_for_sr25519() {
     let message = "sfid-qr-login|origin=http://127.0.0.1:5179|domain=127.0.0.1|session_id=sid|nonce=n|iat=1|exp=2";
     let (pubkey, signature) = sign_with_test_sr25519(33, message);
-    assert!(login::verify_admin_signature(&pubkey, message, &signature));
+    assert!(admins::login::verify_admin_signature(
+        &pubkey, message, &signature
+    ));
 }
 
 #[test]
 fn parse_sr25519_pubkey_bytes_rejects_non_hex_pubkey() {
-    assert!(
-        login::parse_sr25519_pubkey_bytes("5D4Y9fP2U8NDDw7X9W7N6wA6ZwZP3oYfgho2dQ4q8W35bLoA")
-            .is_none()
-    );
+    assert!(admins::login::parse_sr25519_pubkey_bytes(
+        "5D4Y9fP2U8NDDw7X9W7N6wA6ZwZP3oYfgho2dQ4q8W35bLoA"
+    )
+    .is_none());
 }
 
 #[test]

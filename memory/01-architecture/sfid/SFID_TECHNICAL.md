@@ -107,7 +107,7 @@
 - 市级管理员编辑只允许修改姓名；账户地址和市归属属于身份根，不允许修改。
 - 身份信息页已有记录“操作”列内按钮文案固定为“更换绑定”（列名仍为“操作”）；列表顶部新增入口文案固定为“新增身份ID绑定”。
 - 省级管理员维护机构管理：
-1. 先在机构页生成机构身份识别码（调用 `sfid_number` 编码协议，`A3=GFR`,`P1=0`，不输入公钥）。
+1. 先在机构页生成机构身份识别码（调用 `number` 编码协议，`A3=GFR`,`P1=0`，不输入公钥）。
 2. 持 SFID 二维码去 CPMS 初始化系统，CPMS 初始化后生成机构公钥登记二维码。
 3. 回到 SFID 机构页扫码录入机构，完成 3 把机构公钥入库并激活。
 
@@ -156,7 +156,7 @@
 4. `shi_admin_scope`
 - 当前后端功能目录：
 1. `backend/main.rs`：路由装配与启动骨架。
-2. `backend/app_core/`：跨业务底层工具,含 HTTP 安全、运行期工具与 `chain_*` 通用链工具。
+2. `backend/core/`：跨业务底层工具,含 HTTP 响应、HTTP 安全、运行期工具、QR 协议与 `chain_*` 通用链工具。
 3. `backend/citizens/`：公民身份、绑定、投票凭证、CPMS 状态扫码。
 4. `backend/subjects/`：身份主体共享模型、非法人能力、主体详情和链端公开查询。
 5. `backend/gov/`：公权机构和公安局确定性目录。
@@ -164,10 +164,10 @@
 7. `backend/accounts/`：机构账户。
 8. `backend/docs/`：机构资料库。
 9. `backend/china/`：中国行政区划 SQLite 真源。
-10. `backend/sfid_number/`：SFID 编码协议。
+10. `backend/number/`：身份 ID 编码协议。
 11. `backend/admins/`：管理员域统一目录，承载省级管理员、市级管理员账号维护、`operation_auth.rs` 权限分级、Passkey 注册与冷钱包挑战写操作。
 12. `backend/scope/`：省/市可见范围与写权限判断。
-13. `backend/models/`：统一数据结构模块。
+13. `backend/store/`：Store 聚合体、省级进程内分片缓存和运行时状态模型。
 
 ### 7.3 签名与密钥
 - 管理员登录仍使用冷钱包 sr25519 challenge 签名，管理员私钥不上传、不落库。
@@ -194,11 +194,14 @@
 - `backend/admins/passkeys.rs`：管理员 Passkey 注册、WebAuthn 配置、凭据使用记录和短期挑战清理。
 - `backend/admins/operation_auth.rs`：管理端操作权限分级真源，统一输出 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`。
 - `backend/admins/actions.rs`：`PASSKEY / PASSKEY_CHALLENGE` 操作 prepare/commit 与一次性安全 grant 入口；省/市管理员姓名修改不进入该入口。
-- `backend/app_core/chain_*.rs`：跨业务链底层工具。
-- `backend/sfid_number/admin.rs`：管理端 SFID 编码元数据。
+- `backend/core/chain_*.rs`：跨业务链底层工具。
+- `backend/number/admin.rs`：管理端编码元数据。
 - `backend/china/admin.rs`：管理端城市列表查询业务。
 - `backend/scope/*.rs`：省域隔离、审计范围和 CPMS 站点范围判定。
-- `backend/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
+- `backend/store/model.rs`：Store 聚合体、服务指标、链请求回执、公民奖励和投票缓存。
+- `backend/core/response.rs`：HTTP API 通用响应、分页和健康检查输出。
+- `backend/admins/model.rs`：省/市管理员角色、实体和列表 DTO。
+- `backend/admins/security_model.rs`：管理员 Passkey、冷钱包确认和一次性安全授权模型。
 - 管理员密钥规则（强约束）：
 1. 管理员业务私钥只存在各自冷钱包设备，SFID 后端不保存、不代签。
 2. 管理员登录使用冷钱包 sr25519 挑战签名。
@@ -229,7 +232,9 @@
 - `citizen_id` 仅是 SFID 后端内部自增记录主键，用于管理端定位记录和 replace 请求，不是对用户展示的身份ID；对外身份ID字段固定为 `sfid_code`。
 - 启动清理：历史非 `BOUND` 公民记录及其 `archive_no / sfid_code / wallet_pubkey` 反向索引必须在服务启动时物理剔除，公民列表和查询接口不得暴露半绑定数据。
 - 管理员端大数据列表不得默认返回全量。公民首页只允许按档案号、身份ID、投票账户地址或投票账户公钥精确查询；私权机构列表只允许按机构 SFID 或机构名称精确查询；接口返回 `{ items, page_size, next_cursor, has_more }`，不得依赖前端本地分页承载大数据。所有管理员 scope 必须先落到 `p_code / c_code` 查询条件,禁止查全库后过滤。
-- 公安局是确定性机构，独立于普通公权机构 tab；`GET /api/v1/institutions/public-security` 不接收搜索词，按当前登录管理员省市权限返回省内或市内公安局。公权机构确定性目录走 `GET /api/v1/institutions/official`，进入市详情无需精确搜索即可直接显示。两个确定性列表 GET 接口都是只读分区查询,生成/对账只允许在启动流程或显式 reconcile 中执行。前端可缓存接口返回值，但缓存只用于展示加速，后端仍是权限校验和确定性生成真源。
+- 公安局是确定性机构，独立于普通公权机构 tab；`GET /api/v1/institutions/public-security` 不接收搜索词，按当前登录管理员省市权限返回省内或市内公安局。公权机构确定性目录走 `GET /api/v1/institutions/official`，进入市详情无需精确搜索即可直接显示。两个确定性列表 GET 接口都是只读分区查询，前端可缓存接口返回值，但缓存只用于展示加速，后端仍是权限校验和确定性生成真源。
+- 普通自动公权机构是持久化目录，不属于后端启动任务。首次空库部署时必须显式执行 `sfid-backend init-gov` 初始化；行政区划变化时只执行 `sfid-backend reconcile-gov-province --province <省代码>` 或 `sfid-backend reconcile-gov-city --province <省代码> --city <市代码>`。正常 `serve` 启动不得全量生成或全量 upsert 自动公权机构。
+- 行政区划变更只更新对应范围的自动公权机构展示字段。以 `source=AUTO + institution_level + province_code + city_code + institution_code` 定位已有机构，保持 `sfid_number`、账户、链状态、创建时间不变；新增行政区只新增对应机构，删除行政区只清理目标范围内不再存在的自动公权机构。
 - 精确写入由数据库约束和业务校验共同兜底：`ids.sfid_number` 唯一，`subjects(p_code, sfid_number)` 唯一，`citizens(p_code, sfid_number)` 唯一，`accounts(p_code, sfid_number, account_name)` 唯一；`archive_no / sfid_code / wallet_pubkey` 三者一对一由公民绑定流程强制。
 
 ### 8.3 状态机
@@ -264,9 +269,8 @@
 - `POST /api/v1/admin/citizen/bind/challenge`：扫描 CPMS `ARCHIVE` 档案码，生成 wuminapp `sign_request`。
 - `POST /api/v1/admin/citizen/bind`：提交 wuminapp `sign_response`，完成电子护照绑定。
 - `GET /api/v1/admin/citizens`：查询电子护照绑定列表。
-- `GET /api/v1/admin/sfid/meta`：获取 SFID 生成工具元数据（A3 选项、机构选项、省列表、当前管理员省域限制）。
-- `GET /api/v1/admin/sfid/cities?province=...`：按省加载可选市列表（省级管理员仅可查询本省）。
-- `POST /api/v1/admin/sfid/generate`：使用后端 Rust 工具生成指定用户 SFID 码（首次生成后锁定该公民所属省）。
+- `GET /api/v1/admin/number/meta`：获取身份 ID 编码元数据（A3 选项、机构选项、省列表、当前管理员省域限制）。
+- `GET /api/v1/admin/china/cities?province=...`：按省加载可选市列表（省级管理员仅可查询本省）。
 - `POST /api/v1/admin/cpms-keys/sfid/generate`：生成机构身份识别码与 SFID 签名初始化二维码（仅省级管理员）。
 - `POST /api/v1/admin/cpms-keys/register-scan`：扫描并录入 CPMS 公钥登记二维码（仅省级管理员，且必须绑定对应 `init_qr_payload`）。
 - `GET /api/v1/admin/cpms-keys`：查询机构列表（仅省级管理员，返回本省机构）。
@@ -532,7 +536,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 市级管理员访问管理员管理接口必须返回权限拒绝。
 
 ### 13.3 自动化回归（已落地）
-- `backend/scripts/smoke.sh` 覆盖主流程 + 异常流：
+- 后端单元测试与前端构建覆盖主流程 + 异常流：
   - 重复 nonce 拒绝；
   - 过期 timestamp 拒绝；
   - 投票资格 `NORMAL/ABNORMAL` 正反校验；
@@ -545,7 +549,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 14.1 SFID码生成工具（Rust）
 #### 14.1.1 代码位置
-- 工具主模块：`backend/sfid_number/mod.rs`
+- 工具主模块：`backend/number/mod.rs`
 - 行政区真源：`backend/china/data/china.sqlite`
 - 省市代码查询：`backend/china/store.rs`
 
@@ -588,7 +592,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 15.3 P2（运维与结构优化）
 - 可观测完善：增加扫码验签失败率、登录验签失败率、绑定成功率、链查询 P95、重放拦截次数（链路 P95/P99、重放拦截、链请求失败、回调失败已落地）。
-- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。后端源码直接平铺在 `backend/` 根目录，功能模块按 `app_core`、`citizens`、`subjects`、`gov`、`private`、`accounts`、`docs`、`china`、`sfid_number`、`scope`、`admins`、`models` 等目录归属；链交互能力放在所属功能目录的 `chain_*.rs` 文件内。
+- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；测试归档在 `backend/tests`。后端源码直接平铺在 `backend/` 根目录，功能模块按 `core`、`citizens`、`subjects`、`gov`、`private`、`accounts`、`docs`、`china`、`number`、`scope`、`admins`、`store` 等目录归属；链交互能力放在所属功能目录的 `chain_*.rs` 文件内，跨业务链底层工具放在 `core/chain_*.rs`。
 
 ## 16. 开发步骤（执行版）
 ### 16.1 里程碑 0：规格冻结（0.5 天）

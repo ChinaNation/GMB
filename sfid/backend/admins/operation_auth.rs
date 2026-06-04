@@ -7,7 +7,7 @@
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::login::AdminAuthContext;
+use crate::admins::login::AdminAuthContext;
 use crate::{api_error, AdminRole};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

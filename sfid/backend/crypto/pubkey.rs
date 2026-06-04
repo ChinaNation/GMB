@@ -3,7 +3,7 @@
 //! 中文注释:这是跨业务通用的 sr25519 公钥工具,归入 `crypto`。
 //! 内部统一 0x 小写 hex,前端展示 SS58(prefix=2027),禁止混用。
 
-use crate::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
+use crate::admins::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
 
 pub(crate) fn normalize_admin_pubkey(input: &str) -> Option<String> {
     normalize_sr25519_pubkey(input)

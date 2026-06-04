@@ -2,8 +2,8 @@
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // 使用 WUMIN_QR_V1 envelope,不支持字段别名。
 
-import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
-import type { LoginReceiptBody, SignResponseBody } from '../qr/wuminQr';
+import { parseQrEnvelope, QrParseError } from '../core/qr/wuminQr';
+import type { LoginReceiptBody, SignResponseBody } from '../core/qr/wuminQr';
 
 export type SignedLoginPayload = {
   challenge_id: string;

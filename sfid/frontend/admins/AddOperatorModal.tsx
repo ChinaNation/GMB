@@ -4,8 +4,8 @@
 import { useEffect } from 'react';
 import { Button, Form, Input, Modal, Select } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
-import { ScanAccountModal } from '../common/ScanAccountModal';
-import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
+import { ScanAccountModal } from '../core/ScanAccountModal';
+import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
 import { MAX_SHI_ADMINS_PER_CITY, type ShengAdminSharedState } from './shengAdminUtils';
 
 interface AddOperatorModalProps {

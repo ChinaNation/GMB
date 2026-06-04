@@ -7,8 +7,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminAuth } from '../auth/types';
-import type { SfidMetaResult } from '../sfid/api';
-import { loadCachedSfidMeta } from '../sfid/metaCache';
+import type { SfidMetaResult } from '../china/api';
+import { loadCachedSfidMeta } from '../china/metaCache';
 
 export interface UseSfidMetaResult {
   meta: SfidMetaResult | null;

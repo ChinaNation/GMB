@@ -11,16 +11,16 @@
 import React, { useState } from 'react';
 import { Button, Card, Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import { ProvinceGrid } from '../common/ProvinceGrid';
-import { CityGrid } from '../common/CityGrid';
+import { ProvinceGrid } from '../core/ProvinceGrid';
+import { CityGrid } from '../core/CityGrid';
 import { GovListTable } from './GovListTable';
 import { GovCreateModal } from './GovCreateModal';
 import { GovDetailPage } from './GovDetailPage';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
-import type { SfidMetaResult } from '../sfid/api';
+import type { SfidMetaResult } from '../china/api';
 import type { GovCategory } from './api';
-import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
+import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 
 interface Props {
   auth: AdminAuth;
