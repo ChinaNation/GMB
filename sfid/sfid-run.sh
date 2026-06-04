@@ -130,7 +130,7 @@ launch_frontend() {
     trap cleanup_child EXIT INT TERM
     npm run dev &
     child_pid="$!"
-    # 中文注释:npm/vite 也走父进程监控,避免 Ctrl-C 后留下 5179 旧监听。
+    # 中文注释:npm/vite 也走父进程监控,避免 Ctrl-C 后留下 5179 遗留监听。
     while kill -0 "$parent_pid" >/dev/null 2>&1; do
       if ! kill -0 "$child_pid" >/dev/null 2>&1; then
         wait "$child_pid"

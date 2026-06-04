@@ -109,7 +109,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 #### 2.4 SFID 端 Step 2 末尾联动
 
-- `sfid/backend/institutions/handler.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
+- `sfid/backend/subjects/chain_duoqian_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
   - `AND sfid_number IN (SELECT sfid_number FROM clearing_bank_nodes_cache)`
 - 新建 `sfid/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
 - SFID 后端推链 `register_sfid_institution` 等调用增加 a3/sub_type/parent 参数
@@ -181,5 +181,5 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 ## 引用
 
 - 现有清算 pallet：[citizenchain/runtime/transaction/offchain-transaction/src/lib.rs](../../citizenchain/runtime/transaction/offchain-transaction/src/lib.rs)
-- 现有 SFID 公开 API：[sfid/backend/institutions/handler.rs:1605](../../sfid/backend/institutions/handler.rs)（app_search_clearing_banks）
-- ParentInstitutionRow 已含 sub_type 字段：[sfid/backend/institutions/model.rs:228-230](../../sfid/backend/institutions/model.rs)
+- 现有 SFID 公开 API：[sfid/backend/subjects/chain_duoqian_info.rs](../../sfid/backend/subjects/chain_duoqian_info.rs)（app_search_clearing_banks）
+- ParentInstitutionRow 已含 sub_type 字段：[sfid/backend/subjects/model.rs](../../sfid/backend/subjects/model.rs)

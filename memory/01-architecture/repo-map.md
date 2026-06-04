@@ -131,11 +131,21 @@ SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `sfid/backend/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
 - `sfid/backend/app_core/`:跨业务底层工具,含 `chain_*` 通用链工具。
 - `sfid/backend/citizens/`:公民身份业务和公民链交互 `chain_*`。
-- `sfid/backend/institutions/`:机构本地管理和机构链交互 `chain_duoqian_info*`。
+- `sfid/backend/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
+- `sfid/backend/gov/`:公权机构和公安局确定性目录入口。
+- `sfid/backend/private/`:私权机构注册和精确查询入口。
+- `sfid/backend/accounts/`:机构账户入口。
+- `sfid/backend/docs/`:机构资料库入口。
+- `sfid/backend/china/`:中国行政区划 SQLite 真源。
+- `sfid/backend/sfid_number/`:SFID 编码协议,A3/机构码/生成/校验。
 - `sfid/backend/admins/`:省/市管理员治理、Passkey 注册与冷钱包挑战写操作。
 - `sfid/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `sfid/frontend/sfid/`:SFID 元数据 API。
-- `sfid/frontend/institutions/`:机构页面、机构 API 和 `chain_duoqian_info.ts`。
+- `sfid/frontend/subjects/`:主体共享类型、字段标签和 `chain_duoqian_info.ts`。
+- `sfid/frontend/gov/`:公权机构页面入口。
+- `sfid/frontend/private/`:私权机构页面入口。
+- `sfid/frontend/accounts/`:机构账户组件。
+- `sfid/frontend/docs/`:机构资料库组件。
 - `sfid/frontend/admins/`:省/市管理员页面、API、Passkey 与冷钱包挑战前端流程。
 
 同名对齐规则:

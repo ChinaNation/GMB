@@ -83,7 +83,7 @@
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
 | `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
-| `sfid/backend/sfid/` | SFID 核心规则 | sfid-core | SFID 后端核心身份号码、省市码和校验规则唯一源码目录 |
+| `sfid/backend/sfid_number/` | SFID 编码协议 | sfid-number | SFID 后端身份号码格式、A3、机构码、分类、生成和校验唯一源码目录 |
 | `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `wumin/` | 冷钱包 | wumin | 离线签名、扫码识别和冷钱包 UI |
 | `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
@@ -266,13 +266,18 @@
 | `sfid/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
 | `sfid/backend/db/` | 数据库 | db | 数据库连接和迁移边界 |
 | `sfid/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
-| `sfid/backend/institutions/` | 机构 | institutions | 机构注册、凭证和链端信息接口 |
+| `sfid/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
+| `sfid/backend/private/` | 私权机构 | private | 学校、盈利性私权机构、非盈利私权机构和私权新增接口 |
+| `sfid/backend/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
+| `sfid/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
+| `sfid/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
 | `sfid/backend/login/` | 登录 | login | 管理端登录和认证 |
 | `sfid/backend/models/` | 数据模型 | models | 后端共享数据模型 |
 | `sfid/backend/qr/` | QR | qr | 后端二维码生成和解析 |
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
 | `sfid/backend/scripts/` | 脚本 | scripts | 后端维护脚本 |
-| `sfid/backend/sfid/` | SFID 核心 | sfid-core | 身份号码、省市码和校验规则 |
+| `sfid/backend/sfid_number/` | SFID 编码协议 | sfid-number | 身份号码格式、A3、机构码、分类、生成和校验规则 |
+| `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
 | `sfid/backend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战写操作 |
 | `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
 | `sfid/backend/store_shards/` | 存储分片 | store-shards | 存储分片相关能力 |
@@ -288,7 +293,11 @@
 | `sfid/frontend/common/` | 通用组件 | common | 前端通用组件和共享 UI |
 | `sfid/frontend/cpms/` | CPMS 对接 | cpms | CPMS 对接界面 |
 | `sfid/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
-| `sfid/frontend/institutions/` | 机构 | institutions | 机构管理界面 |
+| `sfid/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
+| `sfid/frontend/private/` | 私权机构 | private | 私权机构界面 |
+| `sfid/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
+| `sfid/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
+| `sfid/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
 | `sfid/frontend/qr/` | QR | qr | 二维码界面和工具 |
 | `sfid/frontend/sfid/` | SFID 核心 | sfid-core | SFID 核心展示和工具 |
 | `sfid/frontend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战前端流程 |

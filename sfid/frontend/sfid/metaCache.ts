@@ -1,13 +1,15 @@
-// 中文注释:SFID 确定性元数据前端缓存。
-// 只缓存省市代码和公安局确定性展示列表;普通公民/机构业务查询不得放进这里。
+// 中文注释:SFID 前端轻量缓存。
+// 只缓存省市代码、确定性机构展示列表和机构详情快照;普通公民/机构精确搜索结果不得放进这里。
 
 import type { AdminAuth } from '../auth/types';
-import type { InstitutionListRow } from '../institutions/api';
+import type { InstitutionDetail, InstitutionListRow } from '../subjects/api';
 import { getSfidMeta, listSfidCities, type SfidCityItem, type SfidMetaResult } from './api';
 
 const SFID_META_CACHE_VERSION = 'sfid-meta-v1';
 const SFID_CITY_CACHE_VERSION = 'sfid-cities-v1';
 const PUBLIC_SECURITY_CACHE_VERSION = 'public-security-v1';
+const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v1';
+const INSTITUTION_DETAIL_CACHE_VERSION = 'institution-detail-v1';
 
 interface CachedPayload<T> {
   version: string;
@@ -76,6 +78,10 @@ export async function loadCachedSfidCities(
   return rows;
 }
 
+export function readCachedSfidCities(province: string): SfidCityItem[] | null {
+  return readCache<SfidCityItem[]>(sfidCitiesCacheKey(province), SFID_CITY_CACHE_VERSION);
+}
+
 export function publicSecurityCacheKey(auth: AdminAuth, province: string, city: string): string {
   const scopeCity = auth.admin_city || city || 'ALL';
   const scopeProvince = auth.admin_province || province;
@@ -129,7 +135,73 @@ export function writeCachedPublicSecurityRows(
   }
 }
 
-export function clearCachedPublicSecurityRows(key: string) {
-  localStorage.removeItem(key);
+export function officialInstitutionCacheKey(auth: AdminAuth, province: string, city: string): string {
+  const scopeCity = auth.admin_city || city || 'ALL';
+  const scopeProvince = auth.admin_province || province;
+  return [
+    'sfid:official-institutions',
+    OFFICIAL_INSTITUTION_CACHE_VERSION,
+    auth.admin_pubkey,
+    auth.role,
+    scopeProvince,
+    scopeCity,
+  ].join(':');
 }
 
+export function readCachedOfficialInstitutionRows(key: string): InstitutionListRow[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PublicSecurityCachePayload;
+    if (parsed.version !== OFFICIAL_INSTITUTION_CACHE_VERSION || !Array.isArray(parsed.rows)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.rows;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+export function writeCachedOfficialInstitutionRows(
+  key: string,
+  auth: AdminAuth,
+  province: string,
+  city: string,
+  rows: InstitutionListRow[],
+) {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: OFFICIAL_INSTITUTION_CACHE_VERSION,
+        admin_pubkey: auth.admin_pubkey,
+        role: auth.role,
+        province: auth.admin_province || province,
+        city: auth.admin_city || city || 'ALL',
+        rows,
+      } satisfies PublicSecurityCachePayload),
+    );
+  } catch {
+    // 中文注释:公权机构确定性列表缓存只是展示加速,写失败不影响后端权威结果。
+  }
+}
+
+export function institutionDetailCacheKey(auth: AdminAuth, sfidNumber: string): string {
+  return [
+    'sfid:institution-detail',
+    INSTITUTION_DETAIL_CACHE_VERSION,
+    auth.admin_pubkey,
+    auth.role,
+    sfidNumber,
+  ].join(':');
+}
+
+export function readCachedInstitutionDetail(key: string): InstitutionDetail | null {
+  return readCache<InstitutionDetail>(key, INSTITUTION_DETAIL_CACHE_VERSION);
+}
+
+export function writeCachedInstitutionDetail(key: string, detail: InstitutionDetail) {
+  writeCache(key, INSTITUTION_DETAIL_CACHE_VERSION, detail);
+}

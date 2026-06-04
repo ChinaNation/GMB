@@ -31,7 +31,7 @@
 - 普通用户：不登录管理员后台，但可使用公开查询页查询档案号、身份识别码、公钥地址。
 
 ## 3.1 区块链五项能力模块归属（对齐口径）
-1. 机构 SFID 登记（多签创建前置）：`institutions` 模块，字段统一为 `sfid_number`。
+1. 机构 SFID 登记（多签创建前置）：`subjects` 公开查询 + `gov/private/accounts/docs` 管理模块，字段统一为 `sfid_number`。
 2. 公民电子护照绑定结果：`citizens` 模块本地完成，wuminapp 通过 `/api/v1/app/myid/status` 查询。
 3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
 4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + signature`，`who` 必入签名）。
@@ -107,7 +107,7 @@
 - 市级管理员编辑只允许修改姓名；账户地址和市归属属于身份根，不允许修改。
 - 身份信息页已有记录“操作”列内按钮文案固定为“更换绑定”（列名仍为“操作”）；列表顶部新增入口文案固定为“新增身份ID绑定”。
 - 省级管理员维护机构管理：
-1. 先在机构页生成机构身份识别码（调用 `sfid`，`A3=GFR`,`P1=0`，不输入公钥）。
+1. 先在机构页生成机构身份识别码（调用 `sfid_number` 编码协议，`A3=GFR`,`P1=0`，不输入公钥）。
 2. 持 SFID 二维码去 CPMS 初始化系统，CPMS 初始化后生成机构公钥登记二维码。
 3. 回到 SFID 机构页扫码录入机构，完成 3 把机构公钥入库并激活。
 
@@ -145,7 +145,7 @@
 - `Rust + Axum`
 - `PostgreSQL`
 - `Redis`（可选，用于限流和缓存）
-- 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端按模块写入 `store_citizens / store_cpms / store_institutions / store_ops`，运行缓存启动时从这些主数据恢复。
+- 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端按模块写入 `store_citizens / store_cpms / store_subjects / store_ops`，运行缓存启动时从这些主数据恢复。
 - SFID main 系统签名缓存：仅服务登录二维码系统签名与自动链路凭证签名,不得用于省级管理员治理代签。
 - 数据库结构由后端启动时创建当前目标结构；初始省级管理员只读取
   `backend/admins/province_admins.rs`。
@@ -154,15 +154,20 @@
 2. `provinces`
 3. `sheng_admin_scope`
 4. `shi_admin_scope`
-- 当前后端功能目录（2026-05-02 平铺后）：
+- 当前后端功能目录：
 1. `backend/main.rs`：路由装配与启动骨架。
 2. `backend/app_core/`：跨业务底层工具,含 HTTP 安全、运行期工具与 `chain_*` 通用链工具。
 3. `backend/citizens/`：公民身份、绑定、投票凭证、CPMS 状态扫码。
-4. `backend/institutions/`：机构创建、机构资料、账户名称、机构链交互 `chain_duoqian_info*`。
-5. `backend/admins/`：管理员域统一目录，承载省级管理员、市级管理员账号维护、`operation_auth.rs` 权限分级、Passkey 注册与冷钱包挑战写操作。
-6. `backend/scope/`：省/市可见范围与写权限判断。
-7. `backend/sfid/`：SFID 生成与元数据模块。
-8. `backend/models/`：统一数据结构模块。
+4. `backend/subjects/`：身份主体共享模型、非法人能力、主体详情和链端公开查询。
+5. `backend/gov/`：公权机构和公安局确定性目录。
+6. `backend/private/`：私权机构注册和精确查询。
+7. `backend/accounts/`：机构账户。
+8. `backend/docs/`：机构资料库。
+9. `backend/china/`：中国行政区划 SQLite 真源。
+10. `backend/sfid_number/`：SFID 编码协议。
+11. `backend/admins/`：管理员域统一目录，承载省级管理员、市级管理员账号维护、`operation_auth.rs` 权限分级、Passkey 注册与冷钱包挑战写操作。
+12. `backend/scope/`：省/市可见范围与写权限判断。
+13. `backend/models/`：统一数据结构模块。
 
 ### 7.3 签名与密钥
 - 管理员登录仍使用冷钱包 sr25519 challenge 签名，管理员私钥不上传、不落库。
@@ -174,7 +179,7 @@
   与 `SFID_PASSKEY_ORIGIN=http://localhost:5179`;生产环境 `SFID_ENV=prod|production`
   时启动期强制 `SFID_PASSKEY_RP_ID=sfid.crcfrcn.com` 且
   `SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com`,不得混入 localhost、IP 或其它 origin。
-- 机构登记与机构链交互在 `institutions`，公民电子护照绑定/投票凭证在 `citizens`。
+- 机构登记管理按 `gov/private/accounts/docs` 拆分,机构链端公开查询在 `subjects`；公民电子护照绑定/投票凭证在 `citizens`。
 - CPMS 授权方案：每个市公安局机构 `sfid_number` 对应一个 INSTALL 授权。
 - SFID 信任库存储维度：`sfid_number + install_secret_hash + cpms_pubkey_hash`，按机构隔离验真。
 - 密钥分期：
@@ -182,7 +187,7 @@
 2. v2.0：Root + 省级分层密钥。
 
 ### 7.4 目录能力分配（已落地）
-- `backend/institutions/chain_duoqian_info*.rs`：机构查询、注册信息凭证、清算行候选。
+- `backend/subjects/chain_duoqian_info.rs`：机构查询、注册信息凭证、清算行候选。
 - `backend/citizens/binding.rs`：公民电子护照绑定 challenge 与 wuminapp 签名验签。
 - `backend/citizens/chain_vote.rs`：公民投票凭证。
 - `backend/citizens/chain_joint_vote.rs`：联合投票人口快照凭证。
@@ -190,7 +195,8 @@
 - `backend/admins/operation_auth.rs`：管理端操作权限分级真源，统一输出 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`。
 - `backend/admins/actions.rs`：`PASSKEY / PASSKEY_CHALLENGE` 操作 prepare/commit 与一次性安全 grant 入口；省/市管理员姓名修改不进入该入口。
 - `backend/app_core/chain_*.rs`：跨业务链底层工具。
-- `backend/sfid/admin.rs`：管理端 SFID 生成、元数据与城市列表查询业务。
+- `backend/sfid_number/admin.rs`：管理端 SFID 编码元数据。
+- `backend/china/admin.rs`：管理端城市列表查询业务。
 - `backend/scope/*.rs`：省域隔离、审计范围和 CPMS 站点范围判定。
 - `backend/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
 - 管理员密钥规则（强约束）：
@@ -207,11 +213,11 @@
 2. `sheng_admin_scope`：省级管理员省域归属。
 3. `store_citizens`：公民电子护照绑定快照。
 4. `store_cpms`：CPMS 安装授权、`install_secret`、授权状态和 `cpms_pubkey_hash` 主数据。
-5. `store_institutions`：机构、机构账户和资料库快照。
+5. `store_subjects`：法人/非法人主体、机构、机构账户和资料库快照。
 6. `store_ops`：登录 challenge/session、审计、链路幂等和服务指标。
-7. `sfid_citizens`：管理员端公民精确查询行表，按 `province_code / city_code / created_at / id` 建索引。
-8. `sfid_institutions`：管理员端私权/普通公权机构精确查询行表，按 `category / province / city / created_at / id` 建索引。
-9. `sfid_institution_accounts`：机构账户行表，用于机构列表账户数和账户精确写入。
+7. `citizens`：管理员端公民精确查询行表，按 `p_code / c_code / created_at / id` 建索引。
+8. `subjects`：管理员端主体精确查询基础行，按 `p_code / c_code / category / created_at / sfid_number` 建索引。
+9. `gov / private / accounts / docs`：公权机构、私权机构、机构账户和资料库分区详情表。
 ### 8.2 关键约束
 - `admins.admin_pubkey` 全局唯一。
 - 管理员新增入口必须共用全局公钥查重逻辑，重复时区分“已是省级管理员 / 已是市级管理员”。
@@ -222,9 +228,9 @@
 - `archive_no` 与 `sfid_code` 首次绑定后永久绑定，不允许解绑、不允许换档案号、不允许把同一档案号绑定到其他身份ID，也不允许把同一身份ID改绑到其他档案号；后续只允许使用同一 `archive_no` 的 ARCHIVE 档案码更换 `wallet_pubkey / wallet_address`。
 - `citizen_id` 仅是 SFID 后端内部自增记录主键，用于管理端定位记录和 replace 请求，不是对用户展示的身份ID；对外身份ID字段固定为 `sfid_code`。
 - 启动清理：历史非 `BOUND` 公民记录及其 `archive_no / sfid_code / wallet_pubkey` 反向索引必须在服务启动时物理剔除，公民列表和查询接口不得暴露半绑定数据。
-- 管理员端大数据列表不得默认返回全量。公民首页只允许按档案号、身份ID、投票账户地址或投票账户公钥精确查询；私权机构列表、公权机构列表只允许按机构 SFID 或机构名称精确查询；接口返回 `{ items, page_size, next_cursor, has_more }`，不得依赖前端本地分页承载大数据。
-- 公安局是确定性机构，独立于普通公权机构 tab；`GET /api/v1/institutions/public-security` 不接收搜索词，按当前登录管理员省市权限返回省内或市内公安局。前端可缓存该接口返回值，但缓存只用于展示加速，后端仍是权限校验和确定性生成真源。
-- 精确写入由数据库唯一约束兜底：`sfid_citizens.archive_no / sfid_code / wallet_pubkey / wallet_address` 唯一，`sfid_institutions.sfid_number` 唯一，`sfid_institution_accounts(sfid_number, account_name)` 唯一。
+- 管理员端大数据列表不得默认返回全量。公民首页只允许按档案号、身份ID、投票账户地址或投票账户公钥精确查询；私权机构列表只允许按机构 SFID 或机构名称精确查询；接口返回 `{ items, page_size, next_cursor, has_more }`，不得依赖前端本地分页承载大数据。所有管理员 scope 必须先落到 `p_code / c_code` 查询条件,禁止查全库后过滤。
+- 公安局是确定性机构，独立于普通公权机构 tab；`GET /api/v1/institutions/public-security` 不接收搜索词，按当前登录管理员省市权限返回省内或市内公安局。公权机构确定性目录走 `GET /api/v1/institutions/official`，进入市详情无需精确搜索即可直接显示。两个确定性列表 GET 接口都是只读分区查询,生成/对账只允许在启动流程或显式 reconcile 中执行。前端可缓存接口返回值，但缓存只用于展示加速，后端仍是权限校验和确定性生成真源。
+- 精确写入由数据库约束和业务校验共同兜底：`ids.sfid_number` 唯一，`subjects(p_code, sfid_number)` 唯一，`citizens(p_code, sfid_number)` 唯一，`accounts(p_code, sfid_number, account_name)` 唯一；`archive_no / sfid_code / wallet_pubkey` 三者一对一由公民绑定流程强制。
 
 ### 8.3 状态机
 - `audit_logs.result`：`SUCCESS | FAILED`
@@ -308,7 +314,7 @@
 - 鉴权方式：请求头 `x-app-token`，服务端与环境变量 `SFID_APP_TOKEN` 比对。
 - 用途：为移动端（wuminapp）提供专用接口，采用静态 Token 鉴权，无需链路 HMAC 签名，认证复杂度低于区块链接口。
 - 限流：共享全局限流器，与其他接口统一限流策略。
-- 源码位置：App API 已按功能拆入 `sfid/backend/citizens/chain_*` 与 `sfid/backend/institutions/chain_duoqian_info*`。
+- 源码位置：App API 已按功能拆入 `sfid/backend/citizens/chain_*` 与 `sfid/backend/subjects/chain_duoqian_info.rs`。
 
 #### 9.9.1 人口快照查询
 - `GET /api/v1/app/voters/count?who=<pubkey_hex>`
@@ -539,9 +545,9 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 14.1 SFID码生成工具（Rust）
 #### 14.1.1 代码位置
-- 工具主模块：`backend/sfid/mod.rs`
-- 省定义：`backend/sfid/province.rs`
-- 市级代码表：`backend/sfid/city_codes/01_ZS.rs` 至 `backend/sfid/city_codes/43_HJ.rs`
+- 工具主模块：`backend/sfid_number/mod.rs`
+- 行政区真源：`backend/china/data/china.sqlite`
+- 省市代码查询：`backend/china/store.rs`
 
 #### 14.1.2 生成输入
 - `wallet_pubkey`（电子护照绑定字段）
@@ -582,7 +588,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 15.3 P2（运维与结构优化）
 - 可观测完善：增加扫码验签失败率、登录验签失败率、绑定成功率、链查询 P95、重放拦截次数（链路 P95/P99、重放拦截、链请求失败、回调失败已落地）。
-- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。后端源码直接平铺在 `backend/` 根目录，功能模块按 `app_core`、`citizens`、`institutions`、`scope`、`sfid`、`admins`、`models` 等目录归属；链交互能力放在所属功能目录的 `chain_*.rs` 文件内。
+- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。后端源码直接平铺在 `backend/` 根目录，功能模块按 `app_core`、`citizens`、`subjects`、`gov`、`private`、`accounts`、`docs`、`china`、`sfid_number`、`scope`、`admins`、`models` 等目录归属；链交互能力放在所属功能目录的 `chain_*.rs` 文件内。
 
 ## 16. 开发步骤（执行版）
 ### 16.1 里程碑 0：规格冻结（0.5 天）
@@ -593,7 +599,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 验收标准：前后端、测试、区块链对接口与字段无歧义。
 
 ### 16.2 里程碑 1：数据层与系统初始化（2-3 天）
-- 完成模块 Store 拆分：`store_citizens / store_cpms / store_institutions / store_ops`。
+- 完成模块 Store 拆分：`store_citizens / store_cpms / store_subjects / store_ops`。
 - 运行缓存只作为进程内加速层，启动时从模块 Store 主数据恢复，不再作为持久化真源。
 - CPMS 授权、电子护照绑定、机构账户和登录审计按模块快照持久化。
 - 交付物：启动期当前结构初始化、数据字典。

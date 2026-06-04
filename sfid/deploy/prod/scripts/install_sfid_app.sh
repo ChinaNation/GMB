@@ -47,7 +47,7 @@ DATABASE_URL=postgres://sfid_app:CHANGE_ME_APP_PASSWORD@PRIMARY_DB_FQDN:5432/sfi
 # Redis（限流 / 防重放 / 短缓存）
 SFID_REDIS_URL=redis://127.0.0.1:6379/0
 
-# 链对接相关（基础站点部署可先留空，后续接链时再补）
+# 链对接相关（基础站点部署可先留空，接链时再补）
 SFID_CHAIN_TOKEN=
 SFID_CHAIN_SIGNING_SECRET=
 SFID_CHAIN_WS_URL=

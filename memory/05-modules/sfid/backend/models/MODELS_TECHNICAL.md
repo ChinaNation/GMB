@@ -32,10 +32,10 @@ sfid/backend/citizens/model.rs
 sfid/backend/cpms/model.rs
   # CPMS 安装授权、INSTALL/ARCHIVE DTO、档案验真结果
 
-sfid/backend/sfid/model.rs
-  # SFID 管理页元信息 DTO
+sfid/backend/sfid_number/model.rs
+  # SFID 编码元信息 DTO
 
-sfid/backend/institutions/model.rs
+sfid/backend/subjects/model.rs
   # 机构链状态 InstitutionChainStatus / MultisigChainStatus
 ```
 
@@ -44,7 +44,7 @@ sfid/backend/institutions/model.rs
 - `main.rs` 继续 `pub(crate) use models::*` 暴露全局共享类型。
 - 业务模型由对应模块导出,例如 `citizens::model::*`、`cpms::model::*`。
 - `Store` 仍作为内存聚合体类型使用,但持久化由 `main.rs` 拆到
-  `store_citizens / store_cpms / store_institutions / store_ops` 四张模块快照表。
+  `store_citizens / store_cpms / store_subjects / store_ops` 四张模块快照表。
 - `Store` 可以引用业务模块模型,但业务 DTO 不反向塞回 `models`。
 - 管理员安全分级的跨模块共享状态放在 `Store`:
   - `admin_passkeys_by_credential_id`:省/市管理员浏览器 Passkey 凭据。

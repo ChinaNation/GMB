@@ -29,7 +29,8 @@ import { adminLogout, checkAdminAuth } from './auth/api';
 import type { SfidMetaResult } from './sfid/api';
 import { loadCachedSfidMeta } from './sfid/metaCache';
 import { LoginView } from './auth/LoginView';
-import { InstitutionsView } from './institutions/InstitutionsView';
+import { GovView } from './gov/GovView';
+import { PrivateView } from './private/PrivateView';
 import { OperatorsView } from './admins/OperatorsView';
 import { ShengAdminsView } from './admins/ShengAdminsView';
 import { CitizensView } from './citizens/CitizensView';
@@ -51,9 +52,9 @@ function resolveHeaderAdminIdentity(auth: AdminAuth | null): { roleLabel: string
 
 type ActiveView =
   | 'citizens'
-  | 'institutions'
-  | 'gov-institutions'
-  | 'multisig'
+  | 'public-security'
+  | 'gov'
+  | 'private'
   | 'system-settings'
   | 'sheng-admins'
   | 'operators';
@@ -62,7 +63,7 @@ function AppInner() {
   const { auth, setAuth, capabilities } = useAuth();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [activeView, setActiveView] = useState<ActiveView>('citizens');
-  // 中文注释:sfidMeta 仍需在 App.tsx 持有,因为它由 Tab 点击事件统一拉取后传给 InstitutionsView。
+  // 中文注释:sfidMeta 仍需在 App.tsx 持有,因为机构类 Tab 点击事件要统一拉取省市元数据。
   const [sfidMeta, setSfidMeta] = useState<SfidMetaResult | null>(null);
 
   useEffect(() => {
@@ -124,7 +125,7 @@ function AppInner() {
     message.success('已退出登录');
   };
 
-  /** 点击机构类 Tab 时统一加载省份列表(传给 InstitutionsView) */
+  /** 点击机构类 Tab 时统一加载省份列表(传给 gov/private 页面) */
   const loadSfidMetaForInstitutions = async () => {
     if (!auth) return;
     if (sfidMeta) return;
@@ -275,23 +276,23 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 公权机构 → 公安局 → 注册局。省管理员链功能后续统一并入注册局页面。 */}
+            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 公权机构 → 公安局 → 注册局。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: !mustUpdatePasskey, onClick: () => setActiveView('citizens') },
               {
-                key: 'multisig' as const, label: '私权机构',
-                visible: !mustUpdatePasskey && capabilities.canViewMultisig,
-                onClick: async () => { setActiveView('multisig'); await loadSfidMetaForInstitutions(); }
+                key: 'private' as const, label: '私权机构',
+                visible: !mustUpdatePasskey && capabilities.canViewPrivate,
+                onClick: async () => { setActiveView('private'); await loadSfidMetaForInstitutions(); }
               },
               {
-                key: 'gov-institutions' as const, label: '公权机构',
+                key: 'gov' as const, label: '公权机构',
                 visible: !mustUpdatePasskey && capabilities.canViewInstitutions,
-                onClick: async () => { setActiveView('gov-institutions'); await loadSfidMetaForInstitutions(); }
+                onClick: async () => { setActiveView('gov'); await loadSfidMetaForInstitutions(); }
               },
               {
-                key: 'institutions' as const, label: '公安局',
+                key: 'public-security' as const, label: '公安局',
                 visible: !mustUpdatePasskey && capabilities.canViewInstitutions,
-                onClick: async () => { setActiveView('institutions'); await loadSfidMetaForInstitutions(); }
+                onClick: async () => { setActiveView('public-security'); await loadSfidMetaForInstitutions(); }
               },
               {
                 key: 'system-settings' as const, label: '注册局',
@@ -325,13 +326,13 @@ function AppInner() {
             <OperatorsView />
           ) : routedView === 'sheng-admins' && capabilities.canViewShengAdmins ? (
             <ShengAdminsView mode="list" />
-          ) : routedView === 'institutions' && capabilities.canManageInstitutions && auth ? (
-            // 中文注释:三机构 tab 共享 InstitutionsView,key=category 保证切 tab 时 state 重置
-            <InstitutionsView key="PUBLIC_SECURITY" auth={auth} category="PUBLIC_SECURITY" sfidMeta={sfidMeta} />
-          ) : routedView === 'gov-institutions' && capabilities.canManageInstitutions && auth ? (
-            <InstitutionsView key="GOV_INSTITUTION" auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} />
-          ) : routedView === 'multisig' && capabilities.canViewMultisig && auth ? (
-            <InstitutionsView key="PRIVATE_INSTITUTION" auth={auth} category="PRIVATE_INSTITUTION" sfidMeta={sfidMeta} />
+          ) : routedView === 'public-security' && capabilities.canManageInstitutions && auth ? (
+            // 中文注释:公安局属于 gov 前端边界,但仍保持独立 Tab。
+            <GovView auth={auth} category="PUBLIC_SECURITY" sfidMeta={sfidMeta} />
+          ) : routedView === 'gov' && capabilities.canManageInstitutions && auth ? (
+            <GovView auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} />
+          ) : routedView === 'private' && capabilities.canViewPrivate && auth ? (
+            <PrivateView auth={auth} sfidMeta={sfidMeta} />
           ) : routedView === 'system-settings' && capabilities.canViewSystemSettings ? (
             <ShengAdminsView mode="system-settings" />
           ) : (

@@ -315,16 +315,14 @@ pub(crate) fn append_audit_log_with_meta(
 /// 任务卡 6:后端启动时 backfill + 对 43 省全量对账公安局机构。
 ///
 /// 中文注释:
-/// 1. 先调 `backfill_public_security_city_codes` 给老公安局记录补 `city_code`
+/// 1. 先调 `backfill_public_security_city_code_fields` 给老公安局记录补 `city_code`
 ///    (任务卡 6 新增字段),否则 reconcile 会按 city_code 误删。
 /// 2. 然后按 sfid 工具权威清单 reconcile 每个省:
 ///    增加缺失的市公安局、删除已从市清单剔除的、改名同步。
 pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
-    use crate::institutions::service::{
-        backfill_public_security_city_codes, reconcile_public_security_for_province,
+    use crate::gov::service::{
+        backfill_public_security_city_code_fields, reconcile_public_security_for_province,
     };
-    use crate::sfid::province::PROVINCES;
-
     let mut store = match state.store.write() {
         Ok(v) => v,
         Err(e) => {
@@ -332,7 +330,7 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
             return;
         }
     };
-    let fixed = backfill_public_security_city_codes(&mut store);
+    let fixed = backfill_public_security_city_code_fields(&mut store);
     if fixed > 0 {
         tracing::info!(
             count = fixed,
@@ -343,7 +341,7 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
     let mut total_inserted = 0usize;
     let mut total_updated = 0usize;
     let mut total_removed = 0usize;
-    for p in PROVINCES.iter() {
+    for p in crate::china::provinces().iter() {
         let r = reconcile_public_security_for_province(&mut store, p.name, "SYSTEM");
         total_inserted += r.inserted;
         total_updated += r.updated;
@@ -357,31 +355,83 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
     );
 }
 
-/// 把 `backfill_and_reconcile_public_security` 新写入的公安局机构 + 2 条默认账户
-/// 从模块 Store 快照幂等同步到进程内分片缓存。
+/// 后端启动时对账普通公权/宪法机构目录。
+///
+/// 中文注释:公安局仍走独立 tab 和独立 reconcile;这里处理除公安局外的自动机构,
+/// 包括 citizenchain 宪法常量中的国家/省级机构,以及 SFID 行政区划派生的市级机构。
+pub(crate) fn backfill_and_reconcile_official_institutions(state: &AppState) {
+    use crate::gov::service::reconcile_official_institutions;
+
+    let (report, upsert_institutions, upsert_accounts) = {
+        let mut store = match state.store.write() {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!(error = %e, "store RwLock poisoned");
+                return;
+            }
+        };
+        let report = reconcile_official_institutions(&mut store, "SYSTEM");
+        let touched: HashSet<String> = report.touched_sfids.iter().cloned().collect();
+        let upsert_institutions = report
+            .touched_sfids
+            .iter()
+            .filter_map(|sfid| store.multisig_institutions.get(sfid).cloned())
+            .collect::<Vec<_>>();
+        let upsert_accounts = store
+            .multisig_accounts
+            .values()
+            .filter(|account| touched.contains(&account.sfid_number))
+            .cloned()
+            .collect::<Vec<_>>();
+        (report, upsert_institutions, upsert_accounts)
+    };
+
+    if !report.removed_sfids.is_empty() {
+        if let Err(e) = state
+            .store
+            .delete_institution_rows_by_sfids(&report.removed_sfids)
+        {
+            tracing::error!(error = %e, "official institution stale row cleanup failed");
+        }
+    }
+    for inst in &upsert_institutions {
+        if let Err(e) = state.store.upsert_institution_row(inst) {
+            tracing::error!(sfid = %inst.sfid_number, error = %e, "official institution row upsert failed");
+        }
+    }
+    for account in &upsert_accounts {
+        if let Err(e) = state.store.upsert_institution_account_row(account) {
+            tracing::error!(sfid = %account.sfid_number, account = %account.account_name, error = %e, "official institution account row upsert failed");
+        }
+    }
+
+    tracing::info!(
+        inserted = report.inserted,
+        updated = report.updated,
+        removed = report.removed,
+        total_after = report.total_after,
+        "official institution reconcile finished"
+    );
+}
+
+/// 把模块 Store 快照里的机构 + 账户幂等同步到进程内分片缓存。
 ///
 /// 为什么需要这一步:
-/// - `reconcile_public_security_for_province` 是同步函数,只持全局 `&mut Store`,
+/// - 启动期 reconcile 是同步函数,只持全局 `&mut Store`,
 ///   无法写 sharded_store(sharded 接口是 async)
 /// - ShardedStore 当前是进程内缓存,启动后需要从模块 Store 快照同步一次
 ///
-/// 所以启动时 reconcile 新建的公安局机构和它们的主账户 / 费用账户,前端按省读
-/// sharded_store 否则看不到。本函数在 tokio runtime 起来后跑一次,
-/// 把模块 Store 快照里所有 `PublicSecurity` 机构及其默认账户写入分片缓存,**幂等**(or_insert)。
-pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
-    use crate::institutions::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
-    use crate::institutions::MultisigChainStatus;
-    use crate::sfid::InstitutionCategory;
+/// 所以启动时 reconcile 新建的公安局、自动公权/宪法机构及其默认账户,前端详情页按省读
+/// sharded_store 才能看到。本函数在 tokio runtime 起来后跑一次,**幂等**(or_insert)。
+pub(crate) async fn sync_institutions_to_sharded(state: &AppState) {
+    use crate::subjects::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
+    use crate::subjects::MultisigChainStatus;
 
-    // 1. 从模块 Store 快照取所有公安局机构 + 其 2 条默认账户
+    // 1. 从模块 Store 快照取所有机构 + 账户。
     let snapshot: Vec<(MultisigInstitution, Vec<MultisigAccount>)> = match state.store.read() {
         Ok(store) => {
-            let institutions: Vec<MultisigInstitution> = store
-                .multisig_institutions
-                .values()
-                .filter(|i| matches!(i.category, InstitutionCategory::PublicSecurity))
-                .cloned()
-                .collect();
+            let institutions: Vec<MultisigInstitution> =
+                store.multisig_institutions.values().cloned().collect();
             institutions
                 .into_iter()
                 .map(|inst| {
@@ -396,7 +446,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                 .collect()
         }
         Err(e) => {
-            tracing::warn!(error = %e, "sync_public_security_to_sharded: store read failed");
+            tracing::warn!(error = %e, "sync_institutions_to_sharded: store read failed");
             return;
         }
     };
@@ -442,23 +492,19 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                 tracing::warn!(
                     province = %province,
                     error = %e,
-                    "sync_public_security_to_sharded: shard write failed"
+                    "sync_institutions_to_sharded: shard write failed"
                 );
             }
         }
     }
 
-    // 3. 对模块 Store 快照里存在但缺默认账户的公安局,再补齐一次默认账户。
+    // 3. 对模块 Store 快照里存在但缺默认账户的机构,再补齐一次默认账户。
     //    走 DUOQIAN_V1 本地派生;同时写模块 Store 快照 + 分片缓存。
     let missing: Vec<(String, String)> = {
         let mut out: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
         if let Ok(store) = state.store.read() {
-            for inst in store
-                .multisig_institutions
-                .values()
-                .filter(|i| matches!(i.category, InstitutionCategory::PublicSecurity))
-            {
-                for name in crate::institutions::service::DEFAULT_ACCOUNT_NAMES {
+            for inst in store.multisig_institutions.values() {
+                for name in crate::subjects::service::DEFAULT_ACCOUNT_NAMES {
                     let key = account_key_to_string(&inst.sfid_number, name);
                     if !store.multisig_accounts.contains_key(&key) {
                         out.insert((inst.province.clone(), inst.sfid_number.clone()));
@@ -471,7 +517,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
     if !missing.is_empty() {
         if let Ok(mut store) = state.store.write() {
             for (_, sfid) in &missing {
-                crate::institutions::service::insert_default_accounts_into_global_store(
+                crate::subjects::service::insert_default_accounts_into_global_store(
                     &mut store, sfid, "SYSTEM",
                 );
             }
@@ -486,17 +532,15 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                 });
         for (province, sfids) in missing_by_prov {
             let sfids_clone = sfids.clone();
-            let backfilled =
-                sfids.len() * crate::institutions::service::DEFAULT_ACCOUNT_NAMES.len();
+            let backfilled = sfids.len() * crate::subjects::service::DEFAULT_ACCOUNT_NAMES.len();
             let write_result = state
                 .sharded_store
                 .write_province(&province, move |shard| {
                     let now = chrono::Utc::now();
                     for sfid in &sfids_clone {
-                        for name in crate::institutions::service::DEFAULT_ACCOUNT_NAMES {
+                        for name in crate::subjects::service::DEFAULT_ACCOUNT_NAMES {
                             let key = account_key_to_string(sfid, name);
-                            let addr =
-                                crate::institutions::derive::derive_duoqian_address(sfid, name);
+                            let addr = crate::accounts::derive::derive_duoqian_address(sfid, name);
                             shard
                                 .multisig_accounts
                                 .entry(key)
@@ -524,7 +568,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
     tracing::info!(
         institutions_synced = inst_written,
         accounts_synced = acc_written,
-        "public security sharded_store sync finished"
+        "institution sharded_store sync finished"
     );
 }
 
@@ -550,7 +594,7 @@ pub(crate) async fn sync_cpms_sites_to_sharded(state: &AppState) {
         let province = if !site.admin_province.trim().is_empty() {
             site.admin_province.clone()
         } else {
-            match crate::sfid::province::province_name_by_code(site.province_code.as_str()) {
+            match crate::china::province_name_by_code(site.province_code.as_str()) {
                 Some(name) => name.to_string(),
                 None => {
                     tracing::warn!(

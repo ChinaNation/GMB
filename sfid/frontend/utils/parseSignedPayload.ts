@@ -1,6 +1,6 @@
 // 统一的签名二维码 payload 解析工具。
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// 使用 WUMIN_QR_V1 envelope,不再有任何字段别名兼容。
+// 使用 WUMIN_QR_V1 envelope,不支持字段别名。
 
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import type { LoginReceiptBody, SignResponseBody } from '../qr/wuminQr';
@@ -50,7 +50,7 @@ export type SignedReceiptPayload = {
 };
 
 // 中文注释:解析"挑战签名回执"二维码 payload。
-// 既兼容 WUMIN_QR_V1 envelope(login_receipt),也兼容裸字符串(纯 hex 签名)。
+// 只接受 WUMIN_QR_V1 envelope(login_receipt/sign_response)。
 // 返回结构供调用方提交后端 verify/commit。
 export function parseSignedReceiptPayload(
   raw: string,
@@ -60,40 +60,37 @@ export function parseSignedReceiptPayload(
   if (!trimmed) {
     throw new Error('签名二维码内容为空');
   }
-  if (trimmed.startsWith('{')) {
-    let env;
-    try {
-      env = parseQrEnvelope(trimmed);
-    } catch (e) {
-      if (e instanceof QrParseError) {
-        throw new Error(`签名二维码解析失败: ${e.message}`);
-      }
-      throw e;
-    }
-    if (env.kind !== 'login_receipt' && env.kind !== 'sign_response') {
-      throw new Error(`期望 login_receipt/sign_response,实际: ${env.kind}`);
-    }
-    const challenge_id = env.id || fallbackChallengeId;
-    if (env.kind === 'sign_response') {
-      const body = env.body as SignResponseBody;
-      if (!challenge_id || !body.signature || !body.pubkey) {
-        throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
-      }
-      return {
-        challenge_id,
-        signature: body.signature,
-        signer_pubkey: body.pubkey,
-        payload_hash: body.payload_hash,
-      };
-    }
-    const body = env.body as LoginReceiptBody;
-    if (!challenge_id || !body.signature) {
-      throw new Error('签名二维码缺少必要字段(id/signature)');
-    }
-    return { challenge_id, signature: body.signature, signer_pubkey: body.pubkey };
+  if (!trimmed.startsWith('{')) {
+    throw new Error('签名二维码必须使用 WUMIN_QR_V1 envelope');
   }
-  return {
-    challenge_id: fallbackChallengeId,
-    signature: trimmed,
-  };
+  let env;
+  try {
+    env = parseQrEnvelope(trimmed);
+  } catch (e) {
+    if (e instanceof QrParseError) {
+      throw new Error(`签名二维码解析失败: ${e.message}`);
+    }
+    throw e;
+  }
+  if (env.kind !== 'login_receipt' && env.kind !== 'sign_response') {
+    throw new Error(`期望 login_receipt/sign_response,实际: ${env.kind}`);
+  }
+  const challenge_id = env.id || fallbackChallengeId;
+  if (env.kind === 'sign_response') {
+    const body = env.body as SignResponseBody;
+    if (!challenge_id || !body.signature || !body.pubkey) {
+      throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
+    }
+    return {
+      challenge_id,
+      signature: body.signature,
+      signer_pubkey: body.pubkey,
+      payload_hash: body.payload_hash,
+    };
+  }
+  const body = env.body as LoginReceiptBody;
+  if (!challenge_id || !body.signature) {
+    throw new Error('签名二维码缺少必要字段(id/signature)');
+  }
+  return { challenge_id, signature: body.signature, signer_pubkey: body.pubkey };
 }

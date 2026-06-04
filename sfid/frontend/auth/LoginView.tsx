@@ -1,5 +1,4 @@
-// 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 5)
-// 独立的登录页组件:渲染未登录态(QR 扫码登录 + 签名挑战应答),
+// 中文注释:独立的登录页组件:渲染未登录态(QR 扫码登录 + 签名挑战应答),
 // 持有登录相关 state / handler / useEffect / videoRef,
 // 登录成功后通过 useAuth().setAuth 写入全局,App.tsx 只负责在 !auth 时渲染 <LoginView />。
 

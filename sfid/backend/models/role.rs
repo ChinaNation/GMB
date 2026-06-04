@@ -24,7 +24,7 @@ pub(crate) struct AdminUser {
     #[serde(default)]
     pub(crate) admin_name: String,
     pub(crate) role: AdminRole,
-    /// 中文注释:初始省级管理员由代码内置,不可删除;后续新增管理员为 false。
+    /// 中文注释:初始省级管理员由代码内置,不可删除;代码以外新增管理员为 false。
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,

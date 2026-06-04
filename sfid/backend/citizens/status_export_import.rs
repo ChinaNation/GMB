@@ -200,8 +200,8 @@ pub(crate) async fn admin_import_cpms_status_export(
         .chain(plan.releases.iter().map(|item| item.citizen_id))
         .collect();
     let output = apply_import_plan(&mut store, &ctx, &file, plan);
-    // 中文注释:管理员公民列表读取 sfid_citizens 行表;CPMS 年度导入改动 Store 后,
-    // 必须把受影响记录同步写入查询行表,否则精确检索会读到旧状态或空结果。
+    // 中文注释:管理员公民列表读取 citizens 分区表;CPMS 年度导入改动 Store 后,
+    // 必须把受影响记录同步写入目标表,否则精确检索会读到过期状态或空结果。
     let changed_records: Vec<_> = affected_citizen_ids
         .iter()
         .filter_map(|id| store.citizen_records.get(id).cloned())

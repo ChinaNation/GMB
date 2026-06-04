@@ -315,7 +315,7 @@ pub(crate) async fn admin_auth_verify(
     store
         .admin_sessions
         .insert(access_token.clone(), new_session.clone());
-    // 中文注释:先释放写锁,避免后续异步同步 GlobalShard 时持有 StoreWriteGuard。
+    // 中文注释:先释放写锁,避免接下来的异步同步 GlobalShard 持有 StoreWriteGuard。
     drop(store);
 
     // 中文注释:登录成功后同步写 GlobalShard session,供鉴权守卫快速读取。

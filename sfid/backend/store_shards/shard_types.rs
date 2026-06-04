@@ -14,12 +14,12 @@ use std::collections::HashMap;
 
 use crate::citizens::model::{CitizenBindChallenge, CitizenRecord};
 use crate::cpms::model::CpmsSiteKeys;
-use crate::institutions::{MultisigAccount, MultisigInstitution};
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 use crate::models::{
     AdminUser, AuditLogEntry, ChainRequestReceipt, RewardStateRecord, ServiceMetrics,
     VoteVerifyCacheEntry,
 };
+use crate::subjects::{MultisigAccount, MultisigInstitution};
 
 /// 省级分片:按 province 名切分的业务数据。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

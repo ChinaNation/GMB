@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-05-31
+- 最后更新:2026-06-03
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
@@ -20,10 +20,13 @@
   - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
   - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
   - `memory/08-tasks/open/20260531-sfid-signature-modal-stack.md`
+  - `memory/08-tasks/open/20260601-sfid-official-institutions.md`
+  - `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
+  - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
 
 ## 当前边界
 
-SFID 前端旧源码壳、旧 views 壳、旧全局业务 API 目录、旧全局链目录已删除。
+SFID 前端 `src` 源码壳、`views` 壳、全局业务 API 目录、全局链目录已删除。
 前端不再保留“src + views”这层空壳,也不再维护全局业务 API 或全局链目录。
 所有页面、hook、通用组件、业务 API 和链交互 API 都直接按业务目录放在 `sfid/frontend/` 下。
 
@@ -32,14 +35,19 @@ sfid/frontend/
 ├── main.tsx
 ├── App.tsx
 ├── vite-env.d.ts
+├── accounts/                  # 机构账户组件
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
-├── common/                    # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗
+├── common/                    # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗和机构共享表单
+│   └── institution/           # 公权/私权共用机构新增表单,不承载业务 API
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
+├── docs/                      # 机构资料库前端出口
+├── gov/                       # 公权机构页面入口,前后端统一使用 gov 命名
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
-├── institutions/              # 机构本地管理页面、institutions/api.ts、chain_duoqian_info.ts
+├── private/                   # 私权机构页面入口
 ├── qr/
 ├── sfid/                      # SFID 元数据 API,如省市/A3/机构类型选项
+├── subjects/                  # 身份主体共享类型、字段标签和链端公开查询封装
 ├── admins/                    # 省/市管理员页面、Passkey.tsx、operators_api.ts、admin_security_api.ts
 ├── theme/
 └── utils/                     # 通用工具,http.ts 只放请求封装,不放业务 API
@@ -53,17 +61,26 @@ sfid/frontend/
   `ApiError`,页面按 `errorCode` 展示,不得返回 `undefined as T`。
 - 登录/会话接口放 `auth/api.ts`;登录态和角色类型放 `auth/types.ts`。
 - SFID 元数据接口放 `sfid/api.ts`,用于省份、市、A3、机构类型等跨页面选择项。
-- 机构本地管理接口放 `institutions/api.ts`。机构与区块链交互继续放 `institutions/chain_duoqian_info.ts`。
+- `subjects/api.ts` 只保留跨公权/私权共用的数据类型和公共边界;业务 CRUD API
+  分别放 `gov/api.ts`、`private/api.ts`、`accounts/api.ts`、`docs/api.ts`。
+  机构与区块链交互继续放 `subjects/chain_duoqian_info.ts`。
+- 公权机构页面入口放 `gov/`,前后端统一使用 `gov` 命名;前端不得新建 `public/` 业务目录。
+- 私权机构页面入口放 `private/`;身份主体公共出口放 `subjects/`;账户和资料库出口分别放
+  `accounts/`、`docs/`。
+- 不得恢复 `institutions/` 前端目录;公权 UI 归 `gov/`,私权 UI 归 `private/`,
+  账户和资料库分别归 `accounts/`、`docs/`。`subjects/` 不再承载机构聚合页面组件。
 - CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 省/市管理员本地后台接口统一放 `admins/`;省管理员目录接口放 `admins/api.ts`,
   市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `common/WuminSignaturePanel.tsx` 与 `common/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
+- `common/institution/CreateInstitutionForm.tsx` 是公权/私权新增弹窗唯一表单实现;
+  `gov/GovCreateModal.tsx` 和 `private/PrivateCreateModal.tsx` 只做本模块 API 注入,不得再复制表单逻辑。
 - `common/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
-  扫码账户弹窗在其上,Passkey 后续冷钱包签名弹窗固定在最高安全层。
+  扫码账户弹窗在其上,Passkey 冷钱包签名弹窗固定在最高安全层。
 - 管理端权限类型统一为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`;前端类型必须与后端
-  `admins/operation_auth.rs` 对齐,不得恢复旧二级权限命名。
+  `admins/operation_auth.rs` 对齐,不得恢复二级权限命名。
 - `PASSKEY` 业务写操作不得直接裸调用 CRUD 端点;必须先通过
   `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
 - `PASSKEY_CHALLENGE` 写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
@@ -99,9 +116,13 @@ sfid/frontend/
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
-- `sfid/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单和公安局确定性展示列表，不得缓存普通公民或普通机构业务查询结果。
-- `common/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
-- `institutions/InstitutionListTable.tsx` 不做普通机构本地分页承载大数据；公权机构和私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。
+- `sfid/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
+- `common/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
+- `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 只承载公安局和公权机构确定性列表,进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
+- 公权机构 tab 不再提供普通公权机构新增入口；右上角按钮文案固定为“新增”。
+- `common/institution/CreateInstitutionForm.tsx` 中公权新增只允许 `GFR/JY`,填写的是学校名称,不得出现所属学校 SFID。
+- 公权机构和私权机构新增选项中 `JY` 文案均显示为“教育委员会 (JY)”；选择 `JY` 时名称字段标签显示为“学校名称”。
+- 机构链上状态前端只保留“未注册 / 已注册 / 已注销”,不得出现第四状态筛选或文案。
 
 ## 管理员目录规则
 
@@ -111,6 +132,8 @@ sfid/frontend/
 - 市级管理员列表必须显示 `本市市级管理员：x / 30`;市列表卡片显示该市 `x / 30`;
   达到 30 人的市禁用新增按钮和新增弹窗里的市选项,但最终上限仍以后端校验为准。
 - `operators_api.ts` 保留市管理员列表读取和姓名登录态修改。
+- `admins/ShengAdminsView.tsx` 的省级管理员列表和市级管理员列表有本地缓存时必须先显示缓存,再后台刷新后端数据,避免进入注册局详情时反复空白转圈。
+- `admins/ShengAdminsView.tsx` 首次按登录角色自动定位所属省时不得覆盖用户已经点击的“省管理员列表”页签；只有用户真正切换省份时才重置回默认市列表页签。
 - `admin_security_api.ts` 负责 Passkey 注册、写操作 prepare/commit、浏览器 WebAuthn、
   `PASSKEY` grant、`PASSKEY_CHALLENGE` 冷钱包签名回执提交和管理员新增错误码文案转换。
 - 管理员新增失败时，前端只能按 `ApiError.errorCode` 展示角色级重复、省级管理员上限和市级管理员上限提示，禁止解析后端
@@ -123,7 +146,7 @@ sfid/frontend/
 - 管理员列表不得展示状态栏,也不得保留启用/停用按钮。
 - 编辑市管理员只允许调整管理员姓名;账户地址和市归属只读展示,不得在前端提交修改。
 - 删除市管理员确认弹窗必须展示 SS58 地址,不直接展示 hex 公钥。
-- 旧省管理员签名维护页不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
+- 省管理员签名维护页不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
 - 本地开发的 Vite host 固定为 `localhost`;Passkey 开发配置依赖
   `http://localhost:5179`,不得用 `127.0.0.1` 或局域网 IP 打开前端注册 Passkey。
@@ -137,17 +160,18 @@ sfid/frontend/
 
 | 前端文件 | 后端文件 | 职责 |
 |---|---|---|
-| `institutions/chain_duoqian_info.ts` | `institutions/chain_duoqian_info.rs` | 机构查询、注册信息凭证、清算行信息 |
+| `subjects/chain_duoqian_info.ts` | `subjects/chain_duoqian_info.rs` | 机构查询、注册信息凭证、清算行信息 |
 
 省/市管理员治理 Passkey/冷钱包挑战不列入链交互表。
 CPMS 系统管理也不列入链交互表,归 `cpms/`。
 
-### `institutions/chain_duoqian_info.ts` 边界
+### `subjects/chain_duoqian_info.ts` 边界
 
-- 不放 SFID 内部机构创建/修改页面,这些仍归 `frontend/institutions/`。
+- 不放 SFID 内部机构创建/修改页面,这些归 `frontend/gov/`、`frontend/private/`、
+  `frontend/accounts/`、`frontend/docs/`。
 - 不再提供“备案”按钮、备案弹窗或备案状态组件。
 - 机构列表的“清算行资格”列只在私权机构 Tab 显示;公安局和公权机构列表不得展示该列。
-- 公安局 Tab 不显示搜索框，不复用普通机构精确搜索；首次进入调用 `/api/v1/institutions/public-security`，成功后按管理员账户、角色、省市范围写入 `sfid:public-security:public-security-v1:*` 本地缓存，再次进入优先展示缓存，点击“刷新”才清缓存并重新请求。公安局列表前端固定每页 20 条，显示“共 N 条 / 第 X 页 / 上一页 / 下一页”，本地翻页不得触发后端 cursor 请求。
+- 公安局 Tab 不显示搜索框，不复用普通机构精确搜索；首次进入调用 `/api/v1/institutions/public-security`，成功后按管理员账户、角色、省市范围写入 `sfid:public-security:public-security-v1:*` 本地缓存，再次进入优先展示缓存。公安局列表前端固定每页 20 条，显示“共 X 页 / 第 Y 页”“共 N 条”“上一页”“下一页”，不得展示手动刷新按钮，本地翻页不得触发后端 cursor 请求。公安局表格列固定为“序号 / 身份ID / 机构名称 / 省/市 / 账户数”，表头和数据居中对齐，序号按当前公安局排序跨页连续编号。
 - 公民身份列表搜索框只允许输入档案号、身份ID、投票账户地址或投票账户公钥；SFID 前端不得出现“按姓名检索公民”的文案。
 - 当前封装公开查询:
   - `getInstitutionInfo(sfidNumber)`:机构展示详情。
@@ -165,13 +189,17 @@ CPMS 系统管理也不列入链交互表,归 `cpms/`。
   "App.tsx",
   "vite-env.d.ts",
   "auth",
+  "accounts",
   "citizens",
   "common",
   "cpms",
+  "docs",
+  "gov",
   "hooks",
-  "institutions",
+  "private",
   "qr",
   "sfid",
+  "subjects",
   "admins",
   "theme",
   "utils"

@@ -4,10 +4,11 @@
 //   - 省管理员: 市列表 → 市详情(该市管理员列表)
 //   - 市管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Form, Input, Modal, Space, Typography, message } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
+import type { AdminAuth } from '../auth/types';
 import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
 import type { SfidCityItem } from '../sfid/api';
@@ -20,7 +21,7 @@ import {
   type AdminActionType,
 } from './admin_security_api';
 import { listShengAdmins } from './api';
-import { loadCachedSfidCities } from '../sfid/metaCache';
+import { loadCachedSfidCities, readCachedSfidCities } from '../sfid/metaCache';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
@@ -52,6 +53,57 @@ const centeredConfirmFooter: ModalProps['footer'] = (_originNode, { OkBtn, Cance
   </div>
 );
 
+const ADMIN_LIST_CACHE_VERSION = 'sfid-admin-list-v1';
+
+interface CachedAdminListPayload<T> {
+  version: string;
+  rows: T[];
+}
+
+function adminListCacheKey(
+  kind: 'sheng-admins' | 'city-admins',
+  auth: AdminAuth,
+  mode: ShengAdminsViewProps['mode'],
+): string {
+  return [
+    'sfid:admin-list',
+    ADMIN_LIST_CACHE_VERSION,
+    kind,
+    auth.admin_pubkey,
+    auth.role,
+    auth.admin_province || 'ALL',
+    auth.admin_city || 'ALL',
+    mode,
+  ].join(':');
+}
+
+function readCachedAdminList<T>(key: string): T[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedAdminListPayload<T>;
+    if (parsed.version !== ADMIN_LIST_CACHE_VERSION || !Array.isArray(parsed.rows)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.rows;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function writeCachedAdminList<T>(key: string, rows: T[]) {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({ version: ADMIN_LIST_CACHE_VERSION, rows } satisfies CachedAdminListPayload<T>),
+    );
+  } catch {
+    // 中文注释:注册局管理员列表缓存只是减少重复转圈,写失败不能影响业务操作。
+  }
+}
+
 export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const { auth } = useAuth();
 
@@ -60,13 +112,20 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [selectedShengAdmin, setSelectedShengAdmin] = useState<ShengAdminRow | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [adminDetailTab, setAdminDetailTab] = useState<'operators' | 'sheng-admin'>('operators');
+  const adminDetailTabRef = useRef<'operators' | 'sheng-admin'>('operators');
+  const lastSelectedShengAdminKey = useRef<string | null>(null);
 
   const [operators, setOperators] = useState<OperatorRow[]>([]);
   const [operatorsLoading, setOperatorsLoading] = useState(false);
   const [operatorListPage, setOperatorListPage] = useState(1);
 
-  const [operatorCities, setOperatorCities] = useState<SfidCityItem[]>([]);
-  const [operatorCitiesLoading, setOperatorCitiesLoading] = useState(false);
+  const initialOperatorCities = auth?.admin_province
+    ? readCachedSfidCities(auth.admin_province)
+    : null;
+  const [operatorCities, setOperatorCities] = useState<SfidCityItem[]>(initialOperatorCities ?? []);
+  const [operatorCitiesLoading, setOperatorCitiesLoading] = useState(
+    !!auth?.admin_province && !initialOperatorCities,
+  );
 
   const [addOperatorOpen, setAddOperatorOpen] = useState(false);
   const [addOperatorLoading, setAddOperatorLoading] = useState(false);
@@ -78,39 +137,59 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [adminActionLoading, setAdminActionLoading] = useState(false);
   const [adminActionCommitLoading, setAdminActionCommitLoading] = useState(false);
 
+  useEffect(() => {
+    adminDetailTabRef.current = adminDetailTab;
+  }, [adminDetailTab]);
+
   // ── 数据加载 ──
 
   const refreshShengAdmins = async (): Promise<ShengAdminRow[]> => {
     if (!auth) return [];
-    setShengAdminsLoading(true);
+    const cacheKey = adminListCacheKey('sheng-admins', auth, mode);
+    const cached = readCachedAdminList<ShengAdminRow>(cacheKey);
+    if (cached !== null) {
+      setShengAdmins(cached);
+      setShengAdminsLoading(false);
+    } else {
+      setShengAdminsLoading(true);
+    }
     try {
       const rows = await listShengAdmins(auth);
       const list = Array.isArray(rows) ? rows : [];
       setShengAdmins(list);
+      writeCachedAdminList(cacheKey, list);
       return list;
     } catch (err) {
       const msg = err instanceof Error ? err.message : '加载省级管理员失败';
       message.error(msg);
-      return [];
+      return cached ?? [];
     } finally {
-      setShengAdminsLoading(false);
+      if (cached === null) setShengAdminsLoading(false);
     }
   };
 
   const refreshOperators = async (): Promise<OperatorRow[]> => {
     if (!auth) return [];
-    setOperatorsLoading(true);
+    const cacheKey = adminListCacheKey('city-admins', auth, mode);
+    const cached = readCachedAdminList<OperatorRow>(cacheKey);
+    if (cached !== null) {
+      setOperators(cached);
+      setOperatorsLoading(false);
+    } else {
+      setOperatorsLoading(true);
+    }
     try {
       const rows = await listOperators(auth);
       const list = Array.isArray(rows) ? rows : [];
       setOperators(list);
+      writeCachedAdminList(cacheKey, list);
       return list;
     } catch (err) {
       const msg = err instanceof Error ? err.message : '加载市级管理员失败';
       message.error(msg);
-      return [];
+      return cached ?? [];
     } finally {
-      setOperatorsLoading(false);
+      if (cached === null) setOperatorsLoading(false);
     }
   };
 
@@ -152,14 +231,41 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   //   2. 重置 sub-tab 到默认(市级管理员列表)
   //   3. 重置市级管理员列表分页到第 1 页
   useEffect(() => {
-    if (!selectedShengAdmin || !auth) {
+    if (!auth) {
       setOperatorCities([]);
+      setOperatorCitiesLoading(false);
       return;
     }
-    setOperatorCities([]);
-    setAdminDetailTab(auth.passkey_bound === false && auth.role === 'SHENG_ADMIN' ? 'sheng-admin' : 'operators');
+    if (!selectedShengAdmin) {
+      lastSelectedShengAdminKey.current = null;
+      const cachedRows = auth.admin_province ? readCachedSfidCities(auth.admin_province) : null;
+      if (cachedRows) {
+        setOperatorCities(cachedRows);
+        setOperatorCitiesLoading(false);
+      } else {
+        setOperatorCities([]);
+        setOperatorCitiesLoading(!!auth.admin_province);
+      }
+      return;
+    }
+    const selectedKey = `${selectedShengAdmin.province}:${selectedShengAdmin.admin_pubkey}`;
+    const isRealProvinceSwitch = lastSelectedShengAdminKey.current !== null
+      && lastSelectedShengAdminKey.current !== selectedKey;
+    lastSelectedShengAdminKey.current = selectedKey;
+    const cachedRows = readCachedSfidCities(selectedShengAdmin.province);
+    if (cachedRows) {
+      setOperatorCities(cachedRows);
+      setOperatorCitiesLoading(false);
+    } else {
+      setOperatorCities([]);
+      setOperatorCitiesLoading(true);
+    }
+    // 中文注释:首次自动定位当前省时不能覆盖用户刚点击的“省管理员列表”。
+    // 只有用户真正切换到另一个省时,才把子页签重置回市列表。
+    if (isRealProvinceSwitch && adminDetailTabRef.current !== 'sheng-admin') {
+      setAdminDetailTab(auth.passkey_bound === false && auth.role === 'SHENG_ADMIN' ? 'sheng-admin' : 'operators');
+    }
     setOperatorListPage(1);
-    setOperatorCitiesLoading(true);
     let cancelled = false;
     loadCachedSfidCities(auth, selectedShengAdmin.province)
       .then((rows) => {

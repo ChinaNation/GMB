@@ -244,7 +244,7 @@ fn match_event(
 
         // ─── personal_manage (index 7) ──────────────────────────
         // B 阶段拆分(2026-05-06)起,DuoqianCreated/DuoqianClosed 由 PersonalManage 发射;
-        // 机构多签的创建/关闭事件名为 InstitutionCreated/InstitutionClosed,本 indexer 暂不收录。
+        // 机构多签的创建/关闭事件名为 InstitutionCreated/InstitutionClosed,本 indexer 不收录。
         ("PersonalManage", "DuoqianCreated") => {
             let duoqian = fields.at("duoqian_address").and_then(extract_account_id)?;
             let creator = fields.at("creator").and_then(extract_account_id)?;

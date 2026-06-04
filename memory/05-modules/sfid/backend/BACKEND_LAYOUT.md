@@ -1,6 +1,6 @@
 # SFID 后端目录布局
 
-- 最后更新:2026-05-31
+- 最后更新:2026-06-03
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
@@ -14,10 +14,12 @@
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
   - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
   - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
+  - `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
+  - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
 
 ## 当前边界
 
-SFID 后端旧源码壳已删除。SFID 后端 Rust 源码不再放在 Cargo 默认
+SFID 后端 `backend/src/` 源码壳已删除。SFID 后端 Rust 源码不再放在 Cargo 默认
 `src/main.rs` 下面,而是直接以 `sfid/backend/` 为源码根目录。
 
 `Cargo.toml` 使用显式入口:
@@ -35,20 +37,26 @@ sfid/backend/
 ├── Cargo.toml                 # 显式声明 main.rs 为后端入口
 ├── main.rs                    # Axum 路由、AppState、StoreHandle 等后端入口
 ├── main_tests.rs              # main.rs 的测试模块
+├── accounts/                  # 机构账户入口
 ├── app_core/                  # 跨业务底层工具,含 HTTP 安全、运行期工具、chain_* 通用链工具
 ├── audit.rs                   # 审计日志查询 handler
 ├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
 ├── cpms/                      # CPMS 安装授权、ARCHIVE 验真、档案导入、站点状态治理
 ├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
+├── china/                     # 中国行政区划 SQLite 真源和省市查询接口
+├── docs/                      # 机构资料库入口
+├── gov/                       # 公权机构入口,含公安局和普通公权确定性列表路由归属
 ├── indexer/                   # 链事件解析与索引 worker
-├── institutions/              # 机构创建、机构资料、账户名称、机构链查询 chain_duoqian_info.rs
 ├── login/                     # 管理员登录、扫码登录、鉴权守卫、签名校验
 ├── models/                    # 全局共享模型、角色、响应包装、Store 结构
+├── private/                   # 私权机构入口,含学校/盈利/非盈利/非法人机构路由归属
 ├── qr/                        # QR 协议辅助,含统一 sign_request 构造
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
-├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
+├── sfid_number/               # SFID 编码协议,A3/机构码/生成/校验/admin 元信息 DTO
 ├── admins/                    # 省/市管理员治理和安全分级,含 operation_auth.rs / actions.rs / passkeys.rs
 ├── store_shards/              # 进程内省分片缓存
+├── subjects/                  # 身份主体共享模型、目标分区表、主体详情、非法人能力
+│   └── uninorg/               # 非法人机构从属关系能力
 ├── db/                        # 数据库辅助目录,不是 Rust 源码模块
 ├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
 ├── tests/                     # 集成/e2e 测试
@@ -57,15 +65,20 @@ sfid/backend/
 
 ## 目录铁律
 
-- 禁止恢复旧后端源码壳。
+- 禁止恢复 `backend/src/` 源码壳。
 - 禁止恢复独立 chain 业务目录。
 - 后端新增功能模块直接放 `sfid/backend/<功能名>/`。
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
 - CPMS 系统管理归 `sfid/backend/cpms/`,不得放入管理员目录。
-- 后端不再维护旧省级/市级管理员双目录;
+- 后端不再维护分散的省级/市级管理员双目录;
   省级管理员列表、市级管理员列表和管理员治理写入口统一归 `admins/`。
+- 公权机构前后端目录统一命名为 `gov`;后端不得再另建 `public` 或 `registry_admins`。
+- 私权机构归 `private`;公民继续使用 `citizens`;智能人功能当前不上线,不得预建智能人目录或表。
 - 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,SFID 元信息 DTO 归
-  `sfid/model.rs`,不得塞回 `models/`。
+  `sfid_number/model.rs`,不得塞回 `models/`。
+- 行政区划唯一真源归 `china/`;不得恢复 `sfid/`、`province.rs`、`cities.rs`
+  或 `city_codes/*.rs` 静态表。
+- 非法人机构能力归 `subjects/uninorg/`;不得放在单侧 `gov/` 或 `private/`。
 - `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或 pubkey 工具。
 - 管理端操作权限类型只允许 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,统一登记在
   `admins/operation_auth.rs`;未登记或类型不匹配的操作必须拒绝。
@@ -102,19 +115,39 @@ sfid/backend/
 - 当前持久化按模块快照表拆分:
   - `store_citizens`:公民记录、绑定 challenge、状态扫码短期池、投票缓存。
   - `store_cpms`:CPMS 安装授权和授权状态。
-  - `store_institutions`:机构、账户、机构资料文档。
+  - `store_subjects`:机构、账户、机构资料文档。
   - `store_ops`:登录 challenge/session、扫码登录结果、审计、链幂等、回调任务、指标。
     同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
 - `store_shards/` 只保留进程内按省缓存访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
 - 数据库当前目标结构由 `main.rs` 启动时创建；初始省级管理员唯一真源为
   `admins/province_admins.rs`。
+- 关系型目标表从初始化阶段即按 `p_code` 创建省级分区,不得写成“数据量变大后再分区”:
+  - `ids`:全局 `sfid_number` 唯一约束表,不是第二身份键。
+  - `subjects`:统一身份主体索引,`kind=CITIZEN/PUBLIC/PRIVATE`;机构列表所需的
+    `category/source/level/A3/P1/省市/机构码/链上状态/创建人` 也在这里保存。
+  - `citizens`:公民详情,保留精简命名。
+  - `gov`:公权机构详情,国家级机构管辖分区使用 `p_code=CN`,驻地写 `home_p/home_c`。
+  - `private`:私权机构详情。
+  - `accounts`:机构账户。
+  - `docs`:机构资料库。
+  - `audit`:目标审计分区表。
+- `CN` 与 43 个省代码的分区在启动建表时一次性创建。
+- 机构主写入只进入 `subjects / gov / private / accounts / docs` 目标表;
+  私权机构精确搜索从 `subjects + accounts + admins` 查询,且 handler 必须先把登录
+  scope 翻译成 `p_code / c_code` 后再交给 StoreHandle,不得用中文省市字段或内存全量过滤。
+- 公安局和公权机构确定性列表是只读查询:启动或显式 reconcile 负责生成/对账,GET 列表接口
+  只按 `p_code / c_code` 读取目标表,不得在 GET 中执行 backfill、reconcile、写库或分片同步。
+- `subjects/http.rs` 承接跨 `gov/private/accounts/docs/subjects` 的 HTTP 辅助函数,包括
+  `ServiceError` 响应转换、SFID 省市解析、机构 scope 可见性、默认账户 best-effort 和审计 best-effort。
 
 ## 验收口径
 
 ```text
 test ! -d sfid/backend/src
 test ! -d sfid/backend/chain
+test ! -d sfid/backend/institutions
+test ! -d sfid/backend/sfid
 rg "mod chain;|crate::chain|chain::" sfid/backend -g '*.rs'
 cd sfid/backend && cargo fmt && cargo check
 ```

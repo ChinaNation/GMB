@@ -2,7 +2,7 @@
 //! 公民奖励 / 投票验证缓存。
 //!
 //! 中文注释:本文件维护 `Store` 聚合体类型。运行时短锁仍使用这棵内存对象,
-//! 持久化由 `main.rs` 拆成各模块 Store 快照表,不再写旧整包 runtime JSON。
+//! 持久化由 `main.rs` 拆成各模块 Store 快照表,不再写整包 runtime JSON。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -116,13 +116,13 @@ pub(crate) struct Store {
     pub(crate) metrics: ServiceMetrics,
     /// 机构层(每 sfid_number 唯一),任务卡 2 引入。
     #[serde(default)]
-    pub(crate) multisig_institutions: HashMap<String, crate::institutions::MultisigInstitution>,
+    pub(crate) multisig_institutions: HashMap<String, crate::subjects::MultisigInstitution>,
     /// 账户层(key = "sfid_number|account_name"),任务卡 2 引入。account_name 就是链上 name。
     #[serde(default)]
-    pub(crate) multisig_accounts: HashMap<String, crate::institutions::MultisigAccount>,
+    pub(crate) multisig_accounts: HashMap<String, crate::subjects::MultisigAccount>,
     /// 机构资料库文档,key = document id(字符串化)。
     #[serde(default)]
-    pub(crate) institution_documents: HashMap<String, crate::institutions::InstitutionDocument>,
+    pub(crate) institution_documents: HashMap<String, crate::subjects::InstitutionDocument>,
     /// 文档自增 ID。
     #[serde(default)]
     pub(crate) next_document_id: u64,

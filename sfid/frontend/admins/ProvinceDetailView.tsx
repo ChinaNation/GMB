@@ -1,5 +1,5 @@
 // 注册局视图 mode='system-settings'
-// 和 InstitutionsView 完全一样的显示方式:
+// 和机构类省市视图保持一样的显示方式:
 //   始终渲染一个 Card,按角色和选中状态切换内部 title/body/extra
 //   用 useScope 自动处理角色锁定,不闪烁
 
@@ -138,7 +138,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
         {adminDetailTab === 'operators' ? (
           <CityGrid
             cities={operatorCities.filter((c) => c.code !== '000')}
-            citiesLoading={operatorCitiesLoading}
+            citiesLoading={operatorCitiesLoading || (!selectedShengAdmin && operatorCities.length === 0)}
             operators={operatorsForProvince}
             onSelectCity={setSelectedCity}
           />
@@ -164,7 +164,8 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
       <>
         <SubTabBar tabs={subTabs} active={adminDetailTab} onChange={(key) => {
           setAdminDetailTab(key);
-          // 市管理员锁定在本市
+          // 中文注释:省管理员列表属于省级页,从市详情点击时必须回到省级上下文。
+          if (key === 'sheng-admin') setSelectedCity(null);
           if (key === 'operators' && !scope.skipCityList) setSelectedCity(null);
         }} />
         {adminDetailTab === 'operators' ? (
