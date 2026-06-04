@@ -23,11 +23,7 @@ pub(crate) async fn admin_list_citizens(
     let scope_province_code = auth_ctx
         .admin_province
         .as_deref()
-        .and_then(|name| {
-            crate::sfid::province::provinces()
-                .iter()
-                .find(|p| p.name == name)
-        })
+        .and_then(|name| crate::china::provinces().iter().find(|p| p.name == name))
         .map(|p| p.code.to_string());
     let scope_city_code = auth_ctx
         .admin_city
@@ -37,7 +33,7 @@ pub(crate) async fn admin_list_citizens(
                 .admin_province
                 .as_deref()
                 .and_then(|province_name| {
-                    crate::sfid::province::provinces()
+                    crate::china::provinces()
                         .iter()
                         .find(|p| p.name == province_name)
                         .and_then(|p| p.cities.iter().find(|c| c.name == city_name))

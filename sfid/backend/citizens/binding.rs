@@ -450,8 +450,7 @@ fn create_citizen_record(
         ));
     }
 
-    let province_name =
-        crate::sfid::province::province_name_by_code(&challenge.province_code).unwrap_or("");
+    let province_name = crate::china::province_name_by_code(&challenge.province_code).unwrap_or("");
     let sfid_code = generate_unique_citizen_sfid(store, province_name, &challenge.wallet_pubkey)?;
     let cid = store.next_citizen_id;
     store.next_citizen_id += 1;
@@ -623,7 +622,7 @@ fn cleanup_stale_citizen_record(store: &mut Store, citizen_id: u64) {
     if record.bind_status() == CitizenBindStatus::Bound {
         return;
     }
-    // 中文注释:开发期旧流程可能留下半绑定记录。新流程只保留完整绑定结果。
+    // 中文注释:开发期流程可能留下半绑定记录。当前流程只保留完整绑定结果。
     store.citizen_records.remove(&citizen_id);
     if let Some(archive_no) = record.archive_no {
         store.citizen_id_by_archive_no.remove(&archive_no);
@@ -732,17 +731,18 @@ fn generate_unique_citizen_sfid(
         } else {
             format!("{}#{retry}", wallet_pubkey)
         };
-        let candidate = match crate::sfid::generate_sfid_code(crate::sfid::GenerateSfidInput {
-            account_pubkey: attempt_pubkey.as_str(),
-            a3: "GMR",
-            p1: "1",
-            province: province_name,
-            city: "省辖市",
-            institution: "ZG",
-        }) {
-            Ok(v) => v,
-            Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
-        };
+        let candidate =
+            match crate::sfid_number::generate_sfid_code(crate::sfid_number::GenerateSfidInput {
+                account_pubkey: attempt_pubkey.as_str(),
+                a3: "GMR",
+                p1: "1",
+                province: province_name,
+                city: "省辖市",
+                institution: "ZG",
+            }) {
+                Ok(v) => v,
+                Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
+            };
         if !store.citizen_id_by_sfid_code.contains_key(&candidate) {
             return Ok(candidate);
         }

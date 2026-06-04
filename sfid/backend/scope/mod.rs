@@ -15,7 +15,7 @@
 //! 2026-05-02 models/scope 边界整改后,本目录只保留权限范围规则。
 //! HTTP handler、CPMS 专用判断、pubkey 工具已归还对应业务模块。
 
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub mod admin_province;
 pub mod filter;

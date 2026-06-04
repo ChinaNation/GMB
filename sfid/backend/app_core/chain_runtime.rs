@@ -322,7 +322,7 @@ async fn fetch_chain_genesis_hash_via_ws(ws_url: &str) -> Result<[u8; 32], Strin
 }
 
 /// 启动时从区块链 RPC 获取创世哈希并缓存。
-/// 调用一次后，后续 resolve_chain_genesis_hash() 直接返回缓存值。
+/// 调用一次后，之后的 resolve_chain_genesis_hash() 直接返回缓存值。
 pub(crate) async fn init_genesis_hash_from_chain() -> Result<(), String> {
     if CHAIN_GENESIS_HASH.get().is_some() {
         return Ok(());

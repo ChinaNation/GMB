@@ -19,7 +19,7 @@ SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 ch
 
 | 职责 | 当前文件 |
 |---|---|
-| 机构查询、注册信息凭证、账户列表、清算行候选 DTO 与 handler | `sfid/backend/institutions/chain_duoqian_info.rs` |
+| 机构查询、注册信息凭证、账户列表、清算行候选 DTO 与 handler | `sfid/backend/subjects/chain_duoqian_info.rs` |
 | 公民投票凭证 | `sfid/backend/citizens/chain_vote.rs` |
 | 联合投票人口快照凭证 | `sfid/backend/citizens/chain_joint_vote.rs` |
 | 通用链凭证/SCALE/genesis hash | `sfid/backend/app_core/chain_runtime.rs` |
@@ -38,7 +38,7 @@ CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理归
 - 禁止恢复后端独立 chain 业务目录。
 - 新增链交互文件必须以 `chain_` 开头。
 - 链交互文件必须放在业务归属目录内,例如:
-  - 机构 -> `institutions/chain_*`
+  - 主体公开查询 -> `subjects/chain_*`
   - 公民 -> `citizens/chain_*`
   - 管理员治理链交互 -> `admins/chain_*`
 - 只有跨业务复用的链底层工具允许放在 `app_core/chain_*`。
@@ -79,12 +79,12 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 |---|---|
 | `GET /api/v1/app/voters/count` | `citizens::chain_joint_vote::app_voters_count` |
 | `POST /api/v1/app/vote/credential` | `citizens::chain_vote::app_vote_credential` |
-| `GET /api/v1/app/institutions/search` | `institutions::chain_duoqian_info::app_search_institutions` |
-| `GET /api/v1/app/institutions/:sfid_number` | `institutions::chain_duoqian_info::app_get_institution` |
-| `GET /api/v1/app/institutions/:sfid_number/registration-info` | `institutions::chain_duoqian_info::app_get_institution_registration_info` |
-| `GET /api/v1/app/institutions/:sfid_number/accounts` | `institutions::chain_duoqian_info::app_list_accounts` |
-| `GET /api/v1/app/clearing-banks/search` | `institutions::chain_duoqian_info::app_search_clearing_banks` |
-| `GET /api/v1/app/clearing-banks/eligible-search` | `institutions::chain_duoqian_info::app_search_eligible_clearing_banks` |
+| `GET /api/v1/app/institutions/search` | `subjects::chain_duoqian_info::app_search_institutions` |
+| `GET /api/v1/app/institutions/:sfid_number` | `subjects::chain_duoqian_info::app_get_institution` |
+| `GET /api/v1/app/institutions/:sfid_number/registration-info` | `subjects::chain_duoqian_info::app_get_institution_registration_info` |
+| `GET /api/v1/app/institutions/:sfid_number/accounts` | `subjects::chain_duoqian_info::app_list_accounts` |
+| `GET /api/v1/app/clearing-banks/search` | `subjects::chain_duoqian_info::app_search_clearing_banks` |
+| `GET /api/v1/app/clearing-banks/eligible-search` | `subjects::chain_duoqian_info::app_search_eligible_clearing_banks` |
 
 说明:
 

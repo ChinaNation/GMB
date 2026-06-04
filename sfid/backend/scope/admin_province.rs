@@ -2,7 +2,7 @@
 //!
 //! 中文注释:本文件只保留 pubkey + role 推断所属省的权限辅助。
 //! 这两个函数与 `rules.rs::get_visible_scope`(从 ctx 派生 VisibleScope)互补,
-//! 用于尚未走 ctx.admin_province 的旧路径,从 pubkey 兜底查省。
+//! 用于未携带 ctx.admin_province 的路径,从 pubkey 兜底查省。
 
 use crate::admins::province_admins::sheng_admin_province;
 use crate::crypto::pubkey::same_admin_pubkey;

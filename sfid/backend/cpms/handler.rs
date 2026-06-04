@@ -13,10 +13,10 @@ use chrono::{NaiveDate, Utc};
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 
-// 中文注释:SFID 工具统一从 crate::sfid 拿,见 feedback_sfid_module_is_single_entry.md
+// 中文注释:SFID 工具统一从 crate::sfid_number 拿,见 feedback_sfid_module_is_single_entry.md
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::operation_auth::AdminActionType;
-use crate::sfid::validate_sfid_number_format;
+use crate::sfid_number::validate_sfid_number_format;
 use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
@@ -914,7 +914,7 @@ pub(crate) async fn get_cpms_site_by_institution(
 
     // 中文注释:机构详情从进程内省分片缓存读取。
     let province_code = extract_province_code_from_sfid(&sfid_number);
-    let province_name = match crate::sfid::province::province_name_by_code(&province_code) {
+    let province_name = match crate::china::province_name_by_code(&province_code) {
         Some(n) => n.to_string(),
         None => {
             return api_error(
@@ -1624,7 +1624,7 @@ fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
 }
 
 // 中文注释:`validate_sfid_number_format` 和 SFID_NUMBER_* 常量已搬到
-// `crate::sfid::validator`,本文件通过 import 使用。见任务卡 1。
+// `crate::sfid_number::validator`,本文件通过 import 使用。见任务卡 1。
 
 fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteStatus) -> bool {
     matches!(

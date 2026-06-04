@@ -23,21 +23,33 @@ use std::{
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+mod accounts;
 mod admins;
 mod app_core;
 mod audit;
+mod china;
 mod citizens;
 mod cpms;
 mod crypto;
+mod docs;
+mod gov;
 mod indexer;
-mod institutions;
 mod login;
 mod models;
+mod private;
 #[allow(dead_code)]
 mod qr;
 mod scope;
-mod sfid;
+mod sfid_number;
 mod store_shards;
+mod subjects;
+
+#[cfg(test)]
+mod genesis {
+    // 中文注释:SFID 测试编译会加载 citizenchain 的 china_ch 常量测试,
+    // 该测试只需要创世人口常量来校验省储行人口总和。
+    pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378;
+}
 
 pub(crate) use app_core::http_security::*;
 pub(crate) use app_core::runtime_ops::*;
@@ -49,7 +61,7 @@ pub(crate) use login::{
     require_sheng_admin, AdminSession, LoginChallenge, QrLoginResultRecord,
 };
 pub(crate) use models::*;
-pub(crate) use sfid::model::*;
+pub(crate) use sfid_number::model::*;
 
 #[derive(Clone)]
 struct AppState {
@@ -148,49 +160,83 @@ fn citizen_bind_status_text(status: &CitizenBindStatus) -> &'static str {
     }
 }
 
-fn institution_category_text(category: crate::sfid::InstitutionCategory) -> &'static str {
+fn institution_category_text(category: crate::sfid_number::InstitutionCategory) -> &'static str {
     match category {
-        crate::sfid::InstitutionCategory::PublicSecurity => "PUBLIC_SECURITY",
-        crate::sfid::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
-        crate::sfid::InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
+        crate::sfid_number::InstitutionCategory::PublicSecurity => "PUBLIC_SECURITY",
+        crate::sfid_number::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
+        crate::sfid_number::InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
     }
 }
 
-fn institution_category_from_text(category: &str) -> Option<crate::sfid::InstitutionCategory> {
+fn institution_category_from_text(
+    category: &str,
+) -> Option<crate::sfid_number::InstitutionCategory> {
     match category {
-        "PUBLIC_SECURITY" => Some(crate::sfid::InstitutionCategory::PublicSecurity),
-        "GOV_INSTITUTION" => Some(crate::sfid::InstitutionCategory::GovInstitution),
-        "PRIVATE_INSTITUTION" => Some(crate::sfid::InstitutionCategory::PrivateInstitution),
+        "PUBLIC_SECURITY" => Some(crate::sfid_number::InstitutionCategory::PublicSecurity),
+        "GOV_INSTITUTION" => Some(crate::sfid_number::InstitutionCategory::GovInstitution),
+        "PRIVATE_INSTITUTION" => Some(crate::sfid_number::InstitutionCategory::PrivateInstitution),
         _ => None,
     }
 }
 
-fn institution_chain_status_text(
-    status: &crate::institutions::InstitutionChainStatus,
-) -> &'static str {
+fn institution_chain_status_text(status: &crate::subjects::InstitutionChainStatus) -> &'static str {
     match status {
-        crate::institutions::InstitutionChainStatus::NotRegistered => "NOT_REGISTERED",
-        crate::institutions::InstitutionChainStatus::PendingRegister => "PENDING_REGISTER",
-        crate::institutions::InstitutionChainStatus::Registered => "REGISTERED",
-        crate::institutions::InstitutionChainStatus::RevokedOnChain => "REVOKED_ON_CHAIN",
+        crate::subjects::InstitutionChainStatus::NotRegistered => "NOT_REGISTERED",
+        crate::subjects::InstitutionChainStatus::Registered => "REGISTERED",
+        crate::subjects::InstitutionChainStatus::RevokedOnChain => "REVOKED_ON_CHAIN",
     }
 }
 
-fn institution_chain_status_from_text(status: &str) -> crate::institutions::InstitutionChainStatus {
+fn institution_chain_status_from_text(status: &str) -> crate::subjects::InstitutionChainStatus {
     match status {
-        "PENDING_REGISTER" => crate::institutions::InstitutionChainStatus::PendingRegister,
-        "REGISTERED" => crate::institutions::InstitutionChainStatus::Registered,
-        "REVOKED_ON_CHAIN" => crate::institutions::InstitutionChainStatus::RevokedOnChain,
-        _ => crate::institutions::InstitutionChainStatus::NotRegistered,
+        "REGISTERED" => crate::subjects::InstitutionChainStatus::Registered,
+        "REVOKED_ON_CHAIN" => crate::subjects::InstitutionChainStatus::RevokedOnChain,
+        _ => crate::subjects::InstitutionChainStatus::NotRegistered,
     }
 }
 
-fn multisig_chain_status_text(status: &crate::institutions::MultisigChainStatus) -> &'static str {
+fn institution_source_text(source: &crate::subjects::InstitutionSource) -> &'static str {
+    match source {
+        crate::subjects::InstitutionSource::Auto => "AUTO",
+    }
+}
+
+fn institution_source_from_text(
+    source: Option<String>,
+) -> Option<crate::subjects::InstitutionSource> {
+    match source.as_deref() {
+        Some("AUTO") => Some(crate::subjects::InstitutionSource::Auto),
+        _ => None,
+    }
+}
+
+fn institution_level_text(level: &crate::subjects::InstitutionLevel) -> &'static str {
+    match level {
+        crate::subjects::InstitutionLevel::National => "NATIONAL",
+        crate::subjects::InstitutionLevel::Province => "PROVINCE",
+        crate::subjects::InstitutionLevel::City => "CITY",
+        crate::subjects::InstitutionLevel::Town => "TOWN",
+        crate::subjects::InstitutionLevel::NoAdministrativeLevel => "NONE",
+    }
+}
+
+fn institution_level_from_text(level: Option<String>) -> Option<crate::subjects::InstitutionLevel> {
+    match level.as_deref() {
+        Some("NATIONAL") => Some(crate::subjects::InstitutionLevel::National),
+        Some("PROVINCE") => Some(crate::subjects::InstitutionLevel::Province),
+        Some("CITY") => Some(crate::subjects::InstitutionLevel::City),
+        Some("TOWN") => Some(crate::subjects::InstitutionLevel::Town),
+        Some("NONE") => Some(crate::subjects::InstitutionLevel::NoAdministrativeLevel),
+        _ => None,
+    }
+}
+
+fn multisig_chain_status_text(status: &crate::subjects::MultisigChainStatus) -> &'static str {
     match status {
-        crate::institutions::MultisigChainStatus::NotOnChain => "NOT_ON_CHAIN",
-        crate::institutions::MultisigChainStatus::PendingOnChain => "PENDING_ON_CHAIN",
-        crate::institutions::MultisigChainStatus::ActiveOnChain => "ACTIVE_ON_CHAIN",
-        crate::institutions::MultisigChainStatus::RevokedOnChain => "REVOKED_ON_CHAIN",
+        crate::subjects::MultisigChainStatus::NotOnChain => "NOT_ON_CHAIN",
+        crate::subjects::MultisigChainStatus::PendingOnChain => "PENDING_ON_CHAIN",
+        crate::subjects::MultisigChainStatus::ActiveOnChain => "ACTIVE_ON_CHAIN",
+        crate::subjects::MultisigChainStatus::RevokedOnChain => "REVOKED_ON_CHAIN",
     }
 }
 
@@ -257,7 +303,7 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
     }
 }
 
-fn institution_exact_match(inst: &crate::institutions::MultisigInstitution, keyword: &str) -> bool {
+fn institution_exact_match(inst: &crate::subjects::MultisigInstitution, keyword: &str) -> bool {
     inst.sfid_number.eq_ignore_ascii_case(keyword)
         || inst
             .institution_name
@@ -277,12 +323,12 @@ fn stable_institution_cursor_id(sfid_number: &str) -> i64 {
 }
 
 fn institution_row_from_record(
-    inst: &crate::institutions::MultisigInstitution,
+    inst: &crate::subjects::MultisigInstitution,
     account_count: usize,
     created_by_name: Option<String>,
     created_by_role: Option<String>,
-) -> crate::institutions::InstitutionListRow {
-    crate::institutions::InstitutionListRow {
+) -> crate::subjects::InstitutionListRow {
+    crate::subjects::InstitutionListRow {
         sfid_number: inst.sfid_number.clone(),
         institution_name: inst.institution_name.clone(),
         category: inst.category,
@@ -293,12 +339,140 @@ fn institution_row_from_record(
         institution_code: inst.institution_code.clone(),
         sub_type: inst.sub_type.clone(),
         parent_sfid_number: inst.parent_sfid_number.clone(),
+        source: inst.source.clone(),
+        institution_level: inst.institution_level.clone(),
         chain_status: inst.chain_status.clone(),
         account_count,
         created_at: inst.created_at,
         created_by_name,
         created_by_role,
     }
+}
+
+fn institution_row_from_pg_row(
+    row: &postgres::Row,
+) -> Result<crate::subjects::InstitutionListRow, String> {
+    let category_text: String = row.get(2);
+    let category = institution_category_from_text(category_text.as_str())
+        .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
+    let source_text: Option<String> = row.get(3);
+    let institution_level_text: Option<String> = row.get(4);
+    let chain_status_text: String = row.get(14);
+    let account_count_i64: i64 = row.get(17);
+    let created_by_name: Option<String> = row.get(18);
+    let created_by_role: Option<String> = row.get(19);
+    let inst = crate::subjects::MultisigInstitution {
+        sfid_number: row.get(0),
+        institution_name: row.get(1),
+        category,
+        source: institution_source_from_text(source_text),
+        institution_level: institution_level_from_text(institution_level_text),
+        a3: row.get(5),
+        p1: row.get(6),
+        province: row.get(7),
+        city: row.get(8),
+        province_code: row.get(9),
+        city_code: row.get(10),
+        institution_code: row.get(11),
+        sub_type: row.get(12),
+        parent_sfid_number: row.get(13),
+        chain_status: institution_chain_status_from_text(chain_status_text.as_str()),
+        chain_tx_hash: None,
+        chain_block_number: None,
+        chain_synced_at: None,
+        created_by: row.get(15),
+        created_at: row.get(16),
+    };
+    Ok(institution_row_from_record(
+        &inst,
+        usize::try_from(account_count_i64).unwrap_or(0),
+        created_by_name,
+        created_by_role,
+    ))
+}
+
+fn offset_page_from_rows<T: Serialize>(
+    rows: Vec<T>,
+    offset: usize,
+    page_size: usize,
+) -> PageResult<T> {
+    let window = rows
+        .into_iter()
+        .skip(offset)
+        .take(page_size.saturating_add(1))
+        .collect::<Vec<_>>();
+    offset_page_from_window(window, offset, page_size)
+}
+
+fn offset_page_from_window<T: Serialize>(
+    mut rows: Vec<T>,
+    offset: usize,
+    page_size: usize,
+) -> PageResult<T> {
+    let has_more = rows.len() > page_size;
+    if has_more {
+        rows.truncate(page_size);
+    }
+    let next_offset = offset.saturating_add(rows.len());
+    PageResult {
+        items: rows,
+        page_size,
+        next_cursor: has_more.then(|| next_offset.to_string()),
+        has_more,
+    }
+}
+
+fn official_list_keyword_match(inst: &crate::subjects::MultisigInstitution, keyword: &str) -> bool {
+    if keyword.is_empty() {
+        return true;
+    }
+    inst.sfid_number.to_ascii_lowercase().contains(keyword)
+        || inst
+            .institution_name
+            .as_deref()
+            .map(|name| name.to_ascii_lowercase().contains(keyword))
+            .unwrap_or(false)
+}
+
+fn official_list_code_rank(code: &str) -> u8 {
+    match code {
+        "ZF" => 0,
+        "LF" => 1,
+        "SF" => 2,
+        "JC" => 3,
+        "JY" => 4,
+        _ => 9,
+    }
+}
+
+fn compare_official_list_rows(
+    a: &crate::subjects::InstitutionListRow,
+    b: &crate::subjects::InstitutionListRow,
+) -> std::cmp::Ordering {
+    let a_auto_rank = if matches!(a.source, Some(crate::subjects::InstitutionSource::Auto)) {
+        0
+    } else {
+        1
+    };
+    let b_auto_rank = if matches!(b.source, Some(crate::subjects::InstitutionSource::Auto)) {
+        0
+    } else {
+        1
+    };
+    a.city
+        .cmp(&b.city)
+        .then_with(|| a_auto_rank.cmp(&b_auto_rank))
+        .then_with(|| {
+            official_list_code_rank(&a.institution_code)
+                .cmp(&official_list_code_rank(&b.institution_code))
+        })
+        .then_with(|| {
+            a.institution_name
+                .as_deref()
+                .unwrap_or("")
+                .cmp(b.institution_name.as_deref().unwrap_or(""))
+        })
+        .then_with(|| a.sfid_number.cmp(&b.sfid_number))
 }
 
 impl std::ops::Deref for StoreWriteGuard {
@@ -347,7 +521,7 @@ struct CitizenStoreSnapshot {
     citizen_id_by_archive_no: HashMap<String, u64>,
     citizen_id_by_sfid_code: HashMap<String, u64>,
     /// 中文注释:绑定 challenge 属于公民绑定短期状态,必须跨请求可读,
-    /// 但不再写入旧 runtime 整包 JSON。
+    /// 但不再写入 runtime 整包 JSON。
     citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
     /// 中文注释:CPMS 年度报告导入幂等记录,随公民模块快照持久化。
     cpms_status_export_imports: HashMap<String, CpmsStatusExportImportRecord>,
@@ -407,9 +581,9 @@ impl CpmsStoreSnapshot {
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 struct InstStoreSnapshot {
-    multisig_institutions: HashMap<String, crate::institutions::MultisigInstitution>,
-    multisig_accounts: HashMap<String, crate::institutions::MultisigAccount>,
-    institution_documents: HashMap<String, crate::institutions::InstitutionDocument>,
+    multisig_institutions: HashMap<String, crate::subjects::MultisigInstitution>,
+    multisig_accounts: HashMap<String, crate::subjects::MultisigAccount>,
+    institution_documents: HashMap<String, crate::subjects::InstitutionDocument>,
     next_document_id: u64,
 }
 
@@ -442,7 +616,7 @@ struct OpsStoreSnapshot {
     admin_action_challenges: HashMap<String, AdminActionChallenge>,
     admin_security_grants: HashMap<String, AdminSecurityGrant>,
     /// 中文注释:登录 challenge/session/扫码结果必须跨请求可读;
-    /// 本任务将它们收敛到 ops 模块快照,不再依赖旧 runtime cache 表。
+    /// 它们收敛到 ops 模块快照,不依赖 runtime cache 表。
     login_challenges: HashMap<String, LoginChallenge>,
     qr_login_results: HashMap<String, QrLoginResultRecord>,
     admin_sessions: HashMap<String, AdminSession>,
@@ -581,8 +755,7 @@ impl StoreBackend {
         Self::load_module_store::<CitizenStoreSnapshot>(conn, "store_citizens")?
             .apply_to(&mut store);
         Self::load_module_store::<CpmsStoreSnapshot>(conn, "store_cpms")?.apply_to(&mut store);
-        Self::load_module_store::<InstStoreSnapshot>(conn, "store_institutions")?
-            .apply_to(&mut store);
+        Self::load_module_store::<InstStoreSnapshot>(conn, "store_subjects")?.apply_to(&mut store);
         Self::load_module_store::<OpsStoreSnapshot>(conn, "store_ops")?.apply_to(&mut store);
 
         store.admin_users_by_pubkey.clear();
@@ -652,7 +825,7 @@ impl StoreBackend {
         Self::save_module_store(&mut tx, "store_cpms", &CpmsStoreSnapshot::from_store(store))?;
         Self::save_module_store(
             &mut tx,
-            "store_institutions",
+            "store_subjects",
             &InstStoreSnapshot::from_store(store),
         )?;
         Self::save_module_store(&mut tx, "store_ops", &OpsStoreSnapshot::from_store(store))?;
@@ -785,82 +958,16 @@ impl StoreBackend {
                 payload JSONB NOT NULL DEFAULT '{}'::jsonb,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
              );
-             CREATE TABLE IF NOT EXISTS store_institutions (
+             CREATE TABLE IF NOT EXISTS store_subjects (
                 id SMALLINT PRIMARY KEY CHECK (id = 1),
                 payload JSONB NOT NULL DEFAULT '{}'::jsonb,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
              );
-	             CREATE TABLE IF NOT EXISTS store_ops (
-	                id SMALLINT PRIMARY KEY CHECK (id = 1),
-	                payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-	                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	             );
-
-	             CREATE TABLE IF NOT EXISTS sfid_citizens (
-	                id BIGINT PRIMARY KEY,
-	                wallet_pubkey TEXT UNIQUE,
-	                wallet_address TEXT UNIQUE,
-	                archive_no TEXT UNIQUE,
-	                sfid_code TEXT UNIQUE,
-	                province_code TEXT NOT NULL,
-	                city_code TEXT NOT NULL,
-	                citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'REVOKED')),
-	                voting_eligible BOOLEAN NOT NULL,
-	                valid_from TEXT,
-	                valid_until TEXT,
-	                status_updated_at BIGINT,
-	                bind_status TEXT NOT NULL CHECK (bind_status IN ('PENDING', 'BOUND')),
-	                bound_at TIMESTAMPTZ,
-	                bound_by TEXT,
-	                created_at TIMESTAMPTZ NOT NULL
-	             );
-	             CREATE INDEX IF NOT EXISTS idx_sfid_citizens_scope_created
-	                ON sfid_citizens(province_code, city_code, created_at DESC, id DESC);
-	             CREATE INDEX IF NOT EXISTS idx_sfid_citizens_province_created
-	                ON sfid_citizens(province_code, created_at DESC, id DESC);
-
-	             CREATE TABLE IF NOT EXISTS sfid_institutions (
-	                id BIGSERIAL PRIMARY KEY,
-	                sfid_number TEXT NOT NULL UNIQUE,
-	                institution_name TEXT,
-	                category TEXT NOT NULL CHECK (category IN ('PUBLIC_SECURITY', 'GOV_INSTITUTION', 'PRIVATE_INSTITUTION')),
-	                a3 TEXT NOT NULL,
-	                p1 TEXT NOT NULL,
-	                province TEXT NOT NULL,
-	                city TEXT NOT NULL,
-	                province_code TEXT NOT NULL,
-	                city_code TEXT NOT NULL,
-	                institution_code TEXT NOT NULL,
-	                sub_type TEXT,
-	                parent_sfid_number TEXT,
-	                chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_REGISTERED', 'PENDING_REGISTER', 'REGISTERED', 'REVOKED_ON_CHAIN')),
-	                chain_tx_hash TEXT,
-	                chain_block_number BIGINT,
-	                chain_synced_at TIMESTAMPTZ,
-	                created_by TEXT NOT NULL,
-	                created_at TIMESTAMPTZ NOT NULL
-	             );
-	             CREATE INDEX IF NOT EXISTS idx_sfid_institutions_scope_created
-	                ON sfid_institutions(category, province, city, created_at DESC, id DESC);
-	             CREATE INDEX IF NOT EXISTS idx_sfid_institutions_province_created
-	                ON sfid_institutions(category, province, created_at DESC, id DESC);
-	             CREATE INDEX IF NOT EXISTS idx_sfid_institutions_name
-	                ON sfid_institutions(institution_name);
-
-	             CREATE TABLE IF NOT EXISTS sfid_institution_accounts (
-	                sfid_number TEXT NOT NULL REFERENCES sfid_institutions(sfid_number) ON DELETE CASCADE,
-	                account_name TEXT NOT NULL,
-	                duoqian_address TEXT,
-	                chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_ON_CHAIN', 'PENDING_ON_CHAIN', 'ACTIVE_ON_CHAIN', 'REVOKED_ON_CHAIN')),
-	                chain_tx_hash TEXT,
-	                chain_block_number BIGINT,
-	                chain_synced_at TIMESTAMPTZ,
-	                created_by TEXT NOT NULL,
-	                created_at TIMESTAMPTZ NOT NULL,
-	                PRIMARY KEY (sfid_number, account_name)
-	             );
-	             CREATE INDEX IF NOT EXISTS idx_sfid_institution_accounts_sfid
-	                ON sfid_institution_accounts(sfid_number);
+             CREATE TABLE IF NOT EXISTS store_ops (
+                id SMALLINT PRIMARY KEY CHECK (id = 1),
+                payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
 
 	             CREATE TABLE IF NOT EXISTS tx_records (
                 id BIGSERIAL PRIMARY KEY,
@@ -894,6 +1001,195 @@ impl StoreBackend {
              ON CONFLICT (id) DO NOTHING;",
         )
         .map_err(|e| format!("init current schema failed: {e}"))?;
+        Self::init_subject_partition_schema(conn)?;
+        Ok(())
+    }
+
+    fn init_subject_partition_schema(conn: &mut postgres::Client) -> Result<(), String> {
+        // 中文注释:目标身份主体表从第一版结构开始按 p_code 分区。
+        // `ids` 只用于保证 sfid_number 全局唯一,不引入第二身份键。
+        conn.batch_execute(
+            "CREATE TABLE IF NOT EXISTS ids (
+                sfid_number TEXT PRIMARY KEY,
+                kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
+                p_code TEXT NOT NULL,
+                c_code TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+
+             CREATE TABLE IF NOT EXISTS subjects (
+                sfid_number TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
+                name TEXT,
+                p_code TEXT NOT NULL,
+                c_code TEXT,
+                status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
+                category TEXT,
+                source TEXT,
+                institution_level TEXT,
+                a3 TEXT,
+                p1 TEXT,
+                province TEXT,
+                city TEXT,
+                province_code TEXT,
+                city_code TEXT,
+                institution_code TEXT,
+                sub_type TEXT,
+                parent_sfid_number TEXT,
+                chain_status TEXT,
+                created_by TEXT,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (p_code, sfid_number)
+             ) PARTITION BY LIST (p_code);
+
+             CREATE TABLE IF NOT EXISTS citizens (
+                sfid_number TEXT NOT NULL,
+                p_code TEXT NOT NULL,
+                c_code TEXT NOT NULL,
+                id BIGINT,
+                archive_no TEXT,
+                wallet_pubkey TEXT,
+                wallet_address TEXT,
+                citizen_status TEXT NOT NULL,
+                voting_eligible BOOLEAN NOT NULL,
+                valid_from TEXT,
+                valid_until TEXT,
+                status_updated_at BIGINT,
+                bind_status TEXT NOT NULL DEFAULT 'BOUND' CHECK (bind_status IN ('PENDING', 'BOUND')),
+                bound_at TIMESTAMPTZ,
+                bound_by TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (p_code, sfid_number)
+             ) PARTITION BY LIST (p_code);
+
+             CREATE TABLE IF NOT EXISTS gov (
+                sfid_number TEXT NOT NULL,
+                p_code TEXT NOT NULL,
+                c_code TEXT,
+                code TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN ('AUTO', 'MANUAL')),
+                level TEXT NOT NULL CHECK (level IN ('NATIONAL', 'PROVINCE', 'CITY', 'TOWN')),
+                home_p TEXT,
+                home_c TEXT,
+                chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_REGISTERED', 'REGISTERED', 'REVOKED_ON_CHAIN')),
+                PRIMARY KEY (p_code, sfid_number)
+             ) PARTITION BY LIST (p_code);
+
+             CREATE TABLE IF NOT EXISTS private (
+                sfid_number TEXT NOT NULL,
+                p_code TEXT NOT NULL,
+                c_code TEXT NOT NULL,
+                code TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('SCHOOL', 'PROFIT', 'NONPROFIT', 'BRANCH')),
+                a3 TEXT NOT NULL CHECK (a3 IN ('SFR', 'FFR')),
+                p1 TEXT NOT NULL CHECK (p1 IN ('0', '1')),
+                sub_type TEXT,
+                parent_sfid_number TEXT,
+                PRIMARY KEY (p_code, sfid_number)
+             ) PARTITION BY LIST (p_code);
+
+             CREATE TABLE IF NOT EXISTS accounts (
+                sfid_number TEXT NOT NULL,
+                p_code TEXT NOT NULL,
+                c_code TEXT,
+                account_name TEXT NOT NULL,
+                duoqian_address TEXT,
+                chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_ON_CHAIN', 'PENDING_ON_CHAIN', 'ACTIVE_ON_CHAIN', 'REVOKED_ON_CHAIN')),
+                created_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (p_code, sfid_number, account_name)
+             ) PARTITION BY LIST (p_code);
+
+             CREATE TABLE IF NOT EXISTS docs (
+                id BIGSERIAL,
+                sfid_number TEXT NOT NULL,
+                p_code TEXT NOT NULL,
+                c_code TEXT,
+                file_name TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                uploaded_by TEXT NOT NULL,
+                uploaded_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (p_code, id)
+             ) PARTITION BY LIST (p_code);
+
+             CREATE TABLE IF NOT EXISTS audit (
+                id BIGSERIAL,
+                p_code TEXT NOT NULL,
+                c_code TEXT,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target_sfid TEXT,
+                detail TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (p_code, id)
+             ) PARTITION BY LIST (p_code);
+
+             ALTER TABLE subjects
+                ADD COLUMN IF NOT EXISTS category TEXT,
+                ADD COLUMN IF NOT EXISTS source TEXT,
+                ADD COLUMN IF NOT EXISTS institution_level TEXT,
+                ADD COLUMN IF NOT EXISTS a3 TEXT,
+                ADD COLUMN IF NOT EXISTS p1 TEXT,
+                ADD COLUMN IF NOT EXISTS province TEXT,
+                ADD COLUMN IF NOT EXISTS city TEXT,
+                ADD COLUMN IF NOT EXISTS province_code TEXT,
+                ADD COLUMN IF NOT EXISTS city_code TEXT,
+                ADD COLUMN IF NOT EXISTS institution_code TEXT,
+                ADD COLUMN IF NOT EXISTS sub_type TEXT,
+                ADD COLUMN IF NOT EXISTS parent_sfid_number TEXT,
+                ADD COLUMN IF NOT EXISTS chain_status TEXT,
+                ADD COLUMN IF NOT EXISTS created_by TEXT;
+
+             ALTER TABLE citizens
+                ADD COLUMN IF NOT EXISTS id BIGINT,
+                ADD COLUMN IF NOT EXISTS status_updated_at BIGINT,
+                ADD COLUMN IF NOT EXISTS bind_status TEXT NOT NULL DEFAULT 'BOUND',
+                ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+             CREATE INDEX IF NOT EXISTS idx_subjects_city
+                ON subjects (p_code, c_code, kind, status, sfid_number);
+             CREATE INDEX IF NOT EXISTS idx_subjects_name
+                ON subjects (p_code, c_code, name);
+             CREATE INDEX IF NOT EXISTS idx_subjects_scope_created
+                ON subjects (category, province, city, created_at DESC, sfid_number DESC);
+             CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
+                ON subjects (category, province, city, sfid_number, name);
+             CREATE INDEX IF NOT EXISTS idx_citizens_scope_created
+                ON citizens (p_code, c_code, created_at DESC, id DESC);
+             CREATE INDEX IF NOT EXISTS idx_citizens_province_created
+                ON citizens (p_code, created_at DESC, id DESC);
+             CREATE INDEX IF NOT EXISTS idx_citizens_exact_lookup
+                ON citizens (p_code, c_code, archive_no, sfid_number, wallet_pubkey, wallet_address);
+             CREATE INDEX IF NOT EXISTS idx_gov_city
+                ON gov (p_code, c_code, source, code);
+             CREATE INDEX IF NOT EXISTS idx_private_city
+                ON private (p_code, c_code, kind, code);
+             CREATE INDEX IF NOT EXISTS idx_accounts_sfid
+                ON accounts (p_code, sfid_number);
+             CREATE INDEX IF NOT EXISTS idx_docs_sfid
+                ON docs (p_code, sfid_number, uploaded_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_audit_scope_time
+                ON audit (p_code, c_code, created_at DESC);",
+        )
+        .map_err(|e| format!("init subject partition parent schema failed: {e}"))?;
+
+        Self::create_subject_partitions(conn, crate::subjects::schema::GLOBAL_SCOPE_CODE)?;
+        for province in crate::china::provinces().iter() {
+            Self::create_subject_partitions(conn, province.code)?;
+        }
+        Ok(())
+    }
+
+    fn create_subject_partitions(conn: &mut postgres::Client, p_code: &str) -> Result<(), String> {
+        for table in crate::subjects::schema::PARTITIONED_TABLES {
+            let partition_name = format!("{}_{}", table, p_code.to_ascii_lowercase());
+            let sql = format!(
+                "CREATE TABLE IF NOT EXISTS {partition_name} PARTITION OF {table} FOR VALUES IN ('{p_code}')"
+            );
+            conn.batch_execute(sql.as_str())
+                .map_err(|e| format!("init partition {partition_name} failed: {e}"))?;
+        }
         Ok(())
     }
 
@@ -984,65 +1280,175 @@ impl StoreHandle {
             } => {
                 let record = record.clone();
                 StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
-                    let citizen_status = record
-                        .citizen_status
-                        .as_ref()
-                        .map(citizen_status_text)
-                        .unwrap_or("REVOKED");
-                    let bind_status = citizen_bind_status_text(&record.bind_status());
-                    let id = i64::try_from(record.id)
-                        .map_err(|_| "citizen id exceeds i64".to_string())?;
-                    let province_code = record.province_code.clone().unwrap_or_default();
-                    let city_code = record.city_code.clone().unwrap_or_default();
-                    conn.execute(
-                        "INSERT INTO sfid_citizens (
-                            id, wallet_pubkey, wallet_address, archive_no, sfid_code,
-                            province_code, city_code, citizen_status, voting_eligible,
-                            valid_from, valid_until, status_updated_at, bind_status,
-                            bound_at, bound_by, created_at
-                         ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-                         )
-                         ON CONFLICT (id) DO UPDATE SET
-                            wallet_pubkey = EXCLUDED.wallet_pubkey,
-                            wallet_address = EXCLUDED.wallet_address,
-                            archive_no = EXCLUDED.archive_no,
-                            sfid_code = EXCLUDED.sfid_code,
-                            province_code = EXCLUDED.province_code,
-                            city_code = EXCLUDED.city_code,
-                            citizen_status = EXCLUDED.citizen_status,
-                            voting_eligible = EXCLUDED.voting_eligible,
-                            valid_from = EXCLUDED.valid_from,
-                            valid_until = EXCLUDED.valid_until,
-                            status_updated_at = EXCLUDED.status_updated_at,
-                            bind_status = EXCLUDED.bind_status,
-                            bound_at = EXCLUDED.bound_at,
-                            bound_by = EXCLUDED.bound_by,
-                            created_at = EXCLUDED.created_at",
-                        &[
-                            &id,
-                            &record.wallet_pubkey,
-                            &record.wallet_address,
-                            &record.archive_no,
-                            &record.sfid_code,
-                            &province_code,
-                            &city_code,
-                            &citizen_status,
-                            &record.voting_eligible,
-                            &record.archive_valid_from,
-                            &record.archive_valid_until,
-                            &record.status_updated_at,
-                            &bind_status,
-                            &record.bound_at,
-                            &record.bound_by,
-                            &record.created_at,
-                        ],
-                    )
-                    .map_err(|e| format!("upsert sfid_citizens failed: {e}"))?;
+                    Self::upsert_target_citizen_rows(conn, &record)?;
                     Ok(())
                 })
             }
         }
+    }
+
+    fn upsert_target_citizen_rows(
+        conn: &mut postgres::Client,
+        record: &CitizenRecord,
+    ) -> Result<(), String> {
+        let Some(sfid_number) = record
+            .sfid_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+        else {
+            return Ok(());
+        };
+        let p_code = record
+            .province_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| Self::scope_codes_from_sfid(sfid_number.as_str()).0);
+        let c_code = record
+            .city_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+            .or_else(|| Self::scope_codes_from_sfid(sfid_number.as_str()).1)
+            .unwrap_or_else(|| "000".to_string());
+        let status = if matches!(record.computed_identity_status(), CitizenStatus::Normal) {
+            "ACTIVE"
+        } else {
+            "REVOKED"
+        };
+        let citizen_status = record
+            .citizen_status
+            .as_ref()
+            .map(citizen_status_text)
+            .unwrap_or("REVOKED");
+        let bind_status = citizen_bind_status_text(&record.bind_status());
+        let id = i64::try_from(record.id).map_err(|_| "citizen id exceeds i64".to_string())?;
+        Self::upsert_target_id_row(
+            conn,
+            sfid_number.as_str(),
+            "CITIZEN",
+            p_code.as_str(),
+            Some(c_code.as_str()),
+        )?;
+        Self::delete_target_rows_outside_scope(
+            conn,
+            "subjects",
+            sfid_number.as_str(),
+            p_code.as_str(),
+        )?;
+        Self::delete_target_rows_outside_scope(
+            conn,
+            "citizens",
+            sfid_number.as_str(),
+            p_code.as_str(),
+        )?;
+        conn.execute(
+            "INSERT INTO subjects (
+                sfid_number, kind, name, p_code, c_code, status, created_at, updated_at
+             ) VALUES ($1, 'CITIZEN', NULL, $2, $3, $4, $5, now())
+             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+                c_code = EXCLUDED.c_code,
+                status = EXCLUDED.status,
+                updated_at = now()",
+            &[&sfid_number, &p_code, &c_code, &status, &record.created_at],
+        )
+        .map_err(|e| format!("upsert citizen subject failed: {e}"))?;
+        conn.execute(
+            "INSERT INTO citizens (
+                sfid_number, p_code, c_code, id, archive_no, wallet_pubkey, wallet_address,
+                citizen_status, voting_eligible, valid_from, valid_until, status_updated_at,
+                bind_status, bound_at, bound_by, created_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+                c_code = EXCLUDED.c_code,
+                id = EXCLUDED.id,
+                archive_no = EXCLUDED.archive_no,
+                wallet_pubkey = EXCLUDED.wallet_pubkey,
+                wallet_address = EXCLUDED.wallet_address,
+                citizen_status = EXCLUDED.citizen_status,
+                voting_eligible = EXCLUDED.voting_eligible,
+                valid_from = EXCLUDED.valid_from,
+                valid_until = EXCLUDED.valid_until,
+                status_updated_at = EXCLUDED.status_updated_at,
+                bind_status = EXCLUDED.bind_status,
+                bound_at = EXCLUDED.bound_at,
+                bound_by = EXCLUDED.bound_by,
+                created_at = EXCLUDED.created_at",
+            &[
+                &sfid_number,
+                &p_code,
+                &c_code,
+                &id,
+                &record.archive_no,
+                &record.wallet_pubkey,
+                &record.wallet_address,
+                &citizen_status,
+                &record.voting_eligible,
+                &record.archive_valid_from,
+                &record.archive_valid_until,
+                &record.status_updated_at,
+                &bind_status,
+                &record.bound_at,
+                &record.bound_by,
+                &record.created_at,
+            ],
+        )
+        .map_err(|e| format!("upsert citizens failed: {e}"))?;
+        Ok(())
+    }
+
+    fn upsert_target_id_row(
+        conn: &mut postgres::Client,
+        sfid_number: &str,
+        kind: &str,
+        p_code: &str,
+        c_code: Option<&str>,
+    ) -> Result<(), String> {
+        // 中文注释:ids 是 sfid_number 全局唯一索引,同号不能在身份大类之间静默改义。
+        let existing = conn
+            .query_opt(
+                "SELECT kind FROM ids WHERE sfid_number = $1",
+                &[&sfid_number],
+            )
+            .map_err(|e| format!("query target id failed: {e}"))?;
+        if let Some(row) = existing {
+            let existing_kind: String = row.get(0);
+            if existing_kind != kind {
+                return Err(format!(
+                    "sfid_number {sfid_number} already belongs to {existing_kind}, cannot write {kind}"
+                ));
+            }
+            conn.execute(
+                "UPDATE ids SET p_code = $2, c_code = $3 WHERE sfid_number = $1",
+                &[&sfid_number, &p_code, &c_code],
+            )
+            .map_err(|e| format!("update target id failed: {e}"))?;
+        } else {
+            conn.execute(
+                "INSERT INTO ids (sfid_number, kind, p_code, c_code)
+                 VALUES ($1, $2, $3, $4)",
+                &[&sfid_number, &kind, &p_code, &c_code],
+            )
+            .map_err(|e| format!("insert target id failed: {e}"))?;
+        }
+        Ok(())
+    }
+
+    fn delete_target_rows_outside_scope(
+        conn: &mut postgres::Client,
+        table: &str,
+        sfid_number: &str,
+        p_code: &str,
+    ) -> Result<(), String> {
+        // 中文注释:分区键按行政区划真源修正时,清掉同一 sfid 留在原分区的查询行。
+        let sql = format!("DELETE FROM {table} WHERE sfid_number = $1 AND p_code <> $2");
+        conn.execute(sql.as_str(), &[&sfid_number, &p_code])
+            .map_err(|e| format!("delete {table} rows outside scope failed: {e}"))?;
+        Ok(())
     }
 
     pub(crate) fn list_citizens_exact(
@@ -1111,25 +1517,30 @@ impl StoreHandle {
                         .map_err(|_| "page_size too large".to_string())?;
                     let rows = conn
                         .query(
-                            "SELECT id, wallet_pubkey, wallet_address, archive_no, sfid_code,
-                                    citizen_status, voting_eligible, valid_from, valid_until,
-                                    status_updated_at, bind_status, province_code, city_code,
-                                    bound_at, bound_by, created_at
-                             FROM sfid_citizens
-                             WHERE bind_status = 'BOUND'
-                               AND ($1::text IS NULL OR province_code = $1)
-                               AND ($2::text IS NULL OR city_code = $2)
+                            "SELECT COALESCE(c.id, 0), c.wallet_pubkey, c.wallet_address,
+                                    c.archive_no, c.sfid_number, c.citizen_status,
+                                    c.voting_eligible, c.valid_from, c.valid_until,
+                                    c.status_updated_at, c.bind_status, c.p_code, c.c_code,
+                                    c.bound_at, c.bound_by, c.created_at
+                             FROM citizens c
+                             JOIN subjects s
+                               ON s.p_code = c.p_code
+                              AND s.sfid_number = c.sfid_number
+                              AND s.kind = 'CITIZEN'
+                             WHERE c.bind_status = 'BOUND'
+                               AND ($1::text IS NULL OR c.p_code = $1)
+                               AND ($2::text IS NULL OR c.c_code = $2)
                                AND (
-                                    archive_no = $3 OR sfid_code = $3
-                                    OR lower(wallet_pubkey) = lower($3)
-                                    OR lower(wallet_address) = lower($3)
+                                    c.archive_no = $3 OR c.sfid_number = $3
+                                    OR lower(c.wallet_pubkey) = lower($3)
+                                    OR lower(c.wallet_address) = lower($3)
                                )
                                AND (
                                     $4::timestamptz IS NULL
-                                    OR created_at < $4
-                                    OR (created_at = $4 AND id < $5)
+                                    OR c.created_at < $4
+                                    OR (c.created_at = $4 AND COALESCE(c.id, 0) < $5)
                                )
-                             ORDER BY created_at DESC, id DESC
+                             ORDER BY c.created_at DESC, COALESCE(c.id, 0) DESC
                              LIMIT $6",
                             &[
                                 &province_code,
@@ -1140,7 +1551,7 @@ impl StoreHandle {
                                 &fetch_limit,
                             ],
                         )
-                        .map_err(|e| format!("query sfid_citizens failed: {e}"))?;
+                        .map_err(|e| format!("query citizens failed: {e}"))?;
                     let mut output = Vec::with_capacity(rows.len());
                     for row in rows {
                         let id_i64: i64 = row.get(0);
@@ -1175,7 +1586,7 @@ impl StoreHandle {
 
     pub(crate) fn upsert_institution_row(
         &self,
-        inst: &crate::institutions::MultisigInstitution,
+        inst: &crate::subjects::MultisigInstitution,
     ) -> Result<(), String> {
         match &self.backend {
             StoreBackend::Memory(_) => Ok(()),
@@ -1185,67 +1596,235 @@ impl StoreHandle {
             } => {
                 let inst = inst.clone();
                 StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
-                    let category = institution_category_text(inst.category);
-                    let chain_status = institution_chain_status_text(&inst.chain_status);
-                    let chain_block_number = inst.chain_block_number.map(|v| v as i64);
-                    conn.execute(
-                        "INSERT INTO sfid_institutions (
-                            sfid_number, institution_name, category, a3, p1, province, city,
-                            province_code, city_code, institution_code, sub_type,
-                            parent_sfid_number, chain_status, chain_tx_hash,
-                            chain_block_number, chain_synced_at, created_by, created_at
-                         ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
-                         )
-                         ON CONFLICT (sfid_number) DO UPDATE SET
-                            institution_name = EXCLUDED.institution_name,
-                            category = EXCLUDED.category,
-                            a3 = EXCLUDED.a3,
-                            p1 = EXCLUDED.p1,
-                            province = EXCLUDED.province,
-                            city = EXCLUDED.city,
-                            province_code = EXCLUDED.province_code,
-                            city_code = EXCLUDED.city_code,
-                            institution_code = EXCLUDED.institution_code,
-                            sub_type = EXCLUDED.sub_type,
-                            parent_sfid_number = EXCLUDED.parent_sfid_number,
-                            chain_status = EXCLUDED.chain_status,
-                            chain_tx_hash = EXCLUDED.chain_tx_hash,
-                            chain_block_number = EXCLUDED.chain_block_number,
-                            chain_synced_at = EXCLUDED.chain_synced_at,
-                            created_by = EXCLUDED.created_by,
-                            created_at = EXCLUDED.created_at",
-                        &[
-                            &inst.sfid_number,
-                            &inst.institution_name,
-                            &category,
-                            &inst.a3,
-                            &inst.p1,
-                            &inst.province,
-                            &inst.city,
-                            &inst.province_code,
-                            &inst.city_code,
-                            &inst.institution_code,
-                            &inst.sub_type,
-                            &inst.parent_sfid_number,
-                            &chain_status,
-                            &inst.chain_tx_hash,
-                            &chain_block_number,
-                            &inst.chain_synced_at,
-                            &inst.created_by,
-                            &inst.created_at,
-                        ],
-                    )
-                    .map_err(|e| format!("upsert sfid_institutions failed: {e}"))?;
+                    Self::upsert_target_subject_rows(conn, &inst)?;
                     Ok(())
                 })
             }
         }
     }
 
+    fn upsert_target_subject_rows(
+        conn: &mut postgres::Client,
+        inst: &crate::subjects::MultisigInstitution,
+    ) -> Result<(), String> {
+        let kind = match inst.category {
+            crate::sfid_number::InstitutionCategory::PrivateInstitution => "PRIVATE",
+            crate::sfid_number::InstitutionCategory::PublicSecurity
+            | crate::sfid_number::InstitutionCategory::GovInstitution => "PUBLIC",
+        };
+        let is_national =
+            inst.institution_level == Some(crate::subjects::InstitutionLevel::National);
+        let p_code = if is_national {
+            crate::subjects::schema::GLOBAL_SCOPE_CODE.to_string()
+        } else {
+            inst.province_code.clone()
+        };
+        let c_code = if is_national || inst.city_code == "000" || inst.city_code.is_empty() {
+            None
+        } else {
+            Some(inst.city_code.clone())
+        };
+        let status = if matches!(
+            inst.chain_status,
+            crate::subjects::InstitutionChainStatus::RevokedOnChain
+        ) {
+            "REVOKED"
+        } else {
+            "ACTIVE"
+        };
+        Self::upsert_target_id_row(
+            conn,
+            inst.sfid_number.as_str(),
+            kind,
+            p_code.as_str(),
+            c_code.as_deref(),
+        )?;
+        Self::delete_target_rows_outside_scope(
+            conn,
+            "subjects",
+            inst.sfid_number.as_str(),
+            p_code.as_str(),
+        )?;
+        let category = institution_category_text(inst.category);
+        let source = inst.source.as_ref().map(institution_source_text);
+        let institution_level = inst.institution_level.as_ref().map(institution_level_text);
+        let chain_status = institution_chain_status_text(&inst.chain_status);
+        conn.execute(
+            "INSERT INTO subjects (
+                sfid_number, kind, name, p_code, c_code, status, category, source,
+                institution_level, a3, p1, province, city, province_code, city_code,
+                institution_code, sub_type, parent_sfid_number, chain_status, created_by,
+                created_at, updated_at
+             ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                $14, $15, $16, $17, $18, $19, $20, $21, now()
+             )
+             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+                kind = EXCLUDED.kind,
+                name = EXCLUDED.name,
+                c_code = EXCLUDED.c_code,
+                status = EXCLUDED.status,
+                category = EXCLUDED.category,
+                source = EXCLUDED.source,
+                institution_level = EXCLUDED.institution_level,
+                a3 = EXCLUDED.a3,
+                p1 = EXCLUDED.p1,
+                province = EXCLUDED.province,
+                city = EXCLUDED.city,
+                province_code = EXCLUDED.province_code,
+                city_code = EXCLUDED.city_code,
+                institution_code = EXCLUDED.institution_code,
+                sub_type = EXCLUDED.sub_type,
+                parent_sfid_number = EXCLUDED.parent_sfid_number,
+                chain_status = EXCLUDED.chain_status,
+                created_by = EXCLUDED.created_by,
+                updated_at = now()",
+            &[
+                &inst.sfid_number,
+                &kind,
+                &inst.institution_name,
+                &p_code,
+                &c_code,
+                &status,
+                &category,
+                &source,
+                &institution_level,
+                &inst.a3,
+                &inst.p1,
+                &inst.province,
+                &inst.city,
+                &inst.province_code,
+                &inst.city_code,
+                &inst.institution_code,
+                &inst.sub_type,
+                &inst.parent_sfid_number,
+                &chain_status,
+                &inst.created_by,
+                &inst.created_at,
+            ],
+        )
+        .map_err(|e| format!("upsert subjects failed: {e}"))?;
+
+        match inst.category {
+            crate::sfid_number::InstitutionCategory::PrivateInstitution => {
+                Self::delete_target_rows_outside_scope(
+                    conn,
+                    "private",
+                    inst.sfid_number.as_str(),
+                    p_code.as_str(),
+                )?;
+                conn.execute(
+                    "DELETE FROM gov WHERE sfid_number = $1",
+                    &[&inst.sfid_number],
+                )
+                .map_err(|e| format!("delete gov row for private subject failed: {e}"))?;
+                let private_kind = if inst.institution_code == "JY" {
+                    "SCHOOL"
+                } else if inst.a3 == "FFR" {
+                    "BRANCH"
+                } else if inst.p1 == "0" {
+                    "NONPROFIT"
+                } else {
+                    "PROFIT"
+                };
+                conn.execute(
+                    "INSERT INTO private (
+                        sfid_number, p_code, c_code, code, kind, a3, p1, sub_type, parent_sfid_number
+                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                     ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+                        c_code = EXCLUDED.c_code,
+                        code = EXCLUDED.code,
+                        kind = EXCLUDED.kind,
+                        a3 = EXCLUDED.a3,
+                        p1 = EXCLUDED.p1,
+                        sub_type = EXCLUDED.sub_type,
+                        parent_sfid_number = EXCLUDED.parent_sfid_number",
+                    &[
+                        &inst.sfid_number,
+                        &p_code,
+                        &c_code,
+                        &inst.institution_code,
+                        &private_kind,
+                        &inst.a3,
+                        &inst.p1,
+                        &inst.sub_type,
+                        &inst.parent_sfid_number,
+                    ],
+                )
+                .map_err(|e| format!("upsert private failed: {e}"))?;
+            }
+            crate::sfid_number::InstitutionCategory::PublicSecurity
+            | crate::sfid_number::InstitutionCategory::GovInstitution => {
+                Self::delete_target_rows_outside_scope(
+                    conn,
+                    "gov",
+                    inst.sfid_number.as_str(),
+                    p_code.as_str(),
+                )?;
+                conn.execute(
+                    "DELETE FROM private WHERE sfid_number = $1",
+                    &[&inst.sfid_number],
+                )
+                .map_err(|e| format!("delete private row for public subject failed: {e}"))?;
+                let source = if matches!(
+                    inst.source.as_ref(),
+                    Some(crate::subjects::InstitutionSource::Auto)
+                ) {
+                    "AUTO"
+                } else {
+                    "MANUAL"
+                };
+                let level = match inst.institution_level.as_ref() {
+                    Some(crate::subjects::InstitutionLevel::National) => "NATIONAL",
+                    Some(crate::subjects::InstitutionLevel::Province) => "PROVINCE",
+                    Some(crate::subjects::InstitutionLevel::Town) => "TOWN",
+                    _ => "CITY",
+                };
+                let chain_status = institution_chain_status_text(&inst.chain_status);
+                let home_p = if is_national {
+                    Some(inst.province_code.clone())
+                } else {
+                    None
+                };
+                let home_c = if is_national && !inst.city_code.is_empty() && inst.city_code != "000"
+                {
+                    Some(inst.city_code.clone())
+                } else {
+                    None
+                };
+                conn.execute(
+                    "INSERT INTO gov (
+                        sfid_number, p_code, c_code, code, source, level, home_p, home_c, chain_status
+                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                     ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+                        c_code = EXCLUDED.c_code,
+                        code = EXCLUDED.code,
+                        source = EXCLUDED.source,
+                        level = EXCLUDED.level,
+                        home_p = EXCLUDED.home_p,
+                        home_c = EXCLUDED.home_c,
+                        chain_status = EXCLUDED.chain_status",
+                    &[
+                        &inst.sfid_number,
+                        &p_code,
+                        &c_code,
+                        &inst.institution_code,
+                        &source,
+                        &level,
+                        &home_p,
+                        &home_c,
+                        &chain_status,
+                    ],
+                )
+                .map_err(|e| format!("upsert gov failed: {e}"))?;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn upsert_institution_account_row(
         &self,
-        account: &crate::institutions::MultisigAccount,
+        account: &crate::subjects::MultisigAccount,
     ) -> Result<(), String> {
         match &self.backend {
             StoreBackend::Memory(_) => Ok(()),
@@ -1255,39 +1834,73 @@ impl StoreHandle {
             } => {
                 let account = account.clone();
                 StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
-                    let chain_status = multisig_chain_status_text(&account.chain_status);
-                    let chain_block_number = account.chain_block_number.map(|v| v as i64);
-                    conn.execute(
-                        "INSERT INTO sfid_institution_accounts (
-                            sfid_number, account_name, duoqian_address, chain_status,
-                            chain_tx_hash, chain_block_number, chain_synced_at,
-                            created_by, created_at
-                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                         ON CONFLICT (sfid_number, account_name) DO UPDATE SET
-                            duoqian_address = EXCLUDED.duoqian_address,
-                            chain_status = EXCLUDED.chain_status,
-                            chain_tx_hash = EXCLUDED.chain_tx_hash,
-                            chain_block_number = EXCLUDED.chain_block_number,
-                            chain_synced_at = EXCLUDED.chain_synced_at,
-                            created_by = EXCLUDED.created_by,
-                            created_at = EXCLUDED.created_at",
-                        &[
-                            &account.sfid_number,
-                            &account.account_name,
-                            &account.duoqian_address,
-                            &chain_status,
-                            &account.chain_tx_hash,
-                            &chain_block_number,
-                            &account.chain_synced_at,
-                            &account.created_by,
-                            &account.created_at,
-                        ],
-                    )
-                    .map_err(|e| format!("upsert sfid_institution_accounts failed: {e}"))?;
+                    Self::upsert_target_account_row(conn, &account)?;
                     Ok(())
                 })
             }
         }
+    }
+
+    fn upsert_target_account_row(
+        conn: &mut postgres::Client,
+        account: &crate::subjects::MultisigAccount,
+    ) -> Result<(), String> {
+        let scope_row = conn
+            .query_opt(
+                "SELECT p_code, c_code FROM ids WHERE sfid_number = $1",
+                &[&account.sfid_number],
+            )
+            .map_err(|e| format!("query id scope for account failed: {e}"))?;
+        let (fallback_p, fallback_c) = Self::scope_codes_from_sfid(account.sfid_number.as_str());
+        let (p_code, c_code): (String, Option<String>) = match scope_row {
+            Some(row) => (row.get(0), row.get(1)),
+            None => (fallback_p, fallback_c),
+        };
+        let chain_status = multisig_chain_status_text(&account.chain_status);
+        Self::delete_target_rows_outside_scope(
+            conn,
+            "accounts",
+            account.sfid_number.as_str(),
+            p_code.as_str(),
+        )?;
+        conn.execute(
+            "INSERT INTO accounts (
+                sfid_number, p_code, c_code, account_name, duoqian_address, chain_status, created_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (p_code, sfid_number, account_name) DO UPDATE SET
+                c_code = EXCLUDED.c_code,
+                duoqian_address = EXCLUDED.duoqian_address,
+                chain_status = EXCLUDED.chain_status,
+                created_at = EXCLUDED.created_at",
+            &[
+                &account.sfid_number,
+                &p_code,
+                &c_code,
+                &account.account_name,
+                &account.duoqian_address,
+                &chain_status,
+                &account.created_at,
+            ],
+        )
+        .map_err(|e| format!("upsert accounts failed: {e}"))?;
+        Ok(())
+    }
+
+    fn scope_codes_from_sfid(sfid_number: &str) -> (String, Option<String>) {
+        let Some(r5) = sfid_number.split('-').nth(1) else {
+            return (crate::subjects::schema::GLOBAL_SCOPE_CODE.to_string(), None);
+        };
+        if r5.len() < 5 {
+            return (crate::subjects::schema::GLOBAL_SCOPE_CODE.to_string(), None);
+        }
+        let p_code = r5[0..2].to_string();
+        let c_part = &r5[2..5];
+        let c_code = if c_part == "000" {
+            None
+        } else {
+            Some(c_part.to_string())
+        };
+        (p_code, c_code)
     }
 
     pub(crate) fn delete_institution_account_row(
@@ -1305,11 +1918,48 @@ impl StoreHandle {
                 let account_name = account_name.to_string();
                 StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
                     conn.execute(
-                        "DELETE FROM sfid_institution_accounts
+                        "DELETE FROM accounts
                          WHERE sfid_number = $1 AND account_name = $2",
                         &[&sfid_number, &account_name],
                     )
-                    .map_err(|e| format!("delete sfid_institution_accounts failed: {e}"))?;
+                    .map_err(|e| format!("delete accounts failed: {e}"))?;
+                    Ok(())
+                })
+            }
+        }
+    }
+
+    pub(crate) fn delete_institution_rows_by_sfids(&self, sfids: &[String]) -> Result<(), String> {
+        if sfids.is_empty() {
+            return Ok(());
+        }
+        match &self.backend {
+            StoreBackend::Memory(_) => Ok(()),
+            StoreBackend::Postgres {
+                clients,
+                next_client_idx,
+            } => {
+                let sfids = sfids.to_vec();
+                StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
+                    let mut tx = conn
+                        .transaction()
+                        .map_err(|e| format!("begin delete subject rows failed: {e}"))?;
+                    for sfid in &sfids {
+                        tx.execute("DELETE FROM accounts WHERE sfid_number = $1", &[sfid])
+                            .map_err(|e| format!("delete accounts by sfid failed: {e}"))?;
+                        tx.execute("DELETE FROM docs WHERE sfid_number = $1", &[sfid])
+                            .map_err(|e| format!("delete docs by sfid failed: {e}"))?;
+                        tx.execute("DELETE FROM gov WHERE sfid_number = $1", &[sfid])
+                            .map_err(|e| format!("delete gov by sfid failed: {e}"))?;
+                        tx.execute("DELETE FROM private WHERE sfid_number = $1", &[sfid])
+                            .map_err(|e| format!("delete private by sfid failed: {e}"))?;
+                        tx.execute("DELETE FROM subjects WHERE sfid_number = $1", &[sfid])
+                            .map_err(|e| format!("delete subjects by sfid failed: {e}"))?;
+                        tx.execute("DELETE FROM ids WHERE sfid_number = $1", &[sfid])
+                            .map_err(|e| format!("delete ids by sfid failed: {e}"))?;
+                    }
+                    tx.commit()
+                        .map_err(|e| format!("commit delete subject rows failed: {e}"))?;
                     Ok(())
                 })
             }
@@ -1319,12 +1969,12 @@ impl StoreHandle {
     pub(crate) fn list_institutions_exact(
         &self,
         category: Option<&str>,
-        province: Option<&str>,
-        city: Option<&str>,
+        p_code: &str,
+        c_code: Option<&str>,
         keyword: &str,
         cursor: Option<&str>,
         page_size: usize,
-    ) -> Result<PageResult<crate::institutions::InstitutionListRow>, String> {
+    ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
         let keyword = keyword.trim();
         if keyword.is_empty() {
             return Ok(PageResult {
@@ -1340,6 +1990,8 @@ impl StoreHandle {
                 let store = inner
                     .read()
                     .map_err(|_| "memory store read lock poisoned".to_string())?;
+                // 中文注释:内存后端只用于本地开发和测试,仍按 p_code/c_code 先收窄范围,
+                // 保持和 Postgres 分区查询同一权限语义。
                 let mut rows = store
                     .multisig_institutions
                     .values()
@@ -1348,8 +2000,8 @@ impl StoreHandle {
                             .and_then(institution_category_from_text)
                             .map_or(true, |cat| inst.category == cat)
                     })
-                    .filter(|inst| province.map_or(true, |v| inst.province == v))
-                    .filter(|inst| city.map_or(true, |v| inst.city == v))
+                    .filter(|inst| inst.province_code == p_code)
+                    .filter(|inst| c_code.map_or(true, |v| inst.city_code == v))
                     .filter(|inst| institution_exact_match(inst, keyword))
                     .filter(|inst| {
                         cursor.map_or(true, |c| {
@@ -1379,87 +2031,92 @@ impl StoreHandle {
                 next_client_idx,
             } => {
                 let category = category.map(str::to_string);
-                let province = province.map(str::to_string);
-                let city = city.map(str::to_string);
+                let p_code = p_code.to_string();
+                let c_code = c_code.map(str::to_string);
                 let keyword = keyword.to_string();
                 StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
                     let cursor_created_at = cursor.map(|c| c.created_at);
-                    let cursor_id = cursor.map(|c| c.id).unwrap_or(i64::MAX);
                     let fetch_limit = i64::try_from(page_size.saturating_add(1))
                         .map_err(|_| "page_size too large".to_string())?;
                     let rows = conn
                         .query(
-                            "SELECT i.id, i.sfid_number, i.institution_name, i.category,
-                                    i.a3, i.p1, i.province, i.city, i.institution_code,
-                                    i.sub_type, i.parent_sfid_number, i.chain_status,
-                                    i.created_at, COALESCE(ac.account_count, 0),
-                                    a.admin_name, a.role
-                             FROM sfid_institutions i
-                             LEFT JOIN (
-                                SELECT sfid_number, COUNT(*)::BIGINT AS account_count
-                                FROM sfid_institution_accounts
-                                GROUP BY sfid_number
-                             ) ac ON ac.sfid_number = i.sfid_number
-                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(i.created_by)
-                             WHERE ($1::text IS NULL OR i.category = $1)
-                               AND ($2::text IS NULL OR i.province = $2)
-                               AND ($3::text IS NULL OR i.city = $3)
-                               AND (
-                                    i.sfid_number = $4
-                                    OR lower(COALESCE(i.institution_name, '')) = lower($4)
-                               )
-                               AND (
-                                    $5::timestamptz IS NULL
-                                    OR i.created_at < $5
-                                    OR (i.created_at = $5 AND i.id < $6)
-                               )
-                             ORDER BY i.created_at DESC, i.id DESC
-                             LIMIT $7",
+                            "SELECT s.sfid_number, s.name, s.category,
+	                                    s.source, s.institution_level, s.a3, s.p1, s.province,
+	                                    s.city, s.province_code, s.city_code, s.institution_code,
+	                                    s.sub_type, s.parent_sfid_number, s.chain_status,
+	                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
+	                                    a.admin_name, a.role
+	                             FROM subjects s
+	                             LEFT JOIN (
+	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
+	                                FROM accounts
+	                                WHERE p_code = $2
+	                                  AND ($3::text IS NULL OR c_code = $3)
+	                                GROUP BY p_code, sfid_number
+	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
+	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
+	                               AND ($1::text IS NULL OR s.category = $1)
+	                               AND s.p_code = $2
+	                               AND ($3::text IS NULL OR s.c_code = $3)
+	                               AND (
+	                                    s.sfid_number = $4
+	                                    OR lower(COALESCE(s.name, '')) = lower($4)
+	                               )
+	                               AND (
+	                                    $5::timestamptz IS NULL
+	                                    OR s.created_at < $5
+	                               )
+	                             ORDER BY s.created_at DESC, s.sfid_number DESC
+	                             LIMIT $6",
                             &[
                                 &category,
-                                &province,
-                                &city,
+                                &p_code,
+                                &c_code,
                                 &keyword,
                                 &cursor_created_at,
-                                &cursor_id,
                                 &fetch_limit,
                             ],
                         )
-                        .map_err(|e| format!("query sfid_institutions failed: {e}"))?;
+                        .map_err(|e| format!("query subjects failed: {e}"))?;
                     let mut output = Vec::with_capacity(rows.len());
                     for row in rows {
-                        let id: i64 = row.get(0);
-                        let category_text: String = row.get(3);
+                        let category_text: String = row.get(2);
                         let category = institution_category_from_text(category_text.as_str())
                             .ok_or_else(|| {
                                 format!("invalid institution category: {category_text}")
                             })?;
-                        let chain_status_text: String = row.get(11);
-                        let account_count_i64: i64 = row.get(13);
-                        let created_by_name: Option<String> = row.get(14);
-                        let created_by_role: Option<String> = row.get(15);
-                        let inst = crate::institutions::MultisigInstitution {
-                            sfid_number: row.get(1),
-                            institution_name: row.get(2),
+                        let source_text: Option<String> = row.get(3);
+                        let institution_level_text: Option<String> = row.get(4);
+                        let chain_status_text: String = row.get(14);
+                        let account_count_i64: i64 = row.get(17);
+                        let created_by_name: Option<String> = row.get(18);
+                        let created_by_role: Option<String> = row.get(19);
+                        let inst = crate::subjects::MultisigInstitution {
+                            sfid_number: row.get(0),
+                            institution_name: row.get(1),
                             category,
-                            a3: row.get(4),
-                            p1: row.get(5),
-                            province: row.get(6),
-                            city: row.get(7),
-                            province_code: String::new(),
-                            city_code: String::new(),
-                            institution_code: row.get(8),
-                            sub_type: row.get(9),
-                            parent_sfid_number: row.get(10),
+                            source: institution_source_from_text(source_text),
+                            institution_level: institution_level_from_text(institution_level_text),
+                            a3: row.get(5),
+                            p1: row.get(6),
+                            province: row.get(7),
+                            city: row.get(8),
+                            province_code: row.get(9),
+                            city_code: row.get(10),
+                            institution_code: row.get(11),
+                            sub_type: row.get(12),
+                            parent_sfid_number: row.get(13),
                             chain_status: institution_chain_status_from_text(
                                 chain_status_text.as_str(),
                             ),
                             chain_tx_hash: None,
                             chain_block_number: None,
                             chain_synced_at: None,
-                            created_by: String::new(),
-                            created_at: row.get(12),
+                            created_by: row.get(15),
+                            created_at: row.get(16),
                         };
+                        let id = stable_institution_cursor_id(inst.sfid_number.as_str());
                         output.push((
                             institution_row_from_record(
                                 &inst,
@@ -1472,6 +2129,188 @@ impl StoreHandle {
                         ));
                     }
                     Ok(page_from_rows(output, page_size))
+                })
+            }
+        }
+    }
+
+    pub(crate) fn list_public_security_scope(
+        &self,
+        p_code: &str,
+        c_code: Option<&str>,
+        offset: usize,
+        page_size: usize,
+    ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
+        match &self.backend {
+            StoreBackend::Memory(inner) => {
+                let store = inner
+                    .read()
+                    .map_err(|_| "memory store read lock poisoned".to_string())?;
+                let mut rows = store
+                    .multisig_institutions
+                    .values()
+                    .filter(|inst| {
+                        inst.category == crate::sfid_number::InstitutionCategory::PublicSecurity
+                    })
+                    .filter(|inst| inst.province_code == p_code)
+                    .filter(|inst| c_code.map_or(true, |v| inst.city_code == v))
+                    .map(|inst| {
+                        let account_count = store
+                            .multisig_accounts
+                            .values()
+                            .filter(|acc| acc.sfid_number == inst.sfid_number)
+                            .count();
+                        institution_row_from_record(inst, account_count, None, None)
+                    })
+                    .collect::<Vec<_>>();
+                rows.sort_by(|a, b| {
+                    a.city
+                        .cmp(&b.city)
+                        .then_with(|| a.sfid_number.cmp(&b.sfid_number))
+                });
+                Ok(offset_page_from_rows(rows, offset, page_size))
+            }
+            StoreBackend::Postgres {
+                clients,
+                next_client_idx,
+            } => {
+                let p_code = p_code.to_string();
+                let c_code = c_code.map(str::to_string);
+                StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
+                    let limit = i64::try_from(page_size.saturating_add(1))
+                        .map_err(|_| "page_size too large".to_string())?;
+                    let offset_i64 =
+                        i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
+                    let rows = conn
+                        .query(
+                            "SELECT s.sfid_number, s.name, s.category,
+	                                    s.source, s.institution_level, s.a3, s.p1, s.province,
+	                                    s.city, s.province_code, s.city_code, s.institution_code,
+	                                    s.sub_type, s.parent_sfid_number, s.chain_status,
+	                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
+	                                    a.admin_name, a.role
+	                             FROM subjects s
+	                             LEFT JOIN (
+	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
+	                                FROM accounts
+	                                WHERE p_code = $1
+	                                  AND ($2::text IS NULL OR c_code = $2)
+	                                GROUP BY p_code, sfid_number
+	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
+	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+	                             WHERE s.kind = 'PUBLIC'
+	                               AND s.category = 'PUBLIC_SECURITY'
+	                               AND s.p_code = $1
+	                               AND ($2::text IS NULL OR s.c_code = $2)
+	                             ORDER BY s.c_code ASC NULLS LAST, s.sfid_number ASC
+	                             LIMIT $3 OFFSET $4",
+                            &[&p_code, &c_code, &limit, &offset_i64],
+                        )
+                        .map_err(|e| format!("query public security failed: {e}"))?;
+                    let mut items = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        items.push(institution_row_from_pg_row(&row)?);
+                    }
+                    Ok(offset_page_from_window(items, offset, page_size))
+                })
+            }
+        }
+    }
+
+    pub(crate) fn list_official_institutions_scope(
+        &self,
+        p_code: &str,
+        c_code: Option<&str>,
+        keyword: &str,
+        offset: usize,
+        page_size: usize,
+    ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
+        let keyword = keyword.trim().to_ascii_lowercase();
+        match &self.backend {
+            StoreBackend::Memory(inner) => {
+                let store = inner
+                    .read()
+                    .map_err(|_| "memory store read lock poisoned".to_string())?;
+                let mut rows = store
+                    .multisig_institutions
+                    .values()
+                    .filter(|inst| {
+                        inst.category == crate::sfid_number::InstitutionCategory::GovInstitution
+                    })
+                    .filter(|inst| inst.province_code == p_code)
+                    .filter(|inst| c_code.map_or(true, |v| inst.city_code == v))
+                    .filter(|inst| official_list_keyword_match(inst, keyword.as_str()))
+                    .map(|inst| {
+                        let account_count = store
+                            .multisig_accounts
+                            .values()
+                            .filter(|acc| acc.sfid_number == inst.sfid_number)
+                            .count();
+                        institution_row_from_record(inst, account_count, None, None)
+                    })
+                    .collect::<Vec<_>>();
+                rows.sort_by(compare_official_list_rows);
+                Ok(offset_page_from_rows(rows, offset, page_size))
+            }
+            StoreBackend::Postgres {
+                clients,
+                next_client_idx,
+            } => {
+                let p_code = p_code.to_string();
+                let c_code = c_code.map(str::to_string);
+                StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
+                    let limit = i64::try_from(page_size.saturating_add(1))
+                        .map_err(|_| "page_size too large".to_string())?;
+                    let offset_i64 =
+                        i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
+                    let rows = conn
+                        .query(
+                            "SELECT s.sfid_number, s.name, s.category,
+	                                    s.source, s.institution_level, s.a3, s.p1, s.province,
+	                                    s.city, s.province_code, s.city_code, s.institution_code,
+	                                    s.sub_type, s.parent_sfid_number, s.chain_status,
+	                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
+	                                    a.admin_name, a.role
+	                             FROM subjects s
+	                             LEFT JOIN (
+	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
+	                                FROM accounts
+	                                WHERE p_code = $1
+	                                  AND ($2::text IS NULL OR c_code = $2)
+	                                GROUP BY p_code, sfid_number
+	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
+	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+	                             WHERE s.kind = 'PUBLIC'
+	                               AND s.category = 'GOV_INSTITUTION'
+	                               AND s.p_code = $1
+	                               AND ($2::text IS NULL OR s.c_code = $2)
+	                               AND (
+	                                    $3::text = ''
+	                                    OR lower(s.sfid_number) LIKE '%' || $3 || '%'
+	                                    OR lower(COALESCE(s.name, '')) LIKE '%' || $3 || '%'
+	                               )
+	                             ORDER BY
+	                                s.c_code ASC NULLS LAST,
+	                                CASE WHEN s.source = 'AUTO' THEN 0 ELSE 1 END ASC,
+	                                CASE s.institution_code
+	                                    WHEN 'ZF' THEN 0
+	                                    WHEN 'LF' THEN 1
+	                                    WHEN 'SF' THEN 2
+	                                    WHEN 'JC' THEN 3
+	                                    WHEN 'JY' THEN 4
+	                                    ELSE 9
+	                                END ASC,
+	                                COALESCE(s.name, '') ASC,
+	                                s.sfid_number ASC
+	                             LIMIT $4 OFFSET $5",
+                            &[&p_code, &c_code, &keyword, &limit, &offset_i64],
+                        )
+                        .map_err(|e| format!("query official institutions failed: {e}"))?;
+                    let mut items = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        items.push(institution_row_from_pg_row(&row)?);
+                    }
+                    Ok(offset_page_from_window(items, offset, page_size))
                 })
             }
         }
@@ -1594,6 +2433,8 @@ fn main() {
     info!("initialized runtime state with defaults");
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
+    // 中文注释:启动对账普通公权/宪法机构目录;机构身份只使用 sfid_number。
+    app_core::runtime_ops::backfill_and_reconcile_official_institutions(&state);
     app_core::runtime_ops::cleanup_stale_citizen_bind_records(&state);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -1654,9 +2495,9 @@ fn main() {
             }
         }
 
-        // 中文注释:启动后把模块 Store 快照里的公安局机构同步到进程内分片缓存,
-        // 保证详情页/列表按省读取时能看到最新机构和账户。
-        app_core::runtime_ops::sync_public_security_to_sharded(&state).await;
+        // 中文注释:启动后把模块 Store 快照里的机构同步到进程内分片缓存,
+        // 保证详情页/账户列表按省读取时能看到最新机构和账户。
+        app_core::runtime_ops::sync_institutions_to_sharded(&state).await;
 
         // 中文注释:启动后把 store_cpms 持久化授权恢复到分片缓存,供 ARCHIVE geo_seal 验真扫描。
         app_core::runtime_ops::sync_cpms_sites_to_sharded(&state).await;
@@ -1763,7 +2604,7 @@ fn main() {
                 put(cpms::revoke_cpms_keys),
             )
             // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。
-            // 中文注释:机构/账户两层模型的 API
+            // 中文注释:机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
             // - POST /api/v1/institution/create                          — 生成机构(不上链)
             // - POST /api/v1/institution/:sfid_number/account/create         — 只登记账户名称,不上链
@@ -1773,61 +2614,64 @@ fn main() {
             // - DELETE /api/v1/institution/:sfid_number/account/:account_name — 删除未上链/已注销新增账户
             .route(
                 "/api/v1/institution/check-name",
-                get(institutions::handler::check_institution_name),
+                get(subjects::admin::check_institution_name),
             )
             // FFR 详情页"所属法人"搜索(全国范围 SFR/GFR 模糊匹配)
             .route(
                 "/api/v1/institution/search-parents",
-                get(institutions::handler::search_parent_institutions),
+                get(subjects::admin::search_parent_institutions),
             )
             .route(
                 "/api/v1/institution/create",
-                post(institutions::handler::create_institution),
+                post(private::handler::create_institution),
             )
             .route(
                 "/api/v1/institution/:sfid_number/account/create",
-                post(institutions::handler::create_account),
+                post(accounts::handler::create_account),
             )
             .route(
                 "/api/v1/institution/list",
-                get(institutions::handler::list_institutions),
+                get(private::handler::list_institutions),
             )
             .route(
                 "/api/v1/institution/:sfid_number",
-                get(institutions::handler::get_institution)
+                get(subjects::admin::get_institution)
                     // 两步式第二步:详情页更新机构名称/企业类型
-                    .patch(institutions::handler::update_institution),
+                    .patch(subjects::admin::update_institution),
             )
             .route(
                 "/api/v1/institution/:sfid_number/accounts",
-                get(institutions::handler::list_accounts),
+                get(accounts::handler::list_accounts),
             )
             .route(
                 "/api/v1/institution/:sfid_number/account/:account_name",
-                delete(institutions::handler::delete_account),
+                delete(accounts::handler::delete_account),
             )
             // 机构资料库文档 CRUD
             .route(
                 "/api/v1/institution/:sfid_number/documents",
-                get(institutions::handler::list_documents)
-                    .post(institutions::handler::upload_document),
+                get(docs::handler::list_documents).post(docs::handler::upload_document),
             )
             .route(
                 "/api/v1/institution/:sfid_number/documents/:doc_id/download",
-                get(institutions::handler::download_document),
+                get(docs::handler::download_document),
             )
             .route(
                 "/api/v1/institution/:sfid_number/documents/:doc_id",
-                delete(institutions::handler::delete_document),
+                delete(docs::handler::delete_document),
             )
             // 任务卡 6:公安局跟 sfid 工具市清单对账
             .route(
                 "/api/v1/public-security/reconcile",
-                post(institutions::handler::reconcile_public_security),
+                post(gov::handler::reconcile_public_security),
             )
             .route(
                 "/api/v1/institutions/public-security",
-                get(institutions::handler::list_public_security_institutions),
+                get(gov::handler::list_public_security_institutions),
+            )
+            .route(
+                "/api/v1/institutions/official",
+                get(gov::handler::list_official_institutions),
             )
             .route(
                 "/api/v1/admin/citizens/cpms-status-export/import",
@@ -1850,10 +2694,13 @@ fn main() {
                 "/api/v1/admin/citizen/bind",
                 post(citizens::binding::citizen_bind),
             )
-            .route("/api/v1/admin/sfid/meta", get(sfid::admin::admin_sfid_meta))
+            .route(
+                "/api/v1/admin/sfid/meta",
+                get(sfid_number::admin::admin_sfid_meta),
+            )
             .route(
                 "/api/v1/admin/sfid/cities",
-                get(sfid::admin::admin_sfid_cities),
+                get(china::admin::admin_sfid_cities),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -1900,29 +2747,29 @@ fn main() {
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 注册信息凭证 / 账户列表 ──
             .route(
                 "/api/v1/app/institutions/search",
-                get(institutions::chain_duoqian_info::app_search_institutions),
+                get(subjects::chain_duoqian_info::app_search_institutions),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_number/registration-info",
-                get(institutions::chain_duoqian_info::app_get_institution_registration_info),
+                get(subjects::chain_duoqian_info::app_get_institution_registration_info),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_number",
-                get(institutions::chain_duoqian_info::app_get_institution),
+                get(subjects::chain_duoqian_info::app_get_institution),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_number/accounts",
-                get(institutions::chain_duoqian_info::app_list_accounts),
+                get(subjects::chain_duoqian_info::app_list_accounts),
             )
             // ── 清算行搜索(已激活,wuminapp 绑定清算行用):资格白名单 + 主账户 ACTIVE_ON_CHAIN ──
             .route(
                 "/api/v1/app/clearing-banks/search",
-                get(institutions::chain_duoqian_info::app_search_clearing_banks),
+                get(subjects::chain_duoqian_info::app_search_clearing_banks),
             )
             // ── 候选清算行搜索(可未激活,节点桌面"添加清算行"用):仅资格白名单过滤 ──
             .route(
                 "/api/v1/app/clearing-banks/eligible-search",
-                get(institutions::chain_duoqian_info::app_search_eligible_clearing_banks),
+                get(subjects::chain_duoqian_info::app_search_eligible_clearing_banks),
             );
 
         let app_state = state.clone();

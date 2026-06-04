@@ -69,7 +69,7 @@
   省级管理员只看本省,市级管理员只操作本市。
 - 管理员端公民查询不默认返回任何全量列表；必须输入档案号、身份ID、投票账户地址或投票账户公钥，后端返回 `{ items, page_size, next_cursor, has_more }`。
 - SFID 公民模块不保存公民姓名，任何公民检索都不得按姓名匹配。
-- `sfid_citizens` 是管理员浏览器查询用行表；绑定完成和 CPMS 年度报告导入后同步写入，唯一约束保证 `archive_no / sfid_code / wallet_pubkey / wallet_address` 一对一。
+- `citizens` 是管理员浏览器查询用分区表；绑定完成和 CPMS 年度报告导入后同步写入，`archive_no / sfid_code / wallet_pubkey` 三者一对一由公民绑定流程强制。
 - 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。

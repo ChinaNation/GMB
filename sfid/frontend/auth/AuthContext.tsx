@@ -10,7 +10,7 @@ import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/store
 
 export type RoleCapabilities = {
   canViewInstitutions: boolean;
-  canViewMultisig: boolean;
+  canViewPrivate: boolean;
   canViewShengAdmins: boolean;
   canViewShiAdmins: boolean;
   canCrudShiAdmins: boolean;
@@ -27,7 +27,7 @@ export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilitie
   const isShiAdmin = role === 'SHI_ADMIN';
   return {
     canViewInstitutions: isShengAdmin || isShiAdmin,
-    canViewMultisig: isShengAdmin || isShiAdmin,
+    canViewPrivate: isShengAdmin || isShiAdmin,
     canViewShengAdmins: isShengAdmin,
     canViewShiAdmins: isShengAdmin || isShiAdmin,
     canCrudShiAdmins: isShengAdmin,

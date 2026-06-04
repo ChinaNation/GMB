@@ -52,10 +52,13 @@
 - `memory/08-tasks/open/20260530-sfid-admins-module-unify.md`
 - `memory/08-tasks/open/20260530-sfid-cpms-used-install-ui.md`
 - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
+- `memory/08-tasks/open/20260601-sfid-official-institutions.md`
+- `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done
 
+- `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
 - `memory/08-tasks/done/20260531-cpms-installer-db-pdf.md`
 - `memory/08-tasks/done/20260531-cpms-ci-arm64-installer.md`
 - `memory/08-tasks/done/20260531-cpms-ci-clean-ubuntu-debs.md`
@@ -397,6 +400,7 @@
 - `memory/08-tasks/done/20260531-cpms日期输入统一组件.md`
 - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
 - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
+- `memory/08-tasks/done/20260531-sfid-city-cache-public-security-table.md`
 - `memory/08-tasks/done/20260531-sfid-permission-closeout.md`
 - `memory/08-tasks/done/20260531-sfid-signature-modal-stack.md`
 - `memory/08-tasks/done/20260531-sfid-signature-scan-loading.md`

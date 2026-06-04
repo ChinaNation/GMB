@@ -13,7 +13,7 @@ export interface Capabilities {
   // tab 可见性
   canViewCitizens: boolean;           // 首页公民身份
   canViewInstitutions: boolean;       // 公安局 / 公权机构 / 私权机构 tab
-  canViewMultisig: boolean;           // 多签管理(legacy tab,任务卡 4 会并入私权机构)
+  canViewPrivate: boolean;            // 私权机构 tab
   canViewRegistry: boolean;           // 注册局 tab(原机构管理)
   canViewShengAdmins: boolean;        // 省级管理员列表
   canViewShiAdmins: boolean;          // 市级管理员列表
@@ -38,7 +38,7 @@ export function useCapabilities(auth: AdminAuth | null): Capabilities {
 
       canViewCitizens: !!role,
       canViewInstitutions: isShengAdmin || isShiAdmin,
-      canViewMultisig: isShengAdmin || isShiAdmin,
+      canViewPrivate: isShengAdmin || isShiAdmin,
       canViewRegistry: isShengAdmin || isShiAdmin,
       canViewShengAdmins: isShengAdmin,
       canViewShiAdmins: isShengAdmin || isShiAdmin,

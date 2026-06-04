@@ -1,5 +1,5 @@
 // 中文注释:把 AntD <QRCode /> 渲染出的 canvas 导出成带白边 PNG 下载。
-// 原实现散在 CpmsSitePanel.tsx 里,步 0 抽成通用 util,让后续 SFID 二维码、
+// 原实现散在 CpmsSitePanel.tsx 里,步 0 抽成通用 util,让 SFID 二维码、
 // CPMS 二维码、多签二维码都能复用,避免每个组件复制一份。
 
 export interface DownloadQrOptions {

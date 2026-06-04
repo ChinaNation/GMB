@@ -1,5 +1,4 @@
-// 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
-// 注册局顶层视图 —— activeView === 'citizens' 分支。
+// 中文注释:注册局顶层视图 —— activeView === 'citizens' 分支。
 // 包含:citizen 列表 + 搜索栏 + 表格 + 身份ID绑定弹窗 + 年度报告导入弹窗。
 
 import { useEffect, useState } from 'react';

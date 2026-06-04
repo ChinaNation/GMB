@@ -170,8 +170,7 @@ pub(crate) fn ensure_city_in_creator_province(
             "cannot resolve province from created_by",
         ));
     };
-    let Some(city_code) = crate::sfid::province::city_code_by_name(province_name.as_str(), city)
-    else {
+    let Some(city_code) = crate::china::city_code_by_name(province_name.as_str(), city) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,

@@ -38,9 +38,9 @@ GFR / SF 等其他 a3 一律 ❌。
 
 | 资产 | 文件 |
 |---|---|
-| 资格判定函数 | [sfid/backend/institutions/service.rs](../../../sfid/backend/institutions/service.rs) `is_clearing_bank_eligible` |
-| 已激活清算行搜索 | [sfid/backend/institutions/handler.rs](../../../sfid/backend/institutions/handler.rs) `app_search_clearing_banks`（收紧版） |
-| 候选清算行搜索（含未激活） | [sfid/backend/institutions/handler.rs](../../../sfid/backend/institutions/handler.rs) `app_search_eligible_clearing_banks` |
+| 资格判定函数 | [sfid/backend/private/clearing.rs](../../../sfid/backend/private/clearing.rs) `is_clearing_bank_eligible` |
+| 已激活清算行搜索 | [sfid/backend/subjects/chain_duoqian_info.rs](../../../sfid/backend/subjects/chain_duoqian_info.rs) `app_search_clearing_banks`（收紧版） |
+| 候选清算行搜索（含未激活） | [sfid/backend/subjects/chain_duoqian_info.rs](../../../sfid/backend/subjects/chain_duoqian_info.rs) `app_search_eligible_clearing_banks` |
 | 路由 | [sfid/backend/main.rs](../../../sfid/backend/main.rs) `/api/v1/app/clearing-banks/search` 与 `/api/v1/app/clearing-banks/eligible-search` |
 
 ## 跨省 parent 查询机制
@@ -56,10 +56,10 @@ GFR / SF 等其他 a3 一律 ❌。
 
 | 资产 | 文件 |
 |---|---|
-| 前端版资格判定 | [sfid/frontend/institutions/utils/clearingBankEligible.ts](../../../sfid/frontend/institutions/utils/clearingBankEligible.ts) |
-| 列表 badge | [sfid/frontend/institutions/InstitutionListTable.tsx](../../../sfid/frontend/institutions/InstitutionListTable.tsx) |
-| 详情 badge | [sfid/frontend/institutions/InstitutionDetailPage.tsx](../../../sfid/frontend/institutions/InstitutionDetailPage.tsx) |
-| 第二步选 sub_type 时提示 | [sfid/frontend/institutions/PrivateInstitutionLayout.tsx](../../../sfid/frontend/institutions/PrivateInstitutionLayout.tsx) |
+| 前端版资格判定 | [sfid/frontend/private/clearingBankEligible.ts](../../../sfid/frontend/private/clearingBankEligible.ts) |
+| 列表 badge | [sfid/frontend/private/PrivateListTable.tsx](../../../sfid/frontend/private/PrivateListTable.tsx) |
+| 详情 badge | [sfid/frontend/private/PrivateDetailLayout.tsx](../../../sfid/frontend/private/PrivateDetailLayout.tsx) |
+| 第二步选 sub_type 时提示 | [sfid/frontend/private/PrivateDetailLayout.tsx](../../../sfid/frontend/private/PrivateDetailLayout.tsx) |
 
 **前端 badge 显示规则**：
 - SFR + JOINT_STOCK → 蓝色 badge `可作为清算行`（直接判定，单条机构信息足够）

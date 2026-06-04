@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import type { AdminAuth } from '../auth/types';
 import type { SfidCityItem } from '../sfid/api';
-import { loadCachedSfidCities } from '../sfid/metaCache';
+import { loadCachedSfidCities, readCachedSfidCities } from '../sfid/metaCache';
 
 interface Props {
   auth: AdminAuth;
@@ -25,13 +25,23 @@ const CARD_STYLE: React.CSSProperties = {
 };
 
 export const CityGrid: React.FC<Props> = ({ auth, province, onPick }) => {
-  const [cities, setCities] = useState<SfidCityItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const cachedCities = readCachedSfidCities(province);
+  const [cities, setCities] = useState<SfidCityItem[]>(
+    () => cachedCities?.filter((c) => c.code !== '000') ?? [],
+  );
+  const [loading, setLoading] = useState(!cachedCities);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const cachedRows = readCachedSfidCities(province);
+    if (cachedRows) {
+      setCities(cachedRows.filter((c) => c.code !== '000'));
+      setLoading(false);
+    } else {
+      setCities([]);
+      setLoading(true);
+    }
     setError(null);
     loadCachedSfidCities(auth, province)
       .then((rows) => {

@@ -292,11 +292,11 @@ pub(crate) struct AppState {
 | `sfid/backend/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
 | `sfid/backend/models/store.rs`(新建) | 2 | 43 shard 数据结构 |
 | `sfid/backend/<feature>/` | 2 | 按业务归属新增结构化热路径表 |
-| `sfid/backend/admins/institutions.rs` | 3 | 改 submit 为入队 |
+| `sfid/backend/subjects/chain_duoqian_info.rs` | 3 | 机构注册提交改为入队状态查询 |
 | `sfid/backend/store_shards/`(新建) | 3 | 省级 flush task + batch 聚合 |
 | `sfid/backend/Cargo.toml` | 3 | 加 `crossbeam-queue` 依赖 |
 | `sfid/frontend/<feature>/api.ts` | 3 | 增加任务状态轮询接口 |
-| `sfid/frontend/institutions/` | 3 | UI 改"已提交,等待上链"状态显示 |
+| `sfid/frontend/subjects/` | 3 | UI 改"已提交,等待上链"状态显示 |
 | 部署:`nginx.conf` | 4 | sticky routing by province header |
 | `sfid/backend/indexer/event_parser.rs`(新建) | 4 | 链事件订阅,同步 sheng signer cache |
 | `sfid/backend/tools/load_test/`(新建) | 4 | 自写 Rust 压测脚本 |
