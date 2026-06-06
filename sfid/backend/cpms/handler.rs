@@ -8,12 +8,10 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{NaiveDate, Utc};
-
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
+use chrono::{NaiveDate, Utc};
 
-// 中文注释:SFID 工具统一从 crate::number 拿,见 feedback_sfid_module_is_single_entry.md
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::operation_auth::AdminActionType;
 use crate::number::validate_sfid_number_format;
@@ -27,70 +25,160 @@ const MAX_PROVINCE_CHARS: usize = 100;
 const MAX_STATUS_REASON_CHARS: usize = 500;
 const GEO_SEAL_PREFIX: &str = "g1";
 
-// 中文注释:`cpms_site_keys` 主数据写入模块 Store 快照,同时同步进程内省分片缓存。
-// 根据 site_sfid 定位所在省份分片:
-//   - sheng-admin 已经锁定 province scope,直接用 scope 省即可;
-//   - 无省域 scope 的内部调用才跨省扫描定位,开销可接受(admin 低频操作)。
-pub(crate) async fn resolve_site_province_via_shard(
-    state: &AppState,
-    site_sfid: &str,
-    admin_province_scope: Option<&str>,
-) -> Result<String, (StatusCode, &'static str)> {
-    if let Some(p) = admin_province_scope {
-        return Ok(p.to_string());
+fn cpms_status_text(status: &CpmsSiteStatus) -> &'static str {
+    match status {
+        CpmsSiteStatus::Pending => "PENDING",
+        CpmsSiteStatus::Active => "ACTIVE",
+        CpmsSiteStatus::Disabled => "DISABLED",
+        CpmsSiteStatus::Revoked => "REVOKED",
     }
-    let mut found: Option<String> = None;
-    let site_sfid_owned = site_sfid.to_string();
-    state
-        .sharded_store
-        .for_each_province(|province, shard| {
-            if found.is_some() {
-                return;
-            }
-            if shard.cpms_site_keys.contains_key(&site_sfid_owned) {
-                found = Some(province.to_string());
-            }
-        })
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "shard scan failed"))?;
-    found.ok_or((StatusCode::NOT_FOUND, "site_sfid not found"))
 }
 
-/// CPMS 写入采用两步提交风格。
-/// 先写进程内分片缓存,再拿模块 Store 短锁保存快照和审计日志。
-/// 审计日志写失败只记 WARN,返回 OK(业务数据不丢)。
-#[allow(clippy::too_many_arguments)]
+fn install_token_status_text(status: &InstallTokenStatus) -> &'static str {
+    match status {
+        InstallTokenStatus::Pending => "PENDING",
+        InstallTokenStatus::Used => "USED",
+        InstallTokenStatus::Revoked => "REVOKED",
+    }
+}
+
+fn cpms_site_from_row(row: &postgres::Row) -> Result<CpmsSiteKeys, String> {
+    let payload: serde_json::Value = row.get(7);
+    let mut site: CpmsSiteKeys = serde_json::from_value(payload)
+        .map_err(|e| format!("deserialize cpms site payload failed: {e}"))?;
+    site.site_sfid = row.get(0);
+    site.province_code = row.get(1);
+    site.city_code = row.get(2);
+    site.cpms_pubkey_hash = row.get(5);
+    site.created_by = row.get(6);
+    Ok(site)
+}
+
+impl Db {
+    pub(crate) fn get_cpms_site(&self, sfid_number: &str) -> Result<Option<CpmsSiteKeys>, String> {
+        let sfid_number = sfid_number.trim().to_string();
+        self.with_client(move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT sfid_number, p_code, c_code, status, install_token_status,
+                            cpms_pubkey_hash, created_by, payload
+                     FROM cpms_sites
+                     WHERE sfid_number = $1",
+                    &[&sfid_number],
+                )
+                .map_err(|e| format!("query cpms site failed: {e}"))?;
+            row.as_ref().map(cpms_site_from_row).transpose()
+        })
+    }
+
+    fn upsert_cpms_site(&self, site: &CpmsSiteKeys) -> Result<(), String> {
+        let site = site.clone();
+        self.with_client(move |conn| {
+            let payload = serde_json::to_value(&site)
+                .map_err(|e| format!("serialize cpms site failed: {e}"))?;
+            conn.execute(
+                "INSERT INTO cpms_sites (
+                    sfid_number, p_code, c_code, status, install_token_status,
+                    cpms_pubkey_hash, created_by, created_at, updated_at, payload
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                 ON CONFLICT (sfid_number) DO UPDATE SET
+                    p_code = EXCLUDED.p_code,
+                    c_code = EXCLUDED.c_code,
+                    status = EXCLUDED.status,
+                    install_token_status = EXCLUDED.install_token_status,
+                    cpms_pubkey_hash = EXCLUDED.cpms_pubkey_hash,
+                    updated_at = EXCLUDED.updated_at,
+                    payload = EXCLUDED.payload",
+                &[
+                    &site.site_sfid,
+                    &site.province_code,
+                    &site.city_code,
+                    &cpms_status_text(&site.status),
+                    &install_token_status_text(&site.install_token_status),
+                    &site.cpms_pubkey_hash,
+                    &site.created_by,
+                    &site.created_at,
+                    &site.updated_at,
+                    &payload,
+                ],
+            )
+            .map_err(|e| format!("upsert cpms site failed: {e}"))?;
+            Ok(())
+        })
+    }
+
+    fn delete_cpms_site(&self, sfid_number: &str) -> Result<bool, String> {
+        let sfid_number = sfid_number.trim().to_string();
+        self.with_client(move |conn| {
+            let affected = conn
+                .execute(
+                    "DELETE FROM cpms_sites WHERE sfid_number = $1",
+                    &[&sfid_number],
+                )
+                .map_err(|e| format!("delete cpms site failed: {e}"))?;
+            Ok(affected > 0)
+        })
+    }
+
+    fn list_cpms_sites(&self, province_name: Option<&str>) -> Result<Vec<CpmsSiteKeys>, String> {
+        let p_code = province_name
+            .and_then(crate::china::province_code_by_name)
+            .map(str::to_string);
+        self.with_client(move |conn| {
+            let rows = conn
+                .query(
+                    "SELECT sfid_number, p_code, c_code, status, install_token_status,
+                            cpms_pubkey_hash, created_by, payload
+                     FROM cpms_sites
+                     WHERE ($1::text IS NULL OR p_code = $1)
+                     ORDER BY p_code ASC, c_code ASC, sfid_number ASC",
+                    &[&p_code],
+                )
+                .map_err(|e| format!("list cpms sites failed: {e}"))?;
+            rows.iter().map(cpms_site_from_row).collect()
+        })
+    }
+
+    fn find_cpms_target_institution(
+        &self,
+        province: &str,
+        city: &str,
+        institution: &str,
+    ) -> Result<Option<(String, String, String, String, String)>, String> {
+        let province = province.trim().to_string();
+        let city = city.trim().to_string();
+        let institution = institution.trim().to_string();
+        self.with_client(move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT sfid_number, province_code, city_code, institution_code,
+                            COALESCE(name, '')
+                     FROM subjects
+                     WHERE kind = 'PUBLIC'
+                       AND status = 'ACTIVE'
+                       AND province = $1
+                       AND city = $2
+                       AND (institution_code = $3 OR COALESCE(name, '') = $3)
+                     ORDER BY created_at DESC
+                     LIMIT 1",
+                    &[&province, &city, &institution],
+                )
+                .map_err(|e| format!("query cpms target institution failed: {e}"))?;
+            Ok(row.map(|row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4))))
+        })
+    }
+}
+
 fn append_cpms_audit_log_best_effort(
     state: &AppState,
     action: &'static str,
     actor_pubkey: &str,
-    target_pubkey: Option<String>,
-    target_archive_no: Option<String>,
-    result: &'static str,
+    target_sfid: Option<String>,
     detail: String,
 ) {
-    match state.store.write() {
-        Ok(mut store) => {
-            append_audit_log(
-                &mut store,
-                action,
-                actor_pubkey,
-                target_pubkey,
-                target_archive_no,
-                result,
-                detail,
-            );
-        }
-        Err(e) => {
-            tracing::warn!(action, error = %e, "append_audit_log failed (cpms shard write already committed)");
-        }
-    }
+    crate::core::runtime_ops::append_audit_log(state, action, actor_pubkey, target_sfid, detail);
 }
 
-/// 生成 `SFID_CPMS_V1 / INSTALL` 安装授权二维码。
-///
-/// 中文注释:两码方案下 INSTALL 只携带 `sfid_number / province_name / city_name / install_secret / sig`。
-/// 省市代码由 SFID 从 sfid_number 解码,不作为二维码字段重复携带。
 pub(crate) async fn generate_cpms_install_qr(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -115,13 +203,7 @@ pub(crate) async fn generate_cpms_install_qr(
     ) {
         return resp;
     }
-    if input.city.trim().is_empty() || input.institution.trim().is_empty() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "city and institution are required",
-        );
-    }
+
     let province = match ctx.admin_province.as_deref() {
         Some(scope) => {
             if let Some(raw) = input.province.as_deref() {
@@ -135,57 +217,54 @@ pub(crate) async fn generate_cpms_install_qr(
             }
             scope.to_string()
         }
-        None => match input.province.as_deref() {
-            Some(raw) if !raw.trim().is_empty() => raw.trim().to_string(),
-            _ => return api_error(StatusCode::BAD_REQUEST, 1001, "province is required"),
+        None => match input
+            .province
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            Some(raw) => raw.to_string(),
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "province is required"),
         },
     };
-    if province.chars().count() > MAX_PROVINCE_CHARS {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "province too long");
-    }
     let city = input.city.trim().to_string();
     let institution = input.institution.trim().to_string();
-    if city.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "city is required");
+    if city.is_empty() || institution.is_empty() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "city and institution are required",
+        );
     }
-    if institution.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "institution is required");
+    if province.chars().count() > MAX_PROVINCE_CHARS
+        || city.chars().count() > MAX_CITY_CHARS
+        || institution.chars().count() > MAX_INSTITUTION_CHARS
+    {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "field too long");
     }
-    if city.chars().count() > MAX_CITY_CHARS {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
-    }
-    if institution.chars().count() > MAX_INSTITUTION_CHARS {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "institution too long");
-    }
-    // ── 查找已有机构,直接读机构当前 sfid_number；二维码不重复携带省市码。 ──
-    let site_sfid = match state.store.read() {
-        Ok(store) => {
-            let found = store.multisig_institutions.values().find(|i| {
-                i.province == province && i.city == city && i.institution_code == institution
-            });
-            match found {
-                Some(inst) => inst.sfid_number.clone(),
-                None => {
-                    return api_error(
-                        StatusCode::NOT_FOUND,
-                        1004,
-                        "institution not found, reconcile may not have run",
-                    );
-                }
+
+    let Some((site_sfid, province_code, city_code, institution_code, institution_name)) =
+        (match state
+            .db
+            .find_cpms_target_institution(&province, &city, &institution)
+        {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!(error = %err, "query cpms target institution failed");
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "institution query failed",
+                );
             }
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "store read failed");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
-        }
+        })
+    else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
     let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
     };
-    let province_code = extract_province_code_from_sfid(&site_sfid);
-    let city_code = extract_city_code_from_sfid(&site_sfid);
-
     let install_secret = match generate_install_secret() {
         Ok(v) => v,
         Err(_) => {
@@ -197,15 +276,11 @@ pub(crate) async fn generate_cpms_install_qr(
         }
     };
     let install_secret_hash = install_secret_hash(install_secret.as_str());
-
-    // 用 SFID 主密钥签名 INSTALL 精简字段。
     let sign_source = build_install_sign_source(&site_sfid, &province, &city, &install_secret_hash);
     let signature = match sign_with_main_key(&state, &sign_source) {
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
     };
-
-    // 构造 QR1 payload
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
@@ -225,82 +300,44 @@ pub(crate) async fn generate_cpms_install_qr(
             )
         }
     };
-
     let created_at = Utc::now();
-    // 写 cpms_site_keys 到 sharded_store
-    let site_sfid_key = site_sfid.clone();
-    let new_site = CpmsSiteKeys {
+    let site = CpmsSiteKeys {
         site_sfid: site_sfid.clone(),
         install_token: String::new(),
-        install_secret: install_secret.clone(),
-        install_secret_hash: install_secret_hash.clone(),
+        install_secret,
+        install_secret_hash,
         install_token_status: InstallTokenStatus::Pending,
         status: CpmsSiteStatus::Pending,
         version: 1,
-        province_code: province_code.clone(),
-        admin_province: province.clone(),
-        city_name: city.clone(),
-        city_code: city_code.clone(),
-        institution_code: institution.clone(),
-        institution_name: String::new(),
+        province_code,
+        admin_province: province,
+        city_name: city,
+        city_code,
+        institution_code,
+        institution_name,
         qr1_payload: qr1_payload.clone(),
         cpms_pubkey_hash: None,
         created_by: ctx.admin_pubkey.clone(),
         created_at,
-        updated_by: Some(ctx.admin_pubkey.clone()),
-        updated_at: Some(created_at),
+        updated_by: None,
+        updated_at: None,
     };
-    let new_site_for_store = new_site.clone();
-    let insert_result = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            // 已有同 sfid 的站点记录时覆盖(多次生成 QR1 场景)
-            shard.cpms_site_keys.insert(site_sfid_key.clone(), new_site);
-            Ok(())
-        })
-        .await;
-    match insert_result {
-        Ok(Ok(())) => {}
-        Ok(Err(())) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "shard write failed",
-            )
-        }
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "shard write failed",
-            )
-        }
+    if let Err(err) = state.db.upsert_cpms_site(&site) {
+        tracing::error!(error = %err, "write cpms site failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "cpms site write failed",
+        );
     }
-
-    // 中文注释:同步写模块 Store 快照,作为 CPMS 授权主数据持久化来源。
-    {
-        match state.store.write() {
-            Ok(mut store) => {
-                store
-                    .cpms_site_keys
-                    .insert(site_sfid.clone(), new_site_for_store);
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "module store snapshot write failed (cpms generate, shard already committed)");
-            }
-        }
-    }
-
     append_cpms_audit_log_best_effort(
         &state,
-        "CPMS_SFID_GENERATE",
+        "CPMS_INSTALL_QR_GENERATE",
         &ctx.admin_pubkey,
         Some(site_sfid.clone()),
-        None,
-        "SUCCESS",
         format!(
-            "sfid_number={} province={} city={} city_code={} institution={}",
-            site_sfid, province, city, city_code, institution,
+            "city={} institution={}",
+            site.city_name, site.institution_code
         ),
     );
     Json(ApiResponse {
@@ -314,66 +351,31 @@ pub(crate) async fn generate_cpms_install_qr(
     .into_response()
 }
 
-/// 处理档案码，验证并返回预览结果。
-///
-/// SFID_CPMS_V1 两码方案：解 `geo_seal` 得到省市归属,再验证 CPMS 本机签名,
-/// 档案正式绑定必须走 citizens 绑定流程,不能在没有钱包地址时单独录入。
 pub(crate) async fn archive_verify(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(input): Json<CpmsArchiveVerifyInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 解析档案码
     let archive_code: CpmsArchiveCodePayload = match serde_json::from_str(input.qr_payload.trim()) {
         Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "invalid archive code payload",
-            )
-        }
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid archive QR payload"),
     };
-    if archive_code.r#type != "ARCHIVE" {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "type must be ARCHIVE");
-    }
-
     let verified =
         match verify_cpms_archive_qr(&state, &archive_code, ctx.admin_province.as_deref()).await {
             Ok(v) => v,
             Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
         };
-
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    append_audit_log(
-        &mut store,
+    append_cpms_audit_log_best_effort(
+        &state,
         "CPMS_ARCHIVE_VERIFY",
         &ctx.admin_pubkey,
-        Some(verified.archive_no.clone()),
-        None,
-        "SUCCESS",
-        format!(
-            "archive_no={} province_code={} city_code={} sfid_number={} citizen_status={:?} voting_eligible={} valid_from={} valid_until={} status_updated_at={}",
-            verified.archive_no,
-            verified.province_code,
-            verified.city_code,
-            verified.sfid_number,
-            verified.citizen_status,
-            verified.voting_eligible,
-            verified.valid_from,
-            verified.valid_until,
-            verified.status_updated_at
-        ),
+        Some(verified.sfid_number.clone()),
+        format!("archive_no={}", verified.archive_no),
     );
-    drop(store);
-
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -387,159 +389,55 @@ pub(crate) async fn archive_verify(
             province_code: verified.province_code,
             city_code: verified.city_code,
             sfid_number: verified.sfid_number,
-            status: "VERIFIED",
+            status: "verified",
         },
     })
     .into_response()
 }
 
-/// 作废安装令牌。
-/// 中文注释:按 site_sfid 找到省分片后,撤销 CPMS 安装授权。
 pub(crate) async fn revoke_install_token(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(site_sfid): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let sfid_trimmed = site_sfid.trim().to_string();
-    let grant_payload = serde_json::json!({ "target": sfid_trimmed.clone() });
-    if let Err(resp) = require_admin_security_grant(
-        &state,
-        &headers,
-        &ctx,
-        AdminActionType::CpmsRevokeInstallToken,
-        sfid_trimmed.as_str(),
-        Some(&grant_payload),
-    ) {
-        return resp;
-    }
-    let province =
-        match resolve_site_province_via_shard(&state, &sfid_trimmed, ctx.admin_province.as_deref())
-            .await
-        {
-            Ok(v) => v,
-            Err((code, msg)) => return api_error(code, 1004, msg),
-        };
-    let actor_pubkey = ctx.admin_pubkey.clone();
-    let sfid_for_closure = sfid_trimmed.clone();
-    let write_result = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            let site = match shard.cpms_site_keys.get_mut(sfid_for_closure.as_str()) {
-                Some(v) => v,
-                None => return Err("site_sfid not found"),
-            };
-            site.install_token_status = InstallTokenStatus::Revoked;
-            site.updated_by = Some(actor_pubkey.clone());
-            site.updated_at = Some(Utc::now());
-            Ok(())
-        })
-        .await;
-    match write_result {
-        Ok(Ok(())) => {}
-        Ok(Err(msg)) => return api_error(StatusCode::NOT_FOUND, 1004, msg),
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
-    }
-
-    // 中文注释:同步写模块 Store 快照,保证重启后授权状态仍可恢复。
-    {
-        match state.store.write() {
-            Ok(mut store) => {
-                if let Some(site) = store.cpms_site_keys.get_mut(&sfid_trimmed) {
-                    site.install_token_status = InstallTokenStatus::Revoked;
-                    site.updated_by = Some(ctx.admin_pubkey.clone());
-                    site.updated_at = Some(Utc::now());
-                }
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "module store snapshot write failed (cpms revoke, shard already committed)");
-            }
-        }
-    }
-
-    append_cpms_audit_log_best_effort(
-        &state,
-        "CPMS_INSTALL_TOKEN_REVOKE",
-        &ctx.admin_pubkey,
-        Some(sfid_trimmed.clone()),
-        None,
-        "SUCCESS",
-        format!("site_sfid={}", sfid_trimmed),
-    );
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: "revoked",
-    })
-    .into_response()
+    update_cpms_site_token_status(state, headers, sfid_number, InstallTokenStatus::Revoked).await
 }
 
-/// 重新签发安装令牌（QR1）。
 pub(crate) async fn reissue_install_token(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(site_sfid): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
     let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid_validated = match validate_sfid_number_format(site_sfid.trim()) {
+    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let grant_payload = serde_json::json!({ "target": site_sfid_validated.clone() });
+    let grant_payload = serde_json::json!({ "target": site_sfid.clone() });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
         &ctx,
-        AdminActionType::CpmsReissueInstallToken,
-        site_sfid_validated.as_str(),
+        AdminActionType::CpmsIssueInstallCode,
+        site_sfid.as_str(),
         Some(&grant_payload),
     ) {
         return resp;
     }
-    // 先定位省份，再读站点元数据用于 QR1 名称字段
-    let province = match resolve_site_province_via_shard(
-        &state,
-        &site_sfid_validated,
-        ctx.admin_province.as_deref(),
-    )
-    .await
-    {
+    let mut site = match load_scoped_site(&state, &ctx, &site_sfid) {
         Ok(v) => v,
-        Err((code, msg)) => return api_error(code, 1004, msg),
+        Err(resp) => return resp,
     };
-    let sfid_for_read = site_sfid_validated.clone();
-    let site_meta = state
-        .sharded_store
-        .read_province(&province, move |shard| {
-            shard.cpms_site_keys.get(&sfid_for_read).map(|s| {
-                (
-                    s.admin_province.clone(),
-                    s.city_name.clone(),
-                    s.city_code.clone(),
-                    s.institution_name.clone(),
-                    s.province_code.clone(),
-                )
-            })
-        })
-        .await
-        .ok()
-        .flatten();
-    let (prov_name, city_name, _city_code, _inst_name, _province_code) =
-        site_meta.unwrap_or_else(|| {
-            (
-                province.clone(),
-                String::new(),
-                extract_city_code_from_sfid(&site_sfid_validated),
-                String::new(),
-                extract_province_code_from_sfid(&site_sfid_validated),
-            )
-        });
+    if matches!(site.status, CpmsSiteStatus::Revoked) {
+        return api_error(
+            StatusCode::CONFLICT,
+            1005,
+            "revoked cpms site cannot be reissued",
+        );
+    }
     let install_secret = match generate_install_secret() {
         Ok(v) => v,
         Err(_) => {
@@ -550,28 +448,34 @@ pub(crate) async fn reissue_install_token(
             )
         }
     };
-    let install_secret_hash = install_secret_hash(install_secret.as_str());
+    site.install_secret = install_secret;
+    site.install_secret_hash = install_secret_hash(site.install_secret.as_str());
+    site.install_token_status = InstallTokenStatus::Pending;
+    site.cpms_pubkey_hash = None;
+    site.status = CpmsSiteStatus::Pending;
+    site.version += 1;
+    site.updated_by = Some(ctx.admin_pubkey.clone());
+    site.updated_at = Some(Utc::now());
     let sign_source = build_install_sign_source(
-        &site_sfid_validated,
-        &prov_name,
-        &city_name,
-        &install_secret_hash,
+        site.site_sfid.as_str(),
+        site.admin_province.as_str(),
+        site.city_name.as_str(),
+        site.install_secret_hash.as_str(),
     );
     let signature = match sign_with_main_key(&state, &sign_source) {
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
     };
-
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
-        "sfid_number": site_sfid_validated,
-        "province_name": prov_name,
-        "city_name": city_name,
-        "install_secret": install_secret,
+        "sfid_number": site.site_sfid,
+        "province_name": site.admin_province,
+        "city_name": site.city_name,
+        "install_secret": site.install_secret,
         "sig": signature,
     });
-    let qr1_payload = match serde_json::to_string(&qr1) {
+    site.qr1_payload = match serde_json::to_string(&qr1) {
         Ok(v) => v,
         Err(_) => {
             return api_error(
@@ -581,89 +485,74 @@ pub(crate) async fn reissue_install_token(
             )
         }
     };
-    let actor_pubkey = ctx.admin_pubkey.clone();
-    let sfid_for_closure = site_sfid_validated.clone();
-    let install_secret_clone = install_secret.clone();
-    let install_secret_hash_clone = install_secret_hash.clone();
-    let qr1_payload_clone = qr1_payload.clone();
-    let write_result = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            let site = match shard.cpms_site_keys.get_mut(sfid_for_closure.as_str()) {
-                Some(v) => v,
-                None => return Err("site_sfid not found"),
-            };
-            if site.status != CpmsSiteStatus::Revoked
-                && site.install_token_status != InstallTokenStatus::Revoked
-            {
-                return Err("only revoked cpms install authorization can be reissued");
-            }
-            site.install_token = String::new();
-            site.install_secret = install_secret_clone;
-            site.install_secret_hash = install_secret_hash_clone;
-            site.install_token_status = InstallTokenStatus::Pending;
-            site.status = CpmsSiteStatus::Pending;
-            site.qr1_payload = qr1_payload_clone;
-            site.cpms_pubkey_hash = None;
-            site.version += 1;
-            site.updated_by = Some(actor_pubkey.clone());
-            site.updated_at = Some(Utc::now());
-            Ok(())
-        })
-        .await;
-    match write_result {
-        Ok(Ok(())) => {}
-        Ok(Err(msg)) => {
-            let code = if msg.contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::CONFLICT
-            };
-            return api_error(code, 1004, msg);
-        }
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+    if let Err(err) = state.db.upsert_cpms_site(&site) {
+        tracing::error!(error = %err, "reissue cpms site failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "cpms site write failed",
+        );
     }
-
-    // 中文注释:同步写模块 Store 快照,保存重新签发后的安装密钥状态。
-    {
-        match state.store.write() {
-            Ok(mut store) => {
-                if let Some(site) = store.cpms_site_keys.get_mut(&site_sfid_validated) {
-                    site.install_token = String::new();
-                    site.install_secret = install_secret.clone();
-                    site.install_secret_hash = install_secret_hash.clone();
-                    site.install_token_status = InstallTokenStatus::Pending;
-                    site.status = CpmsSiteStatus::Pending;
-                    site.qr1_payload = qr1_payload.clone();
-                    site.cpms_pubkey_hash = None;
-                    site.version += 1;
-                    site.updated_by = Some(ctx.admin_pubkey.clone());
-                    site.updated_at = Some(Utc::now());
-                }
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "module store snapshot write failed (cpms reissue, shard already committed)");
-            }
-        }
-    }
-
     append_cpms_audit_log_best_effort(
         &state,
-        "CPMS_INSTALL_TOKEN_REISSUE",
+        "CPMS_INSTALL_QR_REISSUE",
         &ctx.admin_pubkey,
-        Some(site_sfid_validated.clone()),
-        None,
-        "SUCCESS",
-        format!("sfid_number={}", site_sfid_validated),
+        Some(site.site_sfid.clone()),
+        "reissue install code".to_string(),
     );
-
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: GenerateCpmsInstallOutput {
-            sfid_number: site_sfid_validated,
-            qr1_payload,
-        },
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
+    })
+    .into_response()
+}
+
+async fn update_cpms_site_token_status(
+    state: AppState,
+    headers: HeaderMap,
+    sfid_number: String,
+    target: InstallTokenStatus,
+) -> axum::response::Response {
+    let ctx = match require_sheng_admin(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
+        Ok(v) => v,
+        Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
+    };
+    let grant_payload = serde_json::json!({ "target": site_sfid.clone() });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CpmsRevokeInstallToken,
+        site_sfid.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
+    let mut site = match load_scoped_site(&state, &ctx, &site_sfid) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    site.install_token_status = target;
+    site.version += 1;
+    site.updated_by = Some(ctx.admin_pubkey.clone());
+    site.updated_at = Some(Utc::now());
+    if let Err(err) = state.db.upsert_cpms_site(&site) {
+        tracing::error!(error = %err, "update cpms token status failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "cpms site write failed",
+        );
+    }
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
     })
     .into_response()
 }
@@ -671,13 +560,13 @@ pub(crate) async fn reissue_install_token(
 pub(crate) async fn disable_cpms_keys(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(site_sfid): Path<String>,
+    Path(sfid_number): Path<String>,
     Json(input): Json<UpdateCpmsSiteStatusInput>,
 ) -> impl IntoResponse {
     update_cpms_site_status(
         state,
         headers,
-        site_sfid,
+        sfid_number,
         CpmsSiteStatus::Disabled,
         input.reason,
     )
@@ -687,13 +576,13 @@ pub(crate) async fn disable_cpms_keys(
 pub(crate) async fn enable_cpms_keys(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(site_sfid): Path<String>,
+    Path(sfid_number): Path<String>,
     Json(input): Json<UpdateCpmsSiteStatusInput>,
 ) -> impl IntoResponse {
     update_cpms_site_status(
         state,
         headers,
-        site_sfid,
+        sfid_number,
         CpmsSiteStatus::Active,
         input.reason,
     )
@@ -703,13 +592,13 @@ pub(crate) async fn enable_cpms_keys(
 pub(crate) async fn revoke_cpms_keys(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(site_sfid): Path<String>,
+    Path(sfid_number): Path<String>,
     Json(input): Json<UpdateCpmsSiteStatusInput>,
 ) -> impl IntoResponse {
     update_cpms_site_status(
         state,
         headers,
-        site_sfid,
+        sfid_number,
         CpmsSiteStatus::Revoked,
         input.reason,
     )
@@ -719,16 +608,13 @@ pub(crate) async fn revoke_cpms_keys(
 pub(crate) async fn delete_cpms_keys(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(site_sfid): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
     let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if site_sfid.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "site_sfid is required");
-    }
-    let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
+    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
@@ -743,78 +629,40 @@ pub(crate) async fn delete_cpms_keys(
     ) {
         return resp;
     }
-    // 中文注释:先按省分片删除缓存记录,再同步模块 Store 快照。
-    let province =
-        match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
-            .await
-        {
-            Ok(v) => v,
-            Err((code, msg)) => return api_error(code, 1004, msg),
-        };
-    let sfid_for_closure = site_sfid.clone();
-    let scope_province = ctx.admin_province.clone();
-    let write_result = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            let existing = match shard.cpms_site_keys.get(sfid_for_closure.as_str()) {
-                Some(v) => v.clone(),
-                None => return Err((StatusCode::NOT_FOUND, "cpms site not found")),
-            };
-            if !in_scope_cpms_site(&existing, scope_province.as_deref()) {
-                return Err((
-                    StatusCode::FORBIDDEN,
-                    "cannot manage other province institutions",
-                ));
-            }
-            if existing.status != CpmsSiteStatus::Pending {
-                return Err((
-                    StatusCode::CONFLICT,
-                    "only pending cpms site can be deleted",
-                ));
-            }
-            let info = (
-                existing.site_sfid.clone(),
-                existing.status.clone(),
-                existing.version,
-            );
-            shard.cpms_site_keys.remove(sfid_for_closure.as_str());
-            Ok(info)
-        })
-        .await;
-    let (existing_sfid, existing_status, existing_version) = match write_result {
-        Ok(Ok(info)) => info,
-        Ok(Err((code, msg))) => return api_error(code, 1004, msg),
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+    let site = match load_scoped_site(&state, &ctx, &site_sfid) {
+        Ok(v) => v,
+        Err(resp) => return resp,
     };
-
-    // 中文注释:同步删除模块 Store 快照中的 CPMS 授权记录。
-    {
-        match state.store.write() {
-            Ok(mut store) => {
-                store.cpms_site_keys.remove(&site_sfid);
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "module store snapshot write failed (cpms delete, shard already committed)");
-            }
-        }
+    if site.status != CpmsSiteStatus::Pending {
+        return api_error(
+            StatusCode::CONFLICT,
+            1007,
+            "only pending cpms site can be deleted",
+        );
     }
-
+    if let Err(err) = state.db.delete_cpms_site(&site_sfid) {
+        tracing::error!(error = %err, "delete cpms site failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "cpms site delete failed",
+        );
+    }
     append_cpms_audit_log_best_effort(
         &state,
         "CPMS_KEYS_DELETE",
         &ctx.admin_pubkey,
-        Some(existing_sfid.clone()),
-        None,
-        "SUCCESS",
-        format!(
-            "site_sfid={} status={:?} version={}",
-            existing_sfid, existing_status, existing_version
-        ),
+        Some(site_sfid.clone()),
+        "delete pending cpms site".to_string(),
     );
+    #[derive(serde::Serialize)]
+    struct DeleteOutput {
+        deleted: bool,
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: "deleted",
+        data: DeleteOutput { deleted: true },
     })
     .into_response()
 }
@@ -828,48 +676,16 @@ pub(crate) async fn list_cpms_keys(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 中文注释:CPMS 授权列表从进程内省分片缓存读取。
-    // 按 admin_province scope 决定读一省还是遍历全部。
-    let scope_province = ctx.admin_province.clone();
-    let mut sites: Vec<CpmsSiteKeys> = Vec::new();
-    if let Some(ref p) = scope_province {
-        let read_result = state
-            .sharded_store
-            .read_province(p, |shard| {
-                shard
-                    .cpms_site_keys
-                    .values()
-                    .filter(|site| in_scope_cpms_site(site, scope_province.as_deref()))
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
-            .await;
-        match read_result {
-            Ok(v) => sites = v,
-            Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+    let mut rows = match state.db.list_cpms_sites(ctx.admin_province.as_deref()) {
+        Ok(sites) => sites
+            .iter()
+            .map(|site| cpms_site_keys_to_list_row_simple(site, site.created_by.clone()))
+            .collect::<Vec<_>>(),
+        Err(err) => {
+            tracing::error!(error = %err, "list cpms sites failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cpms list failed");
         }
-    } else {
-        // 中文注释:无省域 scope 的历史兜底路径;正常 SHENG/SHI 登录应带省域。
-        let read_result = state
-            .sharded_store
-            .for_each_province(|_prov, shard| {
-                sites.extend(shard.cpms_site_keys.values().cloned());
-            })
-            .await;
-        if let Err(e) = read_result {
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e);
-        }
-    }
-    // 中文注释:拿模块 Store 短锁做 admin 名称解析。
-    let store = match store_read_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
     };
-    let mut rows: Vec<CpmsSiteKeysListRow> = sites
-        .iter()
-        .map(|site| cpms_site_keys_to_list_row(site, &store))
-        .collect();
-    drop(store);
     rows.sort_by(|a, b| a.sfid_number.cmp(&b.sfid_number));
     let total = rows.len();
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
@@ -892,12 +708,6 @@ pub(crate) async fn list_cpms_keys(
     .into_response()
 }
 
-/// 任务卡 `20260408-sfid-public-security-cpms-embed`:
-/// 按市公安局机构 sfid_number 反查其 CPMS 站点(`cpms_site_keys`)。
-///
-/// 中文注释:对外一律使用公安局机构 `sfid_number`。`cpms_site_keys` 的内部
-/// 历史字段保存同一个值,这里仍用 `(admin_province, city_name, institution_code)`
-/// 做一次机构详情页反查,确保每市公安局只挂自己的 CPMS 授权。
 pub(crate) async fn get_cpms_site_by_institution(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -907,83 +717,39 @@ pub(crate) async fn get_cpms_site_by_institution(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let sfid_number = sfid_number.trim().to_string();
-    if sfid_number.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_number is required");
-    }
-
-    // 中文注释:机构详情从进程内省分片缓存读取。
-    let province_code = extract_province_code_from_sfid(&sfid_number);
-    let province_name = match crate::china::province_name_by_code(&province_code) {
-        Some(n) => n.to_string(),
-        None => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "cannot resolve province from sfid_number",
-            )
-        }
-    };
-    let sfid_number_r = sfid_number.clone();
-    let inst_result = state
-        .sharded_store
-        .read_province(&province_name, move |shard| {
-            shard.multisig_institutions.get(&sfid_number_r).cloned()
-        })
-        .await;
-    let inst = match inst_result {
-        Ok(Some(v)) => v,
-        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
-        Err(e) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                &format!("shard read: {e}"),
-            )
-        }
-    };
-    // 省级管理员只能看本省
-    if let Some(scope_province) = ctx.admin_province.as_deref() {
-        if inst.province != scope_province {
-            return api_error(
-                StatusCode::FORBIDDEN,
-                1003,
-                "cannot view other province institutions",
-            );
-        }
-    }
-    // institution 的省已知，读同省分片的 cpms_site_keys
-    let inst_province = inst.province.clone();
-    let inst_city = inst.city.clone();
-    let inst_code = inst.institution_code.clone();
-    let province_key = inst_province.clone();
-    let matched_site: Option<CpmsSiteKeys> = match state
-        .sharded_store
-        .read_province(&province_key, move |shard| {
-            shard
-                .cpms_site_keys
-                .values()
-                .find(|site| {
-                    site.admin_province == inst_province
-                        && site.city_name == inst_city
-                        && site.institution_code == inst_code
-                })
-                .cloned()
-        })
-        .await
-    {
+    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+        Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    // 中文注释:展示用 admin 名称从模块 Store 快照短读。
-    let matched = match state.store.read() {
-        Ok(store) => matched_site.map(|site| cpms_site_keys_to_list_row(&site, &store)),
-        Err(_) => matched_site.map(|site| cpms_site_keys_to_list_row_simple(&site, String::new())),
+    let site = match state.db.get_cpms_site(&site_sfid) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "query cpms site failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cpms query failed");
+        }
+    };
+    let row = match site {
+        Some(site) => {
+            if let Some(scope) = ctx.admin_province.as_deref() {
+                if site.admin_province != scope {
+                    return api_error(
+                        StatusCode::FORBIDDEN,
+                        1003,
+                        "cannot view other province institutions",
+                    );
+                }
+            }
+            Some(cpms_site_keys_to_list_row_simple(
+                &site,
+                site.created_by.clone(),
+            ))
+        }
+        None => None,
     };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: matched,
+        data: row,
     })
     .into_response()
 }
@@ -999,9 +765,6 @@ async fn update_cpms_site_status(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if site_sfid.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "site_sfid is required");
-    }
     let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
@@ -1018,8 +781,7 @@ async fn update_cpms_site_status(
             return api_error(StatusCode::BAD_REQUEST, 1001, "invalid target status")
         }
     };
-    let grant_payload =
-        serde_json::json!({ "target": site_sfid.clone(), "reason": reason_text.clone() });
+    let grant_payload = serde_json::json!({ "target": site_sfid.clone(), "reason": reason_text });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
@@ -1030,117 +792,70 @@ async fn update_cpms_site_status(
     ) {
         return resp;
     }
-    // 中文注释:从进程内省分片缓存读取 CPMS 站点状态。
-    let province =
-        match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
-            .await
-        {
-            Ok(v) => v,
-            Err((code, msg)) => return api_error(code, 1004, msg),
-        };
-    let sfid_for_closure = site_sfid.clone();
-    let scope_province = ctx.admin_province.clone();
-    let actor_pubkey = ctx.admin_pubkey.clone();
-    let target_status_clone = target_status.clone();
-    let write_result = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            let site = match shard.cpms_site_keys.get_mut(sfid_for_closure.as_str()) {
-                Some(v) => v,
-                None => return Err((StatusCode::NOT_FOUND, "cpms site not found")),
-            };
-            if !in_scope_cpms_site(site, scope_province.as_deref()) {
-                return Err((
-                    StatusCode::FORBIDDEN,
-                    "cannot manage other province institutions",
-                ));
-            }
-            if site.status == target_status_clone {
-                // 状态相同，返回当前快照（不改）
-                return Ok((site.clone(), false));
-            }
-            if !can_transition_cpms_site_status(&site.status, &target_status_clone) {
-                return Err((StatusCode::CONFLICT, "invalid cpms site status transition"));
-            }
-            site.status = target_status_clone;
-            site.version += 1;
-            site.updated_by = Some(actor_pubkey.clone());
-            site.updated_at = Some(Utc::now());
-            Ok((site.clone(), true))
-        })
-        .await;
-    let (output, changed) = match write_result {
-        Ok(Ok(v)) => v,
-        Ok(Err((code, msg))) => return api_error(code, 1004, msg),
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+    let mut site = match load_scoped_site(&state, &ctx, &site_sfid) {
+        Ok(v) => v,
+        Err(resp) => return resp,
     };
-
-    // 中文注释:状态实际变更时同步写模块 Store 快照。
-    if changed {
-        match state.store.write() {
-            Ok(mut store) => {
-                if let Some(site) = store.cpms_site_keys.get_mut(&site_sfid) {
-                    site.status = target_status.clone();
-                    site.version += 1;
-                    site.updated_by = Some(ctx.admin_pubkey.clone());
-                    site.updated_at = Some(Utc::now());
-                }
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "module store snapshot write failed (cpms status update, shard already committed)");
-            }
-        }
+    let changed = site.status != target_status;
+    if changed && !can_transition_cpms_site_status(&site.status, &target_status) {
+        return api_error(
+            StatusCode::CONFLICT,
+            1005,
+            "invalid cpms site status transition",
+        );
     }
-
-    // 中文注释:拿模块 Store 短锁做 admin 名称解析 + 审计日志。
-    let created_by_name = match state.store.read() {
-        Ok(store) => resolve_admin_display_name(&store, &output.created_by),
-        Err(_) => output.created_by.clone(),
-    };
-    let response_row = cpms_site_keys_to_list_row_simple(&output, created_by_name);
     if changed {
+        site.status = target_status;
+        site.version += 1;
+        site.updated_by = Some(ctx.admin_pubkey.clone());
+        site.updated_at = Some(Utc::now());
+        if let Err(err) = state.db.upsert_cpms_site(&site) {
+            tracing::error!(error = %err, "update cpms site status failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "cpms site write failed",
+            );
+        }
         append_cpms_audit_log_best_effort(
             &state,
             "CPMS_KEYS_STATUS_UPDATE",
             &ctx.admin_pubkey,
-            Some(output.site_sfid.clone()),
-            None,
-            "SUCCESS",
-            format!(
-                "site_sfid={} status={:?} version={} reason={}",
-                output.site_sfid, output.status, output.version, reason_text
-            ),
+            Some(site.site_sfid.clone()),
+            format!("status={:?} reason={}", site.status, reason_text),
         );
     }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: response_row,
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
     })
     .into_response()
 }
 
-fn cpms_site_keys_to_list_row(site: &CpmsSiteKeys, store: &Store) -> CpmsSiteKeysListRow {
-    let created_by_name = resolve_admin_display_name(store, &site.created_by);
-    CpmsSiteKeysListRow {
-        sfid_number: site.site_sfid.clone(),
-        install_token_status: site.install_token_status.clone(),
-        status: site.status.clone(),
-        version: site.version,
-        province_code: site.province_code.clone(),
-        admin_province: site.admin_province.clone(),
-        city_name: site.city_name.clone(),
-        city_code: site.city_code.clone(),
-        institution_code: site.institution_code.clone(),
-        institution_name: site.institution_name.clone(),
-        qr1_payload: site.qr1_payload.clone(),
-        cpms_pubkey_bound: site.cpms_pubkey_hash.is_some(),
-        created_by: site.created_by.clone(),
-        created_by_name,
-        created_at: site.created_at,
-        updated_by: site.updated_by.clone(),
-        updated_at: site.updated_at,
+fn load_scoped_site(
+    state: &AppState,
+    ctx: &crate::admins::login::AdminAuthContext,
+    sfid_number: &str,
+) -> Result<CpmsSiteKeys, axum::response::Response> {
+    let site = state
+        .db
+        .get_cpms_site(sfid_number)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query cpms site failed");
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cpms query failed")
+        })?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, 1004, "cpms site not found"))?;
+    if let Some(scope) = ctx.admin_province.as_deref() {
+        if site.admin_province != scope {
+            return Err(api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "cannot manage other province institutions",
+            ));
+        }
     }
+    Ok(site)
 }
 
 fn cpms_site_keys_to_list_row_simple(
@@ -1168,10 +883,6 @@ fn cpms_site_keys_to_list_row_simple(
     }
 }
 
-/// 验证 `SFID_CPMS_V1 / ARCHIVE` 档案二维码。
-///
-/// 中文注释:本函数是两码方案的 SFID 侧核心验收点。它不会信任二维码明文省市,
-/// 只用安装授权中保存的 `install_secret` 尝试解开 `geo_seal`,再校验 CPMS 本机签名。
 pub(crate) async fn verify_cpms_archive_qr(
     state: &AppState,
     archive_code: &CpmsArchiveCodePayload,
@@ -1212,7 +923,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         archive_code.valid_from.as_str(),
         archive_code.valid_until.as_str(),
     )?;
-    let (province_name, site, seal) = find_site_by_geo_seal(
+    let (site, seal) = find_site_by_geo_seal(
         state,
         archive_code.geo_seal.as_str(),
         archive_code.archive_no.as_str(),
@@ -1220,9 +931,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         admin_province_scope,
     )
     .await?;
-
     validate_geo_seal_against_site(&site, &seal)?;
-
     if matches!(
         site.status,
         CpmsSiteStatus::Disabled | CpmsSiteStatus::Revoked
@@ -1240,7 +949,6 @@ pub(crate) async fn verify_cpms_archive_qr(
             "CPMS install authorization is revoked".to_string(),
         ));
     }
-
     let cpms_pubkey = crate::admins::login::parse_sr25519_pubkey_bytes(
         archive_code.cpms_pubkey.as_str(),
     )
@@ -1279,14 +987,7 @@ pub(crate) async fn verify_cpms_archive_qr(
     }
     let cpms_pubkey_hash = hash_hex(archive_code.cpms_pubkey.as_bytes());
     let citizen_status = citizen_status_from_cpms(archive_code.citizen_status.as_str())?;
-    bind_cpms_pubkey_if_needed(
-        state,
-        &province_name,
-        site.site_sfid.as_str(),
-        cpms_pubkey_hash.as_str(),
-    )
-    .await?;
-
+    bind_cpms_pubkey_if_needed(state, site.site_sfid.as_str(), cpms_pubkey_hash.as_str()).await?;
     Ok(VerifiedCpmsArchive {
         archive_no: archive_code.archive_no.clone(),
         citizen_status,
@@ -1301,6 +1002,98 @@ pub(crate) async fn verify_cpms_archive_qr(
         wallet_pubkey: archive_code.wallet_pubkey.clone(),
         wallet_sig_alg: archive_code.wallet_sig_alg.clone(),
     })
+}
+
+async fn find_site_by_geo_seal(
+    state: &AppState,
+    geo_seal: &str,
+    archive_no: &str,
+    cpms_pubkey: &str,
+    admin_province_scope: Option<&str>,
+) -> Result<(CpmsSiteKeys, CpmsGeoSealClaims), (StatusCode, u32, String)> {
+    let sites = state
+        .db
+        .list_cpms_sites(admin_province_scope)
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, 1004, err))?;
+    for site in sites {
+        if site.install_secret.trim().is_empty() {
+            continue;
+        }
+        if let Ok(seal) = decrypt_geo_seal(
+            site.install_secret.as_str(),
+            geo_seal,
+            archive_no,
+            cpms_pubkey,
+        ) {
+            return Ok((site, seal));
+        }
+    }
+    Err((
+        StatusCode::UNPROCESSABLE_ENTITY,
+        2004,
+        "geo_seal cannot be decrypted".to_string(),
+    ))
+}
+
+fn validate_geo_seal_against_site(
+    site: &CpmsSiteKeys,
+    seal: &CpmsGeoSealClaims,
+) -> Result<(), (StatusCode, u32, String)> {
+    if seal.sfid_number != site.site_sfid {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "geo_seal install scope mismatch".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn bind_cpms_pubkey_if_needed(
+    state: &AppState,
+    sfid_number: &str,
+    cpms_pubkey_hash: &str,
+) -> Result<(), (StatusCode, u32, String)> {
+    let mut site = state
+        .db
+        .get_cpms_site(sfid_number)
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, 1004, err))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            1004,
+            "cpms install authorization not found".to_string(),
+        ))?;
+    if let Some(existing) = site.cpms_pubkey_hash.as_deref() {
+        if existing != cpms_pubkey_hash {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "cpms_pubkey does not match installed CPMS".to_string(),
+            ));
+        }
+    }
+    let mut changed = false;
+    if site.cpms_pubkey_hash.is_none() {
+        site.cpms_pubkey_hash = Some(cpms_pubkey_hash.to_string());
+        changed = true;
+    }
+    if site.status == CpmsSiteStatus::Pending {
+        site.status = CpmsSiteStatus::Active;
+        changed = true;
+    }
+    if site.install_token_status == InstallTokenStatus::Pending {
+        site.install_token_status = InstallTokenStatus::Used;
+        changed = true;
+    }
+    if changed {
+        site.version += 1;
+        site.updated_at = Some(Utc::now());
+        state
+            .db
+            .upsert_cpms_site(&site)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, 1004, err))?;
+    }
+    Ok(())
 }
 
 fn validate_archive_validity(
@@ -1341,172 +1134,6 @@ fn citizen_status_from_cpms(
             StatusCode::BAD_REQUEST,
             1001,
             "citizen_status must be NORMAL or REVOKED".to_string(),
-        )),
-    }
-}
-
-async fn find_site_by_geo_seal(
-    state: &AppState,
-    geo_seal: &str,
-    archive_no: &str,
-    cpms_pubkey: &str,
-    admin_province_scope: Option<&str>,
-) -> Result<(String, CpmsSiteKeys, CpmsGeoSealClaims), (StatusCode, u32, String)> {
-    if let Some(province) = admin_province_scope {
-        let found = state
-            .sharded_store
-            .read_province(province, |shard| {
-                find_site_in_shard_by_geo_seal(geo_seal, archive_no, cpms_pubkey, shard)
-            })
-            .await
-            .map_err(|_| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "shard read failed".to_string(),
-                )
-            })?;
-        return found
-            .map(|(site, seal)| (province.to_string(), site, seal))
-            .ok_or((
-                StatusCode::UNPROCESSABLE_ENTITY,
-                2004,
-                "geo_seal cannot be decrypted".to_string(),
-            ));
-    }
-
-    let mut found: Option<(String, CpmsSiteKeys, CpmsGeoSealClaims)> = None;
-    state
-        .sharded_store
-        .for_each_province(|province, shard| {
-            if found.is_some() {
-                return;
-            }
-            if let Some((site, seal)) =
-                find_site_in_shard_by_geo_seal(geo_seal, archive_no, cpms_pubkey, shard)
-            {
-                found = Some((province.to_string(), site, seal));
-            }
-        })
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "shard scan failed".to_string(),
-            )
-        })?;
-    found.ok_or((
-        StatusCode::UNPROCESSABLE_ENTITY,
-        2004,
-        "geo_seal cannot be decrypted".to_string(),
-    ))
-}
-
-fn find_site_in_shard_by_geo_seal(
-    geo_seal: &str,
-    archive_no: &str,
-    cpms_pubkey: &str,
-    shard: &crate::store::StoreShard,
-) -> Option<(CpmsSiteKeys, CpmsGeoSealClaims)> {
-    for site in shard.cpms_site_keys.values() {
-        if site.install_secret.trim().is_empty() {
-            continue;
-        }
-        if let Ok(seal) = decrypt_geo_seal(
-            site.install_secret.as_str(),
-            geo_seal,
-            archive_no,
-            cpms_pubkey,
-        ) {
-            return Some((site.clone(), seal));
-        }
-    }
-    None
-}
-
-fn validate_geo_seal_against_site(
-    site: &CpmsSiteKeys,
-    seal: &CpmsGeoSealClaims,
-) -> Result<(), (StatusCode, u32, String)> {
-    if seal.sfid_number != site.site_sfid {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            2004,
-            "geo_seal install scope mismatch".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) async fn bind_cpms_pubkey_if_needed(
-    state: &AppState,
-    province: &str,
-    sfid_number: &str,
-    cpms_pubkey_hash: &str,
-) -> Result<(), (StatusCode, u32, String)> {
-    let sfid_key = sfid_number.to_string();
-    let hash = cpms_pubkey_hash.to_string();
-    let updated_site = {
-        let mut store = state.store.write().map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "store write failed".to_string(),
-            )
-        })?;
-        let Some(site) = store.cpms_site_keys.get_mut(sfid_key.as_str()) else {
-            return Err((
-                StatusCode::NOT_FOUND,
-                1004,
-                "cpms install authorization not found".to_string(),
-            ));
-        };
-        if let Some(existing) = site.cpms_pubkey_hash.as_deref() {
-            if existing != hash {
-                return Err((
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    2004,
-                    "cpms_pubkey does not match installed CPMS".to_string(),
-                ));
-            }
-        }
-
-        let mut changed = false;
-        if site.cpms_pubkey_hash.is_none() {
-            site.cpms_pubkey_hash = Some(hash.clone());
-            changed = true;
-        }
-        if site.status == CpmsSiteStatus::Pending {
-            site.status = CpmsSiteStatus::Active;
-            changed = true;
-        }
-        if site.install_token_status == InstallTokenStatus::Pending {
-            site.install_token_status = InstallTokenStatus::Used;
-            changed = true;
-        }
-        if changed {
-            site.version += 1;
-            site.updated_at = Some(Utc::now());
-        }
-        site.clone()
-    };
-
-    let result = state
-        .sharded_store
-        .write_province(province, move |shard| {
-            // 中文注释:store_cpms 是主数据；分片缓存直接覆盖为刚持久化后的授权快照。
-            shard
-                .cpms_site_keys
-                .insert(sfid_key.clone(), updated_site.clone());
-        })
-        .await;
-    match result {
-        Ok(()) => Ok(()),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "shard write failed".to_string(),
         )),
     }
 }
@@ -1606,28 +1233,6 @@ fn build_archive_sign_source(
     )
 }
 
-fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
-    if let Some(admin) = store.admin_users_by_pubkey.get(pubkey) {
-        // 中文注释:当前只剩 ShengAdmin / ShiAdmin 两角色。
-        let role_label = match admin.role {
-            AdminRole::ShengAdmin => "机构管理员",
-            AdminRole::ShiAdmin => "系统管理员",
-        };
-        if let Some(province) = store.sheng_admin_province_by_pubkey.get(pubkey) {
-            format!("{}{}", province, role_label)
-        } else if !admin.admin_name.is_empty() {
-            format!("{} ({})", admin.admin_name, role_label)
-        } else {
-            role_label.to_string()
-        }
-    } else {
-        "未知".to_string()
-    }
-}
-
-// 中文注释:`validate_sfid_number_format` 和 SFID_NUMBER_* 常量由
-// `crate::number::validator` 统一提供,本文件通过 import 使用。
-
 fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteStatus) -> bool {
     matches!(
         (current, target),
@@ -1635,35 +1240,11 @@ fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteSt
             | (CpmsSiteStatus::Active, CpmsSiteStatus::Revoked)
             | (CpmsSiteStatus::Disabled, CpmsSiteStatus::Active)
             | (CpmsSiteStatus::Disabled, CpmsSiteStatus::Revoked)
+            | (CpmsSiteStatus::Pending, CpmsSiteStatus::Revoked)
+            | (CpmsSiteStatus::Pending, CpmsSiteStatus::Disabled)
     )
 }
 
-// ADR-008 Phase 23e:`is_trusted_attestor_pubkey` 历史依赖
-// `validate_active_main_signer_with_keyring` + AppState.public_key_hex,这两条
-// 路径都已下架。该函数当前 dead code(`#[allow(dead_code)]`),保留接口签名供
-// 将来 chain pull 凭证回流校验使用,内部退化成"用 SFID main env seed 派生公钥
-// 做对比"的 fallback 行为。
-#[allow(dead_code)]
-fn is_trusted_attestor_pubkey(_state: &AppState, public_key: &str) -> bool {
-    let Some(candidate) = parse_sr25519_pubkey(public_key) else {
-        return false;
-    };
-    let Ok(seed_hex) = std::env::var("SFID_SIGNING_SEED_HEX") else {
-        return false;
-    };
-    let Ok(derived) = crate::crypto::sr25519::try_derive_pubkey_hex_from_seed(seed_hex.as_str())
-    else {
-        return false;
-    };
-    parse_sr25519_pubkey(derived.as_str())
-        .map(|v| v == candidate)
-        .unwrap_or(false)
-}
-
-/// 从 site_sfid 的 r5 段提取两位字母省代码。
-///
-/// site_sfid 格式：`{a3}-{r5}-{t2p1c1}-{n9}-{d8}`
-/// r5 段 = 2 位字母省码 + 3 位数字城市码。
 pub(super) fn extract_province_code_from_sfid(site_sfid: &str) -> String {
     let segments: Vec<&str> = site_sfid.split('-').collect();
     if segments.len() >= 2 && segments[1].len() >= 2 {
@@ -1673,7 +1254,6 @@ pub(super) fn extract_province_code_from_sfid(site_sfid: &str) -> String {
     }
 }
 
-/// 从 site_sfid 的 r5 段提取三位城市代码。
 pub(super) fn extract_city_code_from_sfid(site_sfid: &str) -> String {
     let segments: Vec<&str> = site_sfid.split('-').collect();
     if segments.len() >= 2 && segments[1].len() >= 5 {
@@ -1683,11 +1263,6 @@ pub(super) fn extract_city_code_from_sfid(site_sfid: &str) -> String {
     }
 }
 
-/// 用 SFID 主密钥（sr25519）对消息签名，返回 hex 编码签名。
-///
-/// ADR-008 Phase 23e:AppState 不再持有 signing seed,改从 SFID_SIGNING_SEED_HEX
-/// 环境变量按需加载。本函数只在 `generate_cpms_install_qr` 路径上签发
-/// 二维码完整性签名,与省/市管理员冷钱包签名无关。
 fn sign_with_main_key(_state: &AppState, message: &str) -> Result<String, String> {
     use sp_core::Pair;
     let seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
@@ -1698,7 +1273,6 @@ fn sign_with_main_key(_state: &AppState, message: &str) -> Result<String, String
     Ok(format!("0x{}", hex::encode(sig.0)))
 }
 
-/// 验证 sr25519 签名。
 pub(crate) fn verify_sr25519_signature(
     pubkey_bytes: &[u8; 32],
     message: &str,

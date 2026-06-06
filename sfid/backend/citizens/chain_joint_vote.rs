@@ -14,7 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::core::chain_runtime::build_population_snapshot_credential;
+use crate::core::chain_runtime::{build_population_snapshot_credential, normalize_account_pubkey};
 use crate::*;
 
 #[derive(Deserialize)]
@@ -43,16 +43,29 @@ pub(crate) async fn app_voters_count(
         return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is required");
     };
 
-    let eligible_total = {
-        let store = match store_write_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        store
-            .citizen_records
-            .values()
-            .filter(|r| r.archive_no.is_some() && r.computed_vote_status() == CitizenStatus::Normal)
-            .count() as u64
+    let eligible_total = match state.db.with_client(|conn| {
+        let row = conn
+            .query_one(
+                "SELECT COUNT(*)::BIGINT
+                 FROM citizens
+                 WHERE bind_status = 'BOUND'
+                   AND citizen_status = 'NORMAL'
+                   AND voting_eligible = true",
+                &[],
+            )
+            .map_err(|e| format!("query eligible voters failed: {e}"))?;
+        let total: i64 = row.get(0);
+        Ok(u64::try_from(total).unwrap_or(0))
+    }) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "query voters count failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "voters query failed",
+            );
+        }
     };
 
     let snapshot = match build_population_snapshot_credential(
@@ -68,20 +81,16 @@ pub(crate) async fn app_voters_count(
         }
     };
 
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    append_audit_log_with_meta(
-        &mut store,
+    crate::core::runtime_ops::append_audit_log(
+        &state,
         "APP_VOTERS_COUNT",
         "app",
         Some(who.clone()),
-        None,
-        None,
-        actor_ip_from_headers(&headers),
-        "SUCCESS",
-        format!("eligible_total={eligible_total}"),
+        format!(
+            "eligible_total={} actor_ip={:?}",
+            eligible_total,
+            actor_ip_from_headers(&headers)
+        ),
     );
 
     Json(ApiResponse {

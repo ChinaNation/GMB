@@ -17,8 +17,6 @@ pub(crate) use handler::{
     require_admin_session_middleware,
 };
 pub(crate) use model::{AdminAuthContext, AdminSession, LoginChallenge, QrLoginResultRecord};
-#[cfg(test)]
-pub(crate) use model::{AdminQrChallengeInput, AdminQrCompleteInput, AdminQrResultQuery};
 pub(crate) use qr_login::{admin_auth_qr_challenge, admin_auth_qr_complete, admin_auth_qr_result};
 pub(crate) use signature::verify_admin_signature;
 pub(crate) use signature::{

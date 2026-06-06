@@ -7,7 +7,7 @@
 //   REVOKED  → 不再接收该授权签发的档案码
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Button, Input, message, Modal, Popconfirm, QRCode, Tag, Typography } from 'antd';
+import { Button, Input, Modal, Popconfirm, QRCode, Tag, Typography } from 'antd';
 import {
   disableCpmsKeys,
   enableCpmsKeys,
@@ -24,6 +24,7 @@ import {
   type AdminActionType,
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
+import { notice } from '../utils/notice';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { WuminSignatureModal } from '../core/WuminSignatureModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
@@ -103,7 +104,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
       setSecurityModal(null);
     } catch (err) {
       securityModal.reject(err);
-      message.error(err instanceof Error ? err.message : '签名回执处理失败');
+      notice.error(err, '');
     } finally {
       setSecurityCommitLoading(false);
     }
@@ -114,10 +115,10 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
     try {
       const grant = await runPasskeyChallengeAction('CPMS_REISSUE_INSTALL_TOKEN', { target: site.sfid_number });
       await reissueInstallToken(auth, site.sfid_number, grant);
-      message.success('已重发安装令牌');
+      notice.success('已重发安装令牌');
       onChanged();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '重发失败');
+      notice.error(err, '');
     } finally { setBusy(false); }
   };
 
@@ -132,10 +133,10 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         reason: normalizedReason,
       });
       await disableCpmsKeys(auth, site.sfid_number, normalizedReason || undefined, grant);
-      message.success('已禁用');
+      notice.success('已禁用');
       onChanged();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '禁用失败');
+      notice.error(err, '');
     } finally { setBusy(false); }
   };
 
@@ -147,10 +148,10 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         reason: '',
       });
       await enableCpmsKeys(auth, site.sfid_number, grant);
-      message.success('已启用');
+      notice.success('已启用');
       onChanged();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '启用失败');
+      notice.error(err, '');
     } finally { setBusy(false); }
   };
 
@@ -165,10 +166,10 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         reason: normalizedReason,
       });
       await revokeCpmsKeys(auth, site.sfid_number, normalizedReason || undefined, grant);
-      message.success('已吊销');
+      notice.success('已吊销');
       onChanged();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '吊销失败');
+      notice.error(err, '');
     } finally { setBusy(false); }
   };
 
@@ -177,7 +178,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
     downloadQr({
       container: qrRef.current,
       filename: `cpms-${label}-${site.sfid_number}`,
-      onError: (msg) => message.error(msg),
+      onError: (msg) => notice.error(msg),
     });
   };
 
@@ -288,7 +289,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}
-        onScannerError={(msg) => message.error(msg)}
+        onScannerError={(msg) => notice.error(msg)}
       />
     </div>
   );
@@ -297,7 +298,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
 function askReason(title: string): Promise<string | null> {
   return new Promise((resolve) => {
     let value = '';
-    Modal.confirm({
+    notice.confirm({
       title,
       zIndex: SFID_MODAL_Z_INDEX.business,
       content: (

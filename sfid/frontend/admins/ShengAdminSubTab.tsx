@@ -1,8 +1,8 @@
-// 中文注释:注册局省级管理员列表。所有省级管理员同级,
-// 代码内置初始省级管理员只作为不可删除安全根保留。
+// 中文注释:注册局联邦管理员列表。所有联邦管理员同级,
+// 代码内置初始联邦管理员只作为不可删除安全根保留。
 
 import { useMemo, useState } from 'react';
-import { Button, Form, Input, Modal, Space, Table, Typography, message } from 'antd';
+import { Button, Form, Input, Modal, Space, Table, Typography } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
@@ -11,6 +11,7 @@ import { updateShengAdminName, type ShengAdminRow } from './api';
 import { formatAdminCreateError, type AdminActionType } from './admin_security_api';
 import { sameHexPubkey } from './shengAdminUtils';
 import { Passkey } from './Passkey';
+import { notice } from '../utils/notice';
 
 interface ShengAdminSubTabProps {
   selectedShengAdmin: ShengAdminRow;
@@ -45,7 +46,7 @@ export function ShengAdminSubTab({
   const currentAdminRow = auth
     ? provinceAdmins.find((row) => sameHexPubkey(row.admin_pubkey, auth.admin_pubkey)) || null
     : null;
-  const canAddShengAdmin = auth?.role === 'SHENG_ADMIN';
+  const canAddShengAdmin = auth?.role === 'FEDERAL_ADMIN';
   const shengAdminLimitReached = provinceAdmins.length >= 5;
   const canDeleteShengAdmin = (row: ShengAdminRow) =>
     !!currentAdminRow?.built_in
@@ -55,28 +56,28 @@ export function ShengAdminSubTab({
   const submitAdd = async (values: AddFormValues) => {
     const adminName = values.admin_name.trim();
     if (!adminName) {
-      message.error('请输入省级管理员姓名');
+      notice.error('请输入联邦管理员姓名');
       return;
     }
     let adminPubkey: string;
     try {
       adminPubkey = decodeSs58(values.admin_pubkey.trim());
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '账户格式无效');
+      notice.error(error, '');
       return;
     }
     setAddLoading(true);
     try {
-      await runSecuredAction<ShengAdminRow>('CREATE_SHENG_ADMIN', {
+      await runSecuredAction<ShengAdminRow>('CREATE_FEDERAL_ADMIN', {
         admin_pubkey: adminPubkey,
         admin_name: adminName,
       });
-      message.success('省级管理员已新增');
+      notice.success('联邦管理员已新增');
       form.resetFields();
       setAddOpen(false);
       await refreshShengAdmins();
     } catch (error) {
-      message.error(formatAdminCreateError(error, 'SHENG_ADMIN', '新增省级管理员失败'));
+      notice.error(formatAdminCreateError(error, 'FEDERAL_ADMIN', '新增联邦管理员失败'));
     } finally {
       setAddLoading(false);
     }
@@ -84,8 +85,8 @@ export function ShengAdminSubTab({
 
   const editShengAdmin = (row: ShengAdminRow) => {
     let nextName = row.admin_name;
-    Modal.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑省级管理员</div>,
+    notice.confirm({
+      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑联邦管理员</div>,
       icon: null,
       centered: true,
       zIndex: SFID_MODAL_Z_INDEX.business,
@@ -119,16 +120,16 @@ export function ShengAdminSubTab({
       onOk: async () => {
         const adminName = nextName.trim();
         if (!adminName) {
-          message.error('请输入管理员姓名');
+          notice.error('请输入管理员姓名');
           throw new Error('admin_name is required');
         }
         try {
           if (!auth) throw new Error('请先登录');
           await updateShengAdminName(auth, row.id, adminName);
-          message.success('省级管理员已更新');
+          notice.success('联邦管理员已更新');
           await refreshShengAdmins();
         } catch (error) {
-          message.error(error instanceof Error ? error.message : '更新省级管理员失败');
+          notice.error(error, '');
           throw error;
         }
       },
@@ -136,14 +137,14 @@ export function ShengAdminSubTab({
   };
 
   const deleteShengAdmin = (row: ShengAdminRow) => {
-    Modal.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>删除省级管理员</div>,
+    notice.confirm({
+      title: <div style={{ textAlign: 'center', width: '100%' }}>删除联邦管理员</div>,
       icon: null,
       centered: true,
       zIndex: SFID_MODAL_Z_INDEX.business,
       content: (
         <div style={{ textAlign: 'center' }}>
-          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该省级管理员?</Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该联邦管理员?</Typography.Paragraph>
           <Typography.Text code style={{ wordBreak: 'break-all' }}>{tryEncodeSs58(row.admin_pubkey)}</Typography.Text>
         </div>
       ),
@@ -158,11 +159,11 @@ export function ShengAdminSubTab({
       ),
       onOk: async () => {
         try {
-          await runSecuredAction('DELETE_SHENG_ADMIN', { id: row.id });
-          message.success('省级管理员已删除');
+          await runSecuredAction('DELETE_FEDERAL_ADMIN', { id: row.id });
+          notice.success('联邦管理员已删除');
           await refreshShengAdmins();
         } catch (error) {
-          message.error(error instanceof Error ? error.message : '删除省级管理员失败');
+          notice.error(error, '');
           throw error;
         }
       },
@@ -173,16 +174,16 @@ export function ShengAdminSubTab({
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <Typography.Text type="secondary">
-          本省省级管理员：{provinceAdmins.length} / 5
+          联邦管理员：{provinceAdmins.length} / 5
         </Typography.Text>
         {canAddShengAdmin ? (
           <Button
             type="primary"
             disabled={shengAdminLimitReached}
-            title={shengAdminLimitReached ? '本省省级管理员已满 5 人' : undefined}
+            title={shengAdminLimitReached ? '联邦管理员已满 5 人' : undefined}
             onClick={() => setAddOpen(true)}
           >
-            新增省级管理员
+            新增联邦管理员
           </Button>
         ) : null}
       </div>
@@ -221,7 +222,7 @@ export function ShengAdminSubTab({
       />
 
       <Modal
-        title={<div style={{ textAlign: 'center', width: '100%' }}>新增省级管理员</div>}
+        title={<div style={{ textAlign: 'center', width: '100%' }}>新增联邦管理员</div>}
         open={addOpen}
         centered
         destroyOnClose
@@ -243,17 +244,17 @@ export function ShengAdminSubTab({
           <Form.Item
             label="姓名"
             name="admin_name"
-            rules={[{ required: true, message: '请输入省级管理员姓名' }]}
+            rules={[{ required: true, message: '请输入联邦管理员姓名' }]}
           >
-            <Input placeholder="请输入省级管理员姓名" />
+            <Input placeholder="请输入联邦管理员姓名" />
           </Form.Item>
           <Form.Item
             label="账户"
             name="admin_pubkey"
-            rules={[{ required: true, message: '请扫码或输入省级管理员账户' }]}
+            rules={[{ required: true, message: '请扫码或输入联邦管理员账户' }]}
           >
             <Input
-              placeholder="请输入省级管理员账户(SS58)"
+              placeholder="请输入联邦管理员账户(SS58)"
               suffix={
                 <span
                   title="扫码识别用户码"

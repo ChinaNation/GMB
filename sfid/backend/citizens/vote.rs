@@ -26,16 +26,8 @@ pub(crate) async fn app_myid_status(
         None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid wallet_address"),
     };
 
-    let store = match store_read_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let result = match store
-        .citizen_id_by_wallet_pubkey
-        .get(&wallet_pubkey)
-        .and_then(|cid| store.citizen_records.get(cid))
-    {
-        Some(record) => MyIdStatusOutput {
+    let result = match state.db.find_bound_citizen_by_wallet(&wallet_pubkey) {
+        Ok(Some(record)) => MyIdStatusOutput {
             bind_status: match record.bind_status() {
                 CitizenBindStatus::Bound => "bound",
                 CitizenBindStatus::Pending => "pending",
@@ -51,7 +43,7 @@ pub(crate) async fn app_myid_status(
             valid_until: record.archive_valid_until.clone(),
             status_updated_at: record.status_updated_at,
         },
-        None => MyIdStatusOutput {
+        Ok(None) => MyIdStatusOutput {
             bind_status: "unset".to_string(),
             wallet_address: None,
             sfid_code: None,
@@ -63,6 +55,10 @@ pub(crate) async fn app_myid_status(
             valid_until: None,
             status_updated_at: None,
         },
+        Err(err) => {
+            tracing::error!(error = %err, "query myid status failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "myid query failed");
+        }
     };
     Json(ApiResponse {
         code: 0,

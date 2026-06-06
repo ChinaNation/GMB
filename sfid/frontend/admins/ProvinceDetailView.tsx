@@ -76,12 +76,12 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
   // 当前省的管理员
   const operatorsForProvince = selectedShengAdmin ? operators : [];
 
-  // 中文注释:后端按登录省域二次校验;前端只负责把省级管理员入口打开。
-  const canEditOperators = scope.canWrite && auth?.role === 'SHENG_ADMIN';
+  // 中文注释:后端按登录省域二次校验;前端只负责把联邦管理员入口打开。
+  const canEditOperators = scope.canWrite && auth?.role === 'FEDERAL_ADMIN';
   // sub-tab(仅在省详情内显示)
   const subTabs: Array<{ key: 'operators' | 'sheng-admin'; label: string }> = [
-    { key: 'operators', label: effectiveCity ? '市管理员列表' : '市列表' },
-    { key: 'sheng-admin', label: auth?.role === 'SHI_ADMIN' ? '安全设置' : '省管理员列表' },
+    { key: 'operators', label: '市级管理员列表' },
+    { key: 'sheng-admin', label: '联邦管理员列表' },
   ];
 
   // ── 决定 title / body / extra ──
@@ -123,7 +123,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
       </div>
     );
   } else if (!effectiveCity) {
-    // ── 省详情:市列表 + sub-tab ──
+    // ── 省详情:市级管理员列表入口 + sub-tab ──
     const canGoBack = !scope.skipProvinceList;
     title = makeCenteredTitle(
       effectiveProvince,
@@ -154,7 +154,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
       </>
     );
   } else {
-    // ── 市详情:该市管理员列表 + sub-tab ──
+    // ── 市详情:该市市级管理员列表 + sub-tab ──
     const canGoBack = !scope.skipCityList;
     title = makeCenteredTitle(
       `${effectiveProvince} · ${effectiveCity}`,
@@ -164,7 +164,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
       <>
         <SubTabBar tabs={subTabs} active={adminDetailTab} onChange={(key) => {
           setAdminDetailTab(key);
-          // 中文注释:省管理员列表属于省级页,从市详情点击时必须回到省级上下文。
+          // 中文注释:联邦管理员列表属于省级页,从市详情点击时必须回到省级上下文。
           if (key === 'sheng-admin') setSelectedCity(null);
           if (key === 'operators' && !scope.skipCityList) setSelectedCity(null);
         }} />
@@ -242,7 +242,7 @@ function SubTabBar({ tabs, active, onChange }: {
   );
 }
 
-// ── 市列表网格 ──
+// ── 市级管理员列表的城市入口网格 ──
 
 function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
   cities: SfidCityItem[];

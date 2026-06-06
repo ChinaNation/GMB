@@ -89,8 +89,6 @@ export async function createInstitution(
     city: input.city,
     institution: input.institution,
     institution_name: input.institution_name ?? null,
-    source: null,
-    institution_level: null,
     sub_type: null,
   };
   const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload);

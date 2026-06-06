@@ -13,28 +13,16 @@ use chrono::{Duration, Utc};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::admins::security_model::AdminPasskeyStatus;
+use crate::admins::repo;
 use crate::crypto::pubkey::same_admin_pubkey;
-use crate::scope::admin_province::province_scope_for_role;
 use crate::*;
 
 use super::model::*;
 use super::signature::{
     build_admin_display_name, build_admin_display_name_from_user, build_login_qr_system_signature,
-    cleanup_expired_challenges, extract_domain_from_origin, resolve_admin_city,
-    resolve_admin_pubkey_key, verify_admin_signature,
+    extract_domain_from_origin, resolve_admin_city, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
-
-fn admin_has_active_passkey(store: &Store, admin_pubkey: &str) -> bool {
-    store
-        .admin_passkeys_by_credential_id
-        .values()
-        .any(|record| {
-            record.status == AdminPasskeyStatus::Active
-                && same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey)
-        })
-}
 
 pub(crate) async fn admin_auth_qr_challenge(
     State(state): State<AppState>,
@@ -100,15 +88,9 @@ pub(crate) async fn admin_auth_qr_challenge(
     ))
     .unwrap_or_default();
 
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_expired_challenges(&mut store, now);
-    insert_bounded_map(
-        &mut store.login_challenges,
-        challenge_id.clone(),
-        LoginChallenge {
+    if let Err(err) = repo::insert_login_challenge(
+        &state.db,
+        &LoginChallenge {
             challenge_id: challenge_id.clone(),
             admin_pubkey: String::new(),
             challenge_text: challenge_text.clone(),
@@ -123,8 +105,10 @@ pub(crate) async fn admin_auth_qr_challenge(
             expire_at,
             consumed: false,
         },
-        bounded_cache_limit("SFID_LOGIN_CHALLENGE_MAX", 20_000),
-    );
+    ) {
+        let message = format!("insert qr challenge failed: {err}");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -158,129 +142,131 @@ pub(crate) async fn admin_auth_qr_complete(
     }
 
     let now = Utc::now();
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_expired_challenges(&mut store, now);
-
-    let (challenge_text, session_id, challenge_expire_at) = {
-        let Some(challenge) = store.login_challenges.get_mut(&input.challenge_id) else {
-            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
-        };
-        if challenge.consumed {
-            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed");
-        }
-        if let Some(client_sid) = input.session_id.as_ref() {
-            if challenge.session_id != client_sid.trim() {
-                return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
-            }
-        }
-        if now > challenge.expire_at {
-            return api_error(StatusCode::GONE, 1007, "challenge expired");
-        }
-        (
-            challenge.challenge_text.clone(),
-            challenge.session_id.clone(),
-            challenge.expire_at.timestamp(),
-        )
-    };
-
+    let challenge_id = input.challenge_id.trim().to_string();
+    let client_session_id = input.session_id.clone();
     let login_pubkey_raw = input.admin_pubkey.trim().to_string();
     let signer_pubkey = input
         .signer_pubkey
         .as_ref()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
-    let verify_pubkey = signer_pubkey
-        .clone()
-        .unwrap_or_else(|| login_pubkey_raw.clone());
-    let login_pubkey = resolve_admin_pubkey_key(&store, &login_pubkey_raw)
-        .or_else(|| {
-            signer_pubkey
-                .as_ref()
-                .and_then(|spk| resolve_admin_pubkey_key(&store, spk))
-        })
-        .unwrap_or_else(|| login_pubkey_raw.clone());
-    if !same_admin_pubkey(login_pubkey.as_str(), verify_pubkey.as_str()) {
-        return api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "signer_pubkey must match admin_pubkey",
+    let signature = input.signature.trim().to_string();
+    let result = state.db.with_client(move |conn| {
+        repo::cleanup_login_state_conn(conn, now)?;
+        let Some(mut challenge) = repo::get_login_challenge_conn(conn, challenge_id.as_str())?
+        else {
+            return Err("http:not_found:challenge not found".to_string());
+        };
+        if challenge.consumed {
+            return Err("http:conflict:challenge already consumed".to_string());
+        }
+        if let Some(client_sid) = client_session_id.as_ref() {
+            if challenge.session_id != client_sid.trim() {
+                return Err("http:forbidden:challenge session mismatch".to_string());
+            }
+        }
+        if now > challenge.expire_at {
+            return Err("http:gone:challenge expired".to_string());
+        }
+        let session_id = challenge.session_id.clone();
+        let challenge_expire_at = challenge.expire_at.timestamp();
+        let verify_pubkey = signer_pubkey
+            .clone()
+            .unwrap_or_else(|| login_pubkey_raw.clone());
+        let login_pubkey = repo::resolve_admin_pubkey_key_conn(conn, login_pubkey_raw.as_str())?
+            .or_else(|| {
+                signer_pubkey.as_ref().and_then(|spk| {
+                    repo::resolve_admin_pubkey_key_conn(conn, spk)
+                        .ok()
+                        .flatten()
+                })
+            })
+            .unwrap_or_else(|| login_pubkey_raw.clone());
+        if !same_admin_pubkey(login_pubkey.as_str(), verify_pubkey.as_str()) {
+            return Err("http:forbidden:signer_pubkey must match admin_pubkey".to_string());
+        }
+        // 中文注释:重建完整签名原文,与 wumin 端 login_receipt 规则一致。
+        let verify_message = crate::core::qr::build_signature_message(
+            crate::core::qr::QrKind::LoginReceipt,
+            challenge_id.as_str(),
+            Some("sfid"),
+            Some(challenge_expire_at),
+            &verify_pubkey,
         );
-    }
-    // 重建完整签名原文(包含签名者公钥作为 principal),与 wumin 端
-    // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
-    // challenge_text 仅用于回放保护,不直接用于签名验证。
-    let verify_message = crate::core::qr::build_signature_message(
-        crate::core::qr::QrKind::LoginReceipt,
-        &input.challenge_id,
-        Some("sfid"),
-        Some(challenge_expire_at),
-        &verify_pubkey,
-    );
-    let _ = challenge_text; // 不再用于签名验证
-    if !verify_admin_signature(&verify_pubkey, &verify_message, input.signature.trim()) {
-        warn!(
-            challenge = %input.challenge_id,
-            admin_pubkey = %login_pubkey_raw,
-            signer_pubkey = %verify_pubkey,
-            "qr login signature verify failed"
-        );
-        return api_error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            2004,
-            "signature verify failed",
-        );
-    }
-    let Some(admin) = store.admin_users_by_pubkey.get(&login_pubkey) else {
-        return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
-    };
-    let login_role = admin.role.clone();
-
-    if let Some(challenge) = store.login_challenges.get_mut(&input.challenge_id) {
+        if !verify_admin_signature(&verify_pubkey, &verify_message, signature.as_str()) {
+            warn!(
+                challenge = %challenge_id,
+                admin_pubkey = %login_pubkey_raw,
+                signer_pubkey = %verify_pubkey,
+                "qr login signature verify failed"
+            );
+            return Err("http:unprocessable:signature verify failed".to_string());
+        }
+        let admin = repo::get_admin_by_pubkey_conn(conn, login_pubkey.as_str())?
+            .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
+        let login_role = admin.role.clone();
         challenge.consumed = true;
         challenge.admin_pubkey = login_pubkey.clone();
-    }
+        repo::update_login_challenge_conn(conn, &challenge)?;
 
-    let access_token = Uuid::new_v4().to_string();
-    let expire_at = now + Duration::hours(8);
-    let new_session_qr = AdminSession {
-        token: access_token.clone(),
-        admin_pubkey: login_pubkey.clone(),
-        role: login_role.clone(),
-        expire_at,
-        last_active_at: now,
-    };
-    store
-        .admin_sessions
-        .insert(access_token.clone(), new_session_qr.clone());
-
-    // 中文注释:QR 登录成功后同步写 GlobalShard session,供鉴权守卫快速读取。
-    {
-        let ss = state.sharded_store.clone();
-        let token_for_shard = access_token.clone();
-        tokio::task::spawn(async move {
-            let _ = ss
-                .write_global(|g| {
-                    g.admin_sessions.insert(token_for_shard, new_session_qr);
-                })
-                .await;
-        });
-    }
-
-    store.qr_login_results.insert(
-        input.challenge_id.clone(),
-        QrLoginResultRecord {
+        let access_token = Uuid::new_v4().to_string();
+        let expire_at = now + Duration::hours(8);
+        let session = AdminSession {
+            token: access_token.clone(),
+            admin_pubkey: login_pubkey.clone(),
+            role: login_role.clone(),
+            expire_at,
+            last_active_at: now,
+        };
+        repo::insert_admin_session_conn(conn, &session)?;
+        let qr_result = QrLoginResultRecord {
             session_id,
             access_token: access_token.clone(),
             expire_at,
             admin_pubkey: login_pubkey,
             role: login_role,
             created_at: now,
-        },
-    );
-    drop(store);
+        };
+        repo::insert_qr_login_result_conn(conn, challenge_id.as_str(), &qr_result)?;
+        Ok(())
+    });
+
+    match result {
+        Ok(()) => {}
+        Err(err) if err == "http:not_found:challenge not found" => {
+            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found")
+        }
+        Err(err) if err == "http:conflict:challenge already consumed" => {
+            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed")
+        }
+        Err(err) if err == "http:forbidden:challenge session mismatch" => {
+            return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch")
+        }
+        Err(err) if err == "http:gone:challenge expired" => {
+            return api_error(StatusCode::GONE, 1007, "challenge expired")
+        }
+        Err(err) if err == "http:forbidden:signer_pubkey must match admin_pubkey" => {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "signer_pubkey must match admin_pubkey",
+            )
+        }
+        Err(err) if err == "http:unprocessable:signature verify failed" => {
+            return api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "signature verify failed",
+            )
+        }
+        Err(err) if err == "http:forbidden:admin not found" => {
+            return api_error(StatusCode::FORBIDDEN, 2002, "admin not found")
+        }
+        Err(err) => {
+            let message = format!("complete qr login failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -303,16 +289,48 @@ pub(crate) async fn admin_auth_qr_result(
     }
 
     let now = Utc::now();
-    let mut store = match store_write_or_500(&state) {
+    let challenge_id = query.challenge_id.trim().to_string();
+    let session_id = query.session_id.trim().to_string();
+    let result = state.db.with_client(move |conn| {
+        repo::cleanup_login_state_conn(conn, now)?;
+        let result = repo::get_qr_login_result_conn(conn, challenge_id.as_str())?;
+        let challenge = repo::get_login_challenge_conn(conn, challenge_id.as_str())?;
+        Ok((result, challenge))
+    });
+    let (qr_result, challenge) = match result {
         Ok(v) => v,
-        Err(resp) => return resp,
+        Err(err) => {
+            let message = format!("query qr login result failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
     };
-    cleanup_expired_challenges(&mut store, now);
 
-    if let Some(result) = store.qr_login_results.get(query.challenge_id.trim()) {
+    if let Some(result) = qr_result {
         if result.session_id != query.session_id.trim() {
             return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
         }
+        let admin = match repo::get_admin_by_pubkey(&state.db, &result.admin_pubkey) {
+            Ok(v) => v,
+            Err(err) => {
+                let message = format!("query admin failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        };
+        let province =
+            match repo::province_scope_for_role(&state.db, &result.admin_pubkey, &result.role) {
+                Ok(v) => v,
+                Err(err) => {
+                    let message = format!("query admin scope failed: {err}");
+                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+                }
+            };
+        let passkey_bound = match repo::admin_has_active_passkey(&state.db, &result.admin_pubkey) {
+            Ok(v) => v,
+            Err(err) => {
+                let message = format!("query passkey failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        };
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -324,43 +342,29 @@ pub(crate) async fn admin_auth_qr_result(
                 admin: Some(AdminIdentifyOutput {
                     admin_pubkey: result.admin_pubkey.clone(),
                     role: result.role.clone(),
-                    admin_name: {
-                        if let Some(admin_user) =
-                            store.admin_users_by_pubkey.get(&result.admin_pubkey)
-                        {
-                            let province =
-                                province_scope_for_role(&store, &result.admin_pubkey, &result.role);
-                            build_admin_display_name_from_user(admin_user, province.as_deref())
-                        } else {
-                            let province =
-                                province_scope_for_role(&store, &result.admin_pubkey, &result.role);
+                    admin_name: admin
+                        .as_ref()
+                        .map(|v| build_admin_display_name_from_user(v, province.as_deref()))
+                        .unwrap_or_else(|| {
                             build_admin_display_name(
                                 &result.admin_pubkey,
                                 &result.role,
                                 province.as_deref(),
                             )
-                        }
-                    },
-                    admin_province: province_scope_for_role(
-                        &store,
-                        &result.admin_pubkey,
-                        &result.role,
-                    ),
-                    admin_city: store
-                        .admin_users_by_pubkey
-                        .get(&result.admin_pubkey)
-                        .and_then(resolve_admin_city),
-                    passkey_bound: admin_has_active_passkey(&store, &result.admin_pubkey),
+                        }),
+                    admin_province: province,
+                    admin_city: admin.as_ref().and_then(resolve_admin_city),
+                    passkey_bound,
                 }),
             },
         })
         .into_response();
     }
 
-    let Some(challenge) = store.login_challenges.get(query.challenge_id.trim()) else {
+    let Some(challenge) = challenge else {
         return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
     };
-    if challenge.session_id != query.session_id.trim() {
+    if challenge.session_id != session_id {
         return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
     }
     if now > challenge.expire_at {

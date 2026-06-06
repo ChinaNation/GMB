@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Descriptions, Modal, Space, Typography, Upload, message } from 'antd';
+import { Button, Descriptions, Modal, Space, Typography, Upload } from 'antd';
 
 import type { AdminAuth } from '../auth/types';
 import {
@@ -7,6 +7,7 @@ import {
   type CpmsStatusExportFile,
   type CpmsStatusExportImportResult,
 } from './api';
+import { notice } from '../utils/notice';
 
 type Props = {
   auth: AdminAuth | null;
@@ -35,14 +36,14 @@ export function StatusExportImportModal({ auth, open, onClose, onImported }: Pro
     try {
       const parsed = JSON.parse(await file.text()) as CpmsStatusExportFile;
       if (parsed.proto !== 'SFID_CPMS_V1' || parsed.type !== 'CPMS_STATUS_EXPORT') {
-        message.error('年度报告格式不正确');
+        notice.error('年度报告格式不正确');
         return Upload.LIST_IGNORE;
       }
       setExportFile(parsed);
       setResult(null);
-      message.success('年度报告已读取');
+      notice.success('年度报告已读取');
     } catch {
-      message.error('年度报告 JSON 解析失败');
+      notice.error('年度报告 JSON 解析失败');
     }
     return Upload.LIST_IGNORE;
   };
@@ -54,9 +55,9 @@ export function StatusExportImportModal({ auth, open, onClose, onImported }: Pro
       const imported = await importCpmsStatusExport(auth, exportFile);
       setResult(imported);
       onImported();
-      message.success(imported.already_imported ? '该年度报告已导入' : '年度报告导入完成');
+      notice.success(imported.already_imported ? '该年度报告已导入' : '年度报告导入完成');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '年度报告导入失败');
+      notice.error(err, '');
     } finally {
       setSubmitting(false);
     }

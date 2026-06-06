@@ -55,6 +55,8 @@ node 本地 RPC `constitution_getDocument` 从当前链上 runtime 读取。
 - 文档使用 `marked` 转 HTML 后再经 `DOMPurify` 清洗，避免 Markdown 内嵌 HTML
   直接扩大渲染面；该策略只适用于白皮书 Markdown。
 - 公民宪法 HTML 在 sandbox iframe 中运行，只允许脚本执行自身目录展开逻辑，不开放同源权限。
+- 公民宪法目录链接必须由 HTML 自身脚本 `preventDefault()` 后调用 `scrollIntoView()`，
+  不依赖 `srcDoc` 默认 hash 导航，避免 Tauri/WebView 在 sandbox iframe 中将锚点点击处理为空白导航。
 - 公民宪法 runtime HTML 自带 `<style>` 和目录 `<script>`，Tauri CSP 必须通过
   `style-src-elem 'self' 'unsafe-inline'` 与 `script-src-elem 'self' 'unsafe-inline'`
   放行元素级内联样式/脚本；同时保留 `style-src-attr 'none'` 和

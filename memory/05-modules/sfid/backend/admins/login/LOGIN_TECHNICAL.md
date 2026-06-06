@@ -24,7 +24,7 @@ sfid/backend/admins/login/
 ├── model.rs      # 登录 challenge、session、二维码结果、请求/响应 DTO
 ├── handler.rs    # 普通登录接口:check/logout/identify/challenge/verify
 ├── qr_login.rs   # WUMIN_QR_V1 扫码登录 challenge/complete/result
-├── guards.rs     # 登录态与省级管理员守卫、session 校验
+├── guards.rs     # 登录态与联邦管理员守卫、session 校验
 └── signature.rs  # sr25519 验签、公钥解析、challenge 清理、展示名辅助
 ```
 
@@ -85,7 +85,7 @@ sfid/backend/admins/login/
 
 ## 7. 边界规则
 
-- `admins/login` 不承载机构、公民、CPMS、省管理员治理等业务 handler。
+- `admins/login` 不承载机构、公民、CPMS、联邦管理员治理等业务 handler。
 - 业务模块不得直接读取 session cache,只能通过 `require_admin_any` 或
   `require_sheng_admin` 获取认证上下文。
 - 角色范围过滤放在 `scope`,不放回 `admins/login`。

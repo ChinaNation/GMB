@@ -26,13 +26,13 @@ SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 ch
 | 通用链凭证/SCALE/genesis hash | `sfid/backend/core/chain_runtime.rs` |
 | 通用链 RPC URL | `sfid/backend/core/chain_url.rs` |
 
-管理员模块当前没有活跃 `chain_*.rs` 文件。省级管理员只负责管理员治理,
+管理员模块当前没有活跃 `chain_*.rs` 文件。联邦管理员只负责管理员治理,
 写操作统一走 `admins/actions.rs` 的安全动作入口与 `admins/passkeys.rs` 的
 WebAuthn 辅助,
-不使用云端省级 signer。
+不使用云端联邦管理员 signer。
 
 CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理归
-`sfid/backend/cpms/handler.rs`,不属于省管理员链交互。
+`sfid/backend/cpms/handler.rs`,不属于联邦管理员链交互。
 
 ## 2. 目录铁律
 
@@ -89,18 +89,18 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 
 说明:
 
-- `GET /api/v1/admin/sheng-admins` 是省级管理员列表接口,归
+- `GET /api/v1/admin/sheng-admins` 是联邦管理员列表接口,归
   `admins::catalog`,不是链交互。
 - `POST /api/v1/admin/passkeys/register/start|confirm|complete` 是管理员 Passkey 注册流程,
   归 `admins::passkeys`,不是链交互。
 - `POST /api/v1/admin/actions/*` 是管理员治理安全动作流程,归
   `admins::actions`,不是链交互。
-- 省管理员云端代签端点已删除;不得恢复为替代入口。
+- 联邦管理员云端代签端点已删除;不得恢复为替代入口。
 
 ## 5. 验收
 
 - 后端独立 chain 业务目录不存在。
 - `sfid/backend/main.rs` 不存在 `mod chain;`。
 - `rg "crate::chain|chain::" sfid/backend` 无活跃引用。
-- `sfid/backend/admins/` 不存在省管理员云端代签文件。
+- `sfid/backend/admins/` 不存在联邦管理员云端代签文件。
 - `cd sfid/backend && cargo fmt && cargo check` 通过。

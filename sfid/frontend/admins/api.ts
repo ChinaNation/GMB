@@ -1,12 +1,12 @@
-// 中文注释:省级管理员目录的后台只读 API。
-// 更换省管理员必须走本人签名和链上状态对齐,不暴露本地替换前端入口。
+// 中文注释:联邦管理员目录的后台只读 API。
+// 更换联邦管理员必须走本人签名和链上状态对齐,不暴露本地替换前端入口。
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, request } from '../utils/http';
 
-// 省级管理员对外行(API 返回结构)。
+// 联邦管理员对外行(API 返回结构)。
 //
-// SFID 业务语义:省级管理员只有存在/删除,不存在停用/启用状态字段。
+// SFID 业务语义:联邦管理员只有存在/删除,不存在停用/启用状态字段。
 export type ShengAdminRow = {
   id: number;
   province: string;

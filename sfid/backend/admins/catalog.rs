@@ -1,11 +1,9 @@
 use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 
-use crate::scope::admin_province::province_scope_for_role;
+use crate::admins::repo;
 use crate::*;
 
-/// 二角色均可访问,按 scope 过滤:
-/// - SHENG_ADMIN:仅返回自己所属省
-/// - SHI_ADMIN:仅返回自己上级省管理员所属省
+/// 中文注释:二角色均可访问联邦管理员列表,但只能看自己所在省域。
 pub(crate) async fn list_province_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -14,47 +12,50 @@ pub(crate) async fn list_province_admins(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let store = match store_read_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    // ADR-008 后只保留 SHENG/SHI,按登录管理员省域 scope 过滤。
-    let scope_province = province_scope_for_role(&store, &ctx.admin_pubkey, &ctx.role);
-    let mut rows: Vec<ShengAdminRow> = store
-        .sheng_admin_province_by_pubkey
-        .iter()
-        .filter_map(|(pubkey, province)| {
-            // scope 过滤:有省域的管理员只能看自己所属省。
-            if let Some(ref scope) = scope_province {
-                if province != scope {
-                    return None;
-                }
-            }
-            let user = store.admin_users_by_pubkey.get(pubkey)?;
-            if user.role != AdminRole::ShengAdmin {
-                return None;
-            }
-            Some(ShengAdminRow {
-                id: user.id,
+    if ctx
+        .admin_province
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return api_error(
+            axum::http::StatusCode::FORBIDDEN,
+            1003,
+            "admin province scope missing",
+        );
+    }
+    let scope_province = ctx.admin_province.clone();
+    let result = state.db.with_client(move |conn| {
+        let rows = repo::list_sheng_admins_by_province_conn(conn, scope_province.as_deref())?
+            .into_iter()
+            .map(|(admin, province)| ShengAdminRow {
+                id: admin.id,
                 province: province.clone(),
-                admin_pubkey: user.admin_pubkey.clone(),
-                admin_name: if user.admin_name.is_empty() {
-                    format!("{province}省级管理员")
+                admin_pubkey: admin.admin_pubkey,
+                admin_name: if admin.admin_name.is_empty() {
+                    format!("{province}联邦管理员")
                 } else {
-                    user.admin_name.clone()
+                    admin.admin_name
                 },
-                built_in: user.built_in,
-                created_at: user.created_at,
-                updated_at: user.updated_at,
+                built_in: admin.built_in,
+                created_at: admin.created_at,
+                updated_at: admin.updated_at,
             })
-        })
-        .collect();
-    rows.sort_by(|a, b| {
-        a.province
-            .cmp(&b.province)
-            .then_with(|| b.built_in.cmp(&a.built_in))
-            .then_with(|| a.id.cmp(&b.id))
+            .collect::<Vec<_>>();
+        Ok(rows)
     });
+    let rows = match result {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query province admins failed: {err}");
+            return api_error(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                message.as_str(),
+            );
+        }
+    };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

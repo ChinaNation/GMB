@@ -94,18 +94,36 @@ pub(crate) async fn citizen_bind_challenge(
     }
 
     {
-        let store = match store_read_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
         if mode == "create" {
-            if existing_bound_archive_owner(&store, &verified.archive_no).is_some() {
-                return api_error(StatusCode::CONFLICT, 1005, "archive_no already bound");
+            match state.db.find_bound_citizen_by_archive(&verified.archive_no) {
+                Ok(Some(_)) => {
+                    return api_error(StatusCode::CONFLICT, 1005, "archive_no already bound")
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::error!(error = %err, "query citizen archive owner failed");
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "citizen query failed",
+                    );
+                }
             }
         } else {
             let citizen_id = input.citizen_id.unwrap();
-            let Some(record) = store.citizen_records.get(&citizen_id) else {
-                return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found");
+            let record = match state.db.find_bound_citizen_by_id(citizen_id) {
+                Ok(Some(v)) => v,
+                Ok(None) => {
+                    return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found")
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "query citizen record failed");
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "citizen query failed",
+                    );
+                }
             };
             if record.bind_status() != CitizenBindStatus::Bound {
                 return api_error(StatusCode::CONFLICT, 1005, "citizen record is not bound");
@@ -122,20 +140,33 @@ pub(crate) async fn citizen_bind_challenge(
                     return api_error(StatusCode::CONFLICT, 1005, "citizen status is stale");
                 }
             }
-            if let Some(owner) = store.citizen_id_by_archive_no.get(&verified.archive_no) {
-                if *owner != citizen_id && is_bound_citizen_record(&store, *owner) {
-                    return api_error(StatusCode::CONFLICT, 1005, "archive_no already bound");
+            match state.db.find_bound_citizen_by_archive(&verified.archive_no) {
+                Ok(Some(owner)) if owner.id != citizen_id => {
+                    return api_error(StatusCode::CONFLICT, 1005, "archive_no already bound")
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::error!(error = %err, "query archive owner failed");
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "citizen query failed",
+                    );
                 }
             }
         }
-        if let Some(owner) = store
-            .citizen_id_by_wallet_pubkey
-            .get(wallet_pubkey.as_str())
-        {
-            if (mode == "create" || Some(*owner) != input.citizen_id)
-                && is_bound_citizen_record(&store, *owner)
-            {
+        match state.db.find_bound_citizen_by_wallet(&wallet_pubkey) {
+            Ok(Some(owner)) if mode == "create" || Some(owner.id) != input.citizen_id => {
                 return api_error(StatusCode::CONFLICT, 1005, "wallet_pubkey already bound");
+            }
+            Ok(_) => {}
+            Err(err) => {
+                tracing::error!(error = %err, "query wallet owner failed");
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "citizen query failed",
+                );
             }
         }
     }
@@ -168,35 +199,33 @@ pub(crate) async fn citizen_bind_challenge(
         mode,
     );
 
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
+    let challenge = CitizenBindChallenge {
+        challenge_id: challenge_id.clone(),
+        challenge_text: challenge_text.clone(),
+        mode: mode.to_string(),
+        citizen_id: input.citizen_id,
+        archive_no: verified.archive_no.clone(),
+        wallet_address: wallet_address.clone(),
+        wallet_pubkey: wallet_pubkey.clone(),
+        wallet_sig_alg: verified.wallet_sig_alg.clone(),
+        citizen_status: verified.citizen_status.clone(),
+        voting_eligible: verified.voting_eligible,
+        archive_valid_from: verified.valid_from.clone(),
+        archive_valid_until: verified.valid_until.clone(),
+        status_updated_at: verified.status_updated_at,
+        province_code: verified.province_code.clone(),
+        city_code: verified.city_code.clone(),
+        expire_at,
+        created_at: now,
     };
-    store
-        .citizen_bind_challenges
-        .retain(|_, c| c.expire_at > Utc::now());
-    store.citizen_bind_challenges.insert(
-        challenge_id.clone(),
-        CitizenBindChallenge {
-            challenge_id: challenge_id.clone(),
-            challenge_text: challenge_text.clone(),
-            mode: mode.to_string(),
-            citizen_id: input.citizen_id,
-            archive_no: verified.archive_no.clone(),
-            wallet_address: wallet_address.clone(),
-            wallet_pubkey: wallet_pubkey.clone(),
-            wallet_sig_alg: verified.wallet_sig_alg.clone(),
-            citizen_status: verified.citizen_status.clone(),
-            voting_eligible: verified.voting_eligible,
-            archive_valid_from: verified.valid_from.clone(),
-            archive_valid_until: verified.valid_until.clone(),
-            status_updated_at: verified.status_updated_at,
-            province_code: verified.province_code.clone(),
-            city_code: verified.city_code.clone(),
-            expire_at,
-            created_at: now,
-        },
-    );
+    if let Err(err) = state.db.insert_citizen_bind_challenge(&challenge) {
+        tracing::error!(error = %err, "insert citizen bind challenge failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "citizen bind challenge write failed",
+        );
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -257,22 +286,28 @@ pub(crate) async fn citizen_bind(
         return resp;
     }
 
-    let challenge = {
-        let mut store = match store_write_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        let Some(challenge) = store.citizen_bind_challenges.remove(challenge_id.as_str()) else {
+    let challenge = match state.db.take_citizen_bind_challenge(&challenge_id) {
+        Ok(Some(v)) => {
+            if Utc::now() > v.expire_at {
+                return api_error(StatusCode::GONE, 1007, "challenge expired");
+            }
+            v
+        }
+        Ok(None) => {
             return api_error(
                 StatusCode::NOT_FOUND,
                 1004,
                 "challenge not found or expired",
-            );
-        };
-        if Utc::now() > challenge.expire_at {
-            return api_error(StatusCode::GONE, 1007, "challenge expired");
+            )
         }
-        challenge
+        Err(err) => {
+            tracing::error!(error = %err, "take citizen bind challenge failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "challenge query failed",
+            );
+        }
     };
 
     let wallet_pubkey = input.pubkey.trim().to_lowercase();
@@ -308,24 +343,18 @@ pub(crate) async fn citizen_bind(
         );
     }
 
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let cid = if challenge.mode == "create" {
-        match create_citizen_record(&mut store, &ctx, &challenge) {
+    let record = if challenge.mode == "create" {
+        match create_citizen_record(&state, &ctx, &challenge) {
             Ok(v) => v,
             Err(resp) => return resp,
         }
     } else {
-        match replace_citizen_record(&mut store, &ctx, &challenge) {
+        match replace_citizen_record(&state, &ctx, &challenge) {
             Ok(v) => v,
             Err(resp) => return resp,
         }
     };
-
-    let record = store.citizen_records.get(&cid).cloned().unwrap();
-    if let Err(e) = state.store.upsert_citizen_row(&record) {
+    if let Err(e) = state.db.upsert_citizen_row(&record) {
         tracing::error!(error = %e, "citizen row upsert failed");
         if e.contains("duplicate key") {
             return api_error(
@@ -340,19 +369,18 @@ pub(crate) async fn citizen_bind(
             "citizen row write failed",
         );
     }
-    append_audit_log_with_meta(
-        &mut store,
+    crate::core::runtime_ops::append_audit_log(
+        &state,
         "CITIZEN_BIND",
         &ctx.admin_pubkey,
-        record.wallet_pubkey.clone(),
-        record.archive_no.clone(),
-        request_id_from_headers(&headers),
-        actor_ip_from_headers(&headers),
-        "SUCCESS",
+        record.sfid_code.clone(),
         format!(
-            "mode={} sfid_code={}",
+            "mode={} sfid_code={} archive_no={:?} request_id={:?} actor_ip={:?}",
             challenge.mode,
-            record.sfid_code.clone().unwrap_or_default()
+            record.sfid_code.clone().unwrap_or_default(),
+            record.archive_no,
+            request_id_from_headers(&headers),
+            actor_ip_from_headers(&headers)
         ),
     );
     let output = citizen_bind_output(&record);
@@ -369,14 +397,20 @@ fn ensure_verified_archive_in_admin_scope(
     ctx: &AdminAuthContext,
     site_sfid: &str,
 ) -> Result<(), axum::response::Response> {
-    let store = store_read_or_500(state)?;
-    let Some(site) = store.cpms_site_keys.get(site_sfid) else {
-        return Err(api_error(
-            StatusCode::NOT_FOUND,
-            1004,
-            "cpms install authorization not found",
-        ));
-    };
+    let site = state
+        .db
+        .get_cpms_site(site_sfid)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query cpms site failed");
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cpms query failed")
+        })?
+        .ok_or_else(|| {
+            api_error(
+                StatusCode::NOT_FOUND,
+                1004,
+                "cpms install authorization not found",
+            )
+        })?;
     if let Some(province) = ctx.admin_province.as_deref() {
         if site.admin_province != province {
             return Err(api_error(
@@ -399,50 +433,40 @@ fn ensure_verified_archive_in_admin_scope(
 }
 
 fn create_citizen_record(
-    store: &mut Store,
+    state: &AppState,
     ctx: &AdminAuthContext,
     challenge: &CitizenBindChallenge,
-) -> Result<u64, axum::response::Response> {
-    if let Some(owner) = store
-        .citizen_id_by_archive_no
-        .get(&challenge.archive_no)
-        .copied()
+) -> Result<CitizenRecord, axum::response::Response> {
+    if let Some(_) = state
+        .db
+        .find_bound_citizen_by_archive(&challenge.archive_no)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query archive owner failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            )
+        })?
     {
-        if is_bound_citizen_record(store, owner) {
-            return Err(api_error(
-                StatusCode::CONFLICT,
-                1005,
-                "archive_no already bound",
-            ));
-        }
-        cleanup_stale_citizen_record(store, owner);
-        store.citizen_id_by_archive_no.remove(&challenge.archive_no);
-    }
-    if existing_bound_archive_owner(store, &challenge.archive_no).is_some() {
         return Err(api_error(
             StatusCode::CONFLICT,
             1005,
             "archive_no already bound",
         ));
     }
-    if let Some(owner) = store
-        .citizen_id_by_wallet_pubkey
-        .get(challenge.wallet_pubkey.as_str())
-        .copied()
+    if let Some(_) = state
+        .db
+        .find_bound_citizen_by_wallet(&challenge.wallet_pubkey)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query wallet owner failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            )
+        })?
     {
-        if is_bound_citizen_record(store, owner) {
-            return Err(api_error(
-                StatusCode::CONFLICT,
-                1005,
-                "wallet_pubkey already bound",
-            ));
-        }
-        cleanup_stale_citizen_record(store, owner);
-        store
-            .citizen_id_by_wallet_pubkey
-            .remove(challenge.wallet_pubkey.as_str());
-    }
-    if existing_bound_wallet_owner(store, &challenge.wallet_pubkey).is_some() {
         return Err(api_error(
             StatusCode::CONFLICT,
             1005,
@@ -451,10 +475,16 @@ fn create_citizen_record(
     }
 
     let province_name = crate::china::province_name_by_code(&challenge.province_code).unwrap_or("");
-    let sfid_code = generate_unique_citizen_sfid(store, province_name, &challenge.wallet_pubkey)?;
-    let cid = store.next_citizen_id;
-    store.next_citizen_id += 1;
-    let record = CitizenRecord {
+    let sfid_code = generate_unique_citizen_sfid(state, province_name, &challenge.wallet_pubkey)?;
+    let cid = state.db.next_citizen_id().map_err(|err| {
+        tracing::error!(error = %err, "allocate citizen id failed");
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "citizen id allocate failed",
+        )
+    })?;
+    Ok(CitizenRecord {
         id: cid,
         wallet_pubkey: Some(challenge.wallet_pubkey.clone()),
         wallet_address: Some(challenge.wallet_address.clone()),
@@ -471,25 +501,27 @@ fn create_citizen_record(
         bound_at: Some(Utc::now()),
         bound_by: Some(ctx.admin_pubkey.clone()),
         created_at: Utc::now(),
-    };
-    store.citizen_records.insert(cid, record);
-    store
-        .citizen_id_by_archive_no
-        .insert(challenge.archive_no.clone(), cid);
-    store
-        .citizen_id_by_wallet_pubkey
-        .insert(challenge.wallet_pubkey.clone(), cid);
-    store.citizen_id_by_sfid_code.insert(sfid_code, cid);
-    Ok(cid)
+    })
 }
 
 fn replace_citizen_record(
-    store: &mut Store,
+    state: &AppState,
     ctx: &AdminAuthContext,
     challenge: &CitizenBindChallenge,
-) -> Result<u64, axum::response::Response> {
+) -> Result<CitizenRecord, axum::response::Response> {
     let citizen_id = challenge.citizen_id.unwrap_or_default();
-    let Some(existing) = store.citizen_records.get(&citizen_id).cloned() else {
+    let Some(existing) = state
+        .db
+        .find_bound_citizen_by_id(citizen_id)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query existing citizen failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            )
+        })?
+    else {
         return Err(api_error(
             StatusCode::NOT_FOUND,
             1004,
@@ -523,38 +555,47 @@ fn replace_citizen_record(
             ));
         }
     }
-    if let Some(owner) = store.citizen_id_by_archive_no.get(&challenge.archive_no) {
-        if *owner != citizen_id && is_bound_citizen_record(store, *owner) {
+    if let Some(owner) = state
+        .db
+        .find_bound_citizen_by_archive(&challenge.archive_no)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query archive owner failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            )
+        })?
+    {
+        if owner.id != citizen_id {
             return Err(api_error(
                 StatusCode::CONFLICT,
                 1005,
                 "archive_no already bound",
             ));
         }
-        if *owner != citizen_id {
-            cleanup_stale_citizen_record(store, *owner);
-        }
     }
-    if let Some(owner) = store
-        .citizen_id_by_wallet_pubkey
-        .get(&challenge.wallet_pubkey)
-        .copied()
+    if let Some(owner) = state
+        .db
+        .find_bound_citizen_by_wallet(&challenge.wallet_pubkey)
+        .map_err(|err| {
+            tracing::error!(error = %err, "query wallet owner failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            )
+        })?
     {
-        if owner != citizen_id && is_bound_citizen_record(store, owner) {
+        if owner.id != citizen_id {
             return Err(api_error(
                 StatusCode::CONFLICT,
                 1005,
                 "wallet_pubkey already bound",
             ));
         }
-        if owner != citizen_id {
-            cleanup_stale_citizen_record(store, owner);
-        }
     }
-    if let Some(old_pubkey) = existing.wallet_pubkey {
-        store.citizen_id_by_wallet_pubkey.remove(&old_pubkey);
-    }
-    let record = store.citizen_records.get_mut(&citizen_id).unwrap();
+    let mut record = existing;
     record.wallet_pubkey = Some(challenge.wallet_pubkey.clone());
     record.wallet_address = Some(challenge.wallet_address.clone());
     record.citizen_status = Some(challenge.citizen_status.clone());
@@ -566,13 +607,7 @@ fn replace_citizen_record(
     record.city_code = Some(challenge.city_code.clone());
     record.bound_at = Some(Utc::now());
     record.bound_by = Some(ctx.admin_pubkey.clone());
-    store
-        .citizen_id_by_archive_no
-        .insert(existing_archive_no, citizen_id);
-    store
-        .citizen_id_by_wallet_pubkey
-        .insert(challenge.wallet_pubkey.clone(), citizen_id);
-    Ok(citizen_id)
+    Ok(record)
 }
 
 fn citizen_bind_output(record: &CitizenRecord) -> CitizenBindOutput {
@@ -590,48 +625,6 @@ fn citizen_bind_output(record: &CitizenRecord) -> CitizenBindOutput {
         valid_until: record.archive_valid_until.clone(),
         status_updated_at: record.status_updated_at,
         bind_status: record.bind_status(),
-    }
-}
-
-fn existing_bound_archive_owner<'a>(store: &'a Store, archive_no: &str) -> Option<&'a u64> {
-    store
-        .citizen_id_by_archive_no
-        .get(archive_no)
-        .filter(|cid| is_bound_citizen_record(store, **cid))
-}
-
-fn existing_bound_wallet_owner<'a>(store: &'a Store, wallet_pubkey: &str) -> Option<&'a u64> {
-    store
-        .citizen_id_by_wallet_pubkey
-        .get(wallet_pubkey)
-        .filter(|cid| is_bound_citizen_record(store, **cid))
-}
-
-fn is_bound_citizen_record(store: &Store, citizen_id: u64) -> bool {
-    store
-        .citizen_records
-        .get(&citizen_id)
-        .map(|record| record.bind_status() == CitizenBindStatus::Bound)
-        .unwrap_or(false)
-}
-
-fn cleanup_stale_citizen_record(store: &mut Store, citizen_id: u64) {
-    let Some(record) = store.citizen_records.get(&citizen_id).cloned() else {
-        return;
-    };
-    if record.bind_status() == CitizenBindStatus::Bound {
-        return;
-    }
-    // 中文注释:开发期流程可能留下半绑定记录。当前流程只保留完整绑定结果。
-    store.citizen_records.remove(&citizen_id);
-    if let Some(archive_no) = record.archive_no {
-        store.citizen_id_by_archive_no.remove(&archive_no);
-    }
-    if let Some(wallet_pubkey) = record.wallet_pubkey {
-        store.citizen_id_by_wallet_pubkey.remove(&wallet_pubkey);
-    }
-    if let Some(sfid_code) = record.sfid_code {
-        store.citizen_id_by_sfid_code.remove(&sfid_code);
     }
 }
 
@@ -721,7 +714,7 @@ fn build_citizen_bind_sign_request(
 }
 
 fn generate_unique_citizen_sfid(
-    store: &mut Store,
+    state: &AppState,
     province_name: &str,
     wallet_pubkey: &str,
 ) -> Result<String, axum::response::Response> {
@@ -742,7 +735,11 @@ fn generate_unique_citizen_sfid(
             Ok(v) => v,
             Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
         };
-        if !store.citizen_id_by_sfid_code.contains_key(&candidate) {
+        let exists = state.db.sfid_exists(&candidate).map_err(|err| {
+            tracing::error!(error = %err, "query sfid exists failed");
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sfid query failed")
+        })?;
+        if !exists {
             return Ok(candidate);
         }
     }
@@ -796,6 +793,199 @@ fn payload_hash_for_text(text: &str) -> String {
 fn same_pubkey_hex(left: &str, right: &str) -> bool {
     left.trim_start_matches("0x")
         .eq_ignore_ascii_case(right.trim_start_matches("0x"))
+}
+
+fn citizen_status_from_db(status: &str) -> CitizenStatus {
+    match status {
+        "NORMAL" => CitizenStatus::Normal,
+        _ => CitizenStatus::Revoked,
+    }
+}
+
+fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
+    let id: i64 = row.get(0);
+    CitizenRecord {
+        id: u64::try_from(id).unwrap_or(0),
+        wallet_pubkey: row.get(1),
+        wallet_address: row.get(2),
+        archive_no: row.get(3),
+        sfid_code: Some(row.get(4)),
+        citizen_status: Some(citizen_status_from_db(row.get::<_, String>(5).as_str())),
+        voting_eligible: row.get(6),
+        archive_valid_from: row.get(7),
+        archive_valid_until: row.get(8),
+        status_updated_at: row.get(9),
+        sfid_signature: None,
+        province_code: Some(row.get(10)),
+        city_code: Some(row.get(11)),
+        bound_at: row.get(12),
+        bound_by: row.get(13),
+        created_at: row.get(14),
+    }
+}
+
+impl Db {
+    pub(crate) fn insert_citizen_bind_challenge(
+        &self,
+        challenge: &CitizenBindChallenge,
+    ) -> Result<(), String> {
+        let challenge = challenge.clone();
+        self.with_client(move |conn| {
+            conn.execute(
+                "DELETE FROM citizen_bind_challenges WHERE expires_at < now()",
+                &[],
+            )
+            .map_err(|e| format!("cleanup citizen challenges failed: {e}"))?;
+            let payload = serde_json::to_value(&challenge)
+                .map_err(|e| format!("serialize citizen challenge failed: {e}"))?;
+            conn.execute(
+                "INSERT INTO citizen_bind_challenges (
+                    challenge_id, p_code, c_code, wallet_pubkey, archive_no, expires_at, consumed, payload
+                 ) VALUES ($1, $2, $3, $4, $5, $6, false, $7)
+                 ON CONFLICT (challenge_id) DO UPDATE SET
+                    p_code = EXCLUDED.p_code,
+                    c_code = EXCLUDED.c_code,
+                    wallet_pubkey = EXCLUDED.wallet_pubkey,
+                    archive_no = EXCLUDED.archive_no,
+                    expires_at = EXCLUDED.expires_at,
+                    consumed = false,
+                    payload = EXCLUDED.payload",
+                &[
+                    &challenge.challenge_id,
+                    &challenge.province_code,
+                    &challenge.city_code,
+                    &challenge.wallet_pubkey,
+                    &challenge.archive_no,
+                    &challenge.expire_at,
+                    &payload,
+                ],
+            )
+            .map_err(|e| format!("insert citizen challenge failed: {e}"))?;
+            Ok(())
+        })
+    }
+
+    pub(crate) fn take_citizen_bind_challenge(
+        &self,
+        challenge_id: &str,
+    ) -> Result<Option<CitizenBindChallenge>, String> {
+        let challenge_id = challenge_id.trim().to_string();
+        self.with_client(move |conn| {
+            let mut tx = conn
+                .transaction()
+                .map_err(|e| format!("begin challenge transaction failed: {e}"))?;
+            let row = tx
+                .query_opt(
+                    "SELECT payload
+                     FROM citizen_bind_challenges
+                     WHERE challenge_id = $1 AND consumed = false AND expires_at > now()
+                     FOR UPDATE",
+                    &[&challenge_id],
+                )
+                .map_err(|e| format!("query citizen challenge failed: {e}"))?;
+            let Some(row) = row else {
+                tx.commit()
+                    .map_err(|e| format!("commit empty challenge transaction failed: {e}"))?;
+                return Ok(None);
+            };
+            tx.execute(
+                "UPDATE citizen_bind_challenges SET consumed = true WHERE challenge_id = $1",
+                &[&challenge_id],
+            )
+            .map_err(|e| format!("consume citizen challenge failed: {e}"))?;
+            tx.commit()
+                .map_err(|e| format!("commit challenge transaction failed: {e}"))?;
+            let value: serde_json::Value = row.get(0);
+            serde_json::from_value(value)
+                .map(Some)
+                .map_err(|e| format!("deserialize citizen challenge failed: {e}"))
+        })
+    }
+
+    pub(crate) fn find_bound_citizen_by_archive(
+        &self,
+        archive_no: &str,
+    ) -> Result<Option<CitizenRecord>, String> {
+        let archive_no = archive_no.trim().to_string();
+        self.find_bound_citizen_by_clause("archive_no = $1", archive_no)
+    }
+
+    pub(crate) fn find_bound_citizen_by_wallet(
+        &self,
+        wallet_pubkey: &str,
+    ) -> Result<Option<CitizenRecord>, String> {
+        let wallet_pubkey = wallet_pubkey.trim().to_string();
+        self.find_bound_citizen_by_clause("lower(wallet_pubkey) = lower($1)", wallet_pubkey)
+    }
+
+    pub(crate) fn find_bound_citizen_by_id(
+        &self,
+        citizen_id: u64,
+    ) -> Result<Option<CitizenRecord>, String> {
+        let citizen_id =
+            i64::try_from(citizen_id).map_err(|_| "citizen id too large".to_string())?;
+        self.with_client(move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address, archive_no,
+                            sfid_number, citizen_status, voting_eligible, valid_from,
+                            valid_until, status_updated_at, p_code, c_code, bound_at,
+                            bound_by, created_at
+                     FROM citizens
+                     WHERE id = $1 AND bind_status = 'BOUND'
+                     LIMIT 1",
+                    &[&citizen_id],
+                )
+                .map_err(|e| format!("query citizen by id failed: {e}"))?;
+            Ok(row.as_ref().map(citizen_record_from_row))
+        })
+    }
+
+    fn find_bound_citizen_by_clause(
+        &self,
+        clause: &'static str,
+        value: String,
+    ) -> Result<Option<CitizenRecord>, String> {
+        self.with_client(move |conn| {
+            let sql = format!(
+                "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address, archive_no,
+                        sfid_number, citizen_status, voting_eligible, valid_from,
+                        valid_until, status_updated_at, p_code, c_code, bound_at,
+                        bound_by, created_at
+                 FROM citizens
+                 WHERE {clause} AND bind_status = 'BOUND'
+                 ORDER BY created_at DESC
+                 LIMIT 1"
+            );
+            let row = conn
+                .query_opt(sql.as_str(), &[&value])
+                .map_err(|e| format!("query citizen failed: {e}"))?;
+            Ok(row.as_ref().map(citizen_record_from_row))
+        })
+    }
+
+    pub(crate) fn next_citizen_id(&self) -> Result<u64, String> {
+        self.with_client(|conn| {
+            let row = conn
+                .query_one("SELECT COALESCE(MAX(id), 0) + 1 FROM citizens", &[])
+                .map_err(|e| format!("allocate citizen id failed: {e}"))?;
+            let id: i64 = row.get(0);
+            Ok(u64::try_from(id).unwrap_or(1))
+        })
+    }
+
+    pub(crate) fn sfid_exists(&self, sfid_number: &str) -> Result<bool, String> {
+        let sfid_number = sfid_number.trim().to_string();
+        self.with_client(move |conn| {
+            let row = conn
+                .query_one(
+                    "SELECT EXISTS(SELECT 1 FROM ids WHERE sfid_number = $1)",
+                    &[&sfid_number],
+                )
+                .map_err(|e| format!("query sfid exists failed: {e}"))?;
+            Ok(row.get(0))
+        })
+    }
 }
 
 /// 从 SS58 地址解出 hex 格式公钥。
@@ -863,75 +1053,5 @@ mod tests {
         assert_eq!(value["body"]["address"], "addr2027");
         assert_eq!(value["body"]["pubkey"], "0xabc");
         assert_eq!(value["body"]["display"]["fields"][4]["value"], "addr2027");
-    }
-
-    #[test]
-    fn replace_citizen_record_rejects_archive_change() {
-        let mut store = Store::default();
-        let now = Utc.timestamp_opt(1_000, 0).single().unwrap();
-        store.citizen_records.insert(
-            7,
-            CitizenRecord {
-                id: 7,
-                wallet_pubkey: Some("0xold".to_string()),
-                wallet_address: Some("old-address".to_string()),
-                archive_no: Some("ARCHIVE-OLD".to_string()),
-                sfid_code: Some("GMR-OLD".to_string()),
-                citizen_status: Some(CitizenStatus::Normal),
-                voting_eligible: true,
-                archive_valid_from: Some("2026-05-24".to_string()),
-                archive_valid_until: Some("2036-05-23".to_string()),
-                status_updated_at: Some(1_000),
-                sfid_signature: None,
-                province_code: Some("GD".to_string()),
-                city_code: Some("001".to_string()),
-                bound_at: Some(now),
-                bound_by: Some("admin-old".to_string()),
-                created_at: now,
-            },
-        );
-        store
-            .citizen_id_by_archive_no
-            .insert("ARCHIVE-OLD".to_string(), 7);
-        store
-            .citizen_id_by_wallet_pubkey
-            .insert("0xold".to_string(), 7);
-        store
-            .citizen_id_by_sfid_code
-            .insert("GMR-OLD".to_string(), 7);
-
-        let ctx = AdminAuthContext {
-            admin_pubkey: "admin-new".to_string(),
-            role: AdminRole::ShengAdmin,
-            admin_name: "测试管理员".to_string(),
-            admin_province: Some("广东省".to_string()),
-            admin_city: None,
-            passkey_bound: false,
-        };
-        let challenge = CitizenBindChallenge {
-            challenge_id: "challenge-replace".to_string(),
-            challenge_text: "text".to_string(),
-            mode: "replace".to_string(),
-            citizen_id: Some(7),
-            archive_no: "ARCHIVE-NEW".to_string(),
-            wallet_address: "new-address".to_string(),
-            wallet_pubkey: "0xnew".to_string(),
-            wallet_sig_alg: "sr25519".to_string(),
-            citizen_status: CitizenStatus::Normal,
-            voting_eligible: true,
-            archive_valid_from: "2026-05-24".to_string(),
-            archive_valid_until: "2036-05-23".to_string(),
-            status_updated_at: 1_001,
-            province_code: "GD".to_string(),
-            city_code: "001".to_string(),
-            expire_at: now,
-            created_at: now,
-        };
-
-        assert!(replace_citizen_record(&mut store, &ctx, &challenge).is_err());
-        let record = store.citizen_records.get(&7).unwrap();
-        assert_eq!(record.archive_no.as_deref(), Some("ARCHIVE-OLD"));
-        assert_eq!(record.sfid_code.as_deref(), Some("GMR-OLD"));
-        assert_eq!(record.wallet_pubkey.as_deref(), Some("0xold"));
     }
 }

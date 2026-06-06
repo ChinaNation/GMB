@@ -11,9 +11,10 @@
 //   - "主账户" / "费用账户" 是默认账户(创建机构时已自动生成),这里手工建名不能重复
 
 import React, { useEffect, useState } from 'react';
-import { Button, Form, Input, message, Modal, Typography } from 'antd';
+import { Button, Form, Input, Modal, Typography } from 'antd';
 import type { AdminAuth } from '../auth/types';
 import { createAccount, type MultisigAccount } from './api';
+import { notice } from '../utils/notice';
 
 interface Props {
   auth: AdminAuth;
@@ -51,26 +52,25 @@ export const CreateAccountModal: React.FC<Props> = ({
   const onSubmit = async (values: FormValues) => {
     const name = values.account_name.trim();
     if (!name) {
-      message.error('账户名称不能为空');
+      notice.error('账户名称不能为空');
       return;
     }
     if (name.length > 30) {
-      message.error('账户名称最多 30 字');
+      notice.error('账户名称最多 30 字');
       return;
     }
     // 前端预校验:同 sfid 下不能重名(含已自动生成的主账户/费用账户)
     if (existingAccounts.some((a) => a.account_name === name)) {
-      message.error(`账户名称"${name}"在本机构下已存在`);
+      notice.error(`账户名称"${name}"在本机构下已存在`);
       return;
     }
     setSubmitting(true);
     try {
       await createAccount(auth, sfidNumber, name);
-      message.success('账户名称已创建,链上注册后会自动同步状态');
+      notice.success('账户名称已创建,链上注册后会自动同步状态');
       onCreated();
     } catch (err) {
-      const raw = err instanceof Error ? err.message : '创建账户失败';
-      message.error(raw);
+      notice.error(err, '创建账户失败');
     } finally {
       setSubmitting(false);
     }

@@ -1,667 +1,121 @@
-# SFID 技术开发文档（统一版）
-
-## 1. 文档目的
-- 固化 SFID 最新业务流程与系统边界，作为开发、测试、联调、验收基线。
-- 本文档已合并历史方案，不再依赖已删除的散落文档。
-- 本系统仅保留本文件作为唯一技术文档基线；后续规格变更统一回写本文件。
-
-## 2. 系统定位与边界
-### 2.1 系统关系
-- `CPMS`：完全离线独立系统，负责线下建档、扫描 wuminapp 钱包地址并签发 `SFID_CPMS_V1 / ARCHIVE` 档案码。
-- `SFID`：在线系统，负责扫码验签、签发 wuminapp 绑定签名请求、校验 wuminapp 签名并形成本地电子护照绑定结果。
-- `Blockchain`：区块链系统，按投票引擎边界请求人口快照、公民投票凭证等链端凭证。
-
-### 2.2 范围内
-- SFID 唯一联网管理员网站（Web）。
-- SFID 公开查询页面（无需登录）。
-- SFID API 服务。
-- SFID 系统签名能力（登录二维码系统签名、链路自动凭证签名）。
-- 数据库与审计系统。
-
-### 2.3 范围外
-- CPMS 内部建档与签章实现。
-- CPMS 与 SFID 的系统直连、在线接口集成。
-- 区块链 Runtime/Pallet 内部实现改造。
-
-## 3. 参与方与职责
-- 办证工作人员：在线下 CPMS 建档，生成二维码。
-- SFID 省级管理员：负责省/市管理员治理入口和本省管理范围控制；高危治理写操作必须二次确认。
-- SFID 市级管理员：执行电子护照绑定、状态扫码、查询用户信息等日常业务操作。
-- 区块链端：调用 SFID 自动接口获取可投票人数、绑定有效性等结果。
-- 普通用户：不登录管理员后台，但可使用公开查询页查询档案号、身份识别码、公钥地址。
-
-## 3.1 区块链五项能力模块归属（对齐口径）
-1. 机构 SFID 登记（多签创建前置）：`subjects` 公开查询 + `gov/private/accounts/docs` 管理模块，字段统一为 `sfid_number`。
-2. 公民电子护照绑定结果：`citizens` 模块本地完成，wuminapp 通过 `/api/v1/app/myid/status` 查询。
-3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
-4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + signature`，`who` 必入签名）。
-
-## 4. 管理员模型与登录机制
-### 4.1 管理员类型
-- 省级管理员（`SHENG_ADMIN`）：
-1. 每省有 1 个代码内置初始省级管理员，初始管理员只承担不可删除安全根职责。
-2. 每省最多 5 个省级管理员：1 个代码内置初始省级管理员 + 最多 4 个后续新增省级管理员；所有省级管理员采用同级模型。
-3. 查看市级管理员列表只需要有效登录态。
-4. 新增、删除市级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
-5. 编辑市级管理员姓名只需要有效登录态，后端仍校验省域范围与角色。
-6. 新增、删除省级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
-7. 编辑省级管理员姓名只需要有效登录态，后端仍校验省域范围与角色。
-8. 删除省级管理员只能由本省初始省级管理员发起；初始省级管理员不可删除自己，也不可被删除。
-9. 后端不得为省级管理员保存或使用云端业务 signer、seed、cache。
-- 市级管理员（`SHI_ADMIN`）：
-1. 每省每市最多 30 个市级管理员。
-2. 由省级管理员按本省范围创建、编辑、删除。
-3. 登录后执行电子护照绑定、状态扫码、查询用户信息，不可管理管理员账号。
-4. 管理员不存在 `ACTIVE / DISABLED` 状态字段；删除即物理失效并清理会话与密钥。
-
-### 4.4 前端统一形态
-- 菜单显示仅做体验控制，最终权限以后端 RBAC 为准。
-
-### 4.2 账户模型
-- 管理员账户标识为公钥（`admin_pubkey`）。
-- 管理员公钥全局唯一，同一公钥不能同时成为省级管理员和市级管理员。
-- 新增管理员时，若公钥已存在，后端按已有角色返回 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` 或 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN`，前端不得解析 `message` 判断业务分支。
-- 不使用用户名密码模式作为主登录机制。
-- 管理员私钥仅用于签名，不上传、不落库。
-
-### 4.3 登录流程（二维码挑战签名）
-1. 管理员点击“生成登录二维码”，SFID 前端向后端申请一次性登录 challenge。
-2. SFID 页面展示登录二维码（`WUMIN_QR_V1` 协议）。
-3. 管理员手机扫码后完成签名，并在手机端展示“签名结果二维码”。
-4. SFID 前端扫描该签名结果二维码（或粘贴签名原文）后，提交到 `/api/v1/admin/auth/qr/complete`。
-5. SFID 校验扫码公钥与签名：是管理员则登录管理员模式，不是管理员或签名失败则拒绝登录。
-6. 页面轮询 challenge 结果，成功后自动写入会话并完成登录。
-7. challenge 固定有效期 `90` 秒，且 `challenge` 一次性消费，防重放。
-8. 登录二维码协议固定为 `WUMIN_QR_V1`，字段必须包含：
-`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`（时间戳为秒级）。
-9. 系统先使用自身私钥对登录二维码签名；手机验 `sys_pubkey + sys_sig` 后，管理员钱包再对登录 challenge 签名。
-10. 手机端登录签名原文固定为：`WUMIN_QR_V1|system|challenge|expires_at`。
-11. `origin`/`domain`/`session_id` 仅作为网页侧上下文，不属于移动端扫码验签协议字段。
-
-## 5. 核心业务流程
-### 5.1 电子护照绑定流程（人工）
-1. 用户在 wuminapp 选择电子护照钱包，向 CPMS 出示钱包地址二维码。
-2. CPMS 保存 `wallet_address / wallet_pubkey / wallet_sig_alg`，生成带 CPMS 本机签名的 `ARCHIVE` 档案码。
-3. SFID 管理员在后台扫描或上传 `ARCHIVE` 档案码。
-4. SFID 验 CPMS 签名、`geo_seal`、授权状态、有效期和钱包字段，生成 `WUMIN_QR_V1 / sign_request`。
-5. wuminapp 使用同一钱包扫描 `sign_request` 并生成 `sign_response`。
-6. SFID 校验 `sign_response.pubkey / signature / payload_hash`，通过后写入 `archive_no / sfid_code / wallet_pubkey` 三者绑定关系。
-7. wuminapp 通过 `/api/v1/app/myid/status?wallet_address=...` 查询绑定结果。
-
-### 5.3 自动查询/校验流程（无管理员参与）
-- 区块链请求当前可投票公民数量，SFID 自动返回统计结果（仅统计状态为 `NORMAL` 且绑定有效用户）。
-- 区块链请求公民投票凭证，SFID 按本地电子护照绑定结果、CPMS 公民状态和选举资格签发或拒绝。
-
-### 5.4 公开查询流程（无需登录）
-1. 用户访问 SFID 公开查询页面。
-2. 输入查询条件（档案号/身份识别码/钱包公钥任一）。
-3. 系统返回档案号、身份识别码、钱包公钥三项对应信息（若存在）。
-
-## 6. 功能清单
-### 6.1 管理员人工功能
-- 扫码并解析 CPMS 二维码。
-- 电子护照绑定确认（档案号、身份 ID、钱包公钥唯一性校验）。
-- 绑定查询与审计查询。
-- 市级管理员数据模型新增姓名字段 `admin_name`；新增管理员必须提交姓名与公钥。
-- 管理员新增市级管理员时，`admin_pubkey` 必须通过 `sr25519` 公钥格式校验（非法输入拒绝）。
-- 市级管理员编辑只允许修改姓名；账户地址和市归属属于身份根，不允许修改。
-- 身份信息页已有记录“操作”列内按钮文案固定为“更换绑定”（列名仍为“操作”）；列表顶部新增入口文案固定为“新增身份ID绑定”。
-- 省级管理员维护机构管理：
-1. 先在机构页生成机构身份识别码（调用 `number` 编码协议，`A3=GFR`,`P1=0`，不输入公钥）。
-2. 持 SFID 二维码去 CPMS 初始化系统，CPMS 初始化后生成机构公钥登记二维码。
-3. 回到 SFID 机构页扫码录入机构，完成 3 把机构公钥入库并激活。
-
-### 6.3 权限控制实现要求
-- 机构管理接口（机构身份识别码生成、机构扫码录入、机构更新/禁用/撤销/删除/查询）仅允许：`SHENG_ADMIN`。
-- 市级管理员管理接口的对象权限：省级管理员只能管理本省范围内的市级管理员。
-- 管理端操作权限统一分为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 三类；所有管理端写操作必须登记到 `admins/operation_auth.rs`，未登记或类型不匹配的操作直接拒绝。
-- `LOGIN_STATE`：登录态即可执行，如查看列表、修改省/市管理员姓名、公民绑定 challenge 创建。
-- `PASSKEY`：必须完成浏览器 Passkey 后取得一次性 grant，如创建/更新机构、新增机构账户、上传机构文档、公民绑定提交、导入 CPMS 状态报告。
-- `PASSKEY_CHALLENGE`：必须完成 Passkey + 当前管理员冷钱包挑战签名，如新增/删除省市管理员、删除机构账户、删除机构文档、CPMS 安装授权治理。
-- 省级数据强隔离：省级管理员只能查看和操作本省数据；市级管理员只能进行业务操作。
-- 隔离范围：机构（CPMS 机构登记）、公民绑定信息、SFID 生成与状态变更。
-- `cpms_site_keys` 必须记录 `admin_province`，并在机构查询、扫码验签、状态变更时做后端强校验。
-- 公民电子护照记录只在 `ARCHIVE` 档案码验真和 wuminapp 签名验签全部通过后进入可见列表；未完成绑定的历史半记录不得展示为公民身份。
-- 前端隐藏按钮不等于授权，后端必须对每个接口做角色校验。
-
-### 6.2 系统自动功能
-- 校验二维码签名。
-- 向 wuminapp 返回电子护照绑定状态。
-- 响应投票引擎所需的人口快照与公民投票凭证查询。
-- 提供无需登录的公开查询接口。
-- 根据 CPMS 二维码状态同步投票资格（`NORMAL`/`ABNORMAL`）。
-
-## 7. 技术架构与栈
-### 7.1 前端（管理员网站）
-- `React + TypeScript + Vite + Ant Design`
-- Web 部署，不以桌面应用为目标形态。
-- 登录页当前口径：
-1. 整页背景图（含顶部区域）由前端静态资源提供（`/assets/login-bg.png`）。
-2. 顶部左侧文案两行：`中华民族联邦共和国`（上）与 `身份识别码系统`（下，右下对齐）。
-3. 登录流程为“页面出示登录二维码 + 手机扫码签名 + 前端扫描签名二维码提交”，前端轮询登录状态并自动登录。
-4. 非管理员扫码登录直接拒绝；签名失败同样拒绝登录。
-
-### 7.2 后端
-- `Rust + Axum`
-- `PostgreSQL`
-- `Redis`（可选，用于限流和缓存）
-- 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端按模块写入 `store_citizens / store_cpms / store_subjects / store_ops`，运行缓存启动时从这些主数据恢复。
-- SFID main 系统签名缓存：仅服务登录二维码系统签名与自动链路凭证签名,不得用于省级管理员治理代签。
-- 数据库结构由后端启动时创建当前目标结构；初始省级管理员只读取
-  `backend/admins/province_admins.rs`。
-- 当前管理员与密钥结构化表：
-1. `admins`
-2. `provinces`
-3. `sheng_admin_scope`
-4. `shi_admin_scope`
-- 当前后端功能目录：
-1. `backend/main.rs`：路由装配与启动骨架。
-2. `backend/core/`：跨业务底层工具,含 HTTP 响应、HTTP 安全、运行期工具、QR 协议与 `chain_*` 通用链工具。
-3. `backend/citizens/`：公民身份、绑定、投票凭证、CPMS 状态扫码。
-4. `backend/subjects/`：身份主体共享模型、非法人能力、主体详情和链端公开查询。
-5. `backend/gov/`：公权机构和公安局确定性目录。
-6. `backend/private/`：私权机构注册和精确查询。
-7. `backend/accounts/`：机构账户。
-8. `backend/docs/`：机构资料库。
-9. `backend/china/`：中国行政区划 SQLite 真源。
-10. `backend/number/`：身份 ID 编码协议。
-11. `backend/admins/`：管理员域统一目录，承载省级管理员、市级管理员账号维护、`operation_auth.rs` 权限分级、Passkey 注册与冷钱包挑战写操作。
-12. `backend/scope/`：省/市可见范围与写权限判断。
-13. `backend/store/`：Store 聚合体、省级进程内分片缓存和运行时状态模型。
-
-### 7.3 签名与密钥
-- 管理员登录仍使用冷钱包 sr25519 challenge 签名，管理员私钥不上传、不落库。
-- 管理端高危写操作使用 Passkey + 既有 `WUMIN_QR_V1 / sign_request` 冷钱包 sr25519 签名，业务域为 `sfid_admin_governance`，不新增二维码协议。
-- 管理端前端执行 Passkey + 冷钱包签名时,业务编辑/新增/删除弹窗必须保留在底层,
-  冷钱包签名弹窗使用统一最高层级覆盖在前面;不得通过提前关闭业务弹窗来规避遮挡。
-- 后端只保存 Passkey 可验证公钥凭据和短期挑战状态，不保存省管理员云端业务私钥。
-- Passkey WebAuthn 域名由后端环境变量控制:开发默认 `SFID_PASSKEY_RP_ID=localhost`
-  与 `SFID_PASSKEY_ORIGIN=http://localhost:5179`;生产环境 `SFID_ENV=prod|production`
-  时启动期强制 `SFID_PASSKEY_RP_ID=sfid.crcfrcn.com` 且
-  `SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com`,不得混入 localhost、IP 或其它 origin。
-- 机构登记管理按 `gov/private/accounts/docs` 拆分,机构链端公开查询在 `subjects`；公民电子护照绑定/投票凭证在 `citizens`。
-- CPMS 授权方案：每个市公安局机构 `sfid_number` 对应一个 INSTALL 授权。
-- SFID 信任库存储维度：`sfid_number + install_secret_hash + cpms_pubkey_hash`，按机构隔离验真。
-- 密钥分期：
-1. v1.0：国家级单签名私钥。
-2. v2.0：Root + 省级分层密钥。
-
-### 7.4 目录能力分配（已落地）
-- `backend/subjects/chain_duoqian_info.rs`：机构查询、注册信息凭证、清算行候选。
-- `backend/citizens/binding.rs`：公民电子护照绑定 challenge 与 wuminapp 签名验签。
-- `backend/citizens/chain_vote.rs`：公民投票凭证。
-- `backend/citizens/chain_joint_vote.rs`：联合投票人口快照凭证。
-- `backend/admins/passkeys.rs`：管理员 Passkey 注册、WebAuthn 配置、凭据使用记录和短期挑战清理。
-- `backend/admins/operation_auth.rs`：管理端操作权限分级真源，统一输出 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`。
-- `backend/admins/actions.rs`：`PASSKEY / PASSKEY_CHALLENGE` 操作 prepare/commit 与一次性安全 grant 入口；省/市管理员姓名修改不进入该入口。
-- `backend/core/chain_*.rs`：跨业务链底层工具。
-- `backend/number/admin.rs`：管理端编码元数据。
-- `backend/china/admin.rs`：管理端城市列表查询业务。
-- `backend/scope/*.rs`：省域隔离、审计范围和 CPMS 站点范围判定。
-- `backend/store/model.rs`：Store 聚合体、服务指标、链请求回执、公民奖励和投票缓存。
-- `backend/core/response.rs`：HTTP API 通用响应、分页和健康检查输出。
-- `backend/admins/model.rs`：省/市管理员角色、实体和列表 DTO。
-- `backend/admins/security_model.rs`：管理员 Passkey、冷钱包确认和一次性安全授权模型。
-- 管理员密钥规则（强约束）：
-1. 管理员业务私钥只存在各自冷钱包设备，SFID 后端不保存、不代签。
-2. 管理员登录使用冷钱包 sr25519 挑战签名。
-3. 管理员 `PASSKEY` 写操作使用 Passkey 换取一次性安全 grant。
-4. 管理员 `PASSKEY_CHALLENGE` 写操作使用 Passkey + 冷钱包 sr25519 签名确认。
-5. 管理员首次登录若未绑定 Passkey，前端强制进入注册局管理员列表，由本人在操作栏点击“更新密钥”完成绑定。
-
-## 8. 数据模型
-### 8.1 核心表（当前落地）
-- 当前主流程持久化表：
-1. `admins`：省级管理员、市级管理员账号元数据。
-2. `sheng_admin_scope`：省级管理员省域归属。
-3. `store_citizens`：公民电子护照绑定快照。
-4. `store_cpms`：CPMS 安装授权、`install_secret`、授权状态和 `cpms_pubkey_hash` 主数据。
-5. `store_subjects`：法人/非法人主体、机构、机构账户和资料库快照。
-6. `store_ops`：登录 challenge/session、审计、链路幂等和服务指标。
-7. `citizens`：管理员端公民精确查询行表，按 `p_code / c_code / created_at / id` 建索引。
-8. `subjects`：管理员端主体精确查询基础行，按 `p_code / c_code / category / created_at / sfid_number` 建索引。
-9. `gov / private / accounts / docs`：公权机构、私权机构、机构账户和资料库分区详情表。
-### 8.2 关键约束
-- `admins.admin_pubkey` 全局唯一。
-- 管理员新增入口必须共用全局公钥查重逻辑，重复时区分“已是省级管理员 / 已是市级管理员”。
-- `sheng_admin_scope` 记录省级管理员与省份归属；同一省最多 5 名省级管理员，数据库不得对 `province_name` 设置唯一约束。
-- 市级管理员数量由后端按 `省份 + 市名` 强制限制，同一省同一市最多 30 名 `SHI_ADMIN`；市名可能跨省重复，统计时不得只按市名计数。
-- 链路幂等与防重放由 `store_ops.chain_requests_by_key / chain_nonce_seen` 维护 24 小时窗口。
-- 公民电子护照绑定唯一关系：`archive_no / sfid_code / wallet_pubkey` 三者一对一。
-- `archive_no` 与 `sfid_code` 首次绑定后永久绑定，不允许解绑、不允许换档案号、不允许把同一档案号绑定到其他身份ID，也不允许把同一身份ID改绑到其他档案号；后续只允许使用同一 `archive_no` 的 ARCHIVE 档案码更换 `wallet_pubkey / wallet_address`。
-- `citizen_id` 仅是 SFID 后端内部自增记录主键，用于管理端定位记录和 replace 请求，不是对用户展示的身份ID；对外身份ID字段固定为 `sfid_code`。
-- 启动清理：历史非 `BOUND` 公民记录及其 `archive_no / sfid_code / wallet_pubkey` 反向索引必须在服务启动时物理剔除，公民列表和查询接口不得暴露半绑定数据。
-- 管理员端大数据列表不得默认返回全量。公民首页只允许按档案号、身份ID、投票账户地址或投票账户公钥精确查询；私权机构列表只允许按机构 SFID 或机构名称精确查询；接口返回 `{ items, page_size, next_cursor, has_more }`，不得依赖前端本地分页承载大数据。所有管理员 scope 必须先落到 `p_code / c_code` 查询条件,禁止查全库后过滤。
-- 公安局是确定性机构，独立于普通公权机构 tab；`GET /api/v1/institutions/public-security` 不接收搜索词，按当前登录管理员省市权限返回省内或市内公安局。公权机构确定性目录走 `GET /api/v1/institutions/official`，进入市详情无需精确搜索即可直接显示。两个确定性列表 GET 接口都是只读分区查询，前端可缓存接口返回值，但缓存只用于展示加速，后端仍是权限校验和确定性生成真源。
-- 普通自动公权机构是持久化目录，不属于后端启动任务。首次空库部署时必须显式执行 `sfid-backend init-gov` 初始化；行政区划变化时只执行 `sfid-backend reconcile-gov-province --province <省代码>` 或 `sfid-backend reconcile-gov-city --province <省代码> --city <市代码>`。正常 `serve` 启动不得全量生成或全量 upsert 自动公权机构。
-- 行政区划变更只更新对应范围的自动公权机构展示字段。以 `source=AUTO + institution_level + province_code + city_code + institution_code` 定位已有机构，保持 `sfid_number`、账户、链状态、创建时间不变；新增行政区只新增对应机构，删除行政区只清理目标范围内不再存在的自动公权机构。
-- 精确写入由数据库约束和业务校验共同兜底：`ids.sfid_number` 唯一，`subjects(p_code, sfid_number)` 唯一，`citizens(p_code, sfid_number)` 唯一，`accounts(p_code, sfid_number, account_name)` 唯一；`archive_no / sfid_code / wallet_pubkey` 三者一对一由公民绑定流程强制。
-
-### 8.3 状态机
-- `audit_logs.result`：`SUCCESS | FAILED`
-- 登录挑战：运行态 `login_challenges`（一次性消费 + TTL）。
-- 奖励状态：`PENDING | RETRY_WAITING | FAILED | REWARDED`。
-
-## 9. API 设计（v1 建议）
-### 9.1 通用返回
-- 成功：`{ code: 0, message: "ok", data: ... }`
-- 失败：`{ code: <non-zero>, message: "...", trace_id: "..." }`
-
-### 9.2 管理员认证与账号管理接口
-- `POST /api/v1/admin/auth/identify`：扫码识别管理员身份二维码（入参 `identity_qr`）。
-- `POST /api/v1/admin/auth/challenge`：创建登录挑战二维码。
-- `POST /api/v1/admin/auth/verify`：提交签名并完成登录。
-- `POST /api/v1/admin/auth/qr/challenge`：生成网页登录二维码 challenge。
-- `POST /api/v1/admin/auth/qr/complete`：提交签名结果（`challenge_id/request_id + admin_pubkey + signature`，`session_id` 可选）。
-- `GET /api/v1/admin/auth/qr/result`：网页登录页轮询二维码登录结果。
-- 市级管理员接口口径补充：`GET /api/v1/admin/operators` 列表返回 `admin_name` 与 `created_by_name`；新增、删除通过 `/api/v1/admin/actions/prepare` 和 `/api/v1/admin/actions/commit`；新增时后端按省市校验单市 30 人上限；编辑姓名使用 `PATCH /api/v1/admin/operators/:id` 登录态接口。
-- 省级管理员列表接口：`GET /api/v1/admin/sheng-admins`。
-- 省级管理员治理动作：`CREATE_SHENG_ADMIN / DELETE_SHENG_ADMIN`；编辑姓名使用 `PATCH /api/v1/admin/sheng-admins/:id` 登录态接口。
-- Passkey 注册接口：`POST /api/v1/admin/passkeys/register/start`、`/confirm`、`/complete`，由 `admins::passkeys` 承接；流程固定为先生成 `WUMIN_QR_V1 / sign_request` 并完成当前管理员冷钱包 sr25519 确认，再创建浏览器 Passkey 凭据并落库。
-- 管理员安全写操作接口：`POST /api/v1/admin/actions/prepare` 生成 WebAuthn assertion 选项；当 `auth_type=PASSKEY_CHALLENGE` 时同时返回 `WUMIN_QR_V1 / sign_request`；`POST /api/v1/admin/actions/commit` 按 `auth_type` 校验 Passkey 或 Passkey + sr25519 签名回执。
-
-### 9.6 省级管理员基线与变更策略（当前）
-1. 省级管理员初始安全根采用 `province_name + admin_pubkey` 固化清单初始化（代码维护）。
-2. 新增省级管理员写入 `admins` 与 `sheng_admin_scope`，归属当前登录省级管理员所在省。
-3. 删除新增省级管理员必须同步清理会话、Passkey、短期挑战与安全 grant，并写入审计日志。
-
-### 9.3 管理员业务接口（人工）
-- `POST /api/v1/admin/citizen/bind/challenge`：扫描 CPMS `ARCHIVE` 档案码，生成 wuminapp `sign_request`。
-- `POST /api/v1/admin/citizen/bind`：提交 wuminapp `sign_response`，完成电子护照绑定。
-- `GET /api/v1/admin/citizens`：查询电子护照绑定列表。
-- `GET /api/v1/admin/number/meta`：获取身份 ID 编码元数据（A3 选项、机构选项、省列表、当前管理员省域限制）。
-- `GET /api/v1/admin/china/cities?province=...`：按省加载可选市列表（省级管理员仅可查询本省）。
-- `POST /api/v1/admin/cpms-keys/sfid/generate`：生成机构身份识别码与 SFID 签名初始化二维码（仅省级管理员）。
-- `POST /api/v1/admin/cpms-keys/register-scan`：扫描并录入 CPMS 公钥登记二维码（仅省级管理员，且必须绑定对应 `init_qr_payload`）。
-- `GET /api/v1/admin/cpms-keys`：查询机构列表（仅省级管理员，返回本省机构）。
-
-### 9.4 区块链接口（自动）
-- `GET /api/v1/app/voters/count?account_pubkey=<who>`：返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`；签名 payload 必须包含 `who(account)`。
-- `POST /api/v1/app/vote/credential`：`proposal_id` 必填，输出投票验签凭证字段对齐 Runtime（`genesis_hash/who/binding_id/proposal_id/vote_nonce/signature`），不返回 `sfid_code` 明文。
-- 鉴权要求：仅接受区块链调用方请求，请求头必须携带：
-  - `x-chain-token`
-  - `x-chain-request-id`
-  - `x-chain-nonce`
-  - `x-chain-timestamp`（Unix 秒，5 分钟有效窗）
-  - `x-chain-signature`（必填）
-- 签名规范（当启用 `SFID_CHAIN_SIGNING_SECRET`）：
-  - Canonical payload（按以下顺序、`\n` 分隔）：
-
-### 9.4.1 wuminapp 电子护照接口（公共）
-
-- `GET /api/v1/app/myid/status?wallet_address=<walletAddress>`：wuminapp 查询电子护照绑定状态。
-- 返回字段：
-  - `bind_status`：绑定状态，只允许表达 `unset / pending / bound`。
-  - `wallet_address`：投票账户地址。
-  - `sfid_code`：身份ID号码，wuminapp 展示为“身份ID”。
-  - `citizen_status / voting_eligible / vote_status`：公民状态、选举资格和投票状态。
-  - `identity_status`：身份ID状态，来自 CPMS 公民状态和电子护照有效期；`NORMAL` 表示正常，其他值由 wuminapp 展示为异常。
-  - `valid_from / valid_until / status_updated_at`：电子护照有效期和 CPMS 公民状态更新时间。
-- 绑定入口：
-  - SFID 后台扫描 CPMS `ARCHIVE` 档案码后生成 `WUMIN_QR_V1 / sign_request`。
-  - wuminapp 使用 `MyIdSignPage` 扫描签名请求并返回 `sign_response`。
-  - SFID 验签后直接完成本地电子护照绑定并向 wuminapp 状态接口返回结果。
-    - `route=<route_key>`
-    - `request_id=<x-chain-request-id>`
-    - `nonce=<x-chain-nonce>`
-    - `timestamp=<x-chain-timestamp>`
-    - `fingerprint=<request_fingerprint>`
-  - 签名值：`hex(blake2b_mac_256(blake2b_256(SFID_CHAIN_SIGNING_SECRET), payload))`
-- 幂等与防重放：
-  - 进程内：`chain_requests_by_key + chain_nonce_seen`（24 小时窗口）。
-- 投票资格规则：以 CPMS 档案码中的 `citizen_status + voting_eligible` 为准；公民状态异常或无选举资格时不可投票。
-- `/api/v1/vote/verify` 使用 5 秒短缓存（按 `account_pubkey + proposal_id`），状态变更/绑定变更会即时失效缓存。
-- 绑定凭证刷新规则：若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化 Runtime 凭证不一致，会自动重签发并覆盖持久化凭证。
-
-### 9.9 App API 接口（移动端专用）
-- 路由组：`/api/v1/app/*`
-- 鉴权方式：请求头 `x-app-token`，服务端与环境变量 `SFID_APP_TOKEN` 比对。
-- 用途：为移动端（wuminapp）提供专用接口，采用静态 Token 鉴权，无需链路 HMAC 签名，认证复杂度低于区块链接口。
-- 限流：共享全局限流器，与其他接口统一限流策略。
-- 源码位置：App API 已按功能拆入 `sfid/backend/citizens/chain_*` 与 `sfid/backend/subjects/chain_duoqian_info.rs`。
-
-#### 9.9.1 人口快照查询
-- `GET /api/v1/app/voters/count?who=<pubkey_hex>`
-- 返回字段：`eligible_total`、`snapshot_nonce`、`signature`、`who`、`as_of`
-- 核心逻辑复用 `build_population_signature()`，与链路 `/api/v1/chain/voters/count` 签名产出一致。
-
-#### 9.9.2 公民投票凭证
-- `POST /api/v1/app/vote/credential`
-- 请求体：`{ "who": "<pubkey>", "proposal_id": 42 }`
-- 返回字段：`binding_id`、`vote_nonce`、`vote_signature`（仅资格合格时签发）
-- 核心逻辑复用 `build_vote_credential()`，与链路 `/api/v1/vote/verify` 凭证产出一致。
-
-#### 9.9.3 电子护照状态查询
-- `GET /api/v1/app/myid/status?wallet_address=<walletAddress>`
-- 返回 `bind_status / wallet_address / sfid_code / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at`。
-
-#### 9.9.4 App Token 配置说明
-- 新增环境变量：`SFID_APP_TOKEN`（在部署脚本中配置）。
-- 移动端编译时通过 `--dart-define=WUMINAPP_API_TOKEN=<同一值>` 注入。
-- App Token 与 Chain Token（`SFID_CHAIN_TOKEN`）为独立凭据，安全级别不同，不可混用。
-
-### 9.8 CPMS 状态变更扫码接口（人工）
-- `POST /api/v1/admin/cpms-status/scan`：省级管理员/市级管理员扫描 CPMS 状态变更二维码并更新用户状态。
-
-### 9.5 公开查询接口（Token 鉴权）
-- `GET /api/v1/public/identity/search?archive_no=...`
-- `GET /api/v1/public/identity/search?identity_code=...`
-- `GET /api/v1/public/identity/search?wallet_pubkey=...`
-- 返回字段：`found`, `archive_no`, `identity_code`, `wallet_pubkey`
-- 访问控制：必须携带 `x-public-search-token`（服务端配置 `SFID_PUBLIC_SEARCH_TOKEN`）并受全局限流。
-- 公开查询只返回公开绑定字段，不返回公民状态、选举资格或有效期。
-
-### 9.7 状态返回（已落地）
-1. SFID 完成电子护照绑定后，本地记录直接成为状态查询真相。
-2. wuminapp 通过 `/api/v1/app/myid/status?wallet_address=<walletAddress>` 查询 `bind_status / sfid_code / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at`。
-3. 管理端列表通过 `/api/v1/admin/citizens` 查看 `wallet_address / archive_no / sfid_code / bind_status / citizen_status / voting_eligible / vote_status`。
-
-## 10. 安全与合规
-- 管理员登录采用“公钥身份识别 + challenge 二维码签名验签”。
-- 管理端高危写操作必须二次校验 Passkey 与冷钱包 sr25519 签名,任一失败不得落库。
-- 电子护照绑定必须管理员执行，非管理员不可执行。
-- 建议电子护照绑定启用双人复核。
-- CPMS 二维码必须验签，防伪造与重放。
-- 区块链接口必须鉴权，禁止匿名公网调用。
-- 区块链接口必须执行 `request_id + nonce + timestamp` 防重放，并落库幂等表。
-- 生产必须配置 `SFID_CHAIN_SIGNING_SECRET`，并强制 `x-chain-signature` 请求签名校验。
-- 公开查询接口允许匿名访问，但必须启用限流、IP 频控和访问日志审计。
-- 登录 challenge 必须一次性、短时效，并绑定 `session` 上下文。
-- 审计日志保留不少于 3 年。
-- 状态变更扫码、电子护照绑定确认、机构公钥登记、链路资格查询、链路计数查询必须写入审计日志（操作者、钱包公钥/档案号、结果、时间、request_id、actor_ip）。
-- CORS 不允许全开放；应通过 `SFID_CORS_ALLOWED_ORIGINS` 显式配置前端来源（禁止 `*`）。
-
-## 11. CPMS 二维码规范（v1 冻结）
-### 11.1 公民档案二维码字段定义
-- `proto`：固定 `SFID_CPMS_V1`。
-- `type`：固定 `ARCHIVE`。
-- `archive_no`：档案号（全局唯一用户标识）。
-- `citizen_status`：CPMS 公民状态，`NORMAL` 或 `ABNORMAL`。
-- `voting_eligible`：CPMS 选举资格，布尔值。
-- `valid_from / valid_until`：电子护照有效期。
-- `status_updated_at`：CPMS 公民状态更新时间。
-- `wallet_address / wallet_pubkey / wallet_sig_alg`：wuminapp 钱包地址、公钥与签名算法。
-- `cpms_pubkey`：CPMS 本机档案签发公钥。
-- `geo_seal`：只有 SFID 可解开的归属密文，明文只包含 `sfid_number`。
-- `sig`：CPMS 本机私钥对档案核心字段签名后的结果值。
-
-### 11.2 明确约束
-- 二维码明文不暴露签发城市和公安局机构。
-- 每个 CPMS 实例必须先扫描 SFID 签发的 INSTALL 安装码。
-- SFID 按 `sfid_number + install_secret_hash + cpms_pubkey_hash` 维护该 CPMS 授权；
-  `store_cpms` 是主数据，`sharded_store` 只是运行期按省扫描缓存。
-- 当前版本是单向验真：CPMS 签发 ARCHIVE，SFID 解 `geo_seal` 后验签。
-- `archive_no` 作为唯一用户标识，不再引入额外用户 ID 字段。
-- `archive_no` 不承载省、市、机构、日期与状态语义，SFID 不得从 `archive_no` 推导投票资格。
-
-## 12. WUMINAPP 扫码登录协议规范（统一口径）
-
-### 12.1 目标状态
-- 协议：`WUMIN_QR_V1`。
-- 责任边界：`wuminapp` 负责挑战解析、系统身份验签、手机签名与回执生成；SFID 独立完成回执验签、授权与登录结果展示。
-- 信任来源：WuminApp 通过区块链 RPC 获取 SFID 当前公钥；CPMS 通过 SFID 背书建立信任，不直接依赖区块链。
-
-### 12.2 挑战码（SFID -> 手机）
-```json
-{
-  "proto": "WUMIN_QR_V1",
-  "system": "sfid",
-  "request_id": "uuid",
-  "challenge": "string",
-  "nonce": "uuid",
-  "issued_at": 1760000000,
-  "expires_at": 1760000090,
-  "sys_pubkey": "0x...",
-  "sys_sig": "0x..."
-}
-```
-
-### 12.3 签名原文（固定）
-```text
-proto|system|request_id|challenge|nonce|issued_at|expires_at
-```
-
-### 12.4 回执码（手机 -> SFID）
-```json
-{
-  "proto": "WUMIN_QR_V1",
-  "system": "sfid",
-  "request_id": "uuid",
-  "pubkey": "0x...",
-  "sig_alg": "sr25519",
-  "signature": "0x...",
-  "signed_at": 1760000020,
-  "payload_hash": "0x..."
-}
-```
-
-说明：`system` 标识回执来源系统（`sfid` 或 `cpms`），`payload_hash` 为签名原文的 SHA-256 哈希，用于防篡改校验。
-
-### 12.5 SFID 验签顺序
-1. 解析 `WUMIN_QR_V1 / login_receipt` 并读取 envelope `id`、`body.pubkey`、`body.signature`。
-2. 按 envelope `id` 查挑战缓存，校验 `proto/kind/body/issued_at/expires_at` 字段完整性与格式。
-3. 校验系统固定为 `sfid`。
-4. 校验挑战固定 `90` 秒时效：`expires_at - issued_at == 90` 且当前未过期。
-5. 按统一签名原文 `WUMIN_QR_V1|login_receipt|id|system|expires_at|pubkey` 执行 `sr25519` 验签。
-6. 校验挑战未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
-- `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE2b` 摘要字节和 `mod 10`。
-- 投票资格最终以 CPMS 档案码中的 `citizen_status + voting_eligible` 为准。
-
-### 11.3 验签规则
-1. 解析二维码并校验必填字段完整性。
-2. 校验 `proto=SFID_CPMS_V1`、`type=ARCHIVE`。
-3. 用 SFID 保存的 `install_secret` 解 `geo_seal`。
-4. 校验 `geo_seal.sfid_number`、CPMS 本机签名和授权状态。
-5. 验签通过后返回 `archive_no + citizen_status + voting_eligible + valid_from + valid_until + status_updated_at + wallet_address + wallet_pubkey + province_code + city_code + sfid_number`；失败直接拒绝。
-6. 绑定确认必须使用同一 ARCHIVE 验真结果,不得从档案号明文推导归属。
-
-### 11.4 INSTALL 安装码（机构初始化）
-- 用途：SFID 为市公安局 CPMS 签发安装授权。
-- INSTALL 字段（由 SFID 生成）：`proto`, `type`, `sfid_number`, `province_name`, `city_name`, `install_secret`, `sig`。
-- CPMS 初始化后生成本机档案签发密钥，首次 ARCHIVE 验真成功时由 SFID 把
-  `cpms_pubkey_hash / ACTIVE / USED` 写入 `store_cpms`，再同步到运行缓存。
-- 流程：
-1. SFID 省级管理员在公安局机构详情页生成 INSTALL 安装码。
-2. CPMS 使用 INSTALL 完成离线安装初始化并保存授权材料。
-3. CPMS 生成 ARCHIVE 档案码。
-4. SFID 首次验真成功后将授权状态由 `PENDING` 改为 `ACTIVE`，并把安装码状态置为 `USED`。
-5. 未完成验真或授权状态不可用时,SFID 不认可该 CPMS 出具的档案码。
-
-### 11.5 CPMS 对齐清单（执行项）
-- 初始化口径：CPMS 必须使用 SFID 签发的 INSTALL 完成首装初始化，不得本地自生成机构号。
-- 绑定校验口径：SFID 在 ARCHIVE 验真时必须校验 `geo_seal` 与 SFID 侧授权记录一致。
-- 可信链路口径：只有“SFID 签发 INSTALL -> CPMS 初始化 -> SFID 验真 ARCHIVE”闭环完成，CPMS 该机构二维码才进入受信集合。
-- 机构密钥口径：每个 `sfid_number` 授权只允许绑定一个 `cpms_pubkey_hash`。
-- 绑定二维码字段：`proto, type, archive_no, citizen_status, voting_eligible, valid_from, valid_until, status_updated_at, cpms_pubkey, geo_seal, wallet_address, wallet_pubkey, wallet_sig_alg, sig`。
-- 状态变更二维码字段继续按 CPMS 状态扫码接口单独维护,不得混入 ARCHIVE 档案码。
-- 状态值口径：`citizen_status=NORMAL` 且 `voting_eligible=true` 才是投票状态正常；任一条件不满足即异常。
-- 签名原文口径：`sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}`，严禁字段重排、空格填充、编码漂移。
-- 重复绑定口径：`archive_no / sfid_code / wallet_pubkey` 三者一对一；SFID 以该关系拒绝重复绑定。
-- 失败语义对齐：SFID 返回“站点未登记/签名失败/二维码过期/二维码已消费”时，CPMS 按同义错误码落日志并触发补发流程。
-- 拒绝语义口径：验签失败、机构未登记、机构非 `ACTIVE`、初始化链路不一致时，SFID 必须拒绝该 CPMS 公民档案号二维码/状态变更二维码。
-- 联调顺序：先登记机构公钥二维码，再联调公民绑定二维码，最后联调状态变更二维码。
-
-### 11.6 机构管理页面冻结口径（2026-05）
-- 机构列表中“机构号”统一为“身份识别码”，展示 `sfid_number`。
-- 生成身份识别码弹窗不输入公钥；弹窗内 `A3` 固定公法人（`GFR`）、`P1` 固定非盈利（`0`）。
-- 省级管理员账号有省份约束时，省份默认并锁定；可选市与机构类型（机构类型受 `GFR` 约束）。
-- 生成后主按钮显示“完成”，点击返回列表并展示该 `sfid_number`；次按钮为“下载”二维码，不显示 JSON 文本框。
-- 列表每条身份识别码后显示小二维码按钮；点击弹出该 `sfid_number` 对应二维码并支持再次下载。
-- 身份识别码二维码长期有效，不展示“有效期至”文案。
-- 机构页操作按钮为“禁用、删除、扫码”；不显示“撤销”按钮与“扫码录入机构”顶栏按钮。
-- CPMS 安装授权进入 `ACTIVE` 且签发公钥已绑定后，INSTALL 安装码视为已使用；机构详情页显示“安装码已使用”，不再显示下载按钮，只保留禁用和吊销操作。
-- 每个机构公钥列分别展示”更新”按钮；”登记人”列显示”`{省名}省级管理员`”。
-
-## 12. 部署与运维
-- SFID 为在线部署系统，管理员通过浏览器访问前端网站。
-- 仅管理员可登录，普通用户无后台入口权限。
-- 数据库建议单主高可用，所有写入进主库。
-- 可按区域部署只读副本承担查询流量。
-- 监控至少覆盖：接口可用性、错误率、签名耗时、数据库延迟。
-- 本地开发启动最小条件：
-1. PostgreSQL 可达（示例：`docker` 容器 `sfid-pg` 映射 `127.0.0.1:5432`）。
-2. 后端环境变量设置 `DATABASE_URL`。
-3. `./sfid-run.sh` 会在启动前停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程。
-4. 前端必须使用 `http://localhost:5179` 打开；Passkey 开发配置不接受 `127.0.0.1:5179`。
-- 安全相关关键环境变量：
-1. `SFID_CHAIN_TOKEN`：区块链接口静态 Token。
-2. `SFID_CHAIN_SIGNING_SECRET`：必填，链路请求强制验签。
-3. `SFID_PUBLIC_SEARCH_TOKEN`：公开身份检索鉴权 Token。
-4. `SFID_SIGNING_SEED_HEX`：后端主签名种子（必填）。
-5. `SFID_KEY_ID`：签名 key id（必填）。
-6. `SFID_RUNTIME_META_KEY`：运行态元数据加密密钥（必填）。
-7. `SFID_CORS_ALLOWED_ORIGINS`：CORS 来源白名单（逗号分隔，禁止 `*`）。
-8. `SFID_APP_TOKEN`：移动端（wuminapp）App API 鉴权 Token（与 `SFID_CHAIN_TOKEN` 独立，不可混用）。
-- 常见故障排查：
-1. 前端提示 `Failed to fetch` 且 `curl` 返回 `Empty reply from server`：优先检查后端进程是否 panic。
-2. 日志出现 `AddrInUse`：说明 `8899` 端口被旧进程占用，先清理占用进程再启动。
-3. 日志出现 `connect postgres failed`：检查 PostgreSQL 容器状态、端口映射和 `DATABASE_URL` 账号密码。
-
-## 13. 测试与验收
-### 13.1 功能验收
-- 可完成“wuminapp 选择钱包 -> CPMS 出具 ARCHIVE -> SFID 扫码生成签名请求 -> wuminapp 签名 -> SFID 完成绑定 -> wuminapp 查询结果”闭环。
-- 可投票人数统计接口可稳定返回。
-- 绑定有效性校验接口返回准确。
-- 省级管理员可通过 Passkey + 冷钱包挑战新增、删除市级管理员；市级管理员姓名修改只需要登录态；市级管理员无管理员账号管理权限。
-- 非管理员公钥扫码登录必须被拒绝（返回 403）。
-- 省级管理员与市级管理员使用同一前端页面；省级管理员仅多一个”市级管理员管理”功能域。
-- 公开查询需携带查询 Token，可查询档案号、身份识别码、钱包公钥三项信息。
-- 状态为 `ABNORMAL` 的用户在绑定有效时仍不可计入可投票人数，且资格校验返回不可投票。
-
-### 13.2 安全验收
-- 二维码签名校验必须生效。
-- 越权绑定、伪造二维码、重放请求应被拦截。
-- 登录 challenge 重放必须被拦截。
-- 关键动作具备完整审计记录。
-- 市级管理员访问管理员管理接口必须返回权限拒绝。
-
-### 13.3 自动化回归（已落地）
-- 后端单元测试与前端构建覆盖主流程 + 异常流：
-  - 重复 nonce 拒绝；
-  - 过期 timestamp 拒绝；
-  - 投票资格 `NORMAL/ABNORMAL` 正反校验；
-  - 奖励回执状态机（`FAILED -> RETRY_WAITING/FAILED -> SUCCESS -> REWARDED`）。
-- 单测覆盖：缺失防重放头拒绝、重复 nonce 拒绝。
-
-## 14. 当前待定项
-- 可投票人数统计口径（实时/准实时、是否按地域筛选）。
-- 双人复核是否默认强制。
-
-### 14.1 SFID码生成工具（Rust）
-#### 14.1.1 代码位置
-- 工具主模块：`backend/number/mod.rs`
-- 行政区真源：`backend/china/data/china.sqlite`
-- 省市代码查询：`backend/china/store.rs`
-
-#### 14.1.2 生成输入
-- `wallet_pubkey`（电子护照绑定字段）
-- `a3`（必填）：`GMR | ZRR | ZNR | GFR | SFR | FFR`
-- `p1`（按 A3 规则可选/必填）
-- `province`（必填）
-- `city`（必填，必须属于所选省）
-- `institution`（必填，按 A3 限制）
-
-#### 14.1.3 A3/P1/机构规则（已落地）
-- `GMR`（公民人）：机构固定 `ZG`（中国），`P1` 固定 `1`（盈利）。
-- `ZRR`（自然人）：机构固定 `TG`（他国），`P1` 固定 `1`（盈利）。
-- `ZNR`（智能人）：机构固定 `ZG`（中国），`P1` 可选 `0/1`。
-- `GFR`（公法人）：机构仅允许 `ZF/LF/SF/JC/JY/CB`，`P1` 固定 `0`（非盈利）。
-- `SFR`（私法人）：机构仅允许 `ZG/CH/TG`，`P1` 可选 `0/1`。
-- `FFR`（非法人）：机构仅允许 `ZG/TG`，`P1` 可选 `0/1`。
-- `GMR / ZRR / ZNR` 生成时，`R5` 的后三位固定为省级占位码 `000`，不再暴露真实市。
-- 各省真实市码统一从 `001` 起排；`000` 仅保留给省级占位，不属于真实市。
-
-#### 14.1.4 前端行为
-- 点击“生成”时，前端调用后端接口，不在前端本地生成。
-- A3 为单机构场景时，机构字段自动设值并锁定不可编辑。
-- 省级管理员进入生成弹窗时，省字段默认本省且锁定；市字段必须从本省市列表选择。
-- 新增和更换电子护照绑定都必须从 CPMS `ARCHIVE` 档案码进入；SFID 前端不得提供绕过档案码的公民 SFID 生成或待绑定按钮。
-
-## 15. 优化路线（优先级）
-### 15.1 P0（上线前建议完成）
-- 登录 challenge 可绑定 `domain/session_id/nonce/expires_at` 作为网页侧上下文；`aud` 不再属于扫码协议字段。
-- 冻结二维码签名原文规范（字段顺序、编码、时间格式），避免 CPMS/SFID 联调歧义。
-- 重放防护双层化：`qr_id` 一次性消费 + `login_challenges` 一次性消费与 TTL。
-- 省级管理员保护：除”不可删改角色”外，增加最小可用数量保护（避免误操作锁死）。
-
-### 15.2 P1（首版稳定后建议）
-- 从“固定 3 把公钥任意验签”升级为 `key_id` 精确验签 + 公钥状态管理（`ACTIVE/REVOKED`）。
-- 区块链接口防滥用升级：请求签名或 mTLS + timestamp/nonce 防重放 + 限流（`timestamp/nonce` 已落地）。
-- 审计增强：记录操作者公钥、IP、请求 ID、结果码，日志仅追加不可改写（UA 与摘要哈希待补）。
-- 绑定事务幂等化：并发下保持 `archive_no / sfid_code / wallet_pubkey` 三者唯一失败语义和可追踪错误码。
-
-### 15.3 P2（运维与结构优化）
-- 可观测完善：增加扫码验签失败率、登录验签失败率、绑定成功率、链查询 P95、重放拦截次数（链路 P95/P99、重放拦截、链请求失败、回调失败已落地）。
-- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；测试归档在 `backend/tests`。后端源码直接平铺在 `backend/` 根目录，功能模块按 `core`、`citizens`、`subjects`、`gov`、`private`、`accounts`、`docs`、`china`、`number`、`scope`、`admins`、`store` 等目录归属；链交互能力放在所属功能目录的 `chain_*.rs` 文件内，跨业务链底层工具放在 `core/chain_*.rs`。
-
-## 16. 开发步骤（执行版）
-### 16.1 里程碑 0：规格冻结（0.5 天）
-- 冻结 `archive_no` 解析规则：字段位置、日期格式、异常处理策略。
-- 冻结 API 字段、错误码、通用返回结构（`code/message/data|trace_id`）。
-- 冻结权限矩阵：`SHENG_ADMIN` 与 `SHI_ADMIN` 的接口边界。
-- 交付物：全部冻结规格统一写入本技术文档（不再拆分独立规格文档）。
-- 验收标准：前后端、测试、区块链对接口与字段无歧义。
-
-### 16.2 里程碑 1：数据层与系统初始化（2-3 天）
-- 完成模块 Store 拆分：`store_citizens / store_cpms / store_subjects / store_ops`。
-- 运行缓存只作为进程内加速层，启动时从模块 Store 主数据恢复，不再作为持久化真源。
-- CPMS 授权、电子护照绑定、机构账户和登录审计按模块快照持久化。
-- 交付物：启动期当前结构初始化、数据字典。
-- 验收标准：全新 PostgreSQL 库启动后可直接创建当前目标结构；初始省级管理员只来自 `province_admins.rs`。
-
-### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）
-- 实现认证链路：`identify -> challenge -> verify`。
-- challenge 绑定 `domain/session_id/nonce/expires_at`，一次性消费与 TTL 过期清理。
-- 落地后端 RBAC 中间件，对每个管理接口进行角色强校验。
-- 实现市级管理员管理接口（仅省级管理员可访问）。
-- 交付物：认证 API、会话/JWT、权限中间件、管理员管理 API。
-- 验收标准：非管理员公钥拒绝登录；市级管理员访问管理员管理接口返回 403。
-
-### 16.4 里程碑 3：电子护照绑定主流程（3 天）
-- 完成 CPMS 授权验真流程：INSTALL 初始化后首次 ARCHIVE 验真绑定 `sfid_number + cpms_pubkey_hash`。
-- 完成 CPMS `ARCHIVE` 验签：`archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey` 必填。
-- 实现 wuminapp 签名确认：写入 `archive_no + sfid_code + wallet_pubkey`，`bind_status=BOUND`。
-- 交付物：绑定 challenge API、绑定提交 API、验签模块、审计日志落库。
-- 验收标准：伪造二维码与重放请求被拦截；绑定闭环可复现。
-
-### 16.5 里程碑 4：资格判定与区块链接口（2 天）
-- 接入 CPMS 二维码状态（`NORMAL`/`ABNORMAL`）作为投票资格判定源。
-- 实现 `/api/v1/app/voters/count` 与 `/api/v1/app/vote/credential`。
-- 增加区块链调用方鉴权（token 或签名）与防重放基础能力。
-- 交付物：链路自动接口、鉴权中间件、资格判定单测。
-- 验收标准：`ABNORMAL` 用户不计入可投票人数，校验接口返回一致。
-
-### 16.6 里程碑 5：公开查询与防滥用（1 天）
-- 实现公开查询接口：按 `archive_no`/`identity_code`/`wallet_pubkey` 检索。
-- 返回统一字段：`archive_no`、`identity_code`、`wallet_pubkey`（可选扩展资格字段）。
-- 启用匿名访问限流、IP 频控、访问日志审计。
-- 交付物：公开查询 API、限流策略、访问日志面板基础指标。
-- 验收标准：匿名可查询，异常频率请求可拦截且留痕。
-
-### 16.7 里程碑 6：前端收口（3-4 天）
-- 管理端统一页面：登录、电子护照绑定、查询、管理员管理。
-- 同一套前端支持两类管理员；省级管理员额外显示管理员管理模块。
-- 完善错误态、空态、加载态与操作反馈。
-- 交付物：`frontend` 联调版本、接口错误映射与提示规范。
-- 验收标准：核心流程均可前端闭环完成，无阻断级 UI 缺陷。
-
-### 16.8 里程碑 7：联调、测试与上线（4-5 天）
-- 功能联调：认证、电子护照绑定、投票凭证接口、公开查询。
-- 安全测试：越权、伪造二维码、重放、匿名滥用。
-- 上线准备：部署配置、监控告警、回滚预案、值班手册。
-- 发布策略：灰度 -> 指标观察 -> 全量切换。
-- 交付物：测试报告、上线清单、回滚演练记录。
-- 验收标准：P0/P1 缺陷清零后上线，关键指标达标。
-
-### 16.9 推荐排期（3 周）
-- 第 1 周：完成里程碑 0-2。
-- 第 2 周：完成里程碑 3-4。
-- 第 3 周：完成里程碑 5-7，灰度上线并进入稳定性观察。
-
-### 16.10 稳定性观察（上线后 1 周）
-- 重点监控：扫码验签失败率、登录验签失败率、绑定成功率、链路接口 P95、错误率。
-- 对异常流量与资格误判进行快速修正并追加回归测试。
-
-## 17. 变更控制
-- 本文档作为当前冻结基线。
-- 新需求必须通过 CR 流程更新本文档后再开发。
+# SFID 技术架构
+
+## 目标状态
+
+SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend/src/` 壳。前后端业务命名保持一致,公权机构使用 `gov`,私权机构使用 `private`,主体公共能力使用 `subjects`。
+
+系统不维护历史兼容通道。所有业务主数据只存在于结构化数据库表,不得在运行期再维护第二套聚合主数据。
+
+## 启动流程
+
+1. 读取 `DATABASE_URL` 和 Redis 配置。
+2. 初始化 PostgreSQL schema。
+3. 为 `subjects/citizens/gov/private/accounts/docs/audit` 创建按省分区。
+4. 初始化内置 43 个联邦管理员。
+5. 启动交易索引 worker。
+
+`sfid-backend serve` 不自动全量生成公权机构目录。确定性机构只在显式维护命令中写入。
+
+部署入口必须在后端 schema 初始化后、启动 `serve` 前执行 `ensure-gov`。该命令检查 `gov_manifest` 与当前目录 hash,已初始化且完整则跳过;缺失、不完整或目录版本变化时才写入所有确定性公权机构和公安局。行政区划真源变化时再执行按省或按市对账。页面列表接口只能读取持久化结果,不得触发全量补数据。
+
+## 数据表
+
+### 主体身份
+
+- `ids(sfid_number, kind, p_code, c_code)`:全局身份 ID 索引。
+- `subjects`:主体公共展示字段,按省分区。
+- `citizens`:公民电子护照绑定字段,按省分区。
+- `gov`:公权机构扩展字段,按省分区。
+- `private`:私权机构和非法人扩展字段,按省分区。
+
+`sfid_number` 是唯一且不可变的身份标识。不得新增 `identity_key`、`generation_key` 等第二身份键。
+
+### 账户与资料
+
+- `accounts`:机构账户,主键为 `(p_code, sfid_number, account_name)`。
+- `docs`:机构资料库元数据,文件本体存磁盘。
+
+### 管理员与安全
+
+- `admins`:联邦管理员/市级管理员。
+- `sheng_admin_scope`:联邦管理员所属省。
+- `admin_sessions`:登录会话。
+- `admin_login_challenges`:签名登录挑战。
+- `admin_qr_login_results`:扫码登录结果。
+- `admin_passkeys`、`admin_passkey_challenges`:Passkey 凭据和挑战。
+- `admin_action_challenges`、`admin_security_grants`:高风险操作二次确认。
+
+登录挑战、二维码结果和会话属于短生命周期安全运行态。清理逻辑必须在 Rust 中先计算明确截止时间,再把时间点传给 SQL 比较;SQL 中不得使用 `$1 - interval '...'` 这类参数参与 interval 运算的写法,避免 PostgreSQL 无法推断绑定参数类型。数据库错误必须展开 PostgreSQL 的 SQLSTATE、message、detail 和 hint,不得只把 `db error` 传到前端或启动日志。
+
+### CPMS 与公民绑定
+
+- `cpms_sites`:CPMS 安装授权、安装密钥、状态和 CPMS 公钥哈希。
+- `citizen_bind_challenges`:公民绑定签名挑战。
+- `citizen_status_imports`:CPMS 年度状态导入幂等记录。
+
+### 审计与链路
+
+- `audit`:结构化审计记录,按省分区。
+- `chain_requests`、`chain_nonces`:链路幂等与防重放。
+- `tx_records`、`tx_indexer_state`:链上交易索引。
+
+目标数据库不得保留废弃快照或旧机构行表;它们也不得作为兼容数据源。
+
+## 权限模型
+
+管理员分为联邦管理员和市级管理员:
+
+- 联邦管理员:只能增删改查所属省数据。
+- 市级管理员:只能增删改查所属市数据。
+
+所有列表和 CRUD 接口必须把管理员范围转成 SQL 条件。禁止读取全量数据后在 Rust 或前端过滤。
+
+市级管理员范围不单独建表。市级管理员记录保存在 `admins`,所属市使用 `admins.city`,所属省通过 `admins.created_by` 指向的联邦管理员和 `sheng_admin_scope` 解析。注册局页面统一显示 `联邦管理员列表`、`市级管理员列表`;市级管理员在该页面只读查看本人所属省的联邦管理员和本人所属市的市级管理员目录,不得显示新增、编辑或删除入口。
+
+## 前端交互与提示
+
+公权机构和公安局使用同一个 `GovView` 组件边界,但它们属于两个一级 tab。顶部 tab 点击必须生成重置信号,详情页本地状态必须在 `category` 或重置信号变化时清空,避免从某个机构详情页切换模块时仍停留在旧详情。
+
+SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件只允许调用 `notice.success/error/warning/info/confirm/warningModal`,不得直接调用 Ant Design `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。统一入口负责:
+
+- 同一时刻只显示一个提示。
+- 将 WebAuthn、网络和后端错误翻译为中文。
+- 将用户取消类错误显示为取消提示或静默,不得展示 W3C 英文原文。
+
+业务组件捕获异常时必须把原始错误对象传给 `notice.error(error, '中文兜底提示')`,不得先取 `error.message` 再传入提示入口。后端 `ApiError.error_code` 和原始 `message` 的翻译只允许在 `notice.ts` 中实现;无法识别的英文错误必须在统一入口降级为中文兜底提示,不得原样显示给用户。
+
+## 公权机构
+
+`gov` 模块负责:
+
+- 公安局确定性目录。
+- 政府、立法院、司法院、监察院、公民教育委员会、公民储备委员会等宪法机构目录。
+- 根据 `china` 行政区划变化执行目标范围对账。
+
+公权机构不保存上下级字段。国家/部/省/市/镇只作为目录分类和行政区范围参与生成、查询和对账。主体表 `subjects` 保存身份、名称、行政区和状态;`gov` 只保存 `institution_code/org_code` 等机构类型细分;初始化批次只记录在 `gov_manifest`,不得写入初始化来源业务字段。
+
+## 私权机构与非法人
+
+私权机构由注册局管理员人工注册。学校属于私权机构的一种,机构类型使用教育委员会代码 `JY`。
+
+非法人能力放在 `sfid/backend/subjects/uninorg`,因为公权机构和私权机构都可能拥有从属非法人机构。
+
+## 公开接口
+
+公开查询不要求管理员 token,由全局限流保护。接口只读取结构化表:
+
+- `/api/v1/app/institutions/search`
+- `/api/v1/app/institutions/:sfid_number`
+- `/api/v1/app/institutions/:sfid_number/accounts`
+- `/api/v1/app/clearing-banks/search`
+- `/api/v1/app/clearing-banks/eligible-search`
+- `/api/v1/app/voters/count`
+- `/api/v1/app/vote/credential`
+- `/api/v1/app/myid/status`
+
+## 禁止项
+
+- 不得恢复旧聚合快照目录或旧运行期分片缓存。
+- 不得双写历史格式。
+- 不得新增历史兼容接口。
+- 不得在 SFID 业务模块内实现投票流程。投票流程只属于投票引擎,SFID 只签发其已定义的凭证。

@@ -33,7 +33,6 @@ import {
   Spin,
   Tag,
   Typography,
-  message,
 } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
@@ -58,10 +57,11 @@ import {
   CLEARING_BANK_ELIGIBLE_LABEL,
   isClearingBankEligible,
 } from './clearingBankEligible';
+import { notice } from '../utils/notice';
 
 // 创建者角色中文映射(与列表页保持一致)。
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
-  SHENG_ADMIN: '省级管理员',
+  FEDERAL_ADMIN: '联邦管理员',
   SHI_ADMIN: '市级管理员',
 };
 
@@ -160,7 +160,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const onParentSearch = async (value: string) => {
     const q = value.trim();
     if (!q) {
-      message.warning('请先输入 SFID 或机构名称');
+      notice.warning('请先输入 SFID 或机构名称');
       setParentSearchOpts([]);
       return;
     }
@@ -169,10 +169,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       const rows = await searchParentInstitutions(auth, q);
       setParentSearchOpts(rows);
       if (rows.length === 0) {
-        message.info('未找到匹配的法人机构');
+        notice.info('未找到匹配的法人机构');
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '搜索失败');
+      notice.error(err, '');
       setParentSearchOpts([]);
     } finally {
       setParentSearching(false);
@@ -233,7 +233,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const onCheckName = async () => {
     const name = currentName.trim();
     if (!name) {
-      message.warning('请先输入机构名称');
+      notice.warning('请先输入机构名称');
       return;
     }
     if (isNameUnchanged()) {
@@ -247,14 +247,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       // 所以必须在名称改动时才调用;未改名的场景已在 isNameUnchanged 提前返回)
       const { exists } = await checkInstitutionName(auth, name);
       if (exists) {
-        message.error('该机构名称已被使用,请更换名称');
+        notice.error('该机构名称已被使用,请更换名称');
         setNameAvailable(false);
       } else {
-        message.success('名称可用');
+        notice.success('名称可用');
         setNameAvailable(true);
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '查重失败');
+      notice.error(err, '');
       setNameAvailable(null);
     } finally {
       setNameChecking(false);
@@ -264,20 +264,20 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const onSaveInfo = async (values: InfoFormValues) => {
     const name = values.institution_name.trim();
     if (!name) {
-      message.error('机构名称不能为空');
+      notice.error('机构名称不能为空');
       return;
     }
     if (isSFR && !values.sub_type) {
-      message.error('请选择企业类型');
+      notice.error('请选择企业类型');
       return;
     }
     if (isFFR && !values.parent_sfid_number) {
-      message.error('请选择所属法人机构');
+      notice.error('请选择所属法人机构');
       return;
     }
     // 名称变了必须查重通过才能保存
     if (!isNameUnchanged() && nameAvailable !== true) {
-      message.warning('请点击搜索图标检查名称是否可用');
+      notice.warning('请点击搜索图标检查名称是否可用');
       return;
     }
     setSavingInfo(true);
@@ -287,16 +287,16 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         sub_type: isSFR ? values.sub_type ?? null : null,
         parent_sfid_number: isFFR ? values.parent_sfid_number : undefined,
       });
-      message.success('机构信息已保存');
+      notice.success('机构信息已保存');
       setEditing(false);
       onReload();
     } catch (err) {
       const raw = err instanceof Error ? err.message : '保存失败';
       if (raw.includes('已被使用') || raw.includes('同名机构')) {
-        message.error('该机构名称已被使用,请更换名称');
+        notice.error('该机构名称已被使用,请更换名称');
         setNameAvailable(false);
       } else {
-        message.error(raw);
+        notice.error(err, '保存失败');
       }
     } finally {
       setSavingInfo(false);

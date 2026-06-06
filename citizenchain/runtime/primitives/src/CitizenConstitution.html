@@ -1618,8 +1618,8 @@
   </h3>
 
   <p class="article-paragraph">
-    <span class="cn body-cn">中华民族联邦共和国设总统府，总统府设总统职位1个，由拥有选举权的公民选举产生，设副总统职位1个，由总统提名；总统府下设国家安全局、国家情报局、国家注册局、国家新闻局和国家人事局。</span>
-    <span class="en body-en">The Federal Republic of the China Nation shall establish a Presidential Office. The Presidential Office shall have one President position, to be filled by election by citizens possessing the right to vote, and one Vice President position, to be nominated by the President. The Presidential Office shall have under it the National Security Bureau, the National Intelligence Bureau, the National Registration Bureau, the National News Bureau, and the National Personnel Bureau.</span>
+    <span class="cn body-cn">中华民族联邦共和国设总统府，总统府设总统职位1个，由拥有选举权的公民选举产生，设副总统职位1个，由总统提名；总统府下设联邦安全局、联邦情报局、联邦特勤局、联邦注册局和联邦人事局。</span>
+    <span class="en body-en">The Federal Republic of the China Nation shall establish a Presidential Office. The Presidential Office shall have one President position, to be filled by election by citizens possessing the right to vote, and one Vice President position, to be nominated by the President. Under the Presidential Office shall be the Federal Security Bureau, the Federal Intelligence Bureau, the Federal Special Service Bureau, the Federal Registry Bureau, and the Federal Personnel Bureau.</span>
   </p>
   <p class="article-paragraph">
     <span class="cn body-cn">第一款	总统提名的副总统，由国家参议会以常规案表决任免产生，常规案表决未通过的，总统可发起常规案二审表决，常规案二审表决未通过的，该提名即驳回，并由总统另选被提名人；总统提名的副总统，经国家参议会三次常规案二审表决仍未通过的，总统可直接提名并任免副总统。</span>
@@ -3250,14 +3250,21 @@
         const node = link.closest('.toc-node');
         const isBranch = node?.classList.contains('toc-branch');
         link.addEventListener('click', (event) => {
-          const id = (link.getAttribute('href') || '').replace(/^#/, '');
+          const href = link.getAttribute('href') || '';
+          const id = href.replace(/^#/, '');
+          if (!id || !href.startsWith('#')) return;
+          event.preventDefault();
           if (isBranch) {
-            event.preventDefault();
             setExpanded(node, !node.classList.contains('expanded'));
-            if (id) setActive(id, false);
+            setActive(id, false);
             return;
           }
-          if (id) setActive(id, true);
+          // 中文注释：sandbox srcDoc 默认 hash 导航在桌面 WebView 中可能白屏，目录条目统一改为 iframe 内部滚动。
+          const target = document.getElementById(id);
+          if (target) {
+            setActive(id, true);
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         });
       });
 

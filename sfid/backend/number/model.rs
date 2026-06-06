@@ -21,6 +21,12 @@ pub(crate) struct SfidCityItem {
 }
 
 #[derive(Serialize)]
+pub(crate) struct SfidTownItem {
+    pub(crate) name: String,
+    pub(crate) code: String,
+}
+
+#[derive(Serialize)]
 pub(crate) struct AdminSfidMetaOutput {
     pub(crate) a3_options: Vec<SfidOptionItem>,
     pub(crate) institution_options: Vec<SfidOptionItem>,
@@ -31,4 +37,10 @@ pub(crate) struct AdminSfidMetaOutput {
 #[derive(Deserialize)]
 pub(crate) struct AdminSfidCitiesQuery {
     pub(crate) province: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AdminSfidTownsQuery {
+    pub(crate) province: String,
+    pub(crate) city: String,
 }

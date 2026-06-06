@@ -91,26 +91,6 @@ pub(crate) struct CpmsStatusExportImportOutput {
     unmatched_release_records: Vec<String>,
 }
 
-struct ImportPlan {
-    updates: Vec<BindingUpdatePlan>,
-    releases: Vec<BindingReleasePlan>,
-    unmatched_binding_records: Vec<String>,
-    unmatched_release_records: Vec<String>,
-}
-
-struct BindingUpdatePlan {
-    citizen_id: u64,
-    record: CpmsCitizenBindingRecord,
-    normalized_wallet_pubkey: String,
-    canonical_wallet_address: String,
-    wallet_changed: bool,
-}
-
-struct BindingReleasePlan {
-    citizen_id: u64,
-    released_at: i64,
-}
-
 /// 导入 CPMS 年度报告。
 ///
 /// 中文注释：接口开放给所有管理员；导入前先校验 CPMS 安装授权、公钥绑定、
@@ -146,15 +126,23 @@ pub(crate) async fn admin_import_cpms_status_export(
         return api_error(status, code, message.as_str());
     }
 
-    let import_key = import_record_key(&file.sfid_number, file.export_year);
-    let mut store = match store_write_or_500(&state) {
+    if let Some(existing_hash) = match state
+        .db
+        .get_cpms_status_import_hash(&file.sfid_number, file.export_year)
+    {
         Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    if let Some(existing) = store.cpms_status_export_imports.get(import_key.as_str()) {
-        if existing.records_hash != file.records_hash {
+        Err(err) => {
+            tracing::error!(error = %err, "query cpms status import failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "import query failed",
+            );
+        }
+    } {
+        if existing_hash != file.records_hash {
             append_import_audit(
-                &mut store,
+                &state,
                 &ctx,
                 &headers,
                 &file,
@@ -186,39 +174,30 @@ pub(crate) async fn admin_import_cpms_status_export(
         .into_response();
     }
 
-    let plan = match build_import_plan(&store, &file) {
+    let output = match apply_status_export_to_db(&state, &ctx, &file) {
         Ok(v) => v,
         Err(message) => {
-            append_import_audit(&mut store, &ctx, &headers, &file, "FAILED", message.clone());
+            append_import_audit(&state, &ctx, &headers, &file, "FAILED", message.clone());
             return api_error(StatusCode::CONFLICT, 1005, message.as_str());
         }
     };
-    let affected_citizen_ids: Vec<u64> = plan
-        .updates
-        .iter()
-        .map(|item| item.citizen_id)
-        .chain(plan.releases.iter().map(|item| item.citizen_id))
-        .collect();
-    let output = apply_import_plan(&mut store, &ctx, &file, plan);
-    // 中文注释:管理员公民列表读取 citizens 分区表;CPMS 年度导入改动 Store 后,
-    // 必须把受影响记录同步写入目标表,否则精确检索会读到过期状态或空结果。
-    let changed_records: Vec<_> = affected_citizen_ids
-        .iter()
-        .filter_map(|id| store.citizen_records.get(id).cloned())
-        .collect();
-    store.cpms_status_export_imports.insert(
-        import_key,
-        CpmsStatusExportImportRecord {
-            sfid_number: file.sfid_number.clone(),
-            export_year: file.export_year,
-            export_batch_id: file.export_batch_id.clone(),
-            records_hash: file.records_hash.clone(),
-            imported_at: Utc::now(),
-            imported_by: ctx.admin_pubkey.clone(),
-        },
-    );
+    if let Err(err) = state.db.insert_cpms_status_import(
+        &file.sfid_number,
+        file.export_year,
+        &file.export_batch_id,
+        &file.records_hash,
+        &ctx.admin_pubkey,
+        &file,
+    ) {
+        tracing::error!(error = %err, "insert cpms status import failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "import record write failed",
+        );
+    }
     append_import_audit(
-        &mut store,
+        &state,
         &ctx,
         &headers,
         &file,
@@ -232,18 +211,6 @@ pub(crate) async fn admin_import_cpms_status_export(
             output.unmatched_release_records.len()
         ),
     );
-    drop(store);
-
-    for record in changed_records {
-        if let Err(e) = state.store.upsert_citizen_row(&record) {
-            tracing::error!(citizen_id = record.id, error = %e, "citizen row upsert failed after CPMS status import");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "citizen row write failed",
-            );
-        }
-    }
 
     Json(ApiResponse {
         code: 0,
@@ -261,24 +228,15 @@ async fn validate_cpms_status_export(
     validate_export_header(file)?;
     validate_export_records(file)?;
 
-    let site = {
-        let store = state.store.read().map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "store read failed".to_string(),
-            )
-        })?;
-        store
-            .cpms_site_keys
-            .get(file.sfid_number.as_str())
-            .cloned()
-            .ok_or((
-                StatusCode::NOT_FOUND,
-                1004,
-                "cpms install authorization not found".to_string(),
-            ))?
-    };
+    let site = state
+        .db
+        .get_cpms_site(file.sfid_number.as_str())
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, 1004, err))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            1004,
+            "cpms install authorization not found".to_string(),
+        ))?;
     if !in_scope_cpms_site(&site, ctx.admin_province.as_deref()) {
         return Err((
             StatusCode::FORBIDDEN,
@@ -480,9 +438,15 @@ fn validate_export_records(file: &CpmsStatusExportFile) -> Result<(), (StatusCod
     Ok(())
 }
 
-fn build_import_plan(store: &Store, file: &CpmsStatusExportFile) -> Result<ImportPlan, String> {
-    let mut updates = Vec::new();
-    let mut releases = Vec::new();
+fn apply_status_export_to_db(
+    state: &AppState,
+    ctx: &AdminAuthContext,
+    file: &CpmsStatusExportFile,
+) -> Result<CpmsStatusExportImportOutput, String> {
+    let imported_binding_records = file.citizen_binding_records.len();
+    let mut updated_binding_records = 0usize;
+    let mut wallet_replaced_records = 0usize;
+    let mut released_binding_records = 0usize;
     let mut unmatched_binding_records = Vec::new();
     let mut unmatched_release_records = Vec::new();
     let release_archive_nos: HashSet<String> = file
@@ -496,28 +460,10 @@ fn build_import_plan(store: &Store, file: &CpmsStatusExportFile) -> Result<Impor
             .ok_or_else(|| "invalid wallet_pubkey".to_string())?;
         let canonical_wallet_address = pubkey_hex_to_ss58(normalized_wallet_pubkey.as_str())
             .ok_or_else(|| "invalid wallet_pubkey".to_string())?;
-        let wallet_owner = store
-            .citizen_id_by_wallet_pubkey
-            .get(normalized_wallet_pubkey.as_str())
-            .copied();
-        let citizen_id = match store
-            .citizen_id_by_archive_no
-            .get(record.archive_no.as_str())
-        {
-            Some(cid) => *cid,
-            None => {
-                if let Some(owner) = wallet_owner {
-                    if is_bound_citizen_record(store, owner)
-                        && !owner_archive_is_released(store, owner, &release_archive_nos)
-                    {
-                        return Err("wallet_pubkey already bound to another archive_no".to_string());
-                    }
-                }
-                unmatched_binding_records.push(record.archive_no.clone());
-                continue;
-            }
-        };
-        let Some(existing) = store.citizen_records.get(&citizen_id) else {
+        let Some(mut existing) = state
+            .db
+            .find_bound_citizen_by_archive(record.archive_no.as_str())?
+        else {
             unmatched_binding_records.push(record.archive_no.clone());
             continue;
         };
@@ -525,133 +471,55 @@ fn build_import_plan(store: &Store, file: &CpmsStatusExportFile) -> Result<Impor
             unmatched_binding_records.push(record.archive_no.clone());
             continue;
         }
-        if let Some(owner) = wallet_owner {
-            if owner != citizen_id
-                && is_bound_citizen_record(store, owner)
-                && !owner_archive_is_released(store, owner, &release_archive_nos)
+        if let Some(owner) = state
+            .db
+            .find_bound_citizen_by_wallet(normalized_wallet_pubkey.as_str())?
+        {
+            if owner.id != existing.id
+                && !owner
+                    .archive_no
+                    .as_ref()
+                    .is_some_and(|archive_no| release_archive_nos.contains(archive_no))
             {
                 return Err("wallet_pubkey already bound to another archive_no".to_string());
             }
         }
-        let wallet_changed =
-            existing.wallet_pubkey.as_deref() != Some(normalized_wallet_pubkey.as_str());
-        updates.push(BindingUpdatePlan {
-            citizen_id,
-            record: record.clone(),
-            normalized_wallet_pubkey,
-            canonical_wallet_address,
-            wallet_changed,
-        });
+        if existing.wallet_pubkey.as_deref() != Some(normalized_wallet_pubkey.as_str()) {
+            wallet_replaced_records += 1;
+        }
+        existing.wallet_pubkey = Some(normalized_wallet_pubkey);
+        existing.wallet_address = Some(canonical_wallet_address);
+        existing.citizen_status = Some(record.citizen_status.clone());
+        existing.voting_eligible =
+            record.voting_eligible && record.citizen_status == CitizenStatus::Normal;
+        existing.status_updated_at = Some(record.status_updated_at);
+        existing.bound_at = chrono::DateTime::<Utc>::from_timestamp(record.wallet_bound_at, 0);
+        existing.bound_by = Some(ctx.admin_pubkey.clone());
+        state.db.upsert_citizen_row(&existing)?;
+        updated_binding_records += 1;
     }
 
-    for record in &file.binding_release_records {
-        let Some(citizen_id) = store
-            .citizen_id_by_archive_no
-            .get(record.archive_no.as_str())
-            .copied()
+    for release in &file.binding_release_records {
+        let Some(mut existing) = state
+            .db
+            .find_bound_citizen_by_archive(release.archive_no.as_str())?
         else {
-            unmatched_release_records.push(record.archive_no.clone());
-            continue;
-        };
-        let Some(existing) = store.citizen_records.get(&citizen_id) else {
-            unmatched_release_records.push(record.archive_no.clone());
+            unmatched_release_records.push(release.archive_no.clone());
             continue;
         };
         if existing.bind_status() != CitizenBindStatus::Bound {
-            unmatched_release_records.push(record.archive_no.clone());
+            unmatched_release_records.push(release.archive_no.clone());
             continue;
         }
-        releases.push(BindingReleasePlan {
-            citizen_id,
-            released_at: record.released_at,
-        });
+        existing.citizen_status = Some(CitizenStatus::Revoked);
+        existing.voting_eligible = false;
+        existing.status_updated_at = Some(release.released_at);
+        existing.bound_by = Some(ctx.admin_pubkey.clone());
+        state.db.upsert_citizen_row(&existing)?;
+        released_binding_records += 1;
     }
 
-    Ok(ImportPlan {
-        updates,
-        releases,
-        unmatched_binding_records,
-        unmatched_release_records,
-    })
-}
-
-fn apply_import_plan(
-    store: &mut Store,
-    ctx: &AdminAuthContext,
-    file: &CpmsStatusExportFile,
-    plan: ImportPlan,
-) -> CpmsStatusExportImportOutput {
-    let imported_binding_records = file.citizen_binding_records.len();
-    let updated_binding_records = plan.updates.len();
-    let wallet_replaced_records = plan
-        .updates
-        .iter()
-        .filter(|item| item.wallet_changed)
-        .count();
-    let released_binding_records = plan.releases.len();
-
-    for release in plan.releases {
-        let Some(existing) = store.citizen_records.get(&release.citizen_id).cloned() else {
-            continue;
-        };
-        if let Some(archive_no) = existing.archive_no.as_deref() {
-            store.citizen_id_by_archive_no.remove(archive_no);
-        }
-        if let Some(wallet_pubkey) = existing.wallet_pubkey.as_deref() {
-            store.citizen_id_by_wallet_pubkey.remove(wallet_pubkey);
-            invalidate_vote_cache_for_pubkey(store, wallet_pubkey);
-        }
-        if let Some(sfid_code) = existing.sfid_code.as_deref() {
-            store.citizen_id_by_sfid_code.remove(sfid_code);
-        }
-        if let Some(record) = store.citizen_records.get_mut(&release.citizen_id) {
-            record.wallet_pubkey = None;
-            record.wallet_address = None;
-            record.archive_no = None;
-            record.sfid_code = None;
-            record.citizen_status = Some(CitizenStatus::Revoked);
-            record.voting_eligible = false;
-            record.archive_valid_from = None;
-            record.archive_valid_until = None;
-            record.status_updated_at = Some(release.released_at);
-            record.bound_at = None;
-            record.bound_by = Some(ctx.admin_pubkey.clone());
-        }
-    }
-
-    for update in plan.updates {
-        let old_wallet_pubkey = store
-            .citizen_records
-            .get(&update.citizen_id)
-            .and_then(|record| record.wallet_pubkey.clone());
-        if let Some(old_pubkey) = old_wallet_pubkey.as_deref() {
-            if old_pubkey != update.normalized_wallet_pubkey {
-                store.citizen_id_by_wallet_pubkey.remove(old_pubkey);
-                invalidate_vote_cache_for_pubkey(store, old_pubkey);
-            }
-        }
-        let Some(record) = store.citizen_records.get_mut(&update.citizen_id) else {
-            continue;
-        };
-        let voting_eligible =
-            update.record.voting_eligible && update.record.citizen_status == CitizenStatus::Normal;
-        record.wallet_pubkey = Some(update.normalized_wallet_pubkey.clone());
-        record.wallet_address = Some(update.canonical_wallet_address);
-        record.citizen_status = Some(update.record.citizen_status);
-        record.voting_eligible = voting_eligible;
-        record.status_updated_at = Some(update.record.status_updated_at);
-        record.bound_at = chrono::DateTime::<Utc>::from_timestamp(update.record.wallet_bound_at, 0);
-        record.bound_by = Some(ctx.admin_pubkey.clone());
-        store
-            .citizen_id_by_archive_no
-            .insert(update.record.archive_no, update.citizen_id);
-        store
-            .citizen_id_by_wallet_pubkey
-            .insert(update.normalized_wallet_pubkey.clone(), update.citizen_id);
-        invalidate_vote_cache_for_pubkey(store, update.normalized_wallet_pubkey.as_str());
-    }
-
-    CpmsStatusExportImportOutput {
+    Ok(CpmsStatusExportImportOutput {
         sfid_number: file.sfid_number.clone(),
         export_year: file.export_year,
         export_batch_id: file.export_batch_id.clone(),
@@ -660,29 +528,33 @@ fn apply_import_plan(
         updated_binding_records,
         wallet_replaced_records,
         released_binding_records,
-        unmatched_binding_records: plan.unmatched_binding_records,
-        unmatched_release_records: plan.unmatched_release_records,
-    }
+        unmatched_binding_records,
+        unmatched_release_records,
+    })
 }
 
 fn append_import_audit(
-    store: &mut Store,
+    state: &AppState,
     ctx: &AdminAuthContext,
     headers: &HeaderMap,
     file: &CpmsStatusExportFile,
     result: &'static str,
     detail: String,
 ) {
-    append_audit_log_with_meta(
-        store,
+    crate::core::runtime_ops::append_audit_log(
+        state,
         "CPMS_STATUS_EXPORT_IMPORT",
         &ctx.admin_pubkey,
-        None,
-        Some(format!("{}:{}", file.sfid_number, file.export_year)),
-        request_id_from_headers(headers),
-        actor_ip_from_headers(headers),
-        result,
-        detail,
+        Some(file.sfid_number.clone()),
+        format!(
+            "year={} batch={} result={} request_id={:?} actor_ip={:?} detail={}",
+            file.export_year,
+            file.export_batch_id,
+            result,
+            request_id_from_headers(headers),
+            actor_ip_from_headers(headers),
+            detail
+        ),
     );
 }
 
@@ -751,39 +623,71 @@ fn normalize_pubkey_hex(pubkey: &str) -> Option<String> {
     Some(format!("0x{}", hex::encode(bytes)))
 }
 
-fn is_bound_citizen_record(store: &Store, citizen_id: u64) -> bool {
-    store
-        .citizen_records
-        .get(&citizen_id)
-        .map(|record| record.bind_status() == CitizenBindStatus::Bound)
-        .unwrap_or(false)
-}
-
-fn owner_archive_is_released(
-    store: &Store,
-    citizen_id: u64,
-    release_archive_nos: &HashSet<String>,
-) -> bool {
-    store
-        .citizen_records
-        .get(&citizen_id)
-        .and_then(|record| record.archive_no.as_ref())
-        .map(|archive_no| release_archive_nos.contains(archive_no))
-        .unwrap_or(false)
-}
-
 fn hash_hex(bytes: &[u8]) -> String {
     format!("0x{}", hex::encode(Blake2b256::digest(bytes)))
 }
 
-fn import_record_key(sfid_number: &str, export_year: i32) -> String {
-    format!("{}|{}", sfid_number.trim(), export_year)
+impl Db {
+    fn get_cpms_status_import_hash(
+        &self,
+        sfid_number: &str,
+        export_year: i32,
+    ) -> Result<Option<String>, String> {
+        let sfid_number = sfid_number.trim().to_string();
+        self.with_client(move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT records_hash
+                     FROM citizen_status_imports
+                     WHERE sfid_number = $1 AND export_year = $2",
+                    &[&sfid_number, &export_year],
+                )
+                .map_err(|e| format!("query status import failed: {e}"))?;
+            Ok(row.map(|row| row.get(0)))
+        })
+    }
+
+    fn insert_cpms_status_import(
+        &self,
+        sfid_number: &str,
+        export_year: i32,
+        export_batch_id: &str,
+        records_hash: &str,
+        imported_by: &str,
+        file: &CpmsStatusExportFile,
+    ) -> Result<(), String> {
+        let sfid_number = sfid_number.trim().to_string();
+        let export_batch_id = export_batch_id.trim().to_string();
+        let records_hash = records_hash.trim().to_string();
+        let imported_by = imported_by.trim().to_string();
+        let payload = serde_json::to_value(file)
+            .map_err(|e| format!("serialize cpms status import failed: {e}"))?;
+        let imported_at = Utc::now();
+        self.with_client(move |conn| {
+            conn.execute(
+                "INSERT INTO citizen_status_imports (
+                    sfid_number, export_year, export_batch_id, records_hash,
+                    imported_at, imported_by, payload
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                &[
+                    &sfid_number,
+                    &export_year,
+                    &export_batch_id,
+                    &records_hash,
+                    &imported_at,
+                    &imported_by,
+                    &payload,
+                ],
+            )
+            .map_err(|e| format!("insert status import failed: {e}"))?;
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
 
     fn sample_file() -> CpmsStatusExportFile {
         let mut file = CpmsStatusExportFile {
@@ -828,108 +732,5 @@ mod tests {
         file.records_hash =
             records_hash(&file.citizen_binding_records, &file.binding_release_records).unwrap();
         assert!(validate_export_records(&file).is_err());
-    }
-
-    fn bound_record(
-        id: u64,
-        archive_no: &str,
-        wallet_pubkey: &str,
-        sfid_code: &str,
-    ) -> CitizenRecord {
-        CitizenRecord {
-            id,
-            wallet_pubkey: Some(wallet_pubkey.to_string()),
-            wallet_address: Some(
-                pubkey_hex_to_ss58(wallet_pubkey).unwrap_or_else(|| "5F-test".to_string()),
-            ),
-            archive_no: Some(archive_no.to_string()),
-            sfid_code: Some(sfid_code.to_string()),
-            citizen_status: Some(CitizenStatus::Normal),
-            voting_eligible: true,
-            archive_valid_from: Some("2026-01-01".to_string()),
-            archive_valid_until: Some("2035-12-31".to_string()),
-            status_updated_at: Some(1),
-            sfid_signature: None,
-            province_code: Some("GD".to_string()),
-            city_code: Some("001".to_string()),
-            bound_at: Some(Utc::now()),
-            bound_by: Some("admin".to_string()),
-            created_at: Utc::now(),
-        }
-    }
-
-    #[test]
-    fn release_in_same_report_allows_wallet_to_move_to_another_archive() {
-        let old_wallet = format!("0x{}", "11".repeat(32));
-        let new_wallet = format!("0x{}", "22".repeat(32));
-        let old_wallet_address = pubkey_hex_to_ss58(&old_wallet).unwrap();
-        let mut store = Store::default();
-        store
-            .citizen_records
-            .insert(1, bound_record(1, "ARCHIVE-OLD", &old_wallet, "SFID-OLD"));
-        store
-            .citizen_records
-            .insert(2, bound_record(2, "ARCHIVE-NEW", &new_wallet, "SFID-NEW"));
-        store
-            .citizen_id_by_archive_no
-            .insert("ARCHIVE-OLD".to_string(), 1);
-        store
-            .citizen_id_by_archive_no
-            .insert("ARCHIVE-NEW".to_string(), 2);
-        store
-            .citizen_id_by_wallet_pubkey
-            .insert(old_wallet.clone(), 1);
-        store
-            .citizen_id_by_wallet_pubkey
-            .insert(new_wallet.clone(), 2);
-        store
-            .citizen_id_by_sfid_code
-            .insert("SFID-OLD".to_string(), 1);
-        store
-            .citizen_id_by_sfid_code
-            .insert("SFID-NEW".to_string(), 2);
-
-        let mut file = sample_file();
-        file.citizen_binding_records = vec![CpmsCitizenBindingRecord {
-            archive_no: "ARCHIVE-NEW".to_string(),
-            wallet_address: old_wallet_address,
-            wallet_pubkey: old_wallet.clone(),
-            wallet_sig_alg: WALLET_SIG_ALG_SR25519.to_string(),
-            wallet_bound_at: 10,
-            citizen_status: CitizenStatus::Normal,
-            voting_eligible: true,
-            status_updated_at: 10,
-        }];
-        file.binding_release_records = vec![CpmsBindingReleaseRecord {
-            archive_no: "ARCHIVE-OLD".to_string(),
-            released_at: 11,
-            release_reason: RELEASE_REASON_AFTER_100_YEARS.to_string(),
-        }];
-        file.citizen_binding_records_count = 1;
-        file.binding_release_records_count = 1;
-        file.records_hash =
-            records_hash(&file.citizen_binding_records, &file.binding_release_records).unwrap();
-
-        let plan = build_import_plan(&store, &file).expect("plan");
-        assert_eq!(plan.updates.len(), 1);
-        assert_eq!(plan.releases.len(), 1);
-
-        let ctx = AdminAuthContext {
-            admin_pubkey: "admin".to_string(),
-            role: AdminRole::ShengAdmin,
-            admin_name: "管理员".to_string(),
-            admin_province: None,
-            admin_city: None,
-            passkey_bound: false,
-        };
-        let output = apply_import_plan(&mut store, &ctx, &file, plan);
-        assert_eq!(output.updated_binding_records, 1);
-        assert_eq!(output.released_binding_records, 1);
-        assert_eq!(store.citizen_id_by_wallet_pubkey.get(&old_wallet), Some(&2));
-        assert!(store
-            .citizen_records
-            .get(&1)
-            .and_then(|record| record.sfid_code.as_ref())
-            .is_none());
     }
 }

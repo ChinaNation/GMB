@@ -9,7 +9,7 @@ export interface DownloadQrOptions {
   filename: string;
   // 白边宽度,默认 32px
   padding?: number;
-  // 失败时的回调(比如 message.error),不抛异常
+  // 失败时的提示回调,不抛异常。
   onError?: (msg: string) => void;
 }
 

@@ -15,7 +15,7 @@ use crate::admins::model::AdminRole;
 pub struct VisibleScope {
     /// 可见省份列表。当前最少 1 个(本省),保留 Vec 是为了将来扩展跨省视图。
     pub provinces: Vec<String>,
-    /// 可见城市列表。空 vec 表示"不限市"(SHENG_ADMIN)。
+    /// 可见城市列表。空 vec 表示"不限市"(FEDERAL_ADMIN)。
     pub cities: Vec<String>,
     /// 是否可以增删改。当前两角色在自己范围内都能写,保留字段为将来扩展只读角色。
     pub can_write: bool,
@@ -25,7 +25,7 @@ pub struct VisibleScope {
     pub skip_province_list: bool,
     /// 进入 tab 时是否跳过市列表(仅 SHI_ADMIN)。
     pub skip_city_list: bool,
-    /// 锁定的省份(SHENG_ADMIN / SHI_ADMIN 进入时自动填)。
+    /// 锁定的省份(FEDERAL_ADMIN / SHI_ADMIN 进入时自动填)。
     pub locked_province: Option<String>,
     /// 锁定的市(SHI_ADMIN 进入时自动填)。
     pub locked_city: Option<String>,
@@ -80,7 +80,7 @@ pub fn get_visible_scope(ctx: &AdminAuthContext) -> VisibleScope {
             let province = ctx
                 .admin_province
                 .clone()
-                .unwrap_or_else(|| "__SHENG_ADMIN_MISSING_PROVINCE__".to_string());
+                .unwrap_or_else(|| "__FEDERAL_ADMIN_MISSING_PROVINCE__".to_string());
             VisibleScope::sheng_admin(province)
         }
         AdminRole::ShiAdmin => {

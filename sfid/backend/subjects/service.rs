@@ -5,12 +5,8 @@
 
 #![allow(dead_code)]
 
-use chrono::Utc;
-
 use crate::number::{classify, InstitutionCategory, InstitutionCode, A3};
-use crate::store::Store;
 use crate::subjects::model::MultisigAccount;
-use crate::subjects::store;
 use crate::subjects::MultisigChainStatus;
 
 pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &["主账户", "费用账户"];
@@ -102,32 +98,6 @@ pub fn derive_category(
     classify(a3, code, institution_name)
 }
 
-/// 检查机构名称是否已被全国任意机构占用(私权机构使用)。
-/// 两步式改造:institution_name 为 `Option<String>`,未命名机构视为不占名。
-/// 可选 `exclude_sfid_number` 用于更新自身时排除自己。
-pub fn institution_name_exists(store: &Store, name: &str) -> bool {
-    institution_name_exists_excluding(store, name, None)
-}
-
-pub fn institution_name_exists_excluding(
-    store: &Store,
-    name: &str,
-    exclude_sfid_number: Option<&str>,
-) -> bool {
-    store.multisig_institutions.values().any(|i| {
-        i.institution_name.as_deref() == Some(name)
-            && exclude_sfid_number.map_or(true, |ex| i.sfid_number != ex)
-    })
-}
-
-/// 检查同城是否存在同名机构(公权机构使用:不同市允许重名)。
-pub fn institution_name_exists_in_city(store: &Store, name: &str, city: &str) -> bool {
-    store
-        .multisig_institutions
-        .values()
-        .any(|i| i.institution_name.as_deref() == Some(name) && i.city == city)
-}
-
 // ─── 两步式第二步:sub_type 与 P1 联动校验 ──────────────────────
 //
 // 联动规则:
@@ -193,78 +163,28 @@ pub fn validate_sub_type_with_p1(
     }
 }
 
-/// 校验机构主键 sfid_number 未被占用。
-pub fn ensure_institution_not_exists(store: &Store, sfid_number: &str) -> Result<(), ServiceError> {
-    if store::contains_institution(store, sfid_number) {
-        return Err(ServiceError::Conflict(
-            "institution sfid_number already exists",
-        ));
-    }
-    Ok(())
-}
-
-/// 校验机构存在。
-pub fn ensure_institution_exists(store: &Store, sfid_number: &str) -> Result<(), ServiceError> {
-    if !store::contains_institution(store, sfid_number) {
-        return Err(ServiceError::NotFound("institution not found"));
-    }
-    Ok(())
-}
-
-/// 校验同 sfid_number 下账户名未被占用。
-/// 这是**进链前**的硬校验,避免白交链上手续费。
-pub fn ensure_account_name_unique(
-    store: &Store,
-    sfid_number: &str,
-    account_name: &str,
-) -> Result<(), ServiceError> {
-    if store::contains_account(store, sfid_number, account_name) {
-        return Err(ServiceError::Conflict(
-            "account_name already exists under this institution",
-        ));
-    }
-    Ok(())
-}
-
-/// 给指定机构写入 2 条默认未上链账户(模块 Store 快照)。
+/// 构造指定机构的 2 条默认未上链账户。
 ///
-/// 中文注释:默认账户是机构主体的公共能力,不属于公权或私权单独目录。
-/// 幂等:已存在账户不覆盖;仅在该 `(sfid_number, account_name)` 缺失时补齐。
-pub fn insert_default_accounts_into_global_store(
-    store: &mut Store,
-    sfid_number: &str,
-    actor: &str,
-) -> usize {
-    use std::collections::hash_map::Entry;
-
+/// 中文注释:默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
+pub fn build_default_accounts(sfid_number: &str, actor: &str) -> Vec<MultisigAccount> {
     use crate::accounts::derive::derive_duoqian_address;
-    use crate::subjects::model::{account_key_to_string, MultisigAccount};
+    use chrono::Utc;
 
     let now = Utc::now();
-    let mut inserted = 0usize;
-    for name in DEFAULT_ACCOUNT_NAMES {
-        let key = account_key_to_string(sfid_number, name);
-        // DUOQIAN_V1 本地派生:主账户和费用账户地址由 sfid_number 稳定决定。
-        let addr = derive_duoqian_address(sfid_number, name);
-        match store.multisig_accounts.entry(key) {
-            Entry::Occupied(_) => {}
-            Entry::Vacant(entry) => {
-                entry.insert(MultisigAccount {
-                    sfid_number: sfid_number.to_string(),
-                    account_name: (*name).to_string(),
-                    duoqian_address: addr,
-                    chain_status: MultisigChainStatus::NotOnChain,
-                    chain_synced_at: None,
-                    chain_tx_hash: None,
-                    chain_block_number: None,
-                    created_by: actor.to_string(),
-                    created_at: now,
-                });
-                inserted += 1;
-            }
-        }
-    }
-    inserted
+    DEFAULT_ACCOUNT_NAMES
+        .iter()
+        .map(|name| MultisigAccount {
+            sfid_number: sfid_number.to_string(),
+            account_name: (*name).to_string(),
+            duoqian_address: derive_duoqian_address(sfid_number, name),
+            chain_status: MultisigChainStatus::NotOnChain,
+            chain_synced_at: None,
+            chain_tx_hash: None,
+            chain_block_number: None,
+            created_by: actor.to_string(),
+            created_at: now,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -283,7 +203,7 @@ mod tests {
     #[test]
     fn derive_category_rules() {
         assert_eq!(
-            derive_category("GFR", "ZF", "公民安全局"),
+            derive_category("GFR", "ZF", "广州市公安局"),
             Some(InstitutionCategory::PublicSecurity)
         );
         assert_eq!(

@@ -1,12 +1,12 @@
 // 中文注释:sfid 前端登录态 + 能力标志的全局 Context。
-// 中文注释:角色仅剩 SHENG_ADMIN / SHI_ADMIN。
+// 中文注释:角色仅剩 FEDERAL_ADMIN / SHI_ADMIN。
 // Passkey 绑定状态只用于引导管理员进入注册局更新密钥,不改变角色能力。
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { message } from 'antd';
 import type { AdminAuth } from './types';
 import { setOnUnauthorized } from '../utils/http';
 import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/storedAuth';
+import { notice } from '../utils/notice';
 
 export type RoleCapabilities = {
   canViewInstitutions: boolean;
@@ -23,7 +23,7 @@ export type RoleCapabilities = {
 
 export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
   const role = auth?.role;
-  const isShengAdmin = role === 'SHENG_ADMIN';
+  const isShengAdmin = role === 'FEDERAL_ADMIN';
   const isShiAdmin = role === 'SHI_ADMIN';
   return {
     canViewInstitutions: isShengAdmin || isShiAdmin,
@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   logoutRef.current = logout;
   useEffect(() => {
     setOnUnauthorized(() => {
-      message.warning('登录已过期，请重新登录');
+      notice.warning('登录已过期，请重新登录');
       logoutRef.current();
     });
     return () => setOnUnauthorized(null);

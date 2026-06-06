@@ -3,7 +3,7 @@
 - 最后更新:2026-06-04
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
-  - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
+  - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-联邦管理员相关前后端与-runtime-目录结构.md`
   - `memory/08-tasks/open/20260502-sfid-chain目录归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
@@ -73,7 +73,7 @@ sfid/frontend/
   账户和资料库分别归 `accounts/`、`docs/`。`subjects/` 不再承载机构聚合页面组件。
 - CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
-- 省/市管理员本地后台接口统一放 `admins/`;省管理员目录接口放 `admins/api.ts`,
+- 省/市管理员本地后台接口统一放 `admins/`;联邦管理员目录接口放 `admins/api.ts`,
   市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `core/WuminSignaturePanel.tsx` 与 `core/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
@@ -130,19 +130,19 @@ sfid/frontend/
 
 ## 管理员目录规则
 
-- `admins/`:放省级管理员列表、注册局视图、市管理员维护和管理员安全写操作。
-- 注册局-省管理员列表页面由 `ShengAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
-- 省级管理员采用同级模型;每省最多 5 人,仅内置初始省级管理员拥有删除新增省级管理员的权限。
+- `admins/`:放联邦管理员列表、注册局视图、市管理员维护和管理员安全写操作。
+- 注册局-联邦管理员列表页面由 `ShengAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
+- 联邦管理员采用同级模型;每省最多 5 人,仅内置初始联邦管理员拥有删除新增联邦管理员的权限。
 - 市级管理员列表必须显示 `本市市级管理员：x / 30`;市列表卡片显示该市 `x / 30`;
   达到 30 人的市禁用新增按钮和新增弹窗里的市选项,但最终上限仍以后端校验为准。
 - `operators_api.ts` 保留市管理员列表读取和姓名登录态修改。
-- `admins/ShengAdminsView.tsx` 的省级管理员列表和市级管理员列表有本地缓存时必须先显示缓存,再后台刷新后端数据,避免进入注册局详情时反复空白转圈。
-- `admins/ShengAdminsView.tsx` 首次按登录角色自动定位所属省时不得覆盖用户已经点击的“省管理员列表”页签；只有用户真正切换省份时才重置回默认市列表页签。
+- `admins/ShengAdminsView.tsx` 的联邦管理员列表和市级管理员列表有本地缓存时必须先显示缓存,再后台刷新后端数据,避免进入注册局详情时反复空白转圈。
+- `admins/ShengAdminsView.tsx` 首次按登录角色自动定位所属省时不得覆盖用户已经点击的“联邦管理员列表”页签；只有用户真正切换省份时才重置回默认市列表页签。
 - `admin_security_api.ts` 负责 Passkey 注册、写操作 prepare/commit、浏览器 WebAuthn、
   `PASSKEY` grant、`PASSKEY_CHALLENGE` 冷钱包签名回执提交和管理员新增错误码文案转换。
-- 管理员新增失败时，前端只能按 `ApiError.errorCode` 展示角色级重复、省级管理员上限和市级管理员上限提示，禁止解析后端
+- 管理员新增失败时，前端只能按 `ApiError.errorCode` 展示角色级重复、联邦管理员上限和市级管理员上限提示，禁止解析后端
   `message`。
-- 省级管理员和市级管理员都在管理员列表操作栏通过“更新密钥”使用 `Passkey.tsx`
+- 联邦管理员和市级管理员都在管理员列表操作栏通过“更新密钥”使用 `Passkey.tsx`
   生成或重新生成本人 Passkey。
 - 当 `auth.passkey_bound === false` 时,`Passkey.tsx` 只在当前登录管理员本人那一行的
   “更新密钥”按钮右上角显示红色角标;更新成功并刷新登录态后角标自动消失。
@@ -150,7 +150,7 @@ sfid/frontend/
 - 管理员列表不得展示状态栏,也不得保留启用/停用按钮。
 - 编辑市管理员只允许调整管理员姓名;账户地址和市归属只读展示,不得在前端提交修改。
 - 删除市管理员确认弹窗必须展示 SS58 地址,不直接展示 hex 公钥。
-- 省管理员签名维护页不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
+- 联邦管理员签名维护页不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
 - 本地开发的 Vite host 固定为 `localhost`;Passkey 开发配置依赖
   `http://localhost:5179`,不得用 `127.0.0.1` 或局域网 IP 打开前端注册 Passkey。

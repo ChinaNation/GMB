@@ -1,7 +1,7 @@
 // 中文注释:私权机构列表。私权机构必须输入机构名称或 SFID 精确搜索,避免跨省全量扫描。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, message, Space, Table, Tag, Typography } from 'antd';
+import { Button, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { AdminAuth } from '../auth/types';
 import type { InstitutionListRow } from './api';
@@ -10,9 +10,10 @@ import {
   CLEARING_BANK_ELIGIBLE_LABEL,
   isSelfEligibleClearingBank,
 } from './clearingBankEligible';
+import { notice } from '../utils/notice';
 
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
-  SHENG_ADMIN: '省级管理员',
+  FEDERAL_ADMIN: '联邦管理员',
   SHI_ADMIN: '市级管理员',
 };
 
@@ -61,7 +62,7 @@ export const PrivateListTable: React.FC<Props> = ({
         setNextCursor(data.next_cursor ?? null);
       })
       .catch((err) => {
-        if (!cancelled) message.error(err instanceof Error ? err.message : '加载机构列表失败');
+        if (!cancelled) notice.error(err, '');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

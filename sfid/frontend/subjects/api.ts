@@ -26,19 +26,24 @@ export interface MultisigInstitution {
   sfid_number: string;
   /** 机构名称。两步式创建(2026-04-19):第一步生成时为 null,详情页补填后非空。 */
   institution_name: string | null;
+  /** 详情页展示全称;列表不得与简称同时展示。 */
+  full_name?: string | null;
+  /** 详情页展示简称;公权目录默认用简称作为 institution_name。 */
+  short_name?: string | null;
+  /** 主体业务状态,只允许 ACTIVE / REVOKED。 */
+  status: 'ACTIVE' | 'REVOKED';
   category: InstitutionCategory;
-  /** 登记来源:自动宪法机构/自动公权机构为 AUTO;普通手动机构可为空。 */
-  source?: 'AUTO' | null;
-  /** 自动机构制度层级;手动学校机构不设置。 */
-  institution_level?: 'NATIONAL' | 'PROVINCE' | 'CITY' | 'TOWN' | 'NONE' | null;
   a3: string;
   p1: string;
   province: string;
   city: string;
+  town?: string;
   province_code: string;
   /** 任务卡 6 新增:2 位数字市代码(r5 段后 3 字符),作为公安局对账稳定主键 */
   city_code?: string;
+  town_code?: string;
   institution_code: string;
+  org_code?: string | null;
   /** 私法人子类型(仅 A3=SFR 且 P1 填完后才有值) */
   sub_type?: string | null;
   /** 所属法人 sfid_number(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
@@ -67,22 +72,28 @@ export interface InstitutionListRow {
   sfid_number: string;
   /** 两步式创建:第一步仅有 SFID 时为 null,详情页补填后非空 */
   institution_name: string | null;
+  full_name?: string | null;
+  short_name?: string | null;
+  status: 'ACTIVE' | 'REVOKED';
   category: InstitutionCategory;
   a3: string;
   p1: string;
   province: string;
   city: string;
+  town?: string;
   institution_code: string;
+  org_code?: string | null;
   sub_type?: string | null;
   parent_sfid_number?: string | null;
-  source?: 'AUTO' | null;
-  institution_level?: 'NATIONAL' | 'PROVINCE' | 'CITY' | 'TOWN' | 'NONE' | null;
   chain_status: InstitutionChainStatus;
   account_count: number;
+  cpms_status?: string | null;
+  install_token_status?: string | null;
+  identity_service_status?: string | null;
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
   created_by_name?: string | null;
-  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN;未命中 null */
+  /** 创建者角色:FEDERAL_ADMIN / SHI_ADMIN;未命中 null */
   created_by_role?: string | null;
 }
 
@@ -91,6 +102,10 @@ export interface PageResult<T> {
   page_size: number;
   next_cursor?: string | null;
   has_more: boolean;
+  /** 确定性目录版本。普通分页接口没有该字段。 */
+  manifest_version?: string | null;
+  /** 确定性目录状态。普通分页接口没有该字段。 */
+  catalog_status?: string | null;
 }
 
 export interface InstitutionDetail {
@@ -98,7 +113,7 @@ export interface InstitutionDetail {
   accounts: MultisigAccount[];
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
   created_by_name?: string | null;
-  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN */
+  /** 创建者角色:FEDERAL_ADMIN / SHI_ADMIN */
   created_by_role?: string | null;
 }
 

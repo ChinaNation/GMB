@@ -11,32 +11,18 @@ use axum::{
     Json,
 };
 use chrono::{Duration, Utc};
-use tracing::warn;
 use uuid::Uuid;
 
-use crate::scope::admin_province::province_scope_for_role;
+use crate::admins::repo;
 use crate::*;
 
 use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::signature::{
-    build_admin_display_name_from_user, cleanup_expired_challenges, extract_domain_from_origin,
-    parse_admin_identity_qr, resolve_admin_city, verify_admin_signature,
+    build_admin_display_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
+    resolve_admin_city, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
-
-fn admin_has_active_passkey(store: &Store, admin_pubkey: &str) -> bool {
-    store
-        .admin_passkeys_by_credential_id
-        .values()
-        .any(|record| {
-            record.status == AdminPasskeyStatus::Active
-                && crate::crypto::pubkey::same_admin_pubkey(
-                    record.admin_pubkey.as_str(),
-                    admin_pubkey,
-                )
-        })
-}
 
 pub(crate) async fn require_admin_session_middleware(
     State(state): State<AppState>,
@@ -73,7 +59,7 @@ pub(crate) async fn admin_auth_check(
     .into_response()
 }
 
-/// 主动登出:从 GlobalShard 删除当前 session。
+/// 主动登出:从结构化会话表删除当前 session。
 pub(crate) async fn admin_logout(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -82,12 +68,10 @@ pub(crate) async fn admin_logout(
         Some(t) => t,
         None => return api_error(StatusCode::BAD_REQUEST, 1001, "missing token"),
     };
-    let _ = state
-        .sharded_store
-        .write_global(|g| {
-            g.admin_sessions.remove(&token);
-        })
-        .await;
+    if let Err(err) = repo::delete_admin_session(&state.db, token.as_str()) {
+        let message = format!("delete session failed: {err}");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -105,15 +89,28 @@ pub(crate) async fn admin_auth_identify(
         return api_error(StatusCode::BAD_REQUEST, 1001, "identity_qr is required");
     }
 
-    let store = match state.store.read() {
-        Ok(guard) => guard,
+    let admin = match repo::get_admin_by_pubkey(&state.db, admin_pubkey.as_str()) {
+        Ok(Some(v)) => v,
+        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
         Err(err) => {
-            warn!("store read failed in /api/v1/admin/auth/identify: {}", err);
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, "store unavailable");
+            let message = format!("query admin failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let Some(admin) = store.admin_users_by_pubkey.get(&admin_pubkey) else {
-        return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
+    let province = match repo::province_scope_for_role(&state.db, &admin.admin_pubkey, &admin.role)
+    {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query admin scope failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    };
+    let passkey_bound = match repo::admin_has_active_passkey(&state.db, &admin.admin_pubkey) {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query passkey failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
     };
 
     Json(ApiResponse {
@@ -122,13 +119,10 @@ pub(crate) async fn admin_auth_identify(
         data: AdminIdentifyOutput {
             admin_pubkey: admin.admin_pubkey.clone(),
             role: admin.role.clone(),
-            admin_name: {
-                let province = province_scope_for_role(&store, &admin.admin_pubkey, &admin.role);
-                build_admin_display_name_from_user(admin, province.as_deref())
-            },
-            admin_province: province_scope_for_role(&store, &admin.admin_pubkey, &admin.role),
-            admin_city: resolve_admin_city(admin),
-            passkey_bound: admin_has_active_passkey(&store, &admin.admin_pubkey),
+            admin_name: build_admin_display_name_from_user(&admin, province.as_deref()),
+            admin_province: province,
+            admin_city: resolve_admin_city(&admin),
+            passkey_bound,
         },
     })
     .into_response()
@@ -171,22 +165,17 @@ pub(crate) async fn admin_auth_challenge(
         expire_at.timestamp()
     );
 
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_expired_challenges(&mut store, now);
-    if !store
-        .admin_users_by_pubkey
-        .contains_key(&input.admin_pubkey)
-    {
-        return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
+    match repo::get_admin_by_pubkey(&state.db, input.admin_pubkey.as_str()) {
+        Ok(Some(_)) => {}
+        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
+        Err(err) => {
+            let message = format!("query admin failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
     }
-
-    insert_bounded_map(
-        &mut store.login_challenges,
-        challenge_id.clone(),
-        LoginChallenge {
+    if let Err(err) = repo::insert_login_challenge(
+        &state.db,
+        &LoginChallenge {
             challenge_id: challenge_id.clone(),
             admin_pubkey: input.admin_pubkey,
             challenge_text: challenge_text.clone(),
@@ -201,8 +190,10 @@ pub(crate) async fn admin_auth_challenge(
             expire_at,
             consumed: false,
         },
-        bounded_cache_limit("SFID_LOGIN_CHALLENGE_MAX", 20_000),
-    );
+    ) {
+        let message = format!("insert challenge failed: {err}");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -246,90 +237,110 @@ pub(crate) async fn admin_auth_verify(
     }
 
     let now = Utc::now();
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_expired_challenges(&mut store, now);
-    let admin_pubkey = {
-        let Some(challenge) = store.login_challenges.get_mut(&input.challenge_id) else {
-            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
+    let challenge_id = input.challenge_id.trim().to_string();
+    let signature = input.signature.trim().to_string();
+    let origin = input.origin.clone();
+    let session_id = input.session_id.clone();
+    let nonce = input.nonce.clone();
+    let verify_domain_for_db = verify_domain.clone();
+    let result = state.db.with_client(move |conn| {
+        repo::cleanup_login_state_conn(conn, now)?;
+        let Some(mut challenge) = repo::get_login_challenge_conn(conn, challenge_id.as_str())?
+        else {
+            return Err("http:not_found:challenge not found".to_string());
         };
         if challenge.consumed {
-            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed");
+            return Err("http:conflict:challenge already consumed".to_string());
         }
         if now > challenge.expire_at {
-            return api_error(StatusCode::GONE, 1007, "challenge expired");
+            return Err("http:gone:challenge expired".to_string());
         }
-        if challenge.origin != input.origin
-            || challenge.domain != verify_domain
-            || challenge.session_id != input.session_id
-            || challenge.nonce != input.nonce
+        if challenge.origin != origin
+            || challenge.domain != verify_domain_for_db
+            || challenge.session_id != session_id
+            || challenge.nonce != nonce
         {
-            return api_error(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                2004,
-                "challenge context mismatch",
-            );
+            return Err("http:unprocessable:challenge context mismatch".to_string());
         }
 
-        // 中文注释：乐观消费——先标记 consumed 再验签，防止并发请求同时通过 consumed 检查。
+        // 中文注释:乐观消费——先标记 consumed 再验签,防止并发请求同时通过 consumed 检查。
         // 验签失败时回退 consumed = false。
         challenge.consumed = true;
         let admin_pubkey = challenge.admin_pubkey.clone();
         let challenge_text = challenge.challenge_text.clone();
+        repo::update_login_challenge_conn(conn, &challenge)?;
 
-        if !verify_admin_signature(&admin_pubkey, &challenge_text, input.signature.trim()) {
-            if let Some(c) = store.login_challenges.get_mut(&input.challenge_id) {
-                c.consumed = false;
-            }
+        if !verify_admin_signature(&admin_pubkey, &challenge_text, signature.as_str()) {
+            challenge.consumed = false;
+            repo::update_login_challenge_conn(conn, &challenge)?;
+            return Err("http:unprocessable:signature verify failed".to_string());
+        }
+
+        let admin = repo::get_admin_by_pubkey_conn(conn, admin_pubkey.as_str())?
+            .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
+        let admin_role = admin.role.clone();
+        let admin_province =
+            repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?;
+        let admin_name = build_admin_display_name_from_user(&admin, admin_province.as_deref());
+        let admin_city = resolve_admin_city(&admin);
+        let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_pubkey)?;
+        let access_token = Uuid::new_v4().to_string();
+        let expire_at = now + Duration::hours(8);
+        let new_session = AdminSession {
+            token: access_token.clone(),
+            admin_pubkey: admin.admin_pubkey.clone(),
+            role: admin_role.clone(),
+            expire_at,
+            last_active_at: now,
+        };
+        repo::insert_admin_session_conn(conn, &new_session)?;
+        Ok((
+            access_token,
+            expire_at,
+            AdminIdentifyOutput {
+                admin_pubkey: admin.admin_pubkey,
+                role: admin_role,
+                admin_name,
+                admin_province,
+                admin_city,
+                passkey_bound,
+            },
+        ))
+    });
+
+    let (access_token, expire_at, admin) = match result {
+        Ok(v) => v,
+        Err(err) if err == "http:not_found:challenge not found" => {
+            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found")
+        }
+        Err(err) if err == "http:conflict:challenge already consumed" => {
+            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed")
+        }
+        Err(err) if err == "http:gone:challenge expired" => {
+            return api_error(StatusCode::GONE, 1007, "challenge expired")
+        }
+        Err(err) if err == "http:unprocessable:challenge context mismatch" => {
+            return api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "challenge context mismatch",
+            )
+        }
+        Err(err) if err == "http:unprocessable:signature verify failed" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "signature verify failed",
-            );
+            )
         }
-        admin_pubkey
+        Err(err) if err == "http:forbidden:admin not found" => {
+            return api_error(StatusCode::FORBIDDEN, 2002, "admin not found")
+        }
+        Err(err) => {
+            let message = format!("verify login failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
     };
-
-    let admin = match store.admin_users_by_pubkey.get(&admin_pubkey) {
-        Some(v) => v,
-        None => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
-    };
-    let admin_pubkey = admin.admin_pubkey.clone();
-    let admin_role = admin.role.clone();
-    let admin_province = province_scope_for_role(&store, &admin_pubkey, &admin_role);
-    let admin_name = build_admin_display_name_from_user(admin, admin_province.as_deref());
-    let admin_city = resolve_admin_city(admin);
-    let passkey_bound = admin_has_active_passkey(&store, &admin_pubkey);
-
-    let access_token = Uuid::new_v4().to_string();
-    let expire_at = now + Duration::hours(8);
-    let new_session = AdminSession {
-        token: access_token.clone(),
-        admin_pubkey: admin_pubkey.clone(),
-        role: admin_role.clone(),
-        expire_at,
-        last_active_at: now,
-    };
-    store
-        .admin_sessions
-        .insert(access_token.clone(), new_session.clone());
-    // 中文注释:先释放写锁,避免接下来的异步同步 GlobalShard 持有 StoreWriteGuard。
-    drop(store);
-
-    // 中文注释:登录成功后同步写 GlobalShard session,供鉴权守卫快速读取。
-    {
-        let ss = state.sharded_store.clone();
-        let token_for_shard = access_token.clone();
-        tokio::task::spawn(async move {
-            let _ = ss
-                .write_global(|g| {
-                    g.admin_sessions.insert(token_for_shard, new_session);
-                })
-                .await;
-        });
-    }
 
     Json(ApiResponse {
         code: 0,
@@ -337,14 +348,7 @@ pub(crate) async fn admin_auth_verify(
         data: AdminVerifyOutput {
             access_token,
             expire_at: expire_at.timestamp(),
-            admin: AdminIdentifyOutput {
-                admin_pubkey,
-                role: admin_role,
-                admin_name,
-                admin_province,
-                admin_city,
-                passkey_bound,
-            },
+            admin,
         },
     })
     .into_response()

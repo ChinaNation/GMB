@@ -7,7 +7,7 @@ import type { AdminAuth } from './types';
 export type AdminAuthCheck = {
   ok: boolean;
   admin_pubkey: string;
-  role: 'SHENG_ADMIN' | 'SHI_ADMIN';
+  role: 'FEDERAL_ADMIN' | 'SHI_ADMIN';
   admin_name: string;
   admin_province?: string | null;
   admin_city?: string | null;
@@ -16,7 +16,7 @@ export type AdminAuthCheck = {
 
 export type AdminIdentifyResult = {
   admin_pubkey: string;
-  role: 'SHENG_ADMIN' | 'SHI_ADMIN';
+  role: 'FEDERAL_ADMIN' | 'SHI_ADMIN';
   admin_name: string;
   admin_province?: string | null;
   admin_city?: string | null;

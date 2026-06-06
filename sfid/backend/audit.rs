@@ -5,7 +5,7 @@
 
 use axum::{
     extract::{Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -44,45 +44,77 @@ pub(crate) async fn admin_list_audit_logs(
     headers: HeaderMap,
     Query(query): Query<AuditLogsQuery>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_admin_any(&state, &headers) {
-        return resp;
-    }
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
 
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let action = query.action.unwrap_or_default().trim().to_uppercase();
     let actor = query.actor_pubkey.unwrap_or_default().trim().to_string();
     let keyword = query.keyword.unwrap_or_default().trim().to_lowercase();
-
-    let store = match store_read_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
+    let province_code = ctx
+        .admin_province
+        .as_deref()
+        .and_then(crate::china::province_code_by_name);
+    let city_code = match (ctx.admin_province.as_deref(), ctx.admin_city.as_deref()) {
+        (Some(province), Some(city)) => crate::china::city_code_by_name(province, city),
+        _ => None,
     };
-    let mut rows: Vec<AuditLogEntry> = store
-        .audit_logs
-        .iter()
-        .filter(|e| action.is_empty() || e.action == action)
-        .filter(|e| actor.is_empty() || e.actor_pubkey == actor)
-        .filter(|e| {
-            if keyword.is_empty() {
-                return true;
-            }
-            e.detail.to_lowercase().contains(&keyword)
-                || e.action.to_lowercase().contains(&keyword)
-                || e.actor_pubkey.to_lowercase().contains(&keyword)
-                || e.target_pubkey
-                    .as_ref()
-                    .map(|v| v.to_lowercase().contains(&keyword))
-                    .unwrap_or(false)
-                || e.target_archive_no
-                    .as_ref()
-                    .map(|v| v.to_lowercase().contains(&keyword))
-                    .unwrap_or(false)
-        })
-        .cloned()
-        .collect();
-
-    rows.sort_by(|a, b| b.seq.cmp(&a.seq));
-    rows.truncate(limit);
+    let result = state.db.with_client(move |conn| {
+        let limit_i64 = i64::try_from(limit).map_err(|_| "limit too large".to_string())?;
+        let rows = conn
+            .query(
+                "SELECT id, action, actor, target_sfid, detail, created_at
+                 FROM audit
+                 WHERE ($1::text IS NULL OR p_code = $1)
+                   AND ($2::text IS NULL OR c_code = $2)
+                   AND ($3::text = '' OR action = $3)
+                   AND ($4::text = '' OR lower(actor) = lower($4))
+                   AND (
+                        $5::text = ''
+                        OR lower(detail) LIKE '%' || $5 || '%'
+                        OR lower(action) LIKE '%' || $5 || '%'
+                        OR lower(actor) LIKE '%' || $5 || '%'
+                        OR lower(COALESCE(target_sfid, '')) LIKE '%' || $5 || '%'
+                   )
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT $6",
+                &[
+                    &province_code,
+                    &city_code,
+                    &action,
+                    &actor,
+                    &keyword,
+                    &limit_i64,
+                ],
+            )
+            .map_err(|e| format!("query audit logs failed: {e}"))?;
+        let mut output = Vec::with_capacity(rows.len());
+        for row in rows {
+            let seq: i64 = row.get(0);
+            output.push(AuditLogEntry {
+                seq: u64::try_from(seq).unwrap_or(0),
+                action: row.get(1),
+                actor_pubkey: row.get(2),
+                target_pubkey: row.get(3),
+                target_archive_no: None,
+                request_id: None,
+                actor_ip: None,
+                result: "SUCCESS".to_string(),
+                detail: row.get(4),
+                created_at: row.get(5),
+            });
+        }
+        Ok(output)
+    });
+    let rows = match result {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query audit logs failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    };
 
     Json(ApiResponse {
         code: 0,

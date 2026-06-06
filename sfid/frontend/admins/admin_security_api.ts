@@ -7,8 +7,8 @@ import { ApiError, adminRequest } from '../utils/http';
 export type AdminActionType =
   | 'CREATE_OPERATOR'
   | 'DELETE_OPERATOR'
-  | 'CREATE_SHENG_ADMIN'
-  | 'DELETE_SHENG_ADMIN'
+  | 'CREATE_FEDERAL_ADMIN'
+  | 'DELETE_FEDERAL_ADMIN'
   | 'INSTITUTION_CREATE'
   | 'INSTITUTION_UPDATE'
   | 'INSTITUTION_CREATE_ACCOUNT'
@@ -27,7 +27,7 @@ export type AdminActionType =
   | 'CPMS_DELETE_KEYS';
 
 export type AdminOperationAuth = 'LOGIN_STATE' | 'PASSKEY' | 'PASSKEY_CHALLENGE';
-export type AdminRoleTarget = 'SHENG_ADMIN' | 'SHI_ADMIN';
+export type AdminRoleTarget = 'FEDERAL_ADMIN' | 'SHI_ADMIN';
 
 export type SignDisplayField = { key?: string; label: string; value: string };
 
@@ -68,18 +68,18 @@ export function formatAdminCreateError(error: unknown, targetRole: AdminRoleTarg
     return error instanceof Error ? error.message : fallback;
   }
   // 中文注释:管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
-  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN') {
-    return targetRole === 'SHENG_ADMIN'
-      ? '该账户已是省级管理员，不能重复新增'
-      : '该账户已是省级管理员，不能新增为市级管理员';
+  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN') {
+    return targetRole === 'FEDERAL_ADMIN'
+      ? '该账户已是联邦管理员，不能重复新增'
+      : '该账户已是联邦管理员，不能新增为市级管理员';
   }
   if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN') {
-    return targetRole === 'SHENG_ADMIN'
-      ? '该账户已是市级管理员，不能新增为省级管理员'
+    return targetRole === 'FEDERAL_ADMIN'
+      ? '该账户已是市级管理员，不能新增为联邦管理员'
       : '该账户已是市级管理员，不能重复新增';
   }
-  if (error.errorCode === 'SFID_ADMIN_SHENG_ADMIN_PROVINCE_LIMIT_REACHED') {
-    return '本省省级管理员已满 5 人，不能继续新增';
+  if (error.errorCode === 'SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED') {
+    return '联邦管理员已满 5 人，不能继续新增';
   }
   if (error.errorCode === 'SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED') {
     return '本市市级管理员已满 30 人，不能继续新增';
@@ -89,7 +89,7 @@ export function formatAdminCreateError(error: unknown, targetRole: AdminRoleTarg
 
 export async function startPasskeyRegistration(
   auth: AdminAuth,
-  label = '管理员 Passkey',
+  label = '管理员通行密钥',
 ): Promise<PasskeyStartOutput> {
   return adminRequest<PasskeyStartOutput>('/api/v1/admin/passkeys/register/start', auth, {
     method: 'POST',
@@ -174,17 +174,57 @@ export async function createPasskeySecurityGrant(
 }
 
 export async function createPasskeyCredential(options: any): Promise<unknown> {
+  if (!navigator.credentials?.create) {
+    throw new Error('当前浏览器不支持通行密钥');
+  }
   const publicKey = toCreationOptions(options.publicKey);
-  const credential = await navigator.credentials.create({ publicKey });
-  if (!credential) throw new Error('Passkey 创建已取消');
+  let credential: Credential | null;
+  try {
+    credential = await navigator.credentials.create({ publicKey });
+  } catch (error) {
+    throw normalizeWebAuthnError(error, 'create');
+  }
+  if (!credential) throw new Error('已取消创建通行密钥');
   return credentialToJSON(credential as PublicKeyCredential);
 }
 
 export async function getPasskeyAssertion(options: any): Promise<unknown> {
+  if (!navigator.credentials?.get) {
+    throw new Error('当前浏览器不支持通行密钥');
+  }
   const publicKey = toRequestOptions(options.publicKey);
-  const credential = await navigator.credentials.get({ publicKey });
-  if (!credential) throw new Error('Passkey 验证已取消');
+  let credential: Credential | null;
+  try {
+    credential = await navigator.credentials.get({ publicKey });
+  } catch (error) {
+    throw normalizeWebAuthnError(error, 'assert');
+  }
+  if (!credential) throw new Error('已取消通行密钥验证');
   return credentialToJSON(credential as PublicKeyCredential);
+}
+
+function normalizeWebAuthnError(error: unknown, mode: 'create' | 'assert'): Error {
+  const cancelText = mode === 'create' ? '已取消创建通行密钥' : '已取消通行密钥验证';
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
+      return new Error(cancelText);
+    }
+    if (error.name === 'NotSupportedError') {
+      return new Error('当前浏览器不支持通行密钥');
+    }
+    if (error.name === 'SecurityError') {
+      return new Error('当前页面不允许使用通行密钥');
+    }
+    if (error.name === 'InvalidStateError') {
+      return new Error('当前设备已存在该通行密钥');
+    }
+  }
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+  if (lower.includes('the operation either timed out or was not allowed') || lower.includes('notallowederror')) {
+    return new Error(cancelText);
+  }
+  return new Error(raw || '通行密钥操作失败');
 }
 
 function toCreationOptions(publicKey: any): PublicKeyCredentialCreationOptions {

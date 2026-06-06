@@ -3,13 +3,11 @@
 //! 这里放纯工具函数和 challenge 清理逻辑;会话鉴权在 `guards.rs`,HTTP handler 在
 //! `handler.rs` / `qr_login.rs`。
 
-use chrono::{DateTime, Duration, Utc};
 use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use sp_core::Pair;
 
 use crate::admins::province_admins::sheng_admin_display_name;
-use crate::crypto::pubkey::same_admin_pubkey;
 use crate::*;
 
 pub(crate) fn verify_admin_signature(
@@ -58,7 +56,7 @@ pub(super) fn build_login_qr_system_signature(
     expires_at: i64,
 ) -> Result<(String, String), String> {
     // ADR-008 Phase 23e:登录二维码的"系统签名"由 SFID main signer(全局唯一)产出。
-    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与省/市管理员冷钱包无关。
+    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与联邦管理员/市级管理员冷钱包无关。
     let main_seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
         .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
     let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
@@ -108,14 +106,6 @@ fn strip_0x_prefix(value: &str) -> &str {
         .unwrap_or(value.trim())
 }
 
-pub(super) fn resolve_admin_pubkey_key(store: &Store, candidate: &str) -> Option<String> {
-    store
-        .admin_users_by_pubkey
-        .keys()
-        .find(|pubkey| same_admin_pubkey(pubkey.as_str(), candidate))
-        .cloned()
-}
-
 pub(super) fn parse_admin_identity_qr(identity_qr: &str) -> String {
     let trimmed = identity_qr.trim();
     if trimmed.is_empty() {
@@ -153,83 +143,6 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
         return None;
     }
     Some(domain.to_string())
-}
-
-pub(super) fn cleanup_expired_challenges(store: &mut Store, now: DateTime<Utc>) {
-    store.login_challenges.retain(|_, c| {
-        c.expire_at > now - Duration::minutes(10) && (!c.consumed || c.expire_at > now)
-    });
-    store.qr_login_results.retain(|_, r| {
-        r.created_at > now - Duration::hours(1) && r.expire_at > now - Duration::minutes(10)
-    });
-}
-
-/// 中文注释:清理过期/空闲超时的 admin session。
-#[allow(dead_code)]
-fn cleanup_admin_sessions(
-    store: &mut Store,
-    now: DateTime<Utc>,
-    idle_timeout_minutes: i64,
-) -> Vec<String> {
-    let mut evicted_sheng_provinces: Vec<String> = Vec::new();
-    let mut remaining_sheng_pubkeys: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
-
-    // 先收集"被驱逐"的 sheng admin pubkey。
-    let mut evicted_sheng_pubkeys: Vec<String> = Vec::new();
-    store.admin_sessions.retain(|_, session| {
-        let keep = now <= session.expire_at
-            && now <= session.last_active_at + Duration::minutes(idle_timeout_minutes);
-        if !keep && session.role == AdminRole::ShengAdmin {
-            evicted_sheng_pubkeys.push(session.admin_pubkey.clone());
-        }
-        if keep && session.role == AdminRole::ShengAdmin {
-            remaining_sheng_pubkeys.insert(session.admin_pubkey.clone());
-        }
-        keep
-    });
-
-    let max_sessions = bounded_cache_limit("SFID_ADMIN_SESSION_MAX", 50_000);
-    if store.admin_sessions.len() > max_sessions {
-        let mut entries = store
-            .admin_sessions
-            .iter()
-            .map(|(token, session)| {
-                (
-                    token.clone(),
-                    session.last_active_at,
-                    session.role.clone(),
-                    session.admin_pubkey.clone(),
-                )
-            })
-            .collect::<Vec<_>>();
-        entries.sort_by_key(|(_, last_active, _, _)| *last_active);
-        let overflow = store.admin_sessions.len() - max_sessions;
-        for (token, _, role, pubkey) in entries.into_iter().take(overflow) {
-            store.admin_sessions.remove(&token);
-            if role == AdminRole::ShengAdmin {
-                evicted_sheng_pubkeys.push(pubkey);
-            }
-        }
-        // 重新计算 remaining_sheng_pubkeys
-        remaining_sheng_pubkeys.clear();
-        for (_, s) in store.admin_sessions.iter() {
-            if s.role == AdminRole::ShengAdmin {
-                remaining_sheng_pubkeys.insert(s.admin_pubkey.clone());
-            }
-        }
-    }
-
-    // 只有当该 sheng admin 所有 session 都被清掉时，才驱逐本省 cache。
-    for pubkey in evicted_sheng_pubkeys {
-        if remaining_sheng_pubkeys.contains(&pubkey) {
-            continue;
-        }
-        if let Some(province) = store.sheng_admin_province_by_pubkey.get(&pubkey) {
-            evicted_sheng_provinces.push(province.clone());
-        }
-    }
-    evicted_sheng_provinces
 }
 
 pub(crate) fn build_admin_display_name(
