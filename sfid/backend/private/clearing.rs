@@ -22,7 +22,7 @@ use crate::subjects::model::MultisigInstitution;
 /// - 其他 a3(GFR / SF 等):一律不允许
 ///
 /// `parent` 由调用方按需提供(FFR 才需要;SFR / 其他可传 `None`)。
-/// 跨省 parent 查询由 caller 通过 sharded_store.read_province 完成,
+/// 跨省 parent 查询由调用方通过 `subjects` 结构化表完成,
 /// 本函数只做纯逻辑判定,便于单测。
 #[allow(dead_code)]
 pub fn is_clearing_bank_eligible(
@@ -60,9 +60,10 @@ mod tests {
         MultisigInstitution {
             sfid_number: format!("{a3}-GD-CB01-000000000-20260101"),
             institution_name: Some("测试机构".to_string()),
+            full_name: Some("测试机构".to_string()),
+            short_name: Some("测试机构".to_string()),
+            status: "ACTIVE".to_string(),
             category: InstitutionCategory::PrivateInstitution,
-            source: None,
-            institution_level: None,
             a3: a3.to_string(),
             p1: if sub_type == Some("NON_PROFIT") {
                 "0".to_string()
@@ -71,9 +72,12 @@ mod tests {
             },
             province: "广东省".to_string(),
             city: "广州市".to_string(),
+            town: String::new(),
             province_code: "GD".to_string(),
             city_code: "001".to_string(),
+            town_code: String::new(),
             institution_code: "CB".to_string(),
+            org_code: None,
             sub_type: sub_type.map(|s| s.to_string()),
             parent_sfid_number: parent_sfid_number.map(|s| s.to_string()),
             chain_status: InstitutionChainStatus::NotRegistered,

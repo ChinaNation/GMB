@@ -3,15 +3,17 @@ pub(crate) mod actions;
 pub(crate) mod catalog;
 /// 中文注释:管理员登录认证能力,归入 admins 边界。
 pub(crate) mod login;
-/// 中文注释:省/市管理员实体、角色和列表 DTO。
+/// 中文注释:联邦管理员/市级管理员实体、角色和列表 DTO。
 pub(crate) mod model;
 /// 中文注释:管理端操作权限分级唯一入口。
 pub(crate) mod operation_auth;
 pub(crate) mod operators;
 /// 中文注释:管理员 Passkey 注册与 WebAuthn 凭据校验工具。
 pub(crate) mod passkeys;
-/// 中文注释:内置初始省管理员公钥与省份归属清单。
+/// 中文注释:内置初始联邦管理员公钥与省份归属清单。
 pub(crate) mod province_admins;
+/// 中文注释:管理员结构化表读写，唯一持久化入口。
+pub(crate) mod repo;
 /// 中文注释:管理员 Passkey、冷钱包确认和一次性安全授权模型。
 pub(crate) mod security_model;
 

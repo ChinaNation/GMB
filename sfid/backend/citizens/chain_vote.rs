@@ -15,7 +15,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::core::chain_runtime::build_vote_credential;
+use crate::core::chain_runtime::{build_vote_credential, normalize_account_pubkey};
 use crate::*;
 
 #[derive(Deserialize)]
@@ -47,29 +47,26 @@ pub(crate) async fn app_vote_credential(
     };
     let proposal_id = input.proposal_id;
 
-    let (is_bound, has_vote_eligibility, binding_seed) = {
-        let store = match store_write_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        if let Some(cid) = store
-            .citizen_id_by_wallet_pubkey
-            .get(account_pubkey.as_str())
-        {
-            if let Some(record) = store.citizen_records.get(cid) {
+    let (is_bound, has_vote_eligibility, binding_seed) =
+        match state.db.find_bound_citizen_by_wallet(&account_pubkey) {
+            Ok(Some(record)) => {
                 let bound = record.archive_no.is_some();
                 (
                     bound,
                     bound && record.computed_vote_status() == CitizenStatus::Normal,
                     record.archive_no.clone(),
                 )
-            } else {
-                (false, false, None)
             }
-        } else {
-            (false, false, None)
-        }
-    };
+            Ok(None) => (false, false, None),
+            Err(err) => {
+                tracing::error!(error = %err, "query vote binding failed");
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "binding query failed",
+                );
+            }
+        };
 
     let credential = if has_vote_eligibility {
         let binding_seed = binding_seed.as_deref().unwrap_or("");
@@ -92,24 +89,17 @@ pub(crate) async fn app_vote_credential(
         return api_error(StatusCode::NOT_FOUND, 1004, "binding not found");
     };
 
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    append_audit_log_with_meta(
-        &mut store,
+    crate::core::runtime_ops::append_audit_log(
+        &state,
         "APP_VOTE_CREDENTIAL",
         "app",
         Some(account_pubkey.clone()),
-        None,
-        None,
-        actor_ip_from_headers(&headers),
-        if has_vote_eligibility {
-            "SUCCESS"
-        } else {
-            "INELIGIBLE"
-        },
-        format!("proposal_id={proposal_id} eligible={has_vote_eligibility}"),
+        format!(
+            "proposal_id={} eligible={} actor_ip={:?}",
+            proposal_id,
+            has_vote_eligibility,
+            actor_ip_from_headers(&headers)
+        ),
     );
 
     Json(ApiResponse {

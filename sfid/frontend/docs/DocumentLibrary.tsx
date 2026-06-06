@@ -3,7 +3,7 @@
 // 修改资料库功能只需改本文件,不影响其他模块。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, message, Popconfirm, Select, Table, Tag, Upload } from 'antd';
+import { Button, Card, Popconfirm, Select, Table, Tag, Upload } from 'antd';
 import { UploadOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import {
@@ -16,6 +16,7 @@ import {
 } from './api';
 import type { AdminAuth } from '../auth/types';
 import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
+import { notice } from '../utils/notice';
 
 interface Props {
   auth: AdminAuth;
@@ -56,7 +57,7 @@ export const DocumentLibrary: React.FC<Props> = ({
     setLoading(true);
     listDocuments(auth, sfidNumber)
       .then(setDocs)
-      .catch((err) => message.error(err instanceof Error ? err.message : '加载资料库失败'))
+      .catch((err) => notice.error(err, ''))
       .finally(() => setLoading(false));
   }, [auth.access_token, sfidNumber]);
 
@@ -70,10 +71,10 @@ export const DocumentLibrary: React.FC<Props> = ({
     setUploading(true);
     try {
       await uploadDocument(auth, sfidNumber, rawFile, selectedDocType);
-      message.success('文件上传成功');
+      notice.success('文件上传成功');
       load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '上传失败');
+      notice.error(err, '');
     } finally {
       setUploading(false);
     }
@@ -84,7 +85,7 @@ export const DocumentLibrary: React.FC<Props> = ({
     try {
       await downloadDocument(auth, sfidNumber, doc.id, doc.file_name);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '下载失败');
+      notice.error(err, '');
     }
   };
 
@@ -96,10 +97,10 @@ export const DocumentLibrary: React.FC<Props> = ({
         doc_id: String(doc.id),
       });
       await deleteDocument(auth, sfidNumber, doc.id, grant);
-      message.success('文件已删除');
+      notice.success('文件已删除');
       load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除失败');
+      notice.error(err, '');
     }
   };
 

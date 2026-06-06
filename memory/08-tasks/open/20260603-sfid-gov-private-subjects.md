@@ -39,14 +39,14 @@ SFID
 - 已把清算行资格纯规则迁到 `backend/private/clearing.rs`。
 - 已保留现有 `admins` 权限模块，不新增 `registry_admins`。
 - 已新增目标分区表初始化：`ids / subjects / citizens / gov / private / accounts / docs / audit`，启动阶段一次性创建 `CN + 43` 个省级分区。
-- 已将机构持久化快照改为 `store_subjects`。
+- 已删除机构持久化快照方案；机构、公民和账户只写 `subjects / citizens / gov / private / accounts` 结构化目标表。
 - 已停止创建、写入和查询旧机构行表与旧机构账户行表；机构列表改从 `subjects + accounts + admins` 查询。
 - 已将公民精确查询写入和查询同步到 `citizens` 目标分区表，保持精简命名。
 - 已新增前端 `gov/private/subjects/accounts/docs` 目录入口，`App.tsx` 通过 `GovView` 和 `PrivateView` 渲染机构页。
 - 已把前端 `gov`、`private` 页面组件从旧 `subjects` 聚合组件拆出为各自目录真实组件，并删除旧主体聚合页面组件。
 - 已新增 `frontend/gov/api.ts`、`frontend/private/api.ts`、`frontend/accounts/api.ts`、`frontend/docs/api.ts`，`subjects/api.ts` 只保留共享类型，不再承载业务请求函数。
 - 已更新 `sfid/frontend/tsconfig.json`，显式覆盖新前端目录。
-- 已确认 `sfid/backend/institutions`、`sfid/frontend/institutions`、`sfid/backend/sfid` 不再存在。
+- 已确认后端和前端不再保留旧机构聚合业务目录。
 - 已运行 `cargo check`、`npm run build`。
 - 已将私权机构精确列表改为按登录 scope 解析 `p_code / c_code` 后查询目标分区表,不再按中文省市字段或内存全量过滤。
 - 已新增公安局和公权机构确定性列表 StoreHandle 只读查询,GET 接口不再执行 backfill、reconcile、写库或分片同步。

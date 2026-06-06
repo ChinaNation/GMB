@@ -1,10 +1,10 @@
 // 中文注释:登录与角色相关的前端类型集中放在 auth 模块内。
 // 中文注释:管理员只有省级/市级两类;Passkey 绑定状态用于首次登录后的强制密钥更新入口。
 
-export type AdminRole = 'SHENG_ADMIN' | 'SHI_ADMIN';
+export type AdminRole = 'FEDERAL_ADMIN' | 'SHI_ADMIN';
 
 export const AdminRoleLabel: Record<AdminRole, string> = {
-  SHENG_ADMIN: '省级管理员',
+  FEDERAL_ADMIN: '联邦管理员',
   SHI_ADMIN: '市级管理员',
 };
 

@@ -2,7 +2,7 @@
 // 扫 CPMS ARCHIVE 档案码 -> 展示 wuminapp sign_request -> 扫 sign_response -> 提交 SFID。
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Descriptions, Modal, QRCode, Typography, Upload, message } from 'antd';
+import { Button, Descriptions, Modal, QRCode, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 
 import type { AdminAuth } from '../auth/types';
@@ -15,6 +15,7 @@ import {
 import { decodeQrImageFile, startCameraScanner } from '../utils/cameraScanner';
 import { ApiError } from '../utils/http';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
+import { notice } from '../utils/notice';
 
 type BindStep = 'scan_archive_code' | 'sign_challenge' | 'scan_signature';
 
@@ -91,7 +92,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const onScanArchiveCode = async (qrPayload: string) => {
     if (!auth) return;
     if (!qrPayload.trim()) {
-      message.error('二维码识别失败');
+      notice.error('二维码识别失败');
       return;
     }
     setArchiveCodeScanLoading(true);
@@ -106,7 +107,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       setBindChallenge(challenge);
       setBindStep('sign_challenge');
     } catch (err) {
-      message.error(bindErrorMessage(err));
+      notice.error(bindErrorMessage(err));
     } finally {
       setArchiveCodeScanLoading(false);
     }
@@ -114,7 +115,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
 
   const onUploadArchiveCode: UploadProps['beforeUpload'] = async (file) => {
     if (!auth) {
-      message.error('请先登录');
+      notice.error('请先登录');
       return Upload.LIST_IGNORE;
     }
     setBindScannerActive(false);
@@ -124,7 +125,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       const raw = await decodeQrImageFile(file as File);
       await onScanArchiveCode(raw);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '二维码图片识别失败');
+      notice.error(err, '');
     } finally {
       setArchiveCodeUploadLoading(false);
     }
@@ -134,7 +135,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const onScanBindSignature = async (raw: string) => {
     if (!auth || !bindChallenge) return;
     if (!raw.trim()) {
-      message.error('签名二维码识别失败');
+      notice.error('签名二维码识别失败');
       return;
     }
     setArchiveCodeScanLoading(true);
@@ -151,11 +152,11 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         signature: payload.signature,
         payload_hash: payload.payload_hash,
       });
-      message.success(`${modalTitle}成功${result.sfid_code ? `，身份ID：${result.sfid_code}` : ''}`);
+      notice.success(`${modalTitle}成功${result.sfid_code ? `，身份ID：${result.sfid_code}` : ''}`);
       onClose();
       await onBound();
     } catch (err) {
-      message.error(bindErrorMessage(err));
+      notice.error(bindErrorMessage(err));
     } finally {
       setArchiveCodeScanLoading(false);
     }
@@ -180,7 +181,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       },
       () => setBindScannerReady(true),
       (msg) => {
-        message.error(msg);
+        notice.error(msg);
         setBindScannerActive(false);
       },
     );

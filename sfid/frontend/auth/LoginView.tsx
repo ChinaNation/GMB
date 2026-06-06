@@ -3,7 +3,7 @@
 // 登录成功后通过 useAuth().setAuth 写入全局,App.tsx 只负责在 !auth 时渲染 <LoginView />。
 
 import { useCallback, useEffect, useState } from 'react';
-import { Typography, message } from 'antd';
+import { Typography } from 'antd';
 import { QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
@@ -16,6 +16,7 @@ import {
   createAdminQrChallenge,
   queryAdminQrLoginResult,
 } from './api';
+import { notice } from '../utils/notice';
 
 function createSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -40,10 +41,9 @@ export function LoginView() {
         session_id: sessionId,
       });
       setPendingQrLogin(challenge);
-      message.success('登录二维码已生成');
+      notice.success('登录二维码已生成');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '生成登录二维码失败';
-      message.error(msg);
+      notice.error(err, '生成登录二维码失败');
       setPendingQrLogin(null);
     } finally {
       setChallengeLoading(false);
@@ -52,7 +52,7 @@ export function LoginView() {
 
   const onCompleteSignedLogin = useCallback(async (raw: string) => {
     if (!pendingQrLogin) {
-      message.error('请先生成登录二维码');
+      notice.error('请先生成登录二维码');
       return;
     }
     setScanSubmitting(true);
@@ -82,14 +82,14 @@ export function LoginView() {
         setAuth(nextAuth);
         writeStoredAuth(nextAuth);
         setPendingQrLogin(null);
-        message.success('登录成功');
+        notice.success('登录成功');
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '签名二维码处理失败';
-      if (msg.includes('admin not found')) {
-        message.error('非管理员禁止登录本系统');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.toLowerCase().includes('admin not found')) {
+        notice.error('非管理员禁止登录本系统');
       } else {
-        message.error(msg);
+        notice.error(err, '签名二维码处理失败');
       }
     } finally {
       setScanSubmitting(false);
@@ -109,7 +109,7 @@ export function LoginView() {
         if (cancelled) return;
         if (status.status === 'PENDING') return;
         if (status.status === 'EXPIRED') {
-          message.warning('二维码已过期，请重新生成');
+          notice.warning('二维码已过期，请重新生成');
           setPendingQrLogin(null);
           return;
         }
@@ -126,7 +126,7 @@ export function LoginView() {
           setAuth(nextAuth);
           writeStoredAuth(nextAuth);
           setPendingQrLogin(null);
-          message.success('登录成功');
+          notice.success('登录成功');
         }
       } catch {
         // keep polling
@@ -202,7 +202,7 @@ export function LoginView() {
           scannerDisabled={!pendingQrLogin || scanSubmitting}
           scannerLoading={scanSubmitting}
           onDetected={onCompleteSignedLogin}
-          onScannerError={(msg) => message.error(msg)}
+          onScannerError={(msg) => notice.error(msg)}
         />
       </div>
     </div>

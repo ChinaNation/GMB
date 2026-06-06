@@ -1,4 +1,4 @@
-// 省级管理员视图共享工具函数与类型
+// 联邦管理员视图共享工具函数与类型
 
 import type { FormInstance } from 'antd';
 import type { SfidCityItem } from '../china/api';

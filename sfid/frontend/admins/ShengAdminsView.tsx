@@ -1,11 +1,11 @@
-// 省级管理员视图 —— 调度器:持有所有状态和副作用,
+// 联邦管理员视图 —— 调度器:持有所有状态和副作用,
 // 按 mode 分派到 ShengAdminListView / ProvinceDetailView。
 // system-settings 两层导航:
-//   - 省管理员: 市列表 → 市详情(该市管理员列表)
-//   - 市管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
+//   - 联邦管理员: 市列表 → 市详情(该市市级管理员列表)
+//   - 市级管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Form, Input, Modal, Space, Typography, message } from 'antd';
+import { Form, Input, Modal, Space, Typography } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import type { AdminAuth } from '../auth/types';
@@ -30,6 +30,7 @@ import { ProvinceDetailView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { WuminSignatureModal } from '../core/WuminSignatureModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
+import { notice } from '../utils/notice';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng_admin 列表分支(全省网格);
@@ -160,8 +161,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       writeCachedAdminList(cacheKey, list);
       return list;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载省级管理员失败';
-      message.error(msg);
+      notice.error(err, '加载联邦管理员失败');
       return cached ?? [];
     } finally {
       if (cached === null) setShengAdminsLoading(false);
@@ -185,8 +185,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       writeCachedAdminList(cacheKey, list);
       return list;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载市级管理员失败';
-      message.error(msg);
+      notice.error(err, '加载市级管理员失败');
       return cached ?? [];
     } finally {
       if (cached === null) setOperatorsLoading(false);
@@ -210,7 +209,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       // 自动定位到当前登录角色所属省的 ShengAdmin
       if (!selectedShengAdmin) {
         let target: ShengAdminRow | null = null;
-        if (auth.role === 'SHENG_ADMIN') {
+        if (auth.role === 'FEDERAL_ADMIN') {
           target = rows.find((r) => sameHexPubkey(r.admin_pubkey, auth.admin_pubkey)) || null;
         } else if (auth.role === 'SHI_ADMIN') {
           const me = ops.find((o) => sameHexPubkey(o.admin_pubkey, auth.admin_pubkey));
@@ -260,10 +259,10 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       setOperatorCities([]);
       setOperatorCitiesLoading(true);
     }
-    // 中文注释:首次自动定位当前省时不能覆盖用户刚点击的“省管理员列表”。
+    // 中文注释:首次自动定位当前省时不能覆盖用户刚点击的“联邦管理员列表”。
     // 只有用户真正切换到另一个省时,才把子页签重置回市列表。
     if (isRealProvinceSwitch && adminDetailTabRef.current !== 'sheng-admin') {
-      setAdminDetailTab(auth.passkey_bound === false && auth.role === 'SHENG_ADMIN' ? 'sheng-admin' : 'operators');
+      setAdminDetailTab(auth.passkey_bound === false && auth.role === 'FEDERAL_ADMIN' ? 'sheng-admin' : 'operators');
     }
     setOperatorListPage(1);
     let cancelled = false;
@@ -327,8 +326,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       adminActionModal.resolve(result);
       setAdminActionModal(null);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : '签名回执处理失败';
-      message.error(msg);
+      notice.error(error, '签名回执处理失败');
       adminActionModal.reject(error);
     } finally {
       setAdminActionCommitLoading(false);
@@ -343,27 +341,27 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     const admin_name = values.operator_name?.trim();
     const city = (values.city ?? '').trim();
     if (!inputAddr) {
-      message.error('请输入管理员账户');
+      notice.error('请输入管理员账户');
       return;
     }
     if (!admin_name) {
-      message.error('请输入管理员姓名');
+      notice.error('请输入管理员姓名');
       return;
     }
     if (!city) {
-      message.error('请选择市');
+      notice.error('请选择市');
       return;
     }
     const cityOperatorCount = operators.filter((item) => item.city === city).length;
     if (cityOperatorCount >= MAX_SHI_ADMINS_PER_CITY) {
-      message.error(`本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人，不能继续新增`);
+      notice.error(`本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人，不能继续新增`);
       return;
     }
     let admin_pubkey: string;
     try {
       admin_pubkey = decodeSs58(inputAddr);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '账户格式无效');
+      notice.error(err, '');
       return;
     }
     setAddOperatorLoading(true);
@@ -373,7 +371,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         admin_name,
         city,
       });
-      message.success('管理员新增成功');
+      notice.success('管理员新增成功');
       addOperatorForm.resetFields();
       setAddOperatorOpen(false);
       setOperators((prev) => {
@@ -383,7 +381,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       await refreshOperators();
     } catch (err) {
       const msg = formatAdminCreateError(err, 'SHI_ADMIN', '新增管理员失败');
-      message.error(msg);
+      notice.error(msg);
     } finally {
       setAddOperatorLoading(false);
     }
@@ -393,7 +391,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     if (!auth) return;
     let nextName = row.admin_name;
     const ss58Address = tryEncodeSs58(row.admin_pubkey);
-    Modal.confirm({
+    notice.confirm({
       title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市级管理员</div>,
       icon: null,
       centered: true,
@@ -427,17 +425,16 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       onOk: async () => {
         const admin_name = nextName.trim();
         if (!admin_name) {
-          message.error('请输入管理员姓名');
+          notice.error('请输入管理员姓名');
           throw new Error('admin_name is required');
         }
         setOperatorsLoading(true);
         try {
           await updateOperatorName(auth, row.id, admin_name);
-          message.success('市级管理员信息已更新');
+          notice.success('市级管理员信息已更新');
           await refreshOperators();
         } catch (err) {
-          const msg = err instanceof Error ? err.message : '更新市级管理员信息失败';
-          message.error(msg);
+          notice.error(err, '更新市级管理员信息失败');
           throw err;
         } finally {
           setOperatorsLoading(false);
@@ -449,7 +446,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const onDeleteOperator = (row: OperatorRow) => {
     if (!auth) return;
     const ss58Address = tryEncodeSs58(row.admin_pubkey);
-    Modal.confirm({
+    notice.confirm({
       title: <div style={{ textAlign: 'center', width: '100%' }}>删除市级管理员</div>,
       icon: null,
       centered: true,
@@ -468,11 +465,10 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         setOperatorsLoading(true);
         try {
           await runSecuredAction('DELETE_OPERATOR', { id: row.id });
-          message.success('市级管理员已删除');
+          notice.success('市级管理员已删除');
           await refreshOperators();
         } catch (err) {
-          const msg = err instanceof Error ? err.message : '删除市级管理员失败';
-          message.error(msg);
+          notice.error(err, '删除市级管理员失败');
           throw err;
         } finally {
           setOperatorsLoading(false);
@@ -535,7 +531,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         scannerDisabled={adminActionCommitLoading}
         scannerLoading={adminActionCommitLoading}
         onDetected={handleAdminActionSignedResponse}
-        onScannerError={(msg) => message.error(msg)}
+        onScannerError={(msg) => notice.error(msg)}
       />
     </>
   );

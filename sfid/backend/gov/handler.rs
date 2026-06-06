@@ -24,7 +24,8 @@ use crate::admins::operation_auth::AdminActionType;
 use crate::china::{city_code_by_name, province_code_by_name};
 use crate::core::response::ApiResponse;
 use crate::gov::service::{
-    backfill_public_security_city_code_fields, reconcile_public_security_for_province,
+    check_gov_catalog_db, current_gov_manifest_version, gov_manifest_key,
+    reconcile_public_security_for_province_db, GovTargetKind, OfficialReconcileScope,
     ReconcileReport,
 };
 use crate::scope::get_visible_scope;
@@ -32,6 +33,45 @@ use crate::subjects::model::InstitutionListRow;
 use crate::*;
 
 // ─── 0. 机构名称查重(私权=全国唯一,公权=同城唯一) ──────────────
+
+fn manifest_version_for_scope(
+    state: &AppState,
+    scope: &OfficialReconcileScope,
+    kind: GovTargetKind,
+    province_code: &str,
+) -> Option<String> {
+    current_gov_manifest_version(&state.db, gov_manifest_key(scope, kind).as_str())
+        .or_else(|| {
+            current_gov_manifest_version(
+                &state.db,
+                gov_manifest_key(scope, GovTargetKind::All).as_str(),
+            )
+        })
+        .or_else(|| {
+            let province_scope = OfficialReconcileScope::Province {
+                province_code: province_code.to_string(),
+            };
+            current_gov_manifest_version(
+                &state.db,
+                gov_manifest_key(&province_scope, kind).as_str(),
+            )
+        })
+        .or_else(|| {
+            let province_scope = OfficialReconcileScope::Province {
+                province_code: province_code.to_string(),
+            };
+            current_gov_manifest_version(
+                &state.db,
+                gov_manifest_key(&province_scope, GovTargetKind::All).as_str(),
+            )
+        })
+        .or_else(|| {
+            current_gov_manifest_version(
+                &state.db,
+                gov_manifest_key(&OfficialReconcileScope::All, GovTargetKind::All).as_str(),
+            )
+        })
+}
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ListPublicSecurityQuery {
@@ -42,7 +82,7 @@ pub(crate) struct ListPublicSecurityQuery {
 /// GET /api/v1/institutions/public-security
 ///
 /// 中文注释:公安局是按 sfid 省市代码确定性生成的机构,不是普通公权机构搜索结果。
-/// 该接口不接收搜索词:省级管理员返回本省全部市级公安局,市级管理员返回本市公安局。
+/// 该接口不接收搜索词:联邦管理员返回本省全部市公安局,市级管理员返回本市公安局。
 pub(crate) async fn list_public_security_institutions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -79,9 +119,18 @@ pub(crate) async fn list_public_security_institutions(
         None => 0,
     };
 
-    let page =
+    let directory_scope = match city_code {
+        Some(code) => OfficialReconcileScope::City {
+            province_code: province_code.to_string(),
+            city_code: code.to_string(),
+        },
+        None => OfficialReconcileScope::Province {
+            province_code: province_code.to_string(),
+        },
+    };
+    let mut page =
         match state
-            .store
+            .db
             .list_public_security_scope(province_code, city_code, offset, page_size)
         {
             Ok(v) => v,
@@ -94,6 +143,28 @@ pub(crate) async fn list_public_security_institutions(
                 );
             }
         };
+    page.manifest_version = manifest_version_for_scope(
+        &state,
+        &directory_scope,
+        GovTargetKind::PublicSecurity,
+        province_code,
+    );
+    page.catalog_status = Some("OK".to_string());
+    if page.items.is_empty() {
+        match check_gov_catalog_db(&state.db, directory_scope, GovTargetKind::PublicSecurity) {
+            Ok(report) if !report.ok => {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    1005,
+                    "deterministic public security directory is not initialized",
+                );
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "public security directory check failed");
+            }
+            _ => {}
+        }
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -130,6 +201,8 @@ pub(crate) async fn list_official_institutions(
         page_size: query.page_size.unwrap_or(300).clamp(1, 300),
         next_cursor: None,
         has_more: false,
+        manifest_version: None,
+        catalog_status: None,
     };
     if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province) {
         if locked != requested {
@@ -184,7 +257,16 @@ pub(crate) async fn list_official_institutions(
     };
 
     let keyword = query.q.as_deref().map(str::trim).unwrap_or("");
-    let page = match state.store.list_official_institutions_scope(
+    let directory_scope = match city_code {
+        Some(code) => OfficialReconcileScope::City {
+            province_code: province_code.to_string(),
+            city_code: code.to_string(),
+        },
+        None => OfficialReconcileScope::Province {
+            province_code: province_code.to_string(),
+        },
+    };
+    let mut page = match state.db.list_official_institutions_scope(
         province_code,
         city_code,
         keyword,
@@ -201,6 +283,28 @@ pub(crate) async fn list_official_institutions(
             );
         }
     };
+    page.manifest_version = manifest_version_for_scope(
+        &state,
+        &directory_scope,
+        GovTargetKind::Official,
+        province_code,
+    );
+    page.catalog_status = Some("OK".to_string());
+    if page.items.is_empty() {
+        match check_gov_catalog_db(&state.db, directory_scope, GovTargetKind::Official) {
+            Ok(report) if !report.ok => {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    1005,
+                    "deterministic gov directory is not initialized",
+                );
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "official directory check failed");
+            }
+            _ => {}
+        }
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -246,12 +350,6 @@ pub(crate) async fn reconcile_public_security(
     }
     let scope = get_visible_scope(&ctx);
 
-    let mut store_guard = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    backfill_public_security_city_code_fields(&mut store_guard);
-
     let mut reports: Vec<ReconcileReport> = Vec::new();
     match query
         .province
@@ -267,11 +365,21 @@ pub(crate) async fn reconcile_public_security(
                     "province out of current admin scope",
                 );
             }
-            let report = reconcile_public_security_for_province(
-                &mut store_guard,
+            let report = match reconcile_public_security_for_province_db(
+                &state.db,
                 province,
                 ctx.admin_pubkey.as_str(),
-            );
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(error = %e, "public security reconcile failed");
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "public security reconcile failed",
+                    );
+                }
+            };
             reports.push(report);
         }
         None => {
@@ -285,11 +393,21 @@ pub(crate) async fn reconcile_public_security(
                 scope.provinces.clone()
             };
             for province in target_provinces {
-                let report = reconcile_public_security_for_province(
-                    &mut store_guard,
+                let report = match reconcile_public_security_for_province_db(
+                    &state.db,
                     province.as_str(),
                     ctx.admin_pubkey.as_str(),
-                );
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "public security reconcile failed");
+                        return api_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            1004,
+                            "public security reconcile failed",
+                        );
+                    }
+                };
                 reports.push(report);
             }
         }

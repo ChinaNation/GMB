@@ -9,7 +9,6 @@ pub(crate) mod http;
 pub(crate) mod model;
 pub(crate) mod schema;
 pub(crate) mod service;
-pub(crate) mod store;
 pub(crate) mod uninorg;
 
 #[allow(unused_imports)]
@@ -17,7 +16,7 @@ pub use model::{
     account_key_from_string, account_key_to_string, AccountKey, ChainSyncAccountInput,
     ChainSyncInput, ChainSyncOutput, CreateAccountInput, CreateAccountOutput,
     CreateInstitutionInput, CreateInstitutionOutput, InstitutionChainStatus,
-    InstitutionDetailOutput, InstitutionDocument, InstitutionLevel, InstitutionListRow,
-    InstitutionSource, MultisigAccount, MultisigChainStatus, MultisigInstitution,
-    ParentInstitutionRow, UpdateInstitutionInput, VALID_DOC_TYPES,
+    InstitutionDetailOutput, InstitutionDocument, InstitutionListRow, MultisigAccount,
+    MultisigChainStatus, MultisigInstitution, ParentInstitutionRow, UpdateInstitutionInput,
+    VALID_DOC_TYPES,
 };

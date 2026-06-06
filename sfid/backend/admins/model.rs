@@ -1,18 +1,19 @@
 //! 中文注释:管理员角色 / 实体 + 管理员列表与维护接口 DTO。
 //!
 //! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
-//! 省级管理员采用同级模型;代码内置初始省级管理员只承担不可删除安全根职责。
+//! 联邦管理员采用同级模型;代码内置初始联邦管理员只承担不可删除安全根职责。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // 中文注释:两种管理员角色(ADR-008 后)
-//   - ShengAdmin → 省级管理员(每省 N 人;内置初始管理员不可删除) 目录 admins/
+//   - ShengAdmin → 联邦管理员(每省 N 人;内置初始管理员不可删除) 目录 admins/
 //   - ShiAdmin   → 市级管理员(每市 N 人)                         目录 admins/
-// 序列化为 SHENG_ADMIN / SHI_ADMIN,数据库字段值同。
+// 序列化为 FEDERAL_ADMIN / SHI_ADMIN,数据库字段值同。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {
+    #[serde(rename = "FEDERAL_ADMIN")]
     ShengAdmin,
     ShiAdmin,
 }
@@ -24,7 +25,7 @@ pub(crate) struct AdminUser {
     #[serde(default)]
     pub(crate) admin_name: String,
     pub(crate) role: AdminRole,
-    /// 中文注释:初始省级管理员由代码内置,不可删除;代码以外新增管理员为 false。
+    /// 中文注释:初始联邦管理员由代码内置,不可删除;代码以外新增管理员为 false。
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
@@ -56,7 +57,7 @@ pub(crate) struct OperatorListOutput {
     pub(crate) rows: Vec<OperatorRow>,
 }
 
-// 省级管理员对外行(API 序列化)。
+// 联邦管理员对外行(API 序列化)。
 // 中文注释:管理员只有存在/删除,不存在停用状态。
 #[derive(Serialize)]
 pub(crate) struct ShengAdminRow {

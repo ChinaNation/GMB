@@ -1,7 +1,7 @@
-//! 中文注释:省级管理员初始安全根的 SFID 后端本地基线。
+//! 中文注释:联邦管理员初始安全根的 SFID 后端本地基线。
 //!
 //! `china` 只负责行政区划代码;本文件只负责 43 省注册局管理员分配。
-//! 初始省级管理员公钥和登录归属判断。新增省级管理员存入 `admins` 表。
+//! 初始联邦管理员公钥和登录归属判断。新增联邦管理员存入 `admins` 表。
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ShengAdminMain {
@@ -10,7 +10,7 @@ pub(crate) struct ShengAdminMain {
 }
 
 #[rustfmt::skip]
-pub(crate) const SHENG_ADMIN_MAINS: [ShengAdminMain; 43] = [
+pub(crate) const FEDERAL_ADMIN_MAINS: [ShengAdminMain; 43] = [
     ShengAdminMain { province: "中枢省", pubkey: "0xd641dbfe17fa3fb2427b974212a0fe821b12576e0eade088309d4f05f2cc9930" },
     ShengAdminMain { province: "岭南省", pubkey: "0xe28a39b8f9f9bdc7d0d5c2f6bf290f892a25aeeb34c57002cdb978d13c4efa26" },
     ShengAdminMain { province: "广东省", pubkey: "0x5cdd16e9a9b63f2660ad7829c6d2004ddb713ea46ee5086e53edbda3dd175b42" },
@@ -57,11 +57,11 @@ pub(crate) const SHENG_ADMIN_MAINS: [ShengAdminMain; 43] = [
 ];
 
 pub(crate) fn sheng_admin_mains() -> &'static [ShengAdminMain] {
-    &SHENG_ADMIN_MAINS
+    &FEDERAL_ADMIN_MAINS
 }
 
 pub(crate) fn sheng_admin_province(pubkey: &str) -> Option<&'static str> {
-    SHENG_ADMIN_MAINS
+    FEDERAL_ADMIN_MAINS
         .iter()
         .find(|p| p.pubkey.eq_ignore_ascii_case(pubkey))
         .map(|p| p.province)
@@ -69,7 +69,7 @@ pub(crate) fn sheng_admin_province(pubkey: &str) -> Option<&'static str> {
 
 pub(crate) fn sheng_admin_display_name(pubkey: &str) -> Option<String> {
     let province_name = sheng_admin_province(pubkey)?;
-    Some(format!("{province_name}省级管理员"))
+    Some(format!("{province_name}联邦管理员"))
 }
 
 /// 把 0x 小写 hex 字符串解析为 32 字节 pubkey。失败返回 None。

@@ -5,8 +5,8 @@
 // 修改某类机构的布局只需改对应模块,不影响其他类型。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Col, Descriptions, message, Row, Tag, Typography } from 'antd';
-import { A3_LABEL, INSTITUTION_CODE_LABEL } from '../subjects/labels';
+import { Button, Card, Col, Descriptions, Row, Table, Tag, Typography } from 'antd';
+import { A3_LABEL, INSTITUTION_CODE_LABEL, ORG_CODE_LABEL } from '../subjects/labels';
 import { getInstitution, type InstitutionDetail } from './api';
 import { deleteAccount } from '../accounts/api';
 import {
@@ -16,9 +16,11 @@ import {
 } from '../cpms/api';
 import type { AdminAuth } from '../auth/types';
 import { AccountList } from '../accounts/AccountList';
+import { notice } from '../utils/notice';
 import { CpmsSitePanel } from '../cpms/CpmsSitePanel';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { PrivateDetailLayout } from '../private/PrivateDetailLayout';
+import { DocumentLibrary } from '../docs/DocumentLibrary';
 import {
   commitAdminAction,
   getPasskeyAssertion,
@@ -33,6 +35,7 @@ import {
   readCachedInstitutionDetail,
   writeCachedInstitutionDetail,
 } from '../china/metaCache';
+import { adminRequest } from '../utils/http';
 
 interface Props {
   auth: AdminAuth;
@@ -45,6 +48,73 @@ const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
   NOT_REGISTERED: '未注册',
   REGISTERED: '已注册',
   REVOKED_ON_CHAIN: '已注销',
+};
+
+const SUBJECT_STATUS_LABEL: Record<string, string> = {
+  ACTIVE: '正常',
+  REVOKED: '已注销',
+};
+
+type AuditLogEntry = {
+  seq: number;
+  action: string;
+  actor_pubkey: string;
+  target_pubkey?: string | null;
+  detail: string;
+  created_at: string;
+};
+
+const OperationRecords: React.FC<{ auth: AdminAuth; sfidNumber: string }> = ({ auth, sfidNumber }) => {
+  const [rows, setRows] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    adminRequest<AuditLogEntry[]>(
+      `/api/v1/admin/audit-logs?keyword=${encodeURIComponent(sfidNumber)}&limit=20`,
+      auth,
+    )
+      .then((next) => {
+        if (!cancelled) setRows(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.access_token, sfidNumber]);
+
+  return (
+    <Card type="inner" title={`操作记录(${rows.length})`}>
+      <Table<AuditLogEntry>
+        rowKey="seq"
+        loading={loading}
+        dataSource={rows}
+        pagination={rows.length > 10 ? { pageSize: 10 } : false}
+        columns={[
+          { title: '操作', dataIndex: 'action', width: 160 },
+          {
+            title: '操作者',
+            dataIndex: 'actor_pubkey',
+            width: 220,
+            ellipsis: true,
+          },
+          { title: '详情', dataIndex: 'detail', ellipsis: true },
+          {
+            title: '时间',
+            dataIndex: 'created_at',
+            width: 170,
+            render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+          },
+        ]}
+      />
+    </Card>
+  );
 };
 
 type SecurityModalState = {
@@ -132,7 +202,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
       setSecurityModal(null);
     } catch (err) {
       securityModal.reject(err);
-      message.error(err instanceof Error ? err.message : '签名回执处理失败');
+      notice.error(err, '');
     } finally {
       setSecurityCommitLoading(false);
     }
@@ -140,7 +210,10 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
 
   const inst = detail?.institution;
   const accounts = detail?.accounts || [];
-  const canManageCpms = canWrite && auth.role === 'SHENG_ADMIN';
+  const canManageCpms = canWrite && auth.role === 'FEDERAL_ADMIN';
+  const administrativeArea = inst
+    ? [inst.province, inst.city, inst.town].filter(Boolean).join('/') || '-'
+    : '-';
 
   const loadCpms = useCallback(
     (instSfidNumber: string) => {
@@ -170,10 +243,10 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         account_name: accountName,
       });
       await deleteAccount(auth, sfidNumber, accountName, grant);
-      message.success(`账户 "${accountName}" 已删除`);
+      notice.success(`账户 "${accountName}" 已删除`);
       load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除账户失败');
+      notice.error(err, '');
     }
   };
 
@@ -201,12 +274,12 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         created_by: auth.admin_pubkey,
         created_at: new Date().toISOString(),
       });
-      message.success('CPMS 安装码已生成');
+      notice.success('CPMS 安装码已生成');
       // 中文注释:安装码直接交给 CPMS 初始化,不再经过中间注册回传。
       load();
       loadCpms(result.sfid_number);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '生成失败');
+      notice.error(err, '');
     } finally {
       setCpmsBusy(false);
     }
@@ -260,16 +333,25 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                 <Row gutter={24}>
                   <Col xs={24} md={cpmsSite ? 12 : 24}>
                     <Descriptions column={1} size="small">
-                      <Descriptions.Item label="机构 SFID">
+	                      <Descriptions.Item label="机构 SFID">
                         <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
                           {inst.sfid_number}
                         </Typography.Text>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
-                      <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
-                      <Descriptions.Item label="A3 类型">{inst.a3}/{A3_LABEL[inst.a3] || inst.a3}</Descriptions.Item>
-                      <Descriptions.Item label="机构代码">{inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}</Descriptions.Item>
-                      <Descriptions.Item label="链上状态">
+	                      </Descriptions.Item>
+	                      <Descriptions.Item label="全称">{inst.full_name || '-'}</Descriptions.Item>
+	                      <Descriptions.Item label="简称">{inst.short_name || inst.institution_name || '-'}</Descriptions.Item>
+	                      <Descriptions.Item label="行政区">{administrativeArea}</Descriptions.Item>
+	                      <Descriptions.Item label="机构类型">
+	                        {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
+	                        {inst.org_code ? ` / ${ORG_CODE_LABEL[inst.org_code] || inst.org_code}` : ''}
+	                      </Descriptions.Item>
+	                      <Descriptions.Item label="状态">
+	                        <Tag color={inst.status === 'ACTIVE' ? 'green' : 'red'}>
+	                          {SUBJECT_STATUS_LABEL[inst.status] || inst.status}
+	                        </Tag>
+	                      </Descriptions.Item>
+	                      <Descriptions.Item label="A3 类型">{inst.a3}/{A3_LABEL[inst.a3] || inst.a3}</Descriptions.Item>
+	                      <Descriptions.Item label="链上状态">
                         <Tag>{INSTITUTION_CHAIN_STATUS_LABEL[inst.chain_status] || inst.chain_status}</Tag>
                       </Descriptions.Item>
                       <Descriptions.Item label="创建时间">
@@ -290,9 +372,9 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                 </Row>
               </Card>
 
-              <Card
-                type="inner"
-                title={`账户列表(${accounts.length})`}
+	            <Card
+	                type="inner"
+	                title={`账户列表(${accounts.length})`}
                 extra={
                   canWrite && (
                     <Button type="primary" onClick={() => setCreateAccountOpen(true)}>
@@ -307,9 +389,22 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                   canDelete={canWrite}
                   onDelete={onDeleteAccount}
                 />
-              </Card>
+	              </Card>
 
-              <CreateAccountModal
+	              <div style={{ marginTop: 16 }}>
+	                <DocumentLibrary
+	                  auth={auth}
+	                  sfidNumber={inst.sfid_number}
+	                  canWrite={canWrite}
+	                  createPasskeyChallengeGrant={runPasskeyChallengeGrant}
+	                />
+	              </div>
+
+	              <div style={{ marginTop: 16 }}>
+	                <OperationRecords auth={auth} sfidNumber={inst.sfid_number} />
+	              </div>
+
+	              <CreateAccountModal
                 auth={auth}
                 sfidNumber={inst.sfid_number}
                 institutionName={inst.institution_name ?? ''}
@@ -335,12 +430,12 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
-        qrHint="使用省管理员冷钱包扫码签名"
+        qrHint="使用联邦管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}
-        onScannerError={(msg) => message.error(msg)}
+        onScannerError={(msg) => notice.error(msg)}
       />
     </div>
   );

@@ -50,7 +50,7 @@ pub(crate) async fn admin_list_citizens(
             "offset pagination is not supported",
         );
     }
-    let page = match state.store.list_citizens_exact(
+    let page = match state.db.list_citizens_exact(
         keyword.as_str(),
         scope_province_code.as_deref(),
         scope_city_code.as_deref(),
@@ -100,52 +100,60 @@ pub(crate) async fn public_identity_search(
 
     let actor_ip = actor_ip_from_headers(&headers);
     let request_id = request_id_from_headers(&headers);
-    let found = {
-        let store = match store_read_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        if !wallet_pubkey.is_empty() {
-            store
-                .citizen_id_by_wallet_pubkey
-                .get(wallet_pubkey)
-                .and_then(|cid| store.citizen_records.get(cid))
-                .cloned()
-        } else if !archive_no.is_empty() {
-            store
-                .citizen_id_by_archive_no
-                .get(archive_no)
-                .and_then(|cid| store.citizen_records.get(cid))
-                .cloned()
-        } else {
-            store
-                .citizen_records
-                .values()
-                .find(|r| r.sfid_code.as_deref() == Some(identity_code))
-                .cloned()
+    let found = match state.db.with_client({
+        let archive_no = archive_no.to_string();
+        let identity_code = identity_code.to_string();
+        let wallet_pubkey = wallet_pubkey.to_string();
+        move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT archive_no, sfid_number, wallet_pubkey
+                     FROM citizens
+                     WHERE bind_status = 'BOUND'
+                       AND (
+                            ($1::text <> '' AND archive_no = $1)
+                            OR ($2::text <> '' AND sfid_number = $2)
+                            OR ($3::text <> '' AND lower(wallet_pubkey) = lower($3))
+                       )
+                     ORDER BY created_at DESC
+                     LIMIT 1",
+                    &[&archive_no, &identity_code, &wallet_pubkey],
+                )
+                .map_err(|e| format!("public citizen lookup failed: {e}"))?;
+            Ok(row.map(|row| {
+                (
+                    row.get::<_, Option<String>>(0),
+                    row.get::<_, String>(1),
+                    row.get::<_, Option<String>>(2),
+                )
+            }))
         }
-    }
-    .filter(|record| record.bind_status() == CitizenBindStatus::Bound);
+    }) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(error = %err, "public_identity_search failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "identity query failed",
+            );
+        }
+    };
     let output = PublicIdentitySearchOutput {
         found: found.is_some(),
-        archive_no: found.as_ref().and_then(|r| r.archive_no.clone()),
-        identity_code: found.as_ref().and_then(|r| r.sfid_code.clone()),
-        wallet_pubkey: found.as_ref().and_then(|r| r.wallet_pubkey.clone()),
+        archive_no: found.as_ref().and_then(|r| r.0.clone()),
+        identity_code: found.as_ref().map(|r| r.1.clone()),
+        wallet_pubkey: found.as_ref().and_then(|r| r.2.clone()),
     };
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    append_audit_log_with_meta(
-        &mut store,
+    crate::core::runtime_ops::append_audit_log(
+        &state,
         "PUBLIC_IDENTITY_SEARCH",
         "public",
         output.wallet_pubkey.clone(),
-        output.archive_no.clone(),
-        request_id,
-        actor_ip,
-        "SUCCESS",
-        format!("found={}", output.found),
+        format!(
+            "found={} archive_no={:?} request_id={:?} actor_ip={:?}",
+            output.found, output.archive_no, request_id, actor_ip
+        ),
     );
     Json(ApiResponse {
         code: 0,

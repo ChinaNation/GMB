@@ -15,13 +15,6 @@ pub(crate) fn try_load_signing_key_from_seed(seed_text: &str) -> Result<Sr25519P
         .map_err(|_| "invalid sr25519 seed for substrate pair derivation".to_string())
 }
 
-/// 启动期 / 测试期把 64 hex 字符的 seed 文本解码成 keypair。失败 panic。
-#[cfg(test)]
-pub(crate) fn load_signing_key_from_seed(seed_text: &str) -> Sr25519Pair {
-    try_load_signing_key_from_seed(seed_text)
-        .unwrap_or_else(|err| panic!("invalid signing seed hex: {err}"))
-}
-
 /// 由 seed 文本派生 32 字节公钥 hex(`0x` + 64 字符,小写)。
 #[allow(dead_code)]
 pub(crate) fn try_derive_pubkey_hex_from_seed(seed_text: &str) -> Result<String, String> {

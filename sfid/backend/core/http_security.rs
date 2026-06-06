@@ -218,28 +218,20 @@ pub(crate) async fn root() -> impl IntoResponse {
 }
 
 pub(crate) async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    let store = match state.store.read() {
-        Ok(guard) => guard,
-        Err(err) => {
-            warn!("store read failed in /api/v1/health: {}", err);
-            return Json(ApiResponse {
-                code: 0,
-                message: "ok".to_string(),
-                data: HealthData {
-                    service: "sfid-backend",
-                    status: "DEGRADED",
-                    checked_at: Utc::now().timestamp(),
-                },
-            });
-        }
-    };
-    let _ = latency_p95_p99_ms(&store.metrics.chain_latency_samples);
+    let db_ok = state
+        .db
+        .with_client(|conn| {
+            conn.query_one("SELECT 1", &[])
+                .map(|_| ())
+                .map_err(|e| format!("health query failed: {e}"))
+        })
+        .is_ok();
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: HealthData {
             service: "sfid-backend",
-            status: "UP",
+            status: if db_ok { "UP" } else { "DEGRADED" },
             checked_at: Utc::now().timestamp(),
         },
     })
@@ -366,18 +358,6 @@ pub(crate) fn chain_header_value(headers: &HeaderMap, key: &str) -> Option<Strin
         .and_then(|v| v.to_str().ok())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
-}
-
-pub(crate) fn latency_p95_p99_ms(samples: &[u32]) -> (u32, u32) {
-    if samples.is_empty() {
-        return (0, 0);
-    }
-    let mut ordered = samples.to_vec();
-    ordered.sort_unstable();
-    let len = ordered.len();
-    let p95 = ordered[((len as f64 * 0.95).ceil() as usize).saturating_sub(1)];
-    let p99 = ordered[((len as f64 * 0.99).ceil() as usize).saturating_sub(1)];
-    (p95, p99)
 }
 
 pub(crate) fn actor_ip_from_headers(headers: &HeaderMap) -> Option<String> {

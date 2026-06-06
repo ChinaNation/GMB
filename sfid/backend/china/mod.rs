@@ -8,5 +8,5 @@ pub(crate) mod model;
 mod store;
 
 pub(crate) use store::{
-    city_code_by_name, province_code_by_name, province_name_by_code, provinces,
+    china_sqlite_hash, city_code_by_name, province_code_by_name, province_name_by_code, provinces,
 };

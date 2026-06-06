@@ -7,7 +7,7 @@
 //! sfid 系统把所有注册型多签机构按业务域分为 3 类,便于前端按 tab 过滤和
 //! 按角色授权。分类规则由 `classify(a3, code, institution_name)` 决定:
 //!
-//! - PublicSecurity  公安局        GFR + ZF + institution_name == "公民安全局"
+//! - PublicSecurity  公安局        GFR + ZF + institution_name 以"公安局"结尾
 //! - GovInstitution  公权机构      GFR + 其他(非公安局)
 //! - PrivateInstitution 私权机构   SFR / FFR
 //!
@@ -21,7 +21,7 @@ use crate::number::institution_code::InstitutionCode;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum InstitutionCategory {
-    /// 公安局(GFR + ZF + institution_name == "公民安全局")
+    /// 公安局(GFR + ZF + 名称以"公安局"结尾)
     PublicSecurity,
     /// 公权机构(GFR 类,但不是公安局的那部分)
     GovInstitution,
@@ -40,8 +40,8 @@ impl InstitutionCategory {
     }
 }
 
-/// 中文注释:公安局硬编码的机构名称常量(任务卡 2 用来判定 category)。
-pub const PUBLIC_SECURITY_INSTITUTION_NAME: &str = "公民安全局";
+/// 中文注释:公安局确定性目录使用"xx市公安局"命名,这里只保存稳定后缀。
+pub const PUBLIC_SECURITY_INSTITUTION_SUFFIX: &str = "公安局";
 
 /// 按 (a3, code, institution_name) 三元组决定机构分类。
 /// 规则优先级:公安局 > 公权机构 > 私权机构。
@@ -55,8 +55,10 @@ pub fn classify(
 ) -> Option<InstitutionCategory> {
     match a3 {
         A3::GFR => {
-            // 公法人类:区分公安局和其他公权机构
-            if code == InstitutionCode::ZF && institution_name == PUBLIC_SECURITY_INSTITUTION_NAME {
+            // 公法人类:区分公安局和其他公权机构。
+            if code == InstitutionCode::ZF
+                && institution_name.ends_with(PUBLIC_SECURITY_INSTITUTION_SUFFIX)
+            {
                 Some(InstitutionCategory::PublicSecurity)
             } else {
                 Some(InstitutionCategory::GovInstitution)
@@ -75,7 +77,7 @@ mod tests {
     #[test]
     fn public_security_exact_match() {
         assert_eq!(
-            classify(A3::GFR, InstitutionCode::ZF, "公民安全局"),
+            classify(A3::GFR, InstitutionCode::ZF, "广州市公安局"),
             Some(InstitutionCategory::PublicSecurity)
         );
     }

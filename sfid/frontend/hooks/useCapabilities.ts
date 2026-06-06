@@ -1,6 +1,6 @@
 // 中文注释:从 auth.role 派生出前端各 tab 的能力标志,方便 业务子组件做条件渲染。
-// 中文注释:当前仅保留 SHENG_ADMIN / SHI_ADMIN。
-// 管理员不存在层级槽位和状态字段,本 hook 只看角色。
+// 中文注释:当前仅保留 FEDERAL_ADMIN / SHI_ADMIN。
+// 管理员不存在组织级别槽位和状态字段,本 hook 只看角色。
 
 import { useMemo } from 'react';
 import type { AdminAuth } from '../auth/types';
@@ -15,7 +15,7 @@ export interface Capabilities {
   canViewInstitutions: boolean;       // 公安局 / 公权机构 / 私权机构 tab
   canViewPrivate: boolean;            // 私权机构 tab
   canViewRegistry: boolean;           // 注册局 tab(原机构管理)
-  canViewShengAdmins: boolean;        // 省级管理员列表
+  canViewShengAdmins: boolean;        // 联邦管理员列表
   canViewShiAdmins: boolean;          // 市级管理员列表
 
   // 业务操作权限
@@ -29,7 +29,7 @@ export interface Capabilities {
 export function useCapabilities(auth: AdminAuth | null): Capabilities {
   return useMemo<Capabilities>(() => {
     const role = auth?.role;
-    const isShengAdmin = role === 'SHENG_ADMIN';
+    const isShengAdmin = role === 'FEDERAL_ADMIN';
     const isShiAdmin = role === 'SHI_ADMIN';
 
     return {

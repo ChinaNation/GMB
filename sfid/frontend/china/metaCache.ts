@@ -10,6 +10,7 @@ const SFID_CITY_CACHE_VERSION = 'sfid-cities-v1';
 const PUBLIC_SECURITY_CACHE_VERSION = 'public-security-v1';
 const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v1';
 const INSTITUTION_DETAIL_CACHE_VERSION = 'institution-detail-v1';
+const GOV_MANIFEST_VERSION_KEY = 'sfid:gov-manifest-version';
 
 interface CachedPayload<T> {
   version: string;
@@ -22,6 +23,7 @@ interface PublicSecurityCachePayload {
   role: string;
   province: string;
   city: string;
+  manifest_version?: string | null;
   rows: InstitutionListRow[];
 }
 
@@ -104,6 +106,19 @@ export function readCachedPublicSecurityRows(key: string): InstitutionListRow[] 
       localStorage.removeItem(key);
       return null;
     }
+    if (parsed.rows.length === 0) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    const latestManifestVersion = localStorage.getItem(GOV_MANIFEST_VERSION_KEY);
+    if (
+      latestManifestVersion
+      && parsed.manifest_version
+      && parsed.manifest_version !== latestManifestVersion
+    ) {
+      localStorage.removeItem(key);
+      return null;
+    }
     return parsed.rows;
   } catch {
     localStorage.removeItem(key);
@@ -117,8 +132,11 @@ export function writeCachedPublicSecurityRows(
   province: string,
   city: string,
   rows: InstitutionListRow[],
+  manifestVersion?: string | null,
 ) {
+  if (rows.length === 0) return;
   try {
+    if (manifestVersion) localStorage.setItem(GOV_MANIFEST_VERSION_KEY, manifestVersion);
     localStorage.setItem(
       key,
       JSON.stringify({
@@ -127,6 +145,7 @@ export function writeCachedPublicSecurityRows(
         role: auth.role,
         province: auth.admin_province || province,
         city: auth.admin_city || city || 'ALL',
+        manifest_version: manifestVersion ?? null,
         rows,
       } satisfies PublicSecurityCachePayload),
     );
@@ -157,6 +176,19 @@ export function readCachedOfficialInstitutionRows(key: string): InstitutionListR
       localStorage.removeItem(key);
       return null;
     }
+    if (parsed.rows.length === 0) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    const latestManifestVersion = localStorage.getItem(GOV_MANIFEST_VERSION_KEY);
+    if (
+      latestManifestVersion
+      && parsed.manifest_version
+      && parsed.manifest_version !== latestManifestVersion
+    ) {
+      localStorage.removeItem(key);
+      return null;
+    }
     return parsed.rows;
   } catch {
     localStorage.removeItem(key);
@@ -170,8 +202,11 @@ export function writeCachedOfficialInstitutionRows(
   province: string,
   city: string,
   rows: InstitutionListRow[],
+  manifestVersion?: string | null,
 ) {
+  if (rows.length === 0) return;
   try {
+    if (manifestVersion) localStorage.setItem(GOV_MANIFEST_VERSION_KEY, manifestVersion);
     localStorage.setItem(
       key,
       JSON.stringify({
@@ -180,6 +215,7 @@ export function writeCachedOfficialInstitutionRows(
         role: auth.role,
         province: auth.admin_province || province,
         city: auth.admin_city || city || 'ALL',
+        manifest_version: manifestVersion ?? null,
         rows,
       } satisfies PublicSecurityCachePayload),
     );

@@ -1,7 +1,7 @@
 // 中文注释:机构新增弹窗共享表单。gov/private 只传入各自 API 函数,不在公共组件里越过业务边界。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Form, Input, message, Modal, Select, Spin } from 'antd';
+import { Button, Form, Input, Modal, Select, Spin } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../../auth/types';
 import type { SfidCityItem } from '../../china/api';
@@ -12,6 +12,7 @@ import type {
   InstitutionCategory,
 } from '../../subjects/api';
 import { dynamicLocksForA3, locksForCategory } from '../../subjects/labels';
+import { notice } from '../../utils/notice';
 
 interface FormValues {
   a3: string;
@@ -115,7 +116,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       .catch((err) => {
         if (!cancelled) {
           setCities([]);
-          message.error(err instanceof Error ? err.message : '加载城市列表失败');
+          notice.error(err, '');
         }
       })
       .finally(() => {
@@ -152,13 +153,13 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const onCheckName = async () => {
     const name = (form.getFieldValue('institution_name') ?? '').trim();
     if (!name) {
-      message.warning(isEducationSchool ? '请先输入学校名称' : '请先输入机构名称');
+      notice.warning(isEducationSchool ? '请先输入学校名称' : '请先输入机构名称');
       return;
     }
     if (isPublicGov) {
       const city = (form.getFieldValue('city') ?? '').trim();
       if (!city) {
-        message.warning('学校名称查重需要先选择市');
+        notice.warning('学校名称查重需要先选择市');
         return;
       }
     }
@@ -172,14 +173,14 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         cityVal,
       );
       if (exists) {
-        message.error(isPublicGov ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用');
+        notice.error(isPublicGov ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用');
         setNameAvailable(false);
       } else {
-        message.success('名称可用');
+        notice.success('名称可用');
         setNameAvailable(true);
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '查重失败');
+      notice.error(err, '');
       setNameAvailable(null);
     } finally {
       setNameChecking(false);
@@ -192,7 +193,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   const onSubmit = async (values: FormValues) => {
     if (collectNameInModal && !locks.lockedInstitutionName && nameAvailable !== true) {
-      message.warning('请先点击搜索图标检查名称是否可用');
+      notice.warning('请先点击搜索图标检查名称是否可用');
       return;
     }
     setSubmitting(true);
@@ -208,20 +209,20 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           : undefined,
       });
       if (isPrivate && !isEducationSchool) {
-        message.success(`机构 SFID 已生成,请到详情页完善信息:${result.sfid_number}`);
+        notice.success(`机构 SFID 已生成,请到详情页完善信息:${result.sfid_number}`);
       } else {
-        message.success(`学校机构已创建:${result.sfid_number}`);
+        notice.success(`学校机构已创建:${result.sfid_number}`);
       }
       onCreated(result);
     } catch (err) {
       const raw = err instanceof Error ? err.message : '创建机构失败';
       if (raw.includes('本省') && raw.includes('未在线')) {
-        message.error('本省登录管理员未在线,请联系省管理员登录后重试');
+        notice.error('本省登录管理员未在线,请联系联邦管理员登录后重试');
       } else if (raw.includes('已被使用') || raw.includes('同名机构')) {
-        message.error('该市已存在同名机构，请更换名称');
+        notice.error('该市已存在同名机构，请更换名称');
         setNameAvailable(false);
       } else {
-        message.error(raw);
+        notice.error(err, '创建机构失败');
       }
     } finally {
       setSubmitting(false);

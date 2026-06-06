@@ -69,7 +69,7 @@ sfid/backend/
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
 - CPMS 系统管理归 `sfid/backend/cpms/`,不得放入管理员目录。
 - 后端不再维护分散的省级/市级管理员双目录;
-  省级管理员列表、市级管理员列表和管理员治理写入口统一归 `admins/`。
+  联邦管理员列表、市级管理员列表和管理员治理写入口统一归 `admins/`。
 - 公权机构前后端目录统一命名为 `gov`;后端不得再另建 `public` 或 `registry_admins`。
 - 私权机构归 `private`;公民继续使用 `citizens`;智能人功能当前不上线,不得预建智能人目录或表。
 - 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,编码元信息 DTO 归
@@ -90,8 +90,8 @@ sfid/backend/
 - 省/市管理员姓名修改属于 `LOGIN_STATE`,使用登录态 PATCH handler,但仍必须做省域和角色校验。
 - 市级管理员地址属于身份根,`UPDATE_OPERATOR` 不接收 `admin_pubkey`;修改市级管理员
   只允许调整管理员姓名。
-- 省级管理员采用同级模型;新增、删除省级管理员统一走
-  `CREATE_SHENG_ADMIN / DELETE_SHENG_ADMIN` 安全动作;编辑姓名使用登录态 PATCH handler。
+- 联邦管理员采用同级模型;新增、删除联邦管理员统一走
+  `CREATE_FEDERAL_ADMIN / DELETE_FEDERAL_ADMIN` 安全动作;编辑姓名使用登录态 PATCH handler。
 - 管理员不存在停用状态字段;删除管理员时必须同步清理会话、Passkey、短期挑战和安全 grant。
 - `PASSKEY` 业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
   提供 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;`PASSKEY_CHALLENGE` 写操作必须再叠加
@@ -106,7 +106,7 @@ sfid/backend/
 - 通用 `WUMIN_QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
   已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
   `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
-- CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归省级管理员;
+- CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归联邦管理员;
   市级管理员不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `sfid/backend/core/chain_*`。
 - 非源码目录 `tests/`、`target/` 不参与业务模块平铺;后端源码根下不得恢复空的
@@ -122,14 +122,15 @@ sfid/backend/
     同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
 - `store/` 内的分片缓存只保留进程内按省访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
-- 数据库当前目标结构由 `main.rs` 启动时创建；初始省级管理员唯一真源为
+- 数据库当前目标结构由 `main.rs` 启动时创建；初始联邦管理员唯一真源为
   `admins/province_admins.rs`。
 - 关系型目标表从初始化阶段即按 `p_code` 创建省级分区,不得写成“数据量变大后再分区”:
   - `ids`:全局 `sfid_number` 唯一约束表,不是第二身份键。
-  - `subjects`:统一身份主体索引,`kind=CITIZEN/PUBLIC/PRIVATE`;机构列表所需的
-    `category/source/level/A3/P1/省市/机构码/链上状态/创建人` 也在这里保存。
+  - `subjects`:统一身份主体索引,`kind=CITIZEN/PUBLIC/PRIVATE`;保存
+    `name/full_name/short_name/p_code/c_code/t_code/省市镇/status` 等主体展示与范围字段。
   - `citizens`:公民详情,保留精简命名。
-  - `gov`:公权机构详情,国家级机构管辖分区使用 `p_code=CN`,驻地写 `home_p/home_c`。
+  - `gov`:公权机构详情,保存 `level/institution_code/org_code`；公安局只保留
+    `level=CITY AND org_code=CITY_POLICE` 的市公安局。
   - `private`:私权机构详情。
   - `accounts`:机构账户。
   - `docs`:机构资料库。
@@ -165,7 +166,7 @@ SFID 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP
 登录态无效;公民绑定 challenge 过期、账户不匹配、签名失败、ARCHIVE 验真失败等业务错误
 不得返回 `401`。完整规则见 `memory/05-modules/sfid/ERROR_CODES.md`。
 管理员新增入口必须以规范化 `admin_pubkey` 做全局唯一校验；重复账号按已有角色返回
-`SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` 或 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN`。
-省级管理员每省最多 5 人；市级管理员每省每市最多 30 人；`sheng_admin_scope.province_name` 只能建普通索引,不得建唯一约束。
+`SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN` 或 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN`。
+联邦管理员每省最多 5 人；市级管理员每省每市最多 30 人；`sheng_admin_scope.province_name` 只能建普通索引,不得建唯一约束。
 管理员安全写操作必须在返回成功前显式完成 Store 持久化；持久化失败返回
 `SFID_STORE_PERSIST_FAILED`。

@@ -8,13 +8,13 @@ use subxt::ext::scale_value::At;
 use subxt::{OnlineClient, PolkadotConfig};
 use tracing::{error, info, warn};
 
-use crate::StoreBackend;
+use crate::Db;
 
 use super::db;
 use super::event_parser;
 
 /// Indexer 后台任务入口。在 main.rs 中通过 `tokio::spawn` 启动。
-pub(crate) async fn indexer_worker(backend: StoreBackend) {
+pub(crate) async fn indexer_worker(db_pool: Db) {
     let ws_url = match crate::core::chain_url::chain_ws_url() {
         Ok(url) => url,
         Err(err) => {
@@ -28,16 +28,25 @@ pub(crate) async fn indexer_worker(backend: StoreBackend) {
     // 带 backoff 的重连循环
     let mut backoff_secs = 2u64;
     loop {
-        match run_indexer_loop(&ws_url, &backend).await {
+        match run_indexer_loop(&ws_url, &db_pool).await {
             Ok(()) => {
                 info!("indexer loop exited normally, restarting in {backoff_secs}s");
             }
             Err(err) => {
-                error!(
-                    error = %err,
-                    retry_in = backoff_secs,
-                    "indexer loop failed, will retry"
-                );
+                // 中文注释:链节点未启动是允许的降级状态,只提示后台索引稍后重试。
+                if err.contains("connect rpc") {
+                    warn!(
+                        error = %err,
+                        retry_in = backoff_secs,
+                        "indexer chain rpc unavailable, will retry"
+                    );
+                } else {
+                    error!(
+                        error = %err,
+                        retry_in = backoff_secs,
+                        "indexer loop failed, will retry"
+                    );
+                }
             }
         }
         tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
@@ -46,7 +55,7 @@ pub(crate) async fn indexer_worker(backend: StoreBackend) {
 }
 
 /// 主索引循环：连接链，追赶历史区块，然后订阅新区块。
-async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), String> {
+async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
     let rpc_client = RpcClient::from_insecure_url(ws_url)
         .await
         .map_err(|e| format!("connect rpc: {e}"))?;
@@ -58,7 +67,7 @@ async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), St
     info!("indexer connected to chain");
 
     // 读取当前索引进度
-    let last_indexed = with_db(backend, |conn| db::read_last_indexed_block(conn))?;
+    let last_indexed = db_pool.with_client(|conn| db::read_last_indexed_block(conn))?;
     info!(last_indexed_block = last_indexed, "indexer resuming");
 
     // 获取链上最新已最终化区块
@@ -89,7 +98,7 @@ async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), St
             .await
             .map_err(|e| format!("fetch block hash #{next_block}: {e}"))?
             .ok_or_else(|| format!("block #{next_block} not found"))?;
-        process_block_at_hash(&client, backend, next_block, hash).await?;
+        process_block_at_hash(&client, db_pool, next_block, hash).await?;
         if next_block % 1000 == 0 {
             info!(block = next_block, "indexer catch-up progress");
         }
@@ -114,7 +123,7 @@ async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), St
         let block_num = block.number() as i64;
 
         // 跳过已索引的区块
-        let current_last = with_db(backend, |conn| db::read_last_indexed_block(conn))?;
+        let current_last = db_pool.with_client(|conn| db::read_last_indexed_block(conn))?;
         if block_num <= current_last {
             continue;
         }
@@ -127,7 +136,7 @@ async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), St
                 .await
                 .map_err(|e| format!("fetch block hash #{n}: {e}"))?
                 .ok_or_else(|| format!("block #{n} not found"))?;
-            process_block_at_hash(&client, backend, n, hash).await?;
+            process_block_at_hash(&client, db_pool, n, hash).await?;
             n += 1;
         }
 
@@ -138,16 +147,14 @@ async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), St
             .map_err(|e| format!("fetch events #{block_num}: {e}"))?;
         let block_ts = extract_block_timestamp_from_block(&block).await;
         let records = event_parser::parse_block_events(&events, block_num, block_ts);
-        with_db(backend, |conn| {
-            db::insert_block_records(conn, block_num, &records)
-        })?;
+        db_pool.with_client(|conn| db::insert_block_records(conn, block_num, &records))?;
     }
 }
 
 /// 通过 block hash 处理单个区块。
 async fn process_block_at_hash(
     client: &OnlineClient<PolkadotConfig>,
-    backend: &StoreBackend,
+    db_pool: &Db,
     block_number: i64,
     block_hash: subxt::utils::H256,
 ) -> Result<(), String> {
@@ -165,9 +172,7 @@ async fn process_block_at_hash(
     let block_ts = extract_block_timestamp_from_block(&block).await;
     let records = event_parser::parse_block_events(&events, block_number, block_ts);
 
-    with_db(backend, |conn| {
-        db::insert_block_records(conn, block_number, &records)
-    })?;
+    db_pool.with_client(|conn| db::insert_block_records(conn, block_number, &records))?;
 
     Ok(())
 }
@@ -190,19 +195,4 @@ async fn extract_block_timestamp_from_block(
         }
     }
     None
-}
-
-/// 在同步 postgres 客户端上执行操作。
-fn with_db<R: Send>(
-    backend: &StoreBackend,
-    op: impl FnOnce(&mut postgres::Client) -> Result<R, String> + Send,
-) -> Result<R, String> {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = backend
-    else {
-        return Err("indexer requires postgres backend".to_string());
-    };
-    StoreBackend::with_postgres_client(clients, next_client_idx, op)
 }

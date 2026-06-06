@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 use crate::number::InstitutionCategory;
 use crate::scope::HasProvinceCity;
 
+fn default_subject_status() -> String {
+    "ACTIVE".to_string()
+}
+
 // ── 机构 / 账户链上状态 ───────────────────────────────────────
 
 /// 机构链上注册状态。
@@ -37,31 +41,6 @@ impl Default for InstitutionChainStatus {
     fn default() -> Self {
         Self::NotRegistered
     }
-}
-
-/// 机构登记来源。
-///
-/// 中文注释:该字段只描述机构记录如何进入 SFID,不参与机构身份判定。
-/// 机构唯一身份仍然只有 `sfid_number`,不得引入第二套 identity/generation key。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum InstitutionSource {
-    /// 按公民宪法/宪法常量与 SFID 行政区划自动生成。
-    Auto,
-}
-
-/// 机构制度层级。
-///
-/// 中文注释:国家/省/市/镇层级只服务自动生成的宪法机构目录。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum InstitutionLevel {
-    National,
-    Province,
-    City,
-    Town,
-    #[serde(rename = "NONE")]
-    NoAdministrativeLevel,
 }
 
 /// 机构账户链上状态。
@@ -97,14 +76,17 @@ pub struct MultisigInstitution {
     ///   - 自动公权机构/公安局由系统生成名称,不会为 `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub institution_name: Option<String>,
+    /// 机构全称。列表只显示 `institution_name`,详情页显示全称和简称。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full_name: Option<String>,
+    /// 机构简称。确定性公权机构默认把简称写入 `institution_name` 作为列表名称。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_name: Option<String>,
+    /// 主体业务状态。机构列表和详情只展示 ACTIVE / REVOKED,不把链上状态混成业务状态。
+    #[serde(default = "default_subject_status")]
+    pub status: String,
     /// 机构分类(公安局/公权机构/私权机构)。
     pub category: InstitutionCategory,
-    /// 机构登记来源。普通手动机构可为空;自动宪法机构/自动公权机构为 AUTO。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<InstitutionSource>,
-    /// 自动宪法/公权机构的制度层级;手动学校机构不设置。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub institution_level: Option<InstitutionLevel>,
     /// 主体属性(GFR/SFR/FFR)。
     pub a3: String,
     /// 盈利属性("0"/"1")。
@@ -113,6 +95,9 @@ pub struct MultisigInstitution {
     pub province: String,
     /// 所属市(名称,如"合肥市")。
     pub city: String,
+    /// 所属镇(名称)。非镇目录机构为空。
+    #[serde(default)]
+    pub town: String,
     /// 所属省代码(r5 前 2 字符)。
     pub province_code: String,
     /// 所属市代码(r5 后 3 字符)。任务卡 6 新增:
@@ -120,8 +105,14 @@ pub struct MultisigInstitution {
     /// 既有记录在后端启动时由 `backfill_and_reconcile_public_security` 补齐。
     #[serde(default)]
     pub city_code: String,
+    /// 所属镇代码。只有镇目录机构填写。
+    #[serde(default)]
+    pub town_code: String,
     /// 机构类型代码(ZF/LF/SF/...)。
     pub institution_code: String,
+    /// 公权机构细类代码,例如 CITY_FINANCE、TOWN_GOV。私权机构可为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub org_code: Option<String>,
     /// 私法人子类型(仅 A3=SFR 时有值)。
     /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK / NON_PROFIT
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -230,12 +221,8 @@ pub struct CreateInstitutionInput {
     /// 两步式:私权(SFR/FFR)不传,由详情页 `update_institution` 补填;
     /// `JY` 手动新增学校机构必传;普通私权两步式不传;自动公权机构不走该创建 DTO。
     pub institution_name: Option<String>,
-    /// 登记来源只允许系统自动目录使用;手动创建不得传。
-    #[serde(default)]
-    pub source: Option<InstitutionSource>,
-    /// 制度层级只允许系统自动目录使用;手动创建不得传。
-    #[serde(default)]
-    pub institution_level: Option<InstitutionLevel>,
+    pub full_name: Option<String>,
+    pub short_name: Option<String>,
     /// 私法人子类型。两步式改造后:**创建阶段不再接受** sub_type,
     /// 统一由 `update_institution` 在详情页设置;创建请求传入该字段会被拒绝。
     #[serde(default)]
@@ -254,6 +241,10 @@ pub struct CreateInstitutionOutput {
 #[derive(Debug, Deserialize)]
 pub struct UpdateInstitutionInput {
     pub institution_name: Option<String>,
+    #[serde(default)]
+    pub full_name: Option<String>,
+    #[serde(default)]
+    pub short_name: Option<String>,
     pub sub_type: Option<String>,
     /// 所属法人 sfid_number(仅 FFR 可设置;SFR/GFR 传值会被拒)
     #[serde(default)]
@@ -281,28 +272,39 @@ pub struct InstitutionListRow {
     pub sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub institution_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_name: Option<String>,
+    pub status: String,
     pub category: InstitutionCategory,
     pub a3: String,
     pub p1: String,
     pub province: String,
     pub city: String,
+    #[serde(default)]
+    pub town: String,
     pub institution_code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub org_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source: Option<InstitutionSource>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub institution_level: Option<InstitutionLevel>,
     pub chain_status: InstitutionChainStatus,
     pub account_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpms_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_token_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_service_status: Option<String>,
     pub created_at: DateTime<Utc>,
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
     /// 命中:admin_name;未命中:None(前端显示为"未知")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"SHENG_ADMIN" / "SHI_ADMIN" / None
+    /// 创建者角色:"FEDERAL_ADMIN" / "SHI_ADMIN" / None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }
@@ -319,6 +321,8 @@ pub struct ParentInstitutionRow {
     pub category: InstitutionCategory,
     pub province: String,
     pub city: String,
+    #[serde(default)]
+    pub town: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -328,7 +332,7 @@ pub struct InstitutionDetailOutput {
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"SHENG_ADMIN" / "SHI_ADMIN"
+    /// 创建者角色:"FEDERAL_ADMIN" / "SHI_ADMIN"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }

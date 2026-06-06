@@ -15,6 +15,12 @@ pub(crate) struct PageResult<T: Serialize> {
     pub(crate) page_size: usize,
     pub(crate) next_cursor: Option<String>,
     pub(crate) has_more: bool,
+    /// 中文注释:确定性目录列表使用。普通分页接口保持 None,序列化时省略。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) manifest_version: Option<String>,
+    /// 中文注释:确定性目录列表使用。OK 表示当前响应来自已校验目录。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) catalog_status: Option<String>,
 }
 
 #[derive(Serialize)]

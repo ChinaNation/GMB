@@ -17,7 +17,6 @@
 
 #![allow(dead_code, unused_imports)]
 
-pub mod admin_province;
 pub mod filter;
 pub mod rules;
 

@@ -86,6 +86,44 @@ stop_launchd_backend() {
   fi
 }
 
+check_database_ready() {
+  if ! command -v pg_isready >/dev/null 2>&1; then
+    echo "Missing pg_isready; install PostgreSQL client tools before starting SFID."
+    return 1
+  fi
+
+  if pg_isready -d "$DATABASE_URL" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local pgdata="${SFID_POSTGRES_DATA_DIR:-/opt/homebrew/var/postgresql@17}"
+  local pid_file="$pgdata/postmaster.pid"
+  if [[ -f "$pid_file" ]]; then
+    local pid
+    pid="$(head -1 "$pid_file" | tr -d '[:space:]')"
+    if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+      local args
+      args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+      if [[ "$args" != *postgres* && "$args" != *postmaster* ]]; then
+        echo "PostgreSQL is not ready, and $pid_file is stale."
+        echo "The PID in that file is $pid, but the running process is:"
+        echo "$args"
+        echo "Move the stale pid file away, then restart PostgreSQL:"
+        echo "  mv \"$pid_file\" \"$pid_file.stale.\$(date +%Y%m%d%H%M%S)\""
+        echo "  brew services restart postgresql@17"
+        return 1
+      fi
+    fi
+  fi
+
+  echo "PostgreSQL is not ready for DATABASE_URL."
+  echo "DATABASE_URL=${DATABASE_URL}"
+  echo "Check it with:"
+  echo "  pg_isready -d \"\$DATABASE_URL\""
+  echo "  brew services list | grep postgresql"
+  return 1
+}
+
 launch_backend() {
   local parent_pid="$$"
   (
@@ -177,9 +215,12 @@ fi
 stop_launchd_backend
 stop_port_listeners "$SFID_FRONTEND_PORT" "frontend"
 stop_port_listeners "$SFID_PORT" "backend"
+check_database_ready
 
 # 中文注释:不要用 `cargo run` 常驻服务,否则 Ctrl-C 后真实后端二进制可能被孤儿化。
 (cd "$ROOT_DIR" && cargo build --manifest-path backend/Cargo.toml)
+# 中文注释:部署守门只在确定性公权机构目录缺失或不完整时初始化,已初始化则直接跳过。
+"$ROOT_DIR/backend/target/debug/sfid-backend" ensure-gov
 launch_backend
 
 wait_backend_ready() {

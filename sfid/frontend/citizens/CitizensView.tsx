@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import type { MouseEvent } from 'react';
-import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag, message } from 'antd';
+import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag } from 'antd';
 
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -15,6 +15,7 @@ import { useAuth } from '../hooks/useAuth';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { BindModal } from './BindModal';
 import { StatusExportImportModal } from './StatusExportImportModal';
+import { notice } from '../utils/notice';
 
 
 export function CitizensView() {
@@ -46,15 +47,14 @@ export function CitizensView() {
       setRows(list);
       setNextCursor(raw.next_cursor ?? null);
       if (list.length === 0) {
-        Modal.warning({
+        notice.warningModal({
           title: '查询结果',
           content: '未查询到公民信息',
         });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '查询失败';
       if (!silent) {
-        message.error(msg);
+        notice.error(err, '查询失败');
       }
     } finally {
       setLoading(false);

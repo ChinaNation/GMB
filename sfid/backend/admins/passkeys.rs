@@ -1,7 +1,7 @@
 //! 管理员 Passkey 注册与 WebAuthn 工具。
 //!
-//! 中文注释:本模块只负责浏览器 Passkey 凭据的注册、验证辅助和短期安全挑战清理;
-//! 管理员治理动作的业务落库仍归 `admins/actions.rs`。
+//! 中文注释:Passkey 凭据、注册挑战和一次性安全动作均落到 admins 结构化表。
+//! 本模块只保留 WebAuthn、冷钱包签名校验和哈希工具,不再维护进程内状态。
 
 use axum::{
     extract::State,
@@ -19,6 +19,7 @@ use webauthn_rs::prelude::{
     RegisterPublicKeyCredential, Url, Webauthn, WebauthnBuilder,
 };
 
+use crate::admins::repo;
 use crate::admins::security_model::{
     AdminPasskeyCredential, AdminPasskeyRegistrationChallenge, AdminPasskeyStatus,
 };
@@ -169,29 +170,27 @@ pub(crate) async fn start_passkey_registration(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    {
-        let mut store = match store_write_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        cleanup_admin_security_challenges(&mut store);
-        store.admin_passkey_registration_challenges.insert(
-            registration_id.clone(),
-            AdminPasskeyRegistrationChallenge {
-                registration_id: registration_id.clone(),
-                admin_pubkey: ctx.admin_pubkey.clone(),
-                admin_name: ctx.admin_name.clone(),
-                label,
-                webauthn_state: None,
-                payload_text,
-                payload_hash: payload_hash.clone(),
-                cold_wallet_confirmed: false,
-                issued_at: now,
-                expires_at,
-                consumed: false,
-            },
-        );
+
+    if let Err(err) = repo::insert_passkey_challenge(
+        &state.db,
+        &AdminPasskeyRegistrationChallenge {
+            registration_id: registration_id.clone(),
+            admin_pubkey: ctx.admin_pubkey.clone(),
+            admin_name: ctx.admin_name.clone(),
+            label,
+            webauthn_state: None,
+            payload_text,
+            payload_hash: payload_hash.clone(),
+            cold_wallet_confirmed: false,
+            issued_at: now,
+            expires_at,
+            consumed: false,
+        },
+    ) {
+        let message = format!("insert passkey challenge failed: {err}");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -220,83 +219,89 @@ pub(crate) async fn confirm_passkey_registration(
         Err(resp) => return resp,
     };
     let now = Utc::now();
-    let mut store = match store_write_or_500(&state) {
+    let registration_id = input.registration_id.trim().to_string();
+    let result = state.db.with_client(move |conn| {
+        repo::cleanup_security_state_conn(conn, now)?;
+        let Some(mut challenge) = repo::get_passkey_challenge_conn(conn, registration_id.as_str())?
+        else {
+            return Err("http:not_found:passkey registration not found".to_string());
+        };
+        if challenge.consumed || now > challenge.expires_at {
+            return Err("http:unprocessable:passkey registration expired".to_string());
+        }
+        if !same_admin_pubkey(challenge.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
+            return Err("http:forbidden:passkey registration owner mismatch".to_string());
+        }
+        verify_cold_wallet_signature(
+            ctx.admin_pubkey.as_str(),
+            input.signer_pubkey.as_str(),
+            input.signature.as_str(),
+            input.payload_hash.as_str(),
+            challenge.payload_hash.as_str(),
+            challenge.payload_text.as_str(),
+        )
+        .map_err(|_| "http:unprocessable:signature verify failed".to_string())?;
+        let existing = repo::active_passkey_credentials_conn(conn, ctx.admin_pubkey.as_str())?
+            .into_iter()
+            .map(|record| record.passkey.cred_id().clone())
+            .collect::<Vec<_>>();
+        let (public_key_options, webauthn_state) = webauthn
+            .start_passkey_registration(
+                user_uuid_for_pubkey(ctx.admin_pubkey.as_str()),
+                ctx.admin_pubkey.as_str(),
+                ctx.admin_name.as_str(),
+                Some(existing),
+            )
+            .map_err(|err| format!("start passkey registration failed: {err}"))?;
+        challenge.webauthn_state = Some(webauthn_state);
+        challenge.cold_wallet_confirmed = true;
+        repo::upsert_passkey_challenge_conn(conn, &challenge)?;
+        Ok((public_key_options, challenge.expires_at))
+    });
+
+    let (public_key_options, expires_at) = match result {
         Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_admin_security_challenges(&mut store);
-    let challenge = match store
-        .admin_passkey_registration_challenges
-        .get(input.registration_id.as_str())
-        .cloned()
-    {
-        Some(v) => v,
-        None => {
+        Err(err) if err == "http:not_found:passkey registration not found" => {
             return api_error(
                 StatusCode::NOT_FOUND,
                 1004,
                 "passkey registration not found",
             )
         }
-    };
-    if challenge.consumed || now > challenge.expires_at {
-        return api_error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            2004,
-            "passkey registration expired",
-        );
-    }
-    if !same_admin_pubkey(challenge.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
-        return api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "passkey registration owner mismatch",
-        );
-    }
-    if let Err(resp) = verify_cold_wallet_signature(
-        ctx.admin_pubkey.as_str(),
-        input.signer_pubkey.as_str(),
-        input.signature.as_str(),
-        input.payload_hash.as_str(),
-        challenge.payload_hash.as_str(),
-        challenge.payload_text.as_str(),
-    ) {
-        return resp;
-    }
-    let existing = active_passkey_credentials(&store, ctx.admin_pubkey.as_str())
-        .into_iter()
-        .map(|record| record.passkey.cred_id().clone())
-        .collect::<Vec<_>>();
-    let (public_key_options, webauthn_state) = match webauthn.start_passkey_registration(
-        user_uuid_for_pubkey(ctx.admin_pubkey.as_str()),
-        ctx.admin_pubkey.as_str(),
-        ctx.admin_name.as_str(),
-        Some(existing),
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::warn!(error = %err, "start passkey registration failed");
+        Err(err) if err == "http:unprocessable:passkey registration expired" => {
             return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1503,
-                "passkey start failed",
-            );
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "passkey registration expired",
+            )
+        }
+        Err(err) if err == "http:forbidden:passkey registration owner mismatch" => {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "passkey registration owner mismatch",
+            )
+        }
+        Err(err) if err == "http:unprocessable:signature verify failed" => {
+            return api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "signature verify failed",
+            )
+        }
+        Err(err) => {
+            let message = format!("confirm passkey failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    if let Some(challenge_mut) = store
-        .admin_passkey_registration_challenges
-        .get_mut(input.registration_id.as_str())
-    {
-        challenge_mut.webauthn_state = Some(webauthn_state);
-        challenge_mut.cold_wallet_confirmed = true;
-    }
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: PasskeyConfirmOutput {
             registration_id: input.registration_id,
             public_key_options,
-            expires_at: challenge.expires_at.timestamp(),
+            expires_at: expires_at.timestamp(),
         },
     })
     .into_response()
@@ -312,23 +317,22 @@ pub(crate) async fn complete_passkey_registration(
         Err(resp) => return resp,
     };
     let now = Utc::now();
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_admin_security_challenges(&mut store);
-    let challenge = match store
-        .admin_passkey_registration_challenges
-        .get(input.registration_id.as_str())
-        .cloned()
-    {
-        Some(v) => v,
-        None => {
+    let registration_id = input.registration_id.trim().to_string();
+    let challenge = match state.db.with_client(move |conn| {
+        repo::cleanup_security_state_conn(conn, now)?;
+        repo::get_passkey_challenge_conn(conn, registration_id.as_str())
+    }) {
+        Ok(Some(v)) => v,
+        Ok(None) => {
             return api_error(
                 StatusCode::NOT_FOUND,
                 1004,
                 "passkey registration not found",
             )
+        }
+        Err(err) => {
+            let message = format!("query passkey challenge failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
     if challenge.consumed || now > challenge.expires_at {
@@ -374,48 +378,60 @@ pub(crate) async fn complete_passkey_registration(
         Err(resp) => return resp,
     };
     let credential_id = credential_id_hex(&passkey);
-    if store
-        .admin_passkeys_by_credential_id
-        .contains_key(credential_id.as_str())
-    {
-        return api_error(
-            StatusCode::CONFLICT,
-            1005,
-            "passkey credential already exists",
-        );
-    }
-    // 中文注释:更新密钥采用替换语义,同一管理员只保留一个有效 Passkey。
-    store.admin_passkeys_by_credential_id.retain(|_, record| {
-        !same_admin_pubkey(record.admin_pubkey.as_str(), ctx.admin_pubkey.as_str())
+    let label = challenge.label.clone();
+    let result = state.db.with_client({
+        let ctx_pubkey = ctx.admin_pubkey.clone();
+        let credential_id = credential_id.clone();
+        let registration_id = input.registration_id.clone();
+        move |conn| {
+            if repo::get_passkey_credential_conn(conn, credential_id.as_str())?.is_some() {
+                return Err("http:conflict:passkey credential already exists".to_string());
+            }
+            repo::revoke_active_passkeys_for_admin_conn(conn, ctx_pubkey.as_str())?;
+            repo::upsert_passkey_credential_conn(
+                conn,
+                &AdminPasskeyCredential {
+                    credential_id: credential_id.clone(),
+                    admin_pubkey: ctx_pubkey.clone(),
+                    label,
+                    passkey,
+                    status: AdminPasskeyStatus::Active,
+                    created_at: now,
+                    last_used_at: None,
+                },
+            )?;
+            let Some(mut challenge) =
+                repo::get_passkey_challenge_conn(conn, registration_id.as_str())?
+            else {
+                return Err("http:not_found:passkey registration not found".to_string());
+            };
+            challenge.consumed = true;
+            repo::upsert_passkey_challenge_conn(conn, &challenge)?;
+            repo::active_passkey_credentials_conn(conn, ctx_pubkey.as_str()).map(|v| v.len())
+        }
     });
-    store.admin_passkeys_by_credential_id.insert(
-        credential_id.clone(),
-        AdminPasskeyCredential {
-            credential_id: credential_id.clone(),
-            admin_pubkey: ctx.admin_pubkey.clone(),
-            label: challenge.label,
-            passkey,
-            status: AdminPasskeyStatus::Active,
-            created_at: now,
-            last_used_at: None,
-        },
-    );
-    if let Some(challenge_mut) = store
-        .admin_passkey_registration_challenges
-        .get_mut(input.registration_id.as_str())
-    {
-        challenge_mut.consumed = true;
-    }
-    append_audit_log(
-        &mut store,
-        "ADMIN_PASSKEY_REGISTER",
-        &ctx.admin_pubkey,
-        Some(ctx.admin_pubkey.clone()),
-        None,
-        "SUCCESS",
-        format!("credential_id={credential_id}"),
-    );
-    let count = active_passkey_credentials(&store, ctx.admin_pubkey.as_str()).len();
+    let count = match result {
+        Ok(v) => v,
+        Err(err) if err == "http:conflict:passkey credential already exists" => {
+            return api_error(
+                StatusCode::CONFLICT,
+                1005,
+                "passkey credential already exists",
+            )
+        }
+        Err(err) if err == "http:not_found:passkey registration not found" => {
+            return api_error(
+                StatusCode::NOT_FOUND,
+                1004,
+                "passkey registration not found",
+            )
+        }
+        Err(err) => {
+            let message = format!("complete passkey failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    };
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -569,23 +585,52 @@ fn optional_env(key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub(crate) fn active_passkeys(store: &Store, admin_pubkey: &str) -> Vec<Passkey> {
-    active_passkey_credentials(store, admin_pubkey)
-        .into_iter()
-        .map(|record| record.passkey.clone())
-        .collect()
+pub(crate) fn active_passkeys(db: &Db, admin_pubkey: &str) -> Result<Vec<Passkey>, String> {
+    let admin_pubkey = admin_pubkey.to_string();
+    db.with_client(move |conn| {
+        repo::active_passkey_credentials_conn(conn, admin_pubkey.as_str()).map(|rows| {
+            rows.into_iter()
+                .map(|record| record.passkey)
+                .collect::<Vec<_>>()
+        })
+    })
 }
 
-fn active_passkey_credentials<'a>(
-    store: &'a Store,
+pub(crate) fn update_passkey_usage_conn(
+    conn: &mut postgres::Client,
     admin_pubkey: &str,
-) -> Vec<&'a AdminPasskeyCredential> {
-    store
-        .admin_passkeys_by_credential_id
-        .values()
-        .filter(|record| record.status == AdminPasskeyStatus::Active)
-        .filter(|record| same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey))
-        .collect()
+    assertion: &PublicKeyCredential,
+    auth_result: &AuthenticationResult,
+    now: DateTime<Utc>,
+) -> Result<(), axum::response::Response> {
+    let credential_id = format!("0x{}", hex::encode(assertion.raw_id.as_ref()));
+    let Some(mut record) = repo::get_passkey_credential_conn(conn, credential_id.as_str())
+        .map_err(|err| {
+            let message = format!("query passkey credential failed: {err}");
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str())
+        })?
+    else {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "passkey credential not registered",
+        ));
+    };
+    if record.status != AdminPasskeyStatus::Active
+        || !same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey)
+    {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "passkey owner mismatch",
+        ));
+    }
+    let _ = record.passkey.update_credential(auth_result);
+    record.last_used_at = Some(now);
+    repo::upsert_passkey_credential_conn(conn, &record).map_err(|err| {
+        let message = format!("update passkey usage failed: {err}");
+        api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str())
+    })
 }
 
 fn user_uuid_for_pubkey(pubkey: &str) -> Uuid {
@@ -597,19 +642,6 @@ fn user_uuid_for_pubkey(pubkey: &str) -> Uuid {
 
 fn credential_id_hex(passkey: &Passkey) -> String {
     format!("0x{}", hex::encode(passkey.cred_id().as_ref()))
-}
-
-pub(crate) fn cleanup_admin_security_challenges(store: &mut Store) {
-    let now = Utc::now();
-    store
-        .admin_passkey_registration_challenges
-        .retain(|_, c| !c.consumed && c.expires_at > now);
-    store
-        .admin_action_challenges
-        .retain(|_, c| !c.consumed && c.expires_at > now);
-    store
-        .admin_security_grants
-        .retain(|_, c| !c.consumed && c.expires_at > now);
 }
 
 pub(crate) fn signed_payload_text(payload: AdminSignedPayload<'_>) -> String {
@@ -654,38 +686,6 @@ pub(crate) fn verify_cold_wallet_signature(
             "signature verify failed",
         ));
     }
-    Ok(())
-}
-
-pub(crate) fn update_passkey_usage(
-    store: &mut Store,
-    admin_pubkey: &str,
-    assertion: &PublicKeyCredential,
-    auth_result: &AuthenticationResult,
-    now: DateTime<Utc>,
-) -> Result<(), axum::response::Response> {
-    let credential_id = format!("0x{}", hex::encode(assertion.raw_id.as_ref()));
-    let Some(record) = store
-        .admin_passkeys_by_credential_id
-        .get_mut(credential_id.as_str())
-    else {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "passkey credential not registered",
-        ));
-    };
-    if record.status != AdminPasskeyStatus::Active
-        || !same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey)
-    {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "passkey owner mismatch",
-        ));
-    }
-    let _ = record.passkey.update_credential(auth_result);
-    record.last_used_at = Some(now);
     Ok(())
 }
 

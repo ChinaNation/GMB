@@ -230,6 +230,14 @@ fn normalize_and_parse_account_id32(account_pubkey: &str) -> Result<(String, [u8
     Ok((normalized, who))
 }
 
+pub(crate) fn normalize_account_pubkey(account_pubkey: &str) -> Option<String> {
+    if let Some(hex_pubkey) = parse_sr25519_pubkey(account_pubkey) {
+        return Some(hex_pubkey);
+    }
+    let bytes = parse_sr25519_pubkey_bytes(account_pubkey)?;
+    Some(format!("0x{}", hex::encode(bytes)))
+}
+
 fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
     if let Some(cached) = CHAIN_GENESIS_HASH.get() {
         return Ok(*cached);

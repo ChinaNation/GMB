@@ -8,7 +8,7 @@
 //   - 中间绝对居中标题
 //   - 右侧由 Card.extra 承载(机构表格页的"+ 新增")
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, Card, Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { ProvinceGrid } from '../core/ProvinceGrid';
@@ -26,6 +26,7 @@ interface Props {
   auth: AdminAuth;
   category: GovCategory;
   sfidMeta: SfidMetaResult | null;
+  resetToken?: number;
 }
 
 /** 可复用的 Card title 布局:左(可选返回) + 中间绝对居中标题 */
@@ -44,7 +45,7 @@ function makeCenteredTitle(center: React.ReactNode, back?: () => void, backLabel
   );
 }
 
-export const GovView: React.FC<Props> = ({ auth, category, sfidMeta }) => {
+export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken = 0 }) => {
   const scope = useScope(auth);
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
@@ -54,6 +55,16 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta }) => {
   // 市详情页的机构列表搜索:输入不自动触发,点搜索图标提交 → committedSearch
   const [searchInput, setSearchInput] = useState('');
   const [committedSearch, setCommittedSearch] = useState('');
+
+  useEffect(() => {
+    // 中文注释:顶层 tab 切换必须打断详情页状态,否则公权机构和公安局复用 GovView 时会停留在旧详情。
+    setSelectedProvince(null);
+    setSelectedCity(null);
+    setSelectedSfidNumber(null);
+    setCreateOpen(false);
+    setSearchInput('');
+    setCommittedSearch('');
+  }, [auth.admin_pubkey, category, resetToken]);
 
   const provinces = sfidMeta?.provinces || [];
   const lockedProvince = scope.lockedProvince;

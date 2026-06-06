@@ -1,18 +1,15 @@
 //! 主体 HTTP handler 共享辅助函数。
 //!
-//! 中文注释:公权机构、私权机构、账户、资料库和主体详情都会用到同一批
-//! HTTP 层辅助逻辑。集中在这里,避免各业务目录复制一份后出现注释和行为漂移。
+//! 中文注释:这里只放跨公权、私权、账户、资料库和主体详情共用的 HTTP 辅助。
+//! 数据读取写入统一走结构化表,不保留旧缓存回填逻辑。
 
 use axum::http::StatusCode;
 
-use crate::accounts::derive::derive_duoqian_address;
 use crate::admins::login::AdminAuthContext;
-use crate::china::province_name_by_code;
-use crate::core::runtime_ops::append_audit_log;
+use crate::admins::repo;
 use crate::crypto::pubkey::normalize_admin_pubkey;
-use crate::subjects::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
-use crate::subjects::service::{ServiceError, DEFAULT_ACCOUNT_NAMES};
-use crate::subjects::MultisigChainStatus;
+use crate::subjects::model::MultisigInstitution;
+use crate::subjects::service::{build_default_accounts, ServiceError};
 use crate::{api_error, AppState};
 
 pub(crate) const MAX_PROVINCE_CHARS: usize = 100;
@@ -40,7 +37,6 @@ pub(crate) fn extract_province_code(sfid: &str) -> String {
 }
 
 pub(crate) fn extract_city_code(sfid: &str) -> String {
-    // r5 = 省代码 2 字符 + 市代码 3 字符。
     sfid.split('-')
         .nth(1)
         .and_then(|r5| {
@@ -53,17 +49,6 @@ pub(crate) fn extract_city_code(sfid: &str) -> String {
         .unwrap_or_default()
 }
 
-/// 从 sfid_number 解析省代码并映射到省名。
-/// 用于 handler 层确定进程内分片缓存 key。
-pub(crate) fn resolve_province_from_sfid_number(sfid_number: &str) -> Option<String> {
-    let code = extract_province_code(sfid_number);
-    if code.is_empty() {
-        return None;
-    }
-    province_name_by_code(&code).map(|n| n.to_string())
-}
-
-/// 机构详情、账户和资料库入口必须先确认机构存在,再按管理员 scope 放行。
 pub(crate) fn ensure_institution_visible_to_admin(
     inst: &MultisigInstitution,
     ctx: &AdminAuthContext,
@@ -85,197 +70,45 @@ pub(crate) fn ensure_institution_visible_to_admin(
     Ok(())
 }
 
-/// 反查 `created_by` pubkey → (管理员姓名, 角色枚举字符串)。
-/// 未命中两者均为 `None`,前端统一显示为“未知”。
 pub(crate) fn resolve_created_by(
     state: &AppState,
     created_by: &str,
 ) -> (Option<String>, Option<String>) {
-    let norm = match normalize_admin_pubkey(created_by) {
-        Some(v) => v,
-        None => return (None, None),
+    let Some(norm) = normalize_admin_pubkey(created_by) else {
+        return (None, None);
     };
-    let store = match state.store.read() {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!(error = %e, "resolve_created_by: store read failed");
-            return (None, None);
-        }
-    };
-    for user in store.admin_users_by_pubkey.values() {
-        let Some(user_norm) = normalize_admin_pubkey(&user.admin_pubkey) else {
-            continue;
+    let result = state.db.with_client(move |conn| {
+        let Some(admin) = repo::get_admin_by_pubkey_conn(conn, norm.as_str())? else {
+            return Ok((None, None));
         };
-        if user_norm == norm {
-            let role_str = match user.role {
-                crate::admins::model::AdminRole::ShengAdmin => "SHENG_ADMIN",
-                crate::admins::model::AdminRole::ShiAdmin => "SHI_ADMIN",
-            };
-            let name_opt = if user.admin_name.trim().is_empty() {
-                None
-            } else {
-                Some(user.admin_name.clone())
-            };
-            return (name_opt, Some(role_str.to_string()));
-        }
-    }
-    (None, None)
+        let role_str = match admin.role {
+            crate::admins::model::AdminRole::ShengAdmin => "FEDERAL_ADMIN",
+            crate::admins::model::AdminRole::ShiAdmin => "SHI_ADMIN",
+        };
+        let name_opt = if admin.admin_name.trim().is_empty() {
+            None
+        } else {
+            Some(admin.admin_name)
+        };
+        Ok((name_opt, Some(role_str.to_string())))
+    });
+    result.unwrap_or((None, None))
 }
 
-/// 按需从持久化 Store 快照读取机构和账户。
-///
-/// 中文注释:后端启动不再全量把自动公权机构同步进分片缓存。详情页/账户页遇到
-/// 分片未命中时,按 `sfid_number` 从持久化主数据读取一次,再由调用方按需回填分片。
-pub(crate) fn read_institution_with_accounts_from_store(
-    state: &AppState,
-    sfid_number: &str,
-) -> Result<Option<(MultisigInstitution, Vec<MultisigAccount>)>, String> {
-    let store = state.store.read()?;
-    let Some(inst) = store.multisig_institutions.get(sfid_number).cloned() else {
-        return Ok(None);
-    };
-    let accounts = store
-        .multisig_accounts
-        .values()
-        .filter(|account| account.sfid_number == sfid_number)
-        .cloned()
-        .collect::<Vec<_>>();
-    Ok(Some((inst, accounts)))
-}
-
-/// 将按需读取到的机构回填分片缓存。
-pub(crate) async fn cache_institution_detail_best_effort(
-    state: &AppState,
-    inst: &MultisigInstitution,
-    accounts: &[MultisigAccount],
-) {
-    let province = inst.province.clone();
-    let inst_for_cache = inst.clone();
-    let accounts_for_cache = accounts.to_vec();
-    if let Err(e) = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            shard
-                .multisig_institutions
-                .insert(inst_for_cache.sfid_number.clone(), inst_for_cache);
-            for account in accounts_for_cache {
-                let key = account_key_to_string(&account.sfid_number, &account.account_name);
-                shard.multisig_accounts.insert(key, account);
-            }
-        })
-        .await
-    {
-        tracing::warn!(province = %province, error = %e, "cache institution detail failed");
-    }
-}
-
-/// 给机构写入默认账户(`主账户` / `费用账户`)的未上链本地记录。
-///
-/// 中文注释:这是机构创建后的 best-effort 补充动作。机构主记录已经成功时,
-/// 默认账户写失败只记日志,不回滚机构身份。
 pub(crate) async fn insert_default_accounts_best_effort(
     state: &AppState,
     sfid_number: &str,
-    province: &str,
+    _province: &str,
     created_by: &str,
 ) {
-    let now = chrono::Utc::now();
-    let sfid_owned = sfid_number.to_string();
-    let creator_owned = created_by.to_string();
-    let write_result = state
-        .sharded_store
-        .write_province(province, move |shard| {
-            for name in DEFAULT_ACCOUNT_NAMES {
-                let key = account_key_to_string(&sfid_owned, name);
-                let addr = derive_duoqian_address(&sfid_owned, name);
-                shard
-                    .multisig_accounts
-                    .entry(key)
-                    .or_insert_with(|| MultisigAccount {
-                        sfid_number: sfid_owned.clone(),
-                        account_name: (*name).to_string(),
-                        duoqian_address: addr,
-                        chain_status: MultisigChainStatus::NotOnChain,
-                        chain_synced_at: None,
-                        chain_tx_hash: None,
-                        chain_block_number: None,
-                        created_by: creator_owned.clone(),
-                        created_at: now,
-                    });
-            }
-        })
-        .await;
-    if let Err(e) = write_result {
-        tracing::warn!(
-            sfid = sfid_number,
-            error = %e,
-            "insert_default_accounts shard write failed; institution create already committed"
-        );
-        return;
-    }
-    if let Ok(mut store) = state.store.write() {
-        for name in DEFAULT_ACCOUNT_NAMES {
-            let key = account_key_to_string(sfid_number, name);
-            let addr = derive_duoqian_address(sfid_number, name);
-            store
-                .multisig_accounts
-                .entry(key)
-                .or_insert_with(|| MultisigAccount {
-                    sfid_number: sfid_number.to_string(),
-                    account_name: (*name).to_string(),
-                    duoqian_address: addr,
-                    chain_status: MultisigChainStatus::NotOnChain,
-                    chain_synced_at: None,
-                    chain_tx_hash: None,
-                    chain_block_number: None,
-                    created_by: created_by.to_string(),
-                    created_at: now,
-                });
-        }
-    }
-    for name in DEFAULT_ACCOUNT_NAMES {
-        let account = MultisigAccount {
-            sfid_number: sfid_number.to_string(),
-            account_name: (*name).to_string(),
-            duoqian_address: derive_duoqian_address(sfid_number, name),
-            chain_status: MultisigChainStatus::NotOnChain,
-            chain_synced_at: None,
-            chain_tx_hash: None,
-            chain_block_number: None,
-            created_by: created_by.to_string(),
-            created_at: now,
-        };
-        if let Err(e) = state.store.upsert_institution_account_row(&account) {
-            tracing::warn!(sfid = sfid_number, account = *name, error = %e, "institution account row upsert failed");
-        }
-    }
-}
-
-/// 审计日志 best-effort 写入。失败只记 WARN,不影响已经提交的业务主流程。
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_inst_audit_log_best_effort(
-    state: &AppState,
-    action: &'static str,
-    actor_pubkey: &str,
-    target_pubkey: Option<String>,
-    target_archive_no: Option<String>,
-    result: &'static str,
-    detail: String,
-) {
-    match state.store.write() {
-        Ok(mut store) => {
-            append_audit_log(
-                &mut store,
-                action,
-                actor_pubkey,
-                target_pubkey,
-                target_archive_no,
-                result,
-                detail,
+    for account in build_default_accounts(sfid_number, created_by) {
+        if let Err(err) = state.db.upsert_institution_account_row(&account) {
+            tracing::warn!(
+                sfid = sfid_number,
+                account = %account.account_name,
+                error = %err,
+                "default account upsert failed"
             );
-        }
-        Err(e) => {
-            tracing::warn!(action, error = %e, "append_audit_log failed (main write already committed)");
         }
     }
 }

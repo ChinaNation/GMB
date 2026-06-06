@@ -8,7 +8,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{api_error, ApiResponse, AppState, StoreBackend};
+use crate::{api_error, ApiResponse, AppState};
 
 use super::db;
 
@@ -53,19 +53,7 @@ pub(crate) async fn wallet_transactions(
     // 多查一条以判断 has_more
     let fetch_limit = limit + 1;
 
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return api_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            1500,
-            "indexer not available",
-        );
-    };
-
-    let result = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
+    let result = state.db.with_client(|conn| {
         db::query_tx_records(
             conn,
             &address,

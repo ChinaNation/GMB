@@ -1,4 +1,4 @@
-// 省级管理员列表视图 mode='list'(从 ShengAdminsView.tsx 拆分)
+// 联邦管理员列表视图 mode='list'(从 ShengAdminsView.tsx 拆分)
 
 import { Card, Table } from 'antd';
 import type { ShengAdminRow } from './api';
@@ -18,7 +18,7 @@ export function ShengAdminListView({ state }: ShengAdminListViewProps) {
 
   return (
     <Card
-      title="省级管理员列表"
+      title="联邦管理员列表"
       bordered={false}
       style={glassCardStyle}
       headStyle={glassCardHeadStyle}

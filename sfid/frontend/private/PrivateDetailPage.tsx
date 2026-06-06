@@ -1,24 +1,12 @@
-// 中文注释:机构详情页(调度器)。
-// 按 category 分派给不同布局模块:
-//   - PRIVATE_INSTITUTION → PrivateDetailLayout(三板块:机构信息+账户列表+资料库)
-//   - PUBLIC_SECURITY / GOV_INSTITUTION → 默认布局(机构信息+CPMS+账户列表)
-// 修改某类机构的布局只需改对应模块,不影响其他类型。
+// 中文注释:私权机构详情页只调度私权布局,不得承载公安局/CPMS 业务。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Col, Descriptions, message, Row, Tag, Typography } from 'antd';
-import { A3_LABEL, INSTITUTION_CODE_LABEL } from '../subjects/labels';
+import { Button, Typography } from 'antd';
 import { getInstitution, type InstitutionDetail } from './api';
 import { deleteAccount } from '../accounts/api';
-import {
-  generateCpmsInstallQr,
-  getCpmsSiteByInstitution,
-  type CpmsSiteRow,
-} from '../cpms/api';
 import type { AdminAuth } from '../auth/types';
-import { AccountList } from '../accounts/AccountList';
-import { CpmsSitePanel } from '../cpms/CpmsSitePanel';
-import { CreateAccountModal } from '../accounts/CreateAccountModal';
-import { PrivateDetailLayout } from '../private/PrivateDetailLayout';
+import { notice } from '../utils/notice';
+import { PrivateDetailLayout } from './PrivateDetailLayout';
 import {
   commitAdminAction,
   getPasskeyAssertion,
@@ -41,12 +29,6 @@ interface Props {
   onBack: () => void;
 }
 
-const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
-  NOT_REGISTERED: '未注册',
-  REGISTERED: '已注册',
-  REVOKED_ON_CHAIN: '已注销',
-};
-
 type SecurityModalState = {
   actionId: string;
   signRequest: string;
@@ -61,11 +43,6 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
     readCachedInstitutionDetail(detailCacheKey),
   );
   const [loading, setLoading] = useState(false);
-  const [createAccountOpen, setCreateAccountOpen] = useState(false);
-
-  // ── CPMS 站点状态(仅公安局机构使用) ──
-  const [cpmsSite, setCpmsSite] = useState<CpmsSiteRow | null>(null);
-  const [cpmsBusy, setCpmsBusy] = useState(false);
   const [securityCommitLoading, setSecurityCommitLoading] = useState(false);
   const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
 
@@ -83,7 +60,9 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
         setDetail(next);
         writeCachedInstitutionDetail(detailCacheKey, next);
       })
-      .catch(() => { /* 静默：后台刷新失败不弹窗 */ })
+      .catch(() => {
+        // 中文注释:详情后台刷新失败时保留缓存,避免切页时闪断。
+      })
       .finally(() => {
         if (!cached) setLoading(false);
       });
@@ -132,35 +111,13 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
       setSecurityModal(null);
     } catch (err) {
       securityModal.reject(err);
-      message.error(err instanceof Error ? err.message : '签名回执处理失败');
+      notice.error(err, '');
     } finally {
       setSecurityCommitLoading(false);
     }
   }, [auth, securityModal]);
 
   const inst = detail?.institution;
-  const accounts = detail?.accounts || [];
-  const canManageCpms = canWrite && auth.role === 'SHENG_ADMIN';
-
-  const loadCpms = useCallback(
-    (instSfidNumber: string) => {
-      getCpmsSiteByInstitution(auth, instSfidNumber)
-        .then((row) => setCpmsSite(row))
-        .catch(() => {
-          // 静默：后台刷新失败不弹窗（404 是正常场景——尚未生成）
-          setCpmsSite(null);
-        });
-    },
-    [auth.access_token]
-  );
-
-  useEffect(() => {
-    if (inst && inst.category === 'PUBLIC_SECURITY') {
-      loadCpms(inst.sfid_number);
-    } else {
-      setCpmsSite(null);
-    }
-  }, [inst?.sfid_number, inst?.category, loadCpms]);
 
   const onDeleteAccount = async (accountName: string) => {
     try {
@@ -170,45 +127,10 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
         account_name: accountName,
       });
       await deleteAccount(auth, sfidNumber, accountName, grant);
-      message.success(`账户 "${accountName}" 已删除`);
+      notice.success(`账户 "${accountName}" 已删除`);
       load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除账户失败');
-    }
-  };
-
-  const onGenerateCpms = async () => {
-    if (!inst) return;
-    setCpmsBusy(true);
-    try {
-      const payload = {
-        province: inst.province,
-        city: inst.city,
-        institution: inst.institution_code,
-      };
-      const grant = await runPasskeyChallengeGrant('CPMS_ISSUE_INSTALL_CODE', payload);
-      const result = await generateCpmsInstallQr(auth, payload, grant);
-      setCpmsSite({
-        sfid_number: result.sfid_number,
-        install_token_status: 'PENDING',
-        status: 'PENDING',
-        version: 1,
-        qr1_payload: result.qr1_payload,
-        admin_province: inst.province,
-        city_name: inst.city,
-        institution_code: inst.institution_code,
-        institution_name: inst.institution_name ?? '',
-        created_by: auth.admin_pubkey,
-        created_at: new Date().toISOString(),
-      });
-      message.success('CPMS 安装码已生成');
-      // 中文注释:安装码直接交给 CPMS 初始化,不再经过中间注册回传。
-      load();
-      loadCpms(result.sfid_number);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '生成失败');
-    } finally {
-      setCpmsBusy(false);
+      notice.error(err, '');
     }
   };
 
@@ -223,108 +145,17 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
       {loading && !inst && <Typography.Text type="secondary">加载中...</Typography.Text>}
 
       {inst && detail && (
-        <>
-          {/* ── 私权机构:三板块布局(独立模块) ── */}
-          {inst.category === 'PRIVATE_INSTITUTION' ? (
-            <PrivateDetailLayout
-              auth={auth}
-              detail={detail}
-              canWrite={canWrite}
-              loading={loading}
-              onReload={load}
-              onDeleteAccount={onDeleteAccount}
-              createPasskeyChallengeGrant={runPasskeyChallengeGrant}
-            />
-          ) : (
-            <>
-              {/* ── 公安局 / 公权机构:默认布局 ── */}
-              <Card
-                title={
-                  <span style={{ fontSize: 18, fontWeight: 600 }}>
-                    {inst.institution_name ?? '(未命名机构)'}
-                  </span>
-                }
-                extra={(() => {
-                  if (inst.category !== 'PUBLIC_SECURITY' || !canManageCpms) return null;
-                  if (!cpmsSite) {
-                    return (
-                      <Button type="primary" onClick={onGenerateCpms} loading={cpmsBusy}>
-                        生成 CPMS 安装码
-                      </Button>
-                    );
-                  }
-                  return null;
-                })()}
-                style={{ marginBottom: 16 }}
-              >
-                <Row gutter={24}>
-                  <Col xs={24} md={cpmsSite ? 12 : 24}>
-                    <Descriptions column={1} size="small">
-                      <Descriptions.Item label="机构 SFID">
-                        <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                          {inst.sfid_number}
-                        </Typography.Text>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
-                      <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
-                      <Descriptions.Item label="A3 类型">{inst.a3}/{A3_LABEL[inst.a3] || inst.a3}</Descriptions.Item>
-                      <Descriptions.Item label="机构代码">{inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}</Descriptions.Item>
-                      <Descriptions.Item label="链上状态">
-                        <Tag>{INSTITUTION_CHAIN_STATUS_LABEL[inst.chain_status] || inst.chain_status}</Tag>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="创建时间">
-                        {new Date(inst.created_at).toLocaleString('zh-CN')}
-                      </Descriptions.Item>
-                    </Descriptions>
-                  </Col>
-                  {inst.category === 'PUBLIC_SECURITY' && cpmsSite && (
-                    <Col xs={24} md={12}>
-                      <CpmsSitePanel
-                        auth={auth}
-                        site={cpmsSite}
-                        canWrite={canManageCpms}
-                        onChanged={() => loadCpms(inst.sfid_number)}
-                      />
-                    </Col>
-                  )}
-                </Row>
-              </Card>
-
-              <Card
-                type="inner"
-                title={`账户列表(${accounts.length})`}
-                extra={
-                  canWrite && (
-                    <Button type="primary" onClick={() => setCreateAccountOpen(true)}>
-                      + 新建账户
-                    </Button>
-                  )
-                }
-              >
-                <AccountList
-                  accounts={accounts}
-                  loading={loading}
-                  canDelete={canWrite}
-                  onDelete={onDeleteAccount}
-                />
-              </Card>
-
-              <CreateAccountModal
-                auth={auth}
-                sfidNumber={inst.sfid_number}
-                institutionName={inst.institution_name ?? ''}
-                existingAccounts={accounts}
-                open={createAccountOpen}
-                onCancel={() => setCreateAccountOpen(false)}
-                onCreated={() => {
-                  setCreateAccountOpen(false);
-                  load();
-                }}
-              />
-            </>
-          )}
-        </>
+        <PrivateDetailLayout
+          auth={auth}
+          detail={detail}
+          canWrite={canWrite}
+          loading={loading}
+          onReload={load}
+          onDeleteAccount={onDeleteAccount}
+          createPasskeyChallengeGrant={runPasskeyChallengeGrant}
+        />
       )}
+
       <WuminSignatureModal
         title="冷钱包签名确认"
         open={!!securityModal}
@@ -335,12 +166,12 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
-        qrHint="使用省管理员冷钱包扫码签名"
+        qrHint="使用联邦管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}
-        onScannerError={(msg) => message.error(msg)}
+        onScannerError={(msg) => notice.error(msg)}
       />
     </div>
   );

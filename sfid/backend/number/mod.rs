@@ -28,7 +28,7 @@ pub mod validator;
 
 // 中文注释:对外聚合导出,方便业务模块只写 `use crate::number::*`。
 pub use a3::{all_a3, A3};
-pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_NAME};
+pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_SUFFIX};
 pub use generator::{generate_sfid_code, GenerateSfidInput};
 pub use institution_code::InstitutionCode;
 #[allow(unused_imports)]

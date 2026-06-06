@@ -120,20 +120,6 @@ pub(crate) struct CitizenBindChallenge {
     pub(crate) created_at: DateTime<Utc>,
 }
 
-/// CPMS 年度报告导入幂等记录。
-///
-/// 中文注释：同一 CPMS 同一年度只允许导入同一份记录哈希，避免重复导入或用
-/// 不同文件覆盖已经完成的年度对账结果。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct CpmsStatusExportImportRecord {
-    pub(crate) sfid_number: String,
-    pub(crate) export_year: i32,
-    pub(crate) export_batch_id: String,
-    pub(crate) records_hash: String,
-    pub(crate) imported_at: DateTime<Utc>,
-    pub(crate) imported_by: String,
-}
-
 // ── 公民电子护照绑定接口类型 ──
 
 /// 绑定 challenge 返回。

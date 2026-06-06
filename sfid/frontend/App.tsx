@@ -20,7 +20,7 @@
 
 import { useEffect, useState } from 'react';
 import { QrcodeOutlined } from '@ant-design/icons';
-import { Button, Card, Layout, Typography, message } from 'antd';
+import { Button, Card, Layout, Typography } from 'antd';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import { writeStoredAuth, clearStoredAuth } from './utils/storedAuth';
@@ -34,6 +34,7 @@ import { PrivateView } from './private/PrivateView';
 import { OperatorsView } from './admins/OperatorsView';
 import { ShengAdminsView } from './admins/ShengAdminsView';
 import { CitizensView } from './citizens/CitizensView';
+import { notice } from './utils/notice';
 
 const { Header, Content } = Layout;
 
@@ -41,9 +42,9 @@ const { Header, Content } = Layout;
 function resolveHeaderAdminIdentity(auth: AdminAuth | null): { roleLabel: string; adminName: string } {
   if (!auth) return { roleLabel: '', adminName: '' };
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
-  // 中文注释:当前只剩 SHENG_ADMIN / SHI_ADMIN 两个管理员角色。
-  const roleLabel = auth.role === 'SHENG_ADMIN'
-    ? '省级管理员'
+  // 中文注释:当前只剩 FEDERAL_ADMIN / SHI_ADMIN 两个管理员角色。
+  const roleLabel = auth.role === 'FEDERAL_ADMIN'
+    ? '联邦管理员'
     : auth.role === 'SHI_ADMIN'
       ? '市级管理员'
       : '';
@@ -63,6 +64,7 @@ function AppInner() {
   const { auth, setAuth, capabilities } = useAuth();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [activeView, setActiveView] = useState<ActiveView>('citizens');
+  const [viewResetToken, setViewResetToken] = useState(0);
   // 中文注释:sfidMeta 仍需在 App.tsx 持有,因为机构类 Tab 点击事件要统一拉取省市元数据。
   const [sfidMeta, setSfidMeta] = useState<SfidMetaResult | null>(null);
 
@@ -121,8 +123,9 @@ function AppInner() {
     setAuth(null);
     clearStoredAuth();
     setActiveView('citizens');
+    setViewResetToken((v) => v + 1);
     setSfidMeta(null);
-    message.success('已退出登录');
+    notice.success('已退出登录');
   };
 
   /** 点击机构类 Tab 时统一加载省份列表(传给 gov/private 页面) */
@@ -133,8 +136,15 @@ function AppInner() {
       const meta = await loadCachedSfidMeta(auth);
       setSfidMeta(meta);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '加载省份列表失败');
+      notice.error(err, '');
     }
+  };
+
+  const switchView = async (view: ActiveView, options?: { loadSfidMeta?: boolean }) => {
+    // 中文注释:重复点击当前 tab 也要重置子页面,用于从机构详情页回到模块入口。
+    setActiveView(view);
+    setViewResetToken((v) => v + 1);
+    if (options?.loadSfidMeta) await loadSfidMetaForInstitutions();
   };
 
   return (
@@ -278,26 +288,26 @@ function AppInner() {
           >
             {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 公权机构 → 公安局 → 注册局。 */}
             {([
-              { key: 'citizens' as const, label: '首页', visible: !mustUpdatePasskey, onClick: () => setActiveView('citizens') },
+              { key: 'citizens' as const, label: '首页', visible: !mustUpdatePasskey, onClick: () => switchView('citizens') },
               {
                 key: 'private' as const, label: '私权机构',
                 visible: !mustUpdatePasskey && capabilities.canViewPrivate,
-                onClick: async () => { setActiveView('private'); await loadSfidMetaForInstitutions(); }
+                onClick: () => switchView('private', { loadSfidMeta: true })
               },
               {
                 key: 'gov' as const, label: '公权机构',
                 visible: !mustUpdatePasskey && capabilities.canViewInstitutions,
-                onClick: async () => { setActiveView('gov'); await loadSfidMetaForInstitutions(); }
+                onClick: () => switchView('gov', { loadSfidMeta: true })
               },
               {
                 key: 'public-security' as const, label: '公安局',
                 visible: !mustUpdatePasskey && capabilities.canViewInstitutions,
-                onClick: async () => { setActiveView('public-security'); await loadSfidMetaForInstitutions(); }
+                onClick: () => switchView('public-security', { loadSfidMeta: true })
               },
               {
                 key: 'system-settings' as const, label: '注册局',
                 visible: capabilities.canViewSystemSettings,
-                onClick: () => setActiveView('system-settings')
+                onClick: () => switchView('system-settings')
               }
             ] as const)
               .filter((tab) => tab.visible)
@@ -328,9 +338,9 @@ function AppInner() {
             <ShengAdminsView mode="list" />
           ) : routedView === 'public-security' && capabilities.canManageInstitutions && auth ? (
             // 中文注释:公安局属于 gov 前端边界,但仍保持独立 Tab。
-            <GovView auth={auth} category="PUBLIC_SECURITY" sfidMeta={sfidMeta} />
+            <GovView key={`public-security-${viewResetToken}`} auth={auth} category="PUBLIC_SECURITY" sfidMeta={sfidMeta} resetToken={viewResetToken} />
           ) : routedView === 'gov' && capabilities.canManageInstitutions && auth ? (
-            <GovView auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} />
+            <GovView key={`gov-${viewResetToken}`} auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} resetToken={viewResetToken} />
           ) : routedView === 'private' && capabilities.canViewPrivate && auth ? (
             <PrivateView auth={auth} sfidMeta={sfidMeta} />
           ) : routedView === 'system-settings' && capabilities.canViewSystemSettings ? (
