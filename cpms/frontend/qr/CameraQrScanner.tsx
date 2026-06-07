@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScanIcon } from '../components/ScanIcon';
-import { startCameraScanner } from './cameraScanner';
+import { decodeQrImageFile, startCameraScanner } from './cameraScanner';
 
 type CameraQrScannerProps = {
   active: boolean;
@@ -15,6 +15,10 @@ type CameraQrScannerProps = {
   busy?: boolean;
   size?: number;
   showButton?: boolean;
+  // 中文注释：开启后在统一组件内渲染「上传二维码」入口，与摄像头共用 BarcodeDetector 和 onDetected，
+  // 不在页面里另起第二套扫码逻辑；图片只在前端本地解析。
+  allowUpload?: boolean;
+  uploadLabel?: string;
 };
 
 // 中文注释：CPMS 所有二维码读取统一走摄像头，禁止在页面内分散实现第二套扫码入口。
@@ -31,15 +35,31 @@ export default function CameraQrScanner({
   busy = false,
   size = 260,
   showButton = true,
+  allowUpload = false,
+  uploadLabel = '上传二维码',
 }: CameraQrScannerProps) {
   const [ready, setReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopScanner = () => {
     cleanupRef.current?.();
     cleanupRef.current = null;
     setReady(false);
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 允许重复选同一文件
+    if (!file || busy) return;
+    if (active) onActiveChange(false); // 上传解码与摄像头不同时推进
+    try {
+      const raw = await decodeQrImageFile(file);
+      onDetected(raw);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '二维码图片识别失败');
+    }
   };
 
   useEffect(() => {
@@ -115,14 +135,35 @@ export default function CameraQrScanner({
         </div>
       )}
       {showButton && (
-        <button
-          className="btn btn--ghost"
-          style={{ width: 200, marginTop: 10 }}
-          onClick={() => onActiveChange(!active)}
-          disabled={busy}
-        >
-          {active ? stopLabel : buttonLabel}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'center' }}>
+          <button
+            className="btn btn--ghost"
+            style={{ width: allowUpload ? 140 : 200 }}
+            onClick={() => onActiveChange(!active)}
+            disabled={busy}
+          >
+            {active ? stopLabel : buttonLabel}
+          </button>
+          {allowUpload && (
+            <>
+              <button
+                className="btn btn--ghost"
+                style={{ width: 140 }}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busy}
+              >
+                {uploadLabel}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+                style={{ display: 'none' }}
+                onChange={handleUpload}
+              />
+            </>
+          )}
+        </div>
       )}
     </div>
   );

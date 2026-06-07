@@ -18,7 +18,9 @@ if command -v nginx >/dev/null 2>&1; then
 fi
 
 rm -f /opt/cpms/bin/cpms-backend /opt/cpms/bin/backup_to_storage.sh /opt/cpms/bin/generate_cpms_certs.sh
+rm -f /opt/cpms/data/china.sqlite
 rmdir /opt/cpms/bin >/dev/null 2>&1 || true
+rmdir /opt/cpms/data >/dev/null 2>&1 || true
 rmdir /opt/cpms >/dev/null 2>&1 || true
 
 echo "CPMS backend service removed."

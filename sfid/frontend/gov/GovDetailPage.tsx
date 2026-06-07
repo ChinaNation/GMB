@@ -6,7 +6,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Col, Descriptions, Row, Table, Tag, Typography } from 'antd';
-import { A3_LABEL, INSTITUTION_CODE_LABEL, ORG_CODE_LABEL } from '../subjects/labels';
+import { INSTITUTION_CODE_LABEL, ORG_CODE_LABEL } from '../subjects/labels';
 import { getInstitution, type InstitutionDetail } from './api';
 import { deleteAccount } from '../accounts/api';
 import {
@@ -43,12 +43,6 @@ interface Props {
   canWrite: boolean;
   onBack: () => void;
 }
-
-const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
-  NOT_REGISTERED: '未注册',
-  REGISTERED: '已注册',
-  REVOKED_ON_CHAIN: '已注销',
-};
 
 const SUBJECT_STATUS_LABEL: Record<string, string> = {
   ACTIVE: '正常',
@@ -333,8 +327,8 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                 <Row gutter={24}>
                   <Col xs={24} md={cpmsSite ? 12 : 24}>
                     <Descriptions column={1} size="small">
-	                      <Descriptions.Item label="机构 SFID">
-                        <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
+	                      <Descriptions.Item label="身份ID">
+                        <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
                           {inst.sfid_number}
                         </Typography.Text>
 	                      </Descriptions.Item>
@@ -350,9 +344,20 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
 	                          {SUBJECT_STATUS_LABEL[inst.status] || inst.status}
 	                        </Tag>
 	                      </Descriptions.Item>
-	                      <Descriptions.Item label="A3 类型">{inst.a3}/{A3_LABEL[inst.a3] || inst.a3}</Descriptions.Item>
-	                      <Descriptions.Item label="链上状态">
-                        <Tag>{INSTITUTION_CHAIN_STATUS_LABEL[inst.chain_status] || inst.chain_status}</Tag>
+                      <Descriptions.Item label="法定代表人姓名">
+                        {inst.legal_rep_name || <span style={{ color: '#999' }}>(未填写)</span>}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="法定代表人身份ID">
+                        {inst.legal_rep_sfid_number ? (
+                          <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                            {inst.legal_rep_sfid_number}
+                          </Typography.Text>
+                        ) : (
+                          <span style={{ color: '#999' }}>(未填写)</span>
+                        )}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="法定代表人证件照">
+                        {inst.legal_rep_photo_name || <span style={{ color: '#999' }}>(未上传)</span>}
                       </Descriptions.Item>
                       <Descriptions.Item label="创建时间">
                         {new Date(inst.created_at).toLocaleString('zh-CN')}

@@ -23,25 +23,7 @@ fn default_subject_status() -> String {
     "ACTIVE".to_string()
 }
 
-// ── 机构 / 账户链上状态 ───────────────────────────────────────
-
-/// 机构链上注册状态。
-///
-/// 中文注释:该状态只服务机构模块。SFID 系统只记录链上同步回来的机构状态,
-/// 不在后台手动创建或注销链上机构。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum InstitutionChainStatus {
-    NotRegistered,
-    Registered,
-    RevokedOnChain,
-}
-
-impl Default for InstitutionChainStatus {
-    fn default() -> Self {
-        Self::NotRegistered
-    }
-}
+// ── 账户链上状态 ───────────────────────────────────────
 
 /// 机构账户链上状态。
 ///
@@ -117,23 +99,29 @@ pub struct MultisigInstitution {
     /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK / NON_PROFIT
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
-    /// 所属法人机构 SFID(**仅 A3=FFR 非法人必填**)。
+    /// 所属法人身份ID(**仅 A3=FFR 非法人必填**)。
     /// 指向一个私法人(SFR)或公法人(GFR)机构的 sfid_number。
     /// 非法人机构必须挂在某个法人机构下,全国范围可选。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
-    /// 机构链上注册状态。SFID 只记录链上同步结果,不在后台手动注册机构。
-    #[serde(default)]
-    pub chain_status: InstitutionChainStatus,
-    /// 最近一次链上注册/注销交易哈希。
+    /// 法定代表人姓名。初始化目录机构允许为空;机构资料编辑保存时必须补齐。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_tx_hash: Option<String>,
-    /// 最近一次链上注册/注销确认区块。
+    pub legal_rep_name: Option<String>,
+    /// 法定代表人身份ID,必须指向正常状态公民的 sfid_number。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_block_number: Option<u64>,
-    /// 最近一次链上状态同步时间。
+    pub legal_rep_sfid_number: Option<String>,
+    /// 法定代表人证件照服务端存储路径。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_synced_at: Option<DateTime<Utc>>,
+    pub legal_rep_photo_path: Option<String>,
+    /// 法定代表人证件照原始文件名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_rep_photo_name: Option<String>,
+    /// 法定代表人证件照 MIME 类型。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_rep_photo_mime: Option<String>,
+    /// 法定代表人证件照大小(字节)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_rep_photo_size: Option<u64>,
     /// 创建人 pubkey。
     pub created_by: String,
     pub created_at: DateTime<Utc>,
@@ -227,6 +215,21 @@ pub struct CreateInstitutionInput {
     /// 统一由 `update_institution` 在详情页设置;创建请求传入该字段会被拒绝。
     #[serde(default)]
     pub sub_type: Option<String>,
+    /// 法定代表人姓名,新增机构必填。
+    #[serde(default)]
+    pub legal_rep_name: Option<String>,
+    /// 法定代表人身份ID,新增机构必填,且必须选择正常状态公民。
+    #[serde(default)]
+    pub legal_rep_sfid_number: Option<String>,
+    /// 证件照上传接口返回的服务端路径,新增机构必填。
+    #[serde(default)]
+    pub legal_rep_photo_path: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_name: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_mime: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_size: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -249,6 +252,27 @@ pub struct UpdateInstitutionInput {
     /// 所属法人 sfid_number(仅 FFR 可设置;SFR/GFR 传值会被拒)
     #[serde(default)]
     pub parent_sfid_number: Option<String>,
+    /// 法定代表人三项资料在机构编辑保存时必填。
+    #[serde(default)]
+    pub legal_rep_name: Option<String>,
+    #[serde(default)]
+    pub legal_rep_sfid_number: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_path: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_name: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_mime: Option<String>,
+    #[serde(default)]
+    pub legal_rep_photo_size: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LegalRepresentativePhoto {
+    pub file_path: String,
+    pub file_name: String,
+    pub mime_type: String,
+    pub file_size: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -291,7 +315,6 @@ pub struct InstitutionListRow {
     pub sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
-    pub chain_status: InstitutionChainStatus,
     pub account_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpms_status: Option<String>,
@@ -347,23 +370,4 @@ pub struct ChainSyncAccountInput {
     pub chain_tx_hash: Option<String>,
     #[serde(default)]
     pub chain_block_number: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ChainSyncInput {
-    pub institution_status: InstitutionChainStatus,
-    #[serde(default)]
-    pub accounts: Vec<ChainSyncAccountInput>,
-    #[serde(default)]
-    pub chain_tx_hash: Option<String>,
-    #[serde(default)]
-    pub chain_block_number: Option<u64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ChainSyncOutput {
-    pub sfid_number: String,
-    pub institution_status: InstitutionChainStatus,
-    pub synced_accounts: usize,
-    pub chain_synced_at: DateTime<Utc>,
 }

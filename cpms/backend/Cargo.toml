@@ -3,6 +3,11 @@ name = "cpms-backend"
 version = "0.1.0"
 edition = "2021"
 
+# 中文注释:CPMS 后端源码已平铺到 backend 根目录,不再使用 Cargo 默认的 src/main.rs。
+[[bin]]
+name = "cpms-backend"
+path = "main.rs"
+
 [workspace]
 
 [dependencies]
@@ -22,3 +27,5 @@ rand = "0.8"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "json"] }
 bs58 = "0.5"
 aes-gcm = "0.10"
+# 中文注释:行政区唯一源 china.sqlite 由 SFID 维护,CPMS 安装期随附拷贝并用 rusqlite 只读。
+rusqlite = { version = "0.32", features = ["bundled"] }

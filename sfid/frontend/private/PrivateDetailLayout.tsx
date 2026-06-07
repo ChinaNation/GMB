@@ -33,12 +33,12 @@ import {
   Spin,
   Tag,
   Typography,
+  Upload,
 } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
 import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
 import {
-  A3_LABEL,
   INSTITUTION_CODE_LABEL,
   SUB_TYPE_LABEL,
   subTypeChoicesForP1,
@@ -47,9 +47,11 @@ import {
   checkInstitutionName,
   searchParentInstitutions,
   updateInstitution,
+  uploadLegalRepresentativePhoto,
   type InstitutionDetail,
   type ParentInstitutionRow,
 } from './api';
+import { searchLegalRepresentativeCitizens } from '../citizens/api';
 import { AccountList } from '../accounts/AccountList';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { DocumentLibrary } from '../docs/DocumentLibrary';
@@ -63,12 +65,6 @@ import { notice } from '../utils/notice';
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
   FEDERAL_ADMIN: '联邦管理员',
   SHI_ADMIN: '市级管理员',
-};
-
-const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
-  NOT_REGISTERED: '未注册',
-  REGISTERED: '已注册',
-  REVOKED_ON_CHAIN: '已注销',
 };
 
 interface Props {
@@ -89,6 +85,12 @@ interface InfoFormValues {
   sub_type?: string;
   /** 非法人(FFR)所属法人 sfid_number */
   parent_sfid_number?: string;
+  legal_rep_name: string;
+  legal_rep_sfid_number: string;
+  legal_rep_photo_path: string;
+  legal_rep_photo_name: string;
+  legal_rep_photo_mime: string;
+  legal_rep_photo_size?: number;
 }
 
 export const PrivateDetailLayout: React.FC<Props> = ({
@@ -114,6 +116,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const [nameChecking, setNameChecking] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
   const [currentName, setCurrentName] = useState<string>(inst.institution_name ?? '');
+  const [legalRepSearching, setLegalRepSearching] = useState(false);
+  const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoName, setPhotoName] = useState<string>(inst.legal_rep_photo_name ?? '');
 
   const isSFR = inst.a3 === 'SFR';
   const isFFR = inst.a3 === 'FFR';
@@ -126,7 +132,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const needsCompletion =
     !inst.institution_name ||
     (isSFR && !inst.sub_type) ||
-    (isFFR && !inst.parent_sfid_number);
+    (isFFR && !inst.parent_sfid_number) ||
+    !inst.legal_rep_name ||
+    !inst.legal_rep_sfid_number ||
+    !inst.legal_rep_photo_path;
 
   // ── FFR 所属法人搜索 ──
   const [parentSearchOpts, setParentSearchOpts] = useState<ParentInstitutionRow[]>([]);
@@ -194,8 +203,24 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
+      legal_rep_name: inst.legal_rep_name ?? '',
+      legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
+      legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
+      legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
+      legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
+      legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
-  }, [inst.sfid_number, inst.institution_name, inst.sub_type]);
+    setPhotoName(inst.legal_rep_photo_name ?? '');
+    setLegalRepOptions([]);
+  }, [
+    inst.sfid_number,
+    inst.institution_name,
+    inst.sub_type,
+    inst.parent_sfid_number,
+    inst.legal_rep_name,
+    inst.legal_rep_sfid_number,
+    inst.legal_rep_photo_path,
+  ]);
 
   const onClickEdit = () => {
     setEditing(true);
@@ -204,7 +229,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
+      legal_rep_name: inst.legal_rep_name ?? '',
+      legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
+      legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
+      legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
+      legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
+      legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
+    setPhotoName(inst.legal_rep_photo_name ?? '');
     setCurrentName(inst.institution_name ?? '');
   };
 
@@ -215,7 +247,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
+      legal_rep_name: inst.legal_rep_name ?? '',
+      legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
+      legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
+      legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
+      legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
+      legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
+    setPhotoName(inst.legal_rep_photo_name ?? '');
     setCurrentName(inst.institution_name ?? '');
   };
 
@@ -261,6 +300,47 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
   };
 
+  const triggerLegalRepSearch = async () => {
+    const q = (form.getFieldValue('legal_rep_sfid_number') ?? '').trim();
+    if (!q) {
+      notice.warning('请先输入法定代表人身份ID关键字');
+      return;
+    }
+    setLegalRepSearching(true);
+    try {
+      const rows = await searchLegalRepresentativeCitizens(auth, q);
+      setLegalRepOptions(rows);
+      if (rows.length === 0) {
+        notice.info('未找到正常状态公民');
+      }
+    } catch (err) {
+      notice.error(err, '');
+      setLegalRepOptions([]);
+    } finally {
+      setLegalRepSearching(false);
+    }
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    setPhotoUploading(true);
+    try {
+      const photo = await uploadLegalRepresentativePhoto(auth, file);
+      form.setFieldsValue({
+        legal_rep_photo_path: photo.file_path,
+        legal_rep_photo_name: photo.file_name,
+        legal_rep_photo_mime: photo.mime_type,
+        legal_rep_photo_size: photo.file_size,
+      });
+      setPhotoName(photo.file_name);
+      notice.success('证件照已上传');
+    } catch (err) {
+      notice.error(err, '证件照上传失败');
+    } finally {
+      setPhotoUploading(false);
+    }
+    return false;
+  };
+
   const onSaveInfo = async (values: InfoFormValues) => {
     const name = values.institution_name.trim();
     if (!name) {
@@ -275,6 +355,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.error('请选择所属法人机构');
       return;
     }
+    const legalRepName = values.legal_rep_name?.trim();
+    const legalRepSfid = values.legal_rep_sfid_number?.trim();
+    if (!legalRepName || !legalRepSfid || !values.legal_rep_photo_path) {
+      notice.error('请完整填写法定代表人姓名、身份ID和证件照');
+      return;
+    }
     // 名称变了必须查重通过才能保存
     if (!isNameUnchanged() && nameAvailable !== true) {
       notice.warning('请点击搜索图标检查名称是否可用');
@@ -286,6 +372,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         institution_name: name,
         sub_type: isSFR ? values.sub_type ?? null : null,
         parent_sfid_number: isFFR ? values.parent_sfid_number : undefined,
+        legal_rep_name: legalRepName,
+        legal_rep_sfid_number: legalRepSfid,
+        legal_rep_photo_path: values.legal_rep_photo_path,
+        legal_rep_photo_name: values.legal_rep_photo_name,
+        legal_rep_photo_mime: values.legal_rep_photo_mime,
+        legal_rep_photo_size: values.legal_rep_photo_size,
       });
       notice.success('机构信息已保存');
       setEditing(false);
@@ -364,24 +456,18 @@ export const PrivateDetailLayout: React.FC<Props> = ({
           {/* 左:SFID 不可编辑身份信息 */}
           <Col xs={24} md={12}>
             <Descriptions column={1} size="small">
-              <Descriptions.Item label="机构 SFID">
-                <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
+              <Descriptions.Item label="身份ID">
+                <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
                   {inst.sfid_number}
                 </Typography.Text>
               </Descriptions.Item>
               <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
               <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
-              <Descriptions.Item label="A3 类型">
-                {inst.a3}/{A3_LABEL[inst.a3] || inst.a3}
-              </Descriptions.Item>
               <Descriptions.Item label="P1 盈利属性">
                 {inst.p1}/{inst.p1 === '0' ? '非盈利' : '盈利'}
               </Descriptions.Item>
               <Descriptions.Item label="机构代码">
                 {inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
-              </Descriptions.Item>
-              <Descriptions.Item label="链上状态">
-                <Tag>{INSTITUTION_CHAIN_STATUS_LABEL[inst.chain_status] || inst.chain_status}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {new Date(inst.created_at).toLocaleString('zh-CN')}
@@ -396,7 +482,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               <Alert
                 type="warning"
                 showIcon
-                message="请先完善机构名称与企业类型,才能新建账户"
+                message="请先完善机构名称、企业类型和法定代表人资料,才能新建账户"
                 style={{ marginBottom: 12 }}
               />
             )}
@@ -410,6 +496,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                     institution_name: inst.institution_name ?? '',
                     sub_type: inst.sub_type ?? undefined,
                     parent_sfid_number: inst.parent_sfid_number ?? undefined,
+                    legal_rep_name: inst.legal_rep_name ?? '',
+                    legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
+                    legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
+                    legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
+                    legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
+                    legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
                   }}
                 >
                   <Form.Item
@@ -509,6 +601,71 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       <Select options={subTypeChoices} placeholder="请选择企业类型" />
                     </Form.Item>
                   )}
+                  <Form.Item
+                    label="法定代表人姓名"
+                    name="legal_rep_name"
+                    rules={[
+                      { required: true, message: '请输入法定代表人姓名' },
+                      { max: 30, message: '最多 30 个字' },
+                    ]}
+                  >
+                    <Input placeholder="请输入法定代表人姓名" maxLength={30} />
+                  </Form.Item>
+                  <Form.Item
+                    label="法定代表人身份ID"
+                    name="legal_rep_sfid_number"
+                    rules={[{ required: true, message: '请选择法定代表人身份ID' }]}
+                  >
+                    <AutoComplete
+                      filterOption={false}
+                      options={legalRepOptions.map((sfidNumber) => ({
+                        value: sfidNumber,
+                        label: sfidNumber,
+                      }))}
+                    >
+                      <Input
+                        placeholder="输入身份ID后点击搜索"
+                        suffix={
+                          <span
+                            style={{
+                              cursor: legalRepSearching ? 'default' : 'pointer',
+                              color: legalRepSearching ? '#999' : '#1890ff',
+                            }}
+                            onClick={legalRepSearching ? undefined : triggerLegalRepSearch}
+                            title="搜索正常状态公民"
+                          >
+                            {legalRepSearching ? <Spin size="small" /> : <SearchOutlined />}
+                          </span>
+                        }
+                      />
+                    </AutoComplete>
+                  </Form.Item>
+                  <Form.Item label="法定代表人证件照" required>
+                    <Upload
+                      accept="image/jpeg,image/png,image/webp"
+                      showUploadList={false}
+                      beforeUpload={(file) => handlePhotoUpload(file as File)}
+                    >
+                      <Button icon={<UploadOutlined />} loading={photoUploading}>
+                        上传证件照
+                      </Button>
+                    </Upload>
+                    {photoName && (
+                      <div style={{ color: '#52c41a', marginTop: 8, fontSize: 12 }}>
+                        {photoName}
+                      </div>
+                    )}
+                  </Form.Item>
+                  <Form.Item
+                    name="legal_rep_photo_path"
+                    rules={[{ required: true, message: '请上传法定代表人证件照' }]}
+                    hidden
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item name="legal_rep_photo_name" hidden><Input /></Form.Item>
+                  <Form.Item name="legal_rep_photo_mime" hidden><Input /></Form.Item>
+                  <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
                 </Form>
               ) : (
                 // 只读展示
@@ -568,6 +725,21 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
                     </Descriptions.Item>
                   )}
+                  <Descriptions.Item label="法定代表人姓名">
+                    {inst.legal_rep_name || <span style={{ color: '#999' }}>(未填写)</span>}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="法定代表人身份ID">
+                    {inst.legal_rep_sfid_number ? (
+                      <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                        {inst.legal_rep_sfid_number}
+                      </Typography.Text>
+                    ) : (
+                      <span style={{ color: '#999' }}>(未填写)</span>
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="法定代表人证件照">
+                    {inst.legal_rep_photo_name || <span style={{ color: '#999' }}>(未上传)</span>}
+                  </Descriptions.Item>
                 </Descriptions>
               )}
           </Col>
@@ -583,7 +755,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
             <Button
               type="primary"
               disabled={needsCompletion}
-              title={needsCompletion ? '请先完善机构名称与企业类型' : undefined}
+              title={needsCompletion ? '请先完善机构名称、企业类型和法定代表人资料' : undefined}
               onClick={() => setCreateAccountOpen(true)}
             >
               + 新建账户

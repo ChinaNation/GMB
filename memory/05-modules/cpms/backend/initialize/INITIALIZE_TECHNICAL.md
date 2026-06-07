@@ -1,7 +1,7 @@
 # CPMS Initialize 模块技术文档
 
 ## 1. 模块定位
-`backend/src/initialize/` 负责 CPMS 安装初始化、安装授权材料入库、ARCHIVE 签发密钥生成和超级管理员绑定。
+`backend/initialize/` 负责 CPMS 安装初始化、安装授权材料入库、ARCHIVE 签发密钥生成和超级管理员绑定。
 
 本模块只消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码，不再维护旧中间注册状态。
 CPMS 是离线系统，初始化阶段不要求外置验签公钥；档案码真实性由 SFID 在 ARCHIVE 验真阶段闭环确认。

@@ -6,6 +6,14 @@ type BarcodeDetectorLike = {
 };
 type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
 
+function createQrDetector(unsupportedMessage: string): BarcodeDetectorLike {
+  const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
+  if (!win.BarcodeDetector) {
+    throw new Error(unsupportedMessage);
+  }
+  return new win.BarcodeDetector({ formats: ['qr_code'] });
+}
+
 /**
  * 启动摄像头 BarcodeDetector 扫码。
  *
@@ -72,4 +80,46 @@ export function startCameraScanner(
       stream.getTracks().forEach((t) => t.stop());
     }
   };
+}
+
+/**
+ * 从用户上传的图片文件中识别二维码内容。
+ *
+ * 中文注释：上传二维码与摄像头扫码共用 BarcodeDetector，只产生一份二维码原文，
+ * 仍交给调用方已有的 onDetected 流程，不新增第二套业务逻辑；图片只在前端本地解析。
+ */
+export async function decodeQrImageFile(file: File): Promise<string> {
+  const isImage =
+    file.type.startsWith('image/') ||
+    /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+  if (!isImage) {
+    throw new Error('请上传二维码图片文件');
+  }
+  if (typeof createImageBitmap !== 'function') {
+    throw new Error('当前浏览器不支持二维码图片解析');
+  }
+
+  const detector = createQrDetector('当前浏览器不支持二维码图片识别');
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('二维码图片读取失败，请上传清晰的图片文件');
+  }
+
+  try {
+    const codes = await detector.detect(bitmap);
+    const raw = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim();
+    if (!raw) {
+      throw new Error('未识别到二维码，请上传清晰的二维码图片');
+    }
+    return raw;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('未识别到二维码')) {
+      throw err;
+    }
+    throw new Error('二维码图片识别失败，请换用清晰的二维码图片');
+  } finally {
+    bitmap.close();
+  }
 }

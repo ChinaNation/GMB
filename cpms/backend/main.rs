@@ -17,18 +17,15 @@ use uuid::Uuid;
 
 mod address;
 mod authz;
+// 中文注释：行政区唯一源是 SFID 维护的 china.sqlite；CPMS 安装包随附其只读拷贝，
+// 运行时用 rusqlite 按安装码所属市窄查询镇/村，不在 CPMS 侧维护第二套行政区源。
+mod china;
 mod dangan;
 mod initialize;
 mod login;
 mod number;
 mod qr;
 mod rate_limit;
-// 中文注释：行政区数据唯一源是 SFID 系统 sfid 工具；CPMS 只在编译期直接引用，
-// 不在 CPMS 源码树保存 province.rs 或 city_codes 的第二份文件。
-#[allow(dead_code)]
-#[allow(clippy::large_const_arrays)]
-#[path = "../../../sfid/backend/sfid/province.rs"]
-mod sfid_tool_province;
 mod ss58;
 mod store;
 mod super_admin;

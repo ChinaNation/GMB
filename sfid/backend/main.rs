@@ -128,22 +128,6 @@ fn institution_category_from_text(category: &str) -> Option<crate::number::Insti
     }
 }
 
-fn institution_chain_status_text(status: &crate::subjects::InstitutionChainStatus) -> &'static str {
-    match status {
-        crate::subjects::InstitutionChainStatus::NotRegistered => "NOT_REGISTERED",
-        crate::subjects::InstitutionChainStatus::Registered => "REGISTERED",
-        crate::subjects::InstitutionChainStatus::RevokedOnChain => "REVOKED_ON_CHAIN",
-    }
-}
-
-fn institution_chain_status_from_text(status: &str) -> crate::subjects::InstitutionChainStatus {
-    match status {
-        "REGISTERED" => crate::subjects::InstitutionChainStatus::Registered,
-        "REVOKED_ON_CHAIN" => crate::subjects::InstitutionChainStatus::RevokedOnChain,
-        _ => crate::subjects::InstitutionChainStatus::NotRegistered,
-    }
-}
-
 fn multisig_chain_status_text(status: &crate::subjects::MultisigChainStatus) -> &'static str {
     match status {
         crate::subjects::MultisigChainStatus::NotOnChain => "NOT_ON_CHAIN",
@@ -236,7 +220,6 @@ fn institution_row_from_record(
         org_code: inst.org_code.clone(),
         sub_type: inst.sub_type.clone(),
         parent_sfid_number: inst.parent_sfid_number.clone(),
-        chain_status: inst.chain_status.clone(),
         account_count,
         cpms_status: None,
         install_token_status: None,
@@ -253,19 +236,18 @@ fn institution_row_from_pg_row(
     let category_text: String = row.get(2);
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-    let chain_status_text: String = row.get(12);
-    let account_count_i64: i64 = row.get(15);
-    let created_by_name: Option<String> = row.get(16);
-    let created_by_role: Option<String> = row.get(17);
-    let full_name: Option<String> = row.get(18);
-    let short_name: Option<String> = row.get(19);
-    let town: Option<String> = row.get(20);
-    let town_code: Option<String> = row.get(21);
-    let org_code: Option<String> = row.get(22);
-    let status: String = row.get(23);
-    let cpms_status: Option<String> = row.get(24);
-    let install_token_status: Option<String> = row.get(25);
-    let cpms_pubkey_bound: Option<bool> = row.get(26);
+    let account_count_i64: i64 = row.get(14);
+    let created_by_name: Option<String> = row.get(15);
+    let created_by_role: Option<String> = row.get(16);
+    let full_name: Option<String> = row.get(17);
+    let short_name: Option<String> = row.get(18);
+    let town: Option<String> = row.get(19);
+    let town_code: Option<String> = row.get(20);
+    let org_code: Option<String> = row.get(21);
+    let status: String = row.get(22);
+    let cpms_status: Option<String> = row.get(23);
+    let install_token_status: Option<String> = row.get(24);
+    let cpms_pubkey_bound: Option<bool> = row.get(25);
     let identity_service_status = if category == crate::number::InstitutionCategory::PublicSecurity
     {
         Some(
@@ -300,12 +282,14 @@ fn institution_row_from_pg_row(
         org_code,
         sub_type: row.get(10),
         parent_sfid_number: row.get(11),
-        chain_status: institution_chain_status_from_text(chain_status_text.as_str()),
-        chain_tx_hash: None,
-        chain_block_number: None,
-        chain_synced_at: None,
-        created_by: row.get(13),
-        created_at: row.get(14),
+        legal_rep_name: None,
+        legal_rep_sfid_number: None,
+        legal_rep_photo_path: None,
+        legal_rep_photo_name: None,
+        legal_rep_photo_mime: None,
+        legal_rep_photo_size: None,
+        created_by: row.get(12),
+        created_at: row.get(13),
     };
     let mut item = institution_row_from_record(
         &inst,
@@ -325,13 +309,13 @@ fn institution_from_subject_row(
     let category_text: String = row.get(2);
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-    let chain_status_text: String = row.get(12);
-    let full_name: Option<String> = row.get(15);
-    let short_name: Option<String> = row.get(16);
-    let town: Option<String> = row.get(17);
-    let town_code: Option<String> = row.get(18);
-    let org_code: Option<String> = row.get(19);
-    let status: String = row.get(20);
+    let full_name: Option<String> = row.get(14);
+    let short_name: Option<String> = row.get(15);
+    let town: Option<String> = row.get(16);
+    let town_code: Option<String> = row.get(17);
+    let org_code: Option<String> = row.get(18);
+    let status: String = row.get(19);
+    let legal_rep_photo_size_i64: Option<i64> = row.get(25);
     Ok(crate::subjects::MultisigInstitution {
         sfid_number: row.get(0),
         institution_name: row.get(1),
@@ -351,12 +335,14 @@ fn institution_from_subject_row(
         org_code,
         sub_type: row.get(10),
         parent_sfid_number: row.get(11),
-        chain_status: institution_chain_status_from_text(chain_status_text.as_str()),
-        chain_tx_hash: None,
-        chain_block_number: None,
-        chain_synced_at: None,
-        created_by: row.get(13),
-        created_at: row.get(14),
+        legal_rep_name: row.get(20),
+        legal_rep_sfid_number: row.get(21),
+        legal_rep_photo_path: row.get(22),
+        legal_rep_photo_name: row.get(23),
+        legal_rep_photo_mime: row.get(24),
+        legal_rep_photo_size: legal_rep_photo_size_i64.and_then(|v| u64::try_from(v).ok()),
+        created_by: row.get(12),
+        created_at: row.get(13),
     })
 }
 
@@ -427,10 +413,12 @@ impl Db {
                     "SELECT s.sfid_number, s.name, s.category,
                             s.a3, s.p1, s.province,
                             s.city, s.province_code, s.city_code, s.institution_code,
-		                            s.sub_type, s.parent_sfid_number, s.chain_status,
+		                            s.sub_type, s.parent_sfid_number,
 		                            s.created_by, s.created_at, s.full_name, s.short_name,
 	                            COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
-	                            s.status
+	                            s.status, s.legal_rep_name, s.legal_rep_sfid_number,
+	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
+	                            s.legal_rep_photo_mime, s.legal_rep_photo_size
 		                     FROM subjects s
 		                     LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
 	                     WHERE s.kind IN ('PUBLIC', 'PRIVATE') AND s.sfid_number = $1
@@ -748,6 +736,26 @@ impl Db {
         })
     }
 
+    pub(crate) fn legal_representative_citizen_exists(
+        &self,
+        sfid_number: &str,
+    ) -> Result<bool, String> {
+        let sfid_number = sfid_number.trim().to_string();
+        self.with_client(move |conn| {
+            let row = conn
+                .query_one(
+                    "SELECT EXISTS (
+                        SELECT 1 FROM citizens
+                        WHERE sfid_number = $1
+                          AND citizen_status = 'NORMAL'
+                     )",
+                    &[&sfid_number],
+                )
+                .map_err(|e| format!("query legal representative citizen failed: {e}"))?;
+            Ok(row.get(0))
+        })
+    }
+
     fn upsert_target_subject_rows(
         conn: &mut postgres::Client,
         inst: &crate::subjects::MultisigInstitution,
@@ -768,14 +776,7 @@ impl Db {
         } else {
             Some(inst.town_code.clone())
         };
-        let status = if matches!(
-            inst.chain_status,
-            crate::subjects::InstitutionChainStatus::RevokedOnChain
-        ) {
-            "REVOKED"
-        } else {
-            "ACTIVE"
-        };
+        let status = inst.status.trim().to_string();
         Self::upsert_target_id_row(
             conn,
             inst.sfid_number.as_str(),
@@ -790,17 +791,21 @@ impl Db {
             p_code.as_str(),
         )?;
         let category = institution_category_text(inst.category);
-        let chain_status = institution_chain_status_text(&inst.chain_status);
+        let legal_rep_photo_size = inst
+            .legal_rep_photo_size
+            .and_then(|v| i64::try_from(v).ok());
         conn.execute(
             "INSERT INTO subjects (
 		                sfid_number, kind, name, full_name, short_name, p_code, c_code, t_code,
 		                status, category, a3, p1, province, city, town,
 		                province_code, city_code, town_code, institution_code, org_code, sub_type,
-		                parent_sfid_number, chain_status, created_by, created_at, updated_at
+		                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
+		                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
+		                legal_rep_photo_size, created_by, created_at, updated_at
 		             ) VALUES (
 		                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 		                $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-		                $25, now()
+		                $25, $26, $27, $28, $29, $30, now()
 		             )
 		             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
 		                kind = EXCLUDED.kind,
@@ -823,7 +828,12 @@ impl Db {
 	                org_code = EXCLUDED.org_code,
 	                sub_type = EXCLUDED.sub_type,
                 parent_sfid_number = EXCLUDED.parent_sfid_number,
-                chain_status = EXCLUDED.chain_status,
+                legal_rep_name = EXCLUDED.legal_rep_name,
+                legal_rep_sfid_number = EXCLUDED.legal_rep_sfid_number,
+                legal_rep_photo_path = EXCLUDED.legal_rep_photo_path,
+                legal_rep_photo_name = EXCLUDED.legal_rep_photo_name,
+                legal_rep_photo_mime = EXCLUDED.legal_rep_photo_mime,
+                legal_rep_photo_size = EXCLUDED.legal_rep_photo_size,
                 created_by = EXCLUDED.created_by,
                 updated_at = now()",
             &[
@@ -849,7 +859,12 @@ impl Db {
                 &inst.org_code,
                 &inst.sub_type,
                 &inst.parent_sfid_number,
-                &chain_status,
+                &inst.legal_rep_name,
+                &inst.legal_rep_sfid_number,
+                &inst.legal_rep_photo_path,
+                &inst.legal_rep_photo_name,
+                &inst.legal_rep_photo_mime,
+                &legal_rep_photo_size,
                 &inst.created_by,
                 &inst.created_at,
             ],
@@ -917,22 +932,20 @@ impl Db {
                     &[&inst.sfid_number],
                 )
                 .map_err(|e| format!("delete private row for public subject failed: {e}"))?;
-                let chain_status = institution_chain_status_text(&inst.chain_status);
                 let home_p: Option<String> = None;
                 let home_c: Option<String> = None;
                 conn.execute(
                     "INSERT INTO gov (
 		                        sfid_number, p_code, c_code, t_code, institution_code, org_code,
-		                        home_p, home_c, chain_status
-		                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		                        home_p, home_c
+		                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		                     ON CONFLICT (p_code, sfid_number) DO UPDATE SET
 		                        c_code = EXCLUDED.c_code,
 		                        t_code = EXCLUDED.t_code,
 		                        institution_code = EXCLUDED.institution_code,
 		                        org_code = EXCLUDED.org_code,
 		                        home_p = EXCLUDED.home_p,
-		                        home_c = EXCLUDED.home_c,
-		                        chain_status = EXCLUDED.chain_status",
+		                        home_c = EXCLUDED.home_c",
                     &[
                         &inst.sfid_number,
                         &p_code,
@@ -942,7 +955,6 @@ impl Db {
                         &inst.org_code,
                         &home_p,
                         &home_c,
-                        &chain_status,
                     ],
                 )
                 .map_err(|e| format!("upsert gov failed: {e}"))?;
@@ -1100,7 +1112,7 @@ impl Db {
 		                    "SELECT s.sfid_number, s.name, s.category,
 			                                    s.a3, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
-				                                    s.sub_type, s.parent_sfid_number, s.chain_status,
+				                                    s.sub_type, s.parent_sfid_number,
 					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
 				                                    a.admin_name, a.role, s.full_name, s.short_name,
 				                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
@@ -1144,16 +1156,15 @@ impl Db {
                 let category_text: String = row.get(2);
                 let category = institution_category_from_text(category_text.as_str())
                     .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-		                let chain_status_text: String = row.get(12);
-			                let account_count_i64: i64 = row.get(15);
-			                let created_by_name: Option<String> = row.get(16);
-			                let created_by_role: Option<String> = row.get(17);
-			                let full_name: Option<String> = row.get(18);
-			                let short_name: Option<String> = row.get(19);
-				                let town: Option<String> = row.get(20);
-				                let town_code: Option<String> = row.get(21);
-				                let org_code: Option<String> = row.get(22);
-				                let status: String = row.get(23);
+			                let account_count_i64: i64 = row.get(14);
+			                let created_by_name: Option<String> = row.get(15);
+			                let created_by_role: Option<String> = row.get(16);
+			                let full_name: Option<String> = row.get(17);
+			                let short_name: Option<String> = row.get(18);
+				                let town: Option<String> = row.get(19);
+				                let town_code: Option<String> = row.get(20);
+				                let org_code: Option<String> = row.get(21);
+				                let status: String = row.get(22);
 		                let inst = crate::subjects::MultisigInstitution {
 		                    sfid_number: row.get(0),
 		                    institution_name: row.get(1),
@@ -1173,12 +1184,14 @@ impl Db {
 			                    org_code,
 			                    sub_type: row.get(10),
 		                    parent_sfid_number: row.get(11),
-		                    chain_status: institution_chain_status_from_text(chain_status_text.as_str()),
-                    chain_tx_hash: None,
-                    chain_block_number: None,
-                    chain_synced_at: None,
-		                    created_by: row.get(13),
-		                    created_at: row.get(14),
+                    legal_rep_name: None,
+                    legal_rep_sfid_number: None,
+                    legal_rep_photo_path: None,
+                    legal_rep_photo_name: None,
+                    legal_rep_photo_mime: None,
+                    legal_rep_photo_size: None,
+		                    created_by: row.get(12),
+		                    created_at: row.get(13),
                 };
                 let id = stable_institution_cursor_id(inst.sfid_number.as_str());
                 output.push((
@@ -1215,7 +1228,7 @@ impl Db {
 		                    "SELECT s.sfid_number, s.name, s.category,
 			                                    s.a3, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
-				                                    s.sub_type, s.parent_sfid_number, s.chain_status,
+				                                    s.sub_type, s.parent_sfid_number,
 					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.role, s.full_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
@@ -1273,7 +1286,7 @@ impl Db {
                     "SELECT s.sfid_number, s.name, s.category,
 			                                    s.a3, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
-				                                    s.sub_type, s.parent_sfid_number, s.chain_status,
+				                                    s.sub_type, s.parent_sfid_number,
 				                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.role, s.full_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
@@ -1911,6 +1924,10 @@ fn main() {
                 get(subjects::admin::search_parent_institutions),
             )
             .route(
+                "/api/v1/institution/legal-representative/photo",
+                post(subjects::admin::upload_legal_representative_photo),
+            )
+            .route(
                 "/api/v1/institution/create",
                 post(private::handler::create_institution),
             )
@@ -1973,6 +1990,10 @@ fn main() {
             .route(
                 "/api/v1/admin/citizens",
                 get(citizens::handler::admin_list_citizens),
+            )
+            .route(
+                "/api/v1/admin/citizens/legal-representatives",
+                get(citizens::handler::admin_search_legal_representative_citizens),
             )
             // ── 公民身份绑定 ──
             .route(

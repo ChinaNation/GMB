@@ -788,14 +788,35 @@ mod tests {
         }
     }
 
+    /// 中文注释：安装 QR 校验含行政区交叉核对，依赖 SFID 维护的 china.sqlite 唯一源。
+    /// 测试指向其源文件（与 deploy 随附的是同一份），缺失则跳过，不在 CPMS 侧维护第二套源。
+    fn point_to_china_source() -> bool {
+        let china_db = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../sfid/backend/china/data/china.sqlite"
+        );
+        if !std::path::Path::new(china_db).exists() {
+            eprintln!("skip: china source not found at {china_db}");
+            return false;
+        }
+        std::env::set_var("CPMS_CHINA_DB", china_db);
+        true
+    }
+
     #[test]
     fn validate_sfid_install_qr_does_not_require_sfid_pubkey_env() {
+        if !point_to_china_source() {
+            return;
+        }
         let payload = install_payload();
         assert!(validate_sfid_install_qr(&payload).is_ok());
     }
 
     #[test]
     fn validate_sfid_install_qr_rejects_bad_install_secret() {
+        if !point_to_china_source() {
+            return;
+        }
         let mut payload = install_payload();
         payload.install_secret = "0x1234".to_string();
         let result = validate_sfid_install_qr(&payload);

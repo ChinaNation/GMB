@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-`cpms/backend/src/number/` 是 CPMS 编号工具模块，负责在创建公民档案时同步生成一对编号：
+`cpms/backend/number/` 是 CPMS 编号工具模块，负责在创建公民档案时同步生成一对编号：
 
 - `archive_no`：档案号，供 SFID 绑定和 ARCHIVE 载荷使用。
 - `passport_no`：护照号，印刷在公民护照上。

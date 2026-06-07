@@ -136,9 +136,9 @@
 | 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 固定 `sr25519` |
 | 电子护照身份ID | `sfid_code` | SFID citizens / wuminapp myid | SFID 生成并返回给用户展示的身份ID号码 |
 | 电子护照绑定状态 | `bind_status` | SFID citizens / wuminapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
-| CPMS 编号工具 | `number` | `cpms/backend/src/number/` | CPMS 后端档案号与护照号生成模块 |
-| CPMS 档案生命周期 | `lifecycle` | `cpms/backend/src/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
-| CPMS 状态导出 | `export` | `cpms/backend/src/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
+| CPMS 编号工具 | `number` | `cpms/backend/number/` | CPMS 后端档案号与护照号生成模块 |
+| CPMS 档案生命周期 | `lifecycle` | `cpms/backend/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
+| CPMS 状态导出 | `export` | `cpms/backend/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
 | CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/SFID 离线 JSON 文件 | CPMS 给 SFID 导入的年度状态与档案号绑定释放凭证 |
 | CPMS 前端鉴权 | `authz` | `cpms/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
 | CPMS 前端初始化 | `initialize` | `cpms/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |

@@ -5,7 +5,9 @@
 
 #![allow(dead_code)]
 
-use crate::number::{classify, InstitutionCategory, InstitutionCode, A3};
+use crate::number::{
+    classify, validate_sfid_number_format, InstitutionCategory, InstitutionCode, A3,
+};
 use crate::subjects::model::MultisigAccount;
 use crate::subjects::MultisigChainStatus;
 
@@ -15,6 +17,18 @@ pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
 pub const MAX_INSTITUTION_NAME_CHARS: usize = 30;
 pub const MAX_INSTITUTION_NAME_BYTES: usize = 128;
+pub const MAX_LEGAL_REP_NAME_CHARS: usize = 30;
+pub const MAX_LEGAL_REP_NAME_BYTES: usize = 128;
+pub const MAX_LEGAL_REP_PHOTO_BYTES: u64 = 5 * 1024 * 1024;
+
+pub struct LegalRepresentativeFields {
+    pub name: String,
+    pub sfid_number: String,
+    pub photo_path: String,
+    pub photo_name: String,
+    pub photo_mime: String,
+    pub photo_size: u64,
+}
 
 pub fn is_default_account_name(account_name: &str) -> bool {
     DEFAULT_ACCOUNT_NAMES
@@ -63,6 +77,60 @@ pub fn validate_institution_name(name: &str) -> Result<String, ServiceError> {
         ));
     }
     Ok(trimmed.to_string())
+}
+
+pub fn validate_legal_representative_required(
+    name: Option<&str>,
+    sfid_number: Option<&str>,
+    photo_path: Option<&str>,
+    photo_name: Option<&str>,
+    photo_mime: Option<&str>,
+    photo_size: Option<u64>,
+) -> Result<LegalRepresentativeFields, ServiceError> {
+    let name = name
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or(ServiceError::BadInput("法定代表人姓名不能为空"))?;
+    if name.chars().count() > MAX_LEGAL_REP_NAME_CHARS || name.len() > MAX_LEGAL_REP_NAME_BYTES {
+        return Err(ServiceError::BadInput("法定代表人姓名过长"));
+    }
+    let sfid_number = sfid_number
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or(ServiceError::BadInput("法定代表人身份ID不能为空"))?;
+    let sfid_number = validate_sfid_number_format(sfid_number)
+        .map_err(|_| ServiceError::BadInput("法定代表人身份ID格式错误"))?;
+    let photo_path = photo_path
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or(ServiceError::BadInput("法定代表人证件照不能为空"))?;
+    if !photo_path.starts_with("data/legal-rep-photos/") {
+        return Err(ServiceError::BadInput("法定代表人证件照路径非法"));
+    }
+    let photo_name = photo_name
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or(ServiceError::BadInput("法定代表人证件照文件名不能为空"))?;
+    let photo_mime = photo_mime
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or(ServiceError::BadInput("法定代表人证件照类型不能为空"))?;
+    if !matches!(photo_mime, "image/jpeg" | "image/png" | "image/webp") {
+        return Err(ServiceError::BadInput(
+            "法定代表人证件照只支持 JPEG/PNG/WebP",
+        ));
+    }
+    let photo_size = photo_size
+        .filter(|v| *v > 0 && *v <= MAX_LEGAL_REP_PHOTO_BYTES)
+        .ok_or(ServiceError::BadInput("法定代表人证件照大小非法"))?;
+    Ok(LegalRepresentativeFields {
+        name: name.to_string(),
+        sfid_number,
+        photo_path: photo_path.to_string(),
+        photo_name: photo_name.to_string(),
+        photo_mime: photo_mime.to_string(),
+        photo_size,
+    })
 }
 
 /// 校验账户名称格式。

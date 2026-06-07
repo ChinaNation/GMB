@@ -10,6 +10,7 @@ import type {
   CreateInstitutionOutput,
   InstitutionDetail,
   InstitutionListRow,
+  LegalRepresentativePhoto,
   PageResult,
 } from '../subjects/api';
 
@@ -90,6 +91,9 @@ export async function createInstitution(
     institution: input.institution,
     institution_name: input.institution_name ?? null,
     sub_type: null,
+    legal_rep_name: input.legal_rep_name ?? null,
+    legal_rep_sfid_number: input.legal_rep_sfid_number ?? null,
+    legal_rep_photo_path: input.legal_rep_photo_path ?? null,
   };
   const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload);
   return adminRequest<CreateInstitutionOutput>('/api/v1/institution/create', auth, {
@@ -97,6 +101,22 @@ export async function createInstitution(
     headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
     body: JSON.stringify(input),
   });
+}
+
+export async function uploadLegalRepresentativePhoto(
+  auth: AdminAuth,
+  file: File,
+): Promise<LegalRepresentativePhoto> {
+  const form = new FormData();
+  form.append('file', file);
+  return adminRequest<LegalRepresentativePhoto>(
+    '/api/v1/institution/legal-representative/photo',
+    auth,
+    {
+      method: 'POST',
+      body: form,
+    },
+  );
 }
 
 export async function getInstitution(

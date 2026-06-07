@@ -31,7 +31,7 @@ export interface InstitutionFieldLocks {
   modalTitle: string;
 }
 
-// ── A3 类型中文映射 ──
+// ── A3 中文映射 ──
 export const A3_LABEL: Record<string, string> = {
   GFR: '公法人',
   SFR: '私法人',

@@ -9,6 +9,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD_DIR="${SCRIPT_DIR}/payload"
 BIN_SRC="${PAYLOAD_DIR}/bin/cpms-backend"
+CHINA_DB_SRC="${PAYLOAD_DIR}/data/china.sqlite"
 FRONTEND_SRC="${PAYLOAD_DIR}/frontend"
 SERVICE_SRC="${PAYLOAD_DIR}/systemd/cpms-backend.service"
 BACKUP_SCRIPT_SRC="${PAYLOAD_DIR}/bin/backup_to_storage.sh"
@@ -27,6 +28,10 @@ check_payload() {
   fi
   if [[ ! -f "${FRONTEND_SRC}/index.html" ]]; then
     echo "ERROR: missing frontend static payload at ${FRONTEND_SRC}"
+    exit 1
+  fi
+  if [[ ! -f "${CHINA_DB_SRC}" ]]; then
+    echo "ERROR: missing china administrative-area source at ${CHINA_DB_SRC}"
     exit 1
   fi
   if [[ ! -f "${SERVICE_SRC}" ]]; then
@@ -176,9 +181,14 @@ CPMS_BIND=127.0.0.1:8080
 CPMS_DATABASE_URL=postgresql://${db_user}:${db_password}@127.0.0.1:5432/${db_name}
 CPMS_KEY_ENCRYPT_SECRET=${key_encrypt_secret}
 CPMS_FRONTEND_DIR=/opt/cpms/frontend
+CPMS_CHINA_DB=/opt/cpms/data/china.sqlite
 CPMS_MATERIALS_DIR=/var/lib/cpms/materials
 CPMS_COOKIE_SECURE=true
 EOF
+  fi
+  # 中文注释：行政区唯一源 china.sqlite 的路径，老安装升级时补齐缺失项。
+  if ! grep -q '^CPMS_CHINA_DB=' /etc/cpms/cpms-backend.env; then
+    echo 'CPMS_CHINA_DB=/opt/cpms/data/china.sqlite' >>/etc/cpms/cpms-backend.env
   fi
   chmod 0600 /etc/cpms/cpms-backend.env
   chown root:cpms /etc/cpms/cpms-backend.env
@@ -217,9 +227,12 @@ SQL
 
 install_backend() {
   install -d -m 0755 /opt/cpms/bin
+  install -d -m 0755 /opt/cpms/data
   install -d -m 0755 /opt/cpms/docs
   install -d -m 0755 /opt/cpms/frontend
   install -m 0755 "${BIN_SRC}" /opt/cpms/bin/cpms-backend
+  # 中文注释：行政区唯一源只读拷贝，运行时由 CPMS_CHINA_DB 指向此路径。
+  install -m 0644 "${CHINA_DB_SRC}" /opt/cpms/data/china.sqlite
   install -m 0755 "${CERT_SCRIPT_SRC}" /opt/cpms/bin/generate_cpms_certs.sh
   install -m 0644 "${INSTALL_GUIDE_SRC}" /opt/cpms/docs/CPMS安装配置手册.pdf
   rm -rf /opt/cpms/frontend/*

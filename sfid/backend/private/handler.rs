@@ -26,8 +26,9 @@ use crate::subjects::http::{
 use crate::subjects::model::{
     CreateInstitutionInput, CreateInstitutionOutput, InstitutionListRow, MultisigInstitution,
 };
-use crate::subjects::service::{derive_category, validate_institution_name};
-use crate::subjects::InstitutionChainStatus;
+use crate::subjects::service::{
+    derive_category, validate_institution_name, validate_legal_representative_required,
+};
 use crate::*;
 
 pub(crate) async fn create_institution(
@@ -47,6 +48,9 @@ pub(crate) async fn create_institution(
         "institution": input.institution.clone(),
         "institution_name": input.institution_name.clone(),
         "sub_type": input.sub_type.clone(),
+        "legal_rep_name": input.legal_rep_name.clone(),
+        "legal_rep_sfid_number": input.legal_rep_sfid_number.clone(),
+        "legal_rep_photo_path": input.legal_rep_photo_path.clone(),
     });
     if let Err(resp) = require_admin_security_grant(
         &state,
@@ -174,6 +178,34 @@ pub(crate) async fn create_institution(
     if matches!(a3.as_str(), "SFR" | "FFR") && p1 != "0" && p1 != "1" {
         return api_error(StatusCode::BAD_REQUEST, 1001, "P1 非法(仅 0/1)");
     }
+    let legal_rep = match validate_legal_representative_required(
+        input.legal_rep_name.as_deref(),
+        input.legal_rep_sfid_number.as_deref(),
+        input.legal_rep_photo_path.as_deref(),
+        input.legal_rep_photo_name.as_deref(),
+        input.legal_rep_photo_mime.as_deref(),
+        input.legal_rep_photo_size,
+    ) {
+        Ok(v) => v,
+        Err(e) => return service_error_to_response(e),
+    };
+    match state
+        .db
+        .legal_representative_citizen_exists(legal_rep.sfid_number.as_str())
+    {
+        Ok(true) => {}
+        Ok(false) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "法定代表人身份ID必须选择正常状态公民",
+            )
+        }
+        Err(err) => {
+            let message = format!("query legal representative failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    }
     if let Some(ref name) = institution_name {
         let conflict = match state.db.institution_name_exists(name, None, None, None) {
             Ok(v) => v,
@@ -231,10 +263,12 @@ pub(crate) async fn create_institution(
             org_code: None,
             sub_type: None,
             parent_sfid_number: None,
-            chain_status: InstitutionChainStatus::NotRegistered,
-            chain_tx_hash: None,
-            chain_block_number: None,
-            chain_synced_at: None,
+            legal_rep_name: Some(legal_rep.name.clone()),
+            legal_rep_sfid_number: Some(legal_rep.sfid_number.clone()),
+            legal_rep_photo_path: Some(legal_rep.photo_path.clone()),
+            legal_rep_photo_name: Some(legal_rep.photo_name.clone()),
+            legal_rep_photo_mime: Some(legal_rep.photo_mime.clone()),
+            legal_rep_photo_size: Some(legal_rep.photo_size),
             created_by: ctx.admin_pubkey.clone(),
             created_at: Utc::now(),
         };

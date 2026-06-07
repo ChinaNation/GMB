@@ -119,6 +119,7 @@ export default function InstallPage() {
                   idleText="点击开启摄像头扫码"
                   busy={loading}
                   size={280}
+                  allowUpload
                 />
               </div>
             </div>

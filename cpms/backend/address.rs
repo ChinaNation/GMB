@@ -1,6 +1,6 @@
 //! 地址管理模块：镇/村路 API。
 //!
-//! CPMS 编译期直接引用 SFID 工具行政区唯一源，发行版只内置编译后的只读数据。
+//! 行政区唯一源是 SFID 维护的 `china.sqlite`，CPMS 安装包随附其只读拷贝。
 //! 运行时只启用安装码对应市公安局的镇/村路数据。
 //! 地址 API 只读，CPMS 不允许保存或维护第二套行政区数据源。
 
@@ -13,11 +13,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::{
-    authz, err, ok,
-    sfid_tool_province::{CityCode, ProvinceCode, PROVINCES},
-    ApiError, ApiResponse, AppState,
-};
+use crate::{authz, china, err, ok, ApiError, ApiResponse, AppState};
 
 pub(crate) async fn sync_installed_city_address(db: &sqlx::PgPool) -> Result<(), String> {
     let sfid_number: Option<String> =
@@ -51,8 +47,9 @@ pub(crate) async fn sync_city_address_by_sfid_in_tx(
     conn: &mut sqlx::PgConnection,
     sfid_number: &str,
 ) -> Result<(), String> {
-    let (_, city) = find_install_city(sfid_number)?;
-    replace_city_address(conn, city).await
+    let (province_code, city_code, _) = find_install_city(sfid_number)?;
+    let towns = china::city_towns_with_villages(&province_code, &city_code)?;
+    replace_city_address(conn, &towns).await
 }
 
 pub(crate) fn validate_install_area(
@@ -60,20 +57,20 @@ pub(crate) fn validate_install_area(
     province_name: &str,
     city_name: &str,
 ) -> Result<(), String> {
-    let (province, city) = find_install_city(sfid_number)?;
-    if province.name != province_name.trim() {
+    let (province_code, city_code, area) = find_install_city(sfid_number)?;
+    if area.province_name != province_name.trim() {
         return Err(format!(
             "install province_name '{}' does not match code {}",
             province_name.trim(),
-            province.code
+            province_code
         ));
     }
-    if city.name != city_name.trim() {
+    if area.city_name != city_name.trim() {
         return Err(format!(
             "install city_name '{}' does not match code {}{}",
             city_name.trim(),
-            province.code,
-            city.code
+            province_code,
+            city_code
         ));
     }
     Ok(())
@@ -112,9 +109,9 @@ pub(crate) async fn validate_town_village(
 
 async fn replace_city_address(
     conn: &mut sqlx::PgConnection,
-    city: &CityCode,
+    towns: &[china::TownArea],
 ) -> Result<(), String> {
-    // 中文注释：行政区唯一来源是 SFID 工具；同步只落当前市运行表，清掉旧城市/旧硬编码残留。
+    // 中文注释：行政区唯一来源是 SFID 的 china.sqlite；同步只落当前市运行表，清掉旧城市残留。
     sqlx::query("DELETE FROM address_villages")
         .execute(&mut *conn)
         .await
@@ -124,22 +121,22 @@ async fn replace_city_address(
         .await
         .map_err(|e| format!("clear towns failed: {e}"))?;
 
-    for town in city.towns {
+    for town in towns {
         sqlx::query("INSERT INTO address_towns (town_code, town_name) VALUES ($1, $2)")
-            .bind(town.code)
-            .bind(town.name)
+            .bind(&town.code)
+            .bind(&town.name)
             .execute(&mut *conn)
             .await
             .map_err(|e| format!("insert town {} failed: {e}", town.code))?;
 
-        for village in town.villages {
+        for village in &town.villages {
             let village_id = format!("{}-{}", town.code, village.code);
             sqlx::query(
                 "INSERT INTO address_villages (village_id, town_code, village_name) VALUES ($1, $2, $3)",
             )
             .bind(&village_id)
-            .bind(town.code)
-            .bind(village.name)
+            .bind(&town.code)
+            .bind(&village.name)
             .execute(&mut *conn)
             .await
             .map_err(|e| format!("insert village {} failed: {e}", village_id))?;
@@ -148,24 +145,13 @@ async fn replace_city_address(
     Ok(())
 }
 
-fn find_install_city(
-    sfid_number: &str,
-) -> Result<(&'static ProvinceCode, &'static CityCode), String> {
+/// 解析安装码所属省市代码并从 china.sqlite 还原省市名称。
+fn find_install_city(sfid_number: &str) -> Result<(String, String, china::CityArea), String> {
     let (province_code, city_code) = parse_sfid_area_codes(sfid_number)?;
-    let province = PROVINCES
-        .iter()
-        .find(|p| p.code == province_code)
-        .ok_or_else(|| {
-            format!("install province not found in embedded sfid tool: {province_code}")
-        })?;
-    let city = province
-        .cities
-        .iter()
-        .find(|c| c.code == city_code)
-        .ok_or_else(|| {
-            format!("install city not found in embedded sfid tool: {province_code}{city_code}")
-        })?;
-    Ok((province, city))
+    let area = china::find_city(province_code, city_code)?.ok_or_else(|| {
+        format!("install city not found in china source: {province_code}{city_code}")
+    })?;
+    Ok((province_code.to_string(), city_code.to_string(), area))
 }
 
 fn parse_sfid_area_codes(sfid_number: &str) -> Result<(&str, &str), String> {

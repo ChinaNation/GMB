@@ -1,7 +1,7 @@
 # CPMS Dangan 模块技术文档
 
 ## 1. 模块定位
-`backend/src/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案生命周期硬删除和年度状态导出。
+`backend/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案生命周期硬删除和年度状态导出。
 
 本模块不保存实名归属判断逻辑；省市归属来自 `initialize` 保存的 INSTALL 授权材料，并只写入加密 `geo_seal`。
 
@@ -20,7 +20,7 @@
 - `export::build_and_record_cpms_status_export(...)`：生成 CPMS 给 SFID 手工导入的年度状态更新文件，并记录导出批次。
 
 档案号和护照号生成统一归属 `memory/05-modules/cpms/backend/number/NUMBER_TECHNICAL.md`
-与 `cpms/backend/src/number/`。
+与 `cpms/backend/number/`。
 
 ## 3. 有效期规则
 
@@ -104,7 +104,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 ## 8. 公民资料库
 
 - 公民资料库命名为“公民资料库”，在公民档案详情页下半部分展示。
-- 后端入口固定在 `backend/src/dangan/materials.rs`，路由由 `dangan::router()` 挂载；不得把资料库存储和生命周期逻辑放进角色模块。
+- 后端入口固定在 `backend/dangan/materials.rs`，路由由 `dangan::router()` 挂载；不得把资料库存储和生命周期逻辑放进角色模块。
 - 资料类型固定为 `PHOTO / BIRTH_CERTIFICATE / COPY / VIDEO / OTHER`，分别对应照片、出生纸、复印件、视频和其他资料。
 - `archive_materials` 只保存元数据：资料类型、原始文件名、本机存储文件名、MIME、大小、SHA-256、备注、上传人、上传时间和软删除字段。
 - 开发默认文件正文保存到 `data/archive-materials/<archive_id>/`；正式离线安装包固定设置

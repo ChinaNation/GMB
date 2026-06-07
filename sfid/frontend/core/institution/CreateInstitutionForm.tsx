@@ -1,8 +1,8 @@
 // 中文注释:机构新增弹窗共享表单。gov/private 只传入各自 API 函数,不在公共组件里越过业务边界。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Form, Input, Modal, Select, Spin } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { AutoComplete, Button, Form, Input, Modal, Select, Spin, Upload } from 'antd';
+import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../../auth/types';
 import type { SfidCityItem } from '../../china/api';
 import { loadCachedSfidCities } from '../../china/metaCache';
@@ -10,7 +10,9 @@ import type {
   CreateInstitutionInput,
   CreateInstitutionOutput,
   InstitutionCategory,
+  LegalRepresentativePhoto,
 } from '../../subjects/api';
+import { searchLegalRepresentativeCitizens } from '../../citizens/api';
 import { dynamicLocksForA3, locksForCategory } from '../../subjects/labels';
 import { notice } from '../../utils/notice';
 
@@ -22,6 +24,12 @@ interface FormValues {
   institution: string;
   /** 普通私权机构不填;教育委员会(JY)学校机构必填学校名称。 */
   institution_name?: string;
+  legal_rep_name: string;
+  legal_rep_sfid_number: string;
+  legal_rep_photo_path: string;
+  legal_rep_photo_name: string;
+  legal_rep_photo_mime: string;
+  legal_rep_photo_size?: number;
 }
 
 type CheckInstitutionName = (
@@ -36,6 +44,11 @@ type CreateInstitution = (
   input: CreateInstitutionInput,
 ) => Promise<CreateInstitutionOutput>;
 
+type UploadLegalRepresentativePhoto = (
+  auth: AdminAuth,
+  file: File,
+) => Promise<LegalRepresentativePhoto>;
+
 export interface CreateInstitutionFormProps {
   auth: AdminAuth;
   category: InstitutionCategory;
@@ -44,6 +57,7 @@ export interface CreateInstitutionFormProps {
   lockedCity: string | null;
   checkInstitutionName: CheckInstitutionName;
   createInstitution: CreateInstitution;
+  uploadLegalRepresentativePhoto: UploadLegalRepresentativePhoto;
   onCancel: () => void;
   onCreated: (result: CreateInstitutionOutput) => void;
 }
@@ -56,6 +70,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   lockedCity,
   checkInstitutionName,
   createInstitution,
+  uploadLegalRepresentativePhoto,
   onCancel,
   onCreated,
 }) => {
@@ -66,6 +81,10 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [nameChecking, setNameChecking] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [legalRepSearching, setLegalRepSearching] = useState(false);
+  const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoName, setPhotoName] = useState<string>('');
 
   const [currentA3, setCurrentA3] = useState<string>(locks.a3Choices[0]?.value ?? '');
   const [currentInstitution, setCurrentInstitution] = useState<string>(
@@ -102,7 +121,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       institution_name: (!isPrivate || defaultInstitution === 'JY')
         ? (locks.lockedInstitutionName ?? '')
         : undefined,
+      legal_rep_name: '',
+      legal_rep_sfid_number: '',
+      legal_rep_photo_path: '',
+      legal_rep_photo_name: '',
+      legal_rep_photo_mime: '',
+      legal_rep_photo_size: undefined,
     });
+    setLegalRepOptions([]);
+    setPhotoName('');
   }, [open, category, lockedProvince, lockedCity]);
 
   useEffect(() => {
@@ -191,6 +218,47 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     if (nameAvailable !== null) setNameAvailable(null);
   };
 
+  const triggerLegalRepSearch = async () => {
+    const q = (form.getFieldValue('legal_rep_sfid_number') ?? '').trim();
+    if (!q) {
+      notice.warning('请先输入法定代表人身份ID关键字');
+      return;
+    }
+    setLegalRepSearching(true);
+    try {
+      const rows = await searchLegalRepresentativeCitizens(auth, q);
+      setLegalRepOptions(rows);
+      if (rows.length === 0) {
+        notice.info('未找到正常状态公民');
+      }
+    } catch (err) {
+      notice.error(err, '');
+      setLegalRepOptions([]);
+    } finally {
+      setLegalRepSearching(false);
+    }
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    setPhotoUploading(true);
+    try {
+      const photo = await uploadLegalRepresentativePhoto(auth, file);
+      form.setFieldsValue({
+        legal_rep_photo_path: photo.file_path,
+        legal_rep_photo_name: photo.file_name,
+        legal_rep_photo_mime: photo.mime_type,
+        legal_rep_photo_size: photo.file_size,
+      });
+      setPhotoName(photo.file_name);
+      notice.success('证件照已上传');
+    } catch (err) {
+      notice.error(err, '证件照上传失败');
+    } finally {
+      setPhotoUploading(false);
+    }
+    return false;
+  };
+
   const onSubmit = async (values: FormValues) => {
     if (collectNameInModal && !locks.lockedInstitutionName && nameAvailable !== true) {
       notice.warning('请先点击搜索图标检查名称是否可用');
@@ -207,9 +275,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         institution_name: collectNameInModal
           ? (values.institution_name ?? '').trim()
           : undefined,
+        legal_rep_name: values.legal_rep_name.trim(),
+        legal_rep_sfid_number: values.legal_rep_sfid_number.trim(),
+        legal_rep_photo_path: values.legal_rep_photo_path,
+        legal_rep_photo_name: values.legal_rep_photo_name,
+        legal_rep_photo_mime: values.legal_rep_photo_mime,
+        legal_rep_photo_size: values.legal_rep_photo_size,
       });
       if (isPrivate && !isEducationSchool) {
-        notice.success(`机构 SFID 已生成,请到详情页完善信息:${result.sfid_number}`);
+        notice.success(`身份ID 已生成,请到详情页完善信息:${result.sfid_number}`);
       } else {
         notice.success(`学校机构已创建:${result.sfid_number}`);
       }
@@ -329,9 +403,74 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             )}
           </>
         )}
+        <Form.Item
+          label="法定代表人姓名"
+          name="legal_rep_name"
+          rules={[
+            { required: true, message: '请输入法定代表人姓名' },
+            { max: 30, message: '最多 30 个字' },
+          ]}
+        >
+          <Input placeholder="请输入法定代表人姓名" maxLength={30} />
+        </Form.Item>
+        <Form.Item
+          label="法定代表人身份ID"
+          name="legal_rep_sfid_number"
+          rules={[{ required: true, message: '请选择法定代表人身份ID' }]}
+        >
+          <AutoComplete
+            filterOption={false}
+            options={legalRepOptions.map((sfidNumber) => ({
+              value: sfidNumber,
+              label: sfidNumber,
+            }))}
+          >
+            <Input
+              placeholder="输入身份ID后点击搜索"
+              suffix={
+                <span
+                  style={{
+                    cursor: legalRepSearching ? 'default' : 'pointer',
+                    color: legalRepSearching ? '#999' : '#1890ff',
+                  }}
+                  onClick={legalRepSearching ? undefined : triggerLegalRepSearch}
+                  title="搜索正常状态公民"
+                >
+                  {legalRepSearching ? <Spin size="small" /> : <SearchOutlined />}
+                </span>
+              }
+            />
+          </AutoComplete>
+        </Form.Item>
+        <Form.Item label="法定代表人证件照" required>
+          <Upload
+            accept="image/jpeg,image/png,image/webp"
+            showUploadList={false}
+            beforeUpload={(file) => handlePhotoUpload(file as File)}
+          >
+            <Button icon={<UploadOutlined />} loading={photoUploading}>
+              上传证件照
+            </Button>
+          </Upload>
+          {photoName && (
+            <div style={{ color: '#52c41a', marginTop: 8, fontSize: 12 }}>
+              {photoName}
+            </div>
+          )}
+        </Form.Item>
+        <Form.Item
+          name="legal_rep_photo_path"
+          rules={[{ required: true, message: '请上传法定代表人证件照' }]}
+          hidden
+        >
+          <Input />
+        </Form.Item>
+        <Form.Item name="legal_rep_photo_name" hidden><Input /></Form.Item>
+        <Form.Item name="legal_rep_photo_mime" hidden><Input /></Form.Item>
+        <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
         {isPrivate && !isEducationSchool && (
           <div style={{ color: '#888', fontSize: 12, marginTop: -8 }}>
-            提示:本步骤仅生成机构 SFID。生成后请在详情页设置机构名称、企业类型等信息。
+            提示:本步骤仅生成身份ID。生成后请在详情页设置机构名称、企业类型等信息。
           </div>
         )}
       </Form>
