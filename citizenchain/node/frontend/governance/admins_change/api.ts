@@ -2,29 +2,29 @@ import { invoke } from '../../core/tauri';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
-  AdminSubjectRef,
-  AdminSubjectState,
+  AdminAccountRef,
+  AdminAccountState,
   InstitutionDetail,
   VoteSignRequestResult,
   VoteSubmitResult,
 } from './types';
 
-// 管理员更换模块前端 API。激活、更换与主体读取统一聚合到 admins_change。
-const subjectRefParams = (subjectRef: AdminSubjectRef) => ({
-  sfidNumber: subjectRef.sfidNumber ?? null,
-  subjectIdHex: subjectRef.subjectIdHex ?? null,
-  expectedOrg: subjectRef.org ?? null,
+// 管理员更换模块前端 API。激活、更换与账户读取统一聚合到 admins_change。
+const accountRefParams = (accountRef: AdminAccountRef) => ({
+  sfidNumber: accountRef.sfidNumber ?? null,
+  accountHex: accountRef.accountHex ?? null,
+  expectedOrg: accountRef.org ?? null,
 });
 
 export const adminsChangeApi = {
   getInstitutionDetail: (sfidNumber: string) =>
     invoke<InstitutionDetail>('get_institution_detail', { sfidNumber }),
-  buildActivateAdminRequest: (pubkeyHex: string, sfidNumber: string, subjectRef?: AdminSubjectRef) =>
+  buildActivateAdminRequest: (pubkeyHex: string, sfidNumber: string, accountRef?: AdminAccountRef) =>
     invoke<ActivateRequestResult>('build_activate_admin_request', {
       pubkeyHex,
       sfidNumber,
-      subjectIdHex: subjectRef?.subjectIdHex ?? null,
-      expectedOrg: subjectRef?.org ?? null,
+      accountHex: accountRef?.accountHex ?? null,
+      expectedOrg: accountRef?.org ?? null,
     }),
   verifyActivateAdmin: (
     requestId: string,
@@ -40,34 +40,34 @@ export const adminsChangeApi = {
       payloadHex,
       responseJson,
     }),
-  getActivatedAdmins: (sfidNumber: string, subjectRef?: AdminSubjectRef) =>
+  getActivatedAdmins: (sfidNumber: string, accountRef?: AdminAccountRef) =>
     invoke<ActivatedAdmin[]>('get_activated_admins', {
       sfidNumber,
-      subjectIdHex: subjectRef?.subjectIdHex ?? null,
-      expectedOrg: subjectRef?.org ?? null,
+      accountHex: accountRef?.accountHex ?? null,
+      expectedOrg: accountRef?.org ?? null,
     }),
-  deactivateAdmin: (pubkeyHex: string, sfidNumber: string, subjectRef: AdminSubjectRef, unlockPassword: string) =>
+  deactivateAdmin: (pubkeyHex: string, sfidNumber: string, accountRef: AdminAccountRef, unlockPassword: string) =>
     invoke<void>('deactivate_admin', {
       pubkeyHex,
       sfidNumber,
-      subjectIdHex: subjectRef.subjectIdHex ?? null,
-      expectedOrg: subjectRef.org ?? null,
+      accountHex: accountRef.accountHex ?? null,
+      expectedOrg: accountRef.org ?? null,
       unlockPassword,
     }),
   hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
-  getAdminSubjectState: (subjectRef: AdminSubjectRef) =>
-    invoke<AdminSubjectState | null>('get_admin_subject_state', subjectRefParams(subjectRef)),
-  buildAdminSetChangeRequest: (pubkeyHex: string, subjectRef: AdminSubjectRef, newAdmins: string[]) =>
+  getAdminAccountState: (accountRef: AdminAccountRef) =>
+    invoke<AdminAccountState | null>('get_admin_account_state', accountRefParams(accountRef)),
+  buildAdminSetChangeRequest: (pubkeyHex: string, accountRef: AdminAccountRef, newAdmins: string[]) =>
     invoke<VoteSignRequestResult>('build_admin_set_change_request', {
       pubkeyHex,
-      ...subjectRefParams(subjectRef),
+      ...accountRefParams(accountRef),
       newAdmins,
     }),
   submitAdminSetChange: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    subjectRef: AdminSubjectRef,
+    accountRef: AdminAccountRef,
     newAdmins: string[],
     signNonce: number,
     signBlockNumber: number,
@@ -77,7 +77,7 @@ export const adminsChangeApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      ...subjectRefParams(subjectRef),
+      ...accountRefParams(accountRef),
       newAdmins,
       signNonce,
       signBlockNumber,

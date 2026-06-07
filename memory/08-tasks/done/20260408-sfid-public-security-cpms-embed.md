@@ -15,9 +15,9 @@
 ## 后端改动
 
 ### 新增 HTTP 路由
-- `GET /api/v1/admin/cpms-keys/by-institution/:sfid_id`
+- `GET /api/v1/admin/cpms-keys/by-institution/:sfid_number`
   - Handler: `sheng_admins::get_cpms_site_by_institution`
-  - 输入:`multisig_institutions.sfid_id`(机构主键,**不是 CPMS site_sfid**)
+  - 输入:`multisig_institutions.sfid_number`(机构主键,**不是 CPMS cpms_site_key**)
   - 逻辑:读机构拿 `(province, city, institution_code)`,线性扫描
     `cpms_site_keys.values()` 找匹配三元组的首条记录,返回 `CpmsSiteKeysListRow` 或 `null`
 
@@ -30,8 +30,8 @@
     删除的市公安局同时带走其 CPMS 站点
 
 ### 关键约束
-- **两个 sfid_id 不同值**:`multisig_institutions.sfid_id` 是两层机构模型主键,
-  `cpms_site_keys.site_sfid` 是生成 QR1 时随机派生,**两者不等价**,只能用
+- **两个 sfid_number 不同值**:`multisig_institutions.sfid_number` 是两层机构模型主键,
+  `cpms_site_keys.cpms_site_key` 是生成 QR1 时随机派生,**两者不等价**,只能用
   `(province, city, institution_code)` 元组关联。公安局每市唯一保证一一对应。
 - 见 `feedback_cpms_institution_tuple_match.md`
 
@@ -47,7 +47,7 @@
 - `sfid/frontend/institutions/CpmsSitePanel.tsx`(~300 行)
   - 公安局详情页上半部分主组件
   - 无站点态:显示"生成 CPMS 安装二维码"按钮
-  - 有站点态:Descriptions 展示 site_sfid、安装令牌状态(Tag)、站点状态(Tag)、
+  - 有站点态:Descriptions 展示 cpms_site_key、安装令牌状态(Tag)、站点状态(Tag)、
     版本、时间戳;QR1 payload 折叠展开 + 复制
   - 操作按钮(`canWrite` 门禁):扫描 QR2 注册、重发安装令牌、禁用、吊销、删除
   - 复用 `api/client.ts` 里已有的 `generateCpmsInstitutionSfid` /

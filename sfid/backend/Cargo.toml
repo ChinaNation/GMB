@@ -41,5 +41,6 @@ getrandom = "0.2"
 dashmap = "6.1"
 async-trait = "0.1"
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+primitives = { path = "../../citizenchain/runtime/primitives" }
 
 [workspace]

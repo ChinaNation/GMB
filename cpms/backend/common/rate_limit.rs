@@ -9,7 +9,8 @@ use axum::{
 use chrono::Utc;
 use tokio::sync::Mutex;
 
-use crate::{err, ApiError, AppState};
+use super::response::{err, ApiError};
+use crate::AppState;
 
 #[derive(Default)]
 pub(crate) struct RateLimiter {

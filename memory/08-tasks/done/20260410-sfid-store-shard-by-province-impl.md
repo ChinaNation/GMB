@@ -568,7 +568,7 @@ if self.double_write {
 **旧代码**:
 ```rust
 let store = state.store.read().map_err(|_| ...)?;
-let institution = store.multisig_institutions.get(&sfid_id).cloned();
+let institution = store.multisig_institutions.get(&sfid_number).cloned();
 ```
 
 **新代码**:
@@ -576,7 +576,7 @@ let institution = store.multisig_institutions.get(&sfid_id).cloned();
 // 从 ctx 拿 province
 let province = ctx.admin_province.as_deref().ok_or(...)?;
 let institution = state.store_shards.read_province(province, |shard| {
-    shard.multisig_institutions.get(&sfid_id).cloned()
+    shard.multisig_institutions.get(&sfid_number).cloned()
 }).await?;
 ```
 
@@ -585,7 +585,7 @@ let institution = state.store_shards.read_province(province, |shard| {
 **旧代码**:
 ```rust
 let mut store = state.store.write().map_err(|_| ...)?;
-store.multisig_institutions.insert(sfid_id.clone(), inst);
+store.multisig_institutions.insert(sfid_number.clone(), inst);
 drop(store);
 persist_store(&state).await?;
 ```
@@ -594,7 +594,7 @@ persist_store(&state).await?;
 ```rust
 let province = ctx.admin_province.as_deref().ok_or(...)?;
 state.store_shards.write_province(province, |shard| {
-    shard.multisig_institutions.insert(sfid_id.clone(), inst);
+    shard.multisig_institutions.insert(sfid_number.clone(), inst);
 }).await?;
 // persist 已在 write_province 内部完成
 ```
@@ -654,21 +654,21 @@ pub(crate) async fn migrate_legacy_store_if_needed(
     let mut shards_by_province: HashMap<String, StoreShard> = HashMap::new();
 
     // 1.1 按 province 分散 multisig_institutions
-    for (sfid_id, inst) in &legacy_store.multisig_institutions {
+    for (sfid_number, inst) in &legacy_store.multisig_institutions {
         let shard = shards_by_province
             .entry(inst.province.clone())
             .or_insert_with(|| StoreShard {
                 province: inst.province.clone(),
                 ..Default::default()
             });
-        shard.multisig_institutions.insert(sfid_id.clone(), inst.clone());
+        shard.multisig_institutions.insert(sfid_number.clone(), inst.clone());
     }
 
-    // 1.2 按 sfid_id 关联 multisig_accounts
+    // 1.2 按 sfid_number 关联 multisig_accounts
     for (key, acc) in &legacy_store.multisig_accounts {
-        // key 格式 "sfid_id|account_name"
-        if let Some(sfid_id) = key.split('|').next() {
-            if let Some(inst) = legacy_store.multisig_institutions.get(sfid_id) {
+        // key 格式 "sfid_number|account_name"
+        if let Some(sfid_number) = key.split('|').next() {
+            if let Some(inst) = legacy_store.multisig_institutions.get(sfid_number) {
                 let shard = shards_by_province.entry(inst.province.clone())
                     .or_insert_with(|| StoreShard {
                         province: inst.province.clone(),
@@ -680,14 +680,14 @@ pub(crate) async fn migrate_legacy_store_if_needed(
     }
 
     // 1.3 按 province 分散 CPMS
-    for (site_sfid, site) in &legacy_store.cpms_site_keys {
+    for (cpms_site_key, site) in &legacy_store.cpms_site_keys {
         let province = &site.admin_province;
         let shard = shards_by_province.entry(province.clone())
             .or_insert_with(|| StoreShard {
                 province: province.clone(),
                 ..Default::default()
             });
-        shard.cpms_site_keys.insert(site_sfid.clone(), site.clone());
+        shard.cpms_site_keys.insert(cpms_site_key.clone(), site.clone());
     }
 
     // 1.4 按 province 分散 citizen 记录(通过 archive_no / archive_index 拆分)
@@ -952,7 +952,7 @@ let state = AppState {
 
 - 链端(完全不动)
 - sheng_signer_cache / signer_router / chain_sheng_signing(独立于分片)
-- 4 个 payload DOMAIN 常量(`GMB_SFID_V1`，2026-04-20 彻底退役为 `DUOQIAN_DOMAIN + OP_SIGN_*`)
+- 4 个 payload DOMAIN 常量(`GMB_SFID_V1`，2026-04-20 彻底退役为 `DUOQIAN + OP_SIGN_*`)
 - runtime_align.rs 里 `build_institution_credential_with_province`
 
 ---

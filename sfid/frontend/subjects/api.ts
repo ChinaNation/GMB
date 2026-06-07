@@ -27,7 +27,7 @@ export interface MultisigInstitution {
   /** 主体业务状态,只允许 ACTIVE / REVOKED。 */
   status: 'ACTIVE' | 'REVOKED';
   category: InstitutionCategory;
-  a3: string;
+  subject_property: string;
   p1: string;
   province: string;
   city: string;
@@ -38,9 +38,9 @@ export interface MultisigInstitution {
   town_code?: string;
   institution_code: string;
   org_code?: string | null;
-  /** 私法人子类型(仅 A3=SFR 且 P1 填完后才有值) */
+  /** 私法人子类型(仅 SubjectProperty=S 且 P1 填完后才有值) */
   sub_type?: string | null;
-  /** 所属法人 sfid_number(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
+  /** 所属法人 sfid_number(仅 SubjectProperty=F 非法人必填;指向 S/G) */
   parent_sfid_number?: string | null;
   /** 法定代表人资料。初始化目录机构可为空;编辑保存时必填。 */
   legal_rep_name?: string | null;
@@ -73,7 +73,7 @@ export interface InstitutionListRow {
   short_name?: string | null;
   status: 'ACTIVE' | 'REVOKED';
   category: InstitutionCategory;
-  a3: string;
+  subject_property: string;
   p1: string;
   province: string;
   city: string;
@@ -134,14 +134,14 @@ export interface LegalRepresentativePhoto {
 // ─── 请求 DTO ─────────────────────────────────────────────────
 
 export interface CreateInstitutionInput {
-  a3: string;
+  subject_property: string;
   p1?: string;
   province?: string;
   city: string;
   institution: string;
   /**
    * 机构名称。
-   * - 私权(SFR/FFR)两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
+   * - 私权(S/F)两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
    * - 教育委员会(JY)手动新增学校机构:**必传**,同步做查重
    * - 自动公权机构/公安局:不走手动创建接口
   */
@@ -167,7 +167,7 @@ export interface UpdateInstitutionInput {
   full_name?: string | null;
   short_name?: string | null;
   sub_type?: string | null;
-  /** 所属法人 sfid_number(仅 FFR;传空串后端会拒) */
+  /** 所属法人 sfid_number(仅 F;传空串后端会拒) */
   parent_sfid_number?: string;
   legal_rep_name?: string;
   legal_rep_sfid_number?: string;
@@ -177,12 +177,12 @@ export interface UpdateInstitutionInput {
   legal_rep_photo_size?: number;
 }
 
-/** 法人机构搜索结果项(FFR 详情页"所属法人"选择器用) */
+/** 法人机构搜索结果项(F 详情页"所属法人"选择器用) */
 export interface ParentInstitutionRow {
   sfid_number: string;
   institution_name: string;
-  a3: string;
-  /** 私法人子类型(仅 a3=SFR);FFR 判断父 SFR 是否 JOINT_STOCK 以显示清算行设置 */
+  subject_property: string;
+  /** 私法人子类型(仅 subject_property=S);F 判断父 S 是否 JOINT_STOCK 以显示清算行设置 */
   sub_type?: string | null;
   category: InstitutionCategory;
   province: string;

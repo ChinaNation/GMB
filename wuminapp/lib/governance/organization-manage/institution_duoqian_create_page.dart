@@ -484,7 +484,7 @@ class _InstitutionDuoqianCreatePageState
         final entity = DuoqianInstitutionEntity()
           ..duoqianAddress = result.mainAddressHex
           ..sfidNumber = registrationInfo.sfidNumber
-          ..adminSubjectOrg = _defaultInstitutionAdminOrg
+          ..adminAccountOrg = _defaultInstitutionAdminOrg
           ..name = accounts.isEmpty
               ? registrationInfo.institutionName
               : accounts.first.accountName

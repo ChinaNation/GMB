@@ -15,8 +15,8 @@ pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
 pub const CHINA_JC: &[ChinaJc] = &[
     ChinaJc {
         sfid_name: "国家监察院",
-        sfid_number: "GFR-ZS001-JC0R-545692179-2026",
-        main_address: hex!("b87bcda88f3349252fc49929ca6bc7b229d0e29741bf54f1f6d40272aafd0461"),
+        sfid_number: "ZS001-GJC0M-545692179-2026",
+        main_address: hex!("78c41637258d49ff5f78176c698ac9901c7b79e1b593258ba820919704577073"),
         duoqian_admins: &[
             hex!("24926e0df7ff2bde6e3d179e0d413df9b0716f776b7f89698f884328502da847"),
             hex!("3a3490611bfeb614138d3254ff00d2294afc50197a2abe005e629708d3913630"),
@@ -31,8 +31,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "联邦廉政署",
-        sfid_number: "GFR-ZS001-JC06-000239513-2026",
-        main_address: hex!("3da80fe92c3d0ca8c0c082a52ee692613ce8b46cf0c67ef21b3d1fc6285095b3"),
+        sfid_number: "ZS001-GJC0F-000239513-2026",
+        main_address: hex!("18cd5a2e8721cf4ad1b4a681317fced559b17cd75a20de0ba55766d1e5ff348d"),
         duoqian_admins: &[
             hex!("4ef6940db1c4095aaf876a4a341af84cf7597f2c6d241a14be4de2c680196d34"),
             hex!("b04f313e3132267813c3bdd669615aa90da6b8887a3507d807448435b34da631"),
@@ -47,8 +47,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "联邦审计署",
-        sfid_number: "GFR-ZS001-JC0C-535248451-2026",
-        main_address: hex!("e08e0805f908ffb5d36bbb9a6d30d4b8ae5fc4a0329b75a4d79cfd29242b281a"),
+        sfid_number: "ZS001-GJC0T-535248451-2026",
+        main_address: hex!("142fc026a40c05893d026bda904abecd282f535e0ec91dd986db7ee40eb1d13d"),
         duoqian_admins: &[
             hex!("8c783f40fb93eda70ff7bd672e24ec2997d78d5718e91f4a4407a709884fdd3c"),
             hex!("ba3830df099b3f7a56b03af63157f8b6a0b1f3d0975f2b2d8db1dcaf9d34473c"),
@@ -63,8 +63,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "联邦调查署",
-        sfid_number: "GFR-ZS001-JC04-103804644-2026",
-        main_address: hex!("a4c43191283ec2ac06f83652a58d69c55264a7335f16665334d985f29869a25e"),
+        sfid_number: "ZS001-GJC0Z-103804644-2026",
+        main_address: hex!("ca8adddb4435dff3a7e93e104b05952d1a6e9a577451efa787cd856ba1e3f417"),
         duoqian_admins: &[
             hex!("0e31afc155078c3e9079c264d5c715038ac54562011003b7f2741e0d8b4d9440"),
             hex!("4860e56f579797219fbca1bf265f74b48cd18c7e7304ef73d8052f44cb7adb3a"),
@@ -79,8 +79,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "中枢省监察院",
-        sfid_number: "GFR-ZS001-JC0K-781848966-2026",
-        main_address: hex!("ed2326833f50f289c36d55eb092e157562158fbc330e6e6dd8f2ad99a5f23032"),
+        sfid_number: "ZS001-GJC0X-781848966-2026",
+        main_address: hex!("6450fb556c33ee3d02d0fca6de0fb008cc2fca118313b786e48dceb2c9f93568"),
         duoqian_admins: &[
             hex!("2083f90f62ba84e08b463e9e18743940705443f2ec2e3329497e45a392cce56d"),
             hex!("2cfc65f084992529f8627cbc18ed648ad2e6d56490b643911679203c66c5625f"),
@@ -95,8 +95,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "岭南省监察院",
-        sfid_number: "GFR-LN001-JC0E-030875113-2026",
-        main_address: hex!("51bba1b0436340bd5752362491ba27351499fac9594bf37e2e040d5d582cae99"),
+        sfid_number: "LN001-GJC0Y-030875113-2026",
+        main_address: hex!("5d8019d53832d5e05cd133bffed59bd40e0b0bd82700c9bb9814d10dce368af9"),
         duoqian_admins: &[
             hex!("388a24d72c47fc7b54e65776746d6b486cfa0deb36197e63d6dc95202642da5c"),
             hex!("125cf248fd17bcb475f6078d832b7c9a9eb1f803e3504477e0e2c38844d98f58"),
@@ -111,8 +111,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "广东省监察院",
-        sfid_number: "GFR-GD001-JC06-303750247-2026",
-        main_address: hex!("e77a00b09bbff8d672523cbc8c4d4071ba43d7814507af67c7d055415a55a03f"),
+        sfid_number: "GD001-GJC0T-303750247-2026",
+        main_address: hex!("016952641c9df0ebebc3b48619e1ec64fae5ff54228158b9a57b8a4df465c9a7"),
         duoqian_admins: &[
             hex!("325423391c2f81e22be07f6da651eb33a1e5b75c3ec1c74368815deef83c2c54"),
             hex!("22e892853d474c4ef4c0f906ffeae43c0af01a8bdcbb128f4f63a87e60ac2a37"),
@@ -127,8 +127,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "广西省监察院",
-        sfid_number: "GFR-GX001-JC0J-409645736-2026",
-        main_address: hex!("cb301c69fc8ed86d9b66161c5e64223a5a11614bc198096686e50430316e42d1"),
+        sfid_number: "GX001-GJC0S-409645736-2026",
+        main_address: hex!("dea8946f9d375c13e1fbf38908c240cbee047cb67f5a30e2a18c65d6c78b16a6"),
         duoqian_admins: &[
             hex!("c6e4d85927787511f05ff7c764549e1acddd58640d762251076f9e857b16d21b"),
             hex!("e43ded754f078dff4835ace8ae165870d251b312510f7593867ee49fa85ad607"),
@@ -143,8 +143,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "福建省监察院",
-        sfid_number: "GFR-FJ001-JC09-745488346-2026",
-        main_address: hex!("fbce76713d31668bb43a0d175d3207f9900347694079f9973eae1093a52888bb"),
+        sfid_number: "FJ001-GJC0H-745488346-2026",
+        main_address: hex!("e4c0b0013117286185f7b700bbf72667fef48ab88f531f87254c42fbc818ee3a"),
         duoqian_admins: &[
             hex!("56dc09c452c2371b28a2eda5ec4240e6bee1030f3ce5dfa2649083b6e7a73f5a"),
             hex!("b265ce98d6c5f021545d26262e4ccc3ea0d5edc91ce36b3632e4776c7ce5532d"),
@@ -159,8 +159,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "海南省监察院",
-        sfid_number: "GFR-HN001-JC0S-799337965-2026",
-        main_address: hex!("db9b2b99487eee7ba98922baaeb7342b193d4fa5c8c5d3c4e3ce8701bc90ce19"),
+        sfid_number: "HN001-GJC00-799337965-2026",
+        main_address: hex!("c642e606edf5c8dc5a85ff117082bcb7eb20a19788e54af684e36df4367aa96c"),
         duoqian_admins: &[
             hex!("988c8ac7e9a61fc183a4cbc601a422981dbfd582abc0d1c8865c1d2594b50731"),
             hex!("089210134b71a4398bb8aa5c69a7de5ea9b7877d12cfafb6c61c6c2b971c9631"),
@@ -175,8 +175,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "云南省监察院",
-        sfid_number: "GFR-YN001-JC0C-467247508-2026",
-        main_address: hex!("df7f05ae3df14c44ce5c0e26942cc66df8d3c3676babe2b0dd0334dfc62c4113"),
+        sfid_number: "YN001-GJC0Z-467247508-2026",
+        main_address: hex!("88e0bac698c79371d954d3f5d2bfffce18607a060ad8fe0579f5d2391567287b"),
         duoqian_admins: &[
             hex!("4497949bb5944913652d441001ed90fad551b7ff33705716fcd492418ddcfd77"),
             hex!("2ac803de31d507976f1b998ecce58ae2e7b45d8f751656d1b0ddc9bcdeac0266"),
@@ -191,8 +191,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "贵州省监察院",
-        sfid_number: "GFR-GZ001-JC0J-842518536-2026",
-        main_address: hex!("b9a2dff7a08e34bdc95d69d7af871fab72b1f350beda948db664f4a34920ba16"),
+        sfid_number: "GZ001-GJC0Q-842518536-2026",
+        main_address: hex!("4b64af0db53fb67a53aac8730da63e3f7b50a45a70f50bc9bddff9c4f62e967d"),
         duoqian_admins: &[
             hex!("e01936c7304a64e9a522dd435b30328a02729f9fc811a7ad21ed835387d43377"),
             hex!("78fe3482d3b85292dcb1384ea0e0d397b4f5219175235262d358e2c56f52fd78"),
@@ -207,8 +207,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "湖南省监察院",
-        sfid_number: "GFR-HU001-JC0X-206694932-2026",
-        main_address: hex!("cdac4e86c87daba6bce0684d9352857bbada9d7cfe8410b1d9b1d3cafaff13fb"),
+        sfid_number: "HU001-GJC0I-206694932-2026",
+        main_address: hex!("7bbb895aa7a24ab4c43da9f30ab646aaeda75acbafe687fa939e4f7e35cb18d4"),
         duoqian_admins: &[
             hex!("7c2d532d382c61d9a18861c1a4faa9486548ec64e784e48da8a5e606f7647915"),
             hex!("02a69541f50a7f45cef75f9a1ac964abf1b66577adc8072e410ed9e4602a4667"),
@@ -223,8 +223,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "江西省监察院",
-        sfid_number: "GFR-JX001-JC0T-209335980-2026",
-        main_address: hex!("340233e8e2038c56cf745dba7e8ace0877c3eb044d88e8cabba19e2e84266514"),
+        sfid_number: "JX001-GJC03-209335980-2026",
+        main_address: hex!("23afa7f314d229510c70f133230c8c86376a6edf5e8d55edd40f51ebad6f7247"),
         duoqian_admins: &[
             hex!("0a3f94b0df41dd7f6d86177bb3340449a2c7eaef8078b13356fa6b2f5d076e18"),
             hex!("de478ec8519bc4a2f0c8f8255e28cb4632668cef3b4641fc29327cb10412b059"),
@@ -239,8 +239,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "浙江省监察院",
-        sfid_number: "GFR-ZJ001-JC0Z-049915488-2026",
-        main_address: hex!("ace548769f99aed72d670153909166d294f4e2f49e0d798b54bcc780f56975ff"),
+        sfid_number: "ZJ001-GJC0L-049915488-2026",
+        main_address: hex!("a02662b3484743ee3e953c2906bfb4fb38bb038c0e5dd0900bd63c0d2d237c9e"),
         duoqian_admins: &[
             hex!("889c5ccf764d3e82271fad331b1617846777ccf656a0076e1056fa6fb547ed5c"),
             hex!("9c791af022cbf1276ae7a52c953b52a449bc2f808421f0a702fea48d52041559"),
@@ -255,8 +255,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "江苏省监察院",
-        sfid_number: "GFR-JS001-JC0L-605960227-2026",
-        main_address: hex!("d5e56e20d644995a25c8ce2766aa65bdd397b559b7690eff3efe0f4ee18616ef"),
+        sfid_number: "JS001-GJC0E-605960227-2026",
+        main_address: hex!("b71765c85a6e0132daf8362cc69c2889dd0f92fe2be12ede2aabcb66f3a5e44f"),
         duoqian_admins: &[
             hex!("1e5e1ef9e3758a14d52d17e7193559392e54da404b1c559e3269ef32b577813f"),
             hex!("e6deaed918e010c4068027a5b21ac4622f357512b49b604d3c5c819b676ae039"),
@@ -271,8 +271,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "山东省监察院",
-        sfid_number: "GFR-SD001-JC0T-114117651-2026",
-        main_address: hex!("9eb72d033a73a7f49857acbe2bd321a1802ce027f20415581d7f6b01dde1aaec"),
+        sfid_number: "SD001-GJC0O-114117651-2026",
+        main_address: hex!("1a7e1492527bd106e272dca4d1d2476e1b65d7d0b9101a7390ff7262269de8fc"),
         duoqian_admins: &[
             hex!("a6523427f536778943447327d1c11383b47a1c6f18fb1ae8822e93339349b76a"),
             hex!("403aff91890945f441933cdc12d849e6817eb52a0fde3e6dee50328dad58ca31"),
@@ -287,8 +287,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "山西省监察院",
-        sfid_number: "GFR-SX001-JC0K-308959833-2026",
-        main_address: hex!("c5d2c4d6f29cde79c889aed13fd479d2a8e45709162ba7a96441f1d6b930ca8b"),
+        sfid_number: "SX001-GJC0L-308959833-2026",
+        main_address: hex!("837cc7a1c72cd769faf41359fa91a7e7fcf4dec63126bef4ebdea83e89f83b6e"),
         duoqian_admins: &[
             hex!("e67eada54f3e86a5d176536d842cd367972e789c378636e4781da77af5473657"),
             hex!("a26fd5954f126aa4b1bff87a7687fc2bbdb8455400b89759e86610b4fe7e0376"),
@@ -303,8 +303,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "河南省监察院",
-        sfid_number: "GFR-HE001-JC0T-145800497-2026",
-        main_address: hex!("2a3dedd9e00e0cfb379705dc133e329d05b58f569e50c583444f3ac14f729f3a"),
+        sfid_number: "HE001-GJC0W-145800497-2026",
+        main_address: hex!("33f4535db69ea3c7a7e854a50867b03cba9aad346b53ce0394db54ac7ee06938"),
         duoqian_admins: &[
             hex!("1e8efc6881eacb4724a12553d2bc93cfc32100c956ed1dbd806cf29c8cc9ae4c"),
             hex!("10ebd63f2e42026b9c908d4699879baac5f6d290d3e15aa32b43143d26052d57"),
@@ -319,8 +319,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "河北省监察院",
-        sfid_number: "GFR-HB001-JC04-886894534-2026",
-        main_address: hex!("290586b2e12d2924970512ee19ccb503144910c0209fad5c81a37074816607b5"),
+        sfid_number: "HB001-GJC0I-886894534-2026",
+        main_address: hex!("4b77384660940568438e2e5fc7605cb1ea25fb1ce9f5007059419007853eaac5"),
         duoqian_admins: &[
             hex!("b632a34cdfb7f8ddc40caa3619aa8fe00f5afd27b0c0923fa946c20b7b9db70f"),
             hex!("b63708cd6efed233739b80444285d28c9ca1817f91b0f38296b520c728184d6b"),
@@ -335,8 +335,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "湖北省监察院",
-        sfid_number: "GFR-HI001-JC0K-031865067-2026",
-        main_address: hex!("19c4b270d537d6809322642772f4ab3d0a93d64e317ef1a9b820e6362a344ed2"),
+        sfid_number: "HI001-GJC0F-031865067-2026",
+        main_address: hex!("d4c25711c8b5d1e4f22b8db3f3edf34dbe5dcfa345093bbf22f1d93f2c2c740f"),
         duoqian_admins: &[
             hex!("908caeb629b6f4e0aa25e991102835e0d50d4639517f5093ad5e4a3e34ccc401"),
             hex!("4a7866cd67baa15b0c1c753eed88932094b15a943ba7c8c0db524fe7e1276d4b"),
@@ -351,8 +351,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "陕西省监察院",
-        sfid_number: "GFR-SI001-JC0W-233228430-2026",
-        main_address: hex!("4f46e15b21b18744274054d33a9c97590d97fecae45674bcf8bbdbab6a7a73a0"),
+        sfid_number: "SI001-GJC0C-233228430-2026",
+        main_address: hex!("dac47225e1acd2db04378adc7bcdef6639f7e4a8732d95964d6494b237c190dd"),
         duoqian_admins: &[
             hex!("242f89a10b2fc2e38d169882866bfb2f7669cce3bcb9b0540062b57a3a2ab025"),
             hex!("6e0800d42f9bcf7fdf4ef8d900bc0a8aa0e8bac1abf9ba1d19cb025cc501221d"),
@@ -367,8 +367,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "重庆省监察院",
-        sfid_number: "GFR-CQ001-JC0T-671860922-2026",
-        main_address: hex!("66d803c94f6297e2dcafb000cc3ec38cc687ad27c9ed37ebdd4446d220c914ea"),
+        sfid_number: "CQ001-GJC05-671860922-2026",
+        main_address: hex!("5e1efcc5a8e5503da993a01797e148f2144cc9e788c1b7b7d82dbd6e701f3003"),
         duoqian_admins: &[
             hex!("8e03c7f1915c452f78d6d0183160a7115bdb09523dc6605fe79c346a465fc81f"),
             hex!("1c9a7dba45767a17aa4f41bc0350719cb0bedc325d9ccc52de467b41532a805c"),
@@ -383,8 +383,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "四川省监察院",
-        sfid_number: "GFR-SC001-JC0J-417258523-2026",
-        main_address: hex!("91a7b6490214f757fa602e92a9f972ea13ecc6add8287892efec111e24bab9bd"),
+        sfid_number: "SC001-GJC0X-417258523-2026",
+        main_address: hex!("cf3a2b63edf5c33069c9ca1a637f6eeb6c5fdc9df63e0febdb9279de662b9d20"),
         duoqian_admins: &[
             hex!("9e485d9ff8058cb9ad6785896fad8a900c165275625eaf6de7473d3c54fab768"),
             hex!("5c56e6a05be3cd34ca4d7a5da4408e4267f8a6801c97a5cf97f56e31a6ad6666"),
@@ -399,8 +399,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "甘肃省监察院",
-        sfid_number: "GFR-GS001-JC08-649309744-2026",
-        main_address: hex!("9cc12471aaae6aff2276d202c2f5632b562729faf6b534f9f3bc67e12382a2dc"),
+        sfid_number: "GS001-GJC0S-649309744-2026",
+        main_address: hex!("70d28b5e54d718fc4f25b580332d17e8e83a539cd61e45bb3a7a1b557962435c"),
         duoqian_admins: &[
             hex!("c417d82cd533df0ec46341c1ec7ca761dee6ce83f076a57bbf2880851518470c"),
             hex!("666a5dbe3ca57957c54f3602fb3ac7cc05f15a563537f8f21d95186eaefd5130"),
@@ -415,8 +415,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "北平省监察院",
-        sfid_number: "GFR-BP001-JC0V-054863049-2026",
-        main_address: hex!("221d18a7c47f570a5b142fcfbba227e884d0d25f4375a8cc7fa1ff458dca3c6f"),
+        sfid_number: "BP001-GJC0H-054863049-2026",
+        main_address: hex!("fc180bea9499fb69fc82efab250d2f6bfce9703a82a93593c9abb363c51780d8"),
         duoqian_admins: &[
             hex!("3aa83cfa1f197a3d1e8ada3661a696e0c616970339976becdfb44a8644bced23"),
             hex!("72d1edcd7cc9ce262e1db8ffe55f6c298575fdb35baa46bc86f6fbcb572c3371"),
@@ -431,8 +431,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "海滨省监察院",
-        sfid_number: "GFR-HA001-JC0Q-667840188-2026",
-        main_address: hex!("2daf3a2b74b4d4dccac27354eee3d3fd4cf1ae56890bc1351bded20053ffd481"),
+        sfid_number: "HA001-GJC0L-667840188-2026",
+        main_address: hex!("5da5ffac97eb2def694325f0710e7fe61223ee5e0779d972438a7689529b7819"),
         duoqian_admins: &[
             hex!("788533514958ca3b5c99388f2f95a470e741c21dae32b4947f0dedf29da3927c"),
             hex!("58f8f481f5b78363d919c160abe564b2636fb1e1965247a022a4cf9e59ab6362"),
@@ -447,8 +447,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "松江省监察院",
-        sfid_number: "GFR-SJ001-JC0V-186536238-2026",
-        main_address: hex!("2e4665101efd3650f738bc3e726e880acbc51c0b203676514e28ae2c84a6ed77"),
+        sfid_number: "SJ001-GJC0E-186536238-2026",
+        main_address: hex!("9169f479b750a45fb0df49f17e58ff915c1752b1a945daae8203943395616e5d"),
         duoqian_admins: &[
             hex!("deadf8e44bc058c4474e14383a86276ee6764424c8d5d1f9f8e5976f78d47064"),
             hex!("6e9c0d3336555910ab3a7e76ccfa4f7931aef487332dccdba4ae81a7c9ac245c"),
@@ -463,8 +463,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "龙江省监察院",
-        sfid_number: "GFR-LJ001-JC0U-401474770-2026",
-        main_address: hex!("1c71d86cbf7fbbe0222fac2ce93dadf78ebbb013fed4cc4d7ee685c66115448e"),
+        sfid_number: "LJ001-GJC0E-401474770-2026",
+        main_address: hex!("491155d0b092772cba94ff662874819da9079af15af931cc993c2b34aa3ffd4d"),
         duoqian_admins: &[
             hex!("a8611ed4d6ac27b4402162c4a51d92a82fcdb334608fe9958919ef38a37eb263"),
             hex!("e228a97fa2fe6fba0c643794e672b1f0cfdca508e2b2462b70e823d220df9b6a"),
@@ -479,8 +479,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "吉林省监察院",
-        sfid_number: "GFR-JL001-JC06-048512463-2026",
-        main_address: hex!("4c388ead077a5e4ffecdf73ad818d1d634d63b604c0977ea2d615ddecf050d89"),
+        sfid_number: "JL001-GJC0S-048512463-2026",
+        main_address: hex!("98c331fc8c18c3c932ccdc383dcbac92811173f89497b92d659d0ac5b8392238"),
         duoqian_admins: &[
             hex!("bea0ce59bb09ef76778e497fd7a53cf1e0fcf2e814288b8b61094b8ddf9b262d"),
             hex!("1acf4b17fa69958a96a4b0baadfead98910388f6cf38a77eb6745055fc41254e"),
@@ -495,8 +495,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "辽宁省监察院",
-        sfid_number: "GFR-LI001-JC0M-467886648-2026",
-        main_address: hex!("b4c6b491b553a59819fee4debe2025473de25d38e5f9d593ff7b659115127f8e"),
+        sfid_number: "LI001-GJC0Z-467886648-2026",
+        main_address: hex!("fe52241851a95ef75ee4d23cb22e808d7dea8d767c05eeb7f7e0616e289f64e5"),
         duoqian_admins: &[
             hex!("8808dd6ca60ae87c9c45490ade863129e5d85e5e9f33246f8c1ffe23703fb650"),
             hex!("ca945b39ddc5a953aea914c33679d588a09b49b98d7e47c2f3c69ae7e2525f75"),
@@ -511,8 +511,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "宁夏省监察院",
-        sfid_number: "GFR-NX001-JC07-192812513-2026",
-        main_address: hex!("3ba85f7a04d98087a378ed84476fbd097eaaabefaa0e8989edda133c9f5a821f"),
+        sfid_number: "NX001-GJC0J-192812513-2026",
+        main_address: hex!("290b612865a9d3b8502427dd21d5744c6664b1266626cf8087e1f07e3df99a9d"),
         duoqian_admins: &[
             hex!("1065806dd53860962c3c415120cd3f3e26ff1830c2b13a6255bf3a57bffb647d"),
             hex!("76412b3abde0ea141b95cc808ad0a7e740b6c8f5ae844045098a2bad8c213143"),
@@ -527,8 +527,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "青海省监察院",
-        sfid_number: "GFR-QH001-JC08-097589382-2026",
-        main_address: hex!("830d3ba516ceb4364cc2f5fb09056ce4a58f0adba57debf74fe2c6e40f2c0d13"),
+        sfid_number: "QH001-GJC0L-097589382-2026",
+        main_address: hex!("df0d77bc9a1a5ddbcfff7973551d5e7cba08018f4fc9194ab1c5238789ee617b"),
         duoqian_admins: &[
             hex!("70f77bbeb30ad673247f1b469c95b29bdde2196f0ed6d22b6c700295029c0d3d"),
             hex!("067872910396b36d65c951fd3556f732a9374ffc2b1e62b01e327ceed799013a"),
@@ -543,8 +543,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "安徽省监察院",
-        sfid_number: "GFR-AH001-JC0L-641171400-2026",
-        main_address: hex!("80fa8bf0514e194767682e5032ee31f7c624565219db4422a92020443fb57b4d"),
+        sfid_number: "AH001-GJC0S-641171400-2026",
+        main_address: hex!("340ade265ecc1b28d8528e0ae2de4f888be1caaed15b7f2695cb7220a675a10a"),
         duoqian_admins: &[
             hex!("2c3ae0a0c5aecd7915f425ecbbcc34aa700849433c855f8971cd61780e752712"),
             hex!("c2054f7faa92f9940d5cb2fb8ca88b3f506a0aec07ad630984941f8e4a4aed7c"),
@@ -559,8 +559,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "台湾省监察院",
-        sfid_number: "GFR-TW001-JC0Z-219778079-2026",
-        main_address: hex!("3af796e0796b79f0f4c540576d2374789cb8de10035bc52741aa3d958c85c179"),
+        sfid_number: "TW001-GJC0W-219778079-2026",
+        main_address: hex!("9d672935eed5fe152d4f29b131c5efe54ec80827e96f6162f71e6e30bd3efe87"),
         duoqian_admins: &[
             hex!("f6e66e1ac00f8eca6ffdb52bba56c81e6404b51d0fbb38ab0ad386da66493621"),
             hex!("f8b3cca174af78efec66f664921b8c478b83479d2bbb334b02c1e00a61f5b009"),
@@ -575,8 +575,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "西藏省监察院",
-        sfid_number: "GFR-XZ001-JC0H-718056153-2026",
-        main_address: hex!("c8b95fdb08ec18f718cf836dcf44041d78b9c792812eda19999b61374c74bf64"),
+        sfid_number: "XZ001-GJC0L-718056153-2026",
+        main_address: hex!("dbbebd58459e50bb7f658af89de31de6154d68203d40c19e121efe2b1d8670c0"),
         duoqian_admins: &[
             hex!("ba06455bb2889776642f6fbbe917b3b7b1c5aeb2711c0cee4edf215e9f63d727"),
             hex!("fc17b274aa514f34a18363209a026d34957f7d688edf457c5e7d7e241a994a41"),
@@ -591,8 +591,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "新疆省监察院",
-        sfid_number: "GFR-XJ001-JC0C-261542589-2026",
-        main_address: hex!("4ba555c5b35b9897d3fada2bc2756b0d5e2c298600ebc89e0206e22433a2b566"),
+        sfid_number: "XJ001-GJC0G-261542589-2026",
+        main_address: hex!("dfad7a5dcd22efdc2d1e1259a38fdf33451af90f99a20aede3961837097a8bad"),
         duoqian_admins: &[
             hex!("2e58812de859b0b3fb417276662d2248e063c27a176734d0a557c075887f2f66"),
             hex!("b00ac29c484d0ff2b8af3875dfbe622a7d98cd96a61c2e4b40862d5de420c909"),
@@ -607,8 +607,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "西康省监察院",
-        sfid_number: "GFR-XK001-JC08-821263753-2026",
-        main_address: hex!("1461b91ea22fe00c48ba103884c9976b124b496a97f94c133ecce0eb54b8ef8e"),
+        sfid_number: "XK001-GJC0J-821263753-2026",
+        main_address: hex!("d3ec9eb3c668ee91fa3bea4629f90730036bdcaadfa6cb8d0b748a7e7a4e7e95"),
         duoqian_admins: &[
             hex!("30373e92a86e1872f2a274dd2697604d7b96fcf255c1e2bc08de5d4775e4986c"),
             hex!("36cf70c6fa1c1f9d7fa39f84c59b6a8ac14f325f263afdb0b07004210594806e"),
@@ -623,8 +623,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "阿里省监察院",
-        sfid_number: "GFR-AL001-JC0G-717764071-2026",
-        main_address: hex!("dff4f3b94ebe33089d9380ef602c6b34ee2dd6eceea53d2460f965ad5d883a13"),
+        sfid_number: "AL001-GJC0F-717764071-2026",
+        main_address: hex!("24a1eec450b086a82649c4b14951c876983069f1ab02f1539c243a807dbb4c66"),
         duoqian_admins: &[
             hex!("c854140abedc93b83171e8254a0a127eadad26a4a9f969bace0a1591137b494a"),
             hex!("f83c3759afa5002612948e40d977f54db70a98a794daeaf766644c14d63f3f1d"),
@@ -639,8 +639,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "葱岭省监察院",
-        sfid_number: "GFR-CL001-JC0R-237688074-2026",
-        main_address: hex!("725ae56be6f704a894dab579ae0b2d0638bb61e89854557ae2f5a9f4a4b2284f"),
+        sfid_number: "CL001-GJC0A-237688074-2026",
+        main_address: hex!("348f6d9cacc41bfcaf3080bba627445a4e0581159c8b3d412a0c2eeab2210024"),
         duoqian_admins: &[
             hex!("a01bf68809c8afc88fb2ef522802cbbbc1dd19392335203b83860ebaf82a7b06"),
             hex!("e6184b3d65553402d148f72f2c8f7fe0084aafbec8227f15aa29968475f0273c"),
@@ -655,8 +655,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "天山省监察院",
-        sfid_number: "GFR-TS001-JC0T-190934454-2026",
-        main_address: hex!("e399cf0cf329f844a4d41d2792ce204f9e5f3dc238cdac56c27d9202bef5296a"),
+        sfid_number: "TS001-GJC0O-190934454-2026",
+        main_address: hex!("12580827b49c345c0ce3b764cee1e2cd5d652f9eddd7af5f00b449c55319bfd2"),
         duoqian_admins: &[
             hex!("ac9ba3081e65f7ca4acc791f3d6ad07afc61c553359a175a7e0ab34a46969c3e"),
             hex!("92022aea48917d0128f7ccfca2e9109c6fa2c01f564bd8a63cddf5bdb7cb987a"),
@@ -671,8 +671,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "河西省监察院",
-        sfid_number: "GFR-HX001-JC0H-186075670-2026",
-        main_address: hex!("9ab1a5c501d5276be9f892560bf5a0f4b5408179f2348e9ff54e3761626a0256"),
+        sfid_number: "HX001-GJC0V-186075670-2026",
+        main_address: hex!("fe2cbbff10f911dfc2b4e666211a86c17d0a082b323ac1211c2c3b9778ba3910"),
         duoqian_admins: &[
             hex!("9ceaeb3da3cf3a18cee23af91582f778f5cf0aceba7b20b0035be4445e78ae59"),
             hex!("388af2d90d220fe8d25b48f7f29f11ac5cc2afd120b541aeaa913b433de25a15"),
@@ -687,8 +687,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "昆仑省监察院",
-        sfid_number: "GFR-KL001-JC0N-925840208-2026",
-        main_address: hex!("b8089aeea854e571a6b734ba07a93ba2b67778485c8a40cb09a45d51efbd21b3"),
+        sfid_number: "KL001-GJC0W-925840208-2026",
+        main_address: hex!("c1364a24483d7c2281fdfab96e43ca73d3376800197a51f5fbf044cc648368fe"),
         duoqian_admins: &[
             hex!("d82d83d51ea3dbf252a883498f6dd1a66b99aa0e2dd861d182cb132fbcc19e0e"),
             hex!("d88a89094ca40f1973dc392864701fb373e31a3de55b719a67cb249fa9eea013"),
@@ -703,8 +703,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "河套省监察院",
-        sfid_number: "GFR-HT001-JC04-104165277-2026",
-        main_address: hex!("b4d04e37dcd9173b076fb1f6b20a8e1212581a68a54aa1f11379626435fcc47a"),
+        sfid_number: "HT001-GJC08-104165277-2026",
+        main_address: hex!("531a0e2ff382390344fa498ee73c1f72e6a6e272567bb09595d1daeaa51a34ed"),
         duoqian_admins: &[
             hex!("c4dc96e6b14cd26b2532869aba19d1f46491156fadaaaf09e7289bb1da32222c"),
             hex!("1af7fe071f46d9e2c91f17491f56aea3caa68e5ab7f7cf3f993693d66d874315"),
@@ -719,8 +719,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "热河省监察院",
-        sfid_number: "GFR-RH001-JC09-199854011-2026",
-        main_address: hex!("14d59a647c33de53b37ddc87eb49a1a36550131fa058907bdb5db20d270981ca"),
+        sfid_number: "RH001-GJC09-199854011-2026",
+        main_address: hex!("6015a4d48041dbb90852002065d03ac7f7e78f2c1dc04b67c1d6ba25e716a557"),
         duoqian_admins: &[
             hex!("5467689ec9208ba9fcd1cf2d33467c7bfb31076e7d82fa44a707b249accf2848"),
             hex!("2ec5c5635cf2e7cb3274cca72fe9e319ed807b99e658af6977d2c0910e4c2a13"),
@@ -735,8 +735,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "兴安省监察院",
-        sfid_number: "GFR-XA001-JC0V-682632777-2026",
-        main_address: hex!("96c5e78261f11487e351cf3b45500ced5fc68358ee55b0cfbe04601accd3beee"),
+        sfid_number: "XA001-GJC0E-682632777-2026",
+        main_address: hex!("fa516a4a1012916590931e0e953f0e282184d1a60764b36653df312a00bf79e3"),
         duoqian_admins: &[
             hex!("a6d9e048f935a48e0350a1fce9a709ef481f64cecb315028b44c7637a9b03b21"),
             hex!("02a7c1c7d0e7e02213bdc0aaa32571f85d3d04c2a2bb28a231a2e4f63f8c680f"),
@@ -751,8 +751,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
     },
     ChinaJc {
         sfid_name: "合江省监察院",
-        sfid_number: "GFR-HJ001-JC0P-920742619-2026",
-        main_address: hex!("b2d4adc87a6fca1c91be6567ddc94bc89c0649fa10c6a2b05380d555abb06847"),
+        sfid_number: "HJ001-GJC09-920742619-2026",
+        main_address: hex!("791c2e9125a57d7d5995d7a1a7d4b391c5bbcb9974254850ea6c2268e5627dd2"),
         duoqian_admins: &[
             hex!("c4edd663503437c8cd3abb98e5b4eeb08c3167483715dcc8d42a58c63ef99d74"),
             hex!("1eb0b5ddca2bd5b1ba894018fbe8122af17c622ce8e1b948de81247b2e70e822"),

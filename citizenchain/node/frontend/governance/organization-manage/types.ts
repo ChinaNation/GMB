@@ -3,11 +3,11 @@
 export type EligibleClearingBankCandidate = {
   sfidNumber: string;
   institutionName: string;
-  a3: string;
+  subjectProperty: string;
   subType?: string | null;
   parentSfidNumber?: string | null;
   parentInstitutionName?: string | null;
-  parentA3?: string | null;
+  parentSubjectProperty?: string | null;
   province: string;
   city: string;
   /** 主账户当前链上状态:Inactive / Pending / Registered / Failed。 */
@@ -30,8 +30,8 @@ export type AccountWithBalance = {
 export type InstitutionDetail = {
   sfidNumber: string;
   institutionName: string;
-  /** 管理员更换使用的账户级 SubjectId，清算行当前指向主账户。 */
-  adminSubjectIdHex: string;
+  /** 管理员更换使用的机构多签 AccountId，清算行当前指向主账户。 */
+  adminAccountHex: string;
   /** 管理员更换使用的 org：清算行属于 ORG_OTH。 */
   adminOrg: number;
 

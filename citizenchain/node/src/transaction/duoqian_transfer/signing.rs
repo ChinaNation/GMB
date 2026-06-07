@@ -39,8 +39,8 @@ pub fn build_propose_transfer_sign_request(
     let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(beneficiary_address)?;
 
     // node 端支持内置治理机构和注册机构多签账户，明确拒绝个人多签。
-    // 内置治理机构可校验“收款地址不能等于主账户”；注册机构账户没有 registry 条目，
-    // 只按 `duoqian:<account_hex>` 生成 0x05 SubjectId。
+    // 内置治理机构可校验“收款地址不能等于主账户”；注册机构账户使用
+    // `duoqian:<account_hex>` 传入机构多签 AccountId。
     let entry = governance::registry::find_institution(sfid_number);
     if let Some(entry) = entry {
         let institution_duoqian = hex::decode(entry.main_address_hex())
@@ -50,19 +50,13 @@ pub fn build_propose_transfer_sign_request(
         }
     }
 
-    let institution_id = super::subject_id::subject_id_from_transfer_identity(sfid_number)?;
-
-    let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
-    let mut call_data =
-        Vec::with_capacity(2 + 1 + 48 + 32 + 16 + remark_compact.len() + remark_bytes.len());
-    call_data.push(19u8);
-    call_data.push(0u8);
-    call_data.push(org_type);
-    call_data.extend_from_slice(&institution_id);
-    call_data.extend_from_slice(&beneficiary_bytes);
-    call_data.extend_from_slice(&amount_fen.to_le_bytes());
-    call_data.extend_from_slice(&remark_compact);
-    call_data.extend_from_slice(remark_bytes);
+    let call_data = build_transfer_call_data(
+        sfid_number,
+        org_type,
+        &beneficiary_bytes,
+        amount_fen,
+        remark_bytes,
+    )?;
 
     let institution_label = if let Some(hex) = sfid_number.strip_prefix("duoqian:") {
         let short = if hex.len() > 14 {
@@ -152,11 +146,13 @@ pub fn build_propose_sweep_sign_request(
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let call_data = build_sweep_call_data(sfid_number, amount_yuan)?;
 
-    let inst_name = governance::registry::find_institution(sfid_number)
-        .map(|entry| entry.name())
-        .unwrap_or("未知机构");
+    let institution_account = super::account_id::account_id_from_transfer_identity(sfid_number)?;
+    let institution_label = format!(
+        "机构账户 {}",
+        governance::signing::pubkey_to_ss58(&institution_account)?
+    );
     let fields = serde_json::json!([
-        { "key": "institution", "label": "机构", "value": inst_name },
+        { "key": "institution", "label": "机构", "value": institution_label },
         {
             "key": "amount_yuan",
             "label": "金额",
@@ -164,7 +160,7 @@ pub fn build_propose_sweep_sign_request(
         }
     ]);
     let summary = format!(
-        "{inst_name} 手续费划转 {} 元",
+        "{institution_label} 手续费划转 {} 元",
         governance::signing::format_amount(amount_yuan)
     );
 
@@ -208,6 +204,35 @@ pub(crate) fn build_safety_fund_call_data(
     Ok(call_data)
 }
 
+/// 普通机构多签转账 call_data，供签名构造和签名回执提交复用。
+pub(crate) fn build_transfer_call_data(
+    sfid_number: &str,
+    org_type: u8,
+    beneficiary_bytes: &[u8; 32],
+    amount_fen: u128,
+    remark_bytes: &[u8],
+) -> Result<Vec<u8>, String> {
+    if remark_bytes.len() > 256 {
+        return Err(format!(
+            "备注长度不能超过 256 字节，当前 {} 字节",
+            remark_bytes.len()
+        ));
+    }
+    let institution_account = super::account_id::account_id_from_transfer_identity(sfid_number)?;
+    let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
+    let mut call_data =
+        Vec::with_capacity(2 + 1 + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len());
+    call_data.push(19u8);
+    call_data.push(0u8);
+    call_data.push(org_type);
+    call_data.extend_from_slice(&institution_account);
+    call_data.extend_from_slice(beneficiary_bytes);
+    call_data.extend_from_slice(&amount_fen.to_le_bytes());
+    call_data.extend_from_slice(&remark_compact);
+    call_data.extend_from_slice(remark_bytes);
+    Ok(call_data)
+}
+
 /// 手续费划转 call_data，供签名构造和签名回执提交复用。
 pub(crate) fn build_sweep_call_data(
     sfid_number: &str,
@@ -217,12 +242,12 @@ pub(crate) fn build_sweep_call_data(
         return Err("划转金额必须大于 0".to_string());
     }
     let amount_fen = (amount_yuan * 100.0).round() as u128;
-    let institution_id = super::subject_id::subject_id_from_transfer_identity(sfid_number)?;
+    let institution_account = super::account_id::account_id_from_transfer_identity(sfid_number)?;
 
-    let mut call_data = Vec::with_capacity(2 + 48 + 16);
+    let mut call_data = Vec::with_capacity(2 + 32 + 16);
     call_data.push(19u8);
     call_data.push(2u8);
-    call_data.extend_from_slice(&institution_id);
+    call_data.extend_from_slice(&institution_account);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     Ok(call_data)
 }

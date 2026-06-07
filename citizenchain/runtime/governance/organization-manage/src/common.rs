@@ -3,9 +3,8 @@
 //! 与 Pallet 内部状态无关的纯函数放在这里。
 //! 涉及 Pallet storage 的 helper 仍留在 lib.rs 的 `impl<T: Config> Pallet<T>` 块。
 //!
-//! D 阶段(SubjectKind 协议统一,2026-05-06)起,治理主体派生函数全部归口
-//! `primitives::derive::institution_id_from_*`,本文件不再 re-export,
-//! 调用方直接 use primitives::derive 的目标函数。
+//! 账户地址派生只允许调用 `primitives::core_const::derive_duoqian_account`
+//! 及各业务模块对它的薄封装；本文件不再保存任何派生协议常量。
 
 use frame_support::{ensure, traits::Currency};
 use sp_runtime::{traits::CheckedAdd, DispatchResult, SaturatedConversion};

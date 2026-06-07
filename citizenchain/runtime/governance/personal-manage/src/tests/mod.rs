@@ -81,14 +81,16 @@ impl pallet_balances::Config for Test {
 // ─── Trait mock 实现 ─────────────────────────────────────────────────────
 
 pub struct TestAddressValidator;
-impl primitives::traits::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+impl primitives::multisig::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAddressChecker;
-impl primitives::traits::DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
+impl primitives::multisig::DuoqianReservedAddressChecker<AccountId32>
+    for TestReservedAddressChecker
+{
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
@@ -100,7 +102,7 @@ thread_local! {
     static INSTITUTION_CAN_SPEND: RefCell<bool> = const { RefCell::new(true) };
 }
 
-impl primitives::traits::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+impl primitives::multisig::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
     fn is_protected(address: &AccountId32) -> bool {
         PROTECTED_ADDRESS.with(|value| value.borrow().as_ref() == Some(address))
     }
@@ -164,23 +166,23 @@ impl
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
+    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
         if org != ORG_REN {
             return false;
         }
-        admins_change::Pallet::<Test>::is_active_subject_admin(org, institution, who)
+        admins_change::Pallet::<Test>::is_active_account_admin(org, institution, who)
     }
 
-    fn get_admin_list(org: u8, institution: SubjectId) -> Option<alloc::vec::Vec<AccountId32>> {
+    fn get_admin_list(org: u8, institution: AccountId32) -> Option<alloc::vec::Vec<AccountId32>> {
         if org != ORG_REN {
             return None;
         }
-        admins_change::Pallet::<Test>::active_subject_admins(org, institution)
+        admins_change::Pallet::<Test>::active_account_admins(org, institution)
     }
 
-    fn is_pending_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
+    fn is_pending_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
         org == ORG_REN
-            && admins_change::Pallet::<Test>::is_pending_subject_admin_for_snapshot(
+            && admins_change::Pallet::<Test>::is_pending_account_admin_for_snapshot(
                 org,
                 institution,
                 who,
@@ -189,22 +191,22 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
     fn get_pending_admin_list(
         org: u8,
-        institution: SubjectId,
+        institution: AccountId32,
     ) -> Option<alloc::vec::Vec<AccountId32>> {
         if org != ORG_REN {
             return None;
         }
-        admins_change::Pallet::<Test>::pending_subject_admins_for_snapshot(org, institution)
+        admins_change::Pallet::<Test>::pending_account_admins_for_snapshot(org, institution)
     }
 }
 
 pub struct TestInternalAdminCountProvider;
-impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: SubjectId) -> Option<u32> {
+impl votingengine::InternalAdminCountProvider<AccountId32> for TestInternalAdminCountProvider {
+    fn admin_count(org: u8, institution: AccountId32) -> Option<u32> {
         if org != ORG_REN {
             return None;
         }
-        admins_change::Pallet::<Test>::active_subject_admin_count(org, institution)
+        admins_change::Pallet::<Test>::active_account_admin_count(org, institution)
     }
 }
 
@@ -360,7 +362,7 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
     Ok(())
 }
 
-/// 直接灌已激活的 PersonalDuoqian + admins-change 主体,跳过 propose/vote 链路。
+/// 直接灌已激活的 PersonalDuoqian + admins-change 管理员账户,跳过 propose/vote 链路。
 /// 用于关闭/资金边界测试,避免每个用例都重复一遍创建流程。
 pub fn seed_active_duoqian(
     duoqian_address: &AccountId32,
@@ -377,23 +379,23 @@ pub fn seed_active_duoqian(
             status: types::DuoqianStatus::Active,
         },
     );
-    // admins-change 写 Active 主体,让 propose_close 的 is_active_subject_admin 通过。
+    // admins-change 写 Active 管理员账户,让 propose_close 的 is_active_account_admin 通过。
     // 中文注释：普通业务阈值归 internal-vote 管，不再写入管理员主体。
-    let subject = primitives::derive::subject_id_from_account(duoqian_address);
+    let account = duoqian_address.clone();
     let admins_ac: admins_change::AdminsOf<Test> =
         BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");
     let threshold = (admins.len() as u32 / 2).saturating_add(1);
-    internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, subject, threshold);
-    admins_change::Subjects::<Test>::insert(
-        subject,
-        admins_change::AdminSubject {
+    internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, account.clone(), threshold);
+    admins_change::AdminAccounts::<Test>::insert(
+        account,
+        admins_change::AdminAccount {
             org: ORG_REN,
-            kind: admins_change::AdminSubjectKind::PersonalDuoqian,
+            kind: admins_change::AdminAccountKind::PersonalDuoqian,
             admins: admins_ac,
             creator: creator.clone(),
             created_at: 1,
             updated_at: 1,
-            status: admins_change::AdminSubjectStatus::Active,
+            status: admins_change::AdminAccountStatus::Active,
         },
     );
     use frame_support::traits::Currency;

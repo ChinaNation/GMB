@@ -46,7 +46,6 @@ use frame_support::{
 use frame_system::limits::{BlockLength, BlockWeights};
 use onchain_transaction::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
-use primitives::derive::subject_id_from_sfid_number;
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 #[allow(unused_imports)]
@@ -743,11 +742,11 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             // 中文注释：这里必须和 SFID 端 `/registration-info` 的签名 payload 严格一致。
-            // payload：DUOQIAN_DOMAIN + OP_SIGN_INST + genesis_hash + sfid_number
+            // payload：DUOQIAN + OP_SIGN_INST + genesis_hash + sfid_number
             // + institution_name + account_names[] + nonce + province + signer_admin_pubkey。
             // signer_admin_pubkey 必须进 payload,否则同 province 下任意 admin 的签名可互换。
             let payload = (
-                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 sfid_number,
@@ -807,7 +806,7 @@ impl personal_manage::Config for Runtime {
 // - `RuntimePopulationSnapshotVerifier`(联合提案人口快照)
 // 全部按 (province, signer_admin_pubkey) 在 `ShengSigningPubkey` 双映射中查派生签名公钥;
 // 链上 0 prior knowledge of SFID,无任何"SFID main 兜底"路径。
-// payload 哈希前缀统一遵循 `DUOQIAN_DOMAIN || OP_SIGN_BIND/VOTE/POP || block_hash(0) || <字段>
+// payload 哈希前缀统一遵循 `DUOQIAN || OP_SIGN_BIND/VOTE/POP || block_hash(0) || <字段>
 //   || province || signer_admin_pubkey`,且 `signer_admin_pubkey` 必须进 payload —— 否则
 // 同省 admin 之间签名可互换,违反双层匹配语义。
 
@@ -853,11 +852,11 @@ impl
             sig_raw.copy_from_slice(sig_bytes);
             let signature = sr25519::Signature::from_raw(sig_raw);
 
-            // payload:DUOQIAN_DOMAIN + OP_SIGN_BIND + block_hash(0) + account + binding_id
+            // payload:DUOQIAN + OP_SIGN_BIND + block_hash(0) + account + binding_id
             //   + bind_nonce + province + signer_admin_pubkey。
             // signer_admin_pubkey 必须进 payload,否则同省 admin 签名可互换。
             let payload = (
-                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_BIND,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
@@ -924,10 +923,10 @@ impl
             sig_raw.copy_from_slice(sig_bytes);
             let signature = sr25519::Signature::from_raw(sig_raw);
 
-            // payload:DUOQIAN_DOMAIN + OP_SIGN_VOTE + block_hash(0) + account + binding_id
+            // payload:DUOQIAN + OP_SIGN_VOTE + block_hash(0) + account + binding_id
             //   + proposal_id + nonce + province + signer_admin_pubkey。
             let payload = (
-                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_VOTE,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
@@ -1001,10 +1000,10 @@ impl
             sig_raw.copy_from_slice(sig_bytes);
             let signature = sr25519::Signature::from_raw(sig_raw);
 
-            // payload:DUOQIAN_DOMAIN + OP_SIGN_POP + block_hash(0) + who + eligible_total
+            // payload:DUOQIAN + OP_SIGN_POP + block_hash(0) + who + eligible_total
             //   + nonce + province + signer_admin_pubkey。
             let payload = (
-                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_POP,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,
@@ -1119,7 +1118,7 @@ impl duoqian_transfer::Config for Runtime {
 /// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
 ///
 /// 委托给 `organization-manage` 的 SFID 地址索引和机构账户表；
-/// 管理员校验再统一转给 `admins-change::Subjects`。
+/// 管理员校验再统一转给 `admins-change::AdminAccounts`。
 pub struct DuoqianSfidAccountQuery;
 
 impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
@@ -1159,11 +1158,11 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// 扫码支付 Step 2 新增:判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
-    /// 中文注释:机构账户按自身地址派生 InstitutionAccount 主体,org 来自
+    /// 中文注释:机构账户按自身地址作为治理账户,org 来自
     /// `Institutions[sfid].admin_org`;ORG_REN 只给 personal-manage 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
-        let Some(subject_id) =
-            organization_manage::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
+        let Some(account) =
+            organization_manage::Pallet::<Runtime>::resolve_admin_account_for_account(bank)
         else {
             return false;
         };
@@ -1171,11 +1170,11 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         else {
             return false;
         };
-        admins_change::Pallet::<Runtime>::is_active_subject_admin(org, subject_id, who)
+        admins_change::Pallet::<Runtime>::is_active_account_admin(org, account, who)
     }
 
     /// Step 2(2026-05-02):清算行资格由 SFID 系统的 eligible-search 负责筛选。
-    /// 链上不再保存 a3/sub_type/parent_sfid_number,这里只确认该地址属于已注册且 Active 的
+    /// 链上不再保存 subject_property/sub_type/parent_sfid_number,这里只确认该地址属于已注册且 Active 的
     /// SFID 机构账户,避免把 SFID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
         let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
@@ -1244,11 +1243,11 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
     let nrc_institution = primitives::china::china_cb::CHINA_CB
         .first()
-        .and_then(|n| primitives::derive::subject_id_from_sfid_number(n.sfid_number))
-        .expect("NRC sfid_number must be valid");
+        .map(|n| AccountId::new(n.main_address))
+        .expect("NRC main_address must exist");
 
-    // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
-    admins_change::Pallet::<Runtime>::is_active_subject_admin(
+    // 中文注释：创世后只信任链上管理员治理模块中的统一账户表。
+    admins_change::Pallet::<Runtime>::is_active_account_admin(
         votingengine::types::ORG_NRC,
         nrc_institution,
         who,
@@ -1280,19 +1279,15 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 /// 国储会和省储会管理员均可发起联合提案（含运行时升级、决议发行等）。
 fn is_joint_proposer(who: &AccountId) -> bool {
     use primitives::china::china_cb::CHINA_CB;
-    let nrc_institution = CHINA_CB
-        .first()
-        .and_then(|n| subject_id_from_sfid_number(n.sfid_number));
-    for entry in CHINA_CB.iter() {
-        if let Some(institution) = subject_id_from_sfid_number(entry.sfid_number) {
-            let org = if Some(institution) == nrc_institution {
-                votingengine::types::ORG_NRC
-            } else {
-                votingengine::types::ORG_PRC
-            };
-            if admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who) {
-                return true;
-            }
+    for (idx, entry) in CHINA_CB.iter().enumerate() {
+        let institution = AccountId::new(entry.main_address);
+        let org = if idx == 0 {
+            votingengine::types::ORG_NRC
+        } else {
+            votingengine::types::ORG_PRC
+        };
+        if admins_change::Pallet::<Runtime>::is_active_account_admin(org, institution, who) {
+            return true;
         }
     }
     false
@@ -1468,23 +1463,16 @@ impl genesis_pallet::Config for Runtime {
 pub struct RuntimeInternalAdminProvider;
 
 impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: votingengine::SubjectId, who: &AccountId) -> bool {
-        admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who)
+    fn is_internal_admin(org: u8, institution: AccountId, who: &AccountId) -> bool {
+        admins_change::Pallet::<Runtime>::is_active_account_admin(org, institution, who)
     }
 
-    fn get_admin_list(
-        org: u8,
-        institution: votingengine::SubjectId,
-    ) -> Option<alloc::vec::Vec<AccountId>> {
-        admins_change::Pallet::<Runtime>::active_subject_admins(org, institution)
+    fn get_admin_list(org: u8, institution: AccountId) -> Option<alloc::vec::Vec<AccountId>> {
+        admins_change::Pallet::<Runtime>::active_account_admins(org, institution)
     }
 
-    fn is_pending_internal_admin(
-        org: u8,
-        institution: votingengine::SubjectId,
-        who: &AccountId,
-    ) -> bool {
-        admins_change::Pallet::<Runtime>::is_pending_subject_admin_for_snapshot(
+    fn is_pending_internal_admin(org: u8, institution: AccountId, who: &AccountId) -> bool {
+        admins_change::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
             org,
             institution,
             who,
@@ -1493,17 +1481,17 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
 
     fn get_pending_admin_list(
         org: u8,
-        institution: votingengine::SubjectId,
+        institution: AccountId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
-        admins_change::Pallet::<Runtime>::pending_subject_admins_for_snapshot(org, institution)
+        admins_change::Pallet::<Runtime>::pending_account_admins_for_snapshot(org, institution)
     }
 }
 
 pub struct RuntimeInternalAdminCountProvider;
 
-impl votingengine::InternalAdminCountProvider for RuntimeInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: votingengine::SubjectId) -> Option<u32> {
-        admins_change::Pallet::<Runtime>::active_subject_admin_count(org, institution)
+impl votingengine::InternalAdminCountProvider<AccountId> for RuntimeInternalAdminCountProvider {
+    fn admin_count(org: u8, institution: AccountId) -> Option<u32> {
+        admins_change::Pallet::<Runtime>::active_account_admin_count(org, institution)
     }
 }
 
@@ -1653,13 +1641,13 @@ impl pallet_assets::Config for Runtime {
     type BenchmarkHelper = ();
 }
 
-/// OnchainIssuance pallet 配置(ADR-011 v2 修订项 #1:NRC 主体 / 费用账户语义分离)。
+/// OnchainIssuance pallet 配置(ADR-011 v2 修订项 #1:NRC 账户 / 费用账户语义分离)。
 ///
 /// 中文注释:onchain-issuance 拆为两个独立 trait:
 /// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_address(monitor 调用方校验用)
 /// - `NrcFeeAccountProvider`  → 返回 NRC 费用账户 fee_address(创建费收款用)
 /// v1 错误地复用 onchain_transaction::NrcAccountProvider(它返回 fee_address),
-/// 导致 monitor 主体身份语义错。
+/// 导致 monitor 账户身份语义错。
 
 /// NRC 治理多签账户(main_address)— monitor / 监管动作发起方校验用。
 pub struct RuntimeNrcMainAccountProvider;

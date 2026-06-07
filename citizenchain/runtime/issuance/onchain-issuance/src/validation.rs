@@ -1,28 +1,29 @@
 //! 入参校验工具。
 //!
 //! 三大校验入口:
-//! - `ensure_issuer_allowed` — 发行人主体类型必须 ∈ {SfidInstitution, PersonalDuoqian}
+//! - `ensure_issuer_allowed` — 发行人必须是机构多签账户地址
 //! - `ensure_decimals_in_range` — decimals 必须落在 [0, 18]
 //! - `contains_blacklisted_word` — name / symbol / description 字段不可命中黑名单
 //! - `ensure_class_supported` — 第一期只支持 Plain,Pegged 直接 reject
 
 use crate::types::AssetClass;
-use primitives::derive::{parse_subject_id, SubjectKind};
 use sp_std::vec::Vec;
 
 /// decimals 范围铁律:`0..=18`(与 ERC-20 主流上限对齐,与 GMB 8 位兼容)。
 pub const MIN_DECIMALS: u8 = 0;
 pub const MAX_DECIMALS: u8 = 18;
 
-/// 校验发行人主体类型(必须 SfidInstitution 0x02 或 PersonalDuoqian 0x03)。
+/// 校验发行机构账户地址。
 ///
-/// 中文注释:Builtin 0x01(国储会等)与 OnchainAsset 0x04(代币本身)不允许直接发币;
-/// 0x04 是用户代币 storage key 派生位,不是发行人主体身份。
-pub fn ensure_issuer_allowed(subject_id: &[u8; 48]) -> Result<(), &'static str> {
-    let (kind, _) = parse_subject_id(subject_id).ok_or("invalid_subject_id")?;
-    match kind {
-        SubjectKind::SfidInstitution | SubjectKind::PersonalDuoqian => Ok(()),
-        _ => Err("issuer_not_allowed"),
+/// 中文注释：具体“是否为已注册机构多签、发起人是否为该账户管理员”由 pallet 调用
+/// admins-change / organization-manage 的账户级接口完成；本函数只拒绝空编码。
+pub fn ensure_issuer_allowed<AccountId: codec::Encode>(
+    issuer_account: &AccountId,
+) -> Result<(), &'static str> {
+    if issuer_account.encode().is_empty() {
+        Err("issuer_not_allowed")
+    } else {
+        Ok(())
     }
 }
 
@@ -66,29 +67,13 @@ pub fn contains_blacklisted_word(field: &[u8], blacklist: &[Vec<u8>]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use primitives::derive::{
-        build_subject_id, subject_id_from_account, subject_id_from_onchain_asset,
-    };
+    use codec::Encode;
 
     #[test]
-    fn issuer_only_accepts_0x02_and_0x03() {
-        // 0x02 SfidInstitution → ok
-        let sfid = build_subject_id(SubjectKind::SfidInstitution, b"CN-110000-0001").unwrap();
-        assert!(ensure_issuer_allowed(&sfid).is_ok());
-
-        // 0x03 PersonalDuoqian → ok
+    fn issuer_accepts_account_id() {
         let acc: [u8; 32] = [0x77; 32];
-        let pers = subject_id_from_account(&acc);
-        assert!(ensure_issuer_allowed(&pers).is_ok());
-
-        // 0x01 Builtin → reject
-        let builtin =
-            build_subject_id(SubjectKind::Builtin, b"GFR-LN001-CB0X-944805165-2026").unwrap();
-        assert!(ensure_issuer_allowed(&builtin).is_err());
-
-        // 0x04 OnchainAsset → reject
-        let onchain = subject_id_from_onchain_asset(1);
-        assert!(ensure_issuer_allowed(&onchain).is_err());
+        assert!(ensure_issuer_allowed(&acc).is_ok());
+        assert!(!acc.encode().is_empty());
     }
 
     #[test]

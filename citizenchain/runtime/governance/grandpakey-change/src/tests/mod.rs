@@ -116,24 +116,24 @@ impl
 }
 
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
+    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
         let mut who_raw = [0u8; 32];
         who_raw.copy_from_slice(who.as_ref());
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|node| subject_id_from_sfid_number(node.sfid_number) == Some(institution))
+                .find(|node| AccountId32::new(node.main_address) == institution)
                 .map(|node| node.duoqian_admins.iter().any(|admin| *admin == who_raw))
                 .unwrap_or(false),
             _ => false,
         }
     }
 
-    fn get_admin_list(org: u8, institution: SubjectId) -> Option<sp_std::vec::Vec<AccountId32>> {
+    fn get_admin_list(org: u8, institution: AccountId32) -> Option<sp_std::vec::Vec<AccountId32>> {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|node| subject_id_from_sfid_number(node.sfid_number) == Some(institution))
+                .find(|node| AccountId32::new(node.main_address) == institution)
                 .map(|node| {
                     node.duoqian_admins
                         .iter()
@@ -241,16 +241,15 @@ fn cb_admin(node_index: usize, admin_index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CB[node_index].duoqian_admins[admin_index])
 }
 
-fn cb_pallet_id(node_index: usize) -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[node_index].sfid_number)
-        .expect("institution should map to pallet id")
+fn cb_pallet_id(node_index: usize) -> AccountId32 {
+    AccountId32::new(CHINA_CB[node_index].main_address)
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
     cb_admin(1, index)
 }
 
-fn prc_pallet_id() -> SubjectId {
+fn prc_pallet_id() -> AccountId32 {
     cb_pallet_id(1)
 }
 

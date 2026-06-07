@@ -64,13 +64,18 @@ class ProposalQueryService {
   /// 查询提案创建时锁定的管理员快照。
   Future<List<String>> fetchAdminSnapshot(
     int proposalId,
-    String institutionIdentity,
+    InstitutionInfo institution,
   ) async {
     final key = _buildDoubleStorageKey(
       'VotingEngine',
       'AdminSnapshot',
       _u64ToLeBytes(proposalId),
-      Uint8List.fromList(institutionIdentityToPalletId(institutionIdentity)),
+      Uint8List.fromList(
+        institutionIdentityToAccountId(
+          institution.sfidNumber,
+          mainAddress: institution.mainAddress,
+        ),
+      ),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];

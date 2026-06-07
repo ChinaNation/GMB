@@ -1,8 +1,7 @@
 // 链上发行代币 storage 查询封装(框架阶段占位)。
 //
 // 后续任务卡 C 实装时承载:
-// - 通过 substrate_api / smoldot 读 OnchainIssuance.Assets storage(SubjectId → AssetMeta)
-// - 读 OnchainIssuance.AssetIdIndex(AssetId → SubjectId)反向查询
+// - 通过 substrate_api / smoldot 读 OnchainIssuance.Assets storage(asset_id → AssetMeta)
 // - 读 pallet_assets::Asset(asset_id)获得 supply / accounts 数量
 // - 读 pallet_assets::Account(asset_id, who)获得持币余额
 // - 订阅 OnchainIssuance::Event 推送 AssetIssued / Minted / MonitorFrozen 等
@@ -14,7 +13,7 @@ import 'dart:typed_data';
 class OnchainAssetMeta {
   const OnchainAssetMeta({
     required this.assetId,
-    required this.issuerSubjectId,
+    required this.issuerAccountId,
     required this.issuerAccount,
     required this.classKind,
     required this.decimals,
@@ -23,11 +22,11 @@ class OnchainAssetMeta {
     required this.symbol,
   });
 
-  /// pallet_assets AssetId,可由 SubjectId byte[1..5] LE 反推(冗余存以便 UI 直接用)。
+  /// pallet_assets AssetId。
   final int assetId;
-  final Uint8List issuerSubjectId;
+  final Uint8List issuerAccountId;
 
-  /// 发行人代理账户 SS58(prefix=2027)。
+  /// 发行机构多签账户 SS58(prefix=2027)。
   final String issuerAccount;
 
   /// 资产种类:'Plain' / 'Pegged'(第一期只 Plain)。
@@ -43,17 +42,13 @@ class OnchainAssetMeta {
   final String symbol;
 }
 
-// ADR-011 v2 修订项 #9:OnchainAssetMeta 不再含 monitor_subject_id 字段
-// (NRC monitor 全局强制,UI 展示监管者直接读 NRC 常量即可,不需逐资产存)。
+// 中文注释：监管账户由 NRC 全局治理账户决定，AssetMeta 不再逐资产保存监管主体字段。
 
 abstract class OnchainAssetQuery {
   /// 列出指定持币人(SS58)持有的所有资产 + 当前余额。
   Future<List<OnchainAssetMeta>> listAssetsHeldBy(String ss58);
 
-  /// 按 SubjectId 读资产元数据。
-  Future<OnchainAssetMeta?> readAssetBySubject(Uint8List subjectId);
-
-  /// 按 AssetId 反查 SubjectId 后读元数据。
+  /// 按 asset_id 读资产元数据。
   Future<OnchainAssetMeta?> readAssetById(int assetId);
 
   /// 读特定持币人在某资产下的当前余额(已含 decimals 的 raw 值)。

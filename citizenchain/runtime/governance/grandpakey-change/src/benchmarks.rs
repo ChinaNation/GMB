@@ -10,14 +10,14 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_core::Pair;
 
-use crate::{pallet, subject_id_from_sfid_number, Call, Config, Pallet, SubjectId, CHINA_CB};
+use crate::{pallet, Call, Config, Pallet, CHINA_CB};
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
+fn prc_institution<T: pallet::Config>() -> T::AccountId {
+    decode_account::<T>(CHINA_CB[1].main_address)
 }
 
 fn prc_admin<T: pallet::Config>(index: usize) -> T::AccountId {
@@ -36,7 +36,7 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_replace_grandpa_key() {
-        let institution = prc_institution();
+        let institution = prc_institution::<T>();
         let proposer = prc_admin::<T>(0);
         let new_key = seeded_public_key(11);
 

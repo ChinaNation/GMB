@@ -60,7 +60,7 @@
 
 ## 5. 关键一致性约束
 
-- 三端字段统一：`archive_no / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg / sfid_code / bind_status`。
+- 三端字段统一：`archive_no / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg / sfid_number / bind_status`。
 - `bind_status` 只表达电子护照绑定状态：`PENDING / BOUND`；`identity_status` 表达身份 ID 当前有效状态；`vote_status` 由 `citizen_status + voting_eligible` 计算。
 - `citizen_status` 当前只允许 `NORMAL / REVOKED`；`REVOKED` 表示 CPMS 软删除注销，必须对应 `voting_eligible=false`。
 - CPMS 年度 `CPMS_STATUS_EXPORT` 导入时，`citizen_binding_records` 按 `archive_no` 覆盖已有 SFID 绑定记录的钱包地址、公民状态和投票资格，但不自动生成新的身份 ID；`binding_release_records` 用于释放档案号、身份 ID、钱包地址三者绑定关系，不处理 CPMS 护照号。
@@ -69,19 +69,19 @@
   联邦管理员只看本省,市级管理员只操作本市。
 - 管理员端公民查询不默认返回任何全量列表；必须输入档案号、身份ID、投票账户地址或投票账户公钥，后端返回 `{ items, page_size, next_cursor, has_more }`。
 - SFID 公民模块不保存公民姓名，任何公民检索都不得按姓名匹配。
-- `citizens` 是管理员浏览器查询用分区表；绑定完成和 CPMS 年度报告导入后同步写入，`archive_no / sfid_code / wallet_pubkey` 三者一对一由公民绑定流程强制。
+- `citizens` 是管理员浏览器查询用分区表；绑定完成和 CPMS 年度报告导入后同步写入，`archive_no / sfid_number / wallet_pubkey` 三者一对一由公民绑定流程强制。
 - 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
 - `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
 - wuminapp 扫描 `citizen_bind` 请求时必须先独立解析 `payload_hex`，确认 action、档案号、公民状态、选举权利和钱包地址与 display 一致后才签名。
-- `archive_no / sfid_code / wallet_pubkey` 三者保持一对一唯一关系。
+- `archive_no / sfid_number / wallet_pubkey` 三者保持一对一唯一关系。
 - `status_updated_at` 参与 CPMS `ARCHIVE` 签名原文；旧时间戳档案码不得覆盖新状态。
 
 ## 6. 审计事件
 
 | 事件 | 触发场景 | 关键字段 |
 |------|---------|---------|
-| `CITIZEN_BIND` | 管理员完成电子护照绑定 | wallet_pubkey, archive_no, sfid_code |
+| `CITIZEN_BIND` | 管理员完成电子护照绑定 | wallet_pubkey, archive_no, sfid_number |
 | `CPMS_STATUS_EXPORT_IMPORT` | 管理员导入 CPMS 年度报告 | sfid_number, export_year, records_hash |
 | `APP_VOTE_CREDENTIAL` | wuminapp 请求公民投票凭证 | wallet_pubkey, proposal_id |

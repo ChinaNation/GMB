@@ -1,7 +1,7 @@
 //! 扫码支付清算体系 Step 1 新增:清算行合法性判定。
 //!
 //! 中文注释:
-//! - 清算行(L2)= SFR 私法人 或 FFR 非法人(两者都是"私权机构")。
+//! - 清算行(L2)= subject_property 为 S(私法人)或 F(非法人)的私权机构。
 //! - 清算行在 SFID 系统注册时生成 sfid_number,并在链上 `organization-manage` 注册
 //!   主账户 + 费用账户两个多签账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
@@ -20,8 +20,10 @@ use crate::{Config, Error};
 // 常量
 // ------------------------------------------------------------
 
-/// SFID 字符串中第一段 A3 的长度(如 "SFR" / "FFR")。
-pub const A3_LEN: usize = 3;
+/// 新版 SFID 字符串 `R5-K3P1C1-N9-D4` 中 K1 的字节位置。
+pub const SFID_K1_INDEX: usize = 6;
+/// 新版 SFID 字符串第一段 R5 后的分隔符位置。
+pub const SFID_R5_SEPARATOR_INDEX: usize = 5;
 
 /// 清算行"主账户"名称(字节形式,与 SFID 系统生成时逐字节一致)。
 pub const ACCOUNT_NAME_MAIN: &[u8] = "主账户".as_bytes();
@@ -86,15 +88,14 @@ impl<AccountId> SfidAccountQuery<AccountId> for () {
 // 内部辅助
 // ------------------------------------------------------------
 
-/// 判定 SFID 编码字符串的 A3 段属于"私权机构"(SFR 或 FFR)。
+/// 判定 SFID 编码字符串的 K1 主体属性属于"私权机构"(S 或 F)。
 ///
-/// 直接对字节做前缀匹配,不依赖 sfid-system 或 SFID 后端。
-fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
-    if sfid_bytes.len() < A3_LEN {
+/// 直接对目标态 `R5-K3P1C1-N9-D4` 做字节判定,不依赖 sfid-system 或 SFID 后端。
+fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
+    if sfid_bytes.len() <= SFID_K1_INDEX || sfid_bytes.get(SFID_R5_SEPARATOR_INDEX) != Some(&b'-') {
         return false;
     }
-    let a3 = &sfid_bytes[..A3_LEN];
-    a3 == b"SFR" || a3 == b"FFR"
+    matches!(sfid_bytes[SFID_K1_INDEX], b'S' | b'F')
 }
 
 // ------------------------------------------------------------
@@ -106,7 +107,7 @@ fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 /// Step 2(2026-04-27, ADR-007)起 6 重校验,任一失败即拒绝:
 /// 1. 在链上 `AddressRegisteredSfid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
-/// 3. A3 ∈ {SFR, FFR}(字节级前缀判定)
+/// 3. K1 ∈ {S, F}(字节级主体属性判定)
 /// 4. 对应 `InstitutionAccounts.status == Active`
 /// 5. **资格白名单**:由 SFID 系统在候选/注册信息接口筛选;链上通过
 ///    `SfidAccountQuery::is_clearing_bank_eligible` 只确认该 SFID 机构账户已 Active
@@ -122,7 +123,7 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
     );
 
     ensure!(
-        a3_is_private_institution(sfid_bytes.as_slice()),
+        subject_property_is_private_institution(sfid_bytes.as_slice()),
         Error::<T>::NotPrivateInstitution
     );
 
@@ -131,7 +132,7 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
         Error::<T>::ClearingBankNotActive
     );
 
-    // Step 2 第 5 重:资格白名单(SFR-JOINT_STOCK / FFR-parent.SFR.JOINT_STOCK)
+    // Step 2 第 5 重:资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)
     ensure!(
         T::SfidAccountQuery::is_clearing_bank_eligible(addr),
         Error::<T>::NotEligibleForClearingBank
@@ -167,7 +168,8 @@ pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountI
 pub fn is_clearing_bank_account<T: Config>(addr: &T::AccountId) -> bool {
     match T::SfidAccountQuery::account_info(addr) {
         Some((sfid, _)) => {
-            a3_is_private_institution(sfid.as_slice()) && T::SfidAccountQuery::is_active(addr)
+            subject_property_is_private_institution(sfid.as_slice())
+                && T::SfidAccountQuery::is_active(addr)
         }
         None => false,
     }
@@ -182,30 +184,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a3_sfr_accepted() {
-        assert!(a3_is_private_institution(b"SFR-GD-SZ01-CB01-xxx"));
+    fn subject_property_s_accepted() {
+        assert!(subject_property_is_private_institution(
+            b"AH001-SCB0V-123456789-2026"
+        ));
     }
 
     #[test]
-    fn a3_ffr_accepted() {
-        assert!(a3_is_private_institution(b"FFR-GD-SZ01-CB01-xxx"));
+    fn subject_property_f_accepted() {
+        assert!(subject_property_is_private_institution(
+            b"AH001-FCB0P-123456789-2026"
+        ));
     }
 
     #[test]
-    fn a3_gfr_rejected() {
-        assert!(!a3_is_private_institution(b"GFR-GD-xxx"));
+    fn subject_property_g_rejected() {
+        assert!(!subject_property_is_private_institution(
+            b"AH001-GCB0V-123456789-2026"
+        ));
     }
 
     #[test]
-    fn a3_too_short_rejected() {
-        assert!(!a3_is_private_institution(b"SF"));
+    fn subject_property_too_short_rejected() {
+        assert!(!subject_property_is_private_institution(b"AH001"));
     }
 
     #[test]
     fn noop_impl_returns_none_and_inactive() {
         let addr: [u8; 32] = [0u8; 32];
         assert!(<() as SfidAccountQuery<[u8; 32]>>::account_info(&addr).is_none());
-        assert!(<() as SfidAccountQuery<[u8; 32]>>::find_address(b"SFR", b"main").is_none());
+        assert!(<() as SfidAccountQuery<[u8; 32]>>::find_address(
+            b"AH001-SCB0V-123456789-2026",
+            b"main"
+        )
+        .is_none());
         assert!(!<() as SfidAccountQuery<[u8; 32]>>::is_active(&addr));
     }
 }

@@ -3,7 +3,7 @@
 - 日期: 2026-05-01
 - 状态: open / in-progress
 - 归属: SFID Agent
-- 触发原因: 节点桌面"添加清算行"输入 `FFR-AH001-ZG1C-887947508-20260430` 报 "SFID 响应解析失败:error decoding response body"(P0 故障);追溯发现 `chain/` 目录承载语义混乱、含 6 条 dead route、与按业务域整理 chain ↔ SFID 交互能力的预期相悖。
+- 触发原因: 节点桌面"添加清算行"输入 `AH001-FCB0P-123456789-2026` 报 "SFID 响应解析失败:error decoding response body"(P0 故障);追溯发现 `chain/` 目录承载语义混乱、含 6 条 dead route、与按业务域整理 chain ↔ SFID 交互能力的预期相悖。
 
 ## 架构铁律(本任务确立)
 
@@ -33,7 +33,7 @@ sfid/backend/app_core/
 2. `GET /api/v1/chain/voters/count` + `chain/voters.rs` 整文件
 3. `POST /api/v1/chain/binding/validate` / `chain/reward/ack` / `chain/reward/state` + `chain/binding.rs` 整文件
 4. `GET /api/v1/attestor/public-key` + `app_core/http_security.rs::attestor_public_key`
-5. `POST /api/v1/app/institutions/:sfid_id/chain-sync` + `institutions/handler.rs::sync_institution_chain_state`
+5. `POST /api/v1/app/institutions/:sfid_number/chain-sync` + `institutions/handler.rs::sync_institution_chain_state`
 6. `chain/clearing_bank_watcher.rs` 整文件 + `start_watcher` 调用 + AppState 缓存字段(下游 `app_search_clearing_banks` 改为不再过滤"已加入清算网络",由 wuminapp 自己读链 — 第二步任务承接)
 
 ### 顺手修复 P0
@@ -71,7 +71,7 @@ sfid/backend/app_core/
 
 - `cargo check -p sfid-backend` 零 error
 - `cargo test --workspace` 既有测试不破坏
-- 节点桌面添加清算行能搜到 `FFR-AH001-...` 候选(P0 解决)
+- 节点桌面添加清算行能搜到 `K1=F-AH001-...` 候选(P0 解决)
 - `grep "subxt|chain_http_url|chain_ws_url"` 仅出现在 `chain/` 子目录内
 - `grep "verify_vote_eligibility|chain_voters_count|chain_binding_validate|chain_reward|attestor_public_key|sync_institution_chain_state|clearing_bank_watcher"` 全 SFID 后端零残留
 - `CHAIN_TECHNICAL.md` 按新 7 模块结构重写

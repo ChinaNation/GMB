@@ -6,7 +6,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 /// 个人多签账户生命周期快照。
 ///
 /// `PersonalManage::PersonalDuoqians` 只保存个人账户生命周期元数据；
-/// 管理员真源在 `AdminsChange::Subjects`，动态阈值真源在 `InternalVote`。
+/// 管理员真源在 `AdminsChange::AdminAccounts`，动态阈值真源在 `InternalVote`。
 class PersonalManageAccountSnapshot {
   const PersonalManageAccountSnapshot({
     required this.creatorHex,
@@ -38,8 +38,6 @@ class PersonalManageAdminSnapshot {
 class PersonalManageStorageCodec {
   PersonalManageStorageCodec._();
 
-  static const int subjectKindPersonalDuoqian = 0x03;
-
   static Uint8List personalDuoqiansKey(String personalAddressHex) {
     return storageMapKey(
       'PersonalManage',
@@ -48,31 +46,28 @@ class PersonalManageStorageCodec {
     );
   }
 
-  static Uint8List subjectIdFromAccountHex(String accountHex) {
+  static Uint8List accountIdFromAccountHex(String accountHex) {
     final account = hexDecode(accountHex);
     if (account.length != 32) {
       throw ArgumentError('account hex 必须为 32 字节');
     }
-    final out = Uint8List(48);
-    out[0] = subjectKindPersonalDuoqian;
-    out.setAll(1, account);
-    return out;
+    return account;
   }
 
-  static Uint8List adminSubjectKey(Uint8List subjectId) {
-    return storageMapKey('AdminsChange', 'Subjects', subjectId);
+  static Uint8List adminAccountKey(Uint8List accountId) {
+    return storageMapKey('AdminsChange', 'AdminAccounts', accountId);
   }
 
   static Uint8List dynamicThresholdKey({
     required String storageName,
     required int org,
-    required Uint8List subjectId,
+    required Uint8List accountId,
   }) {
     return storageDoubleMapKey(
       'InternalVote',
       storageName,
       Uint8List.fromList([org]),
-      subjectId,
+      accountId,
     );
   }
 
@@ -98,11 +93,11 @@ class PersonalManageStorageCodec {
     );
   }
 
-  static PersonalManageAdminSnapshot? decodeAdminSubject(Uint8List data) {
+  static PersonalManageAdminSnapshot? decodeAdminAccount(Uint8List data) {
     if (data.length <= 2) return null;
     var offset = 0;
     final org = data[offset++];
-    offset++; // AdminSubjectKind
+    offset++; // AdminAccountKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
     final admins = <String>[];
@@ -111,7 +106,7 @@ class PersonalManageStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    // 中文注释：AdminsChange::Subjects 已不保存 threshold；
+    // 中文注释：AdminsChange::AdminAccounts 已不保存 threshold；
     // 后续字段是 creator/created_at/updated_at/status，阈值必须另查 InternalVote。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return PersonalManageAdminSnapshot(

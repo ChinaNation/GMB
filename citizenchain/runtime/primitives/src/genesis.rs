@@ -10,6 +10,24 @@ pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378; // 中共国第7次人口普
 /// 三、创世发行（单位：分）：144,349,737,800.00 元 = 14_434_973_780_000 分
 pub const GENESIS_ISSUANCE: u128 = 14_434_973_780_000; // 每人100元的创世发行总量，单位为分
 
+use sp_std::vec::Vec;
+
+/// 四、公民宪法 HTML 真源
+///
+/// `CitizenConstitution.html` 被编入 WASM；修改该 HTML 后必须发布 runtime 升级。
+pub const CITIZEN_CONSTITUTION_HTML: &str = include_str!("CitizenConstitution.html");
+
+// 五、公民宪法 Runtime API：runtime 暴露内置宪法 HTML 正文与其 blake2_256 摘要。
+sp_api::decl_runtime_apis! {
+    pub trait CitizenConstitutionApi {
+        /// 返回当前链上 runtime 内置的公民宪法 HTML。
+        fn citizen_constitution_html() -> Vec<u8>;
+
+        /// 返回当前链上 runtime 内置公民宪法 HTML 的 blake2_256 摘要。
+        fn citizen_constitution_blake2_256() -> [u8; 32];
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

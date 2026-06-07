@@ -3,7 +3,7 @@
 - 创建日期:2026-05-07
 - 入口:GMB Claude 主聊天入口(本会话)
 - 关联 ADR:
-  - ADR-010(SubjectKind 协议规范)— 本任务追加 0x04 = OnchainAsset 段
+  - ADR-010(AdminAccountKind 协议规范)— 本任务追加 0x04 = asset_id 资产编号 段
   - ADR-011(onchain-issuance Plain FT 协议位 + 监管六条 + 计费)— 本任务新建
 
 ## 任务需求
@@ -25,7 +25,7 @@
 
 ## 输入文档
 
-- memory/04-decisions/ADR-010-subject-id-protocol.md(SubjectId 协议)
+- memory/04-decisions/ADR-010-subject-id-protocol.md(AccountId 协议)
 - memory/CLAUDE.md / memory/AGENTS.md / memory/07-ai/chat-protocol.md
 - memory/MEMORY.md 中已锁定的相关 feedback / project 条目:
   - feedback_no_compatibility(死规则:绝不搞兼容/保留/过渡)
@@ -35,14 +35,14 @@
   - feedback_desktop_is_miner(桌面端是矿工)
   - project_unified_voting_entry / project_unified_voting_entry_phase4(业务 pallet 不暴露 wrapper extrinsic,前端直调 VotingEngine)
   - project_qr_signing_two_color(冷钱包两色识别铁律,禁止盲签)
-  - project_subject_id_protocol_2026_05_06(永久 ABI 锁定)
+  - project_account_id_protocol_2026_05_06(永久 ABI 锁定)
   - project_pallet_tests_restructured_2026_05_07(tests 搬入 src/tests/{mod,cases}.rs 样板)
   - project_fee_policy_unified(全链费率单一权威源)
 
 ## 必须遵守
 
 - 不可突破模块边界(链端 / wuminapp / wumin 三段各管各)
-- 不可绕过既有契约(VotingEngine 单一入口、SubjectId 协议、fee_policy 权威源、QR 两色识别)
+- 不可绕过既有契约(VotingEngine 单一入口、AccountId 协议、fee_policy 权威源、QR 两色识别)
 - 不可擅自修改安全红线(BaseCallFilter 屏蔽 pallet_assets 原生 extrinsic 不可松开)
 - pallet_assets 仅作内核,对外只能通过 OnchainIssuance pallet 包装入口暴露
 - decimals 区间强制 `0..=18`,链端硬校验(用户已确认)
@@ -77,7 +77,7 @@
 ### 链端
 
 - `citizenchain/runtime/issuance/onchain-issuance/` 新建 crate(Cargo.toml + 11 个 src 文件骨架)
-- `citizenchain/runtime/primitives/src/derive.rs` 加 `SubjectKind::OnchainAsset = 0x04` + parse 分支 + helper
+- `citizenchain/runtime/primitives/src/derive.rs` 加 `asset_id 资产编号 = 0x04` + parse 分支 + helper
 - `citizenchain/runtime/primitives/src/fee_policy.rs` 加 `ONCHAIN_ASSET_CREATE_FEE: u128 = 100_000` (= 1000 GMB)
 - `citizenchain/Cargo.toml` workspace.members 加 `runtime/issuance/onchain-issuance`
 - `citizenchain/Cargo.toml` workspace.dependencies 加 `pallet-assets`
@@ -138,10 +138,10 @@
 | 4 | 🔴 | 计费表订正:mint/burn/transfer/close 全部 VOTE_FLAT_FEE = 1 元(走 InternalVote) | ADR-011 6 节 |
 | 5 | 🔴 | ForceCloseSchedule storage(BlockNumber → Vec<asset_id>) + on_finalize O(1) take + MaxScheduledPerBlock | ADR-011 5.6 / 8 节 / lib.rs / monitor.rs |
 | 6 | 🔴 | onchain-issuance/Cargo.toml `try-runtime` feature 传播给 frame/balances/assets/votingengine | onchain-issuance/Cargo.toml |
-| 7 | 🟡 | SubjectId 0x04 payload 简化:8B+4B+35B → 4B+43B(去 issuer_subject_short) | ADR-010 / ADR-011 2 节 / derive.rs / wuminapp codec |
+| 7 | 🟡 | AccountId 0x04 payload 简化:8B+4B+35B → 4B+43B(去 issuer_subject_short) | ADR-010 / ADR-011 2 节 / derive.rs / wuminapp codec |
 | 8 | 🟡 | 哈希算法依赖随 #7 自动消失 | derive.rs |
-| 9 | 🟡 | OnchainAssetMeta 去 `monitor_subject_id` 字段(NRC 全局,非每条) | types.rs / wuminapp query |
-| 10 | 🟡 | OnchainAssetMeta 去 `asset_id` 字段(SubjectId byte[1..5] 即可反推),保留 AssetIdIndex | types.rs |
+| 9 | 🟡 | OnchainAssetMeta 去 `monitor_account_id` 字段(NRC 全局,非每条) | types.rs / wuminapp query |
+| 10 | 🟡 | OnchainAssetMeta 去 `asset_id` 字段(AccountId byte[1..5] 即可反推),保留 AssetIdIndex | types.rs |
 | 11 | 🟡 | metadata 永久不可改铁律写入 ADR-011 5.7 节 + Error::MetadataImmutable | ADR-011 / lib.rs |
 | 12 | 🟢 | fee.rs `let _ = (...)` 死代码清理 | fee.rs |
 | 13 | 🟢 | onchain-issuance vs onchain-transaction 命名说明加在 ADR-011 顶部 | ADR-011 |
@@ -159,7 +159,7 @@
 ### 顺手修复(超出 review 15 项,但属测试基础设施)
 
 - `primitives/derive.rs` 既存测试 bug 2 处:
-  - `sfid_number_starts_with_0x02`:错调 `subject_id_from_sfid_number(&str)`,改为 `subject_id_from_registered_sfid_number(&[u8])`
+  - `sfid_number_starts_with_0x02`:错调 `account_id_from_sfid_number(&str)`,改为 `account_id_from_registered_sfid_number(&[u8])`
   - `builtin_id_starts_with_0x01`:硬编码 `id[1..34]` 与 29B 实际字符串长度不匹配,改用动态 `n = sfid_number.len()`
 - 这 2 处既存 bug 阻塞 `cargo test -p primitives`,与 v2 修订无直接关系但作为验证基础设施顺手修;原本派出的 spawn_task chip(修复同一 bug)可作废,用户可 dismiss
 

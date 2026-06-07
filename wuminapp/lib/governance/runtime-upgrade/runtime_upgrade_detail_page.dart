@@ -5,7 +5,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
@@ -144,14 +144,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
-        final institutionSubjectId = _institutionSubjectId(institution);
+        final institutionAccountId = _institutionAccountId(institution);
         futures.add(_adminService.fetchAdmins(
-          AdminSubjectIdentity.fromInstitution(institution),
+          AdminAccountIdentity.fromInstitution(institution),
         ));
         futures.add(_service.fetchJointVoteByInstitution(
-            widget.proposalId, institutionSubjectId));
+            widget.proposalId, institutionAccountId));
         futures.add(_service.fetchJointInstitutionTally(
-            widget.proposalId, institutionSubjectId));
+            widget.proposalId, institutionAccountId));
       }
 
       final results = await Future.wait(futures);
@@ -180,7 +180,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
-        final institutionBytes = _institutionSubjectId(institution);
+        final institutionBytes = _institutionAccountId(institution);
         final voteResults = await _service.fetchJointAdminVotesBatch(
           widget.proposalId,
           institutionBytes,
@@ -423,11 +423,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         : hex.toLowerCase();
   }
 
-  Uint8List _institutionSubjectId(InstitutionInfo institution) {
-    // 中文注释：联合投票 storage 使用 runtime SubjectId，不是裸 sfidNumber。
-    // 内置机构需要 kind=0x01 前缀；机构账户/个人多签也必须走统一编码。
+  Uint8List _institutionAccountId(InstitutionInfo institution) {
+    // 中文注释：联合投票 storage 使用机构多签 AccountId，不从 sfid_number 派生主体。
     return Uint8List.fromList(
-      institutionIdentityToPalletId(institution.sfidNumber),
+      institutionIdentityToAccountId(
+        institution.sfidNumber,
+        mainAddress: institution.mainAddress,
+      ),
     );
   }
 
@@ -506,10 +508,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     setState(() => _submitting = true);
 
     try {
-      final institutionBytes = _institutionSubjectId(institution);
+      final institutionBytes = _institutionAccountId(institution);
       final result = await _service.submitJointVote(
         proposalId: widget.proposalId,
-        institutionId48: institutionBytes,
+        institutionAccountId: institutionBytes,
         approve: approve,
         fromAddress: voteWallet.address,
         signerPubkey: _hexDecode(voteWallet.pubkeyHex),
@@ -524,7 +526,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               summary: '联合投票 提案 #${widget.proposalId}：$voteText',
               fields: [
                 // joint_vote 当前 decoder 输出 fields = (proposal_id, approve),
-                // subject_id 在 payload 里但 decoder 跳过不回填 display。
+                // account_id 在 payload 里但 decoder 跳过不回填 display。
                 // _proposalInfo(提案人/理由/代码哈希)属辅助展示,
                 // 页面已独立显示,不塞 display.fields 避免对齐失败
                 // (2026-04-22 两色识别整改)。
@@ -571,7 +573,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       );
 
       _adminService
-          .clearCache(AdminSubjectIdentity.fromInstitution(institution));
+          .clearCache(AdminAccountIdentity.fromInstitution(institution));
       // 中文注释：服务层已经等待入块并回读 JointVote storage；这里刷新页面
       // 只负责同步最新展示状态，投票成功与否不再由 txHash 判断。
       unawaited(_load(showSpinner: false));
@@ -686,7 +688,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         final institution = widget.institution;
         if (institution != null) {
           _adminService.clearCache(
-            AdminSubjectIdentity.fromInstitution(institution),
+            AdminAccountIdentity.fromInstitution(institution),
           );
         }
         await _load();

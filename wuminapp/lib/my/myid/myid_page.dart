@@ -121,8 +121,8 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   String _identityIdText() {
-    final code = _state.sfidCode?.trim();
-    return code == null || code.isEmpty ? '未绑定' : code;
+    final sfidNumber = _state.sfidNumber?.trim();
+    return sfidNumber == null || sfidNumber.isEmpty ? '未绑定' : sfidNumber;
   }
 
   String _identityStatusText() {

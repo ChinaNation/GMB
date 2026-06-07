@@ -998,13 +998,13 @@ class ChainRpc {
         4 => 'AdminSetUnchanged',
         10 => 'ProposalOrgMismatch',
         11 => 'InstitutionAlreadyExists',
-        12 => 'SubjectNotPending',
-        13 => 'SubjectNotActive',
-        14 => 'BuiltinSubjectCannotClose',
-        15 => 'InvalidSubjectKind',
+        12 => 'AdminAccountNotPending',
+        13 => 'AdminAccountNotActive',
+        14 => 'BuiltinAdminAccountCannotClose',
+        15 => 'InvalidAdminAccountKind',
         16 => 'InvalidThreshold',
         17 => 'DuplicateAdmin',
-        18 => 'InvalidSubjectLifecycleScope',
+        18 => 'InvalidAdminAccountLifecycleScope',
         _ => null,
       };
 

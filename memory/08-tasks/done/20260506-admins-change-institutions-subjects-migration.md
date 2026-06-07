@@ -1,5 +1,5 @@
 任务需求：
-2026-05-06 任务卡 C「命名修正 institution_id → subject_id」把 admins-change
+2026-05-06 任务卡 C「命名修正 institution_id → account_id」把 admins-change
 storage 名 `Institutions` → `Subjects`,但**没写 migration**。链上数据停留在
 老前缀 `AdminsChange::Institutions` 下,wuminapp + citizenchain 节点 UI 都按
 新前缀 `Subjects` 查 → 读到空 → 治理机构详情页"管理员 0 人" / "提案不显示"。
@@ -10,7 +10,7 @@ storage 名 `Institutions` → `Subjects`,但**没写 migration**。链上数据
 
 输入文档：
 - memory/08-tasks/done/20260506-...wuminapp-公民三tab扁平化重构.md
-- memory/project_subject_id_naming_2026_05_06.md（C 阶段命名修正记录）
+- memory/project_account_id_naming_2026_05_06.md（C 阶段命名修正记录）
 - memory/feedback_no_chain_restart.md（链不可重启,migration 走 setCode）
 - memory/feedback_chainspec_frozen.md
 - runtime/votingengine/internal-vote/src/migrations/v1.rs（move_prefix 模板）
@@ -70,7 +70,7 @@ storage 名 `Institutions` → `Subjects`,但**没写 migration**。链上数据
 - memory 固化:storage rename 必须配 migration
 
 ## 验收标准
-- 链上 setCode 后 `AdminsChange::Subjects` 取代 `Institutions`,管理员数据可读
+- 链上 setCode 后 `AdminsChange::AdminAccounts` 取代 `Institutions`,管理员数据可读
 - 治理 tab 详情页"管理员 N 人"显示正常
 - 国储会等机构详情页"提案列表"出现历史提案
 - 链端 0 编译错误,wuminapp 0 analyze issue + 141 测试全过

@@ -18,17 +18,12 @@ void main() {
       ];
 
   group('PersonalManageStorageCodec', () {
-    test('builds personal subject id', () {
+    test('builds personal account id', () {
       final personal =
-          PersonalManageStorageCodec.subjectIdFromAccountHex('11' * 32);
+          PersonalManageStorageCodec.accountIdFromAccountHex('11' * 32);
 
-      expect(personal.length, 48);
-      expect(
-        personal[0],
-        PersonalManageStorageCodec.subjectKindPersonalDuoqian,
-      );
-      expect(personal.sublist(1, 33), List<int>.filled(32, 0x11));
-      expect(personal.sublist(33), List<int>.filled(15, 0));
+      expect(personal.length, 32);
+      expect(personal, List<int>.filled(32, 0x11));
     });
 
     test('decodes personal account state', () {
@@ -46,7 +41,7 @@ void main() {
       expect(decoded.statusByte, 1);
     });
 
-    test('decodes admin subject without reading threshold from subject', () {
+    test('decodes admin account without reading threshold from account', () {
       final admin1 = List<int>.filled(32, 0xaa);
       final admin2 = List<int>.filled(32, 0xbb);
       final data = Uint8List.fromList([
@@ -61,7 +56,7 @@ void main() {
         1,
       ]);
 
-      final decoded = PersonalManageStorageCodec.decodeAdminSubject(data)!;
+      final decoded = PersonalManageStorageCodec.decodeAdminAccount(data)!;
 
       expect(decoded.org, 3);
       expect(decoded.adminCount, 2);

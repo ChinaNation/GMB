@@ -20,7 +20,7 @@ SFID
 - `sfid/backend/private/`：承接私权机构注册和私权列表能力，涉及代码。
 - `sfid/backend/accounts/`：承接机构账户、默认账户和 DUOQIAN 地址派生，涉及代码。
 - `sfid/backend/docs/`：承接机构资料库，涉及代码。
-- `sfid/backend/sfid_number/`：承接 A3、机构码、SFID 生成和格式校验，涉及代码。
+- `sfid/backend/sfid_number/`：承接 SubjectProperty、机构码、SFID 生成和格式校验，涉及代码。
 - `sfid/backend/china/`：承接中国行政区划 SQLite 数据源和查询接口，涉及代码和数据。
 - `sfid/frontend/subjects/`：承接主体详情、主体列表公共组件和主体类型，涉及代码。
 - `sfid/frontend/gov/`：承接公权机构 UI，涉及代码。

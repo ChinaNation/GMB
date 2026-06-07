@@ -266,7 +266,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
             summary:
                 '$institutionLabel 提案转账 $amountFormatted GMB 给 $beneficiary',
             fields: [
-              // propose_transfer 冷钱包按账户级 SubjectId 展示真实支出主体;
+              // propose_transfer 冷钱包按机构 AccountId 展示真实支出账户;
               // org 只是链端路由,不进入 display.fields,避免个人多签被显示成机构。
               SignDisplayField(
                   key: 'institution', label: '转出账户', value: institutionLabel),

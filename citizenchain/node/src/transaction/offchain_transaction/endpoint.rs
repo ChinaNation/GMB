@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn encode_sfid_key_data_round_trip() {
-        let raw = "GFR-LN001-CB0X-944805165-2026";
+        let raw = "LN001-GCB05-944805165-2026";
         let encoded = encode_sfid_key_data(raw).unwrap();
         // Compact<u32> 长度前缀(单字节模式 raw.len() < 64)+ raw 字节
         assert_eq!(encoded[0], (raw.len() as u8) << 2);
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn clearing_bank_nodes_key_starts_with_pallet_prefix() {
-        let key = clearing_bank_nodes_key("SFR-12345-AAAA-678901234-20260101").unwrap();
+        let key = clearing_bank_nodes_key("AH001-SCB0V-123456789-2026").unwrap();
         let pallet_hex = hex::encode(storage_keys::twox_128(b"OffchainTransaction"));
         let storage_hex = hex::encode(storage_keys::twox_128(b"ClearingBankNodes"));
         let prefix = format!("0x{pallet_hex}{storage_hex}");

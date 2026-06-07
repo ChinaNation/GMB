@@ -10,16 +10,14 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
-use crate::{
-    subject_id_from_sfid_number, BalanceOf, Call, Config, Pallet, SubjectId, CHINA_CB, ORG_PRC,
-};
+use crate::{BalanceOf, Call, Config, Pallet, CHINA_CB, ORG_PRC};
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
+fn prc_institution<T: Config>() -> T::AccountId {
+    decode_account::<T>(CHINA_CB[1].main_address)
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
@@ -36,7 +34,7 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_destroy() {
-        let institution = prc_institution();
+        let institution = prc_institution::<T>();
         let proposer = prc_admin::<T>(0);
         let amount: BalanceOf<T> = 100u128.saturated_into();
 

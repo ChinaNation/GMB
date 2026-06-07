@@ -50,7 +50,7 @@ mod benchmarks {
         let bench_signer_pubkey: [u8; 32] = public.0;
         let genesis_block = BlockNumberFor::<T>::zero();
         let payload = (
-            primitives::core_const::DUOQIAN_DOMAIN,
+            primitives::core_const::DUOQIAN,
             primitives::core_const::OP_SIGN_BIND,
             frame_system::Pallet::<T>::block_hash(genesis_block),
             &caller,

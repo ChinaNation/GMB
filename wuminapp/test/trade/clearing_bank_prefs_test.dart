@@ -13,14 +13,14 @@ void main() {
     });
 
     test('save then load roundtrip per walletIndex', () async {
-      await ClearingBankPrefs.save(0, 'SFR-GD-SZ01-CB01-N9-D8');
-      await ClearingBankPrefs.save(1, 'SFR-BJ-BJ01-CB01-N9-D8');
-      expect(await ClearingBankPrefs.load(0), 'SFR-GD-SZ01-CB01-N9-D8');
-      expect(await ClearingBankPrefs.load(1), 'SFR-BJ-BJ01-CB01-N9-D8');
+      await ClearingBankPrefs.save(0, 'GD001-SCB05-000000001-2026');
+      await ClearingBankPrefs.save(1, 'BJ001-SCB0U-000000002-2026');
+      expect(await ClearingBankPrefs.load(0), 'GD001-SCB05-000000001-2026');
+      expect(await ClearingBankPrefs.load(1), 'BJ001-SCB0U-000000002-2026');
     });
 
     test('save empty string clears entry', () async {
-      await ClearingBankPrefs.save(0, 'SFR-GD-SZ01-CB01-N9-D8');
+      await ClearingBankPrefs.save(0, 'GD001-SCB05-000000001-2026');
       expect(await ClearingBankPrefs.load(0), isNotNull);
       await ClearingBankPrefs.save(0, '   '); // 空白等价于清除
       expect(await ClearingBankPrefs.load(0), isNull);
@@ -44,7 +44,7 @@ void main() {
       await ClearingBankPrefs.saveSnapshot(
         0,
         const ClearingBankBindingSnapshot(
-          sfidNumber: 'SFR-GD-SZ01-CB01-N9-D8',
+          sfidNumber: 'GD001-SCB05-000000001-2026',
           institutionName: '测试清算行',
           mainAccount: 'aa',
           feeAccount: 'bb',
@@ -58,9 +58,9 @@ void main() {
 
       final snapshot = await ClearingBankPrefs.loadSnapshot(0);
       expect(snapshot, isNotNull);
-      expect(snapshot!.sfidNumber, 'SFR-GD-SZ01-CB01-N9-D8');
+      expect(snapshot!.sfidNumber, 'GD001-SCB05-000000001-2026');
       expect(snapshot.wssUrl, 'ws://127.0.0.1:9944');
-      expect(await ClearingBankPrefs.load(0), 'SFR-GD-SZ01-CB01-N9-D8');
+      expect(await ClearingBankPrefs.load(0), 'GD001-SCB05-000000001-2026');
     });
   });
 }

@@ -110,7 +110,7 @@ sfid/frontend/
   `utils/cameraScanner.ts` 的 `BarcodeDetector` 解析图片,解析出的二维码原文继续走同一条档案码绑定流程,
   不把图片文件上传到后端。
 - “上传二维码”按钮保持纯文字按钮;同一按钮组内的“开启扫码”没有图标,上传入口也不得额外增加图标。
-- `citizens/CitizensView.tsx` 公民列表中 `sfid_code` 列标题显示为“身份ID”,不改变底层字段名。
+- `citizens/CitizensView.tsx` 公民列表中 `sfid_number` 列标题显示为“身份ID”,不改变底层字段名。
 - `citizens/CitizensView.tsx` 公民列表中 `wallet_address` 列标题显示为“投票账户”；列表状态列显示“投票状态”，由 `citizen_status + voting_eligible` 计算。
 - `citizens/CitizensView.tsx` 登录后不得自动加载公民全量列表；管理员输入投票账户、档案号或身份ID后，前端调用服务端精确查询并使用 `next_cursor` 翻页。
 - 公民详情只展示“身份ID / 档案号 / 投票账户 / 绑定状态 / 选举权利 / 公民状态 / 有效期”，不得接收或展示签发地市归属。
@@ -124,7 +124,7 @@ sfid/frontend/
 - `core/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
 - `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 只承载公安局和公权机构确定性列表,进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
 - 公权机构 tab 不再提供普通公权机构新增入口；右上角按钮文案固定为“新增”。
-- `core/institution/CreateInstitutionForm.tsx` 中公权新增只允许 `GFR/JY`,填写的是学校名称,不得出现所属学校 SFID。
+- `core/institution/CreateInstitutionForm.tsx` 中公权新增只允许 `G/JY`,填写的是学校名称,不得出现所属学校 SFID。
 - 公权机构和私权机构新增选项中 `JY` 文案均显示为“教育委员会 (JY)”；选择 `JY` 时名称字段标签显示为“学校名称”。
 - 机构链上状态前端只保留“未注册 / 已注册 / 已注销”,不得出现第四状态筛选或文案。
 

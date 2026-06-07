@@ -27,7 +27,7 @@ type BalanceOf<T> =
 ///
 /// 约束:
 /// - L3 未绑定其他清算行
-/// - `bank_main_address` 必须满足 `bank_check::ensure_can_be_bound`(SFR/FFR + Active + 主账户)
+/// - `bank_main_address` 必须满足 `bank_check::ensure_can_be_bound`(K1=S/F + Active + 主账户)
 /// - 无预存,`DepositBalance` 初始化为 0
 pub fn do_bind_clearing_bank<T: Config>(
     user: T::AccountId,
@@ -39,7 +39,7 @@ pub fn do_bind_clearing_bank<T: Config>(
         Error::<T>::AlreadyHasBank
     );
 
-    // 2. 清算行合法性(A3 + Active + 主账户三重校验)
+    // 2. 清算行合法性(K1 主体属性 + Active + 主账户三重校验)
     bank_check::ensure_can_be_bound::<T>(&bank_main_address).map_err(DispatchError::from)?;
 
     // 3. 落存储

@@ -13,11 +13,11 @@ import type {
   LegalRepresentativePhoto,
 } from '../../subjects/api';
 import { searchLegalRepresentativeCitizens } from '../../citizens/api';
-import { dynamicLocksForA3, locksForCategory } from '../../subjects/labels';
+import { dynamicLocksForSubjectProperty, locksForCategory } from '../../subjects/labels';
 import { notice } from '../../utils/notice';
 
 interface FormValues {
-  a3: string;
+  subject_property: string;
   p1: string;
   province: string;
   city: string;
@@ -35,7 +35,7 @@ interface FormValues {
 type CheckInstitutionName = (
   auth: AdminAuth,
   name: string,
-  a3?: string,
+  subject_property?: string,
   city?: string,
 ) => Promise<{ exists: boolean }>;
 
@@ -86,11 +86,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoName, setPhotoName] = useState<string>('');
 
-  const [currentA3, setCurrentA3] = useState<string>(locks.a3Choices[0]?.value ?? '');
+  const [currentSubjectProperty, setCurrentSubjectProperty] = useState<string>(locks.subjectPropertyChoices[0]?.value ?? '');
   const [currentInstitution, setCurrentInstitution] = useState<string>(
     locks.institutionChoices[0]?.value ?? '',
   );
-  const dynamicLocks = useMemo(() => dynamicLocksForA3(currentA3), [currentA3]);
+  const dynamicLocks = useMemo(() => dynamicLocksForSubjectProperty(currentSubjectProperty), [currentSubjectProperty]);
   const isPrivate = category === 'PRIVATE_INSTITUTION';
   const isPublicGov = category === 'GOV_INSTITUTION';
   const isPublicSecurity = category === 'PUBLIC_SECURITY';
@@ -104,16 +104,16 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    const defaultA3 = locks.a3Choices[0]?.value ?? '';
-    setCurrentA3(defaultA3);
+    const defaultSubjectProperty = locks.subjectPropertyChoices[0]?.value ?? '';
+    setCurrentSubjectProperty(defaultSubjectProperty);
     setNameAvailable(null);
-    const dl = dynamicLocksForA3(defaultA3);
+    const dl = dynamicLocksForSubjectProperty(defaultSubjectProperty);
     const defaultInstitution = isPrivate
       ? dl.institutionChoices[0]?.value
       : locks.institutionChoices[0]?.value;
     setCurrentInstitution(defaultInstitution ?? '');
     form.setFieldsValue({
-      a3: defaultA3,
+      subject_property: defaultSubjectProperty,
       p1: isPrivate ? dl.p1Default : locks.p1Choices[0]?.value,
       province: lockedProvince ?? '',
       city: lockedCity ?? '',
@@ -154,9 +154,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     };
   }, [open, lockedProvince, auth.access_token]);
 
-  const onA3Change = (a3: string) => {
-    setCurrentA3(a3);
-    const dl = dynamicLocksForA3(a3);
+  const onSubjectPropertyChange = (subject_property: string) => {
+    setCurrentSubjectProperty(subject_property);
+    const dl = dynamicLocksForSubjectProperty(subject_property);
     const nextInstitution = dl.institutionChoices[0]?.value;
     setCurrentInstitution(nextInstitution ?? '');
     setNameAvailable(null);
@@ -196,7 +196,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       const { exists } = await checkInstitutionName(
         auth,
         name,
-        isPublicGov ? 'GFR' : form.getFieldValue('a3'),
+        isPublicGov ? 'G' : form.getFieldValue('subject_property'),
         cityVal,
       );
       if (exists) {
@@ -267,7 +267,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setSubmitting(true);
     try {
       const result = await createInstitution(auth, {
-        a3: values.a3.trim(),
+        subject_property: values.subject_property.trim(),
         p1: values.p1?.trim(),
         province: values.province.trim(),
         city: values.city.trim(),
@@ -303,7 +303,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
   };
 
-  const a3Disabled = locks.a3Choices.length === 1;
+  const subjectPropertyDisabled = locks.subjectPropertyChoices.length === 1;
   const p1Disabled = effectiveP1Choices.length === 1;
   const instDisabled = effectiveInstChoices.length === 1;
   const nameDisabled = locks.lockedInstitutionName !== null;
@@ -337,8 +337,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       destroyOnClose
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        <Form.Item label="A3 主体属性" name="a3" rules={[{ required: true }]}>
-          <Select options={locks.a3Choices} disabled={a3Disabled} onChange={onA3Change} />
+        <Form.Item label="SubjectProperty 主体属性" name="subject_property" rules={[{ required: true }]}>
+          <Select options={locks.subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
         </Form.Item>
         <Form.Item label="P1 盈利属性" name="p1" rules={[{ required: true }]}>
           <Select options={effectiveP1Choices} disabled={p1Disabled} />

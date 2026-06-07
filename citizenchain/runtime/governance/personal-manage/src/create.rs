@@ -7,8 +7,8 @@
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalDuoqians 占位
-//!    - 调投票引擎 create_registered_subject_create_proposal_with_data
-//!    - 调 admins-change 写 Pending 主体
+//!    - 调投票引擎 create_registered_account_create_proposal_with_data
+//!    - 调 admins-change 写 Pending 账户
 //! 4. 从投票引擎回读 expires_at,发射 PersonalDuoqianProposed 事件
 
 extern crate alloc;
@@ -28,8 +28,7 @@ use crate::pallet::{
 use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus};
 use crate::BalanceOf;
 use crate::ACTION_CREATE;
-use primitives::derive::subject_id_from_account;
-use primitives::traits::{
+use primitives::multisig::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
 };
 use votingengine::InternalVoteEngine;
@@ -75,7 +74,7 @@ pub(crate) fn do_propose_create<T: Config>(
     );
 
     let now = <frame_system::Pallet<T>>::block_number();
-    let institution = subject_id_from_account(&duoqian_address);
+    let institution = duoqian_address.clone();
     let org = votingengine::types::ORG_REN;
     let action = CreateDuoqianAction {
         duoqian_address: duoqian_address.clone(),
@@ -102,10 +101,10 @@ pub(crate) fn do_propose_create<T: Config>(
         );
         // 中文注释：regular_threshold 是账户激活后的动态阈值配置；
         // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
-        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_subject_create_proposal_with_data(
+        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_account_create_proposal_with_data(
             who.clone(),
             org,
-            institution,
+            institution.clone(),
             duoqian_admins.iter().cloned().collect(),
             regular_threshold,
             crate::MODULE_TAG,
@@ -115,10 +114,10 @@ pub(crate) fn do_propose_create<T: Config>(
             Err(err) => return TransactionOutcome::Rollback(Err(err)),
         };
         PendingPersonalCreate::<T>::insert(proposal_id, &action);
-        if let Err(err) = Pallet::<T>::create_pending_admin_subject_for_proposal(
+        if let Err(err) = Pallet::<T>::create_pending_admin_account_for_proposal(
             proposal_id,
-            institution,
-            admins_change::AdminSubjectKind::PersonalDuoqian,
+            institution.clone(),
+            admins_change::AdminAccountKind::PersonalDuoqian,
             &duoqian_admins,
             &who,
         ) {

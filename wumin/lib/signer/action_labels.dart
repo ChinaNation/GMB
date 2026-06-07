@@ -50,7 +50,7 @@ const Map<String, String> actionLabels = {
   'developer_direct_upgrade': '开发期协议直升',
 
   // 其他
-  'activate_admin_subject': '管理员激活',
+  'activate_admin_account': '管理员激活',
   'decrypt_admin': '解密清算行管理员',
   'bind_clearing_bank': '绑定清算行',
   'deposit_clearing_bank': '充值到清算行',

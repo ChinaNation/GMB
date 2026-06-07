@@ -11,8 +11,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use codec::Decode;
 use frame_support::pallet_prelude::DispatchResult;
-use primitives::derive::subject_id_from_sfid_number;
 use sp_runtime::DispatchError;
 
 use primitives::china::china_cb::CHINA_CB;
@@ -21,7 +21,7 @@ use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
-use votingengine::{nrc_subject_id, Proposal, SubjectId};
+use votingengine::Proposal;
 
 pub mod jointinternal;
 pub mod jointreferendum;
@@ -40,25 +40,39 @@ pub use pallet::*;
 // 跨阶段共用纯函数(jointinternal 与 jointreferendum 都引用)
 // ──────────────────────────────────────────────────────────────────
 
-/// 机构 ID → 联合投票票权(NRC=43 / PRC=43 / PRB=19)。
-pub fn institution_info(id: SubjectId) -> Option<u32> {
-    if let Some(nrc) = nrc_subject_id() {
-        if id == nrc {
-            return Some(NRC_JOINT_VOTE_WEIGHT);
-        }
+pub(crate) fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
+    T::AccountId::decode(&mut &raw[..]).ok()
+}
+
+pub(crate) fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
+    CHINA_CB
+        .first()
+        .and_then(|n| decode_account::<T>(&n.main_address))
+}
+
+fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], id: &T::AccountId) -> bool {
+    decode_account::<T>(raw).as_ref() == Some(id)
+}
+
+/// 机构多签账户 → 联合投票票权(NRC=43 / PRC=43 / PRB=19)。
+pub fn institution_info<T: frame_system::Config>(id: &T::AccountId) -> Option<u32> {
+    if CHINA_CB
+        .first()
+        .map(|n| raw_account_matches::<T>(&n.main_address, id))
+        .unwrap_or(false)
+    {
+        return Some(NRC_JOINT_VOTE_WEIGHT);
     }
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
-        .any(|pid| pid == id)
+        .any(|n| raw_account_matches::<T>(&n.main_address, id))
     {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
-        .any(|pid| pid == id)
+        .any(|n| raw_account_matches::<T>(&n.main_address, id))
     {
         return Some(PRB_JOINT_VOTE_WEIGHT);
     }
@@ -118,7 +132,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        (SubjectId, T::AccountId),
+        (T::AccountId, T::AccountId),
         bool,
         OptionQuery,
     >;
@@ -130,15 +144,22 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        SubjectId,
+        T::AccountId,
         votingengine::VoteCountU32,
         ValueQuery,
     >;
 
     /// 联合投票机构级汇总:(proposal_id, 机构) → 赞成/反对。
     #[pallet::storage]
-    pub type JointVotesByInstitution<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, SubjectId, bool, OptionQuery>;
+    pub type JointVotesByInstitution<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        T::AccountId,
+        bool,
+        OptionQuery,
+    >;
 
     #[pallet::storage]
     #[pallet::getter(fn joint_tally)]
@@ -204,14 +225,14 @@ pub mod pallet {
         /// 联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
             proposal_id: u64,
-            institution: SubjectId,
+            institution: T::AccountId,
             who: T::AccountId,
             approve: bool,
         },
         /// 联合投票中某机构已形成最终结果(赞成/反对)。
         JointInstitutionVoteFinalized {
             proposal_id: u64,
-            institution: SubjectId,
+            institution: T::AccountId,
             approved: bool,
         },
         /// 联合公投已投出一票(binding_id 为 SFID 哈希)。
@@ -250,7 +271,7 @@ pub mod pallet {
         pub fn cast_admin(
             origin: OriginFor<T>,
             proposal_id: u64,
-            institution: SubjectId,
+            institution: T::AccountId,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -377,18 +398,20 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
 }
 
 impl<T: Config>
-    votingengine::traits::JointProposalFinalizer<frame_system::pallet_prelude::BlockNumberFor<T>>
-    for Pallet<T>
+    votingengine::traits::JointProposalFinalizer<
+        frame_system::pallet_prelude::BlockNumberFor<T>,
+        T::AccountId,
+    > for Pallet<T>
 {
     fn finalize_joint_timeout(
-        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
         Self::do_finalize_joint_timeout(proposal, proposal_id)
     }
 
     fn finalize_jointreferendum_timeout(
-        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
         Self::do_finalize_jointreferendum_timeout(proposal, proposal_id)

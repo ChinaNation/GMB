@@ -7,7 +7,7 @@
 - 拒绝回调与手动 cleanup 重复发 `DuoqianCreateRejected`。
 - 创建提案未快照 fee，执行和清理阶段重算 fee。
 - 执行失败终态缺少业务清理和可靠事件。
-- `remove_pending_admin_subject` 吞错。
+- `remove_pending_admin_account` 吞错。
 - `PersonalDuoqians` / `PersonalDuoqianInfo` creator 冗余。
 - runtime 配置重复校验、死参数、重复 action 解码、零权重占位、事件字段不一致等残留。
 
@@ -34,7 +34,7 @@
 
 - [x] 确认影响面：链端 `personal-manage`、`duoqian-transfer` 测试 mock、wuminapp ProposalData/storage codec、模块文档和统一协议文件。
 - [x] 修复高风险终态链路：拒绝 cleanup 幂等、创建 fee 快照、执行失败终态清理和失败事件。
-- [x] 清理结构债和死代码：删除 `PersonalDuoqianInfo`/`PersonalDuoqianMeta`、删除 `_callback_context`、删除重复 runtime 配置校验、统一 action 解码、`remove_pending_admin_subject` 不再吞错。
+- [x] 清理结构债和死代码：删除 `PersonalDuoqianInfo`/`PersonalDuoqianMeta`、删除 `_callback_context`、删除重复 runtime 配置校验、统一 action 解码、`remove_pending_admin_account` 不再吞错。
 - [x] 补测试、权重、文档和客户端解码：新增执行失败、重复拒绝事件、protected/reserved、fee 快照测试；weights 改为保守非零；wuminapp storage/proposal decoder 同步。
 - [x] 执行验收。
 

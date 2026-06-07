@@ -6,7 +6,7 @@
 //! 业务流程:
 //! 1. 校验地址是机构地址(否则返回 `NotInstitutionDuoqian`)
 //! 2. 校验机构账户已 Active(从 InstitutionAccounts 读)
-//! 3. 校验发起人是该机构账户的活跃管理员(admins-change::Subjects[account subject])
+//! 3. 校验发起人是该机构账户的活跃管理员(admins-change::AdminAccounts[account account])
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
 //! 5. 注销生命周期投票的全员阈值由投票引擎按管理员快照生成
 //! 6. 写入 InstitutionPendingClose[address] = proposal_id 防并发
@@ -82,13 +82,13 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         Error::<T>::DuoqianNotActive
     );
 
-    // 校验发起人是机构主体的活跃管理员
-    let subject_id = Pallet::<T>::resolve_admin_subject_for_account(&duoqian_address)
+    // 校验发起人是机构账户的活跃管理员
+    let account = Pallet::<T>::resolve_admin_account_for_account(&duoqian_address)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let org = Pallet::<T>::resolve_admin_org_for_account(&duoqian_address)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     ensure!(
-        admins_change::Pallet::<T>::is_active_subject_admin(org, subject_id, &who),
+        admins_change::Pallet::<T>::is_active_account_admin(org, account.clone(), &who),
         Error::<T>::PermissionDenied
     );
 
@@ -130,7 +130,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         <T as Config>::InternalVoteEngine::create_lifecycle_internal_proposal_with_data(
             who.clone(),
             org,
-            subject_id,
+            account,
             crate::MODULE_TAG,
             data,
         )?;
@@ -146,7 +146,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     Ok(())
 }
 
-/// 执行关闭：转出余额 + 删除 InstitutionAccounts entry 状态置 Closed + 关闭 admin subject。
+/// 执行关闭：转出余额 + 删除 InstitutionAccounts entry 状态置 Closed + 关闭 admin account。
 pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &CloseInstitutionAction<T::AccountId>,
@@ -159,7 +159,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         ),
         Error::<T>::ProtectedSource
     );
-    let subject_id = Pallet::<T>::resolve_admin_subject_for_account(&action.duoqian_address)
+    let account = Pallet::<T>::resolve_admin_account_for_account(&action.duoqian_address)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let registered = AddressRegisteredSfid::<T>::get(&action.duoqian_address)
         .ok_or(Error::<T>::DuoqianNotFound)?;
@@ -207,7 +207,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     InstitutionAccounts::<T>::remove(&registered.sfid_number, &registered.account_name);
     SfidRegisteredAddress::<T>::remove(&registered.sfid_number, &registered.account_name);
     AddressRegisteredSfid::<T>::remove(&action.duoqian_address);
-    Pallet::<T>::close_admin_subject(proposal_id, subject_id)?;
+    Pallet::<T>::close_admin_account(proposal_id, account)?;
     InstitutionPendingClose::<T>::remove(&action.duoqian_address);
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionClosed {

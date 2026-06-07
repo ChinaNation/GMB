@@ -16,13 +16,13 @@ completed: 2026-04-21
   - struct 字段：`pub name:` → `pub account_name:`（`RegisteredInstitution`、`PersonalDuoqianMeta`）
   - Event 字段：`Event::PersonalDuoqianProposed { name }` / `Event::SfidInstitutionRegistered { name }` → `account_name`
   - Error：`EmptySfidName` → `EmptyAccountName`
-  - Extrinsic 参数：`propose_create(sfid_id, name, …)` / `register_sfid_institution(…, name, …)` / `propose_create_personal(name, …)` 全部 `name` → `account_name`
+  - Extrinsic 参数：`propose_create(sfid_number, name, …)` / `register_sfid_institution(…, name, …)` / `propose_create_personal(name, …)` 全部 `name` → `account_name`
   - 辅助函数：`role_from_name(name)` → `role_from_account_name(account_name)`；`derive_personal_duoqian_address(..., name)` → `(…, account_name)`
   - 测试：8 处 `let (sfid, name, ...)` 元组解构 + `assert_eq!(meta.name, name)` + 多处 `name.clone()` / `&name` 全部更新
 - [benchmarks.rs](citizenchain/runtime/transaction/duoqian-manage/src/benchmarks.rs)：`bench_name<T>` → `bench_account_name<T>`，添加 `let account_name = bench_account_name::<T>()?` 到 propose_create / propose_close 各 setup（先前 5 处调用缺此参数，遗留的 pre-existing 测试 bug 一并修好）
-- [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs)：`SfidNameOf<Runtime>` 类型引用 4 处、`MaxSfidNameLength` 1 处、`SfidInstitutionVerifier` 实现的参数 `_name` → `_account_name`、`fn find_address(sfid_id, name)` → `(sfid_id, account_name)`、`info.name.to_vec()` → `info.account_name.to_vec()`、test 局部 `register_name` → `register_account_name`
+- [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs)：`SfidNameOf<Runtime>` 类型引用 4 处、`MaxSfidNameLength` 1 处、`SfidInstitutionVerifier` 实现的参数 `_name` → `_account_name`、`fn find_address(sfid_number, name)` → `(sfid_number, account_name)`、`info.name.to_vec()` → `info.account_name.to_vec()`、test 局部 `register_name` → `register_account_name`
 - [duoqian-transfer/src/lib.rs](citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs)：测试 trait impl 参数 + `MaxSfidNameLength` → `MaxAccountNameLength`
-- [offchain-transaction](citizenchain/runtime/transaction/offchain-transaction/src/bank_check.rs) + [tests.rs](citizenchain/runtime/transaction/offchain-transaction/src/tests.rs)：`SfidAccountQuery::find_address(sfid_id, name)` trait 方法签名 → `(sfid_id, account_name)`；`ensure_can_be_bound` 局部 `name_bytes` → `account_name_bytes`
+- [offchain-transaction](citizenchain/runtime/transaction/offchain-transaction/src/bank_check.rs) + [tests.rs](citizenchain/runtime/transaction/offchain-transaction/src/tests.rs)：`SfidAccountQuery::find_address(sfid_number, name)` trait 方法签名 → `(sfid_number, account_name)`；`ensure_can_be_bound` 局部 `name_bytes` → `account_name_bytes`
 
 ## Dart 侧（wuminapp + wumin）
 

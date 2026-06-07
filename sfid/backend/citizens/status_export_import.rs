@@ -695,7 +695,7 @@ mod tests {
             r#type: EXPORT_TYPE.to_string(),
             version: EXPORT_VERSION,
             export_year: 2026,
-            sfid_number: "GFR-GD001-ZG0X-123456789-2026".to_string(),
+            sfid_number: "GD001-GZF06-123456789-2026".to_string(),
             cpms_pubkey: "0x11".repeat(32),
             export_batch_id: "cse_test".to_string(),
             exported_at: 1,

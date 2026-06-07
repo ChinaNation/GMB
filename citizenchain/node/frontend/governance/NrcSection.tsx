@@ -12,7 +12,7 @@ import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upg
 import type { AdminWalletMatch } from './types';
 
 // 国储会 sfidNumber（全链唯一，直接进入详情）。
-const NRC_SFID_NUMBER = 'GFR-LN001-CB0X-944805165-2026';
+const NRC_SFID_NUMBER = 'LN001-GCB05-944805165-2026';
 
 type NrcView =
   | { page: 'detail' }
@@ -34,7 +34,7 @@ export function NrcSection() {
     return (
       <AdminListPage
         sfidNumber={NRC_SFID_NUMBER}
-        subjectRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
+        accountRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
         onBack={backToDetail}
       />
     );
@@ -54,7 +54,7 @@ export function NrcSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        subjectRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
+        accountRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}

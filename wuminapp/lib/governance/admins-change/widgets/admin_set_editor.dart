@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
 
 class AdminSetEditor extends StatefulWidget {
   const AdminSetEditor({
@@ -69,13 +69,13 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
   }
 
   void _add() {
-    final clean = AdminSubjectIdCodec.normalizeHex(_controller.text);
+    final clean = AdminAccountIdCodec.normalizeHex(_controller.text);
     if (clean.length != 64 || widget.admins.contains(clean)) return;
     widget.onChanged([...widget.admins, clean]);
     _controller.clear();
   }
 
   static String _ss58(String hex) {
-    return Keyring().encodeAddress(AdminSubjectIdCodec.hexDecode(hex), 2027);
+    return Keyring().encodeAddress(AdminAccountIdCodec.hexDecode(hex), 2027);
   }
 }

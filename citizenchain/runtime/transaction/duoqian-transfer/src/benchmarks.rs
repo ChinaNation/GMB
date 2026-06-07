@@ -15,26 +15,18 @@ use frame_support::BoundedVec;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
-use crate::{
-    subject_id_from_sfid_number, subject_pallet_address, BalanceOf, Call, Config, Pallet,
-    SubjectId, CHINA_CB, ORG_PRC,
-};
+use crate::{BalanceOf, Call, Config, Pallet, CHINA_CB, ORG_PRC};
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
+fn prc_institution<T: Config>() -> T::AccountId {
+    decode_account::<T>(CHINA_CB[1].main_address)
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
-}
-
-fn institution_account<T: Config>(institution: SubjectId) -> T::AccountId {
-    let raw = subject_pallet_address(institution).expect("institution account should exist");
-    decode_account::<T>(raw)
 }
 
 fn beneficiary_account<T: Config>() -> T::AccountId {
@@ -51,13 +43,13 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_transfer() {
-        let institution = prc_institution();
+        let institution = prc_institution::<T>();
         let proposer = prc_admin::<T>(0);
         let beneficiary = beneficiary_account::<T>();
         let amount: BalanceOf<T> = 100u128.saturated_into();
         let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
 
-        let institution_account = institution_account::<T>(institution);
+        let institution_account = institution.clone();
         let _ = T::Currency::deposit_creating(&institution_account, top_up);
 
         #[extrinsic_call]

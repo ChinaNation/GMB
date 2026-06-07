@@ -2,7 +2,7 @@
 //!
 //! 链上 4 张反向索引让客户端按"分类"O(分类内规模)迭代提案,不用扫全表:
 //! - **`ProposalsByOrg[org][id]`** — 按 ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH 反查
-//! - **`ProposalsByInstitution[subject_id][id]`** — 按机构主体反查
+//! - **`ProposalsByInstitution[account][id]`** — 按多签账户地址反查
 //!   (如某省储行所有提案、某个多签账户所有提案)
 //! - **`ProposalsByOwner[module_tag][id]`** — 按业务模块 MODULE_TAG 反查
 //!   (如"只看 runtime 升级提案"、"只看决议销毁提案")
@@ -17,8 +17,6 @@ use crate::pallet::{
     self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByOrg,
     ProposalsByOwner, ProposalsByYear,
 };
-use crate::SubjectId;
-
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 写入四张反向索引。
     ///
@@ -28,7 +26,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn register_proposal_indexes(
         proposal_id: u64,
         org: Option<u8>,
-        institution: Option<SubjectId>,
+        institution: Option<T::AccountId>,
         module_tag: BoundedVec<u8, T::MaxModuleTagLen>,
         year: u16,
     ) {

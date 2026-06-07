@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
@@ -59,8 +59,8 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   final DuoqianManageService _manageService = DuoqianManageService();
   final PersonalManageService _personalManageService = PersonalManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
-  AdminSubjectIdentity get _subjectIdentity =>
-      AdminSubjectIdentity.fromInstitution(widget.institution);
+  AdminAccountIdentity get _accountIdentity =>
+      AdminAccountIdentity.fromInstitution(widget.institution);
   bool _loading = true;
   String? _error;
   bool _submitting = false;
@@ -131,10 +131,10 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
           .fetchInternalThresholdSnapshot(widget.proposalId)
           .catchError((_) => null);
       final adminSnapshotFuture = _proposalService
-          .fetchAdminSnapshot(widget.proposalId, widget.institution.sfidNumber)
+          .fetchAdminSnapshot(widget.proposalId, widget.institution)
           .catchError((_) => const <String>[]);
       final results = await Future.wait([
-        _adminService.fetchAdmins(_subjectIdentity),
+        _adminService.fetchAdmins(_accountIdentity),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
         thresholdFuture,
@@ -609,7 +609,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         ),
       );
 
-      _adminService.clearCache(_subjectIdentity);
+      _adminService.clearCache(_accountIdentity);
       // 中文注释：服务层已经等待入块并回读 InternalVote storage；这里
       // 只后台刷新展示状态，不能再把 txHash 当作投票成功依据。
       debugPrint('[VoteDetail] fire-and-forget 调 _load 后台刷新');
@@ -729,7 +729,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(_subjectIdentity);
+        _adminService.clearCache(_accountIdentity);
         await _load();
       },
       child: ListView(

@@ -14,7 +14,7 @@ export type CitizenRow = {
   wallet_pubkey?: string;
   wallet_address?: string;
   archive_no?: string;
-  sfid_code?: string;
+  sfid_number?: string;
   citizen_status?: CitizenState;
   voting_eligible: boolean;
   vote_status: CitizenState;
@@ -54,7 +54,7 @@ export type CitizenBindResult = {
   wallet_pubkey?: string;
   wallet_address?: string;
   archive_no?: string;
-  sfid_code?: string;
+  sfid_number?: string;
   citizen_status?: CitizenState;
   voting_eligible: boolean;
   vote_status: CitizenState;

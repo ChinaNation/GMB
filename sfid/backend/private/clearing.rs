@@ -11,17 +11,17 @@ use crate::subjects::model::MultisigInstitution;
 // 与 memory/05-modules/sfid/clearing-bank-eligibility.md。
 //
 // 规则:
-//   SFR + sub_type=JOINT_STOCK            → ✅
-//   FFR + parent.SFR + parent.JOINT_STOCK → ✅
+//   S + sub_type=JOINT_STOCK            → ✅
+//   F + parent.S + parent.JOINT_STOCK → ✅
 //   其他                                   → ❌
 
 /// 清算行资格白名单判定:仅允许"私法人股份公司"及其下属非法人。
 ///
-/// - `inst.a3 == "SFR"`:必须 `sub_type == "JOINT_STOCK"`
-/// - `inst.a3 == "FFR"`:`parent` 必须存在,`parent.a3 == "SFR"` 且 `parent.sub_type == "JOINT_STOCK"`
-/// - 其他 a3(GFR / SF 等):一律不允许
+/// - `inst.subject_property == "S"`:必须 `sub_type == "JOINT_STOCK"`
+/// - `inst.subject_property == "F"`:`parent` 必须存在,`parent.subject_property == "S"` 且 `parent.sub_type == "JOINT_STOCK"`
+/// - 其他 subject_property:一律不允许
 ///
-/// `parent` 由调用方按需提供(FFR 才需要;SFR / 其他可传 `None`)。
+/// `parent` 由调用方按需提供(F 才需要;S / 其他可传 `None`)。
 /// 跨省 parent 查询由调用方通过 `subjects` 结构化表完成,
 /// 本函数只做纯逻辑判定,便于单测。
 #[allow(dead_code)]
@@ -29,10 +29,10 @@ pub fn is_clearing_bank_eligible(
     inst: &MultisigInstitution,
     parent: Option<&MultisigInstitution>,
 ) -> bool {
-    match inst.a3.as_str() {
-        "SFR" => inst.sub_type.as_deref() == Some("JOINT_STOCK"),
-        "FFR" => match parent {
-            Some(p) => p.a3 == "SFR" && p.sub_type.as_deref() == Some("JOINT_STOCK"),
+    match inst.subject_property.as_str() {
+        "S" => inst.sub_type.as_deref() == Some("JOINT_STOCK"),
+        "F" => match parent {
+            Some(p) => p.subject_property == "S" && p.sub_type.as_deref() == Some("JOINT_STOCK"),
             None => false,
         },
         _ => false,
@@ -49,20 +49,24 @@ mod tests {
     // ─── 清算行资格白名单(ADR-007)─────────────────────────────
 
     /// 测试 fixture:按所需字段构造一个最小机构样本。
-    /// `a3`/`sub_type`/`parent_sfid_number` 是判定关键字段,其他用合理默认值。
+    /// `subject_property`/`sub_type`/`parent_sfid_number` 是判定关键字段,其他用合理默认值。
     fn fixture_institution(
-        a3: &str,
+        subject_property: &str,
         sub_type: Option<&str>,
         parent_sfid_number: Option<&str>,
     ) -> MultisigInstitution {
         MultisigInstitution {
-            sfid_number: format!("{a3}-GD-CB01-000000000-20260101"),
+            sfid_number: match subject_property {
+                "F" => "AH001-FCB0P-123456789-2026".to_string(),
+                "G" => "AH001-GCB0V-123456789-2026".to_string(),
+                _ => "AH001-SCB0V-123456789-2026".to_string(),
+            },
             institution_name: Some("测试机构".to_string()),
             full_name: Some("测试机构".to_string()),
             short_name: Some("测试机构".to_string()),
             status: "ACTIVE".to_string(),
             category: InstitutionCategory::PrivateInstitution,
-            a3: a3.to_string(),
+            subject_property: subject_property.to_string(),
             p1: if sub_type == Some("NON_PROFIT") {
                 "0".to_string()
             } else {
@@ -90,63 +94,63 @@ mod tests {
     }
 
     #[test]
-    fn clearing_bank_eligible_sfr_joint_stock() {
-        // case 1: SFR + JOINT_STOCK → ✅
-        let inst = fixture_institution("SFR", Some("JOINT_STOCK"), None);
+    fn clearing_bank_eligible_s_subject_joint_stock() {
+        // case 1: S + JOINT_STOCK → ✅
+        let inst = fixture_institution("S", Some("JOINT_STOCK"), None);
         assert!(is_clearing_bank_eligible(&inst, None));
     }
 
     #[test]
-    fn clearing_bank_eligible_sfr_limited_liability_rejected() {
-        // case 2: SFR + LIMITED_LIABILITY → ❌
-        let inst = fixture_institution("SFR", Some("LIMITED_LIABILITY"), None);
+    fn clearing_bank_eligible_s_subject_limited_liability_rejected() {
+        // case 2: S + LIMITED_LIABILITY → ❌
+        let inst = fixture_institution("S", Some("LIMITED_LIABILITY"), None);
         assert!(!is_clearing_bank_eligible(&inst, None));
     }
 
     #[test]
-    fn clearing_bank_eligible_sfr_non_profit_rejected() {
-        // case 3: SFR + NON_PROFIT → ❌
-        let inst = fixture_institution("SFR", Some("NON_PROFIT"), None);
+    fn clearing_bank_eligible_s_subject_non_profit_rejected() {
+        // case 3: S + NON_PROFIT → ❌
+        let inst = fixture_institution("S", Some("NON_PROFIT"), None);
         assert!(!is_clearing_bank_eligible(&inst, None));
     }
 
     #[test]
-    fn clearing_bank_eligible_ffr_with_jointstock_parent() {
-        // case 4: FFR + parent(SFR + JOINT_STOCK) → ✅
-        let parent = fixture_institution("SFR", Some("JOINT_STOCK"), None);
-        let inst = fixture_institution("FFR", None, Some(&parent.sfid_number));
+    fn clearing_bank_eligible_f_subject_with_jointstock_parent() {
+        // case 4: F + parent(S + JOINT_STOCK) → ✅
+        let parent = fixture_institution("S", Some("JOINT_STOCK"), None);
+        let inst = fixture_institution("F", None, Some(&parent.sfid_number));
         assert!(is_clearing_bank_eligible(&inst, Some(&parent)));
     }
 
     #[test]
-    fn clearing_bank_eligible_ffr_with_non_jointstock_parent_rejected() {
-        // case 5: FFR + parent(SFR + LIMITED_LIABILITY) → ❌
-        let parent = fixture_institution("SFR", Some("LIMITED_LIABILITY"), None);
-        let inst = fixture_institution("FFR", None, Some(&parent.sfid_number));
+    fn clearing_bank_eligible_f_subject_with_non_jointstock_parent_rejected() {
+        // case 5: F + parent(S + LIMITED_LIABILITY) → ❌
+        let parent = fixture_institution("S", Some("LIMITED_LIABILITY"), None);
+        let inst = fixture_institution("F", None, Some(&parent.sfid_number));
         assert!(!is_clearing_bank_eligible(&inst, Some(&parent)));
     }
 
     #[test]
-    fn clearing_bank_eligible_ffr_without_parent_rejected() {
-        // case 6: FFR + 缺 parent(查不到 / 未设置 parent_sfid_number) → ❌
-        let inst = fixture_institution("FFR", None, None);
+    fn clearing_bank_eligible_f_subject_without_parent_rejected() {
+        // case 6: F + 缺 parent(查不到 / 未设置 parent_sfid_number) → ❌
+        let inst = fixture_institution("F", None, None);
         assert!(!is_clearing_bank_eligible(&inst, None));
     }
 
     #[test]
-    fn clearing_bank_eligible_other_a3_rejected() {
-        // GFR / SF 等其他 a3 一律 ❌
-        let gfr = fixture_institution("GFR", None, None);
-        assert!(!is_clearing_bank_eligible(&gfr, None));
+    fn clearing_bank_eligible_other_subject_rejected() {
+        // G 等其他 subject_property 一律拒绝。
+        let gov_inst = fixture_institution("G", None, None);
+        assert!(!is_clearing_bank_eligible(&gov_inst, None));
         let sf = fixture_institution("SF", None, None);
         assert!(!is_clearing_bank_eligible(&sf, None));
     }
 
     #[test]
-    fn clearing_bank_eligible_ffr_with_gfr_parent_rejected() {
-        // FFR 即使 parent 是 GFR 也不允许(必须 SFR + JOINT_STOCK)
-        let parent = fixture_institution("GFR", None, None);
-        let inst = fixture_institution("FFR", None, Some(&parent.sfid_number));
+    fn clearing_bank_eligible_f_subject_with_g_subject_parent_rejected() {
+        // F 即使 parent 是 G 也不允许(必须 S + JOINT_STOCK)
+        let parent = fixture_institution("G", None, None);
+        let inst = fixture_institution("F", None, Some(&parent.sfid_number));
         assert!(!is_clearing_bank_eligible(&inst, Some(&parent)));
     }
 }

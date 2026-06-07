@@ -12,7 +12,6 @@ use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use organization_manage::DuoqianReservedAddressChecker;
 use primitives::china::china_cb::CHINA_CB;
-use primitives::derive::subject_id_from_sfid_number;
 use sfid_system::{SfidVerifier, SfidVoteVerifier};
 use sp_core::{sr25519, Pair};
 use sp_io::hashing::blake2_256;
@@ -87,7 +86,7 @@ fn build_bind_credential(
     bind_nonce: &sfid_system::pallet::NonceOf<Runtime>,
 ) -> sfid_system::pallet::CredentialOf<Runtime> {
     let payload = (
-        primitives::core_const::DUOQIAN_DOMAIN,
+        primitives::core_const::DUOQIAN,
         primitives::core_const::OP_SIGN_BIND,
         frame_system::Pallet::<Runtime>::block_hash(0),
         account,
@@ -119,7 +118,7 @@ fn build_vote_signature(
     vote_nonce: &sfid_system::pallet::NonceOf<Runtime>,
 ) -> sfid_system::pallet::SignatureOf<Runtime> {
     let payload = (
-        primitives::core_const::DUOQIAN_DOMAIN,
+        primitives::core_const::DUOQIAN,
         primitives::core_const::OP_SIGN_VOTE,
         frame_system::Pallet::<Runtime>::block_hash(0),
         account,
@@ -147,7 +146,7 @@ fn build_pop_signature(
     pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
 ) -> votingengine::pallet::VoteSignatureOf<Runtime> {
     let payload = (
-        primitives::core_const::DUOQIAN_DOMAIN,
+        primitives::core_const::DUOQIAN,
         primitives::core_const::OP_SIGN_POP,
         frame_system::Pallet::<Runtime>::block_hash(0),
         who,

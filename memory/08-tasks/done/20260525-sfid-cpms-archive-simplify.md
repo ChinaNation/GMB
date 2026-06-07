@@ -13,7 +13,7 @@
 - 不新增 `code_id`。
 - 不新增 `usage_limit`。
 - 不新增“已消费档案码”记录。
-- SFID 侧继续按“钱包地址先存在，扫描档案码后绑定 `ano + sfid_code + wallet_pubkey` 三者一对一”的目标模型处理。
+- SFID 侧继续按“钱包地址先存在，扫描档案码后绑定 `ano + sfid_number + wallet_pubkey` 三者一对一”的目标模型处理。
 
 同时修复 SFID 前端公民信息列表 bug：
 
@@ -35,7 +35,7 @@
 
 - CPMS 与 SFID 的签名原文必须完全一致，否则所有新档案码都会验签失败。
 - 删除 `status_updated_at` 后，不能残留任何要求 SFID 解析该字段的逻辑。
-- 不引入一次性码机制，重复绑定必须继续依赖 SFID 的 `ano / wallet_pubkey / sfid_code` 唯一关系。
+- 不引入一次性码机制，重复绑定必须继续依赖 SFID 的 `ano / wallet_pubkey / sfid_number` 唯一关系。
 - 前端修复必须只收窄行点击热区，不破坏绑定按钮、详情查看和其他操作按钮。
 
 ## 验收标准

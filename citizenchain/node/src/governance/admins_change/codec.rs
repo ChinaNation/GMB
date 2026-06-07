@@ -1,15 +1,15 @@
-use super::subject_id::normalize_pubkey_hex;
-use super::types::AdminSubjectDecoded;
+use super::account_id::normalize_pubkey_hex;
+use super::types::AdminAccountDecoded;
 
-/// 解码 `AdminsChange::Subjects` 的完整核心字段。
+/// 解码 `AdminsChange::AdminAccounts` 的完整核心字段。
 ///
 /// 链上布局:
-/// org:u8 + kind:u8 + admins:BoundedVec<AccountId32> + threshold:u32
+/// org:u8 + kind:u8 + admins:BoundedVec<AccountId32>
 /// + creator:AccountId32 + created_at:u32 + updated_at:u32 + status:u8。
 /// 中文注释:created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
-pub fn decode_admin_subject(data: &[u8]) -> Result<AdminSubjectDecoded, String> {
+pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
     if data.len() < 2 {
-        return Err("AdminSubject 数据不足".to_string());
+        return Err("AdminAccount 数据不足".to_string());
     }
     let org = data[0];
     let kind = data[1];
@@ -19,46 +19,39 @@ pub fn decode_admin_subject(data: &[u8]) -> Result<AdminSubjectDecoded, String> 
     let mut admins = Vec::with_capacity(count as usize);
     for _ in 0..count {
         if offset + 32 > data.len() {
-            return Err("AdminSubject 管理员列表数据不足".to_string());
+            return Err("AdminAccount 管理员列表数据不足".to_string());
         }
         admins.push(hex::encode(&data[offset..offset + 32]));
         offset += 32;
     }
 
-    if offset + 4 > data.len() {
-        return Err("AdminSubject threshold 数据不足".to_string());
-    }
-    let threshold = read_u32_le(data, offset);
-    offset += 4;
-
     if offset + 32 > data.len() {
-        return Err("AdminSubject creator 数据不足".to_string());
+        return Err("AdminAccount creator 数据不足".to_string());
     }
     let creator_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
     if offset + 4 > data.len() {
-        return Err("AdminSubject created_at 数据不足".to_string());
+        return Err("AdminAccount created_at 数据不足".to_string());
     }
     let created_at = read_u32_le(data, offset);
     offset += 4;
 
     if offset + 4 > data.len() {
-        return Err("AdminSubject updated_at 数据不足".to_string());
+        return Err("AdminAccount updated_at 数据不足".to_string());
     }
     let updated_at = read_u32_le(data, offset);
     offset += 4;
 
     if offset >= data.len() {
-        return Err("AdminSubject status 数据不足".to_string());
+        return Err("AdminAccount status 数据不足".to_string());
     }
     let status = data[offset];
 
-    Ok(AdminSubjectDecoded {
+    Ok(AdminAccountDecoded {
         org,
         kind,
         admins,
-        threshold,
         creator_hex,
         created_at,
         updated_at,
@@ -139,17 +132,15 @@ mod tests {
     }
 
     #[test]
-    fn decode_admin_subject_full_layout() {
+    fn decode_admin_account_full_layout() {
         let mut data = vec![0, 0, 0x04];
         data.extend_from_slice(&[0xaa; 32]);
-        data.extend_from_slice(&13u32.to_le_bytes());
         data.extend_from_slice(&[0xbb; 32]);
         data.extend_from_slice(&7u32.to_le_bytes());
         data.extend_from_slice(&9u32.to_le_bytes());
         data.push(1);
-        let decoded = decode_admin_subject(&data).unwrap();
+        let decoded = decode_admin_account(&data).unwrap();
         assert_eq!(decoded.admins, vec!["aa".repeat(32)]);
-        assert_eq!(decoded.threshold, 13);
         assert_eq!(decoded.status, 1);
     }
 }

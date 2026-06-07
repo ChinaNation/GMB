@@ -20,7 +20,7 @@ CPMS 是离线系统，初始化阶段不要求外置验签公钥；档案码真
 {
   "proto": "SFID_CPMS_V1",
   "type": "INSTALL",
-  "sfid_number": "GFR-GD001-ZG0X-123456789-2026",
+  "sfid_number": "GD001-GZG0E-123456789-2026",
   "province_name": "广东省",
   "city_name": "广州市",
   "install_secret": "0x...",

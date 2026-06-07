@@ -72,7 +72,7 @@ export type ClearingBankView =
       kind: 'admin-set-change';
       sfidNumber: string;
       institutionName: string;
-      adminSubjectIdHex: string;
+      adminAccountHex: string;
       adminOrg: number;
       adminWallets: AdminWalletMatch[];
     }

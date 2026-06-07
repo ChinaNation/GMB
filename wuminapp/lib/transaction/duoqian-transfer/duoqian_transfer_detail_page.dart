@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
@@ -74,8 +74,8 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   final ProposalDetailLocalStore _detailStore =
       ProposalDetailLocalStore.instance;
   final InstitutionAdminService _adminService = InstitutionAdminService();
-  AdminSubjectIdentity get _subjectIdentity =>
-      AdminSubjectIdentity.fromInstitution(widget.institution);
+  AdminAccountIdentity get _accountIdentity =>
+      AdminAccountIdentity.fromInstitution(widget.institution);
   bool _loading = true;
   String? _error;
   bool _submitting = false;
@@ -199,7 +199,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       final results = await Future.wait([
         _proposalService.fetchAdminSnapshot(
           widget.proposalId,
-          widget.institution.sfidNumber,
+          widget.institution,
         ),
         _proposalService.fetchInternalThresholdSnapshot(widget.proposalId),
         _proposalService.fetchProposalStatus(widget.proposalId),
@@ -213,7 +213,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       final tally = results[3] as ({int yes, int no});
       final detail = results[4];
       if (admins.isEmpty) {
-        admins = await _adminService.fetchAdmins(_subjectIdentity);
+        admins = await _adminService.fetchAdmins(_accountIdentity);
       }
 
       // 中文注释：管理员投票记录批量读取，避免 43 个管理员产生 43 次 RPC。
@@ -671,7 +671,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       );
 
       // 刷新数据
-      _adminService.clearCache(_subjectIdentity);
+      _adminService.clearCache(_accountIdentity);
       // 中文注释：服务层已经等待入块并回读 InternalVote storage；这里
       // 只后台刷新展示状态，不能再把 txHash 当作投票成功依据。
       unawaited(_load(showSpinner: false));
@@ -779,7 +779,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(_subjectIdentity);
+        _adminService.clearCache(_accountIdentity);
         await _load();
       },
       child: ListView(

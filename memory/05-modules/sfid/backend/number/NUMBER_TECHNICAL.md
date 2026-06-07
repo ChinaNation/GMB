@@ -1,14 +1,15 @@
 # number/ — 身份 ID 编码协议
 
-- 最后更新:2026-06-04
+- 最后更新:2026-06-07
 - 任务卡:
   - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
   - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
+  - `memory/08-tasks/open/20260607-sfid-number-protocol.md`
 
 ## 定位
 
 - 路径:`sfid/backend/number/`
-- 职责:提供 SFID 编码协议的 A3、机构码、分类、生成和格式校验。
+- 职责:提供 SFID 编码协议的主体属性、机构码、分类、生成和格式校验。
 - 非职责:不维护行政区划静态表,不保存省市镇村数据。
 
 行政区划唯一真源在 `sfid/backend/china/`。`number::generator`
@@ -19,7 +20,6 @@
 ```text
 sfid/backend/number/
 ├── mod.rs
-├── a3.rs
 ├── institution_code.rs
 ├── category.rs
 ├── generator.rs
@@ -28,31 +28,32 @@ sfid/backend/number/
 └── admin.rs
 ```
 
-- `a3.rs`:A3 主体属性枚举。
 - `institution_code.rs`:机构类型枚举。
-- `category.rs`:机构分类枚举与分类函数。
-- `generator.rs`:SFID 号码生成入口。
-- `validator.rs`:SFID 号码格式校验与标准化。
+- `category.rs`:主体属性枚举、机构分类枚举与分类函数。
+- `generator.rs`:SFID 号码生成入口 `generate_sfid_number`。
+- `validator.rs`:SFID 号码格式校验、校验位计算与协议字段拆分。
 - `model.rs`:管理端编码元信息 DTO。
 - `admin.rs`:管理端编码元信息接口,路由为 `/api/v1/admin/number/meta`。
 
 ## 生成规则摘要
 
-- 编码段:`A3-R5-T2P1C1-N9-D4`
-- `A3`:主体类型。
+- 编码段:`R5-K3P1C1-N9-D4`
 - `R5`:省码 + 市码;省市代码来自 `china` 模块。
-- `T2P1`:机构类型与盈利属性。
-- `C1`:校验位。
+- `K3`:主体属性 `K1` + 机构类型 `T2`。
+- `K1`:主体属性,取值为 `M/Z/N/G/S/F`。
+- `P1`:盈利属性,取值为 `0/1`。
+- `C1`:校验位,继续使用原校验算法,载荷为 `R5 + K3 + P1 + N9 + D4`。
 - `N9`:稳定散列序列。
 - `D4`:年份。
+- 示例:`LN001-GCB05-944805165-2026`。
 
 规则:
 
-- `GMR / ZRR / ZNR` 使用省级占位市码 `000`。
-- `GFR / SFR / FFR` 使用真实市码。
-- `GFR` 机构码允许 `ZF/LF/SF/JC/JY/CB`。
-- `SFR` 允许 `ZG/JY/CH/TG`。
-- `FFR` 允许 `ZG/JY/TG`,并由 `subjects/uninorg` 校验从属关系。
+- `M / Z / N` 使用省级占位市码 `000`。
+- `G / S / F` 使用真实市码。
+- `G` 机构码允许 `ZF/LF/SF/JC/JY/CB`。
+- `S` 允许 `ZG/JY/CH/TG`。
+- `F` 允许 `ZG/JY/TG`,并由 `subjects/uninorg` 校验从属关系。
 
 ## 引用规则
 
@@ -68,6 +69,6 @@ test ! -d sfid/backend/sfid
 test ! -d sfid/backend/sfid_number
 test -d sfid/backend/number
 test -d sfid/backend/china
-rg "crate::sfid_number|mod sfid_number|city_codes|province.rs" sfid/backend -g '*.rs'
+rg "历史主体属性字段|历史身份字段别名" sfid/backend memory/05-modules/sfid
 cd sfid/backend && cargo check
 ```

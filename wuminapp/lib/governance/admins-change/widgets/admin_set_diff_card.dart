@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
 
 class AdminSetDiffCard extends StatelessWidget {
   const AdminSetDiffCard({
@@ -15,8 +15,8 @@ class AdminSetDiffCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final current = currentAdmins.map(AdminSubjectIdCodec.normalizeHex).toSet();
-    final next = newAdmins.map(AdminSubjectIdCodec.normalizeHex).toSet();
+    final current = currentAdmins.map(AdminAccountIdCodec.normalizeHex).toSet();
+    final next = newAdmins.map(AdminAccountIdCodec.normalizeHex).toSet();
     final added = next.where((item) => !current.contains(item)).toList();
     final removed = current.where((item) => !next.contains(item)).toList();
     return Card(
@@ -40,6 +40,6 @@ class AdminSetDiffCard extends StatelessWidget {
   }
 
   static String _ss58(String hex) {
-    return Keyring().encodeAddress(AdminSubjectIdCodec.hexDecode(hex), 2027);
+    return Keyring().encodeAddress(AdminAccountIdCodec.hexDecode(hex), 2027);
   }
 }

@@ -37,6 +37,6 @@
 - 状态：done
 - 代码：`InstitutionDetailPage` 已删除整页 `_loading` 阻塞，改为管理员、主账户余额、提案列表三个分区后台加载状态。
 - 首屏：机构名称、身份 ID、主账户地址、制度账户类型和固定阈值现在直接从本地数据展示，不等待链上 RPC。
-- 缓存：`AdminSubjectService` 增加 30 秒共享短缓存与 in-flight 去重；`DuoqianTransferProposalFeed` 增加机构主余额和机构可见提案短缓存，下拉刷新/返回刷新会强制清理。
+- 缓存：`AdminAccountService` 增加 30 秒共享短缓存与 in-flight 去重；`DuoqianTransferProposalFeed` 增加机构主余额和机构可见提案短缓存，下拉刷新/返回刷新会强制清理。
 - 文档：已同步 `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md` 与 `memory/05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md`。
 - 验证：`dart analyze lib test`、`flutter test test/governance/governance_list_page_test.dart`、`flutter test test/governance/admins-change/institution_admin_service_test.dart`、`flutter test test/governance/admins-change/admins_change_codec_test.dart`、`git diff --check` 已通过。

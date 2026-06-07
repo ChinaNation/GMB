@@ -23,7 +23,6 @@ use frame_support::{
     pallet_prelude::{BoundedVec, DispatchResult},
     storage::{with_transaction, TransactionOutcome},
 };
-use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::{DispatchError, RuntimeDebug};
@@ -33,13 +32,12 @@ use primitives::china::china_ch::CHINA_CH;
 use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
-    nrc_subject_id,
     pallet::{AdminSnapshot, Proposals},
     types::{
         fixed_governance_pass_threshold, is_registered_multisig_org, is_valid_org, ORG_NRC,
         ORG_PRB, ORG_PRC,
     },
-    InternalAdminProvider, InternalProposalMutexKind, Proposal, SubjectId, PROPOSAL_KIND_INTERNAL,
+    InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
 };
 
@@ -67,9 +65,9 @@ pub enum InternalProposalRole {
 }
 
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
-pub struct PendingAdminChangeThreshold {
+pub struct PendingAdminChangeThreshold<AccountId> {
     pub org: u8,
-    pub subject: SubjectId,
+    pub account: AccountId,
     pub new_admin_count: u32,
     pub new_threshold: u32,
 }
@@ -112,29 +110,34 @@ pub mod pallet {
     pub type InternalTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU32, ValueQuery>;
 
-    /// 内部投票阈值快照:提案创建时锁定阈值,投票期间不受主体状态变化影响。
+    /// 内部投票阈值快照:提案创建时锁定阈值,投票期间不受账户状态变化影响。
     #[pallet::storage]
     pub type InternalThresholdSnapshot<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, u32, OptionQuery>;
 
-    /// 注册多签待激活动态阈值:(org, subject) -> threshold。
+    /// 注册多签待激活动态阈值:(org, account) -> threshold。
     ///
     /// 中文注释：注册提案发起时写入，提案执行成功后移动到 ActiveDynamicThresholds。
     #[pallet::storage]
     pub type PendingDynamicThresholds<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, u8, Blake2_128Concat, SubjectId, u32, OptionQuery>;
+        StorageDoubleMap<_, Blake2_128Concat, u8, Blake2_128Concat, T::AccountId, u32, OptionQuery>;
 
-    /// 注册多签已激活动态阈值:(org, subject) -> threshold。
+    /// 注册多签已激活动态阈值:(org, account) -> threshold。
     ///
     /// 中文注释：一般内部投票只从这里读取动态阈值，不再读取 admins-change。
     #[pallet::storage]
     pub type ActiveDynamicThresholds<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, u8, Blake2_128Concat, SubjectId, u32, OptionQuery>;
+        StorageDoubleMap<_, Blake2_128Concat, u8, Blake2_128Concat, T::AccountId, u32, OptionQuery>;
 
     /// 管理员变更提案待应用的新动态阈值。
     #[pallet::storage]
-    pub type PendingAdminChangeThresholds<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, PendingAdminChangeThreshold, OptionQuery>;
+    pub type PendingAdminChangeThresholds<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        PendingAdminChangeThreshold<T::AccountId>,
+        OptionQuery,
+    >;
 
     /// 内部提案语义分类。用于终态副作用，不交给业务模块判断。
     #[pallet::storage]
@@ -184,19 +187,25 @@ pub mod pallet {
 // 内部判定 helper
 // ──────────────────────────────────────────────────────────────────
 
-fn is_valid_internal_institution<T: Config>(org: u8, institution: SubjectId) -> bool {
+fn decode_account<T: Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
+    T::AccountId::decode(&mut &raw[..]).ok()
+}
+
+fn is_valid_internal_institution<T: Config>(org: u8, institution: T::AccountId) -> bool {
     match org {
-        ORG_NRC => nrc_subject_id()
+        ORG_NRC => CHINA_CB
+            .first()
+            .and_then(|n| decode_account::<T>(&n.main_address))
             .map(|nrc| institution == nrc)
             .unwrap_or(false),
         ORG_PRC => CHINA_CB
             .iter()
             .skip(1)
-            .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
+            .filter_map(|n| decode_account::<T>(&n.main_address))
             .any(|pid| pid == institution),
         ORG_PRB => CHINA_CH
             .iter()
-            .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
+            .filter_map(|n| decode_account::<T>(&n.main_address))
             .any(|pid| pid == institution),
         org if is_registered_multisig_org(org) => {
             <T as votingengine::Config>::InternalAdminProvider::get_admin_list(org, institution)
@@ -206,11 +215,11 @@ fn is_valid_internal_institution<T: Config>(org: u8, institution: SubjectId) -> 
     }
 }
 
-fn is_internal_admin<T: Config>(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {
+fn is_internal_admin<T: Config>(org: u8, institution: T::AccountId, who: &T::AccountId) -> bool {
     <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(org, institution, who)
 }
 
-fn active_internal_threshold<T: Config>(org: u8, institution: SubjectId) -> Option<u32> {
+fn active_internal_threshold<T: Config>(org: u8, institution: T::AccountId) -> Option<u32> {
     match org {
         ORG_NRC | ORG_PRC | ORG_PRB => fixed_governance_pass_threshold(org),
         org if is_registered_multisig_org(org) => {
@@ -239,7 +248,7 @@ impl<T: Config> Pallet<T> {
     }
 
     fn ensure_all_admin_threshold(admin_count: u32, threshold: u32) -> DispatchResult {
-        // 中文注释：账户链上注册与注销会改变主体生命周期，必须由该账户快照内全体管理员通过。
+        // 中文注释：账户链上注册与注销会改变账户生命周期，必须由该账户快照内全体管理员通过。
         ensure!(
             admin_count > 0 && threshold == admin_count,
             Error::<T>::InvalidThresholdSnapshot
@@ -261,16 +270,16 @@ impl<T: Config> Pallet<T> {
 
     fn snapshot_admin_count_or_missing(
         proposal_id: u64,
-        institution: SubjectId,
+        institution: T::AccountId,
     ) -> Result<u32, DispatchError> {
         <votingengine::Pallet<T>>::snapshot_admin_count(proposal_id, institution)
             .ok_or(votingengine::Error::<T>::MissingAdminSnapshot.into())
     }
 
-    pub fn do_create_registered_subject_create_proposal(
+    pub fn do_create_registered_account_create_proposal(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
     ) -> Result<u64, DispatchError> {
@@ -311,7 +320,7 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_INTERNAL,
             status: votingengine::STATUS_VOTING,
             internal_org: Some(org),
-            internal_institution: Some(institution),
+            internal_institution: Some(institution.clone()),
             start: now,
             end,
             citizen_eligible_total: 0,
@@ -322,19 +331,21 @@ impl<T: Config> Pallet<T> {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            if let Err(err) = votingengine::limit::try_add_active_proposal::<T>(institution, id) {
+            if let Err(err) =
+                votingengine::limit::try_add_active_proposal::<T>(institution.clone(), id)
+            {
                 return TransactionOutcome::Rollback(Err(err));
             }
             if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                 id,
                 org,
-                institution,
+                institution.clone(),
                 InternalProposalMutexKind::Regular,
             ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
 
-            AdminSnapshot::<T>::insert(id, institution, bounded_admins);
+            AdminSnapshot::<T>::insert(id, institution.clone(), bounded_admins);
             InternalThresholdSnapshot::<T>::insert(id, lifecycle_threshold);
             PendingDynamicThresholds::<T>::insert(org, institution, dynamic_threshold);
             InternalProposalRoles::<T>::insert(id, InternalProposalRole::LifecycleCreate);
@@ -355,12 +366,12 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_general_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
     ) -> Result<u64, DispatchError> {
-        Self::do_create_active_subject_internal_proposal(
+        Self::do_create_active_account_internal_proposal(
             who,
             org,
-            institution,
+            institution.clone(),
             InternalProposalMutexKind::Regular,
             InternalProposalRole::General,
             None,
@@ -370,13 +381,13 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_lifecycle_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
     ) -> Result<u64, DispatchError> {
         ensure!(
             is_registered_multisig_org(org),
             Error::<T>::InvalidInternalOrg
         );
-        Self::do_create_active_subject_internal_proposal(
+        Self::do_create_active_account_internal_proposal(
             who,
             org,
             institution,
@@ -389,7 +400,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_admin_change_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         new_admin_count: u32,
         new_threshold: u32,
     ) -> Result<u64, DispatchError> {
@@ -401,10 +412,10 @@ impl<T: Config> Pallet<T> {
                 Error::<T>::InvalidDynamicThreshold
             );
         }
-        let proposal_id = Self::do_create_active_subject_internal_proposal(
+        let proposal_id = Self::do_create_active_account_internal_proposal(
             who,
             org,
-            institution,
+            institution.clone(),
             InternalProposalMutexKind::AdminSetMutationExclusive,
             InternalProposalRole::AdminChange,
             Some(false),
@@ -414,7 +425,7 @@ impl<T: Config> Pallet<T> {
                 proposal_id,
                 PendingAdminChangeThreshold {
                     org,
-                    subject: institution,
+                    account: institution,
                     new_admin_count,
                     new_threshold,
                 },
@@ -423,24 +434,24 @@ impl<T: Config> Pallet<T> {
         Ok(proposal_id)
     }
 
-    fn do_create_active_subject_internal_proposal(
+    fn do_create_active_account_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         mutex_kind: InternalProposalMutexKind,
         role: InternalProposalRole,
         force_all_admin_threshold: Option<bool>,
     ) -> Result<u64, DispatchError> {
         ensure!(is_valid_org(org), Error::<T>::InvalidInternalOrg);
         ensure!(
-            is_valid_internal_institution::<T>(org, institution),
+            is_valid_internal_institution::<T>(org, institution.clone()),
             votingengine::Error::<T>::InvalidInstitution
         );
         ensure!(
-            is_internal_admin::<T>(org, institution, &who),
+            is_internal_admin::<T>(org, institution.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
-        let active_threshold = active_internal_threshold::<T>(org, institution)
+        let active_threshold = active_internal_threshold::<T>(org, institution.clone())
             .ok_or(Error::<T>::InvalidInternalOrg)?;
 
         let now = <frame_system::Pallet<T>>::block_number();
@@ -451,7 +462,7 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_INTERNAL,
             status: votingengine::STATUS_VOTING,
             internal_org: Some(org),
-            internal_institution: Some(institution),
+            internal_institution: Some(institution.clone()),
             start: now,
             end,
             citizen_eligible_total: 0,
@@ -463,24 +474,29 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
 
-            if let Err(err) = votingengine::limit::try_add_active_proposal::<T>(institution, id) {
+            if let Err(err) =
+                votingengine::limit::try_add_active_proposal::<T>(institution.clone(), id)
+            {
                 return TransactionOutcome::Rollback(Err(err));
             }
             if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                 id,
                 org,
-                institution,
+                institution.clone(),
                 mutex_kind,
             ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
 
-            if let Err(err) =
-                <votingengine::Pallet<T>>::snapshot_institution_admins(id, org, institution, false)
-            {
+            if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
+                id,
+                org,
+                institution.clone(),
+                false,
+            ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if !<votingengine::Pallet<T>>::is_admin_in_snapshot(id, institution, &who) {
+            if !<votingengine::Pallet<T>>::is_admin_in_snapshot(id, institution.clone(), &who) {
                 frame_support::defensive!(
                     "do_create_internal_proposal: proposer is missing from admin snapshot"
                 );
@@ -488,7 +504,8 @@ impl<T: Config> Pallet<T> {
                     votingengine::Error::<T>::NoPermission.into()
                 ));
             }
-            let snapshot_size = match Self::snapshot_admin_count_or_missing(id, institution) {
+            let snapshot_size = match Self::snapshot_admin_count_or_missing(id, institution.clone())
+            {
                 Ok(size) => size,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
@@ -538,36 +555,36 @@ impl<T: Config> Pallet<T> {
         Ok(proposal_id)
     }
 
-    fn proposal_org_subject(proposal_id: u64) -> Result<(u8, SubjectId), DispatchError> {
+    fn proposal_org_account(proposal_id: u64) -> Result<(u8, T::AccountId), DispatchError> {
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
         let org = proposal
             .internal_org
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        let subject = proposal
+        let account = proposal
             .internal_institution
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        Ok((org, subject))
+        Ok((org, account))
     }
 
     fn apply_executed_threshold_side_effect(proposal_id: u64) -> DispatchResult {
         match InternalProposalRoles::<T>::get(proposal_id) {
             Some(InternalProposalRole::LifecycleCreate) => {
-                let (org, subject) = Self::proposal_org_subject(proposal_id)?;
-                let threshold = PendingDynamicThresholds::<T>::take(org, subject)
+                let (org, account) = Self::proposal_org_account(proposal_id)?;
+                let threshold = PendingDynamicThresholds::<T>::take(org, account.clone())
                     .ok_or(Error::<T>::MissingDynamicThreshold)?;
-                ActiveDynamicThresholds::<T>::insert(org, subject, threshold);
+                ActiveDynamicThresholds::<T>::insert(org, account, threshold);
             }
             Some(InternalProposalRole::LifecycleClose) => {
-                let (org, subject) = Self::proposal_org_subject(proposal_id)?;
-                ActiveDynamicThresholds::<T>::remove(org, subject);
+                let (org, account) = Self::proposal_org_account(proposal_id)?;
+                ActiveDynamicThresholds::<T>::remove(org, account);
             }
             Some(InternalProposalRole::AdminChange) => {
                 if let Some(pending) = PendingAdminChangeThresholds::<T>::take(proposal_id) {
                     Self::ensure_dynamic_threshold(pending.new_admin_count, pending.new_threshold)?;
                     ActiveDynamicThresholds::<T>::insert(
                         pending.org,
-                        pending.subject,
+                        pending.account,
                         pending.new_threshold,
                     );
                 }
@@ -583,8 +600,8 @@ impl<T: Config> Pallet<T> {
                 Some(InternalProposalRole::LifecycleCreate),
                 STATUS_REJECTED | STATUS_EXECUTION_FAILED,
             ) => {
-                let (org, subject) = Self::proposal_org_subject(proposal_id)?;
-                PendingDynamicThresholds::<T>::remove(org, subject);
+                let (org, account) = Self::proposal_org_account(proposal_id)?;
+                PendingDynamicThresholds::<T>::remove(org, account);
             }
             (
                 Some(InternalProposalRole::AdminChange),
@@ -617,7 +634,7 @@ impl<T: Config> Pallet<T> {
             .internal_institution
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         ensure!(
-            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution, &who),
+            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
 
@@ -656,7 +673,7 @@ impl<T: Config> Pallet<T> {
     }
 
     pub fn do_finalize_internal_timeout(
-        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
         ensure!(
@@ -683,7 +700,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_general_internal_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -703,7 +720,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_lifecycle_internal_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -720,17 +737,17 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn create_registered_subject_create_proposal_with_data(
+    fn create_registered_account_create_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_registered_subject_create_proposal(
+            let proposal_id = match Self::do_create_registered_account_create_proposal(
                 who.clone(),
                 org,
                 institution,
@@ -750,7 +767,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_admin_change_internal_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         new_admin_count: u32,
         new_threshold: u32,
         module_tag: &[u8],
@@ -774,22 +791,24 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn active_dynamic_threshold(org: u8, institution: SubjectId) -> Option<u32> {
+    fn active_dynamic_threshold(org: u8, institution: T::AccountId) -> Option<u32> {
         ActiveDynamicThresholds::<T>::get(org, institution)
     }
 
-    fn configured_dynamic_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        ActiveDynamicThresholds::<T>::get(org, institution)
+    fn configured_dynamic_threshold(org: u8, institution: T::AccountId) -> Option<u32> {
+        ActiveDynamicThresholds::<T>::get(org, institution.clone())
             .or_else(|| PendingDynamicThresholds::<T>::get(org, institution))
     }
 }
 
 impl<T: Config>
-    votingengine::traits::InternalProposalFinalizer<frame_system::pallet_prelude::BlockNumberFor<T>>
-    for Pallet<T>
+    votingengine::traits::InternalProposalFinalizer<
+        frame_system::pallet_prelude::BlockNumberFor<T>,
+        T::AccountId,
+    > for Pallet<T>
 {
     fn finalize_internal_timeout(
-        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
         Self::do_finalize_internal_timeout(proposal, proposal_id)

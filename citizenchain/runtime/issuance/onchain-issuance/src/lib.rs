@@ -17,14 +17,13 @@
 //!
 //! ## 协议位
 //!
-//! 用户代币 SubjectId 使用 `SubjectKind::OnchainAsset = 0x04`(ADR-010 增量段 + ADR-011 v2)。
-//! payload = 4B asset_id(u32 LE) + 43B 零填充。反查 asset_id 直接取 byte[1..5]。
+//! 用户代币用 `asset_id` 做资产编号；发行与治理账户统一使用机构多签 `AccountId`。
 //!
 //! ## 模块文件
 //!
 //! - `types.rs`     — 共用数据类型(AssetMeta / AssetClass / AssetState 等)
 //! - `proposal.rs`  — ACTION 常量 + 提案体定义
-//! - `validation.rs` — 入参校验(decimals 范围 / subject 资格 / 黑名单 hit)
+//! - `validation.rs` — 入参校验(decimals 范围 / 发行机构资格 / 黑名单 hit)
 //! - `blacklist.rs` — 字符串黑名单 storage + 默认词表
 //! - `fee.rs`       — 创建费 reserve / unreserve / transfer(ADR-011 v2 押金机制)
 //! - `execution.rs` — 业务路径(issue/mint/burn/close/transfer)桥接 pallet_assets
@@ -74,8 +73,7 @@ pub mod pallet {
 
     /// pallet_assets 内核 AssetId(u32)。
     ///
-    /// 中文注释:onchain-issuance 对外只暴露 SubjectId(0x04),
-    /// AssetId 仅用于内核桥接,不入用户视野。
+    /// 中文注释:onchain-issuance 对外使用 `asset_id`，它只表示资产编号。
     pub type OnchainAssetId = u32;
 
     #[pallet::config]
@@ -96,8 +94,8 @@ pub mod pallet {
                 Balance = BalanceOf<Self>,
             > + frame_support::traits::tokens::fungibles::Mutate<Self::AccountId>;
 
-        /// **NRC 主体账户(治理多签 main_address)** 提供器:
-        /// - monitor 5 动作的 origin 校验:proposer ∈ admins(NRC main subject)
+        /// **NRC 治理账户(治理多签 main_address)** 提供器:
+        /// - monitor 5 动作的 origin 校验:proposer ∈ admins(NRC main account)
         /// - 监管 JointVote 提案的发起人识别
         ///
         /// ADR-011 v2 修订项 #1:与 `NrcFeeAccountProvider` 语义分离,
@@ -134,7 +132,7 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
     }
 
-    /// **NRC 主体账户(治理多签 main_address)** trait — ADR-011 v2 拆分语义后的独立 trait。
+    /// **NRC 治理账户(治理多签 main_address)** trait — ADR-011 v2 拆分语义后的独立 trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcMainAccountProvider`,
     /// 返回 `china_cb[0].main_address`。
@@ -153,25 +151,18 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// SubjectId(0x04) → 资产元数据。
+    /// asset_id → 资产元数据。
     ///
     /// 中文注释:用户代币的唯一权威 storage,记录 issuer / class / decimals / state。
-    /// SubjectId 由 onchain-issuance 内部派生(`primitives::derive::subject_id_from_onchain_asset`),
-    /// payload byte[1..5] 即 asset_id LE,无需在 OnchainAssetMeta 里重复存。
     #[pallet::storage]
     #[pallet::getter(fn asset_meta)]
-    pub type Assets<T: Config> =
-        StorageMap<_, Blake2_128Concat, [u8; 48], OnchainAssetMeta<T::AccountId>, OptionQuery>;
-
-    /// 反向索引:pallet_assets AssetId(u32) → SubjectId(0x04)。
-    ///
-    /// 中文注释:pallet_assets 内核事件回调可能持有 AssetId,需要快速反查 SubjectId。
-    /// 与 SubjectId 内 byte[1..5] 包含 asset_id LE 信息互补:正向(SubjectId→asset_id)走解码,
-    /// 反向(asset_id→SubjectId)走本 storage(因为 SubjectId 还需要拼装 kind tag)。
-    #[pallet::storage]
-    #[pallet::getter(fn asset_id_to_subject)]
-    pub type AssetIdIndex<T: Config> =
-        StorageMap<_, Twox64Concat, OnchainAssetId, [u8; 48], OptionQuery>;
+    pub type Assets<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        OnchainAssetId,
+        OnchainAssetMeta<T::AccountId>,
+        OptionQuery,
+    >;
 
     /// 下一个待分配的 AssetId(u32 自增,从 1 开始)。
     ///
@@ -260,7 +251,6 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// 用户代币创建成功。
         AssetIssued {
-            subject_id: [u8; 48],
             asset_id: OnchainAssetId,
             issuer: T::AccountId,
         },
@@ -342,7 +332,7 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 发行人主体类型不允许(只接受 SfidInstitution / PersonalDuoqian)。
+        /// 发行机构账户不允许。
         IssuerNotAllowed,
         /// decimals 越界(必须 0..=18)。
         DecimalsOutOfRange,
@@ -354,7 +344,7 @@ pub mod pallet {
         AssetClosed,
         /// 提案体解码失败。
         InvalidProposalData,
-        /// NRC 主体账户未配置。
+        /// NRC 治理账户未配置。
         NrcMainAccountMissing,
         /// NRC 费用账户未配置。
         NrcFeeAccountMissing,
@@ -395,7 +385,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::issue())]
         pub fn propose_issue(
             origin: OriginFor<T>,
-            issuer_subject_id: [u8; 48],
+            issuer_account: T::AccountId,
             class: crate::types::AssetClass,
             name: BoundedVec<u8, T::MaxAssetNameLen>,
             symbol: BoundedVec<u8, T::MaxAssetSymbolLen>,
@@ -406,7 +396,7 @@ pub mod pallet {
             let _who = ensure_signed(origin)?;
             // 业务逻辑参数防 unused 警告(框架阶段)
             let _ = (
-                issuer_subject_id,
+                issuer_account,
                 class,
                 name,
                 symbol,
@@ -416,7 +406,7 @@ pub mod pallet {
             );
             // TODO: implement business logic (任务卡 A)
             //   1. validation::ensure_issuer_allowed / ensure_decimals_in_range / ensure_class_supported
-            //   2. ensure proposer ∈ admins(issuer_subject_id)
+            //   2. ensure proposer ∈ admins(issuer_account)
             //   3. 字段过黑名单
             //   4. fee::reserve_creation_deposit(&who, proposal_id)
             //   5. InternalVoteEngine::create_general_internal_proposal_with_data(MODULE_TAG + ACTION_OAIS + scale-encoded fields)

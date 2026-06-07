@@ -1,4 +1,4 @@
-// 中文注释:SFID 元数据 API。这里承接省份、城市、A3/机构类型等跨页面选择项。
+// 中文注释:SFID 元数据 API。这里承接省份、城市、SubjectProperty/机构类型等跨页面选择项。
 
 import { adminHeaders, request } from '../utils/http';
 import type { AdminAuth } from '../auth/types';
@@ -19,7 +19,7 @@ export type SfidCityItem = {
 };
 
 export type SfidMetaResult = {
-  a3_options: SfidOptionItem[];
+  subject_property_options: SfidOptionItem[];
   institution_options: SfidOptionItem[];
   provinces: SfidProvinceItem[];
   scoped_province?: string | null;

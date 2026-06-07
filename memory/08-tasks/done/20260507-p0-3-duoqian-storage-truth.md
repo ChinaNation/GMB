@@ -11,7 +11,7 @@
 - 注册机构基本快照：`OrganizationManage::Institutions(sfid_number)`
 - 个人多签账户状态：`PersonalManage::PersonalDuoqians(personal_address)`
 - 个人多签反向信息：`PersonalManage::PersonalDuoqianInfo(personal_address)`
-- 管理员与阈值：`AdminsChange::Subjects(subject_id)`
+- 管理员与阈值：`AdminsChange::AdminAccounts(account_id)`
 
 ## 预计修改目录
 
@@ -42,10 +42,10 @@
 
 2026-05-07 已执行：
 
-- 新增 `wuminapp/lib/duoqian/shared/duoqian_storage_codec.dart`，统一维护 `AddressRegisteredSfid`、`Institutions`、`InstitutionAccounts`、`PersonalDuoqians`、`PersonalDuoqianInfo`、`AdminsChange::Subjects` 的 storage key 与 SCALE 解码。
+- 新增 `wuminapp/lib/duoqian/shared/duoqian_storage_codec.dart`，统一维护 `AddressRegisteredSfid`、`Institutions`、`InstitutionAccounts`、`PersonalDuoqians`、`PersonalDuoqianInfo`、`AdminsChange::AdminAccounts` 的 storage key 与 SCALE 解码。
 - `DuoqianManageService.fetchPersonalMeta` 改读 `PersonalManage::PersonalDuoqianInfo`。
 - `DuoqianManageService.fetchDuoqianAccount` 改成先走注册机构路径 `AddressRegisteredSfid -> Institutions + InstitutionAccounts`，未命中再走个人多签 `PersonalManage::PersonalDuoqians`。
-- `InstitutionAdminService` 改为统一读取 `AdminsChange::Subjects`：`duoqian:` 先反查 SFID 再派生 subject，`personal:` 按账户地址派生 subject，内置机构按机构 id 派生 subject。
+- `InstitutionAdminService` 改为统一读取 `AdminsChange::AdminAccounts`：`duoqian:` 先反查 SFID 再派生 subject，`personal:` 按账户地址派生 subject，内置机构按机构 id 派生 subject。
 - 已清理 `wuminapp/lib` 与 `wuminapp/test` 中旧 `OrganizationManage::DuoqianAccounts` 活跃引用。
 - 已补 `wuminapp/test/duoqian/duoqian_storage_codec_test.dart`、`wuminapp/test/duoqian/duoqian_manage_storage_test.dart`、`wuminapp/test/institution/institution_admin_service_test.dart`。
 

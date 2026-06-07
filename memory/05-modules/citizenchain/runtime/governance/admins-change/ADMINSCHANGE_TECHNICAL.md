@@ -8,7 +8,7 @@
 
 当前职责：
 
-- 维护 `Subjects<SubjectId, AdminSubject>`。
+- 维护 `Subjects<AccountId, AdminAccount>`。
 - 为治理机构写入创世固定管理员集合。
 - 为个人账户、机构账户提供 Pending / Active 生命周期写入口；关闭成功后删除当前状态记录。
 - 创建并执行管理员集合变更提案。
@@ -28,22 +28,22 @@
 - `/Users/rhett/GMB/citizenchain/runtime/governance/admins-change/src/weights.rs`
 - `/Users/rhett/GMB/citizenchain/runtime/governance/admins-change/src/benchmarks.rs`
 
-## 2. SubjectKind
+## 2. AdminAccountKind
 
-`AdminSubjectKind` 当前值：
+`AdminAdminAccountKind` 当前值：
 
 - `BuiltinInstitution`：NRC / PRC / PRB 等内置治理主体。
-- `SfidInstitution`：历史枚举值，新增、变更和生命周期写入路径一律拒绝作为管理员主体。
+- `注册机构归属关系`：历史枚举值，新增、变更和生命周期写入路径一律拒绝作为管理员主体。
 - `PersonalDuoqian`：注册个人账户主体。
 - `InstitutionAccount`：注册机构某个具体账户的账户级主体。
 
-对应底层 `SubjectId` 协议见 ADR-010：
+对应底层 `AccountId` 协议见 ADR-010：
 
 - `0x01 Builtin`
-- `0x02 SfidInstitution`，仅表示同一 SFID 机构归属/检索。
-- `0x03 PersonalDuoqian`
-- `0x04 OnchainAsset`
-- `0x05 InstitutionAccount`，payload 为账户 `AccountId` 前 32 字节并右填零。
+- `0x02 注册机构归属关系`，仅表示同一 SFID 机构归属/检索。
+- `PersonalDuoqian AccountId`
+- `0x04 asset_id 资产编号`
+- `InstitutionAccount AccountId`，payload 为账户 `AccountId` 前 32 字节并右填零。
 
 ## 3. 存储模型
 
@@ -57,10 +57,10 @@
 核心存储：
 
 ```text
-Subjects<SubjectId, AdminSubject>
+Subjects<AccountId, AdminAccount>
 ```
 
-`AdminSubject` 字段：
+`AdminAccount` 字段：
 
 - `org`：内部投票组织类型，含 `ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH`。
 - `kind`：管理员主体类型。
@@ -103,13 +103,13 @@ validate_admin_set_for_subject(kind, org, admins)
 - `BuiltinInstitution` 必须等于固定人数：NRC 19、PRC 9、PRB 9。
 - `PersonalDuoqian` 必须使用 `ORG_REN`，管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
 - `InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，管理员数量必须在 `2..=MaxAdminsPerInstitution`。
-- `SfidInstitution` 不能作为管理员主体，写入和变更路径返回 `InvalidSubjectKind`。
+- `注册机构归属关系` 不能作为管理员主体，写入和变更路径返回 `InvalidAdminAccountKind`。
 - 当前 runtime 配置：`MaxPersonalAccountAdmins = 64`，`MaxAdminsPerInstitution = 1989`。
 
 读侧防线：
 
 - `active_subject_*` 与 `pending_subject_*_for_snapshot` 查询在返回前同样校验主体类型与 `org` 是否匹配。
-- 升级前误写入的 `SfidInstitution` 管理员主体，或 `InstitutionAccount + ORG_REN` 等旧脏数据，不再通过读 API 暴露给投票引擎和业务模块。
+- 升级前误写入的 `注册机构归属关系` 管理员主体，或 `InstitutionAccount + ORG_REN` 等旧脏数据，不再通过读 API 暴露给投票引擎和业务模块。
 
 ## 6. 生命周期
 
@@ -205,10 +205,10 @@ propose_admin_set_change(org, subject, new_admins, new_threshold)
 - `AdminSetChangeProposed`
 - `AdminSetChangeExecutionFailed`
 - `AdminSetChanged`
-- `AdminSubjectPendingCreated`
-- `AdminSubjectActivated { subject, org }`
-- `AdminSubjectPendingRemoved { subject, org }`
-- `AdminSubjectClosed { subject, org }`
+- `AdminAccountPendingCreated`
+- `AdminAccountActivated { subject, org }`
+- `AdminAccountPendingRemoved { subject, org }`
+- `AdminAccountClosed { subject, org }`
 
 生命周期事件必须携带 `org`，用于客户端和索引器按组织分桶，避免只拿 `subject` 后再反查 storage。
 
@@ -228,7 +228,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 覆盖重点：
 
-- `0x05 InstitutionAccount` 派生与解析。
+- `InstitutionAccount AccountId` 派生与解析。
 - NRC / PRC / PRB 固定人数、固定阈值、等长管理员更换。
 - 动态主体通过统一管理员集合变更提案增加、删除、更换管理员，并把新动态阈值交给投票引擎更新。
 - 管理员集合未变化、重复管理员、无效主体等错误路径。
@@ -239,5 +239,5 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - 管理员集合变更提案与普通内部提案互斥。
 - 自动执行成功/失败都由投票引擎统一推进终态并释放互斥锁。
 - `InstitutionAccount` kind 独立单测覆盖最小 2 人、`ORG_PUP / ORG_OTH` 成功、`ORG_REN` 拒绝、`MaxAdminsPerInstitution` 上界。
-- `SfidInstitution` 新写入路径拒绝。
-- 历史脏数据读侧拦截：`InstitutionAccount + ORG_REN`、`SfidInstitution + ORG_PUP` 不再通过 Active/Pending 业务 API 返回。
+- `注册机构归属关系` 新写入路径拒绝。
+- 历史脏数据读侧拦截：`InstitutionAccount + ORG_REN`、`注册机构归属关系 + ORG_PUP` 不再通过 Active/Pending 业务 API 返回。

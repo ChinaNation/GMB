@@ -2,25 +2,27 @@
 """
 统一派生 citizenchain/runtime/primitives/china 下所有链上保留地址。
 
-统一方案（DUOQIAN_V1 单域 + op_tag 子命名空间）：
+统一方案（DUOQIAN 单域 + op_tag 子命名空间）：
 
-    preimage = b"DUOQIAN_V1"  (10B)
+    preimage = b"DUOQIAN"     (7B)
              || op_tag        (1B)
-             || ss58_prefix   (2B, LE, = [0xEB, 0x07] for 2027)
+             || ss58          (2B, LE, = [0xEB, 0x07] for 2027)
              || payload       (按 op_tag 规范拼接)
     address  = blake2b_256(preimage)
 
 op_tag 分配：
     0x00 = OP_MAIN      → input: sfid_number [+ name]（机构主账户）
     0x01 = OP_FEE       → input: sfid_number          （费用账户）
-    0x02 = OP_STAKE     → input: citizens_number_u64_le（省储行质押）
+    0x02 = OP_STAKE     → input: sfid_number          （质押账户）
     0x03 = OP_AN        → input: NRC_sfid_number      （国储会安全基金）
-    0x04 = OP_PERSONAL  → input: creator(32B) + name_utf8（个人多签，链上派生）
+    0x04 = OP_HE        → input: sfid_number          （两和基金）
+    0x05 = OP_PERSONAL  → input: creator(32B) + name_utf8（个人多签，链上派生）
+    0x06 = OP_INSTITUTION → input: sfid_number + name_utf8（机构自定义账户）
 
 本工具一次性重算：
   - main_address（所有 7 个机构常量文件：cb/ch/zf/jc/lf/sf/jy）
   - fee_address （cb + ch 共 87 个）
-  - stake_address（ch 专有 43 个）
+  - stake_address（ch 专有 43 个，按 sfid_number 派生）
   - NRC_ANQUAN_ADDRESS（cb 内 1 个全局常量）
   - CHINA_RESERVED_MAIN_ADDRESSES 保留名单（zb.rs 汇总表，365 条）
 
@@ -32,7 +34,6 @@ op_tag 分配：
 import argparse
 import hashlib
 import re
-import struct
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,19 +47,34 @@ CHINA_DIR = (
     / "primitives"
     / "china"
 )
+CORE_CONST_PATH = CHINA_DIR.parent / "src" / "core_const.rs"
+
+
+def _load_core_const() -> tuple[bytes, int, dict[str, int]]:
+    """从 runtime/primitives/src/core_const.rs 读取 DUOQIAN 协议唯一真源。"""
+    text = CORE_CONST_PATH.read_text(encoding="utf-8")
+    domain_match = re.search(r'pub const DUOQIAN:\s*&\[u8;\s*7\]\s*=\s*b"([^"]+)";', text)
+    ss58_match = re.search(r"pub const SS58_FORMAT:\s*u16\s*=\s*(\d+);", text)
+    if not domain_match or not ss58_match:
+        raise RuntimeError(f"无法从 {CORE_CONST_PATH} 读取 DUOQIAN/SS58_FORMAT")
+    ops: dict[str, int] = {}
+    for name in ("OP_MAIN", "OP_FEE", "OP_STAKE", "OP_AN"):
+        match = re.search(rf"pub const {name}:\s*u8\s*=\s*(0x[0-9A-Fa-f]+|\d+);", text)
+        if not match:
+            raise RuntimeError(f"无法从 {CORE_CONST_PATH} 读取 {name}")
+        ops[name] = int(match.group(1), 0)
+    return domain_match.group(1).encode("utf-8"), int(ss58_match.group(1)), ops
+
 
 # ── 统一域 ─────────────────────────────────────────
-DOMAIN = b"DUOQIAN_V1"  # 10 字节
-SS58_FORMAT: int = 2027
-
-OP_MAIN = 0x00
-OP_FEE = 0x01
-OP_STAKE = 0x02
-OP_AN = 0x03
-# OP_PERSONAL = 0x04 由链上 derive_personal 使用，不参与 primitives 派生
+DOMAIN, SS58_FORMAT, OPS = _load_core_const()
+OP_MAIN = OPS["OP_MAIN"]
+OP_FEE = OPS["OP_FEE"]
+OP_STAKE = OPS["OP_STAKE"]
+OP_AN = OPS["OP_AN"]
 
 # 按 china_cb.rs 硬编码，第一条是 NRC
-NRC_SFID_NUMBER = "GFR-LN001-CB0X-944805165-2026"
+NRC_SFID_NUMBER = "LN001-GCB05-944805165-2026"
 
 # 需要处理的机构文件（含 main_address 字段）
 FILES_WITH_MAIN = [
@@ -88,7 +104,7 @@ def ss58_le() -> bytes:
 
 
 def derive(op_tag: int, payload: bytes) -> bytes:
-    """统一派生入口：DUOQIAN_V1 + op_tag + ss58_le + payload → blake2b_256"""
+    """统一派生入口：DUOQIAN + op_tag + ss58 + payload → blake2b_256"""
     preimage = DOMAIN + bytes([op_tag]) + ss58_le() + payload
     return blake2b_256(preimage)
 
@@ -101,8 +117,8 @@ def derive_fee(sfid_number: str) -> bytes:
     return derive(OP_FEE, sfid_number.encode("utf-8"))
 
 
-def derive_stake(citizens_number: int) -> bytes:
-    return derive(OP_STAKE, struct.pack("<Q", citizens_number))
+def derive_stake(sfid_number: str) -> bytes:
+    return derive(OP_STAKE, sfid_number.encode("utf-8"))
 
 
 def derive_anquan() -> bytes:
@@ -130,7 +146,7 @@ class FeeEntry:
 
 @dataclass
 class StakeEntry:
-    citizens_number: int
+    sfid_number: str
     old_hex: str
     new_hex: str
     file_name: str
@@ -203,34 +219,33 @@ def extract_fee(file_path: Path) -> list[FeeEntry]:
 
 
 def extract_stake(file_path: Path) -> list[StakeEntry]:
-    """按 citizens_number → 下一个 stake_address hex!(...) 配对。"""
+    """按 sfid_number → 下一个 stake_address hex!(...) 配对。"""
     text = file_path.read_text(encoding="utf-8")
     lines = text.split("\n")
     out: list[StakeEntry] = []
 
-    # 处理 Rust 里的下划线分隔符：10_913_902 → 10913902
-    cn_re = re.compile(r"citizens_number:\s*([0-9_]+)")
+    sfid_re = re.compile(r'sfid_number:\s*"([^"]+)"')
     addr_re = re.compile(r'stake_address:\s*hex!\("([0-9a-fA-F]{64})"\)')
 
-    current_cn: Optional[int] = None
+    current_sfid: Optional[str] = None
     for i, line in enumerate(lines):
-        m1 = cn_re.search(line)
+        m1 = sfid_re.search(line)
         if m1:
-            current_cn = int(m1.group(1).replace("_", ""))
+            current_sfid = m1.group(1)
         m2 = addr_re.search(line)
-        if m2 and current_cn is not None:
+        if m2 and current_sfid is not None:
             old = m2.group(1).lower()
-            new = hexstr(derive_stake(current_cn))
+            new = hexstr(derive_stake(current_sfid))
             out.append(
                 StakeEntry(
-                    citizens_number=current_cn,
+                    sfid_number=current_sfid,
                     old_hex=old,
                     new_hex=new,
                     file_name=file_path.name,
                     line_num=i + 1,
                 )
             )
-            current_cn = None
+            current_sfid = None
     return out
 
 
@@ -292,7 +307,7 @@ def regen_zb(all_addresses: list[str], dry_run: bool) -> None:
         "//! （main_address + fee_address + stake_address + NRC_ANQUAN_ADDRESS）。",
         "//! 用于禁止 organization-manage 抢注这些机构地址。",
         "//!",
-        "//! 派生统一走 `primitives::core_const::DUOQIAN_DOMAIN` + op_tag，由",
+        "//! 派生统一走 `primitives::core_const::DUOQIAN` + op_tag，由",
         "//! `tools/duoqian.py` 一次性生成，禁止手改。",
         "",
         "use hex_literal::hex;",
@@ -322,7 +337,7 @@ def regen_zb(all_addresses: list[str], dry_run: bool) -> None:
 # ── 主流程 ──────────────────────────────────────────
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="统一派生 primitives/china 下的 main/fee/stake/anquan 地址（DUOQIAN_V1 + op_tag）"
+        description="统一派生 primitives/china 下的 main/fee/stake/anquan 地址（DUOQIAN + op_tag）"
     )
     grp = parser.add_mutually_exclusive_group()
     grp.add_argument("--dry-run", action="store_true", default=True, help="仅打印差异（默认）")
@@ -392,7 +407,7 @@ def main() -> int:
         for e in entries:
             all_reserved.append(e.new_hex)
             if e.old_hex != e.new_hex:
-                print(f"   🔄 citizens_number={e.citizens_number}")
+                print(f"   🔄 {e.sfid_number}")
                 print(f"      旧: {e.old_hex}")
                 print(f"      新: {e.new_hex}")
         if not dry_run and changed:

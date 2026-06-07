@@ -14,7 +14,7 @@ ADR-015 后，机构管理按账户级治理：
 - 机构只是账户归属分组，不是管理员集合真源。
 - 一个机构可以下挂多个账户，每个可操作账户独立持有管理员集合。
 - 主账户不管理其他账户，每个账户只由自己的管理员管理。
-- 当前 `propose_create_institution` 创建的是机构主账户的管理员主体；主体由主账户地址派生为 `InstitutionAccount(0x05)`，不是 `SfidInstitution(0x02)`。
+- 当前 `propose_create_institution` 创建的是机构主账户的管理员主体；主体由主账户地址派生为 `InstitutionAccount(0x05)`，不是 `注册机构归属关系(0x02)`。
 - `admin_org` 必须是 `ORG_PUP` 或 `ORG_OTH`；`ORG_REN` 只属于个人多签。
 - 省储行质押账户永远不可操作，不得进入本模块账户治理。
 - 注册机构账户管理员数量范围为 `2..=1989`。
@@ -23,7 +23,7 @@ ADR-015 后，机构管理按账户级治理：
 
 ## 2. 目录结构
 
-- `src/address.rs`：`DUOQIAN_V1` 地址角色语义，包含主账户、费用账户、自定义账户的角色定义。
+- `src/address.rs`：`DUOQIAN` 地址角色语义，包含主账户、费用账户、自定义账户的角色定义。
 - `src/institution/`：机构多签业务分区。
 - `src/institution/types.rs`：机构级 storage/action 类型。
 - `src/personal/`：个人多签业务分区。
@@ -33,14 +33,14 @@ ADR-015 后，机构管理按账户级治理：
 
 ## 3. 地址规则
 
-机构账户地址继续严格遵守 `DUOQIAN_V1`：
+机构账户地址继续严格遵守 `DUOQIAN`：
 
 | 账户 | op_tag | preimage |
 |---|---:|---|
-| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN_DOMAIN || OP_MAIN || ss58_prefix_le || sfid_number` |
-| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN_DOMAIN || OP_FEE || ss58_prefix_le || sfid_number` |
-| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN_DOMAIN || OP_INSTITUTION || ss58_prefix_le || sfid_number || account_name` |
-| 个人多签 | `OP_PERSONAL = 0x04` | `DUOQIAN_DOMAIN || OP_PERSONAL || ss58_prefix_le || creator || account_name` |
+| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN || OP_MAIN || ss58_le || sfid_number` |
+| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN || OP_FEE || ss58_le || sfid_number` |
+| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN || OP_INSTITUTION || ss58_le || sfid_number || account_name` |
+| 个人多签 | `OP_PERSONAL = 0x04` | `DUOQIAN || OP_PERSONAL || ss58_le || creator || account_name` |
 
 `"主账户"` 和 `"费用账户"` 是保留名，只能分别落到 `OP_MAIN` 和 `OP_FEE`；禁止作为自定义账户名进入 `OP_INSTITUTION` 命名空间。
 
@@ -57,10 +57,10 @@ ADR-015 后，机构管理按账户级治理：
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionAccount(0x05)` 的 `SubjectId`，并按 `admin_org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
+- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按 `admin_org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭成功后删除账户当前状态主体。
-- 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_subject_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
+- 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_account_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
 - 关闭多签必须走 `InternalVoteEngine::create_lifecycle_internal_proposal_with_data`，由投票引擎按 Active 管理员快照写全员关闭投票阈值。
 - 其他普通业务必须走 `InternalVoteEngine::create_general_internal_proposal_with_data`，只接受 Active 主体和 active 动态阈值。
 
@@ -96,7 +96,7 @@ propose_create_institution(
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
 - `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / institution_name / account_names[]`。
 - `province + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位省管理员派生签名公钥。
-- `a3 / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
+- `subject_property / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
 
@@ -141,7 +141,7 @@ runtime 适配：
 - `RuntimeInternalAdminProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
 - 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
-- `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_subject_for_account` 映射到账户级管理员主体，并通过 `resolve_admin_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
+- `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_admin_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
 - `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
 - `DuoqianSfidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;SFID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 SFID 机构账户。
 
@@ -166,6 +166,6 @@ runtime 适配：
 
 ## 9. 变更记录
 
-- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `a3/sub_type/parent_sfid_number`,签名业务字段收口为 `sfid_number / institution_name / account_names[]`。
+- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `subject_property/sub_type/parent_sfid_number`,签名业务字段收口为 `sfid_number / institution_name / account_names[]`。
 - 2026-05-02:创建 Pending 多签主体改为 votingengine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。
 - 2026-05-17:机构账户关闭成功后删除账户正向/反向索引和管理员主体当前状态；已转出的余额不继承到重新注册的新当前状态。

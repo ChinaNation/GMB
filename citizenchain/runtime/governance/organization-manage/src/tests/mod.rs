@@ -80,21 +80,23 @@ impl pallet_balances::Config for Test {
 // ─── Trait mock 实现 ─────────────────────────────────────────────────────
 
 pub struct TestAddressValidator;
-impl primitives::traits::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+impl primitives::multisig::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAddressChecker;
-impl primitives::traits::DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
+impl primitives::multisig::DuoqianReservedAddressChecker<AccountId32>
+    for TestReservedAddressChecker
+{
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
 }
 
 pub struct TestProtectedSourceChecker;
-impl primitives::traits::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+impl primitives::multisig::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
     fn is_protected(_address: &AccountId32) -> bool {
         false
     }
@@ -180,38 +182,38 @@ impl
     }
 }
 
-// ── Provider:支持注册多签动态主体(ORG_REN/ORG_PUP/ORG_OTH) ──
+// ── Provider:支持注册多签动态机构账户(ORG_REN/ORG_PUP/ORG_OTH) ──
 //
-// 机构账户 institution = subject_id_from_institution_account(account)。
-// 测试环境直接读 admins-change::Subjects[institution] 的管理员列表。
+// 机构账户 institution = 注册机构 main AccountId。
+// 测试环境直接读 admins-change::AdminAccounts[institution] 的管理员列表。
 // 中文注释：动态阈值由 internal-vote 保存，不再挂在管理员主体上。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
+    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
         if !is_registered_multisig_org(org) {
             return false;
         }
-        admins_change::Subjects::<Test>::get(institution)
+        admins_change::AdminAccounts::<Test>::get(institution)
             .map(|s| s.admins.iter().any(|a| a == who))
             .unwrap_or(false)
     }
 
-    fn get_admin_list(org: u8, institution: SubjectId) -> Option<alloc::vec::Vec<AccountId32>> {
+    fn get_admin_list(org: u8, institution: AccountId32) -> Option<alloc::vec::Vec<AccountId32>> {
         if !is_registered_multisig_org(org) {
             return None;
         }
-        admins_change::Subjects::<Test>::get(institution).map(|s| s.admins.into_inner())
+        admins_change::AdminAccounts::<Test>::get(institution).map(|s| s.admins.into_inner())
     }
 }
 
 pub struct TestInternalAdminCountProvider;
-impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: SubjectId) -> Option<u32> {
+impl votingengine::InternalAdminCountProvider<AccountId32> for TestInternalAdminCountProvider {
+    fn admin_count(org: u8, institution: AccountId32) -> Option<u32> {
         if !is_registered_multisig_org(org) {
             return None;
         }
-        admins_change::Subjects::<Test>::get(institution).map(|s| s.admins.len() as u32)
+        admins_change::AdminAccounts::<Test>::get(institution).map(|s| s.admins.len() as u32)
     }
 }
 

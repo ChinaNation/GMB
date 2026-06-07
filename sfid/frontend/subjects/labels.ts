@@ -1,26 +1,26 @@
-// 中文注释:按 category + a3 决定"新增机构"弹窗里哪些字段锁定 + 默认值。
+// 中文注释:按 category + subject_property 决定"新增机构"弹窗里哪些字段锁定 + 默认值。
 // gov/private 新增弹窗共用这一份字段锁定规则,但组件分别放在各自业务目录。
 //
 // 两步式机构创建(2026-04-19 改造):
-//   第一步 弹窗:SFR/FFR 只选 A3、P1、institution_code、省/市、T2/C1,仅生成 SFID,
+//   第一步 弹窗:S/F 只选 SubjectProperty、P1、institution_code、省/市、T2/C1,仅生成 SFID,
 //                **不要求** institution_name / sub_type
-//   第二步 详情页:设置 institution_name(全国唯一)、sub_type(SFR)及其他可变信息
+//   第二步 详情页:设置 institution_name(全国唯一)、sub_type(S)及其他可变信息
 //
-// A3 联动:
-//   SFR(私法人) → P1 可选 0/1;sub_type 选项由 P1 决定(见 subTypeChoicesForP1)
-//   FFR(非法人) → P1 可选 0/1;无 sub_type;机构代码为 ZG/TG/教育委员会(JY)
+// SubjectProperty 联动:
+//   S(私法人) → P1 可选 0/1;sub_type 选项由 P1 决定(见 subTypeChoicesForP1)
+//   F(非法人) → P1 可选 0/1;无 sub_type;机构代码为 ZG/TG/教育委员会(JY)
 //
 // 机构代码选项:
-//   GFR → 仅允许手动新增教育委员会(JY)类型学校机构,普通公权机构由后端自动生成
-//   SFR/FFR → ZG/TG/教育委员会(JY)(移除 CH 储备银行,死规则全局删除)
+//   G → 仅允许手动新增教育委员会(JY)类型学校机构,普通公权机构由后端自动生成
+//   S/F → ZG/TG/教育委员会(JY)(移除 CH 储备银行,死规则全局删除)
 
 import type { InstitutionCategory } from './api';
 
 export type ChoiceItem = { value: string; label: string };
 
 export interface InstitutionFieldLocks {
-  /** a3 的候选列表;长度=1 时锁死第一项 */
-  a3Choices: ChoiceItem[];
+  /** subject_property 的候选列表;长度=1 时锁死第一项 */
+  subjectPropertyChoices: ChoiceItem[];
   /** p1 的候选列表;长度=1 时锁死第一项 */
   p1Choices: ChoiceItem[];
   /** institution 代码的候选列表;长度=1 时锁死第一项 */
@@ -31,14 +31,14 @@ export interface InstitutionFieldLocks {
   modalTitle: string;
 }
 
-// ── A3 中文映射 ──
-export const A3_LABEL: Record<string, string> = {
-  GFR: '公法人',
-  SFR: '私法人',
-  FFR: '非法人',
-  GMR: '公民人',
-  ZRR: '自然人',
-  ZNR: '智能人',
+// ── SubjectProperty 中文映射 ──
+export const SUBJECT_PROPERTY_LABEL: Record<string, string> = {
+  G: '公法人',
+  S: '私法人',
+  F: '非法人',
+  M: '公民',
+  Z: '自然人',
+  N: '智能人',
 };
 
 // ── 机构代码中文映射 ──
@@ -125,7 +125,7 @@ export const ORG_CODE_LABEL: Record<string, string> = {
 };
 
 // ── 公权机构手动新增只保留教育委员会类型学校机构 ──
-const GFR_NONPROFIT_GOV: ChoiceItem[] = [
+const G_NONPROFIT_GOV: ChoiceItem[] = [
   { value: 'JY', label: '教育委员会 (JY)' },
 ];
 
@@ -138,7 +138,7 @@ const PRIVATE_INSTITUTIONS: ChoiceItem[] = [
 
 // ── 私法人企业类型(详情页使用;P1 联动见 subTypeChoicesForP1) ──
 // P1=0 → 仅 NON_PROFIT;P1=1 → 四种企业类型
-export const SFR_SUB_TYPE_CHOICES: ChoiceItem[] = [
+export const S_SUB_TYPE_CHOICES: ChoiceItem[] = [
   { value: 'SOLE_PROPRIETORSHIP', label: '个人独资' },
   { value: 'PARTNERSHIP', label: '合伙企业' },
   { value: 'LIMITED_LIABILITY', label: '有限责任' },
@@ -155,12 +155,12 @@ export const SUB_TYPE_LABEL: Record<string, string> = {
   NON_PROFIT: '公益组织',
 };
 
-/** 基础 locks(不依赖 a3 动态值的部分) */
+/** 基础 locks(不依赖 subject_property 动态值的部分) */
 export function locksForCategory(category: InstitutionCategory): InstitutionFieldLocks {
   switch (category) {
     case 'PUBLIC_SECURITY':
       return {
-        a3Choices: [{ value: 'GFR', label: '公法人 (GFR)' }],
+        subjectPropertyChoices: [{ value: 'G', label: '公法人 (G)' }],
         p1Choices: [{ value: '0', label: '非盈利 (0)' }],
         institutionChoices: [{ value: 'ZF', label: '政府 (ZF)' }],
         lockedInstitutionName: null,
@@ -168,18 +168,18 @@ export function locksForCategory(category: InstitutionCategory): InstitutionFiel
       };
     case 'GOV_INSTITUTION':
       return {
-        a3Choices: [{ value: 'GFR', label: '公法人 (GFR)' }],
+        subjectPropertyChoices: [{ value: 'G', label: '公法人 (G)' }],
         p1Choices: [{ value: '0', label: '非盈利 (0)' }],
-        institutionChoices: GFR_NONPROFIT_GOV,
+        institutionChoices: G_NONPROFIT_GOV,
         lockedInstitutionName: null,
         modalTitle: '新增机构',
       };
     case 'PRIVATE_INSTITUTION':
       // 两步式:第一步弹窗不含 institution_name/sub_type;P1 可 0/1 由用户选
       return {
-        a3Choices: [
-          { value: 'SFR', label: '私法人 (SFR)' },
-          { value: 'FFR', label: '非法人 (FFR)' },
+        subjectPropertyChoices: [
+          { value: 'S', label: '私法人 (S)' },
+          { value: 'F', label: '非法人 (F)' },
         ],
         p1Choices: [
           { value: '1', label: '盈利 (1)' },
@@ -192,18 +192,18 @@ export function locksForCategory(category: InstitutionCategory): InstitutionFiel
   }
 }
 
-/** 根据 a3 动态计算 P1、机构选项(SFR/FFR 都用同一批 institution 选项)。 */
-export function dynamicLocksForA3(a3: string): {
+/** 根据 subject_property 动态计算 P1、机构选项(S/F 都用同一批 institution 选项)。 */
+export function dynamicLocksForSubjectProperty(subject_property: string): {
   p1Choices: ChoiceItem[];
   p1Default: string;
   institutionChoices: ChoiceItem[];
 } {
-  // SFR/FFR 通用:P1 用户可选 0/1;机构代码 ZG/TG
+  // S/F 通用:P1 用户可选 0/1;机构代码 ZG/TG
   const p1Choices: ChoiceItem[] = [
     { value: '1', label: '盈利 (1)' },
     { value: '0', label: '非盈利 (0)' },
   ];
-  const p1Default = a3 === 'FFR' ? '0' : '1';
+  const p1Default = subject_property === 'F' ? '0' : '1';
   return {
     p1Choices,
     p1Default,
@@ -212,14 +212,14 @@ export function dynamicLocksForA3(a3: string): {
 }
 
 /**
- * 根据 P1 决定 SFR 详情页可选 sub_type:
+ * 根据 P1 决定 S 详情页可选 sub_type:
  *   P1=0(非盈利) → 只能 NON_PROFIT
  *   P1=1(盈利)   → 四种企业类型,排除 NON_PROFIT
  */
 export function subTypeChoicesForP1(p1: string | number): ChoiceItem[] {
   const p1Str = String(p1);
   if (p1Str === '0') {
-    return SFR_SUB_TYPE_CHOICES.filter((c) => c.value === 'NON_PROFIT');
+    return S_SUB_TYPE_CHOICES.filter((c) => c.value === 'NON_PROFIT');
   }
-  return SFR_SUB_TYPE_CHOICES.filter((c) => c.value !== 'NON_PROFIT');
+  return S_SUB_TYPE_CHOICES.filter((c) => c.value !== 'NON_PROFIT');
 }

@@ -271,11 +271,6 @@ pub async fn get_institution_detail(
         .map_err(|e| format!("institution detail task failed: {e}"))?
 }
 
-/// 通过 sfidNumber 查找机构名称（供 proposal 模块反查用）。
-pub(crate) fn find_institution_name(sfid_number: &str) -> Option<String> {
-    registry::find_institution_name(sfid_number).map(str::to_string)
-}
-
 /// 获取提案分页列表（需要节点运行）。
 #[tauri::command]
 pub async fn get_proposal_page(

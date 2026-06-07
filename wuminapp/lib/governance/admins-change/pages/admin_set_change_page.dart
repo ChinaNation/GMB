@@ -1,17 +1,17 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/pages/admin_set_change_confirm_page.dart';
 import 'package:wuminapp_mobile/governance/admins-change/admin_set_change_qr_adapter.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_set_change_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_set_validation.dart';
-import 'package:wuminapp_mobile/governance/admins-change/services/admin_subject_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/services/admin_account_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_set_change_action_bar.dart';
 import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_set_diff_card.dart';
 import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_set_editor.dart';
-import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_subject_card.dart';
+import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_account_card.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -21,12 +21,12 @@ class AdminSetChangePage extends StatefulWidget {
   const AdminSetChangePage({
     super.key,
     required this.institution,
-    required this.subjectIdentity,
+    required this.accountIdentity,
     required this.adminWallets,
   });
 
   final InstitutionInfo institution;
-  final AdminSubjectIdentity subjectIdentity;
+  final AdminAccountIdentity accountIdentity;
   final List<WalletProfile> adminWallets;
 
   @override
@@ -34,10 +34,10 @@ class AdminSetChangePage extends StatefulWidget {
 }
 
 class _AdminSetChangePageState extends State<AdminSetChangePage> {
-  final _subjectService = AdminSubjectService();
+  final _accountService = AdminAccountService();
   final _changeService = AdminSetChangeService();
   final _thresholdController = TextEditingController();
-  AdminSubjectState? _subject;
+  AdminAccountState? _subject;
   List<String> _newAdmins = const [];
   WalletProfile? _selectedWallet;
   bool _loading = true;
@@ -64,14 +64,14 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
       _error = null;
     });
     try {
-      final subject = await _subjectService.fetchByIdentity(
-        widget.subjectIdentity,
+      final account = await _accountService.fetchByIdentity(
+        widget.accountIdentity,
       );
       if (!mounted) return;
       setState(() {
-        _subject = subject;
-        _newAdmins = subject?.admins ?? const [];
-        if (subject != null) _syncThresholdInput(subject, _newAdmins.length);
+        _subject = account;
+        _newAdmins = account?.admins ?? const [];
+        if (account != null) _syncThresholdInput(account, _newAdmins.length);
         _loading = false;
       });
     } catch (e) {
@@ -85,35 +85,35 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
 
   @override
   Widget build(BuildContext context) {
-    final subject = _subject;
+    final account = _subject;
     return Scaffold(
       appBar: AppBar(title: const Text('更换管理员')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : subject == null
-              ? Center(child: Text(_error ?? '未查询到管理员主体'))
+          : account == null
+              ? Center(child: Text(_error ?? '未查询到管理员账户'))
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    AdminSubjectCard(subject: subject),
+                    AdminAccountCard(account: account),
                     const SizedBox(height: 12),
                     _buildWalletSelector(),
                     const SizedBox(height: 12),
                     AdminSetEditor(
                         admins: _newAdmins,
-                        onChanged: (value) => _setNewAdmins(subject, value)),
+                        onChanged: (value) => _setNewAdmins(account, value)),
                     const SizedBox(height: 12),
-                    _buildThresholdCard(subject),
+                    _buildThresholdCard(account),
                     const SizedBox(height: 12),
                     AdminSetDiffCard(
-                        currentAdmins: subject.admins, newAdmins: _newAdmins),
+                        currentAdmins: account.admins, newAdmins: _newAdmins),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(_error!, style: const TextStyle(color: Colors.red)),
                     ],
                   ],
                 ),
-      bottomNavigationBar: subject == null
+      bottomNavigationBar: account == null
           ? null
           : AdminSetChangeActionBar(
               busy: _submitting,
@@ -137,16 +137,16 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
     );
   }
 
-  void _setNewAdmins(AdminSubjectState subject, List<String> value) {
+  void _setNewAdmins(AdminAccountState account, List<String> value) {
     setState(() {
       _newAdmins = value;
-      _syncThresholdInput(subject, value.length);
+      _syncThresholdInput(account, value.length);
     });
   }
 
-  Widget _buildThresholdCard(AdminSubjectState subject) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(subject.org);
-    if (subject.kind == 0 && fixed != null) {
+  Widget _buildThresholdCard(AdminAccountState account) {
+    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.org);
+    if (account.kind == 0 && fixed != null) {
       return Card(
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -189,9 +189,9 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
     );
   }
 
-  void _syncThresholdInput(AdminSubjectState subject, int adminCount) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(subject.org);
-    if (subject.kind == 0 && fixed != null) {
+  void _syncThresholdInput(AdminAccountState account, int adminCount) {
+    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.org);
+    if (account.kind == 0 && fixed != null) {
       _thresholdController.text = fixed.toString();
       return;
     }
@@ -206,26 +206,26 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
     }
   }
 
-  int _readNewThreshold(AdminSubjectState subject) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(subject.org);
-    if (subject.kind == 0 && fixed != null) return fixed;
+  int _readNewThreshold(AdminAccountState account) {
+    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.org);
+    if (account.kind == 0 && fixed != null) return fixed;
     final value = int.tryParse(_thresholdController.text.trim());
     if (value == null) throw StateError('请输入有效阈值');
     return value;
   }
 
   Future<void> _submit() async {
-    final subject = _subject;
+    final account = _subject;
     final wallet = _selectedWallet;
-    if (subject == null || wallet == null) return;
+    if (account == null || wallet == null) return;
     setState(() {
       _submitting = true;
       _error = null;
     });
     try {
-      final newThreshold = _readNewThreshold(subject);
+      final newThreshold = _readNewThreshold(account);
       final validated = AdminSetValidation.validate(
-        subject: subject,
+        account: account,
         proposerPubkeyHex: wallet.pubkeyHex,
         newAdmins: _newAdmins,
         newThreshold: newThreshold,
@@ -245,9 +245,9 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
           requestId: QrSigner.generateRequestId(prefix: 'admin-change-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
-          payloadHex: '0x${AdminSubjectIdCodec.hexEncode(payload)}',
+          payloadHex: '0x${AdminAccountIdCodec.hexEncode(payload)}',
           display: AdminSetChangeQrAdapter.buildDisplay(
-            subject: subject,
+            account: account,
             newAdmins: validated.admins,
             newThreshold: validated.threshold,
           ),
@@ -262,19 +262,19 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return AdminSubjectIdCodec.hexDecode(response.body.signature);
+        return AdminAccountIdCodec.hexDecode(response.body.signature);
       }
 
       final result = await _changeService.submit(
-        subject: subject,
+        account: account,
         newAdmins: validated.admins,
         newThreshold: validated.threshold,
         fromAddress: wallet.address,
-        signerPubkey: AdminSubjectIdCodec.hexDecode(wallet.pubkeyHex),
+        signerPubkey: AdminAccountIdCodec.hexDecode(wallet.pubkeyHex),
         sign: signCallback,
       );
-      _subjectService.clearSubjectCache(subject.subjectIdHex);
-      _subjectService.clearIdentityCache(widget.subjectIdentity);
+      _accountService.clearAccountCache(account.accountHex);
+      _accountService.clearIdentityCache(widget.accountIdentity);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(

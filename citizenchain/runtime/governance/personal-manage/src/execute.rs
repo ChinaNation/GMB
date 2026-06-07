@@ -3,7 +3,7 @@
 //! 涵盖:
 //! - `execute_create_with_finalizer`: ACTION_CREATE 通过后入金 + 激活 PersonalDuoqians
 //! - `execute_close_with_finalizer`: ACTION_CLOSE 通过后转出余额 + 删除 PersonalDuoqians
-//!   + 关闭 admin subject + 清 PendingCloseProposal
+//!   + 关闭 admin account + 清 PendingCloseProposal
 //! - `cleanup_pending_create`: 创建提案被否决/超时/终态失败时清理 reserve
 
 extern crate alloc;
@@ -23,7 +23,6 @@ use crate::pallet::{
 };
 use crate::types::{CloseDuoqianAction, CreateDuoqianAction, DuoqianStatus};
 use crate::BalanceOf;
-use primitives::derive::subject_id_from_account;
 use votingengine::InternalVoteEngine;
 
 /// 执行创建：unreserve + 划转 + 扣手续费 + 激活 PersonalDuoqians。
@@ -58,18 +57,19 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    let subject = subject_id_from_account(&action.duoqian_address);
-    Pallet::<T>::activate_admin_subject(proposal_id, subject)?;
+    let account = action.duoqian_address.clone();
+    Pallet::<T>::activate_admin_account(proposal_id, account.clone())?;
     PersonalDuoqians::<T>::mutate(&action.duoqian_address, |maybe_account| {
         if let Some(account) = maybe_account {
             account.status = DuoqianStatus::Active;
         }
     });
     let org = votingengine::types::ORG_REN;
-    let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject)
+    let admin_count = admins_change::Pallet::<T>::active_account_admin_count(org, account.clone())
         .ok_or(Error::<T>::DuoqianNotFound)?;
-    let threshold = <T as Config>::InternalVoteEngine::configured_dynamic_threshold(org, subject)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
+    let threshold =
+        <T as Config>::InternalVoteEngine::configured_dynamic_threshold(org, account.clone())
+            .ok_or(Error::<T>::DuoqianNotFound)?;
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::DuoqianCreated {
@@ -85,7 +85,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     Ok(())
 }
 
-/// 执行关闭：转出余额 + 删除 PersonalDuoqians + 关闭 admin subject。
+/// 执行关闭：转出余额 + 删除 PersonalDuoqians + 关闭 admin account。
 pub(crate) fn execute_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &CloseDuoqianAction<T::AccountId>,
@@ -97,12 +97,13 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
         ),
         Error::<T>::ProtectedSource
     );
-    let subject_id = subject_id_from_account(&action.duoqian_address);
+    let account = action.duoqian_address.clone();
     let org = votingengine::types::ORG_REN;
-    let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject_id)
+    let admin_count = admins_change::Pallet::<T>::active_account_admin_count(org, account.clone())
         .ok_or(Error::<T>::DuoqianNotFound)?;
-    let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, subject_id)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
+    let threshold =
+        <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())
+            .ok_or(Error::<T>::DuoqianNotFound)?;
     let all_balance = T::Currency::free_balance(&action.duoqian_address);
     // 中文注释：注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
     ensure!(
@@ -140,7 +141,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     .map_err(|_| Error::<T>::TransferFailed)?;
 
     PersonalDuoqians::<T>::remove(&action.duoqian_address);
-    Pallet::<T>::close_admin_subject(proposal_id, subject_id)?;
+    Pallet::<T>::close_admin_account(proposal_id, account)?;
     PendingCloseProposal::<T>::remove(&action.duoqian_address);
 
     Pallet::<T>::deposit_event(Event::<T>::DuoqianClosed {
@@ -158,7 +159,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
 
 /// 创建提案被否决/超时/终态失败时清理:
 /// unreserve(amount + fee) + 删 PersonalDuoqians/PendingPersonalCreate +
-/// 移除 admin subject Pending。
+/// 移除 admin account Pending。
 ///
 /// `emit_event = true` 时(否决路径)发 `DuoqianCreateRejected`,终态失败路径不发。
 pub(crate) fn cleanup_pending_create<T: Config>(
@@ -170,10 +171,7 @@ pub(crate) fn cleanup_pending_create<T: Config>(
         return Ok(false);
     }
 
-    Pallet::<T>::remove_pending_admin_subject(
-        proposal_id,
-        subject_id_from_account(&action.duoqian_address),
-    )?;
+    Pallet::<T>::remove_pending_admin_account(proposal_id, action.duoqian_address.clone())?;
 
     let reserve_total = action.amount.saturating_add(action.fee);
     let _ = T::Currency::unreserve(&action.proposer, reserve_total);

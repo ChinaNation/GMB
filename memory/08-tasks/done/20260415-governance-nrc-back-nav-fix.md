@@ -38,7 +38,7 @@
 **不区分 backTab** 一律跳转到视图 B：
 
 ```tsx
-onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+onBack={() => setView({ page: 'institution-detail', sfidNumber: view.sfidNumber, backTab: view.backTab })}
 ```
 
 对 PRC/PRB（backTab='prc'|'prb'，来时即通过视图 B）是对的；
@@ -49,20 +49,20 @@ onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, b
 **方案 1：按 backTab 分发返回父级**。NRC 的父级是 tab 状态 `{ page: 'nrc' }`，
 PRC/PRB 的父级是 `{ page: 'institution-detail' }`。
 
-抽 `backToInstitutionParent(backTab, shenfenId)` helper：
+抽 `backToInstitutionParent(backTab, sfidNumber)` helper：
 
 ```tsx
-const backToInstitutionParent = (backTab: SubTab, shenfenId: string) => {
+const backToInstitutionParent = (backTab: SubTab, sfidNumber: string) => {
   if (backTab === 'nrc') {
     setView({ page: 'nrc' });
   } else {
-    setView({ page: 'institution-detail', shenfenId, backTab });
+    setView({ page: 'institution-detail', sfidNumber, backTab });
   }
 };
 ```
 
 `propose-sweep` / `propose-fee-rate` 的 `onBack` / `onSuccess` 都改为
-`() => backToInstitutionParent(view.backTab, view.shenfenId)`。
+`() => backToInstitutionParent(view.backTab, view.sfidNumber)`。
 
 ### 为什么不选"方案 2"（把视图 B 改成自动适配 NRC）
 

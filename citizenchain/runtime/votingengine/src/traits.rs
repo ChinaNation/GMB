@@ -1,12 +1,12 @@
 //! 投票引擎对外 trait 定义与默认 `()` 实现。
 //!
 //! 本文件集中所有可被 runtime / 业务 pallet 注入的 trait,以及它们的默认 `()` 实现,
-//! 让 lib.rs 主体只保留 `#[pallet]` 宏与 storage/extrinsic 声明。
+//! 让 lib.rs 主文件只保留 `#[pallet]` 宏与 storage/extrinsic 声明。
 
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
-use crate::{ProposalCancelDecision, ProposalExecutionOutcome, SubjectId};
+use crate::{ProposalCancelDecision, ProposalExecutionOutcome};
 
 pub trait JointVoteEngine<AccountId> {
     fn create_joint_proposal(who: AccountId) -> Result<u64, DispatchError>;
@@ -59,7 +59,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_general_internal_proposal_with_data(
         who: AccountId,
         org: u8,
-        institution: SubjectId,
+        institution: AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
@@ -70,7 +70,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_lifecycle_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: SubjectId,
+        _institution: AccountId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -81,17 +81,17 @@ pub trait InternalVoteEngine<AccountId> {
     ///
     /// `dynamic_threshold` 是注册后普通业务使用的动态阈值配置，不是本次注册投票阈值。
     /// 本次注册投票阈值由投票引擎按 `admins.len()` 写全员通过快照。
-    fn create_registered_subject_create_proposal_with_data(
+    fn create_registered_account_create_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: SubjectId,
+        _institution: AccountId,
         _admins: sp_std::vec::Vec<AccountId>,
         _dynamic_threshold: u32,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
-            "RegisteredSubjectCreateVoteEngineNotConfigured",
+            "RegisteredAccountCreateVoteEngineNotConfigured",
         ))
     }
 
@@ -102,7 +102,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_admin_change_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: SubjectId,
+        _institution: AccountId,
         _new_admin_count: u32,
         _new_threshold: u32,
         _module_tag: &[u8],
@@ -114,12 +114,12 @@ pub trait InternalVoteEngine<AccountId> {
     }
 
     /// 读取已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
-    fn active_dynamic_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
+    fn active_dynamic_threshold(_org: u8, _institution: AccountId) -> Option<u32> {
         None
     }
 
     /// 读取 pending 或 active 动态阈值。注册回调在激活前发事件时使用。
-    fn configured_dynamic_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
+    fn configured_dynamic_threshold(_org: u8, _institution: AccountId) -> Option<u32> {
         None
     }
 }
@@ -128,7 +128,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     fn create_general_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: SubjectId,
+        _institution: AccountId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -530,60 +530,42 @@ impl<
 /// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
 /// drift，会被视为权限错误并回滚提案创建。
 pub trait InternalAdminProvider<AccountId> {
-    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId) -> bool;
+    fn is_internal_admin(org: u8, institution: AccountId, who: &AccountId) -> bool;
 
     /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
-    fn get_admin_list(_org: u8, _institution: SubjectId) -> Option<sp_std::vec::Vec<AccountId>> {
+    fn get_admin_list(_org: u8, _institution: AccountId) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 
-    /// 查询 Pending 主体管理员权限。仅供创建/激活该主体的投票入口使用。
-    fn is_pending_internal_admin(_org: u8, _institution: SubjectId, _who: &AccountId) -> bool {
+    /// 查询 Pending 账户管理员权限。仅供创建/激活该账户的投票入口使用。
+    fn is_pending_internal_admin(_org: u8, _institution: AccountId, _who: &AccountId) -> bool {
         false
     }
 
-    /// 获取 Pending 主体管理员列表。仅供创建/激活该主体时锁定快照。
+    /// 获取 Pending 账户管理员列表。仅供创建/激活该账户时锁定快照。
     fn get_pending_admin_list(
         _org: u8,
-        _institution: SubjectId,
+        _institution: AccountId,
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
-    fn is_internal_admin(_org: u8, _institution: SubjectId, _who: &AccountId) -> bool {
+    fn is_internal_admin(_org: u8, _institution: AccountId, _who: &AccountId) -> bool {
         false
     }
 }
 
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
-pub trait InternalAdminCountProvider {
-    fn admin_count(org: u8, institution: SubjectId) -> Option<u32>;
+pub trait InternalAdminCountProvider<AccountId> {
+    fn admin_count(org: u8, institution: AccountId) -> Option<u32>;
 }
 
-impl InternalAdminCountProvider for () {
-    fn admin_count(org: u8, institution: SubjectId) -> Option<u32> {
-        match org {
-            crate::types::ORG_NRC | crate::types::ORG_PRC => {
-                use primitives::china::china_cb::CHINA_CB;
-                use primitives::derive::subject_id_from_sfid_number;
-                CHINA_CB
-                    .iter()
-                    .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
-                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
-            }
-            crate::types::ORG_PRB => {
-                use primitives::china::china_ch::CHINA_CH;
-                use primitives::derive::subject_id_from_sfid_number;
-                CHINA_CH
-                    .iter()
-                    .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
-                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
-            }
-            _ => None,
-        }
+impl<AccountId> InternalAdminCountProvider<AccountId> for () {
+    fn admin_count(_org: u8, _institution: AccountId) -> Option<u32> {
+        None
     }
 }
 
@@ -597,16 +579,16 @@ impl InternalAdminCountProvider for () {
 ///
 /// votingengine 主 crate 的 `finalize_proposal` extrinsic 与 `on_initialize`
 /// 自动结算逻辑遇到 `STAGE_INTERNAL` 时通过本 trait 派发,业务实现住在 sub-pallet。
-pub trait InternalProposalFinalizer<BlockNumber> {
+pub trait InternalProposalFinalizer<BlockNumber, AccountId> {
     fn finalize_internal_timeout(
-        proposal: &crate::Proposal<BlockNumber>,
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
         proposal_id: u64,
     ) -> DispatchResult;
 }
 
-impl<BlockNumber> InternalProposalFinalizer<BlockNumber> for () {
+impl<BlockNumber, AccountId> InternalProposalFinalizer<BlockNumber, AccountId> for () {
     fn finalize_internal_timeout(
-        _proposal: &crate::Proposal<BlockNumber>,
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,
     ) -> DispatchResult {
         Err(DispatchError::Other(
@@ -659,28 +641,28 @@ impl InternalCleanupHandler for () {
 ///
 /// 联合投票分两阶段:内部投票阶段(STAGE_JOINT)+ 联合公投阶段(STAGE_REFERENDUM)。
 /// votingengine 主 crate 的 finalize 路径根据 stage 选择派发到这两个 fn。
-pub trait JointProposalFinalizer<BlockNumber> {
+pub trait JointProposalFinalizer<BlockNumber, AccountId> {
     fn finalize_joint_timeout(
-        proposal: &crate::Proposal<BlockNumber>,
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
         proposal_id: u64,
     ) -> DispatchResult;
 
     fn finalize_jointreferendum_timeout(
-        proposal: &crate::Proposal<BlockNumber>,
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
         proposal_id: u64,
     ) -> DispatchResult;
 }
 
-impl<BlockNumber> JointProposalFinalizer<BlockNumber> for () {
+impl<BlockNumber, AccountId> JointProposalFinalizer<BlockNumber, AccountId> for () {
     fn finalize_joint_timeout(
-        _proposal: &crate::Proposal<BlockNumber>,
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,
     ) -> DispatchResult {
         Err(DispatchError::Other("JointProposalFinalizerNotConfigured"))
     }
 
     fn finalize_jointreferendum_timeout(
-        _proposal: &crate::Proposal<BlockNumber>,
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,
     ) -> DispatchResult {
         Err(DispatchError::Other("JointProposalFinalizerNotConfigured"))

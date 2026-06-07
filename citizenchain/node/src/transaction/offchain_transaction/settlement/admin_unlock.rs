@@ -354,20 +354,20 @@ mod tests {
 
     #[test]
     fn challenge_payload_layout_is_118_bytes() {
-        let p = build_challenge_payload(&[0xAA; 32], "SFR-TEST", 1234567890);
+        let p = build_challenge_payload(&[0xAA; 32], "AH001-SCB0V-123456789-2026", 1234567890);
         assert_eq!(p.len(), CHALLENGE_TOTAL_LEN);
         assert_eq!(&p[..14], DECRYPT_PREFIX);
     }
 
     #[test]
     fn challenge_payload_pubkey_position() {
-        let p = build_challenge_payload(&[0xCC; 32], "FFR-X", 0);
+        let p = build_challenge_payload(&[0xCC; 32], "AH001-FCB0P-123456789-2026", 0);
         assert_eq!(&p[14 + 48..14 + 48 + 32], &[0xCC; 32]);
     }
 
     #[test]
     fn build_decrypt_admin_request_rejects_short_pubkey() {
-        let err = build_decrypt_admin_request("0xAA", "SFR-X").unwrap_err();
+        let err = build_decrypt_admin_request("0xAA", "AH001-SCB0V-123456789-2026").unwrap_err();
         assert!(err.contains("公钥格式"));
     }
 
@@ -376,18 +376,18 @@ mod tests {
         decrypted_map().lock().unwrap().insert(
             "aa".repeat(32),
             MemoryEntry {
-                sfid_number: "SFR-A".to_string(),
+                sfid_number: "AH001-SCB0V-123456789-2026".to_string(),
                 decrypted_at_ms: 1,
             },
         );
         decrypted_map().lock().unwrap().insert(
             "bb".repeat(32),
             MemoryEntry {
-                sfid_number: "SFR-B".to_string(),
+                sfid_number: "AH001-SCB0H-202605070-2026".to_string(),
                 decrypted_at_ms: 2,
             },
         );
-        let r = list_decrypted_admins("SFR-A");
+        let r = list_decrypted_admins("AH001-SCB0V-123456789-2026");
         assert_eq!(r.len(), 1);
         assert!(r[0].pubkey_hex.contains("aa"));
 
@@ -400,7 +400,7 @@ mod tests {
         decrypted_map().lock().unwrap().insert(
             "cc".repeat(32),
             MemoryEntry {
-                sfid_number: "SFR-C".to_string(),
+                sfid_number: "AH001-SCB0E-202605180-2026".to_string(),
                 decrypted_at_ms: 10,
             },
         );

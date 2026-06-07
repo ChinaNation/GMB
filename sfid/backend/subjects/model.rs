@@ -53,7 +53,7 @@ pub struct MultisigInstitution {
     /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
     ///
     /// 两步式创建(2026-04-19):
-    ///   - 私权机构(SFR/FFR)第一步创建时为 `None`,由详情页 `update_institution` 补填
+    ///   - 私权机构(S/F)第一步创建时为 `None`,由详情页 `update_institution` 补填
     ///   - `JY` 手动新增学校机构时必传
     ///   - 自动公权机构/公安局由系统生成名称,不会为 `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -69,8 +69,8 @@ pub struct MultisigInstitution {
     pub status: String,
     /// 机构分类(公安局/公权机构/私权机构)。
     pub category: InstitutionCategory,
-    /// 主体属性(GFR/SFR/FFR)。
-    pub a3: String,
+    /// 主体属性(G/S/F)。
+    pub subject_property: String,
     /// 盈利属性("0"/"1")。
     pub p1: String,
     /// 所属省(名称,如"安徽省")。
@@ -95,12 +95,12 @@ pub struct MultisigInstitution {
     /// 公权机构细类代码,例如 CITY_FINANCE、TOWN_GOV。私权机构可为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
-    /// 私法人子类型(仅 A3=SFR 时有值)。
+    /// 私法人子类型(仅 SubjectProperty=S 时有值)。
     /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK / NON_PROFIT
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
-    /// 所属法人身份ID(**仅 A3=FFR 非法人必填**)。
-    /// 指向一个私法人(SFR)或公法人(GFR)机构的 sfid_number。
+    /// 所属法人身份ID(**仅 SubjectProperty=F 非法人必填**)。
+    /// 指向一个私法人(S)或公法人(G)机构的 sfid_number。
     /// 非法人机构必须挂在某个法人机构下,全国范围可选。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
@@ -201,12 +201,12 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInstitutionInput {
-    pub a3: String,
+    pub subject_property: String,
     pub p1: Option<String>,
     pub province: Option<String>,
     pub city: String,
     pub institution: String,
-    /// 两步式:私权(SFR/FFR)不传,由详情页 `update_institution` 补填;
+    /// 两步式:私权(S/F)不传,由详情页 `update_institution` 补填;
     /// `JY` 手动新增学校机构必传;普通私权两步式不传;自动公权机构不走该创建 DTO。
     pub institution_name: Option<String>,
     pub full_name: Option<String>,
@@ -249,7 +249,7 @@ pub struct UpdateInstitutionInput {
     #[serde(default)]
     pub short_name: Option<String>,
     pub sub_type: Option<String>,
-    /// 所属法人 sfid_number(仅 FFR 可设置;SFR/GFR 传值会被拒)
+    /// 所属法人 sfid_number(仅 F 可设置;S/G 传值会被拒)
     #[serde(default)]
     pub parent_sfid_number: Option<String>,
     /// 法定代表人三项资料在机构编辑保存时必填。
@@ -302,7 +302,7 @@ pub struct InstitutionListRow {
     pub short_name: Option<String>,
     pub status: String,
     pub category: InstitutionCategory,
-    pub a3: String,
+    pub subject_property: String,
     pub p1: String,
     pub province: String,
     pub city: String,
@@ -332,13 +332,13 @@ pub struct InstitutionListRow {
     pub created_by_role: Option<String>,
 }
 
-/// 法人机构搜索结果项(用于 FFR 详情页"所属法人"选择器)
+/// 法人机构搜索结果项(用于 F 详情页"所属法人"选择器)
 #[derive(Debug, Serialize)]
 pub struct ParentInstitutionRow {
     pub sfid_number: String,
     pub institution_name: String,
-    pub a3: String,
-    /// 私法人子类型(仅 a3=SFR 有值);FFR 前端用此判断父 SFR 是否 JOINT_STOCK 以开放清算行设置
+    pub subject_property: String,
+    /// 私法人子类型(仅 subject_property=S 有值);F 前端用此判断父 S 是否 JOINT_STOCK 以开放清算行设置
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
     pub category: InstitutionCategory,

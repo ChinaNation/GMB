@@ -25,22 +25,22 @@ src/
 
 ## 3. 清算行合法性模型
 
-清算行 = **SFR 私法人** 或 **FFR 非法人**(两者皆私权机构),对应 `sfid/backend/number/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
+清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `sfid/backend/number/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
 
-链上**不新增** SFID 枚举,而是直接对 `organization-manage::AddressRegisteredSfid` 存的 `sfid_number` 字符串做 A3 前缀匹配(前 3 字节)。
+链上**不新增** SFID 枚举,而是直接对 `organization-manage::AddressRegisteredSfid` 存的 `sfid_number` 字符串做 K1 字节匹配。
 
 ```rust
-pub fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
-    sfid_bytes.get(..3).map(|a3| a3 == b"SFR" || a3 == b"FFR").unwrap_or(false)
+pub fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
+    matches!(sfid_bytes.get(6), Some(b'S' | b'F'))
 }
 ```
 
 合法清算行的六条并列条件(`ensure_can_be_bound`):
 1. 在 `AddressRegisteredSfid` 有登记
 2. `name` 段等于 `"主账户"`(3 字节 UTF-8 × 3 字 = 9 字节)
-3. A3 ∈ {SFR, FFR}
+3. K1 ∈ {S, F}
 4. `InstitutionAccounts[(sfid_number, "主账户")].status == Active`
-5. `SfidAccountQuery::is_clearing_bank_eligible(bank_main)` 通过。2026-05-02 起 SFID 系统负责 `eligible-search` 候选筛选,链上不再保存 `a3/sub_type/parent_sfid_number` 元数据,这里只确认账户属于已注册且 Active 的 SFID 机构账户
+5. `SfidAccountQuery::is_clearing_bank_eligible(bank_main)` 通过。2026-05-02 起 SFID 系统负责 `eligible-search` 候选筛选,链上不再保存 `subject_property/sub_type/parent_sfid_number` 元数据,这里只确认账户属于已注册且 Active 的 SFID 机构账户
 6. `ClearingBankNodes[sfid_number]` 已声明,确保用户不能绑定到"合法机构但未加入清算网络"的节点
 
 ## 4. 解耦抽象 `SfidAccountQuery`

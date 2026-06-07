@@ -10,19 +10,19 @@
 > 警告：交易内容与摘要不符，禁止签名
 
 服务端 `citizenchain/node/src/ui/governance/signing.rs` 调用
-`find_entry(shenfen_id)`（在 `mod.rs` 的 NATIONAL_COUNCILS + PROVINCIAL_COUNCILS
-+ PROVINCIAL_BANKS 三个数组中查找）把 `shenfen_id` 还原为中文名，写入
+`find_entry(sfid_number)`（在 `mod.rs` 的 NATIONAL_COUNCILS + PROVINCIAL_COUNCILS
++ PROVINCIAL_BANKS 三个数组中查找）把 `sfid_number` 还原为中文名，写入
 `display.fields.institution`。
 
 冷钱包 `wumin/lib/signer/payload_decoder.dart` 用
-`clearingBankName(shenfen_id) ?? shenfen_id` 还原机构名并塞入
+`clearingBankName(sfid_number) ?? sfid_number` 还原机构名并塞入
 `decoded.fields.institution`。但 `clearing_banks.dart` 只有 43 条
-`SFR-` 省储行数据，缺：
-- 1 条国储会（`GFR-LN001-CB0C-...`，`国家储备委员会`）
-- 43 条省储会（`GFR-...`）
+`K1=S-` 省储行数据，缺：
+- 1 条国储会（`LN001-GCB05-944805165-2026-...`，`国家储备委员会`）
+- 43 条省储会（`K1=G-...`）
 
 结果：国储或省储会发起提案时 `clearingBankName()` 返回 null，
-`bankName` 退化成原始的 `GFR-LN001-CB0C-617776487-20260222` 字符串，
+`bankName` 退化成原始的 `LN001-GCB05-944805165-2026` 字符串，
 与服务端 `国家储备委员会` 不匹配 → `DisplayMatchStatus.mismatched`
 → `交易内容与摘要不符,拒绝签名`。
 
@@ -53,7 +53,7 @@
 - `wuminapp/lib/trade/offchain/clearing_banks.dart:45`
 - `wuminapp/lib/governance/institution_data.dart:706`
 
-`shenfen_id` 未变（仍为 `SFR-HA000-CH1N-832919801-20260222`），链上标识不受影响；
+`sfid_number` 未变（仍为 `AH001-SCB0V-123456789-2026`），链上标识不受影响；
 `shenfen_name` 仅用于展示，runtime 升级即可生效。
 
 ## 验证

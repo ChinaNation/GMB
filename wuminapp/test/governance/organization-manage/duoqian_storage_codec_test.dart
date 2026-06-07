@@ -28,39 +28,25 @@ void main() {
   }
 
   group('DuoqianStorageCodec', () {
-    test('builds current subject ids', () {
-      final builtin = DuoqianStorageCodec.subjectIdFromBuiltin(
-        'GFR-LN001-CB0X-944805165-2026',
-      );
-      expect(builtin.length, 48);
-      expect(builtin[0], 0x01);
-
-      final sfid = DuoqianStorageCodec.subjectIdFromSfidBytes(
-        Uint8List.fromList(utf8.encode('SFR-AH001-20260507')),
-      );
-      expect(sfid.length, 48);
-      expect(sfid[0], 0x02);
-
+    test('builds current account ids', () {
       final institutionAccount =
-          DuoqianStorageCodec.subjectIdFromInstitutionAccountHex('22' * 32);
-      expect(institutionAccount.length, 48);
-      expect(institutionAccount[0], 0x05);
-      expect(institutionAccount.sublist(1, 33), List<int>.filled(32, 0x22));
-      expect(institutionAccount.sublist(33), List<int>.filled(15, 0));
+          DuoqianStorageCodec.accountIdFromAccountHex('22' * 32);
+      expect(institutionAccount.length, 32);
+      expect(institutionAccount, List<int>.filled(32, 0x22));
     });
 
     test('decodes registered institution ref', () {
       final data = Uint8List.fromList([
-        ...compactVec('SFR-AH001-20260507'),
+        ...compactVec('AH001-SCB0H-202605070-2026'),
         ...compactVec('主账户'),
       ]);
 
       final decoded = DuoqianStorageCodec.decodeRegisteredInstitution(data)!;
-      expect(decoded.sfidNumberText, 'SFR-AH001-20260507');
+      expect(decoded.sfidNumberText, 'AH001-SCB0H-202605070-2026');
       expect(decoded.accountNameText, '主账户');
     });
 
-    test('decodes admin subject', () {
+    test('decodes admin account', () {
       final admin1 = List<int>.filled(32, 0xaa);
       final admin2 = List<int>.filled(32, 0xbb);
       final data = Uint8List.fromList([
@@ -75,7 +61,7 @@ void main() {
         1,
       ]);
 
-      final decoded = DuoqianStorageCodec.decodeAdminSubject(data)!;
+      final decoded = DuoqianStorageCodec.decodeAdminAccount(data)!;
       expect(decoded.org, 5);
       expect(decoded.adminCount, 2);
       expect(decoded.threshold, isNull);

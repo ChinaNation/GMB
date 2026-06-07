@@ -93,7 +93,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 **任何字段顺序变更必须同步改 `governance/organization-manage/signing.rs::build_propose_create_institution_call_data`**,否则冷钱包签名 payload 与链上 call_data 不一致。
 
 注册业务字段只允许来自 SFID `registration-info` 的 `sfid_number / institution_name / account_names[]`。
-`a3 / sub_type / parent_sfid_number` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。
+`subject_property / sub_type / parent_sfid_number` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。
 
 ## 5. 创建机构整体时序
 
@@ -108,7 +108,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
                   - 取 sheng_signer_cache.get(province) → ProvinceSigner
                   - 生成 register_nonce = uuid_v4 字符串
                   - signature = ProvinceSigner.sign(blake2_256(scale_encode(
-                        DUOQIAN_DOMAIN ++ OP_SIGN_INST ++ genesis_hash
+                        DUOQIAN ++ OP_SIGN_INST ++ genesis_hash
                         ++ sfid_number ++ institution_name ++ account_names[]
                         ++ register_nonce ++ province ++ signer_admin_pubkey
                     )))
@@ -166,4 +166,4 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 ## 8. 变更记录
 
 - 2026-05-01:首次落地。节点 Rust 加 4 个 Tauri 命令 + 5 个 chain/sfid/signing helper;节点前端新建 4 页 + 状态机重构 + 删 3 个老文件。
-- 2026-05-02:对齐 SFID `registration-info`。创建机构多签注册 payload 收口为 `sfid_number / institution_name / account_names[]`,移除 `a3/sub_type/parent_sfid_number` 注册透传,补齐 `signer_admin_pubkey`。
+- 2026-05-02:对齐 SFID `registration-info`。创建机构多签注册 payload 收口为 `sfid_number / institution_name / account_names[]`,移除 `subject_property/sub_type/parent_sfid_number` 注册透传,补齐 `signer_admin_pubkey`。

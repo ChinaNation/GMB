@@ -67,11 +67,11 @@ export async function listOfficialInstitutions(
 export async function checkInstitutionName(
   auth: AdminAuth,
   name: string,
-  a3?: string,
+  subject_property?: string,
   city?: string,
 ): Promise<{ exists: boolean }> {
   const params = new URLSearchParams({ name });
-  if (a3) params.set('a3', a3);
+  if (subject_property) params.set('subject_property', subject_property);
   if (city) params.set('city', city);
   return adminRequest<{ exists: boolean }>(
     `/api/v1/institution/check-name?${params.toString()}`,
@@ -84,7 +84,7 @@ export async function createInstitution(
   input: CreateInstitutionInput,
 ): Promise<CreateInstitutionOutput> {
   const grantPayload = {
-    a3: input.a3,
+    subject_property: input.subject_property,
     p1: input.p1 ?? null,
     province: input.province ?? null,
     city: input.city,

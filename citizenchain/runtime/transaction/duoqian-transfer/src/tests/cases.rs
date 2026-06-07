@@ -6,7 +6,7 @@ use super::*;
 fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -38,7 +38,7 @@ fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
 fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -68,7 +68,7 @@ fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
 fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prb_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -97,7 +97,7 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
 #[test]
 fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let institution = registered_duoqian_institution();
+        let institution = registered_duoqian_account();
         let inst_account = registered_duoqian_account();
         let dest = beneficiary();
         let admins = BoundedVec::try_from(vec![
@@ -119,19 +119,19 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
                 status: personal_manage::DuoqianStatus::Active,
             },
         );
-        admins_change::Subjects::<Test>::insert(
-            institution,
-            admins_change::AdminSubject {
+        admins_change::AdminAccounts::<Test>::insert(
+            institution.clone(),
+            admins_change::AdminAccount {
                 org: ORG_REN,
-                kind: admins_change::AdminSubjectKind::PersonalDuoqian,
+                kind: admins_change::AdminAccountKind::PersonalDuoqian,
                 admins,
                 creator: registered_duoqian_admin(0),
                 created_at: 1,
                 updated_at: 1,
-                status: admins_change::AdminSubjectStatus::Active,
+                status: admins_change::AdminAccountStatus::Active,
             },
         );
-        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, institution, 2);
+        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, institution.clone(), 2);
         let _ = Balances::deposit_creating(&inst_account, 10_000);
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -159,9 +159,9 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
 }
 
 #[test]
-fn institution_account_subject_transfer_executes_when_internal_vote_reaches_threshold() {
+fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let institution = registered_institution_subject();
+        let institution = registered_institution_account();
         let inst_account = registered_institution_account();
         let dest = beneficiary();
         let admins = BoundedVec::try_from(vec![
@@ -171,7 +171,7 @@ fn institution_account_subject_transfer_executes_when_internal_vote_reaches_thre
         ])
         .expect("admins should fit");
 
-        insert_active_registered_institution_account(&inst_account, institution, admins);
+        insert_active_registered_institution_account(&inst_account, admins);
         let _ = Balances::deposit_creating(&inst_account, 10_000);
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -201,7 +201,7 @@ fn institution_account_subject_transfer_executes_when_internal_vote_reaches_thre
 #[test]
 fn institution_account_rejects_personal_org() {
     new_test_ext().execute_with(|| {
-        let institution = registered_institution_subject();
+        let institution = registered_institution_account();
         let inst_account = registered_institution_account();
         let admins = BoundedVec::try_from(vec![
             registered_institution_admin(0),
@@ -210,14 +210,14 @@ fn institution_account_rejects_personal_org() {
         ])
         .expect("admins should fit");
 
-        insert_active_registered_institution_account(&inst_account, institution, admins);
+        insert_active_registered_institution_account(&inst_account, admins);
         let _ = Balances::deposit_creating(&inst_account, 10_000);
 
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(registered_institution_admin(0)),
                 ORG_REN,
-                institution,
+                institution.clone(),
                 beneficiary(),
                 1_000,
                 BoundedVec::default(),
@@ -228,17 +228,15 @@ fn institution_account_rejects_personal_org() {
 }
 
 #[test]
-fn sfid_institution_subject_cannot_be_used_as_transfer_source() {
+fn unknown_account_cannot_be_used_as_transfer_source() {
     new_test_ext().execute_with(|| {
-        let institution =
-            primitives::derive::subject_id_from_registered_sfid_number(b"SFR-TEST-INST-20260507")
-                .expect("sfid subject should be valid");
+        let institution = AccountId32::new([0x77; 32]);
 
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(registered_institution_admin(0)),
                 ORG_REN,
-                institution,
+                institution.clone(),
                 beneficiary(),
                 1_000,
                 BoundedVec::default(),
@@ -258,7 +256,7 @@ fn zero_amount_is_rejected() {
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
-                institution,
+                institution.clone(),
                 dest,
                 0,
                 BoundedVec::default(),
@@ -272,7 +270,7 @@ fn zero_amount_is_rejected() {
 fn self_transfer_is_rejected() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
 
         assert_noop!(
             DuoqianTransfer::propose_transfer(
@@ -300,7 +298,7 @@ fn insufficient_balance_is_rejected_on_propose() {
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
-                institution,
+                institution.clone(),
                 dest.clone(),
                 9_990,
                 BoundedVec::default(),
@@ -329,7 +327,7 @@ fn multiple_proposals_allowed_within_limit() {
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -356,7 +354,7 @@ fn executed_transfer_does_not_block_new_proposal() {
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -391,7 +389,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -429,7 +427,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
 fn existential_deposit_is_preserved() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
 
         // 余额 10_000，ED=1，手续费=10，提案 9_989 刚好使剩余 = ED
@@ -460,7 +458,7 @@ fn existential_deposit_is_preserved() {
 fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
 
         // 余额 10_000,提案 9_000(预检通过),然后在投票通过前转走 9_000。
@@ -544,7 +542,7 @@ fn retry_passed_transfer_rejects_non_passed_proposal() {
 fn retry_passed_transfer_rejects_non_admin() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
         let outsider = AccountId32::new([88u8; 32]);
         let _ = Balances::deposit_creating(&outsider, 1);
@@ -655,7 +653,7 @@ fn protected_address_is_rejected() {
 fn institution_spend_guard_blocks_transfer_proposal() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let source = institution_account(institution);
+        let source = institution_account(&institution);
         let dest = beneficiary();
         DENIED_SPEND_SOURCE.with(|blocked| *blocked.borrow_mut() = Some(source.clone()));
 
@@ -679,7 +677,7 @@ fn institution_spend_guard_blocks_transfer_proposal() {
 fn fee_respects_minimum_on_small_amount() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
+        let inst_account = institution_account(&institution);
         let dest = beneficiary();
 
         // amount=1, 费率计算 1×0.1%=0.001 < 最低 10 分，手续费应为 10

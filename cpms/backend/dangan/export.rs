@@ -7,7 +7,10 @@ use sqlx::Row;
 use std::collections::HashSet;
 use uuid::Uuid;
 
-use crate::{err, initialize, ApiError, AppState};
+use crate::{
+    common::{err, ApiError},
+    initialize, AppState,
+};
 
 use super::{
     active_archive_sign_key, effective_voting_eligible, sign_archive_payload_with_secret,
@@ -570,13 +573,13 @@ mod tests {
     fn status_export_sign_source_is_canonical() {
         assert_eq!(
             build_status_export_sign_source(
-                "GFR-GD001-ZG0X-123456789-2026",
+                "GD001-GZG0E-123456789-2026",
                 "0xpub",
                 "cse_1",
                 9,
                 "0xhash"
             ),
-            "sfid-cpms-v1|cpms-status-export|GFR-GD001-ZG0X-123456789-2026|0xpub|cse_1|9|0xhash"
+            "sfid-cpms-v1|cpms-status-export|GD001-GZG0E-123456789-2026|0xpub|cse_1|9|0xhash"
         );
     }
 

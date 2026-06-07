@@ -381,8 +381,8 @@ class _PersonalManageAccountInfoPageState
     );
     if (closed == true && mounted) {
       // 关闭提案已提交,但**链上 close 还没真正执行**(要等其他管理员投票通过)。
-      // 此时 admins-change Subjects 仍存,反向索引下次扫还会拉回 → **不能立即删本地**。
-      // 等链上 close execute 自动清掉 admins-change 后,反向索引下次扫不到再清孤立 entity。
+      // 此时 admins-change AdminAccounts 仍存,反向索引下次扫还会拉回 → **不能立即删本地**。
+      // 等链上 close execute 自动清掉 AdminAccounts 后,反向索引下次扫不到再清孤立 entity。
       Navigator.pop(context);
     }
   }
@@ -460,8 +460,8 @@ class _PersonalManageAccountInfoPageState
   /// `tally.yes + remaining < threshold` 立即满足,提案直接进入 STATUS_REJECTED。
   /// `cleanup_pending_personal_create` 自动执行:unreserve 创建者锁仓 + 删
   /// `PersonalManage::PersonalDuoqians` /
-  /// `PendingPersonalCreate` / `admins-change::Subjects`。其他管理员设备的反向索引下次扫不到该
-  /// institution_id,自动清理孤立 Isar entity。
+  /// `PendingPersonalCreate` / `admins-change::AdminAccounts`。其他管理员设备的反向索引下次扫不到该
+  /// AccountId,自动清理孤立 Isar entity。
   ///
   /// 仅个人 Pending 路径调用；Active 走 propose_close。
   /// 当前仅支持热钱包:冷钱包用户走"管理员列表" → 投反对票完成同样语义。

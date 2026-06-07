@@ -8,7 +8,7 @@ use blake2::{Blake2b, Digest};
 use rand::{rngs::OsRng, RngCore};
 use sqlx::Row;
 
-use crate::{err, ApiError};
+use crate::common::{err, ApiError};
 
 type Blake2b256 = Blake2b<U32>;
 

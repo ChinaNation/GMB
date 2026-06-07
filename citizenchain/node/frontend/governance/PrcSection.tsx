@@ -30,7 +30,7 @@ export function PrcSection() {
     return (
       <AdminListPage
         sfidNumber={view.sfidNumber}
-        subjectRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
+        accountRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
         onBack={() => backToDetail(view.sfidNumber)}
       />
     );
@@ -64,7 +64,7 @@ export function PrcSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        subjectRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
+        accountRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.sfidNumber)}

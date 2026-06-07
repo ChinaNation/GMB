@@ -16,7 +16,7 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_service.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_cache.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_models.dart';
@@ -73,10 +73,9 @@ class DuoqianTransferService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    final identity = AdminSubjectIdentity.fromInstitution(institution);
+    final identity = AdminAccountIdentity.fromInstitution(institution);
     final amountFen = BigInt.from((amountYuan * 100).round());
-    final institutionBytes =
-        _institutionIdentityToFixed48(institution.sfidNumber);
+    final institutionBytes = _institutionAccountId(institution);
     final beneficiaryPubkey =
         _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
     // 中文注释：InstitutionInfo.mainAddress 是 App 内部 AccountId hex，
@@ -85,6 +84,7 @@ class DuoqianTransferService {
     final callData = _buildProposeTransferCall(
       org: identity.org,
       institutionIdentity: institution.sfidNumber,
+      mainAddress: institution.mainAddress,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: amountFen,
       remark: remark,
@@ -144,6 +144,7 @@ class DuoqianTransferService {
   }) async {
     final callData = _buildProposeSweepCall(
       institutionIdentity: institution.sfidNumber,
+      mainAddress: institution.mainAddress,
       amountYuan: amountYuan,
     );
     return _signAndSubmit(
@@ -222,11 +223,12 @@ class DuoqianTransferService {
     );
   }
 
-  /// 反向索引:`ProposalsByInstitution[subject_id(48 bytes)]` 下的所有 proposal_id。
-  Future<List<int>> fetchProposalIdsByInstitution(String sfidNumber) async {
+  /// 反向索引:`ProposalsByInstitution[AccountId32]` 下的所有 proposal_id。
+  Future<List<int>> fetchProposalIdsByInstitution(
+      InstitutionInfo institution) async {
     return _fetchProposalIdsByDoubleMap(
       'ProposalsByInstitution',
-      _institutionIdentityToFixed48(sfidNumber),
+      _institutionAccountId(institution),
     );
   }
 
@@ -295,11 +297,11 @@ class DuoqianTransferService {
   static const maxActiveProposalsPerInstitution = 10;
 
   /// 查询机构活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
-  Future<List<int>> fetchActiveProposalIds(String sfidNumber) async {
+  Future<List<int>> fetchActiveProposalIds(InstitutionInfo institution) async {
     final key = _buildStorageKey(
       'VotingEngine',
       'ActiveProposalsByInstitution',
-      _institutionIdentityToFixed48(sfidNumber),
+      _institutionAccountId(institution),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];
@@ -350,13 +352,13 @@ class DuoqianTransferService {
   /// 可投钱包筛选也应优先使用同一份快照，避免当前管理员列表变化影响旧提案。
   Future<List<String>> fetchAdminSnapshot(
     int proposalId,
-    String institutionIdentity,
+    InstitutionInfo institution,
   ) async {
     final key = _buildDoubleStorageKey(
       'VotingEngine',
       'AdminSnapshot',
       _u64ToLeBytes(proposalId),
-      _institutionIdentityToFixed48(institutionIdentity),
+      _institutionAccountId(institution),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];
@@ -415,14 +417,14 @@ class DuoqianTransferService {
       offset++; // skip 0x00 (None)
     }
 
-    // internal_institution: Option<[u8;48]>
+    // internal_institution: Option<AccountId32>
     Uint8List? institutionBytes;
     if (offset < data.length && data[offset] == 1) {
       offset++;
-      if (offset + 48 <= data.length) {
+      if (offset + 32 <= data.length) {
         institutionBytes =
-            Uint8List.fromList(data.sublist(offset, offset + 48));
-        offset += 48;
+            Uint8List.fromList(data.sublist(offset, offset + 32));
+        offset += 32;
       }
     }
 
@@ -704,9 +706,9 @@ class DuoqianTransferService {
   ///   不会落 `ProposalsByInstitution`,所以这里**额外**取本年所有 kind=1
   ///   提案,并入结果(机构页要让所有用户都能看到联合投票)
   Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
-      String sfidNumber) async {
+      InstitutionInfo institution) async {
     // 1) 本机构所有提案(含内部投票)
-    final institutionIds = await fetchProposalIdsByInstitution(sfidNumber);
+    final institutionIds = await fetchProposalIdsByInstitution(institution);
     final institutionProposals = await _fetchProposalsForIds(institutionIds);
 
     // 2) 联合投票提案(kind=1)在所有机构页可见 — 取本年所有 ProposalsByYear[当前年]
@@ -750,9 +752,10 @@ class DuoqianTransferService {
 
   /// 查询指定机构的所有转账提案（包括已完成的），按 ID 倒序。
   Future<List<TransferProposalInfo>> fetchAllInstitutionProposals(
-      String sfidNumber) async {
-    final visibleProposals = await fetchInstitutionVisibleProposals(sfidNumber);
-    final institutionBytes = _institutionIdentityToFixed48(sfidNumber);
+      InstitutionInfo institution) async {
+    final visibleProposals =
+        await fetchInstitutionVisibleProposals(institution);
+    final institutionBytes = _institutionAccountId(institution);
     final proposals = <TransferProposalInfo>[];
 
     for (final proposal in visibleProposals) {
@@ -792,9 +795,9 @@ class DuoqianTransferService {
     Uint8List? institutionBytes;
     if (offset < data.length && data[offset] == 1) {
       offset++;
-      if (offset + 48 <= data.length) {
+      if (offset + 32 <= data.length) {
         institutionBytes =
-            Uint8List.fromList(data.sublist(offset, offset + 48));
+            Uint8List.fromList(data.sublist(offset, offset + 32));
       }
     }
 
@@ -898,7 +901,7 @@ class DuoqianTransferService {
   ///
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
   /// 原始字节为 TransferAction SCALE 布局：
-  ///   institution: [u8;48] + beneficiary: AccountId32(32) + amount: u128(16)
+  ///   institution: AccountId32(32) + beneficiary: AccountId32(32) + amount: u128(16)
   ///   + remark: Vec<u8>(Compact len + bytes) + proposer: AccountId32(32)
   Future<TransferProposalInfo?> fetchProposalAction(int proposalId) async {
     final key = _buildStorageKey(
@@ -918,7 +921,7 @@ class DuoqianTransferService {
 
     // 跳过 MODULE_TAG 前缀（"dq-xfer" = 7 字节）
     const tag = [0x64, 0x71, 0x2d, 0x78, 0x66, 0x65, 0x72]; // "dq-xfer"
-    if (data.length < tag.length + 48 + 32 + 16 + 1 + 32) return null;
+    if (data.length < tag.length + 32 + 32 + 16 + 1 + 32) return null;
     for (var i = 0; i < tag.length; i++) {
       if (data[i] != tag[i]) return null;
     }
@@ -930,9 +933,9 @@ class DuoqianTransferService {
     try {
       var offset = 0;
 
-      // institution: [u8; 48]
-      final institutionBytes = data.sublist(offset, offset + 48);
-      offset += 48;
+      // institution: AccountId32
+      final institutionBytes = data.sublist(offset, offset + 32);
+      offset += 32;
 
       // beneficiary: AccountId32 (32 bytes)
       final beneficiaryBytes = data.sublist(offset, offset + 32);
@@ -1013,10 +1016,11 @@ class DuoqianTransferService {
 
   /// 构造 propose_transfer call data。
   ///
-  /// 格式：[0x13][0x00][org:u8][institution:48bytes][beneficiary:32bytes][amount:u128][Vec remark]
+  /// 格式：[0x13][0x00][org:u8][institution:AccountId32][beneficiary:32bytes][amount:u128][Vec remark]
   Uint8List _buildProposeTransferCall({
     required int org,
     required String institutionIdentity,
+    required String mainAddress,
     required String beneficiaryAddress,
     required BigInt amountFen,
     required String remark,
@@ -1028,8 +1032,9 @@ class DuoqianTransferService {
     // org: u8
     output.pushByte(org);
 
-    // institution: [u8; 48]
-    output.write(_institutionIdentityToFixed48(institutionIdentity));
+    // institution: AccountId32
+    output.write(
+        _institutionIdentityToAccountId(institutionIdentity, mainAddress));
 
     // beneficiary: AccountId32 = 32 bytes（不是 MultiAddress，无 0x00 前缀）
     final beneficiaryId = _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
@@ -1051,15 +1056,17 @@ class DuoqianTransferService {
 
   /// 构造 propose_sweep_to_main call data。
   ///
-  /// 格式：[0x13][0x02][institution:48][amount:u128_le]
+  /// 格式：[0x13][0x02][institution:AccountId32][amount:u128_le]
   Uint8List _buildProposeSweepCall({
     required String institutionIdentity,
+    required String mainAddress,
     required double amountYuan,
   }) {
     final output = ByteOutput();
     output.pushByte(_palletIndex);
     output.pushByte(_proposeSweepCallIndex);
-    output.write(_institutionIdentityToFixed48(institutionIdentity));
+    output.write(
+        _institutionIdentityToAccountId(institutionIdentity, mainAddress));
     final amountFen = BigInt.from((amountYuan * 100).round());
     final amountBytes = Uint8List(16);
     var rem = amountFen;
@@ -1157,13 +1164,13 @@ class DuoqianTransferService {
       _u64ToLeBytes(proposalId),
     );
     final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    // SweepAction: institution([u8;48]) + amount(u128=16)
-    if (raw == null || raw.length < 48 + 16) return null;
+    // SweepAction: institution(AccountId32) + amount(u128=16)
+    if (raw == null || raw.length < 32 + 16) return null;
     try {
-      final institutionBytes = Uint8List.fromList(raw.sublist(0, 48));
+      final institutionBytes = Uint8List.fromList(raw.sublist(0, 32));
       var amountBig = BigInt.zero;
       for (var i = 15; i >= 0; i--) {
-        amountBig = (amountBig << 8) | BigInt.from(raw[48 + i]);
+        amountBig = (amountBig << 8) | BigInt.from(raw[32 + i]);
       }
       return SweepProposalInfo(
         proposalId: proposalId,
@@ -1305,15 +1312,15 @@ class DuoqianTransferService {
     required BigInt amountFen,
   }) {
     // 中文注释：TransferProposed 事件字段顺序必须与 runtime Event enum 完全一致。
-    const fixedBytes = 8 + 1 + 48 + 32 + 32 + 32 + 16;
+    const fixedBytes = 8 + 1 + 32 + 32 + 32 + 32 + 16;
     if (offset + fixedBytes > data.length) return null;
     var pos = offset;
     final proposalId = _readU64LE(data, pos);
     pos += 8;
     final eventOrg = data[pos];
     pos += 1;
-    final eventInstitution = Uint8List.fromList(data.sublist(pos, pos + 48));
-    pos += 48;
+    final eventInstitution = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
     final eventProposer = Uint8List.fromList(data.sublist(pos, pos + 32));
     pos += 32;
     final eventFrom = Uint8List.fromList(data.sublist(pos, pos + 32));
@@ -1474,9 +1481,23 @@ class DuoqianTransferService {
 
   // ──── 内部：编码工具 ────
 
-  Uint8List _institutionIdentityToFixed48(String institutionIdentity) {
+  Uint8List _institutionAccountId(InstitutionInfo institution) {
+    return _institutionIdentityToAccountId(
+      institution.sfidNumber,
+      institution.mainAddress,
+    );
+  }
+
+  Uint8List _institutionIdentityToAccountId(
+    String institutionIdentity,
+    String mainAddress,
+  ) {
     return Uint8List.fromList(
-        institutionIdentityToPalletId(institutionIdentity));
+      institutionIdentityToAccountId(
+        institutionIdentity,
+        mainAddress: mainAddress,
+      ),
+    );
   }
 
   /// 将 BigInt 编码为 u128 little-endian（16 字节）。

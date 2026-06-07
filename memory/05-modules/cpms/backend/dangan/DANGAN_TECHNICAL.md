@@ -51,7 +51,7 @@
 ```
 
 二维码明文字段不得出现 `sfid_number / province_code / city_code`。归属密文 `geo_seal` 只加密 `sfid_number`，由 SFID 根据安装授权中的 `install_secret` 解密。
-ARCHIVE 不包含 `code_id` 或使用次数；重复绑定由 SFID 的 `archive_no / sfid_code / wallet_pubkey` 三者唯一关系约束。
+ARCHIVE 不包含 `code_id` 或使用次数；重复绑定由 SFID 的 `archive_no / sfid_number / wallet_pubkey` 三者唯一关系约束。
 生成和打印 ARCHIVE 前必须满足完整性门槛：姓氏、名字、性别、身高、出生日期、护照号、有效期、省份、城市、公民状态、选举资格、投票账户、照片和出生纸齐全；公民状态必须为 `NORMAL`，选举资格必须为 `true`，照片和出生纸各至少 1 张。
 
 ## 5. 签名与加密

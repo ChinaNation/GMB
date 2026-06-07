@@ -65,7 +65,7 @@ sfid/backend/cpms/
 4. 校验 CPMS 本机签名；首次成功时把 `cpms_pubkey_hash / ACTIVE / USED`
    写入 `store_cpms` 主数据，后续只接受同一公钥。
 5. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 wuminapp 签名通过后完成。
-6. 绑定流程检查 `archive_no / sfid_code / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
+6. 绑定流程检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
 
 ## 4. 归属说明
 

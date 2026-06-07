@@ -1,30 +1,30 @@
 任务需求：
-SFID 号格式日期段从 D8(YYYY) 缩为 D4(YYYY),整体长度 32→28 字符;
+SFID 号格式日期段固定为 D4(YYYY),整体长度 28 字符;
 同时给 SFID 生成的三条业务路径统一加 1000 次碰撞重试保护栏,
 取代原本不一致的处理(路径 1 5 次 / 路径 2 单次/ 路径 3 0 次)。
 
-旧数据全部删除,无需 migration。
+历史数据全部删除,无需 migration。
 
 所属模块：SFID
 
 输入文档：
 - memory/feedback_no_compatibility.md(死规则:绝不搞兼容)
-- sfid/backend/sfid/validator.rs(原 D8 格式定义)
-- sfid/backend/sfid/generator.rs(SFID 唯一生成入口)
+- sfid/backend/number/validator.rs(目标 D4 格式定义)
+- sfid/backend/number/generator.rs(SFID 唯一生成入口)
 
 必须遵守：
 - 不可突破模块边界(链端、wuminapp、sfid-frontend 不动)
-- 不留 D8 兼容代码,旧数据全清
-- 所有 SFID 生成必须走 sfid::generate_sfid_code 单一入口
+- 不留历史兼容代码,历史数据全清
+- 所有 SFID 生成必须走 sfid::generate_sfid_number 单一入口
 
 ## 改动清单
 
-### 格式 D8 → D4
+### 格式 D4
 | 文件 | 改动 |
 |---|---|
-| sfid/backend/sfid/validator.rs | `SFID_NUMBER_SEGMENT_D8_LEN = 8` → `SFID_NUMBER_SEGMENT_D4_LEN = 4`;校验段 5 长度 8→4;文档 + 测试 fixture |
-| sfid/backend/sfid/generator.rs | `Utc::now().format("%Y%m%d")` → `format("%Y")` |
-| sfid/backend/sfid/mod.rs | 重导出常量名 D8_LEN → D4_LEN |
+| sfid/backend/number/validator.rs | `SFID_NUMBER_SEGMENT_D4_LEN = 4`;校验段 5 长度固定为 4;文档 + 测试 fixture |
+| sfid/backend/number/generator.rs | `Utc::now().format("%Y")` |
+| sfid/backend/number/mod.rs | 重导出 D4 常量 |
 
 ### 1000 次碰撞重试
 | 文件 | 路径 | 旧行为 | 新行为 |
@@ -40,7 +40,7 @@ SFID 号格式日期段从 D8(YYYY) 缩为 D4(YYYY),整体长度 32→28 字符;
 
 ## 容量分析
 
-n9 桶 = 10⁹,单 (a3, 省, 市, 机构, year) 5 元组共享。
+n9 桶 = 10⁹,单 (subject_property, 省, 市, 机构, year) 5 元组共享。
 
 | 路径 | 桶最大填充 | 1000 次都撞概率 |
 |---|---|---|
@@ -53,7 +53,7 @@ n9 桶 = 10⁹,单 (a3, 省, 市, 机构, year) 5 元组共享。
 ## 验证
 - ✅ `cargo check` 0 error 0 warning(SFID 相关)
 - ✅ `cargo test --bin sfid-backend` 69/69 全过
-  - sfid 模块 16/16(validator + generator + a3 + cities + category + institution_code)
+  - sfid 模块 16/16(validator + generator + subject_property + cities + category + institution_code)
   - 其他模块 53/53(login + cpms + main_tests 等)
 
 ## 输出物
@@ -65,5 +65,5 @@ n9 桶 = 10⁹,单 (a3, 省, 市, 机构, year) 5 元组共享。
 ## 验收标准
 - 新生成 SFID 末段 4 字符纯数字年(如 `2026`)
 - 三条业务路径都走 1000 次保护栏,撞了能换
-- 旧 D8 数据按死规则全清,启动新表后自然全是 D4
+- 历史格式数据按死规则全清,启动新表后自然全是 D4
 - 链端 / wuminapp / sfid-frontend 不动(grep 确认无解析日期段处)

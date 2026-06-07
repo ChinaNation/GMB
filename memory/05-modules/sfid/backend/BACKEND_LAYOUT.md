@@ -51,7 +51,7 @@ sfid/backend/
 ├── docs/                      # 机构资料库入口
 ├── gov/                       # 公权机构入口,含公安局和普通公权确定性列表路由归属
 ├── indexer/                   # 链事件解析与索引 worker
-├── number/                    # 身份 ID 编码协议,A3/机构码/生成/校验/admin 编码元信息 DTO
+├── number/                    # 身份 ID 编码协议,SubjectProperty/机构码/生成/校验/admin 编码元信息 DTO
 ├── private/                   # 私权机构入口,含学校/盈利/非盈利/非法人机构路由归属
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
 ├── store/                     # Store 聚合体、省级进程内分片缓存和存储边界模型

@@ -113,6 +113,22 @@ pub(crate) fn find_institution(sfid_number: &str) -> Option<InstitutionRef> {
         .map(InstitutionRef::Prb)
 }
 
-pub(crate) fn find_institution_name(sfid_number: &str) -> Option<&'static str> {
-    find_institution(sfid_number).map(|item| item.name())
+pub(crate) fn find_institution_by_main_address(main_address: &[u8]) -> Option<InstitutionRef> {
+    CHINA_CB
+        .iter()
+        .enumerate()
+        .find(|(_, item)| item.main_address.as_slice() == main_address)
+        .map(|(index, item)| {
+            if index == 0 {
+                InstitutionRef::Nrc(item)
+            } else {
+                InstitutionRef::Prc(item)
+            }
+        })
+        .or_else(|| {
+            CHINA_CH
+                .iter()
+                .find(|item| item.main_address.as_slice() == main_address)
+                .map(InstitutionRef::Prb)
+        })
 }

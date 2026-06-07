@@ -13,7 +13,7 @@ use std::{
 use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
 use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
-use primitives::citizen_constitution::CitizenConstitutionApi as _;
+use primitives::genesis::CitizenConstitutionApi as _;
 use sc_client_api::StorageProvider;
 use sc_transaction_pool_api::{TransactionPool, TransactionSource};
 use sp_api::Core as CoreApi;
@@ -216,7 +216,7 @@ where
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
     C::Api: BlockBuilder<Block>,
     C::Api: CoreApi<Block>,
-    C::Api: primitives::citizen_constitution::CitizenConstitutionApi<Block>,
+    C::Api: primitives::genesis::CitizenConstitutionApi<Block>,
     P: TransactionPool<Block = Block> + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};

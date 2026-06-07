@@ -1,5 +1,5 @@
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 
 class AdminSetValidationResult {
   const AdminSetValidationResult({
@@ -15,29 +15,29 @@ class AdminSetValidation {
   AdminSetValidation._();
 
   static AdminSetValidationResult validate({
-    required AdminSubjectState subject,
+    required AdminAccountState account,
     required String proposerPubkeyHex,
     required List<String> newAdmins,
     required int newThreshold,
   }) {
-    if (!subject.isActive) {
-      throw StateError('管理员主体不是已激活状态');
+    if (!account.isActive) {
+      throw StateError('管理员账户不是已激活状态');
     }
     final proposer = _normalizePubkey(proposerPubkeyHex);
-    if (!subject.admins.contains(proposer)) {
+    if (!account.admins.contains(proposer)) {
       throw StateError('当前签名钱包不是该主体管理员');
     }
     final normalized = newAdmins.map(_normalizePubkey).toList(growable: false);
-    _validateCount(subject.kind, subject.org, normalized.length);
+    _validateCount(account.kind, account.org, normalized.length);
     if (normalized.toSet().length != normalized.length) {
       throw StateError('新管理员列表存在重复公钥');
     }
-    if (subject.admins.toSet().containsAll(normalized) &&
-        normalized.toSet().containsAll(subject.admins)) {
+    if (account.admins.toSet().containsAll(normalized) &&
+        normalized.toSet().containsAll(account.admins)) {
       throw StateError('新管理员集合与当前集合没有变化');
     }
     _validateThreshold(
-        subject.kind, subject.org, normalized.length, newThreshold);
+        account.kind, account.org, normalized.length, newThreshold);
     return AdminSetValidationResult(
         admins: normalized, threshold: newThreshold);
   }
@@ -55,7 +55,7 @@ class AdminSetValidation {
   }
 
   static String _normalizePubkey(String value) {
-    final clean = AdminSubjectIdCodec.normalizeHex(value);
+    final clean = AdminAccountIdCodec.normalizeHex(value);
     if (clean.length != 64 || !RegExp(r'^[0-9a-f]+$').hasMatch(clean)) {
       throw FormatException('管理员公钥必须为 64 位 hex', value);
     }
@@ -72,12 +72,12 @@ class AdminSetValidation {
       if (count != expected) throw StateError('内置治理机构管理员数量必须保持 $expected 人');
       return;
     }
-    if (kind == 2) {
+    if (kind == 1) {
       if (org != 3) throw StateError('个人多签管理员更换必须使用 ORG_REN');
       if (count < 2 || count > 64) throw StateError('个人多签管理员数量必须在 2..=64 之间');
       return;
     }
-    if (kind == 3) {
+    if (kind == 2) {
       if (org != 4 && org != 5) {
         throw StateError('机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH');
       }
@@ -86,10 +86,7 @@ class AdminSetValidation {
       }
       return;
     }
-    if (kind == 1) {
-      throw StateError('SfidInstitution 只用于机构归属/检索，不能作为管理员更换主体');
-    }
-    throw StateError('未知管理员主体类型');
+    throw StateError('未知管理员账户类型');
   }
 
   static void _validateThreshold(
@@ -106,7 +103,7 @@ class AdminSetValidation {
       }
       return;
     }
-    if (kind == 2 || kind == 3) {
+    if (kind == 1 || kind == 2) {
       // 中文注释：动态账户阈值只按 runtime 投票引擎公式做端上前置校验；
       // 真正保存和生效仍由 internal-vote 负责。
       if (threshold <= 0 || threshold > count || threshold * 2 <= count) {
@@ -114,6 +111,6 @@ class AdminSetValidation {
       }
       return;
     }
-    throw StateError('该管理员主体不能设置阈值');
+    throw StateError('该管理员账户不能设置阈值');
   }
 }

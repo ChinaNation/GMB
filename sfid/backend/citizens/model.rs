@@ -15,7 +15,7 @@ pub(crate) enum CitizenStatus {
 
 /// 公民电子护照记录。
 ///
-/// 以自增 ID 为主键，wallet_pubkey / archive_no / sfid_code 各自唯一（非空时）。
+/// 以自增 ID 为主键，wallet_pubkey / archive_no / sfid_number 各自唯一（非空时）。
 /// 绑定完成的判定只看 SFID 本地记录是否同时拥有档案、钱包和身份 ID。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenRecord {
@@ -25,7 +25,7 @@ pub(crate) struct CitizenRecord {
     #[serde(default)]
     pub(crate) wallet_address: Option<String>,
     pub(crate) archive_no: Option<String>,
-    pub(crate) sfid_code: Option<String>,
+    pub(crate) sfid_number: Option<String>,
     /// CPMS 档案码中的公民状态。中文注释：它不是绑定状态，也不是最终身份ID状态。
     pub(crate) citizen_status: Option<CitizenStatus>,
     /// CPMS 档案码中的选举资格。
@@ -49,7 +49,7 @@ pub(crate) struct CitizenRecord {
 
 impl CitizenRecord {
     pub(crate) fn bind_status(&self) -> CitizenBindStatus {
-        match (&self.wallet_pubkey, &self.archive_no, &self.sfid_code) {
+        match (&self.wallet_pubkey, &self.archive_no, &self.sfid_number) {
             (Some(_), Some(_), Some(_)) => CitizenBindStatus::Bound,
             _ => CitizenBindStatus::Pending,
         }
@@ -172,7 +172,7 @@ pub(crate) struct CitizenBindOutput {
     pub(crate) wallet_pubkey: Option<String>,
     pub(crate) wallet_address: Option<String>,
     pub(crate) archive_no: Option<String>,
-    pub(crate) sfid_code: Option<String>,
+    pub(crate) sfid_number: Option<String>,
     pub(crate) citizen_status: Option<CitizenStatus>,
     pub(crate) voting_eligible: bool,
     pub(crate) vote_status: CitizenStatus,
@@ -213,7 +213,7 @@ pub(crate) struct CitizenRow {
     pub(crate) wallet_pubkey: Option<String>,
     pub(crate) wallet_address: Option<String>,
     pub(crate) archive_no: Option<String>,
-    pub(crate) sfid_code: Option<String>,
+    pub(crate) sfid_number: Option<String>,
     pub(crate) citizen_status: Option<CitizenStatus>,
     pub(crate) voting_eligible: bool,
     pub(crate) vote_status: CitizenStatus,
@@ -236,7 +236,7 @@ pub(crate) struct MyIdStatusQuery {
 pub(crate) struct MyIdStatusOutput {
     pub(crate) bind_status: String,
     pub(crate) wallet_address: Option<String>,
-    pub(crate) sfid_code: Option<String>,
+    pub(crate) sfid_number: Option<String>,
     pub(crate) citizen_status: Option<CitizenStatus>,
     pub(crate) voting_eligible: Option<bool>,
     pub(crate) vote_status: Option<CitizenStatus>,
@@ -256,7 +256,7 @@ mod tests {
         let output = MyIdStatusOutput {
             bind_status: "bound".to_string(),
             wallet_address: Some("5F-test".to_string()),
-            sfid_code: Some("1234567890".to_string()),
+            sfid_number: Some("1234567890".to_string()),
             citizen_status: Some(CitizenStatus::Normal),
             voting_eligible: Some(true),
             vote_status: Some(CitizenStatus::Normal),
@@ -268,7 +268,7 @@ mod tests {
 
         let value = serde_json::to_value(output).expect("serialize status output");
         assert_eq!(value["bind_status"], "bound");
-        assert_eq!(value["sfid_code"], "1234567890");
+        assert_eq!(value["sfid_number"], "1234567890");
         assert_eq!(value["citizen_status"], "NORMAL");
         assert_eq!(value["voting_eligible"], true);
         assert_eq!(value["vote_status"], "NORMAL");
@@ -285,7 +285,7 @@ mod tests {
             wallet_pubkey: Some("0xabc".to_string()),
             wallet_address: Some("5F-test".to_string()),
             archive_no: Some("ARCHIVE-1".to_string()),
-            sfid_code: Some("1234567890".to_string()),
+            sfid_number: Some("1234567890".to_string()),
             citizen_status: Some(CitizenStatus::Normal),
             voting_eligible: true,
             archive_valid_from: Some("2026-05-24".to_string()),

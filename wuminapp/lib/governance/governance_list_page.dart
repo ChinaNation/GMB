@@ -364,7 +364,7 @@ class _GovernanceSection extends StatelessWidget {
                           institution: inst,
                           icon: icon,
                           badgeColor: badgeColor,
-                          isAdmin: ProposalContextResolver.isAdminInstitution(
+                          isAdmin: ProposalContextResolver.isInstitutionAdmin(
                             inst.sfidNumber,
                           ),
                           onReturnFromDetail: onReturnFromDetail,
@@ -386,7 +386,7 @@ class _GovernanceSection extends StatelessWidget {
                 ),
                 itemBuilder: (context, index) {
                   final inst = institutions[index];
-                  final isAdmin = ProposalContextResolver.isAdminInstitution(
+                  final isAdmin = ProposalContextResolver.isInstitutionAdmin(
                     inst.sfidNumber,
                   );
                   final reorder = onReorder;

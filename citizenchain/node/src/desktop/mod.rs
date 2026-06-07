@@ -68,7 +68,7 @@ pub fn run_desktop() {
             governance::admins_change::activation::get_activated_admins,
             governance::admins_change::activation::deactivate_admin,
             governance::admins_change::activation::has_any_activated_admin,
-            governance::admins_change::commands::get_admin_subject_state,
+            governance::admins_change::commands::get_admin_account_state,
             governance::admins_change::commands::build_admin_set_change_request,
             governance::admins_change::commands::submit_admin_set_change,
             governance::build_vote_request,

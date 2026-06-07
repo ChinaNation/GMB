@@ -331,17 +331,17 @@ CREATE INDEX IF NOT EXISTS idx_store_shards_updated_at
 ```rust
 // 旧:
 let store = state.store.read()?;
-let institution = store.multisig_institutions.get(&sfid_id)?;
+let institution = store.multisig_institutions.get(&sfid_number)?;
 
 // 新:
 let institution = state.store_shards.read_province(&province, |shard| {
-    shard.multisig_institutions.get(&sfid_id).cloned()
+    shard.multisig_institutions.get(&sfid_number).cloned()
 }).await?;
 ```
 
 **province 从哪里来**:
 - SHI_ADMIN / ShengAdmin 的请求 → `ctx.admin_province`(已有)
-- 公开路径(citizen 绑定等)→ 从 sfid_id 里解析省份代码(见 `sfid/province.rs`)
+- 公开路径(citizen 绑定等)→ 从 sfid_number 里解析省份代码(见 `sfid/province.rs`)
 
 ### 4.2 跨省查询
 

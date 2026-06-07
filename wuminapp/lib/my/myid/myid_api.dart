@@ -9,7 +9,7 @@ class MyIdStatusResponse {
   const MyIdStatusResponse({
     required this.bindStatus,
     this.walletAddress,
-    this.sfidCode,
+    this.sfidNumber,
     this.citizenStatus,
     this.votingEligible,
     this.voteStatus,
@@ -22,7 +22,7 @@ class MyIdStatusResponse {
   /// "pending" | "bound" | "unset"
   final String bindStatus;
   final String? walletAddress;
-  final String? sfidCode;
+  final String? sfidNumber;
   final String? citizenStatus;
   final bool? votingEligible;
   final String? voteStatus;
@@ -75,7 +75,7 @@ class MyIdApi {
     return MyIdStatusResponse(
       bindStatus: (data['bind_status']?.toString() ?? 'unset').trim(),
       walletAddress: data['wallet_address']?.toString(),
-      sfidCode: data['sfid_code']?.toString(),
+      sfidNumber: data['sfid_number']?.toString(),
       citizenStatus: data['citizen_status']?.toString(),
       votingEligible: _parseBool(data['voting_eligible']),
       voteStatus: data['vote_status']?.toString(),

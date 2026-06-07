@@ -82,13 +82,13 @@ void main() {
     ]);
   }
 
-  Uint8List adminSubjectBytes({
+  Uint8List adminAccountBytes({
     required List<int> admin1,
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
       3, // ORG_REN
-      2, // AdminSubjectKind::PersonalDuoqian
+      1, // AdminAccountKind::PersonalDuoqian
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
@@ -174,17 +174,17 @@ void main() {
       final address = '22' * 32;
       final personalKey =
           '0x${hexOf(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
-      final adminKey = '0x${hexOf(PersonalManageStorageCodec.adminSubjectKey(
-        PersonalManageStorageCodec.subjectIdFromAccountHex(address),
+      final adminKey = '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
+        PersonalManageStorageCodec.accountIdFromAccountHex(address),
       ))}';
       final thresholdKey =
           '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
         org: 3,
-        subjectId: PersonalManageStorageCodec.subjectIdFromAccountHex(address),
+        accountId: PersonalManageStorageCodec.accountIdFromAccountHex(address),
       ))}';
       rpc.responses[personalKey] = personalAccountBytes();
-      rpc.responses[adminKey] = adminSubjectBytes(
+      rpc.responses[adminKey] = adminAccountBytes(
         admin1: List<int>.filled(32, 0xcc),
         admin2: List<int>.filled(32, 0xdd),
       );
@@ -208,25 +208,25 @@ void main() {
       String personalKey(String address) =>
           '0x${hexOf(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
       String adminKey(String address) =>
-          '0x${hexOf(PersonalManageStorageCodec.adminSubjectKey(
-            PersonalManageStorageCodec.subjectIdFromAccountHex(address),
+          '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
+            PersonalManageStorageCodec.accountIdFromAccountHex(address),
           ))}';
       String thresholdKey(String address, String storageName) =>
           '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
             storageName: storageName,
             org: 3,
-            subjectId: PersonalManageStorageCodec.subjectIdFromAccountHex(
+            accountId: PersonalManageStorageCodec.accountIdFromAccountHex(
               address,
             ),
           ))}';
 
       rpc.responses[personalKey(firstAddress)] = personalAccountBytes();
       rpc.responses[personalKey(secondAddress)] = personalAccountBytes();
-      rpc.responses[adminKey(firstAddress)] = adminSubjectBytes(
+      rpc.responses[adminKey(firstAddress)] = adminAccountBytes(
         admin1: List<int>.filled(32, 0xaa),
         admin2: List<int>.filled(32, 0xbb),
       );
-      rpc.responses[adminKey(secondAddress)] = adminSubjectBytes(
+      rpc.responses[adminKey(secondAddress)] = adminAccountBytes(
         admin1: List<int>.filled(32, 0xcc),
         admin2: List<int>.filled(32, 0xdd),
       );
@@ -265,7 +265,7 @@ void main() {
       expect(failure.description, contains('余额不足'));
     });
 
-    test('describes stale AdminsChange subject failure', () {
+    test('describes stale AdminsChange account failure', () {
       final failure =
           ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(12, 11));
 

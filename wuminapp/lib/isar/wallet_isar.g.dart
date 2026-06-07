@@ -10730,9 +10730,9 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
       name: r'addedAtMillis',
       type: IsarType.long,
     ),
-    r'adminSubjectOrg': PropertySchema(
+    r'adminAccountOrg': PropertySchema(
       id: 1,
-      name: r'adminSubjectOrg',
+      name: r'adminAccountOrg',
       type: IsarType.long,
     ),
     r'discoveredViaAdmin': PropertySchema(
@@ -10841,7 +10841,7 @@ void _duoqianInstitutionEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeLong(offsets[0], object.addedAtMillis);
-  writer.writeLong(offsets[1], object.adminSubjectOrg);
+  writer.writeLong(offsets[1], object.adminAccountOrg);
   writer.writeBool(offsets[2], object.discoveredViaAdmin);
   writer.writeString(offsets[3], object.duoqianAddress);
   writer.writeStringList(offsets[4], object.matchedAdminPubkeys);
@@ -10857,7 +10857,7 @@ DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
 ) {
   final object = DuoqianInstitutionEntity();
   object.addedAtMillis = reader.readLong(offsets[0]);
-  object.adminSubjectOrg = reader.readLongOrNull(offsets[1]);
+  object.adminAccountOrg = reader.readLongOrNull(offsets[1]);
   object.discoveredViaAdmin = reader.readBool(offsets[2]);
   object.duoqianAddress = reader.readString(offsets[3]);
   object.id = id;
@@ -11308,63 +11308,63 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminSubjectOrgIsNull() {
+      QAfterFilterCondition> adminAccountOrgIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'adminSubjectOrg',
+        property: r'adminAccountOrg',
       ));
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminSubjectOrgIsNotNull() {
+      QAfterFilterCondition> adminAccountOrgIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'adminSubjectOrg',
+        property: r'adminAccountOrg',
       ));
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminSubjectOrgEqualTo(int? value) {
+      QAfterFilterCondition> adminAccountOrgEqualTo(int? value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'adminSubjectOrg',
+        property: r'adminAccountOrg',
         value: value,
       ));
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminSubjectOrgGreaterThan(
+      QAfterFilterCondition> adminAccountOrgGreaterThan(
     int? value, {
     bool include = false,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'adminSubjectOrg',
+        property: r'adminAccountOrg',
         value: value,
       ));
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminSubjectOrgLessThan(
+      QAfterFilterCondition> adminAccountOrgLessThan(
     int? value, {
     bool include = false,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'adminSubjectOrg',
+        property: r'adminAccountOrg',
         value: value,
       ));
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminSubjectOrgBetween(
+      QAfterFilterCondition> adminAccountOrgBetween(
     int? lower,
     int? upper, {
     bool includeLower = true,
@@ -11372,7 +11372,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'adminSubjectOrg',
+        property: r'adminAccountOrg',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -12114,16 +12114,16 @@ extension DuoqianInstitutionEntityQuerySortBy on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      sortByAdminSubjectOrg() {
+      sortByAdminAccountOrg() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminSubjectOrg', Sort.asc);
+      return query.addSortBy(r'adminAccountOrg', Sort.asc);
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      sortByAdminSubjectOrgDesc() {
+      sortByAdminAccountOrgDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminSubjectOrg', Sort.desc);
+      return query.addSortBy(r'adminAccountOrg', Sort.desc);
     });
   }
 
@@ -12201,16 +12201,16 @@ extension DuoqianInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      thenByAdminSubjectOrg() {
+      thenByAdminAccountOrg() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminSubjectOrg', Sort.asc);
+      return query.addSortBy(r'adminAccountOrg', Sort.asc);
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      thenByAdminSubjectOrgDesc() {
+      thenByAdminAccountOrgDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminSubjectOrg', Sort.desc);
+      return query.addSortBy(r'adminAccountOrg', Sort.desc);
     });
   }
 
@@ -12295,9 +12295,9 @@ extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
-      distinctByAdminSubjectOrg() {
+      distinctByAdminAccountOrg() {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'adminSubjectOrg');
+      return query.addDistinctBy(r'adminAccountOrg');
     });
   }
 
@@ -12354,9 +12354,9 @@ extension DuoqianInstitutionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, int?, QQueryOperations>
-      adminSubjectOrgProperty() {
+      adminAccountOrgProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'adminSubjectOrg');
+      return query.addPropertyName(r'adminAccountOrg');
     });
   }
 

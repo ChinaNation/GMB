@@ -199,9 +199,10 @@ class DuoqianTransferProposalFeed {
   }
 
   Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
-    String sfidNumber, {
+    InstitutionInfo institution, {
     bool forceRefresh = false,
   }) {
+    final sfidNumber = institution.sfidNumber;
     final cached = _visibleProposalCache[sfidNumber];
     if (!forceRefresh && cached != null && cached.isFresh(_proposalCacheTtl)) {
       return Future.value(cached.value);
@@ -213,7 +214,7 @@ class DuoqianTransferProposalFeed {
     final token = ++_nextFetchToken;
     _visibleProposalFetchTokens[sfidNumber] = token;
     // 中文注释：机构页提案查询会读取机构索引和年度联合提案，短缓存只减少重复读取，不改变链上真值。
-    final future = _service.fetchInstitutionVisibleProposals(sfidNumber).then(
+    final future = _service.fetchInstitutionVisibleProposals(institution).then(
       (value) {
         final immutableValue = List<ProposalWithDetail>.unmodifiable(value);
         if (_visibleProposalFetchTokens[sfidNumber] == token) {

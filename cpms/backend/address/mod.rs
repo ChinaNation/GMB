@@ -3,6 +3,10 @@
 //! 行政区唯一源是 SFID 维护的 `china.sqlite`，CPMS 安装包随附其只读拷贝。
 //! 运行时只启用安装码对应市公安局的镇/村路数据。
 //! 地址 API 只读，CPMS 不允许保存或维护第二套行政区数据源。
+//!
+//! 中文注释：`china` 子模块是本模块对 SFID 行政区源的只读适配，仅服务 address 业务。
+
+mod china;
 
 use axum::{
     extract::{Query, State},
@@ -13,7 +17,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::{authz, china, err, ok, ApiError, ApiResponse, AppState};
+use crate::{
+    authz,
+    common::{err, ok, ApiError, ApiResponse},
+    AppState,
+};
 
 pub(crate) async fn sync_installed_city_address(db: &sqlx::PgPool) -> Result<(), String> {
     let sfid_number: Option<String> =
@@ -158,7 +166,7 @@ fn parse_sfid_area_codes(sfid_number: &str) -> Result<(&str, &str), String> {
     let r5 = sfid_number
         .trim()
         .split('-')
-        .nth(1)
+        .next()
         .ok_or_else(|| "install sfid r5 segment missing".to_string())?;
     if r5.len() != 5 {
         return Err("install sfid r5 segment invalid".to_string());

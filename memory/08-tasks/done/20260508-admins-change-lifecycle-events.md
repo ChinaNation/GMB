@@ -5,7 +5,7 @@
 修复 admins-change 审查中的 L-1 / L-2:
 
 - L-1:`do_remove_pending_subject` 不得在主体不存在时静默成功。
-- L-2:`AdminSubjectActivated` / `AdminSubjectPendingRemoved` / `AdminSubjectClosed` 事件必须携带 `org` 字段,方便客户端和索引器按组织分桶。
+- L-2:`AdminAccountActivated` / `AdminAccountPendingRemoved` / `AdminAccountClosed` 事件必须携带 `org` 字段,方便客户端和索引器按组织分桶。
 
 ## 预计修改目录
 

@@ -70,7 +70,7 @@ account_names[]
 - `signature`
 - `meta`
 
-`a3/sub_type/parent_sfid_number`、照片、章程、许可证、股东会决议、法人授权书等
+`subject_property/sub_type/parent_sfid_number`、照片、章程、许可证、股东会决议、法人授权书等
 SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、金额、投票等由
 `organization-manage`、`personal-manage` 和 `admins-change::Subjects` 按各自边界校验。
 

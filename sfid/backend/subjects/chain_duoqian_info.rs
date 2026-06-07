@@ -25,7 +25,7 @@ pub(crate) struct AppInstitutionDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) institution_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
-    pub(crate) a3: String,
+    pub(crate) subject_property: String,
     pub(crate) p1: String,
     pub(crate) province: String,
     pub(crate) city: String,
@@ -49,7 +49,7 @@ pub(crate) struct AppInstitutionSearchRow {
     pub(crate) sfid_number: String,
     pub(crate) institution_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
-    pub(crate) a3: String,
+    pub(crate) subject_property: String,
     pub(crate) province: String,
     pub(crate) city: String,
 }
@@ -84,7 +84,7 @@ pub(crate) struct AppClearingBankSearchQuery {
 pub(crate) struct AppClearingBankRow {
     pub(crate) sfid_number: String,
     pub(crate) institution_name: String,
-    pub(crate) a3: String,
+    pub(crate) subject_property: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,7 +92,7 @@ pub(crate) struct AppClearingBankRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_institution_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_a3: Option<String>,
+    pub(crate) parent_subject_property: Option<String>,
     pub(crate) province: String,
     pub(crate) city: String,
     pub(crate) main_account: Option<String>,
@@ -118,7 +118,7 @@ pub(crate) struct EligibleClearingBankRow {
     pub(crate) sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) institution_name: Option<String>,
-    pub(crate) a3: String,
+    pub(crate) subject_property: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -126,7 +126,7 @@ pub(crate) struct EligibleClearingBankRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_institution_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_a3: Option<String>,
+    pub(crate) parent_subject_property: Option<String>,
     pub(crate) province: String,
     pub(crate) city: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -167,7 +167,7 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT sfid_number, name, category, a3, province, city
+                "SELECT sfid_number, name, category, subject_property, province, city
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
                    AND status = 'ACTIVE'
@@ -187,7 +187,7 @@ pub(crate) async fn app_search_institutions(
                 sfid_number: row.get(0),
                 institution_name: row.get(1),
                 category: parse_category(row.get::<_, String>(2).as_str()),
-                a3: row.get(3),
+                subject_property: row.get(3),
                 province: row.get(4),
                 city: row.get(5),
             })
@@ -235,7 +235,7 @@ pub(crate) async fn app_get_institution(
             sfid_number: inst.sfid_number,
             institution_name: inst.institution_name,
             category: inst.category,
-            a3: inst.a3,
+            subject_property: inst.subject_property,
             p1: inst.p1,
             province: inst.province,
             city: inst.city,
@@ -373,8 +373,8 @@ fn query_clearing_rows(
         let limit = limit.unwrap_or(10_000);
         let rows = conn
             .query(
-                "SELECT s.sfid_number, s.name, s.a3, s.sub_type, s.parent_sfid_number,
-                        p.name, p.a3, s.province, s.city,
+                "SELECT s.sfid_number, s.name, s.subject_property, s.sub_type, s.parent_sfid_number,
+                        p.name, p.subject_property, s.province, s.city,
                         main.duoqian_address, main.chain_status, fee.duoqian_address
                  FROM subjects s
                  LEFT JOIN subjects p ON p.sfid_number = s.parent_sfid_number
@@ -385,8 +385,8 @@ fn query_clearing_rows(
                  WHERE s.kind = 'PRIVATE'
                    AND s.status = 'ACTIVE'
                    AND (
-                        (s.a3 = 'SFR' AND s.sub_type = 'JOINT_STOCK')
-                        OR (s.a3 = 'FFR' AND p.a3 = 'SFR' AND p.sub_type = 'JOINT_STOCK')
+                        (s.subject_property = 'S' AND s.sub_type = 'JOINT_STOCK')
+                        OR (s.subject_property = 'F' AND p.subject_property = 'S' AND p.sub_type = 'JOINT_STOCK')
                    )
                    AND ($1::text IS NULL OR s.province = $1)
                    AND ($2::text IS NULL OR s.city = $2)
@@ -411,11 +411,11 @@ fn query_clearing_rows(
                 EligibleClearingBankRow {
                     sfid_number: row.get(0),
                     institution_name: row.get(1),
-                    a3: row.get(2),
+                    subject_property: row.get(2),
                     sub_type: row.get(3),
                     parent_sfid_number: row.get(4),
                     parent_institution_name: row.get(5),
-                    parent_a3: row.get(6),
+                    parent_subject_property: row.get(6),
                     province: row.get(7),
                     city: row.get(8),
                     main_account: row.get(9),
@@ -486,11 +486,11 @@ pub(crate) async fn app_search_clearing_banks(
         .map(|row| AppClearingBankRow {
             sfid_number: row.sfid_number,
             institution_name: row.institution_name.unwrap_or_default(),
-            a3: row.a3,
+            subject_property: row.subject_property,
             sub_type: row.sub_type,
             parent_sfid_number: row.parent_sfid_number,
             parent_institution_name: row.parent_institution_name,
-            parent_a3: row.parent_a3,
+            parent_subject_property: row.parent_subject_property,
             province: row.province,
             city: row.city,
             main_account: row.main_account,

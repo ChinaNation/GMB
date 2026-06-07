@@ -137,7 +137,7 @@ SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `sfid/backend/accounts/`:机构账户入口。
 - `sfid/backend/docs/`:机构资料库入口。
 - `sfid/backend/china/`:中国行政区划 SQLite 真源。
-- `sfid/backend/number/`:身份 ID 编码协议,A3/机构码/生成/校验。
+- `sfid/backend/number/`:身份 ID 编码协议、SubjectProperty、机构码、生成和校验。
 - `sfid/backend/admins/`:省/市管理员治理、Passkey 注册与冷钱包挑战写操作。
 - `sfid/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `sfid/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。

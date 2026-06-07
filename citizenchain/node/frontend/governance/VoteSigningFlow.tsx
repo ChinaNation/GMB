@@ -55,10 +55,10 @@ export function VoteSigningFlow({
       // 联合投票走 JointVote::cast_admin(23.0),由 proposalKind===1 分支决定。
       if (proposalKind === 1 && sfidNumber) {
         result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, sfidNumber, approve);
-        cdHex = buildJointVoteCallDataHex(proposalId, sfidNumber, approve);
+        cdHex = result.callDataHex;
       } else {
         result = await api.buildVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
-        cdHex = buildInternalVoteCallDataHex(proposalId, approve);
+        cdHex = result.callDataHex || buildInternalVoteCallDataHex(proposalId, approve);
       }
       setSignRequest(result);
       setCallDataHex(cdHex);
@@ -171,23 +171,4 @@ function buildInternalVoteCallDataHex(proposalId: number, approve: boolean): str
   view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
   arr[10] = approve ? 1 : 0;
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * 联合投票 call 编码:`[0x17][0x00][proposal_id:u64_le][institution:48][approve:bool]` = 59 bytes
- * (JointVote::cast_admin = pallet 23 / call 0,2026-05-05 sub-pallet 拆分后从 votingengine 迁出)。
- */
-function buildJointVoteCallDataHex(proposalId: number, sfidNumber: string, approve: boolean): string {
-  const encoder = new TextEncoder();
-  const shenfenBytes = encoder.encode(sfidNumber);
-  const institution = new Uint8Array(48);
-  institution.set(shenfenBytes.subarray(0, Math.min(48, shenfenBytes.length)));
-  const buf = new Uint8Array(59);
-  buf[0] = 23; buf[1] = 0; // JointVote.cast_admin (2026-05-05 sub-pallet 拆分,原 VotingEngine.joint_vote)
-  const dv = new DataView(buf.buffer);
-  dv.setUint32(2, proposalId & 0xFFFFFFFF, true);
-  dv.setUint32(6, Math.floor(proposalId / 0x100000000), true);
-  buf.set(institution, 10);
-  buf[58] = approve ? 1 : 0;
-  return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
 }

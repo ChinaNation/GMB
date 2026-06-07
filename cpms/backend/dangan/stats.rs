@@ -1,6 +1,6 @@
 use axum::{http::StatusCode, Json};
 
-use crate::{err, ApiError};
+use crate::common::{err, ApiError};
 
 /// 读取当前 CPMS 实例的有效档案总量。
 ///

@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
-import 'package:wuminapp_mobile/governance/admins-change/services/admin_subject_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/services/admin_account_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
@@ -29,7 +29,7 @@ class FakeAdminService extends InstitutionAdminService {
   final List<String> admins;
 
   @override
-  Future<List<String>> fetchAdmins(AdminSubjectIdentity identity) async {
+  Future<List<String>> fetchAdmins(AdminAccountIdentity identity) async {
     return admins;
   }
 }
@@ -45,7 +45,7 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
-  Uint8List adminSubjectBytes({
+  Uint8List adminAccountBytes({
     required int org,
     required int kind,
     required List<int> admin,
@@ -73,46 +73,43 @@ void main() {
   String dynamicThresholdKey({
     required String storageName,
     required int org,
-    required Uint8List subjectId,
+    required Uint8List accountId,
   }) {
     final palletHash = Hasher.twoxx128.hashString('InternalVote');
     final storageHash = Hasher.twoxx128.hashString(storageName);
     final orgKey = blake2128Concat(Uint8List.fromList([org]));
-    final subjectKey = blake2128Concat(subjectId);
+    final accountKey = blake2128Concat(accountId);
     final bytes = <int>[
       ...palletHash,
       ...storageHash,
       ...orgKey,
-      ...subjectKey,
+      ...accountKey,
     ];
     return '0x${hexOf(bytes)}';
   }
 
-  test('registered institution account routes to institution-account subject',
+  test('registered institution account routes to institution-account account',
       () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '11' * 32;
-    final subjectId = AdminSubjectIdCodec.fromAccountHex(
-      AdminSubjectIdCodec.institutionAccount,
-      address,
-    );
-    final subjectKey = '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(
-      subjectId,
+    final accountId = AdminAccountIdCodec.fromAccountHex(address);
+    final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
+      accountId,
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       org: 5,
-      subjectId: subjectId,
+      accountId: accountId,
     );
-    rpc.responses[subjectKey] = adminSubjectBytes(
+    rpc.responses[accountKey] = adminAccountBytes(
       org: 5,
-      kind: 3,
+      kind: 2,
       admin: List<int>.filled(32, 0xaa),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-    final identity = AdminSubjectIdentity.institutionAccount(
+    final identity = AdminAccountIdentity.institutionAccount(
       accountHex: address,
       org: 5,
       displayName: '机构账户',
@@ -122,33 +119,30 @@ void main() {
 
     expect(admins, ['aa' * 32]);
     expect(threshold, 2);
-    expect(rpc.requestedKeys, [subjectKey, thresholdKey]);
+    expect(rpc.requestedKeys, [accountKey, thresholdKey]);
   });
 
-  test('personal institution routes directly to personal subject', () async {
+  test('personal institution routes directly to personal account', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '22' * 32;
-    final subjectId = AdminSubjectIdCodec.fromAccountHex(
-      AdminSubjectIdCodec.personalDuoqian,
-      address,
-    );
-    final subjectKey = '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(
-      subjectId,
+    final accountId = AdminAccountIdCodec.fromAccountHex(address);
+    final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
+      accountId,
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       org: 3,
-      subjectId: subjectId,
+      accountId: accountId,
     );
-    rpc.responses[subjectKey] = adminSubjectBytes(
+    rpc.responses[accountKey] = adminAccountBytes(
       org: 3,
-      kind: 2,
+      kind: 1,
       admin: List<int>.filled(32, 0xbb),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-    final identity = AdminSubjectIdentity.personalDuoqian(
+    final identity = AdminAccountIdentity.personalDuoqian(
       accountHex: address,
       displayName: '个人多签',
     );
@@ -157,89 +151,86 @@ void main() {
 
     expect(admins, ['bb' * 32]);
     expect(threshold, 2);
-    expect(rpc.requestedKeys, [subjectKey, thresholdKey]);
+    expect(rpc.requestedKeys, [accountKey, thresholdKey]);
   });
 
-  test('subject service cache is keyed by subject id', () async {
+  test('account service cache is keyed by account id', () async {
     final rpc = FakeChainRpc();
-    final service = AdminSubjectService(chainRpc: rpc);
-    final subjectId = AdminSubjectIdCodec.fromAccountHex(
-      AdminSubjectIdCodec.personalDuoqian,
-      '33' * 32,
-    );
-    final subjectKey =
-        '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(subjectId))}';
+    final service = AdminAccountService(chainRpc: rpc);
+    final accountId = AdminAccountIdCodec.fromAccountHex('33' * 32);
+    final accountKey =
+        '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(accountId))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       org: 3,
-      subjectId: subjectId,
+      accountId: accountId,
     );
-    rpc.responses[subjectKey] = adminSubjectBytes(
+    rpc.responses[accountKey] = adminAccountBytes(
       org: 3,
-      kind: 2,
+      kind: 1,
       admin: List<int>.filled(32, 0xdd),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-    await service.fetchBySubjectId(subjectId);
-    await service.fetchBySubjectId(subjectId);
-    expect(rpc.requestedKeys, [subjectKey, thresholdKey]);
+    await service.fetchByAccountId(accountId);
+    await service.fetchByAccountId(accountId);
+    expect(rpc.requestedKeys, [accountKey, thresholdKey]);
 
-    service.clearSubjectCache(AdminSubjectIdCodec.hexEncode(subjectId));
-    await service.fetchBySubjectId(subjectId);
+    service.clearAccountCache(AdminAccountIdCodec.hexEncode(accountId));
+    await service.fetchByAccountId(accountId);
     expect(rpc.requestedKeys, [
-      subjectKey,
+      accountKey,
       thresholdKey,
-      subjectKey,
+      accountKey,
       thresholdKey,
     ]);
   });
 
   test('institution info resolves to explicit admins-change identity', () {
     final personalAddress = '44' * 32;
-    final personal = AdminSubjectIdentity.fromInstitution(InstitutionInfo(
+    final personal = AdminAccountIdentity.fromInstitution(InstitutionInfo(
       name: '个人账户',
       sfidNumber: 'personal:$personalAddress',
       orgType: OrgType.duoqian,
       duoqianAddress: personalAddress,
     ));
-    expect(personal.type, AdminSubjectIdentityType.personalDuoqian);
+    expect(personal.type, AdminAccountIdentityType.personalDuoqian);
     expect(personal.org, 3);
-    expect(personal.kind, 2);
+    expect(personal.kind, 1);
 
     final accountAddress = '55' * 32;
     final institutionAccount =
-        AdminSubjectIdentity.fromInstitution(InstitutionInfo(
+        AdminAccountIdentity.fromInstitution(InstitutionInfo(
       name: '机构账户',
       sfidNumber: registeredDuoqianIdentity(accountAddress),
       orgType: OrgType.duoqian,
-      adminSubjectOrg: 5,
+      adminAccountOrg: 5,
       duoqianAddress: accountAddress,
     ));
     expect(
-        institutionAccount.type, AdminSubjectIdentityType.institutionAccount);
+        institutionAccount.type, AdminAccountIdentityType.institutionAccount);
     expect(institutionAccount.org, 5);
-    expect(institutionAccount.kind, 3);
+    expect(institutionAccount.kind, 2);
 
     final governance =
-        AdminSubjectIdentity.fromInstitution(const InstitutionInfo(
+        AdminAccountIdentity.fromInstitution(const InstitutionInfo(
       name: '省储行',
-      sfidNumber: 'GFR-LN001-CB0X-944805165-2026',
+      sfidNumber: 'LN001-GCB05-944805165-2026',
       orgType: OrgType.prb,
       accounts: InstitutionAccounts(mainAddress: '66'),
     ));
-    expect(governance.type, AdminSubjectIdentityType.governanceInstitution);
+    expect(governance.type, AdminAccountIdentityType.governanceInstitution);
     expect(governance.org, OrgType.prb);
     expect(governance.kind, 0);
   });
 
-  test('activation records use v3 subject identity without sfidNumber',
+  test('activation records use v3 account identity without sfidNumber',
       () async {
-    final identity = AdminSubjectIdentity.personalDuoqian(
+    final identity = AdminAccountIdentity.personalDuoqian(
       accountHex: '77' * 32,
       displayName: '个人多签',
     );
-    final otherIdentity = AdminSubjectIdentity.institutionAccount(
+    final otherIdentity = AdminAccountIdentity.institutionAccount(
       accountHex: '88' * 32,
       org: 5,
       displayName: '机构账户',
@@ -247,7 +238,7 @@ void main() {
     final active = ActivatedAdmin(
       pubkeyHex: 'aa' * 32,
       identityKey: identity.identityKey,
-      subjectIdHex: identity.subjectIdHex,
+      accountHex: identity.accountHex,
       org: identity.org,
       kind: identity.kind,
       activatedAtMs: 1,
@@ -255,7 +246,7 @@ void main() {
     final stale = ActivatedAdmin(
       pubkeyHex: 'bb' * 32,
       identityKey: identity.identityKey,
-      subjectIdHex: identity.subjectIdHex,
+      accountHex: identity.accountHex,
       org: identity.org,
       kind: identity.kind,
       activatedAtMs: 2,
@@ -263,14 +254,14 @@ void main() {
     final unrelated = ActivatedAdmin(
       pubkeyHex: 'cc' * 32,
       identityKey: otherIdentity.identityKey,
-      subjectIdHex: otherIdentity.subjectIdHex,
+      accountHex: otherIdentity.accountHex,
       org: otherIdentity.org,
       kind: otherIdentity.kind,
       activatedAtMs: 3,
     );
 
     SharedPreferences.setMockInitialValues({
-      'activated_admins_v3': jsonEncode(
+      'activated_admin_accounts_v1': jsonEncode(
         [active, stale, unrelated].map((item) => item.toJson()).toList(),
       ),
     });

@@ -1,4 +1,3 @@
-// 中文注释:任务卡 1 基础设施,部分 API 在任务卡 2 才会有调用点。
 #![allow(dead_code)]
 
 //! 机构类型代码枚举(sfid 号第三段 T2 部分)
@@ -14,7 +13,7 @@
 //! - CH 储备银行
 //! - TG 他国      — 其他国家
 //!
-//! 不同 A3 对 InstitutionCode 有硬约束(见 `generator.rs` 里的 generate_sfid_code)。
+//! 不同主体属性对 InstitutionCode 有硬约束(见 `generator.rs` 里的 generate_sfid_number)。
 //! 中文注释:私权机构允许 `JY` 表示教育委员会类型学校机构,不是学校内部组织。
 
 use serde::{Deserialize, Serialize};

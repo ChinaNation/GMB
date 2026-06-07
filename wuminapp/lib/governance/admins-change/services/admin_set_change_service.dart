@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:wuminapp_mobile/governance/admins-change/codec/admin_set_change_call_codec.dart';
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_set_change_result.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_set_validation.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
@@ -14,27 +14,27 @@ class AdminSetChangeService {
   final ChainRpc _rpc;
 
   Uint8List buildCallData({
-    required AdminSubjectState subject,
+    required AdminAccountState account,
     required String proposerPubkeyHex,
     required List<String> newAdmins,
     required int newThreshold,
   }) {
     final normalized = AdminSetValidation.validate(
-      subject: subject,
+      account: account,
       proposerPubkeyHex: proposerPubkeyHex,
       newAdmins: newAdmins,
       newThreshold: newThreshold,
     );
     return AdminSetChangeCallCodec.build(
-      org: subject.org,
-      subjectId: AdminSubjectIdCodec.fromHex(subject.subjectIdHex),
+      org: account.org,
+      accountId: AdminAccountIdCodec.fromHex(account.accountHex),
       newAdmins: normalized.admins,
       newThreshold: normalized.threshold,
     );
   }
 
   Future<AdminSetChangeSubmitResult> submit({
-    required AdminSubjectState subject,
+    required AdminAccountState account,
     required List<String> newAdmins,
     required int newThreshold,
     required String fromAddress,
@@ -43,8 +43,8 @@ class AdminSetChangeService {
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final callData = buildCallData(
-      subject: subject,
-      proposerPubkeyHex: AdminSubjectIdCodec.hexEncode(signerPubkey),
+      account: account,
+      proposerPubkeyHex: AdminAccountIdCodec.hexEncode(signerPubkey),
       newAdmins: newAdmins,
       newThreshold: newThreshold,
     );

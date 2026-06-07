@@ -82,12 +82,12 @@ pub(crate) fn append_audit_log(
     let log_action = action.clone();
     let p_code = target_sfid
         .as_deref()
-        .and_then(|sfid| sfid.split('-').nth(1))
+        .and_then(|sfid| sfid.split('-').next())
         .map(|r5| r5[..2.min(r5.len())].to_string())
         .unwrap_or_else(|| "ZS".to_string());
     let c_code = target_sfid
         .as_deref()
-        .and_then(|sfid| sfid.split('-').nth(1))
+        .and_then(|sfid| sfid.split('-').next())
         .and_then(|r5| (r5.len() >= 5).then(|| r5[2..5].to_string()))
         .filter(|v| !v.is_empty() && v != "000");
     if let Err(err) = state.db.with_client(move |conn| {

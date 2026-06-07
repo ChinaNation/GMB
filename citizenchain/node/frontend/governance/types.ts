@@ -5,6 +5,7 @@ import type { DuoqianTransferProposalDetails } from '../transaction/duoqian-tran
 
 export type VoteSignRequestResult = {
   requestJson: string;
+  callDataHex: string;
   requestId: string;
   expectedPayloadHash: string;
   signNonce: number;
@@ -37,7 +38,7 @@ export type AdminWalletMatch = {
 
 export type ActivatedAdmin = {
   pubkeyHex: string;
-  subjectIdHex: string;
+  accountHex: string;
   org: number;
   kind: number;
   activatedAtMs: number;

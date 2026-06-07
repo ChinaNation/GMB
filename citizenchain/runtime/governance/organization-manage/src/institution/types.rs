@@ -45,7 +45,7 @@ pub enum InstitutionLifecycleStatus {
     Closed,
 }
 
-/// 机构信息。管理员更换主体由主账户地址派生,机构本身只保存归属与展示信息。
+/// 机构信息。管理员更换账户由主账户地址派生,机构本身只保存归属与展示信息。
 #[derive(
     Encode,
     Decode,
@@ -163,7 +163,7 @@ pub struct CreateInstitutionAction<
     pub main_address: AccountId,
     pub fee_address: AccountId,
     pub proposer: AccountId,
-    /// 创建阶段写入 pending admin subject 的机构账户 org。
+    /// 创建阶段写入 pending admin account 的机构账户 org。
     pub admin_org: u8,
     pub admin_count: u32,
     pub threshold: u32,

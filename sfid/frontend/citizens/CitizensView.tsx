@@ -158,7 +158,7 @@ export function CitizensView() {
     },
     {
       title: '身份ID',
-      dataIndex: 'sfid_code',
+      dataIndex: 'sfid_number',
       align: 'center',
       render: (v: string | undefined) => v ?? '-',
     },
@@ -257,7 +257,7 @@ export function CitizensView() {
       >
         {detailRecord && (
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="身份ID">{detailRecord.sfid_code ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="身份ID">{detailRecord.sfid_number ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="档案号">{detailRecord.archive_no ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="投票账户">
               {detailRecord.wallet_address ?? detailRecord.wallet_pubkey ?? '-'}

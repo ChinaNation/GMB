@@ -14,8 +14,8 @@ pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
 
 pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
     sfid_name: "公民教育委员会",
-    sfid_number: "GFR-BP001-JY00-689724263-2026",
-    main_address: hex!("52c7daea85284602479d2ca8c93735302e59998d3ae844cdd035ef80c0a97910"),
+    sfid_number: "BP001-GJY0Y-689724263-2026",
+    main_address: hex!("a333dd55f9e2d7730249a42753f8ddae0486edf851f24a8e84e4afac34069ecd"),
     duoqian_admins: &[
         hex!("54e0451ef8d23e2f79d28756567dcdbc3fd475e7fc090b8c655ad243655f8231"),
         hex!("c48d9b25e6bf3fee1c8002bb7e91112a54a44fb99317483bd5dc73416eb48904"),

@@ -46,7 +46,7 @@ fn fetch_finalized_storage(key: String) -> Result<Value, String> {
 pub struct TransferProposalDetail {
     /// 提案主键 ID。
     pub proposal_id: u64,
-    /// 机构 48 字节 hex。
+    /// 机构多签账户 AccountId hex。
     pub institution_hex: String,
     /// 收款人公钥 hex。
     pub beneficiary_hex: String,
@@ -78,7 +78,7 @@ pub struct SafetyFundProposalDetail {
 pub struct SweepProposalDetail {
     /// 提案主键 ID。
     pub proposal_id: u64,
-    /// 机构 48 字节 hex。
+    /// 机构多签账户 AccountId hex。
     pub institution_hex: String,
     /// 金额（分）。
     pub amount_fen: String,
@@ -160,10 +160,10 @@ where
 }
 
 fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferProposalDetail> {
-    // MODULE_TAG("dq-xfer":7) + institution: [u8;48] + beneficiary: [u8;32]
+    // MODULE_TAG("dq-xfer":7) + institution: AccountId32 + beneficiary: AccountId32
     // + amount: u128(16) + remark: Vec<u8> + proposer: [u8;32]
     let tag = TAG_TRANSFER;
-    if data.len() < tag.len() + 48 + 32 + 16 + 1 + 32 {
+    if data.len() < tag.len() + 32 + 32 + 16 + 1 + 32 {
         return None;
     }
     if &data[..tag.len()] != tag {
@@ -171,8 +171,8 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
     }
     let mut offset = tag.len();
 
-    let institution_hex = hex::encode(&data[offset..offset + 48]);
-    offset += 48;
+    let institution_hex = hex::encode(&data[offset..offset + 32]);
+    offset += 32;
 
     let beneficiary_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
@@ -259,14 +259,14 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         Value::Null => Ok(None),
         Value::String(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
-            // SweepAction: institution([u8;48]) + amount(u128=16)
-            if data.len() < 64 {
+            // SweepAction: institution(AccountId32) + amount(u128=16) + proposer(AccountId32)
+            if data.len() < 80 {
                 return Ok(None);
             }
-            let institution_hex = hex::encode(&data[..48]);
+            let institution_hex = hex::encode(&data[..32]);
             let amount_fen = {
                 let mut bytes = [0u8; 16];
-                bytes.copy_from_slice(&data[48..64]);
+                bytes.copy_from_slice(&data[32..48]);
                 u128::from_le_bytes(bytes)
             };
             Ok(Some(SweepProposalDetail {

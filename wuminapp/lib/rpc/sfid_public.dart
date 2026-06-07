@@ -75,33 +75,33 @@ class ClearingBankInfo {
   const ClearingBankInfo({
     required this.sfidNumber,
     required this.institutionName,
-    required this.a3,
+    required this.subjectProperty,
     required this.subType,
     required this.parentSfidNumber,
     required this.parentInstitutionName,
-    required this.parentA3,
+    required this.parentSubjectProperty,
     required this.province,
     required this.city,
     required this.mainAccount,
     required this.feeAccount,
   });
 
-  /// SFID 编码,如 `SFR-GD-SZ01-CB01-N9-D8`。
+  /// SFID 编码,如 `GD001-SCB0T-123456789-2026`。
   final String sfidNumber;
 
   /// 机构中文名(两步式未命名时为空串)。
   final String institutionName;
 
-  /// 主体属性:`SFR`(私法人)或 `FFR`(非法人)。
-  final String a3;
+  /// 主体属性:`S`(私法人)或 `F`(非法人)。
+  final String subjectProperty;
 
   /// 私法人子类型,清算行白名单要求 `JOINT_STOCK`。
   final String? subType;
 
-  /// FFR 所属法人信息,用于手机端展示父子结构。
+  /// 非法人主体所属法人信息,用于手机端展示父子结构。
   final String? parentSfidNumber;
   final String? parentInstitutionName;
-  final String? parentA3;
+  final String? parentSubjectProperty;
 
   final String province;
   final String city;
@@ -116,11 +116,11 @@ class ClearingBankInfo {
     return ClearingBankInfo(
       sfidNumber: (json['sfid_number'] as String?) ?? '',
       institutionName: (json['institution_name'] as String?) ?? '',
-      a3: (json['a3'] as String?) ?? '',
+      subjectProperty: (json['subject_property'] as String?) ?? '',
       subType: json['sub_type'] as String?,
       parentSfidNumber: json['parent_sfid_number'] as String?,
       parentInstitutionName: json['parent_institution_name'] as String?,
-      parentA3: json['parent_a3'] as String?,
+      parentSubjectProperty: json['parent_subject_property'] as String?,
       province: (json['province'] as String?) ?? '',
       city: (json['city'] as String?) ?? '',
       mainAccount: json['main_account'] as String?,

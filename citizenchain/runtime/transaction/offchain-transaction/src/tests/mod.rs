@@ -69,7 +69,7 @@ const BANK_MAIN_BYTES: [u8; 32] = [0xAA; 32];
 const BANK_FEE_BYTES: [u8; 32] = [0xAB; 32];
 const BANK_ADMIN_SEED: [u8; 32] = [0xAC; 32];
 const OTHER_BANK_BYTES: [u8; 32] = [0xBA; 32];
-const BANK_SFID: &[u8] = b"SFR-GD-SZ01-CB01-N9-D8";
+const BANK_SFID: &[u8] = b"GD001-SCB05-000000001-2026";
 
 fn bank_main() -> AccountId32 {
     AccountId32::new(BANK_MAIN_BYTES)
@@ -84,8 +84,8 @@ fn bank_admin() -> AccountId32 {
     AccountId32::new(bank_admin_pair().public().0)
 }
 
-/// Mock `SfidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 SFR 主账户 Active,
-/// `BANK_FEE_BYTES` 注册为 SFR 费用账户 Active;`bank_admin()` 是主账户唯一
+/// Mock `SfidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 K1=S 的主账户 Active,
+/// `BANK_FEE_BYTES` 注册为 K1=S 的费用账户 Active;`bank_admin()` 是主账户唯一
 /// 管理员。`OTHER_BANK_BYTES` 故意不注册,用于负路径。
 pub struct MockSfid;
 

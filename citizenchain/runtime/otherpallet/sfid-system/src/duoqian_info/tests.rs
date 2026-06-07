@@ -31,7 +31,7 @@ fn validate_payload_rejects_empty_field() {
 #[test]
 fn same_filing_payload_matches_three_fields() {
     let payload = InstitutionFilingPayload {
-        sfid_number: bounded::<FilingSfidNumber>(b"SFR-AH001-TEST-20260502"),
+        sfid_number: bounded::<FilingSfidNumber>(b"AH001-SCB0H-202605070-2026"),
         institution_name: bounded::<FilingInstitutionName>("测试股份有限公司".as_bytes()),
         account_name: bounded::<FilingAccountName>("主账户".as_bytes()),
     };

@@ -12,12 +12,12 @@ completed: 2026-04-20
 - runtime 调用方：configs/mod.rs（选择性保留 duoqian_manage::propose_close pattern bindings）、genesis_config_presets.rs、runtime/src/lib.rs、resolution-issuance-gov、resolution-destro、shengbank-interest、offchain-transaction、onchain-transaction、duoqian-transfer、institution-asset 全部更新
 - 节点 UI：node/src/ui/governance/ mod.rs + types.rs + signing.rs；node/frontend/governance/ 4 份 TS 文件 `duoqianAddress → mainAddress`
 - 文档：11 份 memory/05-modules 技术文档 + GMB_WHITEPAPER + 3 份任务卡注释更新
-- 工具：tools/duoqian.py 扫描正则、生成模板同步；Rust 引用函数名 `derive_duoqian_address_from_sfid_id` 保留
+- 工具：tools/duoqian.py 扫描正则、生成模板同步；Rust 引用函数名 `derive_duoqian_address_from_sfid_number` 保留
 - 验证：`cargo check -p primitives ...` 9 crate 全通过；`cargo test -p primitives` 7/7 测试通过（含 `all_china_ch_main_addresses_are_unique`）；node frontend `tsc --noEmit` 零错误
 
 # 保留清单（注册多签概念）
 
-- duoqian-manage 全部（`action.duoqian_address`、`DuoqianAccounts`、`PersonalDuoqianInfo`、`CreateDuoqianAction`、`DuoqianAddressValidator`、`derive_duoqian_address_from_sfid_id`）
+- duoqian-manage 全部（`action.duoqian_address`、`DuoqianAccounts`、`PersonalDuoqianInfo`、`CreateDuoqianAction`、`DuoqianAddressValidator`、`derive_duoqian_address_from_sfid_number`）
 - SFID 后端 `MultisigAccount.duoqian_address`、SFID 前端 `deriveDuoqianAddress.ts`
 - wuminapp/wumin 的 `duoqianAddress` Dart 字段
 - tools/duoqian.py 文件名
@@ -31,7 +31,7 @@ completed: 2026-04-20
 # 铁律
 
 - 字节值不变，仅字段名变，不触 chainspec 冻结、不需要链重启
-- 注册多签（`duoqian-manage::action.duoqian_address`、`DuoqianAccounts`、`PersonalDuoqianInfo`、`DuoqianAddressValidator`、`CreateDuoqianAction`、`derive_duoqian_address_from_sfid_id`）全部保留
+- 注册多签（`duoqian-manage::action.duoqian_address`、`DuoqianAccounts`、`PersonalDuoqianInfo`、`DuoqianAddressValidator`、`CreateDuoqianAction`、`derive_duoqian_address_from_sfid_number`）全部保留
 - SFID 后端 `MultisigAccount.duoqian_address`、前端 `deriveDuoqianAddress.ts` 保留
 - wuminapp `duoqianAddress` 字段保留；只改指向 primitives 的注释
 - wumin `payload_decoder.dart`、`tools/duoqian.py` 文件名保留；工具产出模板同步更新

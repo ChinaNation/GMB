@@ -1,13 +1,13 @@
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
-import 'package:wuminapp_mobile/governance/admins-change/services/admin_subject_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
+import 'package:wuminapp_mobile/governance/admins-change/services/admin_account_service.dart';
 
 class AdminSetChangeController {
-  AdminSetChangeController({AdminSubjectService? subjectService})
-      : _subjectService = subjectService ?? AdminSubjectService();
+  AdminSetChangeController({AdminAccountService? accountService})
+      : _accountService = accountService ?? AdminAccountService();
 
-  final AdminSubjectService _subjectService;
+  final AdminAccountService _accountService;
 
-  Future<AdminSubjectState?> loadSubject(AdminSubjectIdentity identity) {
-    return _subjectService.fetchByIdentity(identity);
+  Future<AdminAccountState?> loadAccount(AdminAccountIdentity identity) {
+    return _accountService.fetchByIdentity(identity);
   }
 }

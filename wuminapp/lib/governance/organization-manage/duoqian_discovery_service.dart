@@ -1,9 +1,9 @@
 // 机构多签反向索引发现服务(req 3 核心)。
 //
-// **完全 0 链端改动**:利用现有 `AdminsChange::Subjects` 统一存储
+// 利用链上 `AdminsChange::AdminAccounts` 统一存储
 // + smoldot 标准 `state_getKeysPaged` 扫描管理员反向索引。
 //
-// 本文件只处理机构多签 SubjectKind=0x05 InstitutionAccount。个人多签发现
+// 本文件只处理机构多签 AdminAccountKind=InstitutionAccount。个人多签发现
 // 已迁移到 `lib/personal-manage/personal_manage_discovery_service.dart`。
 
 import 'package:flutter/foundation.dart';
@@ -15,7 +15,7 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-import 'package:wuminapp_mobile/governance/shared/admin_institution_codec.dart';
+import 'package:wuminapp_mobile/governance/shared/admin_account_storage_codec.dart';
 import 'duoqian_manage_service.dart';
 import 'duoqian_storage_codec.dart';
 
@@ -100,7 +100,7 @@ class DuoqianDiscoveryService {
     final myPubkeys = myPubkeysHex ?? await _readMyPubkeys();
     if (myPubkeys.isEmpty) return DiscoveryStats.empty;
 
-    final prefixHex = _adminsChangeSubjectsPrefixHex();
+    final prefixHex = _adminsChangeAdminAccountsPrefixHex();
     final allKeys = <String>[];
     String? startKey;
     var partialFailure = false;
@@ -147,9 +147,9 @@ class DuoqianDiscoveryService {
       for (final keyHex in batchKeys) {
         final value = values[keyHex];
         if (value == null) continue;
-        final decoded = AdminInstitutionCodec.tryDecode(value);
+        final decoded = AdminAccountStorageCodec.tryDecode(value);
         if (decoded == null ||
-            decoded.kind != AdminInstitutionCodec.kindInstitutionAccount ||
+            decoded.kind != AdminAccountStorageCodec.kindInstitutionAccount ||
             (decoded.org != 4 && decoded.org != 5)) {
           continue;
         }
@@ -160,11 +160,11 @@ class DuoqianDiscoveryService {
         if (hits.isEmpty) continue;
 
         final keyBytes = _hexDecode(keyHex);
-        final subjectId =
-            AdminInstitutionCodec.extractInstitutionIdFromKey(keyBytes);
-        if (subjectId == null) continue;
+        final accountId =
+            AdminAccountStorageCodec.extractAccountIdFromKey(keyBytes);
+        if (accountId == null) continue;
         final addr =
-            AdminInstitutionCodec.institutionAccountFromSubjectId(subjectId);
+            AdminAccountStorageCodec.accountHexFromAccountId(accountId);
         if (addr == null) continue;
         matchedInstitutionAddrs[addr] = hits;
         matchedInstitutionOrgs[addr] = decoded.org;
@@ -198,7 +198,7 @@ class DuoqianDiscoveryService {
         duoqianAddrHex: duoqianAddrHex,
         name: ref.accountNameText,
         sfidNumberUtf8: ref.sfidNumberText,
-        adminSubjectOrg: matchedInstitutionOrgs[duoqianAddrHex],
+        adminAccountOrg: matchedInstitutionOrgs[duoqianAddrHex],
         matchedAdmins: hits,
       );
       if (added) newlyAdded++;
@@ -226,7 +226,7 @@ class DuoqianDiscoveryService {
     required String duoqianAddrHex,
     required String name,
     required String sfidNumberUtf8,
-    required int? adminSubjectOrg,
+    required int? adminAccountOrg,
     required List<String> matchedAdmins,
   }) async {
     return WalletIsar.instance.writeTxn((isar) async {
@@ -237,7 +237,7 @@ class DuoqianDiscoveryService {
 
       if (exists != null) {
         if (!exists.discoveredViaAdmin) return false;
-        exists.adminSubjectOrg = adminSubjectOrg;
+        exists.adminAccountOrg = adminAccountOrg;
         exists.matchedAdminPubkeys = matchedAdmins;
         await isar.duoqianInstitutionEntitys.put(exists);
         return false;
@@ -246,7 +246,7 @@ class DuoqianDiscoveryService {
       final entity = DuoqianInstitutionEntity()
         ..duoqianAddress = duoqianAddrHex
         ..sfidNumber = sfidNumberUtf8
-        ..adminSubjectOrg = adminSubjectOrg
+        ..adminAccountOrg = adminAccountOrg
         ..name = name
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true
@@ -309,10 +309,10 @@ class DuoqianDiscoveryService {
     }
   }
 
-  /// `AdminsChange::Subjects` 双 prefix(twox128 || twox128)的 hex 形式。
-  String _adminsChangeSubjectsPrefixHex() {
+  /// `AdminsChange::AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
+  String _adminsChangeAdminAccountsPrefixHex() {
     final palletHash = Hasher.twoxx128.hashString('AdminsChange');
-    final storageHash = Hasher.twoxx128.hashString('Subjects');
+    final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
     final prefix = Uint8List(palletHash.length + storageHash.length);
     prefix.setAll(0, palletHash);
     prefix.setAll(palletHash.length, storageHash);

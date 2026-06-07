@@ -36,8 +36,8 @@ fn default_install_token_status() -> InstallTokenStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CpmsSiteKeys {
-    /// CPMS 机构的 SFID 号。历史内部字段仍叫 site_sfid,外部协议统一输出 sfid_number。
-    pub(crate) site_sfid: String,
+    /// CPMS 机构的 SFID 号,内部结构和外部协议统一使用 sfid_number。
+    pub(crate) sfid_number: String,
     #[serde(default)]
     pub(crate) install_token: String,
     #[serde(default)]
