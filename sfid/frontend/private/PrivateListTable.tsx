@@ -89,6 +89,12 @@ export const PrivateListTable: React.FC<Props> = ({
 
   const columns = useMemo<ColumnsType<InstitutionListRow>>(
     () => [
+      {
+        title: '序号',
+        width: 70,
+        align: 'center',
+        render: (_v, _row, index) => cursorStack.length * 50 + index + 1,
+      },
       { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
       {
         title: '机构名称',
@@ -136,7 +142,7 @@ export const PrivateListTable: React.FC<Props> = ({
         },
       },
     ],
-    [],
+    [cursorStack.length],
   );
 
   const onNextPage = () => {

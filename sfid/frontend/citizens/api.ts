@@ -124,6 +124,20 @@ export async function listCitizens(
   });
 }
 
+export async function searchLegalRepresentativeCitizens(
+  auth: AdminAuth,
+  q: string,
+  pageSize = 20,
+): Promise<string[]> {
+  const params = new URLSearchParams({
+    q: q.trim(),
+    page_size: String(pageSize),
+  });
+  return request<string[]>(`/api/v1/admin/citizens/legal-representatives?${params.toString()}`, {
+    headers: adminHeaders(auth),
+  });
+}
+
 export async function citizenBindChallenge(
   auth: AdminAuth,
   payload: {

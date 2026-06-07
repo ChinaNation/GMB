@@ -164,6 +164,13 @@ export const GovListTable: React.FC<Props> = ({
   const columns = useMemo<ColumnsType<InstitutionListRow>>(() => {
     if (isPublicSecurity) {
       return [
+        {
+          title: '序号',
+          width: 70,
+          align: 'center',
+          render: (_v, _row, index) =>
+            (deterministicPage - 1) * DETERMINISTIC_PAGE_SIZE + index + 1,
+        },
         { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
         {
           title: '公安局名称',
@@ -196,6 +203,13 @@ export const GovListTable: React.FC<Props> = ({
       ];
     }
     return [
+      {
+        title: '序号',
+        width: 70,
+        align: 'center',
+        render: (_v, _row, index) =>
+          (deterministicPage - 1) * DETERMINISTIC_PAGE_SIZE + index + 1,
+      },
       { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
       {
         title: '机构名称',
@@ -224,7 +238,7 @@ export const GovListTable: React.FC<Props> = ({
       },
       { title: '账户数', dataIndex: 'account_count', width: 90, align: 'center' },
     ];
-  }, [isPublicSecurity]);
+  }, [deterministicPage, isPublicSecurity]);
 
   return (
     <div>

@@ -250,7 +250,7 @@ mod tests {
             .connect(&database_url)
             .await
             .expect("connect CPMS_TEST_DATABASE_URL");
-        sqlx::raw_sql(include_str!("../../db/schema.sql"))
+        sqlx::raw_sql(include_str!("../db/schema.sql"))
             .execute(&pool)
             .await
             .expect("apply schema");

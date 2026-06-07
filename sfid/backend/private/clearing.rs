@@ -46,8 +46,6 @@ mod tests {
     use chrono::Utc;
 
     use crate::number::InstitutionCategory;
-    use crate::subjects::InstitutionChainStatus;
-
     // ─── 清算行资格白名单(ADR-007)─────────────────────────────
 
     /// 测试 fixture:按所需字段构造一个最小机构样本。
@@ -80,10 +78,12 @@ mod tests {
             org_code: None,
             sub_type: sub_type.map(|s| s.to_string()),
             parent_sfid_number: parent_sfid_number.map(|s| s.to_string()),
-            chain_status: InstitutionChainStatus::NotRegistered,
-            chain_tx_hash: None,
-            chain_block_number: None,
-            chain_synced_at: None,
+            legal_rep_name: None,
+            legal_rep_sfid_number: None,
+            legal_rep_photo_path: None,
+            legal_rep_photo_name: None,
+            legal_rep_photo_mime: None,
+            legal_rep_photo_size: None,
             created_by: "test".to_string(),
             created_at: Utc::now(),
         }

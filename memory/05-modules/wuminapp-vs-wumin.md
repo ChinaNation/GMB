@@ -63,7 +63,7 @@
 | 后端 | 生成 | 接收 |
 |---|---|---|
 | `sfid/backend/admins/login/mod.rs` | `login_challenge` | `login_receipt` |
-| `cpms/backend/src/login/mod.rs` | `login_challenge` | `login_receipt` |
+| `cpms/backend/login/mod.rs` | `login_challenge` | `login_receipt` |
 
 sfid / cpms 前端只是扫码 UI 宿主:
 - 笔记本浏览器显示 `login_challenge` 二维码
@@ -80,8 +80,8 @@ sfid / cpms 前端只是扫码 UI 宿主:
 | `cpms/frontend`(登录部分) | `login_receipt` | 登录(显示 challenge 给 wumin 扫) |
 
 **注意**:CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `WUMIN_QR_V1` 无关,永远不合并。相关代码位于:
-- `cpms/backend/src/initialize/mod.rs`
-- `cpms/backend/src/dangan/mod.rs`
+- `cpms/backend/initialize/mod.rs`
+- `cpms/backend/dangan/mod.rs`
 - `cpms/frontend/initialize/`
 - `cpms/frontend/super_admin/`
 - `cpms/frontend/operator_admin/`

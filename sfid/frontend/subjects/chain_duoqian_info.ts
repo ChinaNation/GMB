@@ -7,11 +7,6 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
-export type InstitutionChainStatus =
-  | 'NOT_REGISTERED'
-  | 'REGISTERED'
-  | 'REVOKED_ON_CHAIN';
-
 export interface InstitutionInfoDetail {
   sfid_number: string;
   institution_name?: string | null;
@@ -25,7 +20,6 @@ export interface InstitutionInfoDetail {
   institution_code: string;
   sub_type?: string | null;
   parent_sfid_number?: string | null;
-  chain_status: InstitutionChainStatus;
 }
 
 export interface InstitutionRegistrationCredential {

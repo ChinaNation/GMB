@@ -79,6 +79,93 @@ pub(crate) async fn admin_list_citizens(
     .into_response()
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct LegalRepresentativeCitizenQuery {
+    pub q: Option<String>,
+    pub page_size: Option<usize>,
+}
+
+pub(crate) async fn admin_search_legal_representative_citizens(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LegalRepresentativeCitizenQuery>,
+) -> impl IntoResponse {
+    let auth_ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let q = query.q.as_deref().map(str::trim).unwrap_or("").to_string();
+    if q.is_empty() {
+        return Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: Vec::<String>::new(),
+        })
+        .into_response();
+    }
+    let scope_province_code = auth_ctx
+        .admin_province
+        .as_deref()
+        .and_then(|name| crate::china::provinces().iter().find(|p| p.name == name))
+        .map(|p| p.code.to_string());
+    let scope_city_code = auth_ctx
+        .admin_city
+        .as_deref()
+        .and_then(|city_name| {
+            auth_ctx
+                .admin_province
+                .as_deref()
+                .and_then(|province_name| {
+                    crate::china::provinces()
+                        .iter()
+                        .find(|p| p.name == province_name)
+                        .and_then(|p| p.cities.iter().find(|c| c.name == city_name))
+                })
+        })
+        .map(|c| c.code.to_string());
+    let page_size = query.page_size.unwrap_or(20).clamp(1, 50);
+    let result = state.db.with_client(move |conn| {
+        let limit = i64::try_from(page_size).map_err(|_| "page_size too large".to_string())?;
+        let rows = conn
+            .query(
+                "SELECT sfid_number
+                 FROM citizens
+                 WHERE citizen_status = 'NORMAL'
+                   AND ($1::text IS NULL OR p_code = $1)
+                   AND ($2::text IS NULL OR c_code = $2)
+                   AND (
+                        sfid_number ILIKE '%' || $3 || '%'
+                        OR COALESCE(archive_no, '') ILIKE '%' || $3 || '%'
+                   )
+                 ORDER BY sfid_number ASC
+                 LIMIT $4",
+                &[&scope_province_code, &scope_city_code, &q, &limit],
+            )
+            .map_err(|e| format!("query legal representative citizens failed: {e}"))?;
+        Ok(rows
+            .iter()
+            .map(|row| row.get::<_, String>(0))
+            .collect::<Vec<_>>())
+    });
+    let rows = match result {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "legal representative citizen search failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "citizen query failed",
+            );
+        }
+    };
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: rows,
+    })
+    .into_response()
+}
+
 pub(crate) async fn public_identity_search(
     State(state): State<AppState>,
     headers: HeaderMap,

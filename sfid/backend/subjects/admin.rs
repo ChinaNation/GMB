@@ -4,12 +4,14 @@
 //! `subjects/accounts` 结构化表。
 
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
+use chrono::Utc;
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::login::require_admin_any;
@@ -17,9 +19,11 @@ use crate::admins::operation_auth::AdminActionType;
 use crate::scope::get_visible_scope;
 use crate::subjects::http::{resolve_created_by, service_error_to_response};
 use crate::subjects::model::{
-    InstitutionDetailOutput, ParentInstitutionRow, UpdateInstitutionInput,
+    InstitutionDetailOutput, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
 };
-use crate::subjects::service::{validate_institution_name, validate_sub_type_with_p1};
+use crate::subjects::service::{
+    validate_institution_name, validate_legal_representative_required, validate_sub_type_with_p1,
+};
 use crate::subjects::uninorg;
 use crate::*;
 
@@ -89,6 +93,83 @@ struct CheckNameResult {
     exists: bool,
 }
 
+pub(crate) async fn upload_legal_representative_photo(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin_any(&state, &headers) {
+        return resp;
+    }
+
+    let mut file_name: Option<String> = None;
+    let mut file_mime: Option<String> = None;
+    let mut file_data: Option<Vec<u8>> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name().unwrap_or("") != "file" {
+            continue;
+        }
+        file_name = field.file_name().map(|v| v.to_string());
+        file_mime = field.content_type().map(|v| v.to_string());
+        match field.bytes().await {
+            Ok(bytes) => file_data = Some(bytes.to_vec()),
+            Err(e) => {
+                let message = format!("读取证件照失败: {e}");
+                return api_error(StatusCode::BAD_REQUEST, 1001, message.as_str());
+            }
+        }
+    }
+
+    let file_name = match file_name
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "file is required"),
+    };
+    let file_data = match file_data.filter(|v| !v.is_empty()) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "file is empty"),
+    };
+    if file_data.len() > crate::subjects::service::MAX_LEGAL_REP_PHOTO_BYTES as usize {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "证件照不能超过 5MB");
+    }
+    let mime = file_mime.unwrap_or_else(|| "application/octet-stream".to_string());
+    let ext = match mime.as_str() {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => return api_error(StatusCode::BAD_REQUEST, 1001, "证件照只支持 JPEG/PNG/WebP"),
+    };
+    let doc_dir = format!("data/legal-rep-photos/{}", Utc::now().format("%Y%m"));
+    if let Err(e) = std::fs::create_dir_all(&doc_dir) {
+        tracing::error!(error = %e, "create legal representative photo dir failed");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "create dir failed");
+    }
+    let stored_name = format!(
+        "{}_{}.{}",
+        Utc::now().format("%Y%m%d%H%M%S"),
+        Uuid::new_v4().as_simple(),
+        ext
+    );
+    let stored_path = format!("{doc_dir}/{stored_name}");
+    if let Err(e) = std::fs::write(&stored_path, &file_data) {
+        tracing::error!(error = %e, "write legal representative photo failed");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "write file failed");
+    }
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: LegalRepresentativePhoto {
+            file_path: stored_path,
+            file_name,
+            mime_type: mime,
+            file_size: file_data.len() as u64,
+        },
+    })
+    .into_response()
+}
+
 pub(crate) async fn update_institution(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -105,6 +186,9 @@ pub(crate) async fn update_institution(
         "institution_name": input.institution_name.clone(),
         "sub_type": input.sub_type.clone(),
         "parent_sfid_number": input.parent_sfid_number.clone(),
+        "legal_rep_name": input.legal_rep_name.clone(),
+        "legal_rep_sfid_number": input.legal_rep_sfid_number.clone(),
+        "legal_rep_photo_path": input.legal_rep_photo_path.clone(),
     });
     if let Err(resp) = require_admin_security_grant(
         &state,
@@ -199,6 +283,40 @@ pub(crate) async fn update_institution(
         }
         existing.parent_sfid_number = Some(raw);
     }
+    let legal_rep = match validate_legal_representative_required(
+        input.legal_rep_name.as_deref(),
+        input.legal_rep_sfid_number.as_deref(),
+        input.legal_rep_photo_path.as_deref(),
+        input.legal_rep_photo_name.as_deref(),
+        input.legal_rep_photo_mime.as_deref(),
+        input.legal_rep_photo_size,
+    ) {
+        Ok(v) => v,
+        Err(e) => return service_error_to_response(e),
+    };
+    match state
+        .db
+        .legal_representative_citizen_exists(legal_rep.sfid_number.as_str())
+    {
+        Ok(true) => {}
+        Ok(false) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "法定代表人身份ID必须选择正常状态公民",
+            )
+        }
+        Err(err) => {
+            let message = format!("query legal representative failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    }
+    existing.legal_rep_name = Some(legal_rep.name);
+    existing.legal_rep_sfid_number = Some(legal_rep.sfid_number);
+    existing.legal_rep_photo_path = Some(legal_rep.photo_path);
+    existing.legal_rep_photo_name = Some(legal_rep.photo_name);
+    existing.legal_rep_photo_mime = Some(legal_rep.photo_mime);
+    existing.legal_rep_photo_size = Some(legal_rep.photo_size);
     if let Err(err) = state.db.upsert_institution_row(&existing) {
         let message = format!("update institution failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());

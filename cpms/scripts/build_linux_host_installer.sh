@@ -59,6 +59,8 @@ PAYLOAD_DIR="${OUT_DIR}/payload"
 RUN_FILE="${ROOT_DIR}/dist/${PACKAGE_BASENAME}.run"
 SHA256_FILE="${RUN_FILE}.sha256"
 INSTALL_GUIDE_PDF="${ROOT_DIR}/docs/CPMS安装配置手册.pdf"
+# 中文注释：行政区唯一源是 SFID 维护的 china.sqlite，安装包随附其只读拷贝。
+CHINA_DB_SRC="${ROOT_DIR}/../sfid/backend/china/data/china.sqlite"
 
 collect_offline_debs() {
   if ! command -v docker >/dev/null 2>&1; then
@@ -165,8 +167,8 @@ HEADER
   (cd "$(dirname "${RUN_FILE}")" && sha256sum "$(basename "${RUN_FILE}")" >"$(basename "${SHA256_FILE}")")
 }
 
-# 中文注释：行政区数据由 CPMS 后端编译期直接引用 sfid/backend/sfid 唯一源，
-# 打包脚本不得再把 province.rs 或 city_codes 写入 CPMS 源码树。
+# 中文注释：行政区唯一源是 SFID 维护的 china.sqlite；安装包随附其只读拷贝，
+# CPMS 运行时用 rusqlite 读，不在 CPMS 源码树保存第二套行政区数据。
 echo "[1/8] Build backend release binary"
 cargo build --release --manifest-path "${ROOT_DIR}/backend/Cargo.toml"
 
@@ -182,8 +184,13 @@ if [[ ! -f "${INSTALL_GUIDE_PDF}" ]]; then
   echo "ERROR: missing CPMS install guide PDF at ${INSTALL_GUIDE_PDF}"
   exit 1
 fi
+if [[ ! -f "${CHINA_DB_SRC}" ]]; then
+  echo "ERROR: missing china administrative-area source at ${CHINA_DB_SRC}"
+  exit 1
+fi
 mkdir -p \
   "${PAYLOAD_DIR}/bin" \
+  "${PAYLOAD_DIR}/data" \
   "${PAYLOAD_DIR}/docs" \
   "${PAYLOAD_DIR}/frontend" \
   "${PAYLOAD_DIR}/systemd" \
@@ -199,6 +206,7 @@ collect_offline_debs
 
 echo "[5/8] Copy payload files"
 cp "${ROOT_DIR}/backend/target/release/cpms-backend" "${PAYLOAD_DIR}/bin/cpms-backend"
+cp "${CHINA_DB_SRC}" "${PAYLOAD_DIR}/data/china.sqlite"
 cp "${ROOT_DIR}/deploy/linux/backup_to_storage.sh" "${PAYLOAD_DIR}/bin/backup_to_storage.sh"
 cp "${INSTALL_GUIDE_PDF}" "${PAYLOAD_DIR}/docs/CPMS安装配置手册.pdf"
 cp -R "${ROOT_DIR}/frontend/dist/." "${PAYLOAD_DIR}/frontend/"
@@ -222,6 +230,7 @@ chmod +x \
 
 echo "[7/8] Validate payload"
 test -f "${PAYLOAD_DIR}/manifest.env"
+test -f "${PAYLOAD_DIR}/data/china.sqlite"
 test -f "${PAYLOAD_DIR}/docs/CPMS安装配置手册.pdf"
 test -f "${PAYLOAD_DIR}/frontend/index.html"
 test -f "${PAYLOAD_DIR}/nginx/cpms.conf"

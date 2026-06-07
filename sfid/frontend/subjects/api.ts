@@ -10,12 +10,6 @@ export const InstitutionCategoryLabel: Record<InstitutionCategory, string> = {
   PRIVATE_INSTITUTION: '私权机构',
 };
 
-// 中文注释:SFID 只显示链上同步回来的状态,不提供后台手动激活入口。
-export type InstitutionChainStatus =
-  | 'NOT_REGISTERED'
-  | 'REGISTERED'
-  | 'REVOKED_ON_CHAIN';
-
 export type MultisigChainStatus =
   | 'NOT_ON_CHAIN'
   | 'PENDING_ON_CHAIN'
@@ -48,10 +42,13 @@ export interface MultisigInstitution {
   sub_type?: string | null;
   /** 所属法人 sfid_number(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
   parent_sfid_number?: string | null;
-  chain_status: InstitutionChainStatus;
-  chain_tx_hash?: string | null;
-  chain_block_number?: number | null;
-  chain_synced_at?: string | null;
+  /** 法定代表人资料。初始化目录机构可为空;编辑保存时必填。 */
+  legal_rep_name?: string | null;
+  legal_rep_sfid_number?: string | null;
+  legal_rep_photo_path?: string | null;
+  legal_rep_photo_name?: string | null;
+  legal_rep_photo_mime?: string | null;
+  legal_rep_photo_size?: number | null;
   created_by: string;
   created_at: string;
 }
@@ -85,7 +82,6 @@ export interface InstitutionListRow {
   org_code?: string | null;
   sub_type?: string | null;
   parent_sfid_number?: string | null;
-  chain_status: InstitutionChainStatus;
   account_count: number;
   cpms_status?: string | null;
   install_token_status?: string | null;
@@ -128,6 +124,13 @@ export interface InstitutionDocument {
   uploaded_at: string;
 }
 
+export interface LegalRepresentativePhoto {
+  file_path: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+}
+
 // ─── 请求 DTO ─────────────────────────────────────────────────
 
 export interface CreateInstitutionInput {
@@ -141,8 +144,14 @@ export interface CreateInstitutionInput {
    * - 私权(SFR/FFR)两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
    * - 教育委员会(JY)手动新增学校机构:**必传**,同步做查重
    * - 自动公权机构/公安局:不走手动创建接口
-   */
+  */
   institution_name?: string;
+  legal_rep_name?: string;
+  legal_rep_sfid_number?: string;
+  legal_rep_photo_path?: string;
+  legal_rep_photo_name?: string;
+  legal_rep_photo_mime?: string;
+  legal_rep_photo_size?: number;
 }
 
 export interface CreateInstitutionOutput {
@@ -155,9 +164,17 @@ export interface CreateInstitutionOutput {
 /** 机构详情页可编辑字段(两步式第二步) */
 export interface UpdateInstitutionInput {
   institution_name?: string;
+  full_name?: string | null;
+  short_name?: string | null;
   sub_type?: string | null;
   /** 所属法人 sfid_number(仅 FFR;传空串后端会拒) */
   parent_sfid_number?: string;
+  legal_rep_name?: string;
+  legal_rep_sfid_number?: string;
+  legal_rep_photo_path?: string;
+  legal_rep_photo_name?: string;
+  legal_rep_photo_mime?: string;
+  legal_rep_photo_size?: number;
 }
 
 /** 法人机构搜索结果项(FFR 详情页"所属法人"选择器用) */

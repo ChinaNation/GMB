@@ -9,10 +9,15 @@ SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend
 ## 启动流程
 
 1. 读取 `DATABASE_URL` 和 Redis 配置。
-2. 初始化 PostgreSQL schema。
-3. 为 `subjects/citizens/gov/private/accounts/docs/audit` 创建按省分区。
-4. 初始化内置 43 个联邦管理员。
-5. 启动交易索引 worker。
+2. 初始化 PostgreSQL schema 父表。
+3. 将父表收敛到当前目标字段:新增缺失字段、删除废弃字段。
+4. 校验关键目标字段存在、废弃字段不存在。
+5. 创建当前目标索引。
+6. 为 `subjects/citizens/gov/private/accounts/docs/audit` 创建按省分区。
+7. 初始化内置 43 个联邦管理员。
+8. 启动交易索引 worker。
+
+schema 初始化和业务目录初始化必须分离。schema 收敛每次启动都可以执行,但只允许把数据库结构调整到当前目标状态,不得保留旧字段或旧接口作为兼容通道。任何依赖新字段的索引、约束或业务 SQL 都必须放在字段收敛和目标状态校验之后执行。
 
 `sfid-backend serve` 不自动全量生成公权机构目录。确定性机构只在显式维护命令中写入。
 
@@ -23,9 +28,9 @@ SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend
 ### 主体身份
 
 - `ids(sfid_number, kind, p_code, c_code)`:全局身份 ID 索引。
-- `subjects`:主体公共展示字段,按省分区。
+- `subjects`:主体公共展示字段,按省分区;机构行保存 `name/full_name/short_name`、行政区、业务状态和法定代表人资料。
 - `citizens`:公民电子护照绑定字段,按省分区。
-- `gov`:公权机构扩展字段,按省分区。
+- `gov`:公权机构扩展字段,按省分区;只保存 `institution_code/org_code` 等机构类型细分。
 - `private`:私权机构和非法人扩展字段,按省分区。
 
 `sfid_number` 是唯一且不可变的身份标识。不得新增 `identity_key`、`generation_key` 等第二身份键。
@@ -34,6 +39,16 @@ SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend
 
 - `accounts`:机构账户,主键为 `(p_code, sfid_number, account_name)`。
 - `docs`:机构资料库元数据,文件本体存磁盘。
+
+机构本身不保存链上状态。链上状态只属于 `accounts.chain_status`,用于账户是否已在链上激活、注销或等待同步。机构详情页不得展示机构链上状态字段。
+
+机构法定代表人资料归属 `subjects`,包括:
+
+- `legal_rep_name`:法定代表人姓名,由管理员输入。
+- `legal_rep_sfid_number`:法定代表人身份ID,只能从正常状态公民中选择。
+- `legal_rep_photo_path/legal_rep_photo_name/legal_rep_photo_mime/legal_rep_photo_size`:证件照元数据。
+
+初始化生成的公权机构允许法定代表人资料暂为空;任何机构进入编辑保存时必须补齐姓名、身份ID和证件照。新增人工机构必须在创建时填写三项。候选公民搜索接口只返回 `sfid_number` 字符串,不得返回姓名等 SFID 公民模型不存在的字段。
 
 ### 管理员与安全
 
@@ -75,6 +90,8 @@ SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend
 ## 前端交互与提示
 
 公权机构和公安局使用同一个 `GovView` 组件边界,但它们属于两个一级 tab。顶部 tab 点击必须生成重置信号,详情页本地状态必须在 `category` 或重置信号变化时清空,避免从某个机构详情页切换模块时仍停留在旧详情。
+
+公权机构、公安局、私权机构列表必须显示连续序号。机构详情页的身份字段统一显示为 `身份ID`,不得使用代码框包裹,不得展示 `A3 类型` 或机构链上状态。账户列表可以展示账户链上状态。
 
 SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件只允许调用 `notice.success/error/warning/info/confirm/warningModal`,不得直接调用 Ant Design `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。统一入口负责:
 

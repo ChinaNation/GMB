@@ -7,6 +7,7 @@ import { CreateInstitutionForm } from '../core/institution/CreateInstitutionForm
 import {
   checkInstitutionName,
   createInstitution,
+  uploadLegalRepresentativePhoto,
   type CreateInstitutionOutput,
   type GovCategory,
 } from './api';
@@ -26,5 +27,6 @@ export const GovCreateModal: React.FC<Props> = (props) => (
     {...props}
     checkInstitutionName={checkInstitutionName}
     createInstitution={createInstitution}
+    uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
   />
 );

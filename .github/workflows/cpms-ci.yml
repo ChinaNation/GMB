@@ -6,11 +6,15 @@ on:
     paths:
       - ".github/workflows/cpms-ci.yml"
       - "cpms/**"
+      # 中文注释：CPMS 安装包随附 SFID 维护的行政区唯一源，数据变更时一并重验。
+      - "sfid/backend/china/data/china.sqlite"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/cpms-ci.yml"
       - "cpms/**"
+      # 中文注释：CPMS 安装包随附 SFID 维护的行政区唯一源，数据变更时一并重验。
+      - "sfid/backend/china/data/china.sqlite"
   workflow_dispatch:
 
 concurrency:

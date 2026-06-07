@@ -14,9 +14,8 @@ pub(crate) mod uninorg;
 #[allow(unused_imports)]
 pub use model::{
     account_key_from_string, account_key_to_string, AccountKey, ChainSyncAccountInput,
-    ChainSyncInput, ChainSyncOutput, CreateAccountInput, CreateAccountOutput,
-    CreateInstitutionInput, CreateInstitutionOutput, InstitutionChainStatus,
-    InstitutionDetailOutput, InstitutionDocument, InstitutionListRow, MultisigAccount,
-    MultisigChainStatus, MultisigInstitution, ParentInstitutionRow, UpdateInstitutionInput,
-    VALID_DOC_TYPES,
+    CreateAccountInput, CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput,
+    InstitutionDetailOutput, InstitutionDocument, InstitutionListRow, LegalRepresentativePhoto,
+    MultisigAccount, MultisigChainStatus, MultisigInstitution, ParentInstitutionRow,
+    UpdateInstitutionInput, VALID_DOC_TYPES,
 };

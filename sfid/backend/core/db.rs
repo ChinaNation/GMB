@@ -347,7 +347,12 @@ impl Db {
 	                org_code TEXT,
                 sub_type TEXT,
                 parent_sfid_number TEXT,
-                chain_status TEXT,
+                legal_rep_name TEXT,
+                legal_rep_sfid_number TEXT,
+                legal_rep_photo_path TEXT,
+                legal_rep_photo_name TEXT,
+                legal_rep_photo_mime TEXT,
+                legal_rep_photo_size BIGINT,
                 created_by TEXT,
                 created_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL,
@@ -383,7 +388,6 @@ impl Db {
 		                org_code TEXT,
                 home_p TEXT,
                 home_c TEXT,
-                chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_REGISTERED', 'REGISTERED', 'REVOKED_ON_CHAIN')),
                 PRIMARY KEY (p_code, sfid_number)
              ) PARTITION BY LIST (p_code);
 
@@ -435,9 +439,39 @@ impl Db {
                 detail TEXT NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (p_code, id)
-             ) PARTITION BY LIST (p_code);
+             ) PARTITION BY LIST (p_code);",
+        )
+	        .map_err(|e| {
+	            format!(
+	                "init subject partition parent schema failed: {}",
+	                postgres_error_text(&e)
+	            )
+	        })?;
 
-             CREATE INDEX IF NOT EXISTS idx_subjects_city
+        // 中文注释:旧表已存在时 CREATE TABLE IF NOT EXISTS 不会补新列,必须先把父表收敛到目标字段。
+        conn.batch_execute(
+            "ALTER TABLE subjects
+                ADD COLUMN IF NOT EXISTS legal_rep_name TEXT,
+                ADD COLUMN IF NOT EXISTS legal_rep_sfid_number TEXT,
+                ADD COLUMN IF NOT EXISTS legal_rep_photo_path TEXT,
+                ADD COLUMN IF NOT EXISTS legal_rep_photo_name TEXT,
+                ADD COLUMN IF NOT EXISTS legal_rep_photo_mime TEXT,
+                ADD COLUMN IF NOT EXISTS legal_rep_photo_size BIGINT,
+                DROP COLUMN IF EXISTS chain_status;
+             ALTER TABLE gov
+                DROP COLUMN IF EXISTS chain_status;",
+        )
+        .map_err(|e| {
+            format!(
+                "sync target subject schema failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
+        Self::validate_target_subject_schema(conn)?;
+
+        conn.batch_execute(
+            "CREATE INDEX IF NOT EXISTS idx_subjects_city
                 ON subjects (p_code, c_code, kind, status, sfid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_town
                 ON subjects (p_code, c_code, t_code, kind, status, sfid_number);
@@ -447,6 +481,8 @@ impl Db {
                 ON subjects (category, province, city, created_at DESC, sfid_number DESC);
              CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
                 ON subjects (category, province, city, sfid_number, name);
+             CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
+                ON subjects (p_code, legal_rep_sfid_number);
              CREATE INDEX IF NOT EXISTS idx_citizens_scope_created
                 ON citizens (p_code, c_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_province_created
@@ -455,8 +491,8 @@ impl Db {
                 ON citizens (p_code, c_code, archive_no, sfid_number, wallet_pubkey, wallet_address);
              CREATE INDEX IF NOT EXISTS idx_gov_city
                 ON gov (p_code, c_code, institution_code);
-	             CREATE INDEX IF NOT EXISTS idx_gov_org
-	                ON gov (p_code, org_code);
+             CREATE INDEX IF NOT EXISTS idx_gov_org
+                ON gov (p_code, org_code);
              CREATE INDEX IF NOT EXISTS idx_private_city
                 ON private (p_code, c_code, kind, code);
              CREATE INDEX IF NOT EXISTS idx_accounts_sfid
@@ -466,15 +502,68 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_audit_scope_time
                 ON audit (p_code, c_code, created_at DESC);",
         )
-	        .map_err(|e| {
-	            format!(
-	                "init subject partition parent schema failed: {}",
-	                postgres_error_text(&e)
-	            )
-	        })?;
+        .map_err(|e| {
+            format!(
+                "init subject partition indexes failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
 
         for province in crate::china::provinces().iter() {
             Self::create_subject_partitions(conn, province.code)?;
+        }
+        Ok(())
+    }
+
+    // 中文注释:把启动期失败提前到清晰的目标状态校验,避免后续索引或业务 SQL 报隐晦字段错误。
+    fn validate_target_subject_schema(conn: &mut postgres::Client) -> Result<(), String> {
+        for column in [
+            "legal_rep_name",
+            "legal_rep_sfid_number",
+            "legal_rep_photo_path",
+            "legal_rep_photo_name",
+            "legal_rep_photo_mime",
+            "legal_rep_photo_size",
+        ] {
+            Self::ensure_column_state(conn, "subjects", column, true)?;
+        }
+        for (table, column) in [("subjects", "chain_status"), ("gov", "chain_status")] {
+            Self::ensure_column_state(conn, table, column, false)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_column_state(
+        conn: &mut postgres::Client,
+        table: &str,
+        column: &str,
+        must_exist: bool,
+    ) -> Result<(), String> {
+        let row = conn
+            .query_one(
+                "SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = $1
+                      AND column_name = $2
+                )",
+                &[&table, &column],
+            )
+            .map_err(|e| {
+                format!(
+                    "inspect column {table}.{column} failed: {}",
+                    postgres_error_text(&e)
+                )
+            })?;
+        let exists: bool = row.get(0);
+        if must_exist && !exists {
+            return Err(format!("target schema missing column {table}.{column}"));
+        }
+        if !must_exist && exists {
+            return Err(format!(
+                "target schema still has deprecated column {table}.{column}"
+            ));
         }
         Ok(())
     }

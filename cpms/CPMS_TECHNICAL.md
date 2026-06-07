@@ -30,16 +30,16 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 2. 后端模块结构
 | 模块 | 文件 | 说明 |
 |------|------|------|
-| main | `src/main.rs` | 入口、路由、公共工具函数、过期数据清理 |
-| authz | `src/authz/mod.rs` | Cookie session 校验、角色检查 |
-| login | `src/login/mod.rs` | QR-only 扫码登录、会话查询和登出 |
-| initialize | `src/initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、超级管理员绑定 |
-| rate_limit | `src/rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
-| sfid_tool_province | `src/main.rs` | 编译期直接引用 SFID 系统 `sfid/backend/sfid/province.rs` 行政区唯一源 |
-| address | `src/address.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口 |
-| super_admin | `src/super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
-| number | `src/number/mod.rs` | 档案号与护照号生成 |
-| dangan | `src/dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
+| main | `main.rs` | 入口、路由、公共工具函数、过期数据清理 |
+| authz | `authz/mod.rs` | Cookie session 校验、角色检查 |
+| login | `login/mod.rs` | QR-only 扫码登录、会话查询和登出 |
+| initialize | `initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、超级管理员绑定 |
+| rate_limit | `rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
+| china | `china.rs` | 运行时用 rusqlite 只读 SFID 维护的 `china.sqlite` 行政区唯一源（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
+| address | `address.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口 |
+| super_admin | `super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
+| number | `number/mod.rs` | 档案号与护照号生成 |
+| dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
 
 ## 2.1 前端模块结构
 | 模块 | 目录 | 说明 |
@@ -157,7 +157,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 ## 5.4 公民资料库
 
-- 公民资料库后端主体在 `src/dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx`。
+- 公民资料库后端主体在 `dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx`。
 - 支持资料类型：照片、出生纸、复印件、视频和其他资料；后端按类型校验 MIME，单文件上限 100 MB。
 - 数据库 `archive_materials` 只保存元数据、哈希和本机存储文件名，不保存文件正文。
 - 开发默认文件正文保存在 `data/archive-materials/<archive_id>/`；正式离线安装包固定通过
@@ -179,7 +179,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 安装时生成 `/etc/cpms/certs/cpms-root-ca.crt` 和 `www.cpms.com` 服务端证书；客户端需要信任该
   本机私有 CA 后访问 HTTPS。
 - 安装手册安装到 `/opt/cpms/docs/CPMS安装配置手册.pdf`，手动 CI artifact 也单独包含同一份 PDF。
-- 前端所有二维码读取入口统一使用 `frontend/qr/CameraQrScanner.tsx` 摄像头组件，只保留摄像头扫码模式。
+- 前端所有二维码读取入口统一走 `frontend/qr/CameraQrScanner.tsx`：支持摄像头扫码与上传图片本地解码两种模式，二者共用浏览器原生 `BarcodeDetector` 与同一 `onDetected` 回调，不在页面内另起第二套扫码逻辑。上传二维码只在前端本地解析，不把图片文件传后端。初始化「扫描安装码」步骤开启上传入口（`allowUpload`）；绑定管理员的公民钱包码步骤只用摄像头。
 
 ## 6. 环境变量
 | 变量 | 说明 | 默认值 |
@@ -284,13 +284,16 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
 
 ## 11. 行政区数据
 
-- SFID 系统 `sfid/backend/sfid` 是行政区数据唯一源头。
+- SFID 系统维护的 `sfid/backend/china/data/china.sqlite` 是行政区数据唯一源头。
 - CPMS 后端源码目录不保存行政区第二份文件，也不维护 `province.rs` 或 `city_codes/*.rs`
   的第二份源码。
-- CPMS 后端编译期直接引用 `sfid/backend/sfid/province.rs`；该文件继续引用同目录
-  `city_codes/*.rs`。发行包只内置编译后的只读数据。
-- `cpms/scripts/build_linux_host_installer.sh` 不再执行行政区源码复制脚本；任何恢复复制脚本
-  或恢复 CPMS 行政区第二份源码的改动都属于残留回退。
+- CPMS 后端 `china` 模块运行时用 rusqlite 只读 `china.sqlite`，路径三层兜底：
+  ① 环境变量 `CPMS_CHINA_DB`（生产由 install_host 写入 `/opt/cpms/data/china.sqlite`）；
+  ② 二进制旁 `<exe 目录>/../data/china.sqlite`（部署自定位，env 丢失也能找到）；
+  ③ 编译期 `CARGO_MANIFEST_DIR` 相对的 SFID 唯一源（本地 `cargo run` 零配置即通）。
+  发行包随附该 SQLite 的只读拷贝（安装到 `/opt/cpms/data/china.sqlite`）。
+- `cpms/scripts/build_linux_host_installer.sh` 把 SFID 唯一源 `china.sqlite` 拷入安装包 payload；
+  任何在 CPMS 源码树恢复 `province.rs`/`city_codes` 第二份行政区源码的改动都属于残留回退。
 - 一个 CPMS 通用发行包可以安装到任意市公安局；运行时由 SFID 签发的 INSTALL 安装码锁定
   唯一市公安局。
 - CPMS 初始化和已初始化实例启动时会按安装码 R5 段重建 `address_towns/address_villages`，

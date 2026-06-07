@@ -149,7 +149,7 @@ fn default_wallet_sig_alg() -> String {
 /// CPMS 档案二维码中只允许 SFID 解开的归属密文内容。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CpmsGeoSealClaims {
-    /// 中文注释：归属密文只放机构 SFID 号；省市由 SFID 从 sfid_number 解码。
+    /// 中文注释：归属密文只放机构身份ID；省市由 SFID 从 sfid_number 解码。
     pub(crate) sfid_number: String,
 }
 

@@ -16,7 +16,7 @@ use crate::subjects::http::{MAX_CITY_CHARS, MAX_PROVINCE_CHARS};
 use crate::subjects::service::{
     can_delete_account, is_default_account_name, DEFAULT_ACCOUNT_NAMES,
 };
-use crate::subjects::{InstitutionChainStatus, MultisigChainStatus};
+use crate::subjects::MultisigChainStatus;
 use crate::*;
 
 #[derive(Serialize)]
@@ -36,7 +36,6 @@ pub(crate) struct AppInstitutionDetail {
     pub(crate) sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_sfid_number: Option<String>,
-    pub(crate) chain_status: InstitutionChainStatus,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,7 +52,6 @@ pub(crate) struct AppInstitutionSearchRow {
     pub(crate) a3: String,
     pub(crate) province: String,
     pub(crate) city: String,
-    pub(crate) chain_status: InstitutionChainStatus,
 }
 
 #[derive(Serialize)]
@@ -146,14 +144,6 @@ fn parse_category(value: &str) -> crate::number::InstitutionCategory {
     }
 }
 
-fn parse_institution_status(value: &str) -> InstitutionChainStatus {
-    match value {
-        "REGISTERED" => InstitutionChainStatus::Registered,
-        "REVOKED_ON_CHAIN" => InstitutionChainStatus::RevokedOnChain,
-        _ => InstitutionChainStatus::NotRegistered,
-    }
-}
-
 fn parse_account_status(value: &str) -> MultisigChainStatus {
     match value {
         "PENDING_ON_CHAIN" => MultisigChainStatus::PendingOnChain,
@@ -177,7 +167,7 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT sfid_number, name, category, a3, province, city, chain_status
+                "SELECT sfid_number, name, category, a3, province, city
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
                    AND status = 'ACTIVE'
@@ -200,7 +190,6 @@ pub(crate) async fn app_search_institutions(
                 a3: row.get(3),
                 province: row.get(4),
                 city: row.get(5),
-                chain_status: parse_institution_status(row.get::<_, String>(6).as_str()),
             })
             .collect::<Vec<_>>())
     }) {
@@ -255,7 +244,6 @@ pub(crate) async fn app_get_institution(
             institution_code: inst.institution_code,
             sub_type: inst.sub_type,
             parent_sfid_number: inst.parent_sfid_number,
-            chain_status: inst.chain_status,
         },
     })
     .into_response()

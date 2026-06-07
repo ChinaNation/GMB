@@ -1396,13 +1396,13 @@ fn bulk_write_target_chunk(
             sfid_number, kind, name, full_name, short_name, p_code, c_code, t_code,
             status, category, a3, p1, province, city, town,
             province_code, city_code, town_code, institution_code, org_code, sub_type,
-            parent_sfid_number, chain_status, created_by, created_at, updated_at
+            parent_sfid_number, created_by, created_at, updated_at
          )
          SELECT
             sfid_number, 'PUBLIC', name, full_name, short_name, p_code, c_code, t_code,
             'ACTIVE', category, a3, p1, province, city, town,
             p_code, COALESCE(c_code, ''), COALESCE(t_code, ''), institution_code, org_code,
-            NULL::text, NULL::text, 'NOT_REGISTERED', $18, now(), now()
+            NULL::text, NULL::text, $18, now(), now()
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
@@ -1435,7 +1435,6 @@ fn bulk_write_target_chunk(
             org_code = EXCLUDED.org_code,
             sub_type = EXCLUDED.sub_type,
             parent_sfid_number = EXCLUDED.parent_sfid_number,
-            chain_status = EXCLUDED.chain_status,
             created_by = EXCLUDED.created_by,
             updated_at = now()",
         &[
@@ -1464,10 +1463,10 @@ fn bulk_write_target_chunk(
     tx.execute(
         "INSERT INTO gov (
             sfid_number, p_code, c_code, t_code, institution_code, org_code,
-            home_p, home_c, chain_status
+            home_p, home_c
          )
          SELECT sfid_number, p_code, c_code, t_code, institution_code, org_code,
-                home_p, home_c, 'NOT_REGISTERED'
+                home_p, home_c
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[]
@@ -1481,8 +1480,7 @@ fn bulk_write_target_chunk(
             institution_code = EXCLUDED.institution_code,
             org_code = EXCLUDED.org_code,
             home_p = EXCLUDED.home_p,
-            home_c = EXCLUDED.home_c,
-            chain_status = EXCLUDED.chain_status",
+            home_c = EXCLUDED.home_c",
         &[
             &sfids,
             &p_codes,
