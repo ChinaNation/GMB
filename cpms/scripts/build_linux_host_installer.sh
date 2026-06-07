@@ -188,6 +188,14 @@ if [[ ! -f "${CHINA_DB_SRC}" ]]; then
   echo "ERROR: missing china administrative-area source at ${CHINA_DB_SRC}"
   exit 1
 fi
+# 中文注释：china.sqlite 走 Git LFS。若以 lfs:false / 未拉 LFS 的方式 checkout，
+# 该路径会是一个 ~130 字节的“指针文件”，test -f 仍为真但内容不是数据库。
+# 正向检测 LFS 指针特征(纯 ASCII，跨平台 grep 都稳)，绝不把指针当数据库打进安装包。
+if head -c 64 "${CHINA_DB_SRC}" | grep -qa "git-lfs.github.com"; then
+  echo "ERROR: ${CHINA_DB_SRC} 是未拉取的 Git LFS 指针，不是真实数据库。"
+  echo "       请先执行: git lfs pull --include=\"sfid/backend/china/data/china.sqlite\""
+  exit 1
+fi
 mkdir -p \
   "${PAYLOAD_DIR}/bin" \
   "${PAYLOAD_DIR}/data" \

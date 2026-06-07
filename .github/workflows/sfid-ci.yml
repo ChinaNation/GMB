@@ -24,6 +24,19 @@ jobs:
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
+        with:
+          lfs: false # china.sqlite 走 LFS，先只取指针，避免每个 job 都下载 84MB
+
+      # 中文注释：SFID 后端运行时按路径只读 china.sqlite(省/市/镇查询),cargo test 会打开它。
+      # 缓存键按指针文件哈希:blob 不变 → 永久命中 → 0 流量;仅 china.sqlite 更新才重下一次。
+      - name: 缓存 china.sqlite (LFS 对象)
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-china-sqlite-${{ hashFiles('sfid/backend/china/data/china.sqlite') }}
+
+      - name: 拉取 china.sqlite (LFS)
+        run: git lfs pull --include="sfid/backend/china/data/china.sqlite"
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable

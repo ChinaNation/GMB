@@ -36,6 +36,20 @@ jobs:
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
+        with:
+          lfs: false # china.sqlite 走 LFS，先只取指针，避免每个 job 都下载 84MB
+
+      # 中文注释：china.sqlite(行政区唯一源)走 Git LFS。CPMS 安装包构建必须用到它。
+      # 缓存键按工作树里的“指针文件”哈希计算：blob 不变 → 键不变 → 永久命中 → 0 流量；
+      # 仅当 china.sqlite 真被更新(指针变)才会重新下载一次。
+      - name: 缓存 china.sqlite (LFS 对象)
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-china-sqlite-${{ hashFiles('sfid/backend/china/data/china.sqlite') }}
+
+      - name: 拉取 china.sqlite (LFS)
+        run: git lfs pull --include="sfid/backend/china/data/china.sqlite"
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
