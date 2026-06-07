@@ -3,11 +3,9 @@
 /// 中文注释：
 /// - 此文件由 `lib/institution/institution_data.dart` 拆分而来（2026-05-09 模块边界整改）。
 /// - 内置治理机构静态注册表（`kNationalCouncil`/`kProvincialCouncils`/`kProvincialBanks`）+
-///   `findInstitutionByPalletId()`/`jointVoteTotal`/`jointVotePassThreshold` 已迁至
+///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 已迁至
 ///   `lib/organization-manage/institution_registry.dart`。
-/// - sfid_number 与链上 `AdminsChange::Subjects` 存储的 subject key 一一对应，
-///   来源于 `primitives/china/china_cb.rs`（国储会+省储会）和
-///   `primitives/china/china_ch.rs`（省储行）。
+/// - 治理主体统一为机构多签 AccountId；sfid_number 只用于查找机构资料。
 library;
 
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
@@ -38,7 +36,7 @@ class OrgType {
   /// 省储行 Provincial Reserve Bank
   static const int prb = 2;
 
-  /// 多签账户。具体是个人多签还是机构账户，由 admins-change 的 subject identity 区分。
+  /// 多签账户。具体是个人多签还是机构账户，由 admins-change 的 account identity 区分。
   static const int duoqian = 3;
 
   static String label(int orgType) {
@@ -90,7 +88,7 @@ class InstitutionInfo {
     required this.orgType,
     this.accounts,
     String? duoqianAddress,
-    this.adminSubjectOrg,
+    this.adminAccountOrg,
     this.internalThresholdOverride,
   })  : assert(accounts != null || duoqianAddress != null),
         _legacyMainAddress = duoqianAddress;
@@ -99,14 +97,14 @@ class InstitutionInfo {
   final String name;
 
   /// 链上身份标识（与 Rust 常量 `sfid_number` 完全一致）。
-  /// 在查询链上存储时按 D 协议派生为 48 字节 `SubjectId`(byte[0]=0x01 Builtin + payload)。
+  /// 查询治理 storage 时使用 `mainAddress` 这个 AccountId，不再从 sfid_number 派生主体。
   final String sfidNumber;
 
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
   final int orgType;
 
   /// 注册机构账户管理员更换使用的 org：4=公权机构账户，5=其他机构账户。
-  final int? adminSubjectOrg;
+  final int? adminAccountOrg;
 
   /// 制度账户集合。
   ///
@@ -165,7 +163,7 @@ class InstitutionInfo {
     int? orgType,
     InstitutionAccounts? accounts,
     String? duoqianAddress,
-    int? adminSubjectOrg,
+    int? adminAccountOrg,
     int? internalThresholdOverride,
   }) {
     return InstitutionInfo(
@@ -174,7 +172,7 @@ class InstitutionInfo {
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
       duoqianAddress: duoqianAddress ?? _legacyMainAddress,
-      adminSubjectOrg: adminSubjectOrg ?? this.adminSubjectOrg,
+      adminAccountOrg: adminAccountOrg ?? this.adminAccountOrg,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
     );
@@ -183,9 +181,6 @@ class InstitutionInfo {
 
 const String _registeredDuoqianPrefix = 'duoqian:';
 const String _personalDuoqianPrefix = 'personal:';
-const int _subjectKindBuiltin = 0x01;
-const int _subjectKindPersonalDuoqian = 0x03;
-const int _subjectKindInstitutionAccount = 0x05;
 
 bool isRegisteredDuoqianIdentity(String institutionIdentity) {
   return institutionIdentity.startsWith(_registeredDuoqianPrefix);
@@ -217,39 +212,32 @@ String? personalDuoqianAddressFromIdentity(String institutionIdentity) {
   return hex;
 }
 
-List<int> institutionIdentityToPalletId(String institutionIdentity) {
+List<int> institutionIdentityToAccountId(
+  String institutionIdentity, {
+  String? mainAddress,
+}) {
   final duoqianAddress =
       registeredDuoqianAddressFromIdentity(institutionIdentity);
   if (duoqianAddress != null) {
-    return _accountToSubjectId(_subjectKindInstitutionAccount, duoqianAddress);
+    return _accountHexToBytes(duoqianAddress);
   }
   final personalAddress =
       personalDuoqianAddressFromIdentity(institutionIdentity);
   if (personalAddress != null) {
-    return _accountToSubjectId(_subjectKindPersonalDuoqian, personalAddress);
+    return _accountHexToBytes(personalAddress);
   }
-  return _sfidNumberToFixed48(institutionIdentity);
+  if (mainAddress == null) {
+    throw ArgumentError('内置治理机构必须提供 mainAddress 作为治理 AccountId');
+  }
+  return _accountHexToBytes(mainAddress);
 }
 
-List<int> _sfidNumberToFixed48(String sfidNumber) {
-  final utf8Bytes = sfidNumber.codeUnits;
-  final result = List<int>.filled(48, 0);
-  result[0] = _subjectKindBuiltin;
-  for (var i = 0; i < utf8Bytes.length && i < 47; i++) {
-    result[i + 1] = utf8Bytes[i];
-  }
-  return result;
-}
-
-List<int> _accountToSubjectId(int kind, String accountHex) {
+List<int> _accountHexToBytes(String accountHex) {
   final account = _hexDecode(accountHex);
   if (account.length != 32) {
     throw ArgumentError('account hex 必须为 32 字节');
   }
-  final result = List<int>.filled(48, 0);
-  result[0] = kind;
-  result.setAll(1, account);
-  return result;
+  return account;
 }
 
 List<int> _hexDecode(String hex) {

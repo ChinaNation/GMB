@@ -3,7 +3,7 @@
 任务需求：
 作为清算行三阶段实施（[ADR-007](../../04-decisions/ADR-007-clearing-bank-three-phase.md)）的第 1 阶段，在 SFID 端落地"清算行资格白名单"判定能力 + 收紧已有 `/clearing-banks/search` API + 新增 `/clearing-banks/eligible-search` 候选搜索 API + SFID 前端 badge / hint。
 
-资格定义：仅 `(a3=SFR ∧ sub_type=JOINT_STOCK) ∨ (a3=FFR ∧ parent.a3=SFR ∧ parent.sub_type=JOINT_STOCK)` 的机构有资格成为清算行。规则参见 [memory/05-modules/sfid/clearing-bank-eligibility.md](../../05-modules/sfid/clearing-bank-eligibility.md)。
+资格定义：仅 `(subject_property=K1=S ∧ sub_type=JOINT_STOCK) ∨ (subject_property=K1=F ∧ parent.subject_property=K1=S ∧ parent.sub_type=JOINT_STOCK)` 的机构有资格成为清算行。规则参见 [memory/05-modules/sfid/clearing-bank-eligibility.md](../../05-modules/sfid/clearing-bank-eligibility.md)。
 
 所属模块：SFID Agent（sfid/backend + sfid/frontend；零 runtime / wumin / wuminapp 改动）
 
@@ -27,19 +27,19 @@
 
 - `src/institutions/service.rs`
   - 新增 `is_clearing_bank_eligible(inst, parent) -> bool` 纯函数（参数：机构 + 可选 parent 引用，简化调用方）
-  - 新增 6 case 单元测试（SFR-JOINT_STOCK / SFR-LIMITED_LIABILITY / SFR-NON_PROFIT / FFR-合规 parent / FFR-不合规 parent / FFR-缺 parent）
+  - 新增 6 case 单元测试（K1=S + JOINT_STOCK / K1=S + LIMITED_LIABILITY / K1=S + NON_PROFIT / K1=F-合规 parent / K1=F-不合规 parent / K1=F-缺 parent）
 - `src/institutions/handler.rs`
-  - 修改 `AppClearingBankRow`：新增 `sub_type` / `parent_sfid_id` / `parent_institution_name` / `parent_a3` 字段（追加在末尾）
-  - 修改 `app_search_clearing_banks`：先跨 43 省收集 SFR-JOINT_STOCK 的 sfid_id 全国 HashSet，再二轮收集候选并按资格白名单过滤
+  - 修改 `AppClearingBankRow`：新增 `sub_type` / `parent_sfid_number` / `parent_institution_name` / `parent_a3` 字段（追加在末尾）
+  - 修改 `app_search_clearing_banks`：先跨 43 省收集 K1=S + JOINT_STOCK 的 sfid_number 全国 HashSet，再二轮收集候选并按资格白名单过滤
   - 新增 `EligibleClearingBankRow` + `app_search_eligible_clearing_banks` 函数（不要求主账户已激活）
 - `src/main.rs`
   - 注册新路由 `GET /api/v1/app/clearing-banks/eligible-search` → `app_search_eligible_clearing_banks`
 
 ### 前端（sfid/frontend）
 
-- `src/utils/clearingBankEligible.ts` — 新建，SFR-JOINT_STOCK 单机构判定（FFR 需 parent 信息时由调用方提供）
-- `src/views/institutions/InstitutionListTable.tsx` — 表格新增"清算行资格"列，对 SFR-JOINT_STOCK 显示蓝色 badge `可作为清算行`
-- `src/views/institutions/InstitutionDetailPage.tsx` — 详情页头部对 SFR-JOINT_STOCK / FFR(已设 parent_sfid_id) 显示 badge
+- `src/utils/clearingBankEligible.ts` — 新建，K1=S + JOINT_STOCK 单机构判定（K1=F 需 parent 信息时由调用方提供）
+- `src/views/institutions/InstitutionListTable.tsx` — 表格新增"清算行资格"列，对 K1=S + JOINT_STOCK 显示蓝色 badge `可作为清算行`
+- `src/views/institutions/InstitutionDetailPage.tsx` — 详情页头部对 K1=S + JOINT_STOCK / K1=F(已设 parent_sfid_number) 显示 badge
 - `src/views/institutions/PrivateInstitutionLayout.tsx` — sub_type=JOINT_STOCK 选项加 hint 文案"股份公司可参与清算业务"
 
 ### 文档
@@ -61,16 +61,16 @@
 
 - 资格判定：6 case 单测全绿
 - `/clearing-banks/search`：
-  - 返回结果只含 SFR-JOINT_STOCK + FFR(parent.SFR ∧ parent.JOINT_STOCK) ∩ 主账户已激活
-  - SFR-LIMITED_LIABILITY 即使主账户已激活也不返回
-  - 响应字段含 sub_type / parent_sfid_id / parent_institution_name / parent_a3
+  - 返回结果只含 K1=S + JOINT_STOCK + K1=F(parent.K1=S ∧ parent.JOINT_STOCK) ∩ 主账户已激活
+  - K1=S + LIMITED_LIABILITY 即使主账户已激活也不返回
+  - 响应字段含 sub_type / parent_sfid_number / parent_institution_name / parent_a3
 - `/clearing-banks/eligible-search`：
   - 返回所有满足资格白名单的机构（包括未激活）
   - 含 `main_chain_status` 字段
   - 无 province/city 过滤
 - 前端：
-  - SFR-JOINT_STOCK 列表行显示"可作为清算行" badge
-  - SFR-LIMITED_LIABILITY 不显示
+  - K1=S + JOINT_STOCK 列表行显示"可作为清算行" badge
+  - K1=S + LIMITED_LIABILITY 不显示
   - PrivateInstitutionLayout 第二步选 JOINT_STOCK 显示提示文案
 - 后端：`cargo check -p sfid_backend`（或对应 crate）通过；`cargo test -p sfid_backend institutions::service::tests` 全绿
 - 前端：`npm run build` 通过
@@ -80,7 +80,7 @@
 
 1. 写 ADR-007 + 规则文档 ✅（与本任务卡同时建立）
 2. service.rs 加 `is_clearing_bank_eligible` + 6 case 单测
-3. handler.rs 修改 `app_search_clearing_banks`（含跨省 SFR 集合预收集）
+3. handler.rs 修改 `app_search_clearing_banks`（含跨省 K1=S 集合预收集）
 4. handler.rs 新增 `app_search_eligible_clearing_banks`
 5. main.rs 注册新路由
 6. cargo build + cargo test 验证
@@ -94,6 +94,6 @@
 ## 完成信息
 
 - 完成时间：2026-04-24 22:01:39
-- 完成摘要：Step 1 SFID 端清算行资格白名单完成:service::is_clearing_bank_eligible 函数 + 8 case 单测全绿;app_search_clearing_banks 收紧到 SFR-JOINT_STOCK + FFR(parent.SFR.JOINT_STOCK) ∩ 主账户已激活,响应字段补 sub_type/parent_sfid_id/parent_institution_name/parent_a3;新增 app_search_eligible_clearing_banks(候选搜索,无主账户激活要求,不分页 limit≤50,无 province/city 过滤);跨省 parent 解析采用 2 轮跨省读;sfid 前端 InstitutionListTable + PrivateInstitutionLayout 加可作为清算行 badge + sub_type=JOINT_STOCK 提示;cargo test 80/80 通过,vite build 通过;ADR-007 + clearing-bank-eligibility 规则文档建立;project_institution_create_rules.md 补正废除范围说明
+- 完成摘要：Step 1 SFID 端清算行资格白名单完成:service::is_clearing_bank_eligible 函数 + 8 case 单测全绿;app_search_clearing_banks 收紧到 K1=S + JOINT_STOCK + K1=F(parent.K1=S.JOINT_STOCK) ∩ 主账户已激活,响应字段补 sub_type/parent_sfid_number/parent_institution_name/parent_a3;新增 app_search_eligible_clearing_banks(候选搜索,无主账户激活要求,不分页 limit≤50,无 province/city 过滤);跨省 parent 解析采用 2 轮跨省读;sfid 前端 InstitutionListTable + PrivateInstitutionLayout 加可作为清算行 badge + sub_type=JOINT_STOCK 提示;cargo test 80/80 通过,vite build 通过;ADR-007 + clearing-bank-eligibility 规则文档建立;project_institution_create_rules.md 补正废除范围说明
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

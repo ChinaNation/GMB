@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
 
 class AdminSetChangeCallCodec {
   AdminSetChangeCallCodec._();
@@ -11,12 +11,12 @@ class AdminSetChangeCallCodec {
 
   static Uint8List build({
     required int org,
-    required Uint8List subjectId,
+    required Uint8List accountId,
     required List<String> newAdmins,
     required int newThreshold,
   }) {
-    if (subjectId.length != 48) {
-      throw ArgumentError('subjectId 必须为 48 字节');
+    if (accountId.length != 32) {
+      throw ArgumentError('accountId 必须为 32 字节');
     }
     if (newThreshold <= 0) {
       throw ArgumentError('newThreshold 必须大于 0');
@@ -25,11 +25,11 @@ class AdminSetChangeCallCodec {
     output.pushByte(palletIndex);
     output.pushByte(proposeAdminSetChangeCallIndex);
     output.pushByte(org);
-    output.write(subjectId);
+    output.write(accountId);
     output
         .write(CompactBigIntCodec.codec.encode(BigInt.from(newAdmins.length)));
     for (final admin in newAdmins) {
-      final bytes = AdminSubjectIdCodec.hexDecode(admin);
+      final bytes = AdminAccountIdCodec.hexDecode(admin);
       if (bytes.length != 32) {
         throw ArgumentError('管理员公钥必须为 32 字节');
       }

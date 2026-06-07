@@ -11,13 +11,13 @@
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
 use crate::pallet::{self, AdminSnapshot, Error};
-use crate::{InternalAdminProvider, SubjectId};
+use crate::InternalAdminProvider;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 查询快照中某管理员是否在指定机构的管理员名单中。
     pub fn is_admin_in_snapshot(
         proposal_id: u64,
-        institution: SubjectId,
+        institution: T::AccountId,
         who: &T::AccountId,
     ) -> bool {
         AdminSnapshot::<T>::get(proposal_id, institution)
@@ -26,7 +26,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// 查询快照中某机构的管理员数量。
-    pub fn snapshot_admin_count(proposal_id: u64, institution: SubjectId) -> Option<u32> {
+    pub fn snapshot_admin_count(proposal_id: u64, institution: T::AccountId) -> Option<u32> {
         AdminSnapshot::<T>::get(proposal_id, institution).map(|admins| admins.len() as u32)
     }
 
@@ -47,13 +47,13 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn snapshot_institution_admins(
         proposal_id: u64,
         org: u8,
-        institution: SubjectId,
-        pending_subject: bool,
+        institution: T::AccountId,
+        pending_account: bool,
     ) -> DispatchResult {
-        let admins = if pending_subject {
-            T::InternalAdminProvider::get_pending_admin_list(org, institution)
+        let admins = if pending_account {
+            T::InternalAdminProvider::get_pending_admin_list(org, institution.clone())
         } else {
-            T::InternalAdminProvider::get_admin_list(org, institution)
+            T::InternalAdminProvider::get_admin_list(org, institution.clone())
         }
         .ok_or(Error::<T>::InvalidInstitution)?;
 

@@ -35,15 +35,9 @@ class CreateDuoqianProposalInfo {
   double get amountYuan => amountFen.toDouble() / 100;
   double get feeYuan => feeFen.toDouble() / 100;
 
-  /// 48 字节 SubjectId 兼容字段。
-  ///
-  /// 旧 UI 仍用该 getter 做投票上下文兼容；新个人多签 SubjectId 构造统一走
-  /// `PersonalManageStorageCodec.subjectIdFromAccountHex`。
+  /// 个人多签治理 AccountId。
   Uint8List get institutionBytes {
-    final bytes = Uint8List(48);
-    final addrBytes = _hexDecode(duoqianAddress);
-    bytes.setAll(0, addrBytes);
-    return bytes;
+    return Uint8List.fromList(_hexDecode(duoqianAddress));
   }
 
   CreateDuoqianProposalInfo copyWithStatus(int? newStatus) {
@@ -86,12 +80,9 @@ class CloseDuoqianProposalInfo {
   /// 0=voting, 1=passed, 2=rejected, null=unknown。
   final int? status;
 
-  /// 48 字节 SubjectId 兼容字段。
+  /// 个人多签治理 AccountId。
   Uint8List get institutionBytes {
-    final bytes = Uint8List(48);
-    final addrBytes = _hexDecode(duoqianAddress);
-    bytes.setAll(0, addrBytes);
-    return bytes;
+    return Uint8List.fromList(_hexDecode(duoqianAddress));
   }
 
   CloseDuoqianProposalInfo copyWithStatus(int? newStatus) {
@@ -117,7 +108,7 @@ enum DuoqianStatus {
 /// 个人多签账户链上信息。
 ///
 /// 个人状态来自 `PersonalManage::PersonalDuoqians`，
-/// 管理员来自 `AdminsChange::Subjects`，动态阈值来自 `InternalVote`。
+/// 管理员来自 `AdminsChange::AdminAccounts`，动态阈值来自 `InternalVote`。
 class DuoqianAccountInfo {
   const DuoqianAccountInfo({
     required this.adminCount,

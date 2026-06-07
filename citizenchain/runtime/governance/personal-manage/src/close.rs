@@ -6,7 +6,7 @@
 //! 业务流程：
 //! 1. 校验地址、受益人、地址非保留
 //! 2. 校验地址 PersonalDuoqians 已 Active
-//! 3. 校验发起人是该多签 admins-change 主体的活跃管理员
+//! 3. 校验发起人是该多签 admins-change 账户的活跃管理员
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
 //! 5. 注销生命周期投票的全员阈值由投票引擎按管理员快照生成
 //! 6. 写入 PendingCloseProposal[address] = proposal_id 防并发
@@ -29,8 +29,7 @@ use crate::pallet::{Config, Error, Event, Pallet, PendingCloseProposal, Personal
 use crate::types::{CloseDuoqianAction, DuoqianStatus};
 use crate::BalanceOf;
 use crate::ACTION_CLOSE;
-use primitives::derive::subject_id_from_account;
-use primitives::traits::{
+use primitives::multisig::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
 };
 use votingengine::InternalVoteEngine;
@@ -81,11 +80,11 @@ pub(crate) fn do_propose_close<T: Config>(
         Error::<T>::DuoqianNotActive
     );
 
-    // 个人多签的治理主体 institution_id = subject_id_from_account(personal_address)。
-    let institution = subject_id_from_account(&duoqian_address);
+    // 个人多签治理账户直接使用个人多签账户地址。
+    let institution = duoqian_address.clone();
     let org = votingengine::types::ORG_REN;
     ensure!(
-        admins_change::Pallet::<T>::is_active_subject_admin(org, institution, &who),
+        admins_change::Pallet::<T>::is_active_account_admin(org, institution.clone(), &who),
         Error::<T>::PermissionDenied
     );
 

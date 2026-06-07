@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 use crate::number::{
-    classify, validate_sfid_number_format, InstitutionCategory, InstitutionCode, A3,
+    classify, validate_sfid_number_format, InstitutionCategory, InstitutionCode, SubjectProperty,
 };
 use crate::subjects::model::MultisigAccount;
 use crate::subjects::MultisigChainStatus;
@@ -152,18 +152,18 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
     Ok(trimmed.to_string())
 }
 
-/// 判定机构分类。a3 + institution_code + institution_name → InstitutionCategory。
+/// 判定机构分类。subject_property + institution_code + institution_name → InstitutionCategory。
 ///
-/// 解析失败(a3 或 institution_code 不识别)或不属于任何机构分类(公民类)返回 None,
+/// 解析失败(subject_property 或 institution_code 不识别)或不属于任何机构分类(公民类)返回 None,
 /// 调用方应当直接拒绝请求。
 pub fn derive_category(
-    a3: &str,
+    subject_property: &str,
     institution_code: &str,
     institution_name: &str,
 ) -> Option<InstitutionCategory> {
-    let a3 = A3::from_str(a3)?;
+    let subject_property = SubjectProperty::from_str(subject_property)?;
     let code = InstitutionCode::from_str(institution_code)?;
-    classify(a3, code, institution_name)
+    classify(subject_property, code, institution_name)
 }
 
 // ─── 两步式第二步:sub_type 与 P1 联动校验 ──────────────────────
@@ -173,9 +173,9 @@ pub fn derive_category(
 //   P1 = "1" (盈利)   → sub_type 必须为 SOLE_PROPRIETORSHIP / PARTNERSHIP /
 //                       LIMITED_LIABILITY / JOINT_STOCK 四选一
 //
-// 仅 SFR(私法人)需要 sub_type;FFR(非法人)一律不得传,传了报错。
+// 仅 S(私法人)需要 sub_type;F(非法人)一律不得传,传了报错。
 
-/// 允许的 SFR sub_type 全集。
+/// 允许的 S sub_type 全集。
 pub const VALID_SUB_TYPES: &[&str] = &[
     "SOLE_PROPRIETORSHIP",
     "PARTNERSHIP",
@@ -184,20 +184,20 @@ pub const VALID_SUB_TYPES: &[&str] = &[
     "NON_PROFIT",
 ];
 
-/// 校验 sub_type 与 (a3, p1) 组合是否合法。
+/// 校验 sub_type 与 (subject_property, p1) 组合是否合法。
 ///
-/// - `a3 == "SFR"`:必须提供 sub_type,且与 p1 联动正确
-/// - `a3 == "FFR"`:不得提供 sub_type(传了则返回错误)
-/// - 其他 a3(含 GFR):不得提供 sub_type
+/// - `subject_property == "S"`:必须提供 sub_type,且与 p1 联动正确
+/// - `subject_property == "F"`:不得提供 sub_type(传了则返回错误)
+/// - 其他 subject_property(含 G):不得提供 sub_type
 pub fn validate_sub_type_with_p1(
-    a3: &str,
+    subject_property: &str,
     p1: &str,
     sub_type: Option<&str>,
 ) -> Result<Option<String>, ServiceError> {
     let trimmed = sub_type.map(str::trim).filter(|s| !s.is_empty());
-    match a3 {
-        "SFR" => {
-            let st = trimmed.ok_or(ServiceError::BadInput("私法人(SFR)必须选择企业类型"))?;
+    match subject_property {
+        "S" => {
+            let st = trimmed.ok_or(ServiceError::BadInput("私法人(S)必须选择企业类型"))?;
             if !VALID_SUB_TYPES.contains(&st) {
                 return Err(ServiceError::BadInput(
                     "企业类型非法(仅 SOLE_PROPRIETORSHIP/PARTNERSHIP/LIMITED_LIABILITY/JOINT_STOCK/NON_PROFIT)",
@@ -224,7 +224,7 @@ pub fn validate_sub_type_with_p1(
         }
         _ => {
             if trimmed.is_some() {
-                return Err(ServiceError::BadInput("仅私法人(SFR)才允许设置企业类型"));
+                return Err(ServiceError::BadInput("仅私法人(S)才允许设置企业类型"));
             }
             Ok(None)
         }
@@ -271,18 +271,18 @@ mod tests {
     #[test]
     fn derive_category_rules() {
         assert_eq!(
-            derive_category("GFR", "ZF", "广州市公安局"),
+            derive_category("G", "ZF", "广州市公安局"),
             Some(InstitutionCategory::PublicSecurity)
         );
         assert_eq!(
-            derive_category("GFR", "ZF", "别的机构"),
+            derive_category("G", "ZF", "别的机构"),
             Some(InstitutionCategory::GovInstitution)
         );
         assert_eq!(
-            derive_category("SFR", "ZG", "某公司"),
+            derive_category("S", "ZG", "某公司"),
             Some(InstitutionCategory::PrivateInstitution)
         );
-        assert_eq!(derive_category("GMR", "ZG", "xxx"), None);
+        assert_eq!(derive_category("M", "ZG", "xxx"), None);
         assert_eq!(derive_category("INVALID", "ZG", "xxx"), None);
     }
 }

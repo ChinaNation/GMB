@@ -51,9 +51,9 @@
 - cargo test -p sfid-backend 既有 77/77 + 新增至少 5 通过
 - cargo check -p node --tests 0 error
 - tsc --noEmit(node frontend) exit 0
-- 节点输入 `FFR-AH001-ZG1C-887947508-20260430` 选中候选:
+- 节点输入 `AH001-FCB0P-123456789-2026` 选中候选:
   - 链上不存在 → 进 create-multisig-institution 页,机构名/账户列表正确
-  - 全表单填好 + 冷钱包签 → Institutions[sfid_id]=Pending
+  - 全表单填好 + 冷钱包签 → Institutions[sfid_number]=Pending
   - 投票达阈值 → status=Active → 自动跳 declare-node
   - 已存在(Active) → 进 institution-detail,展示主账户/费用账户/其他账户/管理员/提案列表
 - 全仓 grep `propose-create.*info|register-sfid.*info|chain/institution_register` 零残留

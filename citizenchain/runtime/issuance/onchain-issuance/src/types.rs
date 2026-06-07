@@ -54,11 +54,7 @@ pub enum AssetState {
 
 /// 用户代币元数据(链端权威 storage)。
 ///
-/// 中文注释:每条记录对应一个 SubjectId(0x04)。
-/// ADR-011 v2 修订:
-/// - **去掉 `asset_id` 字段**:asset_id 已编入 SubjectId byte[1..5],storage key 即可反推
-/// - **去掉 `monitor_subject_id` 字段**:NRC monitor 全局强制,走 NrcMainAccountProvider
-///   trait 解析,每条资产存 48B NRC SubjectId 是冗余
+/// 中文注释：storage key 是 `asset_id`，发行/治理账户是机构多签账户地址。
 #[derive(
     Encode,
     Decode,
@@ -72,9 +68,7 @@ pub enum AssetState {
 )]
 #[scale_info(skip_type_params(MaxName, MaxSymbol, MaxDescription))]
 pub struct OnchainAssetMeta<AccountId> {
-    /// 发行人主体 SubjectId(0x02 SfidInstitution 或 0x03 PersonalDuoqian)。
-    pub issuer_subject_id: [u8; 48],
-    /// 发行人代理账户(用于 mint 受益人 / 关闭余额清算等内核操作)。
+    /// 发行机构多签账户地址。
     pub issuer_account: AccountId,
     /// 资产种类(第一期只 Plain)。
     pub class: AssetClass,

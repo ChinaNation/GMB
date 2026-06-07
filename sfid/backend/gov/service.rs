@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::china::{china_sqlite_hash, provinces};
-use crate::number::{generate_sfid_code, GenerateSfidInput, InstitutionCategory};
+use crate::number::{generate_sfid_number, GenerateSfidInput, InstitutionCategory};
 use crate::subjects::service::build_default_accounts;
 use crate::Db;
 
@@ -104,7 +104,7 @@ struct OfficialInstitutionTarget {
     full_name: String,
     short_name: String,
     category: InstitutionCategory,
-    a3: String,
+    subject_property: String,
     p1: String,
     province: String,
     city: String,
@@ -468,7 +468,7 @@ fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
                 full_name: format!("{}公民安全局", city.name),
                 short_name: format!("{}公安局", city.name),
                 category: InstitutionCategory::PublicSecurity,
-                a3: "GFR".to_string(),
+                subject_property: "G".to_string(),
                 p1: "0".to_string(),
                 province: province.name.to_string(),
                 city: city.name.to_string(),
@@ -516,7 +516,7 @@ fn push_constant_target(
     name: &'static str,
     sfid_number: &'static str,
 ) {
-    let Some((a3, province_code, city_code, institution_code, p1)) =
+    let Some((subject_property, province_code, city_code, institution_code, p1)) =
         parse_sfid_institution_parts(sfid_number)
     else {
         return;
@@ -531,7 +531,7 @@ fn push_constant_target(
         full_name,
         short_name,
         category: InstitutionCategory::GovInstitution,
-        a3,
+        subject_property,
         p1,
         province: province.to_string(),
         city: city.to_string(),
@@ -710,7 +710,7 @@ fn push_area_template_target(
         full_name,
         short_name,
         category: InstitutionCategory::GovInstitution,
-        a3: "GFR".to_string(),
+        subject_property: "G".to_string(),
         p1: "0".to_string(),
         province: province_name.to_string(),
         city: city_name.to_string(),
@@ -729,9 +729,9 @@ fn generate_official_template_sfid(
     city_name: &str,
     institution_code: &str,
 ) -> Option<String> {
-    generate_sfid_code(GenerateSfidInput {
+    generate_sfid_number(GenerateSfidInput {
         account_pubkey: account_seed,
-        a3: "GFR",
+        subject_property: "G",
         p1: "0",
         province: province_name,
         city: city_name,
@@ -744,18 +744,17 @@ fn parse_sfid_institution_parts(
     sfid_number: &str,
 ) -> Option<(String, String, String, String, String)> {
     let mut segments = sfid_number.split('-');
-    let a3 = segments.next()?.to_string();
     let r5 = segments.next()?;
-    let t2p1c1 = segments.next()?;
-    if r5.len() != 5 || t2p1c1.len() < 3 {
+    let k3p1c1 = segments.next()?;
+    if r5.len() != 5 || k3p1c1.len() != 5 {
         return None;
     }
     Some((
-        a3,
+        k3p1c1[0..1].to_string(),
         r5[0..2].to_string(),
         r5[2..5].to_string(),
-        t2p1c1[0..2].to_string(),
-        t2p1c1[2..3].to_string(),
+        k3p1c1[1..3].to_string(),
+        k3p1c1[3..4].to_string(),
     ))
 }
 
@@ -1334,9 +1333,9 @@ fn bulk_write_target_chunk(
         .iter()
         .map(|target| category_text(target.category).to_string())
         .collect::<Vec<_>>();
-    let a3_values = targets
+    let subject_property_values = targets
         .iter()
-        .map(|target| target.a3.clone())
+        .map(|target| target.subject_property.clone())
         .collect::<Vec<_>>();
     let p1_values = targets
         .iter()
@@ -1394,13 +1393,13 @@ fn bulk_write_target_chunk(
     tx.execute(
         "INSERT INTO subjects (
             sfid_number, kind, name, full_name, short_name, p_code, c_code, t_code,
-            status, category, a3, p1, province, city, town,
+            status, category, subject_property, p1, province, city, town,
             province_code, city_code, town_code, institution_code, org_code, sub_type,
             parent_sfid_number, created_by, created_at, updated_at
          )
          SELECT
             sfid_number, 'PUBLIC', name, full_name, short_name, p_code, c_code, t_code,
-            'ACTIVE', category, a3, p1, province, city, town,
+            'ACTIVE', category, subject_property, p1, province, city, town,
             p_code, COALESCE(c_code, ''), COALESCE(t_code, ''), institution_code, org_code,
             NULL::text, NULL::text, $18, now(), now()
          FROM unnest(
@@ -1410,7 +1409,7 @@ fn bulk_write_target_chunk(
             $16::text[], $17::text[]
          ) AS u(
             sfid_number, name, full_name, short_name, p_code,
-            c_code, t_code, category, a3, p1,
+            c_code, t_code, category, subject_property, p1,
             province, city, town, institution_code, org_code,
             province_code, city_code
          )
@@ -1423,7 +1422,7 @@ fn bulk_write_target_chunk(
             t_code = EXCLUDED.t_code,
             status = EXCLUDED.status,
             category = EXCLUDED.category,
-            a3 = EXCLUDED.a3,
+            subject_property = EXCLUDED.subject_property,
             p1 = EXCLUDED.p1,
             province = EXCLUDED.province,
             city = EXCLUDED.city,
@@ -1446,7 +1445,7 @@ fn bulk_write_target_chunk(
             &c_codes,
             &t_codes,
             &categories,
-            &a3_values,
+            &subject_property_values,
             &p1_values,
             &provinces,
             &cities,

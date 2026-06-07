@@ -51,9 +51,9 @@ PersonalManage ProposalData：
 PersonalManage storage：
 
 - `PersonalManage::PersonalDuoqians` 保存 `creator / account_name / created_at / status`。
-- 管理员真源是 `AdminsChange::Subjects`，SubjectKind 使用 `0x03 PersonalDuoqian`。
+- 管理员真源是 `AdminsChange::AdminAccounts`，AdminAccountKind 使用 `PersonalDuoqian AccountId`。
 - 普通业务动态阈值真源是 `InternalVote.ActiveDynamicThresholds`；创建/注销生命周期阈值由投票引擎按管理员快照写成全员同意。
-- 详情页和管理员列表不得从 `AdminsChange::Subjects` 后续字段解阈值；该 storage
+- 详情页和管理员列表不得从 `AdminsChange::AdminAccounts` 后续字段解阈值；该 storage
   的管理员列表后面是 `creator / created_at / updated_at / status`，错位读取会出现
   类似 `1478971204/2` 的异常阈值显示。
 
@@ -91,12 +91,12 @@ PersonalManage storage：
 - 个人多签历史、待激活创建提案反查、反向索引发现和本地状态更新全部通过
   `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 进入统一队列，避免与钱包创建/导入、余额刷新和钱包交易流水同步抢 MDBX 锁。
 - 统一多签列表首屏只读本机 `PersonalDuoqianEntity` 和 `PersonalDuoqianLocalState`，
-  不等待 `PersonalManage::PersonalDuoqians`、`AdminsChange::Subjects` 或 discovery 链上读取。
+  不等待 `PersonalManage::PersonalDuoqians`、`AdminsChange::AdminAccounts` 或 discovery 链上读取。
 - `PersonalDuoqianLocalState` 复用 `AppKvEntity.stringValue` 保存状态，
   `AppKvEntity.intValue` 保存最近一次成功链上状态同步时间。
 - 个人多签详情页额外使用 `personal_duoqian_detail:*` 本机持久化快照保存管理员公钥、
   阈值、余额和最近链上刷新时间；进入详情页先显示本地快照，不为了读取
-  `PersonalManage::PersonalDuoqians`、`AdminsChange::Subjects` 或 `InternalVote`
+  `PersonalManage::PersonalDuoqians`、`AdminsChange::AdminAccounts` 或 `InternalVote`
   阈值而全屏等待。
 - 个人多签详情页 Active 余额使用 `lastBalanceRefreshAtMillis` 单独判断；若
   `balanceYuan` 为空或余额时间过期，只静默读取余额，不重复拉账户状态、管理员和阈值。
@@ -108,8 +108,8 @@ PersonalManage storage：
 - 自动 discovery 只在首次进入多签 Tab 或本机钱包 pubkey fingerprint 变化时触发；
   下拉刷新才强制执行全量 discovery。
 - 个人多签列表状态刷新使用 `PersonalManageService.fetchPersonalAccountsBatch()`：
-  先批量读取 `PersonalDuoqians` 与 `AdminsChange::Subjects`，再按解码出的
-  `org + subject_id` 批量读取 `InternalVote.ActiveDynamicThresholds`，缺失时再批量读取
+  先批量读取 `PersonalDuoqians` 与 `AdminsChange::AdminAccounts`，再按解码出的
+  `org + account_id` 批量读取 `InternalVote.ActiveDynamicThresholds`，缺失时再批量读取
   `PendingDynamicThresholds`。
 - 列表页从个人多签详情、创建、关闭、投票返回时只刷新相关账户或本地记录，不重新扫描全部多签。
 

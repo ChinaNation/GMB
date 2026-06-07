@@ -251,11 +251,11 @@ class PersonalProposalHistoryService {
     String personalAddressHex,
   ) async {
     try {
-      final subjectId = _personalAddressToSubjectId(personalAddressHex);
+      final accountId = _personalAddressToAccountId(personalAddressHex);
       final key = _buildStorageKey(
         'VotingEngine',
         'ActiveProposalsByInstitution',
-        subjectId,
+        accountId,
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
       if (data == null || data.isEmpty) return const [];
@@ -427,17 +427,13 @@ class PersonalProposalHistoryService {
 
   // ──── 编码 / 哈希工具(对齐 votingengine storage key) ────
 
-  /// 个人多签 SubjectId = byte[0]=0x03 PersonalDuoqian + byte[1..33]=address(32B) + byte[33..48]=zeros(15B)。
-  ///
-  /// D 阶段(SubjectKind 协议统一,2026-05-06)起,链端协议规范见 ADR-010;
-  /// 对齐 Rust [primitives::derive::subject_id_from_account] 实现。
-  Uint8List _personalAddressToSubjectId(String addressHex) {
+  /// 个人多签治理 AccountId。
+  Uint8List _personalAddressToAccountId(String addressHex) {
     final addr = _hexDecode(addressHex);
-    final id = Uint8List(48);
-    id[0] = 0x03; // SubjectKind::PersonalDuoqian
-    final copy = addr.length < 32 ? addr.length : 32;
-    id.setRange(1, 1 + copy, addr);
-    return id;
+    if (addr.length != 32) {
+      throw ArgumentError('personal address 必须为 32 字节');
+    }
+    return Uint8List.fromList(addr);
   }
 
   Uint8List _buildStorageKey(

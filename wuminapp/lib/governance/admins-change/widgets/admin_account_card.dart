@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 
-class AdminSubjectCard extends StatelessWidget {
-  const AdminSubjectCard({super.key, required this.subject});
+class AdminAccountCard extends StatelessWidget {
+  const AdminAccountCard({super.key, required this.account});
 
-  final AdminSubjectState subject;
+  final AdminAccountState account;
 
   @override
   Widget build(BuildContext context) {
@@ -21,16 +21,16 @@ class AdminSubjectCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(subject.kindLabel,
+                  Text(account.kindLabel,
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('管理员 ${subject.admins.length} 人，阈值 ${subject.threshold}',
+                  Text('管理员 ${account.admins.length} 人，阈值 ${account.threshold}',
                       style: const TextStyle(color: AppTheme.textSecondary)),
                 ],
               ),
             ),
-            Chip(label: Text(subject.statusLabel)),
+            Chip(label: Text(account.statusLabel)),
           ],
         ),
       ),

@@ -14,7 +14,7 @@ use super::*;
 fn create_general_internal_proposal_with_data_via_engine(
     who: AccountId32,
     org: u8,
-    institution: SubjectId,
+    institution: AccountId32,
     module_tag: &[u8],
 ) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
@@ -148,7 +148,7 @@ fn migration_v1_backfills_display_id_and_indexes_for_legacy_proposals() {
     new_test_ext().execute_with(|| {
         // 模拟 v0 旧主键格式:2026000007
         let legacy_id: u64 = 2_026_000_007;
-        let proposal: Proposal<u64> = Proposal {
+        let proposal: Proposal<u64, AccountId32> = Proposal {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: STATUS_VOTING,

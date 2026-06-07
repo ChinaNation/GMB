@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn register_call_data_starts_with_pallet_and_call() {
         let cd = build_register_call_data(
-            "SFR-12345-AAAA-678901234-20260101",
+            "AH001-SCB0V-123456789-2026",
             "12D3KooWAbcDef0123456789012345678901234567890123456",
             "rpc.example.com",
             9944,
@@ -232,12 +232,13 @@ mod tests {
 
     #[test]
     fn unregister_call_only_has_sfid() {
-        let cd = build_unregister_call_data("SFR-X").unwrap();
+        let sfid_number = "AH001-SCB0V-123456789-2026";
+        let cd = build_unregister_call_data(sfid_number).unwrap();
         assert_eq!(cd[0], PALLET_INDEX);
         assert_eq!(cd[1], CALL_UNREGISTER);
         // 单字节模式 compact: len << 2
-        assert_eq!(cd[2], (5u8) << 2);
-        assert_eq!(&cd[3..], b"SFR-X");
+        assert_eq!(cd[2], (sfid_number.len() as u8) << 2);
+        assert_eq!(&cd[3..], sfid_number.as_bytes());
     }
 
     #[test]

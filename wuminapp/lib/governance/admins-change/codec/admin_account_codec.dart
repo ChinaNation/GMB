@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
-import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 
-class AdminSubjectCodec {
-  AdminSubjectCodec._();
+class AdminAccountCodec {
+  AdminAccountCodec._();
 
-  static AdminSubjectState? decode(Uint8List subjectId, Uint8List data) {
+  static AdminAccountState? decode(Uint8List accountId, Uint8List data) {
     if (data.length < 2) return null;
     var offset = 0;
     final org = data[offset++];
@@ -17,24 +17,24 @@ class AdminSubjectCodec {
     for (var i = 0; i < count; i++) {
       if (offset + 32 > data.length) return null;
       admins.add(
-          AdminSubjectIdCodec.hexEncode(data.sublist(offset, offset + 32)));
+          AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     final creatorHex =
-        AdminSubjectIdCodec.hexEncode(data.sublist(offset, offset + 32));
+        AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32));
     offset += 32;
     final createdAt = _readU32(data, offset);
     offset += 4;
     final updatedAt = _readU32(data, offset);
     offset += 4;
     final status = data[offset];
-    return AdminSubjectState(
-      subjectIdHex: AdminSubjectIdCodec.hexEncode(subjectId),
+    return AdminAccountState(
+      accountHex: AdminAccountIdCodec.hexEncode(accountId),
       org: org,
       kind: kind,
       admins: admins,
-      // 中文注释：runtime 的 `AdminsChange::Subjects` 已不再保存阈值；
+      // 中文注释：runtime 的 `AdminsChange::AdminAccounts` 已不再保存阈值；
       // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
       threshold: 0,
       creatorHex: creatorHex,

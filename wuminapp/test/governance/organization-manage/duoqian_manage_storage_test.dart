@@ -57,13 +57,13 @@ void main() {
     return out;
   }
 
-  Uint8List adminSubjectBytes({
+  Uint8List adminAccountBytes({
     required List<int> admin1,
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
       5, // ORG_OTH
-      3, // AdminSubjectKind::InstitutionAccount
+      2, // AdminAccountKind::InstitutionAccount
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
@@ -79,7 +79,8 @@ void main() {
     final rpc = FakeChainRpc();
     final service = DuoqianManageService(chainRpc: rpc);
     final address = '11' * 32;
-    final sfidNumber = Uint8List.fromList(utf8.encode('SFR-AH001-20260507'));
+    final sfidNumber =
+        Uint8List.fromList(utf8.encode('AH001-SCB0H-202605070-2026'));
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
@@ -88,21 +89,21 @@ void main() {
       sfidNumber,
       accountName,
     ))}';
-    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
-      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
+    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminAccountKey(
+      DuoqianStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final thresholdKey = '0x${hexOf(DuoqianStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       org: 5,
-      subjectId: DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+      accountId: DuoqianStorageCodec.accountIdFromAccountHex(
         address,
       ),
     ))}';
     rpc.responses[refKey] = Uint8List.fromList([
-      ...compactVec('SFR-AH001-20260507'),
+      ...compactVec('AH001-SCB0H-202605070-2026'),
       ...compactVec('主账户'),
     ]);
-    rpc.responses[adminKey] = adminSubjectBytes(
+    rpc.responses[adminKey] = adminAccountBytes(
       admin1: List<int>.filled(32, 0xaa),
       admin2: List<int>.filled(32, 0xbb),
     );
@@ -130,7 +131,8 @@ void main() {
     final rpc = FakeChainRpc();
     final service = DuoqianManageService(chainRpc: rpc);
     final address = '22' * 32;
-    final sfidNumber = Uint8List.fromList(utf8.encode('SFR-AH001-20260518'));
+    final sfidNumber =
+        Uint8List.fromList(utf8.encode('AH001-SCB0E-202605180-2026'));
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
@@ -139,23 +141,23 @@ void main() {
       sfidNumber,
       accountName,
     ))}';
-    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
-      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
+    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminAccountKey(
+      DuoqianStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final activeThresholdKey =
         '0x${hexOf(DuoqianStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       org: 5,
-      subjectId: DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+      accountId: DuoqianStorageCodec.accountIdFromAccountHex(
         address,
       ),
     ))}';
 
     rpc.responses[refKey] = Uint8List.fromList([
-      ...compactVec('SFR-AH001-20260518'),
+      ...compactVec('AH001-SCB0E-202605180-2026'),
       ...compactVec('主账户'),
     ]);
-    rpc.responses[adminKey] = adminSubjectBytes(
+    rpc.responses[adminKey] = adminAccountBytes(
       admin1: List<int>.filled(32, 0xaa),
       admin2: List<int>.filled(32, 0xbb),
     );

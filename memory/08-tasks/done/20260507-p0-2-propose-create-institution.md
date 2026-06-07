@@ -26,7 +26,7 @@ signer_admin_pubkey
 ```text
 account_name
 amount
-a3
+subject_property
 sub_type
 parent_sfid_number
 ```
@@ -46,7 +46,7 @@ parent_sfid_number
 - [x] 在线端读取 `registration-info`，使用后端下发的 `account_names/register_nonce/signature/province/signer_admin_pubkey`。
 - [x] 在线端按 10 字段编码 `17.5`，不再使用旧 `17.0` 单账户入口。
 - [x] 在线端创建页面改为按 `registration-info.account_names` 顺序填写每个初始账户金额。
-- [x] 冷钱包 decoder 删除 `a3/sub_type/parent_sfid_number` 解析，末尾不得有多余字节。
+- [x] 冷钱包 decoder 删除 `subject_property/sub_type/parent_sfid_number` 解析，末尾不得有多余字节。
 - [x] 冷钱包和在线端展示字段统一为 `sfid_number/institution_name/admin_count/threshold/total_amount_yuan/amount_<账户名>/province/signer_admin_pubkey`。
 - [x] 增加或更新 P0-2 回归测试。
 - [x] 更新总审计文档并运行验收。
@@ -56,7 +56,7 @@ parent_sfid_number
 - `wuminapp` 编码输出以 `0x11 0x05` 开头。
 - call data 字段顺序与 `P-TX-001` 完全一致。
 - 冷钱包 decoder 能解当前 10 字段载荷。
-- 冷钱包 decoder 拒绝带旧 `a3/sub_type/parent_sfid_number` 尾巴的载荷。
+- 冷钱包 decoder 拒绝带旧 `subject_property/sub_type/parent_sfid_number` 尾巴的载荷。
 - `git diff --cached --check` 通过。
 
 ## 执行结果

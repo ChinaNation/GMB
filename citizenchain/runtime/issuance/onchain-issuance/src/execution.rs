@@ -7,9 +7,8 @@
 //! ADR-011 v2 修订要点:
 //! - propose origin 校验:proposer ∈ issuer admins(防 spam)
 //! - 创建费 1000 GMB 三态机制(reserve / release / refund)走 `fee.rs`
-//! - SubjectId 派生用 `subject_id_from_onchain_asset(asset_id)`(只接 asset_id)
-//! - OnchainAssetMeta 不再含 asset_id 字段(SubjectId byte[1..5] 即 asset_id)
-//! - OnchainAssetMeta 不再含 monitor_subject_id 字段(NRC 走全局 trait)
+//! - `asset_id` 只表示资产编号,治理身份只来自机构多签账户
+//! - OnchainAssetMeta 直接记录发行机构多签账户地址
 //!
 //! 当前框架阶段只搭函数签名 + doc 占位,实装在后续任务卡 A 完成。
 
@@ -25,12 +24,14 @@ use crate::pallet::BalanceOf;
 /// 1. `validation::ensure_issuer_allowed` / `ensure_decimals_in_range` / `ensure_class_supported`
 /// 2. 字段过黑名单(`validation::contains_blacklisted_word`)
 /// 3. `fee::release_creation_deposit_to_nrc(proposal_id)` 把 reserve 的押金 transfer 给 NRC fee_address
-/// 4. 分配 AssetId(NextAssetId),建 SubjectId(`subject_id_from_onchain_asset(asset_id)`)
+/// 4. 分配 AssetId(NextAssetId)
 /// 5. 调 `T::Assets::create(asset_id, owner, ...)` + `mint_into` 注入 initial_supply
-/// 6. 写 Assets / AssetIdIndex storage,emit AssetIssued 事件
+/// 6. 写 Assets storage,emit AssetIssued 事件
 ///
 /// ADR-011 v2:propose 阶段已 reserve 押金,callback 通过则 release(本函数);否决则 refund(fee::refund_*)。
-pub fn execute_issue<T: Config>(_proposal: IssueProposal<BalanceOf<T>>) -> DispatchResult
+pub fn execute_issue<T: Config>(
+    _proposal: IssueProposal<T::AccountId, BalanceOf<T>>,
+) -> DispatchResult
 where
     BalanceOf<T>: From<u128>,
 {

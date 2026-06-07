@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
@@ -88,8 +88,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 主账户实时可用余额（元）。
   double? _mainBalance;
 
-  AdminSubjectIdentity get _subjectIdentity =>
-      AdminSubjectIdentity.fromInstitution(widget.institution);
+  AdminAccountIdentity get _accountIdentity =>
+      AdminAccountIdentity.fromInstitution(widget.institution);
 
   /// 更多制度账户是否已在当前页展开。
   bool _extraAccountsExpanded = false;
@@ -114,7 +114,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _refreshAll({bool force = false}) async {
     if (force) {
-      _adminService.clearCache(_subjectIdentity);
+      _adminService.clearCache(_accountIdentity);
       _contextResolver.clearWalletCache();
       ProposalCache.clear();
       DuoqianTransferProposalAdapter.clearCache();
@@ -135,14 +135,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     });
 
     try {
-      final subjectIdentity = _subjectIdentity;
+      final accountIdentity = _accountIdentity;
       final results = await Future.wait<Object>([
-        _adminService.fetchAdmins(subjectIdentity),
+        _adminService.fetchAdmins(accountIdentity),
         _contextResolver.resolve(
           knownInstitution: widget.institution,
         ),
         _activationService
-            .getActivatedAdmins(subjectIdentity)
+            .getActivatedAdmins(accountIdentity)
             .catchError((_) => <ActivatedAdmin>[]),
       ]);
       final admins = results[0] as List<String>;
@@ -153,7 +153,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
       // 中文注释：这里只记录已确认的管理员机构，用于列表页本地视觉提示，不改变链上排序或身份。
       if (ctx.isAdmin) {
-        ProposalContextResolver.markAdminInstitution(
+        ProposalContextResolver.markInstitutionAdmin(
           widget.institution.sfidNumber,
         );
       }
@@ -273,7 +273,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     try {
       final proposals =
           await _duoqianTransferFeed.fetchInstitutionVisibleProposals(
-        widget.institution.sfidNumber,
+        widget.institution,
         forceRefresh: force,
       );
       final summaries = proposals
@@ -1456,14 +1456,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       MaterialPageRoute(
         builder: (_) => AdminListPage(
           institution: widget.institution,
-          subjectIdentity: _subjectIdentity,
+          accountIdentity: _accountIdentity,
           admins: _admins,
           importedColdPubkeys: _importedColdPubkeys,
           activatedPubkeys: _activatedPubkeys,
           badgeColor: widget.badgeColor,
           onActivated: () {
             // 中文注释：激活只影响当前用户管理员身份和管理员列表展示，局部刷新即可。
-            _adminService.clearCache(_subjectIdentity);
+            _adminService.clearCache(_accountIdentity);
             _contextResolver.clearWalletCache();
             unawaited(_loadAdminsAndRole());
           },

@@ -8,10 +8,10 @@
 3. **gas 由费用账户直接支付**：runtime 自定义 OnChargeTransaction，从 `fee_account_of(institution_main)` 扣 gas
 4. **链上资格白名单二次校验**：`bank_check::ensure_can_be_bound` 收紧到 6 重校验
 5. **链上节点声明 storage + extrinsic**：`ClearingBankNodes` + `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank`
-6. **InstitutionMetadata 上链**：register_sfid_institution 等创建路径增加 a3/sub_type/parent 参数（Required，开发期彻底切换，无 backfill）
+6. **InstitutionMetadata 上链**：register_sfid_institution 等创建路径增加 subject_property/sub_type/parent 参数（Required，开发期彻底切换，无 backfill）
 7. **节点 UI 新增清算行 tab**：8 视图状态机 + "解密"管理员密钥（仅清算行 tab 用，不动 NRC/PRC/PRB）
 8. **桌面节点 连通性自测强制**：DNS + wss + 链 ID + PeerId 匹配，全过才允许提交
-9. **SFID 端 Step 2 末尾联动**：`/clearing-banks/search` 加 `AND sfid_id ∈ ClearingBankNodes` 过滤；新建 ClearingBankWatcher 订阅链上事件 + SQLite 缓存
+9. **SFID 端 Step 2 末尾联动**：`/clearing-banks/search` 加 `AND sfid_number ∈ ClearingBankNodes` 过滤；新建 ClearingBankWatcher 订阅链上事件 + SQLite 缓存
 
 所属模块：**Architect 主入口跨模块协调**——Blockchain Agent（runtime + node）+ SFID Agent（推链字段 + watcher）；不动 wumin/wuminapp（留 Step 3）。
 
@@ -43,10 +43,10 @@
 ### A. citizenchain/runtime
 
 #### A.1 duoqian-manage pallet
-- `MetadataInfo` 结构体新增（a3 / sub_type / parent_sfid_id）
+- `MetadataInfo` 结构体新增（subject_property / sub_type / parent_sfid_number）
 - `InstitutionMetadata: StorageMap<SfidId, MetadataInfo>` 新建
-- `register_sfid_institution`：参数追加 a3 / sub_type / parent_sfid_id（Required）
-- `propose_create`：参数追加 a3 / sub_type / parent_sfid_id（在 institution 元数据未存时写入 InstitutionMetadata）
+- `register_sfid_institution`：参数追加 subject_property / sub_type / parent_sfid_number（Required）
+- `propose_create`：参数追加 subject_property / sub_type / parent_sfid_number（在 institution 元数据未存时写入 InstitutionMetadata）
 - `SfidAccountQuery` trait 扩展：暴露 `institution_a3` / `institution_sub_type` / `institution_parent` 三个查询方法
 
 #### A.2 offchain-transaction pallet
@@ -78,10 +78,10 @@
 
 新 Tauri commands：
 - `search_eligible_clearing_banks(query, limit)` — HTTP 转发 SFID `/clearing-banks/eligible-search`
-- `query_clearing_bank_node_info(sfid_id)` — 链上查 `ClearingBankNodes[sfid_id]`
+- `query_clearing_bank_node_info(sfid_number)` — 链上查 `ClearingBankNodes[sfid_number]`
 - `query_local_peer_id()` — 调 RPC `system_localPeerId`
 - `test_clearing_bank_endpoint_connectivity(domain, port, expected_peer_id)` — 连通性自测（4 项校验）
-- `build_register_clearing_bank_request(pubkey, sfid_id, peer_id, rpc_domain, rpc_port)` + `submit_register_clearing_bank(...)`
+- `build_register_clearing_bank_request(pubkey, sfid_number, peer_id, rpc_domain, rpc_port)` + `submit_register_clearing_bank(...)`
 - `build_update_clearing_bank_endpoint_request(...)` + `submit_update_clearing_bank_endpoint(...)`
 - `build_unregister_clearing_bank_request(...)` + `submit_unregister_clearing_bank(...)`
 
@@ -97,7 +97,7 @@
 
 #### C.2 新建 frontend/clearing-bank/
 - `ClearingBankSection.tsx` — 8 视图状态机
-- `ClearingBankAddPage.tsx` — 输入 sfid_id + 链上状态检查 + 分支
+- `ClearingBankAddPage.tsx` — 输入 sfid_number + 链上状态检查 + 分支
 - `ClearingBankProposeCreatePage.tsx` — 调 propose_create（含候选 admin pubkey 列表 + threshold + amount）
 - `ClearingBankWaitVotePage.tsx` — 等其他 admins 投票，复用现有 voting status 查询
 - `ClearingBankDeclareNodePage.tsx` — peer_id 自动填 + domain/port 手填 + 连通性自测 + register_clearing_bank 签名提交
@@ -120,8 +120,8 @@
   - 增量：订阅 finalized blocks 解析 ClearingBankRegistered/Updated/Unregistered 事件
   - 容错：指数退避重连 + 重连后全量对账
 - 新建 SQLite 表 `clearing_bank_nodes`（持久化）+ `clearing_bank_sync_state`
-- `institutions/handler.rs::app_search_clearing_banks`：第 2 轮过滤里加 `AND sfid_id ∈ clearing_bank_nodes_cache`
-- 推链 `register_sfid_institution` 调用增加 a3 / sub_type / parent_sfid_id 参数
+- `institutions/handler.rs::app_search_clearing_banks`：第 2 轮过滤里加 `AND sfid_number ∈ clearing_bank_nodes_cache`
+- 推链 `register_sfid_institution` 调用增加 subject_property / sub_type / parent_sfid_number 参数
 
 ### E. 测试
 
@@ -157,11 +157,11 @@
 - dev 链端到端验证：
   - 9 tab 切换正确
   - 清算行 tab 完整 8 视图状态机可走通
-  - 一家 SFR-JOINT_STOCK 机构：register_sfid_institution → propose_create → 投票通过 → register_clearing_bank → 详情页展示 → 端点更新 → 注销
-  - SFR-LIMITED_LIABILITY 机构 register_clearing_bank 链上拒绝
+  - 一家 K1=S + JOINT_STOCK 机构：register_sfid_institution → propose_create → 投票通过 → register_clearing_bank → 详情页展示 → 端点更新 → 注销
+  - K1=S + LIMITED_LIABILITY 机构 register_clearing_bank 链上拒绝
   - bind_clearing_bank 绑定一家未声明的机构 → 链上拒绝（call_index 30 报错）
   - submit_offchain_batch_v2 同行 / 跨行：fee 进 recipient_bank 费用账户、gas 从 fee_account 扣、管理员个人钱包余额不变
-  - 用 SFR-JOINT_STOCK 机构成功提交跨行 batch，X 主账户净流出 = 本金 + fee + 0 gas（gas 从 Y 费用账户扣，X 不参与）
+  - 用 K1=S + JOINT_STOCK 机构成功提交跨行 batch，X 主账户净流出 = 本金 + fee + 0 gas（gas 从 Y 费用账户扣，X 不参与）
   - "解密"按钮仅在清算行 tab 显示；NRC/PRC/PRB 的"激活"按钮文案保持不变
 - 桌面节点 连通性自测：填入错误 domain/port 提交按钮置灰
 - 残留扫描通过
@@ -170,9 +170,9 @@
 
 ```
 阶段 A: runtime               (~3-4 天)
-  A1. SfidAccountQuery trait 扩展(暴露 a3/sub_type/parent)
+  A1. SfidAccountQuery trait 扩展(暴露 subject_property/sub_type/parent)
   A2. InstitutionMetadata storage + register_sfid_institution / propose_create 参数追加
-  A3. ClearingBankNodes / NodePeerToInstitution storage
+  SubjectProperty. ClearingBankNodes / NodePeerToInstitution storage
   A4. register_clearing_bank / update_endpoint / unregister extrinsic
   A5. bank_check::ensure_can_be_bound 收紧到 6 重
   A6. submit_offchain_batch_v2 校验改为 recipient_bank 主导
@@ -197,7 +197,7 @@
   C7. tsc + vite build
 
 阶段 D: SFID 联动 + 验收       (~1 天)
-  D1. sfid backend register_sfid_institution 调用补 a3/sub_type/parent 参数
+  D1. sfid backend register_sfid_institution 调用补 subject_property/sub_type/parent 参数
   D2. ClearingBankWatcher 模块(订阅 + SQLite + 启动 scan)
   D3. app_search_clearing_banks 过滤 ClearingBankNodes
   D4. dev 链端到端 12 项验收清单
@@ -213,7 +213,7 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 
 - ✅ A1 SfidAccountQuery trait 加 `is_clearing_bank_eligible` + `is_registered_clearing_node` 两个方法
 - ✅ A2 duoqian-manage `MetadataInfo` 类型 + `InstitutionMetadata` storage + 6 个新错误码
-- ✅ A3 `register_sfid_institution` 加 `a3` / `sub_type` / `parent_sfid_id` 三个 Required 参数 + 元数据写入/校验逻辑
+- ✅ SubjectProperty `register_sfid_institution` 加 `subject_property` / `sub_type` / `parent_sfid_number` 三个 Required 参数 + 元数据写入/校验逻辑
 - ✅ A4 offchain-transaction `ClearingBankNodeInfo` 结构体 + `ClearingBankNodes` storage + `NodePeerToInstitution` 反向索引
 - ✅ A5 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 三个 extrinsic(call_index 50/51/52)+ 9 重校验链 + PeerId 字符集 / RPC 域名字符集校验辅助函数
 - ✅ A6 `bank_check::ensure_can_be_bound` 由 4 重收紧到 6 重(加资格白名单 + 已声明节点)
@@ -270,8 +270,8 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 - ✅ C1 `App.tsx` `TabKey` 加 `'clearing-bank'`,顶部 nav 9 tab 顺序固化(首页/挖矿/国储会/省储会/省储行/**清算行**/白皮书/公民宪法/设置)
 - ✅ C2 新建 `frontend/clearing-bank/` 模块:
   - `clearing-bank-types.ts` — 与后端 `types.rs` 镜像 + `ClearingBankView` 8 视图状态机类型
-  - `ClearingBankSection.tsx` — 主路由 + 状态机 dispatch + localStorage 缓存"已添加"sfid_id 列表 + empty/check-status/register-sfid/propose-create/wait-vote 5 个内联视图
-  - `ClearingBankAddPage.tsx` — 输入 sfid_id 直查 + 关键字搜索(300ms 防抖调 SFID `/eligible-search`)
+  - `ClearingBankSection.tsx` — 主路由 + 状态机 dispatch + localStorage 缓存"已添加"sfid_number 列表 + empty/check-status/register-sfid/propose-create/wait-vote 5 个内联视图
+  - `ClearingBankAddPage.tsx` — 输入 sfid_number 直查 + 关键字搜索(300ms 防抖调 SFID `/eligible-search`)
   - `ClearingBankDeclareNodePage.tsx` — peer_id 自动填(`query_local_peer_id`)+ rpc_domain/port 手填 + 4 重连通性自测 + WUMIN_QR_V1 签名提交
   - `ClearingBankDetailPage.tsx` — 详情(基础信息卡 + 节点信息长卡 + 管理员列表入口 + 提案列表 + 转账/手续费划转启用 + 换管理员/费率设置 disabled "即将上线")
   - `ClearingBankNodeInfoPanel.tsx` — peer_id/rpc_domain:port/registered_at/registered_by 展示 + 端点更新 / 注销两个入口(模态框 QR 签名)
@@ -287,15 +287,15 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 
 **SFID 后端联动 + ClearingBankWatcher + app_search 过滤全部落地**:
 
-- ✅ D1 `submit_register_sfid_institution_extrinsic` 加 `a3 / sub_type / parent_sfid_id` 三个参数(sub_type 与 parent_sfid_id 用 `Value::unnamed_variant("Some"/"None", ...)` 编码 Option),`institutions/chain.rs::submit_register_account` 同步加 3 参数,`institutions/handler.rs::activate_account` 调用处从 `inst.a3 / inst.sub_type / inst.parent_sfid_id` 取值传入
+- ✅ D1 `submit_register_sfid_institution_extrinsic` 加 `subject_property / sub_type / parent_sfid_number` 三个参数(sub_type 与 parent_sfid_number 用 `Value::unnamed_variant("Some"/"None", ...)` 编码 Option),`institutions/chain.rs::submit_register_account` 同步加 3 参数,`institutions/handler.rs::activate_account` 调用处从 `inst.subject_property / inst.sub_type / inst.parent_sfid_number` 取值传入
 - ✅ D2 新建 `chain/clearing_bank_watcher.rs`:
   - `ClearingBankNodeCache` 结构(`HashSet<String>` + `last_scan_ok` flag,RwLock 保护)
   - `spawn_watcher(http_url)` tokio task,启动时即第一次全量 scan
-  - `scan_once` 用 `state_getKeysPaged(prefix, 1000)` 分页拉所有 ClearingBankNodes storage key,反向解出 sfid_id(blake2_128_concat key 编码 = blake2_128(16B) + Compact<u32> 长度 + sfid_id 字节)
+  - `scan_once` 用 `state_getKeysPaged(prefix, 1000)` 分页拉所有 ClearingBankNodes storage key,反向解出 sfid_number(blake2_128_concat key 编码 = blake2_128(16B) + Compact<u32> 长度 + sfid_number 字节)
   - 30 秒轮询间隔 + 失败指数退避(1s → 60s)
   - 内置 twox_128 + decode_compact_u32 工具,无需引 substrate primitives
 - ✅ D3 `AppState` 加 `clearing_bank_node_cache: Arc<ClearingBankNodeCache>`,`main.rs` 启动时 `chain::url::chain_http_url()` 读 URL → `spawn_watcher` 启动 watcher → 把 Arc 放进 state(链 URL 未配置时跳过启动 + 给空 cache)
-- ✅ D4 `app_search_clearing_banks` 第 2 轮过滤里加 `if cb_cache_ready && !cb_node_cache_inner.contains(&inst.sfid_id) { continue; }`(cache 未首次 scan 成功时降级到老语义,避免接口空响应)
+- ✅ D4 `app_search_clearing_banks` 第 2 轮过滤里加 `if cb_cache_ready && !cb_node_cache_inner.contains(&inst.sfid_number) { continue; }`(cache 未首次 scan 成功时降级到老语义,避免接口空响应)
 - ✅ D5 `main_tests.rs::build_test_state` 加空 `clearing_bank_node_cache` 字段
 
 **验证**:

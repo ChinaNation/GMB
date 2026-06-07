@@ -68,6 +68,7 @@ fn build_hashed_payload_request(
 
     Ok(VoteSignRequestResult {
         request_json,
+        call_data_hex: hex::encode(call_data),
         request_id,
         expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
         sign_nonce: nonce,

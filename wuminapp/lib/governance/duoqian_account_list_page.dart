@@ -515,7 +515,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             sfidNumber:
                 'duoqian:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.duoqian,
-            adminSubjectOrg: 5,
+            adminAccountOrg: 5,
             duoqianAddress:
                 '0000000000000000000000000000000000000000000000000000000000000000',
           ),
@@ -552,7 +552,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
               name: item.name,
               sfidNumber: registeredDuoqianIdentity(item.duoqianAddress),
               orgType: OrgType.duoqian,
-              adminSubjectOrg: item.institution?.adminSubjectOrg,
+              adminAccountOrg: item.institution?.adminAccountOrg,
               duoqianAddress: item.duoqianAddress,
             ),
             initialLocalStatus: item.localStatus,

@@ -31,14 +31,14 @@ pub(crate) fn service_error_to_response(e: ServiceError) -> axum::response::Resp
 
 pub(crate) fn extract_province_code(sfid: &str) -> String {
     sfid.split('-')
-        .nth(1)
+        .next()
         .map(|r5| r5[..2.min(r5.len())].to_string())
         .unwrap_or_default()
 }
 
 pub(crate) fn extract_city_code(sfid: &str) -> String {
     sfid.split('-')
-        .nth(1)
+        .next()
         .and_then(|r5| {
             if r5.len() >= 5 {
                 Some(r5[2..5].to_string())

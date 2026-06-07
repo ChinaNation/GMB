@@ -102,7 +102,7 @@ class AttestationService {
 
   Future<SfidBindDraft> buildSfidBindDraft({
     required WalletProfile wallet,
-    required String sfidCode,
+    required String sfidNumber,
   }) async {
     final state = await getState();
     if (!state.isValid || state.token == null) {
@@ -111,7 +111,7 @@ class AttestationService {
     final challenge = _issueChallenge();
     final signature = _signChallengeLocally(challenge, wallet);
     return SfidBindDraft(
-      sfidCode: sfidCode,
+      sfidNumber: sfidNumber,
       attestationToken: state.token!,
       challenge: challenge,
       challengeSignature: signature,
@@ -195,13 +195,13 @@ class AttestationService {
 
 class SfidBindDraft {
   const SfidBindDraft({
-    required this.sfidCode,
+    required this.sfidNumber,
     required this.attestationToken,
     required this.challenge,
     required this.challengeSignature,
   });
 
-  final String sfidCode;
+  final String sfidNumber;
   final String attestationToken;
   final String challenge;
   final String challengeSignature;

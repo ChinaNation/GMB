@@ -12,7 +12,10 @@ use axum::{
 use chrono::Utc;
 use sqlx::Row;
 
-use crate::{err, ApiError, AppState};
+use crate::{
+    common::{err, ApiError},
+    AppState,
+};
 
 pub(crate) const SESSION_COOKIE_NAME: &str = "cpms_session";
 

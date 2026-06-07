@@ -88,10 +88,10 @@ wuminapp
 - `git diff --check`：通过。
 
 2026-05-17 阈值显示补充执行记录：
-- 已修复个人/机构多签详情读取管理员主体时错把 `AdminsChange::Subjects` 中 creator 字段解成 threshold 的问题。
-- 个人/机构多签当前账户详情现在只从 `AdminsChange::Subjects` 读取 org 和管理员列表，普通动态阈值改从 `InternalVote.ActiveDynamicThresholds[(org, subject)]` 读取，查不到 active 时再查 pending。
+- 已修复个人/机构多签详情读取管理员主体时错把 `AdminsChange::AdminAccounts` 中 creator 字段解成 threshold 的问题。
+- 个人/机构多签当前账户详情现在只从 `AdminsChange::AdminAccounts` 读取 org 和管理员列表，普通动态阈值改从 `InternalVote.ActiveDynamicThresholds[(org, subject)]` 读取，查不到 active 时再查 pending。
 - `DuoqianAccountInfo.threshold` 改为可空；阈值查询不到时 UI 只显示管理员人数，不再显示错位大数字。
-- 已补充个人/机构 storage codec 和 service 测试，覆盖 `AdminsChange::Subjects` 不再携带 threshold 的布局。
+- 已补充个人/机构 storage codec 和 service 测试，覆盖 `AdminsChange::AdminAccounts` 不再携带 threshold 的布局。
 
 2026-05-17 阈值显示补充验证记录：
 - `cd wuminapp && dart analyze lib test`：通过。

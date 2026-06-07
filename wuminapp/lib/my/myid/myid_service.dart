@@ -11,7 +11,7 @@ class MyIdState {
     this.walletAddress,
     this.walletPubkeyHex,
     this.walletIndex,
-    this.sfidCode,
+    this.sfidNumber,
     this.citizenStatus,
     this.votingEligible,
     this.voteStatus,
@@ -27,7 +27,7 @@ class MyIdState {
   final String? walletAddress;
   final String? walletPubkeyHex;
   final int? walletIndex;
-  final String? sfidCode;
+  final String? sfidNumber;
   final String? citizenStatus;
   final bool? votingEligible;
   final String? voteStatus;
@@ -46,7 +46,7 @@ class MyIdService {
   static const _kAddress = 'myid.wallet_address';
   static const _kPubkeyHex = 'myid.wallet_pubkey_hex';
   static const _kWalletIndex = 'myid.wallet_index';
-  static const _kSfidCode = 'myid.sfid_code';
+  static const _kSfidNumber = 'myid.sfid_number';
   static const _kCitizenStatus = 'myid.citizen_status';
   static const _kVotingEligible = 'myid.voting_eligible';
   static const _kVoteStatus = 'myid.vote_status';
@@ -70,7 +70,7 @@ class MyIdService {
       walletAddress: prefs.getString(_kAddress),
       walletPubkeyHex: prefs.getString(_kPubkeyHex),
       walletIndex: prefs.getInt(_kWalletIndex),
-      sfidCode: prefs.getString(_kSfidCode),
+      sfidNumber: prefs.getString(_kSfidNumber),
       citizenStatus: prefs.getString(_kCitizenStatus),
       votingEligible: prefs.getBool(_kVotingEligible),
       voteStatus: prefs.getString(_kVoteStatus),
@@ -123,7 +123,7 @@ class MyIdService {
         case 'bound':
           await prefs.setString(_kBindStatus, 'bound');
           await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-          await _setOptionalString(prefs, _kSfidCode, remote.sfidCode);
+          await _setOptionalString(prefs, _kSfidNumber, remote.sfidNumber);
           await _setOptionalString(
             prefs,
             _kCitizenStatus,
@@ -150,7 +150,7 @@ class MyIdService {
         case 'pending':
           await prefs.setString(_kBindStatus, 'pending');
           await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-          await _setOptionalString(prefs, _kSfidCode, remote.sfidCode);
+          await _setOptionalString(prefs, _kSfidNumber, remote.sfidNumber);
           await _setOptionalString(
             prefs,
             _kCitizenStatus,
@@ -181,7 +181,7 @@ class MyIdService {
             await prefs.remove(_kAddress);
             await prefs.remove(_kPubkeyHex);
             await prefs.remove(_kWalletIndex);
-            await prefs.remove(_kSfidCode);
+            await prefs.remove(_kSfidNumber);
             await prefs.remove(_kCitizenStatus);
             await prefs.remove(_kVotingEligible);
             await prefs.remove(_kVoteStatus);
@@ -208,7 +208,7 @@ class MyIdService {
     await prefs.remove(_kAddress);
     await prefs.remove(_kPubkeyHex);
     await prefs.remove(_kWalletIndex);
-    await prefs.remove(_kSfidCode);
+    await prefs.remove(_kSfidNumber);
     await prefs.remove(_kCitizenStatus);
     await prefs.remove(_kVotingEligible);
     await prefs.remove(_kVoteStatus);

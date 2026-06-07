@@ -108,8 +108,7 @@ class DuoqianTransferEntryCard extends StatelessWidget {
     }
 
     final limitService = ProposalLimitService();
-    final activeIds =
-        await limitService.fetchActiveProposalIds(institution.sfidNumber);
+    final activeIds = await limitService.fetchActiveProposalIds(institution);
     if (!context.mounted) return;
     if (activeIds.length >=
         ProposalLimitService.maxActiveProposalsPerInstitution) {

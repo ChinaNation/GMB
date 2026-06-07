@@ -1,6 +1,6 @@
 // 个人多签反向索引发现服务。
 //
-// 只处理 AdminsChange::Subjects 中的 PersonalDuoqian 主体，发现后写入
+// 只处理 AdminsChange::AdminAccounts 中的个人多签账户，发现后写入
 // PersonalDuoqianEntity。机构账户发现继续留在 organization-manage 目录。
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +8,7 @@ import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/governance/shared/admin_institution_codec.dart';
+import 'package:wuminapp_mobile/governance/shared/admin_account_storage_codec.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
@@ -78,7 +78,7 @@ class PersonalManageDiscoveryService {
     final myPubkeys = myPubkeysHex ?? await _readMyPubkeys();
     if (myPubkeys.isEmpty) return PersonalManageDiscoveryStats.empty;
 
-    final prefixHex = _adminsChangeSubjectsPrefixHex();
+    final prefixHex = _adminsChangeAdminAccountsPrefixHex();
     final allKeys = <String>[];
     String? startKey;
     var partialFailure = false;
@@ -124,9 +124,9 @@ class PersonalManageDiscoveryService {
       for (final keyHex in batchKeys) {
         final value = values[keyHex];
         if (value == null) continue;
-        final decoded = AdminInstitutionCodec.tryDecode(value);
+        final decoded = AdminAccountStorageCodec.tryDecode(value);
         if (decoded == null ||
-            decoded.kind != AdminInstitutionCodec.kindPersonal) {
+            decoded.kind != AdminAccountStorageCodec.kindPersonal) {
           continue;
         }
 
@@ -136,11 +136,11 @@ class PersonalManageDiscoveryService {
         if (hits.isEmpty) continue;
 
         final keyBytes = _hexDecode(keyHex);
-        final subjectId =
-            AdminInstitutionCodec.extractInstitutionIdFromKey(keyBytes);
-        if (subjectId == null) continue;
+        final accountId =
+            AdminAccountStorageCodec.extractAccountIdFromKey(keyBytes);
+        if (accountId == null) continue;
         final addr =
-            AdminInstitutionCodec.personalAddressFromInstitutionId(subjectId);
+            AdminAccountStorageCodec.accountHexFromAccountId(accountId);
         if (addr == null) continue;
         matchedPersonalAddrs[addr] = hits;
         matchedCount++;
@@ -294,9 +294,9 @@ class PersonalManageDiscoveryService {
     }
   }
 
-  String _adminsChangeSubjectsPrefixHex() {
+  String _adminsChangeAdminAccountsPrefixHex() {
     final palletHash = Hasher.twoxx128.hashString('AdminsChange');
-    final storageHash = Hasher.twoxx128.hashString('Subjects');
+    final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
     final prefix = Uint8List(palletHash.length + storageHash.length);
     prefix.setAll(0, palletHash);
     prefix.setAll(palletHash.length, storageHash);

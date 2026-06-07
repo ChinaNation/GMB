@@ -91,7 +91,7 @@ const content = [
   "part of 'institution_registry.dart';",
   '',
   '// 本文件由 tools/generate_wuminapp_governance_registry.mjs 自动生成。',
-  '// 中文注释：治理机构名称、身份 ID 和制度账户地址来自 runtime primitives；管理员必须动态读取链上 AdminsChange::Subjects。',
+  '// 中文注释：治理机构名称、sfid_number 和制度账户地址来自 runtime primitives；管理员必须动态读取链上 AdminsChange::AdminAccounts。',
   '',
   '/// 国储会（1 个）。',
   'const List<InstitutionInfo> kNationalCouncil = [',

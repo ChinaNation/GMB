@@ -1,20 +1,20 @@
 use std::collections::BTreeSet;
 
 use super::call_data::normalize_admins;
-use super::types::AdminSubjectState;
+use super::types::AdminAccountState;
 
 /// 桌面端前置校验。链端仍是最终裁判，这里只提前给用户明确错误。
 pub fn validate_admin_set_change(
-    state: &AdminSubjectState,
+    state: &AdminAccountState,
     proposer_pubkey_hex: &str,
     new_admins: &[String],
 ) -> Result<Vec<String>, String> {
     if state.status != 1 {
-        return Err("管理员主体不是已激活状态，不能发起更换".to_string());
+        return Err("管理员账户不是已激活状态，不能发起更换".to_string());
     }
-    let proposer = super::subject_id::normalize_pubkey_hex(proposer_pubkey_hex)?;
+    let proposer = super::account_id::normalize_pubkey_hex(proposer_pubkey_hex)?;
     if !state.admins.iter().any(|admin| admin == &proposer) {
-        return Err("当前签名账户不是该主体管理员，不能发起管理员更换".to_string());
+        return Err("当前签名账户不是该账户管理员，不能发起管理员更换".to_string());
     }
 
     let normalized = normalize_admins(new_admins)?;
@@ -48,9 +48,6 @@ fn validate_count(kind: u8, org: u8, count: usize) -> Result<(), String> {
             }
         }
         1 => {
-            return Err("SfidInstitution 只用于机构归属/检索，不能作为管理员更换主体".to_string());
-        }
-        2 => {
             if org != 3 {
                 return Err("个人多签管理员更换必须使用 ORG_REN".to_string());
             }
@@ -58,7 +55,7 @@ fn validate_count(kind: u8, org: u8, count: usize) -> Result<(), String> {
                 return Err("个人多签管理员数量必须在 2..=64 之间".to_string());
             }
         }
-        3 => {
+        2 => {
             if !matches!(org, 4 | 5) {
                 return Err("机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH".to_string());
             }
@@ -66,7 +63,7 @@ fn validate_count(kind: u8, org: u8, count: usize) -> Result<(), String> {
                 return Err("机构账户管理员数量必须在 2..=1989 之间".to_string());
             }
         }
-        _ => return Err("未知管理员主体类型".to_string()),
+        _ => return Err("未知管理员账户类型".to_string()),
     }
     Ok(())
 }
@@ -79,16 +76,15 @@ mod tests {
         format!("{seed:02x}").repeat(32)
     }
 
-    fn state(kind: u8, org: u8, admins: Vec<String>) -> AdminSubjectState {
-        AdminSubjectState {
-            subject_id_hex: "11".repeat(48),
+    fn state(kind: u8, org: u8, admins: Vec<String>) -> AdminAccountState {
+        AdminAccountState {
+            account_hex: "11".repeat(32),
             sfid_number: Some("TEST-SFID".to_string()),
             org,
             org_label: String::new(),
             kind,
             kind_label: String::new(),
             admins,
-            threshold: 2,
             creator_hex: admin(9),
             created_at: 1,
             updated_at: 1,
@@ -98,18 +94,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_sfid_institution_subject_for_admin_set_change() {
-        let current = vec![admin(1), admin(2)];
-        let next = vec![admin(1), admin(3)];
-        let err = validate_admin_set_change(&state(1, 4, current), &admin(1), &next).unwrap_err();
-        assert!(err.contains("SfidInstitution"));
-    }
-
-    #[test]
     fn personal_duoqian_requires_org_ren() {
         let current = vec![admin(1), admin(2)];
         let next = vec![admin(1), admin(3)];
-        let err = validate_admin_set_change(&state(2, 4, current), &admin(1), &next).unwrap_err();
+        let err = validate_admin_set_change(&state(1, 4, current), &admin(1), &next).unwrap_err();
         assert_eq!(err, "个人多签管理员更换必须使用 ORG_REN");
     }
 
@@ -119,11 +107,11 @@ mod tests {
         let next = vec![admin(1), admin(3)];
 
         for org in [4u8, 5u8] {
-            validate_admin_set_change(&state(3, org, current.clone()), &admin(1), &next)
+            validate_admin_set_change(&state(2, org, current.clone()), &admin(1), &next)
                 .expect("PUP/OTH 机构账户应允许管理员更换");
         }
 
-        let err = validate_admin_set_change(&state(3, 3, current), &admin(1), &next).unwrap_err();
+        let err = validate_admin_set_change(&state(2, 3, current), &admin(1), &next).unwrap_err();
         assert_eq!(err, "机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH");
     }
 }

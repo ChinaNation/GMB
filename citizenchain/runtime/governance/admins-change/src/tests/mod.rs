@@ -93,12 +93,12 @@ impl
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
-        pallet::Pallet::<Test>::is_active_subject_admin(org, institution, who)
+    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
+        pallet::Pallet::<Test>::is_active_account_admin(org, institution, who)
     }
 
-    fn get_admin_list(org: u8, institution: SubjectId) -> Option<Vec<AccountId32>> {
-        pallet::Pallet::<Test>::active_subject_admins(org, institution)
+    fn get_admin_list(org: u8, institution: AccountId32) -> Option<Vec<AccountId32>> {
+        pallet::Pallet::<Test>::active_account_admins(org, institution)
     }
 }
 
@@ -178,27 +178,36 @@ fn prc_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CB[1].duoqian_admins[index])
 }
 
-fn nrc_pallet_id() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
-        .expect("NRC sfid_number should map to valid sfid_number institution id")
+fn nrc_pallet_id() -> AccountId32 {
+    AccountId32::new(CHINA_CB[0].main_address)
 }
 
-fn prc_pallet_id() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[1].sfid_number)
-        .expect("prc pallet_id should be valid sfid_number institution id")
+fn prc_pallet_id() -> AccountId32 {
+    AccountId32::new(CHINA_CB[1].main_address)
 }
 
-fn prb_pallet_id() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CH[0].sfid_number)
-        .expect("prb pallet_id should be valid sfid_number institution id")
+fn prb_pallet_id() -> AccountId32 {
+    AccountId32::new(CHINA_CH[0].main_address)
 }
 
 fn prb_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CH[0].duoqian_admins[index])
 }
 
-fn pending_subject_id() -> SubjectId {
-    [42u8; 48]
+fn pending_account_id() -> AccountId32 {
+    AccountId32::new([42u8; 32])
+}
+
+fn pending_account_with_offset(offset: u8) -> AccountId32 {
+    let mut raw = [42u8; 32];
+    raw[0] = raw[0].saturating_add(offset);
+    AccountId32::new(raw)
+}
+
+fn pending_account_with_second_byte(value: u8) -> AccountId32 {
+    let mut raw = [42u8; 32];
+    raw[1] = value;
+    AccountId32::new(raw)
 }
 
 /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
@@ -206,9 +215,9 @@ fn last_proposal_id() -> u64 {
     votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
 }
 
-fn current_admins(institution: SubjectId) -> Vec<AccountId32> {
-    Subjects::<Test>::get(institution)
-        .expect("admin subject should be stored")
+fn current_admins(institution: AccountId32) -> Vec<AccountId32> {
+    AdminAccounts::<Test>::get(institution)
+        .expect("admin account should be stored")
         .admins
         .into_inner()
 }
@@ -219,27 +228,27 @@ fn bounded_admins(admins: Vec<AccountId32>) -> AdminsOf<Test> {
         .expect("test admin list should fit MaxAdminsPerInstitution")
 }
 
-fn current_vote_threshold(org: u8, subject: SubjectId) -> u32 {
+fn current_vote_threshold(org: u8, account: AccountId32) -> u32 {
     votingengine::types::fixed_governance_pass_threshold(org)
-        .or_else(|| internal_vote::ActiveDynamicThresholds::<Test>::get(org, subject))
+        .or_else(|| internal_vote::ActiveDynamicThresholds::<Test>::get(org, account))
         .unwrap_or(2)
 }
 
 fn propose_admin_set_replacement(
     origin: RuntimeOrigin,
     org: u8,
-    subject: SubjectId,
+    account: AccountId32,
     old_admin: AccountId32,
     new_admin: AccountId32,
 ) -> DispatchResult {
-    let mut admins = current_admins(subject);
+    let mut admins = current_admins(account.clone());
     let old_pos = admins
         .iter()
         .position(|admin| admin == &old_admin)
-        .expect("old admin must exist in test subject");
+        .expect("old admin must exist in test account");
     admins[old_pos] = new_admin;
-    let threshold = current_vote_threshold(org, subject);
-    AdminsChange::propose_admin_set_change(origin, org, subject, bounded_admins(admins), threshold)
+    let threshold = current_vote_threshold(org, account.clone());
+    AdminsChange::propose_admin_set_change(origin, org, account, bounded_admins(admins), threshold)
 }
 
 fn mark_proposal_passed_without_callback(proposal_id: u64) {

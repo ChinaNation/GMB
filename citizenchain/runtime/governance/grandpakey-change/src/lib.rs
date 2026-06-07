@@ -21,14 +21,12 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use primitives::china::china_cb::CHINA_CB;
-use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
     types::{ORG_NRC, ORG_PRC},
-    InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome, SubjectId,
-    STATUS_PASSED,
+    InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -45,30 +43,33 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
 /// 中文注释：密钥替换提案动作，封装机构、旧公钥和新公钥。
-pub struct GrandpaKeyReplacementAction {
-    pub institution: SubjectId,
+pub struct GrandpaKeyReplacementAction<AccountId> {
+    pub institution: AccountId,
     pub old_key: [u8; 32],
     pub new_key: [u8; 32],
 }
 
-/// 中文注释：获取国储会（NRC）的机构 pallet ID。
-fn nrc_subject_id() -> Option<SubjectId> {
+fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
+    T::AccountId::decode(&mut &raw[..]).ok()
+}
+
+fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_CB
         .first()
-        .and_then(|n| subject_id_from_sfid_number(n.sfid_number))
+        .and_then(|n| decode_account::<T>(&n.main_address))
 }
 
 /// 中文注释：判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
 /// PRB（省储行）不参与 GRANDPA 共识出块，故不纳入密钥治理范围。
-fn subject_org(institution: SubjectId) -> Option<u8> {
-    if Some(institution) == nrc_subject_id() {
+fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8> {
+    if Some(institution.clone()) == nrc_account::<T>() {
         return Some(ORG_NRC);
     }
 
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
+        .filter_map(|n| decode_account::<T>(&n.main_address))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
@@ -106,13 +107,13 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn current_grandpa_key)]
     pub type CurrentGrandpaKeys<T: Config> =
-        StorageMap<_, Blake2_128Concat, SubjectId, [u8; 32], OptionQuery>;
+        StorageMap<_, Blake2_128Concat, T::AccountId, [u8; 32], OptionQuery>;
 
     /// 中文注释：公钥到机构的反向索引，O(1) 判断 new_key 是否已被其他机构占用。
     #[pallet::storage]
     #[pallet::getter(fn key_owner)]
     pub type GrandpaKeyOwnerByKey<T: Config> =
-        StorageMap<_, Blake2_128Concat, [u8; 32], SubjectId, OptionQuery>;
+        StorageMap<_, Blake2_128Concat, [u8; 32], T::AccountId, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -132,14 +133,17 @@ pub mod pallet {
         fn build(&self) {
             // 中文注释：初始 GRANDPA 公钥与 CHINA_CB 的机构地址一一对应（1 国储会 + 43 省储会）。
             for node in CHINA_CB.iter() {
-                let Some(institution) = subject_id_from_sfid_number(node.sfid_number) else {
-                    continue;
+                let Some(institution) = decode_account::<T>(&node.main_address) else {
+                    panic!(
+                        "genesis: sfid_number {} 主账户 decode 失败",
+                        node.sfid_number
+                    );
                 };
                 assert!(
                     !GrandpaKeyOwnerByKey::<T>::contains_key(node.grandpa_key),
                     "duplicated initial grandpa key in CHINA_CB"
                 );
-                CurrentGrandpaKeys::<T>::insert(institution, node.grandpa_key);
+                CurrentGrandpaKeys::<T>::insert(institution.clone(), node.grandpa_key);
                 GrandpaKeyOwnerByKey::<T>::insert(node.grandpa_key, institution);
             }
         }
@@ -219,7 +223,7 @@ pub mod pallet {
         GrandpaKeyReplacementProposed {
             proposal_id: u64,
             org: u8,
-            institution: SubjectId,
+            institution: T::AccountId,
             proposer: T::AccountId,
             old_key: [u8; 32],
             new_key: [u8; 32],
@@ -235,14 +239,14 @@ pub mod pallet {
         /// GRANDPA 密钥替换已完成并已调度 GRANDPA authority set 变更
         GrandpaKeyReplaced {
             proposal_id: u64,
-            institution: SubjectId,
+            institution: T::AccountId,
             old_key: [u8; 32],
             new_key: [u8; 32],
         },
         /// 已通过但不可执行的提案被取消
         FailedProposalCancelled {
             proposal_id: u64,
-            institution: SubjectId,
+            institution: T::AccountId,
         },
     }
 
@@ -281,7 +285,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::propose_replace_grandpa_key())]
         pub fn propose_replace_grandpa_key(
             origin: OriginFor<T>,
-            institution: SubjectId,
+            institution: T::AccountId,
             new_key: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -293,22 +297,23 @@ pub mod pallet {
             // 中文注释：仅”能解压”为曲线点还不够，small-order 弱公钥可能导致 GRANDPA 签名安全性失真。
             ensure!(!point.is_small_order(), Error::<T>::InvalidEd25519Key);
 
-            let actual_org = subject_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let actual_org =
+                account_org::<T>(institution.clone()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                Self::is_internal_admin(actual_org, institution, &who),
+                Self::is_internal_admin(actual_org, institution.clone(), &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
-            let old_key = CurrentGrandpaKeys::<T>::get(institution)
+            let old_key = CurrentGrandpaKeys::<T>::get(institution.clone())
                 .ok_or(Error::<T>::CurrentGrandpaKeyNotFound)?;
             ensure!(new_key != old_key, Error::<T>::NewKeyUnchanged);
             ensure!(
-                !Self::is_key_used_by_other_institution(institution, &new_key),
+                !Self::is_key_used_by_other_institution(institution.clone(), &new_key),
                 Error::<T>::NewKeyAlreadyUsed
             );
 
-            let action = GrandpaKeyReplacementAction {
-                institution,
+            let action = GrandpaKeyReplacementAction::<T::AccountId> {
+                institution: institution.clone(),
                 old_key,
                 new_key,
             };
@@ -318,7 +323,7 @@ pub mod pallet {
             let proposal_id = T::InternalVoteEngine::create_general_internal_proposal_with_data(
                 who.clone(),
                 actual_org,
-                institution,
+                institution.clone(),
                 crate::MODULE_TAG,
                 encoded,
             )?;
@@ -342,7 +347,7 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// 中文注释：检查调用者是否为指定机构的内部管理员。
-        fn is_internal_admin(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {
+        fn is_internal_admin(org: u8, institution: T::AccountId, who: &T::AccountId) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
@@ -351,7 +356,7 @@ pub mod pallet {
         }
 
         /// 中文注释：检查 new_key 是否已被其他机构占用（通过反向索引 O(1) 判断）。
-        fn is_key_used_by_other_institution(institution: SubjectId, key: &[u8; 32]) -> bool {
+        fn is_key_used_by_other_institution(institution: T::AccountId, key: &[u8; 32]) -> bool {
             GrandpaKeyOwnerByKey::<T>::get(*key)
                 .map(|owner| owner != institution)
                 .unwrap_or(false)
@@ -360,7 +365,7 @@ pub mod pallet {
         /// 中文注释：尝试执行已通过的密钥替换提案，成功后调度 GRANDPA authority set 变更。
         pub(crate) fn try_execute_from_action(
             proposal_id: u64,
-            action: GrandpaKeyReplacementAction,
+            action: GrandpaKeyReplacementAction<T::AccountId>,
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -379,9 +384,9 @@ pub mod pallet {
 
             // 中文注释：GRANDPA 接受调度后，链上“当前治理认可的目标 key”立即切到新值；
             // 真正 authority set 生效仍由 pallet-grandpa 在 delay 结束时完成。
-            CurrentGrandpaKeys::<T>::insert(action.institution, action.new_key);
+            CurrentGrandpaKeys::<T>::insert(action.institution.clone(), action.new_key);
             GrandpaKeyOwnerByKey::<T>::remove(action.old_key);
-            GrandpaKeyOwnerByKey::<T>::insert(action.new_key, action.institution);
+            GrandpaKeyOwnerByKey::<T>::insert(action.new_key, action.institution.clone());
 
             Self::deposit_event(Event::<T>::GrandpaKeyReplaced {
                 proposal_id,
@@ -394,7 +399,7 @@ pub mod pallet {
 
         /// 中文注释：校验提案可执行性——无 pending change、旧 key 存在、替换后无重复。
         pub(crate) fn validate_action(
-            action: &GrandpaKeyReplacementAction,
+            action: &GrandpaKeyReplacementAction<T::AccountId>,
         ) -> Result<Vec<(GrandpaAuthorityId, u64)>, Error<T>> {
             ensure!(
                 pallet_grandpa::Pallet::<T>::pending_change().is_none(),
@@ -457,8 +462,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         if !approved {
             return Ok(ProposalExecutionOutcome::Executed);
         }
-        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
-            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action = GrandpaKeyReplacementAction::<T::AccountId>::decode(
+            &mut &raw[crate::MODULE_TAG.len()..],
+        )
+        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         match pallet::Pallet::<T>::validate_action(&action) {
             Err(pallet::Error::<T>::GrandpaChangePending) => {
@@ -494,8 +501,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(ProposalCancelDecision::Ignored),
         };
-        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
-            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action = GrandpaKeyReplacementAction::<T::AccountId>::decode(
+            &mut &raw[crate::MODULE_TAG.len()..],
+        )
+        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
         // 中文注释：只允许取消确定不可执行的 GRANDPA 替换；pending change 属于可恢复失败。
         match pallet::Pallet::<T>::validate_action(&action) {
             Ok(_) => Err(pallet::Error::<T>::ProposalStillExecutable.into()),

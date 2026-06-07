@@ -25,7 +25,7 @@ SFID 改造 Step 2:跑 tools/duoqian.py --apply 同步所有派生地址(277 条
 
 ### 派生公式(未变,只换 sfid_number 输入)
 ```
-preimage = b"DUOQIAN_V1" (10B) || op_tag (1B) || ss58_le[2027] (2B) || sfid_number_bytes
+preimage = b"DUOQIAN" (10B) || op_tag (1B) || ss58_le[2027] (2B) || sfid_number_bytes
 address  = blake2b_256(preimage)
 ```
 - OP_MAIN = 0x00 → main_address
@@ -58,7 +58,7 @@ address  = blake2b_256(preimage)
 
 ## 验收标准
 
-- ✅ 所有派生地址新值 = blake2b_256(DUOQIAN_V1 + op_tag + ss58_le + 新 sfid_number)
+- ✅ 所有派生地址新值 = blake2b_256(DUOQIAN + op_tag + ss58_le + 新 sfid_number)
 - ✅ china_zb.rs 汇总 408 条 = 277 main + 87 fee + 43 stake + 1 NRC_AN(去重排序)
 - ✅ 链端 / sfid backend / wuminapp / wumin 全部测试通过
 - ✅ tools/duoqian.py dry-run 再跑显示 "0 变更"(幂等验证)

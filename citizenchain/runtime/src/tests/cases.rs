@@ -20,8 +20,7 @@ fn fee_payer_returns_none_for_transfer() {
     use onchain_transaction::CallFeePayer;
     use primitives::china::china_cb::CHINA_CB;
 
-    let institution = subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
-        .expect("NRC sfid_number must be valid");
+    let institution = AccountId::new(CHINA_CB[0].main_address);
     let beneficiary = AccountId::new([99u8; 32]);
     let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
         org: 0,
@@ -197,8 +196,7 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
 #[test]
 fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() {
     new_test_ext().execute_with(|| {
-        let nrc_institution = subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
-            .expect("nrc institution id must be valid");
+        let nrc_institution = AccountId::new(CHINA_CB[0].main_address);
         let nrc_account = AccountId::new(CHINA_CB[0].main_address);
         let initial_balance: Balance = 1_000;
         let destroy_amount: Balance = 100;
@@ -276,8 +274,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         // 中文注释：投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
         assert_eq!(vote_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
-        let nrc_institution = subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
-            .expect("nrc institution id must be valid");
+        let nrc_institution = AccountId::new(CHINA_CB[0].main_address);
         let resolution_destro_call =
             RuntimeCall::ResolutionDestro(resolution_destro::pallet::Call::propose_destroy {
                 org: votingengine::types::ORG_NRC,
@@ -358,9 +355,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         >>::fee_kind(&who, &close_call);
         assert_eq!(close_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
-        let institution =
-            subject_id_from_sfid_number(primitives::china::china_cb::CHINA_CB[0].sfid_number)
-                .expect("NRC sfid_number must be valid");
+        let institution = AccountId::new(primitives::china::china_cb::CHINA_CB[0].main_address);
         let transfer_call =
             RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
                 org: 0,
@@ -821,7 +816,7 @@ fn runtime_sfid_eligibility_binding_and_vote_full_path() {
 #[test]
 fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
     new_test_ext().execute_with(|| {
-        let nrc_id = subject_id_from_sfid_number(CHINA_CB[0].sfid_number).expect("nrc id");
+        let nrc_id = AccountId::new(CHINA_CB[0].main_address);
         let nrc_admin = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
         let outsider = AccountId::new([99u8; 32]);
 
@@ -830,7 +825,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         let bad_origin = RuntimeOrigin::signed(outsider.clone());
         assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err());
 
-        admins_change::pallet::Subjects::<Runtime>::remove(nrc_id);
+        admins_change::pallet::AdminAccounts::<Runtime>::remove(nrc_id);
         assert!(!is_nrc_admin(&nrc_admin));
         assert!(!is_nrc_admin(&outsider));
         assert!(!RuntimeInternalAdminProvider::is_internal_admin(
@@ -890,7 +885,7 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
             backup_signing_pubkey,
         );
 
-        let sfid_number: &[u8] = b"GFR-AH001-CB0C-000000001-2026";
+        let sfid_number: &[u8] = b"AH001-GCB07-000000001-2026";
         let register_nonce: organization_manage::pallet::RegisterNonceOf<Runtime> =
             b"register-nonce-ah-1"
                 .to_vec()
@@ -905,7 +900,7 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let payload = (
-                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 sfid_number,

@@ -1,8 +1,6 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
@@ -83,30 +81,30 @@ class ProposalContextResolver {
   ///
   /// 当用户浏览某个机构详情页后，如果匹配到管理员身份，
   /// 该机构 sfidNumber 会被加入此集合。机构列表页据此渲染绿色卡片和排序。
-  static final Set<String> _adminInstitutionIds = {};
+  static final Set<String> _institutionAdminIds = {};
 
   /// 记录某机构的管理员状态。
-  static void markAdminInstitution(String sfidNumber) {
-    _adminInstitutionIds.add(sfidNumber);
+  static void markInstitutionAdmin(String sfidNumber) {
+    _institutionAdminIds.add(sfidNumber);
   }
 
   /// 查询某机构是否已确认为管理员。
-  static bool isAdminInstitution(String sfidNumber) {
-    return _adminInstitutionIds.contains(sfidNumber);
+  static bool isInstitutionAdmin(String sfidNumber) {
+    return _institutionAdminIds.contains(sfidNumber);
   }
 
   /// 获取所有已确认的管理员机构 sfidNumber 集合。
-  static Set<String> get adminInstitutionIds =>
-      Set.unmodifiable(_adminInstitutionIds);
+  static Set<String> get institutionAdminIds =>
+      Set.unmodifiable(_institutionAdminIds);
 
   /// 清除管理员机构缓存（如钱包被删除时）。
-  static void clearAdminInstitutionCache() {
-    _adminInstitutionIds.clear();
+  static void clearInstitutionAdminCache() {
+    _institutionAdminIds.clear();
   }
 
   /// 解析用户与指定提案的关系。
   ///
-  /// [institutionBytes] 提案的 48 字节机构标识（可为 null）。
+  /// [institutionBytes] 提案的机构 AccountId32（可为 null）。
   /// [knownInstitution] 如果调用方已知机构信息（如从机构页面进入），直接传入跳过反查。
   Future<ProposalContext> resolve({
     List<int>? institutionBytes,
@@ -120,8 +118,8 @@ class ProposalContextResolver {
     InstitutionInfo? institution = knownInstitution;
 
     if (institution == null && institutionBytes != null) {
-      institution = findInstitutionByPalletId(institutionBytes,
-          adminSubjectOrg: internalOrg);
+      institution = findInstitutionByAccountId(institutionBytes,
+          adminAccountOrg: internalOrg);
     }
 
     // 2. 如果仍然没有机构（如联合投票 institutionBytes 反查失败），
@@ -135,9 +133,9 @@ class ProposalContextResolver {
       return const ProposalContext();
     }
 
-    late final AdminSubjectIdentity identity;
+    late final AdminAccountIdentity identity;
     try {
-      identity = AdminSubjectIdentity.fromInstitution(institution);
+      identity = AdminAccountIdentity.fromInstitution(institution);
       if (institution.isRegisteredDuoqian) {
         final threshold = await _adminService.fetchThreshold(
           identity,
@@ -202,8 +200,8 @@ class ProposalContextResolver {
       InstitutionInfo? institution;
 
       if (institutionBytes != null) {
-        institution = findInstitutionByPalletId(institutionBytes,
-            adminSubjectOrg: internalOrg);
+        institution = findInstitutionByAccountId(institutionBytes,
+            adminAccountOrg: internalOrg);
       }
 
       if (institution == null && coldWallets.isNotEmpty) {
@@ -215,9 +213,9 @@ class ProposalContextResolver {
         continue;
       }
 
-      late final AdminSubjectIdentity identity;
+      late final AdminAccountIdentity identity;
       try {
-        identity = AdminSubjectIdentity.fromInstitution(institution);
+        identity = AdminAccountIdentity.fromInstitution(institution);
         if (institution.isRegisteredDuoqian) {
           final threshold = await _adminService.fetchThreshold(
             identity,
@@ -298,7 +296,7 @@ class ProposalContextResolver {
       List<String> admins;
       try {
         admins = await _adminService.fetchAdmins(
-          AdminSubjectIdentity.fromInstitution(inst),
+          AdminAccountIdentity.fromInstitution(inst),
         );
       } catch (_) {
         continue;
@@ -338,7 +336,7 @@ class VoteChecker {
   ///
   /// 根据 [kind] 自动选择正确的链上存储：
   /// - kind=0（内部投票）→ InternalVote::InternalVotesByAccount
-  /// - kind=1（联合投票）→ JointVote::JointVotesByAdmin（需要 [institutionBytes]）
+  /// - kind=1（联合投票）→ JointVote::JointVotesByAdmin（需要机构 AccountId）
   ///
   /// 返回：null=未投票，true=赞成，false=反对。
   Future<bool?> fetchVote({
@@ -352,7 +350,7 @@ class VoteChecker {
       case 0: // 内部投票
         return _internalVoteService.fetchAdminVote(proposalId, pk);
       case 1: // 联合投票
-        if (institutionBytes == null || institutionBytes.length != 48) {
+        if (institutionBytes == null || institutionBytes.length != 32) {
           return null;
         }
         return _runtimeService.fetchJointAdminVote(
@@ -378,7 +376,12 @@ class VoteChecker {
 
     Uint8List? institutionBytes;
     if (kind == 1 && institution != null) {
-      institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
+      institutionBytes = Uint8List.fromList(
+        institutionIdentityToAccountId(
+          institution.sfidNumber,
+          mainAddress: institution.mainAddress,
+        ),
+      );
     }
 
     final pubkeys = adminWallets.map((wallet) => wallet.pubkeyHex).toList();
@@ -406,14 +409,6 @@ class VoteChecker {
       if (vote == null) return true; // 有未投票的
     }
     return false;
-  }
-
-  /// 将 sfid_number 编码为固定 48 字节。
-  static Uint8List _sfidNumberToFixed48(String sfidNumber) {
-    final raw = utf8.encode(sfidNumber);
-    final out = Uint8List(48);
-    out.setAll(0, raw);
-    return out;
   }
 
   static String _normalize(String hex) {

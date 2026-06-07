@@ -54,20 +54,15 @@ pub async fn submit_duoqian_transfer(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
-        let institution_id = super::subject_id::subject_id_from_transfer_identity(&sfid_number)?;
         let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;
         let remark_bytes = remark.as_bytes();
-        let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
-
-        let mut call_data = Vec::new();
-        call_data.push(19u8);
-        call_data.push(0u8);
-        call_data.push(org_type);
-        call_data.extend_from_slice(&institution_id);
-        call_data.extend_from_slice(&beneficiary_bytes);
-        call_data.extend_from_slice(&amount_fen.to_le_bytes());
-        call_data.extend_from_slice(&remark_compact);
-        call_data.extend_from_slice(remark_bytes);
+        let call_data = super::signing::build_transfer_call_data(
+            &sfid_number,
+            org_type,
+            &beneficiary_bytes,
+            amount_fen,
+            remark_bytes,
+        )?;
 
         governance::signing::verify_and_submit(
             &request_id,

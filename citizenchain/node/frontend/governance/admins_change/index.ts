@@ -1,4 +1,3 @@
 export { AdminListPage } from './AdminListPage';
 export { AdminSetChangePage } from './AdminSetChangePage';
-export type { AdminSubjectState } from './types';
-
+export type { AdminAccountState } from './types';

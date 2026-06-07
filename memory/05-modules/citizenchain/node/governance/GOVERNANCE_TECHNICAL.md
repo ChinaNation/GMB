@@ -55,7 +55,7 @@ governance/
 
 ```
 GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
-+ subject_id (48 字节)
++ account_id (48 字节)
 + org (1 字节)
 + kind (1 字节)
 + pubkey (32 字节)
@@ -78,7 +78,7 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 ### 存储
 
 - 文件：`{app_data}/activated-admin-subjects.json`
-- 格式：JSON 数组，每条记录包含 `pubkey_hex / subject_id_hex / org / kind / activated_at_ms / signature_hex / payload_hash_hex`
+- 格式：JSON 数组，每条记录包含 `pubkey_hex / account_id_hex / org / kind / activated_at_ms / signature_hex / payload_hash_hex`
 - 安全：文件权限限制（通过 security::write_text_atomic_restricted）
 - 失效：每次 `get_activated_admins` 调用时与链上管理员主体的 `org/kind/admins/status` 交叉校验
 
@@ -96,7 +96,7 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 4. 节点桌面端验证签名、构造完整 extrinsic、提交到链上
 
 ### 支持的签名类型
-- 管理员激活（activate_admin_subject，非链上交易）
+- 管理员激活（activate_admin_account，非链上交易）
 - 联合投票（省储会/省储行管理员投票）
 - 内部投票（机构管理员替换/销毁/多签）
 - 公民投票
@@ -132,7 +132,7 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 ## institution.rs — 机构查询
 
 - 管理员列表读取委托到 `admins_change/storage.rs`
-- 内置机构管理员 subject_id 使用 `0x01` Builtin kind tag，与 `primitives::derive::subject_id_from_sfid_number` 字节级一致
+- 内置机构管理员 account_id 使用 `0x01` Builtin kind tag，与 `core_const::account_id_from_sfid_number` 字节级一致
 - 解码管理员 AccountId 列表
 - 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
 
@@ -140,10 +140,10 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 
 - `twox_128`：Substrate pallet/storage 前缀哈希
 - `blake2b_128`：Blake2_128Concat hasher
-- `subject_id_from_sfid_number`：内置机构 SubjectId 编码（与 runtime primitives 一致）
+- `account_id_from_sfid_number`：内置机构 AccountId 编码（与 runtime primitives 一致）
 - `map_key` / `double_map_key`：完整存储 key 拼接
 
-`AdminsChange::Subjects` 专用 storage key 已收口到 `governance/admins_change/storage.rs`，不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
+`AdminsChange::AdminAccounts` 专用 storage key 已收口到 `governance/admins_change/storage.rs`，不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
 
 ## 依赖关系
 

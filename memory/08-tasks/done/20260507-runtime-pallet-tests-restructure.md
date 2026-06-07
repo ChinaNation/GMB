@@ -91,7 +91,7 @@ pallet 业务文件中的就地单测(5 处,共 18 个 #[test]):
 
 primitives crate 内的就地单测(6 处,共 19 个 #[test]):primitives 是常量/类型/纯函数库,每个文件最多 1-7 个测试,各自紧贴自家被测函数,搬到 src/tests/ 反而增加无谓间接层。
 - `primitives/china/china_ch.rs`(3) — 国库行常量数据校验
-- `primitives/src/derive.rs`(7) — `subject_id_from_*` 派生函数
+- `primitives/src/derive.rs`(7) — `account_id_from_*` 派生函数
 - `primitives/src/fee_policy.rs`(6) — 费率规则
 - `primitives/src/count_const.rs`(1) — 常量一致性
 - `primitives/src/genesis.rs`(1) — 创世常量

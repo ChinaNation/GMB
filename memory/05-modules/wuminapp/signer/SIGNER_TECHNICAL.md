@@ -175,13 +175,13 @@ WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
 - 人口快照签名（投票引擎人口快照准备流程字段）：
 
 ```text
-(DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, nonce)
+(DUOQIAN, OP_SIGN_POP, genesis_hash, who, eligible_total, nonce)
 ```
 
 - 公民投票凭证签名：
 
 ```text
-(DUOQIAN_DOMAIN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, nonce)
+(DUOQIAN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, nonce)
 ```
 
 两类消息均采用 `blake2_256(SCALE.encode(payload))` 后做 `sr25519` 签名。

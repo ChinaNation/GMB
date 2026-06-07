@@ -43,7 +43,7 @@ sr25519 公钥):
 
 | 账户 | 字节 | 角色 |
 |---|---|---|
-| `BANK_MAIN_BYTES = [0xAA; 32]` | 清算行主账户(SFR-GD-SZ01-CB01-N9-D4,`主账户`,Active) |
+| `BANK_MAIN_BYTES = [0xAA; 32]` | 清算行主账户(GD001-SCB05-000000001-2026,`主账户`,Active) |
 | `BANK_FEE_BYTES = [0xAB; 32]` | 清算行费用账户(同 SFID,`费用账户`,Active) |
 | `BANK_ADMIN_BYTES = [0xAC; 32]` | 唯一管理员 |
 | `OTHER_BANK_BYTES = [0xBA; 32]` | 故意不注册,用于负路径 |
@@ -104,7 +104,7 @@ impl offchain_transaction::Config for Test {
 ### 既有单元测试保留(12 个)
 
 - 5 个 `batch_item::tests` golden vectors + 基础签名哈希
-- 5 个 `bank_check::tests` A3 私权判定 / noop impl
+- 5 个 `bank_check::tests` K1 私权判定 / noop impl
 - 2 个 runtime integrity / genesis build(自动)
 
 ---

@@ -176,17 +176,15 @@ fn execute_single_item<T: Config>(
     // 2. 消费 nonce
     nonce::consume_nonce::<T>(&item.payer, item.payer_nonce)?;
 
-    // 3. 防重放(t2 从付款方清算行 sfid_number 取前 2 字节作为 shard key;本步
-    //    为了兼容现有 ProcessedOffchainTx 双 map 结构,用固定 t2 或 0)
-    //    Step 3 再细化清算行级别的防重放分桶。
+    // 3. 防重放(shard key 从付款方清算行 sfid_number 的 R5 前 2 字节取省码)。
     //
     //    `item.tx_id` 是 `H256`,链上 Storage 用 `T::Hash`(Substrate 默认等于
     //    H256)。通过 SCALE 编解码跨类型转换,与 frame_system 默认配置兼容。
-    let t2 = t2_from_bank::<T>(&item.payer_bank).unwrap_or([b'L', b'2']);
+    let province_shard = province_shard_from_bank::<T>(&item.payer_bank).unwrap_or([b'L', b'N']);
     let tx_hash: T::Hash = T::Hash::decode(&mut &item.tx_id.as_bytes()[..])
         .map_err(|_| Error::<T>::InvalidL3Signature)?;
     ensure!(
-        !ProcessedOffchainTx::<T>::contains_key(t2, tx_hash),
+        !ProcessedOffchainTx::<T>::contains_key(province_shard, tx_hash),
         Error::<T>::TxAlreadyProcessed
     );
 
@@ -239,8 +237,8 @@ fn execute_single_item<T: Config>(
     }
 
     // 5. 防重放标记 + 事件(tx_hash 已在本函数开头从 item.tx_id 解码)
-    ProcessedOffchainTx::<T>::insert(t2, tx_hash, true);
-    ProcessedOffchainTxAt::<T>::insert(t2, tx_hash, now);
+    ProcessedOffchainTx::<T>::insert(province_shard, tx_hash, true);
+    ProcessedOffchainTxAt::<T>::insert(province_shard, tx_hash, now);
 
     Pallet::<T>::deposit_event(Event::<T>::PaymentSettled {
         tx_id: tx_hash,
@@ -265,16 +263,14 @@ fn pubkey_from_accountid<T: Config>(acc: &T::AccountId) -> Result<Sr25519Public,
     Ok(Sr25519Public::from_raw(arr))
 }
 
-/// 从清算行主账户反查 t2(SFID 第二段前 2 字符),失败时返回 None。
-fn t2_from_bank<T: Config>(bank_main: &T::AccountId) -> Option<[u8; 2]> {
+/// 从清算行主账户反查省级 shard key(SFID 第一段 R5 前 2 字符),失败时返回 None。
+fn province_shard_from_bank<T: Config>(bank_main: &T::AccountId) -> Option<[u8; 2]> {
     let info = T::SfidAccountQuery::account_info(bank_main)?;
     let sfid_bytes = info.0;
-    // SFID 格式 A3-R5-T2P1C1-N9-D8,第二段 R5 前 2 字符是省编码,本步用它做 shard
-    // 近似 t2。例如 "SFR-GD-SZ01-...." → ['G','D']
-    if sfid_bytes.len() < 6 {
+    // SFID 格式 R5-K3P1C1-N9-D4,第一段 R5 前 2 字符是省编码。
+    if sfid_bytes.len() < 2 {
         return None;
     }
-    // 跳过 "SFR-"(4 字节)取后面 2 字节
-    let t2_slice = sfid_bytes.get(4..6)?;
-    Some([t2_slice[0], t2_slice[1]])
+    let shard = sfid_bytes.get(0..2)?;
+    Some([shard[0], shard[1]])
 }

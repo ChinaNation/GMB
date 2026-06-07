@@ -51,7 +51,7 @@ export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBac
   const signRequestRef = useRef(signRequest);
   signRequestRef.current = signRequest;
 
-  // 初始化:拉本机 PeerId + 拉本机构 subject 级已激活管理员
+  // 初始化:拉本机 PeerId + 拉本机构 AccountId 级已激活管理员
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -60,7 +60,7 @@ export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBac
         .then((detail) => detail
           ? adminsChangeApi.getActivatedAdmins(sfidNumber, {
               sfidNumber,
-              subjectIdHex: detail.adminSubjectIdHex,
+              accountHex: detail.adminAccountHex,
               org: detail.adminOrg,
             })
           : [] as ActivatedAdmin[])

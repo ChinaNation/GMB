@@ -17,6 +17,16 @@ const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
 const TAG_ORGANIZATION_MANAGE: &[u8] = b"org-mgmt";
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
+fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
+    let entry = super::registry::find_institution(sfid_number)
+        .ok_or_else(|| format!("未知的治理机构 sfidNumber: {sfid_number}"))?;
+    let clean = entry.main_address_hex();
+    let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
+    bytes
+        .try_into()
+        .map_err(|_| "机构 AccountId 必须为 32 字节".to_string())
+}
+
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(
         method,
@@ -65,7 +75,7 @@ pub struct ProposalMeta {
     /// 0=投票中, 1=通过, 2=否决, 3=已执行, 4=执行失败。
     pub status: u8,
     pub internal_org: Option<u8>,
-    /// 机构 48 字节 hex（不含 0x）。
+    /// 机构多签 AccountId32 hex（不含 0x）。
     pub institution_hex: Option<String>,
 }
 
@@ -433,7 +443,7 @@ fn split_action_into_details(
 
 /// 分页查询指定机构的所有存在提案（从 start_id 往前，按 ID 倒序）。
 ///
-/// 遍历所有提案 ID，过滤 institution_hex 匹配的记录。
+/// 通过机构多签 AccountId 反向索引读取本机构提案。
 /// 每页最多返回 count 条，has_more 表示是否还有更早的提案。
 pub fn fetch_institution_proposal_page(
     sfid_number: &str,
@@ -463,8 +473,7 @@ pub fn fetch_institution_proposal_page(
 
     for id in take_ids {
         if is_organization_manage_proposal(id) {
-            // 防御性过滤:多签管理提案不该出现在 ProposalsByInstitution(它们的
-            // institution 是 ORG_REN 多签账户,不是治理机构)。如果出现就跳过。
+            // 防御性过滤：多签管理提案不属于治理机构列表，详情页不展示。
             continue;
         }
         match fetch_proposal_meta(id) {
@@ -514,11 +523,11 @@ pub fn fetch_institution_proposal_page(
 
 /// 查询机构的活跃提案 ID 列表。
 pub fn fetch_active_proposal_ids(sfid_number: &str) -> Result<Vec<u64>, String> {
-    let institution_id = storage_keys::subject_id_from_sfid_number(sfid_number);
+    let institution_account = institution_account_from_sfid(sfid_number)?;
     let key = storage_keys::map_key(
         "VotingEngine",
         "ActiveProposalsByInstitution",
-        &institution_id,
+        &institution_account,
     );
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
@@ -728,11 +737,11 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         None
     };
 
-    // internal_institution: Option<[u8;48]>
+    // internal_institution: Option<AccountId32>
     let institution_hex = if offset < data.len() && data[offset] == 1 {
         offset += 1;
-        if offset + 48 <= data.len() {
-            Some(hex::encode(&data[offset..offset + 48]))
+        if offset + 32 <= data.len() {
+            Some(hex::encode(&data[offset..offset + 32]))
         } else {
             None
         }
@@ -861,15 +870,15 @@ fn decode_resolution_destroy_action(
     proposal_id: u64,
     data: &[u8],
 ) -> Option<ResolutionDestroyDetail> {
-    // SCALE 布局：MODULE_TAG("res-dst":7) + institution(48) + amount(u128:16)
+    // SCALE 布局：MODULE_TAG("res-dst":7) + institution(AccountId32) + amount(u128:16)
     let tag = TAG_RESOLUTION_DESTROY;
-    if data.len() < tag.len() + 48 + 16 || &data[..tag.len()] != tag {
+    if data.len() < tag.len() + 32 + 16 || &data[..tag.len()] != tag {
         return None;
     }
     let mut offset = tag.len();
 
-    let institution_hex = hex::encode(&data[offset..offset + 48]);
-    offset += 48;
+    let institution_hex = hex::encode(&data[offset..offset + 32]);
+    offset += 32;
 
     let amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
 
@@ -1009,10 +1018,10 @@ pub fn fetch_proposals_by_org(org: u8) -> Result<Vec<u64>, String> {
     fetch_proposal_ids_by_index("ProposalsByOrg", &[org])
 }
 
-/// 反向索引:`ProposalsByInstitution[institution]` → 本机构所有 proposal_id。
+/// 反向索引:`ProposalsByInstitution[account]` → 本机构多签账户所有 proposal_id。
 pub fn fetch_proposals_by_institution(sfid_number: &str) -> Result<Vec<u64>, String> {
-    let inst = storage_keys::subject_id_from_sfid_number(sfid_number);
-    fetch_proposal_ids_by_index("ProposalsByInstitution", &inst)
+    let institution_account = institution_account_from_sfid(sfid_number)?;
+    fetch_proposal_ids_by_index("ProposalsByInstitution", &institution_account)
 }
 
 /// 反向索引:`ProposalsByOwner[module_tag]` → 该业务模块所有 proposal_id。
@@ -1049,22 +1058,14 @@ fn status_label(status: u8) -> &'static str {
     }
 }
 
-/// 从 48 字节机构 hex 反查机构名称。
+/// 从机构多签 AccountId32 hex 反查机构名称。
 fn resolve_institution_name(institution_hex: Option<&str>) -> Option<String> {
     let hex_str = institution_hex?;
     let bytes = hex::decode(hex_str).ok()?;
-    if bytes.len() != 48 {
+    if bytes.len() != 32 {
         return None;
     }
-    // 截取非零部分作为 UTF-8 字符串
-    let end = bytes
-        .iter()
-        .rposition(|&b| b != 0)
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    let sfid_number = std::str::from_utf8(&bytes[..end]).ok()?;
-    // 在静态数据中查找
-    super::find_institution_name(sfid_number)
+    super::registry::find_institution_by_main_address(&bytes).map(|item| item.name().to_string())
 }
 
 /// 列表卡片展示信息:一次解析,按动作变体生成 summary + votingengine status。
@@ -1202,13 +1203,13 @@ pub fn fetch_user_vote_status(
         fetch_option_bool(&key)?
     };
 
-    // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (InstitutionId48 ++ AccountId32)> → bool）
+    // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (InstitutionAccount32 ++ AccountId32)> → bool）
     let joint_vote = if meta.kind == 1 && sfid_number.is_some() {
         // sfid_number.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
-        let institution_id =
-            storage_keys::subject_id_from_sfid_number(sfid_number.expect("guarded by is_some()"));
-        let mut composite_key = Vec::with_capacity(48 + 32);
-        composite_key.extend_from_slice(&institution_id);
+        let institution_account =
+            institution_account_from_sfid(sfid_number.expect("guarded by is_some()"))?;
+        let mut composite_key = Vec::with_capacity(32 + 32);
+        composite_key.extend_from_slice(&institution_account);
         composite_key.extend_from_slice(&pubkey_bytes);
         let key = storage_keys::double_map_key(
             "JointVote",
@@ -1344,7 +1345,7 @@ mod format_summary_tests {
     fn format_destroy_summary_falls_back_to_unknown_institution() {
         let d = ResolutionDestroyDetail {
             proposal_id: 4,
-            institution_hex: "00".repeat(48), // 全零 → 无法反查中文名
+            institution_hex: "00".repeat(32), // 全零 → 无法反查中文名
             amount_fen: "50000".to_string(),
         };
         assert_eq!(format_destroy_summary(&d), "决议销毁 500.00 元：未知机构");
@@ -1354,7 +1355,7 @@ mod format_summary_tests {
     fn format_fee_rate_summary_shows_percent() {
         let d = FeeRateProposalDetail {
             proposal_id: 5,
-            institution_hex: "00".repeat(48),
+            institution_hex: "00".repeat(32),
             new_rate_bp: 150, // 1.50%
         };
         assert_eq!(format_fee_rate_summary(&d), "费率设置 1.50%：未知机构");

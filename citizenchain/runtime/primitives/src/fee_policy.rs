@@ -1,22 +1,8 @@
 //! 费率规则常量库 = fee_policy.rs
 //!
-//! 全链费率定义的**单一权威源**。所有链上交易计费 / 链下清算行扣费 / 投票治理统一价 /
-//! 链上手续费分账比例,都以本文件常量为唯一参考。
+//! 全链费率定义的**单一权威源**。所有链上交易计费 / 链下清算行扣费 / 投票治理统一价 / 链上手续费分账比例,都以本文件常量为唯一参考。
 //!
-//! ## 设计铁律
-//!
-//! 1. **不可治理修改**:本文件定义的常量是编译期 `pub const`,**不允许**通过链上 storage 治理修改。
-//!    改费率 = 改本文件 + 走 `runtime_upgrade::propose_runtime_upgrade` 联合投票升级 wasm。
-//! 2. **单一权威源**:全仓库引用费率 / 阈值 / 分账比例时,**只允许**从 `primitives::fee_policy::*`
-//!    路径导入。禁止自行定义重复常量,禁止散落多处 hardcode 数值。
-//! 3. **链上费率与链下费率分离语义**:
-//!    - `ONCHAIN_*` 系列由 `RuntimeFeeKindClassifier` + `onchain-transaction` pallet 使用,
-//!      仅用于链上资金交易计费 + 80/10/10 分账。
-//!    - `OFFCHAIN_*` 系列由 `offchain-transaction` pallet 使用,描述清算行 L2 链下账本扣费规则;
-//!      清算行通过 `propose_l2_fee_rate` 投票设置个体费率,但必须落在 [MIN, MAX] 区间内。
-//! 4. **货币单位**:本文件所有金额常量单位都是 `FEN`(分),`1 GMB = 100 FEN`。
-//!
-//! ## 5 类交易费用模型(规则定义)
+//! ## 类交易费用模型(规则定义)
 //!
 //! | 类别 | 规则 | 实际收费 |
 //! |---|---|---|
@@ -26,8 +12,7 @@
 //! | 链下交易费 | 清算模块按 `OFFCHAIN_*` 执行 | 不进入链上分账 |
 //! | 未识别 | 拒绝交易 | 不入块 |
 //!
-//! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`
-//! 决定;新增 extrinsic 必须在该 match 中显式归类。
+//! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`决定;新增 extrinsic 必须在该 match 中显式归类。
 
 use sp_runtime::Perbill;
 
@@ -70,11 +55,6 @@ pub const VOTE_FLAT_FEE: u128 = 100;
 /// 1. 防垃圾发行的核心门槛(对个人多签是高门槛,对机构是小钱)
 /// 2. 与 GMB 唯一计费铁律一致(用户代币创建只收 GMB,不按发行量阶梯)
 /// 3. 与发行后 mint/transfer 的 OnchainTx 标准价(0.1% / ≥0.1 元)正交,不重复计费
-///
-/// 适用范围:`onchain-issuance::propose_issue` 一次性扣款。
-/// 后续 mint/transfer 走 `ONCHAIN_FEE_RATE` / `ONCHAIN_MIN_FEE`;burn 与 monitor 监管动作 Free。
-///
-/// 调整路径:本常量改值需走 `runtime_upgrade::propose_runtime_upgrade` 联合投票升级 wasm。
 pub const ONCHAIN_ASSET_CREATE_FEE: u128 = 100_000;
 
 // =====================================================================

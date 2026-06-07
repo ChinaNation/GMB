@@ -1,9 +1,9 @@
 //! 内部提案互斥锁。
 //!
-//! 同一治理主体下的内部提案互斥规则:
-//! - **普通提案**(`Regular`)允许同主体多个并发,但**禁止**与管理员变更提案共存。
-//! - **管理员变更提案**(`AdminSetMutationExclusive`)同主体下必须独占,
-//!   且发起时该主体不得有任何普通活跃提案。
+//! 同一治理账户下的内部提案互斥规则:
+//! - **普通提案**(`Regular`)允许同账户多个并发,但**禁止**与管理员变更提案共存。
+//! - **管理员变更提案**(`AdminSetMutationExclusive`)同账户下必须独占,
+//!   且发起时该账户不得有任何普通活跃提案。
 //!
 //! 本文件提供三个对外入口:
 //! - `acquire_internal_proposal_mutex` — 创建提案时获取互斥锁,登记反向绑定。
@@ -15,20 +15,18 @@ use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 
 use crate::pallet::{self, Error, InternalProposalMutexes, ProposalMutexBindings};
-use crate::{
-    InternalProposalMutexBinding, InternalProposalMutexKind, InternalProposalMutexState, SubjectId,
-};
+use crate::{InternalProposalMutexBinding, InternalProposalMutexKind, InternalProposalMutexState};
 
 impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn acquire_internal_proposal_mutex(
         proposal_id: u64,
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         kind: InternalProposalMutexKind,
     ) -> DispatchResult {
         InternalProposalMutexes::<T>::try_mutate_exists(
             org,
-            institution,
+            institution.clone(),
             |maybe| -> DispatchResult {
                 let state = maybe.get_or_insert_with(InternalProposalMutexState::default);
                 match kind {
@@ -101,7 +99,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     pub fn ensure_admin_set_mutation_lock_owner(
         org: u8,
-        institution: SubjectId,
+        institution: T::AccountId,
         proposal_id: u64,
     ) -> DispatchResult {
         let state = InternalProposalMutexes::<T>::get(org, institution)

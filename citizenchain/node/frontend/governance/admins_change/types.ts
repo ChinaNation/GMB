@@ -14,15 +14,14 @@ export type {
   VoteSubmitResult,
 };
 
-export type AdminSubjectState = {
-  subjectIdHex: string;
+export type AdminAccountState = {
+  accountHex: string;
   sfidNumber: string | null;
   org: number;
   orgLabel: string;
   kind: number;
   kindLabel: string;
   admins: string[];
-  threshold: number;
   creatorHex: string;
   createdAt: number;
   updatedAt: number;
@@ -30,8 +29,8 @@ export type AdminSubjectState = {
   statusLabel: string;
 };
 
-export type AdminSubjectRef = {
+export type AdminAccountRef = {
   sfidNumber?: string | null;
-  subjectIdHex?: string | null;
+  accountHex?: string | null;
   org?: number | null;
 };

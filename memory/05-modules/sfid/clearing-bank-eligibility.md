@@ -8,31 +8,31 @@
 
 ```
 is_clearing_bank_eligible(inst, parent_lookup) =
-  match inst.a3:
-    "SFR" → inst.sub_type == "JOINT_STOCK"
-    "FFR" → 存在 parent = parent_lookup(inst.parent_sfid_number)
-            ∧ parent.a3 == "SFR"
+  match inst.subject_property:
+    "S" → inst.sub_type == "JOINT_STOCK"
+    "F" → 存在 parent = parent_lookup(inst.parent_sfid_number)
+            ∧ parent.subject_property == "S"
             ∧ parent.sub_type == "JOINT_STOCK"
     其他 → false
 ```
 
 **口径**：
-- "私法人股份公司" = `a3=SFR ∧ sub_type=JOINT_STOCK`
-- "私法人股份公司所属的非法人" = `a3=FFR ∧ parent_sfid_number 指向 a3=SFR 且 sub_type=JOINT_STOCK 的机构`
-- 其他类型一律不允许：GFR 公权机构、SF 公安局、SFR-LIMITED_LIABILITY/PARTNERSHIP/SOLE_PROPRIETORSHIP/NON_PROFIT、FFR 但 parent 不合规、FFR 无 parent_sfid_number 等
+- "私法人股份公司" = `subject_property=S ∧ sub_type=JOINT_STOCK`
+- "私法人股份公司所属的非法人" = `subject_property=F ∧ parent_sfid_number 指向 subject_property=S 且 sub_type=JOINT_STOCK 的机构`
+- 其他类型一律不允许：G 公权机构、SF 公安局、S-LIMITED_LIABILITY/PARTNERSHIP/SOLE_PROPRIETORSHIP/NON_PROFIT、F 但 parent 不合规、F 无 parent_sfid_number 等
 
 ## 6 种 case 自检表
 
-| # | a3 | sub_type | parent | 结果 |
+| # | subject_property | sub_type | parent | 结果 |
 |---|---|---|---|---|
-| 1 | SFR | JOINT_STOCK | — | ✅ |
-| 2 | SFR | LIMITED_LIABILITY | — | ❌ |
-| 3 | SFR | NON_PROFIT | — | ❌ |
-| 4 | FFR | (任意) | parent.SFR + parent.JOINT_STOCK | ✅ |
-| 5 | FFR | (任意) | parent.SFR + parent.LIMITED_LIABILITY | ❌ |
-| 6 | FFR | (任意) | parent_sfid_number 缺失 / parent 不存在 | ❌ |
+| 1 | S | JOINT_STOCK | — | ✅ |
+| 2 | S | LIMITED_LIABILITY | — | ❌ |
+| 3 | S | NON_PROFIT | — | ❌ |
+| 4 | F | (任意) | parent.S + parent.JOINT_STOCK | ✅ |
+| 5 | F | (任意) | parent.S + parent.LIMITED_LIABILITY | ❌ |
+| 6 | F | (任意) | parent_sfid_number 缺失 / parent 不存在 | ❌ |
 
-GFR / SF 等其他 a3 一律 ❌。
+G / SF 等其他 subject_property 一律 ❌。
 
 ## 后端实现位置
 
@@ -45,10 +45,10 @@ GFR / SF 等其他 a3 一律 ❌。
 
 ## 跨省 parent 查询机制
 
-由于 SFID 数据按省分片（`sharded_store.read_province(prov, |shard| ...)`)，FFR 候选的 parent 可能在另一省 shard。实现采用 **2 轮跨省读取**：
+由于 SFID 数据按省分片（`sharded_store.read_province(prov, |shard| ...)`)，F 候选的 parent 可能在另一省 shard。实现采用 **2 轮跨省读取**：
 
-1. 第 1 轮（跨 43 省）：收集所有 `SFR ∧ JOINT_STOCK` 的 sfid_number（写入 `HashSet<String>` 全国快查表）
-2. 第 2 轮（跨 43 省）：收集本省候选机构（SFR-JOINT_STOCK 直接通过 / FFR 查 parent_sfid_number 是否在第 1 轮的 HashSet 里）
+1. 第 1 轮（跨 43 省）：收集所有 `S ∧ JOINT_STOCK` 的 sfid_number（写入 `HashSet<String>` 全国快查表）
+2. 第 2 轮（跨 43 省）：收集本省候选机构（S-JOINT_STOCK 直接通过 / F 查 parent_sfid_number 是否在第 1 轮的 HashSet 里）
 
 跨省读取通过 sharded_store 已有的 `read_province` 并发能力，单次 search 总耗时 ≈ 2 × 43 × P95(单省读)。
 
@@ -62,8 +62,8 @@ GFR / SF 等其他 a3 一律 ❌。
 | 第二步选 sub_type 时提示 | [sfid/frontend/private/PrivateDetailLayout.tsx](../../../sfid/frontend/private/PrivateDetailLayout.tsx) |
 
 **前端 badge 显示规则**：
-- SFR + JOINT_STOCK → 蓝色 badge `可作为清算行`（直接判定，单条机构信息足够）
-- FFR + parent_sfid_number 已设置 → 详情页显示"待校验所属法人股份公司"提示（详情页可查 parent 后判定）；列表页**不显示** badge（避免误判和额外查询）
+- S + JOINT_STOCK → 蓝色 badge `可作为清算行`（直接判定，单条机构信息足够）
+- F + parent_sfid_number 已设置 → 详情页显示"待校验所属法人股份公司"提示（详情页可查 parent 后判定）；列表页**不显示** badge（避免误判和额外查询）
 - 其他 → 不显示
 
 ## API 契约
@@ -77,11 +77,11 @@ GFR / SF 等其他 a3 一律 ❌。
 {
   "sfid_number": "...",
   "institution_name": "...",
-  "a3": "SFR" | "FFR",
+  "subject_property": "S" | "F",
   "sub_type": "JOINT_STOCK" | null,
   "parent_sfid_number": "..." | null,
   "parent_institution_name": "..." | null,
-  "parent_a3": "SFR" | null,
+  "parent_subject_property": "S" | null,
   "province": "...",
   "city": "...",
   "main_account": "...",

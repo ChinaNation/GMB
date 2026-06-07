@@ -5,7 +5,6 @@ import 'package:crypto/crypto.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
-import '../chain/institutions.dart';
 import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
@@ -49,9 +48,6 @@ class DecodedPayload {
 class PayloadDecoder {
   /// SS58 地址前缀。
   static const int _ss58Prefix = ChainConstants.ss58Prefix;
-  static const int _subjectKindBuiltin = 0x01;
-  static const int _subjectKindPersonalDuoqian = 0x03;
-  static const int _subjectKindInstitutionAccount = 0x05;
 
   /// 尝试从 payload_hex 中解码交易信息。
   ///
@@ -59,8 +55,8 @@ class PayloadDecoder {
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
   /// 返回 null 表示无法识别或解码失败 → strict 模式下 decodeFailed → 禁止签名。
-  static final _activateSubjectPrefix = Uint8List.fromList(
-    'GMB_ACTIVATE_SUBJECT_V1'.codeUnits,
+  static final _activateAdminPrefix = Uint8List.fromList(
+    'GMB_ACTIVATE_ADMIN_V1'.codeUnits,
   );
 
   /// "GMB_DECRYPT_V1" 前缀（14 字节 ASCII）。
@@ -86,9 +82,9 @@ class PayloadDecoder {
         return adminAction;
       }
       if (raw.length ==
-              _activateSubjectPrefix.length + 48 + 1 + 1 + 32 + 8 + 16 &&
-          _hasPrefix(raw, _activateSubjectPrefix)) {
-        return _decodeActivateAdminSubject(raw);
+              _activateAdminPrefix.length + 32 + 1 + 1 + 32 + 8 + 16 &&
+          _hasPrefix(raw, _activateAdminPrefix)) {
+        return _decodeActivateAdminAccount(raw);
       }
       if (_hasPrefix(raw, _cpmsArchiveDeletePrefix)) {
         return _decodeCpmsArchiveDelete(raw);
@@ -462,22 +458,21 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // DuoqianTransfer(19) / propose_transfer(0)
-  // 格式：[0x13][0x00][org:u8][institution:48][beneficiary:32][amount:u128_le][Vec remark]
+  // 格式：[0x13][0x00][org:u8][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
-    // 最小长度：2 + 1 + 48 + 32 + 16 + 1 = 100
-    if (bytes.length < 100) return null;
+    // 最小长度：2 + 1 + 32 + 32 + 16 + 1 = 84
+    if (bytes.length < 84) return null;
 
     var offset = 2;
 
-    // org: u8 仅用于链端路由,冷钱包展示以 SubjectId 解出的具体账户为准。
+    // org: u8 用于展示机构类型；实际治理账户是 32 字节 AccountId。
+    final org = bytes[offset];
     offset += 1;
 
-    // institution: [u8; 48]，必须是 D/ADR-015 SubjectId。
-    final institutionBytes = bytes.sublist(offset, offset + 48);
-    offset += 48;
-    final subject = _decodeSpendSubjectId(institutionBytes);
-    if (subject == null) return null;
+    final institutionBytes = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final institutionLabel = _institutionAccountLabel(org, institutionBytes);
 
     // beneficiary: 32 bytes（无 MultiAddress 前缀）
     final beneficiaryId = bytes.sublist(offset, offset + 32);
@@ -494,7 +489,8 @@ class PayloadDecoder {
     final (remarkLen, remarkLenSize) = _decodeCompactU32(bytes, offset);
     offset += remarkLenSize;
     var remark = '';
-    if (remarkLen > 0 && offset + remarkLen <= bytes.length) {
+    if (offset + remarkLen != bytes.length) return null;
+    if (remarkLen > 0) {
       remark = utf8.decode(bytes.sublist(offset, offset + remarkLen),
           allowMalformed: true);
     }
@@ -502,9 +498,9 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_transfer',
       summary:
-          '${subject.label} 提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
+          '$institutionLabel 提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
       fields: {
-        'institution': subject.label,
+        'institution': institutionLabel,
         'beneficiary': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
@@ -597,15 +593,15 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // JointVote(23) / cast_admin(0)
-  // 格式：[0x17][0x00][proposal_id:u64_le][subject_id:48][approve:bool]
+  // 格式：[0x17][0x00][proposal_id:u64_le][institution:AccountId32][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
-    // 2 + 8 + 48 + 1 = 59
-    if (bytes.length < 59) return null;
+    // 2 + 8 + 32 + 1 = 43
+    if (bytes.length != 43) return null;
 
     final proposalId = _readU64Le(bytes, 2);
-    // subject_id 48 bytes 跳过（不在 display 中展示细节）
-    final approve = bytes[58] != 0;
+    // institution AccountId32 跳过（不在 display 中展示细节）
+    final approve = bytes[42] != 0;
     final voteText = approve ? '赞成' : '反对';
 
     return DecodedPayload(
@@ -701,39 +697,36 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // 管理员激活（非链上交易）
-  // 格式：GMB_ACTIVATE_SUBJECT_V1 + subject_id(48B) + org(u8) + kind(u8)
+  // 格式：GMB_ACTIVATE_ADMIN_V1 + account_id(32B) + org(u8) + kind(u8)
   //      + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeActivateAdminSubject(Uint8List bytes) {
+  static DecodedPayload? _decodeActivateAdminAccount(Uint8List bytes) {
     final expectedLength =
-        _activateSubjectPrefix.length + 48 + 1 + 1 + 32 + 8 + 16;
+        _activateAdminPrefix.length + 32 + 1 + 1 + 32 + 8 + 16;
     if (bytes.length != expectedLength) return null;
 
-    var offset = _activateSubjectPrefix.length;
-    final subjectBytes = bytes.sublist(offset, offset + 48);
-    final subject = _decodeSpendSubjectId(subjectBytes);
-    if (subject == null) return null;
-    offset += 48;
+    var offset = _activateAdminPrefix.length;
+    final accountBytes = bytes.sublist(offset, offset + 32);
+    offset += 32;
 
     final org = bytes[offset++];
     final kind = bytes[offset++];
-    if (!_activationSubjectKindMatchesOrg(org, kind, subject.kind)) {
-      return null;
-    }
+    if (!_activationAccountKindMatchesOrg(org, kind)) return null;
 
     final pubkey = bytes.sublist(offset, offset + 32);
+    final accountHex = _bytesToLowerHex(accountBytes);
 
     return DecodedPayload(
-      action: 'activate_admin_subject',
+      action: 'activate_admin_account',
       summary: '激活${_orgName(org)}管理员',
       fields: {
         'org': _orgName(org),
-        'subject': _bytesToLowerHex(subjectBytes),
+        'account': accountHex,
         'pubkey': _bytesToSs58(pubkey),
       },
       reviewFields: {
         'org': _orgName(org),
-        'subject': subject.label,
+        'account': _bytesToSs58(accountBytes),
         'pubkey': _bytesToSs58(pubkey),
       },
     );
@@ -786,7 +779,7 @@ class PayloadDecoder {
   //
   // SCALE 顺序与上述完全一致。链端 RuntimeSfidInstitutionVerifier 走
   // sheng_signing_pubkey_for_admin(province, signer_admin_pubkey) 双层匹配。
-  // 禁止在尾部追加 a3/sub_type/parent_sfid_number 等多余字段。
+  // 禁止在尾部追加 subject_property/sub_type/parent_sfid_number 等多余字段。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
     if (bytes.length < 10) return null;
@@ -1102,7 +1095,8 @@ class PayloadDecoder {
     final (remarkLen, remarkLenSize) = _decodeCompactU32(bytes, offset);
     offset += remarkLenSize;
     var remark = '';
-    if (remarkLen > 0 && offset + remarkLen <= bytes.length) {
+    if (offset + remarkLen != bytes.length) return null;
+    if (remarkLen > 0) {
       remark = utf8.decode(bytes.sublist(offset, offset + remarkLen),
           allowMalformed: true);
     }
@@ -1119,22 +1113,21 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // DuoqianTransfer(19) / propose_sweep(2)
-  // 格式：[19][2][institution:48][amount:u128]
+  // 格式：[19][2][institution:AccountId32][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
-    if (bytes.length < 66) return null;
+    if (bytes.length != 50) return null;
     var offset = 2;
-    final institutionBytes = bytes.sublist(offset, offset + 48);
-    offset += 48;
-    final bankName = _decodeBuiltinSubjectLabel(institutionBytes);
-    if (bankName == null) return null;
+    final institutionBytes = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final institutionLabel = _institutionAccountLabel(null, institutionBytes);
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: 'propose_sweep_to_main',
-      summary: '手续费划转 $amountYuan GMB：$bankName',
+      summary: '手续费划转 $amountYuan GMB：$institutionLabel',
       fields: {
-        'institution': bankName,
+        'institution': institutionLabel,
         'amount_yuan': '$amountYuan GMB',
       },
     );
@@ -1142,21 +1135,24 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // ResolutionDestro(14) / propose_destroy(0)
-  // 格式：[14][0][org:u8][institution:48][amount:u128]
+  // 格式：[14][0][org:u8][institution:AccountId32][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
-    if (bytes.length < 67) return null;
+    if (bytes.length != 51) return null;
     var offset = 2;
     final org = bytes[offset];
     offset += 1;
-    offset += 48; // institution 跳过
+    final institutionBytes = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final institutionLabel = _institutionAccountLabel(org, institutionBytes);
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: 'propose_destroy',
-      summary: '${_orgName(org)} 决议销毁 $amountYuan GMB',
+      summary: '${_orgName(org)} 决议销毁 $amountYuan GMB：$institutionLabel',
       fields: {
         'org': _orgName(org),
+        'institution': institutionLabel,
         'amount_yuan': '$amountYuan GMB',
       },
     );
@@ -1164,18 +1160,16 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // AdminsChange(12) / propose_admin_set_change(0)
-  // 格式：[12][0][org:u8][subject:48][Compact<N>][new_admins:N*32][new_threshold:u32_le]
+  // 格式：[12][0][org:u8][account:AccountId32][Compact<N>][new_admins:N*32][new_threshold:u32_le]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
-    if (bytes.length < 56) return null;
+    if (bytes.length < 72) return null;
     var offset = 2;
     final org = bytes[offset];
     offset += 1;
-    final subjectBytes = bytes.sublist(offset, offset + 48);
-    final subject = _decodeSpendSubjectId(subjectBytes);
-    if (subject == null) return null;
-    if (!_adminSubjectKindMatchesOrg(org, subject.kind)) return null;
-    offset += 48;
+    final accountBytes = bytes.sublist(offset, offset + 32);
+    final accountHex = _bytesToLowerHex(accountBytes);
+    offset += 32;
 
     final (adminCount, countSize) = _decodeCompactU32(bytes, offset);
     if (countSize == 0 || adminCount < 1) return null;
@@ -1200,16 +1194,15 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_admin_set_change',
       summary:
-          '${_orgName(org)} 管理员集合变更：${subject.label} → $adminCount 人，阈值 $thresholdLabel',
+          '${_orgName(org)} 管理员集合变更：${_bytesToSs58(accountBytes)} → $adminCount 人，阈值 $thresholdLabel',
       fields: {
         'org': _orgName(org),
-        'subject': _bytesToLowerHex(subjectBytes),
+        'account': accountHex,
         'new_admins': admins.join(','),
-        'new_threshold': thresholdLabel,
       },
       reviewFields: {
         'org': _orgName(org),
-        'subject': subject.label,
+        'account': _bytesToSs58(accountBytes),
         'new_admins': adminAddresses.join(','),
         'new_threshold': thresholdLabel,
       },
@@ -1218,20 +1211,14 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // GrandpaKeyChange(16) / propose_key_change(0)
-  // 格式：[16][0][institution:48][new_key:32]
+  // 格式：[16][0][institution:AccountId32][new_key:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
-    if (bytes.length < 82) return null;
+    if (bytes.length != 66) return null;
     var offset = 2;
-    final institutionBytes = bytes.sublist(offset, offset + 48);
-    offset += 48;
-    var endIndex = 48;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    final sfidNumber = endIndex > 0
-        ? String.fromCharCodes(institutionBytes.sublist(0, endIndex))
-        : '';
+    final institutionBytes = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final institutionLabel = _institutionAccountLabel(null, institutionBytes);
     final keyBytes = bytes.sublist(offset, offset + 32);
     final keyHex =
         keyBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
@@ -1239,7 +1226,7 @@ class PayloadDecoder {
       action: 'propose_replace_grandpa_key',
       summary: 'GRANDPA 密钥替换提案',
       fields: {
-        'institution': sfidNumber,
+        'institution': institutionLabel,
         'new_key': '0x$keyHex',
       },
     );
@@ -1419,55 +1406,22 @@ class PayloadDecoder {
     }
   }
 
-  static ({int kind, String label})? _decodeSpendSubjectId(Uint8List bytes) {
-    if (bytes.length != 48) return null;
-    switch (bytes[0]) {
-      case _subjectKindBuiltin:
-        final label = _decodeBuiltinSubjectLabel(bytes);
-        return label == null ? null : (kind: _subjectKindBuiltin, label: label);
-      case _subjectKindPersonalDuoqian:
-        final account =
-            _accountHexFromSubject(bytes, _subjectKindPersonalDuoqian);
-        return account == null
-            ? null
-            : (
-                kind: _subjectKindPersonalDuoqian,
-                label: '个人多签 ${_pubkeyHexToSs58OrRaw(account)}'
-              );
-      case _subjectKindInstitutionAccount:
-        final account =
-            _accountHexFromSubject(bytes, _subjectKindInstitutionAccount);
-        return account == null
-            ? null
-            : (
-                kind: _subjectKindInstitutionAccount,
-                label: '机构账户 ${_pubkeyHexToSs58OrRaw(account)}'
-              );
+  static String _institutionAccountLabel(int? org, Uint8List accountBytes) {
+    switch (org) {
+      case 0:
+        return '国储会';
+      case 1:
+        return '省储会';
+      case 2:
+        return '省储行';
+      case 3:
+        return '个人多签 ${_bytesToSs58(accountBytes)}';
+      case 4:
+      case 5:
+        return '机构账户 ${_bytesToSs58(accountBytes)}';
       default:
-        return null;
+        return '机构账户 ${_bytesToSs58(accountBytes)}';
     }
-  }
-
-  static String? _decodeBuiltinSubjectLabel(Uint8List bytes) {
-    if (bytes.length != 48 || bytes[0] != _subjectKindBuiltin) return null;
-    var end = 48;
-    while (end > 1 && bytes[end - 1] == 0) {
-      end--;
-    }
-    if (end <= 1) return null;
-    final sfidNumber = utf8.decode(bytes.sublist(1, end), allowMalformed: true);
-    return institutionName(sfidNumber) ?? sfidNumber;
-  }
-
-  static String? _accountHexFromSubject(Uint8List bytes, int expectedKind) {
-    if (bytes.length != 48 || bytes[0] != expectedKind) return null;
-    for (var i = 33; i < 48; i++) {
-      if (bytes[i] != 0) return null;
-    }
-    return bytes
-        .sublist(1, 33)
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
   }
 
   static Uint8List _hexToBytes(String input) {
@@ -1511,6 +1465,21 @@ class PayloadDecoder {
 
   static int _minimumRegularThreshold(int adminCount) {
     return (adminCount ~/ 2) + 1;
+  }
+
+  static bool _validAdminChangeThreshold(
+    int org,
+    int adminCount,
+    int threshold,
+  ) {
+    return switch (org) {
+      0 => adminCount == 19 && threshold == 13,
+      1 || 2 => adminCount == 9 && threshold == 6,
+      3 || 4 || 5 => adminCount >= 2 &&
+          threshold > adminCount ~/ 2 &&
+          threshold <= adminCount,
+      _ => false,
+    };
   }
 
   /// 解码 SCALE Compact<BigInt>，返回 (值, 消耗字节数)。
@@ -1585,76 +1554,17 @@ class PayloadDecoder {
     }
   }
 
-  static bool _adminSubjectKindMatchesOrg(int org, int subjectKind) {
+  static bool _activationAccountKindMatchesOrg(int org, int kind) {
     switch (org) {
       case 0:
       case 1:
       case 2:
-        return subjectKind == _subjectKindBuiltin;
+        return kind == 0;
       case 3:
-        return subjectKind == _subjectKindPersonalDuoqian;
+        return kind == 1;
       case 4:
       case 5:
-        return subjectKind == _subjectKindInstitutionAccount;
-      default:
-        return false;
-    }
-  }
-
-  static bool _validAdminChangeThreshold(
-    int org,
-    int adminCount,
-    int threshold,
-  ) {
-    final fixed = _fixedGovernanceThreshold(org);
-    if (fixed != null) {
-      final expectedCount = _fixedGovernanceAdminCount(org);
-      return adminCount == expectedCount && threshold == fixed;
-    }
-    if (org == 3 || org == 4 || org == 5) {
-      return threshold > 0 &&
-          threshold <= adminCount &&
-          threshold * 2 > adminCount;
-    }
-    return false;
-  }
-
-  static int? _fixedGovernanceThreshold(int org) {
-    switch (org) {
-      case 0:
-        return 13;
-      case 1:
-      case 2:
-        return 6;
-      default:
-        return null;
-    }
-  }
-
-  static int _fixedGovernanceAdminCount(int org) {
-    switch (org) {
-      case 0:
-        return 19;
-      case 1:
-      case 2:
-        return 9;
-      default:
-        return 0;
-    }
-  }
-
-  static bool _activationSubjectKindMatchesOrg(
-      int org, int kind, int subjectKind) {
-    switch (org) {
-      case 0:
-      case 1:
-      case 2:
-        return kind == 0 && subjectKind == _subjectKindBuiltin;
-      case 3:
-        return kind == 2 && subjectKind == _subjectKindPersonalDuoqian;
-      case 4:
-      case 5:
-        return kind == 3 && subjectKind == _subjectKindInstitutionAccount;
+        return kind == 2;
       default:
         return false;
     }

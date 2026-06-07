@@ -152,7 +152,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         signature: payload.signature,
         payload_hash: payload.payload_hash,
       });
-      notice.success(`${modalTitle}成功${result.sfid_code ? `，身份ID：${result.sfid_code}` : ''}`);
+      notice.success(`${modalTitle}成功${result.sfid_number ? `，身份ID：${result.sfid_number}` : ''}`);
       onClose();
       await onBound();
     } catch (err) {
@@ -259,7 +259,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
           {record && (
             <Descriptions column={1} size="small" bordered style={{ marginBottom: 12 }}>
               <Descriptions.Item label="档案号">{record.archive_no ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="身份ID">{record.sfid_code ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="身份ID">{record.sfid_number ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="投票账户">{record.wallet_address ?? '-'}</Descriptions.Item>
             </Descriptions>
           )}

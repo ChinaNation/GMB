@@ -6,9 +6,7 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use crate::Pallet as AdminsChange;
-use crate::{
-    subject_id_from_sfid_number, BlockNumberFor, Call, Config, Pallet, SubjectId, CHINA_CB, ORG_PRC,
-};
+use crate::{BlockNumberFor, Call, Config, Pallet, CHINA_CB, ORG_PRC};
 use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
@@ -18,8 +16,8 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
+fn prc_institution<T: Config>() -> T::AccountId {
+    decode_account::<T>(CHINA_CB[1].main_address)
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
@@ -36,23 +34,25 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_admin_set_change() {
-        let institution = prc_institution();
+        let institution = prc_institution::<T>();
         let proposer = prc_admin::<T>(0);
         let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 0, 0);
         let stale_new_admin: T::AccountId = frame_benchmarking::account("stale_new_admin", 0, 0);
-        let subject =
-            crate::Subjects::<T>::get(institution).expect("benchmark genesis subject should exist");
-        let mut stale_admins = subject.admins.clone();
+        let account = crate::AdminAccounts::<T>::get(institution.clone())
+            .expect("benchmark genesis account should exist");
+        let threshold = votingengine::types::fixed_governance_pass_threshold(ORG_PRC).unwrap_or(2);
+        let mut stale_admins = account.admins.clone();
         stale_admins[1] = stale_new_admin;
-        let mut new_admins = subject.admins;
+        let mut new_admins = account.admins;
         new_admins[1] = new_admin;
 
         // 先发一个"陈旧"提案,让它自然超时被终结,验证新提案不会冲突。
         assert!(AdminsChange::<T>::propose_admin_set_change(
             RawOrigin::Signed(proposer.clone()).into(),
             ORG_PRC,
-            institution,
+            institution.clone(),
             stale_admins,
+            threshold,
         )
         .is_ok());
 
@@ -74,6 +74,7 @@ mod benchmarks {
             ORG_PRC,
             institution,
             new_admins,
+            threshold,
         );
 
         let proposal_id = last_proposal_id::<T>();

@@ -1,7 +1,7 @@
 //! 机构管理的专属 trait 抽象层(SFID 验签)。
 //!
 //! 通用的地址校验 / 资金保护 3 个 trait(`DuoqianAddressValidator`/
-//! `DuoqianReservedAddressChecker`/`ProtectedSourceChecker`)已提到 `primitives::traits`,
+//! `DuoqianReservedAddressChecker`/`ProtectedSourceChecker`)已提到 `primitives::multisig`,
 //! 由 personal-manage / organization-manage / duoqian-transfer 共用,
 //! 这里仅保留机构专属的 SFID 注册验签抽象。
 
@@ -9,8 +9,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 // 中文注释:为兼容下游 use 路径不动,以 re-export 形式从 primitives 导出 3 个共用 trait。
-// 后续命名修正(任务卡 C)会把下游引用切到 primitives::traits 后再删 re-export。
-pub use primitives::traits::{
+// 后续命名修正(任务卡 C)会把下游引用切到 primitives::multisig 后再删 re-export。
+pub use primitives::multisig::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
 };
 
@@ -18,16 +18,16 @@ pub use primitives::traits::{
 ///
 /// 输入任意机构账户(主/费用/自创)都返回该账户的 admin 配置,
 /// 实现:`AddressRegisteredSfid[addr]` → `Institutions[sfid].admin_org`
-/// → `admins-change::Subjects[subject_id_from_institution_account(addr)]`。
+/// → `admins-change::AdminAccounts[addr]`。
 /// 与 personal-manage::PersonalMultisigQuery 对仗,duoqian-transfer 通过 union
 /// 查询(先 personal、再 institution)定位多签 admin 配置。
 pub trait InstitutionMultisigQuery<AccountId> {
-    /// 返回机构账户管理员主体 org。机构账户只能是 ORG_PUP 或 ORG_OTH。
+    /// 返回机构账户管理员账户 org。机构账户只能是 ORG_PUP 或 ORG_OTH。
     fn lookup_admin_org(addr: &AccountId) -> Option<u8>;
 
     fn lookup_admin_config(
         addr: &AccountId,
-    ) -> Option<primitives::types::MultisigConfigSnapshot<AccountId>>;
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>>;
     fn is_active(addr: &AccountId) -> bool;
 }
 
@@ -38,7 +38,7 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
 
     fn lookup_admin_config(
         _addr: &AccountId,
-    ) -> Option<primitives::types::MultisigConfigSnapshot<AccountId>> {
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>> {
         None
     }
     fn is_active(_addr: &AccountId) -> bool {

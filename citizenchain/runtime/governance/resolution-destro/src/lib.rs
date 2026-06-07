@@ -6,7 +6,6 @@ use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
-use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, Zero};
 
@@ -14,7 +13,7 @@ use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, STATUS_PASSED,
+    InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -29,28 +28,32 @@ type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct DestroyAction<Balance> {
-    /// 目标机构（机构标识 pallet_id）
-    pub institution: SubjectId,
+pub struct DestroyAction<AccountId, Balance> {
+    /// 目标机构主账户多签地址。
+    pub institution: AccountId,
     /// 销毁数量
     pub amount: Balance,
 }
 
-fn nrc_subject_id() -> Option<SubjectId> {
-    CHINA_CB
-        .first()
-        .and_then(|n| subject_id_from_sfid_number(n.sfid_number))
+fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
+    T::AccountId::decode(&mut &raw[..]).ok()
 }
 
-fn subject_org(institution: SubjectId) -> Option<u8> {
-    if Some(institution) == nrc_subject_id() {
+fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
+    CHINA_CB
+        .first()
+        .and_then(|n| decode_account::<T>(&n.main_address))
+}
+
+fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8> {
+    if Some(institution.clone()) == nrc_account::<T>() {
         return Some(ORG_NRC);
     }
 
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
+        .filter_map(|n| decode_account::<T>(&n.main_address))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
@@ -58,27 +61,13 @@ fn subject_org(institution: SubjectId) -> Option<u8> {
 
     if CHINA_CH
         .iter()
-        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
+        .filter_map(|n| decode_account::<T>(&n.main_address))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);
     }
 
     None
-}
-
-fn subject_pallet_address(institution: SubjectId) -> Option<[u8; 32]> {
-    if let Some(node) = CHINA_CB
-        .iter()
-        .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
-    {
-        return Some(node.main_address);
-    }
-
-    CHINA_CH
-        .iter()
-        .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
-        .map(|n| n.main_address)
 }
 
 #[frame_support::pallet]
@@ -114,7 +103,7 @@ pub mod pallet {
         DestroyProposed {
             proposal_id: u64,
             org: u8,
-            institution: SubjectId,
+            institution: T::AccountId,
             proposer: T::AccountId,
             amount: BalanceOf<T>,
         },
@@ -129,7 +118,7 @@ pub mod pallet {
         /// 销毁执行完成
         DestroyExecuted {
             proposal_id: u64,
-            institution: SubjectId,
+            institution: T::AccountId,
             amount: BalanceOf<T>,
         },
     }
@@ -154,22 +143,23 @@ pub mod pallet {
         pub fn propose_destroy(
             origin: OriginFor<T>,
             org: u8,
-            institution: SubjectId,
+            institution: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let actual_org = subject_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let actual_org =
+                account_org::<T>(institution.clone()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
             // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
             ensure!(
-                Self::is_internal_admin(org, institution, &who),
+                Self::is_internal_admin(org, institution.clone(), &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
             let action = DestroyAction {
-                institution,
+                institution: institution.clone(),
                 amount,
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
@@ -177,7 +167,7 @@ pub mod pallet {
             let proposal_id = T::InternalVoteEngine::create_general_internal_proposal_with_data(
                 who.clone(),
                 org,
-                institution,
+                institution.clone(),
                 crate::MODULE_TAG,
                 encoded,
             )?;
@@ -197,7 +187,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn is_internal_admin(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {
+        fn is_internal_admin(org: u8, institution: T::AccountId, who: &T::AccountId) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
@@ -207,7 +197,7 @@ pub mod pallet {
 
         pub(crate) fn try_execute_destroy_from_action(
             proposal_id: u64,
-            action: DestroyAction<BalanceOf<T>>,
+            action: DestroyAction<T::AccountId, BalanceOf<T>>,
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -217,12 +207,7 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let raw_account =
-                subject_pallet_address(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
-            let institution_account = T::AccountId::decode(&mut &raw_account[..])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
-
-            let free = T::Currency::free_balance(&institution_account);
+            let free = T::Currency::free_balance(&action.institution);
             let ed = T::Currency::minimum_balance();
             // 中文注释：销毁前必须预留 ED，确保机构账户不会因一次销毁被直接 reap。
             let required = action
@@ -233,7 +218,7 @@ pub mod pallet {
 
             // 中文注释：slash 会同步减少总发行量，实现链上”销毁”。
             let (_negative_imbalance, remaining) =
-                T::Currency::slash(&institution_account, action.amount);
+                T::Currency::slash(&action.institution, action.amount);
             ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);
 
             Self::deposit_event(Event::<T>::DestroyExecuted {
@@ -265,8 +250,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         if !approved {
             return Ok(ProposalExecutionOutcome::Executed);
         }
-        let action = DestroyAction::<BalanceOf<T>>::decode(&mut &raw[crate::MODULE_TAG.len()..])
-            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action = DestroyAction::<T::AccountId, BalanceOf<T>>::decode(
+            &mut &raw[crate::MODULE_TAG.len()..],
+        )
+        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         match pallet::Pallet::<T>::try_execute_destroy_from_action(proposal_id, action) {
             Ok(()) => Ok(ProposalExecutionOutcome::Executed),

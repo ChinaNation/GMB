@@ -46,7 +46,7 @@
 2026-05-15 管理员更换交易口径：
 
 - wuminapp 生产 `AdminsChange(12).propose_admin_set_change(0)` 时必须使用
-  `org / subject_id / new_admins / new_threshold` 新载荷。
+  `org / account_id / new_admins / new_threshold` 新载荷。
 - wumin 冷钱包只解析上述新载荷；缺少 `new_threshold` 或尾部有多余字节的旧/错载荷直接拒绝。
 - 内置治理机构没有创建/注册提交；只有管理员更换提案会携带固定制度阈值，且 UI 不允许用户修改。
 - 个人多签和机构账户的 `new_threshold` 必须严格过半且不超过新管理员数量。

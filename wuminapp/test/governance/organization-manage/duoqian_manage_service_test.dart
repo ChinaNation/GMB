@@ -40,7 +40,7 @@ void main() {
 
       final callData =
           DuoqianManageService.buildProposeCreateInstitutionCallData(
-        sfidNumber: 'SFR-AH001-1234567890-20260501',
+        sfidNumber: 'AH001-SCB0N-202605010-2026',
         institutionName: '安徽省储行',
         accounts: [
           InstitutionInitialAccountInput(
@@ -65,7 +65,7 @@ void main() {
       final expected = <int>[
         0x11,
         0x05,
-        ...compactVec('SFR-AH001-1234567890-20260501'),
+        ...compactVec('AH001-SCB0N-202605010-2026'),
         ...compactVec('安徽省储行'),
         (2 << 2) & 0xff,
         ...compactVec('主账户'),

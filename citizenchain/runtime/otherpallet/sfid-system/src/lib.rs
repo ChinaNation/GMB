@@ -440,7 +440,10 @@ pub mod pallet {
             BindingIdToAccount::<T>::remove(binding_id);
             BoundCount::<T>::mutate(|v| *v = v.saturating_sub(1));
 
-            Self::deposit_event(Event::<T>::SfidUnbound { who: target, binding_id });
+            Self::deposit_event(Event::<T>::SfidUnbound {
+                who: target,
+                binding_id,
+            });
             Ok(())
         }
 

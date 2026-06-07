@@ -27,30 +27,30 @@ pub(crate) async fn admin_number_meta(
         code: 0,
         message: "ok".to_string(),
         data: AdminSfidMetaOutput {
-            a3_options: vec![
+            subject_property_options: vec![
                 SfidOptionItem {
-                    label: "公民人",
-                    value: "GMR",
+                    label: "公民",
+                    value: "M",
                 },
                 SfidOptionItem {
                     label: "自然人",
-                    value: "ZRR",
+                    value: "Z",
                 },
                 SfidOptionItem {
                     label: "智能人",
-                    value: "ZNR",
+                    value: "N",
                 },
                 SfidOptionItem {
                     label: "公法人",
-                    value: "GFR",
+                    value: "G",
                 },
                 SfidOptionItem {
                     label: "私法人",
-                    value: "SFR",
+                    value: "S",
                 },
                 SfidOptionItem {
                     label: "非法人",
-                    value: "FFR",
+                    value: "F",
                 },
             ],
             institution_options: vec![

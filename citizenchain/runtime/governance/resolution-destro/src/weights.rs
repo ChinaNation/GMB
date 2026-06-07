@@ -55,8 +55,8 @@ pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `ResolutionDestro::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `ResolutionDestro::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsChange::Subjects` (r:1 w:0)
-	/// Proof: `AdminsChange::Subjects` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsChange::AdminAccounts` (r:1 w:0)
+	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::NextProposalId` (r:1 w:1)
 	/// Proof: `VotingEngine::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::ProposalsByExpiry` (r:1 w:1)
@@ -82,8 +82,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 impl WeightInfo for () {
 	/// Storage: `ResolutionDestro::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `ResolutionDestro::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsChange::Subjects` (r:1 w:0)
-	/// Proof: `AdminsChange::Subjects` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsChange::AdminAccounts` (r:1 w:0)
+	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::NextProposalId` (r:1 w:1)
 	/// Proof: `VotingEngine::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::ProposalsByExpiry` (r:1 w:1)

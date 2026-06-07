@@ -209,7 +209,6 @@ const FIELD_LABELS: Record<string, string> = {
   institution: '机构',
   institution_name: '机构名称',
   sfid_number: '身份ID号',
-  site_sfid: '站点身份ID',
   file: '文件',
   domain: '域名',
   origin: '来源',

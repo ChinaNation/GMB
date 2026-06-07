@@ -42,7 +42,7 @@ wuminapp 电子护照 / SFID 公民身份绑定
 执行记录：
 - 已在 SFID `CitizenRecord` 增加 `identity_status`，绑定 CPMS 档案二维码时保存 CPMS `cs` 状态；`NORMAL` 保存正常，其他状态保存异常。
 - 已在 `GET /api/v1/app/vote-account/status` 返回 `identity_status`，并保持 `status` 只表示绑定状态。
-- 已在 wuminapp `MyIdStatusResponse` / `MyIdState` / `SharedPreferences` 缓存中增加 `sfidCode` 与 `identityStatus`。
+- 已在 wuminapp `MyIdStatusResponse` / `MyIdState` / `SharedPreferences` 缓存中增加 `sfidNumber` 与 `identityStatus`。
 - 已将电子护照页面新增“身份ID”显示，将“绑定账户”改为“投票账户”，并在账户地址下方显示“状态：正常/异常”。
 - 已同步更新 wuminapp 与 SFID 架构文档、wuminapp 用户模块文档。
 - 已新增 SFID 单测覆盖绑定状态与身份ID状态分离序列化。

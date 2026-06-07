@@ -373,11 +373,11 @@ pub(crate) async fn citizen_bind(
         &state,
         "CITIZEN_BIND",
         &ctx.admin_pubkey,
-        record.sfid_code.clone(),
+        record.sfid_number.clone(),
         format!(
-            "mode={} sfid_code={} archive_no={:?} request_id={:?} actor_ip={:?}",
+            "mode={} sfid_number={} archive_no={:?} request_id={:?} actor_ip={:?}",
             challenge.mode,
-            record.sfid_code.clone().unwrap_or_default(),
+            record.sfid_number.clone().unwrap_or_default(),
             record.archive_no,
             request_id_from_headers(&headers),
             actor_ip_from_headers(&headers)
@@ -395,11 +395,11 @@ pub(crate) async fn citizen_bind(
 fn ensure_verified_archive_in_admin_scope(
     state: &AppState,
     ctx: &AdminAuthContext,
-    site_sfid: &str,
+    sfid_number: &str,
 ) -> Result<(), axum::response::Response> {
     let site = state
         .db
-        .get_cpms_site(site_sfid)
+        .get_cpms_site(sfid_number)
         .map_err(|err| {
             tracing::error!(error = %err, "query cpms site failed");
             api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cpms query failed")
@@ -475,7 +475,7 @@ fn create_citizen_record(
     }
 
     let province_name = crate::china::province_name_by_code(&challenge.province_code).unwrap_or("");
-    let sfid_code = generate_unique_citizen_sfid(state, province_name, &challenge.wallet_pubkey)?;
+    let sfid_number = generate_unique_citizen_sfid(state, province_name, &challenge.wallet_pubkey)?;
     let cid = state.db.next_citizen_id().map_err(|err| {
         tracing::error!(error = %err, "allocate citizen id failed");
         api_error(
@@ -489,7 +489,7 @@ fn create_citizen_record(
         wallet_pubkey: Some(challenge.wallet_pubkey.clone()),
         wallet_address: Some(challenge.wallet_address.clone()),
         archive_no: Some(challenge.archive_no.clone()),
-        sfid_code: Some(sfid_code.clone()),
+        sfid_number: Some(sfid_number.clone()),
         citizen_status: Some(challenge.citizen_status.clone()),
         voting_eligible: challenge.voting_eligible,
         archive_valid_from: Some(challenge.archive_valid_from.clone()),
@@ -616,7 +616,7 @@ fn citizen_bind_output(record: &CitizenRecord) -> CitizenBindOutput {
         wallet_pubkey: record.wallet_pubkey.clone(),
         wallet_address: record.wallet_address.clone(),
         archive_no: record.archive_no.clone(),
-        sfid_code: record.sfid_code.clone(),
+        sfid_number: record.sfid_number.clone(),
         citizen_status: record.citizen_status.clone(),
         voting_eligible: record.voting_eligible,
         vote_status: record.computed_vote_status(),
@@ -724,17 +724,18 @@ fn generate_unique_citizen_sfid(
         } else {
             format!("{}#{retry}", wallet_pubkey)
         };
-        let candidate = match crate::number::generate_sfid_code(crate::number::GenerateSfidInput {
-            account_pubkey: attempt_pubkey.as_str(),
-            a3: "GMR",
-            p1: "1",
-            province: province_name,
-            city: "省辖市",
-            institution: "ZG",
-        }) {
-            Ok(v) => v,
-            Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
-        };
+        let candidate =
+            match crate::number::generate_sfid_number(crate::number::GenerateSfidInput {
+                account_pubkey: attempt_pubkey.as_str(),
+                subject_property: "M",
+                p1: "1",
+                province: province_name,
+                city: "省辖市",
+                institution: "ZG",
+            }) {
+                Ok(v) => v,
+                Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
+            };
         let exists = state.db.sfid_exists(&candidate).map_err(|err| {
             tracing::error!(error = %err, "query sfid exists failed");
             api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sfid query failed")
@@ -809,7 +810,7 @@ fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         wallet_pubkey: row.get(1),
         wallet_address: row.get(2),
         archive_no: row.get(3),
-        sfid_code: Some(row.get(4)),
+        sfid_number: Some(row.get(4)),
         citizen_status: Some(citizen_status_from_db(row.get::<_, String>(5).as_str())),
         voting_eligible: row.get(6),
         archive_valid_from: row.get(7),

@@ -17,11 +17,16 @@ class ProposalLimitService {
   static const maxActiveProposalsPerInstitution = 10;
 
   /// 查询机构活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
-  Future<List<int>> fetchActiveProposalIds(String sfidNumber) async {
+  Future<List<int>> fetchActiveProposalIds(InstitutionInfo institution) async {
     final key = _buildStorageKey(
       'VotingEngine',
       'ActiveProposalsByInstitution',
-      Uint8List.fromList(institutionIdentityToPalletId(sfidNumber)),
+      Uint8List.fromList(
+        institutionIdentityToAccountId(
+          institution.sfidNumber,
+          mainAddress: institution.mainAddress,
+        ),
+      ),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];

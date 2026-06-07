@@ -14,11 +14,11 @@ pub struct EligibleClearingBankCandidate {
     pub sfid_number: String,
     /// 机构中文名;两步式未命名时为空串。
     pub institution_name: String,
-    pub a3: String,
+    pub ref_property: String,
     pub sub_type: Option<String>,
     pub parent_sfid_number: Option<String>,
     pub parent_institution_name: Option<String>,
-    pub parent_a3: Option<String>,
+    pub parent_ref_property: Option<String>,
     pub province: String,
     pub city: String,
     /// 主账户当前链上状态:`Inactive` / `Pending` / `Registered` / `Failed`。
@@ -47,8 +47,8 @@ pub struct AccountWithBalance {
 pub struct InstitutionDetail {
     pub sfid_number: String,
     pub institution_name: String,
-    /// 管理员更换使用的账户级 SubjectId。当前清算行以主账户作为机构管理员主体。
-    pub admin_subject_id_hex: String,
+    /// 管理员更换使用的机构多签 AccountId。当前清算行以主账户作为机构管理员账户。
+    pub admin_account_hex: String,
     /// 管理员更换使用的 org。清算行属于 ORG_OTH 机构账户。
     pub admin_org: u8,
     pub main_account: AccountWithBalance,

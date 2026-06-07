@@ -3,16 +3,16 @@
 // 布局:
 //   顶部一整块 Card(标题 = 机构名称,编辑/取消/保存按钮在 Card extra 右上角):
 //     ┌ 左 Col:SFID 信息(只读)──────────────┐  ┌ 右 Col:机构信息 ──────────────┐
-//     │ SFID / 省 / 市 / A3 / P1 / 机构代码 │  │ 机构名称 + 搜索查重图标       │
-//     │ 创建时间 / 创建用户                  │  │ 企业类型 Select(仅 SFR)       │
-//     │                                      │  │ 所属法人 AutoComplete(仅 FFR) │
+//     │ SFID / 省 / 市 / SubjectProperty / P1 / 机构代码 │  │ 机构名称 + 搜索查重图标       │
+//     │ 创建时间 / 创建用户                  │  │ 企业类型 Select(仅 S)       │
+//     │                                      │  │ 所属法人 AutoComplete(仅 F) │
 //     └──────────────────────────────────────┘  └───────────────────────────────┘
 //
 // 右板块交互:
 //   默认态 = 只读 Descriptions 展示,右上角显示"编辑"按钮
 //   编辑态 = Form 可操作,右上角切换为"取消" + "保存"
 //   机构名称右侧搜索图标:输入后点击查重;重名则禁止保存;名称未改动视为已通过
-//   FFR 所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
+//   F 所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
 //
 // 账户列表(AccountList)每家机构自带"主账户"/"费用账户"两条默认账户,
 // 创建后只登记在 SFID;链上状态由区块链软件同步回来。
@@ -83,7 +83,7 @@ interface Props {
 interface InfoFormValues {
   institution_name: string;
   sub_type?: string;
-  /** 非法人(FFR)所属法人 sfid_number */
+  /** 非法人(F)所属法人 sfid_number */
   parent_sfid_number?: string;
   legal_rep_name: string;
   legal_rep_sfid_number: string;
@@ -121,23 +121,23 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoName, setPhotoName] = useState<string>(inst.legal_rep_photo_name ?? '');
 
-  const isSFR = inst.a3 === 'SFR';
-  const isFFR = inst.a3 === 'FFR';
+  const isS = inst.subject_property === 'S';
+  const isF = inst.subject_property === 'F';
 
   const subTypeChoices = useMemo(
-    () => (isSFR ? subTypeChoicesForP1(inst.p1) : []),
-    [isSFR, inst.p1],
+    () => (isS ? subTypeChoicesForP1(inst.p1) : []),
+    [isS, inst.p1],
   );
-  // 完善判断:名称必填;SFR 需要 sub_type;FFR 需要 parent_sfid_number
+  // 完善判断:名称必填;S 需要 sub_type;F 需要 parent_sfid_number
   const needsCompletion =
     !inst.institution_name ||
-    (isSFR && !inst.sub_type) ||
-    (isFFR && !inst.parent_sfid_number) ||
+    (isS && !inst.sub_type) ||
+    (isF && !inst.parent_sfid_number) ||
     !inst.legal_rep_name ||
     !inst.legal_rep_sfid_number ||
     !inst.legal_rep_photo_path;
 
-  // ── FFR 所属法人搜索 ──
+  // ── F 所属法人搜索 ──
   const [parentSearchOpts, setParentSearchOpts] = useState<ParentInstitutionRow[]>([]);
   const [parentSearching, setParentSearching] = useState(false);
   // 当前选中的法人(用于展示已选项名称;首次进入若 inst.parent_sfid_number 有值,也要一次性拿到显示名)
@@ -145,7 +145,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
 
   // detail 变更 → 若有 parent_sfid_number 则拉一次展示名称
   useEffect(() => {
-    if (!isFFR || !inst.parent_sfid_number) {
+    if (!isF || !inst.parent_sfid_number) {
       setSelectedParent(null);
       return;
     }
@@ -163,7 +163,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [isFFR, inst.parent_sfid_number, auth.access_token]);
+  }, [isF, inst.parent_sfid_number, auth.access_token]);
 
   // 搜索(仅在用户点击搜索图标时触发,不自动 onSearch)
   const onParentSearch = async (value: string) => {
@@ -282,7 +282,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
     setNameChecking(true);
     try {
-      // 私权机构全国唯一查重(不传 a3/city 即走全国范围;后端会排除自身名不在此函数,
+      // 私权机构全国唯一查重(不传 subject_property/city 即走全国范围;后端会排除自身名不在此函数,
       // 所以必须在名称改动时才调用;未改名的场景已在 isNameUnchanged 提前返回)
       const { exists } = await checkInstitutionName(auth, name);
       if (exists) {
@@ -347,11 +347,11 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.error('机构名称不能为空');
       return;
     }
-    if (isSFR && !values.sub_type) {
+    if (isS && !values.sub_type) {
       notice.error('请选择企业类型');
       return;
     }
-    if (isFFR && !values.parent_sfid_number) {
+    if (isF && !values.parent_sfid_number) {
       notice.error('请选择所属法人机构');
       return;
     }
@@ -370,8 +370,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     try {
       await updateInstitution(auth, inst.sfid_number, {
         institution_name: name,
-        sub_type: isSFR ? values.sub_type ?? null : null,
-        parent_sfid_number: isFFR ? values.parent_sfid_number : undefined,
+        sub_type: isS ? values.sub_type ?? null : null,
+        parent_sfid_number: isF ? values.parent_sfid_number : undefined,
         legal_rep_name: legalRepName,
         legal_rep_sfid_number: legalRepSfid,
         legal_rep_photo_path: values.legal_rep_photo_path,
@@ -539,12 +539,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       }
                     />
                   </Form.Item>
-                  {isFFR && (
+                  {isF && (
                     <Form.Item
                       label="所属法人"
                       name="parent_sfid_number"
                       rules={[{ required: true, message: '请选择所属法人机构' }]}
-                      extra="输入 SFID 或机构名称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(SFR)或公法人(GFR)"
+                      extra="输入 SFID 或机构名称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(S)或公法人(G)"
                     >
                       <AutoComplete
                         // 不提供 onSearch → 用户输入时不自动请求,仅点搜索图标触发
@@ -556,7 +556,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                             <div>
                               <div style={{ fontWeight: 500 }}>{r.institution_name}</div>
                               <div style={{ fontSize: 11, color: '#888' }}>
-                                {r.sfid_number} · {r.a3} · {r.province}/{r.city}
+                                {r.sfid_number} · {r.subject_property} · {r.province}/{r.city}
                               </div>
                             </div>
                           ),
@@ -585,7 +585,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       </AutoComplete>
                     </Form.Item>
                   )}
-                  {isSFR && (
+                  {isS && (
                     <Form.Item
                       label="企业类型"
                       name="sub_type"
@@ -675,7 +675,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       <span style={{ color: '#999' }}>(未命名)</span>
                     )}
                   </Descriptions.Item>
-                  {isFFR && (
+                  {isF && (
                     <Descriptions.Item label="所属法人">
                       {inst.parent_sfid_number ? (
                         selectedParent ? (
@@ -698,13 +698,13 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       )}
                     </Descriptions.Item>
                   )}
-                  {isSFR && (
+                  {isS && (
                     <Descriptions.Item label="企业类型">
                       {inst.sub_type ? (
                         <>
                           {SUB_TYPE_LABEL[inst.sub_type] || inst.sub_type}
                           {/* 清算行资格 badge(2026-04-24, ADR-007):
-                              SFR + JOINT_STOCK 自身判定为可作为清算行;
+                              S + JOINT_STOCK 自身判定为可作为清算行;
                               不需要 parent 信息 */}
                           {isClearingBankEligible(inst, null) && (
                             <Tag color="blue" style={{ marginLeft: 8 }}>
@@ -717,10 +717,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       )}
                     </Descriptions.Item>
                   )}
-                  {/* FFR 资格 badge(2026-04-24, ADR-007):
-                      需要 parent 信息(parent.SFR + parent.JOINT_STOCK)。
+                  {/* F 资格 badge(2026-04-24, ADR-007):
+                      需要 parent 信息(parent.S + parent.JOINT_STOCK)。
                       selectedParent 已在 useEffect 里按 parent_sfid_number 反查并缓存。 */}
-                  {isFFR && selectedParent && isClearingBankEligible(inst, selectedParent) && (
+                  {isF && selectedParent && isClearingBankEligible(inst, selectedParent) && (
                     <Descriptions.Item label="清算行资格">
                       <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
                     </Descriptions.Item>

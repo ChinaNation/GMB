@@ -25,7 +25,7 @@
 
 ## 遗留(非本任务)
 
-- 动作卡"余额"列小字 `0.00 元` 为占位,等清算行功能落地后接真实数据(本地 prefs `clearing_bank_shenfen_id_<walletIndex>` + 链下账本查询)
+- 动作卡"余额"列小字 `0.00 元` 为占位,等清算行功能落地后接真实数据(本地 prefs `clearing_bank_sfid_number_<walletIndex>` + 链下账本查询)
 - 充值 / 提现按钮实际业务链路仍等清算行功能落地
 
 ## 任务需求

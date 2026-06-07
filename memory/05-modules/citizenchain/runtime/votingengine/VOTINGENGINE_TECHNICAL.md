@@ -162,7 +162,7 @@ any → unknown
 ## 3. 流程设计
 ### 3.1 内部提案
 1. 一般内部投票通过 `create_general_internal_proposal_with_data` 创建，只接受 Active 管理员主体，使用当前固定阈值或 `ActiveDynamicThresholds`，并登记 `Regular` 锁。
-2. 注册个人多签/机构多签通过 `create_registered_subject_create_proposal_with_data` 创建，业务模块提交初始管理员列表和用户填写的动态阈值；投票引擎校验动态阈值、写 `PendingDynamicThresholds`，并把本次注册投票快照阈值写成全员。
+2. 注册个人多签/机构多签通过 `create_registered_account_create_proposal_with_data` 创建，业务模块提交初始管理员列表和用户填写的动态阈值；投票引擎校验动态阈值、写 `PendingDynamicThresholds`，并把本次注册投票快照阈值写成全员。
 3. 注销个人多签/机构多签通过 `create_lifecycle_internal_proposal_with_data` 创建，只接受 Active 管理员主体，并把本次注销投票快照阈值写成全员。
 4. 管理员集合变更通过 `create_admin_change_internal_proposal_with_data` 创建，只允许 `admins-change` 调用；本次投票使用当前 active 阈值，新管理员数量和新动态阈值写入 `PendingAdminChangeThresholds`。
 5. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。写阈值快照前必须先校验快照管理员人数。
@@ -294,7 +294,7 @@ any → unknown
 - 避免提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
 
 ### 5.6.1 Owner 绑定与数据写入收口
-- 创建提案时必须使用语义化接口：`create_general_internal_proposal_with_data`、`create_lifecycle_internal_proposal_with_data`、`create_registered_subject_create_proposal_with_data`、`create_admin_change_internal_proposal_with_data`、`create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，在同一事务内写入 `ProposalOwner`、`ProposalData`、`ProposalMeta`，以及可选的 `ProposalObject`。
+- 创建提案时必须使用语义化接口：`create_general_internal_proposal_with_data`、`create_lifecycle_internal_proposal_with_data`、`create_registered_account_create_proposal_with_data`、`create_admin_change_internal_proposal_with_data`、`create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，在同一事务内写入 `ProposalOwner`、`ProposalData`、`ProposalMeta`，以及可选的 `ProposalObject`。
 - `store_proposal_data`、`store_proposal_meta`、`set_proposal_passed`、`update_proposal_data`、`store_proposal_object_for`、`remove_proposal_object` 均不再是生产公开 API，避免任意 runtime caller 跨模块覆写业务数据、对象数据或伪造 passed_at。
 - `module_tag` 只用于 owner 路由与数据解码，不是权限凭据；生产业务模块不得通过 caller-supplied `module_tag` 修改已创建提案的数据。
 - 业务执行状态以后只通过 `ProposalExecutionOutcome` 反馈给投票引擎，由投票引擎统一写 `Proposal.status` 和终态清理。
@@ -372,7 +372,7 @@ any → unknown
 
 - `create_general_internal_proposal_with_data`：一般内部投票，读取当前固定/动态阈值。
 - `create_lifecycle_internal_proposal_with_data`：注销生命周期投票，投票引擎写全员阈值。
-- `create_registered_subject_create_proposal_with_data`：注册生命周期投票，投票引擎校验并暂存动态阈值，同时写全员阈值。
+- `create_registered_account_create_proposal_with_data`：注册生命周期投票，投票引擎校验并暂存动态阈值，同时写全员阈值。
 - `create_admin_change_internal_proposal_with_data`：管理员变更投票，只允许 `admins-change` 路径使用，本次投票用当前阈值，执行成功后应用新动态阈值。
 - `snapshot_institution_admins` 在写 `AdminSnapshot` 前拒绝空管理员列表和重复管理员。
 - 阈值与快照人数不匹配统一返回 `InvalidThresholdSnapshot` 或 `InvalidDynamicThreshold`，不再复用机构类型错误。
@@ -425,7 +425,7 @@ propose 和 callback(`InternalVoteExecutor::try_execute_*_from_callback`)。
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
 模块定义 `WeightInfo`：
-- `create_general_internal_proposal_with_data` / `create_lifecycle_internal_proposal_with_data` / `create_registered_subject_create_proposal_with_data` / `create_admin_change_internal_proposal_with_data`
+- `create_general_internal_proposal_with_data` / `create_lifecycle_internal_proposal_with_data` / `create_registered_account_create_proposal_with_data` / `create_admin_change_internal_proposal_with_data`
 - `internal_vote`
 - `joint_vote`
 - `citizen_vote`
@@ -482,7 +482,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
 2. 投票引擎在真正终态自动注册 90 天延迟清理，消费模块不得再保留独立提案清理 trait 方法。
 3. 业务模块必须通过 trait 接入提案创建，优先使用 `*_with_data` 变体，避免生成无业务映射的悬空提案或绕过 owner 绑定。
-4. 普通业务模块必须调用 `create_general_internal_proposal_with_data`；注销生命周期业务必须调用 `create_lifecycle_internal_proposal_with_data`；注册个人多签/机构多签必须调用 `create_registered_subject_create_proposal_with_data`。
+4. 普通业务模块必须调用 `create_general_internal_proposal_with_data`；注销生命周期业务必须调用 `create_lifecycle_internal_proposal_with_data`；注册个人多签/机构多签必须调用 `create_registered_account_create_proposal_with_data`。
 5. 管理员集合变更只能由 `admins-change` 调用 `create_admin_change_internal_proposal_with_data`。
 6. 当前生产链已确认无活跃未终态提案，新增互斥存储以空状态启用；若未来在有存量活跃提案的链上升级，需要先补一次性锁重建迁移。
 7. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。

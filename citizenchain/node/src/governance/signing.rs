@@ -19,6 +19,16 @@ use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
 
+fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
+    let entry = super::registry::find_institution(sfid_number)
+        .ok_or_else(|| format!("未知的治理机构 sfidNumber: {sfid_number}"))?;
+    let clean = entry.main_address_hex();
+    let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
+    bytes
+        .try_into()
+        .map_err(|_| "机构 AccountId 必须为 32 字节".to_string())
+}
+
 /// 金额格式化：带千分位逗号，保留 2 位小数。
 pub(crate) fn format_amount(yuan: f64) -> String {
     let fixed = format!("{:.2}", yuan);
@@ -98,6 +108,8 @@ pub struct QrSignResponse {
 pub struct VoteSignRequestResult {
     /// 完整的 QR 签名请求 JSON 字符串。
     pub request_json: String,
+    /// 后端构造的完整 call data hex（不含 0x）。
+    pub call_data_hex: String,
     /// 请求 ID（用于后续验证匹配）。
     pub request_id: String,
     /// 签名 payload 的 SHA-256 哈希（用于验证响应）。
@@ -206,6 +218,7 @@ pub fn build_vote_sign_request(
 
     Ok(VoteSignRequestResult {
         request_json,
+        call_data_hex: hex::encode(&call_data),
         request_id,
         expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
         sign_nonce: nonce,
@@ -218,7 +231,7 @@ pub fn build_vote_sign_request(
 /// sub-pallet 拆分(2026-05-05):JointVote 独立成 pallet,`cast_admin` 在 23.0,
 /// `cast_referendum` 在 23.1(联合公投阶段需 ADR-008 step3 双层凭证,本函数不覆盖)。
 ///
-/// sfid_number 用于构造 institution_id 48 字节参数。
+/// sfid_number 用于查找机构多签 AccountId32 参数。
 pub fn build_joint_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
@@ -234,19 +247,19 @@ pub fn build_joint_vote_sign_request(
     }
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
-    let institution_id = super::storage_keys::subject_id_from_sfid_number(sfid_number);
+    let institution_account = institution_account_from_sfid(sfid_number)?;
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
     let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // call data: [pallet=23][call=0][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
-    let mut call_data = Vec::with_capacity(1 + 1 + 8 + 48 + 1);
+    // call data: [pallet=23][call=0][proposal_id:u64_le][institution_account:AccountId32][approve:bool]
+    let mut call_data = Vec::with_capacity(1 + 1 + 8 + 32 + 1);
     call_data.push(23u8); // JointVote sub-pallet index (sub-pallet split 2026-05-05)
     call_data.push(0u8); // cast_admin call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
-    call_data.extend_from_slice(&institution_id);
+    call_data.extend_from_slice(&institution_account);
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     let payload = build_signing_payload(
@@ -294,6 +307,7 @@ pub fn build_joint_vote_sign_request(
 
     Ok(VoteSignRequestResult {
         request_json,
+        call_data_hex: hex::encode(&call_data),
         request_id,
         expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
         sign_nonce: nonce,
@@ -798,6 +812,7 @@ pub fn build_sign_request_from_call_data(
 
     Ok(VoteSignRequestResult {
         request_json,
+        call_data_hex: hex::encode(call_data),
         request_id,
         expected_payload_hash: format!("0x{}", hex::encode(payload_hash)),
         sign_nonce: nonce,

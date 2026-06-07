@@ -1,6 +1,6 @@
 任务需求：
 SFID 改造 Step 1:
-1. 全 5 工程统一改名 `shenfen_id` / `sfid_id` → `sfid_number`,`shenfen_name` → `sfid_name`
+1. 全 5 工程统一改名 `sfid_number` / `sfid_number` → `sfid_number`,`shenfen_name` → `sfid_name`
    (覆盖所有 case 形态:snake/camel/Pascal/SCREAMING/字符串/URL/函数名)
 2. 277 条内置机构 sfid_number 字面量按新规则重生成(强制 city=001 无例外,
    d=2026,n9 重算,c1 重算)
@@ -16,10 +16,10 @@ SFID 改造 Step 1:
 
 必须遵守：
 - 不留旧名兼容,所有调用点统一切换
-- subject_id_from_sfid_number 因参数类型不同(&str / &[u8])拆分两个函数:
-  - Builtin(&str): subject_id_from_sfid_number(&str)
-  - SfidInstitution(&[u8]): subject_id_from_registered_sfid_number(&[u8])
-- 链上 AdminSubjectKind 枚举名(BuiltinInstitution/SfidInstitution/PersonalDuoqian)保留不动
+- account_id_from_sfid_number 因参数类型不同(&str / &[u8])拆分两个函数:
+  - Builtin(&str): account_id_from_sfid_number(&str)
+  - 注册机构归属关系(&[u8]): account_id_from_registered_sfid_number(&[u8])
+- 链上 AdminAdminAccountKind 枚举名(BuiltinInstitution/注册机构归属关系/PersonalDuoqian)保留不动
 - 不在 Step 1 重算派生地址,Step 2 跑 tools/duoqian.py --apply 同步
 
 ## 改动清单
@@ -30,22 +30,22 @@ SFID 改造 Step 1:
 - `tools/resolve_stash_conflicts.py`(新建):git stash pop 冲突清理(保留 Stashed)
 
 ### 改名规则(12 条)
-- snake_case:`shenfen_id`/`sfid_id` → `sfid_number`,`shenfen_name` → `sfid_name`
+- snake_case:`sfid_number`/`sfid_number` → `sfid_number`,`shenfen_name` → `sfid_name`
 - SCREAMING:`SHENFEN_ID`/`SFID_ID` → `SFID_NUMBER`,`SHENFEN_NAME` → `SFID_NAME`
 - PascalCase:`ShenfenId`/`SfidId` → `SfidNumber`,`ShenfenName` → `SfidName`
-- camelCase:`shenfenId`/`sfidId` → `sfidNumber`,`shenfenName` → `sfidName`
+- camelCase:`sfidNumber`/`sfidId` → `sfidNumber`,`shenfenName` → `sfidName`
 
 ### SFID 字面量重生成(277 条)
 - 7 个 china_*.rs(cb 44 / ch 43 / lf 44 / sf 44 / jc 47 / jy 1 / zf 54)
 - 强制 city=001(包括原 LN002 也改 LN001)
-- d=2026 (D8 → D4)
-- n9 = blake2b-256(sfid_name | a3 | province | city | t2 | "2026")[:4] mod 10^9
+- d=2026 (D4 年份段)
+- n9 = blake2b-256(sfid_name | subject_property | province | city | t2 | "2026")[:4] mod 10^9
 - c1 = checksum 重算
 
 ### 派生函数拆分(避免 &str / &[u8] 同名冲突)
-- 新增 `subject_id_from_registered_sfid_number(&[u8]) -> Option<[u8;48]>` (kind=0x02)
-- `subject_id_from_sfid_number(&str)` 保留(kind=0x01,Builtin)
-- 调用方:organization-manage 的 byte 调用全切到 `subject_id_from_registered_sfid_number`
+- 新增 `account_id_from_registered_sfid_number(&[u8]) -> Option<[u8;48]>` (kind=0x02)
+- `account_id_from_sfid_number(&str)` 保留(kind=0x01,Builtin)
+- 调用方:organization-manage 的 byte 调用全切到 `account_id_from_registered_sfid_number`
 
 ## 影响面统计
 
@@ -67,7 +67,7 @@ SFID 改造 Step 1:
 | wuminapp | `flutter analyze && flutter test` | **0 issues + 154/154** ✅ |
 | wumin | `flutter analyze && flutter test` | **0 issues + 94/94** ✅ |
 | node/frontend | `npm run build` | **0 error** ✅ |
-| 残留扫描 | `grep shenfen_id\|sfid_id 全工程` | **0 命中** ✅ |
+| 残留扫描 | `grep sfid_number\|sfid_number 全工程` | **0 命中** ✅ |
 
 ## 不在本步范围(Step 2 处理)
 

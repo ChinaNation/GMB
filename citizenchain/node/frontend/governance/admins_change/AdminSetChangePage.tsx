@@ -5,12 +5,12 @@ import { AdminSetChangeSigningFlow } from './AdminSetChangeSigningFlow';
 import { AdminSetDiff } from './AdminSetDiff';
 import { AdminSetEditor } from './AdminSetEditor';
 import { AdminWalletSelector } from './AdminWalletSelector';
-import type { AdminSubjectRef, AdminSubjectState, VoteSignRequestResult } from './types';
+import type { AdminAccountRef, AdminAccountState, VoteSignRequestResult } from './types';
 import type { AdminWalletMatch } from '../types';
 import './styles.css';
 
 type Props = {
-  subjectRef: AdminSubjectRef;
+  accountRef: AdminAccountRef;
   institutionName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
@@ -20,13 +20,13 @@ type Props = {
 type Step = 'form' | 'sign';
 
 export function AdminSetChangePage({
-  subjectRef,
+  accountRef,
   institutionName,
   adminWallets,
   onBack,
   onSuccess,
 }: Props) {
-  const [subject, setSubject] = useState<AdminSubjectState | null>(null);
+  const [account, setAccount] = useState<AdminAccountState | null>(null);
   const [newAdmins, setNewAdmins] = useState<string[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
     adminWallets.length === 1 ? adminWallets[0] : null,
@@ -43,33 +43,33 @@ export function AdminSetChangePage({
   const signRequestRef = useRef<VoteSignRequestResult | null>(null);
   const selectedWalletRef = useRef<AdminWalletMatch | null>(null);
   const newAdminsRef = useRef<string[]>([]);
-  const subjectRefRef = useRef<AdminSubjectRef>(subjectRef);
+  const accountRefRef = useRef<AdminAccountRef>(accountRef);
 
   signRequestRef.current = signRequest;
   selectedWalletRef.current = selectedWallet;
   newAdminsRef.current = newAdmins;
-  subjectRefRef.current = subjectRef;
+  accountRefRef.current = accountRef;
 
   useEffect(() => {
     setLoading(true);
-    api.getAdminSubjectState(subjectRef)
+    api.getAdminAccountState(accountRef)
       .then((state) => {
-        setSubject(state);
+        setAccount(state);
         setNewAdmins(state?.admins ?? []);
         setFormError(null);
       })
       .catch((e) => setFormError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [subjectRef.sfidNumber, subjectRef.subjectIdHex, subjectRef.org]);
+  }, [accountRef.sfidNumber, accountRef.accountHex, accountRef.org]);
 
   const buildRequest = async () => {
-    if (!subject || !selectedWallet) return;
+    if (!account || !selectedWallet) return;
     setSubmitting(true);
     setFormError(null);
     try {
       const result = await api.buildAdminSetChangeRequest(
         selectedWallet.pubkeyHex,
-        subjectRef,
+        accountRef,
         newAdmins,
       );
       setSignRequest(result);
@@ -100,7 +100,7 @@ export function AdminSetChangePage({
         req.requestId,
         wallet.pubkeyHex,
         req.expectedPayloadHash,
-        subjectRefRef.current,
+        accountRefRef.current,
         newAdminsRef.current,
         req.signNonce,
         req.signBlockNumber,
@@ -118,11 +118,11 @@ export function AdminSetChangePage({
     return <div className="governance-section"><p>加载中…</p></div>;
   }
 
-  if (!subject) {
+  if (!account) {
     return (
       <div className="governance-section">
         <button className="back-button" onClick={onBack}>← 返回</button>
-        <div className="error">{formError || '未查询到管理员主体'}</div>
+        <div className="error">{formError || '未查询到管理员账户'}</div>
       </div>
     );
   }
@@ -134,9 +134,8 @@ export function AdminSetChangePage({
       <p className="proposal-institution-name">{institutionName}</p>
 
       <div className="admin-set-change-summary">
-        <div className="metric-card"><strong>{subject.kindLabel}</strong><span>{subject.statusLabel}</span></div>
-        <div className="metric-card"><strong>{subject.admins.length}</strong><span>当前管理员</span></div>
-        <div className="metric-card"><strong>{subject.threshold}</strong><span>内部阈值</span></div>
+        <div className="metric-card"><strong>{account.kindLabel}</strong><span>{account.statusLabel}</span></div>
+        <div className="metric-card"><strong>{account.admins.length}</strong><span>当前管理员</span></div>
       </div>
 
       {step === 'form' && (
@@ -149,7 +148,7 @@ export function AdminSetChangePage({
             onChange={setSelectedWallet}
           />
           <AdminSetEditor admins={newAdmins} disabled={submitting} onChange={setNewAdmins} />
-          <AdminSetDiff currentAdmins={subject.admins} newAdmins={newAdmins} />
+          <AdminSetDiff currentAdmins={account.admins} newAdmins={newAdmins} />
           <button
             className="vote-signing-confirm"
             disabled={submitting || !selectedWallet || newAdmins.length === 0}

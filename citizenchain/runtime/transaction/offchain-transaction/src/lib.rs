@@ -355,7 +355,7 @@ pub mod pallet {
         NotRegisteredClearingBank,
         /// 目标地址的 `name` 不是 "主账户"(只能绑定主账户,不能绑费用账户)。
         NotMainAccount,
-        /// 目标地址的 SFID A3 不是 SFR(私法人)或 FFR(非法人),不属于私权机构。
+        /// 目标地址的 SFID K1 不是 S(私法人)或 F(非法人),不属于私权机构。
         NotPrivateInstitution,
         /// 对应的多签账户状态非 Active(可能还在 Pending,或已关闭)。
         ClearingBankNotActive,
@@ -421,7 +421,7 @@ pub mod pallet {
         ///
         /// 约束:
         /// - 未绑定其他清算行
-        /// - `bank_main_address` 必须是 SFR/FFR 私权机构 + 多签 Active + 主账户
+        /// - `bank_main_address` 必须是 K1=S/F 私权机构 + 多签 Active + 主账户
         #[pallet::call_index(30)]
         #[pallet::weight(T::WeightInfo::bind_clearing_bank())]
         pub fn bind_clearing_bank(
@@ -549,7 +549,7 @@ pub mod pallet {
         /// 4. rpc_domain 字符集合法(仅小写字母/数字/点/横杠)
         /// 5. sfid_number 反查得到主账户地址 + 该地址已 Active
         /// 6. 调用方(origin)是该机构的激活管理员之一
-        /// 7. 资格白名单:机构必须 (SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR.JOINT_STOCK)
+        /// 7. 资格白名单:机构必须 (K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S.JOINT_STOCK)
         /// 8. sfid_number 未已注册节点(切换走 unregister + register)
         /// 9. peer_id 未被另一机构占用
         ///

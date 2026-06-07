@@ -30,13 +30,20 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 2. 后端模块结构
 | 模块 | 文件 | 说明 |
 |------|------|------|
-| main | `main.rs` | 入口、路由、公共工具函数、过期数据清理 |
+| main | `main.rs` | 入口、AppState 装配、路由挂载、安全响应头、过期数据清理 |
 | authz | `authz/mod.rs` | Cookie session 校验、角色检查 |
 | login | `login/mod.rs` | QR-only 扫码登录、会话查询和登出 |
 | initialize | `initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、超级管理员绑定 |
-| rate_limit | `rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
-| china | `china.rs` | 运行时用 rusqlite 只读 SFID 维护的 `china.sqlite` 行政区唯一源（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
-| address | `address.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口 |
+| common | `common/`（与前端 `common/` 对齐的共享层） | 横切低层工具 + 跨模块共享响应/DTO/helper |
+| common::response | `common/response.rs` | `ApiResponse`/`ApiError`/`ok`/`err`/错误码映射（≈ 前端 http.ts） |
+| common::types | `common/types.rs` | 跨模块共享 DTO `AdminUser`/`Archive`（≈ 前端 types.ts） |
+| common::admin | `common/admin.rs` | 管理员记录查询 helper |
+| common::audit | `common/audit.rs` | 审计日志写入 helper |
+| common::encoding | `common/encoding.rs` | hex/base64 字节解码 |
+| common::rate_limit | `common/rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
+| common::ss58 | `common/ss58.rs` | SS58 ↔ hex 公钥编解码（prefix=2027） |
+| address | `address/mod.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口（CPMS 自有地址业务） |
+| address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读 SFID 维护的 `china.sqlite` 行政区唯一源（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
 | super_admin | `super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | number | `number/mod.rs` | 档案号与护照号生成 |
 | dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |

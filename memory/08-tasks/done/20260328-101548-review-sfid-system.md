@@ -67,7 +67,7 @@
    当前真实实现已改为 `UsedBindNonce`、`BindingIdToAccount`、`AccountToBindingId`，且不存在 `CredentialNoncesByExpiry`。这会导致 `bind_sfid` 的总 weight 可信度不足，并影响叠加 `OnSfidBound` 回调后的计费/DoS 保护口径。
 
 2. 模块技术文档与当前实现大面积漂移，且文档内部自相矛盾：
-   - 文档仍写 `bind_sfid(origin, sfid_code, credential)`，但当前链上接口已经是 `bind_sfid(origin, credential)`
+   - 文档仍写 `bind_sfid(origin, sfid_number, credential)`，但当前链上接口已经是 `bind_sfid(origin, credential)`
    - 文档仍写 `expires_at` / `MaxBindCredentialLifetimeBlocks` / `CredentialNoncesByExpiry`
    - 文档错误码、存储命名、测试覆盖清单均与当前代码不一致
    - 文档后半段又同时写明“链上交易更新为 `bind_sfid(origin, credential)`”，说明文档内部已出现两套口径

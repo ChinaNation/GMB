@@ -553,7 +553,7 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
         let main_name = account_name(RESERVED_NAME_MAIN);
-        let subject = primitives::derive::subject_id_from_institution_account(&main);
+        let account = main.clone();
 
         assert_ok!(OrganizationManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -579,8 +579,8 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
             &sfid, &main_name
         ));
         assert!(!pallet::AddressRegisteredSfid::<Test>::contains_key(&main));
-        assert!(admins_change::Subjects::<Test>::get(subject).is_none());
-        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, subject).is_none());
+        assert!(admins_change::AdminAccounts::<Test>::get(account.clone()).is_none());
+        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, account).is_none());
     });
 }
 
@@ -729,11 +729,10 @@ fn existential_deposit_is_preserved_after_close() {
 }
 
 #[test]
-fn admin_subject_id_is_built_from_main_account_with_kind_tag() {
+fn admin_account_is_main_account() {
     new_test_ext().execute_with(|| {
-        // 管理员更换主体必须是主账户地址派生的 InstitutionAccount,不是 SFID 机构号。
+        // 管理员更换主体必须是机构 main AccountId,不是 SFID 机构号或派生主体。
         let main = AccountId32::new([0x42; 32]);
-        let subj = primitives::derive::subject_id_from_institution_account(&main);
-        assert_eq!(subj[0], 0x05, "kind tag must be InstitutionAccount");
+        assert_eq!(main, AccountId32::new([0x42; 32]));
     });
 }

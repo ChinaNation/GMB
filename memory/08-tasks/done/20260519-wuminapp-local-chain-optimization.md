@@ -38,7 +38,7 @@
 - 状态：done
 - 本地读库：新增 `ProposalDetailLocalStore`，复用 Isar `AppKvEntity` 保存提案详情、管理员快照、投票记录、待确认投票和业务详情；新增 `AccountBalanceSnapshotStore` 保存账户余额展示快照。
 - 批量链读取：`InternalVoteQueryService` 增加 `fetchAdminVotesBatch()`；`RuntimeUpgradeService` 增加 `fetchJointAdminVotesBatch()`；转账详情、多签管理详情、Runtime 升级详情、广场红点和个人多签管理员激活列表均改为批量查票。
-- 管理员主体：`AdminSubjectService` 增加 10 分钟本地持久化短缓存，保留 30 秒内存缓存和提交前链上复核边界。
+- 管理员主体：`AdminAccountService` 增加 10 分钟本地持久化短缓存，保留 30 秒内存缓存和提交前链上复核边界。
 - 余额展示：转账页、安全基金页、手续费划转页、个人/机构多签关闭页、治理机构详情主余额和更多账户余额接入本地余额快照；提交前余额 guard 仍实时读链。
 - 清算行目录：`ClearingBankDirectory` 对链上 `ClearingBankNodes` endpoint 增加 24 小时本地快照，对 `UserBank[user]` 增加 3 分钟短快照。
 - 文档：已同步 `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md` 与 `memory/05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md`。

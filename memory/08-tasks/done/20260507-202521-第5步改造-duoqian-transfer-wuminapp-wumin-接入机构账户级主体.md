@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-先执行第5步，改造 duoqian-transfer 多签转账、wuminapp 在线端、wumin 冷钱包，统一接入 0x05 InstitutionAccount 机构账户级内部投票主体；保持一人一票一笔交易；完成文档、注释、残留清理，且不修改 spec_version。第4步 organization-manage 后续再执行。
+先执行第5步，改造 duoqian-transfer 多签转账、wuminapp 在线端、wumin 冷钱包，统一接入 InstitutionAccount AccountId 机构账户级内部投票主体；保持一人一票一笔交易；完成文档、注释、残留清理，且不修改 spec_version。第4步 organization-manage 后续再执行。
 
 ## 必读上下文
 
@@ -91,7 +91,7 @@
 ## 实施记录
 
 - 任务卡已创建
-- 已完成 `duoqian-transfer` 转账主体拆分：`0x03 PersonalDuoqian` 走 `PersonalQuery::is_active`，`0x05 InstitutionAccount` 走 `InstitutionQuery::is_active`，`0x02 SfidInstitution` 拒绝作为转账支出主体。
+- 已完成 `duoqian-transfer` 转账主体拆分：`PersonalDuoqian AccountId` 走 `PersonalQuery::is_active`，`InstitutionAccount AccountId` 走 `InstitutionQuery::is_active`，`注册机构归属关系` 拒绝作为转账支出主体。
 - 已补充链端测试：机构账户 `0x05` 可完成内部投票转账，`0x02` 不能作为转账来源；统一重试相关测试名称与注释已改为 `retry_passed_proposal` 语义。
 - 已完成 wuminapp 账户级编码/发现/查询链路：`institution_data`、`duoqian_storage_codec`、`admin_institution_codec`、`duoqian_discovery_service`、`duoqian_manage_service`、`institution_admin_service` 均按 `0x03 / 0x05` 账户级主体读取。
 - 已补齐 wuminapp 转账 QR 展示字段：`propose_transfer` 冷钱包 display.fields 改为 `institution / beneficiary / amount_yuan / remark`，`org` 仅作为链端路由，不作为展示字段。

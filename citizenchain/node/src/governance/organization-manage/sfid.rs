@@ -12,7 +12,7 @@
 //!   "code": 0,
 //!   "message": "ok",
 //!   "data": [
-//!     { "sfid_number": "...", "a3": "...", "main_chain_status": "NOT_ON_CHAIN", ... }
+//!     { "sfid_number": "...", "ref_property": "...", "main_chain_status": "NOT_ON_CHAIN", ... }
 //!   ]
 //! }
 //! ```
@@ -59,7 +59,7 @@ struct SfidEligibleRow {
     sfid_number: String,
     #[serde(default)]
     institution_name: Option<String>,
-    a3: String,
+    ref_property: String,
     #[serde(default)]
     sub_type: Option<String>,
     #[serde(default)]
@@ -67,7 +67,7 @@ struct SfidEligibleRow {
     #[serde(default)]
     parent_institution_name: Option<String>,
     #[serde(default)]
-    parent_a3: Option<String>,
+    parent_ref_property: Option<String>,
     province: String,
     city: String,
     #[serde(default)]
@@ -108,11 +108,11 @@ fn into_candidate(row: SfidEligibleRow) -> EligibleClearingBankCandidate {
     EligibleClearingBankCandidate {
         sfid_number: row.sfid_number,
         institution_name: row.institution_name.unwrap_or_default(),
-        a3: row.a3,
+        ref_property: row.ref_property,
         sub_type: row.sub_type,
         parent_sfid_number: row.parent_sfid_number,
         parent_institution_name: row.parent_institution_name,
-        parent_a3: row.parent_a3,
+        parent_ref_property: row.parent_ref_property,
         province: row.province,
         city: row.city,
         main_chain_status: map_chain_status(row.main_chain_status).to_string(),

@@ -104,13 +104,13 @@ GMB/
 
 **`build_activate_admin_request` (Tauri 命令)**
 ```
-输入：pubkey_hex（管理员公钥）, shenfen_id（机构身份码）
+输入：pubkey_hex（管理员公钥）, sfid_number（机构身份码）
 输出：QR 签名请求 JSON + request_id + expected_payload_hash
 逻辑：
   1. 查链上管理员列表 → 验证 pubkey 确实是该机构管理员
   2. 构造激活 payload（非链上交易）：
      - 固定前缀 "GMB_ACTIVATE" (12 bytes)
-     - shenfen_id (48 bytes, 右补零)
+     - sfid_number (48 bytes, 右补零)
      - timestamp (8 bytes, u64 LE)
      - random_nonce (16 bytes)
   3. 计算 payload_hex = hex(上述拼接)
@@ -130,7 +130,7 @@ GMB/
          summary: "激活管理员 - XX省储备银行",
          fields: [
            { key: "institution", value: "XX省储备银行" },
-           { key: "shenfen_id", value: "..." }
+           { key: "sfid_number", value: "..." }
          ]
        }
      }
@@ -149,7 +149,7 @@ GMB/
   4. 激活凭证结构：
      {
        pubkey_hex: String,          // 管理员公钥（小写无0x）
-       shenfen_id: String,          // 所属机构身份码
+       sfid_number: String,          // 所属机构身份码
        activated_at_ms: u64,        // 激活时间戳
        signature_hex: String,       // 签名（用于凭证校验）
        payload_hash_hex: String,    // payload hash
@@ -160,7 +160,7 @@ GMB/
 
 **`get_activated_admins` (Tauri 命令)**
 ```
-输入：shenfen_id（机构身份码）
+输入：sfid_number（机构身份码）
 输出：Vec<ActivatedAdmin>
 逻辑：
   1. 从加密存储读取该机构的激活记录
@@ -171,7 +171,7 @@ GMB/
 
 **`deactivate_admin` (Tauri 命令)**
 ```
-输入：pubkey_hex, shenfen_id, device_password
+输入：pubkey_hex, sfid_number, device_password
 输出：成功/失败
 逻辑：
   1. 验证设备密码
@@ -191,7 +191,7 @@ GMB/
 
 ```dart
 // 检测 payload 前 12 字节是否为 "GMB_ACTIVATE"
-// 如果是 → 解码 shenfen_id + timestamp + nonce
+// 如果是 → 解码 sfid_number + timestamp + nonce
 // 返回 DecodedPayload(action: "activate_admin", summary: "激活管理员 - XX机构")
 ```
 
@@ -215,10 +215,10 @@ GMB/
 
 ```
 旧逻辑（第25-32行）：
-  加载时 → api.checkAdminWallets(shenfenId) → 如果有匹配 → isAdmin=true → 显示提案按钮
+  加载时 → api.checkAdminWallets(sfidNumber) → 如果有匹配 → isAdmin=true → 显示提案按钮
 
 新逻辑：
-  加载时 → api.getActivatedAdmins(shenfenId) → activatedAdmins 列表
+  加载时 → api.getActivatedAdmins(sfidNumber) → activatedAdmins 列表
   isAdmin = activatedAdmins.length > 0
 
 管理员列表（第164-184行）改造：
@@ -250,7 +250,7 @@ GMB/
 ```
 1. 用户点击管理员行的 [激活] 按钮
 2. 弹出签名流程弹窗（类似 VoteSigningFlow）
-3. 调用 api.buildActivateAdminRequest(pubkeyHex, shenfenId) → 获取 QR JSON
+3. 调用 api.buildActivateAdminRequest(pubkeyHex, sfidNumber) → 获取 QR JSON
 4. 显示签名请求二维码 → 用户用 wumin 扫码
 5. wumin 显示"激活管理员 - XX机构" → 用户确认签名
 6. wumin 生成签名回执二维码 → 用户在节点端扫描回执（通过 QrScanner）
@@ -302,7 +302,7 @@ GMB/
 | 用户卸载重装 | 激活状态存在本地加密存储（activated-admins.json），随节点数据目录保留 |
 | 前端篡改绕过激活 | 提案操作调后端 API → 后端校验激活状态 → 最终提交仍需冷钱包签名（三层保护） |
 | 多管理员同机 | 支持同一节点激活多个不同机构的管理员 |
-| 跨机构 | 每条激活记录绑定 (pubkey, shenfen_id)，互不干扰 |
+| 跨机构 | 每条激活记录绑定 (pubkey, sfid_number)，互不干扰 |
 | wuminapp 与 node 激活状态 | 各自独立存储（node 在加密 JSON，wuminapp 在 Isar），互不依赖 |
 
 ### 七、执行顺序与调度

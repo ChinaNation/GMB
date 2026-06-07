@@ -8,7 +8,7 @@
 
 ```rust
 pub struct SweepAction<Balance> {
-    pub institution: SubjectId,  // 机构标识 (48 字节)
+    pub institution: AccountId,  // 机构标识 (48 字节)
     pub amount: Balance,                    // 划转金额 (分)
     pub proposer: AccountId,                 // 提案人
 }

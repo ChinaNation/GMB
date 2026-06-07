@@ -21,7 +21,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 **只动 sfid/backend + sfid/frontend**：
 - 资格白名单判定函数：`is_clearing_bank_eligible(inst, parent) -> bool`
-- 收紧 `GET /api/v1/app/clearing-banks/search` 到资格白名单（已激活的 SFR-JOINT_STOCK 与其下属 FFR）
+- 收紧 `GET /api/v1/app/clearing-banks/search` 到资格白名单（已激活的 `K1=S + JOINT_STOCK` 与其下属 `K1=F`）
 - 新增 `GET /api/v1/app/clearing-banks/eligible-search`（桌面节点"添加清算行"用，含未激活机构）
 - SFID 前端机构列表 / 详情页显示"可作为清算行"badge
 - PrivateInstitutionLayout 选择 sub_type=JOINT_STOCK 时增加提示文案
@@ -46,17 +46,17 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - 其他 call 走默认 CurrencyAdapter（从 origin 个人账户扣）
 - 管理员个人钱包余额完全不动；清算行 fee 收入直接覆盖 gas 成本（fee 量级 vs gas 量级 ≈ 1000:1，盈余充足）
 
-**C. 机构元数据上链（Required，开发期彻底切换）**
+**C. 机构注册凭证收口（Required，开发期彻底切换）**
 
-- 新增 `InstitutionMetadata: Map<SfidNumber, MetadataInfo>` storage，包含 `a3 / sub_type / parent_sfid_number`
-- `register_sfid_institution` / `propose_create` 等创建路径增加 a3/sub_type/parent 参数（Required）
-- `InstitutionMetadata` 随机构注册写入，开发期 fresh genesis 重建数据
+- 机构注册凭证只包含 `sfid_number / institution_name / account_names[]` 与省级签名凭证字段
+- `subject_property / sub_type / parent_sfid_number` 只在 SFID `eligible-search` 候选资格判定中使用
+- 链上不保存 SFID 内部机构属性副本，开发期 fresh genesis 重建数据
 
 **D. 资格白名单链上二次校验**
 
 - `bank_check::ensure_can_be_bound` 校验链由 4 重收紧到 6 重：
-  - 原 1-4：AddressRegisteredSfid / account_name="主账户" / a3 ∈ {SFR,FFR} / DuoqianAccount.status=Active
-  - **新 5**：资格白名单（SFR-JOINT_STOCK ∨ FFR-parent.SFR.JOINT_STOCK），通过 SfidAccountQuery trait 查 InstitutionMetadata
+  - 原 1-4：AddressRegisteredSfid / account_name="主账户" / K1 ∈ {S,F} / DuoqianAccount.status=Active
+  - **新 5**：资格白名单（`K1=S + JOINT_STOCK` ∨ `K1=F + parent.K1=S + parent.JOINT_STOCK`），通过 SfidAccountQuery trait 查 SFID 筛选结果
   - **新 6**：sfid_number ∈ ClearingBankNodes（必须是已声明的清算行节点）
 
 **E. 清算行节点声明 storage + extrinsic**
@@ -112,7 +112,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - `sfid/backend/subjects/chain_duoqian_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
   - `AND sfid_number IN (SELECT sfid_number FROM clearing_bank_nodes_cache)`
 - 新建 `sfid/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
-- SFID 后端推链 `register_sfid_institution` 等调用增加 a3/sub_type/parent 参数
+- SFID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_sfid_number`
 
 ### Step 3：手机端（wumin + wuminapp）
 
@@ -126,8 +126,8 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 清算行准入用 **3 层卡口**：
 
-1. **SFID 身份（Step 1 落地）**：机构必须在 SFID 后端注册成功（A3/机构码/sub_type/parent 校验）
-2. **链上资格白名单（Step 2）**：`(SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)`，链上 storage 自证不依赖中心化签名
+1. **SFID 身份（Step 1 落地）**：机构必须在 SFID 后端注册成功（subject_property/机构码/sub_type/parent 校验）
+2. **链上资格白名单（Step 2）**：`(K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S ∧ parent.JOINT_STOCK)`，链端只确认账户已注册且 Active
 3. **节点-机构绑定（Step 2）**：管理员私钥签名 + node PeerId 上链；同时配置 RPC 域名供 wuminapp 可达
 
 PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不变；域名作为辅助字段，可单独 update 不影响 PeerId 主键。
@@ -174,7 +174,7 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 
 ## 与现存设计的兼容性
 
-- [project_institution_create_rules.md](../project_institution_create_rules.md):56 的"清算行概念彻底废除"应理解为"`is_clearing_bank` 字段废除（省储行兼任清算行的旧模型废除）"，与本 ADR 的"清算行作为 SFR-JOINT_STOCK + FFR 子集的视图归类"不冲突
+- [project_institution_create_rules.md](../project_institution_create_rules.md):56 的"清算行概念彻底废除"应理解为"`is_clearing_bank` 字段废除（省储行兼任清算行的历史模型废除）"，与本 ADR 的"清算行作为 K1=S 股份公司 + K1=F 子集的视图归类"不冲突
 - [feedback_no_compatibility.md](../feedback_no_compatibility.md)：本 ADR 的 3 阶段切换不保留兼容窗口，每步直接切换
 - [feedback_chainspec_frozen.md](../feedback_chainspec_frozen.md)：Step 2 的 spec_version 升级走链上 `propose_runtime_upgrade`，不重建 chainspec
 

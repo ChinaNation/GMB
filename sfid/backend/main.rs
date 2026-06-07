@@ -176,7 +176,7 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         wallet_pubkey: record.wallet_pubkey.clone(),
         wallet_address: record.wallet_address.clone(),
         archive_no: record.archive_no.clone(),
-        sfid_code: record.sfid_code.clone(),
+        sfid_number: record.sfid_number.clone(),
         citizen_status: record.citizen_status.clone(),
         voting_eligible: record.voting_eligible,
         vote_status: record.computed_vote_status(),
@@ -211,7 +211,7 @@ fn institution_row_from_record(
         short_name: inst.short_name.clone(),
         status: inst.status.clone(),
         category: inst.category,
-        a3: inst.a3.clone(),
+        subject_property: inst.subject_property.clone(),
         p1: inst.p1.clone(),
         province: inst.province.clone(),
         city: inst.city.clone(),
@@ -270,7 +270,7 @@ fn institution_row_from_pg_row(
         short_name,
         status,
         category,
-        a3: row.get(3),
+        subject_property: row.get(3),
         p1: row.get(4),
         province: row.get(5),
         city: row.get(6),
@@ -323,7 +323,7 @@ fn institution_from_subject_row(
         short_name,
         status,
         category,
-        a3: row.get(3),
+        subject_property: row.get(3),
         p1: row.get(4),
         province: row.get(5),
         city: row.get(6),
@@ -411,7 +411,7 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT s.sfid_number, s.name, s.category,
-                            s.a3, s.p1, s.province,
+                            s.subject_property, s.p1, s.province,
                             s.city, s.province_code, s.city_code, s.institution_code,
 		                            s.sub_type, s.parent_sfid_number,
 		                            s.created_by, s.created_at, s.full_name, s.short_name,
@@ -471,7 +471,7 @@ impl Db {
         record: &CitizenRecord,
     ) -> Result<(), String> {
         let Some(sfid_number) = record
-            .sfid_code
+            .sfid_number
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -704,7 +704,7 @@ impl Db {
                     wallet_pubkey: row.get(1),
                     wallet_address: row.get(2),
                     archive_no: row.get(3),
-                    sfid_code: row.get(4),
+                    sfid_number: row.get(4),
                     citizen_status: Some(citizen_status_from_text(
                         row.get::<_, String>(5).as_str(),
                     )),
@@ -797,7 +797,7 @@ impl Db {
         conn.execute(
             "INSERT INTO subjects (
 		                sfid_number, kind, name, full_name, short_name, p_code, c_code, t_code,
-		                status, category, a3, p1, province, city, town,
+		                status, category, subject_property, p1, province, city, town,
 		                province_code, city_code, town_code, institution_code, org_code, sub_type,
 		                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
 		                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
@@ -816,7 +816,7 @@ impl Db {
 		                t_code = EXCLUDED.t_code,
 		                status = EXCLUDED.status,
 	                category = EXCLUDED.category,
-	                a3 = EXCLUDED.a3,
+	                subject_property = EXCLUDED.subject_property,
 	                p1 = EXCLUDED.p1,
 	                province = EXCLUDED.province,
 	                city = EXCLUDED.city,
@@ -847,7 +847,7 @@ impl Db {
                 &t_code,
                 &status,
                 &category,
-                &inst.a3,
+                &inst.subject_property,
                 &inst.p1,
                 &inst.province,
                 &inst.city,
@@ -886,7 +886,7 @@ impl Db {
                 .map_err(|e| format!("delete gov row for private subject failed: {e}"))?;
                 let private_kind = if inst.institution_code == "JY" {
                     "SCHOOL"
-                } else if inst.a3 == "FFR" {
+                } else if inst.subject_property == "F" {
                     "BRANCH"
                 } else if inst.p1 == "0" {
                     "NONPROFIT"
@@ -895,13 +895,13 @@ impl Db {
                 };
                 conn.execute(
                     "INSERT INTO private (
-                        sfid_number, p_code, c_code, code, kind, a3, p1, sub_type, parent_sfid_number
+                        sfid_number, p_code, c_code, code, kind, subject_property, p1, sub_type, parent_sfid_number
                      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                      ON CONFLICT (p_code, sfid_number) DO UPDATE SET
                         c_code = EXCLUDED.c_code,
                         code = EXCLUDED.code,
                         kind = EXCLUDED.kind,
-                        a3 = EXCLUDED.a3,
+                        subject_property = EXCLUDED.subject_property,
                         p1 = EXCLUDED.p1,
                         sub_type = EXCLUDED.sub_type,
                         parent_sfid_number = EXCLUDED.parent_sfid_number",
@@ -911,7 +911,7 @@ impl Db {
                         &c_code,
                         &inst.institution_code,
                         &private_kind,
-                        &inst.a3,
+                        &inst.subject_property,
                         &inst.p1,
                         &inst.sub_type,
                         &inst.parent_sfid_number,
@@ -1020,7 +1020,7 @@ impl Db {
     }
 
     fn scope_codes_from_sfid(sfid_number: &str) -> (String, Option<String>) {
-        let Some(r5) = sfid_number.split('-').nth(1) else {
+        let Some(r5) = sfid_number.split('-').next() else {
             return ("ZS".to_string(), None);
         };
         if r5.len() < 5 {
@@ -1110,7 +1110,7 @@ impl Db {
             let rows = conn
                 .query(
 		                    "SELECT s.sfid_number, s.name, s.category,
-			                                    s.a3, s.p1, s.province,
+			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.sub_type, s.parent_sfid_number,
 					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
@@ -1172,7 +1172,7 @@ impl Db {
 			                    short_name,
 			                    status,
 			                    category,
-		                    a3: row.get(3),
+		                    subject_property: row.get(3),
 		                    p1: row.get(4),
 			                    province: row.get(5),
 			                    city: row.get(6),
@@ -1226,7 +1226,7 @@ impl Db {
             let rows = conn
                 .query(
 		                    "SELECT s.sfid_number, s.name, s.category,
-			                                    s.a3, s.p1, s.province,
+			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.sub_type, s.parent_sfid_number,
 					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
@@ -1284,7 +1284,7 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT s.sfid_number, s.name, s.category,
-			                                    s.a3, s.p1, s.province,
+			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.sub_type, s.parent_sfid_number,
 				                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
@@ -1918,7 +1918,7 @@ fn main() {
                 "/api/v1/institution/check-name",
                 get(subjects::admin::check_institution_name),
             )
-            // FFR 详情页"所属法人"搜索(全国范围 SFR/GFR 模糊匹配)
+            // F 详情页"所属法人"搜索(全国范围 S/G 模糊匹配)
             .route(
                 "/api/v1/institution/search-parents",
                 get(subjects::admin::search_parent_institutions),

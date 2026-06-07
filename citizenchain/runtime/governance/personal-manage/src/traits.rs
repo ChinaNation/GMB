@@ -5,7 +5,7 @@
 //! union 查询,任意机构账户(主/费用/自创)经 organization-manage 路径反查到
 //! admin 配置;个人多签账户经 personal-manage 路径反查。
 
-use primitives::types::MultisigConfigSnapshot;
+use primitives::multisig::MultisigConfigSnapshot;
 
 /// 个人多签账户管理员配置查询。
 pub trait PersonalMultisigQuery<AccountId> {

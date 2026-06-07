@@ -144,7 +144,7 @@ pub mod pallet {
         /// `STATUS_PASSED` / `STATUS_REJECTED` 时广播到每个成员。
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
-        type InternalAdminCountProvider: InternalAdminCountProvider;
+        type InternalAdminCountProvider: InternalAdminCountProvider<Self::AccountId>;
         /// 每个机构最大管理员数量（与 admins-change 一致），用于管理员快照 BoundedVec。
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;
@@ -155,14 +155,20 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
 
         /// 内部投票 mode 超时结算回调,由 internal-vote pallet 实现。
-        type InternalFinalizer: crate::traits::InternalProposalFinalizer<BlockNumberFor<Self>>;
+        type InternalFinalizer: crate::traits::InternalProposalFinalizer<
+            BlockNumberFor<Self>,
+            Self::AccountId,
+        >;
 
         /// 内部投票 mode chunked cleanup 派发,由 internal-vote pallet 实现。
         type InternalCleanup: crate::traits::InternalCleanupHandler;
 
         /// 联合投票 mode 超时结算回调,覆盖内部投票阶段(STAGE_JOINT)与联合公投阶段(STAGE_REFERENDUM),
         /// 由 joint-vote pallet 实现。
-        type JointFinalizer: crate::traits::JointProposalFinalizer<BlockNumberFor<Self>>;
+        type JointFinalizer: crate::traits::JointProposalFinalizer<
+            BlockNumberFor<Self>,
+            Self::AccountId,
+        >;
 
         /// 联合投票 mode chunked cleanup 派发,由 joint-vote pallet 实现。
         type JointCleanup: crate::traits::JointCleanupHandler;
@@ -205,8 +211,13 @@ pub mod pallet {
     /// 由 `create_internal_proposal` 写入，`set_status_and_emit` 更新状态，超时清理自动删除。
     #[pallet::storage]
     #[pallet::getter(fn proposals)]
-    pub type Proposals<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, Proposal<BlockNumberFor<T>>, OptionQuery>;
+    pub type Proposals<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Proposal<BlockNumberFor<T>, T::AccountId>,
+        OptionQuery,
+    >;
 
     /// 回调执行作用域：只在 `set_status_and_emit` 调业务回调期间临时存在。
     ///
@@ -247,7 +258,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        SubjectId,
+        T::AccountId,
         BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
         OptionQuery,
     >;
@@ -334,12 +345,12 @@ pub mod pallet {
     pub type ActiveProposalsByInstitution<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        SubjectId,
+        T::AccountId,
         BoundedVec<u64, T::MaxActiveProposals>,
         ValueQuery,
     >;
 
-    /// 同一治理主体的内部提案互斥状态：(org, institution) → 锁状态。
+    /// 同一治理账户的内部提案互斥状态：(org, institution) → 锁状态。
     #[pallet::storage]
     #[pallet::getter(fn internal_proposal_mutex)]
     pub type InternalProposalMutexes<T: Config> = StorageDoubleMap<
@@ -347,7 +358,7 @@ pub mod pallet {
         Blake2_128Concat,
         u8,
         Blake2_128Concat,
-        SubjectId,
+        T::AccountId,
         InternalProposalMutexState,
         OptionQuery,
     >;
@@ -359,7 +370,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         u64,
-        BoundedVec<InternalProposalMutexBinding, T::MaxInternalProposalMutexBindings>,
+        BoundedVec<InternalProposalMutexBinding<T::AccountId>, T::MaxInternalProposalMutexBindings>,
         ValueQuery,
     >;
 
@@ -383,7 +394,7 @@ pub mod pallet {
     /// 机构详情页直接迭代该表,不再走"全年扫描 + 客户端过滤"。
     #[pallet::storage]
     pub type ProposalsByInstitution<T: Config> =
-        StorageDoubleMap<_, Twox64Concat, SubjectId, Twox64Concat, u64, (), OptionQuery>;
+        StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, u64, (), OptionQuery>;
 
     /// 反向索引:业务模块 MODULE_TAG → 该模块所有提案 ID。
     /// "只看 runtime 升级提案 / 只看决议销毁提案"等视图走该表。
@@ -480,15 +491,15 @@ pub mod pallet {
         TooManyProposalsAtExpiry,
         /// 中文注释：该机构活跃提案数已达上限（10 个），需等待现有提案完成后再发起。
         ActiveProposalLimitReached,
-        /// 中文注释：同一治理主体已有管理员集合变更提案活跃，普通提案需等待其结束。
+        /// 中文注释：同一治理账户已有管理员集合变更提案活跃，普通提案需等待其结束。
         AdminSetMutationProposalActive,
-        /// 中文注释：同一治理主体已有普通提案活跃，管理员更换需等待普通提案结束。
+        /// 中文注释：同一治理账户已有普通提案活跃，管理员更换需等待普通提案结束。
         RegularInternalProposalActive,
         /// 中文注释：内部提案互斥计数溢出。
         InternalProposalMutexOverflow,
         /// 中文注释：单个提案持有的互斥锁数量超出上限。
         TooManyInternalProposalMutexBindings,
-        /// 中文注释：管理员更换提案不是当前治理主体的独占锁 owner。
+        /// 中文注释：管理员更换提案不是当前治理账户的独占锁 owner。
         InternalProposalMutexOwnerMismatch,
         /// 中文注释：提案尚未绑定业务 owner。
         ProposalOwnerMissing,
@@ -586,16 +597,19 @@ pub mod pallet {
                 STAGE_INTERNAL => {
                     <T::InternalFinalizer as crate::traits::InternalProposalFinalizer<
                         BlockNumberFor<T>,
+                        T::AccountId,
                     >>::finalize_internal_timeout(&proposal, proposal_id)?;
                 }
                 STAGE_JOINT => {
                     <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                         BlockNumberFor<T>,
+                        T::AccountId,
                     >>::finalize_joint_timeout(&proposal, proposal_id)?;
                 }
                 STAGE_REFERENDUM => {
                     <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                         BlockNumberFor<T>,
+                        T::AccountId,
                     >>::finalize_jointreferendum_timeout(
                         &proposal, proposal_id
                     )?;
@@ -705,16 +719,19 @@ pub mod pallet {
                     STAGE_INTERNAL => {
                         <T::InternalFinalizer as crate::traits::InternalProposalFinalizer<
                             BlockNumberFor<T>,
+                            T::AccountId,
                         >>::finalize_internal_timeout(&proposal, proposal_id)
                     }
                     STAGE_JOINT => {
                         <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                             BlockNumberFor<T>,
+                            T::AccountId,
                         >>::finalize_joint_timeout(&proposal, proposal_id)
                     }
                     STAGE_REFERENDUM => {
                         <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                             BlockNumberFor<T>,
+                            T::AccountId,
                         >>::finalize_jointreferendum_timeout(
                             &proposal, proposal_id
                         )
@@ -752,7 +769,7 @@ pub mod pallet {
 
         pub fn ensure_open_proposal(
             proposal_id: u64,
-        ) -> Result<Proposal<BlockNumberFor<T>>, DispatchError> {
+        ) -> Result<Proposal<BlockNumberFor<T>, T::AccountId>, DispatchError> {
             let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
 
             ensure!(
@@ -1305,13 +1322,13 @@ pub mod pallet {
                 let (kind, stage, institution, should_run_callback) =
                     match Proposals::<T>::try_mutate(
                         proposal_id,
-                        |maybe| -> Result<(u8, u8, Option<SubjectId>, bool), DispatchError> {
+                        |maybe| -> Result<(u8, u8, Option<T::AccountId>, bool), DispatchError> {
                             let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                             let old_status = proposal.status;
                             Self::ensure_valid_status_transition(old_status, status)?;
                             let kind = proposal.kind;
                             let stage = proposal.stage;
-                            let inst = proposal.internal_institution;
+                            let inst = proposal.internal_institution.clone();
                             proposal.status = status;
                             if old_status == STATUS_VOTING && status == STATUS_PASSED {
                                 let now = frame_system::Pallet::<T>::block_number();

@@ -28,7 +28,7 @@ pub(crate) struct SfidTownItem {
 
 #[derive(Serialize)]
 pub(crate) struct AdminSfidMetaOutput {
-    pub(crate) a3_options: Vec<SfidOptionItem>,
+    pub(crate) subject_property_options: Vec<SfidOptionItem>,
     pub(crate) institution_options: Vec<SfidOptionItem>,
     pub(crate) provinces: Vec<SfidProvinceItem>,
     pub(crate) scoped_province: Option<String>,

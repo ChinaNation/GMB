@@ -18,8 +18,12 @@ use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::{
-    address, authz, dangan, err, find_admin_by_user_id, initialize, ok, rate_limit, ss58,
-    write_audit, ApiError, ApiResponse, AppState, Archive,
+    address, authz,
+    common::{
+        err, find_admin_by_user_id, ok, rate_limit, ss58, write_audit, ApiError, ApiResponse,
+        Archive,
+    },
+    dangan, initialize, AppState,
 };
 
 #[derive(Deserialize)]
@@ -1420,7 +1424,7 @@ fn build_archive_delete_sign_request(
 }
 
 fn normalize_pubkey_hex(value: &str) -> Option<String> {
-    let bytes = crate::decode_bytes(value)?;
+    let bytes = crate::common::decode_bytes(value)?;
     if bytes.len() != 32 {
         return None;
     }

@@ -335,7 +335,7 @@ impl Db {
 	                t_code TEXT,
 	                status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
                 category TEXT,
-                a3 TEXT,
+                subject_property TEXT,
                 p1 TEXT,
 	                province TEXT,
 	                city TEXT,
@@ -397,7 +397,7 @@ impl Db {
                 c_code TEXT NOT NULL,
                 code TEXT NOT NULL,
                 kind TEXT NOT NULL CHECK (kind IN ('SCHOOL', 'PROFIT', 'NONPROFIT', 'BRANCH')),
-                a3 TEXT NOT NULL CHECK (a3 IN ('SFR', 'FFR')),
+                subject_property TEXT NOT NULL CHECK (subject_property IN ('S', 'F')),
                 p1 TEXT NOT NULL CHECK (p1 IN ('0', '1')),
                 sub_type TEXT,
                 parent_sfid_number TEXT,
@@ -451,6 +451,7 @@ impl Db {
         // 中文注释:旧表已存在时 CREATE TABLE IF NOT EXISTS 不会补新列,必须先把父表收敛到目标字段。
         conn.batch_execute(
             "ALTER TABLE subjects
+                ADD COLUMN IF NOT EXISTS subject_property TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_sfid_number TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_path TEXT,
@@ -458,6 +459,8 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_mime TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_size BIGINT,
                 DROP COLUMN IF EXISTS chain_status;
+             ALTER TABLE private
+                ADD COLUMN IF NOT EXISTS subject_property TEXT;
              ALTER TABLE gov
                 DROP COLUMN IF EXISTS chain_status;",
         )
@@ -467,6 +470,18 @@ impl Db {
                 postgres_error_text(&e)
             )
         })?;
+        let deprecated_subject_property_column = ["a", "3"].concat();
+        for table in ["subjects", "private"] {
+            let sql = format!(
+                "ALTER TABLE {table} DROP COLUMN IF EXISTS {deprecated_subject_property_column}"
+            );
+            conn.batch_execute(sql.as_str()).map_err(|e| {
+                format!(
+                    "remove deprecated identity column from {table} failed: {}",
+                    postgres_error_text(&e)
+                )
+            })?;
+        }
 
         Self::validate_target_subject_schema(conn)?;
 
@@ -524,10 +539,18 @@ impl Db {
             "legal_rep_photo_name",
             "legal_rep_photo_mime",
             "legal_rep_photo_size",
+            "subject_property",
         ] {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
-        for (table, column) in [("subjects", "chain_status"), ("gov", "chain_status")] {
+        Self::ensure_column_state(conn, "private", "subject_property", true)?;
+        let deprecated_subject_property_column = ["a", "3"].concat();
+        for (table, column) in [
+            ("subjects", deprecated_subject_property_column.as_str()),
+            ("private", deprecated_subject_property_column.as_str()),
+            ("subjects", "chain_status"),
+            ("gov", "chain_status"),
+        ] {
             Self::ensure_column_state(conn, table, column, false)?;
         }
         Ok(())

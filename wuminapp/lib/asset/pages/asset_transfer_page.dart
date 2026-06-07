@@ -2,7 +2,7 @@
 //
 // 后续任务卡 C 实装时承载:
 // - 转账金额输入(自动按 decimals 显示精度)
-// - 收款方 SS58 / SubjectId 输入(支持二维码扫描)
+// - 收款方 SS58 / AccountId 输入(支持二维码扫描)
 // - 提示行:GMB 计费(0.1% / ≥0.1 元)+ 当前 GMB 余额
 // - "发起多签提案"按钮 → 直调 VotingEngine InternalVote(unified_voting_entry phase 4)
 

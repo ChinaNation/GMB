@@ -3,6 +3,7 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::Encode;
+use primitives::core_const::{DUOQIAN, OP_SIGN_BIND, OP_SIGN_POP, OP_SIGN_VOTE};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -10,10 +11,8 @@ use subxt::{OnlineClient, PolkadotConfig};
 
 use crate::*;
 
-// 中文注释（适用于本文件所有 DUOQIAN_DOMAIN + OP_SIGN_* 常量）：
-// 必须使用 [u8; N] 数组类型 + u8，与链端 verifier 里
-// `primitives::core_const::DUOQIAN_DOMAIN` (= `*b"DUOQIAN_V1"` 即 [u8; 10])
-// + `OP_SIGN_*` u8 完全对齐。SCALE 编码下：
+// 中文注释：本文件所有 DUOQIAN + OP_SIGN_* 均直接来自
+// `primitives::core_const`。SCALE 编码下：
 //   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
 //   u8                   →  1 字节
 //   &[u8] / Vec<u8>     →  Compact(N) ++ N 字节，多 1~4 字节长度前缀
@@ -22,16 +21,6 @@ use crate::*;
 // 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致 register_sfid_institution
 // 长期 InvalidSfidInstitutionSignature。修复见 ADR
 // `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
-// 中文注释：2026-04-20 统一 DUOQIAN_V1 单域方案：domain 字节 10B
-// (b"DUOQIAN_V1") + 1B op_tag 区分子命名空间。按 op_tag 分别标识 BIND / VOTE /
-// POP。与 citizenchain `primitives::core_const::{DUOQIAN_DOMAIN, OP_SIGN_*}`
-// 严格对齐。
-const DUOQIAN_DOMAIN: [u8; 10] = *b"DUOQIAN_V1";
-const OP_SIGN_BIND: u8 = 0x10;
-const OP_SIGN_VOTE: u8 = 0x11;
-const OP_SIGN_POP: u8 = 0x12;
-#[allow(dead_code)]
-pub(crate) const POPULATION_DOMAIN_STR: &str = "DUOQIAN_V1";
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
@@ -110,7 +99,7 @@ pub(crate) fn build_bind_credential(
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
-        DUOQIAN_DOMAIN,
+        DUOQIAN,
         OP_SIGN_BIND,
         genesis_hash,
         who,
@@ -146,7 +135,7 @@ pub(crate) fn build_vote_credential(
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
-        DUOQIAN_DOMAIN,
+        DUOQIAN,
         OP_SIGN_VOTE,
         genesis_hash,
         who,
@@ -179,7 +168,7 @@ pub(crate) fn build_population_snapshot_credential(
     let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
     let payload = (
-        DUOQIAN_DOMAIN,
+        DUOQIAN,
         OP_SIGN_POP,
         genesis_hash,
         who,

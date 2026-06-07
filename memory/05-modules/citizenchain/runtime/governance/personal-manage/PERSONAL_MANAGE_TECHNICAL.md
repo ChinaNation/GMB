@@ -6,7 +6,7 @@
 - MODULE_TAG:`b"per-mgmt"`(8 字节)
 - 创建日期:2026-05-06(任务卡 B 拆分)
 - 最新更新:2026-05-17(注销成功后清空资金并删除当前状态，可用相同 creator + account_name 重新注册)
-- 关联 ADR:ADR-009(personal-manage 拆分)、ADR-010(SubjectId 协议)、ADR-015(账户级内部投票管理员模型)
+- 关联 ADR:ADR-009(personal-manage 拆分)、ADR-010(AccountId 协议)、ADR-015(账户级内部投票管理员模型)
 
 ## 模块定位
 
@@ -31,7 +31,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 | MODULE_TAG | `b"per-mgmt"`(8 字节,与 `b"org-mgmt"` 长度对仗) |
 | ACTION_CREATE | 0(独立命名空间,从 0 起) |
 | ACTION_CLOSE | 1 |
-| SubjectKind | `0x03 PersonalDuoqian`(D 阶段 ADR-010) |
+| AdminAccountKind | `PersonalDuoqian AccountId`(D 阶段 ADR-010) |
 
 ## storage
 
@@ -42,7 +42,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 | `PendingCloseProposal` | `StorageMap<address, proposal_id>` | 防并发关闭提案 |
 
 管理员和管理员数量不再存储或镜像在 `PersonalDuoqians`。
-管理员唯一真源为 `admins-change::Subjects[subject_id_from_account(personal_address)]`。
+管理员唯一真源为 `admins-change::Subjects[account_id_from_account(personal_address)]`。
 普通动态阈值唯一真源为 `internal-vote::ActiveDynamicThresholds[(ORG_REN, subject)]`。
 旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalDuoqians`。
 
@@ -92,18 +92,18 @@ fee: Balance
 
 ```
 personal_duoqian_address = Blake2b_256(
-    DUOQIAN_DOMAIN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || account_name_utf8
+    DUOQIAN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || account_name_utf8
 )
 ```
 
 地址只依赖 `creator + account_name`,与管理员列表无关 — 换管理员地址不变。
 注销不会改变派生公式；同一创建者使用同一账户名再次注册时仍得到同一地址。
 
-## 治理主体 ID(SubjectId)
+## 治理主体 ID(AccountId)
 
 ```
-subject_id = primitives::derive::subject_id_from_account(personal_address)
-           = byte[0]=0x03 PersonalDuoqian + byte[1..33]=AccountId + byte[33..48]=zeros(15B)
+account_id = core_const::account_id_from_account(personal_address)
+           = byte[0]=PersonalDuoqian AccountId + byte[1..33]=AccountId + byte[33..48]=zeros(15B)
 ```
 
 详见 ADR-010。
@@ -126,7 +126,7 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
   `0x07 0x00 + account_name + duoqian_admins + regular_threshold + amount`。
 - wuminapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
   `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员读
-  `AdminsChange::Subjects`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
+  `AdminsChange::AdminAccounts`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
 - wuminapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
 - 创建类交易入块后若未找到成功事件，客户端必须先解析 `System.ExtrinsicFailed` 并显示真实 `PersonalManage / AdminsChange` 模块错误，不能只提示“未找到成功事件”。
 - wumin `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
@@ -192,7 +192,7 @@ flutter test test/signer/payload_decoder_test.dart
 - `CreateDuoqianAction` 新增 `fee` 快照字段,执行/清理不再按当前 fee policy 重算创建手续费。
 - `cleanup_pending_create` 先检查 `PendingPersonalCreate` 是否存在,重复手动 cleanup 不再重复发 `DuoqianCreateRejected`。
 - 旧反向索引 storage 和 meta 类型已删除,`account_name` 合并进 `PersonalDuoqians`。
-- `remove_pending_admin_subject` 不再吞掉 `admins-change` 错误,清理路径会向上返回失败。
+- `remove_pending_admin_account` 不再吞掉 `admins-change` 错误,清理路径会向上返回失败。
 - `execute_create_with_finalizer` / `execute_close_with_finalizer` 已删除死参数。
 - `InternalVoteExecutor` 统一使用 `decode_module_action` 解码 `MODULE_TAG + ACTION + payload`。
 - 创建/关闭执行失败事件改由 `on_execution_failed_terminal` 在终态清理后发出。

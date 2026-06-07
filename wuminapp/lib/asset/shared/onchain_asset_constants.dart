@@ -53,9 +53,6 @@ class OnchainAssetActions {
   /// VotingEngine ProposalData 业务标签前缀(与链端 MODULE_TAG 一致)。
   static const String moduleTag = 'onc-iss';
 
-  /// SubjectKind 协议位 0x04 = OnchainAsset(ADR-010 增量段 + ADR-011 v2 简化)。
-  static const int subjectKindOnchainAsset = 0x04;
-
   /// 链端铁律:每个用户代币创建一次性 reserve 1000 GMB(= 100_000 FEN)押金,
   /// 提案通过则 transfer 给 NRC fee_address,否决则退还 proposer。
   ///

@@ -114,7 +114,7 @@ impl
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
+    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
         let who_bytes = who.encode();
         if who_bytes.len() != 32 {
             return false;
@@ -124,23 +124,23 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
+                .find(|n| AccountId32::new(n.main_address) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
+                .find(|n| AccountId32::new(n.main_address) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             _ => false,
         }
     }
 
-    fn get_admin_list(org: u8, institution: SubjectId) -> Option<sp_std::vec::Vec<AccountId32>> {
+    fn get_admin_list(org: u8, institution: AccountId32) -> Option<sp_std::vec::Vec<AccountId32>> {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
+                .find(|n| AccountId32::new(n.main_address) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -150,7 +150,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 }),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
+                .find(|n| AccountId32::new(n.main_address) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -230,21 +230,20 @@ fn prb_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CH[0].duoqian_admins[index])
 }
 
-fn nrc_pallet_id() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[0].sfid_number).expect("nrc id should be valid")
+fn nrc_pallet_id() -> AccountId32 {
+    AccountId32::new(CHINA_CB[0].main_address)
 }
 
-fn prc_pallet_id() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("prc id should be valid")
+fn prc_pallet_id() -> AccountId32 {
+    AccountId32::new(CHINA_CB[1].main_address)
 }
 
-fn prb_pallet_id() -> SubjectId {
-    subject_id_from_sfid_number(CHINA_CH[0].sfid_number).expect("prb id should be valid")
+fn prb_pallet_id() -> AccountId32 {
+    AccountId32::new(CHINA_CH[0].main_address)
 }
 
-fn institution_account(institution: SubjectId) -> AccountId32 {
-    let raw = subject_pallet_address(institution).expect("institution pallet address must exist");
-    AccountId32::new(raw)
+fn institution_account(institution: &AccountId32) -> AccountId32 {
+    institution.clone()
 }
 
 /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
@@ -270,9 +269,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
         .expect("test storage should build");
 
     let balances = vec![
-        (institution_account(nrc_pallet_id()), 1_000),
-        (institution_account(prc_pallet_id()), 1_000),
-        (institution_account(prb_pallet_id()), 1_000),
+        (institution_account(&nrc_pallet_id()), 1_000),
+        (institution_account(&prc_pallet_id()), 1_000),
+        (institution_account(&prb_pallet_id()), 1_000),
     ];
     pallet_balances::GenesisConfig::<Test> {
         balances,

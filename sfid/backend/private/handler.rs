@@ -16,7 +16,7 @@ use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
 use crate::china::{city_code_by_name, province_code_by_name};
 use crate::number::{
-    generate_sfid_code, validate_sfid_number_format, GenerateSfidInput, InstitutionCategory,
+    generate_sfid_number, validate_sfid_number_format, GenerateSfidInput, InstitutionCategory,
 };
 use crate::scope::get_visible_scope;
 use crate::subjects::http::{
@@ -41,7 +41,7 @@ pub(crate) async fn create_institution(
         Err(resp) => return resp,
     };
     let grant_payload = serde_json::json!({
-        "a3": input.a3.clone(),
+        "subject_property": input.subject_property.clone(),
         "p1": input.p1.clone(),
         "province": input.province.clone(),
         "city": input.city.clone(),
@@ -63,14 +63,14 @@ pub(crate) async fn create_institution(
         return resp;
     }
     let scope = get_visible_scope(&ctx);
-    let a3 = input.a3.trim().to_string();
+    let subject_property = input.subject_property.trim().to_string();
     let institution_code = input.institution.trim().to_string();
     let p1 = input.p1.as_deref().unwrap_or("").trim().to_string();
-    if a3.is_empty() || institution_code.is_empty() {
+    if subject_property.is_empty() || institution_code.is_empty() {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "a3 and institution are required",
+            "subject_property and institution are required",
         );
     }
     if input
@@ -82,7 +82,7 @@ pub(crate) async fn create_institution(
     {
         return api_error(StatusCode::BAD_REQUEST, 1001, "创建阶段不接受 sub_type");
     }
-    let is_private = matches!(a3.as_str(), "SFR" | "FFR");
+    let is_private = matches!(subject_property.as_str(), "S" | "F");
     let is_education_school = institution_code == "JY";
     let allow_missing_name = is_private && !is_education_school;
     if is_education_school && ctx.admin_city.is_none() {
@@ -148,7 +148,7 @@ pub(crate) async fn create_institution(
         return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
     }
     let category = match derive_category(
-        &a3,
+        &subject_property,
         &institution_code,
         institution_name.as_deref().unwrap_or(""),
     ) {
@@ -157,7 +157,7 @@ pub(crate) async fn create_institution(
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "a3/institution combination is not a valid institution",
+                "subject_property/institution combination is not a valid institution",
             )
         }
     };
@@ -175,7 +175,7 @@ pub(crate) async fn create_institution(
             "普通公权机构由系统自动生成,仅教育委员会类型学校允许手动注册",
         );
     }
-    if matches!(a3.as_str(), "SFR" | "FFR") && p1 != "0" && p1 != "1" {
+    if matches!(subject_property.as_str(), "S" | "F") && p1 != "0" && p1 != "1" {
         return api_error(StatusCode::BAD_REQUEST, 1001, "P1 非法(仅 0/1)");
     }
     let legal_rep = match validate_legal_representative_required(
@@ -220,9 +220,9 @@ pub(crate) async fn create_institution(
     }
     for _ in 0..1000u32 {
         let random_account = Uuid::new_v4().to_string();
-        let sfid = match generate_sfid_code(GenerateSfidInput {
+        let sfid = match generate_sfid_number(GenerateSfidInput {
             account_pubkey: random_account.as_str(),
-            a3: a3.as_str(),
+            subject_property: subject_property.as_str(),
             p1: p1.as_str(),
             province: province.as_str(),
             city: city.as_str(),
@@ -251,7 +251,7 @@ pub(crate) async fn create_institution(
             short_name: institution_name.clone(),
             status: "ACTIVE".to_string(),
             category,
-            a3: a3.clone(),
+            subject_property: subject_property.clone(),
             p1: p1.clone(),
             province: province.clone(),
             city: city.clone(),

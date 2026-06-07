@@ -5,7 +5,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
 import 'package:wuminapp_mobile/governance/admins-change/pages/admin_set_change_page.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_limit_service.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_page.dart';
@@ -232,8 +232,8 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
               context,
               () => AdminSetChangePage(
                 institution: widget.institution,
-                subjectIdentity:
-                    AdminSubjectIdentity.fromInstitution(widget.institution),
+                accountIdentity:
+                    AdminAccountIdentity.fromInstitution(widget.institution),
                 adminWallets: widget.adminWallets,
               ),
             ),
@@ -344,7 +344,7 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
     try {
       final service = ProposalLimitService();
       final activeIds =
-          await service.fetchActiveProposalIds(widget.institution.sfidNumber);
+          await service.fetchActiveProposalIds(widget.institution);
       if (!context.mounted) return;
 
       if (activeIds.length >=

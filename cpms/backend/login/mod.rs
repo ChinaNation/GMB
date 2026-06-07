@@ -14,7 +14,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{authz, err, find_admin_by_pubkey, ok, rate_limit, ApiError, ApiResponse, AppState};
+use crate::{
+    authz,
+    common::{err, find_admin_by_pubkey, ok, rate_limit, ApiError, ApiResponse},
+    AppState,
+};
 
 /// 中文注释：用 CSPRNG 生成 32 字节随机 token，比 UUID 更安全。
 fn generate_secure_token(prefix: &str) -> String {
@@ -509,7 +513,7 @@ async fn auth_me(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<SessionUser>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_auth(&state, &headers).await?;
-    let admin = crate::find_admin_by_user_id(&state, &ctx.user_id).await?;
+    let admin = crate::common::find_admin_by_user_id(&state, &ctx.user_id).await?;
     Ok(Json(ok(SessionUser {
         user_id: ctx.user_id,
         role: ctx.role,
@@ -575,11 +579,12 @@ pub(crate) fn verify_wumin_login_signature(
     signed_message: &str,
     signature: &str,
 ) -> Result<(), &'static str> {
-    let pubkey_bytes = crate::decode_bytes(admin_pubkey).ok_or("invalid admin_pubkey encoding")?;
+    let pubkey_bytes =
+        crate::common::decode_bytes(admin_pubkey).ok_or("invalid admin_pubkey encoding")?;
     if pubkey_bytes.len() != 32 {
         return Err("invalid admin_pubkey length");
     }
-    let sig_bytes = crate::decode_bytes(signature).ok_or("invalid signature encoding")?;
+    let sig_bytes = crate::common::decode_bytes(signature).ok_or("invalid signature encoding")?;
     if sig_bytes.len() != 64 {
         return Err("invalid signature length");
     }

@@ -91,7 +91,7 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 公权机构和公安局使用同一个 `GovView` 组件边界,但它们属于两个一级 tab。顶部 tab 点击必须生成重置信号,详情页本地状态必须在 `category` 或重置信号变化时清空,避免从某个机构详情页切换模块时仍停留在旧详情。
 
-公权机构、公安局、私权机构列表必须显示连续序号。机构详情页的身份字段统一显示为 `身份ID`,不得使用代码框包裹,不得展示 `A3 类型` 或机构链上状态。账户列表可以展示账户链上状态。
+公权机构、公安局、私权机构列表必须显示连续序号。机构详情页的身份字段统一显示为 `身份ID`,不得使用代码框包裹,不得展示 `SubjectProperty 类型` 或机构链上状态。账户列表可以展示账户链上状态。
 
 SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件只允许调用 `notice.success/error/warning/info/confirm/warningModal`,不得直接调用 Ant Design `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。统一入口负责:
 

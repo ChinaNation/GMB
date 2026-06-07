@@ -10,28 +10,12 @@ void main() {
   String hexOf(List<int> payload) =>
       '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 
+  String hexLower(List<int> payload) =>
+      payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
     return [bytes.length << 2, ...bytes];
-  }
-
-  List<int> subjectIdFromText(int kind, String text) {
-    final out = List<int>.filled(48, 0);
-    out[0] = kind;
-    final bytes = utf8.encode(text);
-    for (var i = 0; i < bytes.length && i < 47; i++) {
-      out[i + 1] = bytes[i];
-    }
-    return out;
-  }
-
-  List<int> subjectIdFromAccount(int kind, List<int> account) {
-    final out = List<int>.filled(48, 0);
-    out[0] = kind;
-    for (var i = 0; i < account.length && i < 32; i++) {
-      out[i + 1] = account[i];
-    }
-    return out;
   }
 
   List<int> u128LeForTest(BigInt value) {
@@ -134,7 +118,7 @@ void main() {
     });
 
     test('decodes joint_vote (pallet=23 call=0)', () {
-      // JointVote.cast_admin = pallet 23 / call 0。
+      // JointVote.cast_admin = pallet 23 / call 0，机构参数为 AccountId32。
       final payload = Uint8List.fromList([
         0x17,
         0x00,
@@ -146,7 +130,7 @@ void main() {
         0,
         0,
         0,
-        ...List.filled(48, 0),
+        ...List.filled(32, 0),
         0,
       ]);
       final hex =
@@ -277,7 +261,7 @@ void main() {
     });
 
     test('decodes clearing bank register node call', () {
-      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
+      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
       const peerId = '12D3KooWABCDEFG1234567890abcdefghijk';
       const domain = 'l2.example.com';
       final payload = Uint8List.fromList([
@@ -300,7 +284,7 @@ void main() {
     });
 
     test('decodes clearing bank endpoint update call', () {
-      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
+      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
       const domain = 'new-l2.example.com';
       final payload = Uint8List.fromList([
         21,
@@ -320,7 +304,7 @@ void main() {
     });
 
     test('decodes clearing bank unregister call', () {
-      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
+      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
       final payload = Uint8List.fromList([
         21,
         52,
@@ -335,7 +319,7 @@ void main() {
     });
 
     test('decodes clearing bank decrypt challenge', () {
-      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
+      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
       final idBytes = List<int>.filled(48, 0);
       final rawId = ascii.encode(sfidNumber);
       for (var i = 0; i < rawId.length; i++) {
@@ -364,10 +348,8 @@ void main() {
       expect(decoded.summary, contains('解密清算行管理员'));
     });
 
-    test('decodes propose_sweep_to_main 国储会 (pallet=19 call=2)', () {
-      // Phase 2 重排：propose_sweep_to_main 由原 call=5 迁到 call=2。
-      const sfidNumber = 'GFR-LN001-CB0X-944805165-2026';
-      final idBytes = subjectIdFromText(0x01, sfidNumber);
+    test('decodes propose_sweep_to_main AccountId32 (pallet=19 call=2)', () {
+      final institutionAccount = List<int>.filled(32, 0x66);
       const amount = 10000;
       final amountBytes = List<int>.filled(16, 0);
       amountBytes[0] = amount & 0xff;
@@ -376,7 +358,7 @@ void main() {
       final payload = Uint8List.fromList([
         0x13,
         0x02,
-        ...idBytes,
+        ...institutionAccount,
         ...amountBytes,
       ]);
 
@@ -386,57 +368,37 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_sweep_to_main');
-      expect(decoded.fields['institution'], '国家储备委员会');
+      expect(
+        decoded.fields['institution'],
+        '机构账户 ${ss58FromBytes(institutionAccount)}',
+      );
       expect(decoded.fields['amount_yuan'], '100.00 GMB');
     });
 
-    test('decodes propose_sweep_to_main 省储会 (pallet=19 call=2)', () {
-      const sfidNumber = 'GFR-ZS001-CB0Y-016974075-2026';
-      final idBytes = subjectIdFromText(0x01, sfidNumber);
+    test('rejects legacy 48-byte sweep account payload', () {
+      final legacySubject = List<int>.filled(48, 0);
       final amountBytes = List<int>.filled(16, 0);
       amountBytes[0] = 0x10;
 
       final payload = Uint8List.fromList([
         0x13,
         0x02,
-        ...idBytes,
+        ...legacySubject,
         ...amountBytes,
-      ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
-
-      expect(decoded, isNotNull);
-      expect(decoded!.fields['institution'], '中枢省储备委员会');
-    });
-
-    test('rejects naked subject for propose_sweep_to_main', () {
-      const sfidNumber = 'GFR-LN001-CB0X-944805165-2026';
-      final idBytes = List<int>.filled(48, 0);
-      final idChars = sfidNumber.codeUnits;
-      for (var i = 0; i < idChars.length; i++) {
-        idBytes[i] = idChars[i];
-      }
-
-      final payload = Uint8List.fromList([
-        0x13,
-        0x02,
-        ...idBytes,
-        ...List<int>.filled(16, 0),
       ]);
 
       expect(PayloadDecoder.decode(hexOf(payload)), isNull,
-          reason: 'D/ADR-015 后内置机构必须带 0x01 主体类型,不兼容裸 sfid');
+          reason: '目标态只接受机构多签 AccountId32,不兼容旧 48B 主体');
     });
 
-    test('decodes propose_transfer for institution account subject', () {
+    test('decodes propose_transfer for institution AccountId32', () {
       final institutionAccount = List<int>.filled(32, 0x66);
       final beneficiary = List<int>.filled(32, 0x44);
       final payload = Uint8List.fromList([
         0x13,
         0x00,
-        0x02,
-        ...subjectIdFromAccount(0x05, institutionAccount),
+        0x05,
+        ...institutionAccount,
         ...beneficiary,
         ...u128LeForTest(BigInt.from(12345)),
         0x10,
@@ -455,19 +417,19 @@ void main() {
       expect(decoded.fields['remark'], 'test');
     });
 
-    test('rejects SfidInstitution subject for propose_transfer', () {
+    test('rejects legacy 48-byte transfer account payload', () {
       final payload = Uint8List.fromList([
         0x13,
         0x00,
         0x02,
-        ...subjectIdFromText(0x02, 'GFR-LN001-CB0X-944805165-2026'),
+        ...List<int>.filled(48, 0x22),
         ...List<int>.filled(32, 0x44),
         ...u128LeForTest(BigInt.one),
         0x00,
       ]);
 
       expect(PayloadDecoder.decode(hexOf(payload)), isNull,
-          reason: '0x02 只保留机构归属/检索语义,不能作为多签转账支出账户');
+          reason: '目标态只接受机构多签 AccountId32,不兼容旧 48B 主体');
     });
 
     test('Compact encoding mode 1 (two-byte)', () {
@@ -584,16 +546,13 @@ void main() {
     });
 
     test('decodes propose_admin_set_change (pallet=12 call=0)', () {
-      final subject = subjectIdFromAccount(
-        0x03,
-        List<int>.generate(32, (i) => 0x80 + i),
-      );
+      final account = List<int>.generate(32, (i) => 0x80 + i);
       final admin1 = List<int>.filled(32, 0x11);
       final admin2 = List<int>.filled(32, 0x22);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
         0x03, // org = 个人多签
-        ...subject,
+        ...account,
         0x08, // Compact(2)
         ...admin1,
         ...admin2,
@@ -605,8 +564,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_admin_set_change');
       expect(decoded.fields['org'], '个人多签');
-      expect(decoded.fields['subject'],
-          '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
+      expect(decoded.fields['account'], '0x${hexLower(account)}');
       expect(
         decoded.fields['new_admins'],
         [
@@ -614,20 +572,17 @@ void main() {
           '0x${admin2.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
         ].join(','),
       );
-      expect(decoded.fields['new_threshold'], '2/2');
+      expect(decoded.reviewFields['new_threshold'], '2/2');
       expect(decoded.summary, contains('管理员集合变更'));
     });
 
     test('rejects propose_admin_set_change without new_threshold', () {
-      final subject = subjectIdFromAccount(
-        0x03,
-        List<int>.generate(32, (i) => 0x80 + i),
-      );
+      final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
         0x0c,
         0x00,
         0x03,
-        ...subject,
+        ...account,
         0x08,
         ...List<int>.filled(32, 0x11),
         ...List<int>.filled(32, 0x22),
@@ -637,15 +592,12 @@ void main() {
     });
 
     test('rejects propose_admin_set_change with trailing bytes', () {
-      final subject = subjectIdFromAccount(
-        0x03,
-        List<int>.generate(32, (i) => 0x80 + i),
-      );
+      final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
         0x0c,
         0x00,
         0x03,
-        ...subject,
+        ...account,
         0x08,
         ...List<int>.filled(32, 0x11),
         ...List<int>.filled(32, 0x22),
@@ -657,14 +609,11 @@ void main() {
     });
 
     test('rejects propose_admin_set_change below majority threshold', () {
-      final subject = subjectIdFromAccount(
-        0x03,
-        List<int>.generate(32, (i) => 0x80 + i),
-      );
+      final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
         0x03,
-        ...subject,
+        ...account,
         0x0c, // Compact(3)
         ...List<int>.filled(32, 0x11),
         ...List<int>.filled(32, 0x22),
@@ -677,14 +626,11 @@ void main() {
 
     test('rejects builtin governance admin change with wrong fixed threshold',
         () {
-      final subject = subjectIdFromText(
-        0x01,
-        'GFR-LN001-CB0X-944805165-2026',
-      );
+      final account = List<int>.generate(32, (i) => 0x40 + i);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
         0x00,
-        ...subject,
+        ...account,
         0x4c, // Compact(19)
         for (var i = 0; i < 19; i++) ...List<int>.filled(32, i + 1),
         ...u32Le(12),
@@ -693,17 +639,14 @@ void main() {
       expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
     });
 
-    test('decodes subject-level admin activation payload', () {
-      final subject = subjectIdFromAccount(
-        0x05,
-        List<int>.generate(32, (i) => 0x20 + i),
-      );
+    test('decodes account-level admin activation payload', () {
+      final account = List<int>.generate(32, (i) => 0x20 + i);
       final pubkey = List<int>.filled(32, 0xaa);
       final payload = Uint8List.fromList([
-        ...utf8.encode('GMB_ACTIVATE_SUBJECT_V1'),
-        ...subject,
+        ...utf8.encode('GMB_ACTIVATE_ADMIN_V1'),
+        ...account,
         0x05, // org = 其他机构账户
-        0x03, // kind = InstitutionAccount
+        0x02, // kind = InstitutionAccount
         ...pubkey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
         ...List<int>.filled(16, 0),
@@ -712,19 +655,16 @@ void main() {
       final decoded = PayloadDecoder.decode(encodeHex(payload));
 
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'activate_admin_subject');
+      expect(decoded!.action, 'activate_admin_account');
       expect(decoded.fields['org'], '其他机构账户');
-      expect(decoded.fields['subject'],
-          '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
+      expect(decoded.fields['account'], '0x${hexLower(account)}');
       expect(decoded.fields['pubkey'], ss58FromBytes(pubkey));
+      expect(decoded.reviewFields['account'], ss58FromBytes(account));
       expect(decoded.reviewFields['pubkey'], ss58FromBytes(pubkey));
     });
 
     test('decodes institution-account admin set change org labels', () {
-      final subject = subjectIdFromAccount(
-        0x05,
-        List<int>.generate(32, (i) => 0x30 + i),
-      );
+      final account = List<int>.generate(32, (i) => 0x30 + i);
       final admin1 = List<int>.filled(32, 0x44);
       final admin2 = List<int>.filled(32, 0x55);
 
@@ -736,7 +676,7 @@ void main() {
           0x0c,
           0x00,
           entry.key,
-          ...subject,
+          ...account,
           0x08,
           ...admin1,
           ...admin2,
@@ -747,45 +687,27 @@ void main() {
 
         expect(decoded, isNotNull);
         expect(decoded!.fields['org'], entry.value);
-        expect(decoded.fields['subject'],
-            '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
+        expect(decoded.fields['account'], '0x${hexLower(account)}');
       }
     });
 
-    test('rejects admin set change subject kind and org mismatch', () {
-      final institutionSubject = subjectIdFromAccount(
-        0x05,
-        List<int>.filled(32, 0x66),
-      );
-      final personalSubject = subjectIdFromAccount(
-        0x03,
-        List<int>.filled(32, 0x77),
-      );
-      final sfidSubject = subjectIdFromText(
-        0x02,
-        'GFR-LN001-CB0X-944805165-2026',
-      );
+    test('rejects legacy 48-byte admin account payload', () {
+      final legacySubject = List<int>.filled(48, 0x66);
       final admin1 = List<int>.filled(32, 0x11);
       final admin2 = List<int>.filled(32, 0x22);
 
-      Uint8List payload(int org, List<int> subject) => Uint8List.fromList([
-            0x0c,
-            0x00,
-            org,
-            ...subject,
-            0x08,
-            ...admin1,
-            ...admin2,
-            ...u32Le(2),
-          ]);
+      final payload = Uint8List.fromList([
+        0x0c,
+        0x00,
+        0x04,
+        ...legacySubject,
+        0x08,
+        ...admin1,
+        ...admin2,
+        ...u32Le(2),
+      ]);
 
-      expect(
-          PayloadDecoder.decode(encodeHex(payload(0x03, institutionSubject))),
-          isNull);
-      expect(PayloadDecoder.decode(encodeHex(payload(0x04, personalSubject))),
-          isNull);
-      expect(
-          PayloadDecoder.decode(encodeHex(payload(0x04, sfidSubject))), isNull);
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
     });
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
@@ -844,7 +766,7 @@ void main() {
         return out;
       }
 
-      final sfid = utf8.encode('SFR-AH001-1234567890-20260501');
+      final sfid = utf8.encode('AH001-SCB0N-202605010-2026');
       final instName = utf8.encode('安徽省储行');
       final mainAccount = utf8.encode('主账户');
       final feeAccount = utf8.encode('费用账户');
@@ -898,11 +820,11 @@ void main() {
         ...signerAdminPubkey,
       ];
       if (extraTail) {
-        final a3 = utf8.encode('SFR');
+        final subjectProperty = utf8.encode('S');
         final subType = utf8.encode('SHENG_BANK');
         payload.addAll([
-          (a3.length << 2) & 0xff,
-          ...a3,
+          (subjectProperty.length << 2) & 0xff,
+          ...subjectProperty,
           0x01,
           (subType.length << 2) & 0xff,
           ...subType,
@@ -923,7 +845,7 @@ void main() {
       final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
-      expect(decoded.fields['sfid_number'], 'SFR-AH001-1234567890-20260501');
+      expect(decoded.fields['sfid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['institution_name'], '安徽省储行');
       expect(decoded.fields['org'], '其他机构账户');
       expect(decoded.fields['admin_count'], '2');
@@ -931,7 +853,7 @@ void main() {
       expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
-      expect(decoded.fields.containsKey('a3'), isFalse);
+      expect(decoded.fields.containsKey('subject_property'), isFalse);
       expect(decoded.fields['province'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
@@ -944,7 +866,8 @@ void main() {
           buildProposeCreateInstitutionPayload(extraTail: true));
       final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNull,
-          reason: 'P-TX-001 禁止 a3/sub_type/parent_sfid_number 多余尾字段');
+          reason:
+              'P-TX-001 禁止 subject_property/sub_type/parent_sfid_number 多余尾字段');
     });
 
     test('decodes current propose_create_personal with regular_threshold field',

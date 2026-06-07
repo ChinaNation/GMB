@@ -60,7 +60,7 @@ mod tests {
         let pair = <sr25519::Pair as Pair>::from_seed(&seed);
         SigningKey {
             pair,
-            sfid_number: format!("SFR-TEST-{seed_byte:02x}"),
+            sfid_number: "AH001-SCB0V-123456789-2026".to_string(),
         }
     }
 

@@ -20,7 +20,11 @@ use rand::{rngs::OsRng, RngCore};
 use schnorrkel::{signing_context, MiniSecretKey};
 use serde::Serialize;
 
-use crate::{err, initialize::QrSignKeyRuntime, ApiError, AppState, Archive};
+use crate::{
+    common::{err, ApiError, Archive},
+    initialize::QrSignKeyRuntime,
+    AppState,
+};
 
 pub(crate) use lifecycle::run_due_archive_hard_delete;
 pub(crate) use materials::remove_archive_material_files;

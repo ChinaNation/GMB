@@ -1,12 +1,12 @@
-# 统一 BLAKE2-256 地址派生方案（DUOQIAN_V1 + op_tag）
+# 统一 BLAKE2-256 地址派生方案（DUOQIAN + op_tag）
 
 ## 概述
 
-`citizenchain` 所有链上保留账户地址均通过 BLAKE2-256 确定性派生，统一使用单一 domain `DUOQIAN_V1` 加 1 字节 `op_tag` 子命名空间区分用途。
+`citizenchain` 所有链上保留账户地址均通过 BLAKE2-256 确定性派生，统一使用单一 domain `DUOQIAN` 加 1 字节 `op_tag` 子命名空间区分用途。
 
 ```
 address = BLAKE2-256(
-    DUOQIAN_DOMAIN (10B "DUOQIAN_V1")
+    DUOQIAN (10B "DUOQIAN")
  || op_tag (1B)
  || SS58_PREFIX_LE (2B, [0xEB, 0x07] = 2027)
  || payload（按 op_tag 规范）
@@ -51,7 +51,7 @@ SFID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 ## 设计理由
 
-**统一域**：密码学上 `DUOQIAN_V1 || op_tag` 等价于 N 个独立 domain（BLAKE2 扩散性保证无碰撞），但代码层只维护一个 domain 常量，减少出错面。
+**统一域**：密码学上 `DUOQIAN || op_tag` 等价于 N 个独立 domain（BLAKE2 扩散性保证无碰撞），但代码层只维护一个 domain 常量，减少出错面。
 
 **op_tag 分段**：低半段（0x00-0x0F）留给地址派生，高半段（0x10-0x1F）留给签名 payload，易读易审。
 
@@ -71,19 +71,19 @@ SFID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 ## 示例
 
-国储会 `sfid_number = "GFR-LN001-CB0X-944805165-2026"`：
+国储会 `sfid_number = "LN001-GCB05-944805165-2026"`：
 
 ```
 // main_address
-preimage = b"DUOQIAN_V1" || 0x00 || [0xEB, 0x07] || b"GFR-LN001-CB0X-944805165-2026"
+preimage = b"DUOQIAN" || 0x00 || [0xEB, 0x07] || b"LN001-GCB05-944805165-2026"
 address  = BLAKE2-256(preimage)
 
 // fee_address
-preimage = b"DUOQIAN_V1" || 0x01 || [0xEB, 0x07] || b"GFR-LN001-CB0X-944805165-2026"
+preimage = b"DUOQIAN" || 0x01 || [0xEB, 0x07] || b"LN001-GCB05-944805165-2026"
 address  = BLAKE2-256(preimage)
 
 // NRC_ANQUAN_ADDRESS
-preimage = b"DUOQIAN_V1" || 0x03 || [0xEB, 0x07] || b"GFR-LN001-CB0X-944805165-2026"
+preimage = b"DUOQIAN" || 0x03 || [0xEB, 0x07] || b"LN001-GCB05-944805165-2026"
 address  = 0x0521c1ef5fe34fab5353b6213a559c8ca1044cc1972977b648b84cc2d954e4f6
 ```
 
@@ -91,13 +91,13 @@ address  = 0x0521c1ef5fe34fab5353b6213a559c8ca1044cc1972977b648b84cc2d954e4f6
 
 ```
 // stake_address
-preimage = b"DUOQIAN_V1" || 0x02 || [0xEB, 0x07] || u64_le(10913902)
+preimage = b"DUOQIAN" || 0x02 || [0xEB, 0x07] || u64_le(10913902)
 address  = BLAKE2-256(preimage)
 ```
 
 ## 源码位置
 
-- [primitives/src/core_const.rs](../../../../../citizenchain/runtime/primitives/src/core_const.rs) — `DUOQIAN_DOMAIN` + `OP_*` 常量定义
+- [primitives/src/core_const.rs](../../../../../citizenchain/runtime/primitives/src/core_const.rs) — `DUOQIAN` + `OP_*` 常量定义
 - [primitives/china/china_cb.rs](../../../../../citizenchain/runtime/primitives/china/china_cb.rs) — 国储会 + 省储会常量（含 `NRC_ANQUAN_ADDRESS`）
 - [primitives/china/china_ch.rs](../../../../../citizenchain/runtime/primitives/china/china_ch.rs) — 省储行常量（含 `stake_address`）
 - [primitives/china/china_zb.rs](../../../../../citizenchain/runtime/primitives/china/china_zb.rs) — 汇总保留名单 + `is_reserved_main_address()`
@@ -106,7 +106,7 @@ address  = BLAKE2-256(preimage)
 
 ## 当前约束
 
-地址派生统一使用 `DUOQIAN_V1 + op_tag`。任务卡：[20260420-unified-DUOQIAN_V1-domain](../../../../08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md)。
+地址派生统一使用 `DUOQIAN + op_tag`。任务卡：[20260420-unified-DUOQIAN-domain](../../../../08-tasks/done/20260420-unified-DUOQIAN-domain.md)。
 
 `OP_INSTITUTION = 0x05` 专供 SFID 机构自定义命名账户，`OP_MAIN` / `OP_FEE` 只走 `preimage = ss58 || sfid_number`，宪法机构和 SFID 登记机构的主/费用账户派生公式一致。`derive_institution_address(sfid_number, role)` 与 `role_from_account_name` 是当前辅助接口。保留名 `"主账户"`/`"费用账户"` 强制走 `Role::Main`/`Role::Fee`。任务卡：[20260421-op-institution-role-split](../../../../08-tasks/done/20260421-op-institution-role-split.md)。
 

@@ -388,7 +388,7 @@ class DuoqianManageService {
   /// 查询机构多签账户信息。
   ///
   /// 注册机构账户走 `AddressRegisteredSfid -> InstitutionAccounts`
-  /// + `AdminsChange::Subjects`。
+  /// + `AdminsChange::AdminAccounts`。
   Future<DuoqianAccountInfo?> fetchDuoqianAccount(
       String duoqianAddressHex) async {
     return _fetchInstitutionDuoqianAccount(duoqianAddressHex);
@@ -437,10 +437,10 @@ class DuoqianManageService {
 
     final accountKeyByAddress = <String, String>{};
     final adminKeyByAddress = <String, String>{};
-    final subjectIdByAddress = <String, Uint8List>{};
+    final accountIdByAddress = <String, Uint8List>{};
     final secondRoundKeys = <String>[];
     for (final entry in refByAddress.entries) {
-      final subjectId = DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+      final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
         entry.key,
       );
       final accountKey =
@@ -449,8 +449,8 @@ class DuoqianManageService {
         entry.value.accountName,
       ))}';
       final adminKey =
-          '0x${_hexEncode(DuoqianStorageCodec.adminSubjectKey(subjectId))}';
-      subjectIdByAddress[entry.key] = subjectId;
+          '0x${_hexEncode(DuoqianStorageCodec.adminAccountKey(accountId))}';
+      accountIdByAddress[entry.key] = accountId;
       accountKeyByAddress[entry.key] = accountKey;
       adminKeyByAddress[entry.key] = adminKey;
       secondRoundKeys
@@ -472,7 +472,7 @@ class DuoqianManageService {
         continue;
       }
       final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
-      final admin = DuoqianStorageCodec.decodeAdminSubject(adminData);
+      final admin = DuoqianStorageCodec.decodeAdminAccount(adminData);
       if (account == null || admin == null) {
         result[address] = null;
         continue;
@@ -487,7 +487,7 @@ class DuoqianManageService {
           '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
         org: entry.value.org,
-        subjectId: subjectIdByAddress[entry.key]!,
+        accountId: accountIdByAddress[entry.key]!,
       ))}';
     }
     final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
@@ -508,7 +508,7 @@ class DuoqianManageService {
             '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
           org: admin.org,
-          subjectId: subjectIdByAddress[entry.key]!,
+          accountId: accountIdByAddress[entry.key]!,
         ))}';
       }
     }
@@ -560,17 +560,17 @@ class DuoqianManageService {
     if (accountData == null) return null;
     final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
     if (account == null) return null;
-    final subjectId = DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+    final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
       duoqianAddressHex,
     );
-    final adminKey = DuoqianStorageCodec.adminSubjectKey(subjectId);
+    final adminKey = DuoqianStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
     if (adminData == null) return null;
-    final admin = DuoqianStorageCodec.decodeAdminSubject(adminData);
+    final admin = DuoqianStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
     final threshold = await _fetchInstitutionDynamicThreshold(
       org: admin.org,
-      subjectId: subjectId,
+      accountId: accountId,
     );
     return DuoqianAccountInfo(
       adminCount: admin.adminCount,
@@ -582,7 +582,7 @@ class DuoqianManageService {
 
   Future<int?> _fetchInstitutionDynamicThreshold({
     required int org,
-    required Uint8List subjectId,
+    required Uint8List accountId,
   }) async {
     for (final storageName in const [
       'ActiveDynamicThresholds',
@@ -591,7 +591,7 @@ class DuoqianManageService {
       final key = DuoqianStorageCodec.dynamicThresholdKey(
         storageName: storageName,
         org: org,
-        subjectId: subjectId,
+        accountId: accountId,
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
       final threshold = DuoqianStorageCodec.decodeDynamicThreshold(data);

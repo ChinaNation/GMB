@@ -23,7 +23,6 @@ pub mod pallet {
             ENABLE_SHENGBANK_INTEREST_DECAY, SHENGBANK_INITIAL_INTEREST_BP,
             SHENGBANK_INTEREST_DECREASE_BP, SHENGBANK_INTEREST_DURATION_YEARS,
         },
-        derive::subject_id_from_sfid_number, // D 阶段统一治理主体派生
     };
 
     // 中文注释：自动路径只允许每个年度边界块结算 1 年，避免历史欠账集中压进单块。
@@ -70,22 +69,19 @@ pub mod pallet {
         /// 单个省储行收到利息
         ShengBankInterestMinted {
             year: u32,
-            pallet_id: [u8; 48],
+            account_bytes: [u8; 32],
             account: T::AccountId,
             amount: BalanceOf<T>,
         },
 
         /// 省储行账户解码失败或配置无效（链上可审计，不依赖节点日志）。
-        ShengBankDecodeFailed { year: u32, pallet_id: [u8; 48] },
-
-        /// sfid_number 无法编码为固定 48 字节标识（链上配置异常）。
-        ShengBankIdEncodeFailed { year: u32, index: u32 },
+        ShengBankDecodeFailed { year: u32, account_bytes: [u8; 32] },
 
         /// stake_amount 转换到运行时 Balance 发生饱和截断。
-        ShengBankPrincipalOverflow { year: u32, pallet_id: [u8; 48] },
+        ShengBankPrincipalOverflow { year: u32, account_bytes: [u8; 32] },
 
         /// 利率乘法发生溢出，跳过该省储行本年度铸币并让年度结算失败。
-        ShengBankInterestOverflow { year: u32, pallet_id: [u8; 48] },
+        ShengBankInterestOverflow { year: u32, account_bytes: [u8; 32] },
 
         /// 某一年度结算完成
         ShengBankYearSettled { year: u32 },
@@ -103,7 +99,7 @@ pub mod pallet {
         /// 省储行利息低于 Existential Deposit，跳过发币以防 dust 账户（链上可审计）。
         ShengBankInterestBelowED {
             year: u32,
-            pallet_id: [u8; 48],
+            account_bytes: [u8; 32],
             amount: BalanceOf<T>,
         },
     }
@@ -209,12 +205,15 @@ pub mod pallet {
         fn resolve_bank_account(
             year: u32,
             bank: &primitives::china::china_ch::ChinaCh,
-            pallet_id: [u8; 48],
+            account_bytes: [u8; 32],
         ) -> Option<T::AccountId> {
             match T::AccountId::decode(&mut &bank.main_address[..]) {
                 Ok(a) => Some(a),
                 Err(_) => {
-                    Self::deposit_event(Event::<T>::ShengBankDecodeFailed { year, pallet_id });
+                    Self::deposit_event(Event::<T>::ShengBankDecodeFailed {
+                        year,
+                        account_bytes,
+                    });
                     log::error!(
                         target: "runtime::shengbank",
                         "省储行账户解码失败: {}",
@@ -321,21 +320,9 @@ pub mod pallet {
                 return (0, writes, total_count, total_count);
             }
 
-            for (idx, bank) in CHINA_CH.iter().enumerate() {
-                let Some(pallet_id) = subject_id_from_sfid_number(bank.sfid_number) else {
-                    Self::deposit_event(Event::<T>::ShengBankIdEncodeFailed {
-                        year,
-                        index: idx as u32,
-                    });
-                    log::error!(
-                        target: "runtime::shengbank",
-                        "sfid_number 转换失败: {}",
-                        bank.sfid_number
-                    );
-                    writes = writes.saturating_add(1);
-                    continue;
-                };
-                let Some(account) = Self::resolve_bank_account(year, bank, pallet_id) else {
+            for bank in CHINA_CH.iter() {
+                let Some(account) = Self::resolve_bank_account(year, bank, bank.main_address)
+                else {
                     writes = writes.saturating_add(1); // decode-failed event write
                     continue;
                 };
@@ -343,7 +330,10 @@ pub mod pallet {
                 let principal: BalanceOf<T> = bank.stake_amount.saturated_into();
                 let principal_back: u128 = principal.saturated_into();
                 if principal_back != bank.stake_amount {
-                    Self::deposit_event(Event::<T>::ShengBankPrincipalOverflow { year, pallet_id });
+                    Self::deposit_event(Event::<T>::ShengBankPrincipalOverflow {
+                        year,
+                        account_bytes: bank.main_address,
+                    });
                     log::error!(
                         target: "runtime::shengbank",
                         "stake_amount 饱和截断: {}",
@@ -356,7 +346,10 @@ pub mod pallet {
                 // 中文注释：利率乘法必须显式检查溢出，避免 saturating_mul 静默铸出异常大额。
                 let rate: BalanceOf<T> = rate_bp.into();
                 let Some(gross_interest) = principal.checked_mul(&rate) else {
-                    Self::deposit_event(Event::<T>::ShengBankInterestOverflow { year, pallet_id });
+                    Self::deposit_event(Event::<T>::ShengBankInterestOverflow {
+                        year,
+                        account_bytes: bank.main_address,
+                    });
                     log::error!(
                         target: "runtime::shengbank",
                         "省储行利息乘法溢出: {}",
@@ -377,7 +370,7 @@ pub mod pallet {
                     // 这里保留为防御性兜底，避免未来参数变化时创建 dust 账户。
                     Self::deposit_event(Event::<T>::ShengBankInterestBelowED {
                         year,
-                        pallet_id,
+                        account_bytes: bank.main_address,
                         amount: interest,
                     });
                     log::warn!(
@@ -399,7 +392,7 @@ pub mod pallet {
 
                 Self::deposit_event(Event::<T>::ShengBankInterestMinted {
                     year,
-                    pallet_id,
+                    account_bytes: bank.main_address,
                     account,
                     amount: interest,
                 });

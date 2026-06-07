@@ -34,7 +34,7 @@ pub(crate) async fn app_myid_status(
             }
             .to_string(),
             wallet_address: record.wallet_address.clone(),
-            sfid_code: record.sfid_code.clone(),
+            sfid_number: record.sfid_number.clone(),
             citizen_status: record.citizen_status.clone(),
             voting_eligible: Some(record.voting_eligible),
             vote_status: Some(record.computed_vote_status()),
@@ -46,7 +46,7 @@ pub(crate) async fn app_myid_status(
         Ok(None) => MyIdStatusOutput {
             bind_status: "unset".to_string(),
             wallet_address: None,
-            sfid_code: None,
+            sfid_number: None,
             citizen_status: None,
             voting_eligible: None,
             vote_status: None,

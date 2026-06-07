@@ -37,27 +37,6 @@ pub fn blake2b_128(data: &[u8]) -> [u8; 16] {
     out
 }
 
-/// 将 sfid_number 字符串编码为固定 48 字节(kind tag 0x01 Builtin + payload 47B 右补零)。
-///
-/// D 阶段(SubjectKind 协议统一,2026-05-06)起,内置主体 subject_id 协议:
-///   byte[0]   = 0x01 (SubjectKind::Builtin)
-///   byte[1..48] = sfid_number 字节(≤47B,右填零)
-///
-/// 与 `primitives::derive::subject_id_from_sfid_number` 算法一致。
-/// 节点 offline 计算 storage key 时直接复用此实现(node 不依赖 frame 类型,本地实现)。
-pub fn subject_id_from_sfid_number(sfid_number: &str) -> [u8; 48] {
-    let raw = sfid_number.as_bytes();
-    assert!(
-        !raw.is_empty() && raw.len() <= 47,
-        "sfidNumber 长度必须在 1..47 字节(D 协议预留 1B kind tag),实际: {}",
-        raw.len()
-    );
-    let mut out = [0u8; 48];
-    out[0] = 0x01; // SubjectKind::Builtin
-    out[1..1 + raw.len()].copy_from_slice(raw);
-    out
-}
-
 /// 构造查询账户余额的存储 key：`System::Account(account_id)`。
 /// account_id 为 32 字节公钥（hex 不含 0x）。
 pub fn system_account_key(account_hex: &str) -> Result<String, String> {
@@ -151,19 +130,6 @@ pub fn twox64_concat_prefix(pallet: &str, storage: &str, key1: &[u8]) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn institution_id_from_sfid_number_with_kind_tag() {
-        let id = "GFR-LN001-CB0X-944805165-2026";
-        let fixed = subject_id_from_sfid_number(id);
-        let runtime_fixed =
-            primitives::derive::subject_id_from_sfid_number(id).expect("测试 sfid_number 长度合法");
-        // D 阶段:byte[0]=0x01 Builtin,byte[1..1+len]=sfid_number bytes,余下零填充
-        assert_eq!(fixed, runtime_fixed);
-        assert_eq!(fixed[0], 0x01);
-        assert_eq!(&fixed[1..1 + id.len()], id.as_bytes());
-        assert!(fixed[1 + id.len()..].iter().all(|&b| b == 0));
-    }
 
     #[test]
     fn system_account_key_has_correct_length() {

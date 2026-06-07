@@ -1,8 +1,8 @@
 // 清算行资格白名单(2026-04-24, ADR-007)— 前端复刻版本
 //
 // 与后端 sfid/backend/subjects/service.rs::is_clearing_bank_eligible 严格一致:
-//   - SFR + sub_type=JOINT_STOCK            → ✅
-//   - FFR + parent.SFR + parent.JOINT_STOCK → ✅
+//   - S + sub_type=JOINT_STOCK            → ✅
+//   - F + parent.S + parent.JOINT_STOCK → ✅
 //   - 其他                                   → ❌
 //
 // 详细规则见:
@@ -11,29 +11,29 @@
 
 /** 资格判定所需的最小字段集(覆盖 InstitutionListRow / MultisigInstitution / ParentInstitutionRow)。 */
 export interface ClearingEligibleInst {
-  a3: string;
+  subject_property: string;
   sub_type?: string | null;
   parent_sfid_number?: string | null;
 }
 
 /** 资格判定所需的 parent 最小字段集。 */
 export interface ClearingEligibleParent {
-  a3: string;
+  subject_property: string;
   sub_type?: string | null;
 }
 
 /**
- * 单机构(SFR)直接判定 — 不需要 parent 信息。
+ * 单机构(S)直接判定 — 不需要 parent 信息。
  *
  * 用于 PrivateListTable 列渲染:列表行只有自身字段,没有 parent 详情,
- * 因此 FFR 一律不在列表里直接判定为"可作为清算行";其资格在详情页有 parent 信息后再判定。
+ * 因此 F 一律不在列表里直接判定为"可作为清算行";其资格在详情页有 parent 信息后再判定。
  */
 export function isSelfEligibleClearingBank(inst: ClearingEligibleInst): boolean {
-  return inst.a3 === 'SFR' && inst.sub_type === 'JOINT_STOCK';
+  return inst.subject_property === 'S' && inst.sub_type === 'JOINT_STOCK';
 }
 
 /**
- * 完整判定 — 需要 parent(若 a3=FFR)。
+ * 完整判定 — 需要 parent(若 subject_property=F)。
  *
  * 用于详情页 / PrivateDetailLayout:有完整的机构 + 所属法人信息后做权威判定。
  */
@@ -41,12 +41,12 @@ export function isClearingBankEligible(
   inst: ClearingEligibleInst,
   parent: ClearingEligibleParent | null | undefined,
 ): boolean {
-  if (inst.a3 === 'SFR') {
+  if (inst.subject_property === 'S') {
     return inst.sub_type === 'JOINT_STOCK';
   }
-  if (inst.a3 === 'FFR') {
+  if (inst.subject_property === 'F') {
     if (!parent) return false;
-    return parent.a3 === 'SFR' && parent.sub_type === 'JOINT_STOCK';
+    return parent.subject_property === 'S' && parent.sub_type === 'JOINT_STOCK';
   }
   return false;
 }

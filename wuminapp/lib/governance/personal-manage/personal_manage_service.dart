@@ -198,17 +198,17 @@ class PersonalManageService {
     if (data == null) return null;
     final personal = PersonalManageStorageCodec.decodePersonalDuoqian(data);
     if (personal == null) return null;
-    final subjectId = PersonalManageStorageCodec.subjectIdFromAccountHex(
+    final accountId = PersonalManageStorageCodec.accountIdFromAccountHex(
       duoqianAddressHex,
     );
-    final adminKey = PersonalManageStorageCodec.adminSubjectKey(subjectId);
+    final adminKey = PersonalManageStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
     if (adminData == null) return null;
-    final admin = PersonalManageStorageCodec.decodeAdminSubject(adminData);
+    final admin = PersonalManageStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
     final threshold = await _fetchPersonalDynamicThreshold(
       org: admin.org,
-      subjectId: subjectId,
+      accountId: accountId,
     );
     return DuoqianAccountInfo(
       adminCount: admin.adminCount,
@@ -235,18 +235,18 @@ class PersonalManageService {
 
     final personalKeyByAddress = <String, String>{};
     final adminKeyByAddress = <String, String>{};
-    final subjectIdByAddress = <String, Uint8List>{};
+    final accountIdByAddress = <String, Uint8List>{};
     final firstRoundKeys = <String>[];
 
     for (final address in addresses) {
-      final subjectId = PersonalManageStorageCodec.subjectIdFromAccountHex(
+      final accountId = PersonalManageStorageCodec.accountIdFromAccountHex(
         address,
       );
       final personalKey =
           '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
       final adminKey =
-          '0x${_hexEncode(PersonalManageStorageCodec.adminSubjectKey(subjectId))}';
-      subjectIdByAddress[address] = subjectId;
+          '0x${_hexEncode(PersonalManageStorageCodec.adminAccountKey(accountId))}';
+      accountIdByAddress[address] = accountId;
       personalKeyByAddress[address] = personalKey;
       adminKeyByAddress[address] = adminKey;
       firstRoundKeys
@@ -271,7 +271,7 @@ class PersonalManageService {
       }
       final personal =
           PersonalManageStorageCodec.decodePersonalDuoqian(personalData);
-      final admin = PersonalManageStorageCodec.decodeAdminSubject(adminData);
+      final admin = PersonalManageStorageCodec.decodeAdminAccount(adminData);
       if (personal == null || admin == null) {
         result[address] = null;
         continue;
@@ -282,12 +282,12 @@ class PersonalManageService {
 
     final activeThresholdKeyByAddress = <String, String>{};
     for (final entry in adminByAddress.entries) {
-      final subjectId = subjectIdByAddress[entry.key]!;
+      final accountId = accountIdByAddress[entry.key]!;
       activeThresholdKeyByAddress[entry.key] =
           '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
         org: entry.value.org,
-        subjectId: subjectId,
+        accountId: accountId,
       ))}';
     }
     final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
@@ -308,7 +308,7 @@ class PersonalManageService {
             '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
           org: admin.org,
-          subjectId: subjectIdByAddress[entry.key]!,
+          accountId: accountIdByAddress[entry.key]!,
         ))}';
       }
     }
@@ -343,7 +343,7 @@ class PersonalManageService {
 
   Future<int?> _fetchPersonalDynamicThreshold({
     required int org,
-    required Uint8List subjectId,
+    required Uint8List accountId,
   }) async {
     for (final storageName in const [
       'ActiveDynamicThresholds',
@@ -352,7 +352,7 @@ class PersonalManageService {
       final key = PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: storageName,
         org: org,
-        subjectId: subjectId,
+        accountId: accountId,
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
       final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(data);

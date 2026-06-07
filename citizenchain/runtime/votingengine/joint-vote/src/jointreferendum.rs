@@ -96,7 +96,7 @@ impl<T: Config> Pallet<T> {
 
     /// 联合公投超时结算:按 >50% 规则,未达阈值否决。
     pub fn do_finalize_jointreferendum_timeout(
-        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
         ensure!(

@@ -19,7 +19,10 @@ use schnorrkel::MiniSecretKey;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::{err, ok, rate_limit, write_audit, ApiError, ApiResponse, AppState};
+use crate::{
+    common::{err, ok, rate_limit, write_audit, ApiError, ApiResponse},
+    AppState,
+};
 
 type Blake2b256 = Blake2b<U32>;
 
@@ -724,7 +727,7 @@ fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String
 }
 
 fn parse_sfid_area_codes(sfid_number: &str) -> (Option<String>, Option<String>) {
-    let r5 = sfid_number.split('-').nth(1).unwrap_or("");
+    let r5 = sfid_number.split('-').next().unwrap_or("");
     if r5.len() >= 5 {
         (Some(r5[..2].to_string()), Some(r5[2..5].to_string()))
     } else {
@@ -740,7 +743,7 @@ fn normalize_admin_pubkey(raw_input: &str) -> Result<String, (StatusCode, Json<A
     if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
         return Ok(stripped.to_lowercase());
     }
-    if let Some(hex_with_prefix) = crate::ss58::ss58_to_pubkey_hex(raw_input) {
+    if let Some(hex_with_prefix) = crate::common::ss58::ss58_to_pubkey_hex(raw_input) {
         return Ok(hex_with_prefix
             .strip_prefix("0x")
             .unwrap_or(&hex_with_prefix)
@@ -780,7 +783,7 @@ mod tests {
         SfidInstallQrPayload {
             proto: "SFID_CPMS_V1".to_string(),
             r#type: "INSTALL".to_string(),
-            sfid_number: "GFR-GD001-ZG0X-123456789-2026".to_string(),
+            sfid_number: "GD001-GZG0E-123456789-2026".to_string(),
             province_name: "广东省".to_string(),
             city_name: "广州市".to_string(),
             install_secret: format!("0x{}", "11".repeat(32)),

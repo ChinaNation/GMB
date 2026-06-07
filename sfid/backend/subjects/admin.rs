@@ -39,9 +39,14 @@ pub(crate) async fn check_institution_name(
     if name.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "name is required");
     }
-    let a3 = params.a3.as_deref().unwrap_or("").trim().to_string();
+    let subject_property = params
+        .subject_property
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let city = params.city.as_deref().unwrap_or("").trim().to_string();
-    let exists = if a3 == "GFR" {
+    let exists = if subject_property == "G" {
         if city.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "公权机构查重需要 city 参数");
         }
@@ -84,7 +89,7 @@ pub(crate) async fn check_institution_name(
 #[derive(Debug, serde::Deserialize)]
 pub struct CheckNameQuery {
     pub name: String,
-    pub a3: Option<String>,
+    pub subject_property: Option<String>,
     pub city: Option<String>,
 }
 
@@ -244,7 +249,7 @@ pub(crate) async fn update_institution(
     }
     if input.sub_type.is_some() {
         existing.sub_type = match validate_sub_type_with_p1(
-            &existing.a3,
+            &existing.subject_property,
             &existing.p1,
             input.sub_type.as_deref(),
         ) {
@@ -259,8 +264,8 @@ pub(crate) async fn update_institution(
             .unwrap_or("")
             .trim()
             .to_string();
-        if !uninorg::requires_parent(existing.a3.as_str()) {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "仅非法人(FFR)可设置所属法人");
+        if !uninorg::requires_parent(existing.subject_property.as_str()) {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "仅非法人(F)可设置所属法人");
         }
         if raw.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人不能为空");
@@ -274,11 +279,11 @@ pub(crate) async fn update_institution(
         }) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在");
         };
-        if !uninorg::can_attach_to_parent_a3(target.a3.as_str()) {
+        if !uninorg::can_attach_to_parent_subject(target.subject_property.as_str()) {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                uninorg::parent_a3_requirement_message(),
+                uninorg::parent_subject_requirement_message(),
             );
         }
         existing.parent_sfid_number = Some(raw);
@@ -354,10 +359,10 @@ pub(crate) async fn search_parent_institutions(
     let result = state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT sfid_number, name, a3, sub_type, category, province, city, COALESCE(town, '')
+                "SELECT sfid_number, name, subject_property, sub_type, category, province, city, COALESCE(town, '')
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
-                   AND a3 IN ('SFR', 'GFR')
+                   AND subject_property IN ('S', 'G')
                    AND name IS NOT NULL
                    AND (lower(sfid_number) LIKE '%' || $1 || '%'
                         OR lower(name) LIKE '%' || $1 || '%')
@@ -376,7 +381,7 @@ pub(crate) async fn search_parent_institutions(
             output.push(ParentInstitutionRow {
                 sfid_number: row.get(0),
                 institution_name: row.get(1),
-                a3: row.get(2),
+                subject_property: row.get(2),
                 sub_type: row.get(3),
                 category,
                 province: row.get(5),

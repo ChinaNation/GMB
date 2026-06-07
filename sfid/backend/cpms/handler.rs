@@ -46,7 +46,7 @@ fn cpms_site_from_row(row: &postgres::Row) -> Result<CpmsSiteKeys, String> {
     let payload: serde_json::Value = row.get(7);
     let mut site: CpmsSiteKeys = serde_json::from_value(payload)
         .map_err(|e| format!("deserialize cpms site payload failed: {e}"))?;
-    site.site_sfid = row.get(0);
+    site.sfid_number = row.get(0);
     site.province_code = row.get(1);
     site.city_code = row.get(2);
     site.cpms_pubkey_hash = row.get(5);
@@ -90,7 +90,7 @@ impl Db {
                     updated_at = EXCLUDED.updated_at,
                     payload = EXCLUDED.payload",
                 &[
-                    &site.site_sfid,
+                    &site.sfid_number,
                     &site.province_code,
                     &site.city_code,
                     &cpms_status_text(&site.status),
@@ -243,7 +243,7 @@ pub(crate) async fn generate_cpms_install_qr(
         return api_error(StatusCode::BAD_REQUEST, 1001, "field too long");
     }
 
-    let Some((site_sfid, province_code, city_code, institution_code, institution_name)) =
+    let Some((sfid_number, province_code, city_code, institution_code, institution_name)) =
         (match state
             .db
             .find_cpms_target_institution(&province, &city, &institution)
@@ -261,7 +261,7 @@ pub(crate) async fn generate_cpms_install_qr(
     else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
-    let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
+    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
     };
@@ -276,7 +276,8 @@ pub(crate) async fn generate_cpms_install_qr(
         }
     };
     let install_secret_hash = install_secret_hash(install_secret.as_str());
-    let sign_source = build_install_sign_source(&site_sfid, &province, &city, &install_secret_hash);
+    let sign_source =
+        build_install_sign_source(&sfid_number, &province, &city, &install_secret_hash);
     let signature = match sign_with_main_key(&state, &sign_source) {
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
@@ -284,7 +285,7 @@ pub(crate) async fn generate_cpms_install_qr(
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
-        "sfid_number": site_sfid,
+        "sfid_number": sfid_number,
         "province_name": province,
         "city_name": city,
         "install_secret": install_secret,
@@ -302,7 +303,7 @@ pub(crate) async fn generate_cpms_install_qr(
     };
     let created_at = Utc::now();
     let site = CpmsSiteKeys {
-        site_sfid: site_sfid.clone(),
+        sfid_number: sfid_number.clone(),
         install_token: String::new(),
         install_secret,
         install_secret_hash,
@@ -334,7 +335,7 @@ pub(crate) async fn generate_cpms_install_qr(
         &state,
         "CPMS_INSTALL_QR_GENERATE",
         &ctx.admin_pubkey,
-        Some(site_sfid.clone()),
+        Some(sfid_number.clone()),
         format!(
             "city={} institution={}",
             site.city_name, site.institution_code
@@ -344,7 +345,7 @@ pub(crate) async fn generate_cpms_install_qr(
         code: 0,
         message: "ok".to_string(),
         data: GenerateCpmsInstallOutput {
-            sfid_number: site_sfid,
+            sfid_number: sfid_number,
             qr1_payload,
         },
     })
@@ -412,22 +413,22 @@ pub(crate) async fn reissue_install_token(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
+    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let grant_payload = serde_json::json!({ "target": site_sfid.clone() });
+    let grant_payload = serde_json::json!({ "target": sfid_number.clone() });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
         &ctx,
         AdminActionType::CpmsIssueInstallCode,
-        site_sfid.as_str(),
+        sfid_number.as_str(),
         Some(&grant_payload),
     ) {
         return resp;
     }
-    let mut site = match load_scoped_site(&state, &ctx, &site_sfid) {
+    let mut site = match load_scoped_site(&state, &ctx, &sfid_number) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -457,7 +458,7 @@ pub(crate) async fn reissue_install_token(
     site.updated_by = Some(ctx.admin_pubkey.clone());
     site.updated_at = Some(Utc::now());
     let sign_source = build_install_sign_source(
-        site.site_sfid.as_str(),
+        site.sfid_number.as_str(),
         site.admin_province.as_str(),
         site.city_name.as_str(),
         site.install_secret_hash.as_str(),
@@ -469,7 +470,7 @@ pub(crate) async fn reissue_install_token(
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
-        "sfid_number": site.site_sfid,
+        "sfid_number": site.sfid_number,
         "province_name": site.admin_province,
         "city_name": site.city_name,
         "install_secret": site.install_secret,
@@ -497,7 +498,7 @@ pub(crate) async fn reissue_install_token(
         &state,
         "CPMS_INSTALL_QR_REISSUE",
         &ctx.admin_pubkey,
-        Some(site.site_sfid.clone()),
+        Some(site.sfid_number.clone()),
         "reissue install code".to_string(),
     );
     Json(ApiResponse {
@@ -518,22 +519,22 @@ async fn update_cpms_site_token_status(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
+    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let grant_payload = serde_json::json!({ "target": site_sfid.clone() });
+    let grant_payload = serde_json::json!({ "target": sfid_number.clone() });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
         &ctx,
         AdminActionType::CpmsRevokeInstallToken,
-        site_sfid.as_str(),
+        sfid_number.as_str(),
         Some(&grant_payload),
     ) {
         return resp;
     }
-    let mut site = match load_scoped_site(&state, &ctx, &site_sfid) {
+    let mut site = match load_scoped_site(&state, &ctx, &sfid_number) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -614,22 +615,22 @@ pub(crate) async fn delete_cpms_keys(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
+    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let grant_payload = serde_json::json!({ "target": site_sfid.clone() });
+    let grant_payload = serde_json::json!({ "target": sfid_number.clone() });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
         &ctx,
         AdminActionType::CpmsDeleteKeys,
-        site_sfid.as_str(),
+        sfid_number.as_str(),
         Some(&grant_payload),
     ) {
         return resp;
     }
-    let site = match load_scoped_site(&state, &ctx, &site_sfid) {
+    let site = match load_scoped_site(&state, &ctx, &sfid_number) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -640,7 +641,7 @@ pub(crate) async fn delete_cpms_keys(
             "only pending cpms site can be deleted",
         );
     }
-    if let Err(err) = state.db.delete_cpms_site(&site_sfid) {
+    if let Err(err) = state.db.delete_cpms_site(&sfid_number) {
         tracing::error!(error = %err, "delete cpms site failed");
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -652,7 +653,7 @@ pub(crate) async fn delete_cpms_keys(
         &state,
         "CPMS_KEYS_DELETE",
         &ctx.admin_pubkey,
-        Some(site_sfid.clone()),
+        Some(sfid_number.clone()),
         "delete pending cpms site".to_string(),
     );
     #[derive(serde::Serialize)]
@@ -717,11 +718,11 @@ pub(crate) async fn get_cpms_site_by_institution(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid = match validate_sfid_number_format(sfid_number.as_str()) {
+    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let site = match state.db.get_cpms_site(&site_sfid) {
+    let site = match state.db.get_cpms_site(&sfid_number) {
         Ok(v) => v,
         Err(err) => {
             tracing::error!(error = %err, "query cpms site failed");
@@ -757,7 +758,7 @@ pub(crate) async fn get_cpms_site_by_institution(
 async fn update_cpms_site_status(
     state: AppState,
     headers: HeaderMap,
-    site_sfid: String,
+    sfid_number: String,
     target_status: CpmsSiteStatus,
     reason: Option<String>,
 ) -> axum::response::Response {
@@ -765,7 +766,7 @@ async fn update_cpms_site_status(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
+    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
@@ -781,18 +782,18 @@ async fn update_cpms_site_status(
             return api_error(StatusCode::BAD_REQUEST, 1001, "invalid target status")
         }
     };
-    let grant_payload = serde_json::json!({ "target": site_sfid.clone(), "reason": reason_text });
+    let grant_payload = serde_json::json!({ "target": sfid_number.clone(), "reason": reason_text });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
         &ctx,
         action_type,
-        site_sfid.as_str(),
+        sfid_number.as_str(),
         Some(&grant_payload),
     ) {
         return resp;
     }
-    let mut site = match load_scoped_site(&state, &ctx, &site_sfid) {
+    let mut site = match load_scoped_site(&state, &ctx, &sfid_number) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -821,7 +822,7 @@ async fn update_cpms_site_status(
             &state,
             "CPMS_KEYS_STATUS_UPDATE",
             &ctx.admin_pubkey,
-            Some(site.site_sfid.clone()),
+            Some(site.sfid_number.clone()),
             format!("status={:?} reason={}", site.status, reason_text),
         );
     }
@@ -863,7 +864,7 @@ fn cpms_site_keys_to_list_row_simple(
     created_by_name: String,
 ) -> CpmsSiteKeysListRow {
     CpmsSiteKeysListRow {
-        sfid_number: site.site_sfid.clone(),
+        sfid_number: site.sfid_number.clone(),
         install_token_status: site.install_token_status.clone(),
         status: site.status.clone(),
         version: site.version,
@@ -987,7 +988,7 @@ pub(crate) async fn verify_cpms_archive_qr(
     }
     let cpms_pubkey_hash = hash_hex(archive_code.cpms_pubkey.as_bytes());
     let citizen_status = citizen_status_from_cpms(archive_code.citizen_status.as_str())?;
-    bind_cpms_pubkey_if_needed(state, site.site_sfid.as_str(), cpms_pubkey_hash.as_str()).await?;
+    bind_cpms_pubkey_if_needed(state, site.sfid_number.as_str(), cpms_pubkey_hash.as_str()).await?;
     Ok(VerifiedCpmsArchive {
         archive_no: archive_code.archive_no.clone(),
         citizen_status,
@@ -1039,7 +1040,7 @@ fn validate_geo_seal_against_site(
     site: &CpmsSiteKeys,
     seal: &CpmsGeoSealClaims,
 ) -> Result<(), (StatusCode, u32, String)> {
-    if seal.sfid_number != site.site_sfid {
+    if seal.sfid_number != site.sfid_number {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
             2004,
@@ -1245,19 +1246,19 @@ fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteSt
     )
 }
 
-pub(super) fn extract_province_code_from_sfid(site_sfid: &str) -> String {
-    let segments: Vec<&str> = site_sfid.split('-').collect();
-    if segments.len() >= 2 && segments[1].len() >= 2 {
-        segments[1][..2].to_string()
+pub(super) fn extract_province_code_from_sfid(sfid_number: &str) -> String {
+    let segments: Vec<&str> = sfid_number.split('-').collect();
+    if !segments.is_empty() && segments[0].len() >= 2 {
+        segments[0][..2].to_string()
     } else {
         String::new()
     }
 }
 
-pub(super) fn extract_city_code_from_sfid(site_sfid: &str) -> String {
-    let segments: Vec<&str> = site_sfid.split('-').collect();
-    if segments.len() >= 2 && segments[1].len() >= 5 {
-        segments[1][2..5].to_string()
+pub(super) fn extract_city_code_from_sfid(sfid_number: &str) -> String {
+    let segments: Vec<&str> = sfid_number.split('-').collect();
+    if !segments.is_empty() && segments[0].len() >= 5 {
+        segments[0][2..5].to_string()
     } else {
         String::new()
     }

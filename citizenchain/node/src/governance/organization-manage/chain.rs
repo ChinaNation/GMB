@@ -11,10 +11,7 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
-use crate::governance::admins_change::{
-    storage as admins_storage,
-    subject_id::{self as admin_subject_id, SUBJECT_KIND_INSTITUTION_ACCOUNT},
-};
+use crate::governance::admins_change::storage as admins_storage;
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
@@ -183,7 +180,7 @@ fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
 /// 链上查询某机构的多签信息。返回 `None` = 该 sfid_number 尚未创建机构(进入创建流程)。
 ///
 /// 数据来源:
-/// 1. `OrganizationManage::Institutions[sfid_number]` 取机构主体
+/// 1. `OrganizationManage::Institutions[sfid_number]` 取机构账户
 /// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[sfid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
 pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionDetail>, String> {
@@ -213,10 +210,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
     let main_addr_bytes: [u8; 32] = inst.main_address.clone().into();
     let fee_addr_bytes: [u8; 32] = inst.fee_address.clone().into();
-    let admin_subject_id = admin_subject_id::subject_id_from_account_hex(
-        SUBJECT_KIND_INSTITUTION_ACCOUNT,
-        &hex::encode(main_addr_bytes),
-    )?;
+    let admin_account_id = main_addr_bytes;
     let main_addr_ss58 = pubkey_to_ss58(&main_addr_bytes).unwrap_or_default();
     let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
     let mut main_account: Option<AccountWithBalance> = None;
@@ -254,7 +248,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         }
     });
 
-    let admin_state = admins_storage::fetch_admin_subject(&admin_subject_id, None)?;
+    let admin_state = admins_storage::fetch_admin_account(&admin_account_id, None)?;
     let (duoqian_admins_ss58, admin_count, threshold) = match admin_state {
         Some(state) if state.org == inst.admin_org => {
             let admins = state
@@ -262,10 +256,10 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
                 .iter()
                 .filter_map(|a| admin_hex_to_ss58(a))
                 .collect::<Vec<_>>();
-            (admins, state.admins.len() as u32, state.threshold)
+            (admins, state.admins.len() as u32, inst.threshold)
         }
         _ => {
-            // 创建 Pending 阶段 AdminsChange::Subjects 尚未激活,详情页回退显示创建快照。
+            // 创建 Pending 阶段 AdminsChange::AdminAccounts 尚未激活,详情页回退显示创建快照。
             let admins = inst
                 .duoqian_admins
                 .iter()
@@ -286,7 +280,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     Ok(Some(InstitutionDetail {
         sfid_number: sfid_number.to_string(),
         institution_name,
-        admin_subject_id_hex: hex::encode(admin_subject_id),
+        admin_account_hex: hex::encode(admin_account_id),
         admin_org: inst.admin_org,
         main_account,
         fee_account,
@@ -472,7 +466,7 @@ mod tests {
 
     #[test]
     fn encode_sfid_key_data_round_trip() {
-        let raw = "GFR-LN001-CB0X-944805165-2026";
+        let raw = "LN001-GCB05-944805165-2026";
         let encoded = encode_sfid_key_data(raw).unwrap();
         // Compact<u32> 长度前缀(单字节模式 raw.len() < 64)+ raw 字节
         assert_eq!(encoded[0], (raw.len() as u8) << 2);

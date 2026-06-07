@@ -14,7 +14,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{authz, dangan, err, ok, ss58, write_audit, ApiError, ApiResponse, AppState, Archive};
+use crate::{
+    authz,
+    common::{err, ok, ss58, write_audit, ApiError, ApiResponse, Archive},
+    dangan, AppState,
+};
 
 #[derive(Deserialize)]
 struct CreateAdminRequest {

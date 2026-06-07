@@ -24,11 +24,11 @@
 
 ## 2026-05-08 · 第5步账户级主体接入
 
-- `propose_transfer` 的 `institution: SubjectId` 不再把 `0x02 SfidInstitution` 当作可支出主体；`0x02` 只保留给机构归属与检索。
+- `propose_transfer` 的 `institution: AccountId` 不再把 `0x02 注册机构归属关系` 当作可支出主体；`0x02` 只保留给机构归属与检索。
 - 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_address`。
-- 个人多签使用 `0x03 PersonalDuoqian + AccountId32 + 15B 零填充`，账户状态由 `personal-manage::PersonalMultisigQuery` 校验。
-- 注册机构具体账户使用 `0x05 InstitutionAccount + AccountId32 + 15B 零填充`，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都以 `admins-change::Subjects[SubjectId]` 为真源，内部投票仍是一人一票一笔链上交易。
+- 个人多签使用 `PersonalDuoqian AccountId + AccountId32 + 15B 零填充`，账户状态由 `personal-manage::PersonalMultisigQuery` 校验。
+- 注册机构具体账户使用 `InstitutionAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
+- 两类注册账户的管理员、阈值和人数都以 `admins-change::Subjects[AccountId]` 为真源，内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -43,8 +43,8 @@
 - 管理员个人账户不承担任何费用。
 - 覆盖三类来源：
   - 创世预置的治理机构 `main_address`（NRC / PRC / PRB）
-  - `personal-manage` 注册并激活的个人多签账户（`0x03 PersonalDuoqian`）
-  - `organization-manage` 注册并激活的机构具体账户（`0x05 InstitutionAccount`）
+  - `personal-manage` 注册并激活的个人多签账户（`PersonalDuoqian AccountId`）
+  - `organization-manage` 注册并激活的机构具体账户（`InstitutionAccount AccountId`）
 
 ### 0.2 功能边界
 
@@ -91,8 +91,8 @@
 资金账户地址有三种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 个人多签账户：`SubjectId(48)` 使用 `SubjectKind::PersonalDuoqian = 0x03` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalManage::PersonalDuoqians` 校验 Active。
-- 注册型机构账户：`SubjectId(48)` 使用 `SubjectKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
+- 个人多签账户：`AccountId32` 使用 `AdminAccountKind::PersonalDuoqian = 0x03` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalManage::PersonalDuoqians` 校验 Active。
+- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
 
@@ -108,7 +108,7 @@
 pub fn propose_transfer(
     origin: OriginFor<T>,
     org: u8,                           // 机构类型：0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN
-    institution: SubjectId,   // 机构 pallet id [u8; 48]
+    institution: AccountId,   // 机构 pallet id [u8; 48]
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
     remark: BoundedVec<u8, T::MaxRemarkLen>, // 备注
@@ -121,9 +121,9 @@ pub fn propose_transfer(
 2. `amount > 0`。
 3. `institution` 必须是有效机构：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 个人多签账户：能从 `0x03 PersonalDuoqian` 解码出账户地址，且对应 `PersonalManage::PersonalDuoqians` 处于 Active；
-   - 注册型机构账户：能从 `0x05 InstitutionAccount` 解码出账户地址，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active；
-   - `0x02 SfidInstitution` 只用于机构归属/检索，不能作为转账支出主体。
+   - 个人多签账户：能从 `PersonalDuoqian AccountId` 解码出账户地址，且对应 `PersonalManage::PersonalDuoqians` 处于 Active；
+   - 注册型机构账户：能从 `InstitutionAccount AccountId` 解码出账户地址，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active；
+   - `0x02 注册机构归属关系` 只用于机构归属/检索，不能作为转账支出主体。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
@@ -176,7 +176,7 @@ InternalVote::cast(origin, proposal_id, approve)  // pallet 22.0
 ```rust
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
-    pub institution: SubjectId,       // 转出机构
+    pub institution: AccountId,       // 转出机构
     pub beneficiary: AccountId,                  // 收款地址
     pub amount: Balance,                         // 转账金额
     pub remark: BoundedVec<u8, MaxRemarkLen>,    // 备注
@@ -193,7 +193,7 @@ pub enum Event<T: Config> {
     TransferProposed {
         proposal_id: u64,
         org: u8,
-        institution: SubjectId,
+        institution: AccountId,
         proposer: T::AccountId,
         from: T::AccountId,                             // 转出资金账户
         beneficiary: T::AccountId,
@@ -202,11 +202,11 @@ pub enum Event<T: Config> {
         expires_at: BlockNumberFor<T>,                  // 投票超时区块
     },
     /// 投票通过但执行失败(可通过 VotingEngine::retry_passed_proposal 手动重试)
-    TransferExecutionFailed { proposal_id: u64, institution: SubjectId },
+    TransferExecutionFailed { proposal_id: u64, institution: AccountId },
     /// 转账已执行(含手续费分账)
     TransferExecuted {
         proposal_id: u64,
-        institution: SubjectId,
+        institution: AccountId,
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         fee: BalanceOf<T>,
@@ -227,14 +227,14 @@ pub enum Event<T: Config> {
     // Sweep 组:
     SweepToMainProposed {
         proposal_id: u64,
-        institution: SubjectId,
+        institution: AccountId,
         proposer: T::AccountId,
         from: T::AccountId,                             // fee_account
         to: T::AccountId,                               // main_account
         amount: BalanceOf<T>,
         expires_at: BlockNumberFor<T>,
     },
-    SweepToMainExecuted { proposal_id: u64, institution: SubjectId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
+    SweepToMainExecuted { proposal_id: u64, institution: AccountId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
     SweepExecutionFailed { proposal_id: u64 },
 }
 ```

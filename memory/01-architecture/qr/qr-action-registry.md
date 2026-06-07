@@ -126,7 +126,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | payload 结构 | fields(顺序固定) | 签发方 | 用途 |
 |---|---|---|---|---|
-| `activate_admin_subject` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `subject_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / wuminapp | subject 级管理员激活 |
+| `activate_admin_account` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `account_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / wuminapp | subject 级管理员激活 |
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
 | `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | wuminapp 电子护照绑定签名 |
 | `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |

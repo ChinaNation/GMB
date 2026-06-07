@@ -660,7 +660,7 @@ fn preview_security_action(
         .get("target")
         .and_then(|v| v.as_str())
         .or_else(|| payload.get("sfid_number").and_then(|v| v.as_str()))
-        .or_else(|| payload.get("site_sfid").and_then(|v| v.as_str()))
+        .or_else(|| payload.get("sfid_number").and_then(|v| v.as_str()))
         .or_else(|| payload.get("challenge_id").and_then(|v| v.as_str()))
         .unwrap_or("*");
     let target = normalize_security_target(target);

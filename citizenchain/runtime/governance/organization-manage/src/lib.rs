@@ -17,15 +17,7 @@ pub mod weights;
 #[cfg(test)]
 mod tests;
 
-pub use traits::{
-    DuoqianAddressValidator, DuoqianReservedAddressChecker, InstitutionMultisigQuery,
-    ProtectedSourceChecker, SfidInstitutionVerifier,
-};
-// 中文注释:D 阶段(SubjectKind 协议统一,2026-05-06)起,institution_id 派生函数
-// 全部归口 primitives::derive,organization-manage 不再 re-export;
-// 下游调用方直接 use primitives::derive::institution_id_from_*。
-
-use admins_change::SubjectLifecycle;
+use admins_change::AdminAccountLifecycle;
 use codec::{Decode, Encode};
 use frame_support::{
     ensure,
@@ -34,13 +26,14 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system::pallet_prelude::*;
-use primitives::derive::subject_id_from_institution_account;
 use sp_core::sr25519::Public as Sr25519Public;
-use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
+pub use traits::{
+    DuoqianAddressValidator, DuoqianReservedAddressChecker, InstitutionMultisigQuery,
+    ProtectedSourceChecker, SfidInstitutionVerifier,
+};
 use votingengine::{
-    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId,
-    STATUS_REJECTED,
+    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
 pub use address::{InstitutionAccountRole, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
@@ -605,17 +598,12 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 返回链域前缀（SS58 前缀的小端 u16 字节）
-        fn chain_domain_prefix() -> [u8; 2] {
-            T::SS58Prefix::get().to_le_bytes()
-        }
-
         /// 按角色派生机构多签账户地址（所有机构统一走这条路径）。
         ///
-        /// 派生公式按 `role` 分支：
-        /// - `Main` → `blake2_256(DUOQIAN_DOMAIN || OP_MAIN || ss58_le || sfid_number)`
-        /// - `Fee`  → `blake2_256(DUOQIAN_DOMAIN || OP_FEE  || ss58_le || sfid_number)`
-        /// - `Named(account_name)` → `blake2_256(DUOQIAN_DOMAIN || OP_INSTITUTION || ss58_le || sfid_number || account_name)`
+        /// 派生统一调用 `primitives::core_const::derive_duoqian_account`：
+        /// - `Main` → `OP_MAIN + sfid_number`
+        /// - `Fee`  → `OP_FEE + sfid_number`
+        /// - `Named(account_name)` → `OP_INSTITUTION + sfid_number + account_name`
         ///
         /// 保留名校验：`Named(b"主账户")` 和 `Named(b"费用账户")` 被拒绝（返回
         /// `ReservedAccountName` 错误），强制这两个角色走 `Main`/`Fee` 分支避免
@@ -636,13 +624,14 @@ pub mod pallet {
                     (primitives::core_const::OP_INSTITUTION, n)
                 }
             };
-            let mut input = primitives::core_const::DUOQIAN_DOMAIN.to_vec();
-            input.push(op_tag);
-            input.extend_from_slice(&Self::chain_domain_prefix());
-            input.extend_from_slice(sfid_number);
-            input.extend_from_slice(name_suffix);
-            let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
-            T::AccountId::decode(&mut digest.as_ref())
+            let mut payload = sfid_number.to_vec();
+            payload.extend_from_slice(name_suffix);
+            let digest = primitives::core_const::derive_duoqian_account(
+                op_tag,
+                T::SS58Prefix::get(),
+                &payload,
+            );
+            T::AccountId::decode(&mut &digest[..])
                 .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
         }
 
@@ -733,15 +722,15 @@ pub mod pallet {
             Ok(())
         }
 
-        pub(crate) fn create_pending_admin_subject_for_proposal(
+        pub(crate) fn create_pending_admin_account_for_proposal(
             proposal_id: u64,
             org: u8,
-            institution_id: votingengine::SubjectId,
-            kind: admins_change::AdminSubjectKind,
+            institution_id: T::AccountId,
+            kind: admins_change::AdminAccountKind,
             admins: &DuoqianAdminsOf<T>,
             creator: &T::AccountId,
         ) -> DispatchResult {
-            admins_change::Pallet::<T>::create_pending_subject_for_proposal(
+            admins_change::Pallet::<T>::create_pending_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
@@ -752,48 +741,42 @@ pub mod pallet {
             )
         }
 
-        pub(crate) fn activate_admin_subject(
+        pub(crate) fn activate_admin_account(
             proposal_id: u64,
-            institution_id: votingengine::SubjectId,
+            institution_id: T::AccountId,
         ) -> DispatchResult {
-            admins_change::Pallet::<T>::activate_subject_for_proposal(
+            admins_change::Pallet::<T>::activate_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
             )
         }
 
-        pub(crate) fn remove_pending_admin_subject(
-            proposal_id: u64,
-            institution_id: votingengine::SubjectId,
-        ) {
-            let _ = admins_change::Pallet::<T>::remove_pending_subject_for_proposal(
+        pub(crate) fn remove_pending_admin_account(proposal_id: u64, institution_id: T::AccountId) {
+            let _ = admins_change::Pallet::<T>::remove_pending_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
             );
         }
 
-        pub(crate) fn close_admin_subject(
+        pub(crate) fn close_admin_account(
             proposal_id: u64,
-            institution_id: votingengine::SubjectId,
+            institution_id: T::AccountId,
         ) -> DispatchResult {
-            admins_change::Pallet::<T>::close_subject_for_proposal(
+            admins_change::Pallet::<T>::close_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
             )
         }
 
-        /// 从任意机构多签账户反查其管理员主体的 SubjectId。
+        /// 从任意机构多签账户反查其管理员账户账户地址。
         ///
-        /// - SFID 机构任意账户(主/费用/自创):subject_id_from_institution_account(account)
-        ///
-        /// 个人多签的 subject_id 解析由 personal-manage 自持(直接 subject_id_from_account),
-        /// 本函数仅服务机构账户;对个人地址返回 None,调用方必须自行选 pallet。
-        pub fn resolve_admin_subject_for_account(account: &T::AccountId) -> Option<SubjectId> {
+        /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
+        pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
             AddressRegisteredSfid::<T>::get(account)?;
-            Some(subject_id_from_institution_account(account))
+            Some(account.clone())
         }
 
         /// 从任意机构账户反查管理员更换 org。
@@ -828,8 +811,8 @@ pub mod pallet {
 
 // ──── InstitutionMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
 //
-// 输入任意机构账户(主/费用/自创),通过账户自身派生 InstitutionAccount SubjectId,
-// 再按 Institutions[sfid_number].admin_org 读取 admins-change 主体。这条路径保证
+// 输入任意机构账户(主/费用/自创),直接以账户地址读取 admins-change 账户。
+// 再按 Institutions[sfid_number].admin_org 读取 org。这条路径保证
 // 机构账户只使用 ORG_PUP/ORG_OTH,不再把机构账户错误塞到 ORG_REN。
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
@@ -839,14 +822,14 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
 
     fn lookup_admin_config(
         addr: &T::AccountId,
-    ) -> Option<primitives::types::MultisigConfigSnapshot<T::AccountId>> {
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
         let org = Self::lookup_admin_org(addr)?;
-        let institution_id = pallet::Pallet::<T>::resolve_admin_subject_for_account(addr)?;
-        let admins = admins_change::Pallet::<T>::active_subject_admins(org, institution_id)?;
+        let account = pallet::Pallet::<T>::resolve_admin_account_for_account(addr)?;
+        let admins = admins_change::Pallet::<T>::active_account_admins(org, account.clone())?;
         let threshold =
-            <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, institution_id)?;
+            <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())?;
         let admin_count = admins.len() as u32;
-        Some(primitives::types::MultisigConfigSnapshot {
+        Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
             admin_count,
             threshold,

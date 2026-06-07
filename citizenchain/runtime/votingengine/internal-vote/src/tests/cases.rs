@@ -117,13 +117,13 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
 }
 
 #[test]
-fn active_internal_proposal_rejects_pending_subject() {
+fn active_internal_proposal_rejects_pending_account() {
     new_test_ext().execute_with(|| {
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
-                pending_subject_admin(0),
+                pending_account_admin(0),
                 ORG_REN,
-                pending_subject_institution(),
+                pending_account_institution(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -146,19 +146,19 @@ fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
 }
 
 #[test]
-fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
+fn pending_account_proposal_uses_pending_snapshot_and_threshold() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_pending_subject_proposal_via_engine(
-            pending_subject_admin(0),
+        let proposal_id = create_pending_account_proposal_via_engine(
+            pending_account_admin(0),
             ORG_REN,
-            pending_subject_institution(),
+            pending_account_institution(),
         );
 
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
         assert!(VotingEngine::is_admin_in_snapshot(
             proposal_id,
-            pending_subject_institution(),
-            &pending_subject_admin(0)
+            pending_account_institution(),
+            &pending_account_admin(0)
         ));
 
         assert_eq!(
@@ -169,7 +169,7 @@ fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
         );
 
         assert_ok!(cast_internal_vote_via_extrinsic(
-            pending_subject_admin(1),
+            pending_account_admin(1),
             proposal_id,
             true
         ));
@@ -186,33 +186,33 @@ fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
 fn institution_account_orgs_use_dynamic_pending_snapshot_and_threshold() {
     new_test_ext().execute_with(|| {
         for org in [ORG_PUP, ORG_OTH] {
-            let proposal_id = create_pending_subject_proposal_via_engine(
-                pending_subject_admin(0),
+            let proposal_id = create_pending_account_proposal_via_engine(
+                pending_account_admin(0),
                 org,
-                pending_subject_institution(),
+                pending_account_institution(),
             );
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
             assert!(VotingEngine::is_admin_in_snapshot(
                 proposal_id,
-                pending_subject_institution(),
-                &pending_subject_admin(1)
+                pending_account_institution(),
+                &pending_account_admin(1)
             ));
         }
     });
 }
 
 #[test]
-fn pending_subject_provider_threshold_requires_all_admins() {
+fn pending_account_provider_threshold_requires_all_admins() {
     new_test_ext().execute_with(|| {
         set_pending_duoqian_threshold(1);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_subject_create_proposal_with_data(
-                pending_subject_admin(0),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
+                pending_account_admin(0),
                 ORG_REN,
-                pending_subject_institution(),
-                sp_std::vec![pending_subject_admin(0), pending_subject_admin(1)],
+                pending_account_institution(),
+                sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
                 1,
                 b"test",
                 b"payload".to_vec(),
@@ -223,14 +223,14 @@ fn pending_subject_provider_threshold_requires_all_admins() {
 }
 
 #[test]
-fn pending_subject_snapshot_data_requires_all_admins() {
+fn pending_account_snapshot_data_requires_all_admins() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_subject_create_proposal_with_data(
-                pending_subject_admin(0),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
+                pending_account_admin(0),
                 ORG_REN,
-                pending_subject_institution(),
-                sp_std::vec![pending_subject_admin(0), pending_subject_admin(1)],
+                pending_account_institution(),
+                sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
                 1,
                 b"test",
                 b"payload".to_vec(),
@@ -245,9 +245,9 @@ fn explicit_threshold_proposal_requires_all_snapshot_admins() {
     new_test_ext().execute_with(|| {
         let proposal_id =
             <InternalVote as InternalVoteEngine<AccountId32>>::create_lifecycle_internal_proposal_with_data(
-                registered_subject_admin(0),
+                registered_account_admin(0),
                 ORG_REN,
-                registered_subject_institution(),
+                registered_account_institution(),
                 b"close",
                 b"payload".to_vec(),
             )
@@ -263,9 +263,9 @@ fn registered_duoqian_threshold_must_not_exceed_snapshot_size() {
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
-                registered_subject_admin(0),
+                registered_account_admin(0),
                 ORG_REN,
-                registered_subject_institution(),
+                registered_account_institution(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -281,9 +281,9 @@ fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
-                registered_subject_admin(0),
+                registered_account_admin(0),
                 ORG_REN,
-                registered_subject_institution(),
+                registered_account_institution(),
                 3,
                 2,
                 b"test",
@@ -303,7 +303,7 @@ fn snapshot_rejects_empty_admin_list() {
             VotingEngine::snapshot_institution_admins(
                 0,
                 ORG_REN,
-                registered_subject_institution(),
+                registered_account_institution(),
                 false,
             ),
             votingengine::Error::<Test>::MissingAdminSnapshot
@@ -315,16 +315,16 @@ fn snapshot_rejects_empty_admin_list() {
 fn snapshot_rejects_duplicate_admin_list() {
     new_test_ext().execute_with(|| {
         set_registered_admin_list_override(sp_std::vec![
-            registered_subject_admin(0),
-            registered_subject_admin(0),
-            registered_subject_admin(1),
+            registered_account_admin(0),
+            registered_account_admin(0),
+            registered_account_admin(1),
         ]);
 
         assert_noop!(
             VotingEngine::snapshot_institution_admins(
                 0,
                 ORG_REN,
-                registered_subject_institution(),
+                registered_account_institution(),
                 false,
             ),
             votingengine::Error::<Test>::InvalidInstitution
@@ -337,16 +337,16 @@ fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
     new_test_ext().execute_with(|| {
         set_registered_duoqian_threshold(3);
         let proposal_id = create_internal_proposal_via_engine(
-            registered_subject_admin(0),
+            registered_account_admin(0),
             ORG_REN,
-            registered_subject_institution(),
+            registered_account_institution(),
         );
 
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
         set_registered_duoqian_threshold(2);
 
         assert_ok!(cast_internal_vote_via_extrinsic(
-            registered_subject_admin(1),
+            registered_account_admin(1),
             proposal_id,
             true
         ));
@@ -358,7 +358,7 @@ fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
         );
 
         assert_ok!(cast_internal_vote_via_extrinsic(
-            registered_subject_admin(2),
+            registered_account_admin(2),
             proposal_id,
             true
         ));
@@ -377,16 +377,16 @@ fn institution_account_orgs_snapshot_dynamic_active_threshold() {
         for org in [ORG_PUP, ORG_OTH] {
             set_registered_duoqian_threshold(3);
             let proposal_id = create_internal_proposal_via_engine(
-                registered_subject_admin(0),
+                registered_account_admin(0),
                 org,
-                registered_subject_institution(),
+                registered_account_institution(),
             );
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
             assert!(VotingEngine::is_admin_in_snapshot(
                 proposal_id,
-                registered_subject_institution(),
-                &registered_subject_admin(2)
+                registered_account_institution(),
+                &registered_account_admin(2)
             ));
         }
     });
@@ -721,9 +721,9 @@ fn joint_proposal_rejects_stale_population_snapshot() {
             <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0)),
             Err(joint_vote::Error::<Test>::PopulationSnapshotNotCurrent.into())
         );
-        assert!(!joint_vote::pallet::PendingPopulationSnapshots::<Test>::contains_key(
-            nrc_admin(0)
-        ));
+        assert!(
+            !joint_vote::pallet::PendingPopulationSnapshots::<Test>::contains_key(nrc_admin(0))
+        );
     });
 }
 

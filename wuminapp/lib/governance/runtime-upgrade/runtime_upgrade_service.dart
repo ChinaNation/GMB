@@ -37,7 +37,7 @@ class RuntimeUpgradeService {
   Future<({String txHash, int usedNonce, String blockHashHex})>
       submitJointVote({
     required int proposalId,
-    required Uint8List institutionId48,
+    required Uint8List institutionAccountId,
     required bool approve,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -45,7 +45,7 @@ class RuntimeUpgradeService {
   }) async {
     final callData = _buildJointVoteCall(
       proposalId: proposalId,
-      institutionId48: institutionId48,
+      institutionAccountId: institutionAccountId,
       approve: approve,
     );
     final result = await _signAndSubmit(
@@ -56,7 +56,7 @@ class RuntimeUpgradeService {
     );
     await _confirmRuntimeJointVote(
       proposalId: proposalId,
-      institutionId48: institutionId48,
+      institutionAccountId: institutionAccountId,
       approve: approve,
       signerPubkey: signerPubkey,
       blockHashHex: result.blockHashHex,
@@ -121,15 +121,15 @@ class RuntimeUpgradeService {
 
   /// 查询联合投票中某机构的投票记录。
   ///
-  /// 双 map：blake2_128_concat(u64_le) + blake2_128_concat(48 bytes)。
+  /// 双 map：blake2_128_concat(u64_le) + blake2_128_concat(机构 AccountId32)。
   /// Value: Option<bool> — null=未投票，true=赞成，false=反对。
   Future<bool?> fetchJointVoteByInstitution(
-      int proposalId, Uint8List institutionId48) async {
+      int proposalId, Uint8List institutionAccountId) async {
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
       'JointVotesByInstitution',
       _u64ToLeBytes(proposalId),
-      institutionId48,
+      institutionAccountId,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
     if (data == null || data.isEmpty) return null;
@@ -138,12 +138,12 @@ class RuntimeUpgradeService {
 
   /// 查询某机构在联合投票阶段的管理员票数统计。
   Future<({int yes, int no})> fetchJointInstitutionTally(
-      int proposalId, Uint8List institutionId48) async {
+      int proposalId, Uint8List institutionAccountId) async {
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
       'JointInstitutionTallies',
       _u64ToLeBytes(proposalId),
-      institutionId48,
+      institutionAccountId,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
     if (data == null || data.length < 8) return (yes: 0, no: 0);
@@ -153,10 +153,10 @@ class RuntimeUpgradeService {
   /// 查询某管理员在某机构联合投票中的投票记录。
   Future<bool?> fetchJointAdminVote(
     int proposalId,
-    Uint8List institutionId48,
+    Uint8List institutionAccountId,
     String pubkeyHex,
   ) async {
-    final key = _jointAdminVoteKey(proposalId, institutionId48, pubkeyHex);
+    final key = _jointAdminVoteKey(proposalId, institutionAccountId, pubkeyHex);
     if (key == null) return null;
     final data = await _rpc.fetchStorage(key);
     if (data == null || data.isEmpty) return null;
@@ -169,14 +169,14 @@ class RuntimeUpgradeService {
   /// `JointVotesByAdmin`，不能逐管理员发起 RPC。
   Future<Map<String, bool?>> fetchJointAdminVotesBatch(
     int proposalId,
-    Uint8List institutionId48,
+    Uint8List institutionAccountId,
     Iterable<String> pubkeysHex,
   ) async {
     final keyByPubkey = <String, String>{};
     for (final pubkey in pubkeysHex) {
       final clean = _normalizeHex(pubkey);
       if (clean.isEmpty) continue;
-      final key = _jointAdminVoteKey(proposalId, institutionId48, clean);
+      final key = _jointAdminVoteKey(proposalId, institutionAccountId, clean);
       if (key == null) continue;
       keyByPubkey[clean] = key;
     }
@@ -190,14 +190,17 @@ class RuntimeUpgradeService {
 
   String? _jointAdminVoteKey(
     int proposalId,
-    Uint8List institutionId48,
+    Uint8List institutionAccountId,
     String pubkeyHex,
   ) {
     final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
-    if (institutionId48.length != 48 || accountBytes.length != 32) return null;
-    final compositeKey = Uint8List(institutionId48.length + accountBytes.length)
-      ..setAll(0, institutionId48)
-      ..setAll(institutionId48.length, accountBytes);
+    if (institutionAccountId.length != 32 || accountBytes.length != 32) {
+      return null;
+    }
+    final compositeKey =
+        Uint8List(institutionAccountId.length + accountBytes.length)
+          ..setAll(0, institutionAccountId)
+          ..setAll(institutionAccountId.length, accountBytes);
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
       'JointVotesByAdmin',
@@ -257,14 +260,14 @@ class RuntimeUpgradeService {
       offset++; // skip 0x00 (None)
     }
 
-    // internal_institution: Option<[u8;48]>
+    // internal_institution: Option<AccountId32>
     Uint8List? institutionBytes;
     if (offset < data.length && data[offset] == 1) {
       offset++;
-      if (offset + 48 <= data.length) {
+      if (offset + 32 <= data.length) {
         institutionBytes =
-            Uint8List.fromList(data.sublist(offset, offset + 48));
-        offset += 48;
+            Uint8List.fromList(data.sublist(offset, offset + 32));
+        offset += 32;
       }
     }
 
@@ -347,18 +350,18 @@ class RuntimeUpgradeService {
 
   Uint8List _buildJointVoteCall({
     required int proposalId,
-    required Uint8List institutionId48,
+    required Uint8List institutionAccountId,
     required bool approve,
   }) {
-    if (institutionId48.length != 48) {
-      throw ArgumentError('institutionId48 必须为 48 字节');
+    if (institutionAccountId.length != 32) {
+      throw ArgumentError('institutionAccountId 必须为 32 字节');
     }
 
     final output = ByteOutput();
     output.pushByte(_jointVotePalletIndex);
     output.pushByte(_jointVoteCallIndex);
     output.write(_u64ToLeBytes(proposalId));
-    output.write(institutionId48);
+    output.write(institutionAccountId);
     output.pushByte(approve ? 1 : 0);
 
     return output.toBytes();
@@ -391,7 +394,7 @@ class RuntimeUpgradeService {
   /// 入块后回读 JointVote storage，确认该管理员投票已经由 runtime 记录。
   Future<void> _confirmRuntimeJointVote({
     required int proposalId,
-    required Uint8List institutionId48,
+    required Uint8List institutionAccountId,
     required bool approve,
     required Uint8List signerPubkey,
     required String blockHashHex,
@@ -400,7 +403,7 @@ class RuntimeUpgradeService {
     for (var attempt = 0; attempt < 6; attempt++) {
       final chainVote = await fetchJointAdminVote(
         proposalId,
-        institutionId48,
+        institutionAccountId,
         pubkeyHex,
       );
       if (chainVote == approve) return;

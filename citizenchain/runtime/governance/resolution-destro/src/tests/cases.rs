@@ -4,12 +4,12 @@ use super::*;
 fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(institution);
+        let account = institution_account(&institution);
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             100
         ));
         let pid = last_proposal_id();
@@ -26,12 +26,12 @@ fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
 fn prc_destroy_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
-        let account = institution_account(institution);
+        let account = institution_account(&institution);
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(prc_admin(0)),
             ORG_PRC,
-            institution,
+            institution.clone(),
             200
         ));
         let pid = last_proposal_id();
@@ -48,12 +48,12 @@ fn prc_destroy_executes_when_yes_votes_reach_threshold() {
 fn prb_destroy_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prb_pallet_id();
-        let account = institution_account(institution);
+        let account = institution_account(&institution);
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(prb_admin(0)),
             ORG_PRB,
-            institution,
+            institution.clone(),
             300
         ));
         let pid = last_proposal_id();
@@ -75,7 +75,7 @@ fn non_admin_cannot_propose_or_vote() {
             ResolutionDestro::propose_destroy(
                 RuntimeOrigin::signed(prc_admin(0)),
                 ORG_NRC,
-                institution,
+                institution.clone(),
                 100
             ),
             Error::<Test>::UnauthorizedAdmin
@@ -84,7 +84,7 @@ fn non_admin_cannot_propose_or_vote() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             100
         ));
         let pid = last_proposal_id();
@@ -105,7 +105,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
             ResolutionDestro::propose_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
-                institution,
+                institution.clone(),
                 0
             ),
             Error::<Test>::ZeroAmount
@@ -114,7 +114,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             2_000
         ));
         let pid = last_proposal_id();
@@ -132,7 +132,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
             STATUS_PASSED
         );
         assert_eq!(
-            Balances::free_balance(institution_account(institution)),
+            Balances::free_balance(institution_account(&institution)),
             1_000
         );
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -159,12 +159,12 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
 fn existential_deposit_is_preserved() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(institution);
+        let account = institution_account(&institution);
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             1_000
         ));
         let pid = last_proposal_id();
@@ -196,7 +196,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             100
         ));
         let pid1 = last_proposal_id();
@@ -219,7 +219,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             50
         ));
         let pid2 = last_proposal_id();
@@ -232,12 +232,12 @@ fn rejected_proposal_does_not_block_new_proposal() {
 fn execute_destroy_succeeds_after_failed_auto_execution() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(institution);
+        let account = institution_account(&institution);
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             1_100
         ));
         let pid = last_proposal_id();
@@ -273,7 +273,7 @@ fn executed_proposal_does_not_block_new_proposal() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             100
         ));
         let pid1 = last_proposal_id();
@@ -285,7 +285,7 @@ fn executed_proposal_does_not_block_new_proposal() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             50
         ));
         let pid2 = last_proposal_id();
@@ -300,7 +300,7 @@ fn duplicate_vote_is_rejected_by_votingengine() {
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             100
         ));
         let pid = last_proposal_id();
@@ -316,13 +316,13 @@ fn duplicate_vote_is_rejected_by_votingengine() {
 fn execute_destroy_requires_snapshot_admin() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(institution);
+        let account = institution_account(&institution);
         let outsider = AccountId32::new([99u8; 32]);
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
-            institution,
+            institution.clone(),
             1_100
         ));
         let pid = last_proposal_id();
@@ -345,6 +345,6 @@ fn execute_destroy_requires_snapshot_admin() {
 #[test]
 fn institution_org_returns_none_for_invalid_institution() {
     new_test_ext().execute_with(|| {
-        assert_eq!(subject_org([0u8; 48]), None);
+        assert_eq!(account_org::<Test>(AccountId32::new([0u8; 32])), None);
     });
 }

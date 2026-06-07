@@ -6,18 +6,6 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-pub type SubjectId = [u8; 48];
-
-/// 国储会 SubjectId（从 CHINA_CB 第一条记录派生）。
-/// 公共函数，供 internal_vote、joint_vote 等子模块共用。
-pub fn nrc_subject_id() -> Option<SubjectId> {
-    use primitives::china::china_cb::CHINA_CB;
-    use primitives::derive::subject_id_from_sfid_number;
-    CHINA_CB
-        .first()
-        .and_then(|n| subject_id_from_sfid_number(n.sfid_number))
-}
-
 pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
 pub const PROPOSAL_KIND_JOINT: u8 = 1;
 
@@ -46,7 +34,7 @@ pub fn is_valid_org(org: u8) -> bool {
     )
 }
 
-/// 是否为注册多签动态主体 org。
+/// 是否为注册多签动态账户 org。
 ///
 /// 中文注释：REN 只代表个人多签；PUP/OTH 代表机构账户，不能互相代替。
 pub fn is_registered_multisig_org(org: u8) -> bool {
@@ -54,7 +42,7 @@ pub fn is_registered_multisig_org(org: u8) -> bool {
 }
 
 /// 治理机构(NRC/PRC/PRB)的固定制度阈值。
-/// 中文注释:三类治理机构阈值是永久治理常量,不读取注册多签主体配置。
+/// 中文注释:三类治理机构阈值是永久治理常量,不读取注册多签账户配置。
 pub fn fixed_governance_pass_threshold(org: u8) -> Option<u32> {
     use primitives::count_const::{
         NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD,
@@ -117,13 +105,13 @@ pub enum ProposalCancelDecision {
 /// 内部提案互斥类型。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InternalProposalMutexKind {
-    /// 普通内部治理事项，允许同主体多个普通事项并行。
+    /// 普通内部治理事项，允许同账户多个普通事项并行。
     Regular,
-    /// 管理员集合变更，同主体下必须独占。
+    /// 管理员集合变更，同账户下必须独占。
     AdminSetMutationExclusive,
 }
 
-/// 同一治理主体下的互斥状态。
+/// 同一治理账户下的互斥状态。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct InternalProposalMutexState {
     /// 当前占用管理员集合变更独占锁的提案。
@@ -139,10 +127,10 @@ impl InternalProposalMutexState {
 }
 
 /// proposal_id 到互斥锁的反向绑定，用于终态/阶段切换时释放锁。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct InternalProposalMutexBinding {
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct InternalProposalMutexBinding<AccountId> {
     pub org: u8,
-    pub institution: SubjectId,
+    pub institution: AccountId,
     pub kind: InternalProposalMutexKind,
 }
 
@@ -161,8 +149,8 @@ pub struct ExecutionRetryState<BlockNumber> {
 
 /// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案。
 /// 人口快照、联合签名、投票资格和计票数据只允许在 votingengine/joint-vote 内处理。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct Proposal<BlockNumber> {
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct Proposal<BlockNumber, AccountId> {
     /// 提案类型：内部投票/联合投票
     pub kind: u8,
     /// 当前所处投票阶段：内部/联合/公民
@@ -171,8 +159,8 @@ pub struct Proposal<BlockNumber> {
     pub status: u8,
     /// 仅内部投票使用：机构类型（国储会/省储会/省储行）
     pub internal_org: Option<u8>,
-    /// 仅内部投票使用：机构 sfid_number 标识（全链唯一）
-    pub internal_institution: Option<SubjectId>,
+    /// 仅内部投票使用：多签账户地址（全链唯一）
+    pub internal_institution: Option<AccountId>,
     /// 本阶段起始区块
     pub start: BlockNumber,
     /// 本阶段截止区块（超过则超时）

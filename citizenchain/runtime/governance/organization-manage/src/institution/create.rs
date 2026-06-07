@@ -30,7 +30,6 @@ use frame_support::{
     storage::{with_transaction, TransactionOutcome},
     traits::ReservableCurrency,
 };
-use primitives::derive::subject_id_from_institution_account;
 use sp_runtime::{traits::Hash, DispatchResult};
 use votingengine::types::{ORG_OTH, ORG_PUP};
 use votingengine::InternalVoteEngine;
@@ -93,9 +92,8 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 中文注释:admins-change 只接受账户级主体。SFID 机构号只负责归属/检索,
-    // 管理员更换与内部投票均使用主账户地址派生的 InstitutionAccount SubjectId。
-    let institution = subject_id_from_institution_account(&main_address);
+    // 中文注释：管理员更换与内部投票直接使用机构主账户多签地址。
+    let institution = main_address.clone();
     let org = admin_org;
     let action = CreateInstitutionAction {
         sfid_number: sfid_number.clone(),
@@ -164,15 +162,15 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         }
 
         // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-        // 机构主账户的管理员配置真源在 admins-change::Subjects[main_address 派生主体]；
+        // 机构主账户的管理员配置真源在 admins-change::AdminAccounts[main_address 账户]；
         // 动态阈值真源在 internal-vote，duoqian-transfer 通过查询 trait 合并读取。
 
         // 中文注释:threshold 是账户激活后的动态阈值配置；
         // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
-        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_subject_create_proposal_with_data(
+        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_account_create_proposal_with_data(
             who.clone(),
             org,
-            institution,
+            institution.clone(),
             duoqian_admins.iter().cloned().collect(),
             threshold,
             crate::MODULE_TAG,
@@ -183,11 +181,11 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         };
         PendingInstitutionCreate::<T>::insert(proposal_id, &action);
         UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
-        if let Err(err) = Pallet::<T>::create_pending_admin_subject_for_proposal(
+        if let Err(err) = Pallet::<T>::create_pending_admin_account_for_proposal(
             proposal_id,
             org,
-            institution,
-            admins_change::AdminSubjectKind::InstitutionAccount,
+            institution.clone(),
+            admins_change::AdminAccountKind::InstitutionAccount,
             &duoqian_admins,
             &who,
         ) {

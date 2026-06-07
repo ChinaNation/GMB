@@ -49,41 +49,28 @@ class InstitutionAccountSnapshot {
 class DuoqianStorageCodec {
   DuoqianStorageCodec._();
 
-  static const int subjectKindBuiltin = 0x01;
-  static const int subjectKindSfidInstitution = 0x02;
-  static const int subjectKindInstitutionAccount = 0x05;
-
-  static Uint8List subjectIdFromBuiltin(String sfidNumber) {
-    final raw = Uint8List.fromList(utf8.encode(sfidNumber));
-    return _buildSubjectId(subjectKindBuiltin, raw);
-  }
-
-  static Uint8List subjectIdFromSfidBytes(Uint8List sfidNumber) {
-    return _buildSubjectId(subjectKindSfidInstitution, sfidNumber);
-  }
-
-  static Uint8List subjectIdFromInstitutionAccountHex(String accountHex) {
+  static Uint8List accountIdFromAccountHex(String accountHex) {
     final account = hexDecode(accountHex);
     if (account.length != 32) {
       throw ArgumentError('account hex 必须为 32 字节');
     }
-    return _buildSubjectId(subjectKindInstitutionAccount, account);
+    return account;
   }
 
-  static Uint8List adminSubjectKey(Uint8List subjectId) {
-    return storageMapKey('AdminsChange', 'Subjects', subjectId);
+  static Uint8List adminAccountKey(Uint8List accountId) {
+    return storageMapKey('AdminsChange', 'AdminAccounts', accountId);
   }
 
   static Uint8List dynamicThresholdKey({
     required String storageName,
     required int org,
-    required Uint8List subjectId,
+    required Uint8List accountId,
   }) {
     return storageDoubleMapKey(
       'InternalVote',
       storageName,
       Uint8List.fromList([org]),
-      subjectId,
+      accountId,
     );
   }
 
@@ -168,11 +155,11 @@ class DuoqianStorageCodec {
     );
   }
 
-  static DuoqianAdminSnapshot? decodeAdminSubject(Uint8List data) {
+  static DuoqianAdminSnapshot? decodeAdminAccount(Uint8List data) {
     if (data.length <= 2) return null;
     var offset = 0;
     final org = data[offset++];
-    offset++; // AdminSubjectKind
+    offset++; // AdminAccountKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
     final admins = <String>[];
@@ -181,8 +168,8 @@ class DuoqianStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    // 中文注释：AdminsChange::Subjects 后续字段是 creator/时间/status，
-    // 动态阈值不在这里保存，必须按 org + subject 从 InternalVote 查询。
+    // 中文注释：AdminsChange::AdminAccounts 后续字段是 creator/时间/status，
+    // 动态阈值不在这里保存，必须按 org + account 从 InternalVote 查询。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return DuoqianAdminSnapshot(
       org: org,
@@ -316,15 +303,5 @@ class DuoqianStorageCodec {
       result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
     }
     return result;
-  }
-
-  static Uint8List _buildSubjectId(int kind, Uint8List payload) {
-    if (payload.isEmpty || payload.length > 47) {
-      throw ArgumentError('subject payload 长度需在 1..=47 字节');
-    }
-    final out = Uint8List(48);
-    out[0] = kind;
-    out.setAll(1, payload);
-    return out;
   }
 }

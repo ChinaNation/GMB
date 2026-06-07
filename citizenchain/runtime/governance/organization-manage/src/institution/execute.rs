@@ -2,11 +2,11 @@
 //!
 //! 涵盖:
 //! - `execute_create_institution_with_finalizer`: 投票通过后划转初始余额 +
-//!   扣手续费 + 激活机构和所有账户 + 激活 admin subject + 移除 PendingInstitutionCreate
+//!   扣手续费 + 激活机构和所有账户 + 激活 admin account + 移除 PendingInstitutionCreate
 //! - `cleanup_pending_institution_create`: 投票否决/超时/执行失败终态时,
 //!   unreserve 创建者资金 + 清空 Institutions / InstitutionAccounts /
 //!   SfidRegisteredAddress / AddressRegisteredSfid +
-//!   移除 admin subject Pending。
+//!   移除 admin account Pending。
 //! (B 阶段已删 DuoqianAccounts mirror,无需清理该表)
 
 extern crate alloc;
@@ -22,7 +22,6 @@ use crate::pallet::{
     AddressRegisteredSfid, Config, CreateInstitutionActionOf, Error, Event, InstitutionAccounts,
     Institutions, Pallet, PendingInstitutionCreate, SfidRegisteredAddress,
 };
-use primitives::derive::subject_id_from_institution_account;
 
 /// 投票否决/超时/执行失败终态时清理机构整体创建相关存储。
 pub(crate) fn cleanup_pending_institution_create<T: Config>(
@@ -38,9 +37,8 @@ pub(crate) fn cleanup_pending_institution_create<T: Config>(
         SfidRegisteredAddress::<T>::remove(&action.sfid_number, &account.account_name);
         AddressRegisteredSfid::<T>::remove(&account.address);
     }
-    // admins-change pending 主体绑定主账户地址,不是 SFID 机构号。
-    let institution_id = subject_id_from_institution_account(&action.main_address);
-    Pallet::<T>::remove_pending_admin_subject(proposal_id, institution_id);
+    // admins-change pending 账户直接绑定主账户多签地址。
+    Pallet::<T>::remove_pending_admin_account(proposal_id, action.main_address.clone());
     if emit_event {
         Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateRejected {
             proposal_id,
@@ -104,8 +102,7 @@ pub(crate) fn execute_create_institution_with_finalizer<T: Config>(
     })?;
     // B 阶段后机构主账户状态唯一在 Institutions[sfid_number].status 与
     // InstitutionAccounts[(sfid_number, "主账户")].status 双写;不再 mirror 到 DuoqianAccounts。
-    let institution_id = subject_id_from_institution_account(&action.main_address);
-    Pallet::<T>::activate_admin_subject(proposal_id, institution_id)?;
+    Pallet::<T>::activate_admin_account(proposal_id, action.main_address.clone())?;
     PendingInstitutionCreate::<T>::remove(proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCreated {

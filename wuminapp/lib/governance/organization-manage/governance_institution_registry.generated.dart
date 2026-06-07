@@ -1,13 +1,13 @@
 part of 'institution_registry.dart';
 
 // 本文件由 tools/generate_wuminapp_governance_registry.mjs 自动生成。
-// 中文注释：治理机构名称、身份 ID 和制度账户地址来自 runtime primitives；管理员必须动态读取链上 AdminsChange::Subjects。
+// 中文注释：治理机构名称、sfid_number 和制度账户地址来自 runtime primitives；管理员必须动态读取链上 AdminsChange::AdminAccounts。
 
 /// 国储会（1 个）。
 const List<InstitutionInfo> kNationalCouncil = [
   InstitutionInfo(
     name: '国家储备委员会',
-    sfidNumber: 'GFR-LN001-CB0X-944805165-2026',
+    sfidNumber: 'LN001-GCB05-944805165-2026',
     orgType: OrgType.nrc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -24,7 +24,7 @@ const List<InstitutionInfo> kNationalCouncil = [
 const List<InstitutionInfo> kProvincialCouncils = [
   InstitutionInfo(
     name: '中枢省储备委员会',
-    sfidNumber: 'GFR-ZS001-CB0Y-016974075-2026',
+    sfidNumber: 'ZS001-GCB0R-016974075-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -35,7 +35,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '岭南省储备委员会',
-    sfidNumber: 'GFR-LN001-CB02-773405642-2026',
+    sfidNumber: 'LN001-GCB0I-773405642-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -46,7 +46,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '广东省储备委员会',
-    sfidNumber: 'GFR-GD001-CB0L-067440774-2026',
+    sfidNumber: 'GD001-GCB08-067440774-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -57,7 +57,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '广西省储备委员会',
-    sfidNumber: 'GFR-GX001-CB0I-663454043-2026',
+    sfidNumber: 'GX001-GCB0P-663454043-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -68,7 +68,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '福建省储备委员会',
-    sfidNumber: 'GFR-FJ001-CB03-389570546-2026',
+    sfidNumber: 'FJ001-GCB0V-389570546-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -79,7 +79,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '海南省储备委员会',
-    sfidNumber: 'GFR-HN001-CB0X-545676096-2026',
+    sfidNumber: 'HN001-GCB05-545676096-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -90,7 +90,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '云南省储备委员会',
-    sfidNumber: 'GFR-YN001-CB0K-145427171-2026',
+    sfidNumber: 'YN001-GCB09-145427171-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -101,7 +101,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '贵州省储备委员会',
-    sfidNumber: 'GFR-GZ001-CB0I-969970096-2026',
+    sfidNumber: 'GZ001-GCB0F-969970096-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -112,7 +112,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '湖南省储备委员会',
-    sfidNumber: 'GFR-HU001-CB03-400319700-2026',
+    sfidNumber: 'HU001-GCB02-400319700-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -123,7 +123,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '江西省储备委员会',
-    sfidNumber: 'GFR-JX001-CB0Q-458681566-2026',
+    sfidNumber: 'JX001-GCB0W-458681566-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -134,7 +134,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '浙江省储备委员会',
-    sfidNumber: 'GFR-ZJ001-CB0J-471270801-2026',
+    sfidNumber: 'ZJ001-GCB0L-471270801-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -145,7 +145,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '江苏省储备委员会',
-    sfidNumber: 'GFR-JS001-CB08-358467174-2026',
+    sfidNumber: 'JS001-GCB01-358467174-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -156,7 +156,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '山东省储备委员会',
-    sfidNumber: 'GFR-SD001-CB03-027328848-2026',
+    sfidNumber: 'SD001-GCB0K-027328848-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -167,7 +167,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '山西省储备委员会',
-    sfidNumber: 'GFR-SX001-CB08-104465679-2026',
+    sfidNumber: 'SX001-GCB01-104465679-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -178,7 +178,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '河南省储备委员会',
-    sfidNumber: 'GFR-HE001-CB02-849245626-2026',
+    sfidNumber: 'HE001-GCB05-849245626-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -189,7 +189,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '河北省储备委员会',
-    sfidNumber: 'GFR-HB001-CB07-499533387-2026',
+    sfidNumber: 'HB001-GCB09-499533387-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -200,7 +200,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '湖北省储备委员会',
-    sfidNumber: 'GFR-HI001-CB01-659443961-2026',
+    sfidNumber: 'HI001-GCB0Q-659443961-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -211,7 +211,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '陕西省储备委员会',
-    sfidNumber: 'GFR-SI001-CB0Y-711309909-2026',
+    sfidNumber: 'SI001-GCB06-711309909-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -222,7 +222,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '重庆省储备委员会',
-    sfidNumber: 'GFR-CQ001-CB0Z-478472058-2026',
+    sfidNumber: 'CQ001-GCB0J-478472058-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -233,7 +233,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '四川省储备委员会',
-    sfidNumber: 'GFR-SC001-CB0N-935659021-2026',
+    sfidNumber: 'SC001-GCB0B-935659021-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -244,7 +244,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '甘肃省储备委员会',
-    sfidNumber: 'GFR-GS001-CB0K-679051155-2026',
+    sfidNumber: 'GS001-GCB0Y-679051155-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -255,7 +255,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '北平省储备委员会',
-    sfidNumber: 'GFR-BP001-CB06-189323546-2026',
+    sfidNumber: 'BP001-GCB04-189323546-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -266,7 +266,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '海滨省储备委员会',
-    sfidNumber: 'GFR-HA001-CB0C-214178517-2026',
+    sfidNumber: 'HA001-GCB0B-214178517-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -277,7 +277,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '松江省储备委员会',
-    sfidNumber: 'GFR-SJ001-CB0V-044490898-2026',
+    sfidNumber: 'SJ001-GCB0M-044490898-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -288,7 +288,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '龙江省储备委员会',
-    sfidNumber: 'GFR-LJ001-CB05-279890045-2026',
+    sfidNumber: 'LJ001-GCB0L-279890045-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -299,7 +299,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '吉林省储备委员会',
-    sfidNumber: 'GFR-JL001-CB0C-850461124-2026',
+    sfidNumber: 'JL001-GCB0I-850461124-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -310,7 +310,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '辽宁省储备委员会',
-    sfidNumber: 'GFR-LI001-CB0P-978545133-2026',
+    sfidNumber: 'LI001-GCB06-978545133-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -321,7 +321,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '宁夏省储备委员会',
-    sfidNumber: 'GFR-NX001-CB0C-389752794-2026',
+    sfidNumber: 'NX001-GCB0W-389752794-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -332,7 +332,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '青海省储备委员会',
-    sfidNumber: 'GFR-QH001-CB0C-882026762-2026',
+    sfidNumber: 'QH001-GCB0P-882026762-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -343,7 +343,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '安徽省储备委员会',
-    sfidNumber: 'GFR-AH001-CB0O-589856828-2026',
+    sfidNumber: 'AH001-GCB0D-589856828-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -354,7 +354,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '台湾省储备委员会',
-    sfidNumber: 'GFR-TW001-CB0H-265218823-2026',
+    sfidNumber: 'TW001-GCB0K-265218823-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -365,7 +365,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '西藏省储备委员会',
-    sfidNumber: 'GFR-XZ001-CB05-435616961-2026',
+    sfidNumber: 'XZ001-GCB0F-435616961-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -376,7 +376,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '新疆省储备委员会',
-    sfidNumber: 'GFR-XJ001-CB0F-671044381-2026',
+    sfidNumber: 'XJ001-GCB0F-671044381-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -387,7 +387,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '西康省储备委员会',
-    sfidNumber: 'GFR-XK001-CB05-695945392-2026',
+    sfidNumber: 'XK001-GCB02-695945392-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -398,7 +398,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '阿里省储备委员会',
-    sfidNumber: 'GFR-AL001-CB0Z-487847725-2026',
+    sfidNumber: 'AL001-GCB0Q-487847725-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -409,7 +409,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '葱岭省储备委员会',
-    sfidNumber: 'GFR-CL001-CB0B-771698743-2026',
+    sfidNumber: 'CL001-GCB0W-771698743-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -420,7 +420,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '天山省储备委员会',
-    sfidNumber: 'GFR-TS001-CB0T-293160581-2026',
+    sfidNumber: 'TS001-GCB0C-293160581-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -431,7 +431,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '河西省储备委员会',
-    sfidNumber: 'GFR-HX001-CB0I-475713213-2026',
+    sfidNumber: 'HX001-GCB0Q-475713213-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -442,7 +442,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '昆仑省储备委员会',
-    sfidNumber: 'GFR-KL001-CB0Q-091969119-2026',
+    sfidNumber: 'KL001-GCB01-091969119-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -453,7 +453,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '河套省储备委员会',
-    sfidNumber: 'GFR-HT001-CB07-481172908-2026',
+    sfidNumber: 'HT001-GCB0D-481172908-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -464,7 +464,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '热河省储备委员会',
-    sfidNumber: 'GFR-RH001-CB08-697831866-2026',
+    sfidNumber: 'RH001-GCB0S-697831866-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -475,7 +475,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '兴安省储备委员会',
-    sfidNumber: 'GFR-XA001-CB0V-384161601-2026',
+    sfidNumber: 'XA001-GCB0U-384161601-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -486,7 +486,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     name: '合江省储备委员会',
-    sfidNumber: 'GFR-HJ001-CB0K-963948997-2026',
+    sfidNumber: 'HJ001-GCB08-963948997-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -501,7 +501,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
 const List<InstitutionInfo> kProvincialBanks = [
   InstitutionInfo(
     name: '中枢省公民储备银行',
-    sfidNumber: 'SFR-ZS001-CH1J-233384677-2026',
+    sfidNumber: 'ZS001-SCH1E-233384677-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -514,7 +514,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '岭南省公民储备银行',
-    sfidNumber: 'SFR-LN001-CH1O-703127075-2026',
+    sfidNumber: 'LN001-SCH1Q-703127075-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -527,7 +527,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '广东省公民储备银行',
-    sfidNumber: 'SFR-GD001-CH1I-239565809-2026',
+    sfidNumber: 'GD001-SCH1Z-239565809-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -540,7 +540,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '广西省公民储备银行',
-    sfidNumber: 'SFR-GX001-CH1Q-025559630-2026',
+    sfidNumber: 'GX001-SCH17-025559630-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -553,7 +553,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '福建省公民储备银行',
-    sfidNumber: 'SFR-FJ001-CH1L-504679612-2026',
+    sfidNumber: 'FJ001-SCH11-504679612-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -566,7 +566,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '海南省公民储备银行',
-    sfidNumber: 'SFR-HN001-CH1L-723623074-2026',
+    sfidNumber: 'HN001-SCH1V-723623074-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -579,7 +579,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '云南省公民储备银行',
-    sfidNumber: 'SFR-YN001-CH11-692525950-2026',
+    sfidNumber: 'YN001-SCH1E-692525950-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -592,7 +592,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '贵州省公民储备银行',
-    sfidNumber: 'SFR-GZ001-CH1R-490015860-2026',
+    sfidNumber: 'GZ001-SCH16-490015860-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -605,7 +605,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '湖南省公民储备银行',
-    sfidNumber: 'SFR-HU001-CH1G-084835673-2026',
+    sfidNumber: 'HU001-SCH1L-084835673-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -618,7 +618,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '江西省公民储备银行',
-    sfidNumber: 'SFR-JX001-CH13-243765987-2026',
+    sfidNumber: 'JX001-SCH1F-243765987-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -631,7 +631,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '浙江省公民储备银行',
-    sfidNumber: 'SFR-ZJ001-CH1B-296232973-2026',
+    sfidNumber: 'ZJ001-SCH1X-296232973-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -644,7 +644,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '江苏省公民储备银行',
-    sfidNumber: 'SFR-JS001-CH16-890774605-2026',
+    sfidNumber: 'JS001-SCH17-890774605-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -657,7 +657,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '山东省公民储备银行',
-    sfidNumber: 'SFR-SD001-CH1B-114256751-2026',
+    sfidNumber: 'SD001-SCH1M-114256751-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -670,7 +670,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '山西省公民储备银行',
-    sfidNumber: 'SFR-SX001-CH1X-520132196-2026',
+    sfidNumber: 'SX001-SCH1Q-520132196-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -683,7 +683,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '河南省公民储备银行',
-    sfidNumber: 'SFR-HE001-CH12-158889343-2026',
+    sfidNumber: 'HE001-SCH19-158889343-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -696,7 +696,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '河北省公民储备银行',
-    sfidNumber: 'SFR-HB001-CH1R-484022741-2026',
+    sfidNumber: 'HB001-SCH15-484022741-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -709,7 +709,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '湖北省公民储备银行',
-    sfidNumber: 'SFR-HI001-CH1G-514948302-2026',
+    sfidNumber: 'HI001-SCH11-514948302-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -722,7 +722,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '陕西省公民储备银行',
-    sfidNumber: 'SFR-SI001-CH1D-245618374-2026',
+    sfidNumber: 'SI001-SCH1T-245618374-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -735,7 +735,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '重庆省公民储备银行',
-    sfidNumber: 'SFR-CQ001-CH18-694162045-2026',
+    sfidNumber: 'CQ001-SCH1I-694162045-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -748,7 +748,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '四川省公民储备银行',
-    sfidNumber: 'SFR-SC001-CH1Y-764253139-2026',
+    sfidNumber: 'SC001-SCH1W-764253139-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -761,7 +761,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '甘肃省公民储备银行',
-    sfidNumber: 'SFR-GS001-CH14-005784877-2026',
+    sfidNumber: 'GS001-SCH1E-005784877-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -774,7 +774,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '北平省公民储备银行',
-    sfidNumber: 'SFR-BP001-CH1M-434307982-2026',
+    sfidNumber: 'BP001-SCH1W-434307982-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -787,7 +787,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '海滨省公民储备银行',
-    sfidNumber: 'SFR-HA001-CH19-969179618-2026',
+    sfidNumber: 'HA001-SCH1E-969179618-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -800,7 +800,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '松江省公民储备银行',
-    sfidNumber: 'SFR-SJ001-CH1G-644104544-2026',
+    sfidNumber: 'SJ001-SCH19-644104544-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -813,7 +813,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '龙江省公民储备银行',
-    sfidNumber: 'SFR-LJ001-CH1J-280510636-2026',
+    sfidNumber: 'LJ001-SCH1Z-280510636-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -826,7 +826,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '吉林省公民储备银行',
-    sfidNumber: 'SFR-JL001-CH17-129935340-2026',
+    sfidNumber: 'JL001-SCH1D-129935340-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -839,7 +839,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '辽宁省公民储备银行',
-    sfidNumber: 'SFR-LI001-CH10-249814963-2026',
+    sfidNumber: 'LI001-SCH1P-249814963-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -852,7 +852,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '宁夏省公民储备银行',
-    sfidNumber: 'SFR-NX001-CH1N-292327153-2026',
+    sfidNumber: 'NX001-SCH1L-292327153-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -865,7 +865,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '青海省公民储备银行',
-    sfidNumber: 'SFR-QH001-CH12-075657014-2026',
+    sfidNumber: 'QH001-SCH11-075657014-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -878,7 +878,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '安徽省公民储备银行',
-    sfidNumber: 'SFR-AH001-CH1D-388477914-2026',
+    sfidNumber: 'AH001-SCH1S-388477914-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -891,7 +891,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '台湾省公民储备银行',
-    sfidNumber: 'SFR-TW001-CH1X-266238196-2026',
+    sfidNumber: 'TW001-SCH1Y-266238196-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -904,7 +904,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '西藏省公民储备银行',
-    sfidNumber: 'SFR-XZ001-CH1U-210788637-2026',
+    sfidNumber: 'XZ001-SCH1C-210788637-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -917,7 +917,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '新疆省公民储备银行',
-    sfidNumber: 'SFR-XJ001-CH1J-233325633-2026',
+    sfidNumber: 'XJ001-SCH11-233325633-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -930,7 +930,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '西康省公民储备银行',
-    sfidNumber: 'SFR-XK001-CH1Z-300401625-2026',
+    sfidNumber: 'XK001-SCH1W-300401625-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -943,7 +943,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '阿里省公民储备银行',
-    sfidNumber: 'SFR-AL001-CH1J-527686065-2026',
+    sfidNumber: 'AL001-SCH1Y-527686065-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -956,7 +956,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '葱岭省公民储备银行',
-    sfidNumber: 'SFR-CL001-CH1Z-951267669-2026',
+    sfidNumber: 'CL001-SCH1W-951267669-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -969,7 +969,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '天山省公民储备银行',
-    sfidNumber: 'SFR-TS001-CH1A-142800261-2026',
+    sfidNumber: 'TS001-SCH1P-142800261-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -982,7 +982,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '河西省公民储备银行',
-    sfidNumber: 'SFR-HX001-CH1N-215310265-2026',
+    sfidNumber: 'HX001-SCH1L-215310265-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -995,7 +995,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '昆仑省公民储备银行',
-    sfidNumber: 'SFR-KL001-CH1R-682838027-2026',
+    sfidNumber: 'KL001-SCH1E-682838027-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -1008,7 +1008,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '河套省公民储备银行',
-    sfidNumber: 'SFR-HT001-CH1V-210616196-2026',
+    sfidNumber: 'HT001-SCH1R-210616196-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -1021,7 +1021,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '热河省公民储备银行',
-    sfidNumber: 'SFR-RH001-CH10-380830938-2026',
+    sfidNumber: 'RH001-SCH1I-380830938-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -1034,7 +1034,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '兴安省公民储备银行',
-    sfidNumber: 'SFR-XA001-CH1P-928028839-2026',
+    sfidNumber: 'XA001-SCH1W-928028839-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:
@@ -1047,7 +1047,7 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
   InstitutionInfo(
     name: '合江省公民储备银行',
-    sfidNumber: 'SFR-HJ001-CH1M-089279108-2026',
+    sfidNumber: 'HJ001-SCH1O-089279108-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress:

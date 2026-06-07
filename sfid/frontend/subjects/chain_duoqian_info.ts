@@ -11,7 +11,7 @@ export interface InstitutionInfoDetail {
   sfid_number: string;
   institution_name?: string | null;
   category: string;
-  a3: string;
+  subject_property: string;
   p1: string;
   province: string;
   city: string;

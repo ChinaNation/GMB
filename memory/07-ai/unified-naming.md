@@ -83,7 +83,7 @@
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
 | `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
-| `sfid/backend/number/` | 身份 ID 编码协议 | number | SFID 后端身份号码格式、A3、机构码、分类、生成和校验唯一源码目录 |
+| `sfid/backend/number/` | 身份 ID 编码协议 | number | SFID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `wumin/` | 冷钱包 | wumin | 离线签名、扫码识别和冷钱包 UI |
 | `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
@@ -115,8 +115,8 @@
 | 个人多签 | `PersonalDuoqians` | storage | 个人多签 storage |
 | 治理主体 | `Subjects` | storage | 管理员主体 storage |
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
-| 机构账户主体 | `InstitutionAccount` | SubjectKind / 类型 | 注册机构账户级内部投票主体，已使用 `SubjectKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
-| 机构身份号码 | `sfid_number` | API / call data / storage key | SFID 机构 ID |
+| 机构账户主体 | `InstitutionAccount` | AdminAccountKind / 类型 | 注册机构账户级内部投票主体，已使用 `AdminAccountKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
+| 主体身份号码 | `sfid_number` | API / call data / storage key | SFID 对外身份 ID 字段,所有主体统一使用该字段名 |
 | 机构名称 | `institution_name` | API / call data | 机构显示名称 |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |
 | 签发省份 | `province` | credential / call data | SFID 省级签名来源 |
@@ -134,7 +134,7 @@
 | 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
 | 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / SFID citizens / wuminapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
 | 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 固定 `sr25519` |
-| 电子护照身份ID | `sfid_code` | SFID citizens / wuminapp myid | SFID 生成并返回给用户展示的身份ID号码 |
+| 电子护照身份ID | `sfid_number` | SFID citizens / wuminapp myid | SFID 生成并返回给用户展示的身份ID号码 |
 | 电子护照绑定状态 | `bind_status` | SFID citizens / wuminapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
 | CPMS 编号工具 | `number` | `cpms/backend/number/` | CPMS 后端档案号与护照号生成模块 |
 | CPMS 档案生命周期 | `lifecycle` | `cpms/backend/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
@@ -275,7 +275,7 @@
 | `sfid/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
 | `sfid/backend/core/qr/` | QR | core-qr | 后端 WUMIN_QR_V1 协议辅助和统一 sign_request 构造 |
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
-| `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、A3、机构码、分类、生成和校验规则 |
+| `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
 | `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
 | `sfid/backend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战写操作 |
 | `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
@@ -374,7 +374,7 @@
 |---|---|---|---|
 | `citizenchain/node/src/core/` | 核心 | core | 节点核心启动和共享能力 |
 | `citizenchain/node/src/desktop/` | 桌面端 | desktop | Tauri 桌面端命令和集成 |
-| `citizenchain/node/src/duoqian_transfer/` | 多签转账后端 | duoqian-transfer-node-backend | node 后端多签转账 Tauri 命令、SubjectId 编码和签名提交 |
+| `citizenchain/node/src/duoqian_transfer/` | 多签转账后端 | duoqian-transfer-node-backend | node 后端多签转账 Tauri 命令、AccountId 编码和签名提交 |
 | `citizenchain/node/src/governance/` | 治理 | governance | 节点治理业务和签名构造 |
 | `citizenchain/node/src/home/` | 首页 | home | 桌面端首页后端能力 |
 | `citizenchain/node/src/mining/` | 挖矿 | mining | 挖矿业务能力 |
@@ -402,7 +402,7 @@
 | 省份 | `province` | credential / call data | 签发凭证的省级区域 |
 | 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 签发凭证的省级管理员公钥 |
 | 签名 | `signature` | credential / call data | 凭证签名 |
-| 主体 ID | `subject_id` | call data / storage key | 管理员主体统一 ID |
+| 主体 ID | `account_id` | call data / storage key | 管理员主体统一 ID |
 | 公钥 | `pubkey` | QR body | 发起签名请求的公钥 |
 | 签名算法 | `sig_alg` | QR body | 签名算法标识 |
 | 载荷十六进制 | `payload_hex` | QR body | 待签名或待解码 payload |

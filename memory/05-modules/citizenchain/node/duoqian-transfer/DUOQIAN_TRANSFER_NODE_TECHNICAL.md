@@ -4,7 +4,7 @@
 
 node 端多签转账拆为独立目录：
 
-- `citizenchain/node/src/duoqian_transfer/`：Tauri 命令、签名构造、call_data、SubjectId 编码、提案详情解码和独立 storage 查询。
+- `citizenchain/node/src/duoqian_transfer/`：Tauri 命令、签名构造、call_data、AccountId 编码、提案详情解码和独立 storage 查询。
 - `citizenchain/node/frontend/duoqian-transfer/`：多签转账、安全基金转账、手续费划转的创建页面、详情展示组件、API 和类型。
 
 `governance` 不再注册 `build_propose_transfer_request / submit_propose_transfer`、安全基金转账、手续费划转等 pallet=19 创建/提交命令；前端也不再在 `governance/api.ts` 中暴露这些 API。
@@ -20,11 +20,11 @@ node 端多签转账拆为独立目录：
 node 端只支持：
 
 - `0x01 Builtin`：治理机构主体。
-- `0x05 InstitutionAccount`：注册机构多签账户主体。
+- `InstitutionAccount AccountId`：注册机构多签账户主体。
 
 node 端明确拒绝：
 
-- `0x03 PersonalDuoqian`：个人多签转账，该能力只在 wuminapp 端实现。
+- `PersonalDuoqian AccountId`：个人多签转账，该能力只在 wuminapp 端实现。
 
 ## QR 字段
 

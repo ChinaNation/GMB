@@ -6,9 +6,9 @@
 //! ## propose origin 校验铁律(ADR-011 v2 第 5.4 / 5.6 节)
 //!
 //! - **业务 5 ACTION**(OAIS/OAMT/OABN/OACL/OATR):propose 入口
-//!   `ensure!(proposer ∈ admins-change::Subjects::get(issuer_subject_id).admins)`
+//!   `ensure!(proposer ∈ admins-change::AdminAccounts::get(issuer_account).admins)`
 //! - **监管 5 ACTION**(OMFZ/OMUF/OMCF/OMFT/OMFC):propose 入口
-//!   `ensure!(proposer ∈ admins-change::Subjects::get(NRC_SUBJECT_ID).admins)`
+//!   `ensure!(proposer ∈ admins-change::AdminAccounts::get(nrc_main_account).admins)`
 //!
 //! VotingEngine 自身的 cast 阶段已校验 admin 投票,但 propose 阶段额外 ensure
 //! 防止任意账户消耗 storage 提案位 / 占用投票引擎额度。
@@ -36,7 +36,7 @@ pub const ACTION_ONCHAIN_ASSET_CLOSE: [u8; 4] = *b"OACL";
 pub const ACTION_ONCHAIN_ASSET_TRANSFER: [u8; 4] = *b"OATR";
 
 // ============================================================================
-// 监管 ACTION(走 JointVote,NRC 主体 + 全民兜底)
+// 监管 ACTION(走 JointVote,NRC 治理账户 + 全民兜底)
 // ============================================================================
 
 pub const ACTION_ONCHAIN_ASSET_MONITOR_FREEZE: [u8; 4] = *b"OMFZ";
@@ -51,11 +51,10 @@ pub const ACTION_ONCHAIN_ASSET_MONITOR_FORCE_CLOSE: [u8; 4] = *b"OMFC";
 
 /// 创建资产提案体。
 ///
-/// 中文注释:`monitor_subject_id` 字段不出现 — 链端在 callback 强制写入 NRC SubjectId。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
-pub struct IssueProposal<Balance> {
-    /// 发行人主体(0x02 / 0x03)。
-    pub issuer_subject_id: [u8; 48],
+pub struct IssueProposal<AccountId, Balance> {
+    /// 发行机构多签账户地址。
+    pub issuer_account: AccountId,
     /// 资产种类(第一期 Plain only)。
     pub class: AssetClass,
     /// 名称(过黑名单)。bound 由 runtime 配置 MaxAssetNameLen。

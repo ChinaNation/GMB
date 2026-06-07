@@ -17,7 +17,6 @@ use frame_support::{
     Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
-use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_runtime::{traits::Zero, DispatchError, RuntimeDebug};
 use sp_std::collections::btree_set::BTreeSet;
@@ -27,8 +26,8 @@ use primitives::china::china_ch::CHINA_CH;
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use votingengine::{
     types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
-    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, PROPOSAL_KIND_INTERNAL,
-    STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
+    InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
+    STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 pub use pallet::*;
@@ -43,17 +42,17 @@ pub const MODULE_TAG: &[u8] = b"adm-set-v1";
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
-#[scale_info(skip_type_params(AdminList))]
-pub struct AdminSetChangeAction<AdminList> {
-    /// 目标管理员主体（内置治理机构/个人账户/机构账户）。
-    pub subject: SubjectId,
+#[scale_info(skip_type_params(AccountId, AdminList))]
+pub struct AdminSetChangeAction<AccountId, AdminList> {
+    /// 目标多签账户地址（内置治理机构/个人账户/机构账户）。
+    pub account: AccountId,
     /// 提案通过后写入的完整管理员集合。
     pub new_admins: AdminList,
     /// 提案通过后写入投票引擎的动态阈值；固定治理机构必须等于制度固定阈值。
     pub new_threshold: u32,
 }
 
-/// 管理员主体类型。所有需要内部投票的多签主体都在本模块统一登记。
+/// 管理员账户类型。所有需要内部投票的多签账户都在本模块统一登记。
 #[derive(
     Encode,
     Decode,
@@ -66,21 +65,16 @@ pub struct AdminSetChangeAction<AdminList> {
     PartialEq,
     Eq,
 )]
-pub enum AdminSubjectKind {
+pub enum AdminAccountKind {
     /// 国储会、省储会、省储行等创世内置机构。
     BuiltinInstitution,
-    /// SFID 系统登记的机构归属主体。
-    ///
-    /// 中文注释：该历史枚举值不再允许新写入、新变更或生命周期流转；
-    /// 机构账户必须使用 `InstitutionAccount`。
-    SfidInstitution,
     /// 用户自建的个人多签。
     PersonalDuoqian,
     /// SFID 机构下面的某个具体账户。
     InstitutionAccount,
 }
 
-/// 管理员主体生命周期。
+/// 管理员账户生命周期。
 #[derive(
     Encode,
     Decode,
@@ -93,7 +87,7 @@ pub enum AdminSubjectKind {
     PartialEq,
     Eq,
 )]
-pub enum AdminSubjectStatus {
+pub enum AdminAccountStatus {
     /// 创建提案投票中；投票引擎可读取管理员快照。
     Pending,
     /// 已激活，可发起常规治理/转账/管理员更换。
@@ -102,7 +96,7 @@ pub enum AdminSubjectStatus {
     Closed,
 }
 
-/// 统一管理员主体记录。
+/// 统一管理员账户记录。
 #[derive(
     Encode,
     Decode,
@@ -115,61 +109,64 @@ pub enum AdminSubjectStatus {
     Eq,
 )]
 #[scale_info(skip_type_params(AdminList))]
-pub struct AdminSubject<AdminList, AccountId, BlockNumber> {
+pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
     pub org: u8,
-    pub kind: AdminSubjectKind,
+    pub kind: AdminAccountKind,
     pub admins: AdminList,
     pub creator: AccountId,
     pub created_at: BlockNumber,
     pub updated_at: BlockNumber,
-    pub status: AdminSubjectStatus,
+    pub status: AdminAccountStatus,
 }
 
-/// 管理员主体生命周期写入口。
+/// 管理员账户生命周期写入口。
 ///
 /// 中文注释：这里是跨 pallet 唯一允许写 Pending/Active/Closed 生命周期的 API。
 /// 裸存储 mutator 保持 crate 内私有；调用方必须提供 votingengine 提案上下文，
 /// 由 admins-change 再校验 owner、机构、状态和回调作用域。
-pub trait SubjectLifecycle<AccountId> {
-    fn create_pending_subject_for_proposal(
+pub trait AdminAccountLifecycle<AccountId> {
+    fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: AccountId,
         org: u8,
-        kind: AdminSubjectKind,
+        kind: AdminAccountKind,
         admins: Vec<AccountId>,
         creator: AccountId,
     ) -> DispatchResult;
 
-    fn activate_subject_for_proposal(
+    fn activate_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: AccountId,
     ) -> DispatchResult;
 
-    fn remove_pending_subject_for_proposal(
+    fn remove_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: AccountId,
     ) -> DispatchResult;
 
-    fn close_subject_for_proposal(
+    fn close_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: AccountId,
     ) -> DispatchResult;
 }
 
 /// admins-change pallet on-chain storage 版本。
-/// v3:管理员主体只保存管理员集合和生命周期，阈值归属 internal-vote。
-/// v4:动态多签主体关闭后删除当前状态记录，并迁移清理旧 Closed 动态主体。
+/// v3:管理员账户只保存管理员集合和生命周期，阈值归属 internal-vote。
+/// v4:动态多签账户关闭后删除当前状态记录，并迁移清理旧 Closed 动态账户。
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
-fn nrc_subject_id() -> Option<SubjectId> {
-    // 中文注释：国储会ID统一从常量数组读取并转码。
+fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
+    T::AccountId::decode(&mut &raw[..]).ok()
+}
+
+fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_CB
         .first()
-        .and_then(|n| subject_id_from_sfid_number(n.sfid_number))
+        .and_then(|n| decode_account::<T>(&n.main_address))
 }
 
 fn expected_admin_count(org: u8) -> Option<u32> {
@@ -214,17 +211,17 @@ pub mod pallet {
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
 
-    pub type AdminSubjectOf<T> =
-        AdminSubject<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
+    pub type AdminAccountOf<T> =
+        AdminAccount<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
-    /// 统一管理员主体表：subject_id → 管理员和生命周期。
+    /// 统一管理员账户表：多签账户地址 → 管理员和生命周期。
     ///
     /// 创世时写入国储会、省储会、省储行；个人账户由 `personal-manage` 写入；
     /// 机构账户由 `organization-manage` 在后续账户级改造中写入，投票通过后激活。
     #[pallet::storage]
-    #[pallet::getter(fn subject_of)]
-    pub type Subjects<T: Config> =
-        StorageMap<_, Blake2_128Concat, SubjectId, AdminSubjectOf<T>, OptionQuery>;
+    #[pallet::getter(fn admin_account_of)]
+    pub type AdminAccounts<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, AdminAccountOf<T>, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -248,7 +245,7 @@ pub mod pallet {
         sfid_number: &'static str,
         org: u8,
         raw_admins: &'static [[u8; 32]],
-    ) -> AdminSubjectOf<T> {
+    ) -> AdminAccountOf<T> {
         let admins: Vec<T::AccountId> = raw_admins
             .iter()
             .map(|raw| {
@@ -272,14 +269,14 @@ pub mod pallet {
                 sfid_number
             )
         });
-        AdminSubject {
+        AdminAccount {
             org,
-            kind: AdminSubjectKind::BuiltinInstitution,
+            kind: AdminAccountKind::BuiltinInstitution,
             admins: bounded,
             creator,
             created_at: Zero::zero(),
             updated_at: Zero::zero(),
-            status: AdminSubjectStatus::Active,
+            status: AdminAccountStatus::Active,
         }
     }
 
@@ -293,20 +290,20 @@ pub mod pallet {
             }
 
             let mut reads: u64 = 1;
-            let mut closed_dynamic_subjects = Vec::new();
-            for (subject_id, subject) in Subjects::<T>::iter() {
+            let mut closed_dynamic_accounts = Vec::new();
+            for (account_id, account) in AdminAccounts::<T>::iter() {
                 reads = reads.saturating_add(1);
-                if subject.status == AdminSubjectStatus::Closed
-                    && !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution)
+                if account.status == AdminAccountStatus::Closed
+                    && !matches!(account.kind, AdminAccountKind::BuiltinInstitution)
                 {
-                    closed_dynamic_subjects.push(subject_id);
+                    closed_dynamic_accounts.push(account_id);
                 }
             }
 
-            let removed = closed_dynamic_subjects.len() as u64;
-            for subject_id in closed_dynamic_subjects {
+            let removed = closed_dynamic_accounts.len() as u64;
+            for account in closed_dynamic_accounts {
                 // 中文注释：只删除当前状态墓碑；历史区块、事件和提案仍由链历史保留。
-                Subjects::<T>::remove(subject_id);
+                AdminAccounts::<T>::remove(account);
             }
 
             STORAGE_VERSION.put::<Pallet<T>>();
@@ -335,25 +332,31 @@ pub mod pallet {
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             for node in CHINA_CB.iter() {
-                let Some(institution) = subject_id_from_sfid_number(node.sfid_number) else {
-                    continue;
+                let Some(institution) = decode_account::<T>(&node.main_address) else {
+                    panic!(
+                        "genesis: sfid_number {} 主账户 decode 失败",
+                        node.sfid_number
+                    );
                 };
-                let org = if Some(institution) == nrc_subject_id() {
+                let org = if Some(institution.clone()) == nrc_account::<T>() {
                     ORG_NRC
                 } else {
                     ORG_PRC
                 };
-                Subjects::<T>::insert(
+                AdminAccounts::<T>::insert(
                     institution,
                     build_builtin_institution::<T>(node.sfid_number, org, node.duoqian_admins),
                 );
             }
 
             for node in CHINA_CH.iter() {
-                let Some(institution) = subject_id_from_sfid_number(node.sfid_number) else {
-                    continue;
+                let Some(institution) = decode_account::<T>(&node.main_address) else {
+                    panic!(
+                        "genesis: sfid_number {} 主账户 decode 失败",
+                        node.sfid_number
+                    );
                 };
-                Subjects::<T>::insert(
+                AdminAccounts::<T>::insert(
                     institution,
                     build_builtin_institution::<T>(node.sfid_number, ORG_PRB, node.duoqian_admins),
                 );
@@ -368,7 +371,7 @@ pub mod pallet {
         AdminSetChangeProposed {
             proposal_id: u64,
             org: u8,
-            subject: SubjectId,
+            account: T::AccountId,
             proposer: T::AccountId,
             old_admin_count: u32,
             new_admin_count: u32,
@@ -379,24 +382,24 @@ pub mod pallet {
         /// 管理员集合已完成执行
         AdminSetChanged {
             proposal_id: u64,
-            subject: SubjectId,
+            account: T::AccountId,
             admin_count: u32,
             threshold: u32,
         },
-        /// 多签主体管理员配置已写入 Pending。
-        AdminSubjectPendingCreated {
-            subject: SubjectId,
+        /// 多签账户管理员配置已写入 Pending。
+        AdminAccountPendingCreated {
+            account: T::AccountId,
             org: u8,
-            kind: AdminSubjectKind,
+            kind: AdminAccountKind,
             creator: T::AccountId,
             admin_count: u32,
         },
-        /// 多签主体管理员配置已激活。
-        AdminSubjectActivated { subject: SubjectId, org: u8 },
-        /// Pending 多签主体管理员配置已清理。
-        AdminSubjectPendingRemoved { subject: SubjectId, org: u8 },
-        /// 多签主体管理员配置已关闭。
-        AdminSubjectClosed { subject: SubjectId, org: u8 },
+        /// 多签账户管理员配置已激活。
+        AdminAccountActivated { account: T::AccountId, org: u8 },
+        /// Pending 多签账户管理员配置已清理。
+        AdminAccountPendingRemoved { account: T::AccountId, org: u8 },
+        /// 多签账户管理员配置已关闭。
+        AdminAccountClosed { account: T::AccountId, org: u8 },
     }
 
     #[pallet::error]
@@ -421,24 +424,24 @@ pub mod pallet {
         InvalidProposalStage,
         /// 提案绑定机构与管理员更换动作不一致
         ProposalInstitutionMismatch,
-        /// 提案绑定组织与管理员主体不一致
+        /// 提案绑定组织与管理员账户不一致
         ProposalOrgMismatch,
-        /// 管理员主体已存在
+        /// 管理员账户已存在
         InstitutionAlreadyExists,
-        /// 管理员主体状态不是 Pending
-        SubjectNotPending,
-        /// 管理员主体状态不是 Active
-        SubjectNotActive,
+        /// 管理员账户状态不是 Pending
+        AdminAccountNotPending,
+        /// 管理员账户状态不是 Active
+        AdminAccountNotActive,
         /// 内置治理机构永远不可关闭
-        BuiltinSubjectCannotClose,
-        /// 管理员主体类型与 org 不匹配
-        InvalidSubjectKind,
+        BuiltinAdminAccountCannotClose,
+        /// 管理员账户类型与 org 不匹配
+        InvalidAdminAccountKind,
         /// 阈值不合法
         InvalidThreshold,
         /// 管理员重复
         DuplicateAdmin,
-        /// 管理员主体生命周期写入缺少有效 votingengine 提案作用域
-        InvalidSubjectLifecycleScope,
+        /// 管理员账户生命周期写入缺少有效 votingengine 提案作用域
+        InvalidAdminAccountLifecycleScope,
     }
 
     #[pallet::call]
@@ -448,24 +451,25 @@ pub mod pallet {
         pub fn propose_admin_set_change(
             origin: OriginFor<T>,
             org: u8,
-            subject_id: SubjectId,
+            account: T::AccountId,
             new_admins: AdminsOf<T>,
             new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // 1) 校验管理员主体已激活且 org 匹配。
-            let subject = Subjects::<T>::get(subject_id).ok_or(Error::<T>::InvalidInstitution)?;
+            // 1) 校验管理员账户已激活且 org 匹配。
+            let current =
+                AdminAccounts::<T>::get(account.clone()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                subject.status == AdminSubjectStatus::Active,
-                Error::<T>::SubjectNotActive
+                current.status == AdminAccountStatus::Active,
+                Error::<T>::AdminAccountNotActive
             );
-            ensure!(subject.org == org, Error::<T>::InstitutionOrgMismatch);
+            ensure!(current.org == org, Error::<T>::InstitutionOrgMismatch);
 
             // 2) 校验发起人与目标管理员集合合法性。
-            let current_admins = subject.admins.clone().into_inner();
+            let current_admins = current.admins.clone().into_inner();
             ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-            Self::validate_admin_set_for_subject(subject.kind, subject.org, new_admins.as_slice())?;
+            Self::validate_admin_set_for_account(current.kind, current.org, new_admins.as_slice())?;
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
@@ -473,7 +477,7 @@ pub mod pallet {
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
             with_transaction(|| {
                 let action = AdminSetChangeAction {
-                    subject: subject_id,
+                    account: account.clone(),
                     new_admins: new_admins.clone(),
                     new_threshold,
                 };
@@ -482,7 +486,7 @@ pub mod pallet {
                     match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
                         who.clone(),
                         org,
-                        subject_id,
+                        account.clone(),
                         new_admins.len() as u32,
                         new_threshold,
                         crate::MODULE_TAG,
@@ -495,7 +499,7 @@ pub mod pallet {
                 Self::deposit_event(Event::<T>::AdminSetChangeProposed {
                     proposal_id,
                     org,
-                    subject: subject_id,
+                    account,
                     proposer: who,
                     old_admin_count: current_admins.len() as u32,
                     new_admin_count: new_admins.len() as u32,
@@ -507,13 +511,13 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn validate_admin_count_for_subject(
-            kind: AdminSubjectKind,
+        fn validate_admin_count_for_account(
+            kind: AdminAccountKind,
             org: u8,
             admins_len: usize,
         ) -> DispatchResult {
             match kind {
-                AdminSubjectKind::BuiltinInstitution => {
+                AdminAccountKind::BuiltinInstitution => {
                     // 固定人数约束：国储会19，省储会9，省储行9。
                     let expected =
                         expected_admin_count(org).ok_or(Error::<T>::InvalidInstitution)?;
@@ -522,34 +526,31 @@ pub mod pallet {
                         Error::<T>::InvalidAdminCount
                     );
                 }
-                AdminSubjectKind::PersonalDuoqian => {
+                AdminAccountKind::PersonalDuoqian => {
                     ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
                     ensure!(
                         admins_len <= <T as Config>::MaxPersonalAccountAdmins::get() as usize,
                         Error::<T>::InvalidAdminCount
                     );
                 }
-                AdminSubjectKind::InstitutionAccount => {
+                AdminAccountKind::InstitutionAccount => {
                     ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
                     ensure!(
                         admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
                         Error::<T>::InvalidAdminCount
                     );
                 }
-                AdminSubjectKind::SfidInstitution => {
-                    return Err(Error::<T>::InvalidSubjectKind.into());
-                }
             }
             Ok(())
         }
 
-        fn validate_admin_set_for_subject(
-            kind: AdminSubjectKind,
+        fn validate_admin_set_for_account(
+            kind: AdminAccountKind,
             org: u8,
             admins: &[T::AccountId],
         ) -> DispatchResult {
-            Self::ensure_subject_kind_matches_org(kind, org)?;
-            Self::validate_admin_count_for_subject(kind, org, admins.len())?;
+            Self::ensure_account_kind_matches_org(kind, org)?;
+            Self::validate_admin_count_for_account(kind, org, admins.len())?;
             Self::ensure_unique_admins(admins)?;
             Ok(())
         }
@@ -571,24 +572,21 @@ pub mod pallet {
             left_set == right_set
         }
 
-        fn ensure_subject_kind_matches_org(kind: AdminSubjectKind, org: u8) -> DispatchResult {
+        fn ensure_account_kind_matches_org(kind: AdminAccountKind, org: u8) -> DispatchResult {
             match kind {
-                AdminSubjectKind::BuiltinInstitution => {
+                AdminAccountKind::BuiltinInstitution => {
                     ensure!(
                         matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
-                        Error::<T>::InvalidSubjectKind
+                        Error::<T>::InvalidAdminAccountKind
                     );
                 }
-                AdminSubjectKind::SfidInstitution => {
-                    return Err(Error::<T>::InvalidSubjectKind.into());
+                AdminAccountKind::PersonalDuoqian => {
+                    ensure!(org == ORG_REN, Error::<T>::InvalidAdminAccountKind);
                 }
-                AdminSubjectKind::PersonalDuoqian => {
-                    ensure!(org == ORG_REN, Error::<T>::InvalidSubjectKind);
-                }
-                AdminSubjectKind::InstitutionAccount => {
+                AdminAccountKind::InstitutionAccount => {
                     ensure!(
                         matches!(org, ORG_PUP | ORG_OTH),
-                        Error::<T>::InvalidSubjectKind
+                        Error::<T>::InvalidAdminAccountKind
                     );
                 }
             }
@@ -598,24 +596,24 @@ pub mod pallet {
         pub(crate) fn ensure_lifecycle_proposal(
             proposal_id: u64,
             module_tag: &[u8],
-            institution: SubjectId,
+            institution: T::AccountId,
             org: u8,
             expected_status: u8,
             require_callback_scope: bool,
         ) -> DispatchResult {
             ensure!(
                 votingengine::Pallet::<T>::is_proposal_owner(proposal_id, module_tag),
-                Error::<T>::InvalidSubjectLifecycleScope
+                Error::<T>::InvalidAdminAccountLifecycleScope
             );
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::InvalidSubjectLifecycleScope)?;
+                .ok_or(Error::<T>::InvalidAdminAccountLifecycleScope)?;
             ensure!(
                 proposal.kind == PROPOSAL_KIND_INTERNAL,
-                Error::<T>::InvalidSubjectLifecycleScope
+                Error::<T>::InvalidAdminAccountLifecycleScope
             );
             ensure!(
                 proposal.stage == STAGE_INTERNAL,
-                Error::<T>::InvalidSubjectLifecycleScope
+                Error::<T>::InvalidAdminAccountLifecycleScope
             );
             ensure!(
                 proposal.internal_institution == Some(institution),
@@ -627,52 +625,52 @@ pub mod pallet {
             );
             ensure!(
                 proposal.status == expected_status,
-                Error::<T>::InvalidSubjectLifecycleScope
+                Error::<T>::InvalidAdminAccountLifecycleScope
             );
             if require_callback_scope {
                 ensure!(
                     votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id),
-                    Error::<T>::InvalidSubjectLifecycleScope
+                    Error::<T>::InvalidAdminAccountLifecycleScope
                 );
             }
             Ok(())
         }
 
-        /// 写入 Pending 管理员主体。
+        /// 写入 Pending 管理员账户。
         ///
-        /// 中文注释：生命周期写入只能经 `SubjectLifecycle` trait 做提案上下文校验后进入。
-        pub(crate) fn do_create_pending_subject(
-            institution: SubjectId,
+        /// 中文注释：生命周期写入只能经 `AdminAccountLifecycle` trait 做提案上下文校验后进入。
+        pub(crate) fn do_create_pending_admin_account(
+            institution: T::AccountId,
             org: u8,
-            kind: AdminSubjectKind,
+            kind: AdminAccountKind,
             admins: Vec<T::AccountId>,
             creator: T::AccountId,
         ) -> DispatchResult {
             ensure!(
-                !Subjects::<T>::contains_key(institution),
+                !AdminAccounts::<T>::contains_key(institution.clone()),
                 Error::<T>::InstitutionAlreadyExists
             );
-            Self::validate_admin_set_for_subject(kind, org, &admins)?;
+            Self::validate_admin_set_for_account(kind, org, &admins)?;
 
             let bounded: AdminsOf<T> = admins
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminCount)?;
             let now = frame_system::Pallet::<T>::block_number();
             let admin_count = bounded.len() as u32;
-            Subjects::<T>::insert(
-                institution,
-                AdminSubject {
+            AdminAccounts::<T>::insert(
+                institution.clone(),
+                AdminAccount {
                     org,
                     kind,
                     admins: bounded,
                     creator: creator.clone(),
                     created_at: now,
                     updated_at: now,
-                    status: AdminSubjectStatus::Pending,
+                    status: AdminAccountStatus::Pending,
                 },
             );
-            Self::deposit_event(Event::<T>::AdminSubjectPendingCreated {
-                subject: institution,
+            Self::deposit_event(Event::<T>::AdminAccountPendingCreated {
+                account: institution,
                 org,
                 kind,
                 creator,
@@ -681,154 +679,165 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 将 Pending 管理员主体激活。
-        pub(crate) fn do_activate_subject(institution: SubjectId) -> DispatchResult {
-            let org =
-                Subjects::<T>::try_mutate(institution, |maybe| -> Result<u8, DispatchError> {
-                    let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
+        /// 将 Pending 管理员账户激活。
+        pub(crate) fn do_activate_admin_account(institution: T::AccountId) -> DispatchResult {
+            let org = AdminAccounts::<T>::try_mutate(
+                institution.clone(),
+                |maybe| -> Result<u8, DispatchError> {
+                    let account = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
                     ensure!(
-                        subject.status == AdminSubjectStatus::Pending,
-                        Error::<T>::SubjectNotPending
+                        account.status == AdminAccountStatus::Pending,
+                        Error::<T>::AdminAccountNotPending
                     );
-                    subject.status = AdminSubjectStatus::Active;
-                    subject.updated_at = frame_system::Pallet::<T>::block_number();
-                    Ok(subject.org)
-                })?;
-            Self::deposit_event(Event::<T>::AdminSubjectActivated {
-                subject: institution,
+                    account.status = AdminAccountStatus::Active;
+                    account.updated_at = frame_system::Pallet::<T>::block_number();
+                    Ok(account.org)
+                },
+            )?;
+            Self::deposit_event(Event::<T>::AdminAccountActivated {
+                account: institution,
                 org,
             });
             Ok(())
         }
 
-        /// 清理尚未激活的 Pending 管理员主体。
-        pub(crate) fn do_remove_pending_subject(institution: SubjectId) -> DispatchResult {
-            // 中文注释：Pending 清理必须命中真实主体，避免不存在主体被静默当作清理成功。
-            let subject = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+        /// 清理尚未激活的 Pending 管理员账户。
+        pub(crate) fn do_remove_pending_admin_account(institution: T::AccountId) -> DispatchResult {
+            // 中文注释：Pending 清理必须命中真实账户，避免不存在账户被静默当作清理成功。
+            let account = AdminAccounts::<T>::get(institution.clone())
+                .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                subject.status == AdminSubjectStatus::Pending,
-                Error::<T>::SubjectNotPending
+                account.status == AdminAccountStatus::Pending,
+                Error::<T>::AdminAccountNotPending
             );
-            let org = subject.org;
-            Subjects::<T>::remove(institution);
-            Self::deposit_event(Event::<T>::AdminSubjectPendingRemoved {
-                subject: institution,
+            let org = account.org;
+            AdminAccounts::<T>::remove(institution.clone());
+            Self::deposit_event(Event::<T>::AdminAccountPendingRemoved {
+                account: institution,
                 org,
             });
             Ok(())
         }
 
-        /// 关闭已激活管理员主体。
-        pub(crate) fn do_close_subject(institution: SubjectId) -> DispatchResult {
-            let subject = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+        /// 关闭已激活管理员账户。
+        pub(crate) fn do_close_admin_account(institution: T::AccountId) -> DispatchResult {
+            let account = AdminAccounts::<T>::get(institution.clone())
+                .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                subject.status == AdminSubjectStatus::Active,
-                Error::<T>::SubjectNotActive
+                account.status == AdminAccountStatus::Active,
+                Error::<T>::AdminAccountNotActive
             );
-            // 中文注释：NRC/PRC/PRB 是制度内置治理主体，生命周期不能被删除。
+            // 中文注释：NRC/PRC/PRB 是制度内置治理账户，生命周期不能被删除。
             ensure!(
-                !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution),
-                Error::<T>::BuiltinSubjectCannotClose
+                !matches!(account.kind, AdminAccountKind::BuiltinInstitution),
+                Error::<T>::BuiltinAdminAccountCannotClose
             );
-            let org = subject.org;
+            let org = account.org;
             // 中文注释：动态多签注销完成后不保留 Closed 当前状态墓碑；
             // 同名确定性地址可在资金清空后重新走全新的注册流程。
-            Subjects::<T>::remove(institution);
-            Self::deposit_event(Event::<T>::AdminSubjectClosed {
-                subject: institution,
+            AdminAccounts::<T>::remove(institution.clone());
+            Self::deposit_event(Event::<T>::AdminAccountClosed {
+                account: institution,
                 org,
             });
             Ok(())
         }
 
-        fn subject_with_status(
+        fn admin_account_with_status(
             org: u8,
-            institution: SubjectId,
-            status: AdminSubjectStatus,
-        ) -> Option<AdminSubjectOf<T>> {
-            let subject = Subjects::<T>::get(institution)?;
-            if subject.org != org || subject.status != status {
+            institution: T::AccountId,
+            status: AdminAccountStatus,
+        ) -> Option<AdminAccountOf<T>> {
+            let account = AdminAccounts::<T>::get(institution)?;
+            if account.org != org || account.status != status {
                 return None;
             }
-            // 中文注释：读侧也要执行主体类型边界校验，避免升级前写入的旧脏数据
-            // 继续通过 active/pending 查询 API 被其他业务模块当作有效管理员主体。
-            if Self::ensure_subject_kind_matches_org(subject.kind, subject.org).is_err() {
+            // 中文注释：读侧也要执行账户类型边界校验，避免升级前写入的旧脏数据
+            // 继续通过 active/pending 查询 API 被其他业务模块当作有效管理员账户。
+            if Self::ensure_account_kind_matches_org(account.kind, account.org).is_err() {
                 return None;
             }
-            Some(subject)
+            Some(account)
         }
 
-        /// 查询 Active 主体是否存在。普通业务主体合法性判断只使用 Active 主体。
-        pub fn active_subject_exists(org: u8, institution: SubjectId) -> bool {
-            Self::subject_with_status(org, institution, AdminSubjectStatus::Active).is_some()
+        /// 查询 Active 账户是否存在。普通业务账户合法性判断只使用 Active 账户。
+        pub fn active_admin_account_exists(org: u8, institution: T::AccountId) -> bool {
+            Self::admin_account_with_status(org, institution, AdminAccountStatus::Active).is_some()
         }
 
-        /// 查询 Active 主体管理员权限。普通业务授权只能使用 Active 主体。
-        pub fn is_active_subject_admin(
+        /// 查询 Active 账户管理员权限。普通业务授权只能使用 Active 账户。
+        pub fn is_active_account_admin(
             org: u8,
-            institution: SubjectId,
+            institution: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            let Some(subject) =
-                Self::subject_with_status(org, institution, AdminSubjectStatus::Active)
+            let Some(account) =
+                Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)
             else {
                 return false;
             };
-            subject.admins.iter().any(|admin| admin == who)
+            account.admins.iter().any(|admin| admin == who)
         }
 
-        /// 读取 Active 主体管理员列表。普通业务提案创建和投票快照默认使用此 API。
-        pub fn active_subject_admins(org: u8, institution: SubjectId) -> Option<Vec<T::AccountId>> {
-            let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
-            Some(subject.admins.into_inner())
-        }
-
-        /// 读取 Active 主体管理员数量。普通业务阈值兜底判断只能使用 Active 主体。
-        pub fn active_subject_admin_count(org: u8, institution: SubjectId) -> Option<u32> {
-            let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
-            Some(subject.admins.len() as u32)
-        }
-
-        /// 查询 Pending 主体是否存在。仅用于创建/激活该主体时判断主体合法性。
-        pub fn pending_subject_exists_for_snapshot(org: u8, institution: SubjectId) -> bool {
-            Self::subject_with_status(org, institution, AdminSubjectStatus::Pending).is_some()
-        }
-
-        /// 查询 Pending 主体管理员权限。仅用于创建/激活该主体时锁定投票快照。
-        pub fn is_pending_subject_admin_for_snapshot(
+        /// 读取 Active 账户管理员列表。普通业务提案创建和投票快照默认使用此 API。
+        pub fn active_account_admins(
             org: u8,
-            institution: SubjectId,
-            who: &T::AccountId,
-        ) -> bool {
-            let Some(subject) =
-                Self::subject_with_status(org, institution, AdminSubjectStatus::Pending)
-            else {
-                return false;
-            };
-            subject.admins.iter().any(|admin| admin == who)
-        }
-
-        /// 读取 Pending 主体管理员列表。仅供投票引擎 Pending 创建入口写快照。
-        pub fn pending_subject_admins_for_snapshot(
-            org: u8,
-            institution: SubjectId,
+            institution: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
-            let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Pending)?;
-            Some(subject.admins.into_inner())
+            let account =
+                Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)?;
+            Some(account.admins.into_inner())
         }
 
-        /// 读取 Pending 主体管理员数量。仅用于创建/激活该主体的快照语义。
-        pub fn pending_subject_admin_count_for_snapshot(
+        /// 读取 Active 账户管理员数量。普通业务阈值兜底判断只能使用 Active 账户。
+        pub fn active_account_admin_count(org: u8, institution: T::AccountId) -> Option<u32> {
+            let account =
+                Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)?;
+            Some(account.admins.len() as u32)
+        }
+
+        /// 查询 Pending 账户是否存在。仅用于创建/激活该账户时判断账户合法性。
+        pub fn pending_account_exists_for_snapshot(org: u8, institution: T::AccountId) -> bool {
+            Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending).is_some()
+        }
+
+        /// 查询 Pending 账户管理员权限。仅用于创建/激活该账户时锁定投票快照。
+        pub fn is_pending_account_admin_for_snapshot(
             org: u8,
-            institution: SubjectId,
+            institution: T::AccountId,
+            who: &T::AccountId,
+        ) -> bool {
+            let Some(account) =
+                Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending)
+            else {
+                return false;
+            };
+            account.admins.iter().any(|admin| admin == who)
+        }
+
+        /// 读取 Pending 账户管理员列表。仅供投票引擎 Pending 创建入口写快照。
+        pub fn pending_account_admins_for_snapshot(
+            org: u8,
+            institution: T::AccountId,
+        ) -> Option<Vec<T::AccountId>> {
+            let account =
+                Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending)?;
+            Some(account.admins.into_inner())
+        }
+
+        /// 读取 Pending 账户管理员数量。仅用于创建/激活该账户的快照语义。
+        pub fn pending_account_admin_count_for_snapshot(
+            org: u8,
+            institution: T::AccountId,
         ) -> Option<u32> {
-            let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Pending)?;
-            Some(subject.admins.len() as u32)
+            let account =
+                Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending)?;
+            Some(account.admins.len() as u32)
         }
 
         pub(crate) fn try_execute_set_change_from_action(
             proposal_id: u64,
-            action: AdminSetChangeAction<AdminsOf<T>>,
+            action: AdminSetChangeAction<T::AccountId, AdminsOf<T>>,
         ) -> DispatchResult {
             // 中文注释：执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
@@ -846,45 +855,45 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let subject =
-                Subjects::<T>::get(action.subject).ok_or(Error::<T>::InvalidInstitution)?;
+            let account = AdminAccounts::<T>::get(action.account.clone())
+                .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                subject.status == AdminSubjectStatus::Active,
-                Error::<T>::SubjectNotActive
+                account.status == AdminAccountStatus::Active,
+                Error::<T>::AdminAccountNotActive
             );
             ensure!(
-                proposal.internal_institution == Some(action.subject),
+                proposal.internal_institution == Some(action.account.clone()),
                 Error::<T>::ProposalInstitutionMismatch
             );
             ensure!(
-                proposal.internal_org == Some(subject.org),
+                proposal.internal_org == Some(account.org),
                 Error::<T>::ProposalOrgMismatch
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
-                subject.org,
-                action.subject,
+                account.org,
+                action.account.clone(),
                 proposal_id,
             )?;
-            let current_admins = subject.admins.clone().into_inner();
-            Self::validate_admin_set_for_subject(
-                subject.kind,
-                subject.org,
+            let current_admins = account.admins.clone().into_inner();
+            Self::validate_admin_set_for_account(
+                account.kind,
+                account.org,
                 action.new_admins.as_slice(),
             )?;
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), action.new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
-            Subjects::<T>::mutate(action.subject, |maybe| {
-                if let Some(subject) = maybe {
-                    subject.admins = action.new_admins.clone();
-                    subject.updated_at = frame_system::Pallet::<T>::block_number();
+            AdminAccounts::<T>::mutate(action.account.clone(), |maybe| {
+                if let Some(account) = maybe {
+                    account.admins = action.new_admins.clone();
+                    account.updated_at = frame_system::Pallet::<T>::block_number();
                 }
             });
 
             Self::deposit_event(Event::<T>::AdminSetChanged {
                 proposal_id,
-                subject: action.subject,
+                account: action.account,
                 admin_count: action.new_admins.len() as u32,
                 threshold: action.new_threshold,
             });
@@ -894,85 +903,85 @@ pub mod pallet {
     }
 }
 
-impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
-    fn create_pending_subject_for_proposal(
+impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T> {
+    fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: T::AccountId,
         org: u8,
-        kind: AdminSubjectKind,
+        kind: AdminAccountKind,
         admins: Vec<T::AccountId>,
         creator: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            institution,
+            institution.clone(),
             org,
             STATUS_VOTING,
             false,
         )?;
-        Self::do_create_pending_subject(institution, org, kind, admins, creator)
+        Self::do_create_pending_admin_account(institution, org, kind, admins, creator)
     }
 
-    fn activate_subject_for_proposal(
+    fn activate_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: T::AccountId,
     ) -> DispatchResult {
-        let subject = pallet::Subjects::<T>::get(institution)
+        let account = pallet::AdminAccounts::<T>::get(institution.clone())
             .ok_or(pallet::Error::<T>::InvalidInstitution)?;
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            institution,
-            subject.org,
+            institution.clone(),
+            account.org,
             STATUS_PASSED,
             true,
         )?;
-        Self::do_activate_subject(institution)
+        Self::do_activate_admin_account(institution)
     }
 
-    fn remove_pending_subject_for_proposal(
+    fn remove_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: T::AccountId,
     ) -> DispatchResult {
-        let subject = pallet::Subjects::<T>::get(institution)
+        let account = pallet::AdminAccounts::<T>::get(institution.clone())
             .ok_or(pallet::Error::<T>::InvalidInstitution)?;
         let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-            .ok_or(pallet::Error::<T>::InvalidSubjectLifecycleScope)?;
+            .ok_or(pallet::Error::<T>::InvalidAdminAccountLifecycleScope)?;
         ensure!(
             matches!(proposal.status, STATUS_REJECTED | STATUS_EXECUTION_FAILED),
-            pallet::Error::<T>::InvalidSubjectLifecycleScope
+            pallet::Error::<T>::InvalidAdminAccountLifecycleScope
         );
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            institution,
-            subject.org,
+            institution.clone(),
+            account.org,
             proposal.status,
             false,
         )?;
-        Self::do_remove_pending_subject(institution)
+        Self::do_remove_pending_admin_account(institution)
     }
 
-    fn close_subject_for_proposal(
+    fn close_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        institution: SubjectId,
+        institution: T::AccountId,
     ) -> DispatchResult {
-        let subject = pallet::Subjects::<T>::get(institution)
+        let account = pallet::AdminAccounts::<T>::get(institution.clone())
             .ok_or(pallet::Error::<T>::InvalidInstitution)?;
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            institution,
-            subject.org,
+            institution.clone(),
+            account.org,
             STATUS_PASSED,
             true,
         )?;
-        Self::do_close_subject(institution)
+        Self::do_close_admin_account(institution)
     }
 }
 
@@ -1008,7 +1017,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         }
 
         // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
-        let action = AdminSetChangeAction::<AdminsOf<T>>::decode(&mut &raw[..])
+        let action = AdminSetChangeAction::<T::AccountId, AdminsOf<T>>::decode(&mut &raw[..])
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         // Step 3:执行替换。管理员集合变更失败属于数据/状态已不匹配，直接交给投票引擎失败终态。

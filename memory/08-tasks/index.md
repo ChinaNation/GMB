@@ -58,6 +58,11 @@
 
 ## done
 
+- `memory/08-tasks/done/20260607-merge-traits-types-into-multisig.md`
+- `memory/08-tasks/done/20260606-merge-citizen-constitution-into-genesis.md`
+- `memory/08-tasks/done/20260606-citizen-constitution-pass3.md`
+- `memory/08-tasks/done/20260606-citizen-constitution-committee-titlecase.md`
+- `memory/08-tasks/done/20260606-citizen-constitution-naming-fix.md`
 - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
 - `memory/08-tasks/done/20260531-cpms-installer-db-pdf.md`
 - `memory/08-tasks/done/20260531-cpms-ci-arm64-installer.md`
@@ -157,7 +162,7 @@
 - `memory/08-tasks/done/20260419-sfid-机构两步式创建.md`
 - `memory/08-tasks/done/20260420-duoqian_address-改名-main_address.md`
 - `memory/08-tasks/done/20260420-keyless_address-改名-stake_address.md`
-- `memory/08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md`
+- `memory/08-tasks/done/20260420-unified-DUOQIAN-domain.md`
 - `memory/08-tasks/done/20260421-154308-多签账户注册改造-离线QR聚合签名-step1.md`
 - `memory/08-tasks/done/20260421-162425-多签账户转账改造-离线QR聚合签名-step2.md`
 - `memory/08-tasks/done/20260421-name-to-account-name-rename.md`

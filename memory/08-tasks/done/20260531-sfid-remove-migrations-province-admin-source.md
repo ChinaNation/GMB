@@ -3,7 +3,7 @@
 ## 任务需求
 - 删除 SFID 系统内数据库迁移、旧结构兼容、旧回填和本地 schema finalizer 残留。
 - 初始省级管理员只允许以 `sfid/backend/admins/province_admins.rs` 为唯一真源。
-- 查明 `0xe0fb43daac7243a64e90b95250e4ffac3d47549c72b53b086785c902365ed148` 与 `GFR-GZ001-CB0I-969970096-2026` 的绑定位置。
+- 查明 `0xe0fb43daac7243a64e90b95250e4ffac3d47549c72b53b086785c902365ed148` 与 `LN001-GCB05-944805165-2026` 的绑定位置。
 
 ## 预计修改目录
 - `sfid/backend/`：后端启动直接创建当前目标结构；删除迁移兼容逻辑；省级管理员启动校验只读取 `province_admins.rs`。

@@ -24,7 +24,7 @@
 {
   "proto": "SFID_CPMS_V1",
   "type": "INSTALL",
-  "sfid_number": "GFR-GD001-ZG0X-123456789-2026",
+  "sfid_number": "GD001-GZF06-123456789-2026",
   "province_name": "广东省",
   "city_name": "广州市",
   "install_secret": "0x...",
@@ -98,13 +98,13 @@ ARCHIVE 签名原文：
 sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
 ```
 
-ARCHIVE 不包含 `code_id` 或 `usage_limit`。档案码不是一次性票据；SFID 以 `archive_no / sfid_code / wallet_pubkey` 三者一对一关系防止重复绑定。
+ARCHIVE 不包含 `code_id` 或 `usage_limit`。档案码不是一次性票据；SFID 以 `archive_no / sfid_number / wallet_pubkey` 三者一对一关系防止重复绑定。
 
 `geo_seal` 明文结构：
 
 ```json
 {
-  "sfid_number": "GFR-GD001-ZG0X-123456789-2026"
+  "sfid_number": "GD001-GZF06-123456789-2026"
 }
 ```
 
@@ -129,7 +129,7 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
   "type": "CPMS_STATUS_EXPORT",
   "version": 1,
   "export_year": 2026,
-  "sfid_number": "GFR-GD001-ZG0X-123456789-2026",
+  "sfid_number": "GD001-GZF06-123456789-2026",
   "cpms_pubkey": "0x...",
   "export_batch_id": "cse_...",
   "exported_at": 1780185600,
@@ -190,7 +190,7 @@ sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{e
 6. 首次验真成功时绑定 `cpms_pubkey_hash`；后续同一授权只能接受同一 CPMS 本机公钥。
 7. SFID 根据 ARCHIVE 生成 wuminapp `sign_request`，并锁定 `wallet_address / wallet_pubkey`。
 8. wuminapp 返回 `sign_response` 后，SFID 校验签名和 `payload_hash`。
-9. SFID 检查 `archive_no / sfid_code / wallet_pubkey` 三者唯一，并按 `province_code / city_code / sfid_number` 写入公民绑定记录。
+9. SFID 检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，并按 `province_code / city_code / sfid_number` 写入公民绑定记录。
 
 ## 授权状态
 

@@ -22,14 +22,12 @@ class AdminCatalogEntryResponse {
     required this.pubkeyHex,
     required this.roleName,
     required this.institutionName,
-    required this.institutionIdHex,
     required this.org,
   });
 
   final String pubkeyHex;
   final String roleName;
   final String institutionName;
-  final String institutionIdHex;
   final String org;
 }
 
@@ -88,7 +86,7 @@ class PopulationSnapshotResponse {
 
 /// SFID 机构注册凭证。
 ///
-/// 中文注释:这些字段只用于链端验签和防重放,不得混入 a3/sub_type/parent_sfid_number
+/// 中文注释:这些字段只用于链端验签和防重放,不得混入 subject_property/sub_type/parent_sfid_number
 /// 等业务分类字段。
 class InstitutionRegistrationCredential {
   const InstitutionRegistrationCredential({
@@ -194,8 +192,6 @@ class ApiClient {
       final pubkey = (m['pubkey_hex']?.toString() ?? '').trim().toLowerCase();
       final role = (m['role_name']?.toString() ?? '').trim();
       final institutionName = (m['institution_name']?.toString() ?? '').trim();
-      final institutionId =
-          (m['institution_id_hex']?.toString() ?? '').trim().toLowerCase();
       if (pubkey.isEmpty || role.isEmpty || institutionName.isEmpty) {
         continue;
       }
@@ -204,7 +200,6 @@ class ApiClient {
           pubkeyHex: pubkey.startsWith('0x') ? pubkey.substring(2) : pubkey,
           roleName: role,
           institutionName: institutionName,
-          institutionIdHex: institutionId,
           org: (m['org']?.toString() ?? 'unknown').trim().toLowerCase(),
         ),
       );

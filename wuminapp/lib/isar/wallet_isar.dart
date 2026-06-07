@@ -499,7 +499,7 @@ class DuoqianInstitutionEntity {
   late String sfidNumber;
 
   /// 机构账户管理员更换 org：4=公权机构账户，5=其他机构账户。
-  int? adminSubjectOrg;
+  int? adminAccountOrg;
 
   /// 机构名称（链上升级前暂用 sfidNumber 代替）。
   late String name;

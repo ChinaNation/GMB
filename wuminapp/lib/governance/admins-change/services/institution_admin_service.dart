@@ -1,5 +1,5 @@
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
-import 'package:wuminapp_mobile/governance/admins-change/services/admin_subject_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.dart';
+import 'package:wuminapp_mobile/governance/admins-change/services/admin_account_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
 class InstitutionAdminState {
@@ -14,36 +14,36 @@ class InstitutionAdminState {
 
 /// 管理员查询门面。
 ///
-/// 中文注释：调用方必须传入明确的 `AdminSubjectIdentity`，不再把
+/// 中文注释：调用方必须传入明确的 `AdminAccountIdentity`，不再把
 /// `sfidNumber` 当作个人多签、机构账户和治理机构共用的模糊参数。
 class InstitutionAdminService {
   InstitutionAdminService({ChainRpc? chainRpc})
-      : _subjectService = AdminSubjectService(chainRpc: chainRpc);
+      : _accountService = AdminAccountService(chainRpc: chainRpc);
 
-  final AdminSubjectService _subjectService;
+  final AdminAccountService _accountService;
 
-  Future<List<String>> fetchAdmins(AdminSubjectIdentity identity) {
-    return _subjectService.fetchAdmins(identity);
+  Future<List<String>> fetchAdmins(AdminAccountIdentity identity) {
+    return _accountService.fetchAdmins(identity);
   }
 
-  Future<int?> fetchThreshold(AdminSubjectIdentity identity) {
-    return _subjectService.fetchThreshold(identity);
+  Future<int?> fetchThreshold(AdminAccountIdentity identity) {
+    return _accountService.fetchThreshold(identity);
   }
 
-  Future<bool> isAdmin(String pubkeyHex, AdminSubjectIdentity identity) {
-    return _subjectService.isAdmin(pubkeyHex, identity);
+  Future<bool> isAdmin(String pubkeyHex, AdminAccountIdentity identity) {
+    return _accountService.isAdmin(pubkeyHex, identity);
   }
 
   Future<InstitutionAdminState> fetchState(
-      AdminSubjectIdentity identity) async {
-    final subject = await _subjectService.fetchByIdentity(identity);
+      AdminAccountIdentity identity) async {
+    final account = await _accountService.fetchByIdentity(identity);
     return InstitutionAdminState(
-      admins: subject?.admins ?? const [],
-      threshold: subject?.threshold,
+      admins: account?.admins ?? const [],
+      threshold: account?.threshold,
     );
   }
 
-  void clearCache([AdminSubjectIdentity? identity]) {
-    _subjectService.clearCache(identity);
+  void clearCache([AdminAccountIdentity? identity]) {
+    _accountService.clearCache(identity);
   }
 }

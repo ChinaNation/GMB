@@ -1,4 +1,4 @@
-# 任务卡:institution_id 协议统一(SubjectKind kind tag + payload)
+# 任务卡:institution_id 协议统一(AdminAccountKind kind tag + payload)
 
 - 任务编号:20260506-unified-subject-id-protocol
 - 状态:completed
@@ -8,24 +8,24 @@
 
 ## 1. 任务目标
 
-把当前 3 类治理主体(内置主体 / SFID 注册机构 / 个人多签)的 `InstitutionPalletId`(`[u8; 48]`)派生协议统一为结构化布局 `kind(1B) + payload(47B)`,引入 `SubjectKind` enum 强制主体类型互斥。
+把当前 3 类治理主体(内置主体 / SFID 注册机构 / 个人多签)的 `InstitutionPalletId`(`[u8; 48]`)派生协议统一为结构化布局 `kind(1B) + payload(47B)`,引入 `AdminAccountKind` enum 强制主体类型互斥。
 
 **一次性完整重构,无兼容 wrapper**:
-- 新增 `SubjectKind` enum(Builtin=0x01 / SfidInstitution=0x02 / PersonalDuoqian=0x03 / Reserved=0xFF)
-- 新增 `primitives::derive::build_institution_id(kind, payload)` + 3 个语义 helper
+- 新增 `AdminAccountKind` enum(Builtin=0x01 / 注册机构归属关系=0x02 / PersonalDuoqian=0x03 / Reserved=0xFF)
+- 新增 `core_const::build_institution_id(kind, payload)` + 3 个语义 helper
 - **删除**旧函数 `account_to_institution_id` / `sfid_number_to_institution_id` / `china_cb::sfid_number_to_fixed48` / `china_ch::sfid_number_to_fixed48`
 - 全工程 60+ 调用点切换到新接口,零 compat 残留
 - `MaxSfidNumberLength` 收紧 `ConstU32<96>` → `ConstU32<47>`
 
-类型别名 `InstitutionPalletId` 与变量名 `institution_id` 在 D 阶段保持不变(C 阶段才改名 `SubjectId`/`subject_id`)。
+类型别名 `InstitutionPalletId` 与变量名 `institution_id` 在 D 阶段保持不变(C 阶段才改名 `AccountId`/`account_id`)。
 
 ## 2. 影响范围
 
 ### 2.1 primitives(核心改动)
 - `primitives/src/derive.rs`:
-  - 新增 `pub enum SubjectKind { Builtin = 0x01, SfidInstitution = 0x02, PersonalDuoqian = 0x03 }`(`#[derive(Encode/Decode/Copy/Clone/RuntimeDebug/TypeInfo/MaxEncodedLen/PartialEq/Eq)]`)
-  - 新增 `pub fn build_institution_id(kind: SubjectKind, payload: &[u8]) -> Option<[u8; 48]>`
-  - 新增 `pub fn parse_institution_id(id: &[u8; 48]) -> Option<(SubjectKind, &[u8])>`
+  - 新增 `pub enum AdminAccountKind { Builtin = 0x01, 注册机构归属关系 = 0x02, PersonalDuoqian = 0x03 }`(`#[derive(Encode/Decode/Copy/Clone/RuntimeDebug/TypeInfo/MaxEncodedLen/PartialEq/Eq)]`)
+  - 新增 `pub fn build_institution_id(kind: AdminAccountKind, payload: &[u8]) -> Option<[u8; 48]>`
+  - 新增 `pub fn parse_institution_id(id: &[u8; 48]) -> Option<(AdminAccountKind, &[u8])>`
   - 新增 `pub fn institution_id_from_account<A: Encode>(account: &A) -> [u8; 48]`(取代 `account_to_institution_id`)
   - 新增 `pub fn institution_id_from_sfid_number(sfid_number: &[u8]) -> Option<[u8; 48]>`(取代 `sfid_number_to_institution_id`)
   - 新增 `pub fn institution_id_from_sfid_number(sfid_number: &str) -> Option<[u8; 48]>`(取代 `sfid_number_to_fixed48`)
@@ -35,7 +35,7 @@
 ### 2.2 china::china_cb / china_ch
 - `primitives/china/china_cb.rs:18` 删除 `pub fn sfid_number_to_fixed48` 函数定义
 - `primitives/china/china_ch.rs:21` 删除 `pub fn sfid_number_to_fixed48` 函数定义
-- 任何调用统一切到 `primitives::derive::institution_id_from_sfid_number`
+- 任何调用统一切到 `core_const::institution_id_from_sfid_number`
 
 ### 2.3 votingengine
 - `votingengine/src/types.rs::nrc_pallet_id_bytes()` 改用 `institution_id_from_sfid_number`
@@ -45,7 +45,7 @@
 
 ### 2.5 organization-manage / personal-manage / duoqian-transfer
 - 同上,所有调用点切换
-- `organization-manage::common::pub use primitives::derive::*` re-export 删除(B 阶段为兼容保留的,D 阶段一并清掉)
+- `organization-manage::common::pub use core_const::*` re-export 删除(B 阶段为兼容保留的,D 阶段一并清掉)
 
 ### 2.6 runtime configs
 - `runtime/src/configs/mod.rs:796` `MaxSfidNumberLength: ConstU32<96>` → `ConstU32<47>`
@@ -60,25 +60,25 @@
 
 ## 3. 关键约束
 
-- **永久 ABI 锁定**:`SubjectKind::Builtin=0x01 / SfidInstitution=0x02 / PersonalDuoqian=0x03 / 0xFF Reserved` 一旦上线不可改
+- **永久 ABI 锁定**:`AdminAccountKind::Builtin=0x01 / 注册机构归属关系=0x02 / PersonalDuoqian=0x03 / 0xFF Reserved` 一旦上线不可改
 - 无兼容 wrapper:旧函数名一字节不留(feedback_no_compatibility / feedback_no_remnants)
 - 链未上线,fresh genesis 即生效(feedback_chain_in_dev.md)
-- `InstitutionPalletId` 类型名不动(C 阶段改 `SubjectId`)
+- `InstitutionPalletId` 类型名不动(C 阶段改 `AccountId`)
 - 业务字段 `org` 不动(NRC/PRC/PRB/REN/PUP/OTH 6 类保留)
 - 跨模块联动:runtime + 6 个业务 pallet + 客户端必须同步推进
 
 ## 4. 执行计划(11 步,单 commit)
 
-1. 新增 `SubjectKind` enum + `build_institution_id` + `parse_institution_id` + 3 个 from_X helper(`primitives/src/derive.rs`)
+1. 新增 `AdminAccountKind` enum + `build_institution_id` + `parse_institution_id` + 3 个 from_X helper(`primitives/src/derive.rs`)
 2. 删除旧函数名 `account_to_institution_id` / `sfid_number_to_institution_id`,全工程 grep 替换为新名
-3. 合并 `china::china_cb::sfid_number_to_fixed48` / `china::china_ch::sfid_number_to_fixed48` 到 `primitives::derive::institution_id_from_sfid_number`,删除两处局部定义
+3. 合并 `china::china_cb::sfid_number_to_fixed48` / `china::china_ch::sfid_number_to_fixed48` 到 `core_const::institution_id_from_sfid_number`,删除两处局部定义
 4. `MaxSfidNumberLength` 收紧 47(runtime config + 测试 mock)
 5. `votingengine::types::nrc_pallet_id_bytes()` 切到 `institution_id_from_sfid_number`
 6. 链端编译验证 `cargo check --workspace`
 7. 链端测试验证 `cargo test -p citizenchain --lib + duoqian-transfer + admins-change + personal-manage + organization-manage`
 8. 客户端 grep 扫描 + 必要修改(wumin/wuminapp/sfid/node)
 9. wumin / wuminapp 测试验证
-10. 新增 SubjectKind 协议测试(≥6 case:三类主体 kind 字节正确 / 互不撞 / payload 长度边界 / parse 往返)
+10. 新增 AdminAccountKind 协议测试(≥6 case:三类主体 kind 字节正确 / 互不撞 / payload 长度边界 / parse 往返)
 11. ADR-010 + 任务卡完工 + auto-memory + 残留扫描
 
 ## 5. 验证要求
@@ -133,7 +133,7 @@ grep -rn "MaxSfidNumberLength.*ConstU32<96>" citizenchain/ --include="*.rs" 2>/d
 ## 7. 输出物
 
 - 代码:primitives/src/derive.rs 新增 ~80 行;60+ 调用点改名;MaxSfidNumberLength 改值
-- 中文注释:SubjectKind enum 协议章节(永久 ABI 锁定 + 升级路径 0xFF 哨兵)
+- 中文注释:AdminAccountKind enum 协议章节(永久 ABI 锁定 + 升级路径 0xFF 哨兵)
 - 测试:primitives ≥6 协议测试 case
 - 文档:ADR-010-subject-id-protocol.md(协议规范)
 - 残留清理:旧函数名一字节不留
@@ -142,11 +142,11 @@ grep -rn "MaxSfidNumberLength.*ConstU32<96>" citizenchain/ --include="*.rs" 2>/d
 
 11 步全部完成(2026-05-06):
 
-> 历史记录注:本卡描述 D 阶段 2026-05-06 改造,当时函数名为 `*_from_shenfen_id`/`*_from_sfid_id`/`shenfen_id_to_fixed48`/`sfid_id_to_fixed48` 等;后于 2026-05-07 全部统一为 `sfid_number`(见 `20260507-sfid-step1-rename-shenfen-to-sfid-number-and-city-001.md`)。下文保持当时的命名以反映改造时点,术语对照见上述 step1 卡。
+> 历史记录注:本卡描述 D 阶段 2026-05-06 改造,当时函数名为 `*_from_sfid_number`/`*_from_sfid_number`/`sfid_number_to_fixed48`/`sfid_number_to_fixed48` 等;后于 2026-05-07 全部统一为 `sfid_number`(见 `20260507-sfid-step1-rename-shenfen-to-sfid-number-and-city-001.md`)。下文保持当时的命名以反映改造时点,术语对照见上述 step1 卡。
 
-1. **`primitives/src/derive.rs` 重写** — 新增 `SubjectKind` enum(Builtin=0x01/SfidInstitution=0x02/PersonalDuoqian=0x03)+ `build_institution_id` + `parse_institution_id` + 3 个语义 helper(institution_id_from_account / from_shenfen_id / from_sfid_id);新增 7 个协议正确性测试 case(三类主体 kind 字节 / 互不撞 / payload 长度边界 / parse 往返 / 非法 kind 拒绝)
-2. **全工程改名** — 60+ 处调用点全部从 `account_to_institution_id` / `shenfen_id_to_institution_id` 切换到 `institution_id_from_account` / `institution_id_from_shenfen_id`;`organization-manage::common::pub use` 兼容 re-export 删除
-3. **china_cb / china_ch 局部 `shenfen_id_to_fixed48` 删除** — 全工程 grep 替换 `shenfen_id_to_fixed48` → `institution_id_from_shenfen_id`(链端 + node);别名 `reserve_pallet_id_to_bytes` / `shengbank_pallet_id_to_bytes` 在 13 个文件直接删除,统一用 `institution_id_from_shenfen_id`
+1. **`primitives/src/derive.rs` 重写** — 新增 `AdminAccountKind` enum(Builtin=0x01/注册机构归属关系=0x02/PersonalDuoqian=0x03)+ `build_institution_id` + `parse_institution_id` + 3 个语义 helper(institution_id_from_account / from_sfid_number / from_sfid_number);新增 7 个协议正确性测试 case(三类主体 kind 字节 / 互不撞 / payload 长度边界 / parse 往返 / 非法 kind 拒绝)
+2. **全工程改名** — 60+ 处调用点全部从 `account_to_institution_id` / `sfid_number_to_institution_id` 切换到 `institution_id_from_account` / `institution_id_from_sfid_number`;`organization-manage::common::pub use` 兼容 re-export 删除
+3. **china_cb / china_ch 局部 `sfid_number_to_fixed48` 删除** — 全工程 grep 替换 `sfid_number_to_fixed48` → `institution_id_from_sfid_number`(链端 + node);别名 `reserve_pallet_id_to_bytes` / `shengbank_pallet_id_to_bytes` 在 13 个文件直接删除,统一用 `institution_id_from_sfid_number`
 4. **`MaxSfidNumberLength` 收紧** — `runtime/src/configs/mod.rs` + `duoqian-transfer/src/lib.rs` 测试 mock 从 `ConstU32<96>` 改 `ConstU32<47>`
 5. **`votingengine::types::nrc_pallet_id_bytes()`** — 切到 `institution_id_from_sfid_number`
 6. **链端编译** — `cargo check --workspace` 通过,仅 pre-existing dead-code 警告
@@ -156,10 +156,10 @@ grep -rn "MaxSfidNumberLength.*ConstU32<96>" citizenchain/ --include="*.rs" 2>/d
    - `wuminapp::admin_institution_codec.dart::sfidNumberFromInstitutionId` 加 byte[0]==0x02 校验,提取 `institutionId.sublist(1, realLen)`
    - `wuminapp::institution_admin_service.dart::_sfidNumberToFixed48` 加 `out[0]=0x01` + 长度限制 ≤47
    - `node::governance::storage_keys.rs::institution_id_from_sfid_number` 加 kind tag 0x01
-   - 新增 `subjectKindBuiltin/SfidInstitution/PersonalDuoqian` 常量到 admin_institution_codec.dart
+   - 新增 `subjectKindBuiltin/注册机构归属关系/PersonalDuoqian` 常量到 admin_institution_codec.dart
 9. **客户端测试** — wumin 105/105、wuminapp duoqian 30/30(含修正后的 codec 边界 case)
-10. **协议测试 ≥6 case** — 在 Step 1 中已落入 primitives::derive::tests
-11. **ADR-010 + auto-memory + 残留扫描** — 落盘 `memory/04-decisions/ADR-010-subject-id-protocol.md`、`project_subject_id_protocol_2026_05_06.md`、MEMORY.md 索引
+10. **协议测试 ≥6 case** — 在 Step 1 中已落入 core_const::tests
+11. **ADR-010 + auto-memory + 残留扫描** — 落盘 `memory/04-decisions/ADR-010-subject-id-protocol.md`、`project_account_id_protocol_2026_05_06.md`、MEMORY.md 索引
 
 ## 9. 验证结果
 
@@ -168,7 +168,7 @@ grep -rn "MaxSfidNumberLength.*ConstU32<96>" citizenchain/ --include="*.rs" 2>/d
 - `cargo check -p primitives`:通过
 
 ### 测试
-- `cargo test -p primitives`:**19 passed / 0 failed**(含 7 个新增 SubjectKind 协议 case)
+- `cargo test -p primitives`:**19 passed / 0 failed**(含 7 个新增 AdminAccountKind 协议 case)
 - `cargo test -p citizenchain --lib`:**37 passed / 0 failed**
 - `cargo test -p duoqian-transfer`:**20 passed / 0 failed**
 - `cargo test -p admins-change`:**31 passed / 0 failed**
@@ -181,12 +181,12 @@ grep -rn "MaxSfidNumberLength.*ConstU32<96>" citizenchain/ --include="*.rs" 2>/d
 3. `reserve_pallet_id_to_bytes` / `shengbank_pallet_id_to_bytes` 别名:零残留
 
 ### 行为不变量逐条核对
-- ✓ 永久 ABI 锁定:`SubjectKind::Builtin=0x01 / SfidInstitution=0x02 / PersonalDuoqian=0x03 / Reserved=0xFF`
+- ✓ 永久 ABI 锁定:`AdminAccountKind::Builtin=0x01 / 注册机构归属关系=0x02 / PersonalDuoqian=0x03 / Reserved=0xFF`
 - ✓ payload 长度 47B 强制:MaxSfidNumberLength=47 + BoundedVec 守门
 - ✓ 三类主体永不撞 key:kind tag 不同保证互斥
 - ✓ 业务行为零变更:派生函数返回值字节变化(头加 1B kind tag),但下游 admin/threshold/反向索引等业务逻辑不变
 - ✓ 客户端 dispatch 规则不变
-- ✓ `InstitutionPalletId` 类型名不变(C 阶段才改 `SubjectId`)
+- ✓ `InstitutionPalletId` 类型名不变(C 阶段才改 `AccountId`)
 - ✓ `org` 字段语义不变(NRC/PRC/PRB/REN/PUP/OTH 6 类保留)
 - ✓ 链未上线,fresh genesis 即生效;无 storage migration
 
