@@ -483,7 +483,7 @@ pub mod pallet {
             let _proposer = ensure_signed(origin)?;
             let _ = (asset_id, who, reason_hash);
             // TODO: implement business logic (任务卡 B)
-            //   ensure proposer ∈ admins(NRC_SUBJECT_ID)
+            //   ensure proposer ∈ admins(NRC 机构多签 AccountId)
             //   JointVoteEngine::create_joint_proposal_with_data(...)
             Ok(())
         }
