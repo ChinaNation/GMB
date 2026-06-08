@@ -42,28 +42,37 @@
   的版本，记录 sha256 到 `wuminapp/assets/chainspec.json.sha256`，加
   pre-commit hook + CI 校验 + 脚本启动前校验三道防线。
 
+## 单一权威源(SSOT)— 2026-06-08 重构
+
+**唯一权威创世 = `citizenchain/node/chainspecs/citizenchain.raw.json`,其 `:code` 永远 = CI WASM。**
+所有消费者从它派生,谁都不再各自造创世:
+
+- 桌面端(`run.sh` / `clean-run.sh`)`include_bytes!` 内嵌该 SSOT;clean-run 只清 db,不再本地现造创世(旧版用本地 WASM 会与线上 CI WASM 分叉)。
+- `wuminapp/assets/chainspec.json` 是 SSOT 的派生副本,创世部分必须逐字节等价。
+- `wumin`(冷签)零创世依赖,只签二维码 payload(genesis hash 在 payload 里)。
+
+旧的 `wuminapp/assets/chainspec.json.sha256` 冻结常量已删除——守卫改为直接和 SSOT 比对,SSOT 即唯一基准。
+
 ## 防御措施
 
-1. **文件**：`wuminapp/assets/chainspec.json.sha256` 记录冻结版本的 sha256。
-   sha256 基于 `jq -cS 'del(.bootNodes, .lightSyncState)'` 后的内容计算，
-   bootNodes 和 lightSyncState 变更不影响校验（两者都不参与 genesis hash）。
-2. **脚本**：`scripts/check-chainspec-frozen.sh` 做完整性校验（已排除 bootNodes）。
-3. **git hook**：`.githooks/pre-commit` 调用上述脚本校验创世内容。
-   bootNodes 域名变更可正常提交，genesis 内容变更会被拦截。
-   启用：`git config core.hooksPath .githooks`。
-4. **CI**：`.github/workflows/wuminapp-ci.yml` 在 check 和 android job 开头
-   都调用 `scripts/check-chainspec-frozen.sh`。
-5. **启动脚本**：`wuminapp/scripts/wuminapp-run.sh` 启动前先校验哈希（已排除 bootNodes），
-   不一致直接退出。
+1. **SSOT 守卫脚本**:`scripts/check-chainspec-frozen.sh` 比对
+   `wuminapp/assets/chainspec.json` 与 SSOT 的创世部分(`jq -cS 'del(.bootNodes,.lightSyncState)'` 后 sha256),不一致即拒绝。
+2. **git hook**:`.githooks/pre-commit` 调用上述脚本。启用:`git config core.hooksPath .githooks`。
+3. **CI**:`.github/workflows/wuminapp-ci.yml` 在 check 和 android job 开头都调用该脚本;
+   其 paths 已加 `citizenchain/node/chainspecs/**`,SSOT 变更会触发 wuminapp 重建 + 守卫。
+4. **启动脚本**:`wuminapp/scripts/wuminapp-run.sh` 启动前调用该脚本,不一致直接退出。
+5. **重新创世唯一入口**:`citizenchain/scripts/bake-chainspec.sh`(仅预上线用)——
+   下载 CI WASM → `export-chain-spec --chain citizenchain-fresh --raw` → 断言 `:code`==CI WASM →
+   同时写 SSOT 与 wuminapp 副本,保证两者永远同步。
 
-## 如果真的需要改（硬分叉流程）
+## 如果真的需要改(预上线重新创世 / 硬分叉流程)
 
-1. 写 ADR 说明硬分叉理由和影响范围。
-2. 所有全节点同步停机 → 清数据 → 换新 chainspec.json 重启。
-3. 所有钱包 / 轻节点 / App 同步发版。
-4. 更新 `wuminapp/assets/chainspec.json.sha256`。
-5. `git commit --no-verify`（绕过 pre-commit 守卫），commit message 必须
-   包含 `[HARDFORK]` 标签。
+1. 写 ADR 说明理由和影响范围。
+2. runtime 改动 → 推送(commit message 含「重新创世」让 wasm CI 跳过版本守卫,保 spec_version)→ wasm CI 出新 WASM。
+3. 跑 `citizenchain/scripts/bake-chainspec.sh`:用 CI WASM 重新烘焙 SSOT 并同步 wuminapp 副本(脚本内置 `:code`==CI WASM 断言)。
+4. 提交两份 chainspec → 推送(触发 CitizenChain 节点 CI + WuMinApp CI;SSOT 守卫自动通过因两者已同步)。
+5. 所有全节点 `fuwuqi.sh q <ip>` 清数据重部署;所有钱包 / 轻节点 / App 同步发版。
+6. 守卫无需手改常量(已无 `.sha256`);如确有特殊绕过需求,`git commit --no-verify`。
 
 ## 绝对不能做的事
 
