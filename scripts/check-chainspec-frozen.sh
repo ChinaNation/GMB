@@ -1,48 +1,48 @@
 #!/usr/bin/env bash
-# chainspec.json 创世冻结守卫
+# chainspec 单一权威源(SSOT)守卫
 #
-# 校验 wuminapp/assets/chainspec.json 中 **影响 genesis hash 的字段** 是否被篡改。
-# bootNodes（节点发现）和 lightSyncState（轻节点 checkpoint）不参与 genesis hash，
-# 因此允许修改。校验方式：用 jq 剔除这两个字段后计算 sha256，与 .sha256 文件比对。
+# 规则:wuminapp 轻节点 chainspec 的「创世部分」必须 == 链端 SSOT 的「创世部分」。
+#   SSOT = citizenchain/node/chainspecs/citizenchain.raw.json(:code 永远是 CI WASM)。
+#   wuminapp/assets/chainspec.json 是从 SSOT 派生的副本,二者创世必须逐字节等价,
+#   否则轻节点 genesis hash 与全网对不上,smoldot 握手直接 ProtocolNotAvailable。
 #
-# runtime 升级请走链上 system.setCode 交易，不要重新 build-spec。
-# 详见 memory/07-ai/chainspec-frozen.md
+# bootNodes / lightSyncState 不参与 genesis hash,剔除后比对(允许网络层/checkpoint 差异)。
+# 重新创世只跑 citizenchain/scripts/bake-chainspec.sh(会同步 SSOT 与 wuminapp 副本)。
+# runtime 升级请走链上 system.setCode,绝不重新 build-spec。详见 memory/07-ai/chainspec-frozen.md
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CHAINSPEC="$REPO_ROOT/wuminapp/assets/chainspec.json"
-SHAFILE="$REPO_ROOT/wuminapp/assets/chainspec.json.sha256"
+WUMINAPP="$REPO_ROOT/wuminapp/assets/chainspec.json"
+SSOT="$REPO_ROOT/citizenchain/node/chainspecs/citizenchain.raw.json"
 
-if [[ ! -s "$CHAINSPEC" ]]; then
-  echo "[chainspec-frozen] 错误：$CHAINSPEC 不存在或为空"
-  exit 1
-fi
-if [[ ! -s "$SHAFILE" ]]; then
-  echo "[chainspec-frozen] 错误：$SHAFILE 不存在。请先运行 scripts/lock-chainspec.sh 记录初始哈希。"
-  exit 1
-fi
+for f in "$WUMINAPP" "$SSOT"; do
+  if [[ ! -s "$f" ]]; then
+    echo "[chainspec-ssot] 错误:$f 不存在或为空"
+    exit 1
+  fi
+done
 
-# bootNodes / lightSyncState 不参与 genesis hash，剔除后再校验，允许网络层与轻节点 checkpoint 变更。
-EXPECTED="$(awk '{print $1}' "$SHAFILE")"
-ACTUAL="$(jq -cS 'del(.bootNodes, .lightSyncState)' "$CHAINSPEC" | shasum -a 256 | awk '{print $1}')"
+# 剔除 bootNodes / lightSyncState 后计算创世内容 sha256。
+genesis_sha() { jq -cS 'del(.bootNodes, .lightSyncState)' "$1" | shasum -a 256 | awk '{print $1}'; }
+WUMINAPP_SHA="$(genesis_sha "$WUMINAPP")"
+SSOT_SHA="$(genesis_sha "$SSOT")"
 
-if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+if [[ "$WUMINAPP_SHA" != "$SSOT_SHA" ]]; then
   cat >&2 <<EOF
 ╔══════════════════════════════════════════════════════════════════╗
-║  拒绝提交： wuminapp/assets/chainspec.json 是创世冻结文件！     ║
+║  拒绝:wuminapp chainspec 创世部分 ≠ 链端 SSOT!                  ║
 ╚══════════════════════════════════════════════════════════════════╝
-  期望 sha256（不含 bootNodes）: $EXPECTED
-  实际 sha256（不含 bootNodes）: $ACTUAL
+  wuminapp 创世 sha256(不含 bootNodes/lightSyncState): $WUMINAPP_SHA
+  SSOT     创世 sha256(不含 bootNodes/lightSyncState): $SSOT_SHA
 
-chainspec 决定 genesis hash， genesis hash 决定 libp2p 通知协议名。
-一旦修改， 所有已部署的节点都会和新轻节点握手失败（ProtocolNotAvailable）。
+二者创世必须一致,否则轻节点 genesis hash 与全网对不上(ProtocolNotAvailable)。
 
-runtime 升级请走链上 system.setCode 交易， 不要重新 build-spec。
-详见： memory/07-ai/chainspec-frozen.md
+修复:
+  - 重新创世:跑 citizenchain/scripts/bake-chainspec.sh(自动同步 SSOT 与 wuminapp)
+  - 仅同步副本:cp "$SSOT" "$WUMINAPP"
 
-如果你是在做硬分叉（ 极少数情况）， 请手动：
-  git commit --no-verify
-并同步更新 wuminapp/assets/chainspec.json.sha256。
+runtime 升级请走链上 system.setCode,不要重新 build-spec。
+详见 memory/07-ai/chainspec-frozen.md
 EOF
   exit 1
 fi
-echo "[chainspec-frozen] chainspec.json 创世内容校验通过（bootNodes / lightSyncState 变更不受限）"
+echo "[chainspec-ssot] wuminapp chainspec 创世部分 == 链端 SSOT ✅"

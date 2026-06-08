@@ -16,35 +16,13 @@ DART_DEFINES=(--dart-define=WUMINAPP_SFID_ENV=dev_usb)
 ANDROID_TARGET_PLATFORMS=(--target-platform android-arm,android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
-# ── chainspec.json 已在创世时冻结，严禁自动重新生成 ──
-# 原因：chainspec 决定 genesis hash，genesis hash 决定 libp2p 通知协议名
-#   (/<genesis_hash>/block-announces/1 等)。runtime 重编后 wasm 二进制变化，
-#   而 wasm 是 genesis state 的一部分 (:code:)，所以重新 build-spec 会让
-#   轻节点的 genesis hash 和线上全节点对不上，smoldot gossip 握手直接
-#   ProtocolNotAvailable，wuminapp 永远连不上链。
-# 正确做法：runtime 升级走链上 system.setCode 交易，chainspec.json 绝不动。
-# 详见 memory/07-ai/chainspec-frozen.md
-CHAINSPEC_OUT="$SCRIPT_DIR/../assets/chainspec.json"
-CHAINSPEC_SHA_FILE="$SCRIPT_DIR/../assets/chainspec.json.sha256"
-if [[ ! -s "$CHAINSPEC_OUT" ]]; then
-  echo "错误：$CHAINSPEC_OUT 不存在或为空。chainspec 是创世冻结文件，请从 git 恢复。"
-  exit 1
-fi
-if [[ -s "$CHAINSPEC_SHA_FILE" ]]; then
-  EXPECTED_SHA="$(awk '{print $1}' "$CHAINSPEC_SHA_FILE")"
-  # bootNodes / lightSyncState 不参与 genesis hash，剔除后校验，允许网络层与轻节点 checkpoint 变更。
-  ACTUAL_SHA="$(jq -cS 'del(.bootNodes, .lightSyncState)' "$CHAINSPEC_OUT" | shasum -a 256 | awk '{print $1}')"
-  if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
-    echo "错误：chainspec.json 哈希不一致！这是创世冻结文件，禁止修改。"
-    echo "       期望 $EXPECTED_SHA"
-    echo "       实际 $ACTUAL_SHA"
-    echo "恢复方法：git checkout -- wuminapp/assets/chainspec.json"
-    exit 1
-  fi
-  echo "==> chainspec.json 完整性校验通过"
-else
-  echo "警告：未找到 $CHAINSPEC_SHA_FILE，跳过完整性校验"
-fi
+# ── chainspec.json 是从链端 SSOT 派生的轻节点创世,启动前校验与 SSOT 一致 ──
+# SSOT = citizenchain/node/chainspecs/citizenchain.raw.json(:code 永远是 CI WASM)。
+# chainspec 决定 genesis hash → libp2p 通知协议名;与 SSOT 不一致会让 smoldot 握手
+# 直接 ProtocolNotAvailable、永远连不上链。重新创世请先跑
+# citizenchain/scripts/bake-chainspec.sh 同步 SSOT 与本副本;runtime 升级走链上
+# system.setCode,绝不重新 build-spec。详见 memory/07-ai/chainspec-frozen.md
+bash "$SCRIPT_DIR/../../scripts/check-chainspec-frozen.sh"
 
 echo "==> 清除 Rust 编译缓存..."
 (cd "rust" && ~/.cargo/bin/cargo clean 2>/dev/null || true)
