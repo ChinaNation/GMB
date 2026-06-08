@@ -73,7 +73,7 @@ echo ">>> 下载最新安装包..."
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-gh run download --name "公民链-linux" --dir "$TMPDIR" -R ChinaNation/GMB 2>/dev/null || {
+gh run download --name "公民链-Linux-amd" --dir "$TMPDIR" -R ChinaNation/GMB 2>/dev/null || {
   echo "错误：下载失败。请确认 gh auth login 且 Linux CI 已成功。"
   exit 1
 }
