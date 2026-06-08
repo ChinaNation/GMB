@@ -18,8 +18,8 @@
 ### A.1 新建 crate `gmb-pqc`(node 与 Step 2 钱包共用)
 - `derive_ml_dsa65(root_seed: [u8;32]) -> (pubkey, secret)` = `HKDF-SHA512(root, "GMB/ML-DSA-65/v1") → 32B seed → fips204 ML-DSA-65 keygen`。
 - `sign(secret, msg) -> sig`、`verify(pubkey, msg, sig) -> bool`。
-- 依赖:`fips204`、`hkdf`(0.12.4 已在依赖树)、`sha2`。
-- ⚠️ 待验:`fips204` 是否暴露 seed-based 确定性 keygen;若否,用 HKDF 输出喂确定性 RNG(必须确定性,保证同种子同密钥)。
+- 依赖:`fips204`、`hkdf`(0.12.4 已在依赖树)、`sha2`、`rand_chacha`。
+- ✅ 已查(2026-06-07):`fips204` 无 seed-based keygen,只有 `try_keygen()` / `try_keygen_with_rng(rng)`。确定性派生 = `ChaCha20Rng::from_seed(HKDF 32B)` 传给 `try_keygen_with_rng`(FIPS 204 keygen 仅取 32B ξ,同种子=同密钥);锁定 `fips204` 版本 + 加"已知种子→已知公钥"金标准测试防漂移。
 
 ### A.2 `primitives` 新增 `pqc.rs`(链端)
 - 算法标签常量:`ALGO_ML_DSA_65 = 0x02`(标签空间见 ADR-016)。
@@ -32,14 +32,14 @@
 目录照搬 `sfid-system`。完整 storage / extrinsic 伪代码见实现蓝图 §2、§3。要点:
 
 ### B.1 storage
-- `BoundPqcKey: StorageMap<AccountId, PqcKeyRecord>`(只存公钥 hash;`PqcKeyRecord{algo, pubkey_hash:[u8;32], state:Active/PqcOnly/Revoked, bound_at}`)。
+- `BoundPqcKey: StorageMap<AccountId, PqcKeyRecord>`(**存完整公钥**;`PqcKeyRecord{algo, pubkey:BoundedVec<u8,2048>, state:Active/PqcOnly/Revoked, bound_at}`)。
 - `AccountKeyNonce: StorageMap<AccountId, u32>`(PQC 交易防重放,general-tx 不走 `CheckNonce`)。
 
 ### B.2 `bind_pqc_key`(call_index 0,hybrid 双签)
 外层 sr25519 签(现账户主人)+ 内层 ML-DSA-65 对 `challenge = blake2_256(who ++ pqc_pubkey ++ nonce ++ genesis)` 自签;两签过 → 写 `BoundPqcKey(state=Active)` + bump nonce。算法升级(65→87)走同一 extrinsic 换 `algo` 重绑。
 
 ### B.3 `pqc_dispatch`(call_index 1)+ `#[pallet::authorize]`
-PQC 交易 = general-transaction(无外层 sr25519 签名)。authorize 读 `BoundPqcKey`、校验 `blake2_256(pubkey)==pubkey_hash`、`nonce` 匹配、`verify_ml_dsa_65(pubkey, blake2_256(call.encode()++nonce++genesis), sig)`;通过后以 `RawOrigin::Signed(account)` 派发内层 `call`,bump nonce。机制依据 SDK `authorize_call.rs:59-113`。
+PQC 交易 = general-transaction(无外层 sr25519 签名)。交易**只带 account/call/nonce/签名,不带公钥**——authorize 按 account 从 `BoundPqcKey` 读公钥、校验 `nonce`、`verify_ml_dsa_65(rec.pubkey, blake2_256(call.encode()++nonce++genesis), sig)`;通过后以 `RawOrigin::Signed(account)` 派发内层 `call`,bump nonce。每笔交易省 1952B。机制依据 SDK `authorize_call.rs:59-113`。
 
 ### B.4 手续费(关键风险,Phase 1 必须落定)
 general-tx 无外层签名者,但 `ChargeTransactionPayment` 仍在 `TxExtension`(`lib.rs:174`),需向 canonical `account` 计费。两个候选:
@@ -66,10 +66,11 @@ general-tx 无外层签名者,但 `ChargeTransactionPayment` 仍在 `TxExtension
 
 ## E. node 实现(两个本机热钱包,不动 PoW seal)
 
-### E.1 ML-DSA-65 密钥来源(决策点)
-- **方案 A(推荐):同源派生** —— 从矿工 `powr` keystore 的 BIP39 seed、清算行 `signing_key.enc` 的 seed,经 `gmb-pqc` 派生 ML-DSA-65。一份备份恢复 sr25519+ML-DSA 两支。需从 substrate keystore 读取原始 seed(node 已直接读 keystore 文件名/加密 seed,可行)。
-- 方案 B(兜底):独立生成 ML-DSA-65 密钥存 keystore,用 sr25519(powr/清算行)做 `bind_pqc_key` 外层签名绑定。更简单但备份多一份、且 keystore 丢失即不可恢复。
-- ⚠️ 两钱包密钥**保持独立、不合并**(决策 2026-06-07)。
+### E.1 ML-DSA-65 密钥来源(已锁定 2026-06-07)
+- 矿工账户:用**自己的种子**(powr keystore 的 BIP39),经 `gmb-pqc` 派生矿工的 ML-DSA-65。
+- 清算行账户:用**自己的种子**(`signing_key.enc`),经 `gmb-pqc` 派生清算行的 ML-DSA-65。
+- 两账户**完全独立、各自的种子、零共享、零关联**;每账户一份备份恢复自己的 sr25519 + ML-DSA。
+- 实现:从各自 keystore 读原始 seed(node 已直接读 keystore,可行)→ HKDF → `ChaCha20Rng` → `fips204::try_keygen_with_rng`。
 
 ### E.2 矿工热钱包(最高优先级)
 - `submit_powr_signed_tx`(`core/rpc.rs`)与 `submit_miner_transfer`(`onchain_transaction/mod.rs:354-431`)、`reward_bindWallet`:构造内层 `Balances::transfer_keep_alive` → ML-DSA-65 签 `blake2_256(call++nonce++genesis)` → 包成 `AccountKeys.pqc_dispatch` → 用 general-transaction 提交。
@@ -102,8 +103,8 @@ node 当前用 `UncheckedExtrinsic::new_signed`;PQC 交易改用 general 构造(
 
 ## H. 关键风险 / 待定
 - general-tx + `ChargeTransactionPayment` 计费机制(§B.4)——Phase 1 前做 spike。
-- `fips204` seed-based 确定性 keygen 是否可用(§A.1)。
-- 从 substrate keystore 提取 seed 做同源派生 vs 独立 ML-DSA 密钥(§E.1)。
+- ✅ 已解(2026-06-07):确定性 keygen 用 `try_keygen_with_rng` + `ChaCha20Rng`(§A.1);公钥存 state、交易只带签名(§B.1/§B.3);矿工/清算行各用自己种子、完全独立(§E.1)。
+- 从各自 keystore 读原始 seed 做派生(§E.1)——确认 substrate keystore 读取路径。
 - ML-DSA-65 验签 WASM weight 与签名 3309B 进 extrinsic 的 block length 压力(可能需调 `BlockLength` / length fee)。
 - general-tx 在本 PoW fork 的可用性确认(`AuthorizeCall` 已在 TxExtension,理论支持,需实测)。
 
