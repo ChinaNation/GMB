@@ -101,7 +101,7 @@ pub enum GovTargetKind {
 struct OfficialInstitutionTarget {
     sfid_number: String,
     institution_name: String,
-    full_name: String,
+    sfid_name: String,
     short_name: String,
     category: InstitutionCategory,
     subject_property: String,
@@ -465,7 +465,7 @@ fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
             targets.push(OfficialInstitutionTarget {
                 sfid_number,
                 institution_name: format!("{}公安局", city.name),
-                full_name: format!("{}公民安全局", city.name),
+                sfid_name: format!("{}公民安全局", city.name),
                 short_name: format!("{}公安局", city.name),
                 category: InstitutionCategory::PublicSecurity,
                 subject_property: "G".to_string(),
@@ -524,11 +524,11 @@ fn push_constant_target(
     let Some((province, city)) = province_city_by_codes(&province_code, &city_code) else {
         return;
     };
-    let (full_name, short_name) = official_name_pair(name);
+    let (sfid_name, short_name) = official_name_pair(name);
     targets.push(OfficialInstitutionTarget {
         sfid_number: sfid_number.to_string(),
         institution_name: short_name.clone(),
-        full_name,
+        sfid_name,
         short_name,
         category: InstitutionCategory::GovInstitution,
         subject_property,
@@ -616,7 +616,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     else {
         return;
     };
-    for (short_name, full_name, org_code) in [
+    for (short_name, sfid_name, org_code) in [
         (
             "联邦特勤局",
             "中华民族联邦共和国总统府联邦特勤局",
@@ -661,7 +661,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
             },
             org_code,
             suffix: short_name,
-            full_suffix: full_name,
+            full_suffix: sfid_name,
         };
         push_area_template_target(
             targets,
@@ -691,7 +691,7 @@ fn push_area_template_target(
     seed_scope: &'static str,
 ) {
     let short_name = format!("{display_area_name}{}", template.suffix);
-    let full_name = format!("{display_area_name}{}", template.full_suffix);
+    let sfid_name = format!("{display_area_name}{}", template.full_suffix);
     let account_seed = format!(
         "GOV-{seed_scope}-{province_code}-{city_code}-{town_code}-{}-{}",
         template.institution_code, template.org_code
@@ -707,7 +707,7 @@ fn push_area_template_target(
     targets.push(OfficialInstitutionTarget {
         sfid_number,
         institution_name: short_name.clone(),
-        full_name,
+        sfid_name,
         short_name,
         category: InstitutionCategory::GovInstitution,
         subject_property: "G".to_string(),
@@ -823,7 +823,7 @@ fn catalog_hash(china_hash: &str, targets: &[OfficialInstitutionTarget]) -> Stri
         hasher.update(b"|");
         hasher.update(target.institution_name.as_bytes());
         hasher.update(b"|");
-        hasher.update(target.full_name.as_bytes());
+        hasher.update(target.sfid_name.as_bytes());
         hasher.update(b"|");
         hasher.update(target.short_name.as_bytes());
         hasher.update(b"|");
@@ -957,7 +957,7 @@ fn auto_rows_in_scope(
     db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT s.sfid_number, COALESCE(s.name, ''), COALESCE(s.full_name, ''),
+                "SELECT s.sfid_number, COALESCE(s.name, ''), COALESCE(s.sfid_name, ''),
                         COALESCE(s.short_name, ''), s.category, s.province, s.city,
                         COALESCE(s.town, ''), s.province_code, s.city_code,
                         COALESCE(s.town_code, ''), s.institution_code, COALESCE(g.org_code, '')
@@ -1051,7 +1051,7 @@ pub fn check_gov_catalog_db(
         match active_rows.get(&target.sfid_number) {
             Some((
                 name,
-                full_name,
+                sfid_name,
                 short_name,
                 category,
                 province,
@@ -1064,7 +1064,7 @@ pub fn check_gov_catalog_db(
                 org_code,
             )) => {
                 if name != &target.institution_name
-                    || full_name != &target.full_name
+                    || sfid_name != &target.sfid_name
                     || short_name != &target.short_name
                     || category != category_text(target.category)
                     || province != &target.province
@@ -1321,9 +1321,9 @@ fn bulk_write_target_chunk(
         .iter()
         .map(|target| target.institution_name.clone())
         .collect::<Vec<_>>();
-    let full_names = targets
+    let sfid_names = targets
         .iter()
-        .map(|target| target.full_name.clone())
+        .map(|target| target.sfid_name.clone())
         .collect::<Vec<_>>();
     let short_names = targets
         .iter()
@@ -1392,13 +1392,13 @@ fn bulk_write_target_chunk(
 
     tx.execute(
         "INSERT INTO subjects (
-            sfid_number, kind, name, full_name, short_name, p_code, c_code, t_code,
+            sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
             status, category, subject_property, p1, province, city, town,
             province_code, city_code, town_code, institution_code, org_code, sub_type,
             parent_sfid_number, created_by, created_at, updated_at
          )
          SELECT
-            sfid_number, 'PUBLIC', name, full_name, short_name, p_code, c_code, t_code,
+            sfid_number, 'PUBLIC', name, sfid_name, short_name, p_code, c_code, t_code,
             'ACTIVE', category, subject_property, p1, province, city, town,
             p_code, COALESCE(c_code, ''), COALESCE(t_code, ''), institution_code, org_code,
             NULL::text, NULL::text, $18, now(), now()
@@ -1408,7 +1408,7 @@ fn bulk_write_target_chunk(
             $11::text[], $12::text[], $13::text[], $14::text[], $15::text[],
             $16::text[], $17::text[]
          ) AS u(
-            sfid_number, name, full_name, short_name, p_code,
+            sfid_number, name, sfid_name, short_name, p_code,
             c_code, t_code, category, subject_property, p1,
             province, city, town, institution_code, org_code,
             province_code, city_code
@@ -1416,7 +1416,7 @@ fn bulk_write_target_chunk(
          ON CONFLICT (p_code, sfid_number) DO UPDATE SET
             kind = EXCLUDED.kind,
             name = EXCLUDED.name,
-            full_name = EXCLUDED.full_name,
+            sfid_name = EXCLUDED.sfid_name,
             short_name = EXCLUDED.short_name,
             c_code = EXCLUDED.c_code,
             t_code = EXCLUDED.t_code,
@@ -1439,7 +1439,7 @@ fn bulk_write_target_chunk(
         &[
             &sfids,
             &names,
-            &full_names,
+            &sfid_names,
             &short_names,
             &p_codes,
             &c_codes,

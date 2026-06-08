@@ -16,12 +16,12 @@ export type MultisigChainStatus =
   | 'ACTIVE_ON_CHAIN'
   | 'REVOKED_ON_CHAIN';
 
-export interface MultisigInstitution {
+export interface Institution {
   sfid_number: string;
   /** 机构名称。两步式创建(2026-04-19):第一步生成时为 null,详情页补填后非空。 */
   institution_name: string | null;
   /** 详情页展示全称;列表不得与简称同时展示。 */
-  full_name?: string | null;
+  sfid_name?: string | null;
   /** 详情页展示简称;公权目录默认用简称作为 institution_name。 */
   short_name?: string | null;
   /** 主体业务状态,只允许 ACTIVE / REVOKED。 */
@@ -53,7 +53,7 @@ export interface MultisigInstitution {
   created_at: string;
 }
 
-export interface MultisigAccount {
+export interface InstitutionAccount {
   sfid_number: string;
   account_name: string;
   duoqian_address: string | null;
@@ -69,7 +69,7 @@ export interface InstitutionListRow {
   sfid_number: string;
   /** 两步式创建:第一步仅有 SFID 时为 null,详情页补填后非空 */
   institution_name: string | null;
-  full_name?: string | null;
+  sfid_name?: string | null;
   short_name?: string | null;
   status: 'ACTIVE' | 'REVOKED';
   category: InstitutionCategory;
@@ -105,8 +105,8 @@ export interface PageResult<T> {
 }
 
 export interface InstitutionDetail {
-  institution: MultisigInstitution;
-  accounts: MultisigAccount[];
+  institution: Institution;
+  accounts: InstitutionAccount[];
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
   created_by_name?: string | null;
   /** 创建者角色:FEDERAL_ADMIN / SHI_ADMIN */
@@ -164,7 +164,7 @@ export interface CreateInstitutionOutput {
 /** 机构详情页可编辑字段(两步式第二步) */
 export interface UpdateInstitutionInput {
   institution_name?: string;
-  full_name?: string | null;
+  sfid_name?: string | null;
   short_name?: string | null;
   sub_type?: string | null;
   /** 所属法人 sfid_number(仅 F;传空串后端会拒) */

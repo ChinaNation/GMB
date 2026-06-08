@@ -6,11 +6,11 @@ import {
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
 import { adminRequest } from '../utils/http';
-import type { CreateAccountOutput, MultisigAccount } from '../subjects/api';
+import type { CreateAccountOutput, InstitutionAccount } from '../subjects/api';
 
 const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
-export type { CreateAccountOutput, MultisigAccount, MultisigChainStatus } from '../subjects/api';
+export type { CreateAccountOutput, InstitutionAccount, MultisigChainStatus } from '../subjects/api';
 
 export async function createAccount(
   auth: AdminAuth,
@@ -33,8 +33,8 @@ export async function createAccount(
 export async function listAccounts(
   auth: AdminAuth,
   sfidNumber: string,
-): Promise<MultisigAccount[]> {
-  return adminRequest<MultisigAccount[]>(
+): Promise<InstitutionAccount[]> {
+  return adminRequest<InstitutionAccount[]>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/accounts`,
     auth,
   );

@@ -16,7 +16,7 @@ use crate::admins::actions::require_admin_security_grant;
 use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
 use crate::scope::get_visible_scope;
-use crate::subjects::model::{CreateAccountInput, CreateAccountOutput, MultisigAccount};
+use crate::subjects::model::{CreateAccountInput, CreateAccountOutput, InstitutionAccount};
 use crate::subjects::service::{
     can_delete_account, is_default_account_name, validate_account_name,
 };
@@ -80,7 +80,7 @@ pub(crate) async fn create_account(
         );
     }
     let now = Utc::now();
-    let account = MultisigAccount {
+    let account = InstitutionAccount {
         sfid_number: sfid_number.clone(),
         account_name: account_name.clone(),
         duoqian_address: crate::accounts::derive::derive_duoqian_address(

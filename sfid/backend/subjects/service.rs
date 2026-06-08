@@ -8,8 +8,9 @@
 use crate::number::{
     classify, validate_sfid_number_format, InstitutionCategory, InstitutionCode, SubjectProperty,
 };
-use crate::subjects::model::MultisigAccount;
+use crate::subjects::model::InstitutionAccount;
 use crate::subjects::MultisigChainStatus;
+use primitives::core_const::is_forbidden_account_name;
 
 pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &["主账户", "费用账户"];
 
@@ -36,7 +37,7 @@ pub fn is_default_account_name(account_name: &str) -> bool {
         .any(|name| *name == account_name)
 }
 
-pub fn can_delete_account(account: &MultisigAccount) -> bool {
+pub fn can_delete_account(account: &InstitutionAccount) -> bool {
     !is_default_account_name(&account.account_name)
         && matches!(
             account.chain_status,
@@ -149,6 +150,13 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
             "account_name too long (max 128 bytes)",
         ));
     }
+    // 制度专属保留名(永久质押/安全基金/两和基金)禁止注册为自定义账户名,
+    // 与链端 primitives::core_const::is_forbidden_account_name 单一权威源一致。
+    if is_forbidden_account_name(trimmed.as_bytes()) {
+        return Err(ServiceError::BadInput(
+            "account_name 命中制度专属保留名(永久质押/安全基金/两和基金)",
+        ));
+    }
     Ok(trimmed.to_string())
 }
 
@@ -234,14 +242,14 @@ pub fn validate_sub_type_with_p1(
 /// 构造指定机构的 2 条默认未上链账户。
 ///
 /// 中文注释:默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
-pub fn build_default_accounts(sfid_number: &str, actor: &str) -> Vec<MultisigAccount> {
+pub fn build_default_accounts(sfid_number: &str, actor: &str) -> Vec<InstitutionAccount> {
     use crate::accounts::derive::derive_duoqian_address;
     use chrono::Utc;
 
     let now = Utc::now();
     DEFAULT_ACCOUNT_NAMES
         .iter()
-        .map(|name| MultisigAccount {
+        .map(|name| InstitutionAccount {
             sfid_number: sfid_number.to_string(),
             account_name: (*name).to_string(),
             duoqian_address: derive_duoqian_address(sfid_number, name),

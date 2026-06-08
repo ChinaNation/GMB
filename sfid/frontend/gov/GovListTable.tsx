@@ -54,7 +54,7 @@ function areaText(row: InstitutionListRow) {
 }
 
 function nameText(row: InstitutionListRow) {
-  return row.institution_name || row.short_name || row.full_name || '';
+  return row.institution_name || row.short_name || row.sfid_name || '';
 }
 
 function statusTag(status: string | null | undefined, labels: Record<string, string>) {

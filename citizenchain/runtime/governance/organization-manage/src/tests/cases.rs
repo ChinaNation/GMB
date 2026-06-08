@@ -1,5 +1,8 @@
 use super::*;
-use crate::address::{RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
+use crate::address::{
+    RESERVED_NAME_ANQUAN, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
+    RESERVED_NAME_STAKE,
+};
 use crate::institution::types::InstitutionLifecycleStatus;
 use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED};
@@ -372,6 +375,58 @@ fn propose_create_rejects_duplicate_account_name() {
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::DuplicateAccountName
+        );
+    });
+}
+
+#[test]
+fn role_from_account_name_rejects_reserved_system_names() {
+    new_test_ext().execute_with(|| {
+        // 永久质押/安全基金/两和基金 为制度专属账户,普通机构禁止注册。
+        for name in [RESERVED_NAME_STAKE, RESERVED_NAME_ANQUAN, RESERVED_NAME_HE] {
+            assert_eq!(
+                OrganizationManage::role_from_account_name(name).unwrap_err(),
+                pallet::Error::<Test>::ReservedAccountName.into()
+            );
+        }
+        // 主账户/费用账户仍强制路由,不报错。
+        assert!(matches!(
+            OrganizationManage::role_from_account_name(RESERVED_NAME_MAIN).unwrap(),
+            crate::address::InstitutionAccountRole::Main
+        ));
+        assert!(matches!(
+            OrganizationManage::role_from_account_name(RESERVED_NAME_FEE).unwrap(),
+            crate::address::InstitutionAccountRole::Fee
+        ));
+    });
+}
+
+#[test]
+fn propose_create_rejects_reserved_system_account_name() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        // 自定义账户取名"安全基金" → 制度专属保留名,创建即拒。
+        let bad = initial_accounts(&[
+            (RESERVED_NAME_MAIN, ACCT_AMOUNT),
+            (RESERVED_NAME_FEE, ACCT_AMOUNT),
+            (RESERVED_NAME_ANQUAN, ACCT_AMOUNT),
+        ]);
+        assert_noop!(
+            OrganizationManage::propose_create_institution(
+                RuntimeOrigin::signed(c),
+                sfid_number(b"SFID-RSV"),
+                institution_name(b"X"),
+                bad,
+                ORG_OTH,
+                3,
+                admins_vec(3),
+                2,
+                register_nonce(b"nonce-rsv"),
+                valid_signature(),
+                province(),
+                signer_pubkey(),
+            ),
+            pallet::Error::<Test>::ReservedAccountName
         );
     });
 }

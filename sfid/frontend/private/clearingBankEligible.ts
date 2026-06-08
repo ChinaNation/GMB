@@ -9,7 +9,7 @@
 //   memory/04-decisions/ADR-007-clearing-bank-three-phase.md
 //   memory/05-modules/sfid/clearing-bank-eligibility.md
 
-/** 资格判定所需的最小字段集(覆盖 InstitutionListRow / MultisigInstitution / ParentInstitutionRow)。 */
+/** 资格判定所需的最小字段集(覆盖 InstitutionListRow / Institution / ParentInstitutionRow)。 */
 export interface ClearingEligibleInst {
   subject_property: string;
   sub_type?: string | null;

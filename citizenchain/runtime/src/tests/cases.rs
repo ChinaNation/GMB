@@ -825,7 +825,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         let bad_origin = RuntimeOrigin::signed(outsider.clone());
         assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err());
 
-        admins_change::pallet::AdminAccounts::<Runtime>::remove(nrc_id);
+        admins_change::pallet::AdminAccounts::<Runtime>::remove(&nrc_id);
         assert!(!is_nrc_admin(&nrc_admin));
         assert!(!is_nrc_admin(&outsider));
         assert!(!RuntimeInternalAdminProvider::is_internal_admin(

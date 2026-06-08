@@ -46,7 +46,7 @@ class CloseDuoqianProposalInfo {
 }
 
 /// 多签账户状态。
-enum DuoqianStatus {
+enum InstitutionStatus {
   /// 提案投票中，尚未激活。
   pending,
 
@@ -58,8 +58,8 @@ enum DuoqianStatus {
 ///
 /// 机构状态来自 `OrganizationManage::InstitutionAccounts`，
 /// 管理员来自 `AdminsChange::AdminAccounts`，动态阈值来自 `InternalVote`。
-class DuoqianAccountInfo {
-  const DuoqianAccountInfo({
+class InstitutionAccountInfo {
+  const InstitutionAccountInfo({
     required this.adminCount,
     required this.threshold,
     required this.adminPubkeys,
@@ -72,7 +72,7 @@ class DuoqianAccountInfo {
   /// 管理员公钥列表（hex，不含 0x 前缀）。
   final List<String> adminPubkeys;
 
-  final DuoqianStatus status;
+  final InstitutionStatus status;
 }
 
 // ──── 工具函数 ────

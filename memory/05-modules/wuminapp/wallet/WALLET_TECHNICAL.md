@@ -372,3 +372,40 @@ mnemonic
 - 生产版固定访问 `https://sfid.crcfrcn.com`。
 - 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 SFID 后端。
 - 不允许钱包模块自行读取或拼接 SFID API URL，也不允许从本地开发失败自动回退到生产。
+
+## 13. PQC 抗量子迁移(设计,待实现)
+
+- 关联决策:`memory/04-decisions/ADR-016-account-key-pqc-migration.md`
+- 关联实现蓝图:`memory/05-modules/citizenchain/runtime/otherpallet/ACCOUNT_KEYS_PQC_TECHNICAL.md`
+
+热钱包随全系统从 sr25519 迁移到 ML-DSA-65,遵循"四不变"(不换助记词/账户/地址/余额)。本节是目标态设计,代码尚未落地。
+
+### 13.1 派生链扩展(在 §10.3 基础上)
+
+`§10.3` 的 32 字节 mini-secret 语义升格为 `AccountRootSeedV1`,**派生结果不变 → sr25519 地址比特级不变**。在其上增加 ML-DSA-65 分支:
+
+```
+AccountRootSeedV1(= 现有 mini-secret, 不变)
+  ├─ sr25519   = HKDF-SHA512(root, "GMB/sr25519/v1")    → 现有地址(不变)
+  └─ ML-DSA-65 = HKDF-SHA512(root, "GMB/ML-DSA-65/v1")  → PQC 钥匙
+```
+
+- ML-DSA-65 的 keygen/sign **不在 Dart 实现**(性能与安全),改走 Rust FFI。
+- 新建**共享 crate `gmb-pqc`**(冷热钱包共用,派生规则强制一致),在 `wuminapp/rust/src/` 新增 `ml_dsa.rs`,照现有原生 C FFI 风格(`wuminapp/rust/src/lib.rs:52-133`,非 flutter_rust_bridge)导出 `ml_dsa65_pubkey_from_seed / ml_dsa65_sign`。
+- Dart 侧:`wallet_manager.dart:547-555` 旁加 `_deriveMlDsa65FromSeed`(走 FFI)。
+
+### 13.2 签名与交易构造
+
+- 绑定:调链上 `AccountKeys.bind_pqc_key`(外层 sr25519 + 内层 ML-DSA-65 自签 challenge,hybrid 双签)。
+- PQC 交易:`signed_extrinsic_builder.dart:103,186` 除 `SignatureType.sr25519` 外,新增 general-transaction 构造路径,调 `AccountKeys.pqc_dispatch{account, call, nonce, algo, pubkey, sig}`。
+- 二维码:`qr/bodies/{sign_request,sign_response,login_receipt}_body.dart` 的 `sig_alg` 硬编码(`:37-40`/`:46-47`)放开为枚举 `sr25519 | ml-dsa-65`。
+
+### 13.3 UI 约束
+
+- 钱包 UI 只展示一个账户、一个地址、一份余额;sr25519 与 ML-DSA-65 是同一账户下的不同凭证,不暴露多公钥概念。
+- 账户状态机(Sr25519Only → Bound → PqcOnly)对用户呈现为"抗量子升级"开关,不改地址展示。
+
+### 13.4 安全边界(补充 §7)
+
+- `AccountRootSeedV1` 不出本机、不上传服务器;SFID 不托管助记词/Root Seed/私钥/PQC 私钥。
+- Passkey **本轮不纳入**(后续独立立项),且不得作为助记词或 Root Seed 来源。

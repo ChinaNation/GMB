@@ -8,7 +8,7 @@ use axum::http::StatusCode;
 use crate::admins::login::AdminAuthContext;
 use crate::admins::repo;
 use crate::crypto::pubkey::normalize_admin_pubkey;
-use crate::subjects::model::MultisigInstitution;
+use crate::subjects::model::Institution;
 use crate::subjects::service::{build_default_accounts, ServiceError};
 use crate::{api_error, AppState};
 
@@ -50,7 +50,7 @@ pub(crate) fn extract_city_code(sfid: &str) -> String {
 }
 
 pub(crate) fn ensure_institution_visible_to_admin(
-    inst: &MultisigInstitution,
+    inst: &Institution,
     ctx: &AdminAuthContext,
 ) -> Result<(), axum::response::Response> {
     if let Some(ref locked_province) = ctx.admin_province {

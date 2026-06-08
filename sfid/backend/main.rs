@@ -199,7 +199,7 @@ fn stable_institution_cursor_id(sfid_number: &str) -> i64 {
 }
 
 fn institution_row_from_record(
-    inst: &crate::subjects::MultisigInstitution,
+    inst: &crate::subjects::Institution,
     account_count: usize,
     created_by_name: Option<String>,
     created_by_role: Option<String>,
@@ -207,7 +207,7 @@ fn institution_row_from_record(
     crate::subjects::InstitutionListRow {
         sfid_number: inst.sfid_number.clone(),
         institution_name: inst.institution_name.clone(),
-        full_name: inst.full_name.clone(),
+        sfid_name: inst.sfid_name.clone(),
         short_name: inst.short_name.clone(),
         status: inst.status.clone(),
         category: inst.category,
@@ -239,7 +239,7 @@ fn institution_row_from_pg_row(
     let account_count_i64: i64 = row.get(14);
     let created_by_name: Option<String> = row.get(15);
     let created_by_role: Option<String> = row.get(16);
-    let full_name: Option<String> = row.get(17);
+    let sfid_name: Option<String> = row.get(17);
     let short_name: Option<String> = row.get(18);
     let town: Option<String> = row.get(19);
     let town_code: Option<String> = row.get(20);
@@ -263,10 +263,10 @@ fn institution_row_from_pg_row(
     } else {
         None
     };
-    let inst = crate::subjects::MultisigInstitution {
+    let inst = crate::subjects::Institution {
         sfid_number: row.get(0),
         institution_name: row.get(1),
-        full_name,
+        sfid_name,
         short_name,
         status,
         category,
@@ -305,21 +305,21 @@ fn institution_row_from_pg_row(
 
 fn institution_from_subject_row(
     row: &postgres::Row,
-) -> Result<crate::subjects::MultisigInstitution, String> {
+) -> Result<crate::subjects::Institution, String> {
     let category_text: String = row.get(2);
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-    let full_name: Option<String> = row.get(14);
+    let sfid_name: Option<String> = row.get(14);
     let short_name: Option<String> = row.get(15);
     let town: Option<String> = row.get(16);
     let town_code: Option<String> = row.get(17);
     let org_code: Option<String> = row.get(18);
     let status: String = row.get(19);
     let legal_rep_photo_size_i64: Option<i64> = row.get(25);
-    Ok(crate::subjects::MultisigInstitution {
+    Ok(crate::subjects::Institution {
         sfid_number: row.get(0),
         institution_name: row.get(1),
-        full_name,
+        sfid_name,
         short_name,
         status,
         category,
@@ -401,8 +401,8 @@ impl Db {
         sfid_number: &str,
     ) -> Result<
         Option<(
-            crate::subjects::MultisigInstitution,
-            Vec<crate::subjects::MultisigAccount>,
+            crate::subjects::Institution,
+            Vec<crate::subjects::InstitutionAccount>,
         )>,
         String,
     > {
@@ -414,7 +414,7 @@ impl Db {
                             s.subject_property, s.p1, s.province,
                             s.city, s.province_code, s.city_code, s.institution_code,
 		                            s.sub_type, s.parent_sfid_number,
-		                            s.created_by, s.created_at, s.full_name, s.short_name,
+		                            s.created_by, s.created_at, s.sfid_name, s.short_name,
 	                            COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 	                            s.status, s.legal_rep_name, s.legal_rep_sfid_number,
 	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
@@ -442,7 +442,7 @@ impl Db {
             let mut accounts = Vec::with_capacity(account_rows.len());
             for row in account_rows {
                 let status_text: String = row.get(3);
-                accounts.push(crate::subjects::MultisigAccount {
+                accounts.push(crate::subjects::InstitutionAccount {
                     sfid_number: row.get(0),
                     account_name: row.get(1),
                     duoqian_address: row.get(2),
@@ -727,7 +727,7 @@ impl Db {
 
     pub(crate) fn upsert_institution_row(
         &self,
-        inst: &crate::subjects::MultisigInstitution,
+        inst: &crate::subjects::Institution,
     ) -> Result<(), String> {
         let inst = inst.clone();
         self.with_client(move |conn| {
@@ -758,7 +758,7 @@ impl Db {
 
     fn upsert_target_subject_rows(
         conn: &mut postgres::Client,
-        inst: &crate::subjects::MultisigInstitution,
+        inst: &crate::subjects::Institution,
     ) -> Result<(), String> {
         let kind = match inst.category {
             crate::number::InstitutionCategory::PrivateInstitution => "PRIVATE",
@@ -796,7 +796,7 @@ impl Db {
             .and_then(|v| i64::try_from(v).ok());
         conn.execute(
             "INSERT INTO subjects (
-		                sfid_number, kind, name, full_name, short_name, p_code, c_code, t_code,
+		                sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
 		                status, category, subject_property, p1, province, city, town,
 		                province_code, city_code, town_code, institution_code, org_code, sub_type,
 		                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
@@ -810,7 +810,7 @@ impl Db {
 		             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
 		                kind = EXCLUDED.kind,
 	                name = EXCLUDED.name,
-	                full_name = EXCLUDED.full_name,
+	                sfid_name = EXCLUDED.sfid_name,
 	                short_name = EXCLUDED.short_name,
 	                c_code = EXCLUDED.c_code,
 		                t_code = EXCLUDED.t_code,
@@ -840,7 +840,7 @@ impl Db {
                 &inst.sfid_number,
                 &kind,
                 &inst.institution_name,
-                &inst.full_name,
+                &inst.sfid_name,
                 &inst.short_name,
                 &p_code,
                 &c_code,
@@ -965,7 +965,7 @@ impl Db {
 
     pub(crate) fn upsert_institution_account_row(
         &self,
-        account: &crate::subjects::MultisigAccount,
+        account: &crate::subjects::InstitutionAccount,
     ) -> Result<(), String> {
         let account = account.clone();
         self.with_client(move |conn| {
@@ -976,7 +976,7 @@ impl Db {
 
     fn upsert_target_account_row(
         conn: &mut postgres::Client,
-        account: &crate::subjects::MultisigAccount,
+        account: &crate::subjects::InstitutionAccount,
     ) -> Result<(), String> {
         let scope_row = conn
             .query_opt(
@@ -1114,7 +1114,7 @@ impl Db {
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.sub_type, s.parent_sfid_number,
 					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
-				                                    a.admin_name, a.role, s.full_name, s.short_name,
+				                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 				                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 				                                    s.status
 		                             FROM subjects s
@@ -1159,16 +1159,16 @@ impl Db {
 			                let account_count_i64: i64 = row.get(14);
 			                let created_by_name: Option<String> = row.get(15);
 			                let created_by_role: Option<String> = row.get(16);
-			                let full_name: Option<String> = row.get(17);
+			                let sfid_name: Option<String> = row.get(17);
 			                let short_name: Option<String> = row.get(18);
 				                let town: Option<String> = row.get(19);
 				                let town_code: Option<String> = row.get(20);
 				                let org_code: Option<String> = row.get(21);
 				                let status: String = row.get(22);
-		                let inst = crate::subjects::MultisigInstitution {
+		                let inst = crate::subjects::Institution {
 		                    sfid_number: row.get(0),
 		                    institution_name: row.get(1),
-		                    full_name,
+		                    sfid_name,
 			                    short_name,
 			                    status,
 			                    category,
@@ -1230,7 +1230,7 @@ impl Db {
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.sub_type, s.parent_sfid_number,
 					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.role, s.full_name, s.short_name,
+			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.status, cs.status, cs.install_token_status,
 			                                    CASE WHEN cs.sfid_number IS NULL THEN NULL ELSE (cs.cpms_pubkey_hash IS NOT NULL) END
@@ -1288,7 +1288,7 @@ impl Db {
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.sub_type, s.parent_sfid_number,
 				                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.role, s.full_name, s.short_name,
+			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean
 	                             FROM subjects s

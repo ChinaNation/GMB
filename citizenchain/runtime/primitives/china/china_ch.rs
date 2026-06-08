@@ -1,6 +1,6 @@
 //! 43个初始省储行常量=china_ch.rs
 //! 费用账户地址（DUOQIAN + OP_FEE + ss58 小端 + sfid_number → BLAKE2-256）。
-//! 质押账户地址（DUOQIAN + OP_STAKE + ss58 小端 + citizens_number_u64_le → BLAKE2-256）。
+//! 永久质押地址（DUOQIAN + OP_STAKE + ss58 小端 + sfid_number → BLAKE2-256）。
 
 use hex_literal::hex;
 

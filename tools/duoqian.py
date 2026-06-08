@@ -58,7 +58,7 @@ def _load_core_const() -> tuple[bytes, int, dict[str, int]]:
     if not domain_match or not ss58_match:
         raise RuntimeError(f"无法从 {CORE_CONST_PATH} 读取 DUOQIAN/SS58_FORMAT")
     ops: dict[str, int] = {}
-    for name in ("OP_MAIN", "OP_FEE", "OP_STAKE", "OP_AN"):
+    for name in ("OP_MAIN", "OP_FEE", "OP_STAKE", "OP_AN", "OP_HE"):
         match = re.search(rf"pub const {name}:\s*u8\s*=\s*(0x[0-9A-Fa-f]+|\d+);", text)
         if not match:
             raise RuntimeError(f"无法从 {CORE_CONST_PATH} 读取 {name}")
@@ -72,6 +72,7 @@ OP_MAIN = OPS["OP_MAIN"]
 OP_FEE = OPS["OP_FEE"]
 OP_STAKE = OPS["OP_STAKE"]
 OP_AN = OPS["OP_AN"]
+OP_HE = OPS["OP_HE"]
 
 # 按 china_cb.rs 硬编码，第一条是 NRC
 NRC_SFID_NUMBER = "LN001-GCB05-944805165-2026"
@@ -88,7 +89,15 @@ FILES_WITH_MAIN = [
 ]
 
 # 只在 cb/ch 里有 fee_address
-FILES_WITH_FEE = ["china_cb.rs", "china_ch.rs"]
+FILES_WITH_FEE = [
+    "china_cb.rs",
+    "china_ch.rs",
+    "china_zf.rs",
+    "china_lf.rs",
+    "china_sf.rs",
+    "china_jc.rs",
+    "china_jy.rs",
+]
 
 # 只在 ch 里有 stake_address 和 citizens_number
 FILES_WITH_STAKE = ["china_ch.rs"]
@@ -123,6 +132,10 @@ def derive_stake(sfid_number: str) -> bytes:
 
 def derive_anquan() -> bytes:
     return derive(OP_AN, NRC_SFID_NUMBER.encode("utf-8"))
+
+
+def derive_he() -> bytes:
+    return derive(OP_HE, NRC_SFID_NUMBER.encode("utf-8"))
 
 
 # ── Rust 文件扫描 ───────────────────────────────────
@@ -297,6 +310,20 @@ def rewrite_anquan(cb_path: Path, new_hex: str) -> None:
     cb_path.write_text(new_text, encoding="utf-8")
 
 
+def rewrite_he(cb_path: Path, new_hex: str) -> None:
+    """重写 china_cb.rs 里 NRC_HE_ADDRESS 常量。"""
+    text = cb_path.read_text(encoding="utf-8")
+    # 匹配形如 pub const NRC_HE_ADDRESS: [u8; 32] = hex!("...")
+    pattern = re.compile(
+        r'(pub const NRC_HE_ADDRESS:\s*\[u8;\s*32\]\s*=\s*\n?\s*hex!\(")([0-9a-fA-F]{64})("\))'
+    )
+    new_text, n = pattern.subn(rf"\g<1>{new_hex}\g<3>", text)
+    if n == 0:
+        print("⚠️  china_cb.rs 中没找到 NRC_HE_ADDRESS 常量，跳过")
+        return
+    cb_path.write_text(new_text, encoding="utf-8")
+
+
 def regen_zb(all_addresses: list[str], dry_run: bool) -> None:
     """重建 china_zb.rs：汇总所有保留地址 main + fee + stake + anquan。"""
     zb_path = CHINA_DIR / "china_zb.rs"
@@ -419,6 +446,13 @@ def main() -> int:
     print(f"\n📄 [anquan] NRC_ANQUAN_ADDRESS: {new_anquan}")
     if not dry_run:
         rewrite_anquan(CHINA_DIR / "china_cb.rs", new_anquan)
+
+    # ── NRC_HE_ADDRESS（两和基金）──
+    new_he = hexstr(derive_he())
+    all_reserved.append(new_he)
+    print(f"📄 [he]     NRC_HE_ADDRESS:     {new_he}")
+    if not dry_run:
+        rewrite_he(CHINA_DIR / "china_cb.rs", new_he)
 
     # ── china_zb.rs 汇总 ──
     regen_zb(all_reserved, dry_run=dry_run)

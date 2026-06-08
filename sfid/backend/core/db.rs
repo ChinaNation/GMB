@@ -328,7 +328,7 @@ impl Db {
                 sfid_number TEXT NOT NULL,
                 kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
 	                name TEXT,
-	                full_name TEXT,
+	                sfid_name TEXT,
 	                short_name TEXT,
 	                p_code TEXT NOT NULL,
 	                c_code TEXT,
@@ -470,18 +470,6 @@ impl Db {
                 postgres_error_text(&e)
             )
         })?;
-        let deprecated_subject_property_column = ["a", "3"].concat();
-        for table in ["subjects", "private"] {
-            let sql = format!(
-                "ALTER TABLE {table} DROP COLUMN IF EXISTS {deprecated_subject_property_column}"
-            );
-            conn.batch_execute(sql.as_str()).map_err(|e| {
-                format!(
-                    "remove deprecated identity column from {table} failed: {}",
-                    postgres_error_text(&e)
-                )
-            })?;
-        }
 
         Self::validate_target_subject_schema(conn)?;
 
@@ -544,13 +532,7 @@ impl Db {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
         Self::ensure_column_state(conn, "private", "subject_property", true)?;
-        let deprecated_subject_property_column = ["a", "3"].concat();
-        for (table, column) in [
-            ("subjects", deprecated_subject_property_column.as_str()),
-            ("private", deprecated_subject_property_column.as_str()),
-            ("subjects", "chain_status"),
-            ("gov", "chain_status"),
-        ] {
+        for (table, column) in [("subjects", "chain_status"), ("gov", "chain_status")] {
             Self::ensure_column_state(conn, table, column, false)?;
         }
         Ok(())

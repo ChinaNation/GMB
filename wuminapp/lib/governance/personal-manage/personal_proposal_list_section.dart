@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
-import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/governance/institution_manage_detail_page.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -66,7 +66,7 @@ class _PersonalProposalListSectionState
     //
     // 按 view.action 分流到对应详情页:
     // - transfer → DuoqianTransferDetailPage(转账提案专用页)
-    // - create / close → DuoqianManageDetailPage(多签管理提案,只懂 create/close)
+    // - create / close → InstitutionManageDetailPage(多签管理提案,只懂 create/close)
     final ctx = ProposalContext(
       institution: widget.institution,
       adminWallets: widget.adminWallets,
@@ -82,7 +82,7 @@ class _PersonalProposalListSectionState
         proposalContext: ctx,
       );
     } else {
-      page = DuoqianManageDetailPage(
+      page = InstitutionManageDetailPage(
         institution: widget.institution,
         proposalId: view.proposalId,
         proposalContext: ctx,

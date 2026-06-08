@@ -16,7 +16,7 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'package:wuminapp_mobile/governance/shared/admin_account_storage_codec.dart';
-import 'duoqian_manage_service.dart';
+import 'institution_manage_service.dart';
 import 'duoqian_storage_codec.dart';
 
 /// 机构多签反向索引扫描统计。
@@ -53,17 +53,17 @@ class DiscoveryStats {
   );
 }
 
-class DuoqianDiscoveryService {
-  DuoqianDiscoveryService({
+class InstitutionDiscoveryService {
+  InstitutionDiscoveryService({
     ChainRpc? chainRpc,
-    DuoqianManageService? manageService,
+    InstitutionManageService? manageService,
     WalletManager? walletManager,
   })  : _rpc = chainRpc ?? ChainRpc(),
-        _manage = manageService ?? DuoqianManageService(chainRpc: chainRpc),
+        _manage = manageService ?? InstitutionManageService(chainRpc: chainRpc),
         _wallets = walletManager ?? WalletManager();
 
   final ChainRpc _rpc;
-  final DuoqianManageService _manage;
+  final InstitutionManageService _manage;
   final WalletManager _wallets;
 
   /// 30 分钟节流窗口。
@@ -230,7 +230,7 @@ class DuoqianDiscoveryService {
     required List<String> matchedAdmins,
   }) async {
     return WalletIsar.instance.writeTxn((isar) async {
-      final exists = await isar.duoqianInstitutionEntitys
+      final exists = await isar.institutionEntitys
           .filter()
           .duoqianAddressEqualTo(duoqianAddrHex)
           .findFirst();
@@ -239,11 +239,11 @@ class DuoqianDiscoveryService {
         if (!exists.discoveredViaAdmin) return false;
         exists.adminAccountOrg = adminAccountOrg;
         exists.matchedAdminPubkeys = matchedAdmins;
-        await isar.duoqianInstitutionEntitys.put(exists);
+        await isar.institutionEntitys.put(exists);
         return false;
       }
 
-      final entity = DuoqianInstitutionEntity()
+      final entity = InstitutionEntity()
         ..duoqianAddress = duoqianAddrHex
         ..sfidNumber = sfidNumberUtf8
         ..adminAccountOrg = adminAccountOrg
@@ -251,7 +251,7 @@ class DuoqianDiscoveryService {
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true
         ..matchedAdminPubkeys = matchedAdmins;
-      await isar.duoqianInstitutionEntitys.put(entity);
+      await isar.institutionEntitys.put(entity);
       return true;
     });
   }
@@ -262,13 +262,13 @@ class DuoqianDiscoveryService {
     var orphans = 0;
 
     await WalletIsar.instance.writeTxn((isar) async {
-      final staleInstitutions = await isar.duoqianInstitutionEntitys
+      final staleInstitutions = await isar.institutionEntitys
           .filter()
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final i in staleInstitutions) {
         if (!scannedAddrs.contains(i.duoqianAddress)) {
-          await isar.duoqianInstitutionEntitys.delete(i.id);
+          await isar.institutionEntitys.delete(i.id);
           orphans++;
         }
       }

@@ -5,13 +5,13 @@
 //
 //   - 创建者:无按钮(创建即同意)
 //   - 非本钱包成员:无按钮(仅展示)
-//   - 本钱包未投 + 多签 Pending:蓝色"激活"(可点)→ 跳 DuoqianManageDetailPage
+//   - 本钱包未投 + 多签 Pending:蓝色"激活"(可点)→ 跳 InstitutionManageDetailPage
 //   - 本钱包已投赞成:灰色"已激活"(禁用)
 //   - 本钱包已投反对:灰色"已拒绝"(禁用)
 //   - 多签 Active:无按钮(创建已完成)
 //
 // "激活"行为本质是 votingengine `internal_vote(proposal_id, approve=true)`,
-// 沿用现有 [DuoqianManageDetailPage] 的 QrSigner 签名 + InternalVoteService 投票流程,
+// 沿用现有 [InstitutionManageDetailPage] 的 QrSigner 签名 + InternalVoteService 投票流程,
 // 不引入新的签名逻辑。
 
 import 'dart:typed_data';
@@ -22,7 +22,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_query_service.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
-import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/governance/institution_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -169,7 +169,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
     final pushed = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => DuoqianManageDetailPage(
+        builder: (_) => InstitutionManageDetailPage(
           institution: widget.institution,
           proposalId: pid,
           proposalContext: ProposalContext(

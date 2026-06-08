@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/citizen/citizen_tab_page.dart';
-import 'package:wuminapp_mobile/governance/duoqian_account_list_page.dart';
+import 'package:wuminapp_mobile/governance/institution_account_list_page.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
@@ -354,7 +354,7 @@ class _AppShellState extends State<AppShell> {
   List<Widget> get _pages => [
         _citizenPage,
         _duoqianTabLoaded
-            ? const DuoqianAccountListPage()
+            ? const InstitutionAccountListPage()
             : const SizedBox.shrink(),
         const TransactionTabPage(),
         ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),

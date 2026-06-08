@@ -181,15 +181,8 @@ mod benchmarks {
         Ok(())
     }
 
-    // propose_create (call_index=0) benchmark 已废弃 (2026-05-03):
-    // 单账户机构创建入口已删除,机构最少 2 账户走 propose_create_institution。
-    //
-    // propose_close benchmark + propose_create_personal benchmark 已在 B 阶段
-    // (personal-manage 拆分,2026-05-06) 删除:
-    // - propose_close 原 setup 依赖个人多签;机构 propose_close 的 benchmark 重写
-    //   需要完整的 register_sfid_institution + propose_create_institution + pass
-    //   流水线,留待 follow-up 任务卡补齐。
-    // - propose_create_personal 已迁至 personal-manage(benchmark 用例 follow-up)。
     // 当前 organization-manage 仅保留 register_sfid_institution + propose_create_institution
     // + cleanup_rejected_proposal 三个 benchmark;CI 运行时影响范围与 weights.rs 占位等价。
+    // propose_close 的 benchmark 重写需完整 register_sfid_institution +
+    // propose_create_institution + pass 流水线,留待 follow-up 任务卡补齐。
 }

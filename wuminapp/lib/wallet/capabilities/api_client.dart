@@ -537,34 +537,40 @@ class InstitutionAccountEntry {
   /// 链上派生的多签地址（hex，上链成功后才有值）。
   final String? duoqianAddress;
 
-  /// 链上状态：`INACTIVE` / `PENDING` / `REGISTERED` / `FAILED`。
+  /// 链上状态：`Pending` / `Active` / `Closed` / `Failed`（全端统一取值）。
   final String chainStatus;
 
-  bool get isRegistered => chainStatus == 'REGISTERED';
+  bool get isRegistered => chainStatus == 'Active';
 
+  /// 把 SFID app 接口返回的各种 main_chain_status 取值统一映射为
+  /// `Pending` / `Active` / `Closed` / `Failed`（CANON 第 5 条）：
+  ///   NotOnChain / PendingOnChain → Pending
+  ///   ActiveOnChain               → Active
+  ///   RevokedOnChain              → Closed
+  ///   失败                         → Failed
   static String normalizeChainStatus(String? raw) {
     final status = raw?.trim();
     switch (status) {
-      case 'INACTIVE':
+      case 'NotOnChain':
       case 'NOT_ON_CHAIN':
-        return 'INACTIVE';
-      case 'PENDING':
+      case 'PendingOnChain':
       case 'PENDING_ON_CHAIN':
-        return 'PENDING';
-      case 'REGISTERED':
-      case 'ACTIVE_ON_CHAIN':
-        return 'REGISTERED';
-      case 'FAILED':
-      case 'REVOKED_ON_CHAIN':
-        return 'FAILED';
       case 'Pending':
-        return 'PENDING';
+        return 'Pending';
+      case 'ActiveOnChain':
+      case 'ACTIVE_ON_CHAIN':
+      case 'Active':
       case 'Confirmed':
-        return 'REGISTERED';
+        return 'Active';
+      case 'RevokedOnChain':
+      case 'REVOKED_ON_CHAIN':
+      case 'Closed':
+        return 'Closed';
       case 'Failed':
-        return 'FAILED';
+      case 'FAILED':
+        return 'Failed';
       default:
-        return 'PENDING';
+        return 'Pending';
     }
   }
 }

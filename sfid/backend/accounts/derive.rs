@@ -43,14 +43,15 @@ const RESERVED_NAME_FEE: &str = "费用账户";
 
 /// 按 `account_name` 路由并派生机构账户的 `duoqian_address`(小写 hex,32 字节 → 64 字符)。
 ///
-/// 返回 `None` 当 `account_name` 去空后为空串(与链端 `EmptyAccountName` 对齐的前置拒绝)。
+/// 返回 `None` 当 `account_name` 为空串(与链端 `EmptyAccountName` 对齐的前置拒绝,
+/// 不做 trim:链端按原始字节派生,本端必须字节对齐)。
 ///
 /// ### 路由
 /// - `"主账户"` → `OP_MAIN`(preimage 不含 account_name)
 /// - `"费用账户"` → `OP_FEE`(preimage 不含 account_name)
 /// - 其他非空 → `OP_INSTITUTION`(preimage 追加 account_name 字节)
 pub fn derive_duoqian_address(sfid_number: &str, account_name: &str) -> Option<String> {
-    let name = account_name.trim();
+    let name = account_name;
     if name.is_empty() {
         return None;
     }
@@ -106,8 +107,9 @@ mod tests {
 
     #[test]
     fn empty_name_returns_none() {
+        // 仅空串返回 None;不做 trim,纯空白串按字节参与派生(与链端字节对齐)
         assert!(derive_duoqian_address("sfid", "").is_none());
-        assert!(derive_duoqian_address("sfid", "   ").is_none());
+        assert!(derive_duoqian_address("sfid", "   ").is_some());
     }
 
     #[test]

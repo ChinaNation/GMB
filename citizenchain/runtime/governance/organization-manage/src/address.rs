@@ -3,10 +3,13 @@
 //! `DUOQIAN` 把机构主账户、费用账户和自定义账户拆成不同 op_tag。
 //! 本文件只保存地址角色语义，真正派生统一由 `primitives::core_const` 完成。
 
-/// 机构账户角色保留名：这两个中文字串必须强制走 Role::Main / Role::Fee，
-/// 禁止被误当作 Named 命名账户落到 OP_INSTITUTION。
-pub const RESERVED_NAME_MAIN: &[u8] = "主账户".as_bytes();
-pub const RESERVED_NAME_FEE: &[u8] = "费用账户".as_bytes();
+/// 机构账户保留名（单一权威源在 `primitives::core_const`，此处仅 re-export）。
+/// - `主账户`/`费用账户`：强制走 `Role::Main`/`Role::Fee`，禁止落到 OP_INSTITUTION。
+/// - `永久质押`/`安全基金`/`两和基金`：制度专属账户，普通机构禁止注册。
+pub use primitives::core_const::{
+    RESERVED_NAME_ANQUAN, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
+    RESERVED_NAME_STAKE,
+};
 
 /// SFID 登记机构下的账户角色枚举，决定地址派生走哪个 op_tag：
 /// - `Main`：所有机构的主账户，preimage 不含 account_name，走 `OP_MAIN = 0x00`。

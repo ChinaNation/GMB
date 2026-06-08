@@ -26,13 +26,13 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_models.dart'
     as personal_models;
 import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_service.dart';
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_models.dart'
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_models.dart'
     as org_models;
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_service.dart';
 
 /// 多签管理提案详情页：展示创建/关闭提案信息、投票进度及投票操作。
-class DuoqianManageDetailPage extends StatefulWidget {
-  const DuoqianManageDetailPage({
+class InstitutionManageDetailPage extends StatefulWidget {
+  const InstitutionManageDetailPage({
     super.key,
     required this.institution,
     required this.proposalId,
@@ -46,17 +46,17 @@ class DuoqianManageDetailPage extends StatefulWidget {
   List<WalletProfile> get adminWallets => proposalContext.adminWallets;
 
   @override
-  State<DuoqianManageDetailPage> createState() =>
-      _DuoqianManageDetailPageState();
+  State<InstitutionManageDetailPage> createState() =>
+      _InstitutionManageDetailPageState();
 }
 
-class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
+class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPage> {
   static const int _statusVoting = 0;
 
   final ProposalQueryService _proposalService = ProposalQueryService();
   final ProposalDetailLocalStore _detailStore =
       ProposalDetailLocalStore.instance;
-  final DuoqianManageService _manageService = DuoqianManageService();
+  final InstitutionManageService _manageService = InstitutionManageService();
   final PersonalManageService _personalManageService = PersonalManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   AdminAccountIdentity get _accountIdentity =>

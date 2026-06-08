@@ -332,7 +332,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                           {inst.sfid_number}
                         </Typography.Text>
 	                      </Descriptions.Item>
-	                      <Descriptions.Item label="全称">{inst.full_name || '-'}</Descriptions.Item>
+	                      <Descriptions.Item label="全称">{inst.sfid_name || '-'}</Descriptions.Item>
 	                      <Descriptions.Item label="简称">{inst.short_name || inst.institution_name || '-'}</Descriptions.Item>
 	                      <Descriptions.Item label="行政区">{administrativeArea}</Descriptions.Item>
 	                      <Descriptions.Item label="机构类型">

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_models.dart';
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_models.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_service.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/duoqian_storage_codec.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
@@ -77,7 +77,7 @@ void main() {
   test('fetchDuoqianAccount reads registered institution current storages',
       () async {
     final rpc = FakeChainRpc();
-    final service = DuoqianManageService(chainRpc: rpc);
+    final service = InstitutionManageService(chainRpc: rpc);
     final address = '11' * 32;
     final sfidNumber =
         Uint8List.fromList(utf8.encode('AH001-SCB0H-202605070-2026'));
@@ -122,14 +122,14 @@ void main() {
     expect(info!.adminCount, 2);
     expect(info.threshold, 2);
     expect(info.adminPubkeys, ['aa' * 32, 'bb' * 32]);
-    expect(info.status, DuoqianStatus.active);
+    expect(info.status, InstitutionStatus.active);
     expect(rpc.requestedKeys, [refKey, accountKey, adminKey, thresholdKey]);
   });
 
   test('fetchDuoqianAccountsBatch reads institution accounts in staged batches',
       () async {
     final rpc = FakeChainRpc();
-    final service = DuoqianManageService(chainRpc: rpc);
+    final service = InstitutionManageService(chainRpc: rpc);
     final address = '22' * 32;
     final sfidNumber =
         Uint8List.fromList(utf8.encode('AH001-SCB0E-202605180-2026'));
@@ -175,7 +175,7 @@ void main() {
     expect(infos[address]!.adminCount, 2);
     expect(infos[address]!.threshold, 2);
     expect(infos[address]!.adminPubkeys, ['aa' * 32, 'bb' * 32]);
-    expect(infos[address]!.status, DuoqianStatus.active);
+    expect(infos[address]!.status, InstitutionStatus.active);
     expect(
         rpc.requestedKeys, [refKey, accountKey, adminKey, activeThresholdKey]);
   });

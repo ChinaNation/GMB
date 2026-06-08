@@ -8,7 +8,7 @@ import 'package:wuminapp_mobile/governance/admins-change/models/admin_account.da
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
-import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/governance/institution_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -736,7 +736,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     final stakeAddress = accounts?.stakeAddress;
     if (stakeAddress != null) {
       items.add((
-        name: '质押账户',
+        name: '永久质押',
         address: stakeAddress,
         icon: Icons.lock_outline,
       ));
@@ -1377,7 +1377,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         proposal.closeDuoqianDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => DuoqianManageDetailPage(
+          builder: (_) => InstitutionManageDetailPage(
             institution: widget.institution,
             proposalId: proposalId,
             proposalContext: ctx,

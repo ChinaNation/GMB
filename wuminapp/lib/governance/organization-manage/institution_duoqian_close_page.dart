@@ -17,7 +17,7 @@ import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/transaction/shared/account_balance_snapshot_store.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-import 'duoqian_manage_service.dart';
+import 'institution_manage_service.dart';
 
 /// 关闭机构多签账户提案页面。
 ///
@@ -40,7 +40,7 @@ class InstitutionDuoqianClosePage extends StatefulWidget {
 class _InstitutionDuoqianClosePageState
     extends State<InstitutionDuoqianClosePage> {
   final _beneficiaryController = TextEditingController();
-  final _manageService = DuoqianManageService();
+  final _manageService = InstitutionManageService();
 
   bool _submitting = false;
   bool _loadingBalance = true;
@@ -150,7 +150,7 @@ class _InstitutionDuoqianClosePageState
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
       // 热钱包先认证(生物/密码),后续 signCallback 用本地 seed 签名;
-      // 冷钱包走 QR 签名。对齐 [duoqian_manage_detail_page._submitVote] 同款分流。
+      // 冷钱包走 QR 签名。对齐 [institution_manage_detail_page._submitVote] 同款分流。
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();

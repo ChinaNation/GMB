@@ -23,3 +23,10 @@ sfid/backend/crypto/
 - `crypto/pubkey.rs` 是跨业务工具,不属于 `scope`。
 - 业务模块只调用 crypto 工具,不得在 crypto 内读取 Store、检查角色或执行 HTTP handler。
 - 公钥展示仍由前端/业务模块决定;crypto 只做解析、规范化和比较。
+
+## 4. 钱包密钥托管边界(抗量子迁移,ADR-016)
+
+- SFID **不**保存钱包助记词、`AccountRootSeedV1`、私钥或 PQC(ML-DSA-65)私钥;链上/SFID 只持有账户公钥(`AccountId`)与必要的公钥派生物。
+- 钱包的 sr25519 与 ML-DSA-65 钥匙由用户的助记词在 `wuminapp`/`wumin` 本机派生(共享 `gmb-pqc` crate),不经过 SFID。
+- SFID 的角色仅限账户绑定与管理员安全动作边界;PQC 公钥绑定到链上账户由 `account-keys` pallet 负责,不在 SFID。
+- 关联:`memory/04-decisions/ADR-016-account-key-pqc-migration.md`。

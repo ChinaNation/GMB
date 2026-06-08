@@ -94,13 +94,13 @@ enum SfidMultisigChainStatus {
 /// 把 SFID 端枚举映射成节点 UI 友好的字符串。
 ///
 /// 节点桌面 TS 端([citizenchain/node/frontend/offchain/types.ts])期望:
-/// `'Inactive' | 'Pending' | 'Registered' | 'Failed'`。
+/// `'Pending' | 'Active' | 'Closed' | 'Failed'`。
 fn map_chain_status(status: SfidMultisigChainStatus) -> &'static str {
     match status {
-        SfidMultisigChainStatus::NotOnChain => "Inactive",
+        SfidMultisigChainStatus::NotOnChain => "Pending",
         SfidMultisigChainStatus::PendingOnChain => "Pending",
-        SfidMultisigChainStatus::ActiveOnChain => "Registered",
-        SfidMultisigChainStatus::RevokedOnChain => "Failed",
+        SfidMultisigChainStatus::ActiveOnChain => "Active",
+        SfidMultisigChainStatus::RevokedOnChain => "Closed",
     }
 }
 

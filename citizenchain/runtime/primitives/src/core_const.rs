@@ -39,16 +39,51 @@ pub const DUOQIAN: &[u8; 7] = b"DUOQIAN";
 // 必须强制走这两个 tag，禁止落到 OP_INSTITUTION。OP_INSTITUTION 仅容纳 SFID 机构的自定义命名账户。
 pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: ss58 || sfid_number
 pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: ss58 || sfid_number
-pub const OP_STAKE: u8 = 0x02; // 质押账户 · input: ss58 || sfid_number
-pub const OP_AN: u8 = 0x03; // 安全基金账户 · input: ss58 || sfid_number
-pub const OP_HE: u8 = 0x04; // 两和基金账户 · input: ss58 || sfid_number
+pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: ss58 || sfid_number
+pub const OP_AN: u8 = 0x03; // 安全基金 · input: ss58 || sfid_number
+pub const OP_HE: u8 = 0x04; // 两和基金 · input: ss58 || sfid_number
 pub const OP_PERSONAL: u8 = 0x05; // 个人多签账户 · input: ss58 || creator_32 || account_name
 pub const OP_INSTITUTION: u8 = 0x06; // SFID 机构自定义命名账户 · input: ss58 || sfid_number || account_name
-                                     //（account_name 非空且不得为 "主账户"/"费用账户"/"质押账户" /"安全基金账户" /"两和基金账户" 等保留角色名）
+                                     //（account_name 非空且不得为 "主账户"/"费用账户"/"永久质押"/"安全基金"/"两和基金" 等保留角色名）
+
+/// SFID 机构号(sfid_number)链上/链下统一最大字节数（单一权威源）。
+///
+/// 真实格式 `R5-K3P1C1-N9-D4` 定长 26 字节（如 `LN001-GCB05-944805165-2026`），
+/// 取 32 留余量。链端 `MaxSfidNumberLength`、SFID 后端、各端测试一律 import 本常量，
+/// 禁止任何位置另写死长度值。
+pub const SFID_NUMBER_MAX_BYTES: u32 = 32;
+
+/// 机构账户受限注册保留名（单一权威源）。
+///
+/// - `主账户` / `费用账户`：每个机构强制生成的默认账户，创建时强制路由
+///   `OP_MAIN`/`OP_FEE`，不得作为自定义命名账户。
+/// - `永久质押` / `安全基金` / `两和基金`：制度专属账户，普通 SFID 机构禁止注册，
+///   account_name 命中即拒绝（`ReservedAccountName`）。
+pub const RESERVED_NAME_MAIN: &[u8] = "主账户".as_bytes();
+pub const RESERVED_NAME_FEE: &[u8] = "费用账户".as_bytes();
+pub const RESERVED_NAME_STAKE: &[u8] = "永久质押".as_bytes();
+pub const RESERVED_NAME_ANQUAN: &[u8] = "安全基金".as_bytes();
+pub const RESERVED_NAME_HE: &[u8] = "两和基金".as_bytes();
+
+/// 全部 5 个受限保留名，供各端遍历校验。
+pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 5] = [
+    RESERVED_NAME_MAIN,
+    RESERVED_NAME_FEE,
+    RESERVED_NAME_STAKE,
+    RESERVED_NAME_ANQUAN,
+    RESERVED_NAME_HE,
+];
+
+/// account_name 是否为"禁止注册"的制度专属保留名（永久质押/安全基金/两和基金）。
+///
+/// 主账户/费用账户不在此列：它们走强制默认路由，不是"禁止"而是"强制"。
+pub fn is_forbidden_account_name(name: &[u8]) -> bool {
+    name == RESERVED_NAME_STAKE || name == RESERVED_NAME_ANQUAN || name == RESERVED_NAME_HE
+}
 
 /// DUOQIAN 账户地址唯一派生入口。
 ///
-/// 中文注释：任何主账户、费用账户、质押账户、安全基金账户、两和基金账户、
+/// 中文注释：任何主账户、费用账户、永久质押、安全基金、两和基金、
 /// 个人多签和机构自定义账户都必须调用本函数；禁止在其它模块重新拼接
 /// `DUOQIAN || op_tag || ss58 || payload`。
 pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {

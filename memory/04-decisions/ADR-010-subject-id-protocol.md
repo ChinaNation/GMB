@@ -2,7 +2,7 @@
 
 - 状态:Superseded by target-state AccountId governance
 - 决议日期:2026-06-07
-- 关联任务卡:`memory/08-tasks/open/20260607-duoqian-accountid-governance.md`
+- 关联任务卡:`memory/08-tasks/done/20260607-duoqian-accountid-governance.md`
 
 ## 决议
 

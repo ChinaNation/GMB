@@ -10716,14 +10716,13 @@ extension PersonalDuoqianProposalEntityQueryProperty on QueryBuilder<
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
-extension GetDuoqianInstitutionEntityCollection on Isar {
-  IsarCollection<DuoqianInstitutionEntity> get duoqianInstitutionEntitys =>
-      this.collection();
+extension GetInstitutionEntityCollection on Isar {
+  IsarCollection<InstitutionEntity> get institutionEntitys => this.collection();
 }
 
-const DuoqianInstitutionEntitySchema = CollectionSchema(
-  name: r'DuoqianInstitutionEntity',
-  id: -2269869662941769306,
+const InstitutionEntitySchema = CollectionSchema(
+  name: r'InstitutionEntity',
+  id: -5851359460125618519,
   properties: {
     r'addedAtMillis': PropertySchema(
       id: 0,
@@ -10761,10 +10760,10 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
       type: IsarType.string,
     )
   },
-  estimateSize: _duoqianInstitutionEntityEstimateSize,
-  serialize: _duoqianInstitutionEntitySerialize,
-  deserialize: _duoqianInstitutionEntityDeserialize,
-  deserializeProp: _duoqianInstitutionEntityDeserializeProp,
+  estimateSize: _institutionEntityEstimateSize,
+  serialize: _institutionEntitySerialize,
+  deserialize: _institutionEntityDeserialize,
+  deserializeProp: _institutionEntityDeserializeProp,
   idName: r'id',
   indexes: {
     r'duoqianAddress': IndexSchema(
@@ -10809,14 +10808,14 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
   },
   links: {},
   embeddedSchemas: {},
-  getId: _duoqianInstitutionEntityGetId,
-  getLinks: _duoqianInstitutionEntityGetLinks,
-  attach: _duoqianInstitutionEntityAttach,
+  getId: _institutionEntityGetId,
+  getLinks: _institutionEntityGetLinks,
+  attach: _institutionEntityAttach,
   version: '3.1.0+1',
 );
 
-int _duoqianInstitutionEntityEstimateSize(
-  DuoqianInstitutionEntity object,
+int _institutionEntityEstimateSize(
+  InstitutionEntity object,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
@@ -10834,8 +10833,8 @@ int _duoqianInstitutionEntityEstimateSize(
   return bytesCount;
 }
 
-void _duoqianInstitutionEntitySerialize(
-  DuoqianInstitutionEntity object,
+void _institutionEntitySerialize(
+  InstitutionEntity object,
   IsarWriter writer,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
@@ -10849,13 +10848,13 @@ void _duoqianInstitutionEntitySerialize(
   writer.writeString(offsets[6], object.sfidNumber);
 }
 
-DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
+InstitutionEntity _institutionEntityDeserialize(
   Id id,
   IsarReader reader,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  final object = DuoqianInstitutionEntity();
+  final object = InstitutionEntity();
   object.addedAtMillis = reader.readLong(offsets[0]);
   object.adminAccountOrg = reader.readLongOrNull(offsets[1]);
   object.discoveredViaAdmin = reader.readBool(offsets[2]);
@@ -10867,7 +10866,7 @@ DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
   return object;
 }
 
-P _duoqianInstitutionEntityDeserializeProp<P>(
+P _institutionEntityDeserializeProp<P>(
   IsarReader reader,
   int propertyId,
   int offset,
@@ -10893,27 +10892,26 @@ P _duoqianInstitutionEntityDeserializeProp<P>(
   }
 }
 
-Id _duoqianInstitutionEntityGetId(DuoqianInstitutionEntity object) {
+Id _institutionEntityGetId(InstitutionEntity object) {
   return object.id;
 }
 
-List<IsarLinkBase<dynamic>> _duoqianInstitutionEntityGetLinks(
-    DuoqianInstitutionEntity object) {
+List<IsarLinkBase<dynamic>> _institutionEntityGetLinks(
+    InstitutionEntity object) {
   return [];
 }
 
-void _duoqianInstitutionEntityAttach(
-    IsarCollection<dynamic> col, Id id, DuoqianInstitutionEntity object) {
+void _institutionEntityAttach(
+    IsarCollection<dynamic> col, Id id, InstitutionEntity object) {
   object.id = id;
 }
 
-extension DuoqianInstitutionEntityByIndex
-    on IsarCollection<DuoqianInstitutionEntity> {
-  Future<DuoqianInstitutionEntity?> getByDuoqianAddress(String duoqianAddress) {
+extension InstitutionEntityByIndex on IsarCollection<InstitutionEntity> {
+  Future<InstitutionEntity?> getByDuoqianAddress(String duoqianAddress) {
     return getByIndex(r'duoqianAddress', [duoqianAddress]);
   }
 
-  DuoqianInstitutionEntity? getByDuoqianAddressSync(String duoqianAddress) {
+  InstitutionEntity? getByDuoqianAddressSync(String duoqianAddress) {
     return getByIndexSync(r'duoqianAddress', [duoqianAddress]);
   }
 
@@ -10925,13 +10923,13 @@ extension DuoqianInstitutionEntityByIndex
     return deleteByIndexSync(r'duoqianAddress', [duoqianAddress]);
   }
 
-  Future<List<DuoqianInstitutionEntity?>> getAllByDuoqianAddress(
+  Future<List<InstitutionEntity?>> getAllByDuoqianAddress(
       List<String> duoqianAddressValues) {
     final values = duoqianAddressValues.map((e) => [e]).toList();
     return getAllByIndex(r'duoqianAddress', values);
   }
 
-  List<DuoqianInstitutionEntity?> getAllByDuoqianAddressSync(
+  List<InstitutionEntity?> getAllByDuoqianAddressSync(
       List<String> duoqianAddressValues) {
     final values = duoqianAddressValues.map((e) => [e]).toList();
     return getAllByIndexSync(r'duoqianAddress', values);
@@ -10947,36 +10945,34 @@ extension DuoqianInstitutionEntityByIndex
     return deleteAllByIndexSync(r'duoqianAddress', values);
   }
 
-  Future<Id> putByDuoqianAddress(DuoqianInstitutionEntity object) {
+  Future<Id> putByDuoqianAddress(InstitutionEntity object) {
     return putByIndex(r'duoqianAddress', object);
   }
 
-  Id putByDuoqianAddressSync(DuoqianInstitutionEntity object,
+  Id putByDuoqianAddressSync(InstitutionEntity object,
       {bool saveLinks = true}) {
     return putByIndexSync(r'duoqianAddress', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByDuoqianAddress(
-      List<DuoqianInstitutionEntity> objects) {
+  Future<List<Id>> putAllByDuoqianAddress(List<InstitutionEntity> objects) {
     return putAllByIndex(r'duoqianAddress', objects);
   }
 
-  List<Id> putAllByDuoqianAddressSync(List<DuoqianInstitutionEntity> objects,
+  List<Id> putAllByDuoqianAddressSync(List<InstitutionEntity> objects,
       {bool saveLinks = true}) {
     return putAllByIndexSync(r'duoqianAddress', objects, saveLinks: saveLinks);
   }
 }
 
-extension DuoqianInstitutionEntityQueryWhereSort on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QWhere> {
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterWhere>
-      anyId() {
+extension InstitutionEntityQueryWhereSort
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QWhere> {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhere> anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterWhere>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhere>
       anyAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -10985,7 +10981,7 @@ extension DuoqianInstitutionEntityQueryWhereSort on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterWhere>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhere>
       anyDiscoveredViaAdmin() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -10995,10 +10991,10 @@ extension DuoqianInstitutionEntityQueryWhereSort on QueryBuilder<
   }
 }
 
-extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QWhereClause> {
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> idEqualTo(Id id) {
+extension InstitutionEntityQueryWhere
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QWhereClause> {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      idEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IdWhereClause.between(
         lower: id,
@@ -11007,8 +11003,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> idNotEqualTo(Id id) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      idNotEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -11030,8 +11026,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> idGreaterThan(Id id, {bool include = false}) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      idGreaterThan(Id id, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.greaterThan(lower: id, includeLower: include),
@@ -11039,8 +11035,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> idLessThan(Id id, {bool include = false}) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      idLessThan(Id id, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.lessThan(upper: id, includeUpper: include),
@@ -11048,8 +11044,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> idBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      idBetween(
     Id lowerId,
     Id upperId, {
     bool includeLower = true,
@@ -11065,8 +11061,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> duoqianAddressEqualTo(String duoqianAddress) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      duoqianAddressEqualTo(String duoqianAddress) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
         indexName: r'duoqianAddress',
@@ -11075,8 +11071,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> duoqianAddressNotEqualTo(String duoqianAddress) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      duoqianAddressNotEqualTo(String duoqianAddress) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -11110,8 +11106,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> addedAtMillisEqualTo(int addedAtMillis) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      addedAtMillisEqualTo(int addedAtMillis) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
         indexName: r'addedAtMillis',
@@ -11120,8 +11116,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> addedAtMillisNotEqualTo(int addedAtMillis) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      addedAtMillisNotEqualTo(int addedAtMillis) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -11155,8 +11151,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> addedAtMillisGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      addedAtMillisGreaterThan(
     int addedAtMillis, {
     bool include = false,
   }) {
@@ -11170,8 +11166,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> addedAtMillisLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      addedAtMillisLessThan(
     int addedAtMillis, {
     bool include = false,
   }) {
@@ -11185,8 +11181,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> addedAtMillisBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      addedAtMillisBetween(
     int lowerAddedAtMillis,
     int upperAddedAtMillis, {
     bool includeLower = true,
@@ -11203,8 +11199,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> discoveredViaAdminEqualTo(bool discoveredViaAdmin) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      discoveredViaAdminEqualTo(bool discoveredViaAdmin) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
         indexName: r'discoveredViaAdmin',
@@ -11213,8 +11209,8 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterWhereClause> discoveredViaAdminNotEqualTo(bool discoveredViaAdmin) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterWhereClause>
+      discoveredViaAdminNotEqualTo(bool discoveredViaAdmin) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -11249,10 +11245,10 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
   }
 }
 
-extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QFilterCondition> {
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> addedAtMillisEqualTo(int value) {
+extension InstitutionEntityQueryFilter
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QFilterCondition> {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      addedAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'addedAtMillis',
@@ -11261,8 +11257,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> addedAtMillisGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      addedAtMillisGreaterThan(
     int value, {
     bool include = false,
   }) {
@@ -11275,8 +11271,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> addedAtMillisLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      addedAtMillisLessThan(
     int value, {
     bool include = false,
   }) {
@@ -11289,8 +11285,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> addedAtMillisBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      addedAtMillisBetween(
     int lower,
     int upper, {
     bool includeLower = true,
@@ -11307,8 +11303,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminAccountOrgIsNull() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountOrgIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
         property: r'adminAccountOrg',
@@ -11316,8 +11312,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminAccountOrgIsNotNull() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountOrgIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
         property: r'adminAccountOrg',
@@ -11325,8 +11321,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminAccountOrgEqualTo(int? value) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountOrgEqualTo(int? value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'adminAccountOrg',
@@ -11335,8 +11331,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminAccountOrgGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountOrgGreaterThan(
     int? value, {
     bool include = false,
   }) {
@@ -11349,8 +11345,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminAccountOrgLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountOrgLessThan(
     int? value, {
     bool include = false,
   }) {
@@ -11363,8 +11359,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> adminAccountOrgBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountOrgBetween(
     int? lower,
     int? upper, {
     bool includeLower = true,
@@ -11381,8 +11377,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> discoveredViaAdminEqualTo(bool value) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      discoveredViaAdminEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'discoveredViaAdmin',
@@ -11391,8 +11387,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressEqualTo(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11405,8 +11401,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11421,8 +11417,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11437,8 +11433,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -11457,8 +11453,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressStartsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11471,8 +11467,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressEndsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11485,8 +11481,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       duoqianAddressContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
@@ -11497,8 +11492,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       duoqianAddressMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
@@ -11509,8 +11503,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressIsEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'duoqianAddress',
@@ -11519,8 +11513,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> duoqianAddressIsNotEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      duoqianAddressIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'duoqianAddress',
@@ -11529,8 +11523,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> idEqualTo(Id value) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'id',
@@ -11539,8 +11533,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> idGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      idGreaterThan(
     Id value, {
     bool include = false,
   }) {
@@ -11553,8 +11547,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> idLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      idLessThan(
     Id value, {
     bool include = false,
   }) {
@@ -11567,8 +11561,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> idBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      idBetween(
     Id lower,
     Id upper, {
     bool includeLower = true,
@@ -11585,8 +11579,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementEqualTo(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11599,8 +11593,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11615,8 +11609,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11631,8 +11625,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -11651,8 +11645,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementStartsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11665,8 +11659,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementEndsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11679,8 +11673,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       matchedAdminPubkeysElementContains(String value,
           {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -11692,8 +11685,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       matchedAdminPubkeysElementMatches(String pattern,
           {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -11705,8 +11697,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementIsEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'matchedAdminPubkeys',
@@ -11715,8 +11707,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysElementIsNotEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysElementIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'matchedAdminPubkeys',
@@ -11725,8 +11717,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysLengthEqualTo(int length) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysLengthEqualTo(int length) {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
         r'matchedAdminPubkeys',
@@ -11738,8 +11730,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysIsEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
         r'matchedAdminPubkeys',
@@ -11751,8 +11743,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysIsNotEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
         r'matchedAdminPubkeys',
@@ -11764,8 +11756,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysLengthLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysLengthLessThan(
     int length, {
     bool include = false,
   }) {
@@ -11780,8 +11772,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysLengthGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysLengthGreaterThan(
     int length, {
     bool include = false,
   }) {
@@ -11796,8 +11788,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> matchedAdminPubkeysLengthBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      matchedAdminPubkeysLengthBetween(
     int lower,
     int upper, {
     bool includeLower = true,
@@ -11814,8 +11806,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameEqualTo(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11828,8 +11820,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11844,8 +11836,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11860,8 +11852,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -11880,8 +11872,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameStartsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11894,8 +11886,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameEndsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11908,8 +11900,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       nameContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
@@ -11920,8 +11911,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       nameMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
@@ -11932,8 +11922,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameIsEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'name',
@@ -11942,8 +11932,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> nameIsNotEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      nameIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'name',
@@ -11952,8 +11942,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberEqualTo(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -11966,8 +11956,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberGreaterThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11982,8 +11972,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberLessThan(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11998,8 +11988,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberBetween(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -12018,8 +12008,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberStartsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -12032,8 +12022,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberEndsWith(
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -12046,8 +12036,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       sfidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
@@ -12058,8 +12047,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-          QAfterFilterCondition>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
@@ -12070,8 +12058,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberIsEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'sfidNumber',
@@ -12080,8 +12068,8 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidNumberIsNotEmpty() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      sfidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'sfidNumber',
@@ -12091,92 +12079,92 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 }
 
-extension DuoqianInstitutionEntityQueryObject on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QFilterCondition> {}
+extension InstitutionEntityQueryObject
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QFilterCondition> {}
 
-extension DuoqianInstitutionEntityQueryLinks on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QFilterCondition> {}
+extension InstitutionEntityQueryLinks
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QFilterCondition> {}
 
-extension DuoqianInstitutionEntityQuerySortBy on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QSortBy> {
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+extension InstitutionEntityQuerySortBy
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QSortBy> {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByAddedAtMillisDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByAdminAccountOrg() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'adminAccountOrg', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByAdminAccountOrgDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'adminAccountOrg', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByDiscoveredViaAdmin() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'discoveredViaAdmin', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByDiscoveredViaAdminDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByDuoqianAddress() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'duoqianAddress', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByDuoqianAddressDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'duoqianAddress', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortBySfidNumber() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sfidNumber', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortBySfidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sfidNumber', Sort.desc);
@@ -12184,100 +12172,99 @@ extension DuoqianInstitutionEntityQuerySortBy on QueryBuilder<
   }
 }
 
-extension DuoqianInstitutionEntityQuerySortThenBy on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QSortThenBy> {
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+extension InstitutionEntityQuerySortThenBy
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QSortThenBy> {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByAddedAtMillisDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByAdminAccountOrg() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'adminAccountOrg', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByAdminAccountOrgDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'adminAccountOrg', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByDiscoveredViaAdmin() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'discoveredViaAdmin', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByDiscoveredViaAdminDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByDuoqianAddress() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'duoqianAddress', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByDuoqianAddressDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'duoqianAddress', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      thenById() {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenBySfidNumber() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sfidNumber', Sort.asc);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenBySfidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sfidNumber', Sort.desc);
@@ -12285,30 +12272,30 @@ extension DuoqianInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 }
 
-extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct> {
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+extension InstitutionEntityQueryWhereDistinct
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct> {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctByAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'addedAtMillis');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctByAdminAccountOrg() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'adminAccountOrg');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctByDiscoveredViaAdmin() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'discoveredViaAdmin');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctByDuoqianAddress({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'duoqianAddress',
@@ -12316,21 +12303,21 @@ extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctByMatchedAdminPubkeys() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'matchedAdminPubkeys');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
-      distinctByName({bool caseSensitive = true}) {
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct> distinctByName(
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctBySfidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
@@ -12338,57 +12325,56 @@ extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 }
 
-extension DuoqianInstitutionEntityQueryProperty on QueryBuilder<
-    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QQueryProperty> {
-  QueryBuilder<DuoqianInstitutionEntity, int, QQueryOperations> idProperty() {
+extension InstitutionEntityQueryProperty
+    on QueryBuilder<InstitutionEntity, InstitutionEntity, QQueryProperty> {
+  QueryBuilder<InstitutionEntity, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, int, QQueryOperations>
+  QueryBuilder<InstitutionEntity, int, QQueryOperations>
       addedAtMillisProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'addedAtMillis');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, int?, QQueryOperations>
+  QueryBuilder<InstitutionEntity, int?, QQueryOperations>
       adminAccountOrgProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'adminAccountOrg');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, bool, QQueryOperations>
+  QueryBuilder<InstitutionEntity, bool, QQueryOperations>
       discoveredViaAdminProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'discoveredViaAdmin');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
+  QueryBuilder<InstitutionEntity, String, QQueryOperations>
       duoqianAddressProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'duoqianAddress');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, List<String>, QQueryOperations>
+  QueryBuilder<InstitutionEntity, List<String>, QQueryOperations>
       matchedAdminPubkeysProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'matchedAdminPubkeys');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
-      nameProperty() {
+  QueryBuilder<InstitutionEntity, String, QQueryOperations> nameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'name');
     });
   }
 
-  QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
+  QueryBuilder<InstitutionEntity, String, QQueryOperations>
       sfidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'sfidNumber');

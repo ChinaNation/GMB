@@ -2,7 +2,7 @@
 //!
 //! 中文注释:清算行资格属于私权机构业务,公权机构和公共主体服务不保存该规则。
 
-use crate::subjects::model::MultisigInstitution;
+use crate::subjects::model::Institution;
 
 // ─── 清算行资格白名单(2026-04-24, ADR-007) ─────────────────────
 //
@@ -26,8 +26,8 @@ use crate::subjects::model::MultisigInstitution;
 /// 本函数只做纯逻辑判定,便于单测。
 #[allow(dead_code)]
 pub fn is_clearing_bank_eligible(
-    inst: &MultisigInstitution,
-    parent: Option<&MultisigInstitution>,
+    inst: &Institution,
+    parent: Option<&Institution>,
 ) -> bool {
     match inst.subject_property.as_str() {
         "S" => inst.sub_type.as_deref() == Some("JOINT_STOCK"),
@@ -54,15 +54,15 @@ mod tests {
         subject_property: &str,
         sub_type: Option<&str>,
         parent_sfid_number: Option<&str>,
-    ) -> MultisigInstitution {
-        MultisigInstitution {
+    ) -> Institution {
+        Institution {
             sfid_number: match subject_property {
                 "F" => "AH001-FCB0P-123456789-2026".to_string(),
                 "G" => "AH001-GCB0V-123456789-2026".to_string(),
                 _ => "AH001-SCB0V-123456789-2026".to_string(),
             },
             institution_name: Some("测试机构".to_string()),
-            full_name: Some("测试机构".to_string()),
+            sfid_name: Some("测试机构".to_string()),
             short_name: Some("测试机构".to_string()),
             status: "ACTIVE".to_string(),
             category: InstitutionCategory::PrivateInstitution,

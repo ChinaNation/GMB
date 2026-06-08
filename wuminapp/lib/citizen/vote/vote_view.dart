@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
-import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/governance/institution_manage_detail_page.dart';
 
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/pressable_card.dart';
@@ -612,7 +612,7 @@ class _VoteViewState extends State<VoteView> {
       // 多签管理提案
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => DuoqianManageDetailPage(
+          builder: (_) => InstitutionManageDetailPage(
             institution: inst,
             proposalId: proposalId,
             proposalContext: proposalContext,

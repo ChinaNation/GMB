@@ -4,9 +4,9 @@
 //! 是 DoubleMap,一个 sfid_number 下可挂多个 name,每个 name 派生独立多签地址。
 //! sfid 系统这里对应拆两层:
 //!
-//! - `MultisigInstitution`:每个 sfid_number 唯一,存机构展示信息(institution_name 等),
+//! - `Institution`:每个 sfid_number 唯一,存机构展示信息(institution_name 等),
 //!   **不**进链。
-//! - `MultisigAccount`:以 `(sfid_number, account_name)` 为复合 key,account_name 是
+//! - `InstitutionAccount`:以 `(sfid_number, account_name)` 为复合 key,account_name 是
 //!   **进链的 name**,一个机构下可挂多个。
 //!
 //! 详见 `feedback_institutions_two_layer.md`。
@@ -47,7 +47,7 @@ impl Default for MultisigChainStatus {
 
 /// 机构(每个 sfid_number 唯一)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MultisigInstitution {
+pub struct Institution {
     /// SFID 号,参与链上派生。
     pub sfid_number: String,
     /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
@@ -60,7 +60,7 @@ pub struct MultisigInstitution {
     pub institution_name: Option<String>,
     /// 机构全称。列表只显示 `institution_name`,详情页显示全称和简称。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub full_name: Option<String>,
+    pub sfid_name: Option<String>,
     /// 机构简称。确定性公权机构默认把简称写入 `institution_name` 作为列表名称。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub short_name: Option<String>,
@@ -127,7 +127,7 @@ pub struct MultisigInstitution {
     pub created_at: DateTime<Utc>,
 }
 
-impl HasProvinceCity for MultisigInstitution {
+impl HasProvinceCity for Institution {
     fn province(&self) -> &str {
         &self.province
     }
@@ -138,7 +138,7 @@ impl HasProvinceCity for MultisigInstitution {
 
 /// 机构下的多签账户(复合 key = (sfid_number, account_name))。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MultisigAccount {
+pub struct InstitutionAccount {
     /// 所属机构的 sfid_number。
     pub sfid_number: String,
     /// 账户名称,**进链的 name 字段**。同 sfid_number 下必须唯一。
@@ -209,7 +209,7 @@ pub struct CreateInstitutionInput {
     /// 两步式:私权(S/F)不传,由详情页 `update_institution` 补填;
     /// `JY` 手动新增学校机构必传;普通私权两步式不传;自动公权机构不走该创建 DTO。
     pub institution_name: Option<String>,
-    pub full_name: Option<String>,
+    pub sfid_name: Option<String>,
     pub short_name: Option<String>,
     /// 私法人子类型。两步式改造后:**创建阶段不再接受** sub_type,
     /// 统一由 `update_institution` 在详情页设置;创建请求传入该字段会被拒绝。
@@ -245,7 +245,7 @@ pub struct CreateInstitutionOutput {
 pub struct UpdateInstitutionInput {
     pub institution_name: Option<String>,
     #[serde(default)]
-    pub full_name: Option<String>,
+    pub sfid_name: Option<String>,
     #[serde(default)]
     pub short_name: Option<String>,
     pub sub_type: Option<String>,
@@ -297,7 +297,7 @@ pub struct InstitutionListRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub institution_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub full_name: Option<String>,
+    pub sfid_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_name: Option<String>,
     pub status: String,
@@ -350,8 +350,8 @@ pub struct ParentInstitutionRow {
 
 #[derive(Debug, Serialize)]
 pub struct InstitutionDetailOutput {
-    pub institution: MultisigInstitution,
-    pub accounts: Vec<MultisigAccount>,
+    pub institution: Institution,
+    pub accounts: Vec<InstitutionAccount>,
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,

@@ -559,9 +559,7 @@ pub mod pallet {
             Ok(())
         }
 
-        // call_index = 3, 4, 5 已废弃: execute_transfer /
-        // execute_safety_fund_transfer / execute_sweep_to_main 已统一到
-        // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎入口。
+        // call_index 3/4/5 永久保留空位,不复用。
     }
 
     impl<T: Config> Pallet<T> {
