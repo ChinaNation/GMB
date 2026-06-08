@@ -56,6 +56,9 @@
 - `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 - `memory/08-tasks/open/20260607-wallet-pqc-passkey.md`
+- `memory/08-tasks/open/20260607-sfid-cpms-pqc-signing.md`
+- `memory/08-tasks/open/20260607-pqc-step1-chain-runtime-node.md`
+- `memory/08-tasks/open/20260607-pqc-step2-wallet-wuminapp-wumin.md`
 
 ## done
 

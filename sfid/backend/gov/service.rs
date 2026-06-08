@@ -616,32 +616,10 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     else {
         return;
     };
+    // 中文注释:5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
+    // china_zf.rs CHINA_ZF(带 main/fee/duoqian_admins),由 :375 的常量循环单一 push;
+    // 此处不再用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
     for (short_name, sfid_name, org_code) in [
-        (
-            "联邦特勤局",
-            "中华民族联邦共和国总统府联邦特勤局",
-            "FEDERAL_SPECIAL_SERVICE",
-        ),
-        (
-            "联邦安全局",
-            "中华民族联邦共和国总统府联邦安全局",
-            "FEDERAL_SECURITY",
-        ),
-        (
-            "联邦情报局",
-            "中华民族联邦共和国总统府联邦情报局",
-            "FEDERAL_INTELLIGENCE",
-        ),
-        (
-            "联邦人事局",
-            "中华民族联邦共和国总统府联邦人事局",
-            "FEDERAL_PERSONNEL",
-        ),
-        (
-            "联邦注册局",
-            "中华民族联邦共和国总统府联邦注册局",
-            "FEDERAL_REGISTRY",
-        ),
         (
             "国家参议会",
             "中华民族联邦共和国国家立法院参议员议政会",
@@ -1263,6 +1241,47 @@ fn bulk_write_targets(
     if targets.is_empty() {
         return Ok(());
     }
+    // 中文注释:号生成若在同一批 targets 内产生重复 sfid_number(确定性 N9 碰撞或重复目标),
+    // 后续 bulk upsert 会以 21000 cardinality_violation 报错且不带定位信息。这里提前全量探测,
+    // 带出碰撞双方机构信息,便于判断是重复目标(同 seed)还是 N9 哈希碰撞(不同 seed)。
+    {
+        let mut seen: std::collections::HashMap<&str, &OfficialInstitutionTarget> =
+            std::collections::HashMap::new();
+        let mut collisions: Vec<String> = Vec::new();
+        for target in targets {
+            if let Some(prev) = seen.insert(target.sfid_number.as_str(), target) {
+                collisions.push(format!(
+                    "{}: [{} | {}{} | inst={} org={}] vs [{} | {}{} | inst={} org={}]",
+                    target.sfid_number,
+                    prev.sfid_name,
+                    prev.city,
+                    prev.town,
+                    prev.institution_code,
+                    prev.org_code,
+                    target.sfid_name,
+                    target.city,
+                    target.town,
+                    target.institution_code,
+                    target.org_code,
+                ));
+            }
+        }
+        if !collisions.is_empty() {
+            let shown = collisions
+                .iter()
+                .take(20)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n  ");
+            return Err(format!(
+                "gov reconcile produced {} duplicate sfid_number(s) among {} targets; first {}:\n  {}",
+                collisions.len(),
+                targets.len(),
+                collisions.len().min(20),
+                shown
+            ));
+        }
+    }
     let actor = actor.to_string();
     let targets = targets.to_vec();
     db.with_client(move |conn| {
@@ -1372,11 +1391,20 @@ fn bulk_write_target_chunk(
              WHERE t.sfid_number = u.sfid_number
                AND t.p_code <> u.p_code"
         );
-        tx.execute(sql.as_str(), &[&sfids, &p_codes])
-            .map_err(|e| format!("bulk delete {table} rows outside scope failed: {e}"))?;
+        tx.execute(sql.as_str(), &[&sfids, &p_codes]).map_err(|e| {
+            format!(
+                "bulk delete {table} rows outside scope failed: {}",
+                crate::core::db::postgres_error_text(&e)
+            )
+        })?;
     }
     tx.execute("DELETE FROM private WHERE sfid_number = ANY($1)", &[&sfids])
-        .map_err(|e| format!("bulk delete private rows for gov targets failed: {e}"))?;
+        .map_err(|e| {
+            format!(
+                "bulk delete private rows for gov targets failed: {}",
+                crate::core::db::postgres_error_text(&e)
+            )
+        })?;
 
     tx.execute(
         "INSERT INTO ids (sfid_number, kind, p_code, c_code)
@@ -1388,7 +1416,12 @@ fn bulk_write_target_chunk(
          WHERE ids.kind = 'PUBLIC'",
         &[&sfids, &p_codes, &c_codes],
     )
-    .map_err(|e| format!("bulk upsert gov ids failed: {e}"))?;
+    .map_err(|e| {
+        format!(
+            "bulk upsert gov ids failed: {}",
+            crate::core::db::postgres_error_text(&e)
+        )
+    })?;
 
     tx.execute(
         "INSERT INTO subjects (
@@ -1457,7 +1490,12 @@ fn bulk_write_target_chunk(
             &actor,
         ],
     )
-    .map_err(|e| format!("bulk upsert gov subjects failed: {e}"))?;
+    .map_err(|e| {
+        format!(
+            "bulk upsert gov subjects failed: {}",
+            crate::core::db::postgres_error_text(&e)
+        )
+    })?;
 
     tx.execute(
         "INSERT INTO gov (
@@ -1491,7 +1529,12 @@ fn bulk_write_target_chunk(
             &home_c_codes,
         ],
     )
-    .map_err(|e| format!("bulk upsert gov rows failed: {e}"))?;
+    .map_err(|e| {
+        format!(
+            "bulk upsert gov rows failed: {}",
+            crate::core::db::postgres_error_text(&e)
+        )
+    })?;
 
     let mut account_sfids = Vec::with_capacity(targets.len() * DEFAULT_ACCOUNT_COUNT as usize);
     let mut account_p_codes = Vec::with_capacity(account_sfids.capacity());
@@ -1527,7 +1570,12 @@ fn bulk_write_target_chunk(
             &account_addresses,
         ],
     )
-    .map_err(|e| format!("bulk upsert gov accounts failed: {e}"))?;
+    .map_err(|e| {
+        format!(
+            "bulk upsert gov accounts failed: {}",
+            crate::core::db::postgres_error_text(&e)
+        )
+    })?;
 
     Ok(())
 }
