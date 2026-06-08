@@ -31,7 +31,6 @@ pub mod data;
 pub mod id;
 pub mod index;
 pub mod limit;
-pub mod migrations;
 pub mod mutex;
 pub mod snapshot;
 pub mod traits;
@@ -181,9 +180,8 @@ pub mod pallet {
 
     /// VotingEngine 主 pallet on-chain storage 版本。
     ///
-    /// - v0:历史值,无反向索引,无 ProposalDisplayId,提案主键 `id = year * 1_000_000 + seq`
-    /// - v1:`migrations::v1::MigrateToV1` 给老提案 backfill ProposalDisplayId +
-    ///   ProposalsByOrg/Institution/Owner/Year 4 张反向索引
+    /// 全新创世即 v1 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
+    /// ProposalsByOrg/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
     pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::pallet]

@@ -25,14 +25,10 @@ use votingengine::Proposal;
 
 pub mod jointinternal;
 pub mod jointreferendum;
-pub mod migrations;
 pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
-
-#[cfg(test)]
-mod tests;
 
 pub use pallet::*;
 

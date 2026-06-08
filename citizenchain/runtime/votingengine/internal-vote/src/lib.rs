@@ -41,7 +41,6 @@ use votingengine::{
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
 };
 
-pub mod migrations;
 pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]

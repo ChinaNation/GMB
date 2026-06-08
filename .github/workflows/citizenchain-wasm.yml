@@ -36,6 +36,10 @@ jobs:
       # 编译前以链上 WASM 版本为准做保护性检查:源码版本不足时只在 CI 工作区临时 +1。
       # 这里不提交回 main,避免 CI 自动 commit 触发二次构建和版本号噪音。
       - name: 校验链上 WASM 版本并临时提升源码版本
+        # 中文注释:全新创世(commit message 含「重新创世」)跳过链上版本比对与 +1 提升,
+        # 直接用源码 spec_version 构建(本次归零=1),不被旧网 147.224.14.117 的版本带高,
+        # 也避免旧网在重新创世期间不可达导致此步失败。普通推送保持原有版本守卫。
+        if: ${{ !contains(github.event.head_commit.message, '重新创世') }}
         env:
           CITIZENCHAIN_RPC_URL: ${{ secrets.CITIZENCHAIN_RPC_URL || vars.CITIZENCHAIN_RPC_URL }}
           CITIZENCHAIN_SSH_HOST: ${{ secrets.CITIZENCHAIN_SSH_HOST || vars.CITIZENCHAIN_SSH_HOST || '147.224.14.117' }}
