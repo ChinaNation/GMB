@@ -242,16 +242,9 @@ pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 
 /// Runtime upgrade migrations 集合。
 ///
-/// 跑顺序按 tuple 元素从左到右,Executive 在 set_code 后第一时间调度。
-/// 每个 migration 用自己 pallet 的 StorageVersion 做幂等门控,二次跑安全。
-pub type Migrations = (
-    // 中文注释:跑顺序很关键。先 sub-pallet move_prefix(把 InternalVote/JointVote 的
-    // storage 从 VotingEngine 前缀搬走),再跑 votingengine v1(扫主 pallet 现存
-    // Proposals 给反向索引 backfill)。三组 migration 互不依赖,但保持声明顺序便于追踪。
-    internal_vote::migrations::v1::MigrateV0ToV1<Runtime>,
-    joint_vote::migrations::v1::MigrateV0ToV1<Runtime>,
-    votingengine::migrations::v1::MigrateToV1<Runtime>,
-);
+/// 本链全新创世,无任何历史链上数据需要迁移,故为空元组。
+/// 将来链上线后如需 storage 迁移,在此 tuple 按声明顺序挂入 `OnRuntimeUpgrade`。
+pub type Migrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<

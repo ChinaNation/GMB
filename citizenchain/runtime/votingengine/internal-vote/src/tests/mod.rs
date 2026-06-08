@@ -30,9 +30,8 @@ use votingengine::traits::{
 use votingengine::SfidEligibility;
 use votingengine::{
     PendingCleanupStage, Proposal, ProposalExecutionOutcome, VoteCountU32, VoteCountU64,
-    VoteCredentialCleanup, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_INTERNAL,
-    STAGE_JOINT, STAGE_REFERENDUM, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
-    STATUS_REJECTED, STATUS_VOTING,
+    VoteCredentialCleanup, PROPOSAL_KIND_JOINT, STAGE_INTERNAL, STAGE_JOINT, STAGE_REFERENDUM,
+    STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;

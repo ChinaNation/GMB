@@ -52,7 +52,6 @@ fn grandpa_key_to_genesis_ss58(key: &[u8; 32]) -> String {
     authority.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
 }
 
-
 #[cfg(all(feature = "std", test))]
 fn json_amount_to_u128(v: &Value) -> Option<u128> {
     if let Some(value) = v.as_u64() {

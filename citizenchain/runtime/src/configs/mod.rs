@@ -26,7 +26,10 @@
 // Substrate and Polkadot dependencies
 use alloc::vec::Vec;
 use codec::Decode;
+#[cfg(not(feature = "runtime-benchmarks"))]
 use codec::Encode;
+#[cfg(not(feature = "runtime-benchmarks"))]
+use frame_support::traits::UnfilteredDispatchable;
 use frame_support::{
     derive_impl,
     dispatch::DispatchResult,
@@ -35,7 +38,7 @@ use frame_support::{
         fungible::{Balanced, Credit, Inspect},
         tokens::{Fortitude, Preservation},
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
-        UnfilteredDispatchable, VariantCountOf,
+        VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
@@ -46,7 +49,10 @@ use frame_support::{
 use frame_system::limits::{BlockLength, BlockWeights};
 use onchain_transaction::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
-use sp_core::{sr25519, Void};
+#[cfg(not(feature = "runtime-benchmarks"))]
+use sp_core::sr25519;
+use sp_core::Void;
+#[cfg(not(feature = "runtime-benchmarks"))]
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 #[allow(unused_imports)]
 use sp_runtime::traits::Hash as _;
@@ -54,14 +60,14 @@ use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
 
 // Local module imports
-#[cfg(not(feature = "runtime-benchmarks"))]
-use super::RuntimeUpgrade;
 use super::{
     AccountId, Address, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance,
-    GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
+    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
+#[cfg(not(feature = "runtime-benchmarks"))]
+use super::{ResolutionIssuance, RuntimeUpgrade};
 
 const NORMAL_DISPATCH_RATIO: Perbill =
     Perbill::from_percent(primitives::core_const::NORMAL_DISPATCH_PERCENT);
@@ -87,9 +93,8 @@ parameter_types! {
 ///
 /// This can be a tuple of types, each implementing `OnRuntimeUpgrade`.
 ///
-/// 中文注释:`votingengine::migrations::v1::MigrateToV1` 已实现但**未注册**,
-/// spec_version 维持 0 不升级。一旦决定 0 → 1 升级,在此 tuple 加入 MigrateToV1
-/// 即可激活回填。代码已就绪,只是这一行未挂上去。
+/// 中文注释:本链全新创世,无历史链上数据需迁移,故为空。
+/// 将来链上线后如需单块迁移,在此 tuple 挂入 `OnRuntimeUpgrade` 即可。
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
 

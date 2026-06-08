@@ -7,13 +7,8 @@
 //!   渲染层基于该表拼接 "2026-#000123" 类格式;展示格式想换季度制 / 字母分组
 //!   只动渲染层,主键和存储不动。
 //!
-//! v0 历史格式 `year * 1_000_000 + counter` 已下线;migrations/v1.rs 在
-//! `on_runtime_upgrade` 期间反推存量提案的 `(year, seq_in_year)` 回填到
-//! `ProposalDisplayId`,业务模块**完全不感知**主键格式变化。
-//!
-//! 注:`migrations::v1::MigrateToV1` 已实现但**未在 runtime 注册**(spec_version
-//! 维持 0,等待用户拍板升级)。当前阶段链上没有存量提案需要回填,代码新写的
-//! 提案直接走双层 ID 路径(主键单调 + ProposalDisplayId 同事务写入)。
+//! 历史格式 `year * 1_000_000 + counter` 从一开始就不存在于本链:全新创世直接走
+//! 双层 ID 路径(主键单调 + ProposalDisplayId 同事务写入),无需任何回填迁移。
 
 use frame_support::traits::UnixTime;
 use sp_runtime::DispatchError;
