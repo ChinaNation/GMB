@@ -452,15 +452,19 @@ impl Db {
         conn.batch_execute(
             "ALTER TABLE subjects
                 ADD COLUMN IF NOT EXISTS subject_property TEXT,
+                ADD COLUMN IF NOT EXISTS sfid_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_sfid_number TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_path TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_mime TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_size BIGINT,
-                DROP COLUMN IF EXISTS chain_status;
+                DROP COLUMN IF EXISTS chain_status,
+                DROP COLUMN IF EXISTS full_name,
+                DROP COLUMN IF EXISTS a3;
              ALTER TABLE private
-                ADD COLUMN IF NOT EXISTS subject_property TEXT;
+                ADD COLUMN IF NOT EXISTS subject_property TEXT,
+                DROP COLUMN IF EXISTS a3;
              ALTER TABLE gov
                 DROP COLUMN IF EXISTS chain_status;",
         )
@@ -521,6 +525,7 @@ impl Db {
     // 中文注释:把启动期失败提前到清晰的目标状态校验,避免后续索引或业务 SQL 报隐晦字段错误。
     fn validate_target_subject_schema(conn: &mut postgres::Client) -> Result<(), String> {
         for column in [
+            "sfid_name",
             "legal_rep_name",
             "legal_rep_sfid_number",
             "legal_rep_photo_path",
@@ -532,7 +537,14 @@ impl Db {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
         Self::ensure_column_state(conn, "private", "subject_property", true)?;
-        for (table, column) in [("subjects", "chain_status"), ("gov", "chain_status")] {
+        // 中文注释:旧 SFID 方案残列(full_name 已改名 sfid_name、a3 段已废)必须不存在。
+        for (table, column) in [
+            ("subjects", "chain_status"),
+            ("gov", "chain_status"),
+            ("subjects", "full_name"),
+            ("subjects", "a3"),
+            ("private", "a3"),
+        ] {
             Self::ensure_column_state(conn, table, column, false)?;
         }
         Ok(())

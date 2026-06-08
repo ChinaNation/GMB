@@ -180,6 +180,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_legacy_five_segment_format() {
+        // 旧版 5 段号(A3-R5-T2P1C1-N9-D4)必须校验失败,供 purge-legacy-sfid 判定旧号。
+        assert!(validate_sfid_number_format("GFR-AH001-ZF0X-898100720-2026").is_err());
+        // 新版 4 段号必须通过。
+        assert!(validate_sfid_number_format("LN001-GCB05-944805165-2026").is_ok());
+    }
+
+    #[test]
     fn parses_protocol_parts() {
         let parts = parse_sfid_number_parts("LN001-GCB05-944805165-2026").unwrap();
         assert_eq!(parts.r5, "LN001");

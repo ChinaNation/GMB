@@ -1078,6 +1078,102 @@ impl Db {
         })
     }
 
+    // 中文注释:删除全部旧格式 SFID 号在各号承载表里的残留行。旧号判定唯一标准 =
+    // 过不了 `crate::number::validate_sfid_number_format`(新版 4 段 + checksum)。
+    // dry_run 时在事务内删完即回滚,只回报计数,不改库。
+    pub(crate) fn purge_legacy_sfid_rows(&self, dry_run: bool) -> Result<PurgeReport, String> {
+        // 中文注释:号承载表清单,无外键约束,删除顺序无关;主登记表 ids 放最后。
+        const SFID_TABLES: [&str; 9] = [
+            "subjects",
+            "citizens",
+            "gov",
+            "private",
+            "accounts",
+            "docs",
+            "cpms_sites",
+            "citizen_status_imports",
+            "ids",
+        ];
+        self.with_client(move |conn| {
+            // 1. 收集号全集与 kind(ids 为准,subjects 补孤儿,cpms_sites 兜底)。
+            let mut kind_by_sfid: std::collections::HashMap<String, String> =
+                std::collections::HashMap::new();
+            for row in conn
+                .query("SELECT sfid_number, kind FROM ids", &[])
+                .map_err(|e| format!("scan ids failed: {e}"))?
+            {
+                kind_by_sfid.entry(row.get(0)).or_insert_with(|| row.get(1));
+            }
+            for row in conn
+                .query("SELECT DISTINCT sfid_number, kind FROM subjects", &[])
+                .map_err(|e| format!("scan subjects failed: {e}"))?
+            {
+                kind_by_sfid.entry(row.get(0)).or_insert_with(|| row.get(1));
+            }
+            for row in conn
+                .query("SELECT DISTINCT sfid_number FROM cpms_sites", &[])
+                .map_err(|e| format!("scan cpms_sites failed: {e}"))?
+            {
+                kind_by_sfid
+                    .entry(row.get(0))
+                    .or_insert_with(|| "PUBLIC".to_string());
+            }
+
+            // 2. 筛旧号:过不了新格式校验的即旧号。
+            let legacy: Vec<String> = kind_by_sfid
+                .keys()
+                .filter(|sfid| crate::number::validate_sfid_number_format(sfid).is_err())
+                .cloned()
+                .collect();
+            let private_count = legacy
+                .iter()
+                .filter(|sfid| kind_by_sfid.get(*sfid).map(String::as_str) == Some("PRIVATE"))
+                .count();
+            let citizen_count = legacy
+                .iter()
+                .filter(|sfid| kind_by_sfid.get(*sfid).map(String::as_str) == Some("CITIZEN"))
+                .count();
+
+            if legacy.is_empty() {
+                return Ok(PurgeReport {
+                    legacy_count: 0,
+                    private_count: 0,
+                    citizen_count: 0,
+                    per_table_deleted: SFID_TABLES.iter().map(|table| (*table, 0)).collect(),
+                    dry_run,
+                });
+            }
+
+            // 3. 一事务内逐表删除,记录各表行数。
+            let mut tx = conn
+                .transaction()
+                .map_err(|e| format!("begin purge legacy sfid tx failed: {e}"))?;
+            let mut per_table_deleted = Vec::with_capacity(SFID_TABLES.len());
+            for table in SFID_TABLES {
+                let sql = format!("DELETE FROM {table} WHERE sfid_number = ANY($1)");
+                let deleted = tx
+                    .execute(sql.as_str(), &[&legacy])
+                    .map_err(|e| format!("delete legacy sfid from {table} failed: {e}"))?;
+                per_table_deleted.push((table, deleted));
+            }
+            if dry_run {
+                tx.rollback()
+                    .map_err(|e| format!("rollback purge legacy sfid dry-run failed: {e}"))?;
+            } else {
+                tx.commit()
+                    .map_err(|e| format!("commit purge legacy sfid failed: {e}"))?;
+            }
+
+            Ok(PurgeReport {
+                legacy_count: legacy.len(),
+                private_count,
+                citizen_count,
+                per_table_deleted,
+                dry_run,
+            })
+        })
+    }
+
     pub(crate) fn list_institutions_exact(
         &self,
         category: Option<&str>,
@@ -1394,6 +1490,9 @@ enum BackendCommand {
         province_code: String,
         city_code: String,
     },
+    PurgeLegacySfid {
+        dry_run: bool,
+    },
 }
 
 fn parse_backend_command() -> BackendCommand {
@@ -1430,6 +1529,9 @@ fn parse_backend_command() -> BackendCommand {
                 city_code,
             }
         }
+        "purge-legacy-sfid" => BackendCommand::PurgeLegacySfid {
+            dry_run: args.iter().any(|arg| arg == "--dry-run"),
+        },
         other => panic!("unknown sfid-backend command: {other}"),
     }
 }
@@ -1667,6 +1769,10 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
             );
             return true;
         }
+        BackendCommand::PurgeLegacySfid { dry_run } => {
+            run_purge_legacy_sfid(state, dry_run);
+            return true;
+        }
         BackendCommand::ReconcileGovProvince { province_code } => (
             OfficialReconcileScope::Province { province_code },
             false,
@@ -1699,6 +1805,70 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
         "sfid gov directory command finished"
     );
     true
+}
+
+#[derive(Debug)]
+struct PurgeReport {
+    legacy_count: usize,
+    private_count: usize,
+    citizen_count: usize,
+    per_table_deleted: Vec<(&'static str, u64)>,
+    dry_run: bool,
+}
+
+// 中文注释:清掉所有旧格式 SFID 号(身份ID系统重构前入库的残留),再把能确定性
+// 自动重建的公权机构(含公安局)按新号重对账。PRIVATE 私权机构与公民属用户创建/
+// 钱包绑定,删后无法自动重建,需由用户重建/重绑。链端与 CPMS host 不在本命令范围。
+fn run_purge_legacy_sfid(state: &AppState, dry_run: bool) {
+    let report = state
+        .db
+        .purge_legacy_sfid_rows(dry_run)
+        .unwrap_or_else(|e| panic!("purge-legacy-sfid failed: {e}"));
+    let per_table = report
+        .per_table_deleted
+        .iter()
+        .map(|(table, count)| format!("{table}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    info!(
+        dry_run = report.dry_run,
+        legacy_count = report.legacy_count,
+        private_permanently_deleted = report.private_count,
+        citizen_permanently_deleted = report.citizen_count,
+        per_table = %per_table,
+        "sfid legacy purge finished"
+    );
+    if report.dry_run {
+        info!("purge-legacy-sfid dry-run: no rows changed; re-run without --dry-run to apply");
+        return;
+    }
+    if report.legacy_count == 0 {
+        info!("purge-legacy-sfid: no legacy sfid rows; skip reconcile");
+        return;
+    }
+    if report.private_count > 0 || report.citizen_count > 0 {
+        warn!(
+            private_permanently_deleted = report.private_count,
+            citizen_permanently_deleted = report.citizen_count,
+            "purge-legacy-sfid removed user-created PRIVATE/CITIZEN rows; they must be re-created/re-bound to get new-scheme sfid"
+        );
+    }
+    // 中文注释:build_raw_targets(GovTargetKind::All) 同时含公权机构与公安局,
+    // 一次全量重对账即把所有 PUBLIC 主体按新号重建。
+    let recon = core::runtime_ops::reconcile_official_institutions_explicit(
+        state,
+        crate::gov::service::OfficialReconcileScope::All,
+        true,
+    )
+    .unwrap_or_else(|e| panic!("purge-legacy-sfid reconcile failed: {e}"));
+    info!(
+        inserted = recon.inserted,
+        updated = recon.updated,
+        account_inserted = recon.account_inserted,
+        removed = recon.removed,
+        total_after = recon.total_after,
+        "sfid public institutions reconciled with new scheme"
+    );
 }
 
 fn chain_genesis_source_configured() -> bool {
