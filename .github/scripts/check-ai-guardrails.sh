@@ -259,6 +259,65 @@ if [[ "${#protected_ai_hits[@]}" -gt 0 ]]; then
   exit 1
 fi
 
+# ── PQC 前向兼容守则（ADR-016）──
+# 中文注释：当前阶段只用 sr25519、暂不接入 PQC。以下 sr25519 锚点保障将来无感接入
+# PQC（不换钱包/账户/地址/金额）。锚点被“净删除/改值”时必须同步更新 ADR-016 守则章节确认。
+pqc_guard_ack_doc="memory/04-decisions/ADR-016-account-key-pqc-migration.md"
+pqc_guard_ack=false
+for file in "${changed_files[@]}"; do
+  if [[ "${file}" == "${pqc_guard_ack_doc}" ]]; then
+    pqc_guard_ack=true
+    break
+  fi
+done
+
+# 中文注释：每条 = 受保护文件|受保护文本|说明；按“净删除（删除数 > 新增数）”判定,避免误伤纯改写。
+declare -a pqc_anchor_specs=(
+  "citizenchain/runtime/src/lib.rs|Signature = MultiSignature|账户签名模型 AccountId=sr25519 公钥"
+  "citizenchain/runtime/src/lib.rs|AuthorizeCall|general-transaction 授权入口（PQC 挂载钩子）"
+  "citizenchain/runtime/primitives/src/core_const.rs|SS58_FORMAT|SS58 前缀常量"
+  "citizenchain/runtime/primitives/src/core_const.rs|2027|SS58 前缀值（地址不变）"
+  "wuminapp/lib/wallet/core/wallet_manager.dart|miniSecretFromEntropy|助记词到 AccountRootSeedV1 派生"
+  "wumin/lib/wallet/wallet_manager.dart|miniSecretFromEntropy|助记词到 AccountRootSeedV1 派生"
+  "wuminapp/lib/qr/bodies/sign_request_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
+  "wuminapp/lib/qr/bodies/sign_response_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
+  "wuminapp/lib/qr/bodies/login_receipt_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
+  "wumin/lib/qr/bodies/sign_request_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
+  "wumin/lib/qr/bodies/sign_response_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
+  "wumin/lib/qr/bodies/login_receipt_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
+)
+
+declare -a pqc_guard_hits=()
+for spec in "${pqc_anchor_specs[@]}"; do
+  IFS='|' read -r anchor_file anchor_pat anchor_desc <<< "${spec}"
+  anchor_diff="$(git diff "${merge_base}...HEAD" -- "${anchor_file}" || true)"
+  if [[ -z "${anchor_diff}" ]]; then
+    continue
+  fi
+  # 中文注释：用 awk 按字面子串统计“删除行/新增行”中锚点出现次数（跳过 +++/--- 文件头），
+  # 避免 grep 正则方言差异（GNU grep 与 ugrep 对 \+ 处理不同）导致误判。
+  pqc_counts="$(printf '%s\n' "${anchor_diff}" | awk -v pat="${anchor_pat}" '
+    { if (substr($0,1,3)=="+++" || substr($0,1,3)=="---") next;
+      if (index($0,pat)==0) next;
+      c=substr($0,1,1);
+      if (c=="-") rem++; else if (c=="+") add++; }
+    END { printf "%d %d", rem+0, add+0 }')"
+  removed_count="${pqc_counts%% *}"
+  added_count="${pqc_counts##* }"
+  if [[ "${removed_count}" -gt "${added_count}" ]]; then
+    pqc_guard_hits+=("${anchor_file}: 锚点「${anchor_pat}」被删改（${anchor_desc}）")
+  fi
+done
+
+if [[ "${#pqc_guard_hits[@]}" -gt 0 && "${pqc_guard_ack}" == false ]]; then
+  echo "检测到改动 PQC 前向兼容守则保护的 sr25519 锚点（ADR-016）。"
+  echo "当前阶段只用 sr25519、暂不接入 PQC；以下锚点保障将来无感接入（不换钱包/账户/地址/金额），不得随意删改："
+  printf '  - %s\n' "${pqc_guard_hits[@]}"
+  echo ""
+  echo "若确属有意变更，请同步更新 ${pqc_guard_ack_doc} 的「当前 sr25519 阶段：前向兼容守则」章节后再提交。"
+  exit 1
+fi
+
 if [[ "${#changed_code_files[@]}" -gt 0 && "${#changed_doc_files[@]}" -eq 0 ]]; then
   echo "检测到代码或自动化变更，但没有同步更新文档。"
   echo "请至少更新以下任一类型文档："

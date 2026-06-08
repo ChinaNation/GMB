@@ -12,6 +12,7 @@
   - **hybrid 双签绑定** + 链上**只存公钥 hash**；冷热钱包共用 `gmb-pqc` crate。
   - **Passkey 本轮整体推迟**，作为独立后续立项（非抗量子手段，不抢助记词根地位）。
 - 协议登记：`unified-protocols.md` 新增 P-TX-008 / P-TX-009 / P-STORAGE-005（草案），P-QR-002 / P-SIGN-001 补抗量子草案说明。
+- 前向兼容门禁（2026-06-07）：当前不接入 PQC、只用 sr25519。已在 `.github/scripts/check-ai-guardrails.sh` 加「PQC 前向兼容守则」检查，保护 sr25519 锚点（`Signature = MultiSignature` / `AuthorizeCall` / `SS58_FORMAT`=2027 / `miniSecretFromEntropy` / QR `sig_alg`）不被净删改；如确属有意变更须在同一 PR 同步更新 ADR-016 守则章节才放行。文档见 `memory/07-ai/github-activation.md` §3.1。
 
 任务需求：
 
