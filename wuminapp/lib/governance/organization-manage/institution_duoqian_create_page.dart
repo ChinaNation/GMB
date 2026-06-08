@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/governance/shared/duoqian_create_amount_rules.dart';
+import 'package:wuminapp_mobile/governance/shared/reserved_account_names.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
@@ -22,7 +23,7 @@ import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-import 'duoqian_manage_service.dart';
+import 'institution_manage_service.dart';
 
 /// 创建机构多签账户提案页面。
 ///
@@ -50,7 +51,7 @@ class _InstitutionDuoqianCreatePageState
   final _thresholdController = TextEditingController();
   final Map<String, TextEditingController> _accountAmountControllers = {};
 
-  final _manageService = DuoqianManageService();
+  final _manageService = InstitutionManageService();
   final _apiClient = ApiClient();
 
   bool _submitting = false;
@@ -263,12 +264,26 @@ class _InstitutionDuoqianCreatePageState
       return '请先查询机构账户';
     }
     final accountNames = _accountAmountControllers.keys.toList();
-    if (!accountNames.contains('主账户') || !accountNames.contains('费用账户')) {
-      return '机构注册账户必须包含主账户和费用账户';
+    if (!accountNames.contains(kReservedNameMain) ||
+        !accountNames.contains(kReservedNameFee)) {
+      return '机构注册账户必须包含$kReservedNameMain和$kReservedNameFee';
+    }
+    // 自定义账户名命中制度专属保留名（永久质押/安全基金/两和基金）即拒；
+    // 主账户/费用账户为强制默认账户，不在拒绝之列。
+    const protectedNames = [
+      kReservedNameStake,
+      kReservedNameAnquan,
+      kReservedNameHe,
+    ];
+    final forbidden = accountNames
+        .where((name) => protectedNames.contains(name.trim()))
+        .toList();
+    if (forbidden.isNotEmpty) {
+      return '账户名不能使用制度专属保留名：${forbidden.join('、')}';
     }
     final blockedAccounts = _accounts
-        .where(
-            (a) => a.chainStatus == 'REGISTERED' || a.chainStatus == 'PENDING')
+        .where((a) =>
+            a.chainStatus == 'Active' || a.chainStatus == 'Pending')
         .map((a) => a.accountName)
         .toList();
     if (blockedAccounts.isNotEmpty) {
@@ -481,7 +496,7 @@ class _InstitutionDuoqianCreatePageState
       await WalletIsar.instance.writeTxn((isar) async {
         // 中文注释：创建交易已入块并确认事件后，直接写入当前账户的本地 pending
         // 快照；列表返回时只精准刷新该账户，不再依赖全量 discovery 扫描。
-        final entity = DuoqianInstitutionEntity()
+        final entity = InstitutionEntity()
           ..duoqianAddress = result.mainAddressHex
           ..sfidNumber = registrationInfo.sfidNumber
           ..adminAccountOrg = _defaultInstitutionAdminOrg
@@ -491,7 +506,7 @@ class _InstitutionDuoqianCreatePageState
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
           ..discoveredViaAdmin = false
           ..matchedAdminPubkeys = const [];
-        await isar.duoqianInstitutionEntitys.put(entity);
+        await isar.institutionEntitys.put(entity);
         await InstitutionDuoqianLocalState.putStatusInTxn(
           isar,
           result.mainAddressHex,
@@ -849,7 +864,7 @@ class _InstitutionDuoqianCreatePageState
     final controller = _accountAmountControllers[account.accountName];
     if (controller == null) return const SizedBox.shrink();
     final blocked =
-        account.chainStatus == 'REGISTERED' || account.chainStatus == 'PENDING';
+        account.chainStatus == 'Active' || account.chainStatus == 'Pending';
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextField(
@@ -871,13 +886,13 @@ class _InstitutionDuoqianCreatePageState
 
   String _chainStatusLabel(String status) {
     switch (status) {
-      case 'INACTIVE':
-        return '未上链';
-      case 'PENDING':
+      case 'Pending':
         return '链上注册处理中';
-      case 'REGISTERED':
+      case 'Active':
         return '已上链';
-      case 'FAILED':
+      case 'Closed':
+        return '已注销';
+      case 'Failed':
         return '可重试';
       default:
         return status;

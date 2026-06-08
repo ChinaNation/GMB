@@ -12,7 +12,7 @@
 //
 // 机构代码选项:
 //   G → 仅允许手动新增教育委员会(JY)类型学校机构,普通公权机构由后端自动生成
-//   S/F → ZG/TG/教育委员会(JY)(移除 CH 储备银行,死规则全局删除)
+//   S/F → ZG/TG/教育委员会(JY)
 
 import type { InstitutionCategory } from './api';
 
@@ -49,7 +49,6 @@ export const INSTITUTION_CODE_LABEL: Record<string, string> = {
   JC: '监察院',
   JY: '教育委员会',
   CB: '中央银行',
-  CH: '储备银行',
   ZG: '中国',
   TG: '他国',
 };
@@ -129,7 +128,7 @@ const G_NONPROFIT_GOV: ChoiceItem[] = [
   { value: 'JY', label: '教育委员会 (JY)' },
 ];
 
-// ── 私法人/非法人可选机构代码(移除 CH 储备银行) ──
+// ── 私法人/非法人可选机构代码 ──
 const PRIVATE_INSTITUTIONS: ChoiceItem[] = [
   { value: 'ZG', label: '中国 (ZG)' },
   { value: 'JY', label: '教育委员会 (JY)' },

@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
+import '../chain/reserved_account_names.dart';
 import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
@@ -816,6 +817,10 @@ class PayloadDecoder {
         allowMalformed: true,
       );
       offset += subNameLen;
+      // 制度专属保留名（永久质押/安全基金/两和基金）不可作为机构自定义账户注册，
+      // 命中即判为不可信 payload → 返回 null（两色识别 decodeFailed = 红色拒签）。
+      // 主账户/费用账户是强制默认账户，正常出现在创建凭证里，维持识别。
+      if (ReservedAccountNames.isForbidden(accountName)) return null;
       final amount = _readU128Le(bytes, offset);
       accountAmounts[accountName] = amount;
       accountsTotal += amount;
@@ -1546,9 +1551,10 @@ class PayloadDecoder {
       case 3:
         return '个人多签';
       case 4:
-        return '公权机构账户';
       case 5:
-        return '其他机构账户';
+        // 公权(ORG_PUP=4)/其他(ORG_OTH=5)对外统一展示为"机构账户",
+        // 与 _institutionAccountLabel 措辞一致，消除同一 org 数字跨函数标签不一致。
+        return '机构账户';
       default:
         return '机构$org';
     }

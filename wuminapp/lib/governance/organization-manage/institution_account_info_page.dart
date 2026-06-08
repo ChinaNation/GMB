@@ -13,15 +13,15 @@ import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'institution_duoqian_close_page.dart';
-import 'duoqian_manage_models.dart';
-import 'duoqian_manage_service.dart';
+import 'institution_manage_models.dart';
+import 'institution_manage_service.dart';
 
 /// 机构多签账户详情页。
 ///
 /// 只展示和处理 OrganizationManage 机构多签。个人多签详情已经迁移到
 /// `lib/personal-manage/personal_manage_account_info_page.dart`。
-class DuoqianAccountInfoPage extends StatefulWidget {
-  const DuoqianAccountInfoPage({
+class InstitutionAccountInfoPage extends StatefulWidget {
+  const InstitutionAccountInfoPage({
     super.key,
     required this.institution,
     this.initialLocalStatus,
@@ -33,14 +33,14 @@ class DuoqianAccountInfoPage extends StatefulWidget {
   final List<String> initialAdminPubkeys;
 
   @override
-  State<DuoqianAccountInfoPage> createState() => _DuoqianAccountInfoPageState();
+  State<InstitutionAccountInfoPage> createState() => _InstitutionAccountInfoPageState();
 }
 
-class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
-  final DuoqianManageService _manageService = DuoqianManageService();
+class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage> {
+  final InstitutionManageService _manageService = InstitutionManageService();
   final ChainRpc _rpc = ChainRpc();
 
-  DuoqianAccountInfo? _accountInfo;
+  InstitutionAccountInfo? _accountInfo;
   List<String> _adminPubkeys = const [];
   String _localStatus = InstitutionDuoqianLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
@@ -68,7 +68,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   Future<void> _loadFromLocal() async {
     try {
       final local = await WalletIsar.instance.read((isar) async {
-        final entity = await isar.duoqianInstitutionEntitys
+        final entity = await isar.institutionEntitys
             .filter()
             .duoqianAddressEqualTo(widget.institution.duoqianAddress)
             .findFirst();
@@ -100,7 +100,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
       final normalizedAdmins = _normalizeAdminPubkeys(admins);
       final accountInfo = isClosed
           ? null
-          : DuoqianAccountInfo(
+          : InstitutionAccountInfo(
               adminCount: normalizedAdmins.length,
               threshold: local.detail?.threshold,
               adminPubkeys: normalizedAdmins,
@@ -218,7 +218,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
               balanceYuan: balance ?? previous?.balanceYuan,
               lastChainRefreshAtMillis: now,
               lastBalanceRefreshAtMillis:
-                  info.status == DuoqianStatus.active && balance != null
+                  info.status == InstitutionStatus.active && balance != null
                       ? now
                       : previous?.lastBalanceRefreshAtMillis,
               updatedAtMillis: now,
@@ -247,8 +247,8 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     }
   }
 
-  Future<double?> _resolveBalance(DuoqianStatus? status) async {
-    if (status != DuoqianStatus.active) return null;
+  Future<double?> _resolveBalance(InstitutionStatus? status) async {
+    if (status != InstitutionStatus.active) return null;
     try {
       return await _rpc
           .fetchFinalizedBalance(widget.institution.duoqianAddress);
@@ -257,16 +257,16 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     }
   }
 
-  String _localStatusFromInfo(DuoqianStatus status) {
-    return status == DuoqianStatus.active
+  String _localStatusFromInfo(InstitutionStatus status) {
+    return status == InstitutionStatus.active
         ? InstitutionDuoqianLocalState.statusActive
         : InstitutionDuoqianLocalState.statusPending;
   }
 
-  DuoqianStatus _statusEnumFromLocal(String status) {
+  InstitutionStatus _statusEnumFromLocal(String status) {
     return status == InstitutionDuoqianLocalState.statusActive
-        ? DuoqianStatus.active
-        : DuoqianStatus.pending;
+        ? InstitutionStatus.active
+        : InstitutionStatus.pending;
   }
 
   List<String> _normalizeAdminPubkeys(List<String>? admins) {
@@ -346,7 +346,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
 
   Future<void> _removeFromLocal() async {
     await WalletIsar.instance.writeTxn((isar) async {
-      await isar.duoqianInstitutionEntitys
+      await isar.institutionEntitys
           .deleteByDuoqianAddress(widget.institution.duoqianAddress);
       await InstitutionDuoqianLocalState.deleteStatusInTxn(
         isar,
@@ -543,7 +543,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     );
   }
 
-  Widget _buildAdminEntryCard(DuoqianAccountInfo? info) {
+  Widget _buildAdminEntryCard(InstitutionAccountInfo? info) {
     final adminCount = _adminPubkeys.length;
     final threshold = info?.threshold;
     final subtitle = threshold == null

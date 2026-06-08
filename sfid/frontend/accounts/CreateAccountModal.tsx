@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Input, Modal, Typography } from 'antd';
 import type { AdminAuth } from '../auth/types';
-import { createAccount, type MultisigAccount } from './api';
+import { createAccount, type InstitutionAccount } from './api';
 import { notice } from '../utils/notice';
 
 interface Props {
@@ -21,7 +21,7 @@ interface Props {
   sfidNumber: string;
   institutionName: string;
   /** 当前已有的账户列表(用于前端唯一性预校验) */
-  existingAccounts: MultisigAccount[];
+  existingAccounts: InstitutionAccount[];
   open: boolean;
   onCancel: () => void;
   onCreated: () => void;

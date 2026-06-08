@@ -442,8 +442,7 @@ pub mod pallet {
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
-    /// B 阶段拆分后 organization-manage 仅承载机构多签,ACTION=1 留洞不复用
-    /// (该值历史上是 ACTION_CREATE_PERSONAL,B 阶段已迁至 personal-manage 独立命名空间)。
+    /// ACTION = 1 永久保留空位,不复用。
     pub const ACTION_CLOSE: u8 = 2;
     pub const ACTION_CREATE_INSTITUTION: u8 = 3;
 
@@ -451,11 +450,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         // NOTE: `call_index` values are the on-chain ABI and must remain stable.
 
-        // call_index = 0 已废弃 (2026-05-03):
-        // 原 `propose_create` 单账户机构创建入口已删除。机构多签业务最少
-        // 必须有 2 个账户(主账户 + 费用账户),统一通过 call_index=5 的
-        // `propose_create_institution` 一次性创建机构整体。call_index=0 留洞,
-        // 绝不复用。
+        // call_index = 0 永久保留空位,不复用
 
         /// SFID 注册信息凭证批量登记机构账户地址。
         ///
@@ -605,9 +600,10 @@ pub mod pallet {
         /// - `Fee`  → `OP_FEE + sfid_number`
         /// - `Named(account_name)` → `OP_INSTITUTION + sfid_number + account_name`
         ///
-        /// 保留名校验：`Named(b"主账户")` 和 `Named(b"费用账户")` 被拒绝（返回
-        /// `ReservedAccountName` 错误），强制这两个角色走 `Main`/`Fee` 分支避免
-        /// 命名空间重叠。空 account_name 的 `Named` 也被拒绝（返回 `EmptyAccountName`）。
+        /// 保留名校验：`Named(b"主账户")`/`Named(b"费用账户")` 被拒绝（强制走 `Main`/`Fee`
+        /// 分支避免命名空间重叠）；`永久质押`/`安全基金`/`两和基金` 为制度专属账户，普通机构
+        /// 禁止注册，命中即拒（均返回 `ReservedAccountName`）。空 account_name 的 `Named`
+        /// 返回 `EmptyAccountName`。
         pub fn derive_institution_address(
             sfid_number: &[u8],
             role: InstitutionAccountRole<'_>,
@@ -618,7 +614,9 @@ pub mod pallet {
                 InstitutionAccountRole::Named(n) => {
                     ensure!(!n.is_empty(), Error::<T>::EmptyAccountName);
                     ensure!(
-                        n != RESERVED_NAME_MAIN && n != RESERVED_NAME_FEE,
+                        n != RESERVED_NAME_MAIN
+                            && n != RESERVED_NAME_FEE
+                            && !primitives::core_const::is_forbidden_account_name(n),
                         Error::<T>::ReservedAccountName
                     );
                     (primitives::core_const::OP_INSTITUTION, n)
@@ -638,6 +636,7 @@ pub mod pallet {
         /// 把 SFID 账户名 bytes 翻译成 `InstitutionAccountRole`：
         /// - `"主账户"` → `Main`
         /// - `"费用账户"` → `Fee`
+        /// - `"永久质押"`/`"安全基金"`/`"两和基金"` → `ReservedAccountName`（制度专属，禁止注册）
         /// - 其他非空 → `Named(account_name)`
         /// - 空 → 返回 `EmptyAccountName`
         ///
@@ -654,6 +653,9 @@ pub mod pallet {
                 Ok(InstitutionAccountRole::Main)
             } else if account_name == RESERVED_NAME_FEE {
                 Ok(InstitutionAccountRole::Fee)
+            } else if primitives::core_const::is_forbidden_account_name(account_name) {
+                // 永久质押/安全基金/两和基金 为制度专属账户，普通 SFID 机构禁止注册。
+                Err(Error::<T>::ReservedAccountName.into())
             } else {
                 Ok(InstitutionAccountRole::Named(account_name))
             }
@@ -787,8 +789,7 @@ pub mod pallet {
             Institutions::<T>::get(&registered.sfid_number).map(|inst| inst.admin_org)
         }
 
-        // account_names_payload_from_initial_accounts 已迁至
-        // institution::accounts (上一轮拆分遗留的副本于 2026-05-03 删除)。
+        // account_names_payload_from_initial_accounts 已迁至 institution::accounts。
 
         /// 中文注释:把批量 register 入口的 account_names 抽成验签 payload。
         pub(crate) fn account_names_payload_from_names(

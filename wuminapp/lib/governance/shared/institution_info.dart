@@ -58,7 +58,7 @@ class OrgType {
 /// 治理机构及多签账户的制度账户集合。
 ///
 /// 中文注释：内置治理机构没有笼统的 `duoqianAddress`；链端按主账户、费用账户、
-/// 国储会安全基金账户、省储行质押账户分别建模。个人多签/机构账户只使用主账户。
+/// 国储会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
 class InstitutionAccounts {
   const InstitutionAccounts({
     required this.mainAddress,
@@ -76,7 +76,7 @@ class InstitutionAccounts {
   /// 安全基金账户地址 hex；仅国储会存在。
   final String? safetyFundAddress;
 
-  /// 质押账户地址 hex；仅省储行存在。
+  /// 永久质押账户地址 hex；仅省储行存在。
   final String? stakeAddress;
 }
 

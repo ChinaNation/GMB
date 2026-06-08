@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_discovery_service.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_discovery_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +33,7 @@ void main() {
   });
 
   test('空钱包(无任何账户)→ 直接返回 empty stats,不发 RPC', () async {
-    final service = DuoqianDiscoveryService();
+    final service = InstitutionDiscoveryService();
     final stats = await service.discoverByMyWallets(
       myPubkeysHex: const <String>{},
     );
@@ -51,7 +51,7 @@ void main() {
       'duoqian_discovery_last_at_ms': justNow.millisecondsSinceEpoch,
     });
 
-    final service = DuoqianDiscoveryService();
+    final service = InstitutionDiscoveryService();
     final stats = await service.discoverByMyWallets(
       myPubkeysHex: const {'aabbcc'},
       // 不传 force,应该被节流拦截
@@ -66,13 +66,13 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'duoqian_discovery_last_at_ms': fixed.millisecondsSinceEpoch,
     });
-    final service = DuoqianDiscoveryService();
+    final service = InstitutionDiscoveryService();
     final last = await service.lastDiscoveryAt();
     expect(last, fixed);
   });
 
   test('lastDiscoveryAt 无值返回 null', () async {
-    final service = DuoqianDiscoveryService();
+    final service = InstitutionDiscoveryService();
     final last = await service.lastDiscoveryAt();
     expect(last, isNull);
   });

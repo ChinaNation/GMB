@@ -21,7 +21,7 @@ pub struct EligibleClearingBankCandidate {
     pub parent_ref_property: Option<String>,
     pub province: String,
     pub city: String,
-    /// 主账户当前链上状态:`Inactive` / `Pending` / `Registered` / `Failed`。
+    /// 主账户当前链上状态:`Pending` / `Active` / `Closed` / `Failed`。
     pub main_chain_status: String,
     pub main_account: Option<String>,
     pub fee_account: Option<String>,

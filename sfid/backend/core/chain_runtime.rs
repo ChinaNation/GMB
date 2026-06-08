@@ -3,7 +3,7 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::Encode;
-use primitives::core_const::{DUOQIAN, OP_SIGN_BIND, OP_SIGN_POP, OP_SIGN_VOTE};
+use primitives::core_const::{DUOQIAN, OP_SIGN_POP, OP_SIGN_VOTE};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -49,17 +49,6 @@ pub(crate) struct RuntimeSignatureMeta {
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub(crate) struct RuntimeBindCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) who: String,
-    pub(crate) binding_id: String,
-    pub(crate) bind_nonce: String,
-    pub(crate) signature: String,
-    pub(crate) meta: RuntimeSignatureMeta,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct RuntimeVoteCredential {
     pub(crate) genesis_hash: String,
     pub(crate) who: String,
@@ -80,42 +69,6 @@ pub(crate) struct RuntimePopulationSnapshotCredential {
     pub(crate) genesis_hash: String,
     pub(crate) payload_digest: String,
     pub(crate) meta: RuntimeSignatureMeta,
-}
-
-#[allow(dead_code)]
-pub(crate) fn build_bind_credential(
-    state: &AppState,
-    account_pubkey: &str,
-    binding_seed: &str,
-    bind_nonce: String,
-) -> Result<RuntimeBindCredential, String> {
-    if bind_nonce.trim().is_empty() {
-        return Err("bind nonce is required".to_string());
-    }
-    if binding_seed.trim().is_empty() {
-        return Err("binding seed is required".to_string());
-    }
-    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let binding_id = blake2_256(binding_seed.as_bytes());
-    let payload = (
-        DUOQIAN,
-        OP_SIGN_BIND,
-        genesis_hash,
-        who,
-        binding_id,
-        bind_nonce.as_bytes(),
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimeBindCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        who: normalized_who,
-        binding_id: hex::encode(binding_id),
-        bind_nonce,
-        signature,
-        meta: runtime_signature_meta(state),
-    })
 }
 
 pub(crate) fn build_vote_credential(
@@ -186,11 +139,6 @@ pub(crate) fn build_population_snapshot_credential(
         payload_digest: hex::encode(payload_digest),
         meta: runtime_signature_meta(state),
     })
-}
-
-#[allow(dead_code)]
-pub(crate) fn current_chain_genesis_hash_hex() -> Result<String, String> {
-    resolve_chain_genesis_hash().map(hex::encode)
 }
 
 fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
@@ -390,9 +338,7 @@ fn parse_hex_hash32(raw: &str) -> Result<[u8; 32], String> {
 fn sign_runtime_digest(_state: &AppState, digest: &[u8; 32]) -> Result<String, String> {
     // ADR-008 Phase 23e:SFID main signer 直接从环境变量 SFID_SIGNING_SEED_HEX
     // 派生(由 `crate::crypto::sr25519` helper 加载),AppState 不再持有 seed。
-    // 本函数仅由 `build_*_credential`(非 *_with_province 变体)调用,后者已是
-    // dead code(全部 caller 改走 *_with_province 用省级签名密钥);保留只为
-    // 让 fallback path(全国级凭证)继续可用。
+    // 由 build_vote_credential / build_population_snapshot_credential 调用(全国级签名)。
     let seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
         .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
     let signing_key = resolve_signing_keypair(seed_hex.as_str())?;

@@ -182,8 +182,7 @@ pub mod pallet {
             Ok(())
         }
 
-        // call_index = 1 已废弃: execute_destroy 已统一到
-        // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎入口。
+        // call_index = 1 永久保留空位,不复用。
     }
 
     impl<T: Config> Pallet<T> {

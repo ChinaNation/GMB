@@ -24,7 +24,7 @@ use crate::subjects::http::{
     service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
 };
 use crate::subjects::model::{
-    CreateInstitutionInput, CreateInstitutionOutput, InstitutionListRow, MultisigInstitution,
+    CreateInstitutionInput, CreateInstitutionOutput, Institution, InstitutionListRow,
 };
 use crate::subjects::service::{
     derive_category, validate_institution_name, validate_legal_representative_required,
@@ -244,10 +244,10 @@ pub(crate) async fn create_institution(
         {
             continue;
         }
-        let inst = MultisigInstitution {
+        let inst = Institution {
             sfid_number: sfid.clone(),
             institution_name: institution_name.clone(),
-            full_name: institution_name.clone(),
+            sfid_name: institution_name.clone(),
             short_name: institution_name.clone(),
             status: "ACTIVE".to_string(),
             category,

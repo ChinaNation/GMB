@@ -25,7 +25,6 @@ extern crate alloc;
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
-pub mod duoqian_info;
 pub mod sheng_admins;
 pub mod weights;
 pub use sheng_admins::payload::{

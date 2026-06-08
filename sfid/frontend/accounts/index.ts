@@ -2,4 +2,4 @@
 
 export { AccountList } from './AccountList';
 export { CreateAccountModal } from './CreateAccountModal';
-export type { MultisigAccount } from './api';
+export type { InstitutionAccount } from './api';

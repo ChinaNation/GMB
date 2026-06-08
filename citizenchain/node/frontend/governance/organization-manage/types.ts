@@ -10,8 +10,8 @@ export type EligibleClearingBankCandidate = {
   parentSubjectProperty?: string | null;
   province: string;
   city: string;
-  /** 主账户当前链上状态:Inactive / Pending / Registered / Failed。 */
-  mainChainStatus: 'Inactive' | 'Pending' | 'Registered' | 'Failed';
+  /** 主账户当前链上状态:Pending / Active / Closed / Failed。 */
+  mainChainStatus: 'Pending' | 'Active' | 'Closed' | 'Failed';
   mainAccount?: string | null;
   feeAccount?: string | null;
 };

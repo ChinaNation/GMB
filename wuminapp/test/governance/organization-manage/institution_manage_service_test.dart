@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_service.dart';
 
 void main() {
   String hexOf(List<int> bytes) =>
@@ -30,7 +30,7 @@ void main() {
     return out;
   }
 
-  group('DuoqianManageService', () {
+  group('InstitutionManageService', () {
     test('builds propose_create_institution call_data as P-TX-001 11 fields',
         () {
       final admin1 = Uint8List.fromList(List<int>.filled(32, 0x11));
@@ -39,7 +39,7 @@ void main() {
       final signerAdmin = List<int>.generate(32, (i) => 0xc0 + (i & 0x0f));
 
       final callData =
-          DuoqianManageService.buildProposeCreateInstitutionCallData(
+          InstitutionManageService.buildProposeCreateInstitutionCallData(
         sfidNumber: 'AH001-SCB0N-202605010-2026',
         institutionName: '安徽省储行',
         accounts: [

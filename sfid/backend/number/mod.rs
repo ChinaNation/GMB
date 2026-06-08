@@ -34,7 +34,7 @@ pub use institution_code::InstitutionCode;
 #[allow(unused_imports)]
 pub(crate) use model::*;
 pub use validator::{
-    parse_sfid_number_parts, validate_sfid_number_format, SfidNumberParts, SFID_NUMBER_MAX_BYTES,
+    parse_sfid_number_parts, validate_sfid_number_format, SfidNumberParts,
     SFID_NUMBER_SEGMENT_COUNT, SFID_NUMBER_SEGMENT_D4_LEN, SFID_NUMBER_SEGMENT_K3P1C1_LEN,
     SFID_NUMBER_SEGMENT_N9_LEN, SFID_NUMBER_SEGMENT_R5_LEN,
 };

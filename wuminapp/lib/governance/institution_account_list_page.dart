@@ -20,10 +20,10 @@ import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-import 'organization-manage/duoqian_account_info_page.dart';
-import 'organization-manage/duoqian_discovery_service.dart';
-import 'organization-manage/duoqian_manage_models.dart' as org_models;
-import 'organization-manage/duoqian_manage_service.dart';
+import 'organization-manage/institution_account_info_page.dart';
+import 'organization-manage/institution_discovery_service.dart';
+import 'organization-manage/institution_manage_models.dart' as org_models;
+import 'organization-manage/institution_manage_service.dart';
 import 'organization-manage/institution_duoqian_create_page.dart';
 import 'personal-manage/personal_duoqian_create_page.dart';
 import 'personal-manage/personal_manage_account_info_page.dart';
@@ -48,7 +48,7 @@ class _UnifiedItem {
         institution = null;
 
   _UnifiedItem.institution(
-    DuoqianInstitutionEntity item, {
+    InstitutionEntity item, {
     required this.localStatus,
   })  : kind = _DuoqianKind.institution,
         name = item.name,
@@ -67,17 +67,17 @@ class _UnifiedItem {
   final int matchedAdminCount;
   final String? localStatus;
   final PersonalDuoqianEntity? personal;
-  final DuoqianInstitutionEntity? institution;
+  final InstitutionEntity? institution;
 }
 
-class DuoqianAccountListPage extends StatefulWidget {
-  const DuoqianAccountListPage({super.key});
+class InstitutionAccountListPage extends StatefulWidget {
+  const InstitutionAccountListPage({super.key});
 
   @override
-  State<DuoqianAccountListPage> createState() => _DuoqianAccountListPageState();
+  State<InstitutionAccountListPage> createState() => _InstitutionAccountListPageState();
 }
 
-class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
+class _InstitutionAccountListPageState extends State<InstitutionAccountListPage> {
   List<_UnifiedItem> _items = [];
   bool _loading = true;
   bool _scanning = false;
@@ -85,7 +85,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   final PersonalManageService _personalManageService = PersonalManageService();
   final PersonalProposalHistoryService _personalProposalHistoryService =
       PersonalProposalHistoryService();
-  final DuoqianManageService _duoqianManageService = DuoqianManageService();
+  final InstitutionManageService _duoqianManageService = InstitutionManageService();
 
   static const _activeStatusTtl = Duration(minutes: 60);
   static const _inactiveStatusTtl = Duration(minutes: 10);
@@ -117,7 +117,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalDuoqianEntitys.where().findAll();
       final institutions =
-          await isar.duoqianInstitutionEntitys.where().findAll();
+          await isar.institutionEntitys.where().findAll();
       final personalStatuses = await PersonalDuoqianLocalState.readStatuses(
         isar,
         personals.map((p) => p.duoqianAddress),
@@ -167,7 +167,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalDuoqianEntitys.where().findAll();
       final institutions =
-          await isar.duoqianInstitutionEntitys.where().findAll();
+          await isar.institutionEntitys.where().findAll();
       final personalStatuses =
           await PersonalDuoqianLocalState.readStatusSnapshots(
         isar,
@@ -312,10 +312,10 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   }
 
   Future<void> _syncInstitutionStatuses(
-    List<DuoqianInstitutionEntity> institutions,
+    List<InstitutionEntity> institutions,
   ) async {
     if (institutions.isEmpty) return;
-    Map<String, org_models.DuoqianAccountInfo?> infos;
+    Map<String, org_models.InstitutionAccountInfo?> infos;
     try {
       infos = await _duoqianManageService.fetchDuoqianAccountsBatch(
         institutions.map((p) => p.duoqianAddress),
@@ -329,7 +329,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         final info = infos[_normalizeHex(institution.duoqianAddress)];
         final status = info == null
             ? InstitutionDuoqianLocalState.statusClosed
-            : info.status == org_models.DuoqianStatus.active
+            : info.status == org_models.InstitutionStatus.active
                 ? InstitutionDuoqianLocalState.statusActive
                 : InstitutionDuoqianLocalState.statusPending;
         await WalletIsar.instance.writeTxn((isar) async {
@@ -393,7 +393,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
           }
         },
       );
-      final institutionFuture = DuoqianDiscoveryService().discoverByMyWallets(
+      final institutionFuture = InstitutionDiscoveryService().discoverByMyWallets(
         force: force,
         onProgress: (s, t, m) {
           if (mounted) {
@@ -547,7 +547,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
           ),
         ),
       _DuoqianKind.institution => MaterialPageRoute(
-          builder: (_) => DuoqianAccountInfoPage(
+          builder: (_) => InstitutionAccountInfoPage(
             institution: InstitutionInfo(
               name: item.name,
               sfidNumber: registeredDuoqianIdentity(item.duoqianAddress),

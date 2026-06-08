@@ -285,7 +285,7 @@ impl pallet::Config for Test {
     type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
-    type MaxSfidNumberLength = ConstU32<64>;
+    type MaxSfidNumberLength = ConstU32<{ primitives::core_const::SFID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;

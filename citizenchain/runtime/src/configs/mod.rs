@@ -110,6 +110,11 @@ fn is_nrc_anquan_account(address: &AccountId) -> bool {
     address == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
 }
 
+/// 检查是否为国储会两和基金账户。
+fn is_nrc_he_account(address: &AccountId) -> bool {
+    address == &AccountId::new(primitives::china::china_cb::NRC_HE_ADDRESS)
+}
+
 /// 检查是否为储委会费用账户（44 个机构的 fee_address）。
 fn is_cb_fee_account(address: &AccountId) -> bool {
     primitives::china::china_cb::CHINA_CB
@@ -588,6 +593,11 @@ impl organization_manage::DuoqianAddressValidator<AccountId> for RuntimeDuoqianA
             return false;
         }
 
+        // 中文注释：禁止占用国储会两和基金账户地址。
+        if is_nrc_he_account(address) {
+            return false;
+        }
+
         // 中文注释：禁止占用储委会费用账户地址（44 个机构）。
         if is_cb_fee_account(address) {
             return false;
@@ -683,6 +693,11 @@ impl organization_manage::DuoqianReservedAddressChecker<AccountId>
             return true;
         }
 
+        // 中文注释：禁止占用国储会两和基金账户地址。
+        if is_nrc_he_account(address) {
+            return true;
+        }
+
         // 中文注释：禁止占用储委会费用账户地址（44 个机构）。
         if is_cb_fee_account(address) {
             return true;
@@ -774,7 +789,7 @@ impl organization_manage::Config for Runtime {
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
-    type MaxSfidNumberLength = ConstU32<47>;
+    type MaxSfidNumberLength = ConstU32<{ primitives::core_const::SFID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
@@ -1199,7 +1214,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
             None => return false,
         };
         // ClearingBankNodes 的 key 是 BoundedVec<u8, ConstU32<64>>,
-        // 把 SfidNumberOf<Runtime>(BoundedVec<u8, MaxSfidNumberLength=47>) 转换过去
+        // 把 SfidNumberOf<Runtime>(BoundedVec<u8, MaxSfidNumberLength=SFID_NUMBER_MAX_BYTES>) 转换过去
         let sfid_bytes: Vec<u8> = registered.sfid_number.to_vec();
         let key: BoundedVec<u8, ConstU32<64>> = match sfid_bytes.try_into() {
             Ok(b) => b,

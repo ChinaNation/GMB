@@ -38,7 +38,7 @@ FILES = [
         rs_path=CHINA_DIR / "china_zf.rs",
         struct_name="ChinaZf",
         field_name="duoqian_admins",
-        admins_per_institution=9,
+        admins_per_institution=5,
     ),
     FileConfig(
         name="china_lf",
@@ -46,7 +46,7 @@ FILES = [
         rs_path=CHINA_DIR / "china_lf.rs",
         struct_name="ChinaLf",
         field_name="duoqian_admins",
-        admins_per_institution=9,
+        admins_per_institution=5,
     ),
     FileConfig(
         name="china_jc",
@@ -54,7 +54,7 @@ FILES = [
         rs_path=CHINA_DIR / "china_jc.rs",
         struct_name="ChinaJc",
         field_name="duoqian_admins",
-        admins_per_institution=9,
+        admins_per_institution=5,
     ),
     FileConfig(
         name="china_sf",
@@ -62,7 +62,7 @@ FILES = [
         rs_path=CHINA_DIR / "china_sf.rs",
         struct_name="ChinaSf",
         field_name="duoqian_admins",
-        admins_per_institution=9,
+        admins_per_institution=5,
     ),
 ]
 

@@ -6,7 +6,7 @@
 import React from 'react';
 import { Button, Popconfirm, Space, Table, Tag } from 'antd';
 import {
-  type MultisigAccount,
+  type InstitutionAccount,
   type MultisigChainStatus,
 } from './api';
 import { tryEncodeSs58 } from '../utils/ss58';
@@ -15,7 +15,7 @@ import { tryEncodeSs58 } from '../utils/ss58';
 const DEFAULT_ACCOUNT_NAMES = ['主账户', '费用账户'] as const;
 
 interface Props {
-  accounts: MultisigAccount[];
+  accounts: InstitutionAccount[];
   loading: boolean;
   canDelete: boolean;
   onDelete: (accountName: string) => void;
@@ -42,7 +42,7 @@ export const AccountList: React.FC<Props> = ({
   onDelete,
 }) => {
   return (
-    <Table<MultisigAccount>
+    <Table<InstitutionAccount>
       rowKey={(r) => `${r.sfid_number}|${r.account_name}`}
       loading={loading}
       dataSource={accounts}

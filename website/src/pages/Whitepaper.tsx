@@ -3,6 +3,19 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import whitepaperMarkdown from '../../../docs/《白皮书》.md?raw'
 
+// 白皮书图片改为外链 docs/assets/*，这里用 Vite glob 拿到打包后的 URL，
+// 渲染前把 markdown 里的 ./assets/<file> 替换成打包 URL（保证线上能加载，
+// 同时 .md 在 GitHub/编辑器里按相对路径预览也正常）。
+const whitepaperAssetUrls = import.meta.glob('../../../docs/assets/*', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>
+
+const assetUrlByName = new Map<string, string>(
+  Object.entries(whitepaperAssetUrls).map(([path, url]) => [path.split('/').pop() ?? path, url]),
+)
+
 type Heading = {
   id: string
   level: number
@@ -175,10 +188,21 @@ function renderCodeTables(markdown: string) {
   })
 }
 
+function resolveAssetUrls(markdown: string) {
+  return markdown.replace(
+    /(["'(])(?:\.\/)?assets\/([A-Za-z0-9._-]+)/g,
+    (whole, lead: string, file: string) => {
+      const url = assetUrlByName.get(file)
+      return url ? `${lead}${url}` : whole
+    },
+  )
+}
+
 function renderWhitepaper(markdown: string, headings: Heading[]) {
   const markdownWithIds = addHeadingIds(markdown, headings)
   const markdownWithTables = renderCodeTables(markdownWithIds)
-  const html = marked.parse(markdownWithTables, { async: false }) as string
+  const markdownWithAssets = resolveAssetUrls(markdownWithTables)
+  const html = marked.parse(markdownWithAssets, { async: false }) as string
 
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ['class', 'id', 'width'],

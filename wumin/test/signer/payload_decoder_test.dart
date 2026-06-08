@@ -645,7 +645,7 @@ void main() {
       final payload = Uint8List.fromList([
         ...utf8.encode('GMB_ACTIVATE_ADMIN_V1'),
         ...account,
-        0x05, // org = 其他机构账户
+        0x05, // org = 机构账户 (ORG_OTH)
         0x02, // kind = InstitutionAccount
         ...pubkey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
@@ -656,7 +656,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'activate_admin_account');
-      expect(decoded.fields['org'], '其他机构账户');
+      expect(decoded.fields['org'], '机构账户');
       expect(decoded.fields['account'], '0x${hexLower(account)}');
       expect(decoded.fields['pubkey'], ss58FromBytes(pubkey));
       expect(decoded.reviewFields['account'], ss58FromBytes(account));
@@ -669,8 +669,8 @@ void main() {
       final admin2 = List<int>.filled(32, 0x55);
 
       for (final entry in {
-        0x04: '公权机构账户',
-        0x05: '其他机构账户',
+        0x04: '机构账户',
+        0x05: '机构账户',
       }.entries) {
         final payload = Uint8List.fromList([
           0x0c,
@@ -755,7 +755,10 @@ void main() {
     //   (走 PopulationSnapshotVerifier 双层签发)
     // -----------------------------------------------------------------------
 
-    List<int> buildProposeCreateInstitutionPayload({bool extraTail = false}) {
+    List<int> buildProposeCreateInstitutionPayload({
+      bool extraTail = false,
+      String secondAccountName = '费用账户',
+    }) {
       List<int> u128Le(BigInt value) {
         final out = List<int>.filled(16, 0);
         var tmp = value;
@@ -769,7 +772,7 @@ void main() {
       final sfid = utf8.encode('AH001-SCB0N-202605010-2026');
       final instName = utf8.encode('安徽省储行');
       final mainAccount = utf8.encode('主账户');
-      final feeAccount = utf8.encode('费用账户');
+      final feeAccount = utf8.encode(secondAccountName);
       final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
       final feeAmount = u128Le(BigInt.from(222)); // 2.22 GMB
       final adminPubkeys = [
@@ -797,7 +800,7 @@ void main() {
         (feeAccount.length << 2) & 0xff,
         ...feeAccount,
         ...feeAmount,
-        // admin_org: ORG_OTH
+        // admin_org: ORG_OTH (机构账户)
         5,
         // admin_count: u32 LE
         2, 0, 0, 0,
@@ -847,7 +850,7 @@ void main() {
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['sfid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['institution_name'], '安徽省储行');
-      expect(decoded.fields['org'], '其他机构账户');
+      expect(decoded.fields['org'], '机构账户');
       expect(decoded.fields['admin_count'], '2');
       expect(decoded.fields['threshold'], '2/2');
       expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
@@ -868,6 +871,31 @@ void main() {
       expect(decoded, isNull,
           reason:
               'P-TX-001 禁止 subject_property/sub_type/parent_sfid_number 多余尾字段');
+    });
+
+    // CANON 决策2：制度专属保留名（永久质押/安全基金/两和基金）禁止作为机构
+    // 自定义账户名，命中即 decodeFailed（红色拒签）。取值逐字对齐链端 primitives。
+    for (final forbidden in const ['永久质押', '安全基金', '两和基金']) {
+      test('propose_create_institution 账户名命中保留名「$forbidden」时拒绝解码', () {
+        final payload = Uint8List.fromList(
+          buildProposeCreateInstitutionPayload(secondAccountName: forbidden),
+        );
+        final decoded = PayloadDecoder.decode(encodeHex(payload));
+        expect(decoded, isNull,
+            reason: '制度专属保留名不可作为机构自定义账户注册，必须红色拒签');
+      });
+    }
+
+    // 主账户/费用账户是强制默认账户，正常出现在创建凭证里，维持识别。
+    test('propose_create_institution 主账户/费用账户强制默认账户维持识别', () {
+      final payload = Uint8List.fromList(
+        buildProposeCreateInstitutionPayload(secondAccountName: '费用账户'),
+      );
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_create_institution');
+      expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
+      expect(decoded.fields['amount_费用账户'], '2.22 GMB');
     });
 
     test('decodes current propose_create_personal with regular_threshold field',

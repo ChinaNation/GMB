@@ -16,6 +16,6 @@ pub use model::{
     account_key_from_string, account_key_to_string, AccountKey, ChainSyncAccountInput,
     CreateAccountInput, CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput,
     InstitutionDetailOutput, InstitutionDocument, InstitutionListRow, LegalRepresentativePhoto,
-    MultisigAccount, MultisigChainStatus, MultisigInstitution, ParentInstitutionRow,
+    Institution, InstitutionAccount, MultisigChainStatus, ParentInstitutionRow,
     UpdateInstitutionInput, VALID_DOC_TYPES,
 };

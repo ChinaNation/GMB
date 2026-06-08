@@ -152,7 +152,7 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
 
       // 热钱包:先认证(生物/密码),后续 signCallback 用本地 seed 签名;
       // 冷钱包:走 QR 签名(扫码 → wumin 设备签 → 扫回签名)。
-      // 对齐 [duoqian_manage_detail_page._submitVote] 同款分流。
+      // 对齐 [institution_manage_detail_page._submitVote] 同款分流。
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();

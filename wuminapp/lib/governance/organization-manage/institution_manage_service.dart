@@ -8,7 +8,7 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
-import 'duoqian_manage_models.dart';
+import 'institution_manage_models.dart';
 import 'duoqian_storage_codec.dart';
 
 /// 机构多签创建时的初始账户资金条目。
@@ -37,8 +37,8 @@ class InstitutionInitialAccountInput {
 /// 管理员投票一律走 `InternalVote::cast`(22.0),
 /// 通过 [InternalVoteService] 或业务 service 的 `submitInternalVote`
 /// 统一入口发送。
-class DuoqianManageService {
-  DuoqianManageService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+class InstitutionManageService {
+  InstitutionManageService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -389,7 +389,7 @@ class DuoqianManageService {
   ///
   /// 注册机构账户走 `AddressRegisteredSfid -> InstitutionAccounts`
   /// + `AdminsChange::AdminAccounts`。
-  Future<DuoqianAccountInfo?> fetchDuoqianAccount(
+  Future<InstitutionAccountInfo?> fetchDuoqianAccount(
       String duoqianAddressHex) async {
     return _fetchInstitutionDuoqianAccount(duoqianAddressHex);
   }
@@ -398,7 +398,7 @@ class DuoqianManageService {
   ///
   /// 中文注释：机构多签需要先从地址反查 SFID 与账户名，再读取账户主体和
   /// 管理员主体，所以必须分阶段批量读取，不能简单逐个调用详情查询。
-  Future<Map<String, DuoqianAccountInfo?>> fetchDuoqianAccountsBatch(
+  Future<Map<String, InstitutionAccountInfo?>> fetchDuoqianAccountsBatch(
     Iterable<String> duoqianAddressHexList, {
     int chunkSize = 100,
   }) async {
@@ -409,7 +409,7 @@ class DuoqianManageService {
         .toList(growable: false);
     if (addresses.isEmpty) return {};
 
-    final result = <String, DuoqianAccountInfo?>{};
+    final result = <String, InstitutionAccountInfo?>{};
     final refKeyByAddress = <String, String>{};
     for (final address in addresses) {
       refKeyByAddress[address] =
@@ -530,7 +530,7 @@ class DuoqianManageService {
       final account = accountByAddress[address];
       final admin = adminByAddress[address];
       if (account == null || admin == null) continue;
-      result[address] = DuoqianAccountInfo(
+      result[address] = InstitutionAccountInfo(
         adminCount: admin.adminCount,
         threshold: thresholdByAddress[address],
         adminPubkeys: admin.adminPubkeys,
@@ -541,7 +541,7 @@ class DuoqianManageService {
     return result;
   }
 
-  Future<DuoqianAccountInfo?> _fetchInstitutionDuoqianAccount(
+  Future<InstitutionAccountInfo?> _fetchInstitutionDuoqianAccount(
     String duoqianAddressHex,
   ) async {
     final refKey = DuoqianStorageCodec.addressRegisteredSfidKey(
@@ -572,7 +572,7 @@ class DuoqianManageService {
       org: admin.org,
       accountId: accountId,
     );
-    return DuoqianAccountInfo(
+    return InstitutionAccountInfo(
       adminCount: admin.adminCount,
       threshold: threshold,
       adminPubkeys: admin.adminPubkeys,
@@ -929,8 +929,8 @@ class DuoqianManageService {
 
   // ──── 内部：编码工具 ────
 
-  DuoqianStatus _statusFromByte(int statusByte) {
-    return statusByte == 1 ? DuoqianStatus.active : DuoqianStatus.pending;
+  InstitutionStatus _statusFromByte(int statusByte) {
+    return statusByte == 1 ? InstitutionStatus.active : InstitutionStatus.pending;
   }
 
   static void _writeBoundedBytes(ByteOutput output, Uint8List bytes) {

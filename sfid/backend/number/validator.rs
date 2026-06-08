@@ -19,11 +19,12 @@
 //! 容量分析:同 (主体属性, 省, 市, 机构, year) 5 元组下,n9 是 hash mod 10^9 = 10 亿桶。
 //! 单省最大人口 1.5 亿(15% 填充),撞了由调用方 1000 次重试逃逸,基本不可能用尽。
 //!
-//! 链端 `register_sfid_institution` 对 sfid_number 的 BoundedVec 上限也是 96 字节,
-//! 与本文件 SFID_NUMBER_MAX_BYTES 保持一致。
+//! sfid_number 字节上限唯一权威源 = `primitives::core_const::SFID_NUMBER_MAX_BYTES`,
+//! 与链端 `register_sfid_institution` 对 sfid_number 的 BoundedVec 上限同源,本文件不再本地写死。
 
 use crate::number::category::SubjectProperty;
 use crate::number::institution_code::InstitutionCode;
+use primitives::core_const::SFID_NUMBER_MAX_BYTES;
 
 const CHECKSUM_ALPHABET: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -32,7 +33,6 @@ pub const SFID_NUMBER_SEGMENT_R5_LEN: usize = 5;
 pub const SFID_NUMBER_SEGMENT_K3P1C1_LEN: usize = 5;
 pub const SFID_NUMBER_SEGMENT_N9_LEN: usize = 9;
 pub const SFID_NUMBER_SEGMENT_D4_LEN: usize = 4;
-pub const SFID_NUMBER_MAX_BYTES: usize = 96;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SfidNumberParts {
@@ -70,7 +70,7 @@ pub fn parse_sfid_number_parts(raw: &str) -> Result<SfidNumberParts, &'static st
     if !normalized.is_ascii() {
         return Err("sfid_number must be ascii");
     }
-    if normalized.len() > SFID_NUMBER_MAX_BYTES {
+    if normalized.len() > SFID_NUMBER_MAX_BYTES as usize {
         return Err("sfid_number length exceeds chain max");
     }
     if normalized

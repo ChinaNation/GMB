@@ -54,7 +54,7 @@ pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
     // 中文注释:WASM runtime 在 no_std 下 `get_preset` 永远返回 None,
     // 不能走 `with_genesis_config_preset_name`。直接调用 runtime crate 的 std 版
     // `genesis_config()` 在 host 端构出完整 JSON,再 `with_genesis_config_patch` 注入。
-    let genesis_patch = citizenchain::genesis_config_presets::genesis_config();
+    let genesis_patch = citizenchain::genesis::genesis_config();
 
     Ok(ChainSpec::builder(wasm, None)
         .with_name("CitizenChain")

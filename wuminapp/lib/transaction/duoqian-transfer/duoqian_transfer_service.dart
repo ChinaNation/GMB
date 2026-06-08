@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_models.dart'
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_models.dart'
     as org_models;
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_manage_service.dart';
 import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_models.dart';
 import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_service.dart';
 
@@ -159,7 +159,7 @@ class DuoqianTransferService {
 
   /// 查询转出主账户的 finalized 可用余额（元）。
   ///
-  /// 中文注释：治理机构按主账户、费用账户、安全基金账户、质押账户分别建模，转账提案固定从主账户支出；
+  /// 中文注释：治理机构按主账户、费用账户、安全基金、永久质押分别建模，转账提案固定从主账户支出；
   /// 个人/注册多签账户通过 InstitutionInfo.mainAddress 继续映射到账户地址。
   Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
     return _rpc.fetchFinalizedBalance(institution.mainAddress);
@@ -571,7 +571,7 @@ class DuoqianTransferService {
     }
 
     if (uncachedDetailKeys.isNotEmpty) {
-      final manageService = DuoqianManageService(chainRpc: _rpc);
+      final manageService = InstitutionManageService(chainRpc: _rpc);
       final personalManageService = PersonalManageService(chainRpc: _rpc);
       final batchResult = await _rpc.fetchStorageBatch(uncachedDetailKeys);
       for (var i = 0; i < uncachedDetailIds.length; i++) {

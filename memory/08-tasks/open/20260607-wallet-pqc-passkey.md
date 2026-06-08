@@ -1,5 +1,18 @@
 # 钱包账户 Root Seed、PQC 迁移与 Passkey 解锁方案
 
+## 决策落定（2026-06-07，ADR-016）
+
+- 状态：设计阶段完成（ADR + 设计文档已出），实现未启动，卡片保持 `open`。
+- 决策真源：`memory/04-decisions/ADR-016-account-key-pqc-migration.md`
+- 实现蓝图：`memory/05-modules/citizenchain/runtime/otherpallet/ACCOUNT_KEYS_PQC_TECHNICAL.md`
+- 已定：
+  - **启动算法 = ML-DSA-65**（FIPS 204 Category 3），版本标签 `0x02`，可滚动升级到 ML-DSA-87，升级不换账户。
+  - **账户抽象**：canonical AccountId 永远是 sr25519 派生值；ML-DSA-65 经账户状态机（Sr25519Only → Bound → PqcOnly）绑定为同一账户的签名凭证；**不换助记词/账户/地址/余额**。
+  - **同根派生**：`AccountRootSeedV1`（= 现有 mini-secret）经 HKDF 派生 sr25519 与 ML-DSA-65；过渡无需新秘密。
+  - **hybrid 双签绑定** + 链上**只存公钥 hash**；冷热钱包共用 `gmb-pqc` crate。
+  - **Passkey 本轮整体推迟**，作为独立后续立项（非抗量子手段，不抢助记词根地位）。
+- 协议登记：`unified-protocols.md` 新增 P-TX-008 / P-TX-009 / P-STORAGE-005（草案），P-QR-002 / P-SIGN-001 补抗量子草案说明。
+
 任务需求：
 
 - 将已确认的钱包账户安全方案写入任务卡，作为后续冷热钱包、链上账户、PQC 迁移和 Passkey 解锁改造的执行依据。
@@ -71,7 +84,7 @@ AccountRootSeedV1
    - Passkey 失败或平台账号不可用时，助记词必须仍可恢复账户。
 
 4. PQC 阶段：
-   - 首选 NIST ML-DSA，默认评估 `ML-DSA-44`，高安全场景预留 `ML-DSA-65`。
+   - 首选 NIST ML-DSA；**已定启动 `ML-DSA-65`**（见顶部决策落定 / ADR-016），可升级到 `ML-DSA-87`。
    - 先实现 PQC 公钥绑定到账户主体，而不是创建新的 PQC 钱包地址。
    - 过渡期可要求 sr25519 + ML-DSA 双签完成关键绑定或迁移。
    - 最终 runtime 支持 PQC 签名代表同一个 `AccountId` 发起交易。
@@ -140,9 +153,10 @@ AccountRootSeedV1
 - 测试通过。
 - 残留已清理。
 
-待确认问题：
+待确认问题（更新于 2026-06-07）：
 
-- PQC 默认参数最终采用 `ML-DSA-44` 还是 `ML-DSA-65`。
-- Passkey 是否必须支持 WebAuthn PRF；若平台不支持 PRF，是否只作为授权门禁。
-- 是否允许热钱包长期保存加密助记词，还是目标状态只保存加密后的 `AccountRootSeedV1`。
-- 现有开发期账户是否需要迁移说明；若需要，必须作为目标状态迁移，不设计长期双轨兼容。
+- ~~PQC 默认参数采用 `ML-DSA-44` 还是 `ML-DSA-65`~~ → **已定 ML-DSA-65**（ADR-016）。
+- ~~Passkey 是否必须支持 WebAuthn PRF~~ → **Passkey 本轮整体推迟**，留独立后续立项再议 PRF。
+- 是否允许热钱包长期保存加密助记词，还是只保存加密后的 `AccountRootSeedV1`（任务卡安全原则倾向后者）→ **实现期定**。
+- 现有开发期账户迁移说明 → 走账户状态机自然过渡（Sr25519Only → Bound → PqcOnly），不设计长期双轨兼容。
+- 新增实现期待定：general-tx 手续费向 canonical 账户计费的落点；`fips204` 是否暴露 seed-based 确定性 keygen；切 PqcOnly 的全网治理截止策略。

@@ -55,6 +55,7 @@
 - `memory/08-tasks/open/20260601-sfid-official-institutions.md`
 - `memory/08-tasks/open/20260603-sfid-gov-private-subjects.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
+- `memory/08-tasks/open/20260607-wallet-pqc-passkey.md`
 
 ## done
 

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/governance/shared/duoqian_create_amount_rules.dart';
@@ -19,6 +18,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
+import 'personal_duoqian_derive.dart';
 import 'personal_manage_service.dart';
 import 'personal_proposal_history_service.dart';
 
@@ -95,25 +95,16 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     if (wallet == null || name.isEmpty) return null;
 
     try {
-      final creatorBytes = _hexDecode(wallet.pubkeyHex);
-      final nameBytes = utf8.encode(name);
-      // 与 citizenchain primitives::core_const::{DUOQIAN, OP_PERSONAL} 严格对齐。
-      // preimage = b"DUOQIAN" || 0x05 || ss58.to_le_bytes() || creator(32B) || account_name
-      final input = <int>[
-        ...utf8.encode('DUOQIAN'),
-        0x05, // OP_PERSONAL
-        ..._u16LeBytes(_ss58Prefix),
-        ...creatorBytes,
-        ...nameBytes,
-      ];
-      final digest = Hasher.blake2b256.hash(Uint8List.fromList(input));
-      return Keyring().encodeAddress(digest, _ss58Prefix);
+      // 个人多签地址派生统一走 [deriveDuoqianPersonalAddress]，全 app 仅此一处。
+      return deriveDuoqianPersonalAddress(
+        creatorPubkey: Uint8List.fromList(_hexDecode(wallet.pubkeyHex)),
+        accountName: name,
+        ss58Prefix: _ss58Prefix,
+      );
     } catch (_) {
       return null;
     }
   }
-
-  List<int> _u16LeBytes(int value) => [value & 0xFF, (value >> 8) & 0xFF];
 
   // ──── 管理员管理 ────
 

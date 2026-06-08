@@ -10,10 +10,10 @@ import type {
   CreateInstitutionOutput,
   InstitutionCategory,
   InstitutionDetail,
+  Institution,
   InstitutionListRow,
   LegalRepresentativePhoto,
   ListInstitutionsQuery,
-  MultisigInstitution,
   PageResult,
   ParentInstitutionRow,
   UpdateInstitutionInput,
@@ -24,11 +24,11 @@ const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 export type {
   CreateInstitutionInput,
   CreateInstitutionOutput,
+  Institution,
   InstitutionCategory,
   InstitutionDetail,
   InstitutionListRow,
   LegalRepresentativePhoto,
-  MultisigInstitution,
   PageResult,
   ParentInstitutionRow,
   UpdateInstitutionInput,
@@ -131,7 +131,7 @@ export async function updateInstitution(
   auth: AdminAuth,
   sfidNumber: string,
   input: UpdateInstitutionInput,
-): Promise<MultisigInstitution> {
+): Promise<Institution> {
   const grantPayload = {
     target: sfidNumber,
     sfid_number: sfidNumber,
@@ -143,7 +143,7 @@ export async function updateInstitution(
     legal_rep_photo_path: input.legal_rep_photo_path ?? null,
   };
   const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_UPDATE', grantPayload);
-  return adminRequest<MultisigInstitution>(
+  return adminRequest<Institution>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}`,
     auth,
     {

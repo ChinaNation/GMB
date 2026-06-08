@@ -406,6 +406,18 @@ class InstitutionDuoqianLocalState {
         .deleteAll();
   }
 
+  /// 清空全部机构多签本地状态/详情；schema 迁移清缓存时使用。
+  static Future<void> clearAllInTxn(Isar isar) async {
+    await isar.appKvEntitys
+        .filter()
+        .keyStartsWith('institution_duoqian_status:')
+        .deleteAll();
+    await isar.appKvEntitys
+        .filter()
+        .keyStartsWith('institution_duoqian_detail:')
+        .deleteAll();
+  }
+
   static String _normalizeHex(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     return h.toLowerCase();
@@ -488,7 +500,7 @@ class PersonalDuoqianProposalEntity {
 
 /// 用户添加的多签机构（本地持久化）。
 @collection
-class DuoqianInstitutionEntity {
+class InstitutionEntity {
   Id id = Isar.autoIncrement;
 
   /// 多签地址公钥 hex（32 字节，不含 0x 前缀），唯一标识。
@@ -754,7 +766,7 @@ class WalletIsar {
       ObservedAccountEntitySchema,
       LoginReplayEntitySchema,
       AppKvEntitySchema,
-      DuoqianInstitutionEntitySchema,
+      InstitutionEntitySchema,
       PersonalDuoqianEntitySchema,
       PersonalDuoqianProposalEntitySchema,
       LocalTxEntitySchema,
@@ -899,7 +911,7 @@ class WalletIsarMigration {
   static const String _kSchemaVersion = 'wallet.data.schema.version';
 
   /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 3;
+  static const int currentSchemaVersion = 4;
 
   static Future<void> ensureMigrated(Isar isar) async {
     await _ensureSettingsRow(isar);
@@ -914,6 +926,13 @@ class WalletIsarMigration {
         // 不作为账本真源，升级到 v3 时直接清空，从当前本机时刻重新记录。
         await isar.localTxEntitys.clear();
         await isar.walletTxSyncCursorEntitys.clear();
+      }
+      if (version < 4) {
+        // 中文注释：DuoqianInstitutionEntity 改名为 InstitutionEntity（collection
+        // 名变更），旧 collection 数据仅为本地缓存，丢弃后由反向索引重新发现即可，
+        // 无需数据迁移。这里清空新 collection 兜底，避免新旧叠加出现脏数据。
+        await isar.institutionEntitys.clear();
+        await InstitutionDuoqianLocalState.clearAllInTxn(isar);
       }
       final entity = AppKvEntity()
         ..key = _kSchemaVersion

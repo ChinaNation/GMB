@@ -10,6 +10,11 @@ pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378; // 中共国第7次人口普
 /// 三、创世发行（单位：分）：144,349,737,800.00 元 = 14_434_973_780_000 分
 pub const GENESIS_ISSUANCE: u128 = 14_434_973_780_000; // 每人100元的创世发行总量，单位为分
 
+/// 三之二、两和基金发行（单位：分）：195,818,501,966.00 元 = 19_581_850_196_600 分。
+/// 两和基金 = 历史和解与和平建国基金，创世一次性增发到国储会两和基金账户(NRC_HE_ADDRESS)，
+/// 计入总供应量（独立于创世发行）。金额刻意编码 1958(大跃进)/1850(太平天国)/1966(文革)。
+pub const HE_FUND_ISSUANCE: u128 = 19_581_850_196_600; // 195,818,501,966.00 元
+
 use sp_std::vec::Vec;
 
 /// 四、公民宪法 HTML 真源
@@ -36,5 +41,11 @@ mod tests {
     fn genesis_issuance_matches_population() {
         // 中文注释：创世发行 = 创世人口 × 每人 100 元 × 100 分/元 = 人口 × 10_000。
         assert_eq!(GENESIS_ISSUANCE, GENESIS_CITIZEN_MAX as u128 * 10_000u128);
+    }
+
+    #[test]
+    fn he_fund_issuance_matches_whitepaper() {
+        // 中文注释：两和基金发行 = 195,818,501,966.00 元 × 100 分/元。
+        assert_eq!(HE_FUND_ISSUANCE, 195_818_501_966u128 * 100);
     }
 }
