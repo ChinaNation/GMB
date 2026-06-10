@@ -19,9 +19,6 @@ use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
 
-const MAX_CITY_CHARS: usize = 100;
-const MAX_INSTITUTION_CHARS: usize = 100;
-const MAX_PROVINCE_CHARS: usize = 100;
 const MAX_STATUS_REASON_CHARS: usize = 500;
 const GEO_SEAL_PREFIX: &str = "g1";
 
@@ -139,32 +136,39 @@ impl Db {
         })
     }
 
-    fn find_cpms_target_institution(
+    /// 按机构自身 sfid_number 反查机构真源(subjects 主键含 sfid_number,全局唯一)。
+    /// 返回 (province_name, city_name, province_code, city_code, institution_code, institution_name, category)。
+    fn find_cpms_target_institution_by_sfid(
         &self,
-        province: &str,
-        city: &str,
-        institution: &str,
-    ) -> Result<Option<(String, String, String, String, String)>, String> {
-        let province = province.trim().to_string();
-        let city = city.trim().to_string();
-        let institution = institution.trim().to_string();
+        sfid_number: &str,
+    ) -> Result<Option<(String, String, String, String, String, String, String)>, String> {
+        let sfid_number = sfid_number.trim().to_string();
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT sfid_number, province_code, city_code, institution_code,
-                            COALESCE(name, '')
+                    "SELECT COALESCE(province, ''), COALESCE(city, ''),
+                            COALESCE(province_code, ''), COALESCE(city_code, ''),
+                            COALESCE(institution_code, ''), COALESCE(name, ''),
+                            COALESCE(category, '')
                      FROM subjects
                      WHERE kind = 'PUBLIC'
                        AND status = 'ACTIVE'
-                       AND province = $1
-                       AND city = $2
-                       AND (institution_code = $3 OR COALESCE(name, '') = $3)
-                     ORDER BY created_at DESC
+                       AND sfid_number = $1
                      LIMIT 1",
-                    &[&province, &city, &institution],
+                    &[&sfid_number],
                 )
-                .map_err(|e| format!("query cpms target institution failed: {e}"))?;
-            Ok(row.map(|row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4))))
+                .map_err(|e| format!("query cpms target institution by sfid failed: {e}"))?;
+            Ok(row.map(|row| {
+                (
+                    row.get(0),
+                    row.get(1),
+                    row.get(2),
+                    row.get(3),
+                    row.get(4),
+                    row.get(5),
+                    row.get(6),
+                )
+            }))
         })
     }
 }
@@ -204,53 +208,18 @@ pub(crate) async fn generate_cpms_install_qr(
         return resp;
     }
 
-    let province = match ctx.admin_province.as_deref() {
-        Some(scope) => {
-            if let Some(raw) = input.province.as_deref() {
-                if !raw.trim().is_empty() && raw.trim() != scope {
-                    return api_error(
-                        StatusCode::FORBIDDEN,
-                        1003,
-                        "province out of current admin scope",
-                    );
-                }
-            }
-            scope.to_string()
-        }
-        None => match input
-            .province
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            Some(raw) => raw.to_string(),
-            None => return api_error(StatusCode::BAD_REQUEST, 1001, "province is required"),
-        },
+    let sfid_number = match validate_sfid_number_format(input.sfid_number.trim()) {
+        Ok(v) => v,
+        Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let city = input.city.trim().to_string();
-    let institution = input.institution.trim().to_string();
-    if city.is_empty() || institution.is_empty() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "city and institution are required",
-        );
-    }
-    if province.chars().count() > MAX_PROVINCE_CHARS
-        || city.chars().count() > MAX_CITY_CHARS
-        || institution.chars().count() > MAX_INSTITUTION_CHARS
-    {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "field too long");
-    }
-
-    let Some((sfid_number, province_code, city_code, institution_code, institution_name)) =
-        (match state
-            .db
-            .find_cpms_target_institution(&province, &city, &institution)
-        {
+    // 中文注释:安装码以机构自身 sfid_number 为唯一键(写/读同键);按 sfid 反查机构真源,
+    // 不再用 (province,city,institution) 三元组重解析(institution_code 如 ZF 是类别码,
+    // 同市可命中数十个机构,曾导致公安局页面生成的安装码错落到农业局名下)。
+    let Some((province, city, province_code, city_code, institution_code, institution_name, category)) =
+        (match state.db.find_cpms_target_institution_by_sfid(&sfid_number) {
             Ok(v) => v,
             Err(err) => {
-                tracing::error!(error = %err, "query cpms target institution failed");
+                tracing::error!(error = %err, "query cpms target institution by sfid failed");
                 return api_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     1004,
@@ -261,10 +230,25 @@ pub(crate) async fn generate_cpms_install_qr(
     else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
-    let sfid_number = match validate_sfid_number_format(sfid_number.as_str()) {
-        Ok(v) => v,
-        Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
-    };
+    // 中文注释:铁律——只有公安局(category=PUBLIC_SECURITY)才能签发 CPMS 安装码。
+    // 前端按钮只是展示层,服务端必须独立强制,否则任何直调 API 都能给非公安机构发码。
+    if category != "PUBLIC_SECURITY" {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "install code is only available for PUBLIC_SECURITY institutions",
+        );
+    }
+    // sheng admin 只能给本省机构发码;federal(无 scope)放行。
+    if let Some(scope) = ctx.admin_province.as_deref() {
+        if province != scope {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "province out of current admin scope",
+            );
+        }
+    }
     let install_secret = match generate_install_secret() {
         Ok(v) => v,
         Err(_) => {

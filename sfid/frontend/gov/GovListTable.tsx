@@ -155,8 +155,13 @@ export const GovListTable: React.FC<Props> = ({
     searchQuery,
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / DETERMINISTIC_PAGE_SIZE));
-  const displayRows = rows.slice(
+  // 市注册局(CITY_REGISTRY)已搬进「市注册局」tab,公权机构列表不再展示;
+  // 联邦注册局(FEDERAL_REGISTRY)是中枢省的国家级机构,按 user 决定保留在公权列表里。
+  const visibleRows = isPublicSecurity
+    ? rows
+    : rows.filter((r) => r.org_code !== 'CITY_REGISTRY');
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / DETERMINISTIC_PAGE_SIZE));
+  const displayRows = visibleRows.slice(
     (deterministicPage - 1) * DETERMINISTIC_PAGE_SIZE,
     deterministicPage * DETERMINISTIC_PAGE_SIZE,
   );
@@ -257,7 +262,7 @@ export const GovListTable: React.FC<Props> = ({
         <Typography.Text type="secondary">
           共 {totalPages} 页 / 第 {deterministicPage} 页
         </Typography.Text>
-        <Typography.Text type="secondary">共 {rows.length} 条</Typography.Text>
+        <Typography.Text type="secondary">共 {visibleRows.length} 条</Typography.Text>
         <Button disabled={loading || deterministicPage <= 1} onClick={() => setDeterministicPage((p) => Math.max(1, p - 1))}>
           上一页
         </Button>

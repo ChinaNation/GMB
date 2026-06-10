@@ -2,7 +2,7 @@
 // 代码内置初始联邦管理员只作为不可删除安全根保留。
 
 import { useMemo, useState } from 'react';
-import { Button, Form, Input, Modal, Space, Table, Typography } from 'antd';
+import { Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
@@ -172,21 +172,33 @@ export function ShengAdminSubTab({
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <Typography.Text type="secondary">
-          联邦管理员：{provinceAdmins.length} / 5
-        </Typography.Text>
-        {canAddShengAdmin ? (
-          <Button
-            type="primary"
-            disabled={shengAdminLimitReached}
-            title={shengAdminLimitReached ? '联邦管理员已满 5 人' : undefined}
-            onClick={() => setAddOpen(true)}
-          >
-            新增联邦管理员
-          </Button>
-        ) : null}
-      </div>
+      <Card
+        type="inner"
+        title={
+          <Space size={6} align="center">
+            <span>联邦管理员列表</span>
+            <span style={{ lineHeight: 1, color: 'rgba(15,23,42,0.45)' }}>·</span>
+            <span>{selectedShengAdmin.province}</span>
+          </Space>
+        }
+        extra={
+          <Space size="middle" align="center">
+            <Typography.Text type="secondary" style={{ fontWeight: 400, fontSize: 13 }}>
+              用户数：{provinceAdmins.length} / 5
+            </Typography.Text>
+            {canAddShengAdmin ? (
+              <Button
+                type="primary"
+                disabled={shengAdminLimitReached}
+                title={shengAdminLimitReached ? '联邦管理员已满 5 人' : undefined}
+                onClick={() => setAddOpen(true)}
+              >
+                新增联邦管理员
+              </Button>
+            ) : null}
+          </Space>
+        }
+      >
       <Table<ShengAdminRow>
         rowKey={(row) => `${row.id}-${row.admin_pubkey}`}
         loading={shengAdminsLoading}
@@ -220,6 +232,7 @@ export function ShengAdminSubTab({
           },
         ]}
       />
+      </Card>
 
       <Modal
         title={<div style={{ textAlign: 'center', width: '100%' }}>新增联邦管理员</div>}

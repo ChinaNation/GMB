@@ -1,22 +1,19 @@
-// 中文注释:私权机构页面入口。盈利/非盈利私权机构和非法人(ZG/TG)归这里;
-// 教育委员会(JY)学校机构统一在教育机构 tab 管理。
+// 中文注释:教育机构页面入口。教育委员会(JY)类学校机构(G 公立/S 私立/F 分校)统一在这里管理。
 //
 // 视觉完全复用"注册局"的 Card 样式(glassCardStyle / glassCardHeadStyle),
 // 保证横线颜色、毛玻璃底、绿色左竖条与注册局完全一致。
 //
-// Card title 布局:
-//   - 左侧绝对定位返回按钮(可选)
-//   - 中间绝对居中标题
-//   - 右侧由 Card.extra 承载(机构表格页的"+ 新增")
+// 详情页复用 gov/GovDetailPage 调度:S/F 学校(存储 category=PRIVATE_INSTITUTION)走
+// PrivateDetailLayout 完整编辑布局(含 F 关联所属法人),G 学校(GOV_INSTITUTION)走只读布局。
 
 import React, { useState } from 'react';
 import { Button, Card, Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { ProvinceGrid } from '../core/ProvinceGrid';
 import { CityGrid } from '../core/CityGrid';
-import { PrivateListTable } from './PrivateListTable';
-import { PrivateCreateModal } from './PrivateCreateModal';
-import { PrivateDetailPage } from './PrivateDetailPage';
+import { EducationListTable } from './EducationListTable';
+import { EducationCreateModal } from './EducationCreateModal';
+import { GovDetailPage } from '../gov/GovDetailPage';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
 import type { SfidMetaResult } from '../china/api';
@@ -43,7 +40,7 @@ function makeCenteredTitle(center: React.ReactNode, back?: () => void, backLabel
   );
 }
 
-export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
+export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
   const scope = useScope(auth);
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
@@ -58,10 +55,10 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
   const lockedProvince = scope.lockedProvince;
   const lockedCity = scope.lockedCity;
 
-  // 机构详情页由私权详情页组件接管,列表页自身只维护返回状态。
+  // 机构详情页由公权详情页组件按存储 category 调度,列表页自身只维护返回状态。
   if (selectedSfidNumber) {
     return (
-      <PrivateDetailPage
+      <GovDetailPage
         auth={auth}
         sfidNumber={selectedSfidNumber}
         canWrite={scope.canWrite}
@@ -91,7 +88,7 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
     title = '省份列表';
     body = <ProvinceGrid provinces={provinces} onPick={(p) => setSelectedProvince(p)} />;
   } else if (!effectiveCity) {
-    // ── 公权/私权的省详情 = 该省市列表 ──
+    // ── 省详情 = 该省市列表 ──
     const canGoBack = !scope.skipProvinceList;
     title = makeCenteredTitle(
       effectiveProvince,
@@ -100,7 +97,7 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
     );
     body = <CityGrid auth={auth} province={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
   } else {
-    // ── 公权/私权的市详情 = 该市机构表格 ──
+    // ── 市详情 = 该市教育机构表格 ──
     // 不使用 Card 的 extra(否则 extra 占用 title 空间,中间标题会被挤到左侧)。
     // 整个 Card head 用三列 flex:左返回 + 中标题 + 右(搜索+新增),
     // 左右两列 flex:1 等宽,保证中间标题相对整个 Card 真正居中;
@@ -121,7 +118,7 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
         <div style={{ flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0 }}>
           <Input
             value={searchInput}
-            placeholder="请输入机构名称、身份ID"
+            placeholder="请输入学校名称、身份ID"
             allowClear
             style={{ flex: '1 1 auto', maxWidth: 360, minWidth: 0 }}
             onChange={(e) => {
@@ -140,17 +137,17 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
               </span>
             }
           />
-	          {scope.canWrite && (
-	            <Button type="primary" onClick={() => setCreateOpen(true)}>
-	              + {createLabel}
-	            </Button>
-	          )}
+          {scope.canWrite && (
+            <Button type="primary" onClick={() => setCreateOpen(true)}>
+              + {createLabel}
+            </Button>
+          )}
         </div>
       </div>
     );
     extra = null;
     body = (
-      <PrivateListTable
+      <EducationListTable
         auth={auth}
         province={effectiveProvince}
         city={effectiveCity}
@@ -173,7 +170,7 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
         {body}
       </Card>
 
-      <PrivateCreateModal
+      <EducationCreateModal
         auth={auth}
         open={createOpen}
         lockedProvince={effectiveProvince}
@@ -182,7 +179,7 @@ export const PrivateView: React.FC<Props> = ({ auth, sfidMeta }) => {
         onCreated={(result) => {
           setCreateOpen(false);
           setRefreshKey((k) => k + 1);
-          // 两步式:私权机构生成 SFID 后直接跳详情页,让管理员补填名称/企业类型等信息
+          // 创建成功直接跳详情页:S 补企业类型、F 关联所属法人、G 只读查看
           if (result?.sfid_number) {
             setSelectedSfidNumber(result.sfid_number);
           }

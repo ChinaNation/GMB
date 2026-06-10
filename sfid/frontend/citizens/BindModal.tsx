@@ -24,7 +24,7 @@ interface BindModalProps {
   open: boolean;
   record: CitizenRow | null;
   onClose: () => void;
-  onBound: () => Promise<void> | void;
+  onBound: (boundSfidNumber?: string) => Promise<void> | void;
 }
 
 function bindErrorMessage(err: unknown): string {
@@ -154,7 +154,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       });
       notice.success(`${modalTitle}成功${result.sfid_number ? `，身份ID：${result.sfid_number}` : ''}`);
       onClose();
-      await onBound();
+      await onBound(result.sfid_number);
     } catch (err) {
       notice.error(bindErrorMessage(err));
     } finally {

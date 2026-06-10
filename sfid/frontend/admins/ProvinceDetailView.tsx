@@ -1,9 +1,11 @@
-// 注册局视图 mode='system-settings'
-// 和机构类省市视图保持一样的显示方式:
-//   始终渲染一个 Card,按角色和选中状态切换内部 title/body/extra
-//   用 useScope 自动处理角色锁定,不闪烁
+// 注册局机构详情视图(两个顶级 tab 各一个):
+//   - CityRegistryView(市注册局 tab):联邦管理员 城市网格→点市→该市注册局机构详情页;
+//                                      市级管理员 直接进本市注册局机构详情页。
+//   - FederalRegistryView(联邦注册局 tab):全国唯一联邦注册局机构详情页。
+// 两者 leaf 都是「机构详情页 + 内嵌管理员列表」(GovDetailPage.adminListSection),
+// 管理员列表渲染在机构信息卡与账户列表卡之间。数据由 ShengAdminsView 统一加载。
 
-import React, { useState } from 'react';
+import React, { useCallback } from 'react';
 import { Button, Card, Space, Table, Tag, Typography } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
@@ -16,19 +18,16 @@ import type { ShengAdminSharedState } from './shengAdminUtils';
 import { AddOperatorModal } from './AddOperatorModal';
 import { ShengAdminSubTab } from './ShengAdminSubTab';
 import { Passkey } from './Passkey';
+import { GovDetailPage } from '../gov/GovDetailPage';
+import { getFederalRegistry } from '../gov/api';
 
-interface ProvinceDetailViewProps {
+interface RegistryViewProps {
   state: ShengAdminSharedState;
 }
 
-function makeCenteredTitle(center: React.ReactNode, back?: () => void) {
+function makeCenteredTitle(center: React.ReactNode) {
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minHeight: 32 }}>
-      {back && (
-        <Button type="link" style={{ paddingLeft: 0 }} onClick={back}>
-          ← 返回
-        </Button>
-      )}
       <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
         {center}
       </span>
@@ -36,18 +35,66 @@ function makeCenteredTitle(center: React.ReactNode, back?: () => void) {
   );
 }
 
-export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
+// ── 联邦注册局 tab:机构详情页 + 本省联邦管理员列表 ──
+
+export function FederalRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
-  const scope = useScope(auth);
   const {
     shengAdmins,
     shengAdminsLoading,
     selectedShengAdmin,
-    setSelectedShengAdmin,
+    federalRegistryDetail,
+    federalRegistryLoading,
+  } = state;
+
+  // 稳定引用:复用 ShengAdminsView 预加载的 detail,避免 GovDetailPage 重复触发 load。
+  const loadFederalRegistry = useCallback(() => {
+    if (federalRegistryDetail) return Promise.resolve(federalRegistryDetail);
+    if (auth) return getFederalRegistry(auth);
+    return Promise.reject(new Error('未登录'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [federalRegistryDetail, auth?.access_token]);
+
+  if (!auth) return null;
+
+  if (!federalRegistryDetail) {
+    return (
+      <Card bordered={false} style={glassCardStyle} headStyle={glassCardHeadStyle}>
+        <Typography.Text type="secondary">
+          {federalRegistryLoading ? '加载中...' : '暂无联邦注册局数据'}
+        </Typography.Text>
+      </Card>
+    );
+  }
+
+  return (
+    <GovDetailPage
+      auth={auth}
+      sfidNumber={federalRegistryDetail.institution.sfid_number}
+      canWrite={false}
+      loadDetail={loadFederalRegistry}
+      adminListSection={selectedShengAdmin ? (
+        <ShengAdminSubTab
+          selectedShengAdmin={selectedShengAdmin}
+          shengAdmins={shengAdmins}
+          shengAdminsLoading={shengAdminsLoading}
+          refreshShengAdmins={state.refreshShengAdmins}
+          runSecuredAction={state.runSecuredAction}
+        />
+      ) : null}
+    />
+  );
+}
+
+// ── 市注册局 tab:城市网格(联邦) / 机构详情页 + 本市市级管理员列表 ──
+
+export function CityRegistryView({ state }: RegistryViewProps) {
+  const { auth } = useAuth();
+  const scope = useScope(auth);
+  const {
+    selectedShengAdmin,
     selectedCity,
     setSelectedCity,
-    adminDetailTab,
-    setAdminDetailTab,
     operators,
     operatorsLoading,
     operatorListPage,
@@ -57,118 +104,46 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
     setAddOperatorOpen,
     onUpdateOperator,
     onDeleteOperator,
+    cityRegistrySfid,
   } = state;
 
-  // scope 自动锁定省和市
-  const [pickedProvince, setPickedProvince] = useState<string | null>(null);
-  const effectiveProvince = pickedProvince ?? scope.lockedProvince;
+  if (!auth) return null;
+
+  const effectiveProvince = scope.lockedProvince;
   const effectiveCity = selectedCity ?? scope.lockedCity;
-
-  // 点击省份时同步 selectedShengAdmin
-  const onPickProvince = (provinceName: string) => {
-    const row = shengAdmins.find((r) => r.province === provinceName);
-    if (row) {
-      setSelectedShengAdmin(row);
-      setPickedProvince(provinceName);
-    }
-  };
-
-  // 当前省的管理员
   const operatorsForProvince = selectedShengAdmin ? operators : [];
+  // 市级管理员只读;联邦管理员可增删改(后端按登录省域二次校验)。
+  const canEditOperators = scope.canWrite && auth.role === 'FEDERAL_ADMIN';
 
-  // 中文注释:后端按登录省域二次校验;前端只负责把联邦管理员入口打开。
-  const canEditOperators = scope.canWrite && auth?.role === 'FEDERAL_ADMIN';
-  // sub-tab(仅在省详情内显示)
-  const subTabs: Array<{ key: 'operators' | 'sheng-admin'; label: string }> = [
-    { key: 'operators', label: '市级管理员列表' },
-    { key: 'sheng-admin', label: '联邦管理员列表' },
-  ];
-
-  // ── 决定 title / body / extra ──
-  let title: React.ReactNode;
-  let extra: React.ReactNode = null;
   let body: React.ReactNode;
-
-  if (!effectiveProvince) {
-    // ── 全国省份网格(ADR-008 全局视图,跨省按钮置灰) ──
-    title = '省份列表';
-    body = shengAdminsLoading ? (
-      <Typography.Text type="secondary">加载中...</Typography.Text>
-    ) : (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-        {shengAdmins.map((row) => (
-          <div
-            key={`${row.province}-${row.admin_pubkey}`}
-            onClick={() => onPickProvince(row.province)}
-            style={{
-              padding: 18, borderRadius: 12,
-              border: '1px solid rgba(15,23,42,0.22)',
-              background: 'rgba(226,232,240,0.55)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              cursor: 'pointer', transition: 'all 0.2s ease',
-              textAlign: 'center',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLDivElement).style.background = 'rgba(13,148,136,0.22)';
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(13,148,136,0.55)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLDivElement).style.background = 'rgba(226,232,240,0.55)';
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
-            }}
-          >
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{row.province}</div>
-          </div>
-        ))}
-      </div>
-    );
-  } else if (!effectiveCity) {
-    // ── 省详情:市级管理员列表入口 + sub-tab ──
-    const canGoBack = !scope.skipProvinceList;
-    title = makeCenteredTitle(
-      effectiveProvince,
-      canGoBack ? () => { setPickedProvince(null); setSelectedShengAdmin(null); } : undefined,
-    );
+  if (!effectiveCity) {
+    // 联邦管理员未选市 → 城市网格(套 Card 显示省份标题)
     body = (
-      <>
-        <SubTabBar tabs={subTabs} active={adminDetailTab} onChange={(key) => {
-          setAdminDetailTab(key);
-          if (key === 'operators') setSelectedCity(null);
-        }} />
-        {adminDetailTab === 'operators' ? (
-          <CityGrid
-            cities={operatorCities.filter((c) => c.code !== '000')}
-            citiesLoading={operatorCitiesLoading || (!selectedShengAdmin && operatorCities.length === 0)}
-            operators={operatorsForProvince}
-            onSelectCity={setSelectedCity}
-          />
-        ) : selectedShengAdmin ? (
-          <ShengAdminSubTab
-            selectedShengAdmin={selectedShengAdmin}
-            shengAdmins={shengAdmins}
-            shengAdminsLoading={shengAdminsLoading}
-            refreshShengAdmins={state.refreshShengAdmins}
-            runSecuredAction={state.runSecuredAction}
-          />
-        ) : null}
-      </>
+      <Card
+        title={makeCenteredTitle(effectiveProvince ?? '市注册局')}
+        bordered={false}
+        style={glassCardStyle}
+        headStyle={glassCardHeadStyle}
+      >
+        <CityGrid
+          cities={operatorCities.filter((c) => c.code !== '000')}
+          citiesLoading={operatorCitiesLoading || (!selectedShengAdmin && operatorCities.length === 0)}
+          operators={operatorsForProvince}
+          onSelectCity={setSelectedCity}
+        />
+      </Card>
     );
-  } else {
-    // ── 市详情:该市市级管理员列表 + sub-tab ──
+  } else if (cityRegistrySfid) {
+    // 选中市(联邦) / 锁定市(市管理员) → 市注册局机构详情页 + 本市市级管理员列表
     const canGoBack = !scope.skipCityList;
-    title = makeCenteredTitle(
-      `${effectiveProvince} · ${effectiveCity}`,
-      canGoBack ? () => { setSelectedCity(null); setOperatorListPage(1); } : undefined,
-    );
     body = (
-      <>
-        <SubTabBar tabs={subTabs} active={adminDetailTab} onChange={(key) => {
-          setAdminDetailTab(key);
-          // 中文注释:联邦管理员列表属于省级页,从市详情点击时必须回到省级上下文。
-          if (key === 'sheng-admin') setSelectedCity(null);
-          if (key === 'operators' && !scope.skipCityList) setSelectedCity(null);
-        }} />
-        {adminDetailTab === 'operators' ? (
+      <GovDetailPage
+        auth={auth}
+        sfidNumber={cityRegistrySfid}
+        canWrite={scope.canWrite}
+        onBack={canGoBack ? () => { setSelectedCity(null); setOperatorListPage(1); } : undefined}
+        backLabel="返回"
+        adminListSection={
           <CityOperatorsView
             canEditOperators={canEditOperators}
             operators={operatorsForProvince.filter((op) => op.city === effectiveCity)}
@@ -179,66 +154,23 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
             onUpdateOperator={onUpdateOperator}
             onDeleteOperator={onDeleteOperator}
           />
-        ) : selectedShengAdmin ? (
-          <ShengAdminSubTab
-            selectedShengAdmin={selectedShengAdmin}
-            shengAdmins={shengAdmins}
-            shengAdminsLoading={shengAdminsLoading}
-            refreshShengAdmins={state.refreshShengAdmins}
-            runSecuredAction={state.runSecuredAction}
-          />
-        ) : null}
-      </>
+        }
+      />
+    );
+  } else {
+    // effectiveCity 必有对应市注册局(CITY_TEMPLATES 必生成);sfid 解析失败会单独 toast 报错。
+    body = (
+      <Card bordered={false} style={glassCardStyle} headStyle={glassCardHeadStyle}>
+        <Typography.Text type="secondary">加载中...</Typography.Text>
+      </Card>
     );
   }
 
   return (
     <>
-      <Card
-        title={title}
-        extra={extra}
-        bordered={false}
-        style={glassCardStyle}
-        headStyle={glassCardHeadStyle}
-      >
-        {body}
-      </Card>
+      {body}
       <AddOperatorModal state={state} />
     </>
-  );
-}
-
-// ── Sub-tab 按钮条 ──
-
-function SubTabBar({ tabs, active, onChange }: {
-  tabs: Array<{ key: string; label: string }>;
-  active: string;
-  onChange: (key: 'operators' | 'sheng-admin') => void;
-}) {
-  return (
-    <div style={{
-      display: 'flex', gap: 8, padding: 6,
-      background: 'rgba(15,23,42,0.06)', borderRadius: 10,
-      border: '1px solid rgba(15,23,42,0.12)',
-      width: 'fit-content', marginBottom: 16,
-    }}>
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          onClick={() => onChange(t.key as 'operators' | 'sheng-admin')}
-          style={{
-            padding: '6px 18px', borderRadius: 8, border: 'none',
-            cursor: 'pointer', fontSize: 13, fontWeight: 500,
-            transition: 'all 0.2s ease',
-            ...(active === t.key
-              ? { background: 'linear-gradient(135deg, #0d9488, #0f766e)', color: '#fff', boxShadow: '0 2px 6px rgba(13,148,136,0.35)' }
-              : { background: 'rgba(255,255,255,0.7)', color: 'rgba(15,23,42,0.75)' }),
-          }}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -293,7 +225,7 @@ function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
   );
 }
 
-// ── 某市的管理员列表 ──
+// ── 某市的市级管理员列表(内嵌进市注册局机构详情页) ──
 
 function CityOperatorsView({ canEditOperators, operators, operatorsLoading, operatorListPage, setOperatorListPage, setAddOperatorOpen, onUpdateOperator, onDeleteOperator }: {
   canEditOperators: boolean;
@@ -309,18 +241,15 @@ function CityOperatorsView({ canEditOperators, operators, operatorsLoading, oper
   // 中文注释:本列表已经按当前市过滤,所以长度就是该市市级管理员数量。
   const cityLimitReached = operators.length >= MAX_SHI_ADMINS_PER_CITY;
   return (
-    <>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-      }}>
-        <Typography.Text type="secondary">
-          本市市级管理员：{operators.length} / {MAX_SHI_ADMINS_PER_CITY}
-        </Typography.Text>
-        <div>
-          {canEditOperators && (
+    <Card
+      type="inner"
+      title="市级管理员列表"
+      extra={
+        <Space size="middle" align="center">
+          <Typography.Text type="secondary" style={{ fontWeight: 400, fontSize: 13 }}>
+            用户数：{operators.length} / {MAX_SHI_ADMINS_PER_CITY}
+          </Typography.Text>
+          {canEditOperators ? (
             <Button
               type="primary"
               disabled={cityLimitReached}
@@ -329,9 +258,10 @@ function CityOperatorsView({ canEditOperators, operators, operatorsLoading, oper
             >
               新增市级管理员
             </Button>
-          )}
-        </div>
-      </div>
+          ) : null}
+        </Space>
+      }
+    >
       <Table<OperatorRow>
         rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
         loading={operatorsLoading}
@@ -361,6 +291,6 @@ function CityOperatorsView({ canEditOperators, operators, operatorsLoading, oper
           },
         ]}
       />
-    </>
+    </Card>
   );
 }

@@ -52,6 +52,10 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   bool _loadingBalance = true;
   bool _submitting = false;
   double? _availableBalance;
+
+  /// 中文注释：链上余额刷新失败、当前展示的是本地缓存旧值时置位，
+  /// UI 必须明示"可能已过期"，防止用户拿过期余额提交转账。
+  bool _balanceStale = false;
   double _estimatedFee = 0.0;
   String? _addressError;
   String? _amountError;
@@ -101,21 +105,27 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
           accountHex: widget.institution.mainAddress,
           balanceYuan: balance,
         );
-      } catch (_) {
-        // 余额快照写入失败不影响当前链上余额展示。
+      } catch (e) {
+        // 余额快照写入失败不影响当前链上余额展示，但要留痕便于排查缓存问题。
+        debugPrint('[DuoqianTransfer] 余额快照写入失败: $e');
       }
       if (!mounted) return;
       setState(() {
         _availableBalance = balance;
         _loadingBalance = false;
+        _balanceStale = false;
       });
-    } catch (_) {
+    } catch (e) {
+      // 链上余额查询失败必须留痕；有缓存时继续展示旧值但要标记过期。
+      debugPrint('[DuoqianTransfer] 链上余额查询失败: $e');
       if (!mounted) return;
       if (local == null) {
         setState(() {
           _availableBalance = null;
           _loadingBalance = false;
         });
+      } else {
+        setState(() => _balanceStale = true);
       }
     }
   }
@@ -392,8 +402,10 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
           'amount_yuan': amountYuan,
         },
       );
-    } catch (_) {
-      // 写入失败不阻断主流程(链端已成功)
+    } catch (e) {
+      // 写入失败不阻断主流程(链端已成功)，但本地提案历史会缺该记录，
+      // 必须留痕，否则用户会误以为提案没创建而重复提交。
+      debugPrint('[DuoqianTransfer] 本地提案历史写入失败: $e');
     }
   }
 
@@ -564,6 +576,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
                 ? '查询中...'
                 : _availableBalance != null
                     ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
+                        '${_balanceStale ? '（链上刷新失败，金额可能已过期）' : ''}'
                     : '查询失败',
           ),
           const SizedBox(height: 16),

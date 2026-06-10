@@ -214,7 +214,7 @@ function AddressScope() {
 
   return (
     <Section step={5} title="行政区数据" done={towns.length > 0}>
-      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>镇/街道</div>
+      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>镇</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {towns.map(t => (
           <div key={t.town_code} style={{

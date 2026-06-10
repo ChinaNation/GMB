@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 
 /// 账户余额展示快照。
@@ -122,7 +123,9 @@ class AccountBalanceSnapshot {
         updatedAtMillis: updatedAtMillis,
         source: source,
       );
-    } catch (_) {
+    } catch (e) {
+      // 缓存解析失败按"无快照"降级，但要留痕以区分"缓存损坏"与"缓存不存在"。
+      debugPrint('[BalanceSnapshot] 快照 JSON 解析失败: $e');
       return null;
     }
   }

@@ -210,7 +210,7 @@ export default function ArchiveDetail() {
     if (!String(editForm.gender_code || '')) { setError('请选择性别'); return; }
     const height = Number(heightText);
     if (!Number.isFinite(height) || height < 30 || height > 260) { setError('请输入正确的身高'); return; }
-    if (!String(editForm.town_code || '')) { setError('请选择镇/街道'); return; }
+    if (!String(editForm.town_code || '')) { setError('请选择镇'); return; }
     if (!String(editForm.village_id || '')) { setError('请选择村/路'); return; }
     if (!String(editForm.address || '').trim()) { setError('请输入详细地址'); return; }
     setSaving(true);
@@ -525,7 +525,7 @@ export default function ArchiveDetail() {
                 </div>
                 <div className="form-row mt-16">
                   <div className="form-group">
-                    <label>镇/街道 *</label>
+                    <label>镇 *</label>
                     <select className="form-input" value={String(editForm.town_code || '')} onChange={e => handleEditTownChange(e.target.value)}>
                       <option value="">请选择</option>
                       {towns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}

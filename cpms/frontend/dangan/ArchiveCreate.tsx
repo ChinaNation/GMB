@@ -121,9 +121,9 @@ export default function ArchiveCreate() {
       </div>
       <div className="form-row">
         <div className="form-group">
-          <label>镇/街道 *</label>
+          <label>镇 *</label>
           <select className="form-input" value={selectedTown} onChange={e => setSelectedTown(e.target.value)}>
-            <option value="">请选择镇/街道</option>
+            <option value="">请选择镇</option>
             {towns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}
           </select>
         </div>

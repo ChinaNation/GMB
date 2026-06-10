@@ -441,3 +441,41 @@ pub(crate) async fn get_institution(
     })
     .into_response()
 }
+
+/// 联邦注册局机构详情(只读)。
+/// 联邦注册局是全国唯一机构(位于中枢省),所有省份管理员都需要进入它的机构详情页查看
+/// 本省联邦管理员列表,因此这里**不做 scope 校验**(与 get_institution 的唯一区别)。
+/// 仍要求已登录管理员;只返回 FEDERAL_REGISTRY 这一个机构。
+pub(crate) async fn get_federal_registry(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin_any(&state, &headers) {
+        return resp;
+    }
+    // 联邦注册局 sfid 来自创世常量(china_zf),按 sfid_number 直接定位,绕过 org_code 与 scope。
+    let Some(sfid_number) = crate::gov::service::federal_registry_sfid_number() else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "federal registry not configured");
+    };
+    let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(sfid_number) {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query federal registry failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    }) else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "federal registry not found");
+    };
+    let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: InstitutionDetailOutput {
+            institution: inst,
+            accounts,
+            created_by_name,
+            created_by_role,
+        },
+    })
+    .into_response()
+}

@@ -41,10 +41,11 @@ sfid/frontend/
 ├── china/                     # 行政区元数据 API 和确定性列表/详情缓存
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
 ├── core/                      # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗、QR 协议和机构共享表单
-│   └── institution/           # 公权/私权共用机构新增表单,不承载业务 API
+│   └── institution/           # 私权/教育共用机构新增表单,不承载业务 API
 │   └── qr/                    # WUMIN_QR_V1 前端解析器
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── docs/                      # 机构资料库前端出口
+├── education/                 # 教育机构页面入口,教育委员会(JY)学校机构唯一管理界面
 ├── gov/                       # 公权机构页面入口,前后端统一使用 gov 命名
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
 ├── private/                   # 私权机构页面入口
@@ -64,21 +65,22 @@ sfid/frontend/
 - 行政区和编码元数据接口放 `china/api.ts`;省市清单走 `/api/v1/admin/china/cities`,
   编码选项走 `/api/v1/admin/number/meta`。
 - `subjects/api.ts` 只保留跨公权/私权共用的数据类型和公共边界;业务 CRUD API
-  分别放 `gov/api.ts`、`private/api.ts`、`accounts/api.ts`、`docs/api.ts`。
+  分别放 `gov/api.ts`、`private/api.ts`、`education/api.ts`、`accounts/api.ts`、`docs/api.ts`。
   机构与区块链交互继续放 `subjects/chain_duoqian_info.ts`。
 - 公权机构页面入口放 `gov/`,前后端统一使用 `gov` 命名;前端不得新建 `public/` 业务目录。
-- 私权机构页面入口放 `private/`;身份主体公共出口放 `subjects/`;账户和资料库出口分别放
-  `accounts/`、`docs/`。
-- 不得恢复 `institutions/` 前端目录;公权 UI 归 `gov/`,私权 UI 归 `private/`,
-  账户和资料库分别归 `accounts/`、`docs/`。`subjects/` 不再承载机构聚合页面组件。
+- 私权机构页面入口放 `private/`;教育机构(教育委员会 JY 学校机构)页面入口放 `education/`;
+  身份主体公共出口放 `subjects/`;账户和资料库出口分别放 `accounts/`、`docs/`。
+- 不得恢复 `institutions/` 前端目录;公权 UI 归 `gov/`,私权 UI 归 `private/`,教育 UI 归
+  `education/`,账户和资料库分别归 `accounts/`、`docs/`。`subjects/` 不再承载机构聚合页面组件。
 - CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 省/市管理员本地后台接口统一放 `admins/`;联邦管理员目录接口放 `admins/api.ts`,
   市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `core/WuminSignaturePanel.tsx` 与 `core/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
-- `core/institution/CreateInstitutionForm.tsx` 是公权/私权新增弹窗唯一表单实现;
-  `gov/GovCreateModal.tsx` 和 `private/PrivateCreateModal.tsx` 只做本模块 API 注入,不得再复制表单逻辑。
+- `core/institution/CreateInstitutionForm.tsx` 是私权/教育新增弹窗唯一表单实现;
+  `private/PrivateCreateModal.tsx` 和 `education/EducationCreateModal.tsx` 只做本模块 API 注入,
+  不得再复制表单逻辑。公权机构无手动新增,`gov/` 下不得恢复 CreateModal。
 - `core/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 冷钱包签名弹窗固定在最高安全层。
 - `core/qr/wuminQr.ts` 是前端 WUMIN_QR_V1 envelope 解析唯一入口;不得恢复独立
@@ -122,10 +124,15 @@ sfid/frontend/
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
 - `china/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
 - `core/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
-- `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 只承载公安局和公权机构确定性列表,进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
-- 公权机构 tab 不再提供普通公权机构新增入口；右上角按钮文案固定为“新增”。
-- `core/institution/CreateInstitutionForm.tsx` 中公权新增只允许 `G/JY`,填写的是学校名称,不得出现所属学校 SFID。
-- 公权机构和私权机构新增选项中 `JY` 文案均显示为“教育委员会 (JY)”；选择 `JY` 时名称字段标签显示为“学校名称”。
+- `private/PrivateListTable.tsx` 与 `education/EducationListTable.tsx` 不做普通机构本地分页承载大数据；私权/教育机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 只承载公安局和公权机构确定性列表,进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
+- 公权机构 tab 无任何手动新增入口(公权机构全部由后端自动生成)。
+- 教育委员会(JY)学校机构统一在教育机构 tab(`education/`)管理:列表走
+  `category=EDUCATION_INSTITUTION`(= 手动 JY 学校,跨 GOV/PRIVATE 存储 category),
+  私权/公权列表同步排除;自动生成的监管本体(公民教育委员会/国家教育委员会)仍留在公权目录。
+- 教育机构新增表单:机构锁死“教育委员会 (JY)”,名称字段标签显示“学校名称”;
+  主体属性 G(公立,P1 锁非盈利)/S(私立,P1 可选)/F(分校,先选上级法人属性:上级=G 锁非盈利,
+  上级=S 再选上级盈利属性并由 F 继承;上级法人属性仅推导 P1,创建后在详情页关联所属法人)。
+- 私权机构新增选项只剩 `ZG/TG`,不得再出现 `JY`。
 - 机构链上状态前端只保留“未注册 / 已注册 / 已注销”,不得出现第四状态筛选或文案。
 
 ## 管理员目录规则
@@ -199,6 +206,7 @@ CPMS 系统管理也不列入链交互表,归 `cpms/`。
   "core",
   "cpms",
   "docs",
+  "education",
   "gov",
   "hooks",
   "private",

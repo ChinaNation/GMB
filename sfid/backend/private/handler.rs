@@ -24,7 +24,8 @@ use crate::subjects::http::{
     service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
 };
 use crate::subjects::model::{
-    CreateInstitutionInput, CreateInstitutionOutput, Institution, InstitutionListRow,
+    CreateInstitutionInput, CreateInstitutionOutput, Institution, InstitutionListFilter,
+    InstitutionListRow,
 };
 use crate::subjects::service::{
     derive_category, validate_institution_name, validate_legal_representative_required,
@@ -315,8 +316,12 @@ pub(crate) async fn list_institutions(
         Err(resp) => return resp,
     };
     let scope = get_visible_scope(&ctx);
-    let category = match query.category.as_deref() {
-        Some("PRIVATE_INSTITUTION") | Some("GOV_INSTITUTION") => query.category.as_deref(),
+    // 中文注释:JY 学校机构统一收口教育机构 tab(EDUCATION_INSTITUTION),
+    // 私权/公权两路列表同步排除,过滤子句见 InstitutionListFilter。
+    let filter = match query.category.as_deref() {
+        Some("PRIVATE_INSTITUTION") => InstitutionListFilter::Private,
+        Some("GOV_INSTITUTION") => InstitutionListFilter::Gov,
+        Some("EDUCATION_INSTITUTION") => InstitutionListFilter::Education,
         Some("PUBLIC_SECURITY") => {
             return api_error(
                 StatusCode::BAD_REQUEST,
@@ -379,7 +384,7 @@ pub(crate) async fn list_institutions(
         None => None,
     };
     let page = match state.db.list_institutions_exact(
-        category,
+        filter,
         province_code,
         city_code,
         query.q.as_deref().unwrap_or(""),

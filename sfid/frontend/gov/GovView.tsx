@@ -14,7 +14,6 @@ import { SearchOutlined } from '@ant-design/icons';
 import { ProvinceGrid } from '../core/ProvinceGrid';
 import { CityGrid } from '../core/CityGrid';
 import { GovListTable } from './GovListTable';
-import { GovCreateModal } from './GovCreateModal';
 import { GovDetailPage } from './GovDetailPage';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
@@ -50,7 +49,6 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedSfidNumber, setSelectedSfidNumber] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // 市详情页的机构列表搜索:输入不自动触发,点搜索图标提交 → committedSearch
   const [searchInput, setSearchInput] = useState('');
@@ -61,7 +59,6 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
     setSelectedProvince(null);
     setSelectedCity(null);
     setSelectedSfidNumber(null);
-    setCreateOpen(false);
     setSearchInput('');
     setCommittedSearch('');
   }, [auth.admin_pubkey, category, resetToken]);
@@ -92,9 +89,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
   const effectiveProvince = selectedProvince ?? lockedProvince;
   const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCity : null);
 
-  // 中文注释:普通公权机构由后端自动生成;公权 Tab 手动入口只保留教育委员会类型学校机构。
-  const createLabel = '新增';
-
+  // 中文注释:公权机构全部由后端自动生成,本页无手动新增入口;
+  // 教育委员会(JY)学校机构的新增/管理统一在教育机构 tab。
   const onSubmitSearch = () => {
     setCommittedSearch(searchInput.trim());
   };
@@ -179,11 +175,6 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
               </span>
             }
           />
-	          {scope.canWrite && (
-	            <Button type="primary" onClick={() => setCreateOpen(true)}>
-	              {category === 'GOV_INSTITUTION' ? createLabel : `+ ${createLabel}`}
-	            </Button>
-	          )}
         </div>
       </div>
     );
@@ -212,20 +203,6 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
       >
         {body}
       </Card>
-
-      <GovCreateModal
-        auth={auth}
-        category={category}
-        open={createOpen}
-        lockedProvince={effectiveProvince}
-        lockedCity={effectiveCity}
-        onCancel={() => setCreateOpen(false)}
-        onCreated={(result) => {
-          setCreateOpen(false);
-          setRefreshKey((k) => k + 1);
-          if (result?.sfid_number) setSelectedSfidNumber(result.sfid_number);
-        }}
-      />
     </>
   );
 };

@@ -4,5 +4,5 @@
 import { ShengAdminsView } from './ShengAdminsView';
 
 export function OperatorsView() {
-  return <ShengAdminsView mode="system-settings" />;
+  return <ShengAdminsView mode="city-registry" />;
 }

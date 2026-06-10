@@ -47,7 +47,7 @@ fn build_hashed_payload_request(
     // expected_payload_hash 必须对应 QR 中实际发送的 payload_hex。
     let payload_hash = sha256_hash(payload_for_qr.as_bytes());
 
-    let now = now_secs();
+    let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: "sign_request".to_string(),

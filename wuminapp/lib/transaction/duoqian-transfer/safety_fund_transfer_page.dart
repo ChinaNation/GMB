@@ -295,7 +295,9 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = DuoqianTransferService();
-      await service.submitProposeSafetyFund(
+      // 中文注释：提案类交易等真正入块并核对事件后才返回，proposalId 来自
+      // 链上 SafetyFundTransferProposed 事件，是业务成功的唯一凭据。
+      final result = await service.submitProposeSafetyFund(
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,
@@ -306,7 +308,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('提交成功')),
+        SnackBar(content: Text('提案已创建（#${result.proposalId}），等待管理员投票')),
       );
       Navigator.of(context).pop(true);
     } on WalletAuthException catch (e) {

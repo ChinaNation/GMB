@@ -104,7 +104,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
 
         // 6. 查链上 nonce(对 sender_pair 对应账户)
         let sender_account = AccountId32::from(sender_pair.public());
-        let nonce = lookup_nonce(&self.client, &sender_account);
+        let nonce = lookup_nonce(&self.client, &sender_account)?;
 
         // 7. 构造签名过的 extrinsic
         let extrinsic = build_signed_extrinsic(&self.client, &sender_pair, call, nonce)?;
@@ -132,12 +132,16 @@ impl BatchSubmitter for PoolBatchSubmitter {
     }
 }
 
-/// 查询链上某账户最新 nonce。若 runtime api 不可用,回退 0(链上 `CheckNonce`
-/// 会把不匹配的 nonce 拒掉,不会静默成功)。
-fn lookup_nonce(client: &FullClient, account: &AccountId32) -> u32 {
+/// 查询链上某账户最新 nonce。
+///
+/// 中文注释:runtime api 失败时绝不回退 0——nonce=0 会让整批交易被池以
+/// Stale 拒掉,而提交方只看到"提交失败"却不知道根因是 nonce 查询失败,
+/// 必须把错误如实上抛。
+fn lookup_nonce(client: &FullClient, account: &AccountId32) -> Result<u32, String> {
     let best_hash = client.info().best_hash;
     let api = client.runtime_api();
-    api.account_nonce(best_hash, account.clone()).unwrap_or(0)
+    api.account_nonce(best_hash, account.clone())
+        .map_err(|e| format!("账户 nonce 查询失败: {e}"))
 }
 
 // ---------------- 纯函数工具(便于单测) ----------------
