@@ -1,8 +1,8 @@
-// 联邦管理员视图 —— 调度器:持有所有状态和副作用,
-// 按 mode 分派到 ShengAdminListView / ProvinceDetailView。
-// system-settings 两层导航:
-//   - 联邦管理员: 市列表 → 市详情(该市市级管理员列表)
-//   - 市级管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
+// 注册局视图 —— 调度器:持有所有状态和副作用,按 mode 分派:
+//   - 'list'             → ShengAdminListView(顶层全省网格,旧入口)
+//   - 'city-registry'    → CityRegistryView(市注册局 tab:城市网格→市注册局机构详情页)
+//   - 'federal-registry' → FederalRegistryView(联邦注册局 tab:联邦注册局机构详情页)
+// 联邦管理员城市网格→点市进详情;市级管理员直接进本市/本省详情。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Form, Input, Modal, Space, Typography } from 'antd';
@@ -26,16 +26,19 @@ import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
 import { ShengAdminListView } from './ShengAdminListView';
-import { ProvinceDetailView } from './ProvinceDetailView';
+import { CityRegistryView, FederalRegistryView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { WuminSignatureModal } from '../core/WuminSignatureModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
 import { notice } from '../utils/notice';
+import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
+import type { InstitutionDetail } from '../subjects/api';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng_admin 列表分支(全省网格);
-  /// 'system-settings' = 注册局分支(省份网格 / 机构详情页)
-  mode: 'list' | 'system-settings';
+  /// 'city-registry' = 市注册局 tab(城市网格→市注册局机构详情页);
+  /// 'federal-registry' = 联邦注册局 tab(联邦注册局机构详情页)
+  mode: 'list' | 'city-registry' | 'federal-registry';
 }
 
 type AdminActionModalState = {
@@ -133,6 +136,18 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
 
   const [accountScanTarget, setAccountScanTarget] = useState<AccountScanTarget>(null);
 
+  // ── 注册局机构详情页数据源(任务卡 20260608) ──
+  // 联邦注册局:全国唯一机构,走 scope-bypass 接口,所有省管理员可读。
+  const [federalRegistryDetail, setFederalRegistryDetail] = useState<InstitutionDetail | null>(null);
+  const [federalRegistryLoading, setFederalRegistryLoading] = useState(false);
+  // 市注册局:当前活动市对应的机构 sfid_number。
+  const [cityRegistrySfid, setCityRegistrySfid] = useState<string | null>(null);
+  const [cityRegistryLoading, setCityRegistryLoading] = useState(false);
+
+  // 活动省/市:联邦管理员看 selectedShengAdmin + selectedCity;市管理员锁定本省本市。
+  const activeProvince = selectedShengAdmin?.province ?? auth?.admin_province ?? null;
+  const activeCity = selectedCity ?? (auth?.role === 'SHI_ADMIN' ? auth?.admin_city ?? null : null);
+
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState(false);
@@ -203,7 +218,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         await refreshShengAdmins();
         return;
       }
-      // system-settings
+      // 注册局视图(city-registry / federal-registry):联邦/市级管理员数据都要
       const [rows, ops] = await Promise.all([refreshShengAdmins(), refreshOperators()]);
       if (cancelled) return;
       // 自动定位到当前登录角色所属省的 ShengAdmin
@@ -281,6 +296,41 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShengAdmin?.admin_pubkey, auth?.access_token]);
+
+  // ── 联邦注册局机构详情:进入联邦注册局 tab 时加载一次(scope-bypass) ──
+  useEffect(() => {
+    if (!auth || mode !== 'federal-registry') return;
+    let cancelled = false;
+    setFederalRegistryLoading(true);
+    getFederalRegistry(auth)
+      .then((d) => { if (!cancelled) setFederalRegistryDetail(d); })
+      .catch((err) => { if (!cancelled) notice.error(err, '加载联邦注册局失败'); })
+      .finally(() => { if (!cancelled) setFederalRegistryLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.access_token, mode]);
+
+  // ── 市注册局机构 sfid 解析:从该市公权机构目录里筛 org_code='CITY_REGISTRY' 那条 ──
+  useEffect(() => {
+    if (!auth || mode !== 'city-registry' || !activeProvince || !activeCity) {
+      setCityRegistrySfid(null);
+      setCityRegistryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCityRegistrySfid(null);
+    setCityRegistryLoading(true);
+    listOfficialInstitutions(auth, { province: activeProvince, city: activeCity, page_size: 300 })
+      .then((res) => {
+        if (cancelled) return;
+        const row = res.items.find((r) => r.org_code === 'CITY_REGISTRY');
+        setCityRegistrySfid(row?.sfid_number ?? null);
+      })
+      .catch((err) => { if (!cancelled) notice.error(err, '加载市注册局失败'); })
+      .finally(() => { if (!cancelled) setCityRegistryLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.access_token, mode, activeProvince, activeCity]);
 
   const runSecuredAction = async <T,>(actionType: AdminActionType, payload: unknown): Promise<T> => {
     if (!auth) throw new Error('请先登录');
@@ -505,13 +555,19 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     onUpdateOperator,
     onDeleteOperator,
     runSecuredAction,
+    federalRegistryDetail,
+    federalRegistryLoading,
+    cityRegistrySfid,
+    cityRegistryLoading,
   };
 
   // ── 渲染:按 mode 分派 ──
 
   const content = mode === 'list'
     ? <ShengAdminListView state={shared} />
-    : <ProvinceDetailView state={shared} />;
+    : mode === 'city-registry'
+      ? <CityRegistryView state={shared} />
+      : <FederalRegistryView state={shared} />;
 
   return (
     <>

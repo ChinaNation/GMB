@@ -1,5 +1,6 @@
-// 中文注释:私权机构新增入口。普通私权只生成 SFID,教育委员会(JY)创建学校机构。
-// 表单 UI 复用 common/institution,本文件只负责注入 private API。
+// 中文注释:私权机构新增入口,两步式只生成 SFID(机构代码 ZG/TG)。
+// 教育委员会(JY)学校机构的新增统一在教育机构 tab(education 模块)。
+// 表单 UI 复用 core/institution,本文件只负责注入 private API。
 
 import React from 'react';
 import type { AdminAuth } from '../auth/types';
@@ -9,12 +10,10 @@ import {
   createInstitution,
   uploadLegalRepresentativePhoto,
   type CreateInstitutionOutput,
-  type InstitutionCategory,
 } from './api';
 
 interface Props {
   auth: AdminAuth;
-  category: InstitutionCategory;
   open: boolean;
   lockedProvince: string | null;
   lockedCity: string | null;
@@ -25,6 +24,7 @@ interface Props {
 export const PrivateCreateModal: React.FC<Props> = (props) => (
   <CreateInstitutionForm
     {...props}
+    category="PRIVATE_INSTITUTION"
     checkInstitutionName={checkInstitutionName}
     createInstitution={createInstitution}
     uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}

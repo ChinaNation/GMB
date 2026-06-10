@@ -53,6 +53,15 @@ class DuoqianTransferService {
   /// DuoqianTransfer::TransferProposed event_index=0。
   static const _transferProposedEventIndex = 0;
 
+  /// DuoqianTransfer::SafetyFundTransferProposed event_index=3。
+  /// 中文注释：Event enum 按声明顺序编号（无显式 codec index），顺序为
+  /// TransferProposed(0)/ExecutionFailed(1)/Executed(2)/SafetyFundTransferProposed(3)/
+  /// …/SweepToMainProposed(6)，与 runtime lib.rs 严格一致。
+  static const _safetyFundProposedEventIndex = 3;
+
+  /// DuoqianTransfer::SweepToMainProposed event_index=6。
+  static const _sweepProposedEventIndex = 6;
+
   // ──── Extrinsic 提交 ────
 
   /// 提交 propose_transfer extrinsic。
@@ -113,7 +122,13 @@ class DuoqianTransferService {
   }
 
   /// 提交 propose_safety_fund_transfer extrinsic（安全基金转账提案）。
-  Future<({String txHash, int usedNonce})> submitProposeSafetyFund({
+  ///
+  /// 中文注释：提案创建类交易必须等真正入块并核对事件后才算业务成功
+  /// （与 submitProposeTransfer 同标准），返回事件中的 proposal_id
+  /// 供后续投票跟踪；submit-only 给不出 proposal_id，也无法区分
+  /// "已接受"与"已上链"。
+  Future<({String txHash, int usedNonce, int proposalId, String blockHashHex})>
+      submitProposeSafetyFund({
     required String beneficiaryAddress,
     required double amountYuan,
     required String remark,
@@ -121,37 +136,83 @@ class DuoqianTransferService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
+    final amountFen = BigInt.from((amountYuan * 100).round());
+    final beneficiaryPubkey =
+        _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
     final callData = _buildProposeSafetyFundCall(
       beneficiaryAddress: beneficiaryAddress,
       amountYuan: amountYuan,
       remark: remark,
     );
-    return _signAndSubmit(
+    final submitResult = await _signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
     );
+    final proposalId = await _confirmProposalEvent(
+      blockHashHex: submitResult.blockHashHex,
+      eventLabel: 'SafetyFundTransferProposed',
+      eventIndex: _safetyFundProposedEventIndex,
+      decode: (data, offset) => _decodeSafetyFundProposedEvent(
+        data,
+        offset,
+        proposerPubkey: signerPubkey,
+        beneficiaryPubkey: beneficiaryPubkey,
+        amountFen: amountFen,
+      ),
+    );
+    return (
+      txHash: submitResult.txHash,
+      usedNonce: submitResult.usedNonce,
+      proposalId: proposalId,
+      blockHashHex: submitResult.blockHashHex,
+    );
   }
 
   /// 提交 propose_sweep_to_main extrinsic（手续费划转提案）。
-  Future<({String txHash, int usedNonce})> submitProposeSweep({
+  ///
+  /// 中文注释：同 submitProposeSafetyFund，提案类必须入块+核对事件。
+  Future<({String txHash, int usedNonce, int proposalId, String blockHashHex})>
+      submitProposeSweep({
     required InstitutionInfo institution,
     required double amountYuan,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
+    final amountFen = BigInt.from((amountYuan * 100).round());
+    final institutionBytes = _institutionAccountId(institution);
+    final toPubkey = _accountHexToAccountId(institution.mainAddress, '机构主账户');
     final callData = _buildProposeSweepCall(
       institutionIdentity: institution.sfidNumber,
       mainAddress: institution.mainAddress,
       amountYuan: amountYuan,
     );
-    return _signAndSubmit(
+    final submitResult = await _signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
+    );
+    final proposalId = await _confirmProposalEvent(
+      blockHashHex: submitResult.blockHashHex,
+      eventLabel: 'SweepToMainProposed',
+      eventIndex: _sweepProposedEventIndex,
+      decode: (data, offset) => _decodeSweepProposedEvent(
+        data,
+        offset,
+        institutionBytes: institutionBytes,
+        proposerPubkey: signerPubkey,
+        toPubkey: toPubkey,
+        amountFen: amountFen,
+      ),
+    );
+    return (
+      txHash: submitResult.txHash,
+      usedNonce: submitResult.usedNonce,
+      proposalId: proposalId,
+      blockHashHex: submitResult.blockHashHex,
     );
   }
 
@@ -432,7 +493,11 @@ class DuoqianTransferService {
     ProposalDisplayMeta? displayMeta;
     try {
       displayMeta = await fetchProposalDisplayId(proposalId);
-    } catch (_) {}
+    } catch (e) {
+      // 展示号缺失不阻断主流程，但必须留痕，否则 RPC 故障会伪装成"无展示号"。
+      debugPrint(
+          '[DuoqianTransfer] fetchProposalDisplayId($proposalId) 失败: $e');
+    }
 
     return ProposalMeta(
       proposalId: proposalId,
@@ -652,11 +717,16 @@ class DuoqianTransferService {
           meta.kind == 0) {
         try {
           safetyFundDetail = await fetchSafetyFundAction(id);
-        } catch (_) {}
+        } catch (e) {
+          // 查询失败必须留痕，否则与"确实不是安全基金提案"无法区分。
+          debugPrint('[DuoqianTransfer] fetchSafetyFundAction($id) 失败: $e');
+        }
         if (safetyFundDetail == null) {
           try {
             sweepDetail = await fetchSweepAction(id);
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('[DuoqianTransfer] fetchSweepAction($id) 失败: $e');
+          }
         }
       }
       // 联合提案且不是 runtime 升级，尝试检测决议发行/销毁
@@ -673,7 +743,9 @@ class DuoqianTransferService {
               resDestroySummary = '决议销毁提案';
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[DuoqianTransfer] 联合提案类型检测($id) 失败: $e');
+        }
       }
       results.add(ProposalWithDetail(
         meta: meta,
@@ -864,7 +936,10 @@ class DuoqianTransferService {
         if (data[i] != tag[i]) return null;
       }
       return _decodeTransferAction(proposalId, data.sublist(tag.length));
-    } catch (_) {
+    } catch (e) {
+      // SCALE 解码失败必须留痕：runtime 升级布局变更时提案会"凭空消失"，
+      // 没有日志就无从排查。
+      debugPrint('[DuoqianTransfer] 提案 $proposalId ProposalData 解码失败: $e');
       return null;
     }
   }
@@ -972,7 +1047,9 @@ class DuoqianTransferService {
         remark: remark,
         proposer: proposerSs58,
       );
-    } catch (_) {
+    } catch (e) {
+      // 字段级解码失败同样要留痕，与上层"提案不存在"区分开。
+      debugPrint('[DuoqianTransfer] 提案 $proposalId TransferAction 解码失败: $e');
       return null;
     }
   }
@@ -1151,7 +1228,9 @@ class DuoqianTransferService {
         proposer:
             Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027),
       );
-    } catch (_) {
+    } catch (e) {
+      // SCALE 解码失败必须留痕，与"确实不是安全基金提案"区分开。
+      debugPrint('[DuoqianTransfer] 提案 $proposalId SafetyFundAction 解码失败: $e');
       return null;
     }
   }
@@ -1177,30 +1256,11 @@ class DuoqianTransferService {
         institutionBytes: institutionBytes,
         amountFen: amountBig,
       );
-    } catch (_) {
+    } catch (e) {
+      // SCALE 解码失败必须留痕，与"确实不是手续费划转提案"区分开。
+      debugPrint('[DuoqianTransfer] 提案 $proposalId SweepAction 解码失败: $e');
       return null;
     }
-  }
-
-  /// 签名并提交 extrinsic（复用 onchain.dart 的流程）。
-  ///
-  /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
-  Future<({String txHash, int usedNonce})> _signAndSubmit({
-    required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    return SignedExtrinsicBuilder(
-      chainRpc: _rpc,
-      logLabel: 'TransferProposal',
-    ).signAndSubmit(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-      onTrace: _logSignedExtrinsicTrace,
-    );
   }
 
   Future<({String txHash, int usedNonce, String blockHashHex})>
@@ -1230,36 +1290,64 @@ class DuoqianTransferService {
     required Uint8List fromPubkey,
     required Uint8List beneficiaryPubkey,
     required BigInt amountFen,
+  }) {
+    return _confirmProposalEvent(
+      blockHashHex: blockHashHex,
+      eventLabel: 'TransferProposed',
+      eventIndex: _transferProposedEventIndex,
+      decode: (data, offset) => _decodeTransferProposedEvent(
+        data,
+        offset,
+        org: org,
+        institutionBytes: institutionBytes,
+        proposerPubkey: proposerPubkey,
+        fromPubkey: fromPubkey,
+        beneficiaryPubkey: beneficiaryPubkey,
+        amountFen: amountFen,
+      ),
+    );
+  }
+
+  /// 入块后读取 System.Events 核对提案事件并提取 proposal_id。
+  ///
+  /// 中文注释：三类提案（转账/安全基金/手续费划转）共用本入口，
+  /// 事件不存在=业务失败，必须抛错而不是静默放过。
+  Future<int> _confirmProposalEvent({
+    required String blockHashHex,
+    required String eventLabel,
+    required int eventIndex,
+    required ({int proposalId, bool matches})? Function(
+      Uint8List data,
+      int offset,
+    ) decode,
   }) async {
     final events = await _rpc.fetchSystemEventsAtBlock(blockHashHex);
     if (events == null || events.isEmpty) {
       throw StateError('交易已入块，但未读取到 System.Events，不能确认提案创建成功');
     }
-    final proposalId = _findTransferProposedProposalId(
+    final proposalId = _findProposalIdInEvents(
       events,
-      org: org,
-      institutionBytes: institutionBytes,
-      proposerPubkey: proposerPubkey,
-      fromPubkey: fromPubkey,
-      beneficiaryPubkey: beneficiaryPubkey,
-      amountFen: amountFen,
+      eventIndex: eventIndex,
+      decode: decode,
     );
     if (proposalId == null) {
       throw StateError(
-        '交易已入块，但未找到 DuoqianTransfer.TransferProposed 事件，提案创建失败',
+        '交易已入块，但未找到 DuoqianTransfer.$eventLabel 事件，提案创建失败',
       );
     }
     return proposalId;
   }
 
-  int? _findTransferProposedProposalId(
+  /// 在 System.Events 原始字节中扫描本 pallet 指定事件并提取 proposal_id。
+  ///
+  /// 中文注释：三类提案共用扫描骨架，事件字段解码与匹配由 decode 回调完成。
+  int? _findProposalIdInEvents(
     Uint8List data, {
-    required int org,
-    required Uint8List institutionBytes,
-    required Uint8List proposerPubkey,
-    required Uint8List fromPubkey,
-    required Uint8List beneficiaryPubkey,
-    required BigInt amountFen,
+    required int eventIndex,
+    required ({int proposalId, bool matches})? Function(
+      Uint8List data,
+      int offset,
+    ) decode,
   }) {
     final (_, countSize) = _decodeCompact(data, 0);
     if (countSize <= 0) return null;
@@ -1276,21 +1364,11 @@ class DuoqianTransferService {
 
       if (offset + 2 > data.length) continue;
       final palletIndex = data[offset];
-      final eventIndex = data[offset + 1];
+      final evtIndex = data[offset + 1];
       offset += 2;
 
-      if (palletIndex == _palletIndex &&
-          eventIndex == _transferProposedEventIndex) {
-        final decoded = _decodeTransferProposedEvent(
-          data,
-          offset,
-          org: org,
-          institutionBytes: institutionBytes,
-          proposerPubkey: proposerPubkey,
-          fromPubkey: fromPubkey,
-          beneficiaryPubkey: beneficiaryPubkey,
-          amountFen: amountFen,
-        );
+      if (palletIndex == _palletIndex && evtIndex == eventIndex) {
+        final decoded = decode(data, offset);
         if (decoded == null) continue;
         if (decoded.matches) return decoded.proposalId;
       }
@@ -1346,6 +1424,96 @@ class DuoqianTransferService {
         _bytesEqual(eventProposer, proposerPubkey) &&
         _bytesEqual(eventFrom, fromPubkey) &&
         _bytesEqual(eventBeneficiary, beneficiaryPubkey) &&
+        eventAmount == amountFen;
+    return (
+      proposalId: proposalId,
+      matches: matches,
+    );
+  }
+
+  ({
+    int proposalId,
+    bool matches,
+  })? _decodeSafetyFundProposedEvent(
+    Uint8List data,
+    int offset, {
+    required Uint8List proposerPubkey,
+    required Uint8List beneficiaryPubkey,
+    required BigInt amountFen,
+  }) {
+    // 中文注释：SafetyFundTransferProposed 字段顺序必须与 runtime Event enum
+    // 完全一致：proposal_id u64 | proposer 32B | from 32B | beneficiary 32B
+    // | amount u128 | remark Compact+bytes | expires_at u32 | topics。
+    const fixedBytes = 8 + 32 + 32 + 32 + 16;
+    if (offset + fixedBytes > data.length) return null;
+    var pos = offset;
+    final proposalId = _readU64LE(data, pos);
+    pos += 8;
+    final eventProposer = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    // from = NRC 安全基金常量地址，调用方不持有，不参与匹配。
+    pos += 32;
+    final eventBeneficiary = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    final eventAmount = _readU128LE(data, pos);
+    pos += 16;
+
+    final (remarkLen, remarkLenSize) = _decodeCompact(data, pos);
+    if (remarkLenSize <= 0 || pos + remarkLenSize + remarkLen > data.length) {
+      return null;
+    }
+    pos += remarkLenSize + remarkLen;
+
+    // runtime BlockNumber = u32，expires_at 紧跟 remark 之后。
+    if (pos + 4 > data.length) return null;
+    pos += 4;
+
+    if (_skipTopics(data, pos) == null) return null;
+    final matches = _bytesEqual(eventProposer, proposerPubkey) &&
+        _bytesEqual(eventBeneficiary, beneficiaryPubkey) &&
+        eventAmount == amountFen;
+    return (
+      proposalId: proposalId,
+      matches: matches,
+    );
+  }
+
+  ({
+    int proposalId,
+    bool matches,
+  })? _decodeSweepProposedEvent(
+    Uint8List data,
+    int offset, {
+    required Uint8List institutionBytes,
+    required Uint8List proposerPubkey,
+    required Uint8List toPubkey,
+    required BigInt amountFen,
+  }) {
+    // 中文注释：SweepToMainProposed 字段顺序必须与 runtime Event enum 完全
+    // 一致：proposal_id u64 | institution 32B | proposer 32B | from 32B
+    // | to 32B | amount u128 | expires_at u32 | topics（无 remark 字段）。
+    const fixedBytes = 8 + 32 + 32 + 32 + 32 + 16 + 4;
+    if (offset + fixedBytes > data.length) return null;
+    var pos = offset;
+    final proposalId = _readU64LE(data, pos);
+    pos += 8;
+    final eventInstitution = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    final eventProposer = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    // from = 机构费用账户，调用方不直接持有，不参与匹配。
+    pos += 32;
+    final eventTo = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    final eventAmount = _readU128LE(data, pos);
+    pos += 16;
+    // expires_at: u32。
+    pos += 4;
+
+    if (_skipTopics(data, pos) == null) return null;
+    final matches = _bytesEqual(eventInstitution, institutionBytes) &&
+        _bytesEqual(eventProposer, proposerPubkey) &&
+        _bytesEqual(eventTo, toPubkey) &&
         eventAmount == amountFen;
     return (
       proposalId: proposalId,

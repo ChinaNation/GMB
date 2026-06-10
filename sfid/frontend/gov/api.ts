@@ -1,24 +1,17 @@
 // 中文注释:公权机构前端 API。公安局和自动公权目录都归 gov 模块调用。
+// 公权机构全部由后端自动生成,本模块无创建接口;JY 学校机构归 education 模块。
 
 import type { AdminAuth } from '../auth/types';
-import {
-  createPasskeySecurityGrant,
-} from '../admins/admin_security_api';
 import { adminRequest } from '../utils/http';
 import type {
-  CreateInstitutionInput,
-  CreateInstitutionOutput,
   InstitutionDetail,
   InstitutionListRow,
-  LegalRepresentativePhoto,
   PageResult,
 } from '../subjects/api';
 
 export type GovCategory = 'PUBLIC_SECURITY' | 'GOV_INSTITUTION';
 
-const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
-
-export type { CreateInstitutionOutput, InstitutionDetail } from '../subjects/api';
+export type { InstitutionDetail } from '../subjects/api';
 
 export interface ListPublicSecurityQuery {
   cursor?: string | null;
@@ -64,67 +57,26 @@ export async function listOfficialInstitutions(
   );
 }
 
-export async function checkInstitutionName(
-  auth: AdminAuth,
-  name: string,
-  subject_property?: string,
-  city?: string,
-): Promise<{ exists: boolean }> {
-  const params = new URLSearchParams({ name });
-  if (subject_property) params.set('subject_property', subject_property);
-  if (city) params.set('city', city);
-  return adminRequest<{ exists: boolean }>(
-    `/api/v1/institution/check-name?${params.toString()}`,
-    auth,
-  );
-}
-
-export async function createInstitution(
-  auth: AdminAuth,
-  input: CreateInstitutionInput,
-): Promise<CreateInstitutionOutput> {
-  const grantPayload = {
-    subject_property: input.subject_property,
-    p1: input.p1 ?? null,
-    province: input.province ?? null,
-    city: input.city,
-    institution: input.institution,
-    institution_name: input.institution_name ?? null,
-    sub_type: null,
-    legal_rep_name: input.legal_rep_name ?? null,
-    legal_rep_sfid_number: input.legal_rep_sfid_number ?? null,
-    legal_rep_photo_path: input.legal_rep_photo_path ?? null,
-  };
-  const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload);
-  return adminRequest<CreateInstitutionOutput>('/api/v1/institution/create', auth, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
-    body: JSON.stringify(input),
-  });
-}
-
-export async function uploadLegalRepresentativePhoto(
-  auth: AdminAuth,
-  file: File,
-): Promise<LegalRepresentativePhoto> {
-  const form = new FormData();
-  form.append('file', file);
-  return adminRequest<LegalRepresentativePhoto>(
-    '/api/v1/institution/legal-representative/photo',
-    auth,
-    {
-      method: 'POST',
-      body: form,
-    },
-  );
-}
-
 export async function getInstitution(
   auth: AdminAuth,
   sfidNumber: string,
 ): Promise<InstitutionDetail> {
   return adminRequest<InstitutionDetail>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}`,
+    auth,
+  );
+}
+
+/**
+ * 联邦注册局机构详情(只读,绕过 scope)。
+ * 联邦注册局是全国唯一机构(位于中枢省),其它省管理员被普通 getInstitution 的 scope 拦截,
+ * 故走专用只读接口。返回结构与 getInstitution 完全一致。
+ */
+export async function getFederalRegistry(
+  auth: AdminAuth,
+): Promise<InstitutionDetail> {
+  return adminRequest<InstitutionDetail>(
+    '/api/v1/institutions/federal-registry',
     auth,
   );
 }

@@ -31,6 +31,7 @@ import { loadCachedSfidMeta } from './china/metaCache';
 import { LoginView } from './auth/LoginView';
 import { GovView } from './gov/GovView';
 import { PrivateView } from './private/PrivateView';
+import { EducationView } from './education/EducationView';
 import { OperatorsView } from './admins/OperatorsView';
 import { ShengAdminsView } from './admins/ShengAdminsView';
 import { CitizensView } from './citizens/CitizensView';
@@ -56,7 +57,9 @@ type ActiveView =
   | 'public-security'
   | 'gov'
   | 'private'
-  | 'system-settings'
+  | 'education'
+  | 'city-registry'
+  | 'federal-registry'
   | 'sheng-admins'
   | 'operators';
 
@@ -109,12 +112,15 @@ function AppInner() {
 
   const mustUpdatePasskey = !!auth && auth.passkey_bound === false;
 
+  // 未绑定 passkey 时强制进入本角色可绑定 passkey 的注册局 tab:
+  //   联邦管理员在「联邦注册局」的联邦管理员列表绑定;市级管理员在「市注册局」的市级管理员列表绑定。
+  const passkeyBindView: ActiveView = auth?.role === 'SHI_ADMIN' ? 'city-registry' : 'federal-registry';
   useEffect(() => {
-    if (mustUpdatePasskey && activeView !== 'system-settings') {
-      setActiveView('system-settings');
+    if (mustUpdatePasskey && activeView !== passkeyBindView) {
+      setActiveView(passkeyBindView);
     }
-  }, [mustUpdatePasskey, activeView]);
-  const routedView: ActiveView = mustUpdatePasskey ? 'system-settings' : activeView;
+  }, [mustUpdatePasskey, activeView, passkeyBindView]);
+  const routedView: ActiveView = mustUpdatePasskey ? passkeyBindView : activeView;
   const headerAdminIdentity = resolveHeaderAdminIdentity(auth);
 
   const onLogout = () => {
@@ -286,13 +292,18 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 公权机构 → 公安局 → 注册局。 */}
+            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 教育机构 → 公权机构 → 公安局 → 市注册局 → 联邦注册局。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: !mustUpdatePasskey, onClick: () => switchView('citizens') },
               {
                 key: 'private' as const, label: '私权机构',
                 visible: !mustUpdatePasskey && capabilities.canViewPrivate,
                 onClick: () => switchView('private', { loadSfidMeta: true })
+              },
+              {
+                key: 'education' as const, label: '教育机构',
+                visible: !mustUpdatePasskey && capabilities.canViewEducation,
+                onClick: () => switchView('education', { loadSfidMeta: true })
               },
               {
                 key: 'gov' as const, label: '公权机构',
@@ -305,9 +316,14 @@ function AppInner() {
                 onClick: () => switchView('public-security', { loadSfidMeta: true })
               },
               {
-                key: 'system-settings' as const, label: '注册局',
-                visible: capabilities.canViewSystemSettings,
-                onClick: () => switchView('system-settings')
+                key: 'city-registry' as const, label: '市注册局',
+                visible: capabilities.canViewCityRegistry && (!mustUpdatePasskey || passkeyBindView === 'city-registry'),
+                onClick: () => switchView('city-registry')
+              },
+              {
+                key: 'federal-registry' as const, label: '联邦注册局',
+                visible: capabilities.canViewFederalRegistry && (!mustUpdatePasskey || passkeyBindView === 'federal-registry'),
+                onClick: () => switchView('federal-registry')
               }
             ] as const)
               .filter((tab) => tab.visible)
@@ -343,8 +359,12 @@ function AppInner() {
             <GovView key={`gov-${viewResetToken}`} auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} resetToken={viewResetToken} />
           ) : routedView === 'private' && capabilities.canViewPrivate && auth ? (
             <PrivateView auth={auth} sfidMeta={sfidMeta} />
-          ) : routedView === 'system-settings' && capabilities.canViewSystemSettings ? (
-            <ShengAdminsView mode="system-settings" />
+          ) : routedView === 'education' && capabilities.canViewEducation && auth ? (
+            <EducationView key={`education-${viewResetToken}`} auth={auth} sfidMeta={sfidMeta} />
+          ) : routedView === 'city-registry' && capabilities.canViewCityRegistry ? (
+            <ShengAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
+          ) : routedView === 'federal-registry' && capabilities.canViewFederalRegistry ? (
+            <ShengAdminsView key={`federal-registry-${viewResetToken}`} mode="federal-registry" />
           ) : (
             <CitizensView />
           )}

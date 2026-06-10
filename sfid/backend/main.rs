@@ -1176,7 +1176,7 @@ impl Db {
 
     pub(crate) fn list_institutions_exact(
         &self,
-        category: Option<&str>,
+        filter: crate::subjects::InstitutionListFilter,
         p_code: &str,
         c_code: Option<&str>,
         keyword: &str,
@@ -1195,7 +1195,6 @@ impl Db {
             });
         }
         let cursor = decode_db_page_cursor(cursor)?;
-        let category = category.map(str::to_string);
         let p_code = p_code.to_string();
         let c_code = c_code.map(str::to_string);
         let keyword = keyword.to_string();
@@ -1203,8 +1202,9 @@ impl Db {
             let cursor_created_at = cursor.map(|c| c.created_at);
             let fetch_limit = i64::try_from(page_size.saturating_add(1))
                 .map_err(|_| "page_size too large".to_string())?;
-            let rows = conn
-                .query(
+            // 中文注释:过滤子句来自 InstitutionListFilter 的静态字面量(教育=手动 JY 学校
+            // 跨 GOV/PRIVATE 两 category,私权/公权同步排除),无注入面。
+            let sql = format!(
 		                    "SELECT s.sfid_number, s.name, s.category,
 			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
@@ -1218,27 +1218,31 @@ impl Db {
 		                             LEFT JOIN (
 	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
 	                                FROM accounts
-	                                WHERE p_code = $2
-	                                  AND ($3::text IS NULL OR c_code = $3)
+	                                WHERE p_code = $1
+	                                  AND ($2::text IS NULL OR c_code = $2)
 	                                GROUP BY p_code, sfid_number
 	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
 	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
-	                               AND ($1::text IS NULL OR s.category = $1)
-	                               AND s.p_code = $2
-	                               AND ($3::text IS NULL OR s.c_code = $3)
+	                               {filter_clause}
+	                               AND s.p_code = $1
+	                               AND ($2::text IS NULL OR s.c_code = $2)
 	                               AND (
-	                                    s.sfid_number = $4
-	                                    OR lower(COALESCE(s.name, '')) = lower($4)
+	                                    s.sfid_number = $3
+	                                    OR lower(COALESCE(s.name, '')) = lower($3)
 	                               )
 	                               AND (
-	                                    $5::timestamptz IS NULL
-	                                    OR s.created_at < $5
+	                                    $4::timestamptz IS NULL
+	                                    OR s.created_at < $4
 	                               )
 	                             ORDER BY s.created_at DESC, s.sfid_number DESC
-	                             LIMIT $6",
+	                             LIMIT $5",
+                filter_clause = filter.sql_clause(),
+            );
+            let rows = conn
+                .query(
+                    sql.as_str(),
                     &[
-                        &category,
                         &p_code,
                         &c_code,
                         &keyword,
@@ -2148,6 +2152,11 @@ fn main() {
             .route(
                 "/api/v1/institutions/official",
                 get(gov::handler::list_official_institutions),
+            )
+            // 联邦注册局机构详情(只读,绕过 scope,所有省管理员可读)
+            .route(
+                "/api/v1/institutions/federal-registry",
+                get(subjects::admin::get_federal_registry),
             )
             .route(
                 "/api/v1/admin/citizens/cpms-status-export/import",

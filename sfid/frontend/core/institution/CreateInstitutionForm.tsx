@@ -1,4 +1,4 @@
-// 中文注释:机构新增弹窗共享表单。gov/private 只传入各自 API 函数,不在公共组件里越过业务边界。
+// 中文注释:机构新增弹窗共享表单。private/education 只传入各自 API 函数,不在公共组件里越过业务边界。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { AutoComplete, Button, Form, Input, Modal, Select, Spin, Upload } from 'antd';
@@ -9,11 +9,15 @@ import { loadCachedSfidCities } from '../../china/metaCache';
 import type {
   CreateInstitutionInput,
   CreateInstitutionOutput,
-  InstitutionCategory,
   LegalRepresentativePhoto,
 } from '../../subjects/api';
 import { searchLegalRepresentativeCitizens } from '../../citizens/api';
-import { dynamicLocksForSubjectProperty, locksForCategory } from '../../subjects/labels';
+import {
+  dynamicLocksForSubjectProperty,
+  educationP1Locks,
+  locksForCategory,
+  type CreateFormCategory,
+} from '../../subjects/labels';
 import { notice } from '../../utils/notice';
 
 interface FormValues {
@@ -22,8 +26,12 @@ interface FormValues {
   province: string;
   city: string;
   institution: string;
-  /** 普通私权机构不填;教育委员会(JY)学校机构必填学校名称。 */
+  /** 私权两步式不填;教育机构(JY 学校)必填学校名称。 */
   institution_name?: string;
+  /** 教育机构 F(分校)专用:上级法人属性(G/S),仅用于推导 p1,不进提交 payload。 */
+  parent_subject_property?: string;
+  /** 教育机构 F(分校)且上级=S 时:上级盈利属性(0/1),仅用于推导 p1,不进提交 payload。 */
+  parent_p1?: string;
   legal_rep_name: string;
   legal_rep_sfid_number: string;
   legal_rep_photo_path: string;
@@ -51,7 +59,7 @@ type UploadLegalRepresentativePhoto = (
 
 export interface CreateInstitutionFormProps {
   auth: AdminAuth;
-  category: InstitutionCategory;
+  category: CreateFormCategory;
   open: boolean;
   lockedProvince: string | null;
   lockedCity: string | null;
@@ -87,40 +95,45 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const [photoName, setPhotoName] = useState<string>('');
 
   const [currentSubjectProperty, setCurrentSubjectProperty] = useState<string>(locks.subjectPropertyChoices[0]?.value ?? '');
-  const [currentInstitution, setCurrentInstitution] = useState<string>(
-    locks.institutionChoices[0]?.value ?? '',
-  );
+  // 教育机构 F(分校)专用:上级法人属性 + 上级盈利属性,仅用于推导 p1
+  const [parentSubjectProperty, setParentSubjectProperty] = useState<string>('G');
+  const [parentP1, setParentP1] = useState<string>('0');
   const dynamicLocks = useMemo(() => dynamicLocksForSubjectProperty(currentSubjectProperty), [currentSubjectProperty]);
   const isPrivate = category === 'PRIVATE_INSTITUTION';
-  const isPublicGov = category === 'GOV_INSTITUTION';
-  const isPublicSecurity = category === 'PUBLIC_SECURITY';
-  const isEducationSchool = currentInstitution === 'JY';
+  const isEducation = category === 'EDUCATION_INSTITUTION';
+  const educationLocks = useMemo(
+    () => educationP1Locks(currentSubjectProperty, parentSubjectProperty, parentP1),
+    [currentSubjectProperty, parentSubjectProperty, parentP1],
+  );
 
-  // 中文注释:普通私权两步式不在弹窗收名称;教育委员会(JY)创建的是学校机构,必须填写学校名称。
-  const collectNameInModal = !isPrivate || isEducationSchool;
+  // 中文注释:私权两步式不在弹窗收名称;教育机构创建的是学校机构,必须填写学校名称。
+  const collectNameInModal = isEducation;
 
-  const effectiveP1Choices = isPrivate ? dynamicLocks.p1Choices : locks.p1Choices;
-  const effectiveInstChoices = isPrivate ? dynamicLocks.institutionChoices : locks.institutionChoices;
+  const effectiveP1Choices = isEducation ? educationLocks.p1Choices : dynamicLocks.p1Choices;
+  const effectiveInstChoices = isEducation ? locks.institutionChoices : dynamicLocks.institutionChoices;
 
   useEffect(() => {
     if (!open) return;
     const defaultSubjectProperty = locks.subjectPropertyChoices[0]?.value ?? '';
     setCurrentSubjectProperty(defaultSubjectProperty);
+    setParentSubjectProperty('G');
+    setParentP1('0');
     setNameAvailable(null);
     const dl = dynamicLocksForSubjectProperty(defaultSubjectProperty);
-    const defaultInstitution = isPrivate
-      ? dl.institutionChoices[0]?.value
-      : locks.institutionChoices[0]?.value;
-    setCurrentInstitution(defaultInstitution ?? '');
+    const defaultInstitution = isEducation
+      ? locks.institutionChoices[0]?.value
+      : dl.institutionChoices[0]?.value;
     form.setFieldsValue({
       subject_property: defaultSubjectProperty,
-      p1: isPrivate ? dl.p1Default : locks.p1Choices[0]?.value,
+      p1: isEducation
+        ? educationP1Locks(defaultSubjectProperty, 'G', '0').p1Value
+        : dl.p1Default,
       province: lockedProvince ?? '',
       city: lockedCity ?? '',
       institution: defaultInstitution,
-      institution_name: (!isPrivate || defaultInstitution === 'JY')
-        ? (locks.lockedInstitutionName ?? '')
-        : undefined,
+      institution_name: isEducation ? '' : undefined,
+      parent_subject_property: 'G',
+      parent_p1: '0',
       legal_rep_name: '',
       legal_rep_sfid_number: '',
       legal_rep_photo_path: '',
@@ -156,34 +169,51 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   const onSubjectPropertyChange = (subject_property: string) => {
     setCurrentSubjectProperty(subject_property);
+    setNameAvailable(null);
+    if (isEducation) {
+      // 中文注释:F 的 p1 是隐藏推导值,切主体属性时上级两字段一并重置,p1 同步重算。
+      setParentSubjectProperty('G');
+      setParentP1('0');
+      form.setFieldsValue({
+        p1: educationP1Locks(subject_property, 'G', '0').p1Value,
+        parent_subject_property: 'G',
+        parent_p1: '0',
+      });
+      return;
+    }
     const dl = dynamicLocksForSubjectProperty(subject_property);
     const nextInstitution = dl.institutionChoices[0]?.value;
-    setCurrentInstitution(nextInstitution ?? '');
-    setNameAvailable(null);
     form.setFieldsValue({
       p1: dl.p1Default,
       institution: nextInstitution,
-      institution_name: nextInstitution === 'JY' ? '' : undefined,
     });
   };
 
-  const onInstitutionChange = (institution: string) => {
-    setCurrentInstitution(institution);
-    setNameAvailable(null);
-    if (institution !== 'JY' && isPrivate) {
-      form.setFieldsValue({
-        institution_name: undefined,
-      });
-    }
+  const onParentSubjectPropertyChange = (value: string) => {
+    setParentSubjectProperty(value);
+    setParentP1('0');
+    form.setFieldsValue({
+      parent_p1: '0',
+      p1: educationP1Locks(currentSubjectProperty, value, '0').p1Value,
+    });
+  };
+
+  const onParentP1Change = (value: string) => {
+    setParentP1(value);
+    form.setFieldsValue({
+      p1: educationP1Locks(currentSubjectProperty, parentSubjectProperty, value).p1Value,
+    });
   };
 
   const onCheckName = async () => {
     const name = (form.getFieldValue('institution_name') ?? '').trim();
     if (!name) {
-      notice.warning(isEducationSchool ? '请先输入学校名称' : '请先输入机构名称');
+      notice.warning('请先输入学校名称');
       return;
     }
-    if (isPublicGov) {
+    // 中文注释:G(公立学校)查重是同市同名(后端 check-name G 分支要求 city),S/F 全国查重。
+    const isPublicSchool = currentSubjectProperty === 'G';
+    if (isPublicSchool) {
       const city = (form.getFieldValue('city') ?? '').trim();
       if (!city) {
         notice.warning('学校名称查重需要先选择市');
@@ -192,15 +222,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
     setNameChecking(true);
     try {
-      const cityVal = isPublicGov ? (form.getFieldValue('city') ?? '').trim() : undefined;
+      const cityVal = isPublicSchool ? (form.getFieldValue('city') ?? '').trim() : undefined;
       const { exists } = await checkInstitutionName(
         auth,
         name,
-        isPublicGov ? 'G' : form.getFieldValue('subject_property'),
+        form.getFieldValue('subject_property'),
         cityVal,
       );
       if (exists) {
-        notice.error(isPublicGov ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用');
+        notice.error(isPublicSchool ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用');
         setNameAvailable(false);
       } else {
         notice.success('名称可用');
@@ -260,7 +290,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   };
 
   const onSubmit = async (values: FormValues) => {
-    if (collectNameInModal && !locks.lockedInstitutionName && nameAvailable !== true) {
+    if (collectNameInModal && nameAvailable !== true) {
       notice.warning('请先点击搜索图标检查名称是否可用');
       return;
     }
@@ -282,7 +312,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         legal_rep_photo_mime: values.legal_rep_photo_mime,
         legal_rep_photo_size: values.legal_rep_photo_size,
       });
-      if (isPrivate && !isEducationSchool) {
+      if (isPrivate) {
         notice.success(`身份ID 已生成,请到详情页完善信息:${result.sfid_number}`);
       } else {
         notice.success(`学校机构已创建:${result.sfid_number}`);
@@ -304,11 +334,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   };
 
   const subjectPropertyDisabled = locks.subjectPropertyChoices.length === 1;
-  const p1Disabled = effectiveP1Choices.length === 1;
+  const p1Disabled = isEducation ? educationLocks.p1Locked : effectiveP1Choices.length === 1;
   const instDisabled = effectiveInstChoices.length === 1;
-  const nameDisabled = locks.lockedInstitutionName !== null;
-  const nameCheckPassed = !collectNameInModal || nameDisabled || nameAvailable === true;
-  const nameLabel = isEducationSchool ? '学校名称' : '机构名称';
+  const nameCheckPassed = !collectNameInModal || nameAvailable === true;
+  const nameLabel = '学校名称';
+  const isBranchSchool = isEducation && currentSubjectProperty === 'F';
 
   return (
     <Modal
@@ -340,6 +370,41 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         <Form.Item label="SubjectProperty 主体属性" name="subject_property" rules={[{ required: true }]}>
           <Select options={locks.subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
         </Form.Item>
+        {isBranchSchool && (
+          <>
+            <Form.Item
+              label="上级法人属性"
+              name="parent_subject_property"
+              rules={[{ required: true, message: '请选择上级法人属性' }]}
+            >
+              <Select
+                options={[
+                  { value: 'G', label: '公法人 (G)' },
+                  { value: 'S', label: '私法人 (S)' },
+                ]}
+                onChange={onParentSubjectPropertyChange}
+              />
+            </Form.Item>
+            {parentSubjectProperty === 'S' && (
+              <Form.Item
+                label="上级盈利属性"
+                name="parent_p1"
+                rules={[{ required: true, message: '请选择上级盈利属性' }]}
+              >
+                <Select
+                  options={[
+                    { value: '1', label: '盈利 (1)' },
+                    { value: '0', label: '非盈利 (0)' },
+                  ]}
+                  onChange={onParentP1Change}
+                />
+              </Form.Item>
+            )}
+            <div style={{ color: '#888', fontSize: 12, marginTop: -16, marginBottom: 12 }}>
+              上级法人属性仅用于推导盈利属性,创建后请在详情页关联所属法人。
+            </div>
+          </>
+        )}
         <Form.Item label="P1 盈利属性" name="p1" rules={[{ required: true }]}>
           <Select options={effectiveP1Choices} disabled={p1Disabled} />
         </Form.Item>
@@ -353,16 +418,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             options={cities.map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
             placeholder="请选择市"
             onChange={() => {
-              if (isPublicGov && nameAvailable !== null) setNameAvailable(null);
+              // 中文注释:G(公立学校)查重按市,换市后必须重新查重。
+              if (isEducation && currentSubjectProperty === 'G' && nameAvailable !== null) {
+                setNameAvailable(null);
+              }
             }}
           />
         </Form.Item>
         <Form.Item label="机构" name="institution" rules={[{ required: true }]}>
-          <Select
-            options={effectiveInstChoices}
-            disabled={instDisabled}
-            onChange={onInstitutionChange}
-          />
+          <Select options={effectiveInstChoices} disabled={instDisabled} />
         </Form.Item>
         {collectNameInModal && (
           <>
@@ -375,28 +439,25 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
               ]}
             >
               <Input
-                disabled={nameDisabled}
                 placeholder={`请输入${nameLabel}(最多 30 字)`}
                 maxLength={30}
                 onChange={onNameChange}
                 suffix={
-                  nameDisabled || isPublicSecurity ? null : (
-                    <span
-                      style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
-                      onClick={nameChecking ? undefined : onCheckName}
-                    >
-                      {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
-                    </span>
-                  )
+                  <span
+                    style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
+                    onClick={nameChecking ? undefined : onCheckName}
+                  >
+                    {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
+                  </span>
                 }
               />
             </Form.Item>
-            {!nameDisabled && nameAvailable === true && (
+            {nameAvailable === true && (
               <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
                 名称可用
               </div>
             )}
-            {!nameDisabled && nameAvailable === false && (
+            {nameAvailable === false && (
               <div style={{ color: '#ff4d4f', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
                 该名称已被占用，请更换
               </div>
@@ -468,7 +529,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         <Form.Item name="legal_rep_photo_name" hidden><Input /></Form.Item>
         <Form.Item name="legal_rep_photo_mime" hidden><Input /></Form.Item>
         <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
-        {isPrivate && !isEducationSchool && (
+        {isPrivate && (
           <div style={{ color: '#888', fontSize: 12, marginTop: -8 }}>
             提示:本步骤仅生成身份ID。生成后请在详情页设置机构名称、企业类型等信息。
           </div>

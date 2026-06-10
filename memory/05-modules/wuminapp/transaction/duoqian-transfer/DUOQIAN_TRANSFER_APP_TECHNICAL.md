@@ -46,6 +46,13 @@
 - 只有同一区块存在匹配本次发起人、机构主账户、收款人和金额的 `DuoqianTransfer::TransferProposed` 事件，才允许提示“提案创建成功”并写入本地个人多签提案历史。
 - 如果交易已入块但没有 `TransferProposed`，视为提案创建失败，不写本地历史。
 
+三类提案统一标准（2026-06-09 静默失败整改）：
+
+- 安全基金转账（`propose_safety_fund_transfer`）与手续费划转（`propose_sweep_to_main`）与普通转账提案完全同标准：`_signAndSubmitInBlock` 等真正入块 → 读 `System.Events` 核对 `SafetyFundTransferProposed` / `SweepToMainProposed` 事件 → 返回事件中的 `proposalId`。
+- 事件核对共用 `_confirmProposalEvent` + `_findProposalIdInEvents` 单一扫描骨架，事件字段解码各自实现（字段顺序必须与 runtime Event enum 严格一致；事件变体序号按声明顺序：TransferProposed=0、SafetyFundTransferProposed=3、SweepToMainProposed=6）。
+- submit-only 的 `_signAndSubmit` 已从本服务删除：提案类业务成功必须拿到 proposalId，submit-only 在原理上给不出。普通钱包余额转账仍走 builder 层 `signAndSubmit`（submit-only + 20 分钟后台 watch），两档标准见 `signed_extrinsic_builder.dart` 注释。
+- 错误处理铁律：提交/解码/查询失败一律留痕（debugPrint）或上抛，禁止裸 `catch (_) {}` 吞错；链上余额刷新失败而展示缓存时，UI 必须标注“可能已过期”。
+
 投票提交和确认：
 
 - 投票成功真源是 `InternalVote::InternalVotesByAccount(proposal_id, admin)`，不是 txHash、交易池 watch 或本地 nonce。

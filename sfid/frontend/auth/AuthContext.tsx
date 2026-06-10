@@ -11,6 +11,7 @@ import { notice } from '../utils/notice';
 export type RoleCapabilities = {
   canViewInstitutions: boolean;
   canViewPrivate: boolean;
+  canViewEducation: boolean;
   canViewShengAdmins: boolean;
   canViewShiAdmins: boolean;
   canCrudShiAdmins: boolean;
@@ -18,7 +19,8 @@ export type RoleCapabilities = {
   canRegisterInstitutions: boolean;
   canStatusScan: boolean;
   canBusinessWrite: boolean;
-  canViewSystemSettings: boolean;
+  canViewCityRegistry: boolean;
+  canViewFederalRegistry: boolean;
 };
 
 export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
@@ -28,6 +30,7 @@ export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilitie
   return {
     canViewInstitutions: isShengAdmin || isShiAdmin,
     canViewPrivate: isShengAdmin || isShiAdmin,
+    canViewEducation: isShengAdmin || isShiAdmin,
     canViewShengAdmins: isShengAdmin,
     canViewShiAdmins: isShengAdmin || isShiAdmin,
     canCrudShiAdmins: isShengAdmin,
@@ -35,7 +38,8 @@ export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilitie
     canRegisterInstitutions: isShengAdmin || isShiAdmin,
     canStatusScan: isShengAdmin || isShiAdmin,
     canBusinessWrite: isShengAdmin || isShiAdmin,
-    canViewSystemSettings: isShengAdmin || isShiAdmin,
+    canViewCityRegistry: isShengAdmin || isShiAdmin,
+    canViewFederalRegistry: isShengAdmin || isShiAdmin,
   };
 }
 

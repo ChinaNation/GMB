@@ -75,6 +75,9 @@ pub(crate) struct CpmsSiteKeys {
 
 #[derive(Deserialize)]
 pub(crate) struct GenerateCpmsInstallInput {
+    /// 机构自身 sfid_number,作为 cpms_sites 写入键(= 详情页读取键)。
+    pub(crate) sfid_number: String,
+    /// province/city/institution 仅用于安全授权(passkey grant)绑定,机构真源按 sfid_number 反查。
     pub(crate) province: Option<String>,
     pub(crate) city: String,
     pub(crate) institution: String,

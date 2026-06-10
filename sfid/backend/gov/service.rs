@@ -34,7 +34,7 @@ mod china_sf_constants;
 #[path = "../../../citizenchain/runtime/primitives/china/china_zf.rs"]
 mod china_zf_constants;
 
-pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v3";
+pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v4";
 pub const DEFAULT_ACCOUNT_COUNT: i64 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -544,6 +544,16 @@ fn push_constant_target(
     });
 }
 
+/// 联邦注册局是全国唯一机构,sfid_number 取自创世常量 china_zf.rs(总统府联邦注册局)。
+/// 注意:该机构经 push_constant_target 落库时,org_code_for_constant_name 未单列其名,
+/// 故 org_code 实为 PUBLIC_ORG;只读接口因此按 sfid_number 直接定位,不依赖 org_code。
+pub fn federal_registry_sfid_number() -> Option<&'static str> {
+    china_zf_constants::CHINA_ZF
+        .iter()
+        .find(|item| item.sfid_name == "总统府联邦注册局")
+        .map(|item| item.sfid_number)
+}
+
 fn official_name_pair(name: &str) -> (String, String) {
     const COUNTRY: &str = "中华民族联邦共和国";
     let full = match name {
@@ -570,32 +580,46 @@ fn official_name_pair(name: &str) -> (String, String) {
     (full, name.to_string())
 }
 
+// 中文注释:常量机构(创世 china_zf/lf/sf/jc/cb/ch/jy)按"机构全名"推导细类 org_code。
+// name 即各常量的 sfid_name(china_jy 例外:循环里传字面 "国家教育委员会")。
+// 历史踩坑:旧版用简称("住建部"/"省政府")匹配,但常量存的是全名("…住房与城镇建设部"/"…省联邦政府"),
+// 简称对不上全名 → 国家级与部分省级全落 PUBLIC_ORG。此处改为按实际全名 + 现名后缀匹配。
 fn org_code_for_constant_name(name: &str) -> &'static str {
     match name {
-        "总统府" => "NATIONAL_PRESIDENT_OFFICE",
-        "外交部" => "MINISTRY_FOREIGN",
-        "国防部" => "MINISTRY_DEFENSE",
-        "国安部" => "MINISTRY_SECURITY",
-        "民生部" => "MINISTRY_CIVIL_LIFE",
-        "住建部" => "MINISTRY_HOUSING",
-        "农业部" => "MINISTRY_AGRICULTURE",
-        "商贸部" => "MINISTRY_COMMERCE",
-        "财税部" => "MINISTRY_FINANCE_TAX",
-        "能源部" => "MINISTRY_ENERGY",
-        "交通部" => "MINISTRY_TRANSPORT",
-        "国家立法院" => "NATIONAL_LEGISLATURE",
-        "国家司法院" => "NATIONAL_COURT",
-        "国家监察院" => "NATIONAL_SUPERVISION",
-        "联邦廉政署" => "FEDERAL_INTEGRITY",
-        "联邦审计署" => "FEDERAL_AUDIT",
-        "联邦调查署" => "FEDERAL_INVESTIGATION",
+        // ── 总统府 + 10 部委(china_zf,全名) ──
+        "中华民族联邦共和国总统府" => "NATIONAL_PRESIDENT_OFFICE",
+        "中华民族联邦共和国外事交流部" => "MINISTRY_FOREIGN",
+        "中华民族联邦共和国国家防务部" => "MINISTRY_DEFENSE",
+        "中华民族联邦共和国国土安全部" => "MINISTRY_SECURITY",
+        "中华民族联邦共和国公民生活保障部" => "MINISTRY_CIVIL_LIFE",
+        "中华民族联邦共和国住房与城镇建设部" => "MINISTRY_HOUSING",
+        "中华民族联邦共和国农业与农村发展部" => "MINISTRY_AGRICULTURE",
+        "中华民族联邦共和国商务与市场贸易部" => "MINISTRY_COMMERCE",
+        "中华民族联邦共和国财政与税务部" => "MINISTRY_FINANCE_TAX",
+        "中华民族联邦共和国能源与环保发展部" => "MINISTRY_ENERGY",
+        "中华民族联邦共和国交通运输部" => "MINISTRY_TRANSPORT",
+        // ── 5 个总统府联邦局(china_zf) ──
+        "总统府联邦安全局" => "FEDERAL_SECURITY",
+        "总统府联邦情报局" => "FEDERAL_INTELLIGENCE",
+        "总统府联邦特勤局" => "FEDERAL_SPECIAL_SERVICE",
+        "总统府联邦人事局" => "FEDERAL_PERSONNEL",
+        "总统府联邦注册局" => "FEDERAL_REGISTRY",
+        // ── 国家两院 + 监察院下属联邦署(china_lf/sf/jc) ──
+        "中华民族联邦共和国国家立法院" => "NATIONAL_LEGISLATURE",
+        "中华民族联邦共和国国家司法院" => "NATIONAL_COURT",
+        "中华民族联邦共和国国家监察院" => "NATIONAL_SUPERVISION",
+        "国家监察院联邦廉政署" => "FEDERAL_INTEGRITY",
+        "国家监察院联邦审计署" => "FEDERAL_AUDIT",
+        "国家监察院联邦调查署" => "FEDERAL_INVESTIGATION",
+        // ── 国家储备委员会(china_cb) / 国家教育委员会(china_jy 传字面) ──
+        "国家公民储备委员会" => "NATIONAL_RESERVE",
         "国家教育委员会" | "公民教育委员会" => "NATIONAL_EDU",
-        "国家储备委员会" => "NATIONAL_RESERVE",
-        _ if name.ends_with("省政府") => "PROVINCE_GOV",
+        // ── 省级:按现名后缀匹配(已纠正改名:省政府→省联邦政府、省储备委员会→省公民储备委员会) ──
+        _ if name.ends_with("省联邦政府") => "PROVINCE_GOV",
         _ if name.ends_with("省立法院") => "PROVINCE_LEGISLATURE",
         _ if name.ends_with("省司法院") => "PROVINCE_COURT",
         _ if name.ends_with("省监察院") => "PROVINCE_SUPERVISION",
-        _ if name.ends_with("省储备委员会") => "PROVINCE_RESERVE",
+        _ if name.ends_with("省公民储备委员会") => "PROVINCE_RESERVE",
         _ if name.ends_with("省公民储备银行") => "PROVINCE_RESERVE_BANK",
         _ => "PUBLIC_ORG",
     }

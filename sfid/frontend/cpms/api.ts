@@ -44,7 +44,7 @@ export type CpmsArchiveVerifyResult = {
 /**
  * 任务卡 `20260408-sfid-public-security-cpms-embed`:
  * 按机构 sfid_number 反查其 CPMS 站点。
- * 后端通过 `(province, city, institution_code)` 三元组匹配,无则返回 null。
+ * 后端以 `cpms_sites.sfid_number`(= 机构自身 sfid_number)为主键查询,无则返回 null。
  */
 export async function getCpmsSiteByInstitution(
   auth: AdminAuth,
@@ -56,10 +56,13 @@ export async function getCpmsSiteByInstitution(
   );
 }
 
-/** 生成公安局 CPMS 站点 SFID 和安装码。 */
+/**
+ * 生成公安局 CPMS 站点安装码。
+ * 写入键 = 机构自身 `sfid_number`(= 详情页读取键);province/city/institution 仅供安全授权绑定。
+ */
 export async function generateCpmsInstallQr(
   auth: AdminAuth,
-  payload: { province?: string; city: string; institution: string },
+  payload: { sfid_number: string; province?: string; city: string; institution: string },
   securityGrant: AdminSecurityGrantOutput,
 ): Promise<GenerateCpmsInstallResult> {
   return adminRequest<GenerateCpmsInstallResult>('/api/v1/admin/cpms-keys/sfid/generate', auth, {

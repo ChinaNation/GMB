@@ -20,6 +20,7 @@ import { notice } from '../utils/notice';
 
 export function CitizensView() {
   const { auth, capabilities } = useAuth();
+  const [searchForm] = Form.useForm<{ keyword: string }>();
   const [rows, setRows] = useState<CitizenRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -108,6 +109,20 @@ export function CitizensView() {
   const openBindModal = (record: CitizenRow | null) => {
     setBindTargetRecord(record);
     setBindModalOpen(true);
+  };
+
+  // 中文注释：绑定成功后，用返回的新身份ID自动回填搜索框并查询，让新公民立即显示在列表。
+  // 拿不到新号(理论不应发生)时回退到沿用当前关键字刷新。
+  const handleBound = async (boundSfid?: string) => {
+    const next = boundSfid?.trim();
+    if (next) {
+      searchForm.setFieldsValue({ keyword: next });
+      setSearchKeyword(next);
+      setCursorStack([]);
+      await refreshList(next, null, true);
+      return;
+    }
+    await refreshList(searchKeyword, null, true);
   };
 
   const bindStatusText = (v: string | undefined) => {
@@ -208,7 +223,7 @@ export function CitizensView() {
                 新增身份ID绑定
               </Button>
             )}
-            <Form layout="inline" onFinish={onSearch}>
+            <Form form={searchForm} layout="inline" onFinish={onSearch}>
               <Form.Item name="keyword" style={{ marginBottom: 0 }}>
                 <Input style={{ width: 420 }} placeholder="请输入档案号、身份ID、投票账户检索" allowClear />
               </Form.Item>
@@ -278,7 +293,7 @@ export function CitizensView() {
           open={bindModalOpen}
           record={bindTargetRecord}
           onClose={() => setBindModalOpen(false)}
-          onBound={() => refreshList(searchKeyword, null, true)}
+          onBound={handleBound}
         />
       )}
 

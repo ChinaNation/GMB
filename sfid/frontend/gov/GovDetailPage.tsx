@@ -41,7 +41,20 @@ interface Props {
   auth: AdminAuth;
   sfidNumber: string;
   canWrite: boolean;
-  onBack: () => void;
+  /** 不传则隐藏返回按钮(注册局 tab 里市管理员直接进详情、或联邦注册局无上一级时)。 */
+  onBack?: () => void;
+  /** 返回按钮文案,默认「返回机构列表」。 */
+  backLabel?: string;
+  /**
+   * 详情数据加载覆盖。不传则走默认 getInstitution(auth, sfidNumber)(带 scope 校验)。
+   * 联邦注册局走 scope-bypass 的 getFederalRegistry,通过此 prop 注入。
+   */
+  loadDetail?: () => Promise<InstitutionDetail>;
+  /**
+   * 注册局机构详情页:在机构信息卡与账户列表卡之间内嵌的管理员列表。
+   * 普通机构不传 → 零行为变化。
+   */
+  adminListSection?: React.ReactNode;
 }
 
 const SUBJECT_STATUS_LABEL: Record<string, string> = {
@@ -119,7 +132,7 @@ type SecurityModalState = {
   reject: (reason?: unknown) => void;
 };
 
-export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onBack }) => {
+export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onBack, backLabel, loadDetail, adminListSection }) => {
   const detailCacheKey = institutionDetailCacheKey(auth, sfidNumber);
   const [detail, setDetail] = useState<InstitutionDetail | null>(() =>
     readCachedInstitutionDetail(detailCacheKey),
@@ -142,7 +155,8 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
       setDetail(null);
       setLoading(true);
     }
-    getInstitution(auth, sfidNumber)
+    const fetchDetail = loadDetail ?? (() => getInstitution(auth, sfidNumber));
+    fetchDetail()
       .then((next) => {
         setDetail(next);
         writeCachedInstitutionDetail(detailCacheKey, next);
@@ -151,7 +165,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
       .finally(() => {
         if (!cached) setLoading(false);
       });
-  }, [auth.access_token, detailCacheKey, sfidNumber]);
+  }, [auth.access_token, detailCacheKey, sfidNumber, loadDetail]);
 
   useEffect(() => {
     load();
@@ -212,10 +226,12 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
   const loadCpms = useCallback(
     (instSfidNumber: string) => {
       getCpmsSiteByInstitution(auth, instSfidNumber)
+        // 中文注释：后端「尚未生成」返回 200 + data:null，这里 row=null 即正常未生成态。
         .then((row) => setCpmsSite(row))
-        .catch(() => {
-          // 静默：后台刷新失败不弹窗（404 是正常场景——尚未生成）
-          setCpmsSite(null);
+        .catch((err) => {
+          // 真错误（403/500/网络）才到这里：提示而非静默吞成 null，
+          // 避免把「加载失败」误判为「未生成」而显示重新生成按钮；同时不清空已加载的二维码。
+          notice.error(err, 'CPMS 安装码加载失败');
         });
     },
     [auth.access_token]
@@ -248,13 +264,19 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
     if (!inst) return;
     setCpmsBusy(true);
     try {
-      const payload = {
+      // 中文注释：grant 签名内容保持 {province,city,institution} 不变（不动冷钱包解码）；
+      // 生成请求额外带机构自身 sfid_number，后端以它为写入键（= 详情页读取键），根治再次进入二维码丢失。
+      const grantPayload = {
         province: inst.province,
         city: inst.city,
         institution: inst.institution_code,
       };
-      const grant = await runPasskeyChallengeGrant('CPMS_ISSUE_INSTALL_CODE', payload);
-      const result = await generateCpmsInstallQr(auth, payload, grant);
+      const grant = await runPasskeyChallengeGrant('CPMS_ISSUE_INSTALL_CODE', grantPayload);
+      const result = await generateCpmsInstallQr(
+        auth,
+        { ...grantPayload, sfid_number: inst.sfid_number },
+        grant,
+      );
       setCpmsSite({
         sfid_number: result.sfid_number,
         install_token_status: 'PENDING',
@@ -281,11 +303,13 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
 
   return (
     <div>
-      <div style={{ marginBottom: 12 }}>
-        <Button type="link" onClick={onBack} style={{ paddingLeft: 0 }}>
-          ← 返回机构列表
-        </Button>
-      </div>
+      {onBack && (
+        <div style={{ marginBottom: 12 }}>
+          <Button type="link" onClick={onBack} style={{ paddingLeft: 0 }}>
+            ← {backLabel ?? '返回机构列表'}
+          </Button>
+        </div>
+      )}
 
       {loading && !inst && <Typography.Text type="secondary">加载中...</Typography.Text>}
 
@@ -376,6 +400,11 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                   )}
                 </Row>
               </Card>
+
+              {/* 注册局机构详情页:管理员列表嵌在机构信息与账户列表之间 */}
+              {adminListSection && (
+                <div style={{ marginBottom: 16 }}>{adminListSection}</div>
+              )}
 
 	            <Card
 	                type="inner"

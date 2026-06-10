@@ -59,9 +59,15 @@
 - `memory/08-tasks/open/20260607-sfid-cpms-pqc-signing.md`
 - `memory/08-tasks/open/20260607-pqc-step1-chain-runtime-node.md`
 - `memory/08-tasks/open/20260607-pqc-step2-wallet-wuminapp-wumin.md`
+- `memory/08-tasks/open/20260608-pow-difficulty-fork-storm-txpool-desync.md`
+- `memory/08-tasks/open/20260608-sfid-registry-detail-tab.md`
+- `memory/08-tasks/open/20260609-sfid-citizen-list-refill-cpms-key-align.md`
+- `memory/08-tasks/open/20260610-sfid-education-tab-jy-unify.md`
 
 ## done
 
+- `memory/08-tasks/done/20260609-silent-failure-submit-path-fixes.md`
+- `memory/08-tasks/done/20260608-sfid-admin-district-unify-zhen.md`
 - `memory/08-tasks/done/20260607-merge-traits-types-into-multisig.md`
 - `memory/08-tasks/done/20260606-merge-citizen-constitution-into-genesis.md`
 - `memory/08-tasks/done/20260606-citizen-constitution-pass3.md`

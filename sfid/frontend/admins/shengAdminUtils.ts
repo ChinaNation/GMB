@@ -5,6 +5,7 @@ import type { SfidCityItem } from '../china/api';
 import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
 import type { AdminActionType } from './admin_security_api';
+import type { InstitutionDetail } from '../subjects/api';
 
 export const MAX_SHI_ADMINS_PER_CITY = 30;
 
@@ -51,4 +52,11 @@ export interface ShengAdminSharedState {
   onUpdateOperator: (row: OperatorRow) => void;
   onDeleteOperator: (row: OperatorRow) => void;
   runSecuredAction: <T = unknown>(actionType: AdminActionType, payload: unknown) => Promise<T>;
+
+  /** 联邦注册局机构详情(全国唯一,scope-bypass 接口加载)。用于「联邦注册局」子 tab 详情页。 */
+  federalRegistryDetail: InstitutionDetail | null;
+  federalRegistryLoading: boolean;
+  /** 当前活动市(selectedCity / 市管理员 lockedCity)对应的市注册局机构 sfid_number。 */
+  cityRegistrySfid: string | null;
+  cityRegistryLoading: boolean;
 }

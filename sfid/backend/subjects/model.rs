@@ -291,6 +291,35 @@ pub struct CreateAccountOutput {
     pub duoqian_address: Option<String>,
 }
 
+/// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
+///
+/// 中文注释:JY 学校机构统一收口教育机构 tab 后,列表按入口拆三路:
+/// - `Private`:私权 tab,排除全部 JY(私权下 JY 都是手动学校);
+/// - `Gov`:公权 tab 精确搜索,排除手动 JY 学校(org_code IS NULL),
+///   自动生成的监管本体(公民教育委员会等,org_code=CITY_EDU)仍可搜到;
+/// - `Education`:教育 tab,= 手动 JY 学校,跨 GOV/PRIVATE 两个存储 category。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstitutionListFilter {
+    Private,
+    Gov,
+    Education,
+}
+
+impl InstitutionListFilter {
+    /// 拼进列表 SQL 的静态过滤子句(三分支均为静态字面量,无注入面)。
+    pub fn sql_clause(&self) -> &'static str {
+        match self {
+            Self::Private => {
+                "AND s.category = 'PRIVATE_INSTITUTION' AND s.institution_code <> 'JY'"
+            }
+            Self::Gov => {
+                "AND s.category = 'GOV_INSTITUTION' AND NOT (s.institution_code = 'JY' AND s.org_code IS NULL)"
+            }
+            Self::Education => "AND s.institution_code = 'JY' AND s.org_code IS NULL",
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct InstitutionListRow {
     pub sfid_number: String,

@@ -197,7 +197,7 @@ pub fn build_vote_sign_request(
         ]
     });
 
-    let now = now_secs();
+    let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: "sign_request".to_string(),
@@ -286,7 +286,7 @@ pub fn build_joint_vote_sign_request(
         ]
     });
 
-    let now = now_secs();
+    let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: "sign_request".to_string(),
@@ -487,38 +487,32 @@ pub fn verify_and_submit(
             //   0x01 00 xx = Err(InvalidTransaction::xxx)
             //   0x01 01 xx = Err(UnknownTransaction::xxx)
             let result_hex = s.strip_prefix("0x").unwrap_or(s);
-            let result_bytes = hex::decode(result_hex).unwrap_or_default();
+            // 中文注释：dry-run 已应答但结果无法解码/为空属于异常应答，此时放行
+            // 提交等于放弃校验，必须拒绝；与下方"dry-run RPC 不可用"的可用性
+            // 兜底是两回事。
+            let result_bytes = hex::decode(result_hex)
+                .map_err(|e| format!("dry-run 结果异常，拒绝提交: {e} (raw: {s})"))?;
             if result_bytes.is_empty() {
-                eprintln!("[签名提交] dry-run 结果为空，跳过检查");
-            } else if result_bytes[0] != 0x00 {
-                // 外层 Result = Err → TransactionValidityError
-                let err_kind = if result_bytes.len() > 1 && result_bytes[1] == 0x00 {
-                    let code = result_bytes.get(2).copied().unwrap_or(0);
-                    match code {
-                        0 => "Call",
-                        1 => "Payment",
-                        2 => "Future",
-                        3 => "Stale",
-                        4 => "BadProof",
-                        5 => "AncientBirthBlock",
-                        6 => "ExhaustsResources",
-                        _ => "Unknown",
-                    }
-                } else {
-                    "UnknownTransaction"
-                };
-                eprintln!(
-                    "[签名提交] dry-run 返回 InvalidTransaction::{err_kind}，继续尝试提交（依赖 pool 验证）"
-                );
-            } else if result_bytes.len() > 1 && result_bytes[1] != 0x00 {
+                return Err("dry-run 返回空结果，拒绝提交".to_string());
+            }
+            if result_bytes[0] != 0x00 {
+                // 外层 Result = Err → TransactionValidityError。
+                // 中文注释：Future/Stale 等交易提交后只会"看似成功永不上链"
+                // （Future 进 future 队列且不向 peer 广播），一律拒绝并把
+                // 具体原因抛给前端，绝不再"继续尝试提交"。
+                let reason = classify_invalid_tx(&result_bytes);
+                return Err(format!("交易校验失败，已拒绝提交: {reason} (hex: {s})"));
+            }
+            if result_bytes.len() > 1 && result_bytes[1] != 0x00 {
                 // Ok(Err(DispatchError)) — 交易格式正确但执行会失败，阻止提交
                 return Err(format!("交易执行会失败: DispatchError (hex: {s})"));
             }
             // 0x0000 = Ok(Ok(())) → 可以提交
         }
         Err(e) => {
+            // 中文注释：dry-run RPC 本身不可用（节点未启用 system_dryRun 等）
+            // 时保持可用性兜底继续提交，由交易池做最终校验。
             eprintln!("[签名提交] dry-run RPC 失败: {e}");
-            // dry-run RPC 可能不可用，不阻止提交
             eprintln!("[签名提交] 跳过 dry-run 检查，继续提交");
         }
     }
@@ -529,9 +523,67 @@ pub fn verify_and_submit(
         Value::Array(vec![Value::String(extrinsic_hex)]),
     )?;
 
-    let tx_hash = result.as_str().unwrap_or("unknown").to_string();
+    // 中文注释：提交结果必须是交易哈希字符串；其它形态说明节点应答异常，
+    // 必须上抛而不是用占位值伪装成功。
+    let tx_hash = result
+        .as_str()
+        .ok_or_else(|| format!("author_submitExtrinsic 返回非字符串: {result}"))?
+        .to_string();
+
+    // 中文注释：被交易池接受 ≠ 已上链（nonce 错位时交易进 future 队列，永不
+    // 被打包且不广播）。后台延迟核对一次 nonce 是否被消费，只打日志不阻塞。
+    spawn_post_submit_audit(pubkey_hex_clean.to_string(), sign_nonce, tx_hash.clone());
 
     Ok(VoteSubmitResult { tx_hash })
+}
+
+/// 解析 dry-run 返回的 TransactionValidityError，给出可读原因。
+///
+/// SCALE 布局：外层 0x01 = Err；第二字节 0x00 = InvalidTransaction、
+/// 0x01 = UnknownTransaction；第三字节为具体变体编号。
+fn classify_invalid_tx(result_bytes: &[u8]) -> String {
+    if result_bytes.len() > 1 && result_bytes[1] == 0x00 {
+        let kind = match result_bytes.get(2).copied().unwrap_or(0xff) {
+            0 => "Call(当前链状态下不可调度)",
+            1 => "Payment(余额不足以支付手续费)",
+            2 => "Future(nonce 超前，交易会卡在 future 队列永不出块)",
+            3 => "Stale(nonce 已被消费，交易过期)",
+            4 => "BadProof(签名校验失败)",
+            5 => "AncientBirthBlock(签名时代过旧)",
+            6 => "ExhaustsResources(资源超限，请稍后重试)",
+            _ => "Unknown",
+        };
+        format!("InvalidTransaction::{kind}")
+    } else {
+        "UnknownTransaction".to_string()
+    }
+}
+
+/// 提交后的后台核对：延迟一个出块周期后检查账户 nonce 是否前进。
+///
+/// 中文注释：`system_accountNextIndex` 包含就绪队列中的交易——nonce 未前进
+/// 说明交易既不在就绪队列也未上链（丢失或卡 future 队列），打告警日志供排查；
+/// 该核对纯观测，不影响提交结果，沿用"submit-only + 后台观察"的既定模式。
+fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String) {
+    std::thread::spawn(move || {
+        // 创世期目标块时 30 秒，留 3 个周期余量再核对。
+        std::thread::sleep(std::time::Duration::from_secs(90));
+        match fetch_nonce(&pubkey_hex) {
+            Ok(next) if next > sign_nonce => {
+                eprintln!(
+                    "[签名提交][后台核对] {tx_hash} nonce 已消费(next={next})，交易已上链或在就绪队列"
+                );
+            }
+            Ok(next) => {
+                eprintln!(
+                    "[签名提交][后台核对] ⚠ {tx_hash} 提交 90 秒后 nonce 仍未消费(next={next}, 期望 >{sign_nonce})：交易已丢失或卡在 future 队列，不会上链，需要重新提交"
+                );
+            }
+            Err(e) => {
+                eprintln!("[签名提交][后台核对] {tx_hash} nonce 查询失败，无法核对: {e}");
+            }
+        }
+    });
 }
 
 // ──── RPC 查询 ────
@@ -739,11 +791,15 @@ pub(crate) fn sha256_hash_public(data: &[u8]) -> [u8; 32] {
     sha256_hash(data)
 }
 
-pub(crate) fn now_secs() -> u64 {
+/// 当前 Unix 秒。
+///
+/// 中文注释：系统时钟早于 epoch 属于环境故障；静默返回 0 会让 QR 请求一出生
+/// 就过期（issued_at=0），冷钱包只报"协议过期"而毫无线索，必须显式失败。
+pub(crate) fn now_secs() -> Result<u64, String> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+        .map(|d| d.as_secs())
+        .map_err(|e| format!("系统时钟异常（早于 Unix epoch）: {e}"))
 }
 
 pub(crate) fn generate_request_id(prefix: &str) -> String {
@@ -791,7 +847,7 @@ pub fn build_sign_request_from_call_data(
         "fields": fields
     });
 
-    let now = now_secs();
+    let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: "sign_request".to_string(),
@@ -852,5 +908,36 @@ mod tests {
         // 验证可以用 bs58 解码回来
         let decoded = bs58::decode(&ss58).into_vec().unwrap();
         assert_eq!(&decoded[2..34], &pubkey);
+    }
+
+    #[test]
+    fn classify_invalid_tx_known_variants() {
+        // 0x01 00 xx = Err(InvalidTransaction::xxx)
+        assert!(classify_invalid_tx(&[0x01, 0x00, 0x02]).contains("Future"));
+        assert!(classify_invalid_tx(&[0x01, 0x00, 0x03]).contains("Stale"));
+        assert!(classify_invalid_tx(&[0x01, 0x00, 0x04]).contains("BadProof"));
+        assert!(classify_invalid_tx(&[0x01, 0x00, 0x01]).contains("Payment"));
+    }
+
+    #[test]
+    fn classify_invalid_tx_unknown_transaction() {
+        // 0x01 01 xx = Err(UnknownTransaction::xxx)
+        assert_eq!(
+            classify_invalid_tx(&[0x01, 0x01, 0x00]),
+            "UnknownTransaction"
+        );
+    }
+
+    #[test]
+    fn classify_invalid_tx_unrecognized_code_does_not_panic() {
+        // 越界/未知变体编号不得 panic，归入 Unknown
+        assert!(classify_invalid_tx(&[0x01, 0x00, 0x63]).contains("Unknown"));
+        assert_eq!(classify_invalid_tx(&[0x01]), "UnknownTransaction");
+    }
+
+    #[test]
+    fn now_secs_returns_positive() {
+        // 正常系统时钟下必须返回 epoch 之后的正数秒
+        assert!(now_secs().unwrap() > 1_700_000_000);
     }
 }

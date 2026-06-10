@@ -1,22 +1,23 @@
-// 中文注释:按 category + subject_property 决定"新增机构"弹窗里哪些字段锁定 + 默认值。
-// gov/private 新增弹窗共用这一份字段锁定规则,但组件分别放在各自业务目录。
+// 中文注释:按表单入口(category)+ subject_property 决定"新增机构"弹窗里哪些字段锁定 + 默认值。
+// private/education 新增弹窗共用这一份字段锁定规则,但组件分别放在各自业务目录。
 //
-// 两步式机构创建(2026-04-19 改造):
-//   第一步 弹窗:S/F 只选 SubjectProperty、P1、institution_code、省/市、T2/C1,仅生成 SFID,
-//                **不要求** institution_name / sub_type
-//   第二步 详情页:设置 institution_name(全国唯一)、sub_type(S)及其他可变信息
+// 手动新增只有两个入口(公权机构由后端自动生成,公安局不可手动建):
+//   PRIVATE_INSTITUTION   私权 tab:S/F + ZG/TG,两步式(弹窗只生成 SFID,详情页补名称/sub_type)
+//   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY),学校名称弹窗内必填
 //
-// SubjectProperty 联动:
+// 教育机构 P1 联动(见 educationP1Locks):
+//   G(公立学校)  → P1 锁死 0(非盈利,号码生成器硬规则)
+//   S(私立学校)  → P1 可选 0/1
+//   F(分校)      → 先选上级法人属性:上级=G 锁 0;上级=S 再选上级盈利属性,F 的 P1 跟随
+//
+// 私权 SubjectProperty 联动:
 //   S(私法人) → P1 可选 0/1;sub_type 选项由 P1 决定(见 subTypeChoicesForP1)
-//   F(非法人) → P1 可选 0/1;无 sub_type;机构代码为 ZG/TG/教育委员会(JY)
-//
-// 机构代码选项:
-//   G → 仅允许手动新增教育委员会(JY)类型学校机构,普通公权机构由后端自动生成
-//   S/F → ZG/TG/教育委员会(JY)
-
-import type { InstitutionCategory } from './api';
+//   F(非法人) → P1 可选 0/1;无 sub_type;机构代码 ZG/TG
 
 export type ChoiceItem = { value: string; label: string };
+
+/** 手动新增表单的入口类型(查询/存储 category 见 subjects/api.ts 的 InstitutionCategory)。 */
+export type CreateFormCategory = 'PRIVATE_INSTITUTION' | 'EDUCATION_INSTITUTION';
 
 export interface InstitutionFieldLocks {
   /** subject_property 的候选列表;长度=1 时锁死第一项 */
@@ -25,8 +26,6 @@ export interface InstitutionFieldLocks {
   p1Choices: ChoiceItem[];
   /** institution 代码的候选列表;长度=1 时锁死第一项 */
   institutionChoices: ChoiceItem[];
-  /** 机构名称是否锁死为固定值(仅公安局) */
-  lockedInstitutionName: string | null;
   /** 弹窗标题 */
   modalTitle: string;
 }
@@ -123,17 +122,15 @@ export const ORG_CODE_LABEL: Record<string, string> = {
   PUBLIC_ORG: '公权机构',
 };
 
-// ── 公权机构手动新增只保留教育委员会类型学校机构 ──
-const G_NONPROFIT_GOV: ChoiceItem[] = [
-  { value: 'JY', label: '教育委员会 (JY)' },
-];
-
-// ── 私法人/非法人可选机构代码 ──
+// ── 私法人/非法人可选机构代码(教育委员会 JY 已统一收口教育机构 tab) ──
 const PRIVATE_INSTITUTIONS: ChoiceItem[] = [
   { value: 'ZG', label: '中国 (ZG)' },
-  { value: 'JY', label: '教育委员会 (JY)' },
   { value: 'TG', label: '他国 (TG)' },
 ];
+
+// ── P1 盈利属性选项(单一来源,锁死场景取单项) ──
+const P1_PROFIT: ChoiceItem = { value: '1', label: '盈利 (1)' };
+const P1_NON_PROFIT: ChoiceItem = { value: '0', label: '非盈利 (0)' };
 
 // ── 私法人企业类型(详情页使用;P1 联动见 subTypeChoicesForP1) ──
 // P1=0 → 仅 NON_PROFIT;P1=1 → 四种企业类型
@@ -155,23 +152,19 @@ export const SUB_TYPE_LABEL: Record<string, string> = {
 };
 
 /** 基础 locks(不依赖 subject_property 动态值的部分) */
-export function locksForCategory(category: InstitutionCategory): InstitutionFieldLocks {
+export function locksForCategory(category: CreateFormCategory): InstitutionFieldLocks {
   switch (category) {
-    case 'PUBLIC_SECURITY':
+    case 'EDUCATION_INSTITUTION':
+      // 机构锁死教育委员会(JY);P1 初始为 G 态(锁非盈利),联动见 educationP1Locks
       return {
-        subjectPropertyChoices: [{ value: 'G', label: '公法人 (G)' }],
-        p1Choices: [{ value: '0', label: '非盈利 (0)' }],
-        institutionChoices: [{ value: 'ZF', label: '政府 (ZF)' }],
-        lockedInstitutionName: null,
-        modalTitle: '公安局',
-      };
-    case 'GOV_INSTITUTION':
-      return {
-        subjectPropertyChoices: [{ value: 'G', label: '公法人 (G)' }],
-        p1Choices: [{ value: '0', label: '非盈利 (0)' }],
-        institutionChoices: G_NONPROFIT_GOV,
-        lockedInstitutionName: null,
-        modalTitle: '新增机构',
+        subjectPropertyChoices: [
+          { value: 'G', label: '公法人 (G)' },
+          { value: 'S', label: '私法人 (S)' },
+          { value: 'F', label: '非法人 (F)' },
+        ],
+        p1Choices: [P1_NON_PROFIT],
+        institutionChoices: [{ value: 'JY', label: '教育委员会 (JY)' }],
+        modalTitle: '新增教育机构',
       };
     case 'PRIVATE_INSTITUTION':
       // 两步式:第一步弹窗不含 institution_name/sub_type;P1 可 0/1 由用户选
@@ -180,12 +173,8 @@ export function locksForCategory(category: InstitutionCategory): InstitutionFiel
           { value: 'S', label: '私法人 (S)' },
           { value: 'F', label: '非法人 (F)' },
         ],
-        p1Choices: [
-          { value: '1', label: '盈利 (1)' },
-          { value: '0', label: '非盈利 (0)' },
-        ],
+        p1Choices: [P1_PROFIT, P1_NON_PROFIT],
         institutionChoices: PRIVATE_INSTITUTIONS,
-        lockedInstitutionName: null,
         modalTitle: '新增私权机构',
       };
   }
@@ -198,16 +187,39 @@ export function dynamicLocksForSubjectProperty(subject_property: string): {
   institutionChoices: ChoiceItem[];
 } {
   // S/F 通用:P1 用户可选 0/1;机构代码 ZG/TG
-  const p1Choices: ChoiceItem[] = [
-    { value: '1', label: '盈利 (1)' },
-    { value: '0', label: '非盈利 (0)' },
-  ];
+  const p1Choices: ChoiceItem[] = [P1_PROFIT, P1_NON_PROFIT];
   const p1Default = subject_property === 'F' ? '0' : '1';
   return {
     p1Choices,
     p1Default,
     institutionChoices: PRIVATE_INSTITUTIONS,
   };
+}
+
+/**
+ * 教育机构 P1 联动(公立学校非盈利是号码生成器硬规则,这里把规则显性化到表单):
+ *   G → P1 锁死 0(非盈利)
+ *   S → P1 可选 0/1,默认 1(盈利)
+ *   F → P1 锁死,由上级法人属性推导:上级=G → 0;上级=S → 跟随上级盈利属性
+ */
+export function educationP1Locks(
+  subjectProperty: string,
+  parentSubjectProperty: string,
+  parentP1: string,
+): { p1Choices: ChoiceItem[]; p1Value: string; p1Locked: boolean } {
+  if (subjectProperty === 'S') {
+    return { p1Choices: [P1_PROFIT, P1_NON_PROFIT], p1Value: '1', p1Locked: false };
+  }
+  if (subjectProperty === 'F') {
+    const v = parentSubjectProperty === 'S' ? parentP1 : '0';
+    return {
+      p1Choices: [v === '1' ? P1_PROFIT : P1_NON_PROFIT],
+      p1Value: v,
+      p1Locked: true,
+    };
+  }
+  // G(公立学校)
+  return { p1Choices: [P1_NON_PROFIT], p1Value: '0', p1Locked: true };
 }
 
 /**
