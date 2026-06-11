@@ -149,9 +149,13 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       setSelectedParent(null);
       return;
     }
-    // 用 sfid_number 自身作为查询词反查名称
+    // 用 sfid_number 自身作为查询词反查名称(传机构自身落位省市,既有挂靠必然满足地域规则)
     let cancelled = false;
-    searchParentInstitutions(auth, inst.parent_sfid_number)
+    searchParentInstitutions(auth, inst.parent_sfid_number, {
+      fInstitution: inst.institution_code,
+      province: inst.province,
+      city: inst.city,
+    })
       .then((rows) => {
         if (cancelled) return;
         const hit = rows.find((r) => r.sfid_number === inst.parent_sfid_number);
@@ -175,7 +179,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
     setParentSearching(true);
     try {
-      const rows = await searchParentInstitutions(auth, q);
+      // 改挂与创建同源:后端按 subjects/uninorg 地域规则预过滤候选父级
+      const rows = await searchParentInstitutions(auth, q, {
+        fInstitution: inst.institution_code,
+        province: inst.province,
+        city: inst.city,
+      });
       setParentSearchOpts(rows);
       if (rows.length === 0) {
         notice.info('未找到匹配的法人机构');

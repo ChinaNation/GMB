@@ -8,6 +8,7 @@ import { CreateInstitutionForm } from '../core/institution/CreateInstitutionForm
 import {
   checkInstitutionName,
   createInstitution,
+  searchParentInstitutions,
   uploadLegalRepresentativePhoto,
   type CreateInstitutionOutput,
 } from './api';
@@ -28,5 +29,6 @@ export const PrivateCreateModal: React.FC<Props> = (props) => (
     checkInstitutionName={checkInstitutionName}
     createInstitution={createInstitution}
     uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
+    searchParentInstitutions={searchParentInstitutions}
   />
 );

@@ -78,9 +78,9 @@ sfid/frontend/
   市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `core/WuminSignaturePanel.tsx` 与 `core/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
-- `core/institution/CreateInstitutionForm.tsx` 是私权/教育新增弹窗唯一表单实现;
-  `private/PrivateCreateModal.tsx` 和 `education/EducationCreateModal.tsx` 只做本模块 API 注入,
-  不得再复制表单逻辑。公权机构无手动新增,`gov/` 下不得恢复 CreateModal。
+- `core/institution/CreateInstitutionForm.tsx` 是私权/公权/教育新增弹窗唯一表单实现;
+  `private/PrivateCreateModal.tsx`、`gov/GovCreateModal.tsx` 和 `education/EducationCreateModal.tsx`
+  只做本模块 API 注入,不得再复制表单逻辑。
 - `core/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 冷钱包签名弹窗固定在最高安全层。
 - `core/qr/wuminQr.ts` 是前端 WUMIN_QR_V1 envelope 解析唯一入口;不得恢复独立
@@ -124,15 +124,23 @@ sfid/frontend/
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
 - `china/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
 - `core/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
-- `private/PrivateListTable.tsx` 与 `education/EducationListTable.tsx` 不做普通机构本地分页承载大数据；私权/教育机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 只承载公安局和公权机构确定性列表,进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
-- 公权机构 tab 无任何手动新增入口(公权机构全部由后端自动生成)。
+- `private/PrivateListTable.tsx` 与 `education/EducationListTable.tsx` 不做普通机构本地分页承载大数据；私权/教育机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 承载公安局确定性列表和公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
+- 公权机构 tab 手动新增两能力(公安局页面无新增入口):G 公法人=新公权机构
+  (代码仅 `ZF/LF/SF/JC`,排除央行 `CB`,机构名称必填同市查重)/ F 非法人=公权下属非法人。
+  普通公权目录仍由后端自动生成,手动公权机构与挂公法人的非法人都进浏览目录。
 - 教育委员会(JY)学校机构统一在教育机构 tab(`education/`)管理:列表走
-  `category=EDUCATION_INSTITUTION`(= 手动 JY 学校,跨 GOV/PRIVATE 存储 category),
+  `category=EDUCATION_INSTITUTION`(= 手动 JY 行:学校本部 + 分校,跨 GOV/PRIVATE 存储 category),
   私权/公权列表同步排除;自动生成的监管本体(公民教育委员会/国家教育委员会)仍留在公权目录。
-- 教育机构新增表单:机构锁死“教育委员会 (JY)”,名称字段标签显示“学校名称”;
-  主体属性 G(公立,P1 锁非盈利)/S(私立,P1 可选)/F(分校,先选上级法人属性:上级=G 锁非盈利,
-  上级=S 再选上级盈利属性并由 F 继承;上级法人属性仅推导 P1,创建后在详情页关联所属法人)。
+- 非法人(F)三入口统一流程:创建时**必选所属法人**(创建即挂,不存在未挂靠非法人),
+  P1 盈利属性继承所属法人(公法人父恒非盈利,私法人父继承其 p1);所属法人搜索由后端按
+  `subjects/uninorg` 地域规则预过滤——分校→本市学校本部,公权→本市市级/本省省级/国家级公法人,
+  私权→全国私法人(唯一允许跨省市);详情页"所属法人"保留为改挂入口,同套校验。
+- 教育机构新增表单:机构锁死“教育委员会 (JY)”,名称字段标签显示“学校名称”(分校也必填);
+  主体属性 G(公立)/S(私立)/F(分校,所属法人=本市学校本部)。
 - 私权机构新增选项只剩 `ZG/TG`,不得再出现 `JY`。
+- 非法人列表归属按所属法人分流:父=私法人→私权 tab,父=公法人→公权 tab(含浏览目录),
+  父=教育委员会学校→教育 tab(分校 F+JY 天然命中教育过滤);后端列表 SQL 以
+  `LEFT JOIN subjects par` 按 `par.subject_property` 分流。
 - 机构链上状态前端只保留“未注册 / 已注册 / 已注销”,不得出现第四状态筛选或文案。
 
 ## 管理员目录规则

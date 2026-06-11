@@ -1202,8 +1202,9 @@ impl Db {
             let cursor_created_at = cursor.map(|c| c.created_at);
             let fetch_limit = i64::try_from(page_size.saturating_add(1))
                 .map_err(|_| "page_size too large".to_string())?;
-            // 中文注释:过滤子句来自 InstitutionListFilter 的静态字面量(教育=手动 JY 学校
-            // 跨 GOV/PRIVATE 两 category,私权/公权同步排除),无注入面。
+            // 中文注释:过滤子句来自 InstitutionListFilter 的静态字面量(教育=手动 JY 行,
+            // 非法人按父级属性分流到公权/私权),无注入面;par 是子句依赖的父级别名,
+            // 父级允许跨省(私法人全国),故只按 sfid_number 关联不限定 p_code。
             let sql = format!(
 		                    "SELECT s.sfid_number, s.name, s.category,
 			                                    s.subject_property, s.p1, s.province,
@@ -1215,6 +1216,7 @@ impl Db {
 				                                    s.status
 		                             FROM subjects s
 		                             LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+		                             LEFT JOIN subjects par ON par.sfid_number = s.parent_sfid_number
 		                             LEFT JOIN (
 	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
 	                                FROM accounts
@@ -1381,6 +1383,9 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let offset_i64 =
                 i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
+            // 中文注释:公权目录 = 自动生成目录(gov 表,排公安局) + 手动公权机构
+            // (category=GOV,org_code 空,非 JY 学校) + 公权下属非法人(F,父级为公法人)。
+            // 父级只按 sfid_number 关联(sfid 全局唯一,父级不限定本省分区)。
             let rows = conn
                 .query(
                     "SELECT s.sfid_number, s.name, s.category,
@@ -1392,7 +1397,8 @@ impl Db {
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean
 	                             FROM subjects s
-	                             JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+	                             LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+	                             LEFT JOIN subjects par ON par.sfid_number = s.parent_sfid_number
 		                             LEFT JOIN (
 	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
 	                                FROM accounts
@@ -1401,10 +1407,20 @@ impl Db {
 	                                GROUP BY p_code, sfid_number
 	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
 	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
-	                             WHERE s.kind = 'PUBLIC'
-	                               AND s.category = 'GOV_INSTITUTION'
+	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               AND s.status = 'ACTIVE'
-	                               AND COALESCE(g.org_code, '') <> 'CITY_POLICE'
+	                               AND (
+	                                    (s.category = 'GOV_INSTITUTION'
+	                                     AND g.sfid_number IS NOT NULL
+	                                     AND COALESCE(g.org_code, '') <> 'CITY_POLICE')
+	                                    OR (s.category = 'GOV_INSTITUTION'
+	                                        AND g.sfid_number IS NULL
+	                                        AND s.org_code IS NULL
+	                                        AND s.institution_code <> 'JY')
+	                                    OR (s.subject_property = 'F'
+	                                        AND s.institution_code <> 'JY'
+	                                        AND par.subject_property = 'G')
+	                               )
 	                               AND s.p_code = $1
 	                               AND ($2::text IS NULL OR s.c_code = $2)
 	                               AND (

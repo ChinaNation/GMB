@@ -37,6 +37,46 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
+  List<int> compactU32(int value) {
+    if (value < 64) return [value << 2];
+    if (value < 16384) {
+      final v = (value << 2) | 1;
+      return [v & 0xff, (v >> 8) & 0xff];
+    }
+    final v = (value << 2) | 2;
+    return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+  }
+
+  // SigningPayload 扩展尾,布局与节点端 build_signing_payload / wuminapp
+  // polkadart 编码一致:era(0x00 immortal) + Compact<nonce> + Compact<tip>
+  // + mode(0x00) + spec(4) + tx(4) + genesis(32) + birth=genesis(32) + None。
+  // 真实 QR payload_hex = call_data + 本尾部;链上分支夹具必须带尾构造,
+  // 裸 call_data 会被 decoder 的尾部校验拒绝(decodeFailed → 红色)。
+  final tailGenesis = List<int>.generate(32, (i) => 0x49 ^ i);
+  List<int> signingTail({int nonce = 1, int tip = 0}) => [
+        0x00,
+        ...compactU32(nonce),
+        ...compactU32(tip),
+        0x00,
+        1, 0, 0, 0, // spec_version u32 LE
+        1, 0, 0, 0, // tx_version u32 LE
+        ...tailGenesis,
+        ...tailGenesis,
+        0x00,
+      ];
+
+  Uint8List withSigningTail(List<int> callData, {int nonce = 1}) =>
+      Uint8List.fromList([...callData, ...signingTail(nonce: nonce)]);
+
+  List<int> bytesFromHex(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return List<int>.generate(
+      clean.length ~/ 2,
+      (i) => int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16),
+      growable: false,
+    );
+  }
+
   String ss58FromBytes(List<int> bytes) => Keyring().encodeAddress(bytes, 2027);
 
   String ss58FromHex(String value) {
@@ -63,9 +103,7 @@ void main() {
         0xA2, 0x6D, 0x01, 0x00, // Compact(23400)
       ]);
 
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'transfer');
@@ -84,9 +122,7 @@ void main() {
         42, 0, 0, 0, 0, 0, 0, 0,
         1, // approve = true
       ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'internal_vote');
@@ -109,9 +145,7 @@ void main() {
         0,
         0,
       ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded!.action, 'internal_vote');
       expect(decoded.fields['approve'], 'false');
       expect(decoded.summary, contains('反对'));
@@ -133,9 +167,7 @@ void main() {
         ...List.filled(32, 0),
         0,
       ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'joint_vote');
@@ -160,9 +192,7 @@ void main() {
         ...adminPubkey, // [u8;32]
         1, // approve = true
       ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_referendum');
@@ -185,10 +215,8 @@ void main() {
         0,
         1, // 只到 approve,长度 = 45。
       ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
-      expect(decoded, isNull, reason: '凭证长度 45 < 78 必须被拒绝');
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNull, reason: '缺 province/signer_admin_pubkey 的旧凭证必须被拒绝');
     });
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
@@ -204,9 +232,7 @@ void main() {
         0,
         0,
       ]);
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded!.action, 'finalize_proposal');
       expect(decoded.fields['proposal_id'], '15');
     });
@@ -273,7 +299,7 @@ void main() {
         ...u16Le(9944),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_clearing_bank');
@@ -294,7 +320,7 @@ void main() {
         ...u16Le(443),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'update_clearing_bank_endpoint');
@@ -311,7 +337,7 @@ void main() {
         ...compactVec(sfidNumber),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'unregister_clearing_bank');
@@ -362,9 +388,7 @@ void main() {
         ...amountBytes,
       ]);
 
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_sweep_to_main');
@@ -387,7 +411,7 @@ void main() {
         ...amountBytes,
       ]);
 
-      expect(PayloadDecoder.decode(hexOf(payload)), isNull,
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull,
           reason: '目标态只接受机构多签 AccountId32,不兼容旧 48B 主体');
     });
 
@@ -405,7 +429,7 @@ void main() {
         ...utf8.encode('test'),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_transfer');
@@ -428,7 +452,7 @@ void main() {
         0x00,
       ]);
 
-      expect(PayloadDecoder.decode(hexOf(payload)), isNull,
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull,
           reason: '目标态只接受机构多签 AccountId32,不兼容旧 48B 主体');
     });
 
@@ -444,9 +468,7 @@ void main() {
         0xA9, 0x03, // Compact(234) two-byte mode
       ]);
 
-      final hex =
-          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.fields['amount_yuan'], '2.34 GMB');
@@ -484,7 +506,7 @@ void main() {
       // Phase 4(2026-05-02): 业务 pallet 的 execute_xxx wrapper 全部物理删除,
       // 手动重试统一收口至 VotingEngine::retry_passed_proposal(9.4)。
       final payload = buildProposalIdPayload(0x09, 0x04, 100);
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'retry_passed_proposal');
       expect(decoded.fields['proposal_id'], '100');
@@ -500,7 +522,7 @@ void main() {
             buildProposalIdPayload(0x09, 0x05, 401).sublist(2, 10)))
         ..add([0x00]); // Compact<u32> 0 (空 reason)
       final payload = builder.toBytes();
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '401');
@@ -519,7 +541,7 @@ void main() {
         ..add([compactLen])
         ..add(reason);
       final payload = builder.toBytes();
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '402');
@@ -539,7 +561,8 @@ void main() {
       ];
       for (final c in cases) {
         final payload = buildProposalIdPayload(c[0], c[1], 999);
-        final decoded = PayloadDecoder.decode(encodeHex(payload));
+        final decoded =
+            PayloadDecoder.decode(hexOf(withSigningTail(payload)));
         expect(decoded, isNull,
             reason: 'pallet=${c[0]} call=${c[1]} 应已废弃,decoder 拒绝');
       }
@@ -559,7 +582,7 @@ void main() {
         ...u32Le(2),
       ]);
 
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_admin_set_change');
@@ -588,7 +611,8 @@ void main() {
         ...List<int>.filled(32, 0x22),
       ]);
 
-      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+      expect(
+          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('rejects propose_admin_set_change with trailing bytes', () {
@@ -605,7 +629,8 @@ void main() {
         0xff,
       ]);
 
-      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+      expect(
+          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('rejects propose_admin_set_change below majority threshold', () {
@@ -621,7 +646,8 @@ void main() {
         ...u32Le(1),
       ]);
 
-      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+      expect(
+          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('rejects builtin governance admin change with wrong fixed threshold',
@@ -636,7 +662,8 @@ void main() {
         ...u32Le(12),
       ]);
 
-      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+      expect(
+          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('decodes account-level admin activation payload', () {
@@ -683,7 +710,8 @@ void main() {
           ...u32Le(2),
         ]);
 
-        final decoded = PayloadDecoder.decode(encodeHex(payload));
+        final decoded =
+            PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
         expect(decoded, isNotNull);
         expect(decoded!.fields['org'], entry.value);
@@ -707,12 +735,13 @@ void main() {
         ...u32Le(2),
       ]);
 
-      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+      expect(
+          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
       final payload = buildProposalIdPayload(0x11, 0x04, 500);
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cleanup_rejected_proposal');
       expect(decoded.fields['proposal_id'], '500');
@@ -724,7 +753,7 @@ void main() {
         ...List<int>.filled(32, 0x11),
         ...List<int>.filled(32, 0x22),
       ]);
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_institution');
       expect(decoded.fields.keys.toList(), ['duoqian_address', 'beneficiary']);
@@ -736,7 +765,7 @@ void main() {
         ...List<int>.filled(32, 0x33),
         ...List<int>.filled(32, 0x44),
       ]);
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_personal');
       expect(decoded.fields.keys.toList(), ['duoqian_address', 'beneficiary']);
@@ -845,7 +874,7 @@ void main() {
 
       final payload =
           Uint8List.fromList(buildProposeCreateInstitutionPayload());
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['sfid_number'], 'AH001-SCB0N-202605010-2026');
@@ -867,7 +896,7 @@ void main() {
     test('propose_create_institution 带多余尾字段时拒绝解码', () {
       final payload = Uint8List.fromList(
           buildProposeCreateInstitutionPayload(extraTail: true));
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNull,
           reason:
               'P-TX-001 禁止 subject_property/sub_type/parent_sfid_number 多余尾字段');
@@ -880,7 +909,8 @@ void main() {
         final payload = Uint8List.fromList(
           buildProposeCreateInstitutionPayload(secondAccountName: forbidden),
         );
-        final decoded = PayloadDecoder.decode(encodeHex(payload));
+        final decoded =
+            PayloadDecoder.decode(hexOf(withSigningTail(payload)));
         expect(decoded, isNull,
             reason: '制度专属保留名不可作为机构自定义账户注册，必须红色拒签');
       });
@@ -891,7 +921,7 @@ void main() {
       final payload = Uint8List.fromList(
         buildProposeCreateInstitutionPayload(secondAccountName: '费用账户'),
       );
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
@@ -917,7 +947,7 @@ void main() {
         ...u128LeForTest(BigInt.from(12345)),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_personal');
@@ -946,7 +976,7 @@ void main() {
         ...u128LeForTest(BigInt.from(12345)),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNull);
     });
@@ -971,7 +1001,7 @@ void main() {
         ...u128LeForTest(BigInt.from(12345)),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNull);
     });
@@ -1000,7 +1030,7 @@ void main() {
         ...u128LeForTest(BigInt.from(111)),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNull);
     });
@@ -1036,7 +1066,9 @@ void main() {
       expect(caseEntry['pallet_index'], 23);
       expect(caseEntry['call_index'], 1);
       expect(hex.toLowerCase().startsWith('0x1701'), isTrue);
-      final decoded = PayloadDecoder.decode(hex);
+      // fixture 固化的是纯 call_data,真实 QR 还带签名扩展尾。
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(bytesFromHex(hex))));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
@@ -1057,7 +1089,9 @@ void main() {
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'propose_resolution_issuance');
       final hex = caseEntry['expected_call_data_hex'] as String;
-      final decoded = PayloadDecoder.decode(hex);
+      // fixture 固化的是纯 call_data,真实 QR 还带签名扩展尾。
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(bytesFromHex(hex))));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_resolution_issuance');
       expect(decoded.fields['province'],
@@ -1124,7 +1158,7 @@ void main() {
         // ★ signer_admin_pubkey
         ...signerAdmin,
       ]);
-      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_resolution_issuance');
       expect(decoded.fields['reason'], '紧急救灾');
@@ -1135,6 +1169,68 @@ void main() {
         decoded.fields['signer_admin_pubkey'],
         ss58FromBytes(signerAdmin),
       );
+    });
+
+    // -----------------------------------------------------------------------
+    // 签名扩展尾校验(2026-06-10):真实 QR payload_hex = call_data + 扩展尾。
+    // 历史 bug:84080b6a 把多个分支改成"严格到尾"却没算扩展尾,
+    // 国储会转账提案等 9 类提案扫码必红。本组用例锁死两端约定:
+    // 带合法尾 → 解码成功;裸 call_data / 篡改尾 → null(红色拒签)。
+    // -----------------------------------------------------------------------
+
+    List<int> buildNrcTransferCallData() => [
+          0x13, 0x00,
+          0x00, // org = 国储会
+          ...List<int>.filled(32, 0x66), // institution AccountId32
+          ...List<int>.filled(32, 0x44), // beneficiary
+          ...u128LeForTest(BigInt.from(12345)),
+          0x00, // remark 空 Vec
+        ];
+
+    test('decodes 国储会 propose_transfer 带真实签名扩展尾', () {
+      final decoded = PayloadDecoder.decode(
+          hexOf(withSigningTail(buildNrcTransferCallData())));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_transfer');
+      expect(decoded.fields['institution'], '国储会');
+      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields['remark'], '');
+    });
+
+    test('propose_transfer 大 nonce(两字节 Compact)尾部同样接受', () {
+      final decoded = PayloadDecoder.decode(
+          hexOf(withSigningTail(buildNrcTransferCallData(), nonce: 1000)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_transfer');
+    });
+
+    test('rejects 裸 call_data(无签名扩展尾)', () {
+      expect(PayloadDecoder.decode(hexOf(buildNrcTransferCallData())), isNull,
+          reason: '真实 SigningPayload 必带扩展尾,裸 call_data 拒签');
+    });
+
+    test('rejects 篡改的签名扩展尾', () {
+      final callData = buildNrcTransferCallData();
+      final good = withSigningTail(callData);
+
+      // era ≠ immortal(0x00)
+      final badEra = Uint8List.fromList(good);
+      badEra[callData.length] = 0x15;
+      expect(PayloadDecoder.decode(hexOf(badEra)), isNull);
+
+      // immortal 下 birth hash 必等于 genesis hash
+      final badBirth = Uint8List.fromList(good);
+      badBirth[badBirth.length - 2] ^= 0xff;
+      expect(PayloadDecoder.decode(hexOf(badBirth)), isNull);
+
+      // call_data 与尾部之间夹带多余字节
+      expect(
+          PayloadDecoder.decode(
+              hexOf([...callData, 0xee, ...signingTail()])),
+          isNull);
+
+      // 尾部末尾多挂字节
+      expect(PayloadDecoder.decode(hexOf([...good, 0x00])), isNull);
     });
   });
 }

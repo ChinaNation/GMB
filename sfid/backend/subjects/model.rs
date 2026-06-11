@@ -206,9 +206,13 @@ pub struct CreateInstitutionInput {
     pub province: Option<String>,
     pub city: String,
     pub institution: String,
-    /// 两步式:私权(S/F)不传,由详情页 `update_institution` 补填;
-    /// `JY` 手动新增学校机构必传;普通私权两步式不传;自动公权机构不走该创建 DTO。
+    /// 两步式:S/F 两步式不传,由详情页 `update_institution` 补填;
+    /// `JY` 学校机构和手动公权机构(G)必传;自动公权机构不走该创建 DTO。
     pub institution_name: Option<String>,
+    /// 所属法人身份ID。非法人(F)创建必传(创建即挂,不存在未挂靠非法人),
+    /// 其它主体属性不接受;校验规则单一权威源见 `subjects/uninorg`。
+    #[serde(default)]
+    pub parent_sfid_number: Option<String>,
     pub sfid_name: Option<String>,
     pub short_name: Option<String>,
     /// 私法人子类型。两步式改造后:**创建阶段不再接受** sub_type,
@@ -293,11 +297,14 @@ pub struct CreateAccountOutput {
 
 /// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
 ///
-/// 中文注释:JY 学校机构统一收口教育机构 tab 后,列表按入口拆三路:
-/// - `Private`:私权 tab,排除全部 JY(私权下 JY 都是手动学校);
-/// - `Gov`:公权 tab 精确搜索,排除手动 JY 学校(org_code IS NULL),
-///   自动生成的监管本体(公民教育委员会等,org_code=CITY_EDU)仍可搜到;
-/// - `Education`:教育 tab,= 手动 JY 学校,跨 GOV/PRIVATE 两个存储 category。
+/// 中文注释:JY 学校归教育 tab + 非法人(F)按所属法人分流后,列表按入口拆三路
+/// (子句引用父级别名 `par`,查询必须 `LEFT JOIN subjects par ON par.sfid_number =
+/// s.parent_sfid_number`):
+/// - `Private`:私权 tab = S 非 JY + 父级为私法人的 F(父级缺失的 F 防御性兜底在私权,
+///   保证数据异常时仍可见);
+/// - `Gov`:公权 tab = 公权机构(排除手动 JY 学校,自动监管本体如公民教育委员会保留)
+///   + 父级为公法人的 F;
+/// - `Education`:教育 tab = 手动 JY 行(G/S 学校本部 + F+JY 分校),跨两个存储 category。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstitutionListFilter {
     Private,
@@ -310,10 +317,14 @@ impl InstitutionListFilter {
     pub fn sql_clause(&self) -> &'static str {
         match self {
             Self::Private => {
-                "AND s.category = 'PRIVATE_INSTITUTION' AND s.institution_code <> 'JY'"
+                "AND s.category = 'PRIVATE_INSTITUTION' AND s.institution_code <> 'JY'
+                 AND (s.subject_property <> 'F' OR COALESCE(par.subject_property, 'S') <> 'G')"
             }
             Self::Gov => {
-                "AND s.category = 'GOV_INSTITUTION' AND NOT (s.institution_code = 'JY' AND s.org_code IS NULL)"
+                "AND ((s.category = 'GOV_INSTITUTION'
+                       AND NOT (s.institution_code = 'JY' AND s.org_code IS NULL))
+                      OR (s.subject_property = 'F' AND s.institution_code <> 'JY'
+                          AND par.subject_property = 'G'))"
             }
             Self::Education => "AND s.institution_code = 'JY' AND s.org_code IS NULL",
         }
@@ -371,6 +382,9 @@ pub struct ParentInstitutionRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
     pub category: InstitutionCategory,
+    /// 盈利属性。非法人创建时前端按"盈利属性附属于所属法人"用它推导 F 的 p1
+    /// (公法人父级恒 0;私法人父级继承该值),后端 `uninorg::inherited_p1` 复核。
+    pub p1: String,
     pub province: String,
     pub city: String,
     #[serde(default)]

@@ -4,7 +4,7 @@
 // 保证横线颜色、毛玻璃底、绿色左竖条与注册局完全一致。
 //
 // 详情页复用 gov/GovDetailPage 调度:S/F 学校(存储 category=PRIVATE_INSTITUTION)走
-// PrivateDetailLayout 完整编辑布局(含 F 关联所属法人),G 学校(GOV_INSTITUTION)走只读布局。
+// PrivateDetailLayout 完整编辑布局(含 F 改挂所属法人),G 学校(GOV_INSTITUTION)走只读布局。
 
 import React, { useState } from 'react';
 import { Button, Card, Input } from 'antd';
@@ -179,7 +179,7 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
         onCreated={(result) => {
           setCreateOpen(false);
           setRefreshKey((k) => k + 1);
-          // 创建成功直接跳详情页:S 补企业类型、F 关联所属法人、G 只读查看
+          // 创建成功直接跳详情页:S 补企业类型、F 已挂所属法人(详情页只改挂)、G 只读查看
           if (result?.sfid_number) {
             setSelectedSfidNumber(result.sfid_number);
           }

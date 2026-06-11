@@ -54,4 +54,8 @@
 加固（已落地）：
 - [x] `generate_cpms_install_qr` 增加服务端铁律：`subjects.category != 'PUBLIC_SECURITY'` 一律 403（`find_cpms_target_institution_by_sfid` 返回 category 七元组）。
 - [x] `cargo build`（重建 target/debug 主二进制——教训：cargo check/test 不产出主二进制）+ `cargo test` 52/52。
-- [ ] 待用户：重启 sfid-run.sh 使新二进制生效；确认后删除错位行 `cpms_sites WHERE sfid_number='ZS001-GZF0R-748040000-2026'`；公安局页面重新生成安装码并重装该台 CPMS。
+- [x] 2026-06-10 18:04 用户重启 sfid-run.sh，新进程确认运行 11:17 新二进制（含 category 防线）。
+- [x] 用户已在公安局页面重新生成安装码：新行 `ZS001-GZF0F-149201859-2026`（PENDING）落键正确，QR payload 内嵌 sfid 与机构一致（库内三方核对通过）——修复链路实证生效。
+- [x] 删除错位脏行 `cpms_sites ZS001-GZF0R-748040000-2026`（农业局，ACTIVE/USED），现库内仅剩公安局一行。
+- [ ] 待用户：用新安装码重新初始化那台 CPMS（旧装机持有农业局站点身份，其已签发档案码内嵌错号；脏行已删，旧档案码验真将正确失败）。
+- [x] 2026-06-10 按用户指令删除经旧档案码绑定的公民 `ZS000-MZG12-124983574-2026`（citizens/subjects/ids 三表同事务删除，删后三表 CITIZEN 计数均为 0，号已全局释放）。

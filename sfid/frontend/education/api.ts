@@ -13,6 +13,8 @@ import type {
   LegalRepresentativePhoto,
   ListInstitutionsQuery,
   PageResult,
+  ParentInstitutionRow,
+  SearchParentsOptions,
 } from '../subjects/api';
 
 const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
@@ -51,6 +53,7 @@ export async function createInstitution(
     city: input.city,
     institution: input.institution,
     institution_name: input.institution_name ?? null,
+    parent_sfid_number: input.parent_sfid_number ?? null,
     sub_type: null,
     legal_rep_name: input.legal_rep_name ?? null,
     legal_rep_sfid_number: input.legal_rep_sfid_number ?? null,
@@ -77,6 +80,24 @@ export async function uploadLegalRepresentativePhoto(
       method: 'POST',
       body: form,
     },
+  );
+}
+
+// 中文注释:所属法人搜索(分校模式 f_institution=JY → 只返回本市学校本部)。
+// 后端按 subjects/uninorg 规则预过滤,前端不再兜底过滤。
+export async function searchParentInstitutions(
+  auth: AdminAuth,
+  q: string,
+  opts: SearchParentsOptions,
+): Promise<ParentInstitutionRow[]> {
+  const params = new URLSearchParams({ q });
+  params.set('f_institution', opts.fInstitution);
+  params.set('province', opts.province);
+  params.set('city', opts.city);
+  if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
+  return adminRequest<ParentInstitutionRow[]>(
+    `/api/v1/institution/search-parents?${params.toString()}`,
+    auth,
   );
 }
 

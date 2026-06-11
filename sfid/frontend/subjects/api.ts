@@ -141,11 +141,16 @@ export interface CreateInstitutionInput {
   institution: string;
   /**
    * 机构名称。
-   * - 私权(S/F)两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
-   * - 教育委员会(JY)手动新增学校机构:**必传**,同步做查重
+   * - S/F 两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
+   * - 教育委员会(JY)学校机构和手动公权机构(G):**必传**,同步做查重
    * - 自动公权机构/公安局:不走手动创建接口
   */
   institution_name?: string;
+  /**
+   * 所属法人 sfid_number。非法人(F)创建**必传**(创建即挂,不存在未挂靠非法人),
+   * 盈利属性继承所属法人;其它主体属性不传。规则单一源:后端 subjects/uninorg。
+   */
+  parent_sfid_number?: string;
   legal_rep_name?: string;
   legal_rep_sfid_number?: string;
   legal_rep_photo_path?: string;
@@ -177,7 +182,7 @@ export interface UpdateInstitutionInput {
   legal_rep_photo_size?: number;
 }
 
-/** 法人机构搜索结果项(F 详情页"所属法人"选择器用) */
+/** 法人机构搜索结果项(非法人新增弹窗 + F 详情页"所属法人"选择器用) */
 export interface ParentInstitutionRow {
   sfid_number: string;
   institution_name: string;
@@ -185,8 +190,21 @@ export interface ParentInstitutionRow {
   /** 私法人子类型(仅 subject_property=S);F 判断父 S 是否 JOINT_STOCK 以显示清算行设置 */
   sub_type?: string | null;
   category: InstitutionCategory;
+  /** 盈利属性。F 创建时按"盈利属性附属于所属法人"推导:公法人父恒 0,私法人父继承该值 */
+  p1: string;
   province: string;
   city: string;
+}
+
+/** 所属法人搜索参数。预过滤规则与后端 subjects/uninorg 同源(三处同源缺一有绕过口)。 */
+export interface SearchParentsOptions {
+  /** 非法人的机构代码:JY=教育分校(只搜本市学校本部),其它(ZG/TG)=普通非法人 */
+  fInstitution: string;
+  /** 非法人落位省/市,用于地域预过滤(市级同市/省级同省/国家级不限) */
+  province: string;
+  city: string;
+  /** 限定父级属性:S=私权入口 / G=公权入口;不传=两者(详情页改挂) */
+  parentProperty?: 'S' | 'G';
 }
 
 export interface CreateAccountOutput {

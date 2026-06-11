@@ -499,9 +499,10 @@ pub fn verify_and_submit(
                 // 外层 Result = Err → TransactionValidityError。
                 // 中文注释：Future/Stale 等交易提交后只会"看似成功永不上链"
                 // （Future 进 future 队列且不向 peer 广播），一律拒绝并把
-                // 具体原因抛给前端，绝不再"继续尝试提交"。
+                // 原因抛给前端，绝不再"继续尝试提交"。
                 let reason = classify_invalid_tx(&result_bytes);
-                return Err(format!("交易校验失败，已拒绝提交: {reason} (hex: {s})"));
+                eprintln!("[签名提交] dry-run 拒绝: {reason} (hex: {s})");
+                return Err(dry_run_reject_message(&result_bytes, s));
             }
             if result_bytes.len() > 1 && result_bytes[1] != 0x00 {
                 // Ok(Err(DispatchError)) — 交易格式正确但执行会失败，阻止提交
@@ -535,6 +536,19 @@ pub fn verify_and_submit(
     spawn_post_submit_audit(pubkey_hex_clean.to_string(), sign_nonce, tx_hash.clone());
 
     Ok(VoteSubmitResult { tx_hash })
+}
+
+/// 把 dry-run 拒绝结果转成抛给前端的报错文案。
+///
+/// 中文注释：Future（0x01 0x00 0x02）对用户而言就是"上一笔还没出块"——
+/// 签名 nonce 排在池中上一笔之后，链上状态尚未消费——给人话提示，
+/// 技术细节留在调用方日志；其余变体保留技术原因便于排查。
+fn dry_run_reject_message(result_bytes: &[u8], raw_hex: &str) -> String {
+    if result_bytes.starts_with(&[0x01, 0x00, 0x02]) {
+        return "上一笔交易尚未出块，请稍候再试".to_string();
+    }
+    let reason = classify_invalid_tx(result_bytes);
+    format!("交易校验失败，已拒绝提交: {reason} (hex: {raw_hex})")
 }
 
 /// 解析 dry-run 返回的 TransactionValidityError，给出可读原因。
@@ -933,6 +947,27 @@ mod tests {
         // 越界/未知变体编号不得 panic，归入 Unknown
         assert!(classify_invalid_tx(&[0x01, 0x00, 0x63]).contains("Unknown"));
         assert_eq!(classify_invalid_tx(&[0x01]), "UnknownTransaction");
+    }
+
+    #[test]
+    fn dry_run_reject_future_gives_user_hint() {
+        // Future = 上一笔还没出块，前端文案必须是人话，不带技术细节
+        assert_eq!(
+            dry_run_reject_message(&[0x01, 0x00, 0x02], "0x010002"),
+            "上一笔交易尚未出块，请稍候再试"
+        );
+    }
+
+    #[test]
+    fn dry_run_reject_other_variants_keep_technical_reason() {
+        // Future 之外的变体保持原有技术报错格式（含 hex 便于排查）
+        let stale = dry_run_reject_message(&[0x01, 0x00, 0x03], "0x010003");
+        assert!(stale.contains("交易校验失败，已拒绝提交"));
+        assert!(stale.contains("Stale"));
+        assert!(stale.contains("0x010003"));
+
+        let unknown_tx = dry_run_reject_message(&[0x01, 0x01, 0x00], "0x010100");
+        assert!(unknown_tx.contains("UnknownTransaction"));
     }
 
     #[test]
