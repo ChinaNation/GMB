@@ -442,8 +442,9 @@ class PayloadDecoder {
         Keyring().encodeAddress(toAccountId.toList(), _ss58Prefix);
 
     // Compact<u128> 金额（分）
-    final (amountFen, _) = _decodeCompactBigInt(bytes, offset);
-    if (amountFen == null) return null;
+    final (amountFen, amountSize) = _decodeCompactBigInt(bytes, offset);
+    if (amountFen == null || amountSize == 0) return null;
+    if (!_hasValidSigningTail(bytes, offset + amountSize)) return null;
 
     final amountYuan = _fenToYuan(amountFen);
 
@@ -488,9 +489,11 @@ class PayloadDecoder {
 
     // remark: Vec<u8>
     final (remarkLen, remarkLenSize) = _decodeCompactU32(bytes, offset);
+    if (remarkLenSize == 0) return null;
     offset += remarkLenSize;
+    if (offset + remarkLen > bytes.length) return null;
+    if (!_hasValidSigningTail(bytes, offset + remarkLen)) return null;
     var remark = '';
-    if (offset + remarkLen != bytes.length) return null;
     if (remarkLen > 0) {
       remark = utf8.decode(bytes.sublist(offset, offset + remarkLen),
           allowMalformed: true);
@@ -521,7 +524,8 @@ class PayloadDecoder {
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
-    if (bytes.length < 11) return null;
+    // call_data: 2 + 8 + 1 = 11
+    if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
     final proposalId = _readU64Le(bytes, 2);
     final approve = bytes[10] != 0;
     final voteText = approve ? '赞成' : '反对';
@@ -542,7 +546,8 @@ class PayloadDecoder {
   // 任意账户触发终态执行,无需签投票语义。引擎核心 lifecycle extrinsic。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeFinalizeProposal(Uint8List bytes) {
-    if (bytes.length < 10) return null;
+    // call_data: 2 + 8 = 10
+    if (bytes.length < 10 || !_hasValidSigningTail(bytes, 10)) return null;
     final proposalId = _readU64Le(bytes, 2);
     return DecodedPayload(
       action: 'finalize_proposal',
@@ -566,21 +571,24 @@ class PayloadDecoder {
   // SCALE: [0x09][0x05][proposal_id:u64_le][Compact<u32> reason_len + reason_bytes]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCancelPassedProposal(Uint8List bytes) {
-    if (bytes.length < 10) return null;
+    if (bytes.length < 11) return null;
     final proposalId = _readU64Le(bytes, 2);
     var offset = 10;
 
+    // _reason: BoundedVec<u8> — 空 reason 也带 1 字节 Compact(0) 前缀。
+    final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
+    if (reasonLenSize == 0) return null;
+    offset += reasonLenSize;
+    if (offset + reasonLen > bytes.length) return null;
     var reason = '';
-    if (offset < bytes.length) {
-      final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
-      offset += reasonLenSize;
-      if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
-        reason = utf8.decode(
-          bytes.sublist(offset, offset + reasonLen),
-          allowMalformed: true,
-        );
-      }
+    if (reasonLen > 0) {
+      reason = utf8.decode(
+        bytes.sublist(offset, offset + reasonLen),
+        allowMalformed: true,
+      );
     }
+    offset += reasonLen;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
 
     return DecodedPayload(
       action: 'cancel_passed_proposal',
@@ -597,8 +605,8 @@ class PayloadDecoder {
   // 格式：[0x17][0x00][proposal_id:u64_le][institution:AccountId32][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
-    // 2 + 8 + 32 + 1 = 43
-    if (bytes.length != 43) return null;
+    // call_data: 2 + 8 + 32 + 1 = 43
+    if (bytes.length < 43 || !_hasValidSigningTail(bytes, 43)) return null;
 
     final proposalId = _readU64Le(bytes, 2);
     // institution AccountId32 跳过（不在 display 中展示细节）
@@ -666,6 +674,7 @@ class PayloadDecoder {
     // approve: bool（1 字节）
     if (offset >= bytes.length) return null;
     final approve = bytes[offset] != 0;
+    if (!_hasValidSigningTail(bytes, offset + 1)) return null;
     final voteText = approve ? '赞成' : '反对';
 
     return DecodedPayload(
@@ -882,7 +891,7 @@ class PayloadDecoder {
     final signerAdminPubkey = bytes.sublist(offset, offset + 32);
     offset += 32;
 
-    if (offset != bytes.length) return null;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
 
     final amountYuan = _fenToYuan(accountsTotal);
     final fields = <String, String>{
@@ -933,9 +942,11 @@ class PayloadDecoder {
 
     // reason: Vec<u8>
     final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
+    if (reasonLenSize == 0) return null;
     offset += reasonLenSize;
+    if (offset + reasonLen > bytes.length) return null;
     var reason = '';
-    if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
+    if (reasonLen > 0) {
       reason = utf8.decode(
         bytes.sublist(offset, offset + reasonLen),
         allowMalformed: true,
@@ -984,6 +995,9 @@ class PayloadDecoder {
     // ADR-008 step3 ★ signer_admin_pubkey: [u8; 32]
     if (offset + 32 > bytes.length) return null;
     final signerAdminPubkey = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    if (!_hasValidSigningTail(bytes, offset)) return null;
 
     final amountYuan = _fenToYuan(totalAmountFen);
 
@@ -1028,7 +1042,8 @@ class PayloadDecoder {
     if (offset + adminsLen * 32 > bytes.length) return null;
     offset += adminsLen * 32;
 
-    if (offset + 4 + 16 != bytes.length) return null;
+    if (offset + 4 + 16 > bytes.length) return null;
+    if (!_hasValidSigningTail(bytes, offset + 4 + 16)) return null;
     final regularThreshold = bytes[offset] |
         (bytes[offset + 1] << 8) |
         (bytes[offset + 2] << 16) |
@@ -1067,7 +1082,8 @@ class PayloadDecoder {
     required String action,
     required String summaryLabel,
   }) {
-    if (bytes.length < 66) return null;
+    // call_data: 2 + 32 + 32 = 66
+    if (bytes.length < 66 || !_hasValidSigningTail(bytes, 66)) return null;
     final duoqianId = bytes.sublist(2, 34);
     final beneficiaryId = bytes.sublist(34, 66);
     final duoqian = Keyring().encodeAddress(duoqianId.toList(), _ss58Prefix);
@@ -1098,9 +1114,11 @@ class PayloadDecoder {
     offset += 16;
     final amountYuan = _fenToYuan(amountFen);
     final (remarkLen, remarkLenSize) = _decodeCompactU32(bytes, offset);
+    if (remarkLenSize == 0) return null;
     offset += remarkLenSize;
+    if (offset + remarkLen > bytes.length) return null;
+    if (!_hasValidSigningTail(bytes, offset + remarkLen)) return null;
     var remark = '';
-    if (offset + remarkLen != bytes.length) return null;
     if (remarkLen > 0) {
       remark = utf8.decode(bytes.sublist(offset, offset + remarkLen),
           allowMalformed: true);
@@ -1121,7 +1139,8 @@ class PayloadDecoder {
   // 格式：[19][2][institution:AccountId32][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
-    if (bytes.length != 50) return null;
+    // call_data: 2 + 32 + 16 = 50
+    if (bytes.length < 50 || !_hasValidSigningTail(bytes, 50)) return null;
     var offset = 2;
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
@@ -1143,7 +1162,8 @@ class PayloadDecoder {
   // 格式：[14][0][org:u8][institution:AccountId32][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
-    if (bytes.length != 51) return null;
+    // call_data: 2 + 1 + 32 + 16 = 51
+    if (bytes.length < 51 || !_hasValidSigningTail(bytes, 51)) return null;
     var offset = 2;
     final org = bytes[offset];
     offset += 1;
@@ -1189,7 +1209,8 @@ class PayloadDecoder {
       adminAddresses.add(_bytesToSs58(admin));
       offset += 32;
     }
-    if (offset + 4 != bytes.length) return null;
+    if (offset + 4 > bytes.length) return null;
+    if (!_hasValidSigningTail(bytes, offset + 4)) return null;
     final newThreshold = _readU32Le(bytes, offset);
     if (!_validAdminChangeThreshold(org, adminCount, newThreshold)) {
       return null;
@@ -1219,7 +1240,8 @@ class PayloadDecoder {
   // 格式：[16][0][institution:AccountId32][new_key:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
-    if (bytes.length != 66) return null;
+    // call_data: 2 + 32 + 32 = 66
+    if (bytes.length < 66 || !_hasValidSigningTail(bytes, 66)) return null;
     var offset = 2;
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
@@ -1254,7 +1276,8 @@ class PayloadDecoder {
     required String action,
     required String summaryTemplate,
   }) {
-    if (bytes.length < 10) return null;
+    // call_data: 2 + 8 = 10
+    if (bytes.length < 10 || !_hasValidSigningTail(bytes, 10)) return null;
     final proposalId = _readU64Le(bytes, 2);
     return DecodedPayload(
       action: action,
@@ -1275,7 +1298,8 @@ class PayloadDecoder {
     required String summaryPrefix,
     required String fieldKey,
   }) {
-    if (bytes.length < 34) return null;
+    // call_data: 2 + 32 = 34
+    if (bytes.length < 34 || !_hasValidSigningTail(bytes, 34)) return null;
     final accountId = bytes.sublist(2, 34);
     final address = Keyring().encodeAddress(accountId.toList(), _ss58Prefix);
     return DecodedPayload(
@@ -1299,6 +1323,7 @@ class PayloadDecoder {
     if (bytes.length < 3) return null;
     final (amountFen, size) = _decodeCompactBigInt(bytes, 2);
     if (amountFen == null || size == 0) return null;
+    if (!_hasValidSigningTail(bytes, 2 + size)) return null;
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: action,
@@ -1326,6 +1351,7 @@ class PayloadDecoder {
     offset = domainNext;
     if (offset + 2 > bytes.length) return null;
     final rpcPort = bytes[offset] | (bytes[offset + 1] << 8);
+    if (!_hasValidSigningTail(bytes, offset + 2)) return null;
 
     return DecodedPayload(
       action: 'register_clearing_bank',
@@ -1353,6 +1379,7 @@ class PayloadDecoder {
     offset = domainNext;
     if (offset + 2 > bytes.length) return null;
     final newPort = bytes[offset] | (bytes[offset + 1] << 8);
+    if (!_hasValidSigningTail(bytes, offset + 2)) return null;
 
     return DecodedPayload(
       action: 'update_clearing_bank_endpoint',
@@ -1370,8 +1397,9 @@ class PayloadDecoder {
   // 格式：[21][52][Vec sfid_number]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
-    final (sfidNumber, _) = _readUtf8Vec(bytes, 2);
+    final (sfidNumber, sfidEnd) = _readUtf8Vec(bytes, 2);
     if (sfidNumber == null) return null;
+    if (!_hasValidSigningTail(bytes, sfidEnd)) return null;
     return DecodedPayload(
       action: 'unregister_clearing_bank',
       summary: '注销清算行节点 $sfidNumber',
@@ -1384,6 +1412,49 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // 工具方法
   // ---------------------------------------------------------------------------
+
+  /// SigningPayload 扩展尾固定段:spec_version(4) + tx_version(4)
+  /// + genesis_hash(32) + birth_hash(32) + CheckMetadataHash None(1)。
+  static const int _signingTailFixedLen = 73;
+
+  /// 校验 call_data 在 [callEnd] 处结束,其后是合法的 SigningPayload 扩展尾。
+  ///
+  /// QR 的 payload_hex 是完整 SigningPayload,call_data 永远不会顶到末尾;
+  /// 尾部布局与节点端 build_signing_payload / wuminapp polkadart 编码一致:
+  /// era(0x00 immortal,P-SIGN-001) + Compact<nonce> + Compact<tip>
+  /// + mode(0x00) + 固定 73 字节(末字节 Option::None=0x00,immortal 下
+  /// birth hash 必等于 genesis hash)。
+  /// 所有链上 extrinsic 分支统一以此判定 call_data 边界:既接受真实 payload,
+  /// 又防止在 call_data 后夹带任意字节骗签。
+  static bool _hasValidSigningTail(Uint8List bytes, int callEnd) {
+    if (callEnd < 2 || callEnd >= bytes.length) return false;
+    var offset = callEnd;
+    // CheckEra: immortal 单字节 0x00。
+    if (bytes[offset] != 0x00) return false;
+    offset += 1;
+    // CheckNonce: Compact<u32>
+    final (nonceValue, nonceSize) = _decodeCompactBigInt(bytes, offset);
+    if (nonceValue == null || nonceSize == 0) return false;
+    offset += nonceSize;
+    // ChargeTransactionPayment: Compact<u128> tip
+    final (tipValue, tipSize) = _decodeCompactBigInt(bytes, offset);
+    if (tipValue == null || tipSize == 0) return false;
+    offset += tipSize;
+    // CheckMetadataHash: mode=Disabled(0x00)
+    if (offset >= bytes.length || bytes[offset] != 0x00) return false;
+    offset += 1;
+    if (bytes.length - offset != _signingTailFixedLen) return false;
+    // 末字节 CheckMetadataHash Option::None。
+    if (bytes[bytes.length - 1] != 0x00) return false;
+    // immortal:CheckEra additional 的 birth hash 必等于 genesis hash。
+    final genesisStart = offset + 8;
+    for (var i = 0; i < 32; i++) {
+      if (bytes[genesisStart + i] != bytes[genesisStart + 32 + i]) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /// 0x 小写 hex。
   static String _bytesToLowerHex(Uint8List bytes) {

@@ -286,6 +286,37 @@ pub(crate) async fn update_institution(
                 uninorg::parent_subject_requirement_message(),
             );
         }
+        // 中文注释:改挂与创建同源校验(subjects/uninorg 单一权威源):
+        // 代码一致性(分校⇔学校本部) + 地域规则 + 盈利属性继承,缺一处就有绕过口。
+        if let Some(msg) = uninorg::code_consistency_violation(
+            existing.institution_code.as_str(),
+            target.institution_code.as_str(),
+            target.org_code.as_deref(),
+        ) {
+            return api_error(StatusCode::BAD_REQUEST, 1001, msg);
+        }
+        let rule = uninorg::parent_locality_rule(
+            target.subject_property.as_str(),
+            target.institution_code.as_str(),
+            target.org_code.as_deref(),
+        );
+        if let Some(msg) = uninorg::locality_violation(
+            rule,
+            &target.province,
+            &target.city,
+            &existing.province,
+            &existing.city,
+        ) {
+            return api_error(StatusCode::BAD_REQUEST, 1001, msg);
+        }
+        let expected_p1 = uninorg::inherited_p1(target.subject_property.as_str(), &target.p1);
+        if existing.p1 != expected_p1 {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "非法人盈利属性必须继承所属法人,该机构盈利属性与新所属法人不一致",
+            );
+        }
         existing.parent_sfid_number = Some(raw);
     }
     let legal_rep = match validate_legal_representative_required(
@@ -337,8 +368,19 @@ pub(crate) async fn update_institution(
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct SearchParentsQuery {
     pub q: Option<String>,
+    /// 非法人(F)的机构代码:JY=教育分校(只搜本市学校本部),其它=ZG/TG。
+    pub f_institution: Option<String>,
+    /// 非法人的落位省/市,用于地域预过滤(规则同 subjects/uninorg::parent_locality_rule)。
+    pub province: Option<String>,
+    pub city: Option<String>,
+    /// 限定父级属性:S=仅私法人(私权入口) / G=仅公法人(公权入口);不传=两者(详情页改挂)。
+    pub parent_property: Option<String>,
 }
 
+/// 所属法人搜索。SQL 预过滤与 `subjects/uninorg` 规则同源(注释互引):
+/// - f_institution=JY → 仅本市教育委员会学校本部(手动 JY 行,G/S);
+/// - 其它 → 私法人 S(非学校,全国) ∪ 公法人 G(非学校;手动行/市镇级同市、省级同省、国家级不限);
+/// - parent_property 进一步收窄到单边。
 pub(crate) async fn search_parent_institutions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -356,21 +398,76 @@ pub(crate) async fn search_parent_institutions(
         })
         .into_response();
     }
+    let f_is_branch_school = query.f_institution.as_deref().map(str::trim) == Some("JY");
+    let province = query
+        .province
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
+    let city = query
+        .city
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
+    if province.is_empty() || city.is_empty() {
+        // 地域预过滤依赖非法人落位省市;缺参直接拒绝,不退化成全国搜索
+        return api_error(StatusCode::BAD_REQUEST, 1001, "province/city are required");
+    }
+    let parent_property = match query.parent_property.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some("S") => Some("S".to_string()),
+        Some("G") => Some("G".to_string()),
+        Some(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "parent_property 仅 S/G"),
+    };
     let result = state.db.with_client(move |conn| {
-        let rows = conn
-            .query(
-                "SELECT sfid_number, name, subject_property, sub_type, category, province, city, COALESCE(town, '')
-                 FROM subjects
-                 WHERE kind IN ('PUBLIC', 'PRIVATE')
-                   AND subject_property IN ('S', 'G')
-                   AND name IS NOT NULL
-                   AND (lower(sfid_number) LIKE '%' || $1 || '%'
-                        OR lower(name) LIKE '%' || $1 || '%')
-                 ORDER BY name ASC, sfid_number ASC
-                 LIMIT 20",
-                &[&q],
-            )
-            .map_err(|e| format!("query parent institutions failed: {e}"))?;
+        // 中文注释:候选父级按非法人规则预过滤(与 uninorg::parent_locality_rule /
+        // code_consistency_violation 同源):
+        //   分校(F+JY) → 本市学校本部;
+        //   其它 F → S 非学校(全国) ∪ G 非学校(手动/CITY_/TOWN_ 同市、PROVINCE_ 同省、
+        //            NATIONAL_/MINISTRY_/FEDERAL_ 不限、未知前缀同市)。
+        let candidate_clause = if f_is_branch_school {
+            "s.institution_code = 'JY' AND s.org_code IS NULL
+             AND s.subject_property IN ('S', 'G')
+             AND s.province = $2 AND s.city = $3"
+        } else {
+            "NOT (s.institution_code = 'JY' AND s.org_code IS NULL)
+             AND (
+                  (s.subject_property = 'S' AND $4::text IS DISTINCT FROM 'G')
+                  OR (
+                       s.subject_property = 'G' AND $4::text IS DISTINCT FROM 'S'
+                       AND (
+                            split_part(COALESCE(s.org_code, ''), '_', 1)
+                                IN ('NATIONAL', 'MINISTRY', 'FEDERAL')
+                            OR (split_part(COALESCE(s.org_code, ''), '_', 1) = 'PROVINCE'
+                                AND s.province = $2)
+                            OR (split_part(COALESCE(s.org_code, ''), '_', 1)
+                                    NOT IN ('NATIONAL', 'MINISTRY', 'FEDERAL', 'PROVINCE')
+                                AND s.province = $2 AND s.city = $3)
+                       )
+                  )
+             )"
+        };
+        let sql = format!(
+            "SELECT s.sfid_number, s.name, s.subject_property, s.sub_type, s.category,
+                    s.p1, s.province, s.city, COALESCE(s.town, '')
+             FROM subjects s
+             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
+               AND s.status = 'ACTIVE'
+               AND s.name IS NOT NULL
+               AND {candidate_clause}
+               AND (lower(s.sfid_number) LIKE '%' || $1 || '%'
+                    OR lower(s.name) LIKE '%' || $1 || '%')
+             ORDER BY s.name ASC, s.sfid_number ASC
+             LIMIT 20"
+        );
+        let rows = if f_is_branch_school {
+            conn.query(sql.as_str(), &[&q, &province, &city])
+        } else {
+            conn.query(sql.as_str(), &[&q, &province, &city, &parent_property])
+        }
+        .map_err(|e| format!("query parent institutions failed: {e}"))?;
         let mut output = Vec::with_capacity(rows.len());
         for row in rows {
             let category_text: String = row.get(4);
@@ -384,9 +481,10 @@ pub(crate) async fn search_parent_institutions(
                 subject_property: row.get(2),
                 sub_type: row.get(3),
                 category,
-                province: row.get(5),
-                city: row.get(6),
-                town: row.get(7),
+                p1: row.get(5),
+                province: row.get(6),
+                city: row.get(7),
+                town: row.get(8),
             });
         }
         Ok(output)
@@ -455,7 +553,11 @@ pub(crate) async fn get_federal_registry(
     }
     // 联邦注册局 sfid 来自创世常量(china_zf),按 sfid_number 直接定位,绕过 org_code 与 scope。
     let Some(sfid_number) = crate::gov::service::federal_registry_sfid_number() else {
-        return api_error(StatusCode::NOT_FOUND, 1004, "federal registry not configured");
+        return api_error(
+            StatusCode::NOT_FOUND,
+            1004,
+            "federal registry not configured",
+        );
     };
     let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(sfid_number) {
         Ok(v) => v,

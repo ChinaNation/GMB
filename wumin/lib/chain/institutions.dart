@@ -1,22 +1,20 @@
 // 链上机构中文名注册表（冷钱包签名校验用）。
 //
-// 唯一事实源：citizenchain/node/src/ui/governance/mod.rs 中的三个 static 数组
-//   - NATIONAL_COUNCILS   （国储会 Nrc，1 个）
-//   - PROVINCIAL_COUNCILS （省储会 Prc，43 个）
-//   - PROVINCIAL_BANKS    （省储行 Prb，43 个）
-// 合计 87 个机构。服务端 `find_entry(sfid_number)` 会在这三个数组中依次查找，
-// 冷钱包解码 payload 时用同一套映射把 `sfid_number` 还原成中文名，
+// 唯一事实源：citizenchain/runtime/primitives/china/china_{cb,ch}.rs 的
+// CHINA_CB（国储会 Nrc 1 个 + 省储会 Prc 43 个）与 CHINA_CH（省储行 Prb 43 个），
+// 合计 87 个机构。节点端 `node/src/governance/registry.rs::find_institution`
+// 直接读取同一组常量，冷钱包用同一套映射把 `sfid_number` 还原成中文名，
 // 保证 `display.fields.institution` 与 `decoded.fields.institution` 逐字节一致。
 //
-// 任何机构名/身份号变更必须同时更新此文件与服务端 mod.rs。
+// 任何机构名/身份号变更（含重新创世重派生）必须同步此文件。
 // 以后改为代码生成后可删除手抄。
 
 /// 机构分类（与服务端 OrgType 对齐）。
 enum InstitutionType {
-  /// 国家储备委员会。
+  /// 国家公民储备委员会。
   nrc,
 
-  /// 省级储备委员会。
+  /// 省级公民储备委员会。
   prc,
 
   /// 省级公民储备银行。
@@ -39,7 +37,7 @@ class Institution {
 const List<Institution> kNationalCouncils = [
   Institution(
     sfidNumber: 'LN001-GCB05-944805165-2026',
-    name: '国家储备委员会',
+    name: '国家公民储备委员会',
     type: InstitutionType.nrc,
   ),
 ];
@@ -48,175 +46,175 @@ const List<Institution> kNationalCouncils = [
 const List<Institution> kProvincialCouncils = [
   Institution(
       sfidNumber: 'ZS001-GCB0R-016974075-2026',
-      name: '中枢省储备委员会',
+      name: '中枢省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'LN001-GCB0I-773405642-2026',
-      name: '岭南省储备委员会',
+      name: '岭南省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'GD001-GCB08-067440774-2026',
-      name: '广东省储备委员会',
+      name: '广东省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'GX001-GCB0P-663454043-2026',
-      name: '广西省储备委员会',
+      name: '广西省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'FJ001-GCB0V-389570546-2026',
-      name: '福建省储备委员会',
+      name: '福建省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HN001-GCB05-545676096-2026',
-      name: '海南省储备委员会',
+      name: '海南省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'YN001-GCB09-145427171-2026',
-      name: '云南省储备委员会',
+      name: '云南省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'GZ001-GCB0F-969970096-2026',
-      name: '贵州省储备委员会',
+      name: '贵州省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HU001-GCB02-400319700-2026',
-      name: '湖南省储备委员会',
+      name: '湖南省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'JX001-GCB0W-458681566-2026',
-      name: '江西省储备委员会',
+      name: '江西省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'ZJ001-GCB0L-471270801-2026',
-      name: '浙江省储备委员会',
+      name: '浙江省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'JS001-GCB01-358467174-2026',
-      name: '江苏省储备委员会',
+      name: '江苏省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'SD001-GCB0K-027328848-2026',
-      name: '山东省储备委员会',
+      name: '山东省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'SX001-GCB01-104465679-2026',
-      name: '山西省储备委员会',
+      name: '山西省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HE001-GCB05-849245626-2026',
-      name: '河南省储备委员会',
+      name: '河南省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HB001-GCB09-499533387-2026',
-      name: '河北省储备委员会',
+      name: '河北省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HI001-GCB0Q-659443961-2026',
-      name: '湖北省储备委员会',
+      name: '湖北省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'SI001-GCB06-711309909-2026',
-      name: '陕西省储备委员会',
+      name: '陕西省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'CQ001-GCB0J-478472058-2026',
-      name: '重庆省储备委员会',
+      name: '重庆省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'SC001-GCB0B-935659021-2026',
-      name: '四川省储备委员会',
+      name: '四川省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'GS001-GCB0Y-679051155-2026',
-      name: '甘肃省储备委员会',
+      name: '甘肃省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'BP001-GCB04-189323546-2026',
-      name: '北平省储备委员会',
+      name: '北平省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HA001-GCB0B-214178517-2026',
-      name: '海滨省储备委员会',
+      name: '海滨省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'SJ001-GCB0M-044490898-2026',
-      name: '松江省储备委员会',
+      name: '松江省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'LJ001-GCB0L-279890045-2026',
-      name: '龙江省储备委员会',
+      name: '龙江省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'JL001-GCB0I-850461124-2026',
-      name: '吉林省储备委员会',
+      name: '吉林省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'LI001-GCB06-978545133-2026',
-      name: '辽宁省储备委员会',
+      name: '辽宁省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'NX001-GCB0W-389752794-2026',
-      name: '宁夏省储备委员会',
+      name: '宁夏省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'QH001-GCB0P-882026762-2026',
-      name: '青海省储备委员会',
+      name: '青海省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'AH001-GCB0D-589856828-2026',
-      name: '安徽省储备委员会',
+      name: '安徽省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'TW001-GCB0K-265218823-2026',
-      name: '台湾省储备委员会',
+      name: '台湾省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'XZ001-GCB0F-435616961-2026',
-      name: '西藏省储备委员会',
+      name: '西藏省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'XJ001-GCB0F-671044381-2026',
-      name: '新疆省储备委员会',
+      name: '新疆省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'XK001-GCB02-695945392-2026',
-      name: '西康省储备委员会',
+      name: '西康省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'AL001-GCB0Q-487847725-2026',
-      name: '阿里省储备委员会',
+      name: '阿里省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'CL001-GCB0W-771698743-2026',
-      name: '葱岭省储备委员会',
+      name: '葱岭省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'TS001-GCB0C-293160581-2026',
-      name: '天山省储备委员会',
+      name: '天山省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HX001-GCB0Q-475713213-2026',
-      name: '河西省储备委员会',
+      name: '河西省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'KL001-GCB01-091969119-2026',
-      name: '昆仑省储备委员会',
+      name: '昆仑省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HT001-GCB0D-481172908-2026',
-      name: '河套省储备委员会',
+      name: '河套省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'RH001-GCB0S-697831866-2026',
-      name: '热河省储备委员会',
+      name: '热河省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'XA001-GCB0U-384161601-2026',
-      name: '兴安省储备委员会',
+      name: '兴安省公民储备委员会',
       type: InstitutionType.prc),
   Institution(
       sfidNumber: 'HJ001-GCB08-963948997-2026',
-      name: '合江省储备委员会',
+      name: '合江省公民储备委员会',
       type: InstitutionType.prc),
 ];
 

@@ -14,6 +14,7 @@ import { SearchOutlined } from '@ant-design/icons';
 import { ProvinceGrid } from '../core/ProvinceGrid';
 import { CityGrid } from '../core/CityGrid';
 import { GovListTable } from './GovListTable';
+import { GovCreateModal } from './GovCreateModal';
 import { GovDetailPage } from './GovDetailPage';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
@@ -49,6 +50,7 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedSfidNumber, setSelectedSfidNumber] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // 市详情页的机构列表搜索:输入不自动触发,点搜索图标提交 → committedSearch
   const [searchInput, setSearchInput] = useState('');
@@ -59,6 +61,7 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
     setSelectedProvince(null);
     setSelectedCity(null);
     setSelectedSfidNumber(null);
+    setCreateOpen(false);
     setSearchInput('');
     setCommittedSearch('');
   }, [auth.admin_pubkey, category, resetToken]);
@@ -89,8 +92,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
   const effectiveProvince = selectedProvince ?? lockedProvince;
   const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCity : null);
 
-  // 中文注释:公权机构全部由后端自动生成,本页无手动新增入口;
-  // 教育委员会(JY)学校机构的新增/管理统一在教育机构 tab。
+  // 中文注释:普通公权目录由后端自动生成;手动新增两能力:公权机构(G,ZF/LF/SF/JC)
+  // 和公权下属非法人(F,挂公法人)。教育委员会(JY)学校机构归教育 tab。
   const onSubmitSearch = () => {
     setCommittedSearch(searchInput.trim());
   };
@@ -175,6 +178,11 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
               </span>
             }
           />
+          {scope.canWrite && (
+            <Button type="primary" onClick={() => setCreateOpen(true)}>
+              + 新增
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -203,6 +211,23 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
       >
         {body}
       </Card>
+
+      {/* 公安局复用 GovView 但无新增入口,弹窗只挂在公权机构分支 */}
+      {!isPublicSecurity && (
+        <GovCreateModal
+          auth={auth}
+          open={createOpen}
+          lockedProvince={effectiveProvince}
+          lockedCity={effectiveCity}
+          onCancel={() => setCreateOpen(false)}
+          onCreated={(result) => {
+            setCreateOpen(false);
+            setRefreshKey((k) => k + 1);
+            // 创建成功跳详情:G 公权机构只读查看,F 非法人补名称/查看所属法人
+            if (result?.sfid_number) setSelectedSfidNumber(result.sfid_number);
+          }}
+        />
+      )}
     </>
   );
 };

@@ -16,6 +16,7 @@ import type {
   ListInstitutionsQuery,
   PageResult,
   ParentInstitutionRow,
+  SearchParentsOptions,
   UpdateInstitutionInput,
 } from '../subjects/api';
 
@@ -60,6 +61,7 @@ export async function createInstitution(
     city: input.city,
     institution: input.institution,
     institution_name: input.institution_name ?? null,
+    parent_sfid_number: input.parent_sfid_number ?? null,
     sub_type: null,
     legal_rep_name: input.legal_rep_name ?? null,
     legal_rep_sfid_number: input.legal_rep_sfid_number ?? null,
@@ -116,11 +118,18 @@ export async function getInstitution(
   );
 }
 
+// 中文注释:所属法人搜索。后端按 subjects/uninorg 规则预过滤
+// (分校→本市学校本部;其它 F→私法人全国 ∪ 公法人按层级地域),前端不再兜底过滤。
 export async function searchParentInstitutions(
   auth: AdminAuth,
   q: string,
+  opts: SearchParentsOptions,
 ): Promise<ParentInstitutionRow[]> {
   const params = new URLSearchParams({ q });
+  params.set('f_institution', opts.fInstitution);
+  params.set('province', opts.province);
+  params.set('city', opts.city);
+  if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
     `/api/v1/institution/search-parents?${params.toString()}`,
     auth,

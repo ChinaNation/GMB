@@ -30,6 +30,7 @@ use crate::subjects::model::{
 use crate::subjects::service::{
     derive_category, validate_institution_name, validate_legal_representative_required,
 };
+use crate::subjects::uninorg;
 use crate::*;
 
 pub(crate) async fn create_institution(
@@ -48,6 +49,7 @@ pub(crate) async fn create_institution(
         "city": input.city.clone(),
         "institution": input.institution.clone(),
         "institution_name": input.institution_name.clone(),
+        "parent_sfid_number": input.parent_sfid_number.clone(),
         "sub_type": input.sub_type.clone(),
         "legal_rep_name": input.legal_rep_name.clone(),
         "legal_rep_sfid_number": input.legal_rep_sfid_number.clone(),
@@ -86,11 +88,16 @@ pub(crate) async fn create_institution(
     let is_private = matches!(subject_property.as_str(), "S" | "F");
     let is_education_school = institution_code == "JY";
     let allow_missing_name = is_private && !is_education_school;
-    if is_education_school && ctx.admin_city.is_none() {
+    // 中文注释:手动 G(教育委员会学校 + 公权机构)统一只允许市级管理员注册本市。
+    if subject_property == "G" && ctx.admin_city.is_none() {
         return api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "教育委员会类型学校只能由市级管理员注册",
+            if is_education_school {
+                "教育委员会类型学校只能由市级管理员注册"
+            } else {
+                "公权机构只能由市级管理员注册"
+            },
         );
     }
     let institution_name = match input.institution_name.as_deref().map(str::trim) {
@@ -169,15 +176,88 @@ pub(crate) async fn create_institution(
             "公安局由系统按行政区划自动生成,不得手动创建",
         );
     }
-    if matches!(category, InstitutionCategory::GovInstitution) && !is_education_school {
+    // 中文注释:手动公权机构开放 ZF/LF/SF/JC 四类(教育委员会 JY 走教育 tab 学校流程);
+    // 中央银行 CB 不开放——省公民储备银行每省唯一,创世已生成完毕。
+    if matches!(category, InstitutionCategory::GovInstitution)
+        && !is_education_school
+        && !matches!(institution_code.as_str(), "ZF" | "LF" | "SF" | "JC")
+    {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "普通公权机构由系统自动生成,仅教育委员会类型学校允许手动注册",
+            "手动公权机构仅允许 ZF/LF/SF/JC,中央银行(CB)由系统生成",
         );
     }
     if matches!(subject_property.as_str(), "S" | "F") && p1 != "0" && p1 != "1" {
         return api_error(StatusCode::BAD_REQUEST, 1001, "P1 非法(仅 0/1)");
+    }
+    // ── 非法人(F)必须从属法人:创建即挂,校验单一权威源 subjects/uninorg ──
+    let parent_sfid_number = match input
+        .parent_sfid_number
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(raw) => {
+            if !uninorg::requires_parent(subject_property.as_str()) {
+                return api_error(StatusCode::BAD_REQUEST, 1001, "仅非法人(F)可设置所属法人");
+            }
+            Some(raw.to_string())
+        }
+        None => {
+            if uninorg::requires_parent(subject_property.as_str()) {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "非法人必须选择所属法人(私法人或公法人)",
+                );
+            }
+            None
+        }
+    };
+    if let Some(ref parent_sfid) = parent_sfid_number {
+        let Some((parent, _)) = (match state.db.get_institution_with_accounts(parent_sfid) {
+            Ok(v) => v,
+            Err(err) => {
+                let message = format!("query parent institution failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        }) else {
+            return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在");
+        };
+        if !uninorg::can_attach_to_parent_subject(parent.subject_property.as_str()) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                uninorg::parent_subject_requirement_message(),
+            );
+        }
+        if let Some(msg) = uninorg::code_consistency_violation(
+            institution_code.as_str(),
+            parent.institution_code.as_str(),
+            parent.org_code.as_deref(),
+        ) {
+            return api_error(StatusCode::BAD_REQUEST, 1001, msg);
+        }
+        let rule = uninorg::parent_locality_rule(
+            parent.subject_property.as_str(),
+            parent.institution_code.as_str(),
+            parent.org_code.as_deref(),
+        );
+        if let Some(msg) =
+            uninorg::locality_violation(rule, &parent.province, &parent.city, &province, &city)
+        {
+            return api_error(StatusCode::BAD_REQUEST, 1001, msg);
+        }
+        // 盈利属性附属于所属法人:前端推导值必须与父级一致,防客户端漂移
+        let expected_p1 = uninorg::inherited_p1(parent.subject_property.as_str(), &parent.p1);
+        if p1 != expected_p1 {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "非法人盈利属性必须继承所属法人",
+            );
+        }
     }
     let legal_rep = match validate_legal_representative_required(
         input.legal_rep_name.as_deref(),
@@ -263,7 +343,7 @@ pub(crate) async fn create_institution(
             institution_code: institution_code.clone(),
             org_code: None,
             sub_type: None,
-            parent_sfid_number: None,
+            parent_sfid_number: parent_sfid_number.clone(),
             legal_rep_name: Some(legal_rep.name.clone()),
             legal_rep_sfid_number: Some(legal_rep.sfid_number.clone()),
             legal_rep_photo_path: Some(legal_rep.photo_path.clone()),

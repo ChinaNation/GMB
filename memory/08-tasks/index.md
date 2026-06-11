@@ -63,9 +63,14 @@
 - `memory/08-tasks/open/20260608-sfid-registry-detail-tab.md`
 - `memory/08-tasks/open/20260609-sfid-citizen-list-refill-cpms-key-align.md`
 - `memory/08-tasks/open/20260610-sfid-education-tab-jy-unify.md`
+- `memory/08-tasks/open/20260610-sfid-gov-create-uninorg-unify.md`
+- `memory/08-tasks/open/20260610-wumin-payload-decoder-signing-tail.md`
+- `memory/08-tasks/open/20260611-wuminapp-institution-registry-regen.md`
 
 ## done
 
+- `memory/08-tasks/done/20260611-wumin-institutions-name-sync.md`
+- `memory/08-tasks/done/20260610-node-dryrun-future-friendly-hint.md`
 - `memory/08-tasks/done/20260609-silent-failure-submit-path-fixes.md`
 - `memory/08-tasks/done/20260608-sfid-admin-district-unify-zhen.md`
 - `memory/08-tasks/done/20260607-merge-traits-types-into-multisig.md`

@@ -12,6 +12,24 @@ import 'package:wumin/qr/bodies/sign_request_body.dart';
 import 'package:wumin/signer/qr_signer.dart';
 import 'package:wumin/wallet/wallet_manager.dart';
 
+/// 给纯 call_data 拼上真实 SigningPayload 扩展尾(与节点端 build_signing_payload
+/// 布局一致)。decoder 的两色识别要求链上 payload 必带合法尾,裸 call_data 拒签。
+String _withSigningTailHex(String callDataHex) {
+  final genesis = List<int>.generate(32, (i) => 0x49 ^ i);
+  final tail = <int>[
+    0x00, // era: immortal
+    0x04, // Compact(nonce=1)
+    0x00, // Compact(tip=0)
+    0x00, // CheckMetadataHash mode=Disabled
+    1, 0, 0, 0, // spec_version u32 LE
+    1, 0, 0, 0, // tx_version u32 LE
+    ...genesis,
+    ...genesis, // immortal: birth hash = genesis hash
+    0x00, // CheckMetadataHash Option::None
+  ];
+  return '0x${_toHex([..._hexToBytes(callDataHex), ...tail])}';
+}
+
 SignRequestEnvelope _buildTestRequest({
   required String requestId,
   required String address,
@@ -50,8 +68,8 @@ void main() {
     test('signParsedRequest should sign matched internal_vote (统一入口)',
         () async {
       // 所有管理员投票走 InternalVote(22).cast(0)
-      // payload = [0x16][0x00][u64 LE proposal_id=1][bool approve=1]
-      const payloadHex = '0x16000100000000000000' '01';
+      // payload = [0x16][0x00][u64 LE proposal_id=1][bool approve=1] + 扩展尾
+      final payloadHex = _withSigningTailHex('0x1600010000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
         address: hotWallet.address,
@@ -89,7 +107,7 @@ void main() {
 
     test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
       // decode 成功但 display.action 和 decoded.action 不一致 → 红色拒签。
-      const payloadHex = '0x16000700000000000000' '01';
+      final payloadHex = _withSigningTailHex('0x1600070000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-action-mismatch',
         address: hotWallet.address,
@@ -127,8 +145,9 @@ void main() {
         requestId: 'offline-req-test-known',
         address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
-        payloadHex:
-            '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0491',
+        // call_data: [02][03][00][dest 32B][Compact(1) = 0x04] → 0.01 GMB
+        payloadHex: _withSigningTailHex(
+            '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa04'),
         display: const SignDisplay(
           action: 'transfer',
           summary: 'test transfer',

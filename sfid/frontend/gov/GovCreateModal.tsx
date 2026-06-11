@@ -1,5 +1,8 @@
-// 中文注释:教育机构新增入口。机构锁死教育委员会(JY),主体属性 G(公立)/S(私立)/F(分校,
-// 必选本市学校本部为所属法人)。表单 UI 复用 core/institution,本文件只负责注入 education API。
+// 中文注释:公权机构新增入口,两种能力:
+//   G 公法人 → 新增公权机构(ZF/LF/SF/JC,排除央行CB,机构名称必填同市查重)
+//   F 非法人 → 公权下属非法人(必选公法人为所属法人:本市市级/本省省级/国家级,盈利属性锁非盈利)
+// 教育委员会(JY)学校机构归教育 tab;普通公权目录仍由后端自动生成。
+// 表单 UI 复用 core/institution,本文件只负责注入 gov API。
 
 import React from 'react';
 import type { AdminAuth } from '../auth/types';
@@ -21,10 +24,10 @@ interface Props {
   onCreated: (result: CreateInstitutionOutput) => void;
 }
 
-export const EducationCreateModal: React.FC<Props> = (props) => (
+export const GovCreateModal: React.FC<Props> = (props) => (
   <CreateInstitutionForm
     {...props}
-    category="EDUCATION_INSTITUTION"
+    category="GOV_INSTITUTION"
     checkInstitutionName={checkInstitutionName}
     createInstitution={createInstitution}
     uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
