@@ -146,6 +146,10 @@ sfid/frontend/
   详情页“盈利属性/机构”两字段只显示中文,机构中文映射缺失时回退原代码仅作异常兜底。
   机构操作记录「操作」列经 AUDIT_ACTION_LABEL(GovDetailPage)映射中文,单一来源=后端
   append_audit_log 调用点 action 字面量,后端新增 action 必须同步补映射,未知值回退原标识。
+- **审计 detail 事实与展示分离**:audit 表 detail 为 JSONB,后端写入点只存结构化事实
+  (键小写蛇形,值为系统原值,禁写展示文案/Debug 格式);人话翻译全在前端
+  AUDIT_DETAIL_KEY_LABEL/VALUE_LABEL 渲染器,后端新增字段须同步补键名映射,
+  未知键「键名: 值」兜底,旧文本行原样显示仅作异常兜底。
 - 私权机构新增选项只剩 `ZG/TG`,不得再出现 `JY`。
 - 非法人列表归属按所属法人分流:父=私法人→私权 tab,父=公法人→公权 tab(含浏览目录),
   父=教育委员会学校→教育 tab(分校 F+JY 天然命中教育过滤);后端列表 SQL 以

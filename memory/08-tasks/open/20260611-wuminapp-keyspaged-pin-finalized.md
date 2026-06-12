@@ -38,3 +38,14 @@
 - `smoldot_client.dart` 新增 `getKeysPagedFinalized(prefixHex, {count, startKey})`:取快照 finalizedBlockHash 作第 4 参显式钉块。
 - 4 个调用点统一切换:duoqian_transfer_service(提案反向索引)/ institution_discovery_service / institution_manage_service / personal_manage_discovery_service,全仓不再有裸 `state_getKeysPaged`。
 - 复现实验数据留档:追块窗口内 org/inst 两前缀扫描 + 提案本体读取全部空,同步到头后全部正确;全节点同刻全部有数据。
+
+## 三次诊断(2026-06-12,模拟器实机复现,未动代码)
+
+用户 21:07 构建(含钉 best 修复)仍复现。本机起 Android 模拟器装**同一个 APK** 复现成功:余额/管理员正常、提案列表「暂无提案」(干净空态,非报错)。证据链:
+
+- 模拟器 smoldot 日志:对同一分叉头 `0x3cbf…ea8c` 无限循环重复请求祖先头(299 次,下载成功但永不接受),finalized_height=14;
+- 同一时刻:本机全节点 best=#14(昨日曾 #16),宿主机 dart 全栈测试看到服务器 best=#16(0x6b05…)——**三个观察点三条链视图,全网正处于多分支分叉竞争**;
+- smoldot 源码证实证明失败会返回 -32000 错误而非空列表 → 模拟器扫描返回 `[]` 是"诚实的空"=钉住的 best 是**从 #12/#13 分出的兄弟分叉**,其状态里没有 #14 的提案交易;
+- 广场能显示靠 Isar 缓存(模拟器首次启动窗口侥幸扫到过);点击详情时灵时不灵随轻节点链视图漂移。
+
+**最终根因:POW_INITIAL_DIFFICULTY=100 分叉风暴(任务卡 20260608,一直 open)→ 全网多分支竞争 → 轻节点链视图漂移/卡死在不含提案的兄弟分叉上 → 按 best 钉块的索引扫描诚实返回空。** App 端三轮修复(注册表/48 守卫/钉块)各自真实有效,但都修不掉链层分叉根源。候选缓解:索引扫描改钉 finalized(固化状态必含提案);根治:难度修复。附带观察:广场列表曾重复显示同一提案两次(缓存 dup,待查)。

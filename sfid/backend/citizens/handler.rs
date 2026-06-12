@@ -237,10 +237,12 @@ pub(crate) async fn public_identity_search(
         "PUBLIC_IDENTITY_SEARCH",
         "public",
         output.wallet_pubkey.clone(),
-        format!(
-            "found={} archive_no={:?} request_id={:?} actor_ip={:?}",
-            output.found, output.archive_no, request_id, actor_ip
-        ),
+        serde_json::json!({
+            "found": output.found,
+            "archive_no": output.archive_no.clone(),
+            "request_id": request_id.clone(),
+            "actor_ip": actor_ip.clone(),
+        }),
     );
     Json(ApiResponse {
         code: 0,
