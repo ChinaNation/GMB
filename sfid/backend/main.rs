@@ -248,6 +248,9 @@ fn institution_row_from_pg_row(
     let cpms_status: Option<String> = row.get(23);
     let install_token_status: Option<String> = row.get(24);
     let cpms_pubkey_bound: Option<bool> = row.get(25);
+    // 中文注释:公安局列表唯一的"业务状态"单轴(前端只显示这一列):
+    // 待生成安装码 → 待安装 → 待绑定身份码 → 可办理,外加 已禁用/已吊销 两个管理态。
+    // CPMS 站点状态/安装码状态是它的派生输入,不再单列展示。
     let identity_service_status = if category == crate::number::InstitutionCategory::PublicSecurity
     {
         Some(
@@ -256,7 +259,10 @@ fn institution_row_from_pg_row(
                 Some("ACTIVE") => "WAITING_IDENTITY_CODE",
                 Some("DISABLED") => "DISABLED",
                 Some("REVOKED") => "REVOKED",
-                _ => "WAITING_INSTALL",
+                // PENDING = 安装码已生成,等现场扫码安装
+                Some(_) => "WAITING_INSTALL",
+                // 无 CPMS 站点记录 = 还没生成安装码
+                None => "WAITING_INSTALL_CODE",
             }
             .to_string(),
         )

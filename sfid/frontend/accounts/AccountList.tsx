@@ -52,12 +52,12 @@ export const AccountList: React.FC<Props> = ({
         {
           title: '账户地址',
           dataIndex: 'duoqian_address',
+          // 中文注释:SS58 地址完整显示不截断(地址是给人核对的),小号等宽字体允许换行
           render: (v: string | null) => {
             if (!v) return '-';
-            const ss58 = tryEncodeSs58(v);
             return (
               <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {ss58.slice(0, 12)}...{ss58.slice(-8)}
+                {tryEncodeSs58(v) || v}
               </span>
             );
           },

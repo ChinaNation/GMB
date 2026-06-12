@@ -17,6 +17,7 @@ import {
 import type { AdminAuth } from '../auth/types';
 import { AccountList } from '../accounts/AccountList';
 import { notice } from '../utils/notice';
+import { tryEncodeSs58 } from '../utils/ss58';
 import { CpmsSitePanel } from '../cpms/CpmsSitePanel';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { PrivateDetailLayout } from '../private/PrivateDetailLayout';
@@ -71,6 +72,22 @@ type AuditLogEntry = {
   created_at: string;
 };
 
+// 中文注释:审计日志操作类型中文映射(代码不上前端)。
+// 单一来源 = 后端 append_audit_log 各调用点的 action 字面量(共 10 个);
+// 后端新增 action 必须同步补这里,未知值回退显示原标识兜底。
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  CPMS_INSTALL_QR_GENERATE: '生成 CPMS 安装码',
+  CPMS_INSTALL_QR_REISSUE: '重新生成 CPMS 安装码',
+  CPMS_KEYS_STATUS_UPDATE: 'CPMS 授权状态变更',
+  CPMS_KEYS_DELETE: '删除 CPMS 授权',
+  CPMS_STATUS_EXPORT_IMPORT: '导入 CPMS 年度报告',
+  CPMS_ARCHIVE_VERIFY: 'CPMS 档案码核验',
+  CITIZEN_BIND: '公民身份ID绑定',
+  PUBLIC_IDENTITY_SEARCH: '公开身份查询',
+  APP_VOTERS_COUNT: 'App 选民人数查询',
+  APP_VOTE_CREDENTIAL: 'App 投票凭证签发',
+};
+
 const OperationRecords: React.FC<{ auth: AdminAuth; sfidNumber: string }> = ({ auth, sfidNumber }) => {
   const [rows, setRows] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -104,12 +121,22 @@ const OperationRecords: React.FC<{ auth: AdminAuth; sfidNumber: string }> = ({ a
         dataSource={rows}
         pagination={rows.length > 10 ? { pageSize: 10 } : false}
         columns={[
-          { title: '操作', dataIndex: 'action', width: 160 },
           {
-            title: '操作者',
+            title: '操作',
+            dataIndex: 'action',
+            width: 160,
+            render: (v: string) => AUDIT_ACTION_LABEL[v] || v,
+          },
+          {
+            title: '操作者账户',
             dataIndex: 'actor_pubkey',
-            width: 220,
-            ellipsis: true,
+            width: 240,
+            // 中文注释:公钥是系统的,SS58 地址才是给人看的;完整显示不截断,允许换行
+            render: (v: string) => (
+              <Typography.Text style={{ fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                {tryEncodeSs58(v) || v}
+              </Typography.Text>
+            ),
           },
           { title: '详情', dataIndex: 'detail', ellipsis: true },
           {

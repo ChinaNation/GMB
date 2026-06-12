@@ -292,7 +292,7 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 教育机构 → 公权机构 → 公安局 → 市注册局 → 联邦注册局。 */}
+            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 教育机构 → 公权机构 → 市公安局 → 市注册局 → 联邦注册局。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: !mustUpdatePasskey, onClick: () => switchView('citizens') },
               {
@@ -311,7 +311,7 @@ function AppInner() {
                 onClick: () => switchView('gov', { loadSfidMeta: true })
               },
               {
-                key: 'public-security' as const, label: '公安局',
+                key: 'public-security' as const, label: '市公安局',
                 visible: !mustUpdatePasskey && capabilities.canViewInstitutions,
                 onClick: () => switchView('public-security', { loadSfidMeta: true })
               },

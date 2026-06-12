@@ -45,6 +45,9 @@ function dartInstitution(item) {
   if (item.safetyFundAddress) {
     lines.push(`      safetyFundAddress: ${dartString(item.safetyFundAddress)},`);
   }
+  if (item.heFundAddress) {
+    lines.push(`      heFundAddress: ${dartString(item.heFundAddress)},`);
+  }
   if (item.stakeAddress) {
     lines.push(`      stakeAddress: ${dartString(item.stakeAddress)},`);
   }
@@ -59,6 +62,11 @@ const safetyFundMatch = /NRC_ANQUAN_ADDRESS:\s*\[u8;\s*32\]\s*=\s*hex!\("([0-9a-
 );
 if (!safetyFundMatch) throw new Error('missing NRC_ANQUAN_ADDRESS');
 const safetyFundAddress = safetyFundMatch[1].toLowerCase();
+const heFundMatch = /NRC_HE_ADDRESS:\s*\[u8;\s*32\]\s*=\s*hex!\("([0-9a-fA-F]+)"\)/.exec(
+  cbSource,
+);
+if (!heFundMatch) throw new Error('missing NRC_HE_ADDRESS');
+const heFundAddress = heFundMatch[1].toLowerCase();
 
 const cbItems = extractStructs(cbSource, 'ChinaCb').map((block, index) => ({
   name: extractField(block, 'sfid_name'),
@@ -67,6 +75,7 @@ const cbItems = extractStructs(cbSource, 'ChinaCb').map((block, index) => ({
   mainAddress: extractField(block, 'main_address'),
   feeAddress: extractField(block, 'fee_address'),
   safetyFundAddress: index === 0 ? safetyFundAddress : null,
+  heFundAddress: index === 0 ? heFundAddress : null,
   stakeAddress: null,
 }));
 
@@ -77,6 +86,7 @@ const chItems = extractStructs(chSource, 'ChinaCh').map((block) => ({
   mainAddress: extractField(block, 'main_address'),
   feeAddress: extractField(block, 'fee_address'),
   safetyFundAddress: null,
+  heFundAddress: null,
   stakeAddress: extractField(block, 'stake_address'),
 }));
 

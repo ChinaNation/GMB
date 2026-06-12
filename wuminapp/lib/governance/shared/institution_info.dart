@@ -64,6 +64,7 @@ class InstitutionAccounts {
     required this.mainAddress,
     this.feeAddress,
     this.safetyFundAddress,
+    this.heFundAddress,
     this.stakeAddress,
   });
 
@@ -75,6 +76,9 @@ class InstitutionAccounts {
 
   /// 安全基金账户地址 hex；仅国储会存在。
   final String? safetyFundAddress;
+
+  /// 两和基金账户地址 hex（Reconciliation Fund，链端 NRC_HE_ADDRESS）；仅国储会存在。
+  final String? heFundAddress;
 
   /// 永久质押账户地址 hex；仅省储行存在。
   final String? stakeAddress;

@@ -39,6 +39,39 @@
 - [x] 残留扫描：educationP1Locks/dynamicLocksForSubjectProperty/parent_subject_property/parent_p1 全仓零命中
 - [x] cargo fmt 本卡触碰文件干净（cpms/handler.rs、private/clearing.rs 的 fmt 差异属上一任务/历史存量，不在本卡范围）
 
+## 追加（2026-06-10 用户确认后落地的 UI 调整）
+
+- 新增弹窗 label 去技术前缀:「SubjectProperty 主体属性」→「主体属性」、「P1 盈利属性」→「盈利属性」;机构详情页展示标签同步改「盈利属性」(全站用词统一)。
+- 新增弹窗改双列布局(Row/Col span=12)压低高度:行1 主体属性|盈利属性、行2 省|市、行3 机构|学校名称/机构名称(两步式右侧留空)、行4 法定代表人姓名|证件照;所属法人(F)和法定代表人身份ID 因内容长(26 字符身份ID/机构名+省市)保持整行。三入口(私权/公权/教育)弹窗同时生效,纯 JSX 布局零逻辑改动。
+
+## 追加 2（2026-06-10 用户两点指令）
+
+- 公权 tab 下属非法人(F)的机构选项锁死「中国 (ZG)」,不再提供他国 TG(labels.ts GOV_UNINORG_INSTITUTION_ONLY,单项自动置灰);私权 F 仍 ZG/TG 可选,教育分校仍锁 JY。
+- 「公安局」tab 标签改为「市公安局」(App.tsx label,路由 key/接口/缓存键不动)。
+
+## 追加 3（2026-06-10 用户确认:系统代码不上前端）
+
+- 机构详情(PrivateDetailLayout):「盈利属性」由 `1/盈利` 改纯中文 `盈利`;「机构代码」标签改「机构」、值由 `ZG/中国` 改纯中文 `中国`(映射缺失回退原代码仅作异常兜底)。GovDetailPage「机构类型」本就纯中文,不动。
+- 新增弹窗下拉选项全部去括号代码:公法人/私法人/非法人、盈利/非盈利、政府/立法院/司法院/监察院、中国/他国、教育委员会、市名(原"合肥市 (001)"→"合肥市")共 18 处;value 仍是系统代码,前后端流转零变化。
+- FRONTEND_LAYOUT.md 增设铁律:系统代码只在 value 与后端流转,前端展示与选项一律纯中文。
+
+## 追加 4（2026-06-10 市公安局列表三状态列合一,A 方案）
+
+- 市公安局列表删除「CPMS状态/安装码状态/身份码业务状态」三列,合成唯一「业务状态」列——三列本是同一条流水线的三个视角,身份码业务状态本就由另两者派生(main.rs identity_service_status)。
+- 单轴六态:待生成安装码(新拆档,无 CPMS 站点记录)→ 待安装(安装码已生成待现场扫码)→ 待绑定身份码 → 可办理,+ 已禁用/已吊销;颜色 可办理=绿、等待态=橙、禁用/吊销=红。
+- 后端派生逻辑细分 None→WAITING_INSTALL_CODE / PENDING→WAITING_INSTALL;cpms_status/install_token_status 仍作派生输入随行返回,前端不再展示;删 GovListTable 两个死 label 表 + statusTag 死颜色分支。
+
+## 追加 5（2026-06-10 前端账户地址统一完整 SS58）
+
+- 机构操作记录(GovDetailPage OperationRecords):「操作者」改「操作者账户」,actor_pubkey 由裸 0x hex+省略号改为完整 SS58(tryEncodeSs58,等宽小字+换行不截断)。
+- 机构账户列表(AccountList)「账户地址」:已是 SS58 但截断(前12...后8),改完整显示;交易哈希不是账户,保持截断。
+- 公民详情「投票账户」:wallet_address 缺失时原 fallback 直显 wallet_pubkey 裸 hex,改为转 SS58 兜底。
+- 全仓扫描结论:其余展示点(省/市管理员列表与详情、扫码账户弹窗、公民列表 wallet_address 后端已给 canonical SS58)均已完整 SS58,无残留;FRONTEND_LAYOUT 增设「账户地址统一完整 SS58」铁律。
+
+## 追加 6（2026-06-10 操作记录操作类型全量中文映射）
+
+- 机构操作记录「操作」列加 AUDIT_ACTION_LABEL 全量中文映射(GovDetailPage)。**单一来源=后端 append_audit_log 各调用点的 action 字面量,经全仓扫描共 10 个**(11 个调用点全为字面量,AdminActionType.label() 走的是授权签名展示不入审计表):生成/重新生成 CPMS 安装码、CPMS 授权状态变更、删除 CPMS 授权、导入 CPMS 年度报告、CPMS 档案码核验、公民身份ID绑定、公开身份查询、App 选民人数查询、App 投票凭证签发。未知 action 回退显示原标识兜底;后端新增 action 须同步补映射(映射表注释已写明)。
+
 ## 验证记录
 
 - 后端 `cargo check` 0 error + `cargo test` 58/58（含 uninorg 6 条新单测：学校本部同市/私法人全国/公法人层级三档+未知前缀收紧/地域校验/分校代码一致性/p1 继承）。

@@ -28,20 +28,10 @@ const SUBJECT_STATUS_LABEL: Record<string, string> = {
   REVOKED: '已注销',
 };
 
-const CPMS_STATUS_LABEL: Record<string, string> = {
-  PENDING: '待安装',
-  ACTIVE: '已启用',
-  DISABLED: '已禁用',
-  REVOKED: '已吊销',
-};
-
-const INSTALL_TOKEN_STATUS_LABEL: Record<string, string> = {
-  PENDING: '待使用',
-  USED: '已使用',
-  REVOKED: '已吊销',
-};
-
+// 中文注释:公安局"业务状态"单轴(后端按 CPMS 站点 + 安装码 + 公钥绑定派生,
+// 见 main.rs identity_service_status):主流程四档递进 + 两个管理态,不再分列展示派生输入。
 const IDENTITY_SERVICE_STATUS_LABEL: Record<string, string> = {
+  WAITING_INSTALL_CODE: '待生成安装码',
   WAITING_INSTALL: '待安装',
   WAITING_IDENTITY_CODE: '待绑定身份码',
   READY: '可办理',
@@ -58,10 +48,9 @@ function nameText(row: InstitutionListRow) {
 }
 
 function statusTag(status: string | null | undefined, labels: Record<string, string>) {
-  if (!status) return <Tag>未生成</Tag>;
-  const color = status === 'ACTIVE' || status === 'READY' || status === 'USED' ? 'green'
-    : status === 'PENDING' || status.startsWith('WAITING') ? 'orange'
-      : 'red';
+  if (!status) return <Tag>-</Tag>;
+  // 可办理=绿;主流程等待态=橙;已禁用/已吊销=红
+  const color = status === 'READY' ? 'green' : status.startsWith('WAITING') ? 'orange' : 'red';
   return <Tag color={color}>{labels[status] || status}</Tag>;
 }
 
@@ -185,21 +174,7 @@ export const GovListTable: React.FC<Props> = ({
         },
         { title: '所属行政区', width: 180, align: 'center', render: (_v, row) => areaText(row) },
         {
-          title: 'CPMS状态',
-          dataIndex: 'cpms_status',
-          width: 120,
-          align: 'center',
-          render: (v: string | null | undefined) => statusTag(v, CPMS_STATUS_LABEL),
-        },
-        {
-          title: '安装码状态',
-          dataIndex: 'install_token_status',
-          width: 130,
-          align: 'center',
-          render: (v: string | null | undefined) => statusTag(v, INSTALL_TOKEN_STATUS_LABEL),
-        },
-        {
-          title: '身份码业务状态',
+          title: '业务状态',
           dataIndex: 'identity_service_status',
           width: 150,
           align: 'center',

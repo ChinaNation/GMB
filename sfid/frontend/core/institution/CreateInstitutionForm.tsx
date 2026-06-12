@@ -8,7 +8,7 @@
 //       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级;私权→全国)
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { AutoComplete, Button, Form, Input, Modal, Select, Spin, Upload } from 'antd';
+import { AutoComplete, Button, Col, Form, Input, Modal, Row, Select, Spin, Upload } from 'antd';
 import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../../auth/types';
 import type { SfidCityItem } from '../../china/api';
@@ -438,49 +438,102 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       destroyOnClose
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        <Form.Item label="SubjectProperty 主体属性" name="subject_property" rules={[{ required: true }]}>
-          <Select options={locks.subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
-        </Form.Item>
-        <Form.Item
-          label="P1 盈利属性"
-          name="p1"
-          rules={[
-            {
-              required: true,
-              message: isF ? '盈利属性继承所属法人,请先选择所属法人' : '请选择盈利属性',
-            },
-          ]}
-        >
-          <Select
-            options={p1Locks.choices}
-            disabled={p1Locks.locked}
-            placeholder={isF ? '由所属法人决定' : undefined}
-          />
-        </Form.Item>
-        <Form.Item label="省" name="province" rules={[{ required: true }]}>
-          <Input disabled />
-        </Form.Item>
-        <Form.Item label="市" name="city" rules={[{ required: true, message: '请选择市' }]}>
-          <Select
-            loading={citiesLoading}
-            disabled={lockedCity !== null}
-            options={cities.map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
-            placeholder="请选择市"
-            onChange={() => {
-              // 中文注释:G 名称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
-              if (currentSubjectProperty === 'G' && nameAvailable !== null) {
-                setNameAvailable(null);
-              }
-              if (isF && (selectedParent || parentOptions.length > 0)) {
-                resetParentState();
-                form.setFieldsValue({ parent_sfid_number: undefined, p1: undefined });
-              }
-            }}
-          />
-        </Form.Item>
-        <Form.Item label="机构" name="institution" rules={[{ required: true }]}>
-          <Select options={instChoices} disabled={instDisabled} />
-        </Form.Item>
+        {/* 中文注释:短选项字段双列排布压低弹窗高度;所属法人/法定代表人身份ID 内容长,保持整行。 */}
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="主体属性" name="subject_property" rules={[{ required: true }]}>
+              <Select options={locks.subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              label="盈利属性"
+              name="p1"
+              rules={[
+                {
+                  required: true,
+                  message: isF ? '盈利属性继承所属法人,请先选择所属法人' : '请选择盈利属性',
+                },
+              ]}
+            >
+              <Select
+                options={p1Locks.choices}
+                disabled={p1Locks.locked}
+                placeholder={isF ? '由所属法人决定' : undefined}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="省" name="province" rules={[{ required: true }]}>
+              <Input disabled />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="市" name="city" rules={[{ required: true, message: '请选择市' }]}>
+              <Select
+                loading={citiesLoading}
+                disabled={lockedCity !== null}
+                options={cities.map((c) => ({ label: c.name, value: c.name }))}
+                placeholder="请选择市"
+                onChange={() => {
+                  // 中文注释:G 名称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
+                  if (currentSubjectProperty === 'G' && nameAvailable !== null) {
+                    setNameAvailable(null);
+                  }
+                  if (isF && (selectedParent || parentOptions.length > 0)) {
+                    resetParentState();
+                    form.setFieldsValue({ parent_sfid_number: undefined, p1: undefined });
+                  }
+                }}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="机构" name="institution" rules={[{ required: true }]}>
+              <Select options={instChoices} disabled={instDisabled} />
+            </Form.Item>
+          </Col>
+          {collectNameInModal && (
+            <Col span={12}>
+              <Form.Item
+                label={nameLabel}
+                name="institution_name"
+                rules={[
+                  { required: true, message: `请输入${nameLabel}` },
+                  { max: 30, message: '最多 30 个字' },
+                ]}
+              >
+                <Input
+                  placeholder={`请输入${nameLabel}`}
+                  maxLength={30}
+                  onChange={onNameChange}
+                  suffix={
+                    <span
+                      style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
+                      onClick={nameChecking ? undefined : onCheckName}
+                    >
+                      {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
+                    </span>
+                  }
+                />
+              </Form.Item>
+              {nameAvailable === true && (
+                <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
+                  名称可用
+                </div>
+              )}
+              {nameAvailable === false && (
+                <div style={{ color: '#ff4d4f', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
+                  该名称已被占用，请更换
+                </div>
+              )}
+            </Col>
+          )}
+        </Row>
         {isF && (
           <>
             <Form.Item
@@ -530,52 +583,38 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             )}
           </>
         )}
-        {collectNameInModal && (
-          <>
+        <Row gutter={16}>
+          <Col span={12}>
             <Form.Item
-              label={nameLabel}
-              name="institution_name"
+              label="法定代表人姓名"
+              name="legal_rep_name"
               rules={[
-                { required: true, message: `请输入${nameLabel}` },
+                { required: true, message: '请输入法定代表人姓名' },
                 { max: 30, message: '最多 30 个字' },
               ]}
             >
-              <Input
-                placeholder={`请输入${nameLabel}(最多 30 字)`}
-                maxLength={30}
-                onChange={onNameChange}
-                suffix={
-                  <span
-                    style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
-                    onClick={nameChecking ? undefined : onCheckName}
-                  >
-                    {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
-                  </span>
-                }
-              />
+              <Input placeholder="请输入法定代表人姓名" maxLength={30} />
             </Form.Item>
-            {nameAvailable === true && (
-              <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
-                名称可用
-              </div>
-            )}
-            {nameAvailable === false && (
-              <div style={{ color: '#ff4d4f', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
-                该名称已被占用，请更换
-              </div>
-            )}
-          </>
-        )}
-        <Form.Item
-          label="法定代表人姓名"
-          name="legal_rep_name"
-          rules={[
-            { required: true, message: '请输入法定代表人姓名' },
-            { max: 30, message: '最多 30 个字' },
-          ]}
-        >
-          <Input placeholder="请输入法定代表人姓名" maxLength={30} />
-        </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="法定代表人证件照" required>
+              <Upload
+                accept="image/jpeg,image/png,image/webp"
+                showUploadList={false}
+                beforeUpload={(file) => handlePhotoUpload(file as File)}
+              >
+                <Button icon={<UploadOutlined />} loading={photoUploading}>
+                  上传证件照
+                </Button>
+              </Upload>
+              {photoName && (
+                <div style={{ color: '#52c41a', marginTop: 8, fontSize: 12 }}>
+                  {photoName}
+                </div>
+              )}
+            </Form.Item>
+          </Col>
+        </Row>
         <Form.Item
           label="法定代表人身份ID"
           name="legal_rep_sfid_number"
@@ -604,22 +643,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
               }
             />
           </AutoComplete>
-        </Form.Item>
-        <Form.Item label="法定代表人证件照" required>
-          <Upload
-            accept="image/jpeg,image/png,image/webp"
-            showUploadList={false}
-            beforeUpload={(file) => handlePhotoUpload(file as File)}
-          >
-            <Button icon={<UploadOutlined />} loading={photoUploading}>
-              上传证件照
-            </Button>
-          </Upload>
-          {photoName && (
-            <div style={{ color: '#52c41a', marginTop: 8, fontSize: 12 }}>
-              {photoName}
-            </div>
-          )}
         </Form.Item>
         <Form.Item
           name="legal_rep_photo_path"
