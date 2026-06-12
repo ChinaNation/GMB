@@ -324,15 +324,12 @@ class InstitutionManageService {
     final prefixHexLen = prefixHex.length;
 
     while (true) {
-      final keysRaw =
-          await SmoldotClientManager.instance.request('state_getKeysPaged', [
+      final keys = await SmoldotClientManager.instance.getKeysPagedAtBest(
         prefixHex,
-        pageSize,
-        startKey,
-        null,
-      ]);
-      if (keysRaw is! List || keysRaw.isEmpty) break;
-      final keys = keysRaw.cast<String>();
+        count: pageSize,
+        startKey: startKey,
+      );
+      if (keys.isEmpty) break;
 
       for (final keyHex in keys) {
         // 双 key:prefix + blake2_128(name)(16B 32 hex) + name 真值(变长)

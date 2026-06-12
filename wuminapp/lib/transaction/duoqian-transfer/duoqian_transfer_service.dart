@@ -335,17 +335,15 @@ class DuoqianTransferService {
     prefix.setAll(off, firstKeyRaw);
     final prefixHex = '0x${_hexEncode(prefix)}';
 
-    // 一次拉到底(开发期数据量小);生产 1000 万级时再分页
-    final keysHex = await SmoldotClientManager.instance.request(
-      'state_getKeysPaged',
-      [prefixHex, 1000, null],
-    ) as List<dynamic>?;
-    if (keysHex == null || keysHex.isEmpty) return const [];
+    // 一次拉到底(开发期数据量小);生产 1000 万级时再分页。
+    // 必须走 finalized 钉块入口,否则轻节点追块窗口内会拿到旧状态空列表。
+    final keysHex =
+        await SmoldotClientManager.instance.getKeysPagedAtBest(prefixHex);
+    if (keysHex.isEmpty) return const [];
 
     // 每条 key 末 8 字节 = proposal_id u64 LE(twox64_concat 的 raw 部分)
     final ids = <int>[];
     for (final keyHex in keysHex) {
-      if (keyHex is! String) continue;
       final keyBytes = _hexDecode(keyHex);
       if (keyBytes.length < 8) continue;
       final tail = keyBytes.sublist(keyBytes.length - 8);
@@ -921,6 +919,14 @@ class DuoqianTransferService {
     return null;
   }
 
+  /// 测试入口：暴露批量解码路径（_decodeProposalData），用链上真实
+  /// payload 字节做布局回归，防止再出现"守卫长度与链端布局漂移"导致
+  /// 提案静默消失（2026-06-11 旧 48 字节主体残留事故）。
+  @visibleForTesting
+  TransferProposalInfo? debugDecodeProposalData(int proposalId, Uint8List raw) {
+    return _decodeProposalData(proposalId, raw);
+  }
+
   /// 从原始 SCALE 字节解码 ProposalData（BoundedVec<u8> → TransferAction）。
   TransferProposalInfo? _decodeProposalData(int proposalId, Uint8List raw) {
     try {
@@ -931,7 +937,9 @@ class DuoqianTransferService {
       final data = raw.sublist(offset, offset + vecLen);
       // 跳过 MODULE_TAG 前缀（"dq-xfer" = 7 字节）
       const tag = [0x64, 0x71, 0x2d, 0x78, 0x66, 0x65, 0x72]; // "dq-xfer"
-      if (data.length < tag.length + 48 + 32 + 16 + 1 + 32) return null;
+      // 最小长度 = tag(7) + institution(32) + beneficiary(32) + amount(16)
+      //          + remark Compact(≥1) + proposer(32) = 120（空备注下限）。
+      if (data.length < tag.length + 32 + 32 + 16 + 1 + 32) return null;
       for (var i = 0; i < tag.length; i++) {
         if (data[i] != tag[i]) return null;
       }

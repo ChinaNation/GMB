@@ -13,6 +13,7 @@ const List<InstitutionInfo> kNationalCouncil = [
       mainAddress: '39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d',
       feeAddress: '66d1de031e332facb67bd20ae428e187ae4bbf3caa0a1421bd0023c49fb228d3',
       safetyFundAddress: 'c878e700bde52b5c9c2a94bcf5296c4f6a75ca61b8e920a4e53a01c6da433e52',
+      heFundAddress: 'ce19b7f0df3e9ba6c88b02364aa97cd1994df25aaa86c36e790ee85eea009f76',
     ),
   ),
 ];

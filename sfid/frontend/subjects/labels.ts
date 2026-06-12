@@ -3,7 +3,7 @@
 //
 // 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
 //   PRIVATE_INSTITUTION   私权 tab:S/F + ZG/TG,两步式(弹窗只生成 SFID,详情页补名称/sub_type)
-//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除央行CB)机构名称必填 / F(ZG/TG)挂公法人
+//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除央行CB)机构名称必填 / F(锁中国ZG)挂公法人
 //   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY),学校名称弹窗内必填
 //
 // P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/uninorg 同源):
@@ -125,26 +125,31 @@ export const ORG_CODE_LABEL: Record<string, string> = {
 
 // ── 私法人/非法人可选机构代码(教育委员会 JY 已统一收口教育机构 tab) ──
 const PRIVATE_INSTITUTIONS: ChoiceItem[] = [
-  { value: 'ZG', label: '中国 (ZG)' },
-  { value: 'TG', label: '他国 (TG)' },
+  { value: 'ZG', label: '中国' },
+  { value: 'TG', label: '他国' },
 ];
 
 // ── 手动公权机构可选代码:排除央行 CB(省公民储备银行每省唯一已生成)和 JY(归教育 tab) ──
 const GOV_MANUAL_INSTITUTIONS: ChoiceItem[] = [
-  { value: 'ZF', label: '政府 (ZF)' },
-  { value: 'LF', label: '立法院 (LF)' },
-  { value: 'SF', label: '司法院 (SF)' },
-  { value: 'JC', label: '监察院 (JC)' },
+  { value: 'ZF', label: '政府' },
+  { value: 'LF', label: '立法院' },
+  { value: 'SF', label: '司法院' },
+  { value: 'JC', label: '监察院' },
+];
+
+// ── 公权下属非法人机构代码锁死中国(ZG),不开放他国 ──
+const GOV_UNINORG_INSTITUTION_ONLY: ChoiceItem[] = [
+  { value: 'ZG', label: '中国' },
 ];
 
 // ── 教育委员会(JY)锁死选项 ──
 const EDUCATION_INSTITUTION_ONLY: ChoiceItem[] = [
-  { value: 'JY', label: '教育委员会 (JY)' },
+  { value: 'JY', label: '教育委员会' },
 ];
 
 // ── P1 盈利属性选项(单一来源,锁死场景取单项) ──
-const P1_PROFIT: ChoiceItem = { value: '1', label: '盈利 (1)' };
-const P1_NON_PROFIT: ChoiceItem = { value: '0', label: '非盈利 (0)' };
+const P1_PROFIT: ChoiceItem = { value: '1', label: '盈利' };
+const P1_NON_PROFIT: ChoiceItem = { value: '0', label: '非盈利' };
 
 // ── 私法人企业类型(详情页使用;P1 联动见 subTypeChoicesForP1) ──
 // P1=0 → 仅 NON_PROFIT;P1=1 → 四种企业类型
@@ -172,8 +177,8 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
       // G=新公权机构(名称必填同市查重) / F=公权下属非法人(挂公法人)
       return {
         subjectPropertyChoices: [
-          { value: 'G', label: '公法人 (G)' },
-          { value: 'F', label: '非法人 (F)' },
+          { value: 'G', label: '公法人' },
+          { value: 'F', label: '非法人' },
         ],
         institutionChoices: GOV_MANUAL_INSTITUTIONS,
         modalTitle: '新增公权机构',
@@ -182,9 +187,9 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
       // G=公立学校 / S=私立学校 / F=分校(挂本部),机构锁死教育委员会(JY)
       return {
         subjectPropertyChoices: [
-          { value: 'G', label: '公法人 (G)' },
-          { value: 'S', label: '私法人 (S)' },
-          { value: 'F', label: '非法人 (F)' },
+          { value: 'G', label: '公法人' },
+          { value: 'S', label: '私法人' },
+          { value: 'F', label: '非法人' },
         ],
         institutionChoices: EDUCATION_INSTITUTION_ONLY,
         modalTitle: '新增教育机构',
@@ -193,8 +198,8 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
       // 两步式:第一步弹窗不含 institution_name/sub_type
       return {
         subjectPropertyChoices: [
-          { value: 'S', label: '私法人 (S)' },
-          { value: 'F', label: '非法人 (F)' },
+          { value: 'S', label: '私法人' },
+          { value: 'F', label: '非法人' },
         ],
         institutionChoices: PRIVATE_INSTITUTIONS,
         modalTitle: '新增私权机构',
@@ -202,14 +207,14 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
   }
 }
 
-/** 机构代码选项随入口 + 主体属性联动(GOV 入口 G 建公权机构、F 建下属非法人)。 */
+/** 机构代码选项随入口 + 主体属性联动(GOV 入口 G 建公权机构、F 建下属非法人锁中国)。 */
 export function institutionChoicesFor(
   category: CreateFormCategory,
   subjectProperty: string,
 ): ChoiceItem[] {
   if (category === 'EDUCATION_INSTITUTION') return EDUCATION_INSTITUTION_ONLY;
-  if (category === 'GOV_INSTITUTION' && subjectProperty === 'G') {
-    return GOV_MANUAL_INSTITUTIONS;
+  if (category === 'GOV_INSTITUTION') {
+    return subjectProperty === 'G' ? GOV_MANUAL_INSTITUTIONS : GOV_UNINORG_INSTITUTION_ONLY;
   }
   return PRIVATE_INSTITUTIONS;
 }

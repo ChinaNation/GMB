@@ -403,7 +403,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             _buildAccountInfoTile(
               icon: Icons.account_balance_wallet_outlined,
               label: '主账户',
-              value: _shortAddress(_accountHexToSs58(inst.mainAddress)),
+              // 完整 SS58 地址,不截断。
+              value: _accountHexToSs58(inst.mainAddress),
             ),
             const Divider(height: 18),
             _buildAccountInfoTile(
@@ -481,10 +482,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                 ),
               ),
               const SizedBox(height: 2),
+              // 中文注释:value 可能是完整 SS58 地址,允许换行,不截断。
               Text(
                 value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 13,
                   color: valueColor,
@@ -677,7 +677,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   ),
                 ),
               ),
-              Flexible(
+              // 中文注释：必须用 Expanded(tight)填满剩余宽度,textAlign.right
+              // 才能真正把金额顶到行右缘;Flexible(loose)按内容收缩,右对齐失效
+              // (短金额浮在行中间,长金额碰巧填满才看似靠右)。
+              Expanded(
                 child: Text(
                   AmountFormat.format(account.balance, symbol: 'GMB'),
                   textAlign: TextAlign.right,
@@ -695,10 +698,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           const SizedBox(height: 6),
           Align(
             alignment: Alignment.centerLeft,
+            // 完整 SS58 地址,允许换行,不截断。
             child: Text(
-              _shortAddress(account.addressSs58),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              account.addressSs58,
               style: const TextStyle(
                 fontSize: 12,
                 color: AppTheme.textTertiary,
@@ -730,6 +732,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         name: '安全基金账户',
         address: safetyFundAddress,
         icon: Icons.health_and_safety_outlined,
+      ));
+    }
+
+    // 两和基金账户(Reconciliation Fund)固定排在安全基金账户之后。
+    final heFundAddress = accounts?.heFundAddress;
+    if (heFundAddress != null) {
+      items.add((
+        name: '两和基金账户',
+        address: heFundAddress,
+        icon: Icons.handshake_outlined,
       ));
     }
 
@@ -1444,11 +1456,6 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           int.parse(clean.substring(index * 2, index * 2 + 2), radix: 16),
       growable: false,
     );
-  }
-
-  String _shortAddress(String address) {
-    if (address.length <= 18) return address;
-    return '${address.substring(0, 8)}...${address.substring(address.length - 8)}';
   }
 
   void _openAdminList() {

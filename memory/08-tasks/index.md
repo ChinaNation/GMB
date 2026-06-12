@@ -66,6 +66,9 @@
 - `memory/08-tasks/open/20260610-sfid-gov-create-uninorg-unify.md`
 - `memory/08-tasks/open/20260610-wumin-payload-decoder-signing-tail.md`
 - `memory/08-tasks/open/20260611-wuminapp-institution-registry-regen.md`
+- `memory/08-tasks/open/20260611-wuminapp-proposaldata-stale-48-guard.md`
+- `memory/08-tasks/open/20260611-wuminapp-keyspaged-pin-finalized.md`
+- `memory/08-tasks/open/20260611-wuminapp-nrc-hefund-account-row.md`
 
 ## done
 

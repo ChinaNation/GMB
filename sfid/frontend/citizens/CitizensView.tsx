@@ -10,7 +10,7 @@ import {
   listCitizens,
   type CitizenRow,
 } from './api';
-import { decodeSs58 } from '../utils/ss58';
+import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { useAuth } from '../hooks/useAuth';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { BindModal } from './BindModal';
@@ -275,7 +275,9 @@ export function CitizensView() {
             <Descriptions.Item label="身份ID">{detailRecord.sfid_number ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="档案号">{detailRecord.archive_no ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="投票账户">
-              {detailRecord.wallet_address ?? detailRecord.wallet_pubkey ?? '-'}
+              {/* 中文注释:wallet_address 缺失时把公钥转 SS58 兜底,前端不显示裸公钥 */}
+              {detailRecord.wallet_address
+                ?? (detailRecord.wallet_pubkey ? tryEncodeSs58(detailRecord.wallet_pubkey) || '-' : '-')}
             </Descriptions.Item>
             <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.bind_status)}</Descriptions.Item>
             <Descriptions.Item label="选举权利">{detailRecord.voting_eligible ? '有' : '无'}</Descriptions.Item>

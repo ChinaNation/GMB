@@ -106,19 +106,20 @@ class InstitutionDiscoveryService {
     var partialFailure = false;
 
     while (true) {
-      List<dynamic>? page;
+      List<String>? page;
       try {
-        page = await SmoldotClientManager.instance.request(
-          'state_getKeysPaged',
-          [prefixHex, _pageSize, startKey, null],
-        ) as List<dynamic>?;
+        page = await SmoldotClientManager.instance.getKeysPagedAtBest(
+          prefixHex,
+          count: _pageSize,
+          startKey: startKey,
+        );
       } catch (e) {
         debugPrint('[DuoqianDiscovery] getKeysPaged 失败: $e');
         partialFailure = true;
         break;
       }
-      if (page == null || page.isEmpty) break;
-      final keys = page.cast<String>();
+      if (page.isEmpty) break;
+      final keys = page;
       allKeys.addAll(keys);
       onProgress?.call(allKeys.length, null, 0);
       if (keys.length < _pageSize) break;

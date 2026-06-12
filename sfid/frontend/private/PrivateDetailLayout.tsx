@@ -3,7 +3,7 @@
 // 布局:
 //   顶部一整块 Card(标题 = 机构名称,编辑/取消/保存按钮在 Card extra 右上角):
 //     ┌ 左 Col:SFID 信息(只读)──────────────┐  ┌ 右 Col:机构信息 ──────────────┐
-//     │ SFID / 省 / 市 / SubjectProperty / P1 / 机构代码 │  │ 机构名称 + 搜索查重图标       │
+//     │ 身份ID / 省 / 市 / 盈利属性 / 机构(均纯中文) │  │ 机构名称 + 搜索查重图标       │
 //     │ 创建时间 / 创建用户                  │  │ 企业类型 Select(仅 S)       │
 //     │                                      │  │ 所属法人 AutoComplete(仅 F) │
 //     └──────────────────────────────────────┘  └───────────────────────────────┘
@@ -472,11 +472,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               </Descriptions.Item>
               <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
               <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
-              <Descriptions.Item label="P1 盈利属性">
-                {inst.p1}/{inst.p1 === '0' ? '非盈利' : '盈利'}
+              {/* 中文注释:p1/机构代码是系统编码,前端只显示中文;映射缺失时回退原代码兜底 */}
+              <Descriptions.Item label="盈利属性">
+                {inst.p1 === '0' ? '非盈利' : '盈利'}
               </Descriptions.Item>
-              <Descriptions.Item label="机构代码">
-                {inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
+              <Descriptions.Item label="机构">
+                {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
               </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {new Date(inst.created_at).toLocaleString('zh-CN')}
