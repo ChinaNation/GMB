@@ -94,12 +94,11 @@ pub(crate) async fn app_vote_credential(
         "APP_VOTE_CREDENTIAL",
         "app",
         Some(account_pubkey.clone()),
-        format!(
-            "proposal_id={} eligible={} actor_ip={:?}",
-            proposal_id,
-            has_vote_eligibility,
-            actor_ip_from_headers(&headers)
-        ),
+        serde_json::json!({
+            "proposal_id": proposal_id,
+            "eligible": has_vote_eligibility,
+            "actor_ip": actor_ip_from_headers(&headers),
+        }),
     );
 
     Json(ApiResponse {

@@ -374,14 +374,13 @@ pub(crate) async fn citizen_bind(
         "CITIZEN_BIND",
         &ctx.admin_pubkey,
         record.sfid_number.clone(),
-        format!(
-            "mode={} sfid_number={} archive_no={:?} request_id={:?} actor_ip={:?}",
-            challenge.mode,
-            record.sfid_number.clone().unwrap_or_default(),
-            record.archive_no,
-            request_id_from_headers(&headers),
-            actor_ip_from_headers(&headers)
-        ),
+        serde_json::json!({
+            "mode": challenge.mode.clone(),
+            "sfid_number": record.sfid_number.clone(),
+            "archive_no": record.archive_no.clone(),
+            "request_id": request_id_from_headers(&headers),
+            "actor_ip": actor_ip_from_headers(&headers),
+        }),
     );
     let output = citizen_bind_output(&record);
     Json(ApiResponse {

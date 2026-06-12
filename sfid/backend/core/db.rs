@@ -436,10 +436,24 @@ impl Db {
                 actor TEXT NOT NULL,
                 action TEXT NOT NULL,
                 target_sfid TEXT,
-                detail TEXT NOT NULL,
+                detail JSONB NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (p_code, id)
-             ) PARTITION BY LIST (p_code);",
+             ) PARTITION BY LIST (p_code);
+
+             -- 中文注释:审计 detail 由自由文本改结构化 JSONB(事实与展示分离,
+             -- 展示翻译归前端)。旧 TEXT 列存的是写死文案无法结构化,按用户确认
+             -- 直接清空重建列类型(开发期运行痕迹,不留旧方案);收敛块幂等。
+             DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'audit' AND column_name = 'detail'
+                      AND data_type = 'text'
+                ) THEN
+                    TRUNCATE audit;
+                    ALTER TABLE audit ALTER COLUMN detail TYPE JSONB USING detail::jsonb;
+                END IF;
+             END $$;",
         )
 	        .map_err(|e| {
 	            format!(

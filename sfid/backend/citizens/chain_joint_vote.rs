@@ -86,11 +86,10 @@ pub(crate) async fn app_voters_count(
         "APP_VOTERS_COUNT",
         "app",
         Some(who.clone()),
-        format!(
-            "eligible_total={} actor_ip={:?}",
-            eligible_total,
-            actor_ip_from_headers(&headers)
-        ),
+        serde_json::json!({
+            "eligible_total": eligible_total,
+            "actor_ip": actor_ip_from_headers(&headers),
+        }),
     );
 
     Json(ApiResponse {

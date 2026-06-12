@@ -26,7 +26,8 @@ pub(crate) struct AuditLogEntry {
     #[serde(default)]
     pub(crate) actor_ip: Option<String>,
     pub(crate) result: String,
-    pub(crate) detail: String,
+    /// 结构化事实字段(JSON 对象,键小写蛇形,值为系统原值);人话翻译归前端渲染器。
+    pub(crate) detail: serde_json::Value,
     pub(crate) created_at: DateTime<Utc>,
 }
 
@@ -73,7 +74,7 @@ pub(crate) async fn admin_list_audit_logs(
                    AND ($4::text = '' OR lower(actor) = lower($4))
                    AND (
                         $5::text = ''
-                        OR lower(detail) LIKE '%' || $5 || '%'
+                        OR lower(detail::text) LIKE '%' || $5 || '%'
                         OR lower(action) LIKE '%' || $5 || '%'
                         OR lower(actor) LIKE '%' || $5 || '%'
                         OR lower(COALESCE(target_sfid, '')) LIKE '%' || $5 || '%'

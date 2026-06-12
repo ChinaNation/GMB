@@ -68,7 +68,8 @@ type AuditLogEntry = {
   action: string;
   actor_pubkey: string;
   target_pubkey?: string | null;
-  detail: string;
+  /** 结构化事实字段(后端 append_audit_log 只存事实);旧文本行/异常值回退 string */
+  detail: Record<string, unknown> | string;
   created_at: string;
 };
 
@@ -87,6 +88,62 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
   APP_VOTERS_COUNT: 'App 选民人数查询',
   APP_VOTE_CREDENTIAL: 'App 投票凭证签发',
 };
+
+// 中文注释:审计详情"事实字段"的人话翻译(代码不上前端)。
+// 后端 detail 只存结构化事实(键小写蛇形,值为系统原值),展示翻译全在这里;
+// 后端新增字段须同步补键名映射,未知键回退「键名: 值」兜底。
+const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
+  city: '市',
+  institution: '机构',
+  archive_no: '档案号',
+  found: '查询命中',
+  request_id: '请求ID',
+  actor_ip: '来源IP',
+  eligible_total: '选民总数',
+  mode: '绑定方式',
+  sfid_number: '身份ID',
+  proposal_id: '提案ID',
+  eligible: '有选举权',
+  year: '年度',
+  batch: '批次',
+  result: '结果',
+  message: '说明',
+  status: '状态',
+  reason: '原因',
+  updates: '更新条数',
+  wallet_replaced: '更换投票账户数',
+  releases: '解除绑定数',
+  unmatched_bindings: '未匹配绑定数',
+  unmatched_releases: '未匹配解除数',
+};
+
+// 枚举值翻译:按键名选择值映射,机构代码复用全局映射
+const AUDIT_DETAIL_VALUE_LABEL: Record<string, Record<string, string>> = {
+  institution: INSTITUTION_CODE_LABEL,
+  status: { PENDING: '待安装', ACTIVE: '已启用', DISABLED: '已禁用', REVOKED: '已吊销' },
+  mode: { create: '新增绑定', replace: '更换绑定' },
+  result: { SUCCESS: '成功', FAILED: '失败' },
+};
+
+function formatAuditDetailValue(key: string, value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  const text = String(value);
+  return AUDIT_DETAIL_VALUE_LABEL[key]?.[text] ?? text;
+}
+
+/** 结构化事实 → 人话(「市：锦程市；机构：政府」);旧文本行原样兜底。 */
+function formatAuditDetail(detail: AuditLogEntry['detail']): string {
+  if (typeof detail === 'string') return detail;
+  if (!detail || typeof detail !== 'object') return '';
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(detail)) {
+    const text = formatAuditDetailValue(key, value);
+    if (text === null) continue;
+    parts.push(`${AUDIT_DETAIL_KEY_LABEL[key] ?? key}：${text}`);
+  }
+  return parts.join('；');
+}
 
 const OperationRecords: React.FC<{ auth: AdminAuth; sfidNumber: string }> = ({ auth, sfidNumber }) => {
   const [rows, setRows] = useState<AuditLogEntry[]>([]);
@@ -138,7 +195,12 @@ const OperationRecords: React.FC<{ auth: AdminAuth; sfidNumber: string }> = ({ a
               </Typography.Text>
             ),
           },
-          { title: '详情', dataIndex: 'detail', ellipsis: true },
+          {
+            title: '详情',
+            dataIndex: 'detail',
+            ellipsis: true,
+            render: (v: AuditLogEntry['detail']) => formatAuditDetail(v),
+          },
           {
             title: '时间',
             dataIndex: 'created_at',

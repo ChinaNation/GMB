@@ -147,7 +147,9 @@ pub(crate) async fn admin_import_cpms_status_export(
                 &headers,
                 &file,
                 "FAILED",
-                "annual export already imported with different records_hash".to_string(),
+                serde_json::json!({
+                    "message": "annual export already imported with different records_hash",
+                }),
             );
             return api_error(
                 StatusCode::CONFLICT,
@@ -177,7 +179,14 @@ pub(crate) async fn admin_import_cpms_status_export(
     let output = match apply_status_export_to_db(&state, &ctx, &file) {
         Ok(v) => v,
         Err(message) => {
-            append_import_audit(&state, &ctx, &headers, &file, "FAILED", message.clone());
+            append_import_audit(
+                &state,
+                &ctx,
+                &headers,
+                &file,
+                "FAILED",
+                serde_json::json!({ "message": message.clone() }),
+            );
             return api_error(StatusCode::CONFLICT, 1005, message.as_str());
         }
     };
@@ -202,14 +211,13 @@ pub(crate) async fn admin_import_cpms_status_export(
         &headers,
         &file,
         "SUCCESS",
-        format!(
-            "updates={} wallet_replaced={} releases={} unmatched_bindings={} unmatched_releases={}",
-            output.updated_binding_records,
-            output.wallet_replaced_records,
-            output.released_binding_records,
-            output.unmatched_binding_records.len(),
-            output.unmatched_release_records.len()
-        ),
+        serde_json::json!({
+            "updates": output.updated_binding_records,
+            "wallet_replaced": output.wallet_replaced_records,
+            "releases": output.released_binding_records,
+            "unmatched_bindings": output.unmatched_binding_records.len(),
+            "unmatched_releases": output.unmatched_release_records.len(),
+        }),
     );
 
     Json(ApiResponse {
@@ -533,28 +541,34 @@ fn apply_status_export_to_db(
     })
 }
 
+/// 中文注释:导入审计 = 基础事实(年度/批次/结果/请求来源) + 调用方扩展字段(extra,
+/// 必须是 JSON 对象:失败传 {"message": …},成功传各计数字段),合并后整体入审计表。
 fn append_import_audit(
     state: &AppState,
     ctx: &AdminAuthContext,
     headers: &HeaderMap,
     file: &CpmsStatusExportFile,
     result: &'static str,
-    detail: String,
+    extra: serde_json::Value,
 ) {
+    let mut detail = serde_json::json!({
+        "year": file.export_year,
+        "batch": file.export_batch_id.clone(),
+        "result": result,
+        "request_id": request_id_from_headers(headers),
+        "actor_ip": actor_ip_from_headers(headers),
+    });
+    if let (Some(base), Some(extra_map)) = (detail.as_object_mut(), extra.as_object()) {
+        for (key, value) in extra_map {
+            base.insert(key.clone(), value.clone());
+        }
+    }
     crate::core::runtime_ops::append_audit_log(
         state,
         "CPMS_STATUS_EXPORT_IMPORT",
         &ctx.admin_pubkey,
         Some(file.sfid_number.clone()),
-        format!(
-            "year={} batch={} result={} request_id={:?} actor_ip={:?} detail={}",
-            file.export_year,
-            file.export_batch_id,
-            result,
-            request_id_from_headers(headers),
-            actor_ip_from_headers(headers),
-            detail
-        ),
+        detail,
     );
 }
 

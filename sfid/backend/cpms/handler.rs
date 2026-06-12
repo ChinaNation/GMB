@@ -178,7 +178,7 @@ fn append_cpms_audit_log_best_effort(
     action: &'static str,
     actor_pubkey: &str,
     target_sfid: Option<String>,
-    detail: String,
+    detail: serde_json::Value,
 ) {
     crate::core::runtime_ops::append_audit_log(state, action, actor_pubkey, target_sfid, detail);
 }
@@ -320,10 +320,10 @@ pub(crate) async fn generate_cpms_install_qr(
         "CPMS_INSTALL_QR_GENERATE",
         &ctx.admin_pubkey,
         Some(sfid_number.clone()),
-        format!(
-            "city={} institution={}",
-            site.city_name, site.institution_code
-        ),
+        serde_json::json!({
+            "city": site.city_name.clone(),
+            "institution": site.institution_code.clone(),
+        }),
     );
     Json(ApiResponse {
         code: 0,
@@ -359,7 +359,7 @@ pub(crate) async fn archive_verify(
         "CPMS_ARCHIVE_VERIFY",
         &ctx.admin_pubkey,
         Some(verified.sfid_number.clone()),
-        format!("archive_no={}", verified.archive_no),
+        serde_json::json!({ "archive_no": verified.archive_no.clone() }),
     );
     Json(ApiResponse {
         code: 0,
@@ -483,7 +483,8 @@ pub(crate) async fn reissue_install_token(
         "CPMS_INSTALL_QR_REISSUE",
         &ctx.admin_pubkey,
         Some(site.sfid_number.clone()),
-        "reissue install code".to_string(),
+        // 操作语义已由 action 表达,无额外事实字段
+        serde_json::json!({}),
     );
     Json(ApiResponse {
         code: 0,
@@ -638,7 +639,8 @@ pub(crate) async fn delete_cpms_keys(
         "CPMS_KEYS_DELETE",
         &ctx.admin_pubkey,
         Some(sfid_number.clone()),
-        "delete pending cpms site".to_string(),
+        // 只有待安装(PENDING)站点允许删除,记录删除时的站点状态
+        serde_json::json!({ "status": "PENDING" }),
     );
     #[derive(serde::Serialize)]
     struct DeleteOutput {
@@ -807,7 +809,10 @@ async fn update_cpms_site_status(
             "CPMS_KEYS_STATUS_UPDATE",
             &ctx.admin_pubkey,
             Some(site.sfid_number.clone()),
-            format!("status={:?} reason={}", site.status, reason_text),
+            serde_json::json!({
+                "status": site.status.clone(),
+                "reason": reason_text.clone(),
+            }),
         );
     }
     Json(ApiResponse {
