@@ -338,7 +338,7 @@ class DuoqianTransferService {
     // 一次拉到底(开发期数据量小);生产 1000 万级时再分页。
     // 必须走 finalized 钉块入口,否则轻节点追块窗口内会拿到旧状态空列表。
     final keysHex =
-        await SmoldotClientManager.instance.getKeysPagedAtBest(prefixHex);
+        await SmoldotClientManager.instance.getKeysPagedFinalized(prefixHex);
     if (keysHex.isEmpty) return const [];
 
     // 每条 key 末 8 字节 = proposal_id u64 LE(twox64_concat 的 raw 部分)

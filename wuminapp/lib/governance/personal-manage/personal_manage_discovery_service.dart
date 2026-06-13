@@ -86,7 +86,7 @@ class PersonalManageDiscoveryService {
     while (true) {
       List<String>? page;
       try {
-        page = await SmoldotClientManager.instance.getKeysPagedAtBest(
+        page = await SmoldotClientManager.instance.getKeysPagedFinalized(
           prefixHex,
           count: _pageSize,
           startKey: startKey,

@@ -1,23 +1,7 @@
-use serde_json::Value;
-use std::time::Duration;
-
-use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
-
 use super::account_id;
 use super::codec;
 use super::types::{kind_label, org_label, status_label, AdminAccountState};
-use crate::governance::storage_keys;
-
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
-
-fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(
-        method,
-        params,
-        RPC_REQUEST_TIMEOUT,
-        RPC_RESPONSE_LIMIT_SMALL,
-    )
-}
+use crate::governance::{chain_query, storage_keys};
 
 /// 构造 `AdminsChange::AdminAccounts` 的 StorageMap key。
 pub fn admin_accounts_key(account_id: &[u8; 32]) -> String {
@@ -45,15 +29,9 @@ pub fn fetch_admin_account(
     sfid_number: Option<String>,
 ) -> Result<Option<AdminAccountState>, String> {
     let storage_key = admin_accounts_key(account_id);
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(storage_key)]),
-    )?;
-    let Value::String(hex_data) = result else {
-        if result.is_null() {
-            return Ok(None);
-        }
-        return Err("state_getStorage 返回格式无效".to_string());
+    // 中文注释(ADR-017):管理员账户状态按 finalized 口径读取,禁止 best。
+    let Some(hex_data) = chain_query::fetch_finalized_storage(&storage_key)? else {
+        return Ok(None);
     };
 
     let data = decode_hex_storage(&hex_data)?;

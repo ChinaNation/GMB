@@ -7,17 +7,13 @@
 //!   但不能因此获得清算行权限。
 
 use codec::{Decode, Encode};
-use serde_json::Value;
 use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
-use std::time::Duration;
 
+use crate::governance::chain_query;
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
-use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 use crate::transaction::offchain_transaction::types::ClearingBankNodeOnChainInfo;
-
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// 链上 `ClearingBankNodeInfo<AccountId, BlockNumber>` 在 node 端的 SCALE 镜像。
 ///
@@ -31,15 +27,6 @@ struct OnChainNodeInfo {
     /// runtime 端 `BlockNumber = u32`(citizenchain Runtime 配置)。
     registered_at: u32,
     registered_by: AccountId32,
-}
-
-fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(
-        method,
-        params,
-        RPC_REQUEST_TIMEOUT,
-        RPC_RESPONSE_LIMIT_SMALL,
-    )
 }
 
 /// SCALE 编码 sfid_number 的 `BoundedVec<u8, ConstU32<64>>` 形式(用作 storage key data)。
@@ -75,11 +62,10 @@ pub fn fetch_clearing_bank_node(
     sfid_number: &str,
 ) -> Result<Option<ClearingBankNodeOnChainInfo>, String> {
     let key = clearing_bank_nodes_key(sfid_number)?;
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):节点声明属于业务读取,按 finalized 口径,禁止 best。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(None),
+        Some(hex_data) => {
             let clean = hex_data.strip_prefix("0x").unwrap_or(&hex_data);
             let bytes = hex::decode(clean).map_err(|e| format!("storage hex 解码失败:{e}"))?;
             let info = OnChainNodeInfo::decode(&mut &bytes[..])
@@ -104,7 +90,6 @@ pub fn fetch_clearing_bank_node(
                 registered_by_ss58: ss58,
             }))
         }
-        _ => Err("state_getStorage 返回格式无效".to_string()),
     }
 }
 

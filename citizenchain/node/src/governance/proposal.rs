@@ -1,21 +1,15 @@
 // 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngine 链上存储。
 
 use crate::shared::proposal_business;
-use crate::shared::rpc;
 use serde::Serialize;
-use serde_json::Value;
-use std::time::Duration;
 
-use super::{signing, storage_keys};
-
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+use super::{chain_query, signing, storage_keys};
 
 const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
 const TAG_RESOLUTION_ISSUANCE: &[u8] = b"res-iss";
 const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
 /// 多签管理提案 TAG — 不属于治理提案，在治理列表中过滤掉。
 const TAG_ORGANIZATION_MANAGE: &[u8] = b"org-mgmt";
-use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
     let entry = super::registry::find_institution(sfid_number)
@@ -25,31 +19,6 @@ fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> 
     bytes
         .try_into()
         .map_err(|_| "机构 AccountId 必须为 32 字节".to_string())
-}
-
-fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(
-        method,
-        params,
-        RPC_REQUEST_TIMEOUT,
-        RPC_RESPONSE_LIMIT_SMALL,
-    )
-}
-
-fn fetch_finalized_head() -> Result<String, String> {
-    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
-}
-
-fn fetch_finalized_storage(key: String) -> Result<Value, String> {
-    let finalized_hash = fetch_finalized_head()?;
-    // 中文注释：提案动作里包含金额字段，详情和摘要按 finalized 口径展示。
-    rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key), Value::String(finalized_hash)]),
-    )
 }
 
 /// 提案展示号(双层 ID v1):`ProposalDisplayId[id]` 反查值。
@@ -224,10 +193,10 @@ enum ProposalAction {
 /// 查询 NextProposalId（VotingEngine 全局递增 ID）。
 pub fn fetch_next_proposal_id() -> Result<u64, String> {
     let key = storage_keys::value_key("VotingEngine", "NextProposalId");
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(0),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):业务读取统一经 chain_query 钉 finalized,禁止 best。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(0),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             if data.len() < 8 {
                 return Ok(0);
@@ -238,7 +207,6 @@ pub fn fetch_next_proposal_id() -> Result<u64, String> {
                     .map_err(|_| "SCALE 数据长度不足".to_string())?,
             ))
         }
-        _ => Ok(0),
     }
 }
 
@@ -529,14 +497,13 @@ pub fn fetch_active_proposal_ids(sfid_number: &str) -> Result<Vec<u64>, String> 
         "ActiveProposalsByInstitution",
         &institution_account,
     );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(Vec::new()),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):活跃提案索引按 finalized 口径读取,避免 best 漂移漏列。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(Vec::new()),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             decode_u64_vec(&data)
         }
-        _ => Ok(Vec::new()),
     }
 }
 
@@ -544,27 +511,25 @@ pub fn fetch_active_proposal_ids(sfid_number: &str) -> Result<Vec<u64>, String> 
 
 fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String> {
     let key = storage_keys::map_key("VotingEngine", "Proposals", &proposal_id.to_le_bytes());
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):提案元数据(含 status)按 finalized 口径读取,禁止 best。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(None),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             Ok(decode_proposal_meta(proposal_id, &data))
         }
-        _ => Ok(None),
     }
 }
 
 fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> {
     let key = storage_keys::map_key("VotingEngine", "ProposalData", &proposal_id.to_le_bytes());
-    let result = fetch_finalized_storage(key)?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
+    // 中文注释:提案动作里包含金额字段,详情和摘要按 finalized 口径展示。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(None),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             Ok(Some(data))
         }
-        _ => Ok(None),
     }
 }
 
@@ -629,10 +594,10 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
         "InternalTallies",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(VoteTally { yes: 0, no: 0 }),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):投票计数按 finalized 口径读取,禁止 best。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(VoteTally { yes: 0, no: 0 }),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             if data.len() < 8 {
                 return Ok(VoteTally { yes: 0, no: 0 });
@@ -649,16 +614,15 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
             );
             Ok(VoteTally { yes, no })
         }
-        _ => Ok(VoteTally { yes: 0, no: 0 }),
     }
 }
 
 fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
     let key = storage_keys::map_key("JointVote", "JointTallies", &proposal_id.to_le_bytes());
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(JointVoteTally { yes: 0, no: 0 }),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):投票计数按 finalized 口径读取,禁止 best。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(JointVoteTally { yes: 0, no: 0 }),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             if data.len() < 8 {
                 return Ok(JointVoteTally { yes: 0, no: 0 });
@@ -675,16 +639,15 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
             );
             Ok(JointVoteTally { yes, no })
         }
-        _ => Ok(JointVoteTally { yes: 0, no: 0 }),
     }
 }
 
 fn fetch_referendum_tally(proposal_id: u64) -> Result<ReferendumVoteTally, String> {
     let key = storage_keys::map_key("JointVote", "ReferendumTallies", &proposal_id.to_le_bytes());
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(ReferendumVoteTally { yes: 0, no: 0 }),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):投票计数按 finalized 口径读取,禁止 best。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(ReferendumVoteTally { yes: 0, no: 0 }),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             if data.len() < 16 {
                 return Ok(ReferendumVoteTally { yes: 0, no: 0 });
@@ -701,7 +664,6 @@ fn fetch_referendum_tally(proposal_id: u64) -> Result<ReferendumVoteTally, Strin
             );
             Ok(ReferendumVoteTally { yes, no })
         }
-        _ => Ok(ReferendumVoteTally { yes: 0, no: 0 }),
     }
 }
 
@@ -963,8 +925,8 @@ pub fn fetch_proposal_display_id(proposal_id: u64) -> Result<Option<ProposalDisp
         "ProposalDisplayId",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    let hex_value = match result.as_str() {
+    // 中文注释(ADR-017):展示号反查按 finalized 口径读取,禁止 best。
+    let hex_value = match chain_query::fetch_finalized_storage(&key)? {
         Some(s) => s,
         None => return Ok(None),
     };
@@ -982,23 +944,10 @@ pub fn fetch_proposal_display_id(proposal_id: u64) -> Result<Option<ProposalDisp
 /// 在指定 K1 下的所有 proposal_id。每条 key 末 8 字节 = u64 LE = proposal_id。
 fn fetch_proposal_ids_by_index(storage_name: &str, key1: &[u8]) -> Result<Vec<u64>, String> {
     let prefix = storage_keys::twox64_concat_prefix("VotingEngine", storage_name, key1);
-    // state_getKeysPaged(prefix, count, startKey, hash)
-    let params = Value::Array(vec![
-        Value::String(prefix),
-        Value::Number(1000.into()),
-        Value::Null,
-    ]);
-    let result = rpc_post("state_getKeysPaged", params)?;
-    let arr = match result.as_array() {
-        Some(arr) => arr,
-        None => return Ok(Vec::new()),
-    };
-    let mut ids = Vec::with_capacity(arr.len());
-    for v in arr {
-        let s = match v.as_str() {
-            Some(s) => s,
-            None => continue,
-        };
+    // 中文注释(ADR-017):反向索引列举按 finalized 口径,best 漂移会列出半新半旧 key 集。
+    let keys = chain_query::fetch_finalized_keys_paged(&prefix, 1000, None)?;
+    let mut ids = Vec::with_capacity(keys.len());
+    for s in &keys {
         let bytes = match hex::decode(s.trim_start_matches("0x")) {
             Ok(b) => b,
             Err(_) => continue,
@@ -1233,13 +1182,10 @@ pub fn fetch_user_vote_status(
 
 /// 查询链上 Option<bool> 存储值。
 fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(storage_key.to_string())]),
-    )?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
+    // 中文注释(ADR-017):投票状态按 finalized 口径读取,禁止 best。
+    match chain_query::fetch_finalized_storage(storage_key)? {
+        None => Ok(None),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             if data.is_empty() {
                 Ok(None)
@@ -1247,7 +1193,6 @@ fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
                 Ok(Some(data[0] == 1))
             }
         }
-        _ => Ok(None),
     }
 }
 

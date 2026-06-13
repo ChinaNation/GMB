@@ -12,6 +12,7 @@ use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
 use crate::governance::admins_change::storage as admins_storage;
+use crate::governance::chain_query;
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
@@ -159,13 +160,6 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
     }
 }
 
-fn fetch_finalized_head() -> Result<String, String> {
-    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
-}
-
 fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
     let clean = admin_hex.strip_prefix("0x").unwrap_or(admin_hex);
     let raw = hex::decode(clean).ok()?;
@@ -184,7 +178,8 @@ fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
 /// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[sfid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
 pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionDetail>, String> {
-    let finalized_hash = fetch_finalized_head()?;
+    // 中文注释(ADR-017):取一次 finalized 快照,机构详情/账户列表/余额全部钉同一块。
+    let finalized_hash = chain_query::fetch_finalized_head()?;
     let key_data = encode_sfid_key_data(sfid_number)?;
     let key = storage_keys::map_key("OrganizationManage", "Institutions", &key_data);
     let result = rpc_post(
@@ -322,14 +317,20 @@ fn fetch_institution_accounts(
     let mut keys: Vec<String> = Vec::new();
     let mut start_key: Option<String> = None;
     loop {
-        let mut params = vec![
-            Value::String(prefix_hex.clone()),
-            Value::Number(serde_json::Number::from(PAGE)),
-        ];
-        if let Some(s) = start_key.as_ref() {
-            params.push(Value::String(s.clone()));
-        }
-        let result = rpc_post("state_getKeysPaged", Value::Array(params))?;
+        // 中文注释(ADR-017):key 列举与后续 storage 读取必须钉同一个 finalized
+        // 快照哈希;不带 at 参数 = best,分叉窗口内会列出半新半旧的账户集。
+        let result = rpc_post(
+            "state_getKeysPaged",
+            Value::Array(vec![
+                Value::String(prefix_hex.clone()),
+                Value::Number(serde_json::Number::from(PAGE)),
+                match start_key.as_ref() {
+                    Some(s) => Value::String(s.clone()),
+                    None => Value::Null,
+                },
+                Value::String(finalized_hash.to_string()),
+            ]),
+        )?;
         let arr = result
             .as_array()
             .ok_or_else(|| "state_getKeysPaged 返回非数组".to_string())?;

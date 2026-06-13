@@ -3,42 +3,11 @@
 //! 本文件只承载 `DuoqianTransfer` pallet 的提案详情结构、SCALE 解码、
 //! 独立 storage 查询和列表摘要格式化；治理提案聚合层只调用这里的结果。
 
-use crate::governance::storage_keys;
-use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
-use crate::shared::rpc;
+use crate::governance::{chain_query, storage_keys};
 use serde::Serialize;
-use serde_json::Value;
-use std::time::Duration;
-
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// MODULE_TAG 前缀（必须与 runtime `duoqian-transfer` pallet 保持一致）。
 const TAG_TRANSFER: &[u8] = b"dq-xfer";
-
-fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(
-        method,
-        params,
-        RPC_REQUEST_TIMEOUT,
-        RPC_RESPONSE_LIMIT_SMALL,
-    )
-}
-
-fn fetch_finalized_head() -> Result<String, String> {
-    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
-}
-
-fn fetch_finalized_storage(key: String) -> Result<Value, String> {
-    let finalized_hash = fetch_finalized_head()?;
-    // 中文注释：多签转账动作的金额展示以 finalized storage 为准。
-    rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key), Value::String(finalized_hash)]),
-    )
-}
 
 /// 普通多签转账提案详情（从 `VotingEngine::ProposalData` 解码）。
 #[derive(Debug, Clone, Serialize)]
@@ -212,10 +181,10 @@ fn fetch_safety_fund_proposal_action(
         "SafetyFundProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    let result = fetch_finalized_storage(key)?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
+    // 中文注释:多签转账动作的金额展示以 finalized storage 为准(ADR-017 收口)。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(None),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             // SafetyFundAction: beneficiary(32) + amount(u128=16) + remark(compact+bytes) + proposer(32)
             if data.len() < 80 {
@@ -244,7 +213,6 @@ fn fetch_safety_fund_proposal_action(
                 remark,
             }))
         }
-        _ => Ok(None),
     }
 }
 
@@ -254,10 +222,10 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         "SweepProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    let result = fetch_finalized_storage(key)?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
+    // 中文注释:多签转账动作的金额展示以 finalized storage 为准(ADR-017 收口)。
+    match chain_query::fetch_finalized_storage(&key)? {
+        None => Ok(None),
+        Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             // SweepAction: institution(AccountId32) + amount(u128=16) + proposer(AccountId32)
             if data.len() < 80 {
@@ -275,7 +243,6 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
                 amount_fen: amount_fen.to_string(),
             }))
         }
-        _ => Ok(None),
     }
 }
 

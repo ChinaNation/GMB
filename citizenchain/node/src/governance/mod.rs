@@ -2,6 +2,7 @@
 
 pub mod admins_change;
 pub(crate) mod balance_watch;
+pub(crate) mod chain_query;
 pub(crate) mod institution;
 #[path = "organization-manage/mod.rs"]
 pub mod organization_manage;
@@ -67,7 +68,7 @@ fn build_chain_query_context(app: &AppHandle) -> Result<ChainQueryContext, Strin
     }
 
     let mut warnings = Vec::new();
-    let block_hash = match institution::fetch_finalized_head() {
+    let block_hash = match chain_query::fetch_finalized_head() {
         Ok(hash) => Some(hash),
         Err(e) => {
             warnings.push(format!("查询最新区块失败: {e}"));

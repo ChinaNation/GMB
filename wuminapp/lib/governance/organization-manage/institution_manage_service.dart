@@ -324,7 +324,7 @@ class InstitutionManageService {
     final prefixHexLen = prefixHex.length;
 
     while (true) {
-      final keys = await SmoldotClientManager.instance.getKeysPagedAtBest(
+      final keys = await SmoldotClientManager.instance.getKeysPagedFinalized(
         prefixHex,
         count: pageSize,
         startKey: startKey,

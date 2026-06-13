@@ -320,7 +320,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         );
         return;
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[OnchainPay] 收款地址 SS58 校验失败: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('收款地址格式错误，请输入有效的 SS58 地址')),
       );
