@@ -35,6 +35,7 @@ pub(crate) struct AuditLogEntry {
 pub(crate) struct AuditLogsQuery {
     pub(crate) action: Option<String>,
     pub(crate) actor_pubkey: Option<String>,
+    pub(crate) target_sfid: Option<String>,
     pub(crate) keyword: Option<String>,
     pub(crate) limit: Option<usize>,
 }
@@ -53,6 +54,7 @@ pub(crate) async fn admin_list_audit_logs(
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let action = query.action.unwrap_or_default().trim().to_uppercase();
     let actor = query.actor_pubkey.unwrap_or_default().trim().to_string();
+    let target_sfid = query.target_sfid.unwrap_or_default().trim().to_string();
     let keyword = query.keyword.unwrap_or_default().trim().to_lowercase();
     let province_code = ctx
         .admin_province
@@ -72,20 +74,22 @@ pub(crate) async fn admin_list_audit_logs(
                    AND ($2::text IS NULL OR c_code = $2)
                    AND ($3::text = '' OR action = $3)
                    AND ($4::text = '' OR lower(actor) = lower($4))
+                   AND ($5::text = '' OR target_sfid = $5)
                    AND (
-                        $5::text = ''
-                        OR lower(detail::text) LIKE '%' || $5 || '%'
-                        OR lower(action) LIKE '%' || $5 || '%'
-                        OR lower(actor) LIKE '%' || $5 || '%'
-                        OR lower(COALESCE(target_sfid, '')) LIKE '%' || $5 || '%'
+                        $6::text = ''
+                        OR lower(detail::text) LIKE '%' || $6 || '%'
+                        OR lower(action) LIKE '%' || $6 || '%'
+                        OR lower(actor) LIKE '%' || $6 || '%'
+                        OR lower(COALESCE(target_sfid, '')) LIKE '%' || $6 || '%'
                    )
                  ORDER BY created_at DESC, id DESC
-                 LIMIT $6",
+                 LIMIT $7",
                 &[
                     &province_code,
                     &city_code,
                     &action,
                     &actor,
+                    &target_sfid,
                     &keyword,
                     &limit_i64,
                 ],

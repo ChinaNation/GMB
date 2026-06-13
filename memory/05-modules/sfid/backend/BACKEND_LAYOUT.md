@@ -1,6 +1,6 @@
 # SFID 后端目录布局
 
-- 最后更新:2026-06-12
+- 最后更新:2026-06-13
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
@@ -19,6 +19,7 @@
   - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
   - `memory/08-tasks/done/20260612-181650-重构-sfid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
   - `memory/08-tasks/done/20260612-194131-sfid-private-real-module-refactor.md`
+  - `memory/08-tasks/open/20260613-sfid-institution-list-audit-accounts.md`
 
 ## 当前边界
 
@@ -146,9 +147,11 @@ sfid/backend/
     `level=CITY AND org_code=CITY_POLICE` 的市公安局。
   - `private`:私权机构详情,仅保存目标私权类型机构;字段以
     `private_type/partnership_kind/has_legal_personality` 表达分类,不得恢复旧分类列。
-  - `accounts`:机构账户。
+  - `accounts`:机构账户。所有机构默认有“主账户 / 费用账户”;省公民储备银行额外有“永久质押”;
+    国储会额外有“安全基金 / 两和基金”。这些制度账户均为默认账户,不可按普通自定义账户删除。
   - `docs`:机构资料库。
-  - `audit`:目标审计分区表。
+  - `audit`:目标审计分区表。机构详情操作记录按 `target_sfid` 精确读取,写入点覆盖机构创建、
+    详情编辑、账户创建/删除、资料上传/下载/删除和 CPMS 安装授权状态。
 - `CN` 与 43 个省代码的分区在启动建表时一次性创建。
 - 机构主写入只进入 `subjects / gov / private / accounts / docs` 目标表;
   私权机构精确搜索从 `subjects + accounts + admins` 查询,且 handler 必须先把登录
@@ -156,11 +159,13 @@ sfid/backend/
 - 公安局和公权机构确定性列表是只读查询:启动或显式 reconcile 负责生成/对账,GET 列表接口
   只按 `p_code / c_code` 读取目标表,不得在 GET 中执行 backfill、reconcile、写库或分片同步。
   公权机构列表允许 `org_code` 精确过滤,用于市注册局等确定性细类列表一次性读取完整身份ID,
-  不得让前端先读取省级公权目录分页再自行过滤。
+  不得让前端先读取省级公权目录分页再自行过滤。确定性公权目录版本为 `gov-deterministic-v5`,
+  简称由 `gov/service.rs` 在入库前归一,不得把常量全名直接写入 `short_name`。
 - `subjects/registration.rs` 承接公权/教育通用注册和列表内核;六类私权机构从
   `private/<type>/mod.rs` 传入固定规则后调用私权专用内核,不得恢复 `private/handler.rs`。
 - `subjects/http.rs` 承接跨 `gov/private/accounts/docs/subjects` 的 HTTP 辅助函数,包括
-  `ServiceError` 响应转换、SFID 省市解析、机构 scope 可见性、默认账户 best-effort 和审计 best-effort。
+  `ServiceError` 响应转换、SFID 省市解析、机构 scope 可见性和默认账户 best-effort。
+  审计写入统一调用 `core/runtime_ops.rs` 的 `append_audit_log`,detail 只存结构化事实。
 
 ## 验收口径
 

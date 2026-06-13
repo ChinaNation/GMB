@@ -141,6 +141,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
   const nameLabel = isEducation ? '学校名称' : '机构名称';
 
+  const subjectPropertyChoices = privateRule
+    ? [{
+        value: privateRule.subjectProperty,
+        label: SUBJECT_PROPERTY_LABEL[privateRule.subjectProperty] ?? privateRule.subjectProperty,
+      }]
+    : locks.subjectPropertyChoices;
   const instChoices = useMemo(() => {
     if (privateRule) {
       return [{ value: privateRule.institution, label: PRIVATE_TYPE_LABEL[privateRule.privateType] }];
@@ -457,7 +463,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
   };
 
-  const subjectPropertyDisabled = isPrivate || locks.subjectPropertyChoices.length === 1;
+  const subjectPropertyDisabled = isPrivate || subjectPropertyChoices.length === 1;
   const instDisabled = instChoices.length === 1;
   const nameCheckPassed = !collectNameInModal || nameAvailable === true;
 
@@ -509,7 +515,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           )}
           <Col span={12}>
             <Form.Item label="主体属性" name="subject_property" rules={[{ required: true }]}>
-              <Select options={locks.subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
+              <Select options={subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
             </Form.Item>
           </Col>
           <Col span={12}>

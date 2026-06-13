@@ -1,17 +1,12 @@
 // 中文注释:私权机构列表。私权机构必须输入机构名称或 SFID 精确搜索,避免跨省全量扫描。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Space, Table, Tag, Typography } from 'antd';
+import { Button, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { AdminAuth } from '../../auth/types';
 import type { InstitutionListRow, PageResult, PrivateType } from '../../subjects/api';
 import { PARTNERSHIP_KIND_LABEL, PRIVATE_TYPE_LABEL } from '../../subjects/labels';
 import { notice } from '../../utils/notice';
-
-const CREATED_BY_ROLE_LABEL: Record<string, string> = {
-  FEDERAL_ADMIN: '联邦管理员',
-  CITY_ADMIN: '市管理员',
-};
 
 interface Props {
   auth: AdminAuth;
@@ -141,31 +136,6 @@ export const PrivateListTable: React.FC<Props> = ({
         render: (_v, r) => r.partnership_kind ? PARTNERSHIP_KIND_LABEL[r.partnership_kind] : '',
       },
       { title: '账户数', dataIndex: 'account_count', width: 90, align: 'center' },
-      {
-        title: '创建用户',
-        key: 'created_by',
-        width: 180,
-        align: 'center',
-        render: (_v, r) => {
-          const roleLabel = r.created_by_role
-            ? CREATED_BY_ROLE_LABEL[r.created_by_role] ?? r.created_by_role
-            : '';
-          if (r.created_by_name) {
-            return (
-              <span>
-                {r.created_by_name}
-                {roleLabel && (
-                  <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
-                    ({roleLabel})
-                  </Typography.Text>
-                )}
-              </span>
-            );
-          }
-          if (roleLabel) return <span>{roleLabel}</span>;
-          return <span style={{ color: '#999' }}>未知</span>;
-        },
-      },
     ],
     [cursorStack.length],
   );

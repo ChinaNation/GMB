@@ -14,8 +14,8 @@
 //   机构名称右侧搜索图标:输入后点击查重;重名则禁止保存;名称未改动视为已通过
 //   需挂靠的非法人所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
 //
-// 账户列表(AccountList)每家机构自带"主账户"/"费用账户"两条默认账户,
-// 创建后只登记在 SFID;链上状态由区块链软件同步回来。
+// 账户列表(AccountList)展示后端按机构类型生成的默认账户与自定义账户,
+// 自定义账户创建后只登记在 SFID;链上状态由区块链软件同步回来。
 
 import React, { useEffect, useState } from 'react';
 import {

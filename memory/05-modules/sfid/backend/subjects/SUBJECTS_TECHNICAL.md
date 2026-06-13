@@ -1,10 +1,11 @@
 # subjects/ — SFID 身份主体共享边界
 
-- 最后更新:2026-06-12
+- 最后更新:2026-06-13
 - 任务卡:
   - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
   - `memory/08-tasks/done/20260612-181650-重构-sfid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
   - `memory/08-tasks/done/20260612-194131-sfid-private-real-module-refactor.md`
+  - `memory/08-tasks/open/20260613-sfid-institution-list-audit-accounts.md`
 
 ## 定位
 
@@ -54,6 +55,16 @@
   `sfid/backend/china/data/china.sqlite` 的行政区划生成。
 - 行政区划唯一真源是 `sfid/backend/china/`;SFID 编码协议目录不再维护省市静态表。
 - 市级自动机构对账匹配键只在内存中用于保持原 `sfid_number` 不变,不得落库为第二身份。
+- 确定性公权目录简称必须写入规范短名,例如住建部、国储会、省储会、省储行;
+  不得把全称重复写入 `short_name`。
+
+## 默认账户
+
+- `subjects::service` 是机构默认账户名称规则的后端单一来源。
+- 普通机构默认账户为“主账户 / 费用账户”。
+- 省公民储备银行默认账户为“主账户 / 费用账户 / 永久质押”。
+- 国储会默认账户为“主账户 / 费用账户 / 安全基金 / 两和基金”。
+- 上述默认账户都属于制度保留账户,账户列表展示但不可按普通自定义账户删除。
 
 ## 路由归属
 

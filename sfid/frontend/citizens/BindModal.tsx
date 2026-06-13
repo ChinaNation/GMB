@@ -60,7 +60,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const bindScanCleanupRef = useRef<(() => void) | null>(null);
 
   const bindMode = record ? 'replace' : 'create';
-  const modalTitle = record ? '更换绑定' : '新增身份ID绑定';
+  const modalTitle = record ? '更换绑定' : '新增公民';
 
   const stopBindScanner = () => {
     if (bindScanCleanupRef.current) {

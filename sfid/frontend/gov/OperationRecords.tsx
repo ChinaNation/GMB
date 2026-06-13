@@ -3,7 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Typography } from 'antd';
 import type { AdminAuth } from '../auth/types';
-import { INSTITUTION_CODE_LABEL } from '../subjects/labels';
+import {
+  INSTITUTION_CODE_LABEL,
+  PARTNERSHIP_KIND_LABEL,
+  PRIVATE_TYPE_LABEL,
+  SUBJECT_PROPERTY_LABEL,
+} from '../subjects/labels';
 import { adminRequest } from '../utils/http';
 import { tryEncodeSs58 } from '../utils/ss58';
 
@@ -23,6 +28,7 @@ type AuditLogEntry = {
 const AUDIT_ACTION_LABEL: Record<string, string> = {
   CPMS_INSTALL_QR_GENERATE: '生成 CPMS 安装码',
   CPMS_INSTALL_QR_REISSUE: '重新生成 CPMS 安装码',
+  CPMS_INSTALL_TOKEN_REVOKE: '吊销 CPMS 安装码',
   CPMS_KEYS_STATUS_UPDATE: 'CPMS 授权状态变更',
   CPMS_KEYS_DELETE: '删除 CPMS 授权',
   CPMS_STATUS_EXPORT_IMPORT: '导入 CPMS 年度报告',
@@ -31,6 +37,20 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
   PUBLIC_IDENTITY_SEARCH: '公开身份查询',
   APP_VOTERS_COUNT: 'App 选民人数查询',
   APP_VOTE_CREDENTIAL: 'App 投票凭证签发',
+  INSTITUTION_CREATE: '创建机构',
+  INSTITUTION_UPDATE: '编辑机构详情',
+  INSTITUTION_ACCOUNT_CREATE: '新建账户',
+  INSTITUTION_ACCOUNT_DELETE: '删除账户',
+  INSTITUTION_DOCUMENT_UPLOAD: '上传资料',
+  INSTITUTION_DOCUMENT_DOWNLOAD: '下载资料',
+  INSTITUTION_DOCUMENT_DELETE: '删除资料',
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  GOV_INSTITUTION: '公权机构',
+  PUBLIC_SECURITY: '市公安局',
+  PRIVATE_INSTITUTION: '私权机构',
+  EDUCATION_INSTITUTION: '教育机构',
 };
 
 // 中文注释:审计详情"事实字段"的人话翻译(代码不上前端)。
@@ -38,6 +58,22 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
 const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
   city: '市',
   institution: '机构',
+  institution_name: '机构名称',
+  old_institution_name: '原机构名称',
+  new_institution_name: '新机构名称',
+  subject_property: '主体属性',
+  category: '机构分类',
+  private_type: '私权类型',
+  partnership_kind: '合伙类型',
+  parent_sfid_number: '所属法人',
+  old_parent_sfid_number: '原所属法人',
+  legal_rep_name: '法定代表人',
+  legal_rep_sfid_number: '法定代表人身份ID',
+  account_name: '账户名称',
+  doc_id: '资料ID',
+  file_name: '文件名',
+  doc_type: '资料类型',
+  file_size: '文件大小',
   archive_no: '档案号',
   found: '查询命中',
   request_id: '请求ID',
@@ -63,7 +99,17 @@ const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
 // 枚举值翻译:按键名选择值映射,机构代码复用全局映射。
 const AUDIT_DETAIL_VALUE_LABEL: Record<string, Record<string, string>> = {
   institution: INSTITUTION_CODE_LABEL,
-  status: { PENDING: '待安装', ACTIVE: '已启用', DISABLED: '已禁用', REVOKED: '已吊销' },
+  subject_property: SUBJECT_PROPERTY_LABEL,
+  category: CATEGORY_LABEL,
+  private_type: PRIVATE_TYPE_LABEL as Record<string, string>,
+  partnership_kind: PARTNERSHIP_KIND_LABEL as Record<string, string>,
+  status: {
+    PENDING: '待安装',
+    USED: '已使用',
+    ACTIVE: '已启用',
+    DISABLED: '已禁用',
+    REVOKED: '已吊销',
+  },
   mode: { create: '新增绑定', replace: '更换绑定' },
   result: { SUCCESS: '成功', FAILED: '失败' },
 };
@@ -101,7 +147,7 @@ export const OperationRecords: React.FC<Props> = ({ auth, sfidNumber }) => {
     let cancelled = false;
     setLoading(true);
     adminRequest<AuditLogEntry[]>(
-      `/api/v1/admin/audit-logs?keyword=${encodeURIComponent(sfidNumber)}&limit=20`,
+      `/api/v1/admin/audit-logs?target_sfid=${encodeURIComponent(sfidNumber)}&limit=1000`,
       auth,
     )
       .then((next) => {

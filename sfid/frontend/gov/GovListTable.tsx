@@ -49,8 +49,12 @@ function nameText(row: InstitutionListRow) {
 
 function statusTag(status: string | null | undefined, labels: Record<string, string>) {
   if (!status) return <Tag>-</Tag>;
-  // 可办理=绿;主流程等待态=橙;已禁用/已吊销=红
-  const color = status === 'READY' ? 'green' : status.startsWith('WAITING') ? 'orange' : 'red';
+  // 正常/可办理=绿;主流程等待态=橙;已禁用/已吊销=红
+  const color = status === 'ACTIVE' || status === 'READY'
+    ? 'green'
+    : status.startsWith('WAITING')
+      ? 'orange'
+      : 'red';
   return <Tag color={color}>{labels[status] || status}</Tag>;
 }
 
@@ -167,7 +171,7 @@ export const GovListTable: React.FC<Props> = ({
         },
         { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
         {
-          title: '公安局名称',
+          title: '市公安局名称',
           width: 180,
           align: 'center',
           render: (_v, row) => nameText(row) || <span style={{ color: '#999' }}>(未命名)</span>,

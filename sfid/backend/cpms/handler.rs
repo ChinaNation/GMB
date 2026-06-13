@@ -542,6 +542,13 @@ async fn update_cpms_site_token_status(
             "cpms site write failed",
         );
     }
+    append_cpms_audit_log_best_effort(
+        &state,
+        "CPMS_INSTALL_TOKEN_REVOKE",
+        &ctx.admin_pubkey,
+        Some(site.sfid_number.clone()),
+        serde_json::json!({ "status": site.install_token_status.clone() }),
+    );
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

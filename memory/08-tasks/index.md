@@ -82,6 +82,11 @@
 - `memory/08-tasks/open/20260612-sfid-audit-detail-structured.md`
 - `memory/08-tasks/done/20260612-sfid-no-compat-cleanup-acceptance.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
+- `memory/08-tasks/open/20260613-sfid-wuminapp-bff-public-catalog.md`
+- `memory/08-tasks/open/20260613-wuminapp-public-institution-card0-derivation-base.md`
+- `memory/08-tasks/open/20260613-wuminapp-public-institution-cardA-data-sync.md`
+- `memory/08-tasks/open/20260613-wuminapp-public-institution-cardB-nav-ui.md`
+- `memory/08-tasks/open/20260613-wuminapp-public-institution-cardC-detail.md`
 
 ## done
 

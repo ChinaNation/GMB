@@ -3,12 +3,12 @@
 // SFID 账户创建规则:
 //   - 创建后只登记 `account_name`,**不立即上链**
 //   - 链上注册由区块链软件发起,成功后同步状态回 SFID
-//   - 链上派生公式由链端按 `account_name` 路由(Role::Main / Role::Fee / Role::Named),
+//   - 链上派生公式由链端按 `account_name` 路由(默认账户/制度账户/自定义账户),
 //     sfid 前端不做地址预览(避免和链端公式漂移)
 //
 // 约束:
 //   - 同一 sfid_number 下 account_name 唯一(后端硬校验,前端做一次即时预校验)
-//   - "主账户" / "费用账户" 是默认账户(创建机构时已自动生成),这里手工建名不能重复
+//   - 默认账户由后端按机构类型自动生成,这里手工建名不能重复或命中制度保留名
 
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Input, Modal, Typography } from 'antd';
@@ -59,7 +59,7 @@ export const CreateAccountModal: React.FC<Props> = ({
       notice.error('账户名称最多 30 字');
       return;
     }
-    // 前端预校验:同 sfid 下不能重名(含已自动生成的主账户/费用账户)
+    // 前端预校验:同 sfid 下不能重名(含已自动生成的默认账户)
     if (existingAccounts.some((a) => a.account_name === name)) {
       notice.error(`账户名称"${name}"在本机构下已存在`);
       return;

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::china::{china_sqlite_hash, provinces};
 use crate::number::{generate_sfid_number, GenerateSfidInput, InstitutionCategory};
-use crate::subjects::service::build_default_accounts;
+use crate::subjects::service::{build_default_accounts_for_codes, default_account_names_for_codes};
 use crate::Db;
 
 #[allow(dead_code)]
@@ -34,8 +34,8 @@ mod china_sf_constants;
 #[path = "../../../citizenchain/runtime/primitives/china/china_zf.rs"]
 mod china_zf_constants;
 
-pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v4";
-pub const DEFAULT_ACCOUNT_COUNT: i64 = 2;
+pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v5";
+pub const MIN_DEFAULT_ACCOUNT_COUNT: i64 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ReconcileReport {
@@ -556,28 +556,76 @@ pub fn federal_registry_sfid_number() -> Option<&'static str> {
 
 fn official_name_pair(name: &str) -> (String, String) {
     const COUNTRY: &str = "中华民族联邦共和国";
-    let full = match name {
-        "总统府" => format!("{COUNTRY}总统府"),
-        "外交部" => format!("{COUNTRY}外事交流部"),
-        "国防部" => format!("{COUNTRY}国家防务部"),
-        "国安部" => format!("{COUNTRY}国土安全部"),
-        "民生部" => format!("{COUNTRY}公民生活保障部"),
-        "住建部" => format!("{COUNTRY}住房与城镇建设部"),
-        "农业部" => format!("{COUNTRY}农业与农村发展部"),
-        "商贸部" => format!("{COUNTRY}商务与市场贸易部"),
-        "财税部" => format!("{COUNTRY}财政与税务部"),
-        "能源部" => format!("{COUNTRY}能源与环保发展部"),
-        "交通部" => format!("{COUNTRY}交通运输部"),
-        "国家立法院" | "国家司法院" | "国家监察院" | "国家教育委员会" | "国家储备委员会" =>
-        {
-            format!("{COUNTRY}{name}")
+    match name {
+        "总统府" | "中华民族联邦共和国总统府" => {
+            (format!("{COUNTRY}总统府"), "总统府".to_string())
         }
-        "联邦廉政署" | "联邦审计署" | "联邦调查署" => {
-            format!("{COUNTRY}国家监察院{name}")
+        "外交部" | "中华民族联邦共和国外事交流部" => {
+            (format!("{COUNTRY}外事交流部"), "外交部".to_string())
         }
-        _ => name.to_string(),
-    };
-    (full, name.to_string())
+        "国防部" | "中华民族联邦共和国国家防务部" => {
+            (format!("{COUNTRY}国家防务部"), "国防部".to_string())
+        }
+        "国安部" | "中华民族联邦共和国国土安全部" => {
+            (format!("{COUNTRY}国土安全部"), "国安部".to_string())
+        }
+        "民生部" | "中华民族联邦共和国公民生活保障部" => {
+            (format!("{COUNTRY}公民生活保障部"), "民生部".to_string())
+        }
+        "住建部" | "中华民族联邦共和国住房与城镇建设部" => {
+            (format!("{COUNTRY}住房与城镇建设部"), "住建部".to_string())
+        }
+        "农业部" | "中华民族联邦共和国农业与农村发展部" => {
+            (format!("{COUNTRY}农业与农村发展部"), "农业部".to_string())
+        }
+        "商贸部" | "中华民族联邦共和国商务与市场贸易部" => {
+            (format!("{COUNTRY}商务与市场贸易部"), "商贸部".to_string())
+        }
+        "财税部" | "中华民族联邦共和国财政与税务部" => {
+            (format!("{COUNTRY}财政与税务部"), "财税部".to_string())
+        }
+        "能源部" | "中华民族联邦共和国能源与环保发展部" => {
+            (format!("{COUNTRY}能源与环保发展部"), "能源部".to_string())
+        }
+        "交通部" | "中华民族联邦共和国交通运输部" => {
+            (format!("{COUNTRY}交通运输部"), "交通部".to_string())
+        }
+        "国家立法院" | "中华民族联邦共和国国家立法院" => {
+            (format!("{COUNTRY}国家立法院"), "国家立法院".to_string())
+        }
+        "国家司法院" | "中华民族联邦共和国国家司法院" => {
+            (format!("{COUNTRY}国家司法院"), "国家司法院".to_string())
+        }
+        "国家监察院" | "中华民族联邦共和国国家监察院" => {
+            (format!("{COUNTRY}国家监察院"), "国家监察院".to_string())
+        }
+        "国家教育委员会" | "中华民族联邦共和国公民教育委员会" => {
+            (format!("{COUNTRY}公民教育委员会"), "国教委会".to_string())
+        }
+        "国家公民储备委员会" => ("国家公民储备委员会".to_string(), "国储会".to_string()),
+        "联邦廉政署" | "国家监察院联邦廉政署" => (
+            format!("{COUNTRY}国家监察院联邦廉政署"),
+            "联邦廉政署".to_string(),
+        ),
+        "联邦审计署" | "国家监察院联邦审计署" => (
+            format!("{COUNTRY}国家监察院联邦审计署"),
+            "联邦审计署".to_string(),
+        ),
+        "联邦调查署" | "国家监察院联邦调查署" => (
+            format!("{COUNTRY}国家监察院联邦调查署"),
+            "联邦调查署".to_string(),
+        ),
+        _ if name.ends_with("省联邦政府") => {
+            (name.to_string(), name.replace("省联邦政府", "省政府"))
+        }
+        _ if name.ends_with("省公民储备委员会") => {
+            (name.to_string(), name.replace("省公民储备委员会", "省储会"))
+        }
+        _ if name.ends_with("省公民储备银行") => {
+            (name.to_string(), name.replace("省公民储备银行", "省储行"))
+        }
+        _ => (name.to_string(), name.to_string()),
+    }
 }
 
 // 中文注释:常量机构(创世 china_zf/lf/sf/jc/cb/ch/jy)按"机构全名"推导细类 org_code。
@@ -611,10 +659,10 @@ fn org_code_for_constant_name(name: &str) -> &'static str {
         "国家监察院联邦廉政署" => "FEDERAL_INTEGRITY",
         "国家监察院联邦审计署" => "FEDERAL_AUDIT",
         "国家监察院联邦调查署" => "FEDERAL_INVESTIGATION",
-        // ── 国家储备委员会(china_cb) / 国家教育委员会(china_jy 传字面) ──
+        // ── 国家公民储备委员会(china_cb) / 国家公民教育委员会(china_jy 传字面) ──
         "国家公民储备委员会" => "NATIONAL_RESERVE",
         "国家教育委员会" | "公民教育委员会" => "NATIONAL_EDU",
-        // ── 省级:按现名后缀匹配(已纠正改名:省政府→省联邦政府、省储备委员会→省公民储备委员会) ──
+        // ── 省级:按现名后缀匹配(省联邦政府/省公民储备委员会/省公民储备银行) ──
         _ if name.ends_with("省联邦政府") => "PROVINCE_GOV",
         _ if name.ends_with("省立法院") => "PROVINCE_LEGISLATURE",
         _ if name.ends_with("省司法院") => "PROVINCE_COURT",
@@ -1083,7 +1131,9 @@ pub fn check_gov_catalog_db(
             }
             None => missing_sfids.push(target.sfid_number.clone()),
         }
-        if counts.get(&target.sfid_number).copied().unwrap_or(0) < DEFAULT_ACCOUNT_COUNT {
+        let expected_count = i64::try_from(default_account_names_for_target(target).len())
+            .map_err(|_| "default account count exceeds i64".to_string())?;
+        if counts.get(&target.sfid_number).copied().unwrap_or(0) < expected_count {
             missing_account_sfids.push(target.sfid_number.clone());
         }
     }
@@ -1215,7 +1265,10 @@ fn write_targets(
     bulk_write_targets(db, actor, &targets)?;
     report.updated = existing_public_count.min(targets.len());
     report.inserted = targets.len().saturating_sub(report.updated);
-    report.account_inserted = targets.len() * usize::try_from(DEFAULT_ACCOUNT_COUNT).unwrap_or(2);
+    report.account_inserted = targets
+        .iter()
+        .map(|target| default_account_names_for_target(target).len())
+        .sum::<usize>();
     let removed = revoke_obsolete_targets(db, &target_sfids, &scope, kind)?;
     report.removed = removed.len();
     report.removed_sfids = removed;
@@ -1563,13 +1616,22 @@ fn bulk_write_target_chunk(
         )
     })?;
 
-    let mut account_sfids = Vec::with_capacity(targets.len() * DEFAULT_ACCOUNT_COUNT as usize);
+    let default_account_total = targets
+        .iter()
+        .map(|target| default_account_names_for_target(target).len())
+        .sum::<usize>();
+    let mut account_sfids = Vec::with_capacity(default_account_total);
     let mut account_p_codes = Vec::with_capacity(account_sfids.capacity());
     let mut account_c_codes = Vec::with_capacity(account_sfids.capacity());
     let mut account_names = Vec::with_capacity(account_sfids.capacity());
     let mut account_addresses = Vec::with_capacity(account_sfids.capacity());
     for target in targets {
-        for account in build_default_accounts(target.sfid_number.as_str(), actor) {
+        for account in build_default_accounts_for_codes(
+            target.sfid_number.as_str(),
+            actor,
+            target.institution_code.as_str(),
+            Some(target.org_code.as_str()),
+        ) {
             account_sfids.push(target.sfid_number.clone());
             account_p_codes.push(target.province_code.clone());
             account_c_codes.push(target_c_code(target));
@@ -1605,6 +1667,13 @@ fn bulk_write_target_chunk(
     })?;
 
     Ok(())
+}
+
+fn default_account_names_for_target(target: &OfficialInstitutionTarget) -> &'static [&'static str] {
+    default_account_names_for_codes(
+        target.institution_code.as_str(),
+        Some(target.org_code.as_str()),
+    )
 }
 
 fn target_c_code(target: &OfficialInstitutionTarget) -> Option<String> {
