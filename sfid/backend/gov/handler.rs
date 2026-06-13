@@ -178,6 +178,7 @@ pub(crate) struct ListOfficialInstitutionQuery {
     pub province: Option<String>,
     pub city: Option<String>,
     pub q: Option<String>,
+    pub org_code: Option<String>,
     pub cursor: Option<String>,
     pub page_size: Option<usize>,
 }
@@ -257,6 +258,7 @@ pub(crate) async fn list_official_institutions(
     };
 
     let keyword = query.q.as_deref().map(str::trim).unwrap_or("");
+    let org_code = query.org_code.as_deref().map(str::trim).unwrap_or("");
     let directory_scope = match city_code {
         Some(code) => OfficialReconcileScope::City {
             province_code: province_code.to_string(),
@@ -270,6 +272,7 @@ pub(crate) async fn list_official_institutions(
         province_code,
         city_code,
         keyword,
+        org_code,
         offset,
         page_size,
     ) {

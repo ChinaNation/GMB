@@ -33,6 +33,7 @@ export interface ListOfficialInstitutionQuery {
   province?: string;
   city?: string;
   q?: string;
+  org_code?: string;
   cursor?: string | null;
   page_size?: number;
 }
@@ -59,6 +60,7 @@ export async function listOfficialInstitutions(
   if (query?.province) params.set('province', query.province);
   if (query?.city) params.set('city', query.city);
   if (query?.q && query.q.trim()) params.set('q', query.q.trim());
+  if (query?.org_code && query.org_code.trim()) params.set('org_code', query.org_code.trim());
   if (query?.cursor) params.set('cursor', query.cursor);
   if (query?.page_size) params.set('page_size', String(query.page_size));
   const qs = params.toString();

@@ -188,6 +188,39 @@ class RuntimeUpgradeService {
     };
   }
 
+  /// 跨提案批量查询联合投票:输入 `{proposalId: (机构account, [pubkeyHex])}`,
+  /// 一次链查返回 `{proposalId: {pubkey: vote?}}`。
+  ///
+  /// 中文注释(ADR-018 R2):与内部投票同理,广场上多个联合投票提案合并成单次
+  /// 分块读取,避免每提案一次 RPC。
+  Future<Map<int, Map<String, bool?>>> fetchJointAdminVotesForProposals(
+    Map<int, ({Uint8List institutionAccountId, List<String> pubkeysHex})>
+        byProposal,
+  ) async {
+    final keyToCoord = <String, ({int pid, String pk})>{};
+    for (final entry in byProposal.entries) {
+      for (final pubkey in entry.value.pubkeysHex) {
+        final clean = _normalizeHex(pubkey);
+        if (clean.isEmpty) continue;
+        final key = _jointAdminVoteKey(
+          entry.key,
+          entry.value.institutionAccountId,
+          clean,
+        );
+        if (key == null) continue;
+        keyToCoord[key] = (pid: entry.key, pk: clean);
+      }
+    }
+    if (keyToCoord.isEmpty) return const {};
+    final values = await _rpc.fetchStorageBatchChunked(keyToCoord.keys);
+    final result = <int, Map<String, bool?>>{};
+    keyToCoord.forEach((key, coord) {
+      (result[coord.pid] ??= <String, bool?>{})[coord.pk] =
+          _decodeBoolVote(values[key]);
+    });
+    return result;
+  }
+
   String? _jointAdminVoteKey(
     int proposalId,
     Uint8List institutionAccountId,

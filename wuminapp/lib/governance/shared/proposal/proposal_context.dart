@@ -332,87 +332,73 @@ class VoteChecker {
   final InternalVoteQueryService _internalVoteService;
   final RuntimeUpgradeService _runtimeService;
 
-  /// 检查某管理员是否已对某提案投票。
+  /// 跨提案批量计算"哪些提案存在本机未投票的管理员钱包"。
   ///
-  /// 根据 [kind] 自动选择正确的链上存储：
-  /// - kind=0（内部投票）→ InternalVote::InternalVotesByAccount
-  /// - kind=1（联合投票）→ JointVote::JointVotesByAdmin（需要机构 AccountId）
-  ///
-  /// 返回：null=未投票，true=赞成，false=反对。
-  Future<bool?> fetchVote({
-    required int proposalId,
-    required String pubkeyHex,
-    required int kind,
-    Uint8List? institutionBytes,
-  }) async {
-    final pk = _normalize(pubkeyHex);
-    switch (kind) {
-      case 0: // 内部投票
-        return _internalVoteService.fetchAdminVote(proposalId, pk);
-      case 1: // 联合投票
-        if (institutionBytes == null || institutionBytes.length != 32) {
-          return null;
+  /// 中文注释(ADR-018 R2):列表页原来按提案逐个查投票(P 个提案 = P 次往返);
+  /// 这里把同类提案(内部/联合)的投票 key 各自一次性拼齐批量读取,P 次往返
+  /// 降为最多 2 次。只统计 status==0(投票中)且本机有管理员钱包的提案。
+  Future<Set<int>> proposalsNeedingVote(List<VoteCheckTarget> targets) async {
+    final active =
+        targets.where((t) => t.status == 0 && t.adminWallets.isNotEmpty);
+
+    final internalByPid = <int, List<String>>{};
+    final jointByPid =
+        <int, ({Uint8List institutionAccountId, List<String> pubkeysHex})>{};
+    for (final t in active) {
+      final pubkeys = t.adminWallets.map((w) => w.pubkeyHex).toList();
+      if (t.kind == 0) {
+        internalByPid[t.proposalId] = pubkeys;
+      } else if (t.kind == 1 && t.institution != null) {
+        final inst = Uint8List.fromList(institutionIdentityToAccountId(
+          t.institution!.sfidNumber,
+          mainAddress: t.institution!.mainAddress,
+        ));
+        if (inst.length == 32) {
+          jointByPid[t.proposalId] =
+              (institutionAccountId: inst, pubkeysHex: pubkeys);
         }
-        return _runtimeService.fetchJointAdminVote(
-          proposalId,
-          institutionBytes,
-          pk,
-        );
-      default:
-        return null;
-    }
-  }
-
-  /// 检查用户的管理员钱包中是否有未投票的。
-  ///
-  /// 用于列表红点判断，统一替代各处手动查询。
-  Future<bool> hasUnvotedWallet({
-    required int proposalId,
-    required int kind,
-    required List<WalletProfile> adminWallets,
-    InstitutionInfo? institution,
-  }) async {
-    if (adminWallets.isEmpty) return false;
-
-    Uint8List? institutionBytes;
-    if (kind == 1 && institution != null) {
-      institutionBytes = Uint8List.fromList(
-        institutionIdentityToAccountId(
-          institution.sfidNumber,
-          mainAddress: institution.mainAddress,
-        ),
-      );
+      }
     }
 
-    final pubkeys = adminWallets.map((wallet) => wallet.pubkeyHex).toList();
-    if (kind == 0) {
+    final needs = <int>{};
+    if (internalByPid.isNotEmpty) {
       final votes =
-          await _internalVoteService.fetchAdminVotesBatch(proposalId, pubkeys);
-      return pubkeys.any((pubkey) => votes[_normalize(pubkey)] == null);
+          await _internalVoteService.fetchAdminVotesForProposals(internalByPid);
+      internalByPid.forEach((pid, pubkeys) {
+        final m = votes[pid] ?? const <String, bool?>{};
+        if (pubkeys.any((pk) => m[_normalize(pk)] == null)) needs.add(pid);
+      });
     }
-    if (kind == 1 && institutionBytes != null) {
-      final votes = await _runtimeService.fetchJointAdminVotesBatch(
-        proposalId,
-        institutionBytes,
-        pubkeys,
-      );
-      return pubkeys.any((pubkey) => votes[_normalize(pubkey)] == null);
+    if (jointByPid.isNotEmpty) {
+      final votes =
+          await _runtimeService.fetchJointAdminVotesForProposals(jointByPid);
+      jointByPid.forEach((pid, v) {
+        final m = votes[pid] ?? const <String, bool?>{};
+        if (v.pubkeysHex.any((pk) => m[_normalize(pk)] == null)) needs.add(pid);
+      });
     }
-
-    for (final w in adminWallets) {
-      final vote = await fetchVote(
-        proposalId: proposalId,
-        pubkeyHex: w.pubkeyHex,
-        kind: kind,
-        institutionBytes: institutionBytes,
-      );
-      if (vote == null) return true; // 有未投票的
-    }
-    return false;
+    return needs;
   }
 
   static String _normalize(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return clean.toLowerCase();
   }
+}
+
+/// [VoteChecker.proposalsNeedingVote] 的输入项:一个提案的投票判定所需上下文。
+class VoteCheckTarget {
+  const VoteCheckTarget({
+    required this.proposalId,
+    required this.kind,
+    required this.status,
+    required this.adminWallets,
+    this.institution,
+  });
+
+  final int proposalId;
+  final int kind;
+  final int status;
+  final List<WalletProfile> adminWallets;
+  final InstitutionInfo? institution;
 }

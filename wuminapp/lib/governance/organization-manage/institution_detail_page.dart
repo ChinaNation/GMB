@@ -787,31 +787,40 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     });
 
     try {
-      // 中文注释：更多账户余额只在用户展开时读取，避免机构详情列表初次进入时放大 RPC 压力。
+      // 中文注释(ADR-018 R2):更多账户余额先读本地快照,未命中的地址收集起来
+      // 一次 `fetchFinalizedBalances` 批量查链,避免按账户逐条 RPC(N+1)。
       final balanceStore = AccountBalanceSnapshotStore.instance;
-      final views = await Future.wait(
-        sources.map((item) async {
-          final local = await balanceStore.readFresh(item.address);
-          final balance = local?.balanceYuan ??
-              await _chainRpc.fetchFinalizedBalance(item.address);
-          if (local == null) {
-            try {
-              await balanceStore.put(
-                accountHex: item.address,
-                balanceYuan: balance,
-              );
-            } catch (_) {
-              // 余额快照写入失败不影响当前链上余额展示。
-            }
-          }
-          return _InstitutionAccountView(
-            name: item.name,
-            addressSs58: _accountHexToSs58(item.address),
-            balance: balance,
-            icon: item.icon,
+      final cachedYuan = <String, double>{};
+      final toFetch = <String>[];
+      for (final item in sources) {
+        final local = await balanceStore.readFresh(item.address);
+        if (local != null) {
+          cachedYuan[item.address] = local.balanceYuan;
+        } else {
+          toFetch.add(item.address);
+        }
+      }
+      final fetched = toFetch.isEmpty
+          ? const <String, double>{}
+          : await _chainRpc.fetchFinalizedBalances(toFetch);
+      for (final entry in fetched.entries) {
+        try {
+          await balanceStore.put(
+            accountHex: entry.key,
+            balanceYuan: entry.value,
           );
-        }),
-      );
+        } catch (_) {
+          // 余额快照写入失败不影响当前链上余额展示。
+        }
+      }
+      final views = sources
+          .map((item) => _InstitutionAccountView(
+                name: item.name,
+                addressSs58: _accountHexToSs58(item.address),
+                balance: cachedYuan[item.address] ?? fetched[item.address] ?? 0.0,
+                icon: item.icon,
+              ))
+          .toList();
       if (!mounted) return;
       setState(() {
         _extraAccounts = views;

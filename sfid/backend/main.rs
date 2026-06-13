@@ -1406,10 +1406,12 @@ impl Db {
         p_code: &str,
         c_code: Option<&str>,
         keyword: &str,
+        org_code: &str,
         offset: usize,
         page_size: usize,
     ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
         let keyword = keyword.trim().to_ascii_lowercase();
+        let org_code = org_code.trim().to_ascii_uppercase();
         let p_code = p_code.to_string();
         let c_code = c_code.map(str::to_string);
         self.with_client(move |conn| {
@@ -1463,6 +1465,10 @@ impl Db {
 	                                    OR lower(s.sfid_number) LIKE '%' || $3 || '%'
 	                                    OR lower(COALESCE(s.name, '')) LIKE '%' || $3 || '%'
 	                               )
+	                               AND (
+	                                    $4::text = ''
+	                                    OR COALESCE(g.org_code, s.org_code, '') = $4
+	                               )
 	                             ORDER BY
 		                                s.c_code ASC NULLS LAST,
 		                                s.t_code ASC NULLS LAST,
@@ -1476,8 +1482,8 @@ impl Db {
 	                                END ASC,
 	                                COALESCE(s.name, '') ASC,
 	                                s.sfid_number ASC
-	                             LIMIT $4 OFFSET $5",
-                    &[&p_code, &c_code, &keyword, &limit, &offset_i64],
+	                             LIMIT $5 OFFSET $6",
+                    &[&p_code, &c_code, &keyword, &org_code, &limit, &offset_i64],
                 )
                 .map_err(|e| format!("query official institutions failed: {e}"))?;
             let mut items = Vec::with_capacity(rows.len());

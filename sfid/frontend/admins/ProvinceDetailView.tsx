@@ -1,14 +1,16 @@
 // 注册局机构详情视图(两个顶级 tab 各一个):
-//   - CityRegistryView(市注册局 tab):联邦管理员 城市网格→点市→该市注册局机构详情页;
+//   - CityRegistryView(市注册局 tab):联邦管理员 城市表格→点市→该市注册局机构详情页;
 //                                      市管理员 直接进本市注册局机构详情页。
 //   - FederalRegistryView(联邦注册局 tab):全国唯一联邦注册局机构详情页。
-// 两者 leaf 都是「机构详情页 + 内嵌管理员列表」(GovDetailPage.adminListSection),
-// 管理员列表渲染在机构信息卡与账户列表卡之间。数据由 FederalAdminsView 统一加载。
+// 两者 leaf 都是「机构详情页 + 管理员列表 tab」(GovDetailPage.adminListSection),
+// 管理员列表由详情页左侧导航显示。数据由 FederalAdminsView 统一加载。
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Space, Table, Tag, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
+import type { AdminAuth } from '../auth/types';
 import type { SfidCityItem } from '../china/api';
 import type { CityAdminRow } from './city_admins_api';
 import { tryEncodeSs58 } from '../utils/ss58';
@@ -19,7 +21,8 @@ import { AddCityAdminModal } from './AddCityAdminModal';
 import { FederalAdminSubTab } from './FederalAdminSubTab';
 import { Passkey } from './Passkey';
 import { GovDetailPage } from '../gov/GovDetailPage';
-import { getFederalRegistry } from '../gov/api';
+import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
+import type { InstitutionListRow } from '../subjects/api';
 
 interface RegistryViewProps {
   state: FederalAdminSharedState;
@@ -39,6 +42,7 @@ function makeCenteredTitle(center: React.ReactNode) {
 
 export function FederalRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
+  const scope = useScope(auth);
   const {
     federalAdmins,
     federalAdminsLoading,
@@ -71,7 +75,7 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
     <GovDetailPage
       auth={auth}
       sfidNumber={federalRegistryDetail.institution.sfid_number}
-      canWrite={false}
+      canWrite={scope.canWrite && auth.role === 'FEDERAL_ADMIN'}
       loadDetail={loadFederalRegistry}
       adminListSection={selectedFederalAdmin ? (
         <FederalAdminSubTab
@@ -86,7 +90,7 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
   );
 }
 
-// ── 市注册局 tab:城市网格(联邦) / 机构详情页 + 本市市管理员列表 ──
+// ── 市注册局 tab:城市表格(联邦) / 机构详情页 + 本市市管理员列表 ──
 
 export function CityRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
@@ -117,7 +121,7 @@ export function CityRegistryView({ state }: RegistryViewProps) {
 
   let body: React.ReactNode;
   if (!effectiveCity) {
-    // 联邦管理员未选市 → 城市网格(套 Card 显示省份标题)
+    // 联邦管理员未选市 → 城市表格(套 Card 显示省份标题)
     body = (
       <Card
         title={makeCenteredTitle(effectiveProvince ?? '市注册局')}
@@ -125,10 +129,13 @@ export function CityRegistryView({ state }: RegistryViewProps) {
         style={glassCardStyle}
         headStyle={glassCardHeadStyle}
       >
-        <CityGrid
+        <CityRegistryListTable
+          auth={auth}
+          province={effectiveProvince ?? ''}
           cities={cityAdminCities.filter((c) => c.code !== '000')}
           citiesLoading={cityAdminCitiesLoading || (!selectedFederalAdmin && cityAdminCities.length === 0)}
           cityAdmins={city_adminsForProvince}
+          cityAdminsLoading={cityAdminsLoading}
           onSelectCity={setSelectedCity}
         />
       </Card>
@@ -142,7 +149,7 @@ export function CityRegistryView({ state }: RegistryViewProps) {
         sfidNumber={cityRegistrySfid}
         canWrite={scope.canWrite}
         onBack={canGoBack ? () => { setSelectedCity(null); setCityAdminListPage(1); } : undefined}
-        backLabel="返回"
+        backLabel="返回列表"
         adminListSection={
           <CityCityAdminsView
             canEditCityAdmins={canEditCityAdmins}
@@ -174,58 +181,146 @@ export function CityRegistryView({ state }: RegistryViewProps) {
   );
 }
 
-// ── 市管理员列表的城市入口网格 ──
+// ── 市注册局城市入口表格 ──
 
-function CityGrid({ cities, citiesLoading, cityAdmins, onSelectCity }: {
+const CITY_REGISTRY_PAGE_SIZE = 20;
+
+function areaText(row: InstitutionListRow | null, province: string, city: string) {
+  if (!row) return [province, city].filter(Boolean).join('/') || '-';
+  return [row.province, row.city, row.town].filter(Boolean).join('/') || '-';
+}
+
+function nameText(row: InstitutionListRow | null, city: string) {
+  return row?.institution_name || row?.short_name || row?.sfid_name || `${city}注册局`;
+}
+
+function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmins, cityAdminsLoading, onSelectCity }: {
+  auth: AdminAuth;
+  province: string;
   cities: SfidCityItem[];
   citiesLoading: boolean;
   cityAdmins: CityAdminRow[];
+  cityAdminsLoading: boolean;
   onSelectCity: (city: string) => void;
 }) {
-  return citiesLoading ? (
-    <Typography.Text type="secondary">加载中...</Typography.Text>
-  ) : cities.length === 0 ? (
-    <Typography.Text type="secondary">暂无城市数据</Typography.Text>
-  ) : (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-      {cities.map((city) => {
-        const count = cityAdmins.filter((op) => op.city === city.name).length;
-        return (
-          <div
-            key={city.code}
-            onClick={() => onSelectCity(city.name)}
-            style={{
-              padding: 18, borderRadius: 12,
-              border: '1px solid rgba(15,23,42,0.22)',
-              background: 'rgba(226,232,240,0.55)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              cursor: 'pointer', transition: 'all 0.2s ease',
-              textAlign: 'center',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLDivElement).style.background = 'rgba(13,148,136,0.22)';
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(13,148,136,0.55)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLDivElement).style.background = 'rgba(226,232,240,0.55)';
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
-            }}
-          >
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{city.name}</div>
-            <Tag
-              color={count >= MAX_CITY_ADMINS_PER_CITY ? 'red' : 'teal'}
-              style={{ marginTop: 6 }}
-            >
-              {count} / {MAX_CITY_ADMINS_PER_CITY}
-            </Tag>
-          </div>
-        );
-      })}
+  const [registryRows, setRegistryRows] = useState<InstitutionListRow[]>([]);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (!province) {
+      setRegistryRows([]);
+      setRegistryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRegistryLoading(true);
+    listOfficialInstitutions(auth, { province, org_code: 'CITY_REGISTRY', page_size: 300 })
+      .then((res) => {
+        if (!cancelled) {
+          setRegistryRows(res.items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRegistryRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRegistryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.access_token, province]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [province, cities.length]);
+
+  const rows = useMemo(() => {
+    return cities.map((city) => {
+      const registry = registryRows.find((row) => row.city === city.name) ?? null;
+      const adminCount = cityAdmins.filter((admin) => admin.city === city.name).length;
+      return { city, registry, adminCount };
+    });
+  }, [cities, registryRows, cityAdmins]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / CITY_REGISTRY_PAGE_SIZE));
+  const displayRows = rows.slice(
+    (page - 1) * CITY_REGISTRY_PAGE_SIZE,
+    page * CITY_REGISTRY_PAGE_SIZE,
+  );
+
+  const columns = useMemo<ColumnsType<(typeof rows)[number]>>(() => [
+    {
+      title: '序号',
+      width: 70,
+      align: 'center',
+      render: (_v, _row, index) => (page - 1) * CITY_REGISTRY_PAGE_SIZE + index + 1,
+    },
+    {
+      title: '身份ID',
+      width: 260,
+      align: 'center',
+      render: (_v, row) => row.registry?.sfid_number ?? '-',
+    },
+    {
+      title: '市注册局名称',
+      width: 180,
+      align: 'center',
+      render: (_v, row) => nameText(row.registry, row.city.name),
+    },
+    {
+      title: '所属行政区',
+      width: 180,
+      align: 'center',
+      render: (_v, row) => areaText(row.registry, province, row.city.name),
+    },
+    {
+      title: '管理员数',
+      width: 150,
+      align: 'center',
+      render: (_v, row) => (
+        <Tag color={row.adminCount >= MAX_CITY_ADMINS_PER_CITY ? 'red' : 'teal'}>
+          {row.adminCount} / {MAX_CITY_ADMINS_PER_CITY}
+        </Tag>
+      ),
+    },
+  ], [page, province]);
+
+  if (!citiesLoading && cities.length === 0) {
+    return <Typography.Text type="secondary">暂无城市数据</Typography.Text>;
+  }
+
+  return (
+    <div>
+      <Table<(typeof rows)[number]>
+        rowKey={(row) => row.city.code}
+        loading={citiesLoading || registryLoading || cityAdminsLoading}
+        dataSource={displayRows}
+        pagination={false}
+        onRow={(row) => ({
+          onClick: () => row.registry && onSelectCity(row.city.name),
+          style: row.registry ? { cursor: 'pointer' } : { color: '#94a3b8' },
+        })}
+        columns={columns}
+      />
+      <Space style={{ marginTop: 12 }} wrap>
+        <Typography.Text type="secondary">
+          共 {totalPages} 页 / 第 {page} 页
+        </Typography.Text>
+        <Typography.Text type="secondary">共 {rows.length} 条</Typography.Text>
+        <Button disabled={citiesLoading || registryLoading || page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+          上一页
+        </Button>
+        <Button disabled={citiesLoading || registryLoading || page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+          下一页
+        </Button>
+      </Space>
     </div>
   );
 }
 
-// ── 某市的市管理员列表(内嵌进市注册局机构详情页) ──
+// ── 某市的市管理员列表(显示在市注册局机构详情页的“管理员列表”tab) ──
 
 function CityCityAdminsView({ canEditCityAdmins, cityAdmins, cityAdminsLoading, cityAdminListPage, setCityAdminListPage, setAddCityAdminOpen, onUpdateCityAdmin, onDeleteCityAdmin }: {
   canEditCityAdmins: boolean;

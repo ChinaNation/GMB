@@ -157,12 +157,12 @@ class DuoqianTransferProposalFeed {
   static final Map<String, _TimedValue<double>> _balanceCache = {};
   static final Map<String, Future<double>> _balanceInFlight = {};
   static final Map<String, int> _balanceFetchTokens = {};
-  static final Map<String, _TimedValue<List<ProposalWithDetail>>>
-      _visibleProposalCache = {};
-  static final Map<String, Future<List<ProposalWithDetail>>>
-      _visibleProposalInFlight = {};
-  static final Map<String, int> _visibleProposalFetchTokens = {};
   static int _nextFetchToken = 0;
+
+  // ADR-018 统一提案查询:当前年全部提案的进程内共享缓存。广场 / 机构详情 /
+  // 个人多签同一刷新周期共用同一份,把"每页各自查链"降为"全应用取一次"。
+  static _TimedValue<List<ProposalWithDetail>>? _yearProposalsCache;
+  static Future<List<ProposalWithDetail>>? _yearProposalsInFlight;
 
   final DuoqianTransferService _service;
 
@@ -198,44 +198,47 @@ class DuoqianTransferProposalFeed {
     });
   }
 
-  Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
-    InstitutionInfo institution, {
+  /// ADR-018 统一提案查询入口:当前年全部提案,进程内共享缓存(TTL 20s)。
+  /// 广场 / 机构详情 / 个人多签同周期复用同一份,避免各页面重复查链。
+  Future<List<ProposalWithDetail>> currentYearProposals({
     bool forceRefresh = false,
   }) {
-    final sfidNumber = institution.sfidNumber;
-    final cached = _visibleProposalCache[sfidNumber];
+    final cached = _yearProposalsCache;
     if (!forceRefresh && cached != null && cached.isFresh(_proposalCacheTtl)) {
       return Future.value(cached.value);
     }
-
-    final inFlight = _visibleProposalInFlight[sfidNumber];
+    final inFlight = _yearProposalsInFlight;
     if (!forceRefresh && inFlight != null) return inFlight;
 
-    final token = ++_nextFetchToken;
-    _visibleProposalFetchTokens[sfidNumber] = token;
-    // 中文注释：机构页提案查询会读取机构索引和年度联合提案，短缓存只减少重复读取，不改变链上真值。
-    final future = _service.fetchInstitutionVisibleProposals(institution).then(
-      (value) {
-        final immutableValue = List<ProposalWithDetail>.unmodifiable(value);
-        if (_visibleProposalFetchTokens[sfidNumber] == token) {
-          _visibleProposalCache[sfidNumber] = _TimedValue(immutableValue);
-        }
-        return immutableValue;
-      },
-    );
-    _visibleProposalInFlight[sfidNumber] = future;
+    final future = _service.fetchCurrentYearProposals().then((value) {
+      final immutableValue = List<ProposalWithDetail>.unmodifiable(value);
+      _yearProposalsCache = _TimedValue(immutableValue);
+      return immutableValue;
+    });
+    _yearProposalsInFlight = future;
     return future.whenComplete(() {
-      if (_visibleProposalInFlight[sfidNumber] == future) {
-        _visibleProposalInFlight.remove(sfidNumber);
-      }
-      if (_visibleProposalFetchTokens[sfidNumber] == token) {
-        _visibleProposalFetchTokens.remove(sfidNumber);
+      if (identical(_yearProposalsInFlight, future)) {
+        _yearProposalsInFlight = null;
       }
     });
   }
 
-  Future<List<int>> fetchProposalIdsByOrg(int org) {
-    return _service.fetchProposalIdsByOrg(org);
+  /// 机构页可见提案:从共享年缓存客户端过滤(本机构内部提案 ∪ 联合投票)。
+  Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
+    InstitutionInfo institution, {
+    bool forceRefresh = false,
+  }) async {
+    final all = await currentYearProposals(forceRefresh: forceRefresh);
+    return _service.filterInstitutionVisible(all, institution);
+  }
+
+  /// 广场治理提案 id:从共享年缓存按 org 过滤,替代 3 次 `ProposalsByOrg` 查询。
+  Future<List<int>> fetchGovernanceProposalIds(
+    Set<int> orgs, {
+    bool forceRefresh = false,
+  }) async {
+    final all = await currentYearProposals(forceRefresh: forceRefresh);
+    return _service.filterGovernanceIds(all, orgs);
   }
 
   Future<List<ProposalWithDetail>> fetchProposalsByIds(List<int> ids) {
@@ -246,9 +249,8 @@ class DuoqianTransferProposalFeed {
     _balanceCache.clear();
     _balanceInFlight.clear();
     _balanceFetchTokens.clear();
-    _visibleProposalCache.clear();
-    _visibleProposalInFlight.clear();
-    _visibleProposalFetchTokens.clear();
+    _yearProposalsCache = null;
+    _yearProposalsInFlight = null;
   }
 
   static String _balanceKey(InstitutionInfo institution) {

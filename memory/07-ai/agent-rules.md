@@ -147,3 +147,12 @@
 - DNS 解析永远没有错。chainspec 里部分省级 bootnode 子域名无 A 记录是已知且无害的(只用现存的几个活节点即可同步),logcat 里的 "No address associated with hostname" 是正常噪音,**不是故障**。
 - 出现"读不到数据/连不上"类问题时,**严禁**检查 DNS、严禁说"手机没连上网络/没连上节点"。必须先看 App 自报的 peerCount/finalized 状态确认是否已同步,已同步就从业务代码路径找原因。
 - 对比定位法优先:同样读链上数据,A 处能读、B 处读不到,直接对比 A/B 两条代码路径的差异,不要到处大海捞针。
+
+## 死规则:wuminapp 链上查询(ADR-018)
+
+wuminapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/04-decisions/ADR-018`):
+
+- **R1 统一字段查询**:列表类数据一律"短 key 索引(`ProposalsByYear`/整表扫描)取一次 → 客户端按已解码字段过滤"。**禁止**对嵌 32 字节 AccountId 或 `blake2_128(x)+x` 的**长前缀**做 `getKeysPagedFinalized`(轻节点静默返回空)。精确整键 `fetchStorage(完整key)` 不受限,可用。
+- **R2 降低全节点依赖**:① 多 key 一律 `fetchStorageBatch`/`fetchFinalizedBalances`,**禁止循环内逐条** `fetchStorage`/`fetchFinalizedBalance`(N+1);② 同一数据跨页面取一次进共享缓存复用;③ 链状态页用 finalized 头订阅驱动刷新,禁止 `Timer.periodic` 轮询查链;④ 能用已缓存/已解码数据客户端算出的,不再联网。
+- **R3 外部后端(SFID/HTTP)缓存**:health/catalog/机构注册证/电子护照状态等读取加 Isar + TTL 缓存。
+- **豁免**:交易提交管线(nonce/dry-run/submit/runtime-version/genesis/提交用 best 块)+ UI 倒计时 Timer。

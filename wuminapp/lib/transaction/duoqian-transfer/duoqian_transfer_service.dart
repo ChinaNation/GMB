@@ -273,37 +273,12 @@ class DuoqianTransferService {
     return result;
   }
 
-  /// 反向索引:`ProposalsByOrg[org]` 下的所有 proposal_id。
-  ///
-  /// org 取值:0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN(详见
-  /// `votingengine::internal_vote::ORG_*` 常量)。
-  Future<List<int>> fetchProposalIdsByOrg(int org) async {
-    return _fetchProposalIdsByDoubleMap(
-      'ProposalsByOrg',
-      Uint8List.fromList([org]),
-    );
-  }
-
-  /// 反向索引:`ProposalsByInstitution[AccountId32]` 下的所有 proposal_id。
-  Future<List<int>> fetchProposalIdsByInstitution(
-      InstitutionInfo institution) async {
-    return _fetchProposalIdsByDoubleMap(
-      'ProposalsByInstitution',
-      _institutionAccountId(institution),
-    );
-  }
-
-  /// 反向索引:`ProposalsByOwner[module_tag]` 下的所有 proposal_id。
-  /// `module_tag` 是业务模块的 BoundedVec<u8, MaxModuleTagLen>,SCALE 编码后传入。
-  Future<List<int>> fetchProposalIdsByOwner(Uint8List moduleTag) async {
-    // BoundedVec<u8> 的 SCALE 编码 = Compact<len> + bytes;作为 storage 的 K1 键时,
-    // 链上对该编码后的字节做 twox64,然后 concat 原编码字节。
-    final encoded = ByteOutput();
-    encoded
-        .write(CompactBigIntCodec.codec.encode(BigInt.from(moduleTag.length)));
-    encoded.write(moduleTag);
-    return _fetchProposalIdsByDoubleMap('ProposalsByOwner', encoded.toBytes());
-  }
+  // ADR-018:`fetchProposalIdsByOrg` / `fetchProposalIdsByInstitution` /
+  // `fetchProposalIdsByOwner` 已删除。前两者的 `ProposalsByOrg` 走统一的
+  // 按年取 + 客户端 org 过滤(filterGovernanceIds);`ProposalsByInstitution`
+  // 是嵌 32 字节 account 的长前缀扫描,轻节点静默返回空,改走按年取 +
+  // 客户端 institution 过滤(filterInstitutionVisible)。`ProposalsByOwner`
+  // 无调用方,一并移除。`ProposalsByYear`(短 key)是唯一保留的反向索引入口。
 
   /// 通用反向索引迭代器。
   ///
@@ -767,38 +742,55 @@ class DuoqianTransferService {
     return results;
   }
 
-  /// 查询对指定机构用户可见的提案事件。
+  /// ADR-018 统一提案查询:按年取当前年全部提案一次。
   ///
-  /// **v1 双层 ID 模式**:
-  /// - 走 `ProposalsByInstitution[sfidNumber]` 反向索引拿本机构所有提案 ID
-  ///   (含内部投票如转账/费率设置/管理员变更等)
-  /// - 联合投票提案(runtime 升级 / 决议)的 internal_institution = None,
-  ///   不会落 `ProposalsByInstitution`,所以这里**额外**取本年所有 kind=1
-  ///   提案,并入结果(机构页要让所有用户都能看到联合投票)
+  /// 中文注释:`ProposalsByYear[year]` 是短 key 索引,轻节点可正常前缀扫描;
+  /// 链端对每个提案无条件写入该索引、终态清理时移除,所以按年取得到的就是
+  /// "全部存活提案"。广场 / 机构详情 / 个人多签统一从这一份结果客户端按
+  /// 已解码字段过滤,替代会在轻节点静默返回空的 `ProposalsByInstitution[account]`
+  /// 长前缀扫描,并让多页面共用一次查询(见 ProposalFeedCache,降全节点负载)。
+  Future<List<ProposalWithDetail>> fetchCurrentYearProposals() async {
+    final currentYear = await _resolveCurrentYear();
+    if (currentYear == null) return const [];
+    final ids = await _fetchProposalIdsByYearTwox(currentYear);
+    return _fetchProposalsForIds(ids);
+  }
+
+  /// 从当前年提案全集过滤出指定机构页可见的提案(纯客户端,不联网):
+  /// 本机构内部提案(`internal_institution == 机构 AccountId`)∪ 全部联合投票
+  /// (`kind == 1`,runtime 升级 / 决议在所有机构页可见)。
+  List<ProposalWithDetail> filterInstitutionVisible(
+    List<ProposalWithDetail> all,
+    InstitutionInfo institution,
+  ) {
+    final account = _institutionAccountId(institution);
+    final visible = all.where((p) {
+      final inst = p.meta.institutionBytes;
+      final mine = inst != null && _bytesEqual(inst, account);
+      return mine || p.meta.kind == 1;
+    }).toList();
+    visible.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
+    return visible;
+  }
+
+  /// 从当前年提案全集过滤出指定治理类型(org)的提案 id(广场用,纯客户端)。
+  List<int> filterGovernanceIds(
+    List<ProposalWithDetail> all,
+    Set<int> orgs,
+  ) {
+    final ids = all
+        .where((p) => p.meta.internalOrg != null && orgs.contains(p.meta.internalOrg))
+        .map((p) => p.meta.proposalId)
+        .toList();
+    ids.sort((a, b) => b.compareTo(a));
+    return ids;
+  }
+
+  /// 查询对指定机构用户可见的提案事件(ADR-018:按年取 + 客户端过滤)。
   Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
       InstitutionInfo institution) async {
-    // 1) 本机构所有提案(含内部投票)
-    final institutionIds = await fetchProposalIdsByInstitution(institution);
-    final institutionProposals = await _fetchProposalsForIds(institutionIds);
-
-    // 2) 联合投票提案(kind=1)在所有机构页可见 — 取本年所有 ProposalsByYear[当前年]
-    //    再筛 kind=1。开发期数据量小;PR-Z 之后产品如果要"机构页只看本机构"
-    //    可以删掉这段。
-    final currentYear = await _resolveCurrentYear();
-    final yearIds = currentYear == null
-        ? const <int>[]
-        : await _fetchProposalIdsByYearTwox(currentYear);
-    final extraJointIds =
-        yearIds.where((id) => !institutionIds.contains(id)).toList();
-    final extraJointProposals = extraJointIds.isEmpty
-        ? const <ProposalWithDetail>[]
-        : await _fetchProposalsForIds(extraJointIds);
-    final jointOnly =
-        extraJointProposals.where((p) => p.meta.kind == 1).toList();
-
-    final all = <ProposalWithDetail>[...institutionProposals, ...jointOnly];
-    all.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
-    return all;
+    final all = await fetchCurrentYearProposals();
+    return filterInstitutionVisible(all, institution);
   }
 
   /// 从 `CurrentProposalYear` 拿当前提案分配年份(用于反向索引按年迭代)。

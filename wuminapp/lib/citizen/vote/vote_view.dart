@@ -127,11 +127,12 @@ class _VoteViewState extends State<VoteView> {
       final newIds = fresh.where((id) => !knownSet.contains(id)).toList();
       if (newIds.isEmpty) return;
 
-      // 新增提案插到列表顶部
+      // 新增提案插到列表顶部。按 proposalId 去重(fresh 在前优先保留),避免
+      // 本地缓存 _items 与 _allIds 口径不同步时同一提案出现两张卡片。
       final newItems = await _loadItemsForIds(newIds);
       if (mounted) {
         setState(() {
-          _items = [...newItems, ..._items];
+          _items = _dedupById([...newItems, ..._items]);
           _allIds = fresh;
         });
         _updatePendingVoteCount();
@@ -150,16 +151,13 @@ class _VoteViewState extends State<VoteView> {
     }
   }
 
-  /// 拉三 org 反向索引并集,降序返回(主键单调,降序即按时间倒序)。
+  /// 治理类提案 id,降序返回(主键单调,降序即按时间倒序)。
+  ///
+  /// ADR-018:从共享年缓存按 org 过滤,替代原来 3 次 `ProposalsByOrg` 查询,
+  /// 与机构详情共用同一份当前年提案缓存(全应用一次按年取)。
   Future<List<int>> _fetchAllGovernanceIds() async {
-    final results = await Future.wait([
-      _duoqianTransferFeed.fetchProposalIdsByOrg(_orgNrc),
-      _duoqianTransferFeed.fetchProposalIdsByOrg(_orgPrc),
-      _duoqianTransferFeed.fetchProposalIdsByOrg(_orgPrb),
-    ]);
-    final all = <int>{...results[0], ...results[1], ...results[2]}.toList();
-    all.sort((a, b) => b.compareTo(a));
-    return all;
+    return _duoqianTransferFeed
+        .fetchGovernanceProposalIds({_orgNrc, _orgPrc, _orgPrb});
   }
 
   Future<void> _loadFirstPage({bool force = false}) async {
@@ -261,7 +259,7 @@ class _VoteViewState extends State<VoteView> {
 
       if (!mounted) return;
       setState(() {
-        _items = [..._items, ...newItems];
+        _items = _dedupById([..._items, ...newItems]);
         _loadingMore = false;
       });
 
@@ -296,27 +294,25 @@ class _VoteViewState extends State<VoteView> {
       internalOrgList: proposals.map((p) => p.meta.internalOrg).toList(),
     );
 
+    // ADR-018 R2:一次性批量算出"哪些提案需要投票",替代过去每提案各发一次
+    // 投票查询 RPC(P 个提案 = P 次往返)。
+    final needVote = await _voteChecker.proposalsNeedingVote([
+      for (var i = 0; i < proposals.length; i++)
+        VoteCheckTarget(
+          proposalId: proposals[i].meta.proposalId,
+          kind: proposals[i].meta.kind,
+          status: proposals[i].meta.status,
+          adminWallets: contexts[i].adminWallets,
+          institution: contexts[i].institution,
+        ),
+    ]);
+
     final items = <_ProposalDisplayItem>[];
-
     for (var i = 0; i < proposals.length; i++) {
-      final p = proposals[i];
-      final ctx = contexts[i];
-
-      // 检查是否有未投票的钱包(统一使用 VoteChecker)
-      bool needsVote = false;
-      if (ctx.hasAdminWallets && p.meta.status == 0) {
-        needsVote = await _voteChecker.hasUnvotedWallet(
-          proposalId: p.meta.proposalId,
-          kind: p.meta.kind,
-          adminWallets: ctx.adminWallets,
-          institution: ctx.institution,
-        );
-      }
-
       items.add(_ProposalDisplayItem.fromProposal(
-        proposal: p,
-        context: ctx,
-        needsVote: needsVote,
+        proposal: proposals[i],
+        context: contexts[i],
+        needsVote: needVote.contains(proposals[i].meta.proposalId),
       ));
     }
 
@@ -324,6 +320,18 @@ class _VoteViewState extends State<VoteView> {
       items.map((item) => item.summary).toList(growable: false),
     );
     return items;
+  }
+
+  /// 按 proposalId 去重,保留首次出现(prepend 的 fresh 项优先)。
+  /// 防止本地缓存项与新查项口径不同步时同一提案重复成卡片。
+  static List<_ProposalDisplayItem> _dedupById(
+      List<_ProposalDisplayItem> items) {
+    final seen = <int>{};
+    final result = <_ProposalDisplayItem>[];
+    for (final item in items) {
+      if (seen.add(item.proposalId)) result.add(item);
+    }
+    return result;
   }
 
   void _updatePendingVoteCount() {

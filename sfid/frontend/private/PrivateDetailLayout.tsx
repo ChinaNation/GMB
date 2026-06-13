@@ -1,7 +1,7 @@
-// 中文注释:私权机构详情页布局 — 顶部左右双板块 + 账户 + 资料库。
+// 中文注释:私权机构详情页布局 — 共享详情壳承载标题、左侧 tab 和右侧业务内容。
 //
-// 布局:
-//   顶部一整块 Card(标题 = 机构名称,编辑/取消/保存按钮在 Card extra 右上角):
+// 机构信息 tab:
+//   一整块 Card(标题 = 机构信息,编辑/取消/保存按钮在 Card extra 右上角):
 //     ┌ 左 Col:SFID 信息(只读)──────────────┐  ┌ 右 Col:机构信息 ──────────────┐
 //     │ 身份ID / 省 / 市 / 盈利属性 / 机构(均纯中文) │  │ 机构名称 + 搜索查重图标       │
 //     │ 创建时间 / 创建用户                  │  │ 私权类型/法人资格只读展示     │
@@ -55,6 +55,8 @@ import { AccountList } from '../accounts/AccountList';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { DocumentLibrary } from '../docs/DocumentLibrary';
 import { notice } from '../utils/notice';
+import { InstitutionDetailNavLayout } from '../core/InstitutionDetailNavLayout';
+import { OperationRecords } from '../gov/OperationRecords';
 
 // 创建者角色中文映射(与列表页保持一致)。
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
@@ -73,6 +75,8 @@ interface Props {
     actionType: AdminActionType,
     payload: unknown,
   ) => Promise<AdminSecurityGrantOutput>;
+  onBack?: () => void;
+  backLabel?: string;
 }
 
 interface InfoFormValues {
@@ -95,6 +99,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   onReload,
   onDeleteAccount,
   createPasskeyChallengeGrant,
+  onBack,
+  backLabel,
 }) => {
   const inst = detail.institution;
   const accounts = detail.accounts;
@@ -432,13 +438,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     )
   ) : null;
 
-  return (
-    <>
-      {/* 顶部:左右双板块;编辑/取消+保存 按钮挂在外层 Card 的 extra(机构名称右侧) */}
+  const institutionInfoSection = (
       <Card
-        title={<span style={{ fontSize: 18, fontWeight: 600 }}>{titleText}</span>}
+        title={<span style={{ fontSize: 18, fontWeight: 600 }}>机构信息</span>}
         extra={rightExtra}
-        style={{ marginBottom: 16 }}
       >
         <Row gutter={24}>
           {/* 左:SFID 不可编辑身份信息 */}
@@ -708,8 +711,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
           </Col>
         </Row>
       </Card>
+  );
 
-      {/* 中:账户列表 */}
+  const accountListSection = (
       <Card
         type="inner"
         title={`账户列表(${accounts.length})`}
@@ -725,7 +729,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
             </Button>
           )
         }
-        style={{ marginBottom: 16 }}
       >
         <AccountList
           accounts={accounts}
@@ -734,13 +737,40 @@ export const PrivateDetailLayout: React.FC<Props> = ({
           onDelete={onDeleteAccount}
         />
       </Card>
+  );
 
-      {/* 下:资料库(自治模块) */}
-      <DocumentLibrary
-        auth={auth}
-        sfidNumber={inst.sfid_number}
-        canWrite={canWrite}
-        createPasskeyChallengeGrant={createPasskeyChallengeGrant}
+  return (
+    <>
+      <InstitutionDetailNavLayout
+        backAction={onBack ? { label: backLabel ?? '返回列表', onClick: onBack } : undefined}
+        title={titleText}
+        subtitle={`身份ID：${inst.sfid_number}`}
+        status={
+          <Tag color={inst.status === 'ACTIVE' ? 'green' : 'red'}>
+            {inst.status === 'ACTIVE' ? '正常' : '已注销'}
+          </Tag>
+        }
+        items={[
+          { key: 'info', label: '机构信息', content: institutionInfoSection },
+          { key: 'accounts', label: '账户列表', badge: accounts.length, content: accountListSection },
+          {
+            key: 'documents',
+            label: '资料库',
+            content: (
+              <DocumentLibrary
+                auth={auth}
+                sfidNumber={inst.sfid_number}
+                canWrite={canWrite}
+                createPasskeyChallengeGrant={createPasskeyChallengeGrant}
+              />
+            ),
+          },
+          {
+            key: 'operations',
+            label: '操作记录',
+            content: <OperationRecords auth={auth} sfidNumber={inst.sfid_number} />,
+          },
+        ]}
       />
 
       <CreateAccountModal
