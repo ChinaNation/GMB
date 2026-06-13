@@ -46,7 +46,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读 SFID 维护的 `china.sqlite` 行政区唯一源（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
 | super_admin | `super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | number | `number/mod.rs` | 档案号与护照号生成 |
-| dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
+| dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、档案操作记录、年度状态导出、100 年硬删除 |
 
 ## 2.1 前端模块结构
 | 模块 | 目录 | 说明 |
@@ -55,7 +55,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | initialize | `frontend/initialize/` | 安装初始化页面、API 和类型 |
 | login | `frontend/login/` | QR-only 登录页面和 API |
 | super_admin | `frontend/super_admin/` | 超级管理员系统设置、管理员管理、年度报告导出 |
-| dangan | `frontend/dangan/` | 档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 |
+| dangan | `frontend/dangan/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇村查询 API 和类型 |
 | qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
 | components | `frontend/components/` | 通用展示与输入组件，日期输入统一使用 `DateInput` |
@@ -87,6 +87,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - `GET /POST /api/v1/archives/:archive_id/materials`
 - `GET /api/v1/archives/:archive_id/materials/:material_id/download`
 - `DELETE /api/v1/archives/:archive_id/materials/:material_id`
+- `GET /api/v1/archives/:archive_id/audit-logs`
 - `POST /api/v1/archives/:archive_id/qr/generate`
 - `POST /api/v1/archives/:archive_id/qr/print`
 - `POST /api/v1/archives/:archive_id/delete/challenge`
@@ -158,24 +159,37 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 默认排序固定为 `created_at DESC, archive_id DESC`，cursor 由后端编码 `created_at / archive_id`，前端只透传。
 - 响应返回 `items / limit / next_cursor / has_next / total_active`，不返回总页数。
 - 前端列表在“年龄”和“公民状态”之间显示“市镇”列；内容只显示当前档案 `town_code` 对应的镇/街道名称，不显示市名、村/路或详细地址。
+- 前端列表第一列为当前页序号，第二列为档案号；整行点击进入公民档案详情，不设置单独“操作/详情”列。
 - `total_active` 来自 `archive_stats.active_count`，不得在列表请求中实时执行 `COUNT(*) FROM archives`。
 - 前端只提供统一精确检索输入框，参数为 `search`；后端用 `archive_no = search OR passport_no = search OR (last_name || first_name) = search` 精确匹配，不做字段选择器。
 - 检索只允许索引化精确检索：`search / birth_date / town_code / village_id / citizen_status`；不得恢复 `%keyword% LIKE` 全表模糊搜索。
 
 ## 5.4 公民资料库
 
-- 公民资料库后端主体在 `dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx`。
+- 公民资料库后端主体在 `dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx` 的“资料库”左侧导航 tab。
 - 支持资料类型：照片、出生纸、复印件、视频和其他资料；后端按类型校验 MIME，单文件上限 100 MB。
 - 数据库 `archive_materials` 只保存元数据、哈希和本机存储文件名，不保存文件正文。
 - 开发默认文件正文保存在 `data/archive-materials/<archive_id>/`；正式离线安装包固定通过
   `CPMS_MATERIALS_DIR=/var/lib/cpms/materials` 写入本机资料目录。
 - 软删除档案仍可查看和下载已有资料，但不能新增或删除资料。
 - 上传、下载、删除资料写入审计；上传或删除资料会清空旧档案码，100 年硬删除档案时同步清理该档案资料文件目录。
+- 前端资料上传入口只显示为“上传”按钮，点击后弹窗录入资料类型、文件和备注；资料库标题区不重复显示数量，数量只保留在左侧“资料库”tab。
 - 资料上传入口有本机 IP 级限流；单文件仍由 100 MB 请求体上限兜底。
 
-## 5.4 安全运行约束
+## 5.5 档案详情与操作记录
+
+- 公民档案详情页固定为左侧导航和右侧内容区：左侧依次为“返回列表、档案详情、资料库、操作记录”，右侧只展示当前选中 tab 的内容。
+- 左侧导航保留 CPMS 当前“返回列表”图标；“档案详情、资料库、操作记录”图标语义对齐 SFID 机构详情共享导航的房子、文件夹和历史记录图标。
+- 档案详情字段使用两列网格对齐；有效期固定显示在护照号下一行，公民状态和选举资格固定纳入同一网格行，不得恢复为独立外层表单行。
+- “档案详情”和“资料库”沿用原 CPMS 业务内容；旧的上下堆叠详情页结构不得恢复。
+- “操作记录”读取 `GET /api/v1/archives/:archive_id/audit-logs`，后端从 `audit_logs` 中按档案 ID、档案号和审计 detail 中的档案事实聚合最近 100 条。
+- 操作记录表格列固定为“操作、操作者账户、详情、时间”；操作者账户由后端从管理员公钥转换为可读账户地址，结果状态并入详情展示。
+- 操作记录只展示 CPMS 本机审计事实，不创建新业务流程，不写入额外审计事件。
+
+## 5.6 安全运行约束
 
 - 后端统一设置 `Content-Security-Policy`、`X-Frame-Options`、`X-Content-Type-Options`、`Referrer-Policy` 和 `Permissions-Policy`。
+- `/api/` 路径不得落到前端 `index.html` 兜底；API 未命中统一返回 JSON 错误，前端 HTTP 封装也会拒绝非 JSON 响应并显示具体请求路径。
 - 登录 QR、安装初始化、超级管理员初始化绑定、删除签名完成和资料上传入口使用本机内存限流；触发后返回 `429 / CPMS_RATE_LIMITED`。
 - `CPMS_KEY_ENCRYPT_SECRET` 在已初始化实例启动时必须能解密 `system_install.install_secret` 和 `qr_sign_keys` 中的 ARCHIVE 私钥，否则拒绝启动。
 - 正式安装包按 CPU 架构分为 `cpms-ubuntu24-amd64.run` 和 `cpms-ubuntu24-arm64.run`，均包含后端、

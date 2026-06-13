@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeftOutlined,
   BankOutlined,
   FolderOpenOutlined,
   HistoryOutlined,
@@ -177,7 +176,7 @@ export const InstitutionDetailNavLayout: React.FC<Props> = ({
               }}
             >
               <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center' }}>
-                <ArrowLeftOutlined />
+                ↩
               </span>
               <span>{backAction.label}</span>
             </button>

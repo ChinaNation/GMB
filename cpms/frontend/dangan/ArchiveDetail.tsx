@@ -1,4 +1,4 @@
-// 公民档案详情页：公民信息、护照有效期、投票账户和 ARCHIVE 二维码操作。
+// 公民档案详情页：左侧导航切换档案详情、资料库、操作记录，右侧承载当前业务区域。
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { listTowns, listVillages } from '../address/api';
 import { installStatus } from '../initialize/api';
 import * as api from './api';
-import type { Archive, ArchiveMaterial, ArchiveMaterialType } from './types';
+import type { Archive, ArchiveAuditLog, ArchiveMaterial, ArchiveMaterialType } from './types';
 import type { Town, Village } from '../address/types';
 import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
@@ -38,6 +38,89 @@ const materialTypeLabels: Record<ArchiveMaterialType, string> = {
   VIDEO: '视频',
   OTHER: '其他资料',
 };
+
+type ArchiveDetailTab = 'detail' | 'materials' | 'operations';
+
+const archiveDetailTabs: Array<{ key: ArchiveDetailTab; label: string; icon: 'home' | 'folder' | 'history' }> = [
+  { key: 'detail', label: '档案详情', icon: 'home' },
+  { key: 'materials', label: '资料库', icon: 'folder' },
+  { key: 'operations', label: '操作记录', icon: 'history' },
+];
+
+function ArchiveDetailNavIcon({ type }: { type: 'home' | 'folder' | 'history' }) {
+  if (type === 'home') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1v-9.5Z" />
+      </svg>
+    );
+  }
+  if (type === 'folder') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M3 8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2" />
+        <path d="M3 11h18l-2 7a2 2 0 0 1-2 1H5a2 2 0 0 1-2-2v-6Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 5v5h5" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+const auditActionLabels: Record<string, string> = {
+  CREATE_ARCHIVE: '创建档案',
+  UPDATE_ARCHIVE: '编辑档案',
+  BIND_ARCHIVE_WALLET: '绑定投票账户',
+  GENERATE_ARCHIVE_QR: '更新档案码',
+  PRINT_ARCHIVE_QR: '打印档案码',
+  ARCHIVE_MATERIAL_UPLOAD: '上传资料',
+  ARCHIVE_MATERIAL_DOWNLOAD: '下载资料',
+  ARCHIVE_MATERIAL_DELETE: '删除资料',
+  ARCHIVE_DELETE_COMPLETE: '删除档案',
+  ARCHIVE_DELETE_FAILED: '删除档案失败',
+  UPDATE_ARCHIVE_CITIZEN_STATUS: '修改公民状态',
+};
+
+const auditDetailLabels: Record<string, string> = {
+  archive_id: '档案ID',
+  archive_no: '档案号',
+  citizen_status: '公民状态',
+  voting_eligible: '选举资格',
+  wallet_address: '投票账户',
+  wallet_pubkey: '投票账户公钥',
+  material_type: '资料类型',
+  mime_type: '文件类型',
+  file_size: '文件大小',
+  sha256: 'SHA-256',
+  valid_from: '有效期开始',
+  valid_until: '有效期截止',
+  reason: '原因',
+};
+
+function auditDetailText(detail: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const [key, raw] of Object.entries(detail)) {
+    if (raw === null || raw === undefined || raw === '') continue;
+    let value = String(raw);
+    if (typeof raw === 'boolean') value = raw ? '是' : '否';
+    if (typeof raw === 'object') value = JSON.stringify(raw);
+    if (key === 'material_type') value = materialTypeLabels[value as ArchiveMaterialType] ?? value;
+    if (key === 'citizen_status') value = value === 'NORMAL' ? '正常' : value === 'REVOKED' ? '注销' : value;
+    parts.push(`${auditDetailLabels[key] ?? key}：${value}`);
+  }
+  return parts.join('；');
+}
+
+function auditDetailWithResult(log: ArchiveAuditLog): string {
+  const detail = auditDetailText(log.detail);
+  const result = `结果：${log.result === 'SUCCESS' ? '成功' : '失败'}`;
+  return detail ? `${result}；${detail}` : result;
+}
 
 const archiveQrErrorLabels: Record<string, string> = {
   'archive qr requires last_name': '档案码生成条件未满足：姓氏',
@@ -110,7 +193,12 @@ export default function ArchiveDetail() {
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialError, setMaterialError] = useState('');
+  const [materialModalOpen, setMaterialModalOpen] = useState(false);
   const materialInputRef = useRef<HTMLInputElement | null>(null);
+  const [activeTab, setActiveTab] = useState<ArchiveDetailTab>('detail');
+  const [auditLogs, setAuditLogs] = useState<ArchiveAuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
 
   const loadArchive = () => {
     if (!id) return;
@@ -124,9 +212,20 @@ export default function ArchiveDetail() {
       .catch(e => setMaterialError(e instanceof Error ? e.message : '加载公民资料库失败'));
   };
 
+  const loadAuditLogs = () => {
+    if (!id) return;
+    setAuditLoading(true);
+    setAuditError('');
+    api.listArchiveAuditLogs(id)
+      .then(res => setAuditLogs(res.data?.items || []))
+      .catch(e => setAuditError(e instanceof Error ? e.message : '加载操作记录失败'))
+      .finally(() => setAuditLoading(false));
+  };
+
   useEffect(() => {
     loadArchive();
     loadMaterials();
+    loadAuditLogs();
     installStatus().then(res => {
       if (res.data?.province_name) setProvinceName(res.data.province_name);
       if (res.data?.city_name) setCityName(res.data.city_name);
@@ -223,6 +322,7 @@ export default function ArchiveDetail() {
       const res = await api.updateArchive(id, body);
       if (res.data) setArchive(res.data);
       setEditing(false);
+      loadAuditLogs();
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存失败');
     }
@@ -295,6 +395,7 @@ export default function ArchiveDetail() {
       if (res.data) setArchive(res.data);
       setWalletModalOpen(false);
       setWalletScannerActive(false);
+      loadAuditLogs();
     } catch (e) {
       const message = e instanceof Error ? e.message : '保存投票账户失败';
       setWalletScanError(message.includes('wallet already bound')
@@ -323,6 +424,7 @@ export default function ArchiveDetail() {
       } else {
         loadArchive();
       }
+      loadAuditLogs();
     } catch (e) {
       setError(archiveQrActionError(e, '生成档案码失败'));
     } finally {
@@ -337,6 +439,7 @@ export default function ArchiveDetail() {
     setWalletBusy(true);
     try {
       await api.printArchiveQr(id);
+      loadAuditLogs();
       window.print();
     } catch (e) {
       setError(archiveQrActionError(e, '打印档案码失败'));
@@ -412,6 +515,20 @@ export default function ArchiveDetail() {
     setDeleteScanError('');
   };
 
+  const openMaterialModal = () => {
+    setMaterialError('');
+    setMaterialModalOpen(true);
+  };
+
+  const closeMaterialModal = () => {
+    if (materialBusy) return;
+    setMaterialModalOpen(false);
+    setMaterialFile(null);
+    setMaterialNote('');
+    setMaterialError('');
+    if (materialInputRef.current) materialInputRef.current.value = '';
+  };
+
   const handleMaterialUpload = async () => {
     if (!id || !materialFile) {
       setMaterialError('请选择要上传的公民资料');
@@ -427,8 +544,10 @@ export default function ArchiveDetail() {
       const res = await api.uploadArchiveMaterial(id, body);
       const uploaded = res.data?.item;
       if (uploaded) setMaterials(items => [uploaded, ...items]);
+      loadAuditLogs();
       setMaterialFile(null);
       setMaterialNote('');
+      setMaterialModalOpen(false);
       if (materialInputRef.current) materialInputRef.current.value = '';
     } catch (e) {
       setMaterialError(e instanceof Error ? e.message : '上传公民资料失败');
@@ -445,6 +564,7 @@ export default function ArchiveDetail() {
       await api.deleteArchiveMaterial(id, materialId);
       setMaterials(items => items.filter(item => item.material_id !== materialId));
       setArchive(current => current ? { ...current, archive_qr_payload: '' } : current);
+      loadAuditLogs();
     } catch (e) {
       setMaterialError(e instanceof Error ? e.message : '删除公民资料失败');
     } finally {
@@ -485,204 +605,332 @@ export default function ArchiveDetail() {
   const archiveDeleted = archive.status === 'DELETED' || archive.deleted_at !== null;
   const archiveId = id || archive.archive_id;
 
+  const archiveTitle = `${archive.last_name || ''}${archive.first_name || ''}`.trim() || '公民档案';
+
+  const detailSection = (
+    <div className="card archive-detail-card">
+      <div className="card__title flex-between">
+        公民档案详情
+        <div className="no-print" style={{ display: 'flex', gap: 8 }}>
+          {!archiveDeleted && editing && <button className="btn btn--primary btn--sm" onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</button>}
+          {!archiveDeleted && editing && <button className="btn btn--ghost btn--sm" onClick={() => setEditing(false)} disabled={saving}>取消</button>}
+          {!archiveDeleted && !editing && <button className="btn btn--danger btn--sm" onClick={openDeleteModal} disabled={deleteBusy}>删除</button>}
+          {!archiveDeleted && !editing && <button className="btn btn--primary btn--sm" onClick={startEdit}>编辑</button>}
+        </div>
+      </div>
+      {error && <div className="no-print" style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      {archiveDeleted && (
+        <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>
+          该档案已删除{archive.deleted_at ? `，删除时间：${new Date(archive.deleted_at * 1000).toLocaleString()}` : ''}{archive.deleted_by ? `，删除人：${archive.deleted_by}` : ''}
+        </div>
+      )}
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>档案号：{archive.archive_no}</div>
+
+      <div className="archive-detail-body">
+        <div className="archive-detail-main">
+          {editing && !archiveDeleted ? (
+            <>
+              <div className="form-row">
+                <div className="form-group"><label>姓氏 *</label><input className="form-input" value={String(editForm.last_name || '')} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} /></div>
+                <div className="form-group"><label>名字 *</label><input className="form-input" value={String(editForm.first_name || '')} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} /></div>
+              </div>
+              <div className="form-row mt-16">
+                <div className="form-group"><label>出生日期 *</label><DateInput value={String(editForm.birth_date || '')} onChange={handleEditBirthDateChange} required /></div>
+                <div className="form-group">
+                  <label>性别 *</label>
+                  <select className="form-input" value={String(editForm.gender_code || 'M')} onChange={e => setEditForm(f => ({ ...f, gender_code: e.target.value }))}>
+                    <option value="M">男</option><option value="W">女</option>
+                  </select>
+                </div>
+                <div className="form-group"><label>身高 (cm) *</label><input className="form-input" type="number" min={30} max={260} step="0.1" value={String(editForm.height_cm ?? '')} onChange={e => setEditForm(f => ({ ...f, height_cm: e.target.value }))} /></div>
+              </div>
+              <div className="form-row mt-16">
+                <div className="form-group">
+                  <label>镇 *</label>
+                  <select className="form-input" value={String(editForm.town_code || '')} onChange={e => handleEditTownChange(e.target.value)}>
+                    <option value="">请选择</option>
+                    {towns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>村/路 *</label>
+                  <select className="form-input" value={String(editForm.village_id || '')} onChange={e => setEditForm(f => ({ ...f, village_id: e.target.value }))}>
+                    <option value="">请选择</option>
+                    {villages.map(v => <option key={v.village_id} value={v.village_id}>{v.village_name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group mt-16"><label>详细地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+              <div className="form-row mt-16">
+                <div className="form-group">
+                  <label>公民状态 *</label>
+                  <select className="form-input" value={String(editForm.citizen_status || 'NORMAL')} onChange={e => handleEditCitizenStatusChange(e.target.value)}>
+                    <option value="NORMAL">正常</option><option value="REVOKED">注销</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>选举资格 *</label>
+                  <select
+                    className="form-input"
+                    value={String(canSetEditVotingEligible ? (editForm.voting_eligible ?? true) : false)}
+                    onChange={e => setEditForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}
+                    disabled={!canSetEditVotingEligible}
+                  >
+                    <option value="true">有选举资格</option><option value="false">无选举资格</option>
+                  </select>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="archive-detail-grid">
+                <div><strong>姓氏：</strong>{archive.last_name || '-'}</div>
+                <div><strong>名字：</strong>{archive.first_name || '-'}</div>
+                <div><strong>性别：</strong>{archive.gender_code === 'M' ? '男' : '女'}</div>
+                <div><strong>身高：</strong>{archive.height_cm ? `${archive.height_cm} cm` : '-'}</div>
+                <div><strong>出生日期：</strong>{archive.birth_date}</div>
+                <div><strong>年龄：</strong>{calcAge(archive.birth_date)}</div>
+                <div><strong>护照号：</strong>{archive.passport_no || '-'}</div>
+                <div className="archive-detail-grid__full archive-validity-line">
+                  <strong>有效期：</strong>{formatYmdZh(archive.valid_from)} - {formatYmdZh(archive.valid_until)}
+                </div>
+                <div><strong>省份：</strong>{provinceName || archive.province_code}</div>
+                <div><strong>城市：</strong>{cityName || archive.city_code}</div>
+                <div className="archive-detail-grid__full"><strong>详细地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
+                <div><strong>公民状态：</strong>
+                  <span className={`tag ${archive.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
+                    {archive.citizen_status === 'NORMAL' ? '正常' : '注销'}
+                  </span>
+                </div>
+                <div><strong>选举资格：</strong>
+                  <span className={`tag ${archive.voting_eligible ? 'tag--success' : 'tag--warning'}`}>
+                    {archive.voting_eligible ? '有选举资格' : '无选举资格'}
+                  </span>
+                </div>
+              </div>
+              <div className="form-row mt-16">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', width: '100%', gridColumn: '1 / -1' }}>
+                  <strong>投票账户：</strong>
+                  {archive.wallet_address ? (
+                    <>
+                      <span className="archive-wallet-address">{archive.wallet_address}</span>
+                      {!archiveDeleted && <button className="btn btn--primary btn--sm no-print" onClick={openWalletScanner} disabled={walletBusy}>更换</button>}
+                    </>
+                  ) : (
+                    <>
+                      <span className="print-only">未绑定</span>
+                      <div className="no-print archive-wallet-bind-row">
+                        <input
+                          className="form-input"
+                          value=""
+                          placeholder="未绑定"
+                          readOnly
+                          style={{ flex: 1 }}
+                        />
+                        {!archiveDeleted && (
+                          <button
+                            className="btn btn--primary btn--sm no-print"
+                            onClick={openWalletScanner}
+                            disabled={walletBusy}
+                            title="扫描钱包二维码"
+                            aria-label="扫描钱包二维码"
+                            style={{ width: 36, height: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <ScanIcon size={18} />
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="archive-detail-qr">
+          {archive.archive_qr_payload ? (
+            <div data-archive-qr="" style={{ lineHeight: 0 }}>
+              <QRCodeSVG value={archive.archive_qr_payload} size={200} />
+            </div>
+          ) : (
+            <div style={{ width: 200, height: 200, background: '#f3f4f6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)', fontSize: 13 }}>
+              签发未就绪
+            </div>
+          )}
+          {!archiveDeleted && (
+            <div className="no-print" style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn--primary btn--sm" onClick={handleGenerateArchiveQr} disabled={walletBusy || !archive.wallet_pubkey}>
+                更新
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={handleDownloadArchiveQr} disabled={!archive.archive_qr_payload}>
+                下载
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={handlePrintArchiveQr} disabled={walletBusy || !archive.archive_qr_payload}>
+                打印
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const materialsSection = (
+    <div className="card archive-material-section">
+      <div className="card__title flex-between">
+        公民资料库
+        {!archiveDeleted && (
+          <button className="btn btn--primary btn--sm no-print" onClick={openMaterialModal} disabled={materialBusy}>
+            上传
+          </button>
+        )}
+      </div>
+      {materialError && (
+        <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12 }}>{materialError}</div>
+      )}
+      {materials.length === 0 ? (
+        <div className="archive-material-empty">暂无资料</div>
+      ) : (
+        <div className="archive-material-grid">
+          {materials.map(item => {
+            const url = api.archiveMaterialDownloadUrl(archiveId, item.material_id);
+            return (
+              <div className="archive-material-card" key={item.material_id}>
+                <div className="archive-material-preview">
+                  {isImageMaterial(item) ? (
+                    <img src={url} alt={item.original_file_name} />
+                  ) : isVideoMaterial(item) ? (
+                    <video src={url} controls />
+                  ) : (
+                    <div className="archive-material-file">{item.mime_type === 'application/pdf' ? 'PDF' : '文件'}</div>
+                  )}
+                </div>
+                <div className="archive-material-meta">
+                  <div className="archive-material-name" title={item.original_file_name}>
+                    {item.original_file_name}
+                  </div>
+                  <div className="archive-material-sub">
+                    {materialTypeLabels[item.material_type]} · {formatFileSize(item.file_size)}
+                  </div>
+                  <div className="archive-material-sub">
+                    {new Date(item.uploaded_at * 1000).toLocaleString()}
+                  </div>
+                  {item.note && <div className="archive-material-note">{item.note}</div>}
+                </div>
+                <div className="archive-material-actions no-print">
+                  <a className="btn btn--ghost btn--sm" href={url} download={item.original_file_name}>下载</a>
+                  {!archiveDeleted && (
+                    <button
+                      className="btn btn--danger btn--sm"
+                      onClick={() => void handleMaterialDelete(item.material_id)}
+                      disabled={materialBusy}
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const operationsSection = (
+    <div className="card archive-operation-section">
+      <div className="card__title flex-between">
+        操作记录
+        <span className="archive-material-count">{auditLogs.length}</span>
+      </div>
+      {auditError && (
+        <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12 }}>{auditError}</div>
+      )}
+      {auditLoading ? (
+        <div className="archive-audit-empty">加载中...</div>
+      ) : auditLogs.length === 0 ? (
+        <div className="archive-audit-empty">暂无操作记录</div>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>操作</th>
+              <th>操作者账户</th>
+              <th>详情</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {auditLogs.map(log => (
+              <tr key={log.log_id}>
+                <td>{auditActionLabels[log.action] ?? log.action}</td>
+                <td className="archive-audit-account" title={log.operator_account || log.operator_user_id || '-'}>
+                  {log.operator_account || log.operator_user_id || '-'}
+                </td>
+                <td>
+                  <div className="archive-audit-detail">{auditDetailWithResult(log)}</div>
+                </td>
+                <td>{new Date(log.created_at * 1000).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+
+  const activeContent = activeTab === 'detail'
+    ? detailSection
+    : activeTab === 'materials'
+      ? materialsSection
+      : operationsSection;
+
   return (
     <>
-      <div className="card archive-detail-card print-area">
-        <div className="card__title flex-between">
-          公民档案详情
-          <div className="no-print" style={{ display: 'flex', gap: 8 }}>
-            {!archiveDeleted && !editing && <button className="btn btn--danger btn--sm" onClick={openDeleteModal} disabled={deleteBusy}>删除</button>}
-            {!archiveDeleted && !editing && <button className="btn btn--primary btn--sm" onClick={startEdit}>编辑</button>}
-            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/admin')}>返回列表</button>
+      <div className="archive-detail-shell print-area">
+        <div className="archive-detail-header no-print">
+          <div>
+            <div className="archive-detail-title">{archiveTitle}</div>
+            <div className="archive-detail-subtitle">档案号：{archive.archive_no}</div>
           </div>
+          <span className={`tag ${archiveDeleted ? 'tag--danger' : archive.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--warning'}`}>
+            {archiveDeleted ? '已删除' : archive.citizen_status === 'NORMAL' ? '正常' : '注销'}
+          </span>
         </div>
-        {error && <div className="no-print" style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
-        {archiveDeleted && (
-          <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>
-            该档案已删除{archive.deleted_at ? `，删除时间：${new Date(archive.deleted_at * 1000).toLocaleString()}` : ''}{archive.deleted_by ? `，删除人：${archive.deleted_by}` : ''}
-          </div>
-        )}
-        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>档案号：{archive.archive_no}</div>
-
-        <div className="archive-detail-body">
-          {/* 左侧：公民信息 */}
-          <div className="archive-detail-main">
-            {editing && !archiveDeleted ? (
-              <>
-                <div className="form-row">
-                  <div className="form-group"><label>姓氏 *</label><input className="form-input" value={String(editForm.last_name || '')} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} /></div>
-                  <div className="form-group"><label>名字 *</label><input className="form-input" value={String(editForm.first_name || '')} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} /></div>
-                </div>
-                <div className="form-row mt-16">
-                  <div className="form-group"><label>出生日期 *</label><DateInput value={String(editForm.birth_date || '')} onChange={handleEditBirthDateChange} required /></div>
-                  <div className="form-group">
-                    <label>性别 *</label>
-                    <select className="form-input" value={String(editForm.gender_code || 'M')} onChange={e => setEditForm(f => ({ ...f, gender_code: e.target.value }))}>
-                      <option value="M">男</option><option value="W">女</option>
-                    </select>
-                  </div>
-                  <div className="form-group"><label>身高 (cm) *</label><input className="form-input" type="number" min={30} max={260} step="0.1" value={String(editForm.height_cm ?? '')} onChange={e => setEditForm(f => ({ ...f, height_cm: e.target.value }))} /></div>
-                </div>
-                <div className="form-row mt-16">
-                  <div className="form-group">
-                    <label>镇 *</label>
-                    <select className="form-input" value={String(editForm.town_code || '')} onChange={e => handleEditTownChange(e.target.value)}>
-                      <option value="">请选择</option>
-                      {towns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>村/路 *</label>
-                    <select className="form-input" value={String(editForm.village_id || '')} onChange={e => setEditForm(f => ({ ...f, village_id: e.target.value }))}>
-                      <option value="">请选择</option>
-                      {villages.map(v => <option key={v.village_id} value={v.village_id}>{v.village_name}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="form-group mt-16"><label>详细地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
-                <div className="form-row mt-16">
-                  <div className="form-group">
-                    <label>公民状态 *</label>
-                    <select className="form-input" value={String(editForm.citizen_status || 'NORMAL')} onChange={e => handleEditCitizenStatusChange(e.target.value)}>
-                      <option value="NORMAL">正常</option><option value="REVOKED">注销</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>选举资格 *</label>
-                    <select
-                      className="form-input"
-                      value={String(canSetEditVotingEligible ? (editForm.voting_eligible ?? true) : false)}
-                      onChange={e => setEditForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}
-                      disabled={!canSetEditVotingEligible}
-                    >
-                      <option value="true">有选举资格</option><option value="false">无选举资格</option>
-                    </select>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                  <button className="btn btn--primary" onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</button>
-                  <button className="btn btn--ghost" onClick={() => setEditing(false)}>取消</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="archive-detail-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', columnGap: 32, rowGap: 16 }}>
-                  <div><strong>姓氏：</strong>{archive.last_name || '-'}</div>
-                  <div><strong>名字：</strong>{archive.first_name || '-'}</div>
-                  <div><strong>性别：</strong>{archive.gender_code === 'M' ? '男' : '女'}</div>
-                  <div><strong>身高：</strong>{archive.height_cm ? `${archive.height_cm} cm` : '-'}</div>
-                  <div><strong>出生日期：</strong>{archive.birth_date}</div>
-                  <div><strong>年龄：</strong>{calcAge(archive.birth_date)}</div>
-                  <div><strong>护照号：</strong>{archive.passport_no || '-'}</div>
-                  <div className="archive-validity-field">
-                    <strong>有效期</strong>
-                    <span className="archive-validity-lines">
-                      <span className="archive-validity-row">
-                        <span className="archive-validity-mark">：</span>
-                        <span>{formatYmdZh(archive.valid_from)}</span>
-                      </span>
-                      <span className="archive-validity-row">
-                        <span className="archive-validity-mark">-</span>
-                        <span>{formatYmdZh(archive.valid_until)}</span>
-                      </span>
-                    </span>
-                  </div>
-                  <div><strong>省份：</strong>{provinceName || archive.province_code}</div>
-                  <div><strong>城市：</strong>{cityName || archive.city_code}</div>
-                  <div style={{ gridColumn: '1 / -1' }}><strong>详细地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
-                </div>
-                <div className="form-row mt-16">
-                  <div><strong>公民状态：</strong>
-                    <span className={`tag ${archive.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
-                      {archive.citizen_status === 'NORMAL' ? '正常' : '注销'}
-                    </span>
-                  </div>
-                  <div><strong>选举资格：</strong>
-                    <span className={`tag ${archive.voting_eligible ? 'tag--success' : 'tag--warning'}`}>
-                      {archive.voting_eligible ? '有选举资格' : '无选举资格'}
-                    </span>
-                  </div>
-                </div>
-                <div className="form-row mt-16">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', width: '100%', gridColumn: '1 / -1' }}>
-                    <strong>投票账户：</strong>
-                    {archive.wallet_address ? (
-                      <>
-                        <span className="archive-wallet-address">{archive.wallet_address}</span>
-                        {!archiveDeleted && <button className="btn btn--primary btn--sm no-print" onClick={openWalletScanner} disabled={walletBusy}>更换</button>}
-                      </>
-                    ) : (
-                      <>
-                        <span className="print-only">未绑定</span>
-                        <div className="no-print archive-wallet-bind-row">
-                          <input
-                            className="form-input"
-                            value=""
-                            placeholder="未绑定"
-                            readOnly
-                            style={{ flex: 1 }}
-                          />
-                          {!archiveDeleted && (
-                            <button
-                              className="btn btn--primary btn--sm no-print"
-                              onClick={openWalletScanner}
-                              disabled={walletBusy}
-                              title="扫描钱包二维码"
-                              aria-label="扫描钱包二维码"
-                              style={{ width: 36, height: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                              <ScanIcon size={18} />
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* 右侧：ARCHIVE 二维码 */}
-          <div className="archive-detail-qr">
-            {archive.archive_qr_payload ? (
-              <>
-                <div data-archive-qr="" style={{ lineHeight: 0 }}>
-                  <QRCodeSVG value={archive.archive_qr_payload} size={200} />
-                </div>
-              </>
-            ) : (
-              <div style={{ width: 200, height: 200, background: '#f3f4f6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-                签发未就绪
-              </div>
-            )}
-            {!archiveDeleted && (
-              <div className="no-print" style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn--primary btn--sm" onClick={handleGenerateArchiveQr} disabled={walletBusy || !archive.wallet_pubkey}>
-                  更新
-                </button>
-                <button className="btn btn--ghost btn--sm" onClick={handleDownloadArchiveQr} disabled={!archive.archive_qr_payload}>
-                  下载
-                </button>
-                <button className="btn btn--ghost btn--sm" onClick={handlePrintArchiveQr} disabled={walletBusy || !archive.archive_qr_payload}>
-                  打印
-                </button>
-              </div>
-            )}
-          </div>
+        <div className="archive-detail-layout">
+          <aside className="archive-detail-nav no-print" aria-label="公民档案详情导航">
+            <button className="archive-detail-nav__button archive-detail-nav__button--back" onClick={() => navigate('/admin')}>
+              <span className="archive-detail-nav__icon">↩</span>
+              <span>返回列表</span>
+            </button>
+            {archiveDetailTabs.map(tab => (
+              <button
+                key={tab.key}
+                className={`archive-detail-nav__button ${activeTab === tab.key ? 'archive-detail-nav__button--active' : ''}`}
+                onClick={() => setActiveTab(tab.key)}
+                aria-current={activeTab === tab.key ? 'page' : undefined}
+              >
+                <span className="archive-detail-nav__icon">
+                  <ArchiveDetailNavIcon type={tab.icon} />
+                </span>
+                <span>{tab.label}</span>
+                {tab.key === 'materials' && <span className="archive-material-count">{materials.length}</span>}
+                {tab.key === 'operations' && <span className="archive-material-count">{auditLogs.length}</span>}
+              </button>
+            ))}
+          </aside>
+          <section className="archive-detail-content">
+            {activeContent}
+          </section>
         </div>
       </div>
 
-      <div className="card archive-material-section">
-        <div className="card__title flex-between">
-          公民资料库
-          <span className="archive-material-count">{materials.length}</span>
-        </div>
-        {materialError && (
-          <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12 }}>{materialError}</div>
-        )}
-        {!archiveDeleted && (
-          <div className="archive-material-upload no-print">
+      {materialModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal archive-material-modal">
+            <div className="modal__title">上传公民资料</div>
+            {materialError && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12 }}>{materialError}</div>}
             <div className="form-group">
               <label>资料类型</label>
               <select
@@ -696,7 +944,7 @@ export default function ArchiveDetail() {
                 ))}
               </select>
             </div>
-            <div className="form-group">
+            <div className="form-group mt-16">
               <label>文件</label>
               <input
                 ref={materialInputRef}
@@ -707,7 +955,7 @@ export default function ArchiveDetail() {
                 disabled={materialBusy}
               />
             </div>
-            <div className="form-group">
+            <div className="form-group mt-16">
               <label>备注</label>
               <input
                 className="form-input"
@@ -717,58 +965,15 @@ export default function ArchiveDetail() {
                 disabled={materialBusy}
               />
             </div>
-            <button className="btn btn--primary" onClick={handleMaterialUpload} disabled={materialBusy || !materialFile}>
-              {materialBusy ? '上传中...' : '上传'}
-            </button>
+            <div className="modal__footer">
+              <button className="btn btn--ghost" onClick={closeMaterialModal} disabled={materialBusy}>取消</button>
+              <button className="btn btn--primary" onClick={handleMaterialUpload} disabled={materialBusy || !materialFile}>
+                {materialBusy ? '上传中...' : '上传'}
+              </button>
+            </div>
           </div>
-        )}
-        {materials.length === 0 ? (
-          <div className="archive-material-empty">暂无资料</div>
-        ) : (
-          <div className="archive-material-grid">
-            {materials.map(item => {
-              const url = api.archiveMaterialDownloadUrl(archiveId, item.material_id);
-              return (
-                <div className="archive-material-card" key={item.material_id}>
-                  <div className="archive-material-preview">
-                    {isImageMaterial(item) ? (
-                      <img src={url} alt={item.original_file_name} />
-                    ) : isVideoMaterial(item) ? (
-                      <video src={url} controls />
-                    ) : (
-                      <div className="archive-material-file">{item.mime_type === 'application/pdf' ? 'PDF' : '文件'}</div>
-                    )}
-                  </div>
-                  <div className="archive-material-meta">
-                    <div className="archive-material-name" title={item.original_file_name}>
-                      {item.original_file_name}
-                    </div>
-                    <div className="archive-material-sub">
-                      {materialTypeLabels[item.material_type]} · {formatFileSize(item.file_size)}
-                    </div>
-                    <div className="archive-material-sub">
-                      {new Date(item.uploaded_at * 1000).toLocaleString()}
-                    </div>
-                    {item.note && <div className="archive-material-note">{item.note}</div>}
-                  </div>
-                  <div className="archive-material-actions no-print">
-                    <a className="btn btn--ghost btn--sm" href={url} download={item.original_file_name}>下载</a>
-                    {!archiveDeleted && (
-                      <button
-                        className="btn btn--danger btn--sm"
-                        onClick={() => void handleMaterialDelete(item.material_id)}
-                        disabled={materialBusy}
-                      >
-                        删除
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {walletModalOpen && (
         <div className="modal-overlay">

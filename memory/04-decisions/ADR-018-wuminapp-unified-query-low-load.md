@@ -1,6 +1,7 @@
 # ADR-018:wuminapp 全应用统一字段查询 + 降低全节点依赖
 
 - 状态:实施中(2026-06-13)。卡①③④⑦ 已完工并真机验证(机构详情提案显示/广场去重/投票确认/降载全部生效);卡②⑤⑥ 待独立窗口续做。
+- **修订(2026-06-13)**:经全栈架构审计,账户发现按"三仓库 + 共享底座"重构(详见 §九)。卡② 由"listSfidAccounts 整表化"重定义为"删死代码 + 合并双发现服务单次扫描 + AddressRegisteredSfid 反查命名";卡⑥ 增列"公权机构目录走 SFID 后端 catalog";新增 [[ADR-019]](ADR-019-adminaccounts-by-member-index.md)(链端成员反向索引,L2)。
 - 关联:[[ADR-017]](ADR-017-finalized-unification.md)
 - 触发:机构详情提案列表为空(根因实测:轻节点对长前缀 keysPaged 返回空);user 要求把"统一字段 + 降载"作为基础规则,整改整个 wuminapp。
 
@@ -58,7 +59,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 | 位置 | 索引 | 改法 |
 |---|---|---|
 | `transaction/duoqian-transfer/duoqian_transfer_service.dart:290` fetchProposalIdsByInstitution | `ProposalsByInstitution[account]` | 删,机构详情改走 ProposalFeedCache 按年取+过滤(**本次 bug 收口**) |
-| `governance/organization-manage/institution_manage_service.dart:327` listSfidAccounts | `SfidRegisteredAddress[blake2(sfid)+sfid]` | 改整表扫 `SfidRegisteredAddress`(短前缀)+ 客户端按 sfid 过滤(落地前手机实测确认空) |
+| `governance/organization-manage/institution_manage_service.dart:327` listSfidAccounts | `SfidRegisteredAddress[blake2(sfid)+sfid]` | **~~改整表扫~~ 已被 §九 取代**:审计确认此方法为死代码(全仓零调用),且多签账户清单应走 `AddressRegisteredSfid` 精确反查而非正向枚举 → **直接删除**,不整表化 |
 
 ### B. R2 必改 — N+1 循环逐条链读(费节点,核心降载)
 | 位置 | 现状 | 改法 |
@@ -110,14 +111,71 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 
 ## 七、任务拆卡
 - 卡①(A+D 提案)`ProposalFeedCache` + 机构详情/广场/个人多签统一接入(收口本次 bug + 最大降载)。
-- 卡②(A)`listSfidAccounts` 整表化(先手机验证)。
+- 卡②(A,**已按 §九 重定义**)多签发现降载:删 `listSfidAccounts` 死代码 + 合并机构/个人多签双发现服务为共享单次 AdminAccounts 扫描 + `AddressRegisteredSfid` 精确反查命名。纯客户端零链改。
 - 卡③(B)全部 N+1 改批量(余额/storage/投票)。
 - 卡④(C)三处轮询改 finalized 订阅。
 - 卡⑤(D)`ChainReadCache` 余额/storage 共享缓存层。
-- 卡⑥(E)HTTP/SFID 后端 Isar+TTL 缓存。
+- 卡⑥(E + §九)HTTP/SFID 后端 Isar+TTL 缓存;**增列**公权机构目录走 SFID 后端 catalog(分页+搜索)+ Isar/TTL,轻节点不扫链(公权机构界面"下一步再做",随界面落地)。
 - 卡⑦ 规则 R1/R2/R3 写入 `memory/07-ai/agent-rules.md` + `memory/05-modules/wuminapp/`。
 
 ## 八、风险与回滚
 - ProposalsByYear 跨年窗口:取 currentYear,必要时并 currentYear-1(提案 90 天清理,1 年窗口足够)。
 - 整表扫 SfidRegisteredAddress / AdminAccounts:注册规模上去需分页;dev 期无虞。
 - 纯客户端改动,逐卡可独立回滚(git revert),不涉链、不涉创世。
+
+---
+
+## 九、账户发现分层架构(2026-06-13 全栈审计修订)
+
+### 0. 背景:三类机构本质不同,不能共用一条发现通路
+全栈审计(链端 storage + 派生原语 + wuminapp 客户端)确认:账户地址全部由唯一原语
+`derive_duoqian_account(op_tag, ss58, payload)`(`primitives/src/core_const.rs:89`)确定性派生,
+同输入永远同地址、可离线算。但"枚举账户清单"的来源与范围语义三类完全不同:
+
+| 类别 | 范围语义 | 发现来源 | 缓存模型 | 新鲜度 | 链改空间 |
+|---|---|---|---|---|---|
+| 治理机构(87:国储会1+省储会43+省储行43) | 目录·全集(与用户无关) | 编译期注册表 `governance_institution_registry.generated.dart` | 静态写死 | 永不变 | 无 |
+| 公权机构(动态注册) | 目录·全集(与用户无关) | **SFID 后端 catalog**(分页+搜索) | HTTP+Isar/TTL(天级) | 慢 | 无 |
+| 多签(机构多签+个人多签) | **我的**(我的钱包某钱包是管理员才显示) | 链上扫 `AdminsChange::AdminAccounts` | Isar 永久+增量 | 随钱包/出块变 | ADR-019 反向索引 |
+
+账户类型注记(用户口径,2026-06-13):
+- 治理机构账户固定不变:国储会 4(主/费/安全基金/两和)、省储会 2(主/费)、省储行 3(主/费/永久质押)。
+- 公权机构:主/费 + N 个自定义(sfid_number+account_name 组合),界面"下一步再做"。
+- 个人多签:发起人钱包 + account_name,无 sfid,仅链上注册。
+
+### 1. 架构:三仓库 + 一共享底座
+上层按"发现来源"拆三个 Repository(语义/来源/缓存/新鲜度四维全不同,强行统一 = 全是
+`if orgType` 的漏抽象);下层共享派生/余额/账户卡/反查,杜绝重复。
+
+```
+lib/governance/
+├── shared/                              ← 共享底座(三类都用,单一源)
+│   ├── account_derivation.dart          ← derive_duoqian_account 唯一 Dart 实现(OP_* 全枚举)
+│   │                                       现状:仅 personal-manage/personal_duoqian_derive.dart,需归位/补全
+│   ├── chain_read_cache.dart(卡⑤)      ← finalizedBlockHash:storageKey 精确整键余额/storage 共享缓存
+│   ├── account_card / balance UI        ← 账户卡、余额展示(三类同一套)
+│   ├── address_registered_sfid 反查     ← AddressRegisteredSfid[addr]→(sfid,name) 精确整键
+│   └── admin_account_storage_codec.dart ← 已存在(两发现服务共用解码器)
+├── organization-manage/                 ← 治理机构目录 repo(读注册表,零链查) + 机构多签 repo(kind=2)
+├── public-institution/(下一步,卡⑥)     ← 公权机构目录 repo(SFID 后端 catalog + Isar/TTL)
+└── personal-manage/                     ← 个人多签 repo(kind=1/org=3)
+    （shared/admin_accounts_scan_service.dart：单次全表扫 AdminAccounts,emit {kind,addr,org,admins};
+      organization-manage 与 personal-manage 各自订阅过滤,不再各扫一遍——既消双扫,又不破模块边界）
+```
+
+### 2. 关键结论(纠正原 §四A 对卡②的判断)
+- **治理机构目录**:已 100% 注册表驱动,零链查(最优,不动);仅余额走精确整键批量 + 卡⑤ 缓存。
+- **公权机构目录**:不扫链。SFID 后端是机构身份签发方,"列出全部公权机构"是其天职 → 后端 catalog +
+  Isar/TTL;点进详情用已知 sfid_number 本地派生主/费地址 + 精确整键读余额/状态;自定义账户清单由
+  catalog 带出。**不碰 `SfidRegisteredAddress` 长前缀**。(归卡⑥)
+- **多签(我的)**:
+  - L1(卡②,纯客户端零链改):① `InstitutionDiscoveryService` + `PersonalManageDiscoveryService` 对
+    同一张 `AdminAccounts` 的双扫合并为 `shared/admin_accounts_scan_service.dart` 单次扫,按 kind 分流;
+    ② 机构账户命名走 `AddressRegisteredSfid[addr]` 精确批量反查聚合,**不正向枚举** `SfidRegisteredAddress`;
+    ③ 删死代码 `listSfidAccounts`。
+  - L2(ADR-019,需 runtime 升级):加 `AdminAccountsByMember` 成员反向索引,把全表扫降为按钱包精确读
+    (O(n)→O(1))。这是全系统最高价值的一处链改,ADR-018"不动链端"范围外,单列。
+
+### 3. `listSfidAccounts` 定性
+死代码(全仓零调用);其设计目标(正向枚举某 sfid 下账户名)被 `AddressRegisteredSfid` 精确反查取代,
+且正向枚举是 R1 禁区 → 直接删除,不整表化重写(免去 BoundedVec 长前缀 SCALE 解析坑)。

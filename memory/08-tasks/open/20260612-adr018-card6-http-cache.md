@@ -1,15 +1,23 @@
-# 任务卡:卡⑥HTTP/SFID后端Isar+TTL缓存
+# 任务卡:卡⑥ HTTP/SFID 后端 Isar+TTL 缓存 + 公权机构目录 catalog
 
-属 ADR-018(memory/04-decisions/ADR-018-wuminapp-unified-query-low-load.md)。
+属 ADR-018 §四E + §九(2026-06-13)。
 
-卡⑥HTTP/SFID后端Isar+TTL缓存
+## E 类:HTTP/SFID 后端缓存(37 处无缓存)
+- [ ] `wallet/capabilities/api_client.dart`:health 5min / admin catalog 1d / 机构注册证 7d
+- [ ] `my/myid/myid_api.dart:50` 电子护照状态:Isar 缓存 + 15min 刷新
+- [ ] `rpc/sfid_public.dart:51` 清算行搜索:已部分缓存,补 TTL
+- [ ] `update/app_update_service.dart:92` GitHub release:低频,加短缓存
+
+## §九:公权机构目录 catalog(下一步建界面时落地)
+公权机构界面"还没做,下一步再做";本项随界面开发落地,先约定契约。
+- [ ] 公权机构目录 = SFID 后端 catalog 接口(分页 + 搜索)+ Isar/TTL(catalog 1d)。**轻节点不扫链**。
+- [ ] 点进详情:用已知 sfid_number **本地派生**主/费地址(`governance/shared/account_derivation.dart`)+ 精确整键读余额/状态;自定义账户清单由 catalog 带出,**不碰 `SfidRegisteredAddress` 长前缀**。
+- [ ] catalog 接口若后端未就绪:先与 SFID 后端约定 OpenAPI 契约(分页游标 + 省/类型筛选 + 机构基础字段),客户端先行接 mock。
 
 ## 验收
 - [ ] flutter analyze 0 + flutter test 全过
+- [ ] E 类:各接口命中缓存,logcat 验证 HTTP 调用数下降
 - [ ] 旧代码/文档/注释清理无残留
 
-## 新窗口独立执行入口(2026-06-13)
-- 前置已完工(勿重做):卡①统一提案查询、卡③N+1批量+广场去重、卡④轮询改订阅、卡⑦规则,均已真机验证(详见 ADR-018 与各卡完工记录)。
-- 本卡自包含,新聊天窗口直接执行本卡即可,无需上轮对话历史。
-- 全局规则见 memory/07-ai/agent-rules.md「死规则:wuminapp 链上查询(ADR-018)」R1/R2/R3。
-- 完成标准:flutter analyze 0 + flutter test 全过 + 真机装机验证 + 清理旧代码/注释。
+## 边界
+- 公权机构详情的余额/状态仍走链上精确整键(经卡⑤ 缓存);catalog 只负责"目录发现",不替代链上实时态。

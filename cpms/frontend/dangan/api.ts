@@ -1,6 +1,6 @@
 import { del, get, post, put } from '../common/http';
 import type { ApiError, ApiResponse } from '../common/types';
-import type { Archive, ArchiveMaterial, CreateArchiveRequest } from './types';
+import type { Archive, ArchiveAuditLog, ArchiveMaterial, CreateArchiveRequest } from './types';
 
 export const createArchive = (body: CreateArchiveRequest) =>
   post<{ archive_id: string; archive_no: string; passport_no: string }>('/api/v1/archives', body);
@@ -96,3 +96,6 @@ export const deleteArchiveMaterial = (archiveId: string, materialId: string) =>
 
 export const archiveMaterialDownloadUrl = (archiveId: string, materialId: string) =>
   `/api/v1/archives/${archiveId}/materials/${materialId}/download`;
+
+export const listArchiveAuditLogs = (id: string) =>
+  get<{ items: ArchiveAuditLog[] }>(`/api/v1/archives/${id}/audit-logs`);

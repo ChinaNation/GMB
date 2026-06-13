@@ -148,6 +148,7 @@ export default function ArchiveList() {
       <table className="table">
         <thead>
           <tr>
+            <th style={CENTER_CELL_STYLE}>序号</th>
             <th style={CENTER_CELL_STYLE}>档案号</th>
             <th style={CENTER_CELL_STYLE}>姓名</th>
             <th style={CENTER_CELL_STYLE}>性别</th>
@@ -155,7 +156,6 @@ export default function ArchiveList() {
             <th style={CENTER_CELL_STYLE}>市镇</th>
             <th style={CENTER_CELL_STYLE}>公民状态</th>
             <th style={CENTER_CELL_STYLE}>创建时间</th>
-            <th style={CENTER_CELL_STYLE}>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -163,8 +163,18 @@ export default function ArchiveList() {
             <tr><td colSpan={8} className="text-center">加载中...</td></tr>
           ) : archives.length === 0 ? (
             <tr><td colSpan={8} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无数据</td></tr>
-          ) : archives.map(a => (
-            <tr key={a.archive_id}>
+          ) : archives.map((a, index) => (
+            <tr
+              key={a.archive_id}
+              className="archive-list-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/admin/archives/${a.archive_id}`)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') navigate(`/admin/archives/${a.archive_id}`);
+              }}
+            >
+              <td style={CENTER_CELL_STYLE}>{cursorStack.length * limit + index + 1}</td>
               <td style={{ ...CENTER_CELL_STYLE, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{a.archive_no}</td>
               <td style={CENTER_CELL_STYLE}>{a.last_name}{a.first_name}</td>
               <td style={CENTER_CELL_STYLE}>{a.gender_code === 'M' ? '男' : '女'}</td>
@@ -176,7 +186,6 @@ export default function ArchiveList() {
                 </span>
               </td>
               <td style={CENTER_CELL_STYLE}>{new Date(a.created_at * 1000).toLocaleDateString()}</td>
-              <td style={CENTER_CELL_STYLE}><button className="btn btn--ghost btn--sm" onClick={() => navigate(`/admin/archives/${a.archive_id}`)}>详情</button></td>
             </tr>
           ))}
         </tbody>

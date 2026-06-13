@@ -2,9 +2,9 @@ use std::{env, net::SocketAddr, path::Path, sync::Arc};
 
 use axum::{
     body::Body,
-    http::{HeaderName, HeaderValue, Request},
+    http::{header, HeaderName, HeaderValue, Request, StatusCode},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
@@ -145,7 +145,18 @@ fn validate_frontend_dir(frontend_dir: &str) {
 }
 
 async fn security_headers(req: Request<Body>, next: Next) -> Response {
+    let is_api_path = req.uri().path().starts_with("/api/");
     let mut response = next.run(req).await;
+    let html_fallback = response.status() == StatusCode::OK
+        && response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.starts_with("text/html"));
+    if is_api_path && html_fallback {
+        // 中文注释：API 未命中时不能落到前端 index.html，否则前端会把 HTML 当 JSON 解析。
+        response = common::err(StatusCode::NOT_FOUND, 404, "api route not found").into_response();
+    }
     let headers = response.headers_mut();
     headers.insert(
         HeaderName::from_static("x-content-type-options"),
