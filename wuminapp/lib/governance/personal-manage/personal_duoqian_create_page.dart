@@ -17,8 +17,8 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/governance/shared/account_derivation.dart';
 
-import 'personal_duoqian_derive.dart';
 import 'personal_manage_service.dart';
 import 'personal_proposal_history_service.dart';
 
