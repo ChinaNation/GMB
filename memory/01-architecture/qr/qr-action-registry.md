@@ -130,7 +130,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
 | `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | wuminapp 电子护照绑定签名 |
 | `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
-| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `province`, `actor_pubkey`, `target` | sfid 后端 | 省管理员治理和 Passkey 更新冷钱包确认 |
+| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `province`, `actor_pubkey`, `target` | sfid 后端 | 联邦管理员治理和 Passkey 更新公民钱包确认 |
 
 ## 二、字段渲染规则
 
@@ -155,7 +155,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 1. `display.action` 必须与 decoder 输出的 `decoded.action` 逐字相等。
 2. `display.fields[*].key` 必须与本表 fields 列逐字相等;禁止大小写变体、别名和回退 key。
 3. `display.fields` 中出现的 key/value 必须与 decoder 验真字段逐字一致;未出现的机器字段不展示。
-4. 冷钱包 UI 展示顺序以 decoder 的 `reviewFields` 为准,只展示中文业务字段和 SS58 地址。
+4. 钱包 UI 展示顺序以 decoder 的 `reviewFields` 为准,只展示中文业务字段和 SS58 地址。
 5. `amount_<account_name>` 是 `propose_create_institution` 的动态字段,`<account_name>` 必须等于 call data 中账户名称原文。
 6. 未列入本表的 action 不得进入生产 `sign_request`。
 

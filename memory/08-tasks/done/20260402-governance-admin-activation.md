@@ -18,7 +18,7 @@
 - 不可突破模块边界
 - 不可绕过既有契约
 - 不可擅自修改安全红线
-- 涉及签名协议变更，必须同步更新 wumin 冷钱包端
+- 涉及签名协议变更，必须同步更新 wumin 公民钱包端
 - 不清楚逻辑时先沟通
 
 ---
@@ -185,7 +185,7 @@ GMB/
 
 关键区别：激活不是链上交易，`payload_hex` 不包含 nonce/era/genesis_hash 等链上签名扩展，而是自定义的 "GMB_ACTIVATE" 前缀 payload。
 
-**wumin 冷钱包端需要的改动：**
+**wumin 公民钱包端需要的改动：**
 
 在 `payload_decoder.dart` 中新增对 `activate_admin` 动作的支持：
 
@@ -280,7 +280,7 @@ GMB/
 - 激活流程：生成激活 payload → 跳转 wumin 扫码 → 返回签名 → 本地验证 → 写入 Isar
 
 **`admin_list_page.dart` 改造：**
-- 旧：冷钱包匹配显示"我"
+- 旧：公民钱包匹配显示"我"
 - 新：读取本地激活状态，已激活显示绿色 + "已激活"
 
 **删除冷钱包导入相关入口**（如果 wuminapp 中有的话）
@@ -300,7 +300,7 @@ GMB/
 |------|---------|
 | 链上管理员被替换 | `get_activated_admins` 每次调用时与链上交叉校验，自动清除失效记录 |
 | 用户卸载重装 | 激活状态存在本地加密存储（activated-admins.json），随节点数据目录保留 |
-| 前端篡改绕过激活 | 提案操作调后端 API → 后端校验激活状态 → 最终提交仍需冷钱包签名（三层保护） |
+| 前端篡改绕过激活 | 提案操作调后端 API → 后端校验激活状态 → 最终提交仍需公民钱包签名（三层保护） |
 | 多管理员同机 | 支持同一节点激活多个不同机构的管理员 |
 | 跨机构 | 每条激活记录绑定 (pubkey, sfid_number)，互不干扰 |
 | wuminapp 与 node 激活状态 | 各自独立存储（node 在加密 JSON，wuminapp 在 Isar），互不依赖 |
@@ -314,7 +314,7 @@ Step 1: [Blockchain Agent] Rust 后端
   - 注册 Tauri 命令
   - 激活凭证加密存储
 
-Step 2: [Blockchain Agent] wumin 冷钱包端
+Step 2: [Blockchain Agent] wumin 公民钱包端
   - payload_decoder.dart 新增 "GMB_ACTIVATE" 前缀识别
   - offline_sign_service.dart 新增 activate_admin 白名单
 
@@ -359,6 +359,6 @@ Step 5: 清理残留
 - 冷钱包管理 Tab 和页面已完全删除
 - 治理主页 Tab 顺序：提案 / 国储会 / 省储会 / 省储行 / 开发升级
 - wuminapp 同步适配
-- wumin 冷钱包支持 activate_admin 签名
+- wumin 公民钱包支持 activate_admin 签名
 - 文档已更新
 - 残留已清理

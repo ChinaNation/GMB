@@ -110,4 +110,4 @@ if raw.is_empty() {
 
 ## 相关任务卡
 
-- `20260415-wumin-institutions-unified-registry.md` — wumin 冷钱包机构注册表合并（同日完成，HA000 省份名统一为"海滨"）
+- `20260415-wumin-institutions-unified-registry.md` — wumin 公民钱包机构注册表合并（同日完成，HA000 省份名统一为"海滨"）

@@ -14,7 +14,7 @@
 ## 预计修改目录
 
 - `citizenchain/runtime/governance/personal-manage/`：修复个人多签创建、关闭、清理、回调、权重和测试；涉及 Rust 代码、测试、注释和残留清理。
-- `wumin/lib/`：离线签名端只解码 extrinsic call data，本次 ProposalData 增加 `fee` 不影响冷钱包签名载荷；涉及残留确认。
+- `wumin/lib/`：离线签名端只解码 extrinsic call data，本次 ProposalData 增加 `fee` 不影响公民钱包签名载荷；涉及残留确认。
 - `wuminapp/lib/`：同步热钱包端对个人多签创建 action 的解码；涉及 Dart 代码。
 - `memory/05-modules/`：更新个人多签/治理模块技术文档；涉及文档。
 - `memory/08-tasks/`：记录执行过程并归档；涉及任务文档。

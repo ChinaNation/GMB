@@ -1,6 +1,6 @@
-//! 中文注释:管理员 Passkey、冷钱包确认和一次性安全授权模型。
+//! 中文注释:管理员 Passkey、公民钱包确认和一次性安全授权模型。
 //!
-//! 这些结构只服务联邦管理员/市级管理员安全动作,因此归属 `admins`,不再放在全局
+//! 这些结构只服务联邦管理员/市管理员安全动作,因此归属 `admins`,不再放在全局
 //! `models` 目录里。
 
 use chrono::{DateTime, Utc};
@@ -35,13 +35,13 @@ pub(crate) struct AdminPasskeyRegistrationChallenge {
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
     pub(crate) label: String,
-    /// 中文注释:冷钱包确认通过后才生成并保存 WebAuthn registration state。
+    /// 中文注释:公民钱包确认通过后才生成并保存 WebAuthn registration state。
     #[serde(default)]
     pub(crate) webauthn_state: Option<PasskeyRegistration>,
     pub(crate) payload_text: String,
     pub(crate) payload_hash: String,
     #[serde(default)]
-    pub(crate) cold_wallet_confirmed: bool,
+    pub(crate) citizen_wallet_confirmed: bool,
     pub(crate) issued_at: DateTime<Utc>,
     pub(crate) expires_at: DateTime<Utc>,
     #[serde(default)]

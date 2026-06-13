@@ -26,7 +26,7 @@ SFID
 - 不可突破 SFID 模块边界，不恢复 `backend/src/`、独立 `backend/chain/`、独立 `frontend/chain/` 或独立 `frontend/api/`。
 - SFID 不保存原始实名数据。
 - 机构唯一身份只认 `sfid_number`，不得新增第二套机构身份键。
-- 普通公权机构不得手动新增；只有教育委员会 `JY` 类型学校机构可以由市级管理员人工注册。
+- 普通公权机构不得手动新增；只有教育委员会 `JY` 类型学校机构可以由市管理员人工注册。
 - 注册局不进入公权机构目录，继续由现有注册局 tab 管理。
 - 公安局保持现有独立生成逻辑，本任务不主动并入公权机构目录。
 - SFID 工具行政区划是自动公权机构目录唯一行政区划真源。
@@ -85,6 +85,6 @@ SFID
 - 前端公权机构新增按钮已改为“新增”；公权/私权机构选项均显示“教育委员会 (JY)”，选择后名称字段显示“学校名称”。
 - 前端确定性公权列表、公安局列表、机构详情和注册局管理员列表已接入本地缓存：先显示缓存，再后台刷新只读查询结果。
 - 公权机构确定性列表接口已改为请求路径只读，不再在每次 GET 时触发全量自动目录 reconcile 和批量写库，避免进入某市公权机构列表时被全量对账拖慢。
-- 注册局省管理员详情页已修复首次自动定位所属省时覆盖用户点击页签的问题，只有真实切换省份时才重置到默认市列表。
+- 注册局联邦管理员详情页已修复首次自动定位所属省时覆盖用户点击页签的问题，只有真实切换省份时才重置到默认市列表。
 - 已更新 SFID institutions、SFID 工具和前端布局文档。
 - 已运行 `git diff --check`、`cargo fmt --manifest-path sfid/backend/Cargo.toml`、`cargo check --manifest-path sfid/backend/Cargo.toml`、`cargo test --manifest-path sfid/backend/Cargo.toml` 与 `npm run build`；前端构建产物 `sfid/frontend/dist/` 已清理。

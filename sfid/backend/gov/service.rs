@@ -1451,14 +1451,15 @@ fn bulk_write_target_chunk(
         "INSERT INTO subjects (
             sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
             status, category, subject_property, p1, province, city, town,
-            province_code, city_code, town_code, institution_code, org_code, sub_type,
+            province_code, city_code, town_code, institution_code, org_code,
+            private_type, partnership_kind, has_legal_personality,
             parent_sfid_number, created_by, created_at, updated_at
          )
          SELECT
             sfid_number, 'PUBLIC', name, sfid_name, short_name, p_code, c_code, t_code,
             'ACTIVE', category, subject_property, p1, province, city, town,
             p_code, COALESCE(c_code, ''), COALESCE(t_code, ''), institution_code, org_code,
-            NULL::text, NULL::text, $18, now(), now()
+            NULL::text, NULL::text, NULL::boolean, NULL::text, $18, now(), now()
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
@@ -1489,7 +1490,9 @@ fn bulk_write_target_chunk(
             town_code = EXCLUDED.town_code,
             institution_code = EXCLUDED.institution_code,
             org_code = EXCLUDED.org_code,
-            sub_type = EXCLUDED.sub_type,
+            private_type = EXCLUDED.private_type,
+            partnership_kind = EXCLUDED.partnership_kind,
+            has_legal_personality = EXCLUDED.has_legal_personality,
             parent_sfid_number = EXCLUDED.parent_sfid_number,
             created_by = EXCLUDED.created_by,
             updated_at = now()",

@@ -13,7 +13,7 @@
 - `lib/rpc/`：链上通信、metadata、nonce、extrinsic 编码与提交公共底座
 - `lib/transaction/shared/local_tx_store.dart`：本地交易记录共用存储
 - `lib/wallet/`：钱包档案、密钥读取、生物识别守卫
-- `lib/signer/` 与 `lib/qr/`：热钱包/冷钱包签名协议与扫码会话
+- `lib/signer/` 与 `lib/qr/`：热钱包/公民钱包签名协议与扫码会话
 - `lib/organization-manage/`：机构多签与多签聚合入口
 - `lib/personal-manage/`：个人多签
 - `lib/transaction/offchain-transaction/`：链下扫码支付与清算行能力
@@ -93,7 +93,7 @@ wuminapp/lib/transaction/shared/
 - 签名算法固定 `sr25519`
 - `OnchainPaymentService.submitTransfer()` 只接收签名回调，不读取 seed
 - 热钱包 seed 只在 `WalletManager` 内短暂存在，签名后清零
-- 冷钱包签名通过 `WUMIN_QR_V1` 的 `sign_request / sign_response`
+- 公民钱包签名通过 `WUMIN_QR_V1` 的 `sign_request / sign_response`
 - `wuminapp` 只负责生成待签名 payload、校验回执、广播交易；离线签名由 `wumin` 完成
 
 ## 7. 手续费

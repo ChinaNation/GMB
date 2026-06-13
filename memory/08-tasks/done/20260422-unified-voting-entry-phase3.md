@@ -1,7 +1,7 @@
 # 任务卡：投票引擎统一入口整改 · Phase 3
 
 - 状态：done(2026-04-22),与 Phase 1+2 一起移 done
-- 归属：Blockchain Agent(runtime spec_version + node 内置 Tauri UI) + Mobile Agent(wumin 冷钱包 + wuminapp 热钱包)
+- 归属：Blockchain Agent(runtime spec_version + node 内置 Tauri UI) + Mobile Agent(wumin 公民钱包 + wuminapp 热钱包)
 - 承接：`20260422-unified-voting-entry-phase1.md` / `20260422-unified-voting-entry-phase2.md`
 
 ## Phase 3 目标

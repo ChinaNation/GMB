@@ -38,4 +38,4 @@
 - `cargo clippy --manifest-path cpms/backend/Cargo.toml --all-targets -- -D warnings`：通过。
 - `npm run build`（`cpms/frontend`）：通过。
 - `git diff --check`：通过。
-- 残留扫描：未发现旧 `/api/v1/admin/operators`、`/admin/operators`、`OperatorList`、旧操作员接口或旧“操作员”文案残留。
+- 残留扫描：未发现旧 `/api/v1/admin/city-admins`、`/admin/city-admins`、`OperatorList`、旧操作员接口或旧“操作员”文案残留。

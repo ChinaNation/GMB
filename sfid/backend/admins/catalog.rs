@@ -4,7 +4,7 @@ use crate::admins::repo;
 use crate::*;
 
 /// 中文注释:二角色均可访问联邦管理员列表,但只能看自己所在省域。
-pub(crate) async fn list_province_admins(
+pub(crate) async fn list_federal_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
@@ -27,9 +27,9 @@ pub(crate) async fn list_province_admins(
     }
     let scope_province = ctx.admin_province.clone();
     let result = state.db.with_client(move |conn| {
-        let rows = repo::list_sheng_admins_by_province_conn(conn, scope_province.as_deref())?
+        let rows = repo::list_federal_admins_by_province_conn(conn, scope_province.as_deref())?
             .into_iter()
-            .map(|(admin, province)| ShengAdminRow {
+            .map(|(admin, province)| FederalAdminRow {
                 id: admin.id,
                 province: province.clone(),
                 admin_pubkey: admin.admin_pubkey,
@@ -48,7 +48,7 @@ pub(crate) async fn list_province_admins(
     let rows = match result {
         Ok(v) => v,
         Err(err) => {
-            let message = format!("query province admins failed: {err}");
+            let message = format!("query federal admins failed: {err}");
             return api_error(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 5001,

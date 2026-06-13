@@ -372,18 +372,18 @@ class PayloadDecoder {
     switch (actionType) {
       case 'PASSKEY_REGISTER':
         return '更新 Passkey';
-      case 'CREATE_OPERATOR':
-        return '新增市级管理员';
-      case 'UPDATE_OPERATOR':
-        return '编辑市级管理员';
-      case 'DELETE_OPERATOR':
-        return '删除市级管理员';
-      case 'CREATE_SHENG_ADMIN':
-        return '新增省级管理员';
-      case 'UPDATE_SHENG_ADMIN':
-        return '编辑省级管理员';
-      case 'DELETE_SHENG_ADMIN':
-        return '删除省级管理员';
+      case 'CREATE_CITY_ADMIN':
+        return '新增市管理员';
+      case 'UPDATE_CITY_ADMIN':
+        return '编辑市管理员';
+      case 'DELETE_CITY_ADMIN':
+        return '删除市管理员';
+      case 'CREATE_FEDERAL_ADMIN':
+        return '新增联邦管理员';
+      case 'UPDATE_FEDERAL_ADMIN':
+        return '编辑联邦管理员';
+      case 'DELETE_FEDERAL_ADMIN':
+        return '删除联邦管理员';
       case 'INSTITUTION_CREATE':
         return '创建机构';
       case 'INSTITUTION_UPDATE':

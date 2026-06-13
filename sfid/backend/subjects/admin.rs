@@ -21,9 +21,7 @@ use crate::subjects::http::{resolve_created_by, service_error_to_response};
 use crate::subjects::model::{
     InstitutionDetailOutput, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
 };
-use crate::subjects::service::{
-    validate_institution_name, validate_legal_representative_required, validate_sub_type_with_p1,
-};
+use crate::subjects::service::{validate_institution_name, validate_legal_representative_required};
 use crate::subjects::uninorg;
 use crate::*;
 
@@ -189,7 +187,6 @@ pub(crate) async fn update_institution(
         "target": sfid_number.clone(),
         "sfid_number": sfid_number.clone(),
         "institution_name": input.institution_name.clone(),
-        "sub_type": input.sub_type.clone(),
         "parent_sfid_number": input.parent_sfid_number.clone(),
         "legal_rep_name": input.legal_rep_name.clone(),
         "legal_rep_sfid_number": input.legal_rep_sfid_number.clone(),
@@ -247,16 +244,6 @@ pub(crate) async fn update_institution(
         }
         existing.institution_name = Some(new_name);
     }
-    if input.sub_type.is_some() {
-        existing.sub_type = match validate_sub_type_with_p1(
-            &existing.subject_property,
-            &existing.p1,
-            input.sub_type.as_deref(),
-        ) {
-            Ok(v) => v,
-            Err(e) => return service_error_to_response(e),
-        };
-    }
     if input.parent_sfid_number.is_some() {
         let raw = input
             .parent_sfid_number
@@ -264,8 +251,11 @@ pub(crate) async fn update_institution(
             .unwrap_or("")
             .trim()
             .to_string();
-        if !uninorg::requires_parent(existing.subject_property.as_str()) {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "仅非法人(F)可设置所属法人");
+        if !uninorg::requires_parent(
+            existing.subject_property.as_str(),
+            existing.institution_code.as_str(),
+        ) {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "该主体类型不接受所属法人");
         }
         if raw.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人不能为空");
@@ -368,7 +358,7 @@ pub(crate) async fn update_institution(
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct SearchParentsQuery {
     pub q: Option<String>,
-    /// 非法人(F)的机构代码:JY=教育分校(只搜本市学校本部),其它=ZG/TG。
+    /// 非法人(F)的机构代码:JY=教育分校(只搜本市学校本部),其它按从属非法人规则搜索。
     pub f_institution: Option<String>,
     /// 非法人的落位省/市,用于地域预过滤(规则同 subjects/uninorg::parent_locality_rule)。
     pub province: Option<String>,
@@ -450,7 +440,7 @@ pub(crate) async fn search_parent_institutions(
              )"
         };
         let sql = format!(
-            "SELECT s.sfid_number, s.name, s.subject_property, s.sub_type, s.category,
+            "SELECT s.sfid_number, s.name, s.subject_property, s.private_type, s.partnership_kind, s.category,
                     s.p1, s.province, s.city, COALESCE(s.town, '')
              FROM subjects s
              WHERE s.kind IN ('PUBLIC', 'PRIVATE')
@@ -470,7 +460,7 @@ pub(crate) async fn search_parent_institutions(
         .map_err(|e| format!("query parent institutions failed: {e}"))?;
         let mut output = Vec::with_capacity(rows.len());
         for row in rows {
-            let category_text: String = row.get(4);
+            let category_text: String = row.get(5);
             let Some(category) = crate::institution_category_from_text(category_text.as_str())
             else {
                 continue;
@@ -479,12 +469,13 @@ pub(crate) async fn search_parent_institutions(
                 sfid_number: row.get(0),
                 institution_name: row.get(1),
                 subject_property: row.get(2),
-                sub_type: row.get(3),
+                private_type: row.get(3),
+                partnership_kind: row.get(4),
                 category,
-                p1: row.get(5),
-                province: row.get(6),
-                city: row.get(7),
-                town: row.get(8),
+                p1: row.get(6),
+                province: row.get(7),
+                city: row.get(8),
+                town: row.get(9),
             });
         }
         Ok(output)

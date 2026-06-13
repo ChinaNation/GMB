@@ -1,5 +1,5 @@
 // 中文注释:管理员通行密钥更新工具。它只服务当前登录管理员本人;
-// 生成/重新生成时先由本人冷钱包确认,再创建浏览器通行密钥并落库。
+// 生成/重新生成时先由本人公民钱包确认,再创建浏览器通行密钥并落库。
 
 import { useCallback, useState } from 'react';
 import { Badge, Button } from 'antd';
@@ -118,7 +118,7 @@ export function Passkey({
         </Badge>
       ) : updateButton}
       <WuminSignatureModal
-        title="通行密钥冷钱包确认"
+        title="通行密钥公民钱包确认"
         open={!!passkeyStart}
         onCancel={() => {
           setPasskeyStart(null);

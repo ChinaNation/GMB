@@ -37,7 +37,7 @@ sfid/backend/store/
   - `store_subjects`
   - `store_ops`
   - `ids / subjects / citizens / gov / private / accounts / docs / audit`
-- `ShardedStore` 是按省读取和写入的进程内缓存,用于避免省市管理员查询时扫描全量内存。
+- `ShardedStore` 是按省读取和写入的进程内缓存,用于避免联邦/市管理员查询时扫描全量内存。
 - 省级分片 key 使用省名;数据库真实过滤必须先落到 `p_code / c_code`。
 
 ## 引用规则

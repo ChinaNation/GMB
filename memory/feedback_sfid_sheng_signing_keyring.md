@@ -13,12 +13,12 @@
 - 省签名密钥私钥**加密存储在 Postgres admins 表的 encrypted_signing_privkey TEXT 列**,AES-256-GCM 格式 `base64(nonce_12B || ciphertext || tag_16B)`
 - Wrap key 由 HKDF-SHA256(SFID MAIN seed, salt, info) 派生,salt = `sfid-sheng-signer-v1-salt`, info = `sfid-sheng-signer-v1-info`
 - **SFID MAIN 轮换时必须级联重加密**所有 sheng admin 密文(已在 `set_active_main_signer` 落地),明文 seed 全生命周期 zeroize
-- 省签名 signer 的生命周期:省登录管理员登录时 bootstrap(首次生成+推链,复用解密),session 过期驱逐 cache,替换省管理员时级联清链+清密文
+- 省签名 signer 的生命周期:省登录管理员登录时 bootstrap(首次生成+推链,复用解密),session 过期驱逐 cache,替换联邦管理员时级联清链+清密文
 - `AdminAuthContext` 必须一路传到业务 extrinsic 提交函数(`submit_register_sfid_institution_extrinsic`),`resolve_business_signer` 根据 ctx.role 路由到本省 Pair
 - 业务 extrinsic 的字段包签名和 submit 的 signer 必须是**同一把**省级 Pair,否则链端 verifier 会挂
 
 ## 前端
-- `ShengAdminsView` 表格必须显示"签名密钥状态"列(Tag),`signing_pubkey` 为 None 显示未初始化,有值显示已激活 + Tooltip 完整 pubkey
+- `FederalAdminsView` 表格必须显示"签名密钥状态"列(Tag),`signing_pubkey` 为 None 显示未初始化,有值显示已激活 + Tooltip 完整 pubkey
 
 ## 运维
 - 唯一新增的部署要求:**确保 `SFID_SIGNING_SEED_HEX` 环境变量正确**(已有机制),不需要任何新 env

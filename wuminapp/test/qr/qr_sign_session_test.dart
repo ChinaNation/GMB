@@ -42,7 +42,7 @@ void main() {
         ),
       );
 
-      expect(find.text('冷钱包签名'), findsOneWidget);
+      expect(find.text('公民钱包签名'), findsOneWidget);
       expect(find.textContaining('签名请求有效期剩余'), findsOneWidget);
       expect(find.textContaining('请用离线设备扫描此二维码'), findsOneWidget);
       expect(find.text('取消'), findsOneWidget);

@@ -14,15 +14,15 @@
 src/views/
 ├── auth/           登录鉴权
 ├── citizens/       注册局 + 业务员绑定/解绑
-├── operators/      市管理员 ShiAdmin
-├── sheng-admins/   省管理员 ShengAdmin + system-settings
+├── operators/      市管理员 CityAdmin
+├── federal-registry/   联邦管理员 FederalAdmin + system-settings
 ├── institutions/   私权/公权/公安局机构
 └── common/         跨 view 共享小组件
 ```
 
 ## 新增功能流程
 
-1. 判断属于哪个 view(auth/citizens/operators/sheng-admins/keyring/institutions)
+1. 判断属于哪个 view(auth/citizens/city-admins/federal-registry/keyring/institutions)
 2. 编辑该 view 文件,不动 App.tsx
 3. 如果是新 tab,先在 App.tsx 的 activeView 类型 + Menu items + Content switch 各加一行,然后新建 `views/<module>/`
 

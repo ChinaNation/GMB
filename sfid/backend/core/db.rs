@@ -105,7 +105,7 @@ impl Db {
                 admin_id BIGINT PRIMARY KEY,
                 admin_pubkey TEXT NOT NULL UNIQUE,
                 admin_name TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('FEDERAL_ADMIN', 'SHI_ADMIN')),
+                role TEXT NOT NULL CHECK (role IN ('FEDERAL_ADMIN', 'CITY_ADMIN')),
                 built_in BOOLEAN NOT NULL DEFAULT FALSE,
                 created_by TEXT NOT NULL DEFAULT 'SYSTEM',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -117,12 +117,12 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_pubkey_lower ON admins(lower(admin_pubkey));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             CREATE TABLE IF NOT EXISTS sheng_admin_scope (
+             CREATE TABLE IF NOT EXISTS federal_admin_scope (
                 admin_id BIGINT PRIMARY KEY REFERENCES admins(admin_id) ON DELETE CASCADE,
                 province_name TEXT NOT NULL REFERENCES provinces(province_name) ON DELETE RESTRICT
              );
-             CREATE INDEX IF NOT EXISTS idx_sheng_admin_scope_province_name
-                ON sheng_admin_scope(province_name);
+             CREATE INDEX IF NOT EXISTS idx_federal_admin_scope_province_name
+                ON federal_admin_scope(province_name);
 
              CREATE TABLE IF NOT EXISTS admin_passkeys (
                 credential_id TEXT PRIMARY KEY,
@@ -193,7 +193,7 @@ impl Db {
              CREATE TABLE IF NOT EXISTS admin_sessions (
                 token TEXT PRIMARY KEY,
                 admin_pubkey TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('FEDERAL_ADMIN', 'SHI_ADMIN')),
+                role TEXT NOT NULL CHECK (role IN ('FEDERAL_ADMIN', 'CITY_ADMIN')),
                 expires_at TIMESTAMPTZ NOT NULL,
                 last_active_at TIMESTAMPTZ NOT NULL,
                 payload JSONB NOT NULL
@@ -345,7 +345,9 @@ impl Db {
 	                town_code TEXT,
 	                institution_code TEXT,
 	                org_code TEXT,
-                sub_type TEXT,
+                private_type TEXT,
+                partnership_kind TEXT,
+                has_legal_personality BOOLEAN,
                 parent_sfid_number TEXT,
                 legal_rep_name TEXT,
                 legal_rep_sfid_number TEXT,
@@ -396,10 +398,11 @@ impl Db {
                 p_code TEXT NOT NULL,
                 c_code TEXT NOT NULL,
                 code TEXT NOT NULL,
-                kind TEXT NOT NULL CHECK (kind IN ('SCHOOL', 'PROFIT', 'NONPROFIT', 'BRANCH')),
+                private_type TEXT NOT NULL CHECK (private_type IN ('SOLE', 'PARTNERSHIP', 'COMPANY', 'CORPORATION', 'WELFARE', 'ASSOCIATION')),
+                partnership_kind TEXT CHECK (partnership_kind IN ('GENERAL', 'LIMITED')),
+                has_legal_personality BOOLEAN NOT NULL,
                 subject_property TEXT NOT NULL CHECK (subject_property IN ('S', 'F')),
                 p1 TEXT NOT NULL CHECK (p1 IN ('0', '1')),
-                sub_type TEXT,
                 parent_sfid_number TEXT,
                 PRIMARY KEY (p_code, sfid_number)
              ) PARTITION BY LIST (p_code);
@@ -478,7 +481,17 @@ impl Db {
                 DROP COLUMN IF EXISTS a3;
              ALTER TABLE private
                 ADD COLUMN IF NOT EXISTS subject_property TEXT,
+                ADD COLUMN IF NOT EXISTS private_type TEXT,
+                ADD COLUMN IF NOT EXISTS partnership_kind TEXT,
+                ADD COLUMN IF NOT EXISTS has_legal_personality BOOLEAN,
+                DROP COLUMN IF EXISTS kind,
+                DROP COLUMN IF EXISTS sub_type,
                 DROP COLUMN IF EXISTS a3;
+             ALTER TABLE subjects
+                ADD COLUMN IF NOT EXISTS private_type TEXT,
+                ADD COLUMN IF NOT EXISTS partnership_kind TEXT,
+                ADD COLUMN IF NOT EXISTS has_legal_personality BOOLEAN,
+                DROP COLUMN IF EXISTS sub_type;
              ALTER TABLE gov
                 DROP COLUMN IF EXISTS chain_status;",
         )
@@ -515,7 +528,7 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_gov_org
                 ON gov (p_code, org_code);
              CREATE INDEX IF NOT EXISTS idx_private_city
-                ON private (p_code, c_code, kind, code);
+                ON private (p_code, c_code, private_type, code);
              CREATE INDEX IF NOT EXISTS idx_accounts_sfid
                 ON accounts (p_code, sfid_number);
              CREATE INDEX IF NOT EXISTS idx_docs_sfid
@@ -547,17 +560,26 @@ impl Db {
             "legal_rep_photo_mime",
             "legal_rep_photo_size",
             "subject_property",
+            "private_type",
+            "partnership_kind",
+            "has_legal_personality",
         ] {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
         Self::ensure_column_state(conn, "private", "subject_property", true)?;
-        // 中文注释:旧 SFID 方案残列(full_name 已改名 sfid_name、a3 段已废)必须不存在。
+        for column in ["private_type", "partnership_kind", "has_legal_personality"] {
+            Self::ensure_column_state(conn, "private", column, true)?;
+        }
+        // 中文注释:旧 SFID 方案残列和旧私权分类列必须不存在。
         for (table, column) in [
             ("subjects", "chain_status"),
             ("gov", "chain_status"),
             ("subjects", "full_name"),
             ("subjects", "a3"),
+            ("subjects", "sub_type"),
             ("private", "a3"),
+            ("private", "kind"),
+            ("private", "sub_type"),
         ] {
             Self::ensure_column_state(conn, table, column, false)?;
         }

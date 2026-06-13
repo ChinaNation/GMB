@@ -7,7 +7,7 @@ import { adminHeaders, request } from '../utils/http';
 // 联邦管理员对外行(API 返回结构)。
 //
 // SFID 业务语义:联邦管理员只有存在/删除,不存在停用/启用状态字段。
-export type ShengAdminRow = {
+export type FederalAdminRow = {
   id: number;
   province: string;
   admin_pubkey: string;
@@ -18,19 +18,19 @@ export type ShengAdminRow = {
   updated_at?: string | null;
 };
 
-export async function listShengAdmins(auth: AdminAuth): Promise<ShengAdminRow[]> {
-  return request<ShengAdminRow[]>('/api/v1/admin/sheng-admins', {
+export async function listFederalAdmins(auth: AdminAuth): Promise<FederalAdminRow[]> {
+  return request<FederalAdminRow[]>('/api/v1/admin/federal-admins', {
     method: 'GET',
     headers: adminHeaders(auth),
   });
 }
 
-export async function updateShengAdminName(
+export async function updateFederalAdminName(
   auth: AdminAuth,
   id: number,
   adminName: string,
-): Promise<ShengAdminRow> {
-  return request<ShengAdminRow>(`/api/v1/admin/sheng-admins/${id}`, {
+): Promise<FederalAdminRow> {
+  return request<FederalAdminRow>(`/api/v1/admin/federal-admins/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json', ...adminHeaders(auth) },
     body: JSON.stringify({ admin_name: adminName }),

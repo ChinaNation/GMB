@@ -8,7 +8,7 @@
 
 ## 1. 任务目标
 
-把 GMB 仓库内 `org-manage` 模块的 crate 名、目录名、Rust 模块路径、pallet 对外名 `DuoqianManage`、MODULE_TAG `b"dq-mgmt"` 以及 node 后端业务目录 `duoqian_manage/` 全部统一重命名为 `organization-manage` / `organization_manage` / `OrganizationManage` / `b"org-mgmt"`，并同步更新 wumin 冷钱包、wuminapp 热钱包、sfid 后台、节点 Tauri 前端、文档与任务记录。
+把 GMB 仓库内 `org-manage` 模块的 crate 名、目录名、Rust 模块路径、pallet 对外名 `DuoqianManage`、MODULE_TAG `b"dq-mgmt"` 以及 node 后端业务目录 `duoqian_manage/` 全部统一重命名为 `organization-manage` / `organization_manage` / `OrganizationManage` / `b"org-mgmt"`，并同步更新 wumin 公民钱包、wuminapp 热钱包、sfid 后台、节点 Tauri 前端、文档与任务记录。
 
 不改动业务逻辑、不改 Event/Error 字面名（如 `DuoqianCreated`/`DuoqianClosed` 保持原字面）、不改 `DuoqianTransfer` pallet（独立模块）、不改 wuminapp `lib/duoqian/` 业务目录命名（按多签业务而非 pallet 分层）。
 
@@ -123,7 +123,7 @@ grep -rln "dq-mgmt" citizenchain/ wumin/ wuminapp/ sfid/ --include="*.rs" --incl
 
 ### 5.4 行为不变量
 - 链上 storage layout 在 fresh genesis 下与重命名前等价（仅 pallet prefix 哈希值变化，结构与字段名一致）
-- 提案 MODULE_TAG 改为 `b"org-mgmt"` 后，wumin 冷钱包 + wuminapp 热钱包 + admins-change pallet 三方解码一致
+- 提案 MODULE_TAG 改为 `b"org-mgmt"` 后，wumin 公民钱包 + wuminapp 热钱包 + admins-change pallet 三方解码一致
 - node 桌面端 6 个 Tauri command 名称不变（仅模块路径变）
 
 ## 6. 风险与回滚

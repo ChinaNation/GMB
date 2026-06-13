@@ -5,7 +5,7 @@
 `sfid-system` 的功能需求是：
 - 维护 SFID 与链上账户的一对一绑定关系。
 - 为公民投票提供基于 SFID 的资格校验与投票凭证验签能力。
-- 维护省管理员 3-tier 名册 `ShengAdmins[Province][Slot]`。
+- 维护联邦管理员 3-tier 名册 `FederalAdmins[Province][Slot]`。
 - 维护省级签名公钥 `ShengSigningPubkey[Province][AdminPubkey]`。
 - 为上游发行/治理模块提供统一、可复用的资格接口，避免多个模块各自保存一份 SFID 真值状态。
 - 将链上“是否为已认证公民”的判断收敛到单一真相源，避免链下口径和链上状态漂移。
@@ -28,7 +28,7 @@
 
 ### 0.4 安全与运维需求
 - 模块不得依赖链下“在线状态”或链下缓存来判断公民资格，资格判断必须完全可由链上状态重建。
-- 省管理员三槽名册必须保证 Main 为本省 trust anchor,Backup1/Backup2 只能由 Main 签名授权增删。
+- 联邦管理员三槽名册必须保证 Main 为本省 trust anchor,Backup1/Backup2 只能由 Main 签名授权增删。
 - 绑定凭证与投票凭证必须带链域隔离信息（`genesis_hash`），防止跨链重放。
 - 绑定 nonce（`UsedBindNonce`）当前为永久存储，无回收机制。以 `CITIZEN_ISSUANCE_MAX_COUNT` 为上界，存储增长有限。
 - 投票 nonce 当前没有按块自动回收机制，运维流程必须在提案结束时通过 `cleanup_vote_credentials` 触发清理，否则会产生长期状态膨胀。当前清理实现使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，需考虑分批清理。
@@ -46,8 +46,8 @@
 `sfid-system` 是一个 FRAME pallet，负责四件核心事：
 - SFID 与链上账户的一对一绑定/解绑。
 - 公民投票资格校验（基于 SFID 绑定关系 + SFID 系统签名凭证）。
-- 维护省管理员三槽名册。
-- 维护每个省管理员槽独立的签名公钥。
+- 维护联邦管理员三槽名册。
+- 维护每个联邦管理员槽独立的签名公钥。
 
 设计边界：
 - 本模块不保存 SFID 明文，只保存 `binding_id`。
@@ -87,7 +87,7 @@ duoqian_info/
 
 ### 1.2 `sheng_admins/` 目录边界(2026-05-02)
 
-`sheng_admins/` 是 `sfid-system` pallet 内省管理员相关纯类型与辅助逻辑目录,
+`sheng_admins/` 是 `sfid-system` pallet 内联邦管理员相关纯类型与辅助逻辑目录,
 这是链上 pallet 的历史命名边界。SFID 应用层后端/前端当前统一使用
 `sfid/backend/admins/` 和 `sfid/frontend/admins/`，不再恢复应用层
 `sheng_admins / shi_admins` 目录。FRAME storage 与 call 壳仍在 `lib.rs`,
@@ -99,13 +99,13 @@ duoqian_info/
 sheng_admins/
 ├── mod.rs        # 模块聚合与边界说明
 ├── types.rs      # Slot { Main, Backup1, Backup2 }
-├── payload.rs    # 4 个省管理员 unsigned extrinsic 的 domain 与 payload hash
+├── payload.rs    # 4 个联邦管理员 unsigned extrinsic 的 domain 与 payload hash
 └── migration.rs  # ADR-008 历史 storage 清理提示
 ```
 
 边界:
 
-- `types.rs` 承载链上 `ShengAdmins[Province][Slot]` 的 Slot 类型。
+- `types.rs` 承载链上 `FederalAdmins[Province][Slot]` 的 Slot 类型。
 - `payload.rs` 的 domain 常量和字段顺序必须与 SFID 应用层管理员模块
   `sfid/backend/admins/` 保持一致。
 - `lib.rs` 继续保留 storage、event、error、call 与 ValidateUnsigned,避免破坏
@@ -146,21 +146,21 @@ Runtime 配置与验签桥接：
   - 绑定凭证 `bind_nonce` 防重放（按 `hash(bind_nonce)` 记账）。
 - `UsedVoteNonce<(proposal_id, binding_id, nonce_hash) -> bool>`
   - 投票凭证防重放（提案 + 身份 + nonce 三维度）。
-- `ShengAdmins<Province, Slot -> [u8; 32]>`
-  - 省管理员三槽名册。Main 首激活占位,Backup1/Backup2 由 Main 签名增删。
+- `FederalAdmins<Province, Slot -> [u8; 32]>`
+  - 联邦管理员三槽名册。Main 首激活占位,Backup1/Backup2 由 Main 签名增删。
 - `ShengSigningPubkey<Province, AdminPubkey -> [u8; 32]>`
-  - 每个省管理员槽独立的业务签名公钥。
+  - 每个联邦管理员槽独立的业务签名公钥。
 - `UsedShengNonce<Hash -> ()>`
-  - 4 个省管理员 unsigned extrinsic 的 32 字节 nonce 防重放。
+  - 4 个联邦管理员 unsigned extrinsic 的 32 字节 nonce 防重放。
 
 ---
 
 ## 4. 创世配置与密钥模型
 ADR-008 后 `sfid-system` 不再通过 GenesisConfig 注入旧全局管理员 / SFID 主备账户。
-省管理员链上状态采用 first-come-first-serve:
+联邦管理员链上状态采用 first-come-first-serve:
 
 1. 某省首次调用 `activate_sheng_signing_pubkey` 的 `admin_pubkey` 占据
-   `ShengAdmins[Province][Main]`。
+   `FederalAdmins[Province][Main]`。
 2. Backup1 / Backup2 后续只能由该省 Main 对 payload 签名授权后写入。
 3. 每个 admin slot 单独写入 `ShengSigningPubkey[Province][AdminPubkey]`。
 
@@ -202,7 +202,7 @@ weight：
 
 权限说明：用户不允许自行解绑，必须由 runtime 配置的治理 Origin 发起。当前生产配置为 Root，链上无法获得真实管理员账户，因此事件不得伪造 `admin` 字段。
 
-### 5.3 省管理员 4 个 unsigned extrinsic（call index = 2..5）
+### 5.3 联邦管理员 4 个 unsigned extrinsic（call index = 2..5）
 
 | call | 说明 | 验签口径 |
 |---|---|---|
@@ -299,7 +299,7 @@ payload 代码锚点:`src/sheng_admins/payload.rs`。
 - 当前实现不校验“sfid_number 哈希与链下回传是否一致”这类二次证明；
 - 当前是“链上唯一性 + 省级签名凭证 + 派生地址”模型。
 
-### 功能 5：省管理员名册与签名密钥运维
+### 功能 5：联邦管理员名册与签名密钥运维
 需要提供：
 1. `activate_sheng_signing_pubkey` 首激活 Main 或激活在册 admin 签名公钥。
 2. `add_sheng_admin_backup` / `remove_sheng_admin_backup` 由 Main 授权维护 Backup1/Backup2。
@@ -328,7 +328,7 @@ payload 代码锚点:`src/sheng_admins/payload.rs`。
   - 投票：`UsedVoteNonce(proposal_id, (binding_id, hash(vote_nonce)))`（提案结束后可清理）
 - 链域隔离：payload 包含 `block_hash(0)`。
 - 域隔离：绑定/投票/快照使用不同 domain 常量。
-- 省级签名根可轮换：每个省管理员槽独立签名公钥,通过 `rotate_sheng_signing_pubkey` 更新。
+- 省级签名根可轮换：每个联邦管理员槽独立签名公钥,通过 `rotate_sheng_signing_pubkey` 更新。
 
 注意：
 - `cleanup_vote_credentials` 当前使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，可能影响出块稳定性。

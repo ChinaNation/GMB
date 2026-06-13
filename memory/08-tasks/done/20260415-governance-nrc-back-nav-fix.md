@@ -99,4 +99,4 @@ const backToInstitutionParent = (backTab: SubTab, sfidNumber: string) => {
 ## 相关任务卡
 
 - `20260415-proposal-action-resolver.md` — 治理提案解码统一入口（同日完成）
-- `20260415-wumin-institutions-unified-registry.md` — wumin 冷钱包机构注册表合并（同日完成）
+- `20260415-wumin-institutions-unified-registry.md` — wumin 公民钱包机构注册表合并（同日完成）

@@ -31,7 +31,7 @@
 
 ## 任务需求
 
-把 wuminapp"我的 → 我的钱包"列表页([wuminapp/lib/wallet/ui/wallet_page.dart:22-565](wuminapp/lib/wallet/ui/wallet_page.dart:22) `MyWalletPage`)的钱包卡片改成与 wumin 冷钱包一样的横向单列样式,并按 wuminapp 端需求做 4 项差异化:
+把 wuminapp"我的 → 我的钱包"列表页([wuminapp/lib/wallet/ui/wallet_page.dart:22-565](wuminapp/lib/wallet/ui/wallet_page.dart:22) `MyWalletPage`)的钱包卡片改成与 wumin 公民钱包一样的横向单列样式,并按 wuminapp 端需求做 4 项差异化:
 
 1. 第 2 行从地址改成**链上余额(只数字 + 千分位)**
 2. 扫码图标按冷热区分:**热钱包显示,冷钱包隐藏**;原"冷/热"小标签删掉
@@ -194,7 +194,7 @@ static String formatThousands(double? value, {int decimals = 2}) { ... }
 - `flutter analyze` 0 error / 0 warning
 - `flutter test` 全部通过
 - 人工跑一遍:
-  - "我的 → 我的钱包" 列表页:每行 1 个卡片,样式同 wumin 冷钱包
+  - "我的 → 我的钱包" 列表页:每行 1 个卡片,样式同 wumin 公民钱包
   - 余额行显示千分位数字(无 GMB 单位)
   - 热钱包卡片右侧有扫码图标,冷钱包没有
   - 三点菜单只有"重命名"和"删除钱包"

@@ -1,26 +1,27 @@
 # SFID 后端链交互归属规则
 
-- 最后更新:2026-06-04
+- 最后更新:2026-06-12
 - 任务卡:
   - `memory/08-tasks/open/20260502-sfid-chain目录归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-sfid-institutions粗粒度整合.md`
   - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
+  - `memory/08-tasks/done/20260612-181650-重构-sfid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
 
 ## 0. 结论
 
 SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 chain 业务目录。
 
 任一功能模块如需和区块链交互,必须在所属功能模块目录中新增 `chain_*.rs`
-文件。普通业务 CRUD、页面展示、管理员 Passkey/冷钱包挑战、CPMS 系统注册
+文件。普通业务 CRUD、页面展示、管理员 Passkey/签名挑战、CPMS 系统注册
 协议,不得放进 `chain_` 文件。
 
 ## 1. 当前代码归属
 
 | 职责 | 当前文件 |
 |---|---|
-| 机构查询、注册信息凭证、账户列表、清算行候选 DTO 与 handler | `sfid/backend/subjects/chain_duoqian_info.rs` |
+| 机构查询、注册信息凭证、账户列表 DTO 与 handler | `sfid/backend/subjects/chain_duoqian_info.rs` |
 | 公民投票凭证 | `sfid/backend/citizens/chain_vote.rs` |
 | 联合投票人口快照凭证 | `sfid/backend/citizens/chain_joint_vote.rs` |
 | 通用链凭证/SCALE/genesis hash | `sfid/backend/core/chain_runtime.rs` |
@@ -70,9 +71,12 @@ account_names[]
 - `signature`
 - `meta`
 
-`subject_property/sub_type/parent_sfid_number`、照片、章程、许可证、股东会决议、法人授权书等
+`subject_property/private_type/partnership_kind/parent_sfid_number`、照片、章程、许可证、股东会决议、法人授权书等
 SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、金额、投票等由
 `organization-manage`、`personal-manage` 和 `admins-change::Subjects` 按各自边界校验。
+
+清算行属于链上组织治理概念,不属于 SFID 身份设计。SFID 只提供机构身份、账户列表和注册信息凭证,
+不得恢复清算行相关端点或字段。
 
 ## 4. 端点归属
 
@@ -84,12 +88,10 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 | `GET /api/v1/app/institutions/:sfid_number` | `subjects::chain_duoqian_info::app_get_institution` |
 | `GET /api/v1/app/institutions/:sfid_number/registration-info` | `subjects::chain_duoqian_info::app_get_institution_registration_info` |
 | `GET /api/v1/app/institutions/:sfid_number/accounts` | `subjects::chain_duoqian_info::app_list_accounts` |
-| `GET /api/v1/app/clearing-banks/search` | `subjects::chain_duoqian_info::app_search_clearing_banks` |
-| `GET /api/v1/app/clearing-banks/eligible-search` | `subjects::chain_duoqian_info::app_search_eligible_clearing_banks` |
 
 说明:
 
-- `GET /api/v1/admin/sheng-admins` 是联邦管理员列表接口,归
+- `GET /api/v1/admin/federal-registry` 是联邦管理员列表接口,归
   `admins::catalog`,不是链交互。
 - `POST /api/v1/admin/passkeys/register/start|confirm|complete` 是管理员 Passkey 注册流程,
   归 `admins::passkeys`,不是链交互。

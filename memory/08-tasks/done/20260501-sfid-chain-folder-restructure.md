@@ -23,7 +23,7 @@ sfid/backend/app_core/
 ├── citizen_binding/             # 公民身份绑定(含 admin push-chain 暂留)
 ├── citizen_vote/                # 公民投票凭证 pull
 │
-├── sheng_admin/                 # 省级管理员链上状态查询(给前端 UI)
+├── sheng_admin/                 # 联邦管理员链上状态查询(给前端 UI)
 └── balance/                     # 链余额查询(给前端 UI)
 ```
 
@@ -59,7 +59,7 @@ sfid/backend/app_core/
 - T3. 搬 app_voters_count → joint_vote/
 - T4. 搬 app_vote_credential → citizen_vote/
 - T5. 搬 operate/binding 推链 + credential → citizen_binding/
-- T7. 搬 sheng-admins/catalog 推链段 → sheng_admin/
+- T7. 搬 federal-registry/catalog 推链段 → sheng_admin/
 - T8. 搬 balance.rs → balance/
 - T9. 删 6 项 dead routes
 - T10. 修 P0(node/src/offchain/sfid.rs+types.rs)
@@ -75,4 +75,4 @@ sfid/backend/app_core/
 - `grep "subxt|chain_http_url|chain_ws_url"` 仅出现在 `chain/` 子目录内
 - `grep "verify_vote_eligibility|chain_voters_count|chain_binding_validate|chain_reward|attestor_public_key|sync_institution_chain_state|clearing_bank_watcher"` 全 SFID 后端零残留
 - `CHAIN_TECHNICAL.md` 按新 7 模块结构重写
-- 前端 sheng-admins 视图链上状态列 + keyring 链余额行行为不变
+- 前端 federal-registry 视图链上状态列 + keyring 链余额行行为不变

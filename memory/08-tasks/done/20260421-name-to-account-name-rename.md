@@ -69,7 +69,7 @@ completed: 2026-04-21
 
 - 链端 Rust：`name` → `account_name`，`SfidNameOf<T>` → `AccountNameOf<T>`，`MaxSfidNameLength` → `MaxAccountNameLength`，`EmptySfidName` → `EmptyAccountName`
 - wuminapp Dart：`name` → `accountName`（camelCase 对齐风格）
-- wumin 冷钱包 payload_decoder：JSON key `'name'` → `'accountName'`
+- wumin 公民钱包 payload_decoder：JSON key `'name'` → `'accountName'`
 - 文档同步清理
 
 # 铁律

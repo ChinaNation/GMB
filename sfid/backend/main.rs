@@ -43,7 +43,7 @@ pub(crate) use crate::core::runtime_ops::*;
 pub(crate) use crate::core::{db::Db, secret::SensitiveSeed};
 pub(crate) use admins::login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_sheng_admin,
+    require_federal_admin,
 };
 pub(crate) use admins::model::*;
 pub(crate) use citizens::model::*;
@@ -218,7 +218,9 @@ fn institution_row_from_record(
         town: inst.town.clone(),
         institution_code: inst.institution_code.clone(),
         org_code: inst.org_code.clone(),
-        sub_type: inst.sub_type.clone(),
+        private_type: inst.private_type.clone(),
+        partnership_kind: inst.partnership_kind.clone(),
+        has_legal_personality: inst.has_legal_personality,
         parent_sfid_number: inst.parent_sfid_number.clone(),
         account_count,
         cpms_status: None,
@@ -236,18 +238,18 @@ fn institution_row_from_pg_row(
     let category_text: String = row.get(2);
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-    let account_count_i64: i64 = row.get(14);
-    let created_by_name: Option<String> = row.get(15);
-    let created_by_role: Option<String> = row.get(16);
-    let sfid_name: Option<String> = row.get(17);
-    let short_name: Option<String> = row.get(18);
-    let town: Option<String> = row.get(19);
-    let town_code: Option<String> = row.get(20);
-    let org_code: Option<String> = row.get(21);
-    let status: String = row.get(22);
-    let cpms_status: Option<String> = row.get(23);
-    let install_token_status: Option<String> = row.get(24);
-    let cpms_pubkey_bound: Option<bool> = row.get(25);
+    let account_count_i64: i64 = row.get(16);
+    let created_by_name: Option<String> = row.get(17);
+    let created_by_role: Option<String> = row.get(18);
+    let sfid_name: Option<String> = row.get(19);
+    let short_name: Option<String> = row.get(20);
+    let town: Option<String> = row.get(21);
+    let town_code: Option<String> = row.get(22);
+    let org_code: Option<String> = row.get(23);
+    let status: String = row.get(24);
+    let cpms_status: Option<String> = row.get(25);
+    let install_token_status: Option<String> = row.get(26);
+    let cpms_pubkey_bound: Option<bool> = row.get(27);
     // 中文注释:公安局列表唯一的"业务状态"单轴(前端只显示这一列):
     // 待生成安装码 → 待安装 → 待绑定身份码 → 可办理,外加 已禁用/已吊销 两个管理态。
     // CPMS 站点状态/安装码状态是它的派生输入,不再单列展示。
@@ -286,16 +288,18 @@ fn institution_row_from_pg_row(
         town_code: town_code.unwrap_or_default(),
         institution_code: row.get(9),
         org_code,
-        sub_type: row.get(10),
-        parent_sfid_number: row.get(11),
+        private_type: row.get(10),
+        partnership_kind: row.get(11),
+        has_legal_personality: row.get(12),
+        parent_sfid_number: row.get(13),
         legal_rep_name: None,
         legal_rep_sfid_number: None,
         legal_rep_photo_path: None,
         legal_rep_photo_name: None,
         legal_rep_photo_mime: None,
         legal_rep_photo_size: None,
-        created_by: row.get(12),
-        created_at: row.get(13),
+        created_by: row.get(14),
+        created_at: row.get(15),
     };
     let mut item = institution_row_from_record(
         &inst,
@@ -315,13 +319,15 @@ fn institution_from_subject_row(
     let category_text: String = row.get(2);
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-    let sfid_name: Option<String> = row.get(14);
-    let short_name: Option<String> = row.get(15);
-    let town: Option<String> = row.get(16);
-    let town_code: Option<String> = row.get(17);
-    let org_code: Option<String> = row.get(18);
-    let status: String = row.get(19);
-    let legal_rep_photo_size_i64: Option<i64> = row.get(25);
+    let sfid_name: Option<String> = row.get(16);
+    let short_name: Option<String> = row.get(17);
+    let town: Option<String> = row.get(18);
+    let town_code: Option<String> = row.get(19);
+    let org_code: Option<String> = row.get(20);
+    let status: String = row.get(21);
+    // 中文注释:字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
+    // legal_rep_photo_size 是第 28 列,下标为 27,越界会在持有数据库锁时 panic。
+    let legal_rep_photo_size_i64: Option<i64> = row.get(27);
     Ok(crate::subjects::Institution {
         sfid_number: row.get(0),
         institution_name: row.get(1),
@@ -339,16 +345,18 @@ fn institution_from_subject_row(
         town_code: town_code.unwrap_or_default(),
         institution_code: row.get(9),
         org_code,
-        sub_type: row.get(10),
-        parent_sfid_number: row.get(11),
-        legal_rep_name: row.get(20),
-        legal_rep_sfid_number: row.get(21),
-        legal_rep_photo_path: row.get(22),
-        legal_rep_photo_name: row.get(23),
-        legal_rep_photo_mime: row.get(24),
+        private_type: row.get(10),
+        partnership_kind: row.get(11),
+        has_legal_personality: row.get(12),
+        parent_sfid_number: row.get(13),
+        legal_rep_name: row.get(22),
+        legal_rep_sfid_number: row.get(23),
+        legal_rep_photo_path: row.get(24),
+        legal_rep_photo_name: row.get(25),
+        legal_rep_photo_mime: row.get(26),
         legal_rep_photo_size: legal_rep_photo_size_i64.and_then(|v| u64::try_from(v).ok()),
-        created_by: row.get(12),
-        created_at: row.get(13),
+        created_by: row.get(14),
+        created_at: row.get(15),
     })
 }
 
@@ -419,10 +427,11 @@ impl Db {
                     "SELECT s.sfid_number, s.name, s.category,
                             s.subject_property, s.p1, s.province,
                             s.city, s.province_code, s.city_code, s.institution_code,
-		                            s.sub_type, s.parent_sfid_number,
-		                            s.created_by, s.created_at, s.sfid_name, s.short_name,
-	                            COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
-	                            s.status, s.legal_rep_name, s.legal_rep_sfid_number,
+                            s.private_type, s.partnership_kind, s.has_legal_personality,
+                            s.parent_sfid_number, s.created_by, s.created_at,
+                            s.sfid_name, s.short_name,
+                            COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+                            s.status, s.legal_rep_name, s.legal_rep_sfid_number,
 	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
 	                            s.legal_rep_photo_mime, s.legal_rep_photo_size
 		                     FROM subjects s
@@ -804,14 +813,15 @@ impl Db {
             "INSERT INTO subjects (
 		                sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
 		                status, category, subject_property, p1, province, city, town,
-		                province_code, city_code, town_code, institution_code, org_code, sub_type,
+		                province_code, city_code, town_code, institution_code, org_code,
+		                private_type, partnership_kind, has_legal_personality,
 		                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
 		                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
 		                legal_rep_photo_size, created_by, created_at, updated_at
 		             ) VALUES (
 		                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 		                $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-		                $25, $26, $27, $28, $29, $30, now()
+		                $25, $26, $27, $28, $29, $30, $31, $32, now()
 		             )
 		             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
 		                kind = EXCLUDED.kind,
@@ -832,7 +842,9 @@ impl Db {
 	                town_code = EXCLUDED.town_code,
 	                institution_code = EXCLUDED.institution_code,
 	                org_code = EXCLUDED.org_code,
-	                sub_type = EXCLUDED.sub_type,
+	                private_type = EXCLUDED.private_type,
+	                partnership_kind = EXCLUDED.partnership_kind,
+	                has_legal_personality = EXCLUDED.has_legal_personality,
                 parent_sfid_number = EXCLUDED.parent_sfid_number,
                 legal_rep_name = EXCLUDED.legal_rep_name,
                 legal_rep_sfid_number = EXCLUDED.legal_rep_sfid_number,
@@ -863,7 +875,9 @@ impl Db {
                 &inst.town_code,
                 &inst.institution_code,
                 &inst.org_code,
-                &inst.sub_type,
+                &inst.private_type,
+                &inst.partnership_kind,
+                &inst.has_legal_personality,
                 &inst.parent_sfid_number,
                 &inst.legal_rep_name,
                 &inst.legal_rep_sfid_number,
@@ -890,40 +904,43 @@ impl Db {
                     &[&inst.sfid_number],
                 )
                 .map_err(|e| format!("delete gov row for private subject failed: {e}"))?;
-                let private_kind = if inst.institution_code == "JY" {
-                    "SCHOOL"
-                } else if inst.subject_property == "F" {
-                    "BRANCH"
-                } else if inst.p1 == "0" {
-                    "NONPROFIT"
+                if let Some(private_type) = &inst.private_type {
+                    let has_legal_personality = inst.has_legal_personality.unwrap_or(false);
+                    conn.execute(
+                        "INSERT INTO private (
+                            sfid_number, p_code, c_code, code, private_type, partnership_kind,
+                            has_legal_personality, subject_property, p1, parent_sfid_number
+                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                         ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+                            c_code = EXCLUDED.c_code,
+                            code = EXCLUDED.code,
+                            private_type = EXCLUDED.private_type,
+                            partnership_kind = EXCLUDED.partnership_kind,
+                            has_legal_personality = EXCLUDED.has_legal_personality,
+                            subject_property = EXCLUDED.subject_property,
+                            p1 = EXCLUDED.p1,
+                            parent_sfid_number = EXCLUDED.parent_sfid_number",
+                        &[
+                            &inst.sfid_number,
+                            &p_code,
+                            &c_code,
+                            &inst.institution_code,
+                            private_type,
+                            &inst.partnership_kind,
+                            &has_legal_personality,
+                            &inst.subject_property,
+                            &inst.p1,
+                            &inst.parent_sfid_number,
+                        ],
+                    )
+                    .map_err(|e| format!("upsert private failed: {e}"))?;
                 } else {
-                    "PROFIT"
-                };
-                conn.execute(
-                    "INSERT INTO private (
-                        sfid_number, p_code, c_code, code, kind, subject_property, p1, sub_type, parent_sfid_number
-                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                     ON CONFLICT (p_code, sfid_number) DO UPDATE SET
-                        c_code = EXCLUDED.c_code,
-                        code = EXCLUDED.code,
-                        kind = EXCLUDED.kind,
-                        subject_property = EXCLUDED.subject_property,
-                        p1 = EXCLUDED.p1,
-                        sub_type = EXCLUDED.sub_type,
-                        parent_sfid_number = EXCLUDED.parent_sfid_number",
-                    &[
-                        &inst.sfid_number,
-                        &p_code,
-                        &c_code,
-                        &inst.institution_code,
-                        &private_kind,
-                        &inst.subject_property,
-                        &inst.p1,
-                        &inst.sub_type,
-                        &inst.parent_sfid_number,
-                    ],
-                )
-                .map_err(|e| format!("upsert private failed: {e}"))?;
+                    conn.execute(
+                        "DELETE FROM private WHERE sfid_number = $1",
+                        &[&inst.sfid_number],
+                    )
+                    .map_err(|e| format!("delete non-private typed row failed: {e}"))?;
+                }
             }
             crate::number::InstitutionCategory::PublicSecurity
             | crate::number::InstitutionCategory::GovInstitution => {
@@ -1183,6 +1200,7 @@ impl Db {
     pub(crate) fn list_institutions_exact(
         &self,
         filter: crate::subjects::InstitutionListFilter,
+        private_type: Option<&str>,
         p_code: &str,
         c_code: Option<&str>,
         keyword: &str,
@@ -1201,6 +1219,10 @@ impl Db {
             });
         }
         let cursor = decode_db_page_cursor(cursor)?;
+        let private_type = private_type
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string);
         let p_code = p_code.to_string();
         let c_code = c_code.map(str::to_string);
         let keyword = keyword.to_string();
@@ -1215,8 +1237,9 @@ impl Db {
 		                    "SELECT s.sfid_number, s.name, s.category,
 			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
-				                                    s.sub_type, s.parent_sfid_number,
-					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
+				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
+				                                    s.parent_sfid_number, s.created_by, s.created_at,
+				                                    COALESCE(ac.account_count, 0),
 				                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 				                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 				                                    s.status
@@ -1233,6 +1256,7 @@ impl Db {
 	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               {filter_clause}
+	                               AND ($6::text IS NULL OR s.private_type = $6)
 	                               AND s.p_code = $1
 	                               AND ($2::text IS NULL OR s.c_code = $2)
 	                               AND (
@@ -1256,6 +1280,7 @@ impl Db {
                         &keyword,
                         &cursor_created_at,
                         &fetch_limit,
+                        &private_type,
                     ],
                 )
                 .map_err(|e| format!("query subjects failed: {e}"))?;
@@ -1264,15 +1289,15 @@ impl Db {
                 let category_text: String = row.get(2);
                 let category = institution_category_from_text(category_text.as_str())
                     .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-			                let account_count_i64: i64 = row.get(14);
-			                let created_by_name: Option<String> = row.get(15);
-			                let created_by_role: Option<String> = row.get(16);
-			                let sfid_name: Option<String> = row.get(17);
-			                let short_name: Option<String> = row.get(18);
-				                let town: Option<String> = row.get(19);
-				                let town_code: Option<String> = row.get(20);
-				                let org_code: Option<String> = row.get(21);
-				                let status: String = row.get(22);
+			                let account_count_i64: i64 = row.get(16);
+			                let created_by_name: Option<String> = row.get(17);
+			                let created_by_role: Option<String> = row.get(18);
+			                let sfid_name: Option<String> = row.get(19);
+			                let short_name: Option<String> = row.get(20);
+				                let town: Option<String> = row.get(21);
+				                let town_code: Option<String> = row.get(22);
+				                let org_code: Option<String> = row.get(23);
+				                let status: String = row.get(24);
 		                let inst = crate::subjects::Institution {
 		                    sfid_number: row.get(0),
 		                    institution_name: row.get(1),
@@ -1290,16 +1315,18 @@ impl Db {
 			                    town_code: town_code.unwrap_or_default(),
 			                    institution_code: row.get(9),
 			                    org_code,
-			                    sub_type: row.get(10),
-		                    parent_sfid_number: row.get(11),
+			                    private_type: row.get(10),
+			                    partnership_kind: row.get(11),
+			                    has_legal_personality: row.get(12),
+		                    parent_sfid_number: row.get(13),
                     legal_rep_name: None,
                     legal_rep_sfid_number: None,
                     legal_rep_photo_path: None,
                     legal_rep_photo_name: None,
                     legal_rep_photo_mime: None,
                     legal_rep_photo_size: None,
-		                    created_by: row.get(12),
-		                    created_at: row.get(13),
+		                    created_by: row.get(14),
+		                    created_at: row.get(15),
                 };
                 let id = stable_institution_cursor_id(inst.sfid_number.as_str());
                 output.push((
@@ -1336,8 +1363,9 @@ impl Db {
 		                    "SELECT s.sfid_number, s.name, s.category,
 			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
-				                                    s.sub_type, s.parent_sfid_number,
-					                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
+				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
+				                                    s.parent_sfid_number, s.created_by, s.created_at,
+				                                    COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.status, cs.status, cs.install_token_status,
@@ -1397,8 +1425,9 @@ impl Db {
                     "SELECT s.sfid_number, s.name, s.category,
 			                                    s.subject_property, s.p1, s.province,
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
-				                                    s.sub_type, s.parent_sfid_number,
-				                                    s.created_by, s.created_at, COALESCE(ac.account_count, 0),
+				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
+				                                    s.parent_sfid_number, s.created_by, s.created_at,
+				                                    COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean
@@ -1941,7 +1970,7 @@ fn main() {
         .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
 
     // 中文注释:启动期仅校验 SFID_SIGNING_SEED_HEX 可解码,供登录二维码系统签名使用。
-    // 联邦管理员业务治理签名只走各自冷钱包,后端不再保存或缓存省级私钥。
+    // 联邦管理员业务治理签名只走各自签名设备,后端不再保存或缓存管理员私钥。
     {
         let seed_hex = required_env("SFID_SIGNING_SEED_HEX");
         crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
@@ -1966,7 +1995,7 @@ fn main() {
         db,
         rate_limit_redis: Arc::new(redis_client),
     };
-    ensure_builtin_province_admins(&state);
+    ensure_builtin_federal_admins(&state);
     info!("initialized database state with defaults");
     if run_gov_directory_command(&state, command.clone()) {
         return;
@@ -2031,10 +2060,10 @@ fn main() {
             );
 
         let admin_routes = Router::new()
-            .route("/api/v1/admin/operators", get(admins::list_operators))
+            .route("/api/v1/admin/city-admins", get(admins::list_city_admins))
             .route(
-                "/api/v1/admin/operators/:id",
-                patch(admins::actions::update_operator_login_state),
+                "/api/v1/admin/city-admins/:id",
+                patch(admins::actions::update_city_admin_login_state),
             )
             .route(
                 "/api/v1/admin/passkeys/register/start",
@@ -2057,12 +2086,12 @@ fn main() {
                 post(admins::actions::commit_admin_action),
             )
             .route(
-                "/api/v1/admin/sheng-admins",
-                get(admins::list_province_admins),
+                "/api/v1/admin/federal-admins",
+                get(admins::list_federal_admins),
             )
             .route(
-                "/api/v1/admin/sheng-admins/:id",
-                patch(admins::actions::update_sheng_admin_login_state),
+                "/api/v1/admin/federal-admins/:id",
+                patch(admins::actions::update_federal_admin_login_state),
             )
             .route("/api/v1/admin/cpms-keys", get(cpms::list_cpms_keys))
             .route(
@@ -2104,9 +2133,11 @@ fn main() {
             // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。
             // 中文注释:机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
-            // - POST /api/v1/institution/create                          — 生成机构(不上链)
+            // - POST /api/v1/institution/create                          — 公权/教育通用机构生成(不上链)
+            // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
             // - POST /api/v1/institution/:sfid_number/account/create         — 只登记账户名称,不上链
-            // - GET  /api/v1/institution/list                            — 按 scope 过滤的机构列表
+            // - GET  /api/v1/institution/list                            — 公权/教育按 scope 过滤的机构列表
+            // - GET  /api/v1/private/<type>                              — 六类私权机构专属列表入口
             // - GET  /api/v1/institution/:sfid_number                        — 机构详情
             // - GET  /api/v1/institution/:sfid_number/accounts               — 账户列表
             // - DELETE /api/v1/institution/:sfid_number/account/:account_name — 删除未上链/已注销新增账户
@@ -2125,7 +2156,31 @@ fn main() {
             )
             .route(
                 "/api/v1/institution/create",
-                post(private::handler::create_institution),
+                post(subjects::registration::create_institution),
+            )
+            .route(
+                "/api/v1/private/sole",
+                get(private::sole::list).post(private::sole::create),
+            )
+            .route(
+                "/api/v1/private/partnership",
+                get(private::partnership::list).post(private::partnership::create),
+            )
+            .route(
+                "/api/v1/private/company",
+                get(private::company::list).post(private::company::create),
+            )
+            .route(
+                "/api/v1/private/corporation",
+                get(private::corporation::list).post(private::corporation::create),
+            )
+            .route(
+                "/api/v1/private/welfare",
+                get(private::welfare::list).post(private::welfare::create),
+            )
+            .route(
+                "/api/v1/private/association",
+                get(private::association::list).post(private::association::create),
             )
             .route(
                 "/api/v1/institution/:sfid_number/account/create",
@@ -2133,12 +2188,12 @@ fn main() {
             )
             .route(
                 "/api/v1/institution/list",
-                get(private::handler::list_institutions),
+                get(subjects::registration::list_institutions),
             )
             .route(
                 "/api/v1/institution/:sfid_number",
                 get(subjects::admin::get_institution)
-                    // 两步式第二步:详情页更新机构名称/企业类型
+                    // 中文注释:详情页只更新机构资料;私权类型由创建时身份编码锁定,不可在此改。
                     .patch(subjects::admin::update_institution),
             )
             .route(
@@ -2175,7 +2230,7 @@ fn main() {
                 "/api/v1/institutions/official",
                 get(gov::handler::list_official_institutions),
             )
-            // 联邦注册局机构详情(只读,绕过 scope,所有省管理员可读)
+            // 联邦注册局机构详情(只读,绕过 scope,所有联邦管理员可读)
             .route(
                 "/api/v1/institutions/federal-registry",
                 get(subjects::admin::get_federal_registry),
@@ -2234,7 +2289,7 @@ fn main() {
                 get(citizens::handler::public_identity_search),
             );
 
-        // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
+        // App routes:公民 与节点桌面 chain pull 用的统一命名空间。
         //
         // 全部端点都汇集在 chain/ 子目录(duoqian_info / joint_vote / citizen_vote)。
         // wuminapp 自有功能(钱包交易索引、电子护照状态查询)继续留 indexer / citizens 模块。
@@ -2275,16 +2330,6 @@ fn main() {
             .route(
                 "/api/v1/app/institutions/:sfid_number/accounts",
                 get(subjects::chain_duoqian_info::app_list_accounts),
-            )
-            // ── 清算行搜索(已激活,wuminapp 绑定清算行用):资格白名单 + 主账户 ACTIVE_ON_CHAIN ──
-            .route(
-                "/api/v1/app/clearing-banks/search",
-                get(subjects::chain_duoqian_info::app_search_clearing_banks),
-            )
-            // ── 候选清算行搜索(可未激活,节点桌面"添加清算行"用):仅资格白名单过滤 ──
-            .route(
-                "/api/v1/app/clearing-banks/eligible-search",
-                get(subjects::chain_duoqian_info::app_search_eligible_clearing_banks),
             );
 
         let app_state = state.clone();
@@ -2365,10 +2410,10 @@ fn sfid_error_code(status: StatusCode, message: &str) -> &'static str {
         "cpms_pubkey does not match installed CPMS" => "SFID_CITIZEN_ARCHIVE_PUBKEY_MISMATCH",
         "qr expired" => "SFID_CITIZEN_QR_EXPIRED",
         "qr header invalid" => "SFID_CITIZEN_QR_HEADER_INVALID",
-        "admin pubkey already exists as sheng admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN",
-        "admin pubkey already exists as shi admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN",
-        "sheng admin province limit reached" => "SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED",
-        "shi admin city limit reached" => "SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED",
+        "admin pubkey already exists as federal admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN",
+        "admin pubkey already exists as city admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN",
+        "federal admin province limit reached" => "SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED",
+        "city admin city limit reached" => "SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED",
         "passkey required" => "SFID_ADMIN_PASSKEY_REQUIRED",
         "security grant required" => "SFID_ADMIN_SECURITY_GRANT_REQUIRED",
         _ if status == StatusCode::UNAUTHORIZED => "SFID_AUTH_UNAUTHORIZED",

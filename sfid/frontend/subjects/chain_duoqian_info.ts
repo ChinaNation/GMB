@@ -18,7 +18,9 @@ export interface InstitutionInfoDetail {
   province_code: string;
   city_code: string;
   institution_code: string;
-  sub_type?: string | null;
+  private_type?: string | null;
+  partnership_kind?: string | null;
+  has_legal_personality?: boolean | null;
   parent_sfid_number?: string | null;
 }
 

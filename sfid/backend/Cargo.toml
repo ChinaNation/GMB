@@ -8,6 +8,10 @@ edition = "2021"
 name = "sfid-backend"
 path = "main.rs"
 
+[[test]]
+name = "institution_tests"
+path = "tests/integration/institution_tests.rs"
+
 [dependencies]
 axum = { version = "0.7", features = ["multipart"] }
 chrono = { version = "0.4", features = ["serde"] }

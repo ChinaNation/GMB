@@ -1,8 +1,8 @@
 //! 非法人机构能力。
 //!
-//! 中文注释:非法人机构不是独立法人,必须从属于一个具有法人资格的主体(创建即挂,
-//! 不存在未挂靠非法人)。公权机构和私权机构都可以拥有从属非法人机构,
-//! 所以能力放在 `subjects/uninorg`。
+//! 中文注释:非法人不是法人资格,但不等于全部必须挂靠。个体经营(F+GT)和无限合伙(F+GP)
+//! 是独立非法人;教育分校(F+JY)以及公权下属非法人仍必须从属于一个具有法人资格的主体。
+//! 公权机构和私权机构都可能拥有从属非法人机构,所以能力放在 `subjects/uninorg`。
 //!
 //! 本模块是非法人挂靠规则的单一权威源,创建(create_institution)、改挂
 //! (update_institution)和所属法人搜索(search_parent_institutions 的 SQL 预过滤)
@@ -16,8 +16,8 @@ pub(crate) fn is_unincorporated_subject(subject_property: &str) -> bool {
     subject_property == "F"
 }
 
-pub(crate) fn requires_parent(subject_property: &str) -> bool {
-    is_unincorporated_subject(subject_property)
+pub(crate) fn requires_parent(subject_property: &str, institution_code: &str) -> bool {
+    is_unincorporated_subject(subject_property) && !matches!(institution_code, "GT" | "GP")
 }
 
 pub(crate) fn can_attach_to_parent_subject(parent_subject_property: &str) -> bool {
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn private_parent_is_nationwide() {
         assert_eq!(
-            parent_locality_rule("S", "ZG", None),
+            parent_locality_rule("S", "GQ", None),
             ParentLocalityRule::Nationwide
         );
     }

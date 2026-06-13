@@ -1,9 +1,9 @@
 // 中文注释:前端对齐后端 scope::rules::VisibleScope,按两角色范围派生。
 // 铁律:feedback_scope_auto_filter.md(SHENG=本省 / SHI=本市)
 //
-// sheng_admin / shi_admin 两个视图的 Dashboard 走"全局视图(43 省可看)+ 跨省按钮置灰":
+// federal_admin / city_admin 两个视图的 Dashboard 走"全局视图(43 省可看)+ 跨省按钮置灰":
 //   - FEDERAL_ADMIN: skipProvinceList=true → 直接进本省的市列表,只读其他省
-//   - SHI_ADMIN:   skipCityList=true     → 直接进本市的详情页,只读其他市
+//   - CITY_ADMIN:   skipCityList=true     → 直接进本市的详情页,只读其他市
 
 import { useMemo } from 'react';
 import type { AdminAuth } from '../auth/types';
@@ -15,13 +15,13 @@ export interface VisibleScope {
   cities: string[];
   /** 是否可以增删改(本省/本市内才有写权限)。 */
   canWrite: boolean;
-  /** 进 tab 时跳过省列表直接进入省详情(FEDERAL_ADMIN + SHI_ADMIN)。 */
+  /** 进 tab 时跳过省列表直接进入省详情(FEDERAL_ADMIN + CITY_ADMIN)。 */
   skipProvinceList: boolean;
-  /** 进 tab 时跳过市列表直接进入市详情(仅 SHI_ADMIN)。 */
+  /** 进 tab 时跳过市列表直接进入市详情(仅 CITY_ADMIN)。 */
   skipCityList: boolean;
   /** 锁定的省份(必填)。 */
   lockedProvince: string | null;
-  /** 锁定的市(仅 SHI_ADMIN 必填)。 */
+  /** 锁定的市(仅 CITY_ADMIN 必填)。 */
   lockedCity: string | null;
 
   /** 判断某省是否在可见范围内。 */
@@ -52,7 +52,7 @@ function makeScope(base: Omit<VisibleScope, 'includesProvince' | 'includesCity' 
     canWriteCity(province: string, city: string) {
       if (!base.canWrite) return false;
       if (!base.lockedProvince || province !== base.lockedProvince) return false;
-      // FEDERAL_ADMIN 本省内任意市;SHI_ADMIN 必须等于自己 lockedCity
+      // FEDERAL_ADMIN 本省内任意市;CITY_ADMIN 必须等于自己 lockedCity
       if (base.lockedCity && city !== base.lockedCity) return false;
       return true;
     },
@@ -86,9 +86,9 @@ export function useScope(auth: AdminAuth | null): VisibleScope {
           lockedCity: null,
         });
       }
-      case 'SHI_ADMIN': {
-        const province = auth.admin_province || '__SHI_ADMIN_MISSING_PROVINCE__';
-        const city = auth.admin_city || '__SHI_ADMIN_MISSING_CITY__';
+      case 'CITY_ADMIN': {
+        const province = auth.admin_province || '__CITY_ADMIN_MISSING_PROVINCE__';
+        const city = auth.admin_city || '__CITY_ADMIN_MISSING_CITY__';
         return makeScope({
           provinces: [province],
           cities: [city],

@@ -86,14 +86,14 @@ SFID HTTP 状态码只表达协议层结果,稳定业务错误码使用响应体
 | error_code | HTTP | 含义 |
 |---|---:|---|
 | `SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN` | 409 | 管理员公钥已作为联邦管理员存在 |
-| `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN` | 409 | 管理员公钥已作为市级管理员存在 |
+| `SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN` | 409 | 管理员公钥已作为市管理员存在 |
 | `SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED` | 409 | 本省联邦管理员已达到 5 人上限 |
-| `SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED` | 409 | 本市市级管理员已达到 30 人上限 |
+| `SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED` | 409 | 本市市管理员已达到 30 人上限 |
 | `SFID_STORE_PERSIST_FAILED` | 500 | 写操作持久化失败，接口不得返回业务成功 |
 
-管理员公钥全局唯一。新增联邦管理员或市级管理员时，后端必须先按规范化公钥查全局
+管理员公钥全局唯一。新增联邦管理员或市管理员时，后端必须先按规范化公钥查全局
 `admins` 账号表；命中后按已有角色返回上述稳定错误码，前端按新增目标角色展示中文提示。
-联邦管理员每省最多 5 人，市级管理员每省每市最多 30 人，达到上限时必须在后端拒绝新增。
+联邦管理员每省最多 5 人，市管理员每省每市最多 30 人，达到上限时必须在后端拒绝新增。
 
 ## 4. 前端处理规则
 

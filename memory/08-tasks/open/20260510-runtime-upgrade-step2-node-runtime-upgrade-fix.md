@@ -11,7 +11,7 @@
 - 不新增、不迁移、不修改投票引擎目录。
 - 不修改 runtime 链上 pallet。
 - 不修改 wuminapp。
-- 不修改 wumin 冷钱包。
+- 不修改 wumin 公民钱包。
 
 ## 修复原则
 

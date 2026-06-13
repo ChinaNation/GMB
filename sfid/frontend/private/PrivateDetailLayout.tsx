@@ -4,20 +4,20 @@
 //   顶部一整块 Card(标题 = 机构名称,编辑/取消/保存按钮在 Card extra 右上角):
 //     ┌ 左 Col:SFID 信息(只读)──────────────┐  ┌ 右 Col:机构信息 ──────────────┐
 //     │ 身份ID / 省 / 市 / 盈利属性 / 机构(均纯中文) │  │ 机构名称 + 搜索查重图标       │
-//     │ 创建时间 / 创建用户                  │  │ 企业类型 Select(仅 S)       │
-//     │                                      │  │ 所属法人 AutoComplete(仅 F) │
+//     │ 创建时间 / 创建用户                  │  │ 私权类型/法人资格只读展示     │
+//     │                                      │  │ 所属法人 AutoComplete(需挂靠 F)│
 //     └──────────────────────────────────────┘  └───────────────────────────────┘
 //
 // 右板块交互:
 //   默认态 = 只读 Descriptions 展示,右上角显示"编辑"按钮
 //   编辑态 = Form 可操作,右上角切换为"取消" + "保存"
 //   机构名称右侧搜索图标:输入后点击查重;重名则禁止保存;名称未改动视为已通过
-//   F 所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
+//   需挂靠的非法人所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
 //
 // 账户列表(AccountList)每家机构自带"主账户"/"费用账户"两条默认账户,
 // 创建后只登记在 SFID;链上状态由区块链软件同步回来。
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   AutoComplete,
@@ -28,7 +28,6 @@ import {
   Form,
   Input,
   Row,
-  Select,
   Space,
   Spin,
   Tag,
@@ -40,8 +39,8 @@ import type { AdminAuth } from '../auth/types';
 import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
 import {
   INSTITUTION_CODE_LABEL,
-  SUB_TYPE_LABEL,
-  subTypeChoicesForP1,
+  PARTNERSHIP_KIND_LABEL,
+  PRIVATE_TYPE_LABEL,
 } from '../subjects/labels';
 import {
   checkInstitutionName,
@@ -50,21 +49,17 @@ import {
   uploadLegalRepresentativePhoto,
   type InstitutionDetail,
   type ParentInstitutionRow,
-} from './api';
+} from './common/api';
 import { searchLegalRepresentativeCitizens } from '../citizens/api';
 import { AccountList } from '../accounts/AccountList';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { DocumentLibrary } from '../docs/DocumentLibrary';
-import {
-  CLEARING_BANK_ELIGIBLE_LABEL,
-  isClearingBankEligible,
-} from './clearingBankEligible';
 import { notice } from '../utils/notice';
 
 // 创建者角色中文映射(与列表页保持一致)。
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
   FEDERAL_ADMIN: '联邦管理员',
-  SHI_ADMIN: '市级管理员',
+  CITY_ADMIN: '市管理员',
 };
 
 interface Props {
@@ -82,8 +77,7 @@ interface Props {
 
 interface InfoFormValues {
   institution_name: string;
-  sub_type?: string;
-  /** 非法人(F)所属法人 sfid_number */
+  /** 需挂靠的非法人所属法人 sfid_number */
   parent_sfid_number?: string;
   legal_rep_name: string;
   legal_rep_sfid_number: string;
@@ -121,31 +115,25 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoName, setPhotoName] = useState<string>(inst.legal_rep_photo_name ?? '');
 
-  const isS = inst.subject_property === 'S';
   const isF = inst.subject_property === 'F';
-
-  const subTypeChoices = useMemo(
-    () => (isS ? subTypeChoicesForP1(inst.p1) : []),
-    [isS, inst.p1],
-  );
-  // 完善判断:名称必填;S 需要 sub_type;F 需要 parent_sfid_number
+  const requiresParent = isF && !['GT', 'GP'].includes(inst.institution_code);
+  // 完善判断:名称必填;仅需挂靠的非法人要求 parent_sfid_number;私权类型由创建时编码确定。
   const needsCompletion =
     !inst.institution_name ||
-    (isS && !inst.sub_type) ||
-    (isF && !inst.parent_sfid_number) ||
+    (requiresParent && !inst.parent_sfid_number) ||
     !inst.legal_rep_name ||
     !inst.legal_rep_sfid_number ||
     !inst.legal_rep_photo_path;
 
-  // ── F 所属法人搜索 ──
+  // ── 需挂靠非法人所属法人搜索 ──
   const [parentSearchOpts, setParentSearchOpts] = useState<ParentInstitutionRow[]>([]);
   const [parentSearching, setParentSearching] = useState(false);
   // 当前选中的法人(用于展示已选项名称;首次进入若 inst.parent_sfid_number 有值,也要一次性拿到显示名)
   const [selectedParent, setSelectedParent] = useState<ParentInstitutionRow | null>(null);
 
-  // detail 变更 → 若有 parent_sfid_number 则拉一次展示名称
+  // detail 变更 → 需挂靠的非法人若有 parent_sfid_number,则拉一次展示名称。
   useEffect(() => {
-    if (!isF || !inst.parent_sfid_number) {
+    if (!requiresParent || !inst.parent_sfid_number) {
       setSelectedParent(null);
       return;
     }
@@ -167,7 +155,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [isF, inst.parent_sfid_number, auth.access_token]);
+  }, [requiresParent, inst.parent_sfid_number, auth.access_token]);
 
   // 搜索(仅在用户点击搜索图标时触发,不自动 onSearch)
   const onParentSearch = async (value: string) => {
@@ -210,7 +198,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     setCurrentName(inst.institution_name ?? '');
     form.setFieldsValue({
       institution_name: inst.institution_name ?? '',
-      sub_type: inst.sub_type ?? undefined,
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
       legal_rep_name: inst.legal_rep_name ?? '',
       legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -224,7 +211,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   }, [
     inst.sfid_number,
     inst.institution_name,
-    inst.sub_type,
     inst.parent_sfid_number,
     inst.legal_rep_name,
     inst.legal_rep_sfid_number,
@@ -236,7 +222,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     setNameAvailable(null);
     form.setFieldsValue({
       institution_name: inst.institution_name ?? '',
-      sub_type: inst.sub_type ?? undefined,
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
       legal_rep_name: inst.legal_rep_name ?? '',
       legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -254,7 +239,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     setNameAvailable(null);
     form.setFieldsValue({
       institution_name: inst.institution_name ?? '',
-      sub_type: inst.sub_type ?? undefined,
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
       legal_rep_name: inst.legal_rep_name ?? '',
       legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -356,11 +340,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.error('机构名称不能为空');
       return;
     }
-    if (isS && !values.sub_type) {
-      notice.error('请选择企业类型');
-      return;
-    }
-    if (isF && !values.parent_sfid_number) {
+    if (requiresParent && !values.parent_sfid_number) {
       notice.error('请选择所属法人机构');
       return;
     }
@@ -379,8 +359,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     try {
       await updateInstitution(auth, inst.sfid_number, {
         institution_name: name,
-        sub_type: isS ? values.sub_type ?? null : null,
-        parent_sfid_number: isF ? values.parent_sfid_number : undefined,
+        parent_sfid_number: requiresParent ? values.parent_sfid_number : undefined,
         legal_rep_name: legalRepName,
         legal_rep_sfid_number: legalRepSfid,
         legal_rep_photo_path: values.legal_rep_photo_path,
@@ -492,7 +471,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               <Alert
                 type="warning"
                 showIcon
-                message="请先完善机构名称、企业类型和法定代表人资料,才能新建账户"
+                message="请先完善机构名称和法定代表人资料,才能新建账户"
                 style={{ marginBottom: 12 }}
               />
             )}
@@ -504,7 +483,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   onFinish={onSaveInfo}
                   initialValues={{
                     institution_name: inst.institution_name ?? '',
-                    sub_type: inst.sub_type ?? undefined,
                     parent_sfid_number: inst.parent_sfid_number ?? undefined,
                     legal_rep_name: inst.legal_rep_name ?? '',
                     legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -549,7 +527,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       }
                     />
                   </Form.Item>
-                  {isF && (
+                  {requiresParent && (
                     <Form.Item
                       label="所属法人"
                       name="parent_sfid_number"
@@ -593,22 +571,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                           }
                         />
                       </AutoComplete>
-                    </Form.Item>
-                  )}
-                  {isS && (
-                    <Form.Item
-                      label="企业类型"
-                      name="sub_type"
-                      rules={[{ required: true, message: '请选择企业类型' }]}
-                      extra={
-                        // 资格白名单提示(2026-04-24, ADR-007):
-                        // 选中 JOINT_STOCK 时额外提示"可参与清算业务",其他类型保留原文案。
-                        inst.p1 === '0'
-                          ? '当前 P1=非盈利,企业类型锁定为公益组织'
-                          : '当前 P1=盈利,可选四种企业类型;选择"股份公司"可参与清算业务(在区块链节点软件中注册为清算行)'
-                      }
-                    >
-                      <Select options={subTypeChoices} placeholder="请选择企业类型" />
                     </Form.Item>
                   )}
                   <Form.Item
@@ -685,7 +647,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       <span style={{ color: '#999' }}>(未命名)</span>
                     )}
                   </Descriptions.Item>
-                  {isF && (
+                  {requiresParent && (
                     <Descriptions.Item label="所属法人">
                       {inst.parent_sfid_number ? (
                         selectedParent ? (
@@ -708,31 +670,22 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       )}
                     </Descriptions.Item>
                   )}
-                  {isS && (
-                    <Descriptions.Item label="企业类型">
-                      {inst.sub_type ? (
-                        <>
-                          {SUB_TYPE_LABEL[inst.sub_type] || inst.sub_type}
-                          {/* 清算行资格 badge(2026-04-24, ADR-007):
-                              S + JOINT_STOCK 自身判定为可作为清算行;
-                              不需要 parent 信息 */}
-                          {isClearingBankEligible(inst, null) && (
-                            <Tag color="blue" style={{ marginLeft: 8 }}>
-                              {CLEARING_BANK_ELIGIBLE_LABEL}
-                            </Tag>
-                          )}
-                        </>
-                      ) : (
-                        <span style={{ color: '#999' }}>(未设置)</span>
-                      )}
+                  {inst.private_type && (
+                    <Descriptions.Item label="私权类型">
+                      {PRIVATE_TYPE_LABEL[inst.private_type] || inst.private_type}
                     </Descriptions.Item>
                   )}
-                  {/* F 资格 badge(2026-04-24, ADR-007):
-                      需要 parent 信息(parent.S + parent.JOINT_STOCK)。
-                      selectedParent 已在 useEffect 里按 parent_sfid_number 反查并缓存。 */}
-                  {isF && selectedParent && isClearingBankEligible(inst, selectedParent) && (
-                    <Descriptions.Item label="清算行资格">
-                      <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
+                  {inst.partnership_kind && (
+                    <Descriptions.Item label="合伙类型">
+                      {PARTNERSHIP_KIND_LABEL[inst.partnership_kind] || inst.partnership_kind}
+                    </Descriptions.Item>
+                  )}
+                  {inst.has_legal_personality !== null &&
+                    inst.has_legal_personality !== undefined && (
+                    <Descriptions.Item label="法人资格">
+                      <Tag color={inst.has_legal_personality ? 'green' : 'default'}>
+                        {inst.has_legal_personality ? '有法人资格' : '无法人资格'}
+                      </Tag>
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label="法定代表人姓名">
@@ -765,7 +718,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
             <Button
               type="primary"
               disabled={needsCompletion}
-              title={needsCompletion ? '请先完善机构名称、企业类型和法定代表人资料' : undefined}
+              title={needsCompletion ? '请先完善机构名称和法定代表人资料' : undefined}
               onClick={() => setCreateAccountOpen(true)}
             >
               + 新建账户

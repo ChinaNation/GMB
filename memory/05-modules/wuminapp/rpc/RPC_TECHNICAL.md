@@ -5,7 +5,7 @@
 
 ## 1. 模块定位
 
-`lib/rpc/` 是手机 App 与区块链节点通信的唯一收口模块。
+`lib/rpc/` 是公民 与区块链节点通信的唯一收口模块。
 
 职责：
 
@@ -39,7 +39,7 @@ lib/rpc/
 ## 3. 通信架构
 
 ```text
-手机 App  --smoldot-->  bootNodes / P2P 网络
+公民  --smoldot-->  bootNodes / P2P 网络
 ```
 
 - 默认协议：`smoldot` 轻客户端 + Substrate JSON-RPC

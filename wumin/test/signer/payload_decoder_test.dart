@@ -272,6 +272,36 @@ void main() {
       expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
     });
 
+    test('decodes sfid admin target role action labels', () {
+      final actor = '0x${List.filled(32, '11').join()}';
+      final target = '0x${List.filled(32, '22').join()}';
+      final cases = {
+        'CREATE_CITY_ADMIN': '新增市管理员',
+        'CREATE_FEDERAL_ADMIN': '新增联邦管理员',
+      };
+
+      for (final entry in cases.entries) {
+        final payload = jsonEncode({
+          'domain': 'sfid_admin_governance',
+          'qr_proto': 'WUMIN_QR_V1',
+          'action_id': 'admin-action-${entry.key}',
+          'action_type': entry.key,
+          'actor_pubkey': actor,
+          'actor_province': '广东省',
+          'target': target,
+          'request_hash': '0x${List.filled(32, '33').join()}',
+          'before_hash': 'none',
+          'after_hash': '0x${List.filled(32, '44').join()}',
+          'expires_at': 1779984120,
+        });
+
+        final decoded = PayloadDecoder.decode(hexOf(utf8.encode(payload)));
+
+        expect(decoded, isNotNull);
+        expect(decoded!.fields['action_type'], entry.value);
+      }
+    });
+
     test('decodes archive_delete with SS58 review fields', () {
       final admin = '0x${List.filled(32, '22').join()}';
       final payload =

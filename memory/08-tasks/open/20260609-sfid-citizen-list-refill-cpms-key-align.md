@@ -25,7 +25,7 @@
 - [x] `sfid/frontend/citizens/CitizensView.tsx`：`Form.useForm()` 绑定搜索表单；新增 `handleBound`：拿到 boundSfid 时 `searchForm.setFieldsValue({keyword})` + `setSearchKeyword` + `setCursorStack([])` + `refreshList(boundSfid,null,true)`，无值回退原逻辑；`<BindModal onBound={handleBound}>`。
 
 ### 缺陷 2（前端 3 文件 + 后端 2 文件）
-- [x] `sfid/frontend/gov/GovDetailPage.tsx`：onGenerateCpms 保持 grant payload `{province,city,institution}` 不变（passkey 冷钱包签名内容不动），generate 请求体增 `sfid_number: inst.sfid_number`；loadCpms 真错误改 `notice.error` 提示、不再静默置 null（返回 null=未生成仍正常置空）。
+- [x] `sfid/frontend/gov/GovDetailPage.tsx`：onGenerateCpms 保持 grant payload `{province,city,institution}` 不变（passkey 公民钱包签名内容不动），generate 请求体增 `sfid_number: inst.sfid_number`；loadCpms 真错误改 `notice.error` 提示、不再静默置 null（返回 null=未生成仍正常置空）。
 - [x] `sfid/frontend/cpms/api.ts`：`generateCpmsInstallQr` 入参增 `sfid_number: string`；顺手修正 getCpmsSiteByInstitution 过时注释。
 - [x] `sfid/backend/cpms/model.rs`：`GenerateCpmsInstallInput` 增 `sfid_number: String`（保留 province/city/institution 供 grant 绑定）。
 - [x] `sfid/backend/cpms/handler.rs`：新增 `find_cpms_target_institution_by_sfid(sfid_number)`（按 subjects 主键 sfid 查 PUBLIC/ACTIVE，返回省/市/编码/名称）；`generate_cpms_install_qr` 改用 `input.sfid_number` 查机构+校验 scope（sheng admin: institution.province==ctx.admin_province）+ 以该 sfid 写 `CpmsSiteKeys.sfid_number`；删除三元组解析写入键的旧 `find_cpms_target_institution`（无其它调用者）+ 一并删除仅此处用的 `MAX_PROVINCE/CITY/INSTITUTION_CHARS` 常量。grant_payload 仍取 `{province,city,institution}` 不变。
@@ -38,7 +38,7 @@
 ## 完成记录
 
 - 缺陷 1 根治：绑定成功后 `BindModal` 把 `result.sfid_number` 回传 `onBound`；`CitizensView.handleBound` 用它回填搜索框 + 触发查询 → 新公民立即按身份ID命中显示（精确检索语义不变，数据本就已入库）。
-- 缺陷 2 根治：写/读键统一为机构自身 `sfid_number`。生成接口改由前端传 `sfid_number`、后端按 sfid 反查机构并以该 sfid 落键；详情页再次进入按同一 sfid 读 → 命中已存站点、二维码持续显示。passkey 冷钱包签名内容（grant payload）保持 `{province,city,institution}` 不变，未触达 wumin 解码器。
+- 缺陷 2 根治：写/读键统一为机构自身 `sfid_number`。生成接口改由前端传 `sfid_number`、后端按 sfid 反查机构并以该 sfid 落键；详情页再次进入按同一 sfid 读 → 命中已存站点、二维码持续显示。passkey 公民钱包签名内容（grant payload）保持 `{province,city,institution}` 不变，未触达 wumin 解码器。
 - 附带：`loadCpms` 真错误改提示而非静默吞 null；删除无引用的三元组解析函数与 3 个仅此处用的常量。
 - 验证：`cargo check` 通过；`cargo test` 52/52 全过；前端 `tsc -b` 0 error；`vite build` 成功。
 - 待用户端到端 QA：①注册局新增身份ID绑定 → 列表自动出现；②市公安局生成安装码 → 离开再进入 → 二维码仍在。

@@ -1,5 +1,5 @@
 // 中文注释：主体共享类型。实际业务 API 必须放在
-// gov/api.ts、private/api.ts、accounts/api.ts、docs/api.ts。
+// gov/api.ts、private/<type>/api.ts、accounts/api.ts、docs/api.ts。
 // 铁律:一个 sfid_number 下可挂多个 account_name。
 
 export type InstitutionCategory = 'PUBLIC_SECURITY' | 'GOV_INSTITUTION' | 'PRIVATE_INSTITUTION';
@@ -16,9 +16,19 @@ export type MultisigChainStatus =
   | 'ACTIVE_ON_CHAIN'
   | 'REVOKED_ON_CHAIN';
 
+export type PrivateType =
+  | 'SOLE'
+  | 'PARTNERSHIP'
+  | 'COMPANY'
+  | 'CORPORATION'
+  | 'WELFARE'
+  | 'ASSOCIATION';
+
+export type PartnershipKind = 'GENERAL' | 'LIMITED';
+
 export interface Institution {
   sfid_number: string;
-  /** 机构名称。两步式创建(2026-04-19):第一步生成时为 null,详情页补填后非空。 */
+  /** 机构名称。私权/教育/手动公权创建时写入;自动目录机构由系统生成。 */
   institution_name: string | null;
   /** 详情页展示全称;列表不得与简称同时展示。 */
   sfid_name?: string | null;
@@ -38,8 +48,12 @@ export interface Institution {
   town_code?: string;
   institution_code: string;
   org_code?: string | null;
-  /** 私法人子类型(仅 SubjectProperty=S 且 P1 填完后才有值) */
-  sub_type?: string | null;
+  /** 私权机构类型。仅私权目标类型机构有值。 */
+  private_type?: PrivateType | null;
+  /** 合伙企业形态。仅 private_type=PARTNERSHIP 时有值。 */
+  partnership_kind?: PartnershipKind | null;
+  /** 是否具有法人资格。仅私权目标类型机构有值。 */
+  has_legal_personality?: boolean | null;
   /** 所属法人 sfid_number(仅 SubjectProperty=F 非法人必填;指向 S/G) */
   parent_sfid_number?: string | null;
   /** 法定代表人资料。初始化目录机构可为空;编辑保存时必填。 */
@@ -67,7 +81,7 @@ export interface InstitutionAccount {
 
 export interface InstitutionListRow {
   sfid_number: string;
-  /** 两步式创建:第一步仅有 SFID 时为 null,详情页补填后非空 */
+  /** 机构名称。私权目标类型创建时应已写入,历史空值仅作为展示兜底。 */
   institution_name: string | null;
   sfid_name?: string | null;
   short_name?: string | null;
@@ -80,7 +94,9 @@ export interface InstitutionListRow {
   town?: string;
   institution_code: string;
   org_code?: string | null;
-  sub_type?: string | null;
+  private_type?: PrivateType | null;
+  partnership_kind?: PartnershipKind | null;
+  has_legal_personality?: boolean | null;
   parent_sfid_number?: string | null;
   account_count: number;
   cpms_status?: string | null;
@@ -89,7 +105,7 @@ export interface InstitutionListRow {
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
   created_by_name?: string | null;
-  /** 创建者角色:FEDERAL_ADMIN / SHI_ADMIN;未命中 null */
+  /** 创建者角色:FEDERAL_ADMIN / CITY_ADMIN;未命中 null */
   created_by_role?: string | null;
 }
 
@@ -109,7 +125,7 @@ export interface InstitutionDetail {
   accounts: InstitutionAccount[];
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
   created_by_name?: string | null;
-  /** 创建者角色:FEDERAL_ADMIN / SHI_ADMIN */
+  /** 创建者角色:FEDERAL_ADMIN / CITY_ADMIN */
   created_by_role?: string | null;
 }
 
@@ -141,16 +157,18 @@ export interface CreateInstitutionInput {
   institution: string;
   /**
    * 机构名称。
-   * - S/F 两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
+   * - 私权机构创建时必填,由对应私权类型 tab 锁定身份编码
    * - 教育委员会(JY)学校机构和手动公权机构(G):**必传**,同步做查重
    * - 自动公权机构/公安局:不走手动创建接口
   */
   institution_name?: string;
   /**
-   * 所属法人 sfid_number。非法人(F)创建**必传**(创建即挂,不存在未挂靠非法人),
-   * 盈利属性继承所属法人;其它主体属性不传。规则单一源:后端 subjects/uninorg。
+   * 所属法人 sfid_number。仅需挂靠的非法人创建必传;个体经营/无限合伙是独立非法人,
+   * 不接受所属法人。规则单一源:后端 subjects/uninorg。
    */
   parent_sfid_number?: string;
+  private_type?: PrivateType;
+  partnership_kind?: PartnershipKind;
   legal_rep_name?: string;
   legal_rep_sfid_number?: string;
   legal_rep_photo_path?: string;
@@ -161,17 +179,16 @@ export interface CreateInstitutionInput {
 
 export interface CreateInstitutionOutput {
   sfid_number: string;
-  /** 首次创建:普通私权为 null,教育委员会(JY)学校机构为已填入的学校名称 */
+  /** 创建成功后的机构名称。 */
   institution_name: string | null;
   category: InstitutionCategory;
 }
 
-/** 机构详情页可编辑字段(两步式第二步) */
+/** 机构详情页可编辑字段。私权类型创建后不可改。 */
 export interface UpdateInstitutionInput {
   institution_name?: string;
   sfid_name?: string | null;
   short_name?: string | null;
-  sub_type?: string | null;
   /** 所属法人 sfid_number(仅 F;传空串后端会拒) */
   parent_sfid_number?: string;
   legal_rep_name?: string;
@@ -187,8 +204,9 @@ export interface ParentInstitutionRow {
   sfid_number: string;
   institution_name: string;
   subject_property: string;
-  /** 私法人子类型(仅 subject_property=S);F 判断父 S 是否 JOINT_STOCK 以显示清算行设置 */
-  sub_type?: string | null;
+  /** 私权机构类型。仅用于展示父级机构事实。 */
+  private_type?: PrivateType | null;
+  partnership_kind?: PartnershipKind | null;
   category: InstitutionCategory;
   /** 盈利属性。F 创建时按"盈利属性附属于所属法人"推导:公法人父恒 0,私法人父继承该值 */
   p1: string;
@@ -198,7 +216,7 @@ export interface ParentInstitutionRow {
 
 /** 所属法人搜索参数。预过滤规则与后端 subjects/uninorg 同源(三处同源缺一有绕过口)。 */
 export interface SearchParentsOptions {
-  /** 非法人的机构代码:JY=教育分校(只搜本市学校本部),其它(ZG/TG)=普通非法人 */
+  /** 非法人的机构代码:JY=教育分校,GT/GP=私权独立非法人,其它 F 由后端判定是否需挂靠 */
   fInstitution: string;
   /** 非法人落位省/市,用于地域预过滤(市级同市/省级同省/国家级不限) */
   province: string;
@@ -223,6 +241,7 @@ export interface ListInstitutionsQuery {
   city?: string;
   /** 精确搜索关键字:匹配机构名称或 SFID;空=返回空页 */
   q?: string;
+  private_type?: PrivateType;
   cursor?: string | null;
   page_size?: number;
 }

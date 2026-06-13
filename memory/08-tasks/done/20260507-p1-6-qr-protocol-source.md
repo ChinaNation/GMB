@@ -36,7 +36,7 @@
 - [x] 更新统一命名文件中的 QR 目录登记。
 - [x] 清理 action registry 中旧 `VotingEngine(9)` 投票入口、旧 `DuoqianManage` 和已删除 execute wrapper。
 - [x] 删除签名识别方案中的 `supportedSpecVersions` 要求。
-- [x] 删除 wumin 冷钱包侧 `user_duoqian` kind 残留。
+- [x] 删除 wumin 公民钱包侧 `user_duoqian` kind 残留。
 - [x] 删除 node / sfid / cpms QR 协议类型中的 `user_duoqian` kind 残留。
 - [x] 对齐 `propose_close_institution` / `propose_close_personal` 与冷钱包 decoder 输出。
 - [x] 扫描旧路径、旧 action、旧 pallet 名和旧识别规则残留。

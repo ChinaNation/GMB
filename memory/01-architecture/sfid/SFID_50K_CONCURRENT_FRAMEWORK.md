@@ -9,8 +9,8 @@ SFID 的高并发目标必须建立在结构化数据库、索引和省市范围
 高峰主要来自注册局工作人员集中使用浏览器后台:
 
 - 联邦管理员查询本省公权机构、私权机构、CPMS 和审计。
-- 市级管理员查询本市机构、公民绑定和资料库。
-- wuminapp 公开查询电子护照状态、机构、清算行和投票凭证。
+- 市管理员查询本市机构、公民绑定和资料库。
+- wuminapp 公开查询电子护照状态、机构身份和投票凭证。
 
 ## 数据分区策略
 
@@ -43,7 +43,7 @@ SFID 的高并发目标必须建立在结构化数据库、索引和省市范围
 - `admins(role, city)`
 - `admins(lower(admin_pubkey))`
 - `admins(lower(created_by))`
-- `sheng_admin_scope(province_name)`
+- `federal_admin_scope(province_name)`
 
 ## 启动策略
 
@@ -67,12 +67,12 @@ SFID 的高并发目标必须建立在结构化数据库、索引和省市范围
 - 公民:按 `citizens` 精确查询或分页查询。
 - CPMS:按 `cpms_sites` 查询授权状态。
 - 资料库:按 `docs` 查询机构资料。
-- 注册局管理员目录:联邦管理员列表按 `sheng_admin_scope.province_name` 查询,市级管理员列表按 `created_by` 归属省和 `city` 查询。禁止查询全部管理员后在 Rust 或前端过滤。
+- 注册局管理员目录:联邦管理员列表按 `federal_admin_scope.province_name` 查询,市管理员列表按 `created_by` 归属省和 `city` 查询。禁止查询全部管理员后在 Rust 或前端过滤。
 
 公开接口:
 
 - 机构搜索和详情读取 `subjects/accounts`。
-- 清算行搜索使用 SQL 资格条件和账户状态条件。
+- SFID 不提供清算行搜索;清算行属于链上组织治理概念。
 - 投票人数快照使用 `citizens` 聚合计数。
 - 投票凭证和电子护照状态按钱包公钥精确查询。
 

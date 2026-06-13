@@ -62,7 +62,7 @@ Tauri 命令按业务拆分:
 | `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上按 finalized hash 查 `Institutions[sfid_number]` + `InstitutionAccounts[sfid_number, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
 | `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
 | `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 SFID `GET /api/v1/app/institutions/:sfid_number/registration-info` 拉链上注册专用信息 |
-| `governance/organization-manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |
+| `governance/organization-manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 公民钱包签名并提交 `propose_create_institution` |
 | `offchain/offchain_transaction/commands.rs` | `query_clearing_bank_node_info` / `query_local_peer_id` / `test_clearing_bank_endpoint_connectivity` | 清算行节点声明和端点自测 |
 | `offchain/offchain_transaction/commands.rs` | `build_register_*` / `submit_register_*` / `build_update_*` / `submit_update_*` / `build_unregister_*` / `submit_unregister_*` | 清算行节点注册、端点更新、注销 |
 | `offchain/settlement/commands.rs` | `build_decrypt_admin_request` / `verify_and_decrypt_admin` / `list_decrypted_admins` / `lock_decrypted_admin` | 结算前管理员解锁 |
@@ -90,7 +90,7 @@ province: Vec<u8>                   = Compact(len) || bytes
 signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 ```
 
-**任何字段顺序变更必须同步改 `governance/organization-manage/signing.rs::build_propose_create_institution_call_data`**,否则冷钱包签名 payload 与链上 call_data 不一致。
+**任何字段顺序变更必须同步改 `governance/organization-manage/signing.rs::build_propose_create_institution_call_data`**,否则公民钱包签名 payload 与链上 call_data 不一致。
 
 注册业务字段只允许来自 SFID `registration-info` 的 `sfid_number / institution_name / account_names[]`。
 `subject_property / sub_type / parent_sfid_number` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。
@@ -128,7 +128,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
                   - 通过 → Institutions[sfid_number] = Pending,创建投票提案
                   - 失败 → DispatchError,extrinsic 回滚
 [节点桌面] ⑩ wait-vote 视图轮询 fetchInstitutionDetail(sfid_number).status
-[其他管理员] ⑪ wumin 冷钱包扫 vote 提案 → 投赞成
+[其他管理员] ⑪ wumin 公民钱包扫 vote 提案 → 投赞成
           │
           ▼ ⑫ 票数达 threshold → InternalVoteExecutor 自动执行 → status = Active
           │

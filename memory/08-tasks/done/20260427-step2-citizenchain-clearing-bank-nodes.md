@@ -306,7 +306,7 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 - citizenchain/node/src/ui/clearing_bank/{mod,types,chain,connectivity,signing,sfid_proxy,admin_decrypt}.rs
 - citizenchain/node/src/ui/{mod.rs,governance/mod.rs(storage_keys 改 pub(crate)),network/network-overview/mod.rs(clearing_nodes 真实计数)}
 - citizenchain/node/frontend/{App.tsx,api.ts,clearing-bank/*.tsx,assets/styles/global.css}
-- sfid/backend/{main.rs,main_tests.rs,chain/{mod.rs,clearing_bank_watcher.rs},institutions/{chain.rs,handler.rs},sheng-admins/institutions.rs}
+- sfid/backend/{main.rs,main_tests.rs,chain/{mod.rs,clearing_bank_watcher.rs},institutions/{chain.rs,handler.rs},federal-registry/institutions.rs}
 
 **Step 2 全部完成**。等 Step 3 wumin/wuminapp 完工后由 Architect 主入口走 `propose_runtime_upgrade` 联合提案上主网。
 

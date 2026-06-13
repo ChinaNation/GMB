@@ -51,9 +51,9 @@
 - 开工前先确认任务属于 `runtime`、`node`、`node` 或 `primitives`
 - 关键 Rust 或前端逻辑必须补中文注释
 - 改动链规则、存储或发布行为前必须先沟通
-- 如果改动 `runtime` 且会影响 `wuminapp` 在线端或 `wumin` 冷钱包二维码签名/验签兼容性，必须先暂停单边修改，转为跨模块任务
+- 如果改动 `runtime` 且会影响 `wuminapp` 在线端或 `wumin` 公民钱包二维码签名/验签兼容性，必须先暂停单边修改，转为跨模块任务
 - 触发项至少检查：`spec_version` / `transaction_version`、pallet index、call index、metadata 编码依赖、冷钱包 `pallet_registry` 与 `payload_decoder`
-- 未把 `wuminapp` 在线端和 `wumin` 冷钱包的对应更新纳入本次执行范围前，不允许继续 runtime 改动
+- 未把 `wuminapp` 在线端和 `wumin` 公民钱包的对应更新纳入本次执行范围前，不允许继续 runtime 改动
 - 文档与残留必须一起收口
 
 ## 模块级完成标准
@@ -92,7 +92,7 @@
 
 - 任务卡已创建
 - 已完成治理模块目录与 memory 模块文档目录改名，两个模块仍位于 `governance` 目录下。
-- 已同步 Cargo workspace、runtime 依赖、pallet 名称、benchmark 脚本、node UI 查询、wuminapp 在线端查询和 wumin 冷钱包注册表。
+- 已同步 Cargo workspace、runtime 依赖、pallet 名称、benchmark 脚本、node UI 查询、wuminapp 在线端查询和 wumin 公民钱包注册表。
 - 已确认当前 runtime metadata/storage prefix 会变化，pallet index 与 call index 保持不变；结合并行治理模块改名后的当前开发期 runtime 为 `spec_version = 6`，冷钱包同步适配 6。
 - 已清理当前代码与当前模块文档中的旧标识残留；历史任务卡属于任务记录，不作为运行时代码入口。
 - 已执行验证：

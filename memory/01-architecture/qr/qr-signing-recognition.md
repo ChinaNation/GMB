@@ -2,7 +2,7 @@
 
 - 版本:2026-05-07
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:wumin 冷钱包扫描 QR 后的识别、展示与签名放行规则
+- 范围:wumin 公民钱包扫描 QR 后的识别、展示与签名放行规则
 - 依赖:
   - `memory/01-architecture/qr/qr-protocol-spec.md`
   - `memory/01-architecture/qr/qr-protocol-fixtures/`
@@ -64,7 +64,7 @@
 - `decoded.action == body.display.action`
 - 对 `decoded.fields` 每一项 `(key, value)`,在 `body.display.fields` 中按同名 `key`
   找到的 value 必须与 decoded 侧 value 逐字相等
-- 冷钱包确认页只展示 `decoded.reviewFields`:中文标签、业务字段和 SS58 地址;内部哈希、
+- 公民钱包确认页只展示 `decoded.reviewFields`:中文标签、业务字段和 SS58 地址;内部哈希、
   nonce、原始公钥 hex、内部 ID 不作为用户确认内容展示
 
 全过即绿色,允许生成 `sign_response`。

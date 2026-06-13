@@ -5,8 +5,8 @@ import type { AdminAuth } from '../auth/types';
 import { ApiError, adminRequest } from '../utils/http';
 
 export type AdminActionType =
-  | 'CREATE_OPERATOR'
-  | 'DELETE_OPERATOR'
+  | 'CREATE_CITY_ADMIN'
+  | 'DELETE_CITY_ADMIN'
   | 'CREATE_FEDERAL_ADMIN'
   | 'DELETE_FEDERAL_ADMIN'
   | 'INSTITUTION_CREATE'
@@ -27,7 +27,7 @@ export type AdminActionType =
   | 'CPMS_DELETE_KEYS';
 
 export type AdminOperationAuth = 'LOGIN_STATE' | 'PASSKEY' | 'PASSKEY_CHALLENGE';
-export type AdminRoleTarget = 'FEDERAL_ADMIN' | 'SHI_ADMIN';
+export type AdminRoleTarget = 'FEDERAL_ADMIN' | 'CITY_ADMIN';
 
 export type SignDisplayField = { key?: string; label: string; value: string };
 
@@ -71,18 +71,18 @@ export function formatAdminCreateError(error: unknown, targetRole: AdminRoleTarg
   if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN') {
     return targetRole === 'FEDERAL_ADMIN'
       ? '该账户已是联邦管理员，不能重复新增'
-      : '该账户已是联邦管理员，不能新增为市级管理员';
+      : '该账户已是联邦管理员，不能新增为市管理员';
   }
-  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN') {
+  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN') {
     return targetRole === 'FEDERAL_ADMIN'
-      ? '该账户已是市级管理员，不能新增为联邦管理员'
-      : '该账户已是市级管理员，不能重复新增';
+      ? '该账户已是市管理员，不能新增为联邦管理员'
+      : '该账户已是市管理员，不能重复新增';
   }
   if (error.errorCode === 'SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED') {
     return '联邦管理员已满 5 人，不能继续新增';
   }
-  if (error.errorCode === 'SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED') {
-    return '本市市级管理员已满 30 人，不能继续新增';
+  if (error.errorCode === 'SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED') {
+    return '本市市管理员已满 30 人，不能继续新增';
   }
   return error.message || fallback;
 }
@@ -164,7 +164,7 @@ export async function createPasskeySecurityGrant(
 ): Promise<AdminSecurityGrantOutput> {
   const prepared = await prepareAdminAction(auth, actionType, payload);
   if (prepared.auth_type !== 'PASSKEY') {
-    throw new Error('该操作需要冷钱包签名确认');
+    throw new Error('该操作需要公民钱包签名确认');
   }
   const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
   return commitAdminAction<AdminSecurityGrantOutput>(auth, {

@@ -90,6 +90,34 @@ pub(crate) async fn admin_number_meta(
                     label: "他国",
                     value: "TG",
                 },
+                SfidOptionItem {
+                    label: "个体经营",
+                    value: "GT",
+                },
+                SfidOptionItem {
+                    label: "无限合伙",
+                    value: "GP",
+                },
+                SfidOptionItem {
+                    label: "有限合伙",
+                    value: "LP",
+                },
+                SfidOptionItem {
+                    label: "股权公司",
+                    value: "GQ",
+                },
+                SfidOptionItem {
+                    label: "股份公司",
+                    value: "GF",
+                },
+                SfidOptionItem {
+                    label: "公益组织",
+                    value: "GY",
+                },
+                SfidOptionItem {
+                    label: "注册协会",
+                    value: "AS",
+                },
             ],
             provinces: provinces_rows,
             scoped_province: scoped,

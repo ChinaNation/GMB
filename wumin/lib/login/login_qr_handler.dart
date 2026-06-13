@@ -1,4 +1,4 @@
-// wumin 冷钱包登录 QR 处理器:解析 WUMIN_QR_V1 login_challenge、
+// wumin 公民钱包登录 QR 处理器:解析 WUMIN_QR_V1 login_challenge、
 // 验证系统签名、构建 login_receipt envelope。
 
 import 'dart:convert';

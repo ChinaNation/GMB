@@ -1,4 +1,4 @@
-// 链上机构中文名注册表（冷钱包签名校验用）。
+// 链上机构中文名注册表（公民钱包签名校验用）。
 //
 // 唯一事实源：citizenchain/runtime/primitives/china/china_{cb,ch}.rs 的
 // CHINA_CB（国储会 Nrc 1 个 + 省储会 Prc 43 个）与 CHINA_CH（省储行 Prb 43 个），

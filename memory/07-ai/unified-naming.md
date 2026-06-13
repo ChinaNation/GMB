@@ -85,8 +85,8 @@
 | `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
 | `sfid/backend/number/` | 身份 ID 编码协议 | number | SFID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
-| `wumin/` | 冷钱包 | wumin | 离线签名、扫码识别和冷钱包 UI |
-| `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
+| `wumin/` | 公民钱包 | wumin | 离线签名、扫码识别和钱包 UI |
+| `wuminapp/` | 公民 | wuminapp | Flutter 客户端、钱包、治理和轻节点能力 |
 | `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
 | `wuminapp/lib/im/` | wuminapp 信息 | wuminapp-im | wuminapp 信息 Tab、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
 | `wuminapp/android/im/` | Android 信息近场 | android-im | wuminapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
@@ -266,18 +266,26 @@
 | `sfid/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
 | `sfid/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
 | `sfid/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
-| `sfid/backend/private/` | 私权机构 | private | 学校、盈利性私权机构、非盈利私权机构和私权新增接口 |
+| `sfid/backend/private/` | 私权机构 | private | 六类私权机构路由边界;根层不得恢复总 handler |
+| `sfid/backend/private/common/` | 私权共用规则 | private-common | 私权类型到主体属性、机构码、盈利属性和法人资格的规则单一来源 |
+| `sfid/backend/private/sole/` | 个体经营 | sole | 个体经营模型、校验、创建和列表边界 |
+| `sfid/backend/private/partnership/` | 合伙企业 | partnership | 有限合伙和无限合伙模型、校验、创建和列表边界 |
+| `sfid/backend/private/company/` | 股权公司 | company | 股权有限公司/有限责任公司模型、校验、创建和列表边界 |
+| `sfid/backend/private/corporation/` | 股份公司 | corporation | 股份有限公司模型、校验、创建和列表边界 |
+| `sfid/backend/private/welfare/` | 公益组织 | welfare | 非营利法人模型、校验、创建和列表边界 |
+| `sfid/backend/private/association/` | 注册协会 | association | 具有法人资格的协会类组织边界 |
+| `sfid/backend/private/participants/` | 参与人关系 | participants | 负责人、合伙人、股东、成员等通用关系边界 |
 | `sfid/backend/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
 | `sfid/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
 | `sfid/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
 | `sfid/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
-| `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 省级管理员、市级管理员和管理员列表 DTO |
+| `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦管理员、市管理员和管理员列表 DTO |
 | `sfid/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
 | `sfid/backend/core/qr/` | QR | core-qr | 后端 WUMIN_QR_V1 协议辅助和统一 sign_request 构造 |
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
 | `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
 | `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
-| `sfid/backend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战写操作 |
+| `sfid/backend/admins/` | 管理员 | admins | 联邦管理员、市管理员、Passkey 和签名挑战写操作 |
 | `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
 | `sfid/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
 | `sfid/backend/tests/` | 测试 | tests | 后端测试 |
@@ -289,17 +297,24 @@
 | `sfid/frontend/assets/` | 静态资产 | assets | 图片、字体等前端静态资产 |
 | `sfid/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
 | `sfid/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
-| `sfid/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、冷钱包签名面板和 QR 工具 |
+| `sfid/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、公民钱包签名面板和 QR 工具 |
 | `sfid/frontend/cpms/` | CPMS 对接 | cpms | CPMS 对接界面 |
 | `sfid/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
 | `sfid/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
-| `sfid/frontend/private/` | 私权机构 | private | 私权机构界面 |
+| `sfid/frontend/private/` | 私权机构 Shell | private | 省市选择、当前私权类型页面和详情跳转 |
+| `sfid/frontend/private/common/` | 私权机构前端共用 | private-common | 共用 API、列表、创建弹窗和单类型页面壳 |
+| `sfid/frontend/private/sole/` | 个体经营前端 | sole | 个体经营页面、API 和类型边界 |
+| `sfid/frontend/private/partnership/` | 合伙企业前端 | partnership | 合伙企业页面、API 和类型边界 |
+| `sfid/frontend/private/company/` | 股权公司前端 | company | 股权公司页面、API 和类型边界 |
+| `sfid/frontend/private/corporation/` | 股份公司前端 | corporation | 股份公司页面、API 和类型边界 |
+| `sfid/frontend/private/welfare/` | 公益组织前端 | welfare | 公益组织页面、API 和类型边界 |
+| `sfid/frontend/private/association/` | 注册协会前端 | association | 注册协会页面、API 和类型边界 |
 | `sfid/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
 | `sfid/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
 | `sfid/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
 | `sfid/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 WUMIN_QR_V1 工具 |
 | `sfid/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
-| `sfid/frontend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战前端流程 |
+| `sfid/frontend/admins/` | 管理员 | admins | 联邦管理员、市管理员、Passkey 和签名挑战前端流程 |
 | `sfid/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
 | `sfid/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
 
@@ -398,9 +413,12 @@
 | 机构名称 | `institution_name` | API / call data / QR display | 机构显示名称 |
 | 账户名称列表 | `account_names` | SFID registration-info API | 机构账户名数组 |
 | 账户名称 | `account_name` | API / call data / QR display | 单个机构或个人账户名 |
+| 私权机构类型 | `private_type` | SFID API / subjects / private | 私权机构目标类型,取值 `SOLE/PARTNERSHIP/COMPANY/CORPORATION/WELFARE/ASSOCIATION` |
+| 合伙类型 | `partnership_kind` | SFID API / subjects / private | 合伙企业内部类型,取值 `GENERAL/LIMITED` |
+| 法人资格 | `has_legal_personality` | SFID API / subjects / private | 私权机构是否具有法人资格 |
 | 注册随机数 | `register_nonce` | credential / call data | SFID 机构注册凭证随机数 |
 | 省份 | `province` | credential / call data | 签发凭证的省级区域 |
-| 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 签发凭证的省级管理员公钥 |
+| 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 签发凭证的联邦管理员公钥 |
 | 签名 | `signature` | credential / call data | 凭证签名 |
 | 主体 ID | `account_id` | call data / storage key | 管理员主体统一 ID |
 | 公钥 | `pubkey` | QR body | 发起签名请求的公钥 |

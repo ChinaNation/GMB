@@ -21,7 +21,7 @@
 
 - 决议发行是一个完整业务功能，提案、投票回调和发行执行必须在同一 pallet 内闭环。
 - 发行执行不再作为独立外部模块暴露，只有 `votingengine` 的 `JointVoteResultCallback::on_joint_vote_finalized` 回调路径可以触发实际铸币。
-- `propose_resolution_issuance` 保持 call index `0`，降低冷钱包签名路径的变更范围。
+- `propose_resolution_issuance` 保持 call index `0`，降低公民钱包签名路径的变更范围。
 - `finalize_joint_vote` 手工 extrinsic 已删除，call index `1` 保持空缺，避免 Root 或误配 origin 绕过投票引擎。
 - 提案核心数据、owner、业务 data 和投票凭证清理由 `votingengine` 终态清理队列统一处理，本模块不再持有独立清理入口。
 - 本模块只负责决议发行业务提案和执行回调，不接收、不生成、不校验人口快照、联合签名、地区或签名管理员公钥；这些全部属于 `votingengine` 的联合投票流程。

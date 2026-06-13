@@ -70,7 +70,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   ): Promise<AdminSecurityGrantOutput> => {
     const prepared = await prepareAdminAction(auth, actionType, payload);
     if (prepared.auth_type !== 'PASSKEY_CHALLENGE' || !prepared.sign_request) {
-      throw new Error('该操作缺少冷钱包签名请求');
+      throw new Error('该操作缺少公民钱包签名请求');
     }
     const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
     return new Promise<AdminSecurityGrantOutput>((resolve, reject) => {
@@ -275,7 +275,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         </div>
       </div>
       <WuminSignatureModal
-        title="冷钱包签名确认"
+        title="公民钱包签名确认"
         open={!!securityModal}
         onCancel={() => {
           securityModal?.reject(new Error('已取消签名确认'));

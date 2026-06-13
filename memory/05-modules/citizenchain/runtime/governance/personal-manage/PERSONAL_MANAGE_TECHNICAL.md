@@ -162,7 +162,7 @@ flutter test test/signer/payload_decoder_test.dart
 - `duoqian-transfer`:22 passed。
 - `organization-manage`:24 passed。
 - `wuminapp` 多签相关测试:10 passed。
-- `wumin` 冷钱包 payload decoder:30 passed。
+- `wumin` 公民钱包 payload decoder:30 passed。
 - `sfid/backend`:cargo check 通过。
 
 ## benchmarks

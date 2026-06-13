@@ -1,4 +1,4 @@
-# 任务卡：将 runtime 影响 wuminapp 在线端与 wumin 冷钱包二维码签名/验签兼容性的变更纳入 AI 编程系统强制规则，要求先同步更新双端后才允许修改 runtime
+# 任务卡：将 runtime 影响 wuminapp 在线端与 wumin 公民钱包二维码签名/验签兼容性的变更纳入 AI 编程系统强制规则，要求先同步更新双端后才允许修改 runtime
 
 - 任务编号：20260325-125830
 - 状态：open
@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-将 runtime 影响 wuminapp 在线端与 wumin 冷钱包二维码签名/验签兼容性的变更纳入 AI 编程系统强制规则，要求先同步更新双端后才允许修改 runtime
+将 runtime 影响 wuminapp 在线端与 wumin 公民钱包二维码签名/验签兼容性的变更纳入 AI 编程系统强制规则，要求先同步更新双端后才允许修改 runtime
 
 ## 必读上下文
 

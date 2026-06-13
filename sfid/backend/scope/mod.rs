@@ -7,8 +7,8 @@
 //! 3. `let filtered = scope::filter_by_scope(&rows, &scope);`
 //!
 //! 各角色范围(ADR-008 后):
-//! - ShengAdmin  → 本省,所有市
-//! - ShiAdmin    → 本市
+//! - FederalAdmin  → 本省,所有市
+//! - CityAdmin    → 本市
 //!
 //! 详细规则见 `rules.rs` 的 `VisibleScope`。
 //!

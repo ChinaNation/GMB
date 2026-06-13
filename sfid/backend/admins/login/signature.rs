@@ -7,7 +7,7 @@ use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use sp_core::Pair;
 
-use crate::admins::province_admins::sheng_admin_display_name;
+use crate::admins::federal_admins::federal_admin_display_name;
 use crate::*;
 
 pub(crate) fn verify_admin_signature(
@@ -56,7 +56,7 @@ pub(super) fn build_login_qr_system_signature(
     expires_at: i64,
 ) -> Result<(String, String), String> {
     // ADR-008 Phase 23e:登录二维码的"系统签名"由 SFID main signer(全局唯一)产出。
-    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与联邦管理员/市级管理员冷钱包无关。
+    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与联邦管理员/市管理员公民钱包无关。
     let main_seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
         .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
     let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
@@ -150,18 +150,18 @@ pub(crate) fn build_admin_display_name(
     role: &AdminRole,
     admin_province: Option<&str>,
 ) -> String {
-    if *role == AdminRole::ShengAdmin {
+    if *role == AdminRole::FederalAdmin {
         if let Some(province) = admin_province {
-            return format!("{province}机构管理员");
+            return format!("{province}联邦管理员");
         }
     }
-    if let Some(name) = sheng_admin_display_name(admin_pubkey) {
+    if let Some(name) = federal_admin_display_name(admin_pubkey) {
         return name;
     }
     // ADR-008 后只剩两角色。
     match role {
-        AdminRole::ShiAdmin => "系统管理员".to_string(),
-        AdminRole::ShengAdmin => "机构管理员".to_string(),
+        AdminRole::CityAdmin => "市管理员".to_string(),
+        AdminRole::FederalAdmin => "联邦管理员".to_string(),
     }
 }
 
@@ -177,9 +177,9 @@ pub(super) fn build_admin_display_name_from_user(
     build_admin_display_name(&admin.admin_pubkey, &admin.role, admin_province)
 }
 
-/// 仅 ShiAdmin 暴露 admin_city，其他角色或空字符串一律返回 None。
+/// 仅 CityAdmin 暴露 admin_city，其他角色或空字符串一律返回 None。
 pub(super) fn resolve_admin_city(admin: &AdminUser) -> Option<String> {
-    if admin.role == AdminRole::ShiAdmin && !admin.city.trim().is_empty() {
+    if admin.role == AdminRole::CityAdmin && !admin.city.trim().is_empty() {
         Some(admin.city.clone())
     } else {
         None

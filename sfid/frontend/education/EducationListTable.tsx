@@ -11,7 +11,7 @@ import { notice } from '../utils/notice';
 
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
   FEDERAL_ADMIN: '联邦管理员',
-  SHI_ADMIN: '市级管理员',
+  CITY_ADMIN: '市管理员',
 };
 
 interface Props {

@@ -413,7 +413,7 @@ any → unknown
 ### 5.12 手动重试 / 取消统一入口
 
 业务 pallet 不暴露任何 `execute_xxx` / `cancel_xxx` wrapper extrinsic。前端
-(citizenchain/node Tauri UI、wuminapp 热钱包、wumin 冷钱包)统一调用投票引擎:
+(citizenchain/node Tauri UI、wuminapp 热钱包、wumin 公民钱包)统一调用投票引擎:
 
 - 手动重试: `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
 - 取消失败: `VotingEngine::cancel_passed_proposal(proposal_id, reason)`(pallet 9.5)

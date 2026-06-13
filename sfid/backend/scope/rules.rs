@@ -4,7 +4,7 @@
 //! 数据范围(VisibleScope)。所有 list/CRUD API 都应当先派生 scope,再用它
 //! 过滤数据。
 //!
-//! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
+//! 中文注释:当前只保留 FederalAdmin / CityAdmin 两个管理员角色。
 //! 见 `feedback_sfid_three_roles_naming.md` 的角色命名铁律。
 
 use crate::admins::login::AdminAuthContext;
@@ -20,20 +20,20 @@ pub struct VisibleScope {
     /// 是否可以增删改。当前两角色在自己范围内都能写,保留字段为将来扩展只读角色。
     pub can_write: bool,
     /// 进入 tab 时是否跳过省份列表直接进入详情。
-    /// - ShengAdmin: true(直接进本省)
-    /// - ShiAdmin: true(直接进本市,同时跳过市列表)
+    /// - FederalAdmin: true(直接进本省)
+    /// - CityAdmin: true(直接进本市,同时跳过市列表)
     pub skip_province_list: bool,
-    /// 进入 tab 时是否跳过市列表(仅 SHI_ADMIN)。
+    /// 进入 tab 时是否跳过市列表(仅 CITY_ADMIN)。
     pub skip_city_list: bool,
-    /// 锁定的省份(FEDERAL_ADMIN / SHI_ADMIN 进入时自动填)。
+    /// 锁定的省份(FEDERAL_ADMIN / CITY_ADMIN 进入时自动填)。
     pub locked_province: Option<String>,
-    /// 锁定的市(SHI_ADMIN 进入时自动填)。
+    /// 锁定的市(CITY_ADMIN 进入时自动填)。
     pub locked_city: Option<String>,
 }
 
 impl VisibleScope {
-    /// ShengAdmin:只看本省,可在本省写。
-    pub fn sheng_admin(province: String) -> Self {
+    /// FederalAdmin:只看本省,可在本省写。
+    pub fn federal_admin(province: String) -> Self {
         Self {
             provinces: vec![province.clone()],
             cities: vec![],
@@ -45,8 +45,8 @@ impl VisibleScope {
         }
     }
 
-    /// ShiAdmin:只看本市,可在本市写。
-    pub fn shi_admin(province: String, city: String) -> Self {
+    /// CityAdmin:只看本市,可在本市写。
+    pub fn city_admin(province: String, city: String) -> Self {
         Self {
             provinces: vec![province.clone()],
             cities: vec![city.clone()],
@@ -71,28 +71,28 @@ impl VisibleScope {
 
 /// 根据登录管理员上下文派生 VisibleScope。
 ///
-/// 中文注释:ShengAdmin 缺 admin_province 或 ShiAdmin 缺 admin_city 时,会
+/// 中文注释:FederalAdmin 缺 admin_province 或 CityAdmin 缺 admin_city 时,会
 /// fallback 到最严格的"零范围"(provinces=["<INVALID>"]),这样过滤后返回空列表,
 /// 避免误放行。调用方应当在 require_admin_* 里先校验必要字段。
 pub fn get_visible_scope(ctx: &AdminAuthContext) -> VisibleScope {
     match ctx.role {
-        AdminRole::ShengAdmin => {
+        AdminRole::FederalAdmin => {
             let province = ctx
                 .admin_province
                 .clone()
                 .unwrap_or_else(|| "__FEDERAL_ADMIN_MISSING_PROVINCE__".to_string());
-            VisibleScope::sheng_admin(province)
+            VisibleScope::federal_admin(province)
         }
-        AdminRole::ShiAdmin => {
+        AdminRole::CityAdmin => {
             let province = ctx
                 .admin_province
                 .clone()
-                .unwrap_or_else(|| "__SHI_ADMIN_MISSING_PROVINCE__".to_string());
+                .unwrap_or_else(|| "__CITY_ADMIN_MISSING_PROVINCE__".to_string());
             let city = ctx
                 .admin_city
                 .clone()
-                .unwrap_or_else(|| "__SHI_ADMIN_MISSING_CITY__".to_string());
-            VisibleScope::shi_admin(province, city)
+                .unwrap_or_else(|| "__CITY_ADMIN_MISSING_CITY__".to_string());
+            VisibleScope::city_admin(province, city)
         }
     }
 }
@@ -102,8 +102,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sheng_admin_limited_to_province() {
-        let s = VisibleScope::sheng_admin("安徽省".to_string());
+    fn federal_admin_limited_to_province() {
+        let s = VisibleScope::federal_admin("安徽省".to_string());
         assert!(s.includes_province("安徽省"));
         assert!(!s.includes_province("广东省"));
         assert!(s.includes_city("合肥市"));
@@ -112,8 +112,8 @@ mod tests {
     }
 
     #[test]
-    fn shi_admin_limited_to_city() {
-        let s = VisibleScope::shi_admin("安徽省".to_string(), "合肥市".to_string());
+    fn city_admin_limited_to_city() {
+        let s = VisibleScope::city_admin("安徽省".to_string(), "合肥市".to_string());
         assert!(s.includes_province("安徽省"));
         assert!(!s.includes_province("广东省"));
         assert!(s.includes_city("合肥市"));

@@ -95,7 +95,8 @@ export async function createInstitution(
     institution: input.institution,
     institution_name: input.institution_name ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
-    sub_type: null,
+    private_type: input.private_type ?? null,
+    partnership_kind: input.partnership_kind ?? null,
     legal_rep_name: input.legal_rep_name ?? null,
     legal_rep_sfid_number: input.legal_rep_sfid_number ?? null,
     legal_rep_photo_path: input.legal_rep_photo_path ?? null,
@@ -154,7 +155,7 @@ export async function getInstitution(
 
 /**
  * 联邦注册局机构详情(只读,绕过 scope)。
- * 联邦注册局是全国唯一机构(位于中枢省),其它省管理员被普通 getInstitution 的 scope 拦截,
+ * 联邦注册局是全国唯一机构(位于中枢省),其它联邦管理员被普通 getInstitution 的 scope 拦截,
  * 故走专用只读接口。返回结构与 getInstitution 完全一致。
  */
 export async function getFederalRegistry(

@@ -1,7 +1,14 @@
 //! 私权机构模块。
 //!
-//! 中文注释:学校、盈利性私权机构、非盈利私权机构、非法人从属机构归这里。
-//! 注册与私权列表入口都归这里;跨模块共享结构只通过机构内核复用。
+//! 中文注释:私权机构继续保留 `private` 一级边界,内部按个体经营、合伙企业、
+//! 股权公司、股份公司、公益组织、注册协会拆分。身份 ID 格式不变,私权类型只决定
+//! `主体属性 + T2 机构码` 的目标组合。
 
-pub(crate) mod clearing;
-pub(crate) mod handler;
+pub(crate) mod association;
+pub(crate) mod common;
+pub(crate) mod company;
+pub(crate) mod corporation;
+pub(crate) mod participants;
+pub(crate) mod partnership;
+pub(crate) mod sole;
+pub(crate) mod welfare;

@@ -12,7 +12,7 @@
 - `wallet` 管钱包与密钥材料生命周期
 - `signer` 管签名算法与签名协议
 - `login`、`onchain`、`myid` 只编排流程，不直接写签名细节
-- 冷钱包离线解码和独立确认由 `wumin/lib/signer/` 承担，wuminapp 不实现冷钱包签名放行规则
+- 冷钱包离线解码和独立确认由 `wumin/lib/signer/` 承担，wuminapp 不实现公民钱包签名放行规则
 
 ## 2. 目录结构
 
@@ -96,10 +96,10 @@ wuminapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `WUMI
 - 若请求包含 `display.fields`，逐项校验 `mode / archive_no / voting_eligible / citizen_status / wallet_address` 与业务原文一致。
 - 校验通过后才使用当前钱包对 `payload_hex` 原始字节签名。
 
-### 4.2 冷钱包签名边界
+### 4.2 公民钱包签名边界
 
-- wumin 冷钱包负责独立解码链上 call data、SFID 管理员操作、CPMS 档案删除等签名请求。
-- wumin 冷钱包只能在独立验证通过时绿色放行，不能独立验证或展示字段不一致时红色拒签。
+- wumin 公民钱包负责独立解码链上 call data、SFID 管理员操作、CPMS 档案删除等签名请求。
+- wumin 公民钱包只能在独立验证通过时绿色放行，不能独立验证或展示字段不一致时红色拒签。
 - wuminapp 只负责展示在线请求二维码、扫描回执、校验 `request_id / pubkey / payload_hash / signature` 后提交业务。
 
 ## 5. 协议口径（WUMIN_QR_V1）

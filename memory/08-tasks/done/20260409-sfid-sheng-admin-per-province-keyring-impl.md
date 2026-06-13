@@ -37,7 +37,7 @@
 - Postgres `admins` 表通过 `ALTER TABLE IF NOT EXISTS` 扩两列:
   - `encrypted_signing_privkey TEXT`(base64(nonce_12B || ciphertext || tag_16B))
   - `signing_pubkey TEXT`(hex,便于链上对账)
-- `src/models/mod.rs::AdminUser` + `sheng-admins` Row 扩同名两字段
+- `src/models/mod.rs::AdminUser` + `federal-registry` Row 扩同名两字段
   内部持 `HashMap<Province, sr25519::Pair>` 与 AES-256-GCM wrap key
   (wrap key 由 HKDF-SHA256(SFID MAIN seed, salt, info) 派生,salt =
   `sfid-sheng-signer-v1-salt`、info = `sfid-sheng-signer-v1-info`),
@@ -67,21 +67,21 @@
   - 4 个 `DOMAIN_*` 常量统一为 `b"GMB_SFID_V1"`（2026-04-20 统一为 `DUOQIAN + OP_SIGN_*`）
   - 新建 `build_institution_credential_with_province(state, ctx, ...)`
 - `src/institutions/chain.rs` + `src/institutions/handler.rs` +
-  `src/sheng-admins/multisig.rs` 调用点全部级联追加 `ctx: &AdminAuthContext` 参数
+  `src/federal-registry/multisig.rs` 调用点全部级联追加 `ctx: &AdminAuthContext` 参数
 
 ### 0.3 前端实际落地(`sfid/frontend`)
 
-- `src/views/sheng_admins/ShengAdminsView.tsx`:新增"签名密钥状态"列
+- `src/views/sheng_admins/FederalAdminsView.tsx`:新增"签名密钥状态"列
   - 未初始化:灰色 Tag "未初始化"
   - 已激活:绿色 Tag "已激活" + `<Tooltip>` 展示完整 pubkey hex
-- `src/api/client.ts::ShengAdminRow`:新增 `signing_pubkey?: string | null`
+- `src/api/client.ts::FederalAdminRow`:新增 `signing_pubkey?: string | null`
 - `src/views/institutions/CreateInstitutionModal.tsx` +
   `src/views/institutions/CreateAccountModal.tsx`:
   翻译成友好中文提示
 
 ### 0.4 已知残留 / 推迟项
 
-- **Phase 1.D 压测推迟**:未跑 500 并发 SHI_ADMIN 压测,灰度开关未设计(当前实现
+- **Phase 1.D 压测推迟**:未跑 500 并发 CITY_ADMIN 压测,灰度开关未设计(当前实现
   无 feature flag,直接全量切换本省签名路由)
 - Setup 文档(环境变量说明)未写,但不需要新 env —— 只是复用现有
   `SFID_SIGNING_SEED_HEX`(SFID MAIN seed)作为 HKDF 派生源
@@ -129,8 +129,8 @@
   职责:
     • 登录 sfid 触发本省签名密钥生成/解锁
     • 管理本省签名密钥对(通过登录/登出控制 cache)
-    • 管理本省市管理员(HTTP 层 CRUD,无链上操作)
-  私钥位置:自己的 wumin 冷钱包
+    • 管理本联邦/市管理员(HTTP 层 CRUD,无链上操作)
+  私钥位置:自己的 wumin 公民钱包
   公钥位置:sfid 后端 Store(不上链)
   ↓ 管理
 省签名密钥对(43 组)
@@ -299,19 +299,19 @@ getrandom = "0.2"
 pub(crate) struct AdminUser {
     // ...existing fields...
 
-    /// 仅 ShengAdmin 使用。加密存储的本省签名私钥种子。
+    /// 仅 FederalAdmin 使用。加密存储的本省签名私钥种子。
     /// 格式:base64(nonce_12B || ciphertext || tag_16B)
     /// 明文 = sr25519 seed 32 字节
     #[serde(default)]
     pub(crate) encrypted_signing_privkey: Option<String>,
 
-    /// 仅 ShengAdmin 使用。对应签名密钥的公钥(便于和链上对账)。
+    /// 仅 FederalAdmin 使用。对应签名密钥的公钥(便于和链上对账)。
     #[serde(default)]
     pub(crate) signing_pubkey: Option<String>,   // hex
 }
 ```
 
-**不新建任何独立的数据结构**(保持"省管理员 = 一个 AdminUser"的统一命名)。
+**不新建任何独立的数据结构**(保持"联邦管理员 = 一个 AdminUser"的统一命名)。
 
 ### 2.3 ShengSignerCache 内存缓存
 
@@ -481,7 +481,7 @@ pub(crate) fn resolve_business_signer(
             return Err(ApiError::forbidden(
             ));
         }
-        AdminRole::ShengAdmin | AdminRole::ShiAdmin => {
+        AdminRole::FederalAdmin | AdminRole::CityAdmin => {
             ctx.admin_province.as_deref().ok_or_else(|| {
                 ApiError::bad_request("管理员缺少省份信息")
             })?
@@ -514,7 +514,7 @@ body: { challenge_id, signature, seed_hex }
 action:
   2. 解析 seed_hex → 32 字节种子
   3. 调用 sheng_signer_cache.unlock(&mut seed)
-  4. 遍历 Store 所有 ShengAdmin,凡是有 encrypted_signing_privkey 的,
+  4. 遍历 Store 所有 FederalAdmin,凡是有 encrypted_signing_privkey 的,
      解密 seed → 构造 PairSigner → 塞进 cache(但 session 没打开,不代表可推链)
   5. zeroize 传入的 seed
   6. 返回 { unlocked: true }
@@ -539,7 +539,7 @@ action:
 在现有登录验签成功后追加:
 
 ```rust
-if ctx.role == AdminRole::ShengAdmin {
+if ctx.role == AdminRole::FederalAdmin {
     let province = ctx.admin_province.as_deref().ok_or_else(|| {
         ApiError::internal("sheng admin missing province")
     })?;
@@ -547,7 +547,7 @@ if ctx.role == AdminRole::ShengAdmin {
     // 检查 cache 是否已解锁
     if !state.sheng_signer_cache.is_unlocked() {
         tracing::warn!("sfid backend not unlocked, sheng login proceeds but SHI推链 unavailable");
-        // 登录仍然成功,但本省 SHI_ADMIN 推链会失败(返回 503)
+        // 登录仍然成功,但本省 CITY_ADMIN 推链会失败(返回 503)
         return Ok(login_response);
     }
 
@@ -622,7 +622,7 @@ if ctx.role == AdminRole::ShengAdmin {
 #### 2.5.3 省登录管理员登出 handler 改造
 
 ```rust
-if ctx.role == AdminRole::ShengAdmin {
+if ctx.role == AdminRole::FederalAdmin {
     if let Some(province) = ctx.admin_province.as_deref() {
         state.sheng_signer_cache.unload_province(province);
         tracing::info!(province, "sheng signer unloaded on logout");
@@ -777,9 +777,9 @@ tracing::info!(
 **wumin 改动需求**:在签 challenge 的同时也返回私钥种子(或派生的 wrap key)。需要用户确认 wumin 是否支持。
 
 
-### 3.3 ShengAdminsView 改动
+### 3.3 FederalAdminsView 改动
 
-**现状**:`src/views/sheng-admins/ShengAdminsView.tsx` 显示省管理员列表(`w5GR...`)。
+**现状**:`src/views/federal-registry/FederalAdminsView.tsx` 显示联邦管理员列表(`w5GR...`)。
 
 **改动**:
 - 新增列:**签名密钥状态**
@@ -793,7 +793,7 @@ tracing::info!(
 业务 handler 可能返回的新错误:
 - 503 "本省(辽宁省)登录管理员未在线,暂无法推链"
 
-前端在机构注册等业务 Modal 里捕获这些错误,展示友好提示 + 引导操作(比如"请通知辽宁省管理员登录")。
+前端在机构注册等业务 Modal 里捕获这些错误,展示友好提示 + 引导操作(比如"请通知辽宁联邦管理员登录")。
 
 ---
 
@@ -873,7 +873,7 @@ sfid-load-test \
 ### 阶段 3:前端(0.5 天)
 
 - [ ] 新建 `SystemLockBanner` + `UnlockBackendModal`
-- [ ] `ShengAdminsView` 新列(签名密钥状态)
+- [ ] `FederalAdminsView` 新列(签名密钥状态)
 - [ ] 业务错误提示友好化
 - [ ] `npx tsc --noEmit` + `npm run build`
 
@@ -939,11 +939,11 @@ sfid-load-test \
 ### 8.3 前端
 - [ ] `npx tsc --noEmit` + `npm run build` 绿
 - [ ] SystemLockBanner 正确显示状态
-- [ ] ShengAdminsView 显示 signing 密钥状态 Tag
+- [ ] FederalAdminsView 显示 signing 密钥状态 Tag
 - [ ] 业务错误(503)有友好提示
 
 ### 8.4 联调
-- [ ] 辽宁 sheng admin 登出 → 辽宁 SHI_ADMIN 推链立即失败
+- [ ] 辽宁 sheng admin 登出 → 辽宁 CITY_ADMIN 推链立即失败
 - [ ] 辽宁 sheng admin 重新登录 → 推链恢复(无需重新生成 keypair)
 - [ ] 压测 baseline 报告产出
 
@@ -955,7 +955,7 @@ sfid-load-test \
 
 
 - [ ] **方式 1**:HTTP body 明文 hex 传 seed(简单,依赖 TLS 信任)—— **推荐**
-- [ ] **方式 2**:wumin 冷钱包支持派生 wrap key,只传 wrap key(需要 wumin 支持额外派生功能)
+- [ ] **方式 2**:wumin 公民钱包支持派生 wrap key,只传 wrap key(需要 wumin 支持额外派生功能)
 
 **默认方式 1**,除非你指定换。
 

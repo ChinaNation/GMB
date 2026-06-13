@@ -1,8 +1,8 @@
-# 任务卡:省级管理员独立推链密钥(简化版)
+# 任务卡:联邦管理员独立推链密钥(简化版)
 
 - **任务 ID**: `20260409-sfid-sheng-admin-per-province-keyring`
 - **模块**: citizenchain-runtime + sfid-backend + sfid-frontend
-- **优先级**: 高(解决 50K SHI_ADMIN 并发推链的单 nonce 瓶颈)
+- **优先级**: 高(解决 50K CITY_ADMIN 并发推链的单 nonce 瓶颈)
 - **前置依赖**: 无
 - **状态**: 待启动
 - **预估工作量**: 2~2.5 天
@@ -11,14 +11,14 @@
 
 当前状态:
 - 链端 `sfid_system` pallet 的 verifier 只信任这一个账户
-- 省级管理员管理通过 `replace_sheng_admin` HTTP handler 进行,但**不涉及链上权限**
+- 联邦管理员管理通过 `replace_sheng_admin` HTTP handler 进行,但**不涉及链上权限**
 
 目标(用户拍板的简化方案):
 - 保留现有 43 省 × 1 管理员的数据模型
-- 每省管理员拥有**唯一一把**推链密钥(1 key,非多备份)
+- 每联邦管理员拥有**唯一一把**推链密钥(1 key,非多备份)
 - 该密钥**公钥注册到链上**,作为链端授权 signer
   同时后端生成新私钥并替换 Store 里旧的
-- SHI_ADMIN 推链时,后端自动用该 SHI_ADMIN 所属省的 sheng admin private key 签名
+- CITY_ADMIN 推链时,后端自动用该 CITY_ADMIN 所属省的 sheng admin private key 签名
 
 信任模型说明:
 - 省级密钥的独立性主要体现在**链上 nonce 并行**(43 条通道)和**审计可追溯**
@@ -37,13 +37,13 @@
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │  sfid_system pallet                                 │  │
 │  │  Storage:                                              │  │
-│  │    ShengAdminPubkey:                                   │  │
+│  │    FederalAdminPubkey:                                   │  │
 │  │      map Province → [u8; 32]           ← 新增           │  │
 │  │  Extrinsic:                                            │  │
 │  │    set_sheng_admin_pubkey(province, new_pub)           │  │
 │  │      effect: 覆写该省 pubkey(替换/初始化一体)         │  │
 │  │  Verifier(register_sfid_institution 等):              │  │
-│  │                 ShengAdminPubkey::iter().value         │  │
+│  │                 FederalAdminPubkey::iter().value         │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
                             ▲
@@ -58,8 +58,8 @@
 │  内存缓存:                                                   │
 │    内存中 PairSigner 按 province 索引                         │
 │  签名路由(resolve_chain_signer):                             │
-│    ShengAdmin 推链 → 本省 sheng signer                       │
-│    ShiAdmin   推链 → 本省 sheng signer  ← 解决瓶颈核心       │
+│    FederalAdmin 推链 → 本省 sheng signer                       │
+│    CityAdmin   推链 → 本省 sheng signer  ← 解决瓶颈核心       │
 │    POST /api/v1/admin/sheng-signer/:province/init            │
 │    POST /api/v1/admin/sheng-signer/:province/rotate          │
 │    GET  /api/v1/admin/sheng-signer/list                      │
@@ -85,7 +85,7 @@
 **1.1 新增 storage**:
 ```rust
 #[pallet::storage]
-pub type ShengAdminPubkey<T: Config> = StorageMap<
+pub type FederalAdminPubkey<T: Config> = StorageMap<
     _,
     Blake2_128Concat,
     BoundedVec<u8, ConstU32<64>>,  // province UTF-8 字节
@@ -109,8 +109,8 @@ pub fn set_sheng_admin_pubkey(
     ensure!(
     );
     // 覆写(替换 = 轮换)
-    ShengAdminPubkey::<T>::insert(&province, new_pubkey);
-    Self::deposit_event(Event::ShengAdminPubkeyUpdated {
+    FederalAdminPubkey::<T>::insert(&province, new_pubkey);
+    Self::deposit_event(Event::FederalAdminPubkeyUpdated {
         province,
         new_pubkey,
     });
@@ -132,7 +132,7 @@ fn is_authorized_sfid_writer<T: Config>(who: &T::AccountId) -> bool {
         return true;
     }
     // 2. 任一省 sheng admin pubkey
-    for (_, pub_bytes) in ShengAdminPubkey::<T>::iter() {
+    for (_, pub_bytes) in FederalAdminPubkey::<T>::iter() {
         if who_bytes == pub_bytes.encode() {
             return true;
         }
@@ -226,7 +226,7 @@ POST /api/v1/admin/sheng-signer/:province/init
 POST /api/v1/admin/sheng-signer/:province/rotate
   body: { }
   action: 同 init,但是覆盖已有行(替换 = 轮换)
-  注意: 旧 pubkey 从此在链上不再被认证,老 SHI_ADMIN 推链会自动用新 pubkey
+  注意: 旧 pubkey 从此在链上不再被认证,老 CITY_ADMIN 推链会自动用新 pubkey
 
 GET /api/v1/admin/sheng-signer/list
   response: [{ province, pubkey, chain_version, updated_at, initialized }]
@@ -234,7 +234,7 @@ GET /api/v1/admin/sheng-signer/list
 
 **2.5 签名路由改造**(核心):
 
-当前 `sheng-admins/institutions.rs::submit_register_sfid_institution_extrinsic` 里:
+当前 `federal-registry/institutions.rs::submit_register_sfid_institution_extrinsic` 里:
 ```rust
 ```
 
@@ -250,7 +250,7 @@ pub(crate) fn resolve_chain_signer(
 ) -> Result<PairSigner<PolkadotConfig, sr25519::Pair>, ApiError> {
     match ctx.role {
         }
-        AdminRole::ShengAdmin | AdminRole::ShiAdmin => {
+        AdminRole::FederalAdmin | AdminRole::CityAdmin => {
             let province = ctx.admin_province.as_ref()
                 .ok_or_else(|| ApiError::bad_request("admin missing province"))?;
             // 先查内存缓存
@@ -294,7 +294,7 @@ pub(crate) fn resolve_chain_signer(
 
 **2.9 验收**:
 - `cargo check` + 单元测试绿
-- 集成测试:unlock → init 辽宁 → 本省 SHI_ADMIN 推 `register_sfid_institution` 成功 →
+- 集成测试:unlock → init 辽宁 → 本省 CITY_ADMIN 推 `register_sfid_institution` 成功 →
   检查链上 extrinsic signer = sheng admin pubkey
 - 集成测试:rotate 辽宁 → 新 pubkey 生效 → 旧 pubkey 推链被链端拒绝
 
@@ -320,7 +320,7 @@ pub(crate) fn resolve_chain_signer(
 **3.2 初始化/轮换确认弹窗**:
 - 无输入框(后端自己生成 keypair)
 - 二次确认:"确认初始化 `辽宁省` 的推链密钥?此操作将上链"
-- 轮换特别警告:"轮换后旧 pubkey 立即失效,本省所有 SHI_ADMIN 未完成的推链请求需要重试"
+- 轮换特别警告:"轮换后旧 pubkey 立即失效,本省所有 CITY_ADMIN 未完成的推链请求需要重试"
 - 提交后显示 loading → 返回新 pubkey + tx_hash + chain_version
 
 **3.3 API 客户端**(`src/api/shengSigner.ts`):
@@ -333,7 +333,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 
 **3.4 验证**:
 - `npx tsc --noEmit` + `npm run build` 全绿
-  本省 SHI_ADMIN 登录 → 推 `register_sfid_institution` → 链上成功
+  本省 CITY_ADMIN 登录 → 推 `register_sfid_institution` → 链上成功
 
 ---
 
@@ -347,7 +347,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 第一次生产发布先在灰度节点 `true`,验证稳定后切换全量。
 
 **4.2 压测**:
-- 500 并发 SHI_ADMIN(模拟 30 省的 SHI_ADMIN 同时推链)
+- 500 并发 CITY_ADMIN(模拟 30 省的 CITY_ADMIN 同时推链)
 - 对比 flag on vs off 下的 p50 / p99 延迟、失败率
 - 目标:flag on 后 p99 低 10× 以上
 
@@ -360,7 +360,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 
 **4.4 回滚预案**:
 - 任何异常:`SFID_SHENG_SIGNER_ENABLED=false` 立即回退
-- 链上 `ShengAdminPubkey` storage 保留不删,下次开启时无需重新初始化
+- 链上 `FederalAdminPubkey` storage 保留不删,下次开启时无需重新初始化
 - 已写入链的机构不受影响
 
 ---
@@ -385,7 +385,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 | runtime setCode 失败导致链停摆 | 高 | 本地节点先 dry-run,再 stage 环境,最后生产 |
 | 加密派生密钥在内存中被 dump | 低 | 进程级隔离 + 短生命周期(解密完立即丢弃派生密钥,只保留 PairSigner 实例) |
 | 43 省 iter 在 verifier 里的性能 | 低 | 每次 extrinsic ~43 次 O(1) 比对,远低于其他 pallet 开销 |
-| 替换省级管理员(`replace_sheng_admin` 老接口)时推链密钥不同步 | 中 | 在 `replace_sheng_admin` handler 内部级联触发 `rotate_sheng_signer`,两件事一笔请求完成 |
+| 替换联邦管理员(`replace_sheng_admin` 老接口)时推链密钥不同步 | 中 | 在 `replace_sheng_admin` handler 内部级联触发 `rotate_sheng_signer`,两件事一笔请求完成 |
 
 ## 不做的事
 
@@ -410,7 +410,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 1. ✅ **链上 runtime 升级**:走 `system.setCode`,符合 `feedback_chainspec_frozen`
 2. ✅ **加密算法统一**:**AES-256-GCM + HKDF-SHA256**,全系统(Store privkey 加密 /
    session token / 任何密钥派生)使用同一套
-3. ✅ **命名统一**:删除 `sheng_admin_signer` 单独概念,**省级管理员 = 省级密钥**,
+3. ✅ **命名统一**:删除 `sheng_admin_signer` 单独概念,**联邦管理员 = 省级密钥**,
    一个实体一个名字。`sheng_admin_province_by_pubkey` 映射里的 pubkey 就是链上授权
    signer,对应 privkey 加密存在同一结构体里。用于登录系统 + 推链签名**同一把密钥**。
 4. ✅ **压测工具**:自写 Rust 脚本(`sfid/backend/tools/load_test.rs` 或独立 crate)
@@ -437,8 +437,8 @@ pub(crate) struct AdminUser {
     pub(crate) updated_at: Option<DateTime<Utc>>,
     pub(crate) city: String,
 
-    // ── 新增字段(仅 ShengAdmin 必填,其他角色 None) ──
-    /// 中文注释:省级管理员的私钥,AES-256-GCM 加密后 base64 编码。
+    // ── 新增字段(仅 FederalAdmin 必填,其他角色 None) ──
+    /// 中文注释:联邦管理员的私钥,AES-256-GCM 加密后 base64 编码。
     #[serde(default)]
     pub(crate) encrypted_privkey: Option<String>,
     /// 链上该 admin_pubkey 当前版本(每次 set_sheng_admin_pubkey extrinsic 成功后递增)
@@ -460,24 +460,24 @@ pub(crate) struct AdminUser {
 原方案的 4 个独立接口全部折叠进现有的 `replace_sheng_admin`:
 
 ```
-POST /api/v1/admin/sheng-admins/unlock
+POST /api/v1/admin/federal-registry/unlock
 
-PUT /api/v1/admin/sheng-admins/:province
-  替换/初始化某省管理员(复用现有 handler,扩展内部逻辑)
+PUT /api/v1/admin/federal-registry/:province
+  替换/初始化某联邦管理员(复用现有 handler,扩展内部逻辑)
   action:
     2. 加密 privkey 写入 AdminUser.encrypted_privkey
     3. 调 chain set_sheng_admin_pubkey 成功后递增 chain_version
     4. 内存 cache.replace(province, new_signer)
     5. 返回新 pubkey + tx_hash + chain_version
 
-GET /api/v1/admin/sheng-admins(复用现有 list,新增字段:chain_version / cache_loaded)
+GET /api/v1/admin/federal-registry(复用现有 list,新增字段:chain_version / cache_loaded)
 ```
 
-前端 ShengSignerPanel 也合并到现有的省级管理员管理界面,不单独开 sub-tab。
+前端 ShengSignerPanel 也合并到现有的联邦管理员管理界面,不单独开 sub-tab。
 
 ## 相关文档
 
-- 前置讨论:会话中"方案 A 省级管理员 3 把密钥"段落,后被用户简化为单密钥方案
+- 前置讨论:会话中"方案 A 联邦管理员 3 把密钥"段落,后被用户简化为单密钥方案
 - 参考铁律:
   - `feedback_chainspec_frozen.md`
   - `feedback_sfid_pow_chain_recipe.md`

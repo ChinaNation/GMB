@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 清空缓存 + 重新编译 + 启动手机 App
+# 清空缓存 + 重新编译 + 启动公民
 #
 # 固定使用 smoldot 轻节点连接区块链（无需 RPC 服务器）。
 set -euo pipefail
@@ -24,11 +24,33 @@ echo "[启动模式] smoldot 轻节点"
 # system.setCode,绝不重新 build-spec。详见 memory/07-ai/chainspec-frozen.md
 bash "$SCRIPT_DIR/../../scripts/check-chainspec-frozen.sh"
 
+# ── 启动前 adb 健康自检：只在 adb 真正卡死时才重置，健康时绝不触碰 ──
+# 中文注释：adb server 是 fork-server 常驻守护进程，脱离终端独立运行；一旦被
+# 挂起(^Z)的 adb 客户端把它的连接状态搞坏，后续每次 `adb devices` 都会永久
+# 阻塞，且换终端、重开都无效(守护进程常驻)。
+# 关键：绝不能无条件强杀 adb——`kill -9` 重启会让 USB 设备短暂重新枚举，正常
+# 连接的设备会在窗口内被下方 `adb get-state` 误判为"未检测到"。所以这里只做
+# 探测：用 8 秒超时跑一次 `adb devices`，仅当它卡住(超时/失败)才判定 server
+# 已卡死并强制重置；健康时整段是只读探测，不动 adb、不动设备连接。
+if command -v adb >/dev/null 2>&1; then
+  if ! perl -e 'alarm 8; exec @ARGV' adb devices >/dev/null 2>&1; then
+    echo "==> adb 无响应(疑似卡死)，强制重置 server..."
+    pkill -9 -f 'adb.*fork-server' 2>/dev/null || true
+    adb start-server >/dev/null 2>&1 || true
+    sleep 2
+  fi
+fi
+# 清掉上一轮残留的 flutter_tools 进程(无残留则空操作，不影响健康运行)。
+pkill -9 -f flutter_tools.snapshot 2>/dev/null || true
+
 echo "==> 清除 Rust 编译缓存..."
 (cd "rust" && ~/.cargo/bin/cargo clean 2>/dev/null || true)
 echo "==> 编译 Rust 原生库..."
-# 检测目标平台：通过 flutter devices 判断
-DEVICE_LINE=$(flutter devices --machine 2>/dev/null | python3 -c "
+# 检测目标平台：通过 flutter devices 判断。
+# 中文注释：`flutter devices --machine` 内部会调 `adb devices`，万一仍被卡住
+# (例如本地 adb 异常)，用 perl alarm 包 60s 超时强制结束(macOS 自带 perl，
+# 无 GNU `timeout`)，避免无限阻塞；超时/失败统一回退到 android 判定。
+DEVICE_LINE=$(perl -e 'alarm 60; exec @ARGV' flutter devices --machine 2>/dev/null | python3 -c "
 import sys, json
 try:
     devices = json.load(sys.stdin)

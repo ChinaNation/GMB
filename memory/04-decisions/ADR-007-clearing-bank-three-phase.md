@@ -114,9 +114,9 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - 新建 `sfid/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
 - SFID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_sfid_number`
 
-### Step 3：手机端（wumin + wuminapp）
+### Step 3：公民端（wumin + wuminapp）
 
-- wumin 冷钱包 decoder 补 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 扫码签名分支
+- wumin 公民钱包 decoder 补 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 扫码签名分支
 - wumin pallet_registry action_labels 补对应中文标签
 - wuminapp `bind_clearing_bank_page.dart` 调整：搜索来源切换为新 search API；绑定前查链上 ClearingBankNodes 取 RPC 域名+端口
 - wuminapp `clearing_bank_settings_page.dart` 占位页落地（用户视角的"我的清算行配置"）

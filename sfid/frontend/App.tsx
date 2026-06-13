@@ -30,11 +30,11 @@ import type { SfidMetaResult } from './china/api';
 import { loadCachedSfidMeta } from './china/metaCache';
 import { LoginView } from './auth/LoginView';
 import { GovView } from './gov/GovView';
-import { PrivateView } from './private/PrivateView';
+import { PrivateShell } from './private/PrivateShell';
 import { EducationView } from './education/EducationView';
-import { OperatorsView } from './admins/OperatorsView';
-import { ShengAdminsView } from './admins/ShengAdminsView';
+import { FederalAdminsView } from './admins/FederalAdminsView';
 import { CitizensView } from './citizens/CitizensView';
+import type { PrivateType } from './subjects/api';
 import { notice } from './utils/notice';
 
 const { Header, Content } = Layout;
@@ -43,11 +43,11 @@ const { Header, Content } = Layout;
 function resolveHeaderAdminIdentity(auth: AdminAuth | null): { roleLabel: string; adminName: string } {
   if (!auth) return { roleLabel: '', adminName: '' };
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
-  // 中文注释:当前只剩 FEDERAL_ADMIN / SHI_ADMIN 两个管理员角色。
+  // 中文注释:当前只剩联邦管理员和市管理员两个管理员角色。
   const roleLabel = auth.role === 'FEDERAL_ADMIN'
     ? '联邦管理员'
-    : auth.role === 'SHI_ADMIN'
-      ? '市级管理员'
+    : auth.role === 'CITY_ADMIN'
+      ? '市管理员'
       : '';
   return { roleLabel, adminName: name || '暂未设置' };
 }
@@ -56,12 +56,34 @@ type ActiveView =
   | 'citizens'
   | 'public-security'
   | 'gov'
-  | 'private'
+  | 'private-sole'
+  | 'private-partnership'
+  | 'private-company'
+  | 'private-corporation'
+  | 'private-welfare'
+  | 'private-association'
   | 'education'
   | 'city-registry'
-  | 'federal-registry'
-  | 'sheng-admins'
-  | 'operators';
+  | 'federal-registry';
+
+function privateTypeForView(view: ActiveView): PrivateType | null {
+  switch (view) {
+    case 'private-sole':
+      return 'SOLE';
+    case 'private-partnership':
+      return 'PARTNERSHIP';
+    case 'private-company':
+      return 'COMPANY';
+    case 'private-corporation':
+      return 'CORPORATION';
+    case 'private-welfare':
+      return 'WELFARE';
+    case 'private-association':
+      return 'ASSOCIATION';
+    default:
+      return null;
+  }
+}
 
 function AppInner() {
   const { auth, setAuth, capabilities } = useAuth();
@@ -113,14 +135,15 @@ function AppInner() {
   const mustUpdatePasskey = !!auth && auth.passkey_bound === false;
 
   // 未绑定 passkey 时强制进入本角色可绑定 passkey 的注册局 tab:
-  //   联邦管理员在「联邦注册局」的联邦管理员列表绑定;市级管理员在「市注册局」的市级管理员列表绑定。
-  const passkeyBindView: ActiveView = auth?.role === 'SHI_ADMIN' ? 'city-registry' : 'federal-registry';
+  //   联邦管理员在「联邦注册局」的联邦管理员列表绑定;市管理员在「市注册局」的市管理员列表绑定。
+  const passkeyBindView: ActiveView = auth?.role === 'CITY_ADMIN' ? 'city-registry' : 'federal-registry';
   useEffect(() => {
     if (mustUpdatePasskey && activeView !== passkeyBindView) {
       setActiveView(passkeyBindView);
     }
   }, [mustUpdatePasskey, activeView, passkeyBindView]);
   const routedView: ActiveView = mustUpdatePasskey ? passkeyBindView : activeView;
+  const routedPrivateType = privateTypeForView(routedView);
   const headerAdminIdentity = resolveHeaderAdminIdentity(auth);
 
   const onLogout = () => {
@@ -292,14 +315,15 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 教育机构 → 公权机构 → 市公安局 → 市注册局 → 联邦注册局。 */}
+            {/* 中文注释:Tab 顺序 — 首页 → 六类私权机构 → 教育机构 → 公权机构 → 市公安局 → 市注册局 → 联邦注册局。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: !mustUpdatePasskey, onClick: () => switchView('citizens') },
-              {
-                key: 'private' as const, label: '私权机构',
-                visible: !mustUpdatePasskey && capabilities.canViewPrivate,
-                onClick: () => switchView('private', { loadSfidMeta: true })
-              },
+              { key: 'private-sole' as const, label: '个体经营', visible: !mustUpdatePasskey && capabilities.canViewPrivate, onClick: () => switchView('private-sole', { loadSfidMeta: true }) },
+              { key: 'private-partnership' as const, label: '合伙企业', visible: !mustUpdatePasskey && capabilities.canViewPrivate, onClick: () => switchView('private-partnership', { loadSfidMeta: true }) },
+              { key: 'private-company' as const, label: '股权公司', visible: !mustUpdatePasskey && capabilities.canViewPrivate, onClick: () => switchView('private-company', { loadSfidMeta: true }) },
+              { key: 'private-corporation' as const, label: '股份公司', visible: !mustUpdatePasskey && capabilities.canViewPrivate, onClick: () => switchView('private-corporation', { loadSfidMeta: true }) },
+              { key: 'private-welfare' as const, label: '公益组织', visible: !mustUpdatePasskey && capabilities.canViewPrivate, onClick: () => switchView('private-welfare', { loadSfidMeta: true }) },
+              { key: 'private-association' as const, label: '注册协会', visible: !mustUpdatePasskey && capabilities.canViewPrivate, onClick: () => switchView('private-association', { loadSfidMeta: true }) },
               {
                 key: 'education' as const, label: '教育机构',
                 visible: !mustUpdatePasskey && capabilities.canViewEducation,
@@ -348,23 +372,24 @@ function AppInner() {
               ))}
           </div>
 
-          {routedView === 'operators' && capabilities.canViewShiAdmins ? (
-            <OperatorsView />
-          ) : routedView === 'sheng-admins' && capabilities.canViewShengAdmins ? (
-            <ShengAdminsView mode="list" />
-          ) : routedView === 'public-security' && capabilities.canManageInstitutions && auth ? (
+          {routedView === 'public-security' && capabilities.canManageInstitutions && auth ? (
             // 中文注释:公安局属于 gov 前端边界,但仍保持独立 Tab。
             <GovView key={`public-security-${viewResetToken}`} auth={auth} category="PUBLIC_SECURITY" sfidMeta={sfidMeta} resetToken={viewResetToken} />
           ) : routedView === 'gov' && capabilities.canManageInstitutions && auth ? (
             <GovView key={`gov-${viewResetToken}`} auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} resetToken={viewResetToken} />
-          ) : routedView === 'private' && capabilities.canViewPrivate && auth ? (
-            <PrivateView auth={auth} sfidMeta={sfidMeta} />
+          ) : routedPrivateType && capabilities.canViewPrivate && auth ? (
+            <PrivateShell
+              key={`${routedView}-${viewResetToken}`}
+              auth={auth}
+              sfidMeta={sfidMeta}
+              privateType={routedPrivateType}
+            />
           ) : routedView === 'education' && capabilities.canViewEducation && auth ? (
             <EducationView key={`education-${viewResetToken}`} auth={auth} sfidMeta={sfidMeta} />
           ) : routedView === 'city-registry' && capabilities.canViewCityRegistry ? (
-            <ShengAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
+            <FederalAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
           ) : routedView === 'federal-registry' && capabilities.canViewFederalRegistry ? (
-            <ShengAdminsView key={`federal-registry-${viewResetToken}`} mode="federal-registry" />
+            <FederalAdminsView key={`federal-registry-${viewResetToken}`} mode="federal-registry" />
           ) : (
             <CitizensView />
           )}

@@ -21,12 +21,12 @@ pub(crate) enum AdminOperationAuth {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminActionType {
-    CreateOperator,
-    UpdateOperator,
-    DeleteOperator,
-    CreateShengAdmin,
-    UpdateShengAdmin,
-    DeleteShengAdmin,
+    CreateCityAdmin,
+    UpdateCityAdmin,
+    DeleteCityAdmin,
+    CreateFederalAdmin,
+    UpdateFederalAdmin,
+    DeleteFederalAdmin,
     InstitutionCreate,
     InstitutionUpdate,
     InstitutionCreateAccount,
@@ -48,12 +48,12 @@ pub(crate) enum AdminActionType {
 impl AdminActionType {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            Self::CreateOperator => "CREATE_OPERATOR",
-            Self::UpdateOperator => "UPDATE_OPERATOR",
-            Self::DeleteOperator => "DELETE_OPERATOR",
-            Self::CreateShengAdmin => "CREATE_FEDERAL_ADMIN",
-            Self::UpdateShengAdmin => "UPDATE_FEDERAL_ADMIN",
-            Self::DeleteShengAdmin => "DELETE_FEDERAL_ADMIN",
+            Self::CreateCityAdmin => "CREATE_CITY_ADMIN",
+            Self::UpdateCityAdmin => "UPDATE_CITY_ADMIN",
+            Self::DeleteCityAdmin => "DELETE_CITY_ADMIN",
+            Self::CreateFederalAdmin => "CREATE_FEDERAL_ADMIN",
+            Self::UpdateFederalAdmin => "UPDATE_FEDERAL_ADMIN",
+            Self::DeleteFederalAdmin => "DELETE_FEDERAL_ADMIN",
             Self::InstitutionCreate => "INSTITUTION_CREATE",
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
@@ -75,12 +75,12 @@ impl AdminActionType {
 
     pub(crate) fn label(&self) -> &'static str {
         match self {
-            Self::CreateOperator => "新增市级管理员",
-            Self::UpdateOperator => "编辑市级管理员",
-            Self::DeleteOperator => "删除市级管理员",
-            Self::CreateShengAdmin => "新增联邦管理员",
-            Self::UpdateShengAdmin => "编辑联邦管理员",
-            Self::DeleteShengAdmin => "删除联邦管理员",
+            Self::CreateCityAdmin => "新增市管理员",
+            Self::UpdateCityAdmin => "编辑市管理员",
+            Self::DeleteCityAdmin => "删除市管理员",
+            Self::CreateFederalAdmin => "新增联邦管理员",
+            Self::UpdateFederalAdmin => "编辑联邦管理员",
+            Self::DeleteFederalAdmin => "删除联邦管理员",
             Self::InstitutionCreate => "创建机构",
             Self::InstitutionUpdate => "更新机构",
             Self::InstitutionCreateAccount => "新增机构账户",
@@ -102,7 +102,7 @@ impl AdminActionType {
 
     pub(crate) fn auth_type(&self) -> AdminOperationAuth {
         match self {
-            Self::UpdateOperator | Self::UpdateShengAdmin => AdminOperationAuth::LoginState,
+            Self::UpdateCityAdmin | Self::UpdateFederalAdmin => AdminOperationAuth::LoginState,
             Self::InstitutionCreate
             | Self::InstitutionUpdate
             | Self::InstitutionCreateAccount
@@ -110,10 +110,10 @@ impl AdminActionType {
             | Self::PublicSecurityReconcile
             | Self::CitizenBindCommit
             | Self::CpmsStatusImportConfirm => AdminOperationAuth::Passkey,
-            Self::CreateOperator
-            | Self::DeleteOperator
-            | Self::CreateShengAdmin
-            | Self::DeleteShengAdmin
+            Self::CreateCityAdmin
+            | Self::DeleteCityAdmin
+            | Self::CreateFederalAdmin
+            | Self::DeleteFederalAdmin
             | Self::InstitutionDeleteAccount
             | Self::InstitutionDeleteDocument
             | Self::CpmsIssueInstallCode
@@ -133,10 +133,10 @@ impl AdminActionType {
     pub(crate) fn is_governance(&self) -> bool {
         matches!(
             self,
-            Self::CreateOperator
-                | Self::DeleteOperator
-                | Self::CreateShengAdmin
-                | Self::DeleteShengAdmin
+            Self::CreateCityAdmin
+                | Self::DeleteCityAdmin
+                | Self::CreateFederalAdmin
+                | Self::DeleteFederalAdmin
         )
     }
 
@@ -158,12 +158,12 @@ pub(crate) fn parse_action_type(
     action_type: &str,
 ) -> Result<AdminActionType, axum::response::Response> {
     match action_type {
-        "CREATE_OPERATOR" => Ok(AdminActionType::CreateOperator),
-        "UPDATE_OPERATOR" => Ok(AdminActionType::UpdateOperator),
-        "DELETE_OPERATOR" => Ok(AdminActionType::DeleteOperator),
-        "CREATE_FEDERAL_ADMIN" => Ok(AdminActionType::CreateShengAdmin),
-        "UPDATE_FEDERAL_ADMIN" => Ok(AdminActionType::UpdateShengAdmin),
-        "DELETE_FEDERAL_ADMIN" => Ok(AdminActionType::DeleteShengAdmin),
+        "CREATE_CITY_ADMIN" => Ok(AdminActionType::CreateCityAdmin),
+        "UPDATE_CITY_ADMIN" => Ok(AdminActionType::UpdateCityAdmin),
+        "DELETE_CITY_ADMIN" => Ok(AdminActionType::DeleteCityAdmin),
+        "CREATE_FEDERAL_ADMIN" => Ok(AdminActionType::CreateFederalAdmin),
+        "UPDATE_FEDERAL_ADMIN" => Ok(AdminActionType::UpdateFederalAdmin),
+        "DELETE_FEDERAL_ADMIN" => Ok(AdminActionType::DeleteFederalAdmin),
         "INSTITUTION_CREATE" => Ok(AdminActionType::InstitutionCreate),
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
@@ -200,12 +200,12 @@ pub(crate) fn ensure_action_role_allowed(
         ));
     }
     if (action_type.is_governance() || action_type.is_cpms() || action_type.is_login_state())
-        && ctx.role != AdminRole::ShengAdmin
+        && ctx.role != AdminRole::FederalAdmin
     {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "sheng admin required",
+            "federal admin required",
         ));
     }
     Ok(())
