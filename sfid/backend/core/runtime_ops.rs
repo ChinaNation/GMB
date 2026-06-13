@@ -5,7 +5,7 @@
 
 use chrono::Utc;
 
-use crate::admins::province_admins::{sheng_admin_mains, sheng_admin_province};
+use crate::admins::federal_admins::{federal_admin_mains, federal_admin_province};
 use crate::admins::repo;
 use crate::crypto::pubkey::normalize_admin_pubkey;
 use crate::gov::service::{
@@ -13,12 +13,12 @@ use crate::gov::service::{
 };
 use crate::{AdminRole, AdminUser, AppState};
 
-pub(crate) fn ensure_builtin_province_admins(state: &AppState) {
+pub(crate) fn ensure_builtin_federal_admins(state: &AppState) {
     if let Err(err) = state.db.with_client(|conn| {
-        for item in sheng_admin_mains() {
+        for item in federal_admin_mains() {
             let pubkey = normalize_admin_pubkey(item.pubkey)
                 .unwrap_or_else(|| item.pubkey.trim().to_ascii_lowercase());
-            let province = sheng_admin_province(item.pubkey)
+            let province = federal_admin_province(item.pubkey)
                 .unwrap_or(item.province)
                 .to_string();
             let existing = repo::get_admin_by_pubkey_conn(conn, pubkey.as_str())?;
@@ -30,7 +30,7 @@ pub(crate) fn ensure_builtin_province_admins(state: &AppState) {
                 id,
                 admin_pubkey: pubkey,
                 admin_name: format!("{}联邦管理员", item.province),
-                role: AdminRole::ShengAdmin,
+                role: AdminRole::FederalAdmin,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
                 created_at: Utc::now(),
@@ -41,7 +41,7 @@ pub(crate) fn ensure_builtin_province_admins(state: &AppState) {
         }
         Ok(())
     }) {
-        tracing::error!(error = %err, "ensure builtin province admins failed");
+        tracing::error!(error = %err, "ensure builtin federal admins failed");
     }
 }
 

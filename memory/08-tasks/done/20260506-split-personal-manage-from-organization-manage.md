@@ -91,7 +91,7 @@
 - `traits.rs:327` 注释 callback list 增 `personal_manage`
 - 不改代码
 
-### 2.9 wumin 冷钱包
+### 2.9 wumin 公民钱包
 - `lib/signer/pallet_registry.dart`：
   - 新增 `static const int personalManagePallet = 7;`
   - `static const int proposeCreatePersonalCall = 0;`
@@ -213,7 +213,7 @@ grep -rn "PersonalDuoqianInfo\|PendingPersonalCreate" citizenchain/runtime/gover
 | R2 | `propose_close` 拆两个后客户端漏改 → 报错 NotInstitutionDuoqian / NotPersonalDuoqian | wuminapp 客户端按地址类型提前判断（PersonalDuoqianInfo / AddressRegisteredSfid）；测试覆盖两条路径 |
 | R3 | duoqian-transfer trait 改造破坏机构多账户转账（费用/自创账户从未在 DuoqianAccounts 里） | 改造后任意机构账户都能通过 AddressRegisteredSfid → admins-change 查到 admin 配置；测试覆盖：主/费用/自创/个人 4 类发起者 |
 | R4 | wuminapp 拆 service 后 personal/* 6 个 dart 文件漏切到新 service | grep `submitProposeCreatePersonal\|submitProposeClosePersonal` 在 wuminapp/lib/duoqian/personal/ 下必须全指向 PersonalManageService；测试覆盖 |
-| R5 | wumin 冷钱包扫码识别 PersonalManage(7) 失败 | wumin payload_decoder 测试新增 6 case 守门；二色识别按 action_labels 白名单 |
+| R5 | wumin 公民钱包扫码识别 PersonalManage(7) 失败 | wumin payload_decoder 测试新增 6 case 守门；二色识别按 action_labels 白名单 |
 | R6 | account_to_institution_id 提到 primitives 后 organization-manage::common 仍有 `pub use` re-export，残留旧引用 | Step 7 内同步删除 organization-manage 内旧函数，全工程 grep 校验下游全部走 core_const |
 
 ## 7. 输出物

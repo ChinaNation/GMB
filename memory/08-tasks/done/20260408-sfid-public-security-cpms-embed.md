@@ -119,7 +119,7 @@ INFO sfid_backend::app_core::runtime_ops: cleaned up orphan CPMS sites (no match
 
 ## 相关文档
 
-- 前置讨论:省级管理员一主两备方案 A(修改 citizenchain runtime 支持每省 signer)
+- 前置讨论:联邦管理员一主两备方案 A(修改 citizenchain runtime 支持每省 signer)
 - 后续任务:`20260408-sfid-frontend-app-tsx-split` — App.tsx 彻底拆分
-  (3431 行 → ≤300 行,按 auth/dashboard/registration/binding/operators/key-management
+  (3431 行 → ≤300 行,按 auth/dashboard/registration/binding/city-admins/key-management
   分六个子目录)

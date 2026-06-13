@@ -32,7 +32,7 @@ views/
     BindingView.tsx        # 业务员"有账户绑档案"+"有档案绑账户"
     Qr4Scanner.tsx
   operators/
-    OperatorsView.tsx      # 操作员(SHI_ADMIN)增删改查
+    FederalAdminsView.tsx      # 操作员(CITY_ADMIN)增删改查
   key-management/
   institutions/            # 已存在,保持不动
   common/                  # 已存在,保持不动
@@ -129,8 +129,8 @@ src/views/
 │                 AccountList,CreateInstitutionModal,CreateAccountModal,
 │                 CpmsRegisterModal,CpmsSitePanel,locks.ts}.tsx
 ├── keyring/KeyringView.tsx
-├── operators/OperatorsView.tsx
-└── sheng-admins/ShengAdminsView.tsx
+├── operators/FederalAdminsView.tsx
+└── federal-registry/FederalAdminsView.tsx
 ```
 
 ### 收官步清理清单

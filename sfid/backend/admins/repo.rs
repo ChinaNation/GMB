@@ -7,7 +7,7 @@ use postgres::Client;
 
 use crate::admins::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 use crate::admins::model::{AdminRole, AdminUser};
-use crate::admins::province_admins::sheng_admin_province;
+use crate::admins::federal_admins::federal_admin_province;
 use crate::admins::security_model::{
     AdminActionChallenge, AdminPasskeyCredential, AdminPasskeyRegistrationChallenge,
     AdminPasskeyStatus, AdminSecurityGrant,
@@ -18,15 +18,15 @@ use crate::Db;
 
 pub(crate) fn admin_role_text(role: &AdminRole) -> &'static str {
     match role {
-        AdminRole::ShengAdmin => "FEDERAL_ADMIN",
-        AdminRole::ShiAdmin => "SHI_ADMIN",
+        AdminRole::FederalAdmin => "FEDERAL_ADMIN",
+        AdminRole::CityAdmin => "CITY_ADMIN",
     }
 }
 
 pub(crate) fn parse_admin_role(role: &str) -> Result<AdminRole, String> {
     match role {
-        "FEDERAL_ADMIN" => Ok(AdminRole::ShengAdmin),
-        "SHI_ADMIN" => Ok(AdminRole::ShiAdmin),
+        "FEDERAL_ADMIN" => Ok(AdminRole::FederalAdmin),
+        "CITY_ADMIN" => Ok(AdminRole::CityAdmin),
         _ => Err(format!("invalid admin role in database: {role}")),
     }
 }
@@ -47,7 +47,7 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     })
 }
 
-pub(crate) fn list_sheng_admins_by_province_conn(
+pub(crate) fn list_federal_admins_by_province_conn(
     conn: &mut Client,
     province: Option<&str>,
 ) -> Result<Vec<(AdminUser, String)>, String> {
@@ -56,7 +56,7 @@ pub(crate) fn list_sheng_admins_by_province_conn(
             "SELECT a.admin_id, a.admin_pubkey, a.admin_name, a.role, a.built_in, a.created_by, a.created_at, a.updated_at, a.city,
                     s.province_name
              FROM admins a
-             JOIN sheng_admin_scope s ON s.admin_id = a.admin_id
+             JOIN federal_admin_scope s ON s.admin_id = a.admin_id
              WHERE a.role = 'FEDERAL_ADMIN' AND s.province_name = $1
              ORDER BY s.province_name ASC, a.built_in DESC, a.admin_id ASC",
             &[&province],
@@ -66,13 +66,13 @@ pub(crate) fn list_sheng_admins_by_province_conn(
             "SELECT a.admin_id, a.admin_pubkey, a.admin_name, a.role, a.built_in, a.created_by, a.created_at, a.updated_at, a.city,
                     s.province_name
              FROM admins a
-             JOIN sheng_admin_scope s ON s.admin_id = a.admin_id
+             JOIN federal_admin_scope s ON s.admin_id = a.admin_id
              WHERE a.role = 'FEDERAL_ADMIN'
              ORDER BY s.province_name ASC, a.built_in DESC, a.admin_id ASC",
             &[],
         )
     }
-    .map_err(|e| format!("query sheng admins by province failed: {e}"))?;
+    .map_err(|e| format!("query federal admins by province failed: {e}"))?;
     rows.iter()
         .map(|row| {
             let admin = admin_from_row(row)?;
@@ -82,7 +82,7 @@ pub(crate) fn list_sheng_admins_by_province_conn(
         .collect()
 }
 
-pub(crate) fn count_sheng_admins_by_province_conn(
+pub(crate) fn count_federal_admins_by_province_conn(
     conn: &mut Client,
     province: &str,
 ) -> Result<usize, String> {
@@ -90,11 +90,11 @@ pub(crate) fn count_sheng_admins_by_province_conn(
         .query_one(
             "SELECT COUNT(*)
              FROM admins a
-             JOIN sheng_admin_scope s ON s.admin_id = a.admin_id
+             JOIN federal_admin_scope s ON s.admin_id = a.admin_id
              WHERE a.role = 'FEDERAL_ADMIN' AND s.province_name = $1",
             &[&province],
         )
-        .map_err(|e| format!("count sheng admins by province failed: {e}"))?;
+        .map_err(|e| format!("count federal admins by province failed: {e}"))?;
     let count: i64 = row.get(0);
     Ok(usize::try_from(count).unwrap_or(0))
 }
@@ -117,7 +117,7 @@ pub(crate) fn get_admin_by_id_and_role_conn(
     row.as_ref().map(admin_from_row).transpose()
 }
 
-pub(crate) fn list_shi_admins_by_scope_conn(
+pub(crate) fn list_city_admins_by_scope_conn(
     conn: &mut Client,
     province: &str,
     city: Option<&str>,
@@ -132,23 +132,23 @@ pub(crate) fn list_shi_admins_by_scope_conn(
                 "SELECT COUNT(*)
                  FROM admins a
                  JOIN admins creator ON lower(creator.admin_pubkey) = lower(a.created_by)
-                 JOIN sheng_admin_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.role = 'SHI_ADMIN' AND s.province_name = $1 AND a.city = $2",
+                 JOIN federal_admin_scope s ON s.admin_id = creator.admin_id
+                 WHERE a.role = 'CITY_ADMIN' AND s.province_name = $1 AND a.city = $2",
                 &[&province, &city],
             )
-            .map_err(|e| format!("count shi admins by city failed: {e}"))?;
+            .map_err(|e| format!("count city admins by city failed: {e}"))?;
         let rows = conn
             .query(
                 "SELECT a.admin_id, a.admin_pubkey, a.admin_name, a.role, a.built_in, a.created_by, a.created_at, a.updated_at, a.city
                  FROM admins a
                  JOIN admins creator ON lower(creator.admin_pubkey) = lower(a.created_by)
-                 JOIN sheng_admin_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.role = 'SHI_ADMIN' AND s.province_name = $1 AND a.city = $2
+                 JOIN federal_admin_scope s ON s.admin_id = creator.admin_id
+                 WHERE a.role = 'CITY_ADMIN' AND s.province_name = $1 AND a.city = $2
                  ORDER BY a.admin_id DESC
                  LIMIT $3 OFFSET $4",
                 &[&province, &city, &limit, &offset],
             )
-            .map_err(|e| format!("query shi admins by city failed: {e}"))?;
+            .map_err(|e| format!("query city admins by city failed: {e}"))?;
         (count_row, rows)
     } else {
         let count_row = conn
@@ -156,23 +156,23 @@ pub(crate) fn list_shi_admins_by_scope_conn(
                 "SELECT COUNT(*)
                  FROM admins a
                  JOIN admins creator ON lower(creator.admin_pubkey) = lower(a.created_by)
-                 JOIN sheng_admin_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.role = 'SHI_ADMIN' AND s.province_name = $1",
+                 JOIN federal_admin_scope s ON s.admin_id = creator.admin_id
+                 WHERE a.role = 'CITY_ADMIN' AND s.province_name = $1",
                 &[&province],
             )
-            .map_err(|e| format!("count shi admins by province failed: {e}"))?;
+            .map_err(|e| format!("count city admins by province failed: {e}"))?;
         let rows = conn
             .query(
                 "SELECT a.admin_id, a.admin_pubkey, a.admin_name, a.role, a.built_in, a.created_by, a.created_at, a.updated_at, a.city
                  FROM admins a
                  JOIN admins creator ON lower(creator.admin_pubkey) = lower(a.created_by)
-                 JOIN sheng_admin_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.role = 'SHI_ADMIN' AND s.province_name = $1
+                 JOIN federal_admin_scope s ON s.admin_id = creator.admin_id
+                 WHERE a.role = 'CITY_ADMIN' AND s.province_name = $1
                  ORDER BY a.admin_id DESC
                  LIMIT $2 OFFSET $3",
                 &[&province, &limit, &offset],
             )
-            .map_err(|e| format!("query shi admins by province failed: {e}"))?;
+            .map_err(|e| format!("query city admins by province failed: {e}"))?;
         (count_row, rows)
     };
     let total: i64 = count_row.get(0);
@@ -184,7 +184,7 @@ pub(crate) fn list_shi_admins_by_scope_conn(
     ))
 }
 
-pub(crate) fn count_shi_admins_by_city_conn(
+pub(crate) fn count_city_admins_by_city_conn(
     conn: &mut Client,
     province: &str,
     city: &str,
@@ -194,16 +194,16 @@ pub(crate) fn count_shi_admins_by_city_conn(
             "SELECT COUNT(*)
              FROM admins a
              JOIN admins creator ON lower(creator.admin_pubkey) = lower(a.created_by)
-             JOIN sheng_admin_scope s ON s.admin_id = creator.admin_id
-             WHERE a.role = 'SHI_ADMIN' AND s.province_name = $1 AND a.city = $2",
+             JOIN federal_admin_scope s ON s.admin_id = creator.admin_id
+             WHERE a.role = 'CITY_ADMIN' AND s.province_name = $1 AND a.city = $2",
             &[&province, &city],
         )
-        .map_err(|e| format!("count shi admins by city failed: {e}"))?;
+        .map_err(|e| format!("count city admins by city failed: {e}"))?;
     let count: i64 = row.get(0);
     Ok(usize::try_from(count).unwrap_or(0))
 }
 
-pub(crate) fn list_shi_admins_by_creator_conn(
+pub(crate) fn list_city_admins_by_creator_conn(
     conn: &mut Client,
     creator_pubkey: &str,
 ) -> Result<Vec<AdminUser>, String> {
@@ -211,11 +211,11 @@ pub(crate) fn list_shi_admins_by_creator_conn(
         .query(
             "SELECT admin_id, admin_pubkey, admin_name, role, built_in, created_by, created_at, updated_at, city
              FROM admins
-             WHERE role = 'SHI_ADMIN' AND lower(created_by) = lower($1)
+             WHERE role = 'CITY_ADMIN' AND lower(created_by) = lower($1)
              ORDER BY admin_id ASC",
             &[&creator_pubkey],
         )
-        .map_err(|e| format!("query shi admins by creator failed: {e}"))?;
+        .map_err(|e| format!("query city admins by creator failed: {e}"))?;
     rows.iter().map(admin_from_row).collect()
 }
 
@@ -268,33 +268,33 @@ pub(crate) fn province_scope_for_role_conn(
     role: &AdminRole,
 ) -> Result<Option<String>, String> {
     match role {
-        AdminRole::ShengAdmin => find_sheng_admin_scope_conn(conn, admin_pubkey),
-        AdminRole::ShiAdmin => {
+        AdminRole::FederalAdmin => find_federal_admin_scope_conn(conn, admin_pubkey),
+        AdminRole::CityAdmin => {
             let Some(admin) = get_admin_by_pubkey_conn(conn, admin_pubkey)? else {
                 return Ok(None);
             };
-            find_sheng_admin_scope_conn(conn, admin.created_by.as_str())
+            find_federal_admin_scope_conn(conn, admin.created_by.as_str())
         }
     }
 }
 
-pub(crate) fn find_sheng_admin_scope_conn(
+pub(crate) fn find_federal_admin_scope_conn(
     conn: &mut Client,
     pubkey: &str,
 ) -> Result<Option<String>, String> {
     let row = conn
         .query_opt(
             "SELECT a.admin_pubkey, s.province_name
-             FROM sheng_admin_scope s
+             FROM federal_admin_scope s
              JOIN admins a ON a.admin_id = s.admin_id
              WHERE lower(a.admin_pubkey) = lower($1)",
             &[&pubkey],
         )
-        .map_err(|e| format!("query sheng admin scope failed: {e}"))?;
+        .map_err(|e| format!("query federal admin scope failed: {e}"))?;
     if let Some(row) = row {
         return Ok(Some(row.get(1)));
     }
-    Ok(sheng_admin_province(pubkey).map(str::to_string))
+    Ok(federal_admin_province(pubkey).map(str::to_string))
 }
 
 pub(crate) fn admin_has_active_passkey(db: &Db, admin_pubkey: &str) -> Result<bool, String> {
@@ -363,30 +363,30 @@ pub(crate) fn upsert_admin_conn(
         ],
     )
     .map_err(|e| format!("upsert admin failed: {e}"))?;
-    if admin.role == AdminRole::ShengAdmin {
+    if admin.role == AdminRole::FederalAdmin {
         let Some(scope) = province_scope else {
-            return Err("sheng admin province scope missing".to_string());
+            return Err("federal admin province scope missing".to_string());
         };
         let row = conn
             .query_one(
                 "SELECT admin_id FROM admins WHERE lower(admin_pubkey) = lower($1)",
                 &[&admin.admin_pubkey],
             )
-            .map_err(|e| format!("query sheng admin id failed: {e}"))?;
+            .map_err(|e| format!("query federal admin id failed: {e}"))?;
         let id: i64 = row.get(0);
         conn.execute(
             "INSERT INTO provinces(province_name) VALUES ($1)
              ON CONFLICT (province_name) DO NOTHING",
             &[&scope],
         )
-        .map_err(|e| format!("upsert sheng admin province failed: {e}"))?;
+        .map_err(|e| format!("upsert federal admin province failed: {e}"))?;
         conn.execute(
-            "INSERT INTO sheng_admin_scope(admin_id, province_name)
+            "INSERT INTO federal_admin_scope(admin_id, province_name)
              VALUES ($1, $2)
              ON CONFLICT (admin_id) DO UPDATE SET province_name = EXCLUDED.province_name",
             &[&id, &scope],
         )
-        .map_err(|e| format!("upsert sheng admin scope failed: {e}"))?;
+        .map_err(|e| format!("upsert federal admin scope failed: {e}"))?;
     }
     Ok(())
 }
@@ -840,17 +840,17 @@ pub(crate) fn touch_admin_session_conn(
 pub(crate) fn cleanup_admin_sessions_conn(
     conn: &mut Client,
     now: DateTime<Utc>,
-    shi_idle_timeout_minutes: i64,
+    city_idle_timeout_minutes: i64,
 ) -> Result<(), String> {
     conn.execute("DELETE FROM admin_sessions WHERE expires_at < $1", &[&now])
         .map_err(|e| format!("cleanup expired admin sessions failed: {e}"))?;
-    let idle_cutoff = now - Duration::minutes(shi_idle_timeout_minutes);
+    let idle_cutoff = now - Duration::minutes(city_idle_timeout_minutes);
     conn.execute(
         "DELETE FROM admin_sessions
-         WHERE role = 'SHI_ADMIN' AND last_active_at < $1",
+         WHERE role = 'CITY_ADMIN' AND last_active_at < $1",
         &[&idle_cutoff],
     )
-    .map_err(|e| format!("cleanup idle shi admin sessions failed: {e}"))?;
+    .map_err(|e| format!("cleanup idle city admin sessions failed: {e}"))?;
     Ok(())
 }
 

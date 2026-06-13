@@ -51,7 +51,7 @@ pub(crate) struct AdminAuthContext {
     pub(crate) role: AdminRole,
     pub(crate) admin_name: String,
     pub(crate) admin_province: Option<String>,
-    /// 仅 ShiAdmin 有值：该操作员登记的市（用于多签列表按市过滤、生成时强制锁定）
+    /// 仅 CityAdmin 有值：该市管理员登记的市（用于列表按市过滤、生成时强制锁定）
     pub(crate) admin_city: Option<String>,
     /// 中文注释:当前登录管理员是否已绑定有效 Passkey;前端据此强制进入管理员列表更新密钥。
     pub(crate) passkey_bound: bool,

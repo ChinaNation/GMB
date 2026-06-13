@@ -121,7 +121,7 @@
 - 子任务 A:onchain-issuance pallet 业务实装(issue/mint/burn/close/transfer)
 - 子任务 B:onchain-issuance pallet 监管实装(NRC freeze/unfreeze/confiscate/forceTransfer/forceClose)
 - 子任务 C:wuminapp 资产视图业务实装
-- 子任务 D:wumin 冷钱包 QR decoder 10 个 ACTION 解码逻辑
+- 子任务 D:wumin 公民钱包 QR decoder 10 个 ACTION 解码逻辑
 - 子任务 E:端到端联调验证(发行 / 转账 / 监管 / 关闭)
 
 ---
@@ -167,7 +167,7 @@
 
 ## v3 修订记录(2026-05-07,模块编号 / call 同步对齐)
 
-用户问"模块编号和 call 都同步了吗?区块链和 wumin 冷钱包等端"时识别出 v2 严重对齐错位:
+用户问"模块编号和 call 都同步了吗?区块链和 wumin 公民钱包等端"时识别出 v2 严重对齐错位:
 
 **根本错误**:v2 把 unified_voting_entry phase 4 铁律("业务 pallet wrapper extrinsic 全删")扩展过头,误把 propose_X 也归入"不暴露",与 GMB 现有架构(duoqian-transfer / personal-manage / organization-manage 等业务 pallet **都暴露 propose_X extrinsic**)严重背离。phase 4 实际删除的只是 execute/cancel wrapper(由 VotingEngine 9.4/9.5 统一承载),不是 propose_X。
 

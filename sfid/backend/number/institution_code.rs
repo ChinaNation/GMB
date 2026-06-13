@@ -3,7 +3,7 @@
 //! 机构类型代码枚举(sfid 号第三段 T2 部分)
 //!
 //! 中文注释:
-//! - ZG 中国      — 国家整体
+//! - ZG 中国      — 人类主体来源分类
 //! - ZF 政府      — 政府机关
 //! - LF 立法院
 //! - SF 司法院
@@ -11,10 +11,16 @@
 //! - JY 教育委员会
 //! - CB 储备委员会
 //! - CH 储备银行
-//! - TG 他国      — 其他国家
+//! - TG 他国      — 人类主体来源分类
+//! - GT 个体经营
+//! - GP 无限合伙
+//! - LP 有限合伙
+//! - GQ 股权公司
+//! - GF 股份公司
+//! - GY 公益组织
+//! - AS 注册协会
 //!
 //! 不同主体属性对 InstitutionCode 有硬约束(见 `generator.rs` 里的 generate_sfid_number)。
-//! 中文注释:私权机构允许 `JY` 表示教育委员会类型学校机构,不是学校内部组织。
 
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +36,13 @@ pub enum InstitutionCode {
     CB,
     CH,
     TG,
+    GT,
+    GP,
+    LP,
+    GQ,
+    GF,
+    GY,
+    AS,
 }
 
 impl InstitutionCode {
@@ -45,6 +58,13 @@ impl InstitutionCode {
             "CB" | "储备委员会" | "公民储备委员会" => Some(Self::CB),
             "CH" | "储备银行" | "公民储备银行" => Some(Self::CH),
             "TG" | "他国" => Some(Self::TG),
+            "GT" | "个体经营" => Some(Self::GT),
+            "GP" | "无限合伙" => Some(Self::GP),
+            "LP" | "有限合伙" => Some(Self::LP),
+            "GQ" | "股权公司" | "股权有限公司" | "有限责任公司" => Some(Self::GQ),
+            "GF" | "股份公司" | "股份有限公司" => Some(Self::GF),
+            "GY" | "公益组织" => Some(Self::GY),
+            "AS" | "注册协会" => Some(Self::AS),
             _ => None,
         }
     }
@@ -61,6 +81,13 @@ impl InstitutionCode {
             Self::CB => "CB",
             Self::CH => "CH",
             Self::TG => "TG",
+            Self::GT => "GT",
+            Self::GP => "GP",
+            Self::LP => "LP",
+            Self::GQ => "GQ",
+            Self::GF => "GF",
+            Self::GY => "GY",
+            Self::AS => "AS",
         }
     }
 
@@ -76,6 +103,13 @@ impl InstitutionCode {
             Self::CB => "储备委员会",
             Self::CH => "储备银行",
             Self::TG => "他国",
+            Self::GT => "个体经营",
+            Self::GP => "无限合伙",
+            Self::LP => "有限合伙",
+            Self::GQ => "股权公司",
+            Self::GF => "股份公司",
+            Self::GY => "公益组织",
+            Self::AS => "注册协会",
         }
     }
 }

@@ -10,12 +10,21 @@ use std::collections::HashMap;
 fn name_uniqueness_private_is_global() {
     // 私权机构:全国内不允许同名
     let mut names: HashMap<String, Vec<String>> = HashMap::new();
-    names.entry("测试机构A".to_string()).or_default().push("广州市".to_string());
-    names.entry("测试机构A".to_string()).or_default().push("深圳市".to_string());
+    names
+        .entry("测试机构A".to_string())
+        .or_default()
+        .push("广州市".to_string());
+    names
+        .entry("测试机构A".to_string())
+        .or_default()
+        .push("深圳市".to_string());
 
     let entry = names.get("测试机构A").unwrap();
     // 私权机构:同名存在两个城市 → 应拒绝第二个
-    assert!(entry.len() > 1, "duplicate name should be detected globally");
+    assert!(
+        entry.len() > 1,
+        "duplicate name should be detected globally"
+    );
 }
 
 #[test]
@@ -32,24 +41,22 @@ fn name_uniqueness_public_allows_cross_city() {
     assert!(dup, "same city same name should be detected");
 }
 
-/// 储备银行(CH)仅股份公司可选。
+/// 私权机构类型直接决定主体属性和机构码。
 #[test]
-fn ch_only_for_joint_stock() {
-    let valid_sub_types = [
-        "SOLE_PROPRIETORSHIP",
-        "PARTNERSHIP",
-        "LIMITED_LIABILITY",
-        "JOINT_STOCK",
+fn private_type_maps_to_subject_and_code() {
+    let rows = [
+        ("SOLE", None, "F", "GT"),
+        ("PARTNERSHIP", Some("GENERAL"), "F", "GP"),
+        ("PARTNERSHIP", Some("LIMITED"), "S", "LP"),
+        ("COMPANY", None, "S", "GQ"),
+        ("CORPORATION", None, "S", "GF"),
+        ("WELFARE", None, "S", "GY"),
+        ("ASSOCIATION", None, "S", "AS"),
     ];
 
-    for sub_type in &valid_sub_types {
-        let can_use_ch = *sub_type == "JOINT_STOCK";
-        if can_use_ch {
-            assert_eq!(*sub_type, "JOINT_STOCK", "only JOINT_STOCK can use CH");
-        } else {
-            assert_ne!(*sub_type, "JOINT_STOCK", "{sub_type} should not use CH");
-        }
-    }
+    assert_eq!(rows.len(), 7);
+    assert!(rows.contains(&("SOLE", None, "F", "GT")));
+    assert!(rows.contains(&("ASSOCIATION", None, "S", "AS")));
 }
 
 /// 文档类型枚举校验。

@@ -65,7 +65,7 @@ wuminapp/test/governance/admins-change/
 4. 用户选择管理员钱包、编辑完整管理员集合。
 5. `AdminSetValidation` 做端上前置校验，同时校验目标阈值。
 6. `AdminSetChangeCallCodec` 构造 `AdminsChange::propose_admin_set_change` call data。
-7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或冷钱包签名并提交。
+7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或公民钱包签名并提交。
 
 ## 主体身份与查询门面
 

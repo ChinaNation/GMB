@@ -89,7 +89,7 @@ export function LoginView() {
       if (msg.toLowerCase().includes('admin not found')) {
         notice.error('非管理员禁止登录本系统');
       } else {
-        notice.error(err, '签名二维码处理失败');
+        notice.error(err, '登录回执处理失败');
       }
     } finally {
       setScanSubmitting(false);
@@ -181,7 +181,7 @@ export function LoginView() {
           管理员扫码登录
         </Typography.Title>
         <Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-          使用 公民 移动端扫描二维码完成身份验证
+          使用公民钱包扫描登录二维码并回扫登录回执
         </Typography.Text>
       </div>
 
@@ -196,6 +196,7 @@ export function LoginView() {
               ? `有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
               : '请点击按钮生成二维码'
           }
+          scannerHint="开启摄像头扫描公民钱包生成的登录回执二维码"
           primaryActionText={pendingQrLogin ? '重新生成' : '生成二维码'}
           primaryActionLoading={challengeLoading}
           onPrimaryAction={onCreateQrLogin}

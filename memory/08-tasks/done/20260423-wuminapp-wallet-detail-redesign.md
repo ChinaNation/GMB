@@ -53,7 +53,7 @@
    - **本轮不显示清算行余额小字,不接任何充值/提现链路**,等清算行功能落地后另开任务卡
    - 备注:后续完善时,充值 = 钱包链上余额 → 该钱包绑定的清算行;提现 = 清算行 → 该钱包链上余额
 
-2. **第 2 卡片 · 钱包身份卡(参照 wumin 冷钱包第 1 卡片样式)**
+2. **第 2 卡片 · 钱包身份卡(参照 wumin 公民钱包第 1 卡片样式)**
    - 参照:[wumin/lib/ui/wallet_detail_page.dart:277-342](wumin/lib/ui/wallet_detail_page.dart:277)
    - 布局:
      - 左:钱包图标(48×48 圆形,半透明白底)
@@ -101,7 +101,7 @@
 
 ## 必须遵守
 
-- 不可突破模块边界:**只改 wuminapp,不同步改 wumin 冷钱包**
+- 不可突破模块边界:**只改 wuminapp,不同步改 wumin 公民钱包**
 - 不可擅自改 citizenchain / sfid-backend,仅消费其现有 RPC 和 API
 - QR 协议维持现状(`WUMIN_QR_V1 kind=user_contact`),不新增 QR 类型
 - 钱包名点击修改复用 `_saveWalletName()`,不重写存储
@@ -151,7 +151,7 @@
 - 仓库内不再存在 `ClearingPaymentEntryPage`、`OffchainClearingReceivePage` 的任何引用(grep 零残留)
 - `flutter analyze` 0 error / 0 warning
 - `flutter test` 全部通过
-- wumin 冷钱包代码**零改动**
+- wumin 公民钱包代码**零改动**
 - 人工跑一遍:创建钱包 → 进详情页 → 改名 → 弹二维码 → 点充值/提现 → 进清算行设置页,全部行为符合本任务卡
 
 ## Review 关注点
@@ -160,4 +160,4 @@
 - 链上余额是否真的 `free + reserved`,而不是只取 `free`
 - 钱包名修改是否走原 `_saveWalletName()` 逻辑,没重写
 - 二维码 payload 是否原样保留,未引入新 QR 类型
-- 是否误改 wumin 冷钱包
+- 是否误改 wumin 公民钱包

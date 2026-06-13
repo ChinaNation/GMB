@@ -1,12 +1,13 @@
 # SFID admins/login 模块技术文档
 
-- 最后更新:2026-06-04
+- 最后更新:2026-06-12
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
   - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
   - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
+  - `memory/08-tasks/open/20260612-sfid-no-compat-cleanup-acceptance.md`
 
 ## 1. 模块目标
 
@@ -42,7 +43,7 @@ sfid/backend/admins/login/
 ## 4. 认证模型
 
 - 管理员标识:`admin_pubkey`
-- 角色模型:当前只保留 `ShengAdmin` / `ShiAdmin`
+- 角色模型:当前只保留 `FederalAdmin` / `CityAdmin`
 - 会话载体:`Bearer <access_token>`
 - 会话缓存:`admin_sessions`,登录后同步写入进程内 GlobalShard。
 - 挑战缓存:`login_challenges`。
@@ -61,20 +62,21 @@ sfid/backend/admins/login/
 ### 5.2 二维码登录
 
 1. `qr/challenge` 生成 WUMIN_QR_V1 登录挑战和 SFID 系统签名。
-2. 手机扫码后按 `login_receipt` 原文签名并提交 `qr/complete`。
+2. `wumin` 公民钱包扫码后按 `login_receipt` 原文签名,并由网页扫描登录回执提交 `qr/complete`。
 3. 后端验签成功后写入 `qr_login_results` 并签发会话。
 4. 网页轮询 `qr/result` 获取 `PENDING / SUCCESS / EXPIRED`。
 
 二维码登录统一遵循 `WUMIN_QR_V1`:
 
 - 系统签名由 `SFID_SIGNING_SEED_HEX` 派生的 SFID main signer 产出。
-- 手机端验签原文由 `core::qr::build_signature_message` 生成。
+- `wumin` 公民钱包验签原文由 `core::qr::build_signature_message` 生成。
 - 登录协议禁止重新引入 `aud` 作为移动端扫码验签字段。
+- `wuminapp` 不承担管理员扫码登录职责;前端不得把登录挑战文案引导到 wuminapp。
 
 ## 6. 守卫函数
 
 - `require_admin_any`:读取登录态,返回 `AdminAuthContext`。
-- `require_sheng_admin`:只放行 `ShengAdmin`,并要求存在省域 scope。
+- `require_sheng_admin`:只放行 `FederalAdmin`,并要求存在省域 scope。
 - `require_admin_session_middleware`:Axum 路由层会话校验中间件。
 
 写权限不再由登录守卫表达。管理端操作权限统一为
@@ -89,6 +91,6 @@ sfid/backend/admins/login/
 - 业务模块不得直接读取 session cache,只能通过 `require_admin_any` 或
   `require_sheng_admin` 获取认证上下文。
 - 角色范围过滤放在 `scope`,不放回 `admins/login`。
-- 省/市管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
+- 联邦/市管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
 - 管理员高危写操作归 `admins/actions.rs`,Passkey 注册和 WebAuthn 工具归
   `admins/passkeys.rs`,不得放回登录目录。

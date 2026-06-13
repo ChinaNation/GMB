@@ -38,8 +38,8 @@ GMB/
 - `citizenchain/`：区块链 runtime、节点程序、节点桌面 UI、打包发布
 - `sfid/`：在线身份系统
 - `cpms/`：离线实名系统，包含 Rust 后端、React/Vite 前端、数据库迁移和部署脚本
-- `wumin/`：冷钱包，负责离线签名、扫码识别和冷钱包 UI
-- `wuminapp/`：手机 App
+- `wumin/`：公民钱包，负责离线签名、扫码识别和钱包 UI
+- `wuminapp/`：公民，负责公民端钱包、治理、投票和链上状态展示
 - `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
 - `docs/`：静态发布文档和展示资产，不承载系统权威记忆
 - `tools/`：仓库级工具脚本和生成器
@@ -138,7 +138,7 @@ SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `sfid/backend/docs/`:机构资料库入口。
 - `sfid/backend/china/`:中国行政区划 SQLite 真源。
 - `sfid/backend/number/`:身份 ID 编码协议、SubjectProperty、机构码、生成和校验。
-- `sfid/backend/admins/`:省/市管理员治理、Passkey 注册与冷钱包挑战写操作。
+- `sfid/backend/admins/`:联邦/市管理员治理、Passkey 注册与签名挑战写操作。
 - `sfid/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `sfid/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
 - `sfid/frontend/china/`:行政区划元数据 API 与本地缓存。
@@ -147,7 +147,7 @@ SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `sfid/frontend/private/`:私权机构页面入口。
 - `sfid/frontend/accounts/`:机构账户组件。
 - `sfid/frontend/docs/`:机构资料库组件。
-- `sfid/frontend/admins/`:省/市管理员页面、API、Passkey 与冷钱包挑战前端流程。
+- `sfid/frontend/admins/`:联邦/市管理员页面、API、Passkey 与签名挑战前端流程。
 
 同名对齐规则:
 

@@ -260,7 +260,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
         final qrSigner = QrSigner();
         final beneficiary = _beneficiaryController.text.trim();
         final institutionLabel = _coldWalletInstitutionLabel();
-        // 中文注释：冷钱包确认页按同一金额格式展示，确保 display 字段逐字可核对。
+        // 中文注释：公民钱包确认页按同一金额格式展示，确保 display 字段逐字可核对。
         final amountFormatted = AmountFormat.format(
                 AmountFormat.tryParse(_amountController.text) ?? 0,
                 symbol: '')

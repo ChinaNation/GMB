@@ -95,7 +95,7 @@ propose_create_institution(
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
 - `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / institution_name / account_names[]`。
-- `province + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位省管理员派生签名公钥。
+- `province + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位联邦管理员派生签名公钥。
 - `subject_property / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：

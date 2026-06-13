@@ -11,10 +11,10 @@ SFID 是注册局运营的身份 ID 系统。系统登记三类主体:
 - `sfid/backend/core`:数据库连接、HTTP 安全、运行期维护、二维码等通用能力。
 - `sfid/backend/china`:中国行政区划 SQLite 真源。
 - `sfid/backend/number`:身份 ID 编码协议。
-- `sfid/backend/admins`:联邦管理员/市级管理员、登录、Passkey、二次确认和权限上下文。
+- `sfid/backend/admins`:联邦管理员/市管理员、登录、Passkey、二次确认和权限上下文。
 - `sfid/backend/gov`:公权机构和公安局确定性目录。
-- `sfid/backend/private`:私权机构、学校和非法人注册能力。
-- `sfid/backend/subjects`:主体公共模型、账户、资料库和公开查询。
+- `sfid/backend/private`:个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会六类私权机构能力。
+- `sfid/backend/subjects`:主体公共模型、通用注册内核、主体详情和公开查询。
 - `sfid/backend/citizens`:公民绑定、状态导入、wuminapp 查询和投票凭证。
 - `sfid/backend/cpms`:CPMS 安装授权和档案码验真。
 - `sfid/backend/accounts`:机构账户管理。
@@ -36,11 +36,11 @@ SFID 是注册局运营的身份 ID 系统。系统登记三类主体:
 - `subjects`:公民、公权机构、私权机构公共主体表,按 `p_code` 省分区;机构行保存名称、行政区、业务状态和法定代表人资料。
 - `citizens`:公民电子护照绑定结果,按 `p_code` 省分区。
 - `gov`:公权机构扩展表,按 `p_code` 省分区,不区分初始化录入和人工新增。
-- `private`:私权机构和非法人扩展表,按 `p_code` 省分区。
+- `private`:六类私权机构扩展表,按 `p_code` 省分区。
 - `accounts`:机构账户表,按 `p_code` 省分区。
 - `docs`:机构资料库元数据表,按 `p_code` 省分区。
 - `audit`:审计表,按 `p_code` 省分区。
-- `admins`、`sheng_admin_scope`:管理员与权限范围。市级管理员范围由 `admins.created_by + city` 解析,不再维护第二张市级管理员范围表。
+- `admins`、`federal_admin_scope`:管理员与权限范围。市管理员范围由 `admins.created_by + city` 解析,不再维护第二张市管理员范围表。
 - `cpms_sites`:CPMS 安装授权和公钥绑定。
 - `citizen_bind_challenges`、`citizen_status_imports`:公民绑定挑战和年度状态导入幂等记录。
 - `admin_*`:登录、会话、Passkey、二次确认运行态。
@@ -54,13 +54,13 @@ SFID 是注册局运营的身份 ID 系统。系统登记三类主体:
 
 ## 权限与查询
 
-联邦管理员只查询自己省的数据,市级管理员只查询自己市的数据。后端必须在 SQL 层携带 `p_code` / `c_code` 条件,不得先取全量再在内存过滤。
+联邦管理员只查询自己省的数据,市管理员只查询自己市的数据。后端必须在 SQL 层携带 `p_code` / `c_code` 条件,不得先取全量再在内存过滤。
 
 公权机构和公安局属于确定性目录。列表接口直接从 `subjects/gov/accounts` 读取目标范围数据,不会在页面进入时全量重建。
 
-注册局页面只显示两个管理员目录入口: `联邦管理员列表` 和 `市级管理员列表`。市级管理员可以只读查看本人所属省的联邦管理员和本人所属市的市级管理员,但不能新增、编辑或删除管理员。联邦管理员只管理本人所属省范围内的联邦管理员/市级管理员。
+注册局页面只显示两个管理员目录入口: `联邦管理员列表` 和 `市管理员列表`。市管理员可以只读查看本人所属省的联邦管理员和本人所属市的市管理员,但不能新增、编辑或删除管理员。联邦管理员只管理本人所属省范围内的联邦管理员/市管理员。
 
-管理员列表接口必须按登录管理员范围执行 SQL 查询:联邦管理员列表按 `sheng_admin_scope.province_name` 查询,市级管理员列表按联邦管理员归属和 `admins.city` 查询。不得恢复“查询全部管理员后内存过滤”的实现。
+管理员列表接口必须按登录管理员范围执行 SQL 查询:联邦管理员列表按 `federal_admin_scope.province_name` 查询,市管理员列表按联邦管理员归属和 `admins.city` 查询。不得恢复“查询全部管理员后内存过滤”的实现。
 
 ## 前端状态与提示
 
@@ -92,6 +92,6 @@ CPMS 安装授权写入 `cpms_sites`。档案码验真通过安装密钥解开 `
 公开查询接口只读结构化表:
 
 - 机构搜索/详情/账户读取 `subjects/accounts`。
-- 清算行候选读取 `subjects/accounts` 并按资格规则过滤。
+- 机构注册信息凭证只返回 `sfid_number / institution_name / account_names[]` 和验签包装字段。
 - 投票人数快照读取 `citizens` 聚合计数。
 - 投票凭证和电子护照状态按钱包公钥精确查询 `citizens`。

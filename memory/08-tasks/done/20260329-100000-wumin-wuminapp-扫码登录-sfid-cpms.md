@@ -7,7 +7,7 @@
 - 涉及系统：wumin（冷钱包）、wuminapp（热钱包）、SFID 前端、CPMS 前端
 
 ## 需求背景
-SFID 和 CPMS 管理员登录使用 `WUMIN_QR_V1` QR 码协议。当前 wuminapp 已有登录能力但需验证完整性，wumin 冷钱包完全不支持登录协议。两端需独立支持扫码登录，不依赖对方中转。
+SFID 和 CPMS 管理员登录使用 `WUMIN_QR_V1` QR 码协议。当前 wuminapp 已有登录能力但需验证完整性，wumin 公民钱包完全不支持登录协议。两端需独立支持扫码登录，不依赖对方中转。
 
 ## 协议规格
 
@@ -52,7 +52,7 @@ WUMIN_QR_V1|<system>|<challenge>|<expires_at>
 
 ## 任务拆分
 
-### T1: wumin 冷钱包 — 新增登录协议支持
+### T1: wumin 公民钱包 — 新增登录协议支持
 - [ ] 新增 `LoginQrHandler`：解析 `WUMIN_QR_V1` challenge QR
 - [ ] 验证系统签名（sr25519 验签 sys_sig）
 - [ ] 显示登录确认界面（系统名、过期时间）
@@ -71,8 +71,8 @@ WUMIN_QR_V1|<system>|<challenge>|<expires_at>
 - [ ] 提交 receipt 到 `/api/v1/admin/auth/qr/complete` 完成登录
 
 ## 验收标准
-1. wumin 冷钱包扫描 SFID 登录 QR → 签名 → 显示 receipt QR → SFID 前端扫描完成登录
-2. wumin 冷钱包扫描 CPMS 登录 QR → 同上
+1. wumin 公民钱包扫描 SFID 登录 QR → 签名 → 显示 receipt QR → SFID 前端扫描完成登录
+2. wumin 公民钱包扫描 CPMS 登录 QR → 同上
 3. wuminapp 热钱包扫描 SFID 登录 QR → 直接完成登录
 4. wuminapp 热钱包扫描 CPMS 登录 QR → 同上
 5. 过期 QR 码被拒绝

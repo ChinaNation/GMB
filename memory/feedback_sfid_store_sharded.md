@@ -29,6 +29,6 @@
 
 ## 后续待清理
 
-- 继续把省市管理员高频查询改成目标分区表精确查询或 `sharded_store` 单省读取。
+- 继续把联邦/市管理员高频查询改成目标分区表精确查询或 `sharded_store` 单省读取。
 - 保持 `gov/private/accounts/docs/subjects` 主写入走目标表,不得退回内存全量过滤。
 - 新增 Store 字段时优先归入对应业务模块模型,不得恢复 `models/` 或 `store_shards/` 目录。

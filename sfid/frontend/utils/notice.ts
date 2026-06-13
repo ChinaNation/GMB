@@ -106,9 +106,9 @@ function domExceptionText(error: DOMException, fallback: string): string {
 function translateErrorCode(code: string): string | null {
   const map: Record<string, string> = {
     SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN: '该账户已是联邦管理员，不能重复新增',
-    SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN: '该账户已是市级管理员，不能重复新增',
+    SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN: '该账户已是市管理员，不能重复新增',
     SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED: '联邦管理员已满 5 人，不能继续新增',
-    SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED: '本市市级管理员已满 30 人，不能继续新增',
+    SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED: '本市市管理员已满 30 人，不能继续新增',
     SFID_ADMIN_PASSKEY_REQUIRED: '请先完成通行密钥验证',
     SFID_ADMIN_SECURITY_GRANT_REQUIRED: '请先完成安全确认',
     SFID_AUTH_FORBIDDEN: '权限不足，无法执行该操作',
@@ -165,10 +165,10 @@ function isCancelText(text: string): boolean {
 const KNOWN_ENGLISH_MESSAGES: Record<string, string> = {
   'passkey required': '请先完成通行密钥验证',
   'security grant required': '请先完成安全确认',
-  'cold wallet confirmation required first': '请先完成冷钱包确认',
+  'citizen wallet confirmation required first': '请先完成公民钱包确认',
   'admin auth required': '请先登录管理员账户',
-  'sheng admin required': '需要联邦管理员权限',
-  'initial sheng admin required': '需要初始联邦管理员权限',
+  'federal admin required': '需要联邦管理员权限',
+  'initial federal admin required': '需要初始联邦管理员权限',
   'province scope required': '缺少省级权限范围',
   'admin province scope missing': '缺少管理员省级权限范围',
   'admin city scope missing': '缺少管理员市级权限范围',

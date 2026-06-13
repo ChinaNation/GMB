@@ -19,7 +19,7 @@ use axum::{
 };
 
 use crate::admins::actions::require_admin_security_grant;
-use crate::admins::login::{require_admin_any, require_sheng_admin};
+use crate::admins::login::{require_admin_any, require_federal_admin};
 use crate::admins::operation_auth::AdminActionType;
 use crate::china::{city_code_by_name, province_code_by_name};
 use crate::core::response::ApiResponse;
@@ -82,7 +82,7 @@ pub(crate) struct ListPublicSecurityQuery {
 /// GET /api/v1/institutions/public-security
 ///
 /// 中文注释:公安局是按 sfid 省市代码确定性生成的机构,不是普通公权机构搜索结果。
-/// 该接口不接收搜索词:联邦管理员返回本省全部市公安局,市级管理员返回本市公安局。
+/// 该接口不接收搜索词:联邦管理员返回本省全部市公安局,市管理员返回本市公安局。
 pub(crate) async fn list_public_security_institutions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -323,7 +323,7 @@ pub(crate) async fn reconcile_public_security(
     headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<ReconcilePublicSecurityQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };

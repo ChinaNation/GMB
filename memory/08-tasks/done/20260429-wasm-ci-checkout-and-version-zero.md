@@ -35,7 +35,7 @@
   `20260429-111541-node-src-and-frontend-layout-cleanup.md`。
 - 已将 `citizenchain/runtime/src/lib.rs` 中 runtime wasm 版本整体归零：
   `authoring_version`、`spec_version`、`impl_version`、`transaction_version`、`system_version` 均为 `0`。
-- 已同步 wumin 冷钱包 `PalletRegistry.supportedSpecVersions = {0}`，避免旧 spec 离线签名请求继续被接受。
+- 已同步 wumin 公民钱包 `PalletRegistry.supportedSpecVersions = {0}`，避免旧 spec 离线签名请求继续被接受。
 - 已更新 runtime 技术文档中的开发期升级策略，改为重新创世策略。
 - 已清理版本归零后不准确的 runtime 注释。
 
@@ -55,6 +55,6 @@
 ## 完成信息
 
 - 完成时间：2026-04-29
-- 完成摘要：修复 wasm CI checkout 阶段的超长文件名失败点，完成 runtime wasm 版本归零与 wumin 冷钱包 spec 同步。
+- 完成摘要：修复 wasm CI checkout 阶段的超长文件名失败点，完成 runtime wasm 版本归零与 wumin 公民钱包 spec 同步。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

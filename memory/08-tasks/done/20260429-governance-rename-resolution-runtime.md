@@ -71,6 +71,6 @@
 ## 完成信息
 
 - 完成时间：2026-04-29 08:33:50
-- 完成摘要：完成治理销毁与运行时升级两个 governance 模块的新名称统一：resolution-destro / runtime-upgrade；旧模块名残留扫描为 0；相关 Rust、文档、脚本、SFID、wumin 冷钱包口径已同步；模块单测、runtime 模块标签单测与冷钱包注册表测试通过；整 runtime cargo check 当前被 `resolution-issuance` 既有未完成改动阻塞，非本次两个模块改名引起。
+- 完成摘要：完成治理销毁与运行时升级两个 governance 模块的新名称统一：resolution-destro / runtime-upgrade；旧模块名残留扫描为 0；相关 Rust、文档、脚本、SFID、wumin 公民钱包口径已同步；模块单测、runtime 模块标签单测与冷钱包注册表测试通过；整 runtime cargo check 当前被 `resolution-issuance` 既有未完成改动阻塞，非本次两个模块改名引起。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

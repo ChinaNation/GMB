@@ -1,7 +1,7 @@
 //! 管理员 Passkey 注册与 WebAuthn 工具。
 //!
 //! 中文注释:Passkey 凭据、注册挑战和一次性安全动作均落到 admins 结构化表。
-//! 本模块只保留 WebAuthn、冷钱包签名校验和哈希工具,不再维护进程内状态。
+//! 本模块只保留 WebAuthn、公民钱包签名校验和哈希工具,不再维护进程内状态。
 
 use axum::{
     extract::State,
@@ -181,7 +181,7 @@ pub(crate) async fn start_passkey_registration(
             webauthn_state: None,
             payload_text,
             payload_hash: payload_hash.clone(),
-            cold_wallet_confirmed: false,
+            citizen_wallet_confirmed: false,
             issued_at: now,
             expires_at,
             consumed: false,
@@ -232,7 +232,7 @@ pub(crate) async fn confirm_passkey_registration(
         if !same_admin_pubkey(challenge.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
             return Err("http:forbidden:passkey registration owner mismatch".to_string());
         }
-        verify_cold_wallet_signature(
+        verify_citizen_wallet_signature(
             ctx.admin_pubkey.as_str(),
             input.signer_pubkey.as_str(),
             input.signature.as_str(),
@@ -254,7 +254,7 @@ pub(crate) async fn confirm_passkey_registration(
             )
             .map_err(|err| format!("start passkey registration failed: {err}"))?;
         challenge.webauthn_state = Some(webauthn_state);
-        challenge.cold_wallet_confirmed = true;
+        challenge.citizen_wallet_confirmed = true;
         repo::upsert_passkey_challenge_conn(conn, &challenge)?;
         Ok((public_key_options, challenge.expires_at))
     });
@@ -349,11 +349,11 @@ pub(crate) async fn complete_passkey_registration(
             "passkey registration owner mismatch",
         );
     }
-    if !challenge.cold_wallet_confirmed {
+    if !challenge.citizen_wallet_confirmed {
         return api_error(
             StatusCode::CONFLICT,
             1005,
-            "cold wallet confirmation required first",
+            "citizen wallet confirmation required first",
         );
     }
     let Some(webauthn_state) = challenge.webauthn_state.clone() else {
@@ -657,7 +657,7 @@ pub(crate) fn hash_json(value: &serde_json::Value) -> String {
     format!("0x{}", hex::encode(Sha256::digest(&encoded)))
 }
 
-pub(crate) fn verify_cold_wallet_signature(
+pub(crate) fn verify_citizen_wallet_signature(
     expected_actor_pubkey: &str,
     signer_pubkey: &str,
     signature: &str,

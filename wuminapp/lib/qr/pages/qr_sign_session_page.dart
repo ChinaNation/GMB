@@ -102,7 +102,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
     final expired = _remainingSeconds <= 0;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('冷钱包签名'),
+        title: const Text('公民钱包签名'),
         centerTitle: true,
       ),
       body: ListView(

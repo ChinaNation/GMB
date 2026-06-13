@@ -59,7 +59,7 @@ pub fn generate_sfid_number(input: GenerateSfidInput<'_>) -> Result<String, &'st
     let subject_property = SubjectProperty::from_str(input.subject_property)
         .ok_or("subject_property must be one of M/Z/N/G/S/F")?;
     let t2 = InstitutionCode::from_str(input.institution)
-        .ok_or("institution must be one of ZG/ZF/LF/SF/JC/JY/CB/CH/TG")?;
+        .ok_or("institution must be a registered SFID institution code")?;
     let p1 = match subject_property {
         SubjectProperty::M | SubjectProperty::Z => "1",
         SubjectProperty::G => "0",
@@ -89,18 +89,23 @@ pub fn generate_sfid_number(input: GenerateSfidInput<'_>) -> Result<String, &'st
     if subject_property == SubjectProperty::S
         && !matches!(
             t2,
-            InstitutionCode::ZG | InstitutionCode::JY | InstitutionCode::CH | InstitutionCode::TG
+            InstitutionCode::LP
+                | InstitutionCode::GQ
+                | InstitutionCode::GF
+                | InstitutionCode::GY
+                | InstitutionCode::AS
+                | InstitutionCode::JY
         )
     {
-        return Err("private legal subject requires institution in ZG/JY/CH/TG");
+        return Err("private legal subject requires institution in LP/GQ/GF/GY/AS or education JY");
     }
     if subject_property == SubjectProperty::F
         && !matches!(
             t2,
-            InstitutionCode::ZG | InstitutionCode::JY | InstitutionCode::TG
+            InstitutionCode::GT | InstitutionCode::GP | InstitutionCode::JY | InstitutionCode::ZG
         )
     {
-        return Err("unincorporated subject requires institution in ZG/JY/TG");
+        return Err("unincorporated subject requires institution in GT/GP, education JY, or public subordinate ZG");
     }
     // 中文注释:D4 段只取年份,生成结果固定符合 R5-K3P1C1-N9-D4。
     // 同 (主体属性, 省, 市, 机构, year) 5 元组共享 10 亿 n9 桶,

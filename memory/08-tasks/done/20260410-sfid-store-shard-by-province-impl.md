@@ -37,8 +37,8 @@
 ### 迁移到 sharded_store 的三个字段
 
 - `cpms_site_keys` -- institutions/handler.rs 9 处
-- `multisig_institutions` -- sheng-admins/institutions.rs + operate/status.rs
-- `multisig_accounts` -- sheng-admins/institutions.rs + operate/status.rs
+- `multisig_institutions` -- federal-registry/institutions.rs + operate/status.rs
+- `multisig_accounts` -- federal-registry/institutions.rs + operate/status.rs
 
 ### 有意保留走 legacy store 的路径(过渡期)
 
@@ -87,7 +87,7 @@
 
 ### 目标
 - **解除后端 Store 全局锁 + 全量 JSON 反序列化瓶颈**
-- 承载:Phase 1 的 ~500 并发 → **~5000 并发 SHI_ADMIN**
+- 承载:Phase 1 的 ~500 并发 → **~5000 并发 CITY_ADMIN**
 - 为 Phase 3(提交队列批处理)和 Phase 4(水平扩展)铺路
 
 ### 范围
@@ -173,7 +173,7 @@ pub(crate) struct ShardedStore {
 pub(crate) struct StoreShard {
     pub(crate) province: String,
 
-    // ── 本省管理员(ShengAdmin + ShiAdmin,按 province 分散)──
+    // ── 本联邦管理员(FederalAdmin + CityAdmin,按 province 分散)──
     // Key: admin_pubkey
     pub(crate) local_admins: HashMap<String, AdminUser>,
 
@@ -220,8 +220,8 @@ pub(crate) struct StoreShard {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct GlobalShard {
 
-    // 注意:ShengAdmin 的详细字段(含 encrypted_signing_privkey)在 GlobalShard 也存一份
-    // 省分片 local_admins 只包含 ShiAdmin
+    // 注意:FederalAdmin 的详细字段(含 encrypted_signing_privkey)在 GlobalShard 也存一份
+    // 省分片 local_admins 只包含 CityAdmin
     pub(crate) global_admins: HashMap<String, AdminUser>,
 
     // 省份路由索引
@@ -258,7 +258,7 @@ pub(crate) struct GlobalShard {
 }
 ```
 
-**关键设计**:`ShengAdmin` 本体在 `GlobalShard.global_admins`(登录路由需要),但每个 ShengAdmin 管理的 `StoreShard.local_admins` 只含 ShiAdmin。这样登录路由快(查全局),业务读写快(按省分片)。
+**关键设计**:`FederalAdmin` 本体在 `GlobalShard.global_admins`(登录路由需要),但每个 FederalAdmin 管理的 `StoreShard.local_admins` 只含 CityAdmin。这样登录路由快(查全局),业务读写快(按省分片)。
 
 ### 3.5 ShardBackend trait
 
@@ -702,9 +702,9 @@ pub(crate) async fn migrate_legacy_store_if_needed(
         shard.citizen_records.insert(*citizen_id, record.clone());
     }
 
-    // 1.5 按 pubkey → province 索引分散 ShiAdmin
+    // 1.5 按 pubkey → province 索引分散 CityAdmin
     for (pubkey, user) in &legacy_store.admin_users_by_pubkey {
-        if user.role != AdminRole::ShiAdmin {
+        if user.role != AdminRole::CityAdmin {
             continue;
         }
         let province = user.admin_province.clone().unwrap_or_default();
@@ -865,7 +865,7 @@ let state = AppState {
 5. 集成测试:
    - 空库首次启动 → `store_shards` 表为空 → 迁移触发 → 43 省 + global 写入
    - 再次启动 → 检测到已迁移 → skip
-   - 迁移后数据完整性:抽样 10 条机构 + 10 个 ShiAdmin diff
+   - 迁移后数据完整性:抽样 10 条机构 + 10 个 CityAdmin diff
 6. `cargo check` + `cargo test` 绿
 
 ### Day 3:Handler 改造(最大一块)
@@ -877,12 +877,12 @@ let state = AppState {
 **任务**:
 1. `Grep state.store.read()` + `state.store.write()` 列出所有调用点(~30~50 处)
 2. 按 handler 分类:
-   - ShiAdmin 业务(注册机构、citizen 绑定等)→ `write_province` / `read_province`
-   - ShengAdmin 管理(列省内资源)→ `read_province`
+   - CityAdmin 业务(注册机构、citizen 绑定等)→ `write_province` / `read_province`
+   - FederalAdmin 管理(列省内资源)→ `read_province`
 3. 逐个改造,每改 10 处跑一次 `cargo check`
 4. **特别处理**:
    - 登录 handler:`admin_users_by_pubkey` → `GlobalShard.global_admins`(登录路由)+ 本省 local_admins(业务路径)
-   - `bootstrap_sheng_signer`:读 ShengAdmin 从 `global.global_admins`,加密私钥字段仍在 global
+   - `bootstrap_sheng_signer`:读 FederalAdmin 从 `global.global_admins`,加密私钥字段仍在 global
    - `cleanup_admin_sessions`:sessions 在 GlobalShard,遍历后驱逐 sheng_signer_cache
    - `replace_sheng_admin`:清 global.global_admins + global.sheng_admin_province_by_pubkey,级联动作不变
    - `set_active_main_signer`:级联重加密的 sheng 密文现在从 `global.global_admins` 读/写
@@ -900,7 +900,7 @@ let state = AppState {
 **任务**:
 1. 自写 Rust 压测 `tools/load_test/src/main.rs`(沿用 Phase 1.D 未做的脚本):
    - 参数:`--concurrency N --provinces M --duration T --backend URL`
-   - 行为:模拟 N 个虚拟 SHI_ADMIN,均分到 M 省,循环调 `register_sfid_institution`
+   - 行为:模拟 N 个虚拟 CITY_ADMIN,均分到 M 省,循环调 `register_sfid_institution`
    - 输出:P50/P95/P99 + 成功率 + 每省 TPS
 2. 运行 baseline 对比:
    - Phase 1 状态(`SFID_SHARD_ENABLED=false`,走老 store):50 并发 × 1 省
@@ -927,7 +927,7 @@ let state = AppState {
 | Handler 改造漏迁某个调用点 | 🔴 高 | Grep 清单 + 改造一个 handler 先跑 cargo check,逐步推进 |
 | DashMap 懒加载竞争 | 🟡 中 | `entry().or_insert()` 原子化,并发测试覆盖 |
 | 登录路径读 global 频繁 → GlobalShard 写锁争用 | 🟡 中 | GlobalShard 的写操作只在 session 变化时,频率低;读用 RwLock 并发读不阻塞 |
-| Phase 1 的 sheng_signer_cache 数据源依赖 global | 🟡 中 | ShengAdmin 明确放 global,不拆到 province 分片 |
+| Phase 1 的 sheng_signer_cache 数据源依赖 global | 🟡 中 | FederalAdmin 明确放 global,不拆到 province 分片 |
 | 迁移耗时过长导致启动卡 | 🟢 低 | 预估 <5 秒,实际压测后调整 preload 策略(可跳过预加载,全部走懒加载) |
 | 双写失败导致新旧不一致 | 🟡 中 | 失败时日志 ERROR,但不阻塞请求(新路径优先);过渡期结束前发现的不一致手工补齐 |
 
@@ -1032,14 +1032,14 @@ systemctl start sfid-backend
 - [ ] PG 里 `store_shards` 表有 44 行(43 省 + 1 global),`legacy runtime_cache_entries` 内容仍同步更新(双写期)
 
 ### 11.2 性能验收
-- [ ] 单省 100 并发 SHI_ADMIN 推 `register_sfid_institution`,**P99 < 100ms**
+- [ ] 单省 100 并发 CITY_ADMIN 推 `register_sfid_institution`,**P99 < 100ms**
 - [ ] 10 省 × 50 = 500 并发,**P99 < 200ms**
 - [ ] 对比 Phase 1 baseline,P99 降低 **> 50%**
 - [ ] 成功率 > 99.9%
 - [ ] 后端进程 CPU < 200%(单核峰值),内存 < 1 GB
 
 ### 11.3 数据完整性
-- [ ] 迁移后抽样:10 个机构 / 10 个 ShiAdmin / 10 条 CPMS 记录,新旧路径读出字段全等
+- [ ] 迁移后抽样:10 个机构 / 10 个 CityAdmin / 10 条 CPMS 记录,新旧路径读出字段全等
 - [ ] 双写期间 24 小时后 diff PG `store_shards` vs `runtime_cache_entries`,差异 = 0
 
 ---

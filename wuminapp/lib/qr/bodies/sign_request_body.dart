@@ -2,7 +2,7 @@ import 'package:wuminapp_mobile/qr/envelope.dart';
 
 /// kind = sign_request
 ///
-/// 由 wuminapp 热钱包生成,wumin 冷钱包扫码后展示交易摘要并签名。
+/// 由 wuminapp 热钱包生成,wumin 公民钱包扫码后展示交易摘要并签名。
 class SignRequestBody implements QrBody {
   const SignRequestBody({
     required this.address,
@@ -108,7 +108,7 @@ class SignDisplay {
 class SignDisplayField {
   const SignDisplayField({this.key, required this.label, required this.value});
 
-  /// 中文注释：可选的英文字段标识，用于让 wumin 冷钱包与本地解码结果交叉比对。
+  /// 中文注释：可选的英文字段标识，用于让 wumin 公民钱包与本地解码结果交叉比对。
   /// 链端 signing.rs 会发送此字段，wuminapp 生成时也应按 action registry 对齐。
   final String? key;
   final String label;

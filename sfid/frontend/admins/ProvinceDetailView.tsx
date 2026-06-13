@@ -1,28 +1,28 @@
 // 注册局机构详情视图(两个顶级 tab 各一个):
 //   - CityRegistryView(市注册局 tab):联邦管理员 城市网格→点市→该市注册局机构详情页;
-//                                      市级管理员 直接进本市注册局机构详情页。
+//                                      市管理员 直接进本市注册局机构详情页。
 //   - FederalRegistryView(联邦注册局 tab):全国唯一联邦注册局机构详情页。
 // 两者 leaf 都是「机构详情页 + 内嵌管理员列表」(GovDetailPage.adminListSection),
-// 管理员列表渲染在机构信息卡与账户列表卡之间。数据由 ShengAdminsView 统一加载。
+// 管理员列表渲染在机构信息卡与账户列表卡之间。数据由 FederalAdminsView 统一加载。
 
 import React, { useCallback } from 'react';
 import { Button, Card, Space, Table, Tag, Typography } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
 import type { SfidCityItem } from '../china/api';
-import type { OperatorRow } from './operators_api';
+import type { CityAdminRow } from './city_admins_api';
 import { tryEncodeSs58 } from '../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
-import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
-import type { ShengAdminSharedState } from './shengAdminUtils';
-import { AddOperatorModal } from './AddOperatorModal';
-import { ShengAdminSubTab } from './ShengAdminSubTab';
+import { MAX_CITY_ADMINS_PER_CITY, sameHexPubkey } from './adminUtils';
+import type { FederalAdminSharedState } from './adminUtils';
+import { AddCityAdminModal } from './AddCityAdminModal';
+import { FederalAdminSubTab } from './FederalAdminSubTab';
 import { Passkey } from './Passkey';
 import { GovDetailPage } from '../gov/GovDetailPage';
 import { getFederalRegistry } from '../gov/api';
 
 interface RegistryViewProps {
-  state: ShengAdminSharedState;
+  state: FederalAdminSharedState;
 }
 
 function makeCenteredTitle(center: React.ReactNode) {
@@ -40,14 +40,14 @@ function makeCenteredTitle(center: React.ReactNode) {
 export function FederalRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
   const {
-    shengAdmins,
-    shengAdminsLoading,
-    selectedShengAdmin,
+    federalAdmins,
+    federalAdminsLoading,
+    selectedFederalAdmin,
     federalRegistryDetail,
     federalRegistryLoading,
   } = state;
 
-  // 稳定引用:复用 ShengAdminsView 预加载的 detail,避免 GovDetailPage 重复触发 load。
+  // 稳定引用:复用 FederalAdminsView 预加载的 detail,避免 GovDetailPage 重复触发 load。
   const loadFederalRegistry = useCallback(() => {
     if (federalRegistryDetail) return Promise.resolve(federalRegistryDetail);
     if (auth) return getFederalRegistry(auth);
@@ -73,12 +73,12 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
       sfidNumber={federalRegistryDetail.institution.sfid_number}
       canWrite={false}
       loadDetail={loadFederalRegistry}
-      adminListSection={selectedShengAdmin ? (
-        <ShengAdminSubTab
-          selectedShengAdmin={selectedShengAdmin}
-          shengAdmins={shengAdmins}
-          shengAdminsLoading={shengAdminsLoading}
-          refreshShengAdmins={state.refreshShengAdmins}
+      adminListSection={selectedFederalAdmin ? (
+        <FederalAdminSubTab
+          selectedFederalAdmin={selectedFederalAdmin}
+          federalAdmins={federalAdmins}
+          federalAdminsLoading={federalAdminsLoading}
+          refreshFederalAdmins={state.refreshFederalAdmins}
           runSecuredAction={state.runSecuredAction}
         />
       ) : null}
@@ -86,24 +86,24 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
   );
 }
 
-// ── 市注册局 tab:城市网格(联邦) / 机构详情页 + 本市市级管理员列表 ──
+// ── 市注册局 tab:城市网格(联邦) / 机构详情页 + 本市市管理员列表 ──
 
 export function CityRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
   const scope = useScope(auth);
   const {
-    selectedShengAdmin,
+    selectedFederalAdmin,
     selectedCity,
     setSelectedCity,
-    operators,
-    operatorsLoading,
-    operatorListPage,
-    setOperatorListPage,
-    operatorCities,
-    operatorCitiesLoading,
-    setAddOperatorOpen,
-    onUpdateOperator,
-    onDeleteOperator,
+    cityAdmins,
+    cityAdminsLoading,
+    cityAdminListPage,
+    setCityAdminListPage,
+    cityAdminCities,
+    cityAdminCitiesLoading,
+    setAddCityAdminOpen,
+    onUpdateCityAdmin,
+    onDeleteCityAdmin,
     cityRegistrySfid,
   } = state;
 
@@ -111,9 +111,9 @@ export function CityRegistryView({ state }: RegistryViewProps) {
 
   const effectiveProvince = scope.lockedProvince;
   const effectiveCity = selectedCity ?? scope.lockedCity;
-  const operatorsForProvince = selectedShengAdmin ? operators : [];
-  // 市级管理员只读;联邦管理员可增删改(后端按登录省域二次校验)。
-  const canEditOperators = scope.canWrite && auth.role === 'FEDERAL_ADMIN';
+  const city_adminsForProvince = selectedFederalAdmin ? cityAdmins : [];
+  // 市管理员只读;联邦管理员可增删改(后端按登录省域二次校验)。
+  const canEditCityAdmins = scope.canWrite && auth.role === 'FEDERAL_ADMIN';
 
   let body: React.ReactNode;
   if (!effectiveCity) {
@@ -126,33 +126,33 @@ export function CityRegistryView({ state }: RegistryViewProps) {
         headStyle={glassCardHeadStyle}
       >
         <CityGrid
-          cities={operatorCities.filter((c) => c.code !== '000')}
-          citiesLoading={operatorCitiesLoading || (!selectedShengAdmin && operatorCities.length === 0)}
-          operators={operatorsForProvince}
+          cities={cityAdminCities.filter((c) => c.code !== '000')}
+          citiesLoading={cityAdminCitiesLoading || (!selectedFederalAdmin && cityAdminCities.length === 0)}
+          cityAdmins={city_adminsForProvince}
           onSelectCity={setSelectedCity}
         />
       </Card>
     );
   } else if (cityRegistrySfid) {
-    // 选中市(联邦) / 锁定市(市管理员) → 市注册局机构详情页 + 本市市级管理员列表
+    // 选中市(联邦) / 锁定市(市管理员) → 市注册局机构详情页 + 本市市管理员列表
     const canGoBack = !scope.skipCityList;
     body = (
       <GovDetailPage
         auth={auth}
         sfidNumber={cityRegistrySfid}
         canWrite={scope.canWrite}
-        onBack={canGoBack ? () => { setSelectedCity(null); setOperatorListPage(1); } : undefined}
+        onBack={canGoBack ? () => { setSelectedCity(null); setCityAdminListPage(1); } : undefined}
         backLabel="返回"
         adminListSection={
-          <CityOperatorsView
-            canEditOperators={canEditOperators}
-            operators={operatorsForProvince.filter((op) => op.city === effectiveCity)}
-            operatorsLoading={operatorsLoading}
-            operatorListPage={operatorListPage}
-            setOperatorListPage={setOperatorListPage}
-            setAddOperatorOpen={setAddOperatorOpen}
-            onUpdateOperator={onUpdateOperator}
-            onDeleteOperator={onDeleteOperator}
+          <CityCityAdminsView
+            canEditCityAdmins={canEditCityAdmins}
+            cityAdmins={city_adminsForProvince.filter((op) => op.city === effectiveCity)}
+            cityAdminsLoading={cityAdminsLoading}
+            cityAdminListPage={cityAdminListPage}
+            setCityAdminListPage={setCityAdminListPage}
+            setAddCityAdminOpen={setAddCityAdminOpen}
+            onUpdateCityAdmin={onUpdateCityAdmin}
+            onDeleteCityAdmin={onDeleteCityAdmin}
           />
         }
       />
@@ -169,17 +169,17 @@ export function CityRegistryView({ state }: RegistryViewProps) {
   return (
     <>
       {body}
-      <AddOperatorModal state={state} />
+      <AddCityAdminModal state={state} />
     </>
   );
 }
 
-// ── 市级管理员列表的城市入口网格 ──
+// ── 市管理员列表的城市入口网格 ──
 
-function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
+function CityGrid({ cities, citiesLoading, cityAdmins, onSelectCity }: {
   cities: SfidCityItem[];
   citiesLoading: boolean;
-  operators: OperatorRow[];
+  cityAdmins: CityAdminRow[];
   onSelectCity: (city: string) => void;
 }) {
   return citiesLoading ? (
@@ -189,7 +189,7 @@ function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
   ) : (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
       {cities.map((city) => {
-        const count = operators.filter((op) => op.city === city.name).length;
+        const count = cityAdmins.filter((op) => op.city === city.name).length;
         return (
           <div
             key={city.code}
@@ -213,10 +213,10 @@ function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
           >
             <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{city.name}</div>
             <Tag
-              color={count >= MAX_SHI_ADMINS_PER_CITY ? 'red' : 'teal'}
+              color={count >= MAX_CITY_ADMINS_PER_CITY ? 'red' : 'teal'}
               style={{ marginTop: 6 }}
             >
-              {count} / {MAX_SHI_ADMINS_PER_CITY}
+              {count} / {MAX_CITY_ADMINS_PER_CITY}
             </Tag>
           </div>
         );
@@ -225,63 +225,63 @@ function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
   );
 }
 
-// ── 某市的市级管理员列表(内嵌进市注册局机构详情页) ──
+// ── 某市的市管理员列表(内嵌进市注册局机构详情页) ──
 
-function CityOperatorsView({ canEditOperators, operators, operatorsLoading, operatorListPage, setOperatorListPage, setAddOperatorOpen, onUpdateOperator, onDeleteOperator }: {
-  canEditOperators: boolean;
-  operators: OperatorRow[];
-  operatorsLoading: boolean;
-  operatorListPage: number;
-  setOperatorListPage: (v: number) => void;
-  setAddOperatorOpen: (v: boolean) => void;
-  onUpdateOperator: (row: OperatorRow) => void;
-  onDeleteOperator: (row: OperatorRow) => void;
+function CityCityAdminsView({ canEditCityAdmins, cityAdmins, cityAdminsLoading, cityAdminListPage, setCityAdminListPage, setAddCityAdminOpen, onUpdateCityAdmin, onDeleteCityAdmin }: {
+  canEditCityAdmins: boolean;
+  cityAdmins: CityAdminRow[];
+  cityAdminsLoading: boolean;
+  cityAdminListPage: number;
+  setCityAdminListPage: (v: number) => void;
+  setAddCityAdminOpen: (v: boolean) => void;
+  onUpdateCityAdmin: (row: CityAdminRow) => void;
+  onDeleteCityAdmin: (row: CityAdminRow) => void;
 }) {
   const { auth } = useAuth();
-  // 中文注释:本列表已经按当前市过滤,所以长度就是该市市级管理员数量。
-  const cityLimitReached = operators.length >= MAX_SHI_ADMINS_PER_CITY;
+  // 中文注释:本列表已经按当前市过滤,所以长度就是该市市管理员数量。
+  const cityLimitReached = cityAdmins.length >= MAX_CITY_ADMINS_PER_CITY;
   return (
     <Card
       type="inner"
-      title="市级管理员列表"
+      title="市管理员列表"
       extra={
         <Space size="middle" align="center">
           <Typography.Text type="secondary" style={{ fontWeight: 400, fontSize: 13 }}>
-            用户数：{operators.length} / {MAX_SHI_ADMINS_PER_CITY}
+            用户数：{cityAdmins.length} / {MAX_CITY_ADMINS_PER_CITY}
           </Typography.Text>
-          {canEditOperators ? (
+          {canEditCityAdmins ? (
             <Button
               type="primary"
               disabled={cityLimitReached}
-              title={cityLimitReached ? `本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人` : undefined}
-              onClick={() => setAddOperatorOpen(true)}
+              title={cityLimitReached ? `本市市管理员已满 ${MAX_CITY_ADMINS_PER_CITY} 人` : undefined}
+              onClick={() => setAddCityAdminOpen(true)}
             >
-              新增市级管理员
+              新增市管理员
             </Button>
           ) : null}
         </Space>
       }
     >
-      <Table<OperatorRow>
+      <Table<CityAdminRow>
         rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
-        loading={operatorsLoading}
-        dataSource={operators}
+        loading={cityAdminsLoading}
+        dataSource={cityAdmins}
         pagination={{
-          pageSize: 10, current: operatorListPage,
-          onChange: (page) => setOperatorListPage(page),
+          pageSize: 10, current: cityAdminListPage,
+          onChange: (page) => setCityAdminListPage(page),
           showSizeChanger: false,
           showTotal: (total) => `共 ${total} 条`,
         }}
         columns={[
-          { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (operatorListPage - 1) * 10 + index + 1 },
+          { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (cityAdminListPage - 1) * 10 + index + 1 },
           { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
           { title: '账户', dataIndex: 'admin_pubkey', align: 'center', render: (v: string) => tryEncodeSs58(v) },
           {
             title: '操作', width: 260, align: 'center' as const,
-            render: (_v: unknown, row: OperatorRow) => (
+            render: (_v: unknown, row: CityAdminRow) => (
               <Space>
-                {canEditOperators ? <Button size="small" onClick={() => onUpdateOperator(row)}>编辑</Button> : null}
-                {canEditOperators ? <Button size="small" danger onClick={() => onDeleteOperator(row)}>删除</Button> : null}
+                {canEditCityAdmins ? <Button size="small" onClick={() => onUpdateCityAdmin(row)}>编辑</Button> : null}
+                {canEditCityAdmins ? <Button size="small" danger onClick={() => onDeleteCityAdmin(row)}>删除</Button> : null}
                 <Passkey
                   size="small"
                   disabled={!sameHexPubkey(row.admin_pubkey, auth?.admin_pubkey)}

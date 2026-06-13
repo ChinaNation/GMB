@@ -39,7 +39,7 @@
 - ❌ citizen-vote 业务模式实现(election / referendum / approval / RCV)→ Phase 3
 - ❌ 公权 / 其他机构注册路径 → Phase 2
 - ❌ ProposalData enum 结构调整 → 维持现状
-- ❌ wumin 冷钱包 decoder 重构 → 客户端 PR
+- ❌ wumin 公民钱包 decoder 重构 → 客户端 PR
 
 ## 7 个 trait 接口(votingengine/src/traits.rs)
 
@@ -85,7 +85,7 @@ pub trait VotingEngineApi<AccountId, BlockNumber> {
 - [x] benchmarks.rs 加 3 行
 - [x] votingengine alias / Proposals storage prefix 不变
 - [x] 链端 11 pallet cargo test 全过(228 passed,0 failed)
-- [x] wumin 冷钱包 105 tests 全过(pallet_registry + decoder + offline_sign + fixture 全部更新)
+- [x] wumin 公民钱包 105 tests 全过(pallet_registry + decoder + offline_sign + fixture 全部更新)
 - [x] cargo check --workspace 通过
 - [x] grep 零残留(votingengine.internal_vote / .joint_vote / .citizen_vote 全栈消失)
 - [ ] wuminapp flutter analyze lib(本任务范围内 0 改动,未跑)

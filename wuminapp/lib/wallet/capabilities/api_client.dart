@@ -77,10 +77,10 @@ class PopulationSnapshotResponse {
   final String who;
 
   /// 签发 admin 所属省份(UTF-8 中文,如 "安徽省")。
-  /// SFID 后端按登录省管理员路由下发,链端 SCALE 末尾必填字段。
+  /// SFID 后端按登录联邦管理员路由下发,链端 SCALE 末尾必填字段。
   final String province;
 
-  /// 签发本凭证的省管理员 admin pubkey(0x 小写 hex,32 字节)。
+  /// 签发本凭证的联邦管理员 admin pubkey(0x 小写 hex,32 字节)。
   final String signerAdminPubkey;
 }
 

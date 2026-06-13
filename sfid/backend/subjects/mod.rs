@@ -7,6 +7,7 @@ pub(crate) mod admin;
 pub(crate) mod chain_duoqian_info;
 pub(crate) mod http;
 pub(crate) mod model;
+pub(crate) mod registration;
 pub(crate) mod schema;
 pub(crate) mod service;
 pub(crate) mod uninorg;

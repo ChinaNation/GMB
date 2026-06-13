@@ -1,8 +1,8 @@
 //! 登录会话鉴权守卫。
 //!
 //! 中文注释:会话、管理员身份和 Passkey 绑定状态只读取结构化表。
-//! 业务模块通过 `require_admin_any`、`require_sheng_admin` 获取认证上下文;
-//! 写操作的 Passkey/冷钱包级别由 admins::actions 的安全 grant 单独校验。
+//! 业务模块通过 `require_admin_any`、`require_federal_admin` 获取认证上下文;
+//! 写操作的 Passkey/公民钱包级别由 admins::actions 的安全 grant 单独校验。
 
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{Duration, Utc};
@@ -27,7 +27,7 @@ pub(super) fn admin_auth(
     };
 
     let now = Utc::now();
-    let shi_idle_timeout_minutes = std::env::var("SFID_ADMIN_IDLE_TIMEOUT_MINUTES")
+    let city_idle_timeout_minutes = std::env::var("SFID_ADMIN_IDLE_TIMEOUT_MINUTES")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
         .filter(|v| *v > 0)
@@ -44,14 +44,14 @@ pub(super) fn admin_auth(
 
     let result = state.db.with_client(move |conn| {
         if should_cleanup {
-            repo::cleanup_admin_sessions_conn(conn, now, shi_idle_timeout_minutes)?;
+            repo::cleanup_admin_sessions_conn(conn, now, city_idle_timeout_minutes)?;
         }
         let Some(mut session) = repo::get_admin_session_conn(conn, token.as_str())? else {
             return Err("http:unauthorized:invalid access token".to_string());
         };
 
-        let idle_expired = session.role == AdminRole::ShiAdmin
-            && now > session.last_active_at + Duration::minutes(shi_idle_timeout_minutes);
+        let idle_expired = session.role == AdminRole::CityAdmin
+            && now > session.last_active_at + Duration::minutes(city_idle_timeout_minutes);
         if now > session.expire_at || idle_expired {
             conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
                 .map_err(|e| format!("delete expired admin session failed: {e}"))?;
@@ -65,7 +65,7 @@ pub(super) fn admin_auth(
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
         let admin_province =
             repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?;
-        let admin_city = if admin.role == AdminRole::ShiAdmin && !admin.city.trim().is_empty() {
+        let admin_city = if admin.role == AdminRole::CityAdmin && !admin.city.trim().is_empty() {
             Some(admin.city.clone())
         } else {
             None
@@ -120,17 +120,17 @@ pub(crate) fn require_admin_any(
     admin_auth(state, headers)
 }
 
-/// 中文注释:省级治理与 CPMS 授权治理只允许 ShengAdmin。
-pub(crate) fn require_sheng_admin(
+/// 中文注释:注册局治理与 CPMS 授权治理只允许 FederalAdmin。
+pub(crate) fn require_federal_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
     let ctx = admin_auth(state, headers)?;
-    if ctx.role != AdminRole::ShengAdmin {
+    if ctx.role != AdminRole::FederalAdmin {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "sheng admin required",
+            "federal admin required",
         ));
     }
     if ctx.admin_province.is_none() {

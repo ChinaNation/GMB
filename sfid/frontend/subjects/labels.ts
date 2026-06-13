@@ -2,17 +2,18 @@
 // private/gov/education 三个新增弹窗共用这一份字段锁定规则,组件分别放在各自业务目录。
 //
 // 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
-//   PRIVATE_INSTITUTION   私权 tab:S/F + ZG/TG,两步式(弹窗只生成 SFID,详情页补名称/sub_type)
+//   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
 //   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除央行CB)机构名称必填 / F(锁中国ZG)挂公法人
 //   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY),学校名称弹窗内必填
 //
 // P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/uninorg 同源):
 //   G → 锁死 0(非盈利,生成器硬规则)
 //   S → 可选 0/1,默认 1
-//   F → 锁死,继承所属法人(公法人父恒 0;私法人父继承其 p1;未选父级前置空)
+//   F → 个体经营/无限合伙为独立非法人;教育分校/公权下属非法人继承所属法人
 //
-// 非法人(F)统一流程:创建时必选"所属法人"(真实父级,创建即挂),搜索范围由后端按
-// subjects/uninorg 地域规则预过滤(分校→本市学校本部;公权→市级同市/省级同省/国家级;私权→全国)。
+// 非法人(F)挂靠只用于从属非法人。个体经营(F+GT)和无限合伙(F+GP)不选择所属法人。
+
+import type { PartnershipKind, PrivateType } from './api';
 
 export type ChoiceItem = { value: string; label: string };
 
@@ -51,6 +52,13 @@ export const INSTITUTION_CODE_LABEL: Record<string, string> = {
   CB: '中央银行',
   ZG: '中国',
   TG: '他国',
+  GT: '个体经营',
+  GP: '无限合伙',
+  LP: '有限合伙',
+  GQ: '股权公司',
+  GF: '股份公司',
+  GY: '公益组织',
+  AS: '注册协会',
 };
 
 // ── 公权机构细类中文映射;仅用于展示,业务仍以 org_code 精确区分。 ──
@@ -123,12 +131,6 @@ export const ORG_CODE_LABEL: Record<string, string> = {
   PUBLIC_ORG: '公权机构',
 };
 
-// ── 私法人/非法人可选机构代码(教育委员会 JY 已统一收口教育机构 tab) ──
-const PRIVATE_INSTITUTIONS: ChoiceItem[] = [
-  { value: 'ZG', label: '中国' },
-  { value: 'TG', label: '他国' },
-];
-
 // ── 手动公权机构可选代码:排除央行 CB(省公民储备银行每省唯一已生成)和 JY(归教育 tab) ──
 const GOV_MANUAL_INSTITUTIONS: ChoiceItem[] = [
   { value: 'ZF', label: '政府' },
@@ -151,24 +153,94 @@ const EDUCATION_INSTITUTION_ONLY: ChoiceItem[] = [
 const P1_PROFIT: ChoiceItem = { value: '1', label: '盈利' };
 const P1_NON_PROFIT: ChoiceItem = { value: '0', label: '非盈利' };
 
-// ── 私法人企业类型(详情页使用;P1 联动见 subTypeChoicesForP1) ──
-// P1=0 → 仅 NON_PROFIT;P1=1 → 四种企业类型
-export const S_SUB_TYPE_CHOICES: ChoiceItem[] = [
-  { value: 'SOLE_PROPRIETORSHIP', label: '个人独资' },
-  { value: 'PARTNERSHIP', label: '合伙企业' },
-  { value: 'LIMITED_LIABILITY', label: '有限责任' },
-  { value: 'JOINT_STOCK', label: '股份公司' },
-  { value: 'NON_PROFIT', label: '公益组织' },
-];
-
-// ── 企业类型 label 映射(详情页展示用) ──
-export const SUB_TYPE_LABEL: Record<string, string> = {
-  SOLE_PROPRIETORSHIP: '个人独资',
+export const PRIVATE_TYPE_LABEL: Record<PrivateType, string> = {
+  SOLE: '个体经营',
   PARTNERSHIP: '合伙企业',
-  LIMITED_LIABILITY: '有限责任',
-  JOINT_STOCK: '股份公司',
-  NON_PROFIT: '公益组织',
+  COMPANY: '股权公司',
+  CORPORATION: '股份公司',
+  WELFARE: '公益组织',
+  ASSOCIATION: '注册协会',
 };
+
+export const PARTNERSHIP_KIND_LABEL: Record<PartnershipKind, string> = {
+  GENERAL: '无限合伙',
+  LIMITED: '有限合伙',
+};
+
+export interface PrivateTypeRule {
+  privateType: PrivateType;
+  partnershipKind?: PartnershipKind;
+  subjectProperty: 'S' | 'F';
+  institution: string;
+  p1: '0' | '1';
+  hasLegalPersonality: boolean;
+}
+
+export const PRIVATE_TYPE_RULES: Record<PrivateType, PrivateTypeRule> = {
+  SOLE: {
+    privateType: 'SOLE',
+    subjectProperty: 'F',
+    institution: 'GT',
+    p1: '1',
+    hasLegalPersonality: false,
+  },
+  PARTNERSHIP: {
+    privateType: 'PARTNERSHIP',
+    partnershipKind: 'GENERAL',
+    subjectProperty: 'F',
+    institution: 'GP',
+    p1: '1',
+    hasLegalPersonality: false,
+  },
+  COMPANY: {
+    privateType: 'COMPANY',
+    subjectProperty: 'S',
+    institution: 'GQ',
+    p1: '1',
+    hasLegalPersonality: true,
+  },
+  CORPORATION: {
+    privateType: 'CORPORATION',
+    subjectProperty: 'S',
+    institution: 'GF',
+    p1: '1',
+    hasLegalPersonality: true,
+  },
+  WELFARE: {
+    privateType: 'WELFARE',
+    subjectProperty: 'S',
+    institution: 'GY',
+    p1: '0',
+    hasLegalPersonality: true,
+  },
+  ASSOCIATION: {
+    privateType: 'ASSOCIATION',
+    subjectProperty: 'S',
+    institution: 'AS',
+    p1: '0',
+    hasLegalPersonality: true,
+  },
+};
+
+export function privateRuleFor(
+  privateType: PrivateType,
+  partnershipKind?: PartnershipKind,
+): PrivateTypeRule {
+  if (privateType === 'PARTNERSHIP') {
+    if (partnershipKind === 'LIMITED') {
+      return {
+        privateType,
+        partnershipKind,
+        subjectProperty: 'S',
+        institution: 'LP',
+        p1: '1',
+        hasLegalPersonality: true,
+      };
+    }
+    return { ...PRIVATE_TYPE_RULES.PARTNERSHIP, partnershipKind: 'GENERAL' };
+  }
+  return PRIVATE_TYPE_RULES[privateType];
+}
 
 /** 基础 locks(不依赖 subject_property 动态值的部分) */
 export function locksForCategory(category: CreateFormCategory): InstitutionFieldLocks {
@@ -195,14 +267,10 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
         modalTitle: '新增教育机构',
       };
     case 'PRIVATE_INSTITUTION':
-      // 两步式:第一步弹窗不含 institution_name/sub_type
       return {
-        subjectPropertyChoices: [
-          { value: 'S', label: '私法人' },
-          { value: 'F', label: '非法人' },
-        ],
-        institutionChoices: PRIVATE_INSTITUTIONS,
-        modalTitle: '新增私权机构',
+        subjectPropertyChoices: [{ value: 'F', label: '非法人' }],
+        institutionChoices: [{ value: 'GT', label: '个体经营' }],
+        modalTitle: '新增机构',
       };
   }
 }
@@ -216,7 +284,7 @@ export function institutionChoicesFor(
   if (category === 'GOV_INSTITUTION') {
     return subjectProperty === 'G' ? GOV_MANUAL_INSTITUTIONS : GOV_UNINORG_INSTITUTION_ONLY;
   }
-  return PRIVATE_INSTITUTIONS;
+  return [{ value: 'GT', label: '个体经营' }];
 }
 
 /** 非法人盈利属性附属于所属法人:公法人父恒 0,私法人父继承其 p1(与后端 uninorg 同源)。 */
@@ -243,17 +311,4 @@ export function p1LocksForSubject(
   }
   // G:公法人恒非盈利
   return { choices: [P1_NON_PROFIT], value: '0', locked: true };
-}
-
-/**
- * 根据 P1 决定 S 详情页可选 sub_type:
- *   P1=0(非盈利) → 只能 NON_PROFIT
- *   P1=1(盈利)   → 四种企业类型,排除 NON_PROFIT
- */
-export function subTypeChoicesForP1(p1: string | number): ChoiceItem[] {
-  const p1Str = String(p1);
-  if (p1Str === '0') {
-    return S_SUB_TYPE_CHOICES.filter((c) => c.value === 'NON_PROFIT');
-  }
-  return S_SUB_TYPE_CHOICES.filter((c) => c.value !== 'NON_PROFIT');
 }

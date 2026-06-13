@@ -1,4 +1,4 @@
-# 任务卡：统一 SFID 管理端权限命名为 LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE，新增 admins/operation_auth，调整删除机构账户/文档为通行密钥+挑战签名，修改省市管理员为登录态，清理旧命名和残留。
+# 任务卡：统一 SFID 管理端权限命名为 LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE，新增 admins/operation_auth，调整删除机构账户/文档为通行密钥+挑战签名，修改联邦/市管理员为登录态，清理旧命名和残留。
 
 - 任务编号：20260531-092106
 - 状态：done
@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-统一 SFID 管理端权限命名为 LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE，新增 admins/operation_auth，调整删除机构账户/文档为通行密钥+挑战签名，修改省市管理员为登录态，清理旧命名和残留。
+统一 SFID 管理端权限命名为 LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE，新增 admins/operation_auth，调整删除机构账户/文档为通行密钥+挑战签名，修改联邦/市管理员为登录态，清理旧命名和残留。
 
 ## 必读上下文
 
@@ -86,13 +86,13 @@
 - 任务卡已创建
 - 2026-05-31：新增 `sfid/backend/admins/operation_auth.rs`，统一登记 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限类型。
 - 2026-05-31：后端安全动作输出字段改为 `auth_type`，删除旧二级权限命名；`prepare/commit` 拒绝登录态操作进入安全动作通道。
-- 2026-05-31：新增省/市管理员姓名登录态 PATCH 接口；新增/删除管理员保留 Passkey + 冷钱包挑战签名。
-- 2026-05-31：删除机构账户、删除机构文档前端改为 Passkey + 冷钱包挑战签名取得 grant 后再调用业务删除接口。
+- 2026-05-31：新增联邦/市管理员姓名登录态 PATCH 接口；新增/删除管理员保留 Passkey + 签名挑战签名。
+- 2026-05-31：删除机构账户、删除机构文档前端改为 Passkey + 签名挑战签名取得 grant 后再调用业务删除接口。
 - 2026-05-31：清理前端登录测试残留，更新 SFID 技术文档、前后端目录文档和统一命名登记。
 
 ## 完成信息
 
 - 完成时间：2026-05-31 09:33:53
-- 完成摘要：完成 SFID 管理端权限统一：新增 operation_auth，统一 auth_type=LOGIN_STATE/PASSKEY/PASSKEY_CHALLENGE，删除机构账户和文档升级为 Passkey+挑战签名，省/市管理员姓名修改改为登录态接口，清理旧命名、前端登录测试残留并更新文档。
+- 完成摘要：完成 SFID 管理端权限统一：新增 operation_auth，统一 auth_type=LOGIN_STATE/PASSKEY/PASSKEY_CHALLENGE，删除机构账户和文档升级为 Passkey+挑战签名，联邦/市管理员姓名修改改为登录态接口，清理旧命名、前端登录测试残留并更新文档。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

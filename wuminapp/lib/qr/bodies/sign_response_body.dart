@@ -2,7 +2,7 @@ import 'package:wuminapp_mobile/qr/envelope.dart';
 
 /// kind = sign_response
 ///
-/// 由 wumin 冷钱包生成,wuminapp 热钱包扫回后广播交易。
+/// 由 wumin 公民钱包生成,wuminapp 热钱包扫回后广播交易。
 class SignResponseBody implements QrBody {
   const SignResponseBody({
     required this.pubkey,

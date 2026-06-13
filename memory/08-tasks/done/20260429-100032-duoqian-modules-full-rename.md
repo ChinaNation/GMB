@@ -46,7 +46,7 @@
 - 任务卡已创建
 - 已完成 runtime 代码目录与 `memory/05-modules` 技术文档目录的新命名。
 - 已完成 Cargo workspace、runtime dependency、crate 标识、runtime pallet 名、外部端 storage/event 字符串、CI 脚本与文档引用的新命名。
-- 已将 runtime `spec_version` 推进到 10，并同步 wumin 冷钱包支持版本。
+- 已将 runtime `spec_version` 推进到 10，并同步 wumin 公民钱包支持版本。
 - 已清理普通源码与文档中的旧命名残留；生成目录与 `.git` 不纳入源码残留口径。
 - 已执行格式化：`cargo fmt --package duoqian-manage --package duoqian-transfer`、`rustfmt sfid/backend/indexer/event_parser.rs`、`dart format` 相关 wumin / wuminapp 文件。
 - 已验证：`cargo check -p duoqian-manage -p duoqian-transfer --offline` 通过。

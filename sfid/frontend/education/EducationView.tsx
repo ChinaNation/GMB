@@ -179,7 +179,7 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
         onCreated={(result) => {
           setCreateOpen(false);
           setRefreshKey((k) => k + 1);
-          // 创建成功直接跳详情页:S 补企业类型、F 已挂所属法人(详情页只改挂)、G 只读查看
+          // 创建成功直接跳详情页,继续维护账户和资料库。
           if (result?.sfid_number) {
             setSelectedSfidNumber(result.sfid_number);
           }

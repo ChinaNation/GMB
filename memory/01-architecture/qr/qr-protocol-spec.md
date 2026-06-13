@@ -88,7 +88,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `system` | string | 是 | 原样回传自挑战码 |
-| `pubkey` | string | 是 | 签名者(wumin 冷钱包)公钥,`0x` + hex |
+| `pubkey` | string | 是 | 签名者(wumin 公民钱包)公钥,`0x` + hex |
 | `sig_alg` | string | 是 | 固定 `"sr25519"` |
 | `signature` | string | 是 | 对签名原文的签名,`0x` + hex |
 | `payload_hash` | string | 是 | 签名原文字节的 SHA-256,`0x` + hex |

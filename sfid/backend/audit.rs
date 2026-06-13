@@ -39,7 +39,7 @@ pub(crate) struct AuditLogsQuery {
     pub(crate) limit: Option<usize>,
 }
 
-/// ShengAdmin / ShiAdmin 均可访问审计日志(只读)。
+/// FederalAdmin / CityAdmin 均可访问审计日志(只读)。
 pub(crate) async fn admin_list_audit_logs(
     State(state): State<AppState>,
     headers: HeaderMap,

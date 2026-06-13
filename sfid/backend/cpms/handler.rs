@@ -188,7 +188,7 @@ pub(crate) async fn generate_cpms_install_qr(
     headers: HeaderMap,
     Json(input): Json<GenerateCpmsInstallInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -215,18 +215,25 @@ pub(crate) async fn generate_cpms_install_qr(
     // 中文注释:安装码以机构自身 sfid_number 为唯一键(写/读同键);按 sfid 反查机构真源,
     // 不再用 (province,city,institution) 三元组重解析(institution_code 如 ZF 是类别码,
     // 同市可命中数十个机构,曾导致公安局页面生成的安装码错落到农业局名下)。
-    let Some((province, city, province_code, city_code, institution_code, institution_name, category)) =
-        (match state.db.find_cpms_target_institution_by_sfid(&sfid_number) {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::error!(error = %err, "query cpms target institution by sfid failed");
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "institution query failed",
-                );
-            }
-        })
+    let Some((
+        province,
+        city,
+        province_code,
+        city_code,
+        institution_code,
+        institution_name,
+        category,
+    )) = (match state.db.find_cpms_target_institution_by_sfid(&sfid_number) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "query cpms target institution by sfid failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "institution query failed",
+            );
+        }
+    })
     else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
@@ -239,7 +246,7 @@ pub(crate) async fn generate_cpms_install_qr(
             "install code is only available for PUBLIC_SECURITY institutions",
         );
     }
-    // sheng admin 只能给本省机构发码;federal(无 scope)放行。
+    // federal admin 只能给本省机构发码;federal(无 scope)放行。
     if let Some(scope) = ctx.admin_province.as_deref() {
         if province != scope {
             return api_error(
@@ -393,7 +400,7 @@ pub(crate) async fn reissue_install_token(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -500,7 +507,7 @@ async fn update_cpms_site_token_status(
     sfid_number: String,
     target: InstallTokenStatus,
 ) -> axum::response::Response {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -596,7 +603,7 @@ pub(crate) async fn delete_cpms_keys(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -659,7 +666,7 @@ pub(crate) async fn list_cpms_keys(
     headers: HeaderMap,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -700,7 +707,7 @@ pub(crate) async fn get_cpms_site_by_institution(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -748,7 +755,7 @@ async fn update_cpms_site_status(
     target_status: CpmsSiteStatus,
     reason: Option<String>,
 ) -> axum::response::Response {
-    let ctx = match require_sheng_admin(&state, &headers) {
+    let ctx = match require_federal_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };

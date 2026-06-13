@@ -82,8 +82,8 @@ pub(crate) fn resolve_created_by(
             return Ok((None, None));
         };
         let role_str = match admin.role {
-            crate::admins::model::AdminRole::ShengAdmin => "FEDERAL_ADMIN",
-            crate::admins::model::AdminRole::ShiAdmin => "SHI_ADMIN",
+            crate::admins::model::AdminRole::FederalAdmin => "FEDERAL_ADMIN",
+            crate::admins::model::AdminRole::CityAdmin => "CITY_ADMIN",
         };
         let name_opt = if admin.admin_name.trim().is_empty() {
             None

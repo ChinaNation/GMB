@@ -63,7 +63,7 @@
 wuminapp / wumin 边界：
 - wuminapp 的 `governance/runtime-upgrade` 不发起协议升级提案，不选择 WASM，不获取人口快照，不提交 `propose_runtime_upgrade`。
 - wuminapp 只展示协议升级介绍、协议升级提案详情，并保留现有提案详情页投票入口。
-- wumin 冷钱包不恢复 runtime-upgrade SCALE decoder；大 WASM 交易继续走哈希直签例外，由用户核对显示字段中的代码哈希。
+- wumin 公民钱包不恢复 runtime-upgrade SCALE decoder；大 WASM 交易继续走哈希直签例外，由用户核对显示字段中的代码哈希。
 
 ## 2. 运行时接线
 Runtime 配置位置：

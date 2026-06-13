@@ -16,7 +16,7 @@ GMB 是一套由离线实名、在线身份、链上权限、移动端交互和 
 - `cpms`：完全离线实名录入、审核、签发系统
 - `sfid`：在线身份验证、账户绑定、permit 签发系统
 - `citizenchain`：区块链 runtime、节点程序、节点 UI、桌面安装包
-- `wuminapp`：手机端钱包与业务入口
+- `wuminapp`：公民端钱包与业务入口
 - `memory`：AI 永久记忆中心
 
 ## 3. AI 开发目标

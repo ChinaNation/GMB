@@ -3,9 +3,9 @@
 //
 // 主体属性统一联动(与后端号码生成器/subjects/uninorg 同源):
 //   G → 盈利属性锁死非盈利;公权入口建公权机构(ZF/LF/SF/JC)、教育入口建公立学校(JY),名称必填
-//   S → 盈利属性可选;私权两步式 / 教育私立学校(名称必填)
-//   F → 非法人必选"所属法人"(创建即挂,不存在未挂靠非法人),盈利属性继承所属法人;
-//       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级;私权→全国)
+//   S → 私权类型规则锁定 T2/P1;教育私立学校名称必填
+//   F → 个体经营/无限合伙是独立非法人;分校等从属非法人必须选择所属法人,
+//       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级)
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { AutoComplete, Button, Col, Form, Input, Modal, Row, Select, Spin, Upload } from 'antd';
@@ -18,6 +18,8 @@ import type {
   CreateInstitutionOutput,
   LegalRepresentativePhoto,
   ParentInstitutionRow,
+  PartnershipKind,
+  PrivateType,
   SearchParentsOptions,
 } from '../../subjects/api';
 import { searchLegalRepresentativeCitizens } from '../../citizens/api';
@@ -26,6 +28,8 @@ import {
   institutionChoicesFor,
   locksForCategory,
   p1LocksForSubject,
+  privateRuleFor,
+  PRIVATE_TYPE_LABEL,
   SUBJECT_PROPERTY_LABEL,
   type CreateFormCategory,
 } from '../../subjects/labels';
@@ -37,9 +41,11 @@ interface FormValues {
   province: string;
   city: string;
   institution: string;
-  /** S/F 两步式不填;教育机构(JY 学校)和手动公权机构(G)必填名称。 */
+  private_type?: PrivateType;
+  partnership_kind?: PartnershipKind;
+  /** 私权/教育机构/手动公权机构创建时必填名称。 */
   institution_name?: string;
-  /** 非法人(F)必填:所属法人 sfid_number,创建即挂。 */
+  /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_sfid_number?: string;
   legal_rep_name: string;
   legal_rep_sfid_number: string;
@@ -75,6 +81,7 @@ type SearchParentInstitutions = (
 export interface CreateInstitutionFormProps {
   auth: AdminAuth;
   category: CreateFormCategory;
+  privateType?: PrivateType;
   open: boolean;
   lockedProvince: string | null;
   lockedCity: string | null;
@@ -89,6 +96,7 @@ export interface CreateInstitutionFormProps {
 export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   auth,
   category,
+  privateType,
   open,
   lockedProvince,
   lockedCity,
@@ -122,20 +130,37 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const isPrivate = category === 'PRIVATE_INSTITUTION';
   const isGov = category === 'GOV_INSTITUTION';
   const isEducation = category === 'EDUCATION_INSTITUTION';
+  const watchedPartnershipKind = Form.useWatch('partnership_kind', form) as PartnershipKind | undefined;
+  const privateRule = isPrivate && privateType
+    ? privateRuleFor(privateType, watchedPartnershipKind)
+    : null;
   const isF = currentSubjectProperty === 'F';
+  const requiresParent = isF && !isPrivate;
 
-  // 中文注释:教育学校(G/S/F 含分校)和手动公权机构(G)名称必填;其余 S/F 两步式不收名称。
-  const collectNameInModal = isEducation || (isGov && !isF);
+  // 中文注释:私权目标态创建阶段直接写入名称;教育学校和手动公权机构也在弹窗内查重。
+  const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
   const nameLabel = isEducation ? '学校名称' : '机构名称';
 
-  const instChoices = useMemo(
-    () => institutionChoicesFor(category, currentSubjectProperty),
-    [category, currentSubjectProperty],
-  );
-  const p1Locks = useMemo(
-    () => p1LocksForSubject(currentSubjectProperty, selectedParent),
-    [currentSubjectProperty, selectedParent],
-  );
+  const instChoices = useMemo(() => {
+    if (privateRule) {
+      return [{ value: privateRule.institution, label: PRIVATE_TYPE_LABEL[privateRule.privateType] }];
+    }
+    return institutionChoicesFor(category, currentSubjectProperty);
+  }, [category, currentSubjectProperty, privateRule]);
+  const p1Locks = useMemo(() => {
+    if (privateRule) {
+      return {
+        choices: [
+          privateRule.p1 === '1'
+            ? { value: '1', label: '盈利' }
+            : { value: '0', label: '非盈利' },
+        ],
+        value: privateRule.p1,
+        locked: true,
+      };
+    }
+    return p1LocksForSubject(currentSubjectProperty, selectedParent);
+  }, [currentSubjectProperty, selectedParent, privateRule]);
 
   const resetParentState = () => {
     setSelectedParent(null);
@@ -144,18 +169,23 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    const defaultSubjectProperty = locks.subjectPropertyChoices[0]?.value ?? '';
+    const defaultPartnershipKind: PartnershipKind | undefined =
+      privateType === 'PARTNERSHIP' ? 'GENERAL' : undefined;
+    const defaultRule = privateType ? privateRuleFor(privateType, defaultPartnershipKind) : null;
+    const defaultSubjectProperty = defaultRule?.subjectProperty ?? locks.subjectPropertyChoices[0]?.value ?? '';
     setCurrentSubjectProperty(defaultSubjectProperty);
     setNameAvailable(null);
     resetParentState();
-    const defaultInstitution = institutionChoicesFor(category, defaultSubjectProperty)[0]?.value;
-    const defaultCollectName = isEducation || (isGov && defaultSubjectProperty === 'G');
+    const defaultInstitution = defaultRule?.institution ?? institutionChoicesFor(category, defaultSubjectProperty)[0]?.value;
+    const defaultCollectName = isPrivate || isEducation || (isGov && defaultSubjectProperty === 'G');
     form.setFieldsValue({
       subject_property: defaultSubjectProperty,
-      p1: p1LocksForSubject(defaultSubjectProperty, null).value,
+      p1: defaultRule?.p1 ?? p1LocksForSubject(defaultSubjectProperty, null).value,
       province: lockedProvince ?? '',
       city: lockedCity ?? '',
       institution: defaultInstitution,
+      private_type: privateType,
+      partnership_kind: defaultPartnershipKind,
       institution_name: defaultCollectName ? '' : undefined,
       parent_sfid_number: undefined,
       legal_rep_name: '',
@@ -167,7 +197,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     });
     setLegalRepOptions([]);
     setPhotoName('');
-  }, [open, category, lockedProvince, lockedCity]);
+  }, [open, category, privateType, lockedProvince, lockedCity]);
 
   useEffect(() => {
     if (!open || !lockedProvince) return;
@@ -207,6 +237,20 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     });
   };
 
+  const onPartnershipKindChange = (kind: PartnershipKind) => {
+    if (!privateType) return;
+    const rule = privateRuleFor(privateType, kind);
+    setCurrentSubjectProperty(rule.subjectProperty);
+    form.setFieldsValue({
+      subject_property: rule.subjectProperty,
+      p1: rule.p1,
+      institution: rule.institution,
+      partnership_kind: kind,
+      parent_sfid_number: undefined,
+    });
+    resetParentState();
+  };
+
   // ── 所属法人搜索/选定(仅 F)────────────────────────────────
 
   const parentSearchOptions = (): SearchParentsOptions | null => {
@@ -220,8 +264,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       fInstitution: (form.getFieldValue('institution') ?? '').trim(),
       province,
       city,
-      // 私权入口只挂私法人、公权入口只挂公法人;教育入口(分校)由后端按学校本部过滤
-      parentProperty: isGov ? 'G' : isPrivate ? 'S' : undefined,
+      // 公权入口只挂公法人;教育入口(分校)由后端按学校本部过滤。
+      parentProperty: isGov ? 'G' : undefined,
     };
   };
 
@@ -358,7 +402,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       notice.warning('请先点击搜索图标检查名称是否可用');
       return;
     }
-    if (isF) {
+    if (requiresParent) {
       // 非法人必须从搜索结果中选定所属法人,手填未选定的不放行
       if (!selectedParent || selectedParent.sfid_number !== (values.parent_sfid_number ?? '').trim()) {
         notice.warning('请从搜索结果中选择所属法人');
@@ -376,7 +420,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         institution_name: collectNameInModal
           ? (values.institution_name ?? '').trim()
           : undefined,
-        parent_sfid_number: isF ? (values.parent_sfid_number ?? '').trim() : undefined,
+        parent_sfid_number: requiresParent ? (values.parent_sfid_number ?? '').trim() : undefined,
+        private_type: isPrivate ? privateType : undefined,
+        partnership_kind: isPrivate && privateType === 'PARTNERSHIP'
+          ? values.partnership_kind
+          : undefined,
         legal_rep_name: values.legal_rep_name.trim(),
         legal_rep_sfid_number: values.legal_rep_sfid_number.trim(),
         legal_rep_photo_path: values.legal_rep_photo_path,
@@ -384,12 +432,14 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         legal_rep_photo_mime: values.legal_rep_photo_mime,
         legal_rep_photo_size: values.legal_rep_photo_size,
       });
-      if (isEducation) {
+      if (isPrivate && privateType) {
+        notice.success(`${PRIVATE_TYPE_LABEL[privateType]}已创建:${result.sfid_number}`);
+      } else if (isEducation) {
         notice.success(`学校机构已创建:${result.sfid_number}`);
       } else if (collectNameInModal) {
         notice.success(`公权机构已创建:${result.sfid_number}`);
       } else {
-        notice.success(`身份ID 已生成,请到详情页完善信息:${result.sfid_number}`);
+        notice.success(`身份ID 已生成:${result.sfid_number}`);
       }
       onCreated(result);
     } catch (err) {
@@ -407,13 +457,17 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
   };
 
-  const subjectPropertyDisabled = locks.subjectPropertyChoices.length === 1;
+  const subjectPropertyDisabled = isPrivate || locks.subjectPropertyChoices.length === 1;
   const instDisabled = instChoices.length === 1;
   const nameCheckPassed = !collectNameInModal || nameAvailable === true;
 
   return (
     <Modal
-      title={<div style={{ textAlign: 'center', width: '100%' }}>{locks.modalTitle}</div>}
+      title={
+        <div style={{ textAlign: 'center', width: '100%' }}>
+          {isPrivate && privateType ? `新增${PRIVATE_TYPE_LABEL[privateType]}` : locks.modalTitle}
+        </div>
+      }
       open={open}
       onCancel={onCancel}
       footer={[
@@ -440,6 +494,19 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         {/* 中文注释:短选项字段双列排布压低弹窗高度;所属法人/法定代表人身份ID 内容长,保持整行。 */}
         <Row gutter={16}>
+          {isPrivate && privateType === 'PARTNERSHIP' && (
+            <Col span={24}>
+              <Form.Item label="合伙类型" name="partnership_kind" rules={[{ required: true }]}>
+                <Select
+                  options={[
+                    { value: 'GENERAL', label: '无限合伙' },
+                    { value: 'LIMITED', label: '有限合伙' },
+                  ]}
+                  onChange={onPartnershipKindChange}
+                />
+              </Form.Item>
+            </Col>
+          )}
           <Col span={12}>
             <Form.Item label="主体属性" name="subject_property" rules={[{ required: true }]}>
               <Select options={locks.subjectPropertyChoices} disabled={subjectPropertyDisabled} onChange={onSubjectPropertyChange} />
@@ -534,7 +601,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             </Col>
           )}
         </Row>
-        {isF && (
+        {requiresParent && (
           <>
             <Form.Item
               label={isEducation ? '所属法人(学校本部)' : '所属法人'}

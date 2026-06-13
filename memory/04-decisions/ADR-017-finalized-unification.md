@@ -32,7 +32,7 @@
 
 ### sfid 后端——基本已达标
 - indexer 已 `subscribe_finalized` + finalized head(C 类)✓;推链三件套保持"只等 InBestBlock"(豁免;可选升级等 Finalized,P2 决策项)。
-- cpms 后端不读链 ✓;wumin 冷钱包离线 ✓。
+- cpms 后端不读链 ✓;wumin 公民钱包离线 ✓。
 
 ### 原生层(smoldot)——0 改动
 - `chain_finalized_storage_values` 等 finalized 原生变体已齐;Dart 路由切换即可。无按任意哈希钉块的原生读取能力(本方案不需要;留备忘)。

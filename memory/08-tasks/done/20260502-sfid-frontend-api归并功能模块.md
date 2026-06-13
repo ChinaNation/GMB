@@ -16,7 +16,7 @@
 - 登录/会话 API 放 `sfid/frontend/auth/api.ts`。
 - 机构 API 放 `sfid/frontend/institutions/api.ts`。
 - 公民 API 放 `sfid/frontend/citizens/api.ts`。
-- 省管理员 API 放 `sfid/frontend/sheng_admins/api.ts`。
+- 联邦管理员 API 放 `sfid/frontend/sheng_admins/api.ts`。
 - 市管理员 API 放 `sfid/frontend/shi_admins/api.ts`。
 - 链交互 API 保持 `chain_` 前缀,例如 `institutions/chain_duoqian_info.ts`。
 
@@ -31,7 +31,7 @@
 - `sfid/frontend/citizens/`
   - 中文注释:公民前端目录;承接公民列表、绑定、解绑、推链绑定、CPMS 状态扫码 API。
 - `sfid/frontend/sheng_admins/`
-  - 中文注释:省管理员前端目录;承接省管理员本地业务 API,链交互 API 仍在 `chain_sheng_admins.ts`。
+  - 中文注释:联邦管理员前端目录;承接联邦管理员本地业务 API,链交互 API 仍在 `chain_sheng_admins.ts`。
 - `sfid/frontend/shi_admins/`
   - 中文注释:市管理员前端目录;承接操作员管理 API。
 - 旧全局 API 目录

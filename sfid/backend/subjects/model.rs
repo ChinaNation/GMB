@@ -52,9 +52,9 @@ pub struct Institution {
     pub sfid_number: String,
     /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
     ///
-    /// 两步式创建(2026-04-19):
-    ///   - 私权机构(S/F)第一步创建时为 `None`,由详情页 `update_institution` 补填
-    ///   - `JY` 手动新增学校机构时必传
+    /// 机构创建时写入名称:
+    ///   - 六类私权机构由对应 Tab 创建,名称与法定代表人资料同步写入
+    ///   - `JY` 手动新增学校机构必传
     ///   - 自动公权机构/公安局由系统生成名称,不会为 `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub institution_name: Option<String>,
@@ -95,13 +95,18 @@ pub struct Institution {
     /// 公权机构细类代码,例如 CITY_FINANCE、TOWN_GOV。私权机构可为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
-    /// 私法人子类型(仅 SubjectProperty=S 时有值)。
-    /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK / NON_PROFIT
+    /// 私权机构类型。仅私权机构有值,取值见 `private/common::PrivateType`。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sub_type: Option<String>,
-    /// 所属法人身份ID(**仅 SubjectProperty=F 非法人必填**)。
+    pub private_type: Option<String>,
+    /// 合伙企业形态。仅 private_type=PARTNERSHIP 时有值:GENERAL / LIMITED。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partnership_kind: Option<String>,
+    /// 是否具有法人资格。仅私权机构有值;公权机构由主体属性 G 表达法人资格。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_legal_personality: Option<bool>,
+    /// 所属法人身份ID(仅需要挂靠的 SubjectProperty=F 非法人填写)。
     /// 指向一个私法人(S)或公法人(G)机构的 sfid_number。
-    /// 非法人机构必须挂在某个法人机构下,全国范围可选。
+    /// 个体经营(F+GT)和无限合伙(F+GP)是独立非法人,不填写所属法人。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
     /// 法定代表人姓名。初始化目录机构允许为空;机构资料编辑保存时必须补齐。
@@ -206,19 +211,20 @@ pub struct CreateInstitutionInput {
     pub province: Option<String>,
     pub city: String,
     pub institution: String,
-    /// 两步式:S/F 两步式不传,由详情页 `update_institution` 补填;
-    /// `JY` 学校机构和手动公权机构(G)必传;自动公权机构不走该创建 DTO。
+    /// 机构名称。目标态私权、公权和教育新增都应在创建阶段写入名称。
     pub institution_name: Option<String>,
-    /// 所属法人身份ID。非法人(F)创建必传(创建即挂,不存在未挂靠非法人),
-    /// 其它主体属性不接受;校验规则单一权威源见 `subjects/uninorg`。
+    /// 所属法人身份ID。仅需要挂靠的非法人(F)使用;个体经营和无限合伙是独立非法人,
+    /// 不接受所属法人。
     #[serde(default)]
     pub parent_sfid_number: Option<String>,
     pub sfid_name: Option<String>,
     pub short_name: Option<String>,
-    /// 私法人子类型。两步式改造后:**创建阶段不再接受** sub_type,
-    /// 统一由 `update_institution` 在详情页设置;创建请求传入该字段会被拒绝。
+    /// 私权机构类型。私权入口创建时必传,由后端锁定主体属性和机构码。
     #[serde(default)]
-    pub sub_type: Option<String>,
+    pub private_type: Option<String>,
+    /// 合伙类型。private_type=PARTNERSHIP 时必传,其它类型不接收。
+    #[serde(default)]
+    pub partnership_kind: Option<String>,
     /// 法定代表人姓名,新增机构必填。
     #[serde(default)]
     pub legal_rep_name: Option<String>,
@@ -244,7 +250,7 @@ pub struct CreateInstitutionOutput {
     pub category: InstitutionCategory,
 }
 
-/// 两步式第二步:机构详情页提交的可编辑字段。
+/// 机构详情页提交的可编辑字段。私权类型由身份 ID 机构码决定,创建后不允许改。
 #[derive(Debug, Deserialize)]
 pub struct UpdateInstitutionInput {
     pub institution_name: Option<String>,
@@ -252,7 +258,6 @@ pub struct UpdateInstitutionInput {
     pub sfid_name: Option<String>,
     #[serde(default)]
     pub short_name: Option<String>,
-    pub sub_type: Option<String>,
     /// 所属法人 sfid_number(仅 F 可设置;S/G 传值会被拒)
     #[serde(default)]
     pub parent_sfid_number: Option<String>,
@@ -297,11 +302,9 @@ pub struct CreateAccountOutput {
 
 /// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
 ///
-/// 中文注释:JY 学校归教育 tab + 非法人(F)按所属法人分流后,列表按入口拆三路
-/// (子句引用父级别名 `par`,查询必须 `LEFT JOIN subjects par ON par.sfid_number =
-/// s.parent_sfid_number`):
-/// - `Private`:私权 tab = S 非 JY + 父级为私法人的 F(父级缺失的 F 防御性兜底在私权,
-///   保证数据异常时仍可见);
+/// 中文注释:JY 学校归教育 tab,私权目标类型归 private tab,公权目录仍承接公权本体
+/// 和公权下属非法人:
+/// - `Private`:私权 tab = 目标私权类型,可用 private_type 继续过滤;
 /// - `Gov`:公权 tab = 公权机构(排除手动 JY 学校,自动监管本体如公民教育委员会保留)
 ///   + 父级为公法人的 F;
 /// - `Education`:教育 tab = 手动 JY 行(G/S 学校本部 + F+JY 分校),跨两个存储 category。
@@ -317,8 +320,7 @@ impl InstitutionListFilter {
     pub fn sql_clause(&self) -> &'static str {
         match self {
             Self::Private => {
-                "AND s.category = 'PRIVATE_INSTITUTION' AND s.institution_code <> 'JY'
-                 AND (s.subject_property <> 'F' OR COALESCE(par.subject_property, 'S') <> 'G')"
+                "AND s.category = 'PRIVATE_INSTITUTION' AND s.private_type IS NOT NULL"
             }
             Self::Gov => {
                 "AND ((s.category = 'GOV_INSTITUTION'
@@ -352,7 +354,11 @@ pub struct InstitutionListRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_type: Option<String>,
+    pub private_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partnership_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_legal_personality: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
     pub account_count: usize,
@@ -367,7 +373,7 @@ pub struct InstitutionListRow {
     /// 命中:admin_name;未命中:None(前端显示为"未知")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"FEDERAL_ADMIN" / "SHI_ADMIN" / None
+    /// 创建者角色:"FEDERAL_ADMIN" / "CITY_ADMIN" / None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }
@@ -378,9 +384,11 @@ pub struct ParentInstitutionRow {
     pub sfid_number: String,
     pub institution_name: String,
     pub subject_property: String,
-    /// 私法人子类型(仅 subject_property=S 有值);F 前端用此判断父 S 是否 JOINT_STOCK 以开放清算行设置
+    /// 私权机构类型。前端只用于展示父级机构事实,不派生链上业务角色。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_type: Option<String>,
+    pub private_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partnership_kind: Option<String>,
     pub category: InstitutionCategory,
     /// 盈利属性。非法人创建时前端按"盈利属性附属于所属法人"用它推导 F 的 p1
     /// (公法人父级恒 0;私法人父级继承该值),后端 `uninorg::inherited_p1` 复核。
@@ -398,7 +406,7 @@ pub struct InstitutionDetailOutput {
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"FEDERAL_ADMIN" / "SHI_ADMIN"
+    /// 创建者角色:"FEDERAL_ADMIN" / "CITY_ADMIN"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }

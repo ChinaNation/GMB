@@ -5,6 +5,9 @@
 SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend/src/` 壳。前后端业务命名保持一致,公权机构使用 `gov`,私权机构使用 `private`,主体公共能力使用 `subjects`。
 
 系统不维护历史兼容通道。所有业务主数据只存在于结构化数据库表,不得在运行期再维护第二套聚合主数据。
+重构后不得保留不符合目标态的旧数据。私权机构拆分后,`PRIVATE_INSTITUTION` 行必须带有
+非空 `name` 和六类之一的 `private_type`,否则必须在同一任务中删除其 `subjects/private/accounts/docs/ids/audit`
+关联残留,不得补字段后作为兼容数据继续保留。
 
 ## 启动流程
 
@@ -28,10 +31,10 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 ### 主体身份
 
 - `ids(sfid_number, kind, p_code, c_code)`:全局身份 ID 索引。
-- `subjects`:主体公共展示字段,按省分区;机构行保存 `name/full_name/short_name`、行政区、业务状态和法定代表人资料。
+- `subjects`:主体公共展示字段,按省分区;机构行保存 `name/sfid_name/short_name`、行政区、业务状态、私权分类和法定代表人资料。
 - `citizens`:公民电子护照绑定字段,按省分区。
 - `gov`:公权机构扩展字段,按省分区;只保存 `institution_code/org_code` 等机构类型细分。
-- `private`:私权机构和非法人扩展字段,按省分区。
+- `private`:私权目标类型机构扩展字段,按省分区;分类字段为 `private_type/partnership_kind/has_legal_personality`。
 
 `sfid_number` 是唯一且不可变的身份标识。不得新增 `identity_key`、`generation_key` 等第二身份键。
 
@@ -52,8 +55,8 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 ### 管理员与安全
 
-- `admins`:联邦管理员/市级管理员。
-- `sheng_admin_scope`:联邦管理员所属省。
+- `admins`:联邦管理员/市管理员。
+- `federal_admin_scope`:联邦管理员所属省。
 - `admin_sessions`:登录会话。
 - `admin_login_challenges`:签名登录挑战。
 - `admin_qr_login_results`:扫码登录结果。
@@ -61,6 +64,8 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 - `admin_action_challenges`、`admin_security_grants`:高风险操作二次确认。
 
 登录挑战、二维码结果和会话属于短生命周期安全运行态。清理逻辑必须在 Rust 中先计算明确截止时间,再把时间点传给 SQL 比较;SQL 中不得使用 `$1 - interval '...'` 这类参数参与 interval 运算的写法,避免 PostgreSQL 无法推断绑定参数类型。数据库错误必须展开 PostgreSQL 的 SQLSTATE、message、detail 和 hint,不得只把 `db error` 传到前端或启动日志。
+任何会在持有数据库连接锁时读取 `postgres::Row` 的代码,必须保证 SELECT 字段顺序和 `row.get(index)`
+逐项一致;越界 panic 会污染连接池并导致后续接口出现 `postgres client lock poisoned`。
 
 ### CPMS 与公民绑定
 
@@ -78,14 +83,14 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 ## 权限模型
 
-管理员分为联邦管理员和市级管理员:
+管理员分为联邦管理员和市管理员:
 
 - 联邦管理员:只能增删改查所属省数据。
-- 市级管理员:只能增删改查所属市数据。
+- 市管理员:只能增删改查所属市数据。
 
 所有列表和 CRUD 接口必须把管理员范围转成 SQL 条件。禁止读取全量数据后在 Rust 或前端过滤。
 
-市级管理员范围不单独建表。市级管理员记录保存在 `admins`,所属市使用 `admins.city`,所属省通过 `admins.created_by` 指向的联邦管理员和 `sheng_admin_scope` 解析。注册局页面统一显示 `联邦管理员列表`、`市级管理员列表`;市级管理员在该页面只读查看本人所属省的联邦管理员和本人所属市的市级管理员目录,不得显示新增、编辑或删除入口。
+市管理员范围不单独建表。市管理员记录保存在 `admins`,所属市使用 `admins.city`,所属省通过 `admins.created_by` 指向的联邦管理员和 `federal_admin_scope` 解析。注册局页面统一显示 `联邦管理员列表`、`市管理员列表`;市管理员在该页面只读查看本人所属省的联邦管理员和本人所属市的市管理员目录,不得显示新增、编辑或删除入口。
 
 ## 前端交互与提示
 
@@ -101,6 +106,10 @@ SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件
 
 业务组件捕获异常时必须把原始错误对象传给 `notice.error(error, '中文兜底提示')`,不得先取 `error.message` 再传入提示入口。后端 `ApiError.error_code` 和原始 `message` 的翻译只允许在 `notice.ts` 中实现;无法识别的英文错误必须在统一入口降级为中文兜底提示,不得原样显示给用户。
 
+管理员扫码登录的端侧职责固定为:SFID 页面生成 `WUMIN_QR_V1 / login_challenge`,
+`wumin` 公民钱包扫描并生成 `login_receipt`,SFID 页面再扫描该登录回执。`wuminapp`
+不承担管理员登录 QR 职责,前端文案不得引导用户使用 wuminapp 处理登录挑战。
+
 ## 公权机构
 
 `gov` 模块负责:
@@ -113,9 +122,15 @@ SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件
 
 ## 私权机构与非法人
 
-私权机构由注册局管理员人工注册。学校属于私权机构的一种,机构类型使用教育委员会代码 `JY`。
+私权机构由注册局管理员人工注册。私权入口拆成个体经营、合伙企业、股权公司、股份公司、
+公益组织、注册协会六类;身份 ID 格式不变,后端按 `private_type` 锁定
+`subject_property + institution_code + p1`。
+
+教育委员会学校机构统一归教育机构入口管理,机构类型使用教育委员会代码 `JY`,不在私权六类 Tab 中出现。
 
 非法人能力放在 `sfid/backend/subjects/uninorg`,因为公权机构和私权机构都可能拥有从属非法人机构。
+个体经营 `F+GT` 和无限合伙 `F+GP` 是独立非法人,不选择所属法人;其它从属非法人仍按
+`subjects/uninorg` 校验所属法人、地域和盈利属性继承。
 
 ## 公开接口
 
@@ -124,15 +139,17 @@ SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件
 - `/api/v1/app/institutions/search`
 - `/api/v1/app/institutions/:sfid_number`
 - `/api/v1/app/institutions/:sfid_number/accounts`
-- `/api/v1/app/clearing-banks/search`
-- `/api/v1/app/clearing-banks/eligible-search`
 - `/api/v1/app/voters/count`
 - `/api/v1/app/vote/credential`
 - `/api/v1/app/myid/status`
+
+清算行属于链上组织治理概念,不属于 SFID 身份设计;SFID 不提供清算行相关公开接口。
 
 ## 禁止项
 
 - 不得恢复旧聚合快照目录或旧运行期分片缓存。
 - 不得双写历史格式。
 - 不得新增历史兼容接口。
+- 不得保留旧数据、旧注释、旧文档或旧 UI 文案作为兼容口径。
+- 涉及 API、数据库、登录、扫码或页面展示的任务,不得只用编译或 build 作为完成验收;必须打真实服务接口或检查真实页面。
 - 不得在 SFID 业务模块内实现投票流程。投票流程只属于投票引擎,SFID 只签发其已定义的凭证。

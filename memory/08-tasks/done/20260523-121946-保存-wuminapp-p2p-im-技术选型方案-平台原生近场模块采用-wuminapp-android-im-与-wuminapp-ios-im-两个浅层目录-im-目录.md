@@ -98,6 +98,6 @@
 ## 完成信息
 
 - 完成时间：2026-05-23 12:22:25
-- 完成摘要：已保存并补充 wuminapp P2P IM 技术架构：手机端统一“信息”Tab 集中显示远程通信全节点与近场消息；通信全节点规划为 `citizenchain/node/src/im/`，只复用既有 libp2p 网络能力，不依赖钱包、治理、交易或身份实名模块；Android/iOS 原生近场模块采用 `android/im` 与 `ios/im` 浅层目录；技术上优先复用成熟库和系统框架，禁止自研底层通信协议、加密算法、局域网模式和公共全节点中继。
+- 完成摘要：已保存并补充 wuminapp P2P IM 技术架构：公民端统一“信息”Tab 集中显示远程通信全节点与近场消息；通信全节点规划为 `citizenchain/node/src/im/`，只复用既有 libp2p 网络能力，不依赖钱包、治理、交易或身份实名模块；Android/iOS 原生近场模块采用 `android/im` 与 `ios/im` 浅层目录；技术上优先复用成熟库和系统框架，禁止自研底层通信协议、加密算法、局域网模式和公共全节点中继。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

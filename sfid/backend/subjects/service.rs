@@ -174,71 +174,6 @@ pub fn derive_category(
     classify(subject_property, code, institution_name)
 }
 
-// ─── 两步式第二步:sub_type 与 P1 联动校验 ──────────────────────
-//
-// 联动规则:
-//   P1 = "0" (非盈利) → sub_type 必须为 "NON_PROFIT"
-//   P1 = "1" (盈利)   → sub_type 必须为 SOLE_PROPRIETORSHIP / PARTNERSHIP /
-//                       LIMITED_LIABILITY / JOINT_STOCK 四选一
-//
-// 仅 S(私法人)需要 sub_type;F(非法人)一律不得传,传了报错。
-
-/// 允许的 S sub_type 全集。
-pub const VALID_SUB_TYPES: &[&str] = &[
-    "SOLE_PROPRIETORSHIP",
-    "PARTNERSHIP",
-    "LIMITED_LIABILITY",
-    "JOINT_STOCK",
-    "NON_PROFIT",
-];
-
-/// 校验 sub_type 与 (subject_property, p1) 组合是否合法。
-///
-/// - `subject_property == "S"`:必须提供 sub_type,且与 p1 联动正确
-/// - `subject_property == "F"`:不得提供 sub_type(传了则返回错误)
-/// - 其他 subject_property(含 G):不得提供 sub_type
-pub fn validate_sub_type_with_p1(
-    subject_property: &str,
-    p1: &str,
-    sub_type: Option<&str>,
-) -> Result<Option<String>, ServiceError> {
-    let trimmed = sub_type.map(str::trim).filter(|s| !s.is_empty());
-    match subject_property {
-        "S" => {
-            let st = trimmed.ok_or(ServiceError::BadInput("私法人(S)必须选择企业类型"))?;
-            if !VALID_SUB_TYPES.contains(&st) {
-                return Err(ServiceError::BadInput(
-                    "企业类型非法(仅 SOLE_PROPRIETORSHIP/PARTNERSHIP/LIMITED_LIABILITY/JOINT_STOCK/NON_PROFIT)",
-                ));
-            }
-            match p1 {
-                "0" => {
-                    if st != "NON_PROFIT" {
-                        return Err(ServiceError::BadInput(
-                            "P1=非盈利 时企业类型必须为 NON_PROFIT",
-                        ));
-                    }
-                }
-                "1" => {
-                    if st == "NON_PROFIT" {
-                        return Err(ServiceError::BadInput(
-                            "P1=盈利 时企业类型不得为 NON_PROFIT",
-                        ));
-                    }
-                }
-                _ => return Err(ServiceError::BadInput("P1 非法(仅 0/1)")),
-            }
-            Ok(Some(st.to_string()))
-        }
-        _ => {
-            if trimmed.is_some() {
-                return Err(ServiceError::BadInput("仅私法人(S)才允许设置企业类型"));
-            }
-            Ok(None)
-        }
-    }
-}
-
 /// 构造指定机构的 2 条默认未上链账户。
 ///
 /// 中文注释:默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
@@ -287,7 +222,7 @@ mod tests {
             Some(InstitutionCategory::GovInstitution)
         );
         assert_eq!(
-            derive_category("S", "ZG", "某公司"),
+            derive_category("S", "GQ", "某公司"),
             Some(InstitutionCategory::PrivateInstitution)
         );
         assert_eq!(derive_category("M", "ZG", "xxx"), None);

@@ -167,7 +167,7 @@ impl std::fmt::Display for QrParseError {
 
 impl std::error::Error for QrParseError {}
 
-/// 解析 login_receipt envelope。后端收到 wumin 冷钱包的回执后使用。
+/// 解析 login_receipt envelope。后端收到 wumin 公民钱包的回执后使用。
 pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseError> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| QrParseError::BadJson(e.to_string()))?;

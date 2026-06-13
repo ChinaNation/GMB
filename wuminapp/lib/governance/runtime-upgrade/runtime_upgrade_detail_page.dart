@@ -473,7 +473,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     required String requestPrefix,
     required SignDisplay display,
   }) async {
-    // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
+    // 管理员投票统一通过 QR 码签名（wumin 公民钱包）
     final qrSigner = QrSigner();
     final request = qrSigner.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: '$requestPrefix-'),

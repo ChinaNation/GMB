@@ -407,7 +407,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'tx-');
           final toAddr = _toController.text.trim();
-          // 中文注释：冷钱包确认页按同一金额格式展示，确保 display 字段逐字可核对。
+          // 中文注释：公民钱包确认页按同一金额格式展示，确保 display 字段逐字可核对。
           final amountFormatted = AmountFormat.format(
                   AmountFormat.tryParse(_amountController.text) ?? 0,
                   symbol: '')

@@ -8,7 +8,7 @@ import 'package:wuminapp_mobile/wallet/widgets/wallet_qr_dialog.dart';
 /// 钱包身份卡(钱包详情页第 2 张卡)。
 ///
 /// 中文注释:
-/// - 样式参照 wumin 冷钱包 `wumin/lib/ui/wallet_detail_page.dart:277-342`,
+/// - 样式参照 wumin 公民钱包 `wumin/lib/ui/wallet_detail_page.dart:277-342`,
 ///   翠绿 primaryGradient 背景 + 左图标 + 中钱包名/地址 + 右 QR 图标。
 /// - 钱包名可点击进入编辑态;提交(回车 / onTapOutside)时通过 [onNameChanged]
 ///   回调让外层落盘。空字符串或与现值相同则回滚不报错,由编辑态自行处理。

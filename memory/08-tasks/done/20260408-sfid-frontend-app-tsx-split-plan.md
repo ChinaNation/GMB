@@ -40,12 +40,12 @@ src/
 │   │   ├── UnbindModal.tsx              # 解绑
 │   │   └── citizen-columns.tsx          # 表格列定义
 │   ├── operators/
-│   │   ├── OperatorsView.tsx            # ShiAdmin 市管理员 CRUD
+│   │   ├── FederalAdminsView.tsx            # CityAdmin 市管理员 CRUD
 │   │   ├── CreateOperatorModal.tsx
 │   │   └── OperatorScanner.tsx          # QR 扫码注册市管理员
-│   ├── sheng-admins/
-│   │   ├── ShengAdminsView.tsx          # 省管理员列表 + 替换
-│   │   └── ReplaceShengAdminModal.tsx
+│   ├── federal-registry/
+│   │   ├── FederalAdminsView.tsx          # 联邦管理员列表 + 替换
+│   │   └── ReplaceFederalAdminModal.tsx
 │   ├── keyring/
 │   ├── multisig-legacy/
 │   │   ├── LegacyMultisigView.tsx       # 老表(保留作兜底,后续可删)
@@ -110,23 +110,23 @@ src/
 **注意**:`onHandleOperationQr` 本次 CPMS 清理后只剩 QR4 citizen 状态扫描路径,严格说这属于 citizens 模块。拆分时要把它挪到 `citizens/` 而不是 `operators/`。
 
 **文件**:
-- `views/operators/OperatorsView.tsx`
-- `views/operators/CreateOperatorModal.tsx`
+- `views/city-admins/FederalAdminsView.tsx`
+- `views/city-admins/CreateOperatorModal.tsx`
 
 ---
 
-### 模块 4:`sheng-admins/` — 省管理员
+### 模块 4:`federal-registry/` — 联邦管理员
 
 **State**:
-- `shengAdmins` / `shengAdminsLoading` / `selectedShengAdmin` / `adminDetailTab`
+- `federalAdmins` / `federalAdminsLoading` / `selectedFederalAdmin` / `adminDetailTab`
 - `replaceSuperLoading` / `replaceSuperForm`
 
 **Handlers**:
-- `refreshShengAdmins` / `onReplaceShengAdmin`
+- `refreshFederalAdmins` / `onReplaceFederalAdmin`
 
 **文件**:
-- `views/sheng-admins/ShengAdminsView.tsx`
-- `views/sheng-admins/ReplaceShengAdminModal.tsx`
+- `views/federal-registry/FederalAdminsView.tsx`
+- `views/federal-registry/ReplaceFederalAdminModal.tsx`
 
 ---
 
@@ -198,13 +198,13 @@ function useSfidMeta(auth: AdminAuth | null) {
 | 步 | 内容 | 交付 | 验收 |
 |---|---|---|---|
 | **1** | **删除 multisig-legacy 死代码** | state / handler / Modal / api imports 整块删除;activeView === 'multisig' 分支保留 | tsc + build 绿;App.tsx 行数下降 |
-| **2** | 拆 `operators/` + `sheng-admins/` | 两个管理员模块一起(原步 3) | build 绿 + 手工点增删改 |
+| **2** | 拆 `operators/` + `federal-registry/` | 两个管理员模块一起(原步 3) | build 绿 + 手工点增删改 |
 | **3** | 拆 `keyring/` | 密钥轮换独立流程,有摄像头扫码(原步 4) | build 绿 + 手工发起一次轮换(不完成) |
 | **4** | 拆 `citizens/` | **最大的一块**,含绑定/解绑双流程(原步 5) | build 绿 + 手工扫码绑定一次 |
 | **5** | 拆 `auth/` (LoginView) | 独立登录 UI(原步 6) | build 绿 + 登出登录一次 |
 | **6** | App.tsx 最终清理 | 删除所有已迁走的 state / handler / import(原步 7) | **App.tsx ≤ 300 行**;`npm run build` 绿 |
 
-> system-settings 不单独成步,其 JSX 分支在步 2 随 operators + sheng-admins 一起迁走。
+> system-settings 不单独成步,其 JSX 分支在步 2 随 operators + federal-registry 一起迁走。
 > 原"步 0 预备 + AuthContext"已在前序任务合入,本轮不再重复。
 
 ## 每一步的动作模板
@@ -237,7 +237,7 @@ function useSfidMeta(auth: AdminAuth | null) {
 - 步 0:预备 + AuthContext 切换 — **1.5 小时**
 - 步 1:multisig-legacy — **1 小时**
 - 步 2:system-settings — **0.5 小时**
-- 步 3:operators + sheng-admins — **2 小时**
+- 步 3:operators + federal-registry — **2 小时**
 - 步 4:keyring — **2 小时**
 - 步 5:citizens(最大) — **4 小时**
 - 步 6:auth(LoginView) — **1.5 小时**

@@ -22,7 +22,7 @@
 - `sfid/backend/app_core/duoqian_info` 负责 SFID 与 DUOQIAN 链之间的机构信息交互。
 - `sfid/frontend/institutions` 负责机构相关前端页面。
 - `sfid/frontend/institutions/duoqian-info` 负责机构备案、链交互状态等前端组件。
-- 不迁移登录、公民、省管理员、市管理员等旧前端功能。
+- 不迁移登录、公民、联邦管理员、市管理员等旧前端功能。
 
 ## 验收
 

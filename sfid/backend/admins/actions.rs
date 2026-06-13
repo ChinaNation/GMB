@@ -1,4 +1,4 @@
-//! 管理员安全动作:Passkey 与 WUMIN_QR_V1/sign_request 冷钱包签名。
+//! 管理员安全动作:Passkey 与 WUMIN_QR_V1/sign_request 公民钱包签名。
 //!
 //! 中文注释:管理员治理动作、业务安全授权和短期挑战全部使用结构化表。
 //! 本文件不保留旧内存聚合体,也不做旧格式兼容。
@@ -21,17 +21,17 @@ use crate::admins::login::AdminAuthContext;
 use crate::admins::operation_auth::{
     ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
 };
-use crate::admins::operators::{
-    can_manage_operator_conn, count_shi_admins_in_city_conn, ensure_city_in_creator_province_conn,
-    find_operator_by_id_conn, operator_row_from_user_conn, MAX_ADMIN_NAME_CHARS,
-    MAX_SHI_ADMINS_PER_CITY,
+use crate::admins::city_admins::{
+    can_manage_city_admin_conn, count_city_admins_in_city_conn, ensure_city_in_creator_province_conn,
+    find_city_admin_by_id_conn, city_admin_row_from_user_conn, MAX_ADMIN_NAME_CHARS,
+    MAX_CITY_ADMINS_PER_CITY,
 };
 use crate::admins::passkeys::{
     active_passkeys, hash_json, payload_hash_for_text, signed_payload_text,
-    update_passkey_usage_conn, verify_cold_wallet_signature, webauthn, AdminSignedPayload,
+    update_passkey_usage_conn, verify_citizen_wallet_signature, webauthn, AdminSignedPayload,
     ADMIN_ACTION_TTL_SECONDS,
 };
-use crate::admins::province_admins::sheng_admin_province;
+use crate::admins::federal_admins::federal_admin_province;
 use crate::admins::repo;
 use crate::admins::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::qr::{build_sign_request, display_account, display_field as field};
@@ -88,13 +88,13 @@ pub(crate) struct PrepareAdminActionOutput {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct OperatorIdPayload {
+struct CityAdminIdPayload {
     id: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateOperatorActionPayload {
+struct UpdateCityAdminActionPayload {
     id: u64,
     #[serde(default)]
     admin_name: Option<String>,
@@ -102,14 +102,14 @@ struct UpdateOperatorActionPayload {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CreateShengAdminActionPayload {
+struct CreateFederalAdminActionPayload {
     admin_pubkey: String,
     admin_name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateShengAdminActionPayload {
+struct UpdateFederalAdminActionPayload {
     id: u64,
     admin_name: String,
 }
@@ -121,7 +121,7 @@ pub(crate) struct UpdateAdminNameInput {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ShengAdminIdPayload {
+struct FederalAdminIdPayload {
     id: u64,
 }
 
@@ -348,7 +348,7 @@ pub(crate) async fn commit_admin_action(
             Some(v) => v,
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "payload_hash is required"),
         };
-        if let Err(resp) = verify_cold_wallet_signature(
+        if let Err(resp) = verify_citizen_wallet_signature(
             ctx.admin_pubkey.as_str(),
             signer_pubkey,
             signature,
@@ -426,7 +426,7 @@ pub(crate) async fn commit_admin_action(
     .into_response()
 }
 
-pub(crate) async fn update_operator_login_state(
+pub(crate) async fn update_city_admin_login_state(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<u64>,
@@ -436,17 +436,17 @@ pub(crate) async fn update_operator_login_state(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action_type = AdminActionType::UpdateOperator;
+    let action_type = AdminActionType::UpdateCityAdmin;
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
-    let payload = UpdateOperatorActionPayload {
+    let payload = UpdateCityAdminActionPayload {
         id,
         admin_name: Some(input.admin_name),
     };
     let result = state
         .db
-        .with_client(move |conn| apply_update_operator_conn(conn, &ctx, &payload));
+        .with_client(move |conn| apply_update_city_admin_conn(conn, &ctx, &payload));
     let data = match result {
         Ok(v) => v,
         Err(err) => return admin_action_error(err),
@@ -459,7 +459,7 @@ pub(crate) async fn update_operator_login_state(
     .into_response()
 }
 
-pub(crate) async fn update_sheng_admin_login_state(
+pub(crate) async fn update_federal_admin_login_state(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<u64>,
@@ -469,17 +469,17 @@ pub(crate) async fn update_sheng_admin_login_state(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action_type = AdminActionType::UpdateShengAdmin;
+    let action_type = AdminActionType::UpdateFederalAdmin;
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
-    let payload = UpdateShengAdminActionPayload {
+    let payload = UpdateFederalAdminActionPayload {
         id,
         admin_name: input.admin_name,
     };
     let result = state
         .db
-        .with_client(move |conn| apply_update_sheng_admin_conn(conn, &ctx, &payload));
+        .with_client(move |conn| apply_update_federal_admin_conn(conn, &ctx, &payload));
     let data = match result {
         Ok(v) => v,
         Err(err) => return admin_action_error(err),
@@ -566,13 +566,13 @@ fn preview_action_conn(
     payload: &serde_json::Value,
 ) -> Result<ActionPreview, String> {
     match action_type {
-        AdminActionType::CreateOperator => {
-            let input: CreateOperatorInput = serde_json::from_value(payload.clone())
+        AdminActionType::CreateCityAdmin => {
+            let input: CreateCityAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
             let (admin_pubkey, admin_name, city, created_by) =
-                validate_create_operator_conn(conn, ctx, &input)?;
+                validate_create_city_admin_conn(conn, ctx, &input)?;
             let after = json!({
-                "role": "SHI_ADMIN",
+                "role": "CITY_ADMIN",
                 "admin_pubkey": admin_pubkey,
                 "admin_name": admin_name,
                 "city": city,
@@ -587,22 +587,22 @@ fn preview_action_conn(
                 display_fields: base_fields(action_type, ctx, admin_pubkey.as_str()),
             })
         }
-        AdminActionType::UpdateOperator => {
-            Err("http:bad_request:update operator is login state action".to_string())
+        AdminActionType::UpdateCityAdmin => {
+            Err("http:bad_request:update city_admin is login state action".to_string())
         }
-        AdminActionType::DeleteOperator => {
-            let input: OperatorIdPayload = serde_json::from_value(payload.clone())
+        AdminActionType::DeleteCityAdmin => {
+            let input: CityAdminIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
-            let operator = require_manageable_operator_conn(conn, ctx, input.id)?;
-            let before = operator_row_from_user_conn(conn, &operator)?;
+            let city_admin = require_manageable_city_admin_conn(conn, ctx, input.id)?;
+            let before = city_admin_row_from_user_conn(conn, &city_admin)?;
             let after =
-                json!({ "deleted": true, "id": input.id, "admin_pubkey": operator.admin_pubkey });
+                json!({ "deleted": true, "id": input.id, "admin_pubkey": city_admin.admin_pubkey });
             let before_hash = hash_serialized(&before);
             let after_hash = hash_json(&after);
             Ok(ActionPreview {
                 before_hash,
                 after_hash,
-                target: operator.admin_pubkey,
+                target: city_admin.admin_pubkey,
                 auth_type: action_type.auth_type(),
                 display_fields: base_fields(
                     action_type,
@@ -611,11 +611,11 @@ fn preview_action_conn(
                 ),
             })
         }
-        AdminActionType::CreateShengAdmin => {
-            let input: CreateShengAdminActionPayload = serde_json::from_value(payload.clone())
-                .map_err(|_| "http:bad_request:invalid sheng admin payload".to_string())?;
+        AdminActionType::CreateFederalAdmin => {
+            let input: CreateFederalAdminActionPayload = serde_json::from_value(payload.clone())
+                .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
             let (admin_pubkey, admin_name, province) =
-                validate_create_sheng_admin_conn(conn, ctx, &input)?;
+                validate_create_federal_admin_conn(conn, ctx, &input)?;
             let after = json!({
                 "role": "FEDERAL_ADMIN",
                 "province": province,
@@ -632,13 +632,13 @@ fn preview_action_conn(
                 display_fields: base_fields(action_type, ctx, admin_pubkey.as_str()),
             })
         }
-        AdminActionType::UpdateShengAdmin => {
-            Err("http:bad_request:update sheng admin is login state action".to_string())
+        AdminActionType::UpdateFederalAdmin => {
+            Err("http:bad_request:update federal admin is login state action".to_string())
         }
-        AdminActionType::DeleteShengAdmin => {
-            let input: ShengAdminIdPayload = serde_json::from_value(payload.clone())
-                .map_err(|_| "http:bad_request:invalid sheng admin payload".to_string())?;
-            let (before, after, target) = preview_delete_sheng_admin_conn(conn, ctx, &input)?;
+        AdminActionType::DeleteFederalAdmin => {
+            let input: FederalAdminIdPayload = serde_json::from_value(payload.clone())
+                .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
+            let (before, after, target) = preview_delete_federal_admin_conn(conn, ctx, &input)?;
             Ok(ActionPreview {
                 before_hash: hash_serialized(&before),
                 after_hash: hash_serialized(&after),
@@ -695,10 +695,10 @@ fn base_fields(
     ]
 }
 
-fn validate_create_operator_conn(
+fn validate_create_city_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateOperatorInput,
+    input: &CreateCityAdminInput,
 ) -> Result<(String, String, String, String), String> {
     let Some(admin_pubkey) = normalize_admin_pubkey(input.admin_pubkey.as_str()) else {
         return Err("http:bad_request:admin_pubkey format invalid".to_string());
@@ -712,7 +712,7 @@ fn validate_create_operator_conn(
             };
             if !same_admin_pubkey(normalized.as_str(), ctx.admin_pubkey.as_str()) {
                 return Err(
-                    "http:forbidden:ShengAdmin can only create operators under itself".to_string(),
+                    "http:forbidden:FederalAdmin can only create city admins under itself".to_string(),
                 );
             }
             normalized
@@ -721,16 +721,16 @@ fn validate_create_operator_conn(
     if let Some(existing) = repo::resolve_admin_pubkey_key_conn(conn, admin_pubkey.as_str())? {
         let role = repo::get_admin_by_pubkey_conn(conn, existing.as_str())?
             .map(|v| v.role)
-            .unwrap_or(AdminRole::ShiAdmin);
+            .unwrap_or(AdminRole::CityAdmin);
         return Err(duplicate_admin_pubkey_error(&role));
     }
     let (province, city) =
         ensure_city_in_creator_province_conn(conn, created_by.as_str(), input.city.as_str())
             .map_err(response_to_string)?;
-    if count_shi_admins_in_city_conn(conn, province.as_str(), city.as_str())?
-        >= MAX_SHI_ADMINS_PER_CITY
+    if count_city_admins_in_city_conn(conn, province.as_str(), city.as_str())?
+        >= MAX_CITY_ADMINS_PER_CITY
     {
-        return Err("http:conflict:shi admin city limit reached".to_string());
+        return Err("http:conflict:city admin city limit reached".to_string());
     }
     Ok((admin_pubkey, admin_name, city, created_by))
 }
@@ -746,42 +746,42 @@ fn validate_admin_name(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-fn require_manageable_operator_conn(
+fn require_manageable_city_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
     id: u64,
 ) -> Result<AdminUser, String> {
-    let operator = find_operator_by_id_conn(conn, id)?
-        .ok_or_else(|| "http:not_found:operator not found".to_string())?;
-    if !can_manage_operator_conn(
+    let city_admin = find_city_admin_by_id_conn(conn, id)?
+        .ok_or_else(|| "http:not_found:city admin not found".to_string())?;
+    if !can_manage_city_admin_conn(
         conn,
         ctx.admin_pubkey.as_str(),
         ctx.admin_province.as_deref(),
-        &operator,
+        &city_admin,
     )? {
-        return Err("http:forbidden:cannot manage other province operators".to_string());
+        return Err("http:forbidden:cannot manage other province city admins".to_string());
     }
-    Ok(operator)
+    Ok(city_admin)
 }
 
-fn preview_update_operator_conn(
+fn preview_update_city_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &UpdateOperatorActionPayload,
-) -> Result<(OperatorRow, OperatorRow, String), String> {
-    let mut operator = require_manageable_operator_conn(conn, ctx, input.id)?;
-    let before = operator_row_from_user_conn(conn, &operator)?;
+    input: &UpdateCityAdminActionPayload,
+) -> Result<(CityAdminRow, CityAdminRow, String), String> {
+    let mut city_admin = require_manageable_city_admin_conn(conn, ctx, input.id)?;
+    let before = city_admin_row_from_user_conn(conn, &city_admin)?;
     if let Some(next_name) = input.admin_name.as_deref() {
-        operator.admin_name = validate_admin_name(next_name)?;
+        city_admin.admin_name = validate_admin_name(next_name)?;
     }
-    let after = operator_row_from_user_conn(conn, &operator)?;
-    Ok((before, after, operator.admin_pubkey))
+    let after = city_admin_row_from_user_conn(conn, &city_admin)?;
+    Ok((before, after, city_admin.admin_pubkey))
 }
 
-fn validate_create_sheng_admin_conn(
+fn validate_create_federal_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateShengAdminActionPayload,
+    input: &CreateFederalAdminActionPayload,
 ) -> Result<(String, String, String), String> {
     let province = ctx
         .admin_province
@@ -794,26 +794,26 @@ fn validate_create_sheng_admin_conn(
     if let Some(existing) = repo::resolve_admin_pubkey_key_conn(conn, admin_pubkey.as_str())? {
         let role = repo::get_admin_by_pubkey_conn(conn, existing.as_str())?
             .map(|v| v.role)
-            .unwrap_or(AdminRole::ShengAdmin);
+            .unwrap_or(AdminRole::FederalAdmin);
         return Err(duplicate_admin_pubkey_error(&role));
     }
-    if count_sheng_admins_in_province_conn(conn, province.as_str())?
+    if count_federal_admins_in_province_conn(conn, province.as_str())?
         >= MAX_FEDERAL_ADMINS_PER_PROVINCE
     {
-        return Err("http:conflict:sheng admin province limit reached".to_string());
+        return Err("http:conflict:federal admin province limit reached".to_string());
     }
     Ok((admin_pubkey, admin_name, province))
 }
 
-fn count_sheng_admins_in_province_conn(conn: &mut Client, province: &str) -> Result<usize, String> {
-    repo::count_sheng_admins_by_province_conn(conn, province)
+fn count_federal_admins_in_province_conn(conn: &mut Client, province: &str) -> Result<usize, String> {
+    repo::count_federal_admins_by_province_conn(conn, province)
 }
 
-fn find_sheng_admin_by_id_conn(conn: &mut Client, id: u64) -> Result<Option<AdminUser>, String> {
-    repo::get_admin_by_id_and_role_conn(conn, id, &AdminRole::ShengAdmin)
+fn find_federal_admin_by_id_conn(conn: &mut Client, id: u64) -> Result<Option<AdminUser>, String> {
+    repo::get_admin_by_id_and_role_conn(conn, id, &AdminRole::FederalAdmin)
 }
 
-fn require_manageable_sheng_admin_conn(
+fn require_manageable_federal_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
     id: u64,
@@ -822,28 +822,28 @@ fn require_manageable_sheng_admin_conn(
         .admin_province
         .clone()
         .ok_or_else(|| "http:forbidden:admin province scope missing".to_string())?;
-    let admin = find_sheng_admin_by_id_conn(conn, id)?
-        .ok_or_else(|| "http:not_found:sheng admin not found".to_string())?;
+    let admin = find_federal_admin_by_id_conn(conn, id)?
+        .ok_or_else(|| "http:not_found:federal admin not found".to_string())?;
     let target_province =
         repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?
-            .ok_or_else(|| "http:conflict:sheng admin province missing".to_string())?;
+            .ok_or_else(|| "http:conflict:federal admin province missing".to_string())?;
     if target_province != actor_province {
-        return Err("http:forbidden:cannot manage other province sheng admins".to_string());
+        return Err("http:forbidden:cannot manage other province federal admins".to_string());
     }
     Ok((admin, target_province))
 }
 
-fn actor_is_initial_sheng_admin(ctx: &AdminAuthContext) -> bool {
+fn actor_is_initial_federal_admin(ctx: &AdminAuthContext) -> bool {
     let Some(province) = ctx.admin_province.as_deref() else {
         return false;
     };
-    sheng_admin_province(ctx.admin_pubkey.as_str())
+    federal_admin_province(ctx.admin_pubkey.as_str())
         .map(|built_in_province| built_in_province == province)
         .unwrap_or(false)
 }
 
-fn sheng_admin_row_value(admin: &AdminUser, province: String) -> Result<serde_json::Value, String> {
-    serde_json::to_value(ShengAdminRow {
+fn federal_admin_row_value(admin: &AdminUser, province: String) -> Result<serde_json::Value, String> {
+    serde_json::to_value(FederalAdminRow {
         id: admin.id,
         province,
         admin_pubkey: admin.admin_pubkey.clone(),
@@ -852,25 +852,25 @@ fn sheng_admin_row_value(admin: &AdminUser, province: String) -> Result<serde_js
         created_at: admin.created_at,
         updated_at: admin.updated_at,
     })
-    .map_err(|e| format!("encode sheng admin failed: {e}"))
+    .map_err(|e| format!("encode federal admin failed: {e}"))
 }
 
-fn preview_delete_sheng_admin_conn(
+fn preview_delete_federal_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &ShengAdminIdPayload,
+    input: &FederalAdminIdPayload,
 ) -> Result<(serde_json::Value, serde_json::Value, String), String> {
-    if !actor_is_initial_sheng_admin(ctx) {
-        return Err("http:forbidden:initial sheng admin required".to_string());
+    if !actor_is_initial_federal_admin(ctx) {
+        return Err("http:forbidden:initial federal admin required".to_string());
     }
-    let (admin, province) = require_manageable_sheng_admin_conn(conn, ctx, input.id)?;
+    let (admin, province) = require_manageable_federal_admin_conn(conn, ctx, input.id)?;
     if same_admin_pubkey(admin.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
-        return Err("http:forbidden:initial sheng admin cannot delete itself".to_string());
+        return Err("http:forbidden:initial federal admin cannot delete itself".to_string());
     }
-    if admin.built_in || sheng_admin_province(admin.admin_pubkey.as_str()).is_some() {
-        return Err("http:forbidden:built-in sheng admin cannot be deleted".to_string());
+    if admin.built_in || federal_admin_province(admin.admin_pubkey.as_str()).is_some() {
+        return Err("http:forbidden:built-in federal admin cannot be deleted".to_string());
     }
-    let before = sheng_admin_row_value(&admin, province.clone())?;
+    let before = federal_admin_row_value(&admin, province.clone())?;
     let after = json!({
         "deleted": true,
         "id": input.id,
@@ -902,29 +902,29 @@ fn apply_action_conn(
     let action_type = parse_action_type(challenge.action_type.as_str())
         .map_err(|_| "http:bad_request:unknown action_type".to_string())?;
     match action_type {
-        AdminActionType::CreateOperator => {
-            let input: CreateOperatorInput =
+        AdminActionType::CreateCityAdmin => {
+            let input: CreateCityAdminInput =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
-            apply_create_operator_conn(conn, ctx, &input)
+            apply_create_city_admin_conn(conn, ctx, &input)
         }
-        AdminActionType::DeleteOperator => {
-            let input: OperatorIdPayload =
+        AdminActionType::DeleteCityAdmin => {
+            let input: CityAdminIdPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
-            apply_delete_operator_conn(conn, ctx, &input)
+            apply_delete_city_admin_conn(conn, ctx, &input)
         }
-        AdminActionType::CreateShengAdmin => {
-            let input: CreateShengAdminActionPayload =
+        AdminActionType::CreateFederalAdmin => {
+            let input: CreateFederalAdminActionPayload =
                 serde_json::from_value(challenge.request_payload.clone())
-                    .map_err(|_| "http:bad_request:invalid sheng admin payload".to_string())?;
-            apply_create_sheng_admin_conn(conn, ctx, &input)
+                    .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
+            apply_create_federal_admin_conn(conn, ctx, &input)
         }
-        AdminActionType::DeleteShengAdmin => {
-            let input: ShengAdminIdPayload =
+        AdminActionType::DeleteFederalAdmin => {
+            let input: FederalAdminIdPayload =
                 serde_json::from_value(challenge.request_payload.clone())
-                    .map_err(|_| "http:bad_request:invalid sheng admin payload".to_string())?;
-            apply_delete_sheng_admin_conn(conn, ctx, &input)
+                    .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
+            apply_delete_federal_admin_conn(conn, ctx, &input)
         }
         _ => Err(
             "http:bad_request:business action cannot be applied by admin governance endpoint"
@@ -933,19 +933,19 @@ fn apply_action_conn(
     }
 }
 
-fn apply_create_operator_conn(
+fn apply_create_city_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateOperatorInput,
+    input: &CreateCityAdminInput,
 ) -> Result<serde_json::Value, String> {
     let (admin_pubkey, admin_name, city, created_by) =
-        validate_create_operator_conn(conn, ctx, input)?;
+        validate_create_city_admin_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
         admin_pubkey: admin_pubkey.clone(),
         admin_name,
-        role: AdminRole::ShiAdmin,
+        role: AdminRole::CityAdmin,
         built_in: false,
         created_by,
         created_at: now,
@@ -953,53 +953,53 @@ fn apply_create_operator_conn(
         city,
     };
     repo::upsert_admin_conn(conn, &row, None)?;
-    serde_json::to_value(operator_row_from_user_conn(conn, &row)?)
-        .map_err(|e| format!("encode operator failed: {e}"))
+    serde_json::to_value(city_admin_row_from_user_conn(conn, &row)?)
+        .map_err(|e| format!("encode city admin failed: {e}"))
 }
 
-fn apply_delete_operator_conn(
+fn apply_delete_city_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &OperatorIdPayload,
+    input: &CityAdminIdPayload,
 ) -> Result<serde_json::Value, String> {
-    let operator = require_manageable_operator_conn(conn, ctx, input.id)?;
-    let pubkey = operator.admin_pubkey.clone();
+    let city_admin = require_manageable_city_admin_conn(conn, ctx, input.id)?;
+    let pubkey = city_admin.admin_pubkey.clone();
     repo::delete_admin_runtime_state_conn(conn, pubkey.as_str())?;
     conn.execute(
         "DELETE FROM admins WHERE lower(admin_pubkey) = lower($1)",
         &[&pubkey],
     )
-    .map_err(|e| format!("delete operator failed: {e}"))?;
+    .map_err(|e| format!("delete city admin failed: {e}"))?;
     Ok(json!({ "deleted": true, "admin_pubkey": pubkey }))
 }
 
-fn apply_update_operator_conn(
+fn apply_update_city_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &UpdateOperatorActionPayload,
+    input: &UpdateCityAdminActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (before, after, _) = preview_update_operator_conn(conn, ctx, input)?;
-    let mut next = require_manageable_operator_conn(conn, ctx, input.id)?;
+    let (before, after, _) = preview_update_city_admin_conn(conn, ctx, input)?;
+    let mut next = require_manageable_city_admin_conn(conn, ctx, input.id)?;
     next.admin_name = after.admin_name;
     next.updated_at = Some(Utc::now());
     repo::upsert_admin_conn(conn, &next, None)?;
     let _ = before;
-    serde_json::to_value(operator_row_from_user_conn(conn, &next)?)
-        .map_err(|e| format!("encode operator failed: {e}"))
+    serde_json::to_value(city_admin_row_from_user_conn(conn, &next)?)
+        .map_err(|e| format!("encode city admin failed: {e}"))
 }
 
-fn apply_create_sheng_admin_conn(
+fn apply_create_federal_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateShengAdminActionPayload,
+    input: &CreateFederalAdminActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (admin_pubkey, admin_name, province) = validate_create_sheng_admin_conn(conn, ctx, input)?;
+    let (admin_pubkey, admin_name, province) = validate_create_federal_admin_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
         admin_pubkey: admin_pubkey.clone(),
         admin_name,
-        role: AdminRole::ShengAdmin,
+        role: AdminRole::FederalAdmin,
         built_in: false,
         created_by: ctx.admin_pubkey.clone(),
         created_at: now,
@@ -1007,40 +1007,40 @@ fn apply_create_sheng_admin_conn(
         city: String::new(),
     };
     repo::upsert_admin_conn(conn, &row, Some(province.as_str()))?;
-    sheng_admin_row_value(&row, province)
+    federal_admin_row_value(&row, province)
 }
 
-fn apply_update_sheng_admin_conn(
+fn apply_update_federal_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &UpdateShengAdminActionPayload,
+    input: &UpdateFederalAdminActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (mut admin, province) = require_manageable_sheng_admin_conn(conn, ctx, input.id)?;
+    let (mut admin, province) = require_manageable_federal_admin_conn(conn, ctx, input.id)?;
     admin.admin_name = validate_admin_name(input.admin_name.as_str())?;
     admin.updated_at = Some(Utc::now());
     repo::upsert_admin_conn(conn, &admin, Some(province.as_str()))?;
-    sheng_admin_row_value(&admin, province)
+    federal_admin_row_value(&admin, province)
 }
 
-fn apply_delete_sheng_admin_conn(
+fn apply_delete_federal_admin_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &ShengAdminIdPayload,
+    input: &FederalAdminIdPayload,
 ) -> Result<serde_json::Value, String> {
-    let (_, _, _) = preview_delete_sheng_admin_conn(conn, ctx, input)?;
-    let (removed, _) = require_manageable_sheng_admin_conn(conn, ctx, input.id)?;
+    let (_, _, _) = preview_delete_federal_admin_conn(conn, ctx, input)?;
+    let (removed, _) = require_manageable_federal_admin_conn(conn, ctx, input.id)?;
     let pubkey = removed.admin_pubkey.clone();
     repo::delete_admin_runtime_state_conn(conn, pubkey.as_str())?;
-    for mut operator in repo::list_shi_admins_by_creator_conn(conn, pubkey.as_str())? {
-        operator.created_by = ctx.admin_pubkey.clone();
-        operator.updated_at = Some(Utc::now());
-        repo::upsert_admin_conn(conn, &operator, None)?;
+    for mut city_admin in repo::list_city_admins_by_creator_conn(conn, pubkey.as_str())? {
+        city_admin.created_by = ctx.admin_pubkey.clone();
+        city_admin.updated_at = Some(Utc::now());
+        repo::upsert_admin_conn(conn, &city_admin, None)?;
     }
     conn.execute(
         "DELETE FROM admins WHERE lower(admin_pubkey) = lower($1)",
         &[&pubkey],
     )
-    .map_err(|e| format!("delete sheng admin failed: {e}"))?;
+    .map_err(|e| format!("delete federal admin failed: {e}"))?;
     Ok(json!({ "deleted": true, "admin_pubkey": pubkey }))
 }
 
@@ -1060,8 +1060,8 @@ fn normalize_security_target(target: &str) -> String {
 
 fn duplicate_admin_pubkey_error(role: &AdminRole) -> String {
     match role {
-        AdminRole::ShengAdmin => "http:conflict:admin pubkey already exists as sheng admin",
-        AdminRole::ShiAdmin => "http:conflict:admin pubkey already exists as shi admin",
+        AdminRole::FederalAdmin => "http:conflict:admin pubkey already exists as federal admin",
+        AdminRole::CityAdmin => "http:conflict:admin pubkey already exists as city admin",
     }
     .to_string()
 }

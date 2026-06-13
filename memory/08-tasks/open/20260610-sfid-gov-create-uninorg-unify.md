@@ -9,7 +9,7 @@
 
 ## 已确认口径
 
-1. **公权机构手动创建放开**：G + 政府ZF/立法院LF/司法院SF/监察院JC 四类（排除中央银行CB——省公民储备银行每省唯一已生成；排除JY——归教育 tab）；公安局命名守卫保留；机构名称必填同市查重；法定代表人必填；p1 锁非盈利；市级管理员注册本市。手动公权机构**进浏览目录**（official 查询并入手动行，reconcile 自动目录机制不动）。
+1. **公权机构手动创建放开**：G + 政府ZF/立法院LF/司法院SF/监察院JC 四类（排除中央银行CB——省公民储备银行每省唯一已生成；排除JY——归教育 tab）；公安局命名守卫保留；机构名称必填同市查重；法定代表人必填；p1 锁非盈利；市管理员注册本市。手动公权机构**进浏览目录**（official 查询并入手动行，reconcile 自动目录机制不动）。
 2. **非法人(F)统一流程**（私权/公权/教育三入口同一组件）：创建时**必选所属法人**（真实父级，创建即写 parent_sfid_number），盈利属性继承所属法人（公法人父→锁0；私法人父→继承其 p1）；"非法人必须从属法人"立为后端硬规则（开发库 F 存量=0，零迁移）。教育 tab 上一卡的"上级法人属性/上级盈利属性"推导选择器删除，换真实本部学校选择器。详情页关联所属法人保留，语义=改挂，同套校验。
 3. **列表按所属法人分流**：父=私法人→私权；父=公法人→公权（含浏览目录）；父=教育机构（JY 学校）→教育。F+JY ⇔ 父级必须是 JY 学校（代码一致性校验）。
 4. **地域规则**：教育本部→分校同市；公法人父按层级（org_code 前缀）：市/镇级及手动公权行→同市，PROVINCE_→同省，国家级（NATIONAL_/MINISTRY_/FEDERAL_）→全国，未知前缀防御性同市；私法人父→全国不限。三处同源：创建校验 + 改挂校验 + 所属法人搜索预过滤。
@@ -19,7 +19,7 @@
 ### 后端（sfid/backend）
 - [x] subjects/uninorg：单一权威源——`parent_locality_rule`（org_code 前缀判层级）+ `code_consistency_violation`（F+JY⇔学校本部）+ `locality_violation` + `inherited_p1` + 6 条单元测试；模块头注释写明"三处同源缺一有绕过口"
 - [x] subjects/model.rs：CreateInstitutionInput 加 parent_sfid_number；ParentInstitutionRow 加 p1
-- [x] private/handler.rs create_institution：放开 G 非 JY（仅 ZF/LF/SF/JC，CB/其它拒绝）；手动 G 统一市级管理员（教育学校/公权机构分别提示）；F 必传 parent + 存在/属性/代码一致/地域/p1 继承五连校验 + 创建即写 parent；grant payload 加 parent_sfid_number（前后端同步）
+- [x] private/handler.rs create_institution：放开 G 非 JY（仅 ZF/LF/SF/JC，CB/其它拒绝）；手动 G 统一市管理员（教育学校/公权机构分别提示）；F 必传 parent + 存在/属性/代码一致/地域/p1 继承五连校验 + 创建即写 parent；grant payload 加 parent_sfid_number（前后端同步）
 - [x] subjects/admin.rs update_institution 改挂：补与创建同源的代码一致性+地域+p1 继承校验（p1 烧死在号段，改挂只能挂继承值一致的父级）
 - [x] subjects/admin.rs search_parent_institutions：f_institution/province/city/parent_property 四参数，省市必传（缺参拒绝不退化全国搜索）；分校模式=本市学校本部；普通模式=S 全国 ∪ G 按层级地域（split_part 判前缀）；SELECT 加 p1 + status=ACTIVE
 - [x] InstitutionListFilter 父级感知：list_institutions_exact 加 `LEFT JOIN subjects par`（按 sfid_number 关联不限分区，父级允许跨省）；Private 排除父=G 的 F（父缺失防御性兜底私权可见）；Gov 并入父=G 的 F
@@ -66,7 +66,7 @@
 - 机构操作记录(GovDetailPage OperationRecords):「操作者」改「操作者账户」,actor_pubkey 由裸 0x hex+省略号改为完整 SS58(tryEncodeSs58,等宽小字+换行不截断)。
 - 机构账户列表(AccountList)「账户地址」:已是 SS58 但截断(前12...后8),改完整显示;交易哈希不是账户,保持截断。
 - 公民详情「投票账户」:wallet_address 缺失时原 fallback 直显 wallet_pubkey 裸 hex,改为转 SS58 兜底。
-- 全仓扫描结论:其余展示点(省/市管理员列表与详情、扫码账户弹窗、公民列表 wallet_address 后端已给 canonical SS58)均已完整 SS58,无残留;FRONTEND_LAYOUT 增设「账户地址统一完整 SS58」铁律。
+- 全仓扫描结论:其余展示点(联邦/市管理员列表与详情、扫码账户弹窗、公民列表 wallet_address 后端已给 canonical SS58)均已完整 SS58,无残留;FRONTEND_LAYOUT 增设「账户地址统一完整 SS58」铁律。
 
 ## 追加 6（2026-06-10 操作记录操作类型全量中文映射）
 

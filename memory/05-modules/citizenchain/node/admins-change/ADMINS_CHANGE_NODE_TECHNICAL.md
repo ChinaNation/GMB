@@ -41,7 +41,7 @@ Tauri 命令：
 - `get_activated_admins`：按 subject 读取已激活管理员，并与链上当前管理员集合交叉校验；个人多签和机构账户必须附带 `accountIdHex + expectedOrg`。
 - `deactivate_admin`：取消本地管理员激活。
 - `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `sfidNumber + expectedOrg`；个人多签和机构账户必须用 `accountIdHex + expectedOrg`。
-- `build_admin_set_change_request`：校验当前管理员身份、主体 org 和新管理员集合，构建冷钱包签名请求。
+- `build_admin_set_change_request`：校验当前管理员身份、主体 org 和新管理员集合，构建公民钱包签名请求。
 - `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
 
 管理员激活 payload：
@@ -56,7 +56,7 @@ GMB_ACTIVATE_SUBJECT_V1
 + nonce(16)
 ```
 
-激活 QR `display.action = activate_admin_account`，字段必须为 `org / subject / pubkey`，并与 wumin 冷钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
+激活 QR `display.action = activate_admin_account`，字段必须为 `org / subject / pubkey`，并与 wumin 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
 
 链上 call data：
 

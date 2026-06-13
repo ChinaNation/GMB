@@ -23,8 +23,8 @@ sfid/backend/scope/
 
 | 角色 | 可见省 | 可见市 | 进 tab 跳过省列表 | 进 tab 跳过市列表 |
 |---|---|---|---|---|
-| ShengAdmin | 本省(`admin_province`) | 本省全部市 | 是 | 否 |
-| ShiAdmin | 本省 | 本市(`admin_city`) | 是 | 是 |
+| FederalAdmin | 本省(`admin_province`) | 本省全部市 | 是 | 否 |
+| CityAdmin | 本省 | 本市(`admin_city`) | 是 | 是 |
 
 ## 已迁出内容
 
@@ -54,7 +54,7 @@ let filtered = scope::filter_by_scope(&rows, &scope);
 
 ## 安全 fallback
 
-`get_visible_scope` 在 ShengAdmin 缺 `admin_province` 或 ShiAdmin 缺
+`get_visible_scope` 在 FederalAdmin 缺 `admin_province` 或 CityAdmin 缺
 `admin_city` 时会 fallback 到零范围,确保数据不会被误放行。调用方应在
 `require_admin_*` 里先校验必要字段。
 

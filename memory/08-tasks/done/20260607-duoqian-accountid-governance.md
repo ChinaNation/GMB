@@ -59,7 +59,7 @@ AccountId = BLAKE2-256(
 - runtime/primitives：保留 `core_const.rs` 作为 DUOQIAN 唯一真源，`derive_duoqian_account(op_tag, ss58, payload)` 内部使用 `ss58.to_le_bytes()` 写入 preimage，删除旧主体包装派生模块。
 - runtime/votingengine/governance/transaction/issuance：投票主体、管理员主体、转账支出主体、发行主体统一为 `AccountId`；onchain-issuance 的 `asset_id` 只作为资产编号。
 - SFID backend/tools：SFID 后端引用 runtime primitives 的唯一真源；`tools/duoqian.py` 改为读取 `core_const.rs`，并重算创世内置账户地址。
-- wumin/wuminapp：冷钱包和移动端管理员账户、资产发行、转账、发现服务统一为 32 字节 `AccountId`；删除旧主体包装 codec、页面、服务和测试入口。
+- wumin/wuminapp：公民钱包和移动端管理员账户、资产发行、转账、发现服务统一为 32 字节 `AccountId`；删除旧主体包装 codec、页面、服务和测试入口。
 - memory/docs/frontend generated docs：ADR、模块文档、open/done 任务卡和前端内置文档产物已同步目标态。
 
 验证结果：
