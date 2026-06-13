@@ -137,6 +137,24 @@ struct StatusExportStateData {
     state: dangan::CpmsStatusExportState,
 }
 
+#[derive(Serialize)]
+struct ArchiveAuditLogData {
+    items: Vec<ArchiveAuditLogEntry>,
+}
+
+#[derive(Serialize)]
+struct ArchiveAuditLogEntry {
+    log_id: String,
+    operator_user_id: Option<String>,
+    operator_account: Option<String>,
+    action: String,
+    target_type: String,
+    target_id: Option<String>,
+    result: String,
+    detail: serde_json::Value,
+    created_at: i64,
+}
+
 // 编辑档案请求
 #[derive(Deserialize)]
 struct UpdateArchiveRequest {
@@ -178,6 +196,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/archives/:archive_id/delete/complete",
             post(complete_archive_delete),
+        )
+        .route(
+            "/api/v1/archives/:archive_id/audit-logs",
+            get(list_archive_audit_logs),
         )
         .route(
             "/api/v1/archives/status-export/state",
@@ -529,6 +551,59 @@ async fn get_archive(
 
     let archive = fetch_archive_by_id(&state, &archive_id).await?;
     Ok(Json(ok(archive)))
+}
+
+async fn list_archive_audit_logs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(archive_id): Path<String>,
+) -> Result<Json<ApiResponse<ArchiveAuditLogData>>, (StatusCode, Json<ApiError>)> {
+    authz::require_archive_admin(&state, &headers).await?;
+    let archive = fetch_archive_by_id(&state, &archive_id).await?;
+    // 中文注释：历史审计 target_id 可能是档案 ID、档案号或资料 ID，因此按档案 ID 和 detail 中的档案事实共同收口。
+    let rows = sqlx::query(
+        "SELECT l.log_id, l.operator_user_id, l.action, l.target_type, l.target_id, l.result, l.detail, l.created_at,
+                a.admin_pubkey
+         FROM audit_logs l
+         LEFT JOIN admin_users a ON a.user_id = l.operator_user_id
+         WHERE l.target_id = $1
+            OR l.detail->>'archive_id' = $1
+            OR l.detail->>'archive_no' = $2
+         ORDER BY l.created_at DESC
+         LIMIT 100",
+    )
+    .bind(&archive_id)
+    .bind(&archive.archive_no)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive audit logs failed"))?;
+
+    let items = rows
+        .into_iter()
+        .map(|row| {
+            let detail: sqlx::types::Json<serde_json::Value> = row.get("detail");
+            let operator_user_id: Option<String> = row.get("operator_user_id");
+            let admin_pubkey: Option<String> = row.get("admin_pubkey");
+            let operator_account = admin_pubkey
+                .as_deref()
+                .and_then(ss58::pubkey_hex_to_ss58)
+                .or(admin_pubkey)
+                .or_else(|| operator_user_id.clone());
+            ArchiveAuditLogEntry {
+                log_id: row.get("log_id"),
+                operator_user_id,
+                operator_account,
+                action: row.get("action"),
+                target_type: row.get("target_type"),
+                target_id: row.get("target_id"),
+                result: row.get("result"),
+                detail: detail.0,
+                created_at: row.get("created_at"),
+            }
+        })
+        .collect();
+
+    Ok(Json(ok(ArchiveAuditLogData { items })))
 }
 
 async fn save_archive_wallet(

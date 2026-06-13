@@ -1,7 +1,7 @@
 # CPMS Dangan 模块技术文档
 
 ## 1. 模块定位
-`backend/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案生命周期硬删除和年度状态导出。
+`backend/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案操作记录聚合、档案生命周期硬删除和年度状态导出。
 
 本模块不保存实名归属判断逻辑；省市归属来自 `initialize` 保存的 INSTALL 授权材料，并只写入加密 `geo_seal`。
 
@@ -11,9 +11,10 @@
 - `validate_citizen_status(...)`：校验 `NORMAL / REVOKED`。
 - `effective_voting_eligible(...) / resolve_voting_eligible(...)`：按公民状态和 16 周岁年龄线计算或校验选举资格。
 - `archive_valid_from(...) / archive_valid_until(...) / archive_validity_years(...)`：计算电子护照有效期。
-- `routes::router(...)`：提供档案创建、详情、编辑、投票账户绑定、删除签名、打印和列表接口。
+- `routes::router(...)`：提供档案创建、详情、编辑、投票账户绑定、删除签名、打印、操作记录和列表接口。
 - `routes::ensure_archive_qr_ready(...)`：生成或打印 ARCHIVE 前校验档案完整性。
 - `routes::list_archives(...)`：使用 `created_at DESC, archive_id DESC` 游标分页返回档案列表。
+- `routes::list_archive_audit_logs(...)`：按档案 ID、档案号和审计 detail 聚合档案操作记录。
 - `stats::adjust_archive_stats(...)`：在档案创建和注销软删除事务中维护 `archive_stats`。
 - `materials::router(...)`：提供公民资料库上传、列表、下载和删除接口。
 - `lifecycle::run_due_archive_hard_delete(...)`：硬删除软删除满 100 年的档案资料，并释放档案号和护照号。
@@ -80,6 +81,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 翻页使用不透明 cursor，cursor 内部只包含排序所需的 `created_at / archive_id`。
 - SQL 固定按 `created_at DESC, archive_id DESC` 排序，并用 `(created_at, archive_id) < (cursor_created_at, cursor_archive_id)` 取下一页。
 - 响应字段固定为 `items / limit / next_cursor / has_next / total_active`，不返回 `total_pages`。
+- 前端列表固定显示“序号、档案号、姓名、性别、年龄、市镇、公民状态、创建时间”，整行点击进入详情，不保留单独操作列。
 - `total_active` 读取 `archive_stats.active_count`；列表请求不得实时 `COUNT(*) FROM archives`。
 - 统一检索字段为 `search`，后端精确匹配 `archive_no = search OR passport_no = search OR (last_name || first_name) = search`，禁止恢复前端字段选择器。
 - 检索字段只允许 `search / birth_date / town_code / village_id / citizen_status` 的索引化精确过滤，禁止恢复 `%keyword% LIKE` 全表模糊搜索。
@@ -103,7 +105,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 
 ## 8. 公民资料库
 
-- 公民资料库命名为“公民资料库”，在公民档案详情页下半部分展示。
+- 公民资料库命名为“公民资料库”，在公民档案详情页“资料库”左侧导航 tab 展示。
 - 后端入口固定在 `backend/dangan/materials.rs`，路由由 `dangan::router()` 挂载；不得把资料库存储和生命周期逻辑放进角色模块。
 - 资料类型固定为 `PHOTO / BIRTH_CERTIFICATE / COPY / VIDEO / OTHER`，分别对应照片、出生纸、复印件、视频和其他资料。
 - `archive_materials` 只保存元数据：资料类型、原始文件名、本机存储文件名、MIME、大小、SHA-256、备注、上传人、上传时间和软删除字段。
@@ -111,11 +113,20 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
   `CPMS_MATERIALS_DIR=/var/lib/cpms/materials`，备份脚本必须同步备份该目录。
 - 单文件上限 100 MB；后端按资料类型校验 MIME，拒绝类型不匹配或空文件。
 - 上传入口增加本机 IP 级限流，避免内网脚本误传或连续大文件请求压垮主机。
+- 前端资料上传只通过“上传”按钮打开弹窗，弹窗内展示资料类型、文件、备注和提交按钮；资料库卡片标题区不重复显示数量。
 - 软删除档案可以查看和下载已有资料，不能新增或删除资料；100 年硬删除档案时同步删除资料目录。
 - 上传、下载、删除分别记录 `ARCHIVE_MATERIAL_UPLOAD / ARCHIVE_MATERIAL_DOWNLOAD / ARCHIVE_MATERIAL_DELETE` 审计事件。
 - 上传或删除照片、出生纸等公民资料会清空旧 `archive_qr_payload`；重新更新档案码时仍要求照片和出生纸各至少 1 张。
 
-## 9. 年度状态导出
+## 9. 操作记录
+
+- 公民档案详情页固定提供“操作记录”tab，前端入口为 `cpms/frontend/dangan/ArchiveDetail.tsx`，后端入口为 `GET /api/v1/archives/:archive_id/audit-logs`。
+- 操作记录数据来源只允许使用 CPMS 本机 `audit_logs`；不得读取或依赖外部系统日志。
+- 审计记录按 `target_id = archive_id`、`detail->>'archive_id' = archive_id`、`detail->>'archive_no' = archive_no` 聚合，并按 `created_at DESC` 返回最近 100 条。
+- 接口返回 `operator_account`，由 `operator_user_id` 关联 `admin_users.admin_pubkey` 后转换为管理员账户地址；前端表格列固定为“操作、操作者账户、详情、时间”。
+- 查询操作记录是只读行为，不额外写入审计，避免打开详情页本身制造噪声。
+
+## 10. 年度状态导出
 
 - 导出文件类型固定为 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT`。
 - 导出只生成离线 JSON 文件内容，不进行联网推送。
@@ -130,10 +141,11 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 导出文件不得包含姓名、出生日期、地址、护照号等实名或 CPMS 内部号码。
 - 导出文件使用 CPMS ARCHIVE 签发密钥签名，签名原文为 `sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{exported_at}|{records_hash}`。
 
-## 10. 测试覆盖
+## 11. 测试覆盖
 
 - 普通 `cargo test` 覆盖 100 年截止日按 UTC 日期计算，避免用固定秒数近似导致闰年边界错误。
 - 设置 `CPMS_TEST_DATABASE_URL` 后，数据库集成测试会套用当前 `db/schema.sql`，覆盖软删除未满 100 年不硬删除、不入回收池；软删除满 100 年后物理删除档案、写入号码回收池并写入硬删除日志。
 - 生命周期逻辑必须继续保持单事务语义：号码回收池或硬删除日志写入失败时，不得删除 `archives` 行。
 - 公民资料库接口需覆盖上传类型/MIME 校验、软删除档案禁止新增或删除、下载审计和硬删除清理资料目录。
+- 操作记录接口需覆盖档案 ID、档案号和资料操作 detail 的聚合边界。
 - 状态导出测试覆盖导出哈希稳定性、签名原文格式、最早未导出年度选择、1 月 11 日锁定边界和注销状态无投票资格。

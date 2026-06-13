@@ -68,3 +68,15 @@ export interface ArchiveMaterial {
   uploaded_by: string;
   uploaded_at: number;
 }
+
+export interface ArchiveAuditLog {
+  log_id: string;
+  operator_user_id: string | null;
+  operator_account: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  result: 'SUCCESS' | 'FAILED';
+  detail: Record<string, unknown>;
+  created_at: number;
+}
