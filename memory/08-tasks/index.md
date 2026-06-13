@@ -70,6 +70,10 @@
 - `memory/08-tasks/open/20260611-wuminapp-proposaldata-stale-48-guard.md`
 - `memory/08-tasks/open/20260611-wuminapp-keyspaged-pin-finalized.md`
 - `memory/08-tasks/open/20260611-wuminapp-nrc-hefund-account-row.md`
+- `memory/08-tasks/open/20260612-adr017-card1-chain-voting-rule.md`
+- `memory/08-tasks/open/20260612-adr017-card2-wuminapp-finalized.md`
+- `memory/08-tasks/open/20260612-adr017-card3-node-finalized.md`
+- `memory/08-tasks/open/20260612-node-compact-u128-test-value.md`
 
 ## done
 

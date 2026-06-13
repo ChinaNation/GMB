@@ -90,7 +90,8 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         _hasMore = records.length >= _pageSize;
         _loadingMore = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[TxHistory] 分页加载失败: $e');
       if (!mounted) return;
       setState(() => _loadingMore = false);
     }

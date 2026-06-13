@@ -720,7 +720,11 @@ pub fn new_full(
                 network: network.clone(),
                 sync: Arc::new(sync_service),
                 notification_service: grandpa_notification_service,
-                voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
+                // 中文注释(ADR-017 出块即固化)：`()` 是官方无约束投票规则，
+                // 允许 GRANDPA 投票到链尾(best)。默认规则集含 BeforeBestBlockBy(2)，
+                // 在"跳空块"链上会让链尾两块永不固化(死水期 finalized 卡在 best−2)；
+                // 全端 finalized 单一口径(ADR-017)依赖本规则放开。
+                voting_rule: (),
                 prometheus_registry,
                 shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
                 telemetry: telemetry.as_ref().map(|x| x.handle()),

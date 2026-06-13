@@ -4,7 +4,7 @@ use crate::shared::rpc;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::{admins_change, storage_keys};
+use super::{admins_change, chain_query, storage_keys};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
@@ -26,7 +26,8 @@ pub fn fetch_admins(sfid_number: &str) -> Result<Vec<String>, String> {
 
 /// 查询 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。
 pub fn fetch_balance(account_hex: &str) -> Result<Option<u128>, String> {
-    let hash = fetch_finalized_head()?;
+    // 中文注释(ADR-017):钉块哈希统一取自 chain_query 收口,业务读取禁止 best。
+    let hash = chain_query::fetch_finalized_head()?;
     fetch_balance_at(account_hex, Some(&hash))
 }
 
@@ -49,15 +50,6 @@ pub fn fetch_balance_at(
             decode_account_balance(&data)
         }
         _ => Err("state_getStorage 返回格式无效".to_string()),
-    }
-}
-
-/// 查询最新 finalized 区块哈希。
-pub fn fetch_finalized_head() -> Result<String, String> {
-    let result = rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?;
-    match result {
-        Value::String(hash) => Ok(hash),
-        _ => Err("chain_getFinalizedHead 返回格式无效".to_string()),
     }
 }
 

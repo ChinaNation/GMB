@@ -19,8 +19,9 @@ class ChainEventSubscription {
 
   /// 开始订阅新区块头和 finalized 区块头。
   ///
-  /// 中文注释：newHeads 用于把钱包交易流水先标记为 inBlock，finalizedHeads
-  /// 用于把同一条流水升级为 finalized。返回值用于上层判断是否需要重试订阅。
+  /// 中文注释(ADR-017)：业务流水只由 finalizedHeads 驱动(ChainTxMonitor
+  /// 只扫 finalized 链)；newHeads 不参与流水状态，仅供交易提交 watch
+  /// (豁免区)做 UI 进度提示。返回值用于上层判断是否需要重试订阅。
   bool connect() {
     if (!SmoldotClientManager.instance.isReady) {
       debugPrint('[ChainSub] smoldot 尚未就绪，跳过区块订阅');

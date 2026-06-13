@@ -10,18 +10,6 @@ import 'smoldot_client.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 
-enum _TransferEventStatus {
-  inBlock,
-  finalized;
-
-  String get storeStatus {
-    return switch (this) {
-      _TransferEventStatus.inBlock => LocalTxStore.statusInBlock,
-      _TransferEventStatus.finalized => LocalTxStore.statusFinalized,
-    };
-  }
-}
-
 class _DecodedTransferEvent {
   const _DecodedTransferEvent({
     required this.fromHex,
@@ -36,9 +24,10 @@ class _DecodedTransferEvent {
 
 /// 链上交易监控服务（本机增量流水模式）。
 ///
-/// 中文注释：wuminapp 不查询钱包导入前历史，也不让全节点替手机维护交易索引。
-/// 本服务用 newHeads 先写入 inBlock 流水，再按 finalized 游标小步同步
-/// System.Events 并升级为 finalized，本地页面只读 Isar 缓存。
+/// 中文注释(ADR-017 全端 finalized 单一口径)：wuminapp 不查询钱包导入前
+/// 历史，也不让全节点替手机维护交易索引。本服务只按 finalized 游标小步
+/// 同步 System.Events 写入流水——交易状态两态(已提交→已确认)，不再扫
+/// best 链、不再产生"已出块"中间态；本地页面只读 Isar 缓存。
 class ChainTxMonitor {
   ChainTxMonitor._();
   static final ChainTxMonitor instance = ChainTxMonitor._();
@@ -47,7 +36,6 @@ class ChainTxMonitor {
   final ChainRpc _chainRpc = ChainRpc();
   StreamSubscription<ChainEvent>? _listener;
   Future<void>? _syncInflight;
-  Future<void>? _inBlockSweepInflight;
   Timer? _subscriptionRetryTimer;
   Timer? _syncRetryTimer;
   bool _running = false;
@@ -64,7 +52,6 @@ class ChainTxMonitor {
 
   /// 每次补同步最多连续处理的区块数，避免手机长时间离线后一次性压节点。
   static const int _maxBlocksPerRun = 120;
-  static const int _maxUnfinalizedBlocksPerRun = 32;
 
   // ──── 已知事件的 pallet_index + event_index ────
 
@@ -102,7 +89,6 @@ class ChainTxMonitor {
     if (_running) {
       _ensureSubscription();
       unawaited(_syncToLatest());
-      unawaited(_syncBestUnfinalized());
       return;
     }
     _running = true;
@@ -114,7 +100,6 @@ class ChainTxMonitor {
     // 中文注释：启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
     // 以当前 finalized 区块为起点，不回扫导入前历史。
     unawaited(_syncToLatest());
-    unawaited(_syncBestUnfinalized());
   }
 
   /// 停止监控。
@@ -160,7 +145,6 @@ class ChainTxMonitor {
       _subscriptionRetryTimer?.cancel();
       _subscriptionRetryTimer = null;
       unawaited(_syncToLatest());
-      unawaited(_syncBestUnfinalized());
       return;
     }
 
@@ -172,7 +156,6 @@ class ChainTxMonitor {
         _subscriptionRetryTimer?.cancel();
         _subscriptionRetryTimer = null;
         unawaited(_syncToLatest());
-        unawaited(_syncBestUnfinalized());
       }
     });
   }
@@ -183,11 +166,11 @@ class ChainTxMonitor {
     if (blockNumber == null) return;
     switch (event.type) {
       case ChainEventType.newBlock:
-        await _processBlock(blockNumber, status: _TransferEventStatus.inBlock);
+        // 中文注释(ADR-017)：best 头只是链尖竞争中的候选，不作为任何
+        // 业务数据来源；流水统一等 finalized 头驱动。
         break;
       case ChainEventType.newFinalizedBlock:
         await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
-        unawaited(_syncBestUnfinalized());
         break;
     }
   }
@@ -198,7 +181,6 @@ class ChainTxMonitor {
       _syncRetryTimer = null;
       if (!_running) return;
       unawaited(_syncToLatest());
-      unawaited(_syncBestUnfinalized());
     });
   }
 
@@ -212,52 +194,6 @@ class ChainTxMonitor {
       );
     } catch (e) {
       debugPrint('[TxMonitor] 启动补同步失败: $e');
-      _scheduleSyncRetry();
-    }
-  }
-
-  Future<void> _syncBestUnfinalized() {
-    final existing = _inBlockSweepInflight;
-    if (existing != null) return existing;
-
-    final task = _runSyncBestUnfinalized().whenComplete(() {
-      _inBlockSweepInflight = null;
-    });
-    _inBlockSweepInflight = task;
-    return task;
-  }
-
-  Future<void> _runSyncBestUnfinalized() async {
-    if (!_running || _walletAddressByPubkey.isEmpty) return;
-    try {
-      final finalized = await _chainRpc.fetchFinalizedBlock();
-      final latest = await _chainRpc.fetchLatestBlock();
-      final startBlock = finalized.blockNumber + 1;
-      final targetBlock = latest.blockNumber;
-      if (startBlock > targetBlock) return;
-
-      final cappedEnd = startBlock + _maxUnfinalizedBlocksPerRun - 1;
-      final endBlock = cappedEnd < targetBlock ? cappedEnd : targetBlock;
-      for (var block = startBlock; block <= endBlock; block++) {
-        if (!_running || _walletAddressByPubkey.isEmpty) return;
-        if (WalletIsar.instance.hasActiveOperation) {
-          // 中文注释：未确认区块补扫只用于补 UI 里的“已出块”状态，
-          // 遇到前台数据库操作时让路，并安排一次短延迟重试。
-          _scheduleSyncRetry();
-          return;
-        }
-        final ok = await _processBlock(
-          block,
-          status: _TransferEventStatus.inBlock,
-        );
-        if (!ok) {
-          _scheduleSyncRetry();
-          return;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-    } catch (e) {
-      debugPrint('[TxMonitor] 未确认区块补扫失败: $e');
       _scheduleSyncRetry();
     }
   }
@@ -310,10 +246,7 @@ class ChainTxMonitor {
         return;
       }
 
-      final ok = await _processBlock(
-        block,
-        status: _TransferEventStatus.finalized,
-      );
+      final ok = await _processBlock(block);
       if (!ok) {
         _scheduleSyncRetry();
         return;
@@ -333,10 +266,11 @@ class ChainTxMonitor {
     }
   }
 
-  Future<bool> _processBlock(
-    int blockNumber, {
-    required _TransferEventStatus status,
-  }) async {
+  /// 处理一个 finalized 区块的 System.Events。
+  ///
+  /// 中文注释：调用方保证 [blockNumber] ≤ finalized 高度，按块哈希钉块读取，
+  /// 写入的流水状态恒为 finalized(已确认)。
+  Future<bool> _processBlock(int blockNumber) async {
     try {
       final blockHashHex =
           await SmoldotClientManager.instance.getBlockHash(blockNumber);
@@ -355,12 +289,7 @@ class ChainTxMonitor {
       );
       if (eventsBytes.isEmpty) return true;
 
-      await _decodeTransferEvents(
-        eventsBytes,
-        blockNumber,
-        blockHashHex,
-        status: status,
-      );
+      await _decodeTransferEvents(eventsBytes, blockNumber, blockHashHex);
       return true;
     } catch (e) {
       debugPrint('[TxMonitor] 同步区块 $blockNumber 失败: $e');
@@ -372,9 +301,8 @@ class ChainTxMonitor {
   Future<void> _decodeTransferEvents(
     Uint8List data,
     int blockNumber,
-    String blockHash, {
-    required _TransferEventStatus status,
-  }) async {
+    String blockHash,
+  ) async {
     try {
       final keyHex = '0x${_hexEncode(_eventsStorageKey)}';
       final metadata = await _chainRpc.fetchMetadata();
@@ -397,7 +325,6 @@ class ChainTxMonitor {
           blockHash: blockHash,
           eventRecordIndex: index,
           extrinsicIndex: extrinsicIndex,
-          status: status,
         );
       }
       return;
@@ -405,20 +332,14 @@ class ChainTxMonitor {
       debugPrint('[TxMonitor] metadata 事件解码失败，使用兜底解析: $e');
     }
 
-    await _decodeTransferEventsFallback(
-      data,
-      blockNumber,
-      blockHash,
-      status: status,
-    );
+    await _decodeTransferEventsFallback(data, blockNumber, blockHash);
   }
 
   Future<void> _decodeTransferEventsFallback(
     Uint8List data,
     int blockNumber,
-    String blockHash, {
-    required _TransferEventStatus status,
-  }) async {
+    String blockHash,
+  ) async {
     var offset = 0;
     var eventRecordIndex = 0;
     if (data.isEmpty) return;
@@ -460,7 +381,6 @@ class ChainTxMonitor {
             blockHash: blockHash,
             eventRecordIndex: eventRecordIndex,
             extrinsicIndex: extrinsicIndex,
-            status: status,
           );
 
           offset = _skipTopics(data, offset);
@@ -491,7 +411,6 @@ class ChainTxMonitor {
     required String blockHash,
     required int eventRecordIndex,
     required int? extrinsicIndex,
-    required _TransferEventStatus status,
   }) async {
     if (fromHex == toHex) return;
     final fromBytes = _hexDecode(fromHex);
@@ -507,7 +426,6 @@ class ChainTxMonitor {
       fromAddress: _pubkeyToSs58(fromBytes),
       toAddress: _walletAddressByPubkey[toHex] ?? _pubkeyToSs58(toBytes),
       counterpartyAddress: _pubkeyToSs58(fromBytes),
-      status: status,
     );
 
     await _writeWalletTransferIfMatched(
@@ -521,7 +439,6 @@ class ChainTxMonitor {
       fromAddress: _walletAddressByPubkey[fromHex] ?? _pubkeyToSs58(fromBytes),
       toAddress: _pubkeyToSs58(toBytes),
       counterpartyAddress: _pubkeyToSs58(toBytes),
-      status: status,
     );
   }
 
@@ -632,7 +549,6 @@ class ChainTxMonitor {
     required String fromAddress,
     required String toAddress,
     required String counterpartyAddress,
-    required _TransferEventStatus status,
   }) async {
     final pubkey = LocalTxStore.normalizePubkey(walletPubkeyHex);
     final walletAddress = _walletAddressByPubkey[pubkey];
@@ -646,7 +562,8 @@ class ChainTxMonitor {
         blockHash,
         eventRecordIndex,
       ),
-      status: status.storeStatus,
+      // 中文注释(ADR-017)：监控只扫 finalized 链，写入状态恒为"已确认"。
+      status: LocalTxStore.statusFinalized,
       amountDeltaFen: amountDeltaFen,
       transferAmountFen: transferAmountFen,
       fromAddress: fromAddress,

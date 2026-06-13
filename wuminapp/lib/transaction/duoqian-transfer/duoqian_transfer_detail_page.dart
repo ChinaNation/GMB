@@ -263,8 +263,9 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
           pendingPks: pendingPks,
           detail: detail,
         ));
-      } catch (_) {
-        // 中文注释：详情快照写入失败不能影响链上最新结果展示。
+      } catch (e) {
+        // 中文注释：详情快照写入失败不能影响链上最新结果展示；仅留痕便于排查。
+        debugPrint('[DuoqianDetail] 详情快照写入失败: $e');
       }
       if (!mounted) return;
       setState(() {
@@ -358,7 +359,8 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       _syncPendingPoll(
           pendingPks.isNotEmpty && snapshot.status == _statusVoting);
       return snapshot;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DuoqianDetail] 加载多签详情快照失败: $e');
       return null;
     }
   }

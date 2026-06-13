@@ -425,16 +425,17 @@ class SmoldotClientManager {
     return response.result;
   }
 
-  /// 按 best 块哈希钉死的 `state_getKeysPaged`(全 App 反向索引扫描唯一入口)。
+  /// 按 finalized 块哈希钉死的 `state_getKeysPaged`(全 App 反向索引扫描唯一入口)。
   ///
-  /// 中文注释：legacy keysPaged 不带 hash 参数时，smoldot 在请求入队那一刻
-  /// 钉死 legacy 服务的 current_best_block——轻节点启动后追块窗口内这是旧块，
-  /// 会返回旧状态的空列表且不报任何错误（2026-06-11 机构详情提案列表为空事故）。
-  /// 同栈 harness 实证：钉 finalized 哈希的前缀扫描显著慢于钉 best（可悬死/超时），
-  /// 钉 best 秒回且与原生 chain_storage_values（详情读取路径）同口径，故统一钉 best。
-  /// 快照必须在 ensureSynced 之后取，否则追块窗口内拿到旧哈希等于复发原 bug；
-  /// 哈希缺失直接抛错，绝不用假空列表冒充"暂无数据"。
-  Future<List<String>> getKeysPagedAtBest(
+  /// 中文注释(ADR-017 全端 finalized 单一口径)：
+  /// - legacy keysPaged 不带 hash 参数时，smoldot 在请求入队那一刻钉死 legacy
+  ///   服务的 current_best_block——轻节点启动后追块窗口内这是旧块，会返回
+  ///   旧状态的空列表且不报任何错误，禁止裸调；
+  /// - 链端投票规则放开(出块即固化)后 finalized 与 best 仅差秒级，业务读取
+  ///   一律钉 finalized，与余额/提案/事件同口径；
+  /// - 快照必须在 ensureSynced 之后取，否则追块窗口内拿到旧哈希；
+  /// - 哈希缺失直接抛错，绝不用假空列表冒充"暂无数据"。
+  Future<List<String>> getKeysPagedFinalized(
     String prefixHex, {
     int count = 1000,
     String? startKey,
@@ -442,13 +443,13 @@ class SmoldotClientManager {
     _ensureReady();
     await ensureSynced();
     final snapshot = await getStatusSnapshotRaw();
-    final bestHash = snapshot.bestBlockHash;
-    if (bestHash == null || bestHash.isEmpty) {
-      throw Exception('轻节点未提供 best 块哈希，无法执行索引扫描');
+    final finalizedHash = snapshot.finalizedBlockHash;
+    if (finalizedHash == null || finalizedHash.isEmpty) {
+      throw Exception('轻节点未提供 finalized 块哈希，无法执行索引扫描');
     }
     final raw = await request(
       'state_getKeysPaged',
-      [prefixHex, count, startKey, bestHash],
+      [prefixHex, count, startKey, finalizedHash],
     ) as List<dynamic>?;
     if (raw == null) return const [];
     return raw.whereType<String>().toList(growable: false);

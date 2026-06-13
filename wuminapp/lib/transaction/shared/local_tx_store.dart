@@ -177,10 +177,11 @@ class LocalTxStore {
 
   /// 写入链上区块转账事件；如能匹配本机发起记录，则更新原记录。
   ///
-  /// 中文注释：钱包流水状态分三段：
-  /// pending=已提交、inBlock=已出块、finalized=已确认。
-  /// 收入没有本机 pending，因此 inBlock 阶段就要写入本地；finalized 阶段
-  /// 再用同一个区块事件唯一键升级状态，避免“余额到账但无收入记录”。
+  /// 中文注释(ADR-017 全端 finalized 单一口径)：本方法由只扫 finalized 链的
+  /// ChainTxMonitor 调用，写入/升级的流水状态恒为 finalized(已确认)。收入
+  /// (别人转入)没有本机 pending，只在对应区块 finalized 后用同一个区块事件
+  /// 唯一键写入，避免“余额到账但无收入记录”。inBlock 进度态由交易提交
+  /// watch 单独产生(见 [markLocalSubmitInBlock])，不在本路径。
   static Future<void> upsertBlockTransferEvent({
     required String walletAddress,
     required String walletPubkeyHex,

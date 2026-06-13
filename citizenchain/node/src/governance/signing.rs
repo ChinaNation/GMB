@@ -602,7 +602,8 @@ fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String)
 
 // ──── RPC 查询 ────
 
-fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
+// 中文注释:chain_query(ADR-017 finalized 收口)复用本封装,放宽到 pub(crate)。
+pub(crate) fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(
         method,
         params,

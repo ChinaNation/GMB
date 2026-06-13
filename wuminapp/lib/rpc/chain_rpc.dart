@@ -93,31 +93,13 @@ class ChainRpc {
 
   // ──── 批量查询 ────
 
-  /// 批量查询多个 storage key，一次 RPC 调用返回所有结果。
-  /// 使用 state_queryStorageAt([keys]) RPC 方法。
-  Future<Map<String, Uint8List?>> fetchStorageBatch(
-      List<String> storageKeyHexList) async {
-    if (storageKeyHexList.isEmpty) return {};
-
-    // 中文注释：轻节点模式改为走原生批量 storage 读取，避免继续依赖 `state_queryStorageAt`。
-    final rawMap = await SmoldotClientManager.instance
-        .getStorageValuesHex(storageKeyHexList);
-    final result = <String, Uint8List?>{};
-    for (final key in storageKeyHexList) {
-      final valueHex = rawMap[key];
-      result[key] = valueHex == null
-          ? null
-          : _hexDecode(
-              valueHex.startsWith('0x') ? valueHex.substring(2) : valueHex);
-    }
-    return result;
-  }
-
-  /// 批量查询 finalized 块上的多个 storage key。
+  /// 批量查询多个 storage key，一次原生调用返回所有结果。
   ///
-  /// 中文注释：金额展示必须使用 finalized 状态；交易 pending/inBlock/finalized
-  /// 三段状态仍保留 best/inBlock 监听路径，不混用这里的最终性读法。
-  Future<Map<String, Uint8List?>> fetchFinalizedStorageBatch(
+  /// 中文注释(ADR-017 全端 finalized 单一口径)：本入口及所有 fetch* 状态
+  /// 读取一律返回 finalized 块上的状态——业务/展示读取禁止使用 best，
+  /// 平名即 finalized 是全 App 唯一约定。交易构造与提交管线的豁免接口
+  /// (nonce/runtime version/genesis/metadata/fetchLatestBlock)另列。
+  Future<Map<String, Uint8List?>> fetchStorageBatch(
       List<String> storageKeyHexList) async {
     if (storageKeyHexList.isEmpty) return {};
 
@@ -153,26 +135,6 @@ class ChainRpc {
       final end = (start + chunkSize).clamp(0, keys.length);
       final chunk = keys.sublist(start, end);
       result.addAll(await fetchStorageBatch(chunk));
-    }
-    return result;
-  }
-
-  /// 分块批量查询 finalized 块上的多个 storage key。
-  Future<Map<String, Uint8List?>> fetchFinalizedStorageBatchChunked(
-    Iterable<String> storageKeyHexList, {
-    int chunkSize = 100,
-  }) async {
-    final keys = storageKeyHexList.toSet().toList(growable: false);
-    if (keys.isEmpty) return {};
-    if (chunkSize <= 0) {
-      throw ArgumentError.value(chunkSize, 'chunkSize', '必须大于 0');
-    }
-
-    final result = <String, Uint8List?>{};
-    for (var start = 0; start < keys.length; start += chunkSize) {
-      final end = (start + chunkSize).clamp(0, keys.length);
-      final chunk = keys.sublist(start, end);
-      result.addAll(await fetchFinalizedStorageBatch(chunk));
     }
     return result;
   }
@@ -225,10 +187,12 @@ class ChainRpc {
     return SmoldotClientManager.instance.getStatusSnapshotRaw();
   }
 
-  /// 获取最新区块的哈希和块号。
+  /// 获取最新(best)区块的哈希和块号。
   ///
-  /// 仅用于 UI 展示、事件查询和诊断；signed extrinsic 构造按 P-SIGN-001
-  /// 固定使用 immortal era，不得用最新块参与 CheckEra。
+  /// 中文注释(ADR-017 豁免区)：仅限交易/支付凭证构造内部使用(如离线支付
+  /// payload 携带当前块高)，业务/展示读取禁止调用本方法——那些一律走
+  /// finalized 口径。signed extrinsic 构造按 P-SIGN-001 固定 immortal era，
+  /// 不得用最新块参与 CheckEra。
   Future<({Uint8List blockHash, int blockNumber})> fetchLatestBlock() async {
     // 中文注释：轻节点模式直接复用原生状态快照，减少一次 `chain_getHeader` 往返。
     final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();
@@ -598,20 +562,10 @@ class ChainRpc {
   // ──── 链上状态查询 ────
 
   /// 通用 storage 查询：传入完整的 storage key（含 0x 前缀），
-  /// 返回原始 SCALE 编码字节。key 不存在时返回 null。
-  Future<Uint8List?> fetchStorage(String storageKeyHex) async {
-    // 中文注释：轻节点模式统一通过原生 storage 读取，逐步清理 Dart 层的裸 RPC。
-    final valueHex =
-        await SmoldotClientManager.instance.getStorageValueHex(storageKeyHex);
-    if (valueHex == null) return null;
-    return _hexDecode(
-      valueHex.startsWith('0x') ? valueHex.substring(2) : valueHex,
-    );
-  }
-
-  /// 通用 finalized storage 查询：传入完整的 storage key（含 0x 前缀），
   /// 返回 finalized 块上的原始 SCALE 编码字节。key 不存在时返回 null。
-  Future<Uint8List?> fetchFinalizedStorage(String storageKeyHex) async {
+  ///
+  /// 中文注释(ADR-017)：业务/展示读取唯一口径 = finalized，禁止 best。
+  Future<Uint8List?> fetchStorage(String storageKeyHex) async {
     final valueHex = await SmoldotClientManager.instance
         .getFinalizedStorageValueHex(storageKeyHex);
     if (valueHex == null) return null;
@@ -670,32 +624,6 @@ class ChainRpc {
     return null;
   }
 
-  /// 查询链上已打包的 nonce（不含交易池），账户不存在返回 0。
-  Future<int> fetchConfirmedNonce(String pubkeyHex) async {
-    // 中文注释：轻节点模式优先走原生 `System.Account` 快照，避免 Dart 层继续拼 storage RPC。
-    final snapshot = await SmoldotClientManager.instance
-        .getSystemAccountSnapshot(_normalizeAccountHex(pubkeyHex));
-    if (snapshot == null || !snapshot.exists) {
-      return 0;
-    }
-    return snapshot.nonce ?? 0;
-  }
-
-  /// 查询当前 best 视图上的链上余额，返回元（yuan）。账户不存在返回 0.0。
-  ///
-  /// 中文注释：此方法只保留给交易监听、诊断和需要 best 视图的内部流程；
-  /// 页面金额展示请使用 [fetchFinalizedBalance]。
-  @Deprecated('页面金额展示请使用 fetchFinalizedBalance；本方法仅保留 best 视图内部用途')
-  Future<double> fetchBalance(String pubkeyHex) async {
-    // 中文注释：钱包余额刷新先切到原生 `System.Account` 路径，后续再逐步迁移其他 storage 读取。
-    final snapshot = await SmoldotClientManager.instance
-        .getSystemAccountSnapshot(_normalizeAccountHex(pubkeyHex));
-    if (snapshot == null || !snapshot.exists) {
-      return 0.0;
-    }
-    return snapshot.freeYuan ?? 0.0;
-  }
-
   /// 查询 finalized 块上的链上余额，返回元（yuan）。账户不存在返回 0.0。
   Future<double> fetchFinalizedBalance(String pubkeyHex) async {
     final snapshot = await SmoldotClientManager.instance
@@ -715,25 +643,6 @@ class ChainRpc {
   ///   自行解码 AccountData 的 free + reserved,绕过原生 SystemAccountSnapshot
   ///   当前只暴露 freeFen 字段的限制。
   /// - 账户不存在或数据不完整均返回 0.0。
-  @Deprecated('页面金额展示请使用 fetchFinalizedTotalBalance；本方法仅保留 best 视图内部用途')
-  Future<double> fetchTotalBalance(String pubkeyHex) async {
-    // 1. 构造 System.Account storage key:prefix + blake2_128(accountId) + accountId
-    final accountId = _hexDecode(
-        pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
-    final blake2 = Hasher.blake2b128.hash(accountId);
-    final fullKey = Uint8List(
-        _systemAccountPrefix.length + blake2.length + accountId.length);
-    fullKey.setAll(0, _systemAccountPrefix);
-    fullKey.setAll(_systemAccountPrefix.length, blake2);
-    fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
-    final keyHex = '0x${_hexEncode(fullKey)}';
-
-    // 2. 批量接口复用,只查 1 个 key 也走同一路径。
-    final batchResult = await fetchStorageBatch([keyHex]);
-    final data = batchResult[keyHex];
-    return _decodeTotalBalanceFromAccountData(data);
-  }
-
   /// 查询 finalized 块上的真实余额 = free + reserved。
   Future<double> fetchFinalizedTotalBalance(String pubkeyHex) async {
     final accountId = _hexDecode(
@@ -746,7 +655,7 @@ class ChainRpc {
     fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
     final keyHex = '0x${_hexEncode(fullKey)}';
 
-    final batchResult = await fetchFinalizedStorageBatch([keyHex]);
+    final batchResult = await fetchStorageBatch([keyHex]);
     final data = batchResult[keyHex];
     return _decodeTotalBalanceFromAccountData(data);
   }
@@ -785,39 +694,6 @@ class ChainRpc {
   ///
   /// 一次 storage proof 请求查询所有账户，比逐个调用 [fetchBalance] 更高效。
   /// 账户不存在时对应值为 0.0。
-  @Deprecated('页面金额展示请使用 fetchFinalizedBalances；本方法仅保留 best 视图内部用途')
-  Future<Map<String, double>> fetchBalances(List<String> pubkeyHexList) async {
-    if (pubkeyHexList.isEmpty) return {};
-
-    // 1. 为每个账户构建 System.Account storage key
-    final keyToPubkey = <String, String>{};
-    final storageKeys = <String>[];
-    for (final pubkeyHex in pubkeyHexList) {
-      final accountId = _hexDecode(
-          pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
-      final blake2 = Hasher.blake2b128.hash(accountId);
-      final fullKey = Uint8List(
-          _systemAccountPrefix.length + blake2.length + accountId.length);
-      fullKey.setAll(0, _systemAccountPrefix);
-      fullKey.setAll(_systemAccountPrefix.length, blake2);
-      fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
-      final keyHex = '0x${_hexEncode(fullKey)}';
-      storageKeys.add(keyHex);
-      keyToPubkey[keyHex] = pubkeyHex;
-    }
-
-    // 2. 一次批量查询
-    final batchResult = await fetchStorageBatch(storageKeys);
-
-    // 3. 解码每个账户的余额
-    final balances = <String, double>{};
-    for (final entry in keyToPubkey.entries) {
-      final data = batchResult[entry.key];
-      balances[entry.value] = _decodeBalanceFromAccountData(data);
-    }
-    return balances;
-  }
-
   /// 批量查询多个账户在 finalized 块上的链上余额。
   Future<Map<String, double>> fetchFinalizedBalances(
       List<String> pubkeyHexList) async {
@@ -839,7 +715,7 @@ class ChainRpc {
       keyToPubkey[keyHex] = pubkeyHex;
     }
 
-    final batchResult = await fetchFinalizedStorageBatch(storageKeys);
+    final batchResult = await fetchStorageBatch(storageKeys);
 
     final balances = <String, double>{};
     for (final entry in keyToPubkey.entries) {
@@ -874,7 +750,7 @@ class ChainRpc {
 
     final keyHex = '0x${_hexEncode(_sfidMainAccountKey)}';
     final result =
-        await SmoldotClientManager.instance.getStorageValueHex(keyHex);
+        await SmoldotClientManager.instance.getFinalizedStorageValueHex(keyHex);
     if (result == null) {
       return null;
     }

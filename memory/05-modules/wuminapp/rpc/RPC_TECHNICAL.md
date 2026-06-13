@@ -89,9 +89,9 @@ lib/rpc/
   旧的同步版本（不带 `_async` 后缀）已标记废弃，后续将删除。
   Dart 侧通过 `NativeCapabilityHandler`（`chain.dart`）统一管理异步回调注册
 - 当前代码已开始切换业务主路径：
-  - `ChainRpc.fetchBalance()` 在轻节点模式下已优先走 `SmoldotClientManager.getSystemAccountSnapshot()`，仅保留给 best 视图诊断和交易监听内部流程
+  - ADR-017 后 `fetchBalance()`(best 视图)已删除；余额一律 `fetchFinalizedBalance()`
   - `ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` / `fetchFinalizedTotalBalance()` 统一走 finalized storage proof，页面金额展示只允许使用这些方法
-  - `ChainRpc.fetchConfirmedNonce()` 在轻节点模式下已优先走原生 `System.Account` 快照中的 nonce
+  - ADR-017 后 `fetchConfirmedNonce()` 已删除；签名 nonce 走豁免区 `fetchNonce()`(accountNextIndex 池视图)
   - `ChainRpc.fetchStorage()` / `fetchStorageBatch()` 在轻节点模式下已改走原生 storage 读取
   - `ChainRpc.fetchRuntimeVersion()` / `fetchMetadata()` 在轻节点模式下已改走原生 capability
   - `ChainRpc.fetchLatestBlock()` 在轻节点模式下已改为复用状态快照中的 `bestBlock`
@@ -126,7 +126,7 @@ lib/rpc/
 4. 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额
 5. 分 → 元，返回 `double`
 
-`ChainRpc.fetchBalance()` 仍存在，但语义是 best 视图余额，只允许交易监听、链路诊断或明确需要未 finalized 视图的内部代码使用；UI 金额展示不得调用。
+ADR-017 后已无 best 视图余额接口；所有余额读取 finalized(`fetchFinalizedBalance`/`fetchFinalizedBalances`/`fetchFinalizedTotalBalance`)。
 
 `ChainRpc.fetchFinalizedTotalBalance()` 读取 finalized 块上的 `free + reserved`，用于钱包详情链上余额卡；钱包列表、治理机构详情、多签余额、转账页余额提示统一读取 finalized free 余额。
 
@@ -290,13 +290,13 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 ```text
 1. 对每个 pubkeyHex 构建 System.Account storage key：
    key = SYSTEM_ACCOUNT_PREFIX + blake2b_128(accountId) + accountId
-2. 调用 fetchFinalizedStorageBatch(allKeys) — 一次 finalized storage proof 请求
+2. 调用 fetchStorageBatch(allKeys)(平名即 finalized) — 一次 finalized storage proof 请求
 3. 对每个返回值：从 SCALE 字节 offset 16 读 u128 LE → ÷100 → yuan
 ```
 
 `wallet_page.dart` 的 `_refreshBalancesFromChain()` 已改为一次调用 `fetchFinalizedBalances(allPubkeys)`，并在轻节点不可用时向用户展示统一错误文案，而不是把失败静默吞成 0 余额。
 
-`fetchBalances()` 仍作为 best 视图批量余额读取保留，不作为页面金额展示入口。
+ADR-017 后 `fetchBalances()`(best 批量)已删除；批量余额走 `fetchFinalizedBalances()`。
 
 ### 8.3 钱包交易流水监听（已实现）
 
@@ -344,7 +344,7 @@ finalized head 到达
 
 | 模块 | 用途 | 状态 |
 | --- | --- | --- |
-| `wallet` | 余额查询（`ChainRpc.fetchBalance`） | 已实现 |
+| `wallet` | 余额查询（`ChainRpc.fetchFinalizedBalance`） | 已实现 |
 | `wallet` | 钱包交易流水监听（`ChainTxMonitor`） | 已实现 |
 | `onchain` | 普通链上转账（`OnchainRpc.transferKeepAlive`） | 已实现 |
 | `governance` | 提案/投票 | 规划中 |
