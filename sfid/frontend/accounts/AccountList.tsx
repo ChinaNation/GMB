@@ -48,6 +48,12 @@ export const AccountList: React.FC<Props> = ({
       dataSource={accounts}
       pagination={false}
       columns={[
+        {
+          title: '序号',
+          width: 70,
+          align: 'center',
+          render: (_v, _row, index) => index + 1,
+        },
         { title: '账户名称', dataIndex: 'account_name', width: 200 },
         {
           title: '账户地址',

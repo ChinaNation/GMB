@@ -1,7 +1,7 @@
 // 注册局视图 —— 调度器:持有所有状态和副作用,按 mode 分派:
-//   - 'city-registry'    → CityRegistryView(市注册局 tab:城市网格→市注册局机构详情页)
+//   - 'city-registry'    → CityRegistryView(市注册局 tab:城市表格→市注册局机构详情页)
 //   - 'federal-registry' → FederalRegistryView(联邦注册局 tab:联邦注册局机构详情页)
-// 联邦管理员城市网格→点市进详情;市管理员直接进本市/本省详情。
+// 联邦管理员城市表格→点市进详情;市管理员直接进本市/本省详情。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Form, Input, Modal, Space, Typography } from 'antd';
@@ -33,7 +33,7 @@ import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionDetail } from '../subjects/api';
 
 export interface FederalAdminsViewProps {
-  /// 'city-registry' = 市注册局 tab(城市网格→市注册局机构详情页);
+  /// 'city-registry' = 市注册局 tab(城市表格→市注册局机构详情页);
   /// 'federal-registry' = 联邦注册局 tab(联邦注册局机构详情页)
   mode: 'city-registry' | 'federal-registry';
 }

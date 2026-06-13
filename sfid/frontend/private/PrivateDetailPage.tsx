@@ -1,7 +1,7 @@
 // 中文注释:私权机构详情页只调度私权布局,不得承载公安局/CPMS 业务。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Typography } from 'antd';
+import { Typography } from 'antd';
 import { getInstitution, type InstitutionDetail } from './common/api';
 import { deleteAccount } from '../accounts/api';
 import type { AdminAuth } from '../auth/types';
@@ -136,12 +136,6 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
 
   return (
     <div>
-      <div style={{ marginBottom: 12 }}>
-        <Button type="link" onClick={onBack} style={{ paddingLeft: 0 }}>
-          ← 返回机构列表
-        </Button>
-      </div>
-
       {loading && !inst && <Typography.Text type="secondary">加载中...</Typography.Text>}
 
       {inst && detail && (
@@ -153,6 +147,7 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
           onReload={load}
           onDeleteAccount={onDeleteAccount}
           createPasskeyChallengeGrant={runPasskeyChallengeGrant}
+          onBack={onBack}
         />
       )}
 

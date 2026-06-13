@@ -11,6 +11,7 @@ import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/rpc/chain_event_subscription.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_detail_local_store.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/proposal_vote_widgets.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_query_service.dart';
@@ -87,7 +88,9 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
   Set<String> _pendingPubkeys = const {};
   String? _voteNotice;
   bool _voteNoticeIsError = false;
-  Timer? _pendingPollTimer;
+  // ADR-018 R2:待投票确认期改用 finalized 头订阅驱动刷新,空闲链不再 20s 盲轮询。
+  ChainEventSubscription? _pendingSub;
+  StreamSubscription<ChainEvent>? _pendingEventSub;
 
   @override
   void initState() {
@@ -97,7 +100,8 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
 
   @override
   void dispose() {
-    _pendingPollTimer?.cancel();
+    _pendingEventSub?.cancel();
+    _pendingSub?.disconnect();
     super.dispose();
   }
 
@@ -447,12 +451,23 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
 
   void _syncPendingPoll(bool enabled) {
     if (!enabled) {
-      _pendingPollTimer?.cancel();
-      _pendingPollTimer = null;
+      _pendingEventSub?.cancel();
+      _pendingEventSub = null;
+      _pendingSub?.disconnect();
+      _pendingSub = null;
       return;
     }
-    if (_pendingPollTimer != null) return;
-    _pendingPollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    if (_pendingSub != null) return;
+    // 待投票确认期:订阅 finalized 头,有新最终块才刷新,空闲链零查询;
+    // 不再每 20 秒盲查一次。
+    final sub = ChainEventSubscription();
+    if (!sub.connect()) {
+      sub.disconnect();
+      return;
+    }
+    _pendingSub = sub;
+    _pendingEventSub = sub.events.listen((event) {
+      if (event.type != ChainEventType.newFinalizedBlock) return;
       if (!mounted || _loading) return;
       unawaited(_load(showSpinner: false));
     });

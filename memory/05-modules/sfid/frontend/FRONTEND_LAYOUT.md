@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-06-12
+- 最后更新:2026-06-13
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-联邦管理员相关前后端与-runtime-目录结构.md`
@@ -26,6 +26,7 @@
   - `memory/08-tasks/done/20260604-sfid-core-number-store-refactor.md`
   - `memory/08-tasks/done/20260612-181650-重构-sfid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
   - `memory/08-tasks/done/20260612-194131-sfid-private-real-module-refactor.md`
+  - `memory/08-tasks/open/20260613-sfid-institution-detail-nav.md`
 
 ## 当前边界
 
@@ -42,13 +43,13 @@ sfid/frontend/
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── china/                     # 行政区元数据 API 和确定性列表/详情缓存
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
-├── core/                      # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗、QR 协议和机构共享表单
+├── core/                      # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
 │   └── institution/           # 私权/教育共用机构新增表单,不承载业务 API
 │   └── qr/                    # WUMIN_QR_V1 前端解析器
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── docs/                      # 机构资料库前端出口
 ├── education/                 # 教育机构页面入口,教育委员会(JY)学校机构唯一管理界面
-├── gov/                       # 公权机构页面入口,前后端统一使用 gov 命名
+├── gov/                       # 公权机构页面入口、机构操作记录共享组件,前后端统一使用 gov 命名
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
 ├── private/                   # 六类私权机构 Shell,只负责省市选择和详情跳转
 │   ├── common/                # 六类私权机构共用 API、列表、创建弹窗和单类型页面壳
@@ -93,6 +94,14 @@ sfid/frontend/
 - `core/institution/CreateInstitutionForm.tsx` 是私权/公权/教育新增弹窗唯一表单实现;
   `private/PrivateCreateModal.tsx`、`gov/GovCreateModal.tsx` 和 `education/EducationCreateModal.tsx`
   只做本模块 API 注入,不得再复制表单逻辑。
+- `core/InstitutionDetailNavLayout.tsx` 是机构详情页“BrixUI 风格连接式左侧导航 + 右侧内容区”的唯一共享布局。
+  公权机构、公安局、注册局、教育机构和私权机构详情页都必须接入该布局;详情标题、身份ID、
+  状态徽标、左侧图标 tab 和右侧连接式内容区都由共享布局统一承载,不得在业务详情页另行实现 tab UI。
+  从列表进入详情时左侧第一个入口显示“返回列表”,市管理员直达详情时不显示返回入口。详情 tab 固定按
+  “机构信息 / 管理员列表 / 账户列表 / 资料库 / 操作记录”组织,其中没有管理员数据的机构不得显示
+  “管理员列表”tab。
+- `gov/OperationRecords.tsx` 是机构操作记录唯一共享组件。所有机构详情页都必须展示“操作记录”tab,
+  不得把审计日志表格重新内嵌回某个业务详情页组件。
 - `core/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 公民钱包签名弹窗固定在最高安全层。
 - `core/qr/wuminQr.ts` 是前端 WUMIN_QR_V1 envelope 解析唯一入口;不得恢复独立
@@ -135,7 +144,7 @@ sfid/frontend/
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
 - `china/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
-- `core/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；注册局市列表和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
+- `core/CityGrid.tsx`、市注册局城市表格和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；市注册局城市表格和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。市注册局城市表格读取身份ID时必须调用公权机构列表的 `org_code=CITY_REGISTRY` 后端精确过滤,不得省级拉取前 300 条后前端过滤。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
 - `private/PrivateListTable.tsx` 与 `education/EducationListTable.tsx` 不做普通机构本地分页承载大数据；私权/教育机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 承载公安局确定性列表和公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
 - 公权机构 tab 手动新增两能力(市公安局页面无新增入口):G 公法人=新公权机构
   (代码仅 `ZF/LF/SF/JC`,排除央行 `CB`,机构名称必填同市查重)/ F 非法人=公权下属非法人
@@ -153,10 +162,11 @@ sfid/frontend/
 - **账户地址统一完整 SS58**:公钥(0x hex)是系统的,前端凡展示账户一律 `tryEncodeSs58` 转
   SS58(prefix=2027)且**完整显示不截断**(小号等宽字体+break-all 换行);机构操作记录
   「操作者账户」、机构账户列表「账户地址」、公民「投票账户」均按此口径;交易哈希不是账户,允许截断。
+  机构账户列表必须在“账户名称”左侧显示序号列;联邦注册局账户新建入口只对联邦管理员开放,市管理员只读。
 - **系统代码不上前端**:主体属性/盈利属性/机构代码/市代码等系统编码只在 value 与后端流转,
   前端展示与下拉选项一律纯中文(如“公法人”“盈利”“中国”“教育委员会”);
   详情页“盈利属性/机构”两字段只显示中文,机构中文映射缺失时回退原代码仅作异常兜底。
-  机构操作记录「操作」列经 AUDIT_ACTION_LABEL(GovDetailPage)映射中文,单一来源=后端
+  机构操作记录「操作」列经 `gov/OperationRecords.tsx` 内的 AUDIT_ACTION_LABEL 映射中文,单一来源=后端
   append_audit_log 调用点 action 字面量,后端新增 action 必须同步补映射,未知值回退原标识。
 - **审计 detail 事实与展示分离**:audit 表 detail 为 JSONB,后端写入点只存结构化事实
   (键小写蛇形,值为系统原值,禁写展示文案/Debug 格式);人话翻译全在前端
@@ -175,7 +185,7 @@ sfid/frontend/
 - `admins/`:放联邦管理员列表、注册局视图、市管理员维护和管理员安全写操作。
 - 注册局-联邦管理员列表页面由 `FederalAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
 - 联邦管理员采用同级模型;每省最多 5 人,仅内置初始联邦管理员拥有删除新增联邦管理员的权限。
-- 市管理员列表必须显示 `本市市管理员：x / 30`;市列表卡片显示该市 `x / 30`;
+- 市管理员列表必须显示 `本市市管理员：x / 30`;市注册局城市表格“管理员数”列显示该市 `x / 30`;
   达到 30 人的市禁用新增按钮和新增弹窗里的市选项,但最终上限仍以后端校验为准。
 - `city_admins_api.ts` 保留市管理员列表读取和姓名登录态修改。
 - `admins/FederalAdminsView.tsx` 的联邦管理员列表和市管理员列表有本地缓存时必须先显示缓存,再后台刷新后端数据,避免进入注册局详情时反复空白转圈。

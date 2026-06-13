@@ -155,6 +155,8 @@ sfid/backend/
   scope 翻译成 `p_code / c_code` 后再交给 StoreHandle,不得用中文省市字段或内存全量过滤。
 - 公安局和公权机构确定性列表是只读查询:启动或显式 reconcile 负责生成/对账,GET 列表接口
   只按 `p_code / c_code` 读取目标表,不得在 GET 中执行 backfill、reconcile、写库或分片同步。
+  公权机构列表允许 `org_code` 精确过滤,用于市注册局等确定性细类列表一次性读取完整身份ID,
+  不得让前端先读取省级公权目录分页再自行过滤。
 - `subjects/registration.rs` 承接公权/教育通用注册和列表内核;六类私权机构从
   `private/<type>/mod.rs` 传入固定规则后调用私权专用内核,不得恢复 `private/handler.rs`。
 - `subjects/http.rs` 承接跨 `gov/private/accounts/docs/subjects` 的 HTTP 辅助函数,包括
