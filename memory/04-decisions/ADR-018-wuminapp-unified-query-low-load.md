@@ -1,6 +1,6 @@
 # ADR-018:wuminapp 全应用统一字段查询 + 降低全节点依赖
 
-- 状态:实施中(2026-06-13)。卡①③④⑦ 已完工并真机验证(机构详情提案显示/广场去重/投票确认/降载全部生效);卡②⑤⑥ 待独立窗口续做。
+- 状态:实施中(2026-06-13)。卡①③④⑦ 已完工并真机验证(机构详情提案显示/广场去重/投票确认/降载全部生效);**卡②⑤ 代码完工**(②双发现服务合一+批量反查+删死代码;⑤ ChainReadCache 挂 fetchStorageBatch 咽喉+按 finalizedHash 块内缓存+tx_monitor 即时失效+forceFresh 旁路;analyze 0 + test 204/204,真机 logcat 待 user 跑);卡⑥ 待做。
 - **修订(2026-06-13)**:经全栈架构审计,账户发现按"三仓库 + 共享底座"重构(详见 §九)。卡② 由"listSfidAccounts 整表化"重定义为"删死代码 + 合并双发现服务单次扫描 + AddressRegisteredSfid 反查命名";卡⑥ 增列"公权机构目录走 SFID 后端 catalog";新增 [[ADR-019]](ADR-019-adminaccounts-by-member-index.md)(链端成员反向索引,L2)。
 - 关联:[[ADR-017]](ADR-017-finalized-unification.md)
 - 触发:机构详情提案列表为空(根因实测:轻节点对长前缀 keysPaged 返回空);user 要求把"统一字段 + 降载"作为基础规则,整改整个 wuminapp。
@@ -152,7 +152,9 @@ lib/governance/
 ├── shared/                              ← 共享底座(三类都用,单一源)
 │   ├── account_derivation.dart          ← derive_duoqian_account 唯一 Dart 实现(OP_* 全枚举)
 │   │                                       现状:仅 personal-manage/personal_duoqian_derive.dart,需归位/补全
-│   ├── chain_read_cache.dart(卡⑤)      ← finalizedBlockHash:storageKey 精确整键余额/storage 共享缓存
+│   ├── chain_read_cache.dart(卡⑤)      ← finalizedBlockHash 命名空间的余额/storage 共享缓存
+│   │     （实现落 lib/rpc/chain_read_cache.dart:消费者 ChainRpc 在 rpc 层,避免 rpc→governance 层级倒挂;
+│   │      挂在 fetchStorageBatch 咽喉透明覆盖全部 finalized 状态读,豁免管线不经此入口天然隔离）
 │   ├── account_card / balance UI        ← 账户卡、余额展示(三类同一套)
 │   ├── address_registered_sfid 反查     ← AddressRegisteredSfid[addr]→(sfid,name) 精确整键
 │   └── admin_account_storage_codec.dart ← 已存在(两发现服务共用解码器)
