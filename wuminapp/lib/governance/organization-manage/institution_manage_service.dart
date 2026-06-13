@@ -6,7 +6,6 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
-import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
 import 'institution_manage_models.dart';
 import 'duoqian_storage_codec.dart';
@@ -295,67 +294,6 @@ class InstitutionManageService {
 
   // ──── 链上查询 ────
 
-  /// 翻页查询某 SFID 机构下的全部 (account_name, duoqian_address)。
-  ///
-  /// 内部:`state_getKeysPaged` prefix = twox128("OrganizationManage")
-  ///       || twox128("SfidRegisteredAddress")
-  ///       || blake2_128_concat(sfid_number);每个 key 后段:
-  ///       blake2_128(account_name)(16B) || account_name 真值(变长 BoundedVec)。
-  ///       value = duoqian_address(32B)。
-  Future<List<({String accountName, String duoqianAddressHex})>>
-      listSfidAccounts(Uint8List sfidNumber) async {
-    final palletHash = Hasher.twoxx128.hashString('OrganizationManage');
-    final storageHash = Hasher.twoxx128.hashString('SfidRegisteredAddress');
-    final sfidKeyHash = _blake2128Concat(sfidNumber);
-    final prefix = Uint8List(
-      palletHash.length + storageHash.length + sfidKeyHash.length,
-    );
-    var offset = 0;
-    prefix.setAll(offset, palletHash);
-    offset += palletHash.length;
-    prefix.setAll(offset, storageHash);
-    offset += storageHash.length;
-    prefix.setAll(offset, sfidKeyHash);
-
-    final results = <({String accountName, String duoqianAddressHex})>[];
-    String? startKey;
-    const pageSize = 256;
-    final prefixHex = '0x${_hexEncode(prefix)}';
-    final prefixHexLen = prefixHex.length;
-
-    while (true) {
-      final keys = await SmoldotClientManager.instance.getKeysPagedFinalized(
-        prefixHex,
-        count: pageSize,
-        startKey: startKey,
-      );
-      if (keys.isEmpty) break;
-
-      for (final keyHex in keys) {
-        // 双 key:prefix + blake2_128(name)(16B 32 hex) + name 真值(变长)
-        // 截掉 prefix(64 hex)和 name 哈希(32 hex)即可得 name 真字节
-        if (keyHex.length < prefixHexLen + 32) continue;
-        final nameHex = keyHex.substring(prefixHexLen + 32);
-        final nameBytes = _hexDecode(nameHex);
-        final accountName = _utf8Decode(Uint8List.fromList(nameBytes));
-
-        final value = await _rpc.fetchStorage(keyHex);
-        if (value == null || value.length < 32) continue;
-        final duoqianAddrHex =
-            _hexEncode(Uint8List.fromList(value.sublist(0, 32)));
-        results.add((
-          accountName: accountName,
-          duoqianAddressHex: duoqianAddrHex,
-        ));
-      }
-
-      if (keys.length < pageSize) break;
-      startKey = keys.last;
-    }
-
-    return results;
-  }
-
   /// 查询 SFID (sfid_number + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
   Future<String?> fetchSfidRegisteredAddress(
       Uint8List sfidNumber, Uint8List accountName) async {
@@ -370,16 +308,40 @@ class InstitutionManageService {
     return _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
   }
 
-  /// 通过机构账户地址反查其 SFID 归属和账户名。
-  Future<RegisteredInstitutionRef?> fetchRegisteredInstitutionRef(
-    String duoqianAddressHex,
-  ) async {
-    final refKey = DuoqianStorageCodec.addressRegisteredSfidKey(
-      duoqianAddressHex,
+  /// 批量反查多个机构账户地址的 SFID 归属(`AddressRegisteredSfid` 精确整键)。
+  ///
+  /// 返回以入参地址原样为键的 map;未注册或解码失败的地址值为 null。
+  /// 机构多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
+  Future<Map<String, RegisteredInstitutionRef?>>
+      fetchRegisteredInstitutionRefsBatch(
+    Iterable<String> duoqianAddressHexList, {
+    int chunkSize = 100,
+  }) async {
+    final addresses = duoqianAddressHexList
+        .where((address) => address.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (addresses.isEmpty) return {};
+
+    final storageKeyByAddress = <String, String>{
+      for (final address in addresses)
+        address:
+            '0x${_hexEncode(DuoqianStorageCodec.addressRegisteredSfidKey(address))}',
+    };
+
+    final values = await _rpc.fetchStorageBatchChunked(
+      storageKeyByAddress.values.toSet(),
+      chunkSize: chunkSize,
     );
-    final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
-    if (refData == null) return null;
-    return DuoqianStorageCodec.decodeRegisteredInstitution(refData);
+
+    final result = <String, RegisteredInstitutionRef?>{};
+    for (final entry in storageKeyByAddress.entries) {
+      final data = values[entry.value];
+      result[entry.key] = data == null
+          ? null
+          : DuoqianStorageCodec.decodeRegisteredInstitution(data);
+    }
+    return result;
   }
 
   /// 查询机构多签账户信息。
@@ -977,9 +939,6 @@ class InstitutionManageService {
     }
     return true;
   }
-
-  String _utf8Decode(Uint8List bytes) =>
-      utf8.decode(bytes, allowMalformed: true);
 
   (int, int) _decodeCompact(Uint8List data, int offset) {
     final first = data[offset];

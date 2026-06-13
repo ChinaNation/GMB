@@ -6,6 +6,7 @@ import 'package:polkadart/polkadart.dart'
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
+import 'chain_read_cache.dart';
 import 'smoldot_client.dart';
 
 /// 交易池观察状态。
@@ -99,10 +100,29 @@ class ChainRpc {
   /// 读取一律返回 finalized 块上的状态——业务/展示读取禁止使用 best，
   /// 平名即 finalized 是全 App 唯一约定。交易构造与提交管线的豁免接口
   /// (nonce/runtime version/genesis/metadata/fetchLatestBlock)另列。
+  ///
+  /// 中文注释(ADR-018 §九 / 卡⑤)：所有 finalized 状态读取都汇入本入口,
+  /// 故缓存挂在这里即覆盖余额 / storage / 反查 / 多签扫描全部读取(`ChainReadCache`,
+  /// 按 finalizedBlockHash 命名空间,块内复用)。豁免管线走各自原生调用不经本入口,
+  /// 结构性免于被缓存;需绝对最新的场景传 [forceFresh]。
   Future<Map<String, Uint8List?>> fetchStorageBatch(
-      List<String> storageKeyHexList) async {
+    List<String> storageKeyHexList, {
+    bool forceFresh = false,
+  }) async {
     if (storageKeyHexList.isEmpty) return {};
+    return ChainReadCache.instance.read(
+      storageKeyHexList,
+      finalizedHashProvider: () async =>
+          (await SmoldotClientManager.instance.getStatusSnapshot())
+              ?.finalizedBlockHash,
+      fetchMissing: _rawFetchFinalizedStorage,
+      forceFresh: forceFresh,
+    );
+  }
 
+  /// 真正下沉到 smoldot 的 finalized 批量读取(仅 [ChainReadCache] 未命中时调用)。
+  Future<Map<String, Uint8List?>> _rawFetchFinalizedStorage(
+      List<String> storageKeyHexList) async {
     final rawMap = await SmoldotClientManager.instance
         .getFinalizedStorageValuesHex(storageKeyHexList);
     final result = <String, Uint8List?>{};
@@ -244,7 +264,6 @@ class ChainRpc {
   }
 
   RuntimeMetadata? _cachedMetadata;
-  String? _cachedCurrentSfidMainPubkeyHex;
 
   /// 提交已签名的 extrinsic,返回交易哈希(32 字节)。
   ///
@@ -624,14 +643,19 @@ class ChainRpc {
     return null;
   }
 
-  /// 查询 finalized 块上的链上余额，返回元（yuan）。账户不存在返回 0.0。
-  Future<double> fetchFinalizedBalance(String pubkeyHex) async {
-    final snapshot = await SmoldotClientManager.instance
-        .getFinalizedSystemAccountSnapshot(_normalizeAccountHex(pubkeyHex));
-    if (snapshot == null || !snapshot.exists) {
-      return 0.0;
-    }
-    return snapshot.freeYuan ?? 0.0;
+  /// 查询 finalized 块上的链上余额(free，yuan)。账户不存在返回 0.0。
+  ///
+  /// 中文注释(ADR-018 卡⑤)：改走 [fetchFinalizedBalances] 单元素路径,与批量
+  /// 余额共用 System.Account storage 读 + ChainReadCache 块内缓存;口径仍是 free,
+  /// 与原 getFinalizedSystemAccountSnapshot().freeYuan 等价。[forceFresh] 旁路缓存
+  /// (转账前余额守卫用,确保拿到最新 finalized 状态)。
+  Future<double> fetchFinalizedBalance(
+    String pubkeyHex, {
+    bool forceFresh = false,
+  }) async {
+    final balances =
+        await fetchFinalizedBalances([pubkeyHex], forceFresh: forceFresh);
+    return balances[pubkeyHex] ?? 0.0;
   }
 
   /// 查询链上真实余额 = free + reserved,best 视图。
@@ -696,7 +720,9 @@ class ChainRpc {
   /// 账户不存在时对应值为 0.0。
   /// 批量查询多个账户在 finalized 块上的链上余额。
   Future<Map<String, double>> fetchFinalizedBalances(
-      List<String> pubkeyHexList) async {
+    List<String> pubkeyHexList, {
+    bool forceFresh = false,
+  }) async {
     if (pubkeyHexList.isEmpty) return {};
 
     final keyToPubkey = <String, String>{};
@@ -715,7 +741,8 @@ class ChainRpc {
       keyToPubkey[keyHex] = pubkeyHex;
     }
 
-    final batchResult = await fetchStorageBatch(storageKeys);
+    final batchResult =
+        await fetchStorageBatch(storageKeys, forceFresh: forceFresh);
 
     final balances = <String, double>{};
     for (final entry in keyToPubkey.entries) {
@@ -742,21 +769,14 @@ class ChainRpc {
   /// 读取链上当前 SFID 主验签公钥（32 字节 AccountId）。
   ///
   /// 存储项：`SfidSystem::SfidMainAccount`，类型为 `Option<AccountId32>`。
+  /// 中文注释(ADR-018 卡⑤)：改走 [fetchStorageBatch],纳入 ChainReadCache 块内
+  /// 缓存。原先的 `_cachedCurrentSfidMainPubkeyHex` 永久缓存永不失效,密钥轮换后会
+  /// 读到旧值;块内缓存随换块自然失效,更正确。
   Future<String?> fetchCurrentSfidMainPubkeyHex() async {
-    final cached = _cachedCurrentSfidMainPubkeyHex;
-    if (cached != null && cached.isNotEmpty) {
-      return cached;
-    }
-
     final keyHex = '0x${_hexEncode(_sfidMainAccountKey)}';
-    final result =
-        await SmoldotClientManager.instance.getFinalizedStorageValueHex(keyHex);
-    if (result == null) {
-      return null;
-    }
-
-    final data = _hexDecode(_stripHexPrefix(result));
-    if (data.isEmpty) {
+    final batch = await fetchStorageBatch([keyHex]);
+    final data = batch[keyHex];
+    if (data == null || data.isEmpty) {
       return null;
     }
 
@@ -769,9 +789,7 @@ class ChainRpc {
       throw Exception('SfidMainAccount 存储格式异常');
     }
 
-    final pubkeyHex = '0x${_hexEncode(pubkeyBytes)}';
-    _cachedCurrentSfidMainPubkeyHex = pubkeyHex;
-    return pubkeyHex;
+    return '0x${_hexEncode(pubkeyBytes)}';
   }
 
   static (BigInt value, int size) _decodeCompact(Uint8List data, int offset) {
@@ -960,10 +978,6 @@ class ChainRpc {
     key.setAll(0, palletHash);
     key.setAll(palletHash.length, storageHash);
     return key;
-  }
-
-  static String _normalizeAccountHex(String hex) {
-    return hex.startsWith('0x') ? hex : '0x$hex';
   }
 
   static String _stripHexPrefix(String value) {

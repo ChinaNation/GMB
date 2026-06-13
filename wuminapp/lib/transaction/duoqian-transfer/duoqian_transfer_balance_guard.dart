@@ -20,7 +20,9 @@ class DuoqianTransferBalanceGuard {
     ChainRpc? chainRpc,
   }) async {
     final rpc = chainRpc ?? ChainRpc();
-    final balanceYuan = await rpc.fetchFinalizedBalance(wallet.pubkeyHex);
+    // 中文注释(ADR-018 卡⑤)：转账前余额守卫必须读最新 finalized 余额,旁路缓存。
+    final balanceYuan =
+        await rpc.fetchFinalizedBalance(wallet.pubkeyHex, forceFresh: true);
     if (balanceYuan >= requiredFeeYuan) {
       return null;
     }

@@ -21,16 +21,15 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'organization-manage/institution_account_info_page.dart';
-import 'organization-manage/institution_discovery_service.dart';
 import 'organization-manage/institution_manage_models.dart' as org_models;
 import 'organization-manage/institution_manage_service.dart';
 import 'organization-manage/institution_duoqian_create_page.dart';
 import 'personal-manage/personal_duoqian_create_page.dart';
 import 'personal-manage/personal_manage_account_info_page.dart';
-import 'personal-manage/personal_manage_discovery_service.dart';
 import 'personal-manage/personal_manage_models.dart';
 import 'personal-manage/personal_manage_service.dart';
 import 'personal-manage/personal_proposal_history_service.dart';
+import 'shared/multisig_discovery_coordinator.dart';
 
 enum _DuoqianKind { personal, institution }
 
@@ -382,35 +381,20 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     var anyChanged = false;
     var completed = false;
     try {
-      final personalFuture =
-          PersonalManageDiscoveryService().discoverByMyWallets(
+      // 机构多签 + 个人多签共用一次 AdminAccounts 扫描(ADR-018 §九),
+      // 由协调器分发到两类后处理,避免同一张表各扫一遍。
+      final result = await MultisigDiscoveryCoordinator().discoverAll(
         force: force,
         onProgress: (s, t, m) {
           if (mounted) {
             setState(() {
-              _scanProgress = '个人多签扫描 $s${t == null ? '' : '/$t'} · 已发现 $m';
+              _scanProgress = '多签扫描 $s${t == null ? '' : '/$t'} · 已解码 $m';
             });
           }
         },
       );
-      final institutionFuture = InstitutionDiscoveryService().discoverByMyWallets(
-        force: force,
-        onProgress: (s, t, m) {
-          if (mounted) {
-            setState(() {
-              _scanProgress = '机构多签扫描 $s${t == null ? '' : '/$t'} · 已发现 $m';
-            });
-          }
-        },
-      );
-      final personalStats = await personalFuture;
-      final institutionStats = await institutionFuture;
-      anyChanged = personalStats.newlyAdded > 0 ||
-          personalStats.orphansRemoved > 0 ||
-          institutionStats.newlyAdded > 0 ||
-          institutionStats.orphansRemoved > 0;
-      completed =
-          !personalStats.partialFailure && !institutionStats.partialFailure;
+      anyChanged = result.anyChanged;
+      completed = result.completed;
     } catch (e) {
       debugPrint('[DuoqianListPage] discovery 失败: $e');
     } finally {

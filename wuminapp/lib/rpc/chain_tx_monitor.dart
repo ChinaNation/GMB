@@ -5,6 +5,7 @@ import 'package:polkadart/polkadart.dart' show Events, Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_event_subscription.dart';
+import 'chain_read_cache.dart';
 import 'chain_rpc.dart';
 import 'smoldot_client.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
@@ -170,6 +171,9 @@ class ChainTxMonitor {
         // 业务数据来源；流水统一等 finalized 头驱动。
         break;
       case ChainEventType.newFinalizedBlock:
+        // 中文注释(ADR-018 卡⑤)：新 finalized 块=链上状态已更新,立即失效
+        // ChainReadCache,让换块后的余额/storage 读取拿到最新 finalized 状态。
+        ChainReadCache.instance.invalidate();
         await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
         break;
     }

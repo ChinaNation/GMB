@@ -1,21 +1,21 @@
-// 个人多签反向索引发现服务。
+// 个人多签反向索引发现:后处理(ADR-018 §九)。
 //
-// 只处理 AdminsChange::AdminAccounts 中的个人多签账户，发现后写入
-// PersonalDuoqianEntity。机构账户发现继续留在 organization-manage 目录。
+// 只负责"后处理":从共享的 AdminAccounts 单次扫描结果(AdminAccountsScanService)
+// 里筛出个人多签(kind=Personal,且管理员含本地钱包),反查发起人 / 账户名后
+// upsert `PersonalDuoqianEntity`。扫描、节流、本地钱包读取统一收口在
+// `MultisigDiscoveryCoordinator`,本服务不再各自扫链。
 
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
-import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/governance/shared/admin_account_storage_codec.dart';
+import 'package:wuminapp_mobile/governance/shared/admin_accounts_scan_service.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'personal_manage_service.dart';
 
+/// 个人多签后处理统计。
 class PersonalManageDiscoveryStats {
   const PersonalManageDiscoveryStats({
     required this.subjectsScanned,
@@ -46,149 +46,71 @@ class PersonalManageDiscoveryService {
   PersonalManageDiscoveryService({
     ChainRpc? chainRpc,
     PersonalManageService? personalManageService,
-    WalletManager? walletManager,
-  })  : _rpc = chainRpc ?? ChainRpc(),
-        _personalManage =
-            personalManageService ?? PersonalManageService(chainRpc: chainRpc),
-        _wallets = walletManager ?? WalletManager();
+  }) : _personalManage =
+            personalManageService ?? PersonalManageService(chainRpc: chainRpc);
 
-  final ChainRpc _rpc;
   final PersonalManageService _personalManage;
-  final WalletManager _wallets;
 
-  static const _throttleWindow = Duration(minutes: 30);
-  static const _prefsLastDiscoveryAt = 'personal_manage_discovery_last_at_ms';
-  static const _pageSize = 256;
-  static const _batchSize = 100;
-
-  Future<PersonalManageDiscoveryStats> discoverByMyWallets({
-    Set<String>? myPubkeysHex,
-    bool force = false,
-    void Function(int scanned, int? total, int matched)? onProgress,
+  /// 处理一次共享扫描结果:筛出我的个人多签 → 批量反查发起人/账户名 → upsert Isar + 孤儿校验。
+  Future<PersonalManageDiscoveryStats> processScanned(
+    AdminAccountsScanResult scan, {
+    required Set<String> myPubkeys,
   }) async {
     final start = DateTime.now();
 
-    if (!force) {
-      final last = await _readLastDiscoveryAt();
-      if (last != null && DateTime.now().difference(last) < _throttleWindow) {
-        return PersonalManageDiscoveryStats.empty;
-      }
-    }
+    final mine = AdminAccountsScanService.filterMine(
+      scan,
+      myPubkeysHex: myPubkeys,
+      kind: AdminAccountStorageCodec.kindPersonal,
+    );
 
-    final myPubkeys = myPubkeysHex ?? await _readMyPubkeys();
-    if (myPubkeys.isEmpty) return PersonalManageDiscoveryStats.empty;
-
-    final prefixHex = _adminsChangeAdminAccountsPrefixHex();
-    final allKeys = <String>[];
-    String? startKey;
-    var partialFailure = false;
-
-    while (true) {
-      List<String>? page;
-      try {
-        page = await SmoldotClientManager.instance.getKeysPagedFinalized(
-          prefixHex,
-          count: _pageSize,
-          startKey: startKey,
-        );
-      } catch (e) {
-        debugPrint('[PersonalManageDiscovery] getKeysPaged 失败: $e');
-        partialFailure = true;
-        break;
-      }
-      if (page.isEmpty) break;
-      final keys = page;
-      allKeys.addAll(keys);
-      onProgress?.call(allKeys.length, null, 0);
-      if (keys.length < _pageSize) break;
-      startKey = keys.last;
-    }
-
-    final matchedPersonalAddrs = <String, List<String>>{};
-    var matchedCount = 0;
-
-    for (var batchStart = 0;
-        batchStart < allKeys.length;
-        batchStart += _batchSize) {
-      final batchEnd = (batchStart + _batchSize).clamp(0, allKeys.length);
-      final batchKeys = allKeys.sublist(batchStart, batchEnd);
-
-      Map<String, Uint8List?> values;
-      try {
-        values = await _rpc.fetchStorageBatch(batchKeys);
-      } catch (e) {
-        debugPrint('[PersonalManageDiscovery] fetchStorageBatch 失败: $e');
-        partialFailure = true;
-        continue;
-      }
-
-      for (final keyHex in batchKeys) {
-        final value = values[keyHex];
-        if (value == null) continue;
-        final decoded = AdminAccountStorageCodec.tryDecode(value);
-        if (decoded == null ||
-            decoded.kind != AdminAccountStorageCodec.kindPersonal) {
-          continue;
-        }
-
-        final hits = decoded.adminPubkeysHex
-            .where((pk) => myPubkeys.contains(pk))
-            .toList();
-        if (hits.isEmpty) continue;
-
-        final keyBytes = _hexDecode(keyHex);
-        final accountId =
-            AdminAccountStorageCodec.extractAccountIdFromKey(keyBytes);
-        if (accountId == null) continue;
-        final addr =
-            AdminAccountStorageCodec.accountHexFromAccountId(accountId);
-        if (addr == null) continue;
-        matchedPersonalAddrs[addr] = hits;
-        matchedCount++;
-      }
-      onProgress?.call(allKeys.length, allKeys.length, matchedCount);
+    // 批量反查发起人/账户名(PersonalDuoqians 精确整键),取代循环内逐条(ADR-018 R2)。
+    Map<String, ({String creatorAddressHex, String accountName})?> metas;
+    try {
+      metas = await _personalManage.fetchPersonalMetasBatch(
+        mine.map((a) => a.addrHex),
+      );
+    } catch (e) {
+      debugPrint('[PersonalManageDiscovery] 批量反查个人多签元数据失败: $e');
+      // 中文注释:反查整体失败时不做孤儿状态变更,避免把瞬时 RPC 失败误判为注销。
+      return PersonalManageDiscoveryStats(
+        subjectsScanned: scan.totalKeys,
+        matchedPersonals: mine.length,
+        newlyAdded: 0,
+        orphansRemoved: 0,
+        elapsed: DateTime.now().difference(start),
+        partialFailure: true,
+      );
     }
 
     final scannedAddrs = <String>{};
     var newlyAdded = 0;
 
-    for (final entry in matchedPersonalAddrs.entries) {
-      final addr = entry.key;
-      final meta = await _safeFetchPersonalMeta(addr);
+    for (final acc in mine) {
+      final meta = metas[acc.addrHex];
       if (meta == null) continue;
-      scannedAddrs.add(addr);
+      scannedAddrs.add(acc.addrHex);
       final added = await _upsertPersonal(
-        duoqianAddrHex: addr,
+        duoqianAddrHex: acc.addrHex,
         name: meta.accountName,
         creatorAddrHex: meta.creatorAddressHex,
-        matchedAdmins: entry.value,
+        matchedAdmins: acc.adminPubkeysHex
+            .where(myPubkeys.contains)
+            .toList(growable: false),
       );
       if (added) newlyAdded++;
     }
 
     final orphans = await _reverseValidateAndDelete(scannedAddrs);
-    await _writeLastDiscoveryAt(DateTime.now());
 
     return PersonalManageDiscoveryStats(
-      subjectsScanned: allKeys.length,
-      matchedPersonals: matchedPersonalAddrs.length,
+      subjectsScanned: scan.totalKeys,
+      matchedPersonals: mine.length,
       newlyAdded: newlyAdded,
       orphansRemoved: orphans,
       elapsed: DateTime.now().difference(start),
-      partialFailure: partialFailure,
+      partialFailure: scan.partialFailure,
     );
-  }
-
-  Future<DateTime?> lastDiscoveryAt() => _readLastDiscoveryAt();
-
-  Future<({String creatorAddressHex, String accountName})?>
-      _safeFetchPersonalMeta(String addrHex) async {
-    try {
-      return await _personalManage.fetchPersonalMeta(addrHex);
-    } catch (e) {
-      debugPrint('[PersonalManageDiscovery] fetchPersonalMeta $addrHex 失败: $e');
-      return null;
-    }
   }
 
   Future<bool> _upsertPersonal({
@@ -263,47 +185,6 @@ class PersonalManageDiscoveryService {
     return closed;
   }
 
-  Future<Set<String>> _readMyPubkeys() async {
-    try {
-      final wallets = await _wallets.getWallets();
-      return wallets.map((w) {
-        var pk = w.pubkeyHex.toLowerCase();
-        if (pk.startsWith('0x')) pk = pk.substring(2);
-        return pk;
-      }).toSet();
-    } catch (_) {
-      return <String>{};
-    }
-  }
-
-  Future<DateTime?> _readLastDiscoveryAt() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final ms = prefs.getInt(_prefsLastDiscoveryAt);
-      return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _writeLastDiscoveryAt(DateTime t) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_prefsLastDiscoveryAt, t.millisecondsSinceEpoch);
-    } catch (_) {
-      // 中文注释：节流时间写入失败不影响本次发现结果。
-    }
-  }
-
-  String _adminsChangeAdminAccountsPrefixHex() {
-    final palletHash = Hasher.twoxx128.hashString('AdminsChange');
-    final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
-    final prefix = Uint8List(palletHash.length + storageHash.length);
-    prefix.setAll(0, palletHash);
-    prefix.setAll(palletHash.length, storageHash);
-    return '0x${_hexEncode(prefix)}';
-  }
-
   Uint8List _hexDecode(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     final bytes = Uint8List(h.length ~/ 2);
@@ -312,7 +193,4 @@ class PersonalManageDiscoveryService {
     }
     return bytes;
   }
-
-  String _hexEncode(Uint8List bytes) =>
-      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }

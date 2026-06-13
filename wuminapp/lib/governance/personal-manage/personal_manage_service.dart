@@ -170,21 +170,48 @@ class PersonalManageService {
     );
   }
 
-  /// 查询个人多签 meta(creator + account_name)。
-  Future<({String creatorAddressHex, String accountName})?> fetchPersonalMeta(
-    String personalAddressHex,
-  ) async {
-    final key = PersonalManageStorageCodec.personalDuoqiansKey(
-      personalAddressHex,
+  /// 批量反查多个个人多签地址的发起人 / 账户名(`PersonalDuoqians` 精确整键)。
+  ///
+  /// 返回以入参地址原样为键的 map;未注册或解码失败的地址值为 null。
+  /// 个人多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
+  Future<Map<String, ({String creatorAddressHex, String accountName})?>>
+      fetchPersonalMetasBatch(
+    Iterable<String> personalAddressHexList, {
+    int chunkSize = 100,
+  }) async {
+    final addresses = personalAddressHexList
+        .where((address) => address.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (addresses.isEmpty) return {};
+
+    final storageKeyByAddress = <String, String>{
+      for (final address in addresses)
+        address:
+            '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}',
+    };
+
+    final values = await _rpc.fetchStorageBatchChunked(
+      storageKeyByAddress.values.toSet(),
+      chunkSize: chunkSize,
     );
-    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null) return null;
-    final meta = PersonalManageStorageCodec.decodePersonalDuoqian(data);
-    if (meta == null) return null;
-    return (
-      creatorAddressHex: meta.creatorHex,
-      accountName: PersonalManageStorageCodec.accountNameText(meta.accountName),
-    );
+
+    final result =
+        <String, ({String creatorAddressHex, String accountName})?>{};
+    for (final entry in storageKeyByAddress.entries) {
+      final data = values[entry.value];
+      final meta = data == null
+          ? null
+          : PersonalManageStorageCodec.decodePersonalDuoqian(data);
+      result[entry.key] = meta == null
+          ? null
+          : (
+              creatorAddressHex: meta.creatorHex,
+              accountName:
+                  PersonalManageStorageCodec.accountNameText(meta.accountName),
+            );
+    }
+    return result;
   }
 
   /// 查询个人多签账户信息。
