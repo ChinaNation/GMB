@@ -1,5 +1,5 @@
 // 中文注释:公权机构前端 API。公安局和自动公权目录都归 gov 模块调用。
-// 手动新增两能力:公权机构(G,ZF/LF/SF/JC,排除央行CB)+ 公权下属非法人(F,挂公法人);
+// 手动新增两能力:公权机构(G,ZF/LF/SF/JC,排除储备体系自动目录代码)+ 公权下属非法人(F,挂公法人);
 // JY 学校机构归 education 模块。
 
 import type { AdminAuth } from '../auth/types';

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::response::ApiResponse;
 use crate::subjects::service::{
-    can_delete_account, is_default_account_name, DEFAULT_ACCOUNT_NAMES,
+    can_delete_account, default_account_names_for_institution, is_default_account_name,
 };
 use crate::subjects::MultisigChainStatus;
 use crate::*;
@@ -214,6 +214,7 @@ pub(crate) async fn app_get_institution_registration_info(
             "institution_name is required before chain registration",
         );
     }
+    let required_default_names = default_account_names_for_institution(&inst);
     let mut account_names: Vec<String> = accounts
         .iter()
         .map(|account| account.account_name.clone())
@@ -221,15 +222,15 @@ pub(crate) async fn app_get_institution_registration_info(
         .collect();
     account_names.sort_by(|left, right| {
         let rank = |name: &String| {
-            DEFAULT_ACCOUNT_NAMES
+            required_default_names
                 .iter()
                 .position(|default_name| *default_name == name.as_str())
-                .unwrap_or(DEFAULT_ACCOUNT_NAMES.len())
+                .unwrap_or(required_default_names.len())
         };
         rank(left).cmp(&rank(right)).then(left.cmp(right))
     });
     account_names.dedup();
-    for default_name in DEFAULT_ACCOUNT_NAMES {
+    for default_name in required_default_names {
         if !account_names
             .iter()
             .any(|account_name| account_name == default_name)
@@ -237,7 +238,7 @@ pub(crate) async fn app_get_institution_registration_info(
             return api_error(
                 StatusCode::CONFLICT,
                 1005,
-                "default account_names 主账户/费用账户 are required before chain registration",
+                "default account_names are required before chain registration",
             );
         }
     }

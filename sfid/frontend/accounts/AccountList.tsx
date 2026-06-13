@@ -12,7 +12,7 @@ import {
 import { tryEncodeSs58 } from '../utils/ss58';
 
 /** 默认账户名称(与后端 `service::DEFAULT_ACCOUNT_NAMES` 对齐) */
-const DEFAULT_ACCOUNT_NAMES = ['主账户', '费用账户'] as const;
+const DEFAULT_ACCOUNT_NAMES = ['主账户', '费用账户', '永久质押', '安全基金', '两和基金'] as const;
 
 interface Props {
   accounts: InstitutionAccount[];

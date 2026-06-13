@@ -678,12 +678,12 @@ fn build_citizen_bind_sign_request(
     let mode_label = if mode == "replace" {
         "更换绑定"
     } else {
-        "新增身份ID绑定"
+        "新增公民"
     };
     let summary = if mode == "replace" {
         "确认更换绑定"
     } else {
-        "确认新增身份ID绑定"
+        "确认新增公民"
     };
     let sign_request = serde_json::json!({
         "proto": crate::core::qr::WUMIN_QR_V1,

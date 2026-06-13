@@ -2,6 +2,7 @@
 
 - 状态:实施中(2026-06-13)。卡①③④⑦ 已完工并真机验证(机构详情提案显示/广场去重/投票确认/降载全部生效);**卡②⑤ 代码完工**(②双发现服务合一+批量反查+删死代码;⑤ ChainReadCache 挂 fetchStorageBatch 咽喉+按 finalizedHash 块内缓存+tx_monitor 即时失效+forceFresh 旁路;analyze 0 + test 204/204,真机 logcat 待 user 跑);卡⑥ 待做。
 - **修订(2026-06-13)**:经全栈架构审计,账户发现按"三仓库 + 共享底座"重构(详见 §九)。卡② 由"listSfidAccounts 整表化"重定义为"删死代码 + 合并双发现服务单次扫描 + AddressRegisteredSfid 反查命名";卡⑥ 增列"公权机构目录走 SFID 后端 catalog";新增 [[ADR-019]](ADR-019-adminaccounts-by-member-index.md)(链端成员反向索引,L2)。
+- **公权机构界面定案(2026-06-13,混合模式)**:① 数据来源=发布期生成数据包打底 + SFID 公开接口版本/增量同步(不是纯接口、不是纯数据包);② 落点修订——功能域归 `wuminapp/lib/citizen/public/`(不放 governance,公权≠治理),仅借 `governance/shared/` 共享原语(派生/账户卡/缓存/提案查询);③ SFID 侧新建 `sfid/backend/wuminapp/` BFF 目录(匿名只读,薄 handler;领域逻辑留 gov),公权目录接口落此;④ 账户发现 100% 本地派生,目录行带 `custom_account_names`(空占绝大多数,近零成本),只余额联网批量+ChainReadCache 缓存;⑤ v1 只做浏览+订阅+动态展示,发起提案/换管理员下一期。拆 5 张卡:`20260613-sfid-wuminapp-bff-public-catalog`(跨模块前置)+ `card0-derivation-base` + `cardA-data-sync` + `cardB-nav-ui` + `cardC-detail`。
 - 关联:[[ADR-017]](ADR-017-finalized-unification.md)
 - 触发:机构详情提案列表为空(根因实测:轻节点对长前缀 keysPaged 返回空);user 要求把"统一字段 + 降载"作为基础规则,整改整个 wuminapp。
 

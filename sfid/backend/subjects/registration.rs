@@ -229,7 +229,7 @@ async fn create_institution_inner(
         );
     }
     // 中文注释:手动公权机构开放 ZF/LF/SF/JC 四类(教育委员会 JY 走教育 tab 学校流程);
-    // 中央银行 CB 不开放——省公民储备银行每省唯一,创世已生成完毕。
+    // 公民储备委员会/省储行不开放手动创建,创世目录已确定性生成。
     if matches!(category, InstitutionCategory::GovInstitution)
         && !is_education_school
         && !matches!(institution_code.as_str(), "ZF" | "LF" | "SF" | "JC")
@@ -237,7 +237,7 @@ async fn create_institution_inner(
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "手动公权机构仅允许 ZF/LF/SF/JC,中央银行(CB)由系统生成",
+            "手动公权机构仅允许 ZF/LF/SF/JC,公民储备委员会/省储行由系统生成",
         );
     }
     if matches!(subject_property.as_str(), "S" | "F") && p1 != "0" && p1 != "1" {
@@ -413,7 +413,25 @@ async fn create_institution_inner(
             let message = format!("write institution failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
-        insert_default_accounts_best_effort(&state, &sfid, &province, &ctx.admin_pubkey).await;
+        insert_default_accounts_best_effort(&state, &inst, &ctx.admin_pubkey).await;
+        crate::core::runtime_ops::append_audit_log(
+            &state,
+            "INSTITUTION_CREATE",
+            &ctx.admin_pubkey,
+            Some(sfid.clone()),
+            serde_json::json!({
+                "sfid_number": sfid.clone(),
+                "institution_name": institution_name.clone().unwrap_or_default(),
+                "subject_property": subject_property.clone(),
+                "institution": institution_code.clone(),
+                "category": category_text_for_audit(category),
+                "province": province.clone(),
+                "city": city.clone(),
+                "private_type": inst.private_type.clone(),
+                "partnership_kind": inst.partnership_kind.clone(),
+                "parent_sfid_number": parent_sfid_number.clone(),
+            }),
+        );
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -430,6 +448,14 @@ async fn create_institution_inner(
         1005,
         "institution sfid_number collision retry exhausted",
     )
+}
+
+fn category_text_for_audit(category: InstitutionCategory) -> &'static str {
+    match category {
+        InstitutionCategory::PublicSecurity => "PUBLIC_SECURITY",
+        InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
+        InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
+    }
 }
 
 #[derive(Debug, serde::Deserialize)]

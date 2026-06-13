@@ -307,6 +307,19 @@ pub(crate) async fn upload_document(
             );
         }
     };
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_DOCUMENT_UPLOAD",
+        &ctx.admin_pubkey,
+        Some(sfid_number.clone()),
+        serde_json::json!({
+            "sfid_number": sfid_number.clone(),
+            "doc_id": doc.id,
+            "file_name": doc.file_name.clone(),
+            "doc_type": doc.doc_type.clone(),
+            "file_size": doc.file_size,
+        }),
+    );
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -356,6 +369,19 @@ pub(crate) async fn download_document(
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::NOT_FOUND, 1004, "file not found"),
     };
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_DOCUMENT_DOWNLOAD",
+        &ctx.admin_pubkey,
+        Some(sfid_number.clone()),
+        serde_json::json!({
+            "sfid_number": sfid_number.clone(),
+            "doc_id": doc.id,
+            "file_name": doc.file_name.clone(),
+            "doc_type": doc.doc_type.clone(),
+            "file_size": doc.file_size,
+        }),
+    );
     let safe_name = doc
         .file_name
         .bytes()
@@ -441,6 +467,19 @@ pub(crate) async fn delete_document(
         );
     }
     let _ = std::fs::remove_file(&doc.file_path);
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_DOCUMENT_DELETE",
+        &ctx.admin_pubkey,
+        Some(sfid_number.clone()),
+        serde_json::json!({
+            "sfid_number": sfid_number.clone(),
+            "doc_id": doc.id,
+            "file_name": doc.file_name.clone(),
+            "doc_type": doc.doc_type.clone(),
+            "file_size": doc.file_size,
+        }),
+    );
     #[derive(serde::Serialize)]
     struct DeleteOutput {
         deleted: bool,

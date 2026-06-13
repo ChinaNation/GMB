@@ -11,11 +11,14 @@
 //! |--------|---------------------|---------------------------|------------------------------|
 //! | 0x00   | 主账户              | `"主账户"`(UTF-8 中文)   | 否                           |
 //! | 0x01   | 费用账户            | `"费用账户"`(UTF-8 中文) | 否                           |
-//! | 0x06   | 用户自定义其他账户  | 用户输入的任意非空字符串  | 是                           |
+//! | 0x02   | 永久质押            | `"永久质押"`(UTF-8 中文) | 否                           |
+//! | 0x03   | 安全基金            | `"安全基金"`(UTF-8 中文) | 否                           |
+//! | 0x04   | 两和基金            | `"两和基金"`(UTF-8 中文) | 否                           |
+//! | 0x06   | 用户自定义其他账户  | 用户输入的任意非空字符串 | 是                           |
 //!
 //! ```text
 //! preimage = b"DUOQIAN"                      // 7 字节 domain
-//!         || op_tag                          // 1 字节 (0x00 / 0x01 / 0x06)
+//!         || op_tag                          // 1 字节 (0x00 / 0x01 / 0x02 / 0x03 / 0x04 / 0x06)
 //!         || ss58.to_le_bytes()              // 2 字节 (2027 LE = [0xEB, 0x07])
 //!         || sfid_number.as_bytes()          // 变长
 //!         || account_name.as_bytes()         // 仅 0x06 追加;0x00 / 0x01 不追加
@@ -25,21 +28,28 @@
 //! ## 链端唯一真源
 //!
 //! - `primitives/src/core_const.rs`:`DUOQIAN = b"DUOQIAN"`、`OP_MAIN = 0x00`、
-//!   `OP_FEE = 0x01`、`OP_INSTITUTION = 0x06`、`derive_duoqian_account(op_tag, ss58, payload)`
+//!   `OP_FEE = 0x01`、`OP_STAKE = 0x02`、`OP_AN = 0x03`、`OP_HE = 0x04`、
+//!   `OP_INSTITUTION = 0x06`、`derive_duoqian_account(op_tag, ss58, payload)`
 //!   = `blake2_256(DUOQIAN || op_tag || ss58.to_le_bytes() || payload)`
 //! - `organization-manage/src/lib.rs` `derive_institution_address`:
-//!   `payload = sfid_number || name_suffix`,`Main`/`Fee` 的 name_suffix 为空
+//!   `payload = sfid_number || name_suffix`,`Main`/`Fee`/制度账户的 name_suffix 为空
 //! - `organization-manage/src/lib.rs` `role_from_account_name`:
-//!   `"主账户".as_bytes() → Main`;`"费用账户".as_bytes() → Fee`;其他非空 → `Named(account_name)`
+//!   保留账户名走固定角色;其他非空 → `Named(account_name)`
 
 use primitives::core_const::{
-    derive_duoqian_account, OP_FEE, OP_INSTITUTION, OP_MAIN, SS58_FORMAT,
+    derive_duoqian_account, OP_AN, OP_FEE, OP_HE, OP_INSTITUTION, OP_MAIN, OP_STAKE, SS58_FORMAT,
 };
 
 /// 主账户保留名(UTF-8 字节,9 字节)。链端同字节常量。
 const RESERVED_NAME_MAIN: &str = "主账户";
 /// 费用账户保留名(UTF-8 字节,12 字节)。
 const RESERVED_NAME_FEE: &str = "费用账户";
+/// 省储行永久质押账户保留名。
+const RESERVED_NAME_STAKE: &str = "永久质押";
+/// 国储会安全基金账户保留名。
+const RESERVED_NAME_ANQUAN: &str = "安全基金";
+/// 国储会两和基金账户保留名。
+const RESERVED_NAME_HE: &str = "两和基金";
 
 /// 按 `account_name` 路由并派生机构账户的 `duoqian_address`(小写 hex,32 字节 → 64 字符)。
 ///
@@ -49,6 +59,9 @@ const RESERVED_NAME_FEE: &str = "费用账户";
 /// ### 路由
 /// - `"主账户"` → `OP_MAIN`(preimage 不含 account_name)
 /// - `"费用账户"` → `OP_FEE`(preimage 不含 account_name)
+/// - `"永久质押"` → `OP_STAKE`(preimage 不含 account_name)
+/// - `"安全基金"` → `OP_AN`(preimage 不含 account_name)
+/// - `"两和基金"` → `OP_HE`(preimage 不含 account_name)
 /// - 其他非空 → `OP_INSTITUTION`(preimage 追加 account_name 字节)
 pub fn derive_duoqian_address(sfid_number: &str, account_name: &str) -> Option<String> {
     let name = account_name;
@@ -59,6 +72,12 @@ pub fn derive_duoqian_address(sfid_number: &str, account_name: &str) -> Option<S
         (OP_MAIN, &[])
     } else if name == RESERVED_NAME_FEE {
         (OP_FEE, &[])
+    } else if name == RESERVED_NAME_STAKE {
+        (OP_STAKE, &[])
+    } else if name == RESERVED_NAME_ANQUAN {
+        (OP_AN, &[])
+    } else if name == RESERVED_NAME_HE {
+        (OP_HE, &[])
     } else {
         (OP_INSTITUTION, name.as_bytes())
     };
@@ -103,6 +122,22 @@ mod tests {
         let named_main = derive_duoqian_address(sfid, "Main").unwrap();
         let reserved_main = derive_duoqian_address(sfid, "主账户").unwrap();
         assert_ne!(named_main, reserved_main);
+    }
+
+    #[test]
+    fn reserved_policy_accounts_use_dedicated_tags() {
+        let sfid = "LN001-GCB05-944805165-2026";
+        let stake = derive_duoqian_address(sfid, "永久质押").unwrap();
+        let anquan = derive_duoqian_address(sfid, "安全基金").unwrap();
+        let he = derive_duoqian_address(sfid, "两和基金").unwrap();
+        let named_stake = derive_duoqian_account(
+            OP_INSTITUTION,
+            SS58_FORMAT,
+            "LN001-GCB05-944805165-2026永久质押".as_bytes(),
+        );
+        assert_ne!(stake, hex::encode(named_stake));
+        assert_ne!(stake, anquan);
+        assert_ne!(anquan, he);
     }
 
     #[test]

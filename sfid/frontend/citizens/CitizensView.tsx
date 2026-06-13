@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -218,20 +219,28 @@ export function CitizensView() {
                 导入年度报告
               </Button>
             )}
-            {capabilities.canBusinessWrite && (
-              <Button type="primary" onClick={() => openBindModal(null)}>
-                新增身份ID绑定
-              </Button>
-            )}
             <Form form={searchForm} layout="inline" onFinish={onSearch}>
               <Form.Item name="keyword" style={{ marginBottom: 0 }}>
-                <Input style={{ width: 420 }} placeholder="请输入档案号、身份ID、投票账户检索" allowClear />
+                <Input
+                  style={{ width: 420 }}
+                  placeholder="请输入档案号、身份ID、投票账户检索"
+                  allowClear
+                  onPressEnter={() => searchForm.submit()}
+                  suffix={
+                    <SearchOutlined
+                      onClick={() => searchForm.submit()}
+                      style={{ color: loading ? '#999' : '#1677ff', cursor: 'pointer' }}
+                    />
+                  }
+                />
               </Form.Item>
-              <Form.Item style={{ marginBottom: 0 }}>
-                <Button htmlType="submit" loading={loading}>
-                  查询
-                </Button>
-              </Form.Item>
+              {capabilities.canBusinessWrite && (
+                <Form.Item style={{ marginBottom: 0 }}>
+                  <Button type="primary" onClick={() => openBindModal(null)}>
+                    新增公民
+                  </Button>
+                </Form.Item>
+              )}
             </Form>
           </Space>
         }

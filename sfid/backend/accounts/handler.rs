@@ -98,6 +98,16 @@ pub(crate) async fn create_account(
         let message = format!("write account failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_ACCOUNT_CREATE",
+        &ctx.admin_pubkey,
+        Some(sfid_number.clone()),
+        serde_json::json!({
+            "sfid_number": sfid_number.clone(),
+            "account_name": account_name.clone(),
+        }),
+    );
     let duoqian_address = account.duoqian_address.clone();
     Json(ApiResponse {
         code: 0,
@@ -155,11 +165,7 @@ pub(crate) async fn delete_account(
         Err(resp) => return resp,
     };
     if is_default_account_name(&account_name) {
-        return api_error(
-            StatusCode::CONFLICT,
-            1007,
-            "默认账户(主账户/费用账户)不可删除",
-        );
+        return api_error(StatusCode::CONFLICT, 1007, "默认账户不可删除");
     }
     let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(&sfid_number) {
         Ok(v) => v,
@@ -210,6 +216,16 @@ pub(crate) async fn delete_account(
         let message = format!("delete account failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_ACCOUNT_DELETE",
+        &ctx.admin_pubkey,
+        Some(sfid_number.clone()),
+        serde_json::json!({
+            "sfid_number": sfid_number.clone(),
+            "account_name": account_name.clone(),
+        }),
+    );
     #[derive(Serialize)]
     struct DeleteOutput {
         deleted: bool,

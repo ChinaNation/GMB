@@ -71,7 +71,7 @@ pub(crate) fn reconcile_official_institutions_explicit(
 
 /// 中文注释:审计日志只存"事实"——detail 是结构化 JSON(键小写蛇形,值存系统原值:
 /// 代码/布尔/原始字段),不得写展示文案;人话翻译统一归前端操作记录渲染器
-/// (GovDetailPage 的键名/值映射),文案改版零后端改动且历史行同样适用。
+/// (OperationRecords 的键名/值映射),文案改版零后端改动且历史行同样适用。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn append_audit_log(
     state: &AppState,

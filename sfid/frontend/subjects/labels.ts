@@ -3,7 +3,7 @@
 //
 // 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
 //   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
-//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除央行CB)机构名称必填 / F(锁中国ZG)挂公法人
+//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除储备体系自动目录代码)机构名称必填 / F(锁中国ZG)挂公法人
 //   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY),学校名称弹窗内必填
 //
 // P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/uninorg 同源):
@@ -48,8 +48,9 @@ export const INSTITUTION_CODE_LABEL: Record<string, string> = {
   LF: '立法院',
   SF: '司法院',
   JC: '监察院',
-  JY: '教育委员会',
-  CB: '中央银行',
+  JY: '公民教育委员会',
+  CB: '公民储备委员会',
+  CH: '公民储备委员会',
   ZG: '中国',
   TG: '他国',
   GT: '个体经营',
@@ -77,8 +78,8 @@ export const ORG_CODE_LABEL: Record<string, string> = {
   NATIONAL_LEGISLATURE: '国家立法院',
   NATIONAL_COURT: '国家司法院',
   NATIONAL_SUPERVISION: '国家监察院',
-  NATIONAL_EDU: '国家教育委员会',
-  NATIONAL_RESERVE: '国家储备委员会',
+  NATIONAL_EDU: '国教委会',
+  NATIONAL_RESERVE: '国储会',
   FEDERAL_SPECIAL_SERVICE: '联邦特勤局',
   FEDERAL_SECURITY: '联邦安全局',
   FEDERAL_INTELLIGENCE: '联邦情报局',
@@ -93,8 +94,8 @@ export const ORG_CODE_LABEL: Record<string, string> = {
   PROVINCE_LEGISLATURE: '省立法院',
   PROVINCE_COURT: '省司法院',
   PROVINCE_SUPERVISION: '省监察院',
-  PROVINCE_RESERVE: '省储备委员会',
-  PROVINCE_RESERVE_BANK: '省公民储备银行',
+  PROVINCE_RESERVE: '省储会',
+  PROVINCE_RESERVE_BANK: '省储行',
   PROVINCE_DEFENSE: '国家防务厅',
   PROVINCE_SECURITY: '国土安全厅',
   PROVINCE_CIVIL_LIFE: '公民生活保障厅',
@@ -110,7 +111,7 @@ export const ORG_CODE_LABEL: Record<string, string> = {
   CITY_LEGISLATURE: '公民立法委员会',
   CITY_SUPERVISION: '监察院',
   CITY_COURT: '司法院',
-  CITY_EDU: '公民教育委员会',
+  CITY_EDU: '市教委会',
   CITY_CITIZEN_SELF_GOV: '公民自治委员会',
   CITY_DEFENSE: '国家防务局',
   CITY_SECURITY: '国土安全局',
@@ -131,7 +132,7 @@ export const ORG_CODE_LABEL: Record<string, string> = {
   PUBLIC_ORG: '公权机构',
 };
 
-// ── 手动公权机构可选代码:排除央行 CB(省公民储备银行每省唯一已生成)和 JY(归教育 tab) ──
+// ── 手动公权机构可选代码:排除储备委员会/省储行(已确定性生成)和 JY(归教育 tab) ──
 const GOV_MANUAL_INSTITUTIONS: ChoiceItem[] = [
   { value: 'ZF', label: '政府' },
   { value: 'LF', label: '立法院' },

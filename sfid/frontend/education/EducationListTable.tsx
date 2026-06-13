@@ -9,11 +9,6 @@ import { listEducationInstitutions } from './api';
 import { SUBJECT_PROPERTY_LABEL } from '../subjects/labels';
 import { notice } from '../utils/notice';
 
-const CREATED_BY_ROLE_LABEL: Record<string, string> = {
-  FEDERAL_ADMIN: '联邦管理员',
-  CITY_ADMIN: '市管理员',
-};
-
 interface Props {
   auth: AdminAuth;
   province: string;
@@ -117,31 +112,6 @@ export const EducationListTable: React.FC<Props> = ({
       },
       { title: '省/市', render: (_v, r) => `${r.province}/${r.city}`, width: 160, align: 'center' },
       { title: '账户数', dataIndex: 'account_count', width: 90, align: 'center' },
-      {
-        title: '创建用户',
-        key: 'created_by',
-        width: 180,
-        align: 'center',
-        render: (_v, r) => {
-          const roleLabel = r.created_by_role
-            ? CREATED_BY_ROLE_LABEL[r.created_by_role] ?? r.created_by_role
-            : '';
-          if (r.created_by_name) {
-            return (
-              <span>
-                {r.created_by_name}
-                {roleLabel && (
-                  <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
-                    ({roleLabel})
-                  </Typography.Text>
-                )}
-              </span>
-            );
-          }
-          if (roleLabel) return <span>{roleLabel}</span>;
-          return <span style={{ color: '#999' }}>未知</span>;
-        },
-      },
     ],
     [cursorStack.length],
   );

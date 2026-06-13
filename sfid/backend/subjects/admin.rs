@@ -213,6 +213,8 @@ pub(crate) async fn update_institution(
     else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
+    let old_institution_name = existing.institution_name.clone().unwrap_or_default();
+    let old_parent_sfid_number = existing.parent_sfid_number.clone().unwrap_or_default();
     let scope = get_visible_scope(&ctx);
     if !scope.includes_province(&existing.province) || !scope.includes_city(&existing.city) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
@@ -347,6 +349,21 @@ pub(crate) async fn update_institution(
         let message = format!("update institution failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_UPDATE",
+        &ctx.admin_pubkey,
+        Some(sfid_number.clone()),
+        serde_json::json!({
+            "sfid_number": sfid_number.clone(),
+            "old_institution_name": old_institution_name,
+            "new_institution_name": existing.institution_name.clone().unwrap_or_default(),
+            "old_parent_sfid_number": old_parent_sfid_number,
+            "parent_sfid_number": existing.parent_sfid_number.clone().unwrap_or_default(),
+            "legal_rep_name": existing.legal_rep_name.clone().unwrap_or_default(),
+            "legal_rep_sfid_number": existing.legal_rep_sfid_number.clone().unwrap_or_default(),
+        }),
+    );
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

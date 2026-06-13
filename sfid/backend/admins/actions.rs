@@ -17,21 +17,21 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use webauthn_rs::prelude::{PublicKeyCredential, RequestChallengeResponse};
 
+use crate::admins::city_admins::{
+    can_manage_city_admin_conn, city_admin_row_from_user_conn, count_city_admins_in_city_conn,
+    ensure_city_in_creator_province_conn, find_city_admin_by_id_conn, MAX_ADMIN_NAME_CHARS,
+    MAX_CITY_ADMINS_PER_CITY,
+};
+use crate::admins::federal_admins::federal_admin_province;
 use crate::admins::login::AdminAuthContext;
 use crate::admins::operation_auth::{
     ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
-};
-use crate::admins::city_admins::{
-    can_manage_city_admin_conn, count_city_admins_in_city_conn, ensure_city_in_creator_province_conn,
-    find_city_admin_by_id_conn, city_admin_row_from_user_conn, MAX_ADMIN_NAME_CHARS,
-    MAX_CITY_ADMINS_PER_CITY,
 };
 use crate::admins::passkeys::{
     active_passkeys, hash_json, payload_hash_for_text, signed_payload_text,
     update_passkey_usage_conn, verify_citizen_wallet_signature, webauthn, AdminSignedPayload,
     ADMIN_ACTION_TTL_SECONDS,
 };
-use crate::admins::federal_admins::federal_admin_province;
 use crate::admins::repo;
 use crate::admins::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::qr::{build_sign_request, display_account, display_field as field};
@@ -712,7 +712,8 @@ fn validate_create_city_admin_conn(
             };
             if !same_admin_pubkey(normalized.as_str(), ctx.admin_pubkey.as_str()) {
                 return Err(
-                    "http:forbidden:FederalAdmin can only create city admins under itself".to_string(),
+                    "http:forbidden:FederalAdmin can only create city admins under itself"
+                        .to_string(),
                 );
             }
             normalized
@@ -805,7 +806,10 @@ fn validate_create_federal_admin_conn(
     Ok((admin_pubkey, admin_name, province))
 }
 
-fn count_federal_admins_in_province_conn(conn: &mut Client, province: &str) -> Result<usize, String> {
+fn count_federal_admins_in_province_conn(
+    conn: &mut Client,
+    province: &str,
+) -> Result<usize, String> {
     repo::count_federal_admins_by_province_conn(conn, province)
 }
 
@@ -842,7 +846,10 @@ fn actor_is_initial_federal_admin(ctx: &AdminAuthContext) -> bool {
         .unwrap_or(false)
 }
 
-fn federal_admin_row_value(admin: &AdminUser, province: String) -> Result<serde_json::Value, String> {
+fn federal_admin_row_value(
+    admin: &AdminUser,
+    province: String,
+) -> Result<serde_json::Value, String> {
     serde_json::to_value(FederalAdminRow {
         id: admin.id,
         province,
@@ -993,7 +1000,8 @@ fn apply_create_federal_admin_conn(
     ctx: &AdminAuthContext,
     input: &CreateFederalAdminActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (admin_pubkey, admin_name, province) = validate_create_federal_admin_conn(conn, ctx, input)?;
+    let (admin_pubkey, admin_name, province) =
+        validate_create_federal_admin_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,

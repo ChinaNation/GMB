@@ -1619,7 +1619,8 @@ fn gov_bootstrap_state_ready(state: &GovBootstrapState) -> bool {
         && state.target_count > 0
         && state.subject_count >= state.target_count
         && state.gov_count >= state.target_count
-        && state.account_count >= state.target_count * crate::gov::service::DEFAULT_ACCOUNT_COUNT
+        && state.account_count
+            >= state.target_count * crate::gov::service::MIN_DEFAULT_ACCOUNT_COUNT
 }
 
 fn gov_bootstrap_state_summary(state: &GovBootstrapState) -> String {
@@ -2416,7 +2417,9 @@ fn sfid_error_code(status: StatusCode, message: &str) -> &'static str {
         "cpms_pubkey does not match installed CPMS" => "SFID_CITIZEN_ARCHIVE_PUBKEY_MISMATCH",
         "qr expired" => "SFID_CITIZEN_QR_EXPIRED",
         "qr header invalid" => "SFID_CITIZEN_QR_HEADER_INVALID",
-        "admin pubkey already exists as federal admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN",
+        "admin pubkey already exists as federal admin" => {
+            "SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN"
+        }
         "admin pubkey already exists as city admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN",
         "federal admin province limit reached" => "SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED",
         "city admin city limit reached" => "SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED",

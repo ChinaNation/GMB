@@ -9,7 +9,7 @@ use crate::admins::login::AdminAuthContext;
 use crate::admins::repo;
 use crate::crypto::pubkey::normalize_admin_pubkey;
 use crate::subjects::model::Institution;
-use crate::subjects::service::{build_default_accounts, ServiceError};
+use crate::subjects::service::{build_default_accounts_for_institution, ServiceError};
 use crate::{api_error, AppState};
 
 pub(crate) const MAX_PROVINCE_CHARS: usize = 100;
@@ -97,14 +97,13 @@ pub(crate) fn resolve_created_by(
 
 pub(crate) async fn insert_default_accounts_best_effort(
     state: &AppState,
-    sfid_number: &str,
-    _province: &str,
+    inst: &Institution,
     created_by: &str,
 ) {
-    for account in build_default_accounts(sfid_number, created_by) {
+    for account in build_default_accounts_for_institution(inst, created_by) {
         if let Err(err) = state.db.upsert_institution_account_row(&account) {
             tracing::warn!(
-                sfid = sfid_number,
+                sfid = %inst.sfid_number,
                 account = %account.account_name,
                 error = %err,
                 "default account upsert failed"

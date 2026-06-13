@@ -8,11 +8,33 @@
 use crate::number::{
     classify, validate_sfid_number_format, InstitutionCategory, InstitutionCode, SubjectProperty,
 };
-use crate::subjects::model::InstitutionAccount;
+use crate::subjects::model::{Institution, InstitutionAccount};
 use crate::subjects::MultisigChainStatus;
 use primitives::core_const::is_forbidden_account_name;
 
-pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &["主账户", "费用账户"];
+pub const ACCOUNT_NAME_MAIN: &str = "主账户";
+pub const ACCOUNT_NAME_FEE: &str = "费用账户";
+pub const ACCOUNT_NAME_STAKE: &str = "永久质押";
+pub const ACCOUNT_NAME_ANQUAN: &str = "安全基金";
+pub const ACCOUNT_NAME_HE: &str = "两和基金";
+
+pub const COMMON_DEFAULT_ACCOUNT_NAMES: &[&str] = &[ACCOUNT_NAME_MAIN, ACCOUNT_NAME_FEE];
+pub const PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES: &[&str] =
+    &[ACCOUNT_NAME_MAIN, ACCOUNT_NAME_FEE, ACCOUNT_NAME_STAKE];
+pub const NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES: &[&str] = &[
+    ACCOUNT_NAME_MAIN,
+    ACCOUNT_NAME_FEE,
+    ACCOUNT_NAME_ANQUAN,
+    ACCOUNT_NAME_HE,
+];
+
+pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &[
+    ACCOUNT_NAME_MAIN,
+    ACCOUNT_NAME_FEE,
+    ACCOUNT_NAME_STAKE,
+    ACCOUNT_NAME_ANQUAN,
+    ACCOUNT_NAME_HE,
+];
 
 pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
@@ -43,6 +65,21 @@ pub fn can_delete_account(account: &InstitutionAccount) -> bool {
             account.chain_status,
             MultisigChainStatus::NotOnChain | MultisigChainStatus::RevokedOnChain
         )
+}
+
+pub fn default_account_names_for_codes(
+    institution_code: &str,
+    org_code: Option<&str>,
+) -> &'static [&'static str] {
+    match (institution_code, org_code.unwrap_or("")) {
+        ("CB", "NATIONAL_RESERVE") => NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES,
+        ("CH", "PROVINCE_RESERVE_BANK") => PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES,
+        _ => COMMON_DEFAULT_ACCOUNT_NAMES,
+    }
+}
+
+pub fn default_account_names_for_institution(inst: &Institution) -> &'static [&'static str] {
+    default_account_names_for_codes(inst.institution_code.as_str(), inst.org_code.as_deref())
 }
 
 /// 机构 / 账户 service 层错误。
@@ -174,15 +211,19 @@ pub fn derive_category(
     classify(subject_property, code, institution_name)
 }
 
-/// 构造指定机构的 2 条默认未上链账户。
+/// 按机构类型构造默认未上链账户。
 ///
 /// 中文注释:默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
-pub fn build_default_accounts(sfid_number: &str, actor: &str) -> Vec<InstitutionAccount> {
+pub fn build_default_accounts_for_names(
+    sfid_number: &str,
+    actor: &str,
+    names: &[&str],
+) -> Vec<InstitutionAccount> {
     use crate::accounts::derive::derive_duoqian_address;
     use chrono::Utc;
 
     let now = Utc::now();
-    DEFAULT_ACCOUNT_NAMES
+    names
         .iter()
         .map(|name| InstitutionAccount {
             sfid_number: sfid_number.to_string(),
@@ -196,6 +237,30 @@ pub fn build_default_accounts(sfid_number: &str, actor: &str) -> Vec<Institution
             created_at: now,
         })
         .collect()
+}
+
+pub fn build_default_accounts_for_codes(
+    sfid_number: &str,
+    actor: &str,
+    institution_code: &str,
+    org_code: Option<&str>,
+) -> Vec<InstitutionAccount> {
+    build_default_accounts_for_names(
+        sfid_number,
+        actor,
+        default_account_names_for_codes(institution_code, org_code),
+    )
+}
+
+pub fn build_default_accounts_for_institution(
+    inst: &Institution,
+    actor: &str,
+) -> Vec<InstitutionAccount> {
+    build_default_accounts_for_names(
+        inst.sfid_number.as_str(),
+        actor,
+        default_account_names_for_institution(inst),
+    )
 }
 
 #[cfg(test)]
