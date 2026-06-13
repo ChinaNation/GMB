@@ -51,6 +51,17 @@ const RESERVED_NAME_ANQUAN: &str = "安全基金";
 /// 国储会两和基金账户保留名。
 const RESERVED_NAME_HE: &str = "两和基金";
 
+/// 全部 5 个受限保留账户名(单一源,与链端字节对齐)。
+/// 自定义账户判定:account_name 命中其一即非自定义(走各自 op_tag),否则为
+/// `OP_INSTITUTION` 自定义命名账户。wuminapp BFF 据此过滤 custom_account_names。
+pub(crate) const RESERVED_ACCOUNT_NAMES: [&str; 5] = [
+    RESERVED_NAME_MAIN,
+    RESERVED_NAME_FEE,
+    RESERVED_NAME_STAKE,
+    RESERVED_NAME_ANQUAN,
+    RESERVED_NAME_HE,
+];
+
 /// 按 `account_name` 路由并派生机构账户的 `duoqian_address`(小写 hex,32 字节 → 64 字符)。
 ///
 /// 返回 `None` 当 `account_name` 为空串(与链端 `EmptyAccountName` 对齐的前置拒绝,
