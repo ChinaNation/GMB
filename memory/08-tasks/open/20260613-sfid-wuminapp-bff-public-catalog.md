@@ -2,7 +2,12 @@
 
 属 ADR-018 §九(2026-06-13 混合模式修订)。**公权机构界面的跨模块关键路径,wuminapp 卡 A/B/C 全部依赖本卡先落。**
 
-状态:未开始。
+状态:**代码完工(2026-06-13,v1)**。`sfid/backend/wuminapp/` BFF 落地:`list_public_institutions` + `public_institutions_version` 两个匿名 handler 挂 app_routes;公开 DTO `PublicInstitutionRow` 白名单(显式丢 created_by_name/created_by_role/cpms_status/install_token_status/identity_service_status/private_type/partnership_kind);复用 `Db::list_official_institutions_scope` 领域查询不改;`custom_account_names` 批量单查 accounts 表(非 5 保留名,保留名数组从 accounts/derive.rs 暴露单一源);manifest_version 复用 gov::service。cargo build 干净 + 安全白名单单测 2/2(断言敏感字段不泄露)。
+
+**v1 范围决策(card 原列与实现的差异,已对齐)**:
+- `since_version` 行级增量**暂不实现**:v1 同步 = version 接口比对各省 manifest_version,变化则**全量重拉该省**(省份有界、确定性目录极少变),足够且零行级游标复杂度。真行级 delta 留 v1.x。
+- 独立导出 CLI **不单做**:card A 数据包生成器直接调 `list_public_institutions` 分页全量拉取即省导出,无需另写 CLI。
+- OpenAPI 契约见下「契约」节(card A 接 mock 依据)。
 
 ## 背景
 - 现有 `/api/v1/institutions/official` 是**管理员专用**(`require_admin_any`),wuminapp 公民端拉不到。
@@ -35,6 +40,13 @@
 - [ ] cargo build + cargo test 全过;新接口匿名可拉,管理员接口不受影响。
 - [ ] 与 wuminapp 卡 A 联调:全量载入 + 一次增量同步闭环。
 - [ ] 旧代码/文档/注释清理无残留。
+
+## 契约(card A 接 mock 依据,已落地)
+- `GET /api/v1/app/public-institutions?province=<必填>&city=&q=&org_code=&cursor=<offset 整数>&page_size=<1..300,默认300>`
+  → `ApiResponse{code,message,data: PageResult<PublicInstitutionRow>}`,`PageResult` 含 `items/page_size/next_cursor/has_more/manifest_version/catalog_status`。
+  `PublicInstitutionRow{sfid_number, institution_name?, sfid_name?, short_name?, status, category, subject_property, p1, province, city, town, institution_code, org_code?, has_legal_personality?, parent_sfid_number?, account_count, custom_account_names[], created_at}`。
+- `GET /api/v1/app/public-institutions/version?province=<必填>&city=` → `data:{province, city?, manifest_version?}`。
+- 匿名(非 admin),挂 global_rate_limit + CORS;province/city 用中文名,后端 province_code_by_name/city_code_by_name 解析,未知名 400。
 
 ## 不做(边界)
 - 不碰 `core/chain_*`、`indexer/worker`(链交互)。

@@ -29,6 +29,7 @@ mod number;
 mod private;
 mod scope;
 mod subjects;
+mod wuminapp;
 
 #[cfg(test)]
 mod genesis {
@@ -2337,6 +2338,15 @@ fn main() {
             .route(
                 "/api/v1/app/institutions/:sfid_number/accounts",
                 get(subjects::chain_duoqian_info::app_list_accounts),
+            )
+            // ── 公权机构目录(wuminapp BFF,匿名只读,数据来自 SFID Postgres 确定性目录)──
+            .route(
+                "/api/v1/app/public-institutions",
+                get(wuminapp::public_institution::list_public_institutions),
+            )
+            .route(
+                "/api/v1/app/public-institutions/version",
+                get(wuminapp::public_institution::public_institutions_version),
             );
 
         let app_state = state.clone();
