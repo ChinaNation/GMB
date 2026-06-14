@@ -83,7 +83,7 @@ void main() {
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
           'institution_name': '国家公民储备委员会',
-          'province': '岭南',
+          'province': '广东省',
           'city': '中央',
           'institution_code': 'ZF',
           'account_count': 4,
@@ -113,6 +113,8 @@ void main() {
     expect(find.text('法定代表人'), findsOneWidget);
     expect(find.text('王法人'), findsOneWidget);
     expect(find.text('所属地'), findsOneWidget);
+    // 所属地必须显示完整省名(广东省,不是广东);不得套 provinceDisplayName 去"省"。
+    expect(find.text('广东省 · 中央'), findsOneWidget);
     // ② 机构账户入口(治理同款 标题+副标题):主+费+1自定义。
     expect(find.text('机构账户'), findsOneWidget);
     expect(find.text('共 3 个账户'), findsOneWidget);

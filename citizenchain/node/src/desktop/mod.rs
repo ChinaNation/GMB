@@ -13,7 +13,7 @@ pub(crate) mod node_runner;
 use crate::{
     governance,
     home::{self, cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState},
-    mining, other, settings,
+    im, mining, other, settings,
     transaction::duoqian_transfer,
 };
 use std::sync::Mutex;
@@ -33,6 +33,15 @@ pub fn run_desktop() {
             settings::desktop_update::prepare_desktop_update,
             settings::node_mode::get_node_mode,
             settings::node_mode::set_node_mode,
+            im::commands::get_im_private_node_policy,
+            im::commands::get_im_direct_network_capability,
+            im::commands::validate_im_node_endpoint,
+            im::commands::validate_im_direct_delivery_request,
+            im::commands::submit_im_direct_encrypted_envelope,
+            im::commands::register_im_owner_device,
+            im::commands::submit_im_encrypted_envelope,
+            im::commands::fetch_im_pending_envelopes,
+            im::commands::ack_im_envelope,
             settings::fee_address::get_reward_wallet,
             settings::fee_address::set_reward_wallet,
             settings::fee_address::get_local_miner_address,

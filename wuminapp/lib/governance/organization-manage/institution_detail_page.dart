@@ -23,7 +23,6 @@ import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detai
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/transaction/shared/account_balance_snapshot_store.dart';
-import 'package:wuminapp_mobile/citizen/public/data/public_provinces.dart';
 import 'package:wuminapp_mobile/citizen/public/data/sfid_directory_lookup.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_accounts_page.dart';
 
@@ -432,7 +431,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  /// 所属地展示:省去"省"后缀 + 市(与公权详情一致);反查不到留空。
+  /// 所属地展示:完整省名 + 市(与公权详情一致);反查不到留空。
   String _locationLabel() {
     final dir = _directory;
     if (dir == null) return '';
@@ -440,8 +439,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     final city = dir.city ?? '';
     if (province.isEmpty && city.isEmpty) return '';
     if (province.isEmpty) return city;
-    if (city.isEmpty) return provinceDisplayName(province);
-    return '${provinceDisplayName(province)} · $city';
+    if (city.isEmpty) return province;
+    return '$province · $city';
   }
 
   // ──── 机构账户入口（独立一行 + 箭头 → 全部账户页,与公权机构详情统一）────

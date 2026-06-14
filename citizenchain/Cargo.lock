@@ -7363,6 +7363,7 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 name = "node"
 version = "1.0.0"
 dependencies = [
+ "async-channel 1.9.0",
  "blake2b_simd",
  "bs58",
  "citizenchain",

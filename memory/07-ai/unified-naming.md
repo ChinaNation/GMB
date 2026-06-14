@@ -89,6 +89,10 @@
 | `wuminapp/` | 公民 | wuminapp | Flutter 客户端、钱包、治理和轻节点能力 |
 | `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
 | `wuminapp/lib/im/` | wuminapp 信息 | wuminapp-im | wuminapp 信息 Tab、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
+| `wuminapp/lib/im/crypto/` | wuminapp 信息加密 | wuminapp-im-crypto | IM 设备密钥、OpenMLS、KeyPackage、安全码和钱包账户绑定 |
+| `wuminapp/lib/im/payment/` | wuminapp 信息支付提示 | wuminapp-im-payment | 聊天窗口发送公民币、payment_notice 和链上确认状态模型 |
+| `wuminapp/lib/im/storage/` | wuminapp 信息本地存储 | wuminapp-im-storage | IM 会话、联系人、消息和附件缓存的本地存储边界 |
+| `wuminapp/lib/im/transport/` | wuminapp 信息传输 | wuminapp-im-transport | 私人通信全节点传输、近场传输、自动路由和去重 |
 | `wuminapp/android/im/` | Android 信息近场 | android-im | wuminapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
 | `wuminapp/ios/im/` | iOS 信息近场 | ios-im | wuminapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
 | `citizenchain/node/src/im/` | 通信全节点 IM | node-im | 通信全节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
@@ -105,6 +109,15 @@
 | 统一命名文件 | `unified-naming.md` | `memory/07-ai/` | 管理目录、文件、字段等新命名 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
+| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `wuminapp/lib/im/` / `citizenchain/node/src/im/` | 公民 P2P IM 的 Protobuf 外层协议与私人通信全节点接口契约 |
+| IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `wuminapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、附件引用和 ack 策略 |
+| IM 联系人包 | `ImContactBundle` | `GMB_IM_V1` / `wuminapp/lib/im/` | 联系人钱包账户、设备公钥、私人通信全节点端点和安全码交换载荷 |
+| IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | `citizenchain/node/src/im/endpoint.rs` / `wuminapp/lib/im/transport/` | 私人通信全节点的 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型 |
+| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenchain/node/src/im/binding.rs` / `wuminapp/lib/im/crypto/` | 钱包聊天账户、IM 设备密钥和私人通信全节点的绑定载荷 |
+| IM 直连投递请求 | `ImDirectDeliveryRequest` | `citizenchain/node/src/im/direct.rs` | 显式 PeerId + multiaddr 到对方私人通信全节点的密文投递请求 |
+| IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | `citizenchain/node/src/im/network.rs` | `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应 |
+| IM 验收调试 RPC | `im_debug*` / `GMB_IM_DEBUG_RPC` | `citizenchain/node/src/im/rpc.rs` | 仅用于双节点运行态 smoke 的条件注册 RPC，正式节点默认不暴露 |
+| IM 支付提示 | `ImPaymentNotice` | `wuminapp/lib/im/payment/` | 聊天窗口内公民币转账提示，到账真相仍以链上查询为准 |
 | Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | wumin / wuminapp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
 | 机构管理 | `organization-manage` | runtime crate / pallet | 机构多签管理 pallet |
 | 个人多签管理 | `personal-manage` | runtime crate / pallet | 个人多签管理 pallet |

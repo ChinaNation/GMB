@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/citizen/citizen_tab_page.dart';
 import 'package:wuminapp_mobile/governance/institution_account_list_page.dart';
+import 'package:wuminapp_mobile/im/im_tab_page.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
@@ -312,7 +313,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   final AppUpdateController _updateController = AppUpdateController.instance;
-  int _currentIndex = 2;
+  int _currentIndex = 3;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
   bool _duoqianTabLoaded = false;
@@ -356,6 +357,7 @@ class _AppShellState extends State<AppShell> {
         _duoqianTabLoaded
             ? const InstitutionAccountListPage()
             : const SizedBox.shrink(),
+        const ImTabPage(),
         const TransactionTabPage(),
         ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),
       ];
@@ -436,6 +438,11 @@ class _AppShellState extends State<AppShell> {
               icon: Icon(Icons.account_tree_outlined),
               selectedIcon: Icon(Icons.account_tree),
               label: '多签',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline_rounded),
+              selectedIcon: Icon(Icons.chat_bubble_rounded),
+              label: '信息',
             ),
             NavigationDestination(
               icon: SvgPicture.asset(

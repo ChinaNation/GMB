@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_accounts.dart';
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_chain_data.dart';
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_repository.dart';
-import 'package:wuminapp_mobile/citizen/public/data/public_provinces.dart';
 import 'package:wuminapp_mobile/citizen/public/public_institution_accounts_page.dart';
 import 'package:wuminapp_mobile/citizen/public/public_institution_admin_list_page.dart';
 import 'package:wuminapp_mobile/governance/shared/account_derivation.dart';
@@ -244,7 +243,7 @@ class _PublicInstitutionDetailPageState
             _infoTile(
               icon: Icons.place_outlined,
               label: '所属地',
-              value: '${provinceDisplayName(inst.province)} · ${inst.city}',
+              value: '${inst.province} · ${inst.city}',
             ),
           ],
         ),

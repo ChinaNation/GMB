@@ -23,6 +23,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 workspace = true
 
 [dependencies]
+async-channel = "1.9"
 hex = "0.4"
 hex-literal = "0.4"
 clap = { workspace = true }
