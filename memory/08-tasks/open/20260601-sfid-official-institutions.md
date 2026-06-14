@@ -77,7 +77,7 @@ SFID
 - SFID 模块完成标准已对照。
 
 执行记录：
-- 后端已移除 `education_committee_kind`、`parent_school_sfid_number` 和 `SCHOOL` 来源；机构身份仍只使用 `sfid_number`。
+- 后端已清理早期教育分类试验字段和临时来源枚举；机构身份仍只使用 `sfid_number`。
 - 后端已将机构链上状态收口为 `NOT_REGISTERED / REGISTERED / REVOKED_ON_CHAIN`。
 - 后端启动时已增加普通自动机构目录对账：国家/省级机构读取 citizenchain `china_*.rs` 常量，市级自治政府/立法会/司法院/监察院/教育委员会读取 SFID 行政区划生成。
 - 后端手动创建已拒绝公安局和普通公权机构，仅允许市管理员注册教育委员会 `JY` 类型学校机构。

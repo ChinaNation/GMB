@@ -88,11 +88,21 @@ function extractMessage(input: unknown, fallback: string): string {
 
 function apiErrorText(error: ApiError, fallback: string): string {
   if (error.status === 401) return '登录已过期，请重新登录';
+  // 中文注释:403 既可能是通用权限不足,也可能是精确的跨省/跨市业务原因。
+  // 后端已返回中文业务原因时优先展示,避免统一映射盖住真实问题。
+  if (error.status === 403 && error.message && !isGenericForbiddenText(error.message)) {
+    return translateKnownMessage(error.message, fallback);
+  }
   if (error.errorCode) {
     const mapped = translateErrorCode(error.errorCode);
     if (mapped) return mapped;
   }
   return error.message || fallback;
+}
+
+function isGenericForbiddenText(message: string): boolean {
+  const lower = message.trim().toLowerCase();
+  return !lower || lower === 'forbidden' || lower === 'permission denied';
 }
 
 function domExceptionText(error: DOMException, fallback: string): string {

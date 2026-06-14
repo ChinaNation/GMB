@@ -345,6 +345,7 @@ impl Db {
 	                town_code TEXT,
 	                institution_code TEXT,
 	                org_code TEXT,
+                education_type TEXT,
                 private_type TEXT,
                 partnership_kind TEXT,
                 has_legal_personality BOOLEAN,
@@ -470,6 +471,7 @@ impl Db {
             "ALTER TABLE subjects
                 ADD COLUMN IF NOT EXISTS subject_property TEXT,
                 ADD COLUMN IF NOT EXISTS sfid_name TEXT,
+                ADD COLUMN IF NOT EXISTS education_type TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_sfid_number TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_photo_path TEXT,
@@ -504,6 +506,30 @@ impl Db {
 
         Self::validate_target_subject_schema(conn)?;
 
+        // 中文注释:教育委员会从公权目录迁入教育机构 tab 后,已生成的国家/市公民教育委员会
+        // 需要有稳定业务分类;该分类只用于展示与查询,不参与 sfid_number 生成。
+        conn.batch_execute(
+            "UPDATE subjects
+             SET education_type = CASE
+                WHEN org_code = 'NATIONAL_EDU' THEN 'NATIONAL_CITIZEN_EDU_COMMITTEE'
+                WHEN org_code = 'CITY_EDU' THEN 'CITY_CITIZEN_EDU_COMMITTEE'
+                ELSE education_type
+             END
+             WHERE institution_code = 'JY'
+               AND org_code IN ('NATIONAL_EDU', 'CITY_EDU')
+               AND education_type IS DISTINCT FROM CASE
+                    WHEN org_code = 'NATIONAL_EDU' THEN 'NATIONAL_CITIZEN_EDU_COMMITTEE'
+                    WHEN org_code = 'CITY_EDU' THEN 'CITY_CITIZEN_EDU_COMMITTEE'
+                    ELSE education_type
+               END;",
+        )
+        .map_err(|e| {
+            format!(
+                "backfill education institution type failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
         conn.batch_execute(
             "CREATE INDEX IF NOT EXISTS idx_subjects_city
                 ON subjects (p_code, c_code, kind, status, sfid_number);
@@ -517,6 +543,8 @@ impl Db {
                 ON subjects (category, province, city, sfid_number, name);
              CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
                 ON subjects (p_code, legal_rep_sfid_number);
+             CREATE INDEX IF NOT EXISTS idx_subjects_education
+                ON subjects (p_code, c_code, institution_code, education_type, status);
              CREATE INDEX IF NOT EXISTS idx_citizens_scope_created
                 ON citizens (p_code, c_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_province_created
@@ -563,6 +591,7 @@ impl Db {
             "private_type",
             "partnership_kind",
             "has_legal_personality",
+            "education_type",
         ] {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }

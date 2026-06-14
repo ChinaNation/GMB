@@ -3,7 +3,11 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Col, Descriptions, Row, Tag, Typography } from 'antd';
-import { INSTITUTION_CODE_LABEL, ORG_CODE_LABEL } from '../subjects/labels';
+import {
+  EDUCATION_TYPE_LABEL,
+  INSTITUTION_CODE_LABEL,
+  ORG_CODE_LABEL,
+} from '../subjects/labels';
 import { getInstitution, type InstitutionDetail } from './api';
 import { deleteAccount } from '../accounts/api';
 import {
@@ -271,6 +275,11 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                 {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
                 {inst.org_code ? ` / ${ORG_CODE_LABEL[inst.org_code] || inst.org_code}` : ''}
               </Descriptions.Item>
+              {inst.education_type && (
+                <Descriptions.Item label="教育分类">
+                  {EDUCATION_TYPE_LABEL[inst.education_type] || inst.education_type}
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="状态">
                 <Tag color={inst.status === 'ACTIVE' ? 'green' : 'red'}>
                   {SUBJECT_STATUS_LABEL[inst.status] || inst.status}

@@ -1,6 +1,6 @@
 # CITIZENS 模块技术文档
 
-- 最后更新:2026-05-31
+- 最后更新:2026-06-14
 - 任务卡:
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
 
@@ -25,6 +25,7 @@
   - 公民电子护照记录、`bind_status`、绑定 DTO、状态扫码 QR 载荷。
 - `handler.rs`
   - `admin_list_citizens`：后台公民精确查询和游标分页。
+  - `admin_search_legal_representative_citizens`：机构法定代表人候选公民查询;范围由目标机构上下文传入,不按登录管理员辖区硬切。
   - `public_identity_search`：公开身份查询。
 - `status.rs`
   - `admin_cpms_status_scan`：CPMS 站点扫公民状态。
@@ -42,6 +43,7 @@
 - `GET  /api/v1/app/voters/count` -> `citizens::chain_joint_vote::app_voters_count`
 - `POST /api/v1/admin/citizens/cpms-status-export/import` -> `citizens::status_export_import::admin_import_cpms_status_export`
 - `GET  /api/v1/admin/citizens` -> `citizens::handler::admin_list_citizens`
+- `GET  /api/v1/admin/citizens/legal-representatives` -> `citizens::handler::admin_search_legal_representative_citizens`
 - `GET  /api/v1/public/identity/search` -> `citizens::handler::public_identity_search`
 
 ## 4. 依赖与边界
@@ -70,6 +72,10 @@
 - 管理员端公民查询不默认返回任何全量列表；必须输入档案号、身份ID、投票账户地址或投票账户公钥，后端返回 `{ items, page_size, next_cursor, has_more }`。
 - SFID 公民模块不保存公民姓名，任何公民检索都不得按姓名匹配。
 - `citizens` 是管理员浏览器查询用分区表；绑定完成和 CPMS 年度报告导入后同步写入，`archive_no / sfid_number / wallet_pubkey` 三者一对一由公民绑定流程强制。
+- 公民创建/绑定时必须写入 `p_code / c_code`;该归属来自 CPMS 档案码校验结果,不是来自执行创建的管理员。
+- 法定代表人候选搜索是机构创建/编辑的辅助查询,按 `subjects` 模块推导出的目标机构 scope 查询正常状态公民:
+  普通私法人和挂靠私法人的机构可搜全国;公权机构、公法人教育机构和挂靠公法人的非法人机构按本省/本市收口;国家级/部级/联邦级公权机构可搜全国。
+- 公民列表页仍按管理员省/市 scope 精确查询,不得因为法定代表人全国可选而放大后台公民管理列表权限。
 - 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。

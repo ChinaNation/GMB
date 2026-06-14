@@ -21,7 +21,10 @@ use crate::subjects::http::{resolve_created_by, service_error_to_response};
 use crate::subjects::model::{
     InstitutionDetailOutput, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
 };
-use crate::subjects::service::{validate_institution_name, validate_legal_representative_required};
+use crate::subjects::service::{
+    resolve_legal_representative_scope_for_institution, validate_institution_name,
+    validate_legal_representative_required,
+};
 use crate::subjects::uninorg;
 use crate::*;
 
@@ -322,16 +325,32 @@ pub(crate) async fn update_institution(
         Ok(v) => v,
         Err(e) => return service_error_to_response(e),
     };
-    match state
-        .db
-        .legal_representative_citizen_exists(legal_rep.sfid_number.as_str())
-    {
+    let parent_for_legal_rep_scope = match existing.parent_sfid_number.as_deref() {
+        Some(parent_sfid) if !parent_sfid.trim().is_empty() => {
+            match state.db.get_institution_with_accounts(parent_sfid) {
+                Ok(v) => v.map(|(parent, _)| parent),
+                Err(err) => {
+                    let message = format!("query parent institution failed: {err}");
+                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+                }
+            }
+        }
+        _ => None,
+    };
+    let legal_rep_scope = resolve_legal_representative_scope_for_institution(
+        &existing,
+        parent_for_legal_rep_scope.as_ref(),
+    );
+    match state.db.legal_representative_citizen_exists_in_scope(
+        legal_rep.sfid_number.as_str(),
+        &legal_rep_scope,
+    ) {
         Ok(true) => {}
         Ok(false) => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "法定代表人身份ID必须选择正常状态公民",
+                legal_rep_scope.legal_rep_error_message(),
             )
         }
         Err(err) => {
@@ -385,7 +404,7 @@ pub(crate) struct SearchParentsQuery {
 }
 
 /// 所属法人搜索。SQL 预过滤与 `subjects/uninorg` 规则同源(注释互引):
-/// - f_institution=JY → 仅本市教育委员会学校本部(手动 JY 行,G/S);
+/// - f_institution=JY → 仅本市法人教育机构(手动 JY 行,G/S);
 /// - 其它 → 私法人 S(非学校,全国) ∪ 公法人 G(非学校;手动行/市镇级同市、省级同省、国家级不限);
 /// - parent_property 进一步收窄到单边。
 pub(crate) async fn search_parent_institutions(
@@ -437,6 +456,11 @@ pub(crate) async fn search_parent_institutions(
         let candidate_clause = if f_is_branch_school {
             "s.institution_code = 'JY' AND s.org_code IS NULL
              AND s.subject_property IN ('S', 'G')
+             AND s.parent_sfid_number IS NULL
+             AND (
+                  s.education_type IS NULL
+                  OR s.education_type IN ('EARLY_SCHOOL', 'PRIMARY_SCHOOL', 'SECONDARY_SCHOOL', 'UNIVERSITY')
+             )
              AND s.province = $2 AND s.city = $3"
         } else {
             "NOT (s.institution_code = 'JY' AND s.org_code IS NULL)

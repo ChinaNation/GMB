@@ -26,6 +26,8 @@ sfid/backend/scope/
 | FederalAdmin | 本省(`admin_province`) | 本省全部市 | 是 | 否 |
 | CityAdmin | 本省 | 本市(`admin_city`) | 是 | 是 |
 
+机构创建必须复用上述范围:FederalAdmin 可在本省任意市创建手动机构,CityAdmin 只能在本市创建;业务模块不得再用“是否存在 `admin_city`”额外限制 FederalAdmin 创建 G 公法人。
+
 ## 已迁出内容
 
 ```text

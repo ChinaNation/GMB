@@ -38,6 +38,7 @@ import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
 import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
 import {
+  EDUCATION_TYPE_LABEL,
   INSTITUTION_CODE_LABEL,
   PARTNERSHIP_KIND_LABEL,
   PRIVATE_TYPE_LABEL,
@@ -305,9 +306,28 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.warning('请先输入法定代表人身份ID关键字');
       return;
     }
+    const parentValue = ((form.getFieldValue('parent_sfid_number') ?? '') as string).trim();
+    const parentChanged = requiresParent && parentValue !== (inst.parent_sfid_number ?? '').trim();
+    if (parentChanged && (!selectedParent || selectedParent.sfid_number !== parentValue)) {
+      notice.warning('请先从搜索结果中选择所属法人');
+      return;
+    }
     setLegalRepSearching(true);
     try {
-      const rows = await searchLegalRepresentativeCitizens(auth, q);
+      const rows = await searchLegalRepresentativeCitizens(
+        auth,
+        q,
+        parentChanged
+          ? {
+              province: inst.province,
+              city: inst.city,
+              subject_property: inst.subject_property,
+              institution: inst.institution_code,
+              education_type: inst.education_type ?? undefined,
+              parent_sfid_number: parentValue,
+            }
+          : { target_sfid_number: inst.sfid_number },
+      );
       setLegalRepOptions(rows);
       if (rows.length === 0) {
         notice.info('未找到正常状态公民');
@@ -461,6 +481,11 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               <Descriptions.Item label="机构">
                 {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
               </Descriptions.Item>
+              {inst.education_type && (
+                <Descriptions.Item label="教育分类">
+                  {EDUCATION_TYPE_LABEL[inst.education_type] || inst.education_type}
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="创建时间">
                 {new Date(inst.created_at).toLocaleString('zh-CN')}
               </Descriptions.Item>
@@ -556,6 +581,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                           // 选中后,把选中机构缓存到 selectedParent 便于只读态展示
                           const hit = parentSearchOpts.find((o) => o.sfid_number === val);
                           if (hit) setSelectedParent(hit);
+                          setLegalRepOptions([]);
                         }}
                       >
                         <Input

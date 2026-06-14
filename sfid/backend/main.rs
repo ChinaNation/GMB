@@ -219,6 +219,7 @@ fn institution_row_from_record(
         town: inst.town.clone(),
         institution_code: inst.institution_code.clone(),
         org_code: inst.org_code.clone(),
+        education_type: inst.education_type.clone(),
         private_type: inst.private_type.clone(),
         partnership_kind: inst.partnership_kind.clone(),
         has_legal_personality: inst.has_legal_personality,
@@ -247,10 +248,11 @@ fn institution_row_from_pg_row(
     let town: Option<String> = row.get(21);
     let town_code: Option<String> = row.get(22);
     let org_code: Option<String> = row.get(23);
-    let status: String = row.get(24);
-    let cpms_status: Option<String> = row.get(25);
-    let install_token_status: Option<String> = row.get(26);
-    let cpms_pubkey_bound: Option<bool> = row.get(27);
+    let education_type: Option<String> = row.get(24);
+    let status: String = row.get(25);
+    let cpms_status: Option<String> = row.get(26);
+    let install_token_status: Option<String> = row.get(27);
+    let cpms_pubkey_bound: Option<bool> = row.get(28);
     // 中文注释:公安局列表唯一的"业务状态"单轴(前端只显示这一列):
     // 待生成安装码 → 待安装 → 待绑定身份码 → 可办理,外加 已禁用/已吊销 两个管理态。
     // CPMS 站点状态/安装码状态是它的派生输入,不再单列展示。
@@ -289,6 +291,7 @@ fn institution_row_from_pg_row(
         town_code: town_code.unwrap_or_default(),
         institution_code: row.get(9),
         org_code,
+        education_type,
         private_type: row.get(10),
         partnership_kind: row.get(11),
         has_legal_personality: row.get(12),
@@ -325,10 +328,11 @@ fn institution_from_subject_row(
     let town: Option<String> = row.get(18);
     let town_code: Option<String> = row.get(19);
     let org_code: Option<String> = row.get(20);
-    let status: String = row.get(21);
+    let education_type: Option<String> = row.get(21);
+    let status: String = row.get(22);
     // 中文注释:字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
-    // legal_rep_photo_size 是第 28 列,下标为 27,越界会在持有数据库锁时 panic。
-    let legal_rep_photo_size_i64: Option<i64> = row.get(27);
+    // legal_rep_photo_size 是第 29 列,下标为 28,越界会在持有数据库锁时 panic。
+    let legal_rep_photo_size_i64: Option<i64> = row.get(28);
     Ok(crate::subjects::Institution {
         sfid_number: row.get(0),
         institution_name: row.get(1),
@@ -346,15 +350,16 @@ fn institution_from_subject_row(
         town_code: town_code.unwrap_or_default(),
         institution_code: row.get(9),
         org_code,
+        education_type,
         private_type: row.get(10),
         partnership_kind: row.get(11),
         has_legal_personality: row.get(12),
         parent_sfid_number: row.get(13),
-        legal_rep_name: row.get(22),
-        legal_rep_sfid_number: row.get(23),
-        legal_rep_photo_path: row.get(24),
-        legal_rep_photo_name: row.get(25),
-        legal_rep_photo_mime: row.get(26),
+        legal_rep_name: row.get(23),
+        legal_rep_sfid_number: row.get(24),
+        legal_rep_photo_path: row.get(25),
+        legal_rep_photo_name: row.get(26),
+        legal_rep_photo_mime: row.get(27),
         legal_rep_photo_size: legal_rep_photo_size_i64.and_then(|v| u64::try_from(v).ok()),
         created_by: row.get(14),
         created_at: row.get(15),
@@ -432,7 +437,7 @@ impl Db {
                             s.parent_sfid_number, s.created_by, s.created_at,
                             s.sfid_name, s.short_name,
                             COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
-                            s.status, s.legal_rep_name, s.legal_rep_sfid_number,
+                            s.education_type, s.status, s.legal_rep_name, s.legal_rep_sfid_number,
 	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
 	                            s.legal_rep_photo_mime, s.legal_rep_photo_size
 		                     FROM subjects s
@@ -596,8 +601,8 @@ impl Db {
         Ok(())
     }
 
-    fn upsert_target_id_row(
-        conn: &mut postgres::Client,
+    fn upsert_target_id_row<C: postgres::GenericClient>(
+        conn: &mut C,
         sfid_number: &str,
         kind: &str,
         p_code: &str,
@@ -633,8 +638,8 @@ impl Db {
         Ok(())
     }
 
-    fn delete_target_rows_outside_scope(
-        conn: &mut postgres::Client,
+    fn delete_target_rows_outside_scope<C: postgres::GenericClient>(
+        conn: &mut C,
         table: &str,
         sfid_number: &str,
         p_code: &str,
@@ -752,11 +757,14 @@ impl Db {
         })
     }
 
-    pub(crate) fn legal_representative_citizen_exists(
+    pub(crate) fn legal_representative_citizen_exists_in_scope(
         &self,
         sfid_number: &str,
+        scope: &crate::subjects::service::LegalRepresentativeCitizenScope,
     ) -> Result<bool, String> {
         let sfid_number = sfid_number.trim().to_string();
+        let province_code = scope.province_code().map(str::to_string);
+        let city_code = scope.city_code().map(str::to_string);
         self.with_client(move |conn| {
             let row = conn
                 .query_one(
@@ -764,16 +772,52 @@ impl Db {
                         SELECT 1 FROM citizens
                         WHERE sfid_number = $1
                           AND citizen_status = 'NORMAL'
+                          AND ($2::text IS NULL OR p_code = $2)
+                          AND ($3::text IS NULL OR c_code = $3)
                      )",
-                    &[&sfid_number],
+                    &[&sfid_number, &province_code, &city_code],
                 )
                 .map_err(|e| format!("query legal representative citizen failed: {e}"))?;
             Ok(row.get(0))
         })
     }
 
-    fn upsert_target_subject_rows(
-        conn: &mut postgres::Client,
+    pub(crate) fn search_legal_representative_citizens_in_scope(
+        &self,
+        q: &str,
+        page_size: usize,
+        scope: &crate::subjects::service::LegalRepresentativeCitizenScope,
+    ) -> Result<Vec<String>, String> {
+        let q = q.trim().to_string();
+        let province_code = scope.province_code().map(str::to_string);
+        let city_code = scope.city_code().map(str::to_string);
+        self.with_client(move |conn| {
+            let limit = i64::try_from(page_size).map_err(|_| "page_size too large".to_string())?;
+            let rows = conn
+                .query(
+                    "SELECT sfid_number
+                     FROM citizens
+                     WHERE citizen_status = 'NORMAL'
+                       AND ($1::text IS NULL OR p_code = $1)
+                       AND ($2::text IS NULL OR c_code = $2)
+                       AND (
+                            sfid_number ILIKE '%' || $3 || '%'
+                            OR COALESCE(archive_no, '') ILIKE '%' || $3 || '%'
+                       )
+                     ORDER BY sfid_number ASC
+                     LIMIT $4",
+                    &[&province_code, &city_code, &q, &limit],
+                )
+                .map_err(|e| format!("query legal representative citizens failed: {e}"))?;
+            Ok(rows
+                .iter()
+                .map(|row| row.get::<_, String>(0))
+                .collect::<Vec<_>>())
+        })
+    }
+
+    fn upsert_target_subject_rows<C: postgres::GenericClient>(
+        conn: &mut C,
         inst: &crate::subjects::Institution,
     ) -> Result<(), String> {
         let kind = match inst.category {
@@ -815,14 +859,14 @@ impl Db {
 		                sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
 		                status, category, subject_property, p1, province, city, town,
 		                province_code, city_code, town_code, institution_code, org_code,
-		                private_type, partnership_kind, has_legal_personality,
+		                education_type, private_type, partnership_kind, has_legal_personality,
 		                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
 		                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
 		                legal_rep_photo_size, created_by, created_at, updated_at
 		             ) VALUES (
 		                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 		                $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-		                $25, $26, $27, $28, $29, $30, $31, $32, now()
+		                $25, $26, $27, $28, $29, $30, $31, $32, $33, now()
 		             )
 		             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
 		                kind = EXCLUDED.kind,
@@ -843,6 +887,7 @@ impl Db {
 	                town_code = EXCLUDED.town_code,
 	                institution_code = EXCLUDED.institution_code,
 	                org_code = EXCLUDED.org_code,
+	                education_type = EXCLUDED.education_type,
 	                private_type = EXCLUDED.private_type,
 	                partnership_kind = EXCLUDED.partnership_kind,
 	                has_legal_personality = EXCLUDED.has_legal_personality,
@@ -876,6 +921,7 @@ impl Db {
                 &inst.town_code,
                 &inst.institution_code,
                 &inst.org_code,
+                &inst.education_type,
                 &inst.private_type,
                 &inst.partnership_kind,
                 &inst.has_legal_personality,
@@ -1210,6 +1256,9 @@ impl Db {
     ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
         let keyword = keyword.trim();
         if keyword.is_empty() {
+            if matches!(filter, crate::subjects::InstitutionListFilter::Education) {
+                return self.list_education_committees_direct(p_code, c_code, page_size);
+            }
             return Ok(PageResult {
                 items: Vec::new(),
                 page_size,
@@ -1243,6 +1292,7 @@ impl Db {
 				                                    COALESCE(ac.account_count, 0),
 				                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 				                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+				                                    s.education_type,
 				                                    s.status
 		                             FROM subjects s
 		                             LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
@@ -1298,7 +1348,8 @@ impl Db {
 				                let town: Option<String> = row.get(21);
 				                let town_code: Option<String> = row.get(22);
 				                let org_code: Option<String> = row.get(23);
-				                let status: String = row.get(24);
+				                let education_type: Option<String> = row.get(24);
+				                let status: String = row.get(25);
 		                let inst = crate::subjects::Institution {
 		                    sfid_number: row.get(0),
 		                    institution_name: row.get(1),
@@ -1316,6 +1367,7 @@ impl Db {
 			                    town_code: town_code.unwrap_or_default(),
 			                    institution_code: row.get(9),
 			                    org_code,
+			                    education_type,
 			                    private_type: row.get(10),
 			                    partnership_kind: row.get(11),
 			                    has_legal_personality: row.get(12),
@@ -1345,6 +1397,61 @@ impl Db {
         })
     }
 
+    fn list_education_committees_direct(
+        &self,
+        p_code: &str,
+        c_code: Option<&str>,
+        page_size: usize,
+    ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
+        let p_code = p_code.to_string();
+        let c_code = c_code.map(str::to_string);
+        self.with_client(move |conn| {
+            let city_type = crate::subjects::EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE;
+            let limit = i64::try_from(page_size.saturating_add(1))
+                .map_err(|_| "page_size too large".to_string())?;
+            // 中文注释:市详情只直接显示本市确定性市公民教育委员会;
+            // 国家公民教育委员会不跨市铺开,学校和 F+JY 分支机构仍走精确搜索。
+            let rows = conn
+                .query(
+                    "SELECT s.sfid_number, s.name, s.category,
+                                    s.subject_property, s.p1, s.province,
+                                    s.city, s.province_code, s.city_code, s.institution_code,
+                                    s.private_type, s.partnership_kind, s.has_legal_personality,
+                                    s.parent_sfid_number, s.created_by, s.created_at,
+                                    COALESCE(ac.account_count, 0),
+                                    a.admin_name, a.role, s.sfid_name, s.short_name,
+                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+                                    s.education_type, s.status,
+                                    NULL::text, NULL::text, NULL::boolean
+                     FROM subjects s
+                     LEFT JOIN (
+                        SELECT sfid_number, COUNT(*)::BIGINT AS account_count
+                        FROM accounts
+                        GROUP BY sfid_number
+                     ) ac ON ac.sfid_number = s.sfid_number
+                     LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+                     WHERE s.kind = 'PUBLIC'
+	                       AND s.status = 'ACTIVE'
+	                       AND s.institution_code = 'JY'
+	                       AND s.education_type = $3
+	                       AND s.p_code = $1
+	                       AND ($2::text IS NULL OR s.c_code = $2)
+	                     ORDER BY
+	                        s.p_code ASC,
+	                        s.c_code ASC NULLS FIRST,
+	                        s.sfid_number ASC
+	                     LIMIT $4",
+                    &[&p_code, &c_code, &city_type, &limit],
+                )
+                .map_err(|e| format!("query direct education committees failed: {e}"))?;
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                items.push(institution_row_from_pg_row(&row)?);
+            }
+            Ok(offset_page_from_window(items, 0, page_size))
+        })
+    }
+
     pub(crate) fn list_public_security_scope(
         &self,
         p_code: &str,
@@ -1366,9 +1473,10 @@ impl Db {
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
-				                                    COALESCE(ac.account_count, 0),
+			                                    COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+			                                    s.education_type,
 			                                    s.status, cs.status, cs.install_token_status,
 			                                    CASE WHEN cs.sfid_number IS NULL THEN NULL ELSE (cs.cpms_pubkey_hash IS NOT NULL) END
 	                             FROM subjects s
@@ -1430,9 +1538,10 @@ impl Db {
 			                                    s.city, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
-				                                    COALESCE(ac.account_count, 0),
+			                                    COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
 			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+			                                    s.education_type,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean
 	                             FROM subjects s
 	                             LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
@@ -1450,7 +1559,8 @@ impl Db {
 	                               AND (
 	                                    (s.category = 'GOV_INSTITUTION'
 	                                     AND g.sfid_number IS NOT NULL
-	                                     AND COALESCE(g.org_code, '') <> 'CITY_POLICE')
+	                                     AND COALESCE(g.org_code, '') <> 'CITY_POLICE'
+	                                     AND s.institution_code <> 'JY')
 	                                    OR (s.category = 'GOV_INSTITUTION'
 	                                        AND g.sfid_number IS NULL
 	                                        AND s.org_code IS NULL

@@ -1,5 +1,5 @@
 // 中文注释:私权机构新增入口。类型由上层六个 Tab 传入,后端据此锁定主体属性、机构码与法人资格。
-// 教育委员会(JY)学校机构的新增统一在教育机构 tab(education 模块)。
+// JY 教育机构的新增统一在教育机构 tab(education 模块)。
 // 表单 UI 复用 core/institution,本文件只负责注入 private API。
 
 import React from 'react';

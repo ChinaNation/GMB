@@ -9,7 +9,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::china::{china_sqlite_hash, provinces};
 use crate::number::{generate_sfid_number, GenerateSfidInput, InstitutionCategory};
-use crate::subjects::service::{build_default_accounts_for_codes, default_account_names_for_codes};
+use crate::subjects::{
+    service::{build_default_accounts_for_codes, default_account_names_for_codes},
+    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
+};
 use crate::Db;
 
 #[allow(dead_code)]
@@ -34,7 +37,7 @@ mod china_sf_constants;
 #[path = "../../../citizenchain/runtime/primitives/china/china_zf.rs"]
 mod china_zf_constants;
 
-pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v5";
+pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v6";
 pub const MIN_DEFAULT_ACCOUNT_COUNT: i64 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -114,6 +117,7 @@ struct OfficialInstitutionTarget {
     town_code: String,
     institution_code: String,
     org_code: String,
+    education_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -478,6 +482,7 @@ fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
                 town_code: String::new(),
                 institution_code: "ZF".to_string(),
                 org_code: "CITY_POLICE".to_string(),
+                education_type: None,
             });
         }
     }
@@ -525,6 +530,9 @@ fn push_constant_target(
         return;
     };
     let (sfid_name, short_name) = official_name_pair(name);
+    let org_code = org_code_for_constant_name(name);
+    let education_type = (org_code == "NATIONAL_EDU")
+        .then(|| EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE.to_string());
     targets.push(OfficialInstitutionTarget {
         sfid_number: sfid_number.to_string(),
         institution_name: short_name.clone(),
@@ -540,7 +548,8 @@ fn push_constant_target(
         city_code,
         town_code: String::new(),
         institution_code,
-        org_code: org_code_for_constant_name(name).to_string(),
+        org_code: org_code.to_string(),
+        education_type,
     });
 }
 
@@ -770,6 +779,8 @@ fn push_area_template_target(
         town_code: town_code.to_string(),
         institution_code: template.institution_code.to_string(),
         org_code: template.org_code.to_string(),
+        education_type: (template.org_code == "CITY_EDU")
+            .then(|| EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE.to_string()),
     });
 }
 
@@ -888,6 +899,8 @@ fn catalog_hash(china_hash: &str, targets: &[OfficialInstitutionTarget]) -> Stri
         hasher.update(target.institution_code.as_bytes());
         hasher.update(b"|");
         hasher.update(target.org_code.as_bytes());
+        hasher.update(b"|");
+        hasher.update(target.education_type.as_deref().unwrap_or("").as_bytes());
         hasher.update(b"\n");
     }
     hex::encode(hasher.finalize())
@@ -990,6 +1003,7 @@ fn auto_rows_in_scope(
             String,
             String,
             String,
+            String,
         ),
     >,
     String,
@@ -1010,7 +1024,8 @@ fn auto_rows_in_scope(
                 "SELECT s.sfid_number, COALESCE(s.name, ''), COALESCE(s.sfid_name, ''),
                         COALESCE(s.short_name, ''), s.category, s.province, s.city,
                         COALESCE(s.town, ''), s.province_code, s.city_code,
-                        COALESCE(s.town_code, ''), s.institution_code, COALESCE(g.org_code, '')
+                        COALESCE(s.town_code, ''), s.institution_code, COALESCE(g.org_code, ''),
+                        COALESCE(s.education_type, '')
                  FROM subjects s
                  JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
                  WHERE s.kind = 'PUBLIC'
@@ -1038,6 +1053,7 @@ fn auto_rows_in_scope(
                     row.get(10),
                     row.get(11),
                     row.get(12),
+                    row.get(13),
                 ),
             );
         }
@@ -1112,6 +1128,7 @@ pub fn check_gov_catalog_db(
                 town_code,
                 institution_code,
                 org_code,
+                education_type,
             )) => {
                 if name != &target.institution_name
                     || sfid_name != &target.sfid_name
@@ -1125,6 +1142,7 @@ pub fn check_gov_catalog_db(
                     || town_code != &target.town_code
                     || institution_code != &target.institution_code
                     || org_code != &target.org_code
+                    || education_type != target.education_type.as_deref().unwrap_or("")
                 {
                     mismatched_sfids.push(target.sfid_number.clone());
                 }
@@ -1457,6 +1475,10 @@ fn bulk_write_target_chunk(
         .iter()
         .map(|target| target.org_code.clone())
         .collect::<Vec<_>>();
+    let education_types = targets
+        .iter()
+        .map(|target| target.education_type.clone())
+        .collect::<Vec<_>>();
     let home_p_codes = vec![None::<String>; targets.len()];
     let home_c_codes = vec![None::<String>; targets.len()];
 
@@ -1505,24 +1527,24 @@ fn bulk_write_target_chunk(
             sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
             status, category, subject_property, p1, province, city, town,
             province_code, city_code, town_code, institution_code, org_code,
-            private_type, partnership_kind, has_legal_personality,
+            education_type, private_type, partnership_kind, has_legal_personality,
             parent_sfid_number, created_by, created_at, updated_at
          )
          SELECT
             sfid_number, 'PUBLIC', name, sfid_name, short_name, p_code, c_code, t_code,
             'ACTIVE', category, subject_property, p1, province, city, town,
             p_code, COALESCE(c_code, ''), COALESCE(t_code, ''), institution_code, org_code,
-            NULL::text, NULL::text, NULL::boolean, NULL::text, $18, now(), now()
+            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $19, now(), now()
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
             $11::text[], $12::text[], $13::text[], $14::text[], $15::text[],
-            $16::text[], $17::text[]
+            $16::text[], $17::text[], $18::text[]
          ) AS u(
             sfid_number, name, sfid_name, short_name, p_code,
             c_code, t_code, category, subject_property, p1,
             province, city, town, institution_code, org_code,
-            province_code, city_code
+            province_code, city_code, education_type
          )
          ON CONFLICT (p_code, sfid_number) DO UPDATE SET
             kind = EXCLUDED.kind,
@@ -1543,6 +1565,7 @@ fn bulk_write_target_chunk(
             town_code = EXCLUDED.town_code,
             institution_code = EXCLUDED.institution_code,
             org_code = EXCLUDED.org_code,
+            education_type = EXCLUDED.education_type,
             private_type = EXCLUDED.private_type,
             partnership_kind = EXCLUDED.partnership_kind,
             has_legal_personality = EXCLUDED.has_legal_personality,
@@ -1567,6 +1590,7 @@ fn bulk_write_target_chunk(
             &org_codes,
             &p_codes,
             &c_codes,
+            &education_types,
             &actor,
         ],
     )

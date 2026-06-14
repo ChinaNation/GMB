@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-06-13
+- 最后更新:2026-06-14
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-联邦管理员相关前后端与-runtime-目录结构.md`
@@ -28,6 +28,7 @@
   - `memory/08-tasks/done/20260612-194131-sfid-private-real-module-refactor.md`
   - `memory/08-tasks/open/20260613-sfid-institution-detail-nav.md`
   - `memory/08-tasks/open/20260613-sfid-institution-list-audit-accounts.md`
+  - `memory/08-tasks/open/20260614-sfid-education-classification.md`
 
 ## 当前边界
 
@@ -49,7 +50,7 @@ sfid/frontend/
 │   └── qr/                    # WUMIN_QR_V1 前端解析器
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── docs/                      # 机构资料库前端出口
-├── education/                 # 教育机构页面入口,教育委员会(JY)学校机构唯一管理界面
+├── education/                 # 教育机构页面入口,统一管理 JY 教育委员会、法人学校和 F+JY 分支机构
 ├── gov/                       # 公权机构页面入口、机构操作记录共享组件,前后端统一使用 gov 命名
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
 ├── private/                   # 六类私权机构 Shell,只负责省市选择和详情跳转
@@ -80,7 +81,7 @@ sfid/frontend/
   机构与区块链交互继续放 `subjects/chain_duoqian_info.ts`。
 - 公权机构页面入口放 `gov/`,前后端统一使用 `gov` 命名;前端不得新建 `public/` 业务目录。
 - 六类私权机构入口放 `private/`;其下按 `common/sole/partnership/company/corporation/welfare/association`
-  拆分六类私权机构前端边界。教育机构(教育委员会 JY 学校机构)页面入口放 `education/`;
+  拆分六类私权机构前端边界。教育机构(JY 教育体系机构)页面入口放 `education/`;
   身份主体公共出口放 `subjects/`;账户和资料库出口分别放 `accounts/`、`docs/`。
 - 不得恢复 `institutions/` 前端目录;公权 UI 归 `gov/`,私权 UI 归 `private/`,教育 UI 归
   `education/`,账户和资料库分别归 `accounts/`、`docs/`。`subjects/` 不再承载机构聚合页面组件。
@@ -146,22 +147,26 @@ sfid/frontend/
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增公民”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
-- `china/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
+- `china/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表、教育机构市详情直显的确定性市公民教育委员会列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
 - `core/CityGrid.tsx`、市注册局城市表格和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；市注册局城市表格和通用城市网格在已有缓存时必须先同步读取 `readCachedSfidCities` 直接显示，不得先闪出“暂无城市数据”。市注册局城市表格读取身份ID时必须调用公权机构列表的 `org_code=CITY_REGISTRY` 后端精确过滤,不得省级拉取前 300 条后前端过滤。机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
-- `private/PrivateListTable.tsx` 与 `education/EducationListTable.tsx` 不做普通机构本地分页承载大数据；私权/教育机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`gov/GovListTable.tsx` 承载公安局确定性列表和公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
+- `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`education/EducationListTable.tsx` 分两路读取:市详情空搜索直接显示本市确定性市公民教育委员会,有本地缓存时先显示缓存再后台刷新,有搜索词时按名称或身份ID精确查询法人学校和 F+JY 分支机构。`gov/GovListTable.tsx` 承载公安局确定性列表和公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
 - 公权机构 tab 手动新增两能力(市公安局页面无新增入口):G 公法人=新公权机构
   (代码仅 `ZF/LF/SF/JC`,排除储备体系自动目录代码,机构名称必填同市查重)/ F 非法人=公权下属非法人
   (机构代码锁死中国 `ZG`,不开放他国)。
   普通公权目录仍由后端自动生成,手动公权机构与挂公法人的非法人都进浏览目录。
-- 教育委员会(JY)学校机构统一在教育机构 tab(`education/`)管理:列表走
-  `category=EDUCATION_INSTITUTION`(= 手动 JY 行:学校本部 + 分校,跨 GOV/PRIVATE 存储 category),
-  私权/公权列表同步排除;自动生成的监管本体(公民教育委员会/国家教育委员会)仍留在公权目录。
+  联邦管理员可在本省任意市创建,市管理员只能在本市创建;前端通过省/市详情页传入目标市,后端仍做最终 scope 校验。
+- JY 教育机构统一在教育机构 tab(`education/`)管理:列表走
+  `category=EDUCATION_INSTITUTION`;市详情空搜索直接展示本市市公民教育委员会,国家公民教育委员会不跨市直显,法人学校和 F+JY 分支机构按名称或身份ID精确搜索。
+  私权/公权列表同步排除全部 `JY` 教育体系机构,自动生成的国家/市公民教育委员会不再留在公权目录。
 - 非法人(F)不是全部从属:个体经营(F+GT)和无限合伙(F+GP)是独立非法人,创建时不选择所属法人;
   教育分校和公权下属非法人仍必须选择所属法人。P1 盈利属性由私权类型规则或所属法人继承规则决定;
   所属法人搜索由后端按 `subjects/uninorg` 地域规则预过滤——分校→本市学校本部,
   公权→本市市级/本省省级/国家级公法人。
-- 教育机构新增表单:机构锁死“教育委员会”,名称字段标签显示“学校名称”(分校也必填);
-  主体属性 G(公立)/S(私立)/F(分校,所属法人=本市学校本部)。
+- 法定代表人身份ID搜索必须调用 `citizens/api.ts::searchLegalRepresentativeCitizens` 并传目标机构上下文:
+  新增弹窗传省、市、主体属性、机构代码、教育分类和所属法人;详情页传 `target_sfid_number`,若同一编辑表单正在改挂所属法人则临时传更新后的父级上下文。前端只做候选辅助,后端创建/更新接口仍做最终本省/本市/全国校验。
+- 教育机构新增表单:机构锁死“公民教育委员会(JY)”。主体属性 G/S 学校必须单选教育机构类型
+  `初学/小学/中学/大学`;主体属性 F 分支机构不使用教育机构类型字段,仍按所属法人=本市法人教育机构创建。
+- 学校内部部门不是 SFID 机构主体,前端不得提供创建入口、列表项或详情 tab。
 - **账户地址统一完整 SS58**:公钥(0x hex)是系统的,前端凡展示账户一律 `tryEncodeSs58` 转
   SS58(prefix=2027)且**完整显示不截断**(小号等宽字体+break-all 换行);机构操作记录
   「操作者账户」、机构账户列表「账户地址」、公民「投票账户」均按此口径;交易哈希不是账户,允许截断。
@@ -185,7 +190,7 @@ sfid/frontend/
 - 顶层直接显示六个私权机构 Tab:个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会。
   新增时前端提交 `private_type` 和必要的 `partnership_kind`,后端锁定 `subject_property / institution / p1`;
   前端不得把 `ZG/TG` 当作私权机构选项。
-- 私权机构列表按 `private_type` 精确过滤;教育委员会学校仍归教育 tab,公权下属非法人仍归公权 tab。
+- 私权机构列表按 `private_type` 精确过滤;JY 教育机构仍归教育 tab,公权下属非法人仍归公权 tab。
 - 机构链上状态前端只保留“未注册 / 已注册 / 已注销”,不得出现第四状态筛选或文案。
 
 ## 管理员目录规则

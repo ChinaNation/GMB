@@ -1,4 +1,5 @@
-// 中文注释:教育机构列表。与私权一致的精确搜索形态:必须输入学校名称或 SFID,避免跨省全量扫描。
+// 中文注释:教育机构列表。市详情确定性市公民教育委员会先读本地缓存直接展示,再后台刷新;
+// 学校和 F+JY 非法人教育机构仍保持精确搜索,避免跨省全量扫描。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Space, Table, Typography } from 'antd';
@@ -6,7 +7,12 @@ import type { ColumnsType } from 'antd/es/table';
 import type { AdminAuth } from '../auth/types';
 import type { InstitutionListRow } from './api';
 import { listEducationInstitutions } from './api';
-import { SUBJECT_PROPERTY_LABEL } from '../subjects/labels';
+import { EDUCATION_TYPE_LABEL, SUBJECT_PROPERTY_LABEL } from '../subjects/labels';
+import {
+  educationCommitteeCacheKey,
+  readCachedEducationCommitteeRows,
+  writeCachedEducationCommitteeRows,
+} from '../china/metaCache';
 import { notice } from '../utils/notice';
 
 interface Props {
@@ -26,21 +32,52 @@ export const EducationListTable: React.FC<Props> = ({
   refreshKey,
   searchQuery,
 }) => {
-  const [rows, setRows] = useState<InstitutionListRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [directRows, setDirectRows] = useState<InstitutionListRow[]>([]);
+  const [searchRows, setSearchRows] = useState<InstitutionListRow[]>([]);
+  const [directLoading, setDirectLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const directCacheKey = educationCommitteeCacheKey(auth, province, city);
 
-  const loadRows = (cursor?: string | null) => {
+  const loadDirectRows = () => {
+    const cachedRows = readCachedEducationCommitteeRows(directCacheKey);
+    const hasImmediateRows = Boolean(cachedRows);
+    if (cachedRows) setDirectRows(cachedRows);
+
+    let cancelled = false;
+    if (!hasImmediateRows) setDirectLoading(true);
+    listEducationInstitutions(auth, {
+      province,
+      city: city || undefined,
+      page_size: 50,
+    })
+      .then((data) => {
+        if (cancelled) return;
+        setDirectRows(data.items);
+        writeCachedEducationCommitteeRows(directCacheKey, auth, province, city, data.items);
+      })
+      .catch((err) => {
+        if (!cancelled) notice.error(err, '');
+      })
+      .finally(() => {
+        if (!cancelled && !hasImmediateRows) setDirectLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  };
+
+  const loadSearchRows = (cursor?: string | null) => {
     const exactQuery = searchQuery?.trim() ?? '';
     if (!exactQuery) {
-      setRows([]);
+      setSearchRows([]);
       setNextCursor(null);
       return () => {};
     }
 
     let cancelled = false;
-    setLoading(true);
+    setSearchLoading(true);
     listEducationInstitutions(auth, {
       province,
       city: city || undefined,
@@ -50,14 +87,14 @@ export const EducationListTable: React.FC<Props> = ({
     })
       .then((data) => {
         if (cancelled) return;
-        setRows(data.items);
+        setSearchRows(data.items);
         setNextCursor(data.next_cursor ?? null);
       })
       .catch((err) => {
         if (!cancelled) notice.error(err, '');
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSearchLoading(false);
       });
     return () => {
       cancelled = true;
@@ -65,8 +102,22 @@ export const EducationListTable: React.FC<Props> = ({
   };
 
   useEffect(() => {
+    return loadDirectRows();
+  }, [
+    auth.access_token,
+    auth.admin_pubkey,
+    auth.role,
+    auth.admin_province,
+    auth.admin_city,
+    province,
+    city,
+    refreshKey,
+    directCacheKey,
+  ]);
+
+  useEffect(() => {
     setCursorStack([]);
-    return loadRows(null);
+    return loadSearchRows(null);
   }, [
     auth.access_token,
     auth.admin_pubkey,
@@ -79,6 +130,16 @@ export const EducationListTable: React.FC<Props> = ({
     searchQuery,
   ]);
 
+  const loading = directLoading || searchLoading;
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    return [...directRows, ...searchRows].filter((row) => {
+      if (seen.has(row.sfid_number)) return false;
+      seen.add(row.sfid_number);
+      return true;
+    });
+  }, [directRows, searchRows]);
+
   const columns = useMemo<ColumnsType<InstitutionListRow>>(
     () => [
       {
@@ -89,12 +150,22 @@ export const EducationListTable: React.FC<Props> = ({
       },
       { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
       {
-        title: '学校名称',
+        title: '机构名称',
         dataIndex: 'institution_name',
         width: 180,
         align: 'center',
         render: (v: string | null) =>
           v ? v : <span style={{ color: '#999' }}>(未命名,待完善)</span>,
+      },
+      {
+        title: '教育分类',
+        key: 'education_type',
+        width: 150,
+        align: 'center',
+        render: (_v, r) =>
+          r.education_type
+            ? EDUCATION_TYPE_LABEL[r.education_type] ?? r.education_type
+            : '分校',
       },
       {
         title: '主体属性',
@@ -119,7 +190,7 @@ export const EducationListTable: React.FC<Props> = ({
   const onNextPage = () => {
     if (!nextCursor) return;
     setCursorStack((prev) => [...prev, nextCursor]);
-    loadRows(nextCursor);
+    loadSearchRows(nextCursor);
   };
 
   const onPrevPage = () => {
@@ -128,7 +199,7 @@ export const EducationListTable: React.FC<Props> = ({
     stack.pop();
     const prevCursor = stack.length > 0 ? stack[stack.length - 1] : null;
     setCursorStack(stack);
-    loadRows(prevCursor);
+    loadSearchRows(prevCursor);
   };
 
   return (

@@ -93,7 +93,7 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
   const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCity : null);
 
   // 中文注释:普通公权目录由后端自动生成;手动新增两能力:公权机构(G,ZF/LF/SF/JC)
-  // 和公权下属非法人(F,挂公法人)。教育委员会(JY)学校机构归教育 tab。
+  // 和公权下属非法人(F,挂公法人)。JY 教育机构统一归教育 tab。
   const onSubmitSearch = () => {
     setCommittedSearch(searchInput.trim());
   };

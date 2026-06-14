@@ -1,5 +1,6 @@
 // 中文注释:SFID 前端轻量缓存。
 // 只缓存省市代码、确定性机构展示列表和机构详情快照;普通公民/机构精确搜索结果不得放进这里。
+// 教育机构缓存仅限市详情直显的确定性市公民教育委员会,不缓存学校和 F+JY 搜索结果。
 
 import type { AdminAuth } from '../auth/types';
 import type { InstitutionDetail, InstitutionListRow } from '../subjects/api';
@@ -9,6 +10,7 @@ const SFID_META_CACHE_VERSION = 'sfid-meta-v1';
 const SFID_CITY_CACHE_VERSION = 'sfid-cities-v1';
 const PUBLIC_SECURITY_CACHE_VERSION = 'public-security-v1';
 const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v1';
+const EDUCATION_COMMITTEE_CACHE_VERSION = 'education-committees-v1';
 const INSTITUTION_DETAIL_CACHE_VERSION = 'institution-detail-v1';
 const GOV_MANIFEST_VERSION_KEY = 'sfid:gov-manifest-version';
 
@@ -17,7 +19,7 @@ interface CachedPayload<T> {
   data: T;
 }
 
-interface PublicSecurityCachePayload {
+interface InstitutionRowsCachePayload {
   version: string;
   admin_pubkey: string;
   role: string;
@@ -101,7 +103,7 @@ export function readCachedPublicSecurityRows(key: string): InstitutionListRow[] 
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as PublicSecurityCachePayload;
+    const parsed = JSON.parse(raw) as InstitutionRowsCachePayload;
     if (parsed.version !== PUBLIC_SECURITY_CACHE_VERSION || !Array.isArray(parsed.rows)) {
       localStorage.removeItem(key);
       return null;
@@ -147,7 +149,7 @@ export function writeCachedPublicSecurityRows(
         city: auth.admin_city || city || 'ALL',
         manifest_version: manifestVersion ?? null,
         rows,
-      } satisfies PublicSecurityCachePayload),
+      } satisfies InstitutionRowsCachePayload),
     );
   } catch {
     // 中文注释:公安局列表缓存只是展示加速,写失败不影响后端权威结果。
@@ -171,7 +173,7 @@ export function readCachedOfficialInstitutionRows(key: string): InstitutionListR
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as PublicSecurityCachePayload;
+    const parsed = JSON.parse(raw) as InstitutionRowsCachePayload;
     if (parsed.version !== OFFICIAL_INSTITUTION_CACHE_VERSION || !Array.isArray(parsed.rows)) {
       localStorage.removeItem(key);
       return null;
@@ -217,10 +219,72 @@ export function writeCachedOfficialInstitutionRows(
         city: auth.admin_city || city || 'ALL',
         manifest_version: manifestVersion ?? null,
         rows,
-      } satisfies PublicSecurityCachePayload),
+      } satisfies InstitutionRowsCachePayload),
     );
   } catch {
     // 中文注释:公权机构确定性列表缓存只是展示加速,写失败不影响后端权威结果。
+  }
+}
+
+export function educationCommitteeCacheKey(auth: AdminAuth, province: string, city: string): string {
+  const scopeCity = auth.admin_city || city;
+  const scopeProvince = auth.admin_province || province;
+  return [
+    'sfid:education-committees',
+    EDUCATION_COMMITTEE_CACHE_VERSION,
+    auth.admin_pubkey,
+    auth.role,
+    scopeProvince,
+    scopeCity,
+  ].join(':');
+}
+
+export function readCachedEducationCommitteeRows(key: string): InstitutionListRow[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as InstitutionRowsCachePayload;
+    if (parsed.version !== EDUCATION_COMMITTEE_CACHE_VERSION || !Array.isArray(parsed.rows)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    if (parsed.rows.length === 0) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.rows;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+export function writeCachedEducationCommitteeRows(
+  key: string,
+  auth: AdminAuth,
+  province: string,
+  city: string,
+  rows: InstitutionListRow[],
+) {
+  try {
+    if (rows.length === 0) {
+      localStorage.removeItem(key);
+      return;
+    }
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: EDUCATION_COMMITTEE_CACHE_VERSION,
+        admin_pubkey: auth.admin_pubkey,
+        role: auth.role,
+        province: auth.admin_province || province,
+        city: auth.admin_city || city,
+        manifest_version: null,
+        rows,
+      } satisfies InstitutionRowsCachePayload),
+    );
+  } catch {
+    // 中文注释:教育机构确定性市教委缓存只是首屏展示加速,写失败不影响后端权威结果。
   }
 }
 

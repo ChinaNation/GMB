@@ -26,6 +26,14 @@ export type PrivateType =
 
 export type PartnershipKind = 'GENERAL' | 'LIMITED';
 
+export type EducationType =
+  | 'NATIONAL_CITIZEN_EDU_COMMITTEE'
+  | 'CITY_CITIZEN_EDU_COMMITTEE'
+  | 'EARLY_SCHOOL'
+  | 'PRIMARY_SCHOOL'
+  | 'SECONDARY_SCHOOL'
+  | 'UNIVERSITY';
+
 export interface Institution {
   sfid_number: string;
   /** 机构名称。私权/教育/手动公权创建时写入;自动目录机构由系统生成。 */
@@ -48,13 +56,15 @@ export interface Institution {
   town_code?: string;
   institution_code: string;
   org_code?: string | null;
+  /** 教育机构业务分类,只用于教育 tab 分类,不参与身份 ID 生成。 */
+  education_type?: EducationType | null;
   /** 私权机构类型。仅私权目标类型机构有值。 */
   private_type?: PrivateType | null;
   /** 合伙企业形态。仅 private_type=PARTNERSHIP 时有值。 */
   partnership_kind?: PartnershipKind | null;
   /** 是否具有法人资格。仅私权目标类型机构有值。 */
   has_legal_personality?: boolean | null;
-  /** 所属法人 sfid_number(仅 SubjectProperty=F 非法人必填;指向 S/G) */
+  /** 从属关系引用:需挂靠的 F 指向所属法人。 */
   parent_sfid_number?: string | null;
   /** 法定代表人资料。初始化目录机构可为空;编辑保存时必填。 */
   legal_rep_name?: string | null;
@@ -94,6 +104,7 @@ export interface InstitutionListRow {
   town?: string;
   institution_code: string;
   org_code?: string | null;
+  education_type?: EducationType | null;
   private_type?: PrivateType | null;
   partnership_kind?: PartnershipKind | null;
   has_legal_personality?: boolean | null;
@@ -155,10 +166,12 @@ export interface CreateInstitutionInput {
   province?: string;
   city: string;
   institution: string;
+  /** 教育机构业务分类。仅 G/S 学校创建时提交;F+JY 分校不使用。 */
+  education_type?: EducationType;
   /**
    * 机构名称。
    * - 私权机构创建时必填,由对应私权类型 tab 锁定身份编码
-   * - 教育委员会(JY)学校机构和手动公权机构(G):**必传**,同步做查重
+   * - 法人教育机构(G/S+JY)和手动公权机构(G):**必传**,同步做查重
    * - 自动公权机构/公安局:不走手动创建接口
   */
   institution_name?: string;

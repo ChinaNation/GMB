@@ -53,6 +53,118 @@ pub struct LegalRepresentativeFields {
     pub photo_size: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LegalRepresentativeCitizenScope {
+    Nationwide,
+    Province {
+        province_code: String,
+    },
+    City {
+        province_code: String,
+        city_code: String,
+    },
+}
+
+impl LegalRepresentativeCitizenScope {
+    pub fn province_code(&self) -> Option<&str> {
+        match self {
+            Self::Nationwide => None,
+            Self::Province { province_code } | Self::City { province_code, .. } => {
+                Some(province_code.as_str())
+            }
+        }
+    }
+
+    pub fn city_code(&self) -> Option<&str> {
+        match self {
+            Self::City { city_code, .. } => Some(city_code.as_str()),
+            Self::Nationwide | Self::Province { .. } => None,
+        }
+    }
+
+    pub fn legal_rep_error_message(&self) -> &'static str {
+        match self {
+            Self::Nationwide => "法定代表人身份ID必须选择正常状态公民",
+            Self::Province { .. } => "该机构法定代表人必须是本省正常状态公民",
+            Self::City { .. } => "该机构法定代表人必须是本市正常状态公民",
+        }
+    }
+}
+
+fn local_public_scope(province_code: &str, city_code: &str) -> LegalRepresentativeCitizenScope {
+    let province_code = province_code.trim().to_string();
+    let city_code = city_code.trim().to_string();
+    if city_code.is_empty() || city_code == "000" {
+        LegalRepresentativeCitizenScope::Province { province_code }
+    } else {
+        LegalRepresentativeCitizenScope::City {
+            province_code,
+            city_code,
+        }
+    }
+}
+
+fn public_org_scope(
+    org_code: Option<&str>,
+    province_code: &str,
+    city_code: &str,
+) -> LegalRepresentativeCitizenScope {
+    match org_code.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(code)
+            if code.starts_with("NATIONAL_")
+                || code.starts_with("MINISTRY_")
+                || code.starts_with("FEDERAL_") =>
+        {
+            LegalRepresentativeCitizenScope::Nationwide
+        }
+        Some(code) if code.starts_with("PROVINCE_") => LegalRepresentativeCitizenScope::Province {
+            province_code: province_code.trim().to_string(),
+        },
+        // 手动公权机构、CITY_/TOWN_ 公权机构以及未知前缀都按落位省市收口;若没有市码则按省级处理。
+        _ => local_public_scope(province_code, city_code),
+    }
+}
+
+pub fn resolve_legal_representative_scope_for_codes(
+    subject_property: &str,
+    institution_code: &str,
+    org_code: Option<&str>,
+    _education_type: Option<&str>,
+    province_code: &str,
+    city_code: &str,
+    parent: Option<&Institution>,
+) -> LegalRepresentativeCitizenScope {
+    if subject_property == "G" {
+        return public_org_scope(org_code, province_code, city_code);
+    }
+
+    let parent_is_public_legal_person = parent
+        .map(|parent| parent.subject_property.as_str() == "G")
+        .unwrap_or(false);
+    if subject_property == "F" && parent_is_public_legal_person {
+        return local_public_scope(province_code, city_code);
+    }
+
+    // 私法人、私法人学校、挂靠私法人的非法人学校/机构都允许全国正常公民担任法定代表人。
+    let _ = institution_code;
+    LegalRepresentativeCitizenScope::Nationwide
+}
+
+pub fn resolve_legal_representative_scope_for_institution(
+    inst: &Institution,
+    parent: Option<&Institution>,
+) -> LegalRepresentativeCitizenScope {
+    resolve_legal_representative_scope_for_codes(
+        inst.subject_property.as_str(),
+        inst.institution_code.as_str(),
+        inst.org_code.as_deref(),
+        inst.education_type.as_deref(),
+        inst.province_code.as_str(),
+        inst.city_code.as_str(),
+        parent,
+    )
+}
+
 pub fn is_default_account_name(account_name: &str) -> bool {
     DEFAULT_ACCOUNT_NAMES
         .iter()

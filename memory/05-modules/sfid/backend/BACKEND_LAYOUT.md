@@ -1,6 +1,6 @@
 # SFID 后端目录布局
 
-- 最后更新:2026-06-13
+- 最后更新:2026-06-14
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
@@ -20,6 +20,7 @@
   - `memory/08-tasks/done/20260612-181650-重构-sfid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
   - `memory/08-tasks/done/20260612-194131-sfid-private-real-module-refactor.md`
   - `memory/08-tasks/open/20260613-sfid-institution-list-audit-accounts.md`
+  - `memory/08-tasks/open/20260614-sfid-education-classification.md`
 
 ## 当前边界
 
@@ -140,7 +141,7 @@ sfid/backend/
 - 关系型目标表从初始化阶段即按 `p_code` 创建省级分区,不得写成“数据量变大后再分区”:
   - `ids`:全局 `sfid_number` 唯一约束表,不是第二身份键。
   - `subjects`:统一身份主体索引,`kind=CITIZEN/PUBLIC/PRIVATE`;保存
-    `name/sfid_name/short_name/p_code/c_code/t_code/省市镇/status/private_type/partnership_kind/has_legal_personality`
+    `name/sfid_name/short_name/p_code/c_code/t_code/省市镇/status/education_type/private_type/partnership_kind/has_legal_personality`
     等主体展示、范围和私权分类字段。
   - `citizens`:公民详情,保留精简命名。
   - `gov`:公权机构详情,保存 `level/institution_code/org_code`；公安局只保留
@@ -159,8 +160,11 @@ sfid/backend/
 - 公安局和公权机构确定性列表是只读查询:启动或显式 reconcile 负责生成/对账,GET 列表接口
   只按 `p_code / c_code` 读取目标表,不得在 GET 中执行 backfill、reconcile、写库或分片同步。
   公权机构列表允许 `org_code` 精确过滤,用于市注册局等确定性细类列表一次性读取完整身份ID,
-  不得让前端先读取省级公权目录分页再自行过滤。确定性公权目录版本为 `gov-deterministic-v5`,
+  不得让前端先读取省级公权目录分页再自行过滤。确定性公权目录版本为 `gov-deterministic-v6`,
   简称由 `gov/service.rs` 在入库前归一,不得把常量全名直接写入 `short_name`。
+- 国家/市公民教育委员会仍由 `gov/service.rs` 确定性生成和对账,但必须写入
+  `subjects.education_type=NATIONAL_CITIZEN_EDU_COMMITTEE/CITY_CITIZEN_EDU_COMMITTEE`,
+  并从公权机构浏览目录排除,由教育机构 tab 直接展示。
 - `subjects/registration.rs` 承接公权/教育通用注册和列表内核;六类私权机构从
   `private/<type>/mod.rs` 传入固定规则后调用私权专用内核,不得恢复 `private/handler.rs`。
 - `subjects/http.rs` 承接跨 `gov/private/accounts/docs/subjects` 的 HTTP 辅助函数,包括

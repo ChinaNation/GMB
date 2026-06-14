@@ -26,11 +26,12 @@ use crate::subjects::http::{
     service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
 };
 use crate::subjects::model::{
-    CreateInstitutionInput, CreateInstitutionOutput, Institution, InstitutionListFilter,
-    InstitutionListRow,
+    is_education_school_type, CreateInstitutionInput, CreateInstitutionOutput, Institution,
+    InstitutionListFilter, InstitutionListRow,
 };
 use crate::subjects::service::{
-    derive_category, validate_institution_name, validate_legal_representative_required,
+    derive_category, resolve_legal_representative_scope_for_codes, validate_institution_name,
+    validate_legal_representative_required,
 };
 use crate::subjects::uninorg;
 use crate::*;
@@ -81,6 +82,7 @@ async fn create_institution_inner(
         "province": input.province.clone(),
         "city": input.city.clone(),
         "institution": input.institution.clone(),
+        "education_type": input.education_type.clone(),
         "institution_name": input.institution_name.clone(),
         "parent_sfid_number": input.parent_sfid_number.clone(),
         "private_type": input.private_type.clone(),
@@ -134,23 +136,54 @@ async fn create_institution_inner(
     }
     let is_private = matches!(subject_property.as_str(), "S" | "F");
     let is_education_school = institution_code == "JY";
+    let education_type = input
+        .education_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    let education_type = if is_education_school {
+        match subject_property.as_str() {
+            "G" | "S" => {
+                let Some(value) = education_type else {
+                    return api_error(StatusCode::BAD_REQUEST, 1001, "必须选择教育机构类型");
+                };
+                if !is_education_school_type(value.as_str()) {
+                    return api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "教育机构类型仅允许初学/小学/中学/大学",
+                    );
+                }
+                Some(value)
+            }
+            "F" => {
+                if education_type.is_some() {
+                    return api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "F+JY 分支机构不使用教育阶段分类",
+                    );
+                }
+                None
+            }
+            _ => None,
+        }
+    } else {
+        if education_type.is_some() {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "education_type 仅允许教育机构使用",
+            );
+        }
+        None
+    };
     if private_rule.is_none() && is_private && !is_education_school && institution_code != "ZG" {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
             "私权机构必须提交 private_type",
-        );
-    }
-    // 中文注释:手动 G(教育委员会学校 + 公权机构)统一只允许市管理员注册本市。
-    if subject_property == "G" && ctx.admin_city.is_none() {
-        return api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            if is_education_school {
-                "教育委员会类型学校只能由市管理员注册"
-            } else {
-                "公权机构只能由市管理员注册"
-            },
         );
     }
     let institution_name = match input.institution_name.as_deref().map(str::trim) {
@@ -191,6 +224,9 @@ async fn create_institution_inner(
         return api_error(StatusCode::BAD_REQUEST, 1001, "province too long");
     }
     let mut city = input.city.trim().to_string();
+    // 中文注释:机构创建权限统一由省/市 scope 收口:
+    // 联邦管理员 locked_province=本省且 locked_city=None,可在本省任意市创建;
+    // 市管理员同时锁定省和市,只能创建本市机构。
     if let Some(locked_city) = scope.locked_city.clone() {
         if !city.is_empty() && city != locked_city {
             return api_error(
@@ -267,6 +303,7 @@ async fn create_institution_inner(
             None
         }
     };
+    let mut parent_for_legal_rep_scope: Option<Institution> = None;
     if let Some(ref parent_sfid) = parent_sfid_number {
         let Some((parent, _)) = (match state.db.get_institution_with_accounts(parent_sfid) {
             Ok(v) => v,
@@ -310,7 +347,14 @@ async fn create_institution_inner(
                 "非法人盈利属性必须继承所属法人",
             );
         }
+        parent_for_legal_rep_scope = Some(parent);
     }
+    let Some(province_code_for_legal_rep) = province_code_by_name(&province) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
+    };
+    let Some(city_code_for_legal_rep) = city_code_by_name(&province, &city) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city");
+    };
     let legal_rep = match validate_legal_representative_required(
         input.legal_rep_name.as_deref(),
         input.legal_rep_sfid_number.as_deref(),
@@ -322,16 +366,25 @@ async fn create_institution_inner(
         Ok(v) => v,
         Err(e) => return service_error_to_response(e),
     };
-    match state
-        .db
-        .legal_representative_citizen_exists(legal_rep.sfid_number.as_str())
-    {
+    let legal_rep_scope = resolve_legal_representative_scope_for_codes(
+        subject_property.as_str(),
+        institution_code.as_str(),
+        None,
+        education_type.as_deref(),
+        province_code_for_legal_rep,
+        city_code_for_legal_rep,
+        parent_for_legal_rep_scope.as_ref(),
+    );
+    match state.db.legal_representative_citizen_exists_in_scope(
+        legal_rep.sfid_number.as_str(),
+        &legal_rep_scope,
+    ) {
         Ok(true) => {}
         Ok(false) => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "法定代表人身份ID必须选择正常状态公民",
+                legal_rep_scope.legal_rep_error_message(),
             )
         }
         Err(err) => {
@@ -394,6 +447,7 @@ async fn create_institution_inner(
             town_code: String::new(),
             institution_code: institution_code.clone(),
             org_code: None,
+            education_type: education_type.clone(),
             private_type: private_rule.map(|rule| rule.private_type.as_code().to_string()),
             partnership_kind: private_rule
                 .and_then(|rule| rule.partnership_kind)
@@ -424,6 +478,7 @@ async fn create_institution_inner(
                 "institution_name": institution_name.clone().unwrap_or_default(),
                 "subject_property": subject_property.clone(),
                 "institution": institution_code.clone(),
+                "education_type": inst.education_type.clone(),
                 "category": category_text_for_audit(category),
                 "province": province.clone(),
                 "city": city.clone(),
@@ -496,7 +551,7 @@ async fn list_institutions_inner(
         Err(resp) => return resp,
     };
     let scope = get_visible_scope(&ctx);
-    // 中文注释:JY 学校机构统一收口教育机构 tab(EDUCATION_INSTITUTION),
+    // 中文注释:JY 教育机构统一收口教育机构 tab(EDUCATION_INSTITUTION),
     // 私权/公权两路列表同步排除,过滤子句见 InstitutionListFilter。
     let filter = match query.category.as_deref() {
         Some("PRIVATE_INSTITUTION") => {

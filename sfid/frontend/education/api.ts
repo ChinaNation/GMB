@@ -1,5 +1,5 @@
-// 中文注释:教育机构前端 API。教育委员会(JY)类学校机构(G 公立/S 私立/F 分校)统一从这里调用后端。
-// 创建/查重/证件照与私权同一组后端接口,列表用 EDUCATION_INSTITUTION 过滤(= 手动 JY 学校,跨 GOV/PRIVATE)。
+// 中文注释:教育机构前端 API。JY 教育机构统一从这里调用后端:
+// 市详情确定性市公民教育委员会直接列表展示,学校和 F+JY 非法人教育机构按精确搜索返回。
 
 import type { AdminAuth } from '../auth/types';
 import {
@@ -52,6 +52,7 @@ export async function createInstitution(
     province: input.province ?? null,
     city: input.city,
     institution: input.institution,
+    education_type: input.education_type ?? null,
     institution_name: input.institution_name ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
     private_type: input.private_type ?? null,

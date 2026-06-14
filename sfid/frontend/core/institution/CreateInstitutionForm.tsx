@@ -16,6 +16,7 @@ import { loadCachedSfidCities } from '../../china/metaCache';
 import type {
   CreateInstitutionInput,
   CreateInstitutionOutput,
+  EducationType,
   LegalRepresentativePhoto,
   ParentInstitutionRow,
   PartnershipKind,
@@ -30,6 +31,7 @@ import {
   p1LocksForSubject,
   privateRuleFor,
   PRIVATE_TYPE_LABEL,
+  SCHOOL_EDUCATION_TYPE_OPTIONS,
   SUBJECT_PROPERTY_LABEL,
   type CreateFormCategory,
 } from '../../subjects/labels';
@@ -41,6 +43,7 @@ interface FormValues {
   province: string;
   city: string;
   institution: string;
+  education_type?: EducationType;
   private_type?: PrivateType;
   partnership_kind?: PartnershipKind;
   /** 私权/教育机构/手动公权机构创建时必填名称。 */
@@ -136,6 +139,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     : null;
   const isF = currentSubjectProperty === 'F';
   const requiresParent = isF && !isPrivate;
+  const showEducationType = isEducation && !isF;
 
   // 中文注释:私权目标态创建阶段直接写入名称;教育学校和手动公权机构也在弹窗内查重。
   const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
@@ -183,6 +187,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setNameAvailable(null);
     resetParentState();
     const defaultInstitution = defaultRule?.institution ?? institutionChoicesFor(category, defaultSubjectProperty)[0]?.value;
+    const defaultEducationType = category === 'EDUCATION_INSTITUTION' && defaultSubjectProperty !== 'F'
+      ? SCHOOL_EDUCATION_TYPE_OPTIONS[0]?.value as EducationType
+      : undefined;
     const defaultCollectName = isPrivate || isEducation || (isGov && defaultSubjectProperty === 'G');
     form.setFieldsValue({
       subject_property: defaultSubjectProperty,
@@ -190,6 +197,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       province: lockedProvince ?? '',
       city: lockedCity ?? '',
       institution: defaultInstitution,
+      education_type: defaultEducationType,
       private_type: privateType,
       partnership_kind: defaultPartnershipKind,
       institution_name: defaultCollectName ? '' : undefined,
@@ -232,11 +240,16 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setNameAvailable(null);
     // 中文注释:切主体属性必须重置所属法人与 p1(F 的 p1 是父级继承值,残留会提交旧值)。
     resetParentState();
+    setLegalRepOptions([]);
     const nextInstitution = institutionChoicesFor(category, subject_property)[0]?.value;
+    const nextEducationType = isEducation && subject_property !== 'F'
+      ? (form.getFieldValue('education_type') ?? SCHOOL_EDUCATION_TYPE_OPTIONS[0]?.value)
+      : undefined;
     const collectName =
       isEducation || (isGov && subject_property === 'G');
     form.setFieldsValue({
       institution: nextInstitution,
+      education_type: nextEducationType,
       p1: p1LocksForSubject(subject_property, null).value,
       parent_sfid_number: undefined,
       institution_name: collectName ? (form.getFieldValue('institution_name') ?? '') : undefined,
@@ -255,6 +268,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       parent_sfid_number: undefined,
     });
     resetParentState();
+    setLegalRepOptions([]);
   };
 
   // ── 所属法人搜索/选定(仅 F)────────────────────────────────
@@ -304,12 +318,14 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setSelectedParent(row);
     // 盈利属性附属于所属法人:选定父级即重算 p1(后端 uninorg 同规则复核)
     form.setFieldsValue({ p1: inheritedP1(row.subject_property, row.p1) });
+    setLegalRepOptions([]);
   };
 
   const onParentInputChange = (value: string) => {
     if (selectedParent && value !== selectedParent.sfid_number) {
       setSelectedParent(null);
       form.setFieldsValue({ p1: undefined });
+      setLegalRepOptions([]);
     }
   };
 
@@ -366,9 +382,28 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       notice.warning('请先输入法定代表人身份ID关键字');
       return;
     }
+    const province = (form.getFieldValue('province') ?? '').trim();
+    const city = (form.getFieldValue('city') ?? '').trim();
+    const subjectProperty = (form.getFieldValue('subject_property') ?? '').trim();
+    const institution = (form.getFieldValue('institution') ?? '').trim();
+    if (!province || !city || !subjectProperty || !institution) {
+      notice.warning('请先选择省、市、主体属性和机构');
+      return;
+    }
+    if (requiresParent && !selectedParent) {
+      notice.warning('请先从搜索结果中选择所属法人');
+      return;
+    }
     setLegalRepSearching(true);
     try {
-      const rows = await searchLegalRepresentativeCitizens(auth, q);
+      const rows = await searchLegalRepresentativeCitizens(auth, q, {
+        province,
+        city,
+        subject_property: subjectProperty,
+        institution,
+        education_type: showEducationType ? form.getFieldValue('education_type') : undefined,
+        parent_sfid_number: requiresParent ? selectedParent?.sfid_number : undefined,
+      });
       setLegalRepOptions(rows);
       if (rows.length === 0) {
         notice.info('未找到正常状态公民');
@@ -423,6 +458,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         province: values.province.trim(),
         city: values.city.trim(),
         institution: values.institution.trim(),
+        education_type: showEducationType ? values.education_type : undefined,
         institution_name: collectNameInModal
           ? (values.institution_name ?? '').trim()
           : undefined,
@@ -559,6 +595,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                     resetParentState();
                     form.setFieldsValue({ parent_sfid_number: undefined, p1: undefined });
                   }
+                  setLegalRepOptions([]);
                 }}
               />
             </Form.Item>
@@ -570,8 +607,21 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
               <Select options={instChoices} disabled={instDisabled} />
             </Form.Item>
           </Col>
-          {collectNameInModal && (
+          {showEducationType && (
             <Col span={12}>
+              <Form.Item
+                label="教育机构类型"
+                name="education_type"
+                rules={[{ required: true, message: '请选择教育机构类型' }]}
+              >
+                <Select options={SCHOOL_EDUCATION_TYPE_OPTIONS} />
+              </Form.Item>
+            </Col>
+          )}
+        </Row>
+        {collectNameInModal && (
+          <Row gutter={16}>
+            <Col span={24}>
               <Form.Item
                 label={nameLabel}
                 name="institution_name"
@@ -605,8 +655,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 </div>
               )}
             </Col>
-          )}
-        </Row>
+          </Row>
+        )}
         {requiresParent && (
           <>
             <Form.Item

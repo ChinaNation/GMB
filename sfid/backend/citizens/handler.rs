@@ -83,6 +83,163 @@ pub(crate) async fn admin_list_citizens(
 pub(crate) struct LegalRepresentativeCitizenQuery {
     pub q: Option<String>,
     pub page_size: Option<usize>,
+    pub target_sfid_number: Option<String>,
+    pub province: Option<String>,
+    pub city: Option<String>,
+    pub subject_property: Option<String>,
+    pub institution: Option<String>,
+    pub education_type: Option<String>,
+    pub parent_sfid_number: Option<String>,
+}
+
+fn legal_representative_scope_from_existing_target(
+    state: &AppState,
+    auth_ctx: &crate::admins::login::AdminAuthContext,
+    target_sfid_number: &str,
+) -> Result<crate::subjects::service::LegalRepresentativeCitizenScope, axum::response::Response> {
+    let Some((target, _)) = (match state.db.get_institution_with_accounts(target_sfid_number) {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query institution failed: {err}");
+            return Err(api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                message.as_str(),
+            ));
+        }
+    }) else {
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            1004,
+            "institution not found",
+        ));
+    };
+    crate::subjects::http::ensure_institution_visible_to_admin(&target, auth_ctx)?;
+
+    let parent = match target.parent_sfid_number.as_deref() {
+        Some(parent_sfid) if !parent_sfid.trim().is_empty() => {
+            match state.db.get_institution_with_accounts(parent_sfid) {
+                Ok(v) => v.map(|(parent, _)| parent),
+                Err(err) => {
+                    let message = format!("query parent institution failed: {err}");
+                    return Err(api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        message.as_str(),
+                    ));
+                }
+            }
+        }
+        _ => None,
+    };
+    Ok(
+        crate::subjects::service::resolve_legal_representative_scope_for_institution(
+            &target,
+            parent.as_ref(),
+        ),
+    )
+}
+
+fn legal_representative_scope_from_create_context(
+    state: &AppState,
+    auth_ctx: &crate::admins::login::AdminAuthContext,
+    query: &LegalRepresentativeCitizenQuery,
+) -> Result<crate::subjects::service::LegalRepresentativeCitizenScope, axum::response::Response> {
+    let province = query
+        .province
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "province is required"))?;
+    let city = query
+        .city
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "city is required"))?;
+    let scope = crate::scope::get_visible_scope(auth_ctx);
+    if !scope.includes_province(province) {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "province out of current admin scope",
+        ));
+    }
+    if !scope.includes_city(city) {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "city out of current admin scope",
+        ));
+    }
+    let subject_property = query
+        .subject_property
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "subject_property is required",
+            )
+        })?;
+    let institution = query
+        .institution
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "institution is required"))?;
+    let Some(province_code) = crate::china::province_code_by_name(province) else {
+        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "unknown province"));
+    };
+    let Some(city_code) = crate::china::city_code_by_name(province, city) else {
+        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "unknown city"));
+    };
+
+    let parent = match query.parent_sfid_number.as_deref().map(str::trim) {
+        Some(parent_sfid) if !parent_sfid.is_empty() => {
+            let Some((parent, _)) = (match state.db.get_institution_with_accounts(parent_sfid) {
+                Ok(v) => v,
+                Err(err) => {
+                    let message = format!("query parent institution failed: {err}");
+                    return Err(api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        message.as_str(),
+                    ));
+                }
+            }) else {
+                return Err(api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在"));
+            };
+            if !crate::subjects::uninorg::can_attach_to_parent_subject(
+                parent.subject_property.as_str(),
+            ) {
+                return Err(api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    crate::subjects::uninorg::parent_subject_requirement_message(),
+                ));
+            }
+            Some(parent)
+        }
+        _ if crate::subjects::uninorg::requires_parent(subject_property, institution) => {
+            return Err(api_error(StatusCode::BAD_REQUEST, 1001, "请先选择所属法人"));
+        }
+        _ => None,
+    };
+
+    Ok(
+        crate::subjects::service::resolve_legal_representative_scope_for_codes(
+            subject_property,
+            institution,
+            None,
+            query.education_type.as_deref().map(str::trim),
+            province_code,
+            city_code,
+            parent.as_ref(),
+        ),
+    )
 }
 
 pub(crate) async fn admin_search_legal_representative_citizens(
@@ -103,51 +260,33 @@ pub(crate) async fn admin_search_legal_representative_citizens(
         })
         .into_response();
     }
-    let scope_province_code = auth_ctx
-        .admin_province
+    let legal_rep_scope = match query
+        .target_sfid_number
         .as_deref()
-        .and_then(|name| crate::china::provinces().iter().find(|p| p.name == name))
-        .map(|p| p.code.to_string());
-    let scope_city_code = auth_ctx
-        .admin_city
-        .as_deref()
-        .and_then(|city_name| {
-            auth_ctx
-                .admin_province
-                .as_deref()
-                .and_then(|province_name| {
-                    crate::china::provinces()
-                        .iter()
-                        .find(|p| p.name == province_name)
-                        .and_then(|p| p.cities.iter().find(|c| c.name == city_name))
-                })
-        })
-        .map(|c| c.code.to_string());
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(target_sfid_number) => {
+            match legal_representative_scope_from_existing_target(
+                &state,
+                &auth_ctx,
+                target_sfid_number,
+            ) {
+                Ok(v) => v,
+                Err(resp) => return resp,
+            }
+        }
+        None => match legal_representative_scope_from_create_context(&state, &auth_ctx, &query) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        },
+    };
     let page_size = query.page_size.unwrap_or(20).clamp(1, 50);
-    let result = state.db.with_client(move |conn| {
-        let limit = i64::try_from(page_size).map_err(|_| "page_size too large".to_string())?;
-        let rows = conn
-            .query(
-                "SELECT sfid_number
-                 FROM citizens
-                 WHERE citizen_status = 'NORMAL'
-                   AND ($1::text IS NULL OR p_code = $1)
-                   AND ($2::text IS NULL OR c_code = $2)
-                   AND (
-                        sfid_number ILIKE '%' || $3 || '%'
-                        OR COALESCE(archive_no, '') ILIKE '%' || $3 || '%'
-                   )
-                 ORDER BY sfid_number ASC
-                 LIMIT $4",
-                &[&scope_province_code, &scope_city_code, &q, &limit],
-            )
-            .map_err(|e| format!("query legal representative citizens failed: {e}"))?;
-        Ok(rows
-            .iter()
-            .map(|row| row.get::<_, String>(0))
-            .collect::<Vec<_>>())
-    });
-    let rows = match result {
+    let rows = match state.db.search_legal_representative_citizens_in_scope(
+        &q,
+        page_size,
+        &legal_rep_scope,
+    ) {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "legal representative citizen search failed");

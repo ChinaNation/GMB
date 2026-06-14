@@ -49,7 +49,7 @@
   - Education 分支命中手动 G 公立学校 + S 私立学校 + F 分校（跨 GOV/PRIVATE 两存储 category）✓
   - Private 分支搜 JY 学校名 0 行（排除生效）✓
   - Gov 分支搜手动 JY 学校 0 行、搜「合肥市公民教育委员会」（org_code=CITY_EDU 监管本体）命中 ✓
-- **数据不变量已核**：开发库 3,186 条 JY 行全部为自动监管本体（org_code=CITY_EDU 无一为空），`org_code IS NULL` 圈定手动学校无误杀风险。
+- **数据不变量已核**：开发库 3,186 条 JY 行均为确定性市公民教育委员会目录（org_code=CITY_EDU 无一为空），`org_code IS NULL` 圈定手动学校无误杀风险。
 - JY 残留扫描：education 模块之外仅剩 INSTITUTION_CODE_LABEL 展示映射与指向教育 tab 的注释,无功能入口残留。
 
 ## 待用户端到端 QA

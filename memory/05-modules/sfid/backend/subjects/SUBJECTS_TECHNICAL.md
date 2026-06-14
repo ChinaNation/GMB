@@ -1,11 +1,12 @@
 # subjects/ — SFID 身份主体共享边界
 
-- 最后更新:2026-06-13
+- 最后更新:2026-06-14
 - 任务卡:
   - `memory/08-tasks/done/20260603-sfid-remove-institutions-china-sqlite.md`
   - `memory/08-tasks/done/20260612-181650-重构-sfid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
   - `memory/08-tasks/done/20260612-194131-sfid-private-real-module-refactor.md`
   - `memory/08-tasks/open/20260613-sfid-institution-list-audit-accounts.md`
+  - `memory/08-tasks/open/20260614-sfid-education-classification.md`
 
 ## 定位
 
@@ -18,7 +19,10 @@
 - 唯一且不可变身份只认 `sfid_number`。
 - `ids` 表只做全局唯一约束,不是第二身份键。
 - 不新增 `identity_key`、`generation_key` 或任何派生身份键。
-- 自动公权/宪法机构由后端对账维护;手动教育委员会 `JY` 类型登记的是学校本体。
+- 自动公权/宪法机构由后端对账维护;`JY` 教育机构统一归教育机构分类展示。
+- `education_type` 只表达教育业务分类,不参与 `sfid_number` 生成。
+- `parent_sfid_number` 只是指向另一个机构 `sfid_number` 的从属关系引用,不得理解为第二套身份ID。
+- `legal_rep_sfid_number` 只能保存正常状态公民的 `sfid_number`;法定代表人没有第二套身份ID规则。
 
 ## 私权机构分类
 
@@ -46,6 +50,49 @@
 - `F+GT` 个体经营和 `F+GP` 无限合伙是独立非法人,不选择所属法人。
 - 其它从属非法人必须从属于一个具备法人资格的主体。
 - 公权机构和私权机构都可能拥有从属非法人机构,所以能力不能放在 `gov/` 或 `private/` 单侧目录。
+
+## 教育机构分类
+
+教育机构统一使用 `institution_code=JY` 进入教育机构 tab,`subject_property/p1/JY`
+继续按既有 SFID 号码规则生成身份 ID,不得为了教育阶段修改号码协议。
+
+`subjects.education_type` 是教育业务分类:
+
+| education_type | 含义 | 创建来源 |
+|---|---|---|
+| `NATIONAL_CITIZEN_EDU_COMMITTEE` | 国家公民教育委员会 | 确定性目录 |
+| `CITY_CITIZEN_EDU_COMMITTEE` | 市公民教育委员会 | 确定性目录 |
+| `EARLY_SCHOOL` | 初学 | 新增 G/S 学校时选择 |
+| `PRIMARY_SCHOOL` | 小学 | 新增 G/S 学校时选择 |
+| `SECONDARY_SCHOOL` | 中学 | 新增 G/S 学校时选择 |
+| `UNIVERSITY` | 大学 | 新增 G/S 学校时选择 |
+
+规则:
+
+- 国家/市公民教育委员会从公权目录移出;教育机构市详情空搜索只直接显示本市市公民教育委员会,国家公民教育委员会不得跨市铺开。
+- `G+JY`/`S+JY` 是法人教育机构;`F+JY` 是挂靠法人教育机构的非法人教育分支,按名称或身份ID精确搜索后显示。
+- G/S/F 教育机构创建统一按管理员省市 scope 控制:联邦管理员可在本省任意市创建,市管理员只能在本市创建。
+- 学校内部部门不写入 `subjects`,不生成 `sfid_number`,不创建账户,不参与法定代表人校验。
+
+## 法定代表人公民范围
+
+法定代表人选择范围由 `subjects::service::resolve_legal_representative_scope_*`
+实时推导,不落库新字段:
+
+| 目标机构 | 法定代表人范围 |
+|---|---|
+| 普通私法人机构、私法人学校 `S+JY`、挂靠私法人的非法人机构/分校 | 全国正常状态公民 |
+| 公法人机构 `G`、公安局、市注册局等公权机构 | 按机构行政层级限制 |
+| 挂靠公法人的非法人机构/分校 `F` | 按该非法人机构自身落位省市限制 |
+| 国家级/部级/联邦级公权机构(`NATIONAL_`/`MINISTRY_`/`FEDERAL_`) | 全国正常状态公民 |
+| 省级公权机构(`PROVINCE_`) | 本省正常状态公民 |
+| 市/镇级、手动公权机构和未知公权前缀 | 本市正常状态公民;无市码时退为本省 |
+
+执行口径:
+
+- 后台创建机构和更新机构资料时,必须调用同一套 scope 做最终校验;前端搜索结果不能作为可信依据。
+- `citizens` 模块只按传入 scope 查询正常公民,不自行决定机构规则。
+- `target_sfid_number` 模式必须以数据库中现有机构为准;创建模式必须提交目标省、市、主体属性、机构代码和所属法人。
 
 ## 自动目录
 

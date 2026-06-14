@@ -40,7 +40,8 @@ const GOV_FROM_WHERE: &str = "
       AND (
             (s.category = 'GOV_INSTITUTION'
              AND g.sfid_number IS NOT NULL
-             AND COALESCE(g.org_code, '') <> 'CITY_POLICE')
+             AND COALESCE(g.org_code, '') <> 'CITY_POLICE'
+             AND s.institution_code <> 'JY')
             OR (s.category = 'GOV_INSTITUTION'
                 AND g.sfid_number IS NULL
                 AND s.org_code IS NULL
@@ -197,8 +198,8 @@ pub(crate) async fn list_public_institutions(
 
     // custom_account_names 批量补(不动主查询)。
     let sfid_numbers: Vec<String> = items.iter().map(|r| r.sfid_number.clone()).collect();
-    let custom_map = custom_account_names_for(&state, province_code, &sfid_numbers)
-        .unwrap_or_else(|e| {
+    let custom_map =
+        custom_account_names_for(&state, province_code, &sfid_numbers).unwrap_or_else(|e| {
             tracing::warn!(error = %e, "custom account names query failed; default empty");
             HashMap::new()
         });
@@ -346,11 +347,7 @@ fn query_public_institutions(
 }
 
 /// 目录版本 = MAX(updated_at) RFC3339(单查,list 用)。
-fn scope_version(
-    state: &AppState,
-    p_code: &str,
-    c_code: Option<&str>,
-) -> Option<String> {
+fn scope_version(state: &AppState, p_code: &str, c_code: Option<&str>) -> Option<String> {
     scope_version_and_count(state, p_code, c_code)
         .ok()
         .and_then(|(v, _)| v)
@@ -450,7 +447,10 @@ mod tests {
             "private_type",
             "partnership_kind",
         ] {
-            assert!(!json.contains(forbidden), "公开 DTO 泄露敏感字段: {forbidden}");
+            assert!(
+                !json.contains(forbidden),
+                "公开 DTO 泄露敏感字段: {forbidden}"
+            );
         }
         assert!(json.contains("custom_account_names"));
         assert!(json.contains("业务专户A"));

@@ -108,6 +108,16 @@ export type CpmsStatusExportImportResult = {
   unmatched_release_records: string[];
 };
 
+export interface LegalRepresentativeCitizenSearchContext {
+  target_sfid_number?: string;
+  province?: string;
+  city?: string;
+  subject_property?: string;
+  institution?: string;
+  education_type?: string;
+  parent_sfid_number?: string;
+}
+
 export async function listCitizens(
   auth: AdminAuth,
   keyword: string,
@@ -127,11 +137,16 @@ export async function listCitizens(
 export async function searchLegalRepresentativeCitizens(
   auth: AdminAuth,
   q: string,
+  context: LegalRepresentativeCitizenSearchContext,
   pageSize = 20,
 ): Promise<string[]> {
   const params = new URLSearchParams({
     q: q.trim(),
     page_size: String(pageSize),
+  });
+  Object.entries(context).forEach(([key, value]) => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (trimmed) params.set(key, trimmed);
   });
   return request<string[]>(`/api/v1/admin/citizens/legal-representatives?${params.toString()}`, {
     headers: adminHeaders(auth),

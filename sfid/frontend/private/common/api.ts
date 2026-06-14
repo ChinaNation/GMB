@@ -62,6 +62,7 @@ export async function createInstitution(
     province: input.province ?? null,
     city: input.city,
     institution: input.institution,
+    education_type: input.education_type ?? null,
     institution_name: input.institution_name ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
     private_type: input.private_type ?? null,

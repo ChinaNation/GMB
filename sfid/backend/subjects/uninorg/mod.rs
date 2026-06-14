@@ -8,7 +8,7 @@
 //! (update_institution)和所属法人搜索(search_parent_institutions 的 SQL 预过滤)
 //! 三处必须与这里同源,缺一处就有绕过口:
 //! - 父级属性:仅私法人(S)/公法人(G)可作所属法人;
-//! - 代码一致性:F+JY(教育分校) ⇔ 父级是教育委员会学校(手动 JY 行);
+//! - 代码一致性:F+JY(非法人教育机构/分支机构) ⇔ 父级是法人教育机构(手动 JY 行);
 //! - 地域规则:见 [`parent_locality_rule`];
 //! - 盈利属性继承:见 [`inherited_p1`]。
 
@@ -35,12 +35,12 @@ pub(crate) enum ParentLocalityRule {
     Nationwide,
     /// 同省(省级公权机构父级)
     SameProvince,
-    /// 同市(市/镇级公权机构、手动公权机构、教育委员会学校父级)
+    /// 同市(市/镇级公权机构、手动公权机构、法人教育机构父级)
     SameCity,
 }
 
-/// 判定父级是否教育委员会学校(手动 JY 行,公立 G+JY / 私立 S+JY)。
-/// 自动生成的监管本体(公民教育委员会等)org_code 非空,不算学校。
+/// 判定父级是否法人教育机构(手动 JY 行,公立 G+JY / 私立 S+JY)。
+/// 确定性国家/市公民教育委员会 org_code 非空,不算学校或校区所属法人。
 pub(crate) fn parent_is_education_school(
     parent_institution_code: &str,
     parent_org_code: Option<&str>,
@@ -50,7 +50,7 @@ pub(crate) fn parent_is_education_school(
 
 /// 所属法人的地域规则:
 /// - 私法人(S)父级 → 全国不限(唯一允许跨省市;S+JY 学校例外,分校与本部同市);
-/// - 教育委员会学校父级 → 同市;
+/// - 法人教育机构父级 → 同市;
 /// - 公法人(G)父级按行政层级:org_code 为空(手动公权机构)或 CITY_/TOWN_ 前缀 → 同市,
 ///   PROVINCE_ 前缀 → 同省,NATIONAL_/MINISTRY_/FEDERAL_ 前缀(国家级)→ 全国;
 ///   未知前缀防御性按最严的同市处理,不放权。
@@ -108,8 +108,8 @@ pub(crate) fn locality_violation(
     }
 }
 
-/// 非法人机构代码与父级类型一致性:教育分校(F+JY)的父级必须是学校本部,
-/// 学校本部下也只能挂教育分校。违规时返回提示文案。
+/// 非法人机构代码与父级类型一致性:F+JY 分支机构的父级必须是法人教育机构,
+/// 法人教育机构下也只能挂 F+JY 分支机构。违规时返回提示文案。
 pub(crate) fn code_consistency_violation(
     f_institution_code: &str,
     parent_institution_code: &str,
@@ -117,10 +117,10 @@ pub(crate) fn code_consistency_violation(
 ) -> Option<&'static str> {
     let school_parent = parent_is_education_school(parent_institution_code, parent_org_code);
     if f_institution_code == "JY" && !school_parent {
-        return Some("教育分校(教育委员会 JY)的所属法人必须是教育委员会学校");
+        return Some("非法人教育机构(F+JY)的所属法人必须是法人教育机构");
     }
     if f_institution_code != "JY" && school_parent {
-        return Some("教育委员会学校下只能挂教育分校(教育委员会 JY)");
+        return Some("法人教育机构下只能挂非法人教育机构(F+JY)");
     }
     None
 }

@@ -19,6 +19,29 @@ use serde::{Deserialize, Serialize};
 use crate::number::InstitutionCategory;
 use crate::scope::HasProvinceCity;
 
+pub const EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE: &str = "NATIONAL_CITIZEN_EDU_COMMITTEE";
+pub const EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE: &str = "CITY_CITIZEN_EDU_COMMITTEE";
+pub const EDUCATION_TYPE_EARLY_SCHOOL: &str = "EARLY_SCHOOL";
+pub const EDUCATION_TYPE_PRIMARY_SCHOOL: &str = "PRIMARY_SCHOOL";
+pub const EDUCATION_TYPE_SECONDARY_SCHOOL: &str = "SECONDARY_SCHOOL";
+pub const EDUCATION_TYPE_UNIVERSITY: &str = "UNIVERSITY";
+
+pub const EDUCATION_SCHOOL_TYPES: &[&str] = &[
+    EDUCATION_TYPE_EARLY_SCHOOL,
+    EDUCATION_TYPE_PRIMARY_SCHOOL,
+    EDUCATION_TYPE_SECONDARY_SCHOOL,
+    EDUCATION_TYPE_UNIVERSITY,
+];
+
+pub const EDUCATION_COMMITTEE_TYPES: &[&str] = &[
+    EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
+    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE,
+];
+
+pub fn is_education_school_type(value: &str) -> bool {
+    EDUCATION_SCHOOL_TYPES.contains(&value)
+}
+
 fn default_subject_status() -> String {
     "ACTIVE".to_string()
 }
@@ -95,6 +118,9 @@ pub struct Institution {
     /// 公权机构细类代码,例如 CITY_FINANCE、TOWN_GOV。私权机构可为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
+    /// 教育机构业务分类。只用于教育 tab 分类,不参与 SFID 号生成。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub education_type: Option<String>,
     /// 私权机构类型。仅私权机构有值,取值见 `private/common::PrivateType`。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub private_type: Option<String>,
@@ -104,9 +130,9 @@ pub struct Institution {
     /// 是否具有法人资格。仅私权机构有值;公权机构由主体属性 G 表达法人资格。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_legal_personality: Option<bool>,
-    /// 所属法人身份ID(仅需要挂靠的 SubjectProperty=F 非法人填写)。
-    /// 指向一个私法人(S)或公法人(G)机构的 sfid_number。
-    /// 个体经营(F+GT)和无限合伙(F+GP)是独立非法人,不填写所属法人。
+    /// 从属关系引用。字段值始终是另一个机构已有的 `sfid_number`,不是第二套身份 ID。
+    /// - 需要挂靠的 SubjectProperty=F 非法人:指向所属法人。
+    /// 个体经营(F+GT)和无限合伙(F+GP)是独立非法人,不填写本字段。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
     /// 法定代表人姓名。初始化目录机构允许为空;机构资料编辑保存时必须补齐。
@@ -211,6 +237,9 @@ pub struct CreateInstitutionInput {
     pub province: Option<String>,
     pub city: String,
     pub institution: String,
+    /// 教育机构业务分类。仅 `institution=JY` 的教育入口使用,不参与 SFID 号生成。
+    #[serde(default)]
+    pub education_type: Option<String>,
     /// 机构名称。目标态私权、公权和教育新增都应在创建阶段写入名称。
     pub institution_name: Option<String>,
     /// 所属法人身份ID。仅需要挂靠的非法人(F)使用;个体经营和无限合伙是独立非法人,
@@ -302,12 +331,11 @@ pub struct CreateAccountOutput {
 
 /// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
 ///
-/// 中文注释:JY 学校归教育 tab,私权目标类型归 private tab,公权目录仍承接公权本体
+/// 中文注释:JY 教育机构统一归教育 tab,私权目标类型归 private tab,公权目录仍承接公权本体
 /// 和公权下属非法人:
 /// - `Private`:私权 tab = 目标私权类型,可用 private_type 继续过滤;
-/// - `Gov`:公权 tab = 公权机构(排除手动 JY 学校,自动监管本体如公民教育委员会保留)
-///   + 父级为公法人的 F;
-/// - `Education`:教育 tab = 手动 JY 行(G/S 学校本部 + F+JY 分校),跨两个存储 category。
+/// - `Gov`:公权 tab = 非 JY 公权机构 + 父级为公法人的非 JY 非法人;
+/// - `Education`:教育 tab = 确定性国家/市公民教育委员会 + 法人学校 + F+JY 分支机构。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstitutionListFilter {
     Private,
@@ -324,11 +352,14 @@ impl InstitutionListFilter {
             }
             Self::Gov => {
                 "AND ((s.category = 'GOV_INSTITUTION'
-                       AND NOT (s.institution_code = 'JY' AND s.org_code IS NULL))
+                       AND s.institution_code <> 'JY')
                       OR (s.subject_property = 'F' AND s.institution_code <> 'JY'
                           AND par.subject_property = 'G'))"
             }
-            Self::Education => "AND s.institution_code = 'JY' AND s.org_code IS NULL",
+            Self::Education => {
+                "AND s.institution_code = 'JY'
+                 AND COALESCE(s.org_code, '') NOT IN ('NATIONAL_EDU', 'CITY_EDU')"
+            }
         }
     }
 }
@@ -353,6 +384,8 @@ pub struct InstitutionListRow {
     pub institution_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub education_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

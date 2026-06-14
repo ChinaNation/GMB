@@ -4,7 +4,8 @@
 // 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
 //   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
 //   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除储备体系自动目录代码)机构名称必填 / F(锁中国ZG)挂公法人
-//   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY),学校名称弹窗内必填
+//   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY);
+//                         G/S 学校必须选择教育机构类型,F+JY 分校保留原挂靠规则
 //
 // P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/uninorg 同源):
 //   G → 锁死 0(非盈利,生成器硬规则)
@@ -13,7 +14,7 @@
 //
 // 非法人(F)挂靠只用于从属非法人。个体经营(F+GT)和无限合伙(F+GP)不选择所属法人。
 
-import type { PartnershipKind, PrivateType } from './api';
+import type { EducationType, PartnershipKind, PrivateType } from './api';
 
 export type ChoiceItem = { value: string; label: string };
 
@@ -61,6 +62,29 @@ export const INSTITUTION_CODE_LABEL: Record<string, string> = {
   GY: '公益组织',
   AS: '注册协会',
 };
+
+export const EDUCATION_TYPE_LABEL: Record<EducationType, string> = {
+  NATIONAL_CITIZEN_EDU_COMMITTEE: '国家公民教育委员会',
+  CITY_CITIZEN_EDU_COMMITTEE: '市公民教育委员会',
+  EARLY_SCHOOL: '初学',
+  PRIMARY_SCHOOL: '小学',
+  SECONDARY_SCHOOL: '中学',
+  UNIVERSITY: '大学',
+};
+
+export const SCHOOL_EDUCATION_TYPE_OPTIONS: ChoiceItem[] = [
+  { value: 'EARLY_SCHOOL', label: EDUCATION_TYPE_LABEL.EARLY_SCHOOL },
+  { value: 'PRIMARY_SCHOOL', label: EDUCATION_TYPE_LABEL.PRIMARY_SCHOOL },
+  { value: 'SECONDARY_SCHOOL', label: EDUCATION_TYPE_LABEL.SECONDARY_SCHOOL },
+  { value: 'UNIVERSITY', label: EDUCATION_TYPE_LABEL.UNIVERSITY },
+];
+
+export const SCHOOL_EDUCATION_TYPES: EducationType[] = [
+  'EARLY_SCHOOL',
+  'PRIMARY_SCHOOL',
+  'SECONDARY_SCHOOL',
+  'UNIVERSITY',
+];
 
 // ── 公权机构细类中文映射;仅用于展示,业务仍以 org_code 精确区分。 ──
 export const ORG_CODE_LABEL: Record<string, string> = {
