@@ -53,7 +53,27 @@ wuminapp「公民 → 公权 → 公权机构 → 机构详情」页版式与交
 - `SFID_BASE_URL=http://127.0.0.1:8899 node tools/generate_public_institution_bundle.mjs`:43 省、287,790 机构、version=2026-06-14T20:42:56Z,无 429,exit 0。
 - **数据现状**:全包 0 处 `legal_rep_name`。库内 PUBLIC/PRIVATE ACTIVE 共 294,162,仅 **1** 个录了法定代表人(`ZS003-SGF1I-761573855-2026`,中枢省巫溪市,程伟),但它是 **PRIVATE 私法人**(category=PRIVATE_INSTITUTION/subject_property=S),不匹配公权目录 `GOV_FROM_WHERE` 任一分支,本就不在公权目录。→ 当前公权机构详情页法定代表人一律留空,**符合预期**;待有公权机构录入法定代表人后,重跑生成器或在线增量同步即自动带值。
 
+## UI 尺寸对齐治理机构(2026-06-14 二改,user review 后)
+
+一改只对齐了"分几段"的顺序,UI 度量没对齐治理机构,二改按治理组件尺寸逐一重做:
+- 机构信息卡:删机构名标题(名称只在 AppBar,对齐治理);扁平 `_row` 换成治理 `_buildAccountInfoTile` 同款 `_infoTile`(32×32 图标 + 上标签11下数值13),Divider(18) 夹在高 tile 间不再显挤;卡 padding h14/v12、radius12、border primary0.18。
+- 机构账户/管理员入口:压缩的 `_entryRow`(32图标/v11/单行)换成治理 `_buildAdminEntry` 同款 `_entryCard`(36×36 图标 primaryDark、标题15、副标题12"共N个账户/共N位管理员"、v12、radius12)。
+- 提案发起入口:换成治理 `_buildHeader` 同款 44×44 hero(图标22 + 「提案」徽章 + 副文「发起提案」+ 箭头),本期仍占位(点击 SnackBar)。
+- 提案列表:标题16/w700/primaryDark;空态换治理同款 surfaceMuted 大盒(ballot 图标+「暂无提案」);提案卡标题15/primaryDark。
+- 测试断言改副标题双行("共3个账户"/"共1位管理员");`dart format`+`analyze 0`+detail 4/4 绿。**未做真机截图核对**。
+
+## 治理⇄公权详情页统一(2026-06-14 三改,提交=统一治理和公权机构详情页)
+
+目标:两端详情页版面/组件/尺寸统一。统一后版面均为 机构信息(身份ID/主账户/主账户余额/法定代表人/所属地) → 机构账户(独立行→全部账户页) → 提案(发起入口) → 管理员(入口) → 提案列表。
+- **R0 发起提案行齐高**:公权 `_proposalEntry` + 治理 `_buildHeader` 图标 44→36 / size 22→18 / radius 12→10(公权底色 alpha 0.12→0.08);padding 本就 v12 不动。两端发起提案行与机构账户/管理员行齐高。
+- **R1 公权 += 主账户 + 主账户余额**:`_loadDynamics` 重新加主账户余额拉取(`balances([mainHex])`);信息卡插「主账户」(SS58)/「主账户余额」(读取中/未激活/N 元)两 tile。
+- **R2 治理 += 法定代表人 + 所属地**:新增 `citizen/public/data/sfid_directory_lookup.dart`(`SfidDirectoryLookup`/`SfidDirectoryInfo`),按 sfid 反查公权目录 Isar 库(治理内置机构都带真实 SFID 号且在确定性目录内,已验证 GD/ZS/LN 储会均在包内)。治理 `_loadDirectory` 异步反查回填,信息卡插「法定代表人」/「所属地」两 tile;反查不到(注册机构账户)留空。库空时 `ensureBundleLoaded` 一次性兜底。
+- **R3 治理更多账户 → 独立行**:删内联展开整套(`_buildMoreAccountsToggle`/`_buildExpandedAccounts`/`_buildExpandedAccountItem`/`_extraAccountSources`/`_toggleExtraAccounts`/`_loadExtraAccounts`/`_InstitutionAccountView`/`_chainRpc`);新增 `governance/organization-manage/institution_accounts_page.dart`(`GovernanceInstitutionAccountsPage`,对标公权全部账户页,列主+费+安全+两和+质押,批量余额);信息卡下方加「机构账户」独立行(治理 `_buildAdminEntry` 同款 36px)→ 跳该页。
+- 验证:`dart analyze`(governance + citizen/public)0;`dart format` 过;公权 18/18 + 反查单测 3/3。治理无 detail widget 测试(不牵连)。**未做真机截图核对**。
+- 提交边界:工作区有**另一窗口的 IM/P2P 功能**(im/ 目录、main.dart、citizenchain node、ADR-020 等)在并行,本次只按显式路径提交本窗口详情页统一相关文件,不碰其他。SFID 后端 `legal_rep_name` BFF 改动已在更早的提交 `6e77a3a5 更新公权机构中的信息显示` 落地。
+
 ## 待续(follow-up)
 
 - 发起提案真实流程(占位 → 接转账/费用划转/更换管理员发起页,需 PublicInstitutionEntity→InstitutionInfo 桥接 + 管理员钱包/激活态)。
 - 管理员来源接 SFID 系统(当前链读 AdminsChange 为空;公权管理员权威来源在 SFID)。
+- 两端详情页深度统一(抽共享组件/统一 view-model)——当前为结构/视觉统一,代码仍两文件。

@@ -70,6 +70,12 @@ void main() {
   });
 
   testWidgets('详情页五段:名称/ID/法定代表人/机构账户/提案发起/管理员入口/提案列表', (tester) async {
+    // 机构信息卡现为 5 行(身份ID/主账户/主账户余额/法定代表人/所属地),整页较高;
+    // 放大视口让懒加载 ListView 一次性渲染到底部提案列表,免滚动断言。
+    tester.view.physicalSize = const Size(1200, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final repo = await buildSeededRepo(
       provinceOrder: const ['岭南'],
       institutions: [
@@ -100,16 +106,21 @@ void main() {
 
     expect(find.text('国家公民储备委员会'), findsWidgets);
     expect(find.text(_nrcSfid), findsOneWidget);
-    // ① 机构信息:法定代表人 + 所属地(行间分隔线)。
+    // ① 机构信息:主账户 + 主账户余额 + 法定代表人 + 所属地(图标 tile + 分隔线)。
+    expect(find.text('主账户'), findsOneWidget);
+    expect(find.text('主账户余额'), findsOneWidget);
+    expect(find.text('12.50 元'), findsOneWidget); // fake 主账户余额
     expect(find.text('法定代表人'), findsOneWidget);
     expect(find.text('王法人'), findsOneWidget);
     expect(find.text('所属地'), findsOneWidget);
-    // ② 机构账户入口:主+费+1自定义。
-    expect(find.text('机构账户(3)'), findsOneWidget);
-    // ③ 提案发起入口(占位)。
+    // ② 机构账户入口(治理同款 标题+副标题):主+费+1自定义。
+    expect(find.text('机构账户'), findsOneWidget);
+    expect(find.text('共 3 个账户'), findsOneWidget);
+    // ③ 提案发起入口(治理同款 hero,占位)。
     expect(find.text('发起提案'), findsOneWidget);
-    // ④ 管理员入口:只显条数,地址在列表页。
-    expect(find.text('管理员(1)'), findsOneWidget);
+    // ④ 管理员入口(治理同款 标题+副标题):条数在副标题,地址在列表页。
+    expect(find.text('管理员'), findsOneWidget);
+    expect(find.text('共 1 位管理员'), findsOneWidget);
     // ⑤ 提案列表。
     expect(find.text('提案列表'), findsOneWidget);
     expect(find.text('提案 #7'), findsOneWidget);
@@ -137,7 +148,7 @@ void main() {
     )));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('管理员(1)'));
+    await tester.tap(find.text('管理员'));
     await tester.pumpAndSettle();
     // 管理员列表页:非法 hex 兜底原样展示,地址可见。
     expect(find.text('管理员列表'), findsOneWidget);
