@@ -130,7 +130,7 @@ const WalletProfileEntitySchema = CollectionSchema(
   getId: _walletProfileEntityGetId,
   getLinks: _walletProfileEntityGetLinks,
   attach: _walletProfileEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _walletProfileEntityEstimateSize(
@@ -2553,7 +2553,7 @@ const WalletSettingsEntitySchema = CollectionSchema(
   getId: _walletSettingsEntityGetId,
   getLinks: _walletSettingsEntityGetLinks,
   attach: _walletSettingsEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _walletSettingsEntityEstimateSize(
@@ -3076,7 +3076,7 @@ const AdminRoleCacheEntitySchema = CollectionSchema(
   getId: _adminRoleCacheEntityGetId,
   getLinks: _adminRoleCacheEntityGetLinks,
   attach: _adminRoleCacheEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _adminRoleCacheEntityEstimateSize(
@@ -4055,7 +4055,7 @@ const ObservedAccountEntitySchema = CollectionSchema(
   getId: _observedAccountEntityGetId,
   getLinks: _observedAccountEntityGetLinks,
   attach: _observedAccountEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _observedAccountEntityEstimateSize(
@@ -5495,7 +5495,7 @@ const LoginReplayEntitySchema = CollectionSchema(
   getId: _loginReplayEntityGetId,
   getLinks: _loginReplayEntityGetLinks,
   attach: _loginReplayEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _loginReplayEntityEstimateSize(
@@ -6170,7 +6170,7 @@ const AppKvEntitySchema = CollectionSchema(
   getId: _appKvEntityGetId,
   getLinks: _appKvEntityGetLinks,
   attach: _appKvEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _appKvEntityEstimateSize(
@@ -7144,7 +7144,7 @@ const PersonalDuoqianEntitySchema = CollectionSchema(
   getId: _personalDuoqianEntityGetId,
   getLinks: _personalDuoqianEntityGetLinks,
   attach: _personalDuoqianEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _personalDuoqianEntityEstimateSize(
@@ -8734,7 +8734,7 @@ const PersonalDuoqianProposalEntitySchema = CollectionSchema(
   getId: _personalDuoqianProposalEntityGetId,
   getLinks: _personalDuoqianProposalEntityGetLinks,
   attach: _personalDuoqianProposalEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _personalDuoqianProposalEntityEstimateSize(
@@ -10811,7 +10811,7 @@ const InstitutionEntitySchema = CollectionSchema(
   getId: _institutionEntityGetId,
   getLinks: _institutionEntityGetLinks,
   attach: _institutionEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _institutionEntityEstimateSize(
@@ -12526,7 +12526,7 @@ const PublicInstitutionEntitySchema = CollectionSchema(
   getId: _publicInstitutionEntityGetId,
   getLinks: _publicInstitutionEntityGetLinks,
   attach: _publicInstitutionEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _publicInstitutionEntityEstimateSize(
@@ -15897,7 +15897,7 @@ const PublicInstitutionSubscriptionEntitySchema = CollectionSchema(
   getId: _publicInstitutionSubscriptionEntityGetId,
   getLinks: _publicInstitutionSubscriptionEntityGetLinks,
   attach: _publicInstitutionSubscriptionEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _publicInstitutionSubscriptionEntityEstimateSize(
@@ -17254,7 +17254,7 @@ const LocalTxEntitySchema = CollectionSchema(
   getId: _localTxEntityGetId,
   getLinks: _localTxEntityGetLinks,
   attach: _localTxEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _localTxEntityEstimateSize(
@@ -21429,7 +21429,7 @@ const WalletTxSyncCursorEntitySchema = CollectionSchema(
   getId: _walletTxSyncCursorEntityGetId,
   getLinks: _walletTxSyncCursorEntityGetLinks,
   attach: _walletTxSyncCursorEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _walletTxSyncCursorEntityEstimateSize(

@@ -87,6 +87,7 @@
 - `memory/08-tasks/open/20260613-wuminapp-public-institution-cardA-data-sync.md`
 - `memory/08-tasks/open/20260613-wuminapp-public-institution-cardB-nav-ui.md`
 - `memory/08-tasks/open/20260613-wuminapp-public-institution-cardC-detail.md`
+- `memory/08-tasks/open/20260613-android-16kb-page-alignment.md`
 
 ## done
 

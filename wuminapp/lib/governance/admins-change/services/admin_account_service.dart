@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:wuminapp_mobile/governance/admins-change/codec/admin_account_codec.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/account_id_codec.dart';

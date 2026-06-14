@@ -4,7 +4,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
 part 'wallet_isar.g.dart';
@@ -951,7 +951,7 @@ class WalletIsar {
         .where((dir) => dir.path
             .split(Platform.pathSeparator)
             .last
-            .startsWith('isar_flutter_libs-'))
+            .startsWith('isar_community_flutter_libs-'))
         .toList(growable: false)
       ..sort((a, b) => b.path.compareTo(a.path));
 

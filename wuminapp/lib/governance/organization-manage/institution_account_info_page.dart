@@ -2,7 +2,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
