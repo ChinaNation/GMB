@@ -1,34 +1,65 @@
 //! 公权机构目录 —— wuminapp 公民端匿名只读 BFF。
 //!
 //! 数据来自 SFID 自有 Postgres 确定性目录(subjects + gov + accounts),**与链交互无关**。
-//! 复用领域查询 `Db::list_official_institutions_scope`(逻辑留 gov),本层只做:
-//!   ① 去鉴权 / 去 scope 锁(公民可查任意省/市);
-//!   ② 映射公开 DTO 白名单(丢弃管理员/运营/PII 字段);
-//!   ③ 批量补 custom_account_names(单查 accounts 表,不动领域查询)。
+//! 本层只做:① 去鉴权 / 去 scope 锁(公民可查任意省/市);② 公开 DTO 白名单(丢弃
+//! 管理员/运营/PII 字段);③ custom_account_names 批量补。
+//!
+//! ### 量级与混合模式(2026-06-13 修订)
+//! 确定性目录生成到镇级,单省机构上万、全国数十万。客户端走「发布期完整数据包打底
+//! + 在线增量」混合:
+//! - **keyset 翻页**(`after_sfid`,`WHERE sfid_number > $after`):恒定快,避免 OFFSET
+//!   深翻 O(n²),供生成器高效全量导出。
+//! - **增量同步**(`since_version`,`WHERE updated_at > $since`):客户端带本地版本来,
+//!   只回这之后变过的行,在线代价趋近于零。
+//! - **真实版本号**:`MAX(updated_at)`(按省/市 scope),非 null、随增改前进。
+//!   (删除 updated_at 抓不到,删机构罕见,留低频全量对账兜底。)
 //!
 //! 路由(挂 app_routes,非 admin):
-//!   GET /api/v1/app/public-institutions?province=&city=&q=&org_code=&cursor=&page_size=
+//!   GET /api/v1/app/public-institutions?province=&city=&since_version=&after_sfid=&page_size=
 //!   GET /api/v1/app/public-institutions/version?province=&city=
 
 use std::collections::HashMap;
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::china::{city_code_by_name, province_code_by_name};
 use crate::core::response::{ApiResponse, PageResult};
-use crate::gov::service::{
-    current_gov_manifest_version, gov_manifest_key, GovTargetKind, OfficialReconcileScope,
-};
 use crate::number::InstitutionCategory;
-use crate::subjects::InstitutionListRow;
 use crate::*;
+
+/// 公权目录 subjects 过滤(自动生成公权机构 + 手动公权 + 公权下属非法人,排公安局)。
+/// 与 `Db::list_official_institutions_scope` 的 WHERE 同源;参数 $1=p_code、$2=c_code。
+const GOV_FROM_WHERE: &str = "
+    FROM subjects s
+    LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+    LEFT JOIN subjects par ON par.sfid_number = s.parent_sfid_number
+    WHERE s.kind IN ('PUBLIC', 'PRIVATE')
+      AND s.status = 'ACTIVE'
+      AND (
+            (s.category = 'GOV_INSTITUTION'
+             AND g.sfid_number IS NOT NULL
+             AND COALESCE(g.org_code, '') <> 'CITY_POLICE')
+            OR (s.category = 'GOV_INSTITUTION'
+                AND g.sfid_number IS NULL
+                AND s.org_code IS NULL
+                AND s.institution_code <> 'JY')
+            OR (s.subject_property = 'F'
+                AND s.institution_code <> 'JY'
+                AND par.subject_property = 'G')
+          )
+      AND s.p_code = $1
+      AND ($2::text IS NULL OR s.c_code = $2)
+";
+
+fn parse_category(value: &str) -> InstitutionCategory {
+    match value {
+        "PUBLIC_SECURITY" => InstitutionCategory::PublicSecurity,
+        "GOV_INSTITUTION" => InstitutionCategory::GovInstitution,
+        _ => InstitutionCategory::PrivateInstitution,
+    }
+}
 
 /// 公权机构目录公开行(白名单 DTO)。
 ///
@@ -66,27 +97,28 @@ pub(crate) struct PublicInstitutionRow {
 }
 
 impl PublicInstitutionRow {
-    /// 从领域行映射公开行;只取白名单字段,管理员/运营/PII 字段一律丢弃。
-    fn from_list_row(row: InstitutionListRow, custom_account_names: Vec<String>) -> Self {
+    /// 从目录查询行映射公开行(只取白名单列;custom_account_names 后续批量补)。
+    fn from_pg_row(row: &postgres::Row) -> Self {
+        let account_count = row.get::<_, i64>(15).max(0) as usize;
         Self {
-            sfid_number: row.sfid_number,
-            institution_name: row.institution_name,
-            sfid_name: row.sfid_name,
-            short_name: row.short_name,
-            status: row.status,
-            category: row.category,
-            subject_property: row.subject_property,
-            p1: row.p1,
-            province: row.province,
-            city: row.city,
-            town: row.town,
-            institution_code: row.institution_code,
-            org_code: row.org_code,
-            has_legal_personality: row.has_legal_personality,
-            parent_sfid_number: row.parent_sfid_number,
-            account_count: row.account_count,
-            custom_account_names,
-            created_at: row.created_at,
+            sfid_number: row.get(0),
+            institution_name: row.get(1),
+            sfid_name: row.get(2),
+            short_name: row.get(3),
+            status: row.get(4),
+            category: parse_category(row.get::<_, String>(5).as_str()),
+            subject_property: row.get(6),
+            p1: row.get(7),
+            province: row.get(8),
+            city: row.get(9),
+            town: row.get(10),
+            institution_code: row.get(11),
+            org_code: row.get(12),
+            parent_sfid_number: row.get(13),
+            has_legal_personality: row.get(14),
+            account_count,
+            custom_account_names: Vec::new(),
+            created_at: row.get(16),
         }
     }
 }
@@ -95,13 +127,14 @@ impl PublicInstitutionRow {
 pub(crate) struct PublicInstitutionListQuery {
     pub province: Option<String>,
     pub city: Option<String>,
-    pub q: Option<String>,
-    pub org_code: Option<String>,
-    pub cursor: Option<String>,
+    /// 增量游标:仅回 updated_at 严格大于此 RFC3339 时间戳的行。
+    pub since_version: Option<String>,
+    /// keyset 翻页游标:仅回 sfid_number 严格大于此值的行。
+    pub after_sfid: Option<String>,
     pub page_size: Option<usize>,
 }
 
-/// GET /api/v1/app/public-institutions —— 匿名公权机构目录(按省必填、市可选)。
+/// GET /api/v1/app/public-institutions —— 匿名公权机构目录(keyset 翻页 + 可选增量)。
 pub(crate) async fn list_public_institutions(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<PublicInstitutionListQuery>,
@@ -129,28 +162,26 @@ pub(crate) async fn list_public_institutions(
         },
         None => None,
     };
-    let page_size = query.page_size.unwrap_or(300).clamp(1, 300);
-    let offset = match query
-        .cursor
+    let page_size = query.page_size.unwrap_or(300).clamp(1, 500);
+    let after_sfid = query
+        .after_sfid
         .as_deref()
         .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
-        Some(raw) => match raw.parse::<usize>() {
-            Ok(v) => v,
-            Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor"),
-        },
-        None => 0,
-    };
-    let keyword = query.q.as_deref().map(str::trim).unwrap_or("");
-    let org_code = query.org_code.as_deref().map(str::trim).unwrap_or("");
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let since_version = query
+        .since_version
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
-    let page = match state.db.list_official_institutions_scope(
+    let (mut items, has_more, next_cursor) = match query_public_institutions(
+        &state,
         province_code,
         city_code,
-        keyword,
-        org_code,
-        offset,
+        after_sfid,
+        since_version,
         page_size,
     ) {
         Ok(v) => v,
@@ -164,39 +195,26 @@ pub(crate) async fn list_public_institutions(
         }
     };
 
-    let directory_scope = match city_code {
-        Some(code) => OfficialReconcileScope::City {
-            province_code: province_code.to_string(),
-            city_code: code.to_string(),
-        },
-        None => OfficialReconcileScope::Province {
-            province_code: province_code.to_string(),
-        },
-    };
-    let manifest_version = resolve_manifest_version(&state, &directory_scope);
-
-    let sfid_numbers: Vec<String> =
-        page.items.iter().map(|r| r.sfid_number.clone()).collect();
+    // custom_account_names 批量补(不动主查询)。
+    let sfid_numbers: Vec<String> = items.iter().map(|r| r.sfid_number.clone()).collect();
     let custom_map = custom_account_names_for(&state, province_code, &sfid_numbers)
         .unwrap_or_else(|e| {
             tracing::warn!(error = %e, "custom account names query failed; default empty");
             HashMap::new()
         });
+    for row in items.iter_mut() {
+        if let Some(names) = custom_map.get(&row.sfid_number) {
+            row.custom_account_names = names.clone();
+        }
+    }
 
-    let items: Vec<PublicInstitutionRow> = page
-        .items
-        .into_iter()
-        .map(|row| {
-            let names = custom_map.get(&row.sfid_number).cloned().unwrap_or_default();
-            PublicInstitutionRow::from_list_row(row, names)
-        })
-        .collect();
+    let manifest_version = scope_version(&state, province_code, city_code);
 
     let data = PageResult::<PublicInstitutionRow> {
         items,
-        page_size: page.page_size,
-        next_cursor: page.next_cursor,
-        has_more: page.has_more,
+        page_size,
+        next_cursor,
+        has_more,
         manifest_version,
         catalog_status: Some("OK".to_string()),
     };
@@ -219,14 +237,14 @@ struct PublicInstitutionVersion {
     province: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     city: Option<String>,
+    /// 目录版本 = MAX(updated_at) RFC3339;无机构时 null。增量同步比对/since 用。
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_version: Option<String>,
+    /// 机构总数(供客户端粗判增删,删除兜底)。
+    count: i64,
 }
 
-/// GET /api/v1/app/public-institutions/version —— 某省/市目录版本(增量同步比对用)。
-///
-/// 中文注释:客户端按省(可选市)低频查版本,变化才重拉该省份目录(省份有界,确定
-/// 性目录极少变),兑现 ADR-018 §九 懒同步。
+/// GET /api/v1/app/public-institutions/version —— 某省/市目录版本(增量比对用)。
 pub(crate) async fn public_institutions_version(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<PublicInstitutionVersionQuery>,
@@ -254,19 +272,22 @@ pub(crate) async fn public_institutions_version(
         },
         None => None,
     };
-    let directory_scope = match city_code {
-        Some(code) => OfficialReconcileScope::City {
-            province_code: province_code.to_string(),
-            city_code: code.to_string(),
-        },
-        None => OfficialReconcileScope::Province {
-            province_code: province_code.to_string(),
-        },
+    let (version, count) = match scope_version_and_count(&state, province_code, city_code) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "public institutions version failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "public institutions version query failed",
+            );
+        }
     };
     let data = PublicInstitutionVersion {
         province: province.to_string(),
         city: city.map(str::to_string),
-        manifest_version: resolve_manifest_version(&state, &directory_scope),
+        manifest_version: version,
+        count,
     };
     Json(ApiResponse {
         code: 0,
@@ -276,25 +297,85 @@ pub(crate) async fn public_institutions_version(
     .into_response()
 }
 
-/// 取目录 manifest_version:精确 scope 命中优先,回退 All kind。
-fn resolve_manifest_version(
+/// keyset 翻页 + 可选 since 增量查询。返回 (rows, has_more, next_cursor)。
+fn query_public_institutions(
     state: &AppState,
-    scope: &OfficialReconcileScope,
-) -> Option<String> {
-    current_gov_manifest_version(
-        &state.db,
-        gov_manifest_key(scope, GovTargetKind::Official).as_str(),
-    )
-    .or_else(|| {
-        current_gov_manifest_version(
-            &state.db,
-            gov_manifest_key(scope, GovTargetKind::All).as_str(),
-        )
+    p_code: &str,
+    c_code: Option<&str>,
+    after_sfid: Option<String>,
+    since_version: Option<String>,
+    page_size: usize,
+) -> Result<(Vec<PublicInstitutionRow>, bool, Option<String>), String> {
+    let p_code = p_code.to_string();
+    let c_code = c_code.map(str::to_string);
+    let limit = i64::try_from(page_size.saturating_add(1))
+        .map_err(|_| "page_size too large".to_string())?;
+    let sql = format!(
+        "SELECT s.sfid_number, s.name, s.sfid_name, s.short_name, s.status, s.category,
+                s.subject_property, s.p1, s.province, s.city, COALESCE(s.town, ''),
+                s.institution_code, s.org_code, s.parent_sfid_number, s.has_legal_personality,
+                (SELECT COUNT(*) FROM accounts a
+                   WHERE a.p_code = s.p_code AND a.sfid_number = s.sfid_number),
+                s.created_at
+         {GOV_FROM_WHERE}
+           AND ($3::text IS NULL OR s.sfid_number > $3)
+           AND ($4::text IS NULL OR s.updated_at > $4::timestamptz)
+         ORDER BY s.sfid_number ASC
+         LIMIT $5"
+    );
+    state.db.with_client(move |conn| {
+        let rows = conn
+            .query(
+                sql.as_str(),
+                &[&p_code, &c_code, &after_sfid, &since_version, &limit],
+            )
+            .map_err(|e| format!("public institution keyset query failed: {e}"))?;
+        let mut items: Vec<PublicInstitutionRow> =
+            rows.iter().map(PublicInstitutionRow::from_pg_row).collect();
+        let has_more = items.len() > page_size;
+        if has_more {
+            items.truncate(page_size);
+        }
+        let next_cursor = if has_more {
+            items.last().map(|r| r.sfid_number.clone())
+        } else {
+            None
+        };
+        Ok((items, has_more, next_cursor))
     })
 }
 
-/// 批量查机构自定义账户名(op_tag=0x06,即非 5 保留名)。单查 accounts 表,
-/// 不动领域查询;空列表短路。
+/// 目录版本 = MAX(updated_at) RFC3339(单查,list 用)。
+fn scope_version(
+    state: &AppState,
+    p_code: &str,
+    c_code: Option<&str>,
+) -> Option<String> {
+    scope_version_and_count(state, p_code, c_code)
+        .ok()
+        .and_then(|(v, _)| v)
+}
+
+/// 目录版本 + 机构总数:`MAX(updated_at)` RFC3339 + COUNT。
+fn scope_version_and_count(
+    state: &AppState,
+    p_code: &str,
+    c_code: Option<&str>,
+) -> Result<(Option<String>, i64), String> {
+    let p_code = p_code.to_string();
+    let c_code = c_code.map(str::to_string);
+    let sql = format!("SELECT COUNT(*), MAX(s.updated_at) {GOV_FROM_WHERE}");
+    state.db.with_client(move |conn| {
+        let row = conn
+            .query_one(sql.as_str(), &[&p_code, &c_code])
+            .map_err(|e| format!("public institution version query failed: {e}"))?;
+        let count: i64 = row.get(0);
+        let max_updated: Option<DateTime<Utc>> = row.get(1);
+        Ok((max_updated.map(|t| t.to_rfc3339()), count))
+    })
+}
+
+/// 批量查机构自定义账户名(op_tag=0x06,即非 5 保留名)。空列表短路。
 fn custom_account_names_for(
     state: &AppState,
     p_code: &str,
@@ -335,8 +416,8 @@ fn custom_account_names_for(
 mod tests {
     use super::*;
 
-    fn sample_list_row() -> InstitutionListRow {
-        InstitutionListRow {
+    fn sample_row() -> PublicInstitutionRow {
+        PublicInstitutionRow {
             sfid_number: "AH001-ZF000-123456789-2026".to_string(),
             institution_name: Some("安徽省人民政府".to_string()),
             sfid_name: Some("安徽省国民政府".to_string()),
@@ -345,47 +426,31 @@ mod tests {
             category: InstitutionCategory::GovInstitution,
             subject_property: "G".to_string(),
             p1: "0".to_string(),
-            province: "安徽".to_string(),
+            province: "安徽省".to_string(),
             city: "合肥".to_string(),
             town: String::new(),
             institution_code: "ZF".to_string(),
             org_code: None,
-            private_type: None,
-            partnership_kind: None,
             has_legal_personality: Some(true),
             parent_sfid_number: None,
             account_count: 2,
-            cpms_status: Some("INSTALLED".to_string()),
-            install_token_status: Some("ISSUED".to_string()),
-            identity_service_status: Some("ON".to_string()),
+            custom_account_names: vec!["业务专户A".to_string()],
             created_at: Utc::now(),
-            created_by_name: Some("张三管理员".to_string()),
-            created_by_role: Some("FEDERAL_ADMIN".to_string()),
         }
     }
 
     #[test]
     fn public_dto_excludes_sensitive_admin_fields() {
-        let public = PublicInstitutionRow::from_list_row(
-            sample_list_row(),
-            vec!["业务专户A".to_string()],
-        );
-        let json = serde_json::to_string(&public).expect("serialize public row");
+        let json = serde_json::to_string(&sample_row()).expect("serialize public row");
         for forbidden in [
             "created_by",
-            "张三管理员",
-            "FEDERAL_ADMIN",
             "cpms_status",
-            "INSTALLED",
             "install_token_status",
             "identity_service_status",
             "private_type",
             "partnership_kind",
         ] {
-            assert!(
-                !json.contains(forbidden),
-                "公开 DTO 泄露敏感字段: {forbidden}"
-            );
+            assert!(!json.contains(forbidden), "公开 DTO 泄露敏感字段: {forbidden}");
         }
         assert!(json.contains("custom_account_names"));
         assert!(json.contains("业务专户A"));
@@ -394,11 +459,9 @@ mod tests {
 
     #[test]
     fn public_dto_keeps_directory_fields() {
-        let public =
-            PublicInstitutionRow::from_list_row(sample_list_row(), Vec::new());
-        assert_eq!(public.sfid_number, "AH001-ZF000-123456789-2026");
-        assert_eq!(public.account_count, 2);
-        assert_eq!(public.institution_code, "ZF");
-        assert!(public.custom_account_names.is_empty());
+        let row = sample_row();
+        assert_eq!(row.sfid_number, "AH001-ZF000-123456789-2026");
+        assert_eq!(row.account_count, 2);
+        assert_eq!(row.institution_code, "ZF");
     }
 }

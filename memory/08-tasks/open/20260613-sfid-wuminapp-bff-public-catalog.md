@@ -41,12 +41,15 @@
 - [ ] 与 wuminapp 卡 A 联调:全量载入 + 一次增量同步闭环。
 - [ ] 旧代码/文档/注释清理无残留。
 
-## 契约(card A 接 mock 依据,已落地)
-- `GET /api/v1/app/public-institutions?province=<必填>&city=&q=&org_code=&cursor=<offset 整数>&page_size=<1..300,默认300>`
-  → `ApiResponse{code,message,data: PageResult<PublicInstitutionRow>}`,`PageResult` 含 `items/page_size/next_cursor/has_more/manifest_version/catalog_status`。
+## 契约(2026-06-13 混合模式 v2:keyset + updated_at 增量)
+- `GET /api/v1/app/public-institutions?province=<必填>&city=&since_version=<RFC3339,可选增量>&after_sfid=<keyset 游标,可选>&page_size=<1..500,默认300>`
+  → `ApiResponse{code,message,data: PageResult<PublicInstitutionRow>}`,`PageResult` 含 `items/page_size/next_cursor(=末页末尾 sfid_number)/has_more/manifest_version/catalog_status`。
   `PublicInstitutionRow{sfid_number, institution_name?, sfid_name?, short_name?, status, category, subject_property, p1, province, city, town, institution_code, org_code?, has_legal_personality?, parent_sfid_number?, account_count, custom_account_names[], created_at}`。
-- `GET /api/v1/app/public-institutions/version?province=<必填>&city=` → `data:{province, city?, manifest_version?}`。
-- 匿名(非 admin),挂 global_rate_limit + CORS;province/city 用中文名,后端 province_code_by_name/city_code_by_name 解析,未知名 400。
+  - **keyset 翻页**:`after_sfid` → `WHERE sfid_number > $after`,ORDER BY sfid_number;替代 OFFSET(深翻 O(n²))。
+  - **增量**:`since_version` → `WHERE updated_at > $since::timestamptz`,只回这之后变过的行。
+- `GET /api/v1/app/public-institutions/version?province=<必填>&city=` → `data:{province, city?, manifest_version(=MAX(updated_at) RFC3339,非 null), count}`。
+- 匿名(非 admin),挂 global_rate_limit + CORS;province/city 用中文全名(含"省"),后端 province_code_by_name/city_code_by_name 解析,未知名 400。
+- 实现:`GOV_FROM_WHERE` 复用 `list_official_institutions_scope` 同源过滤;**量级实测单省上万、全国约 40 万**(广东 9000–15000)→ 客户端走数据包打底 + updated_at 增量,不按省整批现拉。
 
 ## 不做(边界)
 - 不碰 `core/chain_*`、`indexer/worker`(链交互)。

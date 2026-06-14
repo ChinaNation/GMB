@@ -530,6 +530,71 @@ class InstitutionEntity {
   List<String> matchedAdminPubkeys = const [];
 }
 
+/// 公权机构目录本地完整缓存(ADR-018 §九 混合模式)。
+///
+/// 中文注释:数据来自发布期数据包(基线)+ SFID 公开接口增量同步;UI 永远读本表,
+/// 省/市/机构导航零链读零现查。主/费账户本地派生不入库,仅自定义账户名(op_tag=0x06)
+/// 入 [customAccountNames](绝大多数机构为空)。
+@collection
+class PublicInstitutionEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 机构身份 ID(sfid_number),全局唯一。
+  @Index(unique: true, replace: true)
+  late String sfidNumber;
+
+  late String institutionName;
+  String? sfidName;
+  String? shortName;
+  late String status;
+
+  /// 所属省(左侧省导航分组键)。
+  @Index()
+  late String province;
+
+  /// 所属市(市列表分组键)。
+  @Index()
+  late String city;
+
+  String town = '';
+
+  /// 机构类型:ZF/LF/SF/JC/JY 等。
+  late String institutionCode;
+
+  String? orgCode;
+  String? parentSfidNumber;
+  bool? hasLegalPersonality;
+  late int accountCount;
+
+  /// 自定义账户名(op_tag=0x06);主/费可本地派生不入库。空占绝大多数。
+  List<String> customAccountNames = const [];
+
+  /// 该省目录同步版本戳(增量比对/排错用)。
+  String? catalogVersion;
+
+  late int updatedAtMillis;
+}
+
+/// 公权机构订阅("关注"分组)。
+///
+/// 中文注释:按钱包公钥隔离的纯本地决策表;[subscriptionKey] = `pubkeyHex|sfidNumber`
+/// 复合唯一,只有订阅的机构才纳入动态刷新集(详情页卡C),目录浏览不依赖本表。
+@collection
+class PublicInstitutionSubscriptionEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 复合唯一键:`walletPubkeyHex|sfidNumber`。
+  @Index(unique: true, replace: true)
+  late String subscriptionKey;
+
+  /// 订阅者钱包公钥(查"我的关注"用)。
+  @Index()
+  late String walletPubkeyHex;
+
+  late String sfidNumber;
+  late int subscribedAtMillis;
+}
+
 /// 本地钱包余额变化流水（持久化存储，去中心化设计，不依赖 SFID 服务器）。
 @collection
 class LocalTxEntity {
@@ -770,6 +835,8 @@ class WalletIsar {
       InstitutionEntitySchema,
       PersonalDuoqianEntitySchema,
       PersonalDuoqianProposalEntitySchema,
+      PublicInstitutionEntitySchema,
+      PublicInstitutionSubscriptionEntitySchema,
       LocalTxEntitySchema,
       WalletTxSyncCursorEntitySchema,
     ];
