@@ -2,7 +2,9 @@
 
 属 ADR-018 §九(混合模式)。公权机构功能域的数据底座,纯客户端零链读。依赖 SFID BFF 卡(目录接口)。
 
-状态:未开始。
+状态:**代码完工(2026-06-13)**。`lib/citizen/public/data/` 落地:DTO(public_institution_dto)+ 公开接口客户端(public_institution_api)+ 抽象 store(public_institution_store)+ Isar 实现(isar_public_institution_store)+ 增量同步(public_institution_sync_service,版本比对→跳过/全量重拉)+ 数据包载入(public_institution_bundle_loader)+ repo 门面(public_institution_repository)。Isar 新增 `PublicInstitutionEntity` + `PublicInstitutionSubscriptionEntity`(版本戳/省顺序复用 AppKvEntity),build_runner 已生成,schemas 已注册。assets/public_institutions/ + pubspec 注册 + tools/generate_public_institution_bundle.mjs 生成器(占位 manifest,provinces 空时降级纯接口)。测试 10/10(DTO 解析/同步决策/翻页/数据包载入)+ flutter analyze 0 + **全量 225/225 无回归**。
+
+**v1 范围**:同步=version 比对+变化省全量重拉(对齐 SFID BFF v1);真行级 since_version 延后。生成器省份列表暂 `--provinces` 传入(中枢+43 省规范顺序),SFID 加公开 provinces 接口后改自动拉(follow-up)。
 
 ## 设计(混合模式三层)
 1. **数据包(基线)**:发布期从 SFID 导出接口拉全量目录 → 打进 `assets/public_institutions/`(按省分片,减小首屏解析)→ 首次启动/版本升级载入 Isar。一次性零运行时调用。

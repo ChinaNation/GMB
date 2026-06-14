@@ -12385,6 +12385,4697 @@ extension InstitutionEntityQueryProperty
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
+extension GetPublicInstitutionEntityCollection on Isar {
+  IsarCollection<PublicInstitutionEntity> get publicInstitutionEntitys =>
+      this.collection();
+}
+
+const PublicInstitutionEntitySchema = CollectionSchema(
+  name: r'PublicInstitutionEntity',
+  id: 1125869609343849778,
+  properties: {
+    r'accountCount': PropertySchema(
+      id: 0,
+      name: r'accountCount',
+      type: IsarType.long,
+    ),
+    r'catalogVersion': PropertySchema(
+      id: 1,
+      name: r'catalogVersion',
+      type: IsarType.string,
+    ),
+    r'city': PropertySchema(
+      id: 2,
+      name: r'city',
+      type: IsarType.string,
+    ),
+    r'customAccountNames': PropertySchema(
+      id: 3,
+      name: r'customAccountNames',
+      type: IsarType.stringList,
+    ),
+    r'hasLegalPersonality': PropertySchema(
+      id: 4,
+      name: r'hasLegalPersonality',
+      type: IsarType.bool,
+    ),
+    r'institutionCode': PropertySchema(
+      id: 5,
+      name: r'institutionCode',
+      type: IsarType.string,
+    ),
+    r'institutionName': PropertySchema(
+      id: 6,
+      name: r'institutionName',
+      type: IsarType.string,
+    ),
+    r'orgCode': PropertySchema(
+      id: 7,
+      name: r'orgCode',
+      type: IsarType.string,
+    ),
+    r'parentSfidNumber': PropertySchema(
+      id: 8,
+      name: r'parentSfidNumber',
+      type: IsarType.string,
+    ),
+    r'province': PropertySchema(
+      id: 9,
+      name: r'province',
+      type: IsarType.string,
+    ),
+    r'sfidName': PropertySchema(
+      id: 10,
+      name: r'sfidName',
+      type: IsarType.string,
+    ),
+    r'sfidNumber': PropertySchema(
+      id: 11,
+      name: r'sfidNumber',
+      type: IsarType.string,
+    ),
+    r'shortName': PropertySchema(
+      id: 12,
+      name: r'shortName',
+      type: IsarType.string,
+    ),
+    r'status': PropertySchema(
+      id: 13,
+      name: r'status',
+      type: IsarType.string,
+    ),
+    r'town': PropertySchema(
+      id: 14,
+      name: r'town',
+      type: IsarType.string,
+    ),
+    r'updatedAtMillis': PropertySchema(
+      id: 15,
+      name: r'updatedAtMillis',
+      type: IsarType.long,
+    )
+  },
+  estimateSize: _publicInstitutionEntityEstimateSize,
+  serialize: _publicInstitutionEntitySerialize,
+  deserialize: _publicInstitutionEntityDeserialize,
+  deserializeProp: _publicInstitutionEntityDeserializeProp,
+  idName: r'id',
+  indexes: {
+    r'sfidNumber': IndexSchema(
+      id: 694615574634332730,
+      name: r'sfidNumber',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'sfidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'province': IndexSchema(
+      id: -6035047385865569949,
+      name: r'province',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'province',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'city': IndexSchema(
+      id: 2121973393509345332,
+      name: r'city',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'city',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    )
+  },
+  links: {},
+  embeddedSchemas: {},
+  getId: _publicInstitutionEntityGetId,
+  getLinks: _publicInstitutionEntityGetLinks,
+  attach: _publicInstitutionEntityAttach,
+  version: '3.1.0+1',
+);
+
+int _publicInstitutionEntityEstimateSize(
+  PublicInstitutionEntity object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  {
+    final value = object.catalogVersion;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.city.length * 3;
+  bytesCount += 3 + object.customAccountNames.length * 3;
+  {
+    for (var i = 0; i < object.customAccountNames.length; i++) {
+      final value = object.customAccountNames[i];
+      bytesCount += value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.institutionCode.length * 3;
+  bytesCount += 3 + object.institutionName.length * 3;
+  {
+    final value = object.orgCode;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.parentSfidNumber;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.province.length * 3;
+  {
+    final value = object.sfidName;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.sfidNumber.length * 3;
+  {
+    final value = object.shortName;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.status.length * 3;
+  bytesCount += 3 + object.town.length * 3;
+  return bytesCount;
+}
+
+void _publicInstitutionEntitySerialize(
+  PublicInstitutionEntity object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeLong(offsets[0], object.accountCount);
+  writer.writeString(offsets[1], object.catalogVersion);
+  writer.writeString(offsets[2], object.city);
+  writer.writeStringList(offsets[3], object.customAccountNames);
+  writer.writeBool(offsets[4], object.hasLegalPersonality);
+  writer.writeString(offsets[5], object.institutionCode);
+  writer.writeString(offsets[6], object.institutionName);
+  writer.writeString(offsets[7], object.orgCode);
+  writer.writeString(offsets[8], object.parentSfidNumber);
+  writer.writeString(offsets[9], object.province);
+  writer.writeString(offsets[10], object.sfidName);
+  writer.writeString(offsets[11], object.sfidNumber);
+  writer.writeString(offsets[12], object.shortName);
+  writer.writeString(offsets[13], object.status);
+  writer.writeString(offsets[14], object.town);
+  writer.writeLong(offsets[15], object.updatedAtMillis);
+}
+
+PublicInstitutionEntity _publicInstitutionEntityDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = PublicInstitutionEntity();
+  object.accountCount = reader.readLong(offsets[0]);
+  object.catalogVersion = reader.readStringOrNull(offsets[1]);
+  object.city = reader.readString(offsets[2]);
+  object.customAccountNames = reader.readStringList(offsets[3]) ?? [];
+  object.hasLegalPersonality = reader.readBoolOrNull(offsets[4]);
+  object.id = id;
+  object.institutionCode = reader.readString(offsets[5]);
+  object.institutionName = reader.readString(offsets[6]);
+  object.orgCode = reader.readStringOrNull(offsets[7]);
+  object.parentSfidNumber = reader.readStringOrNull(offsets[8]);
+  object.province = reader.readString(offsets[9]);
+  object.sfidName = reader.readStringOrNull(offsets[10]);
+  object.sfidNumber = reader.readString(offsets[11]);
+  object.shortName = reader.readStringOrNull(offsets[12]);
+  object.status = reader.readString(offsets[13]);
+  object.town = reader.readString(offsets[14]);
+  object.updatedAtMillis = reader.readLong(offsets[15]);
+  return object;
+}
+
+P _publicInstitutionEntityDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readLong(offset)) as P;
+    case 1:
+      return (reader.readStringOrNull(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
+    case 3:
+      return (reader.readStringList(offset) ?? []) as P;
+    case 4:
+      return (reader.readBoolOrNull(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
+      return (reader.readStringOrNull(offset)) as P;
+    case 8:
+      return (reader.readStringOrNull(offset)) as P;
+    case 9:
+      return (reader.readString(offset)) as P;
+    case 10:
+      return (reader.readStringOrNull(offset)) as P;
+    case 11:
+      return (reader.readString(offset)) as P;
+    case 12:
+      return (reader.readStringOrNull(offset)) as P;
+    case 13:
+      return (reader.readString(offset)) as P;
+    case 14:
+      return (reader.readString(offset)) as P;
+    case 15:
+      return (reader.readLong(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _publicInstitutionEntityGetId(PublicInstitutionEntity object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _publicInstitutionEntityGetLinks(
+    PublicInstitutionEntity object) {
+  return [];
+}
+
+void _publicInstitutionEntityAttach(
+    IsarCollection<dynamic> col, Id id, PublicInstitutionEntity object) {
+  object.id = id;
+}
+
+extension PublicInstitutionEntityByIndex
+    on IsarCollection<PublicInstitutionEntity> {
+  Future<PublicInstitutionEntity?> getBySfidNumber(String sfidNumber) {
+    return getByIndex(r'sfidNumber', [sfidNumber]);
+  }
+
+  PublicInstitutionEntity? getBySfidNumberSync(String sfidNumber) {
+    return getByIndexSync(r'sfidNumber', [sfidNumber]);
+  }
+
+  Future<bool> deleteBySfidNumber(String sfidNumber) {
+    return deleteByIndex(r'sfidNumber', [sfidNumber]);
+  }
+
+  bool deleteBySfidNumberSync(String sfidNumber) {
+    return deleteByIndexSync(r'sfidNumber', [sfidNumber]);
+  }
+
+  Future<List<PublicInstitutionEntity?>> getAllBySfidNumber(
+      List<String> sfidNumberValues) {
+    final values = sfidNumberValues.map((e) => [e]).toList();
+    return getAllByIndex(r'sfidNumber', values);
+  }
+
+  List<PublicInstitutionEntity?> getAllBySfidNumberSync(
+      List<String> sfidNumberValues) {
+    final values = sfidNumberValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'sfidNumber', values);
+  }
+
+  Future<int> deleteAllBySfidNumber(List<String> sfidNumberValues) {
+    final values = sfidNumberValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'sfidNumber', values);
+  }
+
+  int deleteAllBySfidNumberSync(List<String> sfidNumberValues) {
+    final values = sfidNumberValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'sfidNumber', values);
+  }
+
+  Future<Id> putBySfidNumber(PublicInstitutionEntity object) {
+    return putByIndex(r'sfidNumber', object);
+  }
+
+  Id putBySfidNumberSync(PublicInstitutionEntity object,
+      {bool saveLinks = true}) {
+    return putByIndexSync(r'sfidNumber', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllBySfidNumber(List<PublicInstitutionEntity> objects) {
+    return putAllByIndex(r'sfidNumber', objects);
+  }
+
+  List<Id> putAllBySfidNumberSync(List<PublicInstitutionEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'sfidNumber', objects, saveLinks: saveLinks);
+  }
+}
+
+extension PublicInstitutionEntityQueryWhereSort
+    on QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QWhere> {
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterWhere>
+      anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+}
+
+extension PublicInstitutionEntityQueryWhere on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QWhereClause> {
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> idGreaterThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> idLessThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> sfidNumberEqualTo(String sfidNumber) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'sfidNumber',
+        value: [sfidNumber],
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> sfidNumberNotEqualTo(String sfidNumber) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'sfidNumber',
+              lower: [],
+              upper: [sfidNumber],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'sfidNumber',
+              lower: [sfidNumber],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'sfidNumber',
+              lower: [sfidNumber],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'sfidNumber',
+              lower: [],
+              upper: [sfidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> provinceEqualTo(String province) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'province',
+        value: [province],
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> provinceNotEqualTo(String province) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'province',
+              lower: [],
+              upper: [province],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'province',
+              lower: [province],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'province',
+              lower: [province],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'province',
+              lower: [],
+              upper: [province],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> cityEqualTo(String city) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'city',
+        value: [city],
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> cityNotEqualTo(String city) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'city',
+              lower: [],
+              upper: [city],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'city',
+              lower: [city],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'city',
+              lower: [city],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'city',
+              lower: [],
+              upper: [city],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+}
+
+extension PublicInstitutionEntityQueryFilter on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QFilterCondition> {
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> accountCountEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> accountCountGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'accountCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> accountCountLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'accountCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> accountCountBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'accountCount',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'catalogVersion',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'catalogVersion',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'catalogVersion',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'catalogVersion',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'catalogVersion',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'catalogVersion',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'catalogVersion',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'catalogVersion',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      catalogVersionContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'catalogVersion',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      catalogVersionMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'catalogVersion',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'catalogVersion',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> catalogVersionIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'catalogVersion',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'city',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'city',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'city',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'city',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'city',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'city',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      cityContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'city',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      cityMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'city',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'city',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> cityIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'city',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'customAccountNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'customAccountNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'customAccountNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'customAccountNames',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'customAccountNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'customAccountNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      customAccountNamesElementContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'customAccountNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      customAccountNamesElementMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'customAccountNames',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'customAccountNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'customAccountNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'customAccountNames',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'customAccountNames',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'customAccountNames',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'customAccountNames',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'customAccountNames',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> customAccountNamesLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'customAccountNames',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> hasLegalPersonalityIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'hasLegalPersonality',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> hasLegalPersonalityIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'hasLegalPersonality',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> hasLegalPersonalityEqualTo(bool? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'hasLegalPersonality',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'institutionCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'institutionCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'institutionCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'institutionCode',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'institutionCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'institutionCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      institutionCodeContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'institutionCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      institutionCodeMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'institutionCode',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'institutionCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionCodeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'institutionCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'institutionName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'institutionName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'institutionName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'institutionName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'institutionName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'institutionName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      institutionNameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'institutionName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      institutionNameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'institutionName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'institutionName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> institutionNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'institutionName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'orgCode',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'orgCode',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'orgCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'orgCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'orgCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'orgCode',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'orgCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'orgCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      orgCodeContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'orgCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      orgCodeMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'orgCode',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'orgCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> orgCodeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'orgCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'parentSfidNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'parentSfidNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'parentSfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'parentSfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'parentSfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'parentSfidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'parentSfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'parentSfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      parentSfidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'parentSfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      parentSfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'parentSfidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'parentSfidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> parentSfidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'parentSfidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'province',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'province',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'province',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'province',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'province',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'province',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      provinceContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'province',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      provinceMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'province',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'province',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> provinceIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'province',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'sfidName',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'sfidName',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sfidName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sfidName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sfidName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'sfidName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'sfidName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      sfidNameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'sfidName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      sfidNameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'sfidName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'sfidName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sfidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      sfidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'sfidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> sfidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'sfidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'shortName',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'shortName',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'shortName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'shortName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'shortName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'shortName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'shortName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'shortName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      shortNameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'shortName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      shortNameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'shortName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'shortName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> shortNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'shortName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'status',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      statusContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      statusMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'status',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'status',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> statusIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'status',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'town',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'town',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'town',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'town',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'town',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'town',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      townContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'town',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      townMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'town',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'town',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> townIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'town',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> updatedAtMillisEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'updatedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> updatedAtMillisGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'updatedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> updatedAtMillisLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'updatedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> updatedAtMillisBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'updatedAtMillis',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension PublicInstitutionEntityQueryObject on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QFilterCondition> {}
+
+extension PublicInstitutionEntityQueryLinks on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QFilterCondition> {}
+
+extension PublicInstitutionEntityQuerySortBy
+    on QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QSortBy> {
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByAccountCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountCount', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByAccountCountDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountCount', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByCatalogVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByCatalogVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogVersion', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByCity() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'city', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByCityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'city', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByHasLegalPersonality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasLegalPersonality', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByHasLegalPersonalityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasLegalPersonality', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByInstitutionCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByInstitutionCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByInstitutionName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByInstitutionNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByOrgCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orgCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByOrgCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orgCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByParentSfidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'parentSfidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByParentSfidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'parentSfidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByProvince() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'province', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByProvinceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'province', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortBySfidName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortBySfidNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortBySfidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortBySfidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByShortName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shortName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByShortNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shortName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByTown() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'town', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByTownDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'town', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByUpdatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByUpdatedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAtMillis', Sort.desc);
+    });
+  }
+}
+
+extension PublicInstitutionEntityQuerySortThenBy on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QSortThenBy> {
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByAccountCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountCount', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByAccountCountDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountCount', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByCatalogVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByCatalogVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogVersion', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByCity() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'city', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByCityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'city', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByHasLegalPersonality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasLegalPersonality', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByHasLegalPersonalityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasLegalPersonality', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByInstitutionCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByInstitutionCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByInstitutionName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByInstitutionNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByOrgCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orgCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByOrgCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orgCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByParentSfidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'parentSfidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByParentSfidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'parentSfidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByProvince() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'province', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByProvinceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'province', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenBySfidName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenBySfidNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenBySfidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenBySfidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByShortName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shortName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByShortNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shortName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByTown() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'town', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByTownDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'town', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByUpdatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByUpdatedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAtMillis', Sort.desc);
+    });
+  }
+}
+
+extension PublicInstitutionEntityQueryWhereDistinct on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QDistinct> {
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByAccountCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'accountCount');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByCatalogVersion({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'catalogVersion',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByCity({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'city', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByCustomAccountNames() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'customAccountNames');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByHasLegalPersonality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'hasLegalPersonality');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByInstitutionCode({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'institutionCode',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByInstitutionName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'institutionName',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByOrgCode({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'orgCode', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByParentSfidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'parentSfidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByProvince({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'province', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctBySfidName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sfidName', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctBySfidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByShortName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'shortName', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByStatus({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'status', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByTown({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'town', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByUpdatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'updatedAtMillis');
+    });
+  }
+}
+
+extension PublicInstitutionEntityQueryProperty on QueryBuilder<
+    PublicInstitutionEntity, PublicInstitutionEntity, QQueryProperty> {
+  QueryBuilder<PublicInstitutionEntity, int, QQueryOperations> idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, int, QQueryOperations>
+      accountCountProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'accountCount');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
+      catalogVersionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'catalogVersion');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      cityProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'city');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, List<String>, QQueryOperations>
+      customAccountNamesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'customAccountNames');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, bool?, QQueryOperations>
+      hasLegalPersonalityProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'hasLegalPersonality');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      institutionCodeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'institutionCode');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      institutionNameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'institutionName');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
+      orgCodeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'orgCode');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
+      parentSfidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'parentSfidNumber');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      provinceProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'province');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
+      sfidNameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sfidName');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      sfidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sfidNumber');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
+      shortNameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'shortName');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      statusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'status');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
+      townProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'town');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, int, QQueryOperations>
+      updatedAtMillisProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'updatedAtMillis');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
+extension GetPublicInstitutionSubscriptionEntityCollection on Isar {
+  IsarCollection<PublicInstitutionSubscriptionEntity>
+      get publicInstitutionSubscriptionEntitys => this.collection();
+}
+
+const PublicInstitutionSubscriptionEntitySchema = CollectionSchema(
+  name: r'PublicInstitutionSubscriptionEntity',
+  id: -8652922314920949356,
+  properties: {
+    r'sfidNumber': PropertySchema(
+      id: 0,
+      name: r'sfidNumber',
+      type: IsarType.string,
+    ),
+    r'subscribedAtMillis': PropertySchema(
+      id: 1,
+      name: r'subscribedAtMillis',
+      type: IsarType.long,
+    ),
+    r'subscriptionKey': PropertySchema(
+      id: 2,
+      name: r'subscriptionKey',
+      type: IsarType.string,
+    ),
+    r'walletPubkeyHex': PropertySchema(
+      id: 3,
+      name: r'walletPubkeyHex',
+      type: IsarType.string,
+    )
+  },
+  estimateSize: _publicInstitutionSubscriptionEntityEstimateSize,
+  serialize: _publicInstitutionSubscriptionEntitySerialize,
+  deserialize: _publicInstitutionSubscriptionEntityDeserialize,
+  deserializeProp: _publicInstitutionSubscriptionEntityDeserializeProp,
+  idName: r'id',
+  indexes: {
+    r'subscriptionKey': IndexSchema(
+      id: -3021161140690889130,
+      name: r'subscriptionKey',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'subscriptionKey',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'walletPubkeyHex': IndexSchema(
+      id: 5635599984015707452,
+      name: r'walletPubkeyHex',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'walletPubkeyHex',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    )
+  },
+  links: {},
+  embeddedSchemas: {},
+  getId: _publicInstitutionSubscriptionEntityGetId,
+  getLinks: _publicInstitutionSubscriptionEntityGetLinks,
+  attach: _publicInstitutionSubscriptionEntityAttach,
+  version: '3.1.0+1',
+);
+
+int _publicInstitutionSubscriptionEntityEstimateSize(
+  PublicInstitutionSubscriptionEntity object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  bytesCount += 3 + object.sfidNumber.length * 3;
+  bytesCount += 3 + object.subscriptionKey.length * 3;
+  bytesCount += 3 + object.walletPubkeyHex.length * 3;
+  return bytesCount;
+}
+
+void _publicInstitutionSubscriptionEntitySerialize(
+  PublicInstitutionSubscriptionEntity object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeString(offsets[0], object.sfidNumber);
+  writer.writeLong(offsets[1], object.subscribedAtMillis);
+  writer.writeString(offsets[2], object.subscriptionKey);
+  writer.writeString(offsets[3], object.walletPubkeyHex);
+}
+
+PublicInstitutionSubscriptionEntity
+    _publicInstitutionSubscriptionEntityDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = PublicInstitutionSubscriptionEntity();
+  object.id = id;
+  object.sfidNumber = reader.readString(offsets[0]);
+  object.subscribedAtMillis = reader.readLong(offsets[1]);
+  object.subscriptionKey = reader.readString(offsets[2]);
+  object.walletPubkeyHex = reader.readString(offsets[3]);
+  return object;
+}
+
+P _publicInstitutionSubscriptionEntityDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readString(offset)) as P;
+    case 1:
+      return (reader.readLong(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _publicInstitutionSubscriptionEntityGetId(
+    PublicInstitutionSubscriptionEntity object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _publicInstitutionSubscriptionEntityGetLinks(
+    PublicInstitutionSubscriptionEntity object) {
+  return [];
+}
+
+void _publicInstitutionSubscriptionEntityAttach(IsarCollection<dynamic> col,
+    Id id, PublicInstitutionSubscriptionEntity object) {
+  object.id = id;
+}
+
+extension PublicInstitutionSubscriptionEntityByIndex
+    on IsarCollection<PublicInstitutionSubscriptionEntity> {
+  Future<PublicInstitutionSubscriptionEntity?> getBySubscriptionKey(
+      String subscriptionKey) {
+    return getByIndex(r'subscriptionKey', [subscriptionKey]);
+  }
+
+  PublicInstitutionSubscriptionEntity? getBySubscriptionKeySync(
+      String subscriptionKey) {
+    return getByIndexSync(r'subscriptionKey', [subscriptionKey]);
+  }
+
+  Future<bool> deleteBySubscriptionKey(String subscriptionKey) {
+    return deleteByIndex(r'subscriptionKey', [subscriptionKey]);
+  }
+
+  bool deleteBySubscriptionKeySync(String subscriptionKey) {
+    return deleteByIndexSync(r'subscriptionKey', [subscriptionKey]);
+  }
+
+  Future<List<PublicInstitutionSubscriptionEntity?>> getAllBySubscriptionKey(
+      List<String> subscriptionKeyValues) {
+    final values = subscriptionKeyValues.map((e) => [e]).toList();
+    return getAllByIndex(r'subscriptionKey', values);
+  }
+
+  List<PublicInstitutionSubscriptionEntity?> getAllBySubscriptionKeySync(
+      List<String> subscriptionKeyValues) {
+    final values = subscriptionKeyValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'subscriptionKey', values);
+  }
+
+  Future<int> deleteAllBySubscriptionKey(List<String> subscriptionKeyValues) {
+    final values = subscriptionKeyValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'subscriptionKey', values);
+  }
+
+  int deleteAllBySubscriptionKeySync(List<String> subscriptionKeyValues) {
+    final values = subscriptionKeyValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'subscriptionKey', values);
+  }
+
+  Future<Id> putBySubscriptionKey(PublicInstitutionSubscriptionEntity object) {
+    return putByIndex(r'subscriptionKey', object);
+  }
+
+  Id putBySubscriptionKeySync(PublicInstitutionSubscriptionEntity object,
+      {bool saveLinks = true}) {
+    return putByIndexSync(r'subscriptionKey', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllBySubscriptionKey(
+      List<PublicInstitutionSubscriptionEntity> objects) {
+    return putAllByIndex(r'subscriptionKey', objects);
+  }
+
+  List<Id> putAllBySubscriptionKeySync(
+      List<PublicInstitutionSubscriptionEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'subscriptionKey', objects, saveLinks: saveLinks);
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQueryWhereSort on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QWhere> {
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterWhere> anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQueryWhere on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QWhereClause> {
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterWhereClause> idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> idGreaterThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> idLessThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterWhereClause> idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> subscriptionKeyEqualTo(String subscriptionKey) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'subscriptionKey',
+        value: [subscriptionKey],
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> subscriptionKeyNotEqualTo(String subscriptionKey) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'subscriptionKey',
+              lower: [],
+              upper: [subscriptionKey],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'subscriptionKey',
+              lower: [subscriptionKey],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'subscriptionKey',
+              lower: [subscriptionKey],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'subscriptionKey',
+              lower: [],
+              upper: [subscriptionKey],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> walletPubkeyHexEqualTo(String walletPubkeyHex) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'walletPubkeyHex',
+        value: [walletPubkeyHex],
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterWhereClause> walletPubkeyHexNotEqualTo(String walletPubkeyHex) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'walletPubkeyHex',
+              lower: [],
+              upper: [walletPubkeyHex],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'walletPubkeyHex',
+              lower: [walletPubkeyHex],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'walletPubkeyHex',
+              lower: [walletPubkeyHex],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'walletPubkeyHex',
+              lower: [],
+              upper: [walletPubkeyHex],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QFilterCondition> {
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterFilterCondition> idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterFilterCondition> idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterFilterCondition> idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sfidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      sfidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'sfidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'sfidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> sfidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'sfidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscribedAtMillisEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'subscribedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscribedAtMillisGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'subscribedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscribedAtMillisLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'subscribedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscribedAtMillisBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'subscribedAtMillis',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'subscriptionKey',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'subscriptionKey',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'subscriptionKey',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'subscriptionKey',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'subscriptionKey',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'subscriptionKey',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      subscriptionKeyContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'subscriptionKey',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      subscriptionKeyMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'subscriptionKey',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'subscriptionKey',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> subscriptionKeyIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'subscriptionKey',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'walletPubkeyHex',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'walletPubkeyHex',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'walletPubkeyHex',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'walletPubkeyHex',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'walletPubkeyHex',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'walletPubkeyHex',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      walletPubkeyHexContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'walletPubkeyHex',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      walletPubkeyHexMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'walletPubkeyHex',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'walletPubkeyHex',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> walletPubkeyHexIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'walletPubkeyHex',
+        value: '',
+      ));
+    });
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQueryObject on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QFilterCondition> {}
+
+extension PublicInstitutionSubscriptionEntityQueryLinks on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QFilterCondition> {}
+
+extension PublicInstitutionSubscriptionEntityQuerySortBy on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QSortBy> {
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterSortBy> sortBySfidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortBySfidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortBySubscribedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscribedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortBySubscribedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscribedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortBySubscriptionKey() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscriptionKey', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortBySubscriptionKeyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscriptionKey', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortByWalletPubkeyHex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'walletPubkeyHex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortByWalletPubkeyHexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'walletPubkeyHex', Sort.desc);
+    });
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQuerySortThenBy on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QSortThenBy> {
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenBySfidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenBySfidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenBySubscribedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscribedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenBySubscribedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscribedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenBySubscriptionKey() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscriptionKey', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenBySubscriptionKeyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'subscriptionKey', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenByWalletPubkeyHex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'walletPubkeyHex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenByWalletPubkeyHexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'walletPubkeyHex', Sort.desc);
+    });
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQueryWhereDistinct on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QDistinct> {
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QDistinct> distinctBySfidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QDistinct> distinctBySubscribedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'subscribedAtMillis');
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QDistinct> distinctBySubscriptionKey({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'subscriptionKey',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QDistinct> distinctByWalletPubkeyHex({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'walletPubkeyHex',
+          caseSensitive: caseSensitive);
+    });
+  }
+}
+
+extension PublicInstitutionSubscriptionEntityQueryProperty on QueryBuilder<
+    PublicInstitutionSubscriptionEntity,
+    PublicInstitutionSubscriptionEntity,
+    QQueryProperty> {
+  QueryBuilder<PublicInstitutionSubscriptionEntity, int, QQueryOperations>
+      idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity, String, QQueryOperations>
+      sfidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sfidNumber');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity, int, QQueryOperations>
+      subscribedAtMillisProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'subscribedAtMillis');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity, String, QQueryOperations>
+      subscriptionKeyProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'subscriptionKey');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity, String, QQueryOperations>
+      walletPubkeyHexProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'walletPubkeyHex');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
 extension GetLocalTxEntityCollection on Isar {
   IsarCollection<LocalTxEntity> get localTxEntitys => this.collection();
 }

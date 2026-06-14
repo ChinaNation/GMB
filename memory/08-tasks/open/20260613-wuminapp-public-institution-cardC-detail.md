@@ -2,7 +2,9 @@
 
 属 ADR-018 §九。公权机构详情页与动态展示。依赖卡0(派生)、卡A(数据)、卡B(导航);余额复用卡⑤ ChainReadCache(已完工)。
 
-状态:未开始。v1 只做浏览+订阅+动态展示,**发起提案/换管理员本期门控隐藏**。
+状态:**代码完工(2026-06-13,v1)**。详情页 `public_institution_detail_page.dart` 扩充:info 卡 + 账户卡(主/费本地派生 + 余额)+ 更多账户页 `public_institution_accounts_page.dart`(主+费+自定义全派生 + 批量余额)+ 提案卡 + 管理员卡 + 右上角订阅按钮(写卡A store)。账户派生 `data/public_institution_accounts.dart`(deriveAccountRows,golden 与链上 hex 吻合)。链读隔离在 `data/public_institution_chain_data.dart`(balances/admins/proposals 接口 + LivePublicInstitutionChainData 复用 ChainRpc/InstitutionAdminService/DuoqianTransferProposalFeed;提案按 institutionBytes==派生主账户id 过滤年缓存;管理员走 institutionAccount org=4)。chainData + walletPubkeyProvider 注入可测。测试 3/3(派生行/详情展示/订阅切换)+ analyze 0 + dart format + citizen/public 子树 17/17 + **全量 232/232 无回归**。
+
+**v1 范围/真机延后**:发起提案/换管理员本期不做(detail 不放入口);真实余额/管理员/提案需联网(LivePublicInstitutionChainData),走既有基础设施,**真机验证待跑**(注入 fake 已覆盖 UI 逻辑)。finalized 订阅刷新未接(v1 进页加载一次;订阅集动态刷新留 follow-up)。
 
 ## 需求(用户口径)
 详情页展示:名称、身份ID(sfid_number)、主账户+余额、费用账户+余额、更多账户(卡片→该机构所有账户页)、提案卡片(→ 发起提案;v1 隐藏非管理员)、管理员列表(→ 管理员列表页)、提案列表。右上角**订阅按钮** → 订阅进"关注"。
