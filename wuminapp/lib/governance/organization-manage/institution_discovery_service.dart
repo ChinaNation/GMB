@@ -8,7 +8,7 @@
 // 个人多签后处理见 lib/governance/personal-manage/personal_manage_discovery_service.dart。
 
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:wuminapp_mobile/governance/shared/admin_account_storage_codec.dart';
 import 'package:wuminapp_mobile/governance/shared/admin_accounts_scan_service.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';

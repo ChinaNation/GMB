@@ -6,7 +6,7 @@
 // `MultisigDiscoveryCoordinator`,本服务不再各自扫链。
 
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/governance/shared/admin_account_storage_codec.dart';
 import 'package:wuminapp_mobile/governance/shared/admin_accounts_scan_service.dart';

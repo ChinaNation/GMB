@@ -9,7 +9,7 @@
 // 这避开了 smoldot 对 `state_getKeys` 翻页支持的不确定性,并且查询成本是
 // O(1) 级 Isar 索引读取。
 
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 

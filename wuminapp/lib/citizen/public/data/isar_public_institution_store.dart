@@ -5,7 +5,7 @@
 
 import 'dart:convert';
 
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 
 import 'public_institution_dto.dart';
