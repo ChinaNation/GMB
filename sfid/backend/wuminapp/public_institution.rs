@@ -67,6 +67,8 @@ fn parse_category(value: &str) -> InstitutionCategory {
 /// 安全红线:**显式不含** created_by_name / created_by_role / cpms_status /
 /// install_token_status / identity_service_status / private_type / partnership_kind。
 /// 新增字段前必须确认其可公开。
+/// 已确认可公开:`legal_rep_name`(公权机构法定代表人姓名属公开目录信息,
+/// 供公民端详情页展示;无则不下发)。
 #[derive(Debug, Serialize)]
 pub(crate) struct PublicInstitutionRow {
     pub sfid_number: String,
@@ -89,6 +91,9 @@ pub(crate) struct PublicInstitutionRow {
     pub org_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_legal_personality: Option<bool>,
+    /// 法定代表人姓名(公开目录字段)。来自 subjects.legal_rep_name;无则不下发。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legal_rep_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_sfid_number: Option<String>,
     pub account_count: usize,
@@ -117,6 +122,7 @@ impl PublicInstitutionRow {
             org_code: row.get(12),
             parent_sfid_number: row.get(13),
             has_legal_personality: row.get(14),
+            legal_rep_name: row.get(17),
             account_count,
             custom_account_names: Vec::new(),
             created_at: row.get(16),
@@ -317,7 +323,7 @@ fn query_public_institutions(
                 s.institution_code, s.org_code, s.parent_sfid_number, s.has_legal_personality,
                 (SELECT COUNT(*) FROM accounts a
                    WHERE a.p_code = s.p_code AND a.sfid_number = s.sfid_number),
-                s.created_at
+                s.created_at, s.legal_rep_name
          {GOV_FROM_WHERE}
            AND ($3::text IS NULL OR s.sfid_number > $3)
            AND ($4::text IS NULL OR s.updated_at > $4::timestamptz)
@@ -429,6 +435,7 @@ mod tests {
             institution_code: "ZF".to_string(),
             org_code: None,
             has_legal_personality: Some(true),
+            legal_rep_name: Some("张三".to_string()),
             parent_sfid_number: None,
             account_count: 2,
             custom_account_names: vec!["业务专户A".to_string()],
@@ -455,6 +462,9 @@ mod tests {
         assert!(json.contains("custom_account_names"));
         assert!(json.contains("业务专户A"));
         assert!(json.contains("安徽省人民政府"));
+        // 法定代表人姓名属已确认可公开的目录字段,必须随公开行下发。
+        assert!(json.contains("legal_rep_name"));
+        assert!(json.contains("张三"));
     }
 
     #[test]

@@ -564,6 +564,9 @@ class PublicInstitutionEntity {
   String? orgCode;
   String? parentSfidNumber;
   bool? hasLegalPersonality;
+
+  /// 法定代表人姓名(公开目录字段,来自 SFID subjects.legal_rep_name);无则 null → 留空。
+  String? legalRepName;
   late int accountCount;
 
   /// 自定义账户名(op_tag=0x06);主/费可本地派生不入库。空占绝大多数。

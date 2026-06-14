@@ -12429,48 +12429,53 @@ const PublicInstitutionEntitySchema = CollectionSchema(
       name: r'institutionName',
       type: IsarType.string,
     ),
-    r'orgCode': PropertySchema(
+    r'legalRepName': PropertySchema(
       id: 7,
+      name: r'legalRepName',
+      type: IsarType.string,
+    ),
+    r'orgCode': PropertySchema(
+      id: 8,
       name: r'orgCode',
       type: IsarType.string,
     ),
     r'parentSfidNumber': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'parentSfidNumber',
       type: IsarType.string,
     ),
     r'province': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'province',
       type: IsarType.string,
     ),
     r'sfidName': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'sfidName',
       type: IsarType.string,
     ),
     r'sfidNumber': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'sfidNumber',
       type: IsarType.string,
     ),
     r'shortName': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'shortName',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'status',
       type: IsarType.string,
     ),
     r'town': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'town',
       type: IsarType.string,
     ),
     r'updatedAtMillis': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'updatedAtMillis',
       type: IsarType.long,
     )
@@ -12552,6 +12557,12 @@ int _publicInstitutionEntityEstimateSize(
   bytesCount += 3 + object.institutionCode.length * 3;
   bytesCount += 3 + object.institutionName.length * 3;
   {
+    final value = object.legalRepName;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
     final value = object.orgCode;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -12595,15 +12606,16 @@ void _publicInstitutionEntitySerialize(
   writer.writeBool(offsets[4], object.hasLegalPersonality);
   writer.writeString(offsets[5], object.institutionCode);
   writer.writeString(offsets[6], object.institutionName);
-  writer.writeString(offsets[7], object.orgCode);
-  writer.writeString(offsets[8], object.parentSfidNumber);
-  writer.writeString(offsets[9], object.province);
-  writer.writeString(offsets[10], object.sfidName);
-  writer.writeString(offsets[11], object.sfidNumber);
-  writer.writeString(offsets[12], object.shortName);
-  writer.writeString(offsets[13], object.status);
-  writer.writeString(offsets[14], object.town);
-  writer.writeLong(offsets[15], object.updatedAtMillis);
+  writer.writeString(offsets[7], object.legalRepName);
+  writer.writeString(offsets[8], object.orgCode);
+  writer.writeString(offsets[9], object.parentSfidNumber);
+  writer.writeString(offsets[10], object.province);
+  writer.writeString(offsets[11], object.sfidName);
+  writer.writeString(offsets[12], object.sfidNumber);
+  writer.writeString(offsets[13], object.shortName);
+  writer.writeString(offsets[14], object.status);
+  writer.writeString(offsets[15], object.town);
+  writer.writeLong(offsets[16], object.updatedAtMillis);
 }
 
 PublicInstitutionEntity _publicInstitutionEntityDeserialize(
@@ -12621,15 +12633,16 @@ PublicInstitutionEntity _publicInstitutionEntityDeserialize(
   object.id = id;
   object.institutionCode = reader.readString(offsets[5]);
   object.institutionName = reader.readString(offsets[6]);
-  object.orgCode = reader.readStringOrNull(offsets[7]);
-  object.parentSfidNumber = reader.readStringOrNull(offsets[8]);
-  object.province = reader.readString(offsets[9]);
-  object.sfidName = reader.readStringOrNull(offsets[10]);
-  object.sfidNumber = reader.readString(offsets[11]);
-  object.shortName = reader.readStringOrNull(offsets[12]);
-  object.status = reader.readString(offsets[13]);
-  object.town = reader.readString(offsets[14]);
-  object.updatedAtMillis = reader.readLong(offsets[15]);
+  object.legalRepName = reader.readStringOrNull(offsets[7]);
+  object.orgCode = reader.readStringOrNull(offsets[8]);
+  object.parentSfidNumber = reader.readStringOrNull(offsets[9]);
+  object.province = reader.readString(offsets[10]);
+  object.sfidName = reader.readStringOrNull(offsets[11]);
+  object.sfidNumber = reader.readString(offsets[12]);
+  object.shortName = reader.readStringOrNull(offsets[13]);
+  object.status = reader.readString(offsets[14]);
+  object.town = reader.readString(offsets[15]);
+  object.updatedAtMillis = reader.readLong(offsets[16]);
   return object;
 }
 
@@ -12659,18 +12672,20 @@ P _publicInstitutionEntityDeserializeProp<P>(
     case 8:
       return (reader.readStringOrNull(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 10:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 11:
-      return (reader.readString(offset)) as P;
-    case 12:
       return (reader.readStringOrNull(offset)) as P;
-    case 13:
+    case 12:
       return (reader.readString(offset)) as P;
+    case 13:
+      return (reader.readStringOrNull(offset)) as P;
     case 14:
       return (reader.readString(offset)) as P;
     case 15:
+      return (reader.readString(offset)) as P;
+    case 16:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -13902,6 +13917,162 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'institutionName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'legalRepName',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'legalRepName',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'legalRepName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'legalRepName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'legalRepName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'legalRepName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'legalRepName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'legalRepName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      legalRepNameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'legalRepName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+          QAfterFilterCondition>
+      legalRepNameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'legalRepName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'legalRepName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterFilterCondition> legalRepNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'legalRepName',
         value: '',
       ));
     });
@@ -15233,6 +15404,20 @@ extension PublicInstitutionEntityQuerySortBy
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByLegalRepName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'legalRepName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      sortByLegalRepNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'legalRepName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
       sortByOrgCode() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'orgCode', Sort.asc);
@@ -15460,6 +15645,20 @@ extension PublicInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByLegalRepName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'legalRepName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
+      thenByLegalRepNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'legalRepName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
       thenByOrgCode() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'orgCode', Sort.asc);
@@ -15641,6 +15840,13 @@ extension PublicInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
+      distinctByLegalRepName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'legalRepName', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
       distinctByOrgCode({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'orgCode', caseSensitive: caseSensitive);
@@ -15759,6 +15965,13 @@ extension PublicInstitutionEntityQueryProperty on QueryBuilder<
       institutionNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'institutionName');
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
+      legalRepNameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'legalRepName');
     });
   }
 

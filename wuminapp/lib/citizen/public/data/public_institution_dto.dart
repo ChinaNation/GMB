@@ -19,6 +19,7 @@ class PublicInstitutionDto {
     this.orgCode,
     this.parentSfidNumber,
     this.hasLegalPersonality,
+    this.legalRepName,
     this.customAccountNames = const [],
   });
 
@@ -34,6 +35,9 @@ class PublicInstitutionDto {
   final String? orgCode;
   final String? parentSfidNumber;
   final bool? hasLegalPersonality;
+
+  /// 法定代表人姓名(公开目录字段,来自 SFID subjects.legal_rep_name);无则 null → 留空。
+  final String? legalRepName;
   final int accountCount;
   final List<String> customAccountNames;
 
@@ -51,6 +55,7 @@ class PublicInstitutionDto {
       orgCode: json['org_code'] as String?,
       parentSfidNumber: json['parent_sfid_number'] as String?,
       hasLegalPersonality: json['has_legal_personality'] as bool?,
+      legalRepName: json['legal_rep_name'] as String?,
       accountCount: (json['account_count'] as num?)?.toInt() ?? 0,
       customAccountNames:
           (json['custom_account_names'] as List<dynamic>? ?? const [])
@@ -77,6 +82,7 @@ class PublicInstitutionDto {
       ..orgCode = orgCode
       ..parentSfidNumber = parentSfidNumber
       ..hasLegalPersonality = hasLegalPersonality
+      ..legalRepName = legalRepName
       ..accountCount = accountCount
       ..customAccountNames = customAccountNames
       ..catalogVersion = catalogVersion

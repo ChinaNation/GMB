@@ -5,6 +5,7 @@ import 'package:wuminapp_mobile/citizen/public/data/public_institution_chain_dat
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_repository.dart';
 import 'package:wuminapp_mobile/citizen/public/data/public_provinces.dart';
 import 'package:wuminapp_mobile/citizen/public/public_institution_accounts_page.dart';
+import 'package:wuminapp_mobile/citizen/public/public_institution_admin_list_page.dart';
 import 'package:wuminapp_mobile/governance/shared/account_derivation.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -12,9 +13,10 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 公权机构详情页(ADR-018 §九 卡C)。
 ///
-/// 中文注释:v1=浏览 + 订阅 + 动态展示。账户全本地派生(卡0),余额批量走
-/// ChainReadCache(卡⑤),提案走年缓存过滤(卡①),管理员走 AdminsChange。
-/// 右上角订阅按钮写本地 store(卡A)。发起提案/换管理员本期门控隐藏(非管理员)。
+/// 中文注释:v1=浏览 + 订阅 + 动态展示,版式对齐治理机构详情页。
+/// 自上而下五段:机构信息(身份ID/法定代表人/所属地) → 机构账户入口 →
+/// 提案发起入口(本期占位) → 管理员入口 → 提案列表。账户全本地派生(卡0),
+/// 余额只在「全部账户页」展示;管理员/提案走链读(卡①⑤)。右上角订阅写本地 store(卡A)。
 class PublicInstitutionDetailPage extends StatefulWidget {
   const PublicInstitutionDetailPage({
     super.key,
@@ -49,8 +51,8 @@ class _PublicInstitutionDetailPageState
   String? _activePubkey;
   bool _subscribed = false;
 
+  /// 账户行本地派生(卡0,零网络);本页只用条数,余额在「全部账户页」补。
   List<PublicAccountRow> _accounts = const [];
-  bool _balanceLoading = true;
 
   List<String> _admins = const [];
   List<PublicProposalSummary> _proposals = const [];
@@ -89,21 +91,6 @@ class _PublicInstitutionDetailPageState
   }
 
   Future<void> _loadDynamics(PublicInstitutionEntity inst) async {
-    // 余额批量(主+费+自定义)。
-    try {
-      final balances = await _chainData
-          .balances(_accounts.map((a) => a.addressHex).toList());
-      if (mounted) {
-        setState(() {
-          _accounts = _accounts
-              .map((a) => a.withBalance(balances[a.addressHex]))
-              .toList(growable: false);
-          _balanceLoading = false;
-        });
-      }
-    } on Exception {
-      if (mounted) setState(() => _balanceLoading = false);
-    }
     // 管理员。
     try {
       final mainHex = _accounts.isNotEmpty ? _accounts.first.addressHex : '';
@@ -183,15 +170,19 @@ class _PublicInstitutionDetailPageState
       padding: const EdgeInsets.all(16),
       children: [
         _infoCard(inst),
-        const SizedBox(height: 16),
-        _accountsCard(inst),
         const SizedBox(height: 12),
-        _proposalsCard(),
+        _accountsEntry(inst),
         const SizedBox(height: 12),
-        _adminsCard(),
+        _proposalEntry(),
+        const SizedBox(height: 12),
+        _adminsEntry(inst),
+        const SizedBox(height: 12),
+        _proposalList(),
       ],
     );
   }
+
+  // ──── ① 机构信息(身份ID / 法定代表人 / 所属地,行间分隔线)────
 
   Widget _infoCard(PublicInstitutionEntity inst) {
     return _card(
@@ -205,129 +196,212 @@ class _PublicInstitutionDetailPageState
                   color: AppTheme.textPrimary)),
           const SizedBox(height: 10),
           _row('身份 ID', inst.sfidNumber),
-          _row('所属', '${provinceDisplayName(inst.province)} · ${inst.city}'),
-          _row('账户数', '${inst.accountCount}'),
+          const Divider(height: 18),
+          // 法定代表人来自 SFID subjects.legal_rep_name;未录入则留空。
+          _row('法定代表人', inst.legalRepName ?? ''),
+          const Divider(height: 18),
+          _row('所属地', '${provinceDisplayName(inst.province)} · ${inst.city}'),
         ],
       ),
     );
   }
 
-  Widget _accountsCard(PublicInstitutionEntity inst) {
-    final main = _accounts.isNotEmpty ? _accounts[0] : null;
-    final fee = _accounts.length > 1 ? _accounts[1] : null;
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _cardHeader(Icons.account_balance_wallet_outlined, '账户与余额'),
-          const SizedBox(height: 10),
-          if (main != null) _accountLine('主账户', main),
-          if (fee != null) ...[
-            const SizedBox(height: 8),
-            _accountLine('费用账户', fee),
-          ],
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PublicInstitutionAccountsPage(
-                  institution: inst,
-                  chainData: _chainData,
-                ),
+  // ──── ② 机构账户入口(单行 + 箭头 → 全部账户页)────
+
+  Widget _accountsEntry(PublicInstitutionEntity inst) {
+    return _entryRow(
+      icon: Icons.account_balance_wallet_outlined,
+      title: '机构账户(${_accounts.length})',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PublicInstitutionAccountsPage(
+            institution: inst,
+            chainData: _chainData,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ──── ③ 提案发起入口(本期占位)────
+
+  /// 公权机构可发起 转账 / 费用划转 / 更换管理员 提案,但发起流程需与 SFID 管理员
+  /// 来源对接,本期**只占位**:展示入口、点击给开发中反馈,不接真实发起页。
+  Widget _proposalEntry() {
+    return _entryRow(
+      icon: Icons.how_to_vote_outlined,
+      title: '提案',
+      subtitle: '发起提案',
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('发起提案功能开发中（转账 / 费用划转 / 更换管理员）'),
+          ),
+        );
+      },
+    );
+  }
+
+  // ──── ④ 管理员入口(单行 + 箭头 → 管理员列表)────
+
+  Widget _adminsEntry(PublicInstitutionEntity inst) {
+    final name = inst.shortName?.isNotEmpty == true
+        ? inst.shortName!
+        : inst.institutionName;
+    return _entryRow(
+      icon: Icons.group_outlined,
+      title: '管理员(${_admins.length})',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PublicInstitutionAdminListPage(
+            institutionName: name,
+            admins: _admins,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ──── ⑤ 提案列表(对齐治理机构卡片样式)────
+
+  Widget _proposalList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 2, bottom: 10),
+          child: Text('提案列表',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary)),
+        ),
+        if (_proposals.isEmpty)
+          _card(
+            child: const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Text('暂无提案',
+                    style: TextStyle(
+                        fontSize: 12.5, color: AppTheme.textTertiary)),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('更多账户(${_accounts.length})',
-                    style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.primary)),
-                const Icon(Icons.chevron_right,
-                    size: 18, color: AppTheme.textTertiary),
-              ],
+          )
+        else
+          ...List.generate(_proposals.length, (i) {
+            return Padding(
+              padding:
+                  EdgeInsets.only(bottom: i < _proposals.length - 1 ? 10 : 0),
+              child: _proposalCard(_proposals[i]),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _proposalCard(PublicProposalSummary p) {
+    final statusColor = AppTheme.proposalStatusColor(p.status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child:
+                Icon(Icons.how_to_vote_outlined, size: 18, color: statusColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(p.idLabel,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(p.statusLabel,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor)),
           ),
         ],
       ),
     );
   }
 
-  Widget _accountLine(String label, PublicAccountRow row) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style:
-                const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
-        Text(
-          _balanceLoading
-              ? '—'
-              : (row.balanceYuan == null
-                  ? '未激活'
-                  : '${row.balanceYuan!.toStringAsFixed(2)} 元'),
-          style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.primary),
-        ),
-      ],
-    );
-  }
+  // ──── 公用零件 ────
 
-  Widget _proposalsCard() {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _cardHeader(Icons.how_to_vote_outlined, '提案'),
-          const SizedBox(height: 8),
-          if (_proposals.isEmpty)
-            const Text('暂无提案',
-                style: TextStyle(fontSize: 12.5, color: AppTheme.textTertiary))
-          else
-            ..._proposals.map((p) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(p.idLabel,
-                          style: const TextStyle(
-                              fontSize: 13, color: AppTheme.textPrimary)),
-                      Text(p.statusLabel,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppTheme.textSecondary)),
-                    ],
-                  ),
-                )),
-        ],
+  /// 单行入口卡(图标 + 标题 + 可选副标题 + 右箭头),行高紧凑。
+  /// 机构账户、提案发起、管理员三个入口共用。
+  Widget _entryRow({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.border),
       ),
-    );
-  }
-
-  Widget _adminsCard() {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _cardHeader(Icons.group_outlined, '管理员(${_admins.length})'),
-          const SizedBox(height: 8),
-          if (_admins.isEmpty)
-            const Text('暂无管理员数据',
-                style: TextStyle(fontSize: 12.5, color: AppTheme.textTertiary))
-          else
-            ..._admins.map((a) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Text(
-                    a,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 12, color: AppTheme.textSecondary),
-                  ),
-                )),
-        ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 18, color: AppTheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppTheme.textTertiary)),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 20, color: AppTheme.textTertiary),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -344,39 +418,22 @@ class _PublicInstitutionDetailPageState
     );
   }
 
-  Widget _cardHeader(IconData icon, String title) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: AppTheme.primary),
-        const SizedBox(width: 8),
-        Text(title,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary)),
-      ],
-    );
-  }
-
   Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 13, color: AppTheme.textTertiary)),
-          ),
-          Expanded(
-            child: Text(value,
-                style: const TextStyle(
-                    fontSize: 13.5, color: AppTheme.textPrimary)),
-          ),
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(label,
+              style:
+                  const TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
+        ),
+        Expanded(
+          child: Text(value,
+              style:
+                  const TextStyle(fontSize: 13.5, color: AppTheme.textPrimary)),
+        ),
+      ],
     );
   }
 }

@@ -17,15 +17,20 @@ void main() {
         'town': '',
         'institution_code': 'ZF',
         'account_count': 3,
+        'legal_rep_name': '李大民',
         'custom_account_names': ['业务专户A', '业务专户B'],
       });
       expect(dto.sfidNumber, 'AH001-ZF000-123456789-2026');
       expect(dto.institutionName, '安徽省人民政府');
       expect(dto.accountCount, 3);
+      expect(dto.legalRepName, '李大民');
       expect(dto.customAccountNames, ['业务专户A', '业务专户B']);
+      // 法定代表人随实体落库。
+      expect(dto.toEntity(catalogVersion: 'v', updatedAtMillis: 0).legalRepName,
+          '李大民');
     });
 
-    test('缺省 custom_account_names → 空列表', () {
+    test('缺省 custom_account_names → 空列表;缺省法定代表人 → null', () {
       final dto = PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': 'X',
         'province': '中枢',
@@ -35,6 +40,7 @@ void main() {
       });
       expect(dto.customAccountNames, isEmpty);
       expect(dto.status, 'ACTIVE');
+      expect(dto.legalRepName, isNull);
     });
 
     test('toEntity 填 catalogVersion + 名称回退', () {

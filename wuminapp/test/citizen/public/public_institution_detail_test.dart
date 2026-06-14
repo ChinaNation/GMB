@@ -1,4 +1,5 @@
-// 卡C 详情页:账户派生 + 余额/管理员/提案展示 + 订阅切换。
+// 卡C 详情页:账户派生 + 五段版式(机构信息/机构账户入口/提案发起/管理员入口/提案列表)
+// + 订阅切换。余额只在「全部账户页」展示,不在详情页。
 
 import 'dart:typed_data';
 
@@ -68,7 +69,7 @@ void main() {
     });
   });
 
-  testWidgets('详情页展示名称/ID/账户余额/管理员/提案', (tester) async {
+  testWidgets('详情页五段:名称/ID/法定代表人/机构账户/提案发起/管理员入口/提案列表', (tester) async {
     final repo = await buildSeededRepo(
       provinceOrder: const ['岭南'],
       institutions: [
@@ -80,6 +81,7 @@ void main() {
           'city': '中央',
           'institution_code': 'ZF',
           'account_count': 4,
+          'legal_rep_name': '王法人',
           'custom_account_names': ['业务专户'],
         }),
       ],
@@ -98,9 +100,47 @@ void main() {
 
     expect(find.text('国家公民储备委员会'), findsWidgets);
     expect(find.text(_nrcSfid), findsOneWidget);
-    expect(find.text('12.50 元'), findsWidgets); // 余额
-    expect(find.text('更多账户(3)'), findsOneWidget); // 主+费+1自定义
+    // ① 机构信息:法定代表人 + 所属地(行间分隔线)。
+    expect(find.text('法定代表人'), findsOneWidget);
+    expect(find.text('王法人'), findsOneWidget);
+    expect(find.text('所属地'), findsOneWidget);
+    // ② 机构账户入口:主+费+1自定义。
+    expect(find.text('机构账户(3)'), findsOneWidget);
+    // ③ 提案发起入口(占位)。
+    expect(find.text('发起提案'), findsOneWidget);
+    // ④ 管理员入口:只显条数,地址在列表页。
+    expect(find.text('管理员(1)'), findsOneWidget);
+    // ⑤ 提案列表。
+    expect(find.text('提案列表'), findsOneWidget);
     expect(find.text('提案 #7'), findsOneWidget);
+  });
+
+  testWidgets('管理员入口点击进入管理员列表页', (tester) async {
+    final repo = await buildSeededRepo(
+      provinceOrder: const ['岭南'],
+      institutions: [
+        PublicInstitutionDto.fromJson(<String, dynamic>{
+          'sfid_number': _nrcSfid,
+          'institution_name': '国家公民储备委员会',
+          'province': '岭南',
+          'city': '中央',
+          'institution_code': 'ZF',
+          'account_count': 2,
+        }),
+      ],
+    );
+    await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
+      sfidNumber: _nrcSfid,
+      repository: repo,
+      chainData: _FakeChainData(adminList: const ['0xadminpubkey001']),
+      walletPubkeyProvider: () async => 'aa',
+    )));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('管理员(1)'));
+    await tester.pumpAndSettle();
+    // 管理员列表页:非法 hex 兜底原样展示,地址可见。
+    expect(find.text('管理员列表'), findsOneWidget);
     expect(find.text('0xadminpubkey001'), findsOneWidget);
   });
 
