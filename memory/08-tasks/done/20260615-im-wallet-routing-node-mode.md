@@ -49,6 +49,6 @@ done
 - IM 支付提示模型和 `payment_notice` 残留已删除；转账继续归既有交易页面。
 - 通信节点 mailbox / KeyPackage 池已支持同一电脑节点服务多个钱包聊天号和多个授权手机设备。
 - 桌面设置页“通信全节点”已改为可选择的 IM 能力开关，普通全节点仍保持待完成。
-- 通信模式设置已同步本机手机 `im_*` RPC 运行态开关；headless smoke 仍可通过 `GMB_IM_OWNER_RPC=1` 直接启用。
+- 通信模式设置旧手机节点接口已在 2026-06-15 删除；通信节点不得恢复节点 RPC。
 - IPv6 endpoint 验收继续覆盖在 node IM endpoint 测试与 Protobuf route record 测试中。
 - `IM_TECHNICAL.md`、`NODE_TECHNICAL.md`、`unified-protocols.md`、`unified-naming.md` 已更新到当前口径。

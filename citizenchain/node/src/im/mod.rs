@@ -13,4 +13,3 @@ pub(crate) mod keypackage;
 pub(crate) mod mailbox;
 pub(crate) mod network;
 pub(crate) mod policy;
-pub(crate) mod rpc;

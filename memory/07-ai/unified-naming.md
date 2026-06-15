@@ -118,7 +118,7 @@
 | IM OpenMLS 状态目录 | `ImMlsStateStore` | `wuminapp/lib/im/crypto/im_mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
 | IM OpenMLS Rust FFI | `gmb_im_mls_create_key_package_json` / `gmb_im_mls_two_party_smoke_json` / `gmb_im_mls_encrypt_json` / `gmb_im_mls_decrypt_json` | `wuminapp/rust/src/im_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
 | IM 消息流状态机 | `ImMessageFlow` | `wuminapp/lib/im/im_message_flow.dart` | 远程通信节点链路的发送、接收、pending 重放和 ack 编排 |
-| IM 运行态编排 | `ImRuntime` / `ImPairedNodeConfig` | `wuminapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、自己的通信节点 RPC、KeyPackage 发布和远程收发同步 |
+| IM 运行态编排 | `ImRuntime` / `ImPairedNodeConfig` | `wuminapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、自己的通信节点端点配置和后续专用 P2P 收发同步 |
 | IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | `wuminapp/lib/qr/bodies/im_node_pairing_body.dart` / `citizenchain/node/src/settings/communication-node/mod.rs` | 公民在“我的 -> 设置 -> 设置通信节点”扫描桌面设置页二维码，保存或更换自己的电脑通信节点 |
 | 桌面通信节点功能设置 | `CommunicationNodeState` / `get_communication_node` / `set_communication_node_enabled` | `citizenchain/node/src/settings/communication-node/mod.rs` / `citizenchain/node/frontend/settings/communication-node/` | 区块链软件设置页独立 IM 能力开关，不属于归档/普通全节点模式选择 |
 | IM Isar 消息库 | `ImIsarStore` / `ImConversationEntity` / `ImRouteCacheEntity` / `ImMessageEntity` / `ImOutboundQueueEntity` / `ImPendingInboundEntity` | `wuminapp/lib/im/storage/im_isar_store.dart` / `wuminapp/lib/isar/wallet_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
@@ -130,8 +130,6 @@
 | IM 直连投递请求 | `ImDirectDeliveryRequest` | `citizenchain/node/src/im/direct.rs` | 显式 PeerId + multiaddr 到对方通信节点的密文投递请求 |
 | IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | `citizenchain/node/src/im/keypackage.rs` / `wuminapp/lib/im/transport/` | 显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求 |
 | IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | `citizenchain/node/src/im/network.rs` | `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应 |
-| IM 本机手机 RPC | `im_*` / `GMB_IM_OWNER_RPC` | `citizenchain/node/src/im/rpc.rs` / `wuminapp/lib/im/transport/` | 公民手机连接自己的通信节点时使用的 RPC，桌面设置页通信节点功能开启后放行，环境变量仅用于 headless 验收 |
-| IM 验收调试 RPC | `im_debug*` / `GMB_IM_DEBUG_RPC` | `citizenchain/node/src/im/rpc.rs` | 仅用于双节点运行态 smoke 的条件注册 RPC，正式节点默认不暴露 |
 | Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | wumin / wuminapp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
 | 机构管理 | `organization-manage` | runtime crate / pallet | 机构多签管理 pallet |
 | 个人多签管理 | `personal-manage` | runtime crate / pallet | 个人多签管理 pallet |

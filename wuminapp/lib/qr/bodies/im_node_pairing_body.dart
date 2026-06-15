@@ -7,23 +7,15 @@ import 'package:wuminapp_mobile/qr/envelope.dart';
 class ImNodePairingBody implements QrBody {
   const ImNodePairingBody({
     required this.nodePeerId,
-    required this.rpcUrl,
     required this.nodeMultiaddr,
     required this.endpointKind,
-    required this.pairingNonce,
-    required this.createdAtMillis,
-    required this.expiresAtMillis,
   });
 
   static const proto = 'GMB_IM_NODE_PAIRING_V1';
 
   final String nodePeerId;
-  final String rpcUrl;
   final String nodeMultiaddr;
   final String endpointKind;
-  final String pairingNonce;
-  final int createdAtMillis;
-  final int expiresAtMillis;
 
   factory ImNodePairingBody.fromJson(Map<String, dynamic> json) {
     final bodyProto = json['proto'];
@@ -32,12 +24,8 @@ class ImNodePairingBody implements QrBody {
     }
     final body = ImNodePairingBody(
       nodePeerId: _requireString(json, 'node_peer_id'),
-      rpcUrl: _requireString(json, 'rpc_url'),
       nodeMultiaddr: _requireString(json, 'node_multiaddr'),
       endpointKind: _requireString(json, 'endpoint_kind'),
-      pairingNonce: _requireString(json, 'pairing_nonce'),
-      createdAtMillis: _requireInt(json, 'created_at_millis'),
-      expiresAtMillis: _requireInt(json, 'expires_at_millis'),
     );
     body.validate();
     return body;
@@ -47,22 +35,14 @@ class ImNodePairingBody implements QrBody {
   Map<String, dynamic> toJson() => {
         'proto': proto,
         'node_peer_id': nodePeerId,
-        'rpc_url': rpcUrl,
         'node_multiaddr': nodeMultiaddr,
         'endpoint_kind': endpointKind,
-        'pairing_nonce': pairingNonce,
-        'created_at_millis': createdAtMillis,
-        'expires_at_millis': expiresAtMillis,
       };
 
-  /// 校验二维码字段，防止把非通信节点二维码保存成本机节点。
+  /// 校验二维码字段，防止把非通信节点信息保存成本机通信节点。
   void validate() {
     if (nodePeerId.trim().isEmpty) {
       throw const FormatException('通信节点 PeerId 不能为空');
-    }
-    final rpc = rpcUrl.trim();
-    if (!rpc.startsWith('http://') && !rpc.startsWith('https://')) {
-      throw const FormatException('通信节点 RPC URL 必须使用 http 或 https');
     }
     final multiaddr = nodeMultiaddr.trim();
     final allowedEndpoint = multiaddr.startsWith('/ip4/') ||
@@ -75,16 +55,7 @@ class ImNodePairingBody implements QrBody {
     if (!multiaddr.endsWith('/p2p/$nodePeerId')) {
       throw const FormatException('通信节点二维码无效：PeerId 与 multiaddr 不一致');
     }
-    if (pairingNonce.trim().isEmpty) {
-      throw const FormatException('通信节点配对 nonce 不能为空');
-    }
-    if (expiresAtMillis <= createdAtMillis) {
-      throw const FormatException('通信节点二维码过期时间无效');
-    }
   }
-
-  bool get isExpired =>
-      DateTime.now().millisecondsSinceEpoch >= expiresAtMillis;
 }
 
 String _requireString(Map<String, dynamic> json, String key) {
@@ -93,12 +64,4 @@ String _requireString(Map<String, dynamic> json, String key) {
     throw FormatException('$key 必填且必须为非空字符串');
   }
   return value.trim();
-}
-
-int _requireInt(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! int) {
-    throw FormatException('$key 必填且必须为整数');
-  }
-  return value;
 }

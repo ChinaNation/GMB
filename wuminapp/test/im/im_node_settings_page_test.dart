@@ -33,7 +33,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('已设置通信节点'), findsOneWidget);
-    expect(find.text('http://192.168.1.8:9944/'), findsOneWidget);
+    expect(find.text('RPC'), findsNothing);
     expect(find.text('12D3KooWNode'), findsOneWidget);
   });
 
@@ -53,7 +53,7 @@ void main() {
 
     expect(runtime.lastPairedBody?.nodePeerId, '12D3KooWNode');
     expect(find.text('已设置通信节点'), findsOneWidget);
-    expect(find.text('http://192.168.1.8:9944/'), findsOneWidget);
+    expect(find.text('RPC'), findsNothing);
   });
 }
 
@@ -74,7 +74,6 @@ class _FakeImRuntime extends ImRuntime {
   ) async {
     lastPairedBody = body;
     _config = ImPairedNodeConfig(
-      rpcUrl: body.rpcUrl,
       peerId: body.nodePeerId,
       multiaddr: body.nodeMultiaddr,
       pairedAtMillis: 1900000,
@@ -85,7 +84,6 @@ class _FakeImRuntime extends ImRuntime {
 
 ImPairedNodeConfig _pairedConfig() {
   return const ImPairedNodeConfig(
-    rpcUrl: 'http://192.168.1.8:9944/',
     peerId: '12D3KooWNode',
     multiaddr: '/ip4/192.168.1.8/tcp/30333/wss/p2p/12D3KooWNode',
     pairedAtMillis: 1900000,
@@ -93,21 +91,16 @@ ImPairedNodeConfig _pairedConfig() {
 }
 
 String _rawPairingQr() {
-  final now = DateTime.now().millisecondsSinceEpoch;
-  final body = ImNodePairingBody(
+  const body = ImNodePairingBody(
     nodePeerId: '12D3KooWNode',
-    rpcUrl: 'http://192.168.1.8:9944/',
     nodeMultiaddr: '/ip4/192.168.1.8/tcp/30333/wss/p2p/12D3KooWNode',
     endpointKind: 'ip4',
-    pairingNonce: 'nonce-1',
-    createdAtMillis: now,
-    expiresAtMillis: now + 600000,
   );
-  return QrEnvelope<ImNodePairingBody>(
+  return const QrEnvelope<ImNodePairingBody>(
     kind: QrKind.imNodePairing,
-    id: 'im-node-nonce-1',
-    issuedAt: now ~/ 1000,
-    expiresAt: (now + 600000) ~/ 1000,
+    id: null,
+    issuedAt: null,
+    expiresAt: null,
     body: body,
   ).toRawJson();
 }

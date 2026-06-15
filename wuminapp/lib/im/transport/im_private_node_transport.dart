@@ -1,7 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
-import '../crypto/im_binding_payload.dart';
 import '../crypto/im_mls_boundary.dart';
 import '../im_session_models.dart';
 import '../proto/im_envelope.pb.dart';
@@ -163,12 +159,13 @@ class ImPrivateNodeEnvelopeDraft {
 /// 私人通信全节点传输骨架。
 ///
 /// 手机只连接自己的私人通信全节点；跨用户投递由自己的节点直连对方私人节点。
+/// 中文注释：本类不得使用节点 RPC。手机会离开家庭局域网，后续必须接入
+/// 专用 IM P2P 通道连接自己的通信节点。
 class ImPrivateNodeTransport implements ImTransport {
   const ImPrivateNodeTransport({
     required this.ownerChatAccount,
     required this.ownerDeviceId,
     required this.ownerNodeEndpoint,
-    this.ownerRpcUrl = 'http://127.0.0.1:9944/',
     this.defaultTtlMillis = 30 * 24 * 60 * 60 * 1000,
   });
 
@@ -181,61 +178,11 @@ class ImPrivateNodeTransport implements ImTransport {
   /// 用户自己的通信节点端点。
   final ImPrivateNodeEndpoint ownerNodeEndpoint;
 
-  /// 用户自己的通信节点 JSON-RPC URL。
-  final String ownerRpcUrl;
-
   /// 接口 fallback 的默认 TTL。
   final int defaultTtlMillis;
 
   @override
   ImTransportType get type => ImTransportType.privateNode;
-
-  /// 读取用户自己的通信节点 IM 能力。
-  Future<Map<String, dynamic>> getCapability() async {
-    final result = await _callRpc('im_getCapability', []);
-    return (result as Map).cast<String, dynamic>();
-  }
-
-  /// 登记本机手机设备绑定。
-  Future<void> registerOwnerDevice({
-    required ImBindingPayload binding,
-    required String walletSignature,
-  }) async {
-    final endpoints = binding.nodeEndpoints
-        .map((multiaddr) => ImPrivateNodeEndpoint(
-              peerId: binding.nodePeerId,
-              multiaddr: multiaddr,
-            ))
-        .map((endpoint) {
-      final error = endpoint.validate();
-      if (error != null) {
-        throw Exception(error);
-      }
-      return endpoint.toJson();
-    }).toList();
-
-    await _callRpc('im_registerOwnerDevice', [
-      {
-        'wallet_account': binding.walletAccount,
-        'im_device_id': binding.imDeviceId,
-        'im_device_pubkey': binding.imDevicePubkey,
-        'node_peer_id': binding.nodePeerId,
-        'node_endpoints': endpoints,
-        'expires_at_millis': binding.expiresAtMillis,
-        'nonce': binding.nonce,
-        'wallet_signature': walletSignature,
-      }
-    ]);
-  }
-
-  /// 发布本机 OpenMLS KeyPackage 到自己的私人通信全节点。
-  Future<ImMlsKeyPackage> publishKeyPackage(ImMlsKeyPackage keyPackage) async {
-    final result = await _callRpc('im_publishKeyPackage', [
-      keyPackage.toPublishJson(),
-    ]);
-    return ImMlsKeyPackage.fromNodeJson(
-        (result as Map).cast<String, dynamic>());
-  }
 
   /// 通过自己的私人通信全节点从对方私人节点拉取 KeyPackage。
   Future<List<ImMlsKeyPackage>> fetchDirectKeyPackages({
@@ -248,30 +195,7 @@ class ImPrivateNodeTransport implements ImTransport {
     if (endpointError != null) {
       throw Exception(endpointError);
     }
-
-    final result = await _callRpc('im_fetchDirectKeyPackages', [
-      {
-        'remote_endpoint': remoteEndpoint.toJson(),
-        'fetch': {
-          'owner_wallet_account': ownerChatAccount,
-          'requester_chat_account': requesterChatAccount,
-          'limit': limit,
-        },
-      }
-    ]);
-    final map = (result as Map).cast<String, dynamic>();
-    if (map['kind'] == 'Error') {
-      throw Exception((map['body'] ?? 'IM KeyPackage 拉取失败').toString());
-    }
-    if (map['kind'] != 'KeyPackages') {
-      throw Exception('IM KeyPackage 响应类型错误:${map['kind']}');
-    }
-    final rows = (map['body'] as List).cast<dynamic>();
-    return rows
-        .map((row) => ImMlsKeyPackage.fromNodeJson(
-              (row as Map).cast<String, dynamic>(),
-            ))
-        .toList();
+    throw StateError(_p2pChannelMissingMessage);
   }
 
   /// 通过自己的私人通信全节点声明已消费对方一次性 KeyPackage。
@@ -285,27 +209,7 @@ class ImPrivateNodeTransport implements ImTransport {
     if (endpointError != null) {
       throw Exception(endpointError);
     }
-
-    final result = await _callRpc('im_consumeDirectKeyPackage', [
-      {
-        'remote_endpoint': remoteEndpoint.toJson(),
-        'consume': {
-          'owner_wallet_account': ownerChatAccount,
-          'key_package_id': keyPackageId,
-          'requester_chat_account': requesterChatAccount,
-        },
-      }
-    ]);
-    final map = (result as Map).cast<String, dynamic>();
-    if (map['kind'] == 'Error') {
-      throw Exception((map['body'] ?? 'IM KeyPackage 消费失败').toString());
-    }
-    if (map['kind'] != 'KeyPackageConsumed') {
-      throw Exception('IM KeyPackage 响应类型错误:${map['kind']}');
-    }
-    return ImMlsKeyPackage.fromNodeJson(
-      (map['body'] as Map).cast<String, dynamic>(),
-    );
+    throw StateError(_p2pChannelMissingMessage);
   }
 
   /// 通过自己的私人通信全节点向对方私人通信全节点投递密文。
@@ -323,61 +227,22 @@ class ImPrivateNodeTransport implements ImTransport {
       );
     }
 
-    try {
-      final result = await _callRpc('im_submitDirectEnvelope', [
-        {
-          'remote_endpoint': remoteEndpoint.toJson(),
-          'submit': {
-            'mailbox_owner_chat_account': draft.recipientChatAccount,
-            'envelope': draft.toEnvelopeJson(),
-          },
-        }
-      ]);
-      final map = (result as Map).cast<String, dynamic>();
-      if (map['kind'] == 'EnvelopeAck') {
-        return ImDeliveryResult(
-          envelopeId: draft.envelopeId,
-          transportType: type,
-          state: ImMessageDeliveryState.sent,
-        );
-      }
-      return ImDeliveryResult(
-        envelopeId: draft.envelopeId,
-        transportType: type,
-        state: ImMessageDeliveryState.failed,
-        errorMessage: (map['body'] ?? 'IM 投递失败').toString(),
-      );
-    } catch (e) {
-      return ImDeliveryResult(
-        envelopeId: draft.envelopeId,
-        transportType: type,
-        state: ImMessageDeliveryState.failed,
-        errorMessage: e.toString(),
-      );
-    }
+    return ImDeliveryResult(
+      envelopeId: draft.envelopeId,
+      transportType: type,
+      state: ImMessageDeliveryState.failed,
+      errorMessage: _p2pChannelMissingMessage,
+    );
   }
 
   /// 拉取当前通信钱包账号 mailbox 中待收密文。
   Future<List<ImPrivateNodeEnvelopeDraft>> fetchPending() async {
-    final result = await _callRpc('im_fetchPending', [
-      ownerChatAccount,
-      ownerDeviceId,
-    ]);
-    final rows = (result as List).cast<dynamic>();
-    return rows
-        .map((row) => ImPrivateNodeEnvelopeDraft.fromJson(
-              (row as Map).cast<String, dynamic>(),
-            ))
-        .toList();
+    throw StateError(_p2pChannelMissingMessage);
   }
 
   /// 确认本机手机已经处理某个密文信封。
   Future<void> ackEnvelope(String envelopeId) async {
-    await _callRpc('im_ackEnvelope', [
-      ownerChatAccount,
-      ownerDeviceId,
-      envelopeId,
-    ]);
+    throw StateError(_p2pChannelMissingMessage);
   }
 
   @override
@@ -395,73 +260,16 @@ class ImPrivateNodeTransport implements ImTransport {
       );
     }
 
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final draft = ImPrivateNodeEnvelopeDraft(
+    return ImDeliveryResult(
       envelopeId: envelopeId,
-      conversationId: envelopeId,
-      senderChatAccount: ownerChatAccount,
-      recipientChatAccount: ownerChatAccount,
-      senderDeviceId: ownerDeviceId,
-      encryptedPayload: envelopeBytes,
-      createdAtMillis: now,
-      ttlMillis: defaultTtlMillis,
+      transportType: type,
+      state: ImMessageDeliveryState.failed,
+      errorMessage: _p2pChannelMissingMessage,
     );
-
-    try {
-      await _callRpc('im_submitEnvelope', [
-        {
-          'mailbox_owner_chat_account': ownerChatAccount,
-          'envelope': draft.toEnvelopeJson(),
-        }
-      ]);
-      return ImDeliveryResult(
-        envelopeId: envelopeId,
-        transportType: type,
-        state: ImMessageDeliveryState.sent,
-      );
-    } catch (e) {
-      return ImDeliveryResult(
-        envelopeId: envelopeId,
-        transportType: type,
-        state: ImMessageDeliveryState.failed,
-        errorMessage: e.toString(),
-      );
-    }
-  }
-
-  Future<dynamic> _callRpc(String method, List<dynamic> params) async {
-    final uri = Uri.parse(ownerRpcUrl);
-    final requestBody = jsonEncode({
-      'jsonrpc': '2.0',
-      'id': 1,
-      'method': method,
-      'params': params,
-    });
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(uri).timeout(
-            const Duration(seconds: 10),
-          );
-      request.headers.contentType = ContentType.json;
-      request.write(requestBody);
-      final response = await request.close().timeout(
-            const Duration(seconds: 15),
-          );
-      final responseText = await response.transform(utf8.decoder).join();
-      if (response.statusCode != HttpStatus.ok) {
-        throw Exception('IM 节点 RPC HTTP ${response.statusCode}: $responseText');
-      }
-      final json = jsonDecode(responseText) as Map<String, dynamic>;
-      if (json.containsKey('error')) {
-        final error = (json['error'] as Map).cast<String, dynamic>();
-        throw Exception('IM 节点 RPC 调用失败:${error['message'] ?? '未知错误'}');
-      }
-      return json['result'];
-    } finally {
-      client.close(force: true);
-    }
   }
 }
+
+const _p2pChannelMissingMessage = '通信节点专用 P2P 通道尚未接入，已禁止使用节点 RPC';
 
 List<int> _hexToBytes(String value) {
   final normalized = value.startsWith('0x') ? value.substring(2) : value;

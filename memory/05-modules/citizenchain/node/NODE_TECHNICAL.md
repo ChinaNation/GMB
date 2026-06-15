@@ -191,11 +191,11 @@
 - 账户边界：公民钱包地址是用户可见聊天号；钱包私钥只用于设备绑定证明，不作为 IM 消息加密密钥。
 - 业务边界：`src/im/` 不处理治理、投票、实名信息或交易业务；联系人详情里的“转账”继续归公民既有交易页面处理。
 - 用户入口：公民端从“我的 -> 用户资料”设置通信账户，从“我的通讯录 -> 联系人详情 -> 消息”进入聊天；“信息”Tab 只展示会话列表。
-- 配对入口：桌面设置页 `frontend/settings/communication-node/CommunicationNodeSection.tsx` 读取 `get_communication_node`，开启后展示 `im_node_pairing` 临时二维码；公民端在“我的 -> 设置 -> 设置通信节点”扫码配对或更换节点。
-- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper、Tauri 调试命令、条件本机手机 RPC 和条件 debug RPC；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和 WUMIN_QR_V1 配对二维码生成。
+- 配对入口：桌面设置页 `frontend/settings/communication-node/CommunicationNodeSection.tsx` 读取 `get_communication_node`，展示 `im_node_pairing` 固定二维码；公民端在“我的 -> 设置 -> 设置通信节点”扫码保存或更换自己的电脑通信节点。
+- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和不含 RPC URL / 有效期的 WUMIN_QR_V1 配对二维码生成。
 - 当前命令：
-  - `get_communication_node`：读取通信节点功能状态、PeerId、RPC URL、multiaddr 和配对二维码 payload。
-  - `set_communication_node_enabled`：独立开启/关闭通信节点功能，并同步本机手机 `im_*` RPC 运行态。
+  - `get_communication_node`：读取通信节点功能状态、PeerId、multiaddr 和配对二维码 payload。
+  - `set_communication_node_enabled`：独立开启/关闭通信节点功能，不改变归档/普通全节点模式，不注册手机 RPC。
   - `get_im_private_node_policy`：查询通信节点边界。
   - `get_im_direct_network_capability`：查询 `/gmb/im/1` 直连网络 Spike 能力。
   - `validate_im_node_endpoint`：校验 IPv4 / IPv6 / dns4 / dnsaddr multiaddr 与 PeerId 是否匹配。
@@ -210,8 +210,8 @@
   - `publish_im_key_package`：已授权手机向自己的通信节点发布 OpenMLS KeyPackage。
   - `fetch_im_key_packages`：查询本机钱包地址 KeyPackage 池，供调试和本机验收使用。
   - `consume_im_key_package`：消费本机钱包地址 KeyPackage，供调试和本机验收使用。
-- 正式本机手机 RPC：`im_getCapability`、`im_registerOwnerDevice`、`im_submitEnvelope`、`im_submitDirectEnvelope`、`im_fetchPending`、`im_ackEnvelope`、`im_publishKeyPackage`、`im_fetchKeyPackages`、`im_consumeKeyPackage`、`im_fetchDirectKeyPackages`、`im_consumeDirectKeyPackage` 会随节点 RPC 模块注册；实际调用必须由桌面设置页开启“通信节点功能”后放行。`GMB_IM_OWNER_RPC=1` 仍保留给 headless 验收脚本直接启用。
-- 验收调试 RPC：仅当进程设置 `GMB_IM_DEBUG_RPC=1` 时注册 `im_debugGetCapability`、`im_debugRegisterOwnerDevice`、`im_debugSubmitDirectEnvelope`、`im_debugFetchPending`、`im_debugAckEnvelope`、`im_debugPublishKeyPackage`、`im_debugFetchKeyPackages`、`im_debugConsumeKeyPackage`、`im_debugFetchDirectKeyPackages`、`im_debugConsumeDirectKeyPackage`；正式节点默认不暴露这些 RPC。
+- 正式手机连接：禁止使用节点 RPC。公民手机会离开家庭局域网，后续必须通过专用 IM P2P 通道连接自己的通信节点。
+- IM RPC 边界：通信节点不提供正式或调试节点 RPC 入口；手机连接自己的通信节点必须走后续专用 IM P2P 通道。
 - 持久化边界：mailbox 快照落在 `base-path/im/mailbox.json`，包含多钱包账号设备绑定、pending envelope 和 ack tombstone；KeyPackage 池快照落在 `base-path/im/keypackages.json`，包含多钱包账号 KeyPackage、TTL 和消费时间；节点启动时加载，登记/投递/ack/发布/消费后写回。
 - sc-network Spike 结论：当前节点能注册 request-response 协议并处理 incoming；outbound 直连会先把显式 `PeerId + multiaddr` 写入地址簿，再用 `NetworkService::request(..., TryConnect)` 发起请求；该路径不使用 DHT、rendezvous 或 Relay。
 - 双节点运行态验收：`citizenchain/scripts/im-two-node-smoke.sh` 已用两个临时 headless 节点验证 KeyPackage 发布/重启恢复/直连拉取/消费、A→B 密文投递、B 重启后 pending 不丢、B 授权设备拉取、ack、ack 后重启不重复、第三方 mailbox 拒绝和 ack 后重复投递不入队。
@@ -245,12 +245,12 @@
 | `src/desktop/mod.rs` | 148 | 桌面端 Tauri 入口、插件与命令注册 |
 | `src/settings/desktop_update.rs` | 15 | 设置页点击更新前的节点停止准备命令 |
 | `src/settings/node-mode/mod.rs` | 230 | 设置页全节点模式后端，当前只允许归档全节点，普通全节点由后端拒绝选择；旧 `communication` 本地值读取时清理回归档 |
-| `src/settings/communication-node/mod.rs` | 265 | 设置页通信节点功能后端，独立读写 `<app_data>/communication-node.json`，生成 IPv4/IPv6 配对二维码并控制本机手机 `im_*` RPC 放行 |
-| `src/im/` | 11 files | 通信节点 IM 边界模块，当前提供策略、端点、绑定、密文信封、持久化 mailbox、持久化 KeyPackage 池、`/gmb/im/1` 网络接入、Tauri 调试命令、条件 owner RPC 与条件 debug RPC |
+| `src/settings/communication-node/mod.rs` | 265 | 设置页通信节点功能后端，独立读写 `<app_data>/communication-node.json`，生成 IPv4/IPv6 固定配对二维码，不返回 RPC URL |
+| `src/im/` | 10 files | 通信节点 IM 边界模块，当前提供策略、端点、绑定、密文信封、持久化 mailbox、持久化 KeyPackage 池和 `/gmb/im/1` 网络接入；不提供节点 RPC 入口 |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
 | `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，只展示归档/普通两种链数据模式，并将普通全节点置灰禁用 |
-| `frontend/settings/communication-node/CommunicationNodeSection.tsx` | 126 | 设置页通信节点功能面板，独立开关、显示 PeerId/RPC/multiaddr 和公民扫码配对二维码 |
+| `frontend/settings/communication-node/CommunicationNodeSection.tsx` | 126 | 设置页通信节点功能面板，独立开关、状态标签、PeerId/multiaddr 摘要和公民扫码配对二维码 |
 | `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
 | `src/home/sync_guard.rs` | 531 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并受控重启 |
 | `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |

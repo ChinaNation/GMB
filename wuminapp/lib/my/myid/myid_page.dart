@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/my/myid/myid_service.dart';
 import 'package:wuminapp_mobile/my/myid/myid_sign_page.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
@@ -379,7 +380,15 @@ class _MyIdPageState extends State<MyIdPage> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: canSign ? _openSignPage : null,
-                    icon: const Icon(Icons.qr_code_scanner_outlined),
+                    icon: SvgPicture.asset(
+                      'assets/icons/scan-line.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: const ColorFilter.mode(
+                        AppTheme.primary,
+                        BlendMode.srcIn,
+                      ),
+                    ),
                     label: const Text('扫码签名'),
                   ),
                 ),

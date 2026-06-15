@@ -248,16 +248,6 @@ where
     module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
     module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
-    // IM 本机手机 RPC 始终注册；实际调用由桌面设置页通信模式或验收环境变量开启。
-    if crate::im::rpc::owner_rpc_enabled() {
-        crate::im::rpc::register_owner_rpc(&mut module)?;
-    }
-
-    // IM debug RPC 只在双节点运行态验收时按环境变量注册，正式节点默认不暴露。
-    if crate::im::rpc::debug_rpc_enabled() {
-        crate::im::rpc::register_debug_rpc(&mut module)?;
-    }
-
     // 公民宪法 RPC：从当前链上 runtime 读取 HTML 真源。
     // 该内容编入 runtime WASM，修改后必须通过 runtime 升级生效。
     {

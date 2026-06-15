@@ -19,7 +19,7 @@ done
 
 - `wuminapp/lib/im/`：新增 IM 运行态编排、联系人包导入导出和信息 Tab 默认收发链路；涉及代码、中文注释和残留清理。
 - `wuminapp/lib/im/crypto/`：复用 OpenMLS native 和设备身份边界生成 KeyPackage；涉及代码。
-- `wuminapp/lib/im/transport/`：复用私人通信全节点 owner RPC 发送、拉取、ack 和 KeyPackage 接口；涉及代码。
+- `wuminapp/lib/im/transport/`：旧手机节点传输接口已在 2026-06-15 删除；后续发送、拉取、ack 和 KeyPackage 同步必须走专用 IM P2P 通道；涉及代码。
 - `wuminapp/test/im/`：新增联系人包和运行态收发联调测试；涉及测试代码。
 - `memory/05-modules/wuminapp/im/`：更新 IM 技术文档，记录产品化远程收发入口；涉及文档。
 - `memory/07-ai/`：更新统一协议和命名登记；涉及文档与残留清理。

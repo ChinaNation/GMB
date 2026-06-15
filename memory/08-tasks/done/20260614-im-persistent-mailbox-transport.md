@@ -29,10 +29,9 @@ done
 ## 实施记录
 
 - 更新 `citizenchain/node/src/im/mailbox.rs`，把 mailbox 从纯内存结构升级为 `base-path/im/mailbox.json` 单文件快照，保存 owner、设备绑定、pending envelope 和 ack tombstone，并补容量、TTL、重复 ack 防护。
-- 更新 `citizenchain/node/src/im/commands.rs` 与 `citizenchain/node/src/core/service.rs`，节点启动时初始化 IM mailbox 存储路径，Tauri 命令、RPC 和 `/gmb/im/1` incoming handler 共享同一份持久化 mailbox。
-- 更新 `citizenchain/node/src/im/rpc.rs` 与 `citizenchain/node/src/core/rpc.rs`，新增 `GMB_IM_OWNER_RPC=1` 条件注册的正式 `im_*` owner RPC，同时保留 `GMB_IM_DEBUG_RPC=1` debug RPC。
-- 更新 `wuminapp/lib/im/transport/im_private_node_transport.dart`，新增 owner RPC 客户端、设备登记、直连投递、待收拉取和 ack 方法，`sendEncryptedEnvelope` 不再返回占位 queued。
-- 升级 `citizenchain/scripts/im-two-node-smoke.sh`，改用正式 `im_*` RPC，并覆盖 B 节点重启恢复 pending、ack 后重启不重复、第三方 mailbox 拒绝和 ack 后重复投递不入队。
+- 更新 `citizenchain/node/src/im/commands.rs` 与 `citizenchain/node/src/core/service.rs`，节点启动时初始化 IM mailbox 存储路径，Tauri 命令和 `/gmb/im/1` incoming handler 共享同一份持久化 mailbox。
+- 当时新增的节点 RPC 入口和公民端 RPC 客户端已在 2026-06-15 删除；通信节点正式路径不得恢复节点 RPC。
+- 升级 `citizenchain/scripts/im-two-node-smoke.sh`，当时覆盖 B 节点重启恢复 pending、ack 后重启不重复、第三方 mailbox 拒绝和 ack 后重复投递不入队；后续验收不得恢复节点 RPC。
 - 更新 IM、node、统一协议和统一命名文档，清理“持久化 mailbox / 正式传输未接入”的旧口径。
 
 ## 验收记录

@@ -41,11 +41,9 @@ export type NodeModeState = {
 export type CommunicationNodeState = {
   enabled: boolean;
   peerId: string | null;
-  rpcUrl: string;
   nodeMultiaddr: string | null;
   endpointKind: string | null;
   pairingPayload: string | null;
-  expiresAtMillis: number | null;
 };
 
 export type DesktopUpdateStatus =

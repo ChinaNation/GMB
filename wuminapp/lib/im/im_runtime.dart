@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../my/user/user_service.dart';
 import '../qr/bodies/im_node_pairing_body.dart';
 import '../wallet/core/wallet_manager.dart';
-import 'crypto/im_binding_payload.dart';
 import 'crypto/im_mls_boundary.dart';
 import 'crypto/im_mls_native.dart';
 import 'crypto/im_mls_state_store.dart';
@@ -20,36 +19,28 @@ import 'transport/im_transport.dart';
 /// wuminapp 与用户电脑通信节点完成配对后的本机配置。
 class ImPairedNodeConfig {
   const ImPairedNodeConfig({
-    required this.rpcUrl,
     required this.peerId,
     required this.multiaddr,
     this.pairedAtMillis,
   });
 
   static const empty = ImPairedNodeConfig(
-    rpcUrl: 'http://127.0.0.1:9944/',
     peerId: '',
     multiaddr: '',
   );
 
-  final String rpcUrl;
   final String peerId;
   final String multiaddr;
   final int? pairedAtMillis;
 
   bool get isComplete =>
-      rpcUrl.trim().isNotEmpty &&
-      peerId.trim().isNotEmpty &&
-      multiaddr.trim().isNotEmpty;
+      peerId.trim().isNotEmpty && multiaddr.trim().isNotEmpty;
 
   ImPrivateNodeEndpoint toEndpoint() {
     return ImPrivateNodeEndpoint(peerId: peerId, multiaddr: multiaddr);
   }
 
   String? validate() {
-    if (rpcUrl.trim().isEmpty) {
-      return '通信节点 RPC URL 不能为空';
-    }
     final endpointError = toEndpoint().validate();
     if (endpointError != null) {
       return endpointError;
@@ -102,9 +93,9 @@ class _ImCommunicationAccount {
 
 /// 公民 IM 运行态编排服务。
 ///
-/// 中文注释：页面层不直接操作 OpenMLS、RPC 和 Isar。这个服务负责读取本机
-/// 通信节点配置、读取用户资料中的通信账户、建立设备身份，并把聊天发送
-/// /同步接到真实链路。
+/// 中文注释：页面层不直接操作 OpenMLS、P2P 通道和 Isar。这个服务负责读取
+/// 本机通信节点配置、读取用户资料中的通信账户、建立设备身份，并把聊天发送
+/// /同步接到后续专用 IM P2P 通道。
 class ImRuntime {
   ImRuntime({
     ImIsarStore? store,
@@ -121,7 +112,6 @@ class ImRuntime {
         _preferences = preferences,
         _cryptoFactory = cryptoFactory;
 
-  static const _kRpcUrl = 'im.paired_node.rpc_url';
   static const _kPeerId = 'im.paired_node.peer_id';
   static const _kMultiaddr = 'im.paired_node.multiaddr';
   static const _kPairedAtMillis = 'im.paired_node.paired_at_millis';
@@ -148,7 +138,6 @@ class ImRuntime {
   Future<ImPairedNodeConfig> readPairedNodeConfig() async {
     final prefs = await _prefs;
     return ImPairedNodeConfig(
-      rpcUrl: prefs.getString(_kRpcUrl) ?? ImPairedNodeConfig.empty.rpcUrl,
       peerId: prefs.getString(_kPeerId) ?? '',
       multiaddr: prefs.getString(_kMultiaddr) ?? '',
       pairedAtMillis: prefs.getInt(_kPairedAtMillis),
@@ -161,7 +150,6 @@ class ImRuntime {
       throw ArgumentError(error);
     }
     final prefs = await _prefs;
-    await prefs.setString(_kRpcUrl, config.rpcUrl.trim());
     await prefs.setString(_kPeerId, config.peerId.trim());
     await prefs.setString(_kMultiaddr, config.multiaddr.trim());
     await prefs.setInt(
@@ -170,27 +158,20 @@ class ImRuntime {
     );
   }
 
-  /// 扫描区块链软件通信节点二维码后保存配对，并立即尝试授权当前通信账户。
+  /// 扫描区块链软件通信节点二维码后只保存通信节点信息。
   ///
   /// 中文注释：配对二维码只绑定用户自己的电脑通信节点；联系人入口仍在
-  /// “我的通讯录”，信息 Tab 不承担节点设置。
+  /// “我的通讯录”，信息 Tab 不承担节点设置。扫码阶段不得连接节点 RPC，
+  /// 手机后续通过专用 IM P2P 通道连接自己的通信节点。
   Future<ImPairedNodeConfig> pairCommunicationNode(
     ImNodePairingBody body,
   ) async {
-    if (body.isExpired) {
-      throw StateError('通信节点二维码已过期，请在区块链软件中重新生成');
-    }
     final config = ImPairedNodeConfig(
-      rpcUrl: body.rpcUrl,
       peerId: body.nodePeerId,
       multiaddr: body.nodeMultiaddr,
       pairedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
     await savePairedNodeConfig(config);
-    if (await readCommunicationAddress() == null) {
-      return config;
-    }
-    await _ensureOwnerContext(createDeviceKeyPackage: true);
     return config;
   }
 
@@ -344,10 +325,8 @@ class ImRuntime {
         ownerChatAccount: account.address,
         ownerDeviceId: deviceId,
         ownerNodeEndpoint: config.toEndpoint(),
-        ownerRpcUrl: config.rpcUrl,
       ),
     );
-    await _ensureAccountRegistered(context);
     return context;
   }
 
@@ -370,41 +349,6 @@ class ImRuntime {
       address: wallet.address,
       walletName: wallet.walletName,
     );
-  }
-
-  Future<void> _ensureAccountRegistered(_ImOwnerContext context) async {
-    final prefs = await _prefs;
-    final marker = [
-      'im.paired_node.registered',
-      _safePath(context.account.address),
-      _safePath(context.deviceId),
-      _safePath(context.config.peerId),
-    ].join('.');
-    if (prefs.getBool(marker) == true) {
-      return;
-    }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final binding = ImBindingPayload(
-      walletAccount: context.account.address,
-      imDeviceId: context.deviceId,
-      imDevicePubkey: context.devicePublicKeyHex,
-      nodePeerId: context.config.peerId,
-      nodeEndpoints: [context.config.multiaddr],
-      expiresAtMillis: now + const Duration(days: 30).inMilliseconds,
-      nonce: _newNonce(),
-    );
-    final signature = await _walletManager.signUtf8WithWallet(
-      context.account.walletIndex,
-      binding.canonicalPayload(),
-    );
-    await context.transport.registerOwnerDevice(
-      binding: binding,
-      walletSignature: signature.signatureHex,
-    );
-    await context.transport.publishKeyPackage(
-      await context.crypto.createKeyPackage(context.identity),
-    );
-    await prefs.setBool(marker, true);
   }
 
   ImMessageFlow _messageFlow(

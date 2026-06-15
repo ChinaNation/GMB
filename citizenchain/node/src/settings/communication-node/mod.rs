@@ -1,8 +1,4 @@
-use crate::{
-    home,
-    im::{endpoint::ImNodeEndpoint, rpc},
-    shared::{rpc as shared_rpc, security},
-};
+use crate::{home, im::endpoint::ImNodeEndpoint, shared::security};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -10,7 +6,6 @@ use std::{
     io::ErrorKind,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
 
@@ -18,7 +13,6 @@ const COMMUNICATION_NODE_FILE_NAME: &str = "communication-node.json";
 const IM_NODE_PAIRING_QR_PROTO: &str = "WUMIN_QR_V1";
 const IM_NODE_PAIRING_KIND: &str = "im_node_pairing";
 const IM_NODE_PAIRING_BODY_PROTO: &str = "GMB_IM_NODE_PAIRING_V1";
-const IM_NODE_PAIRING_TTL_MILLIS: u64 = 10 * 60 * 1000;
 const IM_P2P_PORT: u16 = 30333;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -26,11 +20,9 @@ const IM_P2P_PORT: u16 = 30333;
 pub struct CommunicationNodeState {
     pub enabled: bool,
     pub peer_id: Option<String>,
-    pub rpc_url: String,
     pub node_multiaddr: Option<String>,
     pub endpoint_kind: Option<String>,
     pub pairing_payload: Option<String>,
-    pub expires_at_millis: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,7 +33,6 @@ struct StoredCommunicationNode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CommunicationNodeEndpoint {
-    rpc_url: String,
     multiaddr: String,
     kind: String,
 }
@@ -69,13 +60,6 @@ fn save_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
         .map_err(|err| format!("write communication node setting failed: {err}"))
 }
 
-fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|value| value.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 fn lan_ip() -> IpAddr {
     detect_lan_ip(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)))
         .or_else(|| {
@@ -96,101 +80,57 @@ fn detect_lan_ip(remote_ip: IpAddr) -> Option<IpAddr> {
     Some(socket.local_addr().ok()?.ip())
 }
 
-fn endpoint_for_peer(
-    peer_id: &str,
-    ip: IpAddr,
-    rpc_port: u16,
-) -> Result<CommunicationNodeEndpoint, String> {
+fn endpoint_for_peer(peer_id: &str, ip: IpAddr) -> Result<CommunicationNodeEndpoint, String> {
     let (kind, ip_text) = match ip {
         IpAddr::V4(value) => ("ip4", value.to_string()),
         IpAddr::V6(value) => ("ip6", value.to_string()),
     };
-    let rpc_host = match ip {
-        IpAddr::V4(value) => value.to_string(),
-        IpAddr::V6(value) => format!("[{value}]"),
-    };
     let multiaddr = format!("/{kind}/{ip_text}/tcp/{IM_P2P_PORT}/wss/p2p/{peer_id}");
     let endpoint = ImNodeEndpoint::checked(peer_id, &multiaddr)?;
     Ok(CommunicationNodeEndpoint {
-        rpc_url: format!("http://{rpc_host}:{rpc_port}/"),
         multiaddr: endpoint.multiaddr,
         kind: endpoint.kind,
     })
 }
 
-fn pairing_nonce() -> String {
-    hex::encode(rand::random::<[u8; 16]>())
-}
-
 fn build_pairing_payload(
     peer_id: &str,
     endpoint: &CommunicationNodeEndpoint,
-    now: u64,
-    nonce: &str,
-) -> Result<(String, u64), String> {
-    let expires_at_millis = now.saturating_add(IM_NODE_PAIRING_TTL_MILLIS);
-    let issued_at = now / 1000;
-    let expires_at = expires_at_millis / 1000;
+) -> Result<String, String> {
     let payload = json!({
         "proto": IM_NODE_PAIRING_QR_PROTO,
         "kind": IM_NODE_PAIRING_KIND,
-        "id": format!("im-node-{nonce}"),
-        "issued_at": issued_at,
-        "expires_at": expires_at,
         "body": {
             "proto": IM_NODE_PAIRING_BODY_PROTO,
             "node_peer_id": peer_id,
-            "rpc_url": endpoint.rpc_url,
             "node_multiaddr": endpoint.multiaddr,
             "endpoint_kind": endpoint.kind,
-            "pairing_nonce": nonce,
-            "created_at_millis": now,
-            "expires_at_millis": expires_at_millis,
         }
     });
     let raw = serde_json::to_string(&payload)
         .map_err(|err| format!("encode communication node pairing payload failed: {err}"))?;
-    Ok((raw, expires_at_millis))
+    Ok(raw)
 }
 
 fn build_state(app: AppHandle, enabled: bool) -> Result<CommunicationNodeState, String> {
-    rpc::set_owner_rpc_runtime_enabled(enabled);
     let identity = home::get_node_identity_blocking(app)?;
-    let rpc_url = shared_rpc::local_rpc_http_url();
     let Some(peer_id) = identity.peer_id else {
         return Ok(CommunicationNodeState {
             enabled,
             peer_id: None,
-            rpc_url,
             node_multiaddr: None,
             endpoint_kind: None,
             pairing_payload: None,
-            expires_at_millis: None,
         });
     };
-    if !enabled {
-        return Ok(CommunicationNodeState {
-            enabled,
-            peer_id: Some(peer_id),
-            rpc_url,
-            node_multiaddr: None,
-            endpoint_kind: None,
-            pairing_payload: None,
-            expires_at_millis: None,
-        });
-    }
-
-    let endpoint = endpoint_for_peer(&peer_id, lan_ip(), shared_rpc::current_rpc_port())?;
-    let (pairing_payload, expires_at_millis) =
-        build_pairing_payload(&peer_id, &endpoint, now_millis(), &pairing_nonce())?;
+    let endpoint = endpoint_for_peer(&peer_id, lan_ip())?;
+    let pairing_payload = build_pairing_payload(&peer_id, &endpoint)?;
     Ok(CommunicationNodeState {
         enabled,
         peer_id: Some(peer_id),
-        rpc_url: endpoint.rpc_url,
         node_multiaddr: Some(endpoint.multiaddr),
         endpoint_kind: Some(endpoint.kind),
         pairing_payload: Some(pairing_payload),
-        expires_at_millis: Some(expires_at_millis),
     })
 }
 
@@ -226,13 +166,9 @@ mod tests {
 
     #[test]
     fn endpoint_supports_ipv4_and_ipv6() {
-        let ipv4 = endpoint_for_peer(
-            "12D3KooWTest",
-            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 8)),
-            9944,
-        )
-        .expect("IPv4 endpoint should build");
-        let ipv6 = endpoint_for_peer("12D3KooWTest", IpAddr::V6(Ipv6Addr::LOCALHOST), 9944)
+        let ipv4 = endpoint_for_peer("12D3KooWTest", IpAddr::V4(Ipv4Addr::new(192, 168, 1, 8)))
+            .expect("IPv4 endpoint should build");
+        let ipv6 = endpoint_for_peer("12D3KooWTest", IpAddr::V6(Ipv6Addr::LOCALHOST))
             .expect("IPv6 endpoint should build");
 
         assert_eq!(ipv4.kind, "ip4");
@@ -244,22 +180,20 @@ mod tests {
     #[test]
     fn pairing_payload_matches_wumin_qr_envelope() {
         let endpoint = CommunicationNodeEndpoint {
-            rpc_url: "http://192.168.1.8:9944/".to_string(),
             multiaddr: "/ip4/192.168.1.8/tcp/30333/wss/p2p/12D3KooWTest".to_string(),
             kind: "ip4".to_string(),
         };
-        let (raw, expires) = build_pairing_payload("12D3KooWTest", &endpoint, 1_800_000, "nonce-1")
-            .expect("payload should encode");
+        let raw = build_pairing_payload("12D3KooWTest", &endpoint).expect("payload should encode");
         let value: Value = serde_json::from_str(&raw).expect("payload is JSON");
 
-        assert_eq!(expires, 2_400_000);
         assert_eq!(value["proto"], "WUMIN_QR_V1");
         assert_eq!(value["kind"], "im_node_pairing");
-        assert_eq!(value["id"], "im-node-nonce-1");
-        assert_eq!(value["issued_at"], 1800);
-        assert_eq!(value["expires_at"], 2400);
+        assert!(value.get("id").is_none());
+        assert!(value.get("issued_at").is_none());
+        assert!(value.get("expires_at").is_none());
         assert_eq!(value["body"]["proto"], "GMB_IM_NODE_PAIRING_V1");
         assert_eq!(value["body"]["node_peer_id"], "12D3KooWTest");
         assert_eq!(value["body"]["endpoint_kind"], "ip4");
+        assert!(value["body"].get("rpc_url").is_none());
     }
 }

@@ -53,7 +53,7 @@ wuminapp/lib/im/
 ├── proto/                        Protobuf 生成类型
 ├── crypto/                       OpenMLS、设备密钥、绑定 payload
 ├── storage/                      Isar 会话、消息、路由缓存、队列
-└── transport/                    自己通信节点 RPC 与后续近场传输
+└── transport/                    自己通信节点专用 P2P 通道与后续近场传输
 ```
 
 节点端目录：
@@ -66,7 +66,6 @@ citizenchain/node/src/im/
 ├── endpoint.rs                   IPv4 / IPv6 / dns4 / dnsaddr 端点校验
 ├── direct.rs                     显式端点直连投递
 ├── network.rs                    /gmb/im/1 request-response wire
-├── rpc.rs                        手机连接自己节点使用的 im_* RPC
 └── commands.rs                   桌面端调试和验收命令
 ```
 
@@ -228,7 +227,7 @@ ConsumeImKeyPackageRequest
 - 设置 Tab 的“通信节点功能”是独立 IM 能力开关。
 - 归档全节点和普通全节点都可以开启通信节点功能；开启通信节点功能不改变链数据运行边界。
 - 普通全节点裁剪能力未完成时仍保持原有节点数据模式。
-- 开启后桌面端生成 `im_node_pairing` 临时二维码；公民只在“我的 -> 设置 -> 设置通信节点”扫码配对。
+- 桌面端生成 `im_node_pairing` 固定二维码；公民只在“我的 -> 设置 -> 设置通信节点”扫码保存自己的通信节点信息。
 
 ## 8. 可达性与 IPv6
 
@@ -286,11 +285,11 @@ wuminapp 本地：
 - `wuminapp/lib/im/proto/` 已从该真源生成 Dart 类型。
 - `wuminapp/lib/im/crypto/` 已接入 OpenMLS native 边界、设备密钥、KeyPackage 和绑定 payload。
 - `wuminapp/lib/im/im_message_flow.dart` 已串联 OpenMLS、Protobuf envelope、通信节点投递和 Isar 状态。
-- `wuminapp/lib/im/transport/im_private_node_transport.dart` 已提供自己的通信节点 RPC 客户端。
+- `wuminapp/lib/im/transport/im_private_node_transport.dart` 已移除节点 RPC 客户端，仅保留通信节点端点和后续专用 P2P 通道占位。
 - `citizenchain/node/src/im/mailbox.rs` 已支持一台通信节点服务多个钱包账号和多个授权设备。
 - `citizenchain/node/src/im/keypackage.rs` 已支持多钱包账号 KeyPackage 池。
 - `citizenchain/node/src/settings/node-mode/mod.rs` 已移除旧 `communication` 选项，全节点模式只保留归档/普通链数据模式。
-- `citizenchain/node/src/settings/communication-node/mod.rs` 已提供独立通信节点功能开关、IPv4/IPv6 配对端点和 WUMIN_QR_V1 配对二维码；设置页读写会同步本机手机 `im_*` RPC 运行态开关。
+- `citizenchain/node/src/settings/communication-node/mod.rs` 已提供独立通信节点功能开关、IPv4/IPv6 配对端点和不含 RPC URL / 有效期的 WUMIN_QR_V1 固定配对二维码。
 - `citizenchain/scripts/im-two-node-smoke.sh` 已覆盖双节点 KeyPackage、直连投递、重启恢复、ack 和第三方 mailbox 拒绝。
 
 ## 11. 预计修改目录
@@ -300,7 +299,7 @@ wuminapp 本地：
 - `wuminapp/lib/im/proto/`：Dart Protobuf 生成物；涉及生成代码。
 - `wuminapp/lib/im/crypto/`：OpenMLS、设备密钥、KeyPackage、安全码和钱包账户绑定；涉及代码。
 - `wuminapp/lib/im/storage/`：Isar 会话、消息、路由缓存、发送队列和 pending 入站 envelope；涉及代码。
-- `wuminapp/lib/im/transport/`：手机连接自己通信节点的 RPC 客户端和后续近场传输抽象；涉及代码。
+- `wuminapp/lib/im/transport/`：手机连接自己通信节点的专用 P2P 通道占位和后续近场传输抽象；涉及代码。
 - `wuminapp/lib/my/user/`：用户资料通信账户和通讯录详情消息入口；涉及代码。
 - `wuminapp/lib/isar/`：IM 本地数据库 schema；涉及代码生成和迁移边界。
 - `wuminapp/android/im/`：Android 近场能力预留目录；涉及后续原生代码。

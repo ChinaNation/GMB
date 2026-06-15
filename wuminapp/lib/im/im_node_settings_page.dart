@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../qr/bodies/im_node_pairing_body.dart';
 import '../qr/envelope.dart';
@@ -116,7 +117,15 @@ class _ImNodeSettingsPageState extends State<ImNodeSettingsPage> {
           IconButton(
             tooltip: paired ? '更换通信节点' : '扫描通信节点',
             onPressed: _pairing ? null : _scanAndPair,
-            icon: const Icon(Icons.qr_code_scanner_rounded),
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 22,
+              height: 22,
+              colorFilter: const ColorFilter.mode(
+                AppTheme.textPrimary,
+                BlendMode.srcIn,
+              ),
+            ),
           ),
         ],
       ),
@@ -194,7 +203,15 @@ class _EmptyNodeCard extends StatelessWidget {
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: onScan,
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 18,
+              height: 18,
+              colorFilter: const ColorFilter.mode(
+                Colors.white,
+                BlendMode.srcIn,
+              ),
+            ),
             label: const Text('扫描通信节点'),
           ),
         ],
@@ -233,7 +250,6 @@ class _PairedNodeCard extends StatelessWidget {
           const SizedBox(height: 14),
           const _InfoRow(label: '节点状态', value: '已保存'),
           _InfoRow(label: 'PeerId', value: config.shortPeerId),
-          _InfoRow(label: 'RPC', value: config.rpcUrl),
           _InfoRow(label: '端点', value: config.multiaddr),
           if (config.pairedAtMillis != null)
             _InfoRow(
