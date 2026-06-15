@@ -4,8 +4,8 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ImPrivateNodePolicy {
-    /// 是否只服务当前用户自己的手机和收件箱。
-    pub serves_only_owner: bool,
+    /// 是否只服务当前用户自己的手机、钱包账号和收件箱。
+    pub serves_only_local_user: bool,
     /// 是否允许作为第三方 Relay。
     pub allows_third_party_relay: bool,
     /// 是否允许作为公共 rendezvous。
@@ -28,7 +28,7 @@ impl ImPrivateNodePolicy {
     /// 返回当前 IM 私人通信全节点的硬边界。
     pub(crate) const fn current() -> Self {
         Self {
-            serves_only_owner: true,
+            serves_only_local_user: true,
             allows_third_party_relay: false,
             allows_public_rendezvous: false,
             allows_third_party_mailbox: false,

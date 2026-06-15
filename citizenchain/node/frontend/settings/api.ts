@@ -2,6 +2,7 @@ import { invoke } from '../core/tauri';
 import type {
   BootnodeKey,
   BootnodeOption,
+  CommunicationNodeState,
   GrandpaKey,
   NodeMode,
   NodeModeState,
@@ -12,6 +13,9 @@ import type {
 export const settingsApi = {
   getNodeMode: () => invoke<NodeModeState>('get_node_mode'),
   setNodeMode: (mode: NodeMode) => invoke<NodeModeState>('set_node_mode', { mode }),
+  getCommunicationNode: () => invoke<CommunicationNodeState>('get_communication_node'),
+  setCommunicationNodeEnabled: (enabled: boolean) =>
+    invoke<CommunicationNodeState>('set_communication_node_enabled', { enabled }),
   getRewardWallet: () => invoke<RewardWallet>('get_reward_wallet'),
   setRewardWallet: (address: string, unlockPassword: string) =>
     invoke<RewardWallet>('set_reward_wallet', { address, unlockPassword }),

@@ -14,7 +14,7 @@ done
 - 通信全节点只服务 owner 自己的 mailbox。
 - 不做第三方中继，不替别人存消息。
 - 不接 OpenMLS、Protobuf、Isar、近场和聊天窗口公民币转账。
-- Wire 编码 Spike 阶段用 JSON bytes，后续 `proto/im/im_envelope.proto` 固化后替换。
+- Wire 编码 Spike 阶段用 JSON bytes，后续从 `wuminapp/im/proto/im_envelope.proto` 生成跨端类型后替换。
 
 ## 预计修改目录
 

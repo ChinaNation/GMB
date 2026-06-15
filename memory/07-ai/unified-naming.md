@@ -87,15 +87,15 @@
 | `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `wumin/` | 公民钱包 | wumin | 离线签名、扫码识别和钱包 UI |
 | `wuminapp/` | 公民 | wuminapp | Flutter 客户端、钱包、治理和轻节点能力 |
+| `wuminapp/im/proto/` | wuminapp 信息协议 | wuminapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
 | `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
-| `wuminapp/lib/im/` | wuminapp 信息 | wuminapp-im | wuminapp 信息 Tab、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
+| `wuminapp/lib/im/` | wuminapp 信息 | wuminapp-im | 公民信息 Tab、聊天详情、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
 | `wuminapp/lib/im/crypto/` | wuminapp 信息加密 | wuminapp-im-crypto | IM 设备密钥、OpenMLS、KeyPackage、安全码和钱包账户绑定 |
-| `wuminapp/lib/im/payment/` | wuminapp 信息支付提示 | wuminapp-im-payment | 聊天窗口发送公民币、payment_notice 和链上确认状态模型 |
-| `wuminapp/lib/im/storage/` | wuminapp 信息本地存储 | wuminapp-im-storage | IM 会话、联系人、消息和附件缓存的本地存储边界 |
-| `wuminapp/lib/im/transport/` | wuminapp 信息传输 | wuminapp-im-transport | 私人通信全节点传输、近场传输、自动路由和去重 |
+| `wuminapp/lib/im/storage/` | wuminapp 信息本地存储 | wuminapp-im-storage | IM 会话、路由缓存、消息、发送队列和附件缓存的本地存储边界 |
+| `wuminapp/lib/im/transport/` | wuminapp 信息传输 | wuminapp-im-transport | 通信节点传输、近场传输、自动路由和去重 |
 | `wuminapp/android/im/` | Android 信息近场 | android-im | wuminapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
 | `wuminapp/ios/im/` | iOS 信息近场 | ios-im | wuminapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
-| `citizenchain/node/src/im/` | 通信全节点 IM | node-im | 通信全节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
+| `citizenchain/node/src/im/` | 通信节点 IM | node-im | 通信节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
 | `website/` | 官网 | website | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
 | `citizenchain/runtime/primitives/src/CitizenConstitution.html` | 公民宪法真源 | citizen-constitution-source | 公民宪法 HTML 唯一真源，编入 runtime WASM，修改后必须通过 runtime 升级生效 |
@@ -109,15 +109,29 @@
 | 统一命名文件 | `unified-naming.md` | `memory/07-ai/` | 管理目录、文件、字段等新命名 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
-| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `wuminapp/lib/im/` / `citizenchain/node/src/im/` | 公民 P2P IM 的 Protobuf 外层协议与私人通信全节点接口契约 |
-| IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `wuminapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、附件引用和 ack 策略 |
-| IM 联系人包 | `ImContactBundle` | `GMB_IM_V1` / `wuminapp/lib/im/` | 联系人钱包账户、设备公钥、私人通信全节点端点和安全码交换载荷 |
-| IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | `citizenchain/node/src/im/endpoint.rs` / `wuminapp/lib/im/transport/` | 私人通信全节点的 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型 |
-| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenchain/node/src/im/binding.rs` / `wuminapp/lib/im/crypto/` | 钱包聊天账户、IM 设备密钥和私人通信全节点的绑定载荷 |
-| IM 直连投递请求 | `ImDirectDeliveryRequest` | `citizenchain/node/src/im/direct.rs` | 显式 PeerId + multiaddr 到对方私人通信全节点的密文投递请求 |
+| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `wuminapp/im/proto/im_envelope.proto` / `wuminapp/lib/im/` / `citizenchain/node/src/im/` | 公民 P2P IM 的 Protobuf 外层协议与通信节点接口契约 |
+| IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `wuminapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
+| IM 路由记录 | `ImRouteRecord` | `GMB_IM_V1` / `wuminapp/lib/im/storage/im_isar_store.dart` / `wuminapp/lib/isar/wallet_isar.dart` | IM 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码和通信节点端点，不替代“我的通讯录” |
+| IM KeyPackage | `ImKeyPackage` / `ImMlsKeyPackage` | `GMB_IM_V1` / `citizenchain/node/src/im/keypackage.rs` / `wuminapp/lib/im/crypto/` | OpenMLS 设备预密钥包，发布到自己通信节点的对应钱包账号池并一次性消费 |
+| IM OpenMLS native 实现 | `NativeImMlsCrypto` / `ImMlsNativeBindings` | `wuminapp/lib/im/crypto/im_mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
+| IM OpenMLS 会话模型 | `ImMlsWireMessage` / `ImMlsOutboundMessage` / `ImMlsInboundMessage` / `ImMlsMessageKind` | `wuminapp/lib/im/crypto/im_mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
+| IM OpenMLS 状态目录 | `ImMlsStateStore` | `wuminapp/lib/im/crypto/im_mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
+| IM OpenMLS Rust FFI | `gmb_im_mls_create_key_package_json` / `gmb_im_mls_two_party_smoke_json` / `gmb_im_mls_encrypt_json` / `gmb_im_mls_decrypt_json` | `wuminapp/rust/src/im_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
+| IM 消息流状态机 | `ImMessageFlow` | `wuminapp/lib/im/im_message_flow.dart` | 远程通信节点链路的发送、接收、pending 重放和 ack 编排 |
+| IM 运行态编排 | `ImRuntime` / `ImPairedNodeConfig` | `wuminapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、自己的通信节点 RPC、KeyPackage 发布和远程收发同步 |
+| IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | `wuminapp/lib/qr/bodies/im_node_pairing_body.dart` / `citizenchain/node/src/settings/communication-node/mod.rs` | 公民在“我的 -> 设置 -> 设置通信节点”扫描桌面设置页二维码，保存或更换自己的电脑通信节点 |
+| 桌面通信节点功能设置 | `CommunicationNodeState` / `get_communication_node` / `set_communication_node_enabled` | `citizenchain/node/src/settings/communication-node/mod.rs` / `citizenchain/node/frontend/settings/communication-node/` | 区块链软件设置页独立 IM 能力开关，不属于归档/普通全节点模式选择 |
+| IM Isar 消息库 | `ImIsarStore` / `ImConversationEntity` / `ImRouteCacheEntity` / `ImMessageEntity` / `ImOutboundQueueEntity` / `ImPendingInboundEntity` | `wuminapp/lib/im/storage/im_isar_store.dart` / `wuminapp/lib/isar/wallet_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
+| IM 路由缓存记录 | `ImRouteRecord` | `wuminapp/lib/im/storage/im_isar_store.dart` | 公民端 IM 路由缓存模型，保存对方钱包聊天账户、IM 设备公钥、安全码和通信节点端点 |
+| IM 聊天页面 | `ImChatPage` | `wuminapp/lib/im/im_chat_page.dart` | 通讯录详情“消息”按钮和信息 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ImRuntime` 注入真实 P2P/MLS 发送和同步回调 |
+| IM 聊天 UI 适配器 | `imStoredMessageToChatMessage` / `imStoredMessagesToChatMessages` | `wuminapp/lib/im/im_chat_ui_adapter.dart` | 将本地 IM 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
+| IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | `citizenchain/node/src/im/endpoint.rs` / `wuminapp/lib/im/transport/` | 通信节点的 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型 |
+| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenchain/node/src/im/binding.rs` / `wuminapp/lib/im/crypto/` | 钱包聊天账户、IM 设备密钥和通信节点的绑定载荷 |
+| IM 直连投递请求 | `ImDirectDeliveryRequest` | `citizenchain/node/src/im/direct.rs` | 显式 PeerId + multiaddr 到对方通信节点的密文投递请求 |
+| IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | `citizenchain/node/src/im/keypackage.rs` / `wuminapp/lib/im/transport/` | 显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求 |
 | IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | `citizenchain/node/src/im/network.rs` | `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应 |
+| IM 本机手机 RPC | `im_*` / `GMB_IM_OWNER_RPC` | `citizenchain/node/src/im/rpc.rs` / `wuminapp/lib/im/transport/` | 公民手机连接自己的通信节点时使用的 RPC，桌面设置页通信节点功能开启后放行，环境变量仅用于 headless 验收 |
 | IM 验收调试 RPC | `im_debug*` / `GMB_IM_DEBUG_RPC` | `citizenchain/node/src/im/rpc.rs` | 仅用于双节点运行态 smoke 的条件注册 RPC，正式节点默认不暴露 |
-| IM 支付提示 | `ImPaymentNotice` | `wuminapp/lib/im/payment/` | 聊天窗口内公民币转账提示，到账真相仍以链上查询为准 |
 | Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | wumin / wuminapp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
 | 机构管理 | `organization-manage` | runtime crate / pallet | 机构多签管理 pallet |
 | 个人多签管理 | `personal-manage` | runtime crate / pallet | 个人多签管理 pallet |

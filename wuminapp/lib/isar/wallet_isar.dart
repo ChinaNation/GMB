@@ -598,6 +598,139 @@ class PublicInstitutionSubscriptionEntity {
   late int subscribedAtMillis;
 }
 
+/// IM 会话本地索引。
+///
+/// 中文注释：聊天明文只允许在公民手机本地保存；通信全节点只保存密文
+/// envelope。本表负责会话列表首屏，不参与链上状态。
+@collection
+class ImConversationEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 会话 ID，对应 MLS group id。
+  @Index(unique: true, replace: true)
+  late String conversationId;
+
+  /// 本机钱包聊天账户。
+  @Index()
+  late String ownerChatAccount;
+
+  /// 对方钱包聊天账户。
+  @Index()
+  late String peerChatAccount;
+
+  late String title;
+  late String lastMessage;
+
+  @Index()
+  late int lastUpdatedAtMillis;
+
+  late int unreadCount;
+  late String lastDeliveryState;
+}
+
+/// IM 消息本地记录。
+///
+/// 中文注释：`envelopeBytesHex` 保存完整 GMB_IM_V1 Protobuf bytes，便于重试
+/// 和排查；`plaintext` 只写手机本地库，绝不上传私人通信全节点。
+@collection
+class ImMessageEntity {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  late String envelopeId;
+
+  @Index()
+  late String conversationId;
+
+  @Index()
+  late String ownerChatAccount;
+
+  late String direction;
+  late String senderChatAccount;
+  late String recipientChatAccount;
+  late String senderDeviceId;
+  late String messageKind;
+  late String mlsMessageKind;
+  late String deliveryState;
+  String? plaintext;
+  late String envelopeBytesHex;
+
+  @Index()
+  late int createdAtMillis;
+}
+
+/// IM 出站队列。
+///
+/// 中文注释：投递失败时只重试完整 envelope bytes，不重新加密，避免破坏
+/// MLS 会话状态和消息顺序。
+@collection
+class ImOutboundQueueEntity {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  late String envelopeId;
+
+  @Index()
+  late String conversationId;
+
+  late String recipientChatAccount;
+  late String envelopeBytesHex;
+  late String deliveryState;
+  late int attemptCount;
+  String? lastError;
+
+  @Index()
+  late int updatedAtMillis;
+}
+
+/// IM 待处理入站 envelope。
+///
+/// 中文注释：application 早于 Welcome 到达时先落这里；处理 Welcome 后再
+/// 重放同会话 pending，避免因为网络乱序丢消息。
+@collection
+class ImPendingInboundEntity {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  late String envelopeId;
+
+  @Index()
+  late String conversationId;
+
+  late String envelopeBytesHex;
+  late String reason;
+
+  @Index()
+  late int createdAtMillis;
+}
+
+/// IM 路由缓存记录。
+///
+/// 中文注释：IM 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
+/// OpenMLS 设备和通信节点端点；用户联系人仍以“我的通讯录”为准。
+@collection
+class ImRouteCacheEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 路由唯一键，当前等于钱包聊天账户。
+  @Index(unique: true, replace: true)
+  late String routeId;
+
+  /// 对方钱包聊天账户，也是公民币收款账户。
+  @Index(unique: true, replace: true)
+  late String walletChatAccount;
+
+  late String displayName;
+  late String deviceId;
+  late String devicePublicKeyHex;
+  late String safetyNumber;
+  late String nodePeerId;
+  late String nodeMultiaddr;
+  String? note;
+  late int createdAtMillis;
+  late int updatedAtMillis;
+}
+
 /// 本地钱包余额变化流水（持久化存储，去中心化设计，不依赖 SFID 服务器）。
 @collection
 class LocalTxEntity {
@@ -820,6 +953,8 @@ class WalletIsar {
       try {
         // 尝试访问 LocalTxEntity collection，如果成功说明 schema 完整。
         existing.localTxEntitys;
+        existing.imConversationEntitys;
+        existing.imRouteCacheEntitys;
         return existing;
       } catch (_) {
         // schema 不完整，关闭旧实例后重新打开
@@ -840,6 +975,11 @@ class WalletIsar {
       PersonalDuoqianProposalEntitySchema,
       PublicInstitutionEntitySchema,
       PublicInstitutionSubscriptionEntitySchema,
+      ImConversationEntitySchema,
+      ImMessageEntitySchema,
+      ImOutboundQueueEntitySchema,
+      ImPendingInboundEntitySchema,
+      ImRouteCacheEntitySchema,
       LocalTxEntitySchema,
       WalletTxSyncCursorEntitySchema,
     ];
@@ -982,7 +1122,7 @@ class WalletIsarMigration {
   static const String _kSchemaVersion = 'wallet.data.schema.version';
 
   /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 4;
+  static const int currentSchemaVersion = 6;
 
   static Future<void> ensureMigrated(Isar isar) async {
     await _ensureSettingsRow(isar);

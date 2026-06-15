@@ -55,7 +55,7 @@ export function NodeModeSection({ nodeMode, onUpdated }: Props) {
                 .filter(Boolean)
                 .join(' ');
 
-              // 中文注释：待完成模式由后端返回 enabled=false，前端只展示灰色卡片，不允许点击。
+              // 中文注释：这里仅选择链数据模式；通信节点功能在独立设置区开启。
               return (
                 <button
                   key={option.mode}

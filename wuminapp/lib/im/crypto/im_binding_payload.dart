@@ -1,7 +1,7 @@
 /// 公民 IM 钱包账户绑定 payload。
 ///
-/// 钱包账户是用户可见聊天账户和聊天窗口发公民币的付款账户；IM 消息加密仍由
-/// 独立设备密钥承担。此 payload 只用于让钱包签名确认“此设备属于此账户”。
+/// 钱包账户是用户可见聊天账户；IM 消息加密仍由独立设备密钥承担。
+/// 此 payload 只用于让钱包签名确认“此设备属于此账户”。
 class ImBindingPayload {
   const ImBindingPayload({
     required this.walletAccount,
@@ -13,7 +13,7 @@ class ImBindingPayload {
     required this.nonce,
   });
 
-  /// 用户可见聊天账户，也是公民币转账付款账户。
+  /// 用户可见聊天账户。
   final String walletAccount;
 
   /// 手机本地生成的 IM 设备 ID。

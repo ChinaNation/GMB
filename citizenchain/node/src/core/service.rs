@@ -426,6 +426,9 @@ pub fn new_full(
         other: (block_import, grandpa_link, mut telemetry),
     } = new_partial(&config)?;
 
+    crate::im::commands::init_mailbox_storage(config.base_path.path())
+        .map_err(|e| ServiceError::Other(e.into()))?;
+
     let keystore = keystore_container.keystore();
     let role = config.role;
     let name = config.network.node_name.clone();

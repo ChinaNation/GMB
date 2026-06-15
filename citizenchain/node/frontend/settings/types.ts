@@ -20,7 +20,7 @@ export type BootnodeOption = {
   peerId: string;
 };
 
-export type NodeMode = 'archive' | 'normal' | 'communication';
+export type NodeMode = 'archive' | 'normal';
 
 export type NodeModeImplementationStatus = 'active' | 'pending';
 
@@ -36,6 +36,16 @@ export type NodeModeState = {
   selectedMode: NodeMode;
   effectiveMode: NodeMode;
   options: NodeModeOption[];
+};
+
+export type CommunicationNodeState = {
+  enabled: boolean;
+  peerId: string | null;
+  rpcUrl: string;
+  nodeMultiaddr: string | null;
+  endpointKind: string | null;
+  pairingPayload: string | null;
+  expiresAtMillis: number | null;
 };
 
 export type DesktopUpdateStatus =

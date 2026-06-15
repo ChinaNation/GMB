@@ -20,6 +20,9 @@ import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/my/user/user_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/im/im_chat_page.dart';
+import 'package:wuminapp_mobile/im/im_node_settings_page.dart';
+import 'package:wuminapp_mobile/im/im_runtime.dart';
 import 'package:wuminapp_mobile/update/app_update.dart';
 import 'package:wuminapp_mobile/update/update_badge.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -1031,6 +1034,40 @@ class _ContactDetailPage extends StatelessWidget {
 
   final UserContact contact;
 
+  Future<void> _openMessage(BuildContext context) async {
+    final profile = await UserProfileService().getState();
+    final sender = profile.communicationAddress?.trim() ?? '';
+    if (sender.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在用户资料中设置通信账户')),
+      );
+      return;
+    }
+    final runtime = ImRuntime();
+    final conversationId = ImRuntime.directConversationId(
+      sender,
+      contact.address,
+    );
+    if (!context.mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ImChatPage(
+          conversationId: conversationId,
+          currentUserId: sender,
+          peerUserId: contact.address,
+          title: contact.displayNickname,
+          onSendText: (text) => runtime.sendText(
+            peerWalletAddress: contact.address,
+            conversationId: conversationId,
+            text: text,
+          ),
+          onSync: runtime.syncPending,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final qrData = QrEnvelope<UserContactBody>(
@@ -1137,11 +1174,7 @@ class _ContactDetailPage extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('消息功能开发中')),
-                    );
-                  },
+                  onPressed: () => _openMessage(context),
                   icon: const Icon(Icons.chat_bubble_outline, size: 18),
                   label: const Text('消息'),
                 ),
@@ -1446,6 +1479,22 @@ class _SettingsPageState extends State<_SettingsPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 18),
+                Container(
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                  child: _buildNavSettingTile(
+                    icon: Icons.dns_outlined,
+                    title: '设置通信节点',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ImNodeSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 28),
                 // 关于区标题
                 const Padding(
@@ -1575,6 +1624,46 @@ class _SettingsPageState extends State<_SettingsPage> {
             onChanged: onChanged,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNavSettingTile({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: AppTheme.primary),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppTheme.textTertiary),
+          ],
+        ),
       ),
     );
   }

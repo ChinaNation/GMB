@@ -10,7 +10,6 @@ const NODE_MODE_FILE_NAME: &str = "node-mode.json";
 pub enum NodeMode {
     Archive,
     Normal,
-    Communication,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -41,7 +40,7 @@ pub struct NodeModeState {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredNodeMode {
-    selected_mode: NodeMode,
+    selected_mode: String,
 }
 
 impl NodeMode {
@@ -49,10 +48,7 @@ impl NodeMode {
         match value.trim() {
             "archive" => Ok(Self::Archive),
             "normal" => Ok(Self::Normal),
-            "communication" => Ok(Self::Communication),
-            other => Err(format!(
-                "全节点模式无效：{other}。可选值为 archive、normal、communication"
-            )),
+            other => Err(format!("全节点模式无效：{other}。可选值为 archive、normal")),
         }
     }
 
@@ -81,12 +77,14 @@ fn load_selected_node_mode(app: &AppHandle) -> Result<NodeMode, String> {
     };
     let stored: StoredNodeMode =
         serde_json::from_str(&raw).map_err(|err| format!("parse node mode failed: {err}"))?;
-    Ok(stored.selected_mode)
+    parse_stored_node_mode(&stored.selected_mode)
 }
 
 fn save_selected_node_mode(app: &AppHandle, selected_mode: NodeMode) -> Result<(), String> {
-    let raw = serde_json::to_string_pretty(&StoredNodeMode { selected_mode })
-        .map_err(|err| format!("encode node mode failed: {err}"))?;
+    let raw = serde_json::to_string_pretty(&StoredNodeMode {
+        selected_mode: selected_mode.wire_value().to_string(),
+    })
+    .map_err(|err| format!("encode node mode failed: {err}"))?;
     security::write_text_atomic(&node_mode_path(app)?, &format!("{raw}\n"))
         .map_err(|err| format!("write node mode failed: {err}"))
 }
@@ -98,10 +96,31 @@ fn build_node_mode_state(selected_mode: NodeMode) -> NodeModeState {
         } else {
             NodeMode::Archive
         },
-        // 中文注释：普通全节点、通信全节点的底层裁剪/收件箱能力尚未完成；
-        // 当前版本只允许选择归档全节点，避免用户误以为待完成模式已经生效。
-        effective_mode: NodeMode::Archive,
+        // 中文注释：全节点模式只描述链数据保存方式；IM 通信能力由
+        // settings::communication_node 的独立开关管理，必须和归档/普通模式分离。
+        effective_mode: if selected_mode.enabled() {
+            selected_mode
+        } else {
+            NodeMode::Archive
+        },
         options: node_mode_options(),
+    }
+}
+
+impl NodeMode {
+    fn wire_value(self) -> &'static str {
+        match self {
+            Self::Archive => "archive",
+            Self::Normal => "normal",
+        }
+    }
+}
+
+fn parse_stored_node_mode(value: &str) -> Result<NodeMode, String> {
+    match value.trim() {
+        // 中文注释：清理上一版错误保存的 communication 模式；通信能力现在是独立开关。
+        "communication" => Ok(NodeMode::Archive),
+        other => NodeMode::from_wire_value(other),
     }
 }
 
@@ -120,13 +139,6 @@ fn node_mode_options() -> Vec<NodeModeOption> {
             implementation_status: NodeModeImplementationStatus::Pending,
             enabled: false,
             description: "剪裁历史数据的全节点模式，功能后续完成。",
-        },
-        NodeModeOption {
-            mode: NodeMode::Communication,
-            label: "通信全节点",
-            implementation_status: NodeModeImplementationStatus::Pending,
-            enabled: false,
-            description: "只保留通信收件箱所需能力，功能后续完成。",
         },
     ]
 }
@@ -158,14 +170,14 @@ mod tests {
 
     #[test]
     fn pending_selected_mode_falls_back_to_archive() {
-        let state = build_node_mode_state(NodeMode::Communication);
+        let state = build_node_mode_state(NodeMode::Normal);
 
         assert_eq!(state.selected_mode, NodeMode::Archive);
         assert_eq!(state.effective_mode, NodeMode::Archive);
     }
 
     #[test]
-    fn mode_options_expose_archive_active_and_other_modes_pending() {
+    fn mode_options_expose_archive_active_and_normal_pending() {
         let state = build_node_mode_state(NodeMode::Archive);
 
         let archive = state
@@ -178,11 +190,6 @@ mod tests {
             .iter()
             .find(|option| option.mode == NodeMode::Normal)
             .expect("normal option exists");
-        let communication = state
-            .options
-            .iter()
-            .find(|option| option.mode == NodeMode::Communication)
-            .expect("communication option exists");
 
         assert_eq!(
             archive.implementation_status,
@@ -194,11 +201,7 @@ mod tests {
             NodeModeImplementationStatus::Pending
         );
         assert!(!normal.enabled);
-        assert_eq!(
-            communication.implementation_status,
-            NodeModeImplementationStatus::Pending
-        );
-        assert!(!communication.enabled);
+        assert_eq!(state.options.len(), 2);
     }
 
     #[test]
@@ -210,10 +213,18 @@ mod tests {
 
     #[test]
     fn pending_wire_value_is_not_selectable() {
-        let error = NodeMode::from_wire_value("communication")
+        let error = NodeMode::from_wire_value("normal")
             .and_then(NodeMode::ensure_enabled)
             .expect_err("pending mode is disabled");
 
         assert!(error.contains("尚未完成"));
+    }
+
+    #[test]
+    fn stored_communication_mode_is_cleaned_to_archive() {
+        let mode = super::parse_stored_node_mode("communication")
+            .expect("bad previous local state falls back");
+
+        assert_eq!(mode, NodeMode::Archive);
     }
 }

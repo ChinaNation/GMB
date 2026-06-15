@@ -14,7 +14,7 @@ class ImWalletBindingDraft {
     this.walletSignature,
   });
 
-  /// 用户可见聊天账户，也是聊天窗口发送公民币时的付款账户。
+  /// 用户可见聊天账户；同一个钱包地址也可在交易模块中作为转账账户。
   final String walletAccount;
 
   /// 手机本地生成的 IM 设备 ID。

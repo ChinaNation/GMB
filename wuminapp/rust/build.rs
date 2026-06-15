@@ -28,4 +28,5 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=src/ffi_types.rs");
+    println!("cargo:rerun-if-changed=src/im_mls.rs");
 }

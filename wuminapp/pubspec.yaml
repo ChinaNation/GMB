@@ -36,12 +36,19 @@ dependencies:
   file_picker: ^8.0.0
   sr25519: ^0.7.0
   substrate_bip39: ^0.7.0
+  protobuf: ^6.0.0
+  ffi: ^2.2.0
+  path: ^1.9.1
+  fixnum: ^1.1.1
+  flutter_chat_ui: ^2.11.1
+  flutter_chat_core: ^2.9.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
   build_runner: ^2.4.11
   isar_community_generator: ^3.3.2
+  protoc_plugin: ^25.0.0
 
 flutter:
   uses-material-design: true

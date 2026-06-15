@@ -161,50 +161,61 @@
 
 ## 9. 全节点模式设置边界
 
-2026-05-23 起，桌面设置页新增“全节点模式”入口，用于承接后续归档全节点、普通全节点、通信全节点三种运行模式。
+2026-05-23 起，桌面设置页新增“全节点模式”入口；2026-06-15 起，通信节点能力从全节点模式中拆出，固定为独立 IM 功能开关。
 
 - 当前默认模式：归档全节点。
-- 当前有效运行模式：节点进程按归档全节点运行。
+- 当前可选模式：归档全节点。
+- 当前待完成模式：普通全节点。
 - 展示项：
   - 归档全节点：可选择，保存完整链数据。
   - 普通全节点：置灰不可选择，后续用于剪裁历史链数据。
-  - 通信全节点：置灰不可选择，后续用于承接用户自有通信收件箱能力。
 - 本地配置：
   - `src/settings/node-mode/mod.rs` 通过 Tauri 命令 `get_node_mode` / `set_node_mode` 读写 `<app_data>/node-mode.json`。
-  - 当前版本只允许写入归档全节点；普通全节点、通信全节点的写入会被后端拒绝。
-  - 配置文件不改变当前 `src/desktop/node_runner.rs` 的启动参数、数据库目录或同步策略。
+  - 当前版本只允许写入归档全节点；普通全节点仍会被后端拒绝。
+  - 如果本机旧配置曾错误保存 `communication`，读取时按归档全节点清理。
 - 切换边界：
-  - 当前版本不允许切换到普通全节点或通信全节点，设置页只做灰色展示。
-  - 后续真正实现普通全节点 / 通信全节点时，少数据模式切换到多数据模式应从网络补充同步数据；多数据模式切换到少数据模式应删除不再需要的本地数据。
-  - 在底层能力完成前，不得让设置页暗示当前已执行剪裁、删除数据或通信收件箱存储。
+  - 全节点模式只描述链数据保存方式，不承载 IM 通信开关。
+  - 后续普通全节点真正实现时，少数据模式切换到多数据模式应从网络补充同步数据；多数据模式切换到少数据模式应删除不再需要的本地数据。
+  - 在普通全节点底层能力完成前，不得让设置页暗示当前已执行剪裁或删除数据。
 
-### 9.1 私人通信全节点 IM 边界
+### 9.1 通信节点 IM 边界
 
-2026-06-14 起，通信全节点的 IM 能力统一规划到 `citizenchain/node/src/im/`，并按 ADR-020 固定为“私人通信全节点”。
+2026-06-14 起，通信节点 IM 能力统一规划到 `citizenchain/node/src/im/`，并按 ADR-020 固定为只服务本机用户的通信节点；2026-06-15 起，桌面设置页通过独立“通信节点功能”开关启用，不再作为全节点模式选项。
 
-- 模块定位：通信全节点用于让 wuminapp 用户全天候实时在线，承接自己的端到端加密 IM 收件箱、KeyPackage 池、密文消息投递、设备绑定和通信端点管理。
-- 私人边界：通信全节点只服务自己的手机和自己的密文收件箱；不互为中继，不做公共 Relay / DHT / rendezvous，不替别人存消息。
+- 模块定位：通信节点用于让公民用户全天候实时在线，承接自己的端到端加密 IM 收件箱、KeyPackage 池、密文消息投递、设备绑定和通信端点管理。
+- 私人边界：一台通信节点可以服务同一用户多台手机和多个钱包聊天号；不互为中继，不做公共 Relay / DHT / rendezvous，不替第三方存消息。
+- 设置边界：归档全节点和普通全节点都可以开启通信节点功能；开启/关闭通信节点功能不改变链数据库、同步策略或全节点数据模式。
 - 网络能力：复用当前节点已经固定使用的 `sc-network/libp2p` 后端，注册 IM 专用 request-response 协议 `/gmb/im/1`，不默认另起 swarm。
 - 可达性：节点端点支持 IPv4、IPv6、用户自有 `dns4` / `dnsaddr`；不可达时消息留在发送队列重试，不退化成借别人节点中继。
-- 存储边界：通信全节点只保存密文 `ImEnvelope`、附件密文分片、KeyPackage 池和必要索引，不读取明文；聊天内容、通信端点、设备公钥、PeerId、更新时间和撤销状态都只进入 IM 专属存储。
-- 账户边界：wuminapp 钱包账户是用户可见聊天账户和公民币收付款账户；钱包私钥只用于设备绑定证明和链上转账签名，不作为 IM 消息加密密钥。
-- 业务边界：`src/im/` 不处理治理、投票、实名信息；聊天窗口发公民币仍由 wuminapp 钱包和链上交易模块完成，IM 只发送加密 `payment_notice`。
-- 用户入口：wuminapp 统一通过“信息”Tab 展示通信全节点消息和近场消息；桌面节点设置页只提供通信全节点绑定、状态、PeerId、IPv4/IPv6 端点和收件箱同步展示，不提供“通信模式选择”。
-- 当前实现：`src/im/` 已提供私人通信全节点策略结构、端点校验、钱包账户设备绑定、密文信封、内存态 owner-only mailbox、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递 helper、Tauri 调试命令和条件 debug RPC。
+- 存储边界：通信节点只保存密文 `ImEnvelope`、附件密文分片、KeyPackage 池和必要索引，不读取明文；聊天内容、通信端点、设备公钥、PeerId、更新时间和撤销状态都只进入 IM 专属存储。
+- 账户边界：公民钱包地址是用户可见聊天号；钱包私钥只用于设备绑定证明，不作为 IM 消息加密密钥。
+- 业务边界：`src/im/` 不处理治理、投票、实名信息或交易业务；联系人详情里的“转账”继续归公民既有交易页面处理。
+- 用户入口：公民端从“我的 -> 用户资料”设置通信账户，从“我的通讯录 -> 联系人详情 -> 消息”进入聊天；“信息”Tab 只展示会话列表。
+- 配对入口：桌面设置页 `frontend/settings/communication-node/CommunicationNodeSection.tsx` 读取 `get_communication_node`，开启后展示 `im_node_pairing` 临时二维码；公民端在“我的 -> 设置 -> 设置通信节点”扫码配对或更换节点。
+- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper、Tauri 调试命令、条件本机手机 RPC 和条件 debug RPC；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和 WUMIN_QR_V1 配对二维码生成。
 - 当前命令：
-  - `get_im_private_node_policy`：查询私人通信全节点边界。
+  - `get_communication_node`：读取通信节点功能状态、PeerId、RPC URL、multiaddr 和配对二维码 payload。
+  - `set_communication_node_enabled`：独立开启/关闭通信节点功能，并同步本机手机 `im_*` RPC 运行态。
+  - `get_im_private_node_policy`：查询通信节点边界。
   - `get_im_direct_network_capability`：查询 `/gmb/im/1` 直连网络 Spike 能力。
   - `validate_im_node_endpoint`：校验 IPv4 / IPv6 / dns4 / dnsaddr multiaddr 与 PeerId 是否匹配。
-  - `validate_im_direct_delivery_request`：校验直连投递请求是否满足显式端点和 owner-only mailbox 边界。
-  - `submit_im_direct_encrypted_envelope`：通过已启动的 sc-network 向对方私人通信全节点直连投递密文信封。
-  - `register_im_owner_device`：登记 owner 钱包聊天账户、IM 设备、公钥、节点 PeerId、端点和钱包签名。
-  - `submit_im_encrypted_envelope`：提交投递给 owner 的密文信封，拒绝第三方 mailbox。
-  - `fetch_im_pending_envelopes`：owner 授权设备拉取待收密文。
-  - `ack_im_envelope`：owner 授权设备确认并移除密文信封。
-- 验收调试 RPC：仅当进程设置 `GMB_IM_DEBUG_RPC=1` 时注册 `im_debugGetCapability`、`im_debugRegisterOwnerDevice`、`im_debugSubmitDirectEnvelope`、`im_debugFetchPending`、`im_debugAckEnvelope`；正式节点默认不暴露这些 RPC。
+  - `validate_im_direct_delivery_request`：校验直连投递请求是否满足显式端点和目标钱包 mailbox 边界。
+  - `submit_im_direct_encrypted_envelope`：通过已启动的 sc-network 向对方通信节点直连投递密文信封。
+  - `fetch_im_direct_key_packages`：通过已启动的 sc-network 从对方通信节点直连拉取 KeyPackage。
+  - `consume_im_direct_key_package`：通过已启动的 sc-network 向对方通信节点声明消费一次性 KeyPackage。
+  - `register_im_owner_device`：登记钱包聊天账户、IM 设备、公钥、节点 PeerId、端点和钱包签名。
+  - `submit_im_encrypted_envelope`：提交投递给目标钱包地址的密文信封，拒绝未授权 mailbox。
+  - `fetch_im_pending_envelopes`：已授权设备拉取本钱包地址待收密文。
+  - `ack_im_envelope`：已授权设备确认并移除密文信封。
+  - `publish_im_key_package`：已授权手机向自己的通信节点发布 OpenMLS KeyPackage。
+  - `fetch_im_key_packages`：查询本机钱包地址 KeyPackage 池，供调试和本机验收使用。
+  - `consume_im_key_package`：消费本机钱包地址 KeyPackage，供调试和本机验收使用。
+- 正式本机手机 RPC：`im_getCapability`、`im_registerOwnerDevice`、`im_submitEnvelope`、`im_submitDirectEnvelope`、`im_fetchPending`、`im_ackEnvelope`、`im_publishKeyPackage`、`im_fetchKeyPackages`、`im_consumeKeyPackage`、`im_fetchDirectKeyPackages`、`im_consumeDirectKeyPackage` 会随节点 RPC 模块注册；实际调用必须由桌面设置页开启“通信节点功能”后放行。`GMB_IM_OWNER_RPC=1` 仍保留给 headless 验收脚本直接启用。
+- 验收调试 RPC：仅当进程设置 `GMB_IM_DEBUG_RPC=1` 时注册 `im_debugGetCapability`、`im_debugRegisterOwnerDevice`、`im_debugSubmitDirectEnvelope`、`im_debugFetchPending`、`im_debugAckEnvelope`、`im_debugPublishKeyPackage`、`im_debugFetchKeyPackages`、`im_debugConsumeKeyPackage`、`im_debugFetchDirectKeyPackages`、`im_debugConsumeDirectKeyPackage`；正式节点默认不暴露这些 RPC。
+- 持久化边界：mailbox 快照落在 `base-path/im/mailbox.json`，包含多钱包账号设备绑定、pending envelope 和 ack tombstone；KeyPackage 池快照落在 `base-path/im/keypackages.json`，包含多钱包账号 KeyPackage、TTL 和消费时间；节点启动时加载，登记/投递/ack/发布/消费后写回。
 - sc-network Spike 结论：当前节点能注册 request-response 协议并处理 incoming；outbound 直连会先把显式 `PeerId + multiaddr` 写入地址簿，再用 `NetworkService::request(..., TryConnect)` 发起请求；该路径不使用 DHT、rendezvous 或 Relay。
-- 双节点运行态验收：`citizenchain/scripts/im-two-node-smoke.sh` 已用两个临时 headless 节点验证 A→B 密文投递、B owner 拉取、ack 和第三方 mailbox 拒绝。
-- 未完成能力：持久化 mailbox、KeyPackage 池、OpenMLS wire bytes、Protobuf schema、设备撤销、容量/TTL 清理和 wuminapp 到私人节点正式传输仍需后续任务落地。
+- 双节点运行态验收：`citizenchain/scripts/im-two-node-smoke.sh` 已用两个临时 headless 节点验证 KeyPackage 发布/重启恢复/直连拉取/消费、A→B 密文投递、B 重启后 pending 不丢、B 授权设备拉取、ack、ack 后重启不重复、第三方 mailbox 拒绝和 ack 后重复投递不入队。
+- 未完成能力：设备撤销、正式容量配置、TTL 后台清理、真机双手机联调和近场原生能力仍需后续任务落地。
 
 ## 10. 桌面同步守护边界
 
@@ -233,11 +244,13 @@
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
 | `src/desktop/mod.rs` | 148 | 桌面端 Tauri 入口、插件与命令注册 |
 | `src/settings/desktop_update.rs` | 15 | 设置页点击更新前的节点停止准备命令 |
-| `src/settings/node-mode/mod.rs` | 219 | 设置页全节点模式后端，当前只允许归档全节点，普通/通信全节点由后端拒绝选择 |
-| `src/im/` | 10 files | 私人通信全节点 IM 边界模块，当前提供策略、端点、绑定、密文信封、内存 mailbox、`/gmb/im/1` 网络接入、Tauri 调试命令与条件 debug RPC |
+| `src/settings/node-mode/mod.rs` | 230 | 设置页全节点模式后端，当前只允许归档全节点，普通全节点由后端拒绝选择；旧 `communication` 本地值读取时清理回归档 |
+| `src/settings/communication-node/mod.rs` | 265 | 设置页通信节点功能后端，独立读写 `<app_data>/communication-node.json`，生成 IPv4/IPv6 配对二维码并控制本机手机 `im_*` RPC 放行 |
+| `src/im/` | 11 files | 通信节点 IM 边界模块，当前提供策略、端点、绑定、密文信封、持久化 mailbox、持久化 KeyPackage 池、`/gmb/im/1` 网络接入、Tauri 调试命令、条件 owner RPC 与条件 debug RPC |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
-| `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，展示归档/普通/通信三种模式，并将待完成模式置灰禁用 |
+| `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，只展示归档/普通两种链数据模式，并将普通全节点置灰禁用 |
+| `frontend/settings/communication-node/CommunicationNodeSection.tsx` | 126 | 设置页通信节点功能面板，独立开关、显示 PeerId/RPC/multiaddr 和公民扫码配对二维码 |
 | `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
 | `src/home/sync_guard.rs` | 531 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并受控重启 |
 | `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |

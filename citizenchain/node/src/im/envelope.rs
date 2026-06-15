@@ -52,7 +52,7 @@ impl ImEnvelope {
 /// 提交密文信封到私人通信全节点的请求。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct SubmitImEnvelopeRequest {
-    /// 目标 owner 的钱包聊天账户。私人 mailbox 只接受投递给 owner 的消息。
+    /// 目标钱包聊天账户。私人 mailbox 只接受投递给该账户的消息。
     pub(crate) mailbox_owner_chat_account: String,
     /// 密文信封。
     pub(crate) envelope: ImEnvelope,
@@ -67,7 +67,7 @@ impl SubmitImEnvelopeRequest {
         )?;
         self.envelope.validate()?;
         if self.mailbox_owner_chat_account != self.envelope.recipient_chat_account {
-            return Err("私人通信全节点只能接收投递给 owner 的密文信封".to_string());
+            return Err("私人通信全节点只能接收投递给目标钱包账户的密文信封".to_string());
         }
         Ok(())
     }
@@ -76,9 +76,9 @@ impl SubmitImEnvelopeRequest {
 /// IM 信封状态。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) enum ImEnvelopeState {
-    /// 已进入私人 mailbox 等待 owner 手机拉取。
+    /// 已进入私人 mailbox 等待已授权手机拉取。
     StoredForOwner,
-    /// owner 手机已确认。
+    /// 已授权手机已确认。
     AcknowledgedByOwner,
 }
 
@@ -145,6 +145,6 @@ mod tests {
         let err = request
             .validate()
             .expect_err("third-party mailbox must be rejected");
-        assert!(err.contains("owner"));
+        assert!(err.contains("目标钱包账户"));
     }
 }

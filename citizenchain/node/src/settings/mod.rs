@@ -2,6 +2,8 @@
 pub(crate) mod address_utils;
 #[path = "bootnodes-address/mod.rs"]
 pub mod bootnodes_address;
+#[path = "communication-node/mod.rs"]
+pub mod communication_node;
 pub mod desktop_update;
 #[path = "device-password/mod.rs"]
 pub(crate) mod device_password;

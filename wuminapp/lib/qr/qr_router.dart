@@ -12,6 +12,9 @@ enum QrRouteType {
   /// 用户码 - 收款码(user_transfer)
   userTransfer,
 
+  /// 通信节点配对码(im_node_pairing)
+  imNodePairing,
+
   /// 交易签名请求(sign_request)
   signRequest,
 
@@ -51,8 +54,7 @@ class QrRouteResult {
 ///
 /// 接收扫码原始字符串,返回 [QrRouteResult] 供上层页面分发处理。
 class QrRouter {
-  static final RegExp _ss58Pattern =
-      RegExp(r'^[1-9A-HJ-NP-Za-km-z]{30,80}$');
+  static final RegExp _ss58Pattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]{30,80}$');
   static const String _gmbSchemePrefix = 'gmb://account/';
 
   /// 分析扫码内容并返回路由结果。
@@ -73,6 +75,7 @@ class QrRouter {
           QrKind.signResponse => QrRouteType.signResponse,
           QrKind.userContact => QrRouteType.userContact,
           QrKind.userTransfer => QrRouteType.userTransfer,
+          QrKind.imNodePairing => QrRouteType.imNodePairing,
         };
         return QrRouteResult(type: type, raw: raw, envelope: env);
       } on FormatException {

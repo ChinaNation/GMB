@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/qr/bodies/login_challenge_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/login_receipt_body.dart';
+import 'package:wuminapp_mobile/qr/bodies/im_node_pairing_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_response_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
@@ -14,7 +15,7 @@ import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
 /// ```
 /// {
 ///   "proto": "WUMIN_QR_V1",
-///   "kind":  "<6 选 1>",
+///   "kind":  "<统一 kind>",
 ///   "id":    "<临时码必填,固定码省略>",
 ///   "issued_at":  <临时码必填,固定码省略>,
 ///   "expires_at": <临时码必填,固定码省略>,
@@ -120,6 +121,8 @@ class QrEnvelope<T extends QrBody> {
         body = UserContactBody.fromJson(bodyRaw);
       case QrKind.userTransfer:
         body = UserTransferBody.fromJson(bodyRaw);
+      case QrKind.imNodePairing:
+        body = ImNodePairingBody.fromJson(bodyRaw);
     }
 
     return QrEnvelope<QrBody>(

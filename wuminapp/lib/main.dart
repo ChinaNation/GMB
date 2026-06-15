@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/citizen/citizen_tab_page.dart';
 import 'package:wuminapp_mobile/governance/institution_account_list_page.dart';
+import 'package:wuminapp_mobile/im/im_runtime.dart';
 import 'package:wuminapp_mobile/im/im_tab_page.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
@@ -357,7 +358,7 @@ class _AppShellState extends State<AppShell> {
         _duoqianTabLoaded
             ? const InstitutionAccountListPage()
             : const SizedBox.shrink(),
-        const ImTabPage(),
+        ImTabPage(runtime: ImRuntime()),
         const TransactionTabPage(),
         ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),
       ];

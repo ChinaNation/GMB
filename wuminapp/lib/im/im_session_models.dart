@@ -8,9 +8,6 @@ enum ImMessageKind {
 
   /// 图片、视频或文件附件消息。
   attachment,
-
-  /// 聊天窗口内发起的公民币转账提示。
-  paymentNotice,
 }
 
 /// IM 消息发送状态。
@@ -27,7 +24,7 @@ enum ImMessageDeliveryState {
   /// 对方设备已经拉取到密文消息。
   receivedByDevice,
 
-  /// 本机确认链上或通信结果失败。
+  /// 本机确认通信结果失败。
   failed,
 }
 

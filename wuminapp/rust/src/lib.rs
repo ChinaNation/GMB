@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 mod error;
 mod ffi_types;
+mod im_mls;
 
 use ffi_types::*;
 
@@ -1888,7 +1889,7 @@ fn generate_chain_handle() -> ChainHandle {
     COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
-unsafe fn set_error(error_out: *mut *mut c_char, message: &str) {
+pub(crate) unsafe fn set_error(error_out: *mut *mut c_char, message: &str) {
     if !error_out.is_null() {
         let error_cstr =
             CString::new(message).unwrap_or_else(|_| CString::new("Unknown error").unwrap());
@@ -2057,7 +2058,7 @@ fn read_u128_le_string(bytes: &[u8], offset: usize) -> Result<String, String> {
     Ok(value.to_string())
 }
 
-fn string_into_raw(value: String, error_out: *mut *mut c_char) -> *mut c_char {
+pub(crate) fn string_into_raw(value: String, error_out: *mut *mut c_char) -> *mut c_char {
     match CString::new(value) {
         Ok(string) => string.into_raw(),
         Err(_) => {

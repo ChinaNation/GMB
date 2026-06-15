@@ -9,6 +9,7 @@ pub(crate) mod commands;
 pub(crate) mod direct;
 pub(crate) mod endpoint;
 pub(crate) mod envelope;
+pub(crate) mod keypackage;
 pub(crate) mod mailbox;
 pub(crate) mod network;
 pub(crate) mod policy;

@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-`wuminapp` 的 P2P IM 是独立通信功能，不属于钱包、治理、交易或身份实名模块，但用户可见聊天账户使用 wuminapp 钱包账户。
+`wuminapp` 的 P2P IM 是公民端独立通信功能。用户可见聊天号使用钱包地址；消息加密、设备身份、路由记录和通信节点 mailbox 都归 IM 模块管理。
 
 底部 Tab 目标顺序：
 
@@ -10,155 +10,205 @@
 公民 / 多签 / 信息 / 交易 / 我的
 ```
 
-“信息”Tab 是唯一入口。用户不选择“近场通信 / 通信全节点”模式；远程通信全节点消息和近场消息都在“信息”Tab 集中显示、统一发送和统一搜索。
+当前产品入口：
 
-核心目标：
+- “我的 -> 用户资料 -> 设置通信账户”：选择默认发消息的钱包地址；未设置时不能发消息。
+- “我的 -> 设置 -> 设置通信节点”：扫描区块链软件设置页通信节点二维码，保存或更换自己电脑通信节点。
+- “我的 -> 我的通讯录 -> 联系人详情 -> 消息”：进入与该联系人钱包地址的聊天窗口。
+- “信息”Tab：只展示已有会话列表和进入聊天详情，不提供工程入口。
+- “我的通讯录 -> 联系人详情 -> 转账”：继续跳转既有交易页面，不归 IM 流程处理。
 
-- 远程通信：手机连接自己的私人通信全节点，自己的节点再直连对方私人通信全节点投递密文。
-- 近场通信：手机与手机直接通信，用于游行、聚会、演出、体育场等手机网络拥堵或不可用场景。
-- 钱包聊天账户：钱包账户是聊天账户和公民币收付款账户。
-- 私人节点边界：通信全节点只服务自己，不互为中继，不替别人存消息。
-- 完全去中心化：不上链、不进 SFID、不使用中心化消息服务器。
+核心边界：
+
+- 一台电脑区块链软件可以作为同一用户的通信节点，服务该用户多台手机和多个钱包聊天号。
+- 通信节点只服务自己的 wuminapp 和自己的钱包聊天号，不互为节点，不做公共中继，不替第三方存消息。
+- IM 路由记录只是通信模块的本地运行数据，不属于链业务数据，不进入 SFID 身份体系。
+- 钱包私钥只用于证明“这个 IM 设备属于这个钱包地址”，不用于 OpenMLS 消息加密。
 
 ## 2. 总体架构
 
+远程通信路径：
+
 ```text
 我手机（公民）
-  -> 我家通信全节点（只服务我，只存我的密文队列）
-  -> 你家通信全节点（只服务你，只收发给你的密文）
-  -> 你手机（公民）
-
-近场旁路：
-我手机 <-> 你手机
+  -> 我电脑通信节点（只服务我，只存我授权账号的密文队列）
+  -> 对方电脑通信节点（只服务对方，只接收投递给对方钱包地址的密文）
+  -> 对方手机（公民）
 ```
 
-手机端：
+近场旁路：
+
+```text
+我手机 <-> 对方手机
+```
+
+手机端目录：
 
 ```text
 wuminapp/lib/im/
-├── 信息 Tab / 会话列表 / 聊天详情
-├── Protobuf ImEnvelope 外层协议
-├── OpenMLS 标准 wire bytes 内层消息
-├── 钱包账户绑定 IM 设备密钥
-├── 聊天窗口发送公民币 payment_notice
-├── 本地消息库、发送队列、附件缓存
-└── TransportRouter 统一路由远程节点和近场链路
+├── im_tab_page.dart              信息 Tab 会话列表
+├── im_chat_page.dart             聊天详情页
+├── im_runtime.dart               通信账户、节点配对、OpenMLS、收发编排
+├── im_message_flow.dart          远程消息收发状态机
+├── proto/                        Protobuf 生成类型
+├── crypto/                       OpenMLS、设备密钥、绑定 payload
+├── storage/                      Isar 会话、消息、路由缓存、队列
+└── transport/                    自己通信节点 RPC 与后续近场传输
 ```
 
-节点端：
+节点端目录：
 
 ```text
 citizenchain/node/src/im/
-├── 私人密文 mailbox
-├── KeyPackage 池
-├── 设备授权
-├── /gmb/im/1 P2P 协议边界
-└── IPv4 / IPv6 / dns4 / dnsaddr 端点
+├── mailbox.rs                    多钱包账号密文 mailbox
+├── keypackage.rs                 多钱包账号 KeyPackage 池
+├── binding.rs                    钱包地址与 IM 设备授权
+├── endpoint.rs                   IPv4 / IPv6 / dns4 / dnsaddr 端点校验
+├── direct.rs                     显式端点直连投递
+├── network.rs                    /gmb/im/1 request-response wire
+├── rpc.rs                        手机连接自己节点使用的 im_* RPC
+└── commands.rs                   桌面端调试和验收命令
 ```
 
-## 3. 身份模型
+## 3. 钱包地址与 IM 身份模型
 
 IM 身份分层：
 
 ```text
-聊天账户 = 钱包账户 / SS58 地址 / AccountId
-IM 设备身份 = 独立 OpenMLS 设备密钥
-转账账户 = 同一个钱包账户
+聊天账户 = 钱包地址 / SS58 地址
+IM 设备身份 = 手机本地独立 OpenMLS 设备密钥
+通信节点 = 用户自己电脑上的通信节点能力
 ```
 
-钱包私钥只用于：
+钱包地址作为聊天号：
 
-- 证明某个 IM 设备属于该钱包账户。
-- 在聊天窗口中发送公民币时签链上转账。
+- 用户可以在 wuminapp 里有多个钱包。
+- 用户资料里的“设置通信账户”决定默认用哪个钱包地址发消息。
+- 用户可以随时切换通信账户；切换后，新发送消息使用新的钱包地址。
+- 同一台电脑通信节点可以授权多个钱包地址和多台手机设备。
 
-钱包私钥禁止用于：
+钱包签名只用于设备授权：
+
+```text
+GMB_IM_WALLET_BINDING_V1
+| wallet_account
+| im_device_id
+| im_device_pubkey
+| node_peer_id
+| node_endpoints
+| expires_at_millis
+| nonce
+```
+
+禁止把钱包私钥用于：
 
 - OpenMLS 消息加密。
 - 每条聊天消息签名。
-- 通信全节点存储。
+- 通信节点存储。
 - 节点间投递鉴权。
 
-绑定凭证字段：
+## 4. 最小发送流程
+
+文本消息发送流程必须保持短链路：
 
 ```text
-wallet_account
+联系人详情点击“消息”
+-> 打开 ImChatPage
+-> ImRuntime 读取用户资料通信账户
+-> 查本地 ImRouteRecord 路由缓存
+-> 确认本机手机已授权到自己的通信节点
+-> 拉取/消费对方 KeyPackage
+-> OpenMLS 生成密文 ImEnvelope
+-> 自己通信节点直连对方通信节点投递
+-> 对方手机从自己的通信节点拉取并解密
+```
+
+失败边界：
+
+- 未设置通信账户：直接提示“请先在用户资料中设置通信账户”。
+- 通信账户钱包不存在或地址不一致：提示用户重新设置通信账户。
+- 联系人没有 IM 路由记录：提示“联系人暂未提供通信路由，暂不能发送消息”。
+- 对方通信节点不可达：消息进入发送队列，后续重试。
+
+## 5. IM 路由记录
+
+`ImRouteRecord` 是隐藏的 IM 路由缓存，不是第二套通讯录。
+
+字段：
+
+```text
+route_id
+wallet_chat_account
+display_name
 im_device_id
-im_device_pubkeys
-communication_node_peer_id
-node_endpoints
-expires_at
-nonce
-wallet_signature
+device_public_key_hex
+safety_number
+node_peer_id
+node_multiaddr
+note
+created_at_millis
+updated_at_millis
 ```
 
-当前 Spike 固定绑定签名 payload：
+当前使用方式：
 
-```text
-GMB_IM_WALLET_BINDING_V1|wallet_account|im_device_id|im_device_pubkey|node_peer_id|node_endpoints|expires_at_millis|nonce
-```
+- 联系人仍由“我的通讯录”管理。
+- 聊天发送时按联系人钱包地址查 `ImRouteRecord`。
+- 路由记录只保存通信所需的 PeerId、multiaddr、设备公钥和安全码。
+- 后续设备配对和路由交换可以用二维码，但信息 Tab 不承担配对入口。
 
-`wallet_signature` 必须覆盖上述 payload。节点端当前只做字段和边界校验，真实钱包验签会在签名协议 fixture 固化后接入。
+## 6. E2EE 与 Protobuf
 
-## 4. E2EE 与协议编码
-
-端到端加密主选 OpenMLS。
+端到端加密主选 OpenMLS：
 
 - v1 使用经典 MLS 密码套件。
 - `suite_version` 保留 hybrid / PQC 迁移字段。
-- v1 不宣称抗量子；MLS 密码敏捷性只作为未来切换空间。
-- KeyPackage 以设备为单位发布到自己的通信全节点。
-- KeyPackage 必须具备 TTL、一次性消费或租约消费、防重放和撤销清理。
+- v1 不宣称抗量子；MLS 密码敏捷性用于未来切换空间。
+- KeyPackage 以设备为单位发布到自己的通信节点。
+- KeyPackage 必须具备 TTL、一次性消费、防重放和撤销清理。
+- 当前 native 边界已支持持久化 MLS 会话、Welcome/application wire bytes、重启恢复和真实 KeyPackage 生成。
 
 外层协议使用 Protobuf：
 
 ```text
-GMB_IM_V1 / ImEnvelope
-├── protocol_version
-├── envelope_id
-├── conversation_id
-├── sender_chat_account
-├── recipient_chat_account
-├── sender_device_id
-├── mls_wire_message
-├── encrypted_metadata
-├── attachment_manifest_hash
-├── chunk_refs
-├── created_at
-├── ttl
-└── ack_policy
+真源文件：wuminapp/im/proto/im_envelope.proto
+生成命令：
+PATH="$HOME/.pub-cache/bin:$PATH" protoc \
+  --dart_out=lib/im/proto \
+  -I im/proto \
+  im/proto/im_envelope.proto
 ```
 
-联系人包：
+主要消息：
 
 ```text
-ImContactBundle
-├── chat_account
-├── display_name
-├── node_peer_id
-├── node_endpoints
-├── device_public_keys
-├── keypackage_endpoint
-├── safety_code
-├── expires_at
-└── wallet_signature
+ImEnvelope
+ImRouteRecord
+RegisterImDeviceRequest
+SubmitImEnvelopeRequest
+ImDirectDeliveryRequest
+ImKeyPackage
+PublishImKeyPackageRequest
+FetchImKeyPackagesRequest
+ConsumeImKeyPackageRequest
 ```
 
-禁止把 SFID 号码、实名信息、身份档案字段写入 IM 协议。
+`ImEnvelope.mls_wire_message` 承载 OpenMLS 标准 wire bytes；链内 SCALE 不作为 IM 主协议。
 
-## 5. 通信全节点
+## 7. 通信节点能力
 
-通信全节点能力放在 `citizenchain/node/src/im/`。
+通信节点能力放在 `citizenchain/node/src/im/`。
 
-通信全节点只允许：
+通信节点允许：
 
-- 保存自己的密文 mailbox。
-- 保存自己的 KeyPackage 池。
-- 接收别人投递给自己的密文消息。
-- 给自己的手机提供拉取、确认、删除。
-- 管理自己的设备授权。
-- 向对方私人通信全节点直连投递密文。
+- 保存已授权钱包地址的密文 mailbox。
+- 保存已授权钱包地址的 KeyPackage 池。
+- 接收别人投递给本机授权钱包地址的密文。
+- 给自己的手机提供拉取、确认和删除。
+- 管理自己的手机设备授权。
+- 向对方通信节点直连投递密文。
 
-通信全节点禁止：
+通信节点禁止：
 
 - 不给第三方做 Relay。
 - 不做公共 rendezvous。
@@ -173,36 +223,16 @@ ImContactBundle
 /gmb/im/1
 ```
 
-真实跨节点投递前必须先做 `sc-network/libp2p` 能力 Spike，核实 request-response、notification、端点签名和节点可达性 API。
+桌面端设置边界：
 
-当前网络 Spike 已落地的本地调试命令：
+- 设置 Tab 的“通信节点功能”是独立 IM 能力开关。
+- 归档全节点和普通全节点都可以开启通信节点功能；开启通信节点功能不改变链数据运行边界。
+- 普通全节点裁剪能力未完成时仍保持原有节点数据模式。
+- 开启后桌面端生成 `im_node_pairing` 临时二维码；公民只在“我的 -> 设置 -> 设置通信节点”扫码配对。
 
-```text
-get_im_private_node_policy
-validate_im_node_endpoint
-register_im_owner_device
-submit_im_encrypted_envelope
-fetch_im_pending_envelopes
-ack_im_envelope
-get_im_direct_network_capability
-validate_im_direct_delivery_request
-submit_im_direct_encrypted_envelope
-```
+## 8. 可达性与 IPv6
 
-当前 sc-network Spike 结论：
-
-- 已注册 `/gmb/im/1` request-response 协议。
-- 已启动 incoming handler，收到 `SubmitEnvelope` 后复用 owner-only mailbox 校验。
-- 已提供 `submit_im_direct_encrypted_envelope` Tauri 调试命令。
-- 已新增 `GMB_IM_DEBUG_RPC=1` 条件 debug RPC，供 headless 双节点运行态验收调用；正式节点默认不注册。
-- 已新增 `citizenchain/scripts/im-two-node-smoke.sh`，使用两个临时 `base-path` 启动 A/B 节点，完成 A→B 密文投递、B owner 拉取、ack 和第三方 mailbox 拒绝验证。
-- outbound helper 会把联系人包里的显式 `PeerId + multiaddr` 写入 sc-network 地址簿，再用 `NetworkService::request(..., IfDisconnected::TryConnect)` 发起请求。
-- 不使用公共 DHT、公共 rendezvous 或 Relay。
-- 本机双节点真实运行态 smoke 已通过；后续产品化重点转为持久化 mailbox、OpenMLS wire bytes、Protobuf schema 和 wuminapp 到私人节点的正式传输。
-
-## 6. 可达性与 IPv6
-
-IM 支持 IPv4、IPv6 和用户自有域名，不做 IPv6-only。
+IM 支持 IPv4、IPv6 和用户自有域名。
 
 支持 multiaddr：
 
@@ -221,85 +251,74 @@ IM 支持 IPv4、IPv6 和用户自有域名，不做 IPv6-only。
 4. 用户自有域名。
 5. 用户自己控制的公网入口。
 
-如果不可达，消息进入发送队列等待重试。禁止借别人通信全节点中继。
-
-## 7. 聊天窗口发送公民币
-
-聊天详情页内提供“发送公民币”入口。
-
-流程：
-
-```text
-点击发送公民币
--> 默认填入对方聊天账户的钱包地址
--> 用户输入金额
--> 显示链上转账确认
--> 钱包账户签名
--> 通过 smoldot 提交链上交易
--> 聊天中发送加密 payment_notice
--> 双方各自查链确认状态
-```
-
-`payment_notice` 只是聊天提示，不是到账真相。到账真相必须以链上交易和余额查询为准。
-
-## 8. 近场通信
-
-近场不经过通信全节点，仍传输同一套密文 `ImEnvelope`。
-
-Android：
-
-- 第一优先 Nearby Connections。
-- 无 Google Play Services 场景评估 Wi-Fi Direct / Wi-Fi Aware / BLE。
-
-iOS：
-
-- Multipeer Connectivity。
-- CoreBluetooth / BLE 用于跨平台控制通道。
-
-Android 与 iOS：
-
-- BLE GATT 做发现、控制、短消息。
-- 大附件不承诺 BLE 高速传输，需单独真机验证。
+如果不可达，消息进入发送队列等待重试。禁止借别人通信节点中继。
 
 ## 9. 存储
 
 wuminapp 本地：
 
-- Isar 保存会话、消息索引、联系人、发送队列、附件索引。
-- 明文消息建议本地加密后入库。
-- 本地加密密钥放手机安全存储。
-- 落 Isar schema 前必须先沟通。
+- `ImConversationEntity`：会话索引。
+- `ImMessageEntity`：消息索引和本机明文。
+- `ImRouteCacheEntity`：IM 路由缓存。
+- `ImOutboundQueueEntity`：发送队列。
+- `ImPendingInboundEntity`：Welcome 未到前的 application 暂存。
+- OpenMLS native provider storage 保存到 App 私有 MLS 状态目录。
 
-通信全节点：
+通信节点：
 
-- 只保存密文 envelope。
-- 只保存密文附件分片。
-- 保存 KeyPackage 池。
-- 保存设备授权和 TTL 元数据。
+- `base-path/im/mailbox.json`：多钱包账号密文 mailbox、设备授权、ack tombstone。
+- `base-path/im/keypackages.json`：多钱包账号 KeyPackage 池、TTL、消费时间。
+- 只保存密文 envelope、KeyPackage 和必要索引。
 - 容量、TTL、附件大小必须有限额。
 
 ## 10. 当前代码状态
 
-- `wuminapp/lib/im/` 已新增基础模型和“信息”Tab 壳。
-- `wuminapp/lib/im/crypto/im_binding_payload.dart` 已新增钱包聊天账户到 IM 设备、私人通信全节点的绑定 payload。
-- `wuminapp/lib/im/transport/im_private_node_transport.dart` 已新增私人通信全节点端点和传输骨架，当前只入队不做真实网络发送。
-- `wuminapp/android/im/` 已新增 Android 近场模块占位文档。
-- `wuminapp/ios/im/` 已新增 iOS 近场模块占位文档。
-- `citizenchain/node/src/im/` 已新增私人通信全节点策略、端点校验、设备绑定、密文信封、内存 mailbox、`/gmb/im/1` request-response 接入、incoming handler、显式端点直连投递 helper、Tauri 调试命令和条件 debug RPC。
-- `citizenchain/scripts/im-two-node-smoke.sh` 已新增本机双节点真实运行态验收脚本，验证 A→B 直连投递、owner 拉取/ack 和第三方 mailbox 拒绝。
-- 真实 OpenMLS、Protobuf 生成、Isar schema、持久化 mailbox、wuminapp 到私人节点正式传输和近场原生能力尚未接入，需按任务卡继续拆分。
+- `wuminapp/lib/main.dart` 已在底部多签和交易之间插入“信息”Tab。
+- `wuminapp/lib/im/im_tab_page.dart` 已收口为会话列表，不再暴露工程入口。
+- `wuminapp/lib/my/user/user.dart` 已在“我的 -> 设置”的“安全”和“关于”之间插入“设置通信节点”单行入口。
+- `wuminapp/lib/im/im_node_settings_page.dart` 已提供通信节点未设置/已设置状态、右上角扫码更换和首次扫码配对。
+- `wuminapp/lib/qr/bodies/im_node_pairing_body.dart` 已登记 `GMB_IM_NODE_PAIRING_V1`，支持 IPv4/IPv6/dns4/dnsaddr multiaddr 校验。
+- `wuminapp/lib/my/user/user.dart` 的联系人详情“消息”按钮已接入 `ImChatPage`。
+- `wuminapp/lib/my/user/user_service.dart` 已提供通信账户设置状态。
+- `wuminapp/lib/im/im_runtime.dart` 已按用户资料通信账户发送消息，并使用 `ImPairedNodeConfig` 保存自己的通信节点配置。
+- `wuminapp/lib/im/storage/im_isar_store.dart` 已将原联系人语义收口为 `ImRouteRecord` / `ImRouteCacheEntity`。
+- `wuminapp/im/proto/im_envelope.proto` 已作为 Protobuf 真源放在 wuminapp 内部目录。
+- `wuminapp/lib/im/proto/` 已从该真源生成 Dart 类型。
+- `wuminapp/lib/im/crypto/` 已接入 OpenMLS native 边界、设备密钥、KeyPackage 和绑定 payload。
+- `wuminapp/lib/im/im_message_flow.dart` 已串联 OpenMLS、Protobuf envelope、通信节点投递和 Isar 状态。
+- `wuminapp/lib/im/transport/im_private_node_transport.dart` 已提供自己的通信节点 RPC 客户端。
+- `citizenchain/node/src/im/mailbox.rs` 已支持一台通信节点服务多个钱包账号和多个授权设备。
+- `citizenchain/node/src/im/keypackage.rs` 已支持多钱包账号 KeyPackage 池。
+- `citizenchain/node/src/settings/node-mode/mod.rs` 已移除旧 `communication` 选项，全节点模式只保留归档/普通链数据模式。
+- `citizenchain/node/src/settings/communication-node/mod.rs` 已提供独立通信节点功能开关、IPv4/IPv6 配对端点和 WUMIN_QR_V1 配对二维码；设置页读写会同步本机手机 `im_*` RPC 运行态开关。
+- `citizenchain/scripts/im-two-node-smoke.sh` 已覆盖双节点 KeyPackage、直连投递、重启恢复、ack 和第三方 mailbox 拒绝。
 
 ## 11. 预计修改目录
 
-- `wuminapp/lib/im/`：公民 IM 统一消息层、会话、联系人、消息状态、发送队列；涉及代码。
-- `wuminapp/lib/im/crypto/`：OpenMLS、设备密钥、KeyPackage、安全码、钱包账户绑定；涉及代码。
-- `wuminapp/lib/im/payment/`：聊天窗口发送公民币、`payment_notice`、链上确认状态；涉及代码。
-- `wuminapp/lib/im/storage/`：Isar 消息库、联系人库、附件缓存；涉及代码，schema 前需确认。
-- `wuminapp/lib/im/transport/`：远程节点传输、近场传输、自动路由、去重；涉及代码。
-- `wuminapp/android/im/`：Android Nearby、Wi-Fi fallback、BLE；涉及代码。
-- `wuminapp/ios/im/`：iOS Multipeer、BLE；涉及代码。
-- `citizenchain/node/src/im/`：私人通信全节点 mailbox、KeyPackage、设备授权、IM P2P 协议；涉及代码。
-- `memory/04-decisions/`：IM 架构 ADR；涉及文档。
+- `wuminapp/lib/im/`：公民 IM 信息 Tab、聊天页面、运行态、消息状态机和传输抽象；涉及代码、中文注释和残留清理。
+- `wuminapp/im/proto/`：GMB_IM_V1 外层 Protobuf schema 真源；涉及协议文件，不放仓库根目录。
+- `wuminapp/lib/im/proto/`：Dart Protobuf 生成物；涉及生成代码。
+- `wuminapp/lib/im/crypto/`：OpenMLS、设备密钥、KeyPackage、安全码和钱包账户绑定；涉及代码。
+- `wuminapp/lib/im/storage/`：Isar 会话、消息、路由缓存、发送队列和 pending 入站 envelope；涉及代码。
+- `wuminapp/lib/im/transport/`：手机连接自己通信节点的 RPC 客户端和后续近场传输抽象；涉及代码。
+- `wuminapp/lib/my/user/`：用户资料通信账户和通讯录详情消息入口；涉及代码。
+- `wuminapp/lib/isar/`：IM 本地数据库 schema；涉及代码生成和迁移边界。
+- `wuminapp/android/im/`：Android 近场能力预留目录；涉及后续原生代码。
+- `wuminapp/ios/im/`：iOS 近场能力预留目录；涉及后续原生代码。
+- `citizenchain/node/src/im/`：通信节点 mailbox、KeyPackage、设备授权、端点校验和 `/gmb/im/1`；涉及代码。
+- `citizenchain/node/src/settings/communication-node/`：桌面端通信节点功能独立开关和配对二维码；涉及代码。
+- `citizenchain/node/frontend/settings/communication-node/`：桌面端设置页通信节点功能展示、开关和二维码；涉及代码。
+- `citizenchain/node/src/settings/node-mode/`：只保留归档/普通全节点数据模式；涉及旧 `communication` 选项残留清理。
+- `citizenchain/node/frontend/settings/node-mode/`：只展示归档/普通全节点数据模式；涉及旧 `communication` 选项残留清理。
 - `memory/05-modules/wuminapp/im/`：wuminapp IM 技术文档；涉及文档。
-- `memory/05-modules/citizenchain/node/`：通信全节点边界文档；涉及文档。
-- `memory/07-ai/`：`GMB_IM_V1` 协议和命名登记；涉及文档。
+- `memory/05-modules/citizenchain/node/`：通信节点边界文档；涉及文档。
+- `memory/07-ai/`：`GMB_IM_V1` 协议和命名登记；涉及文档残留清理。
+
+## 12. 验收要求
+
+- `flutter analyze`
+- IM 相关 Flutter 测试。
+- `cargo test -p node im::`
+- `cargo test -p node settings::node_mode`
+- `citizenchain/scripts/im-two-node-smoke.sh`
+- `git diff --check`

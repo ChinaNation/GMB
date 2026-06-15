@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// IM 私人通信全节点对外公布的可达端点。
 ///
-/// 该结构只描述 owner 自己节点的入口，不表示公共 relay、公共 DHT 或公共
+/// 该结构只描述用户自己通信节点的入口，不表示公共 relay、公共 DHT 或公共
 /// rendezvous。端点可以由用户手工配置，也可以由后续 sc-network Spike 从本机
 /// 网络服务读取。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

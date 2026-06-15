@@ -299,6 +299,42 @@ int smoldot_get_finalized_storage_values_async(SmoldotChainHandle chain_handle,
                                                SmoldotDartCallback callback,
                                                char **error_out);
 
+/**
+ * 生成真实 OpenMLS KeyPackage，并以 JSON 返回 hex。
+ *
+ * # Safety
+ * - `request_json` 必须是合法 UTF-8 C 字符串。
+ * - 返回字符串必须由 `smoldot_free_string` 释放。
+ */
+char *gmb_im_mls_create_key_package_json(const char *request_json, char **error_out);
+
+/**
+ * 执行真实 OpenMLS 双人组 round-trip smoke。
+ *
+ * # Safety
+ * - `request_json` 必须是合法 UTF-8 C 字符串。
+ * - 返回字符串必须由 `smoldot_free_string` 释放。
+ */
+char *gmb_im_mls_two_party_smoke_json(const char *request_json, char **error_out);
+
+/**
+ * 使用持久化 MLS 会话加密 application message。
+ *
+ * # Safety
+ * - `request_json` 必须是合法 UTF-8 C 字符串。
+ * - 返回字符串必须由 `smoldot_free_string` 释放。
+ */
+char *gmb_im_mls_encrypt_json(const char *request_json, char **error_out);
+
+/**
+ * 处理 Welcome 或解密 application message。
+ *
+ * # Safety
+ * - `request_json` 必须是合法 UTF-8 C 字符串。
+ * - 返回字符串必须由 `smoldot_free_string` 释放。
+ */
+char *gmb_im_mls_decrypt_json(const char *request_json, char **error_out);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

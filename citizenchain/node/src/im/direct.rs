@@ -4,18 +4,18 @@ use super::{endpoint::ImNodeEndpoint, envelope::SubmitImEnvelopeRequest};
 
 /// IM 直连投递请求。
 ///
-/// 只允许使用联系人包或 owner 显式配置中的 PeerId + multiaddr，不走公共 DHT、
+/// 只允许使用 IM 路由记录或本机显式配置中的 PeerId + multiaddr，不走公共 DHT、
 /// 公共 rendezvous 或第三方 relay。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ImDirectDeliveryRequest {
     /// 对方私人通信全节点端点。
     pub(crate) remote_endpoint: ImNodeEndpoint,
-    /// 投递到对方 owner mailbox 的密文信封。
+    /// 投递到对方钱包账号 mailbox 的密文信封。
     pub(crate) submit: SubmitImEnvelopeRequest,
 }
 
 impl ImDirectDeliveryRequest {
-    /// 校验直连请求不包含第三方 mailbox 或非显式端点。
+    /// 校验直连请求不包含非目标钱包 mailbox 或非显式端点。
     pub(crate) fn validate(&self) -> Result<(), String> {
         self.remote_endpoint.validate()?;
         self.submit.validate()?;
@@ -94,7 +94,7 @@ mod tests {
 
         let err = request
             .validate()
-            .expect_err("third-party mailbox must be rejected");
-        assert!(err.contains("owner"));
+            .expect_err("non-recipient mailbox must be rejected");
+        assert!(err.contains("目标钱包账户"));
     }
 }
