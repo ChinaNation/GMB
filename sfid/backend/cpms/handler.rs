@@ -14,6 +14,7 @@ use chrono::{NaiveDate, Utc};
 
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::operation_auth::AdminActionType;
+use crate::cpms::CpmsRegionClaims;
 use crate::number::validate_sfid_number_format;
 use crate::*;
 
@@ -21,6 +22,15 @@ type Blake2b256 = Blake2b<U32>;
 
 const MAX_STATUS_REASON_CHARS: usize = 500;
 const GEO_SEAL_PREFIX: &str = "g1";
+const ELECTION_SCOPE_PROVINCE: &str = "PROVINCE";
+const ELECTION_SCOPE_CITY: &str = "CITY";
+const ELECTION_SCOPE_TOWN: &str = "TOWN";
+
+struct NormalizedRegionClaims {
+    province_code: String,
+    city_code: Option<String>,
+    town_code: Option<String>,
+}
 
 fn cpms_status_text(status: &CpmsSiteStatus) -> &'static str {
     match status {
@@ -380,6 +390,13 @@ pub(crate) async fn archive_verify(
             status_updated_at: verified.status_updated_at,
             province_code: verified.province_code,
             city_code: verified.city_code,
+            residence_province_code: verified.residence_province_code,
+            residence_city_code: verified.residence_city_code,
+            residence_town_code: verified.residence_town_code,
+            birth_province_code: verified.birth_province_code,
+            birth_city_code: verified.birth_city_code,
+            birth_town_code: verified.birth_town_code,
+            election_scope_level: verified.election_scope_level,
             sfid_number: verified.sfid_number,
             status: "verified",
         },
@@ -936,6 +953,19 @@ pub(crate) async fn verify_cpms_archive_qr(
     )
     .await?;
     validate_geo_seal_against_site(&site, &seal)?;
+    let election_scope_level = validate_election_scope_level(seal.election_scope_level.as_str())?;
+    let residence_region =
+        validate_region_claims(&seal.residence, "residence", election_scope_level.as_str())?;
+    let birthplace_region = validate_region_claims(
+        &seal.birthplace,
+        "birthplace",
+        election_scope_level.as_str(),
+    )?;
+    validate_residence_region_against_site(
+        &site,
+        &residence_region,
+        election_scope_level.as_str(),
+    )?;
     if matches!(
         site.status,
         CpmsSiteStatus::Disabled | CpmsSiteStatus::Revoked
@@ -1001,6 +1031,13 @@ pub(crate) async fn verify_cpms_archive_qr(
         status_updated_at: archive_code.status_updated_at,
         province_code: extract_province_code_from_sfid(seal.sfid_number.as_str()),
         city_code: extract_city_code_from_sfid(seal.sfid_number.as_str()),
+        residence_province_code: residence_region.province_code,
+        residence_city_code: residence_region.city_code,
+        residence_town_code: residence_region.town_code,
+        birth_province_code: birthplace_region.province_code,
+        birth_city_code: birthplace_region.city_code,
+        birth_town_code: birthplace_region.town_code,
+        election_scope_level,
         sfid_number: seal.sfid_number,
         wallet_address: archive_code.wallet_address.clone(),
         wallet_pubkey: archive_code.wallet_pubkey.clone(),
@@ -1051,6 +1088,109 @@ fn validate_geo_seal_against_site(
         ));
     }
     Ok(())
+}
+
+fn validate_election_scope_level(scope: &str) -> Result<String, (StatusCode, u32, String)> {
+    let normalized = scope.trim().to_ascii_uppercase();
+    match normalized.as_str() {
+        ELECTION_SCOPE_PROVINCE | ELECTION_SCOPE_CITY | ELECTION_SCOPE_TOWN => Ok(normalized),
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "geo_seal election_scope_level invalid".to_string(),
+        )),
+    }
+}
+
+fn validate_region_claims(
+    region: &CpmsRegionClaims,
+    label: &str,
+    election_scope_level: &str,
+) -> Result<NormalizedRegionClaims, (StatusCode, u32, String)> {
+    let province_code = normalize_region_code(Some(region.province_code.as_str())).ok_or((
+        StatusCode::BAD_REQUEST,
+        1001,
+        format!("geo_seal {label} province_code required"),
+    ))?;
+    let city_code = normalize_region_code(region.city_code.as_deref());
+    let town_code = normalize_region_code(region.town_code.as_deref());
+
+    match election_scope_level {
+        ELECTION_SCOPE_PROVINCE => {
+            if city_code.is_some() || town_code.is_some() {
+                return Err((
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    2004,
+                    format!("geo_seal {label} must only contain province"),
+                ));
+            }
+        }
+        ELECTION_SCOPE_CITY => {
+            if city_code.is_none() || town_code.is_some() {
+                return Err((
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    2004,
+                    format!("geo_seal {label} must contain province and city"),
+                ));
+            }
+        }
+        ELECTION_SCOPE_TOWN => {
+            if city_code.is_none() || town_code.is_none() {
+                return Err((
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    2004,
+                    format!("geo_seal {label} must contain province, city and town"),
+                ));
+            }
+        }
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                1001,
+                "geo_seal election_scope_level invalid".to_string(),
+            ));
+        }
+    }
+
+    Ok(NormalizedRegionClaims {
+        province_code,
+        city_code,
+        town_code,
+    })
+}
+
+fn validate_residence_region_against_site(
+    site: &CpmsSiteKeys,
+    region: &NormalizedRegionClaims,
+    election_scope_level: &str,
+) -> Result<(), (StatusCode, u32, String)> {
+    if region.province_code != site.province_code {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "geo_seal residence province mismatch".to_string(),
+        ));
+    }
+    if matches!(
+        election_scope_level,
+        ELECTION_SCOPE_CITY | ELECTION_SCOPE_TOWN
+    ) && region.city_code.as_deref() != Some(site.city_code.as_str())
+    {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "geo_seal residence city mismatch".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_region_code(value: Option<&str>) -> Option<String> {
+    let trimmed = value?.trim();
+    if trimmed.is_empty() || !trimmed.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 pub(crate) async fn bind_cpms_pubkey_if_needed(

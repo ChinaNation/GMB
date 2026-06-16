@@ -3,7 +3,7 @@
 ## 1. 模块定位
 `backend/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案操作记录聚合、档案生命周期硬删除和年度状态导出。
 
-本模块不保存实名归属判断逻辑；省市归属来自 `initialize` 保存的 INSTALL 授权材料，并只写入加密 `geo_seal`。
+本模块不保存实名归属判断逻辑；CPMS 所属省市来自 `initialize` 保存的 INSTALL 授权材料。公民居住地由该省市 + 镇村 + 居住地址文本组成；出生地由全国省市镇组成，来自 CPMS 随包的 SFID 行政区唯一真源 `china.sqlite` 只读拷贝，保存后不得在编辑接口中修改。
 
 ## 2. 负责范围
 - `build_archive_qr_payload(...)`：构造 ARCHIVE 二维码。
@@ -51,9 +51,24 @@
 }
 ```
 
-二维码明文字段不得出现 `sfid_number / province_code / city_code`。归属密文 `geo_seal` 只加密 `sfid_number`，由 SFID 根据安装授权中的 `install_secret` 解密。
+二维码明文字段不得出现 `sfid_number / province_code / city_code / town_code` 或中文行政区名称。归属密文 `geo_seal` 加密 CPMS 机构 `sfid_number`、居住地代码、出生地代码和 `election_scope_level`，由 SFID 根据安装授权中的 `install_secret` 解密。
 ARCHIVE 不包含 `code_id` 或使用次数；重复绑定由 SFID 的 `archive_no / sfid_number / wallet_pubkey` 三者唯一关系约束。
-生成和打印 ARCHIVE 前必须满足完整性门槛：姓氏、名字、性别、身高、出生日期、护照号、有效期、省份、城市、公民状态、选举资格、投票账户、照片和出生纸齐全；公民状态必须为 `NORMAL`，选举资格必须为 `true`，照片和出生纸各至少 1 张。
+生成和打印 ARCHIVE 前必须满足完整性门槛：姓氏、名字、性别、身高、出生日期、护照号、有效期、居住省市、出生省市镇、公民状态、选举资格、投票账户、照片和出生纸齐全；公民状态必须为 `NORMAL`，选举资格必须为 `true`，照片和出生纸各至少 1 张。
+
+`geo_seal` 明文结构只在 CPMS 签发端与 SFID 解密端存在：
+
+```json
+{
+  "sfid_number": "GD001-GZF06-123456789-2026",
+  "residence": { "province_code": "GD", "city_code": "001", "town_code": null },
+  "birthplace": { "province_code": "GD", "city_code": "001", "town_code": null },
+  "election_scope_level": "CITY"
+}
+```
+
+- `election_scope_level=PROVINCE`：居住地和出生地只写 `province_code`，`city_code / town_code` 为空。
+- `election_scope_level=CITY`：居住地和出生地写 `province_code / city_code`，`town_code` 为空。
+- `election_scope_level=TOWN`：居住地和出生地写 `province_code / city_code / town_code`；前端在“设置投票账户”弹窗打开“注册镇选举公民”时必须同时打开“注册市选举公民”。
 
 ## 5. 签名与加密
 - `geo_seal` 使用 AES-256-GCM。
@@ -91,11 +106,15 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 公民状态只允许 `NORMAL`（正常）和 `REVOKED`（注销）。
 - 正常且已满 16 周岁的公民允许 `voting_eligible=true/false`；注销公民或未满 16 周岁的公民必须 `voting_eligible=false`。
 - 创建/编辑档案、修改公民状态和年度导出时，后端按同一规则计算选举资格；前端只允许正常且已满 16 周岁的公民选择“有选举资格”。
-- 出生日期必须早于当前 UTC 日期；当天出生和未来日期都不得录入。
-- 前端列表搜索、创建和编辑出生日期统一使用 `cpms/frontend/components/DateInput.tsx`，
+- 出生日期必须早于当前 UTC 日期；当天出生和未来日期都不得录入，保存后编辑档案接口不得接收或改写 `birth_date`。
+- 出生地在创建档案时必填 `birth_province_code / birth_city_code / birth_town_code`，从 CPMS 随包的 SFID 行政区真源只读接口选择；保存后编辑档案接口不得接收或改写出生地字段。
+- 公民详情页投票账户下方只读展示“注册市选举公民 / 注册镇选举公民”的结果；修改入口只在“设置投票账户”弹窗内。
+- 只有 `voting_eligible=true` 的公民允许设置投票账户；前端必须禁用投票账户输入和扫码操作，后端 `设置投票账户` 接口必须拒绝无选举资格或非正常状态档案。
+- “设置投票账户”接口同时保存 `wallet_address` 和 `election_scope_level`，并清空旧 `archive_qr_payload`，等待重新签发 ARCHIVE。
+- 前端列表搜索和创建出生日期统一使用 `cpms/frontend/components/DateInput.tsx`，
   页面内不得散落直接的日期输入实现。
 - 公民档案详情页删除按钮对应注销软删除，后端保存 `status = DELETED`、`citizen_status = REVOKED`、`voting_eligible = false`、`deleted_at`、`deleted_by`、`delete_reason`。
-- 编辑实名字段、修改公民状态、绑定/更换投票账户、上传资料或删除资料会调用 `clear_archive_qr_payload(...)` 清空旧 `archive_qr_payload`；旧档案码不得继续作为当前档案状态展示。
+- 编辑实名字段、修改公民状态、设置投票账户、上传资料或删除资料会调用 `clear_archive_qr_payload(...)` 清空旧 `archive_qr_payload`；旧档案码不得继续作为当前档案状态展示。
 - 软删除后的 100 年内，档案号和护照号仍在 `archives` 表中占用，不进入生成池。
 - 从 `deleted_at` 的 UTC 日期起满 100 年后，`lifecycle` 在服务启动时和每日后台任务中扫描到期档案。
 - 硬删除使用单事务：锁定到期档案、写入 `archive_number_recycle_pool`、写入 `archive_hard_delete_logs`、清理删除挑战和打印记录、物理删除 `archives` 行，并清理该档案的资料库文件目录。

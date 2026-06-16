@@ -171,7 +171,42 @@ fn page_from_rows<T: Serialize>(
     }
 }
 
+fn citizen_region_names(
+    province_code: Option<&str>,
+    city_code: Option<&str>,
+    town_code: Option<&str>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let Some(province_code) = province_code.map(str::trim).filter(|code| !code.is_empty()) else {
+        return (None, None, None);
+    };
+    crate::china::area_name_by_codes(province_code, city_code, town_code)
+        .map(|(province, city, town)| {
+            (
+                Some(province.to_string()),
+                city.map(str::to_string),
+                town.map(str::to_string),
+            )
+        })
+        .unwrap_or((None, None, None))
+}
+
 fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
+    let (residence_province_name, residence_city_name, residence_town_name) = citizen_region_names(
+        record
+            .residence_province_code
+            .as_deref()
+            .or(record.province_code.as_deref()),
+        record
+            .residence_city_code
+            .as_deref()
+            .or(record.city_code.as_deref()),
+        record.residence_town_code.as_deref(),
+    );
+    let (birth_province_name, birth_city_name, birth_town_name) = citizen_region_names(
+        record.birth_province_code.as_deref(),
+        record.birth_city_code.as_deref(),
+        record.birth_town_code.as_deref(),
+    );
     CitizenRow {
         id: record.id,
         wallet_pubkey: record.wallet_pubkey.clone(),
@@ -185,6 +220,19 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         valid_from: record.archive_valid_from.clone(),
         valid_until: record.archive_valid_until.clone(),
         status_updated_at: record.status_updated_at,
+        residence_province_code: record.residence_province_code.clone(),
+        residence_city_code: record.residence_city_code.clone(),
+        residence_town_code: record.residence_town_code.clone(),
+        residence_province_name,
+        residence_city_name,
+        residence_town_name,
+        birth_province_code: record.birth_province_code.clone(),
+        birth_city_code: record.birth_city_code.clone(),
+        birth_town_code: record.birth_town_code.clone(),
+        birth_province_name,
+        birth_city_name,
+        birth_town_name,
+        election_scope_level: record.election_scope_level.clone(),
         bind_status: record.bind_status(),
     }
 }
@@ -487,6 +535,65 @@ impl Db {
         })
     }
 
+    pub(crate) fn delete_citizen_binding_record(
+        &self,
+        record: &CitizenRecord,
+    ) -> Result<(), String> {
+        let sfid_number = record
+            .sfid_number
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| "citizen sfid_number is required for delete".to_string())?;
+        let p_code = record
+            .province_code
+            .as_deref()
+            .or(record.residence_province_code.as_deref())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| "citizen province code is required for delete".to_string())?;
+        let archive_no = record
+            .archive_no
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string);
+        self.with_client(move |conn| {
+            let mut tx = conn
+                .transaction()
+                .map_err(|e| format!("begin citizen delete transaction failed: {e}"))?;
+            if let Some(archive_no) = archive_no.as_deref() {
+                tx.execute(
+                    "DELETE FROM citizen_bind_challenges WHERE archive_no = $1",
+                    &[&archive_no],
+                )
+                .map_err(|e| format!("delete citizen challenge failed: {e}"))?;
+            }
+            // 中文注释:SFID 公民库只保留可投票公民;年度报告判定失格时同步删除索引行。
+            tx.execute(
+                "DELETE FROM citizens WHERE p_code = $1 AND sfid_number = $2",
+                &[&p_code, &sfid_number],
+            )
+            .map_err(|e| format!("delete citizen row failed: {e}"))?;
+            tx.execute(
+                "DELETE FROM subjects
+                 WHERE p_code = $1 AND sfid_number = $2 AND kind = 'CITIZEN'",
+                &[&p_code, &sfid_number],
+            )
+            .map_err(|e| format!("delete citizen subject failed: {e}"))?;
+            tx.execute(
+                "DELETE FROM ids WHERE sfid_number = $1 AND kind = 'CITIZEN'",
+                &[&sfid_number],
+            )
+            .map_err(|e| format!("delete citizen id failed: {e}"))?;
+            tx.commit()
+                .map_err(|e| format!("commit citizen delete transaction failed: {e}"))?;
+            Ok(())
+        })
+    }
+
     fn upsert_target_citizen_rows(
         conn: &mut postgres::Client,
         record: &CitizenRecord,
@@ -526,6 +633,13 @@ impl Db {
             .map(citizen_status_text)
             .unwrap_or("REVOKED");
         let bind_status = citizen_bind_status_text(&record.bind_status());
+        let election_scope_level = record
+            .election_scope_level
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("PROVINCE")
+            .to_string();
         let id = i64::try_from(record.id).map_err(|_| "citizen id exceeds i64".to_string())?;
         Self::upsert_target_id_row(
             conn,
@@ -561,8 +675,9 @@ impl Db {
             "INSERT INTO citizens (
                 sfid_number, p_code, c_code, id, archive_no, wallet_pubkey, wallet_address,
                 citizen_status, voting_eligible, valid_from, valid_until, status_updated_at,
-                bind_status, bound_at, bound_by, created_at
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                residence_p_code, residence_c_code, residence_t_code, birth_p_code, birth_c_code,
+                birth_t_code, election_scope_level, bind_status, bound_at, bound_by, created_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
              ON CONFLICT (p_code, sfid_number) DO UPDATE SET
                 c_code = EXCLUDED.c_code,
                 id = EXCLUDED.id,
@@ -574,6 +689,13 @@ impl Db {
                 valid_from = EXCLUDED.valid_from,
                 valid_until = EXCLUDED.valid_until,
                 status_updated_at = EXCLUDED.status_updated_at,
+                residence_p_code = EXCLUDED.residence_p_code,
+                residence_c_code = EXCLUDED.residence_c_code,
+                residence_t_code = EXCLUDED.residence_t_code,
+                birth_p_code = EXCLUDED.birth_p_code,
+                birth_c_code = EXCLUDED.birth_c_code,
+                birth_t_code = EXCLUDED.birth_t_code,
+                election_scope_level = EXCLUDED.election_scope_level,
                 bind_status = EXCLUDED.bind_status,
                 bound_at = EXCLUDED.bound_at,
                 bound_by = EXCLUDED.bound_by,
@@ -591,6 +713,13 @@ impl Db {
                 &record.archive_valid_from,
                 &record.archive_valid_until,
                 &record.status_updated_at,
+                &record.residence_province_code,
+                &record.residence_city_code,
+                &record.residence_town_code,
+                &record.birth_province_code,
+                &record.birth_city_code,
+                &record.birth_town_code,
+                &election_scope_level,
                 &bind_status,
                 &record.bound_at,
                 &record.bound_by,
@@ -685,7 +814,9 @@ impl Db {
                                     c.archive_no, c.sfid_number, c.citizen_status,
                                     c.voting_eligible, c.valid_from, c.valid_until,
                                     c.status_updated_at, c.bind_status, c.p_code, c.c_code,
-                                    c.bound_at, c.bound_by, c.created_at
+                                    c.residence_p_code, c.residence_c_code, c.residence_t_code,
+                                    c.birth_p_code, c.birth_c_code, c.birth_t_code,
+                                    c.election_scope_level, c.bound_at, c.bound_by, c.created_at
                              FROM citizens c
                              JOIN subjects s
                                ON s.p_code = c.p_code
@@ -719,7 +850,7 @@ impl Db {
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
                 let id_i64: i64 = row.get(0);
-                let created_at: DateTime<Utc> = row.get(15);
+                let created_at: DateTime<Utc> = row.get(22);
                 let record = CitizenRecord {
                     id: u64::try_from(id_i64).unwrap_or(0),
                     wallet_pubkey: row.get(1),
@@ -736,8 +867,15 @@ impl Db {
                     sfid_signature: None,
                     province_code: row.get(11),
                     city_code: row.get(12),
-                    bound_at: row.get(13),
-                    bound_by: row.get(14),
+                    residence_province_code: row.get(13),
+                    residence_city_code: row.get(14),
+                    residence_town_code: row.get(15),
+                    birth_province_code: row.get(16),
+                    birth_city_code: row.get(17),
+                    birth_town_code: row.get(18),
+                    election_scope_level: row.get(19),
+                    bound_at: row.get(20),
+                    bound_by: row.get(21),
                     created_at,
                 };
                 output.push((citizen_row_from_record(&record), created_at, id_i64));

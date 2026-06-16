@@ -153,6 +153,23 @@ export function CitizensView() {
     return `${parts[0]}年${parts[1]}月${parts[2]}日`;
   };
 
+  const electionRangesText = (
+    scope: CitizenRow['election_scope_level'],
+    provinceName?: string,
+    cityName?: string,
+    townName?: string,
+  ) => {
+    const ranges = ['全国选举公民'];
+    if (provinceName?.trim()) ranges.push(`${provinceName}选举公民`);
+    if ((scope === 'CITY' || scope === 'TOWN') && cityName?.trim()) {
+      ranges.push(`${cityName}选举公民`);
+    }
+    if (scope === 'TOWN' && townName?.trim()) {
+      ranges.push(`${townName}选举公民`);
+    }
+    return ranges.join('、');
+  };
+
   const citizenColumns: ColumnsType<CitizenRow> = [
     {
       title: '序号',
@@ -291,6 +308,22 @@ export function CitizensView() {
             <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.bind_status)}</Descriptions.Item>
             <Descriptions.Item label="选举权利">{detailRecord.voting_eligible ? '有' : '无'}</Descriptions.Item>
             <Descriptions.Item label="公民状态">{citizenStatusText(detailRecord.citizen_status)}</Descriptions.Item>
+            <Descriptions.Item label="投票范围">
+              {electionRangesText(
+                detailRecord.election_scope_level,
+                detailRecord.residence_province_name,
+                detailRecord.residence_city_name,
+                detailRecord.residence_town_name,
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="参选范围">
+              {electionRangesText(
+                detailRecord.election_scope_level,
+                detailRecord.birth_province_name,
+                detailRecord.birth_city_name,
+                detailRecord.birth_town_name,
+              )}
+            </Descriptions.Item>
             <Descriptions.Item label="有效期">
               {formatDateRange(detailRecord.valid_from, detailRecord.valid_until)}
             </Descriptions.Item>

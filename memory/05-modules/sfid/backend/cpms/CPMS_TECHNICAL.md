@@ -1,12 +1,13 @@
 # CPMS_TECHNICAL
 
-- 最后更新:2026-05-31
+- 最后更新:2026-06-16
 - 任务卡:
   - `memory/08-tasks/open/20260516-sfid-cpms-install-archive.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
   - `memory/08-tasks/done/20260531-sfid-permission-closeout.md`
+  - `memory/08-tasks/open/20260615-cpms-sfid-birthplace-election-scope.md`
 
 ## 0. 模块边界
 
@@ -15,7 +16,7 @@
 - 生成公安局 CPMS 的 `SFID_CPMS_V1 / INSTALL` 安装授权码。
 - 保存 `install_secret / sfid_number` 授权状态，省市代码由 `sfid_number` 解码。
 - 验证 CPMS 提交的 `SFID_CPMS_V1 / ARCHIVE` 档案码。
-- 解 `geo_seal` 后为公民绑定流程提供省、市、公安局机构 `sfid_number`。
+- 解 `geo_seal` 后为公民绑定流程提供公安局机构 `sfid_number`、居住地投票代码、出生地参选代码和市/镇精度。
 - 查询、禁用、启用、吊销、删除 CPMS 授权。
 - 按机构 `sfid_number` 反查对应 CPMS 授权记录。
 
@@ -61,11 +62,12 @@ sfid/backend/cpms/
 
 1. 解析 `ARCHIVE`，强制 `proto=SFID_CPMS_V1`、`type=ARCHIVE`。
 2. 在当前管理员省域内用已保存的 `install_secret` 尝试解 `geo_seal`。
-3. 校验 `geo_seal.sfid_number` 与授权记录一致，并从 `sfid_number` 解码省市。
-4. 校验 CPMS 本机签名；首次成功时把 `cpms_pubkey_hash / ACTIVE / USED`
+3. 校验 `geo_seal.sfid_number` 与授权记录一致，并从 `sfid_number` 解码 CPMS 授权分区省市。
+4. 校验 `geo_seal.election_scope_level` 与 `residence / birthplace` 代码精度一致：`PROVINCE` 只允许省，`CITY` 允许省市，`TOWN` 允许省市镇；居住省市必须与 CPMS 授权分区一致。
+5. 校验 CPMS 本机签名；首次成功时把 `cpms_pubkey_hash / ACTIVE / USED`
    写入 `store_cpms` 主数据，后续只接受同一公钥。
-5. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 wuminapp 签名通过后完成。
-6. 绑定流程检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
+6. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 wuminapp 签名通过后完成。
+7. 绑定流程检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
 
 ## 4. 归属说明
 
@@ -76,5 +78,6 @@ sfid/backend/cpms/
 - CPMS 本机公钥绑定状态不得只写 `sharded_store`；任何 `cpms_pubkey_hash / status /
   install_token_status` 更新都必须先落 `store_cpms`，再覆盖运行缓存。
 - ARCHIVE 验真入口为 `cpms::verify_cpms_archive_qr`，公民绑定复用同一入口。
+- `VerifiedCpmsArchive.province_code / city_code` 表示 CPMS 授权分区；`residence_* / birth_* / election_scope_level` 表示后续投票区域判断所需代码，不得混用。
 - CPMS 授权省域判断归 `cpms::scope`。
 - 不得从管理员治理目录引用或复刻 CPMS handler。

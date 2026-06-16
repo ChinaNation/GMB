@@ -152,8 +152,19 @@ fn default_wallet_sig_alg() -> String {
 /// CPMS 档案二维码中只允许 SFID 解开的归属密文内容。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CpmsGeoSealClaims {
-    /// 中文注释：归属密文只放机构身份ID；省市由 SFID 从 sfid_number 解码。
+    /// 中文注释：机构身份 ID 只证明档案码来自哪个市公安局授权的 CPMS。
     pub(crate) sfid_number: String,
+    /// 中文注释：区域隐私只放 geo_seal 密文；这里全部是行政区代码，不是中文名称。
+    pub(crate) residence: CpmsRegionClaims,
+    pub(crate) birthplace: CpmsRegionClaims,
+    pub(crate) election_scope_level: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct CpmsRegionClaims {
+    pub(crate) province_code: String,
+    pub(crate) city_code: Option<String>,
+    pub(crate) town_code: Option<String>,
 }
 
 /// SFID 验证 CPMS 档案二维码后的可信结果。
@@ -167,6 +178,13 @@ pub(crate) struct VerifiedCpmsArchive {
     pub(crate) status_updated_at: i64,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
+    pub(crate) residence_province_code: String,
+    pub(crate) residence_city_code: Option<String>,
+    pub(crate) residence_town_code: Option<String>,
+    pub(crate) birth_province_code: String,
+    pub(crate) birth_city_code: Option<String>,
+    pub(crate) birth_town_code: Option<String>,
+    pub(crate) election_scope_level: String,
     pub(crate) sfid_number: String,
     pub(crate) wallet_address: String,
     pub(crate) wallet_pubkey: String,
@@ -191,6 +209,13 @@ pub(crate) struct CpmsArchiveVerifyOutput {
     pub(crate) status_updated_at: i64,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
+    pub(crate) residence_province_code: String,
+    pub(crate) residence_city_code: Option<String>,
+    pub(crate) residence_town_code: Option<String>,
+    pub(crate) birth_province_code: String,
+    pub(crate) birth_city_code: Option<String>,
+    pub(crate) birth_town_code: Option<String>,
+    pub(crate) election_scope_level: String,
     pub(crate) sfid_number: String,
     pub(crate) status: &'static str,
 }

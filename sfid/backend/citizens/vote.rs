@@ -42,6 +42,13 @@ pub(crate) async fn app_myid_status(
             valid_from: record.archive_valid_from.clone(),
             valid_until: record.archive_valid_until.clone(),
             status_updated_at: record.status_updated_at,
+            residence_province_code: record.residence_province_code.clone(),
+            residence_city_code: record.residence_city_code.clone(),
+            residence_town_code: record.residence_town_code.clone(),
+            birth_province_code: record.birth_province_code.clone(),
+            birth_city_code: record.birth_city_code.clone(),
+            birth_town_code: record.birth_town_code.clone(),
+            election_scope_level: record.election_scope_level.clone(),
         },
         Ok(None) => MyIdStatusOutput {
             bind_status: "unset".to_string(),
@@ -54,6 +61,13 @@ pub(crate) async fn app_myid_status(
             valid_from: None,
             valid_until: None,
             status_updated_at: None,
+            residence_province_code: None,
+            residence_city_code: None,
+            residence_town_code: None,
+            birth_province_code: None,
+            birth_city_code: None,
+            birth_town_code: None,
+            election_scope_level: None,
         },
         Err(err) => {
             tracing::error!(error = %err, "query myid status failed");

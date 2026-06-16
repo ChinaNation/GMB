@@ -14,7 +14,7 @@ use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{Error as SqlxError, Postgres, QueryBuilder, Row};
-use std::net::SocketAddr;
+use std::{collections::BTreeMap, net::SocketAddr};
 use uuid::Uuid;
 
 use crate::{
@@ -25,6 +25,19 @@ use crate::{
     },
     dangan, initialize, AppState,
 };
+
+const ARCHIVE_SELECT_FIELDS: &str =
+    "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name,
+            birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no,
+            COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id,
+            COALESCE(address,'') AS address, birth_province_code, birth_city_code,
+            birth_town_code, COALESCE(election_scope_level,'PROVINCE') AS election_scope_level,
+            status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible,
+            valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until,
+            COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at,
+            wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg,
+            wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload,
+            deleted_at, deleted_by, delete_reason, created_at, updated_at";
 
 #[derive(Deserialize)]
 struct CreateArchiveRequest {
@@ -39,6 +52,11 @@ struct CreateArchiveRequest {
     village_id: Option<String>,
     #[serde(default)]
     address: Option<String>,
+    birth_province_code: String,
+    birth_city_code: String,
+    birth_town_code: String,
+    #[serde(default)]
+    election_scope_level: Option<String>,
     citizen_status: Option<String>,
     voting_eligible: Option<bool>,
 }
@@ -100,6 +118,7 @@ struct QrPrintData {
 #[derive(Deserialize)]
 struct WalletBindRequest {
     wallet_address: String,
+    election_scope_level: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -160,7 +179,6 @@ struct ArchiveAuditLogEntry {
 struct UpdateArchiveRequest {
     last_name: Option<String>,
     first_name: Option<String>,
-    birth_date: Option<String>,
     gender_code: Option<String>,
     height_cm: Option<f32>,
     town_code: Option<String>,
@@ -168,6 +186,8 @@ struct UpdateArchiveRequest {
     address: Option<String>,
     citizen_status: Option<String>,
     voting_eligible: Option<bool>,
+    #[serde(flatten)]
+    extra_fields: BTreeMap<String, serde_json::Value>,
 }
 
 pub(crate) fn router() -> Router<AppState> {
@@ -278,6 +298,15 @@ async fn create_archive(
             "address too long (max 100)",
         ));
     }
+    let birth_province_code = req.birth_province_code.trim().to_string();
+    let birth_city_code = req.birth_city_code.trim().to_string();
+    let birth_town_code = req.birth_town_code.trim().to_string();
+    address::validate_birth_town(&birth_province_code, &birth_city_code, &birth_town_code)?;
+    let election_scope_level = dangan::validate_election_scope_level(
+        req.election_scope_level
+            .as_deref()
+            .unwrap_or(dangan::ELECTION_SCOPE_PROVINCE),
+    )?;
 
     let now_ts = Utc::now().timestamp();
     let voting = dangan::resolve_voting_eligible(
@@ -304,6 +333,10 @@ async fn create_archive(
         town_code,
         village_id,
         address: addr,
+        birth_province_code,
+        birth_city_code,
+        birth_town_code,
+        election_scope_level,
         status: "ACTIVE".to_string(),
         citizen_status,
         voting_eligible: voting,
@@ -325,8 +358,8 @@ async fn create_archive(
 
     // 中文注释：号码池领取与档案写入必须同事务完成，避免回收号码被半消费。
     sqlx::query(
-        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::DATE, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::DATE, $18::DATE, $19, $20, $21, $22)",
+        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, birth_province_code, birth_city_code, birth_town_code, election_scope_level, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::DATE, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::DATE, $22::DATE, $23, $24, $25, $26)",
     )
     .bind(&archive.archive_id)
     .bind(&archive.archive_no)
@@ -341,6 +374,10 @@ async fn create_archive(
     .bind(&archive.town_code)
     .bind(&archive.village_id)
     .bind(&archive.address)
+    .bind(&archive.birth_province_code)
+    .bind(&archive.birth_city_code)
+    .bind(&archive.birth_town_code)
+    .bind(&archive.election_scope_level)
     .bind(&archive.status)
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
@@ -393,11 +430,9 @@ async fn list_archives(
     let cursor = decode_archive_list_cursor(query.cursor.as_deref())?;
     validate_archive_list_query(&query)?;
 
-    let mut qb = QueryBuilder::<Postgres>::new(
-        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
-         FROM archives
-         WHERE status = 'ACTIVE'",
-    );
+    let mut qb = QueryBuilder::<Postgres>::new(format!(
+        "{ARCHIVE_SELECT_FIELDS} FROM archives WHERE status = 'ACTIVE'"
+    ));
     push_archive_list_filters(&mut qb, &query);
     if let Some(cursor) = cursor {
         qb.push(" AND (created_at, archive_id) < (");
@@ -614,9 +649,19 @@ async fn save_archive_wallet(
 ) -> Result<Json<ApiResponse<Archive>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_archive_admin(&state, &headers).await?;
     let now = Utc::now().timestamp();
+    let archive = fetch_archive_by_id(&state, &archive_id).await?;
+    ensure_archive_not_deleted(&archive)?;
+    if archive.citizen_status != dangan::CITIZEN_STATUS_NORMAL || !archive.voting_eligible {
+        return Err(err(StatusCode::CONFLICT, 3010, "archive voting ineligible"));
+    }
     let wallet_address = req.wallet_address.trim();
     let wallet_pubkey = ss58::ss58_to_pubkey_hex(wallet_address)
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid wallet_address"))?;
+    let election_scope_level = dangan::validate_election_scope_level(
+        req.election_scope_level
+            .as_deref()
+            .unwrap_or(dangan::ELECTION_SCOPE_PROVINCE),
+    )?;
     let existing_archive: Option<String> = sqlx::query_scalar(
         "SELECT archive_id
          FROM archives
@@ -642,13 +687,14 @@ async fn save_archive_wallet(
     let result = sqlx::query(
         "UPDATE archives
          SET wallet_address=$1, wallet_pubkey=$2, wallet_sig_alg='sr25519',
-             wallet_bound_at=$3, wallet_bound_by=$4, updated_at=$5
-         WHERE archive_id=$6 AND status <> 'DELETED'",
+             wallet_bound_at=$3, wallet_bound_by=$4, election_scope_level=$5, updated_at=$6
+         WHERE archive_id=$7 AND status <> 'DELETED'",
     )
     .bind(wallet_address)
     .bind(&wallet_pubkey)
     .bind(now)
     .bind(&ctx.user_id)
+    .bind(&election_scope_level)
     .bind(now)
     .bind(&archive_id)
     .execute(&state.db)
@@ -676,7 +722,11 @@ async fn save_archive_wallet(
         "CITIZEN_ARCHIVE",
         Some(archive_id.clone()),
         "SUCCESS",
-        serde_json::json!({ "wallet_pubkey": wallet_pubkey, "wallet_address": wallet_address }),
+        serde_json::json!({
+            "wallet_pubkey": wallet_pubkey,
+            "wallet_address": wallet_address,
+            "election_scope_level": election_scope_level
+        }),
     )
     .await?;
 
@@ -694,6 +744,7 @@ async fn update_archive(
     authz::require_archive_admin(&state, &headers).await?;
     let mut archive = fetch_archive_by_id(&state, &archive_id).await?;
     ensure_archive_not_deleted(&archive)?;
+    reject_unknown_archive_update_fields(&req.extra_fields)?;
 
     if let Some(v) = req.last_name {
         if v.trim().is_empty() {
@@ -706,10 +757,6 @@ async fn update_archive(
             return Err(err(StatusCode::BAD_REQUEST, 1001, "first_name is required"));
         }
         archive.first_name = v.trim().to_string();
-    }
-    if let Some(v) = req.birth_date {
-        validate_birth_date(&v)?;
-        archive.birth_date = v.trim().to_string();
     }
     if let Some(v) = req.gender_code {
         if v != "M" && v != "W" {
@@ -765,11 +812,10 @@ async fn update_archive(
     archive.archive_qr_payload = String::new();
 
     sqlx::query(
-        "UPDATE archives SET last_name=$1, first_name=$2, birth_date=$3::DATE, gender_code=$4, height_cm=$5, town_code=$6, village_id=$7, address=$8, citizen_status=$9, voting_eligible=$10, citizen_status_updated_at=$11, updated_at=$12 WHERE archive_id=$13",
+        "UPDATE archives SET last_name=$1, first_name=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, citizen_status_updated_at=$10, updated_at=$11 WHERE archive_id=$12",
     )
     .bind(&archive.last_name)
     .bind(&archive.first_name)
-    .bind(&archive.birth_date)
     .bind(&archive.gender_code)
     .bind(archive.height_cm)
     .bind(&archive.town_code)
@@ -1098,16 +1144,19 @@ async fn complete_archive_delete(
         ));
     }
 
-    let archive_row = match sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
-         FROM archives
-         WHERE archive_id = $1
-         FOR UPDATE",
-    )
-    .bind(&archive_id)
-    .fetch_optional(tx.as_mut())
-    .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive failed"))? {
+    let archive_sql =
+        format!("{ARCHIVE_SELECT_FIELDS} FROM archives WHERE archive_id = $1 FOR UPDATE");
+    let archive_row = match sqlx::query(&archive_sql)
+        .bind(&archive_id)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query archive failed",
+            )
+        })? {
         Some(row) => row,
         None => {
             audit_archive_delete_failure(
@@ -1371,16 +1420,19 @@ async fn fetch_archive_by_id(
     state: &AppState,
     archive_id: &str,
 ) -> Result<Archive, (StatusCode, Json<ApiError>)> {
-    let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
-         FROM archives
-         WHERE archive_id = $1",
-    )
-    .bind(archive_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive failed"))?
-    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
+    let archive_sql = format!("{ARCHIVE_SELECT_FIELDS} FROM archives WHERE archive_id = $1");
+    let row = sqlx::query(&archive_sql)
+        .bind(archive_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query archive failed",
+            )
+        })?
+        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
 
     Ok(row_to_archive(row))
 }
@@ -1400,6 +1452,12 @@ fn row_to_archive(row: sqlx::postgres::PgRow) -> Archive {
         town_code: row.try_get("town_code").unwrap_or_default(),
         village_id: row.try_get("village_id").unwrap_or_default(),
         address: row.try_get("address").unwrap_or_default(),
+        birth_province_code: row.try_get("birth_province_code").unwrap_or_default(),
+        birth_city_code: row.try_get("birth_city_code").unwrap_or_default(),
+        birth_town_code: row.try_get("birth_town_code").unwrap_or_default(),
+        election_scope_level: row
+            .try_get("election_scope_level")
+            .unwrap_or_else(|_| dangan::ELECTION_SCOPE_PROVINCE.to_string()),
         status: row.get("status"),
         citizen_status: row.get("citizen_status"),
         voting_eligible: row.try_get("voting_eligible").unwrap_or(true),
@@ -1432,6 +1490,32 @@ fn ensure_archive_not_deleted(archive: &Archive) -> Result<(), (StatusCode, Json
         return Err(err(StatusCode::CONFLICT, 3008, "archive already deleted"));
     }
     Ok(())
+}
+
+fn reject_unknown_archive_update_fields(
+    extra_fields: &BTreeMap<String, serde_json::Value>,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    if extra_fields.is_empty() {
+        return Ok(());
+    }
+    // 中文注释：出生日期和出生地同属出生信息，创建后不可通过编辑接口改写。
+    if extra_fields.keys().any(|field| {
+        matches!(
+            field.as_str(),
+            "birth_date" | "birth_province_code" | "birth_city_code" | "birth_town_code"
+        )
+    }) {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "birth data cannot be updated",
+        ));
+    }
+    Err(err(
+        StatusCode::BAD_REQUEST,
+        1001,
+        "unknown archive update field",
+    ))
 }
 
 fn build_archive_delete_payload(
@@ -1534,6 +1618,29 @@ async fn ensure_archive_qr_ready(
     validate_required_date(&archive.valid_until, "archive qr requires valid_until")?;
     ensure_required_text(&archive.province_code, "archive qr requires province")?;
     ensure_required_text(&archive.city_code, "archive qr requires city")?;
+    ensure_required_text(
+        &archive.birth_province_code,
+        "archive qr requires birth province",
+    )?;
+    ensure_required_text(&archive.birth_city_code, "archive qr requires birth city")?;
+    ensure_required_text(&archive.birth_town_code, "archive qr requires birth town")?;
+    address::validate_birth_town(
+        &archive.birth_province_code,
+        &archive.birth_city_code,
+        &archive.birth_town_code,
+    )?;
+    let election_scope_level =
+        dangan::validate_election_scope_level(&archive.election_scope_level)?;
+    if election_scope_level == dangan::ELECTION_SCOPE_CITY
+        || election_scope_level == dangan::ELECTION_SCOPE_TOWN
+    {
+        ensure_required_text(&archive.city_code, "archive qr requires residence city")?;
+        ensure_required_text(&archive.birth_city_code, "archive qr requires birth city")?;
+    }
+    if election_scope_level == dangan::ELECTION_SCOPE_TOWN {
+        ensure_required_text(&archive.town_code, "archive qr requires residence town")?;
+        ensure_required_text(&archive.birth_town_code, "archive qr requires birth town")?;
+    }
     if archive.citizen_status != dangan::CITIZEN_STATUS_NORMAL {
         return Err(err(
             StatusCode::BAD_REQUEST,
@@ -1678,6 +1785,10 @@ mod tests {
             town_code: "100001".to_string(),
             village_id: "village-1".to_string(),
             address: "测试地址".to_string(),
+            birth_province_code: "GD".to_string(),
+            birth_city_code: "001".to_string(),
+            birth_town_code: "100001".to_string(),
+            election_scope_level: dangan::ELECTION_SCOPE_PROVINCE.to_string(),
             status: "ACTIVE".to_string(),
             citizen_status: "NORMAL".to_string(),
             voting_eligible: true,

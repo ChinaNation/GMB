@@ -1,13 +1,13 @@
-// 新建公民档案。省份和城市从 INSTALL 初始化信息自动获取，不可修改。
-// 镇和村/路从后端地址 API 加载，联动选择。详细地址文本输入（最长 100 字符）。
+// 新建公民档案。居住省市从 INSTALL 初始化信息自动获取，不可修改。
+// 居住镇村由安装城市接口加载；出生地省市镇由随包 SFID 行政区真源只读接口加载。
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listTowns, listVillages } from '../address/api';
+import { listBirthCities, listBirthProvinces, listBirthTowns, listTowns, listVillages } from '../address/api';
 import { installStatus } from '../initialize/api';
 import DateInput, { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
 import { createArchive } from './api';
-import type { Town, Village } from '../address/types';
+import type { City, Province, Town, Village } from '../address/types';
 
 export default function ArchiveCreate() {
   const navigate = useNavigate();
@@ -21,6 +21,12 @@ export default function ArchiveCreate() {
   const [selectedTown, setSelectedTown] = useState('');
   const [selectedVillage, setSelectedVillage] = useState('');
   const [addressText, setAddressText] = useState('');
+  const [birthProvinces, setBirthProvinces] = useState<Province[]>([]);
+  const [birthCities, setBirthCities] = useState<City[]>([]);
+  const [birthTowns, setBirthTowns] = useState<Town[]>([]);
+  const [birthProvince, setBirthProvince] = useState('');
+  const [birthCity, setBirthCity] = useState('');
+  const [birthTown, setBirthTown] = useState('');
 
   const [form, setForm] = useState({
     last_name: '', first_name: '', birth_date: '',
@@ -44,6 +50,9 @@ export default function ArchiveCreate() {
     listTowns().then(res => {
       if (res.data) setTowns(res.data);
     }).catch(() => {});
+    listBirthProvinces().then(res => {
+      if (res.data) setBirthProvinces(res.data);
+    }).catch(() => {});
   }, []);
 
   // 选镇后联动加载村/路
@@ -54,6 +63,22 @@ export default function ArchiveCreate() {
     }).catch(() => {});
     setSelectedVillage('');
   }, [selectedTown]);
+
+  useEffect(() => {
+    if (!birthProvince) { setBirthCities([]); setBirthCity(''); return; }
+    listBirthCities(birthProvince).then(res => {
+      if (res.data) setBirthCities(res.data);
+    }).catch(() => {});
+    setBirthCity('');
+  }, [birthProvince]);
+
+  useEffect(() => {
+    if (!birthProvince || !birthCity) { setBirthTowns([]); setBirthTown(''); return; }
+    listBirthTowns(birthProvince, birthCity).then(res => {
+      if (res.data) setBirthTowns(res.data);
+    }).catch(() => {});
+    setBirthTown('');
+  }, [birthProvince, birthCity]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const setBirthDate = (value: string) => {
@@ -83,10 +108,13 @@ export default function ArchiveCreate() {
     if (form.voting_eligible && !isAtLeastAgeYmd(form.birth_date, 16)) { setError('未满16周岁的公民不能设置为有选举资格'); return; }
     if (!form.gender_code) { setError('请选择性别'); return; }
     if (!isValidHeight(form.height_cm)) { setError('请输入正确的身高'); return; }
-    if (!provinceCode || !cityCode) { setError('省市信息未加载'); return; }
-    if (!selectedTown) { setError('请选择镇'); return; }
-    if (!selectedVillage) { setError('请选择村/路'); return; }
-    if (!addressText.trim()) { setError('请输入详细地址'); return; }
+    if (!provinceCode || !cityCode) { setError('居住省市信息未加载'); return; }
+    if (!selectedTown) { setError('请选择居住镇'); return; }
+    if (!selectedVillage) { setError('请选择居住村/路'); return; }
+    if (!addressText.trim()) { setError('请输入居住地址'); return; }
+    if (!birthProvince) { setError('请选择出生省份'); return; }
+    if (!birthCity) { setError('请选择出生城市'); return; }
+    if (!birthTown) { setError('请选择出生镇'); return; }
     setError('');
     setLoading(true);
     try {
@@ -94,6 +122,10 @@ export default function ArchiveCreate() {
         town_code: selectedTown,
         village_id: selectedVillage,
         address: addressText.trim() || undefined,
+        birth_province_code: birthProvince,
+        birth_city_code: birthCity,
+        birth_town_code: birthTown,
+        election_scope_level: 'PROVINCE' as const,
         ...form,
         height_cm: parseFloat(form.height_cm),
       };
@@ -107,28 +139,34 @@ export default function ArchiveCreate() {
 
   return (
     <div className="card">
-      <div className="card__title">新建公民档案</div>
+      <div className="card__title flex-between">
+        <span>新建公民档案</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn--primary" onClick={handleSubmit} disabled={loading}>{loading ? '提交中...' : '创建档案'}</button>
+          <button className="btn btn--ghost" onClick={() => navigate('/admin')}>取消</button>
+        </div>
+      </div>
       {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
       <div className="form-row">
         <div className="form-group">
-          <label>省份</label>
+          <label>居住省份</label>
           <input className="form-input" value={provinceName || provinceCode} disabled style={{ background: '#f3f4f6', cursor: 'not-allowed' }} />
         </div>
         <div className="form-group">
-          <label>城市</label>
+          <label>居住城市</label>
           <input className="form-input" value={cityName || cityCode} disabled style={{ background: '#f3f4f6', cursor: 'not-allowed' }} />
         </div>
       </div>
       <div className="form-row">
         <div className="form-group">
-          <label>镇 *</label>
+          <label>居住镇 *</label>
           <select className="form-input" value={selectedTown} onChange={e => setSelectedTown(e.target.value)}>
             <option value="">请选择镇</option>
             {towns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}
           </select>
         </div>
         <div className="form-group">
-          <label>村/路 *</label>
+          <label>居住村/路 *</label>
           <select className="form-input" value={selectedVillage} onChange={e => setSelectedVillage(e.target.value)} disabled={!selectedTown}>
             <option value="">请选择村/路</option>
             {villages.map(v => <option key={v.village_id} value={v.village_id}>{v.village_name}</option>)}
@@ -136,7 +174,7 @@ export default function ArchiveCreate() {
         </div>
       </div>
       <div className="form-group">
-        <label>详细地址 *</label>
+        <label>居住地址 *</label>
         <input className="form-input" placeholder="详细门牌号等（最长100字符）" maxLength={100} value={addressText} onChange={e => setAddressText(e.target.value)} />
       </div>
       <div className="form-row">
@@ -153,6 +191,29 @@ export default function ArchiveCreate() {
           </select>
         </div>
         <div className="form-group"><label>身高 (cm) *</label><input className="form-input" type="number" min={30} max={260} step="0.1" value={form.height_cm} onChange={e => set('height_cm', e.target.value)} /></div>
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label>出生省份 *</label>
+          <select className="form-input" value={birthProvince} onChange={e => setBirthProvince(e.target.value)}>
+            <option value="">请选择出生省份</option>
+            {birthProvinces.map(p => <option key={p.province_code} value={p.province_code}>{p.province_name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>出生城市 *</label>
+          <select className="form-input" value={birthCity} onChange={e => setBirthCity(e.target.value)} disabled={!birthProvince}>
+            <option value="">请选择出生城市</option>
+            {birthCities.map(c => <option key={c.city_code} value={c.city_code}>{c.city_name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>出生镇 *</label>
+          <select className="form-input" value={birthTown} onChange={e => setBirthTown(e.target.value)} disabled={!birthCity}>
+            <option value="">请选择出生镇</option>
+            {birthTowns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}
+          </select>
+        </div>
       </div>
       <div className="form-row">
         <div className="form-group">
@@ -174,10 +235,6 @@ export default function ArchiveCreate() {
             <option value="false">无选举资格</option>
           </select>
         </div>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-        <button className="btn btn--primary" onClick={handleSubmit} disabled={loading}>{loading ? '提交中...' : '创建档案'}</button>
-        <button className="btn btn--ghost" onClick={() => navigate('/admin')}>取消</button>
       </div>
     </div>
   );

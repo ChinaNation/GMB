@@ -86,6 +86,7 @@ pub(crate) struct CpmsStatusExportImportOutput {
     imported_binding_records: usize,
     updated_binding_records: usize,
     wallet_replaced_records: usize,
+    deleted_ineligible_records: usize,
     released_binding_records: usize,
     unmatched_binding_records: Vec<String>,
     unmatched_release_records: Vec<String>,
@@ -168,6 +169,7 @@ pub(crate) async fn admin_import_cpms_status_export(
                 imported_binding_records: 0,
                 updated_binding_records: 0,
                 wallet_replaced_records: 0,
+                deleted_ineligible_records: 0,
                 released_binding_records: 0,
                 unmatched_binding_records: Vec::new(),
                 unmatched_release_records: Vec::new(),
@@ -214,6 +216,7 @@ pub(crate) async fn admin_import_cpms_status_export(
         serde_json::json!({
             "updates": output.updated_binding_records,
             "wallet_replaced": output.wallet_replaced_records,
+            "deleted_ineligible": output.deleted_ineligible_records,
             "releases": output.released_binding_records,
             "unmatched_bindings": output.unmatched_binding_records.len(),
             "unmatched_releases": output.unmatched_release_records.len(),
@@ -373,16 +376,11 @@ fn validate_export_records(file: &CpmsStatusExportFile) -> Result<(), (StatusCod
 
     let mut binding_archives = HashSet::new();
     for record in &file.citizen_binding_records {
-        if record.archive_no.trim().is_empty()
-            || record.wallet_address.trim().is_empty()
-            || record.wallet_pubkey.trim().is_empty()
-            || record.wallet_bound_at <= 0
-            || record.status_updated_at <= 0
-        {
+        if record.archive_no.trim().is_empty() {
             return Err((
                 StatusCode::BAD_REQUEST,
                 1001,
-                "citizen binding record fields are required".to_string(),
+                "citizen binding archive_no is required".to_string(),
             ));
         }
         if !binding_archives.insert(record.archive_no.clone()) {
@@ -392,24 +390,6 @@ fn validate_export_records(file: &CpmsStatusExportFile) -> Result<(), (StatusCod
                 "duplicate citizen binding archive_no".to_string(),
             ));
         }
-        if record.wallet_sig_alg != WALLET_SIG_ALG_SR25519 {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                1001,
-                "wallet_sig_alg must be sr25519".to_string(),
-            ));
-        }
-        if record.citizen_status == CitizenStatus::Revoked && record.voting_eligible {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                1001,
-                "revoked citizen must not have voting eligibility".to_string(),
-            ));
-        }
-        validate_wallet_pair(
-            record.wallet_address.as_str(),
-            record.wallet_pubkey.as_str(),
-        )?;
     }
 
     let mut release_archives = HashSet::new();
@@ -454,6 +434,7 @@ fn apply_status_export_to_db(
     let imported_binding_records = file.citizen_binding_records.len();
     let mut updated_binding_records = 0usize;
     let mut wallet_replaced_records = 0usize;
+    let mut deleted_ineligible_records = 0usize;
     let mut released_binding_records = 0usize;
     let mut unmatched_binding_records = Vec::new();
     let mut unmatched_release_records = Vec::new();
@@ -464,10 +445,6 @@ fn apply_status_export_to_db(
         .collect();
 
     for record in &file.citizen_binding_records {
-        let normalized_wallet_pubkey = normalize_pubkey_hex(record.wallet_pubkey.as_str())
-            .ok_or_else(|| "invalid wallet_pubkey".to_string())?;
-        let canonical_wallet_address = pubkey_hex_to_ss58(normalized_wallet_pubkey.as_str())
-            .ok_or_else(|| "invalid wallet_pubkey".to_string())?;
         let Some(mut existing) = state
             .db
             .find_bound_citizen_by_archive(record.archive_no.as_str())?
@@ -479,6 +456,18 @@ fn apply_status_export_to_db(
             unmatched_binding_records.push(record.archive_no.clone());
             continue;
         }
+        if !status_export_record_has_required_voter_fields(record) {
+            state.db.delete_citizen_binding_record(&existing)?;
+            deleted_ineligible_records += 1;
+            continue;
+        }
+        let Some((normalized_wallet_pubkey, canonical_wallet_address)) =
+            normalized_status_export_wallet(record)
+        else {
+            state.db.delete_citizen_binding_record(&existing)?;
+            deleted_ineligible_records += 1;
+            continue;
+        };
         if let Some(owner) = state
             .db
             .find_bound_citizen_by_wallet(normalized_wallet_pubkey.as_str())?
@@ -508,7 +497,7 @@ fn apply_status_export_to_db(
     }
 
     for release in &file.binding_release_records {
-        let Some(mut existing) = state
+        let Some(existing) = state
             .db
             .find_bound_citizen_by_archive(release.archive_no.as_str())?
         else {
@@ -519,11 +508,7 @@ fn apply_status_export_to_db(
             unmatched_release_records.push(release.archive_no.clone());
             continue;
         }
-        existing.citizen_status = Some(CitizenStatus::Revoked);
-        existing.voting_eligible = false;
-        existing.status_updated_at = Some(release.released_at);
-        existing.bound_by = Some(ctx.admin_pubkey.clone());
-        state.db.upsert_citizen_row(&existing)?;
+        state.db.delete_citizen_binding_record(&existing)?;
         released_binding_records += 1;
     }
 
@@ -535,10 +520,22 @@ fn apply_status_export_to_db(
         imported_binding_records,
         updated_binding_records,
         wallet_replaced_records,
+        deleted_ineligible_records,
         released_binding_records,
         unmatched_binding_records,
         unmatched_release_records,
     })
+}
+
+fn status_export_record_has_required_voter_fields(record: &CpmsCitizenBindingRecord) -> bool {
+    // 中文注释:先筛状态、资格、算法、时间和钱包字段完整性;地址与公钥一致性由下一步规范化校验决定。
+    record.citizen_status == CitizenStatus::Normal
+        && record.voting_eligible
+        && record.wallet_sig_alg == WALLET_SIG_ALG_SR25519
+        && record.wallet_bound_at > 0
+        && record.status_updated_at > 0
+        && !record.wallet_address.trim().is_empty()
+        && !record.wallet_pubkey.trim().is_empty()
 }
 
 /// 中文注释:导入审计 = 基础事实(年度/批次/结果/请求来源) + 调用方扩展字段(extra,
@@ -596,40 +593,18 @@ fn build_status_export_sign_source(
     )
 }
 
-fn validate_wallet_pair(
-    wallet_address: &str,
-    wallet_pubkey: &str,
-) -> Result<(), (StatusCode, u32, String)> {
-    let normalized_wallet_pubkey = normalize_pubkey_hex(wallet_pubkey).ok_or((
-        StatusCode::BAD_REQUEST,
-        1001,
-        "invalid wallet_pubkey".to_string(),
-    ))?;
-    let decoded_pubkey = ss58_to_pubkey_hex(wallet_address).ok_or((
-        StatusCode::BAD_REQUEST,
-        1001,
-        "invalid wallet_address".to_string(),
-    ))?;
+fn normalized_status_export_wallet(record: &CpmsCitizenBindingRecord) -> Option<(String, String)> {
+    let normalized_wallet_pubkey = normalize_pubkey_hex(record.wallet_pubkey.as_str())?;
+    let wallet_address = record.wallet_address.trim();
+    let decoded_pubkey = ss58_to_pubkey_hex(wallet_address)?;
     if decoded_pubkey != normalized_wallet_pubkey {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            2004,
-            "wallet_address and wallet_pubkey mismatch".to_string(),
-        ));
+        return None;
     }
-    let canonical_address = pubkey_hex_to_ss58(normalized_wallet_pubkey.as_str()).ok_or((
-        StatusCode::BAD_REQUEST,
-        1001,
-        "invalid wallet_pubkey".to_string(),
-    ))?;
-    if canonical_address != wallet_address.trim() {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            2004,
-            "wallet_address is not canonical".to_string(),
-        ));
+    let canonical_address = pubkey_hex_to_ss58(normalized_wallet_pubkey.as_str())?;
+    if canonical_address != wallet_address {
+        return None;
     }
-    Ok(())
+    Some((normalized_wallet_pubkey, canonical_address))
 }
 
 fn normalize_pubkey_hex(pubkey: &str) -> Option<String> {
@@ -746,5 +721,56 @@ mod tests {
         file.records_hash =
             records_hash(&file.citizen_binding_records, &file.binding_release_records).unwrap();
         assert!(validate_export_records(&file).is_err());
+    }
+
+    #[test]
+    fn ineligible_binding_record_does_not_reject_whole_export() {
+        let mut file = sample_file();
+        file.binding_release_records.clear();
+        file.binding_release_records_count = 0;
+        file.citizen_binding_records = vec![CpmsCitizenBindingRecord {
+            archive_no: "ARCHIVE-NO-VOTE".to_string(),
+            wallet_address: String::new(),
+            wallet_pubkey: String::new(),
+            wallet_sig_alg: String::new(),
+            wallet_bound_at: 0,
+            citizen_status: CitizenStatus::Normal,
+            voting_eligible: false,
+            status_updated_at: 0,
+        }];
+        file.citizen_binding_records_count = file.citizen_binding_records.len();
+        file.records_hash =
+            records_hash(&file.citizen_binding_records, &file.binding_release_records).unwrap();
+        assert!(validate_export_records(&file).is_ok());
+    }
+
+    #[test]
+    fn normal_voting_citizen_can_remain_in_sfid() {
+        let record = CpmsCitizenBindingRecord {
+            archive_no: "ARCHIVE-NORMAL".to_string(),
+            wallet_address: "address".to_string(),
+            wallet_pubkey: "0x11".to_string(),
+            wallet_sig_alg: WALLET_SIG_ALG_SR25519.to_string(),
+            wallet_bound_at: 1,
+            citizen_status: CitizenStatus::Normal,
+            voting_eligible: true,
+            status_updated_at: 2,
+        };
+        assert!(status_export_record_has_required_voter_fields(&record));
+    }
+
+    #[test]
+    fn ineligible_citizen_must_be_deleted_from_sfid() {
+        let record = CpmsCitizenBindingRecord {
+            archive_no: "ARCHIVE-INELIGIBLE".to_string(),
+            wallet_address: "address".to_string(),
+            wallet_pubkey: "0x11".to_string(),
+            wallet_sig_alg: WALLET_SIG_ALG_SR25519.to_string(),
+            wallet_bound_at: 1,
+            citizen_status: CitizenStatus::Normal,
+            voting_eligible: false,
+            status_updated_at: 2,
+        };
+        assert!(!status_export_record_has_required_voter_fields(&record));
     }
 }

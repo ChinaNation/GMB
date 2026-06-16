@@ -375,6 +375,13 @@ impl Db {
                 valid_from TEXT,
                 valid_until TEXT,
                 status_updated_at BIGINT,
+                residence_p_code TEXT,
+                residence_c_code TEXT,
+                residence_t_code TEXT,
+                birth_p_code TEXT,
+                birth_c_code TEXT,
+                birth_t_code TEXT,
+                election_scope_level TEXT NOT NULL DEFAULT 'PROVINCE' CHECK (election_scope_level IN ('PROVINCE', 'CITY', 'TOWN')),
                 bind_status TEXT NOT NULL DEFAULT 'BOUND' CHECK (bind_status IN ('PENDING', 'BOUND')),
                 bound_at TIMESTAMPTZ,
                 bound_by TEXT,
@@ -504,6 +511,28 @@ impl Db {
             )
         })?;
 
+        conn.batch_execute(
+            "ALTER TABLE citizens
+                ADD COLUMN IF NOT EXISTS residence_p_code TEXT,
+                ADD COLUMN IF NOT EXISTS residence_c_code TEXT,
+                ADD COLUMN IF NOT EXISTS residence_t_code TEXT,
+                ADD COLUMN IF NOT EXISTS birth_p_code TEXT,
+                ADD COLUMN IF NOT EXISTS birth_c_code TEXT,
+                ADD COLUMN IF NOT EXISTS birth_t_code TEXT,
+                ADD COLUMN IF NOT EXISTS election_scope_level TEXT NOT NULL DEFAULT 'PROVINCE';
+             ALTER TABLE citizens
+                DROP CONSTRAINT IF EXISTS citizens_election_scope_level_check;
+             ALTER TABLE citizens
+                ADD CONSTRAINT citizens_election_scope_level_check
+                CHECK (election_scope_level IN ('PROVINCE', 'CITY', 'TOWN'));",
+        )
+        .map_err(|e| {
+            format!(
+                "sync target citizen schema failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
         Self::validate_target_subject_schema(conn)?;
 
         // 中文注释:教育委员会从公权目录迁入教育机构 tab 后,已生成的国家/市公民教育委员会
@@ -551,6 +580,10 @@ impl Db {
                 ON citizens (p_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_exact_lookup
                 ON citizens (p_code, c_code, archive_no, sfid_number, wallet_pubkey, wallet_address);
+             CREATE INDEX IF NOT EXISTS idx_citizens_residence_scope
+                ON citizens (residence_p_code, residence_c_code, residence_t_code, created_at DESC, id DESC);
+             CREATE INDEX IF NOT EXISTS idx_citizens_birth_scope
+                ON citizens (birth_p_code, birth_c_code, birth_t_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_gov_city
                 ON gov (p_code, c_code, institution_code);
              CREATE INDEX IF NOT EXISTS idx_gov_org
@@ -574,6 +607,55 @@ impl Db {
         for province in crate::china::provinces().iter() {
             Self::create_subject_partitions(conn, province.code)?;
         }
+        Self::delete_ineligible_citizen_residuals(conn)?;
+        Ok(())
+    }
+
+    fn delete_ineligible_citizen_residuals(conn: &mut postgres::Client) -> Result<(), String> {
+        // 中文注释:SFID 公民库目标状态是“可投票公民库”;历史残留的注销、无选举资格或无钱包记录不再保留。
+        conn.batch_execute(
+            "WITH doomed AS (
+                SELECT p_code, sfid_number, archive_no
+                FROM citizens
+                WHERE bind_status <> 'BOUND'
+                   OR citizen_status <> 'NORMAL'
+                   OR voting_eligible IS DISTINCT FROM true
+                   OR COALESCE(wallet_pubkey, '') = ''
+                   OR COALESCE(wallet_address, '') = ''
+                   OR COALESCE(archive_no, '') = ''
+             ),
+             deleted_challenges AS (
+                DELETE FROM citizen_bind_challenges ch
+                USING doomed d
+                WHERE ch.archive_no = d.archive_no
+                RETURNING 1
+             ),
+             deleted_subjects AS (
+                DELETE FROM subjects s
+                USING doomed d
+                WHERE s.p_code = d.p_code
+                  AND s.sfid_number = d.sfid_number
+                  AND s.kind = 'CITIZEN'
+                RETURNING 1
+             ),
+             deleted_ids AS (
+                DELETE FROM ids i
+                USING doomed d
+                WHERE i.sfid_number = d.sfid_number
+                  AND i.kind = 'CITIZEN'
+                RETURNING 1
+             )
+             DELETE FROM citizens c
+             USING doomed d
+             WHERE c.p_code = d.p_code
+               AND c.sfid_number = d.sfid_number;",
+        )
+        .map_err(|e| {
+            format!(
+                "delete ineligible citizen residuals failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
         Ok(())
     }
 
@@ -598,6 +680,17 @@ impl Db {
         Self::ensure_column_state(conn, "private", "subject_property", true)?;
         for column in ["private_type", "partnership_kind", "has_legal_personality"] {
             Self::ensure_column_state(conn, "private", column, true)?;
+        }
+        for column in [
+            "residence_p_code",
+            "residence_c_code",
+            "residence_t_code",
+            "birth_p_code",
+            "birth_c_code",
+            "birth_t_code",
+            "election_scope_level",
+        ] {
+            Self::ensure_column_state(conn, "citizens", column, true)?;
         }
         // 中文注释:旧 SFID 方案残列和旧私权分类列必须不存在。
         for (table, column) in [

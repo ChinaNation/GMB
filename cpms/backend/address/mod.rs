@@ -115,6 +115,36 @@ pub(crate) async fn validate_town_village(
     Ok(())
 }
 
+pub(crate) fn validate_birth_town(
+    province_code: &str,
+    city_code: &str,
+    town_code: &str,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    if province_code.trim().is_empty() || city_code.trim().is_empty() || town_code.trim().is_empty()
+    {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "birthplace province, city and town are required",
+        ));
+    }
+    let exists = china::find_town(province_code, city_code, town_code).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query birthplace failed",
+        )
+    })?;
+    if !exists {
+        return Err(err(
+            StatusCode::NOT_FOUND,
+            3006,
+            "birthplace area not found",
+        ));
+    }
+    Ok(())
+}
+
 async fn replace_city_address(
     conn: &mut sqlx::PgConnection,
     towns: &[china::TownArea],
@@ -187,10 +217,33 @@ struct TownRow {
 }
 
 #[derive(Serialize)]
+struct ProvinceRow {
+    province_code: String,
+    province_name: String,
+}
+
+#[derive(Serialize)]
+struct CityRow {
+    city_code: String,
+    city_name: String,
+}
+
+#[derive(Serialize)]
 struct VillageRow {
     village_id: String,
     town_code: String,
     village_name: String,
+}
+
+#[derive(Deserialize)]
+struct CitiesQuery {
+    province_code: String,
+}
+
+#[derive(Deserialize)]
+struct BirthTownsQuery {
+    province_code: String,
+    city_code: String,
 }
 
 #[derive(Deserialize)]
@@ -200,8 +253,79 @@ struct VillageQuery {
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/address/china/provinces", get(list_china_provinces))
+        .route("/api/v1/address/china/cities", get(list_china_cities))
+        .route("/api/v1/address/china/towns", get(list_china_towns))
         .route("/api/v1/address/towns", get(list_towns))
         .route("/api/v1/address/villages", get(list_villages))
+}
+
+async fn list_china_provinces(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<Vec<ProvinceRow>>>, (StatusCode, Json<ApiError>)> {
+    authz::require_auth(&state, &headers).await?;
+    let rows = china::provinces()
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query provinces failed",
+            )
+        })?
+        .into_iter()
+        .map(|p| ProvinceRow {
+            province_code: p.code,
+            province_name: p.name,
+        })
+        .collect();
+    Ok(Json(ok(rows)))
+}
+
+async fn list_china_cities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<CitiesQuery>,
+) -> Result<Json<ApiResponse<Vec<CityRow>>>, (StatusCode, Json<ApiError>)> {
+    authz::require_auth(&state, &headers).await?;
+    let rows = china::cities(q.province_code.as_str())
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query cities failed",
+            )
+        })?
+        .into_iter()
+        .map(|c| CityRow {
+            city_code: c.code,
+            city_name: c.name,
+        })
+        .collect();
+    Ok(Json(ok(rows)))
+}
+
+async fn list_china_towns(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<BirthTownsQuery>,
+) -> Result<Json<ApiResponse<Vec<TownRow>>>, (StatusCode, Json<ApiError>)> {
+    authz::require_auth(&state, &headers).await?;
+    let rows = china::towns(q.province_code.as_str(), q.city_code.as_str())
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query towns failed",
+            )
+        })?
+        .into_iter()
+        .map(|t| TownRow {
+            town_code: t.code,
+            town_name: t.name,
+        })
+        .collect();
+    Ok(Json(ok(rows)))
 }
 
 async fn list_towns(

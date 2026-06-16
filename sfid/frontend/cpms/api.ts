@@ -37,6 +37,13 @@ export type CpmsArchiveVerifyResult = {
   archive_no: string;
   province_code: string;
   city_code: string;
+  residence_province_code: string;
+  residence_city_code?: string | null;
+  residence_town_code?: string | null;
+  birth_province_code: string;
+  birth_city_code?: string | null;
+  birth_town_code?: string | null;
+  election_scope_level: 'PROVINCE' | 'CITY' | 'TOWN';
   sfid_number: string;
   status: string;
 };

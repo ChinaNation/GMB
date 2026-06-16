@@ -1,4 +1,14 @@
-// CPMS 地址模块类型：省市由后端安装信息决定，前端只选择镇村。
+// CPMS 地址模块类型：居住省市由安装授权决定；出生地省市镇来自随包 SFID 行政区真源只读拷贝。
+
+export interface Province {
+  province_code: string;
+  province_name: string;
+}
+
+export interface City {
+  city_code: string;
+  city_name: string;
+}
 
 export interface Town {
   town_code: string;

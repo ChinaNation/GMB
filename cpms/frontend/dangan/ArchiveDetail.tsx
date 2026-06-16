@@ -3,15 +3,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { listTowns, listVillages } from '../address/api';
+import { listBirthCities, listBirthProvinces, listBirthTowns, listTowns, listVillages } from '../address/api';
 import { installStatus } from '../initialize/api';
 import * as api from './api';
-import type { Archive, ArchiveAuditLog, ArchiveMaterial, ArchiveMaterialType } from './types';
+import type { Archive, ArchiveAuditLog, ArchiveMaterial, ArchiveMaterialType, ElectionScopeLevel } from './types';
 import type { Town, Village } from '../address/types';
 import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
 import { ScanIcon } from '../components/ScanIcon';
-import DateInput, { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
+import { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
 
 function calcAge(birthDate: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return '-';
@@ -93,6 +93,7 @@ const auditDetailLabels: Record<string, string> = {
   voting_eligible: '选举资格',
   wallet_address: '投票账户',
   wallet_pubkey: '投票账户公钥',
+  election_scope_level: '选举注册范围',
   material_type: '资料类型',
   mime_type: '文件类型',
   file_size: '文件大小',
@@ -131,8 +132,13 @@ const archiveQrErrorLabels: Record<string, string> = {
   'archive qr requires passport_no': '档案码生成条件未满足：护照号',
   'archive qr requires valid_from': '档案码生成条件未满足：有效期',
   'archive qr requires valid_until': '档案码生成条件未满足：有效期',
-  'archive qr requires province': '档案码生成条件未满足：省份',
-  'archive qr requires city': '档案码生成条件未满足：城市',
+  'archive qr requires province': '档案码生成条件未满足：居住省份',
+  'archive qr requires city': '档案码生成条件未满足：居住城市',
+  'archive qr requires birth province': '档案码生成条件未满足：出生省份',
+  'archive qr requires birth city': '档案码生成条件未满足：出生城市',
+  'archive qr requires birth town': '档案码生成条件未满足：出生镇',
+  'archive qr requires residence city': '档案码生成条件未满足：居住城市',
+  'archive qr requires residence town': '档案码生成条件未满足：居住镇',
   'archive qr requires normal citizen_status': '档案码生成条件未满足：公民状态必须为正常',
   'archive qr requires voting_eligible': '档案码生成条件未满足：选举资格必须为有',
   'archive qr requires age 16': '档案码生成条件未满足：公民必须年满16周岁',
@@ -174,6 +180,9 @@ export default function ArchiveDetail() {
   const [walletScannerActive, setWalletScannerActive] = useState(false);
   const [walletScanError, setWalletScanError] = useState('');
   const [walletBusy, setWalletBusy] = useState(false);
+  const [walletDraftAddress, setWalletDraftAddress] = useState('');
+  const [walletElectionCityChecked, setWalletElectionCityChecked] = useState(false);
+  const [walletElectionTownChecked, setWalletElectionTownChecked] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteChallenge, setDeleteChallenge] = useState<{ challenge_id: string; sign_request: string; expire_at: number } | null>(null);
   const [deleteScannerActive, setDeleteScannerActive] = useState(false);
@@ -184,6 +193,9 @@ export default function ArchiveDetail() {
   const [cityName, setCityName] = useState('');
   const [townName, setTownName] = useState('');
   const [villageName, setVillageName] = useState('');
+  const [birthProvinceName, setBirthProvinceName] = useState('');
+  const [birthCityName, setBirthCityName] = useState('');
+  const [birthTownName, setBirthTownName] = useState('');
   // 编辑用镇村列表
   const [towns, setTowns] = useState<Town[]>([]);
   const [villages, setVillages] = useState<Village[]>([]);
@@ -249,12 +261,38 @@ export default function ArchiveDetail() {
     }
   }, [archive?.town_code, archive?.village_id, towns]);
 
+  useEffect(() => {
+    if (!archive) return;
+    let active = true;
+    setBirthProvinceName('');
+    setBirthCityName('');
+    setBirthTownName('');
+    if (!archive.birth_province_code || !archive.birth_city_code || !archive.birth_town_code) return;
+
+    listBirthProvinces().then(res => {
+      if (!active || !res.data) return;
+      const item = res.data.find(p => p.province_code === archive.birth_province_code);
+      if (item) setBirthProvinceName(item.province_name);
+    }).catch(() => {});
+    listBirthCities(archive.birth_province_code).then(res => {
+      if (!active || !res.data) return;
+      const item = res.data.find(c => c.city_code === archive.birth_city_code);
+      if (item) setBirthCityName(item.city_name);
+    }).catch(() => {});
+    listBirthTowns(archive.birth_province_code, archive.birth_city_code).then(res => {
+      if (!active || !res.data) return;
+      const item = res.data.find(t => t.town_code === archive.birth_town_code);
+      if (item) setBirthTownName(item.town_name);
+    }).catch(() => {});
+
+    return () => { active = false; };
+  }, [archive?.birth_province_code, archive?.birth_city_code, archive?.birth_town_code]);
+
   const startEdit = () => {
     if (!archive) return;
     setEditForm({
       last_name: archive.last_name,
       first_name: archive.first_name,
-      birth_date: archive.birth_date,
       gender_code: archive.gender_code,
       height_cm: archive.height_cm ?? '',
       town_code: archive.town_code,
@@ -284,34 +322,25 @@ export default function ArchiveDetail() {
     setEditForm(f => ({
       ...f,
       citizen_status: value,
-      voting_eligible: value === 'REVOKED' || !isAtLeastAgeYmd(String(f.birth_date || ''), 16) ? false : f.voting_eligible,
-    }));
-  };
-  const handleEditBirthDateChange = (value: string) => {
-    setEditForm(f => ({
-      ...f,
-      birth_date: value,
-      voting_eligible: isAtLeastAgeYmd(value, 16) ? f.voting_eligible : false,
+      voting_eligible: value === 'REVOKED' || !isAtLeastAgeYmd(archive?.birth_date || '', 16) ? false : f.voting_eligible,
     }));
   };
   const canSetEditVotingEligible =
-    editForm.citizen_status === 'NORMAL' && isAtLeastAgeYmd(String(editForm.birth_date || ''), 16);
+    editForm.citizen_status === 'NORMAL' && isAtLeastAgeYmd(archive?.birth_date || '', 16);
 
   const handleSave = async () => {
     if (!id) return;
     setError('');
-    const birthDate = String(editForm.birth_date || '');
     const heightText = String(editForm.height_cm ?? '');
     if (!String(editForm.last_name || '').trim()) { setError('请输入姓氏'); return; }
     if (!String(editForm.first_name || '').trim()) { setError('请输入名字'); return; }
-    if (!isPastYmd(birthDate)) { setError('请选择正确的出生日期'); return; }
-    if (editForm.voting_eligible === true && !isAtLeastAgeYmd(birthDate, 16)) { setError('未满16周岁的公民不能设置为有选举资格'); return; }
+    if (editForm.voting_eligible === true && !isAtLeastAgeYmd(archive?.birth_date || '', 16)) { setError('未满16周岁的公民不能设置为有选举资格'); return; }
     if (!String(editForm.gender_code || '')) { setError('请选择性别'); return; }
     const height = Number(heightText);
     if (!Number.isFinite(height) || height < 30 || height > 260) { setError('请输入正确的身高'); return; }
-    if (!String(editForm.town_code || '')) { setError('请选择镇'); return; }
-    if (!String(editForm.village_id || '')) { setError('请选择村/路'); return; }
-    if (!String(editForm.address || '').trim()) { setError('请输入详细地址'); return; }
+    if (!String(editForm.town_code || '')) { setError('请选择居住镇'); return; }
+    if (!String(editForm.village_id || '')) { setError('请选择居住村/路'); return; }
+    if (!String(editForm.address || '').trim()) { setError('请输入居住地址'); return; }
     setSaving(true);
     try {
       const body: Record<string, unknown> = { ...editForm };
@@ -319,6 +348,7 @@ export default function ArchiveDetail() {
       body.first_name = String(body.first_name || '').trim();
       body.address = String(body.address || '').trim();
       body.height_cm = height;
+      delete body.birth_date;
       const res = await api.updateArchive(id, body);
       if (res.data) setArchive(res.data);
       setEditing(false);
@@ -327,6 +357,22 @@ export default function ArchiveDetail() {
       setError(e instanceof Error ? e.message : '保存失败');
     }
     setSaving(false);
+  };
+
+  const electionScopeFromFlags = (cityChecked: boolean, townChecked: boolean): ElectionScopeLevel => {
+    if (townChecked) return 'TOWN';
+    if (cityChecked) return 'CITY';
+    return 'PROVINCE';
+  };
+
+  const handleWalletElectionCityChange = (checked: boolean) => {
+    setWalletElectionCityChecked(checked);
+    if (!checked) setWalletElectionTownChecked(false);
+  };
+
+  const handleWalletElectionTownChange = (checked: boolean) => {
+    setWalletElectionTownChecked(checked);
+    if (checked) setWalletElectionCityChecked(true);
   };
 
   // ARCHIVE 二维码下载
@@ -351,11 +397,20 @@ export default function ArchiveDetail() {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
-  const openWalletScanner = () => {
+  const openWalletSettings = () => {
+    if (!archive?.voting_eligible) {
+      setError('无选举资格的公民不能设置投票账户');
+      return;
+    }
+    const cityRegistered = archive?.election_scope_level === 'CITY' || archive?.election_scope_level === 'TOWN';
+    const townRegistered = archive?.election_scope_level === 'TOWN';
     setError('');
     setWalletScanError('');
+    setWalletDraftAddress(archive?.wallet_address || '');
+    setWalletElectionCityChecked(cityRegistered);
+    setWalletElectionTownChecked(townRegistered);
     setWalletModalOpen(true);
-    setWalletScannerActive(true);
+    setWalletScannerActive(!archive?.wallet_address);
   };
 
   const extractWalletAddress = (raw: string) => {
@@ -381,17 +436,31 @@ export default function ArchiveDetail() {
       setWalletScanError(e instanceof Error ? e.message : '钱包二维码格式无效');
       return false;
     }
-    void saveWalletAddress(walletAddress);
+    setWalletDraftAddress(walletAddress);
+    setWalletScanError('');
+    setWalletScannerActive(false);
     return true;
   };
 
-  const saveWalletAddress = async (walletAddress: string) => {
+  const saveWalletSettings = async () => {
     if (!id) return;
     setError('');
     setWalletScanError('');
+    if (!archive?.voting_eligible) {
+      setWalletScanError('无选举资格的公民不能设置投票账户');
+      return;
+    }
+    const walletAddress = walletDraftAddress.trim();
+    if (!walletAddress) {
+      setWalletScanError('请扫描或填写投票账户');
+      return;
+    }
     setWalletBusy(true);
     try {
-      const res = await api.bindArchiveWallet(id, walletAddress);
+      const res = await api.bindArchiveWallet(id, {
+        wallet_address: walletAddress,
+        election_scope_level: electionScopeFromFlags(walletElectionCityChecked, walletElectionTownChecked),
+      });
       if (res.data) setArchive(res.data);
       setWalletModalOpen(false);
       setWalletScannerActive(false);
@@ -400,6 +469,8 @@ export default function ArchiveDetail() {
       const message = e instanceof Error ? e.message : '保存投票账户失败';
       setWalletScanError(message.includes('wallet already bound')
         ? '该钱包账户已绑定其他公民档案，不能重复绑定。'
+        : message.includes('archive voting ineligible')
+          ? '无选举资格的公民不能设置投票账户。'
         : message);
     } finally {
       setWalletBusy(false);
@@ -407,9 +478,11 @@ export default function ArchiveDetail() {
   };
 
   const closeWalletModal = () => {
+    if (walletBusy) return;
     setWalletModalOpen(false);
     setWalletScannerActive(false);
     setWalletScanError('');
+    setWalletDraftAddress('');
   };
 
   const handleGenerateArchiveQr = async () => {
@@ -582,8 +655,12 @@ export default function ArchiveDetail() {
     if (!isPastYmd(archive.birth_date)) reasons.push('出生日期');
     if (!archive.passport_no.trim()) reasons.push('护照号');
     if (!archive.valid_from.trim() || !archive.valid_until.trim()) reasons.push('有效期');
-    if (!archive.province_code.trim()) reasons.push('省份');
-    if (!archive.city_code.trim()) reasons.push('城市');
+    if (!archive.province_code.trim()) reasons.push('居住省份');
+    if (!archive.city_code.trim()) reasons.push('居住城市');
+    if (!archive.birth_province_code.trim()) reasons.push('出生省份');
+    if (!archive.birth_city_code.trim()) reasons.push('出生城市');
+    if (!archive.birth_town_code.trim()) reasons.push('出生镇');
+    if (archive.election_scope_level === 'TOWN' && !archive.town_code.trim()) reasons.push('居住镇');
     if (archive.citizen_status !== 'NORMAL') reasons.push('公民状态必须为正常');
     if (!archive.voting_eligible) reasons.push('选举资格必须为有');
     if (archive.voting_eligible && !isAtLeastAgeYmd(archive.birth_date, 16)) reasons.push('年满16周岁');
@@ -604,8 +681,17 @@ export default function ArchiveDetail() {
   if (!archive) return <div className="card">档案不存在</div>;
   const archiveDeleted = archive.status === 'DELETED' || archive.deleted_at !== null;
   const archiveId = id || archive.archive_id;
+  const canSetWallet = !archiveDeleted && archive.voting_eligible;
+  const walletActionTitle = archive.voting_eligible ? '设置投票账户' : '无选举资格，不能设置投票账户';
 
   const archiveTitle = `${archive.last_name || ''}${archive.first_name || ''}`.trim() || '公民档案';
+  const birthplaceText = [
+    birthProvinceName || archive.birth_province_code,
+    birthCityName || archive.birth_city_code,
+    birthTownName || archive.birth_town_code,
+  ].filter(Boolean).join(' . ') || '-';
+  const cityElectionRegistered = archive.election_scope_level === 'CITY' || archive.election_scope_level === 'TOWN';
+  const townElectionRegistered = archive.election_scope_level === 'TOWN';
 
   const detailSection = (
     <div className="card archive-detail-card">
@@ -635,7 +721,10 @@ export default function ArchiveDetail() {
                 <div className="form-group"><label>名字 *</label><input className="form-input" value={String(editForm.first_name || '')} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} /></div>
               </div>
               <div className="form-row mt-16">
-                <div className="form-group"><label>出生日期 *</label><DateInput value={String(editForm.birth_date || '')} onChange={handleEditBirthDateChange} required /></div>
+                <div className="form-group">
+                  <label>出生日期</label>
+                  <input className="form-input" value={archive.birth_date} readOnly disabled title="出生日期保存后不能更改" />
+                </div>
                 <div className="form-group">
                   <label>性别 *</label>
                   <select className="form-input" value={String(editForm.gender_code || 'M')} onChange={e => setEditForm(f => ({ ...f, gender_code: e.target.value }))}>
@@ -646,21 +735,21 @@ export default function ArchiveDetail() {
               </div>
               <div className="form-row mt-16">
                 <div className="form-group">
-                  <label>镇 *</label>
+                  <label>居住镇 *</label>
                   <select className="form-input" value={String(editForm.town_code || '')} onChange={e => handleEditTownChange(e.target.value)}>
                     <option value="">请选择</option>
                     {towns.map(t => <option key={t.town_code} value={t.town_code}>{t.town_name}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>村/路 *</label>
+                  <label>居住村/路 *</label>
                   <select className="form-input" value={String(editForm.village_id || '')} onChange={e => setEditForm(f => ({ ...f, village_id: e.target.value }))}>
                     <option value="">请选择</option>
                     {villages.map(v => <option key={v.village_id} value={v.village_id}>{v.village_name}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="form-group mt-16"><label>详细地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+              <div className="form-group mt-16"><label>居住地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
               <div className="form-row mt-16">
                 <div className="form-group">
                   <label>公民状态 *</label>
@@ -690,13 +779,14 @@ export default function ArchiveDetail() {
                 <div><strong>身高：</strong>{archive.height_cm ? `${archive.height_cm} cm` : '-'}</div>
                 <div><strong>出生日期：</strong>{archive.birth_date}</div>
                 <div><strong>年龄：</strong>{calcAge(archive.birth_date)}</div>
+                <div className="archive-detail-grid__full"><strong>出生地：</strong>{birthplaceText}</div>
                 <div><strong>护照号：</strong>{archive.passport_no || '-'}</div>
                 <div className="archive-detail-grid__full archive-validity-line">
                   <strong>有效期：</strong>{formatYmdZh(archive.valid_from)} - {formatYmdZh(archive.valid_until)}
                 </div>
-                <div><strong>省份：</strong>{provinceName || archive.province_code}</div>
-                <div><strong>城市：</strong>{cityName || archive.city_code}</div>
-                <div className="archive-detail-grid__full"><strong>详细地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
+                <div><strong>居住省份：</strong>{provinceName || archive.province_code}</div>
+                <div><strong>居住城市：</strong>{cityName || archive.city_code}</div>
+                <div className="archive-detail-grid__full"><strong>居住地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
                 <div><strong>公民状态：</strong>
                   <span className={`tag ${archive.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
                     {archive.citizen_status === 'NORMAL' ? '正常' : '注销'}
@@ -714,7 +804,16 @@ export default function ArchiveDetail() {
                   {archive.wallet_address ? (
                     <>
                       <span className="archive-wallet-address">{archive.wallet_address}</span>
-                      {!archiveDeleted && <button className="btn btn--primary btn--sm no-print" onClick={openWalletScanner} disabled={walletBusy}>更换</button>}
+                      {!archiveDeleted && (
+                        <button
+                          className="btn btn--primary btn--sm no-print"
+                          onClick={openWalletSettings}
+                          disabled={walletBusy || !canSetWallet}
+                          title={walletActionTitle}
+                        >
+                          设置
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>
@@ -725,15 +824,17 @@ export default function ArchiveDetail() {
                           value=""
                           placeholder="未绑定"
                           readOnly
+                          disabled={!archive.voting_eligible}
+                          title={walletActionTitle}
                           style={{ flex: 1 }}
                         />
                         {!archiveDeleted && (
                           <button
                             className="btn btn--primary btn--sm no-print"
-                            onClick={openWalletScanner}
-                            disabled={walletBusy}
-                            title="扫描钱包二维码"
-                            aria-label="扫描钱包二维码"
+                            onClick={openWalletSettings}
+                            disabled={walletBusy || !canSetWallet}
+                            title={walletActionTitle}
+                            aria-label={walletActionTitle}
                             style={{ width: 36, height: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                           >
                             <ScanIcon size={18} />
@@ -742,6 +843,18 @@ export default function ArchiveDetail() {
                       </div>
                     </>
                   )}
+                </div>
+                <div className="archive-election-result">
+                  <div><strong>注册市选举公民：</strong>
+                    <span className={`tag ${cityElectionRegistered ? 'tag--success' : 'tag--warning'}`}>
+                      {cityElectionRegistered ? '已注册' : '未注册'}
+                    </span>
+                  </div>
+                  <div><strong>注册镇选举公民：</strong>
+                    <span className={`tag ${townElectionRegistered ? 'tag--success' : 'tag--warning'}`}>
+                      {townElectionRegistered ? '已注册' : '未注册'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </>
@@ -977,20 +1090,60 @@ export default function ArchiveDetail() {
 
       {walletModalOpen && (
         <div className="modal-overlay">
-          <div className="modal" style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
-            <div className="modal__title">扫描钱包二维码</div>
+          <div className="modal archive-wallet-modal">
+            <div className="modal__title">设置投票账户</div>
             {walletScanError && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{walletScanError}</div>}
-            <CameraQrScanner
-              active={walletScannerActive}
-              onActiveChange={setWalletScannerActive}
-              onDetected={handleWalletScanned}
-              onError={setWalletScanError}
-              size={292}
-              busy={walletBusy}
-              loadingText="摄像头初始化中..."
-            />
+            <div className="form-group">
+              <label>投票账户</label>
+              <div className="archive-wallet-draft-row">
+                <input
+                  className="form-input"
+                  value={walletDraftAddress}
+                  onChange={e => setWalletDraftAddress(e.target.value)}
+                  placeholder="扫描或粘贴钱包账户"
+                  disabled={walletBusy}
+                />
+              </div>
+            </div>
+            <div className="archive-election-scope archive-election-scope--modal">
+              <label className="archive-election-scope__option">
+                <input
+                  type="checkbox"
+                  checked={walletElectionCityChecked}
+                  onChange={e => handleWalletElectionCityChange(e.target.checked)}
+                  disabled={walletBusy}
+                />
+                <span>注册市选举公民</span>
+              </label>
+              <label className="archive-election-scope__option">
+                <input
+                  type="checkbox"
+                  checked={walletElectionTownChecked}
+                  onChange={e => handleWalletElectionTownChange(e.target.checked)}
+                  disabled={walletBusy}
+                />
+                <span>注册镇选举公民</span>
+              </label>
+            </div>
+            <div className="archive-wallet-scanner">
+              <CameraQrScanner
+                active={walletScannerActive}
+                onActiveChange={setWalletScannerActive}
+                onDetected={handleWalletScanned}
+                onError={setWalletScanError}
+                size={292}
+                busy={walletBusy}
+                buttonLabel="开启扫码"
+                stopLabel="停止扫码"
+                idleText="等待扫描钱包二维码"
+                loadingText="摄像头初始化中..."
+              />
+            </div>
             <div className="modal__footer">
               <button className="btn btn--ghost" onClick={closeWalletModal} disabled={walletBusy}>取消</button>
+              <button className="btn btn--primary" onClick={saveWalletSettings} disabled={walletBusy}>
+                {walletBusy ? '保存中...' : '保存'}
+              </button>
             </div>
           </div>
         </div>

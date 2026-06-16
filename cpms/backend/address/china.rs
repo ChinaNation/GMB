@@ -16,6 +16,18 @@ pub(crate) struct CityArea {
     pub city_name: String,
 }
 
+/// 单个省。
+pub(crate) struct ProvinceArea {
+    pub code: String,
+    pub name: String,
+}
+
+/// 单个市。
+pub(crate) struct CityCodeArea {
+    pub code: String,
+    pub name: String,
+}
+
 /// 单个镇及其下辖村。
 pub(crate) struct TownArea {
     pub code: String,
@@ -65,6 +77,72 @@ fn open() -> Result<Connection, String> {
         .map_err(|e| format!("open china sqlite {path} failed: {e}"))
 }
 
+/// 读取全国省份。中文注释：出生地选择只读 CPMS 随包的 SFID 行政区唯一真源拷贝。
+pub(crate) fn provinces() -> Result<Vec<ProvinceArea>, String> {
+    let conn = open()?;
+    let mut stmt = conn
+        .prepare("SELECT code, name FROM provinces ORDER BY sort_order")
+        .map_err(|e| format!("prepare china provinces failed: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProvinceArea {
+                code: row.get(0)?,
+                name: row.get(1)?,
+            })
+        })
+        .map_err(|e| format!("query china provinces failed: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("read china province row failed: {e}"))?;
+    Ok(rows)
+}
+
+/// 读取某省全部市。
+pub(crate) fn cities(province_code: &str) -> Result<Vec<CityCodeArea>, String> {
+    let conn = open()?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT code, name FROM cities
+             WHERE province_code = ?1
+             ORDER BY sort_order",
+        )
+        .map_err(|e| format!("prepare china cities failed: {e}"))?;
+    let rows = stmt
+        .query_map([province_code.trim()], |row| {
+            Ok(CityCodeArea {
+                code: row.get(0)?,
+                name: row.get(1)?,
+            })
+        })
+        .map_err(|e| format!("query china cities failed: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("read china city row failed: {e}"))?;
+    Ok(rows)
+}
+
+/// 读取某市全部镇。出生地不需要村/路数据。
+pub(crate) fn towns(province_code: &str, city_code: &str) -> Result<Vec<TownArea>, String> {
+    let conn = open()?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT code, name FROM towns
+             WHERE province_code = ?1 AND city_code = ?2
+             ORDER BY sort_order",
+        )
+        .map_err(|e| format!("prepare china towns failed: {e}"))?;
+    let rows = stmt
+        .query_map([province_code.trim(), city_code.trim()], |row| {
+            Ok(TownArea {
+                code: row.get(0)?,
+                name: row.get(1)?,
+                villages: Vec::new(),
+            })
+        })
+        .map_err(|e| format!("query china towns failed: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("read china town row failed: {e}"))?;
+    Ok(rows)
+}
+
 /// 按省市代码还原省市名称;省或市不存在返回 `Ok(None)`。
 pub(crate) fn find_city(province_code: &str, city_code: &str) -> Result<Option<CityArea>, String> {
     let conn = open()?;
@@ -94,6 +172,31 @@ pub(crate) fn find_city(province_code: &str, city_code: &str) -> Result<Option<C
         province_name,
         city_name,
     }))
+}
+
+pub(crate) fn find_town(
+    province_code: &str,
+    city_code: &str,
+    town_code: &str,
+) -> Result<bool, String> {
+    let conn = open()?;
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*)
+             FROM towns
+             WHERE province_code = ?1 AND city_code = ?2 AND code = ?3",
+            [province_code.trim(), city_code.trim(), town_code.trim()],
+            |row| row.get(0),
+        )
+        .map_err(|e| {
+            format!(
+                "query china town {}{}{} failed: {e}",
+                province_code.trim(),
+                city_code.trim(),
+                town_code.trim()
+            )
+        })?;
+    Ok(exists > 0)
 }
 
 /// 取该市全部镇及其下辖村。单查镇 + 单查全市村后按 town_code 归组,避免逐镇 N+1。

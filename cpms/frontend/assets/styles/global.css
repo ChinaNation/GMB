@@ -696,6 +696,93 @@ a:hover { text-decoration: underline; }
   max-width: 420px;
 }
 
+.archive-wallet-modal {
+  width: min(548px, calc(100vw - 32px));
+  min-width: 0;
+  max-width: 548px;
+}
+
+.archive-wallet-modal .modal__title {
+  text-align: center;
+}
+
+.archive-wallet-modal .modal__footer {
+  justify-content: center;
+  gap: 12px;
+}
+
+.archive-wallet-modal .modal__footer .btn {
+  min-width: 96px;
+}
+
+.archive-wallet-draft-row {
+  display: block;
+  min-width: 0;
+}
+
+.archive-wallet-draft-row .form-input {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.archive-wallet-scanner {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.archive-election-result {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.archive-election-result > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.archive-election-scope {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.archive-election-scope--modal {
+  grid-column: auto;
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.archive-election-scope__option {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.archive-election-scope__option input {
+  width: 16px;
+  height: 16px;
+}
+
 .archive-material-count {
   min-width: 28px;
   height: 22px;
@@ -845,6 +932,14 @@ a:hover { text-decoration: underline; }
   .archive-wallet-address {
     white-space: normal;
     word-break: break-all;
+  }
+
+  .archive-election-result {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-election-scope--modal {
+    grid-template-columns: 1fr;
   }
 
   .archive-operation-section .table {

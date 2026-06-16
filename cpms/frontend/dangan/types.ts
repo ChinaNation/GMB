@@ -1,5 +1,7 @@
 // CPMS 档案模块类型：档案创建、查询、更新、打印和删除签名共用。
 
+export type ElectionScopeLevel = 'PROVINCE' | 'CITY' | 'TOWN';
+
 export interface Archive {
   archive_id: string;
   archive_no: string;
@@ -14,6 +16,10 @@ export interface Archive {
   town_code: string;
   village_id: string;
   address: string;
+  birth_province_code: string;
+  birth_city_code: string;
+  birth_town_code: string;
+  election_scope_level: ElectionScopeLevel;
   status: string;
   citizen_status: string;
   voting_eligible: boolean;
@@ -41,6 +47,10 @@ export interface CreateArchiveRequest {
   town_code?: string;
   village_id?: string;
   address?: string;
+  birth_province_code: string;
+  birth_city_code: string;
+  birth_town_code: string;
+  election_scope_level: ElectionScopeLevel;
   citizen_status?: string;
   voting_eligible?: boolean;
 }

@@ -42,6 +42,20 @@ pub(crate) struct CitizenRecord {
     pub(crate) province_code: Option<String>,
     #[serde(default)]
     pub(crate) city_code: Option<String>,
+    #[serde(default)]
+    pub(crate) residence_province_code: Option<String>,
+    #[serde(default)]
+    pub(crate) residence_city_code: Option<String>,
+    #[serde(default)]
+    pub(crate) residence_town_code: Option<String>,
+    #[serde(default)]
+    pub(crate) birth_province_code: Option<String>,
+    #[serde(default)]
+    pub(crate) birth_city_code: Option<String>,
+    #[serde(default)]
+    pub(crate) birth_town_code: Option<String>,
+    #[serde(default)]
+    pub(crate) election_scope_level: Option<String>,
     pub(crate) bound_at: Option<DateTime<Utc>>,
     pub(crate) bound_by: Option<String>,
     pub(crate) created_at: DateTime<Utc>,
@@ -116,6 +130,13 @@ pub(crate) struct CitizenBindChallenge {
     pub(crate) status_updated_at: i64,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
+    pub(crate) residence_province_code: String,
+    pub(crate) residence_city_code: Option<String>,
+    pub(crate) residence_town_code: Option<String>,
+    pub(crate) birth_province_code: String,
+    pub(crate) birth_city_code: Option<String>,
+    pub(crate) birth_town_code: Option<String>,
+    pub(crate) election_scope_level: String,
     pub(crate) expire_at: DateTime<Utc>,
     pub(crate) created_at: DateTime<Utc>,
 }
@@ -180,6 +201,19 @@ pub(crate) struct CitizenBindOutput {
     pub(crate) valid_from: Option<String>,
     pub(crate) valid_until: Option<String>,
     pub(crate) status_updated_at: Option<i64>,
+    pub(crate) residence_province_code: Option<String>,
+    pub(crate) residence_city_code: Option<String>,
+    pub(crate) residence_town_code: Option<String>,
+    pub(crate) residence_province_name: Option<String>,
+    pub(crate) residence_city_name: Option<String>,
+    pub(crate) residence_town_name: Option<String>,
+    pub(crate) birth_province_code: Option<String>,
+    pub(crate) birth_city_code: Option<String>,
+    pub(crate) birth_town_code: Option<String>,
+    pub(crate) birth_province_name: Option<String>,
+    pub(crate) birth_city_name: Option<String>,
+    pub(crate) birth_town_name: Option<String>,
+    pub(crate) election_scope_level: Option<String>,
     pub(crate) bind_status: CitizenBindStatus,
 }
 
@@ -221,6 +255,19 @@ pub(crate) struct CitizenRow {
     pub(crate) valid_from: Option<String>,
     pub(crate) valid_until: Option<String>,
     pub(crate) status_updated_at: Option<i64>,
+    pub(crate) residence_province_code: Option<String>,
+    pub(crate) residence_city_code: Option<String>,
+    pub(crate) residence_town_code: Option<String>,
+    pub(crate) residence_province_name: Option<String>,
+    pub(crate) residence_city_name: Option<String>,
+    pub(crate) residence_town_name: Option<String>,
+    pub(crate) birth_province_code: Option<String>,
+    pub(crate) birth_city_code: Option<String>,
+    pub(crate) birth_town_code: Option<String>,
+    pub(crate) birth_province_name: Option<String>,
+    pub(crate) birth_city_name: Option<String>,
+    pub(crate) birth_town_name: Option<String>,
+    pub(crate) election_scope_level: Option<String>,
     pub(crate) bind_status: CitizenBindStatus,
 }
 
@@ -244,6 +291,13 @@ pub(crate) struct MyIdStatusOutput {
     pub(crate) valid_from: Option<String>,
     pub(crate) valid_until: Option<String>,
     pub(crate) status_updated_at: Option<i64>,
+    pub(crate) residence_province_code: Option<String>,
+    pub(crate) residence_city_code: Option<String>,
+    pub(crate) residence_town_code: Option<String>,
+    pub(crate) birth_province_code: Option<String>,
+    pub(crate) birth_city_code: Option<String>,
+    pub(crate) birth_town_code: Option<String>,
+    pub(crate) election_scope_level: Option<String>,
 }
 
 #[cfg(test)]
@@ -264,6 +318,13 @@ mod tests {
             valid_from: Some("2026-05-24".to_string()),
             valid_until: Some("2036-05-23".to_string()),
             status_updated_at: Some(1_779_580_800),
+            residence_province_code: Some("GD".to_string()),
+            residence_city_code: Some("001".to_string()),
+            residence_town_code: None,
+            birth_province_code: Some("GD".to_string()),
+            birth_city_code: Some("001".to_string()),
+            birth_town_code: None,
+            election_scope_level: Some("CITY".to_string()),
         };
 
         let value = serde_json::to_value(output).expect("serialize status output");
@@ -276,6 +337,9 @@ mod tests {
         assert_eq!(value["valid_from"], "2026-05-24");
         assert_eq!(value["valid_until"], "2036-05-23");
         assert_eq!(value["status_updated_at"], 1_779_580_800);
+        assert_eq!(value["residence_province_code"], "GD");
+        assert_eq!(value["birth_city_code"], "001");
+        assert_eq!(value["election_scope_level"], "CITY");
     }
 
     #[test]
@@ -294,6 +358,13 @@ mod tests {
             sfid_signature: None,
             province_code: Some("GD".to_string()),
             city_code: Some("4401".to_string()),
+            residence_province_code: Some("GD".to_string()),
+            residence_city_code: Some("4401".to_string()),
+            residence_town_code: Some("HD".to_string()),
+            birth_province_code: Some("GD".to_string()),
+            birth_city_code: Some("4401".to_string()),
+            birth_town_code: Some("HD".to_string()),
+            election_scope_level: Some("TOWN".to_string()),
             bound_at: None,
             bound_by: None,
             created_at: Utc::now(),

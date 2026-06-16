@@ -34,6 +34,9 @@ type Blake2b256 = Blake2b<U32>;
 
 pub(crate) const CITIZEN_STATUS_NORMAL: &str = "NORMAL";
 pub(crate) const CITIZEN_STATUS_REVOKED: &str = "REVOKED";
+pub(crate) const ELECTION_SCOPE_PROVINCE: &str = "PROVINCE";
+pub(crate) const ELECTION_SCOPE_CITY: &str = "CITY";
+pub(crate) const ELECTION_SCOPE_TOWN: &str = "TOWN";
 const ARCHIVE_SIGN_KEY_ID: &str = "ARCHIVE";
 const GEO_SEAL_PREFIX: &str = "g1";
 
@@ -67,8 +70,19 @@ pub(crate) struct ArchiveQrPayload {
 
 #[derive(Serialize)]
 struct GeoSealClaims {
-    /// 中文注释：归属密文只放机构 SFID 号；省市由 SFID 从 sfid_number 解码。
+    /// 中文注释：机构 SFID 号只证明本 CPMS 属于哪个市公安局授权安装。
     sfid_number: String,
+    /// 中文注释：居住地/出生地只放行政区代码，不放中文地名，且只在 geo_seal 密文中出现。
+    residence: GeoSealRegionClaims,
+    birthplace: GeoSealRegionClaims,
+    election_scope_level: String,
+}
+
+#[derive(Serialize)]
+struct GeoSealRegionClaims {
+    province_code: String,
+    city_code: Option<String>,
+    town_code: Option<String>,
 }
 
 /// 构造 ARCHIVE 载荷（SFID_CPMS_V1）。
@@ -101,8 +115,22 @@ pub(crate) async fn build_archive_qr_payload(
 
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
+    let election_scope_level = validate_election_scope_level(&archive.election_scope_level)?;
     let claims = GeoSealClaims {
         sfid_number: install.sfid_number,
+        residence: scoped_region(
+            &archive.province_code,
+            &archive.city_code,
+            &archive.town_code,
+            &election_scope_level,
+        ),
+        birthplace: scoped_region(
+            &archive.birth_province_code,
+            &archive.birth_city_code,
+            &archive.birth_town_code,
+            &election_scope_level,
+        ),
+        election_scope_level,
     };
     let geo_seal = encrypt_geo_seal(
         install.install_secret.as_str(),
@@ -271,6 +299,38 @@ pub(crate) fn validate_citizen_status(status: &str) -> Result<(), (StatusCode, J
     match status {
         CITIZEN_STATUS_NORMAL | CITIZEN_STATUS_REVOKED => Ok(()),
         _ => Err(err(StatusCode::BAD_REQUEST, 1001, "invalid citizen_status")),
+    }
+}
+
+pub(crate) fn validate_election_scope_level(
+    scope: &str,
+) -> Result<String, (StatusCode, Json<ApiError>)> {
+    let normalized = scope.trim().to_ascii_uppercase();
+    match normalized.as_str() {
+        ELECTION_SCOPE_PROVINCE | ELECTION_SCOPE_CITY | ELECTION_SCOPE_TOWN => Ok(normalized),
+        _ => Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "invalid election_scope_level",
+        )),
+    }
+}
+
+fn scoped_region(
+    province_code: &str,
+    city_code: &str,
+    town_code: &str,
+    election_scope_level: &str,
+) -> GeoSealRegionClaims {
+    let include_city = matches!(
+        election_scope_level,
+        ELECTION_SCOPE_CITY | ELECTION_SCOPE_TOWN
+    );
+    let include_town = election_scope_level == ELECTION_SCOPE_TOWN;
+    GeoSealRegionClaims {
+        province_code: province_code.trim().to_string(),
+        city_code: include_city.then(|| city_code.trim().to_string()),
+        town_code: include_town.then(|| town_code.trim().to_string()),
     }
 }
 

@@ -73,6 +73,9 @@ pub(crate) async fn citizen_bind_challenge(
     {
         return resp;
     }
+    if let Err(resp) = ensure_verified_archive_can_enter_sfid(&verified) {
+        return resp;
+    }
     if verified.wallet_sig_alg != "sr25519" {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -215,6 +218,13 @@ pub(crate) async fn citizen_bind_challenge(
         status_updated_at: verified.status_updated_at,
         province_code: verified.province_code.clone(),
         city_code: verified.city_code.clone(),
+        residence_province_code: verified.residence_province_code.clone(),
+        residence_city_code: verified.residence_city_code.clone(),
+        residence_town_code: verified.residence_town_code.clone(),
+        birth_province_code: verified.birth_province_code.clone(),
+        birth_city_code: verified.birth_city_code.clone(),
+        birth_town_code: verified.birth_town_code.clone(),
+        election_scope_level: verified.election_scope_level.clone(),
         expire_at,
         created_at: now,
     };
@@ -497,6 +507,13 @@ fn create_citizen_record(
         sfid_signature: None,
         province_code: Some(challenge.province_code.clone()),
         city_code: Some(challenge.city_code.clone()),
+        residence_province_code: Some(challenge.residence_province_code.clone()),
+        residence_city_code: challenge.residence_city_code.clone(),
+        residence_town_code: challenge.residence_town_code.clone(),
+        birth_province_code: Some(challenge.birth_province_code.clone()),
+        birth_city_code: challenge.birth_city_code.clone(),
+        birth_town_code: challenge.birth_town_code.clone(),
+        election_scope_level: Some(challenge.election_scope_level.clone()),
         bound_at: Some(Utc::now()),
         bound_by: Some(ctx.admin_pubkey.clone()),
         created_at: Utc::now(),
@@ -604,12 +621,66 @@ fn replace_citizen_record(
     record.status_updated_at = Some(challenge.status_updated_at);
     record.province_code = Some(challenge.province_code.clone());
     record.city_code = Some(challenge.city_code.clone());
+    record.residence_province_code = Some(challenge.residence_province_code.clone());
+    record.residence_city_code = challenge.residence_city_code.clone();
+    record.residence_town_code = challenge.residence_town_code.clone();
+    record.birth_province_code = Some(challenge.birth_province_code.clone());
+    record.birth_city_code = challenge.birth_city_code.clone();
+    record.birth_town_code = challenge.birth_town_code.clone();
+    record.election_scope_level = Some(challenge.election_scope_level.clone());
     record.bound_at = Some(Utc::now());
     record.bound_by = Some(ctx.admin_pubkey.clone());
     Ok(record)
 }
 
+fn ensure_verified_archive_can_enter_sfid(
+    verified: &VerifiedCpmsArchive,
+) -> Result<(), axum::response::Response> {
+    // 中文注释:SFID 公民库只保留真实可投票公民;市/镇注册精度是可选项,但基础投票资格不是可选项。
+    if verified.citizen_status != CitizenStatus::Normal {
+        return Err(api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "citizen_status must be NORMAL",
+        ));
+    }
+    if !verified.voting_eligible {
+        return Err(api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "voting_eligible must be true",
+        ));
+    }
+    if verified.wallet_address.trim().is_empty()
+        || verified.wallet_pubkey.trim().is_empty()
+        || verified.wallet_sig_alg.trim().is_empty()
+    {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "voting wallet must be set before SFID binding",
+        ));
+    }
+    Ok(())
+}
+
 fn citizen_bind_output(record: &CitizenRecord) -> CitizenBindOutput {
+    let (residence_province_name, residence_city_name, residence_town_name) = citizen_region_names(
+        record
+            .residence_province_code
+            .as_deref()
+            .or(record.province_code.as_deref()),
+        record
+            .residence_city_code
+            .as_deref()
+            .or(record.city_code.as_deref()),
+        record.residence_town_code.as_deref(),
+    );
+    let (birth_province_name, birth_city_name, birth_town_name) = citizen_region_names(
+        record.birth_province_code.as_deref(),
+        record.birth_city_code.as_deref(),
+        record.birth_town_code.as_deref(),
+    );
     CitizenBindOutput {
         id: record.id,
         wallet_pubkey: record.wallet_pubkey.clone(),
@@ -623,8 +694,40 @@ fn citizen_bind_output(record: &CitizenRecord) -> CitizenBindOutput {
         valid_from: record.archive_valid_from.clone(),
         valid_until: record.archive_valid_until.clone(),
         status_updated_at: record.status_updated_at,
+        residence_province_code: record.residence_province_code.clone(),
+        residence_city_code: record.residence_city_code.clone(),
+        residence_town_code: record.residence_town_code.clone(),
+        residence_province_name,
+        residence_city_name,
+        residence_town_name,
+        birth_province_code: record.birth_province_code.clone(),
+        birth_city_code: record.birth_city_code.clone(),
+        birth_town_code: record.birth_town_code.clone(),
+        birth_province_name,
+        birth_city_name,
+        birth_town_name,
+        election_scope_level: record.election_scope_level.clone(),
         bind_status: record.bind_status(),
     }
+}
+
+fn citizen_region_names(
+    province_code: Option<&str>,
+    city_code: Option<&str>,
+    town_code: Option<&str>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let Some(province_code) = province_code.map(str::trim).filter(|code| !code.is_empty()) else {
+        return (None, None, None);
+    };
+    crate::china::area_name_by_codes(province_code, city_code, town_code)
+        .map(|(province, city, town)| {
+            (
+                Some(province.to_string()),
+                city.map(str::to_string),
+                town.map(str::to_string),
+            )
+        })
+        .unwrap_or((None, None, None))
 }
 
 fn build_challenge_text(
@@ -818,9 +921,16 @@ fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         sfid_signature: None,
         province_code: Some(row.get(10)),
         city_code: Some(row.get(11)),
-        bound_at: row.get(12),
-        bound_by: row.get(13),
-        created_at: row.get(14),
+        residence_province_code: row.get(12),
+        residence_city_code: row.get(13),
+        residence_town_code: row.get(14),
+        birth_province_code: row.get(15),
+        birth_city_code: row.get(16),
+        birth_town_code: row.get(17),
+        election_scope_level: row.get(18),
+        bound_at: row.get(19),
+        bound_by: row.get(20),
+        created_at: row.get(21),
     }
 }
 
@@ -929,8 +1039,10 @@ impl Db {
                 .query_opt(
                     "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address, archive_no,
                             sfid_number, citizen_status, voting_eligible, valid_from,
-                            valid_until, status_updated_at, p_code, c_code, bound_at,
-                            bound_by, created_at
+                            valid_until, status_updated_at, p_code, c_code,
+                            residence_p_code, residence_c_code, residence_t_code,
+                            birth_p_code, birth_c_code, birth_t_code, election_scope_level,
+                            bound_at, bound_by, created_at
                      FROM citizens
                      WHERE id = $1 AND bind_status = 'BOUND'
                      LIMIT 1",
@@ -950,8 +1062,10 @@ impl Db {
             let sql = format!(
                 "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address, archive_no,
                         sfid_number, citizen_status, voting_eligible, valid_from,
-                        valid_until, status_updated_at, p_code, c_code, bound_at,
-                        bound_by, created_at
+                        valid_until, status_updated_at, p_code, c_code,
+                        residence_p_code, residence_c_code, residence_t_code,
+                        birth_p_code, birth_c_code, birth_t_code, election_scope_level,
+                        bound_at, bound_by, created_at
                  FROM citizens
                  WHERE {clause} AND bind_status = 'BOUND'
                  ORDER BY created_at DESC

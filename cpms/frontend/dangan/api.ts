@@ -1,6 +1,6 @@
 import { del, get, post, put } from '../common/http';
 import type { ApiError, ApiResponse } from '../common/types';
-import type { Archive, ArchiveAuditLog, ArchiveMaterial, CreateArchiveRequest } from './types';
+import type { Archive, ArchiveAuditLog, ArchiveMaterial, CreateArchiveRequest, ElectionScopeLevel } from './types';
 
 export const createArchive = (body: CreateArchiveRequest) =>
   post<{ archive_id: string; archive_no: string; passport_no: string }>('/api/v1/archives', body);
@@ -41,8 +41,11 @@ export const getArchive = (id: string) => get<Archive>(`/api/v1/archives/${id}`)
 export const updateArchive = (id: string, body: Record<string, unknown>) =>
   put<Archive>(`/api/v1/archives/${id}`, body);
 
-export const bindArchiveWallet = (id: string, wallet_address: string) =>
-  post<Archive>(`/api/v1/archives/${id}/wallet`, { wallet_address });
+export const bindArchiveWallet = (id: string, body: {
+  wallet_address: string;
+  election_scope_level: ElectionScopeLevel;
+}) =>
+  post<Archive>(`/api/v1/archives/${id}/wallet`, body);
 
 export const generateArchiveQr = (id: string) =>
   post<{ qr_payload: unknown; qr_content: string }>(`/api/v1/archives/${id}/qr/generate`);

@@ -95,7 +95,7 @@ export function StatusExportImportModal({ auth, open, onClose, onImported }: Pro
       {result && (
         <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>
           已更新 {result.updated_binding_records} 条，已更换钱包 {result.wallet_replaced_records} 条，
-          已释放绑定 {result.released_binding_records} 条。
+          已删除无资格公民 {result.deleted_ineligible_records} 条，已释放绑定 {result.released_binding_records} 条。
         </Typography.Paragraph>
       )}
     </Modal>

@@ -8,6 +8,7 @@ import { createPasskeySecurityGrant } from '../admins/admin_security_api';
 const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
+export type ElectionScopeLevel = 'PROVINCE' | 'CITY' | 'TOWN';
 
 export type CitizenRow = {
   id: number;
@@ -22,6 +23,19 @@ export type CitizenRow = {
   valid_from?: string;
   valid_until?: string;
   status_updated_at?: number;
+  residence_province_code?: string;
+  residence_city_code?: string;
+  residence_town_code?: string;
+  residence_province_name?: string;
+  residence_city_name?: string;
+  residence_town_name?: string;
+  birth_province_code?: string;
+  birth_city_code?: string;
+  birth_town_code?: string;
+  birth_province_name?: string;
+  birth_city_name?: string;
+  birth_town_name?: string;
+  election_scope_level?: ElectionScopeLevel;
   bind_status: 'PENDING' | 'BOUND';
 };
 
@@ -62,6 +76,19 @@ export type CitizenBindResult = {
   valid_from?: string;
   valid_until?: string;
   status_updated_at?: number;
+  residence_province_code?: string;
+  residence_city_code?: string;
+  residence_town_code?: string;
+  residence_province_name?: string;
+  residence_city_name?: string;
+  residence_town_name?: string;
+  birth_province_code?: string;
+  birth_city_code?: string;
+  birth_town_code?: string;
+  birth_province_name?: string;
+  birth_city_name?: string;
+  birth_town_name?: string;
+  election_scope_level?: ElectionScopeLevel;
   bind_status: 'PENDING' | 'BOUND';
 };
 
@@ -103,6 +130,7 @@ export type CpmsStatusExportImportResult = {
   imported_binding_records: number;
   updated_binding_records: number;
   wallet_replaced_records: number;
+  deleted_ineligible_records: number;
   released_binding_records: number;
   unmatched_binding_records: string[];
   unmatched_release_records: string[];
