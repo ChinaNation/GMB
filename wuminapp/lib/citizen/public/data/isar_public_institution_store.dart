@@ -83,42 +83,43 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
       final decoded = jsonDecode(raw) as List<dynamic>;
       return decoded.map((e) => e as String).toList(growable: false);
     }
-    // 回退:无 manifest 时用已落库机构去重省份(顺序不保证规范)。
+    // 回退:无 manifest 时用已落库机构去重省 code(顺序不保证规范)。
     final all = await isar.publicInstitutionEntitys.where().findAll();
     final seen = <String>{};
     final out = <String>[];
     for (final e in all) {
-      if (seen.add(e.province)) out.add(e.province);
+      if (seen.add(e.provinceCode)) out.add(e.provinceCode);
     }
     return out;
   }
 
   @override
-  Future<List<String>> listCities(String province) async {
+  Future<List<String>> listCities(String provinceCode) async {
     final isar = await _db();
     final rows = await isar.publicInstitutionEntitys
         .filter()
-        .provinceEqualTo(province)
+        .provinceCodeEqualTo(provinceCode)
         .findAll();
+    // 按 cityCode 去重(市 code 省内唯一);名字由调用方查字典 join。
     final seen = <String>{};
     final out = <String>[];
     for (final e in rows) {
-      if (e.city.isNotEmpty && seen.add(e.city)) out.add(e.city);
+      if (e.cityCode.isNotEmpty && seen.add(e.cityCode)) out.add(e.cityCode);
     }
     return out;
   }
 
   @override
   Future<List<PublicInstitutionEntity>> listInstitutionsByCity(
-    String province,
-    String city,
+    String provinceCode,
+    String cityCode,
   ) async {
     final isar = await _db();
     return isar.publicInstitutionEntitys
         .filter()
-        .provinceEqualTo(province)
+        .provinceCodeEqualTo(provinceCode)
         .and()
-        .cityEqualTo(city)
+        .cityCodeEqualTo(cityCode)
         .findAll();
   }
 

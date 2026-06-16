@@ -530,6 +530,42 @@ class InstitutionEntity {
   List<String> matchedAdminPubkeys = const [];
 }
 
+/// 行政区字典实体(ADR-021 行政区唯一真源)。
+///
+/// 中文注释:派生自 china.sqlite(经 `assets/admin_divisions/` 静态数据包),是
+/// wuminapp 端行政区名字的**唯一真源**——机构记录只存 code,显示名一律按
+/// (level, scopeKey, code) 查本表 join 得到。别处零独立存行政区名字。
+///
+/// 镇 code 全国不唯一(LN 三市都有镇 001),故唯一键必须带完整层级前缀:
+/// [divisionKey] = `"<level>|<pcode>|<ccode>|<tcode>"`,缺级留空。
+@collection
+class AdminDivisionEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 复合唯一键:`"<level>|<pcode>|<ccode>|<tcode>"`(缺级留空)。
+  /// 例:省=`"province|LN||"`、市=`"city|LN|001|"`、镇=`"town|LN|001|005"`。
+  @Index(unique: true, replace: true)
+  late String divisionKey;
+
+  /// 层级:`province` / `city` / `town`。
+  @Index()
+  late String level;
+
+  /// 该层级自身的 code(省 code / 市 code / 镇 code)。
+  late String code;
+
+  /// 父定位键:province 空、city=pcode、town=`"<pcode>|<ccode>"`。
+  /// 用于「某省的全部市」「某省某市的全部镇」按父批量取。
+  @Index()
+  late String scopeKey;
+
+  /// 行政区名字(来自 china.sqlite)。
+  late String name;
+
+  /// 字典版本戳(来自 manifest version;排错/增量比对用)。
+  String? dictVersion;
+}
+
 /// 公权机构目录本地完整缓存(ADR-018 §九 混合模式)。
 ///
 /// 中文注释:数据来自发布期数据包(基线)+ SFID 公开接口增量同步;UI 永远读本表,
@@ -548,15 +584,17 @@ class PublicInstitutionEntity {
   String? shortName;
   late String status;
 
-  /// 所属省(左侧省导航分组键)。
+  /// 所属省 code(行政区唯一真源键;名字由 [AdminDivisionEntity] 字典 join,
+  /// 见 ADR-021)。左侧省导航分组键。
   @Index()
-  late String province;
+  late String provinceCode;
 
-  /// 所属市(市列表分组键)。
+  /// 所属市 code(市列表分组键;名字走字典 join)。
   @Index()
-  late String city;
+  late String cityCode;
 
-  String town = '';
+  /// 所属镇 code(可空,空串表示机构只定位到市级)。
+  String townCode = '';
 
   /// 机构类型:ZF/LF/SF/JC/JY 等。
   late String institutionCode;
@@ -973,6 +1011,7 @@ class WalletIsar {
       InstitutionEntitySchema,
       PersonalDuoqianEntitySchema,
       PersonalDuoqianProposalEntitySchema,
+      AdminDivisionEntitySchema,
       PublicInstitutionEntitySchema,
       PublicInstitutionSubscriptionEntitySchema,
       ImConversationEntitySchema,
@@ -1122,7 +1161,7 @@ class WalletIsarMigration {
   static const String _kSchemaVersion = 'wallet.data.schema.version';
 
   /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 6;
+  static const int currentSchemaVersion = 7;
 
   static Future<void> ensureMigrated(Isar isar) async {
     await _ensureSettingsRow(isar);
@@ -1144,6 +1183,14 @@ class WalletIsarMigration {
         // 无需数据迁移。这里清空新 collection 兜底，避免新旧叠加出现脏数据。
         await isar.institutionEntitys.clear();
         await InstitutionDuoqianLocalState.clearAllInTxn(isar);
+      }
+      if (version < 7) {
+        // 中文注释（ADR-021 行政区唯一真源）：公权机构目录从「存行政区名字」
+        // 改为「只存 province/city/town code」，名字由 AdminDivisionEntity 字典
+        // join。公权目录是只读派生数据(无用户数据),旧 name-keyed 行直接清空,
+        // 首启从 assets 数据包(已带 code)全量重灌;字典表同步清空待 bundle 重灌。
+        await isar.publicInstitutionEntitys.clear();
+        await isar.adminDivisionEntitys.clear();
       }
       final entity = AppKvEntity()
         ..key = _kSchemaVersion

@@ -12,19 +12,20 @@ void main() {
   Future<SfidDirectoryLookup> seedLookup(
       List<PublicInstitutionDto> rows) async {
     final repo = await buildSeededRepo(
-      provinceOrder: const ['广东省'],
+      provinceOrder: const ['GD'],
       institutions: rows,
+      cityNames: const {'GD|001': '广州市'},
     );
     return SfidDirectoryLookup(repository: repo);
   }
 
-  test('命中:反查出省/市/法定代表人', () async {
+  test('命中:反查出省/市/法定代表人(省名链上常量、市名字典 join)', () async {
     final lookup = await seedLookup([
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': sfid,
         'institution_name': '广东省公民储备委员会',
-        'province': '广东省',
-        'city': '广州市',
+        'province_code': 'GD',
+        'city_code': '001',
         'institution_code': 'GCB',
         'account_count': 2,
         'legal_rep_name': '程伟',
@@ -42,8 +43,8 @@ void main() {
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': sfid,
         'institution_name': '广东省公民储备委员会',
-        'province': '广东省',
-        'city': '广州市',
+        'province_code': 'GD',
+        'city_code': '001',
         'institution_code': 'GCB',
         'account_count': 2,
       }),
@@ -57,8 +58,8 @@ void main() {
     final lookup = await seedLookup([
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': sfid,
-        'province': '广东省',
-        'city': '广州市',
+        'province_code': 'GD',
+        'city_code': '001',
         'institution_code': 'GCB',
         'account_count': 2,
       }),

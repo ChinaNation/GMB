@@ -82,10 +82,13 @@ pub(crate) struct PublicInstitutionRow {
     pub category: InstitutionCategory,
     pub subject_property: String,
     pub p1: String,
-    pub province: String,
-    pub city: String,
+    /// 行政区**唯一真源键**:省/市/镇 code(= subjects p_code/c_code/t_code)。
+    /// 名字一律由客户端按 (province_code,city_code,town_code) 查行政区字典(china.sqlite 派生)得到,
+    /// **本接口不下发任何行政区名字**(ADR-021 单一真源:名字别处零独立副本)。
+    pub province_code: String,
+    pub city_code: String,
     #[serde(default)]
-    pub town: String,
+    pub town_code: String,
     pub institution_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
@@ -104,28 +107,29 @@ pub(crate) struct PublicInstitutionRow {
 
 impl PublicInstitutionRow {
     /// 从目录查询行映射公开行(只取白名单列;custom_account_names 后续批量补)。
+    /// **按列名取**(非裸位置索引):SELECT 增删列不会错位/panic(ADR-021 H-2)。
     fn from_pg_row(row: &postgres::Row) -> Self {
-        let account_count = row.get::<_, i64>(15).max(0) as usize;
+        let account_count = row.get::<_, i64>("account_count").max(0) as usize;
         Self {
-            sfid_number: row.get(0),
-            institution_name: row.get(1),
-            sfid_name: row.get(2),
-            short_name: row.get(3),
-            status: row.get(4),
-            category: parse_category(row.get::<_, String>(5).as_str()),
-            subject_property: row.get(6),
-            p1: row.get(7),
-            province: row.get(8),
-            city: row.get(9),
-            town: row.get(10),
-            institution_code: row.get(11),
-            org_code: row.get(12),
-            parent_sfid_number: row.get(13),
-            has_legal_personality: row.get(14),
-            legal_rep_name: row.get(17),
+            sfid_number: row.get("sfid_number"),
+            institution_name: row.get("institution_name"),
+            sfid_name: row.get("sfid_name"),
+            short_name: row.get("short_name"),
+            status: row.get("status"),
+            category: parse_category(row.get::<_, String>("category").as_str()),
+            subject_property: row.get("subject_property"),
+            p1: row.get("p1"),
+            province_code: row.get("province_code"),
+            city_code: row.get("city_code"),
+            town_code: row.get("town_code"),
+            institution_code: row.get("institution_code"),
+            org_code: row.get("org_code"),
+            parent_sfid_number: row.get("parent_sfid_number"),
+            has_legal_personality: row.get("has_legal_personality"),
+            legal_rep_name: row.get("legal_rep_name"),
             account_count,
             custom_account_names: Vec::new(),
-            created_at: row.get(16),
+            created_at: row.get("created_at"),
         }
     }
 }
@@ -317,12 +321,17 @@ fn query_public_institutions(
     let c_code = c_code.map(str::to_string);
     let limit = i64::try_from(page_size.saturating_add(1))
         .map_err(|_| "page_size too large".to_string())?;
+    // 全列显式 AS 别名,from_pg_row 按列名取;行政区只下发 code(p_code/c_code/t_code),不吐名字。
     let sql = format!(
-        "SELECT s.sfid_number, s.name, s.sfid_name, s.short_name, s.status, s.category,
-                s.subject_property, s.p1, s.province, s.city, COALESCE(s.town, ''),
+        "SELECT s.sfid_number,
+                s.name AS institution_name,
+                s.sfid_name, s.short_name, s.status, s.category,
+                s.subject_property, s.p1,
+                s.p_code AS province_code, s.c_code AS city_code,
+                COALESCE(s.t_code, '') AS town_code,
                 s.institution_code, s.org_code, s.parent_sfid_number, s.has_legal_personality,
                 (SELECT COUNT(*) FROM accounts a
-                   WHERE a.p_code = s.p_code AND a.sfid_number = s.sfid_number),
+                   WHERE a.p_code = s.p_code AND a.sfid_number = s.sfid_number) AS account_count,
                 s.created_at, s.legal_rep_name
          {GOV_FROM_WHERE}
            AND ($3::text IS NULL OR s.sfid_number > $3)
@@ -429,9 +438,9 @@ mod tests {
             category: InstitutionCategory::GovInstitution,
             subject_property: "G".to_string(),
             p1: "0".to_string(),
-            province: "安徽省".to_string(),
-            city: "合肥".to_string(),
-            town: String::new(),
+            province_code: "AH".to_string(),
+            city_code: "001".to_string(),
+            town_code: String::new(),
             institution_code: "ZF".to_string(),
             org_code: None,
             has_legal_personality: Some(true),

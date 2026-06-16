@@ -10,6 +10,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
+import 'admin_division_bundle_loader.dart';
+import 'admin_division_store.dart';
+import 'isar_admin_division_store.dart';
 import 'public_institution_dto.dart';
 import 'public_institution_store.dart';
 
@@ -17,10 +20,20 @@ class PublicInstitutionBundleLoader {
   PublicInstitutionBundleLoader({
     required this.store,
     AssetBundle? bundle,
-  }) : bundle = bundle ?? rootBundle;
+    AdminDivisionStore? divisionStore,
+    AdminDivisionBundleLoader? divisionLoader,
+  })  : bundle = bundle ?? rootBundle,
+        divisionLoader = divisionLoader ??
+            AdminDivisionBundleLoader(
+              store: divisionStore ?? IsarAdminDivisionStore(),
+              bundle: bundle ?? rootBundle,
+            );
 
   final PublicInstitutionStore store;
   final AssetBundle bundle;
+
+  /// 行政区字典载入器(ADR-021):机构名字唯一真源,基线灌库时一并灌好。
+  final AdminDivisionBundleLoader divisionLoader;
 
   static const String _dir = 'assets/public_institutions';
   static const String _manifestPath = '$_dir/manifest.json';
@@ -29,7 +42,10 @@ class PublicInstitutionBundleLoader {
   ///
   /// 中文注释:数据包可达数十万条,逐省分片 + store 内分块事务写入,适合首启
   /// 后台调用;不阻塞 UI。(真隔离 isolate 导入留 follow-up。)
+  /// 末尾一并灌行政区字典(库空才灌,幂等),保证机构名字 join 有数据。
   Future<bool> ensureBundleLoaded() async {
+    // 字典独立判空灌入(幂等):即便机构库非空,字典空也补灌,二者解耦。
+    await divisionLoader.ensureDictionaryLoaded();
     if (await store.institutionCount() > 0) return false;
     return loadFromBundle();
   }
@@ -57,6 +73,8 @@ class PublicInstitutionBundleLoader {
       await store.upsertInstitutions(items, catalogVersion: version);
       await store.setProvinceVersion(province, version);
     }
+    // 末尾一并灌行政区字典(幂等),机构名字 join 唯一真源(ADR-021)。
+    await divisionLoader.ensureDictionaryLoaded();
     return true;
   }
 

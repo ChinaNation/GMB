@@ -45,8 +45,8 @@ PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
       <String, dynamic>{
         'sfid_number': _nrcSfid,
         'institution_name': '国家公民储备委员会',
-        'province': '岭南',
-        'city': '中央',
+        'province_code': 'LN',
+        'city_code': '001',
         'institution_code': 'ZF',
         'account_count': 4,
         'custom_account_names': ['业务专户'],
@@ -77,20 +77,21 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final repo = await buildSeededRepo(
-      provinceOrder: const ['岭南'],
+      provinceOrder: const ['GD'],
       institutions: [
         // 复用 harness seedDto 不便带 custom,这里直接用 entity 的 dto。
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
           'institution_name': '国家公民储备委员会',
-          'province': '广东省',
-          'city': '中央',
+          'province_code': 'GD',
+          'city_code': '001',
           'institution_code': 'ZF',
           'account_count': 4,
           'legal_rep_name': '王法人',
           'custom_account_names': ['业务专户'],
         }),
       ],
+      cityNames: const {'GD|001': '中央'},
     );
     final chain = _FakeChainData(
       adminList: const ['0xadminpubkey001'],
@@ -130,17 +131,18 @@ void main() {
 
   testWidgets('管理员入口点击进入管理员列表页', (tester) async {
     final repo = await buildSeededRepo(
-      provinceOrder: const ['岭南'],
+      provinceOrder: const ['LN'],
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
           'institution_name': '国家公民储备委员会',
-          'province': '岭南',
-          'city': '中央',
+          'province_code': 'LN',
+          'city_code': '001',
           'institution_code': 'ZF',
           'account_count': 2,
         }),
       ],
+      cityNames: const {'LN|001': '中央'},
     );
     await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
       sfidNumber: _nrcSfid,
@@ -159,17 +161,18 @@ void main() {
 
   testWidgets('订阅按钮切换写入 store', (tester) async {
     final repo = await buildSeededRepo(
-      provinceOrder: const ['岭南'],
+      provinceOrder: const ['LN'],
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
           'institution_name': '国家公民储备委员会',
-          'province': '岭南',
-          'city': '中央',
+          'province_code': 'LN',
+          'city_code': '001',
           'institution_code': 'ZF',
           'account_count': 2,
         }),
       ],
+      cityNames: const {'LN|001': '中央'},
     );
     await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
       sfidNumber: _nrcSfid,

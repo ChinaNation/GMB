@@ -5,16 +5,16 @@ import 'package:wuminapp_mobile/citizen/public/data/public_institution_dto.dart'
 
 void main() {
   group('PublicInstitutionDto.fromJson', () {
-    test('解析全字段 + custom_account_names', () {
+    test('解析全字段(行政区只吃 code) + custom_account_names', () {
       final dto = PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': 'AH001-ZF000-123456789-2026',
         'institution_name': '安徽省人民政府',
         'sfid_name': '安徽省国民政府',
         'short_name': '皖府',
         'status': 'ACTIVE',
-        'province': '安徽',
-        'city': '合肥',
-        'town': '',
+        'province_code': 'AH',
+        'city_code': '001',
+        'town_code': '',
         'institution_code': 'ZF',
         'account_count': 3,
         'legal_rep_name': '李大民',
@@ -22,22 +22,30 @@ void main() {
       });
       expect(dto.sfidNumber, 'AH001-ZF000-123456789-2026');
       expect(dto.institutionName, '安徽省人民政府');
+      expect(dto.provinceCode, 'AH');
+      expect(dto.cityCode, '001');
+      expect(dto.townCode, '');
       expect(dto.accountCount, 3);
       expect(dto.legalRepName, '李大民');
       expect(dto.customAccountNames, ['业务专户A', '业务专户B']);
-      // 法定代表人随实体落库。
-      expect(dto.toEntity(catalogVersion: 'v', updatedAtMillis: 0).legalRepName,
-          '李大民');
+      // 行政区 code + 法定代表人随实体落库。
+      final entity = dto.toEntity(catalogVersion: 'v', updatedAtMillis: 0);
+      expect(entity.provinceCode, 'AH');
+      expect(entity.cityCode, '001');
+      expect(entity.legalRepName, '李大民');
     });
 
-    test('缺省 custom_account_names → 空列表;缺省法定代表人 → null', () {
+    test('缺省行政区 code → 空串;缺省 custom/法定代表人 → 空/null(无名字 fallback)', () {
       final dto = PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': 'X',
-        'province': '中枢',
-        'city': '中央',
+        'province_code': 'ZS',
+        'city_code': '001',
         'institution_code': 'ZF',
         'account_count': 2,
       });
+      expect(dto.provinceCode, 'ZS');
+      expect(dto.cityCode, '001');
+      expect(dto.townCode, ''); // 缺省镇 code → 空串
       expect(dto.customAccountNames, isEmpty);
       expect(dto.status, 'ACTIVE');
       expect(dto.legalRepName, isNull);
@@ -46,8 +54,8 @@ void main() {
     test('toEntity 填 catalogVersion + 名称回退', () {
       final dto = PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': 'Y',
-        'province': '中枢',
-        'city': '中央',
+        'province_code': 'ZS',
+        'city_code': '001',
         'institution_code': 'LF',
         'account_count': 2,
       });
@@ -65,8 +73,8 @@ void main() {
         'items': [
           {
             'sfid_number': 'A',
-            'province': '中枢',
-            'city': '中央',
+            'province_code': 'ZS',
+            'city_code': '001',
             'institution_code': 'ZF',
             'account_count': 2,
           }

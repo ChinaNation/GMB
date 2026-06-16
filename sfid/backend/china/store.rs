@@ -82,6 +82,24 @@ fn load_provinces() -> Vec<ProvinceCode> {
             cities: Box::leak(cities.into_boxed_slice()),
         });
     }
+
+    // 铁律(ADR-021):china.sqlite 行政区 code 不可变、不复用。加载即校验 (省,市,镇)
+    // 三元组 code 无重复——重复会让机构 town_code 反查歧义、行政区字典互相覆盖。
+    // 有重复直接 panic,启动即暴露(退役的镇 code 进 town_tombstones 表,永不再分配)。
+    let mut seen = std::collections::HashSet::new();
+    for p in &provinces {
+        for c in p.cities {
+            for t in c.towns {
+                assert!(
+                    seen.insert((p.code, c.code, t.code)),
+                    "china.sqlite 行政区 code 重复(违反 ADR-021 不可变不复用铁律): {}/{}/{}",
+                    p.code,
+                    c.code,
+                    t.code
+                );
+            }
+        }
+    }
     provinces
 }
 
@@ -148,4 +166,74 @@ pub fn province_name_by_code(code: &str) -> Option<&'static str> {
         .iter()
         .find(|p| p.code.eq_ignore_ascii_case(code))
         .map(|p| p.name)
+}
+
+/// 判定 (省,市,镇) 三元组是否对应当前行政区划真源里的一个活镇。
+///
+/// 中文注释:孤儿机构清理(ADR-021 §B5)的唯一判定依据。被删/退役复用 code 下的旧机构
+/// 其 `t_code` 会指向一个已不存在于 china.sqlite 的镇。空 `tc` 永远返回 true(市级机构、
+/// 储委会、部委等合法态没有镇维度,绝不当孤儿),由调用方负责跳过空 t_code 行;此处也对
+/// 空 tc 直接判存在以防误删。code 大小写不敏感,与 `area_name_by_codes` 口径一致。
+pub fn town_exists(pc: &str, cc: &str, tc: &str) -> bool {
+    if tc.trim().is_empty() {
+        return true;
+    }
+    let Some(province) = provinces()
+        .iter()
+        .find(|p| p.code.eq_ignore_ascii_case(pc))
+    else {
+        return false;
+    };
+    let Some(city) = province
+        .cities
+        .iter()
+        .find(|c| c.code.eq_ignore_ascii_case(cc))
+    else {
+        return false;
+    };
+    city.towns
+        .iter()
+        .any(|t| t.code.eq_ignore_ascii_case(tc))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn first_town_triple() -> (&'static str, &'static str, &'static str) {
+        for p in provinces() {
+            for c in p.cities {
+                if let Some(t) = c.towns.first() {
+                    return (p.code, c.code, t.code);
+                }
+            }
+        }
+        panic!("china.sqlite 至少应有一个镇供测试");
+    }
+
+    #[test]
+    fn town_exists_true_for_real_triple() {
+        let (pc, cc, tc) = first_town_triple();
+        assert!(town_exists(pc, cc, tc));
+    }
+
+    #[test]
+    fn town_exists_false_for_retired_town_code() {
+        let (pc, cc, _tc) = first_town_triple();
+        // 中文注释:同省同市但镇 code 不存在(模拟退役/被删镇),应判孤儿。
+        assert!(!town_exists(pc, cc, "ZZZ_NOT_A_TOWN"));
+    }
+
+    #[test]
+    fn town_exists_false_for_unknown_province() {
+        assert!(!town_exists("__NOPE__", "001", "001"));
+    }
+
+    #[test]
+    fn town_exists_true_for_empty_town_code() {
+        // 中文注释:空镇 code = 市级机构/储委会/部委合法态,永远不是孤儿。
+        assert!(town_exists("ZS", "001", ""));
+        assert!(town_exists("ZS", "", ""));
+        assert!(town_exists("anything", "anything", "   "));
+    }
 }

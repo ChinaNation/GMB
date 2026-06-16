@@ -1382,6 +1382,201 @@ impl Db {
         })
     }
 
+    // 中文注释(ADR-021 §B5):扫出"孤儿机构"——subjects 中 t_code 非空、但该
+    // (p_code,c_code,t_code) 三元组在行政区划真源 china.sqlite 里已不存在(被删镇/
+    // 退役复用 code 下挂着的旧机构,如港澳旧机构 t_code 指向已退役的镇)。判定只走
+    // 进程内内存树(crate::china::town_exists),不在 PG 里 join china 数据(PG 无 towns 表)。
+    // 白名单:t_code 为空/NULL 的行(市级机构/储委会/部委合法态)永远不是孤儿,直接跳过。
+    // 只读扫描,不改库;删除由调用方拿到 sfid 列表后逐省级联删。
+    pub(crate) fn scan_orphan_institutions(&self) -> Result<Vec<OrphanInstitution>, String> {
+        self.with_client(move |conn| {
+            let rows = conn
+                .query(
+                    "SELECT p_code, sfid_number, kind,
+                            COALESCE(c_code, ''), COALESCE(t_code, ''),
+                            COALESCE(town, ''), COALESCE(category, ''),
+                            COALESCE(org_code, ''), COALESCE(institution_code, '')
+                     FROM subjects
+                     WHERE t_code IS NOT NULL AND t_code <> ''",
+                    &[],
+                )
+                .map_err(|e| {
+                    format!(
+                        "scan subjects for orphan institutions failed: {}",
+                        crate::core::db::postgres_error_text(&e)
+                    )
+                })?;
+            let mut orphans = Vec::new();
+            for row in rows {
+                let p_code: String = row.get(0);
+                let sfid_number: String = row.get(1);
+                let kind: String = row.get(2);
+                let c_code: String = row.get(3);
+                let t_code: String = row.get(4);
+                let town: String = row.get(5);
+                let category: String = row.get(6);
+                let org_code: String = row.get(7);
+                let institution_code: String = row.get(8);
+                // 白名单:空 t_code 已在 SQL 过滤;此处再调 town_exists 内存树判定。
+                if crate::china::town_exists(&p_code, &c_code, &t_code) {
+                    continue;
+                }
+                orphans.push(OrphanInstitution {
+                    p_code,
+                    sfid_number,
+                    kind,
+                    c_code,
+                    t_code,
+                    town,
+                    category,
+                    org_code,
+                    institution_code,
+                });
+            }
+            Ok(orphans)
+        })
+    }
+
+    // 中文注释:把待删孤儿行(subjects/gov/private/accounts)文本导出到备份文件,删除唯一回滚保证。
+    // 用 COPY ... TO STDOUT 抓 TSV(不依赖 pg_dump 外部进程),每张表一段,带表名分隔头。
+    // 仅命中传入 sfid 集合内的行(逐省 p_code + sfid ANY 过滤),不会导出无关数据。
+    fn export_orphan_backup(
+        &self,
+        by_province: &std::collections::BTreeMap<String, Vec<String>>,
+        backup_path: &str,
+    ) -> Result<(), String> {
+        use std::io::Write;
+        let by_province = by_province.clone();
+        let backup_path = backup_path.to_string();
+        self.with_client(move |conn| {
+            let mut file = std::fs::File::create(&backup_path)
+                .map_err(|e| format!("create orphan backup file {backup_path} failed: {e}"))?;
+            writeln!(
+                file,
+                "-- sfid purge-orphan-institutions backup\n-- 中文注释:删除前导出的待删孤儿行(TSV/COPY 格式),删除唯一回滚保证。"
+            )
+            .map_err(|e| format!("write orphan backup header failed: {e}"))?;
+            // 按 (表, 主键关联列) 分别导出;subjects/gov/private/accounts 用 sfid_number,
+            // docs 用 sfid_number,audit 用 target_sfid。
+            const EXPORTS: [(&str, &str); 6] = [
+                ("subjects", "sfid_number"),
+                ("gov", "sfid_number"),
+                ("private", "sfid_number"),
+                ("accounts", "sfid_number"),
+                ("docs", "sfid_number"),
+                ("audit", "target_sfid"),
+            ];
+            for (province, sfids) in &by_province {
+                for (table, key_col) in EXPORTS {
+                    writeln!(file, "-- TABLE={table} P_CODE={province}")
+                        .map_err(|e| format!("write orphan backup table header failed: {e}"))?;
+                    let copy_sql = format!(
+                        "COPY (SELECT * FROM {table} WHERE p_code = '{province}' AND {key_col} = ANY(ARRAY[{}])) TO STDOUT",
+                        sfids
+                            .iter()
+                            .map(|s| format!("'{}'", s.replace('\'', "''")))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    let mut reader = conn
+                        .copy_out(copy_sql.as_str())
+                        .map_err(|e| format!("copy out {table} for orphan backup failed: {e}"))?;
+                    std::io::copy(&mut reader, &mut file)
+                        .map_err(|e| format!("stream {table} copy to orphan backup failed: {e}"))?;
+                }
+            }
+            file.flush()
+                .map_err(|e| format!("flush orphan backup file failed: {e}"))?;
+            Ok(())
+        })
+    }
+
+    // 中文注释:逐省单事务级联删孤儿机构。每省一条事务,WHERE p_code=$1 命中子分区,
+    // sfid_number = ANY($2) 限定本省孤儿集合;禁止跨省一条 SQL。级联删顺序遵守关联依赖:
+    // accounts → docs → audit → gov|private → ids → subjects(子承载表先删,主登记表 ids
+    // 与父表 subjects 最后)。gov/private 按 subjects.kind 区分(本方法传入已分好的两类 sfid)。
+    // audit 关联列为 target_sfid。ids 表不分区,仅按 sfid_number 删。
+    pub(crate) fn delete_orphan_institutions_by_province(
+        &self,
+        province: &str,
+        gov_sfids: &[String],
+        private_sfids: &[String],
+    ) -> Result<u64, String> {
+        let province = province.to_string();
+        let gov_sfids = gov_sfids.to_vec();
+        let private_sfids = private_sfids.to_vec();
+        self.with_client(move |conn| {
+            // 本省全部孤儿 sfid(gov + private 合集),用于按 p_code 分区命中的表。
+            let all_sfids: Vec<String> = gov_sfids
+                .iter()
+                .chain(private_sfids.iter())
+                .cloned()
+                .collect();
+            if all_sfids.is_empty() {
+                return Ok(0);
+            }
+            let mut tx = conn
+                .transaction()
+                .map_err(|e| format!("begin orphan purge tx for {province} failed: {e}"))?;
+
+            // 1. accounts(p_code 分区,按 sfid_number)。
+            tx.execute(
+                "DELETE FROM accounts WHERE p_code = $1 AND sfid_number = ANY($2)",
+                &[&province, &all_sfids],
+            )
+            .map_err(|e| format!("delete accounts for {province} failed: {e}"))?;
+
+            // 2. docs(p_code 分区,按 sfid_number)。
+            tx.execute(
+                "DELETE FROM docs WHERE p_code = $1 AND sfid_number = ANY($2)",
+                &[&province, &all_sfids],
+            )
+            .map_err(|e| format!("delete docs for {province} failed: {e}"))?;
+
+            // 3. audit(p_code 分区,关联列 target_sfid)。
+            tx.execute(
+                "DELETE FROM audit WHERE p_code = $1 AND target_sfid = ANY($2)",
+                &[&province, &all_sfids],
+            )
+            .map_err(|e| format!("delete audit for {province} failed: {e}"))?;
+
+            // 4. gov / private(p_code 分区,按 kind 区分各自的 sfid 集合)。
+            if !gov_sfids.is_empty() {
+                tx.execute(
+                    "DELETE FROM gov WHERE p_code = $1 AND sfid_number = ANY($2)",
+                    &[&province, &gov_sfids],
+                )
+                .map_err(|e| format!("delete gov for {province} failed: {e}"))?;
+            }
+            if !private_sfids.is_empty() {
+                tx.execute(
+                    "DELETE FROM private WHERE p_code = $1 AND sfid_number = ANY($2)",
+                    &[&province, &private_sfids],
+                )
+                .map_err(|e| format!("delete private for {province} failed: {e}"))?;
+            }
+
+            // 5. ids(不分区,主登记表,仅按 sfid_number)。
+            tx.execute(
+                "DELETE FROM ids WHERE sfid_number = ANY($1)",
+                &[&all_sfids],
+            )
+            .map_err(|e| format!("delete ids for {province} failed: {e}"))?;
+
+            // 6. subjects(p_code 分区,父表最后删)。
+            let deleted = tx
+                .execute(
+                    "DELETE FROM subjects WHERE p_code = $1 AND sfid_number = ANY($2)",
+                    &[&province, &all_sfids],
+                )
+                .map_err(|e| format!("delete subjects for {province} failed: {e}"))?;
+
+            tx.commit()
+                .map_err(|e| format!("commit orphan purge tx for {province} failed: {e}"))?;
+            Ok(deleted)
+        })
+    }
+
     pub(crate) fn list_institutions_exact(
         &self,
         filter: crate::subjects::InstitutionListFilter,
@@ -1803,6 +1998,10 @@ enum BackendCommand {
     PurgeLegacySfid {
         dry_run: bool,
     },
+    PurgeOrphanInstitutions {
+        dry_run: bool,
+        backup_path: Option<String>,
+    },
 }
 
 fn parse_backend_command() -> BackendCommand {
@@ -1842,6 +2041,16 @@ fn parse_backend_command() -> BackendCommand {
         "purge-legacy-sfid" => BackendCommand::PurgeLegacySfid {
             dry_run: args.iter().any(|arg| arg == "--dry-run"),
         },
+        "purge-orphan-institutions" => {
+            // 中文注释:默认 dry-run(只回报不删);必须显式 --apply 才落库,--apply 与
+            // --dry-run 同时出现按 dry-run 处理(更安全)。--backup <path> 可覆盖默认备份文件名。
+            let apply = args.iter().any(|arg| arg == "--apply");
+            let dry_run = !apply || args.iter().any(|arg| arg == "--dry-run");
+            BackendCommand::PurgeOrphanInstitutions {
+                dry_run,
+                backup_path: parse_cli_option(&args, "--backup"),
+            }
+        }
         other => panic!("unknown sfid-backend command: {other}"),
     }
 }
@@ -2084,6 +2293,13 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
             run_purge_legacy_sfid(state, dry_run);
             return true;
         }
+        BackendCommand::PurgeOrphanInstitutions {
+            dry_run,
+            backup_path,
+        } => {
+            run_purge_orphan_institutions(state, dry_run, backup_path.as_deref());
+            return true;
+        }
         BackendCommand::ReconcileGovProvince { province_code } => (
             OfficialReconcileScope::Province { province_code },
             false,
@@ -2179,6 +2395,143 @@ fn run_purge_legacy_sfid(state: &AppState, dry_run: bool) {
         removed = recon.removed,
         total_after = recon.total_after,
         "sfid public institutions reconciled with new scheme"
+    );
+}
+
+// 中文注释:一条孤儿机构记录(subjects 行 t_code 指向 china.sqlite 已退役/不存在的镇)。
+#[derive(Debug, Clone)]
+struct OrphanInstitution {
+    p_code: String,
+    sfid_number: String,
+    kind: String,
+    c_code: String,
+    t_code: String,
+    town: String,
+    category: String,
+    org_code: String,
+    institution_code: String,
+}
+
+// 中文注释(ADR-021 §B5):清理孤儿机构 CLI。
+// `purge-orphan-institutions [--dry-run|--apply] [--backup <path>]`,默认 dry-run。
+// 孤儿 = subjects.t_code 非空 + (p_code,c_code,t_code) 不在 china.sqlite 内存树。
+//   - dry-run:只打印孤儿清单(sfid/town/t_code/category/org_code/institution_code/原因)+ 总数,
+//     供人工核对无一命中冻结常量号(储委会/部委)。
+//   - apply:先把待删行导出到 purge_orphan_backup_<...>.sql(删除唯一回滚保证),
+//     再逐省单事务级联删(accounts→docs→audit→gov|private→ids→subjects)。
+// 红线:绝不动 sfid_number;绝不删空 t_code 行(已在扫描层白名单过滤);不碰号生成/链/省市码。
+fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: Option<&str>) {
+    let orphans = state
+        .db
+        .scan_orphan_institutions()
+        .unwrap_or_else(|e| panic!("purge-orphan-institutions scan failed: {e}"));
+
+    if orphans.is_empty() {
+        info!(
+            dry_run,
+            "purge-orphan-institutions: no orphan institutions found; nothing to do"
+        );
+        return;
+    }
+
+    // 打印孤儿清单(dry-run 与 apply 都先打,apply 时即删除前留痕)。
+    for o in &orphans {
+        info!(
+            sfid_number = %o.sfid_number,
+            kind = %o.kind,
+            p_code = %o.p_code,
+            c_code = %o.c_code,
+            t_code = %o.t_code,
+            town = %o.town,
+            category = %o.category,
+            org_code = %o.org_code,
+            institution_code = %o.institution_code,
+            reason = "town (p_code,c_code,t_code) not found in china.sqlite (retired/reused town code)",
+            "orphan institution"
+        );
+    }
+    info!(
+        dry_run,
+        orphan_total = orphans.len(),
+        "purge-orphan-institutions scan finished"
+    );
+
+    if dry_run {
+        info!(
+            "purge-orphan-institutions dry-run: no rows changed; review the list above (verify no frozen-constant sfid e.g. reserve-committee/ministry is hit) then re-run with --apply to delete"
+        );
+        return;
+    }
+
+    // 中文注释:按省分组 + 按 kind 拆 gov/private,供逐省事务级联删与备份导出复用。
+    let mut gov_by_province: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    let mut private_by_province: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    let mut all_by_province: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for o in &orphans {
+        all_by_province
+            .entry(o.p_code.clone())
+            .or_default()
+            .push(o.sfid_number.clone());
+        match o.kind.as_str() {
+            "PRIVATE" => private_by_province
+                .entry(o.p_code.clone())
+                .or_default()
+                .push(o.sfid_number.clone()),
+            // PUBLIC 及其它(默认按公权机构 gov 表处理)。
+            _ => gov_by_province
+                .entry(o.p_code.clone())
+                .or_default()
+                .push(o.sfid_number.clone()),
+        }
+    }
+
+    // 1. 删除前导出待删行(删除唯一回滚保证)。
+    let resolved_backup = backup_path
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("purge_orphan_backup_{}.sql", Utc::now().format("%Y%m%d%H%M%S")));
+    state
+        .db
+        .export_orphan_backup(&all_by_province, &resolved_backup)
+        .unwrap_or_else(|e| panic!("purge-orphan-institutions backup failed: {e}"));
+    info!(
+        backup = %resolved_backup,
+        provinces = all_by_province.len(),
+        orphan_total = orphans.len(),
+        "purge-orphan-institutions backup written before delete"
+    );
+
+    // 2. 逐省单事务级联删(禁止跨省一条 SQL)。
+    let mut deleted_total: u64 = 0;
+    for (province, _sfids) in &all_by_province {
+        let gov_sfids = gov_by_province
+            .get(province)
+            .cloned()
+            .unwrap_or_default();
+        let private_sfids = private_by_province
+            .get(province)
+            .cloned()
+            .unwrap_or_default();
+        let deleted = state
+            .db
+            .delete_orphan_institutions_by_province(province, &gov_sfids, &private_sfids)
+            .unwrap_or_else(|e| panic!("purge-orphan-institutions delete failed: {e}"));
+        info!(
+            p_code = %province,
+            gov_deleted = gov_sfids.len(),
+            private_deleted = private_sfids.len(),
+            subjects_deleted = deleted,
+            "purge-orphan-institutions province purged"
+        );
+        deleted_total += deleted;
+    }
+    warn!(
+        orphan_total = orphans.len(),
+        subjects_deleted = deleted_total,
+        backup = %resolved_backup,
+        "purge-orphan-institutions applied: orphan institutions removed (rollback only via backup file)"
     );
 }
 

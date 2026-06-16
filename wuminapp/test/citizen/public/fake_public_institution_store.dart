@@ -35,22 +35,24 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   @override
   Future<List<String>> listProvinces() async => provinceOrder.isNotEmpty
       ? List.of(provinceOrder)
-      : byId.values.map((e) => e.province).toSet().toList();
+      : byId.values.map((e) => e.provinceCode).toSet().toList();
 
   @override
-  Future<List<String>> listCities(String province) async => byId.values
-      .where((e) => e.province == province)
-      .map((e) => e.city)
+  Future<List<String>> listCities(String provinceCode) async => byId.values
+      .where((e) => e.provinceCode == provinceCode)
+      .map((e) => e.cityCode)
+      .where((c) => c.isNotEmpty)
       .toSet()
       .toList();
 
   @override
   Future<List<PublicInstitutionEntity>> listInstitutionsByCity(
-    String province,
-    String city,
+    String provinceCode,
+    String cityCode,
   ) async =>
       byId.values
-          .where((e) => e.province == province && e.city == city)
+          .where((e) =>
+              e.provinceCode == provinceCode && e.cityCode == cityCode)
           .map(_entity)
           .toList();
 

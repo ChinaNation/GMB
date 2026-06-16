@@ -31,16 +31,31 @@ class PublicPage extends StatefulWidget {
 /// 关注分组的固定标签(置顶,非省份)。
 const String _kFollowGroup = '关注';
 
+/// 市列表行 view-model:cityCode(查询/导航键)+ 预 join 的市名(显示)。
+///
+/// 中文注释(ADR-021):机构只存 code,市名查字典 join。**不在 widget build 里
+/// await**——在 state 层预 join 成此 view-model,UI 直接读 [name]。
+class _CityVm {
+  const _CityVm({required this.code, required this.name});
+  final String code;
+  final String name;
+}
+
 class _PublicPageState extends State<PublicPage> {
   late final PublicInstitutionRepository _repo =
       widget.repository ?? PublicInstitutionRepository();
 
-  List<String> _provinces = const [];
+  List<PublicProvinceItem> _provinces = const [];
+
+  /// 当前选中:`关注` 或省 code;省名/展示名由 [_selectedProvince] 解析。
   String _selected = _kFollowGroup;
   String? _activePubkey;
 
-  List<String> _cities = const [];
+  List<_CityVm> _cities = const [];
   List<PublicInstitutionEntity> _subscribed = const [];
+
+  /// 关注分组每条机构的预 join 所属地(sfidNumber → 「省名·市名」)。
+  Map<String, String> _subscribedArea = const {};
   bool _contentLoading = true;
   String? _contentError;
 
@@ -57,14 +72,14 @@ class _PublicPageState extends State<PublicPage> {
   }
 
   Future<void> _bootstrap() async {
-    // 首启后台灌入数据包基线(库空才灌,非阻塞)。
+    // 首启后台灌入数据包基线 + 行政区字典(库空才灌,非阻塞)。
     unawaited(_repo.ensureBundleLoaded());
     final pubkey = await _resolvePubkey();
     if (!mounted) return;
     setState(() {
       _activePubkey = pubkey;
       // 省份是固定行政区(43 省),始终全显,与数据是否加载无关。
-      _provinces = publicProvinceNames();
+      _provinces = publicProvinceItems();
     });
     await _selectGroup(_kFollowGroup);
   }
@@ -79,15 +94,24 @@ class _PublicPageState extends State<PublicPage> {
       final subs = _activePubkey == null
           ? <PublicInstitutionEntity>[]
           : await _repo.listSubscribed(_activePubkey!);
+      // 预 join 关注机构的所属地(省名·市名),不在 build 里 await。
+      final areas = <String, String>{};
+      for (final inst in subs) {
+        areas[inst.sfidNumber] = await _repo.areaPath(
+          provinceCode: inst.provinceCode,
+          cityCode: inst.cityCode,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _subscribed = subs;
+        _subscribedArea = areas;
         _contentLoading = false;
       });
       return;
     }
-    // 省:**先读本地秒显**(不等网络),再后台增量刷新。
-    final localCities = await _repo.listCities(group);
+    // 省(group=省 code):**先读本地秒显**(不等网络),再后台增量刷新。
+    final localCities = await _loadCityVms(group);
     if (!mounted) return;
     setState(() {
       _cities = localCities;
@@ -96,20 +120,42 @@ class _PublicPageState extends State<PublicPage> {
     unawaited(_refreshProvince(group));
   }
 
-  /// 后台增量刷新某省;成功后静默刷新市列表,失败仅在本地空时提示。
-  Future<void> _refreshProvince(String province) async {
+  /// 读某省市 code 列表并预 join 市名成 view-model。
+  Future<List<_CityVm>> _loadCityVms(String provinceCode) async {
+    final codes = await _repo.listCities(provinceCode);
+    final vms = <_CityVm>[];
+    for (final code in codes) {
+      vms.add(_CityVm(
+        code: code,
+        name: await _repo.cityName(provinceCode, code),
+      ));
+    }
+    return vms;
+  }
+
+  /// 后台增量刷新某省(provinceCode);成功后静默刷新市列表,失败仅在本地空时提示。
+  /// 同步接口仍按省**名**问后端(后端 province_code_by_name),由 code 反解全名。
+  Future<void> _refreshProvince(String provinceCode) async {
     try {
-      await _repo.refreshProvince(province);
-      if (!mounted || _selected != province) return;
-      final cities = await _repo.listCities(province);
-      if (!mounted || _selected != province) return;
+      await _repo.refreshProvince(provinceFullNameByCode(provinceCode));
+      if (!mounted || _selected != provinceCode) return;
+      final cities = await _loadCityVms(provinceCode);
+      if (!mounted || _selected != provinceCode) return;
       setState(() => _cities = cities);
     } on Exception {
-      if (!mounted || _selected != province) return;
+      if (!mounted || _selected != provinceCode) return;
       if (_cities.isEmpty) {
         setState(() => _contentError = '目录同步失败,请检查 SFID 连接后重试');
       }
     }
+  }
+
+  /// 当前选中的省条目(非"关注"时);未命中返回 null。
+  PublicProvinceItem? get _selectedProvince {
+    for (final p in _provinces) {
+      if (p.code == _selected) return p;
+    }
+    return null;
   }
 
   @override
@@ -135,8 +181,9 @@ class _PublicPageState extends State<PublicPage> {
             children: [
               _ProvinceRail(
                 provinces: _provinces,
-                selected: _selected,
-                onSelect: _selectGroup,
+                selectedCode: _selected,
+                onSelectFollow: () => _selectGroup(_kFollowGroup),
+                onSelectProvince: (code) => _selectGroup(code),
               ),
               Expanded(child: _buildContent()),
             ],
@@ -175,7 +222,8 @@ class _PublicPageState extends State<PublicPage> {
           title: inst.shortName?.isNotEmpty == true
               ? inst.shortName!
               : inst.institutionName,
-          subtitle: '${provinceDisplayName(inst.province)} · ${inst.city}',
+          // 预 join 的所属地(省名·市名),字典缺失回退 code(repo 已兜底)。
+          subtitle: _subscribedArea[inst.sfidNumber] ?? '',
           onTap: () => _openDetail(inst.sfidNumber),
         );
       },
@@ -183,12 +231,13 @@ class _PublicPageState extends State<PublicPage> {
   }
 
   Widget _buildCityList() {
+    final provinceDisplay = _selectedProvince?.displayName ?? _selected;
     if (_cities.isEmpty) {
       return _emptyHint(
         icon: _contentError != null
             ? Icons.cloud_off_outlined
             : Icons.location_city_outlined,
-        title: _contentError ?? '$_selected 暂无可显示的公权机构',
+        title: _contentError ?? '$provinceDisplay 暂无可显示的公权机构',
         subtitle: _contentError != null ? '稍后重试,或先在桌面端生成数据包' : '目录尚未同步或该省无机构数据',
       );
     }
@@ -200,22 +249,25 @@ class _PublicPageState extends State<PublicPage> {
       itemBuilder: (context, i) {
         final city = _cities[i];
         return _InstitutionTile(
-          title: city,
-          subtitle: '查看 $city 公权机构',
+          title: city.name,
+          subtitle: '查看 ${city.name} 公权机构',
           trailing: const Icon(Icons.chevron_right,
               color: AppTheme.textTertiary, size: 20),
-          onTap: () => _openCity(_selected, city),
+          onTap: () => _openCity(city),
         );
       },
     );
   }
 
-  void _openCity(String province, String city) {
+  void _openCity(_CityVm city) {
+    final province = _selectedProvince;
+    if (province == null) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => CityInstitutionListPage(
-          province: province,
-          city: city,
+          provinceCode: province.code,
+          cityCode: city.code,
+          cityName: city.name,
           repository: _repo,
         ),
       ),
@@ -269,13 +321,17 @@ class _PublicPageState extends State<PublicPage> {
 class _ProvinceRail extends StatelessWidget {
   const _ProvinceRail({
     required this.provinces,
-    required this.selected,
-    required this.onSelect,
+    required this.selectedCode,
+    required this.onSelectFollow,
+    required this.onSelectProvince,
   });
 
-  final List<String> provinces;
-  final String selected;
-  final ValueChanged<String> onSelect;
+  final List<PublicProvinceItem> provinces;
+
+  /// 当前选中键:`关注` 或省 code。
+  final String selectedCode;
+  final VoidCallback onSelectFollow;
+  final ValueChanged<String> onSelectProvince;
 
   @override
   Widget build(BuildContext context) {
@@ -286,7 +342,11 @@ class _ProvinceRail extends StatelessWidget {
           // 关注:钉顶固定,不随省份滚动。
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
-            child: _railItem(_kFollowGroup, selected == _kFollowGroup),
+            child: _railItem(
+              label: _kFollowGroup,
+              active: selectedCode == _kFollowGroup,
+              onTap: onSelectFollow,
+            ),
           ),
           const Divider(height: 9, indent: 14, endIndent: 14),
           Expanded(
@@ -294,10 +354,15 @@ class _ProvinceRail extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(6, 0, 6, 12),
               itemCount: provinces.length,
               itemBuilder: (context, i) {
-                final name = provinces[i];
+                final p = provinces[i];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: _railItem(name, name == selected),
+                  child: _railItem(
+                    // 展示去"省";选中键用省 code。
+                    label: p.displayName,
+                    active: p.code == selectedCode,
+                    onTap: () => onSelectProvince(p.code),
+                  ),
                 );
               },
             ),
@@ -307,10 +372,14 @@ class _ProvinceRail extends StatelessWidget {
     );
   }
 
-  Widget _railItem(String name, bool active) {
+  Widget _railItem({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
-      onTap: () => onSelect(name),
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         // width 撑满:让"关注"(在 Column 里)与省份(在 ListView 里)选中背景同宽。
@@ -321,8 +390,7 @@ class _ProvinceRail extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
-          // 展示去"省";onSelect 仍传全名 name 用于查询。
-          name == _kFollowGroup ? name : provinceDisplayName(name),
+          label,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: active ? 18 : 16,

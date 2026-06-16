@@ -8,14 +8,14 @@ class PublicInstitutionDto {
   const PublicInstitutionDto({
     required this.sfidNumber,
     required this.status,
-    required this.province,
-    required this.city,
+    required this.provinceCode,
+    required this.cityCode,
     required this.institutionCode,
     required this.accountCount,
     this.institutionName,
     this.sfidName,
     this.shortName,
-    this.town = '',
+    this.townCode = '',
     this.orgCode,
     this.parentSfidNumber,
     this.hasLegalPersonality,
@@ -28,9 +28,15 @@ class PublicInstitutionDto {
   final String? sfidName;
   final String? shortName;
   final String status;
-  final String province;
-  final String city;
-  final String town;
+
+  /// 所属省 code(行政区唯一真源键;名字由字典 join,见 ADR-021)。
+  final String provinceCode;
+
+  /// 所属市 code(名字走字典 join)。
+  final String cityCode;
+
+  /// 所属镇 code(空串=只定位到市级)。
+  final String townCode;
   final String institutionCode;
   final String? orgCode;
   final String? parentSfidNumber;
@@ -48,9 +54,11 @@ class PublicInstitutionDto {
       sfidName: json['sfid_name'] as String?,
       shortName: json['short_name'] as String?,
       status: json['status'] as String? ?? 'ACTIVE',
-      province: json['province'] as String? ?? '',
-      city: json['city'] as String? ?? '',
-      town: json['town'] as String? ?? '',
+      // 行政区只吃 code(province_code/city_code/town_code);无名字 fallback
+      // (ADR-021 死规则:名字唯一来自字典,不留旧方案)。
+      provinceCode: json['province_code'] as String? ?? '',
+      cityCode: json['city_code'] as String? ?? '',
+      townCode: json['town_code'] as String? ?? '',
       institutionCode: json['institution_code'] as String? ?? '',
       orgCode: json['org_code'] as String?,
       parentSfidNumber: json['parent_sfid_number'] as String?,
@@ -75,9 +83,9 @@ class PublicInstitutionDto {
       ..sfidName = sfidName
       ..shortName = shortName
       ..status = status
-      ..province = province
-      ..city = city
-      ..town = town
+      ..provinceCode = provinceCode
+      ..cityCode = cityCode
+      ..townCode = townCode
       ..institutionCode = institutionCode
       ..orgCode = orgCode
       ..parentSfidNumber = parentSfidNumber

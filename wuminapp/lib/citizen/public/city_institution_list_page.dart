@@ -11,13 +11,17 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 class CityInstitutionListPage extends StatefulWidget {
   const CityInstitutionListPage({
     super.key,
-    required this.province,
-    required this.city,
+    required this.provinceCode,
+    required this.cityCode,
+    required this.cityName,
     required this.repository,
   });
 
-  final String province;
-  final String city;
+  final String provinceCode;
+  final String cityCode;
+
+  /// 市名(调用方从字典预 join 传入;字典缺失时为 code,绝不空)。
+  final String cityName;
   final PublicInstitutionRepository repository;
 
   @override
@@ -37,7 +41,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
 
   Future<void> _load() async {
     final items = await widget.repository
-        .listInstitutionsByCity(widget.province, widget.city);
+        .listInstitutionsByCity(widget.provinceCode, widget.cityCode);
     if (!mounted) return;
     setState(() {
       _items = items;
@@ -50,7 +54,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: Text('${widget.city}公权机构'),
+        title: Text('${widget.cityName}公权机构'),
         backgroundColor: AppTheme.surfaceWhite,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
@@ -66,7 +70,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
     if (_items.isEmpty) {
       return Center(
         child: Text(
-          '${widget.city}暂无公权机构数据',
+          '${widget.cityName}暂无公权机构数据',
           style: const TextStyle(color: AppTheme.textTertiary),
         ),
       );

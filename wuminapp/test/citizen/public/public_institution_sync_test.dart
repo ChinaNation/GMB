@@ -40,11 +40,11 @@ class _FakeApi extends PublicInstitutionApi {
   }
 }
 
-PublicInstitutionDto _dto(String sfid, String city) =>
+PublicInstitutionDto _dto(String sfid, String cityCode) =>
     PublicInstitutionDto.fromJson(<String, dynamic>{
       'sfid_number': sfid,
-      'province': '中枢',
-      'city': city,
+      'province_code': 'ZS',
+      'city_code': cityCode,
       'institution_code': 'ZF',
       'account_count': 2,
     });

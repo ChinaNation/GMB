@@ -15,19 +15,22 @@ abstract interface class PublicInstitutionStore {
     required String catalogVersion,
   });
 
-  /// 设置省份规范顺序(中枢 + 43 省,来自数据包 manifest)。
-  Future<void> setProvinceOrder(List<String> provinces);
+  /// 设置省份规范顺序(中枢 + 43 省 code,来自数据包 manifest)。
+  Future<void> setProvinceOrder(List<String> provinceCodes);
 
-  /// 省份规范顺序;无 manifest 时回退已落库机构的去重省份。
+  /// 省份规范顺序(省 code);无 manifest 时回退已落库机构的去重省 code。
   Future<List<String>> listProvinces();
 
-  /// 某省全部市(去重,按机构顺序稳定)。
-  Future<List<String>> listCities(String province);
+  /// 某省全部市 code(按 cityCode 去重,顺序稳定)。
+  ///
+  /// 中文注释(ADR-021):镇 code 全国不唯一,但市 code 在省内唯一;按 code 去重,
+  /// 名字由调用方查字典 join。
+  Future<List<String>> listCities(String provinceCode);
 
-  /// 某省某市全部公权机构。
+  /// 某省某市全部公权机构(按 provinceCode + cityCode)。
   Future<List<PublicInstitutionEntity>> listInstitutionsByCity(
-    String province,
-    String city,
+    String provinceCode,
+    String cityCode,
   );
 
   /// 按 sfid_number 取单个机构。
@@ -36,11 +39,11 @@ abstract interface class PublicInstitutionStore {
   /// 已落库机构总数(判断是否需要首次载入数据包)。
   Future<int> institutionCount();
 
-  /// 取某省已同步版本戳。
-  Future<String?> provinceVersion(String province);
+  /// 取某省(省 code)已同步版本戳。
+  Future<String?> provinceVersion(String provinceCode);
 
-  /// 写某省已同步版本戳。
-  Future<void> setProvinceVersion(String province, String version);
+  /// 写某省(省 code)已同步版本戳。
+  Future<void> setProvinceVersion(String provinceCode, String version);
 
   // ── 订阅("关注")——按钱包公钥隔离 ──
 

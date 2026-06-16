@@ -157,3 +157,10 @@ wuminapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/04-
 - **R2 降低全节点依赖**:① 多 key 一律 `fetchStorageBatch`/`fetchFinalizedBalances`,**禁止循环内逐条** `fetchStorage`/`fetchFinalizedBalance`(N+1);② 同一数据跨页面取一次进共享缓存复用;③ 链状态页用 finalized 头订阅驱动刷新,禁止 `Timer.periodic` 轮询查链;④ 能用已缓存/已解码数据客户端算出的,不再联网。
 - **R3 外部后端(SFID/HTTP)缓存**:health/catalog/机构注册证/电子护照状态等读取加 Isar + TTL 缓存。
 - **豁免**:交易提交管线(nonce/dry-run/submit/runtime-version/genesis/提交用 best 块)+ UI 倒计时 Timer。
+
+## 死规则:行政区唯一真源 + code 不可变不复用(ADR-021)
+
+- **唯一真源**:行政区(省/市/镇/村/路)只有一份真源 = `sfid/backend/china/data/china.sqlite`。**任何地方不得独立存第二份行政区名字**:机构一律存 code(province_code/city_code/town_code),名字由 china.sqlite 派生的字典 join 得到。wuminapp 公权机构显示行政区名走 `assets/admin_divisions/` 字典(生成器 `wuminapp/tools/generate_admin_division_bundle.mjs` 直接 dump china.sqlite,零映射)。
+- **code 不可变、不复用**:省/市/镇 code 一经派生**永久冻结**。改名只改 `name` 不改 `code`;镇撤并 → code 永久退役进 `town_tombstones` 表,**绝不再分配**给任何其它镇;新增镇取该 (省,市) 内 max(code)+1。复用 code 会让历史机构 town_code 静默指向语义已变的镇(比报错更危险)。
+- **校验**:`china/store.rs::load_provinces` 加载即断言 (省,市,镇) code 无重复(违反即 panic);区划脚本(`normalize_*.py`)新分配 code 不得命中 `town_tombstones`;CI `china/data/check_code_immutable.py`。
+- **红线**:镇 code 与 SFID 号生成**无关**(号只编省+市 R5);改 town_code/字典**绝不触及** number 生成、省市码、链上治理常量。

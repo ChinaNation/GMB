@@ -8,24 +8,38 @@
 import 'package:flutter/foundation.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 
+import 'admin_division_dto.dart';
+import 'admin_division_store.dart';
+import 'area_path_formatter.dart';
+import 'isar_admin_division_store.dart';
 import 'isar_public_institution_store.dart';
 import 'public_institution_bundle_loader.dart';
 import 'public_institution_store.dart';
 import 'public_institution_sync_service.dart';
+import 'public_provinces.dart';
 
 class PublicInstitutionRepository {
   PublicInstitutionRepository({
     PublicInstitutionStore? store,
+    AdminDivisionStore? divisionStore,
     PublicInstitutionSyncService? sync,
     PublicInstitutionBundleLoader? loader,
     Duration? syncTtl,
   })  : store = store ?? IsarPublicInstitutionStore(),
+        divisionStore = divisionStore ?? IsarAdminDivisionStore(),
         _syncTtl = syncTtl ?? const Duration(minutes: 2) {
     this.sync = sync ?? PublicInstitutionSyncService(store: this.store);
-    this.loader = loader ?? PublicInstitutionBundleLoader(store: this.store);
+    this.loader = loader ??
+        PublicInstitutionBundleLoader(
+          store: this.store,
+          divisionStore: this.divisionStore,
+        );
   }
 
   final PublicInstitutionStore store;
+
+  /// 行政区字典(ADR-021 行政区唯一真源):机构显示名按 code join 此字典。
+  final AdminDivisionStore divisionStore;
   late final PublicInstitutionSyncService sync;
   late final PublicInstitutionBundleLoader loader;
 
@@ -34,15 +48,59 @@ class PublicInstitutionRepository {
 
   // ── 读(本地,零网络,秒开)──
   Future<List<String>> listProvinces() => store.listProvinces();
-  Future<List<String>> listCities(String province) =>
-      store.listCities(province);
+  Future<List<String>> listCities(String provinceCode) =>
+      store.listCities(provinceCode);
   Future<List<PublicInstitutionEntity>> listInstitutionsByCity(
-    String province,
-    String city,
+    String provinceCode,
+    String cityCode,
   ) =>
-      store.listInstitutionsByCity(province, city);
+      store.listInstitutionsByCity(provinceCode, cityCode);
   Future<PublicInstitutionEntity?> getBySfid(String sfidNumber) =>
       store.getBySfid(sfidNumber);
+
+  // ── 行政区字典 join(ADR-021;UI 显示名唯一来自字典/链上常量省名)──
+
+  /// 某市 code → 市名(查字典;未命中回退 code 本身,绝不崩)。
+  Future<String> cityName(String provinceCode, String cityCode) {
+    final scope = scopeKeyOf(
+      level: AdminDivisionLevel.city,
+      provinceCode: provinceCode,
+    );
+    return divisionStore.divisionName(
+      AdminDivisionLevel.city,
+      scope,
+      cityCode,
+    );
+  }
+
+  /// (provinceCode, cityCode, townCode) → 「省名·市名[·镇名]」显示路径。
+  ///
+  /// 省名走链上常量(认可的省名源);空 town 只显到市;字典缺失回退 code。
+  /// **不在 widget build 里调**:在 repository / state 层预 join 成 view-model。
+  Future<String> areaPath({
+    required String provinceCode,
+    required String cityCode,
+    String townCode = '',
+  }) {
+    return formatAreaPath(
+      divisionStore,
+      provinceName: provinceDisplayNameByCode(provinceCode),
+      provinceCode: provinceCode,
+      cityCode: cityCode,
+      townCode: townCode,
+    );
+  }
+
+  /// 机构所属地显示路径(详情页 所属地行用;省名带"省"全名)。
+  Future<String> institutionAreaPath(PublicInstitutionEntity inst) {
+    return formatAreaPath(
+      divisionStore,
+      provinceName: provinceFullNameByCode(inst.provinceCode),
+      provinceCode: inst.provinceCode,
+      cityCode: inst.cityCode,
+      townCode: inst.townCode,
+    );
+  }
 
   // ── 订阅("关注")──
   Future<void> subscribe(String walletPubkeyHex, String sfidNumber) =>

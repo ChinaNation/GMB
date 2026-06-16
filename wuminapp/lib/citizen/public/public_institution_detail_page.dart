@@ -60,6 +60,10 @@ class _PublicInstitutionDetailPageState
   double? _mainBalanceYuan;
   bool _mainBalanceLoading = true;
 
+  /// 所属地预 join 显示路径(省名·市名[·镇名]);字典缺失回退 code(repo 兜底)。
+  /// 在 [_load] 里预 join,不在 build 里 await(ADR-021)。
+  String _areaPath = '';
+
   @override
   void initState() {
     super.initState();
@@ -83,11 +87,15 @@ class _PublicInstitutionDetailPageState
     final subscribed = pubkey == null
         ? false
         : await widget.repository.isSubscribed(pubkey, inst.sfidNumber);
+    // 所属地预 join(省名·市名[·镇名]),不在 build 里 await。
+    final areaPath = await widget.repository.institutionAreaPath(inst);
+    if (!mounted) return;
     setState(() {
       _inst = inst;
       _activePubkey = pubkey;
       _subscribed = subscribed;
       _accounts = deriveAccountRows(inst);
+      _areaPath = areaPath;
       _loading = false;
     });
     _loadDynamics(inst);
@@ -243,7 +251,7 @@ class _PublicInstitutionDetailPageState
             _infoTile(
               icon: Icons.place_outlined,
               label: '所属地',
-              value: '${inst.province} · ${inst.city}',
+              value: _areaPath,
             ),
           ],
         ),
