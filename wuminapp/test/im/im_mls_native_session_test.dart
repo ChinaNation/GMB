@@ -6,6 +6,8 @@ import 'package:wuminapp_mobile/im/crypto/im_mls_boundary.dart';
 import 'package:wuminapp_mobile/im/crypto/im_mls_native.dart';
 import 'package:wuminapp_mobile/im/crypto/im_mls_state_store.dart';
 
+import '../support/smoldot_native_probe.dart';
+
 void main() {
   test('native OpenMLS creates, persists, and resumes a two-party session',
       () async {
@@ -87,5 +89,6 @@ void main() {
       followUp.applicationMessage,
     );
     expect(utf8.decode(secondPlaintext), '重启后的第二条消息');
-  });
+    // libsmoldot 不可用(纯 Dart CI 无宿主 .so)则跳过;真机/集成构建照跑。
+  }, skip: smoldotNativeSkipReason());
 }

@@ -73,6 +73,22 @@ class PublicInstitutionRepository {
     );
   }
 
+  /// 某省所有市的 `code → 市名` 映射(**一次查询**,供市列表批量 join)。
+  ///
+  /// 中文注释(ADR-018 R2 禁 N+1):市列表渲染必须用本方法一次取全省市名,
+  /// **禁止**对每个市逐个调 [cityName](那是 N+1,省份市多时会转圈)。
+  Future<Map<String, String>> cityNameMap(String provinceCode) async {
+    final scope = scopeKeyOf(
+      level: AdminDivisionLevel.city,
+      provinceCode: provinceCode,
+    );
+    final divisions = await divisionStore.divisionsByLevel(
+      AdminDivisionLevel.city,
+      scope,
+    );
+    return {for (final d in divisions) d.code: d.name};
+  }
+
   /// (provinceCode, cityCode, townCode) → 「省名·市名[·镇名]」显示路径。
   ///
   /// 省名走链上常量(认可的省名源);空 town 只显到市;字典缺失回退 code。

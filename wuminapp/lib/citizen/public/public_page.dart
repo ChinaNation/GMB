@@ -54,6 +54,10 @@ class _PublicPageState extends State<PublicPage> {
   List<_CityVm> _cities = const [];
   List<PublicInstitutionEntity> _subscribed = const [];
 
+  /// 已 join 的各省市列表内存缓存:再次进入同一省直接秒显,不重跑、不转圈。
+  /// 后台增量刷新成功后回写本缓存,保证再次进入既快又新。
+  final Map<String, List<_CityVm>> _cityCache = {};
+
   /// 关注分组每条机构的预 join 所属地(sfidNumber → 「省名·市名」)。
   Map<String, String> _subscribedArea = const {};
   bool _contentLoading = true;
@@ -85,12 +89,12 @@ class _PublicPageState extends State<PublicPage> {
   }
 
   Future<void> _selectGroup(String group) async {
-    setState(() {
-      _selected = group;
-      _contentLoading = true;
-      _contentError = null;
-    });
     if (group == _kFollowGroup) {
+      setState(() {
+        _selected = group;
+        _contentLoading = true;
+        _contentError = null;
+      });
       final subs = _activePubkey == null
           ? <PublicInstitutionEntity>[]
           : await _repo.listSubscribed(_activePubkey!);
@@ -110,27 +114,36 @@ class _PublicPageState extends State<PublicPage> {
       });
       return;
     }
-    // 省(group=省 code):**先读本地秒显**(不等网络),再后台增量刷新。
-    final localCities = await _loadCityVms(group);
-    if (!mounted) return;
+    // 省(group=省 code):命中内存缓存 → **秒显不转圈**;未命中才转圈读本地一次后入缓存。
+    // 之后后台增量刷新(成功会回写缓存与列表)。
+    final cached = _cityCache[group];
     setState(() {
-      _cities = localCities;
-      _contentLoading = false;
+      _selected = group;
+      _contentError = null;
+      _cities = cached ?? const [];
+      _contentLoading = cached == null;
     });
+    if (cached == null) {
+      final localCities = await _loadCityVms(group);
+      if (!mounted || _selected != group) return;
+      _cityCache[group] = localCities;
+      setState(() {
+        _cities = localCities;
+        _contentLoading = false;
+      });
+    }
     unawaited(_refreshProvince(group));
   }
 
-  /// 读某省市 code 列表并预 join 市名成 view-model。
+  /// 读某省市 code 列表 + **一次批量 join 市名**(消 N+1)成 view-model。
   Future<List<_CityVm>> _loadCityVms(String provinceCode) async {
     final codes = await _repo.listCities(provinceCode);
-    final vms = <_CityVm>[];
-    for (final code in codes) {
-      vms.add(_CityVm(
-        code: code,
-        name: await _repo.cityName(provinceCode, code),
-      ));
-    }
-    return vms;
+    if (codes.isEmpty) return const [];
+    // 一次取全省市名映射,避免逐市查字典的 N+1(ADR-018 R2)。
+    final nameMap = await _repo.cityNameMap(provinceCode);
+    return codes
+        .map((code) => _CityVm(code: code, name: nameMap[code] ?? code))
+        .toList(growable: false);
   }
 
   /// 后台增量刷新某省(provinceCode);成功后静默刷新市列表,失败仅在本地空时提示。
@@ -138,8 +151,8 @@ class _PublicPageState extends State<PublicPage> {
   Future<void> _refreshProvince(String provinceCode) async {
     try {
       await _repo.refreshProvince(provinceFullNameByCode(provinceCode));
-      if (!mounted || _selected != provinceCode) return;
       final cities = await _loadCityVms(provinceCode);
+      _cityCache[provinceCode] = cities; // 回写缓存:下次进入既快又新。
       if (!mounted || _selected != provinceCode) return;
       setState(() => _cities = cities);
     } on Exception {

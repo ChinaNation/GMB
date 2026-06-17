@@ -96,3 +96,6 @@
 - subjects 市级列名 `c_code` vs `city_code` 改 SQL 前必 grep core/db.rs 确认(唯一会让运行炸的点)。
 - 镇 code 全国不唯一,字典键/去重一律带 (省,市) 前缀。
 - 删除不可逆,CLI 必先 pg_dump。
+
+## 回归修复(2026-06-16):点省转圈 N+1
+现象:每点一个省都转圈(之前只首次)。根因(A3 引入):`public_page._loadCityVms` 逐市 `await cityName`→`divisionName` 单查(N+1,四川 181 市=182 串行 Isar 查),且 `_selectGroup` 每次强制 loading + 无缓存。修:① 加 `repo.cityNameMap`(用已有 `divisionsByLevel` 一次取全省市名)→ `_loadCityVms` 2 查无 N+1;② public_page 加 `_cityCache` 按省缓存,命中即秒显不转圈,后台刷新回写缓存。flutter analyze 0 + 公权 33 tests 过。符合 ADR-018 R2 禁 N+1。

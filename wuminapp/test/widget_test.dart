@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/main.dart';
 import 'package:wuminapp_mobile/security/app_permission_bootstrap.dart';
 
+import 'support/smoldot_native_probe.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -79,5 +81,8 @@ void main() {
     expect(find.text('多签'), findsWidgets);
     expect(find.text('交易'), findsWidgets);
     expect(find.text('消息'), findsNothing);
-  });
+    // app 启动会初始化链 RPC(smoldot);libsmoldot 不可用(纯 Dart CI 无宿主 .so)
+    // 则跳过此全量启动冒烟,真机/集成构建照跑(首启权限引导用例不依赖 native,仍跑)。
+    // testWidgets 的 skip 仅接受 bool,故以「有无 skip 原因」转 bool。
+  }, skip: smoldotNativeSkipReason() != null);
 }

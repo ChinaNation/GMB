@@ -2,7 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wuminapp_mobile/im/crypto/im_mls_boundary.dart';
 import 'package:wuminapp_mobile/im/crypto/im_mls_native.dart';
 
+import '../support/smoldot_native_probe.dart';
+
 void main() {
+  // libsmoldot 不可用(纯 Dart CI 无宿主 .so)则跳过;真机/集成构建照跑。
+  final skip = smoldotNativeSkipReason();
+
   test('native OpenMLS creates a real KeyPackage', () async {
     final crypto = NativeImMlsCrypto();
     final keyPackage = await crypto.createKeyPackage(
@@ -20,7 +25,7 @@ void main() {
         RegExp(r'^[0-9a-f]+$').hasMatch(keyPackage.devicePublicKeyHex), isTrue);
     expect(keyPackage.keyPackageBytes.length, greaterThan(100));
     expect(keyPackage.cipherSuite, contains('MLS_128'));
-  });
+  }, skip: skip);
 
   test('native OpenMLS two-party smoke decrypts original plaintext', () async {
     final crypto = NativeImMlsCrypto();
@@ -33,5 +38,5 @@ void main() {
     expect(result.aliceWireMessageHex.length, greaterThan(100));
     expect(result.bobKeyPackageHex.length, greaterThan(100));
     expect(result.welcomeHex.length, greaterThan(100));
-  });
+  }, skip: skip);
 }
