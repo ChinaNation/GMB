@@ -5,7 +5,7 @@
 状态:**部分执行(2026-06-16)**。#4/#7/#2/#5/#1#5纯重复 已应用到真实 china.sqlite(78市/1251镇/16385村,CI PASS);#6幽灵地级市因独有镇归户精度不可靠暂 hold;残留 21市级+325镇级同父重名待新规则。
 
 ## 执行记录(2026-06-16)
-- 迁移脚本:`sfid/backend/china/data/dedup_cleanup.py`(dry-run + `--apply [--skip-phantoms]`,孪生验证/分块归户/审查文件)。
+- 迁移脚本:`sfid/backend/china/dedup_cleanup.py`(dry-run + `--apply [--skip-phantoms]`,孪生验证/分块归户/审查文件)。
 - 已应用(--skip-phantoms):甘肃市辖市删(=北京复制)、西康35市+热河12市从原省删(逐镇验孪生)、攀枝花东029→攀枝花市并西030/仁和031留、南市HU075→南县市、北市LI058→北镇市、其余方位市19个验孪生后删、浦东新市→浦东市;高新市×9+兰州新/沈北新/工业园删。
 - china.sqlite:3185→**3107市** / 47574→**46323镇** / 715071→**698686村**;sha256 `de067292…`;metadata 已同步;`check_code_immutable.py` PASS。
 - 备份:`/tmp/china_prededup_20260616.bak`(原 sha `fae7426c…`)。审查文件 `dedup_review.txt`(3条:LI/SC高新镇·JS工业园镇 随城删)。

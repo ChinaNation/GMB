@@ -310,7 +310,36 @@ impl Db {
              );",
         )
         .map_err(|e| format!("init core schema failed: {}", postgres_error_text(&e)))?;
+        Self::rename_yili_admin_scope(conn)?;
         Self::init_subject_partition_schema(conn)?;
+        Ok(())
+    }
+
+    fn rename_yili_admin_scope(conn: &mut postgres::Client) -> Result<(), String> {
+        // 中文注释:旧省名已整体收敛为伊犁省,管理员省级作用域必须一次性收敛,
+        // 否则旧部署升级后会把管理员锁在不存在的省名下。
+        conn.batch_execute(
+            "INSERT INTO provinces(province_name) VALUES ('伊犁省')
+             ON CONFLICT (province_name) DO NOTHING;
+             UPDATE federal_admin_scope
+             SET province_name = '伊犁省'
+             WHERE province_name = '天山省';
+             UPDATE admins
+             SET admin_name = replace(admin_name, '天山省', '伊犁省')
+             WHERE admin_name LIKE '%天山省%';
+             DELETE FROM provinces
+             WHERE province_name = '天山省'
+               AND NOT EXISTS (
+                    SELECT 1 FROM federal_admin_scope
+                    WHERE province_name = '天山省'
+               );",
+        )
+        .map_err(|e| {
+            format!(
+                "rename Yili admin scope failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
         Ok(())
     }
 
@@ -396,6 +425,7 @@ impl Db {
 		                t_code TEXT,
 		                institution_code TEXT NOT NULL,
 		                org_code TEXT,
+                source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('GENERATED', 'MANUAL')),
                 home_p TEXT,
                 home_c TEXT,
                 PRIMARY KEY (p_code, sfid_number)
@@ -502,11 +532,35 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS has_legal_personality BOOLEAN,
                 DROP COLUMN IF EXISTS sub_type;
              ALTER TABLE gov
+                ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'MANUAL',
                 DROP COLUMN IF EXISTS chain_status;",
         )
         .map_err(|e| {
             format!(
                 "sync target subject schema failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
+        conn.batch_execute(
+            "ALTER TABLE gov
+                DROP CONSTRAINT IF EXISTS gov_source_check;
+             ALTER TABLE gov
+                ADD CONSTRAINT gov_source_check
+                CHECK (source IN ('GENERATED', 'MANUAL'));
+             UPDATE gov g
+             SET source = 'GENERATED'
+             FROM subjects s
+             WHERE s.p_code = g.p_code
+               AND s.sfid_number = g.sfid_number
+               AND s.kind = 'PUBLIC'
+               AND s.created_by = 'SYSTEM'
+               AND s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')
+               AND g.source IS DISTINCT FROM 'GENERATED';",
+        )
+        .map_err(|e| {
+            format!(
+                "sync gov source boundary failed: {}",
                 postgres_error_text(&e)
             )
         })?;
@@ -692,6 +746,7 @@ impl Db {
         ] {
             Self::ensure_column_state(conn, "citizens", column, true)?;
         }
+        Self::ensure_column_state(conn, "gov", "source", true)?;
         // 中文注释:旧 SFID 方案残列和旧私权分类列必须不存在。
         for (table, column) in [
             ("subjects", "chain_status"),

@@ -9,7 +9,7 @@
 - ✅ B6 数据:`migration_2026_06_16_retire_ln_001.sql` 应用——中西镇 001→005/葵青 001→010/大堂 001→006,旧 001 退役进 `town_tombstones` 表;47574 镇零重复。
 - ✅ A2 字典生成器:`wuminapp/tools/generate_admin_division_bundle.mjs`(node:sqlite 直 dump,零映射),已生成 `wuminapp/assets/admin_divisions/`(省43/市3185/镇47574,manifest 带 china_sqlite_sha256);中西镇=005 已反映。
 - ✅ A1 后端:`public_institution.rs` SELECT 改吐 `p_code/c_code/t_code AS province_code/city_code/town_code`、**停吐 s.province/s.city/s.town 名字**;`from_pg_row` 全改**按列名取**(根治索引漂移);DTO province/city/town→code。cargo test 61 passed。
-- ✅ B6 铁律:`store.rs::load_provinces` 加载即断言 (省,市,镇) code 无重复(panic);`agent-rules.md` 加死规则;CI `china/data/check_code_immutable.py`(PASS);`feedback_china_code_immutable` 记忆。
+- ✅ B6 铁律:`store.rs::load_provinces` 加载即断言 (省,市,镇) code 无重复(panic);`agent-rules.md` 加死规则;CI `china/check_code_immutable.py`(PASS);`feedback_china_code_immutable` 记忆。
 - ✅ pubspec 注册 `assets/admin_divisions/`(含 cities/towns 子目录)。
 
 **待续(协调上线切换,需 flutter/postgres/重启后端):**

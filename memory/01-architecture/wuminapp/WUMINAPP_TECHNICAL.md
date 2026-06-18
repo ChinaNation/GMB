@@ -17,7 +17,8 @@
 - 手机业务存储：Isar
 - 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `third_party/smoldot-dart/` + `rust/`）
 - P2P IM 路线：信息 Tab + 钱包账户聊天身份 + 用户自己的私人通信全节点 + 近场无网点对点通信；当前已落地基础模型、信息 Tab、绑定 payload、私人节点传输骨架和 node 端 owner-only mailbox Spike；Android 近场模块规划为 `android/im/`，iOS 近场模块规划为 `ios/im/`
-- 外部接口：HTTP API（由 SFID/网关系统提供，仅用于 SFID 绑定、管理员目录等非链上查询场景）
+- 外部接口：HTTP API（由 SFID/网关系统提供，仅用于 SFID 绑定、管理员目录、公权机构目录等非链上查询场景）
+- 行政区字典：安装包内置 `assets/admin_divisions/`，由 `sfid/backend/china/china.sqlite` 直接生成；运行中只读本地包，不向 SFID 联网更新行政区。
 
 ### 2.1 Android 打包和正式签名
 
@@ -450,7 +451,7 @@ App 内置 44 个引导节点的 RPC 地址，域名与 `citizenchain/node/src/c
 | 35 | 西康省 | `prcxks.crcfrcn.com` |
 | 36 | 阿里省 | `prcals.crcfrcn.com` |
 | 37 | 葱岭省 | `prccls.crcfrcn.com` |
-| 38 | 天山省 | `prctss.crcfrcn.com` |
+| 38 | 伊犁省 | `prctss.crcfrcn.com` |
 | 39 | 河西省 | `prchxs.crcfrcn.com` |
 | 40 | 昆仑省 | `prckls.crcfrcn.com` |
 | 41 | 河套省 | `prchts.crcfrcn.com` |

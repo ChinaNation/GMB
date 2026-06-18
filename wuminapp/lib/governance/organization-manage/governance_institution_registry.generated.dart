@@ -345,8 +345,8 @@ const List<InstitutionInfo> kProvincialCouncils = [
     ),
   ),
   InstitutionInfo(
-    name: '天山省公民储备委员会',
-    sfidNumber: 'TS001-GCB0C-293160581-2026',
+    name: '伊犁省公民储备委员会',
+    sfidNumber: 'YL001-GCB0C-293160581-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAddress: '68eca56b1083c9432655fcac74c6c4468953024205d78f3a05c4744baf5be541',
@@ -772,8 +772,8 @@ const List<InstitutionInfo> kProvincialBanks = [
     ),
   ),
   InstitutionInfo(
-    name: '天山省公民储备银行',
-    sfidNumber: 'TS001-SCH1P-142800261-2026',
+    name: '伊犁省公民储备银行',
+    sfidNumber: 'YL001-SCH1P-142800261-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAddress: '38f18eef0f0d2d51dc379b965ab22a7a6516d58313279553f9b04af1d188070b',

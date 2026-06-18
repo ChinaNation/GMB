@@ -160,7 +160,9 @@ wuminapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/04-
 
 ## 死规则:行政区唯一真源 + code 不可变不复用(ADR-021)
 
-- **唯一真源**:行政区(省/市/镇/村/路)只有一份真源 = `sfid/backend/china/data/china.sqlite`。**任何地方不得独立存第二份行政区名字**:机构一律存 code(province_code/city_code/town_code),名字由 china.sqlite 派生的字典 join 得到。wuminapp 公权机构显示行政区名走 `assets/admin_divisions/` 字典(生成器 `wuminapp/tools/generate_admin_division_bundle.mjs` 直接 dump china.sqlite,零映射)。
-- **code 不可变、不复用**:省/市/镇 code 一经派生**永久冻结**。改名只改 `name` 不改 `code`;镇撤并 → code 永久退役进 `town_tombstones` 表,**绝不再分配**给任何其它镇;新增镇取该 (省,市) 内 max(code)+1。复用 code 会让历史机构 town_code 静默指向语义已变的镇(比报错更危险)。
-- **校验**:`china/store.rs::load_provinces` 加载即断言 (省,市,镇) code 无重复(违反即 panic);区划脚本(`normalize_*.py`)新分配 code 不得命中 `town_tombstones`;CI `china/data/check_code_immutable.py`。
-- **红线**:镇 code 与 SFID 号生成**无关**(号只编省+市 R5);改 town_code/字典**绝不触及** number 生成、省市码、链上治理常量。
+- **唯一真源**:行政区(省/市/镇/村/路)只有一个入口 = `sfid/backend/china/`。开发库 `sfid/backend/china/china.sqlite` 是唯一权威源；生产 `SFID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套行政区名字**。
+- **发布消费**:行政区变更必须修改开发库并递增 `metadata.admin_division_version`；SFID、wuminapp、CPMS 发布包都从开发库派生本地只读快照。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,wuminapp 不联网拉取行政区新版。
+- **目录红线**:不得恢复 `sfid/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `sfid/backend/china/`。
+- **code 不可变、不复用**:省 code 固定且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `name` 不改 `code`;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
+- **校验**:`china/store.rs::load_provinces` 加载即断言省名和市名全国唯一、(省,市,镇) code 无重复；CI `sfid/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
+- **红线**:行政区开发库变更不直接修改 `citizenchain/runtime/`。`/primitives/china/` 的行政区和保护机构常量需要变更时,必须走 runtime 升级二次确认。

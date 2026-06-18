@@ -1,7 +1,7 @@
 //! 公权机构自动目录与公安局对账服务。
 //!
-//! 中文注释:自动生成的公权机构只归 gov 模块维护。编译不写库,serve 不全量写库;
-//! 部署入口用 `ensure-gov` 做幂等守门,只有目录缺失或不完整时才初始化。
+//! 中文注释:自动生成的公权机构只归 gov 模块维护。编译不写库,serve 只做版本守门;
+//! 部署入口必须先运行 `reconcile-gov --changed-only` 与 `check-gov --strict`。
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -79,6 +79,20 @@ pub struct GovDirectoryCheckReport {
     pub mismatched_sfids: Vec<String>,
     pub missing_account_sfids: Vec<String>,
     pub obsolete_sfids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct GovDirectoryManifestCheckReport {
+    pub ok: bool,
+    pub scope_key: String,
+    pub china_hash: String,
+    pub catalog_hash: String,
+    pub target_count: usize,
+    pub manifest_china_hash: Option<String>,
+    pub manifest_catalog_hash: Option<String>,
+    pub manifest_template_version: Option<String>,
+    pub manifest_status: Option<String>,
+    pub manifest_target_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -921,6 +935,80 @@ pub fn current_gov_manifest_version(db: &Db, scope_key: &str) -> Option<String> 
     .flatten()
 }
 
+pub fn check_gov_manifest_db(db: &Db) -> Result<GovDirectoryManifestCheckReport, String> {
+    let scope = OfficialReconcileScope::All;
+    let kind = GovTargetKind::All;
+    let targets = resolve_targets(db, &scope, kind)?;
+    let china_hash = china_sqlite_hash()?;
+    let catalog_hash = catalog_hash(china_hash.as_str(), &targets);
+    let target_count = targets.len();
+    let scope_key = scoped_manifest_key(&scope, kind);
+    let manifest = {
+        let scope_key = scope_key.clone();
+        db.with_client(move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT china_hash, catalog_hash, template_version, status, target_count
+                     FROM gov_manifest
+                     WHERE scope_key = $1
+                     ORDER BY updated_at DESC
+                     LIMIT 1",
+                    &[&scope_key],
+                )
+                .map_err(|e| {
+                    format!(
+                        "query gov manifest current state failed: {}",
+                        crate::core::db::postgres_error_text(&e)
+                    )
+                })?;
+            Ok(row.map(|row| {
+                (
+                    row.get::<_, String>(0),
+                    row.get::<_, String>(1),
+                    row.get::<_, String>(2),
+                    row.get::<_, String>(3),
+                    row.get::<_, i64>(4),
+                )
+            }))
+        })?
+    };
+    let (
+        manifest_china_hash,
+        manifest_catalog_hash,
+        manifest_template_version,
+        manifest_status,
+        manifest_target_count,
+    ) = match manifest {
+        Some((china, catalog, template, status, count)) => (
+            Some(china),
+            Some(catalog),
+            Some(template),
+            Some(status),
+            Some(count),
+        ),
+        None => (None, None, None, None, None),
+    };
+    let target_count_i64 =
+        i64::try_from(target_count).map_err(|_| "gov target count exceeds i64".to_string())?;
+    let ok = manifest_china_hash.as_deref() == Some(china_hash.as_str())
+        && manifest_catalog_hash.as_deref() == Some(catalog_hash.as_str())
+        && manifest_template_version.as_deref() == Some(GOV_TEMPLATE_VERSION)
+        && manifest_status.as_deref() == Some("OK")
+        && manifest_target_count == Some(target_count_i64);
+    Ok(GovDirectoryManifestCheckReport {
+        ok,
+        scope_key,
+        china_hash,
+        catalog_hash,
+        target_count,
+        manifest_china_hash,
+        manifest_catalog_hash,
+        manifest_template_version,
+        manifest_status,
+        manifest_target_count,
+    })
+}
+
 fn upsert_manifest(
     db: &Db,
     scope_key: &str,
@@ -1030,6 +1118,7 @@ fn auto_rows_in_scope(
                  JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
                  WHERE s.kind = 'PUBLIC'
                    AND s.status = 'ACTIVE'
+                   AND g.source = 'GENERATED'
                    AND ($1::text IS NULL OR s.p_code = $1)
                    AND ($2::text IS NULL OR s.c_code = $2)
                    AND ($3::text IS NULL OR s.category = $3)",
@@ -1237,6 +1326,19 @@ pub fn reconcile_changed_gov_catalog_db(
                 GovTargetKind::All,
             )?);
         }
+    }
+    // 中文注释:changed-only 以省为单位减少写库范围,但部署守门看的是全局
+    // all:all manifest。省级对账完成后必须刷新全局版本,否则 strict 会误判目录过期。
+    let all_check = check_gov_catalog_db(db, OfficialReconcileScope::All, GovTargetKind::All)?;
+    if all_check.ok {
+        upsert_gov_manifest_from_check_db(db, &all_check)?;
+    } else {
+        reports.push(reconcile_gov_catalog_db(
+            db,
+            actor,
+            OfficialReconcileScope::All,
+            GovTargetKind::All,
+        )?);
     }
     Ok(reports)
 }
@@ -1604,9 +1706,10 @@ fn bulk_write_target_chunk(
     tx.execute(
         "INSERT INTO gov (
             sfid_number, p_code, c_code, t_code, institution_code, org_code,
-            home_p, home_c
+            source, home_p, home_c
          )
          SELECT sfid_number, p_code, c_code, t_code, institution_code, org_code,
+                'GENERATED',
                 home_p, home_c
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
@@ -1620,6 +1723,7 @@ fn bulk_write_target_chunk(
             t_code = EXCLUDED.t_code,
             institution_code = EXCLUDED.institution_code,
             org_code = EXCLUDED.org_code,
+            source = EXCLUDED.source,
             home_p = EXCLUDED.home_p,
             home_c = EXCLUDED.home_c",
         &[
@@ -1720,11 +1824,12 @@ fn revoke_obsolete_targets(
     let candidates = db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT sfid_number, category, province_code, city_code
-                 FROM subjects
-                 WHERE kind = 'PUBLIC'
-                   AND status = 'ACTIVE'
-                   AND ($1::text IS NULL OR category = $1)",
+                "SELECT s.sfid_number, s.category, s.province_code, s.city_code
+                 FROM subjects s
+                 JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+                 WHERE s.kind = 'PUBLIC'
+                   AND g.source = 'GENERATED'
+                   AND ($1::text IS NULL OR s.category = $1)",
                 &[&category_filter],
             )
             .map_err(|e| format!("query obsolete gov candidates failed: {e}"))?;
@@ -1760,6 +1865,58 @@ fn revoke_obsolete_targets(
         }
         Ok(output)
     })?;
-    db.revoke_institution_rows_by_sfids(&candidates)?;
+    delete_obsolete_generated_targets(db, &candidates)?;
     Ok(candidates)
+}
+
+fn delete_obsolete_generated_targets(db: &Db, sfids: &[String]) -> Result<(), String> {
+    if sfids.is_empty() {
+        return Ok(());
+    }
+    let sfids = sfids.to_vec();
+    db.with_client(move |conn| {
+        let mut tx = conn
+            .transaction()
+            .map_err(|e| format!("begin obsolete generated gov cleanup failed: {e}"))?;
+        for chunk in sfids.chunks(10_000) {
+            let chunk = chunk.to_vec();
+            // 中文注释:obsolete 只来自 gov.source=GENERATED 的确定性目录。行政区 code
+            // 删除/合并后,这些行不再是目标目录的一部分,必须连同账户和索引一起清掉。
+            tx.execute(
+                "DELETE FROM accounts WHERE sfid_number = ANY($1)",
+                &[&chunk],
+            )
+            .map_err(|e| format!("delete obsolete generated gov accounts failed: {e}"))?;
+            tx.execute("DELETE FROM docs WHERE sfid_number = ANY($1)", &[&chunk])
+                .map_err(|e| format!("delete obsolete generated gov docs failed: {e}"))?;
+            tx.execute("DELETE FROM audit WHERE target_sfid = ANY($1)", &[&chunk])
+                .map_err(|e| format!("delete obsolete generated gov audit failed: {e}"))?;
+            tx.execute(
+                "DELETE FROM gov
+                 WHERE sfid_number = ANY($1)
+                   AND source = 'GENERATED'",
+                &[&chunk],
+            )
+            .map_err(|e| format!("delete obsolete generated gov rows failed: {e}"))?;
+            tx.execute("DELETE FROM private WHERE sfid_number = ANY($1)", &[&chunk])
+                .map_err(|e| format!("delete obsolete generated private residuals failed: {e}"))?;
+            tx.execute(
+                "DELETE FROM ids
+                 WHERE sfid_number = ANY($1)
+                   AND kind = 'PUBLIC'",
+                &[&chunk],
+            )
+            .map_err(|e| format!("delete obsolete generated gov ids failed: {e}"))?;
+            tx.execute(
+                "DELETE FROM subjects
+                 WHERE sfid_number = ANY($1)
+                   AND kind = 'PUBLIC'",
+                &[&chunk],
+            )
+            .map_err(|e| format!("delete obsolete generated gov subjects failed: {e}"))?;
+        }
+        tx.commit()
+            .map_err(|e| format!("commit obsolete generated gov cleanup failed: {e}"))?;
+        Ok(())
+    })
 }

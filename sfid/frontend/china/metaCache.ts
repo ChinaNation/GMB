@@ -6,8 +6,8 @@ import type { AdminAuth } from '../auth/types';
 import type { InstitutionDetail, InstitutionListRow } from '../subjects/api';
 import { getSfidMeta, listSfidCities, type SfidCityItem, type SfidMetaResult } from './api';
 
-const SFID_META_CACHE_VERSION = 'sfid-meta-v1';
-const SFID_CITY_CACHE_VERSION = 'sfid-cities-v1';
+const SFID_META_CACHE_VERSION = 'sfid-meta-v2';
+const SFID_CITY_CACHE_VERSION = 'sfid-cities-v2';
 const PUBLIC_SECURITY_CACHE_VERSION = 'public-security-v1';
 const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v1';
 const EDUCATION_COMMITTEE_CACHE_VERSION = 'education-committees-v1';
@@ -63,10 +63,11 @@ function sfidCitiesCacheKey(province: string): string {
 
 export async function loadCachedSfidMeta(auth: AdminAuth): Promise<SfidMetaResult> {
   const key = sfidMetaCacheKey(auth);
-  const cached = readCache<SfidMetaResult>(key, SFID_META_CACHE_VERSION);
+  const cacheVersion = SFID_META_CACHE_VERSION;
+  const cached = readCache<SfidMetaResult>(key, cacheVersion);
   if (cached) return cached;
   const next = await getSfidMeta(auth);
-  writeCache(key, SFID_META_CACHE_VERSION, next);
+  writeCache(key, cacheVersion, next);
   return next;
 }
 
@@ -75,10 +76,11 @@ export async function loadCachedSfidCities(
   province: string,
 ): Promise<SfidCityItem[]> {
   const key = sfidCitiesCacheKey(province);
-  const cached = readCache<SfidCityItem[]>(key, SFID_CITY_CACHE_VERSION);
+  const cacheVersion = SFID_CITY_CACHE_VERSION;
+  const cached = readCache<SfidCityItem[]>(key, cacheVersion);
   if (cached) return cached;
   const rows = await listSfidCities(auth, province);
-  writeCache(key, SFID_CITY_CACHE_VERSION, rows);
+  writeCache(key, cacheVersion, rows);
   return rows;
 }
 

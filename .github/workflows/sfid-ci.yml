@@ -33,10 +33,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .git/lfs
-          key: lfs-china-sqlite-${{ hashFiles('sfid/backend/china/data/china.sqlite') }}
+          key: lfs-china-sqlite-${{ hashFiles('sfid/backend/china/china.sqlite') }}
 
       - name: 拉取 china.sqlite (LFS)
-        run: git lfs pull --include="sfid/backend/china/data/china.sqlite"
+        run: git lfs pull --include="sfid/backend/china/china.sqlite"
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
@@ -82,13 +82,18 @@ jobs:
           DEB_ROOT="deb-pkg"
           mkdir -p "$DEB_ROOT/DEBIAN"
           mkdir -p "$DEB_ROOT/opt/sfid/bin"
+          mkdir -p "$DEB_ROOT/opt/sfid/china"
           mkdir -p "$DEB_ROOT/opt/sfid/frontend"
+          mkdir -p "$DEB_ROOT/var/lib/sfid"
           mkdir -p "$DEB_ROOT/etc/systemd/system"
           mkdir -p "$DEB_ROOT/etc/nginx/sites-available"
 
           # 后端二进制
           cp sfid/backend/target/release/sfid-backend "$DEB_ROOT/opt/sfid/bin/"
           chmod 755 "$DEB_ROOT/opt/sfid/bin/sfid-backend"
+
+          # 行政区 SQLite 随包只读源
+          cp sfid/backend/china/china.sqlite "$DEB_ROOT/opt/sfid/china/china.sqlite"
 
           # 前端静态文件
           cp -r sfid/frontend/dist/* "$DEB_ROOT/opt/sfid/frontend/"
@@ -120,6 +125,7 @@ jobs:
           SFID_ENV=production
           DATABASE_URL=postgres://sfid:sfid_pwd@127.0.0.1:5432/sfid
           SFID_REDIS_URL=redis://127.0.0.1:6379/0
+          SFID_CHINA_DB=/opt/sfid/china/china.sqlite
           SFID_SIGNING_SEED_HEX=<替换为主签名种子>
           SFID_CHAIN_WS_URL=ws://127.0.0.1:9944
           SFID_BIND_ADDR=127.0.0.1:8899
@@ -129,7 +135,7 @@ jobs:
           ENVEOF
             echo "请编辑 /opt/sfid/.env 配置环境变量"
           fi
-          chown -R sfid:sfid /opt/sfid
+          chown -R sfid:sfid /opt/sfid /var/lib/sfid
           systemctl daemon-reload
           systemctl enable sfid-server
           echo "SFID 安装完成。启动: sudo systemctl start sfid-server"

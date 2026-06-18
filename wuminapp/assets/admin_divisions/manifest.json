@@ -1,8 +1,8 @@
 {
-  "version": "2026-06-17T04:48:00.985Z",
-  "generated_at": "2026-06-17T04:48:00.985Z",
-  "china_sqlite_sha256": "bb1c45a8199bb03d8abbb1e9b8e8f2757aa12b29fbfc6cef76670b1018ea820a",
+  "version": "2",
+  "generated_at": "2",
+  "china_sqlite_sha256": "20b99f029d8d72fabc368ae24f39970e424a25255f103c82199a13c404cef800",
   "province_count": 43,
-  "city_count": 2942,
-  "town_count": 39727
+  "city_count": 2941,
+  "town_count": 39733
 }

@@ -1,35 +1,64 @@
-//! SQLite 行政区划读取层。
+//! SQLite 行政区划只读层。
 
-use std::{fs, sync::OnceLock};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
 
 use super::model::{CityCode, ProvinceCode, TownCode};
 
-const CHINA_DB_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/china/data/china.sqlite");
+const CHINA_DB_DEV_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/china/china.sqlite");
 
-static PROVINCE_CACHE: OnceLock<Vec<ProvinceCode>> = OnceLock::new();
+static CHINA_DB_PATH: OnceLock<PathBuf> = OnceLock::new();
+static PROVINCE_CACHE: OnceLock<&'static [ProvinceCode]> = OnceLock::new();
 
 fn leak_text(value: String) -> &'static str {
     Box::leak(value.into_boxed_str())
 }
 
+fn china_db_path() -> &'static Path {
+    CHINA_DB_PATH.get_or_init(|| {
+        // 中文注释:行政区以开发库 `sfid/backend/china/china.sqlite` 为权威源。
+        // 生产环境只允许通过 SFID_CHINA_DB 指向随包只读 SQLite,不得在运行中复制或改写。
+        if let Some(raw) = std::env::var("SFID_CHINA_DB")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        {
+            return PathBuf::from(raw);
+        }
+        let dev = PathBuf::from(CHINA_DB_DEV_PATH);
+        if dev.exists() {
+            return dev;
+        }
+        let exe = std::env::current_exe().expect("resolve sfid backend executable path");
+        exe.parent()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("/opt/sfid"))
+            .join("china/china.sqlite")
+    })
+}
+
 fn open_china_db() -> Connection {
-    Connection::open(CHINA_DB_PATH).expect("open china sqlite database")
+    Connection::open_with_flags(china_db_path(), OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("open read-only china sqlite database")
 }
 
 /// 返回当前行政区划 SQLite 文件哈希。
 ///
-/// 中文注释:该哈希只用于部署期确定性目录完整性校验。编译阶段不会读取数据库,
-/// 服务正常启动也不会因为哈希变化自动全量写库。
+/// 中文注释:该哈希只用于部署期确定性目录完整性校验。运行时只读打开数据库,
+/// 不会因为哈希变化自动写库或发布新版本。
 pub fn china_sqlite_hash() -> Result<String, String> {
-    let bytes = fs::read(CHINA_DB_PATH).map_err(|e| format!("read china sqlite failed: {e}"))?;
+    let bytes = fs::read(china_db_path()).map_err(|e| format!("read china sqlite failed: {e}"))?;
     let digest = Sha256::digest(bytes);
     Ok(hex::encode(digest))
 }
 
-fn load_provinces() -> Vec<ProvinceCode> {
+fn load_provinces() -> &'static [ProvinceCode] {
     let conn = open_china_db();
     let mut province_stmt = conn
         .prepare("SELECT code, name FROM provinces ORDER BY sort_order")
@@ -83,15 +112,26 @@ fn load_provinces() -> Vec<ProvinceCode> {
         });
     }
 
-    // 铁律(ADR-021):china.sqlite 行政区 code 不可变、不复用。加载即校验 (省,市,镇)
-    // 三元组 code 无重复——重复会让机构 town_code 反查歧义、行政区字典互相覆盖。
-    // 有重复直接 panic,启动即暴露(退役的镇 code 进 town_tombstones 表,永不再分配)。
-    let mut seen = std::collections::HashSet::new();
+    // 铁律(ADR-021):省名、城市名全国唯一；市/镇 code 不可变且不可复用。
+    // 这里在服务启动读取时同步校验,让错误数据立即暴露。
+    let mut province_names = std::collections::HashSet::new();
+    let mut city_names = std::collections::HashSet::new();
+    let mut town_triples = std::collections::HashSet::new();
     for p in &provinces {
+        assert!(
+            province_names.insert(p.name),
+            "china.sqlite 省名重复(违反 ADR-021 全国唯一铁律): {}",
+            p.name
+        );
         for c in p.cities {
+            assert!(
+                city_names.insert(c.name),
+                "china.sqlite 市名重复(违反 ADR-021 全国唯一铁律): {}",
+                c.name
+            );
             for t in c.towns {
                 assert!(
-                    seen.insert((p.code, c.code, t.code)),
+                    town_triples.insert((p.code, c.code, t.code)),
                     "china.sqlite 行政区 code 重复(违反 ADR-021 不可变不复用铁律): {}/{}/{}",
                     p.code,
                     c.code,
@@ -100,12 +140,12 @@ fn load_provinces() -> Vec<ProvinceCode> {
             }
         }
     }
-    provinces
+    Box::leak(provinces.into_boxed_slice())
 }
 
-/// 返回全部省份。首次调用从 SQLite 加载并缓存到进程内存。
+/// 返回全部省份。首次调用从只读 SQLite 加载并缓存到进程内存。
 pub fn provinces() -> &'static [ProvinceCode] {
-    PROVINCE_CACHE.get_or_init(load_provinces).as_slice()
+    PROVINCE_CACHE.get_or_init(load_provinces)
 }
 
 pub fn province_code_by_name(name: &str) -> Option<&'static str> {
@@ -172,16 +212,12 @@ pub fn province_name_by_code(code: &str) -> Option<&'static str> {
 ///
 /// 中文注释:孤儿机构清理(ADR-021 §B5)的唯一判定依据。被删/退役复用 code 下的旧机构
 /// 其 `t_code` 会指向一个已不存在于 china.sqlite 的镇。空 `tc` 永远返回 true(市级机构、
-/// 储委会、部委等合法态没有镇维度,绝不当孤儿),由调用方负责跳过空 t_code 行;此处也对
-/// 空 tc 直接判存在以防误删。code 大小写不敏感,与 `area_name_by_codes` 口径一致。
+/// 储委会、部委等合法态没有镇维度),由调用方负责跳过空 t_code 行;此处也对空 tc 直接判存在以防误删。
 pub fn town_exists(pc: &str, cc: &str, tc: &str) -> bool {
     if tc.trim().is_empty() {
         return true;
     }
-    let Some(province) = provinces()
-        .iter()
-        .find(|p| p.code.eq_ignore_ascii_case(pc))
-    else {
+    let Some(province) = provinces().iter().find(|p| p.code.eq_ignore_ascii_case(pc)) else {
         return false;
     };
     let Some(city) = province
@@ -191,9 +227,7 @@ pub fn town_exists(pc: &str, cc: &str, tc: &str) -> bool {
     else {
         return false;
     };
-    city.towns
-        .iter()
-        .any(|t| t.code.eq_ignore_ascii_case(tc))
+    city.towns.iter().any(|t| t.code.eq_ignore_ascii_case(tc))
 }
 
 #[cfg(test)]

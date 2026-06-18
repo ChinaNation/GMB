@@ -1145,8 +1145,8 @@ impl Db {
                 conn.execute(
                     "INSERT INTO gov (
 		                        sfid_number, p_code, c_code, t_code, institution_code, org_code,
-		                        home_p, home_c
-		                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		                        source, home_p, home_c
+		                     ) VALUES ($1, $2, $3, $4, $5, $6, 'MANUAL', $7, $8)
 		                     ON CONFLICT (p_code, sfid_number) DO UPDATE SET
 		                        c_code = EXCLUDED.c_code,
 		                        t_code = EXCLUDED.t_code,
@@ -1258,30 +1258,6 @@ impl Db {
                 &[&sfid_number, &account_name],
             )
             .map_err(|e| format!("delete accounts failed: {e}"))?;
-            Ok(())
-        })
-    }
-
-    pub(crate) fn revoke_institution_rows_by_sfids(&self, sfids: &[String]) -> Result<(), String> {
-        if sfids.is_empty() {
-            return Ok(());
-        }
-        let sfids = sfids.to_vec();
-        self.with_client(move |conn| {
-            let mut tx = conn
-                .transaction()
-                .map_err(|e| format!("begin revoke subject rows failed: {e}"))?;
-            for sfid in &sfids {
-                tx.execute(
-                    "UPDATE subjects
-                     SET status = 'REVOKED', updated_at = now()
-                     WHERE sfid_number = $1",
-                    &[sfid],
-                )
-                .map_err(|e| format!("revoke subject row failed: {e}"))?;
-            }
-            tx.commit()
-                .map_err(|e| format!("commit revoke subject rows failed: {e}"))?;
             Ok(())
         })
     }
@@ -1557,11 +1533,8 @@ impl Db {
             }
 
             // 5. ids(不分区,主登记表,仅按 sfid_number)。
-            tx.execute(
-                "DELETE FROM ids WHERE sfid_number = ANY($1)",
-                &[&all_sfids],
-            )
-            .map_err(|e| format!("delete ids for {province} failed: {e}"))?;
+            tx.execute("DELETE FROM ids WHERE sfid_number = ANY($1)", &[&all_sfids])
+                .map_err(|e| format!("delete ids for {province} failed: {e}"))?;
 
             // 6. subjects(p_code 分区,父表最后删)。
             let deleted = tx
@@ -2180,29 +2153,29 @@ fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
             "sfid gov directory bootstrap state checked"
         );
 
-        if gov_bootstrap_state_ready(&before) {
-            info!("sfid gov directory already initialized; ensure-gov skipped");
+        let check =
+            check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
+        let manifest_current =
+            check.manifest_catalog_hash.as_deref() == Some(check.catalog_hash.as_str());
+        info!(
+            ok = check.ok,
+            manifest_current,
+            target_count = check.target_count,
+            active_count = check.active_count,
+            missing = check.missing_sfids.len(),
+            mismatched = check.mismatched_sfids.len(),
+            missing_accounts = check.missing_account_sfids.len(),
+            obsolete = check.obsolete_sfids.len(),
+            "sfid gov directory existing data checked before ensure rewrite"
+        );
+        if check.ok && manifest_current {
+            info!("sfid gov directory already matches current china hash; ensure-gov skipped");
             return Ok(());
         }
-
-        if before.subject_count > 0 || before.gov_count > 0 || before.account_count > 0 {
-            let check =
-                check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
-            info!(
-                ok = check.ok,
-                target_count = check.target_count,
-                active_count = check.active_count,
-                missing = check.missing_sfids.len(),
-                mismatched = check.mismatched_sfids.len(),
-                missing_accounts = check.missing_account_sfids.len(),
-                obsolete = check.obsolete_sfids.len(),
-                "sfid gov directory existing data checked before ensure rewrite"
-            );
-            if check.ok {
-                upsert_gov_manifest_from_check_db(&state.db, &check)?;
-                info!("sfid gov directory manifest repaired by ensure-gov");
-                return Ok(());
-            }
+        if check.ok {
+            upsert_gov_manifest_from_check_db(&state.db, &check)?;
+            info!("sfid gov directory manifest repaired by ensure-gov");
+            return Ok(());
         }
 
         let report = core::runtime_ops::reconcile_official_institutions_explicit(
@@ -2215,6 +2188,23 @@ fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
             return Err(format!(
                 "gov directory remains incomplete after ensure-gov: {}",
                 gov_bootstrap_state_summary(&after)
+            ));
+        }
+        let after_check =
+            check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
+        if !after_check.ok
+            || after_check.manifest_catalog_hash.as_deref()
+                != Some(after_check.catalog_hash.as_str())
+        {
+            return Err(format!(
+                "gov directory remains stale after ensure-gov: ok={}, manifest_current={}, missing={}, mismatched={}, missing_accounts={}, obsolete={}",
+                after_check.ok,
+                after_check.manifest_catalog_hash.as_deref()
+                    == Some(after_check.catalog_hash.as_str()),
+                after_check.missing_sfids.len(),
+                after_check.mismatched_sfids.len(),
+                after_check.missing_account_sfids.len(),
+                after_check.obsolete_sfids.len()
             ));
         }
 
@@ -2243,6 +2233,62 @@ fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
     result
 }
 
+fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> {
+    use crate::gov::service::{
+        check_gov_catalog_db, check_gov_manifest_db, reconcile_changed_gov_catalog_db,
+        GovTargetKind, OfficialReconcileScope,
+    };
+
+    let manifest = check_gov_manifest_db(&state.db)?;
+    if manifest.ok {
+        info!(
+            target_count = manifest.target_count,
+            china_hash = %manifest.china_hash,
+            catalog_hash = %manifest.catalog_hash,
+            "sfid gov directory manifest matches current china sqlite"
+        );
+        return Ok(());
+    }
+    warn!(
+        target_count = manifest.target_count,
+        china_hash = %manifest.china_hash,
+        catalog_hash = %manifest.catalog_hash,
+        manifest_china_hash = ?manifest.manifest_china_hash,
+        manifest_catalog_hash = ?manifest.manifest_catalog_hash,
+        manifest_status = ?manifest.manifest_status,
+        "sfid gov directory manifest is stale"
+    );
+    if !env_flag_enabled("SFID_GOV_AUTO_RECONCILE") {
+        return Err(
+            "SFID 公权机构目录已落后于当前 china.sqlite；请先执行 `sfid-backend reconcile-gov --changed-only` 和 `sfid-backend check-gov --strict`，或在本地开发显式设置 SFID_GOV_AUTO_RECONCILE=1 后再启动。"
+                .to_string(),
+        );
+    }
+
+    let reports = reconcile_changed_gov_catalog_db(&state.db, "SYSTEM")?;
+    info!(
+        scopes = reports.len(),
+        inserted = reports.iter().map(|r| r.inserted).sum::<usize>(),
+        updated = reports.iter().map(|r| r.updated).sum::<usize>(),
+        removed = reports.iter().map(|r| r.removed).sum::<usize>(),
+        "sfid gov directory auto reconciled before serve"
+    );
+    let check = check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
+    if check.ok && check.manifest_catalog_hash.as_deref() == Some(check.catalog_hash.as_str()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "SFID 公权机构目录自动对账后仍未通过: ok={}, manifest_current={}, missing={}, mismatched={}, missing_accounts={}, obsolete={}",
+            check.ok,
+            check.manifest_catalog_hash.as_deref() == Some(check.catalog_hash.as_str()),
+            check.missing_sfids.len(),
+            check.mismatched_sfids.len(),
+            check.missing_account_sfids.len(),
+            check.obsolete_sfids.len()
+        ))
+    }
+}
+
 fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool {
     use crate::gov::service::{
         check_gov_catalog_db, reconcile_changed_gov_catalog_db, GovTargetKind,
@@ -2262,6 +2308,8 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
                     .unwrap_or_else(|e| panic!("check-gov failed: {e}"));
             info!(
                 ok = report.ok,
+                manifest_current =
+                    report.manifest_catalog_hash.as_deref() == Some(report.catalog_hash.as_str()),
                 target_count = report.target_count,
                 active_count = report.active_count,
                 missing = report.missing_sfids.len(),
@@ -2271,7 +2319,9 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
                 catalog_hash = report.catalog_hash,
                 "sfid gov directory check finished"
             );
-            if strict && !report.ok {
+            let manifest_current =
+                report.manifest_catalog_hash.as_deref() == Some(report.catalog_hash.as_str());
+            if strict && (!report.ok || !manifest_current) {
                 panic!("check-gov --strict failed: deterministic gov directory is incomplete");
             }
             return true;
@@ -2489,9 +2539,12 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
     }
 
     // 1. 删除前导出待删行(删除唯一回滚保证)。
-    let resolved_backup = backup_path
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("purge_orphan_backup_{}.sql", Utc::now().format("%Y%m%d%H%M%S")));
+    let resolved_backup = backup_path.map(str::to_string).unwrap_or_else(|| {
+        format!(
+            "purge_orphan_backup_{}.sql",
+            Utc::now().format("%Y%m%d%H%M%S")
+        )
+    });
     state
         .db
         .export_orphan_backup(&all_by_province, &resolved_backup)
@@ -2506,10 +2559,7 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
     // 2. 逐省单事务级联删(禁止跨省一条 SQL)。
     let mut deleted_total: u64 = 0;
     for (province, _sfids) in &all_by_province {
-        let gov_sfids = gov_by_province
-            .get(province)
-            .cloned()
-            .unwrap_or_default();
+        let gov_sfids = gov_by_province.get(province).cloned().unwrap_or_default();
         let private_sfids = private_by_province
             .get(province)
             .cloned()
@@ -2610,7 +2660,10 @@ fn main() {
         return;
     }
     // 中文注释:普通公权/宪法机构目录是持久化数据,正常启动只读数据库,
-    // 不再于健康检查前执行全量生成和逐条 upsert。
+    // 不再于健康检查前执行全量生成和逐条 upsert;但必须确认运行库目录来自当前
+    // china.sqlite,否则行政区变更后旧公权机构会继续对外服务。
+    ensure_gov_catalog_current_for_serve(&state)
+        .unwrap_or_else(|e| panic!("sfid gov directory guard failed: {e}"));
     core::runtime_ops::cleanup_stale_citizen_bind_records(&state);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -2876,10 +2929,6 @@ fn main() {
             .route(
                 "/api/v1/admin/china/cities",
                 get(china::admin::admin_china_cities),
-            )
-            .route(
-                "/api/v1/admin/china/towns",
-                get(china::admin::admin_china_towns),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),

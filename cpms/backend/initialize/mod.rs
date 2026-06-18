@@ -785,7 +785,7 @@ mod tests {
             r#type: "INSTALL".to_string(),
             sfid_number: "GD001-GZG0E-123456789-2026".to_string(),
             province_name: "广东省".to_string(),
-            city_name: "广州市".to_string(),
+            city_name: "荔湾市".to_string(),
             install_secret: format!("0x{}", "11".repeat(32)),
             sig: "0xsfid-issued-signature-kept-for-protocol".to_string(),
         }
@@ -796,7 +796,7 @@ mod tests {
     fn point_to_china_source() -> bool {
         let china_db = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../sfid/backend/china/data/china.sqlite"
+            "/../../sfid/backend/china/china.sqlite"
         );
         if !std::path::Path::new(china_db).exists() {
             eprintln!("skip: china source not found at {china_db}");

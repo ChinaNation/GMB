@@ -18,9 +18,12 @@
 1. 在主库执行：`install_postgres_primary.sh`。
 2. 在备库执行：`install_postgres_standby.sh`。
 3. 在应用服务器执行：`install_sfid_app.sh /opt/sfid /path/to/sfid-backend`。
+   该脚本会同步 `/opt/sfid/china/china.sqlite`,再执行
+   `sfid-backend reconcile-gov --changed-only` 和 `sfid-backend check-gov --strict`;
+   任一命令失败都不得启动新版服务。
 4. 在应用服务器修改 `/etc/sfid/sfid.env`：
    - `DATABASE_URL` 指向主库（建议 `sslmode=verify-full`）。
-   - 基础站点必填：`SFID_SIGNING_SEED_HEX`、`SFID_KEY_ID`、`SFID_RUNTIME_META_KEY`、`SFID_REDIS_URL`
+   - 基础站点必填：`SFID_SIGNING_SEED_HEX`、`SFID_KEY_ID`、`SFID_REDIS_URL`、`SFID_CHINA_DB`
    - 可后补的链对接项：`SFID_CHAIN_TOKEN`、`SFID_CHAIN_SIGNING_SECRET`、`SFID_CHAIN_WS_URL`、`SFID_CHAIN_GENESIS_HASH`
    - 可后补的扩展项：`SFID_PUBLIC_SEARCH_TOKEN`、`SFID_PII_KEY`
 5. 启动服务：
@@ -43,6 +46,11 @@
 - 应用只连接主库，不要写备库。
 - 备库用于容灾与只读核验，故障切换需要明确 SOP。
 - 若 Redis 与应用部署在同一台机器，推荐 `SFID_REDIS_URL=redis://127.0.0.1:6379/0`。
+- `SFID_CHINA_DB` 是行政区随包只读 SQLite，正式部署固定 `/opt/sfid/china/china.sqlite`。
+  行政区变更只能来自开发库 `sfid/backend/china/china.sqlite` 后重新发布安装包。
+- 公权机构目录由行政区和模板确定性派生。安装新版行政区后必须先让运行库中的
+  `gov.source='GENERATED'` 目录对账到当前 `china.sqlite`,并确认全局 `gov_manifest`
+  为 `OK`;手动公权机构 `MANUAL` 不属于自动清理范围。
 - 如果当前目标只是“先把网页、登录和基础后台跑起来”，可以先不填写链对接参数；这些只影响链相关接口，不影响站点基础启动。
 
 ## 自动部署（GitHub Push -> 云服务器自动更新）
@@ -125,9 +133,10 @@ SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com
 2. 构建 `frontend/dist`
 3. 上传发布包到服务器临时目录
 4. 执行 `update_sfid_app.sh`
-5. 同步后端二进制和前端静态资源
-6. 重启 `sfid-backend`
-7. 本地健康检查通过后结束
+5. 同步后端二进制、行政区 SQLite 和前端静态资源
+6. 对账 SFID 运行库中的确定性公权机构,并执行 `check-gov --strict`
+7. 重启 `sfid-backend`
+8. 本地健康检查通过后结束
 
 ### 数据库结构
 SFID 后端启动时直接创建当前目标结构；发布包不携带独立 SQL 脚本。

@@ -2,8 +2,8 @@
 
 /// 镇行政区划。
 ///
-/// 中文注释:SFID 公权机构名录需要覆盖到镇目录。村数据仍只保存在
-/// `china.sqlite` 中,本系统不把村作为公权机构目录范围。
+/// 中文注释:SFID 公权机构名录需要覆盖到镇目录。村/路数据仍只保存在
+/// `china.sqlite` 中,本系统不把村/路作为公权机构目录范围。
 #[derive(Debug)]
 pub struct TownCode {
     pub name: &'static str,

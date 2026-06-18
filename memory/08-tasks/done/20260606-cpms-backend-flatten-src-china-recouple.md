@@ -8,7 +8,7 @@
 
 - SFID 后端早已删除 `backend/src/` 壳，源码以 `sfid/backend/` 为根，配方见 `memory/05-modules/sfid/backend/BACKEND_LAYOUT.md`；CPMS 是唯一残留 src/ 壳的异类。
 - `cpms/backend/src/main.rs:30` 的 `#[path = "../../../sfid/backend/sfid/province.rs"]` 指向文件已被删除 → CPMS 后端当前编译不过。
-- 行政区新真源：`sfid/backend/china/`（rusqlite + `china/data/china.sqlite`，84MB），`china::store::provinces()` 静态结构体只到镇；村数据在 `china.sqlite` 的 `villages` 表（716,219 行，列 province_code/city_code/town_code/code/name），SFID Rust API 未暴露村。
+- 行政区新真源：`sfid/backend/china/`（rusqlite + `china/china.sqlite`，84MB），`china::store::provinces()` 静态结构体只到镇；村数据在 `china.sqlite` 的 `villages` 表（716,219 行，列 province_code/city_code/town_code/code/name），SFID Rust API 未暴露村。
 - CPMS `address.rs` 需要镇+村，遍历到 `town.villages`，落 `address_towns/address_villages`。
 - `address.rs` 顶部既有设计注释：发行版只内置只读数据、运行时只启用安装码对应市、不维护第二套行政区源 → 选自包含离线方案：安装包随附 china.sqlite，CPMS 用 rusqlite 读，零改 SFID。
 
@@ -28,7 +28,7 @@
 - `cpms/backend/address.rs`：删 `use sfid_tool_province::{...}`；`find_install_city` / `replace_city_address` 改为查 china.sqlite（province/city by code、towns by city、villages by town）。涉及代码。
 - `cpms/backend/Cargo.toml`：新增 `rusqlite = { version = "0.32", features = ["bundled"] }`（与 SFID 同版本）。涉及配置。
 - `cpms/backend/` 新增行政区读取模块（命名待定，建议 `china.rs` 或 `address_source.rs`），封装 china.sqlite 路径解析（env `CPMS_CHINA_DB`，默认 `./china.sqlite`，对齐现有 `CPMS_FRONTEND_DIR` 约定）与镇/村查询。涉及代码。
-- `cpms/scripts/build_linux_host_installer.sh`：payload 新增 `db/` 或 `data/`，`cp sfid/backend/china/data/china.sqlite` 进发行包；manifest/校验同步。涉及部署。
+- `cpms/scripts/build_linux_host_installer.sh`：payload 新增 `db/` 或 `data/`，`cp sfid/backend/china/china.sqlite` 进发行包；manifest/校验同步。涉及部署。
 - `cpms/deploy/linux/systemd/cpms-backend.service` + `install_host.sh`：设置 `CPMS_CHINA_DB` 指向部署后路径。涉及部署。
 - `cpms/CPMS_TECHNICAL.md`：11 处 `src/...` 路径表改为去 src/ 后路径；`sfid_tool_province` 行改为 china.sqlite 重对接说明。涉及文档。
 - memory 路径回写：`memory/07-ai/unified-protocols.md`、`memory/07-ai/unified-naming.md`、`memory/05-modules/wuminapp-vs-wumin.md`、`memory/05-modules/cpms/backend/**` 中 `cpms/backend/src/...` → `cpms/backend/...`。涉及文档。
@@ -67,7 +67,7 @@
   - 后端去 src/ 壳：`git mv` 12 个条目上提到 `cpms/backend/`，`Cargo.toml` 加显式 `[[bin]] path="main.rs"`（照搬 SFID 配方）。
   - 修复既有编译中断：删悬空 `#[path = "../../../sfid/backend/sfid/province.rs"]`；新增 `china.rs` 用 rusqlite 只读 `china.sqlite`（`CPMS_CHINA_DB`，默认 `./china.sqlite`），address.rs 改查 china 真源（省市名还原 + 该市镇/村）。零改 SFID。
   - 顺带修两处随源码移动而失效的 `include_str!("../../db/schema.sql")` → `../db/schema.sql`。
-  - 安装链路：build 脚本拷 `sfid/backend/china/data/china.sqlite`（84MB）入 payload/data 并校验；install_host 装到 `/opt/cpms/data/china.sqlite`、env 写 `CPMS_CHINA_DB`（老安装升级 grep 补齐）；uninstall 清理。
+  - 安装链路：build 脚本拷 `sfid/backend/china/china.sqlite`（84MB）入 payload/data 并校验；install_host 装到 `/opt/cpms/data/china.sqlite`、env 写 `CPMS_CHINA_DB`（老安装升级 grep 补齐）；uninstall 清理。
   - 测试：initialize 两条 install QR 测试因行政区校验改走 sqlite，新增 `point_to_china_source()` 指向 SFID 唯一源、缺失则跳过；32 passed。
   - 文档：CPMS_TECHNICAL.md + unified-protocols/unified-naming/wuminapp-vs-wumin + 4 个 cpms/backend 模块 TECHNICAL 路径回写。
 - 遗留（不在本卡范围）：约 15 张 2026-05-30 批次 open 任务卡仍写 `cpms/backend/src/...` 且引用已不存在的 `operator_admin`（现为 `super_admin`），属各自任务的陈旧规划文档，需各卡自行对账，未在本卡改动。

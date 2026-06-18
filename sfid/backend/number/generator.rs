@@ -166,7 +166,7 @@ mod tests {
             subject_property: "M",
             p1: "1",
             province: "广东省",
-            city: "广州市",
+            city: "荔湾市",
             institution: "ZG",
         })
         .expect("citizen sfid should generate");
@@ -181,7 +181,7 @@ mod tests {
             subject_property: "G",
             p1: "0",
             province: "广东省",
-            city: "广州市",
+            city: "荔湾市",
             institution: "ZF",
         })
         .expect("public legal sfid should generate");

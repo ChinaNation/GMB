@@ -5,7 +5,7 @@
 
 ## 0. 行政区与档案基础字段
 
-- 行政区数据唯一源是 SFID 系统 `sfid/backend/china/data/china.sqlite`，CPMS 源码树不得保存行政区第二份源码。
+- 行政区数据唯一源是 SFID 系统 `sfid/backend/china/china.sqlite`，CPMS 源码树不得保存行政区第二份源码。
 - CPMS 后端只允许通过 SFID 行政区真源导出的只读数据使用省市镇村信息；
   通用发行版只内置编译后的只读行政区数据。
 - 一个 SFID INSTALL 安装码只对应一个市公安局；CPMS 初始化后只启用安装码 R5 段对应城市的

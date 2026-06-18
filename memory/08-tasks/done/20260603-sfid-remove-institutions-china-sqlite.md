@@ -45,7 +45,7 @@ SFID
 执行记录：
 - 已删除 `sfid/backend/institutions`、`sfid/frontend/institutions`、`sfid/backend/sfid`。
 - 已新增 `sfid/backend/subjects/uninorg`、`sfid/backend/sfid_number`、`sfid/backend/china`。
-- 已将 43 省 Rust 行政区静态表转换为 `sfid/backend/china/data/china.sqlite`。
+- 已将 43 省 Rust 行政区静态表转换为 `sfid/backend/china/china.sqlite`。
 - 已更新 SFID 后端、前端和架构文档,并完成残留搜索。
 - `cargo check --manifest-path sfid/backend/Cargo.toml` 通过。
 - `cargo test --manifest-path sfid/backend/Cargo.toml` 通过,74 个测试全部通过。

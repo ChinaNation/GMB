@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 行政区字典数据包生成器(ADR-021 §A2)。
 //
-// 唯一真源 = sfid/backend/china/data/china.sqlite。本生成器**直接 dump 三表,零映射**:
+// 唯一真源 = sfid/backend/china/china.sqlite。本生成器**直接 dump 三表,零映射**:
 // 任何「修正名字」逻辑禁止进此文件——改名只改 china.sqlite,这里纯搬运。
 // 铁律:china.sqlite 行政区 code 不可变不复用(见 memory/07-ai/agent-rules.md)。
 //
@@ -16,17 +16,17 @@
 // 机构包与字典是否同一份 china.sqlite 派生(hash 不一致即提示需更新)。
 //
 // 用法:
-//   node tools/generate_admin_division_bundle.mjs [--version 2026-06-16T...] [--db <路径>]
+//   node tools/generate_admin_division_bundle.mjs [--version 2] [--db <路径>]
 
 import { DatabaseSync } from 'node:sqlite';
-import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'assets', 'admin_divisions');
-const DEFAULT_DB = resolve(__dirname, '..', '..', 'sfid', 'backend', 'china', 'data', 'china.sqlite');
+const DEFAULT_DB = resolve(__dirname, '..', '..', 'sfid', 'backend', 'china', 'china.sqlite');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -35,10 +35,13 @@ function arg(name, fallback) {
 
 function main() {
   const dbPath = arg('--db', DEFAULT_DB);
-  const version = arg('--version', new Date().toISOString());
   const sha256 = createHash('sha256').update(readFileSync(dbPath)).digest('hex');
 
   const db = new DatabaseSync(dbPath, { readOnly: true });
+  const metadataVersion = db
+    .prepare("SELECT value FROM metadata WHERE key = 'admin_division_version'")
+    .get()?.value;
+  const version = arg('--version', metadataVersion ? String(metadataVersion) : '0');
 
   // 省:全量一份
   const provinces = db
@@ -67,6 +70,9 @@ function main() {
 
   db.close();
 
+  // 中文注释:先清空分片目录,避免省 code 改名后旧分片继续留在安装包中。
+  rmSync(join(OUT_DIR, 'cities'), { recursive: true, force: true });
+  rmSync(join(OUT_DIR, 'towns'), { recursive: true, force: true });
   mkdirSync(join(OUT_DIR, 'cities'), { recursive: true });
   mkdirSync(join(OUT_DIR, 'towns'), { recursive: true });
 

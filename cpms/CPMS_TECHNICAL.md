@@ -8,6 +8,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 角色访问控制：`SUPER_ADMIN / OPERATOR_ADMIN`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
+- 行政区快照来自开发库 `sfid/backend/china/china.sqlite`；CPMS 必须离线运行，不主动联网拉取，发布包随附本地只读 `china.sqlite`。
 - 安装后生成 `SFID_CPMS_V1 / ARCHIVE` 公民档案二维码；签出前必须先绑定用户投票账户，并满足档案码完整性门槛。
 - ARCHIVE 包含档案号、公民状态、选举资格、电子护照有效期、公民状态更新时间、CPMS 签发公钥、`geo_seal`、投票账户地址/公钥和签名，不包含 `code_id` 或使用次数。
 - 档案号不暴露省、市、机构号。
@@ -43,7 +44,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | common::rate_limit | `common/rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
 | common::ss58 | `common/ss58.rs` | SS58 ↔ hex 公钥编解码（prefix=2027） |
 | address | `address/mod.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口（CPMS 自有地址业务） |
-| address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读 SFID 维护的 `china.sqlite` 行政区唯一源（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
+| address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读开发库派生的 `china.sqlite` 行政区快照（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
 | super_admin | `super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | number | `number/mod.rs` | 档案号与护照号生成 |
 | dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、档案操作记录、年度状态导出、100 年硬删除 |
@@ -96,7 +97,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 4. 两码流程
 1. SFID 生成 `SFID_CPMS_V1 / INSTALL`。
 2. CPMS 离线解析 INSTALL，校验协议类型、字段格式、省市名称与 `sfid_number` 解码结果一致；CPMS 不引入外置 SFID 公钥验签流程，ARCHIVE 是否可信由 SFID 侧最终验真。
-3. CPMS 根据 INSTALL 的 R5 段从内置 SFID 工具行政区数据中重建当前市镇/村路表。
+3. CPMS 根据 INSTALL 的 R5 段从内置 SFID 行政区快照中重建当前市镇/村路表。
 4. CPMS 生成本机 `ARCHIVE` 签发密钥，公钥保存为 `cpms_pubkey`。
 5. CPMS 创建档案时由 `number` 模块同步生成一对一绑定的档案号和护照号；档案号供 SFID 使用，护照号印刷在护照上。
 6. 用户在 wumin 电子护照页出示投票账户地址二维码，CPMS 扫描后保存投票账户。
@@ -211,6 +212,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `CPMS_KEY_ENCRYPT_SECRET` | 本机密钥加密主密钥，32 字节 hex；缺失时拒绝初始化或读取已加密密钥 | 无 |
 | `CPMS_FRONTEND_DIR` | 正式部署前端静态文件目录；设置后必须存在 `index.html` | 未设置时使用 `./frontend` |
 | `CPMS_COOKIE_SECURE` | 设置为 `true/1/yes` 时给 session Cookie 增加 `Secure`，用于 HTTPS 部署 | 未启用 |
+| `CPMS_CHINA_DB` | 开发库派生的离线行政区 SQLite 快照路径；安装包默认随附 | `/opt/cpms/data/china.sqlite` |
 
 ## 7. 验证
 - `cargo fmt && cargo check && cargo test`
@@ -305,7 +307,7 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
 
 ## 11. 行政区数据
 
-- SFID 系统维护的 `sfid/backend/china/data/china.sqlite` 是行政区数据唯一源头。
+- 开发库 `sfid/backend/china/china.sqlite` 是行政区数据唯一源头。
 - CPMS 后端源码目录不保存行政区第二份文件，也不维护 `province.rs` 或 `city_codes/*.rs`
   的第二份源码。
 - CPMS 后端 `china` 模块运行时用 rusqlite 只读 `china.sqlite`，路径三层兜底：

@@ -43,7 +43,7 @@ sfid/frontend/
 ├── vite-env.d.ts
 ├── accounts/                  # 机构账户组件
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
-├── china/                     # 行政区元数据 API 和确定性列表/详情缓存
+├── china/                     # 行政区只读元数据 API 和确定性列表缓存
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
 ├── core/                      # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
 │   └── institution/           # 私权/教育共用机构新增表单,不承载业务 API

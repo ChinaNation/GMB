@@ -47,7 +47,7 @@ pub(crate) const FEDERAL_ADMIN_MAINS: [FederalAdminMain; 43] = [
     FederalAdminMain { province: "西康省", pubkey: "0xbc6215cb2b86840fb27864f72f08ba09a552e2dfcb38fe8ec010664c37e6b748" },
     FederalAdminMain { province: "阿里省", pubkey: "0xb217302c1c6d099df4a440126df288b74c17ec6b59cd02952b772f47e8154c6d" },
     FederalAdminMain { province: "葱岭省", pubkey: "0x98db54a14cdb9015525467d129668eb58573103013ee9ec8ba380384e2b54b41" },
-    FederalAdminMain { province: "天山省", pubkey: "0x463d76ac7e1d3c4cb3355128395189d17bbafb6552a9fdacf075b1fe1f13c32c" },
+    FederalAdminMain { province: "伊犁省", pubkey: "0x463d76ac7e1d3c4cb3355128395189d17bbafb6552a9fdacf075b1fe1f13c32c" },
     FederalAdminMain { province: "河西省", pubkey: "0x2608cab4ded7bee2ac75d55d46d76904f1907b90a4ef768e03cc1663a04de062" },
     FederalAdminMain { province: "昆仑省", pubkey: "0xc645ea0c6e3adb4809268d13cd9820fd759056b2382a5531406873638ce7044a" },
     FederalAdminMain { province: "河套省", pubkey: "0x10972b4b6b227da8cb90cac066502d7210a50955256c83ec083f6b87e3abd71e" },

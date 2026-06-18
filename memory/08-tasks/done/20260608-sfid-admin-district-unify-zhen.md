@@ -6,7 +6,7 @@
 
 边界（已查实）：
 - **市级已 100% 统一**（3,185 个全「X市」）→ 不碰。
-- 真源单一文件 `sfid/backend/china/data/china.sqlite`（git-LFS，运行时由 `china/store.rs` 加载，无 Rust 硬编码镇表、无生成脚本）。全仓**仅此一份**，CPMS 后端经编译期相对路径引用同一文件（`cpms/backend/initialize/mod.rs:797`），无第二副本。
+- 真源单一文件 `sfid/backend/china/china.sqlite`（git-LFS，运行时由 `china/store.rs` 加载，无 Rust 硬编码镇表、无生成脚本）。全仓**仅此一份**，CPMS 后端经编译期相对路径引用同一文件（`cpms/backend/initialize/mod.rs:797`），无第二副本。
 - **功能安全**：全仓无任何代码按「街道/镇/乡」后缀做逻辑分支；SFID 号只编码省+市（R5），镇名仅 `subjects.town` 展示字段 → 改名不影响已签发号码、不动链、不重新创世。`town_code`=(province_code,city_code,code) 才是唯一键，同名不破坏数据。
 
 ## 用户决策
@@ -14,8 +14,8 @@
 2. 长尾走 **「规则转 + 清单确认」**；其中难归类的 1,619 条进一步定为 **「只转干净的」** —— 能干净映射的转镇，非居住功能单位 + 无后缀杂项一律保留原名。
 
 ## 改动目录
-- 新增 `sfid/backend/china/data/normalize_towns.py`：幂等改名脚本（`--scan` 只读出清单 / `--apply` 写回），策略 `CLEAN_CONFIRM_CATEGORIES` + 基底≥2字护栏内嵌，可复现可审计。
-- 改写 `sfid/backend/china/data/china.sqlite`（LFS 重生）。
+- 新增 `sfid/backend/china/normalize_towns.py`：幂等改名脚本（`--scan` 只读出清单 / `--apply` 写回），策略 `CLEAN_CONFIRM_CATEGORIES` + 基底≥2字护栏内嵌，可复现可审计。
+- 改写 `sfid/backend/china/china.sqlite`（LFS 重生）。
 - `cpms/frontend/dangan/ArchiveCreate.tsx`、`ArchiveDetail.tsx`(×2)、`ArchiveList.tsx`(注释)、`super_admin/SystemSettings.tsx`：展示标签「镇/街道」→「镇」。
 - 产物 `towns_longtail_confirm.csv`：记录最终保留原名的 1,284 条（审计用，未自动提交）。
 

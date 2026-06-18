@@ -219,7 +219,7 @@ check_database_ready
 
 # 中文注释:不要用 `cargo run` 常驻服务,否则 Ctrl-C 后真实后端二进制可能被孤儿化。
 (cd "$ROOT_DIR" && cargo build --manifest-path backend/Cargo.toml)
-# 中文注释:部署守门只在确定性公权机构目录缺失或不完整时初始化,已初始化则直接跳过。
+# 中文注释:本地启动前做公权机构目录守门;目录缺失、残缺或 china hash 变化时才对账。
 "$ROOT_DIR/backend/target/debug/sfid-backend" ensure-gov
 launch_backend
 

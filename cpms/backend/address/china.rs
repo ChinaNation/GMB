@@ -66,7 +66,7 @@ fn china_db_path() -> String {
     }
     concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../sfid/backend/china/data/china.sqlite"
+        "/../../sfid/backend/china/china.sqlite"
     )
     .to_string()
 }
