@@ -29,8 +29,12 @@ use crate::core::response::{ApiResponse, PageResult};
 use crate::number::InstitutionCategory;
 use crate::*;
 
-/// 公权目录 subjects 过滤(自动生成公权机构 + 手动公权 + 公权下属非法人,排公安局)。
-/// 与 `Db::list_official_institutions_scope` 的 WHERE 同源;参数 $1=p_code、$2=c_code。
+/// 公民端完整公权目录过滤。
+/// 中文注释:SFID 管理端可以把普通公权、市公安局、教育机构拆成不同后台功能,
+/// 但 wuminapp 公民端“公权机构”必须显示:
+/// ① SFID 自动公权目录(含公安局、教育委员会、省储行等);
+/// ② 手动公法人;③ 上级为公法人的非法人。
+/// 参数 $1=p_code、$2=c_code。
 const GOV_FROM_WHERE: &str = "
     FROM subjects s
     LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
@@ -38,17 +42,11 @@ const GOV_FROM_WHERE: &str = "
     WHERE s.kind IN ('PUBLIC', 'PRIVATE')
       AND s.status = 'ACTIVE'
       AND (
-            (s.category = 'GOV_INSTITUTION'
+            (s.kind = 'PUBLIC'
              AND g.sfid_number IS NOT NULL
-             AND COALESCE(g.org_code, '') <> 'CITY_POLICE'
-             AND s.institution_code <> 'JY')
-            OR (s.category = 'GOV_INSTITUTION'
-                AND g.sfid_number IS NULL
-                AND s.org_code IS NULL
-                AND s.institution_code <> 'JY')
-            OR (s.subject_property = 'F'
-                AND s.institution_code <> 'JY'
-                AND par.subject_property = 'G')
+             AND s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY'))
+            OR s.subject_property = 'G'
+            OR (s.subject_property = 'F' AND par.subject_property = 'G')
           )
       AND s.p_code = $1
       AND ($2::text IS NULL OR s.c_code = $2)
@@ -482,5 +480,14 @@ mod tests {
         assert_eq!(row.sfid_number, "AH001-ZF000-123456789-2026");
         assert_eq!(row.account_count, 2);
         assert_eq!(row.institution_code, "ZF");
+    }
+
+    #[test]
+    fn citizen_public_filter_keeps_all_public_institutions() {
+        assert!(GOV_FROM_WHERE.contains("s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')"));
+        assert!(GOV_FROM_WHERE.contains("s.subject_property = 'G'"));
+        assert!(GOV_FROM_WHERE.contains("par.subject_property = 'G'"));
+        assert!(!GOV_FROM_WHERE.contains("CITY_POLICE"));
+        assert!(!GOV_FROM_WHERE.contains("s.institution_code <> 'JY'"));
     }
 }

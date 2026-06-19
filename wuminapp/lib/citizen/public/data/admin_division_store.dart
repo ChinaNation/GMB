@@ -27,4 +27,19 @@ abstract interface class AdminDivisionStore {
     String level,
     String scopeKey,
   );
+
+  /// 某省全部行政区实体(省级 `province|<pc>||` + 市级 `city|<pc>|*` +
+  /// 镇级 `town|<pc>|*`)。
+  ///
+  /// 中文注释(增量 reconcile 用):按 divisionKey 前缀过滤三段并起来,供 loader
+  /// 逐条比对同 key 内容,只 upsert 真正改名/新增的行,再删除包里已没有的废键。
+  Future<List<AdminDivisionEntity>> divisionsOfProvince(String provinceCode);
+
+  /// 某省全部 divisionKey。
+  Future<List<String>> divisionKeysOfProvince(String provinceCode);
+
+  /// 按 divisionKey 批量删(分块,事务内)。
+  ///
+  /// 中文注释:reconcile 删掉本省里被删码 / 重排掉的旧行政区,零旧数据残留。
+  Future<void> deleteByKeys(List<String> divisionKeys);
 }

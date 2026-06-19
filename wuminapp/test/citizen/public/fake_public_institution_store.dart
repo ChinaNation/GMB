@@ -10,7 +10,10 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   final Set<String> subs = {};
   List<String> provinceOrder = [];
   int upsertCalls = 0;
+  int upsertItemCount = 0;
+  int deleteCalls = 0;
   String? lastCatalogVersion;
+  List<String> lastUpsertSfids = const [];
 
   PublicInstitutionEntity _entity(PublicInstitutionDto d) =>
       d.toEntity(catalogVersion: 'fake', updatedAtMillis: 0);
@@ -21,7 +24,9 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
     required String catalogVersion,
   }) async {
     upsertCalls++;
+    upsertItemCount += items.length;
     lastCatalogVersion = catalogVersion;
+    lastUpsertSfids = items.map((d) => d.sfidNumber).toList(growable: false);
     for (final d in items) {
       byId[d.sfidNumber] = d;
     }
@@ -51,8 +56,8 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
     String cityCode,
   ) async =>
       byId.values
-          .where((e) =>
-              e.provinceCode == provinceCode && e.cityCode == cityCode)
+          .where(
+              (e) => e.provinceCode == provinceCode && e.cityCode == cityCode)
           .map(_entity)
           .toList();
 
@@ -60,6 +65,29 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   Future<PublicInstitutionEntity?> getBySfid(String sfidNumber) async {
     final d = byId[sfidNumber];
     return d == null ? null : _entity(d);
+  }
+
+  @override
+  Future<List<PublicInstitutionEntity>> institutionsOfProvince(
+    String provinceCode,
+  ) async =>
+      byId.values
+          .where((e) => e.provinceCode == provinceCode)
+          .map(_entity)
+          .toList(growable: false);
+
+  @override
+  Future<List<String>> sfidsOfProvince(String provinceCode) async => byId.values
+      .where((e) => e.provinceCode == provinceCode)
+      .map((e) => e.sfidNumber)
+      .toList(growable: false);
+
+  @override
+  Future<void> deleteBySfids(List<String> sfids) async {
+    deleteCalls++;
+    for (final sfid in sfids) {
+      byId.remove(sfid);
+    }
   }
 
   @override

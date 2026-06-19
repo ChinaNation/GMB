@@ -84,6 +84,40 @@ class IsarAdminDivisionStore implements AdminDivisionStore {
         .findAll();
   }
 
+  @override
+  Future<List<AdminDivisionEntity>> divisionsOfProvince(
+    String provinceCode,
+  ) async {
+    final isar = await _db();
+    // 三段前缀并起来:每段以 `|` 收口,保证 `GZ` 不会误命中 `GZA`(code 不含 `|`)。
+    return isar.adminDivisionEntitys
+        .filter()
+        .divisionKeyStartsWith('${AdminDivisionLevel.province}|$provinceCode|')
+        .or()
+        .divisionKeyStartsWith('${AdminDivisionLevel.city}|$provinceCode|')
+        .or()
+        .divisionKeyStartsWith('${AdminDivisionLevel.town}|$provinceCode|')
+        .findAll();
+  }
+
+  @override
+  Future<List<String>> divisionKeysOfProvince(String provinceCode) async {
+    final rows = await divisionsOfProvince(provinceCode);
+    return rows.map((e) => e.divisionKey).toList(growable: false);
+  }
+
+  @override
+  Future<void> deleteByKeys(List<String> divisionKeys) async {
+    if (divisionKeys.isEmpty) return;
+    for (var start = 0; start < divisionKeys.length; start += _upsertChunk) {
+      final end = (start + _upsertChunk).clamp(0, divisionKeys.length);
+      final chunk = divisionKeys.sublist(start, end);
+      await _write((isar) async {
+        await isar.adminDivisionEntitys.deleteAllByDivisionKey(chunk);
+      });
+    }
+  }
+
   /// 由 (level, scopeKey, code) 还原 divisionKey:
   /// - province: scopeKey 空 → `province|<code>||`
   /// - city: scopeKey=pcode → `city|<pcode>|<code>|`

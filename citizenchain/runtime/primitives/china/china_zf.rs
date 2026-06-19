@@ -691,10 +691,10 @@ pub const CHINA_ZF: &[ChinaZf] = &[
         ],
     },
     ChinaZf {
-        sfid_name: "天山省联邦政府",
-        sfid_number: "TS001-GZF06-086374481-2026",
-        main_address: hex!("0199ea38e06e400ea83f0921f97d918ed9eade8dd1dd362c1a3ac23e580f18b3"),
-        fee_address: hex!("6aa6b34325f466d8fd40d081f2f54452f7216c9fab9e1f8f18f01a929db09ac9"),
+        sfid_name: "伊犁省联邦政府",
+        sfid_number: "YL001-GZF06-086374481-2026",
+        main_address: hex!("0a1a099d1b3d22d0e9b5595df1f60cdc99ef9408dee22add1db800dcd53e870f"),
+        fee_address: hex!("fe0f822572aff699acbd8e0af7a7cbdfcae8c0df3d00730a49f6511e440c3417"),
         duoqian_admins: &[
             hex!("46a3cb8214cac65576f4c7a1d3e619901d264e676ed487f43fb4a9596e74897f"),
             hex!("4a98707c235be7bb74e3ac0fc132a1493a02c69048b06d3d96da8368243cd361"),

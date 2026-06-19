@@ -259,11 +259,11 @@
     "domain": "prccls.crcfrcn.com"
   },
   {
-    "name": "天山省权威节点",
+    "name": "伊犁省权威节点",
     "role": "shengchuhui",
     "peerId": "12D3KooWG8ZyfEQo7MkkcKqUczQkY1eKVZFvvAeUpz4EPFi8vEoN",
     "grandpaPubkeyHex": "ae47a89d45e0649ac98aa832eb7d6ae10d6111b30cf64eb118c428c24a00081d",
-    "domain": "prctss.crcfrcn.com"
+    "domain": "prcyls.crcfrcn.com"
   },
   {
     "name": "河西省权威节点",

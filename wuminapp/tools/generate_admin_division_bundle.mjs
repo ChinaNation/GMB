@@ -84,6 +84,15 @@ function main() {
     writeFileSync(join(OUT_DIR, 'towns', `${pcode}.json`), JSON.stringify(list, null, 0));
   }
 
+  // 省级内容版本(增量同步用):客户端按 ver 跳过没变的省,只 reconcile 变了的省。
+  // ver = 该省"市分片 + 镇分片"内容的 sha256 前 16 位,内容(含改名/删码/重排)一变即变。
+  const provinceVersions = provinces.map((p) => {
+    const payload =
+      JSON.stringify(citiesByProv.get(p.code) ?? []) +
+      JSON.stringify(townsByProv.get(p.code) ?? []);
+    return { code: p.code, ver: createHash('sha256').update(payload).digest('hex').slice(0, 16) };
+  });
+
   writeFileSync(
     join(OUT_DIR, 'manifest.json'),
     JSON.stringify(
@@ -94,6 +103,8 @@ function main() {
         province_count: provinces.length,
         city_count: cities.length,
         town_count: towns.length,
+        // 省级版本表:[{ code, ver }],客户端逐省比对,只重灌 ver 变了的省。
+        provinces: provinceVersions,
       },
       null,
       2,

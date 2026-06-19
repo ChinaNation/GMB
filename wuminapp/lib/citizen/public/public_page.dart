@@ -76,8 +76,8 @@ class _PublicPageState extends State<PublicPage> {
   }
 
   Future<void> _bootstrap() async {
-    // 首启后台灌入数据包基线 + 行政区字典(库空才灌,非阻塞)。
-    unawaited(_repo.ensureBundleLoaded());
+    // 后台版本驱动增量同步数据包 + 行政区字典(包版本变了就增量刷新,非阻塞)。
+    unawaited(_repo.ensureSynced());
     final pubkey = await _resolvePubkey();
     if (!mounted) return;
     setState(() {

@@ -1,8 +1,182 @@
 {
-  "version": "2",
-  "generated_at": "2",
-  "china_sqlite_sha256": "20b99f029d8d72fabc368ae24f39970e424a25255f103c82199a13c404cef800",
+  "version": "1",
+  "generated_at": "1",
+  "china_sqlite_sha256": "0db5080d05c1dcb184c6c8f9b4ad0d6fc4fbef17f88c645ba256e86ab450161d",
   "province_count": 43,
-  "city_count": 2941,
-  "town_count": 39733
+  "city_count": 2898,
+  "town_count": 39724,
+  "provinces": [
+    {
+      "code": "ZS",
+      "ver": "bb7a377bceb4ce77"
+    },
+    {
+      "code": "LN",
+      "ver": "42bf0934d841e4e5"
+    },
+    {
+      "code": "GD",
+      "ver": "8b8810d6b331f613"
+    },
+    {
+      "code": "GX",
+      "ver": "5f2895e50516eacf"
+    },
+    {
+      "code": "FJ",
+      "ver": "09cff8a3d30ad8db"
+    },
+    {
+      "code": "HN",
+      "ver": "45f8cdc00004d39c"
+    },
+    {
+      "code": "YN",
+      "ver": "581fd9b444ec9339"
+    },
+    {
+      "code": "GZ",
+      "ver": "e60f4d33260a7027"
+    },
+    {
+      "code": "HU",
+      "ver": "d5ae752b10559ced"
+    },
+    {
+      "code": "JX",
+      "ver": "5160ff2510d90511"
+    },
+    {
+      "code": "ZJ",
+      "ver": "7837e8e53e5a85f4"
+    },
+    {
+      "code": "JS",
+      "ver": "013cd823e4ac11bc"
+    },
+    {
+      "code": "SD",
+      "ver": "0ae1b99f6ca18398"
+    },
+    {
+      "code": "SX",
+      "ver": "9260153a830d9474"
+    },
+    {
+      "code": "HE",
+      "ver": "6202f82e3cb90fc3"
+    },
+    {
+      "code": "HB",
+      "ver": "5644840fd50ba3fc"
+    },
+    {
+      "code": "HI",
+      "ver": "e1a2560d8c534ea0"
+    },
+    {
+      "code": "SI",
+      "ver": "5787c89b223f1015"
+    },
+    {
+      "code": "CQ",
+      "ver": "3c6e4003e9c62335"
+    },
+    {
+      "code": "SC",
+      "ver": "ea30c3bb01292d33"
+    },
+    {
+      "code": "GS",
+      "ver": "8374c5d11b206117"
+    },
+    {
+      "code": "BP",
+      "ver": "45a0584038b60f22"
+    },
+    {
+      "code": "HA",
+      "ver": "36adb944bd10b598"
+    },
+    {
+      "code": "SJ",
+      "ver": "043ca0eaf29d563b"
+    },
+    {
+      "code": "LJ",
+      "ver": "91328614ee0ac0e1"
+    },
+    {
+      "code": "JL",
+      "ver": "b67526bc92289621"
+    },
+    {
+      "code": "LI",
+      "ver": "fc1adf5c01fb4e1f"
+    },
+    {
+      "code": "NX",
+      "ver": "966115d9443cb0b1"
+    },
+    {
+      "code": "QH",
+      "ver": "a7f906e2467b71f2"
+    },
+    {
+      "code": "AH",
+      "ver": "c4aa2351b8356f1a"
+    },
+    {
+      "code": "TW",
+      "ver": "077a6672c5d4b7b1"
+    },
+    {
+      "code": "XZ",
+      "ver": "ab17249b0a0b6095"
+    },
+    {
+      "code": "XJ",
+      "ver": "48f570e33d2942bc"
+    },
+    {
+      "code": "XK",
+      "ver": "a8e69d1b3f6b8c68"
+    },
+    {
+      "code": "AL",
+      "ver": "d2755c7b794ce601"
+    },
+    {
+      "code": "CL",
+      "ver": "adf95e6bfdb6cf76"
+    },
+    {
+      "code": "YL",
+      "ver": "0ba1775b847d7c81"
+    },
+    {
+      "code": "HX",
+      "ver": "3e1613d1a4132d61"
+    },
+    {
+      "code": "KL",
+      "ver": "2da21b72ca5806d9"
+    },
+    {
+      "code": "HT",
+      "ver": "b3bbe95120c0cb93"
+    },
+    {
+      "code": "RH",
+      "ver": "dc64603c92de28f9"
+    },
+    {
+      "code": "XA",
+      "ver": "c5177f42c32f462d"
+    },
+    {
+      "code": "HJ",
+      "ver": "31b6e49ad1fabcd2"
+    }
+  ]
 }

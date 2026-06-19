@@ -36,6 +36,20 @@ abstract interface class PublicInstitutionStore {
   /// 按 sfid_number 取单个机构。
   Future<PublicInstitutionEntity?> getBySfid(String sfidNumber);
 
+  /// 某省(省 code)全部机构实体(按 provinceCode 索引查)。
+  ///
+  /// 中文注释(增量 reconcile 用):供 loader 逐条比对同 sfid 内容,只 upsert 真正
+  /// 改名/新增的行,再删除包里已没有的废 sfid,零旧数据残留。
+  Future<List<PublicInstitutionEntity>> institutionsOfProvince(
+    String provinceCode,
+  );
+
+  /// 某省(省 code)全部机构 sfid_number。
+  Future<List<String>> sfidsOfProvince(String provinceCode);
+
+  /// 按 sfid_number 批量删(分块,事务内)。
+  Future<void> deleteBySfids(List<String> sfids);
+
   /// 已落库机构总数(判断是否需要首次载入数据包)。
   Future<int> institutionCount();
 

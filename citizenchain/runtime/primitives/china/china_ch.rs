@@ -739,13 +739,13 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_name: "天山省公民储备银行",
-        sfid_number: "TS001-SCH1P-142800261-2026",
+        sfid_name: "伊犁省公民储备银行",
+        sfid_number: "YL001-SCH1P-142800261-2026",
         citizens_number: 5_634_164,
         stake_amount: 5_634_164_0000,
-        fee_address: hex!("83575511e71fde28993976074a923b2f5f0f4a92a1e743771e4c76990b058814"),
-        stake_address: hex!("9d2de234353a73b7149bb1db9fb7d272f87c9ed27cdba57979cdf048317b07a5"),
-        main_address: hex!("38f18eef0f0d2d51dc379b965ab22a7a6516d58313279553f9b04af1d188070b"),
+        fee_address: hex!("79b669bf3c303abc0127adbb80d69c8a37c31194b7a607fced835cb785787c91"),
+        stake_address: hex!("127d29f2b209d58be16921d6c2e2a36cbc3aed46d0e54b28d5788c8fb9ceebe2"),
+        main_address: hex!("609a8667015b22b75828f145ec046bf4d1c143c3e90eab68195b878c3c26d039"),
         duoqian_admins: &[
             hex!("d0a892173117fe6d54d93e474395063b29ed4b3d96c280c27c7669817b611948"),
             hex!("24a69bfd777beb23434a5dc979fe1fdce4de09f08fa4a88b263eeece26cb6b2c"),

@@ -9,6 +9,7 @@ const outPath = path.join(
   repoRoot,
   'wuminapp/lib/governance/organization-manage/governance_institution_registry.generated.dart',
 );
+const wuminOutPath = path.join(repoRoot, 'wumin/lib/chain/institutions.dart');
 
 function extractField(block, name) {
   const quoted = new RegExp(`${name}:\\s*"([^"]+)"`).exec(block);
@@ -53,6 +54,22 @@ function dartInstitution(item) {
   }
   lines.push('    ),', '  ),');
   return lines.join('\n');
+}
+
+function walletType(item) {
+  if (item.orgType === 'nrc') return 'InstitutionType.nrc';
+  if (item.orgType === 'prc') return 'InstitutionType.prc';
+  return 'InstitutionType.prb';
+}
+
+function walletInstitution(item) {
+  return [
+    '  Institution(',
+    `    sfidNumber: ${dartString(item.sfidNumber)},`,
+    `    name: ${dartString(item.name)},`,
+    `    type: ${walletType(item)},`,
+    '  ),',
+  ].join('\n');
 }
 
 const cbSource = fs.readFileSync(cbPath, 'utf8');
@@ -121,4 +138,72 @@ const content = [
 ].join('\n');
 
 fs.writeFileSync(outPath, content, 'utf8');
+const wuminContent = [
+  '// 链上机构中文名注册表（公民钱包签名校验用）。',
+  '//',
+  '// 本文件由 tools/generate_wuminapp_governance_registry.mjs 自动生成。',
+  '// 中文注释：唯一事实源是 citizenchain/runtime/primitives/china/china_{cb,ch}.rs。',
+  '// 冷钱包用同一套映射把 sfid_number 还原成中文名，保证交易摘要与解码结果一致。',
+  '',
+  '/// 机构分类（与服务端 OrgType 对齐）。',
+  'enum InstitutionType {',
+  '  /// 国家公民储备委员会。',
+  '  nrc,',
+  '',
+  '  /// 省级公民储备委员会。',
+  '  prc,',
+  '',
+  '  /// 省级公民储备银行。',
+  '  prb,',
+  '}',
+  '',
+  'class Institution {',
+  '  const Institution({',
+  '    required this.sfidNumber,',
+  '    required this.name,',
+  '    required this.type,',
+  '  });',
+  '',
+  '  final String sfidNumber;',
+  '  final String name;',
+  '  final InstitutionType type;',
+  '}',
+  '',
+  '/// 国储会（1）。',
+  'const List<Institution> kNationalCouncils = [',
+  walletInstitution(cbItems[0]),
+  '];',
+  '',
+  '/// 省储会（43）。',
+  'const List<Institution> kProvincialCouncils = [',
+  cbItems.slice(1).map(walletInstitution).join('\n'),
+  '];',
+  '',
+  '/// 省储行（43）。',
+  'const List<Institution> kProvincialBanks = [',
+  chItems.map(walletInstitution).join('\n'),
+  '];',
+  '',
+  '/// 所有机构（87）。按服务端 find_entry 的查找顺序：NRC → PRC → PRB。',
+  'final List<Institution> kAllInstitutions = List.unmodifiable([',
+  '  ...kNationalCouncils,',
+  '  ...kProvincialCouncils,',
+  '  ...kProvincialBanks,',
+  ']);',
+  '',
+  '/// 根据 sfid_number 查找机构中文名（任意类型：国储会 / 省储会 / 省储行）。',
+  '///',
+  '/// 返回 null 表示链上交易含未知机构。若遇到此情况，说明链端常量与公民钱包',
+  '/// 机构注册表未对齐，应重新运行生成器。',
+  'String? institutionName(String sfidNumber) {',
+  '  for (final inst in kAllInstitutions) {',
+  '    if (inst.sfidNumber == sfidNumber) return inst.name;',
+  '  }',
+  '  return null;',
+  '}',
+  '',
+].join('\n');
+
+fs.writeFileSync(wuminOutPath, wuminContent, 'utf8');
 console.log(`generated ${path.relative(repoRoot, outPath)} (${cbItems.length + chItems.length} institutions)`);
+console.log(`generated ${path.relative(repoRoot, wuminOutPath)} (${cbItems.length + chItems.length} institutions)`);

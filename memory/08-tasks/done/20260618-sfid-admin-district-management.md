@@ -13,7 +13,7 @@
 ## 保留的有效结论
 
 - `sfid/backend/china/data/` 不得恢复。
-- `TS/天山省` 已改为 `YL/伊犁省`。
+- 旧省命名已改为 `YL/伊犁省`。
 - 市、镇 code 不可复用；删除的市/镇写入 tombstones。
 - `citizenchain/runtime/` 和 `/primitives/china/` 仍须另走 runtime 升级二次确认。
 

@@ -2,9 +2,9 @@
 // 公权机构目录数据包生成器(ADR-018 §九 混合模式 ①)。
 //
 // 发布期从 SFID 公开接口**keyset 翻页**拉全量公权机构目录,写成 assets 数据包(基线):
-//   assets/public_institutions/manifest.json = { version, generated_at, provinces: [省全名...] }
+//   assets/public_institutions/manifest.json = { version, generated_at, provinces: [{name,ver}] }
 //   assets/public_institutions/<省全名>.json  = { province, manifest_version, count, institutions: [...] }
-// App 首次启动后台分批灌进 Isar 作基线,之后只在线补 updated_at 增量。
+// App 启动后按省级 ver 做本地 reconcile:只写变化行,并删除包内已消失的 sfid。
 //
 // 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_sfid),
 // 否则 OFFSET 深翻 O(n²) 会非常慢。
@@ -30,7 +30,7 @@ const MAX_RETRY_429 = 8;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// 中枢 + 43 省规范全名(与治理 kProvincialCouncils 同一行政区,含"省")。
+// 43 省规范全名(含中枢省,与 china.sqlite provinces 表逐字对齐,含"省")。
 const DEFAULT_PROVINCES = [
   '中枢省', '岭南省', '广东省', '广西省', '福建省', '海南省', '云南省', '贵州省',
   '湖南省', '江西省', '浙江省', '江苏省', '山东省', '山西省', '河南省', '河北省',
@@ -100,6 +100,9 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   let total = 0;
+  // 省级版本表(增量同步用):[{ name, ver }],ver = 后端该省目录 manifest_version。
+  // 客户端逐省比对 ver,只重灌 ver 变了的省,没变的省连分片都不读。
+  const provinceVersions = [];
   for (const province of provinces) {
     const t0 = Date.now();
     const shard = await fetchProvince(province);
@@ -107,6 +110,7 @@ async function main() {
       join(OUT_DIR, `${province}.json`),
       JSON.stringify(shard, null, 0),
     );
+    provinceVersions.push({ name: province, ver: shard.manifest_version });
     total += shard.count;
     console.log(
       `  ${province}: ${shard.count} 机构 (mv=${shard.manifest_version}) ${((Date.now() - t0) / 1000).toFixed(1)}s`,
@@ -114,7 +118,11 @@ async function main() {
   }
   writeFileSync(
     join(OUT_DIR, 'manifest.json'),
-    JSON.stringify({ version, generated_at: version, provinces }, null, 2),
+    JSON.stringify(
+      { version, generated_at: version, provinces: provinceVersions },
+      null,
+      2,
+    ),
   );
   console.log(`manifest.json 写入完成,version=${version},${provinces.length} 省,共 ${total} 机构。`);
 }

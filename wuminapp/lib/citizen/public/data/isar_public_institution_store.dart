@@ -133,6 +133,35 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
+  Future<List<PublicInstitutionEntity>> institutionsOfProvince(
+    String provinceCode,
+  ) async {
+    final isar = await _db();
+    return isar.publicInstitutionEntitys
+        .filter()
+        .provinceCodeEqualTo(provinceCode)
+        .findAll();
+  }
+
+  @override
+  Future<List<String>> sfidsOfProvince(String provinceCode) async {
+    final rows = await institutionsOfProvince(provinceCode);
+    return rows.map((e) => e.sfidNumber).toList(growable: false);
+  }
+
+  @override
+  Future<void> deleteBySfids(List<String> sfids) async {
+    if (sfids.isEmpty) return;
+    for (var start = 0; start < sfids.length; start += _upsertChunk) {
+      final end = (start + _upsertChunk).clamp(0, sfids.length);
+      final chunk = sfids.sublist(start, end);
+      await _write((isar) async {
+        await isar.publicInstitutionEntitys.deleteAllBySfidNumber(chunk);
+      });
+    }
+  }
+
+  @override
   Future<int> institutionCount() async {
     final isar = await _db();
     return isar.publicInstitutionEntitys.count();

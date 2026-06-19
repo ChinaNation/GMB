@@ -81,13 +81,20 @@
 
 后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新 `export-chain-spec` 覆盖这份 JSON。
 
-本机重新创世脚本例外：
+预上线重新创世脚本例外：
 
 - [clean-run.sh](../../../../citizenchain/scripts/clean-run.sh) 会下载最新成功的 `citizenchain-wasm` CI artifact。
-- 脚本用 `citizenchain-fresh` 入口生成 `citizenchain/target/fresh-genesis/citizenchain.fresh.raw.json`。
-- fresh raw chainspec 的 `bootNodes` 必须为空，避免清链后重新接回旧网络。
+- 需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
+- `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 raw chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
 - fresh raw chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
-- 脚本通过 `CITIZENCHAIN_CHAIN_SPEC` 让桌面内嵌节点使用该 fresh raw chainspec 启动；仓库冻结主网 JSON 不被覆盖。
+- 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `wuminapp/assets/chainspec.json`,保证全节点和轻节点使用同一创世。
+
+2026-06-19 预上线重新创世收口:
+
+- runtime 本地 release WASM blake2:`f213cdc476fb0d1e723421a5bd1f5afafc792b5180852d2266346b967386e680`
+- raw chainspec sha256:`cdf74fd89148ab8d681b020c65f59ff8f93e238a1404da44a7b47fae8bb4757a`
+- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `wuminapp/assets/chainspec.json` 完全一致。
+- bootNodes 保持 44 个;伊犁省权威节点域名为 `prcyls.crcfrcn.com`。
 
 历史:2026-05-06 首次冻结,源 nrcgch.crcfrcn.com,sha256 `2b9f46e4aefb66f892d5dc170b2c2bfc33b6b12a88192617b06c18e8ea38a2db`。
 

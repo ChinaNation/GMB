@@ -535,10 +535,10 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_name: "天山省监察院",
-        sfid_number: "TS001-GJC0O-190934454-2026",
-        main_address: hex!("12580827b49c345c0ce3b764cee1e2cd5d652f9eddd7af5f00b449c55319bfd2"),
-        fee_address: hex!("788ddfe371e43c384681c62f4de323a1e06cd835cbc8cbd9dae670ae7a035b41"),
+        sfid_name: "伊犁省监察院",
+        sfid_number: "YL001-GJC0O-190934454-2026",
+        main_address: hex!("a3c28a10b9d9a0f60ecd0b7164c4f3e0c22bf010fb053890cc966e3b53648f2c"),
+        fee_address: hex!("dc645228c28a9db7b6db4258eeebc14b20cac558264931eacdc8080a8a4ed4fb"),
         duoqian_admins: &[
             hex!("ac9ba3081e65f7ca4acc791f3d6ad07afc61c553359a175a7e0ab34a46969c3e"),
             hex!("92022aea48917d0128f7ccfca2e9109c6fa2c01f564bd8a63cddf5bdb7cb987a"),

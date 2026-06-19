@@ -496,10 +496,10 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        sfid_name: "天山省立法院",
-        sfid_number: "TS001-GLF0N-396001522-2026",
-        main_address: hex!("b0b7c11e577eb97438f89e0ee144b91d6bd6bde8911da0930531eb72a4de29c5"),
-        fee_address: hex!("ea0c455b46054da4091c82f1b63b40404153adf3bbcdbb9a2350571d136e8ad9"),
+        sfid_name: "伊犁省立法院",
+        sfid_number: "YL001-GLF0N-396001522-2026",
+        main_address: hex!("1a20eba6278fdf7bfdc22fdbc5b95cbe78d5e86e90dcb7c60b632b872d33dc3a"),
+        fee_address: hex!("92107dfb2b098d74ae6b333a48562ef474c61842bd981e86e520b32f7cbdfcaa"),
         duoqian_admins: &[
             hex!("9aa2c7aebed03f1ab12ef93ad041a1ea9c30a5fc755023c5b7de963856a36f43"),
             hex!("8e4fb3d057a66675bad2c44dec4c65eef18c8fd5fa544a649f8b23dd43d3535a"),

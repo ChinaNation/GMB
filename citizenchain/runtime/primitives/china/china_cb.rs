@@ -25,7 +25,7 @@ pub const NRC_HE_ADDRESS: [u8; 32] =
 /// 所有国储会+省储会数组
 pub const CHINA_CB: &[ChinaCb] = &[
     ChinaCb {
-        sfid_name: "国家公民储备委员会",
+        sfid_name: "中华民族联邦共和国国家公民储备委员会",
         sfid_number: "LN001-GCB05-944805165-2026",
         main_address: hex!("39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d"),
         fee_address: hex!("66d1de031e332facb67bd20ae428e187ae4bbf3caa0a1421bd0023c49fb228d3"),
@@ -701,10 +701,10 @@ pub const CHINA_CB: &[ChinaCb] = &[
         ],
     },
     ChinaCb {
-        sfid_name: "天山省公民储备委员会",
-        sfid_number: "TS001-GCB0C-293160581-2026",
-        main_address: hex!("68eca56b1083c9432655fcac74c6c4468953024205d78f3a05c4744baf5be541"),
-        fee_address: hex!("4386d3bcd92aaec4b48215a4e5c7cf502b161937fc1b6958277e20d5dab54a35"),
+        sfid_name: "伊犁省公民储备委员会",
+        sfid_number: "YL001-GCB0C-293160581-2026",
+        main_address: hex!("8c4aed1db017d5dcdbaf42aa58e0d349d2688f3093198d55ee0ea6de7b377853"),
+        fee_address: hex!("f902eee902d2857d32004b45ceca638d43dc06da055900001ea9d27ee67fc1cd"),
         grandpa_key: hex!("ae47a89d45e0649ac98aa832eb7d6ae10d6111b30cf64eb118c428c24a00081d"),
         duoqian_admins: &[
             hex!("24acc05f6487a97c7ffc6a319cc532cca81e05f26935e56f3867bd54ddf57274"),

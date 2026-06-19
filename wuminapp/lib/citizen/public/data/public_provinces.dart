@@ -40,8 +40,9 @@ String _codeOf(String sfidNumber) {
   return sfidNumber.length >= 2 ? sfidNumber.substring(0, 2) : sfidNumber;
 }
 
-String _displayOf(String fullName) =>
-    fullName.endsWith('省') ? fullName.substring(0, fullName.length - 1) : fullName;
+String _displayOf(String fullName) => fullName.endsWith('省')
+    ? fullName.substring(0, fullName.length - 1)
+    : fullName;
 
 /// 公权机构左栏的 43 个省份导航条目(code + 全名 + 展示名,来自链上省储会常量)。
 List<PublicProvinceItem> publicProvinceItems() {

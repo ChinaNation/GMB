@@ -310,36 +310,7 @@ impl Db {
              );",
         )
         .map_err(|e| format!("init core schema failed: {}", postgres_error_text(&e)))?;
-        Self::rename_yili_admin_scope(conn)?;
         Self::init_subject_partition_schema(conn)?;
-        Ok(())
-    }
-
-    fn rename_yili_admin_scope(conn: &mut postgres::Client) -> Result<(), String> {
-        // 中文注释:旧省名已整体收敛为伊犁省,管理员省级作用域必须一次性收敛,
-        // 否则旧部署升级后会把管理员锁在不存在的省名下。
-        conn.batch_execute(
-            "INSERT INTO provinces(province_name) VALUES ('伊犁省')
-             ON CONFLICT (province_name) DO NOTHING;
-             UPDATE federal_admin_scope
-             SET province_name = '伊犁省'
-             WHERE province_name = '天山省';
-             UPDATE admins
-             SET admin_name = replace(admin_name, '天山省', '伊犁省')
-             WHERE admin_name LIKE '%天山省%';
-             DELETE FROM provinces
-             WHERE province_name = '天山省'
-               AND NOT EXISTS (
-                    SELECT 1 FROM federal_admin_scope
-                    WHERE province_name = '天山省'
-               );",
-        )
-        .map_err(|e| {
-            format!(
-                "rename Yili admin scope failed: {}",
-                postgres_error_text(&e)
-            )
-        })?;
         Ok(())
     }
 

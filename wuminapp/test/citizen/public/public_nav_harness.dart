@@ -4,6 +4,7 @@
 // 行政区字典 fake store(市名 join 用),并按 provinceCode 落库/查询。
 
 import 'package:flutter/services.dart';
+import 'package:wuminapp_mobile/citizen/public/data/admin_division_bundle_loader.dart';
 import 'package:wuminapp_mobile/citizen/public/data/admin_division_dto.dart';
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_api.dart';
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_bundle_loader.dart';
@@ -12,6 +13,7 @@ import 'package:wuminapp_mobile/citizen/public/data/public_institution_repositor
 import 'package:wuminapp_mobile/citizen/public/data/public_institution_sync_service.dart';
 
 import 'fake_admin_division_store.dart';
+import 'fake_data_version_kv.dart';
 import 'fake_public_institution_store.dart';
 
 class _NoopApi extends PublicInstitutionApi {
@@ -111,10 +113,21 @@ Future<PublicInstitutionRepository> buildSeededRepo({
       await store.subscribe(entry.key, entry.value);
     }
   }
+  // 全部走内存 fake(含版本游标),ensureSynced 不触碰全局 Isar。
+  final divisionLoader = AdminDivisionBundleLoader(
+    store: divisionStore,
+    bundle: _EmptyBundle(),
+    versionKv: FakeDataVersionKv(),
+  );
   return PublicInstitutionRepository(
     store: store,
     divisionStore: divisionStore,
     sync: PublicInstitutionSyncService(store: store, api: _NoopApi()),
-    loader: PublicInstitutionBundleLoader(store: store, bundle: _EmptyBundle()),
+    loader: PublicInstitutionBundleLoader(
+      store: store,
+      bundle: _EmptyBundle(),
+      divisionLoader: divisionLoader,
+      versionKv: FakeDataVersionKv(),
+    ),
   );
 }

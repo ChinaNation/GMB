@@ -95,7 +95,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
             ),
           ),
           subtitle: Text(
-            _typeLabel(inst.institutionCode),
+            '身份ID ${inst.sfidNumber}',
             style:
                 const TextStyle(fontSize: 12.5, color: AppTheme.textTertiary),
           ),
@@ -112,22 +112,5 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
         );
       },
     );
-  }
-
-  String _typeLabel(String code) {
-    switch (code) {
-      case 'ZF':
-        return '政府';
-      case 'LF':
-        return '立法';
-      case 'SF':
-        return '司法';
-      case 'JC':
-        return '检察';
-      case 'JY':
-        return '教育';
-      default:
-        return '公权机构';
-    }
   }
 }

@@ -1,9 +1,10 @@
 // 公权机构目录 repo 门面(ADR-018 §九,混合模式)。
 //
 // 中文注释:card B/C 的统一入口。**读全部走本地 store(零链读零网络、秒开)**;
-// 数据包基线由 [ensureBundleLoaded] 在首启后台灌入;某省的在线增量由
-// [refreshProvince] 后台跑(TTL 节流 + 失败上抛供 UI 决定提示)。UI 一律先读本地、
-// 再后台刷新,绝不阻塞在网络同步上(消除"一直转圈")。
+// 数据包由 [ensureSynced] 在首启后台版本驱动增量同步(包版本变了就增量刷新:
+// 变的换、删的清、没变的不动);某省的在线增量由 [refreshProvince] 后台跑
+// (TTL 节流 + 失败上抛供 UI 决定提示)。UI 一律先读本地、再后台刷新,绝不阻塞
+// 在网络同步上(消除"一直转圈")。
 
 import 'package:flutter/foundation.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
@@ -130,8 +131,9 @@ class PublicInstitutionRepository {
   ) =>
       store.listSubscribed(walletPubkeyHex);
 
-  /// 首启后台灌入数据包基线(库空才灌)。返回是否灌入。
-  Future<bool> ensureBundleLoaded() => loader.ensureBundleLoaded();
+  /// 后台版本驱动增量同步数据包(包版本变了就增量刷新:变的换、删的清、没变的
+  /// 不动)。返回机构部分是否发生写入。非阻塞调用方:UI 先读本地再调本方法。
+  Future<bool> ensureSynced() => loader.ensureSynced();
 
   /// 后台刷新某省的在线增量。**非阻塞调用方**:UI 先读本地再调本方法。
   /// TTL 内重复调跳过;失败上抛(UI 自行 catch 决定是否提示),失败不计入节流以便重试。

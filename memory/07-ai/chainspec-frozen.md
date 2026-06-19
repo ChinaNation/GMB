@@ -65,11 +65,17 @@
    下载 CI WASM → `export-chain-spec --chain citizenchain-fresh --raw` → 断言 `:code`==CI WASM →
    同时写 SSOT 与 wuminapp 副本,保证两者永远同步。
 
+2026-06-19 预上线重新创世收口记录:
+
+- 本次使用本地 release WASM 重新导出 fresh raw chainspec,流程沿用 `bake-chainspec.sh` 的断言口径。
+- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `wuminapp/assets/chainspec.json` sha256 均为 `cdf74fd89148ab8d681b020c65f59ff8f93e238a1404da44a7b47fae8bb4757a`。
+- `scripts/check-chainspec-frozen.sh` 通过;bootNodes 保持 44 个,伊犁省权威节点域名为 `prcyls.crcfrcn.com`。
+
 ## 如果真的需要改(预上线重新创世 / 硬分叉流程)
 
 1. 写 ADR 说明理由和影响范围。
 2. runtime 改动 → 推送(commit message 含「重新创世」让 wasm CI 跳过版本守卫,保 spec_version)→ wasm CI 出新 WASM。
-3. 跑 `citizenchain/scripts/bake-chainspec.sh`:用 CI WASM 重新烘焙 SSOT 并同步 wuminapp 副本(脚本内置 `:code`==CI WASM 断言)。
+3. 跑 `citizenchain/scripts/bake-chainspec.sh`:用 CI WASM 重新烘焙 SSOT 并同步 wuminapp 副本(脚本内置 `:code`==CI WASM 断言,并保留当前 SSOT 的权威节点 bootNodes)。
 4. 提交两份 chainspec → 推送(触发 CitizenChain 节点 CI + WuMinApp CI;SSOT 守卫自动通过因两者已同步)。
 5. 所有全节点 `fuwuqi.sh q <ip>` 清数据重部署;所有钱包 / 轻节点 / App 同步发版。
 6. 守卫无需手改常量(已无 `.sha256`);如确有特殊绕过需求,`git commit --no-verify`。

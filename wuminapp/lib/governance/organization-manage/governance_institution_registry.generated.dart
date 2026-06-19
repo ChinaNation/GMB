@@ -6,7 +6,7 @@ part of 'institution_registry.dart';
 /// 国储会（1 个）。
 const List<InstitutionInfo> kNationalCouncil = [
   InstitutionInfo(
-    name: '国家公民储备委员会',
+    name: '中华民族联邦共和国国家公民储备委员会',
     sfidNumber: 'LN001-GCB05-944805165-2026',
     orgType: OrgType.nrc,
     accounts: InstitutionAccounts(
@@ -349,8 +349,8 @@ const List<InstitutionInfo> kProvincialCouncils = [
     sfidNumber: 'YL001-GCB0C-293160581-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
-      mainAddress: '68eca56b1083c9432655fcac74c6c4468953024205d78f3a05c4744baf5be541',
-      feeAddress: '4386d3bcd92aaec4b48215a4e5c7cf502b161937fc1b6958277e20d5dab54a35',
+      mainAddress: '8c4aed1db017d5dcdbaf42aa58e0d349d2688f3093198d55ee0ea6de7b377853',
+      feeAddress: 'f902eee902d2857d32004b45ceca638d43dc06da055900001ea9d27ee67fc1cd',
     ),
   ),
   InstitutionInfo(
@@ -776,9 +776,9 @@ const List<InstitutionInfo> kProvincialBanks = [
     sfidNumber: 'YL001-SCH1P-142800261-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
-      mainAddress: '38f18eef0f0d2d51dc379b965ab22a7a6516d58313279553f9b04af1d188070b',
-      feeAddress: '83575511e71fde28993976074a923b2f5f0f4a92a1e743771e4c76990b058814',
-      stakeAddress: '9d2de234353a73b7149bb1db9fb7d272f87c9ed27cdba57979cdf048317b07a5',
+      mainAddress: '609a8667015b22b75828f145ec046bf4d1c143c3e90eab68195b878c3c26d039',
+      feeAddress: '79b669bf3c303abc0127adbb80d69c8a37c31194b7a607fced835cb785787c91',
+      stakeAddress: '127d29f2b209d58be16921d6c2e2a36cbc3aed46d0e54b28d5788c8fb9ceebe2',
     ),
   ),
   InstitutionInfo(

@@ -496,10 +496,10 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        sfid_name: "天山省司法院",
-        sfid_number: "TS001-GSF00-940493250-2026",
-        main_address: hex!("056138458a7eaebc587f099940c4c189cf06803e40aba6d8df17e900df0b2c69"),
-        fee_address: hex!("891f7993463935f7b78f8c07a6cc51bbbff463f22aedb3e2eeaca77c6d9dbeaa"),
+        sfid_name: "伊犁省司法院",
+        sfid_number: "YL001-GSF00-940493250-2026",
+        main_address: hex!("b31007b83654f343ffd9a809803ed1985ca90c74a02f91973ea53b5928d56923"),
+        fee_address: hex!("f38dca9b089f3a5652b9f02e3c020fff336ae4c6e4d37ee4c81a02d80e056147"),
         duoqian_admins: &[
             hex!("e8213f3ff21707f89f3377f75c0b7f10a7c59e6fae27eaf4bece640035963602"),
             hex!("c441417b5b99c1d7614a9ff55f048657a0bc06f2df19c7f164019cf8c1bb430f"),
