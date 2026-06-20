@@ -10,7 +10,7 @@
 3. **domain 常量强制 `[u8;N]` 数组**(铁律 `feedback_scale_domain_must_be_array`):把现有违规的 `L3_PAY_SIGNING_DOMAIN`/`BATCH_SIGNING_DOMAIN`(`offchain-transaction/src/batch_item.rs:39/42` 等 `&[u8]`)迁入并改数组类型。
 4. **`verify_by_algo` trait**:链端 ML-DSA 验签封装(fips204)。
 5. **`fips204` WASM spike(必做)**:验证 no_std + 编进 runtime WASM + 体积 + 验签权重;若占区块预算显著比例,评估是否需 host function(fork `ChinaNation/ss58-2027-fix` 分支,**非纯 setCode**)。出 benchmark 真实 `WeightInfo`,禁用猜测值。
-6. 🔴 **(硬闸门 spike,card2 前置)验证路线 A `GmbPqcAuth` 机制(路线已定 A,不二选一)**:① `GmbPqcAuth` 在 `validate`/`prepare` 把 General Transaction origin 转 `Signed(account)`,使其后 `CheckNonce`/`ChargeTransactionPayment` 正常(`AuthorizeCall` 默认给 `Authorized` 非 `Signed`,`lib.rs:164`);② **嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 作第一项能编译且按序执行**(outer 仍 12 项);③ 绑定写 `post_dispatch` 可行;④ txpool `provides=(account,nonce)`。确认当前 SDK 可行;若 origin 转换受限,退而 `GmbPqcAuth` 内自管 nonce/扣费,**仍单一扩展授权,不回退 pallet call 主路径**。
+6. 🔴 **(硬闸门 spike,card2 前置)验证路线 A `GmbPqcAuth` 机制(路线已定 A,不二选一)**:① `GmbPqcAuth.validate` 把 General Transaction origin 转 `Signed(account)`,使其后 `CheckNonce`/`ChargeTransactionPayment` 正常(`AuthorizeCall` 默认给 `Authorized` 非 `Signed`,`lib.rs:164`),`prepare` 不负责改 origin;② **嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 作第一项能编译且按序执行**(outer 仍 12 项);③ 绑定写 `post_dispatch` 可行;④ txpool `provides=(account,nonce)`;⑤ PQC 签名消息绑定实际 `following_extensions_hash`,proof 内 `nonce`/`tip`/`era` 与实际后续扩展不一致时拒绝;⑥ `extra=Pqc|Bootstrap` 只允许 General Transaction 起点,sr25519 signed extrinsic 携带 PQC proof 直接拒绝。确认当前 SDK 可行;若 origin 转换受限,退而 `GmbPqcAuth` 内自管 nonce/扣费,**仍单一扩展授权,不回退 pallet call 主路径**。
 
 所属模块:Blockchain(runtime/primitives + 共享 crate)
 

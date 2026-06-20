@@ -24,7 +24,7 @@
 | 保留 Storage | `UserBank` / `DepositBalance` / `BankTotalDeposits` / `L3PaymentNonce` / `L2FeeRateBp` / `L2FeeRateProposed` / `MaxL2FeeRateBp` / `ProcessedOffchainTx` / `ProcessedOffchainTxAt`(settlement 防重放仍用) |
 | 老 Events(17 个) | `OffchainBatchSubmitted` / `InstitutionRate*`(4 个)/ `InternalProposalExecutionFailed` / `RecipientClearingInstitutionBound` / `OffchainBatchQueued` / `OffchainQueuedBatch*`(5 个)/ `OffchainStaleQueuedBatchesCancelled` / `FailedBatchSkipped` / `QueuedBatchPruned` / `BatchSummaryPruned` / `ProcessedTxPruned` / `ProposalActionPruned` / `ProposalExecutionRetried` |
 | 老 Errors(约 20 个) | `InvalidInstitution` / `InvalidRateBp` / `ProposalNotFound` 等一组费率+批次+清理错误。保留新体系使用的 `InvalidL2FeeRate` / `InvalidL3Signature` / `L2FeeRateNotConfigured` / `ExpiredIntent` / `TxAlreadyProcessed` 等 |
-| 老 helpers | `is_prb_admin` / `precheck_submit_offchain_batch_with_rate` / `ensure_rate_and_institution` / `try_execute_rate` / `auto_prune_*` / `queued_prune_budget_hint` / `should_bubble/ignore/wait_precheck_error` / `institution_pallet_address` / `institution_fee_address` / `round_div` / `calc_offchain_fee_fen` / `FeeCalcError` / `ProtectedSourceChecker` trait / `RateProposalAction` struct / `BatchItemOf` / `BatchOf` / `BatchSummary` / `QueuedBatchStatus` / `QueuedBatchLastError` / `QueuedBatchRecord` |
+| 老 helpers | 旧 PRB 管理员校验、旧费率预检查、旧批次清理、旧内置机构地址解析、旧费用计算、旧保护来源检查和旧批次记录相关 helper/type 均已删除 |
 | 老 hook | 原 `on_idle`(清理老 Storage)整块删。保留 `on_initialize` 只做 `fee_config::activate_pending_rates` |
 | 老 `GenesisConfig.initial_rates` | 删除字段 + `BuildGenesisConfig` 整块(清算行费率由治理 extrinsic 设置,无 genesis 初值) |
 | 老配置字段 | `type InternalVoteEngine` / `type ProtectedSourceChecker` 从 `Config` trait 中移除 |

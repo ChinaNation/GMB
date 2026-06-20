@@ -200,7 +200,7 @@ pub(crate) async fn prepare_admin_action(
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
                 actor_pubkey: ctx.admin_pubkey.as_str(),
-                actor_province: province.as_str(),
+                actor_province_name: province.as_str(),
                 target: preview.target.as_str(),
                 request_hash: request_hash.as_str(),
                 before_hash: preview.before_hash.as_str(),
@@ -229,8 +229,8 @@ pub(crate) async fn prepare_admin_action(
         action_type: input.action_type.as_str().to_string(),
         actor_pubkey: ctx.admin_pubkey.clone(),
         actor_role: ctx.role.clone(),
-        actor_province: province,
-        actor_city: ctx.admin_city.clone(),
+        actor_province_name: province,
+        actor_city_name: ctx.admin_city.clone(),
         auth_type: preview.auth_type.clone(),
         target: preview.target,
         payload_text,
@@ -392,8 +392,8 @@ pub(crate) async fn commit_admin_action(
                     action_type: action_type.as_str().to_string(),
                     actor_pubkey: ctx.admin_pubkey.clone(),
                     actor_role: ctx.role.clone(),
-                    actor_province: ctx.admin_province.clone().unwrap_or_default(),
-                    actor_city: ctx.admin_city.clone(),
+                    actor_province_name: ctx.admin_province.clone().unwrap_or_default(),
+                    actor_city_name: ctx.admin_city.clone(),
                     auth_type: current.auth_type.clone(),
                     target: current.target.clone(),
                     payload_hash: hash_json(&current.request_payload),
@@ -537,8 +537,8 @@ pub(crate) fn require_admin_security_grant(
         {
             return Err("http:forbidden:security grant owner mismatch".to_string());
         }
-        if grant.actor_province != ctx.admin_province.clone().unwrap_or_default()
-            || grant.actor_city.as_deref() != ctx.admin_city.as_deref()
+        if grant.actor_province_name != ctx.admin_province.clone().unwrap_or_default()
+            || grant.actor_city_name.as_deref() != ctx.admin_city.as_deref()
         {
             return Err("http:forbidden:security grant scope mismatch".to_string());
         }
@@ -822,7 +822,7 @@ fn require_manageable_federal_admin_conn(
     ctx: &AdminAuthContext,
     id: u64,
 ) -> Result<(AdminUser, String), String> {
-    let actor_province = ctx
+    let actor_province_name = ctx
         .admin_province
         .clone()
         .ok_or_else(|| "http:forbidden:admin province scope missing".to_string())?;
@@ -831,7 +831,7 @@ fn require_manageable_federal_admin_conn(
     let target_province =
         repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?
             .ok_or_else(|| "http:conflict:federal admin province missing".to_string())?;
-    if target_province != actor_province {
+    if target_province != actor_province_name {
         return Err("http:forbidden:cannot manage other province federal admins".to_string());
     }
     Ok((admin, target_province))

@@ -67,12 +67,14 @@ PQC/KEM 加密密钥:
 **未来 runtime 升级后(最终定稿 = 路线 A,无二选一):**
 - **不扩展 `MultiSignature`**(避免改 extrinsic 线格式和账户派生模型)。`MultiSignature` 是上游类型(`lib.rs:130/134`),加 ML-DSA 变体=改线格式≠setCode。
 - **链上授权 = General Transaction + 自定义 `GmbPqcAuth` TransactionExtension**(最终路线;**废弃"pqc_dispatch pallet call 作为主路径"的说法**)。
-  - `GmbPqcAuth` 放在**交易扩展流水线最前面**:验 PQC(ML-DSA-65)通过后,把这笔 General Transaction 的 origin **转成 `Signed(account)`**,后续 `CheckNonce`、`ChargeTransactionPayment` 等**走系统标准逻辑**(不自管 nonce/扣费)。
+  - `GmbPqcAuth` 放在**交易扩展流水线最前面**:验 PQC(ML-DSA-65)通过后,由 **`validate` 返回 `Signed(account)` origin**;后续 `CheckNonce`、`ChargeTransactionPayment` 等**走系统标准逻辑**(不自管 nonce/扣费)。`prepare` 只消费 `validate` 产出的 `Val` 做复核/预处理,**不得假设 `prepare` 能改 origin**。
   - 🔴 **tuple 12 上限约束(落地硬性)**:当前 `TxExtension` 已 **12 项**(`lib.rs:164-176`,Polkadot SDK tuple 实现上限也是 12)→ **不能加第 13 项**。用**嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 合成第一项**(占原 `AuthorizeCall` 槽位),outer 仍 12 项。
   - 🔴 **`GmbPqcAuth` 同时负责"已绑定账户拒 sr25519"**(读 `AccountPqcKey`+`PqcPolicy`):**不再单独加拒绝扩展**——既避免 tuple 超限,又因同一扩展天然不会误伤它自己授权过的 PQC 交易(无需额外 marker 防误伤)。
   - **PQC proof 放在扩展 `extra`**(不在 call 里):ML-DSA 签名 / 公钥(bootstrap)/ `auth_mode` / `key_version`;**签名 preimage 排除签名字节本身**;扩展校验 `call_hash == blake2_256(body.call)`,bootstrap 再校验 `pqc_pubkey_hash == blake2_256(body.pqc_pubkey)`。
+  - 🔴 **PQC 签名消息绑定实际后续扩展,不信任重复字段**:`GmbPqcAuth` 必须按当前 SDK 的 `inherited_implication` 风格,把 `call + extension_version + following extensions` 的编码哈希纳入 `GMB_PQC_TX_V1` / `GMB_PQC_BOOTSTRAP_V1` 签名消息;proof 里若重复携带 `nonce` / `tip` / `era_or_deadline`,必须逐字段等于实际 `CheckNonce` / `ChargeTransactionPayment` / `CheckEra` 的值。严禁出现"签名看到一套 nonce/tip/era,系统实际排队扣费用另一套"。
   - 🔴 **`GmbPqcAuth.extra` 必须有 `None`/`Disabled` 变体**:Phase A/B 的普通 sr25519 signed extrinsic **也会过这个扩展**(它在 tuple 里,每笔交易都过),`extra` 要能表达"本交易不是 PQC 授权"。形如 `extra = { None | Pqc{sig,auth_mode,key_version} | Bootstrap{pqc_pubkey,sig,bootstrap_sig,...} }`。
   - 🔴 **无 PQC proof 时透明放行,不得拒所有 General Transaction**:`extra=None` 且 call 是 runtime 支持的 authorized call 时,`GmbPqcAuth` 必须**原样把 origin 放行给后面的 `AuthorizeCall` 继续处理**(否则误伤现有 `#[pallet::authorize]` 机制);仅对 `extra=None` 的 **sr25519 signed origin** 才按 `PqcPolicy.reject_sr25519_when_bound` 做"已绑定拒 sr25519"判断。
+  - 🔴 **授权模式与 origin 必须互斥**:`extra=Pqc|Bootstrap` 只允许出现在 General Transaction 起点(`origin=None`)。若 sr25519 signed extrinsic 携带 `Pqc`/`Bootstrap` proof,直接判 `InvalidTransaction::BadSigner` 或 `BadProof`;若 General Transaction `extra=None`,只能走后续 `AuthorizeCall` 授权,不能伪装成 PQC 授权。
 - **`account-keys` pallet 只负责** `AccountPqcKey` / `PqcPolicy` 的**存储、查询、事件、密钥轮换**(及治理改 `PqcPolicy`);**不承载主交易派发**——真正业务 call 仍是原业务 call,由 `GmbPqcAuth` 授权后正常 dispatch。
 
 **无感绑定(bootstrap):** 链无法从 sr25519 地址推出 ML-DSA 公钥,需一次"链上知道该账户 PQC 公钥"。设计为**首次 PQC 交易自动绑定并执行**,用户无感:
@@ -81,7 +83,7 @@ PQC/KEM 加密密钥:
 3. 用户照常发起一笔交易。
 4. 若链上还没有该账户 PQC 公钥 → 客户端构造**首笔 bootstrap General Transaction**(`GmbPqcAuth` 扩展授权)。
 5. 冷/热钱包**一次确认**,内部同时生成:**sr25519 bootstrap 证明**(证"我是这个旧地址的主人")+ **ML-DSA 交易签名**(证"这个 PQC 公钥控制本次交易")。
-6. `GmbPqcAuth` 验序 `pqc_pubkey_hash → sr25519 bootstrap sig → ML-DSA tx sig` 通过 → 交易以 `Signed(account)` 进入 nonce/扣费/业务 dispatch;**绑定写入 `AccountPqcKey` 放在 `post_dispatch`**(此时 nonce 与扣费已跑过)。
+6. `GmbPqcAuth.validate` 验序 `pqc_pubkey_hash → sr25519 bootstrap sig → ML-DSA tx sig` 通过 → 返回 `Signed(account)` origin,交易进入 nonce/扣费/业务 dispatch;**绑定写入 `AccountPqcKey` 放在 `post_dispatch`**(此时 nonce 与扣费已跑过)。
 7. 后续交易只用 ML-DSA。
 
 > 对用户是"第一次升级后照常交易",不是"去绑定新账户"。桥**只用于未绑定账户首次进入 PQC**,非长期双轨。
@@ -128,17 +130,20 @@ PqcPolicy = {
 ## 5. 交易载荷(反重放域)
 
 **`GmbPqcAuth` 扩展 `extra`(`GMB_PQC_TX_V1`,普通 PQC 交易):**
-`genesis_hash`、`spec_version`、`transaction_version`、`ss58_format`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`sig_alg`、`key_version`、`auth_mode`。
+`genesis_hash`、`spec_version`、`transaction_version`、`ss58_format`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`sig_alg`、`key_version`、`auth_mode`、`following_extensions_hash`。
+`following_extensions_hash = blake2_256(SCALE(extension_version, call, following_extensions, following_implicits))`,口径对齐当前 `TransactionExtension` 的 `inherited_implication`;客户端签名前按 metadata 构造实际后续扩展,链端验签时按同一口径重算。
 > 🔴 **era / checkpoint 口径钉死**:**默认 immortal**(与当前 GMB sr25519 提交一致),`era_or_deadline = immortal`,链域绑定靠 `genesis_hash`,**不带 checkpoint block hash**。若改用 mortal era,payload **必须额外包含对应 mortal 锚点 checkpoint block hash**——二选一,不混用。
 
 **首笔 bootstrap 额外(`GMB_PQC_BOOTSTRAP_V1`,扩展 `extra`):**
-`genesis_hash`、**`spec_version`**(防跨升级重放)、`account`、`pqc_pubkey_hash`、`sig_alg`、`key_version`、`nonce`、`call_hash`。
-> 🔴 **首笔 bootstrap 的 extrinsic body 必须携带完整 ML-DSA 公钥(~1952B)**(链上还没有,要写入 `AccountPqcKey`)+ sr25519 bootstrap 签名(64B)+ ML-DSA 交易签名(~3309B);后续 `pqc_dispatch` 不带公钥(链端按 account 读)。这决定 §8 的 QR 最坏体积。
+`genesis_hash`、**`spec_version`**(防跨升级重放)、`account`、`pqc_pubkey_hash`、`sig_alg`、`key_version`、`nonce`、`call_hash`、`following_extensions_hash`。
+> 🔴 **首笔 bootstrap 的 extrinsic body 必须携带完整 ML-DSA 公钥(~1952B)**(链上还没有,要写入 `AccountPqcKey`)+ sr25519 bootstrap 签名(64B)+ ML-DSA 交易签名(~3309B);后续普通 PQC General Transaction 不带公钥(链端按 account 读)。这决定 §8 的 QR 最坏体积。
 
 **验签规则(顺序钉死):**
 - 🔴 **所有 hash 口径写死 `blake2_256`**(`call_hash` / `pqc_pubkey_hash` / challenge 一律 `blake2_256`,对齐链端 `sp_io::hashing::blake2_256`)。
 - 🔴 **bootstrap 首笔(顺序不可乱)**:① **先校验 `blake2_256(body.pqc_pubkey) == payload.pqc_pubkey_hash`**(确保 body 携带的公钥就是被签名承诺的那把)→ ② 验 sr25519 bootstrap challenge(证旧地址主人)→ ③ 验 ML-DSA 交易签名(用 body 里那把公钥)→ 全过才写 `AccountPqcKey` 并派发。
 - 普通 PQC 交易:`ml_dsa_signature` 验交易 payload,公钥从 `AccountPqcKey` 按 account 读(交易不带公钥)。
+- `GmbPqcAuth` 验签时必须重算并比对 `following_extensions_hash`;proof 内 `nonce` / `tip` / `era_or_deadline` 必须与实际后续扩展值一致。
+- `extra=Pqc|Bootstrap` 只允许 General Transaction 起点;sr25519 signed origin 携带 PQC proof 直接拒绝,避免双授权混搭。
 - `account` 必须 = sr25519 公钥派生出的当前 AccountId。
 - txpool 用 `(account, nonce)` 做 `provides` 防重复入池。
 - `GmbPqcAuth` 的 `validate` 轻量无副作用;**绑定写入 `AccountPqcKey` 在 `post_dispatch`**(nonce/扣费后);业务 call 正常 dispatch。
@@ -192,7 +197,7 @@ PqcPolicy = {
 
 1. ML-DSA-65 Rust crate 是否支持 no_std / WASM;runtime WASM 体积增量。
 2. 单次 ML-DSA 验签 weight;一个区块最多容多少次 PQC 验签。
-3. 🔴 **(硬闸门)验证路线 A `GmbPqcAuth` 落地机制**(路线已定 A,**不再二选一**):① `GmbPqcAuth` 在 `validate`/`prepare` 把 General Transaction origin 转成 `Signed(account)`,使其后 `CheckNonce`/`ChargeTransactionPayment` 正常生效;② **嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 作第一项能编译且按序执行**(outer 仍 12 项);③ 绑定写入放 `post_dispatch` 可行;④ txpool `provides=(account,nonce)`。**确认这套机制在当前 SDK 版本可行**(若 origin 转换受限,退而在 `GmbPqcAuth` 内自管 nonce/扣费,但路线仍是单一扩展授权,**不回退到 pallet call 主路径**)。
+3. 🔴 **(硬闸门)验证路线 A `GmbPqcAuth` 落地机制**(路线已定 A,**不再二选一**):① `GmbPqcAuth.validate` 把 General Transaction origin 转成 `Signed(account)`,使其后 `CheckNonce`/`ChargeTransactionPayment` 正常生效,`prepare` 不负责改 origin;② **嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 作第一项能编译且按序执行**(outer 仍 12 项);③ 绑定写入放 `post_dispatch` 可行;④ txpool `provides=(account,nonce)`;⑤ `following_extensions_hash` 绑定实际后续扩展,`extra=Pqc|Bootstrap` 与 sr25519 signed origin 互斥。**确认这套机制在当前 SDK 版本可行**(若 origin 转换受限,退而在 `GmbPqcAuth` 内自管 nonce/扣费,但路线仍是单一扩展授权,**不回退到 pallet call 主路径**)。
 4. QR 分片真机稳定:按 bootstrap 最坏体积(sr25519 64B + ML-DSA 签名 ~3309B + ML-DSA 公钥 ~1952B + call,hex 翻倍 ≈10KB+)。
 5. ML-DSA WASM 验签不可接受时再评估 host function;但 host function = 节点二进制边界变化,**不再是纯 setCode**(要 fork `ChinaNation/ss58-2027-fix`)。
 
@@ -204,7 +209,8 @@ PqcPolicy = {
 - 已绑定账户普通 sr25519 用户交易按策略被拒。
 - 冷钱包离线扫码完成 bootstrap + PQC 签名(含分片)。
 - SFID/CPMS 验证同一地址下不同 `sig_alg` 的签名,且 ML-DSA 签名经**权威绑定来源**(链上 `AccountPqcKey`/状态证明)证明归属于原地址,非仅"某公钥签了"。
-- `GmbPqcAuth` 把 PQC General Transaction 转 `Signed(account)` 后 `CheckNonce`/`ChargeTransactionPayment` **真实跑通**;**嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 编译 + 按序执行**(outer 仍 12 项);bootstrap 绑定在 `post_dispatch`。
+- `GmbPqcAuth.validate` 把 PQC General Transaction 转 `Signed(account)` 后 `CheckNonce`/`ChargeTransactionPayment` **真实跑通**;**嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 编译 + 按序执行**(outer 仍 12 项);bootstrap 绑定在 `post_dispatch`。
+- PQC 签名消息绑定 `following_extensions_hash`;proof 内 `nonce`/`tip`/`era` 与实际后续扩展值不一致时拒绝;sr25519 signed extrinsic 携带 `Pqc|Bootstrap` proof 时拒绝。
 - `GmbPqcAuth.extra=None` 时:已适配新 metadata 的 sr25519 客户端正常发交易;**非 PQC 的 authorized general call 透明放行给 `AuthorizeCall`**(现有 `#[pallet::authorize]` 机制不被误伤)。
 - bootstrap 绑定 + 内层 call 失败语义按定稿口径(绑定保留 / 内层失败收费)一致;Phase D 收紧前已定稿截止块高 / 公告周期 / 冻结恢复 / 线下流程。
 - 全仓 PQC 表述以本 ADR 为唯一真源;残留旧路线(单独绑定步 / per-account 状态切换 / 共识造新链)一律按本 ADR 收敛清理;真实运行态验收(非仅编译/单测)。

@@ -41,20 +41,20 @@ pub(crate) async fn list_city_admins(
     }
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let offset = query.offset.unwrap_or(0);
-    let actor_province = ctx.admin_province.clone();
-    let actor_city = if ctx.role == AdminRole::CityAdmin {
+    let actor_province_name = ctx.admin_province.clone();
+    let actor_city_name = if ctx.role == AdminRole::CityAdmin {
         ctx.admin_city.clone()
     } else {
         None
     };
     let result = state.db.with_client(move |conn| {
-        let province = actor_province
+        let province = actor_province_name
             .as_deref()
             .ok_or_else(|| "admin province scope missing".to_string())?;
         let (total, admins) = repo::list_city_admins_by_scope_conn(
             conn,
             province,
-            actor_city.as_deref(),
+            actor_city_name.as_deref(),
             limit,
             offset,
         )?;
@@ -87,13 +87,13 @@ pub(crate) async fn list_city_admins(
 pub(crate) fn can_manage_city_admin_conn(
     conn: &mut Client,
     actor_pubkey: &str,
-    actor_province: Option<&str>,
+    actor_province_name: Option<&str>,
     city_admin: &AdminUser,
 ) -> Result<bool, String> {
     if same_admin_pubkey(city_admin.created_by.as_str(), actor_pubkey) {
         return Ok(true);
     }
-    let Some(scope) = actor_province else {
+    let Some(scope) = actor_province_name else {
         return Ok(false);
     };
     let city_admin_scope =

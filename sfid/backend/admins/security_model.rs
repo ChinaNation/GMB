@@ -54,9 +54,9 @@ pub(crate) struct AdminActionChallenge {
     pub(crate) action_type: String,
     pub(crate) actor_pubkey: String,
     pub(crate) actor_role: AdminRole,
-    pub(crate) actor_province: String,
+    pub(crate) actor_province_name: String,
     #[serde(default)]
-    pub(crate) actor_city: Option<String>,
+    pub(crate) actor_city_name: Option<String>,
     pub(crate) auth_type: AdminOperationAuth,
     pub(crate) target: String,
     pub(crate) payload_text: String,
@@ -77,9 +77,9 @@ pub(crate) struct AdminSecurityGrant {
     pub(crate) action_type: String,
     pub(crate) actor_pubkey: String,
     pub(crate) actor_role: AdminRole,
-    pub(crate) actor_province: String,
+    pub(crate) actor_province_name: String,
     #[serde(default)]
-    pub(crate) actor_city: Option<String>,
+    pub(crate) actor_city_name: Option<String>,
     pub(crate) auth_type: AdminOperationAuth,
     pub(crate) target: String,
     pub(crate) payload_hash: String,
