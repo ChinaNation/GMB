@@ -1,39 +1,47 @@
-# PQC card2:链端 account-keys + pqc_dispatch + bootstrap 绑定 + 验签器 + seal
+# PQC card2:链端 GmbPqcAuth 扩展授权 + account-keys(存储/策略) + bootstrap + 验签器 + seal
 
 关联决策:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`(§3/§4/§5/§6)
-状态:open(依赖 card1 `gmb-pqc`)
+状态:open(依赖 card1 gmb-pqc + spike 确认 GmbPqcAuth 机制)
 
 任务需求:
-**活链 runtime 升级**在位支持 PQC 签名,账户地址/余额/权限/治理身份不变:
-1. **新增 `account-keys` pallet(idx=27)**:
-   - storage `AccountPqcKey[AccountId] = {alg:0x02, key_version:u32, pubkey:BoundedVec(~1952B), bound_at, bootstrap_mode}`(存完整公钥)。
-   - **`pqc_dispatch`**(general-tx + `#[pallet::authorize]`):从 `AccountPqcKey` 按 AccountId 读 ML-DSA 公钥 → `verify_ml_dsa_65` → 以 `RawOrigin::Signed(account)` 派发内层 call;**费用从 account 扣;nonce 用 `frame_system::AccountInfo.nonce`**(不另造)。
-   - **`bootstrap_pqc_dispatch`**(未绑定账户首次,无感桥):验 ① sr25519 bootstrap challenge(证旧地址主人)+ ② ML-DSA 交易签名 → 写 `AccountPqcKey` → **立即派发内层 call**;已绑定**拒绝**再次 sr25519 覆盖(first-bind-wins)。
-   - **绝不扩 `MultiSignature`**(C1)。
-2. **payload 反重放域**:`GMB_PQC_TX_V1`(genesis/spec_version/tx_version/ss58/account/nonce/era/tip/call_hash/sig_alg/key_version/auth_mode)、`GMB_PQC_BOOTSTRAP_V1`(+ spec_version 防跨升级重放、pqc_pubkey_hash);txpool `provides=(account,nonce)`;`validate_unsigned`/authorize 轻量无副作用,写 storage+派发在执行阶段。
-3. **阶段策略 A/B/C/D**:B 预埋(sr25519+PQC 并存)→ C(已绑定只收 ML-DSA,未绑定 bootstrap 后转)→ D 收紧(长期未绑定治理处理 + 已绑定拒 sr25519)。🔴 **bootstrap 窗口必须在 sr25519 被量子破前关闭**(治理硬截止;bootstrap 强度=sr25519)。
-4. **5 个 SFID/机构验签器 algo-tag 路由**:`configs/mod.rs:781/890/961/1037` + organization-manage → `verify_by_algo`。
-5. 省级签名库 `ShengSigningPubkey`/`ShengAdmins` `[u8;32]`→`BoundedVec`。
-6. offchain L3/批量(`settlement.rs:172`/`lib.rs:649`):废弃 `sr25519_pubkey_from_account` 改查 account-keys;`MaxBatchSignatureLength` 放宽。
-7. **seal 共识签名 ML-DSA-65**(`service.rs:276-287`/`93-143`/`162-166`)随 PQC 二进制本链落地;`blake2_256` PoW 不动。
+**活链 runtime 升级**在位支持 PQC 签名(地址/余额/权限/治理身份不变),路线 A 定稿:
+1. **链上授权 = General Transaction + 自定义 `GmbPqcAuth` TransactionExtension(无 pqc_dispatch pallet call 主路径)**:
+   - `GmbPqcAuth` 放扩展流水线**最前**:验 ML-DSA-65 → 把 origin 转 `Signed(account)` → 后续 `CheckNonce`/`ChargeTransactionPayment` 走系统标准逻辑(不自管 nonce/扣费)。
+   - 🔴 **tuple 12 上限**:`TxExtension` 已 12 项(`lib.rs:164-176`,SDK 上限 12)→ 用**嵌套 `(GmbPqcAuth, AuthorizeCall)` 占第一项槽位**,**不加第 13 项**。
+   - **PQC proof 放扩展 `extra`**(非 call):ML-DSA 签名/公钥(bootstrap)/`auth_mode`/`key_version`;**签名 preimage 排除签名字节**;校验 `call_hash==blake2_256(body.call)`,bootstrap 再 `pqc_pubkey_hash==blake2_256(body.pqc_pubkey)`。
+   - **`GmbPqcAuth` 同时负责"已绑定拒 sr25519"**(读 `AccountPqcKey`+`PqcPolicy.reject_sr25519_when_bound`),**不单独加扩展**(同扩展不误伤自己授权的 PQC 交易)。
+   - 🔴 **`extra` 必有 `None` 变体**(`{None|Pqc|Bootstrap}`):Phase A/B 普通 sr25519 交易也过此扩展;`extra=None` 时**透明放行**给 `AuthorizeCall`(非 PQC 的 authorized general call 不被误伤),仅对 `extra=None` 的 sr25519 signed origin 才判 `reject_sr25519_when_bound`。🔴 注:加 `GmbPqcAuth` 改了 signed-extra/metadata 格式,未适配新 metadata 的旧客户端本就发不了交易(非误拒);"不误拒"指仍用 sr25519 但已适配新 extra(`None`)的客户端。
+2. **`account-keys` pallet(idx=27)只承载 存储/策略/查询/事件/轮换,不承载主交易派发**:
+   - `AccountPqcKey[AccountId]{alg:0x02,key_version,pubkey:BoundedVec(完整~1952B),bound_at,bootstrap_mode}`。
+   - `PqcPolicy{phase,bootstrap_deadline:Option<BlockNumber>,reject_sr25519_when_bound,allow_bootstrap_unbound}`,治理写、客户端读;🔴 **首次升级默认安全**:`phase=B`/`reject_sr25519_when_bound=false`/`allow_bootstrap_unbound=true`/`deadline=None`。
+   - 密钥轮换 call:当前有效 PQC 私钥授权 + `key_version++`。
+3. **bootstrap 首笔(无感)**:`GmbPqcAuth` 验序 ① `blake2_256(body.pqc_pubkey)==payload.pqc_pubkey_hash` → ② sr25519 bootstrap challenge(证旧地址主人)→ ③ ML-DSA 交易签名 → origin 转 `Signed(account)` → nonce/扣费/业务 dispatch;🔴 **绑定写入 `AccountPqcKey` 放 `post_dispatch`**(nonce/扣费已跑),**即使内层业务 call 失败绑定仍保留、内层失败照常收费**;已绑定**拒**再次 sr25519 覆盖(first-bind-wins)。
+4. **payload 反重放**:`GMB_PQC_TX_V1` / `GMB_PQC_BOOTSTRAP_V1`(+spec_version);🔴 **hash 全 `blake2_256`**;🔴 **era 默认 immortal**(链域靠 genesis_hash,不带 checkpoint;若 mortal 则必含 checkpoint block hash,二选一不混用);txpool `provides=(account,nonce)`。
+5. **5 个 SFID/机构验签器 algo-tag 路由**(`configs/mod.rs:781/890/961/1037` + organization-manage)→ `verify_by_algo`。
+6. 省级签名库 `ShengSigningPubkey`/`ShengAdmins` `[u8;32]`→`BoundedVec`。
+7. offchain L3/批量(`settlement.rs:172`/`lib.rs:649`):废弃 `sr25519_pubkey_from_account` 改查 account-keys;`MaxBatchSignatureLength` 放宽。
+8. **seal 共识签名 ML-DSA-65**(`service.rs:276-287`/`93-143`/`162-166`)随 PQC 二进制本链落地;`blake2_256` PoW 不动。
 
 所属模块:Blockchain(runtime + node 共识)
 
 输入文档:
 - memory/04-decisions/ADR-022-unified-pqc-crypto.md
-- memory/07-ai/unified-protocols.md(pqc_dispatch / bootstrap / AccountPqcKey 协议登记)
+- memory/07-ai/unified-protocols.md(GmbPqcAuth / bootstrap / AccountPqcKey / PqcPolicy 登记)
 - citizenchain 模块完成标准
 
 必须遵守:
 - 绝不扩 MultiSignature;AccountId 永远 sr25519 锚点(四不变)。
-- bootstrap 只用于未绑定账户首次进 PQC,**非长期双轨**。
-- **spike 前置**:authorize 须在收费前产 signed origin;`frame_system::AccountInfo.nonce` 在 general-tx authorize 复用是否可原子读/写且与 txpool 一致——不过就回退专用 nonce。
+- 授权唯一走 `GmbPqcAuth` 扩展;account-keys **不承载主交易派发**。
+- bootstrap 只用于未绑定账户首次进 PQC,非长期双轨;绑定写 `post_dispatch`。
+- 嵌套 tuple 不超 12 项;hash 全 blake2_256;PqcPolicy 安全默认。
 - DB/storage 列宽核对 ML-DSA 大密钥。
+- **依赖 card1 spike 确认 GmbPqcAuth 机制**(origin 转换 + 嵌套 tuple + post_dispatch)在当前 SDK 可行。
 
 输出物:
-- account-keys pallet(pqc_dispatch + bootstrap_pqc_dispatch)+ 验签器改造 + node seal + 中文注释 + 单测(`src/tests/{mod,cases}.rs`:bootstrap 双签成功/拒绝、已绑定拒覆盖、pqc_dispatch 授权、nonce 防重放、5 验签器分流、seal)+ benchmark + 文档
+- `GmbPqcAuth` 扩展 + account-keys(storage/policy/rotation)+ 验签器改造 + node seal + 中文注释 + 单测(bootstrap 验序成功/拒绝、已绑定拒覆盖、拒 sr25519 不误伤 PQC、origin 转换+nonce/扣费、post_dispatch 绑定、5 验签器、seal)+ benchmark + 文档
 
 验收标准:
-- 未绑定账户首次 **bootstrap + execute** 成功;已绑定后续 ML-DSA 成功;已绑定普通 sr25519 用户交易按策略被拒。
+- 未绑定首次 bootstrap+execute 成功(绑定 `post_dispatch`,内层失败绑定仍留);已绑定后续 PQC 成功;已绑定 sr25519 用户交易被 `GmbPqcAuth` 拒、PQC 交易不误伤。
+- 嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 编译+按序执行;`CheckNonce`/`ChargeTransactionPayment` 真实生效。
 - 5 验签器 algo-tag 分流;`ShengSigningPubkey` 容纳 ML-DSA;seal=ML-DSA-65 出块/验块通过。
-- 残留 sr25519 验签/`sr25519_pubkey_from_account` 假设清零;全 pallet 单测绿 + benchmark;真实运行态出块验收。
+- 残留 sr25519 验签/`sr25519_pubkey_from_account` 假设清零;全 pallet 单测绿+benchmark;真实运行态出块验收。

@@ -25,7 +25,8 @@ SFID 后端自身签名密钥(非用户钱包)迁 ML-DSA-65 + KDF 收敛:
 必须遵守:
 - SFID 不托管用户钱包私钥(边界铁律)。
 - 密钥隔离:SFID MAIN 独立密钥域,不走 AccountSeedV1。
-- 不搞兼容双轨;algo tag 统一升级,旧 sr25519 路径收敛。
+- 不搞兼容双轨;algo tag 统一升级。**当前固定 sr25519 是 Phase A 真相不是旧残留**:`wallet_sig_alg=='sr25519'` 硬编码等改成"Phase A 只收 sr25519 → PQC 阶段按 ADR-022 分流",不要简单删除。
+- 🔴 **验用户钱包 ML-DSA 签名需归属来源(P0)**:`ml-dsa-65` 时 wallet_pubkey 不能反推 wallet_address,验签须另查链上 `AccountPqcKey[wallet_address]` / 状态证明,或 bootstrap 前拒绝 ML-DSA 钱包签名——不能只验"某公钥签了"。
 - 改协议字段前先更 unified-protocols 登记。
 
 输出物:

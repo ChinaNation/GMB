@@ -22,7 +22,8 @@ CPMS 后端自身档案签名密钥迁 ML-DSA-65 + 静态 KDF 收敛 + 放开钱
 必须遵守:
 - CPMS 不托管用户钱包私钥(只记录地址/公钥)。
 - 密钥隔离:CPMS-ARCHIVE 独立 OsRng 密钥域,不走 AccountSeedV1。
-- 不搞兼容双轨;wallet_sig_alg 写入 / 校验同步放开,零遗漏。
+- 不搞兼容双轨;wallet_sig_alg 写入 / 校验同步放开,零遗漏。**当前固定 sr25519 是 Phase A 真相不是旧残留**,改成"Phase A 只收 sr25519 → PQC 阶段按 ADR-022 分流",不要简单删除。
+- 🔴 **验用户钱包 ML-DSA 签名需归属来源(P0)**:`ml-dsa-65` 时 wallet_pubkey 不能反推 wallet_address,验签须另查链上 `AccountPqcKey[wallet_address]` / 状态证明,或 bootstrap 前拒绝 ML-DSA 钱包签名。
 - 协议串 / AAD 升版本号区分新旧载荷。
 
 输出物:

@@ -10,10 +10,12 @@
    - **ML-DSA-65 签名**:`HKDF-SHA512(AccountSeedV1, "GMB/account/ml-dsa-65/v1")` → 确定性 keygen。
    - **ML-KEM-768 加密**:`HKDF-SHA512(AccountSeedV1, "GMB/account/ml-kem-768/v1")`。
    - 冷热**逐字一致**;`wallet_manager.dart:541-555`(热)/`:398-417`(冷)。
+   - **KDF 精确口径(ADR-022 §2)**:HKDF-Extract salt=空、info=ASCII 无 null、ML-DSA L=32 / ML-KEM L=64;**钉 golden vector**(助记词→sr25519 地址+ML-DSA 公钥+ML-KEM 公钥)冷热前后端逐字节一致。
+   - **era 口径**:默认 immortal(链域靠 genesis_hash,不带 checkpoint);若 mortal 则 payload 必含 checkpoint block hash,二选一不混用。
 2. **Rust FFI(gmb-pqc)**:`ml_dsa65_public_from_seed`、`ml_dsa65_sign`。
-3. **查 runtime 签名策略分流**:`Sr25519Only`→普通 sr25519 extrinsic;`PqcPrepared/PqcPrimary`→`pqc_dispatch`;**账户未绑定**→`bootstrap_pqc_dispatch`(同一确认动作同时出 sr25519 bootstrap 签名 + ML-DSA 交易签名)。
-4. extrinsic 走 pqc_dispatch:`signed_extrinsic_builder.dart:103/186`(原 `SignatureType.sr25519`,PQC 路径不再走 MultiSignature)。
-5. **QR 升级**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `payload_hash` + **`chunk_index/chunk_total` 分片**。🔴 最坏体积按 bootstrap(sr25519 64B + ML-DSA ~3.3KB)实测,不能假设单张 QR 稳定可扫;改 `sign_request_body.dart:40` + `sign_response_body.dart:36` + `qr_signer.dart:118/:134-151` + wuminapp 镜像(四处+,漏一处冷热口径裂)。
+3. **查 `PqcPolicy` 分流**:`Sr25519Only`→普通 sr25519 extrinsic;`PqcPrepared/PqcPrimary`→ PQC General Transaction(`GmbPqcAuth` 扩展授权);**账户未绑定**→首笔 bootstrap(同一确认动作同时出 sr25519 bootstrap 签名 + ML-DSA 交易签名 + 携带 ML-DSA 公钥)。
+4. PQC 交易走 **General Transaction(`GmbPqcAuth` 扩展授权)**:`signed_extrinsic_builder.dart:103/186`(原 `SignatureType.sr25519`)新增 general-tx 构造,PQC proof(ML-DSA 签名/公钥/auth_mode/key_version)入扩展 `extra`,**不走 MultiSignature、不走 pqc_dispatch pallet call**。
+5. **QR 升级**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `payload_hash` + **`chunk_index/chunk_total` 分片**。🔴 最坏体积按 bootstrap(sr25519 签名 64B + ML-DSA 签名 ~3309B + **ML-DSA 公钥 ~1952B** + call,hex 翻倍 ≈10KB+)真机实测,不能假设单张 QR 稳定可扫;改 `sign_request_body.dart:40` + `sign_response_body.dart:36` + `qr_signer.dart:118/:134-151` + wuminapp 镜像(四处+,漏一处冷热口径裂)。**注意:`wuminapp/.../sign_request_body.dart:37`、`wumin/.../sign_request_body.dart:40` 当前硬拒非 sr25519 是 Phase A 真相,改成"Phase A 只收 sr25519 → 分流",不要简单删除。**
 6. UI **不展示** PQC 公钥/绑定过程/换账户;交易记录按原地址归集;同助记词恢复同地址 + 同 PQC 密钥(确定性)。
 
 所属模块:Mobile(wuminapp 热钱包 + wumin 冷钱包)
