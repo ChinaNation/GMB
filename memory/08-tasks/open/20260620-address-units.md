@@ -44,6 +44,9 @@
 - 154 条地址段名称中的组织或管理机构词已清理;`社区` 作为合法地址段保留。
 - 568 条 `xx虚拟路` 已归一为 `xx`;3 条纯 `虚拟路` 已删除,其中 2 条对应的功能区壳镇同步删除。
 - 46 条原始名含 `社区` 的纯功能词地址段已恢复为 `xx社区`;26 条 `LOCAL-*` 来源的 `xx虚拟路` 合成占位地址段已删除,同步删除因此空掉的 24 个镇并重排受影响市的镇 code。
+- 2026-06-20:已基于当前 `china.sqlite` 重新生成 `wuminapp/assets/admin_divisions/`,manifest `version=1`,43 省、2872 市、39227 镇,`china_sqlite_sha256=c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb`。
+- 2026-06-20:已执行 SFID 公权机构运行库对账和 strict check;首次全量同步为 `scopes=43 inserted=55354 updated=190362 account_inserted=491475 removed=58281`,本轮复跑为 `scopes=0 inserted=0 updated=0 account_inserted=0 removed=0`;最终 strict 为 `ok=true manifest_current=true target_count=245716 active_count=245716 missing=0 mismatched=0 missing_accounts=0 obsolete=0 catalog_hash=499c1ee8af974f0a79affe6731883d491052da1767f4a99ae072ff29c1f42ea6`。
+- 2026-06-20:已通过当前 SFID 真实公开接口重新生成 `wuminapp/assets/public_institutions/`,manifest `version=1`,43 省,共 245716 条公民端公权机构,包含 `CITY_POLICE=2872`、`CITY_EDU=2872`、`JY=2873`、`PUBLIC_SECURITY=2872`;资产包 code 交叉检查 `bad_count=0`。
 - `cargo fmt --manifest-path cpms/backend/Cargo.toml`:完成。
 - `cargo check --manifest-path cpms/backend/Cargo.toml`:通过。
 - `cargo test --manifest-path cpms/backend/Cargo.toml`:32 passed。

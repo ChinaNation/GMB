@@ -74,11 +74,8 @@
 - 2026-06-18:修正任务卡文件名为短 slug `20260618-version-reset-v1.md`。
 - 2026-06-19:自有软件包版本恢复到 `1.0.0` / `1.0.0+1`;第三方依赖、vendored smoldot/libp2p/GRANDPA 版本不纳入本次恢复范围。
 - 2026-06-19:`sfid/backend/china/china.sqlite` 重新创世基线恢复为行政区版本 1;`admin_division_change_log` 已清空,`admin_division_versions` 仅保留版本 1。
-- 2026-06-19:重新生成 `wuminapp/assets/admin_divisions/` 行政区包,manifest `version=1`,省 43、市 2938、镇 39728,SQLite SHA-256 为 `4f3313749fc5703cea5c2de60a2e4a26ed9c080ef2100b4f7b0773b29a502087`。
-- 2026-06-19:执行 SFID 公权机构运行库 reconcile:`scopes=43 inserted=12332 updated=237011 account_inserted=498729 removed=12398`。
-- 2026-06-19:执行 SFID 公权机构严格校验:`ok=true manifest_current=true target_count=249343 active_count=249343 missing=0 mismatched=0 missing_accounts=0 obsolete=0 catalog_hash=99c392297706637e8cec1826ca4c517eeadab7039f072498bdbb484d94580ea5`。
-- 2026-06-19:后续任务 `20260619-wuminapp-public-all-gov` 已把 `wuminapp/assets/public_institutions/` 修正为完整公权目录,manifest `version=1`,43 省,共 249343 条公民端公权机构。
-- 2026-06-19:公民端完整公权目录包含 `CITY_POLICE=2938`、`JY=2939`、`PROVINCE_RESERVE_BANK=43`,与 `check-gov --strict` 的 `target_count=249343` 对齐。
+- 2026-06-19:曾重新生成行政区包并执行 SFID 公权机构 reconcile/strict;该批统计已在 2026-06-20 行政区重新创世清理后作废,不再作为当前验收口径。
+- 2026-06-20:后续行政区重新创世清理再次覆盖本任务资产包结果:当前 wuminapp 行政区包为 43 省、2872 市、39227 镇;当前 SFID 公权机构 strict check 为 `target_count=245716 active_count=245716 missing=0 mismatched=0 missing_accounts=0 obsolete=0`;当前 wuminapp 公权机构包为 43 省、245716 条,包含 `CITY_POLICE=2872`、`JY=2873`,code 交叉检查 `bad_count=0`。
 
 ## 验收记录
 
@@ -91,7 +88,7 @@
 - `npm run build` in `website`:通过,`website@1.0.0`。
 - `flutter test test/citizen/public/admin_division_test.dart test/citizen/public/public_institution_bundle_loader_test.dart test/citizen/public/public_provinces_test.dart`:通过。
 - `scripts/check-chainspec-frozen.sh`:通过,wuminapp chainspec 创世部分等于链端 SSOT。
-- SFID 真实 HTTP 接口 `GET /api/v1/app/public-institutions/version?province=伊犁省`:返回 `count=1687`,manifest_version 与公开包伊犁省分片一致。
-- 后续任务 `20260619-wuminapp-public-all-gov` 已重新执行公权机构资产包 code 交叉检查:249343 条记录的省、市、镇 code 均能在行政区包中定位,`bad_count=0`。
+- SFID 真实 HTTP 接口 `GET /api/v1/app/public-institutions?province=伊犁省&page_size=1`:返回 `catalog_status=OK`,manifest_version 与公开包伊犁省分片一致。
+- 2026-06-20 当前资产包已再次重生成,以 245716 条记录和 `bad_count=0` 为当前验收口径。
 - `git diff --check`:通过。
 - 残留扫描:自有配置未再命中 `0.1.0` / `0.0.0` / 旧行政区版本号;剩余 `0.1.0` 命中均为第三方 Cargo/npm 依赖,剩余 `TS` 命中均为 TypeScript 文义。

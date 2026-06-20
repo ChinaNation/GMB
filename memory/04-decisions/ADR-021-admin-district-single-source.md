@@ -71,23 +71,26 @@ town_tombstones: 0
 - 河南 `人和市` 对应现实平顶山市石龙区,用于避让广东 `石龙市`;广东 `石龙市` 保留,全国仅一个 `石龙市`。
 - 海南儋州区域收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
 - 本轮已清理已确认的截断名、`县市` 后缀名、跨省错挂名、重复壳和伪镇,并按重新创世重排市镇 code。最终审计发现的 42 个镇级伪行政区已删除,同步删除其下 235 条地址段;镇级伪行政区关键词命中归零。
-- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-19 东莞拆分后曾重新生成行政区包、公权机构运行库和 wuminapp 公权机构包。随后的行政区名称归属清理只更新 `china.sqlite`,未重新生成数据包和公权机构。
+- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-20 已按当前 `china.sqlite` 重新生成 wuminapp 行政区包、执行 SFID 公权机构运行库对账和 strict check,并通过当前 SFID 真实公开接口重新生成 wuminapp 公权机构包。
 - 镇下第四层已迁移为 `address_units`;其中 535084 条补齐 2023 统计局镜像来源码和原始基层组织名,系统名保留地址段核心,例如 `xx办事处社区 -> xx社区`、`xx管委会路 -> xx路`。2026-06-20 已删除无公开源且无镇/地址段的原金门市,补齐 10 个非港澳台空地址段市,并为 160 个高置信市补齐 19226 条 `source_code/raw_name`;随后按用户确认合并原 `HN/006 天涯市` 到崖州市,并补齐崖州区 33 条来源码。剩余无法高置信绑定官方统计局来源的地址段已补入本地稳定来源码 `LOCAL-省市镇-地址段ID`,已有地址段 `source_code` 空值归零。最终审计已重排福建、海南删除/合并后的市 code 空洞,删除 42 个镇级伪行政区及其下 235 条地址段,清理 154 条地址段名称中的组织或管理机构词,将 568 条 `xx虚拟路` 归一为 `xx`,并删除 3 条纯 `虚拟路` 及其中 2 个功能区壳镇。随后对纯功能词地址段做二次收口:46 条原始名含 `社区` 的 `开发区/新区/农场/工业园` 等地址段恢复为 `xx社区`,26 条 `LOCAL-*` 来源的 `xx虚拟路` 合成占位地址段删除,同步删除因此空掉的 24 个镇并重排受影响市的镇 code。`raw_name` 保留原始来源名称用于审计,不作为前端展示名。当前 `FJ/043` 为 `石狮市`,当前 `HN/006` 为 `崖州市`;`LN/001`、`LN/002`、`LN/003`、`LN/004` 与 5 个台湾同名自建市当前无地址段行,按港澳台豁免不产生地址段来源码。
 
-东莞拆分后历史发布验收:
+当前发布验收:
 
 ```text
 china.sqlite sha256:
-  fe44d1d449ec0646a676ed05d2b135dc2aea7f92fb3b0e9aa48f8a871e3b4612
+  c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb
+admin_divisions bundle:
+  version=1 provinces=43 cities=2872 towns=39227
 gov reconcile:
-  scopes=43 inserted=3543 updated=245100 account_inserted=497329 removed=4243
+  scopes=43 inserted=55354 updated=190362 account_inserted=491475 removed=58281
 gov strict:
-  ok=true manifest_current=true target_count=248643 active_count=248643
+  ok=true manifest_current=true target_count=245716 active_count=245716
   missing=0 mismatched=0 missing_accounts=0 obsolete=0
-  catalog_hash=856b48488086cabda027d16d47df352642377c31c41aeabcf927caa8187758ac
-public_institutions bundle(东莞拆分后结果;行政区名称归属清理后未重新生成):
-  version=1 provinces=43 total=248643
-  公民端完整公权目录包含 CITY_POLICE=2898、CITY_EDU=2898、NATIONAL_EDU=1、PROVINCE_RESERVE_BANK=43。
+  catalog_hash=499c1ee8af974f0a79affe6731883d491052da1767f4a99ae072ff29c1f42ea6
+public_institutions bundle:
+  version=1 provinces=43 total=245716 YL=1697
+  CITY_POLICE=2872 CITY_EDU=2872 JY=2873 PUBLIC_SECURITY=2872
+  code cross-check bad_count=0
 ```
 
 ## 发布流程
