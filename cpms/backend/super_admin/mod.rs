@@ -413,7 +413,7 @@ async fn update_archive_citizen_status(
     dangan::validate_citizen_status(&req.citizen_status)?;
 
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, birth_province_code, birth_city_code, birth_town_code, COALESCE(election_scope_level,'PROVINCE') AS election_scope_level, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(address_unit_id,'') AS address_unit_id, COALESCE(address_unit_name_snapshot,'') AS address_unit_name_snapshot, COALESCE(address_detail,'') AS address_detail, COALESCE(address_full_snapshot,'') AS address_full_snapshot, birth_province_code, birth_city_code, birth_town_code, COALESCE(election_scope_level,'PROVINCE') AS election_scope_level, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )
@@ -441,8 +441,12 @@ async fn update_archive_citizen_status(
         height_cm: row.get("height_cm"),
         passport_no: row.get("passport_no"),
         town_code: row.try_get("town_code").unwrap_or_default(),
-        village_id: row.try_get("village_id").unwrap_or_default(),
-        address: row.try_get("address").unwrap_or_default(),
+        address_unit_id: row.try_get("address_unit_id").unwrap_or_default(),
+        address_unit_name_snapshot: row
+            .try_get("address_unit_name_snapshot")
+            .unwrap_or_default(),
+        address_detail: row.try_get("address_detail").unwrap_or_default(),
+        address_full_snapshot: row.try_get("address_full_snapshot").unwrap_or_default(),
         birth_province_code: row.try_get("birth_province_code").unwrap_or_default(),
         birth_city_code: row.try_get("birth_city_code").unwrap_or_default(),
         birth_town_code: row.try_get("birth_town_code").unwrap_or_default(),

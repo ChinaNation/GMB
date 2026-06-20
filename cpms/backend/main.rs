@@ -53,7 +53,7 @@ async fn main() {
         .await
         .expect("CPMS secret encryption config invalid");
 
-    // 中文注释：已初始化实例启动时按安装码所属市重建地址表，避免旧硬编码镇村残留。
+    // 中文注释：已初始化实例启动时按安装码所属市重建地址表，避免旧硬编码地址数据残留。
     address::sync_installed_city_address(&db)
         .await
         .expect("sync installed city address failed");

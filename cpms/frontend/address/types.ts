@@ -15,8 +15,8 @@ export interface Town {
   town_name: string;
 }
 
-export interface Village {
-  village_id: string;
+export interface AddressUnit {
+  address_unit_id: string;
   town_code: string;
-  village_name: string;
+  address_unit_name: string;
 }

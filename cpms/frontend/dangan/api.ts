@@ -11,7 +11,7 @@ export interface ArchiveListParams {
   search?: string;
   birth_date?: string;
   town_code?: string;
-  village_id?: string;
+  address_unit_id?: string;
   citizen_status?: string;
 }
 
@@ -30,7 +30,7 @@ export const listArchives = (params?: ArchiveListParams) => {
   if (params?.search) qs.set('search', params.search);
   if (params?.birth_date) qs.set('birth_date', params.birth_date);
   if (params?.town_code) qs.set('town_code', params.town_code);
-  if (params?.village_id) qs.set('village_id', params.village_id);
+  if (params?.address_unit_id) qs.set('address_unit_id', params.address_unit_id);
   if (params?.citizen_status) qs.set('citizen_status', params.citizen_status);
   const query = qs.toString();
   return get<ArchiveListResponse>(`/api/v1/archives${query ? '?' + query : ''}`);

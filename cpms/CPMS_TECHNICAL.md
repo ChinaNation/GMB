@@ -43,8 +43,8 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | common::encoding | `common/encoding.rs` | hex/base64 字节解码 |
 | common::rate_limit | `common/rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
 | common::ss58 | `common/ss58.rs` | SS58 ↔ hex 公钥编解码（prefix=2027） |
-| address | `address/mod.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口（CPMS 自有地址业务） |
-| address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读开发库派生的 `china.sqlite` 行政区快照（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇/村 |
+| address | `address/mod.rs` | 按安装码所属市重建镇/地址段表并提供查询接口（CPMS 自有地址业务） |
+| address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读开发库派生的 `china.sqlite` 行政区快照（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇和地址段 |
 | super_admin | `super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | number | `number/mod.rs` | 档案号与护照号生成 |
 | dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、档案操作记录、年度状态导出、100 年硬删除 |
@@ -57,7 +57,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | login | `frontend/login/` | QR-only 登录页面和 API |
 | super_admin | `frontend/super_admin/` | 超级管理员系统设置、管理员管理、年度报告导出 |
 | dangan | `frontend/dangan/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
-| address | `frontend/address/` | 镇村查询 API 和类型 |
+| address | `frontend/address/` | 镇和地址段查询 API 和类型 |
 | qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
 | components | `frontend/components/` | 通用展示与输入组件，日期输入统一使用 `DateInput` |
 | common | `frontend/common/` | HTTP 封装、共享类型和通用组件 |
@@ -97,7 +97,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 4. 两码流程
 1. SFID 生成 `SFID_CPMS_V1 / INSTALL`。
 2. CPMS 离线解析 INSTALL，校验协议类型、字段格式、省市名称与 `sfid_number` 解码结果一致；CPMS 不引入外置 SFID 公钥验签流程，ARCHIVE 是否可信由 SFID 侧最终验真。
-3. CPMS 根据 INSTALL 的 R5 段从内置 SFID 行政区快照中重建当前市镇/村路表。
+3. CPMS 根据 INSTALL 的 R5 段从内置 SFID 行政区快照中重建当前市镇和地址段表。
 4. CPMS 生成本机 `ARCHIVE` 签发密钥，公钥保存为 `cpms_pubkey`。
 5. CPMS 创建档案时由 `number` 模块同步生成一对一绑定的档案号和护照号；档案号供 SFID 使用，护照号印刷在护照上。
 6. 用户在 wumin 电子护照页出示投票账户地址二维码，CPMS 扫描后保存投票账户。
@@ -120,8 +120,8 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `archive_hard_delete_logs` | 满 100 年硬删除最小日志，不保存实名原文 |
 | `cpms_status_exports` | 年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告 |
 | `archive_delete_challenges` | 档案软删除前的 wumin 签名挑战 |
-| `address_towns` | 当前 CPMS 实例所属市的镇/街道 |
-| `address_villages` | 当前 CPMS 实例所属市的村/路 |
+| `address_towns` | 当前 CPMS 实例所属市的镇 |
+| `address_units` | 当前 CPMS 实例所属市的镇下地址段 |
 | `sequence_counters` | 本机序列 |
 | `qr_print_records` | 打印记录 |
 | `audit_logs` | 操作审计日志 |
@@ -159,11 +159,11 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 默认每页 `50` 条，前端可选 `20 / 50 / 100`，后端最大限制 `100`。
 - 默认排序固定为 `created_at DESC, archive_id DESC`，cursor 由后端编码 `created_at / archive_id`，前端只透传。
 - 响应返回 `items / limit / next_cursor / has_next / total_active`，不返回总页数。
-- 前端列表在“年龄”和“公民状态”之间显示“市镇”列；内容只显示当前档案 `town_code` 对应的镇/街道名称，不显示市名、村/路或详细地址。
+- 前端列表在“年龄”和“公民状态”之间显示“市镇”列；内容只显示当前档案 `town_code` 对应的镇名称，不显示市名、地址段或详细地址。
 - 前端列表第一列为当前页序号，第二列为档案号；整行点击进入公民档案详情，不设置单独“操作/详情”列。
 - `total_active` 来自 `archive_stats.active_count`，不得在列表请求中实时执行 `COUNT(*) FROM archives`。
 - 前端只提供统一精确检索输入框，参数为 `search`；后端用 `archive_no = search OR passport_no = search OR (last_name || first_name) = search` 精确匹配，不做字段选择器。
-- 检索只允许索引化精确检索：`search / birth_date / town_code / village_id / citizen_status`；不得恢复 `%keyword% LIKE` 全表模糊搜索。
+- 检索只允许索引化精确检索：`search / birth_date / town_code / address_unit_id / citizen_status`；不得恢复 `%keyword% LIKE` 全表模糊搜索。
 
 ## 5.4 公民资料库
 
@@ -319,9 +319,9 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
   任何在 CPMS 源码树恢复 `province.rs`/`city_codes` 第二份行政区源码的改动都属于残留回退。
 - 一个 CPMS 通用发行包可以安装到任意市公安局；运行时由 SFID 签发的 INSTALL 安装码锁定
   唯一市公安局。
-- CPMS 初始化和已初始化实例启动时会按安装码 R5 段重建 `address_towns/address_villages`，
+- CPMS 初始化和已初始化实例启动时会按安装码 R5 段重建 `address_towns/address_units`，
   地址接口只返回当前市数据。
-- 公民档案的出生日期、性别、身高、详细地址均为必填；出生日期固定 `YYYY-MM-DD` 且必须
+- 公民档案的出生日期、性别、身高、地址段和详细地址输入段均为必填；出生日期固定 `YYYY-MM-DD` 且必须
   早于当前 UTC 日期，身高范围为 `30-260 cm`；未满 16 周岁的公民不得设置为有选举资格。
 - 前端日期控件统一走 `frontend/components/DateInput.tsx`，出生日期类输入默认不允许选择
   当天或未来日期。

@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { listBirthCities, listBirthProvinces, listBirthTowns, listTowns, listVillages } from '../address/api';
+import { listAddressUnits, listBirthCities, listBirthProvinces, listBirthTowns, listTowns } from '../address/api';
 import { installStatus } from '../initialize/api';
 import * as api from './api';
 import type { Archive, ArchiveAuditLog, ArchiveMaterial, ArchiveMaterialType, ElectionScopeLevel } from './types';
-import type { Town, Village } from '../address/types';
+import type { AddressUnit, Town } from '../address/types';
 import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
 import { ScanIcon } from '../components/ScanIcon';
@@ -192,13 +192,13 @@ export default function ArchiveDetail() {
   const [provinceName, setProvinceName] = useState('');
   const [cityName, setCityName] = useState('');
   const [townName, setTownName] = useState('');
-  const [villageName, setVillageName] = useState('');
+  const [addressUnitName, setAddressUnitName] = useState('');
   const [birthProvinceName, setBirthProvinceName] = useState('');
   const [birthCityName, setBirthCityName] = useState('');
   const [birthTownName, setBirthTownName] = useState('');
-  // 编辑用镇村列表
+  // 编辑用镇和地址段列表
   const [towns, setTowns] = useState<Town[]>([]);
-  const [villages, setVillages] = useState<Village[]>([]);
+  const [addressUnits, setAddressUnits] = useState<AddressUnit[]>([]);
   const [materials, setMaterials] = useState<ArchiveMaterial[]>([]);
   const [materialType, setMaterialType] = useState<ArchiveMaterialType>('PHOTO');
   const [materialNote, setMaterialNote] = useState('');
@@ -245,21 +245,21 @@ export default function ArchiveDetail() {
     listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
   }, [id]);
 
-  // 解析镇村名称
+  // 解析镇和地址段名称
   useEffect(() => {
     if (!archive?.town_code) return;
     const t = towns.find(t => t.town_code === archive.town_code);
     if (t) setTownName(t.town_name);
-    if (archive.village_id) {
-      listVillages(archive.town_code).then(res => {
+    if (archive.address_unit_id) {
+      listAddressUnits(archive.town_code).then(res => {
         if (res.data) {
-          setVillages(res.data);
-          const v = res.data.find(v => v.village_id === archive.village_id);
-          if (v) setVillageName(v.village_name);
+          setAddressUnits(res.data);
+          const v = res.data.find(v => v.address_unit_id === archive.address_unit_id);
+          if (v) setAddressUnitName(v.address_unit_name);
         }
       }).catch(() => {});
     }
-  }, [archive?.town_code, archive?.village_id, towns]);
+  }, [archive?.town_code, archive?.address_unit_id, towns]);
 
   useEffect(() => {
     if (!archive) return;
@@ -296,25 +296,25 @@ export default function ArchiveDetail() {
       gender_code: archive.gender_code,
       height_cm: archive.height_cm ?? '',
       town_code: archive.town_code,
-      village_id: archive.village_id,
-      address: archive.address,
+      address_unit_id: archive.address_unit_id,
+      address_detail: archive.address_detail,
       citizen_status: archive.citizen_status,
       voting_eligible: archive.voting_eligible,
     });
     setEditing(true);
     setError('');
-    // 加载编辑用村列表
+    // 加载编辑用地址段列表
     if (archive.town_code) {
-      listVillages(archive.town_code).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
+      listAddressUnits(archive.town_code).then(res => { if (res.data) setAddressUnits(res.data); }).catch(() => {});
     }
   };
 
   const handleEditTownChange = (tc: string) => {
-    setEditForm(f => ({ ...f, town_code: tc, village_id: '' }));
+    setEditForm(f => ({ ...f, town_code: tc, address_unit_id: '' }));
     if (tc) {
-      listVillages(tc).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
+      listAddressUnits(tc).then(res => { if (res.data) setAddressUnits(res.data); }).catch(() => {});
     } else {
-      setVillages([]);
+      setAddressUnits([]);
     }
   };
 
@@ -339,14 +339,14 @@ export default function ArchiveDetail() {
     const height = Number(heightText);
     if (!Number.isFinite(height) || height < 30 || height > 260) { setError('请输入正确的身高'); return; }
     if (!String(editForm.town_code || '')) { setError('请选择居住镇'); return; }
-    if (!String(editForm.village_id || '')) { setError('请选择居住村/路'); return; }
-    if (!String(editForm.address || '').trim()) { setError('请输入居住地址'); return; }
+    if (!String(editForm.address_unit_id || '')) { setError('请选择地址段'); return; }
+    if (!String(editForm.address_detail || '').trim()) { setError('请输入详细地址'); return; }
     setSaving(true);
     try {
       const body: Record<string, unknown> = { ...editForm };
       body.last_name = String(body.last_name || '').trim();
       body.first_name = String(body.first_name || '').trim();
-      body.address = String(body.address || '').trim();
+      body.address_detail = String(body.address_detail || '').trim();
       body.height_cm = height;
       delete body.birth_date;
       const res = await api.updateArchive(id, body);
@@ -742,14 +742,14 @@ export default function ArchiveDetail() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>居住村/路 *</label>
-                  <select className="form-input" value={String(editForm.village_id || '')} onChange={e => setEditForm(f => ({ ...f, village_id: e.target.value }))}>
+                  <label>地址段 *</label>
+                  <select className="form-input" value={String(editForm.address_unit_id || '')} onChange={e => setEditForm(f => ({ ...f, address_unit_id: e.target.value }))}>
                     <option value="">请选择</option>
-                    {villages.map(v => <option key={v.village_id} value={v.village_id}>{v.village_name}</option>)}
+                    {addressUnits.map(v => <option key={v.address_unit_id} value={v.address_unit_id}>{v.address_unit_name}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="form-group mt-16"><label>居住地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+              <div className="form-group mt-16"><label>详细地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address_detail || '')} onChange={e => setEditForm(f => ({ ...f, address_detail: e.target.value }))} /></div>
               <div className="form-row mt-16">
                 <div className="form-group">
                   <label>公民状态 *</label>
@@ -786,7 +786,7 @@ export default function ArchiveDetail() {
                 </div>
                 <div><strong>居住省份：</strong>{provinceName || archive.province_code}</div>
                 <div><strong>居住城市：</strong>{cityName || archive.city_code}</div>
-                <div className="archive-detail-grid__full"><strong>居住地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
+                <div className="archive-detail-grid__full"><strong>居住地址：</strong>{[townName, archive.address_full_snapshot || [addressUnitName || archive.address_unit_name_snapshot, archive.address_detail].filter(Boolean).join(' ')].filter(Boolean).join(' ') || '-'}</div>
                 <div><strong>公民状态：</strong>
                   <span className={`tag ${archive.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
                     {archive.citizen_status === 'NORMAL' ? '正常' : '注销'}

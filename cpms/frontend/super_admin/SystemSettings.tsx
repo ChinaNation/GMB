@@ -1,9 +1,9 @@
 // 系统设置页：展示 INSTALL 授权、ARCHIVE 签发状态和年度报告导出状态。
 
 import { useState, useEffect } from 'react';
-import { listTowns, listVillages } from '../address/api';
+import { listAddressUnits, listTowns } from '../address/api';
 import { installStatus } from '../initialize/api';
-import type { Town, Village } from '../address/types';
+import type { AddressUnit, Town } from '../address/types';
 import type { InstallStatus } from '../initialize/types';
 import { exportStatusFile, getStatusExportState } from './api';
 import type { CpmsStatusExportState } from './types';
@@ -199,18 +199,18 @@ function Divider() {
 function AddressScope() {
   const [towns, setTowns] = useState<Town[]>([]);
   const [selectedTown, setSelectedTown] = useState('');
-  const [villages, setVillages] = useState<Village[]>([]);
+  const [addressUnits, setAddressUnits] = useState<AddressUnit[]>([]);
 
   const loadTowns = () => {
     listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
   };
-  const loadVillages = (code: string) => {
-    if (!code) { setVillages([]); return; }
-    listVillages(code).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
+  const loadAddressUnits = (code: string) => {
+    if (!code) { setAddressUnits([]); return; }
+    listAddressUnits(code).then(res => { if (res.data) setAddressUnits(res.data); }).catch(() => {});
   };
 
   useEffect(() => { loadTowns(); }, []);
-  useEffect(() => { loadVillages(selectedTown); }, [selectedTown]);
+  useEffect(() => { loadAddressUnits(selectedTown); }, [selectedTown]);
 
   return (
     <Section step={5} title="行政区数据" done={towns.length > 0}>
@@ -232,15 +232,15 @@ function AddressScope() {
       {selectedTown && (
         <>
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
-            {towns.find(t => t.town_code === selectedTown)?.town_name} - 村/路
+            {towns.find(t => t.town_code === selectedTown)?.town_name} - 地址段
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-            {villages.map(v => (
-              <div key={v.village_id} style={{
+            {addressUnits.map(v => (
+              <div key={v.address_unit_id} style={{
                 display: 'flex', alignItems: 'center', gap: 4,
                 padding: '2px 8px', borderRadius: 4, fontSize: 12, background: '#f3f4f6',
               }}>
-                {v.village_name}
+                {v.address_unit_name}
               </div>
             ))}
           </div>

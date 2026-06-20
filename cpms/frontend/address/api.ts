@@ -1,10 +1,10 @@
 import { get } from '../common/http';
-import type { City, Province, Town, Village } from './types';
+import type { AddressUnit, City, Province, Town } from './types';
 
 export const listTowns = () => get<Town[]>('/api/v1/address/towns');
 
-export const listVillages = (town_code: string) =>
-  get<Village[]>(`/api/v1/address/villages?town_code=${encodeURIComponent(town_code)}`);
+export const listAddressUnits = (town_code: string) =>
+  get<AddressUnit[]>(`/api/v1/address/units?town_code=${encodeURIComponent(town_code)}`);
 
 export const listBirthProvinces = () =>
   get<Province[]>('/api/v1/address/china/provinces');

@@ -170,7 +170,11 @@
 | CPMS 前端登录 | `login` | `cpms/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
 | CPMS 前端超级管理员 | `super_admin` | `cpms/frontend/super_admin/` | CPMS 前端超级管理员页面、操作员管理和年度报告导出 |
 | CPMS 前端档案业务 | `dangan` | `cpms/frontend/dangan/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
-| CPMS 前端地址 | `address` | `cpms/frontend/address/` | CPMS 前端镇村查询 API 和类型 |
+| CPMS 前端地址 | `address` | `cpms/frontend/address/` | CPMS 前端镇和地址段查询 API 与类型 |
+| 镇下地址段 | `address_unit` | SFID china / CPMS archives / CPMS frontend | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
+| 镇下地址段 ID | `address_unit_id` | CPMS archives / address_units | CPMS 档案选择的地址段稳定 ID |
+| 详细地址输入段 | `address_detail` | CPMS archives / CPMS frontend | 管理员录入的可变详细地址文本，与地址段组合为完整详细地址 |
+| 完整详细地址快照 | `address_full_snapshot` | CPMS archives | 保存时由地址段名称和详细地址输入段组成的只读快照 |
 | CPMS 前端二维码 | `qr` | `cpms/frontend/qr/` | CPMS 前端 WUMIN_QR_V1 解析和浏览器扫码工具 |
 | CPMS 前端通用层 | `common` | `cpms/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
 

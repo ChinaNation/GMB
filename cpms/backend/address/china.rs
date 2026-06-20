@@ -4,7 +4,7 @@
 //! 不在 CPMS 侧保存或维护第二套行政区源。路径优先环境变量 `CPMS_CHINA_DB`,
 //! 默认二进制同目录 `./china.sqlite`,与 `CPMS_FRONTEND_DIR` 的约定一致。
 //!
-//! 本模块只按安装码所属省市做窄查询,绝不把全国镇/村全量载入内存。
+//! 本模块只按安装码所属省市做窄查询,绝不把全国镇下地址段全量载入内存。
 
 use std::env;
 
@@ -28,16 +28,16 @@ pub(crate) struct CityCodeArea {
     pub name: String,
 }
 
-/// 单个镇及其下辖村。
+/// 单个镇及其下辖地址段。
 pub(crate) struct TownArea {
     pub code: String,
     pub name: String,
-    pub villages: Vec<VillageArea>,
+    pub address_units: Vec<AddressUnitArea>,
 }
 
-/// 单个村。
-pub(crate) struct VillageArea {
-    pub code: String,
+/// 单个地址段。中文注释:地址段是镇下面的地名段,不是行政区 code。
+pub(crate) struct AddressUnitArea {
+    pub id: String,
     pub name: String,
 }
 
@@ -119,7 +119,7 @@ pub(crate) fn cities(province_code: &str) -> Result<Vec<CityCodeArea>, String> {
     Ok(rows)
 }
 
-/// 读取某市全部镇。出生地不需要村/路数据。
+/// 读取某市全部镇。出生地不需要镇下地址段数据。
 pub(crate) fn towns(province_code: &str, city_code: &str) -> Result<Vec<TownArea>, String> {
     let conn = open()?;
     let mut stmt = conn
@@ -134,7 +134,7 @@ pub(crate) fn towns(province_code: &str, city_code: &str) -> Result<Vec<TownArea
             Ok(TownArea {
                 code: row.get(0)?,
                 name: row.get(1)?,
-                villages: Vec::new(),
+                address_units: Vec::new(),
             })
         })
         .map_err(|e| format!("query china towns failed: {e}"))?
@@ -199,8 +199,8 @@ pub(crate) fn find_town(
     Ok(exists > 0)
 }
 
-/// 取该市全部镇及其下辖村。单查镇 + 单查全市村后按 town_code 归组,避免逐镇 N+1。
-pub(crate) fn city_towns_with_villages(
+/// 取该市全部镇及其下辖地址段。单查镇 + 单查全市地址段后按 town_code 归组,避免逐镇 N+1。
+pub(crate) fn city_towns_with_address_units(
     province_code: &str,
     city_code: &str,
 ) -> Result<Vec<TownArea>, String> {
@@ -218,42 +218,42 @@ pub(crate) fn city_towns_with_villages(
             Ok(TownArea {
                 code: row.get::<_, String>(0)?,
                 name: row.get::<_, String>(1)?,
-                villages: Vec::new(),
+                address_units: Vec::new(),
             })
         })
         .map_err(|e| format!("query china towns failed: {e}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("read china town row failed: {e}"))?;
 
-    let mut village_stmt = conn
+    let mut address_unit_stmt = conn
         .prepare(
-            "SELECT town_code, code, name FROM villages
+            "SELECT town_code, address_unit_id, name FROM address_units
              WHERE province_code = ?1 AND city_code = ?2
              ORDER BY town_code, sort_order",
         )
-        .map_err(|e| format!("prepare china villages failed: {e}"))?;
-    let villages = village_stmt
+        .map_err(|e| format!("prepare china address_units failed: {e}"))?;
+    let address_units = address_unit_stmt
         .query_map([province_code, city_code], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                VillageArea {
-                    code: row.get::<_, String>(1)?,
+                AddressUnitArea {
+                    id: row.get::<_, String>(1)?,
                     name: row.get::<_, String>(2)?,
                 },
             ))
         })
-        .map_err(|e| format!("query china villages failed: {e}"))?;
+        .map_err(|e| format!("query china address_units failed: {e}"))?;
 
     let town_index: std::collections::HashMap<String, usize> = towns
         .iter()
         .enumerate()
         .map(|(i, t)| (t.code.clone(), i))
         .collect();
-    for village in villages {
-        let (town_code, village) =
-            village.map_err(|e| format!("read china village row failed: {e}"))?;
+    for address_unit in address_units {
+        let (town_code, address_unit) =
+            address_unit.map_err(|e| format!("read china address_unit row failed: {e}"))?;
         if let Some(&i) = town_index.get(&town_code) {
-            towns[i].villages.push(village);
+            towns[i].address_units.push(address_unit);
         }
     }
 

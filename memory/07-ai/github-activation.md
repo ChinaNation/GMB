@@ -51,12 +51,12 @@
 - 改代码必须同步更新文档与任务卡，并回写对应模块文档
 - 开发残留扫描（TODO/FIXME/console.log/dbg! 等）
 - 较大代码改动需配套中文注释
-- **PQC 前向兼容守则（ADR-016）**：当前只用 sr25519、暂不接入 PQC。保护以下 sr25519 锚点不被“净删除/改值”，以保障将来无感接入 PQC（不换钱包/账户/地址/金额）：
+- **PQC 前向兼容守则（ADR-022）**：当前只用 sr25519、暂不接入 PQC。保护以下 sr25519 锚点不被“净删除/改值”，以保障将来无感接入 PQC（不换钱包/账户/地址/金额）：
   - `citizenchain/runtime/src/lib.rs` 的 `Signature = MultiSignature`、`AuthorizeCall`
   - `citizenchain/runtime/primitives/src/core_const.rs` 的 `SS58_FORMAT` 与值 `2027`
   - `wuminapp` / `wumin` 钱包的 `miniSecretFromEntropy` 派生
   - `wuminapp` / `wumin` QR bodies 的 `sig_alg` 字段
-  - 确属有意变更时，须在同一 PR 同步更新 `memory/04-decisions/ADR-016-account-key-pqc-migration.md` 守则章节作为确认，门禁才放行。
+  - 确属有意变更时，须在同一 PR 同步更新 `memory/04-decisions/ADR-022-unified-pqc-crypto.md` 守则章节作为确认，门禁才放行。
 
 ## 4. 激活后的验证方式
 

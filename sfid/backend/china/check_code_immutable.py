@@ -8,6 +8,7 @@
   2. 省名、市名全国唯一;省 code 固定,不建省级 tombstone。
   3. 没有 live 市/镇占用 tombstones 里已退役的 code —— 退役 code 永不复用。
   4. 删除市/镇只进入 tombstones,后续不得重新分配同一 code。
+  5. 镇下地址段不属于行政区,但同一镇下名称与 address_unit_id 必须唯一。
 
 退出码非 0 即失败,可挂 pre-commit / CI。
 用法: python3 check_code_immutable.py [--db <path>]
@@ -92,6 +93,45 @@ def main() -> int:
         if reused:
             fail.append(f"复用了已退役 code {len(reused)} 条,例:{reused[:5]}")
 
+    forbidden_old_fourth_table = "".join(("vill", "ages"))
+    old_fourth_tables = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()
+    if any(name == forbidden_old_fourth_table for (name,) in old_fourth_tables):
+        fail.append("旧第四层表不应存在:镇下第四层已统一为 address_units 地址段")
+
+    has_address_units = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='address_units'"
+    ).fetchone()
+    if not has_address_units:
+        fail.append("address_units 表缺失:镇下地址段数据不可用")
+    else:
+        dup_unit_ids = conn.execute(
+            "SELECT address_unit_id, COUNT(*) c FROM address_units "
+            "GROUP BY address_unit_id HAVING c > 1"
+        ).fetchall()
+        if dup_unit_ids:
+            fail.append(
+                f"address_units 重复 address_unit_id {len(dup_unit_ids)} 组,例:{dup_unit_ids[:5]}"
+            )
+
+        dup_unit_names = conn.execute(
+            "SELECT province_code, city_code, town_code, name, COUNT(*) c "
+            "FROM address_units GROUP BY province_code, city_code, town_code, name HAVING c > 1"
+        ).fetchall()
+        if dup_unit_names:
+            fail.append(
+                f"同一镇下地址段重名 {len(dup_unit_names)} 组,例:{dup_unit_names[:5]}"
+            )
+
+        org_tail_rows = conn.execute(
+            "SELECT province_code, city_code, town_code, name FROM address_units "
+            "WHERE name LIKE '%居委会%' OR name LIKE '%居民委员会%' OR name LIKE '%村委会%' "
+            "OR name LIKE '%村民委员会%' OR name LIKE '%委员会%' LIMIT 5"
+        ).fetchall()
+        if org_tail_rows:
+            fail.append(f"地址段仍含基层组织尾词,例:{org_tail_rows[:5]}")
+
     conn.close()
 
     if fail:
@@ -99,7 +139,7 @@ def main() -> int:
         for f in fail:
             print("  -", f, file=sys.stderr)
         return 1
-    print("行政区 code 不可变校验 PASS(省/市唯一,市/镇 code 无重复且无复用退役 code)。")
+    print("行政区 code 不可变校验 PASS(省/市唯一,市/镇 code 无重复,地址段唯一且无组织尾词残留)。")
     return 0
 
 

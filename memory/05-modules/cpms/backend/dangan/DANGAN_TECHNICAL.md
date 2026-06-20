@@ -3,7 +3,7 @@
 ## 1. 模块定位
 `backend/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案操作记录聚合、档案生命周期硬删除和年度状态导出。
 
-本模块不保存实名归属判断逻辑；CPMS 所属省市来自 `initialize` 保存的 INSTALL 授权材料。公民居住地由该省市 + 镇村 + 居住地址文本组成；出生地由全国省市镇组成，来自 CPMS 随包的 SFID 行政区唯一真源 `china.sqlite` 只读拷贝，保存后不得在编辑接口中修改。
+本模块不保存实名归属判断逻辑；CPMS 所属省市来自 `initialize` 保存的 INSTALL 授权材料。公民居住地由该省市 + 镇 + 地址段 + 详细地址输入段组成；出生地由全国省、市、镇组成，来自 CPMS 随包的 SFID 行政区唯一真源 `china.sqlite` 只读拷贝，保存后不得在编辑接口中修改。
 
 ## 2. 负责范围
 - `build_archive_qr_payload(...)`：构造 ARCHIVE 二维码。
@@ -99,7 +99,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 前端列表固定显示“序号、档案号、姓名、性别、年龄、市镇、公民状态、创建时间”，整行点击进入详情，不保留单独操作列。
 - `total_active` 读取 `archive_stats.active_count`；列表请求不得实时 `COUNT(*) FROM archives`。
 - 统一检索字段为 `search`，后端精确匹配 `archive_no = search OR passport_no = search OR (last_name || first_name) = search`，禁止恢复前端字段选择器。
-- 检索字段只允许 `search / birth_date / town_code / village_id / citizen_status` 的索引化精确过滤，禁止恢复 `%keyword% LIKE` 全表模糊搜索。
+- 检索字段只允许 `search / birth_date / town_code / address_unit_id / citizen_status` 的索引化精确过滤，禁止恢复 `%keyword% LIKE` 全表模糊搜索。
 
 ## 7. 档案生命周期
 
@@ -108,6 +108,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 创建/编辑档案、修改公民状态和年度导出时，后端按同一规则计算选举资格；前端只允许正常且已满 16 周岁的公民选择“有选举资格”。
 - 出生日期必须早于当前 UTC 日期；当天出生和未来日期都不得录入，保存后编辑档案接口不得接收或改写 `birth_date`。
 - 出生地在创建档案时必填 `birth_province_code / birth_city_code / birth_town_code`，从 CPMS 随包的 SFID 行政区真源只读接口选择；保存后编辑档案接口不得接收或改写出生地字段。
+- 居住地址保存 `town_code / address_unit_id / address_detail / address_full_snapshot`；`address_unit_id` 必须属于当前安装城市和所选镇，`address_detail` 是管理员录入的自由详细地址段。
 - 公民详情页投票账户下方只读展示“注册市选举公民 / 注册镇选举公民”的结果；修改入口只在“设置投票账户”弹窗内。
 - 只有 `voting_eligible=true` 的公民允许设置投票账户；前端必须禁用投票账户输入和扫码操作，后端 `设置投票账户` 接口必须拒绝无选举资格或非正常状态档案。
 - “设置投票账户”接口同时保存 `wallet_address` 和 `election_scope_level`，并清空旧 `archive_qr_payload`，等待重新签发 ARCHIVE。

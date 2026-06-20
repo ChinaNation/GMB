@@ -5,7 +5,7 @@
 
 任务需求:
 建立全系统单一抗量子原语基座 `gmb-pqc`,被 runtime(no_std WASM)+ sfid/cpms/node 后端 + 钱包 FFI 共用,杜绝第二套实现:
-1. **HKDF-SHA512 派生规则单一源**:domain 标签表(`GMB/sr25519/v1` / `GMB/ML-DSA-65/v1` / `GMB/ML-KEM-768/v1` …),从 `AccountSeedV1` 派生各算法私钥种子(fips204 无 seed keygen → HKDF 输出喂确定性 RNG)。
+1. **HKDF-SHA512 派生规则单一源**:domain 标签表(`GMB/account/ml-dsa-65/v1` / `GMB/account/ml-kem-768/v1` …),从 `AccountSeedV1` 派生 ML-DSA-65/ML-KEM-768 私钥种子(fips204 无 seed keygen → HKDF 输出喂确定性 RNG)。**sr25519 地址锚点不在此表**:保持现有 `fromSeed(AccountSeedV1)` 直接派生,**绝不套 HKDF**(否则 `HKDF(seed)≠seed`→地址变)。
 2. **algo 常量**:`0x01` sr25519 / `0x02` ML-DSA-65 / `0x03` ML-DSA-87(预留)。
 3. **domain 常量强制 `[u8;N]` 数组**(铁律 `feedback_scale_domain_must_be_array`):把现有违规的 `L3_PAY_SIGNING_DOMAIN`/`BATCH_SIGNING_DOMAIN`(`offchain-transaction/src/batch_item.rs:39/42` 等 `&[u8]`)迁入并改数组类型。
 4. **`verify_by_algo` trait**:链端 ML-DSA 验签封装(fips204)。

@@ -12,7 +12,7 @@
 
 - 路径:`sfid/backend/number/`
 - 职责:提供 SFID 编码协议的主体属性、机构码、分类、生成和格式校验。
-- 非职责:不维护行政区划静态表,不保存省市镇村数据。
+- 非职责:不维护行政区划静态表,不保存省、市、镇和地址段数据。
 
 行政区划唯一真源在 `sfid/backend/china/`。`number::generator`
 只在生成号码时调用 `crate::china::{province_code_by_name, city_code_by_name}`。

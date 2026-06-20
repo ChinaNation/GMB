@@ -89,8 +89,10 @@ CREATE TABLE IF NOT EXISTS archives (
   height_cm REAL NOT NULL CHECK (height_cm BETWEEN 30 AND 260),
   passport_no TEXT NOT NULL UNIQUE,
   town_code TEXT NOT NULL DEFAULT '',
-  village_id TEXT NOT NULL DEFAULT '',
-  address TEXT NOT NULL DEFAULT '',
+  address_unit_id TEXT NOT NULL DEFAULT '',
+  address_unit_name_snapshot TEXT NOT NULL DEFAULT '',
+  address_detail TEXT NOT NULL DEFAULT '',
+  address_full_snapshot TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DELETED')),
   citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'REVOKED')),
   voting_eligible BOOLEAN NOT NULL DEFAULT TRUE,
@@ -130,7 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_archives_active_name_birth_cursor
   ON archives ((last_name || first_name), birth_date, created_at DESC, archive_id DESC)
   WHERE status = 'ACTIVE';
 CREATE INDEX IF NOT EXISTS idx_archives_active_area_cursor
-  ON archives (town_code, village_id, created_at DESC, archive_id DESC)
+  ON archives (town_code, address_unit_id, created_at DESC, archive_id DESC)
   WHERE status = 'ACTIVE';
 CREATE INDEX IF NOT EXISTS idx_archives_active_citizen_status_cursor
   ON archives (citizen_status, created_at DESC, archive_id DESC)
@@ -269,10 +271,10 @@ CREATE TABLE IF NOT EXISTS address_towns (
   town_name TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS address_villages (
-  village_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS address_units (
+  address_unit_id TEXT PRIMARY KEY,
   town_code TEXT NOT NULL REFERENCES address_towns(town_code) ON DELETE CASCADE,
-  village_name TEXT NOT NULL
+  address_unit_name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (

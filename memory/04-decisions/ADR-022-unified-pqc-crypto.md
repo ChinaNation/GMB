@@ -1,95 +1,175 @@
-# ADR-022:GMB 统一抗量子加密方案
+# ADR-022:GMB 抗量子签名升级 + 统一加密方案（真源）
 
-状态:Accepted(2026-06-18),**Supersedes ADR-016**
-关联:[[ADR-016]](本 ADR 取代)、[[feedback_no_compatibility]]、[[feedback_chainspec_frozen]]、[[feedback_pubkey_format_rule]]、[[feedback_chain_in_dev]]
+状态:Accepted(2026-06-18)。**本 ADR 是 GMB 抗量子方案的唯一真源**,取代并删除一切旧 PQC 迁移方案文档。
+关联:[[feedback_no_compatibility]]、[[feedback_chainspec_frozen]]、[[feedback_pubkey_format_rule]]、[[project_pqc_unified_adr022]]
 
-## 背景 / 问题
+---
 
-全系统(citizenchain / wuminapp / wumin / sfid / cpms)签名 100% sr25519,机密性(IM / 传输)100% 经典 X25519 + AES-128,均不抗量子。核验确认 **PQC 零代码**(全仓无 fips204 / ml-dsa / ml-kem / account-keys / argon2)。
+## 0. 方案目标
 
-ADR-016 只设计了"钱包签名域",且带完整 sr25519→PQC **迁移机器**(账户状态机 / hybrid 双签 / PqcOnly 收紧)。但:
+GMB **当前继续用 sr25519 签名**(链上已有真实用户);**未来通过链 runtime 升级 + wuminapp/wumin 客户端升级,在位切换到 PQC 签名**。用户**不换助记词、不换钱包、不换账户、不换地址、不换余额归属**,日常仍是"打开钱包、确认交易、冷钱包扫码签名"。
 
-1. ADR-016 未覆盖 **机密性域(ML-KEM)**、**静态加密**、**KDF 统一**——而机密性才是 harvest-now-decrypt-later 最不可逆的暴露面。
-2. 全系统**无数据、上线前可重新创世**——迁移/兼容机器是多余的。
+**核心原则一句话:AccountId 是账户身份锚点,签名算法只是该账户的授权方式。**
 
-本 ADR **取代** ADR-016 + 计划中的"系统签名 PQC"任务卡 + 蓝图 `ACCOUNT_KEYS_PQC_TECHNICAL.md`,合并为单一统一方案。
+> 这是**活链在位升级**,不是重新创世造新链,不是无数据冷启。链已有真实用户用 sr25519,所以需要一座"旧地址账户无痛进入 PQC"的授权桥(见 §3 bootstrap),不是保留旧流程双轨。
 
-### 核验抓出的两条 CRITICAL(已纠正)
+## 1. 外部标准依据(锁版本 + 测试向量)
 
-- **C1:账户 PQC 不是透明 setCode。** 主交易签名是上游 `MultiSignature` 枚举(`runtime/src/lib.rs:130/134`),AccountId 由它派生。加 ML-DSA 变体=改 extrinsic 线格式≠setCode。→ 走 `pqc_dispatch` general-tx 旁路,**绝不扩 MultiSignature**。
-- **C2:node 清算行落盘是假 AES-GCM。** `settlement/keystore.rs:181-220` 实为 `XOR(blake2 keystream)+截断 blake2 tag`,`derive_key` 只跑 100 轮 blake2(`PBKDF2_ITERATIONS/1000`),函数名和注释在说谎,node 无 aes-gcm 依赖。清算行私钥当前弱加密。
+- **签名 = ML-DSA-65**,NIST **FIPS 204**。最终标准已发布但有 errata/修订提示 → **必须锁库版本 + 钉测试向量**。
+- **KEM = ML-KEM-768**,NIST **FIPS 203**。
+- **IM/TLS 混合 KEM 参考 X-Wing**,但 X-Wing 仍是 **draft 且不是认证 KEM**——**不能当身份认证**;身份仍绑账户签名 / MLS credential。
+- TLS:**rustls 已支持 X25519MLKEM768**,但需处理互通失败 + provider 选择。
 
-另修正一条 HIGH:**"SFID 省级 wrap HKDF" 代码里不存在**(`sfid/backend/Cargo.toml:42` hkdf 是死依赖,MAIN signer 是裸 seed 无 KDF);记忆 `feedback_sfid_sheng_signing_keyring` 已过时(级联重加密在 ADR-008 P23e 删除)。
+## 2. 账户与地址模型(铁律)
 
-## 决策
-
-### 1. 统一四原语(全系统单一口径,收口 `gmb-pqc` 共享 crate)
-
-| 用途 | 算法 | 标准 |
-|---|---|---|
-| 签名 | **ML-DSA-65** | FIPS 204,algo tag `0x02`,可升 `0x03`=ML-DSA-87 不换账户 |
-| 机密性(KEM) | **ML-KEM-768**(混合) | FIPS 203;IM 用 X-Wing(X25519+ML-KEM-768),TLS 用 X25519MLKEM768 |
-| 对称 AEAD | **AES-256-GCM** | IM 从 AES-128 升级;node 清算行从假 GCM 换真 GCM |
-| KDF | **HKDF-SHA512**(高熵根种子) + **Argon2id**(用户口令) | 收敛三处异构 KDF |
-
-### 2. 同源派生 + 地址锚点(option B)
-
+当前地址规则**保持不变**:
 ```
-助记词(BIP39) → miniSecretFromEntropy → AccountSeedV1(32B 算法中立根种子, 绝密, 不出本机)
-  ├─ HKDF("GMB/sr25519/v1")    → sr25519 私钥 →(取公钥)→ AccountId(32B 永久地址锚点; sr25519 永不签名)
-  ├─ HKDF("GMB/ML-DSA-65/v1")  → ML-DSA-65 私钥(签名)
-  └─ HKDF("GMB/ML-KEM-768/v1") → ML-KEM-768 私钥(加密)
+助记词 → 当前 wuminapp/wumin 已用的 miniSecretFromEntropy → AccountSeedV1 → sr25519 public key → AccountId/钱包地址
 ```
 
-- **四不变**:不换助记词 / 账户 / 地址 / 余额。
-- **option B**:AccountId = sr25519 公钥(沿用现派生),sr25519 退役为**纯地址锚点**,签名全 ML-DSA-65。地址永不变(同助记词跨链同地址)。
-- **密钥隔离**:矿工 / 清算行 / SFID MAIN / CPMS-ARCHIVE 为独立密钥域(各自 OsRng / env seed,不走 AccountSeedV1),只共用算法不共用密钥。
+**铁律:**
+- `AccountSeedV1` 必须等于现有 32B mini secret,**不能为 PQC 改变**。
+- 当前 sr25519 地址派生路径**不改**,地址逐字节不变。
+- `AccountId` 永远等于当前 sr25519 锚点账户。
+- 未来 PQC 私钥从同一 `AccountSeedV1` 派生,但**不参与生成地址**。
+- **不允许**用 ML-DSA 公钥 / ML-DSA 公钥哈希 / KEM 公钥重新生成新账户地址。
 
-### 3. 无迁移 / 无兼容 / 只用最新(因全系统无数据)
+**派生规则(关键:sr25519 分支不套 HKDF):**
+```
+AccountSeedV1 = 当前 miniSecretFromEntropy 输出, 32B, 绝密
 
-- **删除全部迁移机器**:账户状态机 `Sr25519Only→Bound→PqcOnly`、hybrid 双签 `bind_pqc_key`、`RejectSr25519WhenPqcOnly`、所有 storage 迁移、所有 re-wrap。
-- 账户**出生即 PQC-native**;链上类型创世直接定义目标态(如 `ShengSigningPubkey` 直接 `BoundedVec`)。
-- **始终一条链**:GMB 只有一条链。"重新创世"= 刷新**本链**创世(无数据可丢),**不是造新链、不是迁移**。伊犁省改名先在 sr25519 创世(PQC 未 built);PQC 就绪后,**同一条链**的下次创世/二进制直接带 ML-DSA-65,零迁移代码。
+sr25519 地址锚点:
+  current_sr25519_from_seed(AccountSeedV1) -> AccountId    ← 沿用现有直接派生, 不经 HKDF
 
-### 4. 账户 PQC 走 `pqc_dispatch`,不碰 `MultiSignature`(C1)
+PQC 签名密钥:
+  HKDF-SHA512(AccountSeedV1, info="GMB/account/ml-dsa-65/v1")
+    -> ML-DSA-65 确定性 keygen seed -> ML-DSA-65 keypair
 
-PQC 交易 = general-transaction(无外层 sr25519 签名)→ `account-keys.pqc_dispatch` → `#[pallet::authorize]` 阶段用 ML-DSA-65 验签(公钥从 `BoundPqcKey` 按 AccountId 读)→ 以 sr25519 锚点 AccountId 派发内层 call。全在 WASM 内。
+PQC/KEM 加密密钥:
+  HKDF-SHA512(AccountSeedV1, info="GMB/account/ml-kem-768/v1")
+    -> ML-KEM-768 keypair
+```
+> ⚠️ **sr25519 分支绝不写成 `HKDF("GMB/sr25519/v1")`**,除非 golden vector 证明地址逐字节一致——否则 `HKDF(seed)≠seed`,`fromSeed` 输入变→地址变→破"不换地址"。当前真实路径(已核验 `wallet_manager.dart:541`)是 `miniSecret → sr25519.fromSeed` 直接,无 HKDF。
 
-### 5. seal 共识签名 ML-DSA 跟 PQC 二进制走,本链创世落地(无硬分叉)
+## 3. 链上签名策略 + 无感 bootstrap 绑定
 
-seal 是原生二进制逻辑。本链处于开发期、无数据、本就随更新重刷创世+全网重装二进制,故 seal=ML-DSA-65 **免硬分叉**——跟 PQC 二进制一起,在**本链**带 PQC 的那次创世落地。`blake2_256` PoW 工作量哈希抗量子,不动。
+**当前阶段:** 普通 extrinsic 继续走 MultiSignature/sr25519;AccountId/SS58/余额/权限/治理身份全部现状不变。代码/文档去除"sr25519 = 账户身份"表述,改为"sr25519 是**当前**签名算法"。
 
-### 6. 静态加密真伪修复(C2)
+**未来 runtime 升级后(C1 守则):**
+- **不扩展 `MultiSignature`**(避免改 extrinsic 线格式和账户派生模型)。`MultiSignature` 是上游类型(`lib.rs:130/134`),加 ML-DSA 变体=改线格式≠setCode。
+- 新增 `account-keys` pallet(或等价 runtime 授权模块),新增 general-transaction 授权路径 **`pqc_dispatch`**。
+- `pqc_dispatch` 验 ML-DSA-65 签名后,以 `RawOrigin::Signed(account)` 派发内层 call。
+- **费用仍从 account 扣;nonce 用 `frame_system::AccountInfo.nonce`,不另造一套用户 nonce**(见 §11 spike 验证)。
 
-node 清算行 `keystore.rs:181-220` 换真 `Aes256Gcm` + `Argon2id`,改掉说谎的函数名 / 注释。可立即独立先行。
+**无感绑定(bootstrap):** 链无法从 sr25519 地址推出 ML-DSA 公钥,需一次"链上知道该账户 PQC 公钥"。设计为**首次 PQC 交易自动绑定并执行**,用户无感:
+1. 用户升级 wuminapp/wumin。
+2. 客户端从同一助记词派生当前地址 + ML-DSA-65 公钥。
+3. 用户照常发起一笔交易。
+4. 若链上还没有该账户 PQC 公钥 → 客户端构造 `bootstrap_pqc_dispatch`。
+5. 冷/热钱包**一次确认**,内部同时生成:**sr25519 bootstrap 证明**(证"我是这个旧地址的主人")+ **ML-DSA 交易签名**(证"这个 PQC 公钥控制本次交易")。
+6. runtime 验两签后写 `AccountPqcKey[account]`,**立即派发内层交易**。
+7. 后续交易只用 ML-DSA。
 
-## 影响
+> 对用户是"第一次升级后照常交易",不是"去绑定新账户"。桥**只用于未绑定账户首次进入 PQC**,非长期双轨。
 
-- **删除**:`ADR-016`(转 Superseded 墓碑)、任务卡 `20260607-wallet-pqc-passkey` / `20260607-sfid-cpms-pqc-signing`、蓝图 `ACCOUNT_KEYS_PQC_TECHNICAL.md`。
-- **新增**:`account-keys` pallet(idx=27),`spec_version` bump(本链带 PQC 的创世起);`gmb-pqc` 共享 crate(runtime no_std WASM + sfid/cpms/node 后端 + 钱包 FFI 共用)。
-- **钱包**:Dart 侧 ML-DSA/ML-KEM 经 `gmb-pqc` FFI(无成熟纯 Dart 实现)。
-- **IM**:换 libcrux/X-Wing-capable provider(openmls_rust_crypto 对 X-Wing `unimplemented!()`)。
-- 不影响真实 `ADR-017`(finalized-unification,与 PQC 无关)。
+## 4. 链上存储
 
-## 备选方案(否决)
+```
+AccountPqcKey[AccountId] = {
+  alg: 0x02,                  // ML-DSA-65 (算法档; 0x03=ML-DSA-87)
+  key_version: u32,           // 绑定代次, 换算法/轮换时 ++
+  pubkey: BoundedVec<u8>,     // 完整 ML-DSA-65 公钥(~1952B)
+  bound_at: BlockNumber,
+  bootstrap_mode: AutoBound,
+}
+```
+存完整公钥(非 hash):后续验签需完整公钥,每笔带公钥会让交易体积长期膨胀。
 
-- **迁移模型(ADR-016 状态机)**:无数据下多余,否决。
-- **扩 MultiSignature 加 ML-DSA 变体**:改 extrinsic 线格式,否决(走 pqc_dispatch)。
-- **纯种子派生锚点(option A,彻底删 sr25519)**:更"删旧"但需重写钱包派生且 AccountId 不对应任何公钥,本期取 **option B**(sr25519 锚点)保地址工具兼容、可后续再评估。
-- **Falcon / SLH-DSA**:侧信道 / 体积理由同 ADR-016。
+**绑定规则:**
+- 未绑定账户:允许 `bootstrap_pqc_dispatch`。
+- 已绑定账户:**拒绝再次用 sr25519 bootstrap 覆盖** PQC 公钥(first-bind-wins;bootstrap 只能由持 sr25519 私钥者发起,故不弱于现状)。
+- 换算法版本:必须由**当前有效 PQC 私钥**授权 + `key_version++`。
+- 绑定后,普通 sr25519 用户交易按链上策略逐步拒绝(见 §6 Phase D)。
 
-## 后续动作
+## 5. 交易载荷(反重放域)
 
-7 张任务卡(见 `memory/08-tasks/open/20260618-pqc-card0..6`):
+**`pqc_dispatch` payload(`GMB_PQC_TX_V1`):**
+`genesis_hash`、`spec_version`、`transaction_version`、`ss58_format`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`sig_alg`、`key_version`、`auth_mode`。
 
-| 卡 | 范围 | 域 |
+**`bootstrap_pqc_dispatch` 额外(`GMB_PQC_BOOTSTRAP_V1`):**
+`genesis_hash`、**`spec_version`**(防跨升级重放)、`account`、`pqc_pubkey_hash`、`sig_alg`、`key_version`、`nonce`、`call_hash`。
+
+**验签规则:**
+- `sr25519_signature` 只验 bootstrap challenge;`ml_dsa_signature` 验正式交易 payload。
+- `account` 必须 = sr25519 公钥派生出的当前 AccountId。
+- txpool 用 `(account, nonce)` 做 `provides` 防重复入池。
+- `validate_unsigned`/general-tx 验证**轻量无副作用**;写 `AccountPqcKey` + 派发 call 在**执行阶段**完成。
+
+## 6. 签名策略阶段(不要求用户手动参与)
+
+| 阶段 | 链策略 | 用户体验 |
 |---|---|---|
-| card0 | 卫生修复(清算行真 AES-GCM+Argon2id / App 锁 KDF 统一 / 热钱包 at-rest / IM AES-256) | Blockchain+Mobile |
-| card1 | `gmb-pqc` 共享 crate + fips204 WASM spike + domain 常量 `[u8;N]` | Blockchain |
-| card2 | account-keys pallet + 5 验签器 algo-tag + offchain L3/批量 + seal ML-DSA | Blockchain |
-| card3 | 钱包 AccountSeedV1 HKDF 三分叉 + QR sig_alg + pqc_dispatch 构造 | Mobile |
-| card4 | SFID MAIN signer ML-DSA-65 + KDF 收敛 + 激活死 hkdf 依赖 | SFID |
-| card5 | CPMS ARCHIVE 签名 ML-DSA-65 + master/geo_seal KDF→HKDF + wallet_sig_alg 放开 | CPMS |
-| card6 | 机密性:IM libcrux X-Wing(ML-KEM-768) + TLS X25519MLKEM768 | Blockchain+Mobile |
+| **A 当前** | 只用 sr25519 | 完全不变 |
+| **B 预埋** | runtime 支持 PQC 自动绑定,sr25519 仍可用 | 升级客户端后下一笔交易可自动绑定 |
+| **C PQC 主用** | 已绑定账户只收 ML-DSA;未绑定旧账户允许 bootstrap 后立即转 PQC | 照常交易,客户端自动处理 |
+| **D 收紧** | 长期未绑定账户按治理策略处理;已绑定账户彻底拒绝 sr25519 用户交易 | 大多数用户无感 |
 
-**先行 spike**:fips204 no_std WASM 编译 + 体积 + 权重 → 决定 WASM 内验签 vs host function(后者要 fork polkadot-sdk,非纯 setCode)。
+> 🔴 **安全硬约束**:bootstrap 靠 sr25519 证明所有权,**强度等于 sr25519**。sr25519 一旦被量子破,攻击者可伪造 bootstrap 把自己的 ML-DSA 绑到受害者账户并锁死原主。**因此 bootstrap 窗口(Phase D 对长期未绑定账户的治理截止)必须赶在 sr25519 被量子破之前关闭**——这是无感桥的代价,非可选项。
+
+## 7. wuminapp(热钱包)
+
+- 导入/创建仍显示**同一地址**;内部保存 `AccountSeedV1` 语义,不改助记词恢复结果。
+- 增 Rust FFI:`ml_dsa65_public_from_seed`、`ml_dsa65_sign`(经 `gmb-pqc`)。
+- 查 runtime 签名策略:`Sr25519Only`→构造普通 sr25519 extrinsic;`PqcPrepared/PqcPrimary`→优先 `pqc_dispatch`;**账户未绑定**→构造 `bootstrap_pqc_dispatch`。
+- UI **不展示** "PQC 公钥""绑定状态机""换账户";交易记录仍按原地址归集。
+- 恢复:同一助记词恢复同一地址 + 同一 PQC 密钥(确定性派生)。
+
+## 8. wumin(冷钱包)
+
+- 继续离线签名器;扫码按 `sig_alg`/`auth_mode` 识别:当前签 sr25519,未来签 ML-DSA,首次绑定时**一次扫码确认同时**出 sr25519 bootstrap 签名 + ML-DSA 交易签名。
+- 展示仍是账户/收款方/金额/治理动作等用户语义,不展示多算法细节。
+- **QR 升级:** `sig_alg: sr25519|ml-dsa-65`、`auth_mode: normal|pqc|bootstrap-pqc`、`key_version`、`payload_hash`、**`chunk_index/chunk_total` 大签名分片**。
+- 🔴 **最坏体积按 bootstrap 设计**:首笔 bootstrap 同时带 sr25519(64B)+ML-DSA(~3.3KB) 两签,是最大 payload;ML-DSA 签名 3.3KB 不能假设单张 QR 永远稳定可扫,分片须按它实测。
+
+## 9. SFID / CPMS 边界
+
+- SFID/CPMS **不托管**用户助记词、`AccountSeedV1`、sr25519 私钥、PQC 私钥。
+- 只做两件:① 记录的钱包地址仍是原 `AccountId`;② 验钱包签名时按 `sig_alg` 分流(当前 sr25519,未来 ML-DSA)。
+- `wallet_sig_alg` 字段**保留并放开枚举**,但**不允许生成新钱包地址**。
+- SFID/CPMS **自身系统签名**是否改 ML-DSA = 独立系统密钥升级,**不影响用户账户无痛升级主线**(单独推进:SFID MAIN signer / CPMS ARCHIVE 档案密钥)。
+
+## 10. IM / 传输加密(与账户签名分开做,不阻塞)
+
+- 账户签名 = ML-DSA-65;IM/MLS 机密性 = 未来 X-Wing/ML-KEM-768 混合 KEM;TLS = 评估 rustls X25519MLKEM768。
+- **KEM 不能当身份认证**,身份仍绑账户签名或 MLS credential。
+- 此线不阻塞钱包签名升级。
+
+## 11. 必须先做的技术 spike(写业务代码前)
+
+1. ML-DSA-65 Rust crate 是否支持 no_std / WASM;runtime WASM 体积增量。
+2. 单次 ML-DSA 验签 weight;一个区块最多容多少次 PQC 验签。
+3. QR 分片在真实手机摄像头上是否稳定(按 bootstrap 最坏体积测)。
+4. `AuthorizeCall`/`TransactionExtension` 顺序能否让 `pqc_dispatch` **在收费前产出 signed origin**。
+5. general-transaction txpool 防重放是否可靠;**复用 `frame_system::AccountInfo.nonce` 在 general-tx authorize 阶段是否可原子读/写且与 txpool `provides=(account,nonce)` 一致——不过就回退专用 nonce**。
+6. ML-DSA WASM 验签不可接受时再评估 host function;但 host function = 节点二进制边界变化,**不再是纯 setCode**(要 fork `ChinaNation/ss58-2027-fix`)。
+
+## 12. 验收标准
+
+- 老客户端 sr25519 钱包地址不变;新客户端同助记词恢复地址**逐字节一致**。
+- runtime 升级后原账户余额/权限/治理身份不变。
+- 未绑定账户首次交易 **bootstrap + execute** 成功;已绑定账户后续 ML-DSA 交易成功。
+- 已绑定账户普通 sr25519 用户交易按策略被拒。
+- 冷钱包离线扫码完成 bootstrap + PQC 签名(含分片)。
+- SFID/CPMS 验证同一地址下不同 `sig_alg` 的签名。
+- 全仓 PQC 表述以本 ADR 为唯一真源;残留旧路线(单独绑定步 / per-account 状态切换 / 共识造新链)一律按本 ADR 收敛清理;真实运行态验收(非仅编译/单测)。
+
+## 13. 静态加密 + KDF 卫生(随线带做,核验发现)
+
+- 🔴 **node 清算行落盘是假 AES-GCM**:`settlement/keystore.rs:181-220` 实为 XOR(blake2 keystream)+截断 blake2 tag,`derive_key` 仅 100 轮 blake2,函数名/注释说谎,node 无 aes-gcm 依赖 → 换真 `Aes256Gcm`+`Argon2id`+改谎注释(独立可立即修)。
+- KDF 收敛:CPMS master/geo_seal(`initialize/mod.rs:50`/`dangan/mod.rs:258` Blake2b 单次)→ HKDF-SHA512;口令场景(App 锁 PBKDF2 wumin 1M/wuminapp 100K 漂移)→ Argon2id。
+- 对称统一 AES-256-GCM(IM 从 AES-128 升级)。
+- `gmb-pqc` 共享 crate(runtime no_std WASM + sfid/cpms/node + 钱包 FFI 共用):HKDF 派生规则 + algo 常量 + domain 常量(**强制 `[u8;N]`**,修 `batch_item.rs:39/42` 的 `&[u8]`)+ `verify_by_algo` trait。
+
+## 14. 任务卡
+
+见 `memory/08-tasks/open/20260618-pqc-card*`(按"地址稳定签名升级"重拆):card0 卫生/card1 gmb-pqc+spike/card2 链端 account-keys+pqc_dispatch+bootstrap/card3 钱包派生+bootstrap+QR分片/card4 SFID 分流/card5 CPMS 分流/card6 IM-TLS 机密性。

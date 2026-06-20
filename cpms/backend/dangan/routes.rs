@@ -29,8 +29,12 @@ use crate::{
 const ARCHIVE_SELECT_FIELDS: &str =
     "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name,
             birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no,
-            COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id,
-            COALESCE(address,'') AS address, birth_province_code, birth_city_code,
+            COALESCE(town_code,'') AS town_code,
+            COALESCE(address_unit_id,'') AS address_unit_id,
+            COALESCE(address_unit_name_snapshot,'') AS address_unit_name_snapshot,
+            COALESCE(address_detail,'') AS address_detail,
+            COALESCE(address_full_snapshot,'') AS address_full_snapshot,
+            birth_province_code, birth_city_code,
             birth_town_code, COALESCE(election_scope_level,'PROVINCE') AS election_scope_level,
             status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible,
             valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until,
@@ -40,6 +44,7 @@ const ARCHIVE_SELECT_FIELDS: &str =
             deleted_at, deleted_by, delete_reason, created_at, updated_at";
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CreateArchiveRequest {
     last_name: String,
     first_name: String,
@@ -49,9 +54,9 @@ struct CreateArchiveRequest {
     #[serde(default)]
     town_code: Option<String>,
     #[serde(default)]
-    village_id: Option<String>,
+    address_unit_id: Option<String>,
     #[serde(default)]
-    address: Option<String>,
+    address_detail: Option<String>,
     birth_province_code: String,
     birth_city_code: String,
     birth_town_code: String,
@@ -79,7 +84,7 @@ struct ArchiveListQuery {
     search: Option<String>,
     birth_date: Option<String>,
     town_code: Option<String>,
-    village_id: Option<String>,
+    address_unit_id: Option<String>,
     citizen_status: Option<String>,
 }
 
@@ -182,8 +187,8 @@ struct UpdateArchiveRequest {
     gender_code: Option<String>,
     height_cm: Option<f32>,
     town_code: Option<String>,
-    village_id: Option<String>,
-    address: Option<String>,
+    address_unit_id: Option<String>,
+    address_detail: Option<String>,
     citizen_status: Option<String>,
     voting_eligible: Option<bool>,
     #[serde(flatten)]
@@ -253,15 +258,16 @@ async fn create_archive(
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "height_cm is required"))?;
     validate_height_cm(height_cm)?;
     let town_code = req.town_code.unwrap_or_default().trim().to_string();
-    let village_id = req.village_id.unwrap_or_default().trim().to_string();
-    if town_code.trim().is_empty() || village_id.trim().is_empty() {
+    let address_unit_id = req.address_unit_id.unwrap_or_default().trim().to_string();
+    if town_code.trim().is_empty() || address_unit_id.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             1001,
-            "town_code and village_id are required",
+            "town_code and address_unit_id are required",
         ));
     }
-    address::validate_town_village(&state, &town_code, &village_id).await?;
+    let address_unit_name =
+        address::validate_town_address_unit(&state, &town_code, &address_unit_id).await?;
     let terminal_id = headers
         .get("x-terminal-id")
         .and_then(|v| v.to_str().ok())
@@ -287,17 +293,18 @@ async fn create_archive(
     )
     .await?;
 
-    let addr = req.address.unwrap_or_default().trim().to_string();
-    if addr.is_empty() {
+    let address_detail = req.address_detail.unwrap_or_default().trim().to_string();
+    if address_detail.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "address is required"));
     }
-    if addr.chars().count() > 100 {
+    if address_detail.chars().count() > 100 {
         return Err(err(
             StatusCode::BAD_REQUEST,
             1001,
             "address too long (max 100)",
         ));
     }
+    let address_full_snapshot = compose_address_full_snapshot(&address_unit_name, &address_detail);
     let birth_province_code = req.birth_province_code.trim().to_string();
     let birth_city_code = req.birth_city_code.trim().to_string();
     let birth_town_code = req.birth_town_code.trim().to_string();
@@ -331,8 +338,10 @@ async fn create_archive(
         height_cm: Some(height_cm),
         passport_no: numbers.passport_no.clone(),
         town_code,
-        village_id,
-        address: addr,
+        address_unit_id,
+        address_unit_name_snapshot: address_unit_name,
+        address_detail,
+        address_full_snapshot,
         birth_province_code,
         birth_city_code,
         birth_town_code,
@@ -358,8 +367,8 @@ async fn create_archive(
 
     // 中文注释：号码池领取与档案写入必须同事务完成，避免回收号码被半消费。
     sqlx::query(
-        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, birth_province_code, birth_city_code, birth_town_code, election_scope_level, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::DATE, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::DATE, $22::DATE, $23, $24, $25, $26)",
+        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, town_code, address_unit_id, address_unit_name_snapshot, address_detail, address_full_snapshot, birth_province_code, birth_city_code, birth_town_code, election_scope_level, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::DATE, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::DATE, $24::DATE, $25, $26, $27, $28)",
     )
     .bind(&archive.archive_id)
     .bind(&archive.archive_no)
@@ -372,8 +381,10 @@ async fn create_archive(
     .bind(archive.height_cm)
     .bind(&archive.passport_no)
     .bind(&archive.town_code)
-    .bind(&archive.village_id)
-    .bind(&archive.address)
+    .bind(&archive.address_unit_id)
+    .bind(&archive.address_unit_name_snapshot)
+    .bind(&archive.address_detail)
+    .bind(&archive.address_full_snapshot)
     .bind(&archive.birth_province_code)
     .bind(&archive.birth_city_code)
     .bind(&archive.birth_town_code)
@@ -494,9 +505,9 @@ fn push_archive_list_filters(qb: &mut QueryBuilder<'_, Postgres>, query: &Archiv
         qb.push(" AND town_code = ");
         qb.push_bind(town_code.to_string());
     }
-    if let Some(village_id) = trimmed_opt(query.village_id.as_deref()) {
-        qb.push(" AND village_id = ");
-        qb.push_bind(village_id.to_string());
+    if let Some(address_unit_id) = trimmed_opt(query.address_unit_id.as_deref()) {
+        qb.push(" AND address_unit_id = ");
+        qb.push_bind(address_unit_id.to_string());
     }
     if let Some(citizen_status) = trimmed_opt(query.citizen_status.as_deref()) {
         qb.push(" AND citizen_status = ");
@@ -509,7 +520,7 @@ fn validate_archive_list_query(
 ) -> Result<(), (StatusCode, Json<ApiError>)> {
     validate_short_filter(query.search.as_deref(), "search", 64)?;
     validate_short_filter(query.town_code.as_deref(), "town_code", 32)?;
-    validate_short_filter(query.village_id.as_deref(), "village_id", 64)?;
+    validate_short_filter(query.address_unit_id.as_deref(), "address_unit_id", 64)?;
     if let Some(birth_date) = trimmed_opt(query.birth_date.as_deref()) {
         NaiveDate::parse_from_str(birth_date, "%Y-%m-%d")
             .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"))?;
@@ -771,24 +782,29 @@ async fn update_archive(
     if let Some(v) = req.town_code {
         archive.town_code = v.trim().to_string();
     }
-    if let Some(v) = req.village_id {
-        archive.village_id = v.trim().to_string();
+    if let Some(v) = req.address_unit_id {
+        archive.address_unit_id = v.trim().to_string();
     }
-    address::validate_town_village(&state, &archive.town_code, &archive.village_id).await?;
-    if let Some(v) = req.address {
-        let address = v.trim().to_string();
-        if address.is_empty() {
+    let address_unit_name =
+        address::validate_town_address_unit(&state, &archive.town_code, &archive.address_unit_id)
+            .await?;
+    archive.address_unit_name_snapshot = address_unit_name;
+    if let Some(v) = req.address_detail {
+        let address_detail = v.trim().to_string();
+        if address_detail.is_empty() {
             return Err(err(StatusCode::BAD_REQUEST, 1001, "address is required"));
         }
-        if address.chars().count() > 100 {
+        if address_detail.chars().count() > 100 {
             return Err(err(
                 StatusCode::BAD_REQUEST,
                 1001,
                 "address too long (max 100)",
             ));
         }
-        archive.address = address;
+        archive.address_detail = address_detail;
     }
+    archive.address_full_snapshot =
+        compose_address_full_snapshot(&archive.address_unit_name_snapshot, &archive.address_detail);
     if let Some(v) = req.citizen_status {
         dangan::validate_citizen_status(&v)?;
         archive.citizen_status = v;
@@ -812,15 +828,17 @@ async fn update_archive(
     archive.archive_qr_payload = String::new();
 
     sqlx::query(
-        "UPDATE archives SET last_name=$1, first_name=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, citizen_status_updated_at=$10, updated_at=$11 WHERE archive_id=$12",
+        "UPDATE archives SET last_name=$1, first_name=$2, gender_code=$3, height_cm=$4, town_code=$5, address_unit_id=$6, address_unit_name_snapshot=$7, address_detail=$8, address_full_snapshot=$9, citizen_status=$10, voting_eligible=$11, citizen_status_updated_at=$12, updated_at=$13 WHERE archive_id=$14",
     )
     .bind(&archive.last_name)
     .bind(&archive.first_name)
     .bind(&archive.gender_code)
     .bind(archive.height_cm)
     .bind(&archive.town_code)
-    .bind(&archive.village_id)
-    .bind(&archive.address)
+    .bind(&archive.address_unit_id)
+    .bind(&archive.address_unit_name_snapshot)
+    .bind(&archive.address_detail)
+    .bind(&archive.address_full_snapshot)
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
     .bind(archive.citizen_status_updated_at)
@@ -1450,8 +1468,12 @@ fn row_to_archive(row: sqlx::postgres::PgRow) -> Archive {
         height_cm: row.get("height_cm"),
         passport_no: row.get("passport_no"),
         town_code: row.try_get("town_code").unwrap_or_default(),
-        village_id: row.try_get("village_id").unwrap_or_default(),
-        address: row.try_get("address").unwrap_or_default(),
+        address_unit_id: row.try_get("address_unit_id").unwrap_or_default(),
+        address_unit_name_snapshot: row
+            .try_get("address_unit_name_snapshot")
+            .unwrap_or_default(),
+        address_detail: row.try_get("address_detail").unwrap_or_default(),
+        address_full_snapshot: row.try_get("address_full_snapshot").unwrap_or_default(),
         birth_province_code: row.try_get("birth_province_code").unwrap_or_default(),
         birth_city_code: row.try_get("birth_city_code").unwrap_or_default(),
         birth_town_code: row.try_get("birth_town_code").unwrap_or_default(),
@@ -1732,6 +1754,15 @@ fn ensure_required_text(value: &str, message: &str) -> Result<(), (StatusCode, J
     Ok(())
 }
 
+fn compose_address_full_snapshot(address_unit_name: &str, address_detail: &str) -> String {
+    // 中文注释:镇下地址由“地址段 + 详细地址输入段”组成;这里不拼省市镇,避免和归属字段重复。
+    [address_unit_name.trim(), address_detail.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn validate_required_date(value: &str, message: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
     if value.trim().is_empty() || NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").is_err() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, message));
@@ -1783,8 +1814,10 @@ mod tests {
             height_cm: Some(175.0),
             passport_no: "ZSABCDEFG1".to_string(),
             town_code: "100001".to_string(),
-            village_id: "village-1".to_string(),
-            address: "测试地址".to_string(),
+            address_unit_id: "AU000000001".to_string(),
+            address_unit_name_snapshot: "测试地址段".to_string(),
+            address_detail: "测试地址".to_string(),
+            address_full_snapshot: "测试地址段 测试地址".to_string(),
             birth_province_code: "GD".to_string(),
             birth_city_code: "001".to_string(),
             birth_town_code: "100001".to_string(),

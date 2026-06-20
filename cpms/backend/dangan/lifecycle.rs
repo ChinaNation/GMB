@@ -267,13 +267,14 @@ mod tests {
         sqlx::query(
             "INSERT INTO archives
              (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date,
-              gender_code, height_cm, passport_no, town_code, village_id, address, status,
+              gender_code, height_cm, passport_no, town_code, address_unit_id,
+              address_unit_name_snapshot, address_detail, address_full_snapshot, status,
               citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at,
               birth_province_code, birth_city_code, birth_town_code, election_scope_level,
               archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at)
              VALUES
              ($1, $2, 'GD', '001', 'Test', 'Citizen', '2000-01-01',
-              'M', 170, $3, 'T001', 'V001', 'test address', 'DELETED',
+              'M', 170, $3, 'T001', 'AU000000001', '测试地址段', 'test address', '测试地址段 test address', 'DELETED',
               'REVOKED', FALSE, '2026-01-01', '2036-01-01', 0,
               'GD', '001', 'T001', 'PROVINCE',
               '{}', $4, 'admin_test', 'test delete', $5, $5)",

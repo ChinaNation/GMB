@@ -1,10 +1,10 @@
 {
   "version": "1",
   "generated_at": "1",
-  "china_sqlite_sha256": "0db5080d05c1dcb184c6c8f9b4ad0d6fc4fbef17f88c645ba256e86ab450161d",
+  "china_sqlite_sha256": "c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb",
   "province_count": 43,
-  "city_count": 2898,
-  "town_count": 39724,
+  "city_count": 2872,
+  "town_count": 39227,
   "provinces": [
     {
       "code": "ZS",
@@ -12,71 +12,71 @@
     },
     {
       "code": "LN",
-      "ver": "42bf0934d841e4e5"
+      "ver": "09a6275d45cda9d3"
     },
     {
       "code": "GD",
-      "ver": "8b8810d6b331f613"
+      "ver": "c909d54f1ad5f0ee"
     },
     {
       "code": "GX",
-      "ver": "5f2895e50516eacf"
+      "ver": "e2a3f10fe8947789"
     },
     {
       "code": "FJ",
-      "ver": "09cff8a3d30ad8db"
+      "ver": "be3dd0482e0f8292"
     },
     {
       "code": "HN",
-      "ver": "45f8cdc00004d39c"
+      "ver": "061363f0769370a6"
     },
     {
       "code": "YN",
-      "ver": "581fd9b444ec9339"
+      "ver": "48132564c7829562"
     },
     {
       "code": "GZ",
-      "ver": "e60f4d33260a7027"
+      "ver": "933622992ba8cf9e"
     },
     {
       "code": "HU",
-      "ver": "d5ae752b10559ced"
+      "ver": "364dc3713d175904"
     },
     {
       "code": "JX",
-      "ver": "5160ff2510d90511"
+      "ver": "5f48c4c2b514c74f"
     },
     {
       "code": "ZJ",
-      "ver": "7837e8e53e5a85f4"
+      "ver": "077975d6873291b4"
     },
     {
       "code": "JS",
-      "ver": "013cd823e4ac11bc"
+      "ver": "7a17dde62be7865e"
     },
     {
       "code": "SD",
-      "ver": "0ae1b99f6ca18398"
+      "ver": "d85a41956dbb53e9"
     },
     {
       "code": "SX",
-      "ver": "9260153a830d9474"
+      "ver": "e0fde84714887b79"
     },
     {
       "code": "HE",
-      "ver": "6202f82e3cb90fc3"
+      "ver": "02740b931e351228"
     },
     {
       "code": "HB",
-      "ver": "5644840fd50ba3fc"
+      "ver": "3fd600acdaa7d55d"
     },
     {
       "code": "HI",
-      "ver": "e1a2560d8c534ea0"
+      "ver": "b00676dddd9cce40"
     },
     {
       "code": "SI",
-      "ver": "5787c89b223f1015"
+      "ver": "8806cd415062444d"
     },
     {
       "code": "CQ",
@@ -84,35 +84,35 @@
     },
     {
       "code": "SC",
-      "ver": "ea30c3bb01292d33"
+      "ver": "846eb91a28ae58e1"
     },
     {
       "code": "GS",
-      "ver": "8374c5d11b206117"
+      "ver": "93028b99f39567f0"
     },
     {
       "code": "BP",
-      "ver": "45a0584038b60f22"
+      "ver": "daa1e9fe0bc426ef"
     },
     {
       "code": "HA",
-      "ver": "36adb944bd10b598"
+      "ver": "1dff7868adc7d9a6"
     },
     {
       "code": "SJ",
-      "ver": "043ca0eaf29d563b"
+      "ver": "b816db2f02134790"
     },
     {
       "code": "LJ",
-      "ver": "91328614ee0ac0e1"
+      "ver": "58258e7ab7b90590"
     },
     {
       "code": "JL",
-      "ver": "b67526bc92289621"
+      "ver": "4872eb0ba236c2ce"
     },
     {
       "code": "LI",
-      "ver": "fc1adf5c01fb4e1f"
+      "ver": "30b1cc8fba334dbf"
     },
     {
       "code": "NX",
@@ -120,15 +120,15 @@
     },
     {
       "code": "QH",
-      "ver": "a7f906e2467b71f2"
+      "ver": "7e1366152929a753"
     },
     {
       "code": "AH",
-      "ver": "c4aa2351b8356f1a"
+      "ver": "1126969bb530ae9a"
     },
     {
       "code": "TW",
-      "ver": "077a6672c5d4b7b1"
+      "ver": "3c7243da287e0f45"
     },
     {
       "code": "XZ",
@@ -136,7 +136,7 @@
     },
     {
       "code": "XJ",
-      "ver": "48f570e33d2942bc"
+      "ver": "610b860f1d949e28"
     },
     {
       "code": "XK",
@@ -144,15 +144,15 @@
     },
     {
       "code": "AL",
-      "ver": "d2755c7b794ce601"
+      "ver": "a602279ddf1a2d67"
     },
     {
       "code": "CL",
-      "ver": "adf95e6bfdb6cf76"
+      "ver": "2154ae57a42bcf3a"
     },
     {
       "code": "YL",
-      "ver": "0ba1775b847d7c81"
+      "ver": "3bbbfac99bd24706"
     },
     {
       "code": "HX",
@@ -160,23 +160,23 @@
     },
     {
       "code": "KL",
-      "ver": "2da21b72ca5806d9"
+      "ver": "21551ca2dfd7f706"
     },
     {
       "code": "HT",
-      "ver": "b3bbe95120c0cb93"
+      "ver": "1c0001ccdb91f235"
     },
     {
       "code": "RH",
-      "ver": "dc64603c92de28f9"
+      "ver": "00481d6d15c6e144"
     },
     {
       "code": "XA",
-      "ver": "c5177f42c32f462d"
+      "ver": "9efafd53e27bd248"
     },
     {
       "code": "HJ",
-      "ver": "31b6e49ad1fabcd2"
+      "ver": "713805717c1fac03"
     }
   ]
 }

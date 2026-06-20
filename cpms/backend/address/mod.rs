@@ -1,7 +1,7 @@
-//! 地址管理模块：镇/村路 API。
+//! 地址管理模块：镇/地址段 API。
 //!
 //! 行政区唯一源是 SFID 维护的 `china.sqlite`，CPMS 安装包随附其只读拷贝。
-//! 运行时只启用安装码对应市公安局的镇/村路数据。
+//! 运行时只启用安装码对应市公安局的镇与镇下地址段数据。
 //! 地址 API 只读，CPMS 不允许保存或维护第二套行政区数据源。
 //!
 //! 中文注释：`china` 子模块是本模块对 SFID 行政区源的只读适配，仅服务 address 业务。
@@ -56,7 +56,7 @@ pub(crate) async fn sync_city_address_by_sfid_in_tx(
     sfid_number: &str,
 ) -> Result<(), String> {
     let (province_code, city_code, _) = find_install_city(sfid_number)?;
-    let towns = china::city_towns_with_villages(&province_code, &city_code)?;
+    let towns = china::city_towns_with_address_units(&province_code, &city_code)?;
     replace_city_address(conn, &towns).await
 }
 
@@ -84,22 +84,20 @@ pub(crate) fn validate_install_area(
     Ok(())
 }
 
-pub(crate) async fn validate_town_village(
+pub(crate) async fn validate_town_address_unit(
     state: &AppState,
     town_code: &str,
-    village_id: &str,
-) -> Result<(), (StatusCode, Json<ApiError>)> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-            SELECT 1
-            FROM address_towns t
-            JOIN address_villages v ON v.town_code = t.town_code
-            WHERE t.town_code = $1 AND v.village_id = $2
-         )",
+    address_unit_id: &str,
+) -> Result<String, (StatusCode, Json<ApiError>)> {
+    let name: Option<String> = sqlx::query_scalar(
+        "SELECT u.address_unit_name
+         FROM address_towns t
+         JOIN address_units u ON u.town_code = t.town_code
+         WHERE t.town_code = $1 AND u.address_unit_id = $2",
     )
     .bind(town_code.trim())
-    .bind(village_id.trim())
-    .fetch_one(&state.db)
+    .bind(address_unit_id.trim())
+    .fetch_optional(&state.db)
     .await
     .map_err(|_| {
         err(
@@ -109,10 +107,10 @@ pub(crate) async fn validate_town_village(
         )
     })?;
 
-    if !exists {
+    let Some(name) = name else {
         return Err(err(StatusCode::NOT_FOUND, 3006, "address area not found"));
-    }
-    Ok(())
+    };
+    Ok(name)
 }
 
 pub(crate) fn validate_birth_town(
@@ -150,10 +148,10 @@ async fn replace_city_address(
     towns: &[china::TownArea],
 ) -> Result<(), String> {
     // 中文注释：行政区唯一来源是 SFID 的 china.sqlite；同步只落当前市运行表，清掉旧城市残留。
-    sqlx::query("DELETE FROM address_villages")
+    sqlx::query("DELETE FROM address_units")
         .execute(&mut *conn)
         .await
-        .map_err(|e| format!("clear villages failed: {e}"))?;
+        .map_err(|e| format!("clear address units failed: {e}"))?;
     sqlx::query("DELETE FROM address_towns")
         .execute(&mut *conn)
         .await
@@ -167,17 +165,16 @@ async fn replace_city_address(
             .await
             .map_err(|e| format!("insert town {} failed: {e}", town.code))?;
 
-        for village in &town.villages {
-            let village_id = format!("{}-{}", town.code, village.code);
+        for address_unit in &town.address_units {
             sqlx::query(
-                "INSERT INTO address_villages (village_id, town_code, village_name) VALUES ($1, $2, $3)",
+                "INSERT INTO address_units (address_unit_id, town_code, address_unit_name) VALUES ($1, $2, $3)",
             )
-            .bind(&village_id)
+            .bind(&address_unit.id)
             .bind(&town.code)
-            .bind(&village.name)
+            .bind(&address_unit.name)
             .execute(&mut *conn)
             .await
-            .map_err(|e| format!("insert village {} failed: {e}", village_id))?;
+            .map_err(|e| format!("insert address unit {} failed: {e}", address_unit.id))?;
         }
     }
     Ok(())
@@ -229,10 +226,10 @@ struct CityRow {
 }
 
 #[derive(Serialize)]
-struct VillageRow {
-    village_id: String,
+struct AddressUnitRow {
+    address_unit_id: String,
     town_code: String,
-    village_name: String,
+    address_unit_name: String,
 }
 
 #[derive(Deserialize)]
@@ -247,7 +244,7 @@ struct BirthTownsQuery {
 }
 
 #[derive(Deserialize)]
-struct VillageQuery {
+struct AddressUnitQuery {
     town_code: String,
 }
 
@@ -257,7 +254,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/address/china/cities", get(list_china_cities))
         .route("/api/v1/address/china/towns", get(list_china_towns))
         .route("/api/v1/address/towns", get(list_towns))
-        .route("/api/v1/address/villages", get(list_villages))
+        .route("/api/v1/address/units", get(list_address_units))
 }
 
 async fn list_china_provinces(
@@ -353,26 +350,26 @@ async fn list_towns(
     Ok(Json(ok(towns)))
 }
 
-async fn list_villages(
+async fn list_address_units(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<VillageQuery>,
-) -> Result<Json<ApiResponse<Vec<VillageRow>>>, (StatusCode, Json<ApiError>)> {
+    Query(q): Query<AddressUnitQuery>,
+) -> Result<Json<ApiResponse<Vec<AddressUnitRow>>>, (StatusCode, Json<ApiError>)> {
     authz::require_auth(&state, &headers).await?;
     let rows = sqlx::query(
-        "SELECT village_id, town_code, village_name FROM address_villages WHERE town_code = $1 ORDER BY village_id",
+        "SELECT address_unit_id, town_code, address_unit_name FROM address_units WHERE town_code = $1 ORDER BY address_unit_id",
     )
     .bind(q.town_code.trim())
     .fetch_all(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query villages failed"))?;
-    let villages: Vec<VillageRow> = rows
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query address units failed"))?;
+    let address_units: Vec<AddressUnitRow> = rows
         .iter()
-        .map(|r| VillageRow {
-            village_id: r.get("village_id"),
+        .map(|r| AddressUnitRow {
+            address_unit_id: r.get("address_unit_id"),
             town_code: r.get("town_code"),
-            village_name: r.get("village_name"),
+            address_unit_name: r.get("address_unit_name"),
         })
         .collect();
-    Ok(Json(ok(villages)))
+    Ok(Json(ok(address_units)))
 }

@@ -13,7 +13,11 @@ sfid/backend/china/china.sqlite
 
 此前讨论过“SFID 运行库可管理 + wuminapp 在线拉新版 + CPMS 离线导入”的方案。该方案会形成开发库、运行库、客户端包三条数据线,一旦管理员运行中修改或代码升级替换种子,就会出现数据漂移。
 
-当前决策改为:行政区以开发库 SQLite 为准。重新创世基线版本为 1;此后每次变更必须修改 `sfid/backend/china/china.sqlite`,递增 `metadata.admin_division_version`,再由发布流程生成各系统随包只读数据。
+当前决策改为:行政区以开发库 SQLite 为准。开发期仍允许重新创世刷新版本 1 基线;重新创世任务只修改 `sfid/backend/china/china.sqlite` 时,不生成客户端数据包和公权机构。进入正式发布冻结后,每次行政区变更必须修改开发库 SQLite、递增 `metadata.admin_division_version`,再由发布流程生成各系统随包只读数据。
+
+2026-06-20 起,镇下面第四层不再作为行政区,统一称为地址段。地址段只用于 CPMS 档案地址选择,
+不参与 SFID 号生成、公权机构目录或链上治理边界。档案完整地址由“地址段 + 详细地址输入段”
+组成,例如 `多福巷 + 12号院3号楼101室`。
 
 ## 决策
 
@@ -27,9 +31,11 @@ sfid/backend/china/china.sqlite
 铁律:
 
 - 省 code 固定,不维护 `province_tombstones`。
-- 市、镇 code 不可变、不复用。删除的市/镇 code 写入 `city_tombstones` / `town_tombstones` 永久占位。
+- 开发期重新创世基线允许重排市/镇 code 并清空 tombstones。正式发布冻结后,市、镇 code 不可变、不复用;删除的市/镇 code 写入 `city_tombstones` / `town_tombstones` 永久占位。
 - 名称允许在原 code 上修改；不得用新 code 表达同一行政区改名。
 - 省名和市名必须全国唯一。
+- 镇下地址段不是行政区 code,但 `address_unit_id` 必须唯一,同一镇下地址段名称必须唯一。
+- 地址段名称保留当地地址名,`社区`、`村`、`路`、`巷`、`生活区` 等可以作为地址段;不得保留 `居委会`、`居民委员会`、`村委会`、`村民委员会`、`委员会`、`办事处`、`管理处`、`管委会` 等组织或管理机构词,也不得强制补固定后缀。
 
 ## 不触及(红线)
 
@@ -40,10 +46,13 @@ sfid/backend/china/china.sqlite
 ```text
 version:   1
 provinces: 43
-cities:    2898
-towns:     39724
-villages:  603901
-sha256:    0db5080d05c1dcb184c6c8f9b4ad0d6fc4fbef17f88c645ba256e86ab450161d
+cities:    2872
+towns:     39227
+address_units: 598655
+source_code_filled: 598655
+official_source_codes: 535084
+local_source_codes:    63571
+sha256:    c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb
 city_tombstones: 0
 town_tombstones: 0
 ```
@@ -52,32 +61,45 @@ town_tombstones: 0
 
 - 旧省命名已统一为 `YL/伊犁省`。
 - `HI/071 龙感湖市` 保留真实镇,不把工业园折算为镇。
-- `HU/106 洪江市` 为唯一活跃洪江市,`HU/107` 已删除;重新创世基线清空 city/town tombstones。
-- `HU/072 大通湖市` 保留 `南湾湖镇`。
+- `洪江市` 为唯一活跃市,当前为 `HU/105`;旧重复洪江壳已删除,重新创世基线清空 city/town tombstones。
+- `HU/071 大通湖市` 保留 `南湾湖镇`。
 - `HB/097 察北市` 的管理处名称折算为镇名,不保留“管理处”字样。
 - 描述性民族名已清理:`LJ/025 梅里斯达斡尔族市` 改 `梅里斯市`;`红旗满族镇` 合并为 `红旗镇`;`章党汉族村/章党朝鲜族村` 类同父重复村只保留一个规范名。`胡族铺镇`、`四族镇` 等本名含“族”的条目不清理。
 - 岭南省已拆分 `香港市`、`九龙市`,新增 `香洲市`;广东省 `中山市` 已重建为一个市,原中山镇级伪市壳合并回 `中山市`。
-- 广东省东莞区域不恢复为单一 `东莞市`,而是按重新创世口径拆为 `中堂市`、`莞城市`、`石龙市`、`万江市`、`虎门市`、`常平市`、`塘厦市` 七个市,完整承载原东莞 4 个街道和 28 个镇。
-- `松山湖市`、`东莞港市`、`东莞生态园市` 功能区壳已删除。
-- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-19 东莞拆分后已重新生成行政区包、公权机构运行库和 wuminapp 公权机构包。
+- 广东省东莞区域不恢复为单一旧市,而是按重新创世口径拆为 `中堂市`、`莞城市`、`石龙市`、`万江市`、`虎门市`、`常平市`、`塘厦市` 七个市,完整承载原东莞 4 个街道和 28 个镇。
+- 东莞区域功能区壳已删除。
+- 河南 `人和市` 对应现实平顶山市石龙区,用于避让广东 `石龙市`;广东 `石龙市` 保留,全国仅一个 `石龙市`。
+- 海南儋州区域收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
+- 本轮已清理已确认的截断名、`县市` 后缀名、跨省错挂名、重复壳和伪镇,并按重新创世重排市镇 code。最终审计发现的 42 个镇级伪行政区已删除,同步删除其下 235 条地址段;镇级伪行政区关键词命中归零。
+- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-19 东莞拆分后曾重新生成行政区包、公权机构运行库和 wuminapp 公权机构包。随后的行政区名称归属清理只更新 `china.sqlite`,未重新生成数据包和公权机构。
+- 镇下第四层已迁移为 `address_units`;其中 535084 条补齐 2023 统计局镜像来源码和原始基层组织名,系统名保留地址段核心,例如 `xx办事处社区 -> xx社区`、`xx管委会路 -> xx路`。2026-06-20 已删除无公开源且无镇/地址段的原金门市,补齐 10 个非港澳台空地址段市,并为 160 个高置信市补齐 19226 条 `source_code/raw_name`;随后按用户确认合并原 `HN/006 天涯市` 到崖州市,并补齐崖州区 33 条来源码。剩余无法高置信绑定官方统计局来源的地址段已补入本地稳定来源码 `LOCAL-省市镇-地址段ID`,已有地址段 `source_code` 空值归零。最终审计已重排福建、海南删除/合并后的市 code 空洞,删除 42 个镇级伪行政区及其下 235 条地址段,清理 154 条地址段名称中的组织或管理机构词,将 568 条 `xx虚拟路` 归一为 `xx`,并删除 3 条纯 `虚拟路` 及其中 2 个功能区壳镇。随后对纯功能词地址段做二次收口:46 条原始名含 `社区` 的 `开发区/新区/农场/工业园` 等地址段恢复为 `xx社区`,26 条 `LOCAL-*` 来源的 `xx虚拟路` 合成占位地址段删除,同步删除因此空掉的 24 个镇并重排受影响市的镇 code。`raw_name` 保留原始来源名称用于审计,不作为前端展示名。当前 `FJ/043` 为 `石狮市`,当前 `HN/006` 为 `崖州市`;`LN/001`、`LN/002`、`LN/003`、`LN/004` 与 5 个台湾同名自建市当前无地址段行,按港澳台豁免不产生地址段来源码。
 
-版本 1 发布验收:
+东莞拆分后历史发布验收:
 
 ```text
 china.sqlite sha256:
-  0db5080d05c1dcb184c6c8f9b4ad0d6fc4fbef17f88c645ba256e86ab450161d
+  fe44d1d449ec0646a676ed05d2b135dc2aea7f92fb3b0e9aa48f8a871e3b4612
 gov reconcile:
   scopes=43 inserted=3543 updated=245100 account_inserted=497329 removed=4243
 gov strict:
   ok=true manifest_current=true target_count=248643 active_count=248643
   missing=0 mismatched=0 missing_accounts=0 obsolete=0
   catalog_hash=856b48488086cabda027d16d47df352642377c31c41aeabcf927caa8187758ac
-public_institutions bundle:
+public_institutions bundle(东莞拆分后结果;行政区名称归属清理后未重新生成):
   version=1 provinces=43 total=248643
   公民端完整公权目录包含 CITY_POLICE=2898、CITY_EDU=2898、NATIONAL_EDU=1、PROVINCE_RESERVE_BANK=43。
 ```
 
 ## 发布流程
+
+开发期重新创世只做行政区基线清理时:
+
+1. 修改 `sfid/backend/china/china.sqlite`。
+2. 开发库变更后递增 `metadata.admin_division_version`。
+3. 重新创世任务才允许清空 city/town tombstones 并重排市镇 code;普通行政区变更不得复用正式发布后的市/镇 code。
+4. 运行 `python3 sfid/backend/china/check_code_immutable.py` 和 `PRAGMA integrity_check`。
+
+正式发布完整资产时:
 
 1. 修改 `sfid/backend/china/china.sqlite`。
 2. 更新 `metadata.admin_division_version` 和 `admin_division_versions`。
@@ -107,4 +129,4 @@ wuminapp 无服务端,数据靠 assets 包随版本分发。包版本变了就**
 1. 不得恢复 `sfid/backend/china/data/`。
 2. 不得恢复 SFID 行政区管理 tab 或 `/api/v1/app/admin-divisions/*`。
 3. 不得在 wuminapp/CPMS 内维护第二套行政区名字。
-4. 任何 `HU/107`、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。
+4. 任何重复洪江旧壳、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。

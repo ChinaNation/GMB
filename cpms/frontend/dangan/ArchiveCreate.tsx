@@ -1,13 +1,13 @@
 // 新建公民档案。居住省市从 INSTALL 初始化信息自动获取，不可修改。
-// 居住镇村由安装城市接口加载；出生地省市镇由随包 SFID 行政区真源只读接口加载。
+// 居住镇和地址段由安装城市接口加载；出生地省市镇由随包 SFID 行政区真源只读接口加载。
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listBirthCities, listBirthProvinces, listBirthTowns, listTowns, listVillages } from '../address/api';
+import { listAddressUnits, listBirthCities, listBirthProvinces, listBirthTowns, listTowns } from '../address/api';
 import { installStatus } from '../initialize/api';
 import DateInput, { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
 import { createArchive } from './api';
-import type { City, Province, Town, Village } from '../address/types';
+import type { AddressUnit, City, Province, Town } from '../address/types';
 
 export default function ArchiveCreate() {
   const navigate = useNavigate();
@@ -17,10 +17,10 @@ export default function ArchiveCreate() {
   const [cityName, setCityName] = useState('');
   // 地址数据
   const [towns, setTowns] = useState<Town[]>([]);
-  const [villages, setVillages] = useState<Village[]>([]);
+  const [addressUnits, setAddressUnits] = useState<AddressUnit[]>([]);
   const [selectedTown, setSelectedTown] = useState('');
-  const [selectedVillage, setSelectedVillage] = useState('');
-  const [addressText, setAddressText] = useState('');
+  const [selectedAddressUnit, setSelectedAddressUnit] = useState('');
+  const [addressDetail, setAddressDetail] = useState('');
   const [birthProvinces, setBirthProvinces] = useState<Province[]>([]);
   const [birthCities, setBirthCities] = useState<City[]>([]);
   const [birthTowns, setBirthTowns] = useState<Town[]>([]);
@@ -55,13 +55,13 @@ export default function ArchiveCreate() {
     }).catch(() => {});
   }, []);
 
-  // 选镇后联动加载村/路
+  // 选镇后联动加载地址段。
   useEffect(() => {
-    if (!selectedTown) { setVillages([]); setSelectedVillage(''); return; }
-    listVillages(selectedTown).then(res => {
-      if (res.data) setVillages(res.data);
+    if (!selectedTown) { setAddressUnits([]); setSelectedAddressUnit(''); return; }
+    listAddressUnits(selectedTown).then(res => {
+      if (res.data) setAddressUnits(res.data);
     }).catch(() => {});
-    setSelectedVillage('');
+    setSelectedAddressUnit('');
   }, [selectedTown]);
 
   useEffect(() => {
@@ -110,8 +110,8 @@ export default function ArchiveCreate() {
     if (!isValidHeight(form.height_cm)) { setError('请输入正确的身高'); return; }
     if (!provinceCode || !cityCode) { setError('居住省市信息未加载'); return; }
     if (!selectedTown) { setError('请选择居住镇'); return; }
-    if (!selectedVillage) { setError('请选择居住村/路'); return; }
-    if (!addressText.trim()) { setError('请输入居住地址'); return; }
+    if (!selectedAddressUnit) { setError('请选择居住地址段'); return; }
+    if (!addressDetail.trim()) { setError('请输入详细地址'); return; }
     if (!birthProvince) { setError('请选择出生省份'); return; }
     if (!birthCity) { setError('请选择出生城市'); return; }
     if (!birthTown) { setError('请选择出生镇'); return; }
@@ -120,8 +120,8 @@ export default function ArchiveCreate() {
     try {
       const body = {
         town_code: selectedTown,
-        village_id: selectedVillage,
-        address: addressText.trim() || undefined,
+        address_unit_id: selectedAddressUnit,
+        address_detail: addressDetail.trim() || undefined,
         birth_province_code: birthProvince,
         birth_city_code: birthCity,
         birth_town_code: birthTown,
@@ -166,16 +166,16 @@ export default function ArchiveCreate() {
           </select>
         </div>
         <div className="form-group">
-          <label>居住村/路 *</label>
-          <select className="form-input" value={selectedVillage} onChange={e => setSelectedVillage(e.target.value)} disabled={!selectedTown}>
-            <option value="">请选择村/路</option>
-            {villages.map(v => <option key={v.village_id} value={v.village_id}>{v.village_name}</option>)}
+          <label>地址段 *</label>
+          <select className="form-input" value={selectedAddressUnit} onChange={e => setSelectedAddressUnit(e.target.value)} disabled={!selectedTown}>
+            <option value="">请选择地址段</option>
+            {addressUnits.map(v => <option key={v.address_unit_id} value={v.address_unit_id}>{v.address_unit_name}</option>)}
           </select>
         </div>
       </div>
       <div className="form-group">
-        <label>居住地址 *</label>
-        <input className="form-input" placeholder="详细门牌号等（最长100字符）" maxLength={100} value={addressText} onChange={e => setAddressText(e.target.value)} />
+        <label>详细地址 *</label>
+        <input className="form-input" placeholder="门牌号、楼栋、房号等（最长100字符）" maxLength={100} value={addressDetail} onChange={e => setAddressDetail(e.target.value)} />
       </div>
       <div className="form-row">
         <div className="form-group"><label>姓氏 *</label><input className="form-input" value={form.last_name} onChange={e => set('last_name', e.target.value)} /></div>

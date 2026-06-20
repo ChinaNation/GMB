@@ -1,7 +1,7 @@
 # PQC card6:机密性域抗量子(IM ML-KEM-768 + TLS 混合)
 
 关联决策:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`(§1)
-状态:open(机密性域,ADR-016 完全未覆盖的盲区;与链端 card 并行,app-level)
+状态:open(机密性域,旧 PQC 方案完全未覆盖的盲区;与链端 card 并行,app-level)
 
 任务需求:
 补 harvest-now-decrypt-later 最不可逆的暴露面——IM 消息内容与 P2P/RPC 传输的抗量子:

@@ -40,7 +40,7 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 - `system_install`：保存 `sfid_number / province_code / city_code / province_name / city_name / install_secret / install_secret_hash / cpms_pubkey`。
 - `qr_sign_keys`：保存本机 `ARCHIVE` 签发密钥。
 - `admin_users`：保存超级管理员和操作管理员账号。
-- `address_towns/address_villages`：在同一初始化事务内重建安装码对应市的镇/村路运行表。
+- `address_towns/address_units`：在同一初始化事务内重建安装码对应市的镇和地址段运行表。
 
 `install_secret` 与 ARCHIVE 私钥使用 `CPMS_KEY_ENCRYPT_SECRET` 作为 32 字节 hex 主密钥，通过 AES-256-GCM 加密后落库，格式为 `enc:gcm:<nonce_hex>:<cipher_hex>`。未配置或格式错误时拒绝初始化；已初始化实例启动时如果存在加密材料，必须立即解密验证 `install_secret` 和 ARCHIVE 私钥，任何解密失败都拒绝启动。
 

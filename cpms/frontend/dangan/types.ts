@@ -14,8 +14,10 @@ export interface Archive {
   height_cm: number | null;
   passport_no: string;
   town_code: string;
-  village_id: string;
-  address: string;
+  address_unit_id: string;
+  address_unit_name_snapshot: string;
+  address_detail: string;
+  address_full_snapshot: string;
   birth_province_code: string;
   birth_city_code: string;
   birth_town_code: string;
@@ -45,8 +47,8 @@ export interface CreateArchiveRequest {
   gender_code: string;
   height_cm: number;
   town_code?: string;
-  village_id?: string;
-  address?: string;
+  address_unit_id?: string;
+  address_detail?: string;
   birth_province_code: string;
   birth_city_code: string;
   birth_town_code: string;
