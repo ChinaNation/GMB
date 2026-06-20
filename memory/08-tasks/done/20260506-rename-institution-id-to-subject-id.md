@@ -208,7 +208,7 @@ grep -rn "\binstitution_org\b\|\binstitution_pallet_address\b\|\binstitution_id_
 - ✓ payload 长度上限 47B 不变
 - ✓ storage layout 字节级数据等价(只改 Rust 类型名 + storage prefix 名,fresh genesis 即生效)
 - ✓ 业务流程零变更(propose / vote / execute / close 路径所有 case 继续工作)
-- ✓ 客户端 dispatch 规则不变(PersonalDuoqianInfo.has / AddressRegisteredSfid.has 互斥)
+- ✓ 客户端 dispatch 规则不变(PersonalDuoqianInfo.has / AccountRegisteredSfid.has 互斥)
 - ✓ 机构业务层完全保留:`organization-manage::Institutions(SfidNumber-keyed)` / `InstitutionInfo` / `InstitutionAccountInfo` / `InstitutionLifecycleStatus` / `InstitutionMultisigQuery` / `InstitutionPendingClose` / `verify_institution_registration` / `register_sfid_institution` / `propose_create_institution` 一字未动
 - ✓ wuminapp `lib/citizen/institution/` 目录 + `institution_admin_service.dart` 文件名保留(业务命名)
 - ✓ `institution-asset` crate 保留

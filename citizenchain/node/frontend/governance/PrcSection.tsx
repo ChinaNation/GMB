@@ -14,11 +14,11 @@ type PrcView =
   | { page: 'list' }
   | { page: 'detail'; sfidNumber: string }
   | { page: 'admin-list'; sfidNumber: string; orgType: number }
-  | { page: 'admin-set-change'; sfidNumber: string; orgType: number; institutionName: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'admin-set-change'; sfidNumber: string; orgType: number; sfidFullName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
-  | { page: 'create-proposal'; sfidNumber: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'create-proposal'; sfidNumber: string; orgType: number; sfidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
   | { page: 'protocol-upgrade'; sfidNumber: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'propose-sweep'; sfidNumber: string; sfidFullName: string; adminWallets: AdminWalletMatch[] };
 
 export function PrcSection() {
   const [view, setView] = useState<PrcView>({ page: 'list' });
@@ -52,8 +52,8 @@ export function PrcSection() {
       <CreateDuoqianTransferPage
         sfidNumber={view.sfidNumber}
         orgType={view.orgType}
-        institutionName={view.institutionName}
-        mainAddress={view.mainAddress}
+        sfidFullName={view.sfidFullName}
+        mainAccount={view.mainAccount}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.sfidNumber)}
         onSuccess={() => backToDetail(view.sfidNumber)}
@@ -65,7 +65,7 @@ export function PrcSection() {
     return (
       <AdminSetChangePage
         accountRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
-        institutionName={view.institutionName}
+        sfidFullName={view.sfidFullName}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.sfidNumber)}
         onSuccess={() => backToDetail(view.sfidNumber)}
@@ -87,7 +87,7 @@ export function PrcSection() {
     return (
       <SweepProposalPage
         sfidNumber={view.sfidNumber}
-        institutionName={view.institutionName}
+        sfidFullName={view.sfidFullName}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.sfidNumber)}
         onSuccess={() => backToDetail(view.sfidNumber)}
@@ -105,17 +105,17 @@ export function PrcSection() {
         onSelectProposal={(proposalId, adminWallets, sid) =>
           setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid, originSfidNumber: sfidNumber })
         }
-        onCreateProposal={(sid, orgType, name, mainAddress, aw) =>
-          setView({ page: 'create-proposal', sfidNumber: sid, orgType, institutionName: name, mainAddress, adminWallets: aw })
+        onCreateProposal={(sid, orgType, name, mainAccount, aw) =>
+          setView({ page: 'create-proposal', sfidNumber: sid, orgType, sfidFullName: name, mainAccount, adminWallets: aw })
         }
         onCreateAdminSetChange={(sid, orgType, name, aw) =>
-          setView({ page: 'admin-set-change', sfidNumber: sid, orgType, institutionName: name, adminWallets: aw })
+          setView({ page: 'admin-set-change', sfidNumber: sid, orgType, sfidFullName: name, adminWallets: aw })
         }
         onCreateProtocolUpgrade={(aw) =>
           setView({ page: 'protocol-upgrade', sfidNumber, adminWallets: aw })
         }
         onCreateSweep={(sid, name, aw) =>
-          setView({ page: 'propose-sweep', sfidNumber: sid, institutionName: name, adminWallets: aw })
+          setView({ page: 'propose-sweep', sfidNumber: sid, sfidFullName: name, adminWallets: aw })
         }
       />
     );

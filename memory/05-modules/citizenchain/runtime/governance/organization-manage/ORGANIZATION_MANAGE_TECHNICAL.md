@@ -52,7 +52,7 @@ ADR-015 后，机构管理按账户级治理：
 - `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
-- `SfidRegisteredAddress` / `AddressRegisteredSfid`：继续作为链上账户索引。
+- `SfidRegisteredAccount` / `AccountRegisteredSfid`：继续作为链上账户索引。
 - 个人多签账户不在本模块保存，当前真源为 `personal-manage::PersonalDuoqians`。
 
 管理员主体：
@@ -71,7 +71,7 @@ ADR-015 后，机构管理按账户级治理：
 ```text
 propose_create_institution(
   sfid_number,
-  institution_name,
+  sfid_full_name,
   accounts,
   admin_org,
   admin_count,
@@ -94,8 +94,8 @@ propose_create_institution(
 - 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；动态阈值由用户输入，必须严格过半且不得超过管理员数量。
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
-- `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / institution_name / account_names[]`。
-- `province + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位联邦管理员派生签名公钥。
+- `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / sfid_full_name / account_names[]`。
+- `province_name + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位联邦管理员派生签名公钥。
 - `subject_property / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
@@ -106,7 +106,7 @@ propose_create_institution(
 - 投票通过执行时，先 unreserve，再扣手续费，再把各账户初始余额划入对应机构账户。
 - 投票拒绝时释放 reserve 并清理 pending 索引；自动执行暂时失败时保留 pending 数据供重试；进入 `STATUS_EXECUTION_FAILED` 终态时由 votingengine 的终态回调释放 reserve 并清理 pending 索引。
 - 机构账户关闭执行时，先扣链上手续费，再把 `free_balance - fee` 转入用户提供的收款地址；执行阶段再次拒绝 reserved 余额，保证账户能被清空。
-- 机构账户关闭成功后删除 `InstitutionAccounts[(sfid, account_name)]`、`SfidRegisteredAddress[(sfid, account_name)]`、`AddressRegisteredSfid[address]` 和 `admins-change::Subjects[subject]` 当前状态。历史事件和历史提案不删除。
+- 机构账户关闭成功后删除 `InstitutionAccounts[(sfid, account_name)]`、`SfidRegisteredAccount[(sfid, account_name)]`、`AccountRegisteredSfid[address]` 和 `admins-change::Subjects[subject]` 当前状态。历史事件和历史提案不删除。
 
 ## 6. 投票回调
 
@@ -154,7 +154,7 @@ runtime 适配：
 - 机构级创建提案在提案、Pending 主体、reserve、地址索引任一步失败时整体回滚。
 - 缺少主账户时拒绝。
 - 账户初始余额低于最低金额时拒绝。
-- 批量 SFID 机构注册按 `institution_name + account_names[]` 验签并写入地址索引。
+- 批量 SFID 机构注册按 `sfid_full_name + account_names[]` 验签并写入地址索引。
 - 个人多签路径可创建和激活。
 - 关闭、重复管理员、重放投票等回归路径通过；关闭用例覆盖余额转出、pending 清理、账户索引清理、管理员主体清理和动态阈值清理。
 
@@ -166,6 +166,6 @@ runtime 适配：
 
 ## 9. 变更记录
 
-- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `subject_property/sub_type/parent_sfid_number`,签名业务字段收口为 `sfid_number / institution_name / account_names[]`。
+- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `subject_property/sub_type/parent_sfid_number`,签名业务字段收口为 `sfid_number / sfid_full_name / account_names[]`。
 - 2026-05-02:创建 Pending 多签主体改为 votingengine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。
 - 2026-05-17:机构账户关闭成功后删除账户正向/反向索引和管理员主体当前状态；已转出的余额不继承到重新注册的新当前状态。

@@ -59,20 +59,20 @@ impl Db {
     fn insert_document(&self, doc: &InstitutionDocument) -> Result<InstitutionDocument, String> {
         let doc = doc.clone();
         self.with_client(move |conn| {
-            let (p_code, c_code) = Db::scope_codes_from_sfid(doc.sfid_number.as_str());
+            let (province_code, city_code) = Db::scope_codes_from_sfid(doc.sfid_number.as_str());
             let file_size = i64::try_from(doc.file_size)
                 .map_err(|_| "document file size too large".to_string())?;
             let row = conn
                 .query_one(
                     "INSERT INTO docs (
-                        sfid_number, p_code, c_code, file_name, doc_type, file_size,
+                        sfid_number, province_code, city_code, file_name, doc_type, file_size,
                         file_path, uploaded_by, uploaded_at
                      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                      RETURNING id",
                     &[
                         &doc.sfid_number,
-                        &p_code,
-                        &c_code,
+                        &province_code,
+                        &city_code,
                         &doc.file_name,
                         &doc.doc_type,
                         &file_size,

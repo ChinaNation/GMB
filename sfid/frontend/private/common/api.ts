@@ -40,11 +40,11 @@ export async function checkInstitutionName(
   auth: AdminAuth,
   name: string,
   subject_property?: string,
-  city?: string,
+  cityName?: string,
 ): Promise<{ exists: boolean }> {
   const params = new URLSearchParams({ name });
   if (subject_property) params.set('subject_property', subject_property);
-  if (city) params.set('city', city);
+  if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
     `/api/v1/institution/check-name?${params.toString()}`,
     auth,
@@ -59,11 +59,11 @@ export async function createInstitution(
   const grantPayload = {
     subject_property: input.subject_property,
     p1: input.p1 ?? null,
-    province: input.province ?? null,
-    city: input.city,
+    province_name: input.province_name ?? null,
+    city_name: input.city_name,
     institution: input.institution,
     education_type: input.education_type ?? null,
-    institution_name: input.institution_name ?? null,
+    sfid_full_name: input.sfid_full_name ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
     private_type: input.private_type ?? null,
     partnership_kind: input.partnership_kind ?? null,
@@ -102,8 +102,8 @@ export async function listPrivateInstitutions(
 ): Promise<PageResult<InstitutionListRow>> {
   const params = new URLSearchParams();
   if (query?.private_type) params.set('private_type', query.private_type);
-  if (query?.province) params.set('province', query.province);
-  if (query?.city) params.set('city', query.city);
+  if (query?.province_name) params.set('province_name', query.province_name);
+  if (query?.city_name) params.set('city_name', query.city_name);
   if (query?.q && query.q.trim()) params.set('q', query.q.trim());
   if (query?.cursor) params.set('cursor', query.cursor);
   if (query?.page_size) params.set('page_size', String(query.page_size));
@@ -132,8 +132,8 @@ export async function searchParentInstitutions(
 ): Promise<ParentInstitutionRow[]> {
   const params = new URLSearchParams({ q });
   params.set('f_institution', opts.fInstitution);
-  params.set('province', opts.province);
-  params.set('city', opts.city);
+  params.set('province_name', opts.province_name);
+  params.set('city_name', opts.city_name);
   if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
     `/api/v1/institution/search-parents?${params.toString()}`,
@@ -149,7 +149,7 @@ export async function updateInstitution(
   const grantPayload = {
     target: sfidNumber,
     sfid_number: sfidNumber,
-    institution_name: input.institution_name ?? null,
+    sfid_full_name: input.sfid_full_name ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
     legal_rep_name: input.legal_rep_name ?? null,
     legal_rep_sfid_number: input.legal_rep_sfid_number ?? null,

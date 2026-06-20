@@ -207,7 +207,7 @@ pub mod pallet {
             bank: &primitives::china::china_ch::ChinaCh,
             account_bytes: [u8; 32],
         ) -> Option<T::AccountId> {
-            match T::AccountId::decode(&mut &bank.main_address[..]) {
+            match T::AccountId::decode(&mut &bank.main_account[..]) {
                 Ok(a) => Some(a),
                 Err(_) => {
                     Self::deposit_event(Event::<T>::ShengBankDecodeFailed {
@@ -321,7 +321,7 @@ pub mod pallet {
             }
 
             for bank in CHINA_CH.iter() {
-                let Some(account) = Self::resolve_bank_account(year, bank, bank.main_address)
+                let Some(account) = Self::resolve_bank_account(year, bank, bank.main_account)
                 else {
                     writes = writes.saturating_add(1); // decode-failed event write
                     continue;
@@ -332,7 +332,7 @@ pub mod pallet {
                 if principal_back != bank.stake_amount {
                     Self::deposit_event(Event::<T>::ShengBankPrincipalOverflow {
                         year,
-                        account_bytes: bank.main_address,
+                        account_bytes: bank.main_account,
                     });
                     log::error!(
                         target: "runtime::shengbank",
@@ -348,7 +348,7 @@ pub mod pallet {
                 let Some(gross_interest) = principal.checked_mul(&rate) else {
                     Self::deposit_event(Event::<T>::ShengBankInterestOverflow {
                         year,
-                        account_bytes: bank.main_address,
+                        account_bytes: bank.main_account,
                     });
                     log::error!(
                         target: "runtime::shengbank",
@@ -370,7 +370,7 @@ pub mod pallet {
                     // 这里保留为防御性兜底，避免未来参数变化时创建 dust 账户。
                     Self::deposit_event(Event::<T>::ShengBankInterestBelowED {
                         year,
-                        account_bytes: bank.main_address,
+                        account_bytes: bank.main_account,
                         amount: interest,
                     });
                     log::warn!(
@@ -392,7 +392,7 @@ pub mod pallet {
 
                 Self::deposit_event(Event::<T>::ShengBankInterestMinted {
                     year,
-                    account_bytes: bank.main_address,
+                    account_bytes: bank.main_account,
                     account,
                     amount: interest,
                 });

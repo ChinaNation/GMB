@@ -2,12 +2,12 @@
 
 ## 概述
 
-国储会安全基金（NRC_ANQUAN_ADDRESS）的转账通过内部投票治理。仅国储会管理员（NRC admin）可发起提案，经多签投票通过后自动执行转账并扣除手续费。
+国储会安全基金（NRC_ANQUAN_ACCOUNT）的转账通过内部投票治理。仅国储会管理员（NRC admin）可发起提案，经多签投票通过后自动执行转账并扣除手续费。
 
 ## 安全基金账户
 
 ```rust
-pub const NRC_ANQUAN_ADDRESS: [u8; 32] =
+pub const NRC_ANQUAN_ACCOUNT: [u8; 32] =
     hex!("045bdb35046c60c1346ba48e1e79049519edf4c009e40c7ecead1bebd1884a37");
 ```
 
@@ -58,7 +58,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 投票通过后在 `with_transaction` 中原子执行：
 
 1. 验证提案状态为 PASSED
-2. 解码 NRC_ANQUAN_ADDRESS 为 AccountId
+2. 解码 NRC_ANQUAN_ACCOUNT 为 AccountId
 3. InstitutionAsset::can_spend 再次检查支出权限
 4. **计算手续费**：`fee = max(amount * 0.1%, 0.1 元)`
 5. **余额检查**：`free >= amount + fee + ED`
@@ -92,4 +92,4 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
   - `propose_safety_fund_transfer`(call_index=1)
   - `try_execute_safety_fund_from_callback`(内部方法,投票通过后由 InternalVoteExecutor 回调触发)
-- `citizenchain/runtime/primitives/china/china_cb.rs` - NRC_ANQUAN_ADDRESS 定义
+- `citizenchain/runtime/primitives/china/china_cb.rs` - NRC_ANQUAN_ACCOUNT 定义

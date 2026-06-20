@@ -21,13 +21,13 @@ class AdminCatalogEntryResponse {
   const AdminCatalogEntryResponse({
     required this.pubkeyHex,
     required this.roleName,
-    required this.institutionName,
+    required this.sfidFullName,
     required this.org,
   });
 
   final String pubkeyHex;
   final String roleName;
-  final String institutionName;
+  final String sfidFullName;
   final String org;
 }
 
@@ -50,8 +50,8 @@ class AdminCatalogResponse {
 /// SFID 人口快照响应。
 ///
 /// ADR-008 step3:凭证双层匹配。SFID 后端在签发人口快照时下发
-/// (province, signer_admin_pubkey) — 链端 RuntimePopulationSnapshotVerifier
-/// 走 `sheng_signing_pubkey_for_admin(province, admin_pubkey)` 双映射查派生
+/// (province_name, signer_admin_pubkey) — 链端 RuntimePopulationSnapshotVerifier
+/// 走 `sheng_signing_pubkey_for_admin(province_name, admin_pubkey)` 双映射查派生
 /// 公钥;无对应记录直接拒签。wuminapp 在线端透传到 chain extrinsic,不二次校验。
 class PopulationSnapshotResponse {
   const PopulationSnapshotResponse({
@@ -60,7 +60,7 @@ class PopulationSnapshotResponse {
     required this.snapshotNonce,
     required this.signature,
     required this.who,
-    required this.province,
+    required this.provinceName,
     required this.signerAdminPubkey,
   });
 
@@ -78,7 +78,7 @@ class PopulationSnapshotResponse {
 
   /// 签发 admin 所属省份(UTF-8 中文,如 "安徽省")。
   /// SFID 后端按登录联邦管理员路由下发,链端 SCALE 末尾必填字段。
-  final String province;
+  final String provinceName;
 
   /// 签发本凭证的联邦管理员 admin pubkey(0x 小写 hex,32 字节)。
   final String signerAdminPubkey;
@@ -92,14 +92,14 @@ class InstitutionRegistrationCredential {
   const InstitutionRegistrationCredential({
     required this.genesisHash,
     required this.registerNonce,
-    required this.province,
+    required this.provinceName,
     required this.signerAdminPubkey,
     required this.signature,
   });
 
   final String genesisHash;
   final String registerNonce;
-  final String province;
+  final String provinceName;
   final String signerAdminPubkey;
   final String signature;
 }
@@ -108,13 +108,13 @@ class InstitutionRegistrationCredential {
 class InstitutionRegistrationInfoResponse {
   const InstitutionRegistrationInfoResponse({
     required this.sfidNumber,
-    required this.institutionName,
+    required this.sfidFullName,
     required this.accountNames,
     required this.credential,
   });
 
   final String sfidNumber;
-  final String institutionName;
+  final String sfidFullName;
   final List<String> accountNames;
   final InstitutionRegistrationCredential credential;
 }
@@ -191,15 +191,15 @@ class ApiClient {
       final m = item.map((k, v) => MapEntry(k.toString(), v));
       final pubkey = (m['pubkey_hex']?.toString() ?? '').trim().toLowerCase();
       final role = (m['role_name']?.toString() ?? '').trim();
-      final institutionName = (m['institution_name']?.toString() ?? '').trim();
-      if (pubkey.isEmpty || role.isEmpty || institutionName.isEmpty) {
+      final sfidFullName = (m['sfid_full_name']?.toString() ?? '').trim();
+      if (pubkey.isEmpty || role.isEmpty || sfidFullName.isEmpty) {
         continue;
       }
       entries.add(
         AdminCatalogEntryResponse(
           pubkeyHex: pubkey.startsWith('0x') ? pubkey.substring(2) : pubkey,
           roleName: role,
-          institutionName: institutionName,
+          sfidFullName: sfidFullName,
           org: (m['org']?.toString() ?? 'unknown').trim().toLowerCase(),
         ),
       );
@@ -252,11 +252,12 @@ class ApiClient {
       throw Exception('population snapshot invalid response: missing data');
     }
 
-    final province = (data['province']?.toString() ?? '').trim();
+    final provinceName = (data['province_name']?.toString() ?? '').trim();
     final signerAdminPubkeyRaw =
         (data['signer_admin_pubkey']?.toString() ?? '').trim();
-    if (province.isEmpty) {
-      throw Exception('population snapshot 缺少 province 字段(ADR-008 step3 必填)');
+    if (provinceName.isEmpty) {
+      throw Exception(
+          'population snapshot 缺少 province_name 字段(ADR-008 step3 必填)');
     }
     if (signerAdminPubkeyRaw.isEmpty) {
       throw Exception(
@@ -273,7 +274,7 @@ class ApiClient {
       genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
       signature: (data['signature']?.toString() ?? '').trim(),
       who: (data['who']?.toString() ?? '').trim(),
-      province: province,
+      provinceName: provinceName,
       signerAdminPubkey: signerAdminPubkey,
     );
   }
@@ -281,7 +282,7 @@ class ApiClient {
   /// 查询机构下所有多签账户。
   ///
   /// 调用 SFID 后端 `GET /api/v1/app/institutions/:sfid_number/accounts`，
-  /// 返回机构名称 + 账户列表（account_name / duoqian_address / chain_status）。
+  /// 返回机构名称 + 账户列表（account_name / duoqian_account / chain_status）。
   Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
       String sfidNumber) async {
     final trimmed = sfidNumber.trim();
@@ -330,7 +331,7 @@ class ApiClient {
         final m = item.map((k, v) => MapEntry(k.toString(), v));
         accounts.add(InstitutionAccountEntry(
           accountName: (m['account_name']?.toString() ?? '').trim(),
-          duoqianAddress: m['duoqian_address']?.toString(),
+          duoqianAccount: m['duoqian_account']?.toString(),
           // 中文注释:SFID 后端公开接口返回 SCREAMING_SNAKE_CASE；
           // 这里兼容旧口径 Pending/Confirmed/Failed，统一折叠成同一套状态。
           chainStatus: InstitutionAccountEntry.normalizeChainStatus(
@@ -342,7 +343,7 @@ class ApiClient {
 
     return InstitutionAccountsResponse(
       sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
-      institutionName: (data['institution_name']?.toString() ?? '').trim(),
+      sfidFullName: (data['sfid_full_name']?.toString() ?? '').trim(),
       accounts: accounts,
     );
   }
@@ -408,21 +409,22 @@ class ApiClient {
       throw Exception('机构注册凭证 account_names 为空');
     }
 
-    final institutionName = (data['institution_name']?.toString() ?? '').trim();
+    final sfidFullName = (data['sfid_full_name']?.toString() ?? '').trim();
     final registerNonce =
         (credentialMap['register_nonce']?.toString() ?? '').trim();
-    final province = (credentialMap['province']?.toString() ?? '').trim();
+    final provinceName =
+        (credentialMap['province_name']?.toString() ?? '').trim();
     final signerAdminPubkeyRaw =
         (credentialMap['signer_admin_pubkey']?.toString() ?? '').trim();
     final signature = (credentialMap['signature']?.toString() ?? '').trim();
-    if (institutionName.isEmpty) {
-      throw Exception('机构注册凭证 institution_name 为空');
+    if (sfidFullName.isEmpty) {
+      throw Exception('机构注册凭证 sfid_full_name 为空');
     }
     if (registerNonce.isEmpty) {
       throw Exception('机构注册凭证 register_nonce 为空');
     }
-    if (province.isEmpty) {
-      throw Exception('机构注册凭证 province 为空');
+    if (provinceName.isEmpty) {
+      throw Exception('机构注册凭证 province_name 为空');
     }
     if (signature.isEmpty) {
       throw Exception('机构注册凭证 signature 为空');
@@ -437,12 +439,12 @@ class ApiClient {
     }
     return InstitutionRegistrationInfoResponse(
       sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
-      institutionName: institutionName,
+      sfidFullName: sfidFullName,
       accountNames: accountNames,
       credential: InstitutionRegistrationCredential(
         genesisHash: (credentialMap['genesis_hash']?.toString() ?? '').trim(),
         registerNonce: registerNonce,
-        province: province,
+        provinceName: provinceName,
         signerAdminPubkey: signerAdminPubkey,
         signature: signature.startsWith('0x')
             ? signature.toLowerCase()
@@ -500,6 +502,9 @@ class ApiClient {
       bindingId: (data['binding_id']?.toString() ?? '').trim(),
       proposalId: (data['proposal_id'] as num?)?.toInt() ?? proposalId,
       voteNonce: (data['vote_nonce']?.toString() ?? '').trim(),
+      provinceName: (data['province_name']?.toString() ?? '').trim(),
+      signerAdminPubkey: _normalizePubkeyHex(
+          (data['signer_admin_pubkey']?.toString() ?? '').trim()),
       signature: (data['signature']?.toString() ?? '').trim(),
     );
   }
@@ -511,6 +516,8 @@ class VoteCredentialResponse {
   final String bindingId;
   final int proposalId;
   final String voteNonce;
+  final String provinceName;
+  final String signerAdminPubkey;
   final String signature;
 
   VoteCredentialResponse({
@@ -519,6 +526,8 @@ class VoteCredentialResponse {
     required this.bindingId,
     required this.proposalId,
     required this.voteNonce,
+    required this.provinceName,
+    required this.signerAdminPubkey,
     required this.signature,
   });
 }
@@ -527,7 +536,7 @@ class VoteCredentialResponse {
 class InstitutionAccountEntry {
   const InstitutionAccountEntry({
     required this.accountName,
-    this.duoqianAddress,
+    this.duoqianAccount,
     required this.chainStatus,
   });
 
@@ -535,7 +544,7 @@ class InstitutionAccountEntry {
   final String accountName;
 
   /// 链上派生的多签地址（hex，上链成功后才有值）。
-  final String? duoqianAddress;
+  final String? duoqianAccount;
 
   /// 链上状态：`Pending` / `Active` / `Closed` / `Failed`（全端统一取值）。
   final String chainStatus;
@@ -579,11 +588,11 @@ class InstitutionAccountEntry {
 class InstitutionAccountsResponse {
   const InstitutionAccountsResponse({
     required this.sfidNumber,
-    required this.institutionName,
+    required this.sfidFullName,
     required this.accounts,
   });
 
   final String sfidNumber;
-  final String institutionName;
+  final String sfidFullName;
   final List<InstitutionAccountEntry> accounts;
 }

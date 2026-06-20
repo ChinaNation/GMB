@@ -23,7 +23,7 @@ use crate::pallet::BalanceOf;
 /// 中文注释:框架阶段占位,业务实装时步骤(callback 通过分支):
 /// 1. `validation::ensure_issuer_allowed` / `ensure_decimals_in_range` / `ensure_class_supported`
 /// 2. 字段过黑名单(`validation::contains_blacklisted_word`)
-/// 3. `fee::release_creation_deposit_to_nrc(proposal_id)` 把 reserve 的押金 transfer 给 NRC fee_address
+/// 3. `fee::release_creation_deposit_to_nrc(proposal_id)` 把 reserve 的押金 transfer 给 NRC fee_account
 /// 4. 分配 AssetId(NextAssetId)
 /// 5. 调 `T::Assets::create(asset_id, owner, ...)` + `mint_into` 注入 initial_supply
 /// 6. 写 Assets storage,emit AssetIssued 事件

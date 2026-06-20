@@ -18,18 +18,18 @@ class _FakeApi extends PublicInstitutionApi {
 
   @override
   Future<PublicInstitutionVersion> fetchVersion({
-    required String province,
-    String? city,
+    required String provinceName,
+    String? cityName,
   }) async {
     versionCalls++;
     return PublicInstitutionVersion(
-        province: province, manifestVersion: version);
+        provinceName: provinceName, manifestVersion: version);
   }
 
   @override
   Future<PublicInstitutionPage> fetchPage({
-    required String province,
-    String? city,
+    required String provinceName,
+    String? cityName,
     String? sinceVersion,
     String? afterSfid,
     int pageSize = 500,

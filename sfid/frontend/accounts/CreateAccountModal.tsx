@@ -19,7 +19,7 @@ import { notice } from '../utils/notice';
 interface Props {
   auth: AdminAuth;
   sfidNumber: string;
-  institutionName: string;
+  sfidFullName: string;
   /** 当前已有的账户列表(用于前端唯一性预校验) */
   existingAccounts: InstitutionAccount[];
   open: boolean;
@@ -34,7 +34,7 @@ interface FormValues {
 export const CreateAccountModal: React.FC<Props> = ({
   auth,
   sfidNumber,
-  institutionName,
+  sfidFullName,
   existingAccounts,
   open,
   onCancel,
@@ -92,7 +92,7 @@ export const CreateAccountModal: React.FC<Props> = ({
       destroyOnClose
     >
       <div style={{ marginBottom: 12 }}>
-        <Typography.Text type="secondary">机构:{institutionName}</Typography.Text>
+        <Typography.Text type="secondary">机构:{sfidFullName}</Typography.Text>
         <br />
         <Typography.Text type="secondary" code style={{ fontSize: 11 }}>
           {sfidNumber}

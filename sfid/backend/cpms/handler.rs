@@ -67,7 +67,7 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT sfid_number, p_code, c_code, status, install_token_status,
+                    "SELECT sfid_number, province_code, city_code, status, install_token_status,
                             cpms_pubkey_hash, created_by, payload
                      FROM cpms_sites
                      WHERE sfid_number = $1",
@@ -85,12 +85,12 @@ impl Db {
                 .map_err(|e| format!("serialize cpms site failed: {e}"))?;
             conn.execute(
                 "INSERT INTO cpms_sites (
-                    sfid_number, p_code, c_code, status, install_token_status,
+                    sfid_number, province_code, city_code, status, install_token_status,
                     cpms_pubkey_hash, created_by, created_at, updated_at, payload
                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                  ON CONFLICT (sfid_number) DO UPDATE SET
-                    p_code = EXCLUDED.p_code,
-                    c_code = EXCLUDED.c_code,
+                    province_code = EXCLUDED.province_code,
+                    city_code = EXCLUDED.city_code,
                     status = EXCLUDED.status,
                     install_token_status = EXCLUDED.install_token_status,
                     cpms_pubkey_hash = EXCLUDED.cpms_pubkey_hash,
@@ -128,18 +128,18 @@ impl Db {
     }
 
     fn list_cpms_sites(&self, province_name: Option<&str>) -> Result<Vec<CpmsSiteKeys>, String> {
-        let p_code = province_name
+        let province_code = province_name
             .and_then(crate::china::province_code_by_name)
             .map(str::to_string);
         self.with_client(move |conn| {
             let rows = conn
                 .query(
-                    "SELECT sfid_number, p_code, c_code, status, install_token_status,
+                    "SELECT sfid_number, province_code, city_code, status, install_token_status,
                             cpms_pubkey_hash, created_by, payload
                      FROM cpms_sites
-                     WHERE ($1::text IS NULL OR p_code = $1)
-                     ORDER BY p_code ASC, c_code ASC, sfid_number ASC",
-                    &[&p_code],
+                     WHERE ($1::text IS NULL OR province_code = $1)
+                     ORDER BY province_code ASC, city_code ASC, sfid_number ASC",
+                    &[&province_code],
                 )
                 .map_err(|e| format!("list cpms sites failed: {e}"))?;
             rows.iter().map(cpms_site_from_row).collect()
@@ -147,7 +147,7 @@ impl Db {
     }
 
     /// 按机构自身 sfid_number 反查机构真源(subjects 主键含 sfid_number,全局唯一)。
-    /// 返回 (province_name, city_name, province_code, city_code, institution_code, institution_name, category)。
+    /// 返回 (province_name, city_name, province_code, city_code, institution_code, sfid_full_name, category)。
     fn find_cpms_target_institution_by_sfid(
         &self,
         sfid_number: &str,
@@ -156,7 +156,7 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT COALESCE(province, ''), COALESCE(city, ''),
+                    "SELECT COALESCE(province_name, ''), COALESCE(city_name, ''),
                             COALESCE(province_code, ''), COALESCE(city_code, ''),
                             COALESCE(institution_code, ''), COALESCE(name, ''),
                             COALESCE(category, '')
@@ -203,8 +203,8 @@ pub(crate) async fn generate_cpms_install_qr(
         Err(resp) => return resp,
     };
     let grant_payload = serde_json::json!({
-        "province": input.province.clone(),
-        "city": input.city.clone(),
+        "province_name": input.province_name.clone(),
+        "city_name": input.city_name.clone(),
         "institution": input.institution.clone(),
     });
     if let Err(resp) = require_admin_security_grant(
@@ -231,7 +231,7 @@ pub(crate) async fn generate_cpms_install_qr(
         province_code,
         city_code,
         institution_code,
-        institution_name,
+        sfid_full_name,
         category,
     )) = (match state.db.find_cpms_target_institution_by_sfid(&sfid_number) {
         Ok(v) => v,
@@ -316,7 +316,7 @@ pub(crate) async fn generate_cpms_install_qr(
         city_name: city,
         city_code,
         institution_code,
-        institution_name,
+        sfid_full_name,
         qr1_payload: qr1_payload.clone(),
         cpms_pubkey_hash: None,
         created_by: ctx.admin_pubkey.clone(),
@@ -338,7 +338,7 @@ pub(crate) async fn generate_cpms_install_qr(
         &ctx.admin_pubkey,
         Some(sfid_number.clone()),
         serde_json::json!({
-            "city": site.city_name.clone(),
+            "city_name": site.city_name.clone(),
             "institution": site.institution_code.clone(),
         }),
     );
@@ -893,7 +893,7 @@ fn cpms_site_keys_to_list_row_simple(
         city_name: site.city_name.clone(),
         city_code: site.city_code.clone(),
         institution_code: site.institution_code.clone(),
-        institution_name: site.institution_name.clone(),
+        sfid_full_name: site.sfid_full_name.clone(),
         qr1_payload: site.qr1_payload.clone(),
         cpms_pubkey_bound: site.cpms_pubkey_hash.is_some(),
         created_by: site.created_by.clone(),

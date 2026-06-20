@@ -23,7 +23,7 @@ export type CpmsSiteRow = {
   city_name?: string;
   city_code?: string;
   institution_code?: string;
-  institution_name?: string;
+  sfid_full_name?: string;
   qr1_payload?: string;
   cpms_pubkey_bound?: boolean;
   created_by: string;
@@ -65,11 +65,11 @@ export async function getCpmsSiteByInstitution(
 
 /**
  * 生成公安局 CPMS 站点安装码。
- * 写入键 = 机构自身 `sfid_number`(= 详情页读取键);province/city/institution 仅供安全授权绑定。
+ * 写入键 = 机构自身 `sfid_number`(= 详情页读取键);province_name/city_name/institution 仅供安全授权绑定。
  */
 export async function generateCpmsInstallQr(
   auth: AdminAuth,
-  payload: { sfid_number: string; province?: string; city: string; institution: string },
+  payload: { sfid_number: string; province_name?: string; city_name: string; institution: string },
   securityGrant: AdminSecurityGrantOutput,
 ): Promise<GenerateCpmsInstallResult> {
   return adminRequest<GenerateCpmsInstallResult>('/api/v1/admin/cpms-keys/sfid/generate', auth, {

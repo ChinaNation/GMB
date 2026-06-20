@@ -192,7 +192,7 @@ void main() {
       name: '个人账户',
       sfidNumber: 'personal:$personalAddress',
       orgType: OrgType.duoqian,
-      duoqianAddress: personalAddress,
+      duoqianAccount: personalAddress,
     ));
     expect(personal.type, AdminAccountIdentityType.personalDuoqian);
     expect(personal.org, 3);
@@ -205,7 +205,7 @@ void main() {
       sfidNumber: registeredDuoqianIdentity(accountAddress),
       orgType: OrgType.duoqian,
       adminAccountOrg: 5,
-      duoqianAddress: accountAddress,
+      duoqianAccount: accountAddress,
     ));
     expect(
         institutionAccount.type, AdminAccountIdentityType.institutionAccount);
@@ -217,7 +217,7 @@ void main() {
       name: '省储行',
       sfidNumber: 'LN001-GCB05-944805165-2026',
       orgType: OrgType.prb,
-      accounts: InstitutionAccounts(mainAddress: '66'),
+      accounts: InstitutionAccounts(mainAccount: '66'),
     ));
     expect(governance.type, AdminAccountIdentityType.governanceInstitution);
     expect(governance.org, OrgType.prb);

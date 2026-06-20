@@ -13,14 +13,14 @@ use serde::{Deserialize, Serialize};
 pub struct EligibleClearingBankCandidate {
     pub sfid_number: String,
     /// 机构中文名;两步式未命名时为空串。
-    pub institution_name: String,
+    pub sfid_full_name: String,
     pub ref_property: String,
     pub sub_type: Option<String>,
     pub parent_sfid_number: Option<String>,
-    pub parent_institution_name: Option<String>,
+    pub parent_sfid_full_name: Option<String>,
     pub parent_ref_property: Option<String>,
-    pub province: String,
-    pub city: String,
+    pub province_name: String,
+    pub city_name: String,
     /// 主账户当前链上状态:`Pending` / `Active` / `Closed` / `Failed`。
     pub main_chain_status: String,
     pub main_account: Option<String>,
@@ -46,7 +46,7 @@ pub struct AccountWithBalance {
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {
     pub sfid_number: String,
-    pub institution_name: String,
+    pub sfid_full_name: String,
     /// 管理员更换使用的机构多签 AccountId。当前清算行以主账户作为机构管理员账户。
     pub admin_account_hex: String,
     /// 管理员更换使用的 org。清算行属于 ORG_OTH 机构账户。
@@ -89,7 +89,7 @@ pub struct InstitutionProposalItem {
 #[serde(rename_all = "snake_case")]
 pub struct InstitutionRegistrationInfoResp {
     pub sfid_number: String,
-    pub institution_name: String,
+    pub sfid_full_name: String,
     pub account_names: Vec<String>,
     pub credential: InstitutionRegistrationCredentialResp,
 }
@@ -102,8 +102,8 @@ pub struct InstitutionRegistrationCredentialResp {
     pub genesis_hash: String,
     /// 防重放 nonce(本次响应生成的随机字符串)。
     pub register_nonce: String,
-    pub province: String,
-    /// 本次签名所用省管理员公钥(32 字节 hex),链上按 (province, signer_admin_pubkey) 查派生签名公钥。
+    pub province_name: String,
+    /// 本次签名所用省管理员公钥(32 字节 hex),链上按 (province_name, signer_admin_pubkey) 查派生签名公钥。
     pub signer_admin_pubkey: String,
     /// 省级签名密钥对凭证 payload 的 sr25519 签名(64 字节 hex)。
     pub signature: String,

@@ -45,7 +45,7 @@ void main() {
         0,
         const ClearingBankBindingSnapshot(
           sfidNumber: 'GD001-SCB05-000000001-2026',
-          institutionName: '测试清算行',
+          sfidFullName: '测试清算行',
           mainAccount: 'aa',
           feeAccount: 'bb',
           peerId: '12D3KooWTest',

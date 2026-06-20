@@ -157,7 +157,7 @@ fn bind_rejects_empty_nonce() {
         let empty_credential = BindCredential {
             binding_id: binding_id(b"id-empty"),
             bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
-            province: b"liaoning".to_vec().try_into().expect("province fits"),
+            province_name: b"liaoning".to_vec().try_into().expect("province_name fits"),
             signer_admin_pubkey: [7u8; 32],
             signature: signature("bind-ok"),
         };
@@ -301,7 +301,7 @@ const PROVINCE: &[u8] = b"liaoning";
 const OTHER_PROVINCE: &[u8] = b"jilin";
 
 fn province_bounded(p: &[u8]) -> ProvinceBound {
-    p.to_vec().try_into().expect("province fits")
+    p.to_vec().try_into().expect("province_name fits")
 }
 
 fn make_nonce(seed: u8) -> ShengNonce {
@@ -318,29 +318,35 @@ fn fresh_keypair(seed_phrase: &str) -> (sr25519::Pair, [u8; 32]) {
 }
 
 fn build_add_backup_payload(
-    province: &[u8],
+    province_name: &[u8],
     slot: Slot,
     new_pubkey: &[u8; 32],
     nonce: &ShengNonce,
 ) -> [u8; 32] {
-    let payload = (crate::ADD_BACKUP_DOMAIN, province, slot, new_pubkey, nonce);
+    let payload = (
+        crate::ADD_BACKUP_DOMAIN,
+        province_name,
+        slot,
+        new_pubkey,
+        nonce,
+    );
     blake2_256(&payload.encode())
 }
 
-fn build_remove_backup_payload(province: &[u8], slot: Slot, nonce: &ShengNonce) -> [u8; 32] {
-    let payload = (crate::REMOVE_BACKUP_DOMAIN, province, slot, nonce);
+fn build_remove_backup_payload(province_name: &[u8], slot: Slot, nonce: &ShengNonce) -> [u8; 32] {
+    let payload = (crate::REMOVE_BACKUP_DOMAIN, province_name, slot, nonce);
     blake2_256(&payload.encode())
 }
 
 fn build_activate_payload(
-    province: &[u8],
+    province_name: &[u8],
     admin_pubkey: &[u8; 32],
     signing_pubkey: &[u8; 32],
     nonce: &ShengNonce,
 ) -> [u8; 32] {
     let payload = (
         crate::ACTIVATE_DOMAIN,
-        province,
+        province_name,
         admin_pubkey,
         signing_pubkey,
         nonce,
@@ -349,14 +355,14 @@ fn build_activate_payload(
 }
 
 fn build_rotate_payload(
-    province: &[u8],
+    province_name: &[u8],
     admin_pubkey: &[u8; 32],
     new_signing_pubkey: &[u8; 32],
     nonce: &ShengNonce,
 ) -> [u8; 32] {
     let payload = (
         crate::ROTATE_DOMAIN,
-        province,
+        province_name,
         admin_pubkey,
         new_signing_pubkey,
         nonce,
@@ -369,17 +375,17 @@ fn sign_msg(pair: &sr25519::Pair, msg: &[u8; 32]) -> [u8; 64] {
 }
 
 fn activate_main(
-    province: &[u8],
+    province_name: &[u8],
     admin_pair: &sr25519::Pair,
     admin_pubkey: &[u8; 32],
     signing_pubkey: &[u8; 32],
     nonce: ShengNonce,
 ) {
-    let payload = build_activate_payload(province, admin_pubkey, signing_pubkey, &nonce);
+    let payload = build_activate_payload(province_name, admin_pubkey, signing_pubkey, &nonce);
     let sig = sign_msg(admin_pair, &payload);
     assert_ok!(SfidSystem::activate_sheng_signing_pubkey(
         RuntimeOrigin::none(),
-        province.to_vec(),
+        province_name.to_vec(),
         *admin_pubkey,
         *signing_pubkey,
         nonce,
@@ -716,7 +722,7 @@ fn pays_no_zero_balance_account_succeeds() {
 #[test]
 fn cross_province_admin_cannot_modify_other_province() {
     new_test_ext().execute_with(|| {
-        // province A:Main = alice
+        // province_name A:Main = alice
         let (alice_pair, alice_pubkey) = fresh_keypair("alice-main-A");
         activate_main(
             PROVINCE,
@@ -726,7 +732,7 @@ fn cross_province_admin_cannot_modify_other_province() {
             make_nonce(1),
         );
 
-        // province B:Main = bob
+        // province_name B:Main = bob
         let (bob_pair, bob_pubkey) = fresh_keypair("bob-main-B");
         activate_main(
             OTHER_PROVINCE,
@@ -736,7 +742,7 @@ fn cross_province_admin_cannot_modify_other_province() {
             make_nonce(2),
         );
 
-        // alice 想给 province B 加 backup → 应被拒绝(B 的 Main 是 bob,alice 签名验不过)
+        // alice 想给 province_name B 加 backup → 应被拒绝(B 的 Main 是 bob,alice 签名验不过)
         let (_attacker_pair, attacker_pubkey) = fresh_keypair("attacker");
         let nonce = make_nonce(3);
         let payload =
@@ -858,7 +864,7 @@ fn validate_unsigned_passes_for_valid_activate() {
         let sig = sign_msg(&pair, &payload);
 
         let call = Call::<Test>::activate_sheng_signing_pubkey {
-            province: PROVINCE.to_vec(),
+            province_name: PROVINCE.to_vec(),
             admin_pubkey: pubkey,
             signing_pubkey: signing,
             nonce: nonce_v,

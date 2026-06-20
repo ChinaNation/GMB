@@ -22,7 +22,7 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
 }
 
 fn prc_institution<T: Config>() -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].main_address)
+    decode_account::<T>(CHINA_CB[1].main_account)
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {

@@ -9,6 +9,7 @@ use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
 use subxt::{OnlineClient, PolkadotConfig};
 
+use crate::admins::login::parse_sr25519_pubkey_bytes;
 use crate::*;
 
 // 中文注释：本文件所有 DUOQIAN + OP_SIGN_* 均直接来自
@@ -55,6 +56,8 @@ pub(crate) struct RuntimeVoteCredential {
     pub(crate) binding_id: String,
     pub(crate) proposal_id: u64,
     pub(crate) vote_nonce: String,
+    pub(crate) province_name: String,
+    pub(crate) signer_admin_pubkey: String,
     pub(crate) signature: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
@@ -65,10 +68,18 @@ pub(crate) struct RuntimePopulationSnapshotCredential {
     pub(crate) who: String,
     pub(crate) eligible_total: u64,
     pub(crate) snapshot_nonce: String,
+    pub(crate) province_name: String,
+    pub(crate) signer_admin_pubkey: String,
     pub(crate) signature: String,
     pub(crate) genesis_hash: String,
     pub(crate) payload_digest: String,
     pub(crate) meta: RuntimeSignatureMeta,
+}
+
+struct RuntimeSigningContext {
+    province_name: String,
+    signer_admin_pubkey: [u8; 32],
+    signer_admin_pubkey_hex: String,
 }
 
 pub(crate) fn build_vote_credential(
@@ -87,6 +98,7 @@ pub(crate) fn build_vote_credential(
     let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
+    let signing_ctx = runtime_signing_context()?;
     let payload = (
         DUOQIAN,
         OP_SIGN_VOTE,
@@ -95,6 +107,8 @@ pub(crate) fn build_vote_credential(
         binding_id,
         proposal_id,
         vote_nonce.as_bytes(),
+        signing_ctx.province_name.as_bytes(),
+        &signing_ctx.signer_admin_pubkey,
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
@@ -104,6 +118,8 @@ pub(crate) fn build_vote_credential(
         binding_id: hex::encode(binding_id),
         proposal_id,
         vote_nonce,
+        province_name: signing_ctx.province_name,
+        signer_admin_pubkey: signing_ctx.signer_admin_pubkey_hex,
         signature,
         meta: runtime_signature_meta(state),
     })
@@ -120,6 +136,7 @@ pub(crate) fn build_population_snapshot_credential(
     }
     let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
+    let signing_ctx = runtime_signing_context()?;
     let payload = (
         DUOQIAN,
         OP_SIGN_POP,
@@ -127,6 +144,8 @@ pub(crate) fn build_population_snapshot_credential(
         who,
         eligible_total,
         snapshot_nonce.as_bytes(),
+        signing_ctx.province_name.as_bytes(),
+        &signing_ctx.signer_admin_pubkey,
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
@@ -134,6 +153,8 @@ pub(crate) fn build_population_snapshot_credential(
         who: normalized_who,
         eligible_total,
         snapshot_nonce,
+        province_name: signing_ctx.province_name,
+        signer_admin_pubkey: signing_ctx.signer_admin_pubkey_hex,
         signature,
         genesis_hash: hex::encode(genesis_hash),
         payload_digest: hex::encode(payload_digest),
@@ -150,6 +171,27 @@ fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
         key_version: "v1".to_string(),
         alg: "sr25519".to_string(),
     }
+}
+
+fn runtime_signing_context() -> Result<RuntimeSigningContext, String> {
+    let province_name = std::env::var("SFID_SIGNING_PROVINCE_NAME")
+        .map_err(|_| "SFID_SIGNING_PROVINCE_NAME not set".to_string())?
+        .trim()
+        .to_string();
+    if province_name.is_empty() {
+        return Err("SFID_SIGNING_PROVINCE_NAME is empty".to_string());
+    }
+    let signer_admin_pubkey_raw = std::env::var("SFID_SIGNER_ADMIN_PUBKEY")
+        .map_err(|_| "SFID_SIGNER_ADMIN_PUBKEY not set".to_string())?;
+    let signer_admin_pubkey = parse_sr25519_pubkey_bytes(signer_admin_pubkey_raw.as_str())
+        .ok_or_else(|| {
+            "SFID_SIGNER_ADMIN_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
+        })?;
+    Ok(RuntimeSigningContext {
+        province_name,
+        signer_admin_pubkey,
+        signer_admin_pubkey_hex: format!("0x{}", hex::encode(signer_admin_pubkey)),
+    })
 }
 
 fn is_production_mode() -> bool {

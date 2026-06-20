@@ -12,9 +12,8 @@ class PublicInstitutionDto {
     required this.cityCode,
     required this.institutionCode,
     required this.accountCount,
-    this.institutionName,
-    this.sfidName,
-    this.shortName,
+    this.sfidFullName,
+    this.sfidShortName,
     this.townCode = '',
     this.orgCode,
     this.parentSfidNumber,
@@ -24,9 +23,8 @@ class PublicInstitutionDto {
   });
 
   final String sfidNumber;
-  final String? institutionName;
-  final String? sfidName;
-  final String? shortName;
+  final String? sfidFullName;
+  final String? sfidShortName;
   final String status;
 
   /// 所属省 code(行政区唯一真源键;名字由字典 join,见 ADR-021)。
@@ -50,9 +48,8 @@ class PublicInstitutionDto {
   static PublicInstitutionDto fromJson(Map<String, dynamic> json) {
     return PublicInstitutionDto(
       sfidNumber: json['sfid_number'] as String,
-      institutionName: json['institution_name'] as String?,
-      sfidName: json['sfid_name'] as String?,
-      shortName: json['short_name'] as String?,
+      sfidFullName: json['sfid_full_name'] as String?,
+      sfidShortName: json['sfid_short_name'] as String?,
       status: json['status'] as String? ?? 'ACTIVE',
       // 行政区只吃 code(province_code/city_code/town_code);无名字 fallback
       // (ADR-021 死规则:名字唯一来自字典,不留旧方案)。
@@ -79,9 +76,8 @@ class PublicInstitutionDto {
   }) {
     return PublicInstitutionEntity()
       ..sfidNumber = sfidNumber
-      ..institutionName = institutionName ?? sfidName ?? sfidNumber
-      ..sfidName = sfidName
-      ..shortName = shortName
+      ..sfidFullName = sfidFullName ?? sfidNumber
+      ..sfidShortName = sfidShortName
       ..status = status
       ..provinceCode = provinceCode
       ..cityCode = cityCode

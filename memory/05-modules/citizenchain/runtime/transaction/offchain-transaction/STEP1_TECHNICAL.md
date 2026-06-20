@@ -27,7 +27,7 @@ src/
 
 清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `sfid/backend/number/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
 
-链上**不新增** SFID 枚举,而是直接对 `organization-manage::AddressRegisteredSfid` 存的 `sfid_number` 字符串做 K1 字节匹配。
+链上**不新增** SFID 枚举,而是直接对 `organization-manage::AccountRegisteredSfid` 存的 `sfid_number` 字符串做 K1 字节匹配。
 
 ```rust
 pub fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
@@ -36,7 +36,7 @@ pub fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
 ```
 
 合法清算行的六条并列条件(`ensure_can_be_bound`):
-1. 在 `AddressRegisteredSfid` 有登记
+1. 在 `AccountRegisteredSfid` 有登记
 2. `name` 段等于 `"主账户"`(3 字节 UTF-8 × 3 字 = 9 字节)
 3. K1 ∈ {S, F}
 4. `InstitutionAccounts[(sfid_number, "主账户")].status == Active`
@@ -61,8 +61,8 @@ pub trait SfidAccountQuery<AccountId> {
 ```
 
 **runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianSfidAccountQuery`):委托给 `organization-manage` / `offchain-transaction` 的链上索引:
-- `AddressRegisteredSfid` → `account_info`
-- `SfidRegisteredAddress` → `find_address`
+- `AccountRegisteredSfid` → `account_info`
+- `SfidRegisteredAccount` → `find_address`
 - `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
 - `admins-change` 主体表 → `is_admin_of`
 - `ClearingBankNodes` → `is_registered_clearing_node`

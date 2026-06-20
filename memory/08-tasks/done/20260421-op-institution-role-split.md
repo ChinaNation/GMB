@@ -11,10 +11,10 @@ completed: 2026-04-21
 - **primitives**：[core_const.rs](citizenchain/runtime/primitives/src/core_const.rs) 新增 `OP_INSTITUTION = 0x05` 常量，注释约束为 "SFID 机构自定义命名账户"
 - **链端枚举 + 派生**（[duoqian-manage/src/lib.rs](citizenchain/runtime/transaction/duoqian-manage/src/lib.rs)）：
   - 新增 `InstitutionAccountRole<'a>` 枚举（`Main` / `Fee` / `Named(&'a [u8])`）+ 保留名常量 `RESERVED_NAME_MAIN` / `RESERVED_NAME_FEE`
-  - 旧 `derive_duoqian_address_from_sfid_number(sfid_number, name)` **重构为** `derive_institution_address(sfid_number, role)`
+  - 旧 `derive_duoqian_address_from_sfid_number(sfid_number, name)` **重构为** `derive_institution_account(sfid_number, role)`
   - 新增 `role_from_name(name)` 翻译辅助："主账户"→Main, "费用账户"→Fee, 其他非空→Named(name), 空→`EmptySfidName`
   - 新增 `ReservedAccountName` 错误变体，拦截 `Role::Named("主账户")` / `Role::Named("费用账户")`
-- **调用点同步**：`register_sfid_institution` 用 `role_from_name` + `derive_institution_address` 两步；[benchmarks.rs](citizenchain/runtime/transaction/duoqian-manage/src/benchmarks.rs) 改用 `Role::Main`
+- **调用点同步**：`register_sfid_institution` 用 `role_from_name` + `derive_institution_account` 两步；[benchmarks.rs](citizenchain/runtime/transaction/duoqian-manage/src/benchmarks.rs) 改用 `Role::Main`
 - **SFID 后端**：[service.rs](sfid/backend/institutions/service.rs) CLEARING_BANK_NAMES 注释更新，[INSTITUTIONS_TECHNICAL.md](memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md) 补 2026-04-21 段
 - **TS 镜像**：[deriveDuoqianAddress.ts](sfid/frontend/institutions/chain_duoqian_info.ts) 重写为 3 路派生（按 name 值路由到 Main/Fee/Named）
 - **Dart 镜像**：wuminapp 只有 OP_PERSONAL 派生，本次无改动；wumin 无本地派生
@@ -76,10 +76,10 @@ SFID 机构创建 `Named(name)` 账户时：
 ## 第 2 步：链端 pallet 重构
 - [ ] `duoqian-manage/src/lib.rs`：
   - 定义 `InstitutionAccountRole` 枚举（`Main` / `Fee` / `Named(BoundedVec<u8>)`）
-  - `derive_duoqian_address_from_sfid_number(sfid_number, name)` → `derive_institution_address(sfid_number, role)`
+  - `derive_duoqian_address_from_sfid_number(sfid_number, name)` → `derive_institution_account(sfid_number, role)`
   - 保留名校验：reject `Named("主账户")` / `Named("费用账户")`
   - 更新 `register_sfid_institution` extrinsic 参数（name → role 或内部翻译）
-  - 更新 `AddressRegisteredSfid` / `SfidRegisteredAddress` 存储键值（按 role 归一化）
+  - 更新 `AccountRegisteredSfid` / `SfidRegisteredAccount` 存储键值（按 role 归一化）
 
 ## 第 3 步：SFID 后端
 - [ ] `sfid/backend/institutions/service.rs`：`CLEARING_BANK_NAMES` 改 `DEFAULT_CLEARING_BANK_ROLES`

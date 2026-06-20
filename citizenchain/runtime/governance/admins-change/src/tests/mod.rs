@@ -179,15 +179,15 @@ fn prc_admin(index: usize) -> AccountId32 {
 }
 
 fn nrc_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].main_address)
+    AccountId32::new(CHINA_CB[0].main_account)
 }
 
 fn prc_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].main_address)
+    AccountId32::new(CHINA_CB[1].main_account)
 }
 
 fn prb_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].main_address)
+    AccountId32::new(CHINA_CH[0].main_account)
 }
 
 fn prb_admin(index: usize) -> AccountId32 {

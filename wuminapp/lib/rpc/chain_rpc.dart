@@ -848,8 +848,8 @@ class ChainRpc {
 
   static String? _personalManageErrorName(int index) => switch (index) {
         0 => 'IncompleteParameters',
-        1 => 'InvalidAddress',
-        2 => 'AddressReserved',
+        1 => 'InvalidAccount',
+        2 => 'AccountReserved',
         3 => 'DuplicateAdmin',
         4 => 'InvalidThreshold',
         5 => 'InsufficientAmount',
@@ -914,9 +914,9 @@ class ChainRpc {
 
   static String? _organizationManageErrorName(int index) => switch (index) {
         0 => 'IncompleteParameters',
-        1 => 'InvalidAddress',
-        2 => 'AddressReserved',
-        3 => 'AddressAlreadyExists',
+        1 => 'InvalidAccount',
+        2 => 'AccountReserved',
+        3 => 'AccountAlreadyExists',
         4 => 'DuplicateAdmin',
         5 => 'InvalidThreshold',
         6 => 'InsufficientAmount',

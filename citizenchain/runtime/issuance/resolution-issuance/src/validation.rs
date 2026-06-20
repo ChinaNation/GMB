@@ -77,7 +77,7 @@ impl<T: Config> Pallet<T> {
         let valid_set: BTreeSet<T::AccountId> = CHINA_CB
             .iter()
             .skip(1)
-            .filter_map(|node| T::AccountId::decode(&mut &node.main_address[..]).ok())
+            .filter_map(|node| T::AccountId::decode(&mut &node.main_account[..]).ok())
             .collect();
         for recipient in recipients.iter() {
             ensure!(

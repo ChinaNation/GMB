@@ -24,7 +24,7 @@ class ProposalLimitService {
       Uint8List.fromList(
         institutionIdentityToAccountId(
           institution.sfidNumber,
-          mainAddress: institution.mainAddress,
+          mainAccount: institution.mainAccount,
         ),
       ),
     );

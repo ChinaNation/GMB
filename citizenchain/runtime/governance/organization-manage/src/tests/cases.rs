@@ -37,29 +37,29 @@ fn register_sfid_institution_with_valid_signature_succeeds() {
         assert_ok!(OrganizationManage::register_sfid_institution(
             RuntimeOrigin::signed(submitter),
             sfid.clone(),
-            institution_name("机构甲".as_bytes()),
+            sfid_full_name("机构甲".as_bytes()),
             names.clone(),
             register_nonce(b"nonce-1"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
 
-        assert!(pallet::SfidRegisteredAddress::<Test>::contains_key(
+        assert!(pallet::SfidRegisteredAccount::<Test>::contains_key(
             &sfid,
             &account_name(RESERVED_NAME_MAIN),
         ));
-        assert!(pallet::SfidRegisteredAddress::<Test>::contains_key(
+        assert!(pallet::SfidRegisteredAccount::<Test>::contains_key(
             &sfid,
             &account_name(RESERVED_NAME_FEE),
         ));
         // 反向索引也写入
-        let main_addr = OrganizationManage::derive_institution_address(
+        let main_addr = OrganizationManage::derive_institution_account(
             sfid.as_slice(),
             crate::address::InstitutionAccountRole::Main,
         )
         .expect("derive main");
-        assert!(pallet::AddressRegisteredSfid::<Test>::contains_key(
+        assert!(pallet::AccountRegisteredSfid::<Test>::contains_key(
             &main_addr
         ));
     });
@@ -73,11 +73,11 @@ fn register_rejects_invalid_sfid_institution_signature() {
             OrganizationManage::register_sfid_institution(
                 RuntimeOrigin::signed(submitter),
                 sfid_number(b"SFID-bad-sig"),
-                institution_name("机构甲".as_bytes()),
+                sfid_full_name("机构甲".as_bytes()),
                 account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
                 register_nonce(b"nonce-bs"),
                 invalid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::InvalidSfidInstitutionSignature
@@ -94,11 +94,11 @@ fn register_rejects_duplicate_sfid_account_name() {
         assert_ok!(OrganizationManage::register_sfid_institution(
             RuntimeOrigin::signed(submitter.clone()),
             sfid.clone(),
-            institution_name("机构 A".as_bytes()),
+            sfid_full_name("机构 A".as_bytes()),
             account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
             register_nonce(b"nonce-a1"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
         // 第二次相同 sfid + 主账户:SfidAlreadyRegistered
@@ -106,11 +106,11 @@ fn register_rejects_duplicate_sfid_account_name() {
             OrganizationManage::register_sfid_institution(
                 RuntimeOrigin::signed(submitter),
                 sfid,
-                institution_name("机构 A".as_bytes()),
+                sfid_full_name("机构 A".as_bytes()),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-a2"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::SfidAlreadyRegistered
@@ -126,11 +126,11 @@ fn register_rejects_replayed_nonce() {
         assert_ok!(OrganizationManage::register_sfid_institution(
             RuntimeOrigin::signed(submitter.clone()),
             sfid_number(b"SFID-N1"),
-            institution_name(b"A"),
+            sfid_full_name(b"A"),
             account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
             register_nonce(b"nonce-replay"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
         // 第二次同 nonce 不同 sfid:RegisterNonceAlreadyUsed
@@ -138,11 +138,11 @@ fn register_rejects_replayed_nonce() {
             OrganizationManage::register_sfid_institution(
                 RuntimeOrigin::signed(submitter),
                 sfid_number(b"SFID-N2"),
-                institution_name(b"B"),
+                sfid_full_name(b"B"),
                 account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
                 register_nonce(b"nonce-replay"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::RegisterNonceAlreadyUsed
@@ -159,35 +159,35 @@ fn register_rejects_empty_required_fields() {
             OrganizationManage::register_sfid_institution(
                 RuntimeOrigin::signed(submitter.clone()),
                 sfid_number(b""),
-                institution_name(b"A"),
+                sfid_full_name(b"A"),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty1"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::EmptySfidNumber
         );
-        // 空 institution_name
+        // 空 sfid_full_name
         assert_noop!(
             OrganizationManage::register_sfid_institution(
                 RuntimeOrigin::signed(submitter.clone()),
                 sfid_number(b"SFID-E"),
-                institution_name(b""),
+                sfid_full_name(b""),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty2"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::EmptyAccountName
         );
-        // 空 province
+        // 空 province_name
         assert_noop!(
             OrganizationManage::register_sfid_institution(
                 RuntimeOrigin::signed(submitter),
                 sfid_number(b"SFID-E"),
-                institution_name(b"A"),
+                sfid_full_name(b"A"),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty3"),
                 valid_signature(),
@@ -212,7 +212,7 @@ fn propose_create_institution_writes_pending_and_reserves() {
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
             sfid.clone(),
-            institution_name("机构甲".as_bytes()),
+            sfid_full_name("机构甲".as_bytes()),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -220,7 +220,7 @@ fn propose_create_institution_writes_pending_and_reserves() {
             2,
             register_nonce(b"nonce-cr-1"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
 
@@ -250,7 +250,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
             sfid.clone(),
-            institution_name("机构乙".as_bytes()),
+            sfid_full_name("机构乙".as_bytes()),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -258,7 +258,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             2,
             register_nonce(b"nonce-cr-2"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
         let pid = last_proposal_id();
@@ -272,12 +272,12 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             InstitutionLifecycleStatus::Active,
         );
         // 主账户和费用账户都被划账
-        let main = OrganizationManage::derive_institution_address(
+        let main = OrganizationManage::derive_institution_account(
             sfid.as_slice(),
             crate::address::InstitutionAccountRole::Main,
         )
         .unwrap();
-        let fee_acc = OrganizationManage::derive_institution_address(
+        let fee_acc = OrganizationManage::derive_institution_account(
             sfid.as_slice(),
             crate::address::InstitutionAccountRole::Fee,
         )
@@ -298,7 +298,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
             sfid.clone(),
-            institution_name("机构丙".as_bytes()),
+            sfid_full_name("机构丙".as_bytes()),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -306,7 +306,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
             2,
             register_nonce(b"nonce-cr-3"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
         let pid = last_proposal_id();
@@ -333,7 +333,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid_number(b"SFID-MIN"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 bad_accounts,
                 ORG_OTH,
                 3,
@@ -341,7 +341,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 2,
                 register_nonce(b"nonce-min"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::AccountInitialAmountBelowMinimum
@@ -363,7 +363,7 @@ fn propose_create_rejects_duplicate_account_name() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid_number(b"SFID-DUP"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 dup,
                 ORG_OTH,
                 3,
@@ -371,7 +371,7 @@ fn propose_create_rejects_duplicate_account_name() {
                 2,
                 register_nonce(b"nonce-dup"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::DuplicateAccountName
@@ -415,7 +415,7 @@ fn propose_create_rejects_reserved_system_account_name() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid_number(b"SFID-RSV"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 bad,
                 ORG_OTH,
                 3,
@@ -423,7 +423,7 @@ fn propose_create_rejects_reserved_system_account_name() {
                 2,
                 register_nonce(b"nonce-rsv"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::ReservedAccountName
@@ -440,7 +440,7 @@ fn propose_create_rejects_missing_main_account() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid_number(b"SFID-NM"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 no_main,
                 ORG_OTH,
                 3,
@@ -448,7 +448,7 @@ fn propose_create_rejects_missing_main_account() {
                 2,
                 register_nonce(b"nonce-nm"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::MissingMainAccount
@@ -465,7 +465,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c.clone()),
                 sfid_number(b"SFID-T1"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -473,7 +473,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 1,
                 register_nonce(b"nonce-t1"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::InvalidThreshold
@@ -483,7 +483,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid_number(b"SFID-T2"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -491,7 +491,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 4,
                 register_nonce(b"nonce-t2"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::InvalidThreshold
@@ -509,7 +509,7 @@ fn propose_create_rejects_when_institution_already_exists() {
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
             sfid.clone(),
-            institution_name(b"A"),
+            sfid_full_name(b"A"),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -517,7 +517,7 @@ fn propose_create_rejects_when_institution_already_exists() {
             2,
             register_nonce(b"nonce-ae1"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
         // 第二次同 sfid 应拒
@@ -525,7 +525,7 @@ fn propose_create_rejects_when_institution_already_exists() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid,
-                institution_name(b"B"),
+                sfid_full_name(b"B"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -533,7 +533,7 @@ fn propose_create_rejects_when_institution_already_exists() {
                 2,
                 register_nonce(b"nonce-ae2"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::InstitutionAlreadyExists
@@ -557,7 +557,7 @@ fn create_and_activate_institution(
     assert_ok!(OrganizationManage::propose_create_institution(
         RuntimeOrigin::signed(c.clone()),
         sfid.clone(),
-        institution_name(b"X"),
+        sfid_full_name(b"X"),
         typical_accounts(),
         ORG_OTH,
         admin_count as u32,
@@ -565,7 +565,7 @@ fn create_and_activate_institution(
         admin_count.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
         register_nonce(sfid_number_bytes),
         valid_signature(),
-        province(),
+        province_name(),
         signer_pubkey(),
     ));
     let pid = last_proposal_id();
@@ -575,7 +575,7 @@ fn create_and_activate_institution(
         pid
     ));
 
-    let main = OrganizationManage::derive_institution_address(
+    let main = OrganizationManage::derive_institution_account(
         sfid.as_slice(),
         crate::address::InstitutionAccountRole::Main,
     )
@@ -630,10 +630,10 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
         assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
             &sfid, &main_name
         ));
-        assert!(!pallet::SfidRegisteredAddress::<Test>::contains_key(
+        assert!(!pallet::SfidRegisteredAccount::<Test>::contains_key(
             &sfid, &main_name
         ));
-        assert!(!pallet::AddressRegisteredSfid::<Test>::contains_key(&main));
+        assert!(!pallet::AccountRegisteredSfid::<Test>::contains_key(&main));
         assert!(admins_change::AdminAccounts::<Test>::get(account.clone()).is_none());
         assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, account).is_none());
     });
@@ -668,7 +668,7 @@ fn propose_close_rejects_close_balance_below_minimum() {
 #[test]
 fn propose_close_rejects_when_not_institution_address() {
     new_test_ext().execute_with(|| {
-        // 没在 AddressRegisteredSfid 表里的地址
+        // 没在 AccountRegisteredSfid 表里的地址
         let stranger = AccountId32::new([0xEE; 32]);
         assert_noop!(
             OrganizationManage::propose_close(
@@ -685,7 +685,7 @@ fn propose_close_rejects_when_not_institution_address() {
 fn propose_close_rejects_self_beneficiary() {
     new_test_ext().execute_with(|| {
         let (_sfid, main) = create_and_activate_institution(b"SFID-CL-5", 3);
-        // beneficiary == duoqian_address 应拒
+        // beneficiary == duoqian_account 应拒
         assert_noop!(
             OrganizationManage::propose_close(RuntimeOrigin::signed(admin(0)), main.clone(), main,),
             pallet::Error::<Test>::InvalidBeneficiary
@@ -706,7 +706,7 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c),
             sfid_number(b"SFID-CU"),
-            institution_name(b"X"),
+            sfid_full_name(b"X"),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -714,7 +714,7 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
             2,
             register_nonce(b"nonce-cu"),
             valid_signature(),
-            province(),
+            province_name(),
             signer_pubkey(),
         ));
         let pid = last_proposal_id();
@@ -746,7 +746,7 @@ fn non_admin_cannot_propose_create() {
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 sfid_number(b"SFID-NA"),
-                institution_name(b"X"),
+                sfid_full_name(b"X"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -754,7 +754,7 @@ fn non_admin_cannot_propose_create() {
                 2,
                 register_nonce(b"nonce-na"),
                 valid_signature(),
-                province(),
+                province_name(),
                 signer_pubkey(),
             ),
             pallet::Error::<Test>::PermissionDenied

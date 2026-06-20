@@ -8,7 +8,7 @@
 **已完成并验证(SFID 侧,deployed 系统未受影响——旧后端仍在跑、旧客户端仍工作):**
 - ✅ B6 数据:`migration_2026_06_16_retire_ln_001.sql` 应用——中西镇 001→005/葵青 001→010/大堂 001→006,旧 001 退役进 `town_tombstones` 表;47574 镇零重复。
 - ✅ A2 字典生成器:`wuminapp/tools/generate_admin_division_bundle.mjs`(node:sqlite 直 dump,零映射),已生成 `wuminapp/assets/admin_divisions/`(省43/市3185/镇47574,manifest 带 china_sqlite_sha256);中西镇=005 已反映。
-- ✅ A1 后端:`public_institution.rs` SELECT 改吐 `p_code/c_code/t_code AS province_code/city_code/town_code`、**停吐 s.province/s.city/s.town 名字**;`from_pg_row` 全改**按列名取**(根治索引漂移);DTO province/city/town→code。cargo test 61 passed。
+- ✅ A1 后端:`public_institution.rs` SELECT 改吐 `province_code/city_code/town_code AS province_code/city_code/town_code`、**停吐 s.province/s.city/s.town 名字**;`from_pg_row` 全改**按列名取**(根治索引漂移);DTO province/city/town→code。cargo test 61 passed。
 - ✅ B6 铁律:`store.rs::load_provinces` 加载即断言 (省,市,镇) code 无重复(panic);`agent-rules.md` 加死规则;CI `china/check_code_immutable.py`(PASS);`feedback_china_code_immutable` 记忆。
 - ✅ pubspec 注册 `assets/admin_divisions/`(含 cities/towns 子目录)。
 
@@ -26,7 +26,7 @@
   - 顺手:`sfid_directory_lookup.dart` 反查改 code→名 join(省名链上常量、市名字典),保 governance 详情 SfidDirectoryInfo 名字契约不变。
   - 新测试:`admin_division_test.dart`(键工具/divisionName 回退/formatAreaPath 三态/字典 loader/listCities code 去重)、`public_provinces_test.dart`(链上==字典守卫);fake 新增 `fake_admin_division_store.dart`,harness/各测试改吃 code+seed 字典。
   - **遗留环境失败(非本改动)**:`widget_test.dart` app bootstraps + `im/im_mls_native*` 3 个因缺 `libsmoldot.dylib` native 库报错,与公权/字典无关、文件未改。
-- ✅ B5 purge CLI `purge-orphan-institutions`(2026-06-16,cargo check + test 60+5 过):`china/store.rs::town_exists(pc,cc,tc)`(空 tc 永真,大小写不敏感)+ 4 单测;`main.rs` 加 `BackendCommand::PurgeOrphanInstitutions{dry_run,backup_path}` 子命令(默认 dry-run);`scan_orphan_institutions`(SQL 预筛 t_code 非空 + china::town_exists 确认,白名单空 t_code)、`export_orphan_backup`(COPY TSV 落 purge_orphan_backup_<ts>.sql)、`delete_orphan_institutions_by_province`(逐省单事务级联删 accounts→docs→audit(target_sfid)→gov|private(按kind)→ids(无分区)→subjects)。绝不动 sfid_number、绝不删空 t_code。
+- ✅ B5 purge CLI `purge-orphan-institutions`(2026-06-16,cargo check + test 60+5 过):`china/store.rs::town_exists(pc,cc,tc)`(空 tc 永真,大小写不敏感)+ 4 单测;`main.rs` 加 `BackendCommand::PurgeOrphanInstitutions{dry_run,backup_path}` 子命令(默认 dry-run);`scan_orphan_institutions`(SQL 预筛 town_code 非空 + china::town_exists 确认,白名单空 town_code)、`export_orphan_backup`(COPY TSV 落 purge_orphan_backup_<ts>.sql)、`delete_orphan_institutions_by_province`(逐省单事务级联删 accounts→docs→audit(target_sfid)→gov|private(按kind)→ids(无分区)→subjects)。绝不动 sfid_number、绝不删空 town_code。
 
 **上线切换进度(2026-06-16):**
   - ✅ 新后端已部署(PID 32018):接口确认返回 province_code/city_code/town_code 不再名字。
@@ -41,7 +41,7 @@
 ## A 架构
 
 ### A1 后端接口 `sfid/backend/wuminapp/public_institution.rs`
-- SELECT 改吐 `s.province_code, s.c_code, COALESCE(s.town_code,'')`,**停吐 `s.province/s.city/s.town`**(先核 `core/db.rs:327-363` 实名:市级是 `c_code` 不是 city_code)。
+- SELECT 改吐 `s.province_code, s.city_code, COALESCE(s.town_code,'')`,**停吐 `s.province/s.city/s.town`**(先核 `core/db.rs:327-363` 实名:市级是 `city_code` 不是 city_code)。
 - `from_pg_row`(108-129)**全部改 `row.get("列名")`**,消除裸位置索引 panic(H-2)。
 - 查询入参 `province/city`(157/166 `province_code_by_name`)改为**直接收 code**;加 `resolve_*` 仅做 code 存在性校验,不再"名字→code 匹配"(H-1)。
 - `subjects/registration.rs:442-447` 创建路径**停写 province/city/town 名字列**,只写三 code。
@@ -70,7 +70,7 @@
 - 走 `china::store` 内存树判定(**不在 PG join sqlite**)。
 - 只圈 `town_code 非空且 (pc,cc,tc) 反查不到`;**显式排除空 town_code**(市级/储委会白名单,M-2)。
 - `--dry-run` 出清单(sfid_number+town+town_code+原因+category/org_code/institution_code),人工核**无一命中冻结常量号**。
-- `--apply`:先 `pg_dump` 被删行落 `purge_backup_<ts>.sql`(删除唯一回滚保证),再逐省单事务级联删 `accounts→docs→audit→gov|private→ids→subjects`(按 p_code 命中子分区,禁跨省一条 SQL)。
+- `--apply`:先 `pg_dump` 被删行落 `purge_backup_<ts>.sql`(删除唯一回滚保证),再逐省单事务级联删 `accounts→docs→audit→gov|private→ids→subjects`(按 province_code 命中子分区,禁跨省一条 SQL)。
 - 纯设施镇下机构:被删镇 code 已不在 towns 表 → 自动归入"反查空"。
 
 ### B6 退役 001 + code 铁律 + 墓碑
@@ -93,7 +93,7 @@
 不动 SFID 号生成 / 省码市码 / 链上治理常量 / chainspec。backfill 只改 town_code,绝不动 sfid_number。
 
 ## follow-up / 风险
-- subjects 市级列名 `c_code` vs `city_code` 改 SQL 前必 grep core/db.rs 确认(唯一会让运行炸的点)。
+- subjects 市级列名 `city_code` vs `city_code` 改 SQL 前必 grep core/db.rs 确认(唯一会让运行炸的点)。
 - 镇 code 全国不唯一,字典键/去重一律带 (省,市) 前缀。
 - 删除不可逆,CLI 必先 pg_dump。
 

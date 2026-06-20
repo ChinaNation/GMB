@@ -831,8 +831,8 @@ fn generate_unique_citizen_sfid(
                 account_pubkey: attempt_pubkey.as_str(),
                 subject_property: "M",
                 p1: "1",
-                province: province_name,
-                city: "省辖市",
+                province_name,
+                city_name: "省辖市",
                 institution: "ZG",
             }) {
                 Ok(v) => v,
@@ -950,11 +950,11 @@ impl Db {
                 .map_err(|e| format!("serialize citizen challenge failed: {e}"))?;
             conn.execute(
                 "INSERT INTO citizen_bind_challenges (
-                    challenge_id, p_code, c_code, wallet_pubkey, archive_no, expires_at, consumed, payload
+                    challenge_id, province_code, city_code, wallet_pubkey, archive_no, expires_at, consumed, payload
                  ) VALUES ($1, $2, $3, $4, $5, $6, false, $7)
                  ON CONFLICT (challenge_id) DO UPDATE SET
-                    p_code = EXCLUDED.p_code,
-                    c_code = EXCLUDED.c_code,
+                    province_code = EXCLUDED.province_code,
+                    city_code = EXCLUDED.city_code,
                     wallet_pubkey = EXCLUDED.wallet_pubkey,
                     archive_no = EXCLUDED.archive_no,
                     expires_at = EXCLUDED.expires_at,
@@ -1039,9 +1039,9 @@ impl Db {
                 .query_opt(
                     "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address, archive_no,
                             sfid_number, citizen_status, voting_eligible, valid_from,
-                            valid_until, status_updated_at, p_code, c_code,
-                            residence_p_code, residence_c_code, residence_t_code,
-                            birth_p_code, birth_c_code, birth_t_code, election_scope_level,
+                            valid_until, status_updated_at, province_code, city_code,
+                            residence_province_code, residence_city_code, residence_town_code,
+                            birth_province_code, birth_city_code, birth_town_code, election_scope_level,
                             bound_at, bound_by, created_at
                      FROM citizens
                      WHERE id = $1 AND bind_status = 'BOUND'
@@ -1062,9 +1062,9 @@ impl Db {
             let sql = format!(
                 "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address, archive_no,
                         sfid_number, citizen_status, voting_eligible, valid_from,
-                        valid_until, status_updated_at, p_code, c_code,
-                        residence_p_code, residence_c_code, residence_t_code,
-                        birth_p_code, birth_c_code, birth_t_code, election_scope_level,
+                        valid_until, status_updated_at, province_code, city_code,
+                        residence_province_code, residence_city_code, residence_town_code,
+                        birth_province_code, birth_city_code, birth_town_code, election_scope_level,
                         bound_at, bound_by, created_at
                  FROM citizens
                  WHERE {clause} AND bind_status = 'BOUND'

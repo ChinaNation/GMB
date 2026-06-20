@@ -5,7 +5,7 @@
 //!
 //! 唯一入口: `do_propose_create_institution`(call_index=5,ADR-008 step2b)
 //! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
-//! - 凭证带 (province, signer_admin_pubkey) 双层验签
+//! - 凭证带 (province_name, signer_admin_pubkey) 双层验签
 //! - 资金模型: 发起时 reserve, 通过后划转, 拒绝后 unreserve
 
 extern crate alloc;
@@ -17,10 +17,10 @@ use crate::institution::types::{
     CreateInstitutionAction, InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
 };
 use crate::pallet::{
-    AccountNameOf, AddressRegisteredSfid, Config, DuoqianAdminsOf, Error, Event,
+    AccountNameOf, AccountRegisteredSfid, Config, DuoqianAdminsOf, Error, Event,
     InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
     PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, SfidNumberOf,
-    SfidRegisteredAddress, UsedRegisterNonce, ACTION_CREATE_INSTITUTION,
+    SfidRegisteredAccount, UsedRegisterNonce, ACTION_CREATE_INSTITUTION,
 };
 use crate::traits::{ProtectedSourceChecker, SfidInstitutionVerifier};
 use crate::RegisteredInstitution;
@@ -39,7 +39,7 @@ use votingengine::InternalVoteEngine;
 pub(crate) fn do_propose_create_institution<T: Config>(
     who: T::AccountId,
     sfid_number: SfidNumberOf<T>,
-    institution_name: AccountNameOf<T>,
+    sfid_full_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     admin_org: u8,
     admin_count: u32,
@@ -47,7 +47,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    province: alloc::vec::Vec<u8>,
+    province_name: alloc::vec::Vec<u8>,
     signer_admin_pubkey: [u8; 32],
 ) -> DispatchResult {
     ensure!(
@@ -55,8 +55,8 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(!sfid_number.is_empty(), Error::<T>::EmptySfidNumber);
-    ensure!(!institution_name.is_empty(), Error::<T>::EmptyAccountName);
-    ensure!(!province.is_empty(), Error::<T>::EmptyProvince);
+    ensure!(!sfid_full_name.is_empty(), Error::<T>::EmptyAccountName);
+    ensure!(!province_name.is_empty(), Error::<T>::EmptyProvince);
     ensure!(
         !Institutions::<T>::contains_key(&sfid_number),
         Error::<T>::InstitutionAlreadyExists
@@ -76,30 +76,30 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     ensure!(
         T::SfidInstitutionVerifier::verify_institution_registration(
             sfid_number.as_slice(),
-            &institution_name,
+            &sfid_full_name,
             &account_name_payload,
             &register_nonce,
             &signature,
-            province.as_slice(),
+            province_name.as_slice(),
             &signer_admin_pubkey,
         ),
         Error::<T>::InvalidSfidInstitutionSignature
     );
 
-    let (created_accounts, main_address, fee_address, initial_total) =
+    let (created_accounts, main_account, fee_account, initial_total) =
         validate_initial_accounts::<T>(&sfid_number, &accounts)?;
     // 共用余额预检查 helper(2026-05-03):amount + fee + ED 必须够。
     let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
     // 中文注释：管理员更换与内部投票直接使用机构主账户多签地址。
-    let institution = main_address.clone();
+    let institution = main_account.clone();
     let org = admin_org;
     let action = CreateInstitutionAction {
         sfid_number: sfid_number.clone(),
-        institution_name: institution_name.clone(),
-        main_address: main_address.clone(),
-        fee_address: fee_address.clone(),
+        sfid_full_name: sfid_full_name.clone(),
+        main_account: main_account.clone(),
+        fee_account: fee_account.clone(),
         proposer: who.clone(),
         admin_org,
         admin_count,
@@ -121,9 +121,9 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         Institutions::<T>::insert(
             &sfid_number,
             InstitutionInfo {
-                institution_name: institution_name.clone(),
-                main_address: main_address.clone(),
-                fee_address: fee_address.clone(),
+                sfid_full_name: sfid_full_name.clone(),
+                main_account: main_account.clone(),
+                fee_account: fee_account.clone(),
                 admin_org,
                 admin_count,
                 threshold,
@@ -147,12 +147,12 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                     created_at: now,
                 },
             );
-            SfidRegisteredAddress::<T>::insert(
+            SfidRegisteredAccount::<T>::insert(
                 &sfid_number,
                 &account.account_name,
                 &account.address,
             );
-            AddressRegisteredSfid::<T>::insert(
+            AccountRegisteredSfid::<T>::insert(
                 &account.address,
                 RegisteredInstitution {
                     sfid_number: sfid_number.clone(),
@@ -162,7 +162,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         }
 
         // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-        // 机构主账户的管理员配置真源在 admins-change::AdminAccounts[main_address 账户]；
+        // 机构主账户的管理员配置真源在 admins-change::AdminAccounts[main_account 账户]；
         // 动态阈值真源在 internal-vote，duoqian-transfer 通过查询 trait 合并读取。
 
         // 中文注释:threshold 是账户激活后的动态阈值配置；
@@ -201,8 +201,8 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateProposed {
         proposal_id,
         sfid_number,
-        institution_name,
-        main_address,
+        sfid_full_name,
+        main_account,
         proposer: who,
         accounts: created_accounts,
         admins: duoqian_admins,

@@ -11,7 +11,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:
 /// - 清算行(L2)体系唯一绑定页。数据源:SFID 搜索结果传入的 `ClearingBankInfo`;
-///   链上调用 `bind_clearing_bank(bank_main_address)`(call_index 30)。
+///   链上调用 `bind_clearing_bank(bank_main_account)`(call_index 30)。
 ///   原省储行绑定页 + `bind_clearing_institution` extrinsic 已在 Step 2b-iv-b
 ///   随老 pallet 一起删除。
 /// - 绑定即开户,**无预存、无业务开户费**;链上仅产生付费调用 1 元/次。
@@ -42,7 +42,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
   @override
   Widget build(BuildContext context) {
     final b = widget.bank;
-    final name = b.institutionName.isEmpty ? '(未命名机构)' : b.institutionName;
+    final name = b.sfidFullName.isEmpty ? '(未命名机构)' : b.sfidFullName;
     return Scaffold(
       appBar: AppBar(title: Text(widget.switchMode ? '切换清算行' : '绑定清算行')),
       body: ListView(
@@ -54,7 +54,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ),
           ListTile(
             title: const Text('所在地'),
-            subtitle: Text('${b.province} ${b.city}'),
+            subtitle: Text('${b.provinceName} ${b.cityName}'),
           ),
           ListTile(
             title: const Text('SFID'),
@@ -151,7 +151,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           wallet.walletIndex,
           ClearingBankBindingSnapshot(
             sfidNumber: widget.bank.sfidNumber,
-            institutionName: widget.bank.institutionName,
+            sfidFullName: widget.bank.sfidFullName,
             mainAccount: _normalizeHex(widget.bank.mainAccount ?? ''),
             feeAccount: widget.bank.feeAccount == null
                 ? null

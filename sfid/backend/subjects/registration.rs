@@ -30,8 +30,8 @@ use crate::subjects::model::{
     InstitutionListFilter, InstitutionListRow,
 };
 use crate::subjects::service::{
-    derive_category, resolve_legal_representative_scope_for_codes, validate_institution_name,
-    validate_legal_representative_required,
+    derive_category, resolve_legal_representative_scope_for_codes,
+    validate_legal_representative_required, validate_sfid_full_name,
 };
 use crate::subjects::uninorg;
 use crate::*;
@@ -79,11 +79,11 @@ async fn create_institution_inner(
     let grant_payload = serde_json::json!({
         "subject_property": input.subject_property.clone(),
         "p1": input.p1.clone(),
-        "province": input.province.clone(),
-        "city": input.city.clone(),
+        "province_name": input.province_name.clone(),
+        "city_name": input.city_name.clone(),
         "institution": input.institution.clone(),
         "education_type": input.education_type.clone(),
-        "institution_name": input.institution_name.clone(),
+        "sfid_full_name": input.sfid_full_name.clone(),
         "parent_sfid_number": input.parent_sfid_number.clone(),
         "private_type": input.private_type.clone(),
         "partnership_kind": input.partnership_kind.clone(),
@@ -186,8 +186,8 @@ async fn create_institution_inner(
             "私权机构必须提交 private_type",
         );
     }
-    let institution_name = match input.institution_name.as_deref().map(str::trim) {
-        Some(raw) if !raw.is_empty() => match validate_institution_name(raw) {
+    let sfid_full_name = match input.sfid_full_name.as_deref().map(str::trim) {
+        Some(raw) if !raw.is_empty() => match validate_sfid_full_name(raw) {
             Ok(v) => Some(v),
             Err(e) => return service_error_to_response(e),
         },
@@ -196,7 +196,7 @@ async fn create_institution_inner(
     let province = match scope.locked_province.clone() {
         Some(locked) => {
             if input
-                .province
+                .province_name
                 .as_deref()
                 .map(str::trim)
                 .filter(|v| !v.is_empty() && *v != locked)
@@ -211,7 +211,7 @@ async fn create_institution_inner(
             locked
         }
         None => match input
-            .province
+            .province_name
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -223,7 +223,7 @@ async fn create_institution_inner(
     if province.chars().count() > MAX_PROVINCE_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "province too long");
     }
-    let mut city = input.city.trim().to_string();
+    let mut city = input.city_name.trim().to_string();
     // 中文注释:机构创建权限统一由省/市 scope 收口:
     // 联邦管理员 locked_province=本省且 locked_city=None,可在本省任意市创建;
     // 市管理员同时锁定省和市,只能创建本市机构。
@@ -246,7 +246,7 @@ async fn create_institution_inner(
     let category = match derive_category(
         &subject_property,
         &institution_code,
-        institution_name.as_deref().unwrap_or(""),
+        sfid_full_name.as_deref().unwrap_or(""),
     ) {
         Some(v) => v,
         None => {
@@ -333,9 +333,13 @@ async fn create_institution_inner(
             parent.institution_code.as_str(),
             parent.org_code.as_deref(),
         );
-        if let Some(msg) =
-            uninorg::locality_violation(rule, &parent.province, &parent.city, &province, &city)
-        {
+        if let Some(msg) = uninorg::locality_violation(
+            rule,
+            &parent.province_name,
+            &parent.city_name,
+            &province,
+            &city,
+        ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
         // 盈利属性附属于所属法人:前端推导值必须与父级一致,防客户端漂移
@@ -392,8 +396,8 @@ async fn create_institution_inner(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     }
-    if let Some(ref name) = institution_name {
-        let conflict = match state.db.institution_name_exists(name, None, None, None) {
+    if let Some(ref name) = sfid_full_name {
+        let conflict = match state.db.sfid_full_name_exists(name, None, None, None) {
             Ok(v) => v,
             Err(err) => {
                 let message = format!("query institution name failed: {err}");
@@ -410,8 +414,8 @@ async fn create_institution_inner(
             account_pubkey: random_account.as_str(),
             subject_property: subject_property.as_str(),
             p1: p1.as_str(),
-            province: province.as_str(),
-            city: city.as_str(),
+            province_name: province.as_str(),
+            city_name: city.as_str(),
             institution: institution_code.as_str(),
         }) {
             Ok(v) => v,
@@ -432,16 +436,15 @@ async fn create_institution_inner(
         }
         let inst = Institution {
             sfid_number: sfid.clone(),
-            institution_name: institution_name.clone(),
-            sfid_name: institution_name.clone(),
-            short_name: institution_name.clone(),
+            sfid_full_name: sfid_full_name.clone(),
+            sfid_short_name: sfid_full_name.clone(),
             status: "ACTIVE".to_string(),
             category,
             subject_property: subject_property.clone(),
             p1: p1.clone(),
-            province: province.clone(),
-            city: city.clone(),
-            town: String::new(),
+            province_name: province.clone(),
+            city_name: city.clone(),
+            town_name: String::new(),
             province_code: extract_province_code(&sfid),
             city_code: extract_city_code(&sfid),
             town_code: String::new(),
@@ -475,13 +478,13 @@ async fn create_institution_inner(
             Some(sfid.clone()),
             serde_json::json!({
                 "sfid_number": sfid.clone(),
-                "institution_name": institution_name.clone().unwrap_or_default(),
+                "sfid_full_name": sfid_full_name.clone().unwrap_or_default(),
                 "subject_property": subject_property.clone(),
                 "institution": institution_code.clone(),
                 "education_type": inst.education_type.clone(),
                 "category": category_text_for_audit(category),
-                "province": province.clone(),
-                "city": city.clone(),
+                "province_name": province.clone(),
+                "city_name": city.clone(),
                 "private_type": inst.private_type.clone(),
                 "partnership_kind": inst.partnership_kind.clone(),
                 "parent_sfid_number": parent_sfid_number.clone(),
@@ -492,7 +495,7 @@ async fn create_institution_inner(
             message: "ok".to_string(),
             data: CreateInstitutionOutput {
                 sfid_number: sfid,
-                institution_name,
+                sfid_full_name,
                 category,
             },
         })
@@ -517,8 +520,8 @@ fn category_text_for_audit(category: InstitutionCategory) -> &'static str {
 pub(crate) struct ListInstitutionQuery {
     pub category: Option<String>,
     pub private_type: Option<String>,
-    pub province: Option<String>,
-    pub city: Option<String>,
+    pub province_name: Option<String>,
+    pub city_name: Option<String>,
     pub q: Option<String>,
     pub cursor: Option<String>,
     pub page_size: Option<usize>,
@@ -590,7 +593,7 @@ async fn list_institutions_inner(
         manifest_version: None,
         catalog_status: None,
     };
-    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -600,7 +603,7 @@ async fn list_institutions_inner(
             .into_response();
         }
     }
-    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -613,14 +616,14 @@ async fn list_institutions_inner(
     let Some(province_name) = scope
         .locked_province
         .as_deref()
-        .or(query.province.as_deref())
+        .or(query.province_name.as_deref())
     else {
         return api_error(StatusCode::FORBIDDEN, 1003, "province scope required");
     };
     let Some(province_code) = province_code_by_name(province_name) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
-    let city_code = match scope.locked_city.as_deref().or(query.city.as_deref()) {
+    let city_code = match scope.locked_city.as_deref().or(query.city_name.as_deref()) {
         Some(city_name) => match city_code_by_name(province_name, city_name) {
             Some(code) => Some(code),
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city"),

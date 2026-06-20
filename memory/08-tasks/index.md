@@ -201,8 +201,8 @@
 - `memory/08-tasks/done/20260415-proposal-action-resolver.md`
 - `memory/08-tasks/done/20260415-wumin-institutions-unified-registry.md`
 - `memory/08-tasks/done/20260419-sfid-机构两步式创建.md`
-- `memory/08-tasks/done/20260420-duoqian_address-改名-main_address.md`
-- `memory/08-tasks/done/20260420-keyless_address-改名-stake_address.md`
+- `memory/08-tasks/done/20260420-duoqian_account-改名-main_account.md`
+- `memory/08-tasks/done/20260420-keyless_address-改名-stake_account.md`
 - `memory/08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md`
 - `memory/08-tasks/done/20260421-154308-多签账户注册改造-离线QR聚合签名-step1.md`
 - `memory/08-tasks/done/20260421-162425-多签账户转账改造-离线QR聚合签名-step2.md`

@@ -11,7 +11,7 @@ import './styles.css';
 
 type Props = {
   accountRef: AdminAccountRef;
-  institutionName: string;
+  sfidFullName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -21,7 +21,7 @@ type Step = 'form' | 'sign';
 
 export function AdminSetChangePage({
   accountRef,
-  institutionName,
+  sfidFullName,
   adminWallets,
   onBack,
   onSuccess,
@@ -131,7 +131,7 @@ export function AdminSetChangePage({
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回机构详情</button>
       <h2>更换管理员</h2>
-      <p className="proposal-institution-name">{institutionName}</p>
+      <p className="proposal-institution-name">{sfidFullName}</p>
 
       <div className="admin-set-change-summary">
         <div className="metric-card"><strong>{account.kindLabel}</strong><span>{account.statusLabel}</span></div>

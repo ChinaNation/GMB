@@ -3,7 +3,7 @@
 //! 个人多签管理 pallet（pallet_index = 7,MODULE_TAG = `b"per-mgmt"`）。
 //!
 //! 业务边界:用户自定义的多签账户(无 SFID 归属),由 `creator + account_name`
-//! 派生地址 `derive_personal_duoqian_address`。承载创建/关闭两类提案的发起、
+//! 派生地址 `derive_personal_duoqian_account`。承载创建/关闭两类提案的发起、
 //! 投票回调执行、否决/超时清理。
 //!
 //! 与机构多签 (`organization-manage`) 完全独立的 storage / event / error / extrinsic 命名空间;
@@ -69,8 +69,8 @@ pub mod pallet {
         /// 内部投票引擎
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
-        type AddressValidator: primitives::multisig::DuoqianAddressValidator<Self::AccountId>;
-        type ReservedAddressChecker: primitives::multisig::DuoqianReservedAddressChecker<
+        type AccountValidator: primitives::multisig::DuoqianAccountValidator<Self::AccountId>;
+        type ReservedAccountChecker: primitives::multisig::DuoqianReservedAccountChecker<
             Self::AccountId,
         >;
         type ProtectedSourceChecker: primitives::multisig::ProtectedSourceChecker<Self::AccountId>;
@@ -115,7 +115,7 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 个人多签账户配置。key 为 personal_duoqian_address。
+    /// 个人多签账户配置。key 为 personal_duoqian_account。
     ///
     /// 中文注释:本表统一保存 creator/account_name/created_at/status。
     /// 管理员集合、管理员数量只允许从 admins-change 读取；
@@ -179,7 +179,7 @@ pub mod pallet {
         /// wuminapp 扫描此事件后引导其他管理员到投票引擎统一入口 `internal_vote` 投票。
         PersonalDuoqianProposed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             proposer: T::AccountId,
             account_name: AccountNameOf<T>,
             admins: DuoqianAdminsOf<T>,
@@ -192,7 +192,7 @@ pub mod pallet {
         /// 个人多签账户创建成功(投票通过,入金完成,状态变为 Active)。
         DuoqianCreated {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             creator: T::AccountId,
             admin_count: u32,
             threshold: u32,
@@ -202,24 +202,24 @@ pub mod pallet {
         /// 创建提案投票通过但执行失败。
         CreateExecutionFailed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
         },
         /// 创建提案最终被拒绝(投票引擎返回 STATUS_REJECTED 后清理 Pending)。
         DuoqianCreateRejected {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
         },
         /// 关闭个人多签账户提案已发起。
         CloseDuoqianProposed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             proposer: T::AccountId,
             beneficiary: T::AccountId,
         },
         /// 个人多签账户注销成功(投票通过,余额转出,PersonalDuoqians 删除)。
         DuoqianClosed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             beneficiary: T::AccountId,
             admin_count: u32,
             threshold: u32,
@@ -229,15 +229,15 @@ pub mod pallet {
         /// 关闭提案投票通过但执行失败。
         CloseExecutionFailed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
         },
     }
 
     #[pallet::error]
     pub enum Error<T> {
         IncompleteParameters,
-        InvalidAddress,
-        AddressReserved,
+        InvalidAccount,
+        AccountReserved,
         DuplicateAdmin,
         InvalidThreshold,
         InsufficientAmount,
@@ -250,7 +250,7 @@ pub mod pallet {
         DuoqianNotActive,
         InvalidBeneficiary,
         ProtectedSource,
-        DerivedAddressDecodeFailed,
+        DerivedAccountDecodeFailed,
         ReservedBalanceRemaining,
         VoteEngineError,
         ProposalActionNotFound,
@@ -263,7 +263,7 @@ pub mod pallet {
         ReserveReleaseFailed,
         FeeWithdrawFailed,
         CloseTransferBelowED,
-        /// propose_close 校验:仅个人多签地址可走本入口(非个人地址转 organization-manage)。
+        /// propose_close 校验:仅个人多签账户可走本入口(非个人地址转 organization-manage)。
         NotPersonalDuoqian,
     }
 
@@ -296,16 +296,16 @@ pub mod pallet {
 
         /// 发起"关闭个人多签账户"提案。
         ///
-        /// 仅接受个人多签地址(`PersonalDuoqians.contains_key` 命中);机构多签走 organization-manage。
+        /// 仅接受个人多签账户(`PersonalDuoqians.contains_key` 命中);机构多签走 organization-manage。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
         pub fn propose_close(
             origin: OriginFor<T>,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             beneficiary: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::close::do_propose_close::<T>(who, duoqian_address, beneficiary)
+            crate::close::do_propose_close::<T>(who, duoqian_account, beneficiary)
         }
 
         /// 清理已被拒绝或超时的创建/关闭提案残留状态。
@@ -320,11 +320,11 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 派生个人多签地址。
+        /// 派生个人多签账户。
         ///
         /// 地址只依赖 creator 与 account_name,与管理员列表无关,
         /// 所以未来换管理员地址不变。
-        pub fn derive_personal_duoqian_address(
+        pub fn derive_personal_duoqian_account(
             creator: &T::AccountId,
             account_name: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
@@ -336,7 +336,7 @@ pub mod pallet {
                 &payload,
             );
             T::AccountId::decode(&mut &digest[..])
-                .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
+                .map_err(|_| Error::<T>::DerivedAccountDecodeFailed.into())
         }
 
         /// 校验管理员集合和用户输入的普通业务动态阈值。
@@ -566,7 +566,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 ACTION_CLOSE => {
                     let action = pallet::CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
                         .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                    pallet::PendingCloseProposal::<T>::remove(&action.duoqian_address);
+                    pallet::PendingCloseProposal::<T>::remove(&action.duoqian_account);
                     Ok(ProposalExecutionOutcome::Executed)
                 }
                 _ => Ok(ProposalExecutionOutcome::Ignored),
@@ -587,17 +587,17 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 if crate::execute::cleanup_pending_create::<T>(proposal_id, &action, false)? {
                     pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::CreateExecutionFailed {
                         proposal_id,
-                        duoqian_address: action.duoqian_address,
+                        duoqian_account: action.duoqian_account,
                     });
                 }
             }
             ACTION_CLOSE => {
                 let action = pallet::CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
                     .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                if pallet::PendingCloseProposal::<T>::take(&action.duoqian_address).is_some() {
+                if pallet::PendingCloseProposal::<T>::take(&action.duoqian_account).is_some() {
                     pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::CloseExecutionFailed {
                         proposal_id,
-                        duoqian_address: action.duoqian_address,
+                        duoqian_account: action.duoqian_account,
                     });
                 }
             }

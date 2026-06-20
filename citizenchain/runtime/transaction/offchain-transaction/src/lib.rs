@@ -421,15 +421,15 @@ pub mod pallet {
         ///
         /// 约束:
         /// - 未绑定其他清算行
-        /// - `bank_main_address` 必须是 K1=S/F 私权机构 + 多签 Active + 主账户
+        /// - `bank_main_account` 必须是 K1=S/F 私权机构 + 多签 Active + 主账户
         #[pallet::call_index(30)]
         #[pallet::weight(T::WeightInfo::bind_clearing_bank())]
         pub fn bind_clearing_bank(
             origin: OriginFor<T>,
-            bank_main_address: T::AccountId,
+            bank_main_account: T::AccountId,
         ) -> DispatchResult {
             let user = ensure_signed(origin)?;
-            crate::deposit::do_bind_clearing_bank::<T>(user, bank_main_address)
+            crate::deposit::do_bind_clearing_bank::<T>(user, bank_main_account)
         }
 
         /// L3 从自持链上账户充值到绑定的清算行主账户。`amount` 单位分。

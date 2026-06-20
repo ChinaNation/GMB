@@ -283,7 +283,7 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
     .await
 }
 
-// ── 永久质押金额（43 个省储行 stake_address 余额之和）──
+// ── 永久质押金额（43 个省储行 stake_account 余额之和）──
 
 /// Substrate 标准 Blake2_128Concat：blake2b_128(data) ++ data。
 fn blake2b_128(input: &[u8]) -> [u8; 16] {
@@ -341,7 +341,7 @@ fn get_total_stake_sync(app: AppHandle) -> Result<TotalStake, String> {
 
     // 批量构造 43 个存储键，逐个查询。
     for bank in CHINA_CH.iter() {
-        let key = system_account_storage_key(&bank.stake_address);
+        let key = system_account_storage_key(&bank.stake_account);
         let raw = match rpc_post(
             "state_getStorage",
             Value::Array(vec![

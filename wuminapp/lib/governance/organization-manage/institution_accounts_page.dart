@@ -52,15 +52,15 @@ class _GovernanceInstitutionAccountsPageState
     final items = <({String name, String hex, IconData icon})>[
       (
         name: '主账户',
-        hex: widget.institution.mainAddress,
+        hex: widget.institution.mainAccount,
         icon: Icons.account_balance_wallet_outlined,
       ),
     ];
-    final fee = accounts?.feeAddress;
+    final fee = accounts?.feeAccount;
     if (fee != null) {
       items.add((name: '费用账户', hex: fee, icon: Icons.receipt_long_outlined));
     }
-    final safety = accounts?.safetyFundAddress;
+    final safety = accounts?.anquanAccount;
     if (safety != null) {
       items.add((
         name: '安全基金账户',
@@ -68,11 +68,11 @@ class _GovernanceInstitutionAccountsPageState
         icon: Icons.health_and_safety_outlined,
       ));
     }
-    final he = accounts?.heFundAddress;
+    final he = accounts?.heAccount;
     if (he != null) {
       items.add((name: '两和基金账户', hex: he, icon: Icons.handshake_outlined));
     }
-    final stake = accounts?.stakeAddress;
+    final stake = accounts?.stakeAccount;
     if (stake != null) {
       items.add((name: '永久质押', hex: stake, icon: Icons.lock_outline));
     }

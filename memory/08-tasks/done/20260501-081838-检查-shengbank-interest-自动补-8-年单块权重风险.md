@@ -94,7 +94,7 @@
 - 已装载 `citizenchain/runtime` 上下文。
 - 已检查 `citizenchain/runtime/issuance/shengbank-interest/src/lib.rs`、`weights.rs`、`benchmarks.rs`、runtime 配置和创世配置。
 - 核查结论：问题“部分存在，且需要修复/重新建模权重”。代码确实允许 `AUTO_BACKFILL_MAX_YEARS_PER_BLOCK = 8` 在单个年度边界块内最多补 8 年；每年遍历固定 43 家省储行，正常路径最多触发 `8 * 43 = 344` 次 `T::Currency::deposit_creating` 和 `344` 个 `ShengBankInterestMinted` 事件。
-- 进一步确认：创世余额预置到省储行 `stake_address`，年度利息发给 `main_address`，因此首次年度结算时 43 个 `main_address` 可能走账户创建路径。
+- 进一步确认：创世余额预置到省储行 `stake_account`，年度利息发给 `main_account`，因此首次年度结算时 43 个 `main_account` 可能走账户创建路径。
 - 进一步确认：`deposit_creating` 自身会产生 `Balances::Deposit`，返回的 `PositiveImbalance` drop 时会更新 `TotalIssuance` 并产生 `Balances::Issued`；新账户还可能产生 `Balances::Endowed`。因此事件与账户创建成本不只限于 `ShengBankInterestMinted`。
 - 权重问题：`on_initialize` 未使用 benchmark 生成的 `WeightInfo`，而是在 hook 内手写返回 `T::DbWeight::reads_writes(reads, writes) + ops * 50_000`。`benchmarks.rs` 虽定义了 `on_initialize_settlement` / `on_initialize_noop`，但 `weights.rs` 的 `WeightInfo` 只暴露 `force_settle_years` 和 `force_advance_year`。
 - 当前 8 年正常路径手写计数约为 `reads = 1033`、`writes = 1048`、`ops = 344`；按 runtime `RocksDbWeight` 粗算返回约 `130,642,200,000` ref_time，低于当前 60 秒区块上限。但这不是 benchmark 证明的上界，且 `50_000` 是 ref_time 不是 50,000ns，CPU/事件序列化/账户创建路径没有独立 benchmark 保证。

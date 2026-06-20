@@ -56,7 +56,7 @@ class _InstitutionDuoqianClosePageState
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _duoqianSs58 = _hexToSs58(widget.institution.duoqianAddress);
+    _duoqianSs58 = _hexToSs58(widget.institution.duoqianAccount);
     _fetchBalance();
   }
 
@@ -68,7 +68,7 @@ class _InstitutionDuoqianClosePageState
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.duoqianAddress);
+    final local = await store.read(widget.institution.duoqianAccount);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -78,10 +78,10 @@ class _InstitutionDuoqianClosePageState
     }
     try {
       final balance = await ChainRpc()
-          .fetchFinalizedBalance(widget.institution.duoqianAddress);
+          .fetchFinalizedBalance(widget.institution.duoqianAccount);
       try {
         await store.put(
-          accountHex: widget.institution.duoqianAddress,
+          accountHex: widget.institution.duoqianAccount,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -175,11 +175,11 @@ class _InstitutionDuoqianClosePageState
             fields: [
               // 链端 call 名仍为 propose_close,QR action 为
               // propose_close_institution,fields 按 Registry =
-              // (duoqian_address, beneficiary)。"当前余额" 属辅助展示,
+              // (duoqian_account, beneficiary)。"当前余额" 属辅助展示,
               // 页面已独立显示,不塞 display.fields 避免对齐失败
               // (2026-04-22 两色识别整改)。
               SignDisplayField(
-                key: 'duoqian_address',
+                key: 'duoqian_account',
                 label: '机构多签地址',
                 value: _duoqianSs58,
               ),
@@ -204,7 +204,7 @@ class _InstitutionDuoqianClosePageState
       }
 
       final result = await _manageService.submitProposeCloseInstitution(
-        duoqianAddress: widget.institution.duoqianAddress,
+        duoqianAccount: widget.institution.duoqianAccount,
         beneficiaryAddress: beneficiary,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),

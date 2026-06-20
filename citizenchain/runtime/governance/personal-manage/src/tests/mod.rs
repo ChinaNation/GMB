@@ -80,16 +80,16 @@ impl pallet_balances::Config for Test {
 
 // ─── Trait mock 实现 ─────────────────────────────────────────────────────
 
-pub struct TestAddressValidator;
-impl primitives::multisig::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+pub struct TestAccountValidator;
+impl primitives::multisig::DuoqianAccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
-pub struct TestReservedAddressChecker;
-impl primitives::multisig::DuoqianReservedAddressChecker<AccountId32>
-    for TestReservedAddressChecker
+pub struct TestReservedAccountChecker;
+impl primitives::multisig::DuoqianReservedAccountChecker<AccountId32>
+    for TestReservedAccountChecker
 {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
@@ -270,8 +270,8 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type AddressValidator = TestAddressValidator;
-    type ReservedAddressChecker = TestReservedAddressChecker;
+    type AccountValidator = TestAccountValidator;
+    type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type FeeRouter = ();
@@ -365,13 +365,13 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
 /// 直接灌已激活的 PersonalDuoqian + admins-change 管理员账户,跳过 propose/vote 链路。
 /// 用于关闭/资金边界测试,避免每个用例都重复一遍创建流程。
 pub fn seed_active_duoqian(
-    duoqian_address: &AccountId32,
+    duoqian_account: &AccountId32,
     creator: &AccountId32,
     admins: &[AccountId32],
     initial_balance: Balance,
 ) {
     pallet::PersonalDuoqians::<Test>::insert(
-        duoqian_address,
+        duoqian_account,
         types::DuoqianAccount {
             creator: creator.clone(),
             account_name: account_name(b"seeded"),
@@ -381,7 +381,7 @@ pub fn seed_active_duoqian(
     );
     // admins-change 写 Active 管理员账户,让 propose_close 的 is_active_account_admin 通过。
     // 中文注释：普通业务阈值归 internal-vote 管，不再写入管理员主体。
-    let account = duoqian_address.clone();
+    let account = duoqian_account.clone();
     let admins_ac: admins_change::AdminsOf<Test> =
         BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");
     let threshold = (admins.len() as u32 / 2).saturating_add(1);
@@ -399,7 +399,7 @@ pub fn seed_active_duoqian(
         },
     );
     use frame_support::traits::Currency;
-    let _ = Balances::deposit_creating(duoqian_address, initial_balance);
+    let _ = Balances::deposit_creating(duoqian_account, initial_balance);
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

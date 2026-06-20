@@ -255,16 +255,15 @@ fn institution_row_from_record(
 ) -> crate::subjects::InstitutionListRow {
     crate::subjects::InstitutionListRow {
         sfid_number: inst.sfid_number.clone(),
-        institution_name: inst.institution_name.clone(),
-        sfid_name: inst.sfid_name.clone(),
-        short_name: inst.short_name.clone(),
+        sfid_full_name: inst.sfid_full_name.clone(),
+        sfid_short_name: inst.sfid_short_name.clone(),
         status: inst.status.clone(),
         category: inst.category,
         subject_property: inst.subject_property.clone(),
         p1: inst.p1.clone(),
-        province: inst.province.clone(),
-        city: inst.city.clone(),
-        town: inst.town.clone(),
+        province_name: inst.province_name.clone(),
+        city_name: inst.city_name.clone(),
+        town_name: inst.town_name.clone(),
         institution_code: inst.institution_code.clone(),
         org_code: inst.org_code.clone(),
         education_type: inst.education_type.clone(),
@@ -291,8 +290,8 @@ fn institution_row_from_pg_row(
     let account_count_i64: i64 = row.get(16);
     let created_by_name: Option<String> = row.get(17);
     let created_by_role: Option<String> = row.get(18);
-    let sfid_name: Option<String> = row.get(19);
-    let short_name: Option<String> = row.get(20);
+    let sfid_full_name: Option<String> = row.get(19);
+    let sfid_short_name: Option<String> = row.get(20);
     let town: Option<String> = row.get(21);
     let town_code: Option<String> = row.get(22);
     let org_code: Option<String> = row.get(23);
@@ -324,16 +323,15 @@ fn institution_row_from_pg_row(
     };
     let inst = crate::subjects::Institution {
         sfid_number: row.get(0),
-        institution_name: row.get(1),
-        sfid_name,
-        short_name,
+        sfid_full_name,
+        sfid_short_name,
         status,
         category,
         subject_property: row.get(3),
         p1: row.get(4),
-        province: row.get(5),
-        city: row.get(6),
-        town: town.unwrap_or_default(),
+        province_name: row.get(5),
+        city_name: row.get(6),
+        town_name: town.unwrap_or_default(),
         province_code: row.get(7),
         city_code: row.get(8),
         town_code: town_code.unwrap_or_default(),
@@ -371,8 +369,8 @@ fn institution_from_subject_row(
     let category_text: String = row.get(2);
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-    let sfid_name: Option<String> = row.get(16);
-    let short_name: Option<String> = row.get(17);
+    let sfid_full_name: Option<String> = row.get(16);
+    let sfid_short_name: Option<String> = row.get(17);
     let town: Option<String> = row.get(18);
     let town_code: Option<String> = row.get(19);
     let org_code: Option<String> = row.get(20);
@@ -383,16 +381,15 @@ fn institution_from_subject_row(
     let legal_rep_photo_size_i64: Option<i64> = row.get(28);
     Ok(crate::subjects::Institution {
         sfid_number: row.get(0),
-        institution_name: row.get(1),
-        sfid_name,
-        short_name,
+        sfid_full_name,
+        sfid_short_name,
         status,
         category,
         subject_property: row.get(3),
         p1: row.get(4),
-        province: row.get(5),
-        city: row.get(6),
-        town: town.unwrap_or_default(),
+        province_name: row.get(5),
+        city_name: row.get(6),
+        town_name: town.unwrap_or_default(),
         province_code: row.get(7),
         city_code: row.get(8),
         town_code: town_code.unwrap_or_default(),
@@ -435,7 +432,7 @@ fn offset_page_from_window<T: Serialize>(
 }
 
 impl Db {
-    pub(crate) fn institution_name_exists(
+    pub(crate) fn sfid_full_name_exists(
         &self,
         name: &str,
         province_code: Option<&str>,
@@ -453,8 +450,8 @@ impl Db {
                         SELECT 1 FROM subjects
                         WHERE kind IN ('PUBLIC', 'PRIVATE')
                           AND name = $1
-                          AND ($2::text IS NULL OR p_code = $2)
-                          AND ($3::text IS NULL OR c_code = $3)
+                          AND ($2::text IS NULL OR province_code = $2)
+                          AND ($3::text IS NULL OR city_code = $3)
                           AND ($4::text IS NULL OR sfid_number <> $4)
                      )",
                     &[&name, &province_code, &city_code, &exclude_sfid_number],
@@ -479,17 +476,17 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT s.sfid_number, s.name, s.category,
-                            s.subject_property, s.p1, s.province,
-                            s.city, s.province_code, s.city_code, s.institution_code,
+                            s.subject_property, s.p1, s.province_name,
+                            s.city_name, s.province_code, s.city_code, s.institution_code,
                             s.private_type, s.partnership_kind, s.has_legal_personality,
                             s.parent_sfid_number, s.created_by, s.created_at,
-                            s.sfid_name, s.short_name,
-                            COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+                            s.sfid_full_name, s.sfid_short_name,
+                            COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
                             s.education_type, s.status, s.legal_rep_name, s.legal_rep_sfid_number,
 	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
 	                            s.legal_rep_photo_mime, s.legal_rep_photo_size
 		                     FROM subjects s
-		                     LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+		                     LEFT JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
 	                     WHERE s.kind IN ('PUBLIC', 'PRIVATE') AND s.sfid_number = $1
 	                     LIMIT 1",
                     &[&sfid_number],
@@ -501,7 +498,7 @@ impl Db {
             let inst = institution_from_subject_row(&row)?;
             let account_rows = conn
                 .query(
-                    "SELECT sfid_number, account_name, duoqian_address, chain_status, created_at
+                    "SELECT sfid_number, account_name, duoqian_account, chain_status, created_at
                      FROM accounts
                      WHERE sfid_number = $1
                      ORDER BY account_name ASC",
@@ -514,7 +511,7 @@ impl Db {
                 accounts.push(crate::subjects::InstitutionAccount {
                     sfid_number: row.get(0),
                     account_name: row.get(1),
-                    duoqian_address: row.get(2),
+                    duoqian_account: row.get(2),
                     chain_status: multisig_chain_status_from_text(status_text.as_str()),
                     chain_synced_at: None,
                     chain_tx_hash: None,
@@ -546,7 +543,7 @@ impl Db {
             .filter(|v| !v.is_empty())
             .map(str::to_string)
             .ok_or_else(|| "citizen sfid_number is required for delete".to_string())?;
-        let p_code = record
+        let province_code = record
             .province_code
             .as_deref()
             .or(record.residence_province_code.as_deref())
@@ -573,14 +570,14 @@ impl Db {
             }
             // 中文注释:SFID 公民库只保留可投票公民;年度报告判定失格时同步删除索引行。
             tx.execute(
-                "DELETE FROM citizens WHERE p_code = $1 AND sfid_number = $2",
-                &[&p_code, &sfid_number],
+                "DELETE FROM citizens WHERE province_code = $1 AND sfid_number = $2",
+                &[&province_code, &sfid_number],
             )
             .map_err(|e| format!("delete citizen row failed: {e}"))?;
             tx.execute(
                 "DELETE FROM subjects
-                 WHERE p_code = $1 AND sfid_number = $2 AND kind = 'CITIZEN'",
-                &[&p_code, &sfid_number],
+                 WHERE province_code = $1 AND sfid_number = $2 AND kind = 'CITIZEN'",
+                &[&province_code, &sfid_number],
             )
             .map_err(|e| format!("delete citizen subject failed: {e}"))?;
             tx.execute(
@@ -607,14 +604,14 @@ impl Db {
         else {
             return Ok(());
         };
-        let p_code = record
+        let province_code = record
             .province_code
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(str::to_string)
             .unwrap_or_else(|| Self::scope_codes_from_sfid(sfid_number.as_str()).0);
-        let c_code = record
+        let city_code = record
             .city_code
             .as_deref()
             .map(str::trim)
@@ -645,41 +642,47 @@ impl Db {
             conn,
             sfid_number.as_str(),
             "CITIZEN",
-            p_code.as_str(),
-            Some(c_code.as_str()),
+            province_code.as_str(),
+            Some(city_code.as_str()),
         )?;
         Self::delete_target_rows_outside_scope(
             conn,
             "subjects",
             sfid_number.as_str(),
-            p_code.as_str(),
+            province_code.as_str(),
         )?;
         Self::delete_target_rows_outside_scope(
             conn,
             "citizens",
             sfid_number.as_str(),
-            p_code.as_str(),
+            province_code.as_str(),
         )?;
         conn.execute(
             "INSERT INTO subjects (
-                sfid_number, kind, name, p_code, c_code, status, created_at, updated_at
+                sfid_number, kind, name, province_code, city_code, status, created_at, updated_at
              ) VALUES ($1, 'CITIZEN', NULL, $2, $3, $4, $5, now())
-             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
-                c_code = EXCLUDED.c_code,
+             ON CONFLICT (province_code, sfid_number) DO UPDATE SET
+                city_code = EXCLUDED.city_code,
                 status = EXCLUDED.status,
                 updated_at = now()",
-            &[&sfid_number, &p_code, &c_code, &status, &record.created_at],
+            &[
+                &sfid_number,
+                &province_code,
+                &city_code,
+                &status,
+                &record.created_at,
+            ],
         )
         .map_err(|e| format!("upsert citizen subject failed: {e}"))?;
         conn.execute(
             "INSERT INTO citizens (
-                sfid_number, p_code, c_code, id, archive_no, wallet_pubkey, wallet_address,
+                sfid_number, province_code, city_code, id, archive_no, wallet_pubkey, wallet_address,
                 citizen_status, voting_eligible, valid_from, valid_until, status_updated_at,
-                residence_p_code, residence_c_code, residence_t_code, birth_p_code, birth_c_code,
-                birth_t_code, election_scope_level, bind_status, bound_at, bound_by, created_at
+                residence_province_code, residence_city_code, residence_town_code, birth_province_code, birth_city_code,
+                birth_town_code, election_scope_level, bind_status, bound_at, bound_by, created_at
              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
-                c_code = EXCLUDED.c_code,
+             ON CONFLICT (province_code, sfid_number) DO UPDATE SET
+                city_code = EXCLUDED.city_code,
                 id = EXCLUDED.id,
                 archive_no = EXCLUDED.archive_no,
                 wallet_pubkey = EXCLUDED.wallet_pubkey,
@@ -689,12 +692,12 @@ impl Db {
                 valid_from = EXCLUDED.valid_from,
                 valid_until = EXCLUDED.valid_until,
                 status_updated_at = EXCLUDED.status_updated_at,
-                residence_p_code = EXCLUDED.residence_p_code,
-                residence_c_code = EXCLUDED.residence_c_code,
-                residence_t_code = EXCLUDED.residence_t_code,
-                birth_p_code = EXCLUDED.birth_p_code,
-                birth_c_code = EXCLUDED.birth_c_code,
-                birth_t_code = EXCLUDED.birth_t_code,
+                residence_province_code = EXCLUDED.residence_province_code,
+                residence_city_code = EXCLUDED.residence_city_code,
+                residence_town_code = EXCLUDED.residence_town_code,
+                birth_province_code = EXCLUDED.birth_province_code,
+                birth_city_code = EXCLUDED.birth_city_code,
+                birth_town_code = EXCLUDED.birth_town_code,
                 election_scope_level = EXCLUDED.election_scope_level,
                 bind_status = EXCLUDED.bind_status,
                 bound_at = EXCLUDED.bound_at,
@@ -702,8 +705,8 @@ impl Db {
                 created_at = EXCLUDED.created_at",
             &[
                 &sfid_number,
-                &p_code,
-                &c_code,
+                &province_code,
+                &city_code,
                 &id,
                 &record.archive_no,
                 &record.wallet_pubkey,
@@ -734,8 +737,8 @@ impl Db {
         conn: &mut C,
         sfid_number: &str,
         kind: &str,
-        p_code: &str,
-        c_code: Option<&str>,
+        province_code: &str,
+        city_code: Option<&str>,
     ) -> Result<(), String> {
         // 中文注释:ids 是 sfid_number 全局唯一索引,同号不能在身份大类之间静默改义。
         let existing = conn
@@ -752,15 +755,15 @@ impl Db {
                 ));
             }
             conn.execute(
-                "UPDATE ids SET p_code = $2, c_code = $3 WHERE sfid_number = $1",
-                &[&sfid_number, &p_code, &c_code],
+                "UPDATE ids SET province_code = $2, city_code = $3 WHERE sfid_number = $1",
+                &[&sfid_number, &province_code, &city_code],
             )
             .map_err(|e| format!("update target id failed: {e}"))?;
         } else {
             conn.execute(
-                "INSERT INTO ids (sfid_number, kind, p_code, c_code)
+                "INSERT INTO ids (sfid_number, kind, province_code, city_code)
                  VALUES ($1, $2, $3, $4)",
-                &[&sfid_number, &kind, &p_code, &c_code],
+                &[&sfid_number, &kind, &province_code, &city_code],
             )
             .map_err(|e| format!("insert target id failed: {e}"))?;
         }
@@ -771,11 +774,11 @@ impl Db {
         conn: &mut C,
         table: &str,
         sfid_number: &str,
-        p_code: &str,
+        province_code: &str,
     ) -> Result<(), String> {
         // 中文注释:分区键按行政区划真源修正时,清掉同一 sfid 留在原分区的查询行。
-        let sql = format!("DELETE FROM {table} WHERE sfid_number = $1 AND p_code <> $2");
-        conn.execute(sql.as_str(), &[&sfid_number, &p_code])
+        let sql = format!("DELETE FROM {table} WHERE sfid_number = $1 AND province_code <> $2");
+        conn.execute(sql.as_str(), &[&sfid_number, &province_code])
             .map_err(|e| format!("delete {table} rows outside scope failed: {e}"))?;
         Ok(())
     }
@@ -813,18 +816,18 @@ impl Db {
                     "SELECT COALESCE(c.id, 0), c.wallet_pubkey, c.wallet_address,
                                     c.archive_no, c.sfid_number, c.citizen_status,
                                     c.voting_eligible, c.valid_from, c.valid_until,
-                                    c.status_updated_at, c.bind_status, c.p_code, c.c_code,
-                                    c.residence_p_code, c.residence_c_code, c.residence_t_code,
-                                    c.birth_p_code, c.birth_c_code, c.birth_t_code,
+                                    c.status_updated_at, c.bind_status, c.province_code, c.city_code,
+                                    c.residence_province_code, c.residence_city_code, c.residence_town_code,
+                                    c.birth_province_code, c.birth_city_code, c.birth_town_code,
                                     c.election_scope_level, c.bound_at, c.bound_by, c.created_at
                              FROM citizens c
                              JOIN subjects s
-                               ON s.p_code = c.p_code
+                               ON s.province_code = c.province_code
                               AND s.sfid_number = c.sfid_number
                               AND s.kind = 'CITIZEN'
                              WHERE c.bind_status = 'BOUND'
-                               AND ($1::text IS NULL OR c.p_code = $1)
-                               AND ($2::text IS NULL OR c.c_code = $2)
+                               AND ($1::text IS NULL OR c.province_code = $1)
+                               AND ($2::text IS NULL OR c.city_code = $2)
                                AND (
                                     c.archive_no = $3 OR c.sfid_number = $3
                                     OR lower(c.wallet_pubkey) = lower($3)
@@ -910,8 +913,8 @@ impl Db {
                         SELECT 1 FROM citizens
                         WHERE sfid_number = $1
                           AND citizen_status = 'NORMAL'
-                          AND ($2::text IS NULL OR p_code = $2)
-                          AND ($3::text IS NULL OR c_code = $3)
+                          AND ($2::text IS NULL OR province_code = $2)
+                          AND ($3::text IS NULL OR city_code = $3)
                      )",
                     &[&sfid_number, &province_code, &city_code],
                 )
@@ -936,8 +939,8 @@ impl Db {
                     "SELECT sfid_number
                      FROM citizens
                      WHERE citizen_status = 'NORMAL'
-                       AND ($1::text IS NULL OR p_code = $1)
-                       AND ($2::text IS NULL OR c_code = $2)
+                       AND ($1::text IS NULL OR province_code = $1)
+                       AND ($2::text IS NULL OR city_code = $2)
                        AND (
                             sfid_number ILIKE '%' || $3 || '%'
                             OR COALESCE(archive_no, '') ILIKE '%' || $3 || '%'
@@ -963,13 +966,13 @@ impl Db {
             crate::number::InstitutionCategory::PublicSecurity
             | crate::number::InstitutionCategory::GovInstitution => "PUBLIC",
         };
-        let p_code = inst.province_code.clone();
-        let c_code = if inst.city_code == "000" || inst.city_code.is_empty() {
+        let province_code = inst.province_code.clone();
+        let city_code = if inst.city_code == "000" || inst.city_code.is_empty() {
             None
         } else {
             Some(inst.city_code.clone())
         };
-        let t_code = if inst.town_code.trim().is_empty() {
+        let town_code = if inst.town_code.trim().is_empty() {
             None
         } else {
             Some(inst.town_code.clone())
@@ -979,14 +982,14 @@ impl Db {
             conn,
             inst.sfid_number.as_str(),
             kind,
-            p_code.as_str(),
-            c_code.as_deref(),
+            province_code.as_str(),
+            city_code.as_deref(),
         )?;
         Self::delete_target_rows_outside_scope(
             conn,
             "subjects",
             inst.sfid_number.as_str(),
-            p_code.as_str(),
+            province_code.as_str(),
         )?;
         let category = institution_category_text(inst.category);
         let legal_rep_photo_size = inst
@@ -994,32 +997,32 @@ impl Db {
             .and_then(|v| i64::try_from(v).ok());
         conn.execute(
             "INSERT INTO subjects (
-		                sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
-		                status, category, subject_property, p1, province, city, town,
-		                province_code, city_code, town_code, institution_code, org_code,
-		                education_type, private_type, partnership_kind, has_legal_personality,
-		                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
-		                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
-		                legal_rep_photo_size, created_by, created_at, updated_at
-		             ) VALUES (
-		                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-		                $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-		                $25, $26, $27, $28, $29, $30, $31, $32, $33, now()
+			                sfid_number, kind, name, sfid_full_name, sfid_short_name,
+			                status, category, subject_property, p1, province_name, city_name, town_name,
+			                province_code, city_code, town_code, institution_code, org_code,
+			                education_type, private_type, partnership_kind, has_legal_personality,
+			                parent_sfid_number, legal_rep_name, legal_rep_sfid_number,
+			                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
+			                legal_rep_photo_size, created_by, created_at, updated_at
+			             ) VALUES (
+			                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+			                $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+			                $23, $24, $25, $26, $27, $28, $29, $30, now()
 		             )
-		             ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+		             ON CONFLICT (province_code, sfid_number) DO UPDATE SET
 		                kind = EXCLUDED.kind,
 	                name = EXCLUDED.name,
-	                sfid_name = EXCLUDED.sfid_name,
-	                short_name = EXCLUDED.short_name,
-	                c_code = EXCLUDED.c_code,
-		                t_code = EXCLUDED.t_code,
+	                sfid_full_name = EXCLUDED.sfid_full_name,
+	                sfid_short_name = EXCLUDED.sfid_short_name,
+	                city_code = EXCLUDED.city_code,
+		                town_code = EXCLUDED.town_code,
 		                status = EXCLUDED.status,
 	                category = EXCLUDED.category,
 	                subject_property = EXCLUDED.subject_property,
 	                p1 = EXCLUDED.p1,
-	                province = EXCLUDED.province,
-	                city = EXCLUDED.city,
-	                town = EXCLUDED.town,
+	                province_name = EXCLUDED.province_name,
+	                city_name = EXCLUDED.city_name,
+	                town_name = EXCLUDED.town_name,
 	                province_code = EXCLUDED.province_code,
 	                city_code = EXCLUDED.city_code,
 	                town_code = EXCLUDED.town_code,
@@ -1041,19 +1044,16 @@ impl Db {
             &[
                 &inst.sfid_number,
                 &kind,
-                &inst.institution_name,
-                &inst.sfid_name,
-                &inst.short_name,
-                &p_code,
-                &c_code,
-                &t_code,
+                &inst.sfid_short_name,
+                &inst.sfid_full_name,
+                &inst.sfid_short_name,
                 &status,
                 &category,
                 &inst.subject_property,
                 &inst.p1,
-                &inst.province,
-                &inst.city,
-                &inst.town,
+                &inst.province_name,
+                &inst.city_name,
+                &inst.town_name,
                 &inst.province_code,
                 &inst.city_code,
                 &inst.town_code,
@@ -1082,7 +1082,7 @@ impl Db {
                     conn,
                     "private",
                     inst.sfid_number.as_str(),
-                    p_code.as_str(),
+                    province_code.as_str(),
                 )?;
                 conn.execute(
                     "DELETE FROM gov WHERE sfid_number = $1",
@@ -1093,11 +1093,11 @@ impl Db {
                     let has_legal_personality = inst.has_legal_personality.unwrap_or(false);
                     conn.execute(
                         "INSERT INTO private (
-                            sfid_number, p_code, c_code, code, private_type, partnership_kind,
+                            sfid_number, province_code, city_code, code, private_type, partnership_kind,
                             has_legal_personality, subject_property, p1, parent_sfid_number
                          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                         ON CONFLICT (p_code, sfid_number) DO UPDATE SET
-                            c_code = EXCLUDED.c_code,
+                         ON CONFLICT (province_code, sfid_number) DO UPDATE SET
+                            city_code = EXCLUDED.city_code,
                             code = EXCLUDED.code,
                             private_type = EXCLUDED.private_type,
                             partnership_kind = EXCLUDED.partnership_kind,
@@ -1107,8 +1107,8 @@ impl Db {
                             parent_sfid_number = EXCLUDED.parent_sfid_number",
                         &[
                             &inst.sfid_number,
-                            &p_code,
-                            &c_code,
+                            &province_code,
+                            &city_code,
                             &inst.institution_code,
                             private_type,
                             &inst.partnership_kind,
@@ -1133,7 +1133,7 @@ impl Db {
                     conn,
                     "gov",
                     inst.sfid_number.as_str(),
-                    p_code.as_str(),
+                    province_code.as_str(),
                 )?;
                 conn.execute(
                     "DELETE FROM private WHERE sfid_number = $1",
@@ -1144,21 +1144,21 @@ impl Db {
                 let home_c: Option<String> = None;
                 conn.execute(
                     "INSERT INTO gov (
-		                        sfid_number, p_code, c_code, t_code, institution_code, org_code,
+		                        sfid_number, province_code, city_code, town_code, institution_code, org_code,
 		                        source, home_p, home_c
 		                     ) VALUES ($1, $2, $3, $4, $5, $6, 'MANUAL', $7, $8)
-		                     ON CONFLICT (p_code, sfid_number) DO UPDATE SET
-		                        c_code = EXCLUDED.c_code,
-		                        t_code = EXCLUDED.t_code,
+		                     ON CONFLICT (province_code, sfid_number) DO UPDATE SET
+		                        city_code = EXCLUDED.city_code,
+		                        town_code = EXCLUDED.town_code,
 		                        institution_code = EXCLUDED.institution_code,
 		                        org_code = EXCLUDED.org_code,
 		                        home_p = EXCLUDED.home_p,
 		                        home_c = EXCLUDED.home_c",
                     &[
                         &inst.sfid_number,
-                        &p_code,
-                        &c_code,
-                        &t_code,
+                        &province_code,
+                        &city_code,
+                        &town_code,
                         &inst.institution_code,
                         &inst.org_code,
                         &home_p,
@@ -1188,12 +1188,12 @@ impl Db {
     ) -> Result<(), String> {
         let scope_row = conn
             .query_opt(
-                "SELECT p_code, c_code FROM ids WHERE sfid_number = $1",
+                "SELECT province_code, city_code FROM ids WHERE sfid_number = $1",
                 &[&account.sfid_number],
             )
             .map_err(|e| format!("query id scope for account failed: {e}"))?;
         let (fallback_p, fallback_c) = Self::scope_codes_from_sfid(account.sfid_number.as_str());
-        let (p_code, c_code): (String, Option<String>) = match scope_row {
+        let (province_code, city_code): (String, Option<String>) = match scope_row {
             Some(row) => (row.get(0), row.get(1)),
             None => (fallback_p, fallback_c),
         };
@@ -1202,23 +1202,23 @@ impl Db {
             conn,
             "accounts",
             account.sfid_number.as_str(),
-            p_code.as_str(),
+            province_code.as_str(),
         )?;
         conn.execute(
             "INSERT INTO accounts (
-                sfid_number, p_code, c_code, account_name, duoqian_address, chain_status, created_at
+                sfid_number, province_code, city_code, account_name, duoqian_account, chain_status, created_at
              ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (p_code, sfid_number, account_name) DO UPDATE SET
-                c_code = EXCLUDED.c_code,
-                duoqian_address = EXCLUDED.duoqian_address,
+             ON CONFLICT (province_code, sfid_number, account_name) DO UPDATE SET
+                city_code = EXCLUDED.city_code,
+                duoqian_account = EXCLUDED.duoqian_account,
                 chain_status = EXCLUDED.chain_status,
                 created_at = EXCLUDED.created_at",
             &[
                 &account.sfid_number,
-                &p_code,
-                &c_code,
+                &province_code,
+                &city_code,
                 &account.account_name,
-                &account.duoqian_address,
+                &account.duoqian_account,
                 &chain_status,
                 &account.created_at,
             ],
@@ -1234,14 +1234,14 @@ impl Db {
         if r5.len() < 5 {
             return ("ZS".to_string(), None);
         }
-        let p_code = r5[0..2].to_string();
+        let province_code = r5[0..2].to_string();
         let c_part = &r5[2..5];
-        let c_code = if c_part == "000" {
+        let city_code = if c_part == "000" {
             None
         } else {
             Some(c_part.to_string())
         };
-        (p_code, c_code)
+        (province_code, city_code)
     }
 
     pub(crate) fn delete_institution_account_row(
@@ -1358,22 +1358,22 @@ impl Db {
         })
     }
 
-    // 中文注释(ADR-021 §B5):扫出"孤儿机构"——subjects 中 t_code 非空、但该
-    // (p_code,c_code,t_code) 三元组在行政区划真源 china.sqlite 里已不存在(被删镇/
-    // 退役复用 code 下挂着的旧机构,如港澳旧机构 t_code 指向已退役的镇)。判定只走
+    // 中文注释(ADR-021 §B5):扫出"孤儿机构"——subjects 中 town_code 非空、但该
+    // (province_code,city_code,town_code) 三元组在行政区划真源 china.sqlite 里已不存在(被删镇/
+    // 退役复用 code 下挂着的旧机构,如港澳旧机构 town_code 指向已退役的镇)。判定只走
     // 进程内内存树(crate::china::town_exists),不在 PG 里 join china 数据(PG 无 towns 表)。
-    // 白名单:t_code 为空/NULL 的行(市级机构/储委会/部委合法态)永远不是孤儿,直接跳过。
+    // 白名单:town_code 为空/NULL 的行(市级机构/储委会/部委合法态)永远不是孤儿,直接跳过。
     // 只读扫描,不改库;删除由调用方拿到 sfid 列表后逐省级联删。
     pub(crate) fn scan_orphan_institutions(&self) -> Result<Vec<OrphanInstitution>, String> {
         self.with_client(move |conn| {
             let rows = conn
                 .query(
-                    "SELECT p_code, sfid_number, kind,
-                            COALESCE(c_code, ''), COALESCE(t_code, ''),
-                            COALESCE(town, ''), COALESCE(category, ''),
+                    "SELECT province_code, sfid_number, kind,
+                            COALESCE(city_code, ''), COALESCE(town_code, ''),
+                            COALESCE(town_name, ''), COALESCE(category, ''),
                             COALESCE(org_code, ''), COALESCE(institution_code, '')
                      FROM subjects
-                     WHERE t_code IS NOT NULL AND t_code <> ''",
+                     WHERE town_code IS NOT NULL AND town_code <> ''",
                     &[],
                 )
                 .map_err(|e| {
@@ -1384,25 +1384,25 @@ impl Db {
                 })?;
             let mut orphans = Vec::new();
             for row in rows {
-                let p_code: String = row.get(0);
+                let province_code: String = row.get(0);
                 let sfid_number: String = row.get(1);
                 let kind: String = row.get(2);
-                let c_code: String = row.get(3);
-                let t_code: String = row.get(4);
+                let city_code: String = row.get(3);
+                let town_code: String = row.get(4);
                 let town: String = row.get(5);
                 let category: String = row.get(6);
                 let org_code: String = row.get(7);
                 let institution_code: String = row.get(8);
-                // 白名单:空 t_code 已在 SQL 过滤;此处再调 town_exists 内存树判定。
-                if crate::china::town_exists(&p_code, &c_code, &t_code) {
+                // 白名单:空 town_code 已在 SQL 过滤;此处再调 town_exists 内存树判定。
+                if crate::china::town_exists(&province_code, &city_code, &town_code) {
                     continue;
                 }
                 orphans.push(OrphanInstitution {
-                    p_code,
+                    province_code,
                     sfid_number,
                     kind,
-                    c_code,
-                    t_code,
+                    city_code,
+                    town_code,
                     town,
                     category,
                     org_code,
@@ -1415,7 +1415,7 @@ impl Db {
 
     // 中文注释:把待删孤儿行(subjects/gov/private/accounts)文本导出到备份文件,删除唯一回滚保证。
     // 用 COPY ... TO STDOUT 抓 TSV(不依赖 pg_dump 外部进程),每张表一段,带表名分隔头。
-    // 仅命中传入 sfid 集合内的行(逐省 p_code + sfid ANY 过滤),不会导出无关数据。
+    // 仅命中传入 sfid 集合内的行(逐省 province_code + sfid ANY 过滤),不会导出无关数据。
     fn export_orphan_backup(
         &self,
         by_province: &std::collections::BTreeMap<String, Vec<String>>,
@@ -1447,7 +1447,7 @@ impl Db {
                     writeln!(file, "-- TABLE={table} P_CODE={province}")
                         .map_err(|e| format!("write orphan backup table header failed: {e}"))?;
                     let copy_sql = format!(
-                        "COPY (SELECT * FROM {table} WHERE p_code = '{province}' AND {key_col} = ANY(ARRAY[{}])) TO STDOUT",
+                        "COPY (SELECT * FROM {table} WHERE province_code = '{province}' AND {key_col} = ANY(ARRAY[{}])) TO STDOUT",
                         sfids
                             .iter()
                             .map(|s| format!("'{}'", s.replace('\'', "''")))
@@ -1467,7 +1467,7 @@ impl Db {
         })
     }
 
-    // 中文注释:逐省单事务级联删孤儿机构。每省一条事务,WHERE p_code=$1 命中子分区,
+    // 中文注释:逐省单事务级联删孤儿机构。每省一条事务,WHERE province_code=$1 命中子分区,
     // sfid_number = ANY($2) 限定本省孤儿集合;禁止跨省一条 SQL。级联删顺序遵守关联依赖:
     // accounts → docs → audit → gov|private → ids → subjects(子承载表先删,主登记表 ids
     // 与父表 subjects 最后)。gov/private 按 subjects.kind 区分(本方法传入已分好的两类 sfid)。
@@ -1482,7 +1482,7 @@ impl Db {
         let gov_sfids = gov_sfids.to_vec();
         let private_sfids = private_sfids.to_vec();
         self.with_client(move |conn| {
-            // 本省全部孤儿 sfid(gov + private 合集),用于按 p_code 分区命中的表。
+            // 本省全部孤儿 sfid(gov + private 合集),用于按 province_code 分区命中的表。
             let all_sfids: Vec<String> = gov_sfids
                 .iter()
                 .chain(private_sfids.iter())
@@ -1495,38 +1495,38 @@ impl Db {
                 .transaction()
                 .map_err(|e| format!("begin orphan purge tx for {province} failed: {e}"))?;
 
-            // 1. accounts(p_code 分区,按 sfid_number)。
+            // 1. accounts(province_code 分区,按 sfid_number)。
             tx.execute(
-                "DELETE FROM accounts WHERE p_code = $1 AND sfid_number = ANY($2)",
+                "DELETE FROM accounts WHERE province_code = $1 AND sfid_number = ANY($2)",
                 &[&province, &all_sfids],
             )
             .map_err(|e| format!("delete accounts for {province} failed: {e}"))?;
 
-            // 2. docs(p_code 分区,按 sfid_number)。
+            // 2. docs(province_code 分区,按 sfid_number)。
             tx.execute(
-                "DELETE FROM docs WHERE p_code = $1 AND sfid_number = ANY($2)",
+                "DELETE FROM docs WHERE province_code = $1 AND sfid_number = ANY($2)",
                 &[&province, &all_sfids],
             )
             .map_err(|e| format!("delete docs for {province} failed: {e}"))?;
 
-            // 3. audit(p_code 分区,关联列 target_sfid)。
+            // 3. audit(province_code 分区,关联列 target_sfid)。
             tx.execute(
-                "DELETE FROM audit WHERE p_code = $1 AND target_sfid = ANY($2)",
+                "DELETE FROM audit WHERE province_code = $1 AND target_sfid = ANY($2)",
                 &[&province, &all_sfids],
             )
             .map_err(|e| format!("delete audit for {province} failed: {e}"))?;
 
-            // 4. gov / private(p_code 分区,按 kind 区分各自的 sfid 集合)。
+            // 4. gov / private(province_code 分区,按 kind 区分各自的 sfid 集合)。
             if !gov_sfids.is_empty() {
                 tx.execute(
-                    "DELETE FROM gov WHERE p_code = $1 AND sfid_number = ANY($2)",
+                    "DELETE FROM gov WHERE province_code = $1 AND sfid_number = ANY($2)",
                     &[&province, &gov_sfids],
                 )
                 .map_err(|e| format!("delete gov for {province} failed: {e}"))?;
             }
             if !private_sfids.is_empty() {
                 tx.execute(
-                    "DELETE FROM private WHERE p_code = $1 AND sfid_number = ANY($2)",
+                    "DELETE FROM private WHERE province_code = $1 AND sfid_number = ANY($2)",
                     &[&province, &private_sfids],
                 )
                 .map_err(|e| format!("delete private for {province} failed: {e}"))?;
@@ -1536,10 +1536,10 @@ impl Db {
             tx.execute("DELETE FROM ids WHERE sfid_number = ANY($1)", &[&all_sfids])
                 .map_err(|e| format!("delete ids for {province} failed: {e}"))?;
 
-            // 6. subjects(p_code 分区,父表最后删)。
+            // 6. subjects(province_code 分区,父表最后删)。
             let deleted = tx
                 .execute(
-                    "DELETE FROM subjects WHERE p_code = $1 AND sfid_number = ANY($2)",
+                    "DELETE FROM subjects WHERE province_code = $1 AND sfid_number = ANY($2)",
                     &[&province, &all_sfids],
                 )
                 .map_err(|e| format!("delete subjects for {province} failed: {e}"))?;
@@ -1554,8 +1554,8 @@ impl Db {
         &self,
         filter: crate::subjects::InstitutionListFilter,
         private_type: Option<&str>,
-        p_code: &str,
-        c_code: Option<&str>,
+        province_code: &str,
+        city_code: Option<&str>,
         keyword: &str,
         cursor: Option<&str>,
         page_size: usize,
@@ -1563,7 +1563,7 @@ impl Db {
         let keyword = keyword.trim();
         if keyword.is_empty() {
             if matches!(filter, crate::subjects::InstitutionListFilter::Education) {
-                return self.list_education_committees_direct(p_code, c_code, page_size);
+                return self.list_education_committees_direct(province_code, city_code, page_size);
             }
             return Ok(PageResult {
                 items: Vec::new(),
@@ -1579,8 +1579,8 @@ impl Db {
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(str::to_string);
-        let p_code = p_code.to_string();
-        let c_code = c_code.map(str::to_string);
+        let province_code = province_code.to_string();
+        let city_code = city_code.map(str::to_string);
         let keyword = keyword.to_string();
         self.with_client(move |conn| {
             let cursor_created_at = cursor.map(|c| c.created_at);
@@ -1588,34 +1588,34 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             // 中文注释:过滤子句来自 InstitutionListFilter 的静态字面量(教育=手动 JY 行,
             // 非法人按父级属性分流到公权/私权),无注入面;par 是子句依赖的父级别名,
-            // 父级允许跨省(私法人全国),故只按 sfid_number 关联不限定 p_code。
+            // 父级允许跨省(私法人全国),故只按 sfid_number 关联不限定 province_code。
             let sql = format!(
 		                    "SELECT s.sfid_number, s.name, s.category,
-			                                    s.subject_property, s.p1, s.province,
-			                                    s.city, s.province_code, s.city_code, s.institution_code,
+			                                    s.subject_property, s.p1, s.province_name,
+			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
 				                                    COALESCE(ac.account_count, 0),
-				                                    a.admin_name, a.role, s.sfid_name, s.short_name,
-				                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+				                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+				                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
 				                                    s.education_type,
 				                                    s.status
 		                             FROM subjects s
-		                             LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+		                             LEFT JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
 		                             LEFT JOIN subjects par ON par.sfid_number = s.parent_sfid_number
 		                             LEFT JOIN (
-	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
+	                                SELECT province_code, sfid_number, COUNT(*)::BIGINT AS account_count
 	                                FROM accounts
-	                                WHERE p_code = $1
-	                                  AND ($2::text IS NULL OR c_code = $2)
-	                                GROUP BY p_code, sfid_number
-	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
+	                                WHERE province_code = $1
+	                                  AND ($2::text IS NULL OR city_code = $2)
+	                                GROUP BY province_code, sfid_number
+	                             ) ac ON ac.province_code = s.province_code AND ac.sfid_number = s.sfid_number
 	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               {filter_clause}
 	                               AND ($6::text IS NULL OR s.private_type = $6)
-	                               AND s.p_code = $1
-	                               AND ($2::text IS NULL OR s.c_code = $2)
+	                               AND s.province_code = $1
+	                               AND ($2::text IS NULL OR s.city_code = $2)
 	                               AND (
 	                                    s.sfid_number = $3
 	                                    OR lower(COALESCE(s.name, '')) = lower($3)
@@ -1632,8 +1632,8 @@ impl Db {
                 .query(
                     sql.as_str(),
                     &[
-                        &p_code,
-                        &c_code,
+                        &province_code,
+                        &city_code,
                         &keyword,
                         &cursor_created_at,
                         &fetch_limit,
@@ -1649,25 +1649,24 @@ impl Db {
 			                let account_count_i64: i64 = row.get(16);
 			                let created_by_name: Option<String> = row.get(17);
 			                let created_by_role: Option<String> = row.get(18);
-			                let sfid_name: Option<String> = row.get(19);
-			                let short_name: Option<String> = row.get(20);
+			                let sfid_full_name: Option<String> = row.get(19);
+			                let sfid_short_name: Option<String> = row.get(20);
 				                let town: Option<String> = row.get(21);
 				                let town_code: Option<String> = row.get(22);
 				                let org_code: Option<String> = row.get(23);
 				                let education_type: Option<String> = row.get(24);
 				                let status: String = row.get(25);
-		                let inst = crate::subjects::Institution {
-		                    sfid_number: row.get(0),
-		                    institution_name: row.get(1),
-		                    sfid_name,
-			                    short_name,
+                let inst = crate::subjects::Institution {
+                    sfid_number: row.get(0),
+                    sfid_full_name,
+			                    sfid_short_name,
 			                    status,
 			                    category,
 		                    subject_property: row.get(3),
 		                    p1: row.get(4),
-			                    province: row.get(5),
-			                    city: row.get(6),
-			                    town: town.unwrap_or_default(),
+			                    province_name: row.get(5),
+			                    city_name: row.get(6),
+			                    town_name: town.unwrap_or_default(),
 			                    province_code: row.get(7),
 			                    city_code: row.get(8),
 			                    town_code: town_code.unwrap_or_default(),
@@ -1705,12 +1704,12 @@ impl Db {
 
     fn list_education_committees_direct(
         &self,
-        p_code: &str,
-        c_code: Option<&str>,
+        province_code: &str,
+        city_code: Option<&str>,
         page_size: usize,
     ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
-        let p_code = p_code.to_string();
-        let c_code = c_code.map(str::to_string);
+        let province_code = province_code.to_string();
+        let city_code = city_code.map(str::to_string);
         self.with_client(move |conn| {
             let city_type = crate::subjects::EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE;
             let limit = i64::try_from(page_size.saturating_add(1))
@@ -1720,13 +1719,13 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT s.sfid_number, s.name, s.category,
-                                    s.subject_property, s.p1, s.province,
-                                    s.city, s.province_code, s.city_code, s.institution_code,
+                                    s.subject_property, s.p1, s.province_name,
+                                    s.city_name, s.province_code, s.city_code, s.institution_code,
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
                                     s.parent_sfid_number, s.created_by, s.created_at,
                                     COALESCE(ac.account_count, 0),
-                                    a.admin_name, a.role, s.sfid_name, s.short_name,
-                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
                                     s.education_type, s.status,
                                     NULL::text, NULL::text, NULL::boolean
                      FROM subjects s
@@ -1740,14 +1739,14 @@ impl Db {
 	                       AND s.status = 'ACTIVE'
 	                       AND s.institution_code = 'JY'
 	                       AND s.education_type = $3
-	                       AND s.p_code = $1
-	                       AND ($2::text IS NULL OR s.c_code = $2)
+	                       AND s.province_code = $1
+	                       AND ($2::text IS NULL OR s.city_code = $2)
 	                     ORDER BY
-	                        s.p_code ASC,
-	                        s.c_code ASC NULLS FIRST,
+	                        s.province_code ASC,
+	                        s.city_code ASC NULLS FIRST,
 	                        s.sfid_number ASC
 	                     LIMIT $4",
-                    &[&p_code, &c_code, &city_type, &limit],
+                    &[&province_code, &city_code, &city_type, &limit],
                 )
                 .map_err(|e| format!("query direct education committees failed: {e}"))?;
             let mut items = Vec::with_capacity(rows.len());
@@ -1760,13 +1759,13 @@ impl Db {
 
     pub(crate) fn list_public_security_scope(
         &self,
-        p_code: &str,
-        c_code: Option<&str>,
+        province_code: &str,
+        city_code: Option<&str>,
         offset: usize,
         page_size: usize,
     ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
-        let p_code = p_code.to_string();
-        let c_code = c_code.map(str::to_string);
+        let province_code = province_code.to_string();
+        let city_code = city_code.map(str::to_string);
         self.with_client(move |conn| {
             let limit = i64::try_from(page_size.saturating_add(1))
                 .map_err(|_| "page_size too large".to_string())?;
@@ -1775,37 +1774,37 @@ impl Db {
             let rows = conn
                 .query(
 		                    "SELECT s.sfid_number, s.name, s.category,
-			                                    s.subject_property, s.p1, s.province,
-			                                    s.city, s.province_code, s.city_code, s.institution_code,
+			                                    s.subject_property, s.p1, s.province_name,
+			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
-			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+			                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.education_type,
 			                                    s.status, cs.status, cs.install_token_status,
 			                                    CASE WHEN cs.sfid_number IS NULL THEN NULL ELSE (cs.cpms_pubkey_hash IS NOT NULL) END
 	                             FROM subjects s
-	                             JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+	                             JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
 		                             LEFT JOIN (
-		                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
+		                                SELECT province_code, sfid_number, COUNT(*)::BIGINT AS account_count
 	                                FROM accounts
-	                                WHERE p_code = $1
-	                                  AND ($2::text IS NULL OR c_code = $2)
-	                                GROUP BY p_code, sfid_number
-		                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
+	                                WHERE province_code = $1
+	                                  AND ($2::text IS NULL OR city_code = $2)
+	                                GROUP BY province_code, sfid_number
+		                             ) ac ON ac.province_code = s.province_code AND ac.sfid_number = s.sfid_number
 		                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
 		                             LEFT JOIN cpms_sites cs ON cs.sfid_number = s.sfid_number
 	                             WHERE s.kind = 'PUBLIC'
 	                               AND s.category = 'PUBLIC_SECURITY'
 	                               AND s.status = 'ACTIVE'
 	                               AND g.org_code = 'CITY_POLICE'
-	                               AND s.c_code IS NOT NULL
-	                               AND s.p_code = $1
-	                               AND ($2::text IS NULL OR s.c_code = $2)
-	                             ORDER BY s.c_code ASC NULLS LAST, s.sfid_number ASC
+	                               AND s.city_code IS NOT NULL
+	                               AND s.province_code = $1
+	                               AND ($2::text IS NULL OR s.city_code = $2)
+	                             ORDER BY s.city_code ASC NULLS LAST, s.sfid_number ASC
 	                             LIMIT $3 OFFSET $4",
-                    &[&p_code, &c_code, &limit, &offset_i64],
+                    &[&province_code, &city_code, &limit, &offset_i64],
                 )
                 .map_err(|e| format!("query public security failed: {e}"))?;
             let mut items = Vec::with_capacity(rows.len());
@@ -1818,8 +1817,8 @@ impl Db {
 
     pub(crate) fn list_official_institutions_scope(
         &self,
-        p_code: &str,
-        c_code: Option<&str>,
+        province_code: &str,
+        city_code: Option<&str>,
         keyword: &str,
         org_code: &str,
         offset: usize,
@@ -1827,8 +1826,8 @@ impl Db {
     ) -> Result<PageResult<crate::subjects::InstitutionListRow>, String> {
         let keyword = keyword.trim().to_ascii_lowercase();
         let org_code = org_code.trim().to_ascii_uppercase();
-        let p_code = p_code.to_string();
-        let c_code = c_code.map(str::to_string);
+        let province_code = province_code.to_string();
+        let city_code = city_code.map(str::to_string);
         self.with_client(move |conn| {
             let limit = i64::try_from(page_size.saturating_add(1))
                 .map_err(|_| "page_size too large".to_string())?;
@@ -1840,25 +1839,25 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT s.sfid_number, s.name, s.category,
-			                                    s.subject_property, s.p1, s.province,
-			                                    s.city, s.province_code, s.city_code, s.institution_code,
+			                                    s.subject_property, s.p1, s.province_name,
+			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.role, s.sfid_name, s.short_name,
-			                                    COALESCE(s.town, ''), COALESCE(s.town_code, ''), s.org_code,
+			                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.education_type,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean
 	                             FROM subjects s
-	                             LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+	                             LEFT JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
 	                             LEFT JOIN subjects par ON par.sfid_number = s.parent_sfid_number
 		                             LEFT JOIN (
-	                                SELECT p_code, sfid_number, COUNT(*)::BIGINT AS account_count
+	                                SELECT province_code, sfid_number, COUNT(*)::BIGINT AS account_count
 	                                FROM accounts
-	                                WHERE p_code = $1
-	                                  AND ($2::text IS NULL OR c_code = $2)
-	                                GROUP BY p_code, sfid_number
-	                             ) ac ON ac.p_code = s.p_code AND ac.sfid_number = s.sfid_number
+	                                WHERE province_code = $1
+	                                  AND ($2::text IS NULL OR city_code = $2)
+	                                GROUP BY province_code, sfid_number
+	                             ) ac ON ac.province_code = s.province_code AND ac.sfid_number = s.sfid_number
 	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               AND s.status = 'ACTIVE'
@@ -1875,8 +1874,8 @@ impl Db {
 	                                        AND s.institution_code <> 'JY'
 	                                        AND par.subject_property = 'G')
 	                               )
-	                               AND s.p_code = $1
-	                               AND ($2::text IS NULL OR s.c_code = $2)
+	                               AND s.province_code = $1
+	                               AND ($2::text IS NULL OR s.city_code = $2)
 	                               AND (
 	                                    $3::text = ''
 	                                    OR lower(s.sfid_number) LIKE '%' || $3 || '%'
@@ -1887,8 +1886,8 @@ impl Db {
 	                                    OR COALESCE(g.org_code, s.org_code, '') = $4
 	                               )
 	                             ORDER BY
-		                                s.c_code ASC NULLS LAST,
-		                                s.t_code ASC NULLS LAST,
+		                                s.city_code ASC NULLS LAST,
+		                                s.town_code ASC NULLS LAST,
 		                                CASE s.institution_code
 	                                    WHEN 'ZF' THEN 0
 	                                    WHEN 'LF' THEN 1
@@ -1900,7 +1899,7 @@ impl Db {
 	                                COALESCE(s.name, '') ASC,
 	                                s.sfid_number ASC
 	                             LIMIT $5 OFFSET $6",
-                    &[&p_code, &c_code, &keyword, &org_code, &limit, &offset_i64],
+                    &[&province_code, &city_code, &keyword, &org_code, &limit, &offset_i64],
                 )
                 .map_err(|e| format!("query official institutions failed: {e}"))?;
             let mut items = Vec::with_capacity(rows.len());
@@ -2094,7 +2093,7 @@ fn load_gov_bootstrap_state(state: &AppState) -> Result<GovBootstrapState, Strin
                     (
                         SELECT COUNT(*)::BIGINT
                         FROM accounts a
-                        JOIN gov g ON g.p_code = a.p_code AND g.sfid_number = a.sfid_number
+                        JOIN gov g ON g.province_code = a.province_code AND g.sfid_number = a.sfid_number
                     ) AS account_count",
                 &[&scope_key, &crate::gov::service::GOV_TEMPLATE_VERSION],
             )
@@ -2448,14 +2447,14 @@ fn run_purge_legacy_sfid(state: &AppState, dry_run: bool) {
     );
 }
 
-// 中文注释:一条孤儿机构记录(subjects 行 t_code 指向 china.sqlite 已退役/不存在的镇)。
+// 中文注释:一条孤儿机构记录(subjects 行 town_code 指向 china.sqlite 已退役/不存在的镇)。
 #[derive(Debug, Clone)]
 struct OrphanInstitution {
-    p_code: String,
+    province_code: String,
     sfid_number: String,
     kind: String,
-    c_code: String,
-    t_code: String,
+    city_code: String,
+    town_code: String,
     town: String,
     category: String,
     org_code: String,
@@ -2464,12 +2463,12 @@ struct OrphanInstitution {
 
 // 中文注释(ADR-021 §B5):清理孤儿机构 CLI。
 // `purge-orphan-institutions [--dry-run|--apply] [--backup <path>]`,默认 dry-run。
-// 孤儿 = subjects.t_code 非空 + (p_code,c_code,t_code) 不在 china.sqlite 内存树。
-//   - dry-run:只打印孤儿清单(sfid/town/t_code/category/org_code/institution_code/原因)+ 总数,
+// 孤儿 = subjects.town_code 非空 + (province_code,city_code,town_code) 不在 china.sqlite 内存树。
+//   - dry-run:只打印孤儿清单(sfid/town/town_code/category/org_code/institution_code/原因)+ 总数,
 //     供人工核对无一命中冻结常量号(储委会/部委)。
 //   - apply:先把待删行导出到 purge_orphan_backup_<...>.sql(删除唯一回滚保证),
 //     再逐省单事务级联删(accounts→docs→audit→gov|private→ids→subjects)。
-// 红线:绝不动 sfid_number;绝不删空 t_code 行(已在扫描层白名单过滤);不碰号生成/链/省市码。
+// 红线:绝不动 sfid_number;绝不删空 town_code 行(已在扫描层白名单过滤);不碰号生成/链/省市码。
 fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: Option<&str>) {
     let orphans = state
         .db
@@ -2489,14 +2488,14 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
         info!(
             sfid_number = %o.sfid_number,
             kind = %o.kind,
-            p_code = %o.p_code,
-            c_code = %o.c_code,
-            t_code = %o.t_code,
+            province_code = %o.province_code,
+            city_code = %o.city_code,
+            town_code = %o.town_code,
             town = %o.town,
             category = %o.category,
             org_code = %o.org_code,
             institution_code = %o.institution_code,
-            reason = "town (p_code,c_code,t_code) not found in china.sqlite (retired/reused town code)",
+            reason = "town (province_code,city_code,town_code) not found in china.sqlite (retired/reused town code)",
             "orphan institution"
         );
     }
@@ -2522,17 +2521,17 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
         std::collections::BTreeMap::new();
     for o in &orphans {
         all_by_province
-            .entry(o.p_code.clone())
+            .entry(o.province_code.clone())
             .or_default()
             .push(o.sfid_number.clone());
         match o.kind.as_str() {
             "PRIVATE" => private_by_province
-                .entry(o.p_code.clone())
+                .entry(o.province_code.clone())
                 .or_default()
                 .push(o.sfid_number.clone()),
             // PUBLIC 及其它(默认按公权机构 gov 表处理)。
             _ => gov_by_province
-                .entry(o.p_code.clone())
+                .entry(o.province_code.clone())
                 .or_default()
                 .push(o.sfid_number.clone()),
         }
@@ -2569,7 +2568,7 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
             .delete_orphan_institutions_by_province(province, &gov_sfids, &private_sfids)
             .unwrap_or_else(|e| panic!("purge-orphan-institutions delete failed: {e}"));
         info!(
-            p_code = %province,
+            province_code = %province,
             gov_deleted = gov_sfids.len(),
             private_deleted = private_sfids.len(),
             subjects_deleted = deleted,
@@ -2805,7 +2804,7 @@ fn main() {
             // - DELETE /api/v1/institution/:sfid_number/account/:account_name — 删除未上链/已注销新增账户
             .route(
                 "/api/v1/institution/check-name",
-                get(subjects::admin::check_institution_name),
+                get(subjects::admin::check_sfid_full_name),
             )
             // F 详情页"所属法人"搜索(全国范围 S/G 模糊匹配)
             .route(

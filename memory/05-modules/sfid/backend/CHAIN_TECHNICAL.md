@@ -58,7 +58,7 @@ GET /api/v1/app/institutions/:sfid_number/registration-info
 
 ```text
 sfid_number
-institution_name
+sfid_full_name
 account_names[]
 ```
 
@@ -66,7 +66,7 @@ account_names[]
 
 - `genesis_hash`
 - `register_nonce`
-- `province`
+- `province_name`
 - `signer_admin_pubkey`
 - `signature`
 - `meta`

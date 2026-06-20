@@ -351,7 +351,7 @@ class VoteChecker {
       } else if (t.kind == 1 && t.institution != null) {
         final inst = Uint8List.fromList(institutionIdentityToAccountId(
           t.institution!.sfidNumber,
-          mainAddress: t.institution!.mainAddress,
+          mainAccount: t.institution!.mainAccount,
         ));
         if (inst.length == 32) {
           jointByPid[t.proposalId] =

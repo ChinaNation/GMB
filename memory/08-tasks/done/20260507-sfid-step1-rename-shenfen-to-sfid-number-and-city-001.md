@@ -1,6 +1,6 @@
 任务需求：
 SFID 改造 Step 1:
-1. 全 5 工程统一改名 `sfid_number` / `sfid_number` → `sfid_number`,`shenfen_name` → `sfid_name`
+1. 全 5 工程统一改名 `sfid_number` / `sfid_number` → `sfid_number`,`shenfen_name` → `sfid_full_name`
    (覆盖所有 case 形态:snake/camel/Pascal/SCREAMING/字符串/URL/函数名)
 2. 277 条内置机构 sfid_number 字面量按新规则重生成(强制 city=001 无例外,
    d=2026,n9 重算,c1 重算)
@@ -30,16 +30,16 @@ SFID 改造 Step 1:
 - `tools/resolve_stash_conflicts.py`(新建):git stash pop 冲突清理(保留 Stashed)
 
 ### 改名规则(12 条)
-- snake_case:`sfid_number`/`sfid_number` → `sfid_number`,`shenfen_name` → `sfid_name`
+- snake_case:`sfid_number`/`sfid_number` → `sfid_number`,`shenfen_name` → `sfid_full_name`
 - SCREAMING:`SHENFEN_ID`/`SFID_ID` → `SFID_NUMBER`,`SHENFEN_NAME` → `SFID_NAME`
 - PascalCase:`ShenfenId`/`SfidId` → `SfidNumber`,`ShenfenName` → `SfidName`
-- camelCase:`sfidNumber`/`sfidId` → `sfidNumber`,`shenfenName` → `sfidName`
+- camelCase:`sfidNumber`/`sfidId` → `sfidNumber`,`shenfenName` → `sfidFullName`
 
 ### SFID 字面量重生成(277 条)
 - 7 个 china_*.rs(cb 44 / ch 43 / lf 44 / sf 44 / jc 47 / jy 1 / zf 54)
 - 强制 city=001(包括原 LN002 也改 LN001)
 - d=2026 (D4 年份段)
-- n9 = blake2b-256(sfid_name | subject_property | province | city | t2 | "2026")[:4] mod 10^9
+- n9 = blake2b-256(sfid_full_name | subject_property | province | city | t2 | "2026")[:4] mod 10^9
 - c1 = checksum 重算
 
 ### 派生函数拆分(避免 &str / &[u8] 同名冲突)
@@ -71,10 +71,10 @@ SFID 改造 Step 1:
 
 ## 不在本步范围(Step 2 处理)
 
-- 277 条 main_address(blake2b-256 with sfid_number)重算
-- 87 条 fee_address(cb + ch)重算
-- 1 条 NRC_ANQUAN_ADDRESS(NRC sfid_number)重算
-- 408 条 china_zb.rs CHINA_RESERVED_MAIN_ADDRESSES 重算
+- 277 条 main_account(blake2b-256 with sfid_number)重算
+- 87 条 fee_account(cb + ch)重算
+- 1 条 NRC_ANQUAN_ACCOUNT(NRC sfid_number)重算
+- 408 条 china_zb.rs CHINA_RESERVED_MAIN_ACCOUNTS 重算
 - tools/duoqian.py NRC_SFID_NUMBER 常量改名 + 改值
 - 跑 `python3 tools/duoqian.py --apply` 自动同步
 

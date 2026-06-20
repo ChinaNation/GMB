@@ -2,14 +2,14 @@
 
 export type EligibleClearingBankCandidate = {
   sfidNumber: string;
-  institutionName: string;
+  sfidFullName: string;
   subjectProperty: string;
   subType?: string | null;
   parentSfidNumber?: string | null;
-  parentInstitutionName?: string | null;
+  parentSfidFullName?: string | null;
   parentSubjectProperty?: string | null;
-  province: string;
-  city: string;
+  provinceName: string;
+  cityName: string;
   /** 主账户当前链上状态:Pending / Active / Closed / Failed。 */
   mainChainStatus: 'Pending' | 'Active' | 'Closed' | 'Failed';
   mainAccount?: string | null;
@@ -29,7 +29,7 @@ export type AccountWithBalance = {
 
 export type InstitutionDetail = {
   sfidNumber: string;
-  institutionName: string;
+  sfidFullName: string;
   /** 管理员更换使用的机构多签 AccountId，清算行当前指向主账户。 */
   adminAccountHex: string;
   /** 管理员更换使用的 org：清算行属于 ORG_OTH。 */
@@ -67,7 +67,7 @@ export type InstitutionProposalPage = {
 /** SFID `/registration-info` 响应形态(snake_case 直传)。 */
 export type InstitutionRegistrationInfoResp = {
   sfid_number: string;
-  institution_name: string;
+  sfid_full_name: string;
   account_names: string[];
   credential: InstitutionRegistrationCredentialResp;
 };
@@ -75,7 +75,7 @@ export type InstitutionRegistrationInfoResp = {
 /** SFID 对链上注册 payload 签发的凭证。 */
 export type InstitutionRegistrationCredentialResp = {
   genesis_hash: string;
-  province: string;
+  province_name: string;
   /** 防重放 nonce(本次响应生成的随机字符串)。 */
   register_nonce: string;
   /** 本次签名所用省管理员公钥(32 字节 hex)。 */

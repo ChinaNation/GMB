@@ -17,29 +17,29 @@ pub const ACTIVATE_DOMAIN: &[u8; 32] = b"activate_sheng_signing_pubkey_v1";
 pub const ROTATE_DOMAIN: &[u8; 30] = b"rotate_sheng_signing_pubkey_v1";
 
 pub fn add_backup_payload(
-    province: &[u8],
+    province_name: &[u8],
     slot: Slot,
     new_pubkey: &[u8; 32],
     nonce: &[u8; 32],
 ) -> [u8; 32] {
-    let payload = (ADD_BACKUP_DOMAIN, province, slot, new_pubkey, nonce);
+    let payload = (ADD_BACKUP_DOMAIN, province_name, slot, new_pubkey, nonce);
     blake2_256(&payload.encode())
 }
 
-pub fn remove_backup_payload(province: &[u8], slot: Slot, nonce: &[u8; 32]) -> [u8; 32] {
-    let payload = (REMOVE_BACKUP_DOMAIN, province, slot, nonce);
+pub fn remove_backup_payload(province_name: &[u8], slot: Slot, nonce: &[u8; 32]) -> [u8; 32] {
+    let payload = (REMOVE_BACKUP_DOMAIN, province_name, slot, nonce);
     blake2_256(&payload.encode())
 }
 
 pub fn activate_payload(
-    province: &[u8],
+    province_name: &[u8],
     admin_pubkey: &[u8; 32],
     signing_pubkey: &[u8; 32],
     nonce: &[u8; 32],
 ) -> [u8; 32] {
     let payload = (
         ACTIVATE_DOMAIN,
-        province,
+        province_name,
         admin_pubkey,
         signing_pubkey,
         nonce,
@@ -48,14 +48,14 @@ pub fn activate_payload(
 }
 
 pub fn rotate_payload(
-    province: &[u8],
+    province_name: &[u8],
     admin_pubkey: &[u8; 32],
     new_signing_pubkey: &[u8; 32],
     nonce: &[u8; 32],
 ) -> [u8; 32] {
     let payload = (
         ROTATE_DOMAIN,
-        province,
+        province_name,
         admin_pubkey,
         new_signing_pubkey,
         nonce,

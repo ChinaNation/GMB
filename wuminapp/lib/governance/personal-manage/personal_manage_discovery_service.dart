@@ -83,15 +83,15 @@ class PersonalManageDiscoveryService {
       );
     }
 
-    final scannedAddrs = <String>{};
+    final scannedAccounts = <String>{};
     var newlyAdded = 0;
 
     for (final acc in mine) {
       final meta = metas[acc.addrHex];
       if (meta == null) continue;
-      scannedAddrs.add(acc.addrHex);
+      scannedAccounts.add(acc.addrHex);
       final added = await _upsertPersonal(
-        duoqianAddrHex: acc.addrHex,
+        duoqianAccountHex: acc.addrHex,
         name: meta.accountName,
         creatorAddrHex: meta.creatorAddressHex,
         matchedAdmins: acc.adminPubkeysHex
@@ -101,7 +101,7 @@ class PersonalManageDiscoveryService {
       if (added) newlyAdded++;
     }
 
-    final orphans = await _reverseValidateAndDelete(scannedAddrs);
+    final orphans = await _reverseValidateAndDelete(scannedAccounts);
 
     return PersonalManageDiscoveryStats(
       subjectsScanned: scan.totalKeys,
@@ -114,7 +114,7 @@ class PersonalManageDiscoveryService {
   }
 
   Future<bool> _upsertPersonal({
-    required String duoqianAddrHex,
+    required String duoqianAccountHex,
     required String name,
     required String creatorAddrHex,
     required List<String> matchedAdmins,
@@ -130,7 +130,7 @@ class PersonalManageDiscoveryService {
     return WalletIsar.instance.writeTxn((isar) async {
       final exists = await isar.personalDuoqianEntitys
           .filter()
-          .duoqianAddressEqualTo(duoqianAddrHex)
+          .duoqianAccountEqualTo(duoqianAccountHex)
           .findFirst();
 
       if (exists != null) {
@@ -139,14 +139,14 @@ class PersonalManageDiscoveryService {
         await isar.personalDuoqianEntitys.put(exists);
         await PersonalDuoqianLocalState.putStatusInTxn(
           isar,
-          duoqianAddrHex,
+          duoqianAccountHex,
           PersonalDuoqianLocalState.statusActive,
         );
         return false;
       }
 
       final entity = PersonalDuoqianEntity()
-        ..duoqianAddress = duoqianAddrHex
+        ..duoqianAccount = duoqianAccountHex
         ..name = name
         ..creatorAddress = creatorSs58
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
@@ -155,14 +155,14 @@ class PersonalManageDiscoveryService {
       await isar.personalDuoqianEntitys.put(entity);
       await PersonalDuoqianLocalState.putStatusInTxn(
         isar,
-        duoqianAddrHex,
+        duoqianAccountHex,
         PersonalDuoqianLocalState.statusActive,
       );
       return true;
     });
   }
 
-  Future<int> _reverseValidateAndDelete(Set<String> scannedAddrs) async {
+  Future<int> _reverseValidateAndDelete(Set<String> scannedAccounts) async {
     var closed = 0;
     await WalletIsar.instance.writeTxn((isar) async {
       final stalePersonals = await isar.personalDuoqianEntitys
@@ -170,12 +170,12 @@ class PersonalManageDiscoveryService {
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final p in stalePersonals) {
-        if (!scannedAddrs.contains(p.duoqianAddress)) {
+        if (!scannedAccounts.contains(p.duoqianAccount)) {
           // 中文注释：链上注销后仍保留本地账户入口，只把状态标成已注销；
           // 用户在详情页点“删除”时才真正清空本机数据。
           await PersonalDuoqianLocalState.putStatusInTxn(
             isar,
-            p.duoqianAddress,
+            p.duoqianAccount,
             PersonalDuoqianLocalState.statusClosed,
           );
           closed++;

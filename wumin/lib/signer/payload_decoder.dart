@@ -186,7 +186,7 @@ class PayloadDecoder {
       // register_sfid_institution(call=2) 当前不作为冷钱包 action 暴露;
       // SFID 机构注册凭证等待市管理员业务签名流程接入后再恢复。
       // propose_create_institution(call=5) 由 wuminapp 在线端构造、走冷钱包扫码签名;
-      // ADR-008 step2b/step2d 凭证带 (province, signer_admin_pubkey) 双层匹配字段。
+      // ADR-008 step2b/step2d 凭证带 (province_name, signer_admin_pubkey) 双层匹配字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
         // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
@@ -233,7 +233,7 @@ class PayloadDecoder {
       }
 
       // ── ResolutionIssuance(8) · 决议发行联合提案 ──
-      // ADR-008 step3 后凭证 SCALE 末尾带 (province, signer_admin_pubkey)。
+      // ADR-008 step3 后凭证 SCALE 末尾带 (province_name, signer_admin_pubkey)。
       if (palletIndex == PalletRegistry.resolutionIssuancePallet) {
         if (callIndex == PalletRegistry.proposeResolutionIssuanceCall) {
           return _decodeProposeResolutionIssuance(bytes);
@@ -328,7 +328,7 @@ class PayloadDecoder {
       if (value['domain'] != _sfidAdminActionDomain) return null;
       if (value['qr_proto'] != 'WUMIN_QR_V1') return null;
       final actionType = value['action_type'];
-      final province = value['actor_province'];
+      final province = value['actor_province_name'];
       final actorPubkey = value['actor_pubkey'];
       final target = value['target'];
       final beforeHash = value['before_hash'];
@@ -349,7 +349,7 @@ class PayloadDecoder {
         summary: 'SFID 管理员治理',
         fields: <String, String>{
           'action_type': _sfidAdminActionLabel(actionType),
-          'province': province,
+          'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
           'before_hash': beforeHash,
@@ -358,7 +358,7 @@ class PayloadDecoder {
         },
         reviewFields: <String, String>{
           'action_type': _sfidAdminActionLabel(actionType),
-          'province': province,
+          'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
         },
@@ -630,7 +630,7 @@ class PayloadDecoder {
   // 格式：[0x17][0x01][proposal_id:u64_le][binding_id:32]
   //       [Vec nonce][Vec sig][Vec province][[u8;32] signer_admin_pubkey][approve:bool]
   //
-  // (province, signer_admin_pubkey) 必须进 payload — 链端 RuntimeSfidVoteVerifier
+  // (province_name, signer_admin_pubkey) 必须进 payload — 链端 RuntimeSfidVoteVerifier
   // 走 sheng_signing_pubkey_for_admin(province, admin) 双层匹配查派生公钥,
   // signer_admin_pubkey 不进 SCALE 即被拒签。
   // ---------------------------------------------------------------------------
@@ -683,7 +683,7 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
-        'province': province,
+        'province_name': province,
         'signer_admin_pubkey': _bytesToSs58(signerAdminPubkey),
       },
     );
@@ -774,7 +774,7 @@ class PayloadDecoder {
   //   pub fn propose_create_institution(
   //     origin,
   //     sfid_number: SfidNumberOf<T>,                 // BoundedVec<u8>
-  //     institution_name: AccountNameOf<T>,   // BoundedVec<u8>
+  //     sfid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
   //     admin_org: u8,                        // ORG_PUP / ORG_OTH
@@ -783,12 +783,12 @@ class PayloadDecoder {
   //     threshold: u32,
   //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
   //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
-  //     province: Vec<u8>,                    // ★ ADR-008 step2b 必填省份
+  //     province_name: Vec<u8>,                    // ★ ADR-008 step2b 必填省份
   //     signer_admin_pubkey: [u8; 32],        // ★ ADR-008 step2b 签名 admin
   //   )
   //
   // SCALE 顺序与上述完全一致。链端 RuntimeSfidInstitutionVerifier 走
-  // sheng_signing_pubkey_for_admin(province, signer_admin_pubkey) 双层匹配。
+  // sheng_signing_pubkey_for_admin(province_name, signer_admin_pubkey) 双层匹配。
   // 禁止在尾部追加 subject_property/sub_type/parent_sfid_number 等多余字段。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
@@ -803,11 +803,11 @@ class PayloadDecoder {
         allowMalformed: true);
     offset += sfidLen;
 
-    // institution_name: BoundedVec<u8>
+    // sfid_full_name: BoundedVec<u8>
     final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
     offset += nameLenSize;
     if (offset + nameLen > bytes.length) return null;
-    final institutionName = utf8.decode(bytes.sublist(offset, offset + nameLen),
+    final sfidFullName = utf8.decode(bytes.sublist(offset, offset + nameLen),
         allowMalformed: true);
     offset += nameLen;
 
@@ -876,7 +876,7 @@ class PayloadDecoder {
     if (offset + sigLen > bytes.length) return null;
     offset += sigLen;
 
-    // ADR-008 step2b ★ province: Vec<u8>
+    // ADR-008 step2b ★ province_name: Vec<u8>
     final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
     offset += provinceLenSize;
     if (offset + provinceLen > bytes.length) return null;
@@ -896,7 +896,7 @@ class PayloadDecoder {
     final amountYuan = _fenToYuan(accountsTotal);
     final fields = <String, String>{
       'sfid_number': sfidNumber,
-      'institution_name': institutionName,
+      'sfid_full_name': sfidFullName,
       'org': _orgName(adminOrg),
       'admin_count': adminCount.toString(),
       'threshold': '$threshold/$adminCount',
@@ -905,13 +905,13 @@ class PayloadDecoder {
     for (final entry in accountAmounts.entries) {
       fields['amount_${entry.key}'] = '${_fenToYuan(entry.value)} GMB';
     }
-    fields['province'] = province;
+    fields['province_name'] = province;
     fields['signer_admin_pubkey'] = _bytesToSs58(signerAdminPubkey);
 
     return DecodedPayload(
       action: 'propose_create_institution',
       summary:
-          '创建机构多签账户「$institutionName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+          '创建机构多签账户「$sfidFullName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: fields,
     );
   }
@@ -1009,7 +1009,7 @@ class PayloadDecoder {
         'amount_yuan': '$amountYuan GMB',
         'allocation_count': allocLen.toString(),
         'eligible_total': eligibleTotal.toString(),
-        'province': province,
+        'province_name': province,
         'signer_admin_pubkey': _bytesToSs58(signerAdminPubkey),
       },
     );
@@ -1075,7 +1075,7 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // OrganizationManage(17) / propose_close(1)
   // PersonalManage(7) / propose_close(1)
-  // 格式：[17][1][duoqian_address:32][beneficiary:32]
+  // 格式：[17][1][duoqian_account:32][beneficiary:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeClose(
     Uint8List bytes, {
@@ -1093,7 +1093,7 @@ class PayloadDecoder {
       action: action,
       summary: '提案关闭$summaryLabel ${_truncateAddress(duoqian)}',
       fields: {
-        'duoqian_address': duoqian,
+        'duoqian_account': duoqian,
         'beneficiary': beneficiary,
       },
     );

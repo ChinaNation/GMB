@@ -35,7 +35,8 @@ void main() {
 
   group('机构账户派生 golden 向量(链上注册表交叉验证)', () {
     test('国储会主账户 OP_MAIN', () {
-      expect(hexFromAccountId(deriveInstitutionMainAccountId(nrcSfid)), nrcMain);
+      expect(
+          hexFromAccountId(deriveInstitutionMainAccountId(nrcSfid)), nrcMain);
     });
 
     test('国储会费用账户 OP_FEE', () {
@@ -43,7 +44,8 @@ void main() {
     });
 
     test('中枢省主账户 / 费用账户', () {
-      expect(hexFromAccountId(deriveInstitutionMainAccountId(prcSfid)), prcMain);
+      expect(
+          hexFromAccountId(deriveInstitutionMainAccountId(prcSfid)), prcMain);
       expect(hexFromAccountId(deriveInstitutionFeeAccountId(prcSfid)), prcFee);
     });
 

@@ -45,7 +45,7 @@
 | `RuntimeInternalAdminCountProvider` | 所有内部投票主体统一读 `admins_change::Subjects.admins.len()` |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
 | `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `OnchainFeeRouter` 80/10/10 分账 |
-| `RuntimeSafetyFundAccountProvider` | 将安全基金制度常量 `NRC_ANQUAN_ADDRESS` 转为 runtime 账户，避免手续费分账热路径重复 decode |
+| `RuntimeSafetyFundAccountProvider` | 将安全基金制度常量 `NRC_ANQUAN_ACCOUNT` 转为 runtime 账户，避免手续费分账热路径重复 decode |
 | `RuntimeInstitutionAsset` | stake 禁止一切; reserved main 仅允许转账/销户; fee_account 仅允许 sweep; 安全基金仅允许安全基金转账; CB 费用账户仅允许 sweep |
 
 ## 交易费用流

@@ -14,7 +14,7 @@
 第 1 步只确认备案推链字段:
 
 - `sfid_number`:机构 SFID 号。
-- `institution_name`:机构名称。
+- `sfid_full_name`:机构名称。
 - `account_name`:机构账户名称。
 
 ## 明确不做

@@ -40,17 +40,17 @@ function dartInstitution(item) {
     `    sfidNumber: ${dartString(item.sfidNumber)},`,
     `    orgType: OrgType.${item.orgType},`,
     '    accounts: InstitutionAccounts(',
-    `      mainAddress: ${dartString(item.mainAddress)},`,
-    `      feeAddress: ${dartString(item.feeAddress)},`,
+    `      mainAccount: ${dartString(item.mainAccount)},`,
+    `      feeAccount: ${dartString(item.feeAccount)},`,
   ];
-  if (item.safetyFundAddress) {
-    lines.push(`      safetyFundAddress: ${dartString(item.safetyFundAddress)},`);
+  if (item.anquanAccount) {
+    lines.push(`      anquanAccount: ${dartString(item.anquanAccount)},`);
   }
-  if (item.heFundAddress) {
-    lines.push(`      heFundAddress: ${dartString(item.heFundAddress)},`);
+  if (item.heAccount) {
+    lines.push(`      heAccount: ${dartString(item.heAccount)},`);
   }
-  if (item.stakeAddress) {
-    lines.push(`      stakeAddress: ${dartString(item.stakeAddress)},`);
+  if (item.stakeAccount) {
+    lines.push(`      stakeAccount: ${dartString(item.stakeAccount)},`);
   }
   lines.push('    ),', '  ),');
   return lines.join('\n');
@@ -74,37 +74,37 @@ function walletInstitution(item) {
 
 const cbSource = fs.readFileSync(cbPath, 'utf8');
 const chSource = fs.readFileSync(chPath, 'utf8');
-const safetyFundMatch = /NRC_ANQUAN_ADDRESS:\s*\[u8;\s*32\]\s*=\s*hex!\("([0-9a-fA-F]+)"\)/.exec(
+const safetyFundMatch = /NRC_ANQUAN_ACCOUNT:\s*\[u8;\s*32\]\s*=\s*hex!\("([0-9a-fA-F]+)"\)/.exec(
   cbSource,
 );
-if (!safetyFundMatch) throw new Error('missing NRC_ANQUAN_ADDRESS');
-const safetyFundAddress = safetyFundMatch[1].toLowerCase();
-const heFundMatch = /NRC_HE_ADDRESS:\s*\[u8;\s*32\]\s*=\s*hex!\("([0-9a-fA-F]+)"\)/.exec(
+if (!safetyFundMatch) throw new Error('missing NRC_ANQUAN_ACCOUNT');
+const anquanAccount = safetyFundMatch[1].toLowerCase();
+const heFundMatch = /NRC_HE_ACCOUNT:\s*\[u8;\s*32\]\s*=\s*hex!\("([0-9a-fA-F]+)"\)/.exec(
   cbSource,
 );
-if (!heFundMatch) throw new Error('missing NRC_HE_ADDRESS');
-const heFundAddress = heFundMatch[1].toLowerCase();
+if (!heFundMatch) throw new Error('missing NRC_HE_ACCOUNT');
+const heAccount = heFundMatch[1].toLowerCase();
 
 const cbItems = extractStructs(cbSource, 'ChinaCb').map((block, index) => ({
-  name: extractField(block, 'sfid_name'),
+  name: extractField(block, 'sfid_full_name'),
   sfidNumber: extractField(block, 'sfid_number'),
   orgType: index === 0 ? 'nrc' : 'prc',
-  mainAddress: extractField(block, 'main_address'),
-  feeAddress: extractField(block, 'fee_address'),
-  safetyFundAddress: index === 0 ? safetyFundAddress : null,
-  heFundAddress: index === 0 ? heFundAddress : null,
-  stakeAddress: null,
+  mainAccount: extractField(block, 'main_account'),
+  feeAccount: extractField(block, 'fee_account'),
+  anquanAccount: index === 0 ? anquanAccount : null,
+  heAccount: index === 0 ? heAccount : null,
+  stakeAccount: null,
 }));
 
 const chItems = extractStructs(chSource, 'ChinaCh').map((block) => ({
-  name: extractField(block, 'sfid_name'),
+  name: extractField(block, 'sfid_full_name'),
   sfidNumber: extractField(block, 'sfid_number'),
   orgType: 'prb',
-  mainAddress: extractField(block, 'main_address'),
-  feeAddress: extractField(block, 'fee_address'),
-  safetyFundAddress: null,
-  heFundAddress: null,
-  stakeAddress: extractField(block, 'stake_address'),
+  mainAccount: extractField(block, 'main_account'),
+  feeAccount: extractField(block, 'fee_account'),
+  anquanAccount: null,
+  heAccount: null,
+  stakeAccount: extractField(block, 'stake_account'),
 }));
 
 if (cbItems.length !== 44) {
@@ -195,7 +195,7 @@ const wuminContent = [
   '///',
   '/// 返回 null 表示链上交易含未知机构。若遇到此情况，说明链端常量与公民钱包',
   '/// 机构注册表未对齐，应重新运行生成器。',
-  'String? institutionName(String sfidNumber) {',
+  'String? sfidFullName(String sfidNumber) {',
   '  for (final inst in kAllInstitutions) {',
   '    if (inst.sfidNumber == sfidNumber) return inst.name;',
   '  }',

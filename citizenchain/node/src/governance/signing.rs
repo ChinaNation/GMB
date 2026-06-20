@@ -22,7 +22,7 @@ const SS58_PREFIX: u16 = 2027;
 fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
     let entry = super::registry::find_institution(sfid_number)
         .ok_or_else(|| format!("未知的治理机构 sfidNumber: {sfid_number}"))?;
-    let clean = entry.main_address_hex();
+    let clean = entry.main_account_hex();
     let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
     bytes
         .try_into()

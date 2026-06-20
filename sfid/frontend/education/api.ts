@@ -31,11 +31,11 @@ export async function checkInstitutionName(
   auth: AdminAuth,
   name: string,
   subject_property?: string,
-  city?: string,
+  cityName?: string,
 ): Promise<{ exists: boolean }> {
   const params = new URLSearchParams({ name });
   if (subject_property) params.set('subject_property', subject_property);
-  if (city) params.set('city', city);
+  if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
     `/api/v1/institution/check-name?${params.toString()}`,
     auth,
@@ -49,11 +49,11 @@ export async function createInstitution(
   const grantPayload = {
     subject_property: input.subject_property,
     p1: input.p1 ?? null,
-    province: input.province ?? null,
-    city: input.city,
+    province_name: input.province_name ?? null,
+    city_name: input.city_name,
     institution: input.institution,
     education_type: input.education_type ?? null,
-    institution_name: input.institution_name ?? null,
+    sfid_full_name: input.sfid_full_name ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
     private_type: input.private_type ?? null,
     partnership_kind: input.partnership_kind ?? null,
@@ -94,8 +94,8 @@ export async function searchParentInstitutions(
 ): Promise<ParentInstitutionRow[]> {
   const params = new URLSearchParams({ q });
   params.set('f_institution', opts.fInstitution);
-  params.set('province', opts.province);
-  params.set('city', opts.city);
+  params.set('province_name', opts.province_name);
+  params.set('city_name', opts.city_name);
   if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
     `/api/v1/institution/search-parents?${params.toString()}`,
@@ -110,8 +110,8 @@ export async function listEducationInstitutions(
   const params = new URLSearchParams();
   // EDUCATION_INSTITUTION 是列表过滤维度(后端 InstitutionListFilter),不是存储 category
   params.set('category', 'EDUCATION_INSTITUTION');
-  if (query?.province) params.set('province', query.province);
-  if (query?.city) params.set('city', query.city);
+  if (query?.province_name) params.set('province_name', query.province_name);
+  if (query?.city_name) params.set('city_name', query.city_name);
   if (query?.q && query.q.trim()) params.set('q', query.q.trim());
   if (query?.cursor) params.set('cursor', query.cursor);
   if (query?.page_size) params.set('page_size', String(query.page_size));

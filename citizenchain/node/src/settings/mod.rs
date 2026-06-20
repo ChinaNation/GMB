@@ -8,7 +8,7 @@ pub mod desktop_update;
 #[path = "device-password/mod.rs"]
 pub(crate) mod device_password;
 #[path = "fee-address/mod.rs"]
-pub mod fee_address;
+pub mod fee_account;
 #[path = "grandpa-address/mod.rs"]
 pub mod grandpa_address;
 #[path = "node-mode/mod.rs"]

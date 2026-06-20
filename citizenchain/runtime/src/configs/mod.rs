@@ -101,30 +101,30 @@ type SingleBlockMigrations = ();
 pub fn is_stake_account(address: &AccountId) -> bool {
     primitives::china::china_ch::CHINA_CH
         .iter()
-        .any(|n| address == &AccountId::new(n.stake_address))
+        .any(|n| address == &AccountId::new(n.stake_account))
 }
 
 fn is_reserved_fee_account(address: &AccountId) -> bool {
     primitives::china::china_ch::CHINA_CH
         .iter()
-        .any(|n| address == &AccountId::new(n.fee_address))
+        .any(|n| address == &AccountId::new(n.fee_account))
 }
 
 /// 检查是否为国储会安全基金账户。
 fn is_nrc_anquan_account(address: &AccountId) -> bool {
-    address == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
+    address == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT)
 }
 
 /// 检查是否为国储会两和基金账户。
 fn is_nrc_he_account(address: &AccountId) -> bool {
-    address == &AccountId::new(primitives::china::china_cb::NRC_HE_ADDRESS)
+    address == &AccountId::new(primitives::china::china_cb::NRC_HE_ACCOUNT)
 }
 
-/// 检查是否为储委会费用账户（44 个机构的 fee_address）。
+/// 检查是否为储委会费用账户（44 个机构的 fee_account）。
 fn is_cb_fee_account(address: &AccountId) -> bool {
     primitives::china::china_cb::CHINA_CB
         .iter()
-        .any(|n| address == &AccountId::new(n.fee_address))
+        .any(|n| address == &AccountId::new(n.fee_account))
 }
 
 fn is_reserved_main_account(address: &AccountId) -> bool {
@@ -134,7 +134,7 @@ fn is_reserved_main_account(address: &AccountId) -> bool {
     }
     let mut addr = [0u8; 32];
     addr.copy_from_slice(raw);
-    primitives::china::china_zb::is_reserved_main_address(&addr)
+    primitives::china::china_zb::is_reserved_main_account(&addr)
 }
 
 fn is_stake_multi_address(address: &Address) -> bool {
@@ -205,7 +205,7 @@ impl frame_system::Config for Runtime {
     type AccountData = pallet_balances::AccountData<Balance>;
     /// 地址显示编号（SS58 前缀），统一来自 primitives 制度常量。
     type SS58Prefix = SS58Prefix;
-    /// 中文注释：全局调用过滤器，禁止 stake_address 参与 force_* 余额调用，并封禁强制总发行量调整入口。
+    /// 中文注释：全局调用过滤器，禁止 stake_account 参与 force_* 余额调用，并封禁强制总发行量调整入口。
     type BaseCallFilter = RuntimeCallFilter;
     type MaxConsumers = frame_support::traits::ConstU32<16>;
     type SingleBlockMigrations = SingleBlockMigrations;
@@ -290,7 +290,7 @@ pub struct RuntimeNrcAccountProvider;
 impl onchain_transaction::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_account() -> Option<AccountId> {
         Some(AccountId::new(
-            primitives::china::china_cb::CHINA_CB[0].fee_address,
+            primitives::china::china_cb::CHINA_CB[0].fee_account,
         ))
     }
 }
@@ -301,7 +301,7 @@ impl onchain_transaction::SafetyFundAccountProvider<AccountId>
     for RuntimeSafetyFundAccountProvider
 {
     fn safety_fund_account() -> AccountId {
-        AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
+        AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT)
     }
 }
 
@@ -560,51 +560,51 @@ impl fullnode_issuance::Config for Runtime {
     type WeightInfo = fullnode_issuance::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct RuntimeDuoqianAddressValidator;
+pub struct RuntimeDuoqianAccountValidator;
 
-impl organization_manage::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
-    fn is_valid(address: &AccountId) -> bool {
-        // 中文注释：禁止零地址。
-        if address == &AccountId::new([0u8; 32]) {
+impl organization_manage::DuoqianAccountValidator<AccountId> for RuntimeDuoqianAccountValidator {
+    fn is_valid(account: &AccountId) -> bool {
+        // 中文注释：禁止零账户。
+        if account == &AccountId::new([0u8; 32]) {
             return false;
         }
 
-        // 中文注释：禁止占用“国储会/省储会”的制度保留交易地址。
+        // 中文注释：禁止占用“国储会/省储会”的制度保留交易账户。
         if primitives::china::china_cb::CHINA_CB
             .iter()
-            .any(|n| address == &AccountId::new(n.main_address))
+            .any(|n| account == &AccountId::new(n.main_account))
         {
             return false;
         }
 
-        // 中文注释：禁止占用“省储行”的制度保留交易地址。
+        // 中文注释：禁止占用“省储行”的制度保留交易账户。
         if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.main_address))
+            .any(|n| account == &AccountId::new(n.main_account))
         {
             return false;
         }
 
-        // 中文注释：禁止占用”省储行费用账户”地址（BLAKE2-256 派生）。
+        // 中文注释：禁止占用省储行费用账户（BLAKE2-256 派生）。
         if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.fee_address))
+            .any(|n| account == &AccountId::new(n.fee_account))
         {
             return false;
         }
 
-        // 中文注释：禁止占用国储会安全基金账户地址。
-        if is_nrc_anquan_account(address) {
+        // 中文注释：禁止占用国储会安全基金账户。
+        if is_nrc_anquan_account(account) {
             return false;
         }
 
-        // 中文注释：禁止占用国储会两和基金账户地址。
-        if is_nrc_he_account(address) {
+        // 中文注释：禁止占用国储会两和基金账户。
+        if is_nrc_he_account(account) {
             return false;
         }
 
-        // 中文注释：禁止占用储委会费用账户地址（44 个机构）。
-        if is_cb_fee_account(address) {
+        // 中文注释：禁止占用储委会费用账户（44 个机构）。
+        if is_cb_fee_account(account) {
             return false;
         }
 
@@ -612,7 +612,7 @@ impl organization_manage::DuoqianAddressValidator<AccountId> for RuntimeDuoqianA
     }
 }
 
-pub struct RuntimeDuoqianReservedAddressChecker;
+pub struct RuntimeDuoqianReservedAccountChecker;
 pub struct RuntimeSfidInstitutionVerifier;
 
 pub struct RuntimeProtectedSourceChecker;
@@ -627,8 +627,8 @@ impl organization_manage::ProtectedSourceChecker<AccountId> for RuntimeProtected
 impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset {
     fn can_spend(source: &AccountId, action: institution_asset::InstitutionAssetAction) -> bool {
         // 中文注释：匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
-        // fee_address 同时出现在 CHINA_RESERVED_MAIN_ADDRESSES 列表中（同由 BLAKE2 派生且统一保留），
-        // 如果 is_reserved_main_account 先匹配，fee_address 会被错误地按主账户规则放行。
+        // fee_account 同时出现在 CHINA_RESERVED_MAIN_ACCOUNTS 列表中（同由 BLAKE2 派生且统一保留），
+        // 如果 is_reserved_main_account 先匹配，fee_account 会被错误地按主账户规则放行。
 
         // 1. 无私钥系统账户：全禁
         if is_stake_account(source) {
@@ -652,14 +652,14 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         }
 
         // 4. 国储会安全基金账户：只允许安全基金转账
-        if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS) {
+        if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT) {
             return matches!(
                 action,
                 institution_asset::InstitutionAssetAction::NrcSafetyFundTransfer
             );
         }
 
-        // 5. 多签保留地址（范围最宽）：只允许多签转账和关闭
+        // 5. 多签保留账户（范围最宽）：只允许多签转账和关闭
         if is_reserved_main_account(source) {
             return matches!(
                 action,
@@ -673,42 +673,42 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
     }
 }
 
-impl organization_manage::DuoqianReservedAddressChecker<AccountId>
-    for RuntimeDuoqianReservedAddressChecker
+impl organization_manage::DuoqianReservedAccountChecker<AccountId>
+    for RuntimeDuoqianReservedAccountChecker
 {
-    fn is_reserved(address: &AccountId) -> bool {
-        // 中文注释：禁止占用省储行 stake_address（制度保留地址）。
+    fn is_reserved(account: &AccountId) -> bool {
+        // 中文注释：禁止占用省储行 stake_account（制度保留账户）。
         if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.stake_address))
+            .any(|n| account == &AccountId::new(n.stake_account))
         {
             return true;
         }
 
-        // 中文注释：禁止占用省储行费用账户地址（BLAKE2-256 派生）。
+        // 中文注释：禁止占用省储行费用账户（BLAKE2-256 派生）。
         if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.fee_address))
+            .any(|n| account == &AccountId::new(n.fee_account))
         {
             return true;
         }
 
-        // 中文注释：禁止占用国储会安全基金账户地址。
-        if is_nrc_anquan_account(address) {
+        // 中文注释：禁止占用国储会安全基金账户。
+        if is_nrc_anquan_account(account) {
             return true;
         }
 
-        // 中文注释：禁止占用国储会两和基金账户地址。
-        if is_nrc_he_account(address) {
+        // 中文注释：禁止占用国储会两和基金账户。
+        if is_nrc_he_account(account) {
             return true;
         }
 
-        // 中文注释：禁止占用储委会费用账户地址（44 个机构）。
-        if is_cb_fee_account(address) {
+        // 中文注释：禁止占用储委会费用账户（44 个机构）。
+        if is_cb_fee_account(account) {
             return true;
         }
 
-        is_reserved_main_account(address)
+        is_reserved_main_account(account)
     }
 }
 
@@ -721,18 +721,18 @@ impl
 {
     fn verify_institution_registration(
         sfid_number: &[u8],
-        institution_name: &organization_manage::pallet::AccountNameOf<Runtime>,
+        sfid_full_name: &organization_manage::pallet::AccountNameOf<Runtime>,
         account_names: &[Vec<u8>],
         nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
         signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (province, signer_admin_pubkey);
+            let _ = (province_name, signer_admin_pubkey);
             return !sfid_number.is_empty()
-                && !institution_name.is_empty()
+                && !sfid_full_name.is_empty()
                 && !account_names.is_empty()
                 && !nonce.is_empty()
                 && !signature.is_empty();
@@ -741,11 +741,11 @@ impl
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
             // ADR-008 step2b：链上 0 prior knowledge of SFID,verifier 必须按
-            // (province, signer_admin_pubkey) 在 ShengSigningPubkey 双映射中查派生签名公钥。
+            // (province_name, signer_admin_pubkey) 在 ShengSigningPubkey 双映射中查派生签名公钥。
             // - 该 admin 不在花名册或尚未 activate signing pubkey → 返回 None → 验签失败
             // - 不再保留"无省 + SFID 主公钥"兜底分支
             let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                province,
+                province_name,
                 signer_admin_pubkey,
             ) {
                 Some(k) => k,
@@ -763,17 +763,17 @@ impl
 
             // 中文注释：这里必须和 SFID 端 `/registration-info` 的签名 payload 严格一致。
             // payload：DUOQIAN + OP_SIGN_INST + genesis_hash + sfid_number
-            // + institution_name + account_names[] + nonce + province + signer_admin_pubkey。
-            // signer_admin_pubkey 必须进 payload,否则同 province 下任意 admin 的签名可互换。
+            // + sfid_full_name + account_names[] + nonce + province_name + signer_admin_pubkey。
+            // signer_admin_pubkey 必须进 payload,否则同 province_name 下任意 admin 的签名可互换。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 sfid_number,
-                institution_name.as_slice(),
+                sfid_full_name.as_slice(),
                 account_names,
                 nonce.as_slice(),
-                province,
+                province_name,
                 signer_admin_pubkey,
             );
             let msg = blake2_256(&payload.encode());
@@ -787,8 +787,8 @@ impl organization_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
-    type AddressValidator = RuntimeDuoqianAddressValidator;
-    type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
+    type AccountValidator = RuntimeDuoqianAccountValidator;
+    type ReservedAccountChecker = RuntimeDuoqianReservedAccountChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
@@ -808,8 +808,8 @@ impl personal_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
-    type AddressValidator = RuntimeDuoqianAddressValidator;
-    type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
+    type AccountValidator = RuntimeDuoqianAccountValidator;
+    type ReservedAccountChecker = RuntimeDuoqianReservedAccountChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type FeeRouter = TransferFeeRouter;
@@ -824,10 +824,10 @@ impl personal_manage::Config for Runtime {
 // - `RuntimeSfidVerifier`(BindCredential / 公民身份绑定)
 // - `RuntimeSfidVoteVerifier`(公民投票凭证)
 // - `RuntimePopulationSnapshotVerifier`(联合提案人口快照)
-// 全部按 (province, signer_admin_pubkey) 在 `ShengSigningPubkey` 双映射中查派生签名公钥;
+// 全部按 (province_name, signer_admin_pubkey) 在 `ShengSigningPubkey` 双映射中查派生签名公钥;
 // 链上 0 prior knowledge of SFID,无任何"SFID main 兜底"路径。
 // payload 哈希前缀统一遵循 `DUOQIAN || OP_SIGN_BIND/VOTE/POP || block_hash(0) || <字段>
-//   || province || signer_admin_pubkey`,且 `signer_admin_pubkey` 必须进 payload —— 否则
+//   || province_name || signer_admin_pubkey`,且 `signer_admin_pubkey` 必须进 payload —— 否则
 // 同省 admin 之间签名可互换,违反双层匹配语义。
 
 pub struct RuntimeSfidVerifier;
@@ -849,14 +849,14 @@ impl
             let _ = (account, credential);
             return !credential.bind_nonce.is_empty()
                 && !credential.signature.is_empty()
-                && !credential.province.is_empty();
+                && !credential.province_name.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            // ADR-008 step3:按 (province, signer_admin_pubkey) 双层匹配查派生签名公钥。
+            // ADR-008 step3:按 (province_name, signer_admin_pubkey) 双层匹配查派生签名公钥。
             let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                credential.province.as_slice(),
+                credential.province_name.as_slice(),
                 &credential.signer_admin_pubkey,
             ) {
                 Some(k) => k,
@@ -873,7 +873,7 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             // payload:DUOQIAN + OP_SIGN_BIND + block_hash(0) + account + binding_id
-            //   + bind_nonce + province + signer_admin_pubkey。
+            //   + bind_nonce + province_name + signer_admin_pubkey。
             // signer_admin_pubkey 必须进 payload,否则同省 admin 签名可互换。
             let payload = (
                 primitives::core_const::DUOQIAN,
@@ -882,7 +882,7 @@ impl
                 account,
                 credential.binding_id,
                 credential.bind_nonce.as_slice(),
-                credential.province.as_slice(),
+                credential.province_name.as_slice(),
                 &credential.signer_admin_pubkey,
             );
             let msg = blake2_256(&payload.encode());
@@ -908,7 +908,7 @@ impl
         proposal_id: u64,
         nonce: &sfid_system::pallet::NonceOf<Runtime>,
         signature: &sfid_system::pallet::SignatureOf<Runtime>,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
@@ -917,7 +917,7 @@ impl
                 account,
                 binding_id,
                 proposal_id,
-                province,
+                province_name,
                 signer_admin_pubkey,
             );
             return !nonce.is_empty() && !signature.is_empty();
@@ -927,7 +927,7 @@ impl
         {
             // ADR-008 step3:双层匹配查派生签名公钥。
             let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                province,
+                province_name,
                 signer_admin_pubkey,
             ) {
                 Some(k) => k,
@@ -944,7 +944,7 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             // payload:DUOQIAN + OP_SIGN_VOTE + block_hash(0) + account + binding_id
-            //   + proposal_id + nonce + province + signer_admin_pubkey。
+            //   + proposal_id + nonce + province_name + signer_admin_pubkey。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_VOTE,
@@ -953,7 +953,7 @@ impl
                 binding_id,
                 proposal_id,
                 nonce.as_slice(),
-                province,
+                province_name,
                 signer_admin_pubkey,
             );
             let msg = blake2_256(&payload.encode());
@@ -991,12 +991,12 @@ impl
         eligible_total: u64,
         nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
         signature: &votingengine::pallet::VoteSignatureOf<Runtime>,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (who, province, signer_admin_pubkey);
+            let _ = (who, province_name, signer_admin_pubkey);
             eligible_total > 0 && !nonce.is_empty() && !signature.is_empty()
         }
 
@@ -1004,7 +1004,7 @@ impl
         {
             // ADR-008 step3:双层匹配查派生签名公钥。
             let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                province,
+                province_name,
                 signer_admin_pubkey,
             ) {
                 Some(k) => k,
@@ -1021,7 +1021,7 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             // payload:DUOQIAN + OP_SIGN_POP + block_hash(0) + who + eligible_total
-            //   + nonce + province + signer_admin_pubkey。
+            //   + nonce + province_name + signer_admin_pubkey。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_POP,
@@ -1029,7 +1029,7 @@ impl
                 who,
                 eligible_total,
                 nonce.as_slice(),
-                province,
+                province_name,
                 signer_admin_pubkey,
             );
             let msg = blake2_256(&payload.encode());
@@ -1143,7 +1143,7 @@ pub struct DuoqianSfidAccountQuery;
 
 impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
-        organization_manage::AddressRegisteredSfid::<Runtime>::get(addr)
+        organization_manage::AccountRegisteredSfid::<Runtime>::get(addr)
             .map(|info| (info.sfid_number.to_vec(), info.account_name.to_vec()))
     }
 
@@ -1152,11 +1152,11 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
             sfid_number.to_vec().try_into().ok()?;
         let an: organization_manage::AccountNameOf<Runtime> =
             account_name.to_vec().try_into().ok()?;
-        organization_manage::SfidRegisteredAddress::<Runtime>::get(&id, &an)
+        organization_manage::SfidRegisteredAccount::<Runtime>::get(&id, &an)
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        if let Some(registered) = organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
+        if let Some(registered) = organization_manage::AccountRegisteredSfid::<Runtime>::get(addr) {
             return matches!(
                 organization_manage::InstitutionAccounts::<Runtime>::get(
                     &registered.sfid_number,
@@ -1197,7 +1197,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// 链上不再保存 subject_property/sub_type/parent_sfid_number,这里只确认该地址属于已注册且 Active 的
     /// SFID 机构账户,避免把 SFID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
-        let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
+        let registered = match organization_manage::AccountRegisteredSfid::<Runtime>::get(addr) {
             Some(info) => info,
             None => return false,
         };
@@ -1214,7 +1214,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
     /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_number 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
-        let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(bank) {
+        let registered = match organization_manage::AccountRegisteredSfid::<Runtime>::get(bank) {
             Some(info) => info,
             None => return false,
         };
@@ -1263,8 +1263,8 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
     let nrc_institution = primitives::china::china_cb::CHINA_CB
         .first()
-        .map(|n| AccountId::new(n.main_address))
-        .expect("NRC main_address must exist");
+        .map(|n| AccountId::new(n.main_account))
+        .expect("NRC main_account must exist");
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一账户表。
     admins_change::Pallet::<Runtime>::is_active_account_admin(
@@ -1300,7 +1300,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 fn is_joint_proposer(who: &AccountId) -> bool {
     use primitives::china::china_cb::CHINA_CB;
     for (idx, entry) in CHINA_CB.iter().enumerate() {
-        let institution = AccountId::new(entry.main_address);
+        let institution = AccountId::new(entry.main_account);
         let org = if idx == 0 {
             votingengine::types::ORG_NRC
         } else {
@@ -1543,12 +1543,12 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (who, province, signer_admin_pubkey);
+            let _ = (who, province_name, signer_admin_pubkey);
             if nonce.is_empty() || signature.is_empty() {
                 return false;
             }
@@ -1581,7 +1581,7 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
                 proposal_id,
                 nonce,
                 signature,
-                province,
+                province_name,
                 signer_admin_pubkey,
             )
         }
@@ -1664,27 +1664,27 @@ impl pallet_assets::Config for Runtime {
 /// OnchainIssuance pallet 配置(ADR-011 v2 修订项 #1:NRC 账户 / 费用账户语义分离)。
 ///
 /// 中文注释:onchain-issuance 拆为两个独立 trait:
-/// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_address(monitor 调用方校验用)
-/// - `NrcFeeAccountProvider`  → 返回 NRC 费用账户 fee_address(创建费收款用)
-/// v1 错误地复用 onchain_transaction::NrcAccountProvider(它返回 fee_address),
+/// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_account(monitor 调用方校验用)
+/// - `NrcFeeAccountProvider`  → 返回 NRC 费用账户 fee_account(创建费收款用)
+/// v1 错误地复用 onchain_transaction::NrcAccountProvider(它返回 fee_account),
 /// 导致 monitor 账户身份语义错。
 
-/// NRC 治理多签账户(main_address)— monitor / 监管动作发起方校验用。
+/// NRC 治理多签账户(main_account)— monitor / 监管动作发起方校验用。
 pub struct RuntimeNrcMainAccountProvider;
 
 impl onchain_issuance::pallet::NrcMainAccountProvider<AccountId> for RuntimeNrcMainAccountProvider {
     fn nrc_main_account() -> Option<AccountId> {
-        // 中文注释:china_cb[0].main_address 是 NRC 治理多签地址,与 fee_address 不同。
+        // 中文注释:china_cb[0].main_account 是 NRC 治理多签账户,与 fee_account 不同。
         primitives::china::china_cb::CHINA_CB
             .first()
-            .and_then(|n| AccountId::decode(&mut &n.main_address[..]).ok())
+            .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
     }
 }
 
-/// NRC 费用账户(fee_address)— 创建费 1000 GMB 收款用。
+/// NRC 费用账户(fee_account)— 创建费 1000 GMB 收款用。
 ///
 /// 中文注释:复用既有 `RuntimeNrcAccountProvider`(它实现 onchain_transaction::NrcAccountProvider,
-/// 也返回 fee_address),通过为同 struct 再实现 onchain_issuance 自己的 trait 完成桥接,语义一致。
+/// 也返回 fee_account),通过为同 struct 再实现 onchain_issuance 自己的 trait 完成桥接,语义一致。
 impl onchain_issuance::pallet::NrcFeeAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_fee_account() -> Option<AccountId> {
         <RuntimeNrcAccountProvider as onchain_transaction::NrcAccountProvider<AccountId>>::nrc_account()

@@ -8,9 +8,8 @@ void main() {
     test('解析全字段(行政区只吃 code) + custom_account_names', () {
       final dto = PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': 'AH001-ZF000-123456789-2026',
-        'institution_name': '安徽省人民政府',
-        'sfid_name': '安徽省国民政府',
-        'short_name': '皖府',
+        'sfid_full_name': '安徽省人民政府',
+        'sfid_short_name': '皖府',
         'status': 'ACTIVE',
         'province_code': 'AH',
         'city_code': '001',
@@ -21,7 +20,7 @@ void main() {
         'custom_account_names': ['业务专户A', '业务专户B'],
       });
       expect(dto.sfidNumber, 'AH001-ZF000-123456789-2026');
-      expect(dto.institutionName, '安徽省人民政府');
+      expect(dto.sfidFullName, '安徽省人民政府');
       expect(dto.provinceCode, 'AH');
       expect(dto.cityCode, '001');
       expect(dto.townCode, '');
@@ -61,7 +60,7 @@ void main() {
       });
       final e = dto.toEntity(catalogVersion: 'v9', updatedAtMillis: 123);
       expect(e.sfidNumber, 'Y');
-      expect(e.institutionName, 'Y'); // 无名回退 sfidNumber
+      expect(e.sfidFullName, 'Y'); // 无名回退 sfidNumber
       expect(e.catalogVersion, 'v9');
       expect(e.updatedAtMillis, 123);
     });

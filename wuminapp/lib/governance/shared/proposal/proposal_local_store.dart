@@ -202,7 +202,7 @@ class LocalProposalSummary {
     this.displayYear,
     this.displaySeqInYear,
     this.institutionSfidNumber,
-    this.institutionName,
+    this.sfidFullName,
   });
 
   final int proposalId;
@@ -214,7 +214,7 @@ class LocalProposalSummary {
   final int? displayYear;
   final int? displaySeqInYear;
   final String? institutionSfidNumber;
-  final String? institutionName;
+  final String? sfidFullName;
   final String title;
   final String subtitle;
   final String listSubtitle;
@@ -325,7 +325,7 @@ class LocalProposalSummary {
       displayYear: meta.displayMeta?.year,
       displaySeqInYear: meta.displayMeta?.seqInYear,
       institutionSfidNumber: institution?.sfidNumber,
-      institutionName: institution?.name,
+      sfidFullName: institution?.name,
       title: title,
       subtitle: subtitle,
       listSubtitle: listSubtitle,
@@ -344,7 +344,7 @@ class LocalProposalSummary {
         'display_year': displayYear,
         'display_seq_in_year': displaySeqInYear,
         'institution_sfid_number': institutionSfidNumber,
-        'institution_name': institutionName,
+        'sfid_full_name': sfidFullName,
         'title': title,
         'subtitle': subtitle,
         'list_subtitle': listSubtitle,
@@ -389,7 +389,7 @@ class LocalProposalSummary {
         displaySeqInYear: _toInt(decoded['display_seq_in_year']),
         institutionSfidNumber:
             _toNullableString(decoded['institution_sfid_number']),
-        institutionName: _toNullableString(decoded['institution_name']),
+        sfidFullName: _toNullableString(decoded['sfid_full_name']),
         title: title,
         subtitle: subtitle,
         listSubtitle: listSubtitle,

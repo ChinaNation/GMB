@@ -20,7 +20,7 @@
 //! 关键点(历史踩坑):
 //! - 顶层 `data` 是数组,**不是** `{ "items": [...] }` 信封
 //! - 字段是 snake_case,**不是** camelCase(SFID 后端不挂 `rename_all`)
-//! - `institution_name` 在两步式未命名时可能整个字段缺失(SFID 端 `skip_serializing_if = is_none`)
+//! - `sfid_full_name` 在两步式未命名时可能整个字段缺失(SFID 端 `skip_serializing_if = is_none`)
 //! - `main_chain_status` 是 SCREAMING_SNAKE_CASE 枚举(`NOT_ON_CHAIN` / `PENDING_ON_CHAIN` /
 //!   `ACTIVE_ON_CHAIN` / `REVOKED_ON_CHAIN`),不是友好字符串
 //!
@@ -58,18 +58,18 @@ struct EligibleSearchEnvelope {
 struct SfidEligibleRow {
     sfid_number: String,
     #[serde(default)]
-    institution_name: Option<String>,
+    sfid_full_name: Option<String>,
     ref_property: String,
     #[serde(default)]
     sub_type: Option<String>,
     #[serde(default)]
     parent_sfid_number: Option<String>,
     #[serde(default)]
-    parent_institution_name: Option<String>,
+    parent_sfid_full_name: Option<String>,
     #[serde(default)]
     parent_ref_property: Option<String>,
-    province: String,
-    city: String,
+    province_name: String,
+    city_name: String,
     #[serde(default)]
     main_account: Option<String>,
     #[serde(default)]
@@ -107,14 +107,14 @@ fn map_chain_status(status: SfidMultisigChainStatus) -> &'static str {
 fn into_candidate(row: SfidEligibleRow) -> EligibleClearingBankCandidate {
     EligibleClearingBankCandidate {
         sfid_number: row.sfid_number,
-        institution_name: row.institution_name.unwrap_or_default(),
+        sfid_full_name: row.sfid_full_name.unwrap_or_default(),
         ref_property: row.ref_property,
         sub_type: row.sub_type,
         parent_sfid_number: row.parent_sfid_number,
-        parent_institution_name: row.parent_institution_name,
+        parent_sfid_full_name: row.parent_sfid_full_name,
         parent_ref_property: row.parent_ref_property,
-        province: row.province,
-        city: row.city,
+        province_name: row.province_name,
+        city_name: row.city_name,
         main_chain_status: map_chain_status(row.main_chain_status).to_string(),
         main_account: row.main_account,
         fee_account: row.fee_account,
@@ -210,7 +210,7 @@ pub fn fetch_institution_registration_info(
     let data = body
         .data
         .ok_or_else(|| "SFID 响应缺少 data 字段".to_string())?;
-    if data.institution_name.trim().is_empty() {
+    if data.sfid_full_name.trim().is_empty() {
         return Err("SFID 未返回机构名称,请先在 SFID 系统完善机构信息".to_string());
     }
     if data.account_names.is_empty() || data.account_names.iter().any(|name| name.trim().is_empty())
@@ -219,7 +219,7 @@ pub fn fetch_institution_registration_info(
     }
     if data.credential.register_nonce.is_empty()
         || data.credential.signature.is_empty()
-        || data.credential.province.is_empty()
+        || data.credential.province_name.is_empty()
         || data.credential.signer_admin_pubkey.is_empty()
     {
         return Err("SFID 未返回完整机构注册凭证,请确认省级签名密钥已激活".to_string());

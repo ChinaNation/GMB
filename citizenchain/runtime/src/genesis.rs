@@ -25,7 +25,7 @@ use crate::AccountId;
 use codec::Decode;
 #[cfg(feature = "std")]
 use primitives::{
-    china::china_cb::{CHINA_CB, NRC_HE_ADDRESS},
+    china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT},
     china::china_ch::CHINA_CH,
     core_const::SS58_FORMAT,
     genesis::{CITIZENS, COUNTRY, GENESIS_CITIZEN_MAX, GENESIS_ISSUANCE, HE_FUND_ISSUANCE},
@@ -66,7 +66,7 @@ fn build_genesis() -> Value {
     // 中文注释：国储会信息统一从常量数组入口读取。
     let nrc_account = CHINA_CB
         .first()
-        .and_then(|n| AccountId::decode(&mut &n.main_address[..]).ok())
+        .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
         .expect("NRC pallet_address must decode to AccountId");
 
     // 中文注释：每位国储会管理员创世预置 1000 万元（单位：分）。
@@ -87,16 +87,16 @@ fn build_genesis() -> Value {
         (account, admin_each)
     }));
 
-    // 中文注释：省储行创立发行在创世时直接预置到各自 stake_address（无私钥永久质押地址）。
+    // 中文注释：省储行创立发行在创世时直接预置到各自 stake_account（无私钥永久质押地址）。
     genesis_balances.extend(
         CHINA_CH
             .iter()
-            .map(|bank| (AccountId::new(bank.stake_address), bank.stake_amount)),
+            .map(|bank| (AccountId::new(bank.stake_account), bank.stake_amount)),
     );
 
-    // 中文注释：两和基金创世一次性发行到国储会两和基金账户（无私钥派生地址 NRC_HE_ADDRESS），
+    // 中文注释：两和基金创世一次性发行到国储会两和基金账户（无私钥派生地址 NRC_HE_ACCOUNT），
     // 作为独立增发计入总供应量，国储会通过内部投票管理该基金。
-    genesis_balances.push((AccountId::new(NRC_HE_ADDRESS), HE_FUND_ISSUANCE));
+    genesis_balances.push((AccountId::new(NRC_HE_ACCOUNT), HE_FUND_ISSUANCE));
 
     // 中文注释：创世账户统一输出为链 SS58 地址（前缀 2027）。
     let balances_json: Vec<Value> = genesis_balances
@@ -112,8 +112,8 @@ fn build_genesis() -> Value {
         .iter()
         .skip(1)
         .map(|n| {
-            let account = AccountId::decode(&mut &n.main_address[..])
-                .expect("PRC main_address must decode to AccountId");
+            let account = AccountId::decode(&mut &n.main_account[..])
+                .expect("PRC main_account must decode to AccountId");
             Value::String(account_to_genesis_ss58(&account))
         })
         .collect();
@@ -234,7 +234,7 @@ mod tests {
 
         let nrc_account = CHINA_CB
             .first()
-            .and_then(|n| AccountId::decode(&mut &n.main_address[..]).ok())
+            .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
             .expect("NRC pallet_address must decode to AccountId");
         let nrc_ss58 = account_to_genesis_ss58(&nrc_account);
 

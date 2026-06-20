@@ -16,7 +16,7 @@
   - `MemberAdminAccounts: StorageMap<admin_pubkey, BoundedVec<account_addr, MaxAccountsPerMember>>`(单键取全列表,有上限)。
   倾向 DoubleMap(无上限、增删 O(1)、轻节点对 `admin_pubkey` 短前缀枚举即可)。
 - 写路径:`register` / `create` / `execute` / `close` / admins-change 增删管理员时,同步维护索引(管理员变更 = 旧成员删项 + 新成员加项)。
-- 读路径:轻节点对每个本地钱包 `getKeysPaged(前缀=AdminAccountsByMember[admin_pubkey])` 直接拿到其管理的账户地址 → 再精确读 `AdminAccounts[addr]` / `AddressRegisteredSfid[addr]` 取详情。**全程无全表扫**。
+- 读路径:轻节点对每个本地钱包 `getKeysPaged(前缀=AdminAccountsByMember[admin_pubkey])` 直接拿到其管理的账户地址 → 再精确读 `AdminAccounts[addr]` / `AccountRegisteredSfid[addr]` 取详情。**全程无全表扫**。
 
 ## 三、迁移
 - 全新创世无历史数据,index 随新写入自然建立(`feedback_chain_in_dev`,无需 migration)。

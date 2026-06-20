@@ -24,10 +24,10 @@
 - `kind`：`PUBLIC / PRIVATE / CITIZEN`。
 - `name`：列表展示名，默认用简称。
 - `full_name`：全称。
-- `short_name`：简称。
-- `p_code`：省代码。
-- `c_code`：市代码，可空。
-- `t_code`：镇代码，可空。
+- `sfid_short_name`：简称。
+- `province_code`：省代码。
+- `city_code`：市代码，可空。
+- `town_code`：镇代码，可空。
 - `province`：省名。
 - `city`：市名，可空。
 - `town`：镇名，可空。
@@ -73,7 +73,7 @@
 ```sql
 WHERE s.category = 'PUBLIC_SECURITY'
 AND g.org_code = 'CITY_POLICE'
-AND s.c_code IS NOT NULL
+AND s.city_code IS NOT NULL
 ```
 
 公安局列表显示：
@@ -124,24 +124,24 @@ reconcile-gov --town
 按省分区继续保留，查询必须 SQL 层限定范围：
 
 ```sql
-WHERE p_code = $1
-AND c_code = $2
+WHERE province_code = $1
+AND city_code = $2
 ```
 
 镇范围：
 
 ```sql
-WHERE p_code = $1
-AND c_code = $2
-AND t_code = $3
+WHERE province_code = $1
+AND city_code = $2
+AND town_code = $3
 ```
 
 核心索引：
 
-- `subjects(p_code, c_code, t_code, kind, status)`。
-- `subjects(p_code, name)`。
-- `gov(p_code, c_code, t_code, institution_code)`。
-- `gov(p_code, c_code, t_code, org_code)`。
+- `subjects(province_code, city_code, town_code, kind, status)`。
+- `subjects(province_code, name)`。
+- `gov(province_code, city_code, town_code, institution_code)`。
+- `gov(province_code, city_code, town_code, org_code)`。
 
 ## 建议模块
 
@@ -158,7 +158,7 @@ AND t_code = $3
 
 ## 预计修改目录
 
-- `sfid/backend/china`：读取镇行政区划，作为 `town/t_code` 和镇目录公权机构生成输入，涉及代码。
+- `sfid/backend/china`：读取镇行政区划，作为 `town/town_code` 和镇目录公权机构生成输入，涉及代码。
 - `sfid/backend/gov`：公权机构初始化、对账、列表、详情和公安局聚合接口，涉及代码。
 - `sfid/backend/admins`：旧省域管理员角色对外改名为联邦管理员，市管理员不改名，涉及代码和用户可见文案。
 - `sfid/backend/subjects`：全称、简称、镇字段和状态对外模型收口，删除机构上下级字段残留，涉及代码。
@@ -199,7 +199,7 @@ AND t_code = $3
 - 市管理员名称不被改写。
 - 公权机构列表只显示一个机构名称。
 - 详情页显示全称和简称。
-- `subjects` 对外模型包含 `name/full_name/short_name/t_code/town/status`。
+- `subjects` 对外模型包含 `name/full_name/sfid_short_name/town_code/town/status`。
 - `gov` 对外模型只包含 `institution_code/org_code` 等机构类型字段，不再包含旧上下级字段。
 - 公安局列表包含 CPMS 状态、安装码状态和身份码业务状态。
 - 前端用户可见旧省域管理员文案统一改为“联邦管理员”，市管理员不改名。
@@ -209,7 +209,7 @@ AND t_code = $3
 ## 执行记录
 
 - 2026-06-06：按用户完整技术方案补齐任务卡，准备进入代码和文档落地。
-- 2026-06-06：完成后端主体/公权模型收口，`subjects` 移除初始化来源业务字段，`gov` 只承接 `institution_code/org_code`，公安局列表限定 `category=PUBLIC_SECURITY AND org_code=CITY_POLICE AND c_code IS NOT NULL`。
+- 2026-06-06：完成后端主体/公权模型收口，`subjects` 移除初始化来源业务字段，`gov` 只承接 `institution_code/org_code`，公安局列表限定 `category=PUBLIC_SECURITY AND org_code=CITY_POLICE AND city_code IS NOT NULL`。
 - 2026-06-06：完成前端公权列表简要展示、公安局 tab 独立列、详情全称/简称/行政区/状态/资料库/操作记录展示，并清理私权详情页误带的 CPMS 分支。
 - 2026-06-06：按最新要求删除机构上下级字段和旧等级展示概念；修正市立法会为 `xx市立法会 / xx市公民立法委员会`，公安局为 `xx市公安局 / xx市公民安全局`，市国防局为 `xx市国防局 / xx市国家防务局`，公民自治委员会简称为 `自治会`。
 - 2026-06-06：完成联邦管理员文案、角色值、CPMS 权限说明和 SFID 文档同步；残留扫描未发现旧角色名、旧公安局方案、旧初始化来源业务字段残留。

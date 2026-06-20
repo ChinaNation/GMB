@@ -61,7 +61,7 @@
 - Active 状态自动刷新 TTL 为 60 分钟；Pending / Closed 状态自动刷新 TTL 为 10 分钟；下拉刷新忽略 TTL。
 - 自动 discovery 已收敛为首次进入或钱包 pubkey fingerprint 变化时触发；下拉刷新才强制全量 discovery。
 - 个人多签新增 `fetchPersonalAccountsBatch()`，按 `PersonalDuoqians / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds` 分阶段批量读取。
-- 机构多签新增 `fetchDuoqianAccountsBatch()`，按 `AddressRegisteredSfid / InstitutionAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds` 分阶段批量读取。
+- 机构多签新增 `fetchDuoqianAccountsBatch()`，按 `AccountRegisteredSfid / InstitutionAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds` 分阶段批量读取。
 - `ChainRpc` 新增 `fetchStorageBatchChunked()`，统一限制 storage 批量读取分块大小。
 - 从详情页返回列表时只精准刷新当前多签账户；创建返回只重读本地记录，不触发全量扫描。
 - 已同步 wuminapp 总文档、治理技术文档和 personal-manage 技术文档。

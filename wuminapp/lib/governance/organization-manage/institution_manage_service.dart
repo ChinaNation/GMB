@@ -37,7 +37,8 @@ class InstitutionInitialAccountInput {
 /// 通过 [InternalVoteService] 或业务 service 的 `submitInternalVote`
 /// 统一入口发送。
 class InstitutionManageService {
-  InstitutionManageService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+  InstitutionManageService({ChainRpc? chainRpc})
+      : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -64,19 +65,19 @@ class InstitutionManageService {
   /// 提交机构多签 propose_create_institution extrinsic。
   ///
   /// 参数编码以 `memory/07-ai/unified-protocols.md` 的 P-TX-001 为准：
-  /// [0x11][0x05] + sfid_number + institution_name + accounts + admin_org + admin_count
+  /// [0x11][0x05] + sfid_number + sfid_full_name + accounts + admin_org + admin_count
   ///   + duoqian_admins + threshold + register_nonce + signature
-  ///   + province + signer_admin_pubkey。
+  ///   + province_name + signer_admin_pubkey。
   Future<
       ({
         String txHash,
         int usedNonce,
         int proposalId,
-        String mainAddressHex,
+        String mainAccountHex,
         String blockHashHex,
       })> submitProposeCreateInstitution({
     required String sfidNumber,
-    required String institutionName,
+    required String sfidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int adminOrg,
     required int adminCount,
@@ -84,7 +85,7 @@ class InstitutionManageService {
     required int threshold,
     required String registerNonce,
     required String signatureHex,
-    required String province,
+    required String provinceName,
     required String signerAdminPubkeyHex,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -92,7 +93,7 @@ class InstitutionManageService {
   }) async {
     final callData = buildProposeCreateInstitutionCallData(
       sfidNumber: sfidNumber,
-      institutionName: institutionName,
+      sfidFullName: sfidFullName,
       accounts: accounts,
       adminOrg: adminOrg,
       adminCount: adminCount,
@@ -100,7 +101,7 @@ class InstitutionManageService {
       threshold: threshold,
       registerNonce: registerNonce,
       signatureHex: signatureHex,
-      province: province,
+      provinceName: provinceName,
       signerAdminPubkeyHex: signerAdminPubkeyHex,
     );
     final submitResult = await _signAndSubmitInBlock(
@@ -116,7 +117,7 @@ class InstitutionManageService {
     final event = await _confirmInstitutionCreateProposedEvent(
       blockHashHex: submitResult.blockHashHex,
       sfidNumber: sfidNumber,
-      institutionName: institutionName,
+      sfidFullName: sfidFullName,
       accounts: accounts,
       adminOrg: adminOrg,
       adminCount: adminCount,
@@ -129,7 +130,7 @@ class InstitutionManageService {
       txHash: submitResult.txHash,
       usedNonce: submitResult.usedNonce,
       proposalId: event.proposalId,
-      mainAddressHex: event.mainAddressHex,
+      mainAccountHex: event.mainAccountHex,
       blockHashHex: submitResult.blockHashHex,
     );
   }
@@ -138,7 +139,7 @@ class InstitutionManageService {
   @visibleForTesting
   static Uint8List buildProposeCreateInstitutionCallData({
     required String sfidNumber,
-    required String institutionName,
+    required String sfidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int adminOrg,
     required int adminCount,
@@ -146,15 +147,16 @@ class InstitutionManageService {
     required int threshold,
     required String registerNonce,
     required String signatureHex,
-    required String province,
+    required String provinceName,
     required String signerAdminPubkeyHex,
   }) {
     final sfidBytes = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
     final institutionNameBytes =
-        Uint8List.fromList(utf8.encode(institutionName.trim()));
+        Uint8List.fromList(utf8.encode(sfidFullName.trim()));
     final registerNonceBytes =
         Uint8List.fromList(utf8.encode(registerNonce.trim()));
-    final provinceBytes = Uint8List.fromList(utf8.encode(province.trim()));
+    final provinceNameBytes =
+        Uint8List.fromList(utf8.encode(provinceName.trim()));
     final signatureBytes = _hexDecodeFixed(signatureHex,
         expectedLength: 64, fieldName: 'signature');
     final signerAdminPubkey = _hexDecodeFixed(
@@ -167,7 +169,7 @@ class InstitutionManageService {
       throw ArgumentError('sfid_number 长度需在 1..=96 字节');
     }
     if (institutionNameBytes.isEmpty || institutionNameBytes.length > 128) {
-      throw ArgumentError('institution_name 长度需在 1..=128 字节');
+      throw ArgumentError('sfid_full_name 长度需在 1..=128 字节');
     }
     if (accounts.isEmpty) {
       throw ArgumentError('accounts 不可为空');
@@ -185,8 +187,8 @@ class InstitutionManageService {
     if (registerNonceBytes.isEmpty) {
       throw ArgumentError('register_nonce 不可为空');
     }
-    if (provinceBytes.isEmpty) {
-      throw ArgumentError('province 不可为空');
+    if (provinceNameBytes.isEmpty) {
+      throw ArgumentError('province_name 不可为空');
     }
 
     final output = ByteOutput();
@@ -196,7 +198,7 @@ class InstitutionManageService {
     // sfid_number: BoundedVec<u8> = Compact<u32> length + bytes
     _writeBoundedBytes(output, sfidBytes);
 
-    // institution_name: BoundedVec<u8>
+    // sfid_full_name: BoundedVec<u8>
     _writeBoundedBytes(output, institutionNameBytes);
 
     // accounts: BoundedVec<InstitutionInitialAccount> = Compact<N> + N 项。
@@ -233,10 +235,10 @@ class InstitutionManageService {
     // threshold: u32 little-endian
     output.write(_u32ToLeBytesStatic(threshold));
 
-    // register_nonce / signature / province / signer_admin_pubkey
+    // register_nonce / signature / province_name / signer_admin_pubkey
     _writeBoundedBytes(output, registerNonceBytes);
     _writeBoundedBytes(output, signatureBytes);
-    _writeBoundedBytes(output, provinceBytes);
+    _writeBoundedBytes(output, provinceNameBytes);
     output.write(signerAdminPubkey);
 
     return output.toBytes();
@@ -246,14 +248,14 @@ class InstitutionManageService {
   ///
   /// 当前链端机构关闭 call 为 OrganizationManage::propose_close。
   Future<({String txHash, int usedNonce})> submitProposeCloseInstitution({
-    required String duoqianAddress,
+    required String duoqianAccount,
     required String beneficiaryAddress,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     return _submitProposeClose(
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       beneficiaryAddress: beneficiaryAddress,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
@@ -263,9 +265,9 @@ class InstitutionManageService {
 
   /// 提交 propose_close extrinsic。
   ///
-  /// 参数编码：[0x11][0x01] + duoqian_address(32B) + beneficiary(32B)
+  /// 参数编码：[0x11][0x01] + duoqian_account(32B) + beneficiary(32B)
   Future<({String txHash, int usedNonce})> _submitProposeClose({
-    required String duoqianAddress,
+    required String duoqianAccount,
     required String beneficiaryAddress,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -275,8 +277,8 @@ class InstitutionManageService {
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCloseCallIndex);
 
-    // duoqian_address: AccountId32 = 32 bytes
-    output.write(_hexDecode(duoqianAddress));
+    // duoqian_account: AccountId32 = 32 bytes
+    output.write(_hexDecode(duoqianAccount));
 
     // beneficiary: AccountId32 = 32 bytes
     final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
@@ -294,12 +296,12 @@ class InstitutionManageService {
 
   // ──── 链上查询 ────
 
-  /// 查询 SFID (sfid_number + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
-  Future<String?> fetchSfidRegisteredAddress(
+  /// 查询 SFID (sfid_number + account_name) 是否已注册，返回派生的多签账户 hex（null 表示未注册）。
+  Future<String?> fetchSfidRegisteredAccount(
       Uint8List sfidNumber, Uint8List accountName) async {
     final key = _buildDoubleMapStorageKey(
       'OrganizationManage',
-      'SfidRegisteredAddress',
+      'SfidRegisteredAccount',
       sfidNumber,
       accountName,
     );
@@ -308,34 +310,34 @@ class InstitutionManageService {
     return _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
   }
 
-  /// 批量反查多个机构账户地址的 SFID 归属(`AddressRegisteredSfid` 精确整键)。
+  /// 批量反查多个机构账户的 SFID 归属(`AccountRegisteredSfid` 精确整键)。
   ///
-  /// 返回以入参地址原样为键的 map;未注册或解码失败的地址值为 null。
+  /// 返回以入参账户原样为键的 map;未注册或解码失败的账户值为 null。
   /// 机构多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
   Future<Map<String, RegisteredInstitutionRef?>>
       fetchRegisteredInstitutionRefsBatch(
-    Iterable<String> duoqianAddressHexList, {
+    Iterable<String> duoqianAccountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = duoqianAddressHexList
+    final addresses = duoqianAccountHexList
         .where((address) => address.isNotEmpty)
         .toSet()
         .toList(growable: false);
     if (addresses.isEmpty) return {};
 
-    final storageKeyByAddress = <String, String>{
+    final storageKeyByAccount = <String, String>{
       for (final address in addresses)
         address:
-            '0x${_hexEncode(DuoqianStorageCodec.addressRegisteredSfidKey(address))}',
+            '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredSfidKey(address))}',
     };
 
     final values = await _rpc.fetchStorageBatchChunked(
-      storageKeyByAddress.values.toSet(),
+      storageKeyByAccount.values.toSet(),
       chunkSize: chunkSize,
     );
 
     final result = <String, RegisteredInstitutionRef?>{};
-    for (final entry in storageKeyByAddress.entries) {
+    for (final entry in storageKeyByAccount.entries) {
       final data = values[entry.value];
       result[entry.key] = data == null
           ? null
@@ -346,22 +348,22 @@ class InstitutionManageService {
 
   /// 查询机构多签账户信息。
   ///
-  /// 注册机构账户走 `AddressRegisteredSfid -> InstitutionAccounts`
+  /// 注册机构账户走 `AccountRegisteredSfid -> InstitutionAccounts`
   /// + `AdminsChange::AdminAccounts`。
   Future<InstitutionAccountInfo?> fetchDuoqianAccount(
-      String duoqianAddressHex) async {
-    return _fetchInstitutionDuoqianAccount(duoqianAddressHex);
+      String duoqianAccountHex) async {
+    return _fetchInstitutionDuoqianAccount(duoqianAccountHex);
   }
 
   /// 批量查询机构多签账户状态。
   ///
-  /// 中文注释：机构多签需要先从地址反查 SFID 与账户名，再读取账户主体和
+  /// 中文注释：机构多签需要先从账户反查 SFID 与账户名，再读取账户主体和
   /// 管理员主体，所以必须分阶段批量读取，不能简单逐个调用详情查询。
   Future<Map<String, InstitutionAccountInfo?>> fetchDuoqianAccountsBatch(
-    Iterable<String> duoqianAddressHexList, {
+    Iterable<String> duoqianAccountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = duoqianAddressHexList
+    final addresses = duoqianAccountHexList
         .map(_normalizeHex)
         .where((address) => address.isNotEmpty)
         .toSet()
@@ -369,19 +371,19 @@ class InstitutionManageService {
     if (addresses.isEmpty) return {};
 
     final result = <String, InstitutionAccountInfo?>{};
-    final refKeyByAddress = <String, String>{};
+    final refKeyByAccount = <String, String>{};
     for (final address in addresses) {
-      refKeyByAddress[address] =
-          '0x${_hexEncode(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
+      refKeyByAccount[address] =
+          '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredSfidKey(address))}';
     }
 
     final refValues = await _rpc.fetchStorageBatchChunked(
-      refKeyByAddress.values,
+      refKeyByAccount.values,
       chunkSize: chunkSize,
     );
     final refByAddress = <String, RegisteredInstitutionRef>{};
     for (final address in addresses) {
-      final refData = refValues[refKeyByAddress[address]];
+      final refData = refValues[refKeyByAccount[address]];
       if (refData == null) {
         result[address] = null;
         continue;
@@ -394,9 +396,9 @@ class InstitutionManageService {
       refByAddress[address] = ref;
     }
 
-    final accountKeyByAddress = <String, String>{};
-    final adminKeyByAddress = <String, String>{};
-    final accountIdByAddress = <String, Uint8List>{};
+    final accountKeyByAccount = <String, String>{};
+    final adminKeyByAccount = <String, String>{};
+    final accountIdByAccount = <String, Uint8List>{};
     final secondRoundKeys = <String>[];
     for (final entry in refByAddress.entries) {
       final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
@@ -409,9 +411,9 @@ class InstitutionManageService {
       ))}';
       final adminKey =
           '0x${_hexEncode(DuoqianStorageCodec.adminAccountKey(accountId))}';
-      accountIdByAddress[entry.key] = accountId;
-      accountKeyByAddress[entry.key] = accountKey;
-      adminKeyByAddress[entry.key] = adminKey;
+      accountIdByAccount[entry.key] = accountId;
+      accountKeyByAccount[entry.key] = accountKey;
+      adminKeyByAccount[entry.key] = adminKey;
       secondRoundKeys
         ..add(accountKey)
         ..add(adminKey);
@@ -421,11 +423,11 @@ class InstitutionManageService {
       secondRoundKeys,
       chunkSize: chunkSize,
     );
-    final accountByAddress = <String, InstitutionAccountSnapshot>{};
-    final adminByAddress = <String, DuoqianAdminSnapshot>{};
+    final accountByAccount = <String, InstitutionAccountSnapshot>{};
+    final adminByAccount = <String, DuoqianAdminSnapshot>{};
     for (final address in refByAddress.keys) {
-      final accountData = secondRoundValues[accountKeyByAddress[address]];
-      final adminData = secondRoundValues[adminKeyByAddress[address]];
+      final accountData = secondRoundValues[accountKeyByAccount[address]];
+      final adminData = secondRoundValues[adminKeyByAccount[address]];
       if (accountData == null || adminData == null) {
         result[address] = null;
         continue;
@@ -436,49 +438,49 @@ class InstitutionManageService {
         result[address] = null;
         continue;
       }
-      accountByAddress[address] = account;
-      adminByAddress[address] = admin;
+      accountByAccount[address] = account;
+      adminByAccount[address] = admin;
     }
 
-    final activeThresholdKeyByAddress = <String, String>{};
-    for (final entry in adminByAddress.entries) {
-      activeThresholdKeyByAddress[entry.key] =
+    final activeThresholdKeyByAccount = <String, String>{};
+    for (final entry in adminByAccount.entries) {
+      activeThresholdKeyByAccount[entry.key] =
           '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
         org: entry.value.org,
-        accountId: accountIdByAddress[entry.key]!,
+        accountId: accountIdByAccount[entry.key]!,
       ))}';
     }
     final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
-      activeThresholdKeyByAddress.values,
+      activeThresholdKeyByAccount.values,
       chunkSize: chunkSize,
     );
 
-    final thresholdByAddress = <String, int?>{};
-    final pendingThresholdKeyByAddress = <String, String>{};
-    for (final entry in activeThresholdKeyByAddress.entries) {
+    final thresholdByAccount = <String, int?>{};
+    final pendingThresholdKeyByAccount = <String, String>{};
+    for (final entry in activeThresholdKeyByAccount.entries) {
       final threshold = DuoqianStorageCodec.decodeDynamicThreshold(
         activeThresholdValues[entry.value],
       );
-      thresholdByAddress[entry.key] = threshold;
+      thresholdByAccount[entry.key] = threshold;
       if (threshold == null) {
-        final admin = adminByAddress[entry.key]!;
-        pendingThresholdKeyByAddress[entry.key] =
+        final admin = adminByAccount[entry.key]!;
+        pendingThresholdKeyByAccount[entry.key] =
             '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
           org: admin.org,
-          accountId: accountIdByAddress[entry.key]!,
+          accountId: accountIdByAccount[entry.key]!,
         ))}';
       }
     }
 
-    if (pendingThresholdKeyByAddress.isNotEmpty) {
+    if (pendingThresholdKeyByAccount.isNotEmpty) {
       final pendingThresholdValues = await _rpc.fetchStorageBatchChunked(
-        pendingThresholdKeyByAddress.values,
+        pendingThresholdKeyByAccount.values,
         chunkSize: chunkSize,
       );
-      for (final entry in pendingThresholdKeyByAddress.entries) {
-        thresholdByAddress[entry.key] =
+      for (final entry in pendingThresholdKeyByAccount.entries) {
+        thresholdByAccount[entry.key] =
             DuoqianStorageCodec.decodeDynamicThreshold(
           pendingThresholdValues[entry.value],
         );
@@ -486,12 +488,12 @@ class InstitutionManageService {
     }
 
     for (final address in addresses) {
-      final account = accountByAddress[address];
-      final admin = adminByAddress[address];
+      final account = accountByAccount[address];
+      final admin = adminByAccount[address];
       if (account == null || admin == null) continue;
       result[address] = InstitutionAccountInfo(
         adminCount: admin.adminCount,
-        threshold: thresholdByAddress[address],
+        threshold: thresholdByAccount[address],
         adminPubkeys: admin.adminPubkeys,
         status: _statusFromByte(account.statusByte),
       );
@@ -501,10 +503,10 @@ class InstitutionManageService {
   }
 
   Future<InstitutionAccountInfo?> _fetchInstitutionDuoqianAccount(
-    String duoqianAddressHex,
+    String duoqianAccountHex,
   ) async {
-    final refKey = DuoqianStorageCodec.addressRegisteredSfidKey(
-      duoqianAddressHex,
+    final refKey = DuoqianStorageCodec.accountRegisteredSfidKey(
+      duoqianAccountHex,
     );
     final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
     if (refData == null) return null;
@@ -520,7 +522,7 @@ class InstitutionManageService {
     final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
     if (account == null) return null;
     final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
-      duoqianAddressHex,
+      duoqianAccountHex,
     );
     final adminKey = DuoqianStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
@@ -562,7 +564,7 @@ class InstitutionManageService {
   /// 从 ProposalData 解码机构多签管理提案。
   ///
   /// ProposalData 存储为 BoundedVec<u8>，SCALE：Compact<len> + [ACTION_TYPE(1B)] + action.encode()
-  /// OrganizationManage ACTION_CLOSE(2): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
+  /// OrganizationManage ACTION_CLOSE(2): duoqian_account(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CloseDuoqianProposalInfo，解码失败返回 null。
   /// PersonalManage 提案解码已经迁移到 `PersonalManageService`。
@@ -600,11 +602,11 @@ class InstitutionManageService {
   }
 
   CloseDuoqianProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
-    // duoqian_address(32) + beneficiary(32) + proposer(32)
+    // duoqian_account(32) + beneficiary(32) + proposer(32)
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
 
-    final duoqianAddress =
+    final duoqianAccount =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -619,17 +621,17 @@ class InstitutionManageService {
 
     return CloseDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       beneficiary: beneficiarySs58,
       proposer: proposerSs58,
     );
   }
 
-  Future<({int proposalId, String mainAddressHex})>
+  Future<({int proposalId, String mainAccountHex})>
       _confirmInstitutionCreateProposedEvent({
     required String blockHashHex,
     required String sfidNumber,
-    required String institutionName,
+    required String sfidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int adminOrg,
     required int adminCount,
@@ -649,7 +651,7 @@ class InstitutionManageService {
     final found = _findInstitutionCreateProposedEvent(
       events,
       sfidNumber: sfidNumber,
-      institutionName: institutionName,
+      sfidFullName: sfidFullName,
       accounts: accounts,
       adminOrg: adminOrg,
       adminCount: adminCount,
@@ -666,11 +668,11 @@ class InstitutionManageService {
     return found;
   }
 
-  ({int proposalId, String mainAddressHex})?
+  ({int proposalId, String mainAccountHex})?
       _findInstitutionCreateProposedEvent(
     Uint8List data, {
     required String sfidNumber,
-    required String institutionName,
+    required String sfidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int adminOrg,
     required int adminCount,
@@ -704,7 +706,7 @@ class InstitutionManageService {
             data,
             offset,
             sfidNumber: sfidNumber,
-            institutionName: institutionName,
+            sfidFullName: sfidFullName,
             accounts: accounts,
             adminOrg: adminOrg,
             adminCount: adminCount,
@@ -722,12 +724,12 @@ class InstitutionManageService {
     return null;
   }
 
-  ({int proposalId, String mainAddressHex})?
+  ({int proposalId, String mainAccountHex})?
       _decodeInstitutionCreateProposedEvent(
     Uint8List data,
     int offset, {
     required String sfidNumber,
-    required String institutionName,
+    required String sfidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int adminOrg,
     required int adminCount,
@@ -749,7 +751,7 @@ class InstitutionManageService {
       if (nameRead == null) return null;
       pos = nameRead.nextOffset;
       if (pos + 32 + 32 > data.length) return null;
-      final mainAddress = Uint8List.fromList(data.sublist(pos, pos + 32));
+      final mainAccount = Uint8List.fromList(data.sublist(pos, pos + 32));
       pos += 32;
       final proposer = Uint8List.fromList(data.sublist(pos, pos + 32));
       pos += 32;
@@ -762,7 +764,7 @@ class InstitutionManageService {
         if (accountNameRead == null) return null;
         pos = accountNameRead.nextOffset;
         if (pos + 32 + 16 + 1 > data.length) return null;
-        pos += 32; // address
+        pos += 32; // account
         final eventAmount = _readU128Le(data.sublist(pos, pos + 16));
         pos += 16;
         pos += 1; // is_default
@@ -792,8 +794,7 @@ class InstitutionManageService {
       final eventInitialTotal = _readU128Le(data.sublist(pos, pos + 16));
 
       final expectedSfid = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
-      final expectedName =
-          Uint8List.fromList(utf8.encode(institutionName.trim()));
+      final expectedName = Uint8List.fromList(utf8.encode(sfidFullName.trim()));
       final matches = _bytesEqual(sfidRead.bytes, expectedSfid) &&
           _bytesEqual(nameRead.bytes, expectedName) &&
           _bytesEqual(proposer, proposerPubkey) &&
@@ -805,7 +806,7 @@ class InstitutionManageService {
       if (!matches) return null;
       return (
         proposalId: proposalId,
-        mainAddressHex: _hexEncode(mainAddress),
+        mainAccountHex: _hexEncode(mainAccount),
       );
     } catch (_) {
       return null;
@@ -889,7 +890,9 @@ class InstitutionManageService {
   // ──── 内部：编码工具 ────
 
   InstitutionStatus _statusFromByte(int statusByte) {
-    return statusByte == 1 ? InstitutionStatus.active : InstitutionStatus.pending;
+    return statusByte == 1
+        ? InstitutionStatus.active
+        : InstitutionStatus.pending;
   }
 
   static void _writeBoundedBytes(ByteOutput output, Uint8List bytes) {

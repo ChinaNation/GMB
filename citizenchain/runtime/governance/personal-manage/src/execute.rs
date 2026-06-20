@@ -51,15 +51,15 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
 
     T::Currency::transfer(
         &action.proposer,
-        &action.duoqian_address,
+        &action.duoqian_account,
         action.amount,
         ExistenceRequirement::KeepAlive,
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    let account = action.duoqian_address.clone();
+    let account = action.duoqian_account.clone();
     Pallet::<T>::activate_admin_account(proposal_id, account.clone())?;
-    PersonalDuoqians::<T>::mutate(&action.duoqian_address, |maybe_account| {
+    PersonalDuoqians::<T>::mutate(&action.duoqian_account, |maybe_account| {
         if let Some(account) = maybe_account {
             account.status = DuoqianStatus::Active;
         }
@@ -74,7 +74,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
 
     Pallet::<T>::deposit_event(Event::<T>::DuoqianCreated {
         proposal_id,
-        duoqian_address: action.duoqian_address.clone(),
+        duoqian_account: action.duoqian_account.clone(),
         creator: action.proposer.clone(),
         admin_count,
         threshold,
@@ -92,22 +92,22 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
 ) -> DispatchResult {
     ensure!(
         T::InstitutionAsset::can_spend(
-            &action.duoqian_address,
+            &action.duoqian_account,
             InstitutionAssetAction::DuoqianCloseExecute,
         ),
         Error::<T>::ProtectedSource
     );
-    let account = action.duoqian_address.clone();
+    let account = action.duoqian_account.clone();
     let org = votingengine::types::ORG_REN;
     let admin_count = admins_change::Pallet::<T>::active_account_admin_count(org, account.clone())
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let threshold =
         <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())
             .ok_or(Error::<T>::DuoqianNotFound)?;
-    let all_balance = T::Currency::free_balance(&action.duoqian_address);
+    let all_balance = T::Currency::free_balance(&action.duoqian_account);
     // 中文注释：注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
     ensure!(
-        T::Currency::reserved_balance(&action.duoqian_address).is_zero(),
+        T::Currency::reserved_balance(&action.duoqian_account).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
 
@@ -123,7 +123,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
 
     if !fee.is_zero() {
         let fee_imbalance = T::Currency::withdraw(
-            &action.duoqian_address,
+            &action.duoqian_account,
             fee,
             frame_support::traits::WithdrawReasons::FEE,
             ExistenceRequirement::AllowDeath,
@@ -133,20 +133,20 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     }
 
     T::Currency::transfer(
-        &action.duoqian_address,
+        &action.duoqian_account,
         &action.beneficiary,
         transfer_amount,
         ExistenceRequirement::AllowDeath,
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    PersonalDuoqians::<T>::remove(&action.duoqian_address);
+    PersonalDuoqians::<T>::remove(&action.duoqian_account);
     Pallet::<T>::close_admin_account(proposal_id, account)?;
-    PendingCloseProposal::<T>::remove(&action.duoqian_address);
+    PendingCloseProposal::<T>::remove(&action.duoqian_account);
 
     Pallet::<T>::deposit_event(Event::<T>::DuoqianClosed {
         proposal_id,
-        duoqian_address: action.duoqian_address.clone(),
+        duoqian_account: action.duoqian_account.clone(),
         beneficiary: action.beneficiary.clone(),
         admin_count,
         threshold,
@@ -171,18 +171,18 @@ pub(crate) fn cleanup_pending_create<T: Config>(
         return Ok(false);
     }
 
-    Pallet::<T>::remove_pending_admin_account(proposal_id, action.duoqian_address.clone())?;
+    Pallet::<T>::remove_pending_admin_account(proposal_id, action.duoqian_account.clone())?;
 
     let reserve_total = action.amount.saturating_add(action.fee);
     let _ = T::Currency::unreserve(&action.proposer, reserve_total);
 
-    PersonalDuoqians::<T>::remove(&action.duoqian_address);
+    PersonalDuoqians::<T>::remove(&action.duoqian_account);
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     if emit_event {
         Pallet::<T>::deposit_event(Event::<T>::DuoqianCreateRejected {
             proposal_id,
-            duoqian_address: action.duoqian_address.clone(),
+            duoqian_account: action.duoqian_account.clone(),
         });
     }
     Ok(true)

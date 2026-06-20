@@ -15,39 +15,39 @@ mod derive_consistency_tests {
     use crate::core_const::{derive_duoqian_account, OP_FEE, OP_MAIN, SS58_FORMAT};
 
     #[test]
-    fn china_ch_main_fee_addresses_match_derive_primitive() {
+    fn china_ch_main_fee_accounts_match_derive_primitive() {
         for n in super::china_ch::CHINA_CH {
             let sfid = n.sfid_number.as_bytes();
             assert_eq!(
-                n.main_address,
+                n.main_account,
                 derive_duoqian_account(OP_MAIN, SS58_FORMAT, sfid),
                 "省储行 {} 主账户派生漂移",
-                n.sfid_name
+                n.sfid_full_name
             );
             assert_eq!(
-                n.fee_address,
+                n.fee_account,
                 derive_duoqian_account(OP_FEE, SS58_FORMAT, sfid),
                 "省储行 {} 费用账户派生漂移",
-                n.sfid_name
+                n.sfid_full_name
             );
         }
     }
 
     #[test]
-    fn china_cb_main_fee_addresses_match_derive_primitive() {
+    fn china_cb_main_fee_accounts_match_derive_primitive() {
         for n in super::china_cb::CHINA_CB {
             let sfid = n.sfid_number.as_bytes();
             assert_eq!(
-                n.main_address,
+                n.main_account,
                 derive_duoqian_account(OP_MAIN, SS58_FORMAT, sfid),
                 "储委会 {} 主账户派生漂移",
-                n.sfid_name
+                n.sfid_full_name
             );
             assert_eq!(
-                n.fee_address,
+                n.fee_account,
                 derive_duoqian_account(OP_FEE, SS58_FORMAT, sfid),
                 "储委会 {} 费用账户派生漂移",
-                n.sfid_name
+                n.sfid_full_name
             );
         }
     }
@@ -59,18 +59,18 @@ mod derive_consistency_tests {
                 for n in $arr {
                     let sfid = n.sfid_number.as_bytes();
                     assert_eq!(
-                        n.main_address,
+                        n.main_account,
                         derive_duoqian_account(OP_MAIN, SS58_FORMAT, sfid),
                         "{} {} 主账户派生漂移",
                         $label,
-                        n.sfid_name
+                        n.sfid_full_name
                     );
                     assert_eq!(
-                        n.fee_address,
+                        n.fee_account,
                         derive_duoqian_account(OP_FEE, SS58_FORMAT, sfid),
                         "{} {} 费用账户派生漂移",
                         $label,
-                        n.sfid_name
+                        n.sfid_full_name
                     );
                 }
             };

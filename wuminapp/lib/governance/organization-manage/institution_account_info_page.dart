@@ -33,10 +33,12 @@ class InstitutionAccountInfoPage extends StatefulWidget {
   final List<String> initialAdminPubkeys;
 
   @override
-  State<InstitutionAccountInfoPage> createState() => _InstitutionAccountInfoPageState();
+  State<InstitutionAccountInfoPage> createState() =>
+      _InstitutionAccountInfoPageState();
 }
 
-class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage> {
+class _InstitutionAccountInfoPageState
+    extends State<InstitutionAccountInfoPage> {
   final InstitutionManageService _manageService = InstitutionManageService();
   final ChainRpc _rpc = ChainRpc();
 
@@ -70,19 +72,19 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
       final local = await WalletIsar.instance.read((isar) async {
         final entity = await isar.institutionEntitys
             .filter()
-            .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+            .duoqianAccountEqualTo(widget.institution.duoqianAccount)
             .findFirst();
         final statuses = await InstitutionDuoqianLocalState.readStatusSnapshots(
           isar,
-          [widget.institution.duoqianAddress],
+          [widget.institution.duoqianAccount],
         );
         final detail = await InstitutionDuoqianLocalState.readDetail(
           isar,
-          widget.institution.duoqianAddress,
+          widget.institution.duoqianAccount,
         );
         return (
           entity: entity,
-          status: statuses[_normalizeHex(widget.institution.duoqianAddress)],
+          status: statuses[_normalizeHex(widget.institution.duoqianAccount)],
           detail: detail,
         );
       });
@@ -147,16 +149,16 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
     if (!force && !_shouldRefreshBalance()) return;
     try {
       final balance =
-          await _rpc.fetchFinalizedBalance(widget.institution.duoqianAddress);
+          await _rpc.fetchFinalizedBalance(widget.institution.duoqianAccount);
       final now = DateTime.now().millisecondsSinceEpoch;
       await WalletIsar.instance.writeTxn((isar) async {
         final previous = await InstitutionDuoqianLocalState.readDetail(
           isar,
-          widget.institution.duoqianAddress,
+          widget.institution.duoqianAccount,
         );
         await InstitutionDuoqianLocalState.putDetailInTxn(
           isar,
-          widget.institution.duoqianAddress,
+          widget.institution.duoqianAccount,
           DuoqianLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
             adminPubkeys: previous?.adminPubkeys ?? _adminPubkeys,
@@ -183,9 +185,9 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
     if (!force && !_shouldRefreshDetail()) return;
     try {
       final infos = await _manageService.fetchDuoqianAccountsBatch(
-        [widget.institution.duoqianAddress],
+        [widget.institution.duoqianAccount],
       );
-      final info = infos[_normalizeHex(widget.institution.duoqianAddress)];
+      final info = infos[_normalizeHex(widget.institution.duoqianAccount)];
       final status = info == null
           ? InstitutionDuoqianLocalState.statusClosed
           : _localStatusFromInfo(info.status);
@@ -195,22 +197,22 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
       await WalletIsar.instance.writeTxn((isar) async {
         await InstitutionDuoqianLocalState.putStatusInTxn(
           isar,
-          widget.institution.duoqianAddress,
+          widget.institution.duoqianAccount,
           status,
         );
         if (info == null) {
           await InstitutionDuoqianLocalState.deleteDetailInTxn(
             isar,
-            widget.institution.duoqianAddress,
+            widget.institution.duoqianAccount,
           );
         } else {
           final previous = await InstitutionDuoqianLocalState.readDetail(
             isar,
-            widget.institution.duoqianAddress,
+            widget.institution.duoqianAccount,
           );
           await InstitutionDuoqianLocalState.putDetailInTxn(
             isar,
-            widget.institution.duoqianAddress,
+            widget.institution.duoqianAccount,
             DuoqianLocalDetailSnapshot(
               status: status,
               adminPubkeys: info.adminPubkeys,
@@ -251,7 +253,7 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
     if (status != InstitutionStatus.active) return null;
     try {
       return await _rpc
-          .fetchFinalizedBalance(widget.institution.duoqianAddress);
+          .fetchFinalizedBalance(widget.institution.duoqianAccount);
     } catch (_) {
       return null;
     }
@@ -347,14 +349,14 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
   Future<void> _removeFromLocal() async {
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.institutionEntitys
-          .deleteByDuoqianAddress(widget.institution.duoqianAddress);
+          .deleteByDuoqianAccount(widget.institution.duoqianAccount);
       await InstitutionDuoqianLocalState.deleteStatusInTxn(
         isar,
-        widget.institution.duoqianAddress,
+        widget.institution.duoqianAccount,
       );
       await InstitutionDuoqianLocalState.deleteDetailInTxn(
         isar,
-        widget.institution.duoqianAddress,
+        widget.institution.duoqianAccount,
       );
     });
   }
@@ -454,7 +456,7 @@ class _InstitutionAccountInfoPageState extends State<InstitutionAccountInfoPage>
   }
 
   Widget _buildContent() {
-    final duoqianSs58 = _hexToSs58(widget.institution.duoqianAddress);
+    final duoqianSs58 = _hexToSs58(widget.institution.duoqianAccount);
     final info = _accountInfo;
     final statusLabel = _isClosed
         ? '已注销'

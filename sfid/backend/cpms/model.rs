@@ -60,7 +60,7 @@ pub(crate) struct CpmsSiteKeys {
     #[serde(default)]
     pub(crate) institution_code: String,
     #[serde(default)]
-    pub(crate) institution_name: String,
+    pub(crate) sfid_full_name: String,
     #[serde(default)]
     pub(crate) qr1_payload: String,
     #[serde(default)]
@@ -77,9 +77,9 @@ pub(crate) struct CpmsSiteKeys {
 pub(crate) struct GenerateCpmsInstallInput {
     /// 机构自身 sfid_number,作为 cpms_sites 写入键(= 详情页读取键)。
     pub(crate) sfid_number: String,
-    /// province/city/institution 仅用于安全授权(passkey grant)绑定,机构真源按 sfid_number 反查。
-    pub(crate) province: Option<String>,
-    pub(crate) city: String,
+    /// province_name/city_name/institution 仅用于安全授权(passkey grant)绑定,机构真源按 sfid_number 反查。
+    pub(crate) province_name: Option<String>,
+    pub(crate) city_name: String,
     pub(crate) institution: String,
 }
 
@@ -113,7 +113,7 @@ pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) city_name: String,
     pub(crate) city_code: String,
     pub(crate) institution_code: String,
-    pub(crate) institution_name: String,
+    pub(crate) sfid_full_name: String,
     pub(crate) qr1_payload: String,
     pub(crate) cpms_pubkey_bound: bool,
     pub(crate) created_by: String,

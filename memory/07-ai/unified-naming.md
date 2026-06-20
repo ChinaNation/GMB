@@ -51,7 +51,7 @@
 | 常量 | SCREAMING_SNAKE_CASE(Rust) / lowerCamelCase 或 static const(Dart) | `MODULE_TAG` / `actionCreate` |
 | JSON / API 字段 | snake_case | `signer_admin_pubkey` |
 | storage 字段 | PascalCase | `InstitutionAccounts` |
-| QR display field key | snake_case | `institution_name` |
+| QR display field key | snake_case | `sfid_full_name` |
 | 任务卡文件名 | 短日期 + 短 slug | `20260507-ai-unified-naming.md` |
 | 技术文档文件名 | SCREAMING_SNAKE_CASE | `BACKEND_LAYOUT.md` |
 
@@ -142,9 +142,10 @@
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
 | 机构账户主体 | `InstitutionAccount` | AdminAccountKind / 类型 | 注册机构账户级内部投票主体，已使用 `AdminAccountKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
 | 主体身份号码 | `sfid_number` | API / call data / storage key | SFID 对外身份 ID 字段,所有主体统一使用该字段名 |
-| 机构名称 | `institution_name` | API / call data | 机构显示名称 |
+| 机构全称 | `sfid_full_name` | API / call data | 机构全称,可随机构法定名称变更 |
+| 机构简称 | `sfid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |
-| 签发省份 | `province` | credential / call data | SFID 省级签名来源 |
+| 签发省份名称 | `province_name` | credential / call data | SFID 省级签名来源名称 |
 | 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 省级签发 admin 公钥 |
 | 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `wuminapp/lib/rpc/` | 统一构造 wuminapp 在线 signed extrinsic，固定执行 immortal era 协议 |
 | 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
@@ -439,14 +440,15 @@
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | SFID 号码 | `sfid_number` | API / call data / storage key | 机构或公民 SFID 编号 |
-| 机构名称 | `institution_name` | API / call data / QR display | 机构显示名称 |
+| 机构全称 | `sfid_full_name` | API / call data / QR display | 机构全称,可随机构法定名称变更 |
+| 机构简称 | `sfid_short_name` | API / call data / QR display | 机构简称,用于列表和紧凑展示 |
 | 账户名称列表 | `account_names` | SFID registration-info API | 机构账户名数组 |
 | 账户名称 | `account_name` | API / call data / QR display | 单个机构或个人账户名 |
 | 私权机构类型 | `private_type` | SFID API / subjects / private | 私权机构目标类型,取值 `SOLE/PARTNERSHIP/COMPANY/CORPORATION/WELFARE/ASSOCIATION` |
 | 合伙类型 | `partnership_kind` | SFID API / subjects / private | 合伙企业内部类型,取值 `GENERAL/LIMITED` |
 | 法人资格 | `has_legal_personality` | SFID API / subjects / private | 私权机构是否具有法人资格 |
 | 注册随机数 | `register_nonce` | credential / call data | SFID 机构注册凭证随机数 |
-| 省份 | `province` | credential / call data | 签发凭证的省级区域 |
+| 签发省份名称 | `province_name` | credential / call data | 签发凭证的省级区域名称 |
 | 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 签发凭证的联邦管理员公钥 |
 | 签名 | `signature` | credential / call data | 凭证签名 |
 | 主体 ID | `account_id` | call data / storage key | 管理员主体统一 ID |
@@ -463,17 +465,18 @@
 |---|---|---|---|
 | 操作 | `action` | QR display | 签名请求动作名 |
 | SFID 号码 | `sfid_number` | QR display | 机构或主体 SFID 编号 |
-| 机构名称 | `institution_name` | QR display | 机构显示名称 |
+| 机构全称 | `sfid_full_name` | QR display | 机构全称 |
+| 机构简称 | `sfid_short_name` | QR display | 机构简称 |
 | 账户名称 | `account_name` | QR display | 单个账户名称 |
 | 管理员数量 | `admin_count` | QR display | 管理员总数 |
 | 阈值 | `threshold` | QR display | 多签通过阈值 |
 | 金额 | `amount_yuan` | QR display | 人民币元口径金额 |
 | 总金额 | `total_amount_yuan` | QR display | 总发行或总转账金额 |
 | 账户金额 | `amount_<account_name>` | QR display | 按账户名展开的金额字段 |
-| 省份 | `province` | QR display | 签发凭证省份 |
+| 签发省份名称 | `province_name` | QR display | 签发凭证省份名称 |
 | 签发管理员公钥 | `signer_admin_pubkey` | QR display | 签发管理员公钥 |
 | 提案 ID | `proposal_id` | QR display | 链上提案 ID |
 | 是否同意 | `approve` | QR display | 投票是否同意 |
 | 收款人 | `beneficiary` | QR display | 转账或关闭后的收款地址 |
 | 备注 | `remark` | QR display | 交易备注 |
-| 多签地址 | `duoqian_address` | QR display | 个人或机构多签地址 |
+| 多签地址 | `duoqian_account` | QR display | 个人或机构多签地址 |

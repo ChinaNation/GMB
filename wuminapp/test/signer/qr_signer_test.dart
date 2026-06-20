@@ -26,8 +26,7 @@ void main() {
 
     final signer = QrSigner();
 
-    String longId(String prefix) =>
-        '$prefix-${List.filled(16, 'a').join()}';
+    String longId(String prefix) => '$prefix-${List.filled(16, 'a').join()}';
 
     test('build + parse request should round-trip with envelope', () {
       final requestId = longId('req-onchain');

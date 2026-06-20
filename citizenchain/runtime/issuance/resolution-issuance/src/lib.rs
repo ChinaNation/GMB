@@ -122,8 +122,8 @@ pub mod pallet {
                 .iter()
                 .skip(1)
                 .map(|node| {
-                    T::AccountId::decode(&mut &node.main_address[..])
-                        .expect("CHINA_CB main_address must decode to AccountId")
+                    T::AccountId::decode(&mut &node.main_account[..])
+                        .expect("CHINA_CB main_account must decode to AccountId")
                 })
                 .collect();
             Self { allowed_recipients }

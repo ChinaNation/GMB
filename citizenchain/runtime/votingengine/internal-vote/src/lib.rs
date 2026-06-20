@@ -194,17 +194,17 @@ fn is_valid_internal_institution<T: Config>(org: u8, institution: T::AccountId) 
     match org {
         ORG_NRC => CHINA_CB
             .first()
-            .and_then(|n| decode_account::<T>(&n.main_address))
+            .and_then(|n| decode_account::<T>(&n.main_account))
             .map(|nrc| institution == nrc)
             .unwrap_or(false),
         ORG_PRC => CHINA_CB
             .iter()
             .skip(1)
-            .filter_map(|n| decode_account::<T>(&n.main_address))
+            .filter_map(|n| decode_account::<T>(&n.main_account))
             .any(|pid| pid == institution),
         ORG_PRB => CHINA_CH
             .iter()
-            .filter_map(|n| decode_account::<T>(&n.main_address))
+            .filter_map(|n| decode_account::<T>(&n.main_account))
             .any(|pid| pid == institution),
         org if is_registered_multisig_org(org) => {
             <T as votingengine::Config>::InternalAdminProvider::get_admin_list(org, institution)

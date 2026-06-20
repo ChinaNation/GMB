@@ -22,13 +22,13 @@ use crate::subjects::model::{
     InstitutionDetailOutput, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
 };
 use crate::subjects::service::{
-    resolve_legal_representative_scope_for_institution, validate_institution_name,
-    validate_legal_representative_required,
+    resolve_legal_representative_scope_for_institution, validate_legal_representative_required,
+    validate_sfid_full_name,
 };
 use crate::subjects::uninorg;
 use crate::*;
 
-pub(crate) async fn check_institution_name(
+pub(crate) async fn check_sfid_full_name(
     State(state): State<AppState>,
     headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<CheckNameQuery>,
@@ -46,7 +46,7 @@ pub(crate) async fn check_institution_name(
         .unwrap_or("")
         .trim()
         .to_string();
-    let city = params.city.as_deref().unwrap_or("").trim().to_string();
+    let city = params.city_name.as_deref().unwrap_or("").trim().to_string();
     let exists = if subject_property == "G" {
         if city.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "公权机构查重需要 city 参数");
@@ -57,7 +57,7 @@ pub(crate) async fn check_institution_name(
                 .query_one(
                     "SELECT EXISTS (
                         SELECT 1 FROM subjects
-                        WHERE kind = 'PUBLIC' AND name = $1 AND city = $2
+                        WHERE kind = 'PUBLIC' AND name = $1 AND city_name = $2
                      )",
                     &[&name, &city],
                 )
@@ -71,7 +71,7 @@ pub(crate) async fn check_institution_name(
             }
         }
     } else {
-        match state.db.institution_name_exists(&name, None, None, None) {
+        match state.db.sfid_full_name_exists(&name, None, None, None) {
             Ok(v) => v,
             Err(err) => {
                 let message = format!("query institution name failed: {err}");
@@ -91,7 +91,7 @@ pub(crate) async fn check_institution_name(
 pub struct CheckNameQuery {
     pub name: String,
     pub subject_property: Option<String>,
-    pub city: Option<String>,
+    pub city_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -189,7 +189,7 @@ pub(crate) async fn update_institution(
     let grant_payload = serde_json::json!({
         "target": sfid_number.clone(),
         "sfid_number": sfid_number.clone(),
-        "institution_name": input.institution_name.clone(),
+        "sfid_full_name": input.sfid_full_name.clone(),
         "parent_sfid_number": input.parent_sfid_number.clone(),
         "legal_rep_name": input.legal_rep_name.clone(),
         "legal_rep_sfid_number": input.legal_rep_sfid_number.clone(),
@@ -216,27 +216,29 @@ pub(crate) async fn update_institution(
     else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
-    let old_institution_name = existing.institution_name.clone().unwrap_or_default();
+    let old_sfid_full_name = existing.sfid_full_name.clone().unwrap_or_default();
     let old_parent_sfid_number = existing.parent_sfid_number.clone().unwrap_or_default();
     let scope = get_visible_scope(&ctx);
-    if !scope.includes_province(&existing.province) || !scope.includes_city(&existing.city) {
+    if !scope.includes_province(&existing.province_name)
+        || !scope.includes_city(&existing.city_name)
+    {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
 
     if let Some(raw) = input
-        .institution_name
+        .sfid_full_name
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
     {
-        let new_name = match validate_institution_name(raw) {
+        let new_name = match validate_sfid_full_name(raw) {
             Ok(v) => v,
             Err(e) => return service_error_to_response(e),
         };
         let conflict =
             match state
                 .db
-                .institution_name_exists(&new_name, None, None, Some(&sfid_number))
+                .sfid_full_name_exists(&new_name, None, None, Some(&sfid_number))
             {
                 Ok(v) => v,
                 Err(err) => {
@@ -247,7 +249,7 @@ pub(crate) async fn update_institution(
         if conflict {
             return api_error(StatusCode::CONFLICT, 1007, "该机构名称已被使用");
         }
-        existing.institution_name = Some(new_name);
+        existing.sfid_full_name = Some(new_name);
     }
     if input.parent_sfid_number.is_some() {
         let raw = input
@@ -297,10 +299,10 @@ pub(crate) async fn update_institution(
         );
         if let Some(msg) = uninorg::locality_violation(
             rule,
-            &target.province,
-            &target.city,
-            &existing.province,
-            &existing.city,
+            &target.province_name,
+            &target.city_name,
+            &existing.province_name,
+            &existing.city_name,
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
@@ -375,8 +377,8 @@ pub(crate) async fn update_institution(
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),
-            "old_institution_name": old_institution_name,
-            "new_institution_name": existing.institution_name.clone().unwrap_or_default(),
+            "old_sfid_full_name": old_sfid_full_name,
+            "new_sfid_full_name": existing.sfid_full_name.clone().unwrap_or_default(),
             "old_parent_sfid_number": old_parent_sfid_number,
             "parent_sfid_number": existing.parent_sfid_number.clone().unwrap_or_default(),
             "legal_rep_name": existing.legal_rep_name.clone().unwrap_or_default(),
@@ -397,8 +399,8 @@ pub(crate) struct SearchParentsQuery {
     /// 非法人(F)的机构代码:JY=教育分校(只搜本市学校本部),其它按从属非法人规则搜索。
     pub f_institution: Option<String>,
     /// 非法人的落位省/市,用于地域预过滤(规则同 subjects/uninorg::parent_locality_rule)。
-    pub province: Option<String>,
-    pub city: Option<String>,
+    pub province_name: Option<String>,
+    pub city_name: Option<String>,
     /// 限定父级属性:S=仅私法人(私权入口) / G=仅公法人(公权入口);不传=两者(详情页改挂)。
     pub parent_property: Option<String>,
 }
@@ -426,20 +428,24 @@ pub(crate) async fn search_parent_institutions(
     }
     let f_is_branch_school = query.f_institution.as_deref().map(str::trim) == Some("JY");
     let province = query
-        .province
+        .province_name
         .as_deref()
         .map(str::trim)
         .unwrap_or("")
         .to_string();
     let city = query
-        .city
+        .city_name
         .as_deref()
         .map(str::trim)
         .unwrap_or("")
         .to_string();
     if province.is_empty() || city.is_empty() {
         // 地域预过滤依赖非法人落位省市;缺参直接拒绝,不退化成全国搜索
-        return api_error(StatusCode::BAD_REQUEST, 1001, "province/city are required");
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "province_name/city_name are required",
+        );
     }
     let parent_property = match query.parent_property.as_deref().map(str::trim) {
         None | Some("") => None,
@@ -461,7 +467,7 @@ pub(crate) async fn search_parent_institutions(
                   s.education_type IS NULL
                   OR s.education_type IN ('EARLY_SCHOOL', 'PRIMARY_SCHOOL', 'SECONDARY_SCHOOL', 'UNIVERSITY')
              )
-             AND s.province = $2 AND s.city = $3"
+             AND s.province_name = $2 AND s.city_name = $3"
         } else {
             "NOT (s.institution_code = 'JY' AND s.org_code IS NULL)
              AND (
@@ -472,17 +478,17 @@ pub(crate) async fn search_parent_institutions(
                             split_part(COALESCE(s.org_code, ''), '_', 1)
                                 IN ('NATIONAL', 'MINISTRY', 'FEDERAL')
                             OR (split_part(COALESCE(s.org_code, ''), '_', 1) = 'PROVINCE'
-                                AND s.province = $2)
+                                AND s.province_name = $2)
                             OR (split_part(COALESCE(s.org_code, ''), '_', 1)
                                     NOT IN ('NATIONAL', 'MINISTRY', 'FEDERAL', 'PROVINCE')
-                                AND s.province = $2 AND s.city = $3)
+                                AND s.province_name = $2 AND s.city_name = $3)
                        )
                   )
              )"
         };
         let sql = format!(
             "SELECT s.sfid_number, s.name, s.subject_property, s.private_type, s.partnership_kind, s.category,
-                    s.p1, s.province, s.city, COALESCE(s.town, '')
+                    s.p1, s.province_name, s.city_name, COALESCE(s.town_name, '')
              FROM subjects s
              WHERE s.kind IN ('PUBLIC', 'PRIVATE')
                AND s.status = 'ACTIVE'
@@ -508,15 +514,15 @@ pub(crate) async fn search_parent_institutions(
             };
             output.push(ParentInstitutionRow {
                 sfid_number: row.get(0),
-                institution_name: row.get(1),
+                sfid_full_name: row.get(1),
                 subject_property: row.get(2),
                 private_type: row.get(3),
                 partnership_kind: row.get(4),
                 category,
                 p1: row.get(6),
-                province: row.get(7),
-                city: row.get(8),
-                town: row.get(9),
+                province_name: row.get(7),
+                city_name: row.get(8),
+                town_name: row.get(9),
             });
         }
         Ok(output)
@@ -555,7 +561,7 @@ pub(crate) async fn get_institution(
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
     let scope = get_visible_scope(&ctx);
-    if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
+    if !scope.includes_province(&inst.province_name) || !scope.includes_city(&inst.city_name) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
     let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);

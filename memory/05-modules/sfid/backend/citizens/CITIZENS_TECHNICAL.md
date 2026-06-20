@@ -73,8 +73,8 @@
 - 管理员端公民查询不默认返回任何全量列表；必须输入档案号、身份ID、投票账户地址或投票账户公钥，后端返回 `{ items, page_size, next_cursor, has_more }`。
 - SFID 公民模块不保存公民姓名，任何公民检索都不得按姓名匹配。
 - `citizens` 是管理员浏览器查询用分区表；绑定完成和 CPMS 年度报告导入后同步写入，`archive_no / sfid_number / wallet_pubkey` 三者一对一由公民绑定流程强制。
-- 公民创建/绑定时必须写入 `p_code / c_code`;该归属来自 CPMS 安装授权分区,不是来自执行创建的管理员，也不是公民出生地。
-- 公民创建/绑定时必须另写 `residence_p_code / residence_c_code / residence_t_code / birth_p_code / birth_c_code / birth_t_code / election_scope_level`；这些字段来自 ARCHIVE 的加密 `geo_seal`。投票范围按居住地判断，参选范围按出生地判断，业务模块只提供字段给投票引擎，不自行实现投票流程。
+- 公民创建/绑定时必须写入 `province_code / city_code`;该归属来自 CPMS 安装授权分区,不是来自执行创建的管理员，也不是公民出生地。
+- 公民创建/绑定时必须另写 `residence_province_code / residence_city_code / residence_town_code / birth_province_code / birth_city_code / birth_town_code / election_scope_level`；这些字段来自 ARCHIVE 的加密 `geo_seal`。投票范围按居住地判断，参选范围按出生地判断，业务模块只提供字段给投票引擎，不自行实现投票流程。
 - SFID 管理端公民详情只展示 `投票范围` 和 `参选范围`：投票范围 = 全国 + 居住省 + 按 `election_scope_level` 展开的居住市/镇；参选范围 = 全国 + 出生省 + 按 `election_scope_level` 展开的出生市/镇；不得展示 `residence_*` 或 `birth_*` 代码字段。
 - `election_scope_level=PROVINCE` 时市镇字段为空；`CITY` 时市有值、镇为空；`TOWN` 时市镇都有值。业务模块不得据此自行实现投票流程，只能把字段提供给投票引擎使用。
 - 法定代表人候选搜索是机构创建/编辑的辅助查询,按 `subjects` 模块推导出的目标机构 scope 查询正常状态公民:

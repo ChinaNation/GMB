@@ -15,7 +15,7 @@ InstitutionInfo _institution(
     name: name,
     sfidNumber: sfidNumber,
     orgType: orgType,
-    duoqianAddress: hexSeed.toRadixString(16).padLeft(64, '0'),
+    duoqianAccount: hexSeed.toRadixString(16).padLeft(64, '0'),
   );
 }
 

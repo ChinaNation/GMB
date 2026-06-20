@@ -11,7 +11,7 @@
 ## §九:公权机构目录 catalog(下一步建界面时落地)
 公权机构界面"还没做,下一步再做";本项随界面开发落地,先约定契约。
 - [ ] 公权机构目录 = SFID 后端 catalog 接口(分页 + 搜索)+ Isar/TTL(catalog 1d)。**轻节点不扫链**。
-- [ ] 点进详情:用已知 sfid_number **本地派生**主/费地址(`governance/shared/account_derivation.dart`)+ 精确整键读余额/状态;自定义账户清单由 catalog 带出,**不碰 `SfidRegisteredAddress` 长前缀**。
+- [ ] 点进详情:用已知 sfid_number **本地派生**主/费地址(`governance/shared/account_derivation.dart`)+ 精确整键读余额/状态;自定义账户清单由 catalog 带出,**不碰 `SfidRegisteredAccount` 长前缀**。
 - [ ] catalog 接口若后端未就绪:先与 SFID 后端约定 OpenAPI 契约(分页游标 + 省/类型筛选 + 机构基础字段),客户端先行接 mock。
 
 ## 验收

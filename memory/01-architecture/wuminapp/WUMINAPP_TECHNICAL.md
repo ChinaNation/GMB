@@ -525,7 +525,7 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 ### 7.2 区块链字段与格式标准（总则）
 
 - 链上账户：runtime 内部是 `AccountId32` / `[u8; 32]`，extrinsic call data 写入原始 32 字节。
-- App 内部账户标识：`mainAddress` / `duoqianAddress` / `pubkeyHex` 等字段统一使用 64 位 hex，不带 `0x`。
+- App 内部账户标识：`mainAccount` / `duoqianAccount` / `pubkeyHex` 等字段统一使用 64 位 hex，不带 `0x`。
 - 用户展示和输入：地址统一显示、扫码和输入为 SS58 字符串（当前链 `ss58 = 2027`）。
 - 通讯录联系人地址归属用户展示 / 输入边界，必须保存 SS58；不得把通讯录地址当成内部 `AccountId` hex 转换。
 - RPC/JSON 边界：仅在具体接口要求时临时添加 `0x`，不得把内部 hex 当 SS58 传给 `decodeAddress`。

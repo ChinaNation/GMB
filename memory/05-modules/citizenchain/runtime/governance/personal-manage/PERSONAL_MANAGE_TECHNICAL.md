@@ -76,7 +76,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 `CreateDuoqianAction` 当前字段：
 
 ```text
-duoqian_address: AccountId
+duoqian_account: AccountId
 proposer: AccountId
 amount: Balance
 fee: Balance
@@ -91,7 +91,7 @@ fee: Balance
 ## 派生公式
 
 ```
-personal_duoqian_address = Blake2b_256(
+personal_duoqian_account = Blake2b_256(
     DUOQIAN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || account_name_utf8
 )
 ```
@@ -117,7 +117,7 @@ account_id = core_const::account_id_from_account(personal_address)
 | 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(SfidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
 | MODULE_TAG | `b"per-mgmt"` | `b"org-mgmt"` |
 | pallet_index | 7 | 17 |
-| 客户端 dispatch | `PersonalDuoqians.has(addr)` 命中走此 pallet | `AddressRegisteredSfid.has(addr)` 命中走 organization-manage |
+| 客户端 dispatch | `PersonalDuoqians.has(addr)` 命中走此 pallet | `AccountRegisteredSfid.has(addr)` 命中走 organization-manage |
 
 ## 客户端协议
 

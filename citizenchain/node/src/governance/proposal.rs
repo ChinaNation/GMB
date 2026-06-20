@@ -14,7 +14,7 @@ const TAG_ORGANIZATION_MANAGE: &[u8] = b"org-mgmt";
 fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
     let entry = super::registry::find_institution(sfid_number)
         .ok_or_else(|| format!("未知的治理机构 sfidNumber: {sfid_number}"))?;
-    let clean = entry.main_address_hex();
+    let clean = entry.main_account_hex();
     let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
     bytes
         .try_into()
@@ -97,7 +97,7 @@ pub struct ProposalFullInfo {
     pub joint_tally: Option<JointVoteTally>,
     pub referendum_tally: Option<ReferendumVoteTally>,
     /// 关联机构名称（通过 institutionBytes 反查）。
-    pub institution_name: Option<String>,
+    pub sfid_full_name: Option<String>,
 }
 
 /// 费率提案详情。
@@ -149,7 +149,7 @@ pub struct ProposalListItem {
     pub stage_label: String,
     pub status: u8,
     pub status_label: String,
-    pub institution_name: Option<String>,
+    pub sfid_full_name: Option<String>,
     /// 简要描述（转账提案：金额+备注，升级提案：reason 前 50 字）。
     pub summary: String,
 }
@@ -260,7 +260,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
+                let sfid_full_name = resolve_sfid_full_name(meta.institution_hex.as_deref());
                 // 双层 ID v1:展示号从 ProposalDisplayId 反查;查不到 fallback `#id`
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
 
@@ -273,7 +273,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     stage_label: stage_label(meta.stage).to_string(),
                     status: display.status,
                     status_label: display.status_label,
-                    institution_name,
+                    sfid_full_name,
                     summary: display.summary,
                 });
             }
@@ -339,7 +339,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         None
     };
 
-    let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
+    let sfid_full_name = resolve_sfid_full_name(meta.institution_hex.as_deref());
 
     Ok(ProposalFullInfo {
         meta,
@@ -351,7 +351,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         internal_tally,
         joint_tally,
         referendum_tally,
-        institution_name,
+        sfid_full_name,
     })
 }
 
@@ -454,7 +454,7 @@ pub fn fetch_institution_proposal_page(
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
+                let sfid_full_name = resolve_sfid_full_name(meta.institution_hex.as_deref());
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
                 items.push(ProposalListItem {
                     proposal_id: id,
@@ -465,7 +465,7 @@ pub fn fetch_institution_proposal_page(
                     stage_label: stage_label(meta.stage).to_string(),
                     status: display.status,
                     status_label: display.status_label,
-                    institution_name,
+                    sfid_full_name,
                     summary: display.summary,
                 });
             }
@@ -1008,13 +1008,13 @@ fn status_label(status: u8) -> &'static str {
 }
 
 /// 从机构多签 AccountId32 hex 反查机构名称。
-fn resolve_institution_name(institution_hex: Option<&str>) -> Option<String> {
+fn resolve_sfid_full_name(institution_hex: Option<&str>) -> Option<String> {
     let hex_str = institution_hex?;
     let bytes = hex::decode(hex_str).ok()?;
     if bytes.len() != 32 {
         return None;
     }
-    super::registry::find_institution_by_main_address(&bytes).map(|item| item.name().to_string())
+    super::registry::find_institution_by_main_account(&bytes).map(|item| item.name().to_string())
 }
 
 /// 列表卡片展示信息:一次解析,按动作变体生成 summary + votingengine status。
@@ -1028,7 +1028,7 @@ fn fetch_proposal_display(
     let (summary, status, status_label_s) = match action {
         ProposalAction::Business(action) => (
             proposal_business::format_summary(&action, |institution_hex| {
-                resolve_institution_name(Some(institution_hex))
+                resolve_sfid_full_name(Some(institution_hex))
             }),
             meta.status,
             status_label(meta.status).to_string(),
@@ -1097,8 +1097,8 @@ fn format_issuance_summary(d: &ResolutionIssuanceDetail) -> String {
 
 fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
     let amount: u128 = d.amount_fen.parse().unwrap_or(0);
-    let inst_name = resolve_institution_name(Some(&d.institution_hex))
-        .unwrap_or_else(|| "未知机构".to_string());
+    let inst_name =
+        resolve_sfid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
     format!(
         "决议销毁 {} 元：{inst_name}",
         signing::format_amount(amount as f64 / 100.0)
@@ -1107,8 +1107,8 @@ fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
 
 fn format_fee_rate_summary(d: &FeeRateProposalDetail) -> String {
     let rate_percent = format!("{:.2}%", d.new_rate_bp as f64 / 100.0);
-    let inst_name = resolve_institution_name(Some(&d.institution_hex))
-        .unwrap_or_else(|| "未知机构".to_string());
+    let inst_name =
+        resolve_sfid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
     format!("费率设置 {rate_percent}：{inst_name}")
 }
 

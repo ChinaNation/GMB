@@ -61,9 +61,9 @@ fn encode_sfid_key_data(sfid_number: &str) -> Result<Vec<u8>, String> {
 /// - `AccountName = BoundedVec<u8, ConstU32<128>>`
 #[derive(Decode, Encode)]
 struct OnChainInstitution {
-    institution_name: BoundedVec<u8, ConstU32<128>>,
-    main_address: AccountId32,
-    fee_address: AccountId32,
+    sfid_full_name: BoundedVec<u8, ConstU32<128>>,
+    main_account: AccountId32,
+    fee_account: AccountId32,
     admin_org: u8,
     admin_count: u32,
     threshold: u32,
@@ -203,8 +203,8 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     let accounts = fetch_institution_accounts(sfid_number, &inst, &finalized_hash)?;
 
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
-    let main_addr_bytes: [u8; 32] = inst.main_address.clone().into();
-    let fee_addr_bytes: [u8; 32] = inst.fee_address.clone().into();
+    let main_addr_bytes: [u8; 32] = inst.main_account.clone().into();
+    let fee_addr_bytes: [u8; 32] = inst.fee_account.clone().into();
     let admin_account_id = main_addr_bytes;
     let main_addr_ss58 = pubkey_to_ss58(&main_addr_bytes).unwrap_or_default();
     let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
@@ -222,8 +222,8 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     }
     let main_account = main_account.unwrap_or_else(|| {
         // 容错:如果 InstitutionAccounts 没显式列主账户(理论上不应该),
-        // 就直接用 Institutions.main_address 拉余额拼一条最小记录。
-        let bal = fetch_account_free_balance(&inst.main_address, &finalized_hash).unwrap_or(0);
+        // 就直接用 Institutions.main_account 拉余额拼一条最小记录。
+        let bal = fetch_account_free_balance(&inst.main_account, &finalized_hash).unwrap_or(0);
         AccountWithBalance {
             account_name: "主账户".to_string(),
             address_ss58: pubkey_to_ss58(&main_addr_bytes).unwrap_or_default(),
@@ -233,7 +233,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         }
     });
     let fee_account = fee_account.unwrap_or_else(|| {
-        let bal = fetch_account_free_balance(&inst.fee_address, &finalized_hash).unwrap_or(0);
+        let bal = fetch_account_free_balance(&inst.fee_account, &finalized_hash).unwrap_or(0);
         AccountWithBalance {
             account_name: "费用账户".to_string(),
             address_ss58: pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default(),
@@ -269,12 +269,12 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     let creator_bytes: [u8; 32] = inst.creator.clone().into();
     let creator_ss58 = pubkey_to_ss58(&creator_bytes).unwrap_or_default();
 
-    let institution_name = String::from_utf8(inst.institution_name.into_inner())
-        .map_err(|_| "institution_name 非 UTF-8".to_string())?;
+    let sfid_full_name = String::from_utf8(inst.sfid_full_name.into_inner())
+        .map_err(|_| "sfid_full_name 非 UTF-8".to_string())?;
 
     Ok(Some(InstitutionDetail {
         sfid_number: sfid_number.to_string(),
-        institution_name,
+        sfid_full_name,
         admin_account_hex: hex::encode(admin_account_id),
         admin_org: inst.admin_org,
         main_account,

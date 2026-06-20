@@ -32,27 +32,27 @@ export const organizationManageApi = {
   buildProposeCreateInstitutionRequest: (params: {
     pubkeyHex: string;
     sfidNumber: string;
-    institutionName: string;
+    sfidFullName: string;
     accounts: InitialAccountInputDto[];
     adminOrg: number;
     adminPubkeys: string[];
     threshold: number;
     registerNonce: string;
     signatureHex: string;
-    signingProvince: string;
+    signingProvinceName: string;
     signerAdminPubkey: string;
   }) =>
     invoke<VoteSignRequestResult>('build_propose_create_institution_request', {
       pubkeyHex: params.pubkeyHex,
       sfidNumber: params.sfidNumber,
-      institutionName: params.institutionName,
+      sfidFullName: params.sfidFullName,
       accounts: params.accounts,
       adminOrg: params.adminOrg,
       adminPubkeys: params.adminPubkeys,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
-      signingProvince: params.signingProvince,
+      signingProvinceName: params.signingProvinceName,
       signerAdminPubkey: params.signerAdminPubkey,
     }),
 
@@ -61,14 +61,14 @@ export const organizationManageApi = {
     expectedPubkeyHex: string;
     expectedPayloadHash: string;
     sfidNumber: string;
-    institutionName: string;
+    sfidFullName: string;
     accounts: InitialAccountInputDto[];
     adminOrg: number;
     adminPubkeys: string[];
     threshold: number;
     registerNonce: string;
     signatureHex: string;
-    signingProvince: string;
+    signingProvinceName: string;
     signerAdminPubkey: string;
     signNonce: number;
     signBlockNumber: number;
@@ -79,14 +79,14 @@ export const organizationManageApi = {
       expectedPubkeyHex: params.expectedPubkeyHex,
       expectedPayloadHash: params.expectedPayloadHash,
       sfidNumber: params.sfidNumber,
-      institutionName: params.institutionName,
+      sfidFullName: params.sfidFullName,
       accounts: params.accounts,
       adminOrg: params.adminOrg,
       adminPubkeys: params.adminPubkeys,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
-      signingProvince: params.signingProvince,
+      signingProvinceName: params.signingProvinceName,
       signerAdminPubkey: params.signerAdminPubkey,
       signNonce: params.signNonce,
       signBlockNumber: params.signBlockNumber,

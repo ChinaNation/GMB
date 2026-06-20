@@ -232,9 +232,9 @@ class _PublicPageState extends State<PublicPage> {
       itemBuilder: (context, i) {
         final inst = _subscribed[i];
         return _InstitutionTile(
-          title: inst.shortName?.isNotEmpty == true
-              ? inst.shortName!
-              : inst.institutionName,
+          title: inst.sfidShortName?.isNotEmpty == true
+              ? inst.sfidShortName!
+              : inst.sfidFullName,
           // 预 join 的所属地(省名·市名),字典缺失回退 code(repo 已兜底)。
           subtitle: _subscribedArea[inst.sfidNumber] ?? '',
           onTap: () => _openDetail(inst.sfidNumber),

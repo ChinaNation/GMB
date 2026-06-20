@@ -1,10 +1,10 @@
 //! 机构/账户两层数据模型
 //!
-//! 中文注释:链端 `SfidRegisteredAddress::<T>(sfid_number, name) → duoqian_address`
-//! 是 DoubleMap,一个 sfid_number 下可挂多个 name,每个 name 派生独立多签地址。
+//! 中文注释:链端 `SfidRegisteredAccount::<T>(sfid_number, name) → duoqian_account`
+//! 是 DoubleMap,一个 sfid_number 下可挂多个 name,每个 name 派生独立多签账户。
 //! sfid 系统这里对应拆两层:
 //!
-//! - `Institution`:每个 sfid_number 唯一,存机构展示信息(institution_name 等),
+//! - `Institution`:每个 sfid_number 唯一,存机构展示信息(sfid_full_name 等),
 //!   **不**进链。
 //! - `InstitutionAccount`:以 `(sfid_number, account_name)` 为复合 key,account_name 是
 //!   **进链的 name**,一个机构下可挂多个。
@@ -73,20 +73,12 @@ impl Default for MultisigChainStatus {
 pub struct Institution {
     /// SFID 号,参与链上派生。
     pub sfid_number: String,
-    /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
-    ///
-    /// 机构创建时写入名称:
-    ///   - 六类私权机构由对应 Tab 创建,名称与法定代表人资料同步写入
-    ///   - `JY` 手动新增学校机构必传
-    ///   - 自动公权机构/公安局由系统生成名称,不会为 `None`
+    /// 机构全称。列表可用简称优先展示,详情页同时展示全称和简称。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub institution_name: Option<String>,
-    /// 机构全称。列表只显示 `institution_name`,详情页显示全称和简称。
+    pub sfid_full_name: Option<String>,
+    /// 机构简称。确定性公权机构必须写入规范简称,不得重复写全称。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sfid_name: Option<String>,
-    /// 机构简称。确定性公权机构默认把简称写入 `institution_name` 作为列表名称。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub short_name: Option<String>,
+    pub sfid_short_name: Option<String>,
     /// 主体业务状态。机构列表和详情只展示 ACTIVE / REVOKED,不把链上状态混成业务状态。
     #[serde(default = "default_subject_status")]
     pub status: String,
@@ -96,13 +88,13 @@ pub struct Institution {
     pub subject_property: String,
     /// 盈利属性("0"/"1")。
     pub p1: String,
-    /// 所属省(名称,如"安徽省")。
-    pub province: String,
-    /// 所属市(名称,如"合肥市")。
-    pub city: String,
-    /// 所属镇(名称)。非镇目录机构为空。
+    /// 所属省名称(如"安徽省")。
+    pub province_name: String,
+    /// 所属市名称(如"合肥市")。
+    pub city_name: String,
+    /// 所属镇名称。非镇目录机构为空。
     #[serde(default)]
-    pub town: String,
+    pub town_name: String,
     /// 所属省代码(r5 前 2 字符)。
     pub province_code: String,
     /// 所属市代码(r5 后 3 字符)。任务卡 6 新增:
@@ -160,10 +152,10 @@ pub struct Institution {
 
 impl HasProvinceCity for Institution {
     fn province(&self) -> &str {
-        &self.province
+        &self.province_name
     }
     fn city(&self) -> &str {
-        &self.city
+        &self.city_name
     }
 }
 
@@ -174,8 +166,8 @@ pub struct InstitutionAccount {
     pub sfid_number: String,
     /// 账户名称,**进链的 name 字段**。同 sfid_number 下必须唯一。
     pub account_name: String,
-    /// 链上派生的多签地址(hex, 不含 0x 前缀)。上链成功后填入。
-    pub duoqian_address: Option<String>,
+    /// 链上派生的多签账户(hex, 不含 0x 前缀)。上链成功后填入。
+    pub duoqian_account: Option<String>,
     /// 链上状态。
     #[serde(default)]
     pub chain_status: MultisigChainStatus,
@@ -234,20 +226,19 @@ pub const VALID_DOC_TYPES: &[&str] =
 pub struct CreateInstitutionInput {
     pub subject_property: String,
     pub p1: Option<String>,
-    pub province: Option<String>,
-    pub city: String,
+    pub province_name: Option<String>,
+    pub city_name: String,
     pub institution: String,
     /// 教育机构业务分类。仅 `institution=JY` 的教育入口使用,不参与 SFID 号生成。
     #[serde(default)]
     pub education_type: Option<String>,
     /// 机构名称。目标态私权、公权和教育新增都应在创建阶段写入名称。
-    pub institution_name: Option<String>,
+    pub sfid_full_name: Option<String>,
     /// 所属法人身份ID。仅需要挂靠的非法人(F)使用;个体经营和无限合伙是独立非法人,
     /// 不接受所属法人。
     #[serde(default)]
     pub parent_sfid_number: Option<String>,
-    pub sfid_name: Option<String>,
-    pub short_name: Option<String>,
+    pub sfid_short_name: Option<String>,
     /// 私权机构类型。私权入口创建时必传,由后端锁定主体属性和机构码。
     #[serde(default)]
     pub private_type: Option<String>,
@@ -275,18 +266,17 @@ pub struct CreateInstitutionInput {
 pub struct CreateInstitutionOutput {
     pub sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub institution_name: Option<String>,
+    pub sfid_full_name: Option<String>,
     pub category: InstitutionCategory,
 }
 
 /// 机构详情页提交的可编辑字段。私权类型由身份 ID 机构码决定,创建后不允许改。
 #[derive(Debug, Deserialize)]
 pub struct UpdateInstitutionInput {
-    pub institution_name: Option<String>,
     #[serde(default)]
-    pub sfid_name: Option<String>,
+    pub sfid_full_name: Option<String>,
     #[serde(default)]
-    pub short_name: Option<String>,
+    pub sfid_short_name: Option<String>,
     /// 所属法人 sfid_number(仅 F 可设置;S/G 传值会被拒)
     #[serde(default)]
     pub parent_sfid_number: Option<String>,
@@ -326,7 +316,7 @@ pub struct CreateAccountOutput {
     pub chain_synced_at: Option<DateTime<Utc>>,
     pub chain_tx_hash: Option<String>,
     pub chain_block_number: Option<u64>,
-    pub duoqian_address: Option<String>,
+    pub duoqian_account: Option<String>,
 }
 
 /// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
@@ -368,19 +358,17 @@ impl InstitutionListFilter {
 pub struct InstitutionListRow {
     pub sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub institution_name: Option<String>,
+    pub sfid_full_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sfid_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub short_name: Option<String>,
+    pub sfid_short_name: Option<String>,
     pub status: String,
     pub category: InstitutionCategory,
     pub subject_property: String,
     pub p1: String,
-    pub province: String,
-    pub city: String,
+    pub province_name: String,
+    pub city_name: String,
     #[serde(default)]
-    pub town: String,
+    pub town_name: String,
     pub institution_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub org_code: Option<String>,
@@ -415,7 +403,7 @@ pub struct InstitutionListRow {
 #[derive(Debug, Serialize)]
 pub struct ParentInstitutionRow {
     pub sfid_number: String,
-    pub institution_name: String,
+    pub sfid_full_name: String,
     pub subject_property: String,
     /// 私权机构类型。前端只用于展示父级机构事实,不派生链上业务角色。
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -426,10 +414,10 @@ pub struct ParentInstitutionRow {
     /// 盈利属性。非法人创建时前端按"盈利属性附属于所属法人"用它推导 F 的 p1
     /// (公法人父级恒 0;私法人父级继承该值),后端 `uninorg::inherited_p1` 复核。
     pub p1: String,
-    pub province: String,
-    pub city: String,
+    pub province_name: String,
+    pub city_name: String,
     #[serde(default)]
-    pub town: String,
+    pub town_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -449,7 +437,7 @@ pub struct ChainSyncAccountInput {
     pub account_name: String,
     pub chain_status: MultisigChainStatus,
     #[serde(default)]
-    pub duoqian_address: Option<String>,
+    pub duoqian_account: Option<String>,
     #[serde(default)]
     pub chain_tx_hash: Option<String>,
     #[serde(default)]

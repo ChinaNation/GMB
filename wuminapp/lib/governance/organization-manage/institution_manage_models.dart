@@ -3,12 +3,12 @@ import 'dart:typed_data';
 /// OrganizationManage 关闭机构多签账户提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`org-mgmt` + ACTION_CLOSE = 2 前缀之后）：
-///   duoqian_address: AccountId32(32) + beneficiary: AccountId32(32)
+///   duoqian_account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)
 class CloseDuoqianProposalInfo {
   const CloseDuoqianProposalInfo({
     required this.proposalId,
-    required this.duoqianAddress,
+    required this.duoqianAccount,
     required this.beneficiary,
     required this.proposer,
     this.status,
@@ -16,8 +16,8 @@ class CloseDuoqianProposalInfo {
 
   final int proposalId;
 
-  /// 多签地址公钥 hex（32 字节，不含 0x 前缀）。
-  final String duoqianAddress;
+  /// 多签账户公钥 hex（32 字节，不含 0x 前缀）。
+  final String duoqianAccount;
 
   /// 受益人 SS58 地址。
   final String beneficiary;
@@ -30,14 +30,14 @@ class CloseDuoqianProposalInfo {
 
   /// 机构多签 AccountId32。
   Uint8List get institutionBytes {
-    final addrBytes = _hexDecode(duoqianAddress);
+    final addrBytes = _hexDecode(duoqianAccount);
     return Uint8List.fromList(addrBytes);
   }
 
   CloseDuoqianProposalInfo copyWithStatus(int? newStatus) {
     return CloseDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       beneficiary: beneficiary,
       proposer: proposer,
       status: newStatus,

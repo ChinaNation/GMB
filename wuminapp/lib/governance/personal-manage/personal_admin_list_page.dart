@@ -109,7 +109,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       }
 
       final pid = await _lookup.findActiveCreate(
-        widget.institution.duoqianAddress,
+        widget.institution.duoqianAccount,
       );
 
       // 仅查本钱包持有的 admin 投票状态(其他人投票状态对 UI 无意义,节省 RPC)。

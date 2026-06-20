@@ -48,8 +48,8 @@ export const EducationListTable: React.FC<Props> = ({
     let cancelled = false;
     if (!hasImmediateRows) setDirectLoading(true);
     listEducationInstitutions(auth, {
-      province,
-      city: city || undefined,
+      province_name: province,
+      city_name: city || undefined,
       page_size: 50,
     })
       .then((data) => {
@@ -79,8 +79,8 @@ export const EducationListTable: React.FC<Props> = ({
     let cancelled = false;
     setSearchLoading(true);
     listEducationInstitutions(auth, {
-      province,
-      city: city || undefined,
+      province_name: province,
+      city_name: city || undefined,
       q: exactQuery,
       cursor,
       page_size: 50,
@@ -151,7 +151,7 @@ export const EducationListTable: React.FC<Props> = ({
       { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
       {
         title: '机构名称',
-        dataIndex: 'institution_name',
+        dataIndex: 'sfid_full_name',
         width: 180,
         align: 'center',
         render: (v: string | null) =>
@@ -181,7 +181,7 @@ export const EducationListTable: React.FC<Props> = ({
           </span>
         ),
       },
-      { title: '省/市', render: (_v, r) => `${r.province}/${r.city}`, width: 160, align: 'center' },
+      { title: '省/市', render: (_v, r) => `${r.province_name}/${r.city_name}`, width: 160, align: 'center' },
       { title: '账户数', dataIndex: 'account_count', width: 90, align: 'center' },
     ],
     [cursorStack.length],

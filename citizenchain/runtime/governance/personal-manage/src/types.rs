@@ -58,7 +58,7 @@ pub struct DuoqianAccount<AccountId, AccountName, BlockNumber> {
 /// 不能用当前 runtime 的 fee 公式重新计算。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CreateDuoqianAction<AccountId, Balance> {
-    pub duoqian_address: AccountId,
+    pub duoqian_account: AccountId,
     pub proposer: AccountId,
     pub amount: Balance,
     pub fee: Balance,
@@ -67,7 +67,7 @@ pub struct CreateDuoqianAction<AccountId, Balance> {
 /// 关闭多签账户提案的业务数据
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CloseDuoqianAction<AccountId> {
-    pub duoqian_address: AccountId,
+    pub duoqian_account: AccountId,
     pub beneficiary: AccountId,
     pub proposer: AccountId,
 }

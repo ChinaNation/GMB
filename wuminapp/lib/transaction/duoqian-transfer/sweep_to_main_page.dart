@@ -19,7 +19,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 治理机构手续费划转提案创建页面。
 ///
-/// 中文注释：source 锁定为机构 `feeAddress`,destination 固定为机构 `mainAddress`,
+/// 中文注释：source 锁定为机构 `feeAccount`,destination 固定为机构 `mainAccount`,
 /// 链端调用 `propose_sweep_to_main (call_index=2)`,无 beneficiary/remark 入参。
 class SweepToMainPage extends StatefulWidget {
   const SweepToMainPage({
@@ -51,8 +51,8 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
-  late final String _feeAddressHex;
-  late final String _mainAddressHex;
+  late final String _feeAccountHex;
+  late final String _mainAccountHex;
   late final String _fromSs58;
   late final String _toSs58;
   late WalletProfile _selectedWallet;
@@ -61,14 +61,14 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    final feeHex = widget.institution.accounts?.feeAddress;
+    final feeHex = widget.institution.accounts?.feeAccount;
     if (feeHex == null) {
-      throw StateError('治理机构 InstitutionAccounts.feeAddress 为空,无法发起手续费划转');
+      throw StateError('治理机构 InstitutionAccounts.feeAccount 为空,无法发起手续费划转');
     }
-    _feeAddressHex = feeHex;
-    _mainAddressHex = widget.institution.mainAddress;
-    _fromSs58 = _accountHexToSs58(_feeAddressHex);
-    _toSs58 = _accountHexToSs58(_mainAddressHex);
+    _feeAccountHex = feeHex;
+    _mainAccountHex = widget.institution.mainAccount;
+    _fromSs58 = _accountHexToSs58(_feeAccountHex);
+    _toSs58 = _accountHexToSs58(_mainAccountHex);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -86,7 +86,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(_feeAddressHex);
+    final local = await store.read(_feeAccountHex);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -95,10 +95,10 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance = await ChainRpc().fetchFinalizedBalance(_feeAddressHex);
+      final balance = await ChainRpc().fetchFinalizedBalance(_feeAccountHex);
       try {
         await store.put(
-          accountHex: _feeAddressHex,
+          accountHex: _feeAccountHex,
           balanceYuan: balance,
         );
       } catch (_) {

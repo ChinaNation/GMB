@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 
-/// `OrganizationManage::AddressRegisteredSfid` 反查结果。
+/// `OrganizationManage::AccountRegisteredSfid` 反查结果。
 class RegisteredInstitutionRef {
   const RegisteredInstitutionRef({
     required this.sfidNumber,
@@ -74,11 +74,11 @@ class DuoqianStorageCodec {
     );
   }
 
-  static Uint8List addressRegisteredSfidKey(String duoqianAddressHex) {
+  static Uint8List accountRegisteredSfidKey(String duoqianAccountHex) {
     return storageMapKey(
       'OrganizationManage',
-      'AddressRegisteredSfid',
-      hexDecode(duoqianAddressHex),
+      'AccountRegisteredSfid',
+      hexDecode(duoqianAccountHex),
     );
   }
 
@@ -186,8 +186,8 @@ class DuoqianStorageCodec {
     if (name == null) return null;
     offset = name.nextOffset;
     if (offset + 32 + 32 + 1 + 4 + 4 > data.length) return null;
-    offset += 32; // main_address
-    offset += 32; // fee_address
+    offset += 32; // main_account
+    offset += 32; // fee_account
     offset += 1; // admin_org
     final adminCount = readU32Le(data, offset);
     offset += 4;

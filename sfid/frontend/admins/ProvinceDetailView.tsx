@@ -187,11 +187,11 @@ const CITY_REGISTRY_PAGE_SIZE = 20;
 
 function areaText(row: InstitutionListRow | null, province: string, city: string) {
   if (!row) return [province, city].filter(Boolean).join('/') || '-';
-  return [row.province, row.city, row.town].filter(Boolean).join('/') || '-';
+  return [row.province_name, row.city_name, row.town_name].filter(Boolean).join('/') || '-';
 }
 
 function nameText(row: InstitutionListRow | null, city: string) {
-  return row?.institution_name || row?.short_name || row?.sfid_name || `${city}注册局`;
+  return row?.sfid_full_name || row?.sfid_short_name || `${city}注册局`;
 }
 
 function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmins, cityAdminsLoading, onSelectCity }: {
@@ -215,7 +215,7 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
     }
     let cancelled = false;
     setRegistryLoading(true);
-    listOfficialInstitutions(auth, { province, org_code: 'CITY_REGISTRY', page_size: 300 })
+    listOfficialInstitutions(auth, { province_name: province, org_code: 'CITY_REGISTRY', page_size: 300 })
       .then((res) => {
         if (!cancelled) {
           setRegistryRows(res.items);
@@ -238,7 +238,7 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
 
   const rows = useMemo(() => {
     return cities.map((city) => {
-      const registry = registryRows.find((row) => row.city === city.name) ?? null;
+      const registry = registryRows.find((row) => row.city_name === city.name) ?? null;
       const adminCount = cityAdmins.filter((admin) => admin.city === city.name).length;
       return { city, registry, adminCount };
     });

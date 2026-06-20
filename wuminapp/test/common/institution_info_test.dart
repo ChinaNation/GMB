@@ -3,11 +3,11 @@ import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
 
 void main() {
-  test('内置机构身份编码为 mainAddress AccountId', () {
-    final mainAddress = 'aa' * 32;
+  test('内置机构身份编码为 mainAccount AccountId', () {
+    final mainAccount = 'aa' * 32;
     final id = institutionIdentityToAccountId(
       'LN001-GCB05-944805165-2026',
-      mainAddress: mainAddress,
+      mainAccount: mainAccount,
     );
 
     expect(id.length, 32);
@@ -21,7 +21,7 @@ void main() {
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0x11));
-    expect(findInstitutionByAccountId(id)?.duoqianAddress, address);
+    expect(findInstitutionByAccountId(id)?.duoqianAccount, address);
   });
 
   test('个人多签身份编码为个人多签 AccountId', () {

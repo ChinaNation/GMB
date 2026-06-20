@@ -209,12 +209,12 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_REN | ORG_PUP | ORG_OTH => {
@@ -235,7 +235,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -245,7 +245,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                 }),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -311,13 +311,13 @@ impl
         eligible_total: u64,
         nonce: &votingengine::pallet::VoteNonceOf<Test>,
         signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        province: &[u8],
+        province_name: &[u8],
         _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         eligible_total > 0
             && !nonce.is_empty()
             && signature.as_slice() == b"snapshot-ok"
-            && !province.is_empty()
+            && !province_name.is_empty()
     }
 }
 
@@ -332,13 +332,13 @@ impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for Test
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province: &[u8],
+        province_name: &[u8],
         _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         if !Self::is_eligible(binding_id, who)
             || signature != b"vote-ok"
             || nonce.is_empty()
-            || province.is_empty()
+            || province_name.is_empty()
         {
             return false;
         }
@@ -475,15 +475,15 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn nrc_pid() -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].main_address)
+    AccountId32::new(CHINA_CB[0].main_account)
 }
 
 fn prc_pid() -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].main_address)
+    AccountId32::new(CHINA_CB[1].main_account)
 }
 
 fn prb_pid() -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].main_address)
+    AccountId32::new(CHINA_CH[0].main_account)
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
@@ -496,7 +496,7 @@ fn all_prc_institutions() -> Vec<(AccountId32, AccountId32)> {
         .skip(1)
         .map(|n| {
             (
-                AccountId32::new(n.main_address),
+                AccountId32::new(n.main_account),
                 AccountId32::new(n.duoqian_admins[0]),
             )
         })
@@ -508,7 +508,7 @@ fn all_prb_institutions() -> Vec<(AccountId32, AccountId32)> {
         .iter()
         .map(|n| {
             (
-                AccountId32::new(n.main_address),
+                AccountId32::new(n.main_account),
                 AccountId32::new(n.duoqian_admins[0]),
             )
         })
@@ -526,7 +526,7 @@ fn prb_admin(index: usize) -> AccountId32 {
 fn institution_admins(institution: AccountId32) -> Vec<AccountId32> {
     CHINA_CB
         .iter()
-        .find(|n| AccountId32::new(n.main_address) == institution)
+        .find(|n| AccountId32::new(n.main_account) == institution)
         .map(|n| {
             n.duoqian_admins
                 .iter()
@@ -537,7 +537,7 @@ fn institution_admins(institution: AccountId32) -> Vec<AccountId32> {
         .or_else(|| {
             CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -556,13 +556,13 @@ fn institution_threshold(institution: AccountId32) -> usize {
     if CHINA_CB
         .iter()
         .skip(1)
-        .any(|n| AccountId32::new(n.main_address) == institution)
+        .any(|n| AccountId32::new(n.main_account) == institution)
     {
         return primitives::count_const::PRC_INTERNAL_THRESHOLD as usize;
     }
     if CHINA_CH
         .iter()
-        .any(|n| AccountId32::new(n.main_address) == institution)
+        .any(|n| AccountId32::new(n.main_account) == institution)
     {
         return primitives::count_const::PRB_INTERNAL_THRESHOLD as usize;
     }
@@ -620,14 +620,14 @@ fn vote_sig_bad() -> votingengine::pallet::VoteSignatureOf<Test> {
     b"bad".to_vec().try_into().expect("signature should fit")
 }
 
-/// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
+/// ADR-008 step3:测试用占位 province_name + signer_admin_pubkey,
 /// `TestPopulationSnapshotVerifier` / `TestSfidEligibility` 仅做空字段非空检验,
 /// 真实 sr25519 验签覆盖留 runtime 层。
 fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
     b"liaoning"
         .to_vec()
         .try_into()
-        .expect("province should fit")
+        .expect("province_name should fit")
 }
 
 fn signer_admin_pubkey_ok() -> [u8; 32] {

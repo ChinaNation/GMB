@@ -310,26 +310,26 @@ class InstitutionDuoqianLocalState {
   static const statusActive = 'active';
   static const statusClosed = 'closed';
 
-  static String statusKey(String duoqianAddressHex) =>
-      'institution_duoqian_status:${_normalizeHex(duoqianAddressHex)}';
+  static String statusKey(String duoqianAccountHex) =>
+      'institution_duoqian_status:${_normalizeHex(duoqianAccountHex)}';
 
-  static String detailKey(String duoqianAddressHex) =>
-      'institution_duoqian_detail:${_normalizeHex(duoqianAddressHex)}';
+  static String detailKey(String duoqianAccountHex) =>
+      'institution_duoqian_detail:${_normalizeHex(duoqianAccountHex)}';
 
   static Future<Map<String, String>> readStatuses(
     Isar isar,
-    Iterable<String> duoqianAddressesHex,
+    Iterable<String> duoqianAccountsHex,
   ) async {
-    final snapshots = await readStatusSnapshots(isar, duoqianAddressesHex);
+    final snapshots = await readStatusSnapshots(isar, duoqianAccountsHex);
     return snapshots.map((key, value) => MapEntry(key, value.status));
   }
 
   static Future<Map<String, DuoqianLocalStatusSnapshot>> readStatusSnapshots(
     Isar isar,
-    Iterable<String> duoqianAddressesHex,
+    Iterable<String> duoqianAccountsHex,
   ) async {
     final result = <String, DuoqianLocalStatusSnapshot>{};
-    for (final address in duoqianAddressesHex) {
+    for (final address in duoqianAccountsHex) {
       final normalized = _normalizeHex(address);
       final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
       final status = entity?.stringValue;
@@ -345,20 +345,20 @@ class InstitutionDuoqianLocalState {
 
   static Future<DuoqianLocalDetailSnapshot?> readDetail(
     Isar isar,
-    String duoqianAddressHex,
+    String duoqianAccountHex,
   ) async {
     final entity =
-        await isar.appKvEntitys.getByKey(detailKey(duoqianAddressHex));
+        await isar.appKvEntitys.getByKey(detailKey(duoqianAccountHex));
     return DuoqianLocalDetailSnapshot.fromJsonString(entity?.stringValue);
   }
 
   /// 写入机构多签详情快照；调用方必须处在 Isar writeTxn 内。
   static Future<void> putDetailInTxn(
     Isar isar,
-    String duoqianAddressHex,
+    String duoqianAccountHex,
     DuoqianLocalDetailSnapshot snapshot,
   ) async {
-    final key = detailKey(duoqianAddressHex);
+    final key = detailKey(duoqianAccountHex);
     final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
     entity
       ..key = key
@@ -372,10 +372,10 @@ class InstitutionDuoqianLocalState {
   /// 写入机构多签本地状态；调用方必须处在 Isar writeTxn 内。
   static Future<void> putStatusInTxn(
     Isar isar,
-    String duoqianAddressHex,
+    String duoqianAccountHex,
     String status,
   ) async {
-    final key = statusKey(duoqianAddressHex);
+    final key = statusKey(duoqianAccountHex);
     final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
     entity
       ..key = key
@@ -387,22 +387,22 @@ class InstitutionDuoqianLocalState {
   /// 删除机构多签本地状态；调用方必须处在 Isar writeTxn 内。
   static Future<void> deleteStatusInTxn(
     Isar isar,
-    String duoqianAddressHex,
+    String duoqianAccountHex,
   ) async {
     await isar.appKvEntitys
         .where()
-        .keyEqualTo(statusKey(duoqianAddressHex))
+        .keyEqualTo(statusKey(duoqianAccountHex))
         .deleteAll();
   }
 
   /// 删除机构多签详情快照；调用方必须处在 Isar writeTxn 内。
   static Future<void> deleteDetailInTxn(
     Isar isar,
-    String duoqianAddressHex,
+    String duoqianAccountHex,
   ) async {
     await isar.appKvEntitys
         .where()
-        .keyEqualTo(detailKey(duoqianAddressHex))
+        .keyEqualTo(detailKey(duoqianAccountHex))
         .deleteAll();
   }
 
@@ -429,9 +429,9 @@ class InstitutionDuoqianLocalState {
 class PersonalDuoqianEntity {
   Id id = Isar.autoIncrement;
 
-  /// 多签地址公钥 hex（32 字节，不含 0x 前缀）。
+  /// 多签账户公钥 hex（32 字节，不含 0x 前缀）。
   @Index(unique: true, replace: true)
-  late String duoqianAddress;
+  late String duoqianAccount;
 
   /// 多签账户名称。
   late String name;
@@ -466,7 +466,7 @@ class PersonalDuoqianEntity {
 class PersonalDuoqianProposalEntity {
   Id id = Isar.autoIncrement;
 
-  /// 多签地址公钥 hex(32 字节,不含 0x 前缀)。复合索引 key 之一。
+  /// 多签账户公钥 hex(32 字节,不含 0x 前缀)。复合索引 key 之一。
   @Index(composite: [CompositeIndex('proposalId')], unique: true, replace: true)
   late String personalAddress;
 
@@ -503,9 +503,9 @@ class PersonalDuoqianProposalEntity {
 class InstitutionEntity {
   Id id = Isar.autoIncrement;
 
-  /// 多签地址公钥 hex（32 字节，不含 0x 前缀），唯一标识。
+  /// 多签账户公钥 hex（32 字节，不含 0x 前缀），唯一标识。
   @Index(unique: true, replace: true)
-  late String duoqianAddress;
+  late String duoqianAccount;
 
   /// SFID 标识（UTF-8 字符串）。
   late String sfidNumber;
@@ -579,9 +579,8 @@ class PublicInstitutionEntity {
   @Index(unique: true, replace: true)
   late String sfidNumber;
 
-  late String institutionName;
-  String? sfidName;
-  String? shortName;
+  late String sfidFullName;
+  String? sfidShortName;
   late String status;
 
   /// 所属省 code(行政区唯一真源键;名字由 [AdminDivisionEntity] 字典 join,

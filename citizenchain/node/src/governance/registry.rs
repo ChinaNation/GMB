@@ -1,6 +1,6 @@
 // 治理机构注册表：直接读取 runtime 常量，避免 node 侧再维护过期地址副本。
 
-use primitives::china::china_cb::{ChinaCb, CHINA_CB, NRC_ANQUAN_ADDRESS};
+use primitives::china::china_cb::{ChinaCb, CHINA_CB, NRC_ANQUAN_ACCOUNT};
 use primitives::china::china_ch::{ChinaCh, CHINA_CH};
 
 use super::types::{GovernanceOverview, InstitutionListItem, OrgType};
@@ -15,8 +15,8 @@ pub(crate) enum InstitutionRef {
 impl InstitutionRef {
     pub(crate) fn name(self) -> &'static str {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.sfid_name,
-            InstitutionRef::Prb(item) => item.sfid_name,
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.sfid_full_name,
+            InstitutionRef::Prb(item) => item.sfid_full_name,
         }
     }
 
@@ -35,30 +35,30 @@ impl InstitutionRef {
         }
     }
 
-    pub(crate) fn main_address_hex(self) -> String {
+    pub(crate) fn main_account_hex(self) -> String {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => hex::encode(item.main_address),
-            InstitutionRef::Prb(item) => hex::encode(item.main_address),
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => hex::encode(item.main_account),
+            InstitutionRef::Prb(item) => hex::encode(item.main_account),
         }
     }
 
-    pub(crate) fn fee_address_hex(self) -> String {
+    pub(crate) fn fee_account_hex(self) -> String {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => hex::encode(item.fee_address),
-            InstitutionRef::Prb(item) => hex::encode(item.fee_address),
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => hex::encode(item.fee_account),
+            InstitutionRef::Prb(item) => hex::encode(item.fee_account),
         }
     }
 
-    pub(crate) fn staking_address_hex(self) -> Option<String> {
+    pub(crate) fn stake_account_hex(self) -> Option<String> {
         match self {
-            InstitutionRef::Prb(item) => Some(hex::encode(item.stake_address)),
+            InstitutionRef::Prb(item) => Some(hex::encode(item.stake_account)),
             InstitutionRef::Nrc(_) | InstitutionRef::Prc(_) => None,
         }
     }
 
-    pub(crate) fn anquan_address_hex(self) -> Option<String> {
+    pub(crate) fn anquan_account_hex(self) -> Option<String> {
         match self {
-            InstitutionRef::Nrc(_) => Some(hex::encode(NRC_ANQUAN_ADDRESS)),
+            InstitutionRef::Nrc(_) => Some(hex::encode(NRC_ANQUAN_ACCOUNT)),
             InstitutionRef::Prc(_) | InstitutionRef::Prb(_) => None,
         }
     }
@@ -70,7 +70,7 @@ impl InstitutionRef {
             sfid_number: self.sfid_number().to_string(),
             org_type: org_type as u8,
             org_type_label: org_type.label().to_string(),
-            main_address: self.main_address_hex(),
+            main_account: self.main_account_hex(),
         }
     }
 }
@@ -113,11 +113,11 @@ pub(crate) fn find_institution(sfid_number: &str) -> Option<InstitutionRef> {
         .map(InstitutionRef::Prb)
 }
 
-pub(crate) fn find_institution_by_main_address(main_address: &[u8]) -> Option<InstitutionRef> {
+pub(crate) fn find_institution_by_main_account(main_account: &[u8]) -> Option<InstitutionRef> {
     CHINA_CB
         .iter()
         .enumerate()
-        .find(|(_, item)| item.main_address.as_slice() == main_address)
+        .find(|(_, item)| item.main_account.as_slice() == main_account)
         .map(|(index, item)| {
             if index == 0 {
                 InstitutionRef::Nrc(item)
@@ -128,7 +128,7 @@ pub(crate) fn find_institution_by_main_address(main_address: &[u8]) -> Option<In
         .or_else(|| {
             CHINA_CH
                 .iter()
-                .find(|item| item.main_address.as_slice() == main_address)
+                .find(|item| item.main_account.as_slice() == main_account)
                 .map(InstitutionRef::Prb)
         })
 }

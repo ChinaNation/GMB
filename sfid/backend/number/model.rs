@@ -30,5 +30,5 @@ pub(crate) struct AdminSfidMetaOutput {
 
 #[derive(Deserialize)]
 pub(crate) struct AdminSfidCitiesQuery {
-    pub(crate) province: String,
+    pub(crate) province_name: String,
 }

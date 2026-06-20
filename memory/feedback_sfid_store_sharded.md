@@ -17,7 +17,7 @@
 ## Store 与分片缓存边界
 
 - `store_citizens / store_cpms / store_subjects / store_ops` 是模块 Store 快照表。
-- `ids / subjects / citizens / gov / private / accounts / docs / audit` 是按 `p_code` 分区的目标行表。
+- `ids / subjects / citizens / gov / private / accounts / docs / audit` 是按 `province_code` 分区的目标行表。
 - `sharded_store` 是运行期按省检索缓存,不把分片整包写入 PostgreSQL。
 - `core/runtime_ops.rs` 只负责启动期同步和确定性目录对账,不得在 GET 列表接口里做 backfill 或写库。
 

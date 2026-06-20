@@ -79,7 +79,7 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
                 if (e.key === 'Enter') onSelectCandidate(r);
               }}
             >
-              <strong>{r.institutionName}</strong>
+              <strong>{r.sfidFullName}</strong>
               <code className="admin-card-address">{r.sfidNumber}</code>
             </div>
           ))}

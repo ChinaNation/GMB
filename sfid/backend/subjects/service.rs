@@ -210,20 +210,20 @@ impl ServiceError {
     }
 }
 
-/// 校验机构名称格式。
-pub fn validate_institution_name(name: &str) -> Result<String, ServiceError> {
+/// 校验机构全称格式。
+pub fn validate_sfid_full_name(name: &str) -> Result<String, ServiceError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err(ServiceError::BadInput("institution_name is required"));
+        return Err(ServiceError::BadInput("sfid_full_name is required"));
     }
     if trimmed.chars().count() > MAX_INSTITUTION_NAME_CHARS {
         return Err(ServiceError::BadInput(
-            "institution_name too long (max 30 chars)",
+            "sfid_full_name too long (max 30 chars)",
         ));
     }
     if trimmed.len() > MAX_INSTITUTION_NAME_BYTES {
         return Err(ServiceError::BadInput(
-            "institution_name too long (max 128 bytes)",
+            "sfid_full_name too long (max 128 bytes)",
         ));
     }
     Ok(trimmed.to_string())
@@ -309,18 +309,18 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
     Ok(trimmed.to_string())
 }
 
-/// 判定机构分类。subject_property + institution_code + institution_name → InstitutionCategory。
+/// 判定机构分类。subject_property + institution_code + sfid_full_name → InstitutionCategory。
 ///
 /// 解析失败(subject_property 或 institution_code 不识别)或不属于任何机构分类(公民类)返回 None,
 /// 调用方应当直接拒绝请求。
 pub fn derive_category(
     subject_property: &str,
     institution_code: &str,
-    institution_name: &str,
+    sfid_full_name: &str,
 ) -> Option<InstitutionCategory> {
     let subject_property = SubjectProperty::from_str(subject_property)?;
     let code = InstitutionCode::from_str(institution_code)?;
-    classify(subject_property, code, institution_name)
+    classify(subject_property, code, sfid_full_name)
 }
 
 /// 按机构类型构造默认未上链账户。
@@ -331,7 +331,7 @@ pub fn build_default_accounts_for_names(
     actor: &str,
     names: &[&str],
 ) -> Vec<InstitutionAccount> {
-    use crate::accounts::derive::derive_duoqian_address;
+    use crate::accounts::derive::derive_duoqian_account;
     use chrono::Utc;
 
     let now = Utc::now();
@@ -340,7 +340,7 @@ pub fn build_default_accounts_for_names(
         .map(|name| InstitutionAccount {
             sfid_number: sfid_number.to_string(),
             account_name: (*name).to_string(),
-            duoqian_address: derive_duoqian_address(sfid_number, name),
+            duoqian_account: derive_duoqian_account(sfid_number, name),
             chain_status: MultisigChainStatus::NotOnChain,
             chain_synced_at: None,
             chain_tx_hash: None,

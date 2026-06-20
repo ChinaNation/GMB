@@ -41,7 +41,7 @@ sfid/backend/app_core/
 7. `citizenchain/node/src/offchain/sfid.rs` + `types.rs` 修 SCALE/JSON 契约 mismatch:
    - SFID 返回 `data: Vec<Row>`(非 `data.items`)
    - SFID 返回 snake_case 字段(非 camelCase)
-   - `institution_name` 是 Option(skip_serializing_if=is_none)
+   - `sfid_full_name` 是 Option(skip_serializing_if=is_none)
    - `main_chain_status` 用 SCREAMING_SNAKE_CASE 枚举(NOT_ON_CHAIN/...)
    - 拆 deserialize/serialize 双 DTO,前者 snake_case,后者 camelCase + 友好 enum
 

@@ -57,31 +57,31 @@ class OrgType {
 
 /// 治理机构及多签账户的制度账户集合。
 ///
-/// 中文注释：内置治理机构没有笼统的 `duoqianAddress`；链端按主账户、费用账户、
+/// 中文注释：内置治理机构没有笼统的 `duoqianAccount`；链端按主账户、费用账户、
 /// 国储会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
 class InstitutionAccounts {
   const InstitutionAccounts({
-    required this.mainAddress,
-    this.feeAddress,
-    this.safetyFundAddress,
-    this.heFundAddress,
-    this.stakeAddress,
+    required this.mainAccount,
+    this.feeAccount,
+    this.anquanAccount,
+    this.heAccount,
+    this.stakeAccount,
   });
 
-  /// 主账户地址 hex（32 字节，不含 0x）。
-  final String mainAddress;
+  /// 主账户 AccountId hex（32 字节，不含 0x）。
+  final String mainAccount;
 
-  /// 费用账户地址 hex；内置治理机构必有，个人/注册多签账户可为空。
-  final String? feeAddress;
+  /// 费用账户 AccountId hex；内置治理机构必有，个人/注册多签账户可为空。
+  final String? feeAccount;
 
-  /// 安全基金账户地址 hex；仅国储会存在。
-  final String? safetyFundAddress;
+  /// 安全基金账户 AccountId hex；仅国储会存在。
+  final String? anquanAccount;
 
-  /// 两和基金账户地址 hex（Reconciliation Fund，链端 NRC_HE_ADDRESS）；仅国储会存在。
-  final String? heFundAddress;
+  /// 两和基金账户地址 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国储会存在。
+  final String? heAccount;
 
-  /// 永久质押账户地址 hex；仅省储行存在。
-  final String? stakeAddress;
+  /// 永久质押账户 AccountId hex；仅省储行存在。
+  final String? stakeAccount;
 }
 
 /// 单个机构或多签账户的结构化信息。
@@ -91,17 +91,17 @@ class InstitutionInfo {
     required this.sfidNumber,
     required this.orgType,
     this.accounts,
-    String? duoqianAddress,
+    String? duoqianAccount,
     this.adminAccountOrg,
     this.internalThresholdOverride,
-  })  : assert(accounts != null || duoqianAddress != null),
-        _legacyMainAddress = duoqianAddress;
+  })  : assert(accounts != null || duoqianAccount != null),
+        _singleMainAccount = duoqianAccount;
 
   /// 显示名称。
   final String name;
 
   /// 链上身份标识（与 Rust 常量 `sfid_number` 完全一致）。
-  /// 查询治理 storage 时使用 `mainAddress` 这个 AccountId，不再从 sfid_number 派生主体。
+  /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId，不再从 sfid_number 派生主体。
   final String sfidNumber;
 
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
@@ -113,16 +113,16 @@ class InstitutionInfo {
   /// 制度账户集合。
   ///
   /// 中文注释：治理机构使用生成的完整账户集合；个人多签/机构账户使用
-  /// 主账户地址作为多签账户地址。
+  /// 主账户 AccountId作为多签账户地址。
   final InstitutionAccounts? accounts;
 
-  final String? _legacyMainAddress;
+  final String? _singleMainAccount;
 
-  /// 主账户地址 hex（32 字节，不含 0x）。
-  String get mainAddress => accounts?.mainAddress ?? _legacyMainAddress!;
+  /// 主账户 AccountId hex（32 字节，不含 0x）。
+  String get mainAccount => accounts?.mainAccount ?? _singleMainAccount!;
 
-  /// 个人多签/注册机构账户的多签地址；内置治理机构不得使用这个语义。
-  String get duoqianAddress => mainAddress;
+  /// 个人多签/注册机构账户的多签账户；内置治理机构不得使用这个语义。
+  String get duoqianAccount => mainAccount;
 
   /// 机构账户的动态阈值覆盖。
   final int? internalThresholdOverride;
@@ -166,7 +166,7 @@ class InstitutionInfo {
     String? sfidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
-    String? duoqianAddress,
+    String? duoqianAccount,
     int? adminAccountOrg,
     int? internalThresholdOverride,
   }) {
@@ -175,7 +175,7 @@ class InstitutionInfo {
       sfidNumber: sfidNumber ?? this.sfidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
-      duoqianAddress: duoqianAddress ?? _legacyMainAddress,
+      duoqianAccount: duoqianAccount ?? _singleMainAccount,
       adminAccountOrg: adminAccountOrg ?? this.adminAccountOrg,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
@@ -190,8 +190,8 @@ bool isRegisteredDuoqianIdentity(String institutionIdentity) {
   return institutionIdentity.startsWith(_registeredDuoqianPrefix);
 }
 
-String registeredDuoqianIdentity(String duoqianAddress) {
-  return '$_registeredDuoqianPrefix${_normalizeHex(duoqianAddress)}';
+String registeredDuoqianIdentity(String duoqianAccount) {
+  return '$_registeredDuoqianPrefix${_normalizeHex(duoqianAccount)}';
 }
 
 String? registeredDuoqianAddressFromIdentity(String institutionIdentity) {
@@ -218,22 +218,22 @@ String? personalDuoqianAddressFromIdentity(String institutionIdentity) {
 
 List<int> institutionIdentityToAccountId(
   String institutionIdentity, {
-  String? mainAddress,
+  String? mainAccount,
 }) {
-  final duoqianAddress =
+  final duoqianAccount =
       registeredDuoqianAddressFromIdentity(institutionIdentity);
-  if (duoqianAddress != null) {
-    return _accountHexToBytes(duoqianAddress);
+  if (duoqianAccount != null) {
+    return _accountHexToBytes(duoqianAccount);
   }
   final personalAddress =
       personalDuoqianAddressFromIdentity(institutionIdentity);
   if (personalAddress != null) {
     return _accountHexToBytes(personalAddress);
   }
-  if (mainAddress == null) {
-    throw ArgumentError('内置治理机构必须提供 mainAddress 作为治理 AccountId');
+  if (mainAccount == null) {
+    throw ArgumentError('内置治理机构必须提供 mainAccount 作为治理 AccountId');
   }
-  return _accountHexToBytes(mainAddress);
+  return _accountHexToBytes(mainAccount);
 }
 
 List<int> _accountHexToBytes(String accountHex) {

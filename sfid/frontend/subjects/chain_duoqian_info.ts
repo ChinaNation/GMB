@@ -9,12 +9,12 @@ type ApiEnvelope<T> = {
 
 export interface InstitutionInfoDetail {
   sfid_number: string;
-  institution_name?: string | null;
+  sfid_full_name?: string | null;
   category: string;
   subject_property: string;
   p1: string;
-  province: string;
-  city: string;
+  province_name: string;
+  city_name: string;
   province_code: string;
   city_code: string;
   institution_code: string;
@@ -27,7 +27,7 @@ export interface InstitutionInfoDetail {
 export interface InstitutionRegistrationCredential {
   genesis_hash: string;
   register_nonce: string;
-  province: string;
+  province_name: string;
   signer_admin_pubkey: string;
   signature: string;
   meta: {
@@ -41,7 +41,7 @@ export interface InstitutionRegistrationInfo {
   /** 中文注释:链端注册业务字段 1/3。 */
   sfid_number: string;
   /** 中文注释:链端注册业务字段 2/3。 */
-  institution_name: string;
+  sfid_full_name: string;
   /** 中文注释:链端注册业务字段 3/3,顺序必须原样交给链端验签。 */
   account_names: string[];
   /** 中文注释:只用于链端验签与防重放,不属于业务注册字段。 */

@@ -134,37 +134,37 @@ fn collect_institution_balances(
     block_hash: Option<&str>,
     warnings: &mut Vec<String>,
 ) -> InstitutionBalances {
-    let main_address = entry.main_address_hex();
+    let main_account = entry.main_account_hex();
     let mut balances = InstitutionBalances {
-        balance_fen: load_balance_at_block(&main_address, block_hash, "主账户余额", warnings),
+        balance_fen: load_balance_at_block(&main_account, block_hash, "主账户余额", warnings),
         ..InstitutionBalances::default()
     };
 
     match entry {
         InstitutionRef::Nrc(_) => {
-            let fee_address = entry.fee_address_hex();
-            let anquan_address = entry
-                .anquan_address_hex()
-                .expect("国储会安全基金账户地址必须存在");
+            let fee_account = entry.fee_account_hex();
+            let anquan_account = entry
+                .anquan_account_hex()
+                .expect("国储会安全基金账户 AccountId必须存在");
             balances.nrc_fee_balance_fen =
-                load_balance_at_block(&fee_address, block_hash, "费用账户余额", warnings);
+                load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
             balances.nrc_anquan_balance_fen =
-                load_balance_at_block(&anquan_address, block_hash, "安全基金账户余额", warnings);
+                load_balance_at_block(&anquan_account, block_hash, "安全基金账户余额", warnings);
         }
         InstitutionRef::Prc(_) => {
-            let fee_address = entry.fee_address_hex();
+            let fee_account = entry.fee_account_hex();
             balances.cb_fee_balance_fen =
-                load_balance_at_block(&fee_address, block_hash, "费用账户余额", warnings);
+                load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
         }
         InstitutionRef::Prb(_) => {
-            let stake_address = entry
-                .staking_address_hex()
-                .expect("省储行永久质押账户地址必须存在");
-            let fee_address = entry.fee_address_hex();
+            let stake_account = entry
+                .stake_account_hex()
+                .expect("省储行永久质押账户 AccountId必须存在");
+            let fee_account = entry.fee_account_hex();
             balances.staking_balance_fen =
-                load_balance_at_block(&stake_address, block_hash, "永久质押账户余额", warnings);
+                load_balance_at_block(&stake_account, block_hash, "永久质押账户余额", warnings);
             balances.fee_balance_fen =
-                load_balance_at_block(&fee_address, block_hash, "费用账户余额", warnings);
+                load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
         }
     }
 
@@ -190,19 +190,19 @@ fn build_institution_detail_sync(
     };
     let balances =
         collect_institution_balances(entry, context.block_hash.as_deref(), &mut context.warnings);
-    let (staking_address, fee_address, cb_fee_address, nrc_fee_address, nrc_anquan_address) =
+    let (stake_account, fee_account, cb_fee_account, nrc_fee_account, nrc_anquan_account) =
         match entry {
             InstitutionRef::Nrc(_) => (
                 None,
                 None,
                 None,
-                Some(entry.fee_address_hex()),
-                entry.anquan_address_hex(),
+                Some(entry.fee_account_hex()),
+                entry.anquan_account_hex(),
             ),
-            InstitutionRef::Prc(_) => (None, None, Some(entry.fee_address_hex()), None, None),
+            InstitutionRef::Prc(_) => (None, None, Some(entry.fee_account_hex()), None, None),
             InstitutionRef::Prb(_) => (
-                entry.staking_address_hex(),
-                Some(entry.fee_address_hex()),
+                entry.stake_account_hex(),
+                Some(entry.fee_account_hex()),
                 None,
                 None,
                 None,
@@ -214,20 +214,20 @@ fn build_institution_detail_sync(
         sfid_number: sfid_number.to_string(),
         org_type: org_type as u8,
         org_type_label: org_type.label().to_string(),
-        main_address: entry.main_address_hex(),
+        main_account: entry.main_account_hex(),
         balance_fen: balances.balance_fen,
         admins,
         internal_threshold: internal_threshold(org_type),
         joint_vote_weight: joint_vote_weight(org_type),
-        staking_address,
+        stake_account,
         staking_balance_fen: balances.staking_balance_fen,
-        fee_address,
+        fee_account,
         fee_balance_fen: balances.fee_balance_fen,
-        cb_fee_address,
+        cb_fee_account,
         cb_fee_balance_fen: balances.cb_fee_balance_fen,
-        nrc_fee_address,
+        nrc_fee_account,
         nrc_fee_balance_fen: balances.nrc_fee_balance_fen,
-        nrc_anquan_address,
+        nrc_anquan_account,
         nrc_anquan_balance_fen: balances.nrc_anquan_balance_fen,
         warning: join_warnings(context.warnings),
     })

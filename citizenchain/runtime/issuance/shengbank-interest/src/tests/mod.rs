@@ -107,7 +107,7 @@ fn run_to_block(n: u64) {
 }
 
 fn shengbank_account(index: usize) -> AccountId32 {
-    AccountId32::decode(&mut &primitives::china::china_ch::CHINA_CH[index].main_address[..])
+    AccountId32::decode(&mut &primitives::china::china_ch::CHINA_CH[index].main_account[..])
         .expect("pallet_address must decode")
 }
 

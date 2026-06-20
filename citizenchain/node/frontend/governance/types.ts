@@ -58,7 +58,7 @@ export type InstitutionListItem = {
   sfidNumber: string;
   orgType: number;
   orgTypeLabel: string;
-  mainAddress: string;
+  mainAccount: string;
 };
 
 export type GovernanceOverview = {
@@ -78,20 +78,20 @@ export type InstitutionDetail = {
   sfidNumber: string;
   orgType: number;
   orgTypeLabel: string;
-  mainAddress: string;
+  mainAccount: string;
   balanceFen: string | null;
   admins: AdminInfo[];
   internalThreshold: number;
   jointVoteWeight: number;
-  stakingAddress: string | null;
+  stakeAccount: string | null;
   stakingBalanceFen: string | null;
-  feeAddress: string | null;
+  feeAccount: string | null;
   feeBalanceFen: string | null;
-  cbFeeAddress: string | null;
+  cbFeeAccount: string | null;
   cbFeeBalanceFen: string | null;
-  nrcFeeAddress: string | null;
+  nrcFeeAccount: string | null;
   nrcFeeBalanceFen: string | null;
-  nrcAnquanAddress: string | null;
+  nrcAnquanAccount: string | null;
   nrcAnquanBalanceFen: string | null;
   warning: string | null;
 };
@@ -124,7 +124,7 @@ export type ProposalListItem = {
   stageLabel: string;
   status: number;
   statusLabel: string;
-  institutionName: string | null;
+  sfidFullName: string | null;
   summary: string;
 };
 
@@ -161,5 +161,5 @@ export type ProposalFullInfo = DuoqianTransferProposalDetails & {
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
   citizenTally: { yes: number; no: number } | null;
-  institutionName: string | null;
+  sfidFullName: string | null;
 };

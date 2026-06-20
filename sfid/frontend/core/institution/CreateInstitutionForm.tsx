@@ -47,7 +47,7 @@ interface FormValues {
   private_type?: PrivateType;
   partnership_kind?: PartnershipKind;
   /** 私权/教育机构/手动公权机构创建时必填名称。 */
-  institution_name?: string;
+  sfid_full_name?: string;
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_sfid_number?: string;
   legal_rep_name: string;
@@ -200,7 +200,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       education_type: defaultEducationType,
       private_type: privateType,
       partnership_kind: defaultPartnershipKind,
-      institution_name: defaultCollectName ? '' : undefined,
+      sfid_full_name: defaultCollectName ? '' : undefined,
       parent_sfid_number: undefined,
       legal_rep_name: '',
       legal_rep_sfid_number: '',
@@ -252,7 +252,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       education_type: nextEducationType,
       p1: p1LocksForSubject(subject_property, null).value,
       parent_sfid_number: undefined,
-      institution_name: collectName ? (form.getFieldValue('institution_name') ?? '') : undefined,
+      sfid_full_name: collectName ? (form.getFieldValue('sfid_full_name') ?? '') : undefined,
     });
   };
 
@@ -282,8 +282,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
     return {
       fInstitution: (form.getFieldValue('institution') ?? '').trim(),
-      province,
-      city,
+      province_name: province,
+      city_name: city,
       // 公权入口只挂公法人;教育入口(分校)由后端按学校本部过滤。
       parentProperty: isGov ? 'G' : undefined,
     };
@@ -332,7 +332,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   // ── 名称查重 ─────────────────────────────────────────────
 
   const onCheckName = async () => {
-    const name = (form.getFieldValue('institution_name') ?? '').trim();
+    const name = (form.getFieldValue('sfid_full_name') ?? '').trim();
     if (!name) {
       notice.warning(`请先输入${nameLabel}`);
       return;
@@ -397,8 +397,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setLegalRepSearching(true);
     try {
       const rows = await searchLegalRepresentativeCitizens(auth, q, {
-        province,
-        city,
+        province_name: province,
+        city_name: city,
         subject_property: subjectProperty,
         institution,
         education_type: showEducationType ? form.getFieldValue('education_type') : undefined,
@@ -455,12 +455,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       const result = await createInstitution(auth, {
         subject_property: values.subject_property.trim(),
         p1: values.p1?.trim(),
-        province: values.province.trim(),
-        city: values.city.trim(),
+        province_name: values.province.trim(),
+        city_name: values.city.trim(),
         institution: values.institution.trim(),
         education_type: showEducationType ? values.education_type : undefined,
-        institution_name: collectNameInModal
-          ? (values.institution_name ?? '').trim()
+        sfid_full_name: collectNameInModal
+          ? (values.sfid_full_name ?? '').trim()
           : undefined,
         parent_sfid_number: requiresParent ? (values.parent_sfid_number ?? '').trim() : undefined,
         private_type: isPrivate ? privateType : undefined,
@@ -624,7 +624,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             <Col span={24}>
               <Form.Item
                 label={nameLabel}
-                name="institution_name"
+                name="sfid_full_name"
                 rules={[
                   { required: true, message: `请输入${nameLabel}` },
                   { max: 30, message: '最多 30 个字' },
@@ -668,7 +668,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 filterOption={false}
                 options={parentOptions.map((row) => ({
                   value: row.sfid_number,
-                  label: `${row.institution_name}(${SUBJECT_PROPERTY_LABEL[row.subject_property] ?? row.subject_property}) ${row.province}/${row.city}`,
+                  label: `${row.sfid_full_name}(${SUBJECT_PROPERTY_LABEL[row.subject_property] ?? row.subject_property}) ${row.province_name}/${row.city_name}`,
                 }))}
                 onSelect={onParentSelect}
                 onChange={onParentInputChange}
@@ -699,7 +699,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             </div>
             {selectedParent && (
               <div style={{ color: '#52c41a', marginTop: -8, marginBottom: 12, fontSize: 12 }}>
-                已选:{selectedParent.institution_name}(
+                已选:{selectedParent.sfid_full_name}(
                 {SUBJECT_PROPERTY_LABEL[selectedParent.subject_property] ?? selectedParent.subject_property}
                 ,{selectedParent.p1 === '1' ? '盈利' : '非盈利'})
               </div>

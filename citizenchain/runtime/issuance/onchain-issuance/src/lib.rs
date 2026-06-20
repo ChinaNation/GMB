@@ -94,7 +94,7 @@ pub mod pallet {
                 Balance = BalanceOf<Self>,
             > + frame_support::traits::tokens::fungibles::Mutate<Self::AccountId>;
 
-        /// **NRC 治理账户(治理多签 main_address)** 提供器:
+        /// **NRC 治理账户(治理多签 main_account)** 提供器:
         /// - monitor 5 动作的 origin 校验:proposer ∈ admins(NRC main account)
         /// - 监管 JointVote 提案的发起人识别
         ///
@@ -102,7 +102,7 @@ pub mod pallet {
         /// 不可复用同一 trait(v1 错误地复用了 onchain_transaction::NrcAccountProvider)。
         type NrcMainAccountProvider: NrcMainAccountProvider<Self::AccountId>;
 
-        /// **NRC 费用账户(收创建费 fee_address)** 提供器:
+        /// **NRC 费用账户(收创建费 fee_account)** 提供器:
         /// - 1000 GMB 创建费 unreserve 后 transfer 的目标
         /// - 与 onchain_transaction::NrcAccountProvider 语义一致(都是收钱账户)
         type NrcFeeAccountProvider: NrcFeeAccountProvider<Self::AccountId>;
@@ -132,18 +132,18 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
     }
 
-    /// **NRC 治理账户(治理多签 main_address)** trait — ADR-011 v2 拆分语义后的独立 trait。
+    /// **NRC 治理账户(治理多签 main_account)** trait — ADR-011 v2 拆分语义后的独立 trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcMainAccountProvider`,
-    /// 返回 `china_cb[0].main_address`。
+    /// 返回 `china_cb[0].main_account`。
     pub trait NrcMainAccountProvider<AccountId> {
         fn nrc_main_account() -> Option<AccountId>;
     }
 
-    /// **NRC 费用账户(收创建费 fee_address)** trait — ADR-011 v2 拆分语义后的独立 trait。
+    /// **NRC 费用账户(收创建费 fee_account)** trait — ADR-011 v2 拆分语义后的独立 trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcAccountProvider`(复用既有,
-    /// 返回 `china_cb[0].fee_address`,与 onchain_transaction::NrcAccountProvider 同源)。
+    /// 返回 `china_cb[0].fee_account`,与 onchain_transaction::NrcAccountProvider 同源)。
     pub trait NrcFeeAccountProvider<AccountId> {
         fn nrc_fee_account() -> Option<AccountId>;
     }
@@ -186,7 +186,7 @@ pub mod pallet {
 
     /// 1000 GMB 创建费押金跟踪:proposal_id → (proposer, reserved_amount)。
     ///
-    /// ADR-011 v2 第六节铁律:propose_issue 时 reserve 1000 GMB → 通过则 unreserve+transfer 给 NRC fee_address;
+    /// ADR-011 v2 第六节铁律:propose_issue 时 reserve 1000 GMB → 通过则 unreserve+transfer 给 NRC fee_account;
     /// 否决/过期则 unreserve 退还。本 storage 用于 callback 阶段反查 proposer 与押金额度。
     #[pallet::storage]
     #[pallet::getter(fn issue_deposit)]
@@ -281,7 +281,7 @@ pub mod pallet {
             who: T::AccountId,
             amount: BalanceOf<T>,
         },
-        /// 创建费押金已 transfer 给 NRC fee_address(callback 通过)。
+        /// 创建费押金已 transfer 给 NRC fee_account(callback 通过)。
         IssueDepositCharged {
             proposal_id: u64,
             who: T::AccountId,

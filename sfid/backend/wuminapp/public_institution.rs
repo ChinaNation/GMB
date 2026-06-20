@@ -34,10 +34,10 @@ use crate::*;
 /// 但 wuminapp 公民端“公权机构”必须显示:
 /// ① SFID 自动公权目录(含公安局、教育委员会、省储行等);
 /// ② 手动公法人;③ 上级为公法人的非法人。
-/// 参数 $1=p_code、$2=c_code。
+/// 参数 $1=province_code、$2=city_code。
 const GOV_FROM_WHERE: &str = "
     FROM subjects s
-    LEFT JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+    LEFT JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
     LEFT JOIN subjects par ON par.sfid_number = s.parent_sfid_number
     WHERE s.kind IN ('PUBLIC', 'PRIVATE')
       AND s.status = 'ACTIVE'
@@ -48,8 +48,8 @@ const GOV_FROM_WHERE: &str = "
             OR s.subject_property = 'G'
             OR (s.subject_property = 'F' AND par.subject_property = 'G')
           )
-      AND s.p_code = $1
-      AND ($2::text IS NULL OR s.c_code = $2)
+      AND s.province_code = $1
+      AND ($2::text IS NULL OR s.city_code = $2)
 ";
 
 fn parse_category(value: &str) -> InstitutionCategory {
@@ -71,16 +71,14 @@ fn parse_category(value: &str) -> InstitutionCategory {
 pub(crate) struct PublicInstitutionRow {
     pub sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub institution_name: Option<String>,
+    pub sfid_full_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sfid_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub short_name: Option<String>,
+    pub sfid_short_name: Option<String>,
     pub status: String,
     pub category: InstitutionCategory,
     pub subject_property: String,
     pub p1: String,
-    /// 行政区**唯一真源键**:省/市/镇 code(= subjects p_code/c_code/t_code)。
+    /// 行政区**唯一真源键**:省/市/镇 code(= subjects province_code/city_code/town_code)。
     /// 名字一律由客户端按 (province_code,city_code,town_code) 查行政区字典(china.sqlite 派生)得到,
     /// **本接口不下发任何行政区名字**(ADR-021 单一真源:名字别处零独立副本)。
     pub province_code: String,
@@ -110,9 +108,8 @@ impl PublicInstitutionRow {
         let account_count = row.get::<_, i64>("account_count").max(0) as usize;
         Self {
             sfid_number: row.get("sfid_number"),
-            institution_name: row.get("institution_name"),
-            sfid_name: row.get("sfid_name"),
-            short_name: row.get("short_name"),
+            sfid_full_name: row.get("sfid_full_name"),
+            sfid_short_name: row.get("sfid_short_name"),
             status: row.get("status"),
             category: parse_category(row.get::<_, String>("category").as_str()),
             subject_property: row.get("subject_property"),
@@ -134,8 +131,8 @@ impl PublicInstitutionRow {
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct PublicInstitutionListQuery {
-    pub province: Option<String>,
-    pub city: Option<String>,
+    pub province_name: Option<String>,
+    pub city_name: Option<String>,
     /// 增量游标:仅回 updated_at 严格大于此 RFC3339 时间戳的行。
     pub since_version: Option<String>,
     /// keyset 翻页游标:仅回 sfid_number 严格大于此值的行。
@@ -149,7 +146,7 @@ pub(crate) async fn list_public_institutions(
     axum::extract::Query(query): axum::extract::Query<PublicInstitutionListQuery>,
 ) -> impl IntoResponse {
     let Some(province) = query
-        .province
+        .province_name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -160,7 +157,7 @@ pub(crate) async fn list_public_institutions(
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
     let city = query
-        .city
+        .city_name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
@@ -237,15 +234,15 @@ pub(crate) async fn list_public_institutions(
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct PublicInstitutionVersionQuery {
-    pub province: Option<String>,
-    pub city: Option<String>,
+    pub province_name: Option<String>,
+    pub city_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct PublicInstitutionVersion {
-    province: String,
+    province_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    city: Option<String>,
+    city_name: Option<String>,
     /// 目录版本 = MAX(updated_at) RFC3339;无机构时 null。增量同步比对/since 用。
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_version: Option<String>,
@@ -259,7 +256,7 @@ pub(crate) async fn public_institutions_version(
     axum::extract::Query(query): axum::extract::Query<PublicInstitutionVersionQuery>,
 ) -> impl IntoResponse {
     let Some(province) = query
-        .province
+        .province_name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -270,7 +267,7 @@ pub(crate) async fn public_institutions_version(
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
     let city = query
-        .city
+        .city_name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
@@ -293,8 +290,8 @@ pub(crate) async fn public_institutions_version(
         }
     };
     let data = PublicInstitutionVersion {
-        province: province.to_string(),
-        city: city.map(str::to_string),
+        province_name: province.to_string(),
+        city_name: city.map(str::to_string),
         manifest_version: version,
         count,
     };
@@ -309,27 +306,26 @@ pub(crate) async fn public_institutions_version(
 /// keyset 翻页 + 可选 since 增量查询。返回 (rows, has_more, next_cursor)。
 fn query_public_institutions(
     state: &AppState,
-    p_code: &str,
-    c_code: Option<&str>,
+    province_code: &str,
+    city_code: Option<&str>,
     after_sfid: Option<String>,
     since_version: Option<String>,
     page_size: usize,
 ) -> Result<(Vec<PublicInstitutionRow>, bool, Option<String>), String> {
-    let p_code = p_code.to_string();
-    let c_code = c_code.map(str::to_string);
+    let province_code = province_code.to_string();
+    let city_code = city_code.map(str::to_string);
     let limit = i64::try_from(page_size.saturating_add(1))
         .map_err(|_| "page_size too large".to_string())?;
-    // 全列显式 AS 别名,from_pg_row 按列名取;行政区只下发 code(p_code/c_code/t_code),不吐名字。
+    // 全列显式 AS 别名,from_pg_row 按列名取;行政区只下发 code(province_code/city_code/town_code),不吐名字。
     let sql = format!(
         "SELECT s.sfid_number,
-                s.name AS institution_name,
-                s.sfid_name, s.short_name, s.status, s.category,
+                s.sfid_full_name, s.sfid_short_name, s.status, s.category,
                 s.subject_property, s.p1,
-                s.p_code AS province_code, s.c_code AS city_code,
-                COALESCE(s.t_code, '') AS town_code,
+                s.province_code AS province_code, s.city_code AS city_code,
+                COALESCE(s.town_code, '') AS town_code,
                 s.institution_code, s.org_code, s.parent_sfid_number, s.has_legal_personality,
                 (SELECT COUNT(*) FROM accounts a
-                   WHERE a.p_code = s.p_code AND a.sfid_number = s.sfid_number) AS account_count,
+                   WHERE a.province_code = s.province_code AND a.sfid_number = s.sfid_number) AS account_count,
                 s.created_at, s.legal_rep_name
          {GOV_FROM_WHERE}
            AND ($3::text IS NULL OR s.sfid_number > $3)
@@ -341,7 +337,13 @@ fn query_public_institutions(
         let rows = conn
             .query(
                 sql.as_str(),
-                &[&p_code, &c_code, &after_sfid, &since_version, &limit],
+                &[
+                    &province_code,
+                    &city_code,
+                    &after_sfid,
+                    &since_version,
+                    &limit,
+                ],
             )
             .map_err(|e| format!("public institution keyset query failed: {e}"))?;
         let mut items: Vec<PublicInstitutionRow> =
@@ -360,8 +362,8 @@ fn query_public_institutions(
 }
 
 /// 目录版本 = MAX(updated_at) RFC3339(单查,list 用)。
-fn scope_version(state: &AppState, p_code: &str, c_code: Option<&str>) -> Option<String> {
-    scope_version_and_count(state, p_code, c_code)
+fn scope_version(state: &AppState, province_code: &str, city_code: Option<&str>) -> Option<String> {
+    scope_version_and_count(state, province_code, city_code)
         .ok()
         .and_then(|(v, _)| v)
 }
@@ -369,15 +371,15 @@ fn scope_version(state: &AppState, p_code: &str, c_code: Option<&str>) -> Option
 /// 目录版本 + 机构总数:`MAX(updated_at)` RFC3339 + COUNT。
 fn scope_version_and_count(
     state: &AppState,
-    p_code: &str,
-    c_code: Option<&str>,
+    province_code: &str,
+    city_code: Option<&str>,
 ) -> Result<(Option<String>, i64), String> {
-    let p_code = p_code.to_string();
-    let c_code = c_code.map(str::to_string);
+    let province_code = province_code.to_string();
+    let city_code = city_code.map(str::to_string);
     let sql = format!("SELECT COUNT(*), MAX(s.updated_at) {GOV_FROM_WHERE}");
     state.db.with_client(move |conn| {
         let row = conn
-            .query_one(sql.as_str(), &[&p_code, &c_code])
+            .query_one(sql.as_str(), &[&province_code, &city_code])
             .map_err(|e| format!("public institution version query failed: {e}"))?;
         let count: i64 = row.get(0);
         let max_updated: Option<DateTime<Utc>> = row.get(1);
@@ -388,13 +390,13 @@ fn scope_version_and_count(
 /// 批量查机构自定义账户名(op_tag=0x06,即非 5 保留名)。空列表短路。
 fn custom_account_names_for(
     state: &AppState,
-    p_code: &str,
+    province_code: &str,
     sfid_numbers: &[String],
 ) -> Result<HashMap<String, Vec<String>>, String> {
     if sfid_numbers.is_empty() {
         return Ok(HashMap::new());
     }
-    let p_code = p_code.to_string();
+    let province_code = province_code.to_string();
     let sfids: Vec<String> = sfid_numbers.to_vec();
     let reserved: Vec<String> = crate::accounts::derive::RESERVED_ACCOUNT_NAMES
         .iter()
@@ -405,11 +407,11 @@ fn custom_account_names_for(
             .query(
                 "SELECT sfid_number, account_name
                  FROM accounts
-                 WHERE p_code = $1
+                 WHERE province_code = $1
                    AND sfid_number = ANY($2)
                    AND account_name <> ALL($3)
                  ORDER BY sfid_number ASC, account_name ASC",
-                &[&p_code, &sfids, &reserved],
+                &[&province_code, &sfids, &reserved],
             )
             .map_err(|e| format!("custom account names query failed: {e}"))?;
         let mut map: HashMap<String, Vec<String>> = HashMap::new();
@@ -429,9 +431,8 @@ mod tests {
     fn sample_row() -> PublicInstitutionRow {
         PublicInstitutionRow {
             sfid_number: "AH001-ZF000-123456789-2026".to_string(),
-            institution_name: Some("安徽省人民政府".to_string()),
-            sfid_name: Some("安徽省国民政府".to_string()),
-            short_name: Some("皖府".to_string()),
+            sfid_full_name: Some("安徽省国民政府".to_string()),
+            sfid_short_name: Some("皖府".to_string()),
             status: "ACTIVE".to_string(),
             category: InstitutionCategory::GovInstitution,
             subject_property: "G".to_string(),

@@ -10,7 +10,7 @@
 
 ```text
 sfid_number
-institution_name
+sfid_full_name
 accounts
 admin_count
 duoqian_admins
@@ -47,7 +47,7 @@ parent_sfid_number
 - [x] 在线端按 10 字段编码 `17.5`，不再使用旧 `17.0` 单账户入口。
 - [x] 在线端创建页面改为按 `registration-info.account_names` 顺序填写每个初始账户金额。
 - [x] 冷钱包 decoder 删除 `subject_property/sub_type/parent_sfid_number` 解析，末尾不得有多余字节。
-- [x] 冷钱包和在线端展示字段统一为 `sfid_number/institution_name/admin_count/threshold/total_amount_yuan/amount_<账户名>/province/signer_admin_pubkey`。
+- [x] 冷钱包和在线端展示字段统一为 `sfid_number/sfid_full_name/admin_count/threshold/total_amount_yuan/amount_<账户名>/province/signer_admin_pubkey`。
 - [x] 增加或更新 P0-2 回归测试。
 - [x] 更新总审计文档并运行验收。
 

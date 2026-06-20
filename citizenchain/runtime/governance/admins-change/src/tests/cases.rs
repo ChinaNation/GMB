@@ -1292,7 +1292,7 @@ fn prc_set_change_isolates_provinces() {
     new_test_ext().execute_with(|| {
         let prc_a = prc_pallet_id();
         // CHINA_CB[0]=NRC, [1]=辽宁(prc_pallet_id), 取另一省作为对照。
-        let prc_b = AccountId32::new(CHINA_CB[2].main_address);
+        let prc_b = AccountId32::new(CHINA_CB[2].main_account);
         let prc_b_initial = current_admins(prc_b.clone());
 
         let old_admin = prc_admin(1);

@@ -13,12 +13,12 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 class PublicInstitutionAdminListPage extends StatelessWidget {
   const PublicInstitutionAdminListPage({
     super.key,
-    required this.institutionName,
+    required this.sfidFullName,
     required this.admins,
   });
 
   /// 机构展示名(简称优先,由调用方决定)。
-  final String institutionName;
+  final String sfidFullName;
 
   /// 管理员公钥列表(hex,可能带 0x);来自链上 AdminsChange::AdminAccounts。
   final List<String> admins;

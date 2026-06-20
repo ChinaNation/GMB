@@ -33,13 +33,13 @@ SFID 是注册局运营的身份 ID 系统。系统登记三类主体:
 核心表:
 
 - `ids`:全局唯一身份 ID 索引,保证一个 `sfid_number` 只属于一个主体大类。
-- `subjects`:公民、公权机构、私权机构公共主体表,按 `p_code` 省分区;机构行保存名称、行政区、业务状态和法定代表人资料。
-- `citizens`:公民电子护照绑定结果,按 `p_code` 省分区。
-- `gov`:公权机构扩展表,按 `p_code` 省分区,不区分初始化录入和人工新增。
-- `private`:六类私权机构扩展表,按 `p_code` 省分区。
-- `accounts`:机构账户表,按 `p_code` 省分区。
-- `docs`:机构资料库元数据表,按 `p_code` 省分区。
-- `audit`:审计表,按 `p_code` 省分区。
+- `subjects`:公民、公权机构、私权机构公共主体表,按 `province_code` 省分区;机构行保存名称、行政区、业务状态和法定代表人资料。
+- `citizens`:公民电子护照绑定结果,按 `province_code` 省分区。
+- `gov`:公权机构扩展表,按 `province_code` 省分区,不区分初始化录入和人工新增。
+- `private`:六类私权机构扩展表,按 `province_code` 省分区。
+- `accounts`:机构账户表,按 `province_code` 省分区。
+- `docs`:机构资料库元数据表,按 `province_code` 省分区。
+- `audit`:审计表,按 `province_code` 省分区。
 - `admins`、`federal_admin_scope`:管理员与权限范围。市管理员范围由 `admins.created_by + city` 解析,不再维护第二张市管理员范围表。
 - `cpms_sites`:CPMS 安装授权和公钥绑定。
 - `citizen_bind_challenges`、`citizen_status_imports`:公民绑定挑战和年度状态导入幂等记录。
@@ -54,7 +54,7 @@ SFID 是注册局运营的身份 ID 系统。系统登记三类主体:
 
 ## 权限与查询
 
-联邦管理员只查询自己省的数据,市管理员只查询自己市的数据。后端必须在 SQL 层携带 `p_code` / `c_code` 条件,不得先取全量再在内存过滤。
+联邦管理员只查询自己省的数据,市管理员只查询自己市的数据。后端必须在 SQL 层携带 `province_code` / `city_code` 条件,不得先取全量再在内存过滤。
 
 公权机构和公安局属于确定性目录。列表接口直接从 `subjects/gov/accounts` 读取目标范围数据,不会在页面进入时全量重建。
 
@@ -92,6 +92,6 @@ CPMS 安装授权写入 `cpms_sites`。档案码验真通过安装密钥解开 `
 公开查询接口只读结构化表:
 
 - 机构搜索/详情/账户读取 `subjects/accounts`。
-- 机构注册信息凭证只返回 `sfid_number / institution_name / account_names[]` 和验签包装字段。
+- 机构注册信息凭证只返回 `sfid_number / sfid_full_name / account_names[]` 和验签包装字段。
 - 投票人数快照读取 `citizens` 聚合计数。
 - 投票凭证和电子护照状态按钱包公钥精确查询 `citizens`。

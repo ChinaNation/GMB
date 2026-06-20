@@ -486,7 +486,7 @@ final List<Institution> kAllInstitutions = List.unmodifiable([
 ///
 /// 返回 null 表示链上交易含未知机构。若遇到此情况，说明链端常量与公民钱包
 /// 机构注册表未对齐，应重新运行生成器。
-String? institutionName(String sfidNumber) {
+String? sfidFullName(String sfidNumber) {
   for (final inst in kAllInstitutions) {
     if (inst.sfidNumber == sfidNumber) return inst.name;
   }

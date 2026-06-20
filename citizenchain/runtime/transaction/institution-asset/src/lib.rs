@@ -21,15 +21,15 @@ use scale_info::TypeInfo;
 /// 这里只描述“内部动钱”的执行动作，不描述提案、投票、管理员变更等纯治理动作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InstitutionAssetAction {
-    /// 机构多签转账执行：从 `main_address` 向外部收款地址转账，并扣手续费。
+    /// 机构多签转账执行：从 `main_account` 向外部收款地址转账，并扣手续费。
     DuoqianTransferExecute,
-    /// 多签账户关闭执行：把 `main_address` 的余额整体转出。
+    /// 多签账户关闭执行：把 `main_account` 的余额整体转出。
     DuoqianCloseExecute,
     /// 链下清算批次执行：允许普通付款账户作为批次 source。
     OffchainBatchDebit,
     /// 省储行手续费账户归集：从 `fee_account` 划回机构主账户。
     OffchainFeeSweepExecute,
-    /// 国储会安全基金转账：从 `NRC_ANQUAN_ADDRESS` 向指定收款地址转账。
+    /// 国储会安全基金转账：从 `NRC_ANQUAN_ACCOUNT` 向指定收款地址转账。
     NrcSafetyFundTransfer,
     // ========== 扫码支付 Step 1 新增:清算行(L2)体系动作 ==========
     /// L3 用户向清算行主账户充值。source 为 L3 自持账户。

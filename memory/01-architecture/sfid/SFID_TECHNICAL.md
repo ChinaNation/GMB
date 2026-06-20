@@ -40,8 +40,8 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 ### 主体身份
 
-- `ids(sfid_number, kind, p_code, c_code)`:全局身份 ID 索引。
-- `subjects`:主体公共展示字段,按省分区;机构行保存 `name/sfid_name/short_name`、行政区、业务状态、私权分类和法定代表人资料。
+- `ids(sfid_number, kind, province_code, city_code)`:全局身份 ID 索引。
+- `subjects`:主体公共展示字段,按省分区;机构行保存 `name/sfid_full_name/sfid_short_name`、行政区、业务状态、私权分类和法定代表人资料。
 - `citizens`:公民电子护照绑定字段,按省分区。
 - `gov`:公权机构扩展字段,按省分区;只保存 `institution_code/org_code` 等机构类型细分。
   `source='GENERATED'` 表示由行政区和模板确定性派生,可被对账命令更新或删除;
@@ -52,7 +52,7 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 ### 账户与资料
 
-- `accounts`:机构账户,主键为 `(p_code, sfid_number, account_name)`。
+- `accounts`:机构账户,主键为 `(province_code, sfid_number, account_name)`。
 - `docs`:机构资料库元数据,文件本体存磁盘。
 
 机构本身不保存链上状态。链上状态只属于 `accounts.chain_status`,用于账户是否已在链上激活、注销或等待同步。机构详情页不得展示机构链上状态字段。

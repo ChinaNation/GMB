@@ -138,8 +138,8 @@ export type CpmsStatusExportImportResult = {
 
 export interface LegalRepresentativeCitizenSearchContext {
   target_sfid_number?: string;
-  province?: string;
-  city?: string;
+  province_name?: string;
+  city_name?: string;
   subject_property?: string;
   institution?: string;
   education_type?: string;

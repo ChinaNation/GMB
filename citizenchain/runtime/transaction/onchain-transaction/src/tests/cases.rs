@@ -167,7 +167,7 @@ fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
         let miner = account(9);
         let reward_wallet = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let issuance_before = Balances::total_issuance();
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
@@ -221,7 +221,7 @@ fn fee_router_burns_fullnode_share_when_author_not_bound() {
         let miner = account(7);
         let missing_wallet = account(6);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let issuance_before = Balances::total_issuance();
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
@@ -281,7 +281,7 @@ fn fee_router_burns_fullnode_share_when_author_not_found() {
     new_test_ext().execute_with(|| {
         let payer = account(1);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let issuance_before = Balances::total_issuance();
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
@@ -336,7 +336,7 @@ fn fee_router_burns_nrc_share_when_nrc_account_missing() {
         let payer = account(1);
         let miner = account(9);
         let reward_wallet = account(8);
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let issuance_before = Balances::total_issuance();
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
@@ -393,7 +393,7 @@ fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
         let miner = account(9);
         let reward_wallet = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let total_fee = 50u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
@@ -465,7 +465,7 @@ fn fee_router_burns_nrc_share_when_resolve_fails() {
         let reward_wallet = account(8);
         let nrc = MockNrcAccountProviderResolveFail::nrc_account()
             .expect("nrc account must exist for resolve failure test");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let total_fee = 500u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
@@ -530,7 +530,7 @@ fn fee_router_burns_safety_fund_share_when_resolve_fails() {
         let miner = account(9);
         let reward_wallet = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let total_fee = 500u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
@@ -606,7 +606,7 @@ fn correct_and_deposit_does_not_refund_overpayment() {
         let who = account(1);
         let call = sample_call();
         let info = call.get_dispatch_info();
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
         let issuance_before = Balances::total_issuance();
         let total_fee = 55u128; // base 50 + tip 5
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
@@ -718,7 +718,7 @@ fn tip_is_routed_with_fee_using_same_distribution() {
         let miner = account(9);
         let reward_wallet = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+        let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT);
 
         fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));

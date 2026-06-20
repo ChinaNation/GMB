@@ -359,7 +359,7 @@ mod runtime {
     #[runtime::pallet_index(18)]
     pub type PowDifficulty = pow_difficulty;
 
-    // 机构多签名地址转账模块：治理机构内部投票通过后从 main_address 转账（宪法保留主账户，同时兼容注册型 duoqian_address）
+    // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 duoqian_account）
     #[runtime::pallet_index(19)]
     pub type DuoqianTransfer = duoqian_transfer;
 

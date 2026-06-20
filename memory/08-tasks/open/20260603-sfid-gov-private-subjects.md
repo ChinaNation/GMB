@@ -27,7 +27,7 @@ SFID
 验收标准：
 - 后端编译通过。
 - 前端构建通过。
-- 新目标数据库表从初始化阶段即按 `p_code` 分区。
+- 新目标数据库表从初始化阶段即按 `province_code` 分区。
 - `gov` 命名前后端一致。
 - `institutions` 前后端业务目录不存在；业务职责已拆到 `gov/private/accounts/docs/subjects`。
 - 文档已更新，注释已补充，生成物残留已清理。
@@ -48,7 +48,7 @@ SFID
 - 已更新 `sfid/frontend/tsconfig.json`，显式覆盖新前端目录。
 - 已确认后端和前端不再保留旧机构聚合业务目录。
 - 已运行 `cargo check`、`npm run build`。
-- 已将私权机构精确列表改为按登录 scope 解析 `p_code / c_code` 后查询目标分区表,不再按中文省市字段或内存全量过滤。
+- 已将私权机构精确列表改为按登录 scope 解析 `province_code / city_code` 后查询目标分区表,不再按中文省市字段或内存全量过滤。
 - 已新增公安局和公权机构确定性列表 StoreHandle 只读查询,GET 接口不再执行 backfill、reconcile、写库或分片同步。
 - 已将 `gov/private/accounts/docs/subjects` 重复的 HTTP helper 抽到 `sfid/backend/subjects/http.rs`,并清理旧复制函数。
 - 已将公权/私权新增弹窗表单抽到 `sfid/frontend/core/institution/CreateInstitutionForm.tsx`,`gov` 与 `private` 仅保留 API 包装。

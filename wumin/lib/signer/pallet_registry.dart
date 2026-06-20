@@ -79,10 +79,10 @@ class PalletRegistry {
   static const int registerSfidInstitutionCall = 2;
   static const int cleanupRejectedProposalCall = 4;
 
-  /// `propose_create_institution(sfid_number, institution_name, accounts,
+  /// `propose_create_institution(sfid_number, sfid_full_name, accounts,
   /// admin_org, admin_count, duoqian_admins, threshold, register_nonce, signature,
-  /// province, signer_admin_pubkey)` —
-  /// 机构多签账户创建提案,凭证由 SFID 后端按 (province, admin_pubkey)
+  /// province_name, signer_admin_pubkey)` —
+  /// 机构多签账户创建提案,凭证由 SFID 后端按 (province_name, admin_pubkey)
   /// 双层签发(ADR-008 step2b)。
   static const int proposeCreateInstitutionCall = 5;
 

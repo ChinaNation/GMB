@@ -45,8 +45,8 @@ PersonalManage 交易载荷：
 PersonalManage ProposalData：
 
 - `MODULE_TAG = b"per-mgmt"`。
-- `ACTION_CREATE = 0`：`duoqian_address + proposer + amount + fee`。
-- `ACTION_CLOSE = 1`：`duoqian_address + beneficiary + proposer`。
+- `ACTION_CREATE = 0`：`duoqian_account + proposer + amount + fee`。
+- `ACTION_CLOSE = 1`：`duoqian_account + beneficiary + proposer`。
 
 PersonalManage storage：
 

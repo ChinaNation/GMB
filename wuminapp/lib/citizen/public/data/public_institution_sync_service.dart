@@ -20,7 +20,7 @@ class PublicInstitutionSyncService {
 
   /// 同步某省目录。返回 true=有更新(已写回),false=版本一致跳过。
   Future<bool> syncProvince(String province) async {
-    final remote = await api.fetchVersion(province: province);
+    final remote = await api.fetchVersion(provinceName: province);
     final remoteVersion = remote.manifestVersion;
     final localVersion = await store.provinceVersion(province);
     if (remoteVersion != null && remoteVersion == localVersion) {
@@ -35,7 +35,7 @@ class PublicInstitutionSyncService {
     String? afterSfid;
     while (true) {
       final page = await api.fetchPage(
-        province: province,
+        provinceName: province,
         sinceVersion: since,
         afterSfid: afterSfid,
         pageSize: 500,

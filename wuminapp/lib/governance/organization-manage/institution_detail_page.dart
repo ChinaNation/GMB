@@ -204,7 +204,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (!mounted) return;
     final balanceStore = AccountBalanceSnapshotStore.instance;
     final local =
-        force ? null : await balanceStore.read(widget.institution.mainAddress);
+        force ? null : await balanceStore.read(widget.institution.mainAccount);
     if (local != null && mounted) {
       setState(() {
         _mainBalance = local.balanceYuan;
@@ -225,7 +225,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       );
       try {
         await balanceStore.put(
-          accountHex: widget.institution.mainAddress,
+          accountHex: widget.institution.mainAccount,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -403,7 +403,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
               icon: Icons.account_balance_wallet_outlined,
               label: '主账户',
               // 完整 SS58 地址,不截断。
-              value: _accountHexToSs58(inst.mainAddress),
+              value: _accountHexToSs58(inst.mainAccount),
             ),
             const Divider(height: 18),
             _buildAccountInfoTile(
@@ -435,8 +435,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   String _locationLabel() {
     final dir = _directory;
     if (dir == null) return '';
-    final province = dir.province ?? '';
-    final city = dir.city ?? '';
+    final province = dir.provinceName ?? '';
+    final city = dir.cityName ?? '';
     if (province.isEmpty && city.isEmpty) return '';
     if (province.isEmpty) return city;
     if (city.isEmpty) return province;
@@ -506,10 +506,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   int _accountCount() {
     final accounts = widget.institution.accounts;
     var count = 1; // 主账户
-    if (accounts?.feeAddress != null) count++;
-    if (accounts?.safetyFundAddress != null) count++;
-    if (accounts?.heFundAddress != null) count++;
-    if (accounts?.stakeAddress != null) count++;
+    if (accounts?.feeAccount != null) count++;
+    if (accounts?.anquanAccount != null) count++;
+    if (accounts?.heAccount != null) count++;
+    if (accounts?.stakeAccount != null) count++;
     return count;
   }
 

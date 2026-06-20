@@ -8,7 +8,7 @@
 
 ## 修改范围 / 执行记录
 
-- 新建 `primitives/src/multisig.rs`：3 trait（DuoqianAddressValidator / DuoqianReservedAddressChecker / ProtectedSourceChecker）+ 2 类型（MultisigConfig / MultisigConfigSnapshot），doc 合并。
+- 新建 `primitives/src/multisig.rs`：3 trait（DuoqianAccountValidator / DuoqianReservedAccountChecker / ProtectedSourceChecker）+ 2 类型（MultisigConfig / MultisigConfigSnapshot），doc 合并。
 - 删 `primitives/src/traits.rs`、`primitives/src/types.rs`。
 - `primitives/src/lib.rs`：删 `pub mod traits;` `pub mod types;`，加 `pub mod multisig;`。
 - 下游 8 文件 `primitives::traits` / `primitives::types` → `primitives::multisig`（含 organization-manage 本地 traits.rs 的 re-export `pub use` 与 doc 注释）：

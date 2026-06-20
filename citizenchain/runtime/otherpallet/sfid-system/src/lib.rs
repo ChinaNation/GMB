@@ -55,14 +55,14 @@ pub type ProvinceBoundOuter = BoundedVec<u8, ConstU32<64>>;
     MaxEncodedLen,
 )]
 /// 中文注释:绑定凭证结构体,封装 binding_id、一次性 nonce、ADR-008 step3 双层
-/// (province, signer_admin_pubkey) 字段以及 SFID 系统签名。
-/// SCALE 顺序固定:`binding_id → bind_nonce → province → signer_admin_pubkey → signature`,
+/// (province_name, signer_admin_pubkey) 字段以及 SFID 系统签名。
+/// SCALE 顺序固定:`binding_id → bind_nonce → province_name → signer_admin_pubkey → signature`,
 /// wumin / wuminapp / SFID 后端三处签发流程必须按本顺序序列化。
 pub struct BindCredential<Hash, Nonce, Signature> {
     pub binding_id: Hash,
     pub bind_nonce: Nonce,
     /// ADR-008 step3:与 `signer_admin_pubkey` 配合在 `ShengSigningPubkey` 双映射中查派生签名公钥。
-    pub province: ProvinceBoundOuter,
+    pub province_name: ProvinceBoundOuter,
     /// ADR-008 step3:签发本绑定凭证的省级 admin 公钥(花名册内三槽之一)。
     pub signer_admin_pubkey: [u8; 32],
     pub signature: Signature,
@@ -80,7 +80,7 @@ impl<AccountId, Hash, Nonce, Signature> SfidVerifier<AccountId, Hash, Nonce, Sig
 }
 
 /// 中文注释:公民投票实时验签接口。ADR-008 step3 起,签名载荷与公钥派生路径
-/// 都按 (province, signer_admin_pubkey) 双层匹配,绑定身份标识与提案 ID 同步进 payload。
+/// 都按 (province_name, signer_admin_pubkey) 双层匹配,绑定身份标识与提案 ID 同步进 payload。
 pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify_vote(
         account: &AccountId,
@@ -88,7 +88,7 @@ pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
         proposal_id: u64,
         nonce: &Nonce,
         signature: &Signature,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 }
@@ -124,7 +124,7 @@ pub trait OnSfidBoundWeight {
 impl OnSfidBoundWeight for () {}
 
 /// 中文注释:给投票模块使用的统一资格接口。
-/// ADR-008 step3:`verify_and_consume_vote_credential` 加 (province, signer_admin_pubkey)
+/// ADR-008 step3:`verify_and_consume_vote_credential` 加 (province_name, signer_admin_pubkey)
 /// 双层匹配字段,链上不再保留任何"SFID main 兜底"路径。
 pub trait SfidEligibilityProvider<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
@@ -134,7 +134,7 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 
@@ -242,7 +242,7 @@ pub mod pallet {
     >;
 
     /// 中文注释:省管理员 3-tier 花名册。
-    /// 索引:`(province, slot)` → admin sr25519 公钥(32 字节)。
+    /// 索引:`(province_name, slot)` → admin sr25519 公钥(32 字节)。
     /// 写入路径:`activate_sheng_signing_pubkey`(占 Main)/ `add_sheng_admin_backup`(占 Backup{1,2})。
     /// 删除路径:`remove_sheng_admin_backup`(级联清 ShengSigningPubkey 同 admin 行)。
     #[pallet::storage]
@@ -259,7 +259,7 @@ pub mod pallet {
 
     /// 中文注释:按 (省, admin 公钥) 二维存储的省级签名公钥。
     /// ADR-008:每省 3 把独立签名密钥(Main / Backup1 / Backup2 各一把),互不共享。
-    /// runtime verifier(`organization-manage` 等)按 (province, signer_admin_pubkey) 二元组查表验签。
+    /// runtime verifier(`organization-manage` 等)按 (province_name, signer_admin_pubkey) 二元组查表验签。
     #[pallet::storage]
     #[pallet::getter(fn sheng_signing_pubkey_storage)]
     pub type ShengSigningPubkey<T: Config> = StorageDoubleMap<
@@ -300,25 +300,25 @@ pub mod pallet {
         },
         /// 中文注释:省管理员 backup 槽被占用(Main 已 activate 后由 Main 签名授权写入)。
         ShengAdminBackupAdded {
-            province: ProvinceBound,
+            province_name: ProvinceBound,
             slot: Slot,
             pubkey: [u8; 32],
         },
         /// 中文注释:省管理员 backup 槽被清空(级联清同 admin 行 ShengSigningPubkey)。
         ShengAdminBackupRemoved {
-            province: ProvinceBound,
+            province_name: ProvinceBound,
             slot: Slot,
             pubkey: [u8; 32],
         },
         /// 中文注释:省级签名公钥首次激活(写入 ShengSigningPubkey;若 Main 槽空则同时占 Main)。
         ShengSigningActivated {
-            province: ProvinceBound,
+            province_name: ProvinceBound,
             admin_pubkey: [u8; 32],
             signing_pubkey: [u8; 32],
         },
         /// 中文注释:省级签名公钥轮换(替换同 admin 行的现有 signing pubkey)。
         ShengSigningRotated {
-            province: ProvinceBound,
+            province_name: ProvinceBound,
             admin_pubkey: [u8; 32],
             old_signing_pubkey: [u8; 32],
             new_signing_pubkey: [u8; 32],
@@ -354,7 +354,7 @@ pub mod pallet {
         NotBound,
         /// 中文注释:Main 槽已被占用,activate 走 first-come-first-serve 失败。
         Sheng3TierMainAlreadyActivated,
-        /// 中文注释:admin_pubkey 不在 ShengAdmins[province][\*] 任何槽中。
+        /// 中文注释:admin_pubkey 不在 ShengAdmins[province_name][\*] 任何槽中。
         Sheng3TierAdminNotInRoster,
         /// 中文注释:目标 backup 槽已被占用(必须先 remove)。
         Sheng3TierSlotOccupied,
@@ -454,7 +454,7 @@ pub mod pallet {
         #[pallet::weight((T::WeightInfo::add_sheng_admin_backup(), DispatchClass::Normal, Pays::No))]
         pub fn add_sheng_admin_backup(
             origin: OriginFor<T>,
-            province: Vec<u8>,
+            province_name: Vec<u8>,
             slot: Slot,
             new_pubkey: [u8; 32],
             nonce: ShengNonce,
@@ -467,7 +467,7 @@ pub mod pallet {
                 Error::<T>::Sheng3TierInvalidSlotForBackup
             );
 
-            let bounded = Self::bounded_province(&province)?;
+            let bounded = Self::bounded_province(&province_name)?;
 
             let main_pubkey = ShengAdmins::<T>::get(&bounded, Slot::Main)
                 .ok_or(Error::<T>::Sheng3TierAdminNotInRoster)?;
@@ -485,7 +485,7 @@ pub mod pallet {
             );
 
             let payload = crate::sheng_admins::payload::add_backup_payload(
-                &province,
+                &province_name,
                 slot,
                 &new_pubkey,
                 &nonce,
@@ -499,7 +499,7 @@ pub mod pallet {
             ShengAdmins::<T>::insert(&bounded, slot, new_pubkey);
 
             Self::deposit_event(Event::<T>::ShengAdminBackupAdded {
-                province: bounded,
+                province_name: bounded,
                 slot,
                 pubkey: new_pubkey,
             });
@@ -507,12 +507,12 @@ pub mod pallet {
         }
 
         /// 中文注释:由本省 Main 签名授权,清空 Backup1 / Backup2 槽。
-        /// - 级联效应:同时清 ShengSigningPubkey[(province, removed_admin_pubkey)]。
+        /// - 级联效应:同时清 ShengSigningPubkey[(province_name, removed_admin_pubkey)]。
         #[pallet::call_index(3)]
         #[pallet::weight((T::WeightInfo::remove_sheng_admin_backup(), DispatchClass::Normal, Pays::No))]
         pub fn remove_sheng_admin_backup(
             origin: OriginFor<T>,
-            province: Vec<u8>,
+            province_name: Vec<u8>,
             slot: Slot,
             nonce: ShengNonce,
             sig: [u8; 64],
@@ -524,7 +524,7 @@ pub mod pallet {
                 Error::<T>::Sheng3TierInvalidSlotForBackup
             );
 
-            let bounded = Self::bounded_province(&province)?;
+            let bounded = Self::bounded_province(&province_name)?;
 
             let main_pubkey = ShengAdmins::<T>::get(&bounded, Slot::Main)
                 .ok_or(Error::<T>::Sheng3TierAdminNotInRoster)?;
@@ -539,7 +539,7 @@ pub mod pallet {
             );
 
             let payload =
-                crate::sheng_admins::payload::remove_backup_payload(&province, slot, &nonce);
+                crate::sheng_admins::payload::remove_backup_payload(&province_name, slot, &nonce);
             ensure!(
                 Self::verify_sr25519(&main_pubkey, &sig, &payload),
                 Error::<T>::Sheng3TierSignatureInvalid
@@ -550,7 +550,7 @@ pub mod pallet {
             ShengSigningPubkey::<T>::remove(&bounded, removed_pubkey);
 
             Self::deposit_event(Event::<T>::ShengAdminBackupRemoved {
-                province: bounded,
+                province_name: bounded,
                 slot,
                 pubkey: removed_pubkey,
             });
@@ -561,13 +561,13 @@ pub mod pallet {
         /// 鉴权:sig 由 admin_pubkey 私钥签发。
         /// 业务:
         /// - 若 Main 槽空 → first-come-first-serve 占 Main 槽,同时写 ShengSigningPubkey。
-        /// - 若 Main 槽已被占 → admin_pubkey 必须 ∈ ShengAdmins[province][\*],写 ShengSigningPubkey。
+        /// - 若 Main 槽已被占 → admin_pubkey 必须 ∈ ShengAdmins[province_name][\*],写 ShengSigningPubkey。
         /// - 若该 admin 已有 signing pubkey → 用 `rotate_sheng_signing_pubkey` 而非本入口。
         #[pallet::call_index(4)]
         #[pallet::weight((T::WeightInfo::activate_sheng_signing_pubkey(), DispatchClass::Normal, Pays::No))]
         pub fn activate_sheng_signing_pubkey(
             origin: OriginFor<T>,
-            province: Vec<u8>,
+            province_name: Vec<u8>,
             admin_pubkey: [u8; 32],
             signing_pubkey: [u8; 32],
             nonce: ShengNonce,
@@ -575,7 +575,7 @@ pub mod pallet {
         ) -> DispatchResult {
             ensure_none(origin)?;
 
-            let bounded = Self::bounded_province(&province)?;
+            let bounded = Self::bounded_province(&province_name)?;
 
             let nonce_hash = T::Hashing::hash(&nonce);
             ensure!(
@@ -584,7 +584,7 @@ pub mod pallet {
             );
 
             let payload = crate::sheng_admins::payload::activate_payload(
-                &province,
+                &province_name,
                 &admin_pubkey,
                 &signing_pubkey,
                 &nonce,
@@ -618,7 +618,7 @@ pub mod pallet {
             ShengSigningPubkey::<T>::insert(&bounded, admin_pubkey, signing_pubkey);
 
             Self::deposit_event(Event::<T>::ShengSigningActivated {
-                province: bounded,
+                province_name: bounded,
                 admin_pubkey,
                 signing_pubkey,
             });
@@ -627,12 +627,12 @@ pub mod pallet {
 
         /// 中文注释:轮换某 admin 的省级签名公钥。
         /// 鉴权:sig 由 admin_pubkey 私钥签发。
-        /// 前提:admin_pubkey ∈ ShengAdmins[province][\*] 且 ShengSigningPubkey[(province, admin)] 已存在。
+        /// 前提:admin_pubkey ∈ ShengAdmins[province_name][\*] 且 ShengSigningPubkey[(province_name, admin)] 已存在。
         #[pallet::call_index(5)]
         #[pallet::weight((T::WeightInfo::rotate_sheng_signing_pubkey(), DispatchClass::Normal, Pays::No))]
         pub fn rotate_sheng_signing_pubkey(
             origin: OriginFor<T>,
-            province: Vec<u8>,
+            province_name: Vec<u8>,
             admin_pubkey: [u8; 32],
             new_signing_pubkey: [u8; 32],
             nonce: ShengNonce,
@@ -640,7 +640,7 @@ pub mod pallet {
         ) -> DispatchResult {
             ensure_none(origin)?;
 
-            let bounded = Self::bounded_province(&province)?;
+            let bounded = Self::bounded_province(&province_name)?;
 
             let nonce_hash = T::Hashing::hash(&nonce);
             ensure!(
@@ -650,7 +650,7 @@ pub mod pallet {
 
             // admin 必须在花名册中
             ensure!(
-                Self::is_sheng_admin(&province, &admin_pubkey).is_some(),
+                Self::is_sheng_admin(&province_name, &admin_pubkey).is_some(),
                 Error::<T>::Sheng3TierAdminNotInRoster
             );
 
@@ -658,7 +658,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::Sheng3TierSigningNotActivated)?;
 
             let payload = crate::sheng_admins::payload::rotate_payload(
-                &province,
+                &province_name,
                 &admin_pubkey,
                 &new_signing_pubkey,
                 &nonce,
@@ -672,7 +672,7 @@ pub mod pallet {
             ShengSigningPubkey::<T>::insert(&bounded, admin_pubkey, new_signing_pubkey);
 
             Self::deposit_event(Event::<T>::ShengSigningRotated {
-                province: bounded,
+                province_name: bounded,
                 admin_pubkey,
                 old_signing_pubkey,
                 new_signing_pubkey,
@@ -694,27 +694,27 @@ pub mod pallet {
                 .unwrap_or(false)
         }
 
-        /// 中文注释:按 (province, admin_pubkey) 二元组读省级签名公钥。
+        /// 中文注释:按 (province_name, admin_pubkey) 二元组读省级签名公钥。
         /// runtime verifier(`organization-manage` 等)按本入口验签。
         pub fn sheng_signing_pubkey_for_admin(
-            province: &[u8],
+            province_name: &[u8],
             admin_pubkey: &[u8; 32],
         ) -> Option<[u8; 32]> {
-            let bounded = ProvinceBound::try_from(province.to_vec()).ok()?;
+            let bounded = ProvinceBound::try_from(province_name.to_vec()).ok()?;
             ShengSigningPubkey::<T>::get(&bounded, admin_pubkey)
         }
 
         /// 中文注释:判断 pubkey 是否在某省花名册中,返回所占槽位。
-        pub fn is_sheng_admin(province: &[u8], pubkey: &[u8; 32]) -> Option<Slot> {
-            let bounded = ProvinceBound::try_from(province.to_vec()).ok()?;
+        pub fn is_sheng_admin(province_name: &[u8], pubkey: &[u8; 32]) -> Option<Slot> {
+            let bounded = ProvinceBound::try_from(province_name.to_vec()).ok()?;
             [Slot::Main, Slot::Backup1, Slot::Backup2]
                 .into_iter()
                 .find(|slot| ShengAdmins::<T>::get(&bounded, *slot).as_ref() == Some(pubkey))
         }
 
         /// 中文注释:判断 pubkey 是否为某省 Main(用于业务判定 + 治理快速路径)。
-        pub fn is_sheng_main(province: &[u8], pubkey: &[u8; 32]) -> bool {
-            let bounded = match ProvinceBound::try_from(province.to_vec()) {
+        pub fn is_sheng_main(province_name: &[u8], pubkey: &[u8; 32]) -> bool {
+            let bounded = match ProvinceBound::try_from(province_name.to_vec()) {
                 Ok(v) => v,
                 Err(_) => return false,
             };
@@ -723,8 +723,8 @@ pub mod pallet {
 
         // ---- Helpers (内部) ----
 
-        fn bounded_province(province: &[u8]) -> Result<ProvinceBound, Error<T>> {
-            ProvinceBound::try_from(province.to_vec())
+        fn bounded_province(province_name: &[u8]) -> Result<ProvinceBound, Error<T>> {
+            ProvinceBound::try_from(province_name.to_vec())
                 .map_err(|_| Error::<T>::Sheng3TierProvinceTooLong)
         }
 
@@ -736,7 +736,7 @@ pub mod pallet {
     }
 
     /// 中文注释:实现投票资格接口,供治理模块统一判断公民身份和消费投票凭证。
-    /// ADR-008 step3:消费凭证时把 (province, signer_admin_pubkey) 透传到 verifier,
+    /// ADR-008 step3:消费凭证时把 (province_name, signer_admin_pubkey) 透传到 verifier,
     /// runtime verifier 会按 `ShengSigningPubkey` 双映射查派生签名公钥并验签。
     impl<T: Config> crate::SfidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
         fn is_eligible(binding_id: &T::Hash, who: &T::AccountId) -> bool {
@@ -749,10 +749,10 @@ pub mod pallet {
             proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
-            province: &[u8],
+            province_name: &[u8],
             signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            if nonce.is_empty() || signature.is_empty() || province.is_empty() {
+            if nonce.is_empty() || signature.is_empty() || province_name.is_empty() {
                 return false;
             }
 
@@ -781,7 +781,7 @@ pub mod pallet {
                 proposal_id,
                 &nonce_bounded,
                 &signature_bounded,
-                province,
+                province_name,
                 signer_admin_pubkey,
             ) {
                 return false;
@@ -861,40 +861,46 @@ pub mod pallet {
         fn extract_unsigned_parts(call: &Call<T>) -> Option<UnsignedParts> {
             match call {
                 Call::add_sheng_admin_backup {
-                    province,
+                    province_name,
                     slot,
                     new_pubkey,
                     nonce,
                     sig,
                 } => {
-                    let bounded = ProvinceBound::try_from(province.clone()).ok()?;
+                    let bounded = ProvinceBound::try_from(province_name.clone()).ok()?;
                     let signer = ShengAdmins::<T>::get(&bounded, Slot::Main)?;
                     let payload = crate::sheng_admins::payload::add_backup_payload(
-                        province, *slot, new_pubkey, nonce,
+                        province_name,
+                        *slot,
+                        new_pubkey,
+                        nonce,
                     );
                     Some((*nonce, payload, signer, *sig, b"add_backup"))
                 }
                 Call::remove_sheng_admin_backup {
-                    province,
+                    province_name,
                     slot,
                     nonce,
                     sig,
                 } => {
-                    let bounded = ProvinceBound::try_from(province.clone()).ok()?;
+                    let bounded = ProvinceBound::try_from(province_name.clone()).ok()?;
                     let signer = ShengAdmins::<T>::get(&bounded, Slot::Main)?;
-                    let payload =
-                        crate::sheng_admins::payload::remove_backup_payload(province, *slot, nonce);
+                    let payload = crate::sheng_admins::payload::remove_backup_payload(
+                        province_name,
+                        *slot,
+                        nonce,
+                    );
                     Some((*nonce, payload, signer, *sig, b"remove_backup"))
                 }
                 Call::activate_sheng_signing_pubkey {
-                    province,
+                    province_name,
                     admin_pubkey,
                     signing_pubkey,
                     nonce,
                     sig,
                 } => {
                     let payload = crate::sheng_admins::payload::activate_payload(
-                        province,
+                        province_name,
                         admin_pubkey,
                         signing_pubkey,
                         nonce,
@@ -902,14 +908,14 @@ pub mod pallet {
                     Some((*nonce, payload, *admin_pubkey, *sig, b"activate"))
                 }
                 Call::rotate_sheng_signing_pubkey {
-                    province,
+                    province_name,
                     admin_pubkey,
                     new_signing_pubkey,
                     nonce,
                     sig,
                 } => {
                     let payload = crate::sheng_admins::payload::rotate_payload(
-                        province,
+                        province_name,
                         admin_pubkey,
                         new_signing_pubkey,
                         nonce,

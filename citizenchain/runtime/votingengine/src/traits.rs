@@ -137,7 +137,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
 }
 
 /// 中文注释：公民总人口快照验签接口（由 runtime 对接 SFID 系统）。
-/// ADR-008 step3:`(province, signer_admin_pubkey)` 必须随 payload 一起进 SCALE 哈希,
+/// ADR-008 step3:`(province_name, signer_admin_pubkey)` 必须随 payload 一起进 SCALE 哈希,
 /// runtime verifier 按 `ShengSigningPubkey` 双映射查派生签名公钥并验签;
 /// 链上 0 prior knowledge of SFID,无任何"SFID main 兜底"路径。
 pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
@@ -146,7 +146,7 @@ pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
         eligible_total: u64,
         nonce: &Nonce,
         signature: &Signature,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 }
@@ -726,7 +726,7 @@ impl VoteCredentialCleanup {
     }
 }
 
-/// ADR-008 step3:`verify_and_consume_vote_credential` 加 `(province, signer_admin_pubkey)`
+/// ADR-008 step3:`verify_and_consume_vote_credential` 加 `(province_name, signer_admin_pubkey)`
 /// 双层匹配字段,链上不再保留任何"SFID main 兜底"路径。
 pub trait SfidEligibility<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
@@ -736,7 +736,7 @@ pub trait SfidEligibility<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 

@@ -18,14 +18,14 @@ use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
     /// 联合公投:由外部 SFID 系统判定资格,链上去重计票。
-    /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
+    /// ADR-008 step3:`(province_name, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
     pub fn do_jointreferendum_vote(
         who: T::AccountId,
         proposal_id: u64,
         binding_id: T::Hash,
         nonce: votingengine::pallet::VoteNonceOf<T>,
         signature: votingengine::pallet::VoteSignatureOf<T>,
-        province: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>,
+        province_name: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>,
         signer_admin_pubkey: [u8; 32],
         approve: bool,
     ) -> DispatchResult {
@@ -59,7 +59,7 @@ impl<T: Config> Pallet<T> {
                 proposal_id,
                 nonce.as_slice(),
                 signature.as_slice(),
-                province.as_slice(),
+                province_name.as_slice(),
                 &signer_admin_pubkey,
             ),
             Error::<T>::InvalidSfidVoteCredential

@@ -41,7 +41,7 @@ void main() {
       final callData =
           InstitutionManageService.buildProposeCreateInstitutionCallData(
         sfidNumber: 'AH001-SCB0N-202605010-2026',
-        institutionName: '安徽省储行',
+        sfidFullName: '安徽省储行',
         accounts: [
           InstitutionInitialAccountInput(
             accountName: '主账户',
@@ -58,7 +58,7 @@ void main() {
         threshold: 2,
         registerNonce: 'reg-nonce-001',
         signatureHex: '0x${hexOf(signature)}',
-        province: '安徽省',
+        provinceName: '安徽省',
         signerAdminPubkeyHex: '0x${hexOf(signerAdmin)}',
       );
 

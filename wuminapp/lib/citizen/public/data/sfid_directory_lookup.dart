@@ -3,10 +3,11 @@ import 'package:wuminapp_mobile/citizen/public/data/public_provinces.dart';
 
 /// 机构目录只读反查结果(省/市/法定代表人),源自公权目录本地 Isar 库。
 class SfidDirectoryInfo {
-  const SfidDirectoryInfo({this.province, this.city, this.legalRepName});
+  const SfidDirectoryInfo(
+      {this.provinceName, this.cityName, this.legalRepName});
 
-  final String? province;
-  final String? city;
+  final String? provinceName;
+  final String? cityName;
   final String? legalRepName;
 }
 
@@ -33,8 +34,8 @@ class SfidDirectoryLookup {
     if (entity == null) return null;
     // 机构只存 code(ADR-021);省名走链上常量、市名查字典 join。
     return SfidDirectoryInfo(
-      province: provinceFullNameByCode(entity.provinceCode),
-      city: await _repo.cityName(entity.provinceCode, entity.cityCode),
+      provinceName: provinceFullNameByCode(entity.provinceCode),
+      cityName: await _repo.cityName(entity.provinceCode, entity.cityCode),
       legalRepName: entity.legalRepName,
     );
   }

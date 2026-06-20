@@ -14,7 +14,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
 
   const [input, setInput] = useState(nodeKey.nodeKey ?? '');
   const [bootnodeInstitutionName, setBootnodeInstitutionName] = useState<string | null>(
-    nodeKey.institutionName ?? null,
+    nodeKey.sfidFullName ?? null,
   );
   const [grandpaInput, setGrandpaInput] = useState('');
   const [grandpaInstitutionName, setGrandpaInstitutionName] = useState<string | null>(null);
@@ -28,8 +28,8 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
 
   useEffect(() => {
     setInput(nodeKey.nodeKey ?? '');
-    setBootnodeInstitutionName(nodeKey.institutionName ?? null);
-  }, [nodeKey.nodeKey, nodeKey.institutionName]);
+    setBootnodeInstitutionName(nodeKey.sfidFullName ?? null);
+  }, [nodeKey.nodeKey, nodeKey.sfidFullName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +38,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
       .then((k) => {
         if (cancelled) return;
         setGrandpaInput(k.key ?? '');
-        setGrandpaInstitutionName(k.institutionName ?? null);
+        setGrandpaInstitutionName(k.sfidFullName ?? null);
       })
       .catch(() => undefined);
 
@@ -164,7 +164,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
                       const next = await api.setBootnodeKey(input.trim(), password);
                       onUpdated(next);
                       onApplied();
-                      setBootnodeInstitutionName(next.institutionName ?? null);
+                      setBootnodeInstitutionName(next.sfidFullName ?? null);
                       setInput('');
                       setShowPasswordModal(false);
                       setPendingAction(null);
@@ -183,7 +183,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
                     try {
                       const next = await api.setGrandpaKey(grandpaInput.trim(), password);
                       setGrandpaInput('');
-                      setGrandpaInstitutionName(next.institutionName ?? null);
+                      setGrandpaInstitutionName(next.sfidFullName ?? null);
                       setShowPasswordModal(false);
                       setPendingAction(null);
                       setGrandpaError(null);

@@ -54,7 +54,7 @@ pub(crate) fn ensure_institution_visible_to_admin(
     ctx: &AdminAuthContext,
 ) -> Result<(), axum::response::Response> {
     if let Some(ref locked_province) = ctx.admin_province {
-        if inst.province != *locked_province {
+        if inst.province_name != *locked_province {
             return Err(api_error(
                 StatusCode::FORBIDDEN,
                 1003,
@@ -63,7 +63,7 @@ pub(crate) fn ensure_institution_visible_to_admin(
         }
     }
     if let Some(ref locked_city) = ctx.admin_city {
-        if inst.city != *locked_city {
+        if inst.city_name != *locked_city {
             return Err(api_error(StatusCode::FORBIDDEN, 1003, "city out of scope"));
         }
     }

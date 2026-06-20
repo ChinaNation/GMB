@@ -5,9 +5,9 @@
 //! 中文注释:
 //! 新版 SFID 编号把主体属性放入第二段 `K3P1C1` 的首字符 `K1`。这里集中维护
 //! `K1` 的合法值,并把所有注册型多签机构按业务域分为 3 类,便于前端按 tab
-//! 过滤和按角色授权。分类规则由 `classify(subject_property, code, institution_name)` 决定:
+//! 过滤和按角色授权。分类规则由 `classify(subject_property, code, sfid_full_name)` 决定:
 //!
-//! - PublicSecurity     公安局      公法人 + ZF + institution_name 以"公安局"结尾
+//! - PublicSecurity     公安局      公法人 + ZF + sfid_full_name 以"公安局"结尾
 //! - GovInstitution     公权机构    公法人 + 其他(非公安局)
 //! - PrivateInstitution 私权机构    私法人 / 非法人
 
@@ -108,7 +108,7 @@ impl InstitutionCategory {
 /// 中文注释:公安局确定性目录使用"xx市公安局"命名,这里只保存稳定后缀。
 pub const PUBLIC_SECURITY_INSTITUTION_SUFFIX: &str = "公安局";
 
-/// 按 (subject_property, code, institution_name) 三元组决定机构分类。
+/// 按 (subject_property, code, sfid_full_name) 三元组决定机构分类。
 /// 规则优先级:公安局 > 公权机构 > 私权机构。
 ///
 /// 返回 None 的情况:主体属性与 code 的组合不属于任何一个注册型多签机构
@@ -116,13 +116,13 @@ pub const PUBLIC_SECURITY_INSTITUTION_SUFFIX: &str = "公安局";
 pub fn classify(
     subject_property: SubjectProperty,
     code: InstitutionCode,
-    institution_name: &str,
+    sfid_full_name: &str,
 ) -> Option<InstitutionCategory> {
     match subject_property {
         SubjectProperty::G => {
             // 公法人类:区分公安局和其他公权机构。
             if code == InstitutionCode::ZF
-                && institution_name.ends_with(PUBLIC_SECURITY_INSTITUTION_SUFFIX)
+                && sfid_full_name.ends_with(PUBLIC_SECURITY_INSTITUTION_SUFFIX)
             {
                 Some(InstitutionCategory::PublicSecurity)
             } else {

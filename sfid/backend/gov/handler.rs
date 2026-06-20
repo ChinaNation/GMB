@@ -175,8 +175,8 @@ pub(crate) async fn list_public_security_institutions(
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ListOfficialInstitutionQuery {
-    pub province: Option<String>,
-    pub city: Option<String>,
+    pub province_name: Option<String>,
+    pub city_name: Option<String>,
     pub q: Option<String>,
     pub org_code: Option<String>,
     pub cursor: Option<String>,
@@ -205,7 +205,7 @@ pub(crate) async fn list_official_institutions(
         manifest_version: None,
         catalog_status: None,
     };
-    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -215,7 +215,7 @@ pub(crate) async fn list_official_institutions(
             .into_response();
         }
     }
-    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -228,11 +228,14 @@ pub(crate) async fn list_official_institutions(
     let Some(province) = scope
         .locked_province
         .clone()
-        .or_else(|| query.province.clone())
+        .or_else(|| query.province_name.clone())
     else {
         return api_error(StatusCode::FORBIDDEN, 1003, "province scope required");
     };
-    let city = scope.locked_city.clone().or_else(|| query.city.clone());
+    let city = scope
+        .locked_city
+        .clone()
+        .or_else(|| query.city_name.clone());
     let Some(province_code) = province_code_by_name(&province) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
@@ -318,7 +321,7 @@ pub(crate) async fn list_official_institutions(
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ReconcilePublicSecurityQuery {
-    pub province: Option<String>,
+    pub province_name: Option<String>,
 }
 
 pub(crate) async fn reconcile_public_security(
@@ -331,7 +334,7 @@ pub(crate) async fn reconcile_public_security(
         Err(resp) => return resp,
     };
     let grant_target = query
-        .province
+        .province_name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -339,7 +342,7 @@ pub(crate) async fn reconcile_public_security(
         .to_string();
     let grant_payload = serde_json::json!({
         "target": grant_target.clone(),
-        "province": query.province.clone(),
+        "province_name": query.province_name.clone(),
     });
     if let Err(resp) = require_admin_security_grant(
         &state,
@@ -355,7 +358,7 @@ pub(crate) async fn reconcile_public_security(
 
     let mut reports: Vec<ReconcileReport> = Vec::new();
     match query
-        .province
+        .province_name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())

@@ -112,7 +112,8 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: AppTheme.bannerDecoration(expired ? AppTheme.danger : AppTheme.success),
+            decoration: AppTheme.bannerDecoration(
+                expired ? AppTheme.danger : AppTheme.success),
             child: Row(
               children: [
                 Icon(
@@ -123,7 +124,9 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    expired ? '签名请求已过期，请返回重新提交' : '签名请求有效期剩余：${_remainingSeconds}s',
+                    expired
+                        ? '签名请求已过期，请返回重新提交'
+                        : '签名请求有效期剩余：${_remainingSeconds}s',
                     style: TextStyle(
                       color: expired ? AppTheme.danger : AppTheme.success,
                       fontWeight: FontWeight.w600,
@@ -275,7 +278,6 @@ class _SimpleScannerState extends State<_SimpleScanner> {
               _handleCode(code);
             },
           ),
-
           CustomPaint(
             painter: _ScanOverlayPainter(
               scanBoxSize: scanBoxSize,
@@ -283,7 +285,6 @@ class _SimpleScannerState extends State<_SimpleScanner> {
             ),
             child: const SizedBox.expand(),
           ),
-
           Center(
             child: Transform.translate(
               offset: const Offset(0, scanBoxOffsetY),
@@ -296,7 +297,6 @@ class _SimpleScannerState extends State<_SimpleScanner> {
               ),
             ),
           ),
-
           Center(
             child: Transform.translate(
               offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 24),
@@ -306,7 +306,6 @@ class _SimpleScannerState extends State<_SimpleScanner> {
               ),
             ),
           ),
-
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(

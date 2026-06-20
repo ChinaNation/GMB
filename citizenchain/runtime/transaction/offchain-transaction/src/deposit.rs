@@ -27,11 +27,11 @@ type BalanceOf<T> =
 ///
 /// 约束:
 /// - L3 未绑定其他清算行
-/// - `bank_main_address` 必须满足 `bank_check::ensure_can_be_bound`(K1=S/F + Active + 主账户)
+/// - `bank_main_account` 必须满足 `bank_check::ensure_can_be_bound`(K1=S/F + Active + 主账户)
 /// - 无预存,`DepositBalance` 初始化为 0
 pub fn do_bind_clearing_bank<T: Config>(
     user: T::AccountId,
-    bank_main_address: T::AccountId,
+    bank_main_account: T::AccountId,
 ) -> DispatchResult {
     // 1. 不允许重复绑定
     ensure!(
@@ -40,15 +40,15 @@ pub fn do_bind_clearing_bank<T: Config>(
     );
 
     // 2. 清算行合法性(K1 主体属性 + Active + 主账户三重校验)
-    bank_check::ensure_can_be_bound::<T>(&bank_main_address).map_err(DispatchError::from)?;
+    bank_check::ensure_can_be_bound::<T>(&bank_main_account).map_err(DispatchError::from)?;
 
     // 3. 落存储
-    UserBank::<T>::insert(&user, &bank_main_address);
-    DepositBalance::<T>::insert(&bank_main_address, &user, 0u128);
+    UserBank::<T>::insert(&user, &bank_main_account);
+    DepositBalance::<T>::insert(&bank_main_account, &user, 0u128);
 
     Pallet::<T>::deposit_event(Event::<T>::BankBound {
         user,
-        bank: bank_main_address,
+        bank: bank_main_account,
     });
     Ok(())
 }

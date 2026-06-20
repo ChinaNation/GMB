@@ -1,5 +1,5 @@
 //! 汇总 runtime/primitives/china 目录下所有制度保留地址
-//! （main_address + fee_address + stake_address + NRC_ANQUAN_ADDRESS）。
+//! （main_account + fee_account + stake_account + NRC_ANQUAN_ACCOUNT）。
 //! 用于禁止 organization-manage 抢注这些机构地址。
 //!
 //! 派生统一走 `primitives::core_const::DUOQIAN` + op_tag，由
@@ -7,7 +7,7 @@
 
 use hex_literal::hex;
 
-pub const CHINA_RESERVED_MAIN_ADDRESSES: &[[u8; 32]; 609] = &[
+pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; 609] = &[
     hex!("00dc7626cff40c355cbd014329e2abfeef72b2ffb041f8c88b3d0f050dce025d"),
     hex!("014f9eb856f901b635680c53cb7d266ca67a98db8bf89ea27244e9fc7809d25d"),
     hex!("016952641c9df0ebebc3b48619e1ec64fae5ff54228158b9a57b8a4df465c9a7"),
@@ -620,8 +620,6 @@ pub const CHINA_RESERVED_MAIN_ADDRESSES: &[[u8; 32]; 609] = &[
 ];
 
 /// 检查地址是否属于制度保留地址（静态常量数组二分查找）。
-pub fn is_reserved_main_address(address: &[u8; 32]) -> bool {
-    CHINA_RESERVED_MAIN_ADDRESSES
-        .binary_search(address)
-        .is_ok()
+pub fn is_reserved_main_account(address: &[u8; 32]) -> bool {
+    CHINA_RESERVED_MAIN_ACCOUNTS.binary_search(address).is_ok()
 }

@@ -29,7 +29,7 @@
   - 原始 32 字节 ed25519 私钥二进制，`set_bootnode_key` 时直接写入，Substrate 节点启动时自动加载。
 - 本地元数据文件：`<app_data_dir>/bootnode-meta.json`
   - `peer_id`
-  - `institution_name`
+  - `sfid_full_name`
 
 ## 4. 关键流程
 

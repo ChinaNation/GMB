@@ -79,16 +79,16 @@ impl pallet_balances::Config for Test {
 
 // ─── Trait mock 实现 ─────────────────────────────────────────────────────
 
-pub struct TestAddressValidator;
-impl primitives::multisig::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+pub struct TestAccountValidator;
+impl primitives::multisig::DuoqianAccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
-pub struct TestReservedAddressChecker;
-impl primitives::multisig::DuoqianReservedAddressChecker<AccountId32>
-    for TestReservedAddressChecker
+pub struct TestReservedAccountChecker;
+impl primitives::multisig::DuoqianReservedAccountChecker<AccountId32>
+    for TestReservedAccountChecker
 {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
@@ -113,7 +113,7 @@ impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
 }
 
 /// SFID 双层签名 mock:仅当 signature == b"register-ok"
-/// 且 nonce/institution_name/account_names/province/signer_admin_pubkey 都非空时通过。
+/// 且 nonce/sfid_full_name/account_names/province_name/signer_admin_pubkey 都非空时通过。
 pub struct TestSfidInstitutionVerifier;
 impl
     crate::traits::SfidInstitutionVerifier<
@@ -124,18 +124,18 @@ impl
 {
     fn verify_institution_registration(
         sfid_number: &[u8],
-        institution_name: &crate::pallet::AccountNameOf<Test>,
+        sfid_full_name: &crate::pallet::AccountNameOf<Test>,
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &crate::pallet::RegisterNonceOf<Test>,
         signature: &crate::pallet::RegisterSignatureOf<Test>,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         !sfid_number.is_empty()
-            && !institution_name.is_empty()
+            && !sfid_full_name.is_empty()
             && !account_names.is_empty()
             && !nonce.is_empty()
-            && !province.is_empty()
+            && !province_name.is_empty()
             && signer_admin_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
@@ -278,8 +278,8 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type AddressValidator = TestAddressValidator;
-    type ReservedAddressChecker = TestReservedAddressChecker;
+    type AccountValidator = TestAccountValidator;
+    type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
@@ -323,8 +323,8 @@ pub fn sfid_number(s: &[u8]) -> pallet::SfidNumberOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("sfid_number fits")
 }
 
-pub fn institution_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("institution_name fits")
+pub fn sfid_full_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
+    BoundedVec::try_from(s.to_vec()).expect("sfid_full_name fits")
 }
 
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
@@ -347,7 +347,7 @@ pub fn signer_pubkey() -> [u8; 32] {
     [7u8; 32]
 }
 
-pub fn province() -> alloc::vec::Vec<u8> {
+pub fn province_name() -> alloc::vec::Vec<u8> {
     b"liaoning".to_vec()
 }
 

@@ -2,7 +2,7 @@
 
 ## 概述
 
-`duoqian-transfer` 模块中的 sweep 子功能，将机构手续费账户 (`fee_address`) 余额划转至机构主账户 (`main_address`)。仅限国储会 (NRC) 和省储行 (PRB) 使用，注册多签机构不支持。
+`duoqian-transfer` 模块中的 sweep 子功能，将机构手续费账户 (`fee_account`) 余额划转至机构主账户 (`main_account`)。仅限国储会 (NRC) 和省储行 (PRB) 使用，注册多签机构不支持。
 
 ## 数据结构
 
@@ -31,8 +31,8 @@ pub struct SweepAction<Balance> {
 
 ## 账户解析
 
-- `resolve_fee_account`：NRC 取 `CHINA_CB[0].fee_address`，PRB 取对应 `CHINA_CH` 节点的 `fee_address`
-- `resolve_main_account`：通过 `institution_pallet_address` 查 `main_address`
+- `resolve_fee_account`：NRC 取 `CHINA_CB[0].fee_account`，PRB 取对应 `CHINA_CH` 节点的 `fee_account`
+- `resolve_main_account`：通过内置机构主账户解析逻辑查 `main_account`
 
 ## 提案/投票/执行流程
 

@@ -313,7 +313,7 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
     let cancelled = false;
     setCityRegistrySfid(null);
     setCityRegistryLoading(true);
-    listOfficialInstitutions(auth, { province: activeProvince, city: activeCity, page_size: 300 })
+    listOfficialInstitutions(auth, { province_name: activeProvince, city_name: activeCity, page_size: 300 })
       .then((res) => {
         if (cancelled) return;
         const row = res.items.find((r) => r.org_code === 'CITY_REGISTRY');

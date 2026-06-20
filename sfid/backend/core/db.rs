@@ -205,8 +205,8 @@ impl Db {
 
              CREATE TABLE IF NOT EXISTS cpms_sites (
                 sfid_number TEXT PRIMARY KEY,
-                p_code TEXT NOT NULL,
-                c_code TEXT NOT NULL,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
                 status TEXT NOT NULL,
                 install_token_status TEXT NOT NULL,
                 cpms_pubkey_hash TEXT,
@@ -216,12 +216,12 @@ impl Db {
                 payload JSONB NOT NULL
              );
              CREATE INDEX IF NOT EXISTS idx_cpms_sites_scope
-                ON cpms_sites(p_code, c_code, status);
+                ON cpms_sites(province_code, city_code, status);
 
              CREATE TABLE IF NOT EXISTS citizen_bind_challenges (
                 challenge_id TEXT PRIMARY KEY,
-                p_code TEXT NOT NULL,
-                c_code TEXT NOT NULL,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
                 wallet_pubkey TEXT NOT NULL,
                 archive_no TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
@@ -319,32 +319,29 @@ impl Db {
             "CREATE TABLE IF NOT EXISTS ids (
                 sfid_number TEXT PRIMARY KEY,
                 kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
-                p_code TEXT NOT NULL,
-                c_code TEXT,
+                province_code TEXT NOT NULL,
+                city_code TEXT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
              );
 
              CREATE TABLE IF NOT EXISTS subjects (
                 sfid_number TEXT NOT NULL,
                 kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
-	                name TEXT,
-	                sfid_name TEXT,
-	                short_name TEXT,
-	                p_code TEXT NOT NULL,
-	                c_code TEXT,
-	                t_code TEXT,
-	                status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
+                name TEXT,
+                sfid_full_name TEXT,
+                sfid_short_name TEXT,
+                status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
                 category TEXT,
                 subject_property TEXT,
                 p1 TEXT,
-	                province TEXT,
-	                city TEXT,
-	                town TEXT,
-	                province_code TEXT,
-	                city_code TEXT,
-	                town_code TEXT,
-	                institution_code TEXT,
-	                org_code TEXT,
+                province_name TEXT,
+                city_name TEXT,
+                town_name TEXT,
+                province_code TEXT NOT NULL,
+                city_code TEXT,
+                town_code TEXT,
+                institution_code TEXT,
+                org_code TEXT,
                 education_type TEXT,
                 private_type TEXT,
                 partnership_kind TEXT,
@@ -359,13 +356,13 @@ impl Db {
                 created_by TEXT,
                 created_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL,
-                PRIMARY KEY (p_code, sfid_number)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, sfid_number)
+             ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS citizens (
                 sfid_number TEXT NOT NULL,
-                p_code TEXT NOT NULL,
-                c_code TEXT NOT NULL,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
                 id BIGINT,
                 archive_no TEXT,
                 wallet_pubkey TEXT,
@@ -375,37 +372,37 @@ impl Db {
                 valid_from TEXT,
                 valid_until TEXT,
                 status_updated_at BIGINT,
-                residence_p_code TEXT,
-                residence_c_code TEXT,
-                residence_t_code TEXT,
-                birth_p_code TEXT,
-                birth_c_code TEXT,
-                birth_t_code TEXT,
+                residence_province_code TEXT,
+                residence_city_code TEXT,
+                residence_town_code TEXT,
+                birth_province_code TEXT,
+                birth_city_code TEXT,
+                birth_town_code TEXT,
                 election_scope_level TEXT NOT NULL DEFAULT 'PROVINCE' CHECK (election_scope_level IN ('PROVINCE', 'CITY', 'TOWN')),
                 bind_status TEXT NOT NULL DEFAULT 'BOUND' CHECK (bind_status IN ('PENDING', 'BOUND')),
                 bound_at TIMESTAMPTZ,
                 bound_by TEXT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                PRIMARY KEY (p_code, sfid_number)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, sfid_number)
+             ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS gov (
                 sfid_number TEXT NOT NULL,
-                p_code TEXT NOT NULL,
-		                c_code TEXT,
-		                t_code TEXT,
+                province_code TEXT NOT NULL,
+		                city_code TEXT,
+		                town_code TEXT,
 		                institution_code TEXT NOT NULL,
 		                org_code TEXT,
                 source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('GENERATED', 'MANUAL')),
                 home_p TEXT,
                 home_c TEXT,
-                PRIMARY KEY (p_code, sfid_number)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, sfid_number)
+             ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS private (
                 sfid_number TEXT NOT NULL,
-                p_code TEXT NOT NULL,
-                c_code TEXT NOT NULL,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
                 code TEXT NOT NULL,
                 private_type TEXT NOT NULL CHECK (private_type IN ('SOLE', 'PARTNERSHIP', 'COMPANY', 'CORPORATION', 'WELFARE', 'ASSOCIATION')),
                 partnership_kind TEXT CHECK (partnership_kind IN ('GENERAL', 'LIMITED')),
@@ -413,45 +410,45 @@ impl Db {
                 subject_property TEXT NOT NULL CHECK (subject_property IN ('S', 'F')),
                 p1 TEXT NOT NULL CHECK (p1 IN ('0', '1')),
                 parent_sfid_number TEXT,
-                PRIMARY KEY (p_code, sfid_number)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, sfid_number)
+             ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS accounts (
                 sfid_number TEXT NOT NULL,
-                p_code TEXT NOT NULL,
-                c_code TEXT,
+                province_code TEXT NOT NULL,
+                city_code TEXT,
                 account_name TEXT NOT NULL,
-                duoqian_address TEXT,
+                duoqian_account TEXT,
                 chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_ON_CHAIN', 'PENDING_ON_CHAIN', 'ACTIVE_ON_CHAIN', 'REVOKED_ON_CHAIN')),
                 created_at TIMESTAMPTZ NOT NULL,
-                PRIMARY KEY (p_code, sfid_number, account_name)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, sfid_number, account_name)
+             ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS docs (
                 id BIGSERIAL,
                 sfid_number TEXT NOT NULL,
-                p_code TEXT NOT NULL,
-                c_code TEXT,
+                province_code TEXT NOT NULL,
+                city_code TEXT,
                 file_name TEXT NOT NULL,
                 doc_type TEXT NOT NULL,
                 file_size BIGINT NOT NULL DEFAULT 0,
                 file_path TEXT NOT NULL,
                 uploaded_by TEXT NOT NULL,
                 uploaded_at TIMESTAMPTZ NOT NULL,
-                PRIMARY KEY (p_code, id)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, id)
+             ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS audit (
                 id BIGSERIAL,
-                p_code TEXT NOT NULL,
-                c_code TEXT,
+                province_code TEXT NOT NULL,
+                city_code TEXT,
                 actor TEXT NOT NULL,
                 action TEXT NOT NULL,
                 target_sfid TEXT,
                 detail JSONB NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                PRIMARY KEY (p_code, id)
-             ) PARTITION BY LIST (p_code);
+                PRIMARY KEY (province_code, id)
+             ) PARTITION BY LIST (province_code);
 
              -- 中文注释:审计 detail 由自由文本改结构化 JSONB(事实与展示分离,
              -- 展示翻译归前端)。旧 TEXT 列存的是写死文案无法结构化,按用户确认
@@ -478,7 +475,7 @@ impl Db {
         conn.batch_execute(
             "ALTER TABLE subjects
                 ADD COLUMN IF NOT EXISTS subject_property TEXT,
-                ADD COLUMN IF NOT EXISTS sfid_name TEXT,
+                ADD COLUMN IF NOT EXISTS sfid_full_name TEXT,
                 ADD COLUMN IF NOT EXISTS education_type TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_rep_sfid_number TEXT,
@@ -522,7 +519,7 @@ impl Db {
              UPDATE gov g
              SET source = 'GENERATED'
              FROM subjects s
-             WHERE s.p_code = g.p_code
+             WHERE s.province_code = g.province_code
                AND s.sfid_number = g.sfid_number
                AND s.kind = 'PUBLIC'
                AND s.created_by = 'SYSTEM'
@@ -538,12 +535,12 @@ impl Db {
 
         conn.batch_execute(
             "ALTER TABLE citizens
-                ADD COLUMN IF NOT EXISTS residence_p_code TEXT,
-                ADD COLUMN IF NOT EXISTS residence_c_code TEXT,
-                ADD COLUMN IF NOT EXISTS residence_t_code TEXT,
-                ADD COLUMN IF NOT EXISTS birth_p_code TEXT,
-                ADD COLUMN IF NOT EXISTS birth_c_code TEXT,
-                ADD COLUMN IF NOT EXISTS birth_t_code TEXT,
+                ADD COLUMN IF NOT EXISTS residence_province_code TEXT,
+                ADD COLUMN IF NOT EXISTS residence_city_code TEXT,
+                ADD COLUMN IF NOT EXISTS residence_town_code TEXT,
+                ADD COLUMN IF NOT EXISTS birth_province_code TEXT,
+                ADD COLUMN IF NOT EXISTS birth_city_code TEXT,
+                ADD COLUMN IF NOT EXISTS birth_town_code TEXT,
                 ADD COLUMN IF NOT EXISTS election_scope_level TEXT NOT NULL DEFAULT 'PROVINCE';
              ALTER TABLE citizens
                 DROP CONSTRAINT IF EXISTS citizens_election_scope_level_check;
@@ -586,41 +583,41 @@ impl Db {
 
         conn.batch_execute(
             "CREATE INDEX IF NOT EXISTS idx_subjects_city
-                ON subjects (p_code, c_code, kind, status, sfid_number);
+                ON subjects (province_code, city_code, kind, status, sfid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_town
-                ON subjects (p_code, c_code, t_code, kind, status, sfid_number);
+                ON subjects (province_code, city_code, town_code, kind, status, sfid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_name
-                ON subjects (p_code, c_code, name);
+                ON subjects (province_code, city_code, name);
              CREATE INDEX IF NOT EXISTS idx_subjects_scope_created
-                ON subjects (category, province, city, created_at DESC, sfid_number DESC);
+                ON subjects (category, province_name, city_name, created_at DESC, sfid_number DESC);
              CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
-                ON subjects (category, province, city, sfid_number, name);
+                ON subjects (category, province_name, city_name, sfid_number, name);
              CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
-                ON subjects (p_code, legal_rep_sfid_number);
+                ON subjects (province_code, legal_rep_sfid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_education
-                ON subjects (p_code, c_code, institution_code, education_type, status);
+                ON subjects (province_code, city_code, institution_code, education_type, status);
              CREATE INDEX IF NOT EXISTS idx_citizens_scope_created
-                ON citizens (p_code, c_code, created_at DESC, id DESC);
+                ON citizens (province_code, city_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_province_created
-                ON citizens (p_code, created_at DESC, id DESC);
+                ON citizens (province_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_exact_lookup
-                ON citizens (p_code, c_code, archive_no, sfid_number, wallet_pubkey, wallet_address);
+                ON citizens (province_code, city_code, archive_no, sfid_number, wallet_pubkey, wallet_address);
              CREATE INDEX IF NOT EXISTS idx_citizens_residence_scope
-                ON citizens (residence_p_code, residence_c_code, residence_t_code, created_at DESC, id DESC);
+                ON citizens (residence_province_code, residence_city_code, residence_town_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_birth_scope
-                ON citizens (birth_p_code, birth_c_code, birth_t_code, created_at DESC, id DESC);
+                ON citizens (birth_province_code, birth_city_code, birth_town_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_gov_city
-                ON gov (p_code, c_code, institution_code);
+                ON gov (province_code, city_code, institution_code);
              CREATE INDEX IF NOT EXISTS idx_gov_org
-                ON gov (p_code, org_code);
+                ON gov (province_code, org_code);
              CREATE INDEX IF NOT EXISTS idx_private_city
-                ON private (p_code, c_code, private_type, code);
+                ON private (province_code, city_code, private_type, code);
              CREATE INDEX IF NOT EXISTS idx_accounts_sfid
-                ON accounts (p_code, sfid_number);
+                ON accounts (province_code, sfid_number);
              CREATE INDEX IF NOT EXISTS idx_docs_sfid
-                ON docs (p_code, sfid_number, uploaded_at DESC);
+                ON docs (province_code, sfid_number, uploaded_at DESC);
              CREATE INDEX IF NOT EXISTS idx_audit_scope_time
-                ON audit (p_code, c_code, created_at DESC);",
+                ON audit (province_code, city_code, created_at DESC);",
         )
         .map_err(|e| {
             format!(
@@ -640,7 +637,7 @@ impl Db {
         // 中文注释:SFID 公民库目标状态是“可投票公民库”;历史残留的注销、无选举资格或无钱包记录不再保留。
         conn.batch_execute(
             "WITH doomed AS (
-                SELECT p_code, sfid_number, archive_no
+                SELECT province_code, sfid_number, archive_no
                 FROM citizens
                 WHERE bind_status <> 'BOUND'
                    OR citizen_status <> 'NORMAL'
@@ -658,7 +655,7 @@ impl Db {
              deleted_subjects AS (
                 DELETE FROM subjects s
                 USING doomed d
-                WHERE s.p_code = d.p_code
+                WHERE s.province_code = d.province_code
                   AND s.sfid_number = d.sfid_number
                   AND s.kind = 'CITIZEN'
                 RETURNING 1
@@ -672,7 +669,7 @@ impl Db {
              )
              DELETE FROM citizens c
              USING doomed d
-             WHERE c.p_code = d.p_code
+             WHERE c.province_code = d.province_code
                AND c.sfid_number = d.sfid_number;",
         )
         .map_err(|e| {
@@ -687,7 +684,7 @@ impl Db {
     // 中文注释:把启动期失败提前到清晰的目标状态校验,避免后续索引或业务 SQL 报隐晦字段错误。
     fn validate_target_subject_schema(conn: &mut postgres::Client) -> Result<(), String> {
         for column in [
-            "sfid_name",
+            "sfid_full_name",
             "legal_rep_name",
             "legal_rep_sfid_number",
             "legal_rep_photo_path",
@@ -707,12 +704,12 @@ impl Db {
             Self::ensure_column_state(conn, "private", column, true)?;
         }
         for column in [
-            "residence_p_code",
-            "residence_c_code",
-            "residence_t_code",
-            "birth_p_code",
-            "birth_c_code",
-            "birth_t_code",
+            "residence_province_code",
+            "residence_city_code",
+            "residence_town_code",
+            "birth_province_code",
+            "birth_city_code",
+            "birth_town_code",
             "election_scope_level",
         ] {
             Self::ensure_column_state(conn, "citizens", column, true)?;
@@ -769,11 +766,14 @@ impl Db {
         Ok(())
     }
 
-    fn create_subject_partitions(conn: &mut postgres::Client, p_code: &str) -> Result<(), String> {
+    fn create_subject_partitions(
+        conn: &mut postgres::Client,
+        province_code: &str,
+    ) -> Result<(), String> {
         for table in crate::subjects::schema::PARTITIONED_TABLES {
-            let partition_name = format!("{}_{}", table, p_code.to_ascii_lowercase());
+            let partition_name = format!("{}_{}", table, province_code.to_ascii_lowercase());
             let sql = format!(
-                "CREATE TABLE IF NOT EXISTS {partition_name} PARTITION OF {table} FOR VALUES IN ('{p_code}')"
+                "CREATE TABLE IF NOT EXISTS {partition_name} PARTITION OF {table} FOR VALUES IN ('{province_code}')"
             );
             conn.batch_execute(sql.as_str()).map_err(|e| {
                 format!(

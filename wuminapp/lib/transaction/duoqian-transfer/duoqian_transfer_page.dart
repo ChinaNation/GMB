@@ -69,7 +69,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _fromSs58 = _accountHexToSs58(widget.institution.mainAddress);
+    _fromSs58 = _accountHexToSs58(widget.institution.mainAccount);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -89,7 +89,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.mainAddress);
+    final local = await store.read(widget.institution.mainAccount);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -102,7 +102,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
       final balance = await service.fetchInstitutionBalance(widget.institution);
       try {
         await store.put(
-          accountHex: widget.institution.mainAddress,
+          accountHex: widget.institution.mainAccount,
           balanceYuan: balance,
         );
       } catch (e) {
@@ -168,7 +168,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
     // 检查是否与机构地址相同
     final beneficiaryBytes = Keyring().decodeAddress(address);
     final institutionBytes =
-        Uint8List.fromList(_hexToBytes(widget.institution.mainAddress));
+        Uint8List.fromList(_hexToBytes(widget.institution.mainAccount));
     if (_bytesEqual(beneficiaryBytes, institutionBytes)) {
       setState(() => _addressError = '收款地址不能与机构地址相同');
       return false;
@@ -385,13 +385,13 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
       final personal = await WalletIsar.instance.read((isar) {
         return isar.personalDuoqianEntitys
             .filter()
-            .duoqianAddressEqualTo(widget.institution.mainAddress)
+            .duoqianAccountEqualTo(widget.institution.mainAccount)
             .findFirst();
       });
       if (personal == null) return; // 非个人多签,跳过
 
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAddressHex: widget.institution.mainAddress,
+        personalAddressHex: widget.institution.mainAccount,
         proposalId: proposalId,
         action: PersonalProposalAction.transfer,
         status: PersonalProposalStatus.voting,

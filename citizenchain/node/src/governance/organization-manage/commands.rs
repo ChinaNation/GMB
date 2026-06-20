@@ -109,14 +109,14 @@ pub async fn build_propose_create_institution_request(
     app: AppHandle,
     pubkey_hex: String,
     sfid_number: String,
-    institution_name: String,
+    sfid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
     admin_org: u8,
     admin_pubkeys: Vec<String>,
     threshold: u32,
     register_nonce: String,
     signature_hex: String,
-    signing_province: String,
+    signing_province_name: String,
     signer_admin_pubkey: String,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -129,7 +129,7 @@ pub async fn build_propose_create_institution_request(
         super::signing::build_propose_create_institution_sign_request(
             &pubkey_hex,
             &sfid_number,
-            &institution_name,
+            &sfid_full_name,
             &parsed_accounts,
             admin_org,
             admin_count,
@@ -137,7 +137,7 @@ pub async fn build_propose_create_institution_request(
             threshold,
             &register_nonce,
             &signature_hex,
-            &signing_province,
+            &signing_province_name,
             &signer_admin_pubkey,
         )
     })
@@ -153,14 +153,14 @@ pub async fn submit_propose_create_institution(
     expected_pubkey_hex: String,
     expected_payload_hash: String,
     sfid_number: String,
-    institution_name: String,
+    sfid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
     admin_org: u8,
     admin_pubkeys: Vec<String>,
     threshold: u32,
     register_nonce: String,
     signature_hex: String,
-    signing_province: String,
+    signing_province_name: String,
     signer_admin_pubkey: String,
     sign_nonce: u32,
     sign_block_number: u64,
@@ -175,7 +175,7 @@ pub async fn submit_propose_create_institution(
         let admin_count = admin_pubkeys.len() as u32;
         let call_data = super::signing::build_propose_create_institution_call_data(
             &sfid_number,
-            &institution_name,
+            &sfid_full_name,
             &parsed_accounts,
             admin_org,
             admin_count,
@@ -183,7 +183,7 @@ pub async fn submit_propose_create_institution(
             threshold,
             &register_nonce,
             &signature_hex,
-            &signing_province,
+            &signing_province_name,
             &signer_admin_pubkey,
         )?;
         gov_signing::verify_and_submit(

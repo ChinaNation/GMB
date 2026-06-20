@@ -41,7 +41,7 @@ class AdminAccountIdentity {
     }
 
     return AdminAccountIdentity.governanceInstitution(
-      accountHex: institution.mainAddress,
+      accountHex: institution.mainAccount,
       org: institution.orgType,
       displayName: institution.name,
     );

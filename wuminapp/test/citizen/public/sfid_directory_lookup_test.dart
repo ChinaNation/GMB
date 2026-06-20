@@ -23,7 +23,7 @@ void main() {
     final lookup = await seedLookup([
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': sfid,
-        'institution_name': '广东省公民储备委员会',
+        'sfid_full_name': '广东省公民储备委员会',
         'province_code': 'GD',
         'city_code': '001',
         'institution_code': 'GCB',
@@ -33,8 +33,8 @@ void main() {
     ]);
     final info = await lookup.lookup(sfid);
     expect(info, isNotNull);
-    expect(info!.province, '广东省');
-    expect(info.city, '广州市');
+    expect(info!.provinceName, '广东省');
+    expect(info.cityName, '广州市');
     expect(info.legalRepName, '程伟');
   });
 
@@ -42,7 +42,7 @@ void main() {
     final lookup = await seedLookup([
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'sfid_number': sfid,
-        'institution_name': '广东省公民储备委员会',
+        'sfid_full_name': '广东省公民储备委员会',
         'province_code': 'GD',
         'city_code': '001',
         'institution_code': 'GCB',
@@ -51,7 +51,7 @@ void main() {
     ]);
     final info = await lookup.lookup(sfid);
     expect(info?.legalRepName, isNull);
-    expect(info?.province, '广东省');
+    expect(info?.provinceName, '广东省');
   });
 
   test('反查不到(如注册机构账户身份):返回 null', () async {

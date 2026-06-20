@@ -19,7 +19,7 @@ type Props = {
   onBack: () => void;
   onOpenOtherAccounts: (detail: InstitutionDetail) => void;
   onOpenAdminList: (detail: InstitutionDetail) => void;
-  onDeclareNode: (sfidNumber: string, institutionName: string) => void;
+  onDeclareNode: (sfidNumber: string, sfidFullName: string) => void;
   onCreateAdminSetChange: (detail: InstitutionDetail) => void;
 };
 
@@ -101,7 +101,7 @@ export function ClearingBankInstitutionDetailPage({
       <button className="back-button" onClick={onBack}>← 返回</button>
 
       <div className="institution-title-row">
-        <h2>{detail.institutionName}</h2>
+        <h2>{detail.sfidFullName}</h2>
         {detail.status === 'Pending' && (
           <span className="status-badge status-pending" style={{ marginLeft: 8 }}>
             创建提案投票中
@@ -111,7 +111,7 @@ export function ClearingBankInstitutionDetailPage({
           <button
             className="primary-button"
             style={{ marginLeft: 'auto' }}
-            onClick={() => onDeclareNode(sfidNumber, detail.institutionName)}
+            onClick={() => onDeclareNode(sfidNumber, detail.sfidFullName)}
           >
             声明本机为清算行节点 →
           </button>

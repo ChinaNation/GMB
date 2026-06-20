@@ -84,7 +84,7 @@ void main() {
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
-        '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
+        '0x${hexOf(DuoqianStorageCodec.accountRegisteredSfidKey(address))}';
     final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
       sfidNumber,
       accountName,
@@ -136,7 +136,7 @@ void main() {
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
-        '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
+        '0x${hexOf(DuoqianStorageCodec.accountRegisteredSfidKey(address))}';
     final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
       sfidNumber,
       accountName,

@@ -11,8 +11,8 @@ import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 type Props = {
   sfidNumber: string;
   orgType: number;
-  institutionName: string;
-  mainAddress: string;
+  sfidFullName: string;
+  mainAccount: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -21,7 +21,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function CreateDuoqianTransferPage({
-  sfidNumber, orgType, institutionName, mainAddress, adminWallets, onBack, onSuccess,
+  sfidNumber, orgType, sfidFullName, mainAccount, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
@@ -127,7 +127,7 @@ export function CreateDuoqianTransferPage({
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回</button>
       <h2>发起转账提案</h2>
-      <p className="proposal-institution-name">{institutionName}</p>
+      <p className="proposal-institution-name">{sfidFullName}</p>
 
       {step === 'form' && (
         <div className="create-proposal-form">
@@ -159,7 +159,7 @@ export function CreateDuoqianTransferPage({
 
           <div className="wallet-form-field">
             <label>转出地址（机构多签）</label>
-            <input type="text" value={hexToSs58(mainAddress)} disabled />
+            <input type="text" value={hexToSs58(mainAccount)} disabled />
           </div>
 
           <div className="wallet-form-field">

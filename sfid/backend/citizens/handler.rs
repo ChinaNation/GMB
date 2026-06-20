@@ -84,7 +84,9 @@ pub(crate) struct LegalRepresentativeCitizenQuery {
     pub q: Option<String>,
     pub page_size: Option<usize>,
     pub target_sfid_number: Option<String>,
+    #[serde(rename = "province_name")]
     pub province: Option<String>,
+    #[serde(rename = "city_name")]
     pub city: Option<String>,
     pub subject_property: Option<String>,
     pub institution: Option<String>,

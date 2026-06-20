@@ -111,7 +111,7 @@ struct MockNrcAccountProvider;
 impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
     fn nrc_account() -> Option<AccountId32> {
         Some(AccountId32::new(
-            primitives::china::china_cb::CHINA_CB[0].main_address,
+            primitives::china::china_cb::CHINA_CB[0].main_account,
         ))
     }
 }
@@ -126,7 +126,7 @@ impl NrcAccountProvider<AccountId32> for MockNrcAccountProviderNone {
 struct MockSafetyFundAccountProvider;
 impl SafetyFundAccountProvider<AccountId32> for MockSafetyFundAccountProvider {
     fn safety_fund_account() -> AccountId32 {
-        AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
+        AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT)
     }
 }
 

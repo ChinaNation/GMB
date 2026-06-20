@@ -82,9 +82,9 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
           const Divider(height: 1, color: AppTheme.divider),
       itemBuilder: (context, i) {
         final inst = _items[i];
-        final title = inst.shortName?.isNotEmpty == true
-            ? inst.shortName!
-            : inst.institutionName;
+        final title = inst.sfidShortName?.isNotEmpty == true
+            ? inst.sfidShortName!
+            : inst.sfidFullName;
         return ListTile(
           title: Text(
             title,

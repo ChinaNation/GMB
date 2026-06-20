@@ -81,16 +81,16 @@ impl pallet_balances::Config for Test {
     type WeightInfo = ();
 }
 
-pub struct TestAddressValidator;
-impl organization_manage::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+pub struct TestAccountValidator;
+impl organization_manage::DuoqianAccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
-pub struct TestReservedAddressChecker;
-impl organization_manage::DuoqianReservedAddressChecker<AccountId32>
-    for TestReservedAddressChecker
+pub struct TestReservedAccountChecker;
+impl organization_manage::DuoqianReservedAccountChecker<AccountId32>
+    for TestReservedAccountChecker
 {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
@@ -107,17 +107,17 @@ impl
 {
     fn verify_institution_registration(
         _sfid_number: &[u8],
-        institution_name: &organization_manage::pallet::AccountNameOf<Test>,
+        sfid_full_name: &organization_manage::pallet::AccountNameOf<Test>,
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
         signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
-        !institution_name.is_empty()
+        !sfid_full_name.is_empty()
             && !account_names.is_empty()
             && !nonce.is_empty()
-            && !province.is_empty()
+            && !province_name.is_empty()
             && signer_admin_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
@@ -203,12 +203,12 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_REN | ORG_PUP | ORG_OTH => {
@@ -225,7 +225,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -235,7 +235,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 }),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -257,11 +257,11 @@ impl votingengine::InternalAdminCountProvider<AccountId32> for TestInternalAdmin
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
             ORG_REN | ORG_PUP | ORG_OTH => {
                 admins_change::Pallet::<Test>::active_account_admin_count(org, institution)
@@ -341,8 +341,8 @@ impl organization_manage::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type AddressValidator = TestAddressValidator;
-    type ReservedAddressChecker = TestReservedAddressChecker;
+    type AccountValidator = TestAccountValidator;
+    type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
@@ -370,8 +370,8 @@ impl personal_manage::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type AddressValidator = TestAddressValidator;
-    type ReservedAddressChecker = TestReservedAddressChecker;
+    type AccountValidator = TestAccountValidator;
+    type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type FeeRouter = ();
@@ -429,15 +429,15 @@ fn prb_admin(index: usize) -> AccountId32 {
 // `InternalVote::cast`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
 
 fn nrc_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].main_address)
+    AccountId32::new(CHINA_CB[0].main_account)
 }
 
 fn prc_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].main_address)
+    AccountId32::new(CHINA_CB[1].main_account)
 }
 
 fn prb_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].main_address)
+    AccountId32::new(CHINA_CH[0].main_account)
 }
 
 fn institution_account(institution: &AccountId32) -> AccountId32 {
@@ -508,7 +508,7 @@ fn insert_active_registered_institution_account(
         .into_inner()
         .try_into()
         .expect("institution admins should fit organization-manage MaxAdmins");
-    organization_manage::AddressRegisteredSfid::<Test>::insert(
+    organization_manage::AccountRegisteredSfid::<Test>::insert(
         account,
         organization_manage::RegisteredInstitution {
             sfid_number: sfid_number.clone(),
@@ -518,9 +518,9 @@ fn insert_active_registered_institution_account(
     organization_manage::Institutions::<Test>::insert(
         &sfid_number,
         organization_manage::InstitutionInfo {
-            institution_name: test_account_name(),
-            main_address: account.clone(),
-            fee_address: AccountId32::new([0x67; 32]),
+            sfid_full_name: test_account_name(),
+            main_account: account.clone(),
+            fee_account: AccountId32::new([0x67; 32]),
             admin_org: ORG_OTH,
             admin_count: institution_admins.len() as u32,
             threshold: 2,

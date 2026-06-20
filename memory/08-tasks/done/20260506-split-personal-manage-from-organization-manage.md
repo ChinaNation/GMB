@@ -50,14 +50,14 @@
   - 删 storage `PendingCloseProposal`（机构关闭流程 storage 改名 `InstitutionPendingClose`，作用域只剩机构地址）
   - 删 extrinsic `propose_create_personal`（call_index=3 留洞不复用）
   - 改 `cleanup_rejected_proposal`（call_index=4）：删 `ACTION_CREATE_PERSONAL` 分支，仅保留 `ACTION_CREATE_INSTITUTION` + `ACTION_CLOSE`
-  - 改 `propose_close`（call_index=1）：入口校验 `AddressRegisteredSfid::contains_key(addr)` 必须命中，否则 `Error::NotInstitutionDuoqian`；删除依赖 `DuoqianAccounts` 状态查询，改用 `InstitutionAccounts` 状态
-  - 删 helper `derive_personal_duoqian_address`
-  - 改 `resolve_admin_account_for_account`：删 `PersonalDuoqianInfo` 分支；只剩 `AddressRegisteredSfid` + (移除 DuoqianAccounts fallback)；返回值仅服务机构
+  - 改 `propose_close`（call_index=1）：入口校验 `AccountRegisteredSfid::contains_key(addr)` 必须命中，否则 `Error::NotInstitutionDuoqian`；删除依赖 `DuoqianAccounts` 状态查询，改用 `InstitutionAccounts` 状态
+  - 删 helper `derive_personal_duoqian_account`
+  - 改 `resolve_admin_account_for_account`：删 `PersonalDuoqianInfo` 分支；只剩 `AccountRegisteredSfid` + (移除 DuoqianAccounts fallback)；返回值仅服务机构
   - 删 `Event::PersonalDuoqianProposed`
   - 删 `Error::PersonalDuoqianAlreadyExists / EmptyPersonalName`
   - 删 `ACTION_CREATE_PERSONAL` 常量（仅保留 `ACTION_CLOSE=2 / ACTION_CREATE_INSTITUTION=3`）
 - `src/execute.rs`：删整个文件（`execute_create_with_finalizer` 是个人专属，迁 personal-manage；`execute_close_with_finalizer` 拆两份，机构侧迁 `institution/execute.rs` 新增 `execute_institution_close_with_finalizer`）
-- `src/close.rs`：删除当前共用入口；新建 `src/institution/close.rs::do_propose_institution_close`，入口仅查 `AddressRegisteredSfid → InstitutionAccounts → admins-change` 路径
+- `src/close.rs`：删除当前共用入口；新建 `src/institution/close.rs::do_propose_institution_close`，入口仅查 `AccountRegisteredSfid → InstitutionAccounts → admins-change` 路径
 - `src/common.rs`：删 `account_to_institution_id` / `sfid_number_to_institution_id`（迁 primitives），改为 `pub use core_const::*` 让下游引用兼容
 - `src/traits.rs`：新增 `pub trait InstitutionMultisigQuery<AccountId>` 暴露 `lookup_admin_config / is_active`
 - `src/institution/`：新建 `close.rs`（`do_propose_institution_close`）+ 改 `execute.rs`（增 `execute_institution_close_with_finalizer`）
@@ -155,7 +155,7 @@
 
 1. **primitives 提取**：新建 `primitives/src/derive.rs` + `primitives/src/types.rs::MultisigConfig`，迁两个派生函数
 2. **新建 personal-manage crate 骨架**：Cargo.toml + 空 lib.rs + Config trait
-3. **迁类型 + helper**：types.rs（5 类型）+ derive_personal_duoqian_address
+3. **迁类型 + helper**：types.rs（5 类型）+ derive_personal_duoqian_account
 4. **迁 storage**：PersonalDuoqians（替代 DuoqianAccounts 个人部分）+ PersonalDuoqianInfo + PendingPersonalCreate + PendingCloseProposal（独立）
 5. **迁 extrinsic + execute**：propose_create / propose_close / cleanup_rejected_proposal + InternalVoteExecutor + execute_create / execute_close
 6. **trait 暴露**：personal-manage::traits::PersonalMultisigQuery；organization-manage::traits 增 InstitutionMultisigQuery
@@ -202,16 +202,16 @@ grep -rn "PersonalDuoqianInfo\|PendingPersonalCreate" citizenchain/runtime/gover
 - 机构 `propose_close` 入参不变；行为变化仅在「输入个人地址时返回 NotInstitutionDuoqian」（此前会成功，因为 personal 走同一入口）
 - pallet_index = 7 全局唯一
 - MODULE_TAG 唯一性测试守住 8 个 tag（admins_change/grandpakey_change/resolution_destro/resolution_issuance/runtime_upgrade/organization_manage/personal_manage/duoqian_transfer）
-- 客户端 dispatch 规则：`PersonalDuoqianInfo.has(addr)` 为 true → 走 PersonalManage；`AddressRegisteredSfid.has(addr)` 为 true → 走 OrganizationManage；两条互斥
+- 客户端 dispatch 规则：`PersonalDuoqianInfo.has(addr)` 为 true → 走 PersonalManage；`AccountRegisteredSfid.has(addr)` 为 true → 走 OrganizationManage；两条互斥
 - duoqian-transfer 转账行为不变（机构主账户/费用账户/自创账户 + 个人多签四类发起者全部能转账）
 
 ## 6. 风险与缓解
 
 | ID | 风险 | 缓解 |
 |---|---|---|
-| R1 | personal-manage 与 organization-manage 共用某些 trait（DuoqianAddressValidator / DuoqianReservedAddressChecker / ProtectedSourceChecker）造成跨 crate 依赖 | trait 定义保留在 organization-manage::traits，personal-manage 通过 `use organization_manage::traits::*` 引入；接受**单向依赖** personal-manage → organization-manage::traits（仅 trait，零 storage 耦合）。这是 B 阶段唯一允许的跨依赖。完全解耦留待后续将 trait 提到 primitives |
-| R2 | `propose_close` 拆两个后客户端漏改 → 报错 NotInstitutionDuoqian / NotPersonalDuoqian | wuminapp 客户端按地址类型提前判断（PersonalDuoqianInfo / AddressRegisteredSfid）；测试覆盖两条路径 |
-| R3 | duoqian-transfer trait 改造破坏机构多账户转账（费用/自创账户从未在 DuoqianAccounts 里） | 改造后任意机构账户都能通过 AddressRegisteredSfid → admins-change 查到 admin 配置；测试覆盖：主/费用/自创/个人 4 类发起者 |
+| R1 | personal-manage 与 organization-manage 共用某些 trait（DuoqianAccountValidator / DuoqianReservedAccountChecker / ProtectedSourceChecker）造成跨 crate 依赖 | trait 定义保留在 organization-manage::traits，personal-manage 通过 `use organization_manage::traits::*` 引入；接受**单向依赖** personal-manage → organization-manage::traits（仅 trait，零 storage 耦合）。这是 B 阶段唯一允许的跨依赖。完全解耦留待后续将 trait 提到 primitives |
+| R2 | `propose_close` 拆两个后客户端漏改 → 报错 NotInstitutionDuoqian / NotPersonalDuoqian | wuminapp 客户端按地址类型提前判断（PersonalDuoqianInfo / AccountRegisteredSfid）；测试覆盖两条路径 |
+| R3 | duoqian-transfer trait 改造破坏机构多账户转账（费用/自创账户从未在 DuoqianAccounts 里） | 改造后任意机构账户都能通过 AccountRegisteredSfid → admins-change 查到 admin 配置；测试覆盖：主/费用/自创/个人 4 类发起者 |
 | R4 | wuminapp 拆 service 后 personal/* 6 个 dart 文件漏切到新 service | grep `submitProposeCreatePersonal\|submitProposeClosePersonal` 在 wuminapp/lib/duoqian/personal/ 下必须全指向 PersonalManageService；测试覆盖 |
 | R5 | wumin 公民钱包扫码识别 PersonalManage(7) 失败 | wumin payload_decoder 测试新增 6 case 守门；二色识别按 action_labels 白名单 |
 | R6 | account_to_institution_id 提到 primitives 后 organization-manage::common 仍有 `pub use` re-export，残留旧引用 | Step 7 内同步删除 organization-manage 内旧函数，全工程 grep 校验下游全部走 core_const |
@@ -228,9 +228,9 @@ grep -rn "PersonalDuoqianInfo\|PendingPersonalCreate" citizenchain/runtime/gover
 
 11 步全部按方案完成（2026-05-06）：
 
-1. **primitives 提取** — `primitives/src/derive.rs`(account_to_institution_id / sfid_number_to_institution_id) + `primitives/src/types.rs::MultisigConfigSnapshot` + `primitives/src/traits.rs`(3 个共用 trait:DuoqianAddressValidator / DuoqianReservedAddressChecker / ProtectedSourceChecker)。Cargo.toml 加 sp-std + frame-support dep。
+1. **primitives 提取** — `primitives/src/derive.rs`(account_to_institution_id / sfid_number_to_institution_id) + `primitives/src/types.rs::MultisigConfigSnapshot` + `primitives/src/traits.rs`(3 个共用 trait:DuoqianAccountValidator / DuoqianReservedAccountChecker / ProtectedSourceChecker)。Cargo.toml 加 sp-std + frame-support dep。
 2. **personal-manage crate 骨架** — `runtime/governance/personal-manage/Cargo.toml` + `lib.rs`(pallet 主体 ~600 行;Config / 4 storage / Event 7 变体 / Error 25 变体 / 3 extrinsic / InternalVoteExecutor)。pallet_index=7,MODULE_TAG=`b"per-mgmt"`,ACTION_CREATE=0/ACTION_CLOSE=1。
-3. **类型 + helper 迁移** — types.rs(5 类型:DuoqianAccount/DuoqianStatus/CreateDuoqianAction/CloseDuoqianAction/PersonalDuoqianMeta) + derive_personal_duoqian_address(在 lib.rs Pallet 块内)。
+3. **类型 + helper 迁移** — types.rs(5 类型:DuoqianAccount/DuoqianStatus/CreateDuoqianAction/CloseDuoqianAction/PersonalDuoqianMeta) + derive_personal_duoqian_account(在 lib.rs Pallet 块内)。
 4. **storage 迁移** — PersonalDuoqians(替代旧 DuoqianAccounts 个人部分) + PersonalDuoqianInfo + PendingPersonalCreate + PendingCloseProposal(独立)。
 5. **extrinsic + execute 迁移** — propose_create(call=0) / propose_close(call=1) / cleanup_rejected_proposal(call=2) + InternalVoteExecutor + execute_create_with_finalizer / execute_close_with_finalizer / cleanup_pending_create。
 6. **trait 暴露** — personal-manage::traits::PersonalMultisigQuery + Pallet impl;organization-manage::traits 增 InstitutionMultisigQuery + Pallet impl。

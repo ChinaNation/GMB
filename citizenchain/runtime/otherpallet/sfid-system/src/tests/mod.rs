@@ -127,9 +127,9 @@ fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Tes
     BindCredential {
         binding_id: binding_id(seed),
         bind_nonce: nonce(bind_nonce),
-        // ADR-008 step3:每个 BindCredential 必带 (province, signer_admin_pubkey)。
+        // ADR-008 step3:每个 BindCredential 必带 (province_name, signer_admin_pubkey)。
         // 测试用占位值即可,sfid-system 自身不解析这两个字段(真实双层校验留 runtime verifier)。
-        province: b"liaoning".to_vec().try_into().expect("province fits"),
+        province_name: b"liaoning".to_vec().try_into().expect("province_name fits"),
         signer_admin_pubkey: [7u8; 32],
         signature: signature(sig),
     }

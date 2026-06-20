@@ -19,7 +19,7 @@ use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 // 改造下线,不再从此处导入。
 extern crate alloc;
 
-use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ADDRESS};
+use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ACCOUNT};
 use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
@@ -102,7 +102,7 @@ fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], account: &T::Acc
 fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<u8> {
     if CHINA_CB
         .first()
-        .map(|n| raw_account_matches::<T>(&n.main_address, institution))
+        .map(|n| raw_account_matches::<T>(&n.main_account, institution))
         .unwrap_or(false)
     {
         return Some(ORG_NRC);
@@ -111,14 +111,14 @@ fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<u8
     if CHINA_CB
         .iter()
         .skip(1)
-        .any(|n| raw_account_matches::<T>(&n.main_address, institution))
+        .any(|n| raw_account_matches::<T>(&n.main_account, institution))
     {
         return Some(ORG_PRC);
     }
 
     if CHINA_CH
         .iter()
-        .any(|n| raw_account_matches::<T>(&n.main_address, institution))
+        .any(|n| raw_account_matches::<T>(&n.main_account, institution))
     {
         return Some(ORG_PRB);
     }
@@ -223,7 +223,7 @@ pub mod pallet {
         SafetyFundTransferProposed {
             proposal_id: u64,
             proposer: T::AccountId,
-            /// 资金源(= NRC_ANQUAN_ADDRESS 常量)
+            /// 资金源(= NRC_ANQUAN_ACCOUNT 常量)
             from: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
@@ -415,7 +415,7 @@ pub mod pallet {
 
         /// 发起国储会安全基金转账提案（内部投票）。
         ///
-        /// 从安全基金账户（`NRC_ANQUAN_ADDRESS`）向指定收款地址转账。
+        /// 从安全基金账户（`NRC_ANQUAN_ACCOUNT`）向指定收款地址转账。
         /// 仅国储会管理员可发起。
         #[pallet::call_index(1)]
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
@@ -429,7 +429,7 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
 
             // 验证国储会管理员
-            let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_address)?;
+            let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_account)?;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_NRC,
@@ -440,7 +440,7 @@ pub mod pallet {
             );
 
             // 验证安全基金账户余额
-            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ADDRESS[..])
+            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ACCOUNT[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
             ensure!(
                 <T as organization_manage::Config>::InstitutionAsset::can_spend(
@@ -606,14 +606,14 @@ pub mod pallet {
         fn resolve_sweep_org(institution: &T::AccountId) -> Result<u8, Error<T>> {
             if CHINA_CB
                 .first()
-                .map(|n| raw_account_matches::<T>(&n.main_address, institution))
+                .map(|n| raw_account_matches::<T>(&n.main_account, institution))
                 .unwrap_or(false)
             {
                 return Ok(ORG_NRC);
             }
             if CHINA_CH
                 .iter()
-                .any(|n| raw_account_matches::<T>(&n.main_address, institution))
+                .any(|n| raw_account_matches::<T>(&n.main_account, institution))
             {
                 return Ok(ORG_PRB);
             }
@@ -624,17 +624,17 @@ pub mod pallet {
         fn resolve_fee_account(institution: &T::AccountId) -> Result<T::AccountId, DispatchError> {
             if CHINA_CB
                 .first()
-                .map(|n| raw_account_matches::<T>(&n.main_address, institution))
+                .map(|n| raw_account_matches::<T>(&n.main_account, institution))
                 .unwrap_or(false)
             {
-                return T::AccountId::decode(&mut &CHINA_CB[0].fee_address[..])
+                return T::AccountId::decode(&mut &CHINA_CB[0].fee_account[..])
                     .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into());
             }
             let node = CHINA_CH
                 .iter()
-                .find(|n| raw_account_matches::<T>(&n.main_address, institution))
+                .find(|n| raw_account_matches::<T>(&n.main_account, institution))
                 .ok_or(Error::<T>::InvalidInstitution)?;
-            T::AccountId::decode(&mut &node.fee_address[..])
+            T::AccountId::decode(&mut &node.fee_account[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
         }
 
@@ -737,7 +737,7 @@ pub mod pallet {
                 Error::<T>::SafetyFundProposalNotPassed
             );
 
-            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ADDRESS[..])
+            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ACCOUNT[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
             ensure!(

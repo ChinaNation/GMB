@@ -14,7 +14,7 @@
 ## 完工清单
 - [ ] 生成脚本 `tools/generate_public_institution_bundle.mjs`:调 SFID 导出 → 写 `wuminapp/assets/public_institutions/<province>.json` + `catalog_version` 戳。
 - [ ] Isar 实体(新增,**先沟通过结构**):
-  - `PublicInstitutionEntity { sfidNumber(unique), institutionName, sfidName, shortName, province, city, town, institutionCode, orgCode, status, accountCount, customAccountNamesJson, catalogVersion, updatedAtMillis }`
+  - `PublicInstitutionEntity { sfidNumber(unique), sfidFullName, sfidFullName, sfidShortName, province, city, town, institutionCode, orgCode, status, accountCount, customAccountNamesJson, catalogVersion, updatedAtMillis }`
   - `PublicInstitutionSubscriptionEntity { walletPubkeyHex+sfidNumber(composite unique), subscribedAtMillis }`
   - 版本戳:复用 AppKvEntity 或新 `PublicCatalogMetaEntity`(全局 catalog_version + 各省 manifest_version)。
 - [ ] 数据包载入器:首次/版本升级幂等 upsert 进 Isar。
@@ -34,7 +34,7 @@
 
 ## 不做(边界)
 - 不做 UI(卡 B);不做详情动态(卡 C)。
-- 不扫链、不碰 SfidRegisteredAddress 长前缀(R1)。
+- 不扫链、不碰 SfidRegisteredAccount 长前缀(R1)。
 
 ## 改动目录(中文注释)
 - 新增 `wuminapp/lib/citizen/public/data/`:目录 repo / 载入器 / 增量同步 / 订阅 store,代码。

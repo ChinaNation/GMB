@@ -39,7 +39,7 @@ class _UnifiedItem {
     required this.localStatus,
   })  : kind = _DuoqianKind.personal,
         name = item.name,
-        duoqianAddress = item.duoqianAddress,
+        duoqianAccount = item.duoqianAccount,
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,
         matchedAdminCount = item.matchedAdminPubkeys.length,
@@ -51,7 +51,7 @@ class _UnifiedItem {
     required this.localStatus,
   })  : kind = _DuoqianKind.institution,
         name = item.name,
-        duoqianAddress = item.duoqianAddress,
+        duoqianAccount = item.duoqianAccount,
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,
         matchedAdminCount = item.matchedAdminPubkeys.length,
@@ -60,7 +60,7 @@ class _UnifiedItem {
 
   final _DuoqianKind kind;
   final String name;
-  final String duoqianAddress;
+  final String duoqianAccount;
   final int addedAtMillis;
   final bool discoveredViaAdmin;
   final int matchedAdminCount;
@@ -73,10 +73,12 @@ class InstitutionAccountListPage extends StatefulWidget {
   const InstitutionAccountListPage({super.key});
 
   @override
-  State<InstitutionAccountListPage> createState() => _InstitutionAccountListPageState();
+  State<InstitutionAccountListPage> createState() =>
+      _InstitutionAccountListPageState();
 }
 
-class _InstitutionAccountListPageState extends State<InstitutionAccountListPage> {
+class _InstitutionAccountListPageState
+    extends State<InstitutionAccountListPage> {
   List<_UnifiedItem> _items = [];
   bool _loading = true;
   bool _scanning = false;
@@ -84,7 +86,8 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
   final PersonalManageService _personalManageService = PersonalManageService();
   final PersonalProposalHistoryService _personalProposalHistoryService =
       PersonalProposalHistoryService();
-  final InstitutionManageService _duoqianManageService = InstitutionManageService();
+  final InstitutionManageService _duoqianManageService =
+      InstitutionManageService();
 
   static const _activeStatusTtl = Duration(minutes: 60);
   static const _inactiveStatusTtl = Duration(minutes: 10);
@@ -115,16 +118,15 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
   Future<void> _readFromIsar() async {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalDuoqianEntitys.where().findAll();
-      final institutions =
-          await isar.institutionEntitys.where().findAll();
+      final institutions = await isar.institutionEntitys.where().findAll();
       final personalStatuses = await PersonalDuoqianLocalState.readStatuses(
         isar,
-        personals.map((p) => p.duoqianAddress),
+        personals.map((p) => p.duoqianAccount),
       );
       final institutionStatuses =
           await InstitutionDuoqianLocalState.readStatuses(
         isar,
-        institutions.map((p) => p.duoqianAddress),
+        institutions.map((p) => p.duoqianAccount),
       );
       return (
         personals: personals,
@@ -138,14 +140,14 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
         (p) => _UnifiedItem.personal(
           p,
           localStatus:
-              snapshot.personalStatuses[_normalizeHex(p.duoqianAddress)],
+              snapshot.personalStatuses[_normalizeHex(p.duoqianAccount)],
         ),
       ),
       ...snapshot.institutions.map(
         (p) => _UnifiedItem.institution(
           p,
           localStatus:
-              snapshot.institutionStatuses[_normalizeHex(p.duoqianAddress)],
+              snapshot.institutionStatuses[_normalizeHex(p.duoqianAccount)],
         ),
       ),
     ]..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
@@ -160,22 +162,21 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
 
   Future<void> _refreshKnownStatuses({
     bool force = false,
-    Set<String>? personalAddresses,
-    Set<String>? institutionAddresses,
+    Set<String>? personalAccounts,
+    Set<String>? institutionAccounts,
   }) async {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalDuoqianEntitys.where().findAll();
-      final institutions =
-          await isar.institutionEntitys.where().findAll();
+      final institutions = await isar.institutionEntitys.where().findAll();
       final personalStatuses =
           await PersonalDuoqianLocalState.readStatusSnapshots(
         isar,
-        personals.map((p) => p.duoqianAddress),
+        personals.map((p) => p.duoqianAccount),
       );
       final institutionStatuses =
           await InstitutionDuoqianLocalState.readStatusSnapshots(
         isar,
-        institutions.map((p) => p.duoqianAddress),
+        institutions.map((p) => p.duoqianAccount),
       );
       return (
         personals: personals,
@@ -185,17 +186,17 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
       );
     });
 
-    final personalFilter = personalAddresses?.map(_normalizeHex).toSet();
-    final institutionFilter = institutionAddresses?.map(_normalizeHex).toSet();
+    final personalFilter = personalAccounts?.map(_normalizeHex).toSet();
+    final institutionFilter = institutionAccounts?.map(_normalizeHex).toSet();
     final personalTargets = snapshot.personals.where((item) {
-      final address = _normalizeHex(item.duoqianAddress);
+      final address = _normalizeHex(item.duoqianAccount);
       if (personalFilter != null && !personalFilter.contains(address)) {
         return false;
       }
       return force || _shouldRefreshStatus(snapshot.personalStatuses[address]);
     }).toList(growable: false);
     final institutionTargets = snapshot.institutions.where((item) {
-      final address = _normalizeHex(item.duoqianAddress);
+      final address = _normalizeHex(item.duoqianAccount);
       if (institutionFilter != null && !institutionFilter.contains(address)) {
         return false;
       }
@@ -229,7 +230,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     Map<String, DuoqianAccountInfo?> infos;
     try {
       infos = await _personalManageService.fetchPersonalAccountsBatch(
-        personals.map((p) => p.duoqianAddress),
+        personals.map((p) => p.duoqianAccount),
       );
     } catch (_) {
       // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
@@ -237,11 +238,11 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     }
     for (final personal in personals) {
       try {
-        final info = infos[_normalizeHex(personal.duoqianAddress)];
+        final info = infos[_normalizeHex(personal.duoqianAccount)];
         if (info == null &&
             await _personalProposalHistoryService
-                .hasUnchainedVotingCreateProposal(personal.duoqianAddress)) {
-          await _deletePersonalGhost(personal.duoqianAddress);
+                .hasUnchainedVotingCreateProposal(personal.duoqianAccount)) {
+          await _deletePersonalGhost(personal.duoqianAccount);
           continue;
         }
         final status = info == null
@@ -252,22 +253,22 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
         await WalletIsar.instance.writeTxn((isar) async {
           await PersonalDuoqianLocalState.putStatusInTxn(
             isar,
-            personal.duoqianAddress,
+            personal.duoqianAccount,
             status,
           );
           if (info == null) {
             await PersonalDuoqianLocalState.deleteDetailInTxn(
               isar,
-              personal.duoqianAddress,
+              personal.duoqianAccount,
             );
           } else {
             final previousDetail = await PersonalDuoqianLocalState.readDetail(
               isar,
-              personal.duoqianAddress,
+              personal.duoqianAccount,
             );
             await PersonalDuoqianLocalState.putDetailInTxn(
               isar,
-              personal.duoqianAddress,
+              personal.duoqianAccount,
               DuoqianLocalDetailSnapshot(
                 status: status,
                 adminPubkeys: info.adminPubkeys,
@@ -293,7 +294,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
       // 且创建提案也不存在，说明它从未上链，不能展示为“已注销”。
       await isar.personalDuoqianEntitys
           .where()
-          .duoqianAddressEqualTo(personalAddressHex)
+          .duoqianAccountEqualTo(personalAddressHex)
           .deleteAll();
       await isar.personalDuoqianProposalEntitys
           .filter()
@@ -317,7 +318,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     Map<String, org_models.InstitutionAccountInfo?> infos;
     try {
       infos = await _duoqianManageService.fetchDuoqianAccountsBatch(
-        institutions.map((p) => p.duoqianAddress),
+        institutions.map((p) => p.duoqianAccount),
       );
     } catch (_) {
       // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
@@ -325,7 +326,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     }
     for (final institution in institutions) {
       try {
-        final info = infos[_normalizeHex(institution.duoqianAddress)];
+        final info = infos[_normalizeHex(institution.duoqianAccount)];
         final status = info == null
             ? InstitutionDuoqianLocalState.statusClosed
             : info.status == org_models.InstitutionStatus.active
@@ -334,23 +335,23 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
         await WalletIsar.instance.writeTxn((isar) async {
           await InstitutionDuoqianLocalState.putStatusInTxn(
             isar,
-            institution.duoqianAddress,
+            institution.duoqianAccount,
             status,
           );
           if (info == null) {
             await InstitutionDuoqianLocalState.deleteDetailInTxn(
               isar,
-              institution.duoqianAddress,
+              institution.duoqianAccount,
             );
           } else {
             final previousDetail =
                 await InstitutionDuoqianLocalState.readDetail(
               isar,
-              institution.duoqianAddress,
+              institution.duoqianAccount,
             );
             await InstitutionDuoqianLocalState.putDetailInTxn(
               isar,
-              institution.duoqianAddress,
+              institution.duoqianAccount,
               DuoqianLocalDetailSnapshot(
                 status: status,
                 adminPubkeys: info.adminPubkeys,
@@ -476,7 +477,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     if (createdAddress != null) {
       await _refreshKnownStatuses(
         force: true,
-        personalAddresses: {createdAddress},
+        personalAccounts: {createdAddress},
       );
     }
   }
@@ -500,7 +501,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
                 'duoqian:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.duoqian,
             adminAccountOrg: 5,
-            duoqianAddress:
+            duoqianAccount:
                 '0000000000000000000000000000000000000000000000000000000000000000',
           ),
           adminWallets: wallets,
@@ -510,7 +511,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
     if (createdAddress != null) {
       await _refreshKnownStatuses(
         force: true,
-        institutionAddresses: {createdAddress},
+        institutionAccounts: {createdAddress},
       );
     }
   }
@@ -521,9 +522,9 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
           builder: (_) => PersonalManageAccountInfoPage(
             institution: InstitutionInfo(
               name: item.name,
-              sfidNumber: 'personal:${item.duoqianAddress}',
+              sfidNumber: 'personal:${item.duoqianAccount}',
               orgType: OrgType.duoqian,
-              duoqianAddress: item.duoqianAddress,
+              duoqianAccount: item.duoqianAccount,
             ),
             initialLocalStatus: item.localStatus,
             initialAdminPubkeys:
@@ -534,10 +535,10 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
           builder: (_) => InstitutionAccountInfoPage(
             institution: InstitutionInfo(
               name: item.name,
-              sfidNumber: registeredDuoqianIdentity(item.duoqianAddress),
+              sfidNumber: registeredDuoqianIdentity(item.duoqianAccount),
               orgType: OrgType.duoqian,
               adminAccountOrg: item.institution?.adminAccountOrg,
-              duoqianAddress: item.duoqianAddress,
+              duoqianAccount: item.duoqianAccount,
             ),
             initialLocalStatus: item.localStatus,
             initialAdminPubkeys:
@@ -551,12 +552,12 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
         case _DuoqianKind.personal:
           unawaited(_refreshKnownStatuses(
             force: true,
-            personalAddresses: {item.duoqianAddress},
+            personalAccounts: {item.duoqianAccount},
           ));
         case _DuoqianKind.institution:
           unawaited(_refreshKnownStatuses(
             force: true,
-            institutionAddresses: {item.duoqianAddress},
+            institutionAccounts: {item.duoqianAccount},
           ));
       }
     });
@@ -666,7 +667,7 @@ class _InstitutionAccountListPageState extends State<InstitutionAccountListPage>
   }
 
   Widget _buildCard(_UnifiedItem item) {
-    final ss58 = _hexToSs58(item.duoqianAddress);
+    final ss58 = _hexToSs58(item.duoqianAccount);
     final isPersonal = item.kind == _DuoqianKind.personal;
     final color = isPersonal ? AppTheme.accent : AppTheme.info;
     final iconData = isPersonal ? Icons.person : Icons.business;

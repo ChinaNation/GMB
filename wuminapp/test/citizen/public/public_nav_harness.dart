@@ -21,16 +21,17 @@ class _NoopApi extends PublicInstitutionApi {
 
   @override
   Future<PublicInstitutionVersion> fetchVersion({
-    required String province,
-    String? city,
+    required String provinceName,
+    String? cityName,
   }) async =>
       // 版本恒为 'seed',与 seeded store 版本一致 → syncProvince 跳过,不发网络。
-      PublicInstitutionVersion(province: province, manifestVersion: 'seed');
+      PublicInstitutionVersion(
+          provinceName: provinceName, manifestVersion: 'seed');
 
   @override
   Future<PublicInstitutionPage> fetchPage({
-    required String province,
-    String? city,
+    required String provinceName,
+    String? cityName,
     String? sinceVersion,
     String? afterSfid,
     int pageSize = 500,
@@ -58,7 +59,7 @@ PublicInstitutionDto seedDto(
 }) =>
     PublicInstitutionDto.fromJson(<String, dynamic>{
       'sfid_number': sfid,
-      'institution_name': name ?? '$cityCode$code机构',
+      'sfid_full_name': name ?? '$cityCode$code机构',
       'province_code': provinceCode,
       'city_code': cityCode,
       'town_code': townCode,

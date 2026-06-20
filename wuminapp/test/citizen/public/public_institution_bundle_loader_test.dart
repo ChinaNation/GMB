@@ -66,12 +66,12 @@ void main() {
         ],
       ),
       'assets/public_institutions/中枢省.json': jsonEncode({
-        'province': 'ZS',
+        'province_name': '中枢省',
         'manifest_version': 'cz-1',
         'institutions': [
           {
             'sfid_number': 'ZS001-ZF000-1-2026',
-            'institution_name': '中枢省人民政府',
+            'sfid_full_name': '中枢省人民政府',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -106,7 +106,7 @@ void main() {
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': 'ZS001-ZF000-1-2026',
-          'institution_name': '旧名机构',
+          'sfid_full_name': '旧名机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -126,12 +126,12 @@ void main() {
         ],
       ),
       'assets/public_institutions/中枢省.json': jsonEncode({
-        'province': 'ZS',
+        'province_name': '中枢省',
         'manifest_version': 'cz-new',
         'institutions': [
           {
             'sfid_number': 'ZS001-ZF000-1-2026',
-            'institution_name': '新名机构',
+            'sfid_full_name': '新名机构',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -145,7 +145,7 @@ void main() {
     final changed = await loader.ensureSynced();
 
     expect(changed, isTrue);
-    expect(store.byId['ZS001-ZF000-1-2026']!.institutionName, '新名机构');
+    expect(store.byId['ZS001-ZF000-1-2026']!.sfidFullName, '新名机构');
     expect(kv.globalVersion, '1');
     expect(kv.provinceVersions, {'中枢省': 'cz-new'});
   });
@@ -158,7 +158,7 @@ void main() {
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': 'A',
-          'institution_name': '旧名机构',
+          'sfid_full_name': '旧名机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -166,7 +166,7 @@ void main() {
         }),
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': 'B',
-          'institution_name': '待删机构',
+          'sfid_full_name': '待删机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -174,7 +174,7 @@ void main() {
         }),
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': 'X',
-          'institution_name': '岭南机构',
+          'sfid_full_name': '岭南机构',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -195,13 +195,13 @@ void main() {
         ],
       ),
       'assets/public_institutions/中枢省.json': jsonEncode({
-        'province': 'ZS',
+        'province_name': '中枢省',
         'manifest_version': 'cz-2',
         'institutions': [
           // A 改名,B 不在(删),C 新增。
           {
             'sfid_number': 'A',
-            'institution_name': '新名机构',
+            'sfid_full_name': '新名机构',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -209,7 +209,7 @@ void main() {
           },
           {
             'sfid_number': 'C',
-            'institution_name': '新增机构',
+            'sfid_full_name': '新增机构',
             'province_code': 'ZS',
             'city_code': '002',
             'institution_code': 'ZF',
@@ -224,9 +224,9 @@ void main() {
     final changed = await loader.ensureSynced();
 
     expect(changed, isTrue);
-    expect(store.byId['A']!.institutionName, '新名机构'); // 改名
+    expect(store.byId['A']!.sfidFullName, '新名机构'); // 改名
     expect(store.byId.containsKey('B'), isFalse); // 删除
-    expect(store.byId['C']!.institutionName, '新增机构'); // 新增
+    expect(store.byId['C']!.sfidFullName, '新增机构'); // 新增
     expect(store.byId.containsKey('X'), isTrue); // 岭南省没动,X 仍在
     expect(store.lastUpsertSfids, ['A', 'C']); // 只写改名/新增,不重写整省
     expect(kv.globalVersion, 'v2');
@@ -272,19 +272,19 @@ void main() {
     expect(kv.globalVersion, 'v2');
   });
 
-  test('旧格式 manifest(provinces:[省名字符串]) → 已有库也强制 reconcile', () async {
+  test('manifest 缺省级版本表 → 不写库、不删除本地数据', () async {
     final bundle = _MapBundle({
       'assets/public_institutions/manifest.json': jsonEncode({
         'version': '1',
-        'provinces': ['中枢省'], // 旧格式:字符串数组
+        'provinces': ['中枢省'],
       }),
       'assets/public_institutions/中枢省.json': jsonEncode({
-        'province': 'ZS',
+        'province_name': '中枢省',
         'manifest_version': 'cz-1',
         'institutions': [
           {
             'sfid_number': 'ZS001',
-            'institution_name': '新名机构',
+            'sfid_full_name': '新名机构',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -298,7 +298,7 @@ void main() {
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': 'ZS001',
-          'institution_name': '旧名机构',
+          'sfid_full_name': '旧名机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -306,7 +306,7 @@ void main() {
         }),
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': 'STALE',
-          'institution_name': '旧残留机构',
+          'sfid_full_name': '旧残留机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -316,13 +316,18 @@ void main() {
       catalogVersion: 'old',
     );
     final loader = buildLoader(store: store, bundle: bundle);
+    final upsertBefore = store.upsertCalls;
+    final deleteBefore = store.deleteCalls;
 
     final changed = await loader.ensureSynced();
-    expect(changed, isTrue);
+    expect(changed, isFalse);
+    expect(store.upsertCalls, upsertBefore);
+    expect(store.deleteCalls, deleteBefore);
     expect(store.byId.containsKey('ZS001'), isTrue);
-    expect(store.byId['ZS001']!.institutionName, '新名机构');
-    expect(store.byId.containsKey('STALE'), isFalse);
-    expect(await store.listProvinces(), ['中枢省']);
+    expect(store.byId['ZS001']!.sfidFullName, '旧名机构');
+    expect(store.byId.containsKey('STALE'), isTrue);
+    expect(store.provinceOrder, isEmpty);
+    expect(await store.listProvinces(), ['ZS']);
   });
 
   test('无数据包 → loadFromBundle 返回 false 不崩', () async {

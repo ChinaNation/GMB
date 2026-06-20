@@ -211,7 +211,7 @@ sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{e
 8. SFID 确认 `citizen_status=NORMAL`、`voting_eligible=true`，且 `wallet_address / wallet_pubkey / wallet_sig_alg` 已由 CPMS 档案码携带；否则不得录入 SFID 公民库。
 9. SFID 根据 ARCHIVE 生成 wuminapp `sign_request`，并锁定 `wallet_address / wallet_pubkey`。
 10. wuminapp 返回 `sign_response` 后，SFID 校验签名和 `payload_hash`。
-11. SFID 检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，并按 CPMS 授权分区写入 `citizens.p_code / c_code`；按 `geo_seal` 另存 `residence_* / birth_* / election_scope_level`。后续投票区域按居住地判断，参选区域按出生地判断，具体流程只由投票引擎实现。
+11. SFID 检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，并按 CPMS 授权分区写入 `citizens.province_code / city_code`；按 `geo_seal` 另存 `residence_* / birth_* / election_scope_level`。后续投票区域按居住地判断，参选区域按出生地判断，具体流程只由投票引擎实现。
 
 ## 授权状态
 

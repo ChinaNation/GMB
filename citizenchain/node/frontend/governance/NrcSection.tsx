@@ -17,13 +17,13 @@ const NRC_SFID_NUMBER = 'LN001-GCB05-944805165-2026';
 type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
-  | { page: 'admin-set-change'; institutionName: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'admin-set-change'; sfidFullName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string }
-  | { page: 'create-proposal'; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'create-proposal'; orgType: number; sfidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
   | { page: 'protocol-upgrade'; adminWallets: AdminWalletMatch[] }
   | { page: 'developer-upgrade'; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-safety-fund'; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; institutionName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'propose-sweep'; sfidFullName: string; adminWallets: AdminWalletMatch[] };
 
 export function NrcSection() {
   const [view, setView] = useState<NrcView>({ page: 'detail' });
@@ -55,7 +55,7 @@ export function NrcSection() {
     return (
       <AdminSetChangePage
         accountRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
-        institutionName={view.institutionName}
+        sfidFullName={view.sfidFullName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -68,8 +68,8 @@ export function NrcSection() {
       <CreateDuoqianTransferPage
         sfidNumber={NRC_SFID_NUMBER}
         orgType={view.orgType}
-        institutionName={view.institutionName}
-        mainAddress={view.mainAddress}
+        sfidFullName={view.sfidFullName}
+        mainAccount={view.mainAccount}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -111,7 +111,7 @@ export function NrcSection() {
     return (
       <SweepProposalPage
         sfidNumber={NRC_SFID_NUMBER}
-        institutionName={view.institutionName}
+        sfidFullName={view.sfidFullName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -129,11 +129,11 @@ export function NrcSection() {
       onSelectProposal={(proposalId, adminWallets, sid) =>
         setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid })
       }
-      onCreateProposal={(_sid, orgType, name, mainAddress, aw) =>
-        setView({ page: 'create-proposal', orgType, institutionName: name, mainAddress, adminWallets: aw })
+      onCreateProposal={(_sid, orgType, name, mainAccount, aw) =>
+        setView({ page: 'create-proposal', orgType, sfidFullName: name, mainAccount, adminWallets: aw })
       }
       onCreateAdminSetChange={(_sid, _orgType, name, aw) =>
-        setView({ page: 'admin-set-change', institutionName: name, adminWallets: aw })
+        setView({ page: 'admin-set-change', sfidFullName: name, adminWallets: aw })
       }
       onCreateProtocolUpgrade={(aw) =>
         setView({ page: 'protocol-upgrade', adminWallets: aw })
@@ -145,7 +145,7 @@ export function NrcSection() {
         setView({ page: 'propose-safety-fund', adminWallets: aw })
       }
       onCreateSweep={(_sid, name, aw) =>
-        setView({ page: 'propose-sweep', institutionName: name, adminWallets: aw })
+        setView({ page: 'propose-sweep', sfidFullName: name, adminWallets: aw })
       }
     />
   );

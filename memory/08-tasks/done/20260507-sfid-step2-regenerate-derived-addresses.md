@@ -1,6 +1,6 @@
 任务需求：
 SFID 改造 Step 2:跑 tools/duoqian.py --apply 同步所有派生地址(277 条 main /
-87 条 fee / 1 条 NRC_ANQUAN_ADDRESS / 408 条 china_zb 汇总),因 Step 1 把 277
+87 条 fee / 1 条 NRC_ANQUAN_ACCOUNT / 408 条 china_zb 汇总),因 Step 1 把 277
 条 sfid_number 字面量重生成,所有依赖 sfid_number 的 BLAKE2 派生地址必须连环重算。
 
 所属模块：Blockchain (citizenchain primitives)
@@ -17,20 +17,20 @@ SFID 改造 Step 2:跑 tools/duoqian.py --apply 同步所有派生地址(277 条
 ## 改动清单
 
 ### tools/duoqian.py 一次跑通
-- main_address(7 个 china_*.rs):**277 条全部重算**
-- fee_address(cb + ch):**87 条全部重算**
-- stake_address(ch):**0 条变更**(stake 派生不依赖 sfid_number,仅依赖 citizens_number)
-- NRC_ANQUAN_ADDRESS(china_cb 顶部):**1 条重算** → `b8a5c135280278916442137418ab6423eda038bb4662a5c02e70f8d528903529`
-- china_zb.rs::CHINA_RESERVED_MAIN_ADDRESSES:**408 条**汇总写回(去重排序)
+- main_account(7 个 china_*.rs):**277 条全部重算**
+- fee_account(cb + ch):**87 条全部重算**
+- stake_account(ch):**0 条变更**(stake 派生不依赖 sfid_number,仅依赖 citizens_number)
+- NRC_ANQUAN_ACCOUNT(china_cb 顶部):**1 条重算** → `b8a5c135280278916442137418ab6423eda038bb4662a5c02e70f8d528903529`
+- china_zb.rs::CHINA_RESERVED_MAIN_ACCOUNTS:**408 条**汇总写回(去重排序)
 
 ### 派生公式(未变,只换 sfid_number 输入)
 ```
 preimage = b"DUOQIAN" (10B) || op_tag (1B) || ss58_le[2027] (2B) || sfid_number_bytes
 address  = blake2b_256(preimage)
 ```
-- OP_MAIN = 0x00 → main_address
-- OP_FEE  = 0x01 → fee_address
-- OP_AN   = 0x03 → NRC_ANQUAN_ADDRESS
+- OP_MAIN = 0x00 → main_account
+- OP_FEE  = 0x01 → fee_account
+- OP_AN   = 0x03 → NRC_ANQUAN_ACCOUNT
 - OP_STAKE= 0x02 → stake(用 citizens_number,不重算)
 
 ## 验证(全部 ok)
@@ -50,10 +50,10 @@ address  = blake2b_256(preimage)
 **Rust 测试合计 228 + Dart 测试合计 248 + sfid 69 = 545 全过**
 
 ## 输出物
-- 277 条 main_address 重算(7 个 china_*.rs)
-- 87 条 fee_address 重算(china_cb.rs + china_ch.rs)
-- 1 条 NRC_ANQUAN_ADDRESS 重算(china_cb.rs:31)
-- 408 条 CHINA_RESERVED_MAIN_ADDRESSES 重算(china_zb.rs)
+- 277 条 main_account 重算(7 个 china_*.rs)
+- 87 条 fee_account 重算(china_cb.rs + china_ch.rs)
+- 1 条 NRC_ANQUAN_ACCOUNT 重算(china_cb.rs:31)
+- 408 条 CHINA_RESERVED_MAIN_ACCOUNTS 重算(china_zb.rs)
 - 任务卡(本文件)
 
 ## 验收标准

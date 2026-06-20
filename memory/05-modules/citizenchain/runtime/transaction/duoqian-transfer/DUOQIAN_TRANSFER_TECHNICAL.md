@@ -25,7 +25,7 @@
 ## 2026-05-08 · 第5步账户级主体接入
 
 - `propose_transfer` 的 `institution: AccountId` 不再把 `0x02 注册机构归属关系` 当作可支出主体；`0x02` 只保留给机构归属与检索。
-- 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_address`。
+- 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
 - 个人多签使用 `PersonalDuoqian AccountId + AccountId32 + 15B 零填充`，账户状态由 `personal-manage::PersonalMultisigQuery` 校验。
 - 注册机构具体账户使用 `InstitutionAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
 - 两类注册账户的管理员、阈值和人数都以 `admins-change::Subjects[AccountId]` 为真源，内部投票仍是一人一票一笔链上交易。
@@ -42,7 +42,7 @@
 - 手续费在投票通过后由 pallet 内部从同一个资金账户扣取，通过 `onchain-transaction::calculate_onchain_fee()` 计算。
 - 管理员个人账户不承担任何费用。
 - 覆盖三类来源：
-  - 创世预置的治理机构 `main_address`（NRC / PRC / PRB）
+  - 创世预置的治理机构 `main_account`（NRC / PRC / PRB）
   - `personal-manage` 注册并激活的个人多签账户（`PersonalDuoqian AccountId`）
   - `organization-manage` 注册并激活的机构具体账户（`InstitutionAccount AccountId`）
 
@@ -56,7 +56,7 @@
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
 补充说明：
-- 只要某类内置机构被本模块的 `institution_org()` / `institution_pallet_address()` 正式识别，
+- 只要某类内置机构被本模块的 `institution_org()` / 主账户解析逻辑正式识别，
 - 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`，固定阈值或动态阈值已由投票引擎自身提供，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
@@ -83,21 +83,21 @@
 
 | 地址 | 类型 | 说明 |
 | --- | --- | --- |
-| `stake_address` | 质押地址 | **不允许支出**，仅用于质押 |
-| `main_address`（治理机构）/ `duoqian_address`（注册多签） | 多签资金账户 | 转账和手续费均从此扣取 |
+| `stake_account` | 质押地址 | **不允许支出**，仅用于质押 |
+| `main_account`（治理机构）/ `duoqian_account`（注册多签） | 多签资金账户 | 转账和手续费均从此扣取 |
 
 ### 1.2 资金账户地址来源
 
 资金账户地址有三种来源：
 
-- 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
+- 治理机构：`main_account` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过主账户解析逻辑查找。
 - 个人多签账户：`AccountId32` 使用 `AdminAccountKind::PersonalDuoqian = 0x03` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalManage::PersonalDuoqians` 校验 Active。
 - 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
 
 - 本模块在 `propose_transfer` 和 `try_execute_transfer_from_callback` 两个阶段都会调用 `institution-asset`。
-- 当前 runtime 规则下，制度保留 `main_address` 只允许本模块这类治理执行动作内部扣款。
+- 当前 runtime 规则下，制度保留 `main_account` 只允许本模块这类治理执行动作内部扣款。
 - 这样可以防止其他交易模块绕开治理流程直接动用受治理资金账户余额。
 
 ## 2. Extrinsic 接口
@@ -128,7 +128,7 @@ pub fn propose_transfer(
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
-8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
+8. `beneficiary` 不能是受保护地址（如 `stake_account`、安全基金账户、费用账户等保留地址）。
 9. 转出资金账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
 10. 活跃提案数由 `votingengine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
 
@@ -215,7 +215,7 @@ pub enum Event<T: Config> {
     SafetyFundTransferProposed {
         proposal_id: u64,
         proposer: T::AccountId,
-        from: T::AccountId,                             // NRC_ANQUAN_ADDRESS
+        from: T::AccountId,                             // NRC_ANQUAN_ACCOUNT
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         remark: BoundedVec<u8, T::MaxRemarkLen>,

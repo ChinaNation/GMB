@@ -2,7 +2,7 @@
 //
 // 流程:
 //   1. 加载时调 organizationManageApi.fetchInstitutionRegistrationInfo(sfidNumber) 拉注册专用信息
-//      响应自带 register_nonce / signature / province / signer_admin_pubkey。
+//      响应自带 register_nonce / signature / province_name / signer_admin_pubkey。
 //   2. 账户列表完全以 SFID 返回的 account_names 为准,前端只允许填写每个账户的初始资金。
 //   3. 管理员列表:创建人(选中的本机冷钱包)自动占第一位 + 扫码添加管理员
 //   4. 阈值范围 ⌈n/2⌉ ~ n
@@ -33,7 +33,7 @@ type Props = {
   coldWallets: AdminWalletProfile[];
   onBack: () => void;
   /** 提案提交成功后,跳 wait-vote 视图。 */
-  onSubmitted: (sfidNumber: string, institutionName: string) => void;
+  onSubmitted: (sfidNumber: string, sfidFullName: string) => void;
 };
 
 type AccountForm = {
@@ -170,21 +170,21 @@ export function CreateMultisigInstitutionPage({
         amountFen: yuanToFenString(a.amountYuan)!,
       }));
       const threshold = parseInt(thresholdInput.trim(), 10);
-      const institutionName = registrationInfo.institution_name.trim();
+      const sfidFullName = registrationInfo.sfid_full_name.trim();
       const sfidCredential = registrationInfo.credential;
 
       // Step 1: 构 QR 签名请求
       const reqResult = await organizationManageApi.buildProposeCreateInstitutionRequest({
         pubkeyHex: selectedWallet.pubkeyHex,
         sfidNumber,
-        institutionName,
+        sfidFullName,
         accounts: accountInputs,
         adminOrg: CLEARING_BANK_ADMIN_ORG,
         adminPubkeys,
         threshold,
         registerNonce: sfidCredential.register_nonce,
         signatureHex: sfidCredential.signature,
-        signingProvince: sfidCredential.province,
+        signingProvinceName: sfidCredential.province_name,
         signerAdminPubkey: sfidCredential.signer_admin_pubkey,
       });
 
@@ -207,8 +207,8 @@ export function CreateMultisigInstitutionPage({
       // wait-vote 与 institution-detail 复用)。F3 follow-up 接入冷钱包
       // 真实回签后,本 saveKnownSfid 调用应紧挨 submit 成功之后,而不是
       // 在 alert 占位之后(防止占位被点掉但实际 extrinsic 没提交)。
-      saveKnownSfid({ sfidNumber, institutionName });
-      onSubmitted(sfidNumber, institutionName);
+      saveKnownSfid({ sfidNumber, sfidFullName });
+      onSubmitted(sfidNumber, sfidFullName);
     } catch (e) {
       setSubmitError(sanitizeError(e));
     } finally {
@@ -233,7 +233,7 @@ export function CreateMultisigInstitutionPage({
     );
   }
 
-  const institutionName = registrationInfo.institution_name;
+  const sfidFullName = registrationInfo.sfid_full_name;
 
   return (
     <>
@@ -246,7 +246,7 @@ export function CreateMultisigInstitutionPage({
       {/* 顶部:机构名(只读) */}
       <div className="metric-card">
         <div className="metric-label">机构名(SFID 系统)</div>
-        <div className="metric-value">{institutionName || '(机构名待 SFID 后台命名)'}</div>
+        <div className="metric-value">{sfidFullName || '(机构名待 SFID 后台命名)'}</div>
       </div>
 
       {/* 账户区:每账户初始资金由创建人填(最低 1.11 元) */}

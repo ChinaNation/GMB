@@ -46,7 +46,7 @@ use codec::Encode;
 pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(u8, u32)> {
     if CHINA_CB
         .first()
-        .and_then(|n| decode_account::<T>(&n.main_address))
+        .and_then(|n| decode_account::<T>(&n.main_account))
         .as_ref()
         == Some(id)
     {
@@ -55,14 +55,14 @@ pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(u8, u
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| decode_account::<T>(&n.main_address))
+        .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|account| &account == id)
     {
         return Some((ORG_PRC, PRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| decode_account::<T>(&n.main_address))
+        .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|account| &account == id)
     {
         return Some((ORG_PRB, PRB_JOINT_VOTE_WEIGHT));
@@ -83,7 +83,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
             }
         }
         for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = decode_account::<T>(&entry.main_address) {
+            if let Some(prc) = decode_account::<T>(&entry.main_account) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_PRC,
                     prc.clone(),
@@ -107,7 +107,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
             }
         }
         for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = decode_account::<T>(&entry.main_address) {
+            if let Some(prc) = decode_account::<T>(&entry.main_account) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_PRC,
                     prc.clone(),
@@ -124,7 +124,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
         for entry in CHINA_CB.iter() {
-            if let Some(institution) = decode_account::<T>(&entry.main_address) {
+            if let Some(institution) = decode_account::<T>(&entry.main_account) {
                 if entry.duoqian_admins.iter().any(|admin| *admin == who_arr) {
                     return Some(institution);
                 }
@@ -156,7 +156,7 @@ impl<T: Config> Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
         signature: votingengine::pallet::VoteSignatureOf<T>,
-        province: &[u8],
+        province_name: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> DispatchResult {
         let _proposer_institution = resolve_proposer_institution::<T>(&who)
@@ -167,7 +167,10 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidPopulationSnapshot
         );
         ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
-        ensure!(!province.is_empty(), Error::<T>::InvalidPopulationSnapshot);
+        ensure!(
+            !province_name.is_empty(),
+            Error::<T>::InvalidPopulationSnapshot
+        );
 
         let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
         ensure!(
@@ -180,7 +183,7 @@ impl<T: Config> Pallet<T> {
                 eligible_total,
                 &snapshot_nonce,
                 &signature,
-                province,
+                province_name,
                 signer_admin_pubkey,
             ),
             Error::<T>::InvalidPopulationSnapshot
@@ -259,7 +262,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
             for entry in CHINA_CB.iter().skip(1) {
-                if let Some(prc) = decode_account::<T>(&entry.main_address) {
+                if let Some(prc) = decode_account::<T>(&entry.main_account) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
                         ORG_PRC,
@@ -276,7 +279,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
             for entry in CHINA_CH.iter() {
-                if let Some(prb) = decode_account::<T>(&entry.main_address) {
+                if let Some(prb) = decode_account::<T>(&entry.main_account) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
                         ORG_PRB,

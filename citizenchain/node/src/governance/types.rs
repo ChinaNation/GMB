@@ -46,8 +46,8 @@ pub struct InstitutionDetail {
     pub org_type: u8,
     /// 机构类型显示标签。
     pub org_type_label: String,
-    /// 主账户地址 hex，由前端再转成 SS58 显示。
-    pub main_address: String,
+    /// 主账户 AccountId hex，由前端再转成 SS58 显示。
+    pub main_account: String,
     /// 主账户链上余额（分），节点未运行时为 null。
     pub balance_fen: Option<String>,
     /// 管理员列表（含公钥和链上余额），节点未运行时为空。
@@ -56,24 +56,24 @@ pub struct InstitutionDetail {
     pub internal_threshold: u32,
     /// 联合投票权重。
     pub joint_vote_weight: u32,
-    /// 永久质押账户地址 hex（仅 PRB）。
-    pub staking_address: Option<String>,
+    /// 永久质押账户 AccountId hex（仅 PRB）。
+    pub stake_account: Option<String>,
     /// 永久质押账户余额（分，仅 PRB）。
     pub staking_balance_fen: Option<String>,
-    /// 手续费账户地址 hex（仅 PRB）。
-    pub fee_address: Option<String>,
+    /// 手续费账户 AccountId hex（仅 PRB）。
+    pub fee_account: Option<String>,
     /// 手续费账户余额（分，仅 PRB）。
     pub fee_balance_fen: Option<String>,
-    /// 储委会费用账户地址 hex（省储会，仅 PRC）。
-    pub cb_fee_address: Option<String>,
+    /// 储委会费用账户 AccountId hex（省储会，仅 PRC）。
+    pub cb_fee_account: Option<String>,
     /// 储委会费用账户余额（分，仅 PRC）。
     pub cb_fee_balance_fen: Option<String>,
-    /// 国储会费用账户地址 hex（仅 NRC）。
-    pub nrc_fee_address: Option<String>,
+    /// 国储会费用账户 AccountId hex（仅 NRC）。
+    pub nrc_fee_account: Option<String>,
     /// 国储会手续费账户余额（分，仅 NRC）。
     pub nrc_fee_balance_fen: Option<String>,
-    /// 国储会安全基金账户地址 hex（仅 NRC）。
-    pub nrc_anquan_address: Option<String>,
+    /// 国储会安全基金账户 AccountId hex（仅 NRC）。
+    pub nrc_anquan_account: Option<String>,
     /// 国储会安全基金账户余额（分，仅 NRC）。
     pub nrc_anquan_balance_fen: Option<String>,
     /// 告警信息。
@@ -110,8 +110,8 @@ pub struct InstitutionListItem {
     pub sfid_number: String,
     pub org_type: u8,
     pub org_type_label: String,
-    /// 主账户地址 hex，由前端转成 SS58 显示。
-    pub main_address: String,
+    /// 主账户 AccountId hex，由前端转成 SS58 显示。
+    pub main_account: String,
 }
 
 /// 治理首页聚合数据。

@@ -81,7 +81,7 @@ interface Props {
 }
 
 interface InfoFormValues {
-  institution_name: string;
+  sfid_full_name: string;
   /** 需挂靠的非法人所属法人 sfid_number */
   parent_sfid_number?: string;
   legal_rep_name: string;
@@ -116,7 +116,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   // null = 未查 / 未改名(视为 ok);true = 查重通过;false = 已占用
   const [nameChecking, setNameChecking] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
-  const [currentName, setCurrentName] = useState<string>(inst.institution_name ?? '');
+  const [currentName, setCurrentName] = useState<string>(inst.sfid_full_name ?? '');
   const [legalRepSearching, setLegalRepSearching] = useState(false);
   const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -126,7 +126,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const requiresParent = isF && !['GT', 'GP'].includes(inst.institution_code);
   // 完善判断:名称必填;仅需挂靠的非法人要求 parent_sfid_number;私权类型由创建时编码确定。
   const needsCompletion =
-    !inst.institution_name ||
+    !inst.sfid_full_name ||
     (requiresParent && !inst.parent_sfid_number) ||
     !inst.legal_rep_name ||
     !inst.legal_rep_sfid_number ||
@@ -148,8 +148,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     let cancelled = false;
     searchParentInstitutions(auth, inst.parent_sfid_number, {
       fInstitution: inst.institution_code,
-      province: inst.province,
-      city: inst.city,
+      province_name: inst.province_name,
+      city_name: inst.city_name,
     })
       .then((rows) => {
         if (cancelled) return;
@@ -177,8 +177,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       // 改挂与创建同源:后端按 subjects/uninorg 地域规则预过滤候选父级
       const rows = await searchParentInstitutions(auth, q, {
         fInstitution: inst.institution_code,
-        province: inst.province,
-        city: inst.city,
+        province_name: inst.province_name,
+        city_name: inst.city_name,
       });
       setParentSearchOpts(rows);
       if (rows.length === 0) {
@@ -202,9 +202,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   useEffect(() => {
     setEditing(false);
     setNameAvailable(null);
-    setCurrentName(inst.institution_name ?? '');
+    setCurrentName(inst.sfid_full_name ?? '');
     form.setFieldsValue({
-      institution_name: inst.institution_name ?? '',
+      sfid_full_name: inst.sfid_full_name ?? '',
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
       legal_rep_name: inst.legal_rep_name ?? '',
       legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -217,7 +217,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     setLegalRepOptions([]);
   }, [
     inst.sfid_number,
-    inst.institution_name,
+    inst.sfid_full_name,
     inst.parent_sfid_number,
     inst.legal_rep_name,
     inst.legal_rep_sfid_number,
@@ -228,7 +228,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     setEditing(true);
     setNameAvailable(null);
     form.setFieldsValue({
-      institution_name: inst.institution_name ?? '',
+      sfid_full_name: inst.sfid_full_name ?? '',
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
       legal_rep_name: inst.legal_rep_name ?? '',
       legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -238,14 +238,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
     setPhotoName(inst.legal_rep_photo_name ?? '');
-    setCurrentName(inst.institution_name ?? '');
+    setCurrentName(inst.sfid_full_name ?? '');
   };
 
   const onClickCancel = () => {
     setEditing(false);
     setNameAvailable(null);
     form.setFieldsValue({
-      institution_name: inst.institution_name ?? '',
+      sfid_full_name: inst.sfid_full_name ?? '',
       parent_sfid_number: inst.parent_sfid_number ?? undefined,
       legal_rep_name: inst.legal_rep_name ?? '',
       legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -255,7 +255,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
     setPhotoName(inst.legal_rep_photo_name ?? '');
-    setCurrentName(inst.institution_name ?? '');
+    setCurrentName(inst.sfid_full_name ?? '');
   };
 
   const onNameInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -266,7 +266,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   };
 
   const isNameUnchanged = () => {
-    return currentName.trim() === (inst.institution_name ?? '').trim();
+    return currentName.trim() === (inst.sfid_full_name ?? '').trim();
   };
 
   const onCheckName = async () => {
@@ -319,8 +319,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         q,
         parentChanged
           ? {
-              province: inst.province,
-              city: inst.city,
+              province_name: inst.province_name,
+              city_name: inst.city_name,
               subject_property: inst.subject_property,
               institution: inst.institution_code,
               education_type: inst.education_type ?? undefined,
@@ -361,7 +361,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   };
 
   const onSaveInfo = async (values: InfoFormValues) => {
-    const name = values.institution_name.trim();
+    const name = values.sfid_full_name.trim();
     if (!name) {
       notice.error('机构名称不能为空');
       return;
@@ -384,7 +384,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     setSavingInfo(true);
     try {
       await updateInstitution(auth, inst.sfid_number, {
-        institution_name: name,
+        sfid_full_name: name,
         parent_sfid_number: requiresParent ? values.parent_sfid_number : undefined,
         legal_rep_name: legalRepName,
         legal_rep_sfid_number: legalRepSfid,
@@ -409,7 +409,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
   };
 
-  const titleText = inst.institution_name || '(未命名机构)';
+  const titleText = inst.sfid_full_name || '(未命名机构)';
   const createdByLabel = (() => {
     const roleLabel = detail.created_by_role
       ? CREATED_BY_ROLE_LABEL[detail.created_by_role] ?? detail.created_by_role
@@ -472,8 +472,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   {inst.sfid_number}
                 </Typography.Text>
               </Descriptions.Item>
-              <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
-              <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
+              <Descriptions.Item label="省份">{inst.province_name}</Descriptions.Item>
+              <Descriptions.Item label="城市">{inst.city_name}</Descriptions.Item>
               {/* 中文注释:p1/机构代码是系统编码,前端只显示中文;映射缺失时回退原代码兜底 */}
               <Descriptions.Item label="盈利属性">
                 {inst.p1 === '0' ? '非盈利' : '盈利'}
@@ -510,7 +510,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   layout="vertical"
                   onFinish={onSaveInfo}
                   initialValues={{
-                    institution_name: inst.institution_name ?? '',
+                    sfid_full_name: inst.sfid_full_name ?? '',
                     parent_sfid_number: inst.parent_sfid_number ?? undefined,
                     legal_rep_name: inst.legal_rep_name ?? '',
                     legal_rep_sfid_number: inst.legal_rep_sfid_number ?? '',
@@ -522,7 +522,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                 >
                   <Form.Item
                     label="机构名称"
-                    name="institution_name"
+                    name="sfid_full_name"
                     rules={[
                       { required: true, message: '请输入机构名称' },
                       { max: 30, message: '最多 30 个字' },
@@ -570,9 +570,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                           value: r.sfid_number,
                           label: (
                             <div>
-                              <div style={{ fontWeight: 500 }}>{r.institution_name}</div>
+                              <div style={{ fontWeight: 500 }}>{r.sfid_full_name}</div>
                               <div style={{ fontSize: 11, color: '#888' }}>
-                                {r.sfid_number} · {r.subject_property} · {r.province}/{r.city}
+                                {r.sfid_number} · {r.subject_property} · {r.province_name}/{r.city_name}
                               </div>
                             </div>
                           ),
@@ -672,7 +672,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                 // 只读展示
                 <Descriptions column={1} size="small">
                   <Descriptions.Item label="机构名称">
-                    {inst.institution_name || (
+                    {inst.sfid_full_name || (
                       <span style={{ color: '#999' }}>(未命名)</span>
                     )}
                   </Descriptions.Item>
@@ -681,7 +681,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       {inst.parent_sfid_number ? (
                         selectedParent ? (
                           <span>
-                            {selectedParent.institution_name}
+                            {selectedParent.sfid_full_name}
                             <Typography.Text
                               type="secondary"
                               style={{ marginLeft: 6, fontSize: 12 }}
@@ -802,7 +802,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       <CreateAccountModal
         auth={auth}
         sfidNumber={inst.sfid_number}
-        institutionName={inst.institution_name ?? ''}
+        sfidFullName={inst.sfid_full_name ?? ''}
         existingAccounts={accounts}
         open={createAccountOpen}
         onCancel={() => setCreateAccountOpen(false)}

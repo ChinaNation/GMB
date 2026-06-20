@@ -70,8 +70,8 @@ pub(crate) async fn admin_list_audit_logs(
             .query(
                 "SELECT id, action, actor, target_sfid, detail, created_at
                  FROM audit
-                 WHERE ($1::text IS NULL OR p_code = $1)
-                   AND ($2::text IS NULL OR c_code = $2)
+                 WHERE ($1::text IS NULL OR province_code = $1)
+                   AND ($2::text IS NULL OR city_code = $2)
                    AND ($3::text = '' OR action = $3)
                    AND ($4::text = '' OR lower(actor) = lower($4))
                    AND ($5::text = '' OR target_sfid = $5)

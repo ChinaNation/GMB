@@ -154,16 +154,16 @@ fn make_credential(
     let sig_bytes: &[u8] = if valid { b"valid" } else { b"bad" };
     let signature: sfid_system::pallet::SignatureOf<Test> =
         sig_bytes.to_vec().try_into().expect("sig should fit");
-    // ADR-008 step3:`BindCredential` 必带 (province, signer_admin_pubkey)。
+    // ADR-008 step3:`BindCredential` 必带 (province_name, signer_admin_pubkey)。
     // 集成测试用 TestSfidVerifier 不解析这两个字段,只检查 signature == "valid",
     // 真实双层签名校验在 runtime 层 `RuntimeSfidVerifier` 单独覆盖。
     BindCredential {
         binding_id,
         bind_nonce: nonce,
-        province: b"liaoning"
+        province_name: b"liaoning"
             .to_vec()
             .try_into()
-            .expect("province should fit"),
+            .expect("province_name should fit"),
         signer_admin_pubkey: [7u8; 32],
         signature,
     }

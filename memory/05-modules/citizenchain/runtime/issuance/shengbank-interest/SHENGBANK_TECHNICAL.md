@@ -97,7 +97,7 @@ Runtime 接线：
 
 对每家省储行执行：
 1. 将 `sfid_number` 编码成固定 48 字节 `pallet_id`。
-2. 由 `main_address` 解码出固定收款账户。
+2. 由 `main_account` 解码出固定收款账户。
 3. 将 `stake_amount` 转成运行时 `Balance`，并做回写校验防止饱和截断。
 4. 使用 `checked_mul` 计算 `principal * rate_bp` 后再除以 `10_000`；若乘法溢出，发出 `ShengBankInterestOverflow` 并让该年度结算失败。
 5. `interest == 0` 时视为成功但不发币。

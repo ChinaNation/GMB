@@ -66,18 +66,18 @@ export type DecryptAdminRequestResult = {
 export type ClearingBankView =
   | { kind: 'empty' }
   | { kind: 'add-input-sfid' }
-  | { kind: 'check-multisig'; sfidNumber: string; institutionName: string }
+  | { kind: 'check-multisig'; sfidNumber: string; sfidFullName: string }
   | { kind: 'institution-detail'; sfidNumber: string }
   | {
       kind: 'admin-set-change';
       sfidNumber: string;
-      institutionName: string;
+      sfidFullName: string;
       adminAccountHex: string;
       adminOrg: number;
       adminWallets: AdminWalletMatch[];
     }
   | { kind: 'create-multisig-institution'; sfidNumber: string }
-  | { kind: 'wait-vote'; sfidNumber: string; institutionName: string }
-  | { kind: 'declare-node'; sfidNumber: string; institutionName: string }
+  | { kind: 'wait-vote'; sfidNumber: string; sfidFullName: string }
+  | { kind: 'declare-node'; sfidNumber: string; sfidFullName: string }
   | { kind: 'other-accounts-list'; sfidNumber: string; otherAccounts: AccountWithBalance[] }
   | { kind: 'admin-list'; sfidNumber: string; admins: string[]; threshold: number; adminCount: number };

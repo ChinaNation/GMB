@@ -62,7 +62,7 @@ pub(crate) async fn create_account(
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
     let scope = get_visible_scope(&ctx);
-    if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
+    if !scope.includes_province(&inst.province_name) || !scope.includes_city(&inst.city_name) {
         return api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -83,7 +83,7 @@ pub(crate) async fn create_account(
     let account = InstitutionAccount {
         sfid_number: sfid_number.clone(),
         account_name: account_name.clone(),
-        duoqian_address: crate::accounts::derive::derive_duoqian_address(
+        duoqian_account: crate::accounts::derive::derive_duoqian_account(
             &sfid_number,
             &account_name,
         ),
@@ -108,7 +108,7 @@ pub(crate) async fn create_account(
             "account_name": account_name.clone(),
         }),
     );
-    let duoqian_address = account.duoqian_address.clone();
+    let duoqian_account = account.duoqian_account.clone();
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -119,7 +119,7 @@ pub(crate) async fn create_account(
             chain_synced_at: None,
             chain_tx_hash: None,
             chain_block_number: None,
-            duoqian_address,
+            duoqian_account,
         },
     })
     .into_response()
@@ -144,7 +144,7 @@ pub(crate) async fn list_accounts(
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
     let scope = get_visible_scope(&ctx);
-    if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
+    if !scope.includes_province(&inst.province_name) || !scope.includes_city(&inst.city_name) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
     Json(ApiResponse {
@@ -177,7 +177,7 @@ pub(crate) async fn delete_account(
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
     let scope = get_visible_scope(&ctx);
-    if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
+    if !scope.includes_province(&inst.province_name) || !scope.includes_city(&inst.city_name) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
     let Some(account) = accounts

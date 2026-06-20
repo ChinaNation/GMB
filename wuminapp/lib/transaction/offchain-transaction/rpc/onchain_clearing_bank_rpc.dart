@@ -31,7 +31,7 @@ class OnchainClearingBankRpc {
 
   // ──────────── 公开接口:4 个新 extrinsic ────────────
 
-  /// `bind_clearing_bank(bank_main_address)`:L3 绑定清算行(绑定即开户,无预存)。
+  /// `bind_clearing_bank(bank_main_account)`:L3 绑定清算行(绑定即开户,无预存)。
   ///
   /// [fromAddress]      L3 用户 SS58 地址
   /// [signerPubkey]     L3 用户公钥(32 字节)

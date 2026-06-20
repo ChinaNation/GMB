@@ -44,7 +44,7 @@ class _FakeChainData implements PublicInstitutionChainData {
 PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
       <String, dynamic>{
         'sfid_number': _nrcSfid,
-        'institution_name': '国家公民储备委员会',
+        'sfid_full_name': '国家公民储备委员会',
         'province_code': 'LN',
         'city_code': '001',
         'institution_code': 'ZF',
@@ -82,7 +82,7 @@ void main() {
         // 复用 harness seedDto 不便带 custom,这里直接用 entity 的 dto。
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
-          'institution_name': '国家公民储备委员会',
+          'sfid_full_name': '国家公民储备委员会',
           'province_code': 'GD',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -135,7 +135,7 @@ void main() {
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
-          'institution_name': '国家公民储备委员会',
+          'sfid_full_name': '国家公民储备委员会',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -165,7 +165,7 @@ void main() {
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
           'sfid_number': _nrcSfid,
-          'institution_name': '国家公民储备委员会',
+          'sfid_full_name': '国家公民储备委员会',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',

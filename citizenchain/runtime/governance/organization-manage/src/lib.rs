@@ -29,7 +29,7 @@ use frame_system::pallet_prelude::*;
 use sp_core::sr25519::Public as Sr25519Public;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 pub use traits::{
-    DuoqianAddressValidator, DuoqianReservedAddressChecker, InstitutionMultisigQuery,
+    DuoqianAccountValidator, DuoqianReservedAccountChecker, InstitutionMultisigQuery,
     ProtectedSourceChecker, SfidInstitutionVerifier,
 };
 use votingengine::{
@@ -62,8 +62,8 @@ pub mod pallet {
         /// 内部投票引擎
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
-        type AddressValidator: DuoqianAddressValidator<Self::AccountId>;
-        type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
+        type AccountValidator: DuoqianAccountValidator<Self::AccountId>;
+        type ReservedAccountChecker: DuoqianReservedAccountChecker<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
         type SfidInstitutionVerifier: SfidInstitutionVerifier<
@@ -163,10 +163,10 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// SFID 机构登记：(sfid_number, account_name) -> duoqian_address（由 blake2b_256 派生）。
-    /// 同一 sfid_number 可通过不同 account_name 注册多个多签地址。
+    /// SFID 机构登记：(sfid_number, account_name) -> duoqian_account（由 blake2b_256 派生）。
+    /// 同一 sfid_number 可通过不同 account_name 注册多个多签账户。
     #[pallet::storage]
-    pub type SfidRegisteredAddress<T: Config> = StorageDoubleMap<
+    pub type SfidRegisteredAccount<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         SfidNumberOf<T>,
@@ -176,10 +176,10 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// SFID 机构登记反向索引：duoqian_address -> { sfid_number, nonce }
+    /// SFID 机构登记反向索引：duoqian_account -> { sfid_number, nonce }
     #[pallet::storage]
-    #[pallet::getter(fn address_registered_sfid)]
-    pub type AddressRegisteredSfid<T: Config> = StorageMap<
+    #[pallet::getter(fn account_registered_sfid)]
+    pub type AccountRegisteredSfid<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
@@ -225,7 +225,7 @@ pub mod pallet {
     /// 机构多签当前进行中的关闭提案 ID（防止并发注销提案）。
     /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
     /// B 阶段 PendingCloseProposal 拆为两份:个人侧在 personal-manage 自持,
-    /// 机构侧由本表承载,作用域只剩机构多签地址。
+    /// 机构侧由本表承载,作用域只剩机构多签账户。
     #[pallet::storage]
     #[pallet::getter(fn institution_pending_close)]
     pub type InstitutionPendingClose<T: Config> =
@@ -268,7 +268,7 @@ pub mod pallet {
         /// 机构关闭提案已发起。
         InstitutionCloseProposed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             proposer: T::AccountId,
             beneficiary: T::AccountId,
         },
@@ -281,7 +281,7 @@ pub mod pallet {
         /// 机构关闭成功(投票通过,余额转出)。
         InstitutionClosed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -289,14 +289,14 @@ pub mod pallet {
         /// 机构关闭执行失败。
         InstitutionCloseExecutionFailed {
             proposal_id: u64,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
         },
         /// 机构级创建提案已发起：创建者资金已 reserve，等待管理员投票。
         InstitutionCreateProposed {
             proposal_id: u64,
             sfid_number: SfidNumberOf<T>,
-            institution_name: AccountNameOf<T>,
-            main_address: T::AccountId,
+            sfid_full_name: AccountNameOf<T>,
+            main_account: T::AccountId,
             proposer: T::AccountId,
             accounts: CreateInstitutionAccountsOf<T>,
             admins: DuoqianAdminsOf<T>,
@@ -311,7 +311,7 @@ pub mod pallet {
         InstitutionCreated {
             proposal_id: u64,
             sfid_number: SfidNumberOf<T>,
-            main_address: T::AccountId,
+            main_account: T::AccountId,
             account_count: u32,
             initial_total: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -320,20 +320,20 @@ pub mod pallet {
         InstitutionCreateExecutionFailed {
             proposal_id: u64,
             sfid_number: SfidNumberOf<T>,
-            main_address: T::AccountId,
+            main_account: T::AccountId,
         },
         /// 机构创建提案被否决或超时清理：释放创建者 reserve 资金。
         InstitutionCreateRejected {
             proposal_id: u64,
             sfid_number: SfidNumberOf<T>,
-            main_address: T::AccountId,
+            main_account: T::AccountId,
             reserve_total: BalanceOf<T>,
         },
         /// SFID 机构登记
         SfidInstitutionRegistered {
             sfid_number: SfidNumberOf<T>,
             account_name: AccountNameOf<T>,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             submitter: T::AccountId,
         },
     }
@@ -342,12 +342,12 @@ pub mod pallet {
     pub enum Error<T> {
         /// 参数不完整
         IncompleteParameters,
-        /// 地址非法
-        InvalidAddress,
-        /// 地址为制度保留地址，不允许注册
-        AddressReserved,
-        /// 地址已存在（已初始化）
-        AddressAlreadyExists,
+        /// 账户非法
+        InvalidAccount,
+        /// 账户为制度保留账户，不允许注册
+        AccountReserved,
+        /// 账户已存在（已初始化）
+        AccountAlreadyExists,
         /// 管理员重复
         DuplicateAdmin,
         /// 阈值不合法
@@ -372,7 +372,7 @@ pub mod pallet {
         DuoqianNotFound,
         /// 多签账户处于 pending 状态，不可操作
         DuoqianNotActive,
-        /// 注销收款地址非法（不允许等于 duoqian_address）
+        /// 注销收款账户非法（不允许等于 duoqian_account）
         InvalidBeneficiary,
         /// 资金转出源地址受保护，不允许转出
         ProtectedSource,
@@ -386,10 +386,10 @@ pub mod pallet {
         EmptySfidNumber,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
-        /// ADR-008 step2b 新增:机构登记凭证缺省份(province 改必填后空字节串拒绝)
+        /// ADR-008 step2b 新增:机构登记凭证缺省份(province_name 改必填后空字节串拒绝)
         EmptyProvince,
         /// 无法将派生地址转换为账户ID
-        DerivedAddressDecodeFailed,
+        DerivedAccountDecodeFailed,
         /// 账户仍有保留余额，不允许注销
         ReservedBalanceRemaining,
         /// nonce 已耗尽
@@ -455,29 +455,29 @@ pub mod pallet {
         /// SFID 注册信息凭证批量登记机构账户地址。
         ///
         /// 中文注释:本入口与 SFID `/registration-info` 对齐,业务字段只接收
-        /// `sfid_number / institution_name / account_names[]`。机构类型、企业类型、
+        /// `sfid_number / sfid_full_name / account_names[]`。机构类型、企业类型、
         /// 所属法人关系只由 SFID 系统用于候选资格判断,不再进入链上注册 payload。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_sfid_institution())]
         pub fn register_sfid_institution(
             origin: OriginFor<T>,
             sfid_number: SfidNumberOf<T>,
-            institution_name: AccountNameOf<T>,
+            sfid_full_name: AccountNameOf<T>,
             account_names: InstitutionAccountNamesOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            province: Vec<u8>,
+            province_name: Vec<u8>,
             signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             crate::institution::register::do_register_sfid_institution::<T>(
                 submitter,
                 sfid_number,
-                institution_name,
+                sfid_full_name,
                 account_names,
                 register_nonce,
                 signature,
-                province,
+                province_name,
                 signer_admin_pubkey,
             )
         }
@@ -492,7 +492,7 @@ pub mod pallet {
         pub fn propose_create_institution(
             origin: OriginFor<T>,
             sfid_number: SfidNumberOf<T>,
-            institution_name: AccountNameOf<T>,
+            sfid_full_name: AccountNameOf<T>,
             accounts: InstitutionInitialAccountsOf<T>,
             admin_org: u8,
             admin_count: u32,
@@ -501,14 +501,14 @@ pub mod pallet {
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
             // ADR-008 step2b：必填省份 + 签名 admin pubkey,与 register_sfid_institution 同义。
-            province: Vec<u8>,
+            province_name: Vec<u8>,
             signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             crate::institution::create::do_propose_create_institution::<T>(
                 who,
                 sfid_number,
-                institution_name,
+                sfid_full_name,
                 accounts,
                 admin_org,
                 admin_count,
@@ -516,25 +516,25 @@ pub mod pallet {
                 threshold,
                 register_nonce,
                 signature,
-                province,
+                province_name,
                 signer_admin_pubkey,
             )
         }
 
         /// 发起"关闭机构多签账户"提案。
         ///
-        /// 仅服务于 SFID 注册机构地址(`AddressRegisteredSfid` 命中);
+        /// 仅服务于 SFID 注册机构地址(`AccountRegisteredSfid` 命中);
         /// 个人多签关闭走 personal-manage::propose_close 入口,
         /// 输入个人地址会返回 `Error::NotInstitutionDuoqian`。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
         pub fn propose_close(
             origin: OriginFor<T>,
-            duoqian_address: T::AccountId,
+            duoqian_account: T::AccountId,
             beneficiary: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::close::do_propose_institution_close::<T>(who, duoqian_address, beneficiary)
+            crate::close::do_propose_institution_close::<T>(who, duoqian_account, beneficiary)
         }
 
         /// 发起"创建个人多签账户"提案（无需 SFID 注册）。
@@ -583,7 +583,7 @@ pub mod pallet {
                     let action =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-                    InstitutionPendingClose::<T>::remove(&action.duoqian_address);
+                    InstitutionPendingClose::<T>::remove(&action.duoqian_account);
                 }
                 _ => return Err(Error::<T>::ProposalActionNotFound.into()),
             }
@@ -604,7 +604,7 @@ pub mod pallet {
         /// 分支避免命名空间重叠）；`永久质押`/`安全基金`/`两和基金` 为制度专属账户，普通机构
         /// 禁止注册，命中即拒（均返回 `ReservedAccountName`）。空 account_name 的 `Named`
         /// 返回 `EmptyAccountName`。
-        pub fn derive_institution_address(
+        pub fn derive_institution_account(
             sfid_number: &[u8],
             role: InstitutionAccountRole<'_>,
         ) -> Result<T::AccountId, DispatchError> {
@@ -630,7 +630,7 @@ pub mod pallet {
                 &payload,
             );
             T::AccountId::decode(&mut &digest[..])
-                .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
+                .map_err(|_| Error::<T>::DerivedAccountDecodeFailed.into())
         }
 
         /// 把 SFID 账户名 bytes 翻译成 `InstitutionAccountRole`：
@@ -641,7 +641,7 @@ pub mod pallet {
         /// - 空 → 返回 `EmptyAccountName`
         ///
         /// 这是 `register_sfid_institution` 等 extrinsic 的唯一入口——禁止调用方
-        /// 绕开此函数直接构造 `Role::Named("主账户")`（虽然 `derive_institution_address`
+        /// 绕开此函数直接构造 `Role::Named("主账户")`（虽然 `derive_institution_account`
         /// 里也会拦截，但这里作为第一道防线更清晰）。
         pub fn role_from_account_name(
             account_name: &[u8],
@@ -661,8 +661,8 @@ pub mod pallet {
             }
         }
 
-        // derive_personal_duoqian_address 已迁至 personal-manage::Pallet,
-        // organization-manage 不再提供该派生(机构地址只走 derive_institution_address)。
+        // derive_personal_duoqian_account 已迁至 personal-manage::Pallet,
+        // organization-manage 不再提供该派生(机构地址只走 derive_institution_account)。
 
         pub(crate) fn ensure_unique_admins(
             admins: &DuoqianAdminsOf<T>,
@@ -777,7 +777,7 @@ pub mod pallet {
         ///
         /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
         pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
-            AddressRegisteredSfid::<T>::get(account)?;
+            AccountRegisteredSfid::<T>::get(account)?;
             Some(account.clone())
         }
 
@@ -785,7 +785,7 @@ pub mod pallet {
         ///
         /// 中文注释:机构账户必须使用 ORG_PUP/ORG_OTH；ORG_REN 只属于个人多签。
         pub fn resolve_admin_org_for_account(account: &T::AccountId) -> Option<u8> {
-            let registered = AddressRegisteredSfid::<T>::get(account)?;
+            let registered = AccountRegisteredSfid::<T>::get(account)?;
             Institutions::<T>::get(&registered.sfid_number).map(|inst| inst.admin_org)
         }
 
@@ -838,7 +838,7 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
     }
 
     fn is_active(addr: &T::AccountId) -> bool {
-        let Some(registered) = pallet::AddressRegisteredSfid::<T>::get(addr) else {
+        let Some(registered) = pallet::AccountRegisteredSfid::<T>::get(addr) else {
             return false;
         };
         matches!(
@@ -900,7 +900,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                             pallet::Event::<T>::InstitutionCreateExecutionFailed {
                                 proposal_id,
                                 sfid_number: action.sfid_number,
-                                main_address: action.main_address,
+                                main_account: action.main_account,
                             },
                         );
                         return Ok(ProposalExecutionOutcome::RetryableFailed);
@@ -925,7 +925,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::InstitutionCloseExecutionFailed {
                                 proposal_id,
-                                duoqian_address: action.duoqian_address,
+                                duoqian_account: action.duoqian_account,
                             },
                         );
                         return Ok(ProposalExecutionOutcome::RetryableFailed);
@@ -952,7 +952,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     if let Ok(action) =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                     {
-                        InstitutionPendingClose::<T>::remove(&action.duoqian_address);
+                        InstitutionPendingClose::<T>::remove(&action.duoqian_account);
                     }
                 }
                 _ => {}
@@ -985,7 +985,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 let action =
                     CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                         .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                InstitutionPendingClose::<T>::remove(&action.duoqian_address);
+                InstitutionPendingClose::<T>::remove(&action.duoqian_account);
             }
             _ => {}
         }

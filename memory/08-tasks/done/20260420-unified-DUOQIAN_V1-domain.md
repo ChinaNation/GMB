@@ -10,14 +10,14 @@ completed: 2026-04-20
 
 - **primitives 常量**：`primitives/src/core_const.rs` 新增 `DUOQIAN = b"DUOQIAN"`（10B）+ `OP_MAIN/FEE/STAKE/AN/PERSONAL`（0x00-0x04 地址派生）+ `OP_SIGN_BIND/VOTE/POP/INST/CREATE/TRANSFER`（0x10-0x15 签名 payload）
 - **地址哈希重算**：`tools/duoqian.py` 重写为四合一生成器，跑 `--apply` 一次性重算：
-  - 277 个 `main_address`（cb/ch/zf/jc/lf/sf/jy 7 文件）
-  - 87 个 `fee_address`（cb+ch）
-  - 43 个 `stake_address`（ch，按 `citizens_number_u64_le` 输入）
-  - 1 个 `NRC_ANQUAN_ADDRESS`
-  - `CHINA_RESERVED_MAIN_ADDRESSES` 汇总重建（408 个唯一地址）
+  - 277 个 `main_account`（cb/ch/zf/jc/lf/sf/jy 7 文件）
+  - 87 个 `fee_account`（cb+ch）
+  - 43 个 `stake_account`（ch，按 `citizens_number_u64_le` 输入）
+  - 1 个 `NRC_ANQUAN_ACCOUNT`
+  - `CHINA_RESERVED_MAIN_ACCOUNTS` 汇总重建（408 个唯一地址）
 - **链上派生函数**：
   - `derive_duoqian_address_from_sfid_number` → `DUOQIAN + OP_MAIN`
-  - `derive_personal_duoqian_address` → `DUOQIAN + OP_PERSONAL`
+  - `derive_personal_duoqian_account` → `DUOQIAN + OP_PERSONAL`
 - **configs/mod.rs 4 个 verifier 11 处**：BIND/VOTE/POP/INST 各自拼对应 op_tag
 - **SFID 后端**：`sfid/backend/app_core/chain_runtime.rs` 5 个旧 `*_DOMAIN` 统一成 `DUOQIAN + OP_SIGN_*`
 - **前端镜像**：`deriveDuoqianAddress.ts` + `personal_duoqian_create_page.dart` 重写 preimage 组装
@@ -87,15 +87,15 @@ pub const OP_SIGN_TRANSFER: u8 = 0x15;  // 预留：多签转账离线聚合
 ## 第 2 步：重写生成器 + 重算 773 个哈希
 - [ ] `tools/duoqian.py` 重写为四合一生成器（main + fee + stake + anquan）
 - [ ] 运行 `--apply` 重算：
-  - 277 main_address（7 文件）
-  - 87 fee_address（2 文件）
-  - 43 stake_address（china_ch，按 citizens_number u64_le 输入）
-  - 1 NRC_ANQUAN_ADDRESS
-  - 365 `CHINA_RESERVED_MAIN_ADDRESSES`（排序后重建）
+  - 277 main_account（7 文件）
+  - 87 fee_account（2 文件）
+  - 43 stake_account（china_ch，按 citizens_number u64_le 输入）
+  - 1 NRC_ANQUAN_ACCOUNT
+  - 365 `CHINA_RESERVED_MAIN_ACCOUNTS`（排序后重建）
 
 ## 第 3 步：链上派生函数
 - [ ] `duoqian-manage/src/lib.rs` 的 `derive_duoqian_address_from_sfid_number`：`b"DUOQIAN_SFID_V1"` → `DUOQIAN + OP_MAIN`
-- [ ] `derive_personal_duoqian_address`：`b"DUOQIAN_PERSONAL_V1"` → `DUOQIAN + OP_PERSONAL`
+- [ ] `derive_personal_duoqian_account`：`b"DUOQIAN_PERSONAL_V1"` → `DUOQIAN + OP_PERSONAL`
 
 ## 第 4 步：configs 4 个 verifier
 - [ ] `configs/mod.rs` 11 处 `b"GMB_SFID_V1"` → `DUOQIAN + OP_SIGN_*`（按 BIND/VOTE/POP/INST 匹配 tag）
@@ -118,7 +118,7 @@ pub const OP_SIGN_TRANSFER: u8 = 0x15;  // 预留：多签转账离线聚合
 ## 第 9 步：文档彻底清理（V2/V3 名字零保留）
 - [ ] BLAKE2_ADDRESS_DERIVATION.md 整篇重写
 - [ ] DUOQIAN_TECHNICAL.md、GOVERNANCE_TECHNICAL.md、SIGNER_TECHNICAL.md、SFID_SYSTEM_TECHNICAL.md、CHAIN_TECHNICAL.md、SAFETY_FUND_GOVERNANCE.md
-- [ ] GMB_WHITEPAPER.md（stake_address 派生说明）
+- [ ] GMB_WHITEPAPER.md（stake_account 派生说明）
 - [ ] ADR-005 加尾注 "Superseded by DUOQIAN unification"
 - [ ] feedback_sfid_sheng_signing_keyring.md 更新铁律
 - [ ] 4 份历史任务卡更新

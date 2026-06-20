@@ -22,14 +22,14 @@ import type { ConnectivityTestReport } from './types';
 
 type Props = {
   sfidNumber: string;
-  institutionName: string;
+  sfidFullName: string;
   onBack: () => void;
   onSuccess: () => void;
 };
 
 type Step = 'form' | 'testing' | 'tested' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
-export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBack, onSuccess }: Props) {
+export function ClearingBankDeclareNodePage({ sfidNumber, sfidFullName, onBack, onSuccess }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [error, setError] = useState<string | null>(null);
 
@@ -175,7 +175,7 @@ export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBac
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
         <h2>声明清算行节点</h2>
-        <span className="admin-list-summary">{institutionName} ({sfidNumber})</span>
+        <span className="admin-list-summary">{sfidFullName} ({sfidNumber})</span>
       </div>
 
       {step === 'form' || step === 'testing' || step === 'tested' || step === 'error' ? (

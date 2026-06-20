@@ -217,7 +217,7 @@ const FIELD_LABELS: Record<string, string> = {
   province: '省份',
   city: '城市',
   institution: '机构',
-  institution_name: '机构名称',
+  sfid_full_name: '机构名称',
   sfid_number: '身份ID号',
   file: '文件',
   domain: '域名',

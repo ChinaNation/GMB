@@ -7,7 +7,7 @@ pub(crate) mod wallet_store;
 
 use crate::{
     governance::{institution, signing},
-    settings::{device_password, fee_address},
+    settings::{device_password, fee_account},
     shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc, security},
 };
 use serde::Serialize;
@@ -96,7 +96,7 @@ fn ensure_spendable_balance(
 }
 
 fn local_miner_wallet(app: &tauri::AppHandle) -> Result<Option<ColdWallet>, String> {
-    let Some(miner_hex) = fee_address::local_powr_miner_account_hex(app)? else {
+    let Some(miner_hex) = fee_account::local_powr_miner_account_hex(app)? else {
         return Ok(None);
     };
     let pubkey_hex = normalize_pubkey_hex(&miner_hex, "矿工公钥")?;

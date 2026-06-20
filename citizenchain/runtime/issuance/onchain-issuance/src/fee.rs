@@ -54,7 +54,7 @@ where
     Ok(())
 }
 
-/// 阶段 2:callback 通过时,unreserve 后 transfer 给 NRC fee_address。
+/// 阶段 2:callback 通过时,unreserve 后 transfer 给 NRC fee_account。
 ///
 /// 中文注释:实际净效果 = 押金从 proposer 永久转入 NRC。
 /// 步骤拆为 unreserve + transfer 而非直接 `repatriate_reserved`,

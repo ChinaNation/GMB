@@ -31,26 +31,26 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
   ]) {
     final encoded = institutionIdentityToAccountId(
       inst.sfidNumber,
-      mainAddress: inst.mainAddress,
+      mainAccount: inst.mainAccount,
     );
     if (_bytesEqual(encoded, accountIdBytes)) return inst;
   }
 
-  final duoqianAddress = _hexEncode(accountIdBytes);
+  final duoqianAccount = _hexEncode(accountIdBytes);
   if (adminAccountOrg == 4 || adminAccountOrg == 5) {
     return InstitutionInfo(
-      name: '机构账户 ${duoqianAddress.substring(0, 8)}',
-      sfidNumber: registeredDuoqianIdentity(duoqianAddress),
+      name: '机构账户 ${duoqianAccount.substring(0, 8)}',
+      sfidNumber: registeredDuoqianIdentity(duoqianAccount),
       orgType: OrgType.duoqian,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       adminAccountOrg: adminAccountOrg,
     );
   }
   return InstitutionInfo(
-    name: '个人多签 ${duoqianAddress.substring(0, 8)}',
-    sfidNumber: 'personal:$duoqianAddress',
+    name: '个人多签 ${duoqianAccount.substring(0, 8)}',
+    sfidNumber: 'personal:$duoqianAccount',
     orgType: OrgType.duoqian,
-    duoqianAddress: duoqianAddress,
+    duoqianAccount: duoqianAccount,
   );
 }
 

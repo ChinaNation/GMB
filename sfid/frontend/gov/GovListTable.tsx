@@ -40,11 +40,11 @@ const IDENTITY_SERVICE_STATUS_LABEL: Record<string, string> = {
 };
 
 function areaText(row: InstitutionListRow) {
-  return [row.province, row.city, row.town].filter(Boolean).join('/') || '-';
+  return [row.province_name, row.city_name, row.town_name].filter(Boolean).join('/') || '-';
 }
 
 function nameText(row: InstitutionListRow) {
-  return row.institution_name || row.short_name || row.sfid_name || '';
+  return row.sfid_full_name || row.sfid_short_name || '';
 }
 
 function statusTag(status: string | null | undefined, labels: Record<string, string>) {
@@ -105,8 +105,8 @@ export const GovListTable: React.FC<Props> = ({
     const request = isPublicSecurity
       ? listPublicSecurityInstitutions(auth, { page_size: 300 })
       : listOfficialInstitutions(auth, {
-          province,
-          city: city || undefined,
+          province_name: province,
+          city_name: city || undefined,
           q: exactQuery || undefined,
           page_size: 300,
         });

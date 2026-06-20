@@ -117,9 +117,8 @@ pub enum GovTargetKind {
 #[derive(Debug, Clone)]
 struct OfficialInstitutionTarget {
     sfid_number: String,
-    institution_name: String,
-    sfid_name: String,
-    short_name: String,
+    sfid_full_name: String,
+    sfid_short_name: String,
     category: InstitutionCategory,
     subject_property: String,
     p1: String,
@@ -391,25 +390,25 @@ pub fn gov_manifest_key(scope: &OfficialReconcileScope, kind: GovTargetKind) -> 
 fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
     let mut targets = Vec::new();
     for item in china_zf_constants::CHINA_ZF.iter() {
-        push_constant_target(&mut targets, item.sfid_name, item.sfid_number);
+        push_constant_target(&mut targets, item.sfid_full_name, item.sfid_number);
     }
     for item in china_lf_constants::CHINA_LF.iter() {
-        push_constant_target(&mut targets, item.sfid_name, item.sfid_number);
+        push_constant_target(&mut targets, item.sfid_full_name, item.sfid_number);
     }
     for item in china_sf_constants::CHINA_SF.iter() {
-        push_constant_target(&mut targets, item.sfid_name, item.sfid_number);
+        push_constant_target(&mut targets, item.sfid_full_name, item.sfid_number);
     }
     for item in china_jc_constants::CHINA_JC.iter() {
-        push_constant_target(&mut targets, item.sfid_name, item.sfid_number);
+        push_constant_target(&mut targets, item.sfid_full_name, item.sfid_number);
     }
     for item in china_jy_constants::CHINA_JY.iter() {
         push_constant_target(&mut targets, "国家教育委员会", item.sfid_number);
     }
     for item in china_cb_constants::CHINA_CB.iter() {
-        push_constant_target(&mut targets, item.sfid_name, item.sfid_number);
+        push_constant_target(&mut targets, item.sfid_full_name, item.sfid_number);
     }
     for item in china_ch_constants::CHINA_CH.iter() {
-        push_constant_target(&mut targets, item.sfid_name, item.sfid_number);
+        push_constant_target(&mut targets, item.sfid_full_name, item.sfid_number);
     }
     push_extra_national_targets(&mut targets);
     for province in provinces().iter() {
@@ -482,9 +481,8 @@ fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
             };
             targets.push(OfficialInstitutionTarget {
                 sfid_number,
-                institution_name: format!("{}公安局", city.name),
-                sfid_name: format!("{}公民安全局", city.name),
-                short_name: format!("{}公安局", city.name),
+                sfid_full_name: format!("{}公民安全局", city.name),
+                sfid_short_name: format!("{}公安局", city.name),
                 category: InstitutionCategory::PublicSecurity,
                 subject_property: "G".to_string(),
                 p1: "0".to_string(),
@@ -543,15 +541,14 @@ fn push_constant_target(
     let Some((province, city)) = province_city_by_codes(&province_code, &city_code) else {
         return;
     };
-    let (sfid_name, short_name) = official_name_pair(name);
+    let (sfid_full_name, sfid_short_name) = official_name_pair(name);
     let org_code = org_code_for_constant_name(name);
     let education_type = (org_code == "NATIONAL_EDU")
         .then(|| EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE.to_string());
     targets.push(OfficialInstitutionTarget {
         sfid_number: sfid_number.to_string(),
-        institution_name: short_name.clone(),
-        sfid_name,
-        short_name,
+        sfid_full_name,
+        sfid_short_name,
         category: InstitutionCategory::GovInstitution,
         subject_property,
         p1,
@@ -573,7 +570,7 @@ fn push_constant_target(
 pub fn federal_registry_sfid_number() -> Option<&'static str> {
     china_zf_constants::CHINA_ZF
         .iter()
-        .find(|item| item.sfid_name == "总统府联邦注册局")
+        .find(|item| item.sfid_full_name == "总统府联邦注册局")
         .map(|item| item.sfid_number)
 }
 
@@ -652,7 +649,7 @@ fn official_name_pair(name: &str) -> (String, String) {
 }
 
 // 中文注释:常量机构(创世 china_zf/lf/sf/jc/cb/ch/jy)按"机构全名"推导细类 org_code。
-// name 即各常量的 sfid_name(china_jy 例外:循环里传字面 "国家教育委员会")。
+// name 即各常量的 sfid_full_name(china_jy 例外:循环里传字面 "国家教育委员会")。
 // 历史踩坑:旧版用简称("住建部"/"省政府")匹配,但常量存的是全名("…住房与城镇建设部"/"…省联邦政府"),
 // 简称对不上全名 → 国家级与部分省级全落 PUBLIC_ORG。此处改为按实际全名 + 现名后缀匹配。
 fn org_code_for_constant_name(name: &str) -> &'static str {
@@ -714,7 +711,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     // 中文注释:5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
     // china_zf.rs CHINA_ZF(带 main/fee/duoqian_admins),由 :375 的常量循环单一 push;
     // 此处不再用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
-    for (short_name, sfid_name, org_code) in [
+    for (sfid_short_name, sfid_full_name, org_code) in [
         (
             "国家参议会",
             "中华民族联邦共和国国家立法院参议员议政会",
@@ -727,14 +724,14 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
         ),
     ] {
         let template = OfficialOrgTemplate {
-            institution_code: if short_name.ends_with("议会") {
+            institution_code: if sfid_short_name.ends_with("议会") {
                 "LF"
             } else {
                 "ZF"
             },
             org_code,
-            suffix: short_name,
-            full_suffix: sfid_name,
+            suffix: sfid_short_name,
+            full_suffix: sfid_full_name,
         };
         push_area_template_target(
             targets,
@@ -763,8 +760,8 @@ fn push_area_template_target(
     template: &OfficialOrgTemplate,
     seed_scope: &'static str,
 ) {
-    let short_name = format!("{display_area_name}{}", template.suffix);
-    let sfid_name = format!("{display_area_name}{}", template.full_suffix);
+    let sfid_short_name = format!("{display_area_name}{}", template.suffix);
+    let sfid_full_name = format!("{display_area_name}{}", template.full_suffix);
     let account_seed = format!(
         "GOV-{seed_scope}-{province_code}-{city_code}-{town_code}-{}-{}",
         template.institution_code, template.org_code
@@ -779,9 +776,8 @@ fn push_area_template_target(
     };
     targets.push(OfficialInstitutionTarget {
         sfid_number,
-        institution_name: short_name.clone(),
-        sfid_name,
-        short_name,
+        sfid_full_name,
+        sfid_short_name,
         category: InstitutionCategory::GovInstitution,
         subject_property: "G".to_string(),
         p1: "0".to_string(),
@@ -808,8 +804,8 @@ fn generate_official_template_sfid(
         account_pubkey: account_seed,
         subject_property: "G",
         p1: "0",
-        province: province_name,
-        city: city_name,
+        province_name,
+        city_name,
         institution: institution_code,
     })
     .ok()
@@ -896,11 +892,9 @@ fn catalog_hash(china_hash: &str, targets: &[OfficialInstitutionTarget]) -> Stri
     for target in targets {
         hasher.update(target.sfid_number.as_bytes());
         hasher.update(b"|");
-        hasher.update(target.institution_name.as_bytes());
+        hasher.update(target.sfid_full_name.as_bytes());
         hasher.update(b"|");
-        hasher.update(target.sfid_name.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.short_name.as_bytes());
+        hasher.update(target.sfid_short_name.as_bytes());
         hasher.update(b"|");
         hasher.update(category_text(target.category).as_bytes());
         hasher.update(b"|");
@@ -1109,18 +1103,18 @@ fn auto_rows_in_scope(
     db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT s.sfid_number, COALESCE(s.name, ''), COALESCE(s.sfid_name, ''),
-                        COALESCE(s.short_name, ''), s.category, s.province, s.city,
-                        COALESCE(s.town, ''), s.province_code, s.city_code,
+                "SELECT s.sfid_number, COALESCE(s.name, ''), COALESCE(s.sfid_full_name, ''),
+                        COALESCE(s.sfid_short_name, ''), s.category, s.province_name, s.city_name,
+                        COALESCE(s.town_name, ''), s.province_code, s.city_code,
                         COALESCE(s.town_code, ''), s.institution_code, COALESCE(g.org_code, ''),
                         COALESCE(s.education_type, '')
                  FROM subjects s
-                 JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+                 JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
                  WHERE s.kind = 'PUBLIC'
                    AND s.status = 'ACTIVE'
                    AND g.source = 'GENERATED'
-                   AND ($1::text IS NULL OR s.p_code = $1)
-                   AND ($2::text IS NULL OR s.c_code = $2)
+                   AND ($1::text IS NULL OR s.province_code = $1)
+                   AND ($2::text IS NULL OR s.city_code = $2)
                    AND ($3::text IS NULL OR s.category = $3)",
                 &[&p_filter, &c_filter, &category_filter],
             )
@@ -1206,8 +1200,8 @@ pub fn check_gov_catalog_db(
         match active_rows.get(&target.sfid_number) {
             Some((
                 name,
-                sfid_name,
-                short_name,
+                sfid_full_name,
+                sfid_short_name,
                 category,
                 province,
                 city,
@@ -1219,9 +1213,9 @@ pub fn check_gov_catalog_db(
                 org_code,
                 education_type,
             )) => {
-                if name != &target.institution_name
-                    || sfid_name != &target.sfid_name
-                    || short_name != &target.short_name
+                if name != &target.sfid_short_name
+                    || sfid_full_name != &target.sfid_full_name
+                    || sfid_short_name != &target.sfid_short_name
                     || category != category_text(target.category)
                     || province != &target.province
                     || city != &target.city
@@ -1450,12 +1444,12 @@ fn bulk_write_targets(
                 collisions.push(format!(
                     "{}: [{} | {}{} | inst={} org={}] vs [{} | {}{} | inst={} org={}]",
                     target.sfid_number,
-                    prev.sfid_name,
+                    prev.sfid_full_name,
                     prev.city,
                     prev.town,
                     prev.institution_code,
                     prev.org_code,
-                    target.sfid_name,
+                    target.sfid_full_name,
                     target.city,
                     target.town,
                     target.institution_code,
@@ -1527,23 +1521,23 @@ fn bulk_write_target_chunk(
         .collect::<Vec<_>>();
     let c_codes = targets
         .iter()
-        .map(target_c_code)
+        .map(target_city_code)
         .collect::<Vec<Option<String>>>();
     let t_codes = targets
         .iter()
-        .map(target_t_code)
+        .map(target_town_code)
         .collect::<Vec<Option<String>>>();
     let names = targets
         .iter()
-        .map(|target| target.institution_name.clone())
+        .map(|target| target.sfid_short_name.clone())
         .collect::<Vec<_>>();
     let sfid_names = targets
         .iter()
-        .map(|target| target.sfid_name.clone())
+        .map(|target| target.sfid_full_name.clone())
         .collect::<Vec<_>>();
     let short_names = targets
         .iter()
-        .map(|target| target.short_name.clone())
+        .map(|target| target.sfid_short_name.clone())
         .collect::<Vec<_>>();
     let categories = targets
         .iter()
@@ -1588,9 +1582,9 @@ fn bulk_write_target_chunk(
     for table in ["subjects", "gov", "accounts"] {
         let sql = format!(
             "DELETE FROM {table} t
-             USING unnest($1::text[], $2::text[]) AS u(sfid_number, p_code)
+             USING unnest($1::text[], $2::text[]) AS u(sfid_number, province_code)
              WHERE t.sfid_number = u.sfid_number
-               AND t.p_code <> u.p_code"
+               AND t.province_code <> u.province_code"
         );
         tx.execute(sql.as_str(), &[&sfids, &p_codes]).map_err(|e| {
             format!(
@@ -1608,12 +1602,12 @@ fn bulk_write_target_chunk(
         })?;
 
     tx.execute(
-        "INSERT INTO ids (sfid_number, kind, p_code, c_code)
-         SELECT sfid_number, 'PUBLIC', p_code, c_code
-         FROM unnest($1::text[], $2::text[], $3::text[]) AS u(sfid_number, p_code, c_code)
+        "INSERT INTO ids (sfid_number, kind, province_code, city_code)
+         SELECT sfid_number, 'PUBLIC', province_code, city_code
+         FROM unnest($1::text[], $2::text[], $3::text[]) AS u(sfid_number, province_code, city_code)
          ON CONFLICT (sfid_number) DO UPDATE SET
-            p_code = EXCLUDED.p_code,
-            c_code = EXCLUDED.c_code
+            province_code = EXCLUDED.province_code,
+            city_code = EXCLUDED.city_code
          WHERE ids.kind = 'PUBLIC'",
         &[&sfids, &p_codes, &c_codes],
     )
@@ -1626,42 +1620,42 @@ fn bulk_write_target_chunk(
 
     tx.execute(
         "INSERT INTO subjects (
-            sfid_number, kind, name, sfid_name, short_name, p_code, c_code, t_code,
-            status, category, subject_property, p1, province, city, town,
+            sfid_number, kind, name, sfid_full_name, sfid_short_name,
+            status, category, subject_property, p1, province_name, city_name, town_name,
             province_code, city_code, town_code, institution_code, org_code,
             education_type, private_type, partnership_kind, has_legal_personality,
             parent_sfid_number, created_by, created_at, updated_at
          )
          SELECT
-            sfid_number, 'PUBLIC', name, sfid_name, short_name, p_code, c_code, t_code,
-            'ACTIVE', category, subject_property, p1, province, city, town,
-            p_code, COALESCE(c_code, ''), COALESCE(t_code, ''), institution_code, org_code,
-            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $19, now(), now()
+            sfid_number, 'PUBLIC', name, sfid_full_name, sfid_short_name,
+            'ACTIVE', category, subject_property, p1, province_name, city_name, town_name,
+            province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code, org_code,
+            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $17, now(), now()
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
             $11::text[], $12::text[], $13::text[], $14::text[], $15::text[],
-            $16::text[], $17::text[], $18::text[]
+            $16::text[]
          ) AS u(
-            sfid_number, name, sfid_name, short_name, p_code,
-            c_code, t_code, category, subject_property, p1,
-            province, city, town, institution_code, org_code,
-            province_code, city_code, education_type
+            sfid_number, name, sfid_full_name, sfid_short_name, category,
+            subject_property, p1, province_name, city_name, town_name,
+            institution_code, org_code, province_code, city_code, town_code,
+            education_type
          )
-         ON CONFLICT (p_code, sfid_number) DO UPDATE SET
+         ON CONFLICT (province_code, sfid_number) DO UPDATE SET
             kind = EXCLUDED.kind,
             name = EXCLUDED.name,
-            sfid_name = EXCLUDED.sfid_name,
-            short_name = EXCLUDED.short_name,
-            c_code = EXCLUDED.c_code,
-            t_code = EXCLUDED.t_code,
+            sfid_full_name = EXCLUDED.sfid_full_name,
+            sfid_short_name = EXCLUDED.sfid_short_name,
+            city_code = EXCLUDED.city_code,
+            town_code = EXCLUDED.town_code,
             status = EXCLUDED.status,
             category = EXCLUDED.category,
             subject_property = EXCLUDED.subject_property,
             p1 = EXCLUDED.p1,
-            province = EXCLUDED.province,
-            city = EXCLUDED.city,
-            town = EXCLUDED.town,
+            province_name = EXCLUDED.province_name,
+            city_name = EXCLUDED.city_name,
+            town_name = EXCLUDED.town_name,
             province_code = EXCLUDED.province_code,
             city_code = EXCLUDED.city_code,
             town_code = EXCLUDED.town_code,
@@ -1679,9 +1673,6 @@ fn bulk_write_target_chunk(
             &names,
             &sfid_names,
             &short_names,
-            &p_codes,
-            &c_codes,
-            &t_codes,
             &categories,
             &subject_property_values,
             &p1_values,
@@ -1692,6 +1683,7 @@ fn bulk_write_target_chunk(
             &org_codes,
             &p_codes,
             &c_codes,
+            &t_codes,
             &education_types,
             &actor,
         ],
@@ -1705,22 +1697,22 @@ fn bulk_write_target_chunk(
 
     tx.execute(
         "INSERT INTO gov (
-            sfid_number, p_code, c_code, t_code, institution_code, org_code,
+            sfid_number, province_code, city_code, town_code, institution_code, org_code,
             source, home_p, home_c
          )
-         SELECT sfid_number, p_code, c_code, t_code, institution_code, org_code,
+         SELECT sfid_number, province_code, city_code, town_code, institution_code, org_code,
                 'GENERATED',
                 home_p, home_c
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[]
          ) AS u(
-            sfid_number, p_code, c_code, t_code, institution_code,
+            sfid_number, province_code, city_code, town_code, institution_code,
             org_code, home_p, home_c
          )
-         ON CONFLICT (p_code, sfid_number) DO UPDATE SET
-            c_code = EXCLUDED.c_code,
-            t_code = EXCLUDED.t_code,
+         ON CONFLICT (province_code, sfid_number) DO UPDATE SET
+            city_code = EXCLUDED.city_code,
+            town_code = EXCLUDED.town_code,
             institution_code = EXCLUDED.institution_code,
             org_code = EXCLUDED.org_code,
             source = EXCLUDED.source,
@@ -1762,21 +1754,21 @@ fn bulk_write_target_chunk(
         ) {
             account_sfids.push(target.sfid_number.clone());
             account_p_codes.push(target.province_code.clone());
-            account_c_codes.push(target_c_code(target));
+            account_c_codes.push(target_city_code(target));
             account_names.push(account.account_name);
-            account_addresses.push(account.duoqian_address);
+            account_addresses.push(account.duoqian_account);
         }
     }
     tx.execute(
         "INSERT INTO accounts (
-            sfid_number, p_code, c_code, account_name, duoqian_address, chain_status, created_at
+            sfid_number, province_code, city_code, account_name, duoqian_account, chain_status, created_at
          )
-         SELECT sfid_number, p_code, c_code, account_name, duoqian_address, 'NOT_ON_CHAIN', now()
+         SELECT sfid_number, province_code, city_code, account_name, duoqian_account, 'NOT_ON_CHAIN', now()
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
-              AS u(sfid_number, p_code, c_code, account_name, duoqian_address)
-         ON CONFLICT (p_code, sfid_number, account_name) DO UPDATE SET
-            c_code = EXCLUDED.c_code,
-            duoqian_address = EXCLUDED.duoqian_address,
+              AS u(sfid_number, province_code, city_code, account_name, duoqian_account)
+         ON CONFLICT (province_code, sfid_number, account_name) DO UPDATE SET
+            city_code = EXCLUDED.city_code,
+            duoqian_account = EXCLUDED.duoqian_account,
             chain_status = EXCLUDED.chain_status,
             created_at = EXCLUDED.created_at",
         &[
@@ -1804,11 +1796,11 @@ fn default_account_names_for_target(target: &OfficialInstitutionTarget) -> &'sta
     )
 }
 
-fn target_c_code(target: &OfficialInstitutionTarget) -> Option<String> {
+fn target_city_code(target: &OfficialInstitutionTarget) -> Option<String> {
     (!target.city_code.is_empty() && target.city_code != "000").then(|| target.city_code.clone())
 }
 
-fn target_t_code(target: &OfficialInstitutionTarget) -> Option<String> {
+fn target_town_code(target: &OfficialInstitutionTarget) -> Option<String> {
     (!target.town_code.is_empty()).then(|| target.town_code.clone())
 }
 
@@ -1826,7 +1818,7 @@ fn revoke_obsolete_targets(
             .query(
                 "SELECT s.sfid_number, s.category, s.province_code, s.city_code
                  FROM subjects s
-                 JOIN gov g ON g.p_code = s.p_code AND g.sfid_number = s.sfid_number
+                 JOIN gov g ON g.province_code = s.province_code AND g.sfid_number = s.sfid_number
                  WHERE s.kind = 'PUBLIC'
                    AND g.source = 'GENERATED'
                    AND ($1::text IS NULL OR s.category = $1)",

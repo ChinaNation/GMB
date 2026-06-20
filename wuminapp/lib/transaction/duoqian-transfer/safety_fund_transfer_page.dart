@@ -23,7 +23,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 国储会安全基金转账提案创建页面。
 ///
-/// 中文注释：source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAddress`),
+/// 中文注释：source 锁定为 NRC 安全基金账户(`InstitutionAccounts.anquanAccount`),
 /// 仅 NRC 管理员可发起,链端调用 `propose_safety_fund_transfer (call_index=1)`。
 class SafetyFundTransferPage extends StatefulWidget {
   SafetyFundTransferPage({
@@ -67,10 +67,9 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    final hex = widget.institution.accounts?.safetyFundAddress;
+    final hex = widget.institution.accounts?.anquanAccount;
     if (hex == null) {
-      throw StateError(
-          '国储会 InstitutionAccounts.safetyFundAddress 为空,无法发起安全基金转账');
+      throw StateError('国储会 InstitutionAccounts.anquanAccount 为空,无法发起安全基金转账');
     }
     _safetyFundAddressHex = hex;
     _fromSs58 = _accountHexToSs58(_safetyFundAddressHex);

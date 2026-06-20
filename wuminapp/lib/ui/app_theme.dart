@@ -45,8 +45,10 @@ class AppTheme {
 
   /// 投票中 (蓝)
   static const Color voting = Color(0xFF3B82F6);
+
   /// 已通过 (绿)
   static const Color passed = Color(0xFF22C55E);
+
   /// 已拒绝 (红)
   static const Color rejected = Color(0xFFEF4444);
 
@@ -143,12 +145,18 @@ class AppTheme {
 
   static Color proposalStatusColor(int status) {
     switch (status) {
-      case 0: return voting;
-      case 1: return passed;
-      case 2: return rejected;
-      case 3: return passed;
-      case 4: return danger;
-      default: return textTertiary;
+      case 0:
+        return voting;
+      case 1:
+        return passed;
+      case 2:
+        return rejected;
+      case 3:
+        return passed;
+      case 4:
+        return danger;
+      default:
+        return textTertiary;
     }
   }
 
@@ -395,7 +403,8 @@ class AppTheme {
         unselectedLabelColor: textTertiary,
         indicatorColor: primary,
         labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+        unselectedLabelStyle:
+            TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
       ),
       // Badge
       badgeTheme: const BadgeThemeData(

@@ -4,7 +4,7 @@
 // 分发。包版本变了就增量刷新——变的换、删的清、没变的不动,零旧数据残留
 // (只读派生数据,无用户数据)。数据包结构:
 //   assets/public_institutions/manifest.json = { version, provinces:[{name,ver}] }
-//   assets/public_institutions/<省名>.json    = { province, manifest_version, institutions:[...] }
+//   assets/public_institutions/<省名>.json    = { province_name, manifest_version, institutions:[...] }
 // provinces[].ver = 该省机构目录 manifest_version,内容一变即变。
 
 import 'dart:convert';
@@ -52,7 +52,7 @@ class PublicInstitutionBundleLoader {
   /// 中文注释:先 reconcile 行政区字典(机构 join 字典名),再 reconcile 机构。
   /// 机构同步只信省级 ver 表;全局 version 只作完成标记,不能短路省级检查。
   /// 变了的省读取 `<省名>.json` 分片后做行级 diff:只 upsert 变化行、只删 absent sfid。
-  /// manifest 缺 provinces 版本表(旧格式包)→ 回退 [loadFromBundle] reconcile。
+  /// manifest 缺省级版本表时视为无效数据包,直接拒绝写库。
   /// 返回机构部分是否发生写入。
   Future<bool> ensureSynced() async {
     // 字典先于机构(机构 join 字典名);字典自己也走版本驱动增量。
@@ -67,9 +67,9 @@ class PublicInstitutionBundleLoader {
     final globalVersion = manifest['version'] as String? ?? '0';
     final provinceVers = _parseProvinceVersions(manifest['provinces']);
 
-    // 缺省级版本表(旧格式包)→ 无法确认本地是否干净,强制按包 reconcile。
+    // 当前数据包必须提供省级版本表;缺失时不猜测、不回退。
     if (provinceVers.isEmpty) {
-      return loadFromBundle();
+      return false;
     }
 
     final storedGlobal = await versionKv.readGlobalVersion();
@@ -104,12 +104,16 @@ class PublicInstitutionBundleLoader {
 
   /// 强制按数据包 reconcile。无数据包时返回 false。
   ///
-  /// 中文注释:首装 / 版本表缺失时逐省 reconcile;只写新增/变更行,并删包内已无的旧 sfid。
+  /// 中文注释:首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧 sfid。
   Future<bool> loadFromBundle() async {
     final manifest = await _readManifest();
     if (manifest == null) return false;
 
-    final provinceNames = _parseProvinceNames(manifest['provinces']);
+    final provinceVers = _parseProvinceVersions(manifest['provinces']);
+    if (provinceVers.isEmpty) return false;
+
+    final provinceNames =
+        provinceVers.map((p) => p.name).toList(growable: false);
     final fallbackVersion = manifest['version'] as String? ?? '0';
 
     await store.setProvinceOrder(provinceNames);
@@ -121,12 +125,9 @@ class PublicInstitutionBundleLoader {
     }
 
     // 全量灌完落版本游标(供后续走增量),同步字典 ver。
-    final provinceVers = _parseProvinceVersions(manifest['provinces']);
-    if (provinceVers.isNotEmpty) {
-      await versionKv.writeProvinceVersions(
-        {for (final p in provinceVers) p.name: p.ver},
-      );
-    }
+    await versionKv.writeProvinceVersions(
+      {for (final p in provinceVers) p.name: p.ver},
+    );
     await versionKv.writeGlobalVersion(fallbackVersion);
 
     // 末尾确保字典已同步(机构名字 join 唯一真源,ADR-021)。
@@ -151,7 +152,7 @@ class PublicInstitutionBundleLoader {
     // 删包里没有的废 sfid:provinceCode 取自机构记录自带字段(同省一致)。
     final provinceCode = _provinceCodeOf(
       items,
-      fallback: shard['province']?.toString(),
+      fallback: shard['province_name']?.toString(),
     );
     var changed = false;
     if (provinceCode != null) {
@@ -201,7 +202,7 @@ class PublicInstitutionBundleLoader {
     }
   }
 
-  /// 解析 manifest `provinces:[{name,ver}]`(新格式)→ 有序列表;旧格式返回空。
+  /// 解析当前 manifest `provinces:[{name,ver}]` → 有序列表。
   static List<_ProvinceVer> _parseProvinceVersions(Object? raw) {
     if (raw is! List) return const [];
     final out = <_ProvinceVer>[];
@@ -211,21 +212,6 @@ class PublicInstitutionBundleLoader {
       final ver = e['ver']?.toString();
       if (name != null && name.isNotEmpty && ver != null) {
         out.add(_ProvinceVer(name: name, ver: ver));
-      }
-    }
-    return out;
-  }
-
-  /// 省名有序列表:新格式 `[{name,ver}]` 取 name;旧格式 `[省名...]` 直取。
-  static List<String> _parseProvinceNames(Object? raw) {
-    if (raw is! List) return const [];
-    final out = <String>[];
-    for (final e in raw) {
-      if (e is Map) {
-        final name = e['name']?.toString();
-        if (name != null && name.isNotEmpty) out.add(name);
-      } else if (e is String && e.isNotEmpty) {
-        out.add(e);
       }
     }
     return out;
@@ -248,10 +234,8 @@ class PublicInstitutionBundleLoader {
   ) {
     if (old == null) return false;
     return old.sfidNumber == dto.sfidNumber &&
-        old.institutionName ==
-            (dto.institutionName ?? dto.sfidName ?? dto.sfidNumber) &&
-        old.sfidName == dto.sfidName &&
-        old.shortName == dto.shortName &&
+        old.sfidFullName == (dto.sfidFullName ?? dto.sfidNumber) &&
+        old.sfidShortName == dto.sfidShortName &&
         old.status == dto.status &&
         old.provinceCode == dto.provinceCode &&
         old.cityCode == dto.cityCode &&

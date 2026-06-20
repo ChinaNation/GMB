@@ -23,11 +23,11 @@ use sp_runtime::{
 use crate::address::InstitutionAccountRole;
 use crate::institution::types::CreateInstitutionAccount;
 use crate::pallet::{
-    AddressRegisteredSfid, Config, CreateInstitutionAccountsOf, Error,
-    InstitutionInitialAccountsOf, Pallet, SfidNumberOf, SfidRegisteredAddress,
+    AccountRegisteredSfid, Config, CreateInstitutionAccountsOf, Error,
+    InstitutionInitialAccountsOf, Pallet, SfidNumberOf, SfidRegisteredAccount,
 };
 use crate::traits::{
-    DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
+    DuoqianAccountValidator, DuoqianReservedAccountChecker, ProtectedSourceChecker,
 };
 use crate::BalanceOf;
 
@@ -50,8 +50,8 @@ pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
 
 /// 校验机构初始账户列表合法性,派生地址,返回:
 /// - 固化的 `CreateInstitutionAccountsOf<T>`(已派生完地址)
-/// - 主账户地址
-/// - 费用账户地址
+/// - 主账户 AccountId
+/// - 费用账户 AccountId
 /// - 初始余额合计
 pub(crate) fn validate_initial_accounts<T: Config>(
     sfid_number: &SfidNumberOf<T>,
@@ -70,8 +70,8 @@ pub(crate) fn validate_initial_accounts<T: Config>(
     let mut seen = BTreeSet::new();
     let mut has_main = false;
     let mut has_fee = false;
-    let mut main_address: Option<T::AccountId> = None;
-    let mut fee_address: Option<T::AccountId> = None;
+    let mut main_account: Option<T::AccountId> = None;
+    let mut fee_account: Option<T::AccountId> = None;
     let mut initial_total = BalanceOf::<T>::zero();
     let mut built: Vec<CreateInstitutionAccount<_, T::AccountId, BalanceOf<T>>> =
         Vec::with_capacity(accounts.len());
@@ -92,23 +92,23 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             role,
             InstitutionAccountRole::Main | InstitutionAccountRole::Fee
         );
-        let address = Pallet::<T>::derive_institution_address(sfid_number.as_slice(), role)?;
+        let address = Pallet::<T>::derive_institution_account(sfid_number.as_slice(), role)?;
 
         ensure!(
-            !SfidRegisteredAddress::<T>::contains_key(sfid_number, &item.account_name),
+            !SfidRegisteredAccount::<T>::contains_key(sfid_number, &item.account_name),
             Error::<T>::SfidAlreadyRegistered
         );
         ensure!(
-            !AddressRegisteredSfid::<T>::contains_key(&address),
-            Error::<T>::AddressAlreadyExists
+            !AccountRegisteredSfid::<T>::contains_key(&address),
+            Error::<T>::AccountAlreadyExists
         );
         ensure!(
-            !T::ReservedAddressChecker::is_reserved(&address),
-            Error::<T>::AddressReserved
+            !T::ReservedAccountChecker::is_reserved(&address),
+            Error::<T>::AccountReserved
         );
         ensure!(
-            T::AddressValidator::is_valid(&address),
-            Error::<T>::InvalidAddress
+            T::AccountValidator::is_valid(&address),
+            Error::<T>::InvalidAccount
         );
         ensure!(
             !T::ProtectedSourceChecker::is_protected(&address),
@@ -118,11 +118,11 @@ pub(crate) fn validate_initial_accounts<T: Config>(
         match role {
             InstitutionAccountRole::Main => {
                 has_main = true;
-                main_address = Some(address.clone());
+                main_account = Some(address.clone());
             }
             InstitutionAccountRole::Fee => {
                 has_fee = true;
-                fee_address = Some(address.clone());
+                fee_account = Some(address.clone());
             }
             InstitutionAccountRole::Named(_) => {}
         }
@@ -145,8 +145,8 @@ pub(crate) fn validate_initial_accounts<T: Config>(
         .map_err(|_| Error::<T>::TooManyInstitutionAccounts)?;
     Ok((
         bounded,
-        main_address.ok_or(Error::<T>::MissingMainAccount)?,
-        fee_address.ok_or(Error::<T>::MissingFeeAccount)?,
+        main_account.ok_or(Error::<T>::MissingMainAccount)?,
+        fee_account.ok_or(Error::<T>::MissingFeeAccount)?,
         initial_total,
     ))
 }

@@ -60,7 +60,7 @@ pub(crate) async fn admin_china_cities(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let province_name = match trimmed(&query.province, "province") {
+    let province_name = match trimmed(&query.province_name, "province_name") {
         Ok(v) => v,
         Err(resp) => return resp,
     };

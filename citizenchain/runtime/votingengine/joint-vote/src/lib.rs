@@ -43,7 +43,7 @@ pub(crate) fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<
 pub(crate) fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_CB
         .first()
-        .and_then(|n| decode_account::<T>(&n.main_address))
+        .and_then(|n| decode_account::<T>(&n.main_account))
 }
 
 fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], id: &T::AccountId) -> bool {
@@ -54,7 +54,7 @@ fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], id: &T::AccountI
 pub fn institution_info<T: frame_system::Config>(id: &T::AccountId) -> Option<u32> {
     if CHINA_CB
         .first()
-        .map(|n| raw_account_matches::<T>(&n.main_address, id))
+        .map(|n| raw_account_matches::<T>(&n.main_account, id))
         .unwrap_or(false)
     {
         return Some(NRC_JOINT_VOTE_WEIGHT);
@@ -62,13 +62,13 @@ pub fn institution_info<T: frame_system::Config>(id: &T::AccountId) -> Option<u3
     if CHINA_CB
         .iter()
         .skip(1)
-        .any(|n| raw_account_matches::<T>(&n.main_address, id))
+        .any(|n| raw_account_matches::<T>(&n.main_account, id))
     {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
     if CHINA_CH
         .iter()
-        .any(|n| raw_account_matches::<T>(&n.main_address, id))
+        .any(|n| raw_account_matches::<T>(&n.main_account, id))
     {
         return Some(PRB_JOINT_VOTE_WEIGHT);
     }
@@ -284,7 +284,7 @@ pub mod pallet {
             binding_id: T::Hash,
             nonce: votingengine::pallet::VoteNonceOf<T>,
             signature: votingengine::pallet::VoteSignatureOf<T>,
-            province: BoundedVec<u8, ConstU32<64>>,
+            province_name: BoundedVec<u8, ConstU32<64>>,
             signer_admin_pubkey: [u8; 32],
             approve: bool,
         ) -> DispatchResult {
@@ -295,7 +295,7 @@ pub mod pallet {
                 binding_id,
                 nonce,
                 signature,
-                province,
+                province_name,
                 signer_admin_pubkey,
                 approve,
             )
@@ -312,7 +312,7 @@ pub mod pallet {
             eligible_total: u64,
             snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
             signature: votingengine::pallet::VoteSignatureOf<T>,
-            province: BoundedVec<u8, ConstU32<64>>,
+            province_name: BoundedVec<u8, ConstU32<64>>,
             signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -321,7 +321,7 @@ pub mod pallet {
                 eligible_total,
                 snapshot_nonce,
                 signature,
-                province.as_slice(),
+                province_name.as_slice(),
                 &signer_admin_pubkey,
             )
         }

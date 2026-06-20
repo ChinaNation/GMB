@@ -145,7 +145,7 @@ class _InstitutionDuoqianCreatePageState
       } else {
         _replaceAccountAmountControllers(resp.accounts);
         setState(() {
-          _institutionName = resp.institutionName;
+          _institutionName = resp.sfidFullName;
           _accounts = resp.accounts;
           _checkingSfid = false;
         });
@@ -282,8 +282,7 @@ class _InstitutionDuoqianCreatePageState
       return '账户名不能使用制度专属保留名：${forbidden.join('、')}';
     }
     final blockedAccounts = _accounts
-        .where((a) =>
-            a.chainStatus == 'Active' || a.chainStatus == 'Pending')
+        .where((a) => a.chainStatus == 'Active' || a.chainStatus == 'Pending')
         .map((a) => a.accountName)
         .toList();
     if (blockedAccounts.isNotEmpty) {
@@ -425,9 +424,9 @@ class _InstitutionDuoqianCreatePageState
                   label: 'SFID ID',
                   value: registrationInfo.sfidNumber),
               SignDisplayField(
-                  key: 'institution_name',
+                  key: 'sfid_full_name',
                   label: '机构名称',
-                  value: registrationInfo.institutionName),
+                  value: registrationInfo.sfidFullName),
               const SignDisplayField(
                   key: 'org', label: '管理员组织类型', value: '其他机构账户'),
               SignDisplayField(
@@ -450,9 +449,9 @@ class _InstitutionDuoqianCreatePageState
                 ),
               ),
               SignDisplayField(
-                  key: 'province',
+                  key: 'province_name',
                   label: '签发省份',
-                  value: registrationInfo.credential.province),
+                  value: registrationInfo.credential.provinceName),
               SignDisplayField(
                   key: 'signer_admin_pubkey',
                   label: '签发管理员',
@@ -478,7 +477,7 @@ class _InstitutionDuoqianCreatePageState
 
       final result = await _manageService.submitProposeCreateInstitution(
         sfidNumber: registrationInfo.sfidNumber,
-        institutionName: registrationInfo.institutionName,
+        sfidFullName: registrationInfo.sfidFullName,
         accounts: accounts,
         adminOrg: _defaultInstitutionAdminOrg,
         adminCount: _adminPubkeys.length,
@@ -486,7 +485,7 @@ class _InstitutionDuoqianCreatePageState
         threshold: threshold,
         registerNonce: registrationInfo.credential.registerNonce,
         signatureHex: registrationInfo.credential.signature,
-        province: registrationInfo.credential.province,
+        provinceName: registrationInfo.credential.provinceName,
         signerAdminPubkeyHex: registrationInfo.credential.signerAdminPubkey,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
@@ -497,11 +496,11 @@ class _InstitutionDuoqianCreatePageState
         // 中文注释：创建交易已入块并确认事件后，直接写入当前账户的本地 pending
         // 快照；列表返回时只精准刷新该账户，不再依赖全量 discovery 扫描。
         final entity = InstitutionEntity()
-          ..duoqianAddress = result.mainAddressHex
+          ..duoqianAccount = result.mainAccountHex
           ..sfidNumber = registrationInfo.sfidNumber
           ..adminAccountOrg = _defaultInstitutionAdminOrg
           ..name = accounts.isEmpty
-              ? registrationInfo.institutionName
+              ? registrationInfo.sfidFullName
               : accounts.first.accountName
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
           ..discoveredViaAdmin = false
@@ -509,7 +508,7 @@ class _InstitutionDuoqianCreatePageState
         await isar.institutionEntitys.put(entity);
         await InstitutionDuoqianLocalState.putStatusInTxn(
           isar,
-          result.mainAddressHex,
+          result.mainAccountHex,
           InstitutionDuoqianLocalState.statusPending,
         );
       });
@@ -522,7 +521,7 @@ class _InstitutionDuoqianCreatePageState
           backgroundColor: AppTheme.primaryDark,
         ),
       );
-      Navigator.of(context).pop(result.mainAddressHex);
+      Navigator.of(context).pop(result.mainAccountHex);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

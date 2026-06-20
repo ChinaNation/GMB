@@ -48,14 +48,14 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 **C. 机构注册凭证收口（Required，开发期彻底切换）**
 
-- 机构注册凭证只包含 `sfid_number / institution_name / account_names[]` 与省级签名凭证字段
+- 机构注册凭证只包含 `sfid_number / sfid_full_name / account_names[]` 与省级签名凭证字段
 - `subject_property / sub_type / parent_sfid_number` 只在 SFID `eligible-search` 候选资格判定中使用
 - 链上不保存 SFID 内部机构属性副本，开发期 fresh genesis 重建数据
 
 **D. 资格白名单链上二次校验**
 
 - `bank_check::ensure_can_be_bound` 校验链由 4 重收紧到 6 重：
-  - 原 1-4：AddressRegisteredSfid / account_name="主账户" / K1 ∈ {S,F} / DuoqianAccount.status=Active
+  - 原 1-4：AccountRegisteredSfid / account_name="主账户" / K1 ∈ {S,F} / DuoqianAccount.status=Active
   - **新 5**：资格白名单（`K1=S + JOINT_STOCK` ∨ `K1=F + parent.K1=S + parent.JOINT_STOCK`），通过 SfidAccountQuery trait 查 SFID 筛选结果
   - **新 6**：sfid_number ∈ ClearingBankNodes（必须是已声明的清算行节点）
 

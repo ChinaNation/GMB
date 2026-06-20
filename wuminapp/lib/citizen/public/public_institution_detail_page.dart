@@ -119,7 +119,7 @@ class _PublicInstitutionDetailPageState
     try {
       final admins = await _chainData.admins(
         mainAccountHex: mainHex,
-        displayName: inst.institutionName,
+        displayName: inst.sfidFullName,
       );
       if (mounted) setState(() => _admins = admins);
     } on Exception {
@@ -157,9 +157,9 @@ class _PublicInstitutionDetailPageState
         title: Text(
           inst == null
               ? '公权机构'
-              : (inst.shortName?.isNotEmpty == true
-                  ? inst.shortName!
-                  : inst.institutionName),
+              : (inst.sfidShortName?.isNotEmpty == true
+                  ? inst.sfidShortName!
+                  : inst.sfidFullName),
         ),
         backgroundColor: AppTheme.surfaceWhite,
         foregroundColor: AppTheme.textPrimary,
@@ -356,9 +356,9 @@ class _PublicInstitutionDetailPageState
   // ──── ④ 管理员入口(治理同款 36px Card → 管理员列表)────
 
   Widget _adminsEntry(PublicInstitutionEntity inst) {
-    final name = inst.shortName?.isNotEmpty == true
-        ? inst.shortName!
-        : inst.institutionName;
+    final name = inst.sfidShortName?.isNotEmpty == true
+        ? inst.sfidShortName!
+        : inst.sfidFullName;
     return _entryCard(
       icon: Icons.people_outline,
       title: '管理员',
@@ -366,7 +366,7 @@ class _PublicInstitutionDetailPageState
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PublicInstitutionAdminListPage(
-            institutionName: name,
+            sfidFullName: name,
             admins: _admins,
           ),
         ),

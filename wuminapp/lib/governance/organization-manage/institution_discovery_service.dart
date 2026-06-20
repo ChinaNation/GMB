@@ -56,8 +56,7 @@ class InstitutionDiscoveryService {
   InstitutionDiscoveryService({
     ChainRpc? chainRpc,
     InstitutionManageService? manageService,
-  }) : _manage =
-            manageService ?? InstitutionManageService(chainRpc: chainRpc);
+  }) : _manage = manageService ?? InstitutionManageService(chainRpc: chainRpc);
 
   final InstitutionManageService _manage;
 
@@ -78,7 +77,7 @@ class InstitutionDiscoveryService {
       orgWhitelist: _institutionOrgWhitelist,
     );
 
-    // 批量反查 SFID 归属(AddressRegisteredSfid 精确整键),取代循环内逐条(ADR-018 R2)。
+    // 批量反查 SFID 归属(AccountRegisteredSfid 精确整键),取代循环内逐条(ADR-018 R2)。
     Map<String, RegisteredInstitutionRef?> refs;
     try {
       refs = await _manage.fetchRegisteredInstitutionRefsBatch(
@@ -107,7 +106,7 @@ class InstitutionDiscoveryService {
 
       scannedDuoqianAddrs.add(acc.addrHex);
       final added = await _upsertInstitution(
-        duoqianAddrHex: acc.addrHex,
+        duoqianAccountHex: acc.addrHex,
         name: ref.accountNameText,
         sfidNumberUtf8: ref.sfidNumberText,
         adminAccountOrg: acc.org,
@@ -132,7 +131,7 @@ class InstitutionDiscoveryService {
   }
 
   Future<bool> _upsertInstitution({
-    required String duoqianAddrHex,
+    required String duoqianAccountHex,
     required String name,
     required String sfidNumberUtf8,
     required int? adminAccountOrg,
@@ -141,7 +140,7 @@ class InstitutionDiscoveryService {
     return WalletIsar.instance.writeTxn((isar) async {
       final exists = await isar.institutionEntitys
           .filter()
-          .duoqianAddressEqualTo(duoqianAddrHex)
+          .duoqianAccountEqualTo(duoqianAccountHex)
           .findFirst();
 
       if (exists != null) {
@@ -153,7 +152,7 @@ class InstitutionDiscoveryService {
       }
 
       final entity = InstitutionEntity()
-        ..duoqianAddress = duoqianAddrHex
+        ..duoqianAccount = duoqianAccountHex
         ..sfidNumber = sfidNumberUtf8
         ..adminAccountOrg = adminAccountOrg
         ..name = name
@@ -167,7 +166,7 @@ class InstitutionDiscoveryService {
 
   /// 反向校验:删除 Isar 中 discoveredViaAdmin=true 但本次扫描未命中的机构 entity。
   /// 用户 discoveredViaAdmin=false 的 entity(本机创建)永不被删除。
-  Future<int> _reverseValidateAndDelete(Set<String> scannedAddrs) async {
+  Future<int> _reverseValidateAndDelete(Set<String> scannedAccounts) async {
     var orphans = 0;
 
     await WalletIsar.instance.writeTxn((isar) async {
@@ -176,7 +175,7 @@ class InstitutionDiscoveryService {
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final i in staleInstitutions) {
-        if (!scannedAddrs.contains(i.duoqianAddress)) {
+        if (!scannedAccounts.contains(i.duoqianAccount)) {
           await isar.institutionEntitys.delete(i.id);
           orphans++;
         }

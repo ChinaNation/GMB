@@ -22,12 +22,12 @@ use crate::*;
 pub(crate) struct AppInstitutionDetail {
     pub(crate) sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) institution_name: Option<String>,
+    pub(crate) sfid_full_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
     pub(crate) subject_property: String,
     pub(crate) p1: String,
-    pub(crate) province: String,
-    pub(crate) city: String,
+    pub(crate) province_name: String,
+    pub(crate) city_name: String,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
     pub(crate) institution_code: String,
@@ -50,17 +50,17 @@ pub(crate) struct AppInstitutionSearchQuery {
 #[derive(Serialize, Clone)]
 pub(crate) struct AppInstitutionSearchRow {
     pub(crate) sfid_number: String,
-    pub(crate) institution_name: Option<String>,
+    pub(crate) sfid_full_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
     pub(crate) subject_property: String,
-    pub(crate) province: String,
-    pub(crate) city: String,
+    pub(crate) province_name: String,
+    pub(crate) city_name: String,
 }
 
 #[derive(Serialize)]
 pub(crate) struct AppAccountEntry {
     pub(crate) account_name: String,
-    pub(crate) duoqian_address: Option<String>,
+    pub(crate) duoqian_account: Option<String>,
     pub(crate) chain_status: MultisigChainStatus,
     pub(crate) chain_synced_at: Option<DateTime<Utc>>,
     pub(crate) is_default: bool,
@@ -70,7 +70,7 @@ pub(crate) struct AppAccountEntry {
 #[derive(Serialize)]
 pub(crate) struct AppInstitutionAccounts {
     pub(crate) sfid_number: String,
-    pub(crate) institution_name: String,
+    pub(crate) sfid_full_name: String,
     pub(crate) accounts: Vec<AppAccountEntry>,
 }
 
@@ -96,7 +96,7 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT sfid_number, name, category, subject_property, province, city
+                "SELECT sfid_number, name, category, subject_property, province_name, city_name
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
                    AND status = 'ACTIVE'
@@ -105,7 +105,7 @@ pub(crate) async fn app_search_institutions(
                         OR sfid_number ILIKE '%' || $1 || '%'
                         OR COALESCE(name, '') ILIKE '%' || $1 || '%'
                    )
-                 ORDER BY province ASC, city ASC, sfid_number ASC
+                 ORDER BY province_name ASC, city_name ASC, sfid_number ASC
                  LIMIT $2",
                 &[&q, &limit],
             )
@@ -114,11 +114,11 @@ pub(crate) async fn app_search_institutions(
             .iter()
             .map(|row| AppInstitutionSearchRow {
                 sfid_number: row.get(0),
-                institution_name: row.get(1),
+                sfid_full_name: row.get(1),
                 category: parse_category(row.get::<_, String>(2).as_str()),
                 subject_property: row.get(3),
-                province: row.get(4),
-                city: row.get(5),
+                province_name: row.get(4),
+                city_name: row.get(5),
             })
             .collect::<Vec<_>>())
     }) {
@@ -162,12 +162,12 @@ pub(crate) async fn app_get_institution(
         message: "ok".to_string(),
         data: AppInstitutionDetail {
             sfid_number: inst.sfid_number,
-            institution_name: inst.institution_name,
+            sfid_full_name: inst.sfid_full_name,
             category: inst.category,
             subject_property: inst.subject_property,
             p1: inst.p1,
-            province: inst.province,
-            city: inst.city,
+            province_name: inst.province_name,
+            city_name: inst.city_name,
             province_code: inst.province_code,
             city_code: inst.city_code,
             institution_code: inst.institution_code,
@@ -202,7 +202,7 @@ pub(crate) async fn app_get_institution_registration_info(
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
     if inst
-        .institution_name
+        .sfid_full_name
         .as_deref()
         .map(str::trim)
         .unwrap_or("")
@@ -211,7 +211,7 @@ pub(crate) async fn app_get_institution_registration_info(
         return api_error(
             StatusCode::CONFLICT,
             1005,
-            "institution_name is required before chain registration",
+            "sfid_full_name is required before chain registration",
         );
     }
     let required_default_names = default_account_names_for_institution(&inst);
@@ -274,7 +274,7 @@ pub(crate) async fn app_list_accounts(
         .iter()
         .map(|account| AppAccountEntry {
             account_name: account.account_name.clone(),
-            duoqian_address: account.duoqian_address.clone(),
+            duoqian_account: account.duoqian_account.clone(),
             chain_status: account.chain_status.clone(),
             chain_synced_at: account.chain_synced_at,
             is_default: is_default_account_name(&account.account_name),
@@ -286,7 +286,7 @@ pub(crate) async fn app_list_accounts(
         message: "ok".to_string(),
         data: AppInstitutionAccounts {
             sfid_number,
-            institution_name: inst.institution_name.unwrap_or_default(),
+            sfid_full_name: inst.sfid_full_name.unwrap_or_default(),
             accounts,
         },
     })

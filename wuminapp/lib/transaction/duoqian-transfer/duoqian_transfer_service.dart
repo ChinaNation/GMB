@@ -87,13 +87,13 @@ class DuoqianTransferService {
     final institutionBytes = _institutionAccountId(institution);
     final beneficiaryPubkey =
         _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
-    // 中文注释：InstitutionInfo.mainAddress 是 App 内部 AccountId hex，
+    // 中文注释：InstitutionInfo.mainAccount 是 App 内部 AccountId hex，
     // 不能按 SS58/Base58 解码，否则 hex 中的 0 会被当成非法 Base58 字符。
-    final fromPubkey = _accountHexToAccountId(institution.mainAddress, '转出主账户');
+    final fromPubkey = _accountHexToAccountId(institution.mainAccount, '转出主账户');
     final callData = _buildProposeTransferCall(
       org: identity.org,
       institutionIdentity: institution.sfidNumber,
-      mainAddress: institution.mainAddress,
+      mainAccount: institution.mainAccount,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: amountFen,
       remark: remark,
@@ -183,10 +183,10 @@ class DuoqianTransferService {
   }) async {
     final amountFen = BigInt.from((amountYuan * 100).round());
     final institutionBytes = _institutionAccountId(institution);
-    final toPubkey = _accountHexToAccountId(institution.mainAddress, '机构主账户');
+    final toPubkey = _accountHexToAccountId(institution.mainAccount, '机构主账户');
     final callData = _buildProposeSweepCall(
       institutionIdentity: institution.sfidNumber,
-      mainAddress: institution.mainAddress,
+      mainAccount: institution.mainAccount,
       amountYuan: amountYuan,
     );
     final submitResult = await _signAndSubmitInBlock(
@@ -221,9 +221,9 @@ class DuoqianTransferService {
   /// 查询转出主账户的 finalized 可用余额（元）。
   ///
   /// 中文注释：治理机构按主账户、费用账户、安全基金、永久质押分别建模，转账提案固定从主账户支出；
-  /// 个人/注册多签账户通过 InstitutionInfo.mainAddress 继续映射到账户地址。
+  /// 个人/注册多签账户通过 InstitutionInfo.mainAccount 继续映射到账户地址。
   Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
-    return _rpc.fetchFinalizedBalance(institution.mainAddress);
+    return _rpc.fetchFinalizedBalance(institution.mainAccount);
   }
 
   // ──── 双层 ID 与反向索引(spec_version v1)────
@@ -647,7 +647,7 @@ class DuoqianTransferService {
         if (orgManageDetail is org_models.CloseDuoqianProposalInfo) {
           final detail = CloseDuoqianProposalInfo(
             proposalId: orgManageDetail.proposalId,
-            duoqianAddress: orgManageDetail.duoqianAddress,
+            duoqianAccount: orgManageDetail.duoqianAccount,
             beneficiary: orgManageDetail.beneficiary,
             proposer: orgManageDetail.proposer,
             status: orgManageDetail.status,
@@ -779,7 +779,8 @@ class DuoqianTransferService {
     Set<int> orgs,
   ) {
     final ids = all
-        .where((p) => p.meta.internalOrg != null && orgs.contains(p.meta.internalOrg))
+        .where((p) =>
+            p.meta.internalOrg != null && orgs.contains(p.meta.internalOrg))
         .map((p) => p.meta.proposalId)
         .toList();
     ids.sort((a, b) => b.compareTo(a));
@@ -1097,7 +1098,7 @@ class DuoqianTransferService {
   Uint8List _buildProposeTransferCall({
     required int org,
     required String institutionIdentity,
-    required String mainAddress,
+    required String mainAccount,
     required String beneficiaryAddress,
     required BigInt amountFen,
     required String remark,
@@ -1111,7 +1112,7 @@ class DuoqianTransferService {
 
     // institution: AccountId32
     output.write(
-        _institutionIdentityToAccountId(institutionIdentity, mainAddress));
+        _institutionIdentityToAccountId(institutionIdentity, mainAccount));
 
     // beneficiary: AccountId32 = 32 bytes（不是 MultiAddress，无 0x00 前缀）
     final beneficiaryId = _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
@@ -1136,14 +1137,14 @@ class DuoqianTransferService {
   /// 格式：[0x13][0x02][institution:AccountId32][amount:u128_le]
   Uint8List _buildProposeSweepCall({
     required String institutionIdentity,
-    required String mainAddress,
+    required String mainAccount,
     required double amountYuan,
   }) {
     final output = ByteOutput();
     output.pushByte(_palletIndex);
     output.pushByte(_proposeSweepCallIndex);
     output.write(
-        _institutionIdentityToAccountId(institutionIdentity, mainAddress));
+        _institutionIdentityToAccountId(institutionIdentity, mainAccount));
     final amountFen = BigInt.from((amountYuan * 100).round());
     final amountBytes = Uint8List(16);
     var rem = amountFen;
@@ -1652,18 +1653,18 @@ class DuoqianTransferService {
   Uint8List _institutionAccountId(InstitutionInfo institution) {
     return _institutionIdentityToAccountId(
       institution.sfidNumber,
-      institution.mainAddress,
+      institution.mainAccount,
     );
   }
 
   Uint8List _institutionIdentityToAccountId(
     String institutionIdentity,
-    String mainAddress,
+    String mainAccount,
   ) {
     return Uint8List.fromList(
       institutionIdentityToAccountId(
         institutionIdentity,
-        mainAddress: mainAddress,
+        mainAccount: mainAccount,
       ),
     );
   }

@@ -30,8 +30,7 @@ class MultisigDiscoveryResult {
       personal.orphansRemoved > 0;
 
   /// 两类后处理都未发生部分失败 → 本轮扫描结果完整。
-  bool get completed =>
-      !institution.partialFailure && !personal.partialFailure;
+  bool get completed => !institution.partialFailure && !personal.partialFailure;
 
   static const empty = MultisigDiscoveryResult(
     institution: DiscoveryStats.empty,

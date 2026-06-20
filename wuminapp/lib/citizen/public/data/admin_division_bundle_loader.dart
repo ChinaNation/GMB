@@ -42,7 +42,7 @@ class AdminDivisionBundleLoader {
   ///
   /// 中文注释:每次先看省级 ver 表,只 reconcile ver 变了或本地缺游标的省;
   /// 没变的省连分片都不读。全局 version 只作最终完成标记,不能短路省级检查。
-  /// manifest 缺 provinces 版本表(旧格式包)→ 回退 [loadFromBundle] reconcile。
+  /// manifest 缺省级版本表时视为无效数据包,直接拒绝写库。
   /// 返回是否发生了写入。
   Future<bool> ensureSynced() async {
     final manifest = await _readManifest();
@@ -55,9 +55,9 @@ class AdminDivisionBundleLoader {
     final globalVersion = manifest['version'] as String?;
     final provinceVers = _parseProvinceVersions(manifest['provinces']);
 
-    // 缺省级版本表(旧格式包)→ 无法确认本地是否干净,强制按包 reconcile。
+    // 当前数据包必须提供省级版本表;缺失时不猜测、不回退。
     if (provinceVers.isEmpty) {
-      return loadFromBundle();
+      return false;
     }
 
     final hasData = await store.divisionCount() > 0;
@@ -88,17 +88,20 @@ class AdminDivisionBundleLoader {
 
   /// 强制按数据包 reconcile 字典。无数据包时返回 false。
   ///
-  /// 中文注释:首装 / 版本表缺失时逐省 reconcile;只写新增/变更行,并删包内已无的旧键。
+  /// 中文注释:首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧键。
   Future<bool> loadFromBundle() async {
     final provincesRaw = await _tryLoadString(_provincesPath);
     if (provincesRaw == null) return false;
 
     final manifest = await _readManifest();
     final version = manifest?['version'] as String?;
+    final provinceVers = _parseProvinceVersions(manifest?['provinces']);
+    if (provinceVers.isEmpty) return false;
 
     final provinceJson = jsonDecode(provincesRaw) as List<dynamic>;
     final provinces = provinceJson
         .map((e) => AdminDivisionDto.province(e as Map<String, dynamic>))
+        .where((dto) => provinceVers.containsKey(dto.code))
         .toList(growable: false);
 
     var changed = false;
@@ -109,10 +112,7 @@ class AdminDivisionBundleLoader {
     }
 
     // 全量灌完落版本游标:同步省级 ver 表 + 全局 version,后续走增量。
-    final provinceVers = _parseProvinceVersions(manifest?['provinces']);
-    if (provinceVers.isNotEmpty) {
-      await versionKv.writeProvinceVersions(provinceVers);
-    }
+    await versionKv.writeProvinceVersions(provinceVers);
     if (version != null) {
       await versionKv.writeGlobalVersion(version);
     }
@@ -208,7 +208,7 @@ class AdminDivisionBundleLoader {
     }
   }
 
-  /// 解析 manifest `provinces:[{code,ver}]` → `{code: ver}`;旧格式 / 缺失返回空。
+  /// 解析当前 manifest `provinces:[{code,ver}]` → `{code: ver}`。
   static Map<String, String> _parseProvinceVersions(Object? raw) {
     if (raw is! List) return <String, String>{};
     final out = <String, String>{};

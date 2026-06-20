@@ -10,7 +10,7 @@ use crate::ResolutionDestro;
 use frame_support::assert_ok;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use institution_asset::{InstitutionAsset, InstitutionAssetAction};
-use organization_manage::DuoqianReservedAddressChecker;
+use organization_manage::DuoqianReservedAccountChecker;
 use primitives::china::china_cb::CHINA_CB;
 use sfid_system::{SfidVerifier, SfidVoteVerifier};
 use sp_core::{sr25519, Pair};
@@ -32,9 +32,11 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32], Vec<u8>) {
-    let province: Vec<u8> = b"liaoning".to_vec();
-    let bounded: sfid_system::pallet::ProvinceBound =
-        province.clone().try_into().expect("province fits");
+    let province_name: Vec<u8> = b"liaoning".to_vec();
+    let bounded: sfid_system::pallet::ProvinceBound = province_name
+        .clone()
+        .try_into()
+        .expect("province_name fits");
 
     let main_pair = sr25519::Pair::from_string("//main-step3", None).expect("pair");
     let main_signing_pair = sr25519::Pair::from_string("//main-signing-step3", None).expect("pair");
@@ -73,14 +75,14 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
         main_admin_pubkey,
         backup_signing_pair,
         backup_admin_pubkey,
-        province,
+        province_name,
     )
 }
 
 fn build_bind_credential(
     signing_pair: &sr25519::Pair,
     signer_admin_pubkey: &[u8; 32],
-    province: &[u8],
+    province_name: &[u8],
     account: &AccountId,
     binding_id: Hash,
     bind_nonce: &sfid_system::pallet::NonceOf<Runtime>,
@@ -92,7 +94,7 @@ fn build_bind_credential(
         account,
         binding_id,
         bind_nonce.as_slice(),
-        province,
+        province_name,
         signer_admin_pubkey,
     );
     let msg = blake2_256(&payload.encode());
@@ -102,7 +104,10 @@ fn build_bind_credential(
     sfid_system::BindCredential {
         binding_id,
         bind_nonce: bind_nonce.clone(),
-        province: province.to_vec().try_into().expect("province fits"),
+        province_name: province_name
+            .to_vec()
+            .try_into()
+            .expect("province_name fits"),
         signer_admin_pubkey: *signer_admin_pubkey,
         signature,
     }
@@ -111,7 +116,7 @@ fn build_bind_credential(
 fn build_vote_signature(
     signing_pair: &sr25519::Pair,
     signer_admin_pubkey: &[u8; 32],
-    province: &[u8],
+    province_name: &[u8],
     account: &AccountId,
     binding_id: Hash,
     proposal_id: u64,
@@ -125,7 +130,7 @@ fn build_vote_signature(
         binding_id,
         proposal_id,
         vote_nonce.as_slice(),
-        province,
+        province_name,
         signer_admin_pubkey,
     );
     let msg = blake2_256(&payload.encode());
@@ -140,7 +145,7 @@ fn build_vote_signature(
 fn build_pop_signature(
     signing_pair: &sr25519::Pair,
     signer_admin_pubkey: &[u8; 32],
-    province: &[u8],
+    province_name: &[u8],
     who: &AccountId,
     eligible_total: u64,
     pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
@@ -152,7 +157,7 @@ fn build_pop_signature(
         who,
         eligible_total,
         pop_nonce.as_slice(),
-        province,
+        province_name,
         signer_admin_pubkey,
     );
     let msg = blake2_256(&payload.encode());
@@ -165,15 +170,15 @@ fn build_pop_signature(
 }
 
 fn stake_account() -> AccountId {
-    AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address)
+    AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account)
 }
 
 fn reserved_main_account() -> AccountId {
-    AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_address)
+    AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_account)
 }
 
 fn reserved_fee_account() -> AccountId {
-    AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_address)
+    AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_account)
 }
 
 fn ordinary_account() -> AccountId {

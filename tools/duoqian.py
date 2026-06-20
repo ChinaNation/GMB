@@ -20,11 +20,11 @@ op_tag 分配：
     0x06 = OP_INSTITUTION → input: sfid_number + name_utf8（机构自定义账户）
 
 本工具一次性重算：
-  - main_address（所有 7 个机构常量文件：cb/ch/zf/jc/lf/sf/jy）
-  - fee_address （cb + ch 共 87 个）
-  - stake_address（ch 专有 43 个，按 sfid_number 派生）
-  - NRC_ANQUAN_ADDRESS（cb 内 1 个全局常量）
-  - CHINA_RESERVED_MAIN_ADDRESSES 保留名单（zb.rs 汇总表，365 条）
+  - main_account（所有 7 个机构常量文件：cb/ch/zf/jc/lf/sf/jy）
+  - fee_account （cb + ch 共 87 个）
+  - stake_account（ch 专有 43 个，按 sfid_number 派生）
+  - NRC_ANQUAN_ACCOUNT（cb 内 1 个全局常量）
+  - CHINA_RESERVED_MAIN_ACCOUNTS 保留名单（zb.rs 汇总表，365 条）
 
 用法：
   python3 duoqian.py               # dry-run，仅打印差异
@@ -77,7 +77,7 @@ OP_HE = OPS["OP_HE"]
 # 按 china_cb.rs 硬编码，第一条是 NRC
 NRC_SFID_NUMBER = "LN001-GCB05-944805165-2026"
 
-# 需要处理的机构文件（含 main_address 字段）
+# 需要处理的机构文件（含 main_account 字段）
 FILES_WITH_MAIN = [
     "china_cb.rs",
     "china_ch.rs",
@@ -88,7 +88,7 @@ FILES_WITH_MAIN = [
     "china_zf.rs",
 ]
 
-# 只在 cb/ch 里有 fee_address
+# 只在 cb/ch 里有 fee_account
 FILES_WITH_FEE = [
     "china_cb.rs",
     "china_ch.rs",
@@ -99,7 +99,7 @@ FILES_WITH_FEE = [
     "china_jy.rs",
 ]
 
-# 只在 ch 里有 stake_address 和 citizens_number
+# 只在 ch 里有 stake_account 和 citizens_number
 FILES_WITH_STAKE = ["china_ch.rs"]
 
 
@@ -171,13 +171,13 @@ def hexstr(b: bytes) -> str:
 
 
 def extract_main(file_path: Path) -> list[MainEntry]:
-    """按 sfid_number → 下一个 main_address hex!(...) 配对。"""
+    """按 sfid_number → 下一个 main_account hex!(...) 配对。"""
     text = file_path.read_text(encoding="utf-8")
     lines = text.split("\n")
     out: list[MainEntry] = []
 
     sfid_re = re.compile(r'sfid_number:\s*"([^"]+)"')
-    addr_re = re.compile(r'main_address:\s*hex!\("([0-9a-fA-F]{64})"\)')
+    addr_re = re.compile(r'main_account:\s*hex!\("([0-9a-fA-F]{64})"\)')
 
     current_sfid: Optional[str] = None
     for i, line in enumerate(lines):
@@ -202,13 +202,13 @@ def extract_main(file_path: Path) -> list[MainEntry]:
 
 
 def extract_fee(file_path: Path) -> list[FeeEntry]:
-    """按 sfid_number → 下一个 fee_address hex!(...) 配对。"""
+    """按 sfid_number → 下一个 fee_account hex!(...) 配对。"""
     text = file_path.read_text(encoding="utf-8")
     lines = text.split("\n")
     out: list[FeeEntry] = []
 
     sfid_re = re.compile(r'sfid_number:\s*"([^"]+)"')
-    addr_re = re.compile(r'fee_address:\s*hex!\("([0-9a-fA-F]{64})"\)')
+    addr_re = re.compile(r'fee_account:\s*hex!\("([0-9a-fA-F]{64})"\)')
 
     current_sfid: Optional[str] = None
     for i, line in enumerate(lines):
@@ -232,13 +232,13 @@ def extract_fee(file_path: Path) -> list[FeeEntry]:
 
 
 def extract_stake(file_path: Path) -> list[StakeEntry]:
-    """按 sfid_number → 下一个 stake_address hex!(...) 配对。"""
+    """按 sfid_number → 下一个 stake_account hex!(...) 配对。"""
     text = file_path.read_text(encoding="utf-8")
     lines = text.split("\n")
     out: list[StakeEntry] = []
 
     sfid_re = re.compile(r'sfid_number:\s*"([^"]+)"')
-    addr_re = re.compile(r'stake_address:\s*hex!\("([0-9a-fA-F]{64})"\)')
+    addr_re = re.compile(r'stake_account:\s*hex!\("([0-9a-fA-F]{64})"\)')
 
     current_sfid: Optional[str] = None
     for i, line in enumerate(lines):
@@ -267,8 +267,8 @@ def rewrite_main(path: Path, entries: list[MainEntry]) -> None:
     text = path.read_text(encoding="utf-8")
     for e in entries:
         text = text.replace(
-            f'main_address: hex!("{e.old_hex}")',
-            f'main_address: hex!("{e.new_hex}")',
+            f'main_account: hex!("{e.old_hex}")',
+            f'main_account: hex!("{e.new_hex}")',
             1,
         )
     path.write_text(text, encoding="utf-8")
@@ -278,8 +278,8 @@ def rewrite_fee(path: Path, entries: list[FeeEntry]) -> None:
     text = path.read_text(encoding="utf-8")
     for e in entries:
         text = text.replace(
-            f'fee_address: hex!("{e.old_hex}")',
-            f'fee_address: hex!("{e.new_hex}")',
+            f'fee_account: hex!("{e.old_hex}")',
+            f'fee_account: hex!("{e.new_hex}")',
             1,
         )
     path.write_text(text, encoding="utf-8")
@@ -289,37 +289,37 @@ def rewrite_stake(path: Path, entries: list[StakeEntry]) -> None:
     text = path.read_text(encoding="utf-8")
     for e in entries:
         text = text.replace(
-            f'stake_address: hex!("{e.old_hex}")',
-            f'stake_address: hex!("{e.new_hex}")',
+            f'stake_account: hex!("{e.old_hex}")',
+            f'stake_account: hex!("{e.new_hex}")',
             1,
         )
     path.write_text(text, encoding="utf-8")
 
 
 def rewrite_anquan(cb_path: Path, new_hex: str) -> None:
-    """重写 china_cb.rs 里 NRC_ANQUAN_ADDRESS 常量。"""
+    """重写 china_cb.rs 里 NRC_ANQUAN_ACCOUNT 常量。"""
     text = cb_path.read_text(encoding="utf-8")
-    # 匹配形如 pub const NRC_ANQUAN_ADDRESS: [u8; 32] = hex!("...")
+    # 匹配形如 pub const NRC_ANQUAN_ACCOUNT: [u8; 32] = hex!("...")
     pattern = re.compile(
-        r'(pub const NRC_ANQUAN_ADDRESS:\s*\[u8;\s*32\]\s*=\s*\n?\s*hex!\(")([0-9a-fA-F]{64})("\))'
+        r'(pub const NRC_ANQUAN_ACCOUNT:\s*\[u8;\s*32\]\s*=\s*\n?\s*hex!\(")([0-9a-fA-F]{64})("\))'
     )
     new_text, n = pattern.subn(rf"\g<1>{new_hex}\g<3>", text)
     if n == 0:
-        print("⚠️  china_cb.rs 中没找到 NRC_ANQUAN_ADDRESS 常量，跳过")
+        print("⚠️  china_cb.rs 中没找到 NRC_ANQUAN_ACCOUNT 常量，跳过")
         return
     cb_path.write_text(new_text, encoding="utf-8")
 
 
 def rewrite_he(cb_path: Path, new_hex: str) -> None:
-    """重写 china_cb.rs 里 NRC_HE_ADDRESS 常量。"""
+    """重写 china_cb.rs 里 NRC_HE_ACCOUNT 常量。"""
     text = cb_path.read_text(encoding="utf-8")
-    # 匹配形如 pub const NRC_HE_ADDRESS: [u8; 32] = hex!("...")
+    # 匹配形如 pub const NRC_HE_ACCOUNT: [u8; 32] = hex!("...")
     pattern = re.compile(
-        r'(pub const NRC_HE_ADDRESS:\s*\[u8;\s*32\]\s*=\s*\n?\s*hex!\(")([0-9a-fA-F]{64})("\))'
+        r'(pub const NRC_HE_ACCOUNT:\s*\[u8;\s*32\]\s*=\s*\n?\s*hex!\(")([0-9a-fA-F]{64})("\))'
     )
     new_text, n = pattern.subn(rf"\g<1>{new_hex}\g<3>", text)
     if n == 0:
-        print("⚠️  china_cb.rs 中没找到 NRC_HE_ADDRESS 常量，跳过")
+        print("⚠️  china_cb.rs 中没找到 NRC_HE_ACCOUNT 常量，跳过")
         return
     cb_path.write_text(new_text, encoding="utf-8")
 
@@ -331,7 +331,7 @@ def regen_zb(all_addresses: list[str], dry_run: bool) -> None:
 
     lines = [
         "//! 汇总 runtime/primitives/china 目录下所有制度保留地址",
-        "//! （main_address + fee_address + stake_address + NRC_ANQUAN_ADDRESS）。",
+        "//! （main_account + fee_account + stake_account + NRC_ANQUAN_ACCOUNT）。",
         "//! 用于禁止 organization-manage 抢注这些机构地址。",
         "//!",
         "//! 派生统一走 `primitives::core_const::DUOQIAN` + op_tag，由",
@@ -339,15 +339,15 @@ def regen_zb(all_addresses: list[str], dry_run: bool) -> None:
         "",
         "use hex_literal::hex;",
         "",
-        f"pub const CHINA_RESERVED_MAIN_ADDRESSES: &[[u8; 32]; {len(uniq)}] = &[",
+        f"pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; {len(uniq)}] = &[",
     ]
     for a in uniq:
         lines.append(f'    hex!("{a}"),')
     lines.append("];")
     lines.append("")
     lines.append("/// 检查地址是否属于制度保留地址（静态常量数组二分查找）。")
-    lines.append("pub fn is_reserved_main_address(address: &[u8; 32]) -> bool {")
-    lines.append("    CHINA_RESERVED_MAIN_ADDRESSES")
+    lines.append("pub fn is_reserved_main_account(address: &[u8; 32]) -> bool {")
+    lines.append("    CHINA_RESERVED_MAIN_ACCOUNTS")
     lines.append("        .binary_search(address)")
     lines.append("        .is_ok()")
     lines.append("}")
@@ -379,7 +379,7 @@ def main() -> int:
     # 汇总用
     all_reserved: list[str] = []
 
-    # ── main_address ──
+    # ── main_account ──
     main_total = main_changed = 0
     for fn in FILES_WITH_MAIN:
         fp = CHINA_DIR / fn
@@ -400,7 +400,7 @@ def main() -> int:
         if not dry_run and changed:
             rewrite_main(fp, entries)
 
-    # ── fee_address ──
+    # ── fee_account ──
     fee_total = fee_changed = 0
     for fn in FILES_WITH_FEE:
         fp = CHINA_DIR / fn
@@ -420,7 +420,7 @@ def main() -> int:
         if not dry_run and changed:
             rewrite_fee(fp, entries)
 
-    # ── stake_address ──
+    # ── stake_account ──
     stake_total = stake_changed = 0
     for fn in FILES_WITH_STAKE:
         fp = CHINA_DIR / fn
@@ -440,17 +440,17 @@ def main() -> int:
         if not dry_run and changed:
             rewrite_stake(fp, entries)
 
-    # ── NRC_ANQUAN_ADDRESS ──
+    # ── NRC_ANQUAN_ACCOUNT ──
     new_anquan = hexstr(derive_anquan())
     all_reserved.append(new_anquan)
-    print(f"\n📄 [anquan] NRC_ANQUAN_ADDRESS: {new_anquan}")
+    print(f"\n📄 [anquan] NRC_ANQUAN_ACCOUNT: {new_anquan}")
     if not dry_run:
         rewrite_anquan(CHINA_DIR / "china_cb.rs", new_anquan)
 
-    # ── NRC_HE_ADDRESS（两和基金）──
+    # ── NRC_HE_ACCOUNT（两和基金）──
     new_he = hexstr(derive_he())
     all_reserved.append(new_he)
-    print(f"📄 [he]     NRC_HE_ADDRESS:     {new_he}")
+    print(f"📄 [he]     NRC_HE_ACCOUNT:     {new_he}")
     if not dry_run:
         rewrite_he(CHINA_DIR / "china_cb.rs", new_he)
 

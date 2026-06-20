@@ -70,9 +70,9 @@ pub struct DestroyAction<Balance> {
 ### 本模块存储
 无。提案数据、元数据、活跃提案列表均已移至 `votingengine` 统一管控（lib.rs:103 注释说明）。
 
-### 机构账户地址
-- 通过 `institution_pallet_address` 从 `CHINA_CB` / `CHINA_CH` 常量中查找机构的 `main_address`。
-- 执行销毁时从该地址 decode 出 `AccountId`。
+### 机构主账户
+- 通过 runtime primitives 的 `main_account` 常量查找治理机构主账户。
+- 执行销毁时从主账户字节 decode 出 `AccountId`。
 
 ---
 
@@ -136,7 +136,7 @@ pub struct DestroyAction<Balance> {
    - `ensure!(remaining.is_zero())` 确保 slash 全额完成，防止静默部分销毁。
 
 5. panic 避免：
-   - `nrc_pallet_id_bytes()` / `institution_pallet_address()` 返回 `Option`。
+   - 内置机构主账户解析返回 `Option`。
 
 ---
 

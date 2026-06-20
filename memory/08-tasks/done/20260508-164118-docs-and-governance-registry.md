@@ -7,7 +7,7 @@
 - 清理旧 `GMB_WHITEPAPER.md`、`GMB_README.html`、`FRC_README.html`、GitHub raw 文档读取链路。
 - wuminapp 治理机构静态写死机构名称、身份 ID 和各制度账户地址。
 - wuminapp 治理机构管理员和阈值必须从链上 `AdminsChange::AdminAccounts` 动态读取，不使用创世常量管理员。
-- 治理机构账户字段从 `duoqianAddress` 语义收口到主账户、费用账户、安全基金账户、质押账户。
+- 治理机构账户字段从 `duoqianAccount` 语义收口到主账户、费用账户、安全基金账户、质押账户。
 
 ## 影响范围
 
@@ -28,7 +28,7 @@
 
 - 桌面端不再通过 iframe/CDN/raw URL 加载白皮书和公民宪法。
 - `npm run build` 自动生成并内置最新文档。
-- wuminapp 治理机构路径不再用 `duoqianAddress` 表达内置治理机构主账户。
+- wuminapp 治理机构路径不再用 `duoqianAccount` 表达内置治理机构主账户。
 - 管理员列表与阈值仍从 `AdminsChange::AdminAccounts` 读取。
 - 文档、注释、残留扫描同步完成。
 

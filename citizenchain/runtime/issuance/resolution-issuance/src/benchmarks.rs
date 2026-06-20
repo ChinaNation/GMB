@@ -24,7 +24,7 @@ fn prc_recipients<T: pallet::Config>() -> BoundedVec<T::AccountId, T::MaxAllocat
     let recipients: Vec<T::AccountId> = CHINA_CB
         .iter()
         .skip(1)
-        .map(|node| decode_account::<T>(node.main_address))
+        .map(|node| decode_account::<T>(node.main_account))
         .collect();
     recipients
         .try_into()

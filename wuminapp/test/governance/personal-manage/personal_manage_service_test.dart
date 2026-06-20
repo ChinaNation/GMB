@@ -163,7 +163,7 @@ void main() {
       expect(decoded, isA<CreateDuoqianProposalInfo>());
       final info = decoded as CreateDuoqianProposalInfo;
       expect(info.proposalId, 7);
-      expect(info.duoqianAddress, '33' * 32);
+      expect(info.duoqianAccount, '33' * 32);
       expect(info.amountFen, BigInt.from(111));
       expect(info.feeFen, BigInt.from(10));
     });

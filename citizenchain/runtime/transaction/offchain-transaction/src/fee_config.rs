@@ -40,15 +40,15 @@ pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 20_160;
 /// - 同一清算行不允许并行提案(新提案覆盖旧提案)
 pub fn do_propose_l2_fee_rate<T: Config>(
     who: T::AccountId,
-    bank_main_address: T::AccountId,
+    bank_main_account: T::AccountId,
     new_rate_bp: u32,
 ) -> DispatchResult {
     // 1. 清算行合法性
-    bank_check::ensure_can_be_bound::<T>(&bank_main_address)?;
+    bank_check::ensure_can_be_bound::<T>(&bank_main_account)?;
 
     // 2. 调用者必须是该清算行多签管理员(通过 SfidAccountQuery 解耦到 runtime 层)
     ensure!(
-        T::SfidAccountQuery::is_admin_of(&bank_main_address, &who),
+        T::SfidAccountQuery::is_admin_of(&bank_main_account, &who),
         Error::<T>::UnauthorizedAdmin
     );
 
@@ -64,9 +64,9 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     let delay: BlockNumberFor<T> = RATE_CHANGE_DELAY_BLOCKS.saturated_into();
     let effective_at = now.saturating_add(delay);
 
-    L2FeeRateProposed::<T>::insert(&bank_main_address, (new_rate_bp, effective_at));
+    L2FeeRateProposed::<T>::insert(&bank_main_account, (new_rate_bp, effective_at));
     Pallet::<T>::deposit_event(Event::<T>::L2FeeRateProposed {
-        bank: bank_main_address,
+        bank: bank_main_account,
         new_rate_bp,
         effective_at,
     });

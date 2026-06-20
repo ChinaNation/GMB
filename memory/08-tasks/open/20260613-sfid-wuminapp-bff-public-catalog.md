@@ -24,7 +24,7 @@
 - [ ] `GET /api/v1/wuminapp/public-institutions/version` → `{ catalog_version, provinces:[{province, manifest_version}] }`,极小载荷、匿名、可缓存。
 - [ ] `GET /api/v1/wuminapp/public-institutions?province=&city=&since_version=&cursor=&page_size=`:
   - 无 `since_version` = 全量(按省/市 scope 分页);带 `since_version` = 增量(返回 upsert 行 + 独立 `deleted:[sfid_number]` 列表)。
-  - 行字段(公开白名单):`sfid_number / institution_name / sfid_name / short_name / province / city / town / institution_code / org_code / status / account_count / custom_account_names[]`。
+  - 行字段(公开白名单):`sfid_number / sfid_full_name / sfid_full_name / sfid_short_name / province / city / town / institution_code / org_code / status / account_count / custom_account_names[]`。
   - **`custom_account_names`**:gov/service.rs 同一查询触碰 accounts 表时顺带收 op_tag=0x06 的账户名列表,绝大多数机构为空数组(近零成本)。主/费(0x00/0x01)不带,客户端本地派生。
 - [ ] 导出能力:CLI 或 admin 命令,把全量目录 dump 成 JSON(喂 wuminapp 卡 A 数据包生成器),复用同一查询。
 - [ ] `catalog_version` 单调递增定义(reconcile 时间戳或序列),各省 `manifest_version` 复用现有。
@@ -44,7 +44,7 @@
 ## 契约(2026-06-13 混合模式 v2:keyset + updated_at 增量)
 - `GET /api/v1/app/public-institutions?province=<必填>&city=&since_version=<RFC3339,可选增量>&after_sfid=<keyset 游标,可选>&page_size=<1..500,默认300>`
   → `ApiResponse{code,message,data: PageResult<PublicInstitutionRow>}`,`PageResult` 含 `items/page_size/next_cursor(=末页末尾 sfid_number)/has_more/manifest_version/catalog_status`。
-  `PublicInstitutionRow{sfid_number, institution_name?, sfid_name?, short_name?, status, category, subject_property, p1, province, city, town, institution_code, org_code?, has_legal_personality?, parent_sfid_number?, account_count, custom_account_names[], created_at}`。
+  `PublicInstitutionRow{sfid_number, sfid_full_name?, sfid_full_name?, sfid_short_name?, status, category, subject_property, p1, province, city, town, institution_code, org_code?, has_legal_personality?, parent_sfid_number?, account_count, custom_account_names[], created_at}`。
   - **keyset 翻页**:`after_sfid` → `WHERE sfid_number > $after`,ORDER BY sfid_number;替代 OFFSET(深翻 O(n²))。
   - **增量**:`since_version` → `WHERE updated_at > $since::timestamptz`,只回这之后变过的行。
 - `GET /api/v1/app/public-institutions/version?province=<必填>&city=` → `data:{province, city?, manifest_version(=MAX(updated_at) RFC3339,非 null), count}`。

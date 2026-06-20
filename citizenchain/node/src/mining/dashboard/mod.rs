@@ -1,6 +1,6 @@
 use crate::{
     home,
-    settings::fee_address,
+    settings::fee_account,
     shared::{constants, keystore, rpc, security},
 };
 use serde::{Deserialize, Serialize};
@@ -1088,7 +1088,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         }
     };
 
-    let local_miner_account = match fee_address::local_powr_miner_account_hex(&app) {
+    let local_miner_account = match fee_account::local_powr_miner_account_hex(&app) {
         Ok(v) => v,
         Err(err) => {
             warnings.push(format!("读取本节点矿工账号失败：{err}"));

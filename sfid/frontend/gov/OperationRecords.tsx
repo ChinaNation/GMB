@@ -58,9 +58,9 @@ const CATEGORY_LABEL: Record<string, string> = {
 const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
   city: '市',
   institution: '机构',
-  institution_name: '机构名称',
-  old_institution_name: '原机构名称',
-  new_institution_name: '新机构名称',
+  sfid_full_name: '机构名称',
+  old_sfid_full_name: '原机构全称',
+  new_sfid_full_name: '新机构全称',
   subject_property: '主体属性',
   category: '机构分类',
   private_type: '私权类型',

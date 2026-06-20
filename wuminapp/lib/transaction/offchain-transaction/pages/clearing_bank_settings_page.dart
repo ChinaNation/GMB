@@ -160,9 +160,9 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
     }
     return ListTile(
       leading: const Icon(Icons.account_balance),
-      title: Text(current.institutionName.isEmpty
+      title: Text(current.sfidFullName.isEmpty
           ? current.sfidNumber
-          : current.institutionName),
+          : current.sfidFullName),
       subtitle: Text('${current.sfidNumber}\n${current.wssUrl}'),
       isThreeLine: true,
       trailing: TextButton(
@@ -206,8 +206,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   Widget _candidateTile(ClearingBankCandidate item) {
     final info = item.info;
     final endpoint = item.endpoint;
-    final name =
-        info.institutionName.isEmpty ? '(未命名机构)' : info.institutionName;
+    final name = info.sfidFullName.isEmpty ? '(未命名机构)' : info.sfidFullName;
     final current = _current;
     final isCurrent = current?.sfidNumber == info.sfidNumber;
     final buttonText = isCurrent ? '已绑定' : (current == null ? '绑定' : '切换');

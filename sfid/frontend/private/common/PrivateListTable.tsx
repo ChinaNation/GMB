@@ -103,13 +103,13 @@ export const PrivateListTable: React.FC<Props> = ({
       { title: '身份ID', dataIndex: 'sfid_number', width: 260, align: 'center' },
       {
         title: '机构名称',
-        dataIndex: 'institution_name',
+        dataIndex: 'sfid_full_name',
         width: 180,
         align: 'center',
         render: (v: string | null) =>
           v ? v : <span style={{ color: '#999' }}>(未命名,待完善)</span>,
       },
-      { title: '省/市', render: (_v, r) => `${r.province}/${r.city}`, width: 160, align: 'center' },
+      { title: '省/市', render: (_v, r) => `${r.province_name}/${r.city_name}`, width: 160, align: 'center' },
       {
         title: '私权类型',
         key: 'private_type',

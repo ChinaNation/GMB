@@ -166,7 +166,7 @@ fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountI
 fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_CB
         .first()
-        .and_then(|n| decode_account::<T>(&n.main_address))
+        .and_then(|n| decode_account::<T>(&n.main_account))
 }
 
 fn expected_admin_count(org: u8) -> Option<u32> {
@@ -332,7 +332,7 @@ pub mod pallet {
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             for node in CHINA_CB.iter() {
-                let Some(institution) = decode_account::<T>(&node.main_address) else {
+                let Some(institution) = decode_account::<T>(&node.main_account) else {
                     panic!(
                         "genesis: sfid_number {} 主账户 decode 失败",
                         node.sfid_number
@@ -350,7 +350,7 @@ pub mod pallet {
             }
 
             for node in CHINA_CH.iter() {
-                let Some(institution) = decode_account::<T>(&node.main_address) else {
+                let Some(institution) = decode_account::<T>(&node.main_account) else {
                     panic!(
                         "genesis: sfid_number {} 主账户 decode 失败",
                         node.sfid_number

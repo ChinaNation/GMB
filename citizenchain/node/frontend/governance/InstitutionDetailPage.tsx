@@ -19,12 +19,12 @@ type Props = {
   onBack: () => void;
   onOpenAdminList?: (sfidNumber: string, orgType: number) => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], sfidNumber: string) => void;
-  onCreateProposal?: (sfidNumber: string, orgType: number, institutionName: string, mainAddress: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateProposal?: (sfidNumber: string, orgType: number, sfidFullName: string, mainAccount: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateProtocolUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateSweep?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateAdminSetChange?: (sfidNumber: string, orgType: number, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateSweep?: (sfidNumber: string, sfidFullName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateAdminSetChange?: (sfidNumber: string, orgType: number, sfidFullName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
@@ -167,7 +167,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">主账户 <code className="metric-label-id">{hexToSs58(detail.mainAddress)}</code></div>
+          <div className="metric-label">主账户 <code className="metric-label-id">{hexToSs58(detail.mainAccount)}</code></div>
           <div className="metric-value">
             {detail.balanceFen != null
               ? formatBalance(detail.balanceFen)
@@ -182,9 +182,9 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
           <div className="metric-label">联合投票权重</div>
           <div className="metric-value">{detail.jointVoteWeight} 票</div>
         </div>
-        {detail.orgType === 2 && detail.stakingAddress && (
+        {detail.orgType === 2 && detail.stakeAccount && (
           <div className="metric-card">
-            <div className="metric-label">永久质押账户 <code className="metric-label-id">{hexToSs58(detail.stakingAddress)}</code></div>
+            <div className="metric-label">永久质押账户 <code className="metric-label-id">{hexToSs58(detail.stakeAccount)}</code></div>
             <div className="metric-value">
               {detail.stakingBalanceFen != null
                 ? formatBalance(detail.stakingBalanceFen)
@@ -192,9 +192,9 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
             </div>
           </div>
         )}
-        {detail.orgType === 2 && detail.feeAddress && (
+        {detail.orgType === 2 && detail.feeAccount && (
           <div className="metric-card">
-            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.feeAddress)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.feeAccount)}</code></div>
             <div className="metric-value">
               {detail.feeBalanceFen != null
                 ? formatBalance(detail.feeBalanceFen)
@@ -202,9 +202,9 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
             </div>
           </div>
         )}
-        {detail.orgType === 1 && detail.cbFeeAddress && (
+        {detail.orgType === 1 && detail.cbFeeAccount && (
           <div className="metric-card">
-            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.cbFeeAddress)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.cbFeeAccount)}</code></div>
             <div className="metric-value">
               {detail.cbFeeBalanceFen != null
                 ? formatBalance(detail.cbFeeBalanceFen)
@@ -212,9 +212,9 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
             </div>
           </div>
         )}
-        {detail.nrcFeeAddress && (
+        {detail.nrcFeeAccount && (
           <div className="metric-card">
-            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.nrcFeeAddress)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.nrcFeeAccount)}</code></div>
             <div className="metric-value">
               {detail.nrcFeeBalanceFen != null
                 ? formatBalance(detail.nrcFeeBalanceFen)
@@ -222,9 +222,9 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
             </div>
           </div>
         )}
-        {detail.nrcAnquanAddress && (
+        {detail.nrcAnquanAccount && (
           <div className="metric-card">
-            <div className="metric-label">安全基金账户 <code className="metric-label-id">{hexToSs58(detail.nrcAnquanAddress)}</code></div>
+            <div className="metric-label">安全基金账户 <code className="metric-label-id">{hexToSs58(detail.nrcAnquanAccount)}</code></div>
             <div className="metric-value">
               {detail.nrcAnquanBalanceFen != null
                 ? formatBalance(detail.nrcAnquanBalanceFen)
@@ -261,7 +261,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
             className="proposal-type-button"
             disabled={!isAdmin}
             onClick={() => isAdmin && onCreateProposal?.(
-              sfidNumber, detail.orgType, detail.name, detail.mainAddress, adminWallets
+              sfidNumber, detail.orgType, detail.name, detail.mainAccount, adminWallets
             )}
           >转账</button>
           <button

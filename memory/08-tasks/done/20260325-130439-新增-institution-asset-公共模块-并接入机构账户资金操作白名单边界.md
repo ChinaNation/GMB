@@ -50,8 +50,8 @@
 - 已将 `duoqian-transfer` 接入提案预检与执行阶段资金白名单检查
 - 已将 `offchain-transaction` 接入批次 payer 与 fee sweep 的资金白名单检查
 - 已在 `citizenchain/runtime/src/configs/mod.rs` 落地 runtime 规则：
-  - `stake_address` 一律拒绝
-  - 制度保留 `main_address` 仅允许 `DuoqianTransferExecute` / `DuoqianCloseExecute`
+  - `stake_account` 一律拒绝
+  - 制度保留 `main_account` 仅允许 `DuoqianTransferExecute` / `DuoqianCloseExecute`
   - 制度 `fee_account` 仅允许 `OffchainFeeSweepExecute`
 - 已新增交易模块技术文档：
   - `memory/05-modules/citizenchain/runtime/transaction/institution-asset/INSTITUTION_ASSET_TECHNICAL.md`

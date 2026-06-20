@@ -64,7 +64,7 @@
 1. 银行发起人获取 SFID 机构身份号码
 2. 调用 register_sfid_institution() 注册链上身份
 3. 调用 propose_create() 创建多签账户（管理员 2-64 人）
-4. 投票通过后，银行获得 duoqian_address（多签账户）
+4. 投票通过后，银行获得 duoqian_account（多签账户）
 ```
 
 ### 2.2 清算许可
@@ -82,7 +82,7 @@
 
 - 必须是 SFID 注册的多签机构
 - 必须通过省储行清算许可投票
-- duoqian_address 最低保证金 ≥ 10,000 元
+- duoqian_account 最低保证金 ≥ 10,000 元
 - 必须运行全节点软件
 - 一个银行只绑定一个省储行，不可更换
 
@@ -108,7 +108,7 @@
 ```
 用户 → 输入金额 → 调用 deposit(bank_address, amount)
                      ↓ 链上交易
-    Currency::transfer(用户链上账户 → 银行 duoqian_address)
+    Currency::transfer(用户链上账户 → 银行 duoqian_account)
     DepositBalance[银行][用户] += amount
                      ↓
                充值成功，存款余额增加
@@ -130,7 +130,7 @@
 后台：银行缓存待结算交易
      → 省储行定期收集并打包上链
      → 链上执行：银行A duoqian → 银行B duoqian（主金额）
-                银行A duoqian → 省储行 fee_address（手续费）
+                银行A duoqian → 省储行 fee_account（手续费）
      → 扣减 DepositBalance[银行A][付款用户]
      → 增加 DepositBalance[银行B][收款用户]
 ```
@@ -156,7 +156,7 @@
 用户 → 输入金额 → 调用 withdraw(bank_address, amount)
                      ↓ 链上交易
     ensure DepositBalance[银行][用户] >= amount
-    Currency::transfer(银行 duoqian_address → 用户链上账户)
+    Currency::transfer(银行 duoqian_account → 用户链上账户)
     DepositBalance[银行][用户] -= amount
                      ↓
                提现成功，链上余额增加
@@ -189,10 +189,10 @@
 省储行清算上链时：
   链上 DepositBalance[银行A][用户甲] -= 100 + fee
   链上 DepositBalance[银行A][用户乙] += 100
-  银行A duoqian_address → 省储行 fee_address（手续费）
+  银行A duoqian_account → 省储行 fee_account（手续费）
 ```
 
-银行 duoqian_address 总余额不变（内部划转），只有手续费流出。
+银行 duoqian_account 总余额不变（内部划转），只有手续费流出。
 
 ### 4.2 同省跨行支付
 
@@ -204,7 +204,7 @@
 
 省储行清算上链时：
   Currency::transfer(银行A duoqian → 银行B duoqian, 100 元)
-  Currency::transfer(银行A duoqian → 省储行 fee_address, 手续费)
+  Currency::transfer(银行A duoqian → 省储行 fee_account, 手续费)
   链上 DepositBalance[银行A][用户甲] -= 100 + fee
   链上 DepositBalance[银行B][用户乙] += 100
 ```
@@ -221,7 +221,7 @@
   ↓
 B 省省储行执行 process_queued_batch：
   Currency::transfer(银行甲 duoqian → 银行乙 duoqian, 100 元)
-  Currency::transfer(银行甲 duoqian → B省储行 fee_address, 手续费)
+  Currency::transfer(银行甲 duoqian → B省储行 fee_account, 手续费)
   链上 DepositBalance[银行甲][付款用户] -= 100 + fee
   链上 DepositBalance[银行乙][收款用户] += 100
 ```
@@ -261,9 +261,9 @@ B 省省储行执行 process_queued_batch：
 ### 5.2 安全保障
 
 - 用户存款记录在链上（DepositBalance），银行无法篡改
-- 银行 duoqian_address 是多签账户，单个管理员无法挪用资金
+- 银行 duoqian_account 是多签账户，单个管理员无法挪用资金
 - 省储行清算时校验链上 DepositBalance，银行本地账本仅为缓存
-- 银行保证金制度：duoqian_address 余额必须 ≥ 总存款额
+- 银行保证金制度：duoqian_account 余额必须 ≥ 总存款额
 
 ---
 
@@ -337,11 +337,11 @@ for item in batch.iter() {
         DepositBalance::mutate(bank, payer, |b| *b -= transfer + fee);
         DepositBalance::mutate(bank, recipient, |b| *b += transfer);
         // 手续费从银行转给省储行
-        Currency::transfer(payer_bank → fee_address, fee);
+        Currency::transfer(payer_bank → fee_account, fee);
     } else {
         // 跨行支付：链上转账 + 两边账本更新
         Currency::transfer(payer_bank → recipient_bank, transfer);
-        Currency::transfer(payer_bank → fee_address, fee);
+        Currency::transfer(payer_bank → fee_account, fee);
         DepositBalance::mutate(payer_bank, payer, |b| *b -= transfer + fee);
         DepositBalance::mutate(recipient_bank, recipient, |b| *b += transfer);
     }
@@ -369,8 +369,8 @@ pub enum InstitutionAssetAction {
 | `deposit` | Amount(充值金额) | 用户 |
 | `withdraw` | Amount(提现金额) | 用户 |
 | `open_deposit_account` | Amount(100000) = 1 元 | 用户 |
-| `enqueue_offchain_batch` | Amount(批次手续费总额) | 银行 fee_address 代付 |
-| `process_queued_batch` | Amount(批次手续费总额) | 省储行 fee_address 代付 |
+| `enqueue_offchain_batch` | Amount(批次手续费总额) | 银行 fee_account 代付 |
+| `process_queued_batch` | Amount(批次手续费总额) | 省储行 fee_account 代付 |
 
 ---
 
@@ -511,7 +511,7 @@ Future<List<BankInfo>> queryRegisteredBanks();
 
 | 风险 | 防护 |
 |------|------|
-| 银行挪用存款 | duoqian_address 多签控制，单个管理员无法转出 |
+| 银行挪用存款 | duoqian_account 多签控制，单个管理员无法转出 |
 | 银行 duoqian 余额不足 | 清算时链上转账失败，批次回滚；保证金制度 |
 | 银行跑路 | 用户存款记录在链上 DepositBalance，可由省储行强制清算 |
 | 清算失败 | 链上队列支持重试（现有 QueuedBatches 机制） |
@@ -520,7 +520,7 @@ Future<List<BankInfo>> queryRegisteredBanks();
 ### 10.3 偿付能力监控
 
 ```
-银行偿付能力 = 银行 duoqian_address 链上余额 / BankTotalDeposits
+银行偿付能力 = 银行 duoqian_account 链上余额 / BankTotalDeposits
 
 偿付率 < 100%：发出链上警告事件
 偿付率 < 80%：省储行可暂停银行清算许可

@@ -49,7 +49,7 @@ class PersonalManageService {
         String txHash,
         int usedNonce,
         int proposalId,
-        String duoqianAddressHex,
+        String duoqianAccountHex,
         String blockHashHex,
       })> submitProposeCreatePersonal({
     required Uint8List accountName,
@@ -84,7 +84,7 @@ class PersonalManageService {
       txHash: submitResult.txHash,
       usedNonce: submitResult.usedNonce,
       proposalId: event.proposalId,
-      duoqianAddressHex: event.duoqianAddressHex,
+      duoqianAccountHex: event.duoqianAccountHex,
       blockHashHex: submitResult.blockHashHex,
     );
   }
@@ -150,7 +150,7 @@ class PersonalManageService {
 
   /// 提交 PersonalManage::propose_close extrinsic。
   Future<({String txHash, int usedNonce})> submitProposeClosePersonal({
-    required String duoqianAddress,
+    required String duoqianAccount,
     required String beneficiaryAddress,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -159,7 +159,7 @@ class PersonalManageService {
     final output = ByteOutput();
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCloseCallIndex);
-    output.write(_hexDecode(duoqianAddress));
+    output.write(_hexDecode(duoqianAccount));
     final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
     output.write(beneficiaryId);
     return _signAndSubmit(
@@ -185,20 +185,20 @@ class PersonalManageService {
         .toList(growable: false);
     if (addresses.isEmpty) return {};
 
-    final storageKeyByAddress = <String, String>{
+    final storageKeyByAccount = <String, String>{
       for (final address in addresses)
         address:
             '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}',
     };
 
     final values = await _rpc.fetchStorageBatchChunked(
-      storageKeyByAddress.values.toSet(),
+      storageKeyByAccount.values.toSet(),
       chunkSize: chunkSize,
     );
 
     final result =
         <String, ({String creatorAddressHex, String accountName})?>{};
-    for (final entry in storageKeyByAddress.entries) {
+    for (final entry in storageKeyByAccount.entries) {
       final data = values[entry.value];
       final meta = data == null
           ? null
@@ -216,17 +216,17 @@ class PersonalManageService {
 
   /// 查询个人多签账户信息。
   Future<DuoqianAccountInfo?> fetchPersonalAccount(
-    String duoqianAddressHex,
+    String duoqianAccountHex,
   ) async {
     final key = PersonalManageStorageCodec.personalDuoqiansKey(
-      duoqianAddressHex,
+      duoqianAccountHex,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null) return null;
     final personal = PersonalManageStorageCodec.decodePersonalDuoqian(data);
     if (personal == null) return null;
     final accountId = PersonalManageStorageCodec.accountIdFromAccountHex(
-      duoqianAddressHex,
+      duoqianAccountHex,
     );
     final adminKey = PersonalManageStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
@@ -250,10 +250,10 @@ class PersonalManageService {
   /// 中文注释：多签列表页不能对每个账户逐个调用 [fetchPersonalAccount]。
   /// 这里按 storage 依赖分阶段批量读取：先读账户与管理员主体，再批量读动态阈值。
   Future<Map<String, DuoqianAccountInfo?>> fetchPersonalAccountsBatch(
-    Iterable<String> duoqianAddressHexList, {
+    Iterable<String> duoqianAccountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = duoqianAddressHexList
+    final addresses = duoqianAccountHexList
         .map(_normalizeHex)
         .where((address) => address.isNotEmpty)
         .toSet()
@@ -261,8 +261,8 @@ class PersonalManageService {
     if (addresses.isEmpty) return {};
 
     final personalKeyByAddress = <String, String>{};
-    final adminKeyByAddress = <String, String>{};
-    final accountIdByAddress = <String, Uint8List>{};
+    final adminKeyByAccount = <String, String>{};
+    final accountIdByAccount = <String, Uint8List>{};
     final firstRoundKeys = <String>[];
 
     for (final address in addresses) {
@@ -273,9 +273,9 @@ class PersonalManageService {
           '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
       final adminKey =
           '0x${_hexEncode(PersonalManageStorageCodec.adminAccountKey(accountId))}';
-      accountIdByAddress[address] = accountId;
+      accountIdByAccount[address] = accountId;
       personalKeyByAddress[address] = personalKey;
-      adminKeyByAddress[address] = adminKey;
+      adminKeyByAccount[address] = adminKey;
       firstRoundKeys
         ..add(personalKey)
         ..add(adminKey);
@@ -287,11 +287,11 @@ class PersonalManageService {
     );
     final result = <String, DuoqianAccountInfo?>{};
     final personalByAddress = <String, PersonalManageAccountSnapshot>{};
-    final adminByAddress = <String, PersonalManageAdminSnapshot>{};
+    final adminByAccount = <String, PersonalManageAdminSnapshot>{};
 
     for (final address in addresses) {
       final personalData = firstRoundValues[personalKeyByAddress[address]];
-      final adminData = firstRoundValues[adminKeyByAddress[address]];
+      final adminData = firstRoundValues[adminKeyByAccount[address]];
       if (personalData == null || adminData == null) {
         result[address] = null;
         continue;
@@ -304,13 +304,13 @@ class PersonalManageService {
         continue;
       }
       personalByAddress[address] = personal;
-      adminByAddress[address] = admin;
+      adminByAccount[address] = admin;
     }
 
-    final activeThresholdKeyByAddress = <String, String>{};
-    for (final entry in adminByAddress.entries) {
-      final accountId = accountIdByAddress[entry.key]!;
-      activeThresholdKeyByAddress[entry.key] =
+    final activeThresholdKeyByAccount = <String, String>{};
+    for (final entry in adminByAccount.entries) {
+      final accountId = accountIdByAccount[entry.key]!;
+      activeThresholdKeyByAccount[entry.key] =
           '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
         org: entry.value.org,
@@ -318,35 +318,35 @@ class PersonalManageService {
       ))}';
     }
     final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
-      activeThresholdKeyByAddress.values,
+      activeThresholdKeyByAccount.values,
       chunkSize: chunkSize,
     );
 
-    final thresholdByAddress = <String, int?>{};
-    final pendingThresholdKeyByAddress = <String, String>{};
-    for (final entry in activeThresholdKeyByAddress.entries) {
+    final thresholdByAccount = <String, int?>{};
+    final pendingThresholdKeyByAccount = <String, String>{};
+    for (final entry in activeThresholdKeyByAccount.entries) {
       final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(
         activeThresholdValues[entry.value],
       );
-      thresholdByAddress[entry.key] = threshold;
+      thresholdByAccount[entry.key] = threshold;
       if (threshold == null) {
-        final admin = adminByAddress[entry.key]!;
-        pendingThresholdKeyByAddress[entry.key] =
+        final admin = adminByAccount[entry.key]!;
+        pendingThresholdKeyByAccount[entry.key] =
             '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
           org: admin.org,
-          accountId: accountIdByAddress[entry.key]!,
+          accountId: accountIdByAccount[entry.key]!,
         ))}';
       }
     }
 
-    if (pendingThresholdKeyByAddress.isNotEmpty) {
+    if (pendingThresholdKeyByAccount.isNotEmpty) {
       final pendingThresholdValues = await _rpc.fetchStorageBatchChunked(
-        pendingThresholdKeyByAddress.values,
+        pendingThresholdKeyByAccount.values,
         chunkSize: chunkSize,
       );
-      for (final entry in pendingThresholdKeyByAddress.entries) {
-        thresholdByAddress[entry.key] =
+      for (final entry in pendingThresholdKeyByAccount.entries) {
+        thresholdByAccount[entry.key] =
             PersonalManageStorageCodec.decodeDynamicThreshold(
           pendingThresholdValues[entry.value],
         );
@@ -355,11 +355,11 @@ class PersonalManageService {
 
     for (final address in addresses) {
       final personal = personalByAddress[address];
-      final admin = adminByAddress[address];
+      final admin = adminByAccount[address];
       if (personal == null || admin == null) continue;
       result[address] = DuoqianAccountInfo(
         adminCount: admin.adminCount,
-        threshold: thresholdByAddress[address],
+        threshold: thresholdByAccount[address],
         adminPubkeys: admin.adminPubkeys,
         status: _statusFromByte(personal.statusByte),
       );
@@ -419,7 +419,7 @@ class PersonalManageService {
     if (data.length != 32 + 32 + 16 + 16) return null;
     var offset = 0;
 
-    final duoqianAddress =
+    final duoqianAccount =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -435,7 +435,7 @@ class PersonalManageService {
 
     return CreateDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       proposer: proposerSs58,
       amountFen: amountFen,
       feeFen: feeFen,
@@ -449,7 +449,7 @@ class PersonalManageService {
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
 
-    final duoqianAddress =
+    final duoqianAccount =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -464,13 +464,13 @@ class PersonalManageService {
 
     return CloseDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       beneficiary: beneficiarySs58,
       proposer: proposerSs58,
     );
   }
 
-  Future<({int proposalId, String duoqianAddressHex})>
+  Future<({int proposalId, String duoqianAccountHex})>
       _confirmPersonalDuoqianProposedEvent({
     required String blockHashHex,
     required Uint8List accountName,
@@ -503,7 +503,7 @@ class PersonalManageService {
     return found;
   }
 
-  ({int proposalId, String duoqianAddressHex})?
+  ({int proposalId, String duoqianAccountHex})?
       _findPersonalDuoqianProposedEvent(
     Uint8List data, {
     required Uint8List accountName,
@@ -551,7 +551,7 @@ class PersonalManageService {
     return null;
   }
 
-  ({int proposalId, String duoqianAddressHex})?
+  ({int proposalId, String duoqianAccountHex})?
       _decodePersonalDuoqianProposedEvent(
     Uint8List data,
     int offset, {
@@ -566,7 +566,7 @@ class PersonalManageService {
       if (pos + 8 + 32 + 32 > data.length) return null;
       final proposalId = _readU64Le(data, pos);
       pos += 8;
-      final duoqianAddress = Uint8List.fromList(data.sublist(pos, pos + 32));
+      final duoqianAccount = Uint8List.fromList(data.sublist(pos, pos + 32));
       pos += 32;
       final proposer = Uint8List.fromList(data.sublist(pos, pos + 32));
       pos += 32;
@@ -597,7 +597,7 @@ class PersonalManageService {
       if (!matches) return null;
       return (
         proposalId: proposalId,
-        duoqianAddressHex: _hexEncode(duoqianAddress),
+        duoqianAccountHex: _hexEncode(duoqianAccount),
       );
     } catch (_) {
       return null;

@@ -575,7 +575,7 @@ fn preview_action_conn(
                 "role": "CITY_ADMIN",
                 "admin_pubkey": admin_pubkey,
                 "admin_name": admin_name,
-                "city": city,
+                "city_name": city,
                 "created_by": created_by,
             });
             let after_hash = hash_json(&after);
@@ -618,7 +618,7 @@ fn preview_action_conn(
                 validate_create_federal_admin_conn(conn, ctx, &input)?;
             let after = json!({
                 "role": "FEDERAL_ADMIN",
-                "province": province,
+                "province_name": province,
                 "admin_pubkey": admin_pubkey.clone(),
                 "admin_name": admin_name,
                 "created_by": ctx.admin_pubkey,
@@ -682,7 +682,7 @@ fn base_fields(
     vec![
         field("action_type", "操作", action_type.label()),
         field(
-            "province",
+            "province_name",
             "省份",
             ctx.admin_province.as_deref().unwrap_or_default(),
         ),
@@ -881,7 +881,7 @@ fn preview_delete_federal_admin_conn(
     let after = json!({
         "deleted": true,
         "id": input.id,
-        "province": province,
+        "province_name": province,
         "admin_pubkey": admin.admin_pubkey.clone(),
     });
     Ok((before, after, admin.admin_pubkey))

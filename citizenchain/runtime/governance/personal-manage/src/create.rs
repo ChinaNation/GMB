@@ -3,7 +3,7 @@
 //! `do_propose_create` 由 lib.rs 内 call_index=0 入口 delegate 调用。
 //! 业务流程：
 //! 1. 校验发起人未被保护、账户名非空、管理员集合合法、余额充足
-//! 2. 派生 `derive_personal_duoqian_address(creator, account_name)` —— 地址只依赖
+//! 2. 派生 `derive_personal_duoqian_account(creator, account_name)` —— 地址只依赖
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalDuoqians 占位
@@ -29,7 +29,7 @@ use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus};
 use crate::BalanceOf;
 use crate::ACTION_CREATE;
 use primitives::multisig::{
-    DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
+    DuoqianAccountValidator, DuoqianReservedAccountChecker, ProtectedSourceChecker,
 };
 use votingengine::InternalVoteEngine;
 
@@ -54,30 +54,30 @@ pub(crate) fn do_propose_create<T: Config>(
 
     let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
-    let duoqian_address =
-        Pallet::<T>::derive_personal_duoqian_address(&who, account_name.as_slice())?;
+    let duoqian_account =
+        Pallet::<T>::derive_personal_duoqian_account(&who, account_name.as_slice())?;
     ensure!(
-        !PersonalDuoqians::<T>::contains_key(&duoqian_address),
+        !PersonalDuoqians::<T>::contains_key(&duoqian_account),
         Error::<T>::PersonalDuoqianAlreadyExists
     );
     ensure!(
-        !T::ReservedAddressChecker::is_reserved(&duoqian_address),
-        Error::<T>::AddressReserved
+        !T::ReservedAccountChecker::is_reserved(&duoqian_account),
+        Error::<T>::AccountReserved
     );
     ensure!(
-        T::AddressValidator::is_valid(&duoqian_address),
-        Error::<T>::InvalidAddress
+        T::AccountValidator::is_valid(&duoqian_account),
+        Error::<T>::InvalidAccount
     );
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+        !T::ProtectedSourceChecker::is_protected(&duoqian_account),
         Error::<T>::ProtectedSource
     );
 
     let now = <frame_system::Pallet<T>>::block_number();
-    let institution = duoqian_address.clone();
+    let institution = duoqian_account.clone();
     let org = votingengine::types::ORG_REN;
     let action = CreateDuoqianAction {
-        duoqian_address: duoqian_address.clone(),
+        duoqian_account: duoqian_account.clone(),
         proposer: who.clone(),
         amount,
         fee,
@@ -91,7 +91,7 @@ pub(crate) fn do_propose_create<T: Config>(
             return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
         }
         PersonalDuoqians::<T>::insert(
-            &duoqian_address,
+            &duoqian_account,
             DuoqianAccount {
                 creator: who.clone(),
                 account_name: account_name.clone(),
@@ -132,7 +132,7 @@ pub(crate) fn do_propose_create<T: Config>(
 
     Pallet::<T>::deposit_event(Event::<T>::PersonalDuoqianProposed {
         proposal_id,
-        duoqian_address,
+        duoqian_account,
         proposer: who,
         account_name,
         admins: duoqian_admins,

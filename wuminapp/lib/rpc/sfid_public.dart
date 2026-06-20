@@ -20,14 +20,14 @@ class SfidPublicApi {
 
   /// 搜索清算行列表。
   ///
-  /// [province] 省份名(如"广东省"),省略=全国。
-  /// [city]     市名(配合 province 使用)。
-  /// [keyword]  子串匹配 sfid_number / institution_name。
+  /// [provinceName] 省份名(如"广东省"),省略=全国。
+  /// [cityName]     市名(配合 provinceName 使用)。
+  /// [keyword]  子串匹配 sfid_number / sfid_full_name。
   /// [page]     页码,从 1 起。
   /// [size]     每页条数,1~100。
   Future<ClearingBankSearchResult> searchClearingBanks({
-    String? province,
-    String? city,
+    String? provinceName,
+    String? cityName,
     String? keyword,
     int page = 1,
     int size = 20,
@@ -36,11 +36,11 @@ class SfidPublicApi {
       'page': page.toString(),
       'size': size.toString(),
     };
-    if (province != null && province.trim().isNotEmpty) {
-      params['province'] = province.trim();
+    if (provinceName != null && provinceName.trim().isNotEmpty) {
+      params['province_name'] = provinceName.trim();
     }
-    if (city != null && city.trim().isNotEmpty) {
-      params['city'] = city.trim();
+    if (cityName != null && cityName.trim().isNotEmpty) {
+      params['city_name'] = cityName.trim();
     }
     if (keyword != null && keyword.trim().isNotEmpty) {
       params['keyword'] = keyword.trim();
@@ -74,14 +74,14 @@ class SfidPublicApi {
 class ClearingBankInfo {
   const ClearingBankInfo({
     required this.sfidNumber,
-    required this.institutionName,
+    required this.sfidFullName,
     required this.subjectProperty,
     required this.subType,
     required this.parentSfidNumber,
-    required this.parentInstitutionName,
+    required this.parentSfidFullName,
     required this.parentSubjectProperty,
-    required this.province,
-    required this.city,
+    required this.provinceName,
+    required this.cityName,
     required this.mainAccount,
     required this.feeAccount,
   });
@@ -90,7 +90,7 @@ class ClearingBankInfo {
   final String sfidNumber;
 
   /// 机构中文名(两步式未命名时为空串)。
-  final String institutionName;
+  final String sfidFullName;
 
   /// 主体属性:`S`(私法人)或 `F`(非法人)。
   final String subjectProperty;
@@ -100,11 +100,11 @@ class ClearingBankInfo {
 
   /// 非法人主体所属法人信息,用于手机端展示父子结构。
   final String? parentSfidNumber;
-  final String? parentInstitutionName;
+  final String? parentSfidFullName;
   final String? parentSubjectProperty;
 
-  final String province;
-  final String city;
+  final String provinceName;
+  final String cityName;
 
   /// 主账户链上地址(hex,无 0x 前缀)。未上链时为 null。
   final String? mainAccount;
@@ -115,14 +115,14 @@ class ClearingBankInfo {
   factory ClearingBankInfo.fromJson(Map<String, dynamic> json) {
     return ClearingBankInfo(
       sfidNumber: (json['sfid_number'] as String?) ?? '',
-      institutionName: (json['institution_name'] as String?) ?? '',
+      sfidFullName: (json['sfid_full_name'] as String?) ?? '',
       subjectProperty: (json['subject_property'] as String?) ?? '',
       subType: json['sub_type'] as String?,
       parentSfidNumber: json['parent_sfid_number'] as String?,
-      parentInstitutionName: json['parent_institution_name'] as String?,
+      parentSfidFullName: json['parent_sfid_full_name'] as String?,
       parentSubjectProperty: json['parent_subject_property'] as String?,
-      province: (json['province'] as String?) ?? '',
-      city: (json['city'] as String?) ?? '',
+      provinceName: (json['province_name'] as String?) ?? '',
+      cityName: (json['city_name'] as String?) ?? '',
       mainAccount: json['main_account'] as String?,
       feeAccount: json['fee_account'] as String?,
     );

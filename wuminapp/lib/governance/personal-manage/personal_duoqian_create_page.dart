@@ -356,10 +356,10 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         sign: signCallback,
       );
 
-      final addrHex = result.duoqianAddressHex;
+      final addrHex = result.duoqianAccountHex;
       await WalletIsar.instance.writeTxn((isar) async {
         final entity = PersonalDuoqianEntity()
-          ..duoqianAddress = addrHex
+          ..duoqianAccount = addrHex
           ..name = nameText
           ..creatorAddress = wallet.address
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;

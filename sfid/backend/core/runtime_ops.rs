@@ -83,21 +83,28 @@ pub(crate) fn append_audit_log(
     let actor = actor_pubkey.to_string();
     let action = action.to_string();
     let log_action = action.clone();
-    let p_code = target_sfid
+    let province_code = target_sfid
         .as_deref()
         .and_then(|sfid| sfid.split('-').next())
         .map(|r5| r5[..2.min(r5.len())].to_string())
         .unwrap_or_else(|| "ZS".to_string());
-    let c_code = target_sfid
+    let city_code = target_sfid
         .as_deref()
         .and_then(|sfid| sfid.split('-').next())
         .and_then(|r5| (r5.len() >= 5).then(|| r5[2..5].to_string()))
         .filter(|v| !v.is_empty() && v != "000");
     if let Err(err) = state.db.with_client(move |conn| {
         conn.execute(
-            "INSERT INTO audit(p_code, c_code, actor, action, target_sfid, detail)
+            "INSERT INTO audit(province_code, city_code, actor, action, target_sfid, detail)
              VALUES ($1, $2, $3, $4, $5, $6)",
-            &[&p_code, &c_code, &actor, &action, &target_sfid, &detail],
+            &[
+                &province_code,
+                &city_code,
+                &actor,
+                &action,
+                &target_sfid,
+                &detail,
+            ],
         )
         .map_err(|e| format!("insert audit failed: {e}"))?;
         Ok(())

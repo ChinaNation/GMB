@@ -14,7 +14,7 @@ SFID 的高并发目标必须建立在结构化数据库、索引和省市范围
 
 ## 数据分区策略
 
-从第一版目标结构开始按 `p_code` 做省分区:
+从第一版目标结构开始按 `province_code` 做省分区:
 
 - `subjects`
 - `citizens`
@@ -24,22 +24,22 @@ SFID 的高并发目标必须建立在结构化数据库、索引和省市范围
 - `docs`
 - `audit`
 
-广州管理员查询广州数据时,SQL 必须携带 `p_code='GD' AND c_code='<广州代码>'`。联邦管理员查询本省数据时,SQL 必须携带 `p_code`。禁止全量读取后过滤。
+广州管理员查询广州数据时,SQL 必须携带 `province_code='GD' AND city_code='<广州代码>'`。联邦管理员查询本省数据时,SQL 必须携带 `province_code`。禁止全量读取后过滤。
 
 ## 索引策略
 
 必备索引:
 
-- `subjects(p_code, c_code, kind, status, sfid_number)`
-- `subjects(p_code, c_code, name)`
-- `citizens(p_code, c_code, created_at DESC, id DESC)`
-- `citizens(p_code, c_code, archive_no, sfid_number, wallet_pubkey, wallet_address)`
-- `gov(p_code, c_code, t_code, institution_code)`
-- `gov(p_code, c_code, t_code, org_code)`
-- `private(p_code, c_code, kind, code)`
-- `accounts(p_code, sfid_number)`
-- `docs(p_code, sfid_number, uploaded_at DESC)`
-- `audit(p_code, c_code, created_at DESC)`
+- `subjects(province_code, city_code, kind, status, sfid_number)`
+- `subjects(province_code, city_code, name)`
+- `citizens(province_code, city_code, created_at DESC, id DESC)`
+- `citizens(province_code, city_code, archive_no, sfid_number, wallet_pubkey, wallet_address)`
+- `gov(province_code, city_code, town_code, institution_code)`
+- `gov(province_code, city_code, town_code, org_code)`
+- `private(province_code, city_code, kind, code)`
+- `accounts(province_code, sfid_number)`
+- `docs(province_code, sfid_number, uploaded_at DESC)`
+- `audit(province_code, city_code, created_at DESC)`
 - `admins(role, city)`
 - `admins(lower(admin_pubkey))`
 - `admins(lower(created_by))`

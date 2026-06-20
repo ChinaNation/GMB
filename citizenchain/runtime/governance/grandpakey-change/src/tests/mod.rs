@@ -122,7 +122,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|node| AccountId32::new(node.main_address) == institution)
+                .find(|node| AccountId32::new(node.main_account) == institution)
                 .map(|node| node.duoqian_admins.iter().any(|admin| *admin == who_raw))
                 .unwrap_or(false),
             _ => false,
@@ -133,7 +133,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|node| AccountId32::new(node.main_address) == institution)
+                .find(|node| AccountId32::new(node.main_account) == institution)
                 .map(|node| {
                     node.duoqian_admins
                         .iter()
@@ -242,7 +242,7 @@ fn cb_admin(node_index: usize, admin_index: usize) -> AccountId32 {
 }
 
 fn cb_pallet_id(node_index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[node_index].main_address)
+    AccountId32::new(CHINA_CB[node_index].main_account)
 }
 
 fn prc_admin(index: usize) -> AccountId32 {

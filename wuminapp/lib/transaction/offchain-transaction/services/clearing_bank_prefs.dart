@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ClearingBankBindingSnapshot {
   const ClearingBankBindingSnapshot({
     required this.sfidNumber,
-    required this.institutionName,
+    required this.sfidFullName,
     required this.mainAccount,
     required this.feeAccount,
     required this.peerId,
@@ -22,7 +22,7 @@ class ClearingBankBindingSnapshot {
   });
 
   final String sfidNumber;
-  final String institutionName;
+  final String sfidFullName;
   final String mainAccount;
   final String? feeAccount;
   final String peerId;
@@ -39,7 +39,7 @@ class ClearingBankBindingSnapshot {
 
   Map<String, dynamic> toJson() => {
         'sfid_number': sfidNumber,
-        'institution_name': institutionName,
+        'sfid_full_name': sfidFullName,
         'main_account': mainAccount,
         'fee_account': feeAccount,
         'peer_id': peerId,
@@ -52,7 +52,7 @@ class ClearingBankBindingSnapshot {
   factory ClearingBankBindingSnapshot.fromJson(Map<String, dynamic> json) {
     return ClearingBankBindingSnapshot(
       sfidNumber: (json['sfid_number'] as String?) ?? '',
-      institutionName: (json['institution_name'] as String?) ?? '',
+      sfidFullName: (json['sfid_full_name'] as String?) ?? '',
       mainAccount: (json['main_account'] as String?) ?? '',
       feeAccount: json['fee_account'] as String?,
       peerId: (json['peer_id'] as String?) ?? '',
@@ -125,7 +125,7 @@ class ClearingBankPrefs {
         walletIndex,
         ClearingBankBindingSnapshot(
           sfidNumber: trimmed,
-          institutionName: '',
+          sfidFullName: '',
           mainAccount: '',
           feeAccount: null,
           peerId: '',

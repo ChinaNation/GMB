@@ -132,7 +132,7 @@
 
 | # | 类别 | 修订 | 影响文件 |
 |---|---|---|---|
-| 1 | 🔴 | NrcAccountProvider 拆 `NrcMainAccountProvider`(治理 main_address) + `NrcFeeAccountProvider`(费用 fee_address) | lib.rs / configs/mod.rs |
+| 1 | 🔴 | NrcAccountProvider 拆 `NrcMainAccountProvider`(治理 main_account) + `NrcFeeAccountProvider`(费用 fee_account) | lib.rs / configs/mod.rs |
 | 2 | 🔴 | propose origin 校验铁律写入 ADR-011 5.4 / 5.6 节 + proposal.rs doc + Error::ProposeOriginNotAllowed | ADR-011 / lib.rs / proposal.rs |
 | 3 | 🔴 | 1000 GMB 押金机制三态:reserve / release_to_nrc / refund + 三个 Event + IssueDeposit storage | ADR-011 6 节 / fee.rs / lib.rs |
 | 4 | 🔴 | 计费表订正:mint/burn/transfer/close 全部 VOTE_FLAT_FEE = 1 元(走 InternalVote) | ADR-011 6 节 |

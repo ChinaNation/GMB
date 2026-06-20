@@ -46,9 +46,9 @@ pub trait InstitutionAsset<AccountId> {
 
 当前 `citizenchain/runtime/src/configs/mod.rs` 中的 `RuntimeInstitutionAsset` 规则是：
 
-1. `stake_address`
+1. `stake_account`
    - 一律拒绝
-2. 制度保留 `main_address`
+2. 制度保留 `main_account`
    - 只允许 `DuoqianTransferExecute`
    - 只允许 `DuoqianCloseExecute`
 3. 制度 `fee_account`
@@ -75,8 +75,8 @@ pub trait InstitutionAsset<AccountId> {
 
 ## 5. 设计原因
 
-- `ProtectedSourceChecker` 只能表达“完全禁止的源地址”，适合 `stake_address`。
-- `main_address` 不是完全禁止，而是“只有特定治理执行模块能动钱”。
+- `ProtectedSourceChecker` 只能表达“完全禁止的源地址”，适合 `stake_account`。
+- `main_account` 不是完全禁止，而是“只有特定治理执行模块能动钱”。
 - 所以需要单独的资金动作白名单层，不能继续复用单一布尔语义的 `ProtectedSourceChecker`。
 
 ## 6. 安全注意事项

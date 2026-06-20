@@ -43,7 +43,7 @@ pub fn build_propose_transfer_sign_request(
     // `duoqian:<account_hex>` 传入机构多签 AccountId。
     let entry = governance::registry::find_institution(sfid_number);
     if let Some(entry) = entry {
-        let institution_duoqian = hex::decode(entry.main_address_hex())
+        let institution_duoqian = hex::decode(entry.main_account_hex())
             .map_err(|e| format!("主账户地址解码失败: {e}"))?;
         if beneficiary_bytes[..] == institution_duoqian[..] {
             return Err("收款地址不能为本机构多签地址".to_string());

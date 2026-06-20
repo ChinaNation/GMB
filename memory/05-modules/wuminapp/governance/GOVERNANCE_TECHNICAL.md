@@ -119,7 +119,7 @@ lib/votingengine/
 
 ### 4.1 联合提案投票引擎字段标准
 
-业务模块不接收人口快照字段。`eligible_total / snapshot_nonce / signature / province / signer_admin_pubkey` 只属于投票引擎的联合投票人口快照准备流程。
+业务模块不接收人口快照字段。`eligible_total / snapshot_nonce / signature / province_name / signer_admin_pubkey` 只属于投票引擎的联合投票人口快照准备流程。
 
 - `eligible_total`：`u64`，必须 `> 0`。
 - `snapshot_nonce`：`1..64` 字节。
@@ -427,7 +427,7 @@ message = blake2_256(SCALE.encode(payload))
 | 单机构提案 ID 索引 | Isar `AppKvEntity(governance.proposal.index.institution.<sfid_number>)` | 治理机构详情页提案列表 |
 
 本地摘要包含 `proposalId / displayId / kind / stage / status / internalOrg /
-institutionBytes / institutionName / title / subtitle / iconKind /
+institutionBytes / sfidFullName / title / subtitle / iconKind /
 updatedAtMillis`。这些字段只用于列表展示和首屏恢复，不作为链上真相。
 
 链上同步规则：
@@ -529,16 +529,16 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 `InternalVote::cast` 共享能力；不得在 governance 文档或代码中重新描述
 `DuoqianTransfer::propose_*` 的字段、页面、service 或投票实现。
 
-#### 7.5.1 转出资金账户（mainAddress / accounts）
+#### 7.5.1 转出资金账户（mainAccount / accounts）
 
 `InstitutionInfo` 对治理机构使用 `InstitutionAccounts` 表达制度账户：
-- `mainAddress`：主账户，转账提案的默认转出账户
-- `feeAddress`：费用账户
-- `safetyFundAddress`：安全基金账户，仅国储会显示
-- `stakeAddress`：永久质押账户，仅省储行显示
+- `mainAccount`：主账户，转账提案的默认转出账户
+- `feeAccount`：费用账户
+- `anquanAccount`：安全基金账户，仅国储会显示
+- `stakeAccount`：永久质押账户，仅省储行显示
 
 个人多签和机构账户可通过 `InstitutionInfo` 传入账户地址，但业务侧统一读取
-`InstitutionInfo.mainAddress`。治理机构不得再使用 `duoqianAddress` 表达主账户。
+`InstitutionInfo.mainAccount`。治理机构不得再使用 `duoqianAccount` 表达主账户。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
 治理机构名称、身份 ID、制度账户地址和治理机构固定阈值由
@@ -559,7 +559,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 治理机构详情页的账户信息区直接展示身份 ID 和主账户；主账户 finalized 余额后台读取并仅更新余额
 字段。更多制度账户不再进入二级页面，而是在当前账户信息卡内点击箭头展开。展开项按机构
-实际存在的 `feeAddress / safetyFundAddress / stakeAddress` 懒加载 finalized 链上余额，分别显示
+实际存在的 `feeAccount / anquanAccount / stakeAccount` 懒加载 finalized 链上余额，分别显示
 费用账户、安全基金账户和永久质押账户。
 
 治理机构详情页的提案列表先读取 `ProposalLocalStore` 中的机构索引和摘要；链上刷新成功后
@@ -633,9 +633,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | Extrinsic | call_index | 说明 | 投票 |
 | --- | --- | --- | --- |
 | `OrganizationManage::propose_create_institution(..., admin_org, ...)` | 17.5 | 发起 SFID 机构多签账户创建提案；机构账户管理员 org 必须为 `ORG_PUP / ORG_OTH` | 投票引擎 |
-| `OrganizationManage::propose_close(duoqian_address, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
+| `OrganizationManage::propose_close(duoqian_account, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
 | `PersonalManage::propose_create(account_name, duoqian_admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
-| `PersonalManage::propose_close(duoqian_address, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
+| `PersonalManage::propose_close(duoqian_account, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 
 ### 8.5 创建流程（Pending → Active）
@@ -704,7 +704,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - 个人多签状态刷新由 `PersonalManageService.fetchPersonalAccountsBatch()` 分阶段批量读取
   `PersonalDuoqians / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
 - 机构多签状态刷新由 `DuoqianManageService.fetchDuoqianAccountsBatch()` 分阶段批量读取
-  `AddressRegisteredSfid / InstitutionAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
+  `AccountRegisteredSfid / InstitutionAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
 - 两条批量路径都通过 `ChainRpc.fetchStorageBatchChunked()` 分块读取 storage，列表页不得逐个账户循环调用详情查询。
 - 右上角加号提供“新增个人多签 / 新增机构多签”两个入口。
 - 原交易页中的多签入口删除，交易页只保留普通链上支付和扫码支付。

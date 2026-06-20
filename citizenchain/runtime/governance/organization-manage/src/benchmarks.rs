@@ -14,10 +14,10 @@ use votingengine::STATUS_PASSED;
 
 use crate::{
     pallet::{
-        AccountNameOf, AddressRegisteredSfid, DuoqianAdminsOf, InstitutionAccountNamesOf,
-        RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAddress,
+        AccountNameOf, AccountRegisteredSfid, DuoqianAdminsOf, InstitutionAccountNamesOf,
+        RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAccount,
     },
-    BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker, Pallet,
+    BalanceOf, Call, Config, DuoqianAccountValidator, DuoqianReservedAccountChecker, Pallet,
     ProtectedSourceChecker,
 };
 
@@ -30,24 +30,24 @@ fn find_safe_sfid<T: Config>() -> Result<(SfidNumberOf<T>, T::AccountId), Benchm
             .map_err(|_| BenchmarkError::Stop("benchmark sfid id should fit"))?;
 
         // benchmark 场景用 Role::Main 派生，哈希公式等价于历史空 account_name 路径。
-        let Ok(duoqian_address) = Pallet::<T>::derive_institution_address(
+        let Ok(duoqian_account) = Pallet::<T>::derive_institution_account(
             sfid_number.as_slice(),
             crate::InstitutionAccountRole::Main,
         ) else {
             continue;
         };
 
-        if T::ReservedAddressChecker::is_reserved(&duoqian_address) {
+        if T::ReservedAccountChecker::is_reserved(&duoqian_account) {
             continue;
         }
-        if T::ProtectedSourceChecker::is_protected(&duoqian_address) {
+        if T::ProtectedSourceChecker::is_protected(&duoqian_account) {
             continue;
         }
-        if !T::AddressValidator::is_valid(&duoqian_address) {
+        if !T::AccountValidator::is_valid(&duoqian_account) {
             continue;
         }
 
-        return Ok((sfid_number, duoqian_address));
+        return Ok((sfid_number, duoqian_account));
     }
 
     Err(BenchmarkError::Stop(
@@ -87,25 +87,25 @@ fn register_institution<T: Config>(
         b"LN".to_vec(),
         [1u8; 32],
     )?;
-    SfidRegisteredAddress::<T>::get(sfid_number, &account_name)
+    SfidRegisteredAccount::<T>::get(sfid_number, &account_name)
         .ok_or(BenchmarkError::Stop("benchmark sfid should be registered"))
 }
 
 fn find_safe_beneficiary<T: Config>(
-    duoqian_address: &T::AccountId,
+    duoqian_account: &T::AccountId,
 ) -> Result<T::AccountId, BenchmarkError> {
     for index in 0..64u32 {
         let beneficiary: T::AccountId = frame_benchmarking::account("beneficiary", index, 0);
-        if &beneficiary == duoqian_address {
+        if &beneficiary == duoqian_account {
             continue;
         }
-        if T::ReservedAddressChecker::is_reserved(&beneficiary) {
+        if T::ReservedAccountChecker::is_reserved(&beneficiary) {
             continue;
         }
         if T::ProtectedSourceChecker::is_protected(&beneficiary) {
             continue;
         }
-        if !T::AddressValidator::is_valid(&beneficiary) {
+        if !T::AccountValidator::is_valid(&beneficiary) {
             continue;
         }
         return Ok(beneficiary);
@@ -148,7 +148,7 @@ mod benchmarks {
     fn register_sfid_institution() -> Result<(), BenchmarkError> {
         let relayer: T::AccountId = frame_benchmarking::account("relayer", 0, 0);
 
-        let (sfid_number, duoqian_address) = find_safe_sfid::<T>()?;
+        let (sfid_number, duoqian_account) = find_safe_sfid::<T>()?;
         let account_name = bench_account_name::<T>()?;
         let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
             .to_vec()
@@ -174,10 +174,10 @@ mod benchmarks {
         );
 
         assert_eq!(
-            SfidRegisteredAddress::<T>::get(&sfid_number, &account_name),
-            Some(duoqian_address.clone())
+            SfidRegisteredAccount::<T>::get(&sfid_number, &account_name),
+            Some(duoqian_account.clone())
         );
-        assert!(AddressRegisteredSfid::<T>::contains_key(&duoqian_address));
+        assert!(AccountRegisteredSfid::<T>::contains_key(&duoqian_account));
         Ok(())
     }
 

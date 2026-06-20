@@ -178,7 +178,7 @@ void main() {
 
     test('decodes cast_referendum (pallet=23 call=1) ADR-008 step3 双层凭证', () {
       // JointVote.cast_referendum = pallet 23 / call 1(联合公投联合公投)。
-      // ADR-008 step3：SCALE 末尾在 approve 前加 (province, signer_admin_pubkey)。
+      // ADR-008 step3：SCALE 末尾在 approve 前加 (province_name, signer_admin_pubkey)。
       final province = utf8.encode('安徽省');
       final adminPubkey = List<int>.generate(32, (i) => 0xA0 + (i & 0x0F));
       final payload = Uint8List.fromList([
@@ -198,14 +198,14 @@ void main() {
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
-      expect(decoded.fields['province'], '安徽省');
+      expect(decoded.fields['province_name'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
         ss58FromBytes(adminPubkey),
       );
     });
 
-    test('cast_referendum 缺少 province/admin 时拒绝解码', () {
+    test('cast_referendum 缺少 province_name/admin 时拒绝解码', () {
       // ADR-008 step3 后 SCALE 必须含新字段。缺字段字节流长度不足 → null。
       final payload = Uint8List.fromList([
         0x17, 0x01,
@@ -216,7 +216,8 @@ void main() {
         1, // 只到 approve,长度 = 45。
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-      expect(decoded, isNull, reason: '缺 province/signer_admin_pubkey 的旧凭证必须被拒绝');
+      expect(decoded, isNull,
+          reason: '缺 province_name/signer_admin_pubkey 的旧凭证必须被拒绝');
     });
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
@@ -254,7 +255,7 @@ void main() {
         'action_id': 'admin-action-test',
         'action_type': 'PASSKEY_REGISTER',
         'actor_pubkey': actor,
-        'actor_province': '广东省',
+        'actor_province_name': '广东省',
         'target': target,
         'request_hash': '0x${List.filled(32, '33').join()}',
         'before_hash': 'none',
@@ -267,6 +268,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'sfid_admin_action');
       expect(decoded.fields['action_type'], '更新 Passkey');
+      expect(decoded.reviewFields['actor_province_name'], '广东省');
       expect(decoded.reviewFields['actor_pubkey'], ss58FromHex(actor));
       expect(decoded.reviewFields['target'], ss58FromHex(target));
       expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
@@ -287,7 +289,7 @@ void main() {
           'action_id': 'admin-action-${entry.key}',
           'action_type': entry.key,
           'actor_pubkey': actor,
-          'actor_province': '广东省',
+          'actor_province_name': '广东省',
           'target': target,
           'request_hash': '0x${List.filled(32, '33').join()}',
           'before_hash': 'none',
@@ -591,8 +593,7 @@ void main() {
       ];
       for (final c in cases) {
         final payload = buildProposalIdPayload(c[0], c[1], 999);
-        final decoded =
-            PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+        final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
         expect(decoded, isNull,
             reason: 'pallet=${c[0]} call=${c[1]} 应已废弃,decoder 拒绝');
       }
@@ -641,8 +642,7 @@ void main() {
         ...List<int>.filled(32, 0x22),
       ]);
 
-      expect(
-          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('rejects propose_admin_set_change with trailing bytes', () {
@@ -659,8 +659,7 @@ void main() {
         0xff,
       ]);
 
-      expect(
-          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('rejects propose_admin_set_change below majority threshold', () {
@@ -676,8 +675,7 @@ void main() {
         ...u32Le(1),
       ]);
 
-      expect(
-          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('rejects builtin governance admin change with wrong fixed threshold',
@@ -692,8 +690,7 @@ void main() {
         ...u32Le(12),
       ]);
 
-      expect(
-          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('decodes account-level admin activation payload', () {
@@ -740,8 +737,7 @@ void main() {
           ...u32Le(2),
         ]);
 
-        final decoded =
-            PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+        final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
         expect(decoded, isNotNull);
         expect(decoded!.fields['org'], entry.value);
@@ -765,8 +761,7 @@ void main() {
         ...u32Le(2),
       ]);
 
-      expect(
-          PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
@@ -786,7 +781,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_institution');
-      expect(decoded.fields.keys.toList(), ['duoqian_address', 'beneficiary']);
+      expect(decoded.fields.keys.toList(), ['duoqian_account', 'beneficiary']);
     });
 
     test('decodes personal close action as propose_close_personal', () {
@@ -798,7 +793,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_personal');
-      expect(decoded.fields.keys.toList(), ['duoqian_address', 'beneficiary']);
+      expect(decoded.fields.keys.toList(), ['duoqian_account', 'beneficiary']);
     });
 
     // -----------------------------------------------------------------------
@@ -848,7 +843,7 @@ void main() {
         // sfid_number: Vec<u8>
         (sfid.length << 2) & 0xff,
         ...sfid,
-        // institution_name: Vec<u8>
+        // sfid_full_name: Vec<u8>
         (instName.length << 2) & 0xff,
         ...instName,
         // accounts: Vec<{name, amount}> count=2
@@ -875,7 +870,7 @@ void main() {
         // signature: Vec<u8> 64B (Compact mode 1)
         0x01, 0x01,
         ...signature,
-        // ★ province: Vec<u8>
+        // ★ province_name: Vec<u8>
         (province.length << 2) & 0xff,
         ...province,
         // ★ signer_admin_pubkey: [u8;32]
@@ -897,7 +892,7 @@ void main() {
     }
 
     test(
-        'decodes propose_create_institution (pallet=17 call=5) 含 province + signer_admin_pubkey',
+        'decodes propose_create_institution (pallet=17 call=5) 含 province_name + signer_admin_pubkey',
         () {
       final signerAdminPubkey =
           List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
@@ -908,7 +903,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['sfid_number'], 'AH001-SCB0N-202605010-2026');
-      expect(decoded.fields['institution_name'], '安徽省储行');
+      expect(decoded.fields['sfid_full_name'], '安徽省储行');
       expect(decoded.fields['org'], '机构账户');
       expect(decoded.fields['admin_count'], '2');
       expect(decoded.fields['threshold'], '2/2');
@@ -916,7 +911,7 @@ void main() {
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
       expect(decoded.fields.containsKey('subject_property'), isFalse);
-      expect(decoded.fields['province'], '安徽省');
+      expect(decoded.fields['province_name'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
         ss58FromBytes(signerAdminPubkey),
@@ -939,10 +934,8 @@ void main() {
         final payload = Uint8List.fromList(
           buildProposeCreateInstitutionPayload(secondAccountName: forbidden),
         );
-        final decoded =
-            PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-        expect(decoded, isNull,
-            reason: '制度专属保留名不可作为机构自定义账户注册，必须红色拒签');
+        final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+        expect(decoded, isNull, reason: '制度专属保留名不可作为机构自定义账户注册，必须红色拒签');
       });
     }
 
@@ -1087,7 +1080,7 @@ void main() {
     }
 
     test(
-        'fixture step2d cast_referendum: decoder 解出 province + signer_admin_pubkey',
+        'fixture step2d cast_referendum: decoder 解出 province_name + signer_admin_pubkey',
         () {
       final fixture = readFixture();
       final caseEntry = (fixture['cases'] as List)
@@ -1103,7 +1096,7 @@ void main() {
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
-      expect(decoded.fields['province'],
+      expect(decoded.fields['province_name'],
           (caseEntry['fields'] as Map)['province_utf8']);
       expect(
           decoded.fields['signer_admin_pubkey'],
@@ -1124,7 +1117,7 @@ void main() {
           PayloadDecoder.decode(hexOf(withSigningTail(bytesFromHex(hex))));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_resolution_issuance');
-      expect(decoded.fields['province'],
+      expect(decoded.fields['province_name'],
           (caseEntry['fields'] as Map)['province_utf8']);
       expect(
           decoded.fields['signer_admin_pubkey'],
@@ -1136,7 +1129,7 @@ void main() {
     });
 
     test(
-        'decodes propose_resolution_issuance (pallet=8 call=0) 含 province + signer_admin_pubkey',
+        'decodes propose_resolution_issuance (pallet=8 call=0) 含 province_name + signer_admin_pubkey',
         () {
       final reason = utf8.encode('紧急救灾');
       final totalFen = BigInt.from(50000000); // 500_000.00 GMB
@@ -1194,7 +1187,7 @@ void main() {
       expect(decoded.fields['reason'], '紧急救灾');
       expect(decoded.fields['allocation_count'], '2');
       expect(decoded.fields['eligible_total'], '7654321');
-      expect(decoded.fields['province'], '安徽省');
+      expect(decoded.fields['province_name'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
         ss58FromBytes(signerAdmin),
@@ -1255,8 +1248,7 @@ void main() {
 
       // call_data 与尾部之间夹带多余字节
       expect(
-          PayloadDecoder.decode(
-              hexOf([...callData, 0xee, ...signingTail()])),
+          PayloadDecoder.decode(hexOf([...callData, 0xee, ...signingTail()])),
           isNull);
 
       // 尾部末尾多挂字节

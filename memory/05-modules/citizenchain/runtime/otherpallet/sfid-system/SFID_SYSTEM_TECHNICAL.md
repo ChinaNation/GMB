@@ -79,7 +79,7 @@ duoqian_info/
 边界:
 
 - 不再新增备案入口,不再把该目录作为 SFID 与 DUOQIAN 正式注册链路。
-- 机构注册业务字段以 `sfid_number`、`institution_name`、`account_names[]` 为准。
+- 机构注册业务字段以 `sfid_number`、`sfid_full_name`、`account_names[]` 为准。
 - 正式多签机构注册由 `organization-manage` 校验 SFID 注册凭证并写入机构 storage。
 - 如后续确认该目录无运行时引用,应单独开清理任务删除历史辅助类型。
 
@@ -206,10 +206,10 @@ weight：
 
 | call | 说明 | 验签口径 |
 |---|---|---|
-| `add_sheng_admin_backup` | 写入 Backup1 / Backup2 槽 | Main 对 `ADD_BACKUP_DOMAIN + province + slot + new_pubkey + nonce` 签名 |
-| `remove_sheng_admin_backup` | 清空 Backup1 / Backup2 槽,并级联清签名公钥 | Main 对 `REMOVE_BACKUP_DOMAIN + province + slot + nonce` 签名 |
-| `activate_sheng_signing_pubkey` | 首激活 Main 或激活在册 admin 的签名公钥 | admin_pubkey 对 `ACTIVATE_DOMAIN + province + admin_pubkey + signing_pubkey + nonce` 签名 |
-| `rotate_sheng_signing_pubkey` | 轮换在册 admin 的签名公钥 | admin_pubkey 对 `ROTATE_DOMAIN + province + admin_pubkey + new_signing_pubkey + nonce` 签名 |
+| `add_sheng_admin_backup` | 写入 Backup1 / Backup2 槽 | Main 对 `ADD_BACKUP_DOMAIN + province_name + slot + new_pubkey + nonce` 签名 |
+| `remove_sheng_admin_backup` | 清空 Backup1 / Backup2 槽,并级联清签名公钥 | Main 对 `REMOVE_BACKUP_DOMAIN + province_name + slot + nonce` 签名 |
+| `activate_sheng_signing_pubkey` | 首激活 Main 或激活在册 admin 的签名公钥 | admin_pubkey 对 `ACTIVATE_DOMAIN + province_name + admin_pubkey + signing_pubkey + nonce` 签名 |
+| `rotate_sheng_signing_pubkey` | 轮换在册 admin 的签名公钥 | admin_pubkey 对 `ROTATE_DOMAIN + province_name + admin_pubkey + new_signing_pubkey + nonce` 签名 |
 
 这 4 个调用均为 unsigned + `Pays::No`,防重放统一走 `UsedShengNonce`。
 payload 代码锚点:`src/sheng_admins/payload.rs`。

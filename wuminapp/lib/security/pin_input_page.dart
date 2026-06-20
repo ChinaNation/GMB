@@ -278,7 +278,8 @@ class _PinInputPageState extends State<PinInputPage> {
                 shape: BoxShape.circle,
                 color: AppTheme.danger.withAlpha(20),
               ),
-              child: const Icon(Icons.lock_clock, size: 44, color: AppTheme.danger),
+              child: const Icon(Icons.lock_clock,
+                  size: 44, color: AppTheme.danger),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -293,7 +294,8 @@ class _PinInputPageState extends State<PinInputPage> {
             Text(
               '连续验证错误次数过多\n请在 ${_formatDuration(_remainingSeconds)} 后重试',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              style:
+                  const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -313,7 +315,8 @@ class _PinInputPageState extends State<PinInputPage> {
               shape: BoxShape.circle,
               gradient: AppTheme.primaryGradient,
             ),
-            child: const Icon(Icons.lock_outline, size: 36, color: AppTheme.textOnPrimary),
+            child: const Icon(Icons.lock_outline,
+                size: 36, color: AppTheme.textOnPrimary),
           ),
           const SizedBox(height: 16),
         ],
@@ -357,7 +360,11 @@ class _PinInputPageState extends State<PinInputPage> {
                   width: 2,
                 ),
                 boxShadow: filled
-                    ? [BoxShadow(color: AppTheme.primary.withAlpha(40), blurRadius: 8)]
+                    ? [
+                        BoxShadow(
+                            color: AppTheme.primary.withAlpha(40),
+                            blurRadius: 8)
+                      ]
                     : null,
               ),
             );
@@ -426,7 +433,8 @@ class _PinInputPageState extends State<PinInputPage> {
       height: 72,
       child: Material(
         color: Colors.transparent,
-        shape: const CircleBorder(side: BorderSide(color: AppTheme.borderLight, width: 1)),
+        shape: const CircleBorder(
+            side: BorderSide(color: AppTheme.borderLight, width: 1)),
         clipBehavior: Clip.hardEdge,
         child: InkWell(
           onTap: () => _onDigit(digit),

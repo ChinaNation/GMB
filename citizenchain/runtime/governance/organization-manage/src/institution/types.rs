@@ -3,7 +3,7 @@ use frame_support::pallet_prelude::DecodeWithMemTracking;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-/// SFID 机构登记反向索引项：duoqian_address → (sfid_number, account_name)。
+/// SFID 机构登记反向索引项：duoqian_account → (sfid_number, account_name)。
 ///
 /// 由 `register_sfid_institution` extrinsic 写入,后续创建/查询机构多签时
 /// 用作反向校验。
@@ -59,9 +59,9 @@ pub enum InstitutionLifecycleStatus {
 )]
 #[scale_info(skip_type_params(AdminList))]
 pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName> {
-    pub institution_name: AccountName,
-    pub main_address: AccountId,
-    pub fee_address: AccountId,
+    pub sfid_full_name: AccountName,
+    pub main_account: AccountId,
+    pub fee_account: AccountId,
     /// 管理员更换使用的 org：机构账户只能是 ORG_PUP 或 ORG_OTH。
     pub admin_org: u8,
     pub admin_count: u32,
@@ -96,7 +96,7 @@ pub struct InstitutionAccountInfo<AccountId, Balance, BlockNumber> {
 /// 关闭机构多签账户提案的业务数据(存入投票引擎 ProposalData)。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CloseInstitutionAction<AccountId> {
-    pub duoqian_address: AccountId,
+    pub duoqian_account: AccountId,
     pub beneficiary: AccountId,
     pub proposer: AccountId,
 }
@@ -159,9 +159,9 @@ pub struct CreateInstitutionAction<
     AccountList,
 > {
     pub sfid_number: SfidNumber,
-    pub institution_name: AccountName,
-    pub main_address: AccountId,
-    pub fee_address: AccountId,
+    pub sfid_full_name: AccountName,
+    pub main_account: AccountId,
+    pub fee_account: AccountId,
     pub proposer: AccountId,
     /// 创建阶段写入 pending admin account 的机构账户 org。
     pub admin_org: u8,

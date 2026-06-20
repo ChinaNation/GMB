@@ -157,7 +157,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
   const accounts = detail?.accounts || [];
   const canManageCpms = canWrite && auth.role === 'FEDERAL_ADMIN';
   const administrativeArea = inst
-    ? [inst.province, inst.city, inst.town].filter(Boolean).join('/') || '-'
+    ? [inst.province_name, inst.city_name, inst.town_name].filter(Boolean).join('/') || '-'
     : '-';
 
   const loadCpms = useCallback(
@@ -201,11 +201,11 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
     if (!inst) return;
     setCpmsBusy(true);
     try {
-      // 中文注释：grant 签名内容保持 {province,city,institution} 不变（不动冷钱包解码）；
+      // 中文注释：grant 签名内容使用 province_name/city_name/institution,与后端授权事实字段一致。
       // 生成请求额外带机构自身 sfid_number，后端以它为写入键（= 详情页读取键），根治再次进入二维码丢失。
       const grantPayload = {
-        province: inst.province,
-        city: inst.city,
+        province_name: inst.province_name,
+        city_name: inst.city_name,
         institution: inst.institution_code,
       };
       const grant = await runPasskeyChallengeGrant('CPMS_ISSUE_INSTALL_CODE', grantPayload);
@@ -220,10 +220,10 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         status: 'PENDING',
         version: 1,
         qr1_payload: result.qr1_payload,
-        admin_province: inst.province,
-        city_name: inst.city,
+        admin_province: inst.province_name,
+        city_name: inst.city_name,
         institution_code: inst.institution_code,
-        institution_name: inst.institution_name ?? '',
+        sfid_full_name: inst.sfid_full_name ?? '',
         created_by: auth.admin_pubkey,
         created_at: new Date().toISOString(),
       });
@@ -268,8 +268,8 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
                   {inst.sfid_number}
                 </Typography.Text>
               </Descriptions.Item>
-              <Descriptions.Item label="全称">{inst.sfid_name || '-'}</Descriptions.Item>
-              <Descriptions.Item label="简称">{inst.short_name || inst.institution_name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="全称">{inst.sfid_full_name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="简称">{inst.sfid_short_name || inst.sfid_full_name || '-'}</Descriptions.Item>
               <Descriptions.Item label="行政区">{administrativeArea}</Descriptions.Item>
               <Descriptions.Item label="机构类型">
                 {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
@@ -344,7 +344,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
       <>
         <InstitutionDetailNavLayout
           backAction={onBack ? { label: backLabel ?? '返回列表', onClick: onBack } : undefined}
-          title={inst.institution_name ?? inst.short_name ?? '(未命名机构)'}
+          title={inst.sfid_full_name ?? inst.sfid_short_name ?? '(未命名机构)'}
           subtitle={`身份ID：${inst.sfid_number}`}
           status={
             <Tag color={inst.status === 'ACTIVE' ? 'green' : 'red'}>
@@ -380,7 +380,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         <CreateAccountModal
           auth={auth}
           sfidNumber={inst.sfid_number}
-          institutionName={inst.institution_name ?? ''}
+          sfidFullName={inst.sfid_full_name ?? ''}
           existingAccounts={accounts}
           open={createAccountOpen}
           onCancel={() => setCreateAccountOpen(false)}

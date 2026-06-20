@@ -477,7 +477,7 @@ class _VoteViewState extends State<VoteView> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          if (item.institutionName != null)
+                          if (item.sfidFullName != null)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
@@ -487,7 +487,7 @@ class _VoteViewState extends State<VoteView> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                item.institutionName!,
+                                item.sfidFullName!,
                                 style: const TextStyle(
                                     fontSize: 10, color: AppTheme.primaryDark),
                                 overflow: TextOverflow.ellipsis,
@@ -727,6 +727,6 @@ class _ProposalDisplayItem {
   int get proposalId => summary.proposalId;
   int get status => summary.status;
   String get displayId => summary.displayId;
-  String? get institutionName =>
-      context?.institution?.name ?? summary.institutionName;
+  String? get sfidFullName =>
+      context?.institution?.name ?? summary.sfidFullName;
 }

@@ -38,7 +38,7 @@ pub(crate) fn do_cleanup_rejected_proposal<T: Config>(proposal_id: u64) -> Dispa
         ACTION_CLOSE => {
             let action = CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            PendingCloseProposal::<T>::remove(&action.duoqian_address);
+            PendingCloseProposal::<T>::remove(&action.duoqian_account);
         }
         _ => return Err(Error::<T>::ProposalActionNotFound.into()),
     }

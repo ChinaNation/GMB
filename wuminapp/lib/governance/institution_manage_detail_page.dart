@@ -51,7 +51,8 @@ class InstitutionManageDetailPage extends StatefulWidget {
       _InstitutionManageDetailPageState();
 }
 
-class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPage> {
+class _InstitutionManageDetailPageState
+    extends State<InstitutionManageDetailPage> {
   static const int _statusVoting = 0;
 
   final ProposalQueryService _proposalService = ProposalQueryService();
@@ -175,7 +176,7 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
           if (orgDetail is org_models.CloseDuoqianProposalInfo) {
             closeInfo = personal_models.CloseDuoqianProposalInfo(
               proposalId: orgDetail.proposalId,
-              duoqianAddress: orgDetail.duoqianAddress,
+              duoqianAccount: orgDetail.duoqianAccount,
               beneficiary: orgDetail.beneficiary,
               proposer: orgDetail.proposer,
               status: orgDetail.status,
@@ -350,7 +351,7 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
   ) {
     return {
       'kind': 'create',
-      'duoqian_address': info.duoqianAddress,
+      'duoqian_account': info.duoqianAccount,
       'proposer': info.proposer,
       'amount_fen': info.amountFen.toString(),
       'fee_fen': info.feeFen.toString(),
@@ -363,7 +364,7 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
   ) {
     return {
       'kind': 'close',
-      'duoqian_address': info.duoqianAddress,
+      'duoqian_account': info.duoqianAccount,
       'beneficiary': info.beneficiary,
       'proposer': info.proposer,
       'status': info.status,
@@ -377,13 +378,13 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
     if (detail['kind'] != 'create') return null;
     final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
     final feeFen = BigInt.tryParse(detail['fee_fen']?.toString() ?? '');
-    final duoqianAddress = detail['duoqian_address']?.toString();
-    if (amountFen == null || feeFen == null || duoqianAddress == null) {
+    final duoqianAccount = detail['duoqian_account']?.toString();
+    if (amountFen == null || feeFen == null || duoqianAccount == null) {
       return null;
     }
     return personal_models.CreateDuoqianProposalInfo(
       proposalId: snapshot.proposalId,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       proposer: detail['proposer']?.toString() ?? '',
       amountFen: amountFen,
       feeFen: feeFen,
@@ -396,11 +397,11 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
   ) {
     final detail = snapshot.detail;
     if (detail['kind'] != 'close') return null;
-    final duoqianAddress = detail['duoqian_address']?.toString();
-    if (duoqianAddress == null) return null;
+    final duoqianAccount = detail['duoqian_account']?.toString();
+    if (duoqianAccount == null) return null;
     return personal_models.CloseDuoqianProposalInfo(
       proposalId: snapshot.proposalId,
-      duoqianAddress: duoqianAddress,
+      duoqianAccount: duoqianAccount,
       beneficiary: detail['beneficiary']?.toString() ?? '',
       proposer: detail['proposer']?.toString() ?? '',
       status: snapshot.status,
@@ -840,7 +841,7 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
   List<Widget> _buildCreateInfoRows() {
     final info = _createInfo!;
     final duoqianSs58 =
-        Keyring().encodeAddress(_hexDecode(info.duoqianAddress), 2027);
+        Keyring().encodeAddress(_hexDecode(info.duoqianAccount), 2027);
     return [
       _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: duoqianSs58));
@@ -867,7 +868,7 @@ class _InstitutionManageDetailPageState extends State<InstitutionManageDetailPag
   List<Widget> _buildCloseInfoRows() {
     final info = _closeInfo!;
     final duoqianSs58 =
-        Keyring().encodeAddress(_hexDecode(info.duoqianAddress), 2027);
+        Keyring().encodeAddress(_hexDecode(info.duoqianAccount), 2027);
     return [
       _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: duoqianSs58));

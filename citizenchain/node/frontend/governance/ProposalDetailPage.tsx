@@ -166,8 +166,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回</button>
       <h2>提案 {displayId}</h2>
-      {info.institutionName && (
-        <p className="proposal-institution-name">{info.institutionName}</p>
+      {info.sfidFullName && (
+        <p className="proposal-institution-name">{info.sfidFullName}</p>
       )}
 
       {votingWallet && (

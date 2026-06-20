@@ -20,7 +20,7 @@
 - [ ] 核对 organization-manage 是否有派生点(现状用 registry hex 不派生,确认即可,不改口径)。
 
 ## 单测
-- [ ] golden 向量:用 governance registry 里已知机构的 sfid_number→mainAddress/feeAddress(若同派生)做断言;否则用链上已激活公权机构地址做向量。
+- [ ] golden 向量:用 governance registry 里已知机构的 sfid_number→mainAccount/feeAccount(若同派生)做断言;否则用链上已激活公权机构地址做向量。
 - [ ] 自定义账户 0x06 名字进 preimage、主/费 0x00/0x01 名字不进,各一组向量。
 - [ ] 个人多签迁移后输出与旧实现逐字节一致。
 

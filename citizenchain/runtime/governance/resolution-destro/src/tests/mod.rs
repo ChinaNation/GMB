@@ -124,12 +124,12 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             _ => false,
@@ -140,7 +140,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -150,7 +150,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 }),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_address) == institution)
+                .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -231,15 +231,15 @@ fn prb_admin(index: usize) -> AccountId32 {
 }
 
 fn nrc_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].main_address)
+    AccountId32::new(CHINA_CB[0].main_account)
 }
 
 fn prc_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].main_address)
+    AccountId32::new(CHINA_CB[1].main_account)
 }
 
 fn prb_pallet_id() -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].main_address)
+    AccountId32::new(CHINA_CH[0].main_account)
 }
 
 fn institution_account(institution: &AccountId32) -> AccountId32 {

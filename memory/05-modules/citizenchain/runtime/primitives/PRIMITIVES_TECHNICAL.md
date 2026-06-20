@@ -81,7 +81,7 @@
 | OPERATIONAL_FEE_MULTIPLIER | 1 | 运营类不额外加价 |
 | ONCHAIN_FEE_FULLNODE_PERCENT | 80% | 铸块全节点分成 |
 | ONCHAIN_FEE_NRC_PERCENT | 10% | 国储会分成 |
-| ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 NRC_ANQUAN_ADDRESS |
+| ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 NRC_ANQUAN_ACCOUNT |
 
 **5 类交易费用模型**(由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 强制):
 - 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + OrganizationManage::register_sfid_institution + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + SfidSystem + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
@@ -133,7 +133,7 @@
 - `joint_vote_total_matches_threshold` — 联合投票总票数 = 通过阈值
 - `fullnode_total_issuance_is_consistent` — 全节点发行总量 = 区块奖励 × 区块数
 - `genesis_issuance_matches_population` — 创世发行 = 人口 × 10,000
-- `all_china_ch_main_addresses_are_unique` — 43 省 main_address 全部唯一
+- `all_china_ch_main_accounts_are_unique` — 43 省 main_account 全部唯一
 - **`fee_policy::onchain_fee_percents_sum_to_100`** — 链上手续费分成比例总和 = 100
 - **`fee_policy::vote_flat_fee_equals_one_yuan`** — 投票统一价 = 1 元 = 100 FEN
 - **`fee_policy::offchain_rate_bounds_consistent`** — 链下费率上下限合法

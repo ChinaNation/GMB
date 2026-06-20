@@ -42,7 +42,7 @@ fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountI
 fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_CB
         .first()
-        .and_then(|n| decode_account::<T>(&n.main_address))
+        .and_then(|n| decode_account::<T>(&n.main_account))
 }
 
 fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8> {
@@ -53,7 +53,7 @@ fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8>
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| decode_account::<T>(&n.main_address))
+        .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
@@ -61,7 +61,7 @@ fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8>
 
     if CHINA_CH
         .iter()
-        .filter_map(|n| decode_account::<T>(&n.main_address))
+        .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);

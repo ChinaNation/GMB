@@ -9,7 +9,7 @@ import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   sfidNumber: string;
-  institutionName: string;
+  sfidFullName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -18,7 +18,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function SweepProposalPage({
-  sfidNumber, institutionName, adminWallets, onBack, onSuccess,
+  sfidNumber, sfidFullName, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -93,7 +93,7 @@ export function SweepProposalPage({
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回</button>
       <h2>手续费划转提案</h2>
-      <p className="proposal-institution-name">{institutionName}</p>
+      <p className="proposal-institution-name">{sfidFullName}</p>
 
       {step === 'form' && (
         <div className="create-proposal-form">

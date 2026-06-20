@@ -38,7 +38,10 @@ mod benchmarks {
         let public: sr25519::Public = sr25519_generate(key_type, None);
         // 中文注释:占用 ShengAdmins[Main] 充当 bind 凭证签发方。
         let bounded: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> =
-            BENCH_PROVINCE.to_vec().try_into().expect("province fits");
+            BENCH_PROVINCE
+                .to_vec()
+                .try_into()
+                .expect("province_name fits");
         ShengAdmins::<T>::insert(&bounded, Slot::Main, public.0);
 
         let binding_id = T::Hashing::hash(b"benchmark-binding-id");
@@ -46,7 +49,7 @@ mod benchmarks {
         let nonce_bytes = b"benchmark-nonce".to_vec();
         let nonce: NonceOf<T> = nonce_bytes.try_into().expect("nonce should fit");
 
-        // ADR-008 step3:bind_credential payload 必须把 province + signer_admin_pubkey 进 hash。
+        // ADR-008 step3:bind_credential payload 必须把 province_name + signer_admin_pubkey 进 hash。
         let bench_signer_pubkey: [u8; 32] = public.0;
         let genesis_block = BlockNumberFor::<T>::zero();
         let payload = (
@@ -70,7 +73,10 @@ mod benchmarks {
         let credential = BindCredential {
             binding_id,
             bind_nonce: nonce,
-            province: BENCH_PROVINCE.to_vec().try_into().expect("province fits"),
+            province_name: BENCH_PROVINCE
+                .to_vec()
+                .try_into()
+                .expect("province_name fits"),
             signer_admin_pubkey: bench_signer_pubkey,
             signature,
         };
@@ -99,7 +105,10 @@ mod benchmarks {
         let key_type = KeyTypeId(*b"sfid");
         let main_pub: sr25519::Public = sr25519_generate(key_type, None);
         let bounded: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> =
-            BENCH_PROVINCE.to_vec().try_into().expect("province fits");
+            BENCH_PROVINCE
+                .to_vec()
+                .try_into()
+                .expect("province_name fits");
         ShengAdmins::<T>::insert(&bounded, Slot::Main, main_pub.0);
 
         // 2. 构造 add_backup payload 并由 main 私钥签名
@@ -134,7 +143,10 @@ mod benchmarks {
         let key_type = KeyTypeId(*b"sfid");
         let main_pub: sr25519::Public = sr25519_generate(key_type, None);
         let bounded: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> =
-            BENCH_PROVINCE.to_vec().try_into().expect("province fits");
+            BENCH_PROVINCE
+                .to_vec()
+                .try_into()
+                .expect("province_name fits");
         ShengAdmins::<T>::insert(&bounded, Slot::Main, main_pub.0);
         let backup_pubkey: [u8; 32] = [43u8; 32];
         ShengAdmins::<T>::insert(&bounded, Slot::Backup1, backup_pubkey);
@@ -193,7 +205,10 @@ mod benchmarks {
         let key_type = KeyTypeId(*b"sfid");
         let admin_pub: sr25519::Public = sr25519_generate(key_type, None);
         let bounded: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> =
-            BENCH_PROVINCE.to_vec().try_into().expect("province fits");
+            BENCH_PROVINCE
+                .to_vec()
+                .try_into()
+                .expect("province_name fits");
         ShengAdmins::<T>::insert(&bounded, Slot::Main, admin_pub.0);
         ShengSigningPubkey::<T>::insert(&bounded, &admin_pub.0, [9u8; 32]);
 

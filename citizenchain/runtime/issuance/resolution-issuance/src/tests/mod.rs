@@ -351,7 +351,7 @@ fn reserve_council_accounts() -> Vec<AccountId32> {
     primitives::china::china_cb::CHINA_CB
         .iter()
         .skip(1)
-        .map(|n| AccountId32::new(n.main_address))
+        .map(|n| AccountId32::new(n.main_account))
         .collect()
 }
 

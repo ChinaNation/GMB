@@ -26,7 +26,7 @@
 - 三项分账比例必须固定总和为 `100`，避免"名为百分比、实为任意权重"的语义漂移。
 - 全节点分成（80%）必须仅发给"当前区块作者绑定的钱包地址"；若作者不存在或未绑定钱包，该份额自动销毁。
 - 国储会手续费账户分成（10%）必须仅发给 `NrcAccountProvider` 提供的账户（`NRC_FEIYONG_ADDRESS`）；若账户缺失或无法入账，该份额自动销毁。
-- 安全基金分成（10%）必须转入 `SafetyFundAccountProvider` 提供的安全基金账户（当前 runtime 映射到 `NRC_ANQUAN_ADDRESS`）。
+- 安全基金分成（10%）必须转入 `SafetyFundAccountProvider` 提供的安全基金账户（当前 runtime 映射到 `NRC_ANQUAN_ACCOUNT`）。
 - tip 与基础手续费必须走同一条 Router 分账路径，避免出现两套分账口径。
 
 ### 0.5 资金安全需求
@@ -147,7 +147,7 @@
    - 账户缺失告警、发 `FeeShareBurnt(NrcMissing)` 并销毁
 5. 安全基金分成：
    - 通过 `SafetyFundAccountProvider::safety_fund_account()` 获取收款账户
-   - 当前 runtime provider 返回 `NRC_ANQUAN_ADDRESS` 对应账户，避免 Router 在每笔分账热路径重复 decode 32 字节常量
+   - 当前 runtime provider 返回 `NRC_ANQUAN_ACCOUNT` 对应账户，避免 Router 在每笔分账热路径重复 decode 32 字节常量
    - `resolve` 失败告警、发 `FeeShareBurnt(SafetyFundResolveFailed)` 并销毁
 
 ---
@@ -211,7 +211,7 @@
 - `correct_and_deposit_fee` 不退款语义和 `liquidity_info=None` no-op 语义；不退款测试同时断言 `AuthorMissing` / `NrcMissing` 两类销毁事件
 - tip 与 fee 合并后按同一比例分配；成功分账路径断言不产生 `FeeShareBurnt`
 
-说明：安全基金账户现在由 `SafetyFundAccountProvider` 注入，Router 热路径不再执行 `NRC_ANQUAN_ADDRESS` decode，也不再保留 decode 失败事件分支。
+说明：安全基金账户现在由 `SafetyFundAccountProvider` 注入，Router 热路径不再执行 `NRC_ANQUAN_ACCOUNT` decode，也不再保留 decode 失败事件分支。
 
 执行命令：
 - `cargo test -p onchain-transaction`

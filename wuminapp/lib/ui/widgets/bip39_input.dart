@@ -100,7 +100,8 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
           maxLines: 4,
           decoration: InputDecoration(
             hintText: '输入助记词，选择匹配的单词',
-            counterText: '$_enteredWordCount / ${widget.wordCount > 0 ? widget.wordCount : "12 或 24"} 个单词',
+            counterText:
+                '$_enteredWordCount / ${widget.wordCount > 0 ? widget.wordCount : "12 或 24"} 个单词',
           ),
           textInputAction: TextInputAction.done,
           autocorrect: false,
@@ -114,7 +115,8 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
             runSpacing: 4,
             children: _suggestions.map((word) {
               return ActionChip(
-                label: Text(word, style: const TextStyle(color: AppTheme.primary)),
+                label:
+                    Text(word, style: const TextStyle(color: AppTheme.primary)),
                 backgroundColor: AppTheme.primary.withAlpha(15),
                 side: BorderSide(color: AppTheme.primary.withAlpha(40)),
                 onPressed: () => _selectWord(word),

@@ -143,7 +143,7 @@ void main() {
   });
 
   group('AdminDivisionBundleLoader.ensureSynced (版本驱动增量 reconcile)', () {
-    // 新格式 manifest:provinces:[{code,ver}]。
+    // 当前 manifest:provinces:[{code,ver}]。
     Map<String, String> bundleFiles({
       required String version,
       required Map<String, String> provinceVers, // code -> ver
@@ -436,10 +436,10 @@ void main() {
       expect(keys.toSet(), {'province|LN||', 'city|LN|001|', 'city|LN|003|'});
     });
 
-    test('旧格式 manifest(无 provinces 版本表)→ 已有库也强制 reconcile', () async {
+    test('manifest 缺省级版本表 → 不写库、不删除本地数据', () async {
       final bundle = _MapBundle({
         'assets/admin_divisions/manifest.json':
-            jsonEncode({'version': 'legacy'}),
+            jsonEncode({'version': 'invalid'}),
         'assets/admin_divisions/provinces.json': jsonEncode(const [
           {'code': 'LN', 'name': '岭南省'},
         ]),
@@ -467,13 +467,17 @@ void main() {
         bundle: bundle,
         versionKv: FakeDataVersionKv(),
       );
+      final upsertBefore = store.upsertCalls;
+      final deleteBefore = store.deleteCalls;
 
       final changed = await loader.ensureSynced();
-      expect(changed, isTrue);
+      expect(changed, isFalse);
+      expect(store.upsertCalls, upsertBefore);
+      expect(store.deleteCalls, deleteBefore);
       expect(await store.divisionName(AdminDivisionLevel.city, 'LN', '001'),
-          '广州市');
+          '旧广州市');
       expect(await store.divisionName(AdminDivisionLevel.city, 'LN', '002'),
-          '002');
+          '旧残留市');
     });
 
     test('无数据包 → loadFromBundle 返回 false 不崩', () async {

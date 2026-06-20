@@ -231,7 +231,7 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 - 个人多签账户状态由 `PersonalQuery::is_active` 校验，机构账户状态由 `InstitutionQuery::is_active` 校验；管理员和阈值仍由投票引擎快照读取 `admins-change::Subjects`。
 - wuminapp `institution_data.dart`、`duoqian_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `InstitutionAccount AccountId` 编码/解码。
 - wuminapp 多签自动发现只把 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId` 落为本地账户；`0x02 注册机构归属关系` 只作归属/检索。
-- wuminapp 注册机构账户详情查询改为 `AddressRegisteredSfid -> InstitutionAccounts -> AdminsChange::AdminAccounts[0x05]`，不再从 `0x02` 读取账户管理员。
+- wuminapp 注册机构账户详情查询改为 `AccountRegisteredSfid -> InstitutionAccounts -> AdminsChange::AdminAccounts[0x05]`，不再从 `0x02` 读取账户管理员。
 - wumin 公民钱包 `propose_transfer` 只接受 `0x01 / 0x03 / 0x05` 可支出主体，拒绝旧裸 sfid 与 `0x02`；QR 展示字段新增 `institution`，显示内置机构名、个人多签短地址或机构账户短地址。
 - 本步骤未修改 `spec_version`。
 

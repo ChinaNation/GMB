@@ -29,6 +29,8 @@ struct AppVotersCountOutput {
     eligible_total: u64,
     who: String,
     snapshot_nonce: String,
+    province_name: String,
+    signer_admin_pubkey: String,
     signature: String,
 }
 
@@ -100,6 +102,8 @@ pub(crate) async fn app_voters_count(
             eligible_total,
             who: snapshot.who,
             snapshot_nonce: snapshot.snapshot_nonce,
+            province_name: snapshot.province_name,
+            signer_admin_pubkey: snapshot.signer_admin_pubkey,
             signature: snapshot.signature,
         },
     })
