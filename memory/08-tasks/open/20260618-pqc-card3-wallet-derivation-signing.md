@@ -1,40 +1,28 @@
-# PQC card3:钱包同源派生(sr25519 直接) + ML-DSA 签名 + bootstrap + QR 分片
+# PQC card3:钱包派生(sr25519 直接)+ ML-DSA 签名 + 冷钱包 FFI + 离线 metadata + QR 分片
 
 关联决策:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`(§2/§7/§8)
-状态:open(依赖 card1 gmb-pqc、card2 链端 pqc_dispatch/bootstrap)
+状态:open(依赖 card1 spike S2/S3 全绿)
 
-任务需求:
-冷热钱包(wuminapp/wumin)在位升级 PQC 签名,**地址逐字节不变**:
-1. **同源派生(关键:sr25519 不套 HKDF)**:`AccountSeedV1` = 现有 `miniSecretFromEntropy` 输出(`wallet_manager.dart:541`(热)/`:398`(冷))。
-   - **sr25519 地址锚点**:沿用现有 `sr25519.fromSeed(AccountSeedV1)` **直接派生,不经 HKDF**(否则 `HKDF(seed)≠seed`→地址变,破"不换地址")。
-   - **ML-DSA-65 签名**:`HKDF-SHA512(AccountSeedV1, "GMB/account/ml-dsa-65/v1")` → 确定性 keygen。
-   - **ML-KEM-768 加密**:`HKDF-SHA512(AccountSeedV1, "GMB/account/ml-kem-768/v1")`。
-   - 冷热**逐字一致**;`wallet_manager.dart:541-555`(热)/`:398-417`(冷)。
-   - **KDF 精确口径(ADR-022 §2)**:HKDF-Extract salt=空、info=ASCII 无 null、ML-DSA L=32 / ML-KEM L=64;**钉 golden vector**(助记词→sr25519 地址+ML-DSA 公钥+ML-KEM 公钥)冷热前后端逐字节一致。
-   - **era 口径**:默认 immortal(链域靠 genesis_hash,不带 checkpoint);若 mortal 则 payload 必含 checkpoint block hash,二选一不混用。
-2. **Rust FFI(gmb-pqc)**:`ml_dsa65_public_from_seed`、`ml_dsa65_sign`。
-3. **查 `PqcPolicy` 分流**:`Sr25519Only`→普通 sr25519 extrinsic;`PqcPrepared/PqcPrimary`→ PQC General Transaction(`GmbPqcAuth` 扩展授权);**账户未绑定**→首笔 bootstrap(同一确认动作同时出 sr25519 bootstrap 签名 + ML-DSA 交易签名 + 携带 ML-DSA 公钥)。
-4. PQC 交易走 **General Transaction(`GmbPqcAuth` 扩展授权)**:`signed_extrinsic_builder.dart:103/186`(原 `SignatureType.sr25519`)新增 general-tx 构造,PQC proof(ML-DSA 签名/公钥/auth_mode/key_version)入扩展 `extra`,**不走 MultiSignature、不走 pqc_dispatch pallet call**。
-5. **QR 升级**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `payload_hash` + **`chunk_index/chunk_total` 分片**。🔴 最坏体积按 bootstrap(sr25519 签名 64B + ML-DSA 签名 ~3309B + **ML-DSA 公钥 ~1952B** + call,hex 翻倍 ≈10KB+)真机实测,不能假设单张 QR 稳定可扫;改 `sign_request_body.dart:40` + `sign_response_body.dart:36` + `qr_signer.dart:118/:134-151` + wuminapp 镜像(四处+,漏一处冷热口径裂)。**注意:`wuminapp/.../sign_request_body.dart:37`、`wumin/.../sign_request_body.dart:40` 当前硬拒非 sr25519 是 Phase A 真相,改成"Phase A 只收 sr25519 → 分流",不要简单删除。**
-6. UI **不展示** PQC 公钥/绑定过程/换账户;交易记录按原地址归集;同助记词恢复同地址 + 同 PQC 密钥(确定性)。
+任务需求(冷热钱包在位升级 PQC 签名,地址逐字节不变):
+1. **同源派生(只两支,sr25519 不套 HKDF)**:`AccountSeedV1`=现有 miniSecretFromEntropy(`wuminapp wallet_manager.dart:544`/`wumin:401`);sr25519 锚点沿用 `fromSeed` 直接派生;ML-DSA-65 = `HKDF-SHA512(AccountSeedV1,"GMB/account/ml-dsa-65/seed32/v1")`→ξ→keygen。**账户不派生 ML-KEM(决策3)**。冷热逐字一致,钉 golden vector(含 ξ)。
+2. 🔴 **(B9)冷钱包 wumin 新建 Rust FFI 子工程**(现纯 Dart 无 rust/):对标 wuminapp/rust 的 cdylib/staticlib + Android/iOS target + cbindgen,把 gmb-pqc 编进冷热两端;FFI 暴露 `ml_dsa65_public_from_seed`/`ml_dsa65_sign`。
+3. 🔴 **(B2)General Transaction 编码**:polkadart 0.7.1 只编 legacy 0x84,**不能编 v5 General Transaction** → 按 card1 S2 结论(fork/patch polkadart 或自写 v5 SCALE 编码器:v5 preamble + extension_version + 嵌套 `(GmbPqcAuth,AuthorizeCall)` extra);PQC proof 入 extra,**不走 MultiSignature、不走 pqc_dispatch pallet call**(`signed_extrinsic_builder.dart:103/186`)。
+4. 🔴 **(B10)冷钱包离线 metadata 策略**:"按 metadata 重建 `following_extensions_hash`" 整体留在线热钱包;QR 携带重建所需最小要素(extension_version + 各后续扩展显式值 nonce/tip/era/spec/tx_version/genesis + 预算 hash),**冷钱包用 gmb-pqc 本地 SCALE 重算并比对**,且**自己从助记词派生 ML-DSA 公钥核对 `pqc_pubkey_hash`**(不盲信 QR 公钥);**严禁退化成 wasm 式纯哈希盲签**,保持两色识别·decodeFailed 即拒。
+5. 🔴 **(B11)QR 分片**:envelope 加 `chunk_index/chunk_total/total_hash`;渲染端多帧轮播(单帧字节按 ECC=M version≤40 反推留裕量);扫描端分片聚合状态机(按 id 归并/去重补帧/缺帧提示/校验 total_hash 再解析);放开 32768 上限;最坏 bootstrap(sr25519 64B+ML-DSA 3309B+公钥 1952B+call,hex≈10KB+)真机实测。
+6. **查 `PqcPolicy` 分流**:Sr25519Only→sr25519 extrinsic;PqcPrepared/PqcPrimary→PQC General Transaction;未绑定→首笔 bootstrap(同一确认出 sr25519 bootstrap 签名 + ML-DSA 交易签名 + 携带 ML-DSA 公钥)。
+7. **QR body 四处(冷热 request/response)放开** `sig_alg(sr25519|ml-dsa-65)`+`auth_mode`+`key_version`+`chunk_*`,Phase A 仍只收 sr25519;🔴 **进签名的 hash 一律 gmb-pqc blake2_256,禁复用 `qr_signer` 的 sha256**(`qr_signer.dart:180`)。
+8. **(H15)登录回执 login_receipt** 也是用户钱包签名面,纳入本卡按 sig_alg 升级。
+9. UI 不展示 PQC 公钥/绑定过程/换账户;bootstrap 首笔冷钱包确认页仍展示业务 call 中文摘要(校验不缺位,见 4);同助记词恢复同地址+同 ML-DSA 密钥。
 
 所属模块:Mobile(wuminapp 热钱包 + wumin 冷钱包)
 
-输入文档:
-- memory/04-decisions/ADR-022-unified-pqc-crypto.md
-- memory/07-ai/unified-protocols.md(QR sig_alg/auth_mode/分片 + pqc_dispatch/bootstrap)
-- wuminapp/wumin 模块完成标准
+输入文档:ADR-022 / unified-protocols(QR + pqc 协议)/ wuminapp/wumin 完成标准
 
-必须遵守:
-- `AccountSeedV1` 不变;**sr25519 分支绝不套 HKDF**(除非 golden vector 证地址逐字节一致)。
-- 冷热派生逐字一致;QR sig_alg/auth_mode 全处同步零遗漏。
-- 冷钱包保持离线签名(含 bootstrap 离线扫码)。
-- UI 不暴露多公钥/多算法概念。
+必须遵守:`AccountSeedV1` 不变;**sr25519 分支绝不套 HKDF**;冷热派生/QR 字段逐字一致;冷钱包保持离线(含 bootstrap 离线扫码)且不盲签;UI 不暴露多算法概念。
 
-输出物:
-- 双端派生(sr25519 直接 + ML-DSA/ML-KEM HKDF)/ FFI / pqc_dispatch+bootstrap 构造 / QR 分片 + 中文注释 + 测试(同源派生 golden vector / bootstrap 往返 / QR 分片)+ 文档
+输出物:双端派生(sr25519 直接+ML-DSA HKDF)+ 冷钱包 FFI 子工程 + v5 General Transaction 编码 + 离线 metadata 重算 + QR 分片(冷热)+ login_receipt 升级 + 中文注释 + 测试(golden vector 含ξ / bootstrap 往返 / QR 分片真机)+ 文档。
 
 验收标准:
-- 同助记词冷热恢复同一 AccountId,sr25519 地址**逐字节不变**;ML-DSA 签名被链端 pqc_dispatch 验通过。
-- 未绑定账户首次 bootstrap 扫码(含分片)成功;后续 ML-DSA 交易成功。
-- QR `sig_alg`/`auth_mode`/分片冷热往返 OK,真机扫码验收;残留 sr25519 硬编码按域收敛。
+- 同助记词冷热恢复同一 AccountId,sr25519 地址逐字节不变;Dart 重建 following_extensions_hash 与链端逐字节一致(card1 golden vector)。
+- Dart 产出的 v5 General Transaction 被链端 GmbPqcAuth 接受;未绑定首次 bootstrap 扫码(含分片)成功;后续 ML-DSA 成功。
+- 冷钱包离线本地重算 + 派生核对 pqc_pubkey_hash 通过,不盲签;QR 分片真机最坏 bootstrap 可扫;残留 sr25519/sha256/pqc_dispatch 命名清零。

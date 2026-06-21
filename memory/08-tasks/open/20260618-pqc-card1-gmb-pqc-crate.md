@@ -1,34 +1,35 @@
-# PQC card1:gmb-pqc 共享 crate + fips204 WASM spike
+# PQC card1:gmb-pqc 共享 crate + 全部 spike 闸门
 
-关联决策:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`(§1 §4)
-状态:open(**先行 spike,后续 card 依赖本卡**)
+关联决策:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`(§2/§5/§11)
+状态:open(**先行 spike,card2/card3 依赖本卡;spike 绿了才动**)
 
 任务需求:
-建立全系统单一抗量子原语基座 `gmb-pqc`,被 runtime(no_std WASM)+ sfid/cpms/node 后端 + 钱包 FFI 共用,杜绝第二套实现:
-1. **HKDF-SHA512 派生规则单一源(精确口径,钉 golden vector)**:`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`(ASCII 无 null,`GMB/account/ml-dsa-65/v1` / `GMB/account/ml-kem-768/v1`);`HKDF-Expand` 输出 ML-DSA L=32(ξ→FIPS204 KeyGen_internal)、ML-KEM L=64(d‖z→FIPS203 KeyGen_internal);fips204 无 ξ-API 时用此 32B 种确定性 RNG。**sr25519 地址锚点不在此表**:保持现有 `fromSeed(AccountSeedV1)` 直接派生,**绝不套 HKDF**(否则 `HKDF(seed)≠seed`→地址变)。**golden vector**:固定助记词→{sr25519 地址, ML-DSA-65 公钥, ML-KEM-768 公钥} 作冷热/链/后端跨端基准。
-2. **algo 常量**:`0x01` sr25519 / `0x02` ML-DSA-65 / `0x03` ML-DSA-87(预留)。
-3. **domain 常量强制 `[u8;N]` 数组**(铁律 `feedback_scale_domain_must_be_array`):把现有违规的 `L3_PAY_SIGNING_DOMAIN`/`BATCH_SIGNING_DOMAIN`(`offchain-transaction/src/batch_item.rs:39/42` 等 `&[u8]`)迁入并改数组类型。
-4. **`verify_by_algo` trait**:链端 ML-DSA 验签封装(fips204)。
-5. **`fips204` WASM spike(必做)**:验证 no_std + 编进 runtime WASM + 体积 + 验签权重;若占区块预算显著比例,评估是否需 host function(fork `ChinaNation/ss58-2027-fix` 分支,**非纯 setCode**)。出 benchmark 真实 `WeightInfo`,禁用猜测值。
-6. 🔴 **(硬闸门 spike,card2 前置)验证路线 A `GmbPqcAuth` 机制(路线已定 A,不二选一)**:① `GmbPqcAuth.validate` 把 General Transaction origin 转 `Signed(account)`,使其后 `CheckNonce`/`ChargeTransactionPayment` 正常(`AuthorizeCall` 默认给 `Authorized` 非 `Signed`,`lib.rs:164`),`prepare` 不负责改 origin;② **嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 作第一项能编译且按序执行**(outer 仍 12 项);③ **嵌套 tuple 下钱包按 metadata 重建的 `following_extensions_hash` 与链端 `GmbPqcAuth` 重算值逐字节一致**;④ `GmbPqcAuth.weight()` 按 `None/Pqc/Bootstrap` 分支;⑤ validate 廉价检查先于 ML-DSA 验签,降低 txpool/gossip DoS 面;⑥ 绑定写 `post_dispatch` 可行且带未绑定/同值幂等守卫;⑦ txpool `provides=(account,nonce)`;⑧ proof 内 `nonce`/`tip`/`era` 与实际后续扩展不一致时拒绝;⑨ `extra=Pqc|Bootstrap` 只允许 General Transaction 起点,sr25519 signed extrinsic 携带 PQC proof 直接拒绝。确认当前 SDK 可行;若 origin 转换受限,退而 `GmbPqcAuth` 内自管 nonce/扣费,**仍单一扩展授权,不回退 pallet call 主路径**。
+建立全系统单一抗量子原语基座 `gmb-pqc`(runtime no_std WASM + sfid/cpms/node 后端 + 钱包 FFI 共用):
+1. **HKDF-SHA512 账户派生单一源(精确口径,钉 golden vector)**:`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`(ASCII 无 null、**含长度域**):**仅** `GMB/account/ml-dsa-65/seed32/v1` → `HKDF-Expand L=32` → 32B ξ → FIPS204 `KeyGen_internal(ξ)`。🔴 **账户不派生 ML-KEM**(决策3:机密性 KEM 在 IM/TLS 层,不进账户体系)。🔴 **sr25519 锚点不在此表**(现有 `fromSeed(AccountSeedV1)` 直接派生,绝不套 HKDF)。
+2. 🔴 **(B8)锁库**:强制选用暴露 `KeyGen_internal(ξ)` seed-API 的 fips204 锁定版本,**删一切 DRBG fallback**(不暴露 ξ-API 则换库);库名+版本+API 名钉进本卡产出。
+3. **algo 常量**:`0x01` sr25519 / `0x02` ML-DSA-65 / `0x03` ML-DSA-87(预留)。
+4. **domain 常量强制 `[u8;N]`**(铁律 `feedback_scale_domain_must_be_array`):`DOMAIN_TX=b"GMB_PQC_TX_MLDSA65_V1"`、`DOMAIN_BOOTSTRAP=b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"`(算法标识编进域字面量);并迁 `batch_item.rs:39/42` 的 `L3_PAY/BATCH_SIGNING_DOMAIN` `&[u8]`→`[u8;N]`。
+5. **`verify_by_algo` trait**:链端 ML-DSA 验签封装(fips204),校验 payload `alg` 与 `AccountPqcKey.alg` 一致后路由。
+6. **golden vector**:固定助记词 → AccountSeedV1 →(中间量 **ξ**)→ {sr25519 SS58, ML-DSA-65 公钥};版本化文件,Rust/wuminapp-FFI/wumin-FFI 三端对拍,库升级须重跑。
+
+**🔴 spike 闸门(全绿才进 card2/card3):**
+- S1 fips204 no_std + 编进 runtime WASM + **iOS/Android 移动端编译** + 体积 + 单次验签 weight;一个区块最多容多少次 PQC 验签。
+- S2 **(B2)客户端 General Transaction 编码**:polkadart 0.7.1 只编 legacy 0x84、无 v5/extension_version/自定义 extra → fork/patch polkadart 或自写 v5 SCALE 编码器;验"Dart 产出的 v5 交易被链端 GmbPqcAuth 接受"。
+- S3 **(B3)链端 GmbPqcAuth 机制**:`validate` 转 `Signed(account)`;嵌套 `(GmbPqcAuth, AuthorizeCall)` 编译+按序;**嵌套下 `inherited_implication` 真含 outer 全部后续扩展 implicit、Dart 重建 `following_extensions_hash` 与链端 `inherited_implication.encode()` 逐字节一致**(最高风险点,参照 mod.rs:712-869);post_dispatch 写绑定可行且幂等、绝不 Err。
+- S4 **(H14)枚举当前 runtime 所有 `#[pallet::authorize]` call**,确认不成为已绑定账户绕过 PQC 强制的旁路。
+- S5 QR 分片真机稳定(最坏 bootstrap ~10KB+)。
+- S6 seal=ML-DSA 评估 → 归 **card7**(本卡只确认它是节点二进制非 setCode)。
 
 所属模块:Blockchain(runtime/primitives + 共享 crate)
 
-输入文档:
-- memory/04-decisions/ADR-022-unified-pqc-crypto.md
-- memory/07-ai/unified-protocols.md(协议登记)
-- 链端模块完成标准 citizenchain.md
+输入文档:ADR-022 / unified-protocols(协议登记)/ citizenchain 完成标准
 
 必须遵守:
-- 派生规则冷热 / 前后端逐字一致(domain 标签 / 派生顺序),否则地址锚点漂移。
-- domain 常量必须 `[u8;N]`,不得 `&[u8]`。
-- 验签技术选型 fips204(no_std / 常量时间);不用 RustCrypto ml-dsa。
-- 不破坏 chainspec 冻结模型(默认不加 host function,由 spike 数据驱动)。
+- 派生规则冷热/前后端逐字一致;domain 常量 `[u8;N]`;fips204 no_std 常量时间,不用 RustCrypto ml-dsa;不破坏 chainspec 冻结(默认不加 host function,由 spike 数据驱动)。
 
 输出物:
-- `gmb-pqc` crate + 中文注释 + 单测(派生确定性 / algo 路由 / 跨端 fixture)+ benchmark + 文档(更新 unified-protocols 登记)
+- `gmb-pqc` crate + 锁库版本记录 + golden vector(含ξ)+ 中文注释 + 单测(派生确定性/algo 路由/跨端 fixture)+ benchmark + spike 结论文档
 
 验收标准:
-- 同 `AccountSeedV1` 在 Rust / Dart-FFI 派生出逐字节一致的三套密钥。
-- `verify_by_algo` 单测通过;domain 常量全 `[u8;N]`,旧 `&[u8]` 残留清零。
-- fips204 WASM spike 出结论文档(WASM 内 vs host function)+ 真实验签 weight。
+- 同 AccountSeedV1 在 Rust/Dart-FFI 派生逐字节一致的 sr25519+ML-DSA(golden vector 含 ξ 对拍)。
+- S1-S5 全部出结论且通过(尤其 S2/S3:Dart 能产被链端接受的 v5 交易、嵌套 following_extensions_hash 逐字节一致);domain 常量全 `[u8;N]` 旧 `&[u8]` 清零。

@@ -28,6 +28,7 @@ type TocNode = Heading & {
 }
 
 const headingEnPattern = /<span class="whitepaper-heading-en">([^<]+)<\/span>/
+const headingSubtitlePattern = /<span class="(whitepaper-title-en|whitepaper-heading-en)">([^<]+)<\/span>/
 
 function escapeHtml(value: string) {
   return value
@@ -114,25 +115,43 @@ function buildTocTree(headings: Heading[]) {
 
 function addHeadingIds(markdown: string, headings: Heading[]) {
   let headingIndex = 0
+  const lines = markdown.split('\n')
+  const result: string[] = []
 
-  return markdown
-    .split('\n')
-    .map((line) => {
-      const match = /^(#{1,3})\s+(.+)$/.exec(line)
-      if (!match) {
-        return line
-      }
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const match = /^(#{1,3})\s+(.+)$/.exec(line)
+    if (!match) {
+      result.push(line)
+      continue
+    }
 
-      const heading = headings[headingIndex]
-      headingIndex += 1
+    const heading = headings[headingIndex]
+    headingIndex += 1
 
-      if (!heading) {
-        return line
-      }
+    if (!heading) {
+      result.push(line)
+      continue
+    }
 
-      return `<h${heading.level} id="${escapeHtml(heading.id)}">${escapeHtml(heading.title)}</h${heading.level}>`
-    })
-    .join('\n')
+    const subtitleMatch = headingSubtitlePattern.exec(lines[index + 1] ?? '')
+    const subtitleHtml = subtitleMatch
+      ? `<span class="${subtitleMatch[1]}">${escapeHtml(subtitleMatch[2].trim())}</span>`
+      : ''
+
+    result.push([
+      `<h${heading.level} id="${escapeHtml(heading.id)}">`,
+      `<span class="whitepaper-heading-title">${escapeHtml(heading.title)}</span>`,
+      subtitleHtml,
+      `</h${heading.level}>`,
+    ].join(''))
+
+    if (subtitleMatch) {
+      index += 1
+    }
+  }
+
+  return result.join('\n')
 }
 
 function splitTableRow(row: string) {
@@ -198,13 +217,22 @@ function resolveAssetUrls(markdown: string) {
   )
 }
 
+function normalizeWhitepaperHtml(html: string) {
+  // 页面展示时将列表中英文收束为一个双语列表项，保证同一条内容的中英文紧贴。
+  return html.replace(
+    /<li>\s*<p>([\s\S]*?)<\/p>\s*<p><span class="whitepaper-en">([\s\S]*?)<\/span><\/p>\s*<\/li>/g,
+    '<li class="whitepaper-bilingual-item"><span class="whitepaper-li-zh">$1</span><span class="whitepaper-en">$2</span></li>',
+  )
+}
+
 function renderWhitepaper(markdown: string, headings: Heading[]) {
   const markdownWithIds = addHeadingIds(markdown, headings)
   const markdownWithTables = renderCodeTables(markdownWithIds)
   const markdownWithAssets = resolveAssetUrls(markdownWithTables)
   const html = marked.parse(markdownWithAssets, { async: false }) as string
+  const normalizedHtml = normalizeWhitepaperHtml(html)
 
-  return DOMPurify.sanitize(html, {
+  return DOMPurify.sanitize(normalizedHtml, {
     ADD_ATTR: ['class', 'id', 'width'],
     ADD_DATA_URI_TAGS: ['img'],
   })

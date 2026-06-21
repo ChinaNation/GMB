@@ -150,33 +150,37 @@ body {
 .whitepaper-body h1,
 .whitepaper-body h2,
 .whitepaper-body h3 {
+  border-bottom: 1px solid rgb(229 176 32 / 36%);
   scroll-margin-top: 96px;
   color: #ffffff;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.22;
+  padding-bottom: 12px;
 }
 
 .whitepaper-body h1 {
-  margin: 42px 0 6px;
+  margin: 42px 0 16px;
   font-size: clamp(28px, 4vw, 44px);
 }
 
 .whitepaper-body h1:first-child {
+  border-bottom: 0;
   margin-top: 0;
   color: var(--color-gold-400);
   font-size: clamp(32px, 4.8vw, 56px);
+  padding-bottom: 0;
   text-align: center;
 }
 
 .whitepaper-body h2 {
-  margin: 34px 0 10px;
+  margin: 34px 0 16px;
   color: var(--color-gold-300);
   font-size: clamp(22px, 3vw, 32px);
 }
 
 .whitepaper-body h3 {
-  margin: 28px 0 8px;
+  margin: 28px 0 14px;
   color: #f3d98a;
   font-size: clamp(18px, 2.2vw, 24px);
 }
@@ -196,7 +200,11 @@ body {
 }
 
 .whitepaper-body li {
-  margin: 10px 0;
+  margin: 0 0 18px;
+}
+
+.whitepaper-body li:last-child {
+  margin-bottom: 0;
 }
 
 .whitepaper-body a {
@@ -223,8 +231,12 @@ body {
   line-height: 1.75;
 }
 
+.whitepaper-body .whitepaper-heading-title {
+  display: block;
+}
+
 .whitepaper-body .whitepaper-title-en {
-  margin: -2px 0 24px;
+  margin: 3px 0 0;
   color: #ffffff;
   font-size: clamp(20px, 2.8vw, 32px);
   font-weight: 700;
@@ -232,21 +244,38 @@ body {
 }
 
 .whitepaper-body .whitepaper-heading-en {
-  margin: -2px 0 12px;
+  margin: 4px 0 0;
   color: #91a4bd;
   font-weight: 700;
-}
-
-.whitepaper-body h1 + .whitepaper-title-en,
-.whitepaper-body h1 + .whitepaper-heading-en {
-  border-bottom: 1px solid rgb(229 176 32 / 36%);
-  padding-bottom: 14px;
+  line-height: 1.28;
 }
 
 .whitepaper-body .whitepaper-en {
-  margin-top: 4px;
+  margin-top: 1px;
   padding-left: 14px;
   border-left: 2px solid rgb(229 176 32 / 32%);
+  line-height: 1.5;
+}
+
+.whitepaper-body li .whitepaper-en {
+  margin-top: 0;
+  line-height: 1.34;
+}
+
+.whitepaper-body .whitepaper-bilingual-item {
+  line-height: 1;
+}
+
+.whitepaper-body .whitepaper-li-zh {
+  display: block;
+  line-height: 1.34;
+}
+
+.whitepaper-body .whitepaper-bilingual-item > .whitepaper-en {
+  margin-top: -1px;
+  border-left: 0;
+  padding-left: 0;
+  line-height: 1.32;
 }
 
 .whitepaper-body hr {
