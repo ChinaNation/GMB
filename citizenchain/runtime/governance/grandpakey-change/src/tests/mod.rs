@@ -88,7 +88,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _nonce: &[u8],
         _signature: &[u8],
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         false
     }
@@ -109,7 +109,7 @@ impl
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -123,7 +123,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|node| AccountId32::new(node.main_account) == institution)
-                .map(|node| node.duoqian_admins.iter().any(|admin| *admin == who_raw))
+                .map(|node| node.admins.iter().any(|admin| *admin == who_raw))
                 .unwrap_or(false),
             _ => false,
         }
@@ -135,7 +135,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .iter()
                 .find(|node| AccountId32::new(node.main_account) == institution)
                 .map(|node| {
-                    node.duoqian_admins
+                    node.admins
                         .iter()
                         .map(|raw| AccountId32::new(*raw))
                         .collect()
@@ -238,7 +238,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn cb_admin(node_index: usize, admin_index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[node_index].duoqian_admins[admin_index])
+    AccountId32::new(CHINA_CB[node_index].admins[admin_index])
 }
 
 fn cb_pallet_id(node_index: usize) -> AccountId32 {

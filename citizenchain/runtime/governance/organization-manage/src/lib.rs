@@ -67,6 +67,7 @@ pub mod pallet {
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
         type SfidInstitutionVerifier: SfidInstitutionVerifier<
+            Self::AccountId,
             AccountNameOf<Self>,
             RegisterNonceOf<Self>,
             RegisterSignatureOf<Self>,
@@ -300,8 +301,8 @@ pub mod pallet {
             proposer: T::AccountId,
             accounts: CreateInstitutionAccountsOf<T>,
             admins: DuoqianAdminsOf<T>,
-            admin_org: u8,
-            admin_count: u32,
+            org: u8,
+            admins_len: u32,
             threshold: u32,
             initial_total: BalanceOf<T>,
             reserve_total: BalanceOf<T>,
@@ -386,8 +387,10 @@ pub mod pallet {
         EmptySfidNumber,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
-        /// ADR-008 step2b 新增:机构登记凭证缺省份(province_name 改必填后空字节串拒绝)
-        EmptyProvince,
+        /// 机构签发凭证缺签发机构 SFID 号。
+        EmptyIssuerSfidNumber,
+        /// 机构签发凭证缺业务作用域省名。
+        EmptyScopeProvinceName,
         /// 无法将派生地址转换为账户ID
         DerivedAccountDecodeFailed,
         /// 账户仍有保留余额，不允许注销
@@ -466,8 +469,11 @@ pub mod pallet {
             account_names: InstitutionAccountNamesOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            province_name: Vec<u8>,
-            signer_admin_pubkey: [u8; 32],
+            issuer_sfid_number: Vec<u8>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             crate::institution::register::do_register_sfid_institution::<T>(
@@ -477,8 +483,11 @@ pub mod pallet {
                 account_names,
                 register_nonce,
                 signature,
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             )
         }
 
@@ -494,15 +503,17 @@ pub mod pallet {
             sfid_number: SfidNumberOf<T>,
             sfid_full_name: AccountNameOf<T>,
             accounts: InstitutionInitialAccountsOf<T>,
-            admin_org: u8,
-            admin_count: u32,
-            duoqian_admins: DuoqianAdminsOf<T>,
+            org: u8,
+            admins_len: u32,
+            admins: DuoqianAdminsOf<T>,
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            // ADR-008 step2b：必填省份 + 签名 admin pubkey,与 register_sfid_institution 同义。
-            province_name: Vec<u8>,
-            signer_admin_pubkey: [u8; 32],
+            issuer_sfid_number: Vec<u8>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             crate::institution::create::do_propose_create_institution::<T>(
@@ -510,14 +521,17 @@ pub mod pallet {
                 sfid_number,
                 sfid_full_name,
                 accounts,
-                admin_org,
-                admin_count,
-                duoqian_admins,
+                org,
+                admins_len,
+                admins,
                 threshold,
                 register_nonce,
                 signature,
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             )
         }
 
@@ -700,25 +714,25 @@ pub mod pallet {
 
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
-            admin_count: u32,
-            duoqian_admins: &DuoqianAdminsOf<T>,
+            admins_len: u32,
+            admins: &DuoqianAdminsOf<T>,
             threshold: u32,
         ) -> DispatchResult {
             ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
-            ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
+            ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
             ensure!(
-                duoqian_admins.len() as u32 == admin_count,
+                admins.len() as u32 == admins_len,
                 Error::<T>::AdminCountMismatch
             );
             ensure!(
                 threshold > 0
-                    && threshold <= admin_count
-                    && u64::from(threshold).saturating_mul(2) > u64::from(admin_count),
+                    && threshold <= admins_len
+                    && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            Self::ensure_unique_admins(duoqian_admins)?;
+            Self::ensure_unique_admins(admins)?;
             ensure!(
-                duoqian_admins.iter().any(|admin| admin == who),
+                admins.iter().any(|admin| admin == who),
                 Error::<T>::PermissionDenied
             );
             Ok(())
@@ -784,9 +798,9 @@ pub mod pallet {
         /// 从任意机构账户反查管理员更换 org。
         ///
         /// 中文注释:机构账户必须使用 ORG_PUP/ORG_OTH；ORG_REN 只属于个人多签。
-        pub fn resolve_admin_org_for_account(account: &T::AccountId) -> Option<u8> {
+        pub fn resolve_org_for_account(account: &T::AccountId) -> Option<u8> {
             let registered = AccountRegisteredSfid::<T>::get(account)?;
-            Institutions::<T>::get(&registered.sfid_number).map(|inst| inst.admin_org)
+            Institutions::<T>::get(&registered.sfid_number).map(|inst| inst.org)
         }
 
         // account_names_payload_from_initial_accounts 已迁至 institution::accounts。
@@ -813,26 +827,26 @@ pub mod pallet {
 // ──── InstitutionMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
 //
 // 输入任意机构账户(主/费用/自创),直接以账户地址读取 admins-change 账户。
-// 再按 Institutions[sfid_number].admin_org 读取 org。这条路径保证
+// 再按 Institutions[sfid_number].org 读取 org。这条路径保证
 // 机构账户只使用 ORG_PUP/ORG_OTH,不再把机构账户错误塞到 ORG_REN。
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
-    fn lookup_admin_org(addr: &T::AccountId) -> Option<u8> {
-        pallet::Pallet::<T>::resolve_admin_org_for_account(addr)
+    fn lookup_org(addr: &T::AccountId) -> Option<u8> {
+        pallet::Pallet::<T>::resolve_org_for_account(addr)
     }
 
     fn lookup_admin_config(
         addr: &T::AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
-        let org = Self::lookup_admin_org(addr)?;
+        let org = Self::lookup_org(addr)?;
         let account = pallet::Pallet::<T>::resolve_admin_account_for_account(addr)?;
         let admins = admins_change::Pallet::<T>::active_account_admins(org, account.clone())?;
         let threshold =
             <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())?;
-        let admin_count = admins.len() as u32;
+        let admins_len = admins.len() as u32;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
-            admin_count,
+            admins_len,
             threshold,
         })
     }

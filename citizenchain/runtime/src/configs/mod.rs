@@ -712,8 +712,40 @@ impl organization_manage::DuoqianReservedAccountChecker<AccountId>
     }
 }
 
+#[cfg(not(feature = "runtime-benchmarks"))]
+fn issuer_admin_public(
+    issuer_main_account: &AccountId,
+    signer_pubkey: &[u8; 32],
+) -> Option<sr25519::Public> {
+    let signer_account = AccountId::new(*signer_pubkey);
+    let admin_account =
+        admins_change::Pallet::<Runtime>::admin_account_of(issuer_main_account.clone())?;
+    if admin_account.status != admins_change::AdminAccountStatus::Active {
+        return None;
+    }
+    if !admin_account
+        .admins
+        .iter()
+        .any(|admin| admin == &signer_account)
+    {
+        return None;
+    }
+    Some(sr25519::Public::from_raw(*signer_pubkey))
+}
+
+#[cfg(not(feature = "runtime-benchmarks"))]
+fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> {
+    if signature.len() != 64 {
+        return None;
+    }
+    let mut sig_raw = [0u8; 64];
+    sig_raw.copy_from_slice(signature);
+    Some(sr25519::Signature::from_raw(sig_raw))
+}
+
 impl
     organization_manage::SfidInstitutionVerifier<
+        AccountId,
         organization_manage::pallet::AccountNameOf<Runtime>,
         organization_manage::pallet::RegisterNonceOf<Runtime>,
         organization_manage::pallet::RegisterSignatureOf<Runtime>,
@@ -725,12 +757,21 @@ impl
         account_names: &[Vec<u8>],
         nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
         signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (province_name, signer_admin_pubkey);
+            let _ = (
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            );
             return !sfid_number.is_empty()
                 && !sfid_full_name.is_empty()
                 && !account_names.is_empty()
@@ -740,31 +781,16 @@ impl
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            // ADR-008 step2b：链上 0 prior knowledge of SFID,verifier 必须按
-            // (province_name, signer_admin_pubkey) 在 ShengSigningPubkey 双映射中查派生签名公钥。
-            // - 该 admin 不在花名册或尚未 activate signing pubkey → 返回 None → 验签失败
-            // - 不再保留"无省 + SFID 主公钥"兜底分支
-            let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                province_name,
-                signer_admin_pubkey,
-            ) {
-                Some(k) => k,
-                None => return false,
-            };
-            let public = sr25519::Public::from_raw(public_bytes);
-
-            let sig_bytes = signature.as_slice();
-            if sig_bytes.len() != 64 {
+            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
                 return false;
-            }
-            let mut sig_raw = [0u8; 64];
-            sig_raw.copy_from_slice(sig_bytes);
-            let signature = sr25519::Signature::from_raw(sig_raw);
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
 
             // 中文注释：这里必须和 SFID 端 `/registration-info` 的签名 payload 严格一致。
             // payload：DUOQIAN + OP_SIGN_INST + genesis_hash + sfid_number
-            // + sfid_full_name + account_names[] + nonce + province_name + signer_admin_pubkey。
-            // signer_admin_pubkey 必须进 payload,否则同 province_name 下任意 admin 的签名可互换。
+            // + sfid_full_name + account_names[] + nonce + 签发机构 + 作用域。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_INST,
@@ -773,8 +799,11 @@ impl
                 sfid_full_name.as_slice(),
                 account_names,
                 nonce.as_slice(),
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             );
             let msg = blake2_256(&payload.encode());
 
@@ -819,16 +848,12 @@ impl personal_manage::Config for Runtime {
     type WeightInfo = personal_manage::weights::SubstrateWeight<Runtime>;
 }
 
-// ADR-008 step3 注释:
 // 三处 SFID 验签:
 // - `RuntimeSfidVerifier`(BindCredential / 公民身份绑定)
 // - `RuntimeSfidVoteVerifier`(公民投票凭证)
 // - `RuntimePopulationSnapshotVerifier`(联合提案人口快照)
-// 全部按 (province_name, signer_admin_pubkey) 在 `ShengSigningPubkey` 双映射中查派生签名公钥;
-// 链上 0 prior knowledge of SFID,无任何"SFID main 兜底"路径。
-// payload 哈希前缀统一遵循 `DUOQIAN || OP_SIGN_BIND/VOTE/POP || block_hash(0) || <字段>
-//   || province_name || signer_admin_pubkey`,且 `signer_admin_pubkey` 必须进 payload —— 否则
-// 同省 admin 之间签名可互换,违反双层匹配语义。
+// 全部按 `issuer_sfid_number + issuer_main_account + signer_pubkey` 校验签发身份;
+// `issuer_main_account` 的管理员真源唯一来自 admins-change::AdminAccounts.admins。
 
 pub struct RuntimeSfidVerifier;
 
@@ -849,32 +874,24 @@ impl
             let _ = (account, credential);
             return !credential.bind_nonce.is_empty()
                 && !credential.signature.is_empty()
-                && !credential.province_name.is_empty();
+                && !credential.issuer_sfid_number.is_empty()
+                && !credential.scope_province_name.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            // ADR-008 step3:按 (province_name, signer_admin_pubkey) 双层匹配查派生签名公钥。
-            let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                credential.province_name.as_slice(),
-                &credential.signer_admin_pubkey,
-            ) {
-                Some(k) => k,
-                None => return false,
-            };
-            let public = sr25519::Public::from_raw(public_bytes);
-
-            let sig_bytes = credential.signature.as_slice();
-            if sig_bytes.len() != 64 {
+            let Some(public) =
+                issuer_admin_public(&credential.issuer_main_account, &credential.signer_pubkey)
+            else {
                 return false;
-            }
-            let mut sig_raw = [0u8; 64];
-            sig_raw.copy_from_slice(sig_bytes);
-            let signature = sr25519::Signature::from_raw(sig_raw);
+            };
+            let Some(signature) = sr25519_signature_from_bytes(credential.signature.as_slice())
+            else {
+                return false;
+            };
 
             // payload:DUOQIAN + OP_SIGN_BIND + block_hash(0) + account + binding_id
-            //   + bind_nonce + province_name + signer_admin_pubkey。
-            // signer_admin_pubkey 必须进 payload,否则同省 admin 签名可互换。
+            //   + bind_nonce + 签发机构 + 作用域。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_BIND,
@@ -882,8 +899,11 @@ impl
                 account,
                 credential.binding_id,
                 credential.bind_nonce.as_slice(),
-                credential.province_name.as_slice(),
-                &credential.signer_admin_pubkey,
+                credential.issuer_sfid_number.as_slice(),
+                &credential.issuer_main_account,
+                &credential.signer_pubkey,
+                credential.scope_province_name.as_slice(),
+                credential.scope_city_name.as_slice(),
             );
             let msg = blake2_256(&payload.encode());
 
@@ -908,8 +928,11 @@ impl
         proposal_id: u64,
         nonce: &sfid_system::pallet::NonceOf<Runtime>,
         signature: &sfid_system::pallet::SignatureOf<Runtime>,
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
@@ -917,34 +940,26 @@ impl
                 account,
                 binding_id,
                 proposal_id,
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             );
             return !nonce.is_empty() && !signature.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            // ADR-008 step3:双层匹配查派生签名公钥。
-            let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                province_name,
-                signer_admin_pubkey,
-            ) {
-                Some(k) => k,
-                None => return false,
-            };
-            let public = sr25519::Public::from_raw(public_bytes);
-
-            let sig_bytes = signature.as_slice();
-            if sig_bytes.len() != 64 {
+            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
                 return false;
-            }
-            let mut sig_raw = [0u8; 64];
-            sig_raw.copy_from_slice(sig_bytes);
-            let signature = sr25519::Signature::from_raw(sig_raw);
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
 
             // payload:DUOQIAN + OP_SIGN_VOTE + block_hash(0) + account + binding_id
-            //   + proposal_id + nonce + province_name + signer_admin_pubkey。
+            //   + proposal_id + nonce + 签发机构 + 作用域。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_VOTE,
@@ -953,8 +968,11 @@ impl
                 binding_id,
                 proposal_id,
                 nonce.as_slice(),
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             );
             let msg = blake2_256(&payload.encode());
 
@@ -991,37 +1009,36 @@ impl
         eligible_total: u64,
         nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
         signature: &votingengine::pallet::VoteSignatureOf<Runtime>,
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (who, province_name, signer_admin_pubkey);
+            let _ = (
+                who,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            );
             eligible_total > 0 && !nonce.is_empty() && !signature.is_empty()
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            // ADR-008 step3:双层匹配查派生签名公钥。
-            let public_bytes = match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey_for_admin(
-                province_name,
-                signer_admin_pubkey,
-            ) {
-                Some(k) => k,
-                None => return false,
-            };
-            let public = sr25519::Public::from_raw(public_bytes);
-
-            let sig_bytes = signature.as_slice();
-            if sig_bytes.len() != 64 {
+            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
                 return false;
-            }
-            let mut sig_raw = [0u8; 64];
-            sig_raw.copy_from_slice(sig_bytes);
-            let signature = sr25519::Signature::from_raw(sig_raw);
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
 
             // payload:DUOQIAN + OP_SIGN_POP + block_hash(0) + who + eligible_total
-            //   + nonce + province_name + signer_admin_pubkey。
+            //   + nonce + 签发机构 + 作用域。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_POP,
@@ -1029,8 +1046,11 @@ impl
                 who,
                 eligible_total,
                 nonce.as_slice(),
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             );
             let msg = blake2_256(&payload.encode());
 
@@ -1179,14 +1199,14 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
     /// 中文注释:机构账户按自身地址作为治理账户,org 来自
-    /// `Institutions[sfid].admin_org`;ORG_REN 只给 personal-manage 使用。
+    /// `Institutions[sfid].org`;ORG_REN 只给 personal-manage 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(account) =
             organization_manage::Pallet::<Runtime>::resolve_admin_account_for_account(bank)
         else {
             return false;
         };
-        let Some(org) = organization_manage::Pallet::<Runtime>::resolve_admin_org_for_account(bank)
+        let Some(org) = organization_manage::Pallet::<Runtime>::resolve_org_for_account(bank)
         else {
             return false;
         };
@@ -1255,7 +1275,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].duoqian_admins[0]);
+        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].admins[0]);
         Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
     }
 }
@@ -1291,7 +1311,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].duoqian_admins[0]);
+        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].admins[0]);
         Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
     }
 }
@@ -1510,8 +1530,8 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
 pub struct RuntimeInternalAdminCountProvider;
 
 impl votingengine::InternalAdminCountProvider<AccountId> for RuntimeInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: AccountId) -> Option<u32> {
-        admins_change::Pallet::<Runtime>::active_account_admin_count(org, institution)
+    fn admins_len(org: u8, institution: AccountId) -> Option<u32> {
+        admins_change::Pallet::<Runtime>::active_account_admins_len(org, institution)
     }
 }
 
@@ -1543,12 +1563,22 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (who, province_name, signer_admin_pubkey);
+            let _ = (
+                who,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            );
             if nonce.is_empty() || signature.is_empty() {
                 return false;
             }
@@ -1581,8 +1611,11 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
                 proposal_id,
                 nonce,
                 signature,
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             )
         }
     }

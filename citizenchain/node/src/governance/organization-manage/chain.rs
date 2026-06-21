@@ -64,10 +64,10 @@ struct OnChainInstitution {
     sfid_full_name: BoundedVec<u8, ConstU32<128>>,
     main_account: AccountId32,
     fee_account: AccountId32,
-    admin_org: u8,
-    admin_count: u32,
+    org: u8,
+    admins_len: u32,
     threshold: u32,
-    duoqian_admins: BoundedVec<AccountId32, ConstU32<64>>,
+    admins: BoundedVec<AccountId32, ConstU32<64>>,
     creator: AccountId32,
     created_at: u32,
     status: OnChainInstitutionStatus,
@@ -244,8 +244,8 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     });
 
     let admin_state = admins_storage::fetch_admin_account(&admin_account_id, None)?;
-    let (duoqian_admins_ss58, admin_count, threshold) = match admin_state {
-        Some(state) if state.org == inst.admin_org => {
+    let (admins_ss58, admins_len, threshold) = match admin_state {
+        Some(state) if state.org == inst.org => {
             let admins = state
                 .admins
                 .iter()
@@ -256,14 +256,14 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         _ => {
             // 创建 Pending 阶段 AdminsChange::AdminAccounts 尚未激活,详情页回退显示创建快照。
             let admins = inst
-                .duoqian_admins
+                .admins
                 .iter()
                 .filter_map(|a| {
                     let raw: [u8; 32] = (*a).clone().into();
                     pubkey_to_ss58(&raw).ok()
                 })
                 .collect::<Vec<_>>();
-            (admins, inst.admin_count, inst.threshold)
+            (admins, inst.admins_len, inst.threshold)
         }
     };
     let creator_bytes: [u8; 32] = inst.creator.clone().into();
@@ -276,13 +276,13 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         sfid_number: sfid_number.to_string(),
         sfid_full_name,
         admin_account_hex: hex::encode(admin_account_id),
-        admin_org: inst.admin_org,
+        org: inst.org,
         main_account,
         fee_account,
         other_accounts,
-        admin_count,
+        admins_len,
         threshold,
-        duoqian_admins_ss58,
+        admins_ss58,
         status: inst.status.label().to_string(),
         creator_ss58,
         created_at: inst.created_at as u64,

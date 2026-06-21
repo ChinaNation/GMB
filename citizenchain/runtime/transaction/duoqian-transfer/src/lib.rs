@@ -585,7 +585,7 @@ pub mod pallet {
                 <T as Config>::InstitutionQuery::is_active(&institution),
                 Error::<T>::InvalidInstitution
             );
-            let org = <T as Config>::InstitutionQuery::lookup_admin_org(&institution)
+            let org = <T as Config>::InstitutionQuery::lookup_org(&institution)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 matches!(org, ORG_PUP | ORG_OTH),

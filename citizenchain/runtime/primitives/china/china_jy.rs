@@ -8,7 +8,7 @@ pub struct ChinaJy {
     pub sfid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
-    pub duoqian_admins: &'static [[u8; 32]],
+    pub admins: &'static [[u8; 32]],
 }
 
 pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
@@ -18,7 +18,7 @@ pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
     sfid_number: "BP001-GJY0Y-689724263-2026",
     main_account: hex!("a333dd55f9e2d7730249a42753f8ddae0486edf851f24a8e84e4afac34069ecd"),
     fee_account: hex!("670917e9e43ab5195745e334a063b0a03fdf275ee51777292627dfd92a09d377"),
-    duoqian_admins: &[
+    admins: &[
         hex!("54e0451ef8d23e2f79d28756567dcdbc3fd475e7fc090b8c655ad243655f8231"),
         hex!("c48d9b25e6bf3fee1c8002bb7e91112a54a44fb99317483bd5dc73416eb48904"),
         hex!("e0751a2fd67acb376168f7dc385c3db123efe7dba845e9d6792229ddec030032"),

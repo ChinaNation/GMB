@@ -1,7 +1,7 @@
 //! # 公民档案业务路由
 //!
 //! 档案创建/查询、投票账户绑定、软删除、ARCHIVE 二维码更新/打印。
-//! 中文注释：档案业务允许 SUPER_ADMIN 与 OPERATOR_ADMIN；系统管理才仅限 SUPER_ADMIN。
+//! 中文注释：档案业务允许 ADMIN 与 OPERATOR；系统管理才仅限 ADMIN。
 
 use axum::{
     extract::{ConnectInfo, Path, Query, State},
@@ -1414,7 +1414,7 @@ async fn export_status_file(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<StatusExportData>>, (StatusCode, Json<ApiError>)> {
-    authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    authz::require_role(&state, &headers, "ADMIN").await?;
     let export_file = dangan::build_and_record_cpms_status_export(&state).await?;
     let file_name = format!("cpms-annual-status-report-{}.json", export_file.exported_at);
     Ok(Json(ok(StatusExportData {
@@ -1427,7 +1427,7 @@ async fn status_export_state(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<StatusExportStateData>>, (StatusCode, Json<ApiError>)> {
-    authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    authz::require_role(&state, &headers, "ADMIN").await?;
     let export_state = dangan::status_export_state(&state).await?;
     Ok(Json(ok(StatusExportStateData {
         state: export_state,

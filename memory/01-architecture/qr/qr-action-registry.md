@@ -22,7 +22,7 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_create_personal` | 0 | `propose_create` | `account_name`, `admin_count`, `regular_threshold`, `create_threshold`, `amount_yuan` | wuminapp |
+| `propose_create_personal` | 0 | `propose_create` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | wuminapp |
 | `propose_close_personal` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | wuminapp |
 | `cleanup_rejected_personal_proposal` | 2 | `cleanup_rejected_proposal` | `proposal_id` | wuminapp |
 
@@ -30,7 +30,7 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_resolution_issuance` | 0 | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_admin_pubkey` | node_ui, wuminapp |
+| `propose_resolution_issuance` | 0 | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | node_ui, wuminapp |
 
 ### 1.4 VotingEngine(pallet_index = 9)
 
@@ -46,7 +46,7 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_admin_set_change` | 0 | `propose_admin_set_change` | `org`, `subject`, `new_admins[]` | node_ui, wuminapp |
+| `propose_admin_set_change` | 0 | `propose_admin_set_change` | `org`, `subject`, `admins[]` | node_ui, wuminapp |
 
 `call_index = 1` 已留洞不复用。手动重试统一走 `VotingEngine.retry_passed_proposal(9.4)`。
 
@@ -81,7 +81,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 |---|---|---|---|---|
 | `propose_close_institution` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | wuminapp |
 | `cleanup_rejected_proposal` | 4 | `cleanup_rejected_proposal` | `proposal_id` | wuminapp |
-| `propose_create_institution` | 5 | `propose_create_institution` | `sfid_number`, `sfid_full_name`, `admin_count`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_admin_pubkey` | node_ui, wuminapp |
+| `propose_create_institution` | 5 | `propose_create_institution` | `sfid_number`, `sfid_full_name`, `admins_len`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_pubkey` | node_ui, wuminapp |
 
 `register_sfid_institution(call_index = 2)` 由 SFID 后端签发凭证并由链端验签,不走冷钱包扫码签名,不在本表范围。`call_index = 0 / 3` 已留洞不复用。
 
@@ -118,7 +118,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
 | `joint_vote` | 0 | `cast_admin` | `proposal_id`, `approve` | node_ui, wuminapp |
-| `cast_referendum` | 1 | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_admin_pubkey` | wuminapp |
+| `cast_referendum` | 1 | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_pubkey` | wuminapp |
 
 `joint_vote` 的 call data 内含 48 字节 `institution_id`,当前冷钱包 decoder 只展示 `proposal_id` / `approve`。若要展示机构身份,必须先更新本表和 decoder。
 
@@ -143,11 +143,11 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `org` | u8 / u32 机构代号 | 机构中文名;找不到时回退为 `机构<raw>` |
 | `institution` | 48B sfid_number | 优先转机构中文名;找不到时回退原 sfid_number |
 | `wasm_size` | u32 字节 | `"X.XX MB"` 或 `"X KB"` |
-| `pubkey` / `signer_admin_pubkey` / `admin_pubkey` / `actor_pubkey` / `old_admin` / `new_admin` | 32 字节账户/公钥 | 人机展示为 SS58,prefix = 2027 |
+| `pubkey` / `signer_pubkey` / `admin_pubkey` / `actor_pubkey` / `old_admin` / `new_admin` | 32 字节账户/公钥 | 人机展示为 SS58,prefix = 2027 |
 | `wasm_hash` / `new_key` / `payload_hash` | 32 字节哈希或非账户密钥 | `0x<64hex>` 小写;默认不进入普通确认字段 |
 | `reason` / `remark` / `account_name` / `sfid_full_name` / `sfid_number` / `province_name` / `actor_province_name` / `peer_id` / `rpc_domain` / `new_domain` | UTF-8 | 原字符串;UI 可截断展示,签名原文不截断 |
-| `admin_count` | u32 | 十进制字符串 |
-| `threshold` | u32 | `"<threshold>/<admin_count>"` |
+| `admins_len` | u32 | 十进制字符串 |
+| `threshold` | u32 | `"<threshold>/<admins_len>"` |
 | `archive_no` / `archive_id` / `expires_at` | UTF-8 | 原字符串 |
 
 ## 三、字段约束

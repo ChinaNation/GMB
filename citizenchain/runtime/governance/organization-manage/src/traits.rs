@@ -16,13 +16,13 @@ pub use primitives::multisig::{
 /// 机构多签账户的查询 trait,供 duoqian-transfer / runtime config 等下游调用。
 ///
 /// 输入任意机构账户(主/费用/自创)都返回该账户的 admin 配置,
-/// 实现:`AccountRegisteredSfid[addr]` → `Institutions[sfid].admin_org`
+/// 实现:`AccountRegisteredSfid[addr]` → `Institutions[sfid].org`
 /// → `admins-change::AdminAccounts[addr]`。
 /// 与 personal-manage::PersonalMultisigQuery 对仗,duoqian-transfer 通过 union
 /// 查询(先 personal、再 institution)定位多签 admin 配置。
 pub trait InstitutionMultisigQuery<AccountId> {
     /// 返回机构账户管理员账户 org。机构账户只能是 ORG_PUP 或 ORG_OTH。
-    fn lookup_admin_org(addr: &AccountId) -> Option<u8>;
+    fn lookup_org(addr: &AccountId) -> Option<u8>;
 
     fn lookup_admin_config(
         addr: &AccountId,
@@ -31,7 +31,7 @@ pub trait InstitutionMultisigQuery<AccountId> {
 }
 
 impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
-    fn lookup_admin_org(_addr: &AccountId) -> Option<u8> {
+    fn lookup_org(_addr: &AccountId) -> Option<u8> {
         None
     }
 
@@ -45,37 +45,40 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
     }
 }
 
-/// SFID 机构登记验签抽象（ADR-008 step2b 起按 (province_name, admin_pubkey) 二元组验签）。
+/// SFID 机构登记验签抽象。
 ///
-/// runtime 查 `sfid_system::ShengSigningPubkey[(province_name, signer_admin_pubkey)]` 取得签名公钥后
-/// 验签；该省 admin 在 `ShengAdmins` 花名册之外或尚未 activate signing pubkey 时验签必须失败。
-///
-/// 与 ADR-008 前的差异：
-/// - 删除"用 SfidMainAccount 主公钥兜底"分支（链上 0 prior knowledge of SFID）；
-/// - `province_name` 从可选项改为必填；
-/// - 新增 `signer_admin_pubkey` 显式指明本次签名的省管理员公钥（main 或 backup_{1,2}）。
-/// - 中文注释:签名业务字段收口为 sfid_number / sfid_full_name / account_names[]。
-pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
+/// 中文注释:签发身份统一为机构模型。runtime 必须用 `issuer_main_account`
+/// 读取 admins-change 的 `admins` 真源,确认 `signer_pubkey` 属于该机构管理员,
+/// 再用 `signer_pubkey` 对业务 payload 验签。
+pub trait SfidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_number: &[u8],
         sfid_full_name: &AccountName,
         account_names: &[Vec<u8>],
         nonce: &Nonce,
         signature: &Signature,
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool;
 }
 
-impl<AccountName, Nonce, Signature> SfidInstitutionVerifier<AccountName, Nonce, Signature> for () {
+impl<AccountId, AccountName, Nonce, Signature>
+    SfidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> for ()
+{
     fn verify_institution_registration(
         _sfid_number: &[u8],
         _sfid_full_name: &AccountName,
         _account_names: &[Vec<u8>],
         _nonce: &Nonce,
         _signature: &Signature,
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId,
+        _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         false
     }

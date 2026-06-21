@@ -26,7 +26,7 @@ use crate::{
 
 type Blake2b256 = Blake2b<U32>;
 
-const FIXED_SUPER_ADMIN_COUNT: usize = 1;
+const FIXED_ADMIN_COUNT: usize = 1;
 const ARCHIVE_SIGN_KEY_ID: &str = "ARCHIVE";
 const INSTALL_SECRET_KEY_ID: &str = "INSTALL_SECRET";
 
@@ -161,18 +161,18 @@ struct InstallStatusData {
     city_code: Option<String>,
     province_name: Option<String>,
     city_name: Option<String>,
-    super_admin_bound_count: usize,
+    admins_bound_count: usize,
     archive_signing_ready: bool,
     cpms_pubkey: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct BindSuperAdminRequest {
+struct BindAdminRequest {
     admin_pubkey: String,
 }
 
 #[derive(Serialize)]
-struct BindSuperAdminData {
+struct BindAdminData {
     user_id: String,
     admin_pubkey: String,
     role: String,
@@ -183,10 +183,7 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/install/status", get(install_status))
         .route("/api/v1/install/initialize", post(initialize_install))
-        .route(
-            "/api/v1/install/super-admin/bind",
-            post(bind_super_admin_from_wumin),
-        )
+        .route("/api/v1/install/admins/bind", post(bind_admins_from_wumin))
 }
 
 pub(crate) async fn ensure_secret_config(db: &sqlx::PgPool) -> Result<(), String> {
@@ -285,15 +282,15 @@ async fn install_status(
         .iter()
         .any(|k| k.key_id == ARCHIVE_SIGN_KEY_ID && k.status == "ACTIVE");
 
-    let super_admin_bound_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN'")
+    let admins_bound_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'ADMIN'")
             .fetch_one(&state.db)
             .await
             .map_err(|_| {
                 err(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     5001,
-                    "query super admin failed",
+                    "query admins failed",
                 )
             })?;
 
@@ -304,7 +301,7 @@ async fn install_status(
         city_code,
         province_name,
         city_name,
-        super_admin_bound_count: super_admin_bound_count as usize,
+        admins_bound_count: admins_bound_count as usize,
         archive_signing_ready,
         cpms_pubkey,
     })))
@@ -474,21 +471,13 @@ async fn initialize_install(
     })))
 }
 
-async fn bind_super_admin_from_wumin(
+async fn bind_admins_from_wumin(
     State(state): State<AppState>,
     ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    Json(req): Json<BindSuperAdminRequest>,
-) -> Result<Json<ApiResponse<BindSuperAdminData>>, (StatusCode, Json<ApiError>)> {
-    rate_limit::check(
-        &state,
-        client_addr,
-        &headers,
-        "install_super_admin_bind",
-        5,
-        60,
-    )
-    .await?;
+    Json(req): Json<BindAdminRequest>,
+) -> Result<Json<ApiResponse<BindAdminData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(&state, client_addr, &headers, "install_admins_bind", 5, 60).await?;
 
     let _install = load_cpms_install_runtime(&state).await?;
     let raw_input = req.admin_pubkey.trim().to_string();
@@ -500,7 +489,7 @@ async fn bind_super_admin_from_wumin(
         ));
     }
     let admin_pubkey = normalize_admin_pubkey(&raw_input)?;
-    let user_id = "u_super_admin_01".to_string();
+    let user_id = "u_admins_01".to_string();
     let now_ts = Utc::now().timestamp();
 
     let mut tx = state
@@ -509,19 +498,18 @@ async fn bind_super_admin_from_wumin(
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN'")
-            .fetch_one(tx.as_mut())
-            .await
-            .map_err(|_| {
-                err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    5001,
-                    "count super admin failed",
-                )
-            })?;
-    if count as usize >= FIXED_SUPER_ADMIN_COUNT {
-        return Err(err(StatusCode::CONFLICT, 4004, "super admin already bound"));
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'ADMIN'")
+        .fetch_one(tx.as_mut())
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "count admins failed",
+            )
+        })?;
+    if count as usize >= FIXED_ADMIN_COUNT {
+        return Err(err(StatusCode::CONFLICT, 4004, "admin already bound"));
     }
 
     let pubkey_exists: Option<String> =
@@ -546,7 +534,7 @@ async fn bind_super_admin_from_wumin(
 
     sqlx::query(
         "INSERT INTO admin_users (user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at)
-         VALUES ($1, $2, 'SUPER_ADMIN', TRUE, $3, $4, $5)",
+         VALUES ($1, $2, 'ADMIN', TRUE, $3, $4, $5)",
     )
     .bind(&user_id)
     .bind(&admin_pubkey)
@@ -555,7 +543,7 @@ async fn bind_super_admin_from_wumin(
     .bind(now_ts)
     .execute(tx.as_mut())
     .await
-    .map_err(|_| err(StatusCode::CONFLICT, 4004, "bind super admin failed"))?;
+    .map_err(|_| err(StatusCode::CONFLICT, 4004, "bind admin failed"))?;
 
     tx.commit()
         .await
@@ -564,7 +552,7 @@ async fn bind_super_admin_from_wumin(
     write_audit(
         &state,
         Some(user_id.clone()),
-        "BIND_SUPER_ADMIN",
+        "BIND_ADMIN",
         "ADMIN_USER",
         Some(user_id.clone()),
         "SUCCESS",
@@ -574,10 +562,10 @@ async fn bind_super_admin_from_wumin(
     )
     .await?;
 
-    Ok(Json(ok(BindSuperAdminData {
+    Ok(Json(ok(BindAdminData {
         user_id,
         admin_pubkey,
-        role: "SUPER_ADMIN".to_string(),
+        role: "ADMIN".to_string(),
         managed_key_id: ARCHIVE_SIGN_KEY_ID.to_string(),
     })))
 }

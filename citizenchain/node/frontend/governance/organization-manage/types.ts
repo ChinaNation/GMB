@@ -75,12 +75,19 @@ export type InstitutionRegistrationInfoResp = {
 /** SFID 对链上注册 payload 签发的凭证。 */
 export type InstitutionRegistrationCredentialResp = {
   genesis_hash: string;
-  province_name: string;
   /** 防重放 nonce(本次响应生成的随机字符串)。 */
   register_nonce: string;
-  /** 本次签名所用省管理员公钥(32 字节 hex)。 */
-  signer_admin_pubkey: string;
-  /** 省级签名密钥对凭证 payload 的 sr25519 签名(64 字节 hex)。 */
+  /** 签发机构 SFID 号。 */
+  issuer_sfid_number: string;
+  /** 签发机构主账户(32 字节 hex)。 */
+  issuer_main_account: string;
+  /** 本次签名所用机构管理员公钥(32 字节 hex)。 */
+  signer_pubkey: string;
+  /** 业务作用域省名。 */
+  scope_province_name: string;
+  /** 业务作用域市名。 */
+  scope_city_name: string;
+  /** 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。 */
   signature: string;
   meta?: unknown;
 };

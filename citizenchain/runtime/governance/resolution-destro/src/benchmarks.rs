@@ -21,7 +21,7 @@ fn prc_institution<T: Config>() -> T::AccountId {
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
+    decode_account::<T>(CHINA_CB[1].admins[index])
 }
 
 fn last_proposal_id<T: Config>() -> u64 {

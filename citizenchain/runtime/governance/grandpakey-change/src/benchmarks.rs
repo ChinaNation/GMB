@@ -21,7 +21,7 @@ fn prc_institution<T: pallet::Config>() -> T::AccountId {
 }
 
 fn prc_admin<T: pallet::Config>(index: usize) -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
+    decode_account::<T>(CHINA_CB[1].admins[index])
 }
 
 fn seeded_public_key(seed: u8) -> [u8; 32] {

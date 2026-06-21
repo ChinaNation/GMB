@@ -113,7 +113,7 @@ impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
 }
 
 /// SFID 双层签名 mock:仅当 signature == b"register-ok"
-/// 且 nonce/sfid_full_name/account_names/province_name/signer_admin_pubkey 都非空时通过。
+/// 且 nonce/sfid_full_name/account_names/issuer/scope 字段都非空时通过。
 pub struct TestSfidInstitutionVerifier;
 impl
     crate::traits::SfidInstitutionVerifier<
@@ -129,14 +129,14 @@ impl
         nonce: &crate::pallet::RegisterNonceOf<Test>,
         signature: &crate::pallet::RegisterSignatureOf<Test>,
         province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        signer_pubkey: &[u8; 32],
     ) -> bool {
         !sfid_number.is_empty()
             && !sfid_full_name.is_empty()
             && !account_names.is_empty()
             && !nonce.is_empty()
             && !province_name.is_empty()
-            && signer_admin_pubkey != &[0u8; 32]
+            && signer_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
 }
@@ -156,7 +156,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _nonce: &[u8],
         _signature: &[u8],
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -176,7 +176,7 @@ impl
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -209,7 +209,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
 pub struct TestInternalAdminCountProvider;
 impl votingengine::InternalAdminCountProvider<AccountId32> for TestInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: AccountId32) -> Option<u32> {
+    fn admins_len(org: u8, institution: AccountId32) -> Option<u32> {
         if !is_registered_multisig_org(org) {
             return None;
         }

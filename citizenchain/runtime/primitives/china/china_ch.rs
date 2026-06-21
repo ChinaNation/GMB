@@ -13,7 +13,7 @@ pub struct ChinaCh {
     pub stake_account: [u8; 32],
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
-    pub duoqian_admins: &'static [[u8; 32]],
+    pub admins: &'static [[u8; 32]],
 }
 
 /// 所有省储行数组
@@ -26,7 +26,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("50a039748269d7687aa48e4c73ffe9d116232d8e2ffe272af95b18496bbabd80"),
         stake_account: hex!("e9a0f626c640cadb967e798a29f4fc1d3f8f72a02e1595c930ee7a6e7a0eb128"),
         main_account: hex!("f8849691c497ed6c294ad61a2c29e8ace130e0ddcc5b0b7287a5a96c4870ed50"),
-        duoqian_admins: &[
+        admins: &[
             hex!("7a24e290379c6e458f5372246629a739064b01de97ca85e4008a0c52124ffa2b"),
             hex!("84a26299f660c0baa0af46ca33169aefaa41b35be06f2b8a66b4a20b7038d60b"),
             hex!("ece6ca93610b323a5a20c96d52078da1d90d2c4057784157194365ba51c61f6f"),
@@ -46,7 +46,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("49091bc468cfd85f2ebe053f8fd6efc75df07ae9e3c4a3088d75c476297fb617"),
         stake_account: hex!("4bbc302666d71b426478d140445e0f963f5a86a8a25daef58783111aa0836e2e"),
         main_account: hex!("97050936abfe52a30359bdd3286c17c6df4bd2b5b3786e914a7b11c0db224e21"),
-        duoqian_admins: &[
+        admins: &[
             hex!("026c25206f34749215e5dd6ca6ab806ff53c4a047b68a5779ae7c22ed4befc73"),
             hex!("8834a8025fd436da0b7901653b4c6dd7ed05b14553a3c471b0991e1c840b0338"),
             hex!("5ec76404392102f3ac8f02efae9282160a478643b830d6c76c6edefaf6724227"),
@@ -66,7 +66,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("0844e9170e6f7d1c4b3991ab685f5ca73db2af09fc5c55702ff91b799f0c598e"),
         stake_account: hex!("1ade5c85b38807b457c54c035268b01c09565209f938ae97ef8bbf610f5cbf39"),
         main_account: hex!("d9bb0b5768bdc207ed788b4038100b3c167ac83ee1aaadde5769c1fda4488095"),
-        duoqian_admins: &[
+        admins: &[
             hex!("0489dc54c1f161b86bef1c9c5e5ef04ebd0e80b79a165178739f76a8aec19f71"),
             hex!("ae07a1c9f0f52a7316d5fd8e961ed0725aeb424d24db73a79b526d4174f76e61"),
             hex!("70d474f19e6dd32e28d009dfe481062e918b03b7b7f4e6ae40b95a1e8b361b5e"),
@@ -86,7 +86,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("168f3228f9a7d1129d21ffcb8c2e64b67ec7366ce949fdcf861d70a297487379"),
         stake_account: hex!("d6f6b4e574c14875755d1f3a66bf4f68b54e9f2b137effd35ab00bb49ce77883"),
         main_account: hex!("b1ce2f090c528533874528f3f8ed68b5762c930004b776dabb7a03d2bd69a4f0"),
-        duoqian_admins: &[
+        admins: &[
             hex!("9427e1d51223861d4af89d3327844ff454c67a6dd7cf1a061efe930ebc894201"),
             hex!("ba79a4f7103ea953b143f9d78fcf31de39d234d034d619231104a0a8d680f408"),
             hex!("4477a14b6e3057e5347474c959b706afd7950b82e2797332badc181cd9593f3c"),
@@ -106,7 +106,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("3d44f89c16d2fdcececfc361a32a1a20c2e62bd6e81b9e60569095e057ab5cd2"),
         stake_account: hex!("188422119d3139d5946fec0bb656b38243833fe5fd68a443145e642064d237b8"),
         main_account: hex!("a996934060a63311c2a9235888e36368d1db19ea9e085a36e32385eacc849e80"),
-        duoqian_admins: &[
+        admins: &[
             hex!("aafafefde99d84cdaa347e3525cad15b83661b21e919acb81f07bef285241760"),
             hex!("d829889b40819c533dd7470c46591ae30391f5e976061cdeef39b5b2fed9591b"),
             hex!("d0616e6da5b3e5d99ff7ebe4dae095a6b31182d4c5d93e60b0803b4a8d5eab37"),
@@ -126,7 +126,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("9059bc2f7cd45fa20e31a65283dfe41c2df30f6de9f08c264e87dd14af02010c"),
         stake_account: hex!("caac495aa3ec6441978337ad4769ed0a4daee8ebf216d50c94313572e321a775"),
         main_account: hex!("cfd4fc4cfab6b1aed99296e8e6e2036548a2b8a1f61d21a1381b18eeaccb5a81"),
-        duoqian_admins: &[
+        admins: &[
             hex!("28e54d11584f1ca20f574a25de76ab19b077cf9ae1708fe52a00385b854ff72d"),
             hex!("2ae625ae1cc657c8639d5ff70578bae607c3cbb77561709dcee75dcc1e16ae43"),
             hex!("bc34797c613cdca8271ea8d179e8f7baf021f1f167ba1092c3c20f9126916a2f"),
@@ -146,7 +146,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("544413ba1a80de93f2452206bcb0a32fc827cadbe6bbdab026b677d1b9a6a648"),
         stake_account: hex!("a3ee7ee59ccc65ca3fa3345c5c569d165cac5fde1f374bd8e57f83f63a5887b2"),
         main_account: hex!("9b5e69c3934c1f334b04cf0b6f13aad477b12b16c0f7e801ba01d21651ce8d60"),
-        duoqian_admins: &[
+        admins: &[
             hex!("ae54c9e6bd19eaa35d2d344255f64a4258fad0e342ccee088f3817b6a61b152a"),
             hex!("86189f4190f2070778837d9bad9bc68b6f6c3ae4c712c5555b25553fb3ad2160"),
             hex!("16b7f4e63a9cf16385e086ecb693d0498166b6df914098450f4f5458a47f543f"),
@@ -166,7 +166,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("a4f88bb6e978e06c3499e4030fc859b76941e45956828d8ec1dbe9510ef09afb"),
         stake_account: hex!("c74e7ae830cde13f3af2b7d7893c455117a18656d635b5c93c81ead24fc43b72"),
         main_account: hex!("7684b573df3b772a35eb455e618b6a21c6d7b5e5a54af70ab7c8480a920d9a6e"),
-        duoqian_admins: &[
+        admins: &[
             hex!("e0dcf22a3dd7e1f14aa455c0e274d4b4dcb5c049f36433a7f7f4135f04211d2f"),
             hex!("12f8a76239200bd531cf343957ad851e5135f3b5144c395342f03c5ee65a7272"),
             hex!("76f4fa8168efa5eb0cb752a62b2d348c3d8c8aa459c7a014078be89054c1fc62"),
@@ -186,7 +186,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("75b1d9ffa61559df9cad189e8b8b25a1ce261f9154025caacabe72765ec9779a"),
         stake_account: hex!("fab5a4e811ee8f217ad70f9f4ea07b1f7f829089ce2d7493c9518d44db516982"),
         main_account: hex!("c2747ca4ceec3f51d95cffeb5db3091d76e0dcc2f1757370c33a3f488b16373c"),
-        duoqian_admins: &[
+        admins: &[
             hex!("1a4bf08983c7ca48d46ac578334d808c7ae02fa1bcff39c7fad236fa5b89e246"),
             hex!("764c622263b771743c4493f6bf282138b05f83ce22ed2bdce1295abc45130f1a"),
             hex!("9e1382c1b4e598b3c11af101087b48490107fdee8a60982e203cb45197507c64"),
@@ -206,7 +206,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("65ea7bc5635e5516d56acf71fd9a185798db1f94af9c65a90080e3e6b48ffe6b"),
         stake_account: hex!("07f3a9c32b72c6945d943bb5c36cc1a85162ea881d3093754b51b129de6683d1"),
         main_account: hex!("b4874ab93df83815c1d4a48c722978afbf644d1433428c397b911e639f022a07"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d0eb85c18ae4ba3a56618122ee359b2c18b3af18de0a8d994d01502cd8779176"),
             hex!("c6095937cbd97ddea9713f6e566837203e1af3df322d4c36031631dc3a76c412"),
             hex!("feb24a49cc19e93afc71c8f571f41ed4f50a7a4bf67aeb40e7b9aff6f7b42b0e"),
@@ -226,7 +226,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("359fc9148334b7ad122edd18b98ec604f36f74c9a91d15d1d90092577bb78ff1"),
         stake_account: hex!("e33930cac9a853965370b56d2b6f8c90170d5bba196cdf20fc9e8621a0ce7c45"),
         main_account: hex!("73a64e68988972eca2b41f6d85e0d95c5474e4ac76b0feaf0d223333b2f0e37c"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d45f674ef2a84f320674374cd71e40fe29f4532d4329588f59165011d6a6a673"),
             hex!("ec98eca9117b694254f7ce8d1c96228cee5b2ac1229a8c3da16982a4637ff86d"),
             hex!("dec896043b2cf543245066ab46433f95594b97ae42a35efbb07e2061115a4b20"),
@@ -246,7 +246,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("a8fde60007174359f3eec91e786ac619387f475e9aee71b3ef9d21435dcfcfcc"),
         stake_account: hex!("85d4f2e7689f292718ff91dbacd162c2f70886a66a17ca52a75044379186b0b1"),
         main_account: hex!("55b92434254f11ae30587a85f24a194ba389dd0aea844205780341bcca51de61"),
-        duoqian_admins: &[
+        admins: &[
             hex!("00b31ce3c5a0c72d11d14e44e9fc3f24143fd4e7b50d9d666ca0744030538a11"),
             hex!("6ef2d3a56d37d85f07bd12ad1e039d1ebc6016118baed9d6adf055d22556003d"),
             hex!("a0c2f02007638ba832a18d3dad102c6fb47be43316491f8c87683a13bf96db18"),
@@ -266,7 +266,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("c8df44a3c673c6561d44962c90af0aa29ed2b9506d9e830e5c71cb27fd056c5a"),
         stake_account: hex!("a236b79ce5d79230d3d9c96fb23ba32291db1fe4be0b6eacbe27bf6af3337d36"),
         main_account: hex!("36fc82123bbc9313a2dd68a0ef7c1966a2f7cef51f6d3f9753032b5bc36dfd8f"),
-        duoqian_admins: &[
+        admins: &[
             hex!("5a5c268c38e99e8f20b9e8e3d0a02697a92406e601b8aeb0420a39925211d64f"),
             hex!("f612de6628031f3f285de2c1a3d54583b285057ec28eef35c1e719fa8748eb7b"),
             hex!("5ef1de0f6e4e18a6219c21ddbf65f73504a7ce40e15e0bbf3929480539d0fb12"),
@@ -286,7 +286,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("959fc2049e0dc049ffbf6cf43f9407bee22f33d78b78da5eefd14c4821b27958"),
         stake_account: hex!("3d5f78b7afcb17aa13874971dd782470948fc09da4f1b19c804a27fbf1cfb552"),
         main_account: hex!("d2401d4463ce83397a4d6ac6a6049c5911065932fa27ff7a834fdca5093977f4"),
-        duoqian_admins: &[
+        admins: &[
             hex!("cedaa06d70cd93f39ddb56be76f08d0fa7ee4f8bb74dcb1d65d0831ef1ba7367"),
             hex!("2cea02949c178fd8161759f40b3446f6a14f1f485098c822fb3556a410de1d6a"),
             hex!("fc3ab1d451fa03ba214d736cc6dc1544605899f84607dae17f1fc3a424e03c62"),
@@ -306,7 +306,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("e8a0b874febb29f50e88a529f4f0589f9a5980bd9881d0566e6539a99315a768"),
         stake_account: hex!("64bf92a71f9e0afd0b531f1e7d8e2fd5e0ac5885b8c87b838b22644bff931455"),
         main_account: hex!("36544450f6ed4aed9f97ec064a9dbbd706382fa1223fdb6187cd66bf12e60b7b"),
-        duoqian_admins: &[
+        admins: &[
             hex!("16977016c793b7f8cb5375bfb343e06511e8b6bff0a3ded1763b03e65b49dc75"),
             hex!("2e01b472f46fb11f0adabe426e7a76305d2f1a040213a5b5ca966b89dcc58d7c"),
             hex!("48d4eaf64c72a1c0a79f309df3dc0827f24a29ec203d257048e047062807a844"),
@@ -326,7 +326,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("bf40d7f470591c4d12a3c28d384016b479b567207917ca34da378cb65d31aa49"),
         stake_account: hex!("2f856da0e1057e14adaa20a91e26404baea9cc7ff02556f2303b9f2c41bced38"),
         main_account: hex!("7dbf135536581411a7f25ec9a46f3e17d0b138ae55797cbe4eb40c9475e9aeaf"),
-        duoqian_admins: &[
+        admins: &[
             hex!("bc50baf7fbc79b72df63804d5d48275528142136d1914a2334347875016fa551"),
             hex!("26ccde1f7b15cb0c45ce3a798aee6c68945e524fded101546d1b2e289260ca76"),
             hex!("c2cd07f51c525ac6ed14b6414d178cb8eab731f4b951f8499ecb480ffedd6e31"),
@@ -346,7 +346,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("e86174e5b5fbb0d84aef0387e945b1f4a9560bf88395112904b889b85bae8c64"),
         stake_account: hex!("7a8c88589966ebfbcedd4f068a9913808525bfefc146c33cc0de93b7482da444"),
         main_account: hex!("24e51c132e6213dc8538289903f66d1fd1dab3c26355372af8ef74b99a2fc0db"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d8234d16d61cba73ebbfa12d4e53ddf1a4f5d24f106c286799d0e14801d0953b"),
             hex!("625284c24b30db1417fa4f253751f7e53c0b7f82bfbfbebdfbf2fc8ebc246e54"),
             hex!("f89647d183ef9fa59b51e5389b1037187d10d49d337569a27e31196f4fb43e78"),
@@ -366,7 +366,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("d02b42a9954267e18113243ff6974188479a6da1c78f6bf11114dfae4aebaea0"),
         stake_account: hex!("a191af21765f937ab0b2f590e0c7176e1d574e33148c325ad9cf08582b6a6c34"),
         main_account: hex!("a96a8b6edc42fd7db69441df4433b78552cae03e660191026b8dc59d38aae275"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d230315cd4220886014478c89fe74112f144ef42c167a51ec1cff7d1a394df41"),
             hex!("fc28e2bd3c0f096fb04888a25eded5aa405b3bc010a75d6db79484c8c4e08a57"),
             hex!("188d874eb7953a2c2592b3847a63df8c04806430dd8d33f4ea83170d9bc6c876"),
@@ -386,7 +386,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("8cd711c0ec96975dfbac9c7a1c40b6d2c9d45e4597f2c8b23528b4c139e0ae22"),
         stake_account: hex!("bf9c07f46e3200597b502eb79b54b121d5dbf409d82a4442de2c9dc9656fd2c7"),
         main_account: hex!("df51f1214bf79685dad2b0950d61bdbbea31c4f00787eaf968733f3adc0a02ab"),
-        duoqian_admins: &[
+        admins: &[
             hex!("9e06d0846eebfe509661911c909abd83ae39180b7c6f97099b548d8352ed6428"),
             hex!("fec0660b9e067379bbc9196804cc517fc1b0ef4fb2b38b3e05e7b95d97e6d96b"),
             hex!("90c012f3b1be1015ad2dce39e86da83cff4270a0ded957be3e49394137a79818"),
@@ -406,7 +406,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("c80c0d9ae4fa2c87909dedd8b525df90d1f0ab47337a828cd04fd05e93125bcb"),
         stake_account: hex!("a3612a88b871c57dce8cc1f4bc2958e76b3089845e2e2b9d8554d7f57f33ad31"),
         main_account: hex!("8dd554c6b1751227e1d6311e9e6dc5b2e542e8b21b1aa1f51a43b0d0f27e67ac"),
-        duoqian_admins: &[
+        admins: &[
             hex!("66942d040ad78ebd3dd5823702e65165bfd07ca6b72f4d6b6487ebfe5f710834"),
             hex!("fec1a2a37c3709426ed5c6dda3ec021a491eb26b489d26e3cae2c7928e1ada08"),
             hex!("ec141e5d7509eac37b6a65fdce970e3bc555f6c3ed20661783d92f361986ed4c"),
@@ -426,7 +426,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("7df2c91adb9d56b64a2ce51acf6dcd4183edac75049a18bef591eb1311baab3c"),
         stake_account: hex!("42f5a1038c056f34b0906cf87c50237321d1f2eaace2b6f2973136c61b8d6016"),
         main_account: hex!("1c368b84eb015714752e01c816ea1c07bca95dc6747323326f0d1383abd3b623"),
-        duoqian_admins: &[
+        admins: &[
             hex!("f6a25ebd4796d80cff6b511baa479d0415a940747edd09b604f000969a40c073"),
             hex!("96ac1e9089440a286d9a5779464d50cbce7bd9acf3f13971c34e2bb500bf8a77"),
             hex!("14745b4b10aeb10aa4a1d5d49d9940f3c73736179c1700b6320574fdaad3094f"),
@@ -446,7 +446,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("7f6cb359b8abb77b7f30ae34bac21d4ceabff90d8673d0b9dd6e5bbb4fba3a2e"),
         stake_account: hex!("38a16891215c7a75ca47092d8717da4920c626c8d059f462c3fcb31ecf6ac355"),
         main_account: hex!("9e93a45e5a8a3cb59222b93a44e04e0929df47635be2bd44a5bf09cd5fac4f1b"),
-        duoqian_admins: &[
+        admins: &[
             hex!("5c02963fb3bd05b5219120d83d37f1fa579a385fecb85eb4ec2e2673ebbb2717"),
             hex!("426a2d8b60bea0d1d449f07944bb12b12f1d6462df665d370db2af69b81c3d4e"),
             hex!("d60f7c8aadb750f545334c524d38966f35d721636b4031c1788410c92b2d0904"),
@@ -466,7 +466,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("28f8e719d05979fe4fef68e8e34fbbe5939290de197aa1a39bd78a328e4cfcff"),
         stake_account: hex!("20aa094f7a2fe90bbf5a96ff23fad1b1dc5ba71a392daae726d00fba627c8677"),
         main_account: hex!("af305d6bd94d08f4536d0a573077804ee0704c25e085c8f47fef9a862f19b848"),
-        duoqian_admins: &[
+        admins: &[
             hex!("c088c0c872442f38d757e784c813dcec8553865ead6dd893ac6c017af5d69f55"),
             hex!("42114435469d7725d16e905e2a88c19da99bbb6ae524b1bce5b8ab5723307b02"),
             hex!("9e75e35544fb971fca7ee78a080cccdbd669f173a8f91bcc31d4303ad896dc0c"),
@@ -486,7 +486,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("87cb6eb6612ede3e8ae56d9e74086b09cda263d0389fe3ad653c9ebc2f0e3a78"),
         stake_account: hex!("0742f1db10c6bd856c39ec9903b994d47ab07f7486eec3be9c3ed1651e10499f"),
         main_account: hex!("fe7e52efbd4a81c0c1d18c231e3a9321a132a5da7406d44034bf6bb1a8627870"),
-        duoqian_admins: &[
+        admins: &[
             hex!("827e73de31b2709b35089493589aacee2ae5b21783b42e5485d8f9b0e68fda61"),
             hex!("607171f3f3ea76ffc060c5168343e0b7e37eaa6a895aa5f767c9d7bbeb36b67a"),
             hex!("7cf58cab2eb3d22b06752610e229b6f7f295324e2f344bfec5b637a4e4749c4e"),
@@ -506,7 +506,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("08d796def30e246b6fac0d245e76746e3a4167cb638b0badb6fc915be65f1f87"),
         stake_account: hex!("70e230d35264a726988b762c5ad26b72d4f95cda0fa7a0491b4d5df38b0b1224"),
         main_account: hex!("069aaa597bdb2d2d682ee7c44615e035dee75f1df0fb9eb098f3571c2d045bd8"),
-        duoqian_admins: &[
+        admins: &[
             hex!("ce923cfccca40f7f50dbcc73f3993a47564ce7a2430d9f60bac6b9212db8082e"),
             hex!("c2aca903b71942762be6d8892ab61ad44389193ec442ee8a31ea7ced8c2e1b19"),
             hex!("c4405135f3207e48f73df3626170dbdd8a7c26bea487d954bc59d38e1bfe2411"),
@@ -526,7 +526,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("274ffb6b95feeeff5683a54014b7d2e9926fd09f359cc401ca8dbd7b20fe25c5"),
         stake_account: hex!("c7b82022aa1a5e210e6c63b51c77390e85e4607bf606a6130475849b06c5e56b"),
         main_account: hex!("dd3c7135c61368556911362f5c57da40c7772d71e027f2b1fcd499a7e18082f0"),
-        duoqian_admins: &[
+        admins: &[
             hex!("ec059effa082803a1cb54f4be99123b435514be482b2a45de16f2663d7bec07e"),
             hex!("e2720a778010c978a0dabcc8fd376aa1c2986cea86353695d89e452fe68e331b"),
             hex!("e07a5ae091692aee99991b9008c1c56381c251afa0efc37eb17d7b9275d00b15"),
@@ -546,7 +546,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("3b468ce35bd63c997d91efcef179ba9dce5dc7506e89b839ebbbeca0e33e714b"),
         stake_account: hex!("fcf5eb3cd66e5bb48748e0556583ece6c2ed851fc093844725f90a6ba845428a"),
         main_account: hex!("2304d0242072d00d9b116224c4f09549e9be59e411b78c601542b606a16b3289"),
-        duoqian_admins: &[
+        admins: &[
             hex!("240519b39d7ac94ae048845ff707b81255bfb52383ba61c47d65c9adad1e783f"),
             hex!("0e95f2e4c8cf8e4f2b39d98149d2b8846edfb80d009f6e508e3b4dc457783a15"),
             hex!("7e0df17eafbb1fadafe0449f709f084a28fac02e306279512298fc13b918f924"),
@@ -566,7 +566,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("6d656f51e9070406c7041caebcda93a8b87c80280764b282c98617e495898d4c"),
         stake_account: hex!("2881243de1f9ebe6e7021586efca46de4793eaf03d562d409c62c1c801adf5d8"),
         main_account: hex!("782864a3277c09bc2135d7529c34f7eb88f5d14b5d446db0cc12f68710803038"),
-        duoqian_admins: &[
+        admins: &[
             hex!("9e6c016183e311d06f3af7f8c868d23a63ebb02aed985506ba9cbac71b88e636"),
             hex!("70d199e9871d49ca54f65ef84b22eddaeb46d65fa51acffee5bd8d4ec5f68c7d"),
             hex!("d8a96a54d932bc5e09f7bf38a88b71c95769dbf7af5ff33dd34d41b46d89e203"),
@@ -586,7 +586,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("425565245d2298adb3789d9f207478cf3747b339eea6f031ea4fb3a8d001be68"),
         stake_account: hex!("7537eb5c0fb1d9b84a8a10329cbc919c5f31f787cab11da3efb24a6cd922620f"),
         main_account: hex!("608a1e04f7de9de454cb9d49641aa999eb644999d0c75ae17d8514bf16e1b1d6"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d0abf7d5bf48879b31cf8335bf4eaa35284185444c3c340902791c8860d4d703"),
             hex!("02186e9ca519afc3d461d7433bf47c932b4da73c262eb599b1aa507a6ce6f812"),
             hex!("825f083b9d940748da8bb79c00ebd971bed1a63fc5241f3d72a02726ba236529"),
@@ -606,7 +606,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("2131af1bca9075de2cecd8015bcb8a542b4a12ea71af7d9023680dd1985cf898"),
         stake_account: hex!("751e2ef0028880714823262de9a56f11fd89538ad903b939f9268065d8362ce3"),
         main_account: hex!("2030c382c5bad0fb3a6159e2a92b9502550951e1d62129c740087e6d50292ef0"),
-        duoqian_admins: &[
+        admins: &[
             hex!("6a23c0f923ff3bcb7b787eff0e09cdc5ec3c30d5c9fbaa244b30ff14ec88d00c"),
             hex!("10936e219740f088667645ce8df23fd47b1cb246b3e2f66a7d1111cca2b1820d"),
             hex!("2a89d69c10104b963a3b41e4b553f694f33a7604149bca455b64edc31b5d8d48"),
@@ -626,7 +626,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("85986826cb86e8e221bbb3114fe7faebccd4fad983aeeda32d8d2614abd0a585"),
         stake_account: hex!("c54c7fff799abcf4cf493500d815ce883ce9497b330a387295fcc8faa60b9ff4"),
         main_account: hex!("bc95ab3ca2c658b5269d73bcd3e68a95ed4e41af7133947353d3681d1f84b72b"),
-        duoqian_admins: &[
+        admins: &[
             hex!("c2406f8a720ce27969456d67468debc78e2933f1fb8ebe75799582e6eec73839"),
             hex!("04908273d2916625087590caf764aae7eca0f8fa52a2f9b80959e7f308550430"),
             hex!("fe4fd3d43864c7c8b24249c85736bf42942ef3529e40c995dc47366af3c6352d"),
@@ -646,7 +646,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("b847299b4a6018e765093801c73cbb4cff342f43aa54f4d3ac5002eecf3aed86"),
         stake_account: hex!("50915414c7f0235c23c051473a46f065762d5523b872f5db555eb5e57f78e502"),
         main_account: hex!("9fb5edba282ba9cee81a8faa7e018f0ab173c52690b44509c65d7a8a0e6a427a"),
-        duoqian_admins: &[
+        admins: &[
             hex!("82df0fbf16857baffbed3ceb167c17ee87b999797bdd3cc725c55ddf7d3c040a"),
             hex!("70fe5e941a9171c1884a6094793b91276a1871737c1a182539c453daa743fa6b"),
             hex!("5ed91f2dffb02e1d8555552221895a0f2bc62e465c3c4e7fe2c39bad15515651"),
@@ -666,7 +666,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("6721c2a98f87c3a2f084bf5533c980e38c1bb65dc378a6a767f1470c14ba672e"),
         stake_account: hex!("c35ac7e9d5b737e87d3a44ab6d2bef0f58b2b19788cdc61deb0434571d7a88cf"),
         main_account: hex!("a64f282dd3c24df09a6512cdd72fcd448b480a8f59dc460960a253839ca9332f"),
-        duoqian_admins: &[
+        admins: &[
             hex!("9af72d3d46fe219a8f48fb6f73fdaccc4057f32dffe110531e606487c5abf73e"),
             hex!("6c5c177a796e35fc3a18e74d196b21d41931027bae0b852db3d1844c672b4e62"),
             hex!("a20044c26eda427df6856636abcf530dd69dd52a2adf641ee121a64a3e6fd962"),
@@ -686,7 +686,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("a86a7d1adf7d73770c2c9832a72f1112f49988e8fb7d94315ed9488e8e754cc7"),
         stake_account: hex!("d6cfa334492abfa002ab62131ad758e87724e5e7655defa70163140abce0f842"),
         main_account: hex!("99fa20a38fa94a3ce1830d49a7090a32069cd9b8688da9349633259e3f941ffa"),
-        duoqian_admins: &[
+        admins: &[
             hex!("b0c59a13a468e7c5a5d4fd32a7ca4d34e4bd41517a0bcc8327e2e40c838c2c08"),
             hex!("2c35bd9c95e7ca5660ca44f7bfe6f1033e240860be666b84244ad0fbb2469945"),
             hex!("a82c184bd133150afdc1579c59c61d89d6300159caf65f1bce3a73f8cbc2dc3a"),
@@ -706,7 +706,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("a2d83c5492bc011d3a5f2f7c322139e7156c3b9ec90853b76dc97ed6b784e8af"),
         stake_account: hex!("d47bb6901f37f8852572a1e58c9395e9e5ecc9aaed6ae4709554c1fb3460949d"),
         main_account: hex!("68efded8ffe41856a1336773b22b57b70c22ea55b4754fa63de0b8f098a7cff0"),
-        duoqian_admins: &[
+        admins: &[
             hex!("5ad6075c5d29eb2b8e91083c406fe6f7ccaa41053d30e2cb0961d85bb26eca48"),
             hex!("c0abc0e68d1086d3f4b9de703dd4484b4949ef81c7d6a33372fb0cc9b3be990b"),
             hex!("be251b50338eace5d5c5c40403e7902d505901468f893e659195fcc2c11f6b0b"),
@@ -726,7 +726,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("9b73e74d4b4bdf7b90b9314a522484e0eeabafd17613d0184423468101b52e2b"),
         stake_account: hex!("92f93b885902c91363a7d787c0e613ac58d0eec92f1a82039c6535c6d9e53bd9"),
         main_account: hex!("fc926117c924b15e85973d40a5c62f4989325c8e6000a217a5424bdaf4a50c02"),
-        duoqian_admins: &[
+        admins: &[
             hex!("e8167b6b1319e6b529958c802060970eb11cad3653fe21a3efbd8359fd4dfb5c"),
             hex!("4e33b4bbc3c37ae3a61b8e52d2e901ef15d104e1fc9e27b4c40acf11db39634d"),
             hex!("a0be6c58f47b96d89d005d42d2f2e3ab4b4f85eb1879ff22f847c5369816304f"),
@@ -746,7 +746,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("79b669bf3c303abc0127adbb80d69c8a37c31194b7a607fced835cb785787c91"),
         stake_account: hex!("127d29f2b209d58be16921d6c2e2a36cbc3aed46d0e54b28d5788c8fb9ceebe2"),
         main_account: hex!("609a8667015b22b75828f145ec046bf4d1c143c3e90eab68195b878c3c26d039"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d0a892173117fe6d54d93e474395063b29ed4b3d96c280c27c7669817b611948"),
             hex!("24a69bfd777beb23434a5dc979fe1fdce4de09f08fa4a88b263eeece26cb6b2c"),
             hex!("2a30b5fa75be94882127923977133b5530a103cecbc1ee5d0807e40f1ea1aa35"),
@@ -766,7 +766,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("176e20195e7074351855893f304a38b4a70c83d9987b64c6cc7d5bb55a4609b8"),
         stake_account: hex!("df06db195678afb328e33e013c832986e649e147c5cb622a5911409331fa1f97"),
         main_account: hex!("59fe2f5bfcae83abf98853f063db01e3efceae46dee32e14b8aa9d9c74fef8de"),
-        duoqian_admins: &[
+        admins: &[
             hex!("0afc29913ab6807bd7f56c017f2d50b45131b2b77e0323ea63b6ae6002327812"),
             hex!("3e5616265ad161e34ad89cf30fc8069e17ce015604687497162344fd7bce0030"),
             hex!("d0f1b61336b82066e88897b8a7697acb13b6d3597a877eaa5be83a987a02b96c"),
@@ -786,7 +786,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("aedd82e0b7cd96fee49bb306a267f9c61d4bcbbb996c452888a4c0a7d5622b04"),
         stake_account: hex!("fe13ea29e17c914af06753cd357c1bf4b6de431c5aa8df35c49a2bf54c83733f"),
         main_account: hex!("5216828b35be36f538a7ff0e69a8346a7b635d1ae34229e6206b2c76a5f35455"),
-        duoqian_admins: &[
+        admins: &[
             hex!("a6050f81f2e028db2037070544210b7dd2097b42da9453950c540734bc321528"),
             hex!("fc700d1ecd4360d9fb5b47d93a721df4053ccaf5c1370d2a02f47cb8e9466b08"),
             hex!("c85b5193653a90a7713d98dfe68453fc76b52cb00a419d0b7752e8c65e43c950"),
@@ -806,7 +806,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("fde86223c1945616182ce78304cba4c00c99799a990b528c4e1c6350a31dd908"),
         stake_account: hex!("411833c18dec2a0de42936c834c5f0ee79c3c756dbe0a329af54e03f4a18c212"),
         main_account: hex!("6445e4baab20cdbf9389fc8fdfe1a86fc30c22c80207078f7353f1e8acfc1418"),
-        duoqian_admins: &[
+        admins: &[
             hex!("22e781c336d56df96887073aeb1bae59da5d827c8ad3b68ff1bed9e33767775b"),
             hex!("b65dd0354fb19ea5666c4c2caada227b708907a033452fad41e12eb2e2377210"),
             hex!("0c6b9a4a19a32a9d778a5d9aa77b16383e5dd1d52aace6eacf3815d7e066c051"),
@@ -826,7 +826,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("014f9eb856f901b635680c53cb7d266ca67a98db8bf89ea27244e9fc7809d25d"),
         stake_account: hex!("092e70ab0742be7c478381d2b055e3d653d27b3329890eadd154cd6a7aed2853"),
         main_account: hex!("4c41c13662e52d3393eed706c5d714cfb2b3dc7851c01a6dc2cbb56990129a80"),
-        duoqian_admins: &[
+        admins: &[
             hex!("a0260cf1c59232c08ccf080783363dd6f276183c58ad3e5bc29b494f823af449"),
             hex!("8aa0feb0fb2850e7fd26e6ba53ef828a9d2aa0e4077aecc08142d901862b5f31"),
             hex!("dc7de36d15c5ba3638a9831cdbb9552445993e420d11a9f1a43a073fd1216f47"),
@@ -846,7 +846,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("88f4861da2db2982a187efc88eb7288a7c5cd57eeb98128ce3852bd81929f4bf"),
         stake_account: hex!("740fbb1ff1f1cf77d27ee50836983d82aa6079746b8d32786548e6c295ab9cd3"),
         main_account: hex!("9781163b146fd7ba10720bc3a7b3505f44b1368824282c237b3a1cfffb548977"),
-        duoqian_admins: &[
+        admins: &[
             hex!("785c4af6c7af289e9deaf018d0593f6d2393626f8b4a756e026e62209a57bf26"),
             hex!("f283c9b82d4661efbd32710abcf9406f017e3dee11825885bb7b92e1a319e52b"),
             hex!("9e161898b9367f6aad76f5fbb177a14f45c645f40d894ef585849222c335d650"),
@@ -866,7 +866,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         fee_account: hex!("6ade1894079bad5408e421eee261b21b4d507801aecae0ff9d02203ff0572997"),
         stake_account: hex!("aba2fc9d4b85dd51f9adafe5a71e9114481673d52fb59c0a4c5f5f6dddee559c"),
         main_account: hex!("b8486f8e93b974617597e1e681c4b39cfc329702bcd2b93ff7419656766a35f3"),
-        duoqian_admins: &[
+        admins: &[
             hex!("5a6b9de943c7a5125eecc39a18e565c174583d8aabaec8e540171e25d0251578"),
             hex!("0c892cbc1e85b3ea66dc26006429b8b568a35b2d533347248f43570496830d79"),
             hex!("e8beab3accbdc7987a611da0afa5d486e19a6ff392cf2a0c38a436cc7f970040"),

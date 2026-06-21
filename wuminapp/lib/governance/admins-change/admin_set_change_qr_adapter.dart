@@ -22,7 +22,7 @@ class AdminSetChangeQrAdapter {
         SignDisplayField(
             key: 'account', label: '管理员账户', value: '0x${account.accountHex}'),
         SignDisplayField(
-            key: 'new_admins', label: '新管理员', value: normalizedAdmins),
+            key: 'admins', label: '新管理员', value: normalizedAdmins),
         SignDisplayField(
           key: 'new_threshold',
           label: '新阈值',

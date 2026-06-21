@@ -416,7 +416,7 @@ fn propose_rejects_key_owned_by_other_institution() {
 #[test]
 fn propose_rejects_unauthorized_admin() {
     new_test_ext().execute_with(|| {
-        // 使用一个不在 duoqian_admins 中的随机账户
+        // 使用一个不在 admins 中的随机账户
         let outsider = AccountId32::new([99u8; 32]);
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(

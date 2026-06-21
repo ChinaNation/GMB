@@ -5,7 +5,7 @@
 //! 更换不影响已经在投票中的提案过程。
 //!
 //! - `is_admin_in_snapshot`:查快照判断某人是否是该提案某机构的管理员
-//! - `snapshot_admin_count`:快照中某机构的管理员数量
+//! - `snapshot_admins_len`:快照中某机构的管理员数量
 //! - `snapshot_institution_admins`:从 `InternalAdminProvider` 拉取当前管理员列表写入快照
 
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
@@ -26,7 +26,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// 查询快照中某机构的管理员数量。
-    pub fn snapshot_admin_count(proposal_id: u64, institution: T::AccountId) -> Option<u32> {
+    pub fn snapshot_admins_len(proposal_id: u64, institution: T::AccountId) -> Option<u32> {
         AdminSnapshot::<T>::get(proposal_id, institution).map(|admins| admins.len() as u32)
     }
 

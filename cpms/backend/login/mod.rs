@@ -27,17 +27,17 @@ fn generate_secure_token(prefix: &str) -> String {
     format!("{}_{}", prefix, hex::encode(buf))
 }
 
-/// 超级管理员 session 空闲过期时间（15 分钟无操作后过期）。
-pub(crate) const SUPER_ADMIN_IDLE_EXPIRES_SECONDS: i64 = 15 * 60;
-/// 操作管理员 session 空闲过期时间（30 分钟无操作后过期）。
-pub(crate) const OPERATOR_ADMIN_IDLE_EXPIRES_SECONDS: i64 = 30 * 60;
+/// 管理员 session 空闲过期时间（15 分钟无操作后过期）。
+pub(crate) const ADMIN_IDLE_EXPIRES_SECONDS: i64 = 15 * 60;
+/// 操作员 session 空闲过期时间（30 分钟无操作后过期）。
+pub(crate) const OPERATOR_IDLE_EXPIRES_SECONDS: i64 = 30 * 60;
 const CHALLENGE_EXPIRES_SECONDS: i64 = 90;
 
 pub(crate) fn session_ttl_seconds(role: &str) -> i64 {
-    if role == "SUPER_ADMIN" {
-        SUPER_ADMIN_IDLE_EXPIRES_SECONDS
+    if role == "ADMIN" {
+        ADMIN_IDLE_EXPIRES_SECONDS
     } else {
-        OPERATOR_ADMIN_IDLE_EXPIRES_SECONDS
+        OPERATOR_IDLE_EXPIRES_SECONDS
     }
 }
 
@@ -231,7 +231,7 @@ async fn auth_qr_complete(
 
     // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
     let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
-    if admin.role == "OPERATOR_ADMIN" {
+    if admin.role == "OPERATOR" {
         crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
     }
     // 重建完整签名原文(包含签名者公钥),与 wumin 端
@@ -400,7 +400,7 @@ async fn auth_qr_result(
             role: row.get("role"),
             admin_name: row.get("admin_name"),
         };
-        if user.role == "OPERATOR_ADMIN" {
+        if user.role == "OPERATOR" {
             crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
         }
         sqlx::query("DELETE FROM qr_login_results WHERE challenge_id = $1 AND session_id = $2")

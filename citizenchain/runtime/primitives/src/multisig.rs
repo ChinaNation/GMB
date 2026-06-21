@@ -69,17 +69,17 @@ where
     MaxAdmins: frame_support::traits::Get<u32>,
 {
     pub admins: frame_support::BoundedVec<AccountId, MaxAdmins>,
-    pub admin_count: u32,
+    pub admins_len: u32,
     pub threshold: u32,
 }
 
 /// 不带 BoundedVec 约束的简化版 MultisigConfig，供 trait 接口返回值用。
 ///
 /// 业务 pallet 在 trait 方法中返回此版本（避免把 MaxAdmins 泛型暴露到 trait 边界），
-/// duoqian-transfer 拿到后只需读 admins/threshold/admin_count 三个字段做校验。
+/// duoqian-transfer 拿到后只需读 admins/threshold/admins_len 三个字段做校验。
 #[derive(Clone, RuntimeDebug, PartialEq, Eq)]
 pub struct MultisigConfigSnapshot<AccountId> {
     pub admins: Vec<AccountId>,
-    pub admin_count: u32,
+    pub admins_len: u32,
     pub threshold: u32,
 }

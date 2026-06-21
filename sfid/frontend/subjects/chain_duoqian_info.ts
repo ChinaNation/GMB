@@ -28,7 +28,7 @@ export interface InstitutionRegistrationCredential {
   genesis_hash: string;
   register_nonce: string;
   province_name: string;
-  signer_admin_pubkey: string;
+  signer_pubkey: string;
   signature: string;
   meta: {
     key_id: string;

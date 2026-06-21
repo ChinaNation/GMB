@@ -10,7 +10,9 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
+use crate::core::chain_runtime::build_institution_registration_credential;
 use crate::core::response::ApiResponse;
 use crate::subjects::service::{
     can_delete_account, default_account_names_for_institution, is_default_account_name,
@@ -72,6 +74,27 @@ pub(crate) struct AppInstitutionAccounts {
     pub(crate) sfid_number: String,
     pub(crate) sfid_full_name: String,
     pub(crate) accounts: Vec<AppAccountEntry>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AppInstitutionRegistrationCredential {
+    pub(crate) genesis_hash: String,
+    pub(crate) register_nonce: String,
+    pub(crate) issuer_sfid_number: String,
+    pub(crate) issuer_main_account: String,
+    pub(crate) signer_pubkey: String,
+    pub(crate) scope_province_name: String,
+    pub(crate) scope_city_name: String,
+    pub(crate) signature: String,
+    pub(crate) meta: crate::core::chain_runtime::RuntimeSignatureMeta,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AppInstitutionRegistrationInfo {
+    pub(crate) sfid_number: String,
+    pub(crate) sfid_full_name: String,
+    pub(crate) account_names: Vec<String>,
+    pub(crate) credential: AppInstitutionRegistrationCredential,
 }
 
 fn parse_category(value: &str) -> crate::number::InstitutionCategory {
@@ -242,11 +265,44 @@ pub(crate) async fn app_get_institution_registration_info(
             );
         }
     }
-    api_error(
-        StatusCode::NOT_IMPLEMENTED,
-        5001,
-        "institution chain registration requires the city-admin signing flow",
-    )
+    let sfid_full_name = inst.sfid_full_name.unwrap_or_default();
+    let credential = match build_institution_registration_credential(
+        &state,
+        &sfid_number,
+        &sfid_full_name,
+        &account_names,
+        Uuid::new_v4().to_string(),
+        &inst.province_name,
+        &inst.city_name,
+    ) {
+        Ok(v) => v,
+        Err(message) => {
+            let detail = format!("institution registration credential sign failed: {message}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
+        }
+    };
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: AppInstitutionRegistrationInfo {
+            sfid_number,
+            sfid_full_name,
+            account_names,
+            credential: AppInstitutionRegistrationCredential {
+                genesis_hash: credential.genesis_hash,
+                register_nonce: credential.register_nonce,
+                issuer_sfid_number: credential.issuer_sfid_number,
+                issuer_main_account: credential.issuer_main_account,
+                signer_pubkey: credential.signer_pubkey,
+                scope_province_name: credential.scope_province_name,
+                scope_city_name: credential.scope_city_name,
+                signature: credential.signature,
+                meta: credential.meta,
+            },
+        },
+    })
+    .into_response()
 }
 
 pub(crate) async fn app_list_accounts(

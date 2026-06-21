@@ -709,7 +709,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
         return;
     };
     // 中文注释:5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
-    // china_zf.rs CHINA_ZF(带 main/fee/duoqian_admins),由 :375 的常量循环单一 push;
+    // china_zf.rs CHINA_ZF(带 main/fee/admins),由 :375 的常量循环单一 push;
     // 此处不再用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
     for (sfid_short_name, sfid_full_name, org_code) in [
         (

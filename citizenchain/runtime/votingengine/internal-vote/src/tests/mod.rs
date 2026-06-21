@@ -210,12 +210,12 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_REN | ORG_PUP | ORG_OTH => {
                 institution == registered_account_institution()
@@ -236,23 +236,11 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             ORG_REN | ORG_PUP | ORG_OTH if institution == registered_account_institution() => {
                 let override_admins =
                     REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
@@ -312,7 +300,7 @@ impl
         nonce: &votingengine::pallet::VoteNonceOf<Test>,
         signature: &votingengine::pallet::VoteSignatureOf<Test>,
         province_name: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         eligible_total > 0
             && !nonce.is_empty()
@@ -333,7 +321,7 @@ impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for Test
         nonce: &[u8],
         signature: &[u8],
         province_name: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         if !Self::is_eligible(binding_id, who)
             || signature != b"vote-ok"
@@ -487,7 +475,7 @@ fn prb_pid() -> AccountId32 {
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].duoqian_admins[index])
+    AccountId32::new(CHINA_CB[0].admins[index])
 }
 
 fn all_prc_institutions() -> Vec<(AccountId32, AccountId32)> {
@@ -497,7 +485,7 @@ fn all_prc_institutions() -> Vec<(AccountId32, AccountId32)> {
         .map(|n| {
             (
                 AccountId32::new(n.main_account),
-                AccountId32::new(n.duoqian_admins[0]),
+                AccountId32::new(n.admins[0]),
             )
         })
         .collect()
@@ -509,42 +497,30 @@ fn all_prb_institutions() -> Vec<(AccountId32, AccountId32)> {
         .map(|n| {
             (
                 AccountId32::new(n.main_account),
-                AccountId32::new(n.duoqian_admins[0]),
+                AccountId32::new(n.admins[0]),
             )
         })
         .collect()
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].duoqian_admins[index])
+    AccountId32::new(CHINA_CB[1].admins[index])
 }
 
 fn prb_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].duoqian_admins[index])
+    AccountId32::new(CHINA_CH[0].admins[index])
 }
 
 fn institution_admins(institution: AccountId32) -> Vec<AccountId32> {
     CHINA_CB
         .iter()
         .find(|n| AccountId32::new(n.main_account) == institution)
-        .map(|n| {
-            n.duoqian_admins
-                .iter()
-                .copied()
-                .map(AccountId32::new)
-                .collect()
-        })
+        .map(|n| n.admins.iter().copied().map(AccountId32::new).collect())
         .or_else(|| {
             CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                })
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect())
         })
         .expect("institution should have admins")
 }
@@ -620,7 +596,7 @@ fn vote_sig_bad() -> votingengine::pallet::VoteSignatureOf<Test> {
     b"bad".to_vec().try_into().expect("signature should fit")
 }
 
-/// ADR-008 step3:测试用占位 province_name + signer_admin_pubkey,
+/// 测试用占位签发作用域和签名公钥,
 /// `TestPopulationSnapshotVerifier` / `TestSfidEligibility` 仅做空字段非空检验,
 /// 真实 sr25519 验签覆盖留 runtime 层。
 fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
@@ -630,7 +606,7 @@ fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude:
         .expect("province_name should fit")
 }
 
-fn signer_admin_pubkey_ok() -> [u8; 32] {
+fn signer_pubkey_ok() -> [u8; 32] {
     [7u8; 32]
 }
 
@@ -659,7 +635,7 @@ fn prepare_population_snapshot_for(
         nonce,
         snapshot_sig_ok(),
         province_ok(),
-        signer_admin_pubkey_ok(),
+        signer_pubkey_ok(),
     ));
 }
 

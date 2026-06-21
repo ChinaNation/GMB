@@ -5,7 +5,7 @@
 //!
 //! 唯一入口: `do_propose_create_institution`(call_index=5,ADR-008 step2b)
 //! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
-//! - 凭证带 (province_name, signer_admin_pubkey) 双层验签
+//! - 凭证带签发机构 SFID、签发机构主账户和签发管理员公钥
 //! - 资金模型: 发起时 reserve, 通过后划转, 拒绝后 unreserve
 
 extern crate alloc;
@@ -41,14 +41,17 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     sfid_number: SfidNumberOf<T>,
     sfid_full_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
-    admin_org: u8,
-    admin_count: u32,
-    duoqian_admins: DuoqianAdminsOf<T>,
+    org: u8,
+    admins_len: u32,
+    admins: DuoqianAdminsOf<T>,
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    province_name: alloc::vec::Vec<u8>,
-    signer_admin_pubkey: [u8; 32],
+    issuer_sfid_number: alloc::vec::Vec<u8>,
+    issuer_main_account: T::AccountId,
+    signer_pubkey: [u8; 32],
+    scope_province_name: alloc::vec::Vec<u8>,
+    scope_city_name: alloc::vec::Vec<u8>,
 ) -> DispatchResult {
     ensure!(
         !T::ProtectedSourceChecker::is_protected(&who),
@@ -56,14 +59,21 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     );
     ensure!(!sfid_number.is_empty(), Error::<T>::EmptySfidNumber);
     ensure!(!sfid_full_name.is_empty(), Error::<T>::EmptyAccountName);
-    ensure!(!province_name.is_empty(), Error::<T>::EmptyProvince);
+    ensure!(
+        !issuer_sfid_number.is_empty(),
+        Error::<T>::EmptyIssuerSfidNumber
+    );
+    ensure!(
+        !scope_province_name.is_empty(),
+        Error::<T>::EmptyScopeProvinceName
+    );
     ensure!(
         !Institutions::<T>::contains_key(&sfid_number),
         Error::<T>::InstitutionAlreadyExists
     );
-    Pallet::<T>::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
+    Pallet::<T>::ensure_admin_config(&who, admins_len, &admins, threshold)?;
     ensure!(
-        matches!(admin_org, ORG_PUP | ORG_OTH),
+        matches!(org, ORG_PUP | ORG_OTH),
         Error::<T>::InvalidAdminOrg
     );
 
@@ -80,8 +90,11 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             &account_name_payload,
             &register_nonce,
             &signature,
-            province_name.as_slice(),
-            &signer_admin_pubkey,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
+            &signer_pubkey,
+            scope_province_name.as_slice(),
+            scope_city_name.as_slice(),
         ),
         Error::<T>::InvalidSfidInstitutionSignature
     );
@@ -94,17 +107,17 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     let now = <frame_system::Pallet<T>>::block_number();
     // 中文注释：管理员更换与内部投票直接使用机构主账户多签地址。
     let institution = main_account.clone();
-    let org = admin_org;
+    let org = org;
     let action = CreateInstitutionAction {
         sfid_number: sfid_number.clone(),
         sfid_full_name: sfid_full_name.clone(),
         main_account: main_account.clone(),
         fee_account: fee_account.clone(),
         proposer: who.clone(),
-        admin_org,
-        admin_count,
+        org,
+        admins_len,
         threshold,
-        duoqian_admins: duoqian_admins.clone(),
+        admins: admins.clone(),
         accounts: created_accounts.clone(),
         initial_total,
         fee,
@@ -124,10 +137,10 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                 sfid_full_name: sfid_full_name.clone(),
                 main_account: main_account.clone(),
                 fee_account: fee_account.clone(),
-                admin_org,
-                admin_count,
+                org,
+                admins_len,
                 threshold,
-                duoqian_admins: duoqian_admins.clone(),
+                admins: admins.clone(),
                 creator: who.clone(),
                 created_at: now,
                 status: InstitutionLifecycleStatus::Pending,
@@ -171,7 +184,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             who.clone(),
             org,
             institution.clone(),
-            duoqian_admins.iter().cloned().collect(),
+            admins.iter().cloned().collect(),
             threshold,
             crate::MODULE_TAG,
             data,
@@ -186,7 +199,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             org,
             institution.clone(),
             admins_change::AdminAccountKind::InstitutionAccount,
-            &duoqian_admins,
+            &admins,
             &who,
         ) {
             return TransactionOutcome::Rollback(Err(err));
@@ -205,9 +218,9 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         main_account,
         proposer: who,
         accounts: created_accounts,
-        admins: duoqian_admins,
-        admin_org,
-        admin_count,
+        admins: admins,
+        org,
+        admins_len,
         threshold,
         initial_total,
         reserve_total,

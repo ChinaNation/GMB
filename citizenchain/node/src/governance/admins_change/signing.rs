@@ -10,9 +10,9 @@ use super::validation::validate_admin_set_change;
 pub fn build_admin_set_change_sign_request(
     state: &AdminAccountState,
     pubkey_hex: &str,
-    new_admins: &[String],
+    admins: &[String],
 ) -> Result<VoteSignRequestResult, String> {
-    let normalized = validate_admin_set_change(state, pubkey_hex, new_admins)?;
+    let normalized = validate_admin_set_change(state, pubkey_hex, admins)?;
     let pubkey_clean = account_id::normalize_pubkey_hex(pubkey_hex)?;
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
@@ -24,7 +24,7 @@ pub fn build_admin_set_change_sign_request(
         normalized.len()
     );
     // display.fields 必须和 wumin PayloadDecoder 对 propose_admin_set_change
-    // 解出的字段逐项一致：org / account / new_admins。
+    // 解出的字段逐项一致：org / account / admins。
     let fields = json!([
         {
             "key": "org",
@@ -37,7 +37,7 @@ pub fn build_admin_set_change_sign_request(
             "value": format!("0x{}", state.account_hex),
         },
         {
-            "key": "new_admins",
+            "key": "admins",
             "label": "新管理员",
             "value": normalized
                 .iter()
@@ -62,12 +62,12 @@ pub fn submit_admin_set_change(
     request_id: &str,
     expected_pubkey_hex: &str,
     expected_payload_hash: &str,
-    new_admins: &[String],
+    admins: &[String],
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: &str,
 ) -> Result<VoteSubmitResult, String> {
-    let normalized = validate_admin_set_change(state, expected_pubkey_hex, new_admins)?;
+    let normalized = validate_admin_set_change(state, expected_pubkey_hex, admins)?;
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
     let call_data = build_admin_set_change_call_data(state.org, &account_id, &normalized)?;
     gov_signing::verify_and_submit(

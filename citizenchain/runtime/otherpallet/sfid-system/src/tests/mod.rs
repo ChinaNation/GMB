@@ -1,24 +1,13 @@
-//! sfid-system pallet 测试套件
+//! sfid-system pallet 测试套件。
 //!
-//! 覆盖范围:
-//! - 旧 bind / unbind / 投票凭证测试(继承自老实现,语义不变)。
-//! - ADR-008 Step 2a 4 个新 Pays::No extrinsic + ValidateUnsigned + helper。
-//!
-//! 命名约定保留任务卡列出的 12 条核心测试,验收清单可逐条对照。
+//! 中文注释:本模块当前只负责 SFID 绑定/解绑和公民投票凭证消费。
+//! 签发管理员集合不在本 pallet 内维护,由 runtime verifier 对接 admins-change。
 
 use super::*;
-use codec::Encode;
-use frame_support::traits::EnsureOrigin;
-use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types};
+use frame_support::{derive_impl, parameter_types};
 use frame_system as system;
 use frame_system::EnsureRoot;
-use sp_core::sr25519;
-use sp_core::Pair;
-use sp_io::hashing::blake2_256;
-use sp_runtime::traits::Hash as HashTrait;
-use sp_runtime::traits::ValidateUnsigned;
-use sp_runtime::transaction_validity::{InvalidTransaction, TransactionSource};
-use sp_runtime::{traits::IdentityLookup, BuildStorage};
+use sp_runtime::{traits::Hash, traits::IdentityLookup, BuildStorage};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -57,7 +46,9 @@ impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, Sign
     for TestSfidVerifier
 {
     fn verify(_account: &u64, credential: &CredentialOf<Test>) -> bool {
-        !credential.bind_nonce.is_empty() && credential.signature.as_slice() == b"bind-ok"
+        !credential.issuer_sfid_number.is_empty()
+            && !credential.scope_province_name.is_empty()
+            && credential.signature.as_slice() == b"bind-ok"
     }
 }
 
@@ -71,10 +62,15 @@ impl SfidVoteVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, 
         _proposal_id: u64,
         _nonce: &NonceOf<Test>,
         signature: &SignatureOf<Test>,
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        _issuer_main_account: &u64,
+        _signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
-        signature.as_slice() == b"vote-ok"
+        !issuer_sfid_number.is_empty()
+            && !scope_province_name.is_empty()
+            && signature.as_slice() == b"vote-ok"
     }
 }
 
@@ -127,10 +123,14 @@ fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Tes
     BindCredential {
         binding_id: binding_id(seed),
         bind_nonce: nonce(bind_nonce),
-        // ADR-008 step3:每个 BindCredential 必带 (province_name, signer_admin_pubkey)。
-        // 测试用占位值即可,sfid-system 自身不解析这两个字段(真实双层校验留 runtime verifier)。
-        province_name: b"liaoning".to_vec().try_into().expect("province_name fits"),
-        signer_admin_pubkey: [7u8; 32],
+        issuer_sfid_number: b"SFID-ISSUER"
+            .to_vec()
+            .try_into()
+            .expect("issuer sfid fits"),
+        issuer_main_account: 99,
+        signer_pubkey: [7u8; 32],
+        scope_province_name: b"liaoning".to_vec().try_into().expect("scope fits"),
+        scope_city_name: b"shenyang".to_vec().try_into().expect("scope fits"),
         signature: signature(sig),
     }
 }

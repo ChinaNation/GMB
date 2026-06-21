@@ -21,7 +21,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 - 创建和关闭必须全员投票通过。
 - 普通业务提案按动态阈值通过。
 - 管理员集合变更使用统一管理员集合变更提案，不拆分增加/删除/更换。
-- 普通业务动态阈值由用户在注册或管理员变更时输入，投票引擎统一校验 `threshold * 2 > admin_count && threshold <= admin_count` 并保存。
+- 普通业务动态阈值由用户在注册或管理员变更时输入，投票引擎统一校验 `threshold * 2 > admins_len && threshold <= admins_len` 并保存。
 
 ## 协议参数
 
@@ -50,7 +50,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 
 | call_index | 名 | 入参 | 业务 |
 |---|---|---|---|
-| 0 | `propose_create` | `account_name, duoqian_admins, regular_threshold, amount` | 发起创建提案；普通动态阈值由用户输入并交投票引擎保存，创建投票阈值为全员 |
+| 0 | `propose_create` | `account_name, admins, regular_threshold, amount` | 发起创建提案；普通动态阈值由用户输入并交投票引擎保存，创建投票阈值为全员 |
 | 1 | `propose_close` | `personal_address, beneficiary` | 发起关闭提案(仅个人地址) |
 | 2 | `cleanup_rejected_proposal` | `proposal_id` | 清理被否决/超时的 Pending 残留 |
 
@@ -123,7 +123,7 @@ account_id = core_const::account_id_from_account(personal_address)
 
 - wuminapp `lib/personal-manage/*` 直接调 pallet=7 的 propose_create/propose_close。
 - wuminapp `PersonalManageService.submitProposeCreatePersonal` 编码：
-  `0x07 0x00 + account_name + duoqian_admins + regular_threshold + amount`。
+  `0x07 0x00 + account_name + admins + regular_threshold + amount`。
 - wuminapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
   `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员读
   `AdminsChange::AdminAccounts`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
@@ -131,7 +131,7 @@ account_id = core_const::account_id_from_account(personal_address)
 - 创建类交易入块后若未找到成功事件，客户端必须先解析 `System.ExtrinsicFailed` 并显示真实 `PersonalManage / AdminsChange` 模块错误，不能只提示“未找到成功事件”。
 - wumin `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
 - wumin `payload_decoder.dart` 解析 PersonalManage(7) 新编码，并拒绝旧
-  `admin_count + threshold` 交易载荷。
+  `admins_len + threshold` 交易载荷。
 
 ## 测试
 
@@ -196,7 +196,7 @@ flutter test test/signer/payload_decoder_test.dart
 - `execute_create_with_finalizer` / `execute_close_with_finalizer` 已删除死参数。
 - `InternalVoteExecutor` 统一使用 `decode_module_action` 解码 `MODULE_TAG + ACTION + payload`。
 - 创建/关闭执行失败事件改由 `on_execution_failed_terminal` 在终态清理后发出。
-- `DuoqianClosed` 事件补充 `admin_count / threshold`。
+- `DuoqianClosed` 事件补充 `admins_len / threshold`。
 - `PersonalDuoqianProposed` 事件补充 `fee`。
 - `weights.rs` 从 0 权重改为保守非零权重。
 - wuminapp storage codec 和 ProposalData 解码同步新 SCALE 布局。

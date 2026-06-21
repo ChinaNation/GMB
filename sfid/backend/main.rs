@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;
 use serde::Serialize;
+use sp_core::Pair;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -2627,12 +2628,27 @@ fn main() {
     let redis_client = RedisClient::open(redis_url.as_str())
         .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
 
-    // 中文注释:启动期仅校验 SFID_SIGNING_SEED_HEX 可解码,供登录二维码系统签名使用。
-    // 联邦管理员业务治理签名只走各自签名设备,后端不再保存或缓存管理员私钥。
+    // 中文注释:SFID_SIGNING_SEED_HEX 是本部署用于签发链端凭证的 sr25519 私钥。
+    // 链端不会信任环境变量本身,只会按 issuer_main_account 的 admins 真源确认
+    // SFID_RUNTIME_SIGNER_PUBKEY 是否属于签发机构管理员。
     {
         let seed_hex = required_env("SFID_SIGNING_SEED_HEX");
-        crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
+        let signer = crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
             .unwrap_or_else(|e| panic!("invalid SFID_SIGNING_SEED_HEX: {e}"));
+        let issuer_sfid_number = required_env("SFID_RUNTIME_ISSUER_SFID_NUMBER");
+        if issuer_sfid_number.trim().is_empty() {
+            panic!("SFID_RUNTIME_ISSUER_SFID_NUMBER must not be empty");
+        }
+        let issuer_main_account = required_env("SFID_RUNTIME_ISSUER_MAIN_ACCOUNT");
+        admins::login::parse_sr25519_pubkey_bytes(issuer_main_account.as_str()).unwrap_or_else(
+            || panic!("SFID_RUNTIME_ISSUER_MAIN_ACCOUNT must be a 32-byte account hex"),
+        );
+        let signer_pubkey = required_env("SFID_RUNTIME_SIGNER_PUBKEY");
+        let signer_pubkey_bytes = admins::login::parse_sr25519_pubkey_bytes(signer_pubkey.as_str())
+            .unwrap_or_else(|| panic!("SFID_RUNTIME_SIGNER_PUBKEY must be a 32-byte pubkey hex"));
+        if signer.public().0 != signer_pubkey_bytes {
+            panic!("SFID_RUNTIME_SIGNER_PUBKEY does not match SFID_SIGNING_SEED_HEX public key");
+        }
     }
     let database_url = required_env("DATABASE_URL");
     if database_url

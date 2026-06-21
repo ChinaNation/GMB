@@ -67,7 +67,7 @@ account_names[]
 - `genesis_hash`
 - `register_nonce`
 - `province_name`
-- `signer_admin_pubkey`
+- `signer_pubkey`
 - `signature`
 - `meta`
 

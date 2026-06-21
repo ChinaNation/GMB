@@ -86,7 +86,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _nonce: &[u8],
         _signature: &[u8],
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -106,7 +106,7 @@ impl
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -125,12 +125,12 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             _ => false,
         }
@@ -141,23 +141,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             _ => None,
         }
     }
@@ -219,15 +207,15 @@ impl pallet::Config for Test {
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].duoqian_admins[index])
+    AccountId32::new(CHINA_CB[0].admins[index])
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].duoqian_admins[index])
+    AccountId32::new(CHINA_CB[1].admins[index])
 }
 
 fn prb_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].duoqian_admins[index])
+    AccountId32::new(CHINA_CH[0].admins[index])
 }
 
 fn nrc_pallet_id() -> AccountId32 {

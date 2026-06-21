@@ -1,7 +1,7 @@
 # CPMS Initialize 模块技术文档
 
 ## 1. 模块定位
-`backend/initialize/` 负责 CPMS 安装初始化、安装授权材料入库、ARCHIVE 签发密钥生成和超级管理员绑定。
+`backend/initialize/` 负责 CPMS 安装初始化、安装授权材料入库、ARCHIVE 签发密钥生成和初始管理员绑定。
 
 本模块只消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码，不再维护旧中间注册状态。
 CPMS 是离线系统，初始化阶段不要求外置验签公钥；档案码真实性由 SFID 在 ARCHIVE 验真阶段闭环确认。
@@ -9,7 +9,7 @@ CPMS 是离线系统，初始化阶段不要求外置验签公钥；档案码真
 ## 2. 负责范围
 - 安装状态查询：`GET /api/v1/install/status`
 - 使用 SFID 安装码初始化：`POST /api/v1/install/initialize`
-- 超级管理员绑定：`POST /api/v1/install/super-admin/bind`
+- 初始管理员绑定：`POST /api/v1/install/admins/bind`
 - 生成 CPMS 本机 ARCHIVE 签发密钥：`qr_sign_keys.key_id = ARCHIVE`
 - 解密运行时需要的 `install_secret`，供 `dangan` 构造 `geo_seal`
 
@@ -39,7 +39,7 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 ## 4. 数据落库
 - `system_install`：保存 `sfid_number / province_code / city_code / province_name / city_name / install_secret / install_secret_hash / cpms_pubkey`。
 - `qr_sign_keys`：保存本机 `ARCHIVE` 签发密钥。
-- `admin_users`：保存超级管理员和操作管理员账号。
+- `admin_users`：保存管理员和操作员账号。
 - `address_towns/address_units`：在同一初始化事务内重建安装码对应市的镇和地址段运行表。
 
 `install_secret` 与 ARCHIVE 私钥使用 `CPMS_KEY_ENCRYPT_SECRET` 作为 32 字节 hex 主密钥，通过 AES-256-GCM 加密后落库，格式为 `enc:gcm:<nonce_hex>:<cipher_hex>`。未配置或格式错误时拒绝初始化；已初始化实例启动时如果存在加密材料，必须立即解密验证 `install_secret` 和 ARCHIVE 私钥，任何解密失败都拒绝启动。
@@ -47,11 +47,11 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 ## 5. 安全约束
 - `proto` 必须为 `SFID_CPMS_V1`，`type` 必须为 `INSTALL`。
 - `sfid_number` 必须能解析出省市代码，且 `province_name/city_name` 必须和 SFID 工具行政区真源一致。
-- 初始化必须先完成 INSTALL 校验、主密钥校验、ARCHIVE 密钥生成、安装材料落库、地址表重建和超级管理员绑定前置校验；任何一步失败都不得提交半初始化状态。
+- 初始化必须先完成 INSTALL 校验、主密钥校验、ARCHIVE 密钥生成、安装材料落库、地址表重建和管理员绑定前置校验；任何一步失败都不得提交半初始化状态。
 - `system_install.sfid_number` 已存在时拒绝重复初始化；本阶段按清库重装处理，不提供旧库迁移兼容。
-- 初始化阶段只允许绑定 1 个初始超级管理员，`admin_pubkey` 不允许重复；该初始超级管理员不可删除。
-- `admin_users` 不保留停用状态字段；后续通过管理员管理最多新增 4 个超级管理员，使超级管理员总数不超过 5 个。除初始超级管理员外，其他管理员删除即物理删除并清理会话。
-- 初始化和初始超级管理员绑定入口有本机 IP 级限流，防止脚本误刷；CPMS 仍不引入复杂远程验签或联网确认流程。
+- 初始化阶段只允许绑定 1 个初始管理员，`admin_pubkey` 不允许重复；该初始管理员不可删除。
+- `admin_users` 不保留停用状态字段；后续通过管理员管理最多新增 4 个管理员，使管理员总数不超过 5 个。除初始管理员外，其他管理员删除即物理删除并清理会话。
+- 初始化和初始管理员绑定入口有本机 IP 级限流，防止脚本误刷；CPMS 仍不引入复杂远程验签或联网确认流程。
 - 初始化前端只允许摄像头扫描 SFID 安装码和 wumin 管理员名片二维码。
 
 ## 6. 模块边界

@@ -65,7 +65,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
         }
     });
     let org = votingengine::types::ORG_REN;
-    let admin_count = admins_change::Pallet::<T>::active_account_admin_count(org, account.clone())
+    let admins_len = admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let threshold =
         <T as Config>::InternalVoteEngine::configured_dynamic_threshold(org, account.clone())
@@ -76,7 +76,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
         proposal_id,
         duoqian_account: action.duoqian_account.clone(),
         creator: action.proposer.clone(),
-        admin_count,
+        admins_len,
         threshold,
         amount: action.amount,
         fee,
@@ -99,7 +99,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     );
     let account = action.duoqian_account.clone();
     let org = votingengine::types::ORG_REN;
-    let admin_count = admins_change::Pallet::<T>::active_account_admin_count(org, account.clone())
+    let admins_len = admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let threshold =
         <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())
@@ -148,7 +148,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
         proposal_id,
         duoqian_account: action.duoqian_account.clone(),
         beneficiary: action.beneficiary.clone(),
-        admin_count,
+        admins_len,
         threshold,
         amount: transfer_amount,
         fee,

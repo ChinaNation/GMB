@@ -7,7 +7,7 @@ use super::types::AdminAccountState;
 pub fn validate_admin_set_change(
     state: &AdminAccountState,
     proposer_pubkey_hex: &str,
-    new_admins: &[String],
+    admins: &[String],
 ) -> Result<Vec<String>, String> {
     if state.status != 1 {
         return Err("管理员账户不是已激活状态，不能发起更换".to_string());
@@ -17,7 +17,7 @@ pub fn validate_admin_set_change(
         return Err("当前签名账户不是该账户管理员，不能发起管理员更换".to_string());
     }
 
-    let normalized = normalize_admins(new_admins)?;
+    let normalized = normalize_admins(admins)?;
     validate_count(state.kind, state.org, normalized.len())?;
 
     let mut seen = BTreeSet::new();

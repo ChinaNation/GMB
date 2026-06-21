@@ -42,8 +42,8 @@ export default function InstallPage() {
       }
       const { address } = env.body as UserContactBody;
       // SS58 address 传后端，后端做 SS58→hex 解码
-      await api.bindSuperAdmin(address.trim());
-      setMsg('超级管理员绑定成功');
+      await api.bindAdmin(address.trim());
+      setMsg('管理员绑定成功');
       await load();
     } catch (e) {
       if (e instanceof QrParseError) {
@@ -74,7 +74,7 @@ export default function InstallPage() {
 
   // 三个事实状态：1.未初始化  2.已初始化未绑定管理员  3.已初始化已绑定管理员
   const initialized = status?.initialized ?? false;
-  const adminBound = (status?.super_admin_bound_count ?? 0) >= 1;
+  const adminBound = (status?.admins_bound_count ?? 0) >= 1;
 
   let currentStep = 1;
   if (initialized && !adminBound) currentStep = 2;
@@ -127,7 +127,7 @@ export default function InstallPage() {
 
           {currentStep === 2 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
-              <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>绑定超级管理员</div>
+              <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>绑定管理员</div>
               <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
                 打开公民钱包，展示钱包二维码，用摄像头扫码读取账户地址
               </div>

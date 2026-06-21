@@ -65,7 +65,7 @@ fn dynamic_threshold_is_not_stored_by_admins_change() {
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_eq!(
-            AdminsChange::active_account_admin_count(ORG_PUP, institution.clone()),
+            AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
             Some(2)
         );
         assert_eq!(
@@ -91,14 +91,14 @@ fn institution_account_min_admins_two_works() {
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_eq!(
-            AdminsChange::active_account_admin_count(ORG_PUP, institution.clone()),
+            AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
             Some(2)
         );
     });
 }
 
 #[test]
-fn institution_account_admin_count_does_not_create_threshold() {
+fn institution_account_admins_len_does_not_create_threshold() {
     new_test_ext().execute_with(|| {
         for count in [2u32, 3, 4, 5, 6, 7] {
             let institution = pending_account_with_second_byte(count as u8);
@@ -116,7 +116,7 @@ fn institution_account_admin_count_does_not_create_threshold() {
             ));
             assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
             assert_eq!(
-                AdminsChange::active_account_admin_count(ORG_PUP, institution.clone()),
+                AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
                 Some(count)
             );
             assert_eq!(
@@ -198,7 +198,7 @@ fn institution_account_at_max_admins_works() {
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_eq!(
-            AdminsChange::active_account_admin_count(ORG_OTH, institution.clone()),
+            AdminsChange::active_account_admins_len(ORG_OTH, institution.clone()),
             Some(max)
         );
         assert_eq!(
@@ -534,7 +534,7 @@ fn dynamic_account_set_change_can_add_delete_and_recalculate_threshold() {
         // 中文注释：发起人创建变更提案后，投票引擎已经自动记一票赞成。
         assert_ok!(cast_vote(admin_b.clone(), add_pid, true));
         assert_eq!(
-            AdminsChange::active_account_admin_count(ORG_PUP, institution.clone()),
+            AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
             Some(3)
         );
         assert_eq!(
@@ -1200,7 +1200,7 @@ fn invalid_institution_is_rejected() {
 /// 前 13 位作为投票者。验证 admin 数量恒为 NRC_ADMIN_COUNT、
 /// 新人入名单、旧人出名单、互斥锁每轮正确释放。
 #[test]
-fn nrc_full_cycle_set_change_keeps_admin_count_stable() {
+fn nrc_full_cycle_set_change_keeps_admins_len_stable() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         assert_eq!(

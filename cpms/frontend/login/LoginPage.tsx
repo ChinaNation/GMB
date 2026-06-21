@@ -121,7 +121,7 @@ export default function LoginPage() {
       if (msg.includes('admin not found')) {
         setError('非管理员禁止登录本系统');
       } else if (msg.includes('annual status export required')) {
-        const tip = '上一年度数据超过1月10日仍未导出，操作管理员登录已锁定。请联系超级管理员在系统设置中导出年度报告后再登录。';
+        const tip = '上一年度数据超过1月10日仍未导出，操作员登录已锁定。请联系管理员在系统设置中导出年度报告后再登录。';
         window.alert(tip);
         setError(tip);
       } else {

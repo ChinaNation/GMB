@@ -49,10 +49,10 @@ class AdminCatalogResponse {
 
 /// SFID 人口快照响应。
 ///
-/// ADR-008 step3:凭证双层匹配。SFID 后端在签发人口快照时下发
-/// (province_name, signer_admin_pubkey) — 链端 RuntimePopulationSnapshotVerifier
-/// 走 `sheng_signing_pubkey_for_admin(province_name, admin_pubkey)` 双映射查派生
-/// 公钥;无对应记录直接拒签。wuminapp 在线端透传到 chain extrinsic,不二次校验。
+/// SFID 人口快照凭证统一使用签发机构模型。
+///
+/// 链端按 issuer_main_account 读取 admins-change 的 admins 真源,确认
+/// signer_pubkey 属于该签发机构管理员后再验签。
 class PopulationSnapshotResponse {
   const PopulationSnapshotResponse({
     required this.genesisHash,
@@ -60,8 +60,11 @@ class PopulationSnapshotResponse {
     required this.snapshotNonce,
     required this.signature,
     required this.who,
-    required this.provinceName,
-    required this.signerAdminPubkey,
+    required this.issuerSfidNumber,
+    required this.issuerMainAccount,
+    required this.signerPubkey,
+    required this.scopeProvinceName,
+    required this.scopeCityName,
   });
 
   final String genesisHash;
@@ -76,12 +79,11 @@ class PopulationSnapshotResponse {
   /// 归一化后的账户公钥 hex。
   final String who;
 
-  /// 签发 admin 所属省份(UTF-8 中文,如 "安徽省")。
-  /// SFID 后端按登录联邦管理员路由下发,链端 SCALE 末尾必填字段。
-  final String provinceName;
-
-  /// 签发本凭证的联邦管理员 admin pubkey(0x 小写 hex,32 字节)。
-  final String signerAdminPubkey;
+  final String issuerSfidNumber;
+  final String issuerMainAccount;
+  final String signerPubkey;
+  final String scopeProvinceName;
+  final String scopeCityName;
 }
 
 /// SFID 机构注册凭证。
@@ -92,15 +94,21 @@ class InstitutionRegistrationCredential {
   const InstitutionRegistrationCredential({
     required this.genesisHash,
     required this.registerNonce,
-    required this.provinceName,
-    required this.signerAdminPubkey,
+    required this.issuerSfidNumber,
+    required this.issuerMainAccount,
+    required this.signerPubkey,
+    required this.scopeProvinceName,
+    required this.scopeCityName,
     required this.signature,
   });
 
   final String genesisHash;
   final String registerNonce;
-  final String provinceName;
-  final String signerAdminPubkey;
+  final String issuerSfidNumber;
+  final String issuerMainAccount;
+  final String signerPubkey;
+  final String scopeProvinceName;
+  final String scopeCityName;
   final String signature;
 }
 
@@ -209,7 +217,7 @@ class ApiClient {
       source: data['source']?.toString() ?? 'chain',
       updatedAt: (data['updated_at'] as num?)?.toInt() ?? 0,
       institutionCount: (data['institution_count'] as num?)?.toInt() ?? 0,
-      adminCount: (data['admin_count'] as num?)?.toInt() ?? 0,
+      adminCount: (data['admins_len'] as num?)?.toInt() ?? 0,
       entries: entries,
     );
   }
@@ -252,21 +260,26 @@ class ApiClient {
       throw Exception('population snapshot invalid response: missing data');
     }
 
-    final provinceName = (data['province_name']?.toString() ?? '').trim();
-    final signerAdminPubkeyRaw =
-        (data['signer_admin_pubkey']?.toString() ?? '').trim();
-    if (provinceName.isEmpty) {
-      throw Exception(
-          'population snapshot 缺少 province_name 字段(ADR-008 step3 必填)');
+    final issuerSfidNumber =
+        (data['issuer_sfid_number']?.toString() ?? '').trim();
+    final issuerMainAccountRaw =
+        (data['issuer_main_account']?.toString() ?? '').trim();
+    final signerPubkeyRaw = (data['signer_pubkey']?.toString() ?? '').trim();
+    final scopeProvinceName =
+        (data['scope_province_name']?.toString() ?? '').trim();
+    final scopeCityName = (data['scope_city_name']?.toString() ?? '').trim();
+    if (issuerSfidNumber.isEmpty) {
+      throw Exception('population snapshot 缺少 issuer_sfid_number 字段');
     }
-    if (signerAdminPubkeyRaw.isEmpty) {
-      throw Exception(
-          'population snapshot 缺少 signer_admin_pubkey 字段(ADR-008 step3 必填)');
+    if (issuerMainAccountRaw.isEmpty) {
+      throw Exception('population snapshot 缺少 issuer_main_account 字段');
     }
-    // 机读字段统一为 0x 小写 hex。
-    final signerAdminPubkey = signerAdminPubkeyRaw.startsWith('0x')
-        ? signerAdminPubkeyRaw.toLowerCase()
-        : '0x${signerAdminPubkeyRaw.toLowerCase()}';
+    if (signerPubkeyRaw.isEmpty) {
+      throw Exception('population snapshot 缺少 signer_pubkey 字段');
+    }
+    if (scopeProvinceName.isEmpty) {
+      throw Exception('population snapshot 缺少 scope_province_name 字段');
+    }
 
     return PopulationSnapshotResponse(
       eligibleTotal: (data['eligible_total'] as num?)?.toInt() ?? 0,
@@ -274,8 +287,12 @@ class ApiClient {
       genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
       signature: (data['signature']?.toString() ?? '').trim(),
       who: (data['who']?.toString() ?? '').trim(),
-      provinceName: provinceName,
-      signerAdminPubkey: signerAdminPubkey,
+      issuerSfidNumber: issuerSfidNumber,
+      issuerMainAccount:
+          _normalizePubkeyHex(issuerMainAccountRaw).toLowerCase(),
+      signerPubkey: _normalizePubkeyHex(signerPubkeyRaw).toLowerCase(),
+      scopeProvinceName: scopeProvinceName,
+      scopeCityName: scopeCityName,
     );
   }
 
@@ -412,10 +429,16 @@ class ApiClient {
     final sfidFullName = (data['sfid_full_name']?.toString() ?? '').trim();
     final registerNonce =
         (credentialMap['register_nonce']?.toString() ?? '').trim();
-    final provinceName =
-        (credentialMap['province_name']?.toString() ?? '').trim();
-    final signerAdminPubkeyRaw =
-        (credentialMap['signer_admin_pubkey']?.toString() ?? '').trim();
+    final issuerSfidNumber =
+        (credentialMap['issuer_sfid_number']?.toString() ?? '').trim();
+    final issuerMainAccountRaw =
+        (credentialMap['issuer_main_account']?.toString() ?? '').trim();
+    final signerPubkeyRaw =
+        (credentialMap['signer_pubkey']?.toString() ?? '').trim();
+    final scopeProvinceName =
+        (credentialMap['scope_province_name']?.toString() ?? '').trim();
+    final scopeCityName =
+        (credentialMap['scope_city_name']?.toString() ?? '').trim();
     final signature = (credentialMap['signature']?.toString() ?? '').trim();
     if (sfidFullName.isEmpty) {
       throw Exception('机构注册凭证 sfid_full_name 为空');
@@ -423,19 +446,33 @@ class ApiClient {
     if (registerNonce.isEmpty) {
       throw Exception('机构注册凭证 register_nonce 为空');
     }
-    if (provinceName.isEmpty) {
-      throw Exception('机构注册凭证 province_name 为空');
+    if (issuerSfidNumber.isEmpty) {
+      throw Exception('机构注册凭证 issuer_sfid_number 为空');
+    }
+    if (issuerMainAccountRaw.isEmpty) {
+      throw Exception('机构注册凭证 issuer_main_account 为空');
+    }
+    if (signerPubkeyRaw.isEmpty) {
+      throw Exception('机构注册凭证 signer_pubkey 为空');
+    }
+    if (scopeProvinceName.isEmpty) {
+      throw Exception('机构注册凭证 scope_province_name 为空');
     }
     if (signature.isEmpty) {
       throw Exception('机构注册凭证 signature 为空');
     }
 
-    final signerAdminPubkey =
-        _normalizePubkeyHex(signerAdminPubkeyRaw).toLowerCase();
-    final signerClean = signerAdminPubkey.substring(2);
-    if (signerClean.length != 64 ||
-        !RegExp(r'^[0-9a-f]+$').hasMatch(signerClean)) {
-      throw Exception('机构注册凭证 signer_admin_pubkey 必须为 32 字节 hex');
+    final issuerMainAccount =
+        _normalizePubkeyHex(issuerMainAccountRaw).toLowerCase();
+    final signerPubkey = _normalizePubkeyHex(signerPubkeyRaw).toLowerCase();
+    for (final entry in {
+      'issuer_main_account': issuerMainAccount,
+      'signer_pubkey': signerPubkey,
+    }.entries) {
+      final clean = entry.value.substring(2);
+      if (clean.length != 64 || !RegExp(r'^[0-9a-f]+$').hasMatch(clean)) {
+        throw Exception('机构注册凭证 ${entry.key} 必须为 32 字节 hex');
+      }
     }
     return InstitutionRegistrationInfoResponse(
       sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
@@ -444,8 +481,11 @@ class ApiClient {
       credential: InstitutionRegistrationCredential(
         genesisHash: (credentialMap['genesis_hash']?.toString() ?? '').trim(),
         registerNonce: registerNonce,
-        provinceName: provinceName,
-        signerAdminPubkey: signerAdminPubkey,
+        issuerSfidNumber: issuerSfidNumber,
+        issuerMainAccount: issuerMainAccount,
+        signerPubkey: signerPubkey,
+        scopeProvinceName: scopeProvinceName,
+        scopeCityName: scopeCityName,
         signature: signature.startsWith('0x')
             ? signature.toLowerCase()
             : '0x${signature.toLowerCase()}',
@@ -502,9 +542,13 @@ class ApiClient {
       bindingId: (data['binding_id']?.toString() ?? '').trim(),
       proposalId: (data['proposal_id'] as num?)?.toInt() ?? proposalId,
       voteNonce: (data['vote_nonce']?.toString() ?? '').trim(),
-      provinceName: (data['province_name']?.toString() ?? '').trim(),
-      signerAdminPubkey: _normalizePubkeyHex(
-          (data['signer_admin_pubkey']?.toString() ?? '').trim()),
+      issuerSfidNumber: (data['issuer_sfid_number']?.toString() ?? '').trim(),
+      issuerMainAccount: _normalizePubkeyHex(
+          (data['issuer_main_account']?.toString() ?? '').trim()),
+      signerPubkey:
+          _normalizePubkeyHex((data['signer_pubkey']?.toString() ?? '').trim()),
+      scopeProvinceName: (data['scope_province_name']?.toString() ?? '').trim(),
+      scopeCityName: (data['scope_city_name']?.toString() ?? '').trim(),
       signature: (data['signature']?.toString() ?? '').trim(),
     );
   }
@@ -516,8 +560,11 @@ class VoteCredentialResponse {
   final String bindingId;
   final int proposalId;
   final String voteNonce;
-  final String provinceName;
-  final String signerAdminPubkey;
+  final String issuerSfidNumber;
+  final String issuerMainAccount;
+  final String signerPubkey;
+  final String scopeProvinceName;
+  final String scopeCityName;
   final String signature;
 
   VoteCredentialResponse({
@@ -526,8 +573,11 @@ class VoteCredentialResponse {
     required this.bindingId,
     required this.proposalId,
     required this.voteNonce,
-    required this.provinceName,
-    required this.signerAdminPubkey,
+    required this.issuerSfidNumber,
+    required this.issuerMainAccount,
+    required this.signerPubkey,
+    required this.scopeProvinceName,
+    required this.scopeCityName,
     required this.signature,
   });
 }

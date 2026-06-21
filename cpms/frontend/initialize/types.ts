@@ -7,7 +7,7 @@ export interface InstallStatus {
   city_code: string | null;
   province_name: string | null;
   city_name: string | null;
-  super_admin_bound_count: number;
+  admins_bound_count: number;
   archive_signing_ready: boolean;
   cpms_pubkey: string | null;
 }

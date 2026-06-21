@@ -65,9 +65,9 @@ class InstitutionManageService {
   /// 提交机构多签 propose_create_institution extrinsic。
   ///
   /// 参数编码以 `memory/07-ai/unified-protocols.md` 的 P-TX-001 为准：
-  /// [0x11][0x05] + sfid_number + sfid_full_name + accounts + admin_org + admin_count
-  ///   + duoqian_admins + threshold + register_nonce + signature
-  ///   + province_name + signer_admin_pubkey。
+  /// [0x11][0x05] + sfid_number + sfid_full_name + accounts + org + admins_len
+  ///   + admins + threshold + register_nonce + signature
+  ///   + issuer_sfid_number + issuer_main_account + signer_pubkey + scope_*。
   Future<
       ({
         String txHash,
@@ -85,8 +85,11 @@ class InstitutionManageService {
     required int threshold,
     required String registerNonce,
     required String signatureHex,
-    required String provinceName,
-    required String signerAdminPubkeyHex,
+    required String issuerSfidNumber,
+    required String issuerMainAccountHex,
+    required String signerPubkeyHex,
+    required String scopeProvinceName,
+    required String scopeCityName,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
@@ -101,8 +104,11 @@ class InstitutionManageService {
       threshold: threshold,
       registerNonce: registerNonce,
       signatureHex: signatureHex,
-      provinceName: provinceName,
-      signerAdminPubkeyHex: signerAdminPubkeyHex,
+      issuerSfidNumber: issuerSfidNumber,
+      issuerMainAccountHex: issuerMainAccountHex,
+      signerPubkeyHex: signerPubkeyHex,
+      scopeProvinceName: scopeProvinceName,
+      scopeCityName: scopeCityName,
     );
     final submitResult = await _signAndSubmitInBlock(
       callData: callData,
@@ -147,22 +153,34 @@ class InstitutionManageService {
     required int threshold,
     required String registerNonce,
     required String signatureHex,
-    required String provinceName,
-    required String signerAdminPubkeyHex,
+    required String issuerSfidNumber,
+    required String issuerMainAccountHex,
+    required String signerPubkeyHex,
+    required String scopeProvinceName,
+    required String scopeCityName,
   }) {
     final sfidBytes = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
     final institutionNameBytes =
         Uint8List.fromList(utf8.encode(sfidFullName.trim()));
     final registerNonceBytes =
         Uint8List.fromList(utf8.encode(registerNonce.trim()));
-    final provinceNameBytes =
-        Uint8List.fromList(utf8.encode(provinceName.trim()));
+    final issuerSfidNumberBytes =
+        Uint8List.fromList(utf8.encode(issuerSfidNumber.trim()));
+    final scopeProvinceNameBytes =
+        Uint8List.fromList(utf8.encode(scopeProvinceName.trim()));
+    final scopeCityNameBytes =
+        Uint8List.fromList(utf8.encode(scopeCityName.trim()));
     final signatureBytes = _hexDecodeFixed(signatureHex,
         expectedLength: 64, fieldName: 'signature');
-    final signerAdminPubkey = _hexDecodeFixed(
-      signerAdminPubkeyHex,
+    final issuerMainAccount = _hexDecodeFixed(
+      issuerMainAccountHex,
       expectedLength: 32,
-      fieldName: 'signer_admin_pubkey',
+      fieldName: 'issuer_main_account',
+    );
+    final signerPubkey = _hexDecodeFixed(
+      signerPubkeyHex,
+      expectedLength: 32,
+      fieldName: 'signer_pubkey',
     );
 
     if (sfidBytes.isEmpty || sfidBytes.length > 96) {
@@ -178,7 +196,7 @@ class InstitutionManageService {
       throw ArgumentError('机构账户管理员 org 必须为 ORG_PUP 或 ORG_OTH');
     }
     if (adminCount < 2 || adminCount != adminPubkeys.length) {
-      throw ArgumentError('admin_count 必须 >=2 且等于管理员公钥数量');
+      throw ArgumentError('admins_len 必须 >=2 且等于管理员公钥数量');
     }
     final minThreshold = (adminCount ~/ 2) + 1;
     if (threshold < minThreshold || threshold > adminCount) {
@@ -187,8 +205,11 @@ class InstitutionManageService {
     if (registerNonceBytes.isEmpty) {
       throw ArgumentError('register_nonce 不可为空');
     }
-    if (provinceNameBytes.isEmpty) {
-      throw ArgumentError('province_name 不可为空');
+    if (issuerSfidNumberBytes.isEmpty) {
+      throw ArgumentError('issuer_sfid_number 不可为空');
+    }
+    if (scopeProvinceNameBytes.isEmpty) {
+      throw ArgumentError('scope_province_name 不可为空');
     }
 
     final output = ByteOutput();
@@ -216,18 +237,18 @@ class InstitutionManageService {
       output.write(_u128ToLeBytesStatic(account.amountFen));
     }
 
-    // admin_org: u8。机构账户只能使用 ORG_PUP(4) 或 ORG_OTH(5)。
+    // org: u8。机构账户只能使用 ORG_PUP(4) 或 ORG_OTH(5)。
     output.pushByte(adminOrg);
 
-    // admin_count: u32 little-endian
+    // admins_len: u32 little-endian
     output.write(_u32ToLeBytesStatic(adminCount));
 
-    // duoqian_admins: BoundedVec<AccountId32> = Compact<u32> length + N × 32 bytes
+    // admins: BoundedVec<AccountId32> = Compact<u32> length + N × 32 bytes
     output.write(
         CompactBigIntCodec.codec.encode(BigInt.from(adminPubkeys.length)));
     for (final pubkey in adminPubkeys) {
       if (pubkey.length != 32) {
-        throw ArgumentError('duoqian_admins 每项必须为 32 字节');
+        throw ArgumentError('admins 每项必须为 32 字节');
       }
       output.write(pubkey);
     }
@@ -235,11 +256,14 @@ class InstitutionManageService {
     // threshold: u32 little-endian
     output.write(_u32ToLeBytesStatic(threshold));
 
-    // register_nonce / signature / province_name / signer_admin_pubkey
+    // register_nonce / signature / issuer_sfid_number / issuer_main_account / signer_pubkey / scope_*
     _writeBoundedBytes(output, registerNonceBytes);
     _writeBoundedBytes(output, signatureBytes);
-    _writeBoundedBytes(output, provinceNameBytes);
-    output.write(signerAdminPubkey);
+    _writeBoundedBytes(output, issuerSfidNumberBytes);
+    output.write(issuerMainAccount);
+    output.write(signerPubkey);
+    _writeBoundedBytes(output, scopeProvinceNameBytes);
+    _writeBoundedBytes(output, scopeCityNameBytes);
 
     return output.toBytes();
   }

@@ -1,17 +1,7 @@
 //! Weights for `sfid_system`
 //!
-//! ADR-008 Step 2a 重写后的占位权重(2026-05-01):
-//! - 老的 `set_sheng_signing_pubkey` / `rotate_sfid_keys` benchmark 已删除。
-//! - 新增 4 个 Pays::No unsigned extrinsic(`add/remove_sheng_admin_backup` /
-//!   `activate/rotate_sheng_signing_pubkey`)的权重为占位值,实际数值
-//!   等链端基线就绪后通过 `cargo build --features runtime-benchmarks` 重新生成。
-//!
-//! 数值估算(读 + 写 + 一次 sr25519_verify ≈ 25_000_000 weight):
-//! - reads: 2-3(ShengAdmins / ShengSigningPubkey / UsedShengNonce)
-//! - writes: 1-2(目标 storage + UsedShengNonce)
-//! - sr25519_verify: ~25_000_000
-//!
-//! 综合给一个 35_000_000 量级的 stub。
+//! 当前只保留 SFID 绑定、解绑与投票资格消费。签发管理员集合统一来自
+//! admins-change,本 pallet 不再维护任何省级签发管理员 storage。
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
@@ -28,10 +18,6 @@ use frame_support::{
 pub trait WeightInfo {
     fn bind_sfid() -> Weight;
     fn unbind_sfid() -> Weight;
-    fn add_sheng_admin_backup() -> Weight;
-    fn remove_sheng_admin_backup() -> Weight;
-    fn activate_sheng_signing_pubkey() -> Weight;
-    fn rotate_sheng_signing_pubkey() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -51,33 +37,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
             .saturating_add(T::DbWeight::get().writes(3))
     }
 
-    fn add_sheng_admin_backup() -> Weight {
-        // 中文注释:reads = ShengAdmins[Main] + ShengAdmins[slot] + UsedShengNonce;writes = ShengAdmins[slot] + UsedShengNonce;含 sr25519_verify。
-        Weight::from_parts(35_000_000, 0)
-            .saturating_add(T::DbWeight::get().reads(3))
-            .saturating_add(T::DbWeight::get().writes(2))
-    }
-
-    fn remove_sheng_admin_backup() -> Weight {
-        // 中文注释:reads = ShengAdmins[Main] + ShengAdmins[slot] + UsedShengNonce;writes = ShengAdmins[slot] + ShengSigningPubkey + UsedShengNonce。
-        Weight::from_parts(36_000_000, 0)
-            .saturating_add(T::DbWeight::get().reads(3))
-            .saturating_add(T::DbWeight::get().writes(3))
-    }
-
-    fn activate_sheng_signing_pubkey() -> Weight {
-        // 中文注释:reads = ShengAdmins[Main/Backup1/Backup2] + UsedShengNonce;writes = ShengSigningPubkey + 可能 ShengAdmins[Main] + UsedShengNonce。
-        Weight::from_parts(38_000_000, 0)
-            .saturating_add(T::DbWeight::get().reads(4))
-            .saturating_add(T::DbWeight::get().writes(3))
-    }
-
-    fn rotate_sheng_signing_pubkey() -> Weight {
-        // 中文注释:reads = ShengAdmins[Main/Backup1/Backup2] + ShengSigningPubkey + UsedShengNonce;writes = ShengSigningPubkey + UsedShengNonce。
-        Weight::from_parts(36_000_000, 0)
-            .saturating_add(T::DbWeight::get().reads(5))
-            .saturating_add(T::DbWeight::get().writes(2))
-    }
 }
 
 impl WeightInfo for () {
@@ -93,27 +52,4 @@ impl WeightInfo for () {
             .saturating_add(RocksDbWeight::get().writes(3))
     }
 
-    fn add_sheng_admin_backup() -> Weight {
-        Weight::from_parts(35_000_000, 0)
-            .saturating_add(RocksDbWeight::get().reads(3))
-            .saturating_add(RocksDbWeight::get().writes(2))
-    }
-
-    fn remove_sheng_admin_backup() -> Weight {
-        Weight::from_parts(36_000_000, 0)
-            .saturating_add(RocksDbWeight::get().reads(3))
-            .saturating_add(RocksDbWeight::get().writes(3))
-    }
-
-    fn activate_sheng_signing_pubkey() -> Weight {
-        Weight::from_parts(38_000_000, 0)
-            .saturating_add(RocksDbWeight::get().reads(4))
-            .saturating_add(RocksDbWeight::get().writes(3))
-    }
-
-    fn rotate_sheng_signing_pubkey() -> Weight {
-        Weight::from_parts(36_000_000, 0)
-            .saturating_add(RocksDbWeight::get().reads(5))
-            .saturating_add(RocksDbWeight::get().writes(2))
-    }
 }

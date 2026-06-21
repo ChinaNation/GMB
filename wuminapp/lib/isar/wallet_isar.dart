@@ -137,7 +137,7 @@ class DuoqianLocalDetailSnapshot {
 
   Map<String, dynamic> toJson() => {
         'status': status,
-        'admin_pubkeys': adminPubkeys,
+        'admins': adminPubkeys,
         'threshold': threshold,
         'balance_yuan': balanceYuan,
         'last_chain_refresh_at_millis': lastChainRefreshAtMillis,
@@ -150,7 +150,7 @@ class DuoqianLocalDetailSnapshot {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
-      final adminRaw = decoded['admin_pubkeys'];
+      final adminRaw = decoded['admins'];
       final admins = adminRaw is List
           ? adminRaw
               .map((item) => item.toString().toLowerCase())

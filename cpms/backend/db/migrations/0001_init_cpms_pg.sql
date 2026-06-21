@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   user_id TEXT PRIMARY KEY,
   admin_pubkey TEXT NOT NULL UNIQUE,
   admin_name TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
+  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'OPERATOR')),
   immutable BOOLEAN NOT NULL DEFAULT FALSE,
   managed_key_id TEXT UNIQUE,
   created_at BIGINT NOT NULL,

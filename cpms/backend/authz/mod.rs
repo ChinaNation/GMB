@@ -2,8 +2,8 @@
 //!
 //! 提供 Cookie session 校验和角色检查。
 //!
-//! 中文注释：CPMS 只有 SUPER_ADMIN / OPERATOR_ADMIN 两级管理员；
-//! SUPER_ADMIN 是上级角色，必须能执行所有档案业务操作。
+//! 中文注释：CPMS 只有 ADMIN / OPERATOR 两级管理员；
+//! ADMIN 是上级角色，必须能执行所有档案业务操作。
 
 use axum::{
     http::{HeaderMap, StatusCode},
@@ -53,7 +53,7 @@ pub(crate) async fn require_archive_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
-    require_any_role(state, headers, &["SUPER_ADMIN", "OPERATOR_ADMIN"]).await
+    require_any_role(state, headers, &["ADMIN", "OPERATOR"]).await
 }
 
 pub(crate) async fn require_auth(
@@ -90,7 +90,7 @@ pub(crate) async fn require_auth(
     let role: String = row.get("role");
     let expires_at: i64 = row.get("expires_at");
 
-    if role == "OPERATOR_ADMIN" {
+    if role == "OPERATOR" {
         match crate::dangan::ensure_operator_annual_export_unlocked(state).await {
             Ok(()) => {}
             Err((status, body)) if status == StatusCode::LOCKED => {
@@ -105,7 +105,7 @@ pub(crate) async fn require_auth(
     }
 
     if expires_at < Utc::now().timestamp() {
-        // 中文注释：所有管理员都按角色使用滑动空闲期；超管 15 分钟，操作管理员 30 分钟。
+        // 中文注释：所有管理员都按角色使用滑动空闲期；超管 15 分钟，操作员 30 分钟。
         let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
             .bind(&token)
             .execute(&state.db)

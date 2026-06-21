@@ -111,7 +111,7 @@ lib/votingengine/
 | --- | --- | --- | --- | --- |
 | 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[]` | 国储会 + 43 个省储会管理员 | 联合+公民 |
 | 协议升级 | `propose_runtime_upgrade` | `reason, code` | 国储会 + 43 个省储会管理员 | 联合+公民 |
-| 管理员集合变更 | `propose_admin_set_change` | `org, subject, new_admins[], new_threshold` | 目标账户当前管理员 | 内部 |
+| 管理员集合变更 | `propose_admin_set_change` | `org, subject, admins[], new_threshold` | 目标账户当前管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标联邦管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 联邦管理员 | 内部 |
 | 省储行业务治理(已下线) | ~~`propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters`~~ | Step 2b-iv-b 随老省储行清算 pallet 一起从 runtime 删除 | — | — |
@@ -119,7 +119,7 @@ lib/votingengine/
 
 ### 4.1 联合提案投票引擎字段标准
 
-业务模块不接收人口快照字段。`eligible_total / snapshot_nonce / signature / province_name / signer_admin_pubkey` 只属于投票引擎的联合投票人口快照准备流程。
+业务模块不接收人口快照字段。`eligible_total / snapshot_nonce / signature / province_name / signer_pubkey` 只属于投票引擎的联合投票人口快照准备流程。
 
 - `eligible_total`：`u64`，必须 `> 0`。
 - `snapshot_nonce`：`1..64` 字节。
@@ -381,10 +381,10 @@ message = blake2_256(SCALE.encode(payload))
 
 - 目录边界：公民端管理员更换只在 `lib/governance/admins-change/` 内实现；机构/个人注册、注销仍归 `organization-manage` / `personal-manage`。
 - 主体规则：`PersonalDuoqian` 必须使用 `ORG_REN`，`InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，`注册机构归属关系` 不能作为管理员更换主体。
-- QR call data：`[AdminsChange=12][call=0][org:u8][account_id:48][new_admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`。
+- QR call data：`[AdminsChange=12][call=0][org:u8][account_id:48][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`。
 - 内置治理机构只读展示固定阈值，不展示输入框；提交管理员更换提案时 `new_threshold` 必须等于制度固定阈值。
-- 个人多签和机构账户展示动态阈值输入框，校验公式为 `threshold * 2 > admin_count && threshold <= admin_count`。
-- QR display 字段必须与 wumin 公民钱包 decoder 严格一致：`org`、`subject`、`new_admins`、`new_threshold`，其中 `subject/new_admins` 均使用 `0x` 小写 hex。
+- 个人多签和机构账户展示动态阈值输入框，校验公式为 `threshold * 2 > admins_len && threshold <= admins_len`。
+- QR display 字段必须与 wumin 公民钱包 decoder 严格一致：`org`、`subject`、`admins`、`new_threshold`，其中 `subject/admins` 均使用 `0x` 小写 hex。
 - 提交成功后必须按 `accountIdHex` 清理 `AdminAccountService` 缓存，避免页面继续展示旧管理员集合。
 
 ### 7.2 机构详情页结构
@@ -632,9 +632,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 | Extrinsic | call_index | 说明 | 投票 |
 | --- | --- | --- | --- |
-| `OrganizationManage::propose_create_institution(..., admin_org, ...)` | 17.5 | 发起 SFID 机构多签账户创建提案；机构账户管理员 org 必须为 `ORG_PUP / ORG_OTH` | 投票引擎 |
+| `OrganizationManage::propose_create_institution(..., org, ...)` | 17.5 | 发起 SFID 机构多签账户创建提案；机构账户管理员 org 必须为 `ORG_PUP / ORG_OTH` | 投票引擎 |
 | `OrganizationManage::propose_close(duoqian_account, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
-| `PersonalManage::propose_create(account_name, duoqian_admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
+| `PersonalManage::propose_create(account_name, admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
 | `PersonalManage::propose_close(duoqian_account, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 

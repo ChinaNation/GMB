@@ -173,10 +173,10 @@ void main() {
 
       expect(fields['org'], '其他机构账户');
       expect(fields['account'], '0x${'11' * 32}');
-      expect(fields['new_admins'], '0x${'aa' * 32},0x${'cc' * 32}');
+      expect(fields['admins'], '0x${'aa' * 32},0x${'cc' * 32}');
       expect(fields['new_threshold'], '2/2');
       expect(fields.containsKey('account_id'), isFalse);
-      expect(fields.containsKey('admin_count'), isFalse);
+      expect(fields.containsKey('admins_len'), isFalse);
       expect(fields.containsKey('threshold'), isFalse);
     });
   });

@@ -65,7 +65,7 @@ pub fn is_governance_org(org: u8) -> bool {
     matches!(org, 0 | 1 | 2)
 }
 
-pub fn is_dynamic_admin_org(org: u8) -> bool {
+pub fn is_dynamic_org(org: u8) -> bool {
     matches!(org, 3 | 4 | 5)
 }
 

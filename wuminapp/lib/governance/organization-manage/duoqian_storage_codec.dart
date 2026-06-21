@@ -188,7 +188,7 @@ class DuoqianStorageCodec {
     if (offset + 32 + 32 + 1 + 4 + 4 > data.length) return null;
     offset += 32; // main_account
     offset += 32; // fee_account
-    offset += 1; // admin_org
+    offset += 1; // org
     final adminCount = readU32Le(data, offset);
     offset += 4;
     final threshold = readU32Le(data, offset);

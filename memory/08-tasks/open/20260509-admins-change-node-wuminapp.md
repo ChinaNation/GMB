@@ -72,10 +72,10 @@
 
 ### 发现的问题
 
-- P0：公民钱包 `wumin/lib/signer/payload_decoder.dart` 需要同步 `propose_admin_set_change(org, subject, new_admins[])`，否则会导致严格签名校验拒签，或在非严格路径下造成冷钱包展示字段与真实 call data 不一致。2026-05-10 已在本任务中修复解码、action label 与测试。
+- P0：公民钱包 `wumin/lib/signer/payload_decoder.dart` 需要同步 `propose_admin_set_change(org, subject, admins[])`，否则会导致严格签名校验拒签，或在非严格路径下造成冷钱包展示字段与真实 call data 不一致。2026-05-10 已在本任务中修复解码、action label 与测试。
 - P0/P1：wuminapp 已将注册机构身份解析为 `InstitutionAccount(0x05)` 主体，但 runtime `organization-manage` 创建/激活注册机构管理员主体仍使用 `注册机构归属关系(0x02)`。在第 4 步 `organization-manage` 改造完成前，注册机构账户级管理员变更链路不能视为完成。
 - 已修复：node 前后端已统一为 `AdminAccountRef`，内置治理机构走 `sfidNumber + org`，个人多签和机构账户走 `accountIdHex + org`，动态主体缺少 `accountIdHex` 时后端拒绝。
-- 已修复：QR 注册表要求 `propose_admin_set_change` 展示字段为 `org, subject, new_admins[]`。2026-05-10 node、wumin 公民钱包、wuminapp QR adapter 均已统一到该字段集，`subject/new_admins` 使用 `0x` 小写 hex。
+- 已修复：QR 注册表要求 `propose_admin_set_change` 展示字段为 `org, subject, admins[]`。2026-05-10 node、wumin 公民钱包、wuminapp QR adapter 均已统一到该字段集，`subject/admins` 使用 `0x` 小写 hex。
 - P2：wuminapp `AdminAccountService` 按 identity 缓存管理员主体，提交管理员更换后没有看到自动清理缓存路径，可能导致页面继续展示旧管理员集合。
 - P2：旧路径文档和注释需要更新或删除旧说法。2026-05-10 已将任务卡、wuminapp governance 技术文档和 `institution_admin_service.dart` 注释更新到当前目录口径。
 
@@ -97,7 +97,7 @@
 
 ### 2026-05-10 执行记录
 
-- 已更新 wumin 公民钱包 `AdminsChange(12).call(0)` 解码：从旧单管理员替换同步为 `propose_admin_set_change(org, subject, new_admins[])`。
+- 已更新 wumin 公民钱包 `AdminsChange(12).call(0)` 解码：从旧单管理员替换同步为 `propose_admin_set_change(org, subject, admins[])`。
 - 已更新 wumin 公民钱包 action label 与 pallet registry 常量命名。
 - 已补充 wumin `payload_decoder_test` 对管理员集合变更的解码用例。
 - 已更新 wuminapp governance 技术文档、任务卡旧路径和 `InstitutionAdminService` 注释。
@@ -131,7 +131,7 @@
 
 - 已将 node 后端 `get_admin_account_state / build_admin_set_change_request / submit_admin_set_change` 统一为 `AdminAccountRef`：内置治理机构可用 `sfidNumber + org`，个人多签和机构账户必须用 `accountIdHex + org`。
 - 已将 `注册机构归属关系` 从 node 管理员更换前置校验中排除；`PersonalDuoqian` 只能走 `ORG_REN`，`InstitutionAccount` 只能走 `ORG_PUP / ORG_OTH`。
-- 已将 node QR display 字段统一为 `org / subject / new_admins`，与 wumin 公民钱包 `propose_admin_set_change` 解码字段一致。
+- 已将 node QR display 字段统一为 `org / subject / admins`，与 wumin 公民钱包 `propose_admin_set_change` 解码字段一致。
 - 已将前端 `AdminSetChangePage` 改为接收 `accountRef`，NRC/PRC/PRB 入口带治理 org，清算行入口从主账户派生 `InstitutionAccount(0x05)` subject 并按 `ORG_OTH` 进入 `governance/admins_change`。
 - 已补充 node 后端单测覆盖 `注册机构归属关系` 拒绝、`PersonalDuoqian + 非 REN` 拒绝、`InstitutionAccount + PUP/OTH` 允许。
 - 已清理 node / wumin 公民钱包 QR 展示中的旧机构类泛称：`ORG_REN` 显示为“个人多签”。
@@ -144,13 +144,13 @@
 ### 2026-05-10 wuminapp + wumin 公民钱包 admins-change 修复记录
 
 - 已将 wuminapp `AdminSetValidation` 对齐 runtime/node：`注册机构归属关系` 拒绝，`PersonalDuoqian` 只允许 `ORG_REN`，`InstitutionAccount` 只允许 `ORG_PUP / ORG_OTH`。
-- 已将 wuminapp `AdminSetChangeQrAdapter` 的 display 字段从旧 `account_id/admin_count/threshold` 改为 `org/subject/new_admins`，并统一 `0x` 小写 hex，避免冷钱包 strict display 比对失败。
+- 已将 wuminapp `AdminSetChangeQrAdapter` 的 display 字段从旧 `account_id/admins_len/threshold` 改为 `org/subject/admins`，并统一 `0x` 小写 hex，避免冷钱包 strict display 比对失败。
 - 已将 wuminapp `AdminAccountService` 缓存 key 改为 `accountIdHex`，并在管理员更换提交成功后清理对应 subject 缓存。
 - 已将 wumin 公民钱包 `propose_admin_set_change` 解码增强为主体类型与 org 匹配校验：`0/1/2 -> Builtin`、`3 -> PersonalDuoqian`、`4/5 -> InstitutionAccount`；`注册机构归属关系` 和错配主体拒绝解码。
 - 已同步 wumin 公民钱包 org 展示：`ORG_REN=个人多签`、`ORG_PUP=公权机构账户`、`ORG_OTH=其他机构账户`。
 - 已补充 wuminapp admins-change 测试：主体/org 错配拒绝、QR display 字段、`accountIdHex` 缓存清理。
 - 已补充 wumin 公民钱包测试：个人多签管理员集合变更、PUP/OTH 机构账户展示、subject kind 与 org 错配拒绝。
-- 已同步 node QR display 的 `subject/new_admins` 为 `0x` 小写 hex，并将 PUP/OTH 展示值与冷钱包 decoder 对齐，保证桌面端发出的 QR 也能通过 strict 比对。
+- 已同步 node QR display 的 `subject/admins` 为 `0x` 小写 hex，并将 PUP/OTH 展示值与冷钱包 decoder 对齐，保证桌面端发出的 QR 也能通过 strict 比对。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change`（`wuminapp`）：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`wumin`）：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：通过，7 个 node admins_change 相关测试通过。
@@ -186,9 +186,9 @@
 
 ### 2026-05-10 admins-change 交互模块修复记录
 
-- 已修复 `organization-manage` 创建机构时的 admins-change 主体：`propose_create_institution` 新增 `admin_org`，只允许 `ORG_PUP / ORG_OTH`；Pending/Active 管理员主体改为主账户地址派生的 `InstitutionAccount(0x05)`，不再使用 `注册机构归属关系(0x02)`。
-- 已将机构账户关闭、`InstitutionMultisigQuery`、`DuoqianSfidAccountQuery::is_admin_of` 改为读取账户级 subject 和 `Institutions[sfid].admin_org`；`duoqian-transfer` 对机构账户传 `ORG_REN` 会返回 `InstitutionOrgMismatch`。
-- 已同步 node 后端 `propose_create_institution` QR/call_data 为 11 字段布局，并在机构详情读取 `admin_org` 和 active admins-change 主体；Pending 阶段回退显示创建快照。
+- 已修复 `organization-manage` 创建机构时的 admins-change 主体：`propose_create_institution` 新增 `org`，只允许 `ORG_PUP / ORG_OTH`；Pending/Active 管理员主体改为主账户地址派生的 `InstitutionAccount(0x05)`，不再使用 `注册机构归属关系(0x02)`。
+- 已将机构账户关闭、`InstitutionMultisigQuery`、`DuoqianSfidAccountQuery::is_admin_of` 改为读取账户级 subject 和 `Institutions[sfid].org`；`duoqian-transfer` 对机构账户传 `ORG_REN` 会返回 `InstitutionOrgMismatch`。
+- 已同步 node 后端 `propose_create_institution` QR/call_data 为 11 字段布局，并在机构详情读取 `org` 和 active admins-change 主体；Pending 阶段回退显示创建快照。
 - 已同步 node 前端创建机构入口传 `adminOrg=ORG_OTH`；wuminapp 创建机构、机构账户发现、提案上下文、转账入口均携带/使用 `adminSubjectOrg`，不再把机构账户当作个人多签。
 - 已同步 wumin 公民钱包 `propose_create_institution` decoder：读取并展示 `org`，只接受 `ORG_PUP / ORG_OTH`，字段顺序与 runtime/node/wuminapp 一致。
 - 已更新 organization-manage、duoqian-transfer、votingengine、node 清算行、wuminapp governance/admins-change 文档，清理“机构账户走 ORG_REN”和“10 字段布局”的旧说明。
@@ -203,10 +203,10 @@
 
 ### 2026-05-15 wuminapp + wumin 公民钱包新阈值 ABI 修复记录
 
-- 已将 wuminapp `AdminsChange::propose_admin_set_change` call data 切到最终 ABI：`org / account_id / new_admins / new_threshold`。
+- 已将 wuminapp `AdminsChange::propose_admin_set_change` call data 切到最终 ABI：`org / account_id / admins / new_threshold`。
 - 已删除 wuminapp 对 `AdminsChange::AdminAccounts.threshold` 的旧读取口径；管理员主体 storage 只解码 `org/kind/admins/creator/created_at/updated_at/status`，固定阈值走制度常量，动态阈值读取 `InternalVote.ActiveDynamicThresholds / PendingDynamicThresholds`。
 - 已将 wuminapp 管理员更换页面补齐阈值 UI：内置治理机构只读固定阈值，个人多签和机构账户可输入动态阈值并按严格过半公式校验。
-- 已将 wuminapp 管理员更换 QR display 同步为 `org / subject / new_admins / new_threshold`，与冷钱包 decoder 严格比对。
+- 已将 wuminapp 管理员更换 QR display 同步为 `org / subject / admins / new_threshold`，与冷钱包 decoder 严格比对。
 - 已将 wumin 公民钱包 `propose_admin_set_change` decoder 切到新载荷，缺少 `new_threshold` 的旧载荷和尾部多余字节直接拒签。
 - 已补齐机构多签注销后的本地显示：统一账户列表继续显示“已注销”，详情页不显示余额，右上角显示“删除”，确认后清理本机机构多签数据。
 - 已将个人多签创建/注销提案本地初始票数改为 `yesVotes = 1`，对齐投票引擎发起人自动赞成票。

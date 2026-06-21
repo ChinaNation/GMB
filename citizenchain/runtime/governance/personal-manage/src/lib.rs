@@ -183,7 +183,7 @@ pub mod pallet {
             proposer: T::AccountId,
             account_name: AccountNameOf<T>,
             admins: DuoqianAdminsOf<T>,
-            admin_count: u32,
+            admins_len: u32,
             threshold: u32,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -194,7 +194,7 @@ pub mod pallet {
             proposal_id: u64,
             duoqian_account: T::AccountId,
             creator: T::AccountId,
-            admin_count: u32,
+            admins_len: u32,
             threshold: u32,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -221,7 +221,7 @@ pub mod pallet {
             proposal_id: u64,
             duoqian_account: T::AccountId,
             beneficiary: T::AccountId,
-            admin_count: u32,
+            admins_len: u32,
             threshold: u32,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -280,7 +280,7 @@ pub mod pallet {
         pub fn propose_create(
             origin: OriginFor<T>,
             account_name: AccountNameOf<T>,
-            duoqian_admins: DuoqianAdminsOf<T>,
+            admins: DuoqianAdminsOf<T>,
             regular_threshold: u32,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
@@ -288,7 +288,7 @@ pub mod pallet {
             crate::create::do_propose_create::<T>(
                 who,
                 account_name,
-                duoqian_admins,
+                admins,
                 regular_threshold,
                 amount,
             )
@@ -342,24 +342,24 @@ pub mod pallet {
         /// 校验管理员集合和用户输入的普通业务动态阈值。
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
-            duoqian_admins: &DuoqianAdminsOf<T>,
+            admins: &DuoqianAdminsOf<T>,
             regular_threshold: u32,
         ) -> Result<u32, DispatchError> {
-            let admin_count = duoqian_admins.len() as u32;
-            ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
+            let admins_len = admins.len() as u32;
+            ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
             ensure!(
-                admin_count <= <T as admins_change::Config>::MaxPersonalAccountAdmins::get(),
+                admins_len <= <T as admins_change::Config>::MaxPersonalAccountAdmins::get(),
                 Error::<T>::InvalidAdminCount
             );
             ensure!(
                 regular_threshold > 0
-                    && regular_threshold <= admin_count
-                    && u64::from(regular_threshold).saturating_mul(2) > u64::from(admin_count),
+                    && regular_threshold <= admins_len
+                    && u64::from(regular_threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            Self::ensure_unique_admins(duoqian_admins)?;
+            Self::ensure_unique_admins(admins)?;
             ensure!(
-                duoqian_admins.iter().any(|admin| admin == who),
+                admins.iter().any(|admin| admin == who),
                 Error::<T>::PermissionDenied
             );
             Ok(regular_threshold)
@@ -481,13 +481,13 @@ impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::
         let account = addr.clone();
         let org = votingengine::types::ORG_REN;
         let admins = admins_change::Pallet::<T>::active_account_admins(org, account.clone())?;
-        let admin_count =
-            admins_change::Pallet::<T>::active_account_admin_count(org, account.clone())?;
+        let admins_len =
+            admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())?;
         let threshold =
             <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())?;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
-            admin_count,
+            admins_len,
             threshold,
         })
     }

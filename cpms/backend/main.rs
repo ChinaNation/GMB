@@ -13,6 +13,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::RwLock;
 
 mod address;
+mod admins;
 mod authz;
 mod common;
 mod dangan;
@@ -21,7 +22,6 @@ mod login;
 mod number;
 mod qr;
 mod store;
-mod super_admin;
 
 // 中文注释：跨模块共享的响应封装、DTO、helper 统一在 common/（与前端 common/ 对齐）。
 use common::{ok, ApiResponse};
@@ -81,7 +81,7 @@ async fn main() {
         .route("/api/v1/health", get(health))
         .merge(initialize::router())
         .merge(login::router())
-        .merge(super_admin::router())
+        .merge(admins::router())
         .merge(dangan::router())
         .merge(address::router())
         .with_state(state.clone())

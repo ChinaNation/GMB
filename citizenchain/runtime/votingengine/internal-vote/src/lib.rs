@@ -67,7 +67,7 @@ pub enum InternalProposalRole {
 pub struct PendingAdminChangeThreshold<AccountId> {
     pub org: u8,
     pub account: AccountId,
-    pub new_admin_count: u32,
+    pub new_admins_len: u32,
     pub new_threshold: u32,
 }
 
@@ -237,41 +237,41 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    fn ensure_threshold_within_snapshot(admin_count: u32, threshold: u32) -> DispatchResult {
+    fn ensure_threshold_within_snapshot(admins_len: u32, threshold: u32) -> DispatchResult {
         // 中文注释：普通内部提案仍按账户当前阈值投票，但阈值必须能被本次管理员快照实际达成。
         ensure!(
-            threshold > 0 && threshold <= admin_count,
+            threshold > 0 && threshold <= admins_len,
             Error::<T>::InvalidThresholdSnapshot
         );
         Ok(())
     }
 
-    fn ensure_all_admin_threshold(admin_count: u32, threshold: u32) -> DispatchResult {
+    fn ensure_all_admin_threshold(admins_len: u32, threshold: u32) -> DispatchResult {
         // 中文注释：账户链上注册与注销会改变账户生命周期，必须由该账户快照内全体管理员通过。
         ensure!(
-            admin_count > 0 && threshold == admin_count,
+            admins_len > 0 && threshold == admins_len,
             Error::<T>::InvalidThresholdSnapshot
         );
         Ok(())
     }
 
-    fn ensure_dynamic_threshold(admin_count: u32, threshold: u32) -> DispatchResult {
+    fn ensure_dynamic_threshold(admins_len: u32, threshold: u32) -> DispatchResult {
         // 中文注释：动态阈值只允许严格过半，且不得超过管理员总数；统一用 u64 避免乘法溢出。
-        ensure!(admin_count >= 2, Error::<T>::InvalidDynamicThreshold);
+        ensure!(admins_len >= 2, Error::<T>::InvalidDynamicThreshold);
         ensure!(
             threshold > 0
-                && threshold <= admin_count
-                && u64::from(threshold).saturating_mul(2) > u64::from(admin_count),
+                && threshold <= admins_len
+                && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
             Error::<T>::InvalidDynamicThreshold
         );
         Ok(())
     }
 
-    fn snapshot_admin_count_or_missing(
+    fn snapshot_admins_len_or_missing(
         proposal_id: u64,
         institution: T::AccountId,
     ) -> Result<u32, DispatchError> {
-        <votingengine::Pallet<T>>::snapshot_admin_count(proposal_id, institution)
+        <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
             .ok_or(votingengine::Error::<T>::MissingAdminSnapshot.into())
     }
 
@@ -302,9 +302,9 @@ impl<T: Config> Pallet<T> {
                 );
             }
         }
-        let admin_count = admins.len() as u32;
-        Self::ensure_dynamic_threshold(admin_count, dynamic_threshold)?;
-        let lifecycle_threshold = admin_count;
+        let admins_len = admins.len() as u32;
+        Self::ensure_dynamic_threshold(admins_len, dynamic_threshold)?;
+        let lifecycle_threshold = admins_len;
         let bounded_admins: BoundedVec<
             T::AccountId,
             <T as votingengine::Config>::MaxAdminsPerInstitution,
@@ -400,11 +400,11 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         org: u8,
         institution: T::AccountId,
-        new_admin_count: u32,
+        new_admins_len: u32,
         new_threshold: u32,
     ) -> Result<u64, DispatchError> {
         if is_registered_multisig_org(org) {
-            Self::ensure_dynamic_threshold(new_admin_count, new_threshold)?;
+            Self::ensure_dynamic_threshold(new_admins_len, new_threshold)?;
         } else {
             ensure!(
                 fixed_governance_pass_threshold(org) == Some(new_threshold),
@@ -425,7 +425,7 @@ impl<T: Config> Pallet<T> {
                 PendingAdminChangeThreshold {
                     org,
                     account: institution,
-                    new_admin_count,
+                    new_admins_len,
                     new_threshold,
                 },
             );
@@ -503,7 +503,7 @@ impl<T: Config> Pallet<T> {
                     votingengine::Error::<T>::NoPermission.into()
                 ));
             }
-            let snapshot_size = match Self::snapshot_admin_count_or_missing(id, institution.clone())
+            let snapshot_size = match Self::snapshot_admins_len_or_missing(id, institution.clone())
             {
                 Ok(size) => size,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -580,7 +580,7 @@ impl<T: Config> Pallet<T> {
             }
             Some(InternalProposalRole::AdminChange) => {
                 if let Some(pending) = PendingAdminChangeThresholds::<T>::take(proposal_id) {
-                    Self::ensure_dynamic_threshold(pending.new_admin_count, pending.new_threshold)?;
+                    Self::ensure_dynamic_threshold(pending.new_admins_len, pending.new_threshold)?;
                     ActiveDynamicThresholds::<T>::insert(
                         pending.org,
                         pending.account,
@@ -658,11 +658,11 @@ impl<T: Config> Pallet<T> {
         if tally.yes >= threshold {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         } else {
-            let admin_count =
-                <votingengine::Pallet<T>>::snapshot_admin_count(proposal_id, institution)
+            let admins_len =
+                <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
                     .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
             let casted = tally.yes.saturating_add(tally.no);
-            let remaining = admin_count.saturating_sub(casted);
+            let remaining = admins_len.saturating_sub(casted);
             if tally.yes.saturating_add(remaining) < threshold {
                 <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
             }
@@ -767,7 +767,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         org: u8,
         institution: T::AccountId,
-        new_admin_count: u32,
+        new_admins_len: u32,
         new_threshold: u32,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
@@ -777,7 +777,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 who.clone(),
                 org,
                 institution,
-                new_admin_count,
+                new_admins_len,
                 new_threshold,
             ) {
                 Ok(id) => id,

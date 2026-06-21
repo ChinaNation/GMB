@@ -62,20 +62,23 @@ fn encode_u128_le(v: u128) -> [u8; 16] {
 /// 构造 `propose_create_institution`(pallet=17, call=5)的 call_data。
 ///
 /// 入参顺序与 [`citizenchain/runtime/governance/organization-manage/src/lib.rs::propose_create_institution`]
-/// 严格一致(11 个字段)。任一字段顺序变更必须同步改本函数和冷钱包 decoder。
+/// 严格一致。任一字段顺序变更必须同步改本函数和冷钱包 decoder。
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_call_data(
     sfid_number: &str,
     sfid_full_name: &str,
     accounts: &[InitialAccountInput],
-    admin_org: u8,
-    admin_count: u32,
-    admin_pubkeys: &[String],
+    org: u8,
+    admins_len: u32,
+    admins: &[String],
     threshold: u32,
     register_nonce: &str,
     signature_hex: &str,
-    signing_province_name: &str,
-    signer_admin_pubkey: &str,
+    issuer_sfid_number: &str,
+    issuer_main_account: &str,
+    signer_pubkey: &str,
+    scope_province_name: &str,
+    scope_city_name: &str,
 ) -> Result<Vec<u8>, String> {
     if sfid_number.is_empty() || sfid_number.len() > 96 {
         return Err("sfid_number 长度需在 1..=96".to_string());
@@ -86,22 +89,22 @@ pub fn build_propose_create_institution_call_data(
     if accounts.is_empty() {
         return Err("accounts 至少 1 项(主账户)".to_string());
     }
-    if !matches!(admin_org, 4 | 5) {
+    if !matches!(org, 4 | 5) {
         return Err("机构账户管理员 org 必须是 ORG_PUP(4) 或 ORG_OTH(5)".to_string());
     }
-    if admin_count < 2 {
-        return Err("admin_count 必须 >= 2".to_string());
+    if admins_len < 2 {
+        return Err("admins_len 必须 >= 2".to_string());
     }
-    if admin_pubkeys.len() as u32 != admin_count {
+    if admins.len() as u32 != admins_len {
         return Err(format!(
-            "admin_count={admin_count} 与 admin_pubkeys.len={} 不一致",
-            admin_pubkeys.len()
+            "admins_len={admins_len} 与 admins.len={} 不一致",
+            admins.len()
         ));
     }
-    let min_threshold = std::cmp::max(2, admin_count.saturating_add(1) / 2);
-    if threshold < min_threshold || threshold > admin_count {
+    let min_threshold = std::cmp::max(2, admins_len.saturating_add(1) / 2);
+    if threshold < min_threshold || threshold > admins_len {
         return Err(format!(
-            "threshold 范围必须在 {min_threshold}..={admin_count}"
+            "threshold 范围必须在 {min_threshold}..={admins_len}"
         ));
     }
     let signature_bytes = hex::decode(signature_hex.strip_prefix("0x").unwrap_or(signature_hex))
@@ -112,10 +115,14 @@ pub fn build_propose_create_institution_call_data(
             signature_bytes.len()
         ));
     }
-    if signing_province_name.is_empty() {
-        return Err("signing_province_name 不可为空".to_string());
+    if issuer_sfid_number.is_empty() {
+        return Err("issuer_sfid_number 不可为空".to_string());
     }
-    let signer_admin_pubkey_bytes = parse_account32(signer_admin_pubkey)?;
+    if scope_province_name.is_empty() {
+        return Err("scope_province_name 不可为空".to_string());
+    }
+    let issuer_main_account_bytes = parse_account32(issuer_main_account)?;
+    let signer_pubkey_bytes = parse_account32(signer_pubkey)?;
 
     let mut call: Vec<u8> = Vec::with_capacity(512);
     call.push(DUOQIAN_PALLET_INDEX);
@@ -137,13 +144,13 @@ pub fn build_propose_create_institution_call_data(
         call.extend_from_slice(&encode_bytes_with_len(acc.account_name.as_bytes()));
         call.extend_from_slice(&encode_u128_le(acc.amount_fen));
     }
-    // 4. admin_org: u8(ORG_PUP/ORG_OTH)
-    call.push(admin_org);
-    // 5. admin_count: u32 LE
-    call.extend_from_slice(&admin_count.to_le_bytes());
-    // 6. duoqian_admins: BoundedVec<AccountId32> = Compact(N) + N × 32B
-    call.extend_from_slice(&encode_compact_u32_pub(admin_pubkeys.len() as u32));
-    for pk in admin_pubkeys {
+    // 4. org: u8(ORG_PUP/ORG_OTH)
+    call.push(org);
+    // 5. admins_len: u32 LE
+    call.extend_from_slice(&admins_len.to_le_bytes());
+    // 6. admins: BoundedVec<AccountId32> = Compact(N) + N × 32B
+    call.extend_from_slice(&encode_compact_u32_pub(admins.len() as u32));
+    for pk in admins {
         let bytes = parse_account32(pk)?;
         call.extend_from_slice(&bytes);
     }
@@ -153,10 +160,16 @@ pub fn build_propose_create_institution_call_data(
     call.extend_from_slice(&encode_bytes_with_len(register_nonce.as_bytes()));
     // 9. signature: BoundedVec<u8>(64 字节)
     call.extend_from_slice(&encode_bytes_with_len(&signature_bytes));
-    // 10. province_name: Vec<u8>(本流程必填,链端要查 ShengSigningPubkey[province_name])
-    call.extend_from_slice(&encode_bytes_with_len(signing_province_name.as_bytes()));
-    // 11. signer_admin_pubkey: [u8; 32](固定 32 字节,无长度前缀)
-    call.extend_from_slice(&signer_admin_pubkey_bytes);
+    // 10. issuer_sfid_number: Vec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(issuer_sfid_number.as_bytes()));
+    // 11. issuer_main_account: AccountId32
+    call.extend_from_slice(&issuer_main_account_bytes);
+    // 12. signer_pubkey: [u8; 32](固定 32 字节,无长度前缀)
+    call.extend_from_slice(&signer_pubkey_bytes);
+    // 13. scope_province_name: Vec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(scope_province_name.as_bytes()));
+    // 14. scope_city_name: Vec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(scope_city_name.as_bytes()));
 
     Ok(call)
 }
@@ -168,37 +181,43 @@ pub fn build_propose_create_institution_sign_request(
     sfid_number: &str,
     sfid_full_name: &str,
     accounts: &[InitialAccountInput],
-    admin_org: u8,
-    admin_count: u32,
-    admin_pubkeys: &[String],
+    org: u8,
+    admins_len: u32,
+    admins: &[String],
     threshold: u32,
     register_nonce: &str,
     signature_hex: &str,
-    signing_province_name: &str,
-    signer_admin_pubkey: &str,
+    issuer_sfid_number: &str,
+    issuer_main_account: &str,
+    signer_pubkey: &str,
+    scope_province_name: &str,
+    scope_city_name: &str,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_propose_create_institution_call_data(
         sfid_number,
         sfid_full_name,
         accounts,
-        admin_org,
-        admin_count,
-        admin_pubkeys,
+        org,
+        admins_len,
+        admins,
         threshold,
         register_nonce,
         signature_hex,
-        signing_province_name,
-        signer_admin_pubkey,
+        issuer_sfid_number,
+        issuer_main_account,
+        signer_pubkey,
+        scope_province_name,
+        scope_city_name,
     )?;
     let total_amount_fen: u128 = accounts.iter().map(|a| a.amount_fen).sum();
     let summary = format!("创建清算行机构多签 {sfid_full_name}({sfid_number})");
     let mut fields = vec![
         serde_json::json!({ "key": "sfid_number", "label": "机构身份号码", "value": sfid_number }),
         serde_json::json!({ "key": "sfid_full_name", "label": "机构名称", "value": sfid_full_name }),
-        serde_json::json!({ "key": "org", "label": "管理员组织类型", "value": qr_org_display_value(admin_org) }),
-        serde_json::json!({ "key": "admin_count", "label": "管理员数量", "value": admin_count.to_string() }),
-        serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admin_count}") }),
+        serde_json::json!({ "key": "org", "label": "管理员组织类型", "value": qr_org_display_value(org) }),
+        serde_json::json!({ "key": "admins_len", "label": "管理员数量", "value": admins_len.to_string() }),
+        serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admins_len}") }),
         serde_json::json!({
             "key": "total_amount_yuan",
             "label": "初始资金合计",
@@ -216,17 +235,34 @@ pub fn build_propose_create_institution_sign_request(
             ),
         }));
     }
-    let signer_admin_pubkey_bytes = parse_account32(signer_admin_pubkey)?;
-    let signer_admin_pubkey_display = pubkey_to_ss58(&signer_admin_pubkey_bytes)?;
+    let signer_pubkey_bytes = parse_account32(signer_pubkey)?;
+    let signer_pubkey_display = pubkey_to_ss58(&signer_pubkey_bytes)?;
+    let issuer_main_account_bytes = parse_account32(issuer_main_account)?;
+    let issuer_main_account_display = pubkey_to_ss58(&issuer_main_account_bytes)?;
     fields.push(serde_json::json!({
-        "key": "province_name",
-        "label": "签发省份",
-        "value": signing_province_name,
+        "key": "issuer_sfid_number",
+        "label": "签发机构 SFID",
+        "value": issuer_sfid_number,
     }));
     fields.push(serde_json::json!({
-        "key": "signer_admin_pubkey",
+        "key": "issuer_main_account",
+        "label": "签发机构主账户",
+        "value": issuer_main_account_display,
+    }));
+    fields.push(serde_json::json!({
+        "key": "signer_pubkey",
         "label": "签发管理员",
-        "value": signer_admin_pubkey_display,
+        "value": signer_pubkey_display,
+    }));
+    fields.push(serde_json::json!({
+        "key": "scope_province_name",
+        "label": "作用域省",
+        "value": scope_province_name,
+    }));
+    fields.push(serde_json::json!({
+        "key": "scope_city_name",
+        "label": "作用域市",
+        "value": scope_city_name,
     }));
     build_sign_request_from_call_data(
         &clean,

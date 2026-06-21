@@ -4,8 +4,8 @@
 CPMS（Citizen Passport Management System）是市公安局使用的公民档案管理系统，后端使用 Rust/Axum，前端使用 React/Vite，数据使用 PostgreSQL 持久化。
 
 当前实现基线：
-- 管理员只允许使用 `WUMIN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；超级管理员 15 分钟无活动过期，操作管理员 30 分钟无活动过期。
-- 角色访问控制：`SUPER_ADMIN / OPERATOR_ADMIN`。
+- 管理员只允许使用 `WUMIN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；管理员 15 分钟无活动过期，操作员 30 分钟无活动过期。
+- 角色访问控制：`ADMIN / OPERATOR`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
 - 行政区快照来自开发库 `sfid/backend/china/china.sqlite`；CPMS 必须离线运行，不主动联网拉取，发布包随附本地只读 `china.sqlite`。
@@ -34,7 +34,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | main | `main.rs` | 入口、AppState 装配、路由挂载、安全响应头、过期数据清理 |
 | authz | `authz/mod.rs` | Cookie session 校验、角色检查 |
 | login | `login/mod.rs` | QR-only 扫码登录、会话查询和登出 |
-| initialize | `initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、超级管理员绑定 |
+| initialize | `initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、管理员绑定 |
 | common | `common/`（与前端 `common/` 对齐的共享层） | 横切低层工具 + 跨模块共享响应/DTO/helper |
 | common::response | `common/response.rs` | `ApiResponse`/`ApiError`/`ok`/`err`/错误码映射（≈ 前端 http.ts） |
 | common::types | `common/types.rs` | 跨模块共享 DTO `AdminUser`/`Archive`（≈ 前端 types.ts） |
@@ -45,7 +45,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | common::ss58 | `common/ss58.rs` | SS58 ↔ hex 公钥编解码（prefix=2027） |
 | address | `address/mod.rs` | 按安装码所属市重建镇/地址段表并提供查询接口（CPMS 自有地址业务） |
 | address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读开发库派生的 `china.sqlite` 行政区快照（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇和地址段 |
-| super_admin | `super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
+| admins | `admins/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | number | `number/mod.rs` | 档案号与护照号生成 |
 | dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、档案操作记录、年度状态导出、100 年硬删除 |
 
@@ -55,7 +55,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | authz | `frontend/authz/` | 登录态上下文与路由守卫 |
 | initialize | `frontend/initialize/` | 安装初始化页面、API 和类型 |
 | login | `frontend/login/` | QR-only 登录页面和 API |
-| super_admin | `frontend/super_admin/` | 超级管理员系统设置、管理员管理、年度报告导出 |
+| admins | `frontend/admins/` | 管理员系统设置、管理员管理、年度报告导出 |
 | dangan | `frontend/dangan/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇和地址段查询 API 和类型 |
 | qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
@@ -66,7 +66,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 系统初始化：
 - `GET /api/v1/install/status`
 - `POST /api/v1/install/initialize`
-- `POST /api/v1/install/super-admin/bind`
+- `POST /api/v1/install/admins/bind`
 
 认证：
 - `POST /api/v1/admin/auth/qr/challenge`
@@ -109,7 +109,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 |------|------|
 | `system_install` | INSTALL 安装授权状态，显式保存 `sfid_number / province_code / city_code` |
 | `qr_sign_keys` | ARCHIVE 签发密钥 |
-| `admin_users` | 管理员；不保留停用状态字段，初始超级管理员不可删除，其他管理员删除即物理删除 |
+| `admin_users` | 管理员；不保留停用状态字段，初始管理员不可删除，其他管理员删除即物理删除 |
 | `sessions` | HttpOnly Cookie 对应的本机会话 |
 | `login_challenges` | 扫码登录挑战 |
 | `qr_login_results` | 扫码登录结果 |
@@ -141,12 +141,12 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 5.2 年度状态导出
 
 - 年度报告类型固定为 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT`，只导出给 SFID 手工导入的绑定状态 JSON。
-- 超级管理员从每年 UTC 1 月 1 日起可以导出上一年度数据；如果存在多年未导出，CPMS 按最早未导出年度依次补导。
+- 管理员从每年 UTC 1 月 1 日起可以导出上一年度数据；如果存在多年未导出，CPMS 按最早未导出年度依次补导。
 - 首个需要导出的年度从 `system_install.initialized_at` 所在年份开始，新装 CPMS 不补导安装前历史年度。
 - 年度报告导出按钮始终从当前最新档案数据重新生成报告；同一年度重复导出会覆盖 `cpms_status_exports` 中该年度记录，不返回旧 JSON。
-- UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，操作管理员登录和已有会话会被锁定，直到超级管理员完成补导。
+- UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，操作员登录和已有会话会被锁定，直到管理员完成补导。
 - CPMS 不判断 SFID 是否收到文件，也不禁用安装码；SFID 逾期禁用 CPMS 授权由 SFID 系统单独实现。
-- `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作管理员锁定状态。
+- `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作员锁定状态。
 - `GET /api/v1/archives/status-export` 生成或返回最早未导出年度的已签名报告。
 - `citizen_binding_records` 导出当前仍有钱包绑定的档案快照：`archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`；导出时再次按公民状态和 16 周岁年龄线计算有效选举资格，不把未成年档案导出为有选举资格。
 - `binding_release_records` 只导出当年度满 100 年硬删除后需要 SFID 释放三者绑定关系的 `archive_no / released_at / release_reason`。
@@ -154,7 +154,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 ## 5.3 档案列表分页与检索
 
-- 档案列表归属 `dangan` 模块，不归属操作管理员角色模块；`SUPER_ADMIN / OPERATOR_ADMIN` 只是访问权限。
+- 档案列表归属 `dangan` 模块，不归属操作员角色模块；`ADMIN / OPERATOR` 只是访问权限。
 - `GET /api/v1/archives` 使用游标分页，不接受 `page / page_size / q` 小表分页参数，也不接受 `archive_no / passport_no / name` 选择器式查询参数。
 - 默认每页 `50` 条，前端可选 `20 / 50 / 100`，后端最大限制 `100`。
 - 默认排序固定为 `created_at DESC, archive_id DESC`，cursor 由后端编码 `created_at / archive_id`，前端只透传。
@@ -191,7 +191,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 - 后端统一设置 `Content-Security-Policy`、`X-Frame-Options`、`X-Content-Type-Options`、`Referrer-Policy` 和 `Permissions-Policy`。
 - `/api/` 路径不得落到前端 `index.html` 兜底；API 未命中统一返回 JSON 错误，前端 HTTP 封装也会拒绝非 JSON 响应并显示具体请求路径。
-- 登录 QR、安装初始化、超级管理员初始化绑定、删除签名完成和资料上传入口使用本机内存限流；触发后返回 `429 / CPMS_RATE_LIMITED`。
+- 登录 QR、安装初始化、管理员初始化绑定、删除签名完成和资料上传入口使用本机内存限流；触发后返回 `429 / CPMS_RATE_LIMITED`。
 - `CPMS_KEY_ENCRYPT_SECRET` 在已初始化实例启动时必须能解密 `system_install.install_secret` 和 `qr_sign_keys` 中的 ARCHIVE 私钥，否则拒绝启动。
 - 正式安装包按 CPU 架构分为 `cpms-ubuntu24-amd64.run` 和 `cpms-ubuntu24-arm64.run`，均包含后端、
   `frontend/dist`、PostgreSQL/nginx/openssl 等 Ubuntu 24.04 离线 deb 依赖、systemd、nginx
@@ -231,7 +231,7 @@ CPMS 后端错误响应包含数字 `code` 和稳定业务 `error_code`。HTTP `
 
 CPMS 只有两种管理员:
 
-| 功能 | `SUPER_ADMIN` | `OPERATOR_ADMIN` |
+| 功能 | `ADMIN` | `OPERATOR` |
 |------|------|------|
 | 查看公民列表 | 可以 | 可以 |
 | 创建/编辑公民档案 | 可以 | 可以 |
@@ -244,10 +244,10 @@ CPMS 只有两种管理员:
 | 编辑管理员姓名 | 可以 | 不可以 |
 | 删除非初始管理员 | 可以 | 不可以 |
 
-后端档案业务接口统一使用 `authz::require_archive_admin`，允许超级管理员和操作管理员。
-系统设置、管理员管理继续使用 `SUPER_ADMIN` 专属权限。初始化时绑定的超级管理员固定为
-不可删除的初始管理员，并固定显示在管理员列表第一行；后续新增的超级管理员和操作管理员都
-只能编辑姓名，且都可以被删除。超级管理员总数最多 5 个，包括初始化时的 1 个和后续新增的
+后端档案业务接口统一使用 `authz::require_archive_admin`，允许管理员和操作员。
+系统设置、管理员管理继续使用 `ADMIN` 专属权限。初始化时绑定的管理员固定为
+不可删除的初始管理员，并固定显示在管理员列表第一行；后续新增的管理员和操作员都
+只能编辑姓名，且都可以被删除。管理员总数最多 5 个，包括初始化时的 1 个和后续新增的
 最多 4 个。管理员删除为物理删除，并同步清理本机会话，只保留审计快照。
 
 公民姓名字段统一为 `last_name / first_name`，前端、后端和数据库不再使用 `full_name`

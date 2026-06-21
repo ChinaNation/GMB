@@ -112,11 +112,11 @@ class PersonalManageService {
     final seen = <String>{};
     for (final pubkey in adminPubkeys) {
       if (pubkey.length != 32) {
-        throw ArgumentError('duoqian_admins 每项必须为 32 字节');
+        throw ArgumentError('admins 每项必须为 32 字节');
       }
       final hex = _hexEncode(pubkey);
       if (!seen.add(hex)) {
-        throw ArgumentError('duoqian_admins 不允许重复');
+        throw ArgumentError('admins 不允许重复');
       }
     }
     if (amountFen <= BigInt.zero) {
@@ -132,7 +132,7 @@ class PersonalManageService {
         CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
     output.write(accountName);
 
-    // duoqian_admins: BoundedVec<AccountId32>
+    // admins: BoundedVec<AccountId32>
     output.write(
         CompactBigIntCodec.codec.encode(BigInt.from(adminPubkeys.length)));
     for (final pubkey in adminPubkeys) {

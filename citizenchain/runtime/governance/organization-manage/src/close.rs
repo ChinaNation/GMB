@@ -85,7 +85,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     // 校验发起人是机构账户的活跃管理员
     let account = Pallet::<T>::resolve_admin_account_for_account(&duoqian_account)
         .ok_or(Error::<T>::DuoqianNotFound)?;
-    let org = Pallet::<T>::resolve_admin_org_for_account(&duoqian_account)
+    let org = Pallet::<T>::resolve_org_for_account(&duoqian_account)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     ensure!(
         admins_change::Pallet::<T>::is_active_account_admin(org, account.clone(), &who),

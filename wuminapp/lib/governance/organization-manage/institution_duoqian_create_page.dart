@@ -430,7 +430,7 @@ class _InstitutionDuoqianCreatePageState
               const SignDisplayField(
                   key: 'org', label: '管理员组织类型', value: '其他机构账户'),
               SignDisplayField(
-                  key: 'admin_count',
+                  key: 'admins_len',
                   label: '管理员数量',
                   value: _adminPubkeys.length.toString()),
               SignDisplayField(
@@ -449,14 +449,26 @@ class _InstitutionDuoqianCreatePageState
                 ),
               ),
               SignDisplayField(
-                  key: 'province_name',
-                  label: '签发省份',
-                  value: registrationInfo.credential.provinceName),
+                  key: 'issuer_sfid_number',
+                  label: '签发机构 SFID',
+                  value: registrationInfo.credential.issuerSfidNumber),
               SignDisplayField(
-                  key: 'signer_admin_pubkey',
-                  label: '签发管理员',
+                  key: 'issuer_main_account',
+                  label: '签发机构主账户',
                   value: _hexToSs58(
-                      registrationInfo.credential.signerAdminPubkey)),
+                      registrationInfo.credential.issuerMainAccount)),
+              SignDisplayField(
+                  key: 'signer_pubkey',
+                  label: '签发管理员',
+                  value: _hexToSs58(registrationInfo.credential.signerPubkey)),
+              SignDisplayField(
+                  key: 'scope_province_name',
+                  label: '作用域省',
+                  value: registrationInfo.credential.scopeProvinceName),
+              SignDisplayField(
+                  key: 'scope_city_name',
+                  label: '作用域市',
+                  value: registrationInfo.credential.scopeCityName),
             ],
           ),
         );
@@ -485,8 +497,11 @@ class _InstitutionDuoqianCreatePageState
         threshold: threshold,
         registerNonce: registrationInfo.credential.registerNonce,
         signatureHex: registrationInfo.credential.signature,
-        provinceName: registrationInfo.credential.provinceName,
-        signerAdminPubkeyHex: registrationInfo.credential.signerAdminPubkey,
+        issuerSfidNumber: registrationInfo.credential.issuerSfidNumber,
+        issuerMainAccountHex: registrationInfo.credential.issuerMainAccount,
+        signerPubkeyHex: registrationInfo.credential.signerPubkey,
+        scopeProvinceName: registrationInfo.credential.scopeProvinceName,
+        scopeCityName: registrationInfo.credential.scopeCityName,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,

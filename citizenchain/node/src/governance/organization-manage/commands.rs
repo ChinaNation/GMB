@@ -111,13 +111,16 @@ pub async fn build_propose_create_institution_request(
     sfid_number: String,
     sfid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
-    admin_org: u8,
-    admin_pubkeys: Vec<String>,
+    org: u8,
+    admins: Vec<String>,
     threshold: u32,
     register_nonce: String,
     signature_hex: String,
-    signing_province_name: String,
-    signer_admin_pubkey: String,
+    issuer_sfid_number: String,
+    issuer_main_account: String,
+    signer_pubkey: String,
+    scope_province_name: String,
+    scope_city_name: String,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
@@ -125,20 +128,23 @@ pub async fn build_propose_create_institution_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let parsed_accounts = parse_initial_accounts(&accounts)?;
-        let admin_count = admin_pubkeys.len() as u32;
+        let admins_len = admins.len() as u32;
         super::signing::build_propose_create_institution_sign_request(
             &pubkey_hex,
             &sfid_number,
             &sfid_full_name,
             &parsed_accounts,
-            admin_org,
-            admin_count,
-            &admin_pubkeys,
+            org,
+            admins_len,
+            &admins,
             threshold,
             &register_nonce,
             &signature_hex,
-            &signing_province_name,
-            &signer_admin_pubkey,
+            &issuer_sfid_number,
+            &issuer_main_account,
+            &signer_pubkey,
+            &scope_province_name,
+            &scope_city_name,
         )
     })
     .await
@@ -155,13 +161,16 @@ pub async fn submit_propose_create_institution(
     sfid_number: String,
     sfid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
-    admin_org: u8,
-    admin_pubkeys: Vec<String>,
+    org: u8,
+    admins: Vec<String>,
     threshold: u32,
     register_nonce: String,
     signature_hex: String,
-    signing_province_name: String,
-    signer_admin_pubkey: String,
+    issuer_sfid_number: String,
+    issuer_main_account: String,
+    signer_pubkey: String,
+    scope_province_name: String,
+    scope_city_name: String,
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: String,
@@ -172,19 +181,22 @@ pub async fn submit_propose_create_institution(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let parsed_accounts = parse_initial_accounts(&accounts)?;
-        let admin_count = admin_pubkeys.len() as u32;
+        let admins_len = admins.len() as u32;
         let call_data = super::signing::build_propose_create_institution_call_data(
             &sfid_number,
             &sfid_full_name,
             &parsed_accounts,
-            admin_org,
-            admin_count,
-            &admin_pubkeys,
+            org,
+            admins_len,
+            &admins,
             threshold,
             &register_nonce,
             &signature_hex,
-            &signing_province_name,
-            &signer_admin_pubkey,
+            &issuer_sfid_number,
+            &issuer_main_account,
+            &signer_pubkey,
+            &scope_province_name,
+            &scope_city_name,
         )?;
         gov_signing::verify_and_submit(
             &request_id,

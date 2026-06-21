@@ -284,8 +284,11 @@ pub mod pallet {
             binding_id: T::Hash,
             nonce: votingengine::pallet::VoteNonceOf<T>,
             signature: votingengine::pallet::VoteSignatureOf<T>,
-            province_name: BoundedVec<u8, ConstU32<64>>,
-            signer_admin_pubkey: [u8; 32],
+            issuer_sfid_number: BoundedVec<u8, ConstU32<128>>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
+            scope_province_name: BoundedVec<u8, ConstU32<64>>,
+            scope_city_name: BoundedVec<u8, ConstU32<64>>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -295,8 +298,11 @@ pub mod pallet {
                 binding_id,
                 nonce,
                 signature,
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
                 approve,
             )
         }
@@ -312,8 +318,11 @@ pub mod pallet {
             eligible_total: u64,
             snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
             signature: votingengine::pallet::VoteSignatureOf<T>,
-            province_name: BoundedVec<u8, ConstU32<64>>,
-            signer_admin_pubkey: [u8; 32],
+            issuer_sfid_number: BoundedVec<u8, ConstU32<128>>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
+            scope_province_name: BoundedVec<u8, ConstU32<64>>,
+            scope_city_name: BoundedVec<u8, ConstU32<64>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::do_prepare_population_snapshot(
@@ -321,8 +330,11 @@ pub mod pallet {
                 eligible_total,
                 snapshot_nonce,
                 signature,
-                province_name.as_slice(),
-                &signer_admin_pubkey,
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
+                &signer_pubkey,
+                scope_province_name.as_slice(),
+                scope_city_name.as_slice(),
             )
         }
     }

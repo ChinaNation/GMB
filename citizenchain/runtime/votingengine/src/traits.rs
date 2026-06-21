@@ -103,7 +103,7 @@ pub trait InternalVoteEngine<AccountId> {
         _who: AccountId,
         _org: u8,
         _institution: AccountId,
-        _new_admin_count: u32,
+        _new_admins_len: u32,
         _new_threshold: u32,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
@@ -137,17 +137,19 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
 }
 
 /// 中文注释：公民总人口快照验签接口（由 runtime 对接 SFID 系统）。
-/// ADR-008 step3:`(province_name, signer_admin_pubkey)` 必须随 payload 一起进 SCALE 哈希,
-/// runtime verifier 按 `ShengSigningPubkey` 双映射查派生签名公钥并验签;
-/// 链上 0 prior knowledge of SFID,无任何"SFID main 兜底"路径。
+/// 签发身份统一为 `issuer_sfid_number + issuer_main_account + signer_pubkey`;
+/// runtime verifier 必须确认 signer 属于签发机构 admins 后再验签。
 pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
     fn verify_population_snapshot(
         who: &AccountId,
         eligible_total: u64,
         nonce: &Nonce,
         signature: &Signature,
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool;
 }
 
@@ -157,8 +159,11 @@ impl<AccountId, Nonce, Signature> PopulationSnapshotVerifier<AccountId, Nonce, S
         _eligible_total: u64,
         _nonce: &Nonce,
         _signature: &Signature,
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId,
+        _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         false
     }
@@ -560,11 +565,11 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
 pub trait InternalAdminCountProvider<AccountId> {
-    fn admin_count(org: u8, institution: AccountId) -> Option<u32>;
+    fn admins_len(org: u8, institution: AccountId) -> Option<u32>;
 }
 
 impl<AccountId> InternalAdminCountProvider<AccountId> for () {
-    fn admin_count(_org: u8, _institution: AccountId) -> Option<u32> {
+    fn admins_len(_org: u8, _institution: AccountId) -> Option<u32> {
         None
     }
 }
@@ -726,8 +731,7 @@ impl VoteCredentialCleanup {
     }
 }
 
-/// ADR-008 step3:`verify_and_consume_vote_credential` 加 `(province_name, signer_admin_pubkey)`
-/// 双层匹配字段,链上不再保留任何"SFID main 兜底"路径。
+/// 中文注释：公民投票资格实时验签。签发身份统一从机构 admins 校验。
 pub trait SfidEligibility<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
@@ -736,8 +740,11 @@ pub trait SfidEligibility<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> bool;
 
     /// 清理某个联合/公民提案对应的投票凭证防重放状态。
@@ -762,8 +769,11 @@ impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId,
+        _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         false
     }

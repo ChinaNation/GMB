@@ -205,7 +205,7 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
         let issuance_before = Balances::total_issuance();
 
         assert_ok!(ResolutionDestro::propose_destroy(
-            RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[0])),
+            RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[0])),
             votingengine::types::ORG_NRC,
             nrc_institution,
             destroy_amount,
@@ -215,7 +215,7 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
 
         for i in 0..13 {
             assert_ok!(InternalVote::cast(
-                RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[i])),
+                RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[i])),
                 pid,
                 true,
             ));
@@ -331,7 +331,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         let create_call =
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 account_name,
-                duoqian_admins: admins.clone(),
+                admins: admins.clone(),
                 regular_threshold: 2,
                 amount: 1_000,
             });
@@ -458,7 +458,7 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
 
         // 测试中直接写入 votingengine 存储；生产路径必须走 create_*_with_data 原子入口。
         let proposal_id = 7u64;
-        let proposer = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
+        let proposer = AccountId::new(CHINA_CB[0].admins[0]);
         let reason: runtime_upgrade::pallet::ReasonOf<Runtime> =
             b"upgrade".to_vec().try_into().expect("reason");
         let code: runtime_upgrade::pallet::CodeOf<Runtime> =
@@ -538,24 +538,24 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
     });
 }
 
-// ADR-008 step3:Bind / Vote / PopSnapshot 三个 Credential SCALE 已携带
-// (province_name, signer_admin_pubkey) 字段。runtime verifier 走 ShengSigningPubkey 双映射
-// 派生公钥真实验签。本测试覆盖 main admin 签发 / backup admin 签发 / 花名册外 admin
-// 拒签 / 跨省 admin 拒签四个核心路径,以及 SfidEligibility wrap 的完整链路。
-//
-// 测试 helper:为 `liaoning` 省装入 main admin + backup1 admin,各自激活一把
-// ShengSigningPubkey,然后构造对应 credential 走 verifier 真实验签。
+// SFID 凭证签发统一为机构模型:
+// issuer_sfid_number + issuer_main_account + signer_pubkey。
+// runtime verifier 必须从 admins-change::AdminAccounts[issuer_main_account].admins
+// 校验 signer,再做 sr25519 payload 验签。
 #[test]
-fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
+fn runtime_sfid_verifiers_admins_change_verify_succeeds() {
     new_test_ext().execute_with(|| {
-        let (main_signing_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_main_account = test_issuer_main_account();
+        let scope_city_name = test_scope_city_name();
         let account = AccountId::new([31u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
 
         let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"bind-nonce".to_vec().try_into().expect("nonce should fit");
         let bind_credential = build_bind_credential(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &account,
@@ -567,7 +567,7 @@ fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
         let vote_nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"vote-nonce".to_vec().try_into().expect("nonce should fit");
         let vote_signature = build_vote_signature(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &account,
@@ -581,14 +581,17 @@ fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
             9,
             &vote_nonce,
             &vote_signature,
-            &province_name,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
             &main_admin_pubkey,
+            province_name.as_slice(),
+            scope_city_name.as_slice(),
         ));
 
         let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
             b"pop-nonce".to_vec().try_into().expect("nonce should fit");
         let pop_signature = build_pop_signature(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &account,
@@ -601,8 +604,11 @@ fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
                 123,
                 &pop_nonce,
                 &pop_signature,
-                &province_name,
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 &main_admin_pubkey,
+                province_name.as_slice(),
+                scope_city_name.as_slice(),
             )
         );
     });
@@ -611,13 +617,13 @@ fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
 #[test]
 fn bind_with_main_admin_signature_succeeds() {
     new_test_ext().execute_with(|| {
-        let (main_signing_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
         let account = AccountId::new([21u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-main");
         let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"bind-main-nonce".to_vec().try_into().expect("nonce");
         let credential = build_bind_credential(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &account,
@@ -631,14 +637,13 @@ fn bind_with_main_admin_signature_succeeds() {
 #[test]
 fn bind_with_backup_admin_signature_succeeds() {
     new_test_ext().execute_with(|| {
-        let (_, _, backup_signing_pair, backup_admin_pubkey, province_name) =
-            setup_step3_test_admins();
+        let (_, _, backup_pair, backup_admin_pubkey, province_name) = setup_step3_test_admins();
         let account = AccountId::new([22u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-backup");
         let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"bind-backup-nonce".to_vec().try_into().expect("nonce");
         let credential = build_bind_credential(
-            &backup_signing_pair,
+            &backup_pair,
             &backup_admin_pubkey,
             &province_name,
             &account,
@@ -653,14 +658,13 @@ fn bind_with_backup_admin_signature_succeeds() {
 fn bind_with_admin_not_in_roster_rejected() {
     new_test_ext().execute_with(|| {
         let (_, _, _, _, province_name) = setup_step3_test_admins();
-        // 花名册外的随机 admin pubkey:链上无 ShengSigningPubkey 项,verifier 必拒。
+        // 中文注释:签发账户不在 issuer_main_account 的 admins 集合中,必须拒签。
         let outsider_pair = sr25519::Pair::from_string("//outsider", None).expect("pair");
         let outsider_admin_pubkey = outsider_pair.public().0;
         let account = AccountId::new([23u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-outsider");
         let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"bind-out-nonce".to_vec().try_into().expect("nonce");
-        // 用 outsider 自己签,但花名册中没有他 → 链上查不到 signing pubkey。
         let credential = build_bind_credential(
             &outsider_pair,
             &outsider_admin_pubkey,
@@ -676,13 +680,16 @@ fn bind_with_admin_not_in_roster_rejected() {
 #[test]
 fn vote_double_layer_verify_succeeds() {
     new_test_ext().execute_with(|| {
-        let (main_signing_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_main_account = test_issuer_main_account();
+        let scope_city_name = test_scope_city_name();
         let account = AccountId::new([24u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-vote");
         let nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"vote-pass-nonce".to_vec().try_into().expect("nonce");
         let signature = build_vote_signature(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &account,
@@ -696,29 +703,31 @@ fn vote_double_layer_verify_succeeds() {
             42,
             &nonce,
             &signature,
-            &province_name,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
             &main_admin_pubkey,
+            province_name.as_slice(),
+            scope_city_name.as_slice(),
         ));
     });
 }
 
 #[test]
-fn vote_cross_province_admin_rejected() {
+fn vote_scope_payload_tamper_rejected() {
     new_test_ext().execute_with(|| {
-        // 装入 liaoning 省的 admin。
-        let (main_signing_pair, main_admin_pubkey, _, _, _province) = setup_step3_test_admins();
-        // 用 jilin 省查表(jilin 对应没有任何 ShengSigningPubkey 项)。
+        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_main_account = test_issuer_main_account();
+        let scope_city_name = test_scope_city_name();
         let jilin: Vec<u8> = b"jilin".to_vec();
         let account = AccountId::new([25u8; 32]);
-        let binding_id =
-            <Runtime as frame_system::Config>::Hashing::hash(b"step3-cross-province_name");
+        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-scope-tamper");
         let nonce: sfid_system::pallet::NonceOf<Runtime> =
-            b"vote-cross-nonce".to_vec().try_into().expect("nonce");
-        // 故意让 admin 在 jilin 域下被查 → verifier 必拒。
+            b"vote-tamper-nonce".to_vec().try_into().expect("nonce");
         let signature = build_vote_signature(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
-            &jilin,
+            &province_name,
             &account,
             binding_id,
             7,
@@ -730,8 +739,11 @@ fn vote_cross_province_admin_rejected() {
             7,
             &nonce,
             &signature,
-            &jilin,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
             &main_admin_pubkey,
+            jilin.as_slice(),
+            scope_city_name.as_slice(),
         ));
     });
 }
@@ -739,12 +751,15 @@ fn vote_cross_province_admin_rejected() {
 #[test]
 fn population_snapshot_per_province_signature_verifies() {
     new_test_ext().execute_with(|| {
-        let (main_signing_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_main_account = test_issuer_main_account();
+        let scope_city_name = test_scope_city_name();
         let who = AccountId::new([26u8; 32]);
         let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
             b"pop-pass-nonce".to_vec().try_into().expect("nonce");
         let signature = build_pop_signature(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &who,
@@ -757,19 +772,25 @@ fn population_snapshot_per_province_signature_verifies() {
                 500,
                 &pop_nonce,
                 &signature,
-                &province_name,
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 &main_admin_pubkey,
+                province_name.as_slice(),
+                scope_city_name.as_slice(),
             )
         );
     });
 }
 
-// ADR-008 step3:RuntimeSfidEligibility 的 is_eligible 走 BindingId↔Account 反查;
-// verify_and_consume_vote_credential 走 RuntimeSfidVoteVerifier 真实双层验签。
+// RuntimeSfidEligibility 的 is_eligible 走 BindingId↔Account 反查;
+// verify_and_consume_vote_credential 走 RuntimeSfidVoteVerifier 真实签发机构验签。
 #[test]
 fn runtime_sfid_eligibility_binding_and_vote_full_path() {
     new_test_ext().execute_with(|| {
-        let (main_signing_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
+        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_main_account = test_issuer_main_account();
+        let scope_city_name = test_scope_city_name();
         let who = AccountId::new([41u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-wrap");
         sfid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
@@ -785,7 +806,7 @@ fn runtime_sfid_eligibility_binding_and_vote_full_path() {
         let nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"wrap-nonce".to_vec().try_into().expect("nonce");
         let signature = build_vote_signature(
-            &main_signing_pair,
+            &main_pair,
             &main_admin_pubkey,
             &province_name,
             &who,
@@ -799,8 +820,11 @@ fn runtime_sfid_eligibility_binding_and_vote_full_path() {
             88,
             nonce.as_slice(),
             signature.as_slice(),
-            &province_name,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
             &main_admin_pubkey,
+            province_name.as_slice(),
+            scope_city_name.as_slice(),
         ));
         // 二次同 nonce 必拒(防重放)。
         assert!(!RuntimeSfidEligibility::verify_and_consume_vote_credential(
@@ -809,8 +833,11 @@ fn runtime_sfid_eligibility_binding_and_vote_full_path() {
             88,
             nonce.as_slice(),
             signature.as_slice(),
-            &province_name,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
             &main_admin_pubkey,
+            province_name.as_slice(),
+            scope_city_name.as_slice(),
         ));
     });
 }
@@ -819,7 +846,7 @@ fn runtime_sfid_eligibility_binding_and_vote_full_path() {
 fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
     new_test_ext().execute_with(|| {
         let nrc_id = AccountId::new(CHINA_CB[0].main_account);
-        let nrc_admin = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
+        let nrc_admin = AccountId::new(CHINA_CB[0].admins[0]);
         let outsider = AccountId::new([99u8; 32]);
 
         let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
@@ -838,55 +865,14 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
     });
 }
 
-// ADR-008 step2b：register_institution verifier 改造为按 (province_name, admin_pubkey) 验签后,
-// 本测试覆盖 4 条核心路径(对应 step2b 任务卡 4 条新测试名,在 runtime 集成层验证):
-// - main admin 派生签名公钥已 activate → 验签成功;
-// - backup admin 派生签名公钥已 activate → 验签成功(同省共存);
-// - admin 不在 ShengAdmins 花名册 → 验签 reject(SfidProvinceAdminSigningNotActivated 等价);
-// - admin 在花名册但 ShengSigningPubkey 未 activate → 验签 reject。
 #[test]
-fn runtime_sfid_institution_verifier_double_layer_lookup() {
-    use sfid_system::pallet::ProvinceBound;
-    use sfid_system::Slot;
-
+fn runtime_sfid_institution_verifier_admins_change_lookup() {
     new_test_ext().execute_with(|| {
-        let province_bytes = b"AH".to_vec();
-        let bounded_province: ProvinceBound = province_bytes
-            .clone()
-            .try_into()
-            .expect("province_name should fit");
-
-        // 准备 main / backup_1 admin 各自的派生签名 keypair。
-        let (main_signing_pair, _) = sr25519::Pair::generate();
-        let main_admin_pubkey: [u8; 32] = [11u8; 32];
-        let main_signing_pubkey: [u8; 32] = main_signing_pair.public().0;
-
-        let (backup_signing_pair, _) = sr25519::Pair::generate();
-        let backup_admin_pubkey: [u8; 32] = [22u8; 32];
-        let backup_signing_pubkey: [u8; 32] = backup_signing_pair.public().0;
-
-        // 写入 ShengAdmins[province_name][Main/Backup1] + ShengSigningPubkey[(province_name, admin)]。
-        sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-            &bounded_province,
-            Slot::Main,
-            main_admin_pubkey,
-        );
-        sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-            &bounded_province,
-            Slot::Backup1,
-            backup_admin_pubkey,
-        );
-        sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-            &bounded_province,
-            main_admin_pubkey,
-            main_signing_pubkey,
-        );
-        sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-            &bounded_province,
-            backup_admin_pubkey,
-            backup_signing_pubkey,
-        );
-
+        let (main_pair, main_admin_pubkey, backup_pair, backup_admin_pubkey, province_bytes) =
+            setup_step3_test_admins();
+        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_main_account = test_issuer_main_account();
+        let scope_city_name = test_scope_city_name();
         let sfid_number: &[u8] = b"AH001-GCB07-000000001-2026";
         let register_nonce: organization_manage::pallet::RegisterNonceOf<Runtime> =
             b"register-nonce-ah-1"
@@ -909,8 +895,11 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
                 sfid_full_name.as_slice(),
                 &account_names,
                 register_nonce.as_slice(),
-                province_bytes.as_slice(),
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
             );
             let msg = blake2_256(&payload.encode());
             let sig = signing_pair.sign(&msg);
@@ -919,10 +908,10 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
             bounded
         };
 
-        // 1. main admin 派生签名 → ok
-        let main_signature = make_signature(&main_signing_pair, &main_admin_pubkey);
+        let main_signature = make_signature(&main_pair, &main_admin_pubkey);
         assert!(
             <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
@@ -932,16 +921,19 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
                 &account_names,
                 &register_nonce,
                 &main_signature,
-                province_bytes.as_slice(),
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 &main_admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
             ),
             "main admin signature should pass"
         );
 
-        // 2. backup admin 派生签名 → ok
-        let backup_signature = make_signature(&backup_signing_pair, &backup_admin_pubkey);
+        let backup_signature = make_signature(&backup_pair, &backup_admin_pubkey);
         assert!(
             <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
@@ -951,16 +943,21 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
                 &account_names,
                 &register_nonce,
                 &backup_signature,
-                province_bytes.as_slice(),
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 &backup_admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
             ),
             "backup admin signature should pass"
         );
 
-        // 3. 花名册之外 admin pubkey → reject(ShengSigningPubkey 查不到)
-        let outsider_pubkey: [u8; 32] = [99u8; 32];
+        let outsider_pair = sr25519::Pair::from_string("//outsider-inst", None).expect("pair");
+        let outsider_pubkey = outsider_pair.public().0;
+        let outsider_signature = make_signature(&outsider_pair, &outsider_pubkey);
         assert!(
             !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
@@ -969,45 +966,21 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
                 &sfid_full_name,
                 &account_names,
                 &register_nonce,
-                &main_signature,
-                province_bytes.as_slice(),
+                &outsider_signature,
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 &outsider_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
             ),
             "outsider admin pubkey must reject"
         );
 
-        // 4. 在花名册但尚未 activate signing pubkey → reject(从 storage 删 ShengSigningPubkey)
-        sfid_system::pallet::ShengSigningPubkey::<Runtime>::remove(
-            &bounded_province,
-            main_admin_pubkey,
-        );
-        assert!(
-            !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
-                organization_manage::pallet::AccountNameOf<Runtime>,
-                organization_manage::pallet::RegisterNonceOf<Runtime>,
-                organization_manage::pallet::RegisterSignatureOf<Runtime>,
-            >>::verify_institution_registration(
-                sfid_number,
-                &sfid_full_name,
-                &account_names,
-                &register_nonce,
-                &main_signature,
-                province_bytes.as_slice(),
-                &main_admin_pubkey,
-            ),
-            "signing pubkey not activated must reject"
-        );
-
-        // 篡改签名(长度合法但内容不匹配)→ reject
-        sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-            &bounded_province,
-            main_admin_pubkey,
-            main_signing_pubkey,
-        );
         let bad_signature: organization_manage::pallet::RegisterSignatureOf<Runtime> =
             vec![9u8; 64].try_into().expect("signature should fit");
         assert!(
             !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
@@ -1017,8 +990,11 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
                 &account_names,
                 &register_nonce,
                 &bad_signature,
-                province_bytes.as_slice(),
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
                 &main_admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
             ),
             "tampered signature must reject"
         );

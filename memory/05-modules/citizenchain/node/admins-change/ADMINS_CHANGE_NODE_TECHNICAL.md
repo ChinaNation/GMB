@@ -61,7 +61,7 @@ GMB_ACTIVATE_SUBJECT_V1
 链上 call data：
 
 ```text
-[pallet=12][call=0][org:u8][account_id:48][new_admins:Compact<Vec<AccountId32>>]
+[pallet=12][call=0][org:u8][account_id:48][admins:Compact<Vec<AccountId32>>]
 ```
 
 其中 `pallet=12` 对应 runtime `AdminsChange`，`call=0` 对应 `propose_admin_set_change`。
@@ -108,6 +108,6 @@ citizenchain/node/frontend/governance/admins_change/
 - 个人多签必须使用 `ORG_REN`，管理员数量：`2..=64`。
 - 机构账户必须使用 `ORG_PUP / ORG_OTH`，管理员数量：`2..=1989`。
 - 管理员激活 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`pubkey`。
-- 管理员更换 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`new_admins`；`subject/new_admins` 使用 `0x` 小写 hex。
+- 管理员更换 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`admins`；`subject/admins` 使用 `0x` 小写 hex。
 
 链端仍是最终裁判；桌面端校验只用于提前给出明确错误。

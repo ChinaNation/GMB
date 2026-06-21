@@ -2,7 +2,7 @@
 //
 // 流程:
 //   1. 加载时调 organizationManageApi.fetchInstitutionRegistrationInfo(sfidNumber) 拉注册专用信息
-//      响应自带 register_nonce / signature / province_name / signer_admin_pubkey。
+//      响应自带 register_nonce / signature / issuer_* / signer_pubkey / scope_*。
 //   2. 账户列表完全以 SFID 返回的 account_names 为准,前端只允许填写每个账户的初始资金。
 //   3. 管理员列表:创建人(选中的本机冷钱包)自动占第一位 + 扫码添加管理员
 //   4. 阈值范围 ⌈n/2⌉ ~ n
@@ -184,8 +184,11 @@ export function CreateMultisigInstitutionPage({
         threshold,
         registerNonce: sfidCredential.register_nonce,
         signatureHex: sfidCredential.signature,
-        signingProvinceName: sfidCredential.province_name,
-        signerAdminPubkey: sfidCredential.signer_admin_pubkey,
+        issuerSfidNumber: sfidCredential.issuer_sfid_number,
+        issuerMainAccount: sfidCredential.issuer_main_account,
+        signerPubkey: sfidCredential.signer_pubkey,
+        scopeProvinceName: sfidCredential.scope_province_name,
+        scopeCityName: sfidCredential.scope_city_name,
       });
 
       // Step 2: 弹 QR 两段握手(对接现有 wumin sign_request page)。

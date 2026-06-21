@@ -3,7 +3,7 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::Encode;
-use primitives::core_const::{DUOQIAN, OP_SIGN_POP, OP_SIGN_VOTE};
+use primitives::core_const::{DUOQIAN, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -56,8 +56,11 @@ pub(crate) struct RuntimeVoteCredential {
     pub(crate) binding_id: String,
     pub(crate) proposal_id: u64,
     pub(crate) vote_nonce: String,
-    pub(crate) province_name: String,
-    pub(crate) signer_admin_pubkey: String,
+    pub(crate) issuer_sfid_number: String,
+    pub(crate) issuer_main_account: String,
+    pub(crate) signer_pubkey: String,
+    pub(crate) scope_province_name: String,
+    pub(crate) scope_city_name: String,
     pub(crate) signature: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
@@ -68,18 +71,40 @@ pub(crate) struct RuntimePopulationSnapshotCredential {
     pub(crate) who: String,
     pub(crate) eligible_total: u64,
     pub(crate) snapshot_nonce: String,
-    pub(crate) province_name: String,
-    pub(crate) signer_admin_pubkey: String,
+    pub(crate) issuer_sfid_number: String,
+    pub(crate) issuer_main_account: String,
+    pub(crate) signer_pubkey: String,
+    pub(crate) scope_province_name: String,
+    pub(crate) scope_city_name: String,
     pub(crate) signature: String,
     pub(crate) genesis_hash: String,
     pub(crate) payload_digest: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
 
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct RuntimeInstitutionRegistrationCredential {
+    pub(crate) genesis_hash: String,
+    pub(crate) register_nonce: String,
+    pub(crate) issuer_sfid_number: String,
+    pub(crate) issuer_main_account: String,
+    pub(crate) signer_pubkey: String,
+    pub(crate) scope_province_name: String,
+    pub(crate) scope_city_name: String,
+    pub(crate) signature: String,
+    pub(crate) payload_digest: String,
+    pub(crate) meta: RuntimeSignatureMeta,
+}
+
 struct RuntimeSigningContext {
-    province_name: String,
-    signer_admin_pubkey: [u8; 32],
-    signer_admin_pubkey_hex: String,
+    issuer_sfid_number: String,
+    issuer_main_account: [u8; 32],
+    issuer_main_account_hex: String,
+    signer_pubkey: [u8; 32],
+    signer_pubkey_hex: String,
+    scope_province_name: String,
+    scope_city_name: String,
 }
 
 pub(crate) fn build_vote_credential(
@@ -98,7 +123,7 @@ pub(crate) fn build_vote_credential(
     let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
-    let signing_ctx = runtime_signing_context()?;
+    let signing_ctx = runtime_signing_context(None, None)?;
     let payload = (
         DUOQIAN,
         OP_SIGN_VOTE,
@@ -107,8 +132,11 @@ pub(crate) fn build_vote_credential(
         binding_id,
         proposal_id,
         vote_nonce.as_bytes(),
-        signing_ctx.province_name.as_bytes(),
-        &signing_ctx.signer_admin_pubkey,
+        signing_ctx.issuer_sfid_number.as_bytes(),
+        &signing_ctx.issuer_main_account,
+        &signing_ctx.signer_pubkey,
+        signing_ctx.scope_province_name.as_bytes(),
+        signing_ctx.scope_city_name.as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
@@ -118,8 +146,11 @@ pub(crate) fn build_vote_credential(
         binding_id: hex::encode(binding_id),
         proposal_id,
         vote_nonce,
-        province_name: signing_ctx.province_name,
-        signer_admin_pubkey: signing_ctx.signer_admin_pubkey_hex,
+        issuer_sfid_number: signing_ctx.issuer_sfid_number,
+        issuer_main_account: signing_ctx.issuer_main_account_hex,
+        signer_pubkey: signing_ctx.signer_pubkey_hex,
+        scope_province_name: signing_ctx.scope_province_name,
+        scope_city_name: signing_ctx.scope_city_name,
         signature,
         meta: runtime_signature_meta(state),
     })
@@ -136,7 +167,7 @@ pub(crate) fn build_population_snapshot_credential(
     }
     let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context()?;
+    let signing_ctx = runtime_signing_context(None, None)?;
     let payload = (
         DUOQIAN,
         OP_SIGN_POP,
@@ -144,8 +175,11 @@ pub(crate) fn build_population_snapshot_credential(
         who,
         eligible_total,
         snapshot_nonce.as_bytes(),
-        signing_ctx.province_name.as_bytes(),
-        &signing_ctx.signer_admin_pubkey,
+        signing_ctx.issuer_sfid_number.as_bytes(),
+        &signing_ctx.issuer_main_account,
+        &signing_ctx.signer_pubkey,
+        signing_ctx.scope_province_name.as_bytes(),
+        signing_ctx.scope_city_name.as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
@@ -153,8 +187,11 @@ pub(crate) fn build_population_snapshot_credential(
         who: normalized_who,
         eligible_total,
         snapshot_nonce,
-        province_name: signing_ctx.province_name,
-        signer_admin_pubkey: signing_ctx.signer_admin_pubkey_hex,
+        issuer_sfid_number: signing_ctx.issuer_sfid_number,
+        issuer_main_account: signing_ctx.issuer_main_account_hex,
+        signer_pubkey: signing_ctx.signer_pubkey_hex,
+        scope_province_name: signing_ctx.scope_province_name,
+        scope_city_name: signing_ctx.scope_city_name,
         signature,
         genesis_hash: hex::encode(genesis_hash),
         payload_digest: hex::encode(payload_digest),
@@ -162,35 +199,120 @@ pub(crate) fn build_population_snapshot_credential(
     })
 }
 
+pub(crate) fn build_institution_registration_credential(
+    state: &AppState,
+    sfid_number: &str,
+    sfid_full_name: &str,
+    account_names: &[String],
+    register_nonce: String,
+    scope_province_name: &str,
+    scope_city_name: &str,
+) -> Result<RuntimeInstitutionRegistrationCredential, String> {
+    if sfid_number.trim().is_empty() {
+        return Err("sfid_number is required".to_string());
+    }
+    if sfid_full_name.trim().is_empty() {
+        return Err("sfid_full_name is required".to_string());
+    }
+    if account_names.is_empty() || account_names.iter().any(|name| name.trim().is_empty()) {
+        return Err("account_names are required".to_string());
+    }
+    if register_nonce.trim().is_empty() {
+        return Err("register_nonce is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let signing_ctx = runtime_signing_context(Some(scope_province_name), Some(scope_city_name))?;
+    let account_name_payload = account_names
+        .iter()
+        .map(|name| name.trim().as_bytes().to_vec())
+        .collect::<Vec<_>>();
+    let payload = (
+        DUOQIAN,
+        OP_SIGN_INST,
+        genesis_hash,
+        sfid_number.trim().as_bytes(),
+        sfid_full_name.trim().as_bytes(),
+        &account_name_payload,
+        register_nonce.trim().as_bytes(),
+        signing_ctx.issuer_sfid_number.as_bytes(),
+        &signing_ctx.issuer_main_account,
+        &signing_ctx.signer_pubkey,
+        signing_ctx.scope_province_name.as_bytes(),
+        signing_ctx.scope_city_name.as_bytes(),
+    );
+    let payload_digest = blake2_256(&payload.encode());
+    let signature = sign_runtime_digest(state, &payload_digest)?;
+    Ok(RuntimeInstitutionRegistrationCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        register_nonce,
+        issuer_sfid_number: signing_ctx.issuer_sfid_number,
+        issuer_main_account: signing_ctx.issuer_main_account_hex,
+        signer_pubkey: signing_ctx.signer_pubkey_hex,
+        scope_province_name: signing_ctx.scope_province_name,
+        scope_city_name: signing_ctx.scope_city_name,
+        signature,
+        payload_digest: hex::encode(payload_digest),
+        meta: runtime_signature_meta(state),
+    })
+}
+
 fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
-    // ADR-008 Phase 23e:AppState 不再持有 key_id / key_version / key_alg。
-    // 凭证 metadata 退化成固定标识(消费方只用 alg 校验签名算法,前两个字段
-    // 已无业务消费方,保留固定串避免 wire format 变更。)
+    // 中文注释:metadata 只用于排查签发来源;链上只信任 payload 中的
+    // issuer_sfid_number / issuer_main_account / signer_pubkey。
     RuntimeSignatureMeta {
-        key_id: "sfid-sheng-v1".to_string(),
+        key_id: "sfid-admins-v1".to_string(),
         key_version: "v1".to_string(),
         alg: "sr25519".to_string(),
     }
 }
 
-fn runtime_signing_context() -> Result<RuntimeSigningContext, String> {
-    let province_name = std::env::var("SFID_SIGNING_PROVINCE_NAME")
-        .map_err(|_| "SFID_SIGNING_PROVINCE_NAME not set".to_string())?
+fn runtime_signing_context(
+    scope_province_override: Option<&str>,
+    scope_city_override: Option<&str>,
+) -> Result<RuntimeSigningContext, String> {
+    let issuer_sfid_number = std::env::var("SFID_RUNTIME_ISSUER_SFID_NUMBER")
+        .map_err(|_| "SFID_RUNTIME_ISSUER_SFID_NUMBER not set".to_string())?
         .trim()
         .to_string();
-    if province_name.is_empty() {
-        return Err("SFID_SIGNING_PROVINCE_NAME is empty".to_string());
+    if issuer_sfid_number.is_empty() {
+        return Err("SFID_RUNTIME_ISSUER_SFID_NUMBER is empty".to_string());
     }
-    let signer_admin_pubkey_raw = std::env::var("SFID_SIGNER_ADMIN_PUBKEY")
-        .map_err(|_| "SFID_SIGNER_ADMIN_PUBKEY not set".to_string())?;
-    let signer_admin_pubkey = parse_sr25519_pubkey_bytes(signer_admin_pubkey_raw.as_str())
+    let issuer_main_account_raw = std::env::var("SFID_RUNTIME_ISSUER_MAIN_ACCOUNT")
+        .map_err(|_| "SFID_RUNTIME_ISSUER_MAIN_ACCOUNT not set".to_string())?;
+    let issuer_main_account = parse_sr25519_pubkey_bytes(issuer_main_account_raw.as_str())
         .ok_or_else(|| {
-            "SFID_SIGNER_ADMIN_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
+            "SFID_RUNTIME_ISSUER_MAIN_ACCOUNT must be a 32-byte account hex".to_string()
         })?;
+    let signer_pubkey_raw = std::env::var("SFID_RUNTIME_SIGNER_PUBKEY")
+        .map_err(|_| "SFID_RUNTIME_SIGNER_PUBKEY not set".to_string())?;
+    let signer_pubkey = parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str())
+        .ok_or_else(|| {
+            "SFID_RUNTIME_SIGNER_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
+        })?;
+    let default_scope_province = std::env::var("SFID_RUNTIME_SCOPE_PROVINCE_NAME")
+        .unwrap_or_else(|_| "全国".to_string());
+    let scope_province_name = scope_province_override
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| default_scope_province.trim().to_string());
+    if scope_province_name.is_empty() {
+        return Err("SFID_RUNTIME_SCOPE_PROVINCE_NAME is empty".to_string());
+    }
+    let default_scope_city = std::env::var("SFID_RUNTIME_SCOPE_CITY_NAME").unwrap_or_default();
+    let scope_city_name = scope_city_override
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| default_scope_city.trim().to_string());
     Ok(RuntimeSigningContext {
-        province_name,
-        signer_admin_pubkey,
-        signer_admin_pubkey_hex: format!("0x{}", hex::encode(signer_admin_pubkey)),
+        issuer_sfid_number,
+        issuer_main_account,
+        issuer_main_account_hex: format!("0x{}", hex::encode(issuer_main_account)),
+        signer_pubkey,
+        signer_pubkey_hex: format!("0x{}", hex::encode(signer_pubkey)),
+        scope_province_name,
+        scope_city_name,
     })
 }
 

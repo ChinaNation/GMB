@@ -456,7 +456,7 @@ fn first_missing_export_year(
 }
 
 fn is_operator_lock_active(now: DateTime<Utc>, pending_export_year: i32) -> bool {
-    // 中文注释：某年度报告在下一年 1 月 10 日后仍未导出时，操作管理员持续锁定直到补导完成。
+    // 中文注释：某年度报告在下一年 1 月 10 日后仍未导出时，操作员持续锁定直到补导完成。
     annual_export_lock_start_at(pending_export_year)
         .map(|lock_start| now.timestamp() >= lock_start)
         .unwrap_or(false)

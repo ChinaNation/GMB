@@ -80,17 +80,16 @@ class PalletRegistry {
   static const int cleanupRejectedProposalCall = 4;
 
   /// `propose_create_institution(sfid_number, sfid_full_name, accounts,
-  /// admin_org, admin_count, duoqian_admins, threshold, register_nonce, signature,
-  /// province_name, signer_admin_pubkey)` —
-  /// 机构多签账户创建提案,凭证由 SFID 后端按 (province_name, admin_pubkey)
-  /// 双层签发(ADR-008 step2b)。
+  /// org, admins_len, admins, threshold, register_nonce, signature,
+  /// issuer_sfid_number, issuer_main_account, signer_pubkey, scope_*)` —
+  /// 机构多签账户创建提案,凭证由 SFID 后端按签发机构 admins 真源签发。
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- PersonalManage (7) ----
   // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
   // ACTION enum 独立命名空间(ACTION_CREATE=0/ACTION_CLOSE=1)。
-  // propose_create(account_name, duoqian_admins, regular_threshold, amount):
-  // admin_count 由 admins 长度派生,regular_threshold 由用户输入且必须严格过半。
+  // propose_create(account_name, admins, regular_threshold, amount):
+  // admins_len 由 admins 长度派生,regular_threshold 由用户输入且必须严格过半。
   static const int personalManagePallet = 7;
   static const int proposeCreatePersonalCall = 0;
   static const int proposeClosePersonalCall = 1;

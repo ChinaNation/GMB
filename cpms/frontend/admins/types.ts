@@ -1,6 +1,6 @@
-// CPMS 超级管理员模块类型。
+// CPMS 管理员模块类型。
 
-export type AdminRole = 'SUPER_ADMIN' | 'OPERATOR_ADMIN';
+export type AdminRole = 'ADMIN' | 'OPERATOR';
 
 export interface AdminUser {
   user_id: string;

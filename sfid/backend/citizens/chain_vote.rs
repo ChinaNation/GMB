@@ -1,7 +1,7 @@
 //! 公民投票凭证签发 handler。
 //!
 //! wuminapp 调本接口拿到凭证后,将凭证作为 vote() extrinsic 入参提交上链。
-//! 链端 runtime 会按 province_name + signer_admin_pubkey 查省级签名公钥并消费 vote_nonce 防重放。
+//! 链端 runtime 会按签发机构主账户的 admins 真源确认 signer_pubkey,并消费 vote_nonce 防重放。
 //!
 //! 无 token 鉴权:返回的凭证仅对请求者 `account_pubkey` 有效,链上还会再次验签,
 //! 全局 rate limiter 已防滥用。
@@ -32,8 +32,11 @@ struct AppVoteCredentialOutput {
     binding_id: String,
     proposal_id: u64,
     vote_nonce: String,
-    province_name: String,
-    signer_admin_pubkey: String,
+    issuer_sfid_number: String,
+    issuer_main_account: String,
+    signer_pubkey: String,
+    scope_province_name: String,
+    scope_city_name: String,
     signature: String,
 }
 
@@ -112,8 +115,11 @@ pub(crate) async fn app_vote_credential(
             binding_id: credential.binding_id,
             proposal_id,
             vote_nonce: credential.vote_nonce,
-            province_name: credential.province_name,
-            signer_admin_pubkey: credential.signer_admin_pubkey,
+            issuer_sfid_number: credential.issuer_sfid_number,
+            issuer_main_account: credential.issuer_main_account,
+            signer_pubkey: credential.signer_pubkey,
+            scope_province_name: credential.scope_province_name,
+            scope_city_name: credential.scope_city_name,
             signature: credential.signature,
         },
     })

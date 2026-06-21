@@ -47,7 +47,7 @@ pub struct AdminSetChangeAction<AccountId, AdminList> {
     /// 目标多签账户地址（内置治理机构/个人账户/机构账户）。
     pub account: AccountId,
     /// 提案通过后写入的完整管理员集合。
-    pub new_admins: AdminList,
+    pub admins: AdminList,
     /// 提案通过后写入投票引擎的动态阈值；固定治理机构必须等于制度固定阈值。
     pub new_threshold: u32,
 }
@@ -169,7 +169,7 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
         .and_then(|n| decode_account::<T>(&n.main_account))
 }
 
-fn expected_admin_count(org: u8) -> Option<u32> {
+fn expected_admins_len(org: u8) -> Option<u32> {
     match org {
         ORG_NRC => Some(NRC_ADMIN_COUNT),
         ORG_PRC => Some(PRC_ADMIN_COUNT),
@@ -345,7 +345,7 @@ pub mod pallet {
                 };
                 AdminAccounts::<T>::insert(
                     institution,
-                    build_builtin_institution::<T>(node.sfid_number, org, node.duoqian_admins),
+                    build_builtin_institution::<T>(node.sfid_number, org, node.admins),
                 );
             }
 
@@ -358,7 +358,7 @@ pub mod pallet {
                 };
                 AdminAccounts::<T>::insert(
                     institution,
-                    build_builtin_institution::<T>(node.sfid_number, ORG_PRB, node.duoqian_admins),
+                    build_builtin_institution::<T>(node.sfid_number, ORG_PRB, node.admins),
                 );
             }
         }
@@ -373,8 +373,8 @@ pub mod pallet {
             org: u8,
             account: T::AccountId,
             proposer: T::AccountId,
-            old_admin_count: u32,
-            new_admin_count: u32,
+            old_admins_len: u32,
+            new_admins_len: u32,
             new_threshold: u32,
         },
         /// 提案达到通过状态但自动执行失败（投票不回滚）
@@ -383,7 +383,7 @@ pub mod pallet {
         AdminSetChanged {
             proposal_id: u64,
             account: T::AccountId,
-            admin_count: u32,
+            admins_len: u32,
             threshold: u32,
         },
         /// 多签账户管理员配置已写入 Pending。
@@ -392,7 +392,7 @@ pub mod pallet {
             org: u8,
             kind: AdminAccountKind,
             creator: T::AccountId,
-            admin_count: u32,
+            admins_len: u32,
         },
         /// 多签账户管理员配置已激活。
         AdminAccountActivated { account: T::AccountId, org: u8 },
@@ -452,7 +452,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             org: u8,
             account: T::AccountId,
-            new_admins: AdminsOf<T>,
+            admins: AdminsOf<T>,
             new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -469,16 +469,16 @@ pub mod pallet {
             // 2) 校验发起人与目标管理员集合合法性。
             let current_admins = current.admins.clone().into_inner();
             ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-            Self::validate_admin_set_for_account(current.kind, current.org, new_admins.as_slice())?;
+            Self::validate_admin_set_for_account(current.kind, current.org, admins.as_slice())?;
             ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
+                !Self::same_admin_set(current_admins.as_slice(), admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
             with_transaction(|| {
                 let action = AdminSetChangeAction {
                     account: account.clone(),
-                    new_admins: new_admins.clone(),
+                    admins: admins.clone(),
                     new_threshold,
                 };
                 let encoded = action.encode();
@@ -487,7 +487,7 @@ pub mod pallet {
                         who.clone(),
                         org,
                         account.clone(),
-                        new_admins.len() as u32,
+                        admins.len() as u32,
                         new_threshold,
                         crate::MODULE_TAG,
                         encoded,
@@ -501,8 +501,8 @@ pub mod pallet {
                     org,
                     account,
                     proposer: who,
-                    old_admin_count: current_admins.len() as u32,
-                    new_admin_count: new_admins.len() as u32,
+                    old_admins_len: current_admins.len() as u32,
+                    new_admins_len: admins.len() as u32,
                     new_threshold,
                 });
                 TransactionOutcome::Commit(Ok(()))
@@ -511,7 +511,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn validate_admin_count_for_account(
+        fn validate_admins_len_for_account(
             kind: AdminAccountKind,
             org: u8,
             admins_len: usize,
@@ -520,7 +520,7 @@ pub mod pallet {
                 AdminAccountKind::BuiltinInstitution => {
                     // 固定人数约束：国储会19，省储会9，省储行9。
                     let expected =
-                        expected_admin_count(org).ok_or(Error::<T>::InvalidInstitution)?;
+                        expected_admins_len(org).ok_or(Error::<T>::InvalidInstitution)?;
                     ensure!(
                         admins_len == expected as usize,
                         Error::<T>::InvalidAdminCount
@@ -550,7 +550,7 @@ pub mod pallet {
             admins: &[T::AccountId],
         ) -> DispatchResult {
             Self::ensure_account_kind_matches_org(kind, org)?;
-            Self::validate_admin_count_for_account(kind, org, admins.len())?;
+            Self::validate_admins_len_for_account(kind, org, admins.len())?;
             Self::ensure_unique_admins(admins)?;
             Ok(())
         }
@@ -656,7 +656,7 @@ pub mod pallet {
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminCount)?;
             let now = frame_system::Pallet::<T>::block_number();
-            let admin_count = bounded.len() as u32;
+            let admins_len = bounded.len() as u32;
             AdminAccounts::<T>::insert(
                 institution.clone(),
                 AdminAccount {
@@ -674,7 +674,7 @@ pub mod pallet {
                 org,
                 kind,
                 creator,
-                admin_count,
+                admins_len,
             });
             Ok(())
         }
@@ -790,7 +790,7 @@ pub mod pallet {
         }
 
         /// 读取 Active 账户管理员数量。普通业务阈值兜底判断只能使用 Active 账户。
-        pub fn active_account_admin_count(org: u8, institution: T::AccountId) -> Option<u32> {
+        pub fn active_account_admins_len(org: u8, institution: T::AccountId) -> Option<u32> {
             let account =
                 Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)?;
             Some(account.admins.len() as u32)
@@ -826,7 +826,7 @@ pub mod pallet {
         }
 
         /// 读取 Pending 账户管理员数量。仅用于创建/激活该账户的快照语义。
-        pub fn pending_account_admin_count_for_snapshot(
+        pub fn pending_account_admins_len_for_snapshot(
             org: u8,
             institution: T::AccountId,
         ) -> Option<u32> {
@@ -878,15 +878,15 @@ pub mod pallet {
             Self::validate_admin_set_for_account(
                 account.kind,
                 account.org,
-                action.new_admins.as_slice(),
+                action.admins.as_slice(),
             )?;
             ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), action.new_admins.as_slice()),
+                !Self::same_admin_set(current_admins.as_slice(), action.admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
             AdminAccounts::<T>::mutate(action.account.clone(), |maybe| {
                 if let Some(account) = maybe {
-                    account.admins = action.new_admins.clone();
+                    account.admins = action.admins.clone();
                     account.updated_at = frame_system::Pallet::<T>::block_number();
                 }
             });
@@ -894,7 +894,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::AdminSetChanged {
                 proposal_id,
                 account: action.account,
-                admin_count: action.new_admins.len() as u32,
+                admins_len: action.admins.len() as u32,
                 threshold: action.new_threshold,
             });
 

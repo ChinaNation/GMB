@@ -37,10 +37,10 @@
 PersonalManage 交易载荷：
 
 - `PersonalManage::propose_create`：pallet `7`，call `0`，字段顺序固定为
-  `account_name / duoqian_admins / regular_threshold / amount`。
+  `account_name / admins / regular_threshold / amount`。
 - `PersonalManage::propose_close`：pallet `7`，call `1`。
 - `regular_threshold` 为用户输入的普通提案阈值，App 侧校验范围为
-  `floor(admin_count / 2) + 1 ..= admin_count`；注册提案通过阈值固定为全员同意。
+  `floor(admins_len / 2) + 1 ..= admins_len`；注册提案通过阈值固定为全员同意。
 
 PersonalManage ProposalData：
 

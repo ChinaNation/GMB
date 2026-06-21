@@ -232,7 +232,7 @@ fn propose_create_institution_writes_pending_and_reserves() {
             InstitutionLifecycleStatus::Pending,
         );
         assert_eq!(
-            pallet::Institutions::<Test>::get(&sfid).unwrap().admin_org,
+            pallet::Institutions::<Test>::get(&sfid).unwrap().org,
             ORG_OTH,
         );
         // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
@@ -478,7 +478,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
             ),
             pallet::Error::<Test>::InvalidThreshold
         );
-        // threshold > admin_count
+        // threshold > admins_len
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
@@ -547,12 +547,12 @@ fn propose_create_rejects_when_institution_already_exists() {
 
 fn create_and_activate_institution(
     sfid_number_bytes: &[u8],
-    admin_count: u8,
+    admins_len: u8,
 ) -> (pallet::SfidNumberOf<Test>, AccountId32) {
     let c = creator();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
     let sfid = sfid_number(sfid_number_bytes);
-    let admin_accounts: alloc::vec::Vec<AccountId32> = (0..admin_count).map(|i| admin(i)).collect();
+    let admin_accounts: alloc::vec::Vec<AccountId32> = (0..admins_len).map(|i| admin(i)).collect();
 
     assert_ok!(OrganizationManage::propose_create_institution(
         RuntimeOrigin::signed(c.clone()),
@@ -560,9 +560,9 @@ fn create_and_activate_institution(
         sfid_full_name(b"X"),
         typical_accounts(),
         ORG_OTH,
-        admin_count as u32,
-        admins_vec(admin_count),
-        admin_count.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
+        admins_len as u32,
+        admins_vec(admins_len),
+        admins_len.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
         register_nonce(sfid_number_bytes),
         valid_signature(),
         province_name(),
@@ -571,7 +571,7 @@ fn create_and_activate_institution(
     let pid = last_proposal_id();
     assert_ok!(cast_yes_votes(
         &admin_accounts[1..],
-        admin_count.saturating_sub(1) as usize,
+        admins_len.saturating_sub(1) as usize,
         pid
     ));
 

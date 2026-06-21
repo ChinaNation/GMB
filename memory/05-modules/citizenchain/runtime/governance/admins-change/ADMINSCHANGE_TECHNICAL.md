@@ -19,7 +19,7 @@
 - 治理机构全部可操作账户共享固定管理员集合和固定阈值，只允许等长更换；固定阈值由投票引擎读取制度常量。
 - 注册个人账户独立持有管理员集合，管理员数量范围为 `2..=64`。
 - 注册机构账户独立持有管理员集合，管理员数量范围为 `2..=1989`。
-- 动态账户普通业务阈值由注册或管理员变更时的用户输入决定，投票引擎按 `threshold * 2 > admin_count && threshold <= admin_count` 校验后保存。
+- 动态账户普通业务阈值由注册或管理员变更时的用户输入决定，投票引擎按 `threshold * 2 > admins_len && threshold <= admins_len` 校验后保存。
 - 创建和注销提案使用全员阈值，由投票引擎按管理员快照生成。
 
 代码位置：
@@ -83,7 +83,7 @@ Subjects<AccountId, AdminAccount>
 
 - 创建个人多签和机构多签时，业务模块把用户填写的动态阈值提交给 `internal-vote`。
 - 管理员集合变更时，本模块只把完整目标管理员集合、新管理员数量和新动态阈值提交给 `internal-vote`。
-- `internal-vote` 负责校验 `threshold * 2 > admin_count && threshold <= admin_count`。
+- `internal-vote` 负责校验 `threshold * 2 > admins_len && threshold <= admins_len`。
 - 注册通过后，`internal-vote` 把 pending 动态阈值激活为 active 动态阈值。
 - 注销执行成功后，`internal-vote` 删除 active 动态阈值。
 - 管理员变更执行成功后，`internal-vote` 用提案里暂存的新阈值更新 active 动态阈值。
@@ -137,14 +137,14 @@ Active-only 公共业务 API：
 - `is_active_subject_admin(org, subject, who)`
 - `active_subject_exists(org, subject)`
 - `active_subject_admins(org, subject)`
-- `active_subject_admin_count(org, subject)`
+- `active_subject_admins_len(org, subject)`
 
 Pending 快照专用 API：
 
 - `is_pending_subject_admin_for_snapshot(org, subject, who)`
 - `pending_subject_exists_for_snapshot(org, subject)`
 - `pending_subject_admins_for_snapshot(org, subject)`
-- `pending_subject_admin_count_for_snapshot(org, subject)`
+- `pending_subject_admins_len_for_snapshot(org, subject)`
 
 规则：
 
@@ -157,7 +157,7 @@ Pending 快照专用 API：
 入口：
 
 ```text
-propose_admin_set_change(org, subject, new_admins, new_threshold)
+propose_admin_set_change(org, subject, admins, new_threshold)
 ```
 
 语义：
@@ -174,7 +174,7 @@ propose_admin_set_change(org, subject, new_admins, new_threshold)
 - `ProposalOwner = b"adm-set-v1"`。
 - `ProposalData = AdminSetChangeAction<AdminsOf<T>>(SCALE)`。
 - `AdminSetChangeAction.subject` 是目标主体。
-- `AdminSetChangeAction.new_admins` 是完整目标管理员集合。
+- `AdminSetChangeAction.admins` 是完整目标管理员集合。
 - `AdminSetChangeAction.new_threshold` 是变更执行成功后由投票引擎写入的动态阈值；固定治理机构必须等于制度固定阈值。
 
 执行：
@@ -198,7 +198,7 @@ propose_admin_set_change(org, subject, new_admins, new_threshold)
 - `admins_change::Config::MaxAdminsPerInstitution = 1989`。
 - `admins_change::Config::MaxPersonalAccountAdmins = 64`。
 - `RuntimeInternalAdminProvider` 统一读取 `admins-change` Active / Pending API。
-- `RuntimeInternalAdminCountProvider` 从 `active_subject_admin_count` 读取。
+- `RuntimeInternalAdminCountProvider` 从 `active_subject_admins_len` 读取。
 
 ## 10. 事件
 

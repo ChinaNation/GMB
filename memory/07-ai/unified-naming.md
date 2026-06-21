@@ -44,12 +44,12 @@
 | Rust crate 目录 | kebab-case | `organization-manage` |
 | Rust 模块 / 文件 | snake_case | `chain_duoqian_info.rs` |
 | Dart / TS 文件 | snake_case 或既有框架风格 | `duoqian_manage_service.dart` |
-| 前端功能目录 | snake_case | `sheng_admins` |
+| 前端功能目录 | snake_case | `admins` |
 | Rust 类型 | PascalCase | `InstitutionAccountInfo` |
 | Dart / TS 类型 | PascalCase | `InstitutionAccountEntry` |
 | 函数 / 方法 | snake_case(Rust) / lowerCamelCase(Dart/TS) | `build_call_data` / `buildCallData` |
 | 常量 | SCREAMING_SNAKE_CASE(Rust) / lowerCamelCase 或 static const(Dart) | `MODULE_TAG` / `actionCreate` |
-| JSON / API 字段 | snake_case | `signer_admin_pubkey` |
+| JSON / API 字段 | snake_case | `signer_pubkey` |
 | storage 字段 | PascalCase | `InstitutionAccounts` |
 | QR display field key | snake_case | `sfid_full_name` |
 | 任务卡文件名 | 短日期 + 短 slug | `20260507-ai-unified-naming.md` |
@@ -145,8 +145,11 @@
 | 机构全称 | `sfid_full_name` | API / call data | 机构全称,可随机构法定名称变更 |
 | 机构简称 | `sfid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |
-| 签发省份名称 | `province_name` | credential / call data | SFID 省级签名来源名称 |
-| 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 省级签发 admin 公钥 |
+| 签发机构 SFID 号 | `issuer_sfid_number` | credential / call data | 签发凭证的机构 SFID 号 |
+| 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |
+| 签发管理员公钥 | `signer_pubkey` | credential / call data | 签发机构 `admins` 中实际签名管理员的公钥 |
+| 业务作用域省名称 | `scope_province_name` | credential / call data | 凭证适用的省级业务作用域 |
+| 业务作用域市名称 | `scope_city_name` | credential / call data | 凭证适用的市级业务作用域 |
 | 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `wuminapp/lib/rpc/` | 统一构造 wuminapp 在线 signed extrinsic，固定执行 immortal era 协议 |
 | 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
 | 电子护照护照号 | `passport_no` | CPMS archives / CPMS frontend | CPMS 后端自动生成并印刷在公民护照上的 11 位护照号 |
@@ -169,7 +172,7 @@
 | CPMS 前端鉴权 | `authz` | `cpms/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
 | CPMS 前端初始化 | `initialize` | `cpms/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
 | CPMS 前端登录 | `login` | `cpms/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
-| CPMS 前端超级管理员 | `super_admin` | `cpms/frontend/super_admin/` | CPMS 前端超级管理员页面、操作员管理和年度报告导出 |
+| CPMS 前端管理员 | `admins` | `cpms/frontend/admins/` | CPMS 前端管理员页面、操作员管理和年度报告导出 |
 | CPMS 前端档案业务 | `dangan` | `cpms/frontend/dangan/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
 | CPMS 前端地址 | `address` | `cpms/frontend/address/` | CPMS 前端镇和地址段查询 API 与类型 |
 | 镇下地址段 | `address_unit` | SFID china / CPMS archives / CPMS frontend | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
@@ -448,8 +451,12 @@
 | 合伙类型 | `partnership_kind` | SFID API / subjects / private | 合伙企业内部类型,取值 `GENERAL/LIMITED` |
 | 法人资格 | `has_legal_personality` | SFID API / subjects / private | 私权机构是否具有法人资格 |
 | 注册随机数 | `register_nonce` | credential / call data | SFID 机构注册凭证随机数 |
-| 签发省份名称 | `province_name` | credential / call data | 签发凭证的省级区域名称 |
-| 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 签发凭证的联邦管理员公钥 |
+| 省名称 | `province_name` | API / call data / storage | 行政区省级名称 |
+| 签发机构 SFID 号 | `issuer_sfid_number` | credential / call data | 签发凭证的机构 SFID 号 |
+| 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |
+| 签发管理员公钥 | `signer_pubkey` | credential / call data | 签发机构 `admins` 中实际签名管理员的公钥 |
+| 业务作用域省名称 | `scope_province_name` | credential / call data | 凭证适用的省级业务作用域 |
+| 业务作用域市名称 | `scope_city_name` | credential / call data | 凭证适用的市级业务作用域 |
 | 签名 | `signature` | credential / call data | 凭证签名 |
 | 主体 ID | `account_id` | call data / storage key | 管理员主体统一 ID |
 | 公钥 | `pubkey` | QR body | 发起签名请求的公钥 |
@@ -468,13 +475,13 @@
 | 机构全称 | `sfid_full_name` | QR display | 机构全称 |
 | 机构简称 | `sfid_short_name` | QR display | 机构简称 |
 | 账户名称 | `account_name` | QR display | 单个账户名称 |
-| 管理员数量 | `admin_count` | QR display | 管理员总数 |
+| 管理员数量 | `admins_len` | QR display | 管理员总数 |
 | 阈值 | `threshold` | QR display | 多签通过阈值 |
 | 金额 | `amount_yuan` | QR display | 人民币元口径金额 |
 | 总金额 | `total_amount_yuan` | QR display | 总发行或总转账金额 |
 | 账户金额 | `amount_<account_name>` | QR display | 按账户名展开的金额字段 |
 | 签发省份名称 | `province_name` | QR display | 签发凭证省份名称 |
-| 签发管理员公钥 | `signer_admin_pubkey` | QR display | 签发管理员公钥 |
+| 签发管理员公钥 | `signer_pubkey` | QR display | 签发管理员公钥 |
 | 提案 ID | `proposal_id` | QR display | 链上提案 ID |
 | 是否同意 | `approve` | QR display | 投票是否同意 |
 | 收款人 | `beneficiary` | QR display | 转账或关闭后的收款地址 |

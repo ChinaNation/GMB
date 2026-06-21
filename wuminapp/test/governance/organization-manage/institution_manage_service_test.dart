@@ -31,12 +31,14 @@ void main() {
   }
 
   group('InstitutionManageService', () {
-    test('builds propose_create_institution call_data as P-TX-001 11 fields',
+    test(
+        'builds propose_create_institution call_data with issuer admins fields',
         () {
       final admin1 = Uint8List.fromList(List<int>.filled(32, 0x11));
       final admin2 = Uint8List.fromList(List<int>.filled(32, 0x22));
       final signature = List<int>.filled(64, 0xdd);
-      final signerAdmin = List<int>.generate(32, (i) => 0xc0 + (i & 0x0f));
+      final issuerMain = List<int>.generate(32, (i) => 0xb0 + (i & 0x0f));
+      final signerPubkey = List<int>.generate(32, (i) => 0xc0 + (i & 0x0f));
 
       final callData =
           InstitutionManageService.buildProposeCreateInstitutionCallData(
@@ -58,8 +60,11 @@ void main() {
         threshold: 2,
         registerNonce: 'reg-nonce-001',
         signatureHex: '0x${hexOf(signature)}',
-        provinceName: '安徽省',
-        signerAdminPubkeyHex: '0x${hexOf(signerAdmin)}',
+        issuerSfidNumber: 'CN000-GZF0A-000000001-2026',
+        issuerMainAccountHex: '0x${hexOf(issuerMain)}',
+        signerPubkeyHex: '0x${hexOf(signerPubkey)}',
+        scopeProvinceName: '安徽省',
+        scopeCityName: '合肥市',
       );
 
       final expected = <int>[
@@ -82,8 +87,11 @@ void main() {
         0x01,
         0x01,
         ...signature,
+        ...compactVec('CN000-GZF0A-000000001-2026'),
+        ...issuerMain,
+        ...signerPubkey,
         ...compactVec('安徽省'),
-        ...signerAdmin,
+        ...compactVec('合肥市'),
       ];
 
       expect(hexOf(callData), hexOf(expected));

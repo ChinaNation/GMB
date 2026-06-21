@@ -36,7 +36,7 @@ use votingengine::InternalVoteEngine;
 pub(crate) fn do_propose_create<T: Config>(
     who: T::AccountId,
     account_name: AccountNameOf<T>,
-    duoqian_admins: DuoqianAdminsOf<T>,
+    admins: DuoqianAdminsOf<T>,
     regular_threshold: u32,
     amount: BalanceOf<T>,
 ) -> DispatchResult {
@@ -49,8 +49,8 @@ pub(crate) fn do_propose_create<T: Config>(
         amount >= T::MinCreateAmount::get(),
         Error::<T>::CreateAmountBelowMinimum
     );
-    Pallet::<T>::ensure_admin_config(&who, &duoqian_admins, regular_threshold)?;
-    let admin_count = duoqian_admins.len() as u32;
+    Pallet::<T>::ensure_admin_config(&who, &admins, regular_threshold)?;
+    let admins_len = admins.len() as u32;
 
     let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
@@ -105,7 +105,7 @@ pub(crate) fn do_propose_create<T: Config>(
             who.clone(),
             org,
             institution.clone(),
-            duoqian_admins.iter().cloned().collect(),
+            admins.iter().cloned().collect(),
             regular_threshold,
             crate::MODULE_TAG,
             data,
@@ -118,7 +118,7 @@ pub(crate) fn do_propose_create<T: Config>(
             proposal_id,
             institution.clone(),
             admins_change::AdminAccountKind::PersonalDuoqian,
-            &duoqian_admins,
+            &admins,
             &who,
         ) {
             return TransactionOutcome::Rollback(Err(err));
@@ -135,8 +135,8 @@ pub(crate) fn do_propose_create<T: Config>(
         duoqian_account,
         proposer: who,
         account_name,
-        admins: duoqian_admins,
-        admin_count,
+        admins: admins,
+        admins_len,
         threshold: regular_threshold,
         amount,
         fee,

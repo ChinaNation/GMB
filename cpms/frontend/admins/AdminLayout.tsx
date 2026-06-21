@@ -10,20 +10,20 @@ export default function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const roleLabel = isSuperAdmin ? '超级管理员' : '操作管理员';
+  const isAdmin = user?.role === 'ADMIN';
+  const roleLabel = isAdmin ? '管理员' : '操作员';
   const adminName = user?.admin_name?.trim() || '暂未设置';
   const [exportState, setExportState] = useState<CpmsStatusExportState | null>(null);
 
   const loadExportState = useCallback(() => {
-    if (!isSuperAdmin) {
+    if (!isAdmin) {
       setExportState(null);
       return;
     }
     getStatusExportState()
       .then(res => setExportState(res.data?.state ?? null))
       .catch(() => setExportState(null));
-  }, [isSuperAdmin]);
+  }, [isAdmin]);
 
   useEffect(() => {
     loadExportState();
@@ -42,8 +42,8 @@ export default function AdminLayout() {
     : '';
   const tabs = [
     { key: '/admin', label: '首页', visible: true, badge: '' },
-    { key: '/admin/admins', label: '管理员', visible: isSuperAdmin, badge: '' },
-    { key: '/admin/settings', label: '系统设置', visible: isSuperAdmin, badge: settingsBadge },
+    { key: '/admin/admins', label: '管理员', visible: isAdmin, badge: '' },
+    { key: '/admin/settings', label: '系统设置', visible: isAdmin, badge: settingsBadge },
   ];
 
   const activeTab = (() => {
@@ -118,7 +118,7 @@ export default function AdminLayout() {
       </header>
 
       {/* Tab 栏：普通管理员不显示（只有首页一个页面） */}
-      {isSuperAdmin && (
+      {isAdmin && (
       <div style={{ position: 'relative', zIndex: 1, padding: '12px 24px 0' }}>
         <div style={{
           display: 'flex', gap: 6, padding: '8px 12px',

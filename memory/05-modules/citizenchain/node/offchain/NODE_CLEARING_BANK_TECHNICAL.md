@@ -79,15 +79,15 @@ sfid_number: BoundedVec<u8>            = Compact(len) || bytes
 sfid_full_name: BoundedVec<u8>   = Compact(len) || bytes
 accounts: BoundedVec<InstitutionInitialAccount>
                                     = Compact(N) || N × (account_name_compact || amount_u128_le)
-admin_org: u8                       = ORG_PUP(4) 或 ORG_OTH(5)
-admin_count: u32                    = u32 LE
-duoqian_admins: BoundedVec<AccountId32>
+org: u8                       = ORG_PUP(4) 或 ORG_OTH(5)
+admins_len: u32                    = u32 LE
+admins: BoundedVec<AccountId32>
                                     = Compact(N) || N × 32B
 threshold: u32                      = u32 LE
 register_nonce: BoundedVec<u8>      = Compact(len) || bytes
 signature: BoundedVec<u8>(64)       = Compact(64) || 64B
 province_name: Vec<u8>                   = Compact(len) || bytes
-signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
+signer_pubkey: [u8; 32]       = 32B 原始公钥
 ```
 
 **任何字段顺序变更必须同步改 `governance/organization-manage/signing.rs::build_propose_create_institution_call_data`**,否则公民钱包签名 payload 与链上 call_data 不一致。
@@ -105,12 +105,14 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
           ▼ ③ fetch_clearing_bank_institution_registration_info(sfid_number)
 [SFID 后端] ──→ ④ app_get_institution_registration_info 内部:
                   - 读机构数据(sharded_store)
-                  - 取 sheng_signer_cache.get(province) → ProvinceSigner
+                  - 取签发机构主账户和当前签名管理员公钥
                   - 生成 register_nonce = uuid_v4 字符串
-                  - signature = ProvinceSigner.sign(blake2_256(scale_encode(
+                  - signature = IssuerAdminSigner.sign(blake2_256(scale_encode(
                         DUOQIAN ++ OP_SIGN_INST ++ genesis_hash
                         ++ sfid_number ++ sfid_full_name ++ account_names[]
-                        ++ register_nonce ++ province_name ++ signer_admin_pubkey
+                        ++ register_nonce
+                        ++ issuer_sfid_number ++ issuer_main_account ++ signer_pubkey
+                        ++ scope_province_name ++ scope_city_name
                     )))
                   - 响应:sfid_number + sfid_full_name + account_names[] + credential
 [节点桌面] ⑤ 用户按 account_names[] 填账户初始资金 + 扫码加管理员 + 设阈值 + 选冷钱包
@@ -123,7 +125,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
           │
 [chain runtime] ⑨ propose_create_institution:
                   - UsedRegisterNonce[hash(nonce)] 必须 false
-                  - ShengSigningPubkey[(province_name, signer_admin_pubkey)] 拿验签公钥
+                  - 读取 admins-change::AdminAccounts[issuer_main_account],确认 signer_pubkey 属于该机构 admins
                   - 重算 payload hash + sr25519_verify(signature, hash, pubkey)
                   - 通过 → Institutions[sfid_number] = Pending,创建投票提案
                   - 失败 → DispatchError,extrinsic 回滚
@@ -166,4 +168,4 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 ## 8. 变更记录
 
 - 2026-05-01:首次落地。节点 Rust 加 4 个 Tauri 命令 + 5 个 chain/sfid/signing helper;节点前端新建 4 页 + 状态机重构 + 删 3 个老文件。
-- 2026-05-02:对齐 SFID `registration-info`。创建机构多签注册 payload 收口为 `sfid_number / sfid_full_name / account_names[]`,移除 `subject_property/sub_type/parent_sfid_number` 注册透传,补齐 `signer_admin_pubkey`。
+- 2026-05-02:对齐 SFID `registration-info`。创建机构多签注册 payload 收口为 `sfid_number / sfid_full_name / account_names[]`,移除 `subject_property/sub_type/parent_sfid_number` 注册透传,补齐 `signer_pubkey`。

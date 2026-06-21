@@ -133,7 +133,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _nonce: &[u8],
         _signature: &[u8],
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -153,7 +153,7 @@ impl
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -202,11 +202,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
 pub struct TestInternalAdminCountProvider;
 impl votingengine::InternalAdminCountProvider<AccountId32> for TestInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: AccountId32) -> Option<u32> {
+    fn admins_len(org: u8, institution: AccountId32) -> Option<u32> {
         if org != ORG_REN {
             return None;
         }
-        admins_change::Pallet::<Test>::active_account_admin_count(org, institution)
+        admins_change::Pallet::<Test>::active_account_admins_len(org, institution)
     }
 }
 

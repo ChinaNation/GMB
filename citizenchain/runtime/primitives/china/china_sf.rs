@@ -8,7 +8,7 @@ pub struct ChinaSf {
     pub sfid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
-    pub duoqian_admins: &'static [[u8; 32]],
+    pub admins: &'static [[u8; 32]],
 }
 
 pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
@@ -19,7 +19,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "ZS001-GSF0U-052283563-2026",
         main_account: hex!("34720642b0929f549c26a1e7515a5d08f0bb2fbcf67604d7a5efce210ea5e1b8"),
         fee_account: hex!("fc8c58b2a07d4c40ba6f6d044ab61176dc7a019815ba4acc7135084de92c7fe9"),
-        duoqian_admins: &[
+        admins: &[
             hex!("e2128d8dffc81d154e6161d56607ab1fb3be541102272c09cb3d14a06cc08d43"),
             hex!("f66aaf07c8b48d5ed717019a3fc933269b12003afb1bb7c48f6a093d8240e571"),
             hex!("e4bc1817f6a5ba29a75dd6e962d5ec47afcebb8ce44f835d6de04f617e351213"),
@@ -32,7 +32,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "ZS001-GSF06-801633498-2026",
         main_account: hex!("ab22c7a7e74cc62a50e731d0c9a235e4c83085f06d23bdf6639ae0bbfde1f4ad"),
         fee_account: hex!("fba1ccb23ba2dc94bd91a44e0d7a6242c3fd548a4e0056cbd4cca938c06c275b"),
-        duoqian_admins: &[
+        admins: &[
             hex!("1c6f762bb44f0d175ad53886796e930b1e1981ac8d465b77df85bf6f60353d47"),
             hex!("0ac79f5bd7411ccd7dc84f5d40f2184fe17d9ee5f9a1955270b7038765b0232e"),
             hex!("4cb31bce8f28b18ed930fef46bec1e155340f49e8d8216c792a0206c1a242f6c"),
@@ -45,7 +45,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "LN001-GSF0P-735985207-2026",
         main_account: hex!("81e8ba42478cccedaf27ff2f13744cbf466381cd9856636b727f18533a48e11c"),
         fee_account: hex!("c24ea555c1f70e35421e3e7c1d9cbba1f6fceb7ac2721311ef5a9c1fae1ee741"),
-        duoqian_admins: &[
+        admins: &[
             hex!("709506fcd79ba9e6abd46c5236b562f6d9c2112e51e967fdf7ea14ae74b8df6a"),
             hex!("68f4e3f8ef4005897597fffb529feb6dd0e7c76c9d9bc84cc98ba55808d73272"),
             hex!("ee0b64f64376d49c698d826a0e817fd1ec2f496b98c558499c3e4a697df55468"),
@@ -58,7 +58,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "GD001-GSF03-237972883-2026",
         main_account: hex!("2dbb61bb5a226bdbb59ab243433dcfa885f7ccff5a878b9510786535c3aae93b"),
         fee_account: hex!("9a934d7655bba6bc3effa014efa95f724fea0424b8c123db197ebbaa17519bf9"),
-        duoqian_admins: &[
+        admins: &[
             hex!("247f4b692185b90b797d267c041c58b4d4917c16d01746c9b6856db8c6e29613"),
             hex!("b486b34c5cf1b877cfb2a575342051ec0646ea3c5e73c299b98c1c7164600649"),
             hex!("7e632e218b4f0ccb96019437aa6b20ff9629539d9a9e7fa5f7b5732af7555539"),
@@ -71,7 +71,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "GX001-GSF0T-695571731-2026",
         main_account: hex!("80df3afefcd831d40f572d880589fcb6771b4f1a5d1d507092919c60ccc492d3"),
         fee_account: hex!("28dcc97c3122f8ce57a6db2f3c44d812db877c6372448bfebe3630c4387b0e7a"),
-        duoqian_admins: &[
+        admins: &[
             hex!("30c0cc73232aca9e13a61569084db7dbdcf21e8642588c28d52b2a20342e9d1b"),
             hex!("6c6c898cf8ad67b97c393a8f8e24e97aca498b651f3359e1847d2731a2121378"),
             hex!("909eba55fff39704b565f2d29648d4bc6df3014e0a617a2368f6ada35f2bf32e"),
@@ -84,7 +84,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "FJ001-GSF0N-514142694-2026",
         main_account: hex!("4e54068417498957197be835606e82114f7a7afbf7f098f138c439094e623f4f"),
         fee_account: hex!("1c40b09a74f9eac0d3f1e0f5e3be171c7c6b2825458274fced1492466cbabc0d"),
-        duoqian_admins: &[
+        admins: &[
             hex!("786ef84f57fa1af1c03f124ffe98f0e797f1f42891f4d22e00250ac362ad712f"),
             hex!("e06a19fdd7b2e808fdf086636b38b0a0b4241d99ea8db31f4ebe70a9c306096f"),
             hex!("4abc16f82b5c9faa049b72a7af864b471b976a992ed29bc62e0734f092a6695a"),
@@ -97,7 +97,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HN001-GSF07-404444213-2026",
         main_account: hex!("1c29e505c607486fcfe1c75c4aaf8ddb893d5bc9069975eb1a5c5b16da89cfaa"),
         fee_account: hex!("fc215cacbfd86e96f1f5f6af9ddb9b4680b922583d784483a6f18a51d5d4f2e6"),
-        duoqian_admins: &[
+        admins: &[
             hex!("b0499d90998a6a78f6b4cf48d15a12b0d9a4d89b0bbbca54d1057a0a84158635"),
             hex!("de631a1269127804f63c2af956903c19cdb6fa489bbdaf7ced018e937051b879"),
             hex!("b64df3a554269f1dd2b130a3388e4477d8e24472fc1336ef4af66db386b29103"),
@@ -110,7 +110,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "YN001-GSF0X-150332223-2026",
         main_account: hex!("6f22d67ddf74059f3b42f72d6fd063938400488fdc5c9b4e34219e2d8c8febea"),
         fee_account: hex!("e38a1049d5b15d818a7f88adc99098e6a164b9fcfedbc36fd8e5ddc98c4e49e3"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d4598df860d0ab8bc62544cbdd81623d5e2b4effd4ab8ad541c50c54711be449"),
             hex!("c29bc3879ad67600be218cfdd28f44cd8e384b2dc957e62202a1e119c3236919"),
             hex!("2a090ea5b9b9e1babe07a70d973b512df7fad27a1d86438866889dcbefe9d061"),
@@ -123,7 +123,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "GZ001-GSF0H-943624249-2026",
         main_account: hex!("c02324efc1b56e12e937ecf4d33c0ad83856c19b92311db086dcf87a86b12939"),
         fee_account: hex!("5e1f9beb4a49d5be6b202a7e7a5e3c6182c9d1778b1430c637e1ab9d58657c69"),
-        duoqian_admins: &[
+        admins: &[
             hex!("943350d828352141d93bfefaa8c261964490a7626a7d4a8342ba9e201b091d33"),
             hex!("a655d15418caa1cd1624724c985a0e19864cc97db23823f2e93e427827a55d2c"),
             hex!("800564aa452ee2d7b7465c7798e188e1d57b785032b957ecfa9679703333fc63"),
@@ -136,7 +136,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HU001-GSF06-664701408-2026",
         main_account: hex!("633afaff2d47a761922c98b476c17d83d8f6624a09d65d1fca264eaf2ed50371"),
         fee_account: hex!("33f8e952929f67fe034cf730384d3e7cb2e27091f8d5cc649b4404bdc583266d"),
-        duoqian_admins: &[
+        admins: &[
             hex!("fa762510239495580b6d9a6816cbe9275cc2388d3483f57dd66eb571f3f32e16"),
             hex!("6e38f721139e9de70902057d85bfc45c6b23008d25cbd45714cf62c3b3616d1c"),
             hex!("7e1a9961d7ad6b656521447478818d59363a9440c73c459877a2fe2fa9953478"),
@@ -149,7 +149,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "JX001-GSF08-437316566-2026",
         main_account: hex!("1800fd1830b736b9a8c5a6e0bdc89f16134739fa2e61fda16e5f3b2a68521fe7"),
         fee_account: hex!("562c4fc71e56975f496610c160b0acdd8bbd74f64b11b32acd36294a99f76c16"),
-        duoqian_admins: &[
+        admins: &[
             hex!("38498cb8243baec1f8dea05c4f76f22d5bb84d92e31098ebfde59b25bccd7b6b"),
             hex!("f074af2bacf550875ff41849080395bc99fac303fe74bbeee5ecffad16cf1079"),
             hex!("5255f06f7c9a6d75e61547a73467e01222137b8dec9264e7159c5273078de610"),
@@ -162,7 +162,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "ZJ001-GSF0X-604747113-2026",
         main_account: hex!("b95fc73ecf0d4b90bc4a15a74cf30fd513a6b0bf112326e2b5788a7f334c409c"),
         fee_account: hex!("7f8a460217b131849bbf72a43ecca7051ee91ed9984ef6e711a48e9bb209fd0f"),
-        duoqian_admins: &[
+        admins: &[
             hex!("2a3b665089e3017cdfc3521df7992236b950d849c28579b79f87a5933854417e"),
             hex!("bc6cdc9568bbf4cf696cffca4dfcc2f13ef7834122b858603715b7b88eaa3d4c"),
             hex!("26e66ede75c307a6d772ba3d5e6989fd9bbefc595bccda2bf9dda122fb3a8f5c"),
@@ -175,7 +175,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "JS001-GSF0A-777156747-2026",
         main_account: hex!("49026f539bc6387fce34355f34751f54180eeb5e2166f4de4abc50f2c84f7ea9"),
         fee_account: hex!("ac7f9e9b3edb244569737bd15b7dcd2d8b2230476251f1256000e52870b76d72"),
-        duoqian_admins: &[
+        admins: &[
             hex!("fecc1694ed481f5fce0a879e8187b80474f719b28344559cf1d121cc9a278171"),
             hex!("b6a368573bf3fffd079e4b5dc1409b8e02f990f6b91acd0e5a8dd905abadad31"),
             hex!("e626253664061b9e907cc8bd818c3283bce527db18ed762c42f9db15c28bf72d"),
@@ -188,7 +188,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "SD001-GSF0E-333858828-2026",
         main_account: hex!("f141156823b3cf1dda3e24ed3e7b8488e226c1f865821df9eefa2a4ca14c4d2b"),
         fee_account: hex!("66f26140b0743bf3ffe842ca577e5411d811a55a490dd7a2d99ab46a4271de03"),
-        duoqian_admins: &[
+        admins: &[
             hex!("10f1d5c678f0c4b8d4e9032cc0df2dde738eba561d94f232505042673d701769"),
             hex!("f6c2be08c0ad4f1c89022a2da265f3ea2901de51a5d4b2b597ac3a42a9336333"),
             hex!("f64eea5952598ca0ad0b3eb4b5138fab4b3c93a48138cb2d319bbaa066c3406e"),
@@ -201,7 +201,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "SX001-GSF00-384489008-2026",
         main_account: hex!("1c6ac001b636186f0737554803b4d61516caf1b8b95708137c3dd26b21856ced"),
         fee_account: hex!("d821a73a43cb55cd41fd1b729db4e51d3148528c32eebe4c5515ee71095d6101"),
-        duoqian_admins: &[
+        admins: &[
             hex!("b240b21f0d7754ffeaa0e977f2870edb20bd9b92b92bea71930512e8e47f145c"),
             hex!("a689e2852dc39c571f20da19d154de247bb62f5a85f1f04a712ad51fa6e39638"),
             hex!("64b9472b2fc2e66a5eb924e9dbacc431a10743462ce4749c15ae1a9517f71913"),
@@ -214,7 +214,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HE001-GSF0R-954910656-2026",
         main_account: hex!("31d494f7b96114ac3fe0d9cb33a7fad872062b336c43ea663f847e1a4161ca5b"),
         fee_account: hex!("db9daad78bc66194d38beb0691089fbc7db4104cdb097178baa053a4c5654e8c"),
-        duoqian_admins: &[
+        admins: &[
             hex!("62d6f0c4f3941adfbc60d26f8cd1795c7c686c155a753d87b0546006d72d007e"),
             hex!("f2b4662473baf9136efa11100e792f4c0977bb103c93bc49517de39a51f9501f"),
             hex!("808f13a980e7cc22c0bdc123943f9a1c5cbee8911e5502fde3a12d2f2985d05e"),
@@ -227,7 +227,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HB001-GSF0Y-157451848-2026",
         main_account: hex!("063436e4cf703c2b32844ff5fdd09d26a46413126b02b48b2d56a0b2cb760abf"),
         fee_account: hex!("a94e9ca87fea2a0d22f99684b0623b581b5db2d766a99d9ff4d44c0ccab14f75"),
-        duoqian_admins: &[
+        admins: &[
             hex!("c2f57ceb8cf1024999cd39505cd87bfbc5137c0d9b138906e0ea2f2fd7bf5932"),
             hex!("1696dc19a56ffe816011c2b621647277c2bf98c0b20167e7eabf60cf4403dc3f"),
             hex!("a0ae62133b7e8887ceffc9f1465309cdd122f1f0e33235947d96ec356fbb8e69"),
@@ -240,7 +240,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HI001-GSF0N-077291390-2026",
         main_account: hex!("90ab3b7adbcc846370f2b0d20c788209cf73021c266ee7f1d7da376fec9fa968"),
         fee_account: hex!("27b1b29a7a66e013a1e14747f8833d26372e2676c4451854143e401e6c6f2a7d"),
-        duoqian_admins: &[
+        admins: &[
             hex!("62ad586e10fe01347b722c948445c5c82e83847ee1d6d3cda03fb7fcf7796055"),
             hex!("a4c686e182a6f81dfedd4e549e8b256cb7768f96b81607f8196fef843c4d6925"),
             hex!("9a526f0bb0ef6dd79f560942266572e966f50c8c537d7e4bfd7167a081e98b05"),
@@ -253,7 +253,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "SI001-GSF06-249824979-2026",
         main_account: hex!("f9f39071d6b1dcf81a086abf095116db15f7ecf83f18bdce5bfb61f4a043900e"),
         fee_account: hex!("6393b1c57f61f0a1b2986c500ddac5ab94988d5dcd7da36ba2b5b33bc82ba292"),
-        duoqian_admins: &[
+        admins: &[
             hex!("7099bfabb88f8980c668a3a2b2c5bed7503e20b4cbd72ad4e131bf1f07bc7f30"),
             hex!("4a10d862b8ad9eebb652a7ce5e5dd5c0c236ce5751cbcc2e971841936ea22b44"),
             hex!("e496ee7353d624ae0de97d761d089efc5fda26bfd242789be85731f647d06c10"),
@@ -266,7 +266,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "CQ001-GSF05-088530239-2026",
         main_account: hex!("b0915b5a02a5533285d55bcb21c62bcdc16e9cdbd796e2c8861e4edeed0ebdad"),
         fee_account: hex!("6bb6ba20254737b047f5a653224511587b51e673240804ce9df9f0c1a6cdc2ea"),
-        duoqian_admins: &[
+        admins: &[
             hex!("32b5e07bc11dc783c703d48c2bdf76ed01fe7033ca9d1c3c85e15414afb0bb49"),
             hex!("8e1c940778bb00d520a5e734599f6fcb332e89f56aebfabfc266246e250b2d61"),
             hex!("6cecabc19546de39d5b7b306ee6ae558169d5dcfc2a1f1f90a94ecacd3351068"),
@@ -279,7 +279,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "SC001-GSF0C-802330322-2026",
         main_account: hex!("c8be037580b3549ed22de03c3560f84b568cf9de4734879a6d3b07841165456f"),
         fee_account: hex!("26cf4fdf41fc78fd748dad91f6d8ef2e87b92e2b48d1e44cf12d9a5a8338f329"),
-        duoqian_admins: &[
+        admins: &[
             hex!("74c0df877aa31c344e705ee3805f7941ad66b6012db7f158dd64c62e31afdd5f"),
             hex!("301ccd8f399941fc1687e65e9058e08b39f6c337a58395731eac4d60f0c03e7d"),
             hex!("16609042c539e5ef777057cb1173e3040709d3b9ac8df76d62fa8a0ba0a91325"),
@@ -292,7 +292,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "GS001-GSF09-611023108-2026",
         main_account: hex!("db0e6b03c08837fd5507ebfa9d38b98e6f6ced434ba9c11d766b38f1ac7d9c7c"),
         fee_account: hex!("e127a730648a7624aff9542ba54633da669d9d6b24137c24c4bd0025135372e7"),
-        duoqian_admins: &[
+        admins: &[
             hex!("0823417c71c3ebf50f8eb86ed9c97f459e58c7cfe7f092e4c1ed44f01ed2844a"),
             hex!("1e6ee2cdd6b5c13f7c0b9df2103c82b7f9da7e179e2afb1e35f95e86ca7c0a2f"),
             hex!("10ad3d4a8d074649b27e0a1f3921e77cf167768a790cc1c6ce5abe8888dcb252"),
@@ -305,7 +305,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "BP001-GSF0E-779326321-2026",
         main_account: hex!("676cbae87b03fbbb30cbca45f09b10fe6dd0c87c0547b12c8cca665f15db0339"),
         fee_account: hex!("10bd57c5e3da283f9124d099e6dafe15c291ec680cafdec44b05e0aaa44b7b59"),
-        duoqian_admins: &[
+        admins: &[
             hex!("32e41625cf220a2bbd211efe754e47b4b853c8499006c4aaf9e1afa26beeea72"),
             hex!("88321b35217ed9423d398d24258a45bb94ae584849ae624dd8d26256bd741e47"),
             hex!("9cedb85a3faf89c7d3f5e92dd609b249dd355e5aa71cc787046b5e7dacc6ad55"),
@@ -318,7 +318,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HA001-GSF05-346164340-2026",
         main_account: hex!("6759bb18503bb9abcc2944ea0e5ed8bbffd4eeada2b111b27332b9a3b8ff875c"),
         fee_account: hex!("9c4f3978fa74a986d06113ee2915a6752bfb740b34faf30313844bdc7a135f2c"),
-        duoqian_admins: &[
+        admins: &[
             hex!("a4064d937bf4b5bfa83bbc45fcb67f177d7ba06c81fce2190f7155b0a6b78452"),
             hex!("d2c278c606cd2d27355cf546565ea1ad295bee2154b3033bf8e04da80264a10d"),
             hex!("fcef04ff8c16930b8f59bb06bb714084955305ceacb5cb36af72bdd72256556a"),
@@ -331,7 +331,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "SJ001-GSF0T-743382317-2026",
         main_account: hex!("aecf9e286efa62bf977b20221ecfb9546bb3328bc5ef508296cb1e27d1a15f1c"),
         fee_account: hex!("945d1e487b0b4d1c209b8a31b84f5b90ff0e5f913f1dd192f1192b971bef7937"),
-        duoqian_admins: &[
+        admins: &[
             hex!("928adaa4a8b8b5b0fdde81225891548d733159aa9133e2042e5f1708bec7d612"),
             hex!("c0a5cfd03d53d624e6ee7bf08ccd7a6ece5b7f35f9668ebd5e01ad0406380c0c"),
             hex!("3228df0c6c8d9b4cd665ce389596dcda738a16fc845e04253fbfa841875b8f7e"),
@@ -344,7 +344,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "LJ001-GSF02-503014903-2026",
         main_account: hex!("d6073852c2b464be5e613d53253256291363e9feff36cb38cbd45fb5a9ffe058"),
         fee_account: hex!("f46724f130d446d9c2a9aa95f253fbc6768cb7debda68320abdbcd0fd76a64c9"),
-        duoqian_admins: &[
+        admins: &[
             hex!("56d8cdb5c6dd38f491975209118598c85d5983aa5bc1f774b42ab0e5de24c62f"),
             hex!("72fca20fe2487cdebd745fea54f8dc33526ffa6cffb0626a4a98045e1364a219"),
             hex!("4288c630a4d476989d28b91f68641139494e67d9c40b0b174acc9694a116134d"),
@@ -357,7 +357,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "JL001-GSF02-140130793-2026",
         main_account: hex!("09f6d235be85905fadd8f178f340c206ba12ab4a2b6a225b65498e9b4c15e33d"),
         fee_account: hex!("f828903ec4a8e52118278fe1bf691af8c68e1a047b072d09efc30368fafa1e7b"),
-        duoqian_admins: &[
+        admins: &[
             hex!("d42c52f020c2e4e689f1b2f338fcd676e2d5b7eaa5d4fc626c30a2d8affee240"),
             hex!("086b22a5753a7dc0aa904d66af138e1c363f58049d32137ca9aaceb128a17c18"),
             hex!("c2945d40e8d98770ac22d5ef8ed1823d7bfb5bfde109ef5286bb76210ea16350"),
@@ -370,7 +370,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "LI001-GSF0V-647021209-2026",
         main_account: hex!("dfe0f52782a41b5b12236cf6950c13b5c10402c7cc143cfa4243046b26236ae4"),
         fee_account: hex!("f00f4dd2816c83f70c28eeb996602258c0eae21c1236cf3012074c3af6949d60"),
-        duoqian_admins: &[
+        admins: &[
             hex!("1cfe02fbb447db1640773adc5afe8dbf4424779a6fc7521ab36aea6be8bfe656"),
             hex!("98593b346f294d2f91798413235ad1999ec16958928dc6bfa3beac56720f9d63"),
             hex!("a634bd2e8160a12080a0b16d3fbf70961b30f3b6ca4e4f7d4c00af594933ae14"),
@@ -383,7 +383,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "NX001-GSF0E-853238754-2026",
         main_account: hex!("c7d5d26db15c7ac34a1a515e40ff0102dab470828bcc30c2cbf230b83fcc6082"),
         fee_account: hex!("6882832b66460581fbe1b92a88e444466fb07e6cb06aa74c2bd4ba58f0cd319c"),
-        duoqian_admins: &[
+        admins: &[
             hex!("6069ec90d4b81e9565f0837e6e6e9cc350711f4c2508f03f0a61cb6f4972fe3c"),
             hex!("d2bd2e75be0dae53d501b2f8cc044cad7681c251b8477ff271996abbcc09dc12"),
             hex!("d0e4e12cf865ca18e0f4fb58e3110302228d2b9c9900c6a30166f93d6e4a9d60"),
@@ -396,7 +396,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "QH001-GSF0O-940195791-2026",
         main_account: hex!("ef7947c29eb196ca68e88944fbb8c506ffffe4eee09a1d3c306ef78befc73e74"),
         fee_account: hex!("1f03b3ca52d1c3959a949889f35789bdde133aa487e9b3157e38c4514f05cebb"),
-        duoqian_admins: &[
+        admins: &[
             hex!("10575690d45f2846561594aeacfb83ff77b105140aaacd57700f9866ff83de00"),
             hex!("10ce8219dd015f1bc98a1e8efdf3484ceed6385c4ff84db8caeb99d2309e8623"),
             hex!("c272776f2d65d2e82adf0b0f142184ea163e0133dda6a263ab70a68b9e24863e"),
@@ -409,7 +409,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "AH001-GSF0R-454040736-2026",
         main_account: hex!("8f87b93fb3c58e923d19439f28eed1407d341dedd5174ff0b9ec52c04f7dec00"),
         fee_account: hex!("37c8abf58d78f96ca23a3868bcf2068bc0227e942cfc6bdad0ea654ca9141a10"),
-        duoqian_admins: &[
+        admins: &[
             hex!("f22e4b65e1a9c289412058838dd1f11ff3f34ddc54a7f900b6b71036bf591873"),
             hex!("80bd16d90be8df29ee4861d9ec79d0172642e7a8fd01c9ebd75e64cd9b965953"),
             hex!("cc9df3e992922da93e3deff48e6375b27d8f69c308a464aa5042a0a9ae270e44"),
@@ -422,7 +422,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "TW001-GSF0P-338903264-2026",
         main_account: hex!("0e05cd9f8c579156c594b8c799ad139f83e3af2616667c4c81245ebe10ed83c5"),
         fee_account: hex!("80f7cc951fd8cf036c9c330b0f7c1ea6d113cb89d7da5e7f072b3416e6728d6f"),
-        duoqian_admins: &[
+        admins: &[
             hex!("18d9fda280dc338f3a98a85018bdac1ef020cf6bb544c392008f6c9d1b652751"),
             hex!("b81f53f09b72382618464d2570bde98ddd29092396175c9db44f13355b767414"),
             hex!("0898d5bed7ee213f43105cb34dcb139ff02b080c6b1b7032ba7e6790cb30ca6b"),
@@ -435,7 +435,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "XZ001-GSF03-489864159-2026",
         main_account: hex!("72bf3312ea8f8838ef4d9ecd7cd5879af51409ff01dda6460fc1d965721483d2"),
         fee_account: hex!("65195f637487237023f29b4892195411922e695788e0287fd7ab514ddda7ff96"),
-        duoqian_admins: &[
+        admins: &[
             hex!("e024bad46acdce84df4217f446fd64fa5941d45b331c0398326c1b16edab526e"),
             hex!("b442df0dbb86853836f00f5076ec8f030dff3d9670d0295d9c554867fa5aca21"),
             hex!("008a1372d5bd98ac3eb175da1ec7caaaac70defcb1630c30acc16bf4a685e239"),
@@ -448,7 +448,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "XJ001-GSF0R-665697727-2026",
         main_account: hex!("c1d2d103c2cee3d30ea462955a87c6ebee0bf0fee4ef2c38f6845b70f03968d5"),
         fee_account: hex!("5848cd1ccc157d6b7b1837113ef1ee2e0bdaf478177a6ac4894ec1200ad9a02d"),
-        duoqian_admins: &[
+        admins: &[
             hex!("4aee4e9a7a2cf05f4c45827924a9c16004d08226488aea62bad4ba0eba832258"),
             hex!("4cd50b7977c1154e1ed750d470c211d535222f5499dc43200b43a1c321d00b50"),
             hex!("fc6e18fd57edd7c93fe94d470c462dd21dc43e87b1dc266cf513e28419028e2b"),
@@ -461,7 +461,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "XK001-GSF0A-039776546-2026",
         main_account: hex!("0bfe47044d827f13aff3a47863734bf7024b820cf2423e8b484596c70b3a92eb"),
         fee_account: hex!("77b2e9f302261ce16a2787d243b3620fd932622b866692394278ab454faac803"),
-        duoqian_admins: &[
+        admins: &[
             hex!("045c63e54895a86108ab0bab38836f1735842b617652636a63a64b32d6671600"),
             hex!("ba8730c50682e0b2aeea2a2872871817dda2a7758ebd5c8dd43693a2a9a6ce05"),
             hex!("82af299899774760070c11ca4085c01bea4d8fa6afbcdfa649daef4d541f9225"),
@@ -474,7 +474,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "AL001-GSF0K-773834149-2026",
         main_account: hex!("868023c51e996b641c35d58f74ecbc4ce4548e368c9aa4b0fcaa1ec8e81f6c56"),
         fee_account: hex!("c551847b5bbd8d74837b358a57ee895dbc4cdd046e3282f6e5f1d65bfbf449b4"),
-        duoqian_admins: &[
+        admins: &[
             hex!("6853c0a0b2abb952b82c345c00d142e2ec5df44f5a75952dbc2a7b68a05b8777"),
             hex!("b65c087380221e01a25b57a5a0b3bd8e6b47c9ffcc20c5901d7d7ad76d76a86e"),
             hex!("8e5679270aa18728bc0a99fd5a7cecdaa32d12c05dbc37e1b75e50ae3c54ed14"),
@@ -487,7 +487,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "CL001-GSF08-213372415-2026",
         main_account: hex!("01be7248e9730086fdc27afad5e3fc4f3bc76e4cd19ec56af531a3ed24267e92"),
         fee_account: hex!("aa9c835c3c2c010bf5a6b63ddf5fcc0d574883608d97845b2d9884b3b3663bad"),
-        duoqian_admins: &[
+        admins: &[
             hex!("e021f20187b02ea3cf4f80a3c8058b6b2548d21861f493f15d7b399e2b3dd325"),
             hex!("044dc8d2e0b29880e6290af39bc793b222c6d8b0f0f3cb0f1823ed73725aa00c"),
             hex!("5ac985c02713bf9e8426772378a3717dd9bf44823e414aff744fb093e2e15801"),
@@ -500,7 +500,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "YL001-GSF00-940493250-2026",
         main_account: hex!("b31007b83654f343ffd9a809803ed1985ca90c74a02f91973ea53b5928d56923"),
         fee_account: hex!("f38dca9b089f3a5652b9f02e3c020fff336ae4c6e4d37ee4c81a02d80e056147"),
-        duoqian_admins: &[
+        admins: &[
             hex!("e8213f3ff21707f89f3377f75c0b7f10a7c59e6fae27eaf4bece640035963602"),
             hex!("c441417b5b99c1d7614a9ff55f048657a0bc06f2df19c7f164019cf8c1bb430f"),
             hex!("407cbf882b3a58a1af59a59f5af0d63af9b4e8b996eaaed1bd1e7eb8d6d2ab6b"),
@@ -513,7 +513,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HX001-GSF0V-433393508-2026",
         main_account: hex!("a585280a61f2b4df504a49179e989012175bd13017fefbd7a4f2d080a687efab"),
         fee_account: hex!("dc5ca5936c789a3f868d647a3ace652043131dcab71ff69af9335630187a7f88"),
-        duoqian_admins: &[
+        admins: &[
             hex!("dcd826dbfd05980b59943b29ac453031106e841e3736aecb128fa075dbd42647"),
             hex!("5a7696c1eef1c18fbc47152e4e9784e3441d9a1ea1f41bba4a2d0b1271089904"),
             hex!("e68f12016dbace2eb3c2fe5f9b8c29045a91538bacb3040a281d5970a677c608"),
@@ -526,7 +526,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "KL001-GSF0S-811822340-2026",
         main_account: hex!("1ea26b46660bda68a91ee6ffc8e7c96eaddc79dfe5095eda6ed0dac62303b5cd"),
         fee_account: hex!("6cd93ce3e3c2534d0118752bee3bc13a3534c010dad39d86fa35fabc459d7140"),
-        duoqian_admins: &[
+        admins: &[
             hex!("a05cebf4c43759df1979d2c6ffdc87afe7b9256b28899292b83e404ba5a41b3c"),
             hex!("249f0a2f0fb2659c3c5a63c6a966ba6117b289f9bae661b1aadced3b1f67fa65"),
             hex!("2e736f54052ad48827a5d2630215356042bccbf88d2428b0eccdce0351a14529"),
@@ -539,7 +539,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HT001-GSF02-354283262-2026",
         main_account: hex!("859f1ca294f53892118487891539695750de6ca3e9ac91265bf52a25e6be642d"),
         fee_account: hex!("4a625d3ea854789acbdf8c7cfc07c8a5ab3f29adf541431c0634a20e9bde8c2b"),
-        duoqian_admins: &[
+        admins: &[
             hex!("0e56737b842ea74a4dde0b5df91089696ecde493a742181db78bc1a5ea9de756"),
             hex!("38d6eba42cfff6cbdab92a0eccb75f3dc276454d2d6123d09c2305edfc208563"),
             hex!("b047429a9938accbd2da19a785694258ca7881bc47db3d97ca06c2fd8ec44027"),
@@ -552,7 +552,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "RH001-GSF0O-647806782-2026",
         main_account: hex!("b47b70e1345f6a59a47f55e047034a8e8b160321891551be3145b2d960893e8a"),
         fee_account: hex!("8967c47c2d39c72f819ecd7068c581fdd2936ab5ca436a68eec0f16b63af13b3"),
-        duoqian_admins: &[
+        admins: &[
             hex!("346ab4dc8f6925932f72a828f25b2beafb66ba2c4f4c5a7bc3d4891f39833870"),
             hex!("307cdc1cac71516ecd6d71d99d68533d39eff017abe5347242a438917ab6c005"),
             hex!("22aa83cc2feed957be527de3b601406e232f60ef187f9040dec8d02b8ac01505"),
@@ -565,7 +565,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "XA001-GSF0W-948269419-2026",
         main_account: hex!("1654f5ed6b9c4be0d154f34ab5439407649931908f80186edd76668cdc2f7e61"),
         fee_account: hex!("2449252d64cb6de60464df466142bd66513c506532b9d27d0e97df70788da4e4"),
-        duoqian_admins: &[
+        admins: &[
             hex!("968013757fda161113a8671b33588b2cd681426e85b4e083f9f0b32914c63674"),
             hex!("86902dc07f94ec9067fd1ec70d7d3eeaa2269c66a191c62b14afe1f333dd9c40"),
             hex!("5edd660ef9f77c212b19ccb5fb06ce06ecff37dbe303a9958b230765d8aa345c"),
@@ -578,7 +578,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         sfid_number: "HJ001-GSF0S-251417549-2026",
         main_account: hex!("5ece4ec4fd1499cc246d0e9f8ce50ac7dd2e5677abaf05aba4697a2edf8a44a6"),
         fee_account: hex!("a653cb596b454ab4a185e055756f56d40701b7f741b7c354aa667894f0beba0d"),
-        duoqian_admins: &[
+        admins: &[
             hex!("3e6cfbaaa4a1cc1e27830161ca7800b3a0faa4ccd1812e9bbe6c6aa799c3701c"),
             hex!("0614cd787b1134aa8421823271f4bbb4669a18206dbc1596ce30440de9ae5240"),
             hex!("3607aa1b3b758da2b3f4ffebc0f1fb0de8d431adbd593f9a88d66c415b247a2d"),

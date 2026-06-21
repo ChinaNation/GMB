@@ -65,7 +65,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _nonce: &[u8],
         _signature: &[u8],
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -85,7 +85,7 @@ impl
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -171,11 +171,11 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].duoqian_admins[index])
+    AccountId32::new(CHINA_CB[0].admins[index])
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].duoqian_admins[index])
+    AccountId32::new(CHINA_CB[1].admins[index])
 }
 
 fn nrc_pallet_id() -> AccountId32 {
@@ -191,7 +191,7 @@ fn prb_pallet_id() -> AccountId32 {
 }
 
 fn prb_admin(index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].duoqian_admins[index])
+    AccountId32::new(CHINA_CH[0].admins[index])
 }
 
 fn pending_account_id() -> AccountId32 {

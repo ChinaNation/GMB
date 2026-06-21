@@ -29,7 +29,7 @@
 - 本轮继续修复协议升级边界：`propose_runtime_upgrade` 已删除人口快照、联合签名、省份和签名管理员公钥参数。
 - 本轮已删除 `runtime-upgrade` 业务摘要中的本地状态字段，协议升级真实状态只读取 `votingengine::Proposals.status`。
 - 本轮已把协议升级提案创建入口改为投票引擎待补的业务无感联合提案接口，等待下一步修复 `votingengine` 后统一编译。
-- 本轮已修复投票引擎联合投票模块：人口快照准备、验签、防重放和消费全部收回 `joint-vote`，业务模块不再传 `eligible_total`、`snapshot_nonce`、`signature`、`province`、`signer_admin_pubkey`。
+- 本轮已修复投票引擎联合投票模块：人口快照准备、验签、防重放和消费全部收回 `joint-vote`，业务模块不再传 `eligible_total`、`snapshot_nonce`、`signature`、`province`、`signer_pubkey`。
 - 本轮已删除 `JointVoteEngine` 旧签名，不保留兼容入口；业务模块只能提交业务摘要和可选对象。
 - 本轮同步修复受接口收口影响的 `runtime-upgrade` 与 `resolution-issuance` 调用、测试和 benchmark。
 - 本轮已更新 `runtime-upgrade`、`votingengine`、`resolution-issuance` 技术文档，并清理旧接口说明。

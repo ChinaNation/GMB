@@ -11,10 +11,10 @@ pub const PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX: u8 = 0;
 pub fn build_admin_set_change_call_data(
     org: u8,
     account_id: &[u8; 32],
-    new_admins: &[String],
+    admins: &[String],
 ) -> Result<Vec<u8>, String> {
-    let encoded_admins = codec::encode_admins(new_admins)?;
-    let new_threshold = admin_change_threshold(org, new_admins.len())?;
+    let encoded_admins = codec::encode_admins(admins)?;
+    let new_threshold = admin_change_threshold(org, admins.len())?;
     let mut call_data = Vec::with_capacity(2 + 1 + 32 + encoded_admins.len() + 4);
     call_data.push(ADMINS_CHANGE_PALLET_INDEX);
     call_data.push(PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX);
@@ -25,16 +25,16 @@ pub fn build_admin_set_change_call_data(
     Ok(call_data)
 }
 
-fn admin_change_threshold(org: u8, admin_count: usize) -> Result<u32, String> {
+fn admin_change_threshold(org: u8, admins_len: usize) -> Result<u32, String> {
     match org {
         0 => Ok(NRC_INTERNAL_THRESHOLD),
         1 => Ok(PRC_INTERNAL_THRESHOLD),
         2 => Ok(PRB_INTERNAL_THRESHOLD),
         3..=5 => {
-            if admin_count == 0 {
+            if admins_len == 0 {
                 return Err("管理员数量不能为空".to_string());
             }
-            Ok((admin_count as u32 / 2) + 1)
+            Ok((admins_len as u32 / 2) + 1)
         }
         _ => Err("org 必须在 0..=5 范围内".to_string()),
     }

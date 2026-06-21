@@ -15,11 +15,11 @@ ADR-015 后，机构管理按账户级治理：
 - 一个机构可以下挂多个账户，每个可操作账户独立持有管理员集合。
 - 主账户不管理其他账户，每个账户只由自己的管理员管理。
 - 当前 `propose_create_institution` 创建的是机构主账户的管理员主体；主体由主账户地址派生为 `InstitutionAccount(0x05)`，不是 `注册机构归属关系(0x02)`。
-- `admin_org` 必须是 `ORG_PUP` 或 `ORG_OTH`；`ORG_REN` 只属于个人多签。
+- `org` 必须是 `ORG_PUP` 或 `ORG_OTH`；`ORG_REN` 只属于个人多签。
 - 省储行永久质押账户永远不可操作，不得进入本模块账户治理。
 - 注册机构账户管理员数量范围为 `2..=1989`。
 - 注册机构账户创建和关闭必须由该账户管理员全员投票通过。
-- 动态账户普通业务阈值由用户在注册或管理员变更时输入，投票引擎统一校验 `threshold * 2 > admin_count && threshold <= admin_count` 并保存。
+- 动态账户普通业务阈值由用户在注册或管理员变更时输入，投票引擎统一校验 `threshold * 2 > admins_len && threshold <= admins_len` 并保存。
 
 ## 2. 目录结构
 
@@ -48,7 +48,7 @@ ADR-015 后，机构管理按账户级治理：
 
 核心 storage：
 
-- `Institutions<sfid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`admin_org`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
+- `Institutions<sfid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`org`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
 - `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
@@ -57,7 +57,7 @@ ADR-015 后，机构管理按账户级治理：
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按 `admin_org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
+- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按 `org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭成功后删除账户当前状态主体。
 - 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_account_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
@@ -73,14 +73,14 @@ propose_create_institution(
   sfid_number,
   sfid_full_name,
   accounts,
-  admin_org,
-  admin_count,
-  duoqian_admins,
+  org,
+  admins_len,
+  admins,
   threshold,
   register_nonce,
   signature,
   province,
-  signer_admin_pubkey
+  signer_pubkey
 )
 ```
 
@@ -88,14 +88,14 @@ propose_create_institution(
 
 - 创建的是机构，不是单个账户。
 - `accounts` 必须包含 `"主账户"` 和 `"费用账户"`。
-- `admin_org` 只能是 `ORG_PUP(4)` 或 `ORG_OTH(5)`。
+- `org` 只能是 `ORG_PUP(4)` 或 `ORG_OTH(5)`。
 - 每个账户初始余额都必须 `>= MinCreateAmount`，当前配置语义为最低 1.11 元。
 - 账户名不得重复。
 - 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；动态阈值由用户输入，必须严格过半且不得超过管理员数量。
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
 - `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / sfid_full_name / account_names[]`。
-- `province_name + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位联邦管理员派生签名公钥。
+- `issuer_main_account + signer_pubkey` 用于在 `admins-change::AdminAccounts` 中确认签发机构管理员,`scope_province_name / scope_city_name` 只表示业务作用域。
 - `subject_property / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
@@ -141,7 +141,7 @@ runtime 适配：
 - `RuntimeInternalAdminProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
 - 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
-- `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_admin_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
+- `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
 - `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
 - `DuoqianSfidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;SFID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 SFID 机构账户。
 

@@ -33,60 +33,64 @@ fn new_test_ext() -> sp_io::TestExternalities {
 
 fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32], Vec<u8>) {
     let province_name: Vec<u8> = b"liaoning".to_vec();
-    let bounded: sfid_system::pallet::ProvinceBound = province_name
-        .clone()
-        .try_into()
-        .expect("province_name fits");
+    let issuer_main_account = test_issuer_main_account();
 
     let main_pair = sr25519::Pair::from_string("//main-step3", None).expect("pair");
-    let main_signing_pair = sr25519::Pair::from_string("//main-signing-step3", None).expect("pair");
     let main_admin_pubkey = main_pair.public().0;
-    let main_signing_pubkey = main_signing_pair.public().0;
-
     let backup_pair = sr25519::Pair::from_string("//backup1-step3", None).expect("pair");
-    let backup_signing_pair =
-        sr25519::Pair::from_string("//backup1-signing-step3", None).expect("pair");
     let backup_admin_pubkey = backup_pair.public().0;
-    let backup_signing_pubkey = backup_signing_pair.public().0;
 
-    sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-        &bounded,
-        sfid_system::Slot::Main,
-        main_admin_pubkey,
-    );
-    sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-        &bounded,
-        sfid_system::Slot::Backup1,
-        backup_admin_pubkey,
-    );
-    sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-        &bounded,
-        main_admin_pubkey,
-        main_signing_pubkey,
-    );
-    sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-        &bounded,
-        backup_admin_pubkey,
-        backup_signing_pubkey,
+    let admins: admins_change::pallet::AdminsOf<Runtime> = vec![
+        AccountId::new(main_admin_pubkey),
+        AccountId::new(backup_admin_pubkey),
+    ]
+    .try_into()
+    .expect("test admins should fit");
+    admins_change::pallet::AdminAccounts::<Runtime>::insert(
+        issuer_main_account,
+        admins_change::AdminAccount {
+            org: votingengine::types::ORG_PRC,
+            kind: admins_change::AdminAccountKind::BuiltinInstitution,
+            admins,
+            creator: AccountId::new(main_admin_pubkey),
+            created_at: Default::default(),
+            updated_at: Default::default(),
+            status: admins_change::AdminAccountStatus::Active,
+        },
     );
 
     (
-        main_signing_pair,
+        main_pair,
         main_admin_pubkey,
-        backup_signing_pair,
+        backup_pair,
         backup_admin_pubkey,
         province_name,
     )
 }
 
+fn test_issuer_sfid_number() -> Vec<u8> {
+    b"CB-TEST-ISSUER".to_vec()
+}
+
+fn test_issuer_main_account() -> AccountId {
+    AccountId::new([77u8; 32])
+}
+
+fn test_scope_city_name() -> Vec<u8> {
+    b"shenyang".to_vec()
+}
+
 fn build_bind_credential(
     signing_pair: &sr25519::Pair,
-    signer_admin_pubkey: &[u8; 32],
-    province_name: &[u8],
+    signer_pubkey: &[u8; 32],
+    scope_province_name: &[u8],
     account: &AccountId,
     binding_id: Hash,
     bind_nonce: &sfid_system::pallet::NonceOf<Runtime>,
 ) -> sfid_system::pallet::CredentialOf<Runtime> {
+    let issuer_sfid_number = test_issuer_sfid_number();
+    let issuer_main_account = test_issuer_main_account();
+    let scope_city_name = test_scope_city_name();
     let payload = (
         primitives::core_const::DUOQIAN,
         primitives::core_const::OP_SIGN_BIND,
@@ -94,8 +98,11 @@ fn build_bind_credential(
         account,
         binding_id,
         bind_nonce.as_slice(),
-        province_name,
-        signer_admin_pubkey,
+        issuer_sfid_number.as_slice(),
+        &issuer_main_account,
+        signer_pubkey,
+        scope_province_name,
+        scope_city_name.as_slice(),
     );
     let msg = blake2_256(&payload.encode());
     let sig = signing_pair.sign(&msg);
@@ -104,24 +111,30 @@ fn build_bind_credential(
     sfid_system::BindCredential {
         binding_id,
         bind_nonce: bind_nonce.clone(),
-        province_name: province_name
+        issuer_sfid_number: issuer_sfid_number.try_into().expect("issuer sfid fits"),
+        issuer_main_account,
+        signer_pubkey: *signer_pubkey,
+        scope_province_name: scope_province_name
             .to_vec()
             .try_into()
-            .expect("province_name fits"),
-        signer_admin_pubkey: *signer_admin_pubkey,
+            .expect("scope province fits"),
+        scope_city_name: scope_city_name.try_into().expect("scope city fits"),
         signature,
     }
 }
 
 fn build_vote_signature(
     signing_pair: &sr25519::Pair,
-    signer_admin_pubkey: &[u8; 32],
-    province_name: &[u8],
+    signer_pubkey: &[u8; 32],
+    scope_province_name: &[u8],
     account: &AccountId,
     binding_id: Hash,
     proposal_id: u64,
     vote_nonce: &sfid_system::pallet::NonceOf<Runtime>,
 ) -> sfid_system::pallet::SignatureOf<Runtime> {
+    let issuer_sfid_number = test_issuer_sfid_number();
+    let issuer_main_account = test_issuer_main_account();
+    let scope_city_name = test_scope_city_name();
     let payload = (
         primitives::core_const::DUOQIAN,
         primitives::core_const::OP_SIGN_VOTE,
@@ -130,8 +143,11 @@ fn build_vote_signature(
         binding_id,
         proposal_id,
         vote_nonce.as_slice(),
-        province_name,
-        signer_admin_pubkey,
+        issuer_sfid_number.as_slice(),
+        &issuer_main_account,
+        signer_pubkey,
+        scope_province_name,
+        scope_city_name.as_slice(),
     );
     let msg = blake2_256(&payload.encode());
     signing_pair
@@ -144,12 +160,15 @@ fn build_vote_signature(
 
 fn build_pop_signature(
     signing_pair: &sr25519::Pair,
-    signer_admin_pubkey: &[u8; 32],
-    province_name: &[u8],
+    signer_pubkey: &[u8; 32],
+    scope_province_name: &[u8],
     who: &AccountId,
     eligible_total: u64,
     pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
 ) -> votingengine::pallet::VoteSignatureOf<Runtime> {
+    let issuer_sfid_number = test_issuer_sfid_number();
+    let issuer_main_account = test_issuer_main_account();
+    let scope_city_name = test_scope_city_name();
     let payload = (
         primitives::core_const::DUOQIAN,
         primitives::core_const::OP_SIGN_POP,
@@ -157,8 +176,11 @@ fn build_pop_signature(
         who,
         eligible_total,
         pop_nonce.as_slice(),
-        province_name,
-        signer_admin_pubkey,
+        issuer_sfid_number.as_slice(),
+        &issuer_main_account,
+        signer_pubkey,
+        scope_province_name,
+        scope_city_name.as_slice(),
     );
     let msg = blake2_256(&payload.encode());
     signing_pair

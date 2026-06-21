@@ -1,7 +1,7 @@
-//! # 超级管理员模块 (super_admin)
+//! # 管理员模块 (admins)
 //!
-//! 管理员管理仅 SUPER_ADMIN 角色可访问。
-//! 中文注释：公民状态变更属于档案业务，允许 SUPER_ADMIN 与 OPERATOR_ADMIN。
+//! 管理员管理仅 ADMIN 角色可访问。
+//! 中文注释：公民状态变更属于档案业务，允许 ADMIN 与 OPERATOR。
 
 use axum::{
     extract::{Path, State},
@@ -74,17 +74,17 @@ async fn list_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Vec<AdminData>>>, (StatusCode, Json<ApiError>)> {
-    authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    authz::require_role(&state, &headers, "ADMIN").await?;
 
     let rows = sqlx::query(
         "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name,
                 role, immutable
          FROM admin_users
-         WHERE role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')
+         WHERE role IN ('ADMIN', 'OPERATOR')
          ORDER BY
            CASE
-             WHEN role = 'SUPER_ADMIN' AND immutable = TRUE THEN 0
-             WHEN role = 'SUPER_ADMIN' THEN 1
+             WHEN role = 'ADMIN' AND immutable = TRUE THEN 0
+             WHEN role = 'ADMIN' THEN 1
              ELSE 2
            END,
            created_at,
@@ -110,16 +110,16 @@ async fn create_admin(
     headers: HeaderMap,
     Json(req): Json<CreateAdminRequest>,
 ) -> Result<Json<ApiResponse<AdminData>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let ctx = authz::require_role(&state, &headers, "ADMIN").await?;
     let role = req.role.trim();
-    if role != "SUPER_ADMIN" && role != "OPERATOR_ADMIN" {
+    if role != "ADMIN" && role != "OPERATOR" {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin role"));
     }
     let admin_name = validate_admin_name(req.admin_name.as_str())?;
     let admin_pubkey = normalize_admin_pubkey(req.admin_pubkey.as_str())?;
     let now_ts = Utc::now().timestamp();
-    let user_id = if role == "SUPER_ADMIN" {
-        format!("u_super_{}", Uuid::new_v4().simple())
+    let user_id = if role == "ADMIN" {
+        format!("u_admin_{}", Uuid::new_v4().simple())
     } else {
         format!("u_operator_{}", Uuid::new_v4().simple())
     };
@@ -130,7 +130,7 @@ async fn create_admin(
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
-    // 中文注释：超级管理员总数上限必须和插入共用锁，避免并发新增突破 5 个。
+    // 中文注释：管理员总数上限必须和插入共用锁，避免并发新增突破 5 个。
     sqlx::query("LOCK TABLE admin_users IN SHARE ROW EXCLUSIVE MODE")
         .execute(tx.as_mut())
         .await
@@ -142,20 +142,20 @@ async fn create_admin(
             )
         })?;
 
-    if role == "SUPER_ADMIN" {
-        let super_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN'")
+    if role == "ADMIN" {
+        let admins_total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'ADMIN'")
                 .fetch_one(tx.as_mut())
                 .await
                 .map_err(|_| {
                     err(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         5001,
-                        "count super admins failed",
+                        "count admins failed",
                     )
                 })?;
-        if super_count >= 5 {
-            return Err(err(StatusCode::CONFLICT, 3001, "super admin limit reached"));
+        if admins_total >= 5 {
+            return Err(err(StatusCode::CONFLICT, 3001, "admin limit reached"));
         }
     }
 
@@ -214,13 +214,13 @@ async fn update_admin_name(
     Path(id): Path<String>,
     Json(req): Json<UpdateAdminNameRequest>,
 ) -> Result<Json<ApiResponse<AdminData>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let ctx = authz::require_role(&state, &headers, "ADMIN").await?;
     let admin_name = validate_admin_name(req.admin_name.as_str())?;
     let now = Utc::now().timestamp();
     let row = sqlx::query(
         "UPDATE admin_users
          SET admin_name = $1, updated_at = $2
-         WHERE user_id = $3 AND role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')
+         WHERE user_id = $3 AND role IN ('ADMIN', 'OPERATOR')
          RETURNING user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable",
     )
     .bind(&admin_name)
@@ -256,7 +256,7 @@ async fn delete_admin(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let ctx = authz::require_role(&state, &headers, "ADMIN").await?;
 
     let mut tx = state
         .db
@@ -267,7 +267,7 @@ async fn delete_admin(
     let row = sqlx::query(
         "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable
          FROM admin_users
-         WHERE user_id = $1 AND role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')
+         WHERE user_id = $1 AND role IN ('ADMIN', 'OPERATOR')
          FOR UPDATE",
     )
     .bind(&id)
@@ -290,7 +290,7 @@ async fn delete_admin(
         return Err(err(
             StatusCode::CONFLICT,
             3003,
-            "initial super admin cannot be deleted",
+            "initial admin cannot be deleted",
         ));
     }
     let admin_pubkey: String = row.get("admin_pubkey");
@@ -320,7 +320,7 @@ async fn delete_admin(
             )
         })?;
 
-    // 中文注释：除初始超级管理员外，管理员物理删除后只靠审计快照追溯。
+    // 中文注释：除初始管理员外，管理员物理删除后只靠审计快照追溯。
     sqlx::query(
         "INSERT INTO audit_logs (log_id, operator_user_id, action, target_type, target_id, result, detail, created_at)
          VALUES ($1, $2, 'DELETE_ADMIN', 'ADMIN_USER', $3, 'SUCCESS', $4, $5)",

@@ -115,7 +115,7 @@ export default function SystemSettings() {
         </div>
         {exportState?.operator_lock_active && (
           <div style={{ color: 'var(--color-danger)', fontSize: 13, marginTop: 6 }}>
-            操作管理员登录已锁定，完成年度报告导出后自动恢复。
+            操作员登录已锁定，完成年度报告导出后自动恢复。
           </div>
         )}
       </Section>

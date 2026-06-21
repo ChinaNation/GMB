@@ -58,6 +58,7 @@ impl
     fn verify(
         _account: &u64,
         credential: &BindCredential<
+            u64,
             <Test as frame_system::Config>::Hash,
             sfid_system::pallet::NonceOf<Test>,
             sfid_system::pallet::SignatureOf<Test>,
@@ -83,8 +84,11 @@ impl
         _proposal_id: u64,
         _nonce: &sfid_system::pallet::NonceOf<Test>,
         _signature: &sfid_system::pallet::SignatureOf<Test>,
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &u64,
+        _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         false
     }
@@ -144,6 +148,7 @@ fn make_credential(
     nonce_seed: &[u8],
     valid: bool,
 ) -> BindCredential<
+    u64,
     <Test as frame_system::Config>::Hash,
     sfid_system::pallet::NonceOf<Test>,
     sfid_system::pallet::SignatureOf<Test>,
@@ -154,17 +159,26 @@ fn make_credential(
     let sig_bytes: &[u8] = if valid { b"valid" } else { b"bad" };
     let signature: sfid_system::pallet::SignatureOf<Test> =
         sig_bytes.to_vec().try_into().expect("sig should fit");
-    // ADR-008 step3:`BindCredential` 必带 (province_name, signer_admin_pubkey)。
-    // 集成测试用 TestSfidVerifier 不解析这两个字段,只检查 signature == "valid",
+    // 中文注释:`BindCredential` 必带签发机构、签名管理员和业务作用域字段。
+    // 集成测试用 TestSfidVerifier 不解析这些字段,只检查 signature == "valid",
     // 真实双层签名校验在 runtime 层 `RuntimeSfidVerifier` 单独覆盖。
     BindCredential {
         binding_id,
         bind_nonce: nonce,
-        province_name: b"liaoning"
+        issuer_sfid_number: b"CN000-GZF0A-000000001-2026"
             .to_vec()
             .try_into()
-            .expect("province_name should fit"),
-        signer_admin_pubkey: [7u8; 32],
+            .expect("issuer_sfid_number should fit"),
+        issuer_main_account: 1,
+        signer_pubkey: [7u8; 32],
+        scope_province_name: b"liaoning"
+            .to_vec()
+            .try_into()
+            .expect("scope_province_name should fit"),
+        scope_city_name: b"shenyang"
+            .to_vec()
+            .try_into()
+            .expect("scope_city_name should fit"),
         signature,
     }
 }

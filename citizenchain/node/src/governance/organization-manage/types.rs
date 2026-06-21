@@ -50,15 +50,15 @@ pub struct InstitutionDetail {
     /// 管理员更换使用的机构多签 AccountId。当前清算行以主账户作为机构管理员账户。
     pub admin_account_hex: String,
     /// 管理员更换使用的 org。清算行属于 ORG_OTH 机构账户。
-    pub admin_org: u8,
+    pub org: u8,
     pub main_account: AccountWithBalance,
     pub fee_account: AccountWithBalance,
     /// 主账户/费用账户之外的全部账户(自定义初始账户)。
     pub other_accounts: Vec<AccountWithBalance>,
-    pub admin_count: u32,
+    pub admins_len: u32,
     pub threshold: u32,
     /// 管理员公钥 32B 的 SS58 列表。
-    pub duoqian_admins_ss58: Vec<String>,
+    pub admins_ss58: Vec<String>,
     /// 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。
     pub status: String,
     pub creator_ss58: String,
@@ -102,10 +102,17 @@ pub struct InstitutionRegistrationCredentialResp {
     pub genesis_hash: String,
     /// 防重放 nonce(本次响应生成的随机字符串)。
     pub register_nonce: String,
-    pub province_name: String,
-    /// 本次签名所用省管理员公钥(32 字节 hex),链上按 (province_name, signer_admin_pubkey) 查派生签名公钥。
-    pub signer_admin_pubkey: String,
-    /// 省级签名密钥对凭证 payload 的 sr25519 签名(64 字节 hex)。
+    /// 签发机构 SFID 号。
+    pub issuer_sfid_number: String,
+    /// 签发机构主账户(SS58 或 32 字节 hex)。
+    pub issuer_main_account: String,
+    /// 本次签名所用机构管理员公钥(32 字节 hex)。
+    pub signer_pubkey: String,
+    /// 业务作用域省名,只参与 payload 防串用。
+    pub scope_province_name: String,
+    /// 业务作用域市名,可为空。
+    pub scope_city_name: String,
+    /// 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。
     pub signature: String,
     /// SFID 端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
     pub meta: serde_json::Value,

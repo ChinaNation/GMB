@@ -675,7 +675,7 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
                 snapshot_nonce_ok(),
                 snapshot_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok()
+                signer_pubkey_ok()
             ),
             votingengine::Error::<Test>::NoPermission
         );
@@ -898,7 +898,7 @@ fn population_snapshot_nonce_cannot_be_reused_across_proposals() {
                 nonce,
                 snapshot_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok()
+                signer_pubkey_ok()
             ),
             joint_vote::Error::<Test>::InvalidPopulationSnapshot
         );
@@ -918,7 +918,7 @@ fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
                 vote_nonce("n-1"),
                 vote_sig_bad(),
                 province_ok(),
-                signer_admin_pubkey_ok(),
+                signer_pubkey_ok(),
                 true
             ),
             joint_vote::Error::<Test>::InvalidSfidVoteCredential
@@ -931,7 +931,7 @@ fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
             vote_nonce("n-2"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
         assert_eq!(joint_vote::ReferendumTallies::<Test>::get(0).yes, 1);
@@ -950,7 +950,7 @@ fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
             vote_nonce("n-1"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
 
@@ -962,7 +962,7 @@ fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
                 vote_nonce("n-2"),
                 vote_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok(),
+                signer_pubkey_ok(),
                 false
             ),
             votingengine::Error::<Test>::AlreadyVoted
@@ -983,7 +983,7 @@ fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
             vote_nonce("same"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
 
@@ -994,7 +994,7 @@ fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
             vote_nonce("same"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
     });
@@ -1013,7 +1013,7 @@ fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
                 vote_nonce("x-1"),
                 vote_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok(),
+                signer_pubkey_ok(),
                 true
             ),
             joint_vote::Error::<Test>::CitizenEligibleTotalNotSet
@@ -1072,7 +1072,7 @@ fn citizen_timeout_auto_registers_cleanup_and_clears_vote_nonces() {
             vote_nonce("timeout-cleanup"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
         assert!(has_used_vote_nonce(0, binding_id_ok(), "timeout-cleanup"));
@@ -1114,7 +1114,7 @@ fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
                 vote_nonce("n-ineligible-hash"),
                 vote_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok(),
+                signer_pubkey_ok(),
                 true
             ),
             joint_vote::Error::<Test>::SfidNotEligible
@@ -1129,7 +1129,7 @@ fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
                 vote_nonce("n-ineligible"),
                 vote_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok(),
+                signer_pubkey_ok(),
                 true
             ),
             joint_vote::Error::<Test>::SfidNotEligible
@@ -1151,7 +1151,7 @@ fn citizen_vote_rejects_when_not_in_citizen_stage() {
                 vote_nonce("joint-stage"),
                 vote_sig_ok(),
                 province_ok(),
-                signer_admin_pubkey_ok(),
+                signer_pubkey_ok(),
                 true
             ),
             votingengine::Error::<Test>::InvalidProposalStage
@@ -1172,7 +1172,7 @@ fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
             vote_nonce("immediate-pass"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
 
@@ -1194,7 +1194,7 @@ fn delayed_cleanup_cleans_used_vote_nonce_after_retention() {
             vote_nonce("immediate-cleanup"),
             vote_sig_ok(),
             province_ok(),
-            signer_admin_pubkey_ok(),
+            signer_pubkey_ok(),
             true
         ));
 

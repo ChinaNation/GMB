@@ -18,15 +18,24 @@ use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
     /// 联合公投:由外部 SFID 系统判定资格,链上去重计票。
-    /// ADR-008 step3:`(province_name, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
+    /// 中文注释:签发身份按机构 admins 验签,作用域名称只参与 payload 防串用。
     pub fn do_jointreferendum_vote(
         who: T::AccountId,
         proposal_id: u64,
         binding_id: T::Hash,
         nonce: votingengine::pallet::VoteNonceOf<T>,
         signature: votingengine::pallet::VoteSignatureOf<T>,
-        province_name: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>,
-        signer_admin_pubkey: [u8; 32],
+        issuer_sfid_number: frame_support::BoundedVec<
+            u8,
+            frame_support::pallet_prelude::ConstU32<128>,
+        >,
+        issuer_main_account: T::AccountId,
+        signer_pubkey: [u8; 32],
+        scope_province_name: frame_support::BoundedVec<
+            u8,
+            frame_support::pallet_prelude::ConstU32<64>,
+        >,
+        scope_city_name: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -59,8 +68,11 @@ impl<T: Config> Pallet<T> {
                 proposal_id,
                 nonce.as_slice(),
                 signature.as_slice(),
-                province_name.as_slice(),
-                &signer_admin_pubkey,
+                issuer_sfid_number.as_slice(),
+                &issuer_main_account,
+                &signer_pubkey,
+                scope_province_name.as_slice(),
+                scope_city_name.as_slice(),
             ),
             Error::<T>::InvalidSfidVoteCredential
         );

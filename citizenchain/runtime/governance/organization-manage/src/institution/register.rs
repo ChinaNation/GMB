@@ -2,9 +2,9 @@
 //!
 //! `do_register_sfid_institution` 由 lib.rs 内 call_index=2 入口 delegate 调用。
 //! 业务流程：
-//! 1. 校验参数非空（sfid_number / sfid_full_name / account_names / province_name）
+//! 1. 校验参数非空（sfid_number / sfid_full_name / account_names / 签发机构 / 作用域）
 //! 2. 校验 register_nonce 未被复用
-//! 3. 调 `SfidInstitutionVerifier` 双层验签（ADR-008 step2b: province_name + signer_admin_pubkey）
+//! 3. 调 `SfidInstitutionVerifier` 校验签发机构 admins 与 sr25519 签名
 //! 4. 遍历 account_names 派生机构账户地址 + 校验保留名/重复/已注册
 //! 5. 写入 `UsedRegisterNonce` / `SfidRegisteredAccount` / `AccountRegisteredSfid`
 //! 6. 发射 `SfidInstitutionRegistered` 事件
@@ -37,13 +37,23 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
     account_names: InstitutionAccountNamesOf<T>,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    province_name: Vec<u8>,
-    signer_admin_pubkey: [u8; 32],
+    issuer_sfid_number: Vec<u8>,
+    issuer_main_account: T::AccountId,
+    signer_pubkey: [u8; 32],
+    scope_province_name: Vec<u8>,
+    scope_city_name: Vec<u8>,
 ) -> DispatchResult {
     ensure!(!sfid_number.is_empty(), Error::<T>::EmptySfidNumber);
     ensure!(!sfid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!account_names.is_empty(), Error::<T>::MissingMainAccount);
-    ensure!(!province_name.is_empty(), Error::<T>::EmptyProvince);
+    ensure!(
+        !issuer_sfid_number.is_empty(),
+        Error::<T>::EmptyIssuerSfidNumber
+    );
+    ensure!(
+        !scope_province_name.is_empty(),
+        Error::<T>::EmptyScopeProvinceName
+    );
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
     ensure!(
@@ -59,8 +69,11 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
             &account_name_payload,
             &register_nonce,
             &signature,
-            province_name.as_slice(),
-            &signer_admin_pubkey,
+            issuer_sfid_number.as_slice(),
+            &issuer_main_account,
+            &signer_pubkey,
+            scope_province_name.as_slice(),
+            scope_city_name.as_slice(),
         ),
         Error::<T>::InvalidSfidInstitutionSignature
     );

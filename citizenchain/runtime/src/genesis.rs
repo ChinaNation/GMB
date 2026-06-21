@@ -74,7 +74,7 @@ fn build_genesis() -> Value {
     let nrc_admins = &CHINA_CB
         .first()
         .expect("CHINA_CB must have NRC entry")
-        .duoqian_admins;
+        .admins;
     let admin_total: u128 = admin_each * nrc_admins.len() as u128;
 
     // 中文注释：国储会多签地址 = 创世发行总量 - 管理员预置总额，总量不变。
@@ -218,11 +218,8 @@ mod tests {
 
         // 中文注释：创世包含 1 个国储会多签地址 + 19 个 NRC 管理员 + 43 个省储行 stake 质押地址
         // + 1 个国储会两和基金账户。
-        let nrc_admin_count = CHINA_CB
-            .first()
-            .map(|n| n.duoqian_admins.len())
-            .unwrap_or(0);
-        assert_eq!(balances.len(), 1 + nrc_admin_count + CHINA_CH.len() + 1);
+        let nrc_admins_len = CHINA_CB.first().map(|n| n.admins.len()).unwrap_or(0);
+        assert_eq!(balances.len(), 1 + nrc_admins_len + CHINA_CH.len() + 1);
     }
 
     #[test]
@@ -253,11 +250,11 @@ mod tests {
 
         // 中文注释：创世发行分配到国储会多签地址 = 总发行量 - NRC 管理员预置总额。
         let admin_each: u128 = 1_000_000_000;
-        let nrc_admin_count = CHINA_CB
+        let nrc_admins_len = CHINA_CB
             .first()
-            .map(|n| n.duoqian_admins.len() as u128)
+            .map(|n| n.admins.len() as u128)
             .unwrap_or(0);
-        let expected_nrc = GENESIS_ISSUANCE - admin_each * nrc_admin_count;
+        let expected_nrc = GENESIS_ISSUANCE - admin_each * nrc_admins_len;
         assert_eq!(nrc_amount, expected_nrc);
 
         let total_in_patch: u128 = balances

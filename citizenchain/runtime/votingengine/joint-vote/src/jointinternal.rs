@@ -125,7 +125,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
         who_arr.copy_from_slice(&who_bytes);
         for entry in CHINA_CB.iter() {
             if let Some(institution) = decode_account::<T>(&entry.main_account) {
-                if entry.duoqian_admins.iter().any(|admin| *admin == who_arr) {
+                if entry.admins.iter().any(|admin| *admin == who_arr) {
                     return Some(institution);
                 }
             }
@@ -156,8 +156,11 @@ impl<T: Config> Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
         signature: votingengine::pallet::VoteSignatureOf<T>,
-        province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        issuer_sfid_number: &[u8],
+        issuer_main_account: &T::AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
     ) -> DispatchResult {
         let _proposer_institution = resolve_proposer_institution::<T>(&who)
             .ok_or(votingengine::Error::<T>::NoPermission)?;
@@ -168,7 +171,11 @@ impl<T: Config> Pallet<T> {
         );
         ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
         ensure!(
-            !province_name.is_empty(),
+            !issuer_sfid_number.is_empty(),
+            Error::<T>::InvalidPopulationSnapshot
+        );
+        ensure!(
+            !scope_province_name.is_empty(),
             Error::<T>::InvalidPopulationSnapshot
         );
 
@@ -183,8 +190,11 @@ impl<T: Config> Pallet<T> {
                 eligible_total,
                 &snapshot_nonce,
                 &signature,
-                province_name,
-                signer_admin_pubkey,
+                issuer_sfid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             ),
             Error::<T>::InvalidPopulationSnapshot
         );
@@ -372,15 +382,15 @@ impl<T: Config> Pallet<T> {
 
         let threshold = fixed_governance_pass_threshold(org)
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        let admin_count =
-            <votingengine::Pallet<T>>::snapshot_admin_count(proposal_id, institution.clone())
+        let admins_len =
+            <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution.clone())
                 .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
 
         if tally.yes >= threshold {
             return Self::finalize_joint_institution_vote(proposal_id, institution, true);
         }
         let casted_votes = tally.yes.saturating_add(tally.no);
-        let remaining_admins = admin_count.saturating_sub(casted_votes);
+        let remaining_admins = admins_len.saturating_sub(casted_votes);
         if tally.yes.saturating_add(remaining_admins) < threshold {
             return Self::finalize_joint_institution_vote(proposal_id, institution, false);
         }

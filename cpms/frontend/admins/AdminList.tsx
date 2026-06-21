@@ -32,7 +32,7 @@ export default function AdminList() {
 
   useEffect(() => { load(); }, [load]);
 
-  const superAdminCount = admins.filter(admin => admin.role === 'SUPER_ADMIN').length;
+  const adminCount = admins.filter(admin => admin.role === 'ADMIN').length;
 
   const handleCreate = async () => {
     if (!newRole) { setError('请选择管理员类型'); return; }
@@ -128,8 +128,8 @@ export default function AdminList() {
               onChange={e => setNewRole(e.target.value as AdminRole | '')}
             >
               <option value="">请选择类型</option>
-              <option value="SUPER_ADMIN" disabled={superAdminCount >= 5}>超级管理员</option>
-              <option value="OPERATOR_ADMIN">操作管理员</option>
+              <option value="ADMIN" disabled={adminCount >= 5}>管理员</option>
+              <option value="OPERATOR">操作员</option>
             </select>
             <input
               className="form-input"
@@ -201,7 +201,7 @@ export default function AdminList() {
               </td>
               <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.user_id}</td>
               <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.admin_address || admin.admin_pubkey}</td>
-              <td>{admin.role === 'SUPER_ADMIN' ? '超级管理员' : '操作管理员'}</td>
+              <td>{admin.role === 'ADMIN' ? '管理员' : '操作员'}</td>
               <td>
                 <div className="admin-table__actions">
                   {editingUserId === admin.user_id ? (

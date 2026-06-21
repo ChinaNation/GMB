@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 从 /Users/rhett/Documents 下的 china_*.txt 提取“公钥:”行，
-按顺序回填到 citizenchain/runtime/primitives/china/*.rs 的 duoqian_admins 字段。
+按顺序回填到 citizenchain/runtime/primitives/china/*.rs 的 admins 字段。
 
 默认 dry-run，不改文件；加 --apply 才真正写入。
 """
@@ -37,7 +37,7 @@ FILES = [
         txt_path=DOCS_DIR / "china_zf.txt",
         rs_path=CHINA_DIR / "china_zf.rs",
         struct_name="ChinaZf",
-        field_name="duoqian_admins",
+        field_name="admins",
         admins_per_institution=5,
     ),
     FileConfig(
@@ -45,7 +45,7 @@ FILES = [
         txt_path=DOCS_DIR / "china_lf.txt",
         rs_path=CHINA_DIR / "china_lf.rs",
         struct_name="ChinaLf",
-        field_name="duoqian_admins",
+        field_name="admins",
         admins_per_institution=5,
     ),
     FileConfig(
@@ -53,7 +53,7 @@ FILES = [
         txt_path=DOCS_DIR / "china_jc.txt",
         rs_path=CHINA_DIR / "china_jc.rs",
         struct_name="ChinaJc",
-        field_name="duoqian_admins",
+        field_name="admins",
         admins_per_institution=5,
     ),
     FileConfig(
@@ -61,7 +61,7 @@ FILES = [
         txt_path=DOCS_DIR / "china_sf.txt",
         rs_path=CHINA_DIR / "china_sf.rs",
         struct_name="ChinaSf",
-        field_name="duoqian_admins",
+        field_name="admins",
         admins_per_institution=5,
     ),
 ]

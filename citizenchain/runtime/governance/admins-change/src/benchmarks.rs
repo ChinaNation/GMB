@@ -21,7 +21,7 @@ fn prc_institution<T: Config>() -> T::AccountId {
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
+    decode_account::<T>(CHINA_CB[1].admins[index])
 }
 
 fn last_proposal_id<T: Config>() -> u64 {
@@ -43,8 +43,8 @@ mod benchmarks {
         let threshold = votingengine::types::fixed_governance_pass_threshold(ORG_PRC).unwrap_or(2);
         let mut stale_admins = account.admins.clone();
         stale_admins[1] = stale_new_admin;
-        let mut new_admins = account.admins;
-        new_admins[1] = new_admin;
+        let mut admins = account.admins;
+        admins[1] = new_admin;
 
         // 先发一个"陈旧"提案,让它自然超时被终结,验证新提案不会冲突。
         assert!(AdminsChange::<T>::propose_admin_set_change(
@@ -73,7 +73,7 @@ mod benchmarks {
             RawOrigin::Signed(proposer),
             ORG_PRC,
             institution,
-            new_admins,
+            admins,
             threshold,
         );
 

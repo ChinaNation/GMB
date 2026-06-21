@@ -425,7 +425,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。机构账户提案的实际 org 由 `InstitutionQuery::lookup_admin_org(account)` 返回，必须是 `ORG_PUP / ORG_OTH`，传 `ORG_REN` 会被 `InstitutionOrgMismatch` 拒绝。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。机构账户提案的实际 org 由 `InstitutionQuery::lookup_org(account)` 返回，必须是 `ORG_PUP / ORG_OTH`，传 `ORG_REN` 会被 `InstitutionOrgMismatch` 拒绝。
 
 ## 11. Weight 估算
 

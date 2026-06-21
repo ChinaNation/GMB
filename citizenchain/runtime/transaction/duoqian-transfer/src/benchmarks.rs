@@ -26,7 +26,7 @@ fn prc_institution<T: Config>() -> T::AccountId {
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
+    decode_account::<T>(CHINA_CB[1].admins[index])
 }
 
 fn beneficiary_account<T: Config>() -> T::AccountId {

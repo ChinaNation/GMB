@@ -104,7 +104,7 @@
 
 ## 3. china/ 目录规则
 - 每个机构文件必须在 `china/mod.rs` 中显式声明，避免目录中存在未编译的残留文件。
-- 多签管理员字段统一命名 `duoqian_admins`，不允许 `admins` 变体。
+- 多签管理员字段统一命名 `admins`，不允许 `admins` 变体。
 - `china_zb.rs` 中的 277 个保留地址由 `organization-manage` 模块在转账时校验，防止抢注机构地址。
 
 ---

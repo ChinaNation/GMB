@@ -178,9 +178,9 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
 
 状态规则：
 
-- CPMS 从每年 UTC 1 月 1 日起允许超级管理员导出上一年度更新数据；若存在多年未导出，按最早未导出年度依次补导。
+- CPMS 从每年 UTC 1 月 1 日起允许管理员导出上一年度更新数据；若存在多年未导出，按最早未导出年度依次补导。
 - 导出记录按 `export_year` 表示所属年度；`citizen_binding_records` 是导出时 CPMS 当前仍有钱包绑定的档案快照，`binding_release_records` 只包含该年度内硬删除释放时间落入范围的档案号释放记录。
-- UTC 1 月 11 日起，如果存在超过 1 月 10 日仍未导出的年度报告，CPMS 锁定操作管理员登录和操作，超级管理员仍可登录补导。
+- UTC 1 月 11 日起，如果存在超过 1 月 10 日仍未导出的年度报告，CPMS 锁定操作员登录和操作，管理员仍可登录补导。
 - `citizen_status=NORMAL` 表示正常；只有 `voting_eligible=true` 的记录允许保留在 SFID 公民库。
 - `citizen_status=REVOKED` 表示注销；此时 `voting_eligible` 必须为 `false`。
 - CPMS 软删除档案就是注销，用 `citizen_binding_records` 中的 `citizen_status=REVOKED / voting_eligible=false` 通知 SFID 删除该档案号对应的本地公民记录。

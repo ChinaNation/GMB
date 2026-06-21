@@ -219,10 +219,12 @@ pub fn fetch_institution_registration_info(
     }
     if data.credential.register_nonce.is_empty()
         || data.credential.signature.is_empty()
-        || data.credential.province_name.is_empty()
-        || data.credential.signer_admin_pubkey.is_empty()
+        || data.credential.issuer_sfid_number.is_empty()
+        || data.credential.issuer_main_account.is_empty()
+        || data.credential.signer_pubkey.is_empty()
+        || data.credential.scope_province_name.is_empty()
     {
-        return Err("SFID 未返回完整机构注册凭证,请确认省级签名密钥已激活".to_string());
+        return Err("SFID 未返回完整机构注册凭证,请确认签发机构管理员已激活".to_string());
     }
     Ok(data)
 }

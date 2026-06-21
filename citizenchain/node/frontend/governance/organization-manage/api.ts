@@ -39,8 +39,11 @@ export const organizationManageApi = {
     threshold: number;
     registerNonce: string;
     signatureHex: string;
-    signingProvinceName: string;
-    signerAdminPubkey: string;
+    issuerSfidNumber: string;
+    issuerMainAccount: string;
+    signerPubkey: string;
+    scopeProvinceName: string;
+    scopeCityName: string;
   }) =>
     invoke<VoteSignRequestResult>('build_propose_create_institution_request', {
       pubkeyHex: params.pubkeyHex,
@@ -52,8 +55,11 @@ export const organizationManageApi = {
       threshold: params.threshold,
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
-      signingProvinceName: params.signingProvinceName,
-      signerAdminPubkey: params.signerAdminPubkey,
+      issuerSfidNumber: params.issuerSfidNumber,
+      issuerMainAccount: params.issuerMainAccount,
+      signerPubkey: params.signerPubkey,
+      scopeProvinceName: params.scopeProvinceName,
+      scopeCityName: params.scopeCityName,
     }),
 
   submitProposeCreateInstitution: (params: {
@@ -68,8 +74,11 @@ export const organizationManageApi = {
     threshold: number;
     registerNonce: string;
     signatureHex: string;
-    signingProvinceName: string;
-    signerAdminPubkey: string;
+    issuerSfidNumber: string;
+    issuerMainAccount: string;
+    signerPubkey: string;
+    scopeProvinceName: string;
+    scopeCityName: string;
     signNonce: number;
     signBlockNumber: number;
     responseJson: string;
@@ -86,8 +95,11 @@ export const organizationManageApi = {
       threshold: params.threshold,
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
-      signingProvinceName: params.signingProvinceName,
-      signerAdminPubkey: params.signerAdminPubkey,
+      issuerSfidNumber: params.issuerSfidNumber,
+      issuerMainAccount: params.issuerMainAccount,
+      signerPubkey: params.signerPubkey,
+      scopeProvinceName: params.scopeProvinceName,
+      scopeCityName: params.scopeCityName,
       signNonce: params.signNonce,
       signBlockNumber: params.signBlockNumber,
       responseJson: params.responseJson,

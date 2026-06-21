@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-将 organization-manage 从一机构一套管理员破坏式改为每个机构账户独立 InstitutionAccount=0x05 管理员主体；删除机构创建 admin_count/threshold 旧输入；联动 duoqian-transfer、wuminapp、wumin 编解码；完成文档、注释、残留清理，且不修改 spec_version。
+将 organization-manage 从一机构一套管理员破坏式改为每个机构账户独立 InstitutionAccount=0x05 管理员主体；删除机构创建 admins_len/threshold 旧输入；联动 duoqian-transfer、wuminapp、wumin 编解码；完成文档、注释、残留清理，且不修改 spec_version。
 
 ## 必读上下文
 

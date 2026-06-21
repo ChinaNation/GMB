@@ -313,7 +313,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
               SignDisplayField(
                   key: 'account_name', label: '名称', value: nameText),
               SignDisplayField(
-                  key: 'admin_count',
+                  key: 'admins_len',
                   label: '管理员数量',
                   value: _adminPubkeys.length.toString()),
               SignDisplayField(
@@ -383,7 +383,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         noVotes: 0,
         snapshot: {
           'name': nameText,
-          'admin_count': _adminPubkeys.length,
+          'admins_len': _adminPubkeys.length,
           'regular_threshold': regularThreshold,
           'create_threshold': createThreshold,
           'amount_fen': amountFen.toString(),

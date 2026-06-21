@@ -112,13 +112,13 @@ impl
         nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
         signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
         province_name: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        signer_pubkey: &[u8; 32],
     ) -> bool {
         !sfid_full_name.is_empty()
             && !account_names.is_empty()
             && !nonce.is_empty()
             && !province_name.is_empty()
-            && signer_admin_pubkey != &[0u8; 32]
+            && signer_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
 }
@@ -138,7 +138,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _nonce: &[u8],
         _signature: &[u8],
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -158,7 +158,7 @@ impl
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -204,12 +204,12 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_REN | ORG_PUP | ORG_OTH => {
                 admins_change::Pallet::<Test>::is_active_account_admin(org, institution, who)
@@ -226,23 +226,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| {
-                    n.duoqian_admins
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             ORG_REN | ORG_PUP | ORG_OTH => {
                 admins_change::Pallet::<Test>::active_account_admins(org, institution)
             }
@@ -253,18 +241,18 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
 pub struct TestInternalAdminCountProvider;
 impl votingengine::InternalAdminCountProvider<AccountId32> for TestInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: AccountId32) -> Option<u32> {
+    fn admins_len(org: u8, institution: AccountId32) -> Option<u32> {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
+                .and_then(|n| u32::try_from(n.admins.len()).ok()),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
-                .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
+                .and_then(|n| u32::try_from(n.admins.len()).ok()),
             ORG_REN | ORG_PUP | ORG_OTH => {
-                admins_change::Pallet::<Test>::active_account_admin_count(org, institution)
+                admins_change::Pallet::<Test>::active_account_admins_len(org, institution)
             }
             _ => None,
         }
@@ -521,10 +509,10 @@ fn insert_active_registered_institution_account(
             sfid_full_name: test_account_name(),
             main_account: account.clone(),
             fee_account: AccountId32::new([0x67; 32]),
-            admin_org: ORG_OTH,
-            admin_count: institution_admins.len() as u32,
+            org: ORG_OTH,
+            admins_len: institution_admins.len() as u32,
             threshold: 2,
-            duoqian_admins: institution_admins,
+            admins: institution_admins,
             creator: registered_institution_admin(0),
             created_at: 1,
             status: organization_manage::InstitutionLifecycleStatus::Active,

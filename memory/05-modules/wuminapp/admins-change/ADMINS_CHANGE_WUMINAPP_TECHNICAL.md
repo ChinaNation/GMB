@@ -82,7 +82,7 @@ wuminapp/test/governance/admins-change/
 当前 `AdminsChange::propose_admin_set_change` 载荷固定为：
 
 ```text
-[12][0][org:u8][account_id:48][new_admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
+[12][0][org:u8][account_id:48][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
 ```
 
 规则：
@@ -90,9 +90,9 @@ wuminapp/test/governance/admins-change/
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
 - 内置治理机构不是创建/注册对象，wuminapp 只展示；只有进入“换管理员”提案时才构造管理员更换交易。
 - 内置治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6。
-- 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admin_count && threshold <= admin_count`。
+- 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 阈值真源不在 `AdminsChange::AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
-- QR display 必须与冷钱包 decoder 字段逐字一致：`org / subject / new_admins / new_threshold`。
+- QR display 必须与冷钱包 decoder 字段逐字一致：`org / subject / admins / new_threshold`。
 
 ## 管理员激活
 

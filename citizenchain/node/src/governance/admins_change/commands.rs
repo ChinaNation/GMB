@@ -4,7 +4,7 @@ use crate::{governance::signing::VoteSignRequestResult, home};
 
 use super::{
     account_id, signing, storage,
-    types::{is_dynamic_admin_org, is_governance_org, is_valid_org, AdminAccountState},
+    types::{is_dynamic_org, is_governance_org, is_valid_org, AdminAccountState},
 };
 
 fn resolve_account_state(
@@ -42,7 +42,7 @@ fn validate_account_lookup(
         if !is_valid_org(org) {
             return Err("org 必须在 0..=5 范围内".to_string());
         }
-        if is_dynamic_admin_org(org) && !has_account_id {
+        if is_dynamic_org(org) && !has_account_id {
             return Err("个人多签或机构账户管理员更换必须提供 accountHex".to_string());
         }
         if is_governance_org(org) && !has_account_id && !has_sfid {
@@ -113,7 +113,7 @@ pub async fn build_admin_set_change_request(
     sfid_number: Option<String>,
     account_hex: Option<String>,
     expected_org: Option<u8>,
-    new_admins: Vec<String>,
+    admins: Vec<String>,
 ) -> Result<VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
@@ -121,7 +121,7 @@ pub async fn build_admin_set_change_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let state = resolve_account_state(sfid_number, account_hex, expected_org)?;
-        signing::build_admin_set_change_sign_request(&state, &pubkey_hex, &new_admins)
+        signing::build_admin_set_change_sign_request(&state, &pubkey_hex, &admins)
     })
     .await
     .map_err(|e| format!("build admin set change request task failed: {e}"))?
@@ -137,7 +137,7 @@ pub async fn submit_admin_set_change(
     sfid_number: Option<String>,
     account_hex: Option<String>,
     expected_org: Option<u8>,
-    new_admins: Vec<String>,
+    admins: Vec<String>,
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: String,
@@ -153,7 +153,7 @@ pub async fn submit_admin_set_change(
             &request_id,
             &expected_pubkey_hex,
             &expected_payload_hash,
-            &new_admins,
+            &admins,
             sign_nonce,
             sign_block_number,
             &response_json,
