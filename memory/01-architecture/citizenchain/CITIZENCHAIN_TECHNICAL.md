@@ -193,7 +193,13 @@ citizenchain/
 - `node/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
 - 构建脚本、CI/CD、前端界面、说明文档。
 
-### 11.3 特殊情况
+### 11.3 CI 发布边界
+- `citizenchain-wasm.yml` 的 push 自动 CI 只编译当前源码 WASM，不查询链上版本、不读取 SSH Secret、不连接服务器；手动 `Run workflow` 才允许使用 `GMB_SSH_KEY` 查询链上 `spec_version` 并在 CI 工作区临时提升构建版本。
+- `citizenchain.yml` 的 push 自动 CI 只做桌面端打包检查和本次 run artifact 上传，不读取 Tauri updater 签名私钥、不发布 GitHub Release、不部署服务器。
+- 只有手动 `Run workflow` 才允许使用 `GMB_TOP_KEY / GMB_TOP_PUBKEY` 生成 updater 签名产物、发布 `citizenchain-latest.json`、发布 GitHub Release 和使用 `GMB_SSH_KEY` 滚动部署 Linux 服务器。
+- CitizenChain workflow 不得恢复系统专属 SSH secret 或复用移动端签名 secret。
+
+### 11.4 特殊情况
 - `node/src/chain_spec.rs` 变更通常不是“现有链 runtime 升级”，而是 chain spec / bootnodes / properties / 启动配置变更。
 - `runtime/src/genesis_config_presets.rs` 变更若影响创世状态，通常对应新链或重建链，不等于自动给已运行链打补丁。
 

@@ -160,9 +160,9 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
     }
 }
 
-pub struct TestSfidEligibility;
-impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestSfidEligibility
+pub struct TestCidEligibility;
+impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    for TestCidEligibility
 {
     fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
@@ -174,7 +174,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -197,7 +197,7 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -233,7 +233,7 @@ impl votingengine::Config for Test {
     type MaxCleanupQueueBucketLimit = ConstU32<50>;
     type MaxCleanupScheduleOffset = ConstU32<100>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type SfidEligibility = TestSfidEligibility;
+    type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();

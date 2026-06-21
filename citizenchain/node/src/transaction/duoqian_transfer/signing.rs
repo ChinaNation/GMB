@@ -40,13 +40,13 @@ pub fn build_propose_transfer_sign_request(
 
     // node 端支持内置治理机构和注册机构多签账户，明确拒绝个人多签。
     // 内置治理机构可校验“收款地址不能等于主账户”；注册机构账户使用
-    // `duoqian:<account_hex>` 传入机构多签 AccountId。
+    // `institution-account:<account_hex>` 传入机构多签 AccountId。
     let entry = governance::registry::find_institution(cid_number);
     if let Some(entry) = entry {
-        let institution_duoqian = hex::decode(entry.main_account_hex())
-            .map_err(|e| format!("主账户地址解码失败: {e}"))?;
+        let institution_duoqian =
+            hex::decode(entry.main_account_hex()).map_err(|e| format!("主账户解码失败: {e}"))?;
         if beneficiary_bytes[..] == institution_duoqian[..] {
-            return Err("收款地址不能为本机构多签地址".to_string());
+            return Err("收款地址不能等于本机构多签账户".to_string());
         }
     }
 
@@ -58,7 +58,7 @@ pub fn build_propose_transfer_sign_request(
         remark_bytes,
     )?;
 
-    let institution_label = if let Some(hex) = cid_number.strip_prefix("duoqian:") {
+    let institution_label = if let Some(hex) = cid_number.strip_prefix("institution-account:") {
         let short = if hex.len() > 14 {
             format!("{}...{}", &hex[..8], &hex[hex.len() - 6..])
         } else {
@@ -234,10 +234,7 @@ pub(crate) fn build_transfer_call_data(
 }
 
 /// 手续费划转 call_data，供签名构造和签名回执提交复用。
-pub(crate) fn build_sweep_call_data(
-    cid_number: &str,
-    amount_yuan: f64,
-) -> Result<Vec<u8>, String> {
+pub(crate) fn build_sweep_call_data(cid_number: &str, amount_yuan: f64) -> Result<Vec<u8>, String> {
     if amount_yuan <= 0.0 {
         return Err("划转金额必须大于 0".to_string());
     }

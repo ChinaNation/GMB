@@ -136,8 +136,8 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     }
 }
 
-/// 中文注释：公民总人口快照验签接口（由 runtime 对接 SFID 系统）。
-/// 签发身份统一为 `issuer_sfid_number + issuer_main_account + signer_pubkey`;
+/// 中文注释：公民总人口快照验签接口（由 runtime 对接 CID 系统）。
+/// 签发身份统一为 `issuer_cid_number + issuer_main_account + signer_pubkey`;
 /// runtime verifier 必须确认 signer 属于签发机构 admins 后再验签。
 pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
     fn verify_population_snapshot(
@@ -145,7 +145,7 @@ pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
         eligible_total: u64,
         nonce: &Nonce,
         signature: &Signature,
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -159,7 +159,7 @@ impl<AccountId, Nonce, Signature> PopulationSnapshotVerifier<AccountId, Nonce, S
         _eligible_total: u64,
         _nonce: &Nonce,
         _signature: &Signature,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -709,9 +709,9 @@ impl JointCleanupHandler for () {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// SFID 资格 / 凭证 trait
+// CID 资格 / 凭证 trait
 // votingengine::Config 用作 bound,joint-vote pallet 在 jointreferendum 阶段
-// 调用以判定 SFID 持有者投票资格并消耗一次性凭证。
+// 调用以判定 CID 持有者投票资格并消耗一次性凭证。
 // ──────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -732,7 +732,7 @@ impl VoteCredentialCleanup {
 }
 
 /// 中文注释：公民投票资格实时验签。签发身份统一从机构 admins 校验。
-pub trait SfidEligibility<AccountId, Hash> {
+pub trait CidEligibility<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
         binding_id: &Hash,
@@ -740,7 +740,7 @@ pub trait SfidEligibility<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -758,7 +758,7 @@ pub trait SfidEligibility<AccountId, Hash> {
     }
 }
 
-impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
+impl<AccountId, Hash> CidEligibility<AccountId, Hash> for () {
     fn is_eligible(_binding_id: &Hash, _who: &AccountId) -> bool {
         false
     }
@@ -769,7 +769,7 @@ impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],

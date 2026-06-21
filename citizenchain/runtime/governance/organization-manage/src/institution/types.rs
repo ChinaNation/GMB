@@ -3,9 +3,9 @@ use frame_support::pallet_prelude::DecodeWithMemTracking;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-/// SFID 机构登记反向索引项：account → (sfid_number, account_name)。
+/// CID 机构登记反向索引项：account → (cid_number, account_name)。
 ///
-/// 由 `register_sfid_institution` extrinsic 写入,后续创建/查询机构多签时
+/// 由 `register_cid_institution` extrinsic 写入,后续创建/查询机构多签时
 /// 用作反向校验。
 #[derive(
     Encode,
@@ -18,8 +18,8 @@ use sp_runtime::RuntimeDebug;
     PartialEq,
     Eq,
 )]
-pub struct RegisteredInstitution<SfidNumber, AccountName> {
-    pub sfid_number: SfidNumber,
+pub struct RegisteredInstitution<CidNumber, AccountName> {
+    pub cid_number: CidNumber,
     pub account_name: AccountName,
 }
 
@@ -45,7 +45,7 @@ pub enum InstitutionLifecycleStatus {
     Closed,
 }
 
-/// 机构信息。管理员更换账户由主账户地址派生,机构本身只保存归属与展示信息。
+/// 机构信息。管理员更换账户由主账户派生,机构本身只保存归属与展示信息。
 #[derive(
     Encode,
     Decode,
@@ -59,7 +59,7 @@ pub enum InstitutionLifecycleStatus {
 )]
 #[scale_info(skip_type_params(AdminList))]
 pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName> {
-    pub sfid_full_name: AccountName,
+    pub cid_full_name: AccountName,
     pub main_account: AccountId,
     pub fee_account: AccountId,
     /// 管理员更换使用的 org：机构账户只能是 ORG_PUP 或 ORG_OTH。
@@ -151,15 +151,15 @@ pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
 )]
 #[scale_info(skip_type_params(AdminList, AccountList))]
 pub struct CreateInstitutionAction<
-    SfidNumber,
+    CidNumber,
     AccountName,
     AccountId,
     Balance,
     AdminList,
     AccountList,
 > {
-    pub sfid_number: SfidNumber,
-    pub sfid_full_name: AccountName,
+    pub cid_number: CidNumber,
+    pub cid_full_name: AccountName,
     pub main_account: AccountId,
     pub fee_account: AccountId,
     pub proposer: AccountId,

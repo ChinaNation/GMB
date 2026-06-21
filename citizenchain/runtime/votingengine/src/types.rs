@@ -60,7 +60,7 @@ pub const STAGE_INTERNAL: u8 = 0;
 /// 联合投票 pallet 的内部投票阶段(jointinternal):国储会/省储会/省储行管理员加权投票。
 pub const STAGE_JOINT: u8 = 1;
 /// 联合投票 pallet 的联合公投阶段(jointreferendum):内部投票阶段未全票通过或超时进入,
-/// 由 SFID 持有者按 >50% 严格多数投票。
+/// 由 CID 持有者按 >50% 严格多数投票。
 ///
 /// 注意:这是联合投票的第二阶段,与独立的 citizen-vote pallet(pallet_index=24)
 /// 是两个不同概念。citizen-vote pallet 用于公民选举/公投等多模式投票(Phase 3 接业务)。

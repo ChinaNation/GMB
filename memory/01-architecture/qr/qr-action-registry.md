@@ -23,7 +23,7 @@
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
 | `propose_create_personal` | 0 | `propose_create` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | citizenapp |
-| `propose_close_personal` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | citizenapp |
+| `propose_close_personal` | 1 | `propose_close` | `account`, `beneficiary` | citizenapp |
 | `cleanup_rejected_personal_proposal` | 2 | `cleanup_rejected_proposal` | `proposal_id` | citizenapp |
 
 ### 1.3 ResolutionIssuance(pallet_index = 8)
@@ -79,7 +79,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_close_institution` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | citizenapp |
+| `propose_close_institution` | 1 | `propose_close` | `account`, `beneficiary` | citizenapp |
 | `cleanup_rejected_proposal` | 4 | `cleanup_rejected_proposal` | `proposal_id` | citizenapp |
 | `propose_create_institution` | 5 | `propose_create_institution` | `cid_number`, `cid_full_name`, `admins_len`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_pubkey` | node_ui, citizenapp |
 
@@ -136,7 +136,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | key | 类型 | 渲染格式 |
 |---|---|---|
-| `to` / `beneficiary` / `duoqian_account` / `old_admin` / `new_admin` / `bank_main` / `new_bank` | `AccountId32` | SS58,prefix = 2027 |
+| `to` / `beneficiary` / `account` / `old_admin` / `new_admin` / `bank_main` / `new_bank` | `AccountId32` | SS58,prefix = 2027 |
 | `amount_yuan` / `total_amount_yuan` / `amount_<account_name>` | `Balance` u128,单位分 | `"X.XX GMB"`;整数位可带千分位 |
 | `proposal_id` / `eligible_total` / `allocation_count` / `rpc_port` / `new_port` | 整数 | 十进制字符串 |
 | `approve` | bool | `"true"` / `"false"` |

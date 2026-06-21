@@ -124,12 +124,8 @@ pub async fn submit_register_clearing_bank(
         return Err("节点未运行,无法提交交易".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = super::signing::build_register_call_data(
-            &cid_number,
-            &peer_id,
-            &rpc_domain,
-            rpc_port,
-        )?;
+        let call_data =
+            super::signing::build_register_call_data(&cid_number, &peer_id, &rpc_domain, rpc_port)?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

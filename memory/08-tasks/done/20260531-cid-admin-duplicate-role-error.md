@@ -21,7 +21,7 @@
 ## 完成内容
 
 - 后端新增统一管理员公钥查重 helper，新增联邦/市管理员时按已存在角色返回冲突。
-- 后端新增 `CID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` 与 `CID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN` 稳定错误码。
+- 后端新增 `CID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` 与 `CID_ADMIN_PUBKEY_EXISTS_AS_ADMIN` 稳定错误码。
 - 前端新增管理员公钥重复错误码文案转换，新增联邦/市管理员失败时显示明确中文原因。
 - 文档已补充管理员公钥全局唯一和角色级重复错误码规则。
 - 已清理旧的省级/市管理员重复账号英文笼统报错残留。

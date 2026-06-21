@@ -221,7 +221,7 @@ class DuoqianTransferService {
   /// 查询转出主账户的 finalized 可用余额（元）。
   ///
   /// 中文注释：治理机构按主账户、费用账户、安全基金、永久质押分别建模，转账提案固定从主账户支出；
-  /// 个人/注册多签账户通过 InstitutionInfo.mainAccount 继续映射到账户地址。
+  /// 个人/注册多签账户通过 InstitutionInfo.mainAccount 继续映射到账户。
   Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
     return _rpc.fetchFinalizedBalance(institution.mainAccount);
   }
@@ -647,7 +647,7 @@ class DuoqianTransferService {
         if (orgManageDetail is org_models.CloseDuoqianProposalInfo) {
           final detail = CloseDuoqianProposalInfo(
             proposalId: orgManageDetail.proposalId,
-            duoqianAccount: orgManageDetail.duoqianAccount,
+            account: orgManageDetail.account,
             beneficiary: orgManageDetail.beneficiary,
             proposer: orgManageDetail.proposer,
             status: orgManageDetail.status,

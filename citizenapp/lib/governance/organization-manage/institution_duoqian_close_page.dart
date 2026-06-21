@@ -50,13 +50,13 @@ class _InstitutionDuoqianClosePageState
   String? _chainProgressError;
 
   late WalletProfile _selectedWallet;
-  late String _duoqianSs58;
+  late String _accountSs58;
 
   @override
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _duoqianSs58 = _hexToSs58(widget.institution.duoqianAccount);
+    _accountSs58 = _hexToSs58(widget.institution.account);
     _fetchBalance();
   }
 
@@ -68,7 +68,7 @@ class _InstitutionDuoqianClosePageState
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.duoqianAccount);
+    final local = await store.read(widget.institution.account);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -77,11 +77,11 @@ class _InstitutionDuoqianClosePageState
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance = await ChainRpc()
-          .fetchFinalizedBalance(widget.institution.duoqianAccount);
+      final balance =
+          await ChainRpc().fetchFinalizedBalance(widget.institution.account);
       try {
         await store.put(
-          accountHex: widget.institution.duoqianAccount,
+          accountHex: widget.institution.account,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -112,9 +112,9 @@ class _InstitutionDuoqianClosePageState
       return false;
     }
 
-    // 受益人不能是机构多签地址本身
-    if (address == _duoqianSs58) {
-      setState(() => _addressError = '受益人不能与机构多签地址相同');
+    // 受益人不能是机构多签账户本身
+    if (address == _accountSs58) {
+      setState(() => _addressError = '受益人不能与机构多签账户相同');
       return false;
     }
 
@@ -175,13 +175,13 @@ class _InstitutionDuoqianClosePageState
             fields: [
               // 链端 call 名仍为 propose_close,QR action 为
               // propose_close_institution,fields 按 Registry =
-              // (duoqian_account, beneficiary)。"当前余额" 属辅助展示,
+              // (account, beneficiary)。"当前余额" 属辅助展示,
               // 页面已独立显示,不塞 display.fields 避免对齐失败
               // (2026-04-22 两色识别整改)。
               SignDisplayField(
-                key: 'duoqian_account',
-                label: '机构多签地址',
-                value: _duoqianSs58,
+                key: 'account',
+                label: '机构多签账户',
+                value: _accountSs58,
               ),
               SignDisplayField(
                   key: 'beneficiary', label: '受益人', value: beneficiary),
@@ -204,7 +204,7 @@ class _InstitutionDuoqianClosePageState
       }
 
       final result = await _manageService.submitProposeCloseInstitution(
-        duoqianAccount: widget.institution.duoqianAccount,
+        account: widget.institution.account,
         beneficiaryAddress: beneficiary,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
@@ -288,8 +288,8 @@ class _InstitutionDuoqianClosePageState
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // 机构多签地址（只读）
-          _buildSectionTitle('机构多签地址'),
+          // 机构多签账户（只读）
+          _buildSectionTitle('机构多签账户'),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
@@ -298,7 +298,7 @@ class _InstitutionDuoqianClosePageState
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              _duoqianSs58,
+              _accountSs58,
               style: const TextStyle(
                 fontSize: 13,
                 fontFamily: 'monospace',

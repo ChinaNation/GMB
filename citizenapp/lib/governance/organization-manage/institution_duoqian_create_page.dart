@@ -83,8 +83,7 @@ class _InstitutionDuoqianCreatePageState
     }
     _selectedWallet = widget.adminWallets.first;
     _syncCreatorAdmin(widget.adminWallets.first);
-    debugPrint(
-        '[DuoqianCreate-Diag] after sync: _admins=${_admins.length} '
+    debugPrint('[DuoqianCreate-Diag] after sync: _admins=${_admins.length} '
         'creator=${_creatorPubkey?.substring(0, 8)}...');
   }
 
@@ -250,9 +249,7 @@ class _InstitutionDuoqianCreatePageState
     }
     final minThreshold = (_admins.length ~/ 2) + 1;
     final current = int.tryParse(_thresholdController.text.trim());
-    if (current == null ||
-        current < minThreshold ||
-        current > _admins.length) {
+    if (current == null || current < minThreshold || current > _admins.length) {
       _thresholdController.text = minThreshold.toString();
     }
   }
@@ -390,9 +387,8 @@ class _InstitutionDuoqianCreatePageState
         return;
       }
 
-      final adminsBytes = _admins
-          .map((hex) => Uint8List.fromList(_hexDecode(hex)))
-          .toList();
+      final adminsBytes =
+          _admins.map((hex) => Uint8List.fromList(_hexDecode(hex))).toList();
 
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
@@ -511,7 +507,7 @@ class _InstitutionDuoqianCreatePageState
         // 中文注释：创建交易已入块并确认事件后，直接写入当前账户的本地 pending
         // 快照；列表返回时只精准刷新该账户，不再依赖全量 discovery 扫描。
         final entity = InstitutionEntity()
-          ..duoqianAccount = result.mainAccountHex
+          ..account = result.mainAccountHex
           ..cidNumber = registrationInfo.cidNumber
           ..adminAccountOrg = _defaultInstitutionOrg
           ..name = accounts.isEmpty
@@ -585,8 +581,7 @@ class _InstitutionDuoqianCreatePageState
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-        '[DuoqianCreate-Diag] build START: _admins=${_admins.length} '
+    debugPrint('[DuoqianCreate-Diag] build START: _admins=${_admins.length} '
         '_accounts=${_accounts.length} _checkingCid=$_checkingCid');
     return Scaffold(
       backgroundColor: Colors.white,

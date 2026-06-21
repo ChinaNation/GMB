@@ -24,8 +24,8 @@ import 'personal_proposal_history_service.dart';
 /// 关闭个人多签账户提案页面。
 ///
 /// 指定受益人地址后发起个人多签账户关闭提案。
-class PersonalDuoqianClosePage extends StatefulWidget {
-  const PersonalDuoqianClosePage({
+class PersonalAccountClosePage extends StatefulWidget {
+  const PersonalAccountClosePage({
     super.key,
     required this.institution,
     required this.adminWallets,
@@ -35,11 +35,11 @@ class PersonalDuoqianClosePage extends StatefulWidget {
   final List<WalletProfile> adminWallets;
 
   @override
-  State<PersonalDuoqianClosePage> createState() =>
-      _PersonalDuoqianClosePageState();
+  State<PersonalAccountClosePage> createState() =>
+      _PersonalAccountClosePageState();
 }
 
-class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
+class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
   final _beneficiaryController = TextEditingController();
   final _manageService = PersonalManageService();
 
@@ -51,13 +51,13 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
   String? _chainProgressError;
 
   late WalletProfile _selectedWallet;
-  late String _duoqianSs58;
+  late String _accountSs58;
 
   @override
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _duoqianSs58 = _hexToSs58(widget.institution.duoqianAccount);
+    _accountSs58 = _hexToSs58(widget.institution.account);
     _fetchBalance();
   }
 
@@ -69,7 +69,7 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.duoqianAccount);
+    final local = await store.read(widget.institution.account);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -78,11 +78,11 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance = await ChainRpc()
-          .fetchFinalizedBalance(widget.institution.duoqianAccount);
+      final balance =
+          await ChainRpc().fetchFinalizedBalance(widget.institution.account);
       try {
         await store.put(
-          accountHex: widget.institution.duoqianAccount,
+          accountHex: widget.institution.account,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -113,9 +113,9 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
       return false;
     }
 
-    // 受益人不能是多签地址本身
-    if (address == _duoqianSs58) {
-      setState(() => _addressError = '受益人不能与个人多签地址相同');
+    // 受益人不能是多签账户本身
+    if (address == _accountSs58) {
+      setState(() => _addressError = '受益人不能与个人多签账户相同');
       return false;
     }
 
@@ -177,11 +177,11 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
             fields: [
               // 链端 call 名仍为 propose_close,QR action 为
               // propose_close_personal,fields 按 Registry =
-              // (duoqian_account, beneficiary)。"当前余额" 属辅助展示,
+              // (account, beneficiary)。"当前余额" 属辅助展示,
               // 页面已独立显示,不塞 display.fields 避免对齐失败
               // (2026-04-22 两色识别整改)。
               SignDisplayField(
-                  key: 'duoqian_account', label: '个人多签地址', value: _duoqianSs58),
+                  key: 'account', label: '个人多签账户', value: _accountSs58),
               SignDisplayField(
                   key: 'beneficiary', label: '受益人', value: beneficiary),
             ],
@@ -207,16 +207,16 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
           await ProposalQueryService().fetchNextProposalId();
 
       final result = await _manageService.submitProposeClosePersonal(
-        duoqianAccount: widget.institution.duoqianAccount,
+        account: widget.institution.account,
         beneficiaryAddress: beneficiary,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
       );
 
-      // 写入 Isar `PersonalDuoqianProposalEntity`,详情页提案列表才能显示。
+      // 写入 Isar `PersonalAccountProposalEntity`,详情页提案列表才能显示。
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAddressHex: widget.institution.duoqianAccount,
+        personalAccountHex: widget.institution.account,
         proposalId: predictedProposalId,
         action: PersonalProposalAction.close,
         status: PersonalProposalStatus.voting,
@@ -305,8 +305,8 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // 个人多签地址（只读）
-          _buildSectionTitle('个人多签地址'),
+          // 个人多签账户（只读）
+          _buildSectionTitle('个人多签账户'),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
@@ -315,7 +315,7 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              _duoqianSs58,
+              _accountSs58,
               style: const TextStyle(
                 fontSize: 13,
                 fontFamily: 'monospace',

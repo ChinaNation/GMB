@@ -136,7 +136,7 @@ class ProposalContextResolver {
     late final AdminAccountIdentity identity;
     try {
       identity = AdminAccountIdentity.fromInstitution(institution);
-      if (institution.isRegisteredDuoqian) {
+      if (institution.isRegisteredAccount) {
         final threshold = await _adminService.fetchThreshold(
           identity,
         );
@@ -216,7 +216,7 @@ class ProposalContextResolver {
       late final AdminAccountIdentity identity;
       try {
         identity = AdminAccountIdentity.fromInstitution(institution);
-        if (institution.isRegisteredDuoqian) {
+        if (institution.isRegisteredAccount) {
           final threshold = await _adminService.fetchThreshold(
             identity,
           );

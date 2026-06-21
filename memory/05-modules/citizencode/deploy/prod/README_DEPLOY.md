@@ -93,27 +93,12 @@ server {
 }
 ```
 
-### GitHub 侧需要配置
-新增 workflow：
-- `.github/workflows/cid-deploy.yml`
+### GitHub 侧边界
 
-必须配置的 GitHub Secrets：
-- `CID_DEPLOY_USER`：部署服务器 SSH 用户名
-- `CID_DEPLOY_SSH_KEY`：该用户私钥
-
-可选 Secrets：
-- `CID_DEPLOY_KNOWN_HOSTS`：已固定的服务器 host key；不配时 workflow 会执行 `ssh-keyscan`
-
-可选 GitHub Variables（不配时使用默认值）：
-- `CID_DEPLOY_HOST`：默认 `147.224.14.117`
-- `CID_DEPLOY_DOMAIN`：默认 `cid.crcfrcn.com`
-- `CID_DEPLOY_PORT`：默认 `22`
-- `CID_DEPLOY_APP_HOME`：默认 `/opt/citizencode`
-- `CID_DEPLOY_FRONTEND_ROOT`：默认 `/var/www/cid`
-- `CID_DEPLOY_SERVICE`：默认 `citizencode-backend`
-- `CID_DEPLOY_ENV_FILE`：默认 `/etc/citizencode/citizencode.env`
-- `CID_DEPLOY_WEB_SERVICE`：默认 `nginx`
-- `CID_DEPLOY_HEALTHCHECK_URL`：默认 `http://127.0.0.1:8899/api/v1/health`
+- 当前仓库没有独立 CID 部署 workflow。
+- `.github/workflows/citizencode-ci.yml` 的 push / pull_request 自动 CI 只执行编译、测试和前端构建,不得连接服务器或读取部署 SSH 密钥。
+- 手动 `Run workflow` 只负责构建并上传 `citizencode.deb`;服务器部署由运维在目标服务器侧执行。
+- 如后续恢复 GitHub Actions 部署,必须新建手动 `workflow_dispatch` 专用 job,不得挂在 push 自动 CI 上。
 - `CID_FRONTEND_API_BASE_URL`：默认 `/api`
 
 ### Passkey 生产域名约束

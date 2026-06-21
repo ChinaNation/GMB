@@ -22,18 +22,18 @@ void main() {
     await WalletIsar.instance.resetForTest();
   });
 
-  const personalAddress = '11223344556677889900aabbccddeeff'
+  const personalAccount = '11223344556677889900aabbccddeeff'
       'ffeeddccbbaa00998877665544332211';
 
   test('无 entity → 返回 null', () async {
     final lookup = PersonalPendingCreateLookup();
-    expect(await lookup.findActiveCreate(personalAddress), isNull);
+    expect(await lookup.findActiveCreate(personalAccount), isNull);
   });
 
   test('仅有 executed/rejected entity → 不命中,返回 null', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 5,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.executed,
@@ -41,7 +41,7 @@ void main() {
       noVotes: 0,
     );
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 6,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.rejected,
@@ -50,13 +50,13 @@ void main() {
     );
 
     final lookup = PersonalPendingCreateLookup();
-    expect(await lookup.findActiveCreate(personalAddress), isNull);
+    expect(await lookup.findActiveCreate(personalAccount), isNull);
   });
 
   test('voting 状态的 create entity 命中,返回 proposalId', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 99,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -65,13 +65,13 @@ void main() {
     );
 
     final lookup = PersonalPendingCreateLookup();
-    expect(await lookup.findActiveCreate(personalAddress), 99);
+    expect(await lookup.findActiveCreate(personalAccount), 99);
   });
 
   test('voting 但 action != create(如 transfer)不命中', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 200,
       action: PersonalProposalAction.transfer,
       status: PersonalProposalStatus.voting,
@@ -80,15 +80,15 @@ void main() {
     );
 
     final lookup = PersonalPendingCreateLookup();
-    expect(await lookup.findActiveCreate(personalAddress), isNull);
+    expect(await lookup.findActiveCreate(personalAccount), isNull);
   });
 
-  test('其他多签地址的 entity 不命中(filter 按地址过滤)', () async {
+  test('其他多签账户的 entity 不命中(filter 按地址过滤)', () async {
     final service = PersonalProposalHistoryService();
     const otherAddress =
         'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
     await service.recordOrUpdate(
-      personalAddressHex: otherAddress,
+      personalAccountHex: otherAddress,
       proposalId: 77,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -97,7 +97,7 @@ void main() {
     );
 
     final lookup = PersonalPendingCreateLookup();
-    expect(await lookup.findActiveCreate(personalAddress), isNull);
+    expect(await lookup.findActiveCreate(personalAccount), isNull);
     expect(await lookup.findActiveCreate(otherAddress), 77);
   });
 }

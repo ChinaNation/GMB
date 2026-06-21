@@ -1,4 +1,4 @@
-// DUOQIAN 账户地址统一派生原语 —— 全 app 唯一入口(ADR-018 §九)。
+// DUOQIAN 账户统一派生原语 —— 全 app 唯一入口(ADR-018 §九)。
 //
 // 与 citizenchain `primitives::core_const` 单一权威源严格字节对齐:
 //   preimage = b"DUOQIAN"(7B) || op_tag(1B) || ss58.to_le_bytes()(2B) || payload
@@ -20,7 +20,7 @@ import 'reserved_account_names.dart';
 /// GMB 链 SS58 地址前缀(对齐 core_const::SS58_FORMAT)。
 const int kGmbSs58Prefix = 2027;
 
-// ── 地址派生 op_tag(0x00-0x0F),对齐 core_const.rs,不得复用 ──
+// ── 账户派生 op_tag(0x00-0x0F),对齐 core_const.rs,不得复用 ──
 /// 所有机构主账户 · payload = cid_number。
 const int kOpMain = 0x00;
 
@@ -45,7 +45,7 @@ const int kOpInstitution = 0x06;
 const String _domain = 'DUOQIAN';
 
 /// 派生 DUOQIAN account id(32 字节)。底层唯一实现,上层全部经此。
-Uint8List deriveDuoqianAccountId({
+Uint8List deriveAccountId({
   required int opTag,
   required List<int> payload,
   int ss58Prefix = kGmbSs58Prefix,
@@ -75,7 +75,7 @@ Uint8List deriveInstitutionMainAccountId(
   String cidNumber, {
   int ss58Prefix = kGmbSs58Prefix,
 }) =>
-    deriveDuoqianAccountId(
+    deriveAccountId(
       opTag: kOpMain,
       payload: utf8.encode(cidNumber),
       ss58Prefix: ss58Prefix,
@@ -86,7 +86,7 @@ Uint8List deriveInstitutionFeeAccountId(
   String cidNumber, {
   int ss58Prefix = kGmbSs58Prefix,
 }) =>
-    deriveDuoqianAccountId(
+    deriveAccountId(
       opTag: kOpFee,
       payload: utf8.encode(cidNumber),
       ss58Prefix: ss58Prefix,
@@ -107,7 +107,7 @@ Uint8List deriveInstitutionCustomAccountId(
   if (isForbiddenAccountName(accountName)) {
     throw ArgumentError('自定义账户名不得为受限保留名: $accountName');
   }
-  return deriveDuoqianAccountId(
+  return deriveAccountId(
     opTag: kOpInstitution,
     payload: <int>[...utf8.encode(cidNumber), ...utf8.encode(accountName)],
     ss58Prefix: ss58Prefix,
@@ -137,7 +137,7 @@ Uint8List deriveInstitutionAccountIdByName(
     ...utf8.encode(cidNumber),
     if (appendName) ...utf8.encode(accountName),
   ];
-  return deriveDuoqianAccountId(
+  return deriveAccountId(
     opTag: opTag,
     payload: payload,
     ss58Prefix: ss58Prefix,
@@ -146,9 +146,9 @@ Uint8List deriveInstitutionAccountIdByName(
 
 // ── 个人多签(payload = creator || account_name)──
 
-/// 个人多签地址派生(OP_PERSONAL),返回 SS58。归位自原
-/// `personal-manage/personal_duoqian_derive.dart`,行为不变。
-String deriveDuoqianPersonalAddress({
+/// 个人多签账户派生(OP_PERSONAL),返回 SS58。归位自原
+/// `personal-manage/personal_account_derive.dart`,行为不变。
+String derivePersonalAccountSs58({
   required Uint8List creatorPubkey,
   required String accountName,
   int ss58Prefix = kGmbSs58Prefix,
@@ -156,7 +156,7 @@ String deriveDuoqianPersonalAddress({
   if (creatorPubkey.length != 32) {
     throw ArgumentError('creator pubkey 必须为 32 字节');
   }
-  final id = deriveDuoqianAccountId(
+  final id = deriveAccountId(
     opTag: kOpPersonal,
     payload: <int>[...creatorPubkey, ...utf8.encode(accountName)],
     ss58Prefix: ss58Prefix,

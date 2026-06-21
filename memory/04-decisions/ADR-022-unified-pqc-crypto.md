@@ -122,6 +122,13 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 
 🔴 **(B4)era 钉死 immortal(决策4,PoW 难度无问题)**:`era_or_deadline=immortal`,链域靠 genesis_hash,不带 checkpoint;CheckMortality.implicit 仍是 genesis hash(已纳入 following_extensions_hash)。
 
+### 5.1 L3 / offchain payer 授权(资金侧 BLOCKER,真实代码行号)
+L3 批量支付的 payer/batch 授权**必须与链上账户签名同源**,否则主链 Phase C/D 拒 sr25519 后,L3 仍是 sr25519 花钱后门。落地点(card2 §8):
+- 🔴 **`configs/mod.rs:1261` `MaxBatchSignatureLength = ConstU32<128>` → `ConstU32<4096>`**(128B 装不下 ML-DSA ~3309B)。
+- 🔴 **payer_sig / batch_signature 改带 sig_alg 标签的变长结构** `{ sig_alg:u8, key_version:u32, sig:BoundedVec<u8,4096> }`(对齐 §14 六处签名上限放宽)。
+- 🔴 **`settlement.rs:169` 当前 `Sr25519Signature::try_from(&item.payer_sig[..])` 硬编 sr25519 → `verify_by_algo` 按 `AccountPqcKey[payer]` 路由**;`lib.rs:644-663` 的 `sr25519_pubkey_from_account`("公钥可从 account 反推")假设作废——ML-DSA 公钥不可由 account 反推,只能查 AccountPqcKey。
+- 🔴 **`settlement.rs` 当前无 `PqcPolicy` phase 检查 → 必须加**:已绑定账户在 Phase C/D 拒 sr25519 payer、Phase D 后未绑定不可继续 sr25519 L3 花费——**这是真正堵后门的一步**,只改签名长度不够。offchain worker 预聚合阶段须同步感知 PqcPolicy(或 settlement 提交前再验一次),避免 L3/L2 phase 视图不一致导致批次行为不确定。
+
 ## 6. 签名策略阶段
 
 | 阶段 | 链策略 | 用户体验 |
@@ -153,9 +160,13 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
   - **唯一权威源 = 查链上 `AccountPqcKey`**(CID 经 subxt 0.43.1 查,已具备能力);确认该 ML-DSA 公钥已绑到此 sr25519 锚点才接受;**未完成 bootstrap → 拒 ML-DSA 钱包签名**(退化策略)。CID/CPMS **必须用同一选项**。
   - **(B5)CID `citizens/binding.rs`(:79/340/878)是唯一真实落点**:ML-DSA 时 QR 单独带公钥(不再 ss58 反推)、查链验归属、verify_by_algo 验签;脱离 `[u8;32]`。card4 增列。
   - **(B7)CPMS 无链客户端**:CPMS **不验钱包签名**(本就不验,P-CRED-002),归属判定下沉 CID;card5 删①②选项。
-- 🔴 **(B6)CID MAIN signer 迁 ML-DSA 必须与 card2 链端验签器原子同批上线**(或链端先双 algo 路由再切),否则机构注册/投票/人口快照全红。
-- **(H9)系统签名原文 `build_signature_message` 必须含 sig_alg 进 preimage**(防算法混淆/降级)。
-- 🔴 **(决策5)CPMS install_sig 补真实验证**:CPMS 启动用 CID MAIN 公钥真正验 install_sig(顺带补"任何人投递 install QR 即可初始化 CPMS"的安全洞);card4/card5。
+- 🔴 **(B6)CID MAIN signer 迁 ML-DSA 必须与 card2 链端验签器原子同批上线**——允许序仅两种:**(A)链端先切 `verify_by_algo` 路由(支持双算法、仍默认 sr25519),再 CID 切 ML-DSA 发证**;**(B)链端验签器与 CID signer 同批发布**。**禁止 CID 先切 ML-DSA 而链端仍 sr25519_verify**,否则机构注册/投票/人口快照全红。
+- 🔴 **(v5 真实代码行号)CID/CitizenPassport 三处硬编 sr25519 需 verify_by_algo / sig_alg 化(card4)**:
+  - `citizencode/backend/citizenpassport/handler.rs:1017` `verify_sr25519_signature(&cpms_pubkey, ...)` 验 ARCHIVE 档案签名硬编 sr25519 → `verify_by_algo`(从 archive 协议串/元数据解析 sig_alg);否则 CPMS ARCHIVE 转 ML-DSA(card5)后 CID 端档案验签全红。
+  - `citizencode/backend/core/qr/mod.rs:118-141` `build_signature_message`(格式 `CITIZEN_QR_V1|kind|id|system|expires_at|principal`)**无 sig_alg** → 加 sig_alg 进 preimage(H9,防算法混淆/降级)。
+  - 🔴 **治理签名有两套 builder**:上面 CID `qr/mod.rs` 一套 + `citizenchain/node/src/governance/signing.rs`(`sig_alg:String` 硬编 sr25519)一套,格式不一致 → unified-protocols 须定真源,两处都迁(最好抽单一 `build_signature_message` 共享)。
+- 🔴 **(决策5 v5)CPMS install_sig 补真实验证 + 具体机制**:`citizencode/backend/citizenpassport/handler.rs:1343-1419` 当前 CID 端 `sign_with_main_key` **只签不验**,CPMS 无链访问无法独立验 → "任何人投递 install QR 即可初始化 CPMS" 安全洞未堵。card5 须给具体机制(install_sig 入 QR payload + CPMS 初始化时上传 + 向 CID 增 `/verify-install-sig` 端点回源验,或 CPMS 端 activated_at 防重放时间窗),非仅删旧表述。
+> **(v5 已定位)代码分布**:登录/安装授权(CID/CitizenPassport)在 `citizencode/backend/citizenpassport/`(`handler.rs` build_install_sign_source:1336 / sign_with_main_key:1405 只签不验);**CPMS ARCHIVE/dangan 在 `citizenpassport/backend/dangan/mod.rs`**(ARCHIVE `[u8;32]` 撞穿点在此,card5 落点),与上是两个不同 `citizenpassport/` 根,勿混。
 
 ## 10. IM / 传输加密(独立线,不阻塞;账户不派生 KEM)
 
@@ -192,16 +203,17 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 ## 14. 全签名面穷尽清单(H15)+ 任务卡
 
 **所有用户/系统签名面(逐项归属,杜绝漏面):**
-① 普通链上交易(GmbPqcAuth, card2/3)② L3/offchain payer 支付(card2)③ CID 钱包绑定证明 binding.rs(card4)④ 治理/扫码签名(card2/3)⑤ CPMS ARCHIVE/wallet_sig(card5)⑥ **IM 设备绑定 `GMB_IM_WALLET_BINDING_V1`(card6)**⑦ **登录回执 login_receipt(card3)**⑧ CID MAIN/sheng 系统签名(card4+card2)⑨ **seal 共识签名(card7,独立)**。每项归属验证口径同 §9(ML-DSA 公钥需经 AccountPqcKey 证明属于该地址)。
+① 普通链上交易(GmbPqcAuth, card2/3)② L3/offchain payer 支付(card2 §5.1)③ CID 钱包绑定证明 binding.rs(card4)④ 治理/扫码签名(card2/3,两套 builder 见 §9)⑤ CPMS ARCHIVE 档案自签名 + wallet_sig 归属(card5)⑥ **IM 设备绑定 `GMB_IM_WALLET_BINDING_V1`(card6)**⑦ **登录回执 login_receipt(card3)**⑧ CID MAIN/sheng 系统签名(card4+card2)⑨ **seal 共识签名(card7,独立)**。每项归属验证口径同 §9(ML-DSA 公钥需经 AccountPqcKey 证明属于该地址)。
+> 注:⑤ CPMS **ARCHIVE 档案自签名**(机构自身密钥签档案,card5)与 **wallet_sig 归属**(用户钱包签名,归属下沉 CID)是两个面,勿混。⑦ **login_receipt 定义**:钱包对登录会话(`session_id`/`device_fingerprint`/`timestamp`/专用 domain 标签)的签名,按 sig_alg 升 ML-DSA,归属同 §9;card3 给出精确字段+域标签(若评估后由 IM 设备绑定覆盖则显式删除,不留模糊)。
 
 | 卡 | 范围 |
 |---|---|
 | card0 | 卫生修复(清算行真 AES-GCM+Argon2id / App锁KDF / 热钱包at-rest)**不含 IM** |
 | card1 | gmb-pqc crate(KDF 精确+锁库+golden vector 含ξ)+ §11 全部 spike 闸门 |
-| card2 | GmbPqcAuth 扩展授权(嵌套tuple/following_extensions_hash/transaction_version++)+ account-keys(AccountPqcKey/PqcPolicy/轮换PoP)+ 5验签器algo-tag + 6签名长度上限放宽 + L3 PQC授权 |
-| card3 | 钱包(sr25519直接派生)+ **冷钱包FFI** + **离线metadata策略** + **QR分片** + bootstrap + login_receipt |
-| card4 | CID MAIN signer ML-DSA(与card2原子上线)+ **binding.rs归属验证(查链)** + verify_cpms_archive_qr + build_signature_message含sig_alg |
-| card5 | CPMS ARCHIVE签名(脱离[u8;32])+ wallet_sig_alg放开(符号定位)+ KDF + **install_sig验证下沉CID/CPMS验** + 归属下沉CID |
+| card2 | GmbPqcAuth 扩展授权(嵌套tuple/following_extensions_hash/**extra带account**/transaction_version**创世设定**/**fail-safe三语境**/**extra=None validate读storage**/**txpool DoS节点级机制**)+ account-keys(AccountPqcKey/PqcPolicy/轮换PoP)+ 5验签器algo-tag + 6签名长度上限放宽 + **L3 PQC授权(§5.1:configs:1261 128→4096 / settlement:169 verify_by_algo / settlement加PqcPolicy phase检查 / sr25519_pubkey_from_account废)** |
+| card3 | 钱包(sr25519直接派生)+ **冷钱包FFI** + **离线metadata策略** + **QR分片** + bootstrap + **login_receipt(补精确字段+域标签)** |
+| card4 | CID MAIN signer ML-DSA(与card2原子上线,序A/B)+ **binding.rs归属验证(查链)** + **handler.rs:1017 verify_by_algo** + **qr/mod.rs:118-141 build_signature_message含sig_alg** + **governance/signing.rs第二套builder同迁** |
+| card5 | CPMS ARCHIVE自签名(脱离[u8;32])+ wallet_sig_alg放开(符号定位)+ KDF + **install_sig真实验证(handler.rs:1343-1419,给具体机制)** + 归属下沉CID + **先确认CPMS crate是否在本仓** |
 | card6 | IM X-Wing(ML-KEM-768,一次到位含AES-256)+ TLS X25519MLKEM768 + **GMB_IM_WALLET_BINDING_V1 签名升级** + 群rekey归属 |
 | **card7(新)** | **seal 共识签名 ML-DSA-65 = 节点二进制协调升级**(非 setCode):激活高度 + 新旧节点验块共存窗口;与钱包 PQC 主线解耦;**Phase C/D 收紧治理**(bootstrap_deadline 设定 + 多轮公告 + 无恢复告知) |
 
@@ -227,6 +239,7 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 2. **card2 wire-format 骨架**:`GmbPqcAuth` 进 TxExtension(嵌套 `(GmbPqcAuth,AuthorizeCall)`)+ `extra={None|Pqc|Bootstrap}` enum 解码 + **None 透传**(`Pqc/Bootstrap` 暂为 reject-stub,验签逻辑留创世后);`account-keys` pallet(idx=27)+ `AccountPqcKey`/`PqcPolicy` 存储类型(空起步,`phase=A`);**transaction_version 设定**。
 3. **card3 客户端 wire-format**:citizenapp/citizenwallet 让 polkadart 认识 `GmbPqcAuth`,给普通 sr25519 signed extrinsic 的 `extra` 加 `None` + 其 implicit——创世后每笔交易(含 sr25519)都过 GmbPqcAuth,客户端必须能按新 wire format 签发。
 4. **确认**:地址派生=最终 sr25519 直接派生(创世账户按此);前向兼容钩子(AuthorizeCall/MultiSignature/SS58=2027/miniSecretFromEntropy/QR sig_alg)完好;创世 chainspec 按此 runtime 烘焙。
+5. 🔴 **seal 共识签名明确排除创世冻结**:seal 在 **node 二进制**(`service.rs:276-288`),**不进 chainspec/runtime/genesis state** → seal 的 sr25519→ML-DSA 切换**不受永久创世冻结约束**,可创世后由 card7 协调二进制升级(激活高度 + 新旧节点 import 双接受窗口)完成,**无需重新创世**。故创世前 seal 仍是 sr25519,**不烘进骨架**。
 
 ### 16.2 创世后(固定地基上慢慢实现,全部 setCode/app/治理/协调,**永不再动 wire format**)
 - **一次 setCode 加 `Pqc/Bootstrap` 验签 + bootstrap 逻辑**(纯行为,不改 wire format;bug 也能 setCode 修);启用 PQC = 治理翻 `PqcPolicy.phase` A→B→C→D。

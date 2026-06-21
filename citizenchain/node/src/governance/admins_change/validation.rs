@@ -94,11 +94,11 @@ mod tests {
     }
 
     #[test]
-    fn personal_duoqian_requires_org_ren() {
+    fn personal_account_requires_org_ren() {
         let current = vec![admin(1), admin(2)];
         let next = vec![admin(1), admin(3)];
         let err = validate_admin_set_change(&state(1, 4, current), &admin(1), &next).unwrap_err();
-        assert_eq!(err, "个人多签管理员更换必须使用 ORG_REN");
+        assert_eq!(err, "个人多签账户管理员更换必须使用 ORG_REN");
     }
 
     #[test]

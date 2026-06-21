@@ -388,9 +388,9 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             | RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
                 ..
             }) => FeeChargeKind::VoteFlat,
-            // 中文注释：SFID 注册由签名账户提交，不属于系统自动调用，按治理操作固定 1 元。
+            // 中文注释：CID 注册由签名账户提交，不属于系统自动调用，按治理操作固定 1 元。
             RuntimeCall::OrganizationManage(
-                organization_manage::pallet::Call::register_sfid_institution { .. },
+                organization_manage::pallet::Call::register_cid_institution { .. },
             ) => FeeChargeKind::VoteFlat,
             // 付费调用交易：多签管理其他操作（cleanup_X 等）按投票统一价 1 元/次
             RuntimeCall::OrganizationManage(_) => FeeChargeKind::VoteFlat,
@@ -422,8 +422,8 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 votingengine::pallet::Call::finalize_proposal { .. } => FeeChargeKind::Free,
                 _ => FeeChargeKind::VoteFlat,
             },
-            // SfidSystem 全部 6 个 extrinsic(含 bind_sfid / unbind_sfid 等)按投票统一价 1 元/次。
-            RuntimeCall::SfidSystem(_) => FeeChargeKind::VoteFlat,
+            // CidSystem 全部 6 个 extrinsic(含 bind_cid / unbind_cid 等)按投票统一价 1 元/次。
+            RuntimeCall::CidSystem(_) => FeeChargeKind::VoteFlat,
             // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
             RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
             // 业务治理 pallet 的 execute_xxx / cancel_failed_xxx wrapper 已于 2026-05-02
@@ -565,9 +565,9 @@ impl fullnode_issuance::Config for Runtime {
     type WeightInfo = fullnode_issuance::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct RuntimeDuoqianAccountValidator;
+pub struct RuntimeAccountValidator;
 
-impl organization_manage::DuoqianAccountValidator<AccountId> for RuntimeDuoqianAccountValidator {
+impl organization_manage::AccountValidator<AccountId> for RuntimeAccountValidator {
     fn is_valid(account: &AccountId) -> bool {
         // 中文注释：禁止零账户。
         if account == &AccountId::new([0u8; 32]) {
@@ -617,8 +617,8 @@ impl organization_manage::DuoqianAccountValidator<AccountId> for RuntimeDuoqianA
     }
 }
 
-pub struct RuntimeDuoqianReservedAccountChecker;
-pub struct RuntimeSfidInstitutionVerifier;
+pub struct RuntimeReservedAccountGuard;
+pub struct RuntimeCidInstitutionVerifier;
 
 pub struct RuntimeProtectedSourceChecker;
 pub struct RuntimeInstitutionAsset;
@@ -678,9 +678,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
     }
 }
 
-impl organization_manage::DuoqianReservedAccountChecker<AccountId>
-    for RuntimeDuoqianReservedAccountChecker
-{
+impl organization_manage::ReservedAccountGuard<AccountId> for RuntimeReservedAccountGuard {
     fn is_reserved(account: &AccountId) -> bool {
         // 中文注释：禁止占用省储行 stake_account（制度保留账户）。
         if primitives::china::china_ch::CHINA_CH
@@ -749,20 +747,20 @@ fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> 
 }
 
 impl
-    organization_manage::SfidInstitutionVerifier<
+    organization_manage::CidInstitutionVerifier<
         AccountId,
         organization_manage::pallet::AccountNameOf<Runtime>,
         organization_manage::pallet::RegisterNonceOf<Runtime>,
         organization_manage::pallet::RegisterSignatureOf<Runtime>,
-    > for RuntimeSfidInstitutionVerifier
+    > for RuntimeCidInstitutionVerifier
 {
     fn verify_institution_registration(
-        sfid_number: &[u8],
-        sfid_full_name: &organization_manage::pallet::AccountNameOf<Runtime>,
+        cid_number: &[u8],
+        cid_full_name: &organization_manage::pallet::AccountNameOf<Runtime>,
         account_names: &[Vec<u8>],
         nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
         signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -771,14 +769,14 @@ impl
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = (
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
                 scope_city_name,
             );
-            return !sfid_number.is_empty()
-                && !sfid_full_name.is_empty()
+            return !cid_number.is_empty()
+                && !cid_full_name.is_empty()
                 && !account_names.is_empty()
                 && !nonce.is_empty()
                 && !signature.is_empty();
@@ -793,18 +791,18 @@ impl
                 return false;
             };
 
-            // 中文注释：这里必须和 SFID 端 `/registration-info` 的签名 payload 严格一致。
-            // payload：DUOQIAN + OP_SIGN_INST + genesis_hash + sfid_number
-            // + sfid_full_name + account_names[] + nonce + 签发机构 + 作用域。
+            // 中文注释：这里必须和 CID 端 `/registration-info` 的签名 payload 严格一致。
+            // payload：DUOQIAN + OP_SIGN_INST + genesis_hash + cid_number
+            // + cid_full_name + account_names[] + nonce + 签发机构 + 作用域。
             let payload = (
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
-                sfid_number,
-                sfid_full_name.as_slice(),
+                cid_number,
+                cid_full_name.as_slice(),
                 account_names,
                 nonce.as_slice(),
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -821,14 +819,14 @@ impl organization_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
-    type AccountValidator = RuntimeDuoqianAccountValidator;
-    type ReservedAccountChecker = RuntimeDuoqianReservedAccountChecker;
+    type AccountValidator = RuntimeAccountValidator;
+    type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
-    type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
+    type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
-    type MaxSfidNumberLength = ConstU32<{ primitives::core_const::SFID_NUMBER_MAX_BYTES }>;
+    type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
@@ -842,8 +840,8 @@ impl personal_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
-    type AccountValidator = RuntimeDuoqianAccountValidator;
-    type ReservedAccountChecker = RuntimeDuoqianReservedAccountChecker;
+    type AccountValidator = RuntimeAccountValidator;
+    type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type FeeRouter = TransferFeeRouter;
@@ -853,33 +851,30 @@ impl personal_manage::Config for Runtime {
     type WeightInfo = personal_manage::weights::SubstrateWeight<Runtime>;
 }
 
-// 三处 SFID 验签:
-// - `RuntimeSfidVerifier`(BindCredential / 公民身份绑定)
-// - `RuntimeSfidVoteVerifier`(公民投票凭证)
+// 三处 CID 验签:
+// - `RuntimeCidVerifier`(BindCredential / 公民身份绑定)
+// - `RuntimeCidVoteVerifier`(公民投票凭证)
 // - `RuntimePopulationSnapshotVerifier`(联合提案人口快照)
-// 全部按 `issuer_sfid_number + issuer_main_account + signer_pubkey` 校验签发身份;
+// 全部按 `issuer_cid_number + issuer_main_account + signer_pubkey` 校验签发身份;
 // `issuer_main_account` 的管理员真源唯一来自 admins-change::AdminAccounts.admins。
 
-pub struct RuntimeSfidVerifier;
+pub struct RuntimeCidVerifier;
 
 impl
-    sfid_system::SfidVerifier<
+    cid_system::CidVerifier<
         AccountId,
         Hash,
-        sfid_system::pallet::NonceOf<Runtime>,
-        sfid_system::pallet::SignatureOf<Runtime>,
-    > for RuntimeSfidVerifier
+        cid_system::pallet::NonceOf<Runtime>,
+        cid_system::pallet::SignatureOf<Runtime>,
+    > for RuntimeCidVerifier
 {
-    fn verify(
-        account: &AccountId,
-        credential: &sfid_system::pallet::CredentialOf<Runtime>,
-    ) -> bool {
+    fn verify(account: &AccountId, credential: &cid_system::pallet::CredentialOf<Runtime>) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = (account, credential);
             return !credential.bind_nonce.is_empty()
                 && !credential.signature.is_empty()
-                && !credential.issuer_sfid_number.is_empty()
+                && !credential.issuer_cid_number.is_empty()
                 && !credential.scope_province_name.is_empty();
         }
 
@@ -904,7 +899,7 @@ impl
                 account,
                 credential.binding_id,
                 credential.bind_nonce.as_slice(),
-                credential.issuer_sfid_number.as_slice(),
+                credential.issuer_cid_number.as_slice(),
                 &credential.issuer_main_account,
                 &credential.signer_pubkey,
                 credential.scope_province_name.as_slice(),
@@ -917,23 +912,23 @@ impl
     }
 }
 
-pub struct RuntimeSfidVoteVerifier;
+pub struct RuntimeCidVoteVerifier;
 
 impl
-    sfid_system::SfidVoteVerifier<
+    cid_system::CidVoteVerifier<
         AccountId,
         Hash,
-        sfid_system::pallet::NonceOf<Runtime>,
-        sfid_system::pallet::SignatureOf<Runtime>,
-    > for RuntimeSfidVoteVerifier
+        cid_system::pallet::NonceOf<Runtime>,
+        cid_system::pallet::SignatureOf<Runtime>,
+    > for RuntimeCidVoteVerifier
 {
     fn verify_vote(
         account: &AccountId,
         binding_id: Hash,
         proposal_id: u64,
-        nonce: &sfid_system::pallet::NonceOf<Runtime>,
-        signature: &sfid_system::pallet::SignatureOf<Runtime>,
-        issuer_sfid_number: &[u8],
+        nonce: &cid_system::pallet::NonceOf<Runtime>,
+        signature: &cid_system::pallet::SignatureOf<Runtime>,
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -945,7 +940,7 @@ impl
                 account,
                 binding_id,
                 proposal_id,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -973,7 +968,7 @@ impl
                 binding_id,
                 proposal_id,
                 nonce.as_slice(),
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -986,18 +981,18 @@ impl
     }
 }
 
-impl sfid_system::Config for Runtime {
+impl cid_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxCredentialNonceLength = ConstU32<64>;
-    // 中文注释：SFID 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
+    // 中文注释：CID 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
     type MaxCredentialSignatureLength = ConstU32<64>;
-    type SfidVerifier = RuntimeSfidVerifier;
-    type SfidVoteVerifier = RuntimeSfidVoteVerifier;
-    type OnSfidBound = CitizenIssuance;
-    // ADR-008 step2a：unbind_sfid 不再依赖已删除的 SfidMainAccount，临时由 Root 治理 origin 鉴权。
+    type CidVerifier = RuntimeCidVerifier;
+    type CidVoteVerifier = RuntimeCidVoteVerifier;
+    type OnCidBound = CitizenIssuance;
+    // ADR-008 step2a：unbind_cid 不再依赖已删除的 CidMainAccount，临时由 Root 治理 origin 鉴权。
     // step2b 起结合 organization-manage 凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
     type UnbindOrigin = frame_system::EnsureRoot<AccountId>;
-    type WeightInfo = sfid_system::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = cid_system::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimePopulationSnapshotVerifier;
@@ -1014,7 +1009,7 @@ impl
         eligible_total: u64,
         nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
         signature: &votingengine::pallet::VoteSignatureOf<Runtime>,
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -1024,7 +1019,7 @@ impl
         {
             let _ = (
                 who,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -1051,7 +1046,7 @@ impl
                 who,
                 eligible_total,
                 nonce.as_slice(),
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -1160,31 +1155,30 @@ impl duoqian_transfer::Config for Runtime {
 // 链下交易清算模块配置
 // ---------------------------------------------------------------------------
 
-/// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
+/// 扫码支付 Step 1 新增:CID 机构登记表查询实现。
 ///
-/// 委托给 `organization-manage` 的 SFID 地址索引和机构账户表；
+/// 委托给 `organization-manage` 的 CID 地址索引和机构账户表；
 /// 管理员校验再统一转给 `admins-change::AdminAccounts`。
-pub struct DuoqianSfidAccountQuery;
+pub struct DuoqianCidAccountQuery;
 
-impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
+impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
-        organization_manage::AccountRegisteredSfid::<Runtime>::get(addr)
-            .map(|info| (info.sfid_number.to_vec(), info.account_name.to_vec()))
+        organization_manage::AccountRegisteredCid::<Runtime>::get(addr)
+            .map(|info| (info.cid_number.to_vec(), info.account_name.to_vec()))
     }
 
-    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
-        let id: organization_manage::SfidNumberOf<Runtime> =
-            sfid_number.to_vec().try_into().ok()?;
+    fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
+        let id: organization_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
         let an: organization_manage::AccountNameOf<Runtime> =
             account_name.to_vec().try_into().ok()?;
-        organization_manage::SfidRegisteredAccount::<Runtime>::get(&id, &an)
+        organization_manage::CidRegisteredAccount::<Runtime>::get(&id, &an)
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        if let Some(registered) = organization_manage::AccountRegisteredSfid::<Runtime>::get(addr) {
+        if let Some(registered) = organization_manage::AccountRegisteredCid::<Runtime>::get(addr) {
             return matches!(
                 organization_manage::InstitutionAccounts::<Runtime>::get(
-                    &registered.sfid_number,
+                    &registered.cid_number,
                     &registered.account_name,
                 )
                 .map(|a| a.status),
@@ -1204,7 +1198,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
     /// 中文注释:机构账户按自身地址作为治理账户,org 来自
-    /// `Institutions[sfid].org`;ORG_REN 只给 personal-manage 使用。
+    /// `Institutions[cid].org`;ORG_REN 只给 personal-manage 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(account) =
             organization_manage::Pallet::<Runtime>::resolve_admin_account_for_account(bank)
@@ -1218,17 +1212,17 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         admins_change::Pallet::<Runtime>::is_active_account_admin(org, account, who)
     }
 
-    /// Step 2(2026-05-02):清算行资格由 SFID 系统的 eligible-search 负责筛选。
-    /// 链上不再保存 subject_property/sub_type/parent_sfid_number,这里只确认该地址属于已注册且 Active 的
-    /// SFID 机构账户,避免把 SFID 内部机构类型字段重复落到链上。
+    /// Step 2(2026-05-02):清算行资格由 CID 系统的 eligible-search 负责筛选。
+    /// 链上不再保存 subject_property/sub_type/parent_cid_number,这里只确认该地址属于已注册且 Active 的
+    /// CID 机构账户,避免把 CID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
-        let registered = match organization_manage::AccountRegisteredSfid::<Runtime>::get(addr) {
+        let registered = match organization_manage::AccountRegisteredCid::<Runtime>::get(addr) {
             Some(info) => info,
             None => return false,
         };
         matches!(
             organization_manage::InstitutionAccounts::<Runtime>::get(
-                &registered.sfid_number,
+                &registered.cid_number,
                 &registered.account_name,
             )
             .map(|account| account.status),
@@ -1237,16 +1231,16 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     }
 
     /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
-    /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_number 记录)。
+    /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 cid_number 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
-        let registered = match organization_manage::AccountRegisteredSfid::<Runtime>::get(bank) {
+        let registered = match organization_manage::AccountRegisteredCid::<Runtime>::get(bank) {
             Some(info) => info,
             None => return false,
         };
         // ClearingBankNodes 的 key 是 BoundedVec<u8, ConstU32<64>>,
-        // 把 SfidNumberOf<Runtime>(BoundedVec<u8, MaxSfidNumberLength=SFID_NUMBER_MAX_BYTES>) 转换过去
-        let sfid_bytes: Vec<u8> = registered.sfid_number.to_vec();
-        let key: BoundedVec<u8, ConstU32<64>> = match sfid_bytes.try_into() {
+        // 把 CidNumberOf<Runtime>(BoundedVec<u8, MaxCidNumberLength=CID_NUMBER_MAX_BYTES>) 转换过去
+        let cid_bytes: Vec<u8> = registered.cid_number.to_vec();
+        let key: BoundedVec<u8, ConstU32<64>> = match cid_bytes.try_into() {
             Ok(b) => b,
             Err(_) => return false,
         };
@@ -1260,7 +1254,7 @@ impl offchain_transaction::Config for Runtime {
     type MaxBatchSize = ConstU32<100_000>;
     type MaxBatchSignatureLength = ConstU32<128>;
     type InstitutionAsset = RuntimeInstitutionAsset;
-    type SfidAccountQuery = DuoqianSfidAccountQuery;
+    type CidAccountQuery = DuoqianCidAccountQuery;
     type WeightInfo = offchain_transaction::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1448,7 +1442,7 @@ impl votingengine::Config for Runtime {
     type MaxCleanupQueueBucketLimit = ConstU32<512>;
     type MaxCleanupScheduleOffset = ConstU32<1_024>;
     type CleanupKeysPerStep = ConstU32<256>;
-    type SfidEligibility = RuntimeSfidEligibility;
+    type CidEligibility = RuntimeCidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
     // Phase 2:内部投票终态回调注册 5 个业务 Executor。
@@ -1540,22 +1534,22 @@ impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdmin
     }
 }
 
-pub struct RuntimeSfidEligibility;
+pub struct RuntimeCidEligibility;
 
-impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
+impl votingengine::CidEligibility<AccountId, Hash> for RuntimeCidEligibility {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = (
                 who,
-                sfid_system::pallet::BindingIdToAccount::<Runtime>::get(binding_id),
+                cid_system::pallet::BindingIdToAccount::<Runtime>::get(binding_id),
             );
             true
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            <sfid_system::Pallet<Runtime> as sfid_system::SfidEligibilityProvider<
+            <cid_system::Pallet<Runtime> as cid_system::CidEligibilityProvider<
                 AccountId,
                 Hash,
             >>::is_eligible(binding_id, who)
@@ -1568,7 +1562,7 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -1578,7 +1572,7 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
         {
             let _ = (
                 who,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -1590,24 +1584,20 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
 
             let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash_of(&nonce);
             let vote_nonce_key = (binding_id.clone(), nonce_hash);
-            if sfid_system::pallet::UsedVoteNonce::<Runtime>::get(
+            if cid_system::pallet::UsedVoteNonce::<Runtime>::get(
                 proposal_id,
                 vote_nonce_key.clone(),
             ) {
                 return false;
             }
 
-            sfid_system::pallet::UsedVoteNonce::<Runtime>::insert(
-                proposal_id,
-                vote_nonce_key,
-                true,
-            );
+            cid_system::pallet::UsedVoteNonce::<Runtime>::insert(proposal_id, vote_nonce_key, true);
             true
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            <sfid_system::Pallet<Runtime> as sfid_system::SfidEligibilityProvider<
+            <cid_system::Pallet<Runtime> as cid_system::CidEligibilityProvider<
                 AccountId,
                 Hash,
             >>::verify_and_consume_vote_credential(
@@ -1616,7 +1606,7 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
                 proposal_id,
                 nonce,
                 signature,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -1626,7 +1616,7 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
     }
 
     fn cleanup_vote_credentials(proposal_id: u64) {
-        <sfid_system::Pallet<Runtime> as sfid_system::SfidEligibilityProvider<
+        <cid_system::Pallet<Runtime> as cid_system::CidEligibilityProvider<
             AccountId,
             Hash,
         >>::cleanup_vote_credentials(proposal_id)
@@ -1637,7 +1627,7 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
         limit: u32,
     ) -> votingengine::VoteCredentialCleanup {
         let result =
-            sfid_system::pallet::UsedVoteNonce::<Runtime>::clear_prefix(proposal_id, limit, None);
+            cid_system::pallet::UsedVoteNonce::<Runtime>::clear_prefix(proposal_id, limit, None);
         votingengine::VoteCredentialCleanup {
             removed: result.unique,
             loops: result.loops,

@@ -399,9 +399,7 @@ fn fetch_institution_accounts(
 /// 从完整 storage key 反推第二层 key(account_name 字节)。
 fn decode_account_name_from_key(full_key_hex: &str, cid_prefix_hex: &str) -> Option<String> {
     let full = full_key_hex.strip_prefix("0x").unwrap_or(full_key_hex);
-    let prefix = cid_prefix_hex
-        .strip_prefix("0x")
-        .unwrap_or(cid_prefix_hex);
+    let prefix = cid_prefix_hex.strip_prefix("0x").unwrap_or(cid_prefix_hex);
     if !full.starts_with(prefix) {
         return None;
     }

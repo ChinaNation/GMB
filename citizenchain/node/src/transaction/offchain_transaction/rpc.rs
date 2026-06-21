@@ -72,7 +72,7 @@ pub trait OffchainClearingRpc {
 
     // ─── Step 2c-i 新增:citizenapp 扫码前置查询 ───
 
-    /// 查询 L3 当前绑定的清算行主账户地址(对应链上 `UserBank[user]`)。
+    /// 查询 L3 当前绑定的清算行主账户(对应链上 `UserBank[user]`)。
     ///
     /// citizenapp 在扫码付款前调用,以确定"本人付款方清算行"(`payer_bank`)。
     /// 未绑定返回 `None`,调用方据此提示用户先完成绑定流程。

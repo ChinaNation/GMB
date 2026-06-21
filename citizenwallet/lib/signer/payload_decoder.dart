@@ -372,18 +372,12 @@ class PayloadDecoder {
     switch (actionType) {
       case 'PASSKEY_REGISTER':
         return '更新 Passkey';
-      case 'CREATE_CITY_ADMIN':
-        return '新增市管理员';
-      case 'UPDATE_CITY_ADMIN':
-        return '编辑市管理员';
-      case 'DELETE_CITY_ADMIN':
-        return '删除市管理员';
-      case 'CREATE_FEDERAL_ADMIN':
-        return '新增联邦管理员';
-      case 'UPDATE_FEDERAL_ADMIN':
-        return '编辑联邦管理员';
-      case 'DELETE_FEDERAL_ADMIN':
-        return '删除联邦管理员';
+      case 'CREATE_ADMIN':
+        return '新增管理员';
+      case 'UPDATE_ADMIN':
+        return '编辑管理员';
+      case 'DELETE_ADMIN':
+        return '删除管理员';
       case 'INSTITUTION_CREATE':
         return '创建机构';
       case 'INSTITUTION_UPDATE':
@@ -1096,7 +1090,7 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // OrganizationManage(17) / propose_close(1)
   // PersonalManage(7) / propose_close(1)
-  // 格式：[17][1][duoqian_account:32][beneficiary:32]
+  // 格式：[17][1][account:32][beneficiary:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeClose(
     Uint8List bytes, {
@@ -1114,7 +1108,7 @@ class PayloadDecoder {
       action: action,
       summary: '提案关闭$summaryLabel ${_truncateAddress(duoqian)}',
       fields: {
-        'duoqian_account': duoqian,
+        'account': duoqian,
         'beneficiary': beneficiary,
       },
     );
@@ -1572,9 +1566,10 @@ class PayloadDecoder {
     return switch (org) {
       0 => adminsLen == 19 && threshold == 13,
       1 || 2 => adminsLen == 9 && threshold == 6,
-      3 || 4 || 5 => adminsLen >= 2 &&
-          threshold > adminsLen ~/ 2 &&
-          threshold <= adminsLen,
+      3 ||
+      4 ||
+      5 =>
+        adminsLen >= 2 && threshold > adminsLen ~/ 2 && threshold <= adminsLen,
       _ => false,
     };
   }

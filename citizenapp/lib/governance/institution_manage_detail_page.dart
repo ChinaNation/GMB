@@ -176,7 +176,7 @@ class _InstitutionManageDetailPageState
           if (orgDetail is org_models.CloseDuoqianProposalInfo) {
             closeInfo = personal_models.CloseDuoqianProposalInfo(
               proposalId: orgDetail.proposalId,
-              duoqianAccount: orgDetail.duoqianAccount,
+              account: orgDetail.account,
               beneficiary: orgDetail.beneficiary,
               proposer: orgDetail.proposer,
               status: orgDetail.status,
@@ -351,7 +351,7 @@ class _InstitutionManageDetailPageState
   ) {
     return {
       'kind': 'create',
-      'duoqian_account': info.duoqianAccount,
+      'account': info.account,
       'proposer': info.proposer,
       'amount_fen': info.amountFen.toString(),
       'fee_fen': info.feeFen.toString(),
@@ -364,7 +364,7 @@ class _InstitutionManageDetailPageState
   ) {
     return {
       'kind': 'close',
-      'duoqian_account': info.duoqianAccount,
+      'account': info.account,
       'beneficiary': info.beneficiary,
       'proposer': info.proposer,
       'status': info.status,
@@ -378,13 +378,13 @@ class _InstitutionManageDetailPageState
     if (detail['kind'] != 'create') return null;
     final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
     final feeFen = BigInt.tryParse(detail['fee_fen']?.toString() ?? '');
-    final duoqianAccount = detail['duoqian_account']?.toString();
-    if (amountFen == null || feeFen == null || duoqianAccount == null) {
+    final account = detail['account']?.toString();
+    if (amountFen == null || feeFen == null || account == null) {
       return null;
     }
     return personal_models.CreateDuoqianProposalInfo(
       proposalId: snapshot.proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       proposer: detail['proposer']?.toString() ?? '',
       amountFen: amountFen,
       feeFen: feeFen,
@@ -397,11 +397,11 @@ class _InstitutionManageDetailPageState
   ) {
     final detail = snapshot.detail;
     if (detail['kind'] != 'close') return null;
-    final duoqianAccount = detail['duoqian_account']?.toString();
-    if (duoqianAccount == null) return null;
+    final account = detail['account']?.toString();
+    if (account == null) return null;
     return personal_models.CloseDuoqianProposalInfo(
       proposalId: snapshot.proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       beneficiary: detail['beneficiary']?.toString() ?? '',
       proposer: detail['proposer']?.toString() ?? '',
       status: snapshot.status,
@@ -840,11 +840,10 @@ class _InstitutionManageDetailPageState
 
   List<Widget> _buildCreateInfoRows() {
     final info = _createInfo!;
-    final duoqianSs58 =
-        Keyring().encodeAddress(_hexDecode(info.duoqianAccount), 2027);
+    final accountSs58 = Keyring().encodeAddress(_hexDecode(info.account), 2027);
     return [
-      _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
-        Clipboard.setData(ClipboardData(text: duoqianSs58));
+      _buildInfoRow('多签账户', _truncateAddress(accountSs58), onCopy: () {
+        Clipboard.setData(ClipboardData(text: accountSs58));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('地址已复制'), duration: Duration(seconds: 1)),
@@ -867,11 +866,10 @@ class _InstitutionManageDetailPageState
 
   List<Widget> _buildCloseInfoRows() {
     final info = _closeInfo!;
-    final duoqianSs58 =
-        Keyring().encodeAddress(_hexDecode(info.duoqianAccount), 2027);
+    final accountSs58 = Keyring().encodeAddress(_hexDecode(info.account), 2027);
     return [
-      _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
-        Clipboard.setData(ClipboardData(text: duoqianSs58));
+      _buildInfoRow('多签账户', _truncateAddress(accountSs58), onCopy: () {
+        Clipboard.setData(ClipboardData(text: accountSs58));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('地址已复制'), duration: Duration(seconds: 1)),

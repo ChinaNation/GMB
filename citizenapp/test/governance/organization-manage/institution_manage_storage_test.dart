@@ -74,8 +74,7 @@ void main() {
     ]);
   }
 
-  test('fetchDuoqianAccount reads registered institution current storages',
-      () async {
+  test('fetchAccount reads registered institution current storages', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionManageService(chainRpc: rpc);
     final address = '11' * 32;
@@ -116,7 +115,7 @@ void main() {
     ]);
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-    final info = await service.fetchDuoqianAccount(address);
+    final info = await service.fetchAccount(address);
 
     expect(info, isNotNull);
     expect(info!.adminsLen, 2);
@@ -126,7 +125,7 @@ void main() {
     expect(rpc.requestedKeys, [refKey, accountKey, adminKey, thresholdKey]);
   });
 
-  test('fetchDuoqianAccountsBatch reads institution accounts in staged batches',
+  test('fetchAccountsBatch reads institution accounts in staged batches',
       () async {
     final rpc = FakeChainRpc();
     final service = InstitutionManageService(chainRpc: rpc);
@@ -170,7 +169,7 @@ void main() {
     ]);
     rpc.responses[activeThresholdKey] = Uint8List.fromList(u32Le(2));
 
-    final infos = await service.fetchDuoqianAccountsBatch([address]);
+    final infos = await service.fetchAccountsBatch([address]);
 
     expect(infos[address]!.adminsLen, 2);
     expect(infos[address]!.threshold, 2);

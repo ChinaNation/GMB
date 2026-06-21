@@ -201,7 +201,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
   citiesLoading: boolean;
   cityRegistryAdmins: CityRegistryAdminRow[];
   cityRegistryAdminsLoading: boolean;
-  onSelectCity: (city: string) => void;
+  onSelectCity: (city_name: string) => void;
 }) {
   const [registryRows, setRegistryRows] = useState<InstitutionListRow[]>([]);
   const [registryLoading, setRegistryLoading] = useState(false);

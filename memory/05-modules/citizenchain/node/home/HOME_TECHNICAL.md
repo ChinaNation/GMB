@@ -40,9 +40,8 @@ home/
 4. 桌面端数据目录由 `shared/security.rs` 统一解析：正式版默认使用 `~/Library/Application Support/gmb`，开发版默认使用 `~/Library/Application Support/gmb.dev`；节点 `base-path` 直接指向该目录，因此正式版区块库为 `~/Library/Application Support/gmb/chains/citizenchain/db/full`，开发版区块库为 `~/Library/Application Support/gmb.dev/chains/citizenchain/db/full`
 
 WASM CI 版本规则：
-- `citizenchain-wasm.yml` 编译前必须查询链上 `state_getRuntimeVersion.specVersion`
-- GitHub 配置 `CID_DEPLOY_SSH_KEY` 或 `CITIZENCHAIN_SSH_KEY` 后，CI 会通过 SSH 登录 `CITIZENCHAIN_SSH_USER@CITIZENCHAIN_SSH_HOST`，在服务器本机访问 `http://127.0.0.1:9944`；当前优先复用已有的无密码部署密钥 `CID_DEPLOY_SSH_KEY`
-- 如果没有 SSH key，CI 才使用 `CITIZENCHAIN_RPC_URL` 直连 HTTP RPC
+- `citizenchain-wasm.yml` 在 push 自动 CI 中只编译当前源码，不查询链上版本、不读取密钥
+- 只有 GitHub 手动 `Run workflow` 才使用 `GMB_SSH_KEY` 通过 SSH 登录链服务器，在服务器本机访问 `http://127.0.0.1:9944` 查询 `state_getRuntimeVersion.specVersion`
 - 如果源码 `spec_version` 小于或等于链上版本，CI 只在本次工作区临时改为 `链上版本 + 1` 后编译 WASM artifact
 - CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护
 - 生成的 `citizenchain-wasm` artifact 只用于显式的开发升级、下载脚本或链上 `System.set_code` 流程；本地启动脚本不下载、不内置该 artifact

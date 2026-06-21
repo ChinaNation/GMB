@@ -42,7 +42,7 @@ class _PersonalProposalListSectionState
       PersonalProposalHistoryService();
 
   bool _loading = true;
-  List<PersonalDuoqianProposalView> _items = const [];
+  List<PersonalAccountProposalView> _items = const [];
 
   @override
   void initState() {
@@ -52,7 +52,7 @@ class _PersonalProposalListSectionState
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await _service.fetchAll(widget.institution.duoqianAccount);
+    final list = await _service.fetchAll(widget.institution.account);
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -60,7 +60,7 @@ class _PersonalProposalListSectionState
     });
   }
 
-  Future<void> _openProposal(PersonalDuoqianProposalView view) async {
+  Future<void> _openProposal(PersonalAccountProposalView view) async {
     // 历史(已终态)提案在链上可能已被 90 天清理,详情页以链上为准,
     // 终态后可能拉不到完整数据;但仍允许进入展示已知信息。
     //
@@ -186,7 +186,7 @@ class _PersonalProposalListSectionState
   /// 提案方块卡片(对齐治理机构详情页 `institution_detail_page._buildProposalCard:520`):
   /// Card with statusColor border(alpha 0.2) + 36×36 statusColor icon container +
   /// 标题/子标题 + 右侧状态徽章。
-  Widget _buildProposalCard(PersonalDuoqianProposalView view) {
+  Widget _buildProposalCard(PersonalAccountProposalView view) {
     final statusColor = _statusColor(view.status);
     return Card(
       elevation: 0,

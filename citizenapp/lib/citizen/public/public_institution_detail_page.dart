@@ -102,7 +102,7 @@ class _PublicInstitutionDetailPageState
   }
 
   Future<void> _loadDynamics(PublicInstitutionEntity inst) async {
-    final mainHex = _accounts.isNotEmpty ? _accounts.first.addressHex : '';
+    final mainHex = _accounts.isNotEmpty ? _accounts.first.accountHex : '';
     // 主账户余额(对齐治理详情;批量接口只查主账户一条)。
     try {
       final balances = await _chainData.balances([mainHex]);

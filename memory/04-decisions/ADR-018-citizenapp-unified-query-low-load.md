@@ -131,7 +131,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 
 ### 0. 背景:三类机构本质不同,不能共用一条发现通路
 全栈审计(链端 storage + 派生原语 + citizenapp 客户端)确认:账户地址全部由唯一原语
-`derive_duoqian_account(op_tag, ss58, payload)`(`primitives/src/core_const.rs:89`)确定性派生,
+`derive_account(op_tag, ss58, payload)`(`primitives/src/core_const.rs:89`)确定性派生,
 同输入永远同地址、可离线算。但"枚举账户清单"的来源与范围语义三类完全不同:
 
 | 类别 | 范围语义 | 发现来源 | 缓存模型 | 新鲜度 | 链改空间 |
@@ -152,8 +152,8 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 ```
 lib/governance/
 ├── shared/                              ← 共享底座(三类都用,单一源)
-│   ├── account_derivation.dart          ← derive_duoqian_account 唯一 Dart 实现(OP_* 全枚举)
-│   │                                       现状:仅 personal-manage/personal_duoqian_derive.dart,需归位/补全
+│   ├── account_derivation.dart          ← derive_account 唯一 Dart 实现(OP_* 全枚举)
+│   │                                       现状:仅 personal-manage/personal_account_derive.dart,需归位/补全
 │   ├── chain_read_cache.dart(卡⑤)      ← finalizedBlockHash 命名空间的余额/storage 共享缓存
 │   │     （实现落 lib/rpc/chain_read_cache.dart:消费者 ChainRpc 在 rpc 层,避免 rpc→governance 层级倒挂;
 │   │      挂在 fetchStorageBatch 咽喉透明覆盖全部 finalized 状态读,豁免管线不经此入口天然隔离）

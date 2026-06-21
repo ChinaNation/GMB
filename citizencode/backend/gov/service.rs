@@ -1515,15 +1515,15 @@ fn bulk_write_target_chunk(
         ));
     }
 
-    let p_codes = targets
+    let province_codes = targets
         .iter()
         .map(|target| target.province_code.clone())
         .collect::<Vec<_>>();
-    let c_codes = targets
+    let city_codes = targets
         .iter()
         .map(target_city_code)
         .collect::<Vec<Option<String>>>();
-    let t_codes = targets
+    let town_codes = targets
         .iter()
         .map(target_town_code)
         .collect::<Vec<Option<String>>>();
@@ -1575,8 +1575,8 @@ fn bulk_write_target_chunk(
         .iter()
         .map(|target| target.education_type.clone())
         .collect::<Vec<_>>();
-    let home_p_codes = vec![None::<String>; targets.len()];
-    let home_c_codes = vec![None::<String>; targets.len()];
+    let home_province_codes = vec![None::<String>; targets.len()];
+    let home_city_codes = vec![None::<String>; targets.len()];
 
     // 中文注释:同一 cid 如果曾因行政区划修正落在旧分区,批量清掉旧分区行。
     for table in ["subjects", "gov", "accounts"] {
@@ -1586,12 +1586,13 @@ fn bulk_write_target_chunk(
              WHERE t.cid_number = u.cid_number
                AND t.province_code <> u.province_code"
         );
-        tx.execute(sql.as_str(), &[&cids, &p_codes]).map_err(|e| {
-            format!(
-                "bulk delete {table} rows outside scope failed: {}",
-                crate::core::db::postgres_error_text(&e)
-            )
-        })?;
+        tx.execute(sql.as_str(), &[&cids, &province_codes])
+            .map_err(|e| {
+                format!(
+                    "bulk delete {table} rows outside scope failed: {}",
+                    crate::core::db::postgres_error_text(&e)
+                )
+            })?;
     }
     tx.execute("DELETE FROM private WHERE cid_number = ANY($1)", &[&cids])
         .map_err(|e| {
@@ -1609,7 +1610,7 @@ fn bulk_write_target_chunk(
             province_code = EXCLUDED.province_code,
             city_code = EXCLUDED.city_code
          WHERE ids.kind = 'PUBLIC'",
-        &[&cids, &p_codes, &c_codes],
+        &[&cids, &province_codes, &city_codes],
     )
     .map_err(|e| {
         format!(
@@ -1647,8 +1648,6 @@ fn bulk_write_target_chunk(
             name = EXCLUDED.name,
             cid_full_name = EXCLUDED.cid_full_name,
             cid_short_name = EXCLUDED.cid_short_name,
-            city_code = EXCLUDED.city_code,
-            town_code = EXCLUDED.town_code,
             status = EXCLUDED.status,
             category = EXCLUDED.category,
             subject_property = EXCLUDED.subject_property,
@@ -1681,9 +1680,9 @@ fn bulk_write_target_chunk(
             &town_names,
             &institution_codes,
             &org_codes,
-            &p_codes,
-            &c_codes,
-            &t_codes,
+            &province_codes,
+            &city_codes,
+            &town_codes,
             &education_types,
             &actor,
         ],
@@ -1720,13 +1719,13 @@ fn bulk_write_target_chunk(
             home_c = EXCLUDED.home_c",
         &[
             &cids,
-            &p_codes,
-            &c_codes,
-            &t_codes,
+            &province_codes,
+            &city_codes,
+            &town_codes,
             &institution_codes,
             &org_codes,
-            &home_p_codes,
-            &home_c_codes,
+            &home_province_codes,
+            &home_city_codes,
         ],
     )
     .map_err(|e| {
@@ -1756,19 +1755,19 @@ fn bulk_write_target_chunk(
             account_p_codes.push(target.province_code.clone());
             account_c_codes.push(target_city_code(target));
             account_names.push(account.account_name);
-            account_addresses.push(account.duoqian_account);
+            account_addresses.push(account.account);
         }
     }
     tx.execute(
         "INSERT INTO accounts (
-            cid_number, province_code, city_code, account_name, duoqian_account, chain_status, created_at
+            cid_number, province_code, city_code, account_name, account, chain_status, created_at
          )
-         SELECT cid_number, province_code, city_code, account_name, duoqian_account, 'NOT_ON_CHAIN', now()
+         SELECT cid_number, province_code, city_code, account_name, account, 'NOT_ON_CHAIN', now()
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
-              AS u(cid_number, province_code, city_code, account_name, duoqian_account)
+              AS u(cid_number, province_code, city_code, account_name, account)
          ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
             city_code = EXCLUDED.city_code,
-            duoqian_account = EXCLUDED.duoqian_account,
+            account = EXCLUDED.account,
             chain_status = EXCLUDED.chain_status,
             created_at = EXCLUDED.created_at",
         &[

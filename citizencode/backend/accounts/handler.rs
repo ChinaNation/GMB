@@ -83,10 +83,7 @@ pub(crate) async fn create_account(
     let account = InstitutionAccount {
         cid_number: cid_number.clone(),
         account_name: account_name.clone(),
-        duoqian_account: crate::accounts::derive::derive_duoqian_account(
-            &cid_number,
-            &account_name,
-        ),
+        account: crate::accounts::derive::derive_account(&cid_number, &account_name),
         chain_status: MultisigChainStatus::NotOnChain,
         chain_synced_at: None,
         chain_tx_hash: None,
@@ -108,7 +105,7 @@ pub(crate) async fn create_account(
             "account_name": account_name.clone(),
         }),
     );
-    let duoqian_account = account.duoqian_account.clone();
+    let account = account.account.clone();
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -119,7 +116,7 @@ pub(crate) async fn create_account(
             chain_synced_at: None,
             chain_tx_hash: None,
             chain_block_number: None,
-            duoqian_account,
+            account,
         },
     })
     .into_response()

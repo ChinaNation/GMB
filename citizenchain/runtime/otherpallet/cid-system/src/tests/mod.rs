@@ -1,6 +1,6 @@
-//! sfid-system pallet 测试套件。
+//! cid-system pallet 测试套件。
 //!
-//! 中文注释:本模块当前只负责 SFID 绑定/解绑和公民投票凭证消费。
+//! 中文注释:本模块当前只负责 CID 绑定/解绑和公民投票凭证消费。
 //! 签发管理员集合不在本 pallet 内维护,由 runtime verifier 对接 admins-change。
 
 use super::*;
@@ -31,7 +31,7 @@ mod runtime {
     #[runtime::pallet_index(0)]
     pub type System = frame_system;
     #[runtime::pallet_index(1)]
-    pub type SfidSystem = super;
+    pub type CidSystem = super;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -41,20 +41,20 @@ impl system::Config for Test {
     type Lookup = IdentityLookup<Self::AccountId>;
 }
 
-pub struct TestSfidVerifier;
-impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
-    for TestSfidVerifier
+pub struct TestCidVerifier;
+impl CidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
+    for TestCidVerifier
 {
     fn verify(_account: &u64, credential: &CredentialOf<Test>) -> bool {
-        !credential.issuer_sfid_number.is_empty()
+        !credential.issuer_cid_number.is_empty()
             && !credential.scope_province_name.is_empty()
             && credential.signature.as_slice() == b"bind-ok"
     }
 }
 
-pub struct TestSfidVoteVerifier;
-impl SfidVoteVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
-    for TestSfidVoteVerifier
+pub struct TestCidVoteVerifier;
+impl CidVoteVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
+    for TestCidVoteVerifier
 {
     fn verify_vote(
         _account: &u64,
@@ -62,13 +62,13 @@ impl SfidVoteVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, 
         _proposal_id: u64,
         _nonce: &NonceOf<Test>,
         signature: &SignatureOf<Test>,
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         _issuer_main_account: &u64,
         _signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
     ) -> bool {
-        !issuer_sfid_number.is_empty()
+        !issuer_cid_number.is_empty()
             && !scope_province_name.is_empty()
             && signature.as_slice() == b"vote-ok"
     }
@@ -83,9 +83,9 @@ impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxCredentialNonceLength = MaxCredentialNonceLength;
     type MaxCredentialSignatureLength = MaxCredentialSignatureLength;
-    type SfidVerifier = TestSfidVerifier;
-    type SfidVoteVerifier = TestSfidVoteVerifier;
-    type OnSfidBound = ();
+    type CidVerifier = TestCidVerifier;
+    type CidVoteVerifier = TestCidVoteVerifier;
+    type OnCidBound = ();
     type UnbindOrigin = EnsureRoot<u64>;
     type WeightInfo = ();
 }
@@ -123,10 +123,10 @@ fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Tes
     BindCredential {
         binding_id: binding_id(seed),
         bind_nonce: nonce(bind_nonce),
-        issuer_sfid_number: b"SFID-ISSUER"
+        issuer_cid_number: b"CID-ISSUER"
             .to_vec()
             .try_into()
-            .expect("issuer sfid fits"),
+            .expect("issuer cid fits"),
         issuer_main_account: 99,
         signer_pubkey: [7u8; 32],
         scope_province_name: b"liaoning".to_vec().try_into().expect("scope fits"),

@@ -29,7 +29,7 @@ type BalanceOf<T> =
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct DestroyAction<AccountId, Balance> {
-    /// 目标机构主账户多签地址。
+    /// 目标机构主账户。
     pub institution: AccountId,
     /// 销毁数量
     pub amount: Balance,

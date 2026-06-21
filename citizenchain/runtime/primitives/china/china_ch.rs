@@ -1,13 +1,13 @@
 //! 43个初始省储行常量=china_ch.rs
-//! 费用账户地址（DUOQIAN + OP_FEE + ss58 小端 + sfid_number → BLAKE2-256）。
-//! 永久质押地址（DUOQIAN + OP_STAKE + ss58 小端 + sfid_number → BLAKE2-256）。
+//! 费用账户（DUOQIAN + OP_FEE + ss58 小端 + cid_number → BLAKE2-256）。
+//! 永久质押地址（DUOQIAN + OP_STAKE + ss58 小端 + cid_number → BLAKE2-256）。
 
 use hex_literal::hex;
 
 /// 单个省储行常量结构。
 pub struct ChinaCh {
-    pub sfid_full_name: &'static str,
-    pub sfid_number: &'static str,
+    pub cid_full_name: &'static str,
+    pub cid_number: &'static str,
     pub citizens_number: u64,
     pub stake_amount: u128,
     pub stake_account: [u8; 32],
@@ -19,8 +19,8 @@ pub struct ChinaCh {
 /// 所有省储行数组
 pub const CHINA_CH: &[ChinaCh] = &[
     ChinaCh {
-        sfid_full_name: "中枢省公民储备银行",
-        sfid_number: "ZS001-SCH1E-233384677-2026",
+        cid_full_name: "中枢省公民储备银行",
+        cid_number: "ZS001-SCH1E-233384677-2026",
         citizens_number: 10_913_902,
         stake_amount: 10_913_902_0000,
         fee_account: hex!("50a039748269d7687aa48e4c73ffe9d116232d8e2ffe272af95b18496bbabd80"),
@@ -39,8 +39,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "岭南省公民储备银行",
-        sfid_number: "LN001-SCH1Q-703127075-2026",
+        cid_full_name: "岭南省公民储备银行",
+        cid_number: "LN001-SCH1Q-703127075-2026",
         citizens_number: 28_157_064,
         stake_amount: 28_157_064_0000,
         fee_account: hex!("49091bc468cfd85f2ebe053f8fd6efc75df07ae9e3c4a3088d75c476297fb617"),
@@ -59,8 +59,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "广东省公民储备银行",
-        sfid_number: "GD001-SCH1Z-239565809-2026",
+        cid_full_name: "广东省公民储备银行",
+        cid_number: "GD001-SCH1Z-239565809-2026",
         citizens_number: 106_012_864,
         stake_amount: 106_012_864_0000,
         fee_account: hex!("0844e9170e6f7d1c4b3991ab685f5ca73db2af09fc5c55702ff91b799f0c598e"),
@@ -79,8 +79,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "广西省公民储备银行",
-        sfid_number: "GX001-SCH17-025559630-2026",
+        cid_full_name: "广西省公民储备银行",
+        cid_number: "GX001-SCH17-025559630-2026",
         citizens_number: 50_126_804,
         stake_amount: 50_126_804_0000,
         fee_account: hex!("168f3228f9a7d1129d21ffcb8c2e64b67ec7366ce949fdcf861d70a297487379"),
@@ -99,8 +99,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "福建省公民储备银行",
-        sfid_number: "FJ001-SCH11-504679612-2026",
+        cid_full_name: "福建省公民储备银行",
+        cid_number: "FJ001-SCH11-504679612-2026",
         citizens_number: 41_540_086,
         stake_amount: 41_540_086_0000,
         fee_account: hex!("3d44f89c16d2fdcececfc361a32a1a20c2e62bd6e81b9e60569095e057ab5cd2"),
@@ -119,8 +119,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "海南省公民储备银行",
-        sfid_number: "HN001-SCH1V-723623074-2026",
+        cid_full_name: "海南省公民储备银行",
+        cid_number: "HN001-SCH1V-723623074-2026",
         citizens_number: 10_081_232,
         stake_amount: 10_081_232_0000,
         fee_account: hex!("9059bc2f7cd45fa20e31a65283dfe41c2df30f6de9f08c264e87dd14af02010c"),
@@ -139,8 +139,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "云南省公民储备银行",
-        sfid_number: "YN001-SCH1E-692525950-2026",
+        cid_full_name: "云南省公民储备银行",
+        cid_number: "YN001-SCH1E-692525950-2026",
         citizens_number: 46_821_766,
         stake_amount: 46_821_766_0000,
         fee_account: hex!("544413ba1a80de93f2452206bcb0a32fc827cadbe6bbdab026b677d1b9a6a648"),
@@ -159,8 +159,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "贵州省公民储备银行",
-        sfid_number: "GZ001-SCH16-490015860-2026",
+        cid_full_name: "贵州省公民储备银行",
+        cid_number: "GZ001-SCH16-490015860-2026",
         citizens_number: 38_562_148,
         stake_amount: 38_562_148_0000,
         fee_account: hex!("a4f88bb6e978e06c3499e4030fc859b76941e45956828d8ec1dbe9510ef09afb"),
@@ -179,8 +179,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "湖南省公民储备银行",
-        sfid_number: "HU001-SCH1L-084835673-2026",
+        cid_full_name: "湖南省公民储备银行",
+        cid_number: "HU001-SCH1L-084835673-2026",
         citizens_number: 66_444_864,
         stake_amount: 66_444_864_0000,
         fee_account: hex!("75b1d9ffa61559df9cad189e8b8b25a1ce261f9154025caacabe72765ec9779a"),
@@ -199,8 +199,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "江西省公民储备银行",
-        sfid_number: "JX001-SCH1F-243765987-2026",
+        cid_full_name: "江西省公民储备银行",
+        cid_number: "JX001-SCH1F-243765987-2026",
         citizens_number: 45_188_635,
         stake_amount: 45_188_635_0000,
         fee_account: hex!("65ea7bc5635e5516d56acf71fd9a185798db1f94af9c65a90080e3e6b48ffe6b"),
@@ -219,8 +219,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "浙江省公民储备银行",
-        sfid_number: "ZJ001-SCH1X-296232973-2026",
+        cid_full_name: "浙江省公民储备银行",
+        cid_number: "ZJ001-SCH1X-296232973-2026",
         citizens_number: 64_567_588,
         stake_amount: 64_567_588_0000,
         fee_account: hex!("359fc9148334b7ad122edd18b98ec604f36f74c9a91d15d1d90092577bb78ff1"),
@@ -239,8 +239,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "江苏省公民储备银行",
-        sfid_number: "JS001-SCH17-890774605-2026",
+        cid_full_name: "江苏省公民储备银行",
+        cid_number: "JS001-SCH17-890774605-2026",
         citizens_number: 84_748_016,
         stake_amount: 84_748_016_0000,
         fee_account: hex!("a8fde60007174359f3eec91e786ac619387f475e9aee71b3ef9d21435dcfcfcc"),
@@ -259,8 +259,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "山东省公民储备银行",
-        sfid_number: "SD001-SCH1M-114256751-2026",
+        cid_full_name: "山东省公民储备银行",
+        cid_number: "SD001-SCH1M-114256751-2026",
         citizens_number: 101_527_453,
         stake_amount: 101_527_453_0000,
         fee_account: hex!("c8df44a3c673c6561d44962c90af0aa29ed2b9506d9e830e5c71cb27fd056c5a"),
@@ -279,8 +279,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "山西省公民储备银行",
-        sfid_number: "SX001-SCH1Q-520132196-2026",
+        cid_full_name: "山西省公民储备银行",
+        cid_number: "SX001-SCH1Q-520132196-2026",
         citizens_number: 34_915_616,
         stake_amount: 34_915_616_0000,
         fee_account: hex!("959fc2049e0dc049ffbf6cf43f9407bee22f33d78b78da5eefd14c4821b27958"),
@@ -299,8 +299,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "河南省公民储备银行",
-        sfid_number: "HE001-SCH19-158889343-2026",
+        cid_full_name: "河南省公民储备银行",
+        cid_number: "HE001-SCH19-158889343-2026",
         citizens_number: 99_365_519,
         stake_amount: 99_365_519_0000,
         fee_account: hex!("e8a0b874febb29f50e88a529f4f0589f9a5980bd9881d0566e6539a99315a768"),
@@ -319,8 +319,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "河北省公民储备银行",
-        sfid_number: "HB001-SCH15-484022741-2026",
+        cid_full_name: "河北省公民储备银行",
+        cid_number: "HB001-SCH15-484022741-2026",
         citizens_number: 56_282_021,
         stake_amount: 56_282_021_0000,
         fee_account: hex!("bf40d7f470591c4d12a3c28d384016b479b567207917ca34da378cb65d31aa49"),
@@ -339,8 +339,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "湖北省公民储备银行",
-        sfid_number: "HI001-SCH11-514948302-2026",
+        cid_full_name: "湖北省公民储备银行",
+        cid_number: "HI001-SCH11-514948302-2026",
         citizens_number: 54_543_553,
         stake_amount: 54_543_553_0000,
         fee_account: hex!("e86174e5b5fbb0d84aef0387e945b1f4a9560bf88395112904b889b85bae8c64"),
@@ -359,8 +359,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "陕西省公民储备银行",
-        sfid_number: "SI001-SCH1T-245618374-2026",
+        cid_full_name: "陕西省公民储备银行",
+        cid_number: "SI001-SCH1T-245618374-2026",
         citizens_number: 33_824_101,
         stake_amount: 33_824_101_0000,
         fee_account: hex!("d02b42a9954267e18113243ff6974188479a6da1c78f6bf11114dfae4aebaea0"),
@@ -379,8 +379,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "重庆省公民储备银行",
-        sfid_number: "CQ001-SCH1I-694162045-2026",
+        cid_full_name: "重庆省公民储备银行",
+        cid_number: "CQ001-SCH1I-694162045-2026",
         citizens_number: 32_054_159,
         stake_amount: 32_054_159_0000,
         fee_account: hex!("8cd711c0ec96975dfbac9c7a1c40b6d2c9d45e4597f2c8b23528b4c139e0ae22"),
@@ -399,8 +399,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "四川省公民储备银行",
-        sfid_number: "SC001-SCH1W-764253139-2026",
+        cid_full_name: "四川省公民储备银行",
+        cid_number: "SC001-SCH1W-764253139-2026",
         citizens_number: 80_310_245,
         stake_amount: 80_310_245_0000,
         fee_account: hex!("c80c0d9ae4fa2c87909dedd8b525df90d1f0ab47337a828cd04fd05e93125bcb"),
@@ -419,8 +419,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "甘肃省公民储备银行",
-        sfid_number: "GS001-SCH1E-005784877-2026",
+        cid_full_name: "甘肃省公民储备银行",
+        cid_number: "GS001-SCH1E-005784877-2026",
         citizens_number: 20_617_465,
         stake_amount: 20_617_465_0000,
         fee_account: hex!("7df2c91adb9d56b64a2ce51acf6dcd4183edac75049a18bef591eb1311baab3c"),
@@ -439,8 +439,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "北平省公民储备银行",
-        sfid_number: "BP001-SCH1W-434307982-2026",
+        cid_full_name: "北平省公民储备银行",
+        cid_number: "BP001-SCH1W-434307982-2026",
         citizens_number: 21_893_095,
         stake_amount: 21_893_095_0000,
         fee_account: hex!("7f6cb359b8abb77b7f30ae34bac21d4ceabff90d8673d0b9dd6e5bbb4fba3a2e"),
@@ -459,8 +459,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "海滨省公民储备银行",
-        sfid_number: "HA001-SCH1E-969179618-2026",
+        cid_full_name: "海滨省公民储备银行",
+        cid_number: "HA001-SCH1E-969179618-2026",
         citizens_number: 24_720_871,
         stake_amount: 24_720_871_0000,
         fee_account: hex!("28f8e719d05979fe4fef68e8e34fbbe5939290de197aa1a39bd78a328e4cfcff"),
@@ -479,8 +479,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "松江省公民储备银行",
-        sfid_number: "SJ001-SCH19-644104544-2026",
+        cid_full_name: "松江省公民储备银行",
+        cid_number: "SJ001-SCH19-644104544-2026",
         citizens_number: 24_870_895,
         stake_amount: 24_870_895_0000,
         fee_account: hex!("87cb6eb6612ede3e8ae56d9e74086b09cda263d0389fe3ad653c9ebc2f0e3a78"),
@@ -499,8 +499,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "龙江省公民储备银行",
-        sfid_number: "LJ001-SCH1Z-280510636-2026",
+        cid_full_name: "龙江省公民储备银行",
+        cid_number: "LJ001-SCH1Z-280510636-2026",
         citizens_number: 22_780_354,
         stake_amount: 22_780_354_0000,
         fee_account: hex!("08d796def30e246b6fac0d245e76746e3a4167cb638b0badb6fc915be65f1f87"),
@@ -519,8 +519,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "吉林省公民储备银行",
-        sfid_number: "JL001-SCH1D-129935340-2026",
+        cid_full_name: "吉林省公民储备银行",
+        cid_number: "JL001-SCH1D-129935340-2026",
         citizens_number: 24_073_453,
         stake_amount: 24_073_453_0000,
         fee_account: hex!("274ffb6b95feeeff5683a54014b7d2e9926fd09f359cc401ca8dbd7b20fe25c5"),
@@ -539,8 +539,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "辽宁省公民储备银行",
-        sfid_number: "LI001-SCH1P-249814963-2026",
+        cid_full_name: "辽宁省公民储备银行",
+        cid_number: "LI001-SCH1P-249814963-2026",
         citizens_number: 42_591_407,
         stake_amount: 42_591_407_0000,
         fee_account: hex!("3b468ce35bd63c997d91efcef179ba9dce5dc7506e89b839ebbbeca0e33e714b"),
@@ -559,8 +559,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "宁夏省公民储备银行",
-        sfid_number: "NX001-SCH1L-292327153-2026",
+        cid_full_name: "宁夏省公民储备银行",
+        cid_number: "NX001-SCH1L-292327153-2026",
         citizens_number: 7_202_654,
         stake_amount: 7_202_654_0000,
         fee_account: hex!("6d656f51e9070406c7041caebcda93a8b87c80280764b282c98617e495898d4c"),
@@ -579,8 +579,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "青海省公民储备银行",
-        sfid_number: "QH001-SCH11-075657014-2026",
+        cid_full_name: "青海省公民储备银行",
+        cid_number: "QH001-SCH11-075657014-2026",
         citizens_number: 5_030_542,
         stake_amount: 5_030_542_0000,
         fee_account: hex!("425565245d2298adb3789d9f207478cf3747b339eea6f031ea4fb3a8d001be68"),
@@ -599,8 +599,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "安徽省公民储备银行",
-        sfid_number: "AH001-SCH1S-388477914-2026",
+        cid_full_name: "安徽省公民储备银行",
+        cid_number: "AH001-SCH1S-388477914-2026",
         citizens_number: 61_027_171,
         stake_amount: 61_027_171_0000,
         fee_account: hex!("2131af1bca9075de2cecd8015bcb8a542b4a12ea71af7d9023680dd1985cf898"),
@@ -619,8 +619,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "台湾省公民储备银行",
-        sfid_number: "TW001-SCH1Y-266238196-2026",
+        cid_full_name: "台湾省公民储备银行",
+        cid_number: "TW001-SCH1Y-266238196-2026",
         citizens_number: 23_561_236,
         stake_amount: 23_561_236_0000,
         fee_account: hex!("85986826cb86e8e221bbb3114fe7faebccd4fad983aeeda32d8d2614abd0a585"),
@@ -639,8 +639,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "西藏省公民储备银行",
-        sfid_number: "XZ001-SCH1C-210788637-2026",
+        cid_full_name: "西藏省公民储备银行",
+        cid_number: "XZ001-SCH1C-210788637-2026",
         citizens_number: 2_763_853,
         stake_amount: 2_763_853_0000,
         fee_account: hex!("b847299b4a6018e765093801c73cbb4cff342f43aa54f4d3ac5002eecf3aed86"),
@@ -659,8 +659,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "新疆省公民储备银行",
-        sfid_number: "XJ001-SCH11-233325633-2026",
+        cid_full_name: "新疆省公民储备银行",
+        cid_number: "XJ001-SCH11-233325633-2026",
         citizens_number: 9_880_442,
         stake_amount: 9_880_442_0000,
         fee_account: hex!("6721c2a98f87c3a2f084bf5533c980e38c1bb65dc378a6a767f1470c14ba672e"),
@@ -679,8 +679,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "西康省公民储备银行",
-        sfid_number: "XK001-SCH1W-300401625-2026",
+        cid_full_name: "西康省公民储备银行",
+        cid_number: "XK001-SCH1W-300401625-2026",
         citizens_number: 4_513_098,
         stake_amount: 4_513_098_0000,
         fee_account: hex!("a86a7d1adf7d73770c2c9832a72f1112f49988e8fb7d94315ed9488e8e754cc7"),
@@ -699,8 +699,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "阿里省公民储备银行",
-        sfid_number: "AL001-SCH1Y-527686065-2026",
+        cid_full_name: "阿里省公民储备银行",
+        cid_number: "AL001-SCH1Y-527686065-2026",
         citizens_number: 2_627_999,
         stake_amount: 2_627_999_0000,
         fee_account: hex!("a2d83c5492bc011d3a5f2f7c322139e7156c3b9ec90853b76dc97ed6b784e8af"),
@@ -719,8 +719,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "葱岭省公民储备银行",
-        sfid_number: "CL001-SCH1W-951267669-2026",
+        cid_full_name: "葱岭省公民储备银行",
+        cid_number: "CL001-SCH1W-951267669-2026",
         citizens_number: 7_833_021,
         stake_amount: 7_833_021_0000,
         fee_account: hex!("9b73e74d4b4bdf7b90b9314a522484e0eeabafd17613d0184423468101b52e2b"),
@@ -739,8 +739,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "伊犁省公民储备银行",
-        sfid_number: "YL001-SCH1P-142800261-2026",
+        cid_full_name: "伊犁省公民储备银行",
+        cid_number: "YL001-SCH1P-142800261-2026",
         citizens_number: 5_634_164,
         stake_amount: 5_634_164_0000,
         fee_account: hex!("79b669bf3c303abc0127adbb80d69c8a37c31194b7a607fced835cb785787c91"),
@@ -759,8 +759,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "河西省公民储备银行",
-        sfid_number: "HX001-SCH1L-215310265-2026",
+        cid_full_name: "河西省公民储备银行",
+        cid_number: "HX001-SCH1L-215310265-2026",
         citizens_number: 4_664_727,
         stake_amount: 4_664_727_0000,
         fee_account: hex!("176e20195e7074351855893f304a38b4a70c83d9987b64c6cc7d5bb55a4609b8"),
@@ -779,8 +779,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "昆仑省公民储备银行",
-        sfid_number: "KL001-SCH1E-682838027-2026",
+        cid_full_name: "昆仑省公民储备银行",
+        cid_number: "KL001-SCH1E-682838027-2026",
         citizens_number: 893_415,
         stake_amount: 893_415_0000,
         fee_account: hex!("aedd82e0b7cd96fee49bb306a267f9c61d4bcbbb996c452888a4c0a7d5622b04"),
@@ -799,8 +799,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "河套省公民储备银行",
-        sfid_number: "HT001-SCH1R-210616196-2026",
+        cid_full_name: "河套省公民储备银行",
+        cid_number: "HT001-SCH1R-210616196-2026",
         citizens_number: 12_110_780,
         stake_amount: 12_110_780_0000,
         fee_account: hex!("fde86223c1945616182ce78304cba4c00c99799a990b528c4e1c6350a31dd908"),
@@ -819,8 +819,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "热河省公民储备银行",
-        sfid_number: "RH001-SCH1I-380830938-2026",
+        cid_full_name: "热河省公民储备银行",
+        cid_number: "RH001-SCH1I-380830938-2026",
         citizens_number: 15_489_562,
         stake_amount: 15_489_562_0000,
         fee_account: hex!("014f9eb856f901b635680c53cb7d266ca67a98db8bf89ea27244e9fc7809d25d"),
@@ -839,8 +839,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "兴安省公民储备银行",
-        sfid_number: "XA001-SCH1W-928028839-2026",
+        cid_full_name: "兴安省公民储备银行",
+        cid_number: "XA001-SCH1W-928028839-2026",
         citizens_number: 3_991_080,
         stake_amount: 3_991_080_0000,
         fee_account: hex!("88f4861da2db2982a187efc88eb7288a7c5cd57eeb98128ce3852bd81929f4bf"),
@@ -859,8 +859,8 @@ pub const CHINA_CH: &[ChinaCh] = &[
         ],
     },
     ChinaCh {
-        sfid_full_name: "合江省公民储备银行",
-        sfid_number: "HJ001-SCH1O-089279108-2026",
+        cid_full_name: "合江省公民储备银行",
+        cid_number: "HJ001-SCH1O-089279108-2026",
         citizens_number: 8_738_458,
         stake_amount: 8_738_458_0000,
         fee_account: hex!("6ade1894079bad5408e421eee261b21b4d507801aecae0ff9d02203ff0572997"),
@@ -902,7 +902,7 @@ mod tests {
 
     #[test]
     fn all_china_ch_main_accounts_are_unique() {
-        // 中文注释：43 个省储行的多签地址必须全部唯一，不允许两省共用同一地址。
+        // 中文注释：43 个省储行的多签账户必须全部唯一，不允许两省共用同一地址。
         let mut addrs: Vec<[u8; 32]> = CHINA_CH.iter().map(|n| n.main_account).collect();
         let total = addrs.len();
         addrs.sort();

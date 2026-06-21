@@ -9,12 +9,16 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - 改哪个模块，就优先只跑哪个模块
 - 共享依赖变更时，允许多模块联动触发
 - 安全门禁与 Claude 审查属于跨模块能力，继续对 PR 全局生效
+- `push` / `pull_request` 自动触发的 workflow 只允许执行 CI 校验、编译、测试和检查构建,不得访问服务器、不得发布 GitHub Release、不得部署、不得读取部署 SSH 密钥或正式签名密钥
+- 只有 GitHub 页面手动 `Run workflow`(`workflow_dispatch`) 才允许进入正式发布链路,包括 `GMB_APP_KEY`、`GMB_TOP_KEY / GMB_TOP_PUBKEY`、`GMB_SSH_KEY`、GitHub Release 发布、正式安装包上传和旧发布产物清理
 
 ## 2. citizenchain 当前规则
 
 ### 2.1 runtime WASM
 
 - workflow：`.github/workflows/citizenchain-wasm.yml`
+- `push main`:只编译当前源码 WASM 并上传本次 CI artifact,不查询链上 `spec_version`,不读取 RPC/SSH Secret,不连接服务器
+- 手动 `Run workflow`:允许使用 `GMB_SSH_KEY` 查询链上 `spec_version` 并在 CI 工作区临时提升源码版本;不得恢复系统专属 SSH secret
 - 主要命中目录：
   - `citizenchain/runtime/**`
   - `.github/workflows/citizenchain-wasm.yml`
@@ -23,8 +27,8 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 - workflow：`.github/workflows/citizenchain.yml`
 - 主要命中目录：
-  - `push main` 只构建并上传 5 个用户安装包 artifact，不发布 GitHub Release，不生成客户端更新通知，不部署服务器
-  - GitHub 页面手动 `Run workflow` 才进入正式发布路径：构建同样 5 个用户安装包，生成 updater 签名产物，发布 GitHub Release，更新 `citizenchain-latest.json`，部署 Linux 服务器
+  - `push main` 只构建并上传 5 个用户安装包 artifact,不读取 Tauri updater 签名密钥,不发布 GitHub Release,不生成客户端更新通知,不部署服务器
+  - GitHub 页面手动 `Run workflow` 才进入正式发布路径：构建同样 5 个用户安装包，使用 `GMB_TOP_KEY / GMB_TOP_PUBKEY` 生成 updater 签名产物，发布 GitHub Release，更新 `citizenchain-latest.json`，使用 `GMB_SSH_KEY` 部署 Linux 服务器
   - 单个 workflow 通过 matrix 同时构建 macOS Intel / macOS Apple / Windows / Linux amd / Linux arm，五个安装包使用同一个桌面端版本号
   - 五个用户安装包名称固定为：
     - `公民链-macOS-Intel.dmg`
@@ -49,15 +53,22 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 当前仓库规则已经明确为：
 
-- `cid`
+- `citizencode`
   - CI：`.github/workflows/citizencode-ci.yml`
-  - 部署：`.github/workflows/cid-deploy.yml`
-- `cpms`
+  - `push` / `pull_request`:只编译后端、跑后端测试、构建前端,不构建正式 `.deb`
+  - 手动 `Run workflow`:在 CI 通过后构建并上传 `citizencode.deb`
+- `citizenpassport`
   - CI：`.github/workflows/citizenpassport-ci.yml`
+  - `push` / `pull_request`:只编译后端、跑后端测试、构建前端
+  - 手动 `Run workflow`:构建并上传正式离线 `.run` 安装包
 - `citizenapp`
   - CI：`.github/workflows/citizenapp-ci.yml`
-- `docs`
-  - Pages：`.github/workflows/pages.yml`
+  - `push` / `pull_request`:只构建 Debug APK 做工程检查,不读取 release keystore
+  - 手动 `Run workflow`:读取 `GMB_APP_KEY`,构建正式签名 `公民.apk`,发布 Android 更新 Release
+- `citizenwallet`
+  - CI：`.github/workflows/citizenwallet-ci.yml`
+  - `push`:只做 Flutter analyze/test 与 Debug APK 检查构建,不读取 release keystore
+  - 手动 `Run workflow`:读取同一个 `GMB_APP_KEY`,构建并上传正式 `公民钱包.apk`
 
 ## 4. 当前结论
 
@@ -69,3 +80,4 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - Claude 审查继续保留
 - 模块级构建和测试按目录精确触发
 - 共享 Rust 根目录变更允许触发多个 citizenchain workflow
+- push 自动 CI 与手动发布部署必须保持密钥边界隔离

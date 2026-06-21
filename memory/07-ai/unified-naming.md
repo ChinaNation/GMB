@@ -43,7 +43,7 @@
 | 顶层目录 | lowercase | `memory` |
 | Rust crate 目录 | kebab-case | `organization-manage` |
 | Rust 模块 / 文件 | snake_case | `chain_duoqian_info.rs` |
-| Dart / TS 文件 | snake_case 或既有框架风格 | `duoqian_manage_service.dart` |
+| Dart / TS 文件 | snake_case 或既有框架风格 | `account_manage_service.dart` |
 | 前端功能目录 | snake_case | `admins` |
 | Rust 类型 | PascalCase | `InstitutionAccountInfo` |
 | Dart / TS 类型 | PascalCase | `InstitutionAccountEntry` |
@@ -136,7 +136,7 @@
 | 内部投票 | `internal-vote` | runtime crate / pallet | 机构内部治理投票 |
 | 联合投票 | `joint-vote` | runtime crate / pallet | 联合治理投票 |
 | 机构账户 | `InstitutionAccounts` | storage | 机构账户 storage |
-| 个人多签 | `PersonalDuoqians` | storage | 个人多签 storage |
+| 个人多签 | `PersonalAccounts` | storage | 个人多签 storage |
 | 治理主体 | `Subjects` | storage | 管理员主体 storage |
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
 | 机构账户主体 | `InstitutionAccount` | AdminAccountKind / 类型 | 注册机构账户级内部投票主体，已使用 `AdminAccountKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
@@ -485,4 +485,4 @@
 | 是否同意 | `approve` | QR display | 投票是否同意 |
 | 收款人 | `beneficiary` | QR display | 转账或关闭后的收款地址 |
 | 备注 | `remark` | QR display | 交易备注 |
-| 多签地址 | `duoqian_account` | QR display | 个人或机构多签地址 |
+| 多签账户 | `account` | QR display | 个人或机构多签账户 |

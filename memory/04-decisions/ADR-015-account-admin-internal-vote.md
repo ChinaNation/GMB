@@ -128,7 +128,7 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 推荐映射:
 
 - 治理机构账户:继续映射到现有 `AdminAccountKind::Builtin` 主体,同一治理机构所有账户共享一个主体。
-- 注册个人账户:继续映射到现有 `AdminAccountKind::PersonalDuoqian` 主体。
+- 注册个人账户:继续映射到现有 `AdminAccountKind::PersonalAccount` 主体。
 - 注册机构账户:新增账户级主体类型,推荐 `AdminAccountKind::InstitutionAccount = 0x05`,payload 使用账户 `AccountId` 的 32 字节值并右填零。
 
 说明:
@@ -204,9 +204,9 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 
 - `personal-manage::propose_create` 已删除 `admins_len / threshold` 入参，创建 call 编码改为 `account_name + admins + amount`。
 - 个人账户管理员数量由 `admins.len()` 派生，链端限制 `2..=64`。
-- 普通阈值统一调用 `admins-change::derived_threshold` 派生：个人多签使用 `PersonalDuoqian + ORG_REN`，机构账户使用 `InstitutionAccount + ORG_PUP / ORG_OTH`，`注册机构归属关系` 不再作为管理员主体。
+- 普通阈值统一调用 `admins-change::derived_threshold` 派生：个人多签使用 `PersonalAccount + ORG_REN`，机构账户使用 `InstitutionAccount + ORG_PUP / ORG_OTH`，`注册机构归属关系` 不再作为管理员主体。
 - 创建提案内部投票阈值为拟定管理员全员数量；关闭提案仍为当前管理员全员数量。
-- `PersonalManage::PersonalDuoqians` 不再镜像管理员列表、管理员数量和阈值，只保存 `creator / account_name / created_at / status`。
+- `PersonalManage::PersonalAccounts` 不再镜像管理员列表、管理员数量和阈值，只保存 `creator / account_name / created_at / status`。
 - `CreateDuoqianAction` 不再保存管理员数量和阈值，但保存创建时 `fee` 快照。
 - 提案通过后，同一执行事务内完成入金、激活 `admins-change` 主体、激活个人账户。
 - `duoqian-transfer` 的个人多签管理员查询已从 `admins-change` 读取。
@@ -220,17 +220,17 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 - `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：41 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：20 passed。
-- `flutter test test/duoqian/duoqian_manage_service_test.dart test/duoqian/duoqian_storage_codec_test.dart test/duoqian/duoqian_manage_storage_test.dart`：10 passed。
+- `flutter test test/duoqian/account_manage_service_test.dart test/duoqian/duoqian_storage_codec_test.dart test/duoqian/duoqian_manage_storage_test.dart`：10 passed。
 - `flutter test test/signer/payload_decoder_test.dart`：30 passed。
 
 ## 第 5 步执行结果
 
 2026-05-08 已完成：
 
-- `duoqian-transfer::registered_duoqian_account` 拆成 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId` 两条账户级路径；`0x02 注册机构归属关系` 明确拒绝作为转账支出主体。
+- `duoqian-transfer::registered_account` 拆成 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId` 两条账户级路径；`0x02 注册机构归属关系` 明确拒绝作为转账支出主体。
 - 个人多签账户状态由 `PersonalQuery::is_active` 校验，机构账户状态由 `InstitutionQuery::is_active` 校验；管理员和阈值仍由投票引擎快照读取 `admins-change::Subjects`。
 - citizenapp `institution_data.dart`、`duoqian_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `InstitutionAccount AccountId` 编码/解码。
-- citizenapp 多签自动发现只把 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId` 落为本地账户；`0x02 注册机构归属关系` 只作归属/检索。
+- citizenapp 多签自动发现只把 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId` 落为本地账户；`0x02 注册机构归属关系` 只作归属/检索。
 - citizenapp 注册机构账户详情查询改为 `AccountRegisteredCid -> InstitutionAccounts -> AdminsChange::AdminAccounts[0x05]`，不再从 `0x02` 读取账户管理员。
 - citizenwallet 公民钱包 `propose_transfer` 只接受 `0x01 / 0x03 / 0x05` 可支出主体，拒绝旧裸 cid 与 `0x02`；QR 展示字段新增 `institution`，显示内置机构名、个人多签短地址或机构账户短地址。
 - 本步骤未修改 `spec_version`。

@@ -108,7 +108,7 @@ pub struct DestroyAction<Balance> {
 
 ## 5. 执行逻辑（`try_execute_destroy_from_action`）
 1. 校验投票引擎提案状态为 `STATUS_PASSED`。
-2. 从常量表查找机构账户地址并 decode 为 `AccountId`。
+2. 从常量表查找机构账户并 decode 为 `AccountId`。
 3. 校验 `free_balance >= amount + minimum_balance`（ED 保护）。
 4. 调用 `Currency::slash` 执行销毁。
 5. 校验 `remaining.is_zero()` 确认全额销毁成功。
@@ -154,7 +154,7 @@ pub struct DestroyAction<Balance> {
 - `ZeroAmount`：销毁金额为 0
 - `ProposalActionNotFound`：找不到提案动作数据
 - `ProposalNotPassed`：投票尚未通过
-- `InstitutionAccountDecodeFailed`：机构账户地址解码失败
+- `InstitutionAccountDecodeFailed`：机构账户解码失败
 - `InsufficientBalance`：余额不足（含 ED 保护）
 
 ---

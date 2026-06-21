@@ -52,7 +52,7 @@ class OffchainClearingPayPage extends StatefulWidget {
   /// 收款方清算行节点 WSS URL。
   final String clearingNodeWssUrl;
 
-  /// CID 后端 baseUrl(用于按 `cid_number` 查收款方清算行主账户地址)。
+  /// CID 后端 baseUrl(用于按 `cid_number` 查收款方清算行主账户)。
   final String cidBaseUrl;
 
   /// 商户 QR 预填金额(元,字符串)。空 → 由用户输入。

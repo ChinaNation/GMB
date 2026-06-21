@@ -32,7 +32,7 @@ views/
     BindingView.tsx        # 业务员"有账户绑档案"+"有档案绑账户"
     Qr4Scanner.tsx
   operators/
-    FederalAdminsView.tsx      # 操作员(CITY_ADMIN)增删改查
+    FederalAdminsView.tsx      # 操作员(ADMIN)增删改查
   key-management/
   institutions/            # 已存在,保持不动
   common/                  # 已存在,保持不动

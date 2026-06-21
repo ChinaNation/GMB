@@ -3,7 +3,7 @@
 /// 中文注释：
 /// - 此文件由 `lib/institution/institution_data.dart` 拆分而来（2026-05-09 模块边界整改）。
 /// - 通用类型 `InstitutionInfo` / `InstitutionAccounts` / `OrgType` + 身份编码工具
-///   `institutionIdentityToAccountId` / `registeredDuoqianIdentity` 等已迁至
+///   `institutionIdentityToAccountId` / `registeredAccountIdentity` 等已迁至
 ///   `lib/governance/shared/institution_info.dart`。
 /// - 静态注册表仅包含国储会/省储会/省储行三类内置治理机构，机构账户与个人多签
 ///   不在此表中（动态从链上读取 `AdminsChange::AdminAccounts`）。
@@ -36,21 +36,21 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
     if (_bytesEqual(encoded, accountIdBytes)) return inst;
   }
 
-  final duoqianAccount = _hexEncode(accountIdBytes);
+  final account = _hexEncode(accountIdBytes);
   if (adminAccountOrg == 4 || adminAccountOrg == 5) {
     return InstitutionInfo(
-      name: '机构账户 ${duoqianAccount.substring(0, 8)}',
-      cidNumber: registeredDuoqianIdentity(duoqianAccount),
-      orgType: OrgType.duoqian,
-      duoqianAccount: duoqianAccount,
+      name: '机构账户 ${account.substring(0, 8)}',
+      cidNumber: registeredAccountIdentity(account),
+      orgType: OrgType.account,
+      account: account,
       adminAccountOrg: adminAccountOrg,
     );
   }
   return InstitutionInfo(
-    name: '个人多签 ${duoqianAccount.substring(0, 8)}',
-    cidNumber: 'personal:$duoqianAccount',
-    orgType: OrgType.duoqian,
-    duoqianAccount: duoqianAccount,
+    name: '个人多签 ${account.substring(0, 8)}',
+    cidNumber: 'personal-account:$account',
+    orgType: OrgType.account,
+    account: account,
   );
 }
 

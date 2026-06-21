@@ -380,7 +380,7 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.1.1 管理员更换手机端协议
 
 - 目录边界：公民端管理员更换只在 `lib/governance/admins-change/` 内实现；机构/个人注册、注销仍归 `organization-manage` / `personal-manage`。
-- 主体规则：`PersonalDuoqian` 必须使用 `ORG_REN`，`InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，`注册机构归属关系` 不能作为管理员更换主体。
+- 主体规则：`PersonalAccount` 必须使用 `ORG_REN`，`InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，`注册机构归属关系` 不能作为管理员更换主体。
 - QR call data：`[AdminsChange=12][call=0][org:u8][account_id:48][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`。
 - 内置治理机构只读展示固定阈值，不展示输入框；提交管理员更换提案时 `new_threshold` 必须等于制度固定阈值。
 - 个人多签和机构账户展示动态阈值输入框，校验公式为 `threshold * 2 > admins_len && threshold <= admins_len`。
@@ -391,7 +391,7 @@ message = blake2_256(SCALE.encode(payload))
 
 机构详情页（`InstitutionDetailPage`）自上而下包含以下区域：
 
-0. **机构账户信息卡**：身份 ID、主账户地址、制度账户类型和内部门槛均为本地固定数据，进入页面立即显示；主账户余额是链上 finalized 动态数据，独立后台读取并只更新余额字段。
+0. **机构账户信息卡**：身份 ID、主账户、制度账户类型和内部门槛均为本地固定数据，进入页面立即显示；主账户余额是链上 finalized 动态数据，独立后台读取并只更新余额字段。
 1. **顶部机构卡片**：左侧机构图标 + 中间机构类型标签与管理员/阈值信息。
    - 机构类型、阈值来自本地制度常量。
    - 管理员人数来自链上 `AdminsChange::AdminAccounts`，读取中或读取失败时只更新副标题，不阻塞页面。
@@ -406,7 +406,7 @@ message = blake2_256(SCALE.encode(payload))
 | 数据 | 来源 | 刷新方式 | 首屏策略 |
 | --- | --- | --- | --- |
 | 机构名称、类型、身份 ID | 本地静态注册表 | 随 App 版本更新 | 立即显示 |
-| 主账户、费用账户、安全基金账户、永久质押账户地址 | 本地静态注册表 | 随 App 版本更新 | 立即显示 |
+| 主账户、费用账户、安全基金账户、永久质押账户 | 本地静态注册表 | 随 App 版本更新 | 立即显示 |
 | 治理机构内部门槛 | 本地制度常量 | 随 App 版本更新 | 立即显示 |
 | 管理员列表和管理员人数 | 链上 `AdminsChange::AdminAccounts` | 后台读取，30 秒内存短缓存，下拉刷新强制更新 | 显示“读取中/读取失败”副标题 |
 | 当前用户管理员身份 | 本地钱包 + 本地激活记录 + 链上管理员列表 | 后台读取，激活/返回/下拉刷新后更新 | 显示身份确认中，不挡住页面 |
@@ -537,11 +537,11 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - `anquanAccount`：安全基金账户，仅国储会显示
 - `stakeAccount`：永久质押账户，仅省储行显示
 
-个人多签和机构账户可通过 `InstitutionInfo` 传入账户地址，但业务侧统一读取
-`InstitutionInfo.mainAccount`。治理机构不得再使用 `duoqianAccount` 表达主账户。
+个人多签和机构账户可通过 `InstitutionInfo` 传入账户，但业务侧统一读取
+`InstitutionInfo.mainAccount`。治理机构不得再用其他字段表达主账户。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
-治理机构名称、身份 ID、制度账户地址和治理机构固定阈值由
+治理机构名称、身份 ID、制度账户和治理机构固定阈值由
 `scripts/generate_citizenapp_governance_registry.mjs` 从 runtime primitives 生成到
 `lib/institution/governance_institution_registry.generated.dart` 并由
 `InstitutionInfo` 派生展示。管理员列表不写入静态注册表，必须动态读取链上
@@ -586,7 +586,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/citizen/vote/vote_view.dart` | 投票二级页，全局治理提案列表与待投票红点 |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
 | `lib/governance/shared/institution_info.dart + lib/governance/organization-manage/institution_registry.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
-| `lib/governance/organization-manage/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
+| `lib/governance/organization-manage/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户 |
 | `lib/governance/admins-change/services/institution_admin_service.dart` | 管理员查询门面（委托 `AdminAccountService` 读取 `AdminsChange::AdminAccounts`） |
 | `lib/governance/organization-manage/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
 | `lib/governance/shared/proposal/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
@@ -594,7 +594,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/votingengine/internal-vote/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
 | `lib/votingengine/internal-vote/pending_vote_store.dart` | 多提案共用待确认投票记录 |
 | `lib/votingengine/internal-vote/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
-| `lib/governance/duoqian_manage_detail_page.dart` | 跨个人/机构的多签管理提案详情页 |
+| `lib/governance/account_manage_detail_page.dart` | 跨个人/机构的多签管理提案详情页 |
 | `lib/governance/governance_proposals_page.dart` | 提案类型选择页 |
 | `lib/governance/runtime-upgrade/runtime_upgrade_page.dart` | 协议升级说明页（不发起提案、不选择 WASM、不获取人口快照） |
 | `lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart` | 协议升级提案详情页（联合投票/公民投票进度） |
@@ -616,7 +616,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 注册个人账户使用 `org = 3`（`ORG_REN`）；注册机构账户按类型使用 `org = 4`（`ORG_PUP`，公权机构账户）或 `org = 5`（`ORG_OTH`，其他机构账户），与治理机构 org 0/1/2 并列。
 
-`AccountId`（48 字节）使用 AdminAccountKind 协议：个人账户为 `PersonalDuoqian AccountId`，机构账户为 `InstitutionAccount AccountId`，payload 均为账户 `AccountId` 前 32 字节并右填零。
+`AccountId`（48 字节）使用 AdminAccountKind 协议：个人账户为 `PersonalAccount AccountId`，机构账户为 `InstitutionAccount AccountId`，payload 均为账户 `AccountId` 前 32 字节并右填零。
 
 ### 8.3 动态阈值与管理员
 
@@ -633,9 +633,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | Extrinsic | call_index | 说明 | 投票 |
 | --- | --- | --- | --- |
 | `OrganizationManage::propose_create_institution(..., org, ...)` | 17.5 | 发起 CID 机构多签账户创建提案；机构账户管理员 org 必须为 `ORG_PUP / ORG_OTH` | 投票引擎 |
-| `OrganizationManage::propose_close(duoqian_account, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
+| `OrganizationManage::propose_close(account, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
 | `PersonalManage::propose_create(account_name, admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
-| `PersonalManage::propose_close(duoqian_account, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
+| `PersonalManage::propose_close(account, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 
 ### 8.5 创建流程（Pending → Active）
@@ -644,7 +644,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
    创建手续费为 `max(初始资金 * 0.1%, 0.10 元)`，ED 当前为 `1.11 元`。
 2. 管理员调用对应创建入口 → 写入机构或个人 pending storage + 投票引擎创建提案
 3. App 不能把 txHash 当创建成功；必须等待交易入块，并在同一区块确认
-   `PersonalManage.PersonalDuoqianProposed` 或
+   `PersonalManage.PersonalAccountProposed` 或
    `OrganizationManage.InstitutionCreateProposed` 后，才写本地记录。
 4. 本地提案编号必须使用事件中的 `proposal_id`，不得预测
    `VotingEngine.NextProposalId`。
@@ -673,15 +673,15 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 2026-05-17 起，`citizenapp` 将多签账户入口从交易页迁入底部第 2 个 `多签` Tab，点击后直接显示统一多签账户列表，顶部标题为“多签”：
 
-- 个人多签读取 `PersonalDuoqianEntity` 和 `PersonalDuoqianLocalState`。
+- 个人多签读取 `PersonalAccountEntity` 和 `PersonalAccountLocalState`。
 - 机构多签读取 `DuoqianInstitutionEntity` 和 `InstitutionDuoqianLocalState`。
 - 多签列表在首次点击 `多签` Tab 后构建，防止应用启动时提前触发多签账户发现。
 - 多签列表首屏只读本机 Isar，不等待链上账户状态查询、不等待 `AdminsChange::AdminAccounts`
   全量 discovery；链上刷新只能在后台更新局部状态。
 - 本地状态使用 `AppKvEntity.stringValue` 保存 `active / pending / closed`，
   使用 `AppKvEntity.intValue` 记录最近成功链上同步时间。
-- 多签账户详情页必须 local-first：个人详情页读取 `PersonalDuoqianEntity`、
-  `PersonalDuoqianLocalState` 和 `personal_duoqian_detail:*`；机构详情页读取
+- 多签账户详情页必须 local-first：个人详情页读取 `PersonalAccountEntity`、
+  `PersonalAccountLocalState` 和 `personal_account_detail:*`；机构详情页读取
   `DuoqianInstitutionEntity`、`InstitutionDuoqianLocalState` 和
   `institution_duoqian_detail:*`。这些都是本机持久化储存，不是内存缓存。
 - 详情页本机快照可直接显示名称、地址、本地状态、管理员公钥列表、阈值和余额快照；
@@ -690,9 +690,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
   `balanceYuan` 和 `lastBalanceRefreshAtMillis`；Active 详情页若本地余额为空或余额
   TTL 过期，应只调用余额读取，不重复拉管理员/阈值。
 - 详情页进入时不得用全屏转圈等待 `fetchPersonalAccount()`、
-  `fetchDuoqianAccount()` 或 `InstitutionAdminService.fetchAdmins()`；
-  自动刷新必须复用 `fetchPersonalAccountsBatch([address])` /
-  `fetchDuoqianAccountsBatch([address])`，并受 TTL 控制。
+  `fetchAccount()` 或 `InstitutionAdminService.fetchAdmins()`；
+  自动刷新必须复用 `fetchPersonalAccountsBatch([account])` /
+  `fetchAccountsBatch([account])`，并受 TTL 控制。
 - 详情页不展示“同步中”类 UI。下拉刷新、转账提案创建返回、投票返回、关闭返回
   才忽略 TTL 精准刷新当前账户；链上失败只保留本机已储存数据，不写成 Closed。
 - Active 账户 60 分钟内不自动重复查链；Pending / Closed 账户 10 分钟内不自动重复查链；
@@ -702,8 +702,8 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - 下拉刷新先强制刷新已知账户状态，再强制执行个人和机构 discovery。
 - 创建、关闭、投票、删除返回时只刷新相关账户或本地记录，不重新扫描全部多签。
 - 个人多签状态刷新由 `PersonalManageService.fetchPersonalAccountsBatch()` 分阶段批量读取
-  `PersonalDuoqians / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
-- 机构多签状态刷新由 `DuoqianManageService.fetchDuoqianAccountsBatch()` 分阶段批量读取
+  `PersonalAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
+- 机构多签状态刷新由 `InstitutionManageService.fetchAccountsBatch()` 分阶段批量读取
   `AccountRegisteredCid / InstitutionAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
 - 两条批量路径都通过 `ChainRpc.fetchStorageBatchChunked()` 分块读取 storage，列表页不得逐个账户循环调用详情查询。
 - 右上角加号提供“新增个人多签 / 新增机构多签”两个入口。
@@ -715,7 +715,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 2026-04-30 第二轮收口只迁移纯多签文件：账户管理模型/服务、账户详情、创建、
 关闭、账户列表、账户详情和机构发现归入 `lib/organization-manage`；跨个人/机构的
-多签管理提案详情留在 `lib/governance/duoqian_manage_detail_page.dart`。
+多签管理提案详情留在 `lib/governance/account_manage_detail_page.dart`。
 QR 协议、Isar schema、钱包流水、治理聚合页、机构通用服务和内部投票通用服务仍留在原模块目录；
 多签转账相关文件统一归 `lib/transaction/duoqian-transfer/`。
 
@@ -725,7 +725,7 @@ QR 协议、Isar schema、钱包流水、治理聚合页、机构通用服务和
 
 2026-05-09 起，citizenapp 个人多签主业务与 runtime `personal-manage` 对齐：
 个人创建、关闭、管理员激活、待创建提案反查、提案历史、PersonalManage call data、
-PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage codec
+PersonalManage ProposalData 解码、`PersonalManage::PersonalAccounts` storage codec
 统一放入 `lib/governance/personal-manage/`。`lib/governance/organization-manage/` 不再承载这些个人主业务；
 目前仅保留机构多签能力和 `AdminInstitutionCodec` 这类个人/机构都要读取的底层 Subject 解码能力。
 
@@ -738,16 +738,16 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/governance/duoqian_account_list_page.dart` | 个人 + 机构多签统一账户列表页 |
-| `lib/governance/organization-manage/duoqian_account_info_page.dart` | 机构多签账户详情页 |
+| `lib/governance/institution_account_list_page.dart` | 个人 + 机构多签统一账户列表页 |
+| `lib/governance/organization-manage/institution_account_info_page.dart` | 机构多签账户详情页 |
 | `lib/governance/organization-manage/duoqian_discovery_service.dart` | 机构多签反向索引发现服务 |
 | `lib/governance/organization-manage/duoqian_manage_models.dart` | 机构关闭提案模型与机构账户状态模型 |
-| `lib/governance/organization-manage/duoqian_manage_service.dart` | OrganizationManage 机构多签链上交互服务 |
-| `lib/governance/duoqian_manage_detail_page.dart` | 个人/机构多签管理提案共用投票详情页；业务解码委托对应 manage 服务 |
+| `lib/governance/organization-manage/account_manage_service.dart` | OrganizationManage 机构多签链上交互服务 |
+| `lib/governance/account_manage_detail_page.dart` | 个人/机构多签管理提案共用投票详情页；业务解码委托对应 manage 服务 |
 | `lib/governance/organization-manage/institution_duoqian_create_page.dart` | 机构多签创建表单 |
 | `lib/governance/organization-manage/institution_duoqian_close_page.dart` | 机构多签关闭表单 |
-| `lib/governance/personal-manage/personal_duoqian_create_page.dart` | 个人多签创建表单 |
-| `lib/governance/personal-manage/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
+| `lib/governance/personal-manage/personal_account_create_page.dart` | 个人多签创建表单 |
+| `lib/governance/personal-manage/personal_account_close_page.dart` | 个人多签关闭表单 |
 | `lib/governance/personal-manage/personal_admin_list_page.dart` | 个人多签管理员激活列表 |
 | `lib/governance/personal-manage/personal_manage_account_info_page.dart` | 个人多签账户详情页 |
 | `lib/governance/personal-manage/personal_manage_discovery_service.dart` | 个人多签反向索引发现服务 |
@@ -770,15 +770,15 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 - `lib/governance/organization-manage/institution_detail_page.dart`
 - `lib/governance/governance_proposals_page.dart`
 - `lib/governance/organization-manage/institution_admin_list_page.dart`
-- `lib/governance/organization-manage/duoqian_account_info_page.dart`
+- `lib/governance/organization-manage/institution_account_info_page.dart`
 - `lib/governance/organization-manage/duoqian_discovery_service.dart`
 - `lib/governance/organization-manage/duoqian_manage_models.dart`
-- `lib/governance/organization-manage/duoqian_manage_service.dart`
-- `lib/governance/duoqian_manage_detail_page.dart`
+- `lib/governance/organization-manage/account_manage_service.dart`
+- `lib/governance/account_manage_detail_page.dart`
 - `lib/governance/organization-manage/institution_duoqian_create_page.dart`
 - `lib/governance/organization-manage/institution_duoqian_close_page.dart`
-- `lib/governance/personal-manage/personal_duoqian_create_page.dart`
-- `lib/governance/personal-manage/personal_duoqian_close_page.dart`
+- `lib/governance/personal-manage/personal_account_create_page.dart`
+- `lib/governance/personal-manage/personal_account_close_page.dart`
 - `lib/governance/personal-manage/personal_admin_list_page.dart`
 - `lib/governance/personal-manage/personal_manage_account_info_page.dart`
 - `lib/governance/personal-manage/personal_manage_discovery_service.dart`

@@ -28,7 +28,7 @@ export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalPr
   } = state;
   const selectedCityRegistryCity = Form.useWatch('city_scope_city_name', addCityRegistryForm);
   // 中文注释:新增弹窗只做提前拦截,单市 30 人上限最终以后端校验为准。
-  const cityCityRegistryCount = (city: string) => cityRegistryAdmins.filter((item) => item.city_name === city).length;
+  const cityCityRegistryCount = (city_name: string) => cityRegistryAdmins.filter((item) => item.city_name === city_name).length;
   const selectedCityLimitReached = selectedCityRegistryCity
     ? cityCityRegistryCount(selectedCityRegistryCity) >= MAX_CITY_REGISTRY_ADMINS_PER_CITY
     : false;

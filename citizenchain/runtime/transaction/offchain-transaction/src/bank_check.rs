@@ -2,12 +2,12 @@
 //!
 //! 中文注释:
 //! - 清算行(L2)= subject_property 为 S(私法人)或 F(非法人)的私权机构。
-//! - 清算行在 SFID 系统注册时生成 sfid_number,并在链上 `organization-manage` 注册
+//! - 清算行在 CID 系统注册时生成 cid_number,并在链上 `organization-manage` 注册
 //!   主账户 + 费用账户两个多签账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
 //!
 //! **解耦设计**:bank_check 不直接依赖 `organization-manage`,而是通过
-//! `SfidAccountQuery` trait 抽象机构登记表。runtime 层实现该 trait(内部委托
+//! `CidAccountQuery` trait 抽象机构登记表。runtime 层实现该 trait(内部委托
 //! 给 `organization-manage` 的 Storage),测试层可用 `()` 空实现或 mock,从
 //! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `organization_manage::Config`。
 
@@ -20,12 +20,12 @@ use crate::{Config, Error};
 // 常量
 // ------------------------------------------------------------
 
-/// 新版 SFID 字符串 `R5-K3P1C1-N9-D4` 中 K1 的字节位置。
-pub const SFID_K1_INDEX: usize = 6;
-/// 新版 SFID 字符串第一段 R5 后的分隔符位置。
-pub const SFID_R5_SEPARATOR_INDEX: usize = 5;
+/// 新版 CID 字符串 `R5-K3P1C1-N9-D4` 中 K1 的字节位置。
+pub const CID_K1_INDEX: usize = 6;
+/// 新版 CID 字符串第一段 R5 后的分隔符位置。
+pub const CID_R5_SEPARATOR_INDEX: usize = 5;
 
-/// 清算行"主账户"名称(字节形式,与 SFID 系统生成时逐字节一致)。
+/// 清算行"主账户"名称(字节形式,与 CID 系统生成时逐字节一致)。
 pub const ACCOUNT_NAME_MAIN: &[u8] = "主账户".as_bytes();
 /// 清算行"费用账户"名称。
 pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
@@ -36,13 +36,13 @@ pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
 
 /// 机构登记表查询抽象。
 ///
-/// 运行时由 `organization-manage` 的 `AccountRegisteredSfid` / `SfidRegisteredAccount` /
+/// 运行时由 `organization-manage` 的 `AccountRegisteredCid` / `CidRegisteredAccount` /
 /// `InstitutionAccounts` / `ClearingBankNodes` 等链上索引组合实现。测试可用 `()` 或 mock。
-pub trait SfidAccountQuery<AccountId> {
-    /// 地址 → (sfid_number 字节, account_name 字节)。未登记返回 None。
+pub trait CidAccountQuery<AccountId> {
+    /// 地址 → (cid_number 字节, account_name 字节)。未登记返回 None。
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
-    /// (sfid_number, account_name) → 地址。未登记返回 None。
-    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
+    /// (cid_number, account_name) → 地址。未登记返回 None。
+    fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
     /// 该地址对应的多签账户是否处于 Active 状态。
     fn is_active(addr: &AccountId) -> bool;
     /// `who` 是否是 `bank` 对应机构多签的管理员之一(经 InstitutionMultisigQuery 反查)。
@@ -50,24 +50,24 @@ pub trait SfidAccountQuery<AccountId> {
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
     /// Step 2(2026-05-02)调整:清算行资格白名单判定。
     ///
-    /// SFID 系统在 eligible-search / registration-info 入口负责判断"私法人股份公司
+    /// CID 系统在 eligible-search / registration-info 入口负责判断"私法人股份公司
     /// 或其下属非法人"资格;链上不再保存机构类型和所属法人元数据。
     ///
-    /// 实现层只确认地址属于已注册且 Active 的 SFID 机构账户,保持 bank_check 解耦。
+    /// 实现层只确认地址属于已注册且 Active 的 CID 机构账户,保持 bank_check 解耦。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
     /// Step 2(2026-04-27, ADR-007)新增:节点是否已声明为清算行节点。
     ///
-    /// 链上 `ClearingBankNodes` storage 由 sfid_number 索引;此方法接受主账户
-    /// 地址参数,内部由实现层反查 sfid_number 后判定。
+    /// 链上 `ClearingBankNodes` storage 由 cid_number 索引;此方法接受主账户
+    /// 地址参数,内部由实现层反查 cid_number 后判定。
     fn is_registered_clearing_node(bank: &AccountId) -> bool;
 }
 
 /// 测试用 no-op 默认实现:一律返回未登记 / 未激活 / 无管理员权限 / 不合资格 / 未声明节点。
-impl<AccountId> SfidAccountQuery<AccountId> for () {
+impl<AccountId> CidAccountQuery<AccountId> for () {
     fn account_info(_addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         None
     }
-    fn find_account(_sfid_number: &[u8], _account_name: &[u8]) -> Option<AccountId> {
+    fn find_account(_cid_number: &[u8], _account_name: &[u8]) -> Option<AccountId> {
         None
     }
     fn is_active(_addr: &AccountId) -> bool {
@@ -88,14 +88,14 @@ impl<AccountId> SfidAccountQuery<AccountId> for () {
 // 内部辅助
 // ------------------------------------------------------------
 
-/// 判定 SFID 编码字符串的 K1 主体属性属于"私权机构"(S 或 F)。
+/// 判定 CID 编码字符串的 K1 主体属性属于"私权机构"(S 或 F)。
 ///
-/// 直接对目标态 `R5-K3P1C1-N9-D4` 做字节判定,不依赖 sfid-system 或 SFID 后端。
-fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
-    if sfid_bytes.len() <= SFID_K1_INDEX || sfid_bytes.get(SFID_R5_SEPARATOR_INDEX) != Some(&b'-') {
+/// 直接对目标态 `R5-K3P1C1-N9-D4` 做字节判定,不依赖 cid-system 或 CID 后端。
+fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
+    if cid_bytes.len() <= CID_K1_INDEX || cid_bytes.get(CID_R5_SEPARATOR_INDEX) != Some(&b'-') {
         return false;
     }
-    matches!(sfid_bytes[SFID_K1_INDEX], b'S' | b'F')
+    matches!(cid_bytes[CID_K1_INDEX], b'S' | b'F')
 }
 
 // ------------------------------------------------------------
@@ -105,17 +105,17 @@ fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
 /// 严格校验:某地址可作为"清算行主账户"被 L3 绑定。
 ///
 /// Step 2(2026-04-27, ADR-007)起 6 重校验,任一失败即拒绝:
-/// 1. 在链上 `AccountRegisteredSfid` 有机构登记
+/// 1. 在链上 `AccountRegisteredCid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
 /// 3. K1 ∈ {S, F}(字节级主体属性判定)
 /// 4. 对应 `InstitutionAccounts.status == Active`
-/// 5. **资格白名单**:由 SFID 系统在候选/注册信息接口筛选;链上通过
-///    `SfidAccountQuery::is_clearing_bank_eligible` 只确认该 SFID 机构账户已 Active
-/// 6. **节点已声明**:`sfid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络
+/// 5. **资格白名单**:由 CID 系统在候选/注册信息接口筛选;链上通过
+///    `CidAccountQuery::is_clearing_bank_eligible` 只确认该 CID 机构账户已 Active
+/// 6. **节点已声明**:`cid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络
 ///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)
 pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T>> {
-    let (sfid_bytes, account_name_bytes) =
-        T::SfidAccountQuery::account_info(addr).ok_or(Error::<T>::NotRegisteredClearingBank)?;
+    let (cid_bytes, account_name_bytes) =
+        T::CidAccountQuery::account_info(addr).ok_or(Error::<T>::NotRegisteredClearingBank)?;
 
     ensure!(
         account_name_bytes.as_slice() == ACCOUNT_NAME_MAIN,
@@ -123,24 +123,24 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
     );
 
     ensure!(
-        subject_property_is_private_institution(sfid_bytes.as_slice()),
+        subject_property_is_private_institution(cid_bytes.as_slice()),
         Error::<T>::NotPrivateInstitution
     );
 
     ensure!(
-        T::SfidAccountQuery::is_active(addr),
+        T::CidAccountQuery::is_active(addr),
         Error::<T>::ClearingBankNotActive
     );
 
     // Step 2 第 5 重:资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)
     ensure!(
-        T::SfidAccountQuery::is_clearing_bank_eligible(addr),
+        T::CidAccountQuery::is_clearing_bank_eligible(addr),
         Error::<T>::NotEligibleForClearingBank
     );
 
     // Step 2 第 6 重:必须已声明清算行节点
     ensure!(
-        T::SfidAccountQuery::is_registered_clearing_node(addr),
+        T::CidAccountQuery::is_registered_clearing_node(addr),
         Error::<T>::ClearingBankNotRegisteredAsNode
     );
 
@@ -150,15 +150,15 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
 /// 反查"清算行费用账户"地址(Step 2 起由 `settlement.rs` 使用)。
 ///
 /// 流程:
-/// 1. 由主账户地址反查得到 `sfid_number`
-/// 2. 用 `(sfid_number, "费用账户")` 查询费用账户地址
+/// 1. 由主账户反查得到 `cid_number`
+/// 2. 用 `(cid_number, "费用账户")` 查询费用账户
 ///
 /// 若清算行注册时未同步创建费用账户,返回 `FeeAccountNotFound`。
 pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountId, Error<T>> {
-    let (sfid_bytes, _) = T::SfidAccountQuery::account_info(main_addr)
-        .ok_or(Error::<T>::NotRegisteredClearingBank)?;
+    let (cid_bytes, _) =
+        T::CidAccountQuery::account_info(main_addr).ok_or(Error::<T>::NotRegisteredClearingBank)?;
 
-    T::SfidAccountQuery::find_account(sfid_bytes.as_slice(), ACCOUNT_NAME_FEE)
+    T::CidAccountQuery::find_account(cid_bytes.as_slice(), ACCOUNT_NAME_FEE)
         .ok_or(Error::<T>::FeeAccountNotFound)
 }
 
@@ -166,10 +166,10 @@ pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountI
 ///
 /// 供 `institution-asset` 的 `can_spend` / `is_protected` 实现时使用。
 pub fn is_clearing_bank_account<T: Config>(addr: &T::AccountId) -> bool {
-    match T::SfidAccountQuery::account_info(addr) {
-        Some((sfid, _)) => {
-            subject_property_is_private_institution(sfid.as_slice())
-                && T::SfidAccountQuery::is_active(addr)
+    match T::CidAccountQuery::account_info(addr) {
+        Some((cid, _)) => {
+            subject_property_is_private_institution(cid.as_slice())
+                && T::CidAccountQuery::is_active(addr)
         }
         None => false,
     }
@@ -212,12 +212,12 @@ mod tests {
     #[test]
     fn noop_impl_returns_none_and_inactive() {
         let addr: [u8; 32] = [0u8; 32];
-        assert!(<() as SfidAccountQuery<[u8; 32]>>::account_info(&addr).is_none());
-        assert!(<() as SfidAccountQuery<[u8; 32]>>::find_account(
+        assert!(<() as CidAccountQuery<[u8; 32]>>::account_info(&addr).is_none());
+        assert!(<() as CidAccountQuery<[u8; 32]>>::find_account(
             b"AH001-SCB0V-123456789-2026",
             b"main"
         )
         .is_none());
-        assert!(!<() as SfidAccountQuery<[u8; 32]>>::is_active(&addr));
+        assert!(!<() as CidAccountQuery<[u8; 32]>>::is_active(&addr));
     }
 }

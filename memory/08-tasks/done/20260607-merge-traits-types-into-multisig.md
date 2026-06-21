@@ -2,13 +2,13 @@
 
 ## 任务需求
 
-把 `primitives/src/traits.rs`（多签地址校验/资金保护 3 个 Config 注入 trait）与 `primitives/src/types.rs`（MultisigConfig / MultisigConfigSnapshot 类型）合并为单一模块 `primitives::multisig`，删除两个原文件，更新全部下游引用。0 行为变化。
+把 `primitives/src/traits.rs`（多签账户校验/资金保护 3 个 Config 注入 trait）与 `primitives/src/types.rs`（MultisigConfig / MultisigConfigSnapshot 类型）合并为单一模块 `primitives::multisig`，删除两个原文件，更新全部下游引用。0 行为变化。
 
 （用户原话是 traits→china_zb，分析后改为 traits+types→multisig：两者服务同一组多签治理 pallet，china_zb 是 china 机构常量文件、语义/路径不合。用户选 A 方案。）
 
 ## 修改范围 / 执行记录
 
-- 新建 `primitives/src/multisig.rs`：3 trait（DuoqianAccountValidator / DuoqianReservedAccountChecker / ProtectedSourceChecker）+ 2 类型（MultisigConfig / MultisigConfigSnapshot），doc 合并。
+- 新建 `primitives/src/multisig.rs`：3 trait（AccountValidator / ReservedAccountGuard / ProtectedSourceChecker）+ 2 类型（MultisigConfig / MultisigConfigSnapshot），doc 合并。
 - 删 `primitives/src/traits.rs`、`primitives/src/types.rs`。
 - `primitives/src/lib.rs`：删 `pub mod traits;` `pub mod types;`，加 `pub mod multisig;`。
 - 下游 8 文件 `primitives::traits` / `primitives::types` → `primitives::multisig`（含 organization-manage 本地 traits.rs 的 re-export `pub use` 与 doc 注释）：

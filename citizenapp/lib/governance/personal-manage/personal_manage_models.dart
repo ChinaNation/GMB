@@ -3,12 +3,12 @@ import 'dart:typed_data';
 /// PersonalManage 创建个人多签提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CREATE=0 之后）：
-///   duoqian_account: AccountId32(32) + proposer: AccountId32(32)
+///   account: AccountId32(32) + proposer: AccountId32(32)
 ///   + amount: u128(16) + fee: u128(16)。
 class CreateDuoqianProposalInfo {
   const CreateDuoqianProposalInfo({
     required this.proposalId,
-    required this.duoqianAccount,
+    required this.account,
     required this.proposer,
     required this.amountFen,
     required this.feeFen,
@@ -18,7 +18,7 @@ class CreateDuoqianProposalInfo {
   final int proposalId;
 
   /// 个人多签账户公钥 hex（32 字节，不含 0x 前缀）。
-  final String duoqianAccount;
+  final String account;
 
   /// 发起人 SS58 地址。
   final String proposer;
@@ -37,13 +37,13 @@ class CreateDuoqianProposalInfo {
 
   /// 个人多签治理 AccountId。
   Uint8List get institutionBytes {
-    return Uint8List.fromList(_hexDecode(duoqianAccount));
+    return Uint8List.fromList(_hexDecode(account));
   }
 
   CreateDuoqianProposalInfo copyWithStatus(int? newStatus) {
     return CreateDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       proposer: proposer,
       amountFen: amountFen,
       feeFen: feeFen,
@@ -55,12 +55,12 @@ class CreateDuoqianProposalInfo {
 /// PersonalManage 关闭个人多签提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CLOSE=1 之后）：
-///   duoqian_account: AccountId32(32) + beneficiary: AccountId32(32)
+///   account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)。
 class CloseDuoqianProposalInfo {
   const CloseDuoqianProposalInfo({
     required this.proposalId,
-    required this.duoqianAccount,
+    required this.account,
     required this.beneficiary,
     required this.proposer,
     this.status,
@@ -69,7 +69,7 @@ class CloseDuoqianProposalInfo {
   final int proposalId;
 
   /// 个人多签账户公钥 hex（32 字节，不含 0x 前缀）。
-  final String duoqianAccount;
+  final String account;
 
   /// 受益人 SS58 地址。
   final String beneficiary;
@@ -82,13 +82,13 @@ class CloseDuoqianProposalInfo {
 
   /// 个人多签治理 AccountId。
   Uint8List get institutionBytes {
-    return Uint8List.fromList(_hexDecode(duoqianAccount));
+    return Uint8List.fromList(_hexDecode(account));
   }
 
   CloseDuoqianProposalInfo copyWithStatus(int? newStatus) {
     return CloseDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       beneficiary: beneficiary,
       proposer: proposer,
       status: newStatus,
@@ -107,10 +107,10 @@ enum DuoqianStatus {
 
 /// 个人多签账户链上信息。
 ///
-/// 个人状态来自 `PersonalManage::PersonalDuoqians`，
+/// 个人状态来自 `PersonalManage::PersonalAccounts`，
 /// 管理员来自 `AdminsChange::AdminAccounts`，动态阈值来自 `InternalVote`。
-class DuoqianAccountInfo {
-  const DuoqianAccountInfo({
+class AccountInfo {
+  const AccountInfo({
     required this.adminsLen,
     required this.threshold,
     required this.admins,

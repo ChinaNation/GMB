@@ -82,43 +82,41 @@ impl pallet_balances::Config for Test {
 }
 
 pub struct TestAccountValidator;
-impl organization_manage::DuoqianAccountValidator<AccountId32> for TestAccountValidator {
+impl organization_manage::AccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
-impl organization_manage::DuoqianReservedAccountChecker<AccountId32>
-    for TestReservedAccountChecker
-{
+impl organization_manage::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
 }
 
-pub struct TestSfidInstitutionVerifier;
+pub struct TestCidInstitutionVerifier;
 impl
-    organization_manage::SfidInstitutionVerifier<
+    organization_manage::CidInstitutionVerifier<
         AccountId32,
         organization_manage::pallet::AccountNameOf<Test>,
         organization_manage::pallet::RegisterNonceOf<Test>,
         organization_manage::pallet::RegisterSignatureOf<Test>,
-    > for TestSfidInstitutionVerifier
+    > for TestCidInstitutionVerifier
 {
     fn verify_institution_registration(
-        _sfid_number: &[u8],
-        sfid_full_name: &organization_manage::pallet::AccountNameOf<Test>,
+        _cid_number: &[u8],
+        cid_full_name: &organization_manage::pallet::AccountNameOf<Test>,
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
         signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
     ) -> bool {
-        !sfid_full_name.is_empty()
+        !cid_full_name.is_empty()
             && !account_names.is_empty()
             && !nonce.is_empty()
             && !scope_province_name.is_empty()
@@ -127,9 +125,9 @@ impl
     }
 }
 
-pub struct TestSfidEligibility;
-impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestSfidEligibility
+pub struct TestCidEligibility;
+impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    for TestCidEligibility
 {
     fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
@@ -141,7 +139,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -164,7 +162,7 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -270,14 +268,14 @@ impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdmins
 }
 
 thread_local! {
-    static PROTECTED_ADDRESS: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
+    static PROTECTED_ACCOUNT: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
 }
 
 pub struct TestProtectedSourceChecker;
 impl organization_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
     fn is_protected(address: &AccountId32) -> bool {
-        PROTECTED_ADDRESS.with(|pa| pa.borrow().as_ref() == Some(address))
+        PROTECTED_ACCOUNT.with(|pa| pa.borrow().as_ref() == Some(address))
     }
 }
 
@@ -305,7 +303,7 @@ impl votingengine::Config for Test {
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type SfidEligibility = TestSfidEligibility;
+    type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
     // Phase 2:挂上本模块 Executor,3 组业务提案通过后自动走 callback 执行。
@@ -344,10 +342,10 @@ impl organization_manage::pallet::Config for Test {
     type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
-    type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
+    type CidInstitutionVerifier = TestCidInstitutionVerifier;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
-    type MaxSfidNumberLength = ConstU32<47>;
+    type MaxCidNumberLength = ConstU32<47>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
@@ -444,23 +442,23 @@ fn institution_account(institution: &AccountId32) -> AccountId32 {
     institution.clone()
 }
 
-fn registered_duoqian_account() -> AccountId32 {
+fn registered_account() -> AccountId32 {
     AccountId32::new([0x55; 32])
 }
 
-fn registered_duoqian_admin(index: usize) -> AccountId32 {
-    registered_duoqian_pair(index).0
+fn registered_account_admin(index: usize) -> AccountId32 {
+    registered_account_pair(index).0
 }
 
-/// 注册多签(ORG_REN)的 admin sr25519 keypair helper。
-/// seed 按 (ORG_REN, registered_duoqian_account, index) 派生,保证确定性。
-fn registered_duoqian_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(ORG_REN, &registered_duoqian_account(), index as u8)
+/// 注册个人账户(ORG_REN)的 admin sr25519 keypair helper。
+/// seed 按 (ORG_REN, registered_account, index) 派生,保证确定性。
+fn registered_account_pair(index: usize) -> (AccountId32, sr25519::Pair) {
+    derive_admin_pair(ORG_REN, &registered_account(), index as u8)
 }
 
-fn registered_duoqian_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+fn registered_account_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
     (0..count)
-        .map(|i| registered_duoqian_pair(i as usize))
+        .map(|i| registered_account_pair(i as usize))
         .collect()
 }
 
@@ -483,11 +481,11 @@ fn registered_institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> 
         .collect()
 }
 
-fn test_sfid_number() -> organization_manage::SfidNumberOf<Test> {
+fn test_cid_number() -> organization_manage::CidNumberOf<Test> {
     b"AH001-SCB0H-202605070-2026"
         .to_vec()
         .try_into()
-        .expect("sfid number should fit")
+        .expect("cid number should fit")
 }
 
 fn test_account_name() -> organization_manage::AccountNameOf<Test> {
@@ -501,24 +499,24 @@ fn insert_active_registered_institution_account(
     account: &AccountId32,
     admins: admins_change::pallet::AdminsOf<Test>,
 ) {
-    let sfid_number = test_sfid_number();
+    let cid_number = test_cid_number();
     let account_name = test_account_name();
     let institution_admins: organization_manage::pallet::AdminsOf<Test> = admins
         .clone()
         .into_inner()
         .try_into()
         .expect("institution admins should fit organization-manage MaxAdmins");
-    organization_manage::AccountRegisteredSfid::<Test>::insert(
+    organization_manage::AccountRegisteredCid::<Test>::insert(
         account,
         organization_manage::RegisteredInstitution {
-            sfid_number: sfid_number.clone(),
+            cid_number: cid_number.clone(),
             account_name: account_name.clone(),
         },
     );
     organization_manage::Institutions::<Test>::insert(
-        &sfid_number,
+        &cid_number,
         organization_manage::InstitutionInfo {
-            sfid_full_name: test_account_name(),
+            cid_full_name: test_account_name(),
             main_account: account.clone(),
             fee_account: AccountId32::new([0x67; 32]),
             org: ORG_OTH,
@@ -532,7 +530,7 @@ fn insert_active_registered_institution_account(
         },
     );
     organization_manage::InstitutionAccounts::<Test>::insert(
-        &sfid_number,
+        &cid_number,
         &account_name,
         organization_manage::InstitutionAccountInfo {
             address: account.clone(),
@@ -660,7 +658,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         let nrc = nrc_pallet_id();
         let prc = prc_pallet_id();
         let prb = prb_pallet_id();
-        let dq = registered_duoqian_account();
+        let dq = registered_account();
         let nrc_accts: Vec<AccountId32> = nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prc_accts: Vec<AccountId32> = prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prb_accts: Vec<AccountId32> = prb_pass_pairs().into_iter().map(|(a, _)| a).collect();

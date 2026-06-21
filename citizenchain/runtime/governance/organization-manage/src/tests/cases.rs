@@ -24,20 +24,20 @@ fn typical_accounts() -> pallet::InstitutionInitialAccountsOf<Test> {
 }
 
 // ============================================================
-// SFID 登记路径(5 个用例)
+// CID 登记路径(5 个用例)
 // ============================================================
 
 #[test]
-fn register_sfid_institution_with_valid_signature_succeeds() {
+fn register_cid_institution_with_valid_signature_succeeds() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
-        let sfid = sfid_number(b"SFID001");
+        let cid = cid_number(b"CID001");
         let names = account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]);
 
-        assert_ok!(OrganizationManage::register_sfid_institution(
+        assert_ok!(OrganizationManage::register_cid_institution(
             RuntimeOrigin::signed(submitter),
-            sfid.clone(),
-            sfid_full_name("机构甲".as_bytes()),
+            cid.clone(),
+            cid_full_name("机构甲".as_bytes()),
             names.clone(),
             register_nonce(b"nonce-1"),
             valid_signature(),
@@ -48,35 +48,35 @@ fn register_sfid_institution_with_valid_signature_succeeds() {
             b"city".to_vec(),
         ));
 
-        assert!(pallet::SfidRegisteredAccount::<Test>::contains_key(
-            &sfid,
+        assert!(pallet::CidRegisteredAccount::<Test>::contains_key(
+            &cid,
             &account_name(RESERVED_NAME_MAIN),
         ));
-        assert!(pallet::SfidRegisteredAccount::<Test>::contains_key(
-            &sfid,
+        assert!(pallet::CidRegisteredAccount::<Test>::contains_key(
+            &cid,
             &account_name(RESERVED_NAME_FEE),
         ));
         // 反向索引也写入
         let main_addr = OrganizationManage::derive_institution_account(
-            sfid.as_slice(),
+            cid.as_slice(),
             crate::address::InstitutionAccountRole::Main,
         )
         .expect("derive main");
-        assert!(pallet::AccountRegisteredSfid::<Test>::contains_key(
+        assert!(pallet::AccountRegisteredCid::<Test>::contains_key(
             &main_addr
         ));
     });
 }
 
 #[test]
-fn register_rejects_invalid_sfid_institution_signature() {
+fn register_rejects_invalid_cid_institution_signature() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
         assert_noop!(
-            OrganizationManage::register_sfid_institution(
+            OrganizationManage::register_cid_institution(
                 RuntimeOrigin::signed(submitter),
-                sfid_number(b"SFID-bad-sig"),
-                sfid_full_name("机构甲".as_bytes()),
+                cid_number(b"CID-bad-sig"),
+                cid_full_name("机构甲".as_bytes()),
                 account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
                 register_nonce(b"nonce-bs"),
                 invalid_signature(),
@@ -86,21 +86,21 @@ fn register_rejects_invalid_sfid_institution_signature() {
                 province_name(),
                 b"city".to_vec(),
             ),
-            pallet::Error::<Test>::InvalidSfidInstitutionSignature
+            pallet::Error::<Test>::InvalidCidInstitutionSignature
         );
     });
 }
 
 #[test]
-fn register_rejects_duplicate_sfid_account_name() {
+fn register_rejects_duplicate_cid_account_name() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
-        let sfid = sfid_number(b"SFID-dup");
+        let cid = cid_number(b"CID-dup");
         // 第一次成功
-        assert_ok!(OrganizationManage::register_sfid_institution(
+        assert_ok!(OrganizationManage::register_cid_institution(
             RuntimeOrigin::signed(submitter.clone()),
-            sfid.clone(),
-            sfid_full_name("机构 A".as_bytes()),
+            cid.clone(),
+            cid_full_name("机构 A".as_bytes()),
             account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
             register_nonce(b"nonce-a1"),
             valid_signature(),
@@ -110,12 +110,12 @@ fn register_rejects_duplicate_sfid_account_name() {
             province_name(),
             b"city".to_vec(),
         ));
-        // 第二次相同 sfid + 主账户:SfidAlreadyRegistered
+        // 第二次相同 cid + 主账户:CidAlreadyRegistered
         assert_noop!(
-            OrganizationManage::register_sfid_institution(
+            OrganizationManage::register_cid_institution(
                 RuntimeOrigin::signed(submitter),
-                sfid,
-                sfid_full_name("机构 A".as_bytes()),
+                cid,
+                cid_full_name("机构 A".as_bytes()),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-a2"),
                 valid_signature(),
@@ -125,7 +125,7 @@ fn register_rejects_duplicate_sfid_account_name() {
                 province_name(),
                 b"city".to_vec(),
             ),
-            pallet::Error::<Test>::SfidAlreadyRegistered
+            pallet::Error::<Test>::CidAlreadyRegistered
         );
     });
 }
@@ -135,10 +135,10 @@ fn register_rejects_replayed_nonce() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
         // 第一次成功
-        assert_ok!(OrganizationManage::register_sfid_institution(
+        assert_ok!(OrganizationManage::register_cid_institution(
             RuntimeOrigin::signed(submitter.clone()),
-            sfid_number(b"SFID-N1"),
-            sfid_full_name(b"A"),
+            cid_number(b"CID-N1"),
+            cid_full_name(b"A"),
             account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
             register_nonce(b"nonce-replay"),
             valid_signature(),
@@ -148,12 +148,12 @@ fn register_rejects_replayed_nonce() {
             province_name(),
             b"city".to_vec(),
         ));
-        // 第二次同 nonce 不同 sfid:RegisterNonceAlreadyUsed
+        // 第二次同 nonce 不同 cid:RegisterNonceAlreadyUsed
         assert_noop!(
-            OrganizationManage::register_sfid_institution(
+            OrganizationManage::register_cid_institution(
                 RuntimeOrigin::signed(submitter),
-                sfid_number(b"SFID-N2"),
-                sfid_full_name(b"B"),
+                cid_number(b"CID-N2"),
+                cid_full_name(b"B"),
                 account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
                 register_nonce(b"nonce-replay"),
                 valid_signature(),
@@ -172,12 +172,12 @@ fn register_rejects_replayed_nonce() {
 fn register_rejects_empty_required_fields() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
-        // 空 sfid_number
+        // 空 cid_number
         assert_noop!(
-            OrganizationManage::register_sfid_institution(
+            OrganizationManage::register_cid_institution(
                 RuntimeOrigin::signed(submitter.clone()),
-                sfid_number(b""),
-                sfid_full_name(b"A"),
+                cid_number(b""),
+                cid_full_name(b"A"),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty1"),
                 valid_signature(),
@@ -187,14 +187,14 @@ fn register_rejects_empty_required_fields() {
                 province_name(),
                 b"city".to_vec(),
             ),
-            pallet::Error::<Test>::EmptySfidNumber
+            pallet::Error::<Test>::EmptyCidNumber
         );
-        // 空 sfid_full_name
+        // 空 cid_full_name
         assert_noop!(
-            OrganizationManage::register_sfid_institution(
+            OrganizationManage::register_cid_institution(
                 RuntimeOrigin::signed(submitter.clone()),
-                sfid_number(b"SFID-E"),
-                sfid_full_name(b""),
+                cid_number(b"CID-E"),
+                cid_full_name(b""),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty2"),
                 valid_signature(),
@@ -208,10 +208,10 @@ fn register_rejects_empty_required_fields() {
         );
         // 空 province_name
         assert_noop!(
-            OrganizationManage::register_sfid_institution(
+            OrganizationManage::register_cid_institution(
                 RuntimeOrigin::signed(submitter),
-                sfid_number(b"SFID-E"),
-                sfid_full_name(b"A"),
+                cid_number(b"CID-E"),
+                cid_full_name(b"A"),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty3"),
                 valid_signature(),
@@ -234,12 +234,12 @@ fn register_rejects_empty_required_fields() {
 fn propose_create_institution_writes_pending_and_reserves() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let sfid = sfid_number(b"SFID-CR-1");
+        let cid = cid_number(b"CID-CR-1");
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
-            sfid.clone(),
-            sfid_full_name("机构甲".as_bytes()),
+            cid.clone(),
+            cid_full_name("机构甲".as_bytes()),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -256,13 +256,13 @@ fn propose_create_institution_writes_pending_and_reserves() {
 
         let pid = last_proposal_id();
         assert!(pallet::PendingInstitutionCreate::<Test>::contains_key(pid));
-        assert!(pallet::Institutions::<Test>::contains_key(&sfid));
+        assert!(pallet::Institutions::<Test>::contains_key(&cid));
         assert_eq!(
-            pallet::Institutions::<Test>::get(&sfid).unwrap().status,
+            pallet::Institutions::<Test>::get(&cid).unwrap().status,
             InstitutionLifecycleStatus::Pending,
         );
         assert_eq!(
-            pallet::Institutions::<Test>::get(&sfid).unwrap().org,
+            pallet::Institutions::<Test>::get(&cid).unwrap().org,
             ORG_OTH,
         );
         // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
@@ -274,13 +274,13 @@ fn propose_create_institution_writes_pending_and_reserves() {
 fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let sfid = sfid_number(b"SFID-CR-2");
+        let cid = cid_number(b"CID-CR-2");
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
-            sfid.clone(),
-            sfid_full_name("机构乙".as_bytes()),
+            cid.clone(),
+            cid_full_name("机构乙".as_bytes()),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -301,17 +301,17 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
         assert_eq!(proposal.status, STATUS_EXECUTED);
         assert_eq!(
-            pallet::Institutions::<Test>::get(&sfid).unwrap().status,
+            pallet::Institutions::<Test>::get(&cid).unwrap().status,
             InstitutionLifecycleStatus::Active,
         );
         // 主账户和费用账户都被划账
         let main = OrganizationManage::derive_institution_account(
-            sfid.as_slice(),
+            cid.as_slice(),
             crate::address::InstitutionAccountRole::Main,
         )
         .unwrap();
         let fee_acc = OrganizationManage::derive_institution_account(
-            sfid.as_slice(),
+            cid.as_slice(),
             crate::address::InstitutionAccountRole::Fee,
         )
         .unwrap();
@@ -325,13 +325,13 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
 fn create_rejected_releases_reserve_and_no_storage_residue() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let sfid = sfid_number(b"SFID-CR-3");
+        let cid = cid_number(b"CID-CR-3");
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
-            sfid.clone(),
-            sfid_full_name("机构丙".as_bytes()),
+            cid.clone(),
+            cid_full_name("机构丙".as_bytes()),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -354,7 +354,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
         assert_eq!(proposal.status, STATUS_REJECTED);
 
         assert_eq!(Balances::reserved_balance(&c), 0);
-        assert!(!pallet::Institutions::<Test>::contains_key(&sfid));
+        assert!(!pallet::Institutions::<Test>::contains_key(&cid));
         assert!(!pallet::PendingInstitutionCreate::<Test>::contains_key(pid));
     });
 }
@@ -368,8 +368,8 @@ fn propose_create_rejects_below_create_amount_minimum() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid_number(b"SFID-MIN"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-MIN"),
+                cid_full_name(b"X"),
                 bad_accounts,
                 ORG_OTH,
                 3,
@@ -401,8 +401,8 @@ fn propose_create_rejects_duplicate_account_name() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid_number(b"SFID-DUP"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-DUP"),
+                cid_full_name(b"X"),
                 dup,
                 ORG_OTH,
                 3,
@@ -456,8 +456,8 @@ fn propose_create_rejects_reserved_system_account_name() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid_number(b"SFID-RSV"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-RSV"),
+                cid_full_name(b"X"),
                 bad,
                 ORG_OTH,
                 3,
@@ -484,8 +484,8 @@ fn propose_create_rejects_missing_main_account() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid_number(b"SFID-NM"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-NM"),
+                cid_full_name(b"X"),
                 no_main,
                 ORG_OTH,
                 3,
@@ -512,8 +512,8 @@ fn propose_create_rejects_invalid_admin_threshold() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c.clone()),
-                sfid_number(b"SFID-T1"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-T1"),
+                cid_full_name(b"X"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -533,8 +533,8 @@ fn propose_create_rejects_invalid_admin_threshold() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid_number(b"SFID-T2"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-T2"),
+                cid_full_name(b"X"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -557,13 +557,13 @@ fn propose_create_rejects_invalid_admin_threshold() {
 fn propose_create_rejects_when_institution_already_exists() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let sfid = sfid_number(b"SFID-AE");
+        let cid = cid_number(b"CID-AE");
 
         // 先创建一个
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
-            sfid.clone(),
-            sfid_full_name(b"A"),
+            cid.clone(),
+            cid_full_name(b"A"),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -577,12 +577,12 @@ fn propose_create_rejects_when_institution_already_exists() {
             province_name(),
             b"city".to_vec(),
         ));
-        // 第二次同 sfid 应拒
+        // 第二次同 cid 应拒
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid,
-                sfid_full_name(b"B"),
+                cid,
+                cid_full_name(b"B"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -606,24 +606,24 @@ fn propose_create_rejects_when_institution_already_exists() {
 // ============================================================
 
 fn create_and_activate_institution(
-    sfid_number_bytes: &[u8],
+    cid_number_bytes: &[u8],
     admins_len: u8,
-) -> (pallet::SfidNumberOf<Test>, AccountId32) {
+) -> (pallet::CidNumberOf<Test>, AccountId32) {
     let c = creator();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
-    let sfid = sfid_number(sfid_number_bytes);
+    let cid = cid_number(cid_number_bytes);
     let admin_accounts: alloc::vec::Vec<AccountId32> = (0..admins_len).map(|i| admin(i)).collect();
 
     assert_ok!(OrganizationManage::propose_create_institution(
         RuntimeOrigin::signed(c.clone()),
-        sfid.clone(),
-        sfid_full_name(b"X"),
+        cid.clone(),
+        cid_full_name(b"X"),
         typical_accounts(),
         ORG_OTH,
         admins_len as u32,
         admins_vec(admins_len),
         admins_len.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
-        register_nonce(sfid_number_bytes),
+        register_nonce(cid_number_bytes),
         valid_signature(),
         province_name(),
         creator(),
@@ -639,17 +639,17 @@ fn create_and_activate_institution(
     ));
 
     let main = OrganizationManage::derive_institution_account(
-        sfid.as_slice(),
+        cid.as_slice(),
         crate::address::InstitutionAccountRole::Main,
     )
     .unwrap();
-    (sfid, main)
+    (cid, main)
 }
 
 #[test]
 fn propose_close_writes_pending() {
     new_test_ext().execute_with(|| {
-        let (_sfid, main) = create_and_activate_institution(b"SFID-CL-1", 3);
+        let (_cid, main) = create_and_activate_institution(b"CID-CL-1", 3);
 
         assert_ok!(OrganizationManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -667,7 +667,7 @@ fn propose_close_writes_pending() {
 #[test]
 fn close_executes_when_vote_reaches_threshold_returns_balance() {
     new_test_ext().execute_with(|| {
-        let (sfid, main) = create_and_activate_institution(b"SFID-CL-2", 3);
+        let (cid, main) = create_and_activate_institution(b"CID-CL-2", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
         let main_name = account_name(RESERVED_NAME_MAIN);
@@ -691,12 +691,12 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
             &main
         ));
         assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
-            &sfid, &main_name
+            &cid, &main_name
         ));
-        assert!(!pallet::SfidRegisteredAccount::<Test>::contains_key(
-            &sfid, &main_name
+        assert!(!pallet::CidRegisteredAccount::<Test>::contains_key(
+            &cid, &main_name
         ));
-        assert!(!pallet::AccountRegisteredSfid::<Test>::contains_key(&main));
+        assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(&main));
         assert!(admins_change::AdminAccounts::<Test>::get(account.clone()).is_none());
         assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, account).is_none());
     });
@@ -705,7 +705,7 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
 #[test]
 fn propose_close_rejects_close_balance_below_minimum() {
     new_test_ext().execute_with(|| {
-        let (_sfid, main) = create_and_activate_institution(b"SFID-CL-3", 3);
+        let (_cid, main) = create_and_activate_institution(b"CID-CL-3", 3);
 
         // 把主账户余额清空到 50(<MinCloseBalance=111)
         // 用 force-set: 直接 transfer 走
@@ -729,9 +729,9 @@ fn propose_close_rejects_close_balance_below_minimum() {
 }
 
 #[test]
-fn propose_close_rejects_when_not_institution_address() {
+fn propose_close_rejects_when_not_institution_account() {
     new_test_ext().execute_with(|| {
-        // 没在 AccountRegisteredSfid 表里的地址
+        // 没在 AccountRegisteredCid 表里的地址
         let stranger = AccountId32::new([0xEE; 32]);
         assert_noop!(
             OrganizationManage::propose_close(
@@ -747,7 +747,7 @@ fn propose_close_rejects_when_not_institution_address() {
 #[test]
 fn propose_close_rejects_self_beneficiary() {
     new_test_ext().execute_with(|| {
-        let (_sfid, main) = create_and_activate_institution(b"SFID-CL-5", 3);
+        let (_cid, main) = create_and_activate_institution(b"CID-CL-5", 3);
         // beneficiary == account 应拒
         assert_noop!(
             OrganizationManage::propose_close(RuntimeOrigin::signed(admin(0)), main.clone(), main,),
@@ -768,8 +768,8 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c),
-            sfid_number(b"SFID-CU"),
-            sfid_full_name(b"X"),
+            cid_number(b"CID-CU"),
+            cid_full_name(b"X"),
             typical_accounts(),
             ORG_OTH,
             3,
@@ -811,8 +811,8 @@ fn non_admin_cannot_propose_create() {
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
-                sfid_number(b"SFID-NA"),
-                sfid_full_name(b"X"),
+                cid_number(b"CID-NA"),
+                cid_full_name(b"X"),
                 typical_accounts(),
                 ORG_OTH,
                 3,
@@ -834,7 +834,7 @@ fn non_admin_cannot_propose_create() {
 #[test]
 fn existential_deposit_is_preserved_after_close() {
     new_test_ext().execute_with(|| {
-        let (_sfid, main) = create_and_activate_institution(b"SFID-ED", 3);
+        let (_cid, main) = create_and_activate_institution(b"CID-ED", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
 
@@ -855,7 +855,7 @@ fn existential_deposit_is_preserved_after_close() {
 #[test]
 fn admin_account_is_main_account() {
     new_test_ext().execute_with(|| {
-        // 管理员更换主体必须是机构 main AccountId,不是 SFID 机构号或派生主体。
+        // 管理员更换主体必须是机构 main AccountId,不是 CID 机构号或派生主体。
         let main = AccountId32::new([0x42; 32]);
         assert_eq!(main, AccountId32::new([0x42; 32]));
     });

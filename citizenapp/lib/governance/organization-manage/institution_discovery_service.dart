@@ -106,13 +106,12 @@ class InstitutionDiscoveryService {
 
       scannedDuoqianAddrs.add(acc.addrHex);
       final added = await _upsertInstitution(
-        duoqianAccountHex: acc.addrHex,
+        accountHex: acc.addrHex,
         name: ref.accountNameText,
         cidNumberUtf8: ref.cidNumberText,
         adminAccountOrg: acc.org,
-        matchedAdmins: acc.adminsHex
-            .where(myPubkeys.contains)
-            .toList(growable: false),
+        matchedAdmins:
+            acc.adminsHex.where(myPubkeys.contains).toList(growable: false),
       );
       if (added) newlyAdded++;
       matchedCidAccountsCount++;
@@ -131,7 +130,7 @@ class InstitutionDiscoveryService {
   }
 
   Future<bool> _upsertInstitution({
-    required String duoqianAccountHex,
+    required String accountHex,
     required String name,
     required String cidNumberUtf8,
     required int? adminAccountOrg,
@@ -140,7 +139,7 @@ class InstitutionDiscoveryService {
     return WalletIsar.instance.writeTxn((isar) async {
       final exists = await isar.institutionEntitys
           .filter()
-          .duoqianAccountEqualTo(duoqianAccountHex)
+          .accountEqualTo(accountHex)
           .findFirst();
 
       if (exists != null) {
@@ -152,7 +151,7 @@ class InstitutionDiscoveryService {
       }
 
       final entity = InstitutionEntity()
-        ..duoqianAccount = duoqianAccountHex
+        ..account = accountHex
         ..cidNumber = cidNumberUtf8
         ..adminAccountOrg = adminAccountOrg
         ..name = name
@@ -175,7 +174,7 @@ class InstitutionDiscoveryService {
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final i in staleInstitutions) {
-        if (!scannedAccounts.contains(i.duoqianAccount)) {
+        if (!scannedAccounts.contains(i.account)) {
           await isar.institutionEntitys.delete(i.id);
           orphans++;
         }

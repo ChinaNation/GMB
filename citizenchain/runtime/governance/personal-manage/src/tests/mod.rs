@@ -81,16 +81,14 @@ impl pallet_balances::Config for Test {
 // ─── Trait mock 实现 ─────────────────────────────────────────────────────
 
 pub struct TestAccountValidator;
-impl primitives::multisig::DuoqianAccountValidator<AccountId32> for TestAccountValidator {
+impl primitives::multisig::AccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
-impl primitives::multisig::DuoqianReservedAccountChecker<AccountId32>
-    for TestReservedAccountChecker
-{
+impl primitives::multisig::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
@@ -98,13 +96,13 @@ impl primitives::multisig::DuoqianReservedAccountChecker<AccountId32>
 
 pub struct TestProtectedSourceChecker;
 thread_local! {
-    static PROTECTED_ADDRESS: RefCell<Option<AccountId32>> = const { RefCell::new(None) };
+    static PROTECTED_ACCOUNT: RefCell<Option<AccountId32>> = const { RefCell::new(None) };
     static INSTITUTION_CAN_SPEND: RefCell<bool> = const { RefCell::new(true) };
 }
 
 impl primitives::multisig::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
     fn is_protected(address: &AccountId32) -> bool {
-        PROTECTED_ADDRESS.with(|value| value.borrow().as_ref() == Some(address))
+        PROTECTED_ACCOUNT.with(|value| value.borrow().as_ref() == Some(address))
     }
 }
 
@@ -118,9 +116,9 @@ impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
     }
 }
 
-pub struct TestSfidEligibility;
-impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestSfidEligibility
+pub struct TestCidEligibility;
+impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    for TestCidEligibility
 {
     fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
@@ -132,7 +130,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -155,7 +153,7 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -235,7 +233,7 @@ impl votingengine::Config for Test {
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type SfidEligibility = TestSfidEligibility;
+    type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
@@ -321,8 +319,8 @@ pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("account name fits")
 }
 
-pub fn set_protected_address(address: Option<AccountId32>) {
-    PROTECTED_ADDRESS.with(|value| {
+pub fn set_protected_account(address: Option<AccountId32>) {
+    PROTECTED_ACCOUNT.with(|value| {
         *value.borrow_mut() = address;
     });
 }
@@ -400,7 +398,7 @@ pub fn seed_active_duoqian(
         account.clone(),
         admins_change::AdminAccount {
             org: ORG_REN,
-            kind: admins_change::AdminAccountKind::PersonalDuoqian,
+            kind: admins_change::AdminAccountKind::PersonalAccount,
             admins: admins_ac,
             creator: creator.clone(),
             created_at: 1,
@@ -420,7 +418,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext: sp_io::TestExternalities = storage.into();
     ext.execute_with(|| {
         System::set_block_number(1);
-        set_protected_address(None);
+        set_protected_account(None);
         set_institution_can_spend(true);
     });
     ext

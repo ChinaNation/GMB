@@ -87,7 +87,7 @@
 
 ### 目标
 - **解除后端 Store 全局锁 + 全量 JSON 反序列化瓶颈**
-- 承载:Phase 1 的 ~500 并发 → **~5000 并发 CITY_ADMIN**
+- 承载:Phase 1 的 ~500 并发 → **~5000 并发 ADMIN**
 - 为 Phase 3(提交队列批处理)和 Phase 4(水平扩展)铺路
 
 ### 范围
@@ -900,7 +900,7 @@ let state = AppState {
 **任务**:
 1. 自写 Rust 压测 `tools/load_test/src/main.rs`(沿用 Phase 1.D 未做的脚本):
    - 参数:`--concurrency N --provinces M --duration T --backend URL`
-   - 行为:模拟 N 个虚拟 CITY_ADMIN,均分到 M 省,循环调 `register_cid_institution`
+   - 行为:模拟 N 个虚拟 ADMIN,均分到 M 省,循环调 `register_cid_institution`
    - 输出:P50/P95/P99 + 成功率 + 每省 TPS
 2. 运行 baseline 对比:
    - Phase 1 状态(`CID_SHARD_ENABLED=false`,走老 store):50 并发 × 1 省
@@ -1032,7 +1032,7 @@ systemctl start citizencode-backend
 - [ ] PG 里 `store_shards` 表有 44 行(43 省 + 1 global),`legacy runtime_cache_entries` 内容仍同步更新(双写期)
 
 ### 11.2 性能验收
-- [ ] 单省 100 并发 CITY_ADMIN 推 `register_cid_institution`,**P99 < 100ms**
+- [ ] 单省 100 并发 ADMIN 推 `register_cid_institution`,**P99 < 100ms**
 - [ ] 10 省 × 50 = 500 并发,**P99 < 200ms**
 - [ ] 对比 Phase 1 baseline,P99 降低 **> 50%**
 - [ ] 成功率 > 99.9%

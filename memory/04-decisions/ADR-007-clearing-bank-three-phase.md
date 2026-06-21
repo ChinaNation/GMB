@@ -55,7 +55,7 @@
 **D. 资格白名单链上二次校验**
 
 - `bank_check::ensure_can_be_bound` 校验链由 4 重收紧到 6 重：
-  - 原 1-4：AccountRegisteredCid / account_name="主账户" / K1 ∈ {S,F} / DuoqianAccount.status=Active
+  - 原 1-4：AccountRegisteredCid / account_name="主账户" / K1 ∈ {S,F} / Account.status=Active
   - **新 5**：资格白名单（`K1=S + JOINT_STOCK` ∨ `K1=F + parent.K1=S + parent.JOINT_STOCK`），通过 CidAccountQuery trait 查 CID 筛选结果
   - **新 6**：cid_number ∈ ClearingBankNodes（必须是已声明的清算行节点）
 

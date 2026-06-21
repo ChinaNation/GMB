@@ -42,7 +42,7 @@ citizenapp
 
 验收标准：
 - 发起钱包 198 元、初始资金 200 元时，创建前直接提示余额不足，不能进入签名/提交成功流程。
-- 创建个人多签时，只有确认 `PersonalManage.PersonalDuoqianProposed` 后才写本地记录。
+- 创建个人多签时，只有确认个人账户创建成功事件后才写本地记录。
 - 创建机构多签时，只有确认 `OrganizationManage.InstitutionCreateProposed` 后才显示提交成功。
 - 本地不存在链上提案的幽灵创建记录不再显示为“已注销 + 未知提案”。
 - 静态检查通过或明确记录无法运行原因。
@@ -56,13 +56,13 @@ citizenapp
 - 已新增 `citizenapp/lib/governance/shared/duoqian_create_amount_rules.dart`，按 runtime 口径计算创建所需金额：`初始资金 + max(初始资金 * 0.1%, 0.10 元) + 1.11 元 ED`。
 - 已在个人多签创建页和机构多签创建页签名前增加发起钱包余额预校验；余额不足时直接提示并停止，不进入签名/提交流程。
 - 已将 `PersonalManage::propose_create` 和 `OrganizationManage::propose_create_institution` 改为等待入块。
-- 已从入块区块的 `System.Events` 中确认 `PersonalManage.PersonalDuoqianProposed` / `OrganizationManage.InstitutionCreateProposed`，并使用事件中的真实 `proposal_id`。
+- 已从入块区块的 `System.Events` 中确认个人账户 / 机构账户创建成功事件，并使用事件中的真实 `proposal_id`。
 - 已删除个人多签创建页基于 `VotingEngine.NextProposalId` 的预测提案号逻辑。
 - 已修复旧版本本地幽灵记录：链上账户不存在且本地 create 提案仍为 voting、链上 proposal 不存在时，删除本地多签实体、提案快照和本地状态，不再显示为“已注销/未知提案”。
 - 已同步更新 citizenapp 架构文档、personal-manage 技术文档和 governance 技术文档。
 
 验证记录：
-- `dart format citizenapp/lib/governance/shared/duoqian_create_amount_rules.dart citizenapp/lib/governance/personal-manage/personal_duoqian_create_page.dart citizenapp/lib/governance/personal-manage/personal_manage_service.dart citizenapp/lib/governance/personal-manage/personal_proposal_history_service.dart citizenapp/lib/governance/organization-manage/institution_duoqian_create_page.dart citizenapp/lib/governance/organization-manage/duoqian_manage_service.dart citizenapp/lib/governance/duoqian_account_list_page.dart`：通过。
+- `dart format citizenapp/lib/governance/shared/duoqian_create_amount_rules.dart citizenapp/lib/governance/personal-manage/personal_account_create_page.dart citizenapp/lib/governance/personal-manage/personal_manage_service.dart citizenapp/lib/governance/personal-manage/personal_proposal_history_service.dart citizenapp/lib/governance/organization-manage/institution_duoqian_create_page.dart citizenapp/lib/governance/organization-manage/account_manage_service.dart citizenapp/lib/governance/institution_account_list_page.dart`：通过。
 - `cd citizenapp && dart analyze lib test`：通过。
 - `cd citizenapp && flutter test test/widget_test.dart`：通过。
 - `cd citizenapp && flutter test test/governance/personal-manage test/governance/organization-manage`：通过。
@@ -84,13 +84,13 @@ citizenapp
 - `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：通过，24 passed。
 - `cd citizenapp && flutter test test/governance/personal-manage test/governance/organization-manage`：通过。
 - `cd citizenapp && dart analyze lib test`：通过。
-- `cd citizenapp && flutter test test/governance/personal-manage/personal_manage_service_test.dart test/governance/organization-manage/duoqian_manage_service_test.dart`：通过。
+- `cd citizenapp && flutter test test/governance/personal-manage/personal_manage_service_test.dart test/governance/organization-manage/account_manage_service_test.dart`：通过。
 - `git diff --check`：通过。
 
 2026-05-17 阈值显示补充执行记录：
 - 已修复个人/机构多签详情读取管理员主体时错把 `AdminsChange::AdminAccounts` 中 creator 字段解成 threshold 的问题。
 - 个人/机构多签当前账户详情现在只从 `AdminsChange::AdminAccounts` 读取 org 和管理员列表，普通动态阈值改从 `InternalVote.ActiveDynamicThresholds[(org, subject)]` 读取，查不到 active 时再查 pending。
-- `DuoqianAccountInfo.threshold` 改为可空；阈值查询不到时 UI 只显示管理员人数，不再显示错位大数字。
+- 账户详情中的 `threshold` 改为可空；阈值查询不到时 UI 只显示管理员人数，不再显示错位大数字。
 - 已补充个人/机构 storage codec 和 service 测试，覆盖 `AdminsChange::AdminAccounts` 不再携带 threshold 的布局。
 
 2026-05-17 阈值显示补充验证记录：

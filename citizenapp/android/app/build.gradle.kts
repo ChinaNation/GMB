@@ -14,18 +14,18 @@ if (releaseKeystorePropertiesFile.exists()) {
     releaseKeystoreProperties.load(FileInputStream(releaseKeystorePropertiesFile))
 }
 
-fun signingValue(propertyName: String, envName: String): String? {
+fun signingValue(propertyName: String): String? {
     val propertyValue = releaseKeystoreProperties.getProperty(propertyName)
     if (!propertyValue.isNullOrBlank()) {
         return propertyValue.trim()
     }
-    return System.getenv(envName)?.trim()?.takeIf { it.isNotEmpty() }
+    return null
 }
 
-val releaseStoreFile = signingValue("storeFile", "CITIZENAPP_ANDROID_STORE_FILE")
-val releaseStorePassword = signingValue("storePassword", "CITIZENAPP_ANDROID_STORE_PASSWORD")
-val releaseKeyAlias = signingValue("keyAlias", "CITIZENAPP_ANDROID_KEY_ALIAS")
-val releaseKeyPassword = signingValue("keyPassword", "CITIZENAPP_ANDROID_KEY_PASSWORD")
+val releaseStoreFile = signingValue("storeFile")
+val releaseStorePassword = signingValue("storePassword")
+val releaseKeyAlias = signingValue("keyAlias")
+val releaseKeyPassword = signingValue("keyPassword")
 val hasReleaseSigningConfig = listOf(
     releaseStoreFile,
     releaseStorePassword,
@@ -98,9 +98,7 @@ gradle.taskGraph.whenReady {
     if (runsReleaseTask && !hasReleaseSigningConfig) {
         throw GradleException(
             "citizenapp Android release 构建缺少正式签名配置。请在 citizenapp/android/key.properties " +
-                "配置 storeFile/storePassword/keyAlias/keyPassword，或通过 CI 环境变量 " +
-                "CITIZENAPP_ANDROID_STORE_FILE/CITIZENAPP_ANDROID_STORE_PASSWORD/" +
-                "CITIZENAPP_ANDROID_KEY_ALIAS/CITIZENAPP_ANDROID_KEY_PASSWORD 注入。"
+                "配置 storeFile/storePassword/keyAlias/keyPassword；CI 手动发布由 GMB_APP_KEY 自动生成该文件。"
         )
     }
 }

@@ -160,6 +160,12 @@ CID 前端提示统一由 `citizencode/frontend/utils/notice.ts` 管理。业务
 
 清算行属于链上组织治理概念,不属于 CID 身份设计;CID 不提供清算行相关公开接口。
 
+## CI 与发布边界
+
+- `citizencode-ci.yml` 的 push / pull_request 自动 CI 只允许执行后端编译、后端测试、前端依赖安装和前端构建。
+- 正式 `citizencode.deb` 只允许在 GitHub 页面手动 `Run workflow` 时构建和上传;push 自动 CI 不生成正式发布包。
+- 当前 CID workflow 不部署服务器,不得新增 push 自动部署或读取部署 SSH 密钥的步骤。
+
 ## 禁止项
 
 - 不得恢复旧聚合快照目录或旧运行期分片缓存。

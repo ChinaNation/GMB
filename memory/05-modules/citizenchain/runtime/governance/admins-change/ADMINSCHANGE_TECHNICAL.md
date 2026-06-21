@@ -34,14 +34,14 @@
 
 - `BuiltinInstitution`：NRC / PRC / PRB 等内置治理主体。
 - `注册机构归属关系`：历史枚举值，新增、变更和生命周期写入路径一律拒绝作为管理员主体。
-- `PersonalDuoqian`：注册个人账户主体。
+- `PersonalAccount`：注册个人账户主体。
 - `InstitutionAccount`：注册机构某个具体账户的账户级主体。
 
 对应底层 `AccountId` 协议见 ADR-010：
 
 - `0x01 Builtin`
 - `0x02 注册机构归属关系`，仅表示同一 CID 机构归属/检索。
-- `PersonalDuoqian AccountId`
+- `PersonalAccount AccountId`
 - `0x04 asset_id 资产编号`
 - `InstitutionAccount AccountId`，payload 为账户 `AccountId` 前 32 字节并右填零。
 
@@ -101,7 +101,7 @@ validate_admin_set_for_subject(kind, org, admins)
 - 主体类型与 `org` 匹配。
 - 管理员列表不能重复。
 - `BuiltinInstitution` 必须等于固定人数：NRC 19、PRC 9、PRB 9。
-- `PersonalDuoqian` 必须使用 `ORG_REN`，管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
+- `PersonalAccount` 必须使用 `ORG_REN`，管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
 - `InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，管理员数量必须在 `2..=MaxAdminsPerInstitution`。
 - `注册机构归属关系` 不能作为管理员主体，写入和变更路径返回 `InvalidAdminAccountKind`。
 - 当前 runtime 配置：`MaxPersonalAccountAdmins = 64`，`MaxAdminsPerInstitution = 1989`。

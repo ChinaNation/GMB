@@ -4,7 +4,7 @@
 
 use codec::Decode;
 use frame_benchmarking::v2::*;
-use sfid_system::OnSfidBound;
+use cid_system::OnCidBound;
 use sp_runtime::traits::Hash;
 
 use crate::pallet::{AccountRewarded, Config, Pallet, RewardClaimed, RewardedCount};
@@ -18,13 +18,13 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn on_sfid_bound() {
+    fn on_cid_bound() {
         let who = decode_account::<T>([7u8; 32]);
         let binding_id = T::Hashing::hash(b"citizen-issuance-bench");
 
         #[block]
         {
-            <Pallet<T> as OnSfidBound<T::AccountId, T::Hash>>::on_sfid_bound(&who, binding_id);
+            <Pallet<T> as OnCidBound<T::AccountId, T::Hash>>::on_cid_bound(&who, binding_id);
         }
 
         assert_eq!(RewardedCount::<T>::get(), 1u64);

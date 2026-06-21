@@ -1,6 +1,6 @@
 //! 机构多签关闭流程实现(call_index=1)。
 //!
-//! 仅服务于已注册的 SFID 机构账户(`AccountRegisteredSfid.contains_key` 命中);
+//! 仅服务于已注册的 CID 机构账户(`AccountRegisteredCid.contains_key` 命中);
 //! 个人多签关闭走 personal-manage::propose_close 入口。
 //!
 //! 业务流程:
@@ -27,12 +27,10 @@ use sp_runtime::{
 
 use crate::institution::types::{CloseInstitutionAction, InstitutionLifecycleStatus};
 use crate::pallet::{
-    AccountRegisteredSfid, Config, Error, Event, InstitutionAccounts, InstitutionPendingClose,
-    Pallet, SfidRegisteredAccount, ACTION_CLOSE,
+    AccountRegisteredCid, CidRegisteredAccount, Config, Error, Event, InstitutionAccounts,
+    InstitutionPendingClose, Pallet, ACTION_CLOSE,
 };
-use crate::traits::{
-    DuoqianAccountValidator, DuoqianReservedAccountChecker, ProtectedSourceChecker,
-};
+use crate::traits::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 use crate::BalanceOf;
 use votingengine::InternalVoteEngine;
 
@@ -43,7 +41,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
 ) -> DispatchResult {
     // 仅机构地址走本入口
     let registered =
-        AccountRegisteredSfid::<T>::get(&account).ok_or(Error::<T>::NotInstitutionAccount)?;
+        AccountRegisteredCid::<T>::get(&account).ok_or(Error::<T>::NotInstitutionAccount)?;
 
     ensure!(
         !T::ProtectedSourceChecker::is_protected(&account),
@@ -69,7 +67,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
 
     // 校验机构账户已 Active(InstitutionAccounts 状态)
     let account_info =
-        InstitutionAccounts::<T>::get(&registered.sfid_number, &registered.account_name)
+        InstitutionAccounts::<T>::get(&registered.cid_number, &registered.account_name)
             .ok_or(Error::<T>::AccountNotFound)?;
     ensure!(
         matches!(account_info.status, InstitutionLifecycleStatus::Active),
@@ -155,7 +153,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     let admin_account = Pallet::<T>::resolve_admin_account_for_account(&action.account)
         .ok_or(Error::<T>::AccountNotFound)?;
     let registered =
-        AccountRegisteredSfid::<T>::get(&action.account).ok_or(Error::<T>::AccountNotFound)?;
+        AccountRegisteredCid::<T>::get(&action.account).ok_or(Error::<T>::AccountNotFound)?;
 
     let all_balance = T::Currency::free_balance(&action.account);
     // 中文注释：执行阶段也复核 reserved，保证注销完成后账户能被彻底清空和复用。
@@ -197,9 +195,9 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     }
 
     // 中文注释：机构账户注销成功后必须删除账户当前索引；历史事件/提案仍保留在链历史中。
-    InstitutionAccounts::<T>::remove(&registered.sfid_number, &registered.account_name);
-    SfidRegisteredAccount::<T>::remove(&registered.sfid_number, &registered.account_name);
-    AccountRegisteredSfid::<T>::remove(&action.account);
+    InstitutionAccounts::<T>::remove(&registered.cid_number, &registered.account_name);
+    CidRegisteredAccount::<T>::remove(&registered.cid_number, &registered.account_name);
+    AccountRegisteredCid::<T>::remove(&action.account);
     Pallet::<T>::close_admin_account(proposal_id, admin_account)?;
     InstitutionPendingClose::<T>::remove(&action.account);
 

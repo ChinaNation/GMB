@@ -27,7 +27,7 @@ use votingengine::traits::{
     InternalAdminProvider, InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine,
     JointVoteResultCallback, PopulationSnapshotVerifier,
 };
-use votingengine::SfidEligibility;
+use votingengine::CidEligibility;
 use votingengine::{
     PendingCleanupStage, Proposal, ProposalExecutionOutcome, VoteCountU32, VoteCountU64,
     VoteCredentialCleanup, PROPOSAL_KIND_JOINT, STAGE_INTERNAL, STAGE_JOINT, STAGE_REFERENDUM,
@@ -92,7 +92,7 @@ impl votingengine::Config for Test {
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type SfidEligibility = TestSfidEligibility;
+    type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = TestJointVoteResultCallback;
     type InternalVoteResultCallback = TestInternalVoteResultCallback;
@@ -153,7 +153,7 @@ thread_local! {
     static REGISTERED_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
 }
 
-pub struct TestSfidEligibility;
+pub struct TestCidEligibility;
 pub struct TestPopulationSnapshotVerifier;
 pub struct TestJointVoteResultCallback;
 pub struct TestInternalVoteResultCallback;
@@ -183,13 +183,13 @@ fn registered_account_admin(index: usize) -> AccountId32 {
     }
 }
 
-fn set_registered_duoqian_threshold(threshold: u32) {
+fn set_registered_account_threshold(threshold: u32) {
     for org in [ORG_REN, ORG_PUP, ORG_OTH] {
         ActiveDynamicThresholds::<Test>::insert(org, registered_account_institution(), threshold);
     }
 }
 
-fn set_pending_duoqian_threshold(threshold: u32) {
+fn set_pending_account_threshold(threshold: u32) {
     PendingDynamicThresholds::<Test>::insert(ORG_REN, pending_account_institution(), threshold);
 }
 
@@ -299,7 +299,7 @@ impl
         eligible_total: u64,
         nonce: &votingengine::pallet::VoteNonceOf<Test>,
         signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -312,7 +312,7 @@ impl
     }
 }
 
-impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for TestSfidEligibility {
+impl CidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for TestCidEligibility {
     fn is_eligible(binding_id: &<Test as frame_system::Config>::Hash, who: &AccountId32) -> bool {
         *binding_id == binding_id_ok() && who == &nrc_admin(0)
     }
@@ -323,7 +323,7 @@ impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for Test
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -461,8 +461,8 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
-        set_registered_duoqian_threshold(3);
-        set_pending_duoqian_threshold(2);
+        set_registered_account_threshold(3);
+        set_pending_account_threshold(2);
         System::set_block_number(1);
     });
     ext
@@ -580,7 +580,7 @@ fn submit_joint_vote(
 }
 
 fn binding_id_ok() -> <Test as frame_system::Config>::Hash {
-    <Test as frame_system::Config>::Hashing::hash(b"sfid-ok")
+    <Test as frame_system::Config>::Hashing::hash(b"cid-ok")
 }
 
 fn vote_nonce(input: &str) -> votingengine::pallet::VoteNonceOf<Test> {
@@ -603,7 +603,7 @@ fn vote_sig_bad() -> votingengine::pallet::VoteSignatureOf<Test> {
 }
 
 /// 测试用占位签发作用域和签名公钥,
-/// `TestPopulationSnapshotVerifier` / `TestSfidEligibility` 仅做空字段非空检验,
+/// `TestPopulationSnapshotVerifier` / `TestCidEligibility` 仅做空字段非空检验,
 /// 真实 sr25519 验签覆盖留 runtime 层。
 fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
     b"liaoning"
@@ -630,12 +630,12 @@ fn snapshot_sig_ok() -> votingengine::pallet::VoteSignatureOf<Test> {
         .expect("snapshot signature should fit")
 }
 
-fn issuer_sfid_number_ok(
+fn issuer_cid_number_ok(
 ) -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<128>> {
-    b"SFID001"
+    b"CID001"
         .to_vec()
         .try_into()
-        .expect("issuer_sfid_number should fit")
+        .expect("issuer_cid_number should fit")
 }
 
 fn issuer_main_account_ok() -> AccountId32 {
@@ -659,7 +659,7 @@ fn prepare_population_snapshot_for(
         eligible_total,
         nonce,
         snapshot_sig_ok(),
-        issuer_sfid_number_ok(),
+        issuer_cid_number_ok(),
         issuer_main_account_ok(),
         signer_pubkey_ok(),
         province_ok(),

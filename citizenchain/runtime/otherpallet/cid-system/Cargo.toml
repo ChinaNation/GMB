@@ -1,5 +1,5 @@
 [package]
-name = "sfid-system"  # SFID 绑定与资格校验模块
+name = "cid-system"  # CID 绑定与资格校验模块
 edition.workspace = true
 version.workspace = true
 authors.workspace = true

@@ -1,4 +1,4 @@
-# citizenchain 三平台打包手册
+# citizenchain 跨平台打包手册
 
 ## 1. 设计原则
 
@@ -20,8 +20,8 @@
 - `citizenchain/node/tauri.conf.json` `plugins.updater` 段 —— 桌面端打开软件后检查
   GitHub Release 中的 `citizenchain-latest.json`；检查更新不等于安装更新，安装必须由设置页“更新”按钮触发。
 - `.github/workflows/citizenchain.yml` —— push 与手动发布分流：
-  - `push main`：只构建三平台安装包并上传本次 run artifact，不发布 Release，不部署服务器。
-  - `Run workflow`：构建安装包和 updater 签名产物，发布 GitHub Release，并部署 Linux 服务器。
+  - `push main`：只构建 5 个用户安装包并上传本次 run artifact，不读取 Tauri updater 签名密钥，不发布 Release，不部署服务器。
+  - `Run workflow`：构建同样 5 个用户安装包和 updater 签名产物，发布 GitHub Release，并部署 Linux amd 服务器。
 
 ## 3. 桌面端更新协议
 
@@ -30,13 +30,12 @@
 ### 3.1 发布端要求
 
 - 手动 `Run workflow` 必须配置：
-  - `CITIZENCHAIN_TAURI_UPDATER_PUBKEY`：updater 公钥，写入本次发布 App 的 Tauri 配置。
-  - `TAURI_SIGNING_PRIVATE_KEY` 或 `CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY`：Tauri updater 私钥，用于生成 `.sig`。
-  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 或 `CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码，可为空。
+  - `GMB_TOP_PUBKEY`：Tauri updater 公钥，写入本次发布 App 的 Tauri 配置。
+  - `GMB_TOP_KEY`：Tauri updater 私钥，用于生成 `.sig`；该私钥不再拆分系统专属 secret。
 - 手动发布时 workflow 会临时把 `bundle.createUpdaterArtifacts` 改为 `true`；push 构建不会打开该开关。
 - GitHub Release 资产包含：
-  - 普通安装包：`公民链.exe` / `公民链.dmg` / `公民链.deb` / `公民链.AppImage`
-  - updater 资产与签名：`公民链.exe.sig`、`公民链.AppImage.sig`、`公民链.app.tar.gz`、`公民链.app.tar.gz.sig`
+  - 普通安装包：`公民链-macOS-Intel.dmg` / `公民链-macOS-apple.dmg` / `公民链-Windows.exe` / `公民链-Linux-amd.deb` / `公民链-Linux-arm.deb`
+  - updater 资产与签名：`citizenchain-updater-linux-amd.AppImage`、`citizenchain-updater-linux-arm.AppImage`、`citizenchain-updater-macos-intel.app.tar.gz`、`citizenchain-updater-macos-apple.app.tar.gz`、`公民链-Windows.exe.sig`
   - updater 元数据：`citizenchain-latest.json`
 
 ### 3.2 客户端行为
@@ -84,7 +83,7 @@
 
 ## 5. 构建命令
 
-三平台命令一致（因为 target 由 host 决定）：
+各平台命令一致（因为 target 由 host 决定）：
 
 ```bash
 cd citizenchain/node
@@ -160,7 +159,7 @@ dumpbin /dependents citizenchain.exe
 | Windows 公民宪法 tab 目录和中英文标题粘连 | WebView2 CSP 拦截 runtime 宪法 HTML 内联 `<style>` / `<script>` | 确认 `style-src-elem` 与 `script-src-elem` 允许元素级内联，且 iframe 保持 `sandbox=\"allow-scripts\"` |
 | Windows 装机时联网下载 WebView2 | `webviewInstallMode` 默认是 `downloadBootstrapper` | 确认改成 `offlineInstaller` |
 | push 触发后发布了 Release 或部署服务器 | workflow 缺少 `github.event_name == 'workflow_dispatch'` 边界 | 检查 `publish-github-release` / `deploy-linux-servers` / `cleanup-old-runs` 的 job-level `if` |
-| 手动发布缺少 updater 产物或 `.sig` | 没有配置 Tauri updater 签名私钥，或没有打开 `createUpdaterArtifacts` | 检查 GitHub secrets/variables，并确认 workflow 手动运行时把 `bundle.createUpdaterArtifacts` 临时置为 `true` |
+| 手动发布缺少 updater 产物或 `.sig` | 没有配置 `GMB_TOP_KEY / GMB_TOP_PUBKEY`，或没有打开 `createUpdaterArtifacts` | 检查 GitHub secrets，并确认 workflow 手动运行时把 `bundle.createUpdaterArtifacts` 临时置为 `true` |
 | 设置页不显示“更新”按钮 | `citizenchain-latest.json` 不存在、版本不高于本机版本、或 updater 公钥/签名不匹配 | 检查最新 GitHub Release 资产、`citizenchain-latest.json` 的 `version/platforms/signature/url` 字段和发布密钥 |
 | Linux AppImage 启动报缺 webkit | AppImage 打包时未把 webkit 一同打入 | 确认在 Ubuntu 22.04 上构建（旧版本 webkit ABI 不兼容） |
 | macOS 启动闪退 | 系统版本低于 10.15 | 升级或换机器 |

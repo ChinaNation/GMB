@@ -107,7 +107,7 @@
 ### 2026-05-10 runtime admins-change 修复记录
 
 - 已修复 `admins-change` 主体/org 边界：
-  - `PersonalDuoqian` 只能使用 `ORG_REN`。
+  - `PersonalAccount` 只能使用 `ORG_REN`。
   - `InstitutionAccount` 只能使用 `ORG_PUP / ORG_OTH`。
   - `注册机构归属关系` 仅保留 ABI 兼容和机构归属/检索语义，新写入和变更路径返回 `InvalidAdminAccountKind`。
 - 已修复 `votingengine` org 校验：`ORG_PUP / ORG_OTH` 进入内部投票合法 org 集合。
@@ -130,10 +130,10 @@
 ### 2026-05-10 node 前后端 admins-change 修复记录
 
 - 已将 node 后端 `get_admin_account_state / build_admin_set_change_request / submit_admin_set_change` 统一为 `AdminAccountRef`：内置治理机构可用 `cidNumber + org`，个人多签和机构账户必须用 `accountIdHex + org`。
-- 已将 `注册机构归属关系` 从 node 管理员更换前置校验中排除；`PersonalDuoqian` 只能走 `ORG_REN`，`InstitutionAccount` 只能走 `ORG_PUP / ORG_OTH`。
+- 已将 `注册机构归属关系` 从 node 管理员更换前置校验中排除；`PersonalAccount` 只能走 `ORG_REN`，`InstitutionAccount` 只能走 `ORG_PUP / ORG_OTH`。
 - 已将 node QR display 字段统一为 `org / subject / admins`，与 citizenwallet 公民钱包 `propose_admin_set_change` 解码字段一致。
 - 已将前端 `AdminSetChangePage` 改为接收 `accountRef`，NRC/PRC/PRB 入口带治理 org，清算行入口从主账户派生 `InstitutionAccount(0x05)` subject 并按 `ORG_OTH` 进入 `governance/admins_change`。
-- 已补充 node 后端单测覆盖 `注册机构归属关系` 拒绝、`PersonalDuoqian + 非 REN` 拒绝、`InstitutionAccount + PUP/OTH` 允许。
+- 已补充 node 后端单测覆盖 `注册机构归属关系` 拒绝、`PersonalAccount + 非 REN` 拒绝、`InstitutionAccount + PUP/OTH` 允许。
 - 已清理 node / citizenwallet 公民钱包 QR 展示中的旧机构类泛称：`ORG_REN` 显示为“个人多签”。
 - `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
 - `rustfmt --edition 2021 --check citizenchain/node/src/governance/admins_change/*.rs citizenchain/node/src/governance/organization-manage/chain.rs citizenchain/node/src/governance/organization-manage/types.rs citizenchain/node/src/governance/runtime_upgrade/commands.rs`：通过。
@@ -143,10 +143,10 @@
 
 ### 2026-05-10 citizenapp + citizenwallet 公民钱包 admins-change 修复记录
 
-- 已将 citizenapp `AdminSetValidation` 对齐 runtime/node：`注册机构归属关系` 拒绝，`PersonalDuoqian` 只允许 `ORG_REN`，`InstitutionAccount` 只允许 `ORG_PUP / ORG_OTH`。
+- 已将 citizenapp `AdminSetValidation` 对齐 runtime/node：`注册机构归属关系` 拒绝，`PersonalAccount` 只允许 `ORG_REN`，`InstitutionAccount` 只允许 `ORG_PUP / ORG_OTH`。
 - 已将 citizenapp `AdminSetChangeQrAdapter` 的 display 字段从旧 `account_id/admins_len/threshold` 改为 `org/subject/admins`，并统一 `0x` 小写 hex，避免冷钱包 strict display 比对失败。
 - 已将 citizenapp `AdminAccountService` 缓存 key 改为 `accountIdHex`，并在管理员更换提交成功后清理对应 subject 缓存。
-- 已将 citizenwallet 公民钱包 `propose_admin_set_change` 解码增强为主体类型与 org 匹配校验：`0/1/2 -> Builtin`、`3 -> PersonalDuoqian`、`4/5 -> InstitutionAccount`；`注册机构归属关系` 和错配主体拒绝解码。
+- 已将 citizenwallet 公民钱包 `propose_admin_set_change` 解码增强为主体类型与 org 匹配校验：`0/1/2 -> Builtin`、`3 -> PersonalAccount`、`4/5 -> InstitutionAccount`；`注册机构归属关系` 和错配主体拒绝解码。
 - 已同步 citizenwallet 公民钱包 org 展示：`ORG_REN=个人多签`、`ORG_PUP=公权机构账户`、`ORG_OTH=其他机构账户`。
 - 已补充 citizenapp admins-change 测试：主体/org 错配拒绝、QR display 字段、`accountIdHex` 缓存清理。
 - 已补充 citizenwallet 公民钱包测试：个人多签管理员集合变更、PUP/OTH 机构账户展示、subject kind 与 org 错配拒绝。
@@ -158,7 +158,7 @@
 
 ### 2026-05-10 citizenapp admins-change 破坏式 identity 修复记录
 
-- 已新增 `AdminAccountIdentity` 三类主体：`governanceInstitution`、`personalDuoqian`、`institutionAccount`。
+- 已新增 `AdminAccountIdentity` 三类主体：`governanceInstitution`、`personalAccount`、`institutionAccount`。
 - 已删除 citizenapp admins-change 的旧模糊字符串查询入口；`InstitutionAdminService`、`AdminAccountService`、`ActivationService`、`AdminSetChangePage` 均要求传入明确 `AdminAccountIdentity`。
 - 已将管理员激活存储切到 `activated_admins_v3`，只保存 `accountIdHex / identityKey / org / kind`，不读取、不迁移旧 `activated_admins_v1/v2`。
 - 已同步 citizenwallet 公民钱包管理员激活解码：新增 `GMB_ACTIVATE_SUBJECT_V1` / `activate_admin_account`，展示字段为 `org / subject / pubkey`，旧 `cid_number` 激活 payload 不再识别为当前 admins-change 激活协议。
@@ -166,7 +166,7 @@
 - 已清理 citizenapp 当前代码中的旧机构类泛称残留；通用 `OrgType.duoqian` 显示为“多签账户”，具体身份由 admins-change identity 区分。
 - 已补充 citizenapp admins-change 测试：机构账户、个人多签、治理机构 identity 派生；v3 激活记录按 `accountIdHex` 过滤并忽略旧 `cidNumber` 记录。
 - 已补充 citizenwallet 公民钱包测试：subject 级管理员激活 payload 可解码，旧激活 payload 被拒绝。
-- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change lib/governance/shared/institution_info.dart lib/governance/organization-manage/institution_registry.dart lib/governance/organization-manage/institution_admin_list_page.dart lib/governance/organization-manage/institution_detail_page.dart lib/governance/governance_proposals_page.dart lib/governance/shared/proposal/proposal_context.dart lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart lib/governance/duoqian_manage_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_page.dart lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart`（`citizenapp`）：通过。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change lib/governance/shared/institution_info.dart lib/governance/organization-manage/institution_registry.dart lib/governance/organization-manage/institution_admin_list_page.dart lib/governance/organization-manage/institution_detail_page.dart lib/governance/governance_proposals_page.dart lib/governance/shared/proposal/proposal_context.dart lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/institution_account_info_page.dart lib/governance/account_manage_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_page.dart lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart`（`citizenapp`）：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`citizenwallet`）：通过。
 - `flutter test test/governance/admins-change`（`citizenapp`）：本机 Flutter SDK 缓存写权限阻断，报 `/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`。
 - `flutter test test/signer/payload_decoder_test.dart test/signer/pallet_registry_test.dart`（`citizenwallet`）：本机 Flutter SDK 缓存写权限阻断，报 `/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`。
@@ -186,7 +186,7 @@
 
 ### 2026-05-10 admins-change 交互模块修复记录
 
-- 已修复 `organization-manage` 创建机构时的 admins-change 主体：`propose_create_institution` 新增 `org`，只允许 `ORG_PUP / ORG_OTH`；Pending/Active 管理员主体改为主账户地址派生的 `InstitutionAccount(0x05)`，不再使用 `注册机构归属关系(0x02)`。
+- 已修复 `organization-manage` 创建机构时的 admins-change 主体：`propose_create_institution` 新增 `org`，只允许 `ORG_PUP / ORG_OTH`；Pending/Active 管理员主体改为主账户派生的 `InstitutionAccount(0x05)`，不再使用 `注册机构归属关系(0x02)`。
 - 已将机构账户关闭、`InstitutionMultisigQuery`、`DuoqianCidAccountQuery::is_admin_of` 改为读取账户级 subject 和 `Institutions[cid].org`；`duoqian-transfer` 对机构账户传 `ORG_REN` 会返回 `InstitutionOrgMismatch`。
 - 已同步 node 后端 `propose_create_institution` QR/call_data 为 11 字段布局，并在机构详情读取 `org` 和 active admins-change 主体；Pending 阶段回退显示创建快照。
 - 已同步 node 前端创建机构入口传 `adminOrg=ORG_OTH`；citizenapp 创建机构、机构账户发现、提案上下文、转账入口均携带/使用 `adminSubjectOrg`，不再把机构账户当作个人多签。
@@ -211,7 +211,7 @@
 - 已补齐机构多签注销后的本地显示：统一账户列表继续显示“已注销”，详情页不显示余额，右上角显示“删除”，确认后清理本机机构多签数据。
 - 已将个人多签创建/注销提案本地初始票数改为 `yesVotes = 1`，对齐投票引擎发起人自动赞成票。
 - 已修正个人/机构多签详情页右上角关闭菜单的视觉语义：Active 状态“关闭个人多签 / 关闭机构多签”不再显示删除图标，Closed 状态“删除”才保留删除图标。
-- `dart format lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart`（`citizenapp`）：通过。
-- `flutter analyze lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart`（`citizenapp`）：通过，无问题。
+- `dart format lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/institution_account_info_page.dart`（`citizenapp`）：通过。
+- `flutter analyze lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/institution_account_info_page.dart`（`citizenapp`）：通过，无问题。
 - 关闭菜单残留扫描：通过，“关闭个人多签 / 关闭机构多签”附近不再出现 `Icons.delete_outline`，真正的“删除”菜单项仍保留删除图标。
 - 已同步 `unified-protocols.md`、citizenapp governance/admins-change/personal-manage/signer 文档和 citizenapp-vs-citizenwallet 双端边界文档。

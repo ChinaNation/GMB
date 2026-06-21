@@ -4,8 +4,8 @@ use hex_literal::hex;
 
 /// 单个监察院机构常量结构。
 pub struct ChinaJc {
-    pub sfid_full_name: &'static str,
-    pub sfid_number: &'static str,
+    pub cid_full_name: &'static str,
+    pub cid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
     pub admins: &'static [[u8; 32]],
@@ -13,8 +13,8 @@ pub struct ChinaJc {
 
 pub const CHINA_JC: &[ChinaJc] = &[
     ChinaJc {
-        sfid_full_name: "中华民族联邦共和国国家监察院",
-        sfid_number: "ZS001-GJC0M-545692179-2026",
+        cid_full_name: "中华民族联邦共和国国家监察院",
+        cid_number: "ZS001-GJC0M-545692179-2026",
         main_account: hex!("78c41637258d49ff5f78176c698ac9901c7b79e1b593258ba820919704577073"),
         fee_account: hex!("6a0a367c6f3a5ae67625e0e0df7bba441f7983bb9e2827dc1d9d58b52c7503ce"),
         admins: &[
@@ -26,8 +26,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "国家监察院联邦廉政署",
-        sfid_number: "ZS001-GJC0F-000239513-2026",
+        cid_full_name: "国家监察院联邦廉政署",
+        cid_number: "ZS001-GJC0F-000239513-2026",
         main_account: hex!("18cd5a2e8721cf4ad1b4a681317fced559b17cd75a20de0ba55766d1e5ff348d"),
         fee_account: hex!("1572110c309775432f01ec5e4ce03ac3ee0f96e8a4ca7d88fb4690193df03e89"),
         admins: &[
@@ -39,8 +39,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "国家监察院联邦审计署",
-        sfid_number: "ZS001-GJC0T-535248451-2026",
+        cid_full_name: "国家监察院联邦审计署",
+        cid_number: "ZS001-GJC0T-535248451-2026",
         main_account: hex!("142fc026a40c05893d026bda904abecd282f535e0ec91dd986db7ee40eb1d13d"),
         fee_account: hex!("9269b00a7003153c535c05928771bcfeeca9084236ed61ba043122d5d3d5bada"),
         admins: &[
@@ -52,8 +52,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "国家监察院联邦调查署",
-        sfid_number: "ZS001-GJC0Z-103804644-2026",
+        cid_full_name: "国家监察院联邦调查署",
+        cid_number: "ZS001-GJC0Z-103804644-2026",
         main_account: hex!("ca8adddb4435dff3a7e93e104b05952d1a6e9a577451efa787cd856ba1e3f417"),
         fee_account: hex!("e8f9a0b0c9bcd1aaf6cae0395627bdad9957c108db16d538abfec8675a02cbe7"),
         admins: &[
@@ -65,8 +65,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "中枢省监察院",
-        sfid_number: "ZS001-GJC0X-781848966-2026",
+        cid_full_name: "中枢省监察院",
+        cid_number: "ZS001-GJC0X-781848966-2026",
         main_account: hex!("6450fb556c33ee3d02d0fca6de0fb008cc2fca118313b786e48dceb2c9f93568"),
         fee_account: hex!("4294f198469991daa703c74845575c1f5769c4e11255589d91ab1d9e3256b528"),
         admins: &[
@@ -78,8 +78,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "岭南省监察院",
-        sfid_number: "LN001-GJC0Y-030875113-2026",
+        cid_full_name: "岭南省监察院",
+        cid_number: "LN001-GJC0Y-030875113-2026",
         main_account: hex!("5d8019d53832d5e05cd133bffed59bd40e0b0bd82700c9bb9814d10dce368af9"),
         fee_account: hex!("f64749452d6f10e09ff05d84b9cd5464ab5bd44c4f7d6e35309d26b2cf946f0e"),
         admins: &[
@@ -91,8 +91,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "广东省监察院",
-        sfid_number: "GD001-GJC0T-303750247-2026",
+        cid_full_name: "广东省监察院",
+        cid_number: "GD001-GJC0T-303750247-2026",
         main_account: hex!("016952641c9df0ebebc3b48619e1ec64fae5ff54228158b9a57b8a4df465c9a7"),
         fee_account: hex!("d6b9597293457198276ec06b9ac2a14bad7306c31118eb4555f129598a0b5036"),
         admins: &[
@@ -104,8 +104,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "广西省监察院",
-        sfid_number: "GX001-GJC0S-409645736-2026",
+        cid_full_name: "广西省监察院",
+        cid_number: "GX001-GJC0S-409645736-2026",
         main_account: hex!("dea8946f9d375c13e1fbf38908c240cbee047cb67f5a30e2a18c65d6c78b16a6"),
         fee_account: hex!("a42eb835ce56015b35ebbe6afdc807b58dc4dc985f8bff9871f5cfe251bb95cd"),
         admins: &[
@@ -117,8 +117,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "福建省监察院",
-        sfid_number: "FJ001-GJC0H-745488346-2026",
+        cid_full_name: "福建省监察院",
+        cid_number: "FJ001-GJC0H-745488346-2026",
         main_account: hex!("e4c0b0013117286185f7b700bbf72667fef48ab88f531f87254c42fbc818ee3a"),
         fee_account: hex!("a5725af7ff2fab4c06e5428f4072eeec82221d00000184049563c33457dbbea1"),
         admins: &[
@@ -130,8 +130,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "海南省监察院",
-        sfid_number: "HN001-GJC00-799337965-2026",
+        cid_full_name: "海南省监察院",
+        cid_number: "HN001-GJC00-799337965-2026",
         main_account: hex!("c642e606edf5c8dc5a85ff117082bcb7eb20a19788e54af684e36df4367aa96c"),
         fee_account: hex!("95ae59d2b63a7320516497185c5772a66dfdd97ec1c84dde4472cf3bb8faa693"),
         admins: &[
@@ -143,8 +143,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "云南省监察院",
-        sfid_number: "YN001-GJC0Z-467247508-2026",
+        cid_full_name: "云南省监察院",
+        cid_number: "YN001-GJC0Z-467247508-2026",
         main_account: hex!("88e0bac698c79371d954d3f5d2bfffce18607a060ad8fe0579f5d2391567287b"),
         fee_account: hex!("9a6b6e393b94442e7ab266a512e78579d2b1b3a728d0bb3860e72708c8434b05"),
         admins: &[
@@ -156,8 +156,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "贵州省监察院",
-        sfid_number: "GZ001-GJC0Q-842518536-2026",
+        cid_full_name: "贵州省监察院",
+        cid_number: "GZ001-GJC0Q-842518536-2026",
         main_account: hex!("4b64af0db53fb67a53aac8730da63e3f7b50a45a70f50bc9bddff9c4f62e967d"),
         fee_account: hex!("107ceb0766e0500df1e4fa1f8fd2d99bef1268d7cb191eed39387a4203d4a5b1"),
         admins: &[
@@ -169,8 +169,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "湖南省监察院",
-        sfid_number: "HU001-GJC0I-206694932-2026",
+        cid_full_name: "湖南省监察院",
+        cid_number: "HU001-GJC0I-206694932-2026",
         main_account: hex!("7bbb895aa7a24ab4c43da9f30ab646aaeda75acbafe687fa939e4f7e35cb18d4"),
         fee_account: hex!("2df86a137f55cdb91872644ea029e9536fd7b59838658e5f6ec2d13450103f23"),
         admins: &[
@@ -182,8 +182,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "江西省监察院",
-        sfid_number: "JX001-GJC03-209335980-2026",
+        cid_full_name: "江西省监察院",
+        cid_number: "JX001-GJC03-209335980-2026",
         main_account: hex!("23afa7f314d229510c70f133230c8c86376a6edf5e8d55edd40f51ebad6f7247"),
         fee_account: hex!("fec4cef8c96d920381e7541a5f628ac5d12531f487e571f1133f0412a0f07c42"),
         admins: &[
@@ -195,8 +195,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "浙江省监察院",
-        sfid_number: "ZJ001-GJC0L-049915488-2026",
+        cid_full_name: "浙江省监察院",
+        cid_number: "ZJ001-GJC0L-049915488-2026",
         main_account: hex!("a02662b3484743ee3e953c2906bfb4fb38bb038c0e5dd0900bd63c0d2d237c9e"),
         fee_account: hex!("f6db76546cc5de92c7fc7d7aca36b5c9afc22845ca69b5bb24e6aa05251265dc"),
         admins: &[
@@ -208,8 +208,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "江苏省监察院",
-        sfid_number: "JS001-GJC0E-605960227-2026",
+        cid_full_name: "江苏省监察院",
+        cid_number: "JS001-GJC0E-605960227-2026",
         main_account: hex!("b71765c85a6e0132daf8362cc69c2889dd0f92fe2be12ede2aabcb66f3a5e44f"),
         fee_account: hex!("dd7f7bf9c4bd7edc6369d7096fdfb253f69cb24dbaeb7824a315bfc169ef94f5"),
         admins: &[
@@ -221,8 +221,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "山东省监察院",
-        sfid_number: "SD001-GJC0O-114117651-2026",
+        cid_full_name: "山东省监察院",
+        cid_number: "SD001-GJC0O-114117651-2026",
         main_account: hex!("1a7e1492527bd106e272dca4d1d2476e1b65d7d0b9101a7390ff7262269de8fc"),
         fee_account: hex!("725d1857db8e32040aaaba3121854cf21672fbb73cea2c718c0f5c52356b3bee"),
         admins: &[
@@ -234,8 +234,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "山西省监察院",
-        sfid_number: "SX001-GJC0L-308959833-2026",
+        cid_full_name: "山西省监察院",
+        cid_number: "SX001-GJC0L-308959833-2026",
         main_account: hex!("837cc7a1c72cd769faf41359fa91a7e7fcf4dec63126bef4ebdea83e89f83b6e"),
         fee_account: hex!("e8675403e49a02ee0407a330e67201d5a46f6beaf214eccb32105078e524208d"),
         admins: &[
@@ -247,8 +247,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "河南省监察院",
-        sfid_number: "HE001-GJC0W-145800497-2026",
+        cid_full_name: "河南省监察院",
+        cid_number: "HE001-GJC0W-145800497-2026",
         main_account: hex!("33f4535db69ea3c7a7e854a50867b03cba9aad346b53ce0394db54ac7ee06938"),
         fee_account: hex!("ca493a983089c0ac4c67537dddf62302f5041b942b5a23c1f9278b63ac2bfafa"),
         admins: &[
@@ -260,8 +260,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "河北省监察院",
-        sfid_number: "HB001-GJC0I-886894534-2026",
+        cid_full_name: "河北省监察院",
+        cid_number: "HB001-GJC0I-886894534-2026",
         main_account: hex!("4b77384660940568438e2e5fc7605cb1ea25fb1ce9f5007059419007853eaac5"),
         fee_account: hex!("00dc7626cff40c355cbd014329e2abfeef72b2ffb041f8c88b3d0f050dce025d"),
         admins: &[
@@ -273,8 +273,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "湖北省监察院",
-        sfid_number: "HI001-GJC0F-031865067-2026",
+        cid_full_name: "湖北省监察院",
+        cid_number: "HI001-GJC0F-031865067-2026",
         main_account: hex!("d4c25711c8b5d1e4f22b8db3f3edf34dbe5dcfa345093bbf22f1d93f2c2c740f"),
         fee_account: hex!("329e5ee47672163781512baca6d5e319bdd8683e413836ccbd43844a5fdbb4f2"),
         admins: &[
@@ -286,8 +286,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "陕西省监察院",
-        sfid_number: "SI001-GJC0C-233228430-2026",
+        cid_full_name: "陕西省监察院",
+        cid_number: "SI001-GJC0C-233228430-2026",
         main_account: hex!("dac47225e1acd2db04378adc7bcdef6639f7e4a8732d95964d6494b237c190dd"),
         fee_account: hex!("3fe03a053a10f91a208ff38de561e3d82db4f2a90802dfa85a055a54873e5b9a"),
         admins: &[
@@ -299,8 +299,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "重庆省监察院",
-        sfid_number: "CQ001-GJC05-671860922-2026",
+        cid_full_name: "重庆省监察院",
+        cid_number: "CQ001-GJC05-671860922-2026",
         main_account: hex!("5e1efcc5a8e5503da993a01797e148f2144cc9e788c1b7b7d82dbd6e701f3003"),
         fee_account: hex!("18d0e4c45159b9c0f4a204236eb49b298d391d7751ded32b75bf45435251c2ba"),
         admins: &[
@@ -312,8 +312,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "四川省监察院",
-        sfid_number: "SC001-GJC0X-417258523-2026",
+        cid_full_name: "四川省监察院",
+        cid_number: "SC001-GJC0X-417258523-2026",
         main_account: hex!("cf3a2b63edf5c33069c9ca1a637f6eeb6c5fdc9df63e0febdb9279de662b9d20"),
         fee_account: hex!("5ef5219f2211ff67d1078589374266a317535f92997257c163723481d8fb3f16"),
         admins: &[
@@ -325,8 +325,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "甘肃省监察院",
-        sfid_number: "GS001-GJC0S-649309744-2026",
+        cid_full_name: "甘肃省监察院",
+        cid_number: "GS001-GJC0S-649309744-2026",
         main_account: hex!("70d28b5e54d718fc4f25b580332d17e8e83a539cd61e45bb3a7a1b557962435c"),
         fee_account: hex!("3465a87d8740729423cd42bcb7aab310e623c5bbaf533cbbd625c33474362574"),
         admins: &[
@@ -338,8 +338,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "北平省监察院",
-        sfid_number: "BP001-GJC0H-054863049-2026",
+        cid_full_name: "北平省监察院",
+        cid_number: "BP001-GJC0H-054863049-2026",
         main_account: hex!("fc180bea9499fb69fc82efab250d2f6bfce9703a82a93593c9abb363c51780d8"),
         fee_account: hex!("6ff6633ebd6c2747156167e937de36e6acd38331b4e59c4354066ea6933c0d6e"),
         admins: &[
@@ -351,8 +351,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "海滨省监察院",
-        sfid_number: "HA001-GJC0L-667840188-2026",
+        cid_full_name: "海滨省监察院",
+        cid_number: "HA001-GJC0L-667840188-2026",
         main_account: hex!("5da5ffac97eb2def694325f0710e7fe61223ee5e0779d972438a7689529b7819"),
         fee_account: hex!("873ed12594bcc05ac60b89c2b448cb5b474d867641a8f3eafd409eb0fa9928dd"),
         admins: &[
@@ -364,8 +364,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "松江省监察院",
-        sfid_number: "SJ001-GJC0E-186536238-2026",
+        cid_full_name: "松江省监察院",
+        cid_number: "SJ001-GJC0E-186536238-2026",
         main_account: hex!("9169f479b750a45fb0df49f17e58ff915c1752b1a945daae8203943395616e5d"),
         fee_account: hex!("5b0f7e6d9e7f01dff84fee4adeb438aa5d5d24c45167b1a36e94c2a85c4fe0bf"),
         admins: &[
@@ -377,8 +377,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "龙江省监察院",
-        sfid_number: "LJ001-GJC0E-401474770-2026",
+        cid_full_name: "龙江省监察院",
+        cid_number: "LJ001-GJC0E-401474770-2026",
         main_account: hex!("491155d0b092772cba94ff662874819da9079af15af931cc993c2b34aa3ffd4d"),
         fee_account: hex!("725d75903e5b964bfd35c94d025ef13bdbe07519456f42e9d90ebb702b052319"),
         admins: &[
@@ -390,8 +390,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "吉林省监察院",
-        sfid_number: "JL001-GJC0S-048512463-2026",
+        cid_full_name: "吉林省监察院",
+        cid_number: "JL001-GJC0S-048512463-2026",
         main_account: hex!("98c331fc8c18c3c932ccdc383dcbac92811173f89497b92d659d0ac5b8392238"),
         fee_account: hex!("c4930bcfbb00ba71474901d5230b29b505b1ae9fee8bf0976bff1a8ba1ca2e9e"),
         admins: &[
@@ -403,8 +403,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "辽宁省监察院",
-        sfid_number: "LI001-GJC0Z-467886648-2026",
+        cid_full_name: "辽宁省监察院",
+        cid_number: "LI001-GJC0Z-467886648-2026",
         main_account: hex!("fe52241851a95ef75ee4d23cb22e808d7dea8d767c05eeb7f7e0616e289f64e5"),
         fee_account: hex!("ebbb55a72842e175cd3a8831dfd08f32ca526ec5c82b8b42a1a33b6d304df2b8"),
         admins: &[
@@ -416,8 +416,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "宁夏省监察院",
-        sfid_number: "NX001-GJC0J-192812513-2026",
+        cid_full_name: "宁夏省监察院",
+        cid_number: "NX001-GJC0J-192812513-2026",
         main_account: hex!("290b612865a9d3b8502427dd21d5744c6664b1266626cf8087e1f07e3df99a9d"),
         fee_account: hex!("43f6e10aaa5ac726c1a92666cbcd40c331589f710fff1cbaecea4ada69ef711a"),
         admins: &[
@@ -429,8 +429,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "青海省监察院",
-        sfid_number: "QH001-GJC0L-097589382-2026",
+        cid_full_name: "青海省监察院",
+        cid_number: "QH001-GJC0L-097589382-2026",
         main_account: hex!("df0d77bc9a1a5ddbcfff7973551d5e7cba08018f4fc9194ab1c5238789ee617b"),
         fee_account: hex!("3f7989df1a0ac4f74ac5c765a11e03d236152a84bd9c125a5cdbbc811ff00553"),
         admins: &[
@@ -442,8 +442,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "安徽省监察院",
-        sfid_number: "AH001-GJC0S-641171400-2026",
+        cid_full_name: "安徽省监察院",
+        cid_number: "AH001-GJC0S-641171400-2026",
         main_account: hex!("340ade265ecc1b28d8528e0ae2de4f888be1caaed15b7f2695cb7220a675a10a"),
         fee_account: hex!("ab026008a6eed01b627260fca30bd3a063c4ddb891de09466f5f165829d88d64"),
         admins: &[
@@ -455,8 +455,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "台湾省监察院",
-        sfid_number: "TW001-GJC0W-219778079-2026",
+        cid_full_name: "台湾省监察院",
+        cid_number: "TW001-GJC0W-219778079-2026",
         main_account: hex!("9d672935eed5fe152d4f29b131c5efe54ec80827e96f6162f71e6e30bd3efe87"),
         fee_account: hex!("4390e36d8d9a20a7b85671d646acc8cb894079a4c131972643f2aaf5fada94a1"),
         admins: &[
@@ -468,8 +468,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "西藏省监察院",
-        sfid_number: "XZ001-GJC0L-718056153-2026",
+        cid_full_name: "西藏省监察院",
+        cid_number: "XZ001-GJC0L-718056153-2026",
         main_account: hex!("dbbebd58459e50bb7f658af89de31de6154d68203d40c19e121efe2b1d8670c0"),
         fee_account: hex!("4979199544ef98232521872bdf4ecd840dcfb8a94bcb8ff379b0a1d634e84c49"),
         admins: &[
@@ -481,8 +481,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "新疆省监察院",
-        sfid_number: "XJ001-GJC0G-261542589-2026",
+        cid_full_name: "新疆省监察院",
+        cid_number: "XJ001-GJC0G-261542589-2026",
         main_account: hex!("dfad7a5dcd22efdc2d1e1259a38fdf33451af90f99a20aede3961837097a8bad"),
         fee_account: hex!("966522773d6bfea6b6bb17104957ae6140ba7052081e6f5e89f90a17b9b9ecca"),
         admins: &[
@@ -494,8 +494,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "西康省监察院",
-        sfid_number: "XK001-GJC0J-821263753-2026",
+        cid_full_name: "西康省监察院",
+        cid_number: "XK001-GJC0J-821263753-2026",
         main_account: hex!("d3ec9eb3c668ee91fa3bea4629f90730036bdcaadfa6cb8d0b748a7e7a4e7e95"),
         fee_account: hex!("02ed97645b2e9aa6188acc1b42179875705a50df427c1e5c9790f6c724e4fb2b"),
         admins: &[
@@ -507,8 +507,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "阿里省监察院",
-        sfid_number: "AL001-GJC0F-717764071-2026",
+        cid_full_name: "阿里省监察院",
+        cid_number: "AL001-GJC0F-717764071-2026",
         main_account: hex!("24a1eec450b086a82649c4b14951c876983069f1ab02f1539c243a807dbb4c66"),
         fee_account: hex!("f974390f755364b0b20f98befe6cd684d8f572f5e5f9fc9cfcdda94cf34c8f8f"),
         admins: &[
@@ -520,8 +520,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "葱岭省监察院",
-        sfid_number: "CL001-GJC0A-237688074-2026",
+        cid_full_name: "葱岭省监察院",
+        cid_number: "CL001-GJC0A-237688074-2026",
         main_account: hex!("348f6d9cacc41bfcaf3080bba627445a4e0581159c8b3d412a0c2eeab2210024"),
         fee_account: hex!("f19d6e8ac5f61c10e294b27306946b0264cfbab186a31be048d7d649d11b378c"),
         admins: &[
@@ -533,8 +533,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "伊犁省监察院",
-        sfid_number: "YL001-GJC0O-190934454-2026",
+        cid_full_name: "伊犁省监察院",
+        cid_number: "YL001-GJC0O-190934454-2026",
         main_account: hex!("a3c28a10b9d9a0f60ecd0b7164c4f3e0c22bf010fb053890cc966e3b53648f2c"),
         fee_account: hex!("dc645228c28a9db7b6db4258eeebc14b20cac558264931eacdc8080a8a4ed4fb"),
         admins: &[
@@ -546,8 +546,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "河西省监察院",
-        sfid_number: "HX001-GJC0V-186075670-2026",
+        cid_full_name: "河西省监察院",
+        cid_number: "HX001-GJC0V-186075670-2026",
         main_account: hex!("fe2cbbff10f911dfc2b4e666211a86c17d0a082b323ac1211c2c3b9778ba3910"),
         fee_account: hex!("e96674fdad2d6a968400bbc6e97199c7a15588dcce637583c22a2d027e080086"),
         admins: &[
@@ -559,8 +559,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "昆仑省监察院",
-        sfid_number: "KL001-GJC0W-925840208-2026",
+        cid_full_name: "昆仑省监察院",
+        cid_number: "KL001-GJC0W-925840208-2026",
         main_account: hex!("c1364a24483d7c2281fdfab96e43ca73d3376800197a51f5fbf044cc648368fe"),
         fee_account: hex!("0f0ababf3ccf2f018f573b3695faac90670b8a1f6de3f24036fd25e824da70d2"),
         admins: &[
@@ -572,8 +572,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "河套省监察院",
-        sfid_number: "HT001-GJC08-104165277-2026",
+        cid_full_name: "河套省监察院",
+        cid_number: "HT001-GJC08-104165277-2026",
         main_account: hex!("531a0e2ff382390344fa498ee73c1f72e6a6e272567bb09595d1daeaa51a34ed"),
         fee_account: hex!("27c3a4a726446dea01c42327ebf73c1e56d86ae98dd535d50723ec9c155d8444"),
         admins: &[
@@ -585,8 +585,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "热河省监察院",
-        sfid_number: "RH001-GJC09-199854011-2026",
+        cid_full_name: "热河省监察院",
+        cid_number: "RH001-GJC09-199854011-2026",
         main_account: hex!("6015a4d48041dbb90852002065d03ac7f7e78f2c1dc04b67c1d6ba25e716a557"),
         fee_account: hex!("2ed4c19675a3943b7d07f4415d72803da2adc594b5ffb6234f64ee7bc45d51d9"),
         admins: &[
@@ -598,8 +598,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "兴安省监察院",
-        sfid_number: "XA001-GJC0E-682632777-2026",
+        cid_full_name: "兴安省监察院",
+        cid_number: "XA001-GJC0E-682632777-2026",
         main_account: hex!("fa516a4a1012916590931e0e953f0e282184d1a60764b36653df312a00bf79e3"),
         fee_account: hex!("49e602bd8d3ebe05c9a53b9f4e97e0572f66d951b2d825c31675465135b1d3d5"),
         admins: &[
@@ -611,8 +611,8 @@ pub const CHINA_JC: &[ChinaJc] = &[
         ],
     },
     ChinaJc {
-        sfid_full_name: "合江省监察院",
-        sfid_number: "HJ001-GJC09-920742619-2026",
+        cid_full_name: "合江省监察院",
+        cid_number: "HJ001-GJC09-920742619-2026",
         main_account: hex!("791c2e9125a57d7d5995d7a1a7d4b391c5bbcb9974254850ea6c2268e5627dd2"),
         fee_account: hex!("0b004c3d07b17b2e696899a25bb0fc7f74be0428b646f25022013097707e4622"),
         admins: &[

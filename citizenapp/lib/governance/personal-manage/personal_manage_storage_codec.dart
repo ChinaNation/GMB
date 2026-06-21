@@ -5,7 +5,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 
 /// 个人多签账户生命周期快照。
 ///
-/// `PersonalManage::PersonalDuoqians` 只保存个人账户生命周期元数据；
+/// `PersonalManage::PersonalAccounts` 只保存个人账户生命周期元数据；
 /// 管理员真源在 `AdminsChange::AdminAccounts`，动态阈值真源在 `InternalVote`。
 class PersonalManageAccountSnapshot {
   const PersonalManageAccountSnapshot({
@@ -38,11 +38,11 @@ class PersonalManageAdminSnapshot {
 class PersonalManageStorageCodec {
   PersonalManageStorageCodec._();
 
-  static Uint8List personalDuoqiansKey(String personalAddressHex) {
+  static Uint8List personalAccountsKey(String personalAccountHex) {
     return storageMapKey(
       'PersonalManage',
-      'PersonalDuoqians',
-      hexDecode(personalAddressHex),
+      'PersonalAccounts',
+      hexDecode(personalAccountHex),
     );
   }
 
@@ -71,7 +71,7 @@ class PersonalManageStorageCodec {
     );
   }
 
-  static PersonalManageAccountSnapshot? decodePersonalDuoqian(
+  static PersonalManageAccountSnapshot? decodePersonalAccount(
     Uint8List data,
   ) {
     if (data.length < 32 + 1 + 4 + 1) return null;

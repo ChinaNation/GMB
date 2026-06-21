@@ -299,7 +299,7 @@ class ApiClient {
   /// 查询机构下所有多签账户。
   ///
   /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/accounts`，
-  /// 返回机构名称 + 账户列表（account_name / duoqian_account / chain_status）。
+  /// 返回机构名称 + 账户列表（account_name / account / chain_status）。
   Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
       String cidNumber) async {
     final trimmed = cidNumber.trim();
@@ -348,7 +348,7 @@ class ApiClient {
         final m = item.map((k, v) => MapEntry(k.toString(), v));
         accounts.add(InstitutionAccountEntry(
           accountName: (m['account_name']?.toString() ?? '').trim(),
-          duoqianAccount: m['duoqian_account']?.toString(),
+          account: m['account']?.toString(),
           // 中文注释:CID 后端公开接口返回 SCREAMING_SNAKE_CASE；
           // 这里兼容旧口径 Pending/Confirmed/Failed，统一折叠成同一套状态。
           chainStatus: InstitutionAccountEntry.normalizeChainStatus(
@@ -586,15 +586,15 @@ class VoteCredentialResponse {
 class InstitutionAccountEntry {
   const InstitutionAccountEntry({
     required this.accountName,
-    this.duoqianAccount,
+    this.account,
     required this.chainStatus,
   });
 
   /// 账户名称（链上 name 字段）。
   final String accountName;
 
-  /// 链上派生的多签地址（hex，上链成功后才有值）。
-  final String? duoqianAccount;
+  /// 链上派生的多签账户（hex，上链成功后才有值）。
+  final String? account;
 
   /// 链上状态：`Pending` / `Active` / `Closed` / `Failed`（全端统一取值）。
   final String chainStatus;

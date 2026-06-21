@@ -72,19 +72,19 @@ class _InstitutionAccountInfoPageState
       final local = await WalletIsar.instance.read((isar) async {
         final entity = await isar.institutionEntitys
             .filter()
-            .duoqianAccountEqualTo(widget.institution.duoqianAccount)
+            .accountEqualTo(widget.institution.account)
             .findFirst();
         final statuses = await InstitutionDuoqianLocalState.readStatusSnapshots(
           isar,
-          [widget.institution.duoqianAccount],
+          [widget.institution.account],
         );
         final detail = await InstitutionDuoqianLocalState.readDetail(
           isar,
-          widget.institution.duoqianAccount,
+          widget.institution.account,
         );
         return (
           entity: entity,
-          status: statuses[_normalizeHex(widget.institution.duoqianAccount)],
+          status: statuses[_normalizeHex(widget.institution.account)],
           detail: detail,
         );
       });
@@ -149,16 +149,16 @@ class _InstitutionAccountInfoPageState
     if (!force && !_shouldRefreshBalance()) return;
     try {
       final balance =
-          await _rpc.fetchFinalizedBalance(widget.institution.duoqianAccount);
+          await _rpc.fetchFinalizedBalance(widget.institution.account);
       final now = DateTime.now().millisecondsSinceEpoch;
       await WalletIsar.instance.writeTxn((isar) async {
         final previous = await InstitutionDuoqianLocalState.readDetail(
           isar,
-          widget.institution.duoqianAccount,
+          widget.institution.account,
         );
         await InstitutionDuoqianLocalState.putDetailInTxn(
           isar,
-          widget.institution.duoqianAccount,
+          widget.institution.account,
           DuoqianLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
             admins: previous?.admins ?? _admins,
@@ -184,10 +184,10 @@ class _InstitutionAccountInfoPageState
   Future<void> _refreshChainDetail({bool force = false}) async {
     if (!force && !_shouldRefreshDetail()) return;
     try {
-      final infos = await _manageService.fetchDuoqianAccountsBatch(
-        [widget.institution.duoqianAccount],
+      final infos = await _manageService.fetchAccountsBatch(
+        [widget.institution.account],
       );
-      final info = infos[_normalizeHex(widget.institution.duoqianAccount)];
+      final info = infos[_normalizeHex(widget.institution.account)];
       final status = info == null
           ? InstitutionDuoqianLocalState.statusClosed
           : _localStatusFromInfo(info.status);
@@ -197,22 +197,22 @@ class _InstitutionAccountInfoPageState
       await WalletIsar.instance.writeTxn((isar) async {
         await InstitutionDuoqianLocalState.putStatusInTxn(
           isar,
-          widget.institution.duoqianAccount,
+          widget.institution.account,
           status,
         );
         if (info == null) {
           await InstitutionDuoqianLocalState.deleteDetailInTxn(
             isar,
-            widget.institution.duoqianAccount,
+            widget.institution.account,
           );
         } else {
           final previous = await InstitutionDuoqianLocalState.readDetail(
             isar,
-            widget.institution.duoqianAccount,
+            widget.institution.account,
           );
           await InstitutionDuoqianLocalState.putDetailInTxn(
             isar,
-            widget.institution.duoqianAccount,
+            widget.institution.account,
             DuoqianLocalDetailSnapshot(
               status: status,
               admins: info.admins,
@@ -252,8 +252,7 @@ class _InstitutionAccountInfoPageState
   Future<double?> _resolveBalance(InstitutionStatus? status) async {
     if (status != InstitutionStatus.active) return null;
     try {
-      return await _rpc
-          .fetchFinalizedBalance(widget.institution.duoqianAccount);
+      return await _rpc.fetchFinalizedBalance(widget.institution.account);
     } catch (_) {
       return null;
     }
@@ -348,15 +347,14 @@ class _InstitutionAccountInfoPageState
 
   Future<void> _removeFromLocal() async {
     await WalletIsar.instance.writeTxn((isar) async {
-      await isar.institutionEntitys
-          .deleteByDuoqianAccount(widget.institution.duoqianAccount);
+      await isar.institutionEntitys.deleteByAccount(widget.institution.account);
       await InstitutionDuoqianLocalState.deleteStatusInTxn(
         isar,
-        widget.institution.duoqianAccount,
+        widget.institution.account,
       );
       await InstitutionDuoqianLocalState.deleteDetailInTxn(
         isar,
-        widget.institution.duoqianAccount,
+        widget.institution.account,
       );
     });
   }
@@ -456,7 +454,7 @@ class _InstitutionAccountInfoPageState
   }
 
   Widget _buildContent() {
-    final duoqianSs58 = _hexToSs58(widget.institution.duoqianAccount);
+    final accountSs58 = _hexToSs58(widget.institution.account);
     final info = _accountInfo;
     final statusLabel = _isClosed
         ? '已注销'
@@ -505,10 +503,10 @@ class _InstitutionAccountInfoPageState
                   ),
                   const Divider(height: 20),
                   _buildInfoRow(
-                    '多签地址',
-                    duoqianSs58,
+                    '多签账户',
+                    accountSs58,
                     onCopy: () {
-                      Clipboard.setData(ClipboardData(text: duoqianSs58));
+                      Clipboard.setData(ClipboardData(text: accountSs58));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('地址已复制'),
@@ -674,8 +672,8 @@ class _InstitutionAccountInfoPageState
   }
 
   String _extractCidNumber(String cidNumber) {
-    if (isRegisteredDuoqianIdentity(cidNumber)) {
-      return registeredDuoqianAddressFromIdentity(cidNumber) ?? cidNumber;
+    if (isRegisteredAccountIdentity(cidNumber)) {
+      return registeredAccountHexFromIdentity(cidNumber) ?? cidNumber;
     }
     return cidNumber;
   }

@@ -36,11 +36,23 @@
 - 已将仓库顶层目录统一为 `citizencode/`、`citizenpassport/`。
 - 已将 `memory/01-architecture/` 与 `memory/05-modules/` 下的对应模块目录统一为 `citizencode/`、`citizenpassport/`。
 - 已将 CI、脚本、部署配置、安装路径和文档中的目录路径统一为小写。
+- 已在用户二次确认后修改 `citizenchain/runtime/**`,将旧身份系统 crate/pallet/测试命名统一为 `cid-system` / `CidSystem` / CID 字段。
+- 已将活跃代码中的旧多签账户字段统一为 `account`,并删除 CID 后端旧 schema 兼容逻辑。
+- 已将公民钱包签名解码中的旧注册局管理员动作统一为 `CREATE_ADMIN / UPDATE_ADMIN / DELETE_ADMIN`。
 
 ## 当前验收记录
 
+- 残留扫描:旧身份系统命名、旧大写目录路径、runtime 旧文件名、旧顶层目录、旧多签账户字段、旧管理员角色值在活跃代码中均无命中。
+- `cargo fmt --manifest-path citizenchain/runtime/Cargo.toml && cargo check --manifest-path citizenchain/runtime/Cargo.toml` 通过。
+- `cargo fmt --manifest-path citizencode/backend/Cargo.toml && cargo check --manifest-path citizencode/backend/Cargo.toml` 通过。
+- `cargo fmt --manifest-path citizenpassport/backend/Cargo.toml && cargo check --manifest-path citizenpassport/backend/Cargo.toml` 通过。
 - `npm run build`（`citizencode/frontend`）通过。
 - `npm run build`（`citizenpassport/frontend`）通过。
-- `cargo fmt --manifest-path citizenpassport/backend/Cargo.toml --check && cargo check --manifest-path citizenpassport/backend/Cargo.toml` 通过。
+- `flutter analyze`（`citizenapp`）通过。
+- `flutter analyze`（`citizenwallet`）通过。
+- `cargo test --manifest-path citizenchain/runtime/Cargo.toml -p organization-manage` 通过：26/26。
+- `cargo test --manifest-path citizenchain/runtime/Cargo.toml -p personal-manage` 通过：23/23。
+- `cargo test --manifest-path citizenchain/runtime/Cargo.toml -p duoqian-transfer` 通过：23/23。
+- 字段级残留扫描通过：旧账户字段、旧注册局角色动作、旧行政区缩写字段、名称字段旧写法均无命中；仅保留行政区层级枚举、钱包/交易/网络地址字段。
 - 脚本语法检查通过：`citizenpassport/scripts/build_linux_host_installer.sh`、`citizenpassport/deploy/linux/*.sh`、`citizencode/citizencode-run.sh`、`citizenpassport/citizenpassport.sh`、`citizencode/deploy/prod/scripts/*.sh`。
-- `cargo check --manifest-path citizencode/backend/Cargo.toml` 仍被 runtime 未统一字段阻断：runtime primitives 仍导出 `SFID_NUMBER_MAX_BYTES`、`sfid_number`、`sfid_full_name`，而 CitizenCode 后端已统一调用 `CID_NUMBER_MAX_BYTES`、`cid_number`、`cid_full_name`。该阻断必须按 `citizenchain/runtime/**` 二次确认规则处理。
+- 真实运行态验收：重建本地 `citizencode` 空库后启动 `./citizencode/citizencode-run.sh`,完成 245716 条公权机构和 491475 个账户初始化;后端 `/api/v1/health` 返回 UP;前端 `http://localhost:5179/` 返回 200;`accounts` 表只保留 `account` 列。

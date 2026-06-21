@@ -1,6 +1,6 @@
 //! 机构/账户两层数据模型
 //!
-//! 中文注释:链端 `CidRegisteredAccount::<T>(cid_number, name) → duoqian_account`
+//! 中文注释:链端 `CidRegisteredAccount::<T>(cid_number, name) → account`
 //! 是 DoubleMap,一个 cid_number 下可挂多个 name,每个 name 派生独立多签账户。
 //! cid 系统这里对应拆两层:
 //!
@@ -167,7 +167,7 @@ pub struct InstitutionAccount {
     /// 账户名称,**进链的 name 字段**。同 cid_number 下必须唯一。
     pub account_name: String,
     /// 链上派生的多签账户(hex, 不含 0x 前缀)。上链成功后填入。
-    pub duoqian_account: Option<String>,
+    pub account: Option<String>,
     /// 链上状态。
     #[serde(default)]
     pub chain_status: MultisigChainStatus,
@@ -316,7 +316,7 @@ pub struct CreateAccountOutput {
     pub chain_synced_at: Option<DateTime<Utc>>,
     pub chain_tx_hash: Option<String>,
     pub chain_block_number: Option<u64>,
-    pub duoqian_account: Option<String>,
+    pub account: Option<String>,
 }
 
 /// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
@@ -437,7 +437,7 @@ pub struct ChainSyncAccountInput {
     pub account_name: String,
     pub chain_status: MultisigChainStatus,
     #[serde(default)]
-    pub duoqian_account: Option<String>,
+    pub account: Option<String>,
     #[serde(default)]
     pub chain_tx_hash: Option<String>,
     #[serde(default)]

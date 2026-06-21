@@ -34,7 +34,7 @@ void main() {
         1,
       ]);
 
-      final decoded = PersonalManageStorageCodec.decodePersonalDuoqian(data)!;
+      final decoded = PersonalManageStorageCodec.decodePersonalAccount(data)!;
       expect(decoded.creatorHex, '66' * 32);
       expect(utf8.decode(decoded.accountName), '家庭基金');
       expect(decoded.createdAt, 101);

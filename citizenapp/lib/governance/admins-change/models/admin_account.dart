@@ -3,7 +3,7 @@ import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart'
 
 enum AdminAccountIdentityType {
   governanceInstitution,
-  personalDuoqian,
+  personalAccount,
   institutionAccount,
 }
 
@@ -18,16 +18,15 @@ class AdminAccountIdentity {
   });
 
   factory AdminAccountIdentity.fromInstitution(InstitutionInfo institution) {
-    final personal = personalDuoqianAddressFromIdentity(institution.cidNumber);
+    final personal = personalAccountHexFromIdentity(institution.cidNumber);
     if (personal != null) {
-      return AdminAccountIdentity.personalDuoqian(
+      return AdminAccountIdentity.personalAccount(
         accountHex: personal,
         displayName: institution.name,
       );
     }
 
-    final account =
-        registeredDuoqianAddressFromIdentity(institution.cidNumber);
+    final account = registeredAccountHexFromIdentity(institution.cidNumber);
     if (account != null) {
       final org = institution.adminAccountOrg;
       if (org == null) {
@@ -66,15 +65,15 @@ class AdminAccountIdentity {
     );
   }
 
-  factory AdminAccountIdentity.personalDuoqian({
+  factory AdminAccountIdentity.personalAccount({
     required String accountHex,
     required String displayName,
   }) {
     final account = AdminAccountIdCodec.normalizeHex(accountHex);
     AdminAccountIdCodec.fromAccountHex(account);
     return AdminAccountIdentity(
-      type: AdminAccountIdentityType.personalDuoqian,
-      identityKey: 'personal:$account',
+      type: AdminAccountIdentityType.personalAccount,
+      identityKey: 'personal-account:$account',
       displayName: displayName,
       org: 3,
       kind: 1,
@@ -111,7 +110,7 @@ class AdminAccountIdentity {
 
   String get typeLabel => switch (type) {
         AdminAccountIdentityType.governanceInstitution => '治理机构',
-        AdminAccountIdentityType.personalDuoqian => '个人多签',
+        AdminAccountIdentityType.personalAccount => '个人多签',
         AdminAccountIdentityType.institutionAccount => '机构账户',
       };
 

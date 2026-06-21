@@ -151,9 +151,9 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
         );
 
         resolution_issuance::pallet::VotingProposalCount::<Runtime>::put(1u32);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
+        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-cid");
         let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-nonce");
-        sfid_system::pallet::UsedVoteNonce::<Runtime>::insert(
+        cid_system::pallet::UsedVoteNonce::<Runtime>::insert(
             proposal_id,
             (binding_id, nonce_hash),
             true,
@@ -173,10 +173,10 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
         );
 
         // 中文注释：自动延迟清理由 votingengine 自身单测覆盖，
-        // 这里仅验证 runtime 包装层能正确透传到 SFID 投票凭证清理接口。
-        RuntimeSfidEligibility::cleanup_vote_credentials(proposal_id);
+        // 这里仅验证 runtime 包装层能正确透传到 CID 投票凭证清理接口。
+        RuntimeCidEligibility::cleanup_vote_credentials(proposal_id);
 
-        assert!(!sfid_system::pallet::UsedVoteNonce::<Runtime>::get(
+        assert!(!cid_system::pallet::UsedVoteNonce::<Runtime>::get(
             proposal_id,
             (binding_id, nonce_hash)
         ));
@@ -376,12 +376,10 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 #[test]
 fn duoqian_reserved_checker_rejects_stake_and_fee_accounts() {
     let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account);
-    assert!(RuntimeDuoqianReservedAccountChecker::is_reserved(&stake));
+    assert!(RuntimeReservedAccountGuard::is_reserved(&stake));
 
     let fee_account = AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_account);
-    assert!(RuntimeDuoqianReservedAccountChecker::is_reserved(
-        &fee_account
-    ));
+    assert!(RuntimeReservedAccountGuard::is_reserved(&fee_account));
 }
 
 #[test]
@@ -538,21 +536,21 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
     });
 }
 
-// SFID 凭证签发统一为机构模型:
-// issuer_sfid_number + issuer_main_account + signer_pubkey。
+// CID 凭证签发统一为机构模型:
+// issuer_cid_number + issuer_main_account + signer_pubkey。
 // runtime verifier 必须从 admins-change::AdminAccounts[issuer_main_account].admins
 // 校验 signer,再做 sr25519 payload 验签。
 #[test]
-fn runtime_sfid_verifiers_admins_change_verify_succeeds() {
+fn runtime_cid_verifiers_admins_change_verify_succeeds() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let account = AccountId::new([31u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
+        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cid-verify");
 
-        let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
             b"bind-nonce".to_vec().try_into().expect("nonce should fit");
         let bind_credential = build_bind_credential(
             &main_pair,
@@ -562,9 +560,9 @@ fn runtime_sfid_verifiers_admins_change_verify_succeeds() {
             binding_id,
             &bind_nonce,
         );
-        assert!(RuntimeSfidVerifier::verify(&account, &bind_credential));
+        assert!(RuntimeCidVerifier::verify(&account, &bind_credential));
 
-        let vote_nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let vote_nonce: cid_system::pallet::NonceOf<Runtime> =
             b"vote-nonce".to_vec().try_into().expect("nonce should fit");
         let vote_signature = build_vote_signature(
             &main_pair,
@@ -575,13 +573,13 @@ fn runtime_sfid_verifiers_admins_change_verify_succeeds() {
             9,
             &vote_nonce,
         );
-        assert!(RuntimeSfidVoteVerifier::verify_vote(
+        assert!(RuntimeCidVoteVerifier::verify_vote(
             &account,
             binding_id,
             9,
             &vote_nonce,
             &vote_signature,
-            issuer_sfid_number.as_slice(),
+            issuer_cid_number.as_slice(),
             &issuer_main_account,
             &main_admin_pubkey,
             province_name.as_slice(),
@@ -604,7 +602,7 @@ fn runtime_sfid_verifiers_admins_change_verify_succeeds() {
                 123,
                 &pop_nonce,
                 &pop_signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &main_admin_pubkey,
                 province_name.as_slice(),
@@ -620,7 +618,7 @@ fn bind_with_main_admin_signature_succeeds() {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
         let account = AccountId::new([21u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-main");
-        let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
             b"bind-main-nonce".to_vec().try_into().expect("nonce");
         let credential = build_bind_credential(
             &main_pair,
@@ -630,7 +628,7 @@ fn bind_with_main_admin_signature_succeeds() {
             binding_id,
             &bind_nonce,
         );
-        assert!(RuntimeSfidVerifier::verify(&account, &credential));
+        assert!(RuntimeCidVerifier::verify(&account, &credential));
     });
 }
 
@@ -640,7 +638,7 @@ fn bind_with_backup_admin_signature_succeeds() {
         let (_, _, backup_pair, backup_admin_pubkey, province_name) = setup_step3_test_admins();
         let account = AccountId::new([22u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-backup");
-        let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
             b"bind-backup-nonce".to_vec().try_into().expect("nonce");
         let credential = build_bind_credential(
             &backup_pair,
@@ -650,7 +648,7 @@ fn bind_with_backup_admin_signature_succeeds() {
             binding_id,
             &bind_nonce,
         );
-        assert!(RuntimeSfidVerifier::verify(&account, &credential));
+        assert!(RuntimeCidVerifier::verify(&account, &credential));
     });
 }
 
@@ -663,7 +661,7 @@ fn bind_with_admin_not_in_roster_rejected() {
         let outsider_admin_pubkey = outsider_pair.public().0;
         let account = AccountId::new([23u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-outsider");
-        let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
             b"bind-out-nonce".to_vec().try_into().expect("nonce");
         let credential = build_bind_credential(
             &outsider_pair,
@@ -673,7 +671,7 @@ fn bind_with_admin_not_in_roster_rejected() {
             binding_id,
             &bind_nonce,
         );
-        assert!(!RuntimeSfidVerifier::verify(&account, &credential));
+        assert!(!RuntimeCidVerifier::verify(&account, &credential));
     });
 }
 
@@ -681,12 +679,12 @@ fn bind_with_admin_not_in_roster_rejected() {
 fn vote_double_layer_verify_succeeds() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let account = AccountId::new([24u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-vote");
-        let nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let nonce: cid_system::pallet::NonceOf<Runtime> =
             b"vote-pass-nonce".to_vec().try_into().expect("nonce");
         let signature = build_vote_signature(
             &main_pair,
@@ -697,13 +695,13 @@ fn vote_double_layer_verify_succeeds() {
             42,
             &nonce,
         );
-        assert!(RuntimeSfidVoteVerifier::verify_vote(
+        assert!(RuntimeCidVoteVerifier::verify_vote(
             &account,
             binding_id,
             42,
             &nonce,
             &signature,
-            issuer_sfid_number.as_slice(),
+            issuer_cid_number.as_slice(),
             &issuer_main_account,
             &main_admin_pubkey,
             province_name.as_slice(),
@@ -716,13 +714,13 @@ fn vote_double_layer_verify_succeeds() {
 fn vote_scope_payload_tamper_rejected() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let jilin: Vec<u8> = b"jilin".to_vec();
         let account = AccountId::new([25u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-scope-tamper");
-        let nonce: sfid_system::pallet::NonceOf<Runtime> =
+        let nonce: cid_system::pallet::NonceOf<Runtime> =
             b"vote-tamper-nonce".to_vec().try_into().expect("nonce");
         let signature = build_vote_signature(
             &main_pair,
@@ -733,13 +731,13 @@ fn vote_scope_payload_tamper_rejected() {
             7,
             &nonce,
         );
-        assert!(!RuntimeSfidVoteVerifier::verify_vote(
+        assert!(!RuntimeCidVoteVerifier::verify_vote(
             &account,
             binding_id,
             7,
             &nonce,
             &signature,
-            issuer_sfid_number.as_slice(),
+            issuer_cid_number.as_slice(),
             &issuer_main_account,
             &main_admin_pubkey,
             jilin.as_slice(),
@@ -752,7 +750,7 @@ fn vote_scope_payload_tamper_rejected() {
 fn population_snapshot_per_province_signature_verifies() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let who = AccountId::new([26u8; 32]);
@@ -772,7 +770,7 @@ fn population_snapshot_per_province_signature_verifies() {
                 500,
                 &pop_nonce,
                 &signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &main_admin_pubkey,
                 province_name.as_slice(),
@@ -782,28 +780,28 @@ fn population_snapshot_per_province_signature_verifies() {
     });
 }
 
-// RuntimeSfidEligibility 的 is_eligible 走 BindingId↔Account 反查;
-// verify_and_consume_vote_credential 走 RuntimeSfidVoteVerifier 真实签发机构验签。
+// RuntimeCidEligibility 的 is_eligible 走 BindingId↔Account 反查;
+// verify_and_consume_vote_credential 走 RuntimeCidVoteVerifier 真实签发机构验签。
 #[test]
-fn runtime_sfid_eligibility_binding_and_vote_full_path() {
+fn runtime_cid_eligibility_binding_and_vote_full_path() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let who = AccountId::new([41u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-wrap");
-        sfid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
-        sfid_system::pallet::AccountToBindingId::<Runtime>::insert(who.clone(), binding_id);
+        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cid-wrap");
+        cid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
+        cid_system::pallet::AccountToBindingId::<Runtime>::insert(who.clone(), binding_id);
 
-        assert!(RuntimeSfidEligibility::is_eligible(&binding_id, &who));
-        assert!(!RuntimeSfidEligibility::is_eligible(
+        assert!(RuntimeCidEligibility::is_eligible(&binding_id, &who));
+        assert!(!RuntimeCidEligibility::is_eligible(
             &binding_id,
             &AccountId::new([42u8; 32])
         ));
 
-        // 完整链路:wrap 调 verify_and_consume,Bridge 走 sfid_system → RuntimeSfidVoteVerifier。
-        let nonce: sfid_system::pallet::NonceOf<Runtime> =
+        // 完整链路:wrap 调 verify_and_consume,Bridge 走 cid_system → RuntimeCidVoteVerifier。
+        let nonce: cid_system::pallet::NonceOf<Runtime> =
             b"wrap-nonce".to_vec().try_into().expect("nonce");
         let signature = build_vote_signature(
             &main_pair,
@@ -814,26 +812,26 @@ fn runtime_sfid_eligibility_binding_and_vote_full_path() {
             88,
             &nonce,
         );
-        assert!(RuntimeSfidEligibility::verify_and_consume_vote_credential(
+        assert!(RuntimeCidEligibility::verify_and_consume_vote_credential(
             &binding_id,
             &who,
             88,
             nonce.as_slice(),
             signature.as_slice(),
-            issuer_sfid_number.as_slice(),
+            issuer_cid_number.as_slice(),
             &issuer_main_account,
             &main_admin_pubkey,
             province_name.as_slice(),
             scope_city_name.as_slice(),
         ));
         // 二次同 nonce 必拒(防重放)。
-        assert!(!RuntimeSfidEligibility::verify_and_consume_vote_credential(
+        assert!(!RuntimeCidEligibility::verify_and_consume_vote_credential(
             &binding_id,
             &who,
             88,
             nonce.as_slice(),
             signature.as_slice(),
-            issuer_sfid_number.as_slice(),
+            issuer_cid_number.as_slice(),
             &issuer_main_account,
             &main_admin_pubkey,
             province_name.as_slice(),
@@ -866,24 +864,24 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
 }
 
 #[test]
-fn runtime_sfid_institution_verifier_admins_change_lookup() {
+fn runtime_cid_institution_verifier_admins_change_lookup() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, backup_pair, backup_admin_pubkey, province_bytes) =
             setup_step3_test_admins();
-        let issuer_sfid_number = test_issuer_sfid_number();
+        let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
-        let sfid_number: &[u8] = b"AH001-GCB07-000000001-2026";
+        let cid_number: &[u8] = b"AH001-GCB07-000000001-2026";
         let register_nonce: organization_manage::pallet::RegisterNonceOf<Runtime> =
             b"register-nonce-ah-1"
                 .to_vec()
                 .try_into()
                 .expect("nonce should fit");
-        let sfid_full_name: organization_manage::pallet::AccountNameOf<Runtime> =
+        let cid_full_name: organization_manage::pallet::AccountNameOf<Runtime> =
             b"test-institution"
                 .to_vec()
                 .try_into()
-                .expect("sfid_full_name should fit");
+                .expect("cid_full_name should fit");
         let account_names: Vec<Vec<u8>> = vec![b"main-account".to_vec(), b"fee-account".to_vec()];
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
@@ -891,11 +889,11 @@ fn runtime_sfid_institution_verifier_admins_change_lookup() {
                 primitives::core_const::DUOQIAN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
-                sfid_number,
-                sfid_full_name.as_slice(),
+                cid_number,
+                cid_full_name.as_slice(),
                 &account_names,
                 register_nonce.as_slice(),
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 admin_pubkey,
                 province_bytes.as_slice(),
@@ -910,18 +908,18 @@ fn runtime_sfid_institution_verifier_admins_change_lookup() {
 
         let main_signature = make_signature(&main_pair, &main_admin_pubkey);
         assert!(
-            <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+            <RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
                 AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
-                sfid_number,
-                &sfid_full_name,
+                cid_number,
+                &cid_full_name,
                 &account_names,
                 &register_nonce,
                 &main_signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
@@ -932,18 +930,18 @@ fn runtime_sfid_institution_verifier_admins_change_lookup() {
 
         let backup_signature = make_signature(&backup_pair, &backup_admin_pubkey);
         assert!(
-            <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+            <RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
                 AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
-                sfid_number,
-                &sfid_full_name,
+                cid_number,
+                &cid_full_name,
                 &account_names,
                 &register_nonce,
                 &backup_signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &backup_admin_pubkey,
                 province_bytes.as_slice(),
@@ -956,18 +954,18 @@ fn runtime_sfid_institution_verifier_admins_change_lookup() {
         let outsider_pubkey = outsider_pair.public().0;
         let outsider_signature = make_signature(&outsider_pair, &outsider_pubkey);
         assert!(
-            !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+            !<RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
                 AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
-                sfid_number,
-                &sfid_full_name,
+                cid_number,
+                &cid_full_name,
                 &account_names,
                 &register_nonce,
                 &outsider_signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &outsider_pubkey,
                 province_bytes.as_slice(),
@@ -979,18 +977,18 @@ fn runtime_sfid_institution_verifier_admins_change_lookup() {
         let bad_signature: organization_manage::pallet::RegisterSignatureOf<Runtime> =
             vec![9u8; 64].try_into().expect("signature should fit");
         assert!(
-            !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+            !<RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
                 AccountId,
                 organization_manage::pallet::AccountNameOf<Runtime>,
                 organization_manage::pallet::RegisterNonceOf<Runtime>,
                 organization_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
-                sfid_number,
-                &sfid_full_name,
+                cid_number,
+                &cid_full_name,
                 &account_names,
                 &register_nonce,
                 &bad_signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &main_admin_pubkey,
                 province_bytes.as_slice(),

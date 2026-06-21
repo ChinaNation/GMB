@@ -25,8 +25,8 @@ class PersonalManageService {
   /// PersonalManage::propose_close call_index=1。
   static const _proposeCloseCallIndex = 1;
 
-  /// PersonalManage::PersonalDuoqianProposed event_index=0。
-  static const _personalDuoqianProposedEventIndex = 0;
+  /// PersonalManage 个人账户创建成功事件 event_index=0。
+  static const _personalAccountProposedEventIndex = 0;
 
   /// PersonalManage ProposalData action。
   static const actionCreate = 0;
@@ -49,7 +49,7 @@ class PersonalManageService {
         String txHash,
         int usedNonce,
         int proposalId,
-        String duoqianAccountHex,
+        String accountHex,
         String blockHashHex,
       })> submitProposeCreatePersonal({
     required Uint8List accountName,
@@ -72,7 +72,7 @@ class PersonalManageService {
       signerPubkey: signerPubkey,
       sign: sign,
     );
-    final event = await _confirmPersonalDuoqianProposedEvent(
+    final event = await _confirmPersonalAccountProposedEvent(
       blockHashHex: submitResult.blockHashHex,
       accountName: accountName,
       admins: admins,
@@ -84,7 +84,7 @@ class PersonalManageService {
       txHash: submitResult.txHash,
       usedNonce: submitResult.usedNonce,
       proposalId: event.proposalId,
-      duoqianAccountHex: event.duoqianAccountHex,
+      accountHex: event.accountHex,
       blockHashHex: submitResult.blockHashHex,
     );
   }
@@ -104,8 +104,7 @@ class PersonalManageService {
       throw ArgumentError('个人多签管理员数量需在 2..=64');
     }
     final minThreshold = minimumRegularThreshold(admins.length);
-    if (regularThreshold < minThreshold ||
-        regularThreshold > admins.length) {
+    if (regularThreshold < minThreshold || regularThreshold > admins.length) {
       throw ArgumentError(
           'regular_threshold 范围必须在 $minThreshold..=${admins.length}');
     }
@@ -133,8 +132,7 @@ class PersonalManageService {
     output.write(accountName);
 
     // admins: BoundedVec<AccountId32>
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
     for (final pubkey in admins) {
       output.write(pubkey);
     }
@@ -150,7 +148,7 @@ class PersonalManageService {
 
   /// 提交 PersonalManage::propose_close extrinsic。
   Future<({String txHash, int usedNonce})> submitProposeClosePersonal({
-    required String duoqianAccount,
+    required String account,
     required String beneficiaryAddress,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -159,7 +157,7 @@ class PersonalManageService {
     final output = ByteOutput();
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCloseCallIndex);
-    output.write(_hexDecode(duoqianAccount));
+    output.write(_hexDecode(account));
     final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
     output.write(beneficiaryId);
     return _signAndSubmit(
@@ -170,16 +168,16 @@ class PersonalManageService {
     );
   }
 
-  /// 批量反查多个个人多签地址的发起人 / 账户名(`PersonalDuoqians` 精确整键)。
+  /// 批量反查多个个人多签账户的发起人 / 账户名(`PersonalAccounts` 精确整键)。
   ///
   /// 返回以入参地址原样为键的 map;未注册或解码失败的地址值为 null。
   /// 个人多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
-  Future<Map<String, ({String creatorAddressHex, String accountName})?>>
+  Future<Map<String, ({String creatorAccountHex, String accountName})?>>
       fetchPersonalMetasBatch(
-    Iterable<String> personalAddressHexList, {
+    Iterable<String> personalAccountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = personalAddressHexList
+    final addresses = personalAccountHexList
         .where((address) => address.isNotEmpty)
         .toSet()
         .toList(growable: false);
@@ -188,7 +186,7 @@ class PersonalManageService {
     final storageKeyByAccount = <String, String>{
       for (final address in addresses)
         address:
-            '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}',
+            '0x${_hexEncode(PersonalManageStorageCodec.personalAccountsKey(address))}',
     };
 
     final values = await _rpc.fetchStorageBatchChunked(
@@ -197,16 +195,16 @@ class PersonalManageService {
     );
 
     final result =
-        <String, ({String creatorAddressHex, String accountName})?>{};
+        <String, ({String creatorAccountHex, String accountName})?>{};
     for (final entry in storageKeyByAccount.entries) {
       final data = values[entry.value];
       final meta = data == null
           ? null
-          : PersonalManageStorageCodec.decodePersonalDuoqian(data);
+          : PersonalManageStorageCodec.decodePersonalAccount(data);
       result[entry.key] = meta == null
           ? null
           : (
-              creatorAddressHex: meta.creatorHex,
+              creatorAccountHex: meta.creatorHex,
               accountName:
                   PersonalManageStorageCodec.accountNameText(meta.accountName),
             );
@@ -215,18 +213,18 @@ class PersonalManageService {
   }
 
   /// 查询个人多签账户信息。
-  Future<DuoqianAccountInfo?> fetchPersonalAccount(
-    String duoqianAccountHex,
+  Future<AccountInfo?> fetchPersonalAccount(
+    String accountHex,
   ) async {
-    final key = PersonalManageStorageCodec.personalDuoqiansKey(
-      duoqianAccountHex,
+    final key = PersonalManageStorageCodec.personalAccountsKey(
+      accountHex,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null) return null;
-    final personal = PersonalManageStorageCodec.decodePersonalDuoqian(data);
+    final personal = PersonalManageStorageCodec.decodePersonalAccount(data);
     if (personal == null) return null;
     final accountId = PersonalManageStorageCodec.accountIdFromAccountHex(
-      duoqianAccountHex,
+      accountHex,
     );
     final adminKey = PersonalManageStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
@@ -237,7 +235,7 @@ class PersonalManageService {
       org: admin.org,
       accountId: accountId,
     );
-    return DuoqianAccountInfo(
+    return AccountInfo(
       adminsLen: admin.adminsLen,
       threshold: threshold,
       admins: admin.admins,
@@ -249,11 +247,11 @@ class PersonalManageService {
   ///
   /// 中文注释：多签列表页不能对每个账户逐个调用 [fetchPersonalAccount]。
   /// 这里按 storage 依赖分阶段批量读取：先读账户与管理员主体，再批量读动态阈值。
-  Future<Map<String, DuoqianAccountInfo?>> fetchPersonalAccountsBatch(
-    Iterable<String> duoqianAccountHexList, {
+  Future<Map<String, AccountInfo?>> fetchPersonalAccountsBatch(
+    Iterable<String> accountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = duoqianAccountHexList
+    final addresses = accountHexList
         .map(_normalizeHex)
         .where((address) => address.isNotEmpty)
         .toSet()
@@ -270,7 +268,7 @@ class PersonalManageService {
         address,
       );
       final personalKey =
-          '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
+          '0x${_hexEncode(PersonalManageStorageCodec.personalAccountsKey(address))}';
       final adminKey =
           '0x${_hexEncode(PersonalManageStorageCodec.adminAccountKey(accountId))}';
       accountIdByAccount[address] = accountId;
@@ -285,7 +283,7 @@ class PersonalManageService {
       firstRoundKeys,
       chunkSize: chunkSize,
     );
-    final result = <String, DuoqianAccountInfo?>{};
+    final result = <String, AccountInfo?>{};
     final personalByAddress = <String, PersonalManageAccountSnapshot>{};
     final adminByAccount = <String, PersonalManageAdminSnapshot>{};
 
@@ -297,7 +295,7 @@ class PersonalManageService {
         continue;
       }
       final personal =
-          PersonalManageStorageCodec.decodePersonalDuoqian(personalData);
+          PersonalManageStorageCodec.decodePersonalAccount(personalData);
       final admin = PersonalManageStorageCodec.decodeAdminAccount(adminData);
       if (personal == null || admin == null) {
         result[address] = null;
@@ -357,7 +355,7 @@ class PersonalManageService {
       final personal = personalByAddress[address];
       final admin = adminByAccount[address];
       if (personal == null || admin == null) continue;
-      result[address] = DuoqianAccountInfo(
+      result[address] = AccountInfo(
         adminsLen: admin.adminsLen,
         threshold: thresholdByAccount[address],
         admins: admin.admins,
@@ -419,7 +417,7 @@ class PersonalManageService {
     if (data.length != 32 + 32 + 16 + 16) return null;
     var offset = 0;
 
-    final duoqianAccount =
+    final account =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -435,7 +433,7 @@ class PersonalManageService {
 
     return CreateDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       proposer: proposerSs58,
       amountFen: amountFen,
       feeFen: feeFen,
@@ -449,7 +447,7 @@ class PersonalManageService {
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
 
-    final duoqianAccount =
+    final account =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -464,14 +462,14 @@ class PersonalManageService {
 
     return CloseDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       beneficiary: beneficiarySs58,
       proposer: proposerSs58,
     );
   }
 
-  Future<({int proposalId, String duoqianAccountHex})>
-      _confirmPersonalDuoqianProposedEvent({
+  Future<({int proposalId, String accountHex})>
+      _confirmPersonalAccountProposedEvent({
     required String blockHashHex,
     required Uint8List accountName,
     required List<Uint8List> admins,
@@ -487,7 +485,7 @@ class PersonalManageService {
     if (failure != null) {
       throw StateError(failure.description);
     }
-    final found = _findPersonalDuoqianProposedEvent(
+    final found = _findPersonalAccountProposedEvent(
       events,
       accountName: accountName,
       admins: admins,
@@ -497,14 +495,13 @@ class PersonalManageService {
     );
     if (found == null) {
       throw StateError(
-        '交易已入块，但未确认 PersonalManage.PersonalDuoqianProposed，也未检测到链上失败事件，请检查当前区块事件',
+        '交易已入块，但未确认 PersonalManage 个人账户创建成功事件，也未检测到链上失败事件，请检查当前区块事件',
       );
     }
     return found;
   }
 
-  ({int proposalId, String duoqianAccountHex})?
-      _findPersonalDuoqianProposedEvent(
+  ({int proposalId, String accountHex})? _findPersonalAccountProposedEvent(
     Uint8List data, {
     required Uint8List accountName,
     required List<Uint8List> admins,
@@ -532,8 +529,8 @@ class PersonalManageService {
         offset += 2;
 
         if (palletIndex == _palletIndex &&
-            eventIndex == _personalDuoqianProposedEventIndex) {
-          final decoded = _decodePersonalDuoqianProposedEvent(
+            eventIndex == _personalAccountProposedEventIndex) {
+          final decoded = _decodePersonalAccountProposedEvent(
             data,
             offset,
             accountName: accountName,
@@ -551,8 +548,7 @@ class PersonalManageService {
     return null;
   }
 
-  ({int proposalId, String duoqianAccountHex})?
-      _decodePersonalDuoqianProposedEvent(
+  ({int proposalId, String accountHex})? _decodePersonalAccountProposedEvent(
     Uint8List data,
     int offset, {
     required Uint8List accountName,
@@ -566,7 +562,7 @@ class PersonalManageService {
       if (pos + 8 + 32 + 32 > data.length) return null;
       final proposalId = _readU64Le(data, pos);
       pos += 8;
-      final duoqianAccount = Uint8List.fromList(data.sublist(pos, pos + 32));
+      final account = Uint8List.fromList(data.sublist(pos, pos + 32));
       pos += 32;
       final proposer = Uint8List.fromList(data.sublist(pos, pos + 32));
       pos += 32;
@@ -597,7 +593,7 @@ class PersonalManageService {
       if (!matches) return null;
       return (
         proposalId: proposalId,
-        duoqianAccountHex: _hexEncode(duoqianAccount),
+        accountHex: _hexEncode(account),
       );
     } catch (_) {
       return null;

@@ -1,6 +1,6 @@
 // Isar 永久保留:链上发行代币业务/监管 10 类提案历史(框架阶段占位)。
 //
-// 设计参考 project_personal_duoqian_ui_2026_05_03 的"双轨制"思路:
+// 设计参考 project_personal_account_ui_2026_05_03 的"双轨制"思路:
 // 链上 90 天清理终态后,本地 Isar 永久持有提案痕迹(发起方 / 时间 / 资产 ID / 状态 / 解码后参数)。
 //
 // 后续任务卡 C 实装时启用 Isar 标注 + collection schema。框架阶段先定义裸 dart class,

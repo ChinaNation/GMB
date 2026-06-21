@@ -147,7 +147,7 @@ every 30s (spawned task)
 # 无清算行角色(默认)
 ./target/release/citizenchain --chain local
 
-# 以清算行角色启动(SS58 为链上已注册且是 Active 的清算行主账户地址)
+# 以清算行角色启动(SS58 为链上已注册且是 Active 的清算行主账户)
 ./target/release/citizenchain \
   --chain local \
   --clearing-bank 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY \

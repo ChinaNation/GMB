@@ -78,7 +78,7 @@ export interface Institution {
 export interface InstitutionAccount {
   cid_number: string;
   account_name: string;
-  duoqian_account: string | null;
+  account: string | null;
   chain_status: MultisigChainStatus;
   chain_synced_at?: string | null;
   chain_tx_hash: string | null;
@@ -240,7 +240,7 @@ export interface CreateAccountOutput {
   chain_synced_at: string | null;
   chain_tx_hash: string | null;
   chain_block_number: number | null;
-  duoqian_account: string | null;
+  account: string | null;
 }
 
 export interface ListInstitutionsQuery {

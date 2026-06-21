@@ -5,7 +5,7 @@ import type { CidProvinceItem } from '../china/api';
 
 interface Props {
   provinces: CidProvinceItem[];
-  onPick: (province: string) => void;
+  onPick: (province_name: string) => void;
 }
 
 const CARD_STYLE: React.CSSProperties = {

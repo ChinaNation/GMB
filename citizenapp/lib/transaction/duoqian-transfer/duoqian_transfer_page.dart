@@ -242,7 +242,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
 
     try {
       // 多签管理员的转账提案签名(2026-05-03 整改):
-      // 多签管理员(个人 + 机构)支持冷热钱包双路径,与 personal_duoqian_create_page 对齐;
+      // 多签管理员(个人 + 机构)支持冷热钱包双路径,与 personal_account_create_page 对齐;
       // 治理机构(NRC/PRC/PRB)和区块链软件端管理员才只支持冷钱包(QR)。
       // 这里多签提案 → 热钱包优先 → 冷钱包 fallback 走 QR。
       WalletManager? hotWalletManager;
@@ -319,8 +319,8 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
       );
 
       // 若是个人多签,写入提案历史 entity(转账提案在多签详情页提案列表展示)。
-      // 本页 institution.orgType 个人/机构都是 OrgType.duoqian,通过 Isar 查
-      // PersonalDuoqianEntity 命中即视作个人多签。
+      // 本页 institution.orgType 个人/机构都是 OrgType.account,通过 Isar 查
+      // PersonalAccountEntity 命中即视作个人多签。
       await _maybeRecordPersonalProposal(
         proposalId: submitResult.proposalId,
         beneficiary: _beneficiaryController.text.trim(),
@@ -356,11 +356,11 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
 
   String _coldWalletInstitutionLabel() {
     final identity = widget.institution.cidNumber;
-    final registered = registeredDuoqianAddressFromIdentity(identity);
+    final registered = registeredAccountHexFromIdentity(identity);
     if (registered != null) {
       return '机构账户 ${_shortHex(registered)}';
     }
-    final personal = personalDuoqianAddressFromIdentity(identity);
+    final personal = personalAccountHexFromIdentity(identity);
     if (personal != null) {
       return '个人多签 ${_shortHex(personal)}';
     }
@@ -374,7 +374,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   }
 
   /// 仅当 [widget.institution] 是个人多签时,把转账提案写入 Isar 历史
-  /// (`PersonalDuoqianProposalEntity`),让详情页"提案列表"区域立即看到。
+  /// (`PersonalAccountProposalEntity`),让详情页"提案列表"区域立即看到。
   /// 机构多签的提案历史由其他模块负责,这里 silent skip。
   Future<void> _maybeRecordPersonalProposal({
     required int proposalId,
@@ -383,15 +383,15 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   }) async {
     try {
       final personal = await WalletIsar.instance.read((isar) {
-        return isar.personalDuoqianEntitys
+        return isar.personalAccountEntitys
             .filter()
-            .duoqianAccountEqualTo(widget.institution.mainAccount)
+            .accountEqualTo(widget.institution.mainAccount)
             .findFirst();
       });
       if (personal == null) return; // 非个人多签,跳过
 
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAddressHex: widget.institution.mainAccount,
+        personalAccountHex: widget.institution.mainAccount,
         proposalId: proposalId,
         action: PersonalProposalAction.transfer,
         status: PersonalProposalStatus.voting,
@@ -761,7 +761,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
             ),
           ),
         ),
-        // 中文注释：个人多签和机构账户共用 OrgType.duoqian；
+        // 中文注释：个人多签和机构账户共用 OrgType.account；
         // 这里不显示笼统 badge，避免把个人多签误标成机构账户。
         // 直接不显示标签,只显示多签账户名(已足够标识)。
       ],

@@ -103,7 +103,7 @@ void main() {
       expect(institutionDecoded.admins, ['11' * 32, '22' * 32]);
       expect(institutionDecoded.statusByte, 1);
       expect(accountDecoded.statusByte, 1);
-      expect(accountDecoded.addressHex, 'd1' * 32);
+      expect(accountDecoded.accountHex, 'd1' * 32);
     });
   });
 }

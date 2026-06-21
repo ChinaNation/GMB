@@ -9,7 +9,7 @@ use primitives::multisig::MultisigConfigSnapshot;
 
 /// 个人多签账户管理员配置查询。
 pub trait PersonalMultisigQuery<AccountId> {
-    /// 输入个人多签地址,返回 admin 配置快照(管理员列表 + threshold + admins_len)。
+    /// 输入个人多签账户,返回 admin 配置快照(管理员列表 + threshold + admins_len)。
     /// 地址不属于个人多签时返回 None;duoqian-transfer 据此 union 跳到机构查询。
     fn lookup_admin_config(addr: &AccountId) -> Option<MultisigConfigSnapshot<AccountId>>;
 

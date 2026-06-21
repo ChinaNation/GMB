@@ -64,7 +64,7 @@ pub(crate) struct AppInstitutionSearchRow {
 #[derive(Serialize)]
 pub(crate) struct AppAccountEntry {
     pub(crate) account_name: String,
-    pub(crate) duoqian_account: Option<String>,
+    pub(crate) account: Option<String>,
     pub(crate) chain_status: MultisigChainStatus,
     pub(crate) chain_synced_at: Option<DateTime<Utc>>,
     pub(crate) is_default: bool,
@@ -336,7 +336,7 @@ pub(crate) async fn app_list_accounts(
         .iter()
         .map(|account| AppAccountEntry {
             account_name: account.account_name.clone(),
-            duoqian_account: account.duoqian_account.clone(),
+            account: account.account.clone(),
             chain_status: account.chain_status.clone(),
             chain_synced_at: account.chain_synced_at,
             is_default: is_default_account_name(&account.account_name),

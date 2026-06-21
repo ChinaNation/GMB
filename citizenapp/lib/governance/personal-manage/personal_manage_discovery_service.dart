@@ -2,7 +2,7 @@
 //
 // 只负责"后处理":从共享的 AdminAccounts 单次扫描结果(AdminAccountsScanService)
 // 里筛出个人多签(kind=Personal,且管理员含本地钱包),反查发起人 / 账户名后
-// upsert `PersonalDuoqianEntity`。扫描、节流、本地钱包读取统一收口在
+// upsert `PersonalAccountEntity`。扫描、节流、本地钱包读取统一收口在
 // `MultisigDiscoveryCoordinator`,本服务不再各自扫链。
 
 import 'package:flutter/foundation.dart';
@@ -64,8 +64,8 @@ class PersonalManageDiscoveryService {
       kind: AdminAccountStorageCodec.kindPersonal,
     );
 
-    // 批量反查发起人/账户名(PersonalDuoqians 精确整键),取代循环内逐条(ADR-018 R2)。
-    Map<String, ({String creatorAddressHex, String accountName})?> metas;
+    // 批量反查发起人/账户名(PersonalAccounts 精确整键),取代循环内逐条(ADR-018 R2)。
+    Map<String, ({String creatorAccountHex, String accountName})?> metas;
     try {
       metas = await _personalManage.fetchPersonalMetasBatch(
         mine.map((a) => a.addrHex),
@@ -91,12 +91,11 @@ class PersonalManageDiscoveryService {
       if (meta == null) continue;
       scannedAccounts.add(acc.addrHex);
       final added = await _upsertPersonal(
-        duoqianAccountHex: acc.addrHex,
+        accountHex: acc.addrHex,
         name: meta.accountName,
-        creatorAddrHex: meta.creatorAddressHex,
-        matchedAdmins: acc.adminsHex
-            .where(myPubkeys.contains)
-            .toList(growable: false),
+        creatorAccountHex: meta.creatorAccountHex,
+        matchedAdmins:
+            acc.adminsHex.where(myPubkeys.contains).toList(growable: false),
       );
       if (added) newlyAdded++;
     }
@@ -114,49 +113,49 @@ class PersonalManageDiscoveryService {
   }
 
   Future<bool> _upsertPersonal({
-    required String duoqianAccountHex,
+    required String accountHex,
     required String name,
-    required String creatorAddrHex,
+    required String creatorAccountHex,
     required List<String> matchedAdmins,
   }) async {
     String creatorSs58;
     try {
-      creatorSs58 = Keyring()
-          .encodeAddress(Uint8List.fromList(_hexDecode(creatorAddrHex)), 2027);
+      creatorSs58 = Keyring().encodeAddress(
+          Uint8List.fromList(_hexDecode(creatorAccountHex)), 2027);
     } catch (_) {
       creatorSs58 = '';
     }
 
     return WalletIsar.instance.writeTxn((isar) async {
-      final exists = await isar.personalDuoqianEntitys
+      final exists = await isar.personalAccountEntitys
           .filter()
-          .duoqianAccountEqualTo(duoqianAccountHex)
+          .accountEqualTo(accountHex)
           .findFirst();
 
       if (exists != null) {
         if (!exists.discoveredViaAdmin) return false;
         exists.matchedAdminPubkeys = matchedAdmins;
-        await isar.personalDuoqianEntitys.put(exists);
-        await PersonalDuoqianLocalState.putStatusInTxn(
+        await isar.personalAccountEntitys.put(exists);
+        await PersonalAccountLocalState.putStatusInTxn(
           isar,
-          duoqianAccountHex,
-          PersonalDuoqianLocalState.statusActive,
+          accountHex,
+          PersonalAccountLocalState.statusActive,
         );
         return false;
       }
 
-      final entity = PersonalDuoqianEntity()
-        ..duoqianAccount = duoqianAccountHex
+      final entity = PersonalAccountEntity()
+        ..account = accountHex
         ..name = name
         ..creatorAddress = creatorSs58
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true
         ..matchedAdminPubkeys = matchedAdmins;
-      await isar.personalDuoqianEntitys.put(entity);
-      await PersonalDuoqianLocalState.putStatusInTxn(
+      await isar.personalAccountEntitys.put(entity);
+      await PersonalAccountLocalState.putStatusInTxn(
         isar,
-        duoqianAccountHex,
-        PersonalDuoqianLocalState.statusActive,
+        accountHex,
+        PersonalAccountLocalState.statusActive,
       );
       return true;
     });
@@ -165,18 +164,18 @@ class PersonalManageDiscoveryService {
   Future<int> _reverseValidateAndDelete(Set<String> scannedAccounts) async {
     var closed = 0;
     await WalletIsar.instance.writeTxn((isar) async {
-      final stalePersonals = await isar.personalDuoqianEntitys
+      final stalePersonals = await isar.personalAccountEntitys
           .filter()
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final p in stalePersonals) {
-        if (!scannedAccounts.contains(p.duoqianAccount)) {
+        if (!scannedAccounts.contains(p.account)) {
           // 中文注释：链上注销后仍保留本地账户入口，只把状态标成已注销；
           // 用户在详情页点“删除”时才真正清空本机数据。
-          await PersonalDuoqianLocalState.putStatusInTxn(
+          await PersonalAccountLocalState.putStatusInTxn(
             isar,
-            p.duoqianAccount,
-            PersonalDuoqianLocalState.statusClosed,
+            p.account,
+            PersonalAccountLocalState.statusClosed,
           );
           closed++;
         }

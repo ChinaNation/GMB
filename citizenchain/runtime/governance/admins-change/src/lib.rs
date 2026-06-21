@@ -73,9 +73,9 @@ pub struct AdminSetChangeAction<AccountId, AdminList> {
 pub enum AdminAccountKind {
     /// 国储会、省储会、省储行等创世内置机构。
     BuiltinInstitution,
-    /// 用户自建的个人多签。
-    PersonalDuoqian,
-    /// SFID 机构下面的某个具体账户。
+    /// 用户自建的个人多签账户。
+    PersonalAccount,
+    /// CID 机构下面的某个具体账户。
     InstitutionAccount,
 }
 
@@ -244,9 +244,9 @@ pub mod pallet {
     ///
     /// 中文注释：创世期 panic 是设计意图——`CHINA_CB` / `CHINA_CH` 常量错配
     /// 或 `MaxAdminsPerInstitution` 不足时立即拒绝起链，绝不允许带病启动。
-    /// 所有 panic 都携带 `sfid_number` 便于运维定位是哪条记录出错。
+    /// 所有 panic 都携带 `cid_number` 便于运维定位是哪条记录出错。
     fn build_builtin_institution<T: Config>(
-        sfid_number: &'static str,
+        cid_number: &'static str,
         org: u8,
         raw_admins: &'static [[u8; 32]],
     ) -> AdminAccountOf<T> {
@@ -254,23 +254,20 @@ pub mod pallet {
             .iter()
             .map(|raw| {
                 T::AccountId::decode(&mut &raw[..]).unwrap_or_else(|_| {
-                    panic!(
-                        "genesis: sfid_number {} 管理员账号 decode 失败",
-                        sfid_number
-                    )
+                    panic!("genesis: cid_number {} 管理员账号 decode 失败", cid_number)
                 })
             })
             .collect();
         let bounded: AdminsOf<T> = admins.try_into().unwrap_or_else(|_| {
             panic!(
-                "genesis: sfid_number {} 管理员数量超过 MaxAdminsPerInstitution",
-                sfid_number
+                "genesis: cid_number {} 管理员数量超过 MaxAdminsPerInstitution",
+                cid_number
             )
         });
         let creator = bounded.first().cloned().unwrap_or_else(|| {
             panic!(
-                "genesis: sfid_number {} 内置机构必须至少 1 个管理员",
-                sfid_number
+                "genesis: cid_number {} 内置机构必须至少 1 个管理员",
+                cid_number
             )
         });
         AdminAccount {
@@ -309,10 +306,7 @@ pub mod pallet {
         fn build(&self) {
             for node in CHINA_CB.iter() {
                 let Some(institution) = decode_account::<T>(&node.main_account) else {
-                    panic!(
-                        "genesis: sfid_number {} 主账户 decode 失败",
-                        node.sfid_number
-                    );
+                    panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
                 };
                 let org = if Some(institution.clone()) == nrc_account::<T>() {
                     ORG_NRC
@@ -321,38 +315,35 @@ pub mod pallet {
                 };
                 AdminAccounts::<T>::insert(
                     institution,
-                    build_builtin_institution::<T>(node.sfid_number, org, node.admins),
+                    build_builtin_institution::<T>(node.cid_number, org, node.admins),
                 );
             }
 
             for node in CHINA_CH.iter() {
                 let Some(institution) = decode_account::<T>(&node.main_account) else {
-                    panic!(
-                        "genesis: sfid_number {} 主账户 decode 失败",
-                        node.sfid_number
-                    );
+                    panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
                 };
                 AdminAccounts::<T>::insert(
                     institution,
-                    build_builtin_institution::<T>(node.sfid_number, ORG_PRB, node.admins),
+                    build_builtin_institution::<T>(node.cid_number, ORG_PRB, node.admins),
                 );
             }
 
             // 中文注释:公权机构(政府/立法/司法/监察/教育)创世内置管理员统一写入 admins-change,
             // org 一律 ORG_PUP(动态账户,管理员变更走 propose_admin_set_change)。
-            // 总统府联邦注册局随 CHINA_ZF 一并写入,链上单一真源,SFID 不再内置注册局管理员。
+            // 总统府联邦注册局随 CHINA_ZF 一并写入,链上单一真源,CID 不再内置注册局管理员。
             macro_rules! insert_pup_builtin {
                 ($arr:expr) => {
                     for node in $arr.iter() {
                         let Some(institution) = decode_account::<T>(&node.main_account) else {
                             panic!(
-                                "genesis: sfid_number {} 主账户 decode 失败",
-                                node.sfid_number
+                                "genesis: cid_number {} 主账户 decode 失败",
+                                node.cid_number
                             );
                         };
                         AdminAccounts::<T>::insert(
                             institution,
-                            build_builtin_institution::<T>(node.sfid_number, ORG_PUP, node.admins),
+                            build_builtin_institution::<T>(node.cid_number, ORG_PUP, node.admins),
                         );
                     }
                 };
@@ -527,7 +518,7 @@ pub mod pallet {
                         Error::<T>::InvalidAdminsLen
                     );
                 }
-                AdminAccountKind::PersonalDuoqian => {
+                AdminAccountKind::PersonalAccount => {
                     ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
                     ensure!(
                         admins_len <= <T as Config>::MaxPersonalAccountAdmins::get() as usize,
@@ -581,7 +572,7 @@ pub mod pallet {
                         Error::<T>::InvalidAdminAccountKind
                     );
                 }
-                AdminAccountKind::PersonalDuoqian => {
+                AdminAccountKind::PersonalAccount => {
                     ensure!(org == ORG_REN, Error::<T>::InvalidAdminAccountKind);
                 }
                 AdminAccountKind::InstitutionAccount => {

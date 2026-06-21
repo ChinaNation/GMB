@@ -12,7 +12,7 @@ use frame_system::pallet_prelude::*;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_std::vec::Vec;
 
-use crate::bank_check::{self, SfidAccountQuery};
+use crate::bank_check::{self, CidAccountQuery};
 use crate::{Config, Error, Event, L2FeeRateBp, L2FeeRateProposed, MaxL2FeeRateBp, Pallet};
 
 /// Perbill 单位换算:1 bp = 0.01% = `Perbill::from_parts(100_000)`,
@@ -46,9 +46,9 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     // 1. 清算行合法性
     bank_check::ensure_can_be_bound::<T>(&bank_main_account)?;
 
-    // 2. 调用者必须是该清算行多签管理员(通过 SfidAccountQuery 解耦到 runtime 层)
+    // 2. 调用者必须是该清算行多签管理员(通过 CidAccountQuery 解耦到 runtime 层)
     ensure!(
-        T::SfidAccountQuery::is_admin_of(&bank_main_account, &who),
+        T::CidAccountQuery::is_admin_of(&bank_main_account, &who),
         Error::<T>::UnauthorizedAdmin
     );
 

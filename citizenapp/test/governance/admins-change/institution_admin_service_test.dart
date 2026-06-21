@@ -142,7 +142,7 @@ void main() {
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-    final identity = AdminAccountIdentity.personalDuoqian(
+    final identity = AdminAccountIdentity.personalAccount(
       accountHex: address,
       displayName: '个人多签',
     );
@@ -187,14 +187,14 @@ void main() {
   });
 
   test('institution info resolves to explicit admins-change identity', () {
-    final personalAddress = '44' * 32;
+    final personalAccount = '44' * 32;
     final personal = AdminAccountIdentity.fromInstitution(InstitutionInfo(
       name: '个人账户',
-      cidNumber: 'personal:$personalAddress',
-      orgType: OrgType.duoqian,
-      duoqianAccount: personalAddress,
+      cidNumber: 'personal-account:$personalAccount',
+      orgType: OrgType.account,
+      account: personalAccount,
     ));
-    expect(personal.type, AdminAccountIdentityType.personalDuoqian);
+    expect(personal.type, AdminAccountIdentityType.personalAccount);
     expect(personal.org, 3);
     expect(personal.kind, 1);
 
@@ -202,10 +202,10 @@ void main() {
     final institutionAccount =
         AdminAccountIdentity.fromInstitution(InstitutionInfo(
       name: '机构账户',
-      cidNumber: registeredDuoqianIdentity(accountAddress),
-      orgType: OrgType.duoqian,
+      cidNumber: registeredAccountIdentity(accountAddress),
+      orgType: OrgType.account,
       adminAccountOrg: 5,
-      duoqianAccount: accountAddress,
+      account: accountAddress,
     ));
     expect(
         institutionAccount.type, AdminAccountIdentityType.institutionAccount);
@@ -226,7 +226,7 @@ void main() {
 
   test('activation records use v3 account identity without cidNumber',
       () async {
-    final identity = AdminAccountIdentity.personalDuoqian(
+    final identity = AdminAccountIdentity.personalAccount(
       accountHex: '77' * 32,
       displayName: '个人多签',
     );

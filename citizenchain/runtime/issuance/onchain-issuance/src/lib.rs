@@ -2,7 +2,7 @@
 //!
 //! GMB 链上"发行 GMB 之外的其他人代币"业务 pallet。第一期承载:
 //!
-//! - **Plain FT(同质化代币,无锚定声明)**:发行人 = SFID 注册机构 + personal-manage 个人多签
+//! - **Plain FT(同质化代币,无锚定声明)**:发行人 = CID 注册机构 + personal-manage 个人多签
 //! - **GMB 唯一计费**:创建一次性收 1000 GMB(`primitives::fee_policy::ONCHAIN_ASSET_CREATE_FEE`)
 //! - **NRC 强制 monitor**:链端通过 `NrcMainAccountProvider` 全局解析,不在每条资产 storage 冗余
 //! - **业务 InternalVote / 监管 JointVote**:沿用 unified_voting_entry phase 4 铁律,

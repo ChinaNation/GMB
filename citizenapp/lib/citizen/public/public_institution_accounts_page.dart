@@ -35,11 +35,11 @@ class _PublicInstitutionAccountsPageState
   Future<void> _loadBalances() async {
     try {
       final balances = await widget.chainData
-          .balances(_rows.map((r) => r.addressHex).toList());
+          .balances(_rows.map((r) => r.accountHex).toList());
       if (!mounted) return;
       setState(() {
         _rows = _rows
-            .map((r) => r.withBalance(balances[r.addressHex]))
+            .map((r) => r.withBalance(balances[r.accountHex]))
             .toList(growable: false);
         _balanceLoading = false;
       });

@@ -33,48 +33,38 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev openssh-client
 
-      # 编译前以链上 WASM 版本为准做保护性检查:源码版本不足时只在 CI 工作区临时 +1。
-      # 这里不提交回 main,避免 CI 自动 commit 触发二次构建和版本号噪音。
+      # 中文注释:push 自动 CI 只编译当前源码,不访问服务器、不读取 SSH/RPC Secret。
+      # 手动 Run workflow 才以链上 WASM 版本为准做保护性检查:源码版本不足时只在 CI 工作区临时 +1。
       - name: 校验链上 WASM 版本并临时提升源码版本
-        # 中文注释:全新创世(commit message 含「重新创世」)跳过链上版本比对与 +1 提升,
-        # 直接用源码 spec_version 构建(本次归零=1),不被旧网 147.224.14.117 的版本带高,
-        # 也避免旧网在重新创世期间不可达导致此步失败。普通推送保持原有版本守卫。
-        if: ${{ !contains(github.event.head_commit.message, '重新创世') }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
-          CITIZENCHAIN_RPC_URL: ${{ secrets.CITIZENCHAIN_RPC_URL || vars.CITIZENCHAIN_RPC_URL }}
-          CITIZENCHAIN_SSH_HOST: ${{ secrets.CITIZENCHAIN_SSH_HOST || vars.CITIZENCHAIN_SSH_HOST || '147.224.14.117' }}
-          CITIZENCHAIN_SSH_USER: ${{ secrets.CITIZENCHAIN_SSH_USER || vars.CITIZENCHAIN_SSH_USER || 'ubuntu' }}
-          CITIZENCHAIN_SSH_PORT: ${{ secrets.CITIZENCHAIN_SSH_PORT || vars.CITIZENCHAIN_SSH_PORT || '22' }}
-          CITIZENCHAIN_SSH_KEY: ${{ secrets.CITIZENCODE_DEPLOY_SSH_KEY || secrets.CITIZENCHAIN_SSH_KEY }}
+          GMB_SSH_KEY: ${{ secrets.GMB_SSH_KEY }}
+          GMB_CHAIN_HOST: 147.224.14.117
+          GMB_CHAIN_USER: ubuntu
+          GMB_CHAIN_PORT: "22"
         run: |
           set -euo pipefail
 
           request_payload='{"jsonrpc":"2.0","id":1,"method":"state_getRuntimeVersion","params":[]}'
-          if [ -n "${CITIZENCHAIN_SSH_KEY:-}" ]; then
+          if [ -n "${GMB_SSH_KEY:-}" ]; then
             ssh_dir="$RUNNER_TEMP/citizenchain-ssh"
             mkdir -p "$ssh_dir"
             key_file="$ssh_dir/id_ed25519"
             known_hosts_file="$ssh_dir/known_hosts"
-            printf '%s\n' "$CITIZENCHAIN_SSH_KEY" | tr -d '\r' > "$key_file"
+            printf '%s\n' "$GMB_SSH_KEY" | tr -d '\r' > "$key_file"
             chmod 600 "$key_file"
-            ssh-keyscan -p "$CITIZENCHAIN_SSH_PORT" -H "$CITIZENCHAIN_SSH_HOST" >> "$known_hosts_file"
-            echo "通过 SSH 查询链上 spec_version: ${CITIZENCHAIN_SSH_USER}@${CITIZENCHAIN_SSH_HOST}:${CITIZENCHAIN_SSH_PORT}"
+            ssh-keyscan -p "$GMB_CHAIN_PORT" -H "$GMB_CHAIN_HOST" >> "$known_hosts_file"
+            echo "通过 SSH 查询链上 spec_version: ${GMB_CHAIN_USER}@${GMB_CHAIN_HOST}:${GMB_CHAIN_PORT}"
             response="$(ssh \
               -i "$key_file" \
-              -p "$CITIZENCHAIN_SSH_PORT" \
+              -p "$GMB_CHAIN_PORT" \
               -o BatchMode=yes \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile="$known_hosts_file" \
-              "$CITIZENCHAIN_SSH_USER@$CITIZENCHAIN_SSH_HOST" \
+              "$GMB_CHAIN_USER@$GMB_CHAIN_HOST" \
               "curl -sS --fail --max-time 20 -H 'Content-Type: application/json' -d '$request_payload' http://127.0.0.1:9944")"
-          elif [ -n "${CITIZENCHAIN_RPC_URL:-}" ]; then
-            echo "通过 HTTP RPC 查询链上 spec_version: $CITIZENCHAIN_RPC_URL"
-            response="$(curl -sS --fail --max-time 20 \
-              -H 'Content-Type: application/json' \
-              -d "$request_payload" \
-              "$CITIZENCHAIN_RPC_URL")"
           else
-            echo "::error::缺少 CITIZENCODE_DEPLOY_SSH_KEY、CITIZENCHAIN_SSH_KEY 或 CITIZENCHAIN_RPC_URL，无法查询链上 runtime 版本。"
+            echo "::error::手动 WASM 发布缺少 GMB_SSH_KEY，无法查询链上 runtime 版本。"
             exit 1
           fi
           printf '%s' "$response" > /tmp/citizenchain-runtime-version.json
@@ -130,8 +120,9 @@ jobs:
               summary.write(f"- 本次编译 spec_version: `{build_spec_version}`\n")
           PY
 
-      # WASM 是后续本地启动和桌面打包的基础产物，push 与手动运行都上传最新版本。
+      # WASM 是后续本地启动和桌面打包的基础产物，push 与手动运行都上传本次 CI 产物。
       - name: 清理旧版 WASM artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

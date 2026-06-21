@@ -61,7 +61,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
             subtitle: SelectableText(b.cidNumber),
           ),
           ListTile(
-            title: const Text('主账户地址'),
+            title: const Text('主账户'),
             subtitle: SelectableText('0x${b.mainAccount ?? ''}'),
           ),
           const SizedBox(height: 12),
@@ -115,7 +115,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
     try {
       final mainAccountBytes = _hexToBytes(mainAccountHex);
       if (mainAccountBytes.length != 32) {
-        throw Exception('主账户地址必须是 32 字节,实际 ${mainAccountBytes.length}');
+        throw Exception('主账户必须是 32 字节,实际 ${mainAccountBytes.length}');
       }
       final pubkeyBytes = _hexToBytes(wallet.pubkeyHex);
       if (pubkeyBytes.length != 32) {
@@ -164,8 +164,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ),
         );
       } else {
-        await ClearingBankPrefs.save(
-            wallet.walletIndex, widget.bank.cidNumber);
+        await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.cidNumber);
       }
 
       if (!mounted) return;

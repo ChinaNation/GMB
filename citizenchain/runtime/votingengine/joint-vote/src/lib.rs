@@ -162,7 +162,7 @@ pub mod pallet {
     pub type JointTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU32, ValueQuery>;
 
-    /// 联合公投记录:(proposal_id, SFID 绑定哈希) → 赞成/反对。
+    /// 联合公投记录:(proposal_id, CID 绑定哈希) → 赞成/反对。
     #[pallet::storage]
     pub type ReferendumVotesByBindingId<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
@@ -231,7 +231,7 @@ pub mod pallet {
             institution: T::AccountId,
             approved: bool,
         },
-        /// 联合公投已投出一票(binding_id 为 SFID 哈希)。
+        /// 联合公投已投出一票(binding_id 为 CID 哈希)。
         ReferendumVoteCast {
             proposal_id: u64,
             who: T::AccountId,
@@ -250,10 +250,10 @@ pub mod pallet {
         PopulationSnapshotNotPrepared,
         /// 人口快照不是当前区块准备的快照,不能代表提案发起时刻的公民分母。
         PopulationSnapshotNotCurrent,
-        /// SFID 资格校验未通过(binding_id 未绑定或不匹配)。
-        SfidNotEligible,
-        /// SFID 投票凭证验签失败或已被消费。
-        InvalidSfidVoteCredential,
+        /// CID 资格校验未通过(binding_id 未绑定或不匹配)。
+        CidNotEligible,
+        /// CID 投票凭证验签失败或已被消费。
+        InvalidCidVoteCredential,
     }
 
     use crate::weights::WeightInfo;
@@ -274,7 +274,7 @@ pub mod pallet {
             Self::do_joint_vote(who, proposal_id, institution, approve)
         }
 
-        /// 联合公投阶段:SFID 持有者按 >50% 严格多数投票。
+        /// 联合公投阶段:CID 持有者按 >50% 严格多数投票。
         /// 业务实现挂在 [`super::jointreferendum`]。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_referendum())]
@@ -284,7 +284,7 @@ pub mod pallet {
             binding_id: T::Hash,
             nonce: votingengine::pallet::VoteNonceOf<T>,
             signature: votingengine::pallet::VoteSignatureOf<T>,
-            issuer_sfid_number: BoundedVec<u8, ConstU32<128>>,
+            issuer_cid_number: BoundedVec<u8, ConstU32<128>>,
             issuer_main_account: T::AccountId,
             signer_pubkey: [u8; 32],
             scope_province_name: BoundedVec<u8, ConstU32<64>>,
@@ -298,7 +298,7 @@ pub mod pallet {
                 binding_id,
                 nonce,
                 signature,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,
@@ -318,7 +318,7 @@ pub mod pallet {
             eligible_total: u64,
             snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
             signature: votingengine::pallet::VoteSignatureOf<T>,
-            issuer_sfid_number: BoundedVec<u8, ConstU32<128>>,
+            issuer_cid_number: BoundedVec<u8, ConstU32<128>>,
             issuer_main_account: T::AccountId,
             signer_pubkey: [u8; 32],
             scope_province_name: BoundedVec<u8, ConstU32<64>>,
@@ -330,7 +330,7 @@ pub mod pallet {
                 eligible_total,
                 snapshot_nonce,
                 signature,
-                issuer_sfid_number.as_slice(),
+                issuer_cid_number.as_slice(),
                 &issuer_main_account,
                 &signer_pubkey,
                 scope_province_name.as_slice(),

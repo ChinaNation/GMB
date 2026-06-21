@@ -156,7 +156,7 @@ impl<T: Config> Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
         signature: votingengine::pallet::VoteSignatureOf<T>,
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &T::AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -171,7 +171,7 @@ impl<T: Config> Pallet<T> {
         );
         ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
         ensure!(
-            !issuer_sfid_number.is_empty(),
+            !issuer_cid_number.is_empty(),
             Error::<T>::InvalidPopulationSnapshot
         );
         ensure!(
@@ -190,7 +190,7 @@ impl<T: Config> Pallet<T> {
                 eligible_total,
                 &snapshot_nonce,
                 &signature,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,

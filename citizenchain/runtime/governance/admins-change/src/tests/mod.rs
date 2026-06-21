@@ -50,9 +50,9 @@ impl system::Config for Test {
     type Lookup = IdentityLookup<Self::AccountId>;
 }
 
-pub struct TestSfidEligibility;
-impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestSfidEligibility
+pub struct TestCidEligibility;
+impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    for TestCidEligibility
 {
     fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
@@ -64,7 +64,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -87,7 +87,7 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -134,7 +134,7 @@ impl votingengine::Config for Test {
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type SfidEligibility = TestSfidEligibility;
+    type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
     // mock runtime 必须把本模块的 Executor 挂上,

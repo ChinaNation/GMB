@@ -18,7 +18,7 @@ pub mod pallet {
 
     // ===== 引入制度常量 =====
     use primitives::{
-        china::china_ch::CHINA_CH, // 固定 43 个省储行多签地址
+        china::china_ch::CHINA_CH, // 固定 43 个省储行多签账户
         core_const::{
             ENABLE_SHENGBANK_INTEREST_DECAY, SHENGBANK_INITIAL_INTEREST_BP,
             SHENGBANK_INTEREST_DECREASE_BP, SHENGBANK_INTEREST_DURATION_YEARS,
@@ -201,7 +201,7 @@ pub mod pallet {
 
     // ===== 核心逻辑 =====
     impl<T: Config> Pallet<T> {
-        /// 解析省储行收款地址：只能是 CHINA_CH 中硬编码的该省多签地址，不可覆盖。
+        /// 解析省储行收款地址：只能是 CHINA_CH 中硬编码的该省多签账户，不可覆盖。
         fn resolve_bank_account(
             year: u32,
             bank: &primitives::china::china_ch::ChinaCh,
@@ -217,7 +217,7 @@ pub mod pallet {
                     log::error!(
                         target: "runtime::shengbank",
                         "省储行账户解码失败: {}",
-                        bank.sfid_number
+                        bank.cid_number
                     );
                     None
                 }
@@ -303,7 +303,7 @@ pub mod pallet {
             SHENGBANK_INITIAL_INTEREST_BP.saturating_sub(decay)
         }
 
-        /// 核心铸造逻辑（只针对固定省储行多签地址，不可覆盖）。
+        /// 核心铸造逻辑（只针对固定省储行多签账户，不可覆盖）。
         fn mint_interest_for_year(year: u32) -> (u64, u64, u32, u32) {
             // 中文注释：这里的读写计数只保留给调试日志；真实区块权重以 benchmark 产物为准。
             // 保守估算每家省储行读：
@@ -337,7 +337,7 @@ pub mod pallet {
                     log::error!(
                         target: "runtime::shengbank",
                         "stake_amount 饱和截断: {}",
-                        bank.sfid_number
+                        bank.cid_number
                     );
                     writes = writes.saturating_add(1);
                     continue;
@@ -353,7 +353,7 @@ pub mod pallet {
                     log::error!(
                         target: "runtime::shengbank",
                         "省储行利息乘法溢出: {}",
-                        bank.sfid_number
+                        bank.cid_number
                     );
                     writes = writes.saturating_add(1);
                     continue;
@@ -376,7 +376,7 @@ pub mod pallet {
                     log::warn!(
                         target: "runtime::shengbank",
                         "省储行利息低于 ED，跳过: {}",
-                        bank.sfid_number
+                        bank.cid_number
                     );
                     writes = writes.saturating_add(1); // event write
                     success_count = success_count.saturating_add(1);

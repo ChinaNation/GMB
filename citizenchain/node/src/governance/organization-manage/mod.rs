@@ -6,7 +6,7 @@
 //! - 普通注册机构仍由 citizenapp 操作;这里不承接个人多签、转账或国储会安全基金等业务。
 
 pub mod chain;
-pub mod commands;
 pub mod cid;
+pub mod commands;
 pub mod signing;
 pub mod types;

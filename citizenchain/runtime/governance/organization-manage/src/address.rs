@@ -11,10 +11,10 @@ pub use primitives::core_const::{
     RESERVED_NAME_STAKE,
 };
 
-/// SFID 登记机构下的账户角色枚举，决定地址派生走哪个 op_tag：
+/// CID 登记机构下的账户角色枚举，决定地址派生走哪个 op_tag：
 /// - `Main`：所有机构的主账户，preimage 不含 account_name，走 `OP_MAIN = 0x00`。
 /// - `Fee`：所有机构的费用账户，preimage 不含 account_name，走 `OP_FEE = 0x01`。
-/// - `Named(account_name)`：SFID 机构自定义命名账户，走 `OP_INSTITUTION = 0x06`。
+/// - `Named(account_name)`：CID 机构自定义命名账户，走 `OP_INSTITUTION = 0x06`。
 #[derive(Clone, Copy, Debug)]
 pub enum InstitutionAccountRole<'a> {
     Main,

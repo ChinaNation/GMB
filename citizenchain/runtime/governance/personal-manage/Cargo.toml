@@ -1,5 +1,5 @@
 [package]
-name = "personal-manage"  # 个人多签管理:用户自定义多签账户的注册/创建/关闭生命周期入口(无 SFID 归属,creator+account_name 派生地址)
+name = "personal-manage"  # 个人多签管理:用户自定义多签账户的注册/创建/关闭生命周期入口(无 CID 归属,creator+account_name 派生地址)
 edition.workspace = true
 version.workspace = true
 authors.workspace = true

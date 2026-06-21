@@ -3,7 +3,7 @@
 // 背景(ADR-018 §九):机构多签与个人多签发现都依赖同一张
 // `AdminsChange::AdminAccounts` 反向索引。历史上两个发现服务各自全表扫一遍,
 // 同一张表扫两次纯属浪费。本服务把"翻页 getKeysPaged + 批量 fetchStorageBatch
-// + 解码 + 提取账户地址"收敛为一次扫描,产出已解码条目;各业务模块按 kind/org
+// + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;各业务模块按 kind/org
 // 客户端过滤,不再各自扫链。
 //
 // 扫描走轻节点 smoldot 的**短前缀整表**(prefix = twox128(pallet) || twox128(storage),
@@ -25,7 +25,7 @@ class ScannedAdminAccount {
     required this.adminsHex,
   });
 
-  /// 账户地址小写 hex(无 0x),由 storage key 末 32B 提取。
+  /// 账户小写 hex(无 0x),由 storage key 末 32B 提取。
   final String addrHex;
 
   /// 治理 org 标识(0=NRC,1=PRC,2=PRB,3=个人多签,4=PUP,5=OTH)。

@@ -2578,7 +2578,7 @@ select option:checked {
   cursor: not-allowed;
 }
 
-/* ── 身份ID / 多签地址一行 ── */
+/* ── 身份ID / 多签账户一行 ── */
 
 .institution-id-inline {
   display: flex;

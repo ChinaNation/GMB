@@ -858,11 +858,11 @@ fn actor_is_initial_federal_registry(conn: &mut Client, ctx: &AdminAuthContext) 
 
 fn federal_registry_row_value(
     admin: &AdminUser,
-    province: String,
+    province_name: String,
 ) -> Result<serde_json::Value, String> {
     serde_json::to_value(FederalRegistryAdminRow {
         id: admin.id,
-        province_name: province,
+        province_name,
         admin_account: admin.admin_account.clone(),
         admin_display_name: admin.admin_display_name.clone(),
         built_in: admin.built_in,

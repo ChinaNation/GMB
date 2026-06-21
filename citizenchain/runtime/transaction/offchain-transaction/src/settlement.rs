@@ -33,7 +33,7 @@ use sp_runtime::{traits::SaturatedConversion, DispatchResult};
 
 use crate::batch_item::OffchainBatchItemV2;
 use crate::{
-    bank_check::{self, SfidAccountQuery},
+    bank_check::{self, CidAccountQuery},
     fee_config, nonce, solvency, BankTotalDeposits, Config, DepositBalance, Error, Event, Pallet,
     ProcessedOffchainTx, ProcessedOffchainTxAt, UserBank,
 };
@@ -65,7 +65,7 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 /// Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**。
 ///
 /// [`submitter`] 提交该批次的清算行多签管理员(必须是 institution_main 即收款方机构的激活管理员)
-/// [`institution_main`] 批次归属的清算行主账户地址(= **收款方**清算行)
+/// [`institution_main`] 批次归属的清算行主账户(= **收款方**清算行)
 /// [`batch`] SCALE 编码过的 V2 批次数据(已在 extrinsic 入口完成 BoundedVec 长度校验)
 ///
 /// 偿付预检按 **付款方清算行** 做(每个 payer_bank 各自统计扣减总额),因为
@@ -77,7 +77,7 @@ pub fn execute_clearing_bank_batch<T: Config>(
 ) -> DispatchResult {
     // 批次级校验:提交方必须是 institution_main(收款方清算行)的激活管理员
     ensure!(
-        T::SfidAccountQuery::is_admin_of(institution_main, submitter),
+        T::CidAccountQuery::is_admin_of(institution_main, submitter),
         Error::<T>::UnauthorizedAdmin
     );
 
@@ -176,7 +176,7 @@ fn execute_single_item<T: Config>(
     // 2. 消费 nonce
     nonce::consume_nonce::<T>(&item.payer, item.payer_nonce)?;
 
-    // 3. 防重放(shard key 从付款方清算行 sfid_number 的 R5 前 2 字节取省码)。
+    // 3. 防重放(shard key 从付款方清算行 cid_number 的 R5 前 2 字节取省码)。
     //
     //    `item.tx_id` 是 `H256`,链上 Storage 用 `T::Hash`(Substrate 默认等于
     //    H256)。通过 SCALE 编解码跨类型转换,与 frame_system 默认配置兼容。
@@ -263,14 +263,14 @@ fn pubkey_from_accountid<T: Config>(acc: &T::AccountId) -> Result<Sr25519Public,
     Ok(Sr25519Public::from_raw(arr))
 }
 
-/// 从清算行主账户反查省级 shard key(SFID 第一段 R5 前 2 字符),失败时返回 None。
+/// 从清算行主账户反查省级 shard key(CID 第一段 R5 前 2 字符),失败时返回 None。
 fn province_shard_from_bank<T: Config>(bank_main: &T::AccountId) -> Option<[u8; 2]> {
-    let info = T::SfidAccountQuery::account_info(bank_main)?;
-    let sfid_bytes = info.0;
-    // SFID 格式 R5-K3P1C1-N9-D4,第一段 R5 前 2 字符是省编码。
-    if sfid_bytes.len() < 2 {
+    let info = T::CidAccountQuery::account_info(bank_main)?;
+    let cid_bytes = info.0;
+    // CID 格式 R5-K3P1C1-N9-D4,第一段 R5 前 2 字符是省编码。
+    if cid_bytes.len() < 2 {
         return None;
     }
-    let shard = sfid_bytes.get(0..2)?;
+    let shard = cid_bytes.get(0..2)?;
     Some([shard[0], shard[1]])
 }

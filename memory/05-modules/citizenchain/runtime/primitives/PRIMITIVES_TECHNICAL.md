@@ -21,7 +21,7 @@
 | `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限） |
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
-| `china/china_ch.rs` | 43 个省储行（人口、质押、多签地址） |
+| `china/china_ch.rs` | 43 个省储行（人口、质押、多签账户） |
 | `china/china_cb.rs` | 44 个储委会（1 国储会 + 43 省储会） |
 | `china/china_jc.rs` | 48 个联邦监察院 |
 | `china/china_jy.rs` | 公民教育委员会 |

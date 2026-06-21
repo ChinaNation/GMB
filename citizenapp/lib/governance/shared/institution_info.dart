@@ -37,7 +37,7 @@ class OrgType {
   static const int prb = 2;
 
   /// 多签账户。具体是个人多签还是机构账户，由 admins-change 的 account identity 区分。
-  static const int duoqian = 3;
+  static const int account = 3;
 
   static String label(int orgType) {
     switch (orgType) {
@@ -47,7 +47,7 @@ class OrgType {
         return '省储会';
       case prb:
         return '省储行';
-      case duoqian:
+      case account:
         return '多签账户';
       default:
         return '未知';
@@ -57,7 +57,7 @@ class OrgType {
 
 /// 治理机构及多签账户的制度账户集合。
 ///
-/// 中文注释：内置治理机构没有笼统的 `duoqianAccount`；链端按主账户、费用账户、
+/// 中文注释：内置治理机构没有笼统的 `account`；链端按主账户、费用账户、
 /// 国储会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
 class InstitutionAccounts {
   const InstitutionAccounts({
@@ -77,7 +77,7 @@ class InstitutionAccounts {
   /// 安全基金账户 AccountId hex；仅国储会存在。
   final String? anquanAccount;
 
-  /// 两和基金账户地址 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国储会存在。
+  /// 两和基金账户 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国储会存在。
   final String? heAccount;
 
   /// 永久质押账户 AccountId hex；仅省储行存在。
@@ -91,11 +91,11 @@ class InstitutionInfo {
     required this.cidNumber,
     required this.orgType,
     this.accounts,
-    String? duoqianAccount,
+    String? account,
     this.adminAccountOrg,
     this.internalThresholdOverride,
-  })  : assert(accounts != null || duoqianAccount != null),
-        _singleMainAccount = duoqianAccount;
+  })  : assert(accounts != null || account != null),
+        _singleMainAccount = account;
 
   /// 显示名称。
   final String name;
@@ -113,7 +113,7 @@ class InstitutionInfo {
   /// 制度账户集合。
   ///
   /// 中文注释：治理机构使用生成的完整账户集合；个人多签/机构账户使用
-  /// 主账户 AccountId作为多签账户地址。
+  /// 主账户 AccountId作为多签账户。
   final InstitutionAccounts? accounts;
 
   final String? _singleMainAccount;
@@ -122,14 +122,14 @@ class InstitutionInfo {
   String get mainAccount => accounts?.mainAccount ?? _singleMainAccount!;
 
   /// 个人多签/注册机构账户的多签账户；内置治理机构不得使用这个语义。
-  String get duoqianAccount => mainAccount;
+  String get account => mainAccount;
 
   /// 机构账户的动态阈值覆盖。
   final int? internalThresholdOverride;
 
   /// 是否为链上注册的机构账户。
-  bool get isRegisteredDuoqian =>
-      orgType == OrgType.duoqian && isRegisteredDuoqianIdentity(cidNumber);
+  bool get isRegisteredAccount =>
+      orgType == OrgType.account && isRegisteredAccountIdentity(cidNumber);
 
   /// 内部投票通过阈值。
   int get internalThreshold {
@@ -141,7 +141,7 @@ class InstitutionInfo {
         return 6;
       case OrgType.prb:
         return 6;
-      case OrgType.duoqian:
+      case OrgType.account:
         return 0;
       default:
         return 0;
@@ -166,7 +166,7 @@ class InstitutionInfo {
     String? cidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
-    String? duoqianAccount,
+    String? account,
     int? adminAccountOrg,
     int? internalThresholdOverride,
   }) {
@@ -175,7 +175,7 @@ class InstitutionInfo {
       cidNumber: cidNumber ?? this.cidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
-      duoqianAccount: duoqianAccount ?? _singleMainAccount,
+      account: account ?? _singleMainAccount,
       adminAccountOrg: adminAccountOrg ?? this.adminAccountOrg,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
@@ -183,34 +183,34 @@ class InstitutionInfo {
   }
 }
 
-const String _registeredDuoqianPrefix = 'duoqian:';
-const String _personalDuoqianPrefix = 'personal:';
+const String _registeredAccountIdentityPrefix = 'institution-account:';
+const String _personalAccountIdentityPrefix = 'personal-account:';
 
-bool isRegisteredDuoqianIdentity(String institutionIdentity) {
-  return institutionIdentity.startsWith(_registeredDuoqianPrefix);
+bool isRegisteredAccountIdentity(String institutionIdentity) {
+  return institutionIdentity.startsWith(_registeredAccountIdentityPrefix);
 }
 
-String registeredDuoqianIdentity(String duoqianAccount) {
-  return '$_registeredDuoqianPrefix${_normalizeHex(duoqianAccount)}';
+String registeredAccountIdentity(String account) {
+  return '$_registeredAccountIdentityPrefix${_normalizeHex(account)}';
 }
 
-String? registeredDuoqianAddressFromIdentity(String institutionIdentity) {
-  if (!isRegisteredDuoqianIdentity(institutionIdentity)) return null;
+String? registeredAccountHexFromIdentity(String institutionIdentity) {
+  if (!isRegisteredAccountIdentity(institutionIdentity)) return null;
   final hex = _normalizeHex(
-    institutionIdentity.substring(_registeredDuoqianPrefix.length),
+    institutionIdentity.substring(_registeredAccountIdentityPrefix.length),
   );
   if (hex.length != 64) return null;
   return hex;
 }
 
-bool isPersonalDuoqianIdentity(String institutionIdentity) {
-  return institutionIdentity.startsWith(_personalDuoqianPrefix);
+bool isPersonalAccountIdentity(String institutionIdentity) {
+  return institutionIdentity.startsWith(_personalAccountIdentityPrefix);
 }
 
-String? personalDuoqianAddressFromIdentity(String institutionIdentity) {
-  if (!isPersonalDuoqianIdentity(institutionIdentity)) return null;
+String? personalAccountHexFromIdentity(String institutionIdentity) {
+  if (!isPersonalAccountIdentity(institutionIdentity)) return null;
   final hex = _normalizeHex(
-    institutionIdentity.substring(_personalDuoqianPrefix.length),
+    institutionIdentity.substring(_personalAccountIdentityPrefix.length),
   );
   if (hex.length != 64) return null;
   return hex;
@@ -220,15 +220,13 @@ List<int> institutionIdentityToAccountId(
   String institutionIdentity, {
   String? mainAccount,
 }) {
-  final duoqianAccount =
-      registeredDuoqianAddressFromIdentity(institutionIdentity);
-  if (duoqianAccount != null) {
-    return _accountHexToBytes(duoqianAccount);
+  final account = registeredAccountHexFromIdentity(institutionIdentity);
+  if (account != null) {
+    return _accountHexToBytes(account);
   }
-  final personalAddress =
-      personalDuoqianAddressFromIdentity(institutionIdentity);
-  if (personalAddress != null) {
-    return _accountHexToBytes(personalAddress);
+  final personalAccount = personalAccountHexFromIdentity(institutionIdentity);
+  if (personalAccount != null) {
+    return _accountHexToBytes(personalAccount);
   }
   if (mainAccount == null) {
     throw ArgumentError('内置治理机构必须提供 mainAccount 作为治理 AccountId');

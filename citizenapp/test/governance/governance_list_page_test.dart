@@ -15,7 +15,7 @@ InstitutionInfo _institution(
     name: name,
     cidNumber: cidNumber,
     orgType: orgType,
-    duoqianAccount: hexSeed.toRadixString(16).padLeft(64, '0'),
+    account: hexSeed.toRadixString(16).padLeft(64, '0'),
   );
 }
 

@@ -129,8 +129,8 @@ pub mod pallet {
             for node in CHINA_CB.iter() {
                 let Some(institution) = decode_account::<T>(&node.main_account) else {
                     panic!(
-                        "genesis: sfid_number {} 主账户 decode 失败",
-                        node.sfid_number
+                        "genesis: cid_number {} 主账户 decode 失败",
+                        node.cid_number
                     );
                 };
                 assert!(

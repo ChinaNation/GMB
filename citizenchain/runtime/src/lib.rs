@@ -322,9 +322,9 @@ mod runtime {
     #[runtime::pallet_index(24)]
     pub type CitizenVote = citizen_vote;
 
-    // SFID 绑定与资格校验：统一处理绑定、验签、资格查询
+    // CID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]
-    pub type SfidSystem = sfid_system;
+    pub type CidSystem = cid_system;
 
     // 公民发行：仅负责认证奖励发放
     #[runtime::pallet_index(11)]
@@ -350,7 +350,7 @@ mod runtime {
     #[runtime::pallet_index(17)]
     pub type OrganizationManage = organization_manage;
 
-    // 个人多签管理模块:用户自定义多签账户的注册/创建/关闭(无 SFID 归属,creator+account_name 派生)。
+    // 个人多签管理模块:用户自定义多签账户的注册/创建/关闭(无 CID 归属,creator+account_name 派生)。
     // pallet_index=7 重用历史空位(B 阶段 personal-manage 拆分,2026-05-06)。
     #[runtime::pallet_index(7)]
     pub type PersonalManage = personal_manage;
@@ -359,7 +359,7 @@ mod runtime {
     #[runtime::pallet_index(18)]
     pub type PowDifficulty = pow_difficulty;
 
-    // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 duoqian_account）
+    // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 account）
     #[runtime::pallet_index(19)]
     pub type DuoqianTransfer = duoqian_transfer;
 
@@ -371,7 +371,7 @@ mod runtime {
     #[runtime::pallet_index(21)]
     pub type OffchainTransaction = offchain_transaction::pallet;
 
-    // 链上发行代币(Plain FT, ADR-011):用户(SFID 机构 + personal-manage 多签)发行 GMB 之外的代币。
+    // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-manage 多签)发行 GMB 之外的代币。
     // 唯一外壳入口,内核挂 pallet_assets;pallet_assets 原生 extrinsic 由 BaseCallFilter 屏蔽。
     // 当前为空壳(任务卡 A/B 未实装),OnchainIssuance 自身 propose_* 也在 RuntimeCallFilter 中 reject。
     #[runtime::pallet_index(25)]

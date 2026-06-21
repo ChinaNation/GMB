@@ -9,7 +9,7 @@ fn bind_succeeds_and_tracks_binding_id() {
     new_test_ext().execute_with(|| {
         let credential = bind_credential(b"binding-a", "nonce-a", "bind-ok");
 
-        assert_ok!(SfidSystem::bind_sfid(
+        assert_ok!(CidSystem::bind_cid(
             RuntimeOrigin::signed(1),
             credential.clone()
         ));
@@ -32,9 +32,9 @@ fn bind_rejects_reused_bind_nonce() {
         let first = bind_credential(b"binding-a", "same-nonce", "bind-ok");
         let second = bind_credential(b"binding-b", "same-nonce", "bind-ok");
 
-        assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), first));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), first));
         assert_noop!(
-            SfidSystem::bind_sfid(RuntimeOrigin::signed(2), second),
+            CidSystem::bind_cid(RuntimeOrigin::signed(2), second),
             Error::<Test>::BindNonceAlreadyUsed
         );
     });
@@ -46,11 +46,11 @@ fn bind_allows_account_rebinding_to_new_binding_id() {
         let first = bind_credential(b"binding-a", "nonce-a", "bind-ok");
         let second = bind_credential(b"binding-b", "nonce-b", "bind-ok");
 
-        assert_ok!(SfidSystem::bind_sfid(
+        assert_ok!(CidSystem::bind_cid(
             RuntimeOrigin::signed(1),
             first.clone()
         ));
-        assert_ok!(SfidSystem::bind_sfid(
+        assert_ok!(CidSystem::bind_cid(
             RuntimeOrigin::signed(1),
             second.clone()
         ));
@@ -68,10 +68,10 @@ fn bind_rejects_empty_nonce() {
         let empty_credential = BindCredential {
             binding_id: binding_id(b"id-empty"),
             bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
-            issuer_sfid_number: b"SFID-ISSUER"
+            issuer_cid_number: b"CID-ISSUER"
                 .to_vec()
                 .try_into()
-                .expect("issuer sfid fits"),
+                .expect("issuer cid fits"),
             issuer_main_account: 99,
             signer_pubkey: [7u8; 32],
             scope_province_name: b"liaoning".to_vec().try_into().expect("scope fits"),
@@ -79,7 +79,7 @@ fn bind_rejects_empty_nonce() {
             signature: signature("bind-ok"),
         };
         assert_noop!(
-            SfidSystem::bind_sfid(RuntimeOrigin::signed(1), empty_credential),
+            CidSystem::bind_cid(RuntimeOrigin::signed(1), empty_credential),
             Error::<Test>::EmptyBindNonce
         );
     });
@@ -90,8 +90,8 @@ fn bind_rejects_invalid_signature() {
     new_test_ext().execute_with(|| {
         let credential = bind_credential(b"id-badsig", "nonce-badsig", "bad-sig");
         assert_noop!(
-            SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential),
-            Error::<Test>::InvalidSfidBindingSignature
+            CidSystem::bind_cid(RuntimeOrigin::signed(1), credential),
+            Error::<Test>::InvalidCidBindingSignature
         );
     });
 }
@@ -102,12 +102,12 @@ fn bind_rejects_binding_id_owned_by_another_account() {
         let credential_1 = bind_credential(b"shared-id", "nonce-1", "bind-ok");
         let credential_2 = bind_credential(b"shared-id", "nonce-2", "bind-ok");
 
-        assert_ok!(SfidSystem::bind_sfid(
+        assert_ok!(CidSystem::bind_cid(
             RuntimeOrigin::signed(1),
             credential_1
         ));
         assert_noop!(
-            SfidSystem::bind_sfid(RuntimeOrigin::signed(2), credential_2),
+            CidSystem::bind_cid(RuntimeOrigin::signed(2), credential_2),
             Error::<Test>::BindingIdAlreadyBoundToAnotherAccount
         );
     });
@@ -119,12 +119,12 @@ fn bind_rejects_same_binding_id_already_bound() {
         let credential_1 = bind_credential(b"dup-id", "nonce-dup-1", "bind-ok");
         let credential_2 = bind_credential(b"dup-id", "nonce-dup-2", "bind-ok");
 
-        assert_ok!(SfidSystem::bind_sfid(
+        assert_ok!(CidSystem::bind_cid(
             RuntimeOrigin::signed(1),
             credential_1
         ));
         assert_noop!(
-            SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential_2),
+            CidSystem::bind_cid(RuntimeOrigin::signed(1), credential_2),
             Error::<Test>::SameBindingIdAlreadyBound
         );
     });
@@ -135,9 +135,9 @@ fn unbind_by_root_origin_succeeds() {
     new_test_ext().execute_with(|| {
         let credential = bind_credential(b"binding-unbind", "nonce-unbind", "bind-ok");
         let bid = credential.binding_id;
-        assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), credential));
 
-        assert_ok!(SfidSystem::unbind_sfid(RuntimeOrigin::root(), 1));
+        assert_ok!(CidSystem::unbind_cid(RuntimeOrigin::root(), 1));
         assert!(BindingIdToAccount::<Test>::get(bid).is_none());
         assert!(AccountToBindingId::<Test>::get(1).is_none());
         assert_eq!(BoundCount::<Test>::get(), 0);
@@ -149,13 +149,13 @@ fn vote_credential_is_consumed_once_per_proposal_and_binding_id() {
     new_test_ext().execute_with(|| {
         let credential = bind_credential(b"binding-vote", "bind-nonce", "bind-ok");
         let bid = credential.binding_id;
-        assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), credential));
 
-        assert!(<Pallet<Test> as SfidEligibilityProvider<
+        assert!(<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::is_eligible(&bid, &1));
-        assert!(<Pallet<Test> as SfidEligibilityProvider<
+        assert!(<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::verify_and_consume_vote_credential(
@@ -164,13 +164,13 @@ fn vote_credential_is_consumed_once_per_proposal_and_binding_id() {
             7,
             b"vote-nonce",
             b"vote-ok",
-            b"SFID-ISSUER",
+            b"CID-ISSUER",
             &99,
             &[7u8; 32],
             b"liaoning",
             b"shenyang",
         ));
-        assert!(!<Pallet<Test> as SfidEligibilityProvider<
+        assert!(!<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::verify_and_consume_vote_credential(
@@ -179,7 +179,7 @@ fn vote_credential_is_consumed_once_per_proposal_and_binding_id() {
             7,
             b"vote-nonce",
             b"vote-ok",
-            b"SFID-ISSUER",
+            b"CID-ISSUER",
             &99,
             &[7u8; 32],
             b"liaoning",
@@ -193,9 +193,9 @@ fn vote_nonce_is_scoped_per_proposal() {
     new_test_ext().execute_with(|| {
         let credential = bind_credential(b"binding-replay", "bind-nonce", "bind-ok");
         let bid = credential.binding_id;
-        assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), credential));
 
-        assert!(<Pallet<Test> as SfidEligibilityProvider<
+        assert!(<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::verify_and_consume_vote_credential(
@@ -204,13 +204,13 @@ fn vote_nonce_is_scoped_per_proposal() {
             10,
             b"same-nonce",
             b"vote-ok",
-            b"SFID-ISSUER",
+            b"CID-ISSUER",
             &99,
             &[7u8; 32],
             b"liaoning",
             b"shenyang",
         ));
-        assert!(<Pallet<Test> as SfidEligibilityProvider<
+        assert!(<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::verify_and_consume_vote_credential(
@@ -219,7 +219,7 @@ fn vote_nonce_is_scoped_per_proposal() {
             20,
             b"same-nonce",
             b"vote-ok",
-            b"SFID-ISSUER",
+            b"CID-ISSUER",
             &99,
             &[7u8; 32],
             b"liaoning",
@@ -233,9 +233,9 @@ fn cleanup_vote_credentials_removes_nonce_state() {
     new_test_ext().execute_with(|| {
         let credential = bind_credential(b"binding-cleanup", "bind-nonce", "bind-ok");
         let bid = credential.binding_id;
-        assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), credential));
 
-        assert!(<Pallet<Test> as SfidEligibilityProvider<
+        assert!(<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::verify_and_consume_vote_credential(
@@ -244,17 +244,17 @@ fn cleanup_vote_credentials_removes_nonce_state() {
             7,
             b"vote-nonce",
             b"vote-ok",
-            b"SFID-ISSUER",
+            b"CID-ISSUER",
             &99,
             &[7u8; 32],
             b"liaoning",
             b"shenyang",
         ));
-        <Pallet<Test> as SfidEligibilityProvider<
+        <Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::cleanup_vote_credentials(7);
-        assert!(<Pallet<Test> as SfidEligibilityProvider<
+        assert!(<Pallet<Test> as CidEligibilityProvider<
             u64,
             <Test as frame_system::Config>::Hash,
         >>::verify_and_consume_vote_credential(
@@ -263,7 +263,7 @@ fn cleanup_vote_credentials_removes_nonce_state() {
             7,
             b"vote-nonce",
             b"vote-ok",
-            b"SFID-ISSUER",
+            b"CID-ISSUER",
             &99,
             &[7u8; 32],
             b"liaoning",

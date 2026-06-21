@@ -16,7 +16,7 @@
 ## 改名口径表
 - 新增或替换管理员参数统一使用 `admins`；不再保留旧管理员公钥数组字段。
 - 管理员数量字段统一为 `admins_len`；多签管理员 SS58 展示字段统一为 `admins_ss58`(serde→`adminsSs58`)。
-- `DuoqianAdminsOf<T>` → `AdminsOf<T>`（`DuoqianTransfer`/`DuoqianAccountOf`/`PersonalDuoqians` 属多签业务域名，保留）
+- 管理员真源统一为 `AdminsOf<T>`；多签转账只保留业务域名，不再使用多签域名表达账户字段。
 - `EMPTY_DUOQIAN_ADMINS` → 删除（死常量）
 - `InvalidAdminCount`/`AdminCountMismatch` → `InvalidAdminsLen`/`AdminsLenMismatch`
 - `InternalAdminCountProvider`/`RuntimeInternalAdminCountProvider` → `InternalAdminsLenProvider`/`RuntimeInternalAdminsLenProvider`

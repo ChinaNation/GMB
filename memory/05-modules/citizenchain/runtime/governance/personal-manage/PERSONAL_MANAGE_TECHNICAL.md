@@ -31,20 +31,20 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 | MODULE_TAG | `b"per-mgmt"`(8 字节,与 `b"org-mgmt"` 长度对仗) |
 | ACTION_CREATE | 0(独立命名空间,从 0 起) |
 | ACTION_CLOSE | 1 |
-| AdminAccountKind | `PersonalDuoqian AccountId`(D 阶段 ADR-010) |
+| AdminAccountKind | `PersonalAccount AccountId`(D 阶段 ADR-010) |
 
 ## storage
 
 | 名 | key/value | 用途 |
 |---|---|---|
-| `PersonalDuoqians` | `StorageMap<account, DuoqianAccount>` | 个人多签账户生命周期状态,保存 `creator / account_name / created_at / status` |
-| `PendingPersonalCreate` | `StorageMap<proposal_id, CreateDuoqianAction>` | 创建提案投票期 reserve 资金与 fee 快照 |
+| `PersonalAccounts` | `StorageMap<account, PersonalAccount>` | 个人多签账户生命周期状态,保存 `creator / account_name / created_at / status` |
+| `PendingPersonalCreate` | `StorageMap<proposal_id, PersonalCreateAction>` | 创建提案投票期 reserve 资金与 fee 快照 |
 | `PendingCloseProposal` | `StorageMap<account, proposal_id>` | 防并发关闭提案 |
 
-管理员和管理员数量不再存储或镜像在 `PersonalDuoqians`。
+管理员和管理员数量不再存储或镜像在 `PersonalAccounts`。
 管理员唯一真源为 `admins-change::Subjects[account_id_from_account(personal_account)]`。
 普通动态阈值唯一真源为 `internal-vote::ActiveDynamicThresholds[(ORG_REN, subject)]`。
-旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalDuoqians`。
+旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalAccounts`。
 
 ## extrinsic
 
@@ -58,25 +58,25 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 
 | 名 | 触发时机 |
 |---|---|
-| `PersonalDuoqianProposed` | propose_create 成功 |
-| `DuoqianCreated` | 投票通过 + 入金完成 + 状态 Active |
+| `PersonalCreateProposed` | propose_create 成功 |
+| `PersonalCreated` | 投票通过 + 入金完成 + 状态 Active |
 | `CreateExecutionFailed` | 投票通过但执行失败 |
-| `DuoqianCreateRejected` | 投票否决/超时清理 |
-| `CloseDuoqianProposed` | propose_close 成功 |
-| `DuoqianClosed` | 关闭投票通过 + 余额转出 |
+| `PersonalCreateRejected` | 投票否决/超时清理 |
+| `PersonalCloseProposed` | propose_close 成功 |
+| `PersonalClosed` | 关闭投票通过 + 余额转出 |
 | `CloseExecutionFailed` | 关闭投票通过但执行失败 |
 
 ## 类型(`src/types.rs`)
 
-- `DuoqianStatus { Pending, Active }`
-- `DuoqianAccount<AccountId, AccountName, BlockNumber>`：保存 `creator / account_name / created_at / status`
-- `CreateDuoqianAction<AccountId, Balance>`
-- `CloseDuoqianAction<AccountId>`
+- `PersonalStatus { Pending, Active }`
+- `PersonalAccount<AccountId, AccountName, BlockNumber>`：保存 `creator / account_name / created_at / status`
+- `PersonalCreateAction<AccountId, Balance>`
+- `PersonalCloseAction<AccountId>`
 
-`CreateDuoqianAction` 当前字段：
+`PersonalCreateAction` 当前字段：
 
 ```text
-duoqian_account: AccountId
+account: AccountId
 proposer: AccountId
 amount: Balance
 fee: Balance
@@ -91,7 +91,7 @@ fee: Balance
 ## 派生公式
 
 ```
-personal_duoqian_account = Blake2b_256(
+personal_account = Blake2b_256(
     DUOQIAN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || account_name_utf8
 )
 ```
@@ -103,7 +103,7 @@ personal_duoqian_account = Blake2b_256(
 
 ```
 account_id = core_const::account_id_from_account(personal_account)
-           = byte[0]=PersonalDuoqian AccountId + byte[1..33]=AccountId + byte[33..48]=zeros(15B)
+           = byte[0]=PersonalAccount AccountId + byte[1..33]=AccountId + byte[33..48]=zeros(15B)
 ```
 
 详见 ADR-010。
@@ -113,19 +113,19 @@ account_id = core_const::account_id_from_account(personal_account)
 | 关注点 | personal-manage | organization-manage |
 |---|---|---|
 | 主体来源 | 用户自定义 | CID 注册机构 |
-| 地址派生 | creator + account_name | cid_number + account_name(主/费用/自创) |
-| 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(CidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
+| 账户派生 | creator + account_name | cid_number + account_name(主/费用/自创) |
+| 账户表 | `PersonalAccounts`(单地址) | `Institutions`(CidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
 | MODULE_TAG | `b"per-mgmt"` | `b"org-mgmt"` |
 | pallet_index | 7 | 17 |
-| 客户端 dispatch | `PersonalDuoqians.has(addr)` 命中走此 pallet | `AccountRegisteredCid.has(addr)` 命中走 organization-manage |
+| 客户端 dispatch | `PersonalAccounts.has(addr)` 命中走此 pallet | `AccountRegisteredCid.has(addr)` 命中走 organization-manage |
 
 ## 客户端协议
 
 - citizenapp `lib/personal-manage/*` 直接调 pallet=7 的 propose_create/propose_close。
 - citizenapp `PersonalManageService.submitProposeCreatePersonal` 编码：
   `0x07 0x00 + account_name + admins + regular_threshold + amount`。
-- citizenapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
-  `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员读
+- citizenapp 查询个人多签时，状态读 `PersonalManage::PersonalAccounts`，
+  `creator/account_name` 也读 `PersonalManage::PersonalAccounts`，管理员读
   `AdminsChange::AdminAccounts`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
 - citizenapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
 - 创建类交易入块后若未找到成功事件，客户端必须先解析 `System.ExtrinsicFailed` 并显示真实 `PersonalManage / AdminsChange` 模块错误，不能只提示“未找到成功事件”。
@@ -150,7 +150,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib
-flutter test test/organization-manage/duoqian_manage_service_test.dart test/organization-manage/duoqian_storage_codec_test.dart test/organization-manage/duoqian_manage_storage_test.dart
+flutter test test/organization-manage/account_manage_service_test.dart test/organization-manage/duoqian_storage_codec_test.dart test/organization-manage/duoqian_manage_storage_test.dart
 flutter test test/signer/payload_decoder_test.dart
 ```
 
@@ -183,7 +183,7 @@ flutter test test/signer/payload_decoder_test.dart
 - `propose_create` 接收 `regular_threshold`，但该字段只表示账户激活后的普通业务动态阈值，不是本次注册投票通过阈值。
 - 创建流程校验管理员数量 `2..=64`、管理员去重、创建人必须在管理员集合内，并把动态阈值交给投票引擎按严格过半规则校验。
 - 创建提案和关闭提案的投票阈值由投票引擎按管理员快照写成全员。
-- `PersonalDuoqians` 不保存管理员列表、管理员数量和阈值镜像字段。
+- `PersonalAccounts` 不保存管理员列表、管理员数量和阈值镜像字段。
 - 提案通过执行时，同一事务内先完成入金，再激活 `admins-change` 主体，投票引擎随后把 pending 动态阈值激活为 active 动态阈值。
 - `PersonalMultisigQuery` 从 `admins-change` 读取管理员配置，从 `internal-vote` 读取动态阈值。
 
@@ -191,13 +191,13 @@ flutter test test/signer/payload_decoder_test.dart
 
 - `CreateDuoqianAction` 新增 `fee` 快照字段,执行/清理不再按当前 fee policy 重算创建手续费。
 - `cleanup_pending_create` 先检查 `PendingPersonalCreate` 是否存在,重复手动 cleanup 不再重复发 `DuoqianCreateRejected`。
-- 旧反向索引 storage 和 meta 类型已删除,`account_name` 合并进 `PersonalDuoqians`。
+- 旧反向索引 storage 和 meta 类型已删除,`account_name` 合并进 `PersonalAccounts`。
 - `remove_pending_admin_account` 不再吞掉 `admins-change` 错误,清理路径会向上返回失败。
 - `execute_create_with_finalizer` / `execute_close_with_finalizer` 已删除死参数。
 - `InternalVoteExecutor` 统一使用 `decode_module_action` 解码 `MODULE_TAG + ACTION + payload`。
 - 创建/关闭执行失败事件改由 `on_execution_failed_terminal` 在终态清理后发出。
-- `DuoqianClosed` 事件补充 `admins_len / threshold`。
-- `PersonalDuoqianProposed` 事件补充 `fee`。
+- `PersonalClosed` 事件补充 `admins_len / threshold`。
+- `PersonalCreateProposed` 事件补充 `fee`。
 - `weights.rs` 从 0 权重改为保守非零权重。
 - citizenapp storage codec 和 ProposalData 解码同步新 SCALE 布局。
-- CID indexer 已读取 `DuoqianCreated / DuoqianClosed` 事件中的 `fee` 字段。
+- CID indexer 已读取个人账户创建/关闭事件中的 `fee` 字段。

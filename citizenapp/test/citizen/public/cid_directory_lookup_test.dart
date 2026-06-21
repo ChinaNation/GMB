@@ -9,8 +9,7 @@ import 'public_nav_harness.dart';
 void main() {
   const cid = 'GD001-GCB08-067440774-2026';
 
-  Future<CidDirectoryLookup> seedLookup(
-      List<PublicInstitutionDto> rows) async {
+  Future<CidDirectoryLookup> seedLookup(List<PublicInstitutionDto> rows) async {
     final repo = await buildSeededRepo(
       provinceOrder: const ['GD'],
       institutions: rows,
@@ -64,7 +63,7 @@ void main() {
         'account_count': 2,
       }),
     ]);
-    final info = await lookup.lookup('duoqian:abc123');
+    final info = await lookup.lookup('institution-account:abc123');
     expect(info, isNull);
   });
 }

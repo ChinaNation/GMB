@@ -1,8 +1,8 @@
 //! DUOQIAN 机构账户地址派生。
 //!
 //! 与链端 `citizenchain/runtime/primitives/src/core_const.rs`
-//! `derive_duoqian_account` + `organization-manage` 的账户名路由完全对齐,用于:
-//!   - 创建账户时立即在本地算出 `duoqian_account`,无需等激活上链
+//! `derive_account` + `organization-manage` 的账户名路由完全对齐,用于:
+//!   - 创建账户时立即在本地算出 `account`,无需等激活上链
 //!   - 激活成功后做 receipt 地址 ↔ 本地派生值的一致性断言,抓链端路由 / domain 漂移
 //!
 //! ## DUOQIAN 协议
@@ -22,14 +22,14 @@
 //!         || ss58.to_le_bytes()              // 2 字节 (2027 LE = [0xEB, 0x07])
 //!         || cid_number.as_bytes()          // 变长
 //!         || account_name.as_bytes()         // 仅 0x06 追加;0x00 / 0x01 不追加
-//! duoqian_account = blake2b_256(preimage)    // 32 字节
+//! account = blake2b_256(preimage)    // 32 字节
 //! ```
 //!
 //! ## 链端唯一真源
 //!
 //! - `primitives/src/core_const.rs`:`DUOQIAN = b"DUOQIAN"`、`OP_MAIN = 0x00`、
 //!   `OP_FEE = 0x01`、`OP_STAKE = 0x02`、`OP_AN = 0x03`、`OP_HE = 0x04`、
-//!   `OP_INSTITUTION = 0x06`、`derive_duoqian_account(op_tag, ss58, payload)`
+//!   `OP_INSTITUTION = 0x06`、`derive_account(op_tag, ss58, payload)`
 //!   = `blake2_256(DUOQIAN || op_tag || ss58.to_le_bytes() || payload)`
 //! - `organization-manage/src/lib.rs` `derive_institution_account`:
 //!   `payload = cid_number || name_suffix`,`Main`/`Fee`/制度账户的 name_suffix 为空
@@ -37,8 +37,8 @@
 //!   保留账户名走固定角色;其他非空 → `Named(account_name)`
 
 use primitives::core_const::{
-    derive_duoqian_account as derive_duoqian_account_bytes, OP_AN, OP_FEE, OP_HE, OP_INSTITUTION,
-    OP_MAIN, OP_STAKE, SS58_FORMAT,
+    derive_account as derive_account_bytes, OP_AN, OP_FEE, OP_HE, OP_INSTITUTION, OP_MAIN,
+    OP_STAKE, SS58_FORMAT,
 };
 
 /// 主账户保留名(UTF-8 字节,9 字节)。链端同字节常量。
@@ -63,7 +63,7 @@ pub(crate) const RESERVED_ACCOUNT_NAMES: [&str; 5] = [
     RESERVED_NAME_HE,
 ];
 
-/// 按 `account_name` 路由并派生机构账户的 `duoqian_account`(小写 hex,32 字节 → 64 字符)。
+/// 按 `account_name` 路由并派生机构账户的 `account`(小写 hex,32 字节 → 64 字符)。
 ///
 /// 返回 `None` 当 `account_name` 为空串(与链端 `EmptyAccountName` 对齐的前置拒绝,
 /// 不做 trim:链端按原始字节派生,本端必须字节对齐)。
@@ -75,7 +75,7 @@ pub(crate) const RESERVED_ACCOUNT_NAMES: [&str; 5] = [
 /// - `"安全基金"` → `OP_AN`(preimage 不含 account_name)
 /// - `"两和基金"` → `OP_HE`(preimage 不含 account_name)
 /// - 其他非空 → `OP_INSTITUTION`(preimage 追加 account_name 字节)
-pub fn derive_duoqian_account(cid_number: &str, account_name: &str) -> Option<String> {
+pub fn derive_account(cid_number: &str, account_name: &str) -> Option<String> {
     let name = account_name;
     if name.is_empty() {
         return None;
@@ -97,7 +97,7 @@ pub fn derive_duoqian_account(cid_number: &str, account_name: &str) -> Option<St
     let mut payload = Vec::with_capacity(cid_bytes.len() + name_suffix.len());
     payload.extend_from_slice(cid_bytes);
     payload.extend_from_slice(name_suffix);
-    let digest = derive_duoqian_account_bytes(op_tag, SS58_FORMAT, &payload);
+    let digest = derive_account_bytes(op_tag, SS58_FORMAT, &payload);
     Some(hex::encode(digest))
 }
 
@@ -108,8 +108,8 @@ mod tests {
     #[test]
     fn main_account_preimage_excludes_name() {
         // 两个不同 cid 的"主账户"地址必定不同(cid 参与派生)
-        let a = derive_duoqian_account("AH001-SZG1P-123456789-2026", "主账户").unwrap();
-        let b = derive_duoqian_account("BJ001-SZG1I-987654321-2026", "主账户").unwrap();
+        let a = derive_account("AH001-SZG1P-123456789-2026", "主账户").unwrap();
+        let b = derive_account("BJ001-SZG1I-987654321-2026", "主账户").unwrap();
         assert_eq!(a.len(), 64);
         assert_ne!(a, b);
     }
@@ -118,8 +118,8 @@ mod tests {
     fn main_and_fee_differ_for_same_cid() {
         // 同一 cid 的主账户 / 费用账户地址不同(op_tag 不同)
         let cid = "AH001-SZG1P-123456789-2026";
-        let main = derive_duoqian_account(cid, "主账户").unwrap();
-        let fee = derive_duoqian_account(cid, "费用账户").unwrap();
+        let main = derive_account(cid, "主账户").unwrap();
+        let fee = derive_account(cid, "费用账户").unwrap();
         assert_ne!(main, fee);
     }
 
@@ -127,22 +127,22 @@ mod tests {
     fn named_uses_account_name_in_preimage() {
         // 自定义账户名不同 → 地址不同;空 / 保留名按路由规则处理
         let cid = "AH001-SZG1P-123456789-2026";
-        let wage = derive_duoqian_account(cid, "工资账户").unwrap();
-        let case = derive_duoqian_account(cid, "办案账户").unwrap();
+        let wage = derive_account(cid, "工资账户").unwrap();
+        let case = derive_account(cid, "办案账户").unwrap();
         assert_ne!(wage, case);
         // 英文 "Main" / "Fee" 作为 Named 走 OP_INSTITUTION,不应等于主/费账户地址
-        let named_main = derive_duoqian_account(cid, "Main").unwrap();
-        let reserved_main = derive_duoqian_account(cid, "主账户").unwrap();
+        let named_main = derive_account(cid, "Main").unwrap();
+        let reserved_main = derive_account(cid, "主账户").unwrap();
         assert_ne!(named_main, reserved_main);
     }
 
     #[test]
     fn reserved_policy_accounts_use_dedicated_tags() {
         let cid = "LN001-GCB05-944805165-2026";
-        let stake = derive_duoqian_account(cid, "永久质押").unwrap();
-        let anquan = derive_duoqian_account(cid, "安全基金").unwrap();
-        let he = derive_duoqian_account(cid, "两和基金").unwrap();
-        let named_stake = derive_duoqian_account_bytes(
+        let stake = derive_account(cid, "永久质押").unwrap();
+        let anquan = derive_account(cid, "安全基金").unwrap();
+        let he = derive_account(cid, "两和基金").unwrap();
+        let named_stake = derive_account_bytes(
             OP_INSTITUTION,
             SS58_FORMAT,
             "LN001-GCB05-944805165-2026永久质押".as_bytes(),
@@ -155,16 +155,16 @@ mod tests {
     #[test]
     fn empty_name_returns_none() {
         // 仅空串返回 None;不做 trim,纯空白串按字节参与派生(与链端字节对齐)
-        assert!(derive_duoqian_account("cid", "").is_none());
-        assert!(derive_duoqian_account("cid", "   ").is_some());
+        assert!(derive_account("cid", "").is_none());
+        assert!(derive_account("cid", "   ").is_some());
     }
 
     #[test]
     fn deterministic() {
         // 同输入必定同输出(幂等)
         let cid = "AH001-SZG1P-123456789-2026";
-        let a = derive_duoqian_account(cid, "主账户").unwrap();
-        let b = derive_duoqian_account(cid, "主账户").unwrap();
+        let a = derive_account(cid, "主账户").unwrap();
+        let b = derive_account(cid, "主账户").unwrap();
         assert_eq!(a, b);
     }
 }

@@ -5,7 +5,7 @@
 //!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
 //! - **联合机构投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票，
 //!   105 票全票通过直接执行，任一机构反对立即进入公民投票，30 天超时进入公民投票。
-//! - **公民投票**（CITIZEN）：SFID 持有者按 >50% 严格多数投票，
+//! - **公民投票**（CITIZEN）：CID 持有者按 >50% 严格多数投票，
 //!   赞成 > 50% 提前通过，反对 ≥ 50% 提前否决，30 天超时按最终票数判定。
 //!
 //! 关键机制：
@@ -39,7 +39,7 @@ pub mod weights;
 
 pub use pallet::*;
 pub use traits::*;
-pub use traits::{SfidEligibility, VoteCredentialCleanup};
+pub use traits::{CidEligibility, VoteCredentialCleanup};
 pub use types::*;
 pub use types::{ORG_OTH, ORG_PUP, ORG_REN};
 
@@ -130,7 +130,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxPendingRetryExpirationsPerBlock: Get<u32>;
 
-        type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
+        type CidEligibility: CidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
             Self::AccountId,
             VoteNonceOf<Self>,
@@ -1542,7 +1542,7 @@ pub mod pallet {
                     (next, weight)
                 }
                 PendingCleanupStage::VoteCredentials => {
-                    let result = T::SfidEligibility::cleanup_vote_credentials_chunk(
+                    let result = T::CidEligibility::cleanup_vote_credentials_chunk(
                         proposal_id,
                         cleanup_limit,
                     );

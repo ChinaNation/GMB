@@ -59,7 +59,7 @@ citizenapp/test/governance/admins-change/
 1. `proposal_types_page.dart` 的“换管理员”入口进入 `AdminSetChangePage`。
 2. 入口页或调用方先构造 `AdminAccountIdentity`，再交给 `AdminAccountService` 查询目标 `AccountId`：
    - 内置治理机构：`0x01 Builtin + cidNumber`。
-   - 个人多签：`PersonalDuoqian AccountId + AccountId`。
+   - 个人多签：`PersonalAccount AccountId + AccountId`。
    - 机构账户：`InstitutionAccount AccountId + AccountId`。
 3. 读取 `AdminsChange::AdminAccounts` 并解码完整 `AdminAccount`。
 4. 用户选择管理员钱包、编辑完整管理员集合。
@@ -72,7 +72,7 @@ citizenapp/test/governance/admins-change/
 `/Users/rhett/GMB/citizenapp/lib/governance/admins-change/models/admin_account.dart` 定义 `AdminAccountIdentity`，调用方必须显式传入三类主体之一：
 
 - `governanceInstitution`：治理机构主体，`org=0/1/2`，`kind=0`。
-- `personalDuoqian`：个人多签主体，`org=3`，`kind=2`。
+- `personalAccount`：个人多签主体，`org=3`，`kind=2`。
 - `institutionAccount`：机构账户主体，`org=4/5`，`kind=3`。
 
 `/Users/rhett/GMB/citizenapp/lib/governance/admins-change/services/institution_admin_service.dart` 是查询门面，但不接收模糊字符串身份；所有 `fetchAdmins / fetchThreshold / isAdmin / clearCache` 调用都必须传 `AdminAccountIdentity`。按单一字符串混用个人、机构、治理主体的入口不存在。

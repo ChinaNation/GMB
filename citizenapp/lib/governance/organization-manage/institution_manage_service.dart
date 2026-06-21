@@ -244,8 +244,7 @@ class InstitutionManageService {
     output.write(_u32ToLeBytesStatic(adminsLen));
 
     // admins: BoundedVec<AccountId32> = Compact<u32> length + N × 32 bytes
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
     for (final pubkey in admins) {
       if (pubkey.length != 32) {
         throw ArgumentError('admins 每项必须为 32 字节');
@@ -272,14 +271,14 @@ class InstitutionManageService {
   ///
   /// 当前链端机构关闭 call 为 OrganizationManage::propose_close。
   Future<({String txHash, int usedNonce})> submitProposeCloseInstitution({
-    required String duoqianAccount,
+    required String account,
     required String beneficiaryAddress,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     return _submitProposeClose(
-      duoqianAccount: duoqianAccount,
+      account: account,
       beneficiaryAddress: beneficiaryAddress,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
@@ -289,9 +288,9 @@ class InstitutionManageService {
 
   /// 提交 propose_close extrinsic。
   ///
-  /// 参数编码：[0x11][0x01] + duoqian_account(32B) + beneficiary(32B)
+  /// 参数编码：[0x11][0x01] + account(32B) + beneficiary(32B)
   Future<({String txHash, int usedNonce})> _submitProposeClose({
-    required String duoqianAccount,
+    required String account,
     required String beneficiaryAddress,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -301,8 +300,8 @@ class InstitutionManageService {
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCloseCallIndex);
 
-    // duoqian_account: AccountId32 = 32 bytes
-    output.write(_hexDecode(duoqianAccount));
+    // account: AccountId32 = 32 bytes
+    output.write(_hexDecode(account));
 
     // beneficiary: AccountId32 = 32 bytes
     final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
@@ -340,10 +339,10 @@ class InstitutionManageService {
   /// 机构多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
   Future<Map<String, RegisteredInstitutionRef?>>
       fetchRegisteredInstitutionRefsBatch(
-    Iterable<String> duoqianAccountHexList, {
+    Iterable<String> accountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = duoqianAccountHexList
+    final addresses = accountHexList
         .where((address) => address.isNotEmpty)
         .toSet()
         .toList(growable: false);
@@ -374,20 +373,19 @@ class InstitutionManageService {
   ///
   /// 注册机构账户走 `AccountRegisteredCid -> InstitutionAccounts`
   /// + `AdminsChange::AdminAccounts`。
-  Future<InstitutionAccountInfo?> fetchDuoqianAccount(
-      String duoqianAccountHex) async {
-    return _fetchInstitutionDuoqianAccount(duoqianAccountHex);
+  Future<InstitutionAccountInfo?> fetchAccount(String accountHex) async {
+    return _fetchInstitutionAccount(accountHex);
   }
 
   /// 批量查询机构多签账户状态。
   ///
   /// 中文注释：机构多签需要先从账户反查 CID 与账户名，再读取账户主体和
   /// 管理员主体，所以必须分阶段批量读取，不能简单逐个调用详情查询。
-  Future<Map<String, InstitutionAccountInfo?>> fetchDuoqianAccountsBatch(
-    Iterable<String> duoqianAccountHexList, {
+  Future<Map<String, InstitutionAccountInfo?>> fetchAccountsBatch(
+    Iterable<String> accountHexList, {
     int chunkSize = 100,
   }) async {
-    final addresses = duoqianAccountHexList
+    final addresses = accountHexList
         .map(_normalizeHex)
         .where((address) => address.isNotEmpty)
         .toSet()
@@ -526,11 +524,11 @@ class InstitutionManageService {
     return result;
   }
 
-  Future<InstitutionAccountInfo?> _fetchInstitutionDuoqianAccount(
-    String duoqianAccountHex,
+  Future<InstitutionAccountInfo?> _fetchInstitutionAccount(
+    String accountHex,
   ) async {
     final refKey = DuoqianStorageCodec.accountRegisteredCidKey(
-      duoqianAccountHex,
+      accountHex,
     );
     final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
     if (refData == null) return null;
@@ -546,7 +544,7 @@ class InstitutionManageService {
     final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
     if (account == null) return null;
     final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
-      duoqianAccountHex,
+      accountHex,
     );
     final adminKey = DuoqianStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
@@ -588,7 +586,7 @@ class InstitutionManageService {
   /// 从 ProposalData 解码机构多签管理提案。
   ///
   /// ProposalData 存储为 BoundedVec<u8>，SCALE：Compact<len> + [ACTION_TYPE(1B)] + action.encode()
-  /// OrganizationManage ACTION_CLOSE(2): duoqian_account(32B) + beneficiary(32B) + proposer(32B)
+  /// OrganizationManage ACTION_CLOSE(2): account(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CloseDuoqianProposalInfo，解码失败返回 null。
   /// PersonalManage 提案解码已经迁移到 `PersonalManageService`。
@@ -626,11 +624,11 @@ class InstitutionManageService {
   }
 
   CloseDuoqianProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
-    // duoqian_account(32) + beneficiary(32) + proposer(32)
+    // account(32) + beneficiary(32) + proposer(32)
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
 
-    final duoqianAccount =
+    final account =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -645,7 +643,7 @@ class InstitutionManageService {
 
     return CloseDuoqianProposalInfo(
       proposalId: proposalId,
-      duoqianAccount: duoqianAccount,
+      account: account,
       beneficiary: beneficiarySs58,
       proposer: proposerSs58,
     );

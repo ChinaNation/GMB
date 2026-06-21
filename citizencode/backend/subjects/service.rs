@@ -331,7 +331,7 @@ pub fn build_default_accounts_for_names(
     actor: &str,
     names: &[&str],
 ) -> Vec<InstitutionAccount> {
-    use crate::accounts::derive::derive_duoqian_account;
+    use crate::accounts::derive::derive_account;
     use chrono::Utc;
 
     let now = Utc::now();
@@ -340,7 +340,7 @@ pub fn build_default_accounts_for_names(
         .map(|name| InstitutionAccount {
             cid_number: cid_number.to_string(),
             account_name: (*name).to_string(),
-            duoqian_account: derive_duoqian_account(cid_number, name),
+            account: derive_account(cid_number, name),
             chain_status: MultisigChainStatus::NotOnChain,
             chain_synced_at: None,
             chain_tx_hash: None,

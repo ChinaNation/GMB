@@ -60,10 +60,10 @@ void main() {
     test('主/费/自定义三行,地址与链上派生吻合', () {
       final rows = deriveAccountRows(_entity());
       expect(rows.map((r) => r.label), ['主账户', '费用账户', '业务专户']);
-      expect(rows.first.addressHex, _nrcMainHex);
+      expect(rows.first.accountHex, _nrcMainHex);
       // 自定义地址 = 卡0 派生
       expect(
-        rows.last.addressHex,
+        rows.last.accountHex,
         hexFromAccountId(deriveInstitutionCustomAccountId(_nrcCid, '业务专户')),
       );
     });

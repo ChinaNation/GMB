@@ -5,7 +5,7 @@
 citizenapp 所有机构账户地址不准确、余额不显示、管理员不显示。三个症状同一根因:
 
 - `citizenapp/lib/governance/organization-manage/governance_institution_registry.generated.dart` 是 `scripts/generate_citizenapp_governance_registry.mjs` 从链端 `citizenchain/runtime/primitives/china/china_{cb,ch}.rs` 生成的硬编码表。
-- `84080b6a`(重构多签账户体系,derive_duoqian_account 加入 ss58 字节重派生全部地址)+ `c13e0f82`(身份ID协议重构,机构改名「公民储备委员会」)+ 重新创世烘焙新地址后,**生成器没有重跑**,注册表停留在旧地址/旧名(国储会:表内 `c17a81b8…` vs 链端真源 `39936ebd…`)。
+- `84080b6a`(重构多签账户体系,derive_account 加入 ss58 字节重派生全部地址)+ `c13e0f82`(身份ID协议重构,机构改名「公民储备委员会」)+ 重新创世烘焙新地址后,**生成器没有重跑**,注册表停留在旧地址/旧名(国储会:表内 `c17a81b8…` vs 链端真源 `39936ebd…`)。
 - citizenapp 客户端无机构派生逻辑,地址展示/余额查询(`fetchFinalizedBalance(mainAccount)`)/管理员查询(`AdminAccounts` 以 mainAccount 为 key)全部依赖此表 → 全部机构同时断。
 
 ## 方案

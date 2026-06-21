@@ -14,24 +14,24 @@ use votingengine::STATUS_PASSED;
 
 use crate::{
     pallet::{
-        AccountNameOf, AccountRegisteredSfid, AdminsOf, InstitutionAccountNamesOf, RegisterNonceOf,
-        RegisterSignatureOf, SfidNumberOf, SfidRegisteredAccount,
+        AccountNameOf, AccountRegisteredCid, AdminsOf, CidNumberOf, CidRegisteredAccount,
+        InstitutionAccountNamesOf, RegisterNonceOf, RegisterSignatureOf,
     },
-    BalanceOf, Call, Config, DuoqianAccountValidator, DuoqianReservedAccountChecker, Pallet,
-    ProtectedSourceChecker,
+    AccountValidator, BalanceOf, Call, Config, Pallet, ProtectedSourceChecker,
+    ReservedAccountGuard,
 };
 
-fn find_safe_sfid<T: Config>() -> Result<(SfidNumberOf<T>, T::AccountId), BenchmarkError> {
+fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), BenchmarkError> {
     for candidate in 0..2_048u32 {
-        let mut raw = b"duoqian-benchmark-sfid-".to_vec();
+        let mut raw = b"duoqian-benchmark-cid-".to_vec();
         raw.extend_from_slice(&candidate.to_le_bytes());
-        let sfid_number: SfidNumberOf<T> = raw
+        let cid_number: CidNumberOf<T> = raw
             .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark sfid id should fit"))?;
+            .map_err(|_| BenchmarkError::Stop("benchmark cid id should fit"))?;
 
         // benchmark 场景用 Role::Main 派生，哈希公式等价于历史空 account_name 路径。
         let Ok(account) = Pallet::<T>::derive_institution_account(
-            sfid_number.as_slice(),
+            cid_number.as_slice(),
             crate::InstitutionAccountRole::Main,
         ) else {
             continue;
@@ -47,11 +47,11 @@ fn find_safe_sfid<T: Config>() -> Result<(SfidNumberOf<T>, T::AccountId), Benchm
             continue;
         }
 
-        return Ok((sfid_number, account));
+        return Ok((cid_number, account));
     }
 
     Err(BenchmarkError::Stop(
-        "failed to find a benchmark-safe sfid id",
+        "failed to find a benchmark-safe cid id",
     ))
 }
 
@@ -64,7 +64,7 @@ fn bench_account_name<T: Config>() -> Result<AccountNameOf<T>, BenchmarkError> {
 
 fn register_institution<T: Config>(
     relayer: &T::AccountId,
-    sfid_number: &SfidNumberOf<T>,
+    cid_number: &CidNumberOf<T>,
 ) -> Result<T::AccountId, BenchmarkError> {
     let account_name = bench_account_name::<T>()?;
     let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
@@ -77,9 +77,9 @@ fn register_institution<T: Config>(
     let account_names: InstitutionAccountNamesOf<T> = vec![account_name.clone()]
         .try_into()
         .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
-    Pallet::<T>::register_sfid_institution(
+    Pallet::<T>::register_cid_institution(
         RawOrigin::Signed(relayer.clone()).into(),
-        sfid_number.clone(),
+        cid_number.clone(),
         account_name.clone(),
         account_names,
         register_nonce,
@@ -87,8 +87,8 @@ fn register_institution<T: Config>(
         b"LN".to_vec(),
         [1u8; 32],
     )?;
-    SfidRegisteredAccount::<T>::get(sfid_number, &account_name)
-        .ok_or(BenchmarkError::Stop("benchmark sfid should be registered"))
+    CidRegisteredAccount::<T>::get(cid_number, &account_name)
+        .ok_or(BenchmarkError::Stop("benchmark cid should be registered"))
 }
 
 fn find_safe_beneficiary<T: Config>(
@@ -145,10 +145,10 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn register_sfid_institution() -> Result<(), BenchmarkError> {
+    fn register_cid_institution() -> Result<(), BenchmarkError> {
         let relayer: T::AccountId = frame_benchmarking::account("relayer", 0, 0);
 
-        let (sfid_number, account) = find_safe_sfid::<T>()?;
+        let (cid_number, account) = find_safe_cid::<T>()?;
         let account_name = bench_account_name::<T>()?;
         let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
             .to_vec()
@@ -162,9 +162,9 @@ mod benchmarks {
             .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
 
         #[extrinsic_call]
-        register_sfid_institution(
+        register_cid_institution(
             RawOrigin::Signed(relayer.clone()),
-            sfid_number.clone(),
+            cid_number.clone(),
             account_name.clone(),
             account_names,
             register_nonce,
@@ -174,15 +174,15 @@ mod benchmarks {
         );
 
         assert_eq!(
-            SfidRegisteredAccount::<T>::get(&sfid_number, &account_name),
+            CidRegisteredAccount::<T>::get(&cid_number, &account_name),
             Some(account.clone())
         );
-        assert!(AccountRegisteredSfid::<T>::contains_key(&account));
+        assert!(AccountRegisteredCid::<T>::contains_key(&account));
         Ok(())
     }
 
-    // 当前 organization-manage 仅保留 register_sfid_institution + propose_create_institution
+    // 当前 organization-manage 仅保留 register_cid_institution + propose_create_institution
     // + cleanup_rejected_proposal 三个 benchmark;CI 运行时影响范围与 weights.rs 占位等价。
-    // propose_close 的 benchmark 重写需完整 register_sfid_institution +
+    // propose_close 的 benchmark 重写需完整 register_cid_institution +
     // propose_create_institution + pass 流水线,留待 follow-up 任务卡补齐。
 }

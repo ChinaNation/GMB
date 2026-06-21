@@ -38,23 +38,23 @@ mod tests {
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct Row {
-        province: String,
-        city: String,
+        province_name: String,
+        city_name: String,
     }
 
     impl HasProvinceCity for Row {
         fn province(&self) -> &str {
-            &self.province
+            &self.province_name
         }
         fn city(&self) -> &str {
-            &self.city
+            &self.city_name
         }
     }
 
     fn row(p: &str, c: &str) -> Row {
         Row {
-            province: p.into(),
-            city: c.into(),
+            province_name: p.into(),
+            city_name: c.into(),
         }
     }
 

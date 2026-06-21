@@ -66,7 +66,7 @@ pub struct OffchainComponents {
 /// 启动清算行节点所需的 offchain 组件套件。
 ///
 /// [`base_path`]  节点数据根目录(下挂 `offchain_step1/ledger.enc`)。
-/// [`bank_main`]  本清算行**主账户地址**,用于 `EventListener` 过滤与本行相关
+/// [`bank_main`]  本清算行**主账户**,用于 `EventListener` 过滤与本行相关
 ///                的链上事件,以及 packer 批次 signing message 拼接。
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
 ///                (目前实现为 blake2b_256(password) XOR 流 + HMAC,见 `ledger.rs`)。

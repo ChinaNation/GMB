@@ -859,12 +859,12 @@ class ChainRpc {
         9 => 'InvalidAdminsLen',
         16 => 'ReservedBalanceRemaining',
         20 => 'EmptyPersonalName',
-        21 => 'PersonalDuoqianAlreadyExists',
+        21 => 'PersonalAlreadyExists',
         22 => 'CloseAlreadyPending',
         24 => 'ReserveFailed',
         26 => 'FeeWithdrawFailed',
         27 => 'CloseTransferBelowED',
-        28 => 'NotPersonalDuoqian',
+        28 => 'NotPersonalAccount',
         _ => null,
       };
 

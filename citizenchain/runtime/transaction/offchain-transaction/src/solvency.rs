@@ -17,7 +17,7 @@ use crate::{BankTotalDeposits, Config, Error};
 
 /// 校验清算行主账户在执行**一笔扣减**后仍保持偿付充足。
 ///
-/// [`bank_main`] 清算行主账户地址
+/// [`bank_main`] 清算行主账户
 /// [`debit_fen`] 即将从主账户扣除的分(跨行时是本金+fee;同行时是 fee 部分)
 ///
 /// 语义:

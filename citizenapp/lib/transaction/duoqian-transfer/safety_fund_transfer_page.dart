@@ -59,7 +59,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
-  late final String _safetyFundAddressHex;
+  late final String _safetyFundAccountHex;
   late final String _fromSs58;
   late WalletProfile _selectedWallet;
 
@@ -71,8 +71,8 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     if (hex == null) {
       throw StateError('国储会 InstitutionAccounts.anquanAccount 为空,无法发起安全基金转账');
     }
-    _safetyFundAddressHex = hex;
-    _fromSs58 = _accountHexToSs58(_safetyFundAddressHex);
+    _safetyFundAccountHex = hex;
+    _fromSs58 = _accountHexToSs58(_safetyFundAccountHex);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -92,7 +92,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(_safetyFundAddressHex);
+    final local = await store.read(_safetyFundAccountHex);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -102,10 +102,10 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     }
     try {
       final balance =
-          await ChainRpc().fetchFinalizedBalance(_safetyFundAddressHex);
+          await ChainRpc().fetchFinalizedBalance(_safetyFundAccountHex);
       try {
         await store.put(
-          accountHex: _safetyFundAddressHex,
+          accountHex: _safetyFundAccountHex,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -164,7 +164,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     }
     final beneficiaryBytes = Keyring().decodeAddress(address);
     final safetyFundBytes =
-        Uint8List.fromList(_hexToBytes(_safetyFundAddressHex));
+        Uint8List.fromList(_hexToBytes(_safetyFundAccountHex));
     if (_bytesEqual(beneficiaryBytes, safetyFundBytes)) {
       setState(() => _addressError = '收款地址不能与安全基金账户相同');
       return false;

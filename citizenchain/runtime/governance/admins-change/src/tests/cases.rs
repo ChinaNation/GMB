@@ -228,7 +228,7 @@ fn remove_pending_account_requires_existing_pending_account() {
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
             ORG_REN,
-            AdminAccountKind::PersonalDuoqian,
+            AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b],
             admin_a,
         ));
@@ -250,7 +250,7 @@ fn account_lifecycle_events_include_org() {
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
             ORG_REN,
-            AdminAccountKind::PersonalDuoqian,
+            AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b.clone()],
             admin_a.clone(),
         ));
@@ -263,7 +263,7 @@ fn account_lifecycle_events_include_org() {
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
             ORG_REN,
-            AdminAccountKind::PersonalDuoqian,
+            AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b],
             admin_a,
         ));
@@ -284,7 +284,7 @@ fn pending_account_is_not_exposed_to_active_business_api() {
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
             ORG_REN,
-            AdminAccountKind::PersonalDuoqian,
+            AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b.clone()],
             admin_a.clone()
         ));
@@ -337,7 +337,7 @@ fn account_lifecycle_trait_requires_votingengine_scope_for_activation() {
             b"org-mgmt",
             institution.clone(),
             ORG_REN,
-            AdminAccountKind::PersonalDuoqian,
+            AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b],
             admin_a.clone()
         ));
@@ -404,7 +404,7 @@ fn builtin_accounts_cannot_be_closed() {
 fn dynamic_accounts_can_be_closed() {
     new_test_ext().execute_with(|| {
         for (offset, org, kind) in [
-            (0u8, ORG_REN, AdminAccountKind::PersonalDuoqian),
+            (0u8, ORG_REN, AdminAccountKind::PersonalAccount),
             (1u8, ORG_PUP, AdminAccountKind::InstitutionAccount),
             (2u8, ORG_OTH, AdminAccountKind::InstitutionAccount),
         ] {
@@ -440,7 +440,7 @@ fn dynamic_accounts_can_be_closed() {
 fn dynamic_accounts_can_use_admin_set_change_entry() {
     new_test_ext().execute_with(|| {
         for (offset, org, kind) in [
-            (0u8, ORG_REN, AdminAccountKind::PersonalDuoqian),
+            (0u8, ORG_REN, AdminAccountKind::PersonalAccount),
             (1u8, ORG_PUP, AdminAccountKind::InstitutionAccount),
             (2u8, ORG_OTH, AdminAccountKind::InstitutionAccount),
         ] {

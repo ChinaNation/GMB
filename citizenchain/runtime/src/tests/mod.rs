@@ -7,17 +7,17 @@ use super::*;
 use crate::configs::is_nrc_admin;
 use crate::configs::*;
 use crate::ResolutionDestro;
+use cid_system::{CidVerifier, CidVoteVerifier};
 use frame_support::assert_ok;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use institution_asset::{InstitutionAsset, InstitutionAssetAction};
-use organization_manage::DuoqianReservedAccountChecker;
+use organization_manage::ReservedAccountGuard;
 use primitives::china::china_cb::CHINA_CB;
-use sfid_system::{SfidVerifier, SfidVoteVerifier};
 use sp_core::{sr25519, Pair};
 use sp_io::hashing::blake2_256;
 use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
 use votingengine::{
-    InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier, SfidEligibility,
+    CidEligibility, InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier,
 };
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -68,7 +68,7 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
     )
 }
 
-fn test_issuer_sfid_number() -> Vec<u8> {
+fn test_issuer_cid_number() -> Vec<u8> {
     b"CB-TEST-ISSUER".to_vec()
 }
 
@@ -86,9 +86,9 @@ fn build_bind_credential(
     scope_province_name: &[u8],
     account: &AccountId,
     binding_id: Hash,
-    bind_nonce: &sfid_system::pallet::NonceOf<Runtime>,
-) -> sfid_system::pallet::CredentialOf<Runtime> {
-    let issuer_sfid_number = test_issuer_sfid_number();
+    bind_nonce: &cid_system::pallet::NonceOf<Runtime>,
+) -> cid_system::pallet::CredentialOf<Runtime> {
+    let issuer_cid_number = test_issuer_cid_number();
     let issuer_main_account = test_issuer_main_account();
     let scope_city_name = test_scope_city_name();
     let payload = (
@@ -98,7 +98,7 @@ fn build_bind_credential(
         account,
         binding_id,
         bind_nonce.as_slice(),
-        issuer_sfid_number.as_slice(),
+        issuer_cid_number.as_slice(),
         &issuer_main_account,
         signer_pubkey,
         scope_province_name,
@@ -106,12 +106,12 @@ fn build_bind_credential(
     );
     let msg = blake2_256(&payload.encode());
     let sig = signing_pair.sign(&msg);
-    let signature: sfid_system::pallet::SignatureOf<Runtime> =
+    let signature: cid_system::pallet::SignatureOf<Runtime> =
         sig.0.to_vec().try_into().expect("signature fits");
-    sfid_system::BindCredential {
+    cid_system::BindCredential {
         binding_id,
         bind_nonce: bind_nonce.clone(),
-        issuer_sfid_number: issuer_sfid_number.try_into().expect("issuer sfid fits"),
+        issuer_cid_number: issuer_cid_number.try_into().expect("issuer cid fits"),
         issuer_main_account,
         signer_pubkey: *signer_pubkey,
         scope_province_name: scope_province_name
@@ -130,9 +130,9 @@ fn build_vote_signature(
     account: &AccountId,
     binding_id: Hash,
     proposal_id: u64,
-    vote_nonce: &sfid_system::pallet::NonceOf<Runtime>,
-) -> sfid_system::pallet::SignatureOf<Runtime> {
-    let issuer_sfid_number = test_issuer_sfid_number();
+    vote_nonce: &cid_system::pallet::NonceOf<Runtime>,
+) -> cid_system::pallet::SignatureOf<Runtime> {
+    let issuer_cid_number = test_issuer_cid_number();
     let issuer_main_account = test_issuer_main_account();
     let scope_city_name = test_scope_city_name();
     let payload = (
@@ -143,7 +143,7 @@ fn build_vote_signature(
         binding_id,
         proposal_id,
         vote_nonce.as_slice(),
-        issuer_sfid_number.as_slice(),
+        issuer_cid_number.as_slice(),
         &issuer_main_account,
         signer_pubkey,
         scope_province_name,
@@ -166,7 +166,7 @@ fn build_pop_signature(
     eligible_total: u64,
     pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
 ) -> votingengine::pallet::VoteSignatureOf<Runtime> {
-    let issuer_sfid_number = test_issuer_sfid_number();
+    let issuer_cid_number = test_issuer_cid_number();
     let issuer_main_account = test_issuer_main_account();
     let scope_city_name = test_scope_city_name();
     let payload = (
@@ -176,7 +176,7 @@ fn build_pop_signature(
         who,
         eligible_total,
         pop_nonce.as_slice(),
-        issuer_sfid_number.as_slice(),
+        issuer_cid_number.as_slice(),
         &issuer_main_account,
         signer_pubkey,
         scope_province_name,

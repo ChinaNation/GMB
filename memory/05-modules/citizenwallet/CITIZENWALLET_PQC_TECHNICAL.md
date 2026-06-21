@@ -12,3 +12,9 @@
 - **安全**:`AccountSeedV1`/私钥不出本机、不进二维码;payload 带 `genesis_hash`+`spec_version` 防跨链/跨升级重放;bootstrap 强度=sr25519,窗口须在量子破 sr25519 前关闭。
 
 > 实现以本文 + ADR-022 为准,旧路线不再适用。
+
+## CI 与发布边界
+
+- `citizenwallet-ci.yml` 的 push 自动 CI 只执行索引同步、Flutter 依赖安装、`flutter analyze`、`flutter test` 和 Debug APK 检查构建。
+- 正式签名 `公民钱包.apk` 只允许 GitHub 页面手动 `Run workflow` 构建和上传。
+- 手动发布只读取一个 GitHub Secret：`GMB_APP_KEY`。它与公民 App 共用，内容至少包含 `keystore=<base64后的jks>` 和 `password=<keystore密码>`；默认 Android key alias 为 `upload`，如现有 keystore 使用其他别名，可在同一个 secret 内增加 `alias=<key别名>`；key password 默认复用同一个 `password`。

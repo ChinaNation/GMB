@@ -115,7 +115,7 @@ fn force_advance_year_rejects_future_years() {
 fn interest_always_goes_to_hardcoded_multisig_account() {
     new_test_ext().execute_with(|| {
         run_to_block(10);
-        // 利息只能发到 CHINA_CH 中硬编码的省储行多签地址
+        // 利息只能发到 CHINA_CH 中硬编码的省储行多签账户
         let first_bank = &primitives::china::china_ch::CHINA_CH[0];
         let account = shengbank_account(0);
         let expected = first_bank.stake_amount * 100u128 / 10_000u128;

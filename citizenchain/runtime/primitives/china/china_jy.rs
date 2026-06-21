@@ -4,16 +4,16 @@ use hex_literal::hex;
 
 /// 公民教育委员会机构常量结构。
 pub struct ChinaJy {
-    pub sfid_full_name: &'static str,
-    pub sfid_number: &'static str,
+    pub cid_full_name: &'static str,
+    pub cid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
     pub admins: &'static [[u8; 32]],
 }
 
 pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
-    sfid_full_name: "中华民族联邦共和国国家公民教育委员会",
-    sfid_number: "BP001-GJY0Y-689724263-2026",
+    cid_full_name: "中华民族联邦共和国国家公民教育委员会",
+    cid_number: "BP001-GJY0Y-689724263-2026",
     main_account: hex!("a333dd55f9e2d7730249a42753f8ddae0486edf851f24a8e84e4afac34069ecd"),
     fee_account: hex!("670917e9e43ab5195745e334a063b0a03fdf275ee51777292627dfd92a09d377"),
     admins: &[

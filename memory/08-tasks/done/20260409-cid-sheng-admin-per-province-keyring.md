@@ -2,7 +2,7 @@
 
 - **任务 ID**: `20260409-cid-sheng-admin-per-province-keyring`
 - **模块**: citizenchain-runtime + citizencode-backend + cid-frontend
-- **优先级**: 高(解决 50K CITY_ADMIN 并发推链的单 nonce 瓶颈)
+- **优先级**: 高(解决 50K ADMIN 并发推链的单 nonce 瓶颈)
 - **前置依赖**: 无
 - **状态**: 待启动
 - **预估工作量**: 2~2.5 天
@@ -18,7 +18,7 @@
 - 每联邦管理员拥有**唯一一把**推链密钥(1 key,非多备份)
 - 该密钥**公钥注册到链上**,作为链端授权 signer
   同时后端生成新私钥并替换 Store 里旧的
-- CITY_ADMIN 推链时,后端自动用该 CITY_ADMIN 所属省的 sheng admin private key 签名
+- ADMIN 推链时,后端自动用该 ADMIN 所属省的 sheng admin private key 签名
 
 信任模型说明:
 - 省级密钥的独立性主要体现在**链上 nonce 并行**(43 条通道)和**审计可追溯**
@@ -226,7 +226,7 @@ POST /api/v1/admin/sheng-signer/:province/init
 POST /api/v1/admin/sheng-signer/:province/rotate
   body: { }
   action: 同 init,但是覆盖已有行(替换 = 轮换)
-  注意: 旧 pubkey 从此在链上不再被认证,老 CITY_ADMIN 推链会自动用新 pubkey
+  注意: 旧 pubkey 从此在链上不再被认证,老 ADMIN 推链会自动用新 pubkey
 
 GET /api/v1/admin/sheng-signer/list
   response: [{ province, pubkey, chain_version, updated_at, initialized }]
@@ -294,7 +294,7 @@ pub(crate) fn resolve_chain_signer(
 
 **2.9 验收**:
 - `cargo check` + 单元测试绿
-- 集成测试:unlock → init 辽宁 → 本省 CITY_ADMIN 推 `register_cid_institution` 成功 →
+- 集成测试:unlock → init 辽宁 → 本省 ADMIN 推 `register_cid_institution` 成功 →
   检查链上 extrinsic signer = sheng admin pubkey
 - 集成测试:rotate 辽宁 → 新 pubkey 生效 → 旧 pubkey 推链被链端拒绝
 
@@ -320,7 +320,7 @@ pub(crate) fn resolve_chain_signer(
 **3.2 初始化/轮换确认弹窗**:
 - 无输入框(后端自己生成 keypair)
 - 二次确认:"确认初始化 `辽宁省` 的推链密钥?此操作将上链"
-- 轮换特别警告:"轮换后旧 pubkey 立即失效,本省所有 CITY_ADMIN 未完成的推链请求需要重试"
+- 轮换特别警告:"轮换后旧 pubkey 立即失效,本省所有 ADMIN 未完成的推链请求需要重试"
 - 提交后显示 loading → 返回新 pubkey + tx_hash + chain_version
 
 **3.3 API 客户端**(`src/api/shengSigner.ts`):
@@ -333,7 +333,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 
 **3.4 验证**:
 - `npx tsc --noEmit` + `npm run build` 全绿
-  本省 CITY_ADMIN 登录 → 推 `register_cid_institution` → 链上成功
+  本省 ADMIN 登录 → 推 `register_cid_institution` → 链上成功
 
 ---
 
@@ -347,7 +347,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 第一次生产发布先在灰度节点 `true`,验证稳定后切换全量。
 
 **4.2 压测**:
-- 500 并发 CITY_ADMIN(模拟 30 省的 CITY_ADMIN 同时推链)
+- 500 并发 ADMIN(模拟 30 省的 ADMIN 同时推链)
 - 对比 flag on vs off 下的 p50 / p99 延迟、失败率
 - 目标:flag on 后 p99 低 10× 以上
 

@@ -11,8 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: citizenchain-${{ github.ref }}
@@ -111,9 +110,6 @@ jobs:
       - name: 同步桌面端版本
         shell: bash
         env:
-          CITIZENCHAIN_UPDATER_PUBKEY: ${{ vars.CITIZENCHAIN_TAURI_UPDATER_PUBKEY || secrets.CITIZENCHAIN_TAURI_UPDATER_PUBKEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
           CITIZENCHAIN_PUSH_BUNDLE_TARGETS: ${{ matrix.push_bundle_targets }}
           CITIZENCHAIN_MANUAL_BUNDLE_TARGETS: ${{ matrix.manual_bundle_targets }}
         run: |
@@ -122,8 +118,6 @@ jobs:
           const fs = require('fs');
           const version = process.env.CITIZENCHAIN_DESKTOP_VERSION;
           const isManualRelease = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
-          const updaterPubkey = (process.env.CITIZENCHAIN_UPDATER_PUBKEY || '').trim();
-          const signingPrivateKey = (process.env.TAURI_SIGNING_PRIVATE_KEY || '').trim();
           const targetSource = isManualRelease
             ? process.env.CITIZENCHAIN_MANUAL_BUNDLE_TARGETS
             : process.env.CITIZENCHAIN_PUSH_BUNDLE_TARGETS;
@@ -150,26 +144,42 @@ jobs:
           tauri.bundle = tauri.bundle || {};
           // 中文注释：push 只生成用户安装包；手动发布允许额外生成 updater 内部产物。
           tauri.bundle.targets = bundleTargets;
-          // 中文注释：只有手动 Run workflow 才生成 updater 签名产物；push 构建只做打包检查，不要求发布密钥。
-          if (isManualRelease) {
-            if (!updaterPubkey) {
-              throw new Error('手动发布缺少 CITIZENCHAIN_TAURI_UPDATER_PUBKEY repository variable/secret。');
-            }
-            if (!signingPrivateKey) {
-              throw new Error('手动发布缺少 TAURI_SIGNING_PRIVATE_KEY 或 CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY secret。');
-            }
-            tauri.bundle.createUpdaterArtifacts = true;
-            tauri.plugins = tauri.plugins || {};
-            tauri.plugins.updater = tauri.plugins.updater || {};
-            tauri.plugins.updater.pubkey = updaterPubkey;
-          } else {
-            delete tauri.bundle.createUpdaterArtifacts;
-          }
+          // 中文注释：push 构建只做打包检查；手动发布的 updater 公钥和签名密钥由后续手动步骤注入。
+          delete tauri.bundle.createUpdaterArtifacts;
           fs.writeFileSync(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`);
 
           console.log(`桌面端本次发布版本: ${version}`);
           console.log(`手动发布模式: ${isManualRelease ? '是' : '否'}`);
           console.log(`Tauri bundle targets: ${bundleTargets.join(',')}`);
+          NODE
+
+      - name: 配置手动发布 updater
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          GMB_TOP_PUBKEY: ${{ secrets.GMB_TOP_PUBKEY }}
+          GMB_TOP_KEY: ${{ secrets.GMB_TOP_KEY }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const updaterPubkey = (process.env.GMB_TOP_PUBKEY || '').trim();
+          const signingPrivateKey = (process.env.GMB_TOP_KEY || '').trim();
+          if (!updaterPubkey) {
+            throw new Error('手动发布缺少 GMB_TOP_PUBKEY secret。');
+          }
+          if (!signingPrivateKey) {
+            throw new Error('手动发布缺少 GMB_TOP_KEY secret。');
+          }
+
+          const tauriPath = 'citizenchain/node/tauri.conf.json';
+          const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+          tauri.bundle = tauri.bundle || {};
+          tauri.bundle.createUpdaterArtifacts = true;
+          tauri.plugins = tauri.plugins || {};
+          tauri.plugins.updater = tauri.plugins.updater || {};
+          tauri.plugins.updater.pubkey = updaterPubkey;
+          fs.writeFileSync(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`);
           NODE
 
       - name: 安装 Linux 构建依赖
@@ -228,11 +238,16 @@ jobs:
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --locked
 
-      - name: Tauri 打包
+      - name: Tauri 打包（push 检查）
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        working-directory: citizenchain/node
+        run: cargo tauri build --ci
+
+      - name: Tauri 打包（手动发布）
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         working-directory: citizenchain/node
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.GMB_TOP_KEY }}
         run: cargo tauri build --ci
 
       - name: 整理 Linux 产物
@@ -350,6 +365,8 @@ jobs:
     needs: build-desktop
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 拉取发布上下文
         uses: actions/checkout@v5
@@ -455,9 +472,10 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
-      CITIZENCHAIN_DEPLOY_USER: ${{ secrets.CITIZENCHAIN_DEPLOY_USER || vars.CITIZENCHAIN_DEPLOY_USER || 'ubuntu' }}
-      CITIZENCHAIN_DEPLOY_SSH_KEY: ${{ secrets.CITIZENCHAIN_DEPLOY_SSH_KEY || secrets.CITIZENCODE_DEPLOY_SSH_KEY || secrets.CITIZENCHAIN_SSH_KEY }}
-      CITIZENCHAIN_DEPLOY_SERVERS: |
+      GMB_SSH_USER: ubuntu
+      GMB_SSH_PORT: "22"
+      GMB_SSH_KEY: ${{ secrets.GMB_SSH_KEY }}
+      GMB_DEPLOY_SERVERS: |
         147.224.14.117
         64.181.239.233
         158.180.91.13
@@ -478,8 +496,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${CITIZENCHAIN_DEPLOY_SSH_KEY:-}" ]; then
-            echo "::error::缺少 CITIZENCHAIN_DEPLOY_SSH_KEY、CITIZENCODE_DEPLOY_SSH_KEY 或 CITIZENCHAIN_SSH_KEY，无法部署服务器。"
+          if [ -z "${GMB_SSH_KEY:-}" ]; then
+            echo "::error::缺少 GMB_SSH_KEY，无法部署服务器。"
             exit 1
           fi
 
@@ -498,16 +516,17 @@ jobs:
           mkdir -p "$ssh_dir"
           key_file="$ssh_dir/id_ed25519"
           known_hosts_file="$ssh_dir/known_hosts"
-          printf '%s\n' "$CITIZENCHAIN_DEPLOY_SSH_KEY" | tr -d '\r' > "$key_file"
+          printf '%s\n' "$GMB_SSH_KEY" | tr -d '\r' > "$key_file"
           chmod 600 "$key_file"
           : > "$known_hosts_file"
 
-          for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
-            ssh-keyscan -H "$server_ip" >> "$known_hosts_file"
+          for server_ip in $GMB_DEPLOY_SERVERS; do
+            ssh-keyscan -p "$GMB_SSH_PORT" -H "$server_ip" >> "$known_hosts_file"
           done
 
           ssh_opts=(
             -i "$key_file"
+            -p "$GMB_SSH_PORT"
             -o BatchMode=yes
             -o StrictHostKeyChecking=yes
             -o UserKnownHostsFile="$known_hosts_file"
@@ -517,16 +536,16 @@ jobs:
           )
 
           # 中文注释：先确认 6 台服务器都认可同一把部署密钥，避免前几台已升级、后几台因 SSH 失败留下半部署状态。
-          for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
-            ssh_target="$CITIZENCHAIN_DEPLOY_USER@$server_ip"
+          for server_ip in $GMB_DEPLOY_SERVERS; do
+            ssh_target="$GMB_SSH_USER@$server_ip"
             echo "::group::预检查 $ssh_target"
             ssh "${ssh_opts[@]}" "$ssh_target" "echo deploy-ready:\$(hostname):\$(whoami)"
             echo "::endgroup::"
           done
 
           # 中文注释：预检查全部通过后，再顺序滚动部署，避免同时重启导致链服务整体抖动。
-          for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
-            ssh_target="$CITIZENCHAIN_DEPLOY_USER@$server_ip"
+          for server_ip in $GMB_DEPLOY_SERVERS; do
+            ssh_target="$GMB_SSH_USER@$server_ip"
             echo "::group::部署 $ssh_target"
 
             ssh "${ssh_opts[@]}" "$ssh_target" "
@@ -568,6 +587,9 @@ jobs:
       - deploy-linux-servers
     if: ${{ github.event_name == 'workflow_dispatch' && success() }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     steps:
       - name: 删除上一次 CI 记录
         env:

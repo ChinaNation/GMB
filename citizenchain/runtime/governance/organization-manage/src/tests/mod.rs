@@ -80,16 +80,14 @@ impl pallet_balances::Config for Test {
 // ─── Trait mock 实现 ─────────────────────────────────────────────────────
 
 pub struct TestAccountValidator;
-impl primitives::multisig::DuoqianAccountValidator<AccountId32> for TestAccountValidator {
+impl primitives::multisig::AccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
-impl primitives::multisig::DuoqianReservedAccountChecker<AccountId32>
-    for TestReservedAccountChecker
-{
+impl primitives::multisig::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
@@ -112,31 +110,31 @@ impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
     }
 }
 
-/// SFID 双层签名 mock:仅当 signature == b"register-ok"
-/// 且 nonce/sfid_full_name/account_names/issuer/scope 字段都非空时通过。
-pub struct TestSfidInstitutionVerifier;
+/// CID 双层签名 mock:仅当 signature == b"register-ok"
+/// 且 nonce/cid_full_name/account_names/issuer/scope 字段都非空时通过。
+pub struct TestCidInstitutionVerifier;
 impl
-    crate::traits::SfidInstitutionVerifier<
+    crate::traits::CidInstitutionVerifier<
         AccountId32,
         crate::pallet::AccountNameOf<Test>,
         crate::pallet::RegisterNonceOf<Test>,
         crate::pallet::RegisterSignatureOf<Test>,
-    > for TestSfidInstitutionVerifier
+    > for TestCidInstitutionVerifier
 {
     fn verify_institution_registration(
-        sfid_number: &[u8],
-        sfid_full_name: &crate::pallet::AccountNameOf<Test>,
+        cid_number: &[u8],
+        cid_full_name: &crate::pallet::AccountNameOf<Test>,
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &crate::pallet::RegisterNonceOf<Test>,
         signature: &crate::pallet::RegisterSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
     ) -> bool {
-        !sfid_number.is_empty()
-            && !sfid_full_name.is_empty()
+        !cid_number.is_empty()
+            && !cid_full_name.is_empty()
             && !account_names.is_empty()
             && !nonce.is_empty()
             && !scope_province_name.is_empty()
@@ -145,9 +143,9 @@ impl
     }
 }
 
-pub struct TestSfidEligibility;
-impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestSfidEligibility
+pub struct TestCidEligibility;
+impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    for TestCidEligibility
 {
     fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
@@ -159,7 +157,7 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -182,7 +180,7 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -246,7 +244,7 @@ impl votingengine::Config for Test {
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type SfidEligibility = TestSfidEligibility;
+    type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
     // 接 organization-manage 的 InternalVoteExecutor (lib.rs 末尾导出)
@@ -296,10 +294,10 @@ impl pallet::Config for Test {
     type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
-    type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
+    type CidInstitutionVerifier = TestCidInstitutionVerifier;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
-    type MaxSfidNumberLength = ConstU32<{ primitives::core_const::SFID_NUMBER_MAX_BYTES }>;
+    type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
@@ -333,12 +331,12 @@ pub fn beneficiary() -> AccountId32 {
     AccountId32::new([99u8; 32])
 }
 
-pub fn sfid_number(s: &[u8]) -> pallet::SfidNumberOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("sfid_number fits")
+pub fn cid_number(s: &[u8]) -> pallet::CidNumberOf<Test> {
+    BoundedVec::try_from(s.to_vec()).expect("cid_number fits")
 }
 
-pub fn sfid_full_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("sfid_full_name fits")
+pub fn cid_full_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
+    BoundedVec::try_from(s.to_vec()).expect("cid_full_name fits")
 }
 
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {

@@ -13,23 +13,23 @@ use sp_std::vec::Vec;
 
 // ===== 一、地址校验 / 资金保护抽象 trait =====
 
-/// 账户地址合法性抽象：用于校验 duoqian_account 是否为本链合法哈希地址。
-pub trait DuoqianAccountValidator<AccountId> {
+/// 账户地址合法性抽象：用于校验 account 是否为本链合法哈希地址。
+pub trait AccountValidator<AccountId> {
     fn is_valid(address: &AccountId) -> bool;
 }
 
-impl<AccountId> DuoqianAccountValidator<AccountId> for () {
+impl<AccountId> AccountValidator<AccountId> for () {
     fn is_valid(_address: &AccountId) -> bool {
         true
     }
 }
 
-/// 保留地址校验抽象：用于拦截制度保留地址被 duoqian 抢注册。
-pub trait DuoqianReservedAccountChecker<AccountId> {
+/// 保留账户校验抽象：用于拦截制度保留账户被注册。
+pub trait ReservedAccountGuard<AccountId> {
     fn is_reserved(address: &AccountId) -> bool;
 }
 
-impl<AccountId> DuoqianReservedAccountChecker<AccountId> for () {
+impl<AccountId> ReservedAccountGuard<AccountId> for () {
     fn is_reserved(_address: &AccountId) -> bool {
         false
     }

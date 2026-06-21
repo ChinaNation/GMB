@@ -30,7 +30,7 @@
 - 结果：citizenapp 发起普通多签转账提案时，必须等待交易入块并在该区块事件中匹配 `DuoqianTransfer.TransferProposed` 后才返回真实 `proposal_id`。
 - 验证：已通过目标 Dart 静态检查；`dart test` 因项目未引入 `package:test` 无法直接运行。
 
-## 2026-05-15 追加修复：主账户地址 hex 误按 SS58 解码
+## 2026-05-15 追加修复：主账户 hex 误按 SS58 解码
 
 - 问题：普通多签转账提案提交前，`DuoqianTransferService.submitProposeTransfer` 把 `InstitutionInfo.mainAccount` 当成 SS58 地址传给 `Keyring().decodeAddress`，导致 64 位账户 hex 中的字符 `0` 被 Base58 校验拒绝。
 - 修复：`mainAccount` 按 32 字节 AccountId hex 严格解码；用户输入的收款地址继续按 SS58 解码。

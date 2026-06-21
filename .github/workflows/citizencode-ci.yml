@@ -78,6 +78,7 @@ jobs:
 
       # ── 构建 .deb 安装包 ──
       - name: 构建 citizencode.deb
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           DEB_ROOT="deb-pkg"
           mkdir -p "$DEB_ROOT/DEBIAN"

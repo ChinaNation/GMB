@@ -85,13 +85,13 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 #[test]
-fn on_sfid_bound_issues_reward() {
+fn on_cid_bound_issues_reward() {
     new_test_ext().execute_with(|| {
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"sfid-a");
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-a");
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id);
+        >>::on_cid_bound(&1, binding_id);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
@@ -111,12 +111,12 @@ fn on_sfid_bound_issues_reward() {
 fn max_cap_stops_reward() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT);
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"sfid-cap");
+        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-cap");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id);
+        >>::on_cid_bound(&1, binding_id);
 
         assert_eq!(Balances::free_balance(1), 0);
         assert_eq!(RewardedCount::<Test>::get(), CITIZEN_ISSUANCE_MAX_COUNT);
@@ -139,19 +139,19 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
             } else {
                 CITIZEN_ISSUANCE_NORMAL_REWARD
             };
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-last-slot");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-over-cap");
+        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-last-slot");
+        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-over-cap");
 
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT.saturating_sub(1));
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_a);
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        >>::on_cid_bound(&1, binding_id_a);
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&2, binding_id_b);
+        >>::on_cid_bound(&2, binding_id_b);
 
         assert_eq!(Balances::free_balance(1), last_reward_amount);
         assert_eq!(Balances::free_balance(2), 0);
@@ -171,18 +171,18 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
 }
 
 #[test]
-fn same_sfid_only_rewards_once() {
+fn same_cid_only_rewards_once() {
     new_test_ext().execute_with(|| {
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"sfid-repeat");
+        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-repeat");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id);
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        >>::on_cid_bound(&1, binding_id);
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id);
+        >>::on_cid_bound(&1, binding_id);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
@@ -199,19 +199,19 @@ fn same_sfid_only_rewards_once() {
 #[test]
 fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-tier-a");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-tier-b");
+        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-tier-a");
+        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-tier-b");
 
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_a);
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        >>::on_cid_bound(&1, binding_id_a);
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&2, binding_id_b);
+        >>::on_cid_bound(&2, binding_id_b);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_NORMAL_REWARD);
@@ -250,12 +250,12 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
 fn boundary_switches_to_normal_reward_at_high_reward_count() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT);
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"sfid-boundary");
+        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-boundary");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id);
+        >>::on_cid_bound(&1, binding_id);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_NORMAL_REWARD);
         assert_eq!(
@@ -269,12 +269,12 @@ fn boundary_switches_to_normal_reward_at_high_reward_count() {
 fn high_reward_count_minus_one_still_gets_high_reward() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"sfid-high-minus-1");
+        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-high-minus-1");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id);
+        >>::on_cid_bound(&1, binding_id);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
@@ -288,19 +288,19 @@ fn high_reward_count_minus_one_still_gets_high_reward() {
 }
 
 #[test]
-fn same_account_second_sfid_is_not_marked_reward_claimed() {
+fn same_account_second_cid_is_not_marked_reward_claimed() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-claim-a");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-claim-b");
+        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-claim-a");
+        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-claim-b");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_a);
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        >>::on_cid_bound(&1, binding_id_a);
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_b);
+        >>::on_cid_bound(&1, binding_id_b);
 
         assert!(RewardClaimed::<Test>::contains_key(binding_id_a));
         assert!(!RewardClaimed::<Test>::contains_key(binding_id_b));
@@ -316,19 +316,19 @@ fn same_account_second_sfid_is_not_marked_reward_claimed() {
 }
 
 #[test]
-fn different_accounts_and_sfids_reward_independently() {
+fn different_accounts_and_cids_reward_independently() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-a-2");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-b-2");
+        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-a-2");
+        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-b-2");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_a);
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        >>::on_cid_bound(&1, binding_id_a);
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&2, binding_id_b);
+        >>::on_cid_bound(&2, binding_id_b);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_HIGH_REWARD);
@@ -337,19 +337,19 @@ fn different_accounts_and_sfids_reward_independently() {
 }
 
 #[test]
-fn same_account_different_sfids_only_rewards_once() {
+fn same_account_different_cids_only_rewards_once() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-acc-a");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-acc-b");
+        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-acc-a");
+        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-acc-b");
 
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_a);
-        <CitizenIssuance as sfid_system::OnSfidBound<
+        >>::on_cid_bound(&1, binding_id_a);
+        <CitizenIssuance as cid_system::OnCidBound<
             u64,
             <Test as frame_system::Config>::Hash,
-        >>::on_sfid_bound(&1, binding_id_b);
+        >>::on_cid_bound(&1, binding_id_b);
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);

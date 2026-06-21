@@ -2,7 +2,7 @@
 //
 // golden 向量取自 governance_institution_registry.generated.dart 的国储会/中枢省
 // 制度账户 hex —— 这些地址即链上派生结果,可交叉验证本端派生与
-// citizenchain primitives::core_const::derive_duoqian_account 字节对齐:
+// citizenchain primitives::core_const::derive_account 字节对齐:
 //   preimage = b"DUOQIAN" || op_tag || ss58.to_le_bytes() || payload
 //   OP_MAIN(0x00)/OP_FEE(0x01)/OP_AN(0x03)/OP_HE(0x04): payload = cid_number
 //   OP_INSTITUTION(0x06): payload = cid_number || account_name
@@ -35,8 +35,7 @@ void main() {
 
   group('机构账户派生 golden 向量(链上注册表交叉验证)', () {
     test('国储会主账户 OP_MAIN', () {
-      expect(
-          hexFromAccountId(deriveInstitutionMainAccountId(nrcCid)), nrcMain);
+      expect(hexFromAccountId(deriveInstitutionMainAccountId(nrcCid)), nrcMain);
     });
 
     test('国储会费用账户 OP_FEE', () {
@@ -44,8 +43,7 @@ void main() {
     });
 
     test('中枢省主账户 / 费用账户', () {
-      expect(
-          hexFromAccountId(deriveInstitutionMainAccountId(prcCid)), prcMain);
+      expect(hexFromAccountId(deriveInstitutionMainAccountId(prcCid)), prcMain);
       expect(hexFromAccountId(deriveInstitutionFeeAccountId(prcCid)), prcFee);
     });
 
@@ -99,7 +97,7 @@ void main() {
       );
     });
 
-    test('自定义账户地址不同于主账户', () {
+    test('自定义账户不同于主账户', () {
       expect(
         hexFromAccountId(deriveInstitutionCustomAccountId(nrcCid, '专户')),
         isNot(hexFromAccountId(deriveInstitutionMainAccountId(nrcCid))),
@@ -125,13 +123,13 @@ void main() {
     test('SS58 输出与 core 派生一致', () {
       final creator = Uint8List.fromList(List<int>.generate(32, (i) => i));
       final viaCore = ss58FromAccountId(
-        deriveDuoqianAccountId(
+        deriveAccountId(
           opTag: kOpPersonal,
           payload: <int>[...creator, ...utf8.encode('个人钱包')],
         ),
       );
       expect(
-        deriveDuoqianPersonalAddress(
+        derivePersonalAccountSs58(
           creatorPubkey: creator,
           accountName: '个人钱包',
         ),
@@ -141,7 +139,7 @@ void main() {
 
     test('creator 非 32 字节抛错', () {
       expect(
-        () => deriveDuoqianPersonalAddress(
+        () => derivePersonalAccountSs58(
           creatorPubkey: Uint8List(31),
           accountName: 'x',
         ),

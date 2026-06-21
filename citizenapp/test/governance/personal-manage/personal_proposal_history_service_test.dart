@@ -19,13 +19,13 @@ void main() {
     await WalletIsar.instance.resetForTest();
   });
 
-  const personalAddress = 'aabbccddeeff00112233445566778899'
+  const personalAccount = 'aabbccddeeff00112233445566778899'
       '00112233445566778899aabbccddeeff';
 
   test('recordOrUpdate inserts new entity then readAllFromIsar 返回单条', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 42,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -34,7 +34,7 @@ void main() {
       snapshot: {'name': 'TestPersonal', 'amount_fen': '1000'},
     );
 
-    final list = await service.fetchAll(personalAddress);
+    final list = await service.fetchAll(personalAccount);
     expect(list.length, 1);
     expect(list[0].proposalId, 42);
     expect(list[0].action, PersonalProposalAction.create);
@@ -52,7 +52,7 @@ void main() {
       'snapshot 沿用旧值若新调用未传', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 7,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -60,21 +60,21 @@ void main() {
       noVotes: 0,
       snapshot: {'name': 'X'},
     );
-    final firstList = await service.fetchAll(personalAddress);
+    final firstList = await service.fetchAll(personalAccount);
     final firstCreatedAt = firstList[0].createdAtMillis;
 
     await Future<void>.delayed(const Duration(milliseconds: 5));
 
     // 二次写入只更新投票计数和状态,不传 snapshot
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 7,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.executed,
       yesVotes: 3,
       noVotes: 0,
     );
-    final list = await service.fetchAll(personalAddress);
+    final list = await service.fetchAll(personalAccount);
     expect(list.length, 1);
     expect(list[0].status, PersonalProposalStatus.executed);
     expect(list[0].yesVotes, 3);
@@ -87,26 +87,26 @@ void main() {
   test('voting → executed 转换会写入 finalStatusAtMillis', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 1,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
       yesVotes: 0,
       noVotes: 0,
     );
-    var list = await service.fetchAll(personalAddress);
+    var list = await service.fetchAll(personalAccount);
     expect(list[0].finalStatusAtMillis, isNull);
     expect(list[0].isFinal, isFalse);
 
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 1,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.rejected,
       yesVotes: 0,
       noVotes: 3,
     );
-    list = await service.fetchAll(personalAddress);
+    list = await service.fetchAll(personalAccount);
     expect(list[0].finalStatusAtMillis, isNotNull);
     expect(list[0].isFinal, isTrue);
   });
@@ -114,7 +114,7 @@ void main() {
   test('多个 proposal 按 createdAt desc 排序', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 100,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -123,7 +123,7 @@ void main() {
     );
     await Future<void>.delayed(const Duration(milliseconds: 5));
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 101,
       action: PersonalProposalAction.transfer,
       status: PersonalProposalStatus.voting,
@@ -132,7 +132,7 @@ void main() {
     );
     await Future<void>.delayed(const Duration(milliseconds: 5));
     await service.recordOrUpdate(
-      personalAddressHex: personalAddress,
+      personalAccountHex: personalAccount,
       proposalId: 102,
       action: PersonalProposalAction.close,
       status: PersonalProposalStatus.executed,
@@ -140,7 +140,7 @@ void main() {
       noVotes: 0,
     );
 
-    final list = await service.fetchAll(personalAddress);
+    final list = await service.fetchAll(personalAccount);
     expect(list.map((v) => v.proposalId).toList(), [102, 101, 100]);
   });
 

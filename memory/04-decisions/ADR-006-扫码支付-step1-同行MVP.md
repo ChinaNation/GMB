@@ -26,8 +26,8 @@
 - CID `K1` 必须是 **S(私法人)**或 **F(非法人)**两者之一 → 私权机构
 - 每个清算行在 CID 系统注册时一次性生成:
   - `cid_number`
-  - 主账户地址 = `blake2b_256("GMB_DUOQIAN" || cid_number || "主账户" || nonce_1)[0..32]`
-  - 费用账户地址 = `blake2b_256("GMB_DUOQIAN" || cid_number || "费用账户" || nonce_2)[0..32]`
+  - 主账户 = `blake2b_256("GMB_DUOQIAN" || cid_number || "主账户" || nonce_1)[0..32]`
+  - 费用账户 = `blake2b_256("GMB_DUOQIAN" || cid_number || "费用账户" || nonce_2)[0..32]`
 - **管理员数量 N 由链上 `propose_create` 时写入**,阈值 T ≥ ⌈N/2⌉,非固定 9
 - 清算行在链上两步注册(CID 颁证 + duoqian-manage),**不经省储行审批**
 
@@ -50,7 +50,7 @@
 - 前置铁律(无回落):
   - 付款方 L3 必须已绑定清算行
   - 收款方 L3 必须已绑定清算行
-  - 收款方清算行 DuoqianAccount Active
+  - 收款方清算行 Account Active
 - 二维码遵循 `memory/01-architecture/qr/qr-protocol-spec.md` 的 `CITIZEN_QR_V1 + user_transfer`,`body.bank` 填**收款方绑定的清算行主账户 SS58**
 - 每笔 L3 私钥 sr25519 签名 `PaymentIntent`,防重放通过 `L3PaymentNonce` 单调 + `ProcessedOffchainTx`
 - 费率 Step 1 **全局硬编码 5 bp(0.05%)**,最低 1 分;Step 2 改为 `L2FeeRateBp` Storage + 延迟生效

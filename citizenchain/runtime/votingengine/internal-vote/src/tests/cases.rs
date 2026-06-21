@@ -205,7 +205,7 @@ fn institution_account_orgs_use_dynamic_pending_snapshot_and_threshold() {
 #[test]
 fn pending_account_provider_threshold_requires_all_admins() {
     new_test_ext().execute_with(|| {
-        set_pending_duoqian_threshold(1);
+        set_pending_account_threshold(1);
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
@@ -257,9 +257,9 @@ fn explicit_threshold_proposal_requires_all_snapshot_admins() {
 }
 
 #[test]
-fn registered_duoqian_threshold_must_not_exceed_snapshot_size() {
+fn registered_account_threshold_must_not_exceed_snapshot_size() {
     new_test_ext().execute_with(|| {
-        set_registered_duoqian_threshold(4);
+        set_registered_account_threshold(4);
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
@@ -277,7 +277,7 @@ fn registered_duoqian_threshold_must_not_exceed_snapshot_size() {
 #[test]
 fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
     new_test_ext().execute_with(|| {
-        set_registered_duoqian_threshold(4);
+        set_registered_account_threshold(4);
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
@@ -333,9 +333,9 @@ fn snapshot_rejects_duplicate_admin_list() {
 }
 
 #[test]
-fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
+fn registered_account_proposal_snapshots_dynamic_threshold() {
     new_test_ext().execute_with(|| {
-        set_registered_duoqian_threshold(3);
+        set_registered_account_threshold(3);
         let proposal_id = create_internal_proposal_via_engine(
             registered_account_admin(0),
             ORG_REN,
@@ -343,7 +343,7 @@ fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
         );
 
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
-        set_registered_duoqian_threshold(2);
+        set_registered_account_threshold(2);
 
         assert_ok!(cast_internal_vote_via_extrinsic(
             registered_account_admin(1),
@@ -375,7 +375,7 @@ fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
 fn institution_account_orgs_snapshot_dynamic_active_threshold() {
     new_test_ext().execute_with(|| {
         for org in [ORG_PUP, ORG_OTH] {
-            set_registered_duoqian_threshold(3);
+            set_registered_account_threshold(3);
             let proposal_id = create_internal_proposal_via_engine(
                 registered_account_admin(0),
                 org,
@@ -674,7 +674,7 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
                 10,
                 snapshot_nonce_ok(),
                 snapshot_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
@@ -900,7 +900,7 @@ fn population_snapshot_nonce_cannot_be_reused_across_proposals() {
                 11,
                 nonce,
                 snapshot_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
@@ -923,14 +923,14 @@ fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
                 binding_id_ok(),
                 vote_nonce("n-1"),
                 vote_sig_bad(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
                 city_ok(),
                 true
             ),
-            joint_vote::Error::<Test>::InvalidSfidVoteCredential
+            joint_vote::Error::<Test>::InvalidCidVoteCredential
         );
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
@@ -939,7 +939,7 @@ fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
             binding_id_ok(),
             vote_nonce("n-2"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -951,7 +951,7 @@ fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
 }
 
 #[test]
-fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
+fn citizen_vote_same_cid_can_only_vote_once_per_proposal() {
     new_test_ext().execute_with(|| {
         insert_citizen_proposal(0, 10, 100);
 
@@ -961,7 +961,7 @@ fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
             binding_id_ok(),
             vote_nonce("n-1"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -976,7 +976,7 @@ fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
                 binding_id_ok(),
                 vote_nonce("n-2"),
                 vote_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
@@ -989,7 +989,7 @@ fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
 }
 
 #[test]
-fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
+fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_cid() {
     new_test_ext().execute_with(|| {
         insert_citizen_proposal(0, 10, 100);
         insert_citizen_proposal(1, 10, 100);
@@ -1000,7 +1000,7 @@ fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
             binding_id_ok(),
             vote_nonce("same"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -1014,7 +1014,7 @@ fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
             binding_id_ok(),
             vote_nonce("same"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -1036,7 +1036,7 @@ fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
                 binding_id_ok(),
                 vote_nonce("x-1"),
                 vote_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
@@ -1098,7 +1098,7 @@ fn citizen_timeout_auto_registers_cleanup_and_clears_vote_nonces() {
             binding_id_ok(),
             vote_nonce("timeout-cleanup"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -1140,17 +1140,17 @@ fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
             <joint_vote::Pallet<Test>>::do_jointreferendum_vote(
                 nrc_admin(0),
                 0,
-                <Test as frame_system::Config>::Hashing::hash(b"sfid-other"),
+                <Test as frame_system::Config>::Hashing::hash(b"cid-other"),
                 vote_nonce("n-ineligible-hash"),
                 vote_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
                 city_ok(),
                 true
             ),
-            joint_vote::Error::<Test>::SfidNotEligible
+            joint_vote::Error::<Test>::CidNotEligible
         );
 
         let outsider = AccountId32::new([7u8; 32]);
@@ -1161,14 +1161,14 @@ fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
                 binding_id_ok(),
                 vote_nonce("n-ineligible"),
                 vote_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
                 city_ok(),
                 true
             ),
-            joint_vote::Error::<Test>::SfidNotEligible
+            joint_vote::Error::<Test>::CidNotEligible
         );
     });
 }
@@ -1186,7 +1186,7 @@ fn citizen_vote_rejects_when_not_in_citizen_stage() {
                 binding_id_ok(),
                 vote_nonce("joint-stage"),
                 vote_sig_ok(),
-                issuer_sfid_number_ok(),
+                issuer_cid_number_ok(),
                 issuer_main_account_ok(),
                 signer_pubkey_ok(),
                 province_ok(),
@@ -1210,7 +1210,7 @@ fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
             binding_id_ok(),
             vote_nonce("immediate-pass"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -1235,7 +1235,7 @@ fn delayed_cleanup_cleans_used_vote_nonce_after_retention() {
             binding_id_ok(),
             vote_nonce("immediate-cleanup"),
             vote_sig_ok(),
-            issuer_sfid_number_ok(),
+            issuer_cid_number_ok(),
             issuer_main_account_ok(),
             signer_pubkey_ok(),
             province_ok(),
@@ -1767,9 +1767,9 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
     new_test_ext().execute_with(|| {
         let proposal_id = 42u64;
         let citizen_hashes = [
-            <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-1"),
-            <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-2"),
-            <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-3"),
+            <Test as frame_system::Config>::Hashing::hash(b"cleanup-cid-1"),
+            <Test as frame_system::Config>::Hashing::hash(b"cleanup-cid-2"),
+            <Test as frame_system::Config>::Hashing::hash(b"cleanup-cid-3"),
         ];
 
         insert_citizen_proposal(proposal_id, 10, 100);
@@ -1811,17 +1811,17 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
         assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
         assert!(!has_used_vote_nonce(
             proposal_id,
-            <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-1"),
+            <Test as frame_system::Config>::Hashing::hash(b"cleanup-cid-1"),
             "cleanup-nonce-1"
         ));
         assert!(!has_used_vote_nonce(
             proposal_id,
-            <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-2"),
+            <Test as frame_system::Config>::Hashing::hash(b"cleanup-cid-2"),
             "cleanup-nonce-2"
         ));
         assert!(!has_used_vote_nonce(
             proposal_id,
-            <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-3"),
+            <Test as frame_system::Config>::Hashing::hash(b"cleanup-cid-3"),
             "cleanup-nonce-3"
         ));
     });

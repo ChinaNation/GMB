@@ -23,7 +23,7 @@ pub const OP_HE: u8 = 0x04;
 pub const OP_PERSONAL: u8 = 0x05;
 pub const OP_INSTITUTION: u8 = 0x06;
 
-pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
+pub fn derive_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
     // DUOQIAN || op_tag || ss58.to_le_bytes() || payload -> blake2_256
 }
 ```

@@ -3,7 +3,7 @@
 //! `do_propose_create` 由 lib.rs 内 call_index=0 入口 delegate 调用。
 //! 业务流程：
 //! 1. 校验发起人未被保护、账户名非空、管理员集合合法、余额充足
-//! 2. 派生 `derive_personal_duoqian_account(creator, account_name)` —— 地址只依赖
+//! 2. 派生 `derive_personal_account(creator, account_name)` —— 地址只依赖
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalAccounts 占位
@@ -27,9 +27,7 @@ use crate::pallet::{
 use crate::types::{PersonalAccount, PersonalCreateAction, PersonalStatus};
 use crate::BalanceOf;
 use crate::ACTION_CREATE;
-use primitives::multisig::{
-    DuoqianAccountValidator, DuoqianReservedAccountChecker, ProtectedSourceChecker,
-};
+use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_create<T: Config>(
@@ -53,7 +51,7 @@ pub(crate) fn do_propose_create<T: Config>(
 
     let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
-    let account = Pallet::<T>::derive_personal_duoqian_account(&who, account_name.as_slice())?;
+    let account = Pallet::<T>::derive_personal_account(&who, account_name.as_slice())?;
     ensure!(
         !PersonalAccounts::<T>::contains_key(&account),
         Error::<T>::PersonalAlreadyExists
@@ -115,7 +113,7 @@ pub(crate) fn do_propose_create<T: Config>(
         if let Err(err) = Pallet::<T>::create_pending_admin_account_for_proposal(
             proposal_id,
             institution.clone(),
-            admins_change::AdminAccountKind::PersonalDuoqian,
+            admins_change::AdminAccountKind::PersonalAccount,
             &admins,
             &who,
         ) {

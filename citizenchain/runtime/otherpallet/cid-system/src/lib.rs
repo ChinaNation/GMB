@@ -1,6 +1,6 @@
-//! # SFID 绑定与资格校验模块 (sfid-system)
+//! # CID 绑定与资格校验模块 (cid-system)
 //!
-//! 本模块只负责 SFID 绑定、解绑和公民投票资格消费。凭证签发身份不再由
+//! 本模块只负责 CID 绑定、解绑和公民投票资格消费。凭证签发身份不再由
 //! 本 pallet 维护特殊花名册，而是由 runtime 注入的验签器按
 //! `issuer_main_account -> admins-change::AdminAccounts[issuer_main_account].admins`
 //! 判断 `signer_pubkey` 是否为签发机构管理员。
@@ -21,9 +21,9 @@ use frame_support::BoundedVec;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-/// 中文注释:签发机构 SFID 号上限。实际 SFID 长度由 primitives 约束;这里避免
-/// sfid-system 直接依赖业务常量,保持凭证容器自洽。
-pub type IssuerSfidBoundOuter = BoundedVec<u8, ConstU32<128>>;
+/// 中文注释:签发机构 CID 号上限。实际 CID 长度由 primitives 约束;这里避免
+/// cid-system 直接依赖业务常量,保持凭证容器自洽。
+pub type IssuerCidBoundOuter = BoundedVec<u8, ConstU32<128>>;
 
 /// 中文注释:业务作用域名称上限,用于省/市/镇等作用域字段。
 pub type ScopeNameBoundOuter = BoundedVec<u8, ConstU32<64>>;
@@ -42,12 +42,12 @@ pub type ScopeNameBoundOuter = BoundedVec<u8, ConstU32<64>>;
 /// 中文注释:绑定凭证结构体。
 ///
 /// 签发身份统一为机构模型:
-/// `issuer_sfid_number + issuer_main_account + signer_pubkey`。
+/// `issuer_cid_number + issuer_main_account + signer_pubkey`。
 /// `scope_*` 只表示业务作用域,不再表示签发人身份。
 pub struct BindCredential<AccountId, Hash, Nonce, Signature> {
     pub binding_id: Hash,
     pub bind_nonce: Nonce,
-    pub issuer_sfid_number: IssuerSfidBoundOuter,
+    pub issuer_cid_number: IssuerCidBoundOuter,
     pub issuer_main_account: AccountId,
     pub signer_pubkey: [u8; 32],
     pub scope_province_name: ScopeNameBoundOuter,
@@ -55,15 +55,15 @@ pub struct BindCredential<AccountId, Hash, Nonce, Signature> {
     pub signature: Signature,
 }
 
-/// 中文注释:SFID 系统绑定验签接口,由 Runtime 注入具体实现。
-pub trait SfidVerifier<AccountId, Hash, Nonce, Signature> {
+/// 中文注释:CID 系统绑定验签接口,由 Runtime 注入具体实现。
+pub trait CidVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify(
         account: &AccountId,
         credential: &BindCredential<AccountId, Hash, Nonce, Signature>,
     ) -> bool;
 }
 
-impl<AccountId, Hash, Nonce, Signature> SfidVerifier<AccountId, Hash, Nonce, Signature> for () {
+impl<AccountId, Hash, Nonce, Signature> CidVerifier<AccountId, Hash, Nonce, Signature> for () {
     fn verify(
         _account: &AccountId,
         _credential: &BindCredential<AccountId, Hash, Nonce, Signature>,
@@ -74,14 +74,14 @@ impl<AccountId, Hash, Nonce, Signature> SfidVerifier<AccountId, Hash, Nonce, Sig
 
 /// 中文注释:公民投票实时验签接口。runtime 必须确认 `signer_pubkey` 属于
 /// `issuer_main_account` 对应的 admins 集合,再验证签名。
-pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
+pub trait CidVoteVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify_vote(
         account: &AccountId,
         binding_id: Hash,
         proposal_id: u64,
         nonce: &Nonce,
         signature: &Signature,
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -89,14 +89,14 @@ pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
     ) -> bool;
 }
 
-impl<AccountId, Hash, Nonce, Signature> SfidVoteVerifier<AccountId, Hash, Nonce, Signature> for () {
+impl<AccountId, Hash, Nonce, Signature> CidVoteVerifier<AccountId, Hash, Nonce, Signature> for () {
     fn verify_vote(
         _account: &AccountId,
         _binding_id: Hash,
         _proposal_id: u64,
         _nonce: &Nonce,
         _signature: &Signature,
-        _issuer_sfid_number: &[u8],
+        _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId,
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
@@ -107,23 +107,23 @@ impl<AccountId, Hash, Nonce, Signature> SfidVoteVerifier<AccountId, Hash, Nonce,
 }
 
 /// 中文注释:绑定成功后的钩子,用于让发行模块基于 binding_id 做一次性奖励判定。
-pub trait OnSfidBound<AccountId, Hash> {
-    fn on_sfid_bound(_who: &AccountId, _binding_id: Hash) {}
+pub trait OnCidBound<AccountId, Hash> {
+    fn on_cid_bound(_who: &AccountId, _binding_id: Hash) {}
 }
 
-impl<AccountId, Hash> OnSfidBound<AccountId, Hash> for () {}
+impl<AccountId, Hash> OnCidBound<AccountId, Hash> for () {}
 
-/// 中文注释:回调 weight 声明接口,供 bind_sfid 在申报 weight 时叠加回调预算。
-pub trait OnSfidBoundWeight {
-    fn on_sfid_bound_weight() -> Weight {
+/// 中文注释:回调 weight 声明接口,供 bind_cid 在申报 weight 时叠加回调预算。
+pub trait OnCidBoundWeight {
+    fn on_cid_bound_weight() -> Weight {
         Weight::zero()
     }
 }
 
-impl OnSfidBoundWeight for () {}
+impl OnCidBoundWeight for () {}
 
 /// 中文注释:给投票模块使用的统一资格接口。
-pub trait SfidEligibilityProvider<AccountId, Hash> {
+pub trait CidEligibilityProvider<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
         binding_id: &Hash,
@@ -131,7 +131,7 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        issuer_sfid_number: &[u8],
+        issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
@@ -170,8 +170,8 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCredentialSignatureLength: Get<u32>;
 
-        /// 中文注释:SFID 系统绑定验签器(外部接口桥接点)。
-        type SfidVerifier: SfidVerifier<
+        /// 中文注释:CID 系统绑定验签器(外部接口桥接点)。
+        type CidVerifier: CidVerifier<
             Self::AccountId,
             Self::Hash,
             NonceOf<Self>,
@@ -179,7 +179,7 @@ pub mod pallet {
         >;
 
         /// 中文注释:公民投票实时验签器。
-        type SfidVoteVerifier: SfidVoteVerifier<
+        type CidVoteVerifier: CidVoteVerifier<
             Self::AccountId,
             Self::Hash,
             NonceOf<Self>,
@@ -187,9 +187,9 @@ pub mod pallet {
         >;
 
         /// 中文注释:绑定后回调到发行模块发放认证奖励。
-        type OnSfidBound: OnSfidBound<Self::AccountId, Self::Hash> + OnSfidBoundWeight;
+        type OnCidBound: OnCidBound<Self::AccountId, Self::Hash> + OnCidBoundWeight;
 
-        /// 中文注释:`unbind_sfid` 由治理 origin / Root / 受信任管理员调用。
+        /// 中文注释:`unbind_cid` 由治理 origin / Root / 受信任管理员调用。
         type UnbindOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
         /// 权重信息:由 runtime 注入实际 benchmark 结果。
@@ -237,14 +237,14 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 中文注释:SFID 绑定成功,记录账户、binding_id 和 nonce 哈希。
-        SfidBound {
+        /// 中文注释:CID 绑定成功,记录账户、binding_id 和 nonce 哈希。
+        CidBound {
             who: T::AccountId,
             binding_id: T::Hash,
             bind_nonce_hash: T::Hash,
         },
-        /// 中文注释:受治理 origin 授权解绑用户 SFID,记录被解绑用户和 binding_id。
-        SfidUnbound {
+        /// 中文注释:受治理 origin 授权解绑用户 CID,记录被解绑用户和 binding_id。
+        CidUnbound {
             who: T::AccountId,
             binding_id: T::Hash,
         },
@@ -256,25 +256,25 @@ pub mod pallet {
         EmptyBindNonce,
         /// 中文注释:该 bind_nonce 已被使用(防重放)。
         BindNonceAlreadyUsed,
-        /// 中文注释:SFID 绑定签名验证失败。
-        InvalidSfidBindingSignature,
+        /// 中文注释:CID 绑定签名验证失败。
+        InvalidCidBindingSignature,
         /// 中文注释:该 binding_id 已被另一个账户绑定。
         BindingIdAlreadyBoundToAnotherAccount,
         /// 中文注释:该账户已绑定到同一 binding_id,无需重复操作。
         SameBindingIdAlreadyBound,
-        /// 中文注释:账户当前未绑定 SFID,无法解绑。
+        /// 中文注释:账户当前未绑定 CID,无法解绑。
         NotBound,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 中文注释:使用 SFID 系统签发的绑定消息把钱包和 binding_id 绑定。
+        /// 中文注释:使用 CID 系统签发的绑定消息把钱包和 binding_id 绑定。
         #[pallet::call_index(0)]
         #[pallet::weight(
-            T::WeightInfo::bind_sfid()
-                .saturating_add(T::OnSfidBound::on_sfid_bound_weight())
+            T::WeightInfo::bind_cid()
+                .saturating_add(T::OnCidBound::on_cid_bound_weight())
         )]
-        pub fn bind_sfid(origin: OriginFor<T>, credential: CredentialOf<T>) -> DispatchResult {
+        pub fn bind_cid(origin: OriginFor<T>, credential: CredentialOf<T>) -> DispatchResult {
             let who = ensure_signed(origin)?;
             ensure!(
                 !credential.bind_nonce.is_empty(),
@@ -287,8 +287,8 @@ pub mod pallet {
                 Error::<T>::BindNonceAlreadyUsed
             );
             ensure!(
-                T::SfidVerifier::verify(&who, &credential),
-                Error::<T>::InvalidSfidBindingSignature
+                T::CidVerifier::verify(&who, &credential),
+                Error::<T>::InvalidCidBindingSignature
             );
 
             let binding_id = credential.binding_id;
@@ -311,9 +311,9 @@ pub mod pallet {
             AccountToBindingId::<T>::insert(&who, binding_id);
             UsedBindNonce::<T>::insert(bind_nonce_hash, true);
 
-            T::OnSfidBound::on_sfid_bound(&who, binding_id);
+            T::OnCidBound::on_cid_bound(&who, binding_id);
 
-            Self::deposit_event(Event::<T>::SfidBound {
+            Self::deposit_event(Event::<T>::CidBound {
                 who,
                 binding_id,
                 bind_nonce_hash,
@@ -321,10 +321,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 中文注释:由治理 origin 解绑指定用户的 SFID 绑定关系。
+        /// 中文注释:由治理 origin 解绑指定用户的 CID 绑定关系。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::unbind_sfid())]
-        pub fn unbind_sfid(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
+        #[pallet::weight(T::WeightInfo::unbind_cid())]
+        pub fn unbind_cid(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
             T::UnbindOrigin::ensure_origin(origin)?;
 
             let binding_id = AccountToBindingId::<T>::get(&target).ok_or(Error::<T>::NotBound)?;
@@ -332,7 +332,7 @@ pub mod pallet {
             BindingIdToAccount::<T>::remove(binding_id);
             BoundCount::<T>::mutate(|v| *v = v.saturating_sub(1));
 
-            Self::deposit_event(Event::<T>::SfidUnbound {
+            Self::deposit_event(Event::<T>::CidUnbound {
                 who: target,
                 binding_id,
             });
@@ -341,7 +341,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 中文注释:查询账户是否已绑定 SFID。
+        /// 中文注释:查询账户是否已绑定 CID。
         pub fn is_bound(who: &T::AccountId) -> bool {
             AccountToBindingId::<T>::contains_key(who)
         }
@@ -355,7 +355,7 @@ pub mod pallet {
     }
 
     /// 中文注释:实现投票资格接口,供治理模块统一判断公民身份和消费投票凭证。
-    impl<T: Config> crate::SfidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
+    impl<T: Config> crate::CidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
         fn is_eligible(binding_id: &T::Hash, who: &T::AccountId) -> bool {
             Self::is_binding_id_bound_to(binding_id, who)
         }
@@ -366,13 +366,13 @@ pub mod pallet {
             proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
-            issuer_sfid_number: &[u8],
+            issuer_cid_number: &[u8],
             issuer_main_account: &T::AccountId,
             signer_pubkey: &[u8; 32],
             scope_province_name: &[u8],
             scope_city_name: &[u8],
         ) -> bool {
-            if nonce.is_empty() || signature.is_empty() || issuer_sfid_number.is_empty() {
+            if nonce.is_empty() || signature.is_empty() || issuer_cid_number.is_empty() {
                 return false;
             }
 
@@ -395,13 +395,13 @@ pub mod pallet {
                 Err(_) => return false,
             };
 
-            if !T::SfidVoteVerifier::verify_vote(
+            if !T::CidVoteVerifier::verify_vote(
                 who,
                 *binding_id,
                 proposal_id,
                 &nonce_bounded,
                 &signature_bounded,
-                issuer_sfid_number,
+                issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
                 scope_province_name,

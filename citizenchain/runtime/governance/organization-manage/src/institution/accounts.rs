@@ -2,10 +2,10 @@
 //!
 //! 此模块负责:
 //! - `account_names_payload_from_initial_accounts`: 把机构创建账户列表的
-//!   account_name 抽成 SFID 验签 payload `Vec<Vec<u8>>`(顺序与 SFID
+//!   account_name 抽成 CID 验签 payload `Vec<Vec<u8>>`(顺序与 CID
 //!   `/registration-info.account_names` 严格一致)。
 //! - `account_names_payload_from_names`: 同样的 payload, 但接收
-//!   `register_sfid_institution` 入口传来的 BoundedVec<AccountName>。
+//!   `register_cid_institution` 入口传来的 BoundedVec<AccountName>。
 //! - `validate_initial_accounts`: 校验机构初始账户列表合法性,派生每个账户
 //!   的链上地址,返回固化的 `CreateInstitutionAccountsOf<T>` + 主账户/
 //!   费用账户/初始余额合计,供 `do_propose_create_institution` 用。
@@ -23,16 +23,14 @@ use sp_runtime::{
 use crate::address::InstitutionAccountRole;
 use crate::institution::types::CreateInstitutionAccount;
 use crate::pallet::{
-    AccountRegisteredSfid, Config, CreateInstitutionAccountsOf, Error,
-    InstitutionInitialAccountsOf, Pallet, SfidNumberOf, SfidRegisteredAccount,
+    AccountRegisteredCid, CidNumberOf, CidRegisteredAccount, Config, CreateInstitutionAccountsOf,
+    Error, InstitutionInitialAccountsOf, Pallet,
 };
-use crate::traits::{
-    DuoqianAccountValidator, DuoqianReservedAccountChecker, ProtectedSourceChecker,
-};
+use crate::traits::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 use crate::BalanceOf;
 
-/// 把机构创建账户列表里的 account_name 抽成 SFID 签名 payload `Vec<Vec<u8>>`。
-/// 顺序不重排,必须和 SFID `/registration-info.account_names` 一致。
+/// 把机构创建账户列表里的 account_name 抽成 CID 签名 payload `Vec<Vec<u8>>`。
+/// 顺序不重排,必须和 CID `/registration-info.account_names` 一致。
 pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
     accounts: &InstitutionInitialAccountsOf<T>,
 ) -> Result<Vec<Vec<u8>>, DispatchError> {
@@ -54,7 +52,7 @@ pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
 /// - 费用账户 AccountId
 /// - 初始余额合计
 pub(crate) fn validate_initial_accounts<T: Config>(
-    sfid_number: &SfidNumberOf<T>,
+    cid_number: &CidNumberOf<T>,
     accounts: &InstitutionInitialAccountsOf<T>,
 ) -> Result<
     (
@@ -92,14 +90,14 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             role,
             InstitutionAccountRole::Main | InstitutionAccountRole::Fee
         );
-        let address = Pallet::<T>::derive_institution_account(sfid_number.as_slice(), role)?;
+        let address = Pallet::<T>::derive_institution_account(cid_number.as_slice(), role)?;
 
         ensure!(
-            !SfidRegisteredAccount::<T>::contains_key(sfid_number, &item.account_name),
-            Error::<T>::SfidAlreadyRegistered
+            !CidRegisteredAccount::<T>::contains_key(cid_number, &item.account_name),
+            Error::<T>::CidAlreadyRegistered
         );
         ensure!(
-            !AccountRegisteredSfid::<T>::contains_key(&address),
+            !AccountRegisteredCid::<T>::contains_key(&address),
             Error::<T>::AccountAlreadyExists
         );
         ensure!(

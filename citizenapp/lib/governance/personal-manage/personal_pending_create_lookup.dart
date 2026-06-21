@@ -19,14 +19,14 @@ class PersonalPendingCreateLookup {
   /// 查找该地址当前在投票中的创建提案 ID。
   ///
   /// 返回 null 表示无活跃创建提案 — 可能因为:
-  /// 1. 多签已激活(创建提案已 EXECUTED,DuoqianAccount 已转 Active);
-  /// 2. 创建提案被否决(DuoqianAccount 已删除);
+  /// 1. 多签已激活(创建提案已 EXECUTED,Account 已转 Active);
+  /// 2. 创建提案被否决(Account 已删除);
   /// 3. 详情页未触发过历史服务同步,Isar 尚未填充(异常态,管理员子页应回退提示)。
-  Future<int?> findActiveCreate(String personalAddressHex) async {
+  Future<int?> findActiveCreate(String personalAccountHex) async {
     final entity = await WalletIsar.instance.read((isar) {
-      return isar.personalDuoqianProposalEntitys
+      return isar.personalAccountProposalEntitys
           .filter()
-          .personalAddressEqualTo(personalAddressHex)
+          .personalAccountEqualTo(personalAccountHex)
           .actionEqualTo(PersonalProposalAction.create)
           .statusEqualTo(PersonalProposalStatus.voting)
           .findFirst();

@@ -21,9 +21,9 @@ CID 市管理员按市限制数量。每个省内每个市最多 30 个市管理
 
 ## 完成情况
 
-- 已在 CID 后端新增 `MAX_CITY_ADMINS_PER_CITY = 30`，新增市管理员时按 `省份 + 市名` 统计同市 `CITY_ADMIN` 数量。
-- 已在 `CREATE_CITY_ADMIN` 的 prepare/commit 校验链路中加入单市上限判断，达到 30 人时返回 `shi admin city limit reached`。
-- 已新增稳定错误码 `CID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED`，前端按 `ApiError.errorCode` 展示 `本市市管理员已满 30 人，不能继续新增`。
+- 已在 CID 后端新增 `MAX_ADMINS_PER_CITY = 30`，新增市管理员时按 `省份 + 市名` 统计同市 `ADMIN` 数量。
+- 已在 `CREATE_ADMIN` 的 prepare/commit 校验链路中加入单市上限判断，达到 30 人时返回 `shi admin city limit reached`。
+- 已新增稳定错误码 `CID_ADMIN_ADMIN_CITY_LIMIT_REACHED`，前端按 `ApiError.errorCode` 展示 `本市市管理员已满 30 人，不能继续新增`。
 - 已在市列表卡片显示 `x / 30`，在市管理员列表显示 `本市市管理员：x / 30`，满员后禁用新增按钮。
 - 已在新增市管理员弹窗中显示每个市的 `x/30`，满员城市选项不可选，当前市满员时确认按钮不可用。
 - 已更新 CID 管理员体系、错误码、前后端目录文档，并清理旧的“数量不限/不设上限”和旧前端错误处理命名残留。

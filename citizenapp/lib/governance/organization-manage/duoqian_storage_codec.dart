@@ -37,11 +37,11 @@ class AdminSnapshot {
 /// 机构账户快照。
 class InstitutionAccountSnapshot {
   const InstitutionAccountSnapshot({
-    required this.addressHex,
+    required this.accountHex,
     required this.statusByte,
   });
 
-  final String addressHex;
+  final String accountHex;
   final int statusByte;
 }
 
@@ -74,11 +74,11 @@ class DuoqianStorageCodec {
     );
   }
 
-  static Uint8List accountRegisteredCidKey(String duoqianAccountHex) {
+  static Uint8List accountRegisteredCidKey(String accountHex) {
     return storageMapKey(
       'OrganizationManage',
       'AccountRegisteredCid',
-      hexDecode(duoqianAccountHex),
+      hexDecode(accountHex),
     );
   }
 
@@ -225,10 +225,10 @@ class DuoqianStorageCodec {
 
   static InstitutionAccountSnapshot? decodeInstitutionAccount(Uint8List data) {
     if (data.length < 32 + 16 + 1) return null;
-    final addressHex = hexEncode(data.sublist(0, 32));
+    final accountHex = hexEncode(data.sublist(0, 32));
     final statusByte = data[32 + 16];
     return InstitutionAccountSnapshot(
-      addressHex: addressHex,
+      accountHex: accountHex,
       statusByte: statusByte,
     );
   }

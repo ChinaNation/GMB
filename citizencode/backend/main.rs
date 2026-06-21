@@ -498,7 +498,7 @@ impl Db {
             let inst = institution_from_subject_row(&row)?;
             let account_rows = conn
                 .query(
-                    "SELECT cid_number, account_name, duoqian_account, chain_status, created_at
+                    "SELECT cid_number, account_name, account, chain_status, created_at
                      FROM accounts
                      WHERE cid_number = $1
                      ORDER BY account_name ASC",
@@ -511,7 +511,7 @@ impl Db {
                 accounts.push(crate::subjects::InstitutionAccount {
                     cid_number: row.get(0),
                     account_name: row.get(1),
-                    duoqian_account: row.get(2),
+                    account: row.get(2),
                     chain_status: multisig_chain_status_from_text(status_text.as_str()),
                     chain_synced_at: None,
                     chain_tx_hash: None,
@@ -1011,10 +1011,8 @@ impl Db {
 	                name = EXCLUDED.name,
 	                cid_full_name = EXCLUDED.cid_full_name,
 	                cid_short_name = EXCLUDED.cid_short_name,
-	                city_code = EXCLUDED.city_code,
-		                town_code = EXCLUDED.town_code,
-		                status = EXCLUDED.status,
-	                category = EXCLUDED.category,
+			                status = EXCLUDED.status,
+		                category = EXCLUDED.category,
 	                subject_property = EXCLUDED.subject_property,
 	                p1 = EXCLUDED.p1,
 	                province_name = EXCLUDED.province_name,
@@ -1200,11 +1198,11 @@ impl Db {
         )?;
         conn.execute(
             "INSERT INTO accounts (
-                cid_number, province_code, city_code, account_name, duoqian_account, chain_status, created_at
+                cid_number, province_code, city_code, account_name, account, chain_status, created_at
              ) VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
                 city_code = EXCLUDED.city_code,
-                duoqian_account = EXCLUDED.duoqian_account,
+                account = EXCLUDED.account,
                 chain_status = EXCLUDED.chain_status,
                 created_at = EXCLUDED.created_at",
             &[
@@ -1212,7 +1210,7 @@ impl Db {
                 &province_code,
                 &city_code,
                 &account.account_name,
-                &account.duoqian_account,
+                &account.account,
                 &chain_status,
                 &account.created_at,
             ],
@@ -1383,7 +1381,7 @@ impl Db {
                 let kind: String = row.get(2);
                 let city_code: String = row.get(3);
                 let town_code: String = row.get(4);
-                let town: String = row.get(5);
+                let town_name: String = row.get(5);
                 let category: String = row.get(6);
                 let org_code: String = row.get(7);
                 let institution_code: String = row.get(8);
@@ -1397,7 +1395,7 @@ impl Db {
                     kind,
                     city_code,
                     town_code,
-                    town,
+                    town_name,
                     category,
                     org_code,
                     institution_code,
@@ -2449,7 +2447,7 @@ struct OrphanInstitution {
     kind: String,
     city_code: String,
     town_code: String,
-    town: String,
+    town_name: String,
     category: String,
     org_code: String,
     institution_code: String,
@@ -2485,7 +2483,7 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
             province_code = %o.province_code,
             city_code = %o.city_code,
             town_code = %o.town_code,
-            town = %o.town,
+            town_name = %o.town_name,
             category = %o.category,
             org_code = %o.org_code,
             institution_code = %o.institution_code,

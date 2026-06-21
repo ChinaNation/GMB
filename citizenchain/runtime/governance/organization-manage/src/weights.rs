@@ -13,7 +13,7 @@ use frame_support::{
 
 /// Weight functions for `organization_manage`.
 pub trait WeightInfo {
-	fn register_sfid_institution() -> Weight;
+	fn register_cid_institution() -> Weight;
 	fn propose_create_institution() -> Weight;
 	/// `n` = 聚合的签名数量(= 管理员投票数)。
 	fn propose_close() -> Weight;
@@ -22,7 +22,7 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	fn register_sfid_institution() -> Weight {
+	fn register_cid_institution() -> Weight {
 		Weight::from_parts(45_334_000, 0)
 			.saturating_add(Weight::from_parts(0, 3619))
 			.saturating_add(T::DbWeight::get().reads(3))
@@ -49,7 +49,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	fn register_sfid_institution() -> Weight {
+	fn register_cid_institution() -> Weight {
 		Weight::from_parts(45_334_000, 0)
 			.saturating_add(Weight::from_parts(0, 3619))
 			.saturating_add(RocksDbWeight::get().reads(3))

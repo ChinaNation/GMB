@@ -3,7 +3,7 @@
 //! 与 Pallet 内部状态无关的纯函数放在这里。
 //! 涉及 Pallet storage 的 helper 仍留在 lib.rs 的 `impl<T: Config> Pallet<T>` 块。
 //!
-//! 账户地址派生只允许调用 `primitives::core_const::derive_duoqian_account`
+//! 账户地址派生只允许调用 `primitives::core_const::derive_account`
 //! 及各业务模块对它的薄封装；本文件不再保存任何派生协议常量。
 
 use frame_support::{ensure, traits::Currency};

@@ -43,7 +43,7 @@ use frame_support::{
 
 /// Weight functions for `citizen_issuance`.
 pub trait WeightInfo {
-	fn on_sfid_bound() -> Weight;
+	fn on_cid_bound() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -56,7 +56,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `CitizenIssuance::RewardedCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	fn on_sfid_bound() -> Weight {
+	fn on_cid_bound() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `114`
 		//  Estimated: `3593`
@@ -77,7 +77,7 @@ impl WeightInfo for () {
 	/// Proof: `CitizenIssuance::RewardedCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	fn on_sfid_bound() -> Weight {
+	fn on_cid_bound() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `114`
 		//  Estimated: `3593`

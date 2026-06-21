@@ -88,7 +88,7 @@ void main() {
   }) {
     return Uint8List.fromList([
       3, // ORG_REN
-      1, // AdminAccountKind::PersonalDuoqian
+      1, // AdminAccountKind::PersonalAccount
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
@@ -163,7 +163,7 @@ void main() {
       expect(decoded, isA<CreateDuoqianProposalInfo>());
       final info = decoded as CreateDuoqianProposalInfo;
       expect(info.proposalId, 7);
-      expect(info.duoqianAccount, '33' * 32);
+      expect(info.account, '33' * 32);
       expect(info.amountFen, BigInt.from(111));
       expect(info.feeFen, BigInt.from(10));
     });
@@ -173,7 +173,7 @@ void main() {
       final service = PersonalManageService(chainRpc: rpc);
       final address = '22' * 32;
       final personalKey =
-          '0x${hexOf(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
+          '0x${hexOf(PersonalManageStorageCodec.personalAccountsKey(address))}';
       final adminKey = '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
         PersonalManageStorageCodec.accountIdFromAccountHex(address),
       ))}';
@@ -206,7 +206,7 @@ void main() {
       final firstAddress = '22' * 32;
       final secondAddress = '33' * 32;
       String personalKey(String address) =>
-          '0x${hexOf(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
+          '0x${hexOf(PersonalManageStorageCodec.personalAccountsKey(address))}';
       String adminKey(String address) =>
           '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
             PersonalManageStorageCodec.accountIdFromAccountHex(address),

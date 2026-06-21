@@ -33,7 +33,7 @@ frame_benchmarking::define_benchmarks!(
     [fullnode_issuance, FullnodeIssuance]
     [citizen_issuance, CitizenIssuance]
     [resolution_issuance, ResolutionIssuance]
-    [sfid_system, SfidSystem]
+    [cid_system, CidSystem]
     [pow_difficulty, PowDifficulty]
     [admins_change, AdminsChange]
     [resolution_destro, ResolutionDestro]

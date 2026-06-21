@@ -185,6 +185,7 @@ cid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 
 ## 12. 部署
 - 正式安装包由 `citizenpassport/scripts/build_linux_host_installer.sh` 构建，脚本同时构建后端 release binary 和前端 `dist`。
+- `citizenpassport-ci.yml` 的 push / pull_request 自动 CI 只执行后端编译、后端测试和前端构建;正式离线 `.run` 安装包只允许手动 `Run workflow` 构建和上传。
 - `install_host.sh` 把前端静态文件安装到 `/opt/citizenpassport/frontend`，后端通过 `CPMS_FRONTEND_DIR` 直接托管。
 - 正式安装不导入 `schema.sql / seed.sql`；安装脚本只创建 PostgreSQL 角色、数据库和 schema 权限，
   数据库结构由后端启动时的 `MIGRATOR.run()` 创建。

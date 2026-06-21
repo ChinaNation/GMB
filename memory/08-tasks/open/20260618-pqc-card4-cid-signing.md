@@ -8,7 +8,10 @@
    - 🔴 **(B6)硬依赖**:MAIN/sheng 系统签名产出的凭证被链端 `configs/mod.rs:781/890/961/1037` sr25519_verify 验证 → **MAIN signer 切 ML-DSA 必须与 card2 §5/§6(验签器 algo-tag + ShengSigningPubkey value→BoundedVec)原子同批上线**,或链端先双 algo 路由再切;否则全省机构注册/投票/人口快照全红。
 2. 🔴 **(B5)CID 钱包绑定归属验证 = §9 P0 唯一真实落点(被原 card 漏列)**:`citizens/binding.rs:79/340/878` 当前硬拒 wallet_sig_alg!=sr25519、固定 `[u8;32]`、公钥从 SS58 地址反推。改:`ml-dsa-65` 时(a)QR 单独带 ML-DSA 公钥(不再 ss58 反推);(b)**经 subxt 查链 `AccountPqcKey[wallet_address]` 确认该 ML-DSA 公钥已绑到此 sr25519 锚点**(决策8 唯一权威源);(c)gmb-pqc verify_by_algo 验签;(d)**未完成 bootstrap → 拒**。`verify_citizen_bind_signature`/`resolve_bind_wallet` 脱离 `[u8;32]`。
 3. 🔴 **(H10)CID 侧 ARCHIVE 验签器** `citizenpassport/handler.rs:986-1015` `verify_cpms_archive_qr` 硬编码 sr25519,card5 改 CPMS 签名后会全红 → 本卡增列改造:按 ARCHIVE 协议串算法标识走 verify_by_algo;`cpms_pubkey` 解析脱离 32B。
-4. 🔴 **(H9)系统签名原文含 sig_alg**:`core/qr/mod.rs:118-141` `build_signature_message` 把 sig_alg 纳入签名 preimage(防算法混淆/降级),验签先按原文 alg 选验签器;**algo tag 进签名原文,不只进 meta**。
+4. 🔴 **(H9 v5)系统签名原文含 sig_alg —— 治理/扫码有两套 builder,都要迁**:
+   - `core/qr/mod.rs:118-141` `build_signature_message`(格式 `CITIZEN_QR_V1|kind|id|system|expires_at|principal`,无 sig_alg)→ 加 sig_alg 进 preimage。
+   - 🔴 **`citizenchain/node/src/governance/signing.rs`(`sig_alg:String` 硬编 sr25519)是第二套 builder**,格式与 CID 不一致 → unified-protocols 先定"治理签名 vs CID 扫码签名"是否同源;**两处都迁**(最好抽单一 `build_signature_message` 共享放 primitives/gmb-pqc),否则升级时漏一处静默失效。
+   - 验签先按原文 alg 选验签器;**algo tag 进签名原文,不只进 meta**;原文加版本号便于协议演进。
 5. 🔴 **(决策5)CPMS install_sig 真实验证**:install_sig 由 CID MAIN 签发,当前全系统无验证方(任何人投递 install QR 即可初始化 CPMS)。补真实验证(CPMS 启动用 CID MAIN 公钥验,见 card5);本卡保证 CID 侧签发口径与验证方一致。
 6. 激活 CID 死 `hkdf=0.12` 依赖;协议登记(P-CRED/登录QR/安装授权)按 algo tag 升级。
 

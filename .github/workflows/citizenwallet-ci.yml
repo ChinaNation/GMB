@@ -61,29 +61,58 @@ jobs:
         working-directory: citizenwallet
         run: flutter pub get
 
-      - name: 恢复签名文件
+      - name: 写入 Android release keystore
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
-          CITIZENWALLET_UPLOAD_KEYSTORE_BASE64: ${{ secrets.CITIZENWALLET_UPLOAD_KEYSTORE_BASE64 }}
+          GMB_APP_KEY: ${{ secrets.GMB_APP_KEY }}
         run: |
-          test -n "$CITIZENWALLET_UPLOAD_KEYSTORE_BASE64"
-          printf '%s' "$CITIZENWALLET_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/citizenwallet/android/citizenwallet-ci.jks"
+          set -euo pipefail
 
-      - name: 生成 key.properties
-        working-directory: citizenwallet/android
-        env:
-          CITIZENWALLET_KEYSTORE_PASSWORD: ${{ secrets.CITIZENWALLET_KEYSTORE_PASSWORD }}
-          CITIZENWALLET_KEY_PASSWORD: ${{ secrets.CITIZENWALLET_KEY_PASSWORD }}
-          CITIZENWALLET_KEY_ALIAS: ${{ secrets.CITIZENWALLET_KEY_ALIAS }}
-        run: |
-          test -n "$CITIZENWALLET_KEYSTORE_PASSWORD"
-          test -n "$CITIZENWALLET_KEY_PASSWORD"
-          test -n "$CITIZENWALLET_KEY_ALIAS"
-          cat > key.properties <<EOF
-          storePassword=$CITIZENWALLET_KEYSTORE_PASSWORD
-          keyPassword=$CITIZENWALLET_KEY_PASSWORD
-          keyAlias=$CITIZENWALLET_KEY_ALIAS
-          storeFile=$GITHUB_WORKSPACE/citizenwallet/android/citizenwallet-ci.jks
-          EOF
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          raw = os.environ.get("GMB_APP_KEY", "").strip()
+          if not raw:
+              raise SystemExit("手动发布缺少 GMB_APP_KEY secret。")
+
+          props = {}
+          for line in raw.splitlines():
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              if "=" not in line:
+                  raise SystemExit("GMB_APP_KEY 每行必须使用 key=value 格式。")
+              key, value = line.split("=", 1)
+              props[key.strip()] = value.strip()
+
+          keystore_b64 = props.get("keystore")
+          password = props.get("password")
+          alias = props.get("alias", "upload")
+          key_password = props.get("keyPassword", password)
+          if not keystore_b64 or not password:
+              raise SystemExit("GMB_APP_KEY 必须包含 keystore=<base64后的jks> 和 password=<密码>。")
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          android_dir = workspace / "citizenwallet" / "android"
+          keystore_path = android_dir / "gmb-app-release.jks"
+          keystore_path.write_bytes(base64.b64decode(keystore_b64))
+
+          # 中文注释：两个移动端共用同一套 GMB_APP_KEY；alias 随现有 keystore 写入，key 密码默认复用 keystore 密码。
+          (android_dir / "key.properties").write_text(
+              "\n".join(
+                  [
+                      f"storeFile={keystore_path}",
+                      f"storePassword={password}",
+                      f"keyAlias={alias}",
+                      f"keyPassword={key_password}",
+                      "",
+                  ]
+              ),
+              encoding="utf-8",
+          )
+          PY
 
       - name: 分析代码
         working-directory: citizenwallet
@@ -93,11 +122,19 @@ jobs:
         working-directory: citizenwallet
         run: flutter test
 
+      # 中文注释：push 自动 CI 只做工程构建检查，不读取正式签名 keystore。
+      - name: 构建 Debug APK（push 检查）
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        working-directory: citizenwallet
+        run: flutter build apk --debug
+
       - name: 构建正式 APK
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         working-directory: citizenwallet
         run: flutter build apk --release
 
       - name: 重命名产物
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           cp citizenwallet/build/app/outputs/flutter-apk/app-release.apk citizenwallet/build/app/outputs/flutter-apk/公民钱包.apk
           echo "产出: 公民钱包.apk"

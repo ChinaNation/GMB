@@ -25,7 +25,7 @@
 - 已重新生成 `citizenchain/node/frontend/generated/local-docs.generated.ts`，保证区块链软件白皮书 Tab 使用同一结构说明。
 - 已验证 `node scripts/generate_citizenapp_governance_registry.mjs` 可从新路径执行，并同步生成 CitizenApp / CitizenWallet 机构注册表。
 - 已在用户二次确认后，将 `citizenchain/runtime/primitives/china/china_zb.rs` 第 6 行注释从 `tools/duoqian.py` 改为 `scripts/duoqian.py`，不涉及 runtime 业务逻辑。
-- 已修正 `scripts/generate_citizenapp_governance_registry.mjs` 的输入/输出边界：读取 runtime 现有 `sfid_full_name/sfid_number` 字段，输出 CitizenApp / CitizenWallet 当前 `cidNumber` 字段。
+- 已修正 `scripts/generate_citizenapp_governance_registry.mjs` 的输入/输出边界：读取 runtime 现有 `cid_full_name/cid_number` 字段，输出 CitizenApp / CitizenWallet 当前 `cidNumber` 字段。
 - 已执行验证：Python 脚本语法检查、根 shell 脚本语法检查、`node scripts/generate_citizenapp_governance_registry.mjs`、Dart 生成文件格式化、白皮书本地缓存生成、根 `tools/` 残留扫描。
 - 追补(2026-06-21)：统一 `scripts/duoqian.py` 与 BLAKE2 派生文档中 OP_AN/OP_HE 的 payload 表述，二者均为国储会 `cid_number`；同时补齐文档表格中的 `OP_HE=0x04`，恢复 `OP_PERSONAL=0x05`、`OP_INSTITUTION=0x06` 编号。
 

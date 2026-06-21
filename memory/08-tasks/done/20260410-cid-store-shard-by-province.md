@@ -15,7 +15,7 @@
 
 ### 目标
 - **解除后端 Store 全局锁 + 全量 JSON 反序列化的瓶颈**
-- 承载能力:从 Phase 1 的 ~500 并发 → **~5000 并发 CITY_ADMIN**
+- 承载能力:从 Phase 1 的 ~500 并发 → **~5000 并发 ADMIN**
 - 为 Phase 3(提交队列批处理)和 Phase 4(水平扩展)铺路
 
 ### 范围
@@ -95,7 +95,7 @@
 pub(crate) struct StoreShard {
     pub(crate) province: String,
 
-    // ── 本联邦管理员(SHENG_ADMIN + CITY_ADMIN,从 admins 表关联)──
+    // ── 本联邦管理员(SHENG_ADMIN + ADMIN,从 admins 表关联)──
     pub(crate) local_admins: HashMap<String, AdminUser>,
 
     // ── 本省机构(两层模型)──
@@ -340,7 +340,7 @@ let institution = state.store_shards.read_province(&province, |shard| {
 ```
 
 **province 从哪里来**:
-- CITY_ADMIN / FederalAdmin 的请求 → `ctx.admin_province`(已有)
+- ADMIN / FederalAdmin 的请求 → `ctx.admin_province`(已有)
 - 公开路径(citizen 绑定等)→ 从 cid_number 里解析省份代码(见 `citizencode/province.rs`)
 
 ### 4.2 跨省查询

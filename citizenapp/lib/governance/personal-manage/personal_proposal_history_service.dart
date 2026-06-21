@@ -3,7 +3,7 @@
 // 双轨制数据源:
 // 1. 链上 `votingengine.ActiveProposalsByInstitution[personal_account || zeros(16)]`
 //    返回当前活跃(STATUS_VOTING)的提案 ID 列表。
-// 2. 本机 Isar `PersonalDuoqianProposalEntity` 永久保留所有历史快照,覆盖
+// 2. 本机 Isar `PersonalAccountProposalEntity` 永久保留所有历史快照,覆盖
 //    链上 90 天后已清理的终态提案。
 //
 // `fetchAll` 把两条数据合并去重(以 proposalId 为 key),并把链上活跃提案的
@@ -54,8 +54,8 @@ String mapChainStatus(int? chainStatus) {
 }
 
 /// 详情页提案列表渲染所需的视图模型。
-class PersonalDuoqianProposalView {
-  const PersonalDuoqianProposalView({
+class PersonalAccountProposalView {
+  const PersonalAccountProposalView({
     required this.proposalId,
     required this.action,
     required this.status,
@@ -99,21 +99,21 @@ class PersonalProposalHistoryService {
   ///    Proposals[id] 拿最新 status + tally。这步必须独立于 active 列表,
   ///    因为提案一旦终态(passed/executed/rejected)就从 active 列表移除,
   ///    本机 Isar 永远停在 voting 状态,UI 卡片显示"投票中"是假数据。
-  Future<List<PersonalDuoqianProposalView>> fetchAll(
-    String personalAddressHex,
+  Future<List<PersonalAccountProposalView>> fetchAll(
+    String personalAccountHex,
   ) async {
-    final activeIds = await _safeFetchActiveProposalIds(personalAddressHex);
+    final activeIds = await _safeFetchActiveProposalIds(personalAccountHex);
 
     // Step 1: 链上活跃提案逐个同步到 Isar(防止其他设备发起的提案在本机无记录)。
     for (final pid in activeIds) {
-      await _syncActiveProposalToIsar(personalAddressHex, pid);
+      await _syncActiveProposalToIsar(personalAccountHex, pid);
     }
 
     // Step 2: 重查本机 Isar 中 status='voting' 的 entity,即使它们已不在 active 列表
     // (提案终态后就从 active 列表移除,但本机 entity 还停在 voting)。
-    await _refreshLocalVotingEntities(personalAddressHex);
+    await _refreshLocalVotingEntities(personalAccountHex);
 
-    return _readAllFromIsar(personalAddressHex);
+    return _readAllFromIsar(personalAccountHex);
   }
 
   /// 判断本机是否存在“创建提案仍是 voting，但链上 Proposals[id] 从未存在”的快照。
@@ -121,13 +121,13 @@ class PersonalProposalHistoryService {
   /// 中文注释：这类记录通常来自旧版本把 txHash 当成功后提前落库；它不是
   /// 正常注销历史，列表页可据此删除本地幽灵多签。
   Future<bool> hasUnchainedVotingCreateProposal(
-    String personalAddressHex,
+    String personalAccountHex,
   ) async {
     try {
       final entities = await WalletIsar.instance.read((isar) {
-        return isar.personalDuoqianProposalEntitys
+        return isar.personalAccountProposalEntitys
             .filter()
-            .personalAddressEqualTo(personalAddressHex)
+            .personalAccountEqualTo(personalAccountHex)
             .actionEqualTo(PersonalProposalAction.create)
             .statusEqualTo(PersonalProposalStatus.voting)
             .findAll();
@@ -147,12 +147,12 @@ class PersonalProposalHistoryService {
   /// 链上若已终态(passed/executed/rejected/execution_failed),upsert 为终态;
   /// 链上仍 voting 则只刷新 yesVotes/noVotes;链上 storage 不存在(已被 90 天清理)
   /// 也只刷新 vote tally(取现有值)— 不强制覆盖为终态,等本机其他渠道写入历史。
-  Future<void> _refreshLocalVotingEntities(String personalAddressHex) async {
+  Future<void> _refreshLocalVotingEntities(String personalAccountHex) async {
     try {
       final votingEntities = await WalletIsar.instance.read((isar) {
-        return isar.personalDuoqianProposalEntitys
+        return isar.personalAccountProposalEntitys
             .filter()
-            .personalAddressEqualTo(personalAddressHex)
+            .personalAccountEqualTo(personalAccountHex)
             .statusEqualTo(PersonalProposalStatus.voting)
             .findAll();
       });
@@ -164,7 +164,7 @@ class PersonalProposalHistoryService {
           if (chainStatus == null) {
             if (e.action == PersonalProposalAction.create) {
               await _deleteProposalEntity(
-                personalAddressHex: personalAddressHex,
+                personalAccountHex: personalAccountHex,
                 proposalId: e.proposalId,
               );
             }
@@ -172,7 +172,7 @@ class PersonalProposalHistoryService {
           }
           final tally = await _proposalService.fetchVoteTally(e.proposalId);
           await recordOrUpdate(
-            personalAddressHex: personalAddressHex,
+            personalAccountHex: personalAccountHex,
             proposalId: e.proposalId,
             action: e.action,
             status: mapChainStatus(chainStatus),
@@ -189,13 +189,13 @@ class PersonalProposalHistoryService {
   }
 
   Future<void> _deleteProposalEntity({
-    required String personalAddressHex,
+    required String personalAccountHex,
     required int proposalId,
   }) async {
     await WalletIsar.instance.writeTxn((isar) async {
-      await isar.personalDuoqianProposalEntitys
+      await isar.personalAccountProposalEntitys
           .filter()
-          .personalAddressEqualTo(personalAddressHex)
+          .personalAccountEqualTo(personalAccountHex)
           .proposalIdEqualTo(proposalId)
           .deleteAll();
     });
@@ -205,7 +205,7 @@ class PersonalProposalHistoryService {
   ///
   /// [snapshot] 若非空将以 JSON 形式持久化(转账金额 / beneficiary / account_name 等)。
   Future<void> recordOrUpdate({
-    required String personalAddressHex,
+    required String personalAccountHex,
     required int proposalId,
     required String action,
     required String status,
@@ -216,16 +216,16 @@ class PersonalProposalHistoryService {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await WalletIsar.instance.writeTxn((isar) async {
-      final existing = await isar.personalDuoqianProposalEntitys
+      final existing = await isar.personalAccountProposalEntitys
           .filter()
-          .personalAddressEqualTo(personalAddressHex)
+          .personalAccountEqualTo(personalAccountHex)
           .proposalIdEqualTo(proposalId)
           .findFirst();
 
       final isFinal = status != PersonalProposalStatus.voting;
 
-      final entity = existing ?? PersonalDuoqianProposalEntity()
-        ..personalAddress = personalAddressHex
+      final entity = existing ?? PersonalAccountProposalEntity()
+        ..personalAccount = personalAccountHex
         ..proposalId = proposalId
         ..createdAtMillis = existing?.createdAtMillis ?? now;
 
@@ -241,17 +241,17 @@ class PersonalProposalHistoryService {
         entity.snapshotJson = existing.snapshotJson;
       }
 
-      await isar.personalDuoqianProposalEntitys.put(entity);
+      await isar.personalAccountProposalEntitys.put(entity);
     });
   }
 
   // ──── 内部 ─────────────────────────────────────────────
 
   Future<List<int>> _safeFetchActiveProposalIds(
-    String personalAddressHex,
+    String personalAccountHex,
   ) async {
     try {
-      final accountId = _personalAddressToAccountId(personalAddressHex);
+      final accountId = _personalAccountToAccountId(personalAccountHex);
       final key = _buildStorageKey(
         'VotingEngine',
         'ActiveProposalsByInstitution',
@@ -273,7 +273,7 @@ class PersonalProposalHistoryService {
   }
 
   Future<void> _syncActiveProposalToIsar(
-    String personalAddressHex,
+    String personalAccountHex,
     int proposalId,
   ) async {
     try {
@@ -283,9 +283,9 @@ class PersonalProposalHistoryService {
       final statusStr = mapChainStatus(chainStatus);
 
       final existing = await WalletIsar.instance.read((isar) {
-        return isar.personalDuoqianProposalEntitys
+        return isar.personalAccountProposalEntitys
             .filter()
-            .personalAddressEqualTo(personalAddressHex)
+            .personalAccountEqualTo(personalAccountHex)
             .proposalIdEqualTo(proposalId)
             .findFirst();
       });
@@ -305,7 +305,7 @@ class PersonalProposalHistoryService {
       }
 
       await recordOrUpdate(
-        personalAddressHex: personalAddressHex,
+        personalAccountHex: personalAccountHex,
         proposalId: proposalId,
         action: action,
         status: statusStr,
@@ -385,14 +385,14 @@ class PersonalProposalHistoryService {
     return bytes;
   }
 
-  Future<List<PersonalDuoqianProposalView>> _readAllFromIsar(
-    String personalAddressHex,
+  Future<List<PersonalAccountProposalView>> _readAllFromIsar(
+    String personalAccountHex,
   ) async {
     try {
       final entities = await WalletIsar.instance.read((isar) {
-        return isar.personalDuoqianProposalEntitys
+        return isar.personalAccountProposalEntitys
             .filter()
-            .personalAddressEqualTo(personalAddressHex)
+            .personalAccountEqualTo(personalAccountHex)
             .sortByCreatedAtMillisDesc()
             .findAll();
       });
@@ -402,8 +402,8 @@ class PersonalProposalHistoryService {
     }
   }
 
-  PersonalDuoqianProposalView _entityToView(
-    PersonalDuoqianProposalEntity e,
+  PersonalAccountProposalView _entityToView(
+    PersonalAccountProposalEntity e,
   ) {
     Map<String, dynamic>? snapshot;
     if (e.snapshotJson != null && e.snapshotJson!.isNotEmpty) {
@@ -413,7 +413,7 @@ class PersonalProposalHistoryService {
         snapshot = null;
       }
     }
-    return PersonalDuoqianProposalView(
+    return PersonalAccountProposalView(
       proposalId: e.proposalId,
       action: e.action,
       status: e.status,
@@ -428,8 +428,8 @@ class PersonalProposalHistoryService {
   // ──── 编码 / 哈希工具(对齐 votingengine storage key) ────
 
   /// 个人多签治理 AccountId。
-  Uint8List _personalAddressToAccountId(String addressHex) {
-    final addr = _hexDecode(addressHex);
+  Uint8List _personalAccountToAccountId(String accountHex) {
+    final addr = _hexDecode(accountHex);
     if (addr.length != 32) {
       throw ArgumentError('personal address 必须为 32 字节');
     }

@@ -232,32 +232,6 @@ impl Db {
                 updated_at TIMESTAMPTZ,
                 payload JSONB NOT NULL
              );
-             ALTER TABLE cpms_sites
-                ADD COLUMN IF NOT EXISTS province_code TEXT,
-                ADD COLUMN IF NOT EXISTS city_code TEXT;
-             DO $$ BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'cpms_sites' AND column_name = 'p_code'
-                ) THEN
-                    UPDATE cpms_sites
-                    SET province_code = p_code
-                    WHERE province_code IS NULL OR province_code = '';
-                END IF;
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'cpms_sites' AND column_name = 'c_code'
-                ) THEN
-                    UPDATE cpms_sites
-                    SET city_code = c_code
-                    WHERE city_code IS NULL OR city_code = '';
-                END IF;
-             END $$;
-             ALTER TABLE cpms_sites
-                ALTER COLUMN province_code SET NOT NULL,
-                ALTER COLUMN city_code SET NOT NULL,
-                DROP COLUMN IF EXISTS p_code,
-                DROP COLUMN IF EXISTS c_code;
              CREATE INDEX IF NOT EXISTS idx_cpms_sites_scope
                 ON cpms_sites(province_code, city_code, status);
 
@@ -461,7 +435,7 @@ impl Db {
                 province_code TEXT NOT NULL,
                 city_code TEXT,
                 account_name TEXT NOT NULL,
-                duoqian_account TEXT,
+                account TEXT,
                 chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_ON_CHAIN', 'PENDING_ON_CHAIN', 'ACTIVE_ON_CHAIN', 'REVOKED_ON_CHAIN')),
                 created_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (province_code, cid_number, account_name)
@@ -493,63 +467,6 @@ impl Db {
                 PRIMARY KEY (province_code, id)
              ) PARTITION BY LIST (province_code);
 
-             -- 中文注释:早期分区父表以 p_code/c_code/t_code 命名分区键和地域列。
-             -- 目标 schema 只保留 province_code/city_code/town_code 等业务字段;
-             -- 这里在创建索引和对账前统一重命名父表列,PostgreSQL 会同步分区子表。
-             DO $$ DECLARE
-                item text[];
-                has_old boolean;
-                has_new boolean;
-             BEGIN
-                FOREACH item SLICE 1 IN ARRAY ARRAY[
-                    ARRAY['ids', 'p_code', 'province_code'],
-                    ARRAY['ids', 'c_code', 'city_code'],
-                    ARRAY['subjects', 'p_code', 'province_code'],
-                    ARRAY['subjects', 'c_code', 'city_code'],
-                    ARRAY['subjects', 't_code', 'town_code'],
-                    ARRAY['subjects', 'short_name', 'cid_short_name'],
-                    ARRAY['subjects', 'cid_name', 'cid_full_name'],
-                    ARRAY['subjects', 'province', 'province_name'],
-                    ARRAY['subjects', 'city', 'city_name'],
-                    ARRAY['subjects', 'town', 'town_name'],
-                    ARRAY['citizens', 'p_code', 'province_code'],
-                    ARRAY['citizens', 'c_code', 'city_code'],
-                    ARRAY['citizens', 'residence_p_code', 'residence_province_code'],
-                    ARRAY['citizens', 'residence_c_code', 'residence_city_code'],
-                    ARRAY['citizens', 'residence_t_code', 'residence_town_code'],
-                    ARRAY['citizens', 'birth_p_code', 'birth_province_code'],
-                    ARRAY['citizens', 'birth_c_code', 'birth_city_code'],
-                    ARRAY['citizens', 'birth_t_code', 'birth_town_code'],
-                    ARRAY['gov', 'p_code', 'province_code'],
-                    ARRAY['gov', 'c_code', 'city_code'],
-                    ARRAY['gov', 't_code', 'town_code'],
-                    ARRAY['private', 'p_code', 'province_code'],
-                    ARRAY['private', 'c_code', 'city_code'],
-                    ARRAY['accounts', 'p_code', 'province_code'],
-                    ARRAY['accounts', 'c_code', 'city_code'],
-                    ARRAY['accounts', 'duoqian_address', 'duoqian_account'],
-                    ARRAY['docs', 'p_code', 'province_code'],
-                    ARRAY['docs', 'c_code', 'city_code'],
-                    ARRAY['audit', 'p_code', 'province_code'],
-                    ARRAY['audit', 'c_code', 'city_code']
-                ] LOOP
-                    SELECT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = item[1] AND column_name = item[2]
-                    ) INTO has_old;
-                    SELECT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = item[1] AND column_name = item[3]
-                    ) INTO has_new;
-                    IF has_old THEN
-                        IF has_new THEN
-                            EXECUTE format('ALTER TABLE %I DROP COLUMN %I', item[1], item[3]);
-                        END IF;
-                        EXECUTE format('ALTER TABLE %I RENAME COLUMN %I TO %I', item[1], item[2], item[3]);
-                    END IF;
-                END LOOP;
-             END $$;
-
              -- 中文注释:审计 detail 由自由文本改结构化 JSONB(事实与展示分离,
              -- 展示翻译归前端)。旧 TEXT 列存的是写死文案无法结构化,按用户确认
              -- 直接清空重建列类型(开发期运行痕迹,不留旧方案);收敛块幂等。
@@ -570,45 +487,6 @@ impl Db {
 	                postgres_error_text(&e)
 	            )
 	        })?;
-
-        // 中文注释:旧表已存在时 CREATE TABLE IF NOT EXISTS 不会补新列,必须先把父表收敛到目标字段。
-        conn.batch_execute(
-            "ALTER TABLE subjects
-                ADD COLUMN IF NOT EXISTS subject_property TEXT,
-                ADD COLUMN IF NOT EXISTS cid_full_name TEXT,
-                ADD COLUMN IF NOT EXISTS education_type TEXT,
-                ADD COLUMN IF NOT EXISTS legal_rep_name TEXT,
-                ADD COLUMN IF NOT EXISTS legal_rep_cid_number TEXT,
-                ADD COLUMN IF NOT EXISTS legal_rep_photo_path TEXT,
-                ADD COLUMN IF NOT EXISTS legal_rep_photo_name TEXT,
-                ADD COLUMN IF NOT EXISTS legal_rep_photo_mime TEXT,
-                ADD COLUMN IF NOT EXISTS legal_rep_photo_size BIGINT,
-                DROP COLUMN IF EXISTS chain_status,
-                DROP COLUMN IF EXISTS full_name,
-                DROP COLUMN IF EXISTS a3;
-             ALTER TABLE private
-                ADD COLUMN IF NOT EXISTS subject_property TEXT,
-                ADD COLUMN IF NOT EXISTS private_type TEXT,
-                ADD COLUMN IF NOT EXISTS partnership_kind TEXT,
-                ADD COLUMN IF NOT EXISTS has_legal_personality BOOLEAN,
-                DROP COLUMN IF EXISTS kind,
-                DROP COLUMN IF EXISTS sub_type,
-                DROP COLUMN IF EXISTS a3;
-             ALTER TABLE subjects
-                ADD COLUMN IF NOT EXISTS private_type TEXT,
-                ADD COLUMN IF NOT EXISTS partnership_kind TEXT,
-                ADD COLUMN IF NOT EXISTS has_legal_personality BOOLEAN,
-                DROP COLUMN IF EXISTS sub_type;
-             ALTER TABLE gov
-                ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'MANUAL',
-                DROP COLUMN IF EXISTS chain_status;",
-        )
-        .map_err(|e| {
-            format!(
-                "sync target subject schema failed: {}",
-                postgres_error_text(&e)
-            )
-        })?;
 
         conn.batch_execute(
             "ALTER TABLE gov
@@ -815,19 +693,6 @@ impl Db {
             Self::ensure_column_state(conn, "citizens", column, true)?;
         }
         Self::ensure_column_state(conn, "gov", "source", true)?;
-        // 中文注释:旧 CID 方案残列和旧私权分类列必须不存在。
-        for (table, column) in [
-            ("subjects", "chain_status"),
-            ("gov", "chain_status"),
-            ("subjects", "full_name"),
-            ("subjects", "a3"),
-            ("subjects", "sub_type"),
-            ("private", "a3"),
-            ("private", "kind"),
-            ("private", "sub_type"),
-        ] {
-            Self::ensure_column_state(conn, table, column, false)?;
-        }
         Ok(())
     }
 

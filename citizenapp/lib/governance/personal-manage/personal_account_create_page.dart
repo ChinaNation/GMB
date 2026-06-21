@@ -23,15 +23,15 @@ import 'personal_manage_service.dart';
 import 'personal_proposal_history_service.dart';
 
 /// 个人多签账户创建页面（无需 CID）。
-class PersonalDuoqianCreatePage extends StatefulWidget {
-  const PersonalDuoqianCreatePage({super.key});
+class PersonalAccountCreatePage extends StatefulWidget {
+  const PersonalAccountCreatePage({super.key});
 
   @override
-  State<PersonalDuoqianCreatePage> createState() =>
-      _PersonalDuoqianCreatePageState();
+  State<PersonalAccountCreatePage> createState() =>
+      _PersonalAccountCreatePageState();
 }
 
-class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
+class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
   static const int _ss58Prefix = 2027;
 
   final _nameController = TextEditingController();
@@ -95,8 +95,8 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     if (wallet == null || name.isEmpty) return null;
 
     try {
-      // 个人多签地址派生统一走 [deriveDuoqianPersonalAddress]，全 app 仅此一处。
-      return deriveDuoqianPersonalAddress(
+      // 个人多签账户派生统一走 [derivePersonalAccountSs58]，全 app 仅此一处。
+      return derivePersonalAccountSs58(
         creatorPubkey: Uint8List.fromList(_hexDecode(wallet.pubkeyHex)),
         accountName: name,
         ss58Prefix: _ss58Prefix,
@@ -280,9 +280,8 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         return;
       }
 
-      final adminsBytes = _admins
-          .map((hex) => Uint8List.fromList(_hexDecode(hex)))
-          .toList();
+      final adminsBytes =
+          _admins.map((hex) => Uint8List.fromList(_hexDecode(hex))).toList();
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
@@ -356,25 +355,25 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         sign: signCallback,
       );
 
-      final addrHex = result.duoqianAccountHex;
+      final addrHex = result.accountHex;
       await WalletIsar.instance.writeTxn((isar) async {
-        final entity = PersonalDuoqianEntity()
-          ..duoqianAccount = addrHex
+        final entity = PersonalAccountEntity()
+          ..account = addrHex
           ..name = nameText
           ..creatorAddress = wallet.address
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
-        await isar.personalDuoqianEntitys.put(entity);
-        await PersonalDuoqianLocalState.putStatusInTxn(
+        await isar.personalAccountEntitys.put(entity);
+        await PersonalAccountLocalState.putStatusInTxn(
           isar,
           addrHex,
-          PersonalDuoqianLocalState.statusPending,
+          PersonalAccountLocalState.statusPending,
         );
       });
 
-      // 中文注释：只有入块并确认 PersonalDuoqianProposed 事件后，才写本地
+      // 中文注释：只有入块并确认 个人账户创建成功事件 事件后，才写本地
       // 创建提案；proposalId 使用链上事件返回值，不能再预测 NextProposalId。
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAddressHex: addrHex,
+        personalAccountHex: addrHex,
         proposalId: result.proposalId,
         action: PersonalProposalAction.create,
         status: PersonalProposalStatus.voting,
@@ -452,7 +451,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('派生多签地址：',
+                  const Text('派生多签账户：',
                       style:
                           TextStyle(fontSize: 12, color: AppTheme.primaryDark)),
                   const SizedBox(height: 4),

@@ -171,17 +171,19 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
   - `.github/workflows/citizenchain-runtime-src.yml`
 - `citizenchain/runtime/transaction`
   - `.github/workflows/citizenchain-runtime-transaction.yml`
-- `cid`
+- `citizencode`
   - `.github/workflows/citizencode-ci.yml`
-- `cpms`
+- `citizenpassport`
   - `.github/workflows/citizenpassport-ci.yml`
 - `citizenapp`
   - `.github/workflows/citizenapp-ci.yml`
+- `citizenwallet`
+  - `.github/workflows/citizenwallet-ci.yml`
 - `website`
   - 当前暂无专用 GitHub Actions，官网发布前需在本地执行 `npm run build` 并部署 `website/dist/`
 
 补充说明：
 
-- `cid` 部署仍由 `.github/workflows/cid-deploy.yml` 单独负责
+- `citizencode` 当前没有独立部署 workflow;push / pull_request 只做 CI,手动 `Run workflow` 才构建 `citizencode.deb`
 - Pages 只在 `docs/**` 或自身 workflow 变更时触发
 - 共享 Rust 根目录变更允许触发多个 citizenchain workflow，这是保留的安全边界

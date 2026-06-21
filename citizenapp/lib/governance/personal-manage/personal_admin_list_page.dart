@@ -54,7 +54,7 @@ class PersonalAdminListPage extends StatefulWidget {
     this.creatorPubkeyHex,
   });
 
-  /// 多签元信息(名称 / 多签地址 / cidNumber 等)。
+  /// 多签元信息(名称 / 多签账户 / cidNumber 等)。
   final InstitutionInfo institution;
 
   /// 多签当前状态(Pending / Active)。
@@ -109,7 +109,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       }
 
       final pid = await _lookup.findActiveCreate(
-        widget.institution.duoqianAccount,
+        widget.institution.account,
       );
 
       // 仅查本钱包持有的 admin 投票状态(其他人投票状态对 UI 无意义,节省 RPC)。

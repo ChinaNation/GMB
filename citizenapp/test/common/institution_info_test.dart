@@ -16,20 +16,21 @@ void main() {
 
   test('注册机构账户身份编码为机构 AccountId', () {
     final address = '11' * 32;
-    final identity = registeredDuoqianIdentity(address);
+    final identity = registeredAccountIdentity(address);
     final id = institutionIdentityToAccountId(identity);
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0x11));
-    expect(findInstitutionByAccountId(id)?.duoqianAccount, address);
+    expect(findInstitutionByAccountId(id)?.account, address);
   });
 
   test('个人多签身份编码为个人多签 AccountId', () {
     final address = '22' * 32;
-    final id = institutionIdentityToAccountId('personal:$address');
+    final id = institutionIdentityToAccountId('personal-account:$address');
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0x22));
-    expect(findInstitutionByAccountId(id)?.cidNumber, 'personal:$address');
+    expect(
+        findInstitutionByAccountId(id)?.cidNumber, 'personal-account:$address');
   });
 }

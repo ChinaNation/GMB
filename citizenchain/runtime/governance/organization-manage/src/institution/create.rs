@@ -5,7 +5,7 @@
 //!
 //! 唯一入口: `do_propose_create_institution`(call_index=5,ADR-008 step2b)
 //! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
-//! - 凭证带签发机构 SFID、签发机构主账户和签发管理员公钥
+//! - 凭证带签发机构 CID、签发机构主账户和签发管理员公钥
 //! - 资金模型: 发起时 reserve, 通过后划转, 拒绝后 unreserve
 
 extern crate alloc;
@@ -17,12 +17,12 @@ use crate::institution::types::{
     CreateInstitutionAction, InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
 };
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredSfid, AdminsOf, Config, Error, Event, InstitutionAccounts,
-    InstitutionInitialAccountsOf, Institutions, Pallet, PendingInstitutionCreate, RegisterNonceOf,
-    RegisterSignatureOf, SfidNumberOf, SfidRegisteredAccount, UsedRegisterNonce,
+    AccountNameOf, AccountRegisteredCid, AdminsOf, CidNumberOf, CidRegisteredAccount, Config,
+    Error, Event, InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
+    PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, UsedRegisterNonce,
     ACTION_CREATE_INSTITUTION,
 };
-use crate::traits::{ProtectedSourceChecker, SfidInstitutionVerifier};
+use crate::traits::{CidInstitutionVerifier, ProtectedSourceChecker};
 use crate::RegisteredInstitution;
 use codec::Encode;
 use frame_support::{
@@ -38,8 +38,8 @@ use votingengine::InternalVoteEngine;
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_create_institution<T: Config>(
     who: T::AccountId,
-    sfid_number: SfidNumberOf<T>,
-    sfid_full_name: AccountNameOf<T>,
+    cid_number: CidNumberOf<T>,
+    cid_full_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     org: u8,
     admins_len: u32,
@@ -47,7 +47,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    issuer_sfid_number: alloc::vec::Vec<u8>,
+    issuer_cid_number: alloc::vec::Vec<u8>,
     issuer_main_account: T::AccountId,
     signer_pubkey: [u8; 32],
     scope_province_name: alloc::vec::Vec<u8>,
@@ -57,18 +57,18 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         !T::ProtectedSourceChecker::is_protected(&who),
         Error::<T>::ProtectedSource
     );
-    ensure!(!sfid_number.is_empty(), Error::<T>::EmptySfidNumber);
-    ensure!(!sfid_full_name.is_empty(), Error::<T>::EmptyAccountName);
+    ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+    ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(
-        !issuer_sfid_number.is_empty(),
-        Error::<T>::EmptyIssuerSfidNumber
+        !issuer_cid_number.is_empty(),
+        Error::<T>::EmptyIssuerCidNumber
     );
     ensure!(
         !scope_province_name.is_empty(),
         Error::<T>::EmptyScopeProvinceName
     );
     ensure!(
-        !Institutions::<T>::contains_key(&sfid_number),
+        !Institutions::<T>::contains_key(&cid_number),
         Error::<T>::InstitutionAlreadyExists
     );
     Pallet::<T>::ensure_admin_config(&who, admins_len, &admins, threshold)?;
@@ -81,33 +81,33 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     );
     let account_name_payload = account_names_payload_from_initial_accounts::<T>(&accounts)?;
     ensure!(
-        T::SfidInstitutionVerifier::verify_institution_registration(
-            sfid_number.as_slice(),
-            &sfid_full_name,
+        T::CidInstitutionVerifier::verify_institution_registration(
+            cid_number.as_slice(),
+            &cid_full_name,
             &account_name_payload,
             &register_nonce,
             &signature,
-            issuer_sfid_number.as_slice(),
+            issuer_cid_number.as_slice(),
             &issuer_main_account,
             &signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
         ),
-        Error::<T>::InvalidSfidInstitutionSignature
+        Error::<T>::InvalidCidInstitutionSignature
     );
 
     let (created_accounts, main_account, fee_account, initial_total) =
-        validate_initial_accounts::<T>(&sfid_number, &accounts)?;
+        validate_initial_accounts::<T>(&cid_number, &accounts)?;
     // 共用余额预检查 helper(2026-05-03):amount + fee + ED 必须够。
     let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 中文注释：管理员更换与内部投票直接使用机构主账户多签地址。
+    // 中文注释：管理员更换与内部投票直接使用机构主账户。
     let institution = main_account.clone();
     let org = org;
     let action = CreateInstitutionAction {
-        sfid_number: sfid_number.clone(),
-        sfid_full_name: sfid_full_name.clone(),
+        cid_number: cid_number.clone(),
+        cid_full_name: cid_full_name.clone(),
         main_account: main_account.clone(),
         fee_account: fee_account.clone(),
         proposer: who.clone(),
@@ -129,9 +129,9 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
         }
         Institutions::<T>::insert(
-            &sfid_number,
+            &cid_number,
             InstitutionInfo {
-                sfid_full_name: sfid_full_name.clone(),
+                cid_full_name: cid_full_name.clone(),
                 main_account: main_account.clone(),
                 fee_account: fee_account.clone(),
                 org,
@@ -147,7 +147,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
 
         for account in created_accounts.iter() {
             InstitutionAccounts::<T>::insert(
-                &sfid_number,
+                &cid_number,
                 &account.account_name,
                 InstitutionAccountInfo {
                     address: account.address.clone(),
@@ -157,21 +157,17 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                     created_at: now,
                 },
             );
-            SfidRegisteredAccount::<T>::insert(
-                &sfid_number,
-                &account.account_name,
-                &account.address,
-            );
-            AccountRegisteredSfid::<T>::insert(
+            CidRegisteredAccount::<T>::insert(&cid_number, &account.account_name, &account.address);
+            AccountRegisteredCid::<T>::insert(
                 &account.address,
                 RegisteredInstitution {
-                    sfid_number: sfid_number.clone(),
+                    cid_number: cid_number.clone(),
                     account_name: account.account_name.clone(),
                 },
             );
         }
 
-        // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
+        // B 阶段(personal-manage 拆分)起,Accounts mirror 已删除;
         // 机构主账户的管理员配置真源在 admins-change::AdminAccounts[main_account 账户]；
         // 动态阈值真源在 internal-vote，duoqian-transfer 通过查询 trait 合并读取。
 
@@ -210,8 +206,8 @@ pub(crate) fn do_propose_create_institution<T: Config>(
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateProposed {
         proposal_id,
-        sfid_number,
-        sfid_full_name,
+        cid_number,
+        cid_full_name,
         main_account,
         proposer: who,
         accounts: created_accounts,

@@ -29,9 +29,7 @@ use crate::pallet::{Config, Error, Event, Pallet, PendingCloseProposal, Personal
 use crate::types::{PersonalCloseAction, PersonalStatus};
 use crate::BalanceOf;
 use crate::ACTION_CLOSE;
-use primitives::multisig::{
-    DuoqianAccountValidator, DuoqianReservedAccountChecker, ProtectedSourceChecker,
-};
+use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_close<T: Config>(

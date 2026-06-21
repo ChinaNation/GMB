@@ -202,8 +202,7 @@ void main() {
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
-      expect(
-          decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
+      expect(decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
       expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerMain));
       expect(decoded.fields['scope_province_name'], '安徽省');
       expect(decoded.fields['scope_city_name'], '合肥市');
@@ -281,12 +280,13 @@ void main() {
       expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
     });
 
-    test('decodes cid admin target role action labels', () {
+    test('decodes cid admin action labels', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
       final cases = {
-        'CREATE_CITY_ADMIN': '新增市管理员',
-        'CREATE_FEDERAL_ADMIN': '新增联邦管理员',
+        'CREATE_ADMIN': '新增管理员',
+        'UPDATE_ADMIN': '编辑管理员',
+        'DELETE_ADMIN': '删除管理员',
       };
 
       for (final entry in cases.entries) {
@@ -788,7 +788,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_institution');
-      expect(decoded.fields.keys.toList(), ['duoqian_account', 'beneficiary']);
+      expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
     });
 
     test('decodes personal close action as propose_close_personal', () {
@@ -800,7 +800,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_personal');
-      expect(decoded.fields.keys.toList(), ['duoqian_account', 'beneficiary']);
+      expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
     });
 
     // -----------------------------------------------------------------------
@@ -926,8 +926,7 @@ void main() {
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
       expect(decoded.fields.containsKey('subject_property'), isFalse);
-      expect(
-          decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
+      expect(decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
       expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerMain));
       expect(decoded.fields['scope_province_name'], '安徽省');
       expect(decoded.fields['scope_city_name'], '合肥市');

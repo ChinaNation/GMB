@@ -95,21 +95,21 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
 }
 
 #[test]
-fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
+fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let personal_account = registered_duoqian_account();
+        let personal_account = registered_account();
         let dest = beneficiary();
         let admins = BoundedVec::try_from(vec![
-            registered_duoqian_admin(0),
-            registered_duoqian_admin(1),
-            registered_duoqian_admin(2),
+            registered_account_admin(0),
+            registered_account_admin(1),
+            registered_account_admin(2),
         ])
         .expect("admins should fit");
 
         personal_manage::PersonalAccounts::<Test>::insert(
             &personal_account,
             personal_manage::PersonalAccount {
-                creator: registered_duoqian_admin(0),
+                creator: registered_account_admin(0),
                 account_name: b"personal"
                     .to_vec()
                     .try_into()
@@ -122,19 +122,23 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
             personal_account.clone(),
             admins_change::AdminAccount {
                 org: ORG_REN,
-                kind: admins_change::AdminAccountKind::PersonalDuoqian,
+                kind: admins_change::AdminAccountKind::PersonalAccount,
                 admins,
-                creator: registered_duoqian_admin(0),
+                creator: registered_account_admin(0),
                 created_at: 1,
                 updated_at: 1,
                 status: admins_change::AdminAccountStatus::Active,
             },
         );
-        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, personal_account.clone(), 2);
+        internal_vote::ActiveDynamicThresholds::<Test>::insert(
+            ORG_REN,
+            personal_account.clone(),
+            2,
+        );
         let _ = Balances::deposit_creating(&personal_account, 10_000);
 
         assert_ok!(DuoqianTransfer::propose_transfer(
-            RuntimeOrigin::signed(registered_duoqian_admin(0)),
+            RuntimeOrigin::signed(registered_account_admin(0)),
             ORG_REN,
             personal_account.clone(),
             dest.clone(),
@@ -143,7 +147,7 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
         ));
         let pid = last_proposal_id();
 
-        let vote_pairs = registered_duoqian_pairs(2);
+        let vote_pairs = registered_account_pairs(2);
         assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
         assert_eq!(Balances::free_balance(&personal_account), 8_490);
@@ -626,13 +630,13 @@ fn executed_transfer_cannot_be_executed_again() {
 }
 
 #[test]
-fn protected_address_is_rejected() {
+fn protected_account_is_rejected() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let protected = AccountId32::new([77u8; 32]);
 
         // 标记为受保护地址
-        PROTECTED_ADDRESS.with(|pa| *pa.borrow_mut() = Some(protected.clone()));
+        PROTECTED_ACCOUNT.with(|pa| *pa.borrow_mut() = Some(protected.clone()));
 
         assert_noop!(
             DuoqianTransfer::propose_transfer(

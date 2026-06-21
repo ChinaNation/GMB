@@ -1,6 +1,6 @@
 //! # 公民轻节点认证奖励发行模块 (citizen-issuance)
 //!
-//! 本模块在 SFID 绑定成功时，通过 `OnSfidBound` 回调自动发放一次性认证奖励。
+//! 本模块在 CID 绑定成功时，通过 `OnCidBound` 回调自动发放一次性认证奖励。
 //!
 //! ## 核心规则
 //! - 双重防重：按 `binding_id` + 按账户，防止同一身份或同一账户重复领奖。
@@ -25,7 +25,7 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use scale_info::TypeInfo;
-    use sfid_system::{OnSfidBound, OnSfidBoundWeight};
+    use cid_system::{OnCidBound, OnCidBoundWeight};
     use sp_runtime::traits::{SaturatedConversion, Zero};
     use sp_runtime::RuntimeDebug;
 
@@ -78,7 +78,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn account_rewarded)]
-    /// 中文注释：按账户维度再做一次防重，避免同一账户换绑 SFID 后再次领奖。
+    /// 中文注释：按账户维度再做一次防重，避免同一账户换绑 CID 后再次领奖。
     pub type AccountRewarded<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), ValueQuery>;
 
@@ -100,7 +100,7 @@ pub mod pallet {
         DuplicateBindingId,
         /// 中文注释：全局累计发放人数已达上限。
         MaxCountReached,
-        /// 中文注释：该账户已通过其他 SFID 领取过奖励，换绑不可再领。
+        /// 中文注释：该账户已通过其他 CID 领取过奖励，换绑不可再领。
         AccountAlreadyRewarded,
         /// 中文注释：奖励常量已由编译期断言锁定为非零；该分支只兜底 Balance 转换异常。
         ZeroRewardConfigured,
@@ -109,7 +109,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 中文注释：SFID 绑定成功后，认证发行模块执行一次奖励发放。
+        /// 中文注释：CID 绑定成功后，认证发行模块执行一次奖励发放。
         CertificationRewardIssued {
             who: T::AccountId,
             binding_id: T::Hash,
@@ -127,15 +127,15 @@ pub mod pallet {
     #[pallet::error]
     pub enum Error<T> {}
 
-    /// 中文注释：本模块不暴露 extrinsic，奖励发放由 OnSfidBound 回调驱动，无需用户直接调用。
+    /// 中文注释：本模块不暴露 extrinsic，奖励发放由 OnCidBound 回调驱动，无需用户直接调用。
     #[pallet::call]
     impl<T: Config> Pallet<T> {}
 
     impl<T: Config> Pallet<T> {
         /// 调用方在 weight 宏中引用此值。
-        pub fn on_sfid_bound_weight() -> Weight {
-            // 中文注释：上游 bind_sfid 在申报 weight 时会叠加这里的回调预算。
-            T::WeightInfo::on_sfid_bound()
+        pub fn on_cid_bound_weight() -> Weight {
+            // 中文注释：上游 bind_cid 在申报 weight 时会叠加这里的回调预算。
+            T::WeightInfo::on_cid_bound()
         }
 
         fn try_issue_certification_reward(
@@ -192,9 +192,9 @@ pub mod pallet {
         }
     }
 
-    /// 中文注释：实现 sfid-system 的绑定回调，在 SFID 绑定成功后自动尝试发放认证奖励。
-    impl<T: Config> OnSfidBound<T::AccountId, T::Hash> for Pallet<T> {
-        fn on_sfid_bound(who: &T::AccountId, binding_id: T::Hash) {
+    /// 中文注释：实现 cid-system 的绑定回调，在 CID 绑定成功后自动尝试发放认证奖励。
+    impl<T: Config> OnCidBound<T::AccountId, T::Hash> for Pallet<T> {
+        fn on_cid_bound(who: &T::AccountId, binding_id: T::Hash) {
             match Self::try_issue_certification_reward(who, binding_id) {
                 Ok(reward) => {
                     Self::deposit_event(Event::<T>::CertificationRewardIssued {
@@ -214,10 +214,10 @@ pub mod pallet {
         }
     }
 
-    /// 中文注释：向上游提供回调的 weight 预算，供 bind_sfid 在申报交易权重时叠加。
-    impl<T: Config> OnSfidBoundWeight for Pallet<T> {
-        fn on_sfid_bound_weight() -> Weight {
-            Pallet::<T>::on_sfid_bound_weight()
+    /// 中文注释：向上游提供回调的 weight 预算，供 bind_cid 在申报交易权重时叠加。
+    impl<T: Config> OnCidBoundWeight for Pallet<T> {
+        fn on_cid_bound_weight() -> Weight {
+            Pallet::<T>::on_cid_bound_weight()
         }
     }
 }

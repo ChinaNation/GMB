@@ -14,7 +14,7 @@ ADR-015 后，机构管理按账户级治理：
 - 机构只是账户归属分组，不是管理员集合真源。
 - 一个机构可以下挂多个账户，每个可操作账户独立持有管理员集合。
 - 主账户不管理其他账户，每个账户只由自己的管理员管理。
-- 当前 `propose_create_institution` 创建的是机构主账户的管理员主体；主体由主账户地址派生为 `InstitutionAccount(0x05)`，不是 `注册机构归属关系(0x02)`。
+- 当前 `propose_create_institution` 创建的是机构主账户的管理员主体；主体由主账户派生为 `InstitutionAccount(0x05)`，不是 `注册机构归属关系(0x02)`。
 - `org` 必须是 `ORG_PUP` 或 `ORG_OTH`；`ORG_REN` 只属于个人多签。
 - 省储行永久质押账户永远不可操作，不得进入本模块账户治理。
 - 注册机构账户管理员数量范围为 `2..=1989`。
@@ -33,7 +33,7 @@ ADR-015 后，机构管理按账户级治理：
 
 ## 3. 地址规则
 
-机构账户地址继续严格遵守 `DUOQIAN`：
+机构账户继续严格遵守 `DUOQIAN`：
 
 | 账户 | op_tag | preimage |
 |---|---:|---|
@@ -53,12 +53,12 @@ ADR-015 后，机构管理按账户级治理：
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
 - `CidRegisteredAccount` / `AccountRegisteredCid`：继续作为链上账户索引。
-- 个人多签账户不在本模块保存，当前真源为 `personal-manage::PersonalDuoqians`。
+- 个人多签账户不在本模块保存，当前真源为 `personal-manage::PersonalAccounts`。
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按 `org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
-- 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
+- 机构多签创建提案发起时，主账户会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按 `org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
+- 个人多签创建提案发起时，个人多签账户会通过 `admins-change::SubjectLifecycle` 写入 `PersonalAccount` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭成功后删除账户当前状态主体。
 - 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_account_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
 - 关闭多签必须走 `InternalVoteEngine::create_lifecycle_internal_proposal_with_data`，由投票引擎按 Active 管理员快照写全员关闭投票阈值。

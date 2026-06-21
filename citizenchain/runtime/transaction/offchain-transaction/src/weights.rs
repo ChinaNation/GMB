@@ -35,7 +35,7 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// L3 绑定清算行:SFID/机构合法性查询 + UserBank/DepositBalance 初始化。
+	/// L3 绑定清算行:CID/机构合法性查询 + UserBank/DepositBalance 初始化。
 	fn bind_clearing_bank() -> Weight {
 		Weight::from_parts(60_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 6_000))
@@ -98,7 +98,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 
-	/// 清算行节点声明:SFID 反查、管理员/资格/PeerId 唯一性校验与双索引写入。
+	/// 清算行节点声明:CID 反查、管理员/资格/PeerId 唯一性校验与双索引写入。
 	fn register_clearing_bank() -> Weight {
 		Weight::from_parts(95_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 9_000))

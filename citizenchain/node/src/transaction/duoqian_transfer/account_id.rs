@@ -2,10 +2,10 @@ use crate::governance;
 
 /// 将转账流程传入的机构身份解析为机构多签 AccountId32。
 pub fn account_id_from_transfer_identity(identity: &str) -> Result<[u8; 32], String> {
-    if let Some(hex) = identity.strip_prefix("duoqian:") {
+    if let Some(hex) = identity.strip_prefix("institution-account:") {
         return account_id_from_hex(hex, "注册机构多签账户");
     }
-    if identity.starts_with("personal:") {
+    if identity.starts_with("personal-account:") {
         return Err("node 端不支持个人多签转账".to_string());
     }
 
@@ -16,9 +16,9 @@ pub fn account_id_from_transfer_identity(identity: &str) -> Result<[u8; 32], Str
 
 fn account_id_from_hex(account_hex: &str, label: &str) -> Result<[u8; 32], String> {
     let clean = account_hex.strip_prefix("0x").unwrap_or(account_hex);
-    let account = hex::decode(clean).map_err(|e| format!("{label}地址解码失败: {e}"))?;
+    let account = hex::decode(clean).map_err(|e| format!("{label}解码失败: {e}"))?;
     if account.len() != 32 {
-        return Err(format!("{label}地址必须是 32 字节 AccountId"));
+        return Err(format!("{label}必须是 32 字节 AccountId"));
     }
     let mut out = [0u8; 32];
     out.copy_from_slice(&account);

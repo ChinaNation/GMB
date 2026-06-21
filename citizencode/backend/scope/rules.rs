@@ -32,28 +32,28 @@ pub struct VisibleScope {
 
 impl VisibleScope {
     /// FederalRegistry:只看本省,可在本省写。
-    pub fn federal_registry(province: String) -> Self {
+    pub fn federal_registry(province_name: String) -> Self {
         Self {
-            provinces: vec![province.clone()],
+            provinces: vec![province_name.clone()],
             cities: vec![],
             can_write: true,
             skip_province_list: true,
             skip_city_list: false,
-            locked_province_name: Some(province),
+            locked_province_name: Some(province_name),
             locked_city_name: None,
         }
     }
 
     /// CityRegistry:只看本市,可在本市写。
-    pub fn city_registry(province: String, city: String) -> Self {
+    pub fn city_registry(province_name: String, city_name: String) -> Self {
         Self {
-            provinces: vec![province.clone()],
-            cities: vec![city.clone()],
+            provinces: vec![province_name.clone()],
+            cities: vec![city_name.clone()],
             can_write: true,
             skip_province_list: true,
             skip_city_list: true,
-            locked_province_name: Some(province),
-            locked_city_name: Some(city),
+            locked_province_name: Some(province_name),
+            locked_city_name: Some(city_name),
         }
     }
 

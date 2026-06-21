@@ -2,14 +2,14 @@
 
 //! 个人多签管理 pallet（pallet_index = 7,MODULE_TAG = `b"per-mgmt"`）。
 //!
-//! 业务边界:用户自定义的多签账户(无 SFID 归属),由 `creator + account_name`
-//! 派生地址 `derive_personal_duoqian_account`。承载创建/关闭两类提案的发起、
+//! 业务边界:用户自定义的多签账户(无 CID 归属),由 `creator + account_name`
+//! 派生地址 `derive_personal_account`。承载创建/关闭两类提案的发起、
 //! 投票回调执行、否决/超时清理。
 //!
 //! 与机构多签 (`organization-manage`) 完全独立的 storage / event / error / extrinsic 命名空间;
 //! 共用基础设施仅限于 `primitives::core_const` 派生函数、
 //! `primitives::multisig` 校验抽象、`votingengine::InternalVoteEngine` 和
-//! `admins-change::AdminAccountKind::PersonalDuoqian`。
+//! `admins-change::AdminAccountKind::PersonalAccount`。
 
 /// 模块标识前缀(8 字节,与 organization-manage 的 b"org-mgmt" 长度对仗)。
 /// admins-change / citizenwallet / citizenapp 三方解码必须保持一致。
@@ -69,10 +69,8 @@ pub mod pallet {
         /// 内部投票引擎
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
-        type AccountValidator: primitives::multisig::DuoqianAccountValidator<Self::AccountId>;
-        type ReservedAccountChecker: primitives::multisig::DuoqianReservedAccountChecker<
-            Self::AccountId,
-        >;
+        type AccountValidator: primitives::multisig::AccountValidator<Self::AccountId>;
+        type ReservedAccountChecker: primitives::multisig::ReservedAccountGuard<Self::AccountId>;
         type ProtectedSourceChecker: primitives::multisig::ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
 
@@ -118,13 +116,13 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 个人多签账户配置。key 为 personal_duoqian_account。
+    /// 个人多签账户配置。key 为 personal_account。
     ///
     /// 中文注释:本表统一保存 creator/account_name/created_at/status。
     /// 管理员集合、管理员数量只允许从 admins-change 读取；
     /// 普通动态阈值只允许从投票引擎 internal-vote 读取。
     #[pallet::storage]
-    #[pallet::getter(fn personal_duoqians)]
+    #[pallet::getter(fn personal_accounts)]
     pub type PersonalAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, PersonalAccountOf<T>, OptionQuery>;
 
@@ -272,10 +270,10 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 发起"创建个人多签账户"提案(无需 SFID 注册)。
+        /// 发起"创建个人多签账户"提案(无需 CID 注册)。
         ///
         /// 地址由 `creator + account_name` 派生，统一调用
-        /// `primitives::core_const::derive_duoqian_account(OP_PERSONAL, ss58, creator || name)`。
+        /// `primitives::core_const::derive_account(OP_PERSONAL, ss58, creator || name)`。
         ///
         /// 投票通过后由 `InternalVoteExecutor` 自动执行入金 + 激活。
         #[pallet::call_index(0)]
@@ -327,13 +325,13 @@ pub mod pallet {
         ///
         /// 地址只依赖 creator 与 account_name,与管理员列表无关,
         /// 所以未来换管理员地址不变。
-        pub fn derive_personal_duoqian_account(
+        pub fn derive_personal_account(
             creator: &T::AccountId,
             account_name: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
             let mut payload = creator.encode();
             payload.extend_from_slice(account_name);
-            let digest = primitives::core_const::derive_duoqian_account(
+            let digest = primitives::core_const::derive_account(
                 primitives::core_const::OP_PERSONAL,
                 <T as frame_system::Config>::SS58Prefix::get(),
                 &payload,

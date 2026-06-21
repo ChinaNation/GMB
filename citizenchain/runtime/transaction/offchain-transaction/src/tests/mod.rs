@@ -1,7 +1,7 @@
 //! 清算行 pallet 集成测试(Step 2b-iv-b + D 步新增)。
 //!
 //! 覆盖**端到端**路径:构造 mock `Test` runtime(含 `frame_system` +
-//! `pallet_balances` + 本 pallet + mock SFID),用真实 sr25519 密钥签 L3 支付
+//! `pallet_balances` + 本 pallet + mock CID),用真实 sr25519 密钥签 L3 支付
 //! 意图,经 `submit_offchain_batch_v2` 执行后断言链上 Storage 全部吻合。
 //!
 //! 测试清单:
@@ -69,7 +69,7 @@ const BANK_MAIN_BYTES: [u8; 32] = [0xAA; 32];
 const BANK_FEE_BYTES: [u8; 32] = [0xAB; 32];
 const BANK_ADMIN_SEED: [u8; 32] = [0xAC; 32];
 const OTHER_BANK_BYTES: [u8; 32] = [0xBA; 32];
-const BANK_SFID: &[u8] = b"GD001-SCB05-000000001-2026";
+const BANK_CID: &[u8] = b"GD001-SCB05-000000001-2026";
 
 fn bank_main() -> AccountId32 {
     AccountId32::new(BANK_MAIN_BYTES)
@@ -84,25 +84,25 @@ fn bank_admin() -> AccountId32 {
     AccountId32::new(bank_admin_pair().public().0)
 }
 
-/// Mock `SfidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 K1=S 的主账户 Active,
+/// Mock `CidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 K1=S 的主账户 Active,
 /// `BANK_FEE_BYTES` 注册为 K1=S 的费用账户 Active;`bank_admin()` 是主账户唯一
 /// 管理员。`OTHER_BANK_BYTES` 故意不注册,用于负路径。
-pub struct MockSfid;
+pub struct MockCid;
 
-impl crate::bank_check::SfidAccountQuery<AccountId32> for MockSfid {
+impl crate::bank_check::CidAccountQuery<AccountId32> for MockCid {
     fn account_info(addr: &AccountId32) -> Option<(sp_std::vec::Vec<u8>, sp_std::vec::Vec<u8>)> {
         let bytes: &[u8; 32] = addr.as_ref();
         if *bytes == BANK_MAIN_BYTES {
-            Some((BANK_SFID.to_vec(), "主账户".as_bytes().to_vec()))
+            Some((BANK_CID.to_vec(), "主账户".as_bytes().to_vec()))
         } else if *bytes == BANK_FEE_BYTES {
-            Some((BANK_SFID.to_vec(), "费用账户".as_bytes().to_vec()))
+            Some((BANK_CID.to_vec(), "费用账户".as_bytes().to_vec()))
         } else {
             None
         }
     }
 
-    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
-        if sfid_number != BANK_SFID {
+    fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
+        if cid_number != BANK_CID {
             return None;
         }
         if account_name == "主账户".as_bytes() {
@@ -143,7 +143,7 @@ impl offchain_transaction::Config for Test {
     type MaxBatchSize = ConstU32<256>;
     type MaxBatchSignatureLength = ConstU32<128>;
     type InstitutionAsset = (); // fail-open,测试白名单放行
-    type SfidAccountQuery = MockSfid;
+    type CidAccountQuery = MockCid;
     type WeightInfo = ();
 }
 

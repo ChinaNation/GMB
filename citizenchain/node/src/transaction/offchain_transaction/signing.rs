@@ -64,9 +64,8 @@ pub fn build_register_call_data(
         return Err("rpc_port 必须 >= 1024".to_string());
     }
 
-    let mut call = Vec::with_capacity(
-        2 + 1 + cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2,
-    );
+    let mut call =
+        Vec::with_capacity(2 + 1 + cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2);
     call.push(PALLET_INDEX);
     call.push(CALL_REGISTER);
     call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));

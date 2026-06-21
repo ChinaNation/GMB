@@ -128,36 +128,55 @@ jobs:
       - name: 写入 Android release keystore
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
-          CITIZENAPP_RELEASE_KEYSTORE_BASE64: ${{ secrets.CITIZENAPP_RELEASE_KEYSTORE_BASE64 }}
-          CITIZENAPP_ANDROID_STORE_PASSWORD: ${{ secrets.CITIZENAPP_ANDROID_STORE_PASSWORD }}
-          CITIZENAPP_ANDROID_KEY_ALIAS: ${{ secrets.CITIZENAPP_ANDROID_KEY_ALIAS }}
-          CITIZENAPP_ANDROID_KEY_PASSWORD: ${{ secrets.CITIZENAPP_ANDROID_KEY_PASSWORD }}
-          CITIZENAPP_RELEASE_KEYSTORE_SHA256: ${{ secrets.CITIZENAPP_RELEASE_KEYSTORE_SHA256 }}
+          GMB_APP_KEY: ${{ secrets.GMB_APP_KEY }}
         run: |
           set -euo pipefail
 
-          for name in CITIZENAPP_RELEASE_KEYSTORE_BASE64 CITIZENAPP_ANDROID_STORE_PASSWORD CITIZENAPP_ANDROID_KEY_ALIAS CITIZENAPP_ANDROID_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::手动发布缺少 $name secret。"
-              exit 1
-            fi
-          done
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
 
-          keystore_path="$RUNNER_TEMP/citizenapp-release.jks"
-          printf '%s' "$CITIZENAPP_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          raw = os.environ.get("GMB_APP_KEY", "").strip()
+          if not raw:
+              raise SystemExit("手动发布缺少 GMB_APP_KEY secret。")
 
-          if [ -n "${CITIZENAPP_RELEASE_KEYSTORE_SHA256:-}" ]; then
-            actual_sha="$(shasum -a 256 "$keystore_path" | awk '{print $1}')"
-            if [ "$actual_sha" != "$CITIZENAPP_RELEASE_KEYSTORE_SHA256" ]; then
-              echo "::error::citizenapp release keystore SHA256 mismatch."
-              exit 1
-            fi
-          fi
+          props = {}
+          for line in raw.splitlines():
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              if "=" not in line:
+                  raise SystemExit("GMB_APP_KEY 每行必须使用 key=value 格式。")
+              key, value = line.split("=", 1)
+              props[key.strip()] = value.strip()
 
-          echo "CITIZENAPP_ANDROID_STORE_FILE=$keystore_path" >> "$GITHUB_ENV"
-          echo "CITIZENAPP_ANDROID_STORE_PASSWORD=$CITIZENAPP_ANDROID_STORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "CITIZENAPP_ANDROID_KEY_ALIAS=$CITIZENAPP_ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "CITIZENAPP_ANDROID_KEY_PASSWORD=$CITIZENAPP_ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+          keystore_b64 = props.get("keystore")
+          password = props.get("password")
+          alias = props.get("alias", "upload")
+          key_password = props.get("keyPassword", password)
+          if not keystore_b64 or not password:
+              raise SystemExit("GMB_APP_KEY 必须包含 keystore=<base64后的jks> 和 password=<密码>。")
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          android_dir = workspace / "citizenapp" / "android"
+          keystore_path = android_dir / "gmb-app-release.jks"
+          keystore_path.write_bytes(base64.b64decode(keystore_b64))
+
+          # 中文注释：两个移动端共用同一套 GMB_APP_KEY；alias 随现有 keystore 写入，key 密码默认复用 keystore 密码。
+          (android_dir / "key.properties").write_text(
+              "\n".join(
+                  [
+                      f"storeFile={keystore_path}",
+                      f"storePassword={password}",
+                      f"keyAlias={alias}",
+                      f"keyPassword={key_password}",
+                      "",
+                  ]
+              ),
+              encoding="utf-8",
+          )
+          PY
 
       - name: 打包 Debug APK（push / PR 检查）
         if: ${{ github.event_name != 'workflow_dispatch' }}

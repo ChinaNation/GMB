@@ -36,28 +36,28 @@ pub const DUOQIAN: &[u8; 7] = b"DUOQIAN";
 
 // 地址派生 op_tag (0x00-0x0F)
 // 每个 op_tag 单一派生公式，不得复用，OP_MAIN / OP_FEE 覆盖所有机构，保留名 "主账户"/"费用账户"
-// 必须强制走这两个 tag，禁止落到 OP_INSTITUTION。OP_INSTITUTION 仅容纳 SFID 机构的自定义命名账户。
-pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: ss58 || sfid_number
-pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: ss58 || sfid_number
-pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: ss58 || sfid_number
-pub const OP_AN: u8 = 0x03; // 安全基金 · input: ss58 || sfid_number
-pub const OP_HE: u8 = 0x04; // 两和基金 · input: ss58 || sfid_number
+// 必须强制走这两个 tag，禁止落到 OP_INSTITUTION。OP_INSTITUTION 仅容纳 CID 机构的自定义命名账户。
+pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: ss58 || cid_number
+pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: ss58 || cid_number
+pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: ss58 || cid_number
+pub const OP_AN: u8 = 0x03; // 安全基金 · input: ss58 || cid_number
+pub const OP_HE: u8 = 0x04; // 两和基金 · input: ss58 || cid_number
 pub const OP_PERSONAL: u8 = 0x05; // 个人多签账户 · input: ss58 || creator_32 || account_name
-pub const OP_INSTITUTION: u8 = 0x06; // SFID 机构自定义命名账户 · input: ss58 || sfid_number || account_name
+pub const OP_INSTITUTION: u8 = 0x06; // CID 机构自定义命名账户 · input: ss58 || cid_number || account_name
                                      //（account_name 非空且不得为 "主账户"/"费用账户"/"永久质押"/"安全基金"/"两和基金" 等保留角色名）
 
-/// SFID 机构号(sfid_number)链上/链下统一最大字节数（单一权威源）。
+/// CID 机构号(cid_number)链上/链下统一最大字节数（单一权威源）。
 ///
 /// 真实格式 `R5-K3P1C1-N9-D4` 定长 26 字节（如 `LN001-GCB05-944805165-2026`），
-/// 取 32 留余量。链端 `MaxSfidNumberLength`、SFID 后端、各端测试一律 import 本常量，
+/// 取 32 留余量。链端 `MaxCidNumberLength`、CID 后端、各端测试一律 import 本常量，
 /// 禁止任何位置另写死长度值。
-pub const SFID_NUMBER_MAX_BYTES: u32 = 32;
+pub const CID_NUMBER_MAX_BYTES: u32 = 32;
 
 /// 机构账户受限注册保留名（单一权威源）。
 ///
 /// - `主账户` / `费用账户`：每个机构强制生成的默认账户，创建时强制路由
 ///   `OP_MAIN`/`OP_FEE`，不得作为自定义命名账户。
-/// - `永久质押` / `安全基金` / `两和基金`：制度专属账户，普通 SFID 机构禁止注册，
+/// - `永久质押` / `安全基金` / `两和基金`：制度专属账户，普通 CID 机构禁止注册，
 ///   account_name 命中即拒绝（`ReservedAccountName`）。
 pub const RESERVED_NAME_MAIN: &[u8] = "主账户".as_bytes();
 pub const RESERVED_NAME_FEE: &[u8] = "费用账户".as_bytes();
@@ -86,7 +86,7 @@ pub fn is_forbidden_account_name(name: &[u8]) -> bool {
 /// 中文注释：任何主账户、费用账户、永久质押、安全基金、两和基金、
 /// 个人多签和机构自定义账户都必须调用本函数；禁止在其它模块重新拼接
 /// `DUOQIAN || op_tag || ss58 || payload`。
-pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
+pub fn derive_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
     let ss58_le = ss58.to_le_bytes();
     let mut preimage = Vec::with_capacity(DUOQIAN.len() + 1 + ss58_le.len() + payload.len());
     preimage.extend_from_slice(DUOQIAN);
@@ -100,6 +100,6 @@ pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32]
 pub const OP_SIGN_BIND: u8 = 0x10; // 公民身份绑定
 pub const OP_SIGN_VOTE: u8 = 0x11; // 公民投票
 pub const OP_SIGN_POP: u8 = 0x12; // 人口快照
-pub const OP_SIGN_INST: u8 = 0x13; // SFID 机构登记
+pub const OP_SIGN_INST: u8 = 0x13; // CID 机构登记
                                    // 所有治理投票一律走 `InternalVote::cast` 公开 call,业务模块
                                    // 新业务从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。
