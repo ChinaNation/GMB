@@ -110,6 +110,7 @@
 - `memory/08-tasks/open/20260620-unify-admins-finalize.md`
 - `memory/08-tasks/open/20260620-unify-cid-fields.md`
 - `memory/08-tasks/open/20260620-whitepaper-completion.md`
+- `memory/08-tasks/open/20260621-143758-china-sqlite.md`
 - `memory/08-tasks/open/20260621-citizenapp-cpms-ci-fix.md`
 - `memory/08-tasks/open/20260621-federal-registry-onchain-single-source.md`
 - `memory/08-tasks/open/20260621-product-rename-citizencode-citizenpassport.md`
