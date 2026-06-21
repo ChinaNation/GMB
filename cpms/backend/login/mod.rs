@@ -28,24 +28,24 @@ fn generate_secure_token(prefix: &str) -> String {
 }
 
 /// 管理员 session 空闲过期时间（15 分钟无操作后过期）。
-pub(crate) const ADMIN_IDLE_EXPIRES_SECONDS: i64 = 15 * 60;
+pub(crate) const ADMINS_IDLE_EXPIRES_SECONDS: i64 = 15 * 60;
 /// 操作员 session 空闲过期时间（30 分钟无操作后过期）。
-pub(crate) const OPERATOR_IDLE_EXPIRES_SECONDS: i64 = 30 * 60;
+pub(crate) const OPERATORS_IDLE_EXPIRES_SECONDS: i64 = 30 * 60;
 const CHALLENGE_EXPIRES_SECONDS: i64 = 90;
 
-pub(crate) fn session_ttl_seconds(role: &str) -> i64 {
-    if role == "ADMIN" {
-        ADMIN_IDLE_EXPIRES_SECONDS
+pub(crate) fn session_ttl_seconds(user_group: &str) -> i64 {
+    if user_group == "admins" {
+        ADMINS_IDLE_EXPIRES_SECONDS
     } else {
-        OPERATOR_IDLE_EXPIRES_SECONDS
+        OPERATORS_IDLE_EXPIRES_SECONDS
     }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct SessionUser {
     user_id: String,
-    role: String,
-    admin_name: String,
+    user_group: String,
+    admin_display_name: String,
 }
 
 #[derive(Deserialize)]
@@ -68,7 +68,7 @@ struct QrChallengeData {
 struct QrCompleteRequest {
     challenge_id: String,
     session_id: String,
-    admin_pubkey: String,
+    admin_account: String,
     signature: String,
 }
 
@@ -128,7 +128,7 @@ async fn auth_qr_challenge(
     .await?;
 
     sqlx::query(
-        "INSERT INTO login_challenges (challenge_id, admin_pubkey, session_id, expire_at, consumed, created_at)
+        "INSERT INTO login_challenges (challenge_id, admin_account, session_id, expire_at, consumed, created_at)
          VALUES ($1, '', $2, $3, FALSE, $4)",
     )
     .bind(&challenge_id)
@@ -171,13 +171,13 @@ async fn auth_qr_complete(
 
     if req.challenge_id.trim().is_empty()
         || req.session_id.trim().is_empty()
-        || req.admin_pubkey.trim().is_empty()
+        || req.admin_account.trim().is_empty()
         || req.signature.trim().is_empty()
     {
         return Err(err(
             StatusCode::BAD_REQUEST,
             1001,
-            "challenge_id, session_id, admin_pubkey, signature are required",
+            "challenge_id, session_id, admin_account, signature are required",
         ));
     }
     let now_ts = Utc::now().timestamp();
@@ -230,8 +230,8 @@ async fn auth_qr_complete(
     }
 
     // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
-    let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
-    if admin.role == "OPERATOR" {
+    let admin = find_admin_by_pubkey(&state, req.admin_account.trim()).await?;
+    if admin.user_group == "operators" {
         crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
     }
     // 重建完整签名原文(包含签名者公钥),与 citizenwallet 端
@@ -241,10 +241,10 @@ async fn auth_qr_complete(
         req.challenge_id.trim(),
         Some("cpms"),
         Some(expire_at),
-        req.admin_pubkey.trim(),
+        req.admin_account.trim(),
     );
     if verify_citizenwallet_login_signature(
-        req.admin_pubkey.trim(),
+        req.admin_account.trim(),
         &verify_message,
         req.signature.trim(),
     )
@@ -260,10 +260,10 @@ async fn auth_qr_complete(
     // 验签通过，消费 challenge
     sqlx::query(
         "UPDATE login_challenges
-         SET consumed = TRUE, admin_pubkey = $1
+         SET consumed = TRUE, admin_account = $1
          WHERE challenge_id = $2",
     )
-    .bind(req.admin_pubkey.trim())
+    .bind(req.admin_account.trim())
     .bind(req.challenge_id.trim())
     .execute(tx.as_mut())
     .await
@@ -280,7 +280,7 @@ async fn auth_qr_complete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     let access_token = generate_secure_token("atk");
-    let ttl = session_ttl_seconds(&admin.role);
+    let ttl = session_ttl_seconds(&admin.user_group);
     let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
 
     let mut tx2 = state
@@ -290,12 +290,12 @@ async fn auth_qr_complete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
     sqlx::query(
-        "INSERT INTO sessions (access_token, user_id, role, expires_at, created_at)
+        "INSERT INTO sessions (access_token, user_id, user_group, expires_at, created_at)
          VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(&access_token)
     .bind(&admin.user_id)
-    .bind(&admin.role)
+    .bind(&admin.user_group)
     .bind(expires_at)
     .bind(now_ts)
     .execute(tx2.as_mut())
@@ -309,14 +309,14 @@ async fn auth_qr_complete(
     })?;
 
     sqlx::query(
-        "INSERT INTO qr_login_results (challenge_id, session_id, access_token, expires_in, user_id, role, created_at)
+        "INSERT INTO qr_login_results (challenge_id, session_id, access_token, expires_in, user_id, user_group, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (challenge_id) DO UPDATE SET
            session_id = EXCLUDED.session_id,
            access_token = EXCLUDED.access_token,
            expires_in = EXCLUDED.expires_in,
            user_id = EXCLUDED.user_id,
-           role = EXCLUDED.role,
+           user_group = EXCLUDED.user_group,
            created_at = EXCLUDED.created_at",
     )
     .bind(req.challenge_id.trim())
@@ -324,7 +324,7 @@ async fn auth_qr_complete(
     .bind(&access_token)
     .bind(ttl)
     .bind(&admin.user_id)
-    .bind(&admin.role)
+    .bind(&admin.user_group)
     .bind(now_ts)
     .execute(tx2.as_mut())
     .await
@@ -369,8 +369,8 @@ async fn auth_qr_result(
         })?;
 
     if let Some(row) = sqlx::query(
-        "SELECT r.session_id, r.access_token, r.expires_in, r.user_id, r.role,
-                COALESCE(a.admin_name, '') AS admin_name
+        "SELECT r.session_id, r.access_token, r.expires_in, r.user_id, r.user_group,
+                COALESCE(a.admin_display_name, '') AS admin_display_name
          FROM qr_login_results r
          JOIN admin_users a ON a.user_id = r.user_id
          WHERE r.challenge_id = $1",
@@ -397,10 +397,10 @@ async fn auth_qr_result(
         let expires_in: i64 = row.get("expires_in");
         let user = SessionUser {
             user_id: row.get("user_id"),
-            role: row.get("role"),
-            admin_name: row.get("admin_name"),
+            user_group: row.get("user_group"),
+            admin_display_name: row.get("admin_display_name"),
         };
-        if user.role == "OPERATOR" {
+        if user.user_group == "operators" {
             crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
         }
         sqlx::query("DELETE FROM qr_login_results WHERE challenge_id = $1 AND session_id = $2")
@@ -516,8 +516,8 @@ async fn auth_me(
     let admin = crate::common::find_admin_by_user_id(&state, &ctx.user_id).await?;
     Ok(Json(ok(SessionUser {
         user_id: ctx.user_id,
-        role: ctx.role,
-        admin_name: admin.admin_name,
+        user_group: ctx.user_group,
+        admin_display_name: admin.admin_display_name,
     })))
 }
 
@@ -575,14 +575,14 @@ fn extract_domain_from_origin(origin: &str) -> Option<String> {
 }
 
 pub(crate) fn verify_citizenwallet_login_signature(
-    admin_pubkey: &str,
+    admin_account: &str,
     signed_message: &str,
     signature: &str,
 ) -> Result<(), &'static str> {
     let pubkey_bytes =
-        crate::common::decode_bytes(admin_pubkey).ok_or("invalid admin_pubkey encoding")?;
+        crate::common::decode_bytes(admin_account).ok_or("invalid admin_account encoding")?;
     if pubkey_bytes.len() != 32 {
-        return Err("invalid admin_pubkey length");
+        return Err("invalid admin_account length");
     }
     let sig_bytes = crate::common::decode_bytes(signature).ok_or("invalid signature encoding")?;
     if sig_bytes.len() != 64 {

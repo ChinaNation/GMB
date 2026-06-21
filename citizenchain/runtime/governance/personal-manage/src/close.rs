@@ -1,16 +1,16 @@
 //! 个人多签关闭流程实现(call_index=1)。
 //!
-//! 仅接受个人多签账户(`PersonalDuoqians.contains_key` 命中),
-//! 否则返回 `Error::NotPersonalDuoqian`;机构多签关闭走 organization-manage 入口。
+//! 仅接受个人多签账户(`PersonalAccounts.contains_key` 命中),
+//! 否则返回 `Error::NotPersonalAccount`;机构多签关闭走 organization-manage 入口。
 //!
 //! 业务流程：
 //! 1. 校验地址、受益人、地址非保留
-//! 2. 校验地址 PersonalDuoqians 已 Active
+//! 2. 校验地址 PersonalAccounts 已 Active
 //! 3. 校验发起人是该多签 admins-change 账户的活跃管理员
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
 //! 5. 注销生命周期投票的全员阈值由投票引擎按管理员快照生成
 //! 6. 写入 PendingCloseProposal[address] = proposal_id 防并发
-//! 7. 发射 CloseDuoqianProposed 事件
+//! 7. 发射 PersonalCloseProposed 事件
 
 extern crate alloc;
 
@@ -25,8 +25,8 @@ use sp_runtime::{
     DispatchResult, SaturatedConversion,
 };
 
-use crate::pallet::{Config, Error, Event, Pallet, PendingCloseProposal, PersonalDuoqians};
-use crate::types::{CloseDuoqianAction, DuoqianStatus};
+use crate::pallet::{Config, Error, Event, Pallet, PendingCloseProposal, PersonalAccounts};
+use crate::types::{PersonalCloseAction, PersonalStatus};
 use crate::BalanceOf;
 use crate::ACTION_CLOSE;
 use primitives::multisig::{
@@ -36,30 +36,24 @@ use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_close<T: Config>(
     who: T::AccountId,
-    duoqian_account: T::AccountId,
+    account: T::AccountId,
     beneficiary: T::AccountId,
 ) -> DispatchResult {
     // 仅个人多签可走本入口
     ensure!(
-        PersonalDuoqians::<T>::contains_key(&duoqian_account),
-        Error::<T>::NotPersonalDuoqian
+        PersonalAccounts::<T>::contains_key(&account),
+        Error::<T>::NotPersonalAccount
     );
 
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&duoqian_account),
+        !T::ProtectedSourceChecker::is_protected(&account),
         Error::<T>::ProtectedSource
     );
     ensure!(
-        T::InstitutionAsset::can_spend(
-            &duoqian_account,
-            InstitutionAssetAction::DuoqianCloseExecute,
-        ),
+        T::InstitutionAsset::can_spend(&account, InstitutionAssetAction::DuoqianCloseExecute,),
         Error::<T>::ProtectedSource
     );
-    ensure!(
-        beneficiary != duoqian_account,
-        Error::<T>::InvalidBeneficiary
-    );
+    ensure!(beneficiary != account, Error::<T>::InvalidBeneficiary);
     ensure!(
         !T::ReservedAccountChecker::is_reserved(&beneficiary),
         Error::<T>::InvalidBeneficiary
@@ -73,15 +67,14 @@ pub(crate) fn do_propose_close<T: Config>(
         Error::<T>::InvalidBeneficiary
     );
 
-    let account =
-        PersonalDuoqians::<T>::get(&duoqian_account).ok_or(Error::<T>::DuoqianNotFound)?;
+    let account_info = PersonalAccounts::<T>::get(&account).ok_or(Error::<T>::PersonalNotFound)?;
     ensure!(
-        account.status == DuoqianStatus::Active,
-        Error::<T>::DuoqianNotActive
+        account_info.status == PersonalStatus::Active,
+        Error::<T>::PersonalNotActive
     );
 
     // 个人多签治理账户直接使用个人多签账户地址。
-    let institution = duoqian_account.clone();
+    let institution = account.clone();
     let org = votingengine::types::ORG_REN;
     ensure!(
         admins_change::Pallet::<T>::is_active_account_admin(org, institution.clone(), &who),
@@ -89,11 +82,11 @@ pub(crate) fn do_propose_close<T: Config>(
     );
 
     ensure!(
-        !PendingCloseProposal::<T>::contains_key(&duoqian_account),
+        !PendingCloseProposal::<T>::contains_key(&account),
         Error::<T>::CloseAlreadyPending
     );
 
-    let all_balance = T::Currency::free_balance(&duoqian_account);
+    let all_balance = T::Currency::free_balance(&account);
     ensure!(
         all_balance >= T::MinCloseBalance::get(),
         Error::<T>::CloseBalanceBelowMinimum
@@ -109,12 +102,12 @@ pub(crate) fn do_propose_close<T: Config>(
         ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
     }
     ensure!(
-        T::Currency::reserved_balance(&duoqian_account).is_zero(),
+        T::Currency::reserved_balance(&account).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
 
-    let action = CloseDuoqianAction {
-        duoqian_account: duoqian_account.clone(),
+    let action = PersonalCloseAction {
+        account: account.clone(),
         beneficiary: beneficiary.clone(),
         proposer: who.clone(),
     };
@@ -129,11 +122,11 @@ pub(crate) fn do_propose_close<T: Config>(
             crate::MODULE_TAG,
             data,
         )?;
-    PendingCloseProposal::<T>::insert(&duoqian_account, proposal_id);
+    PendingCloseProposal::<T>::insert(&account, proposal_id);
 
-    Pallet::<T>::deposit_event(Event::<T>::CloseDuoqianProposed {
+    Pallet::<T>::deposit_event(Event::<T>::PersonalCloseProposed {
         proposal_id,
-        duoqian_account,
+        account,
         proposer: who,
         beneficiary,
     });

@@ -630,7 +630,8 @@ fn snapshot_sig_ok() -> votingengine::pallet::VoteSignatureOf<Test> {
         .expect("snapshot signature should fit")
 }
 
-fn issuer_sfid_number_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<128>> {
+fn issuer_sfid_number_ok(
+) -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<128>> {
     b"SFID001"
         .to_vec()
         .try_into()

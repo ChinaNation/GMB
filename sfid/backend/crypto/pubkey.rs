@@ -5,7 +5,7 @@
 
 use crate::admins::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
 
-pub(crate) fn normalize_admin_pubkey(input: &str) -> Option<String> {
+pub(crate) fn normalize_admin_account(input: &str) -> Option<String> {
     normalize_sr25519_pubkey(input)
 }
 
@@ -14,7 +14,7 @@ pub(crate) fn normalize_cpms_pubkey(input: &str) -> Option<String> {
     normalize_sr25519_pubkey(input)
 }
 
-pub(crate) fn same_admin_pubkey(left: &str, right: &str) -> bool {
+pub(crate) fn same_admin_account(left: &str, right: &str) -> bool {
     same_sr25519_pubkey(left, right)
 }
 

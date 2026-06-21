@@ -6,20 +6,20 @@ import type { AdminAuth } from './types';
 
 export type AdminAuthCheck = {
   ok: boolean;
-  admin_pubkey: string;
-  role: 'FEDERAL_ADMIN' | 'CITY_ADMIN';
-  admin_name: string;
-  admin_province?: string | null;
-  admin_city?: string | null;
+  admin_account: string;
+  registry_org_code: 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
+  admin_display_name: string;
+  scope_province_name?: string | null;
+  scope_city_name?: string | null;
   passkey_bound: boolean;
 };
 
 export type AdminIdentifyResult = {
-  admin_pubkey: string;
-  role: 'FEDERAL_ADMIN' | 'CITY_ADMIN';
-  admin_name: string;
-  admin_province?: string | null;
-  admin_city?: string | null;
+  admin_account: string;
+  registry_org_code: 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
+  admin_display_name: string;
+  scope_province_name?: string | null;
+  scope_city_name?: string | null;
   passkey_bound: boolean;
 };
 
@@ -67,7 +67,7 @@ export async function identifyAdmin(identityQr: string): Promise<AdminIdentifyRe
 }
 
 export async function createAdminChallenge(input: {
-  admin_pubkey: string;
+  admin_account: string;
   origin: string;
   session_id: string;
 }): Promise<AdminChallengeResult> {
@@ -102,7 +102,7 @@ export async function queryAdminQrLoginResult(
 export async function completeAdminQrLogin(input: {
   challenge_id: string;
   session_id?: string;
-  admin_pubkey: string;
+  admin_account: string;
   signer_pubkey?: string;
   signature: string;
 }): Promise<string> {

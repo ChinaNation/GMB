@@ -168,14 +168,14 @@ struct InstallStatusData {
 
 #[derive(Deserialize)]
 struct BindAdminRequest {
-    admin_pubkey: String,
+    admin_account: String,
 }
 
 #[derive(Serialize)]
 struct BindAdminData {
     user_id: String,
-    admin_pubkey: String,
-    role: String,
+    admin_account: String,
+    user_group: String,
     managed_key_id: String,
 }
 
@@ -283,7 +283,7 @@ async fn install_status(
         .any(|k| k.key_id == ARCHIVE_SIGN_KEY_ID && k.status == "ACTIVE");
 
     let admins_bound_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'ADMIN'")
+        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE user_group = 'admins'")
             .fetch_one(&state.db)
             .await
             .map_err(|_| {
@@ -480,15 +480,15 @@ async fn bind_admins_from_citizenwallet(
     rate_limit::check(&state, client_addr, &headers, "install_admins_bind", 5, 60).await?;
 
     let _install = load_cpms_install_runtime(&state).await?;
-    let raw_input = req.admin_pubkey.trim().to_string();
+    let raw_input = req.admin_account.trim().to_string();
     if raw_input.is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             1001,
-            "admin_pubkey is required",
+            "admin_account is required",
         ));
     }
-    let admin_pubkey = normalize_admin_pubkey(&raw_input)?;
+    let admin_account = normalize_admin_account(&raw_input)?;
     let user_id = "u_admins_01".to_string();
     let now_ts = Utc::now().timestamp();
 
@@ -498,7 +498,7 @@ async fn bind_admins_from_citizenwallet(
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'ADMIN'")
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE user_group = 'admins'")
         .fetch_one(tx.as_mut())
         .await
         .map_err(|_| {
@@ -513,8 +513,8 @@ async fn bind_admins_from_citizenwallet(
     }
 
     let pubkey_exists: Option<String> =
-        sqlx::query_scalar("SELECT user_id FROM admin_users WHERE admin_pubkey = $1 LIMIT 1")
-            .bind(&admin_pubkey)
+        sqlx::query_scalar("SELECT user_id FROM admin_users WHERE admin_account = $1 LIMIT 1")
+            .bind(&admin_account)
             .fetch_optional(tx.as_mut())
             .await
             .map_err(|_| {
@@ -528,16 +528,16 @@ async fn bind_admins_from_citizenwallet(
         return Err(err(
             StatusCode::CONFLICT,
             4004,
-            "admin_pubkey already bound",
+            "admin_account already bound",
         ));
     }
 
     sqlx::query(
-        "INSERT INTO admin_users (user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at)
-         VALUES ($1, $2, 'ADMIN', TRUE, $3, $4, $5)",
+        "INSERT INTO admin_users (user_id, admin_account, user_group, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, 'admins', TRUE, $3, $4, $5)",
     )
     .bind(&user_id)
-    .bind(&admin_pubkey)
+    .bind(&admin_account)
     .bind(ARCHIVE_SIGN_KEY_ID)
     .bind(now_ts)
     .bind(now_ts)
@@ -564,8 +564,8 @@ async fn bind_admins_from_citizenwallet(
 
     Ok(Json(ok(BindAdminData {
         user_id,
-        admin_pubkey,
-        role: "ADMIN".to_string(),
+        admin_account,
+        user_group: "admins".to_string(),
         managed_key_id: ARCHIVE_SIGN_KEY_ID.to_string(),
     })))
 }
@@ -723,7 +723,7 @@ fn parse_sfid_area_codes(sfid_number: &str) -> (Option<String>, Option<String>) 
     }
 }
 
-fn normalize_admin_pubkey(raw_input: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
+fn normalize_admin_account(raw_input: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
     let stripped = raw_input
         .strip_prefix("0x")
         .or_else(|| raw_input.strip_prefix("0X"))
@@ -740,7 +740,7 @@ fn normalize_admin_pubkey(raw_input: &str) -> Result<String, (StatusCode, Json<A
     Err(err(
         StatusCode::BAD_REQUEST,
         1001,
-        "admin_pubkey must be SS58 address or 32-byte hex (64 hex chars)",
+        "admin_account must be SS58 address or 32-byte hex (64 hex chars)",
     ))
 }
 

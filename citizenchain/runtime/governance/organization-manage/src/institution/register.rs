@@ -92,32 +92,31 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
             Error::<T>::SfidAlreadyRegistered
         );
         let role = Pallet::<T>::role_from_account_name(account_name.as_slice())?;
-        let duoqian_account =
-            Pallet::<T>::derive_institution_account(sfid_number.as_slice(), role)?;
+        let account = Pallet::<T>::derive_institution_account(sfid_number.as_slice(), role)?;
         ensure!(
-            !AccountRegisteredSfid::<T>::contains_key(&duoqian_account),
+            !AccountRegisteredSfid::<T>::contains_key(&account),
             Error::<T>::AccountAlreadyExists
         );
         ensure!(
-            !T::ReservedAccountChecker::is_reserved(&duoqian_account),
+            !T::ReservedAccountChecker::is_reserved(&account),
             Error::<T>::AccountReserved
         );
         ensure!(
-            T::AccountValidator::is_valid(&duoqian_account),
+            T::AccountValidator::is_valid(&account),
             Error::<T>::InvalidAccount
         );
         ensure!(
-            !T::ProtectedSourceChecker::is_protected(&duoqian_account),
+            !T::ProtectedSourceChecker::is_protected(&account),
             Error::<T>::ProtectedSource
         );
-        derived.push((account_name.clone(), duoqian_account));
+        derived.push((account_name.clone(), account));
     }
 
     UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
-    for (account_name, duoqian_account) in derived {
-        SfidRegisteredAccount::<T>::insert(&sfid_number, &account_name, &duoqian_account);
+    for (account_name, account) in derived {
+        SfidRegisteredAccount::<T>::insert(&sfid_number, &account_name, &account);
         AccountRegisteredSfid::<T>::insert(
-            &duoqian_account,
+            &account,
             RegisteredInstitution {
                 sfid_number: sfid_number.clone(),
                 account_name: account_name.clone(),
@@ -126,7 +125,7 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
         Pallet::<T>::deposit_event(Event::<T>::SfidInstitutionRegistered {
             sfid_number: sfid_number.clone(),
             account_name,
-            duoqian_account,
+            account,
             submitter: submitter.clone(),
         });
     }

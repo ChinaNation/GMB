@@ -38,7 +38,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
     private_type: PrivateType::Welfare,
     title: "公益组织",
     description: "具有法人资格的非营利组织,管理公益属性和成员关系。",
-    allowed_roles: WELFARE_ROLES,
+    allowed_participant_roles: WELFARE_ROLES,
 };
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {

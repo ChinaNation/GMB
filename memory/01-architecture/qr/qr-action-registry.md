@@ -129,8 +129,8 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `activate_admin_account` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `account_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / citizenapp | subject 级管理员激活 |
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
 | `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | citizenapp 电子护照绑定签名 |
-| `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
-| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `actor_province_name`, `actor_pubkey`, `target` | sfid 后端 | 联邦管理员治理和 Passkey 更新公民钱包确认 |
+| `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|admin_account\|expires_at` | `archive_no`, `admin_account`, `expires_at` | cpms | CPMS 公民档案软删除 |
+| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `actor_province_name`, `actor_account`, `target` | sfid 后端 | 注册局机构管理员治理和 Passkey 更新公民钱包确认 |
 
 ## 二、字段渲染规则
 
@@ -143,7 +143,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `org` | u8 / u32 机构代号 | 机构中文名;找不到时回退为 `机构<raw>` |
 | `institution` | 48B sfid_number | 优先转机构中文名;找不到时回退原 sfid_number |
 | `wasm_size` | u32 字节 | `"X.XX MB"` 或 `"X KB"` |
-| `pubkey` / `signer_pubkey` / `admin_pubkey` / `actor_pubkey` / `old_admin` / `new_admin` | 32 字节账户/公钥 | 人机展示为 SS58,prefix = 2027 |
+| `pubkey` / `signer_pubkey` / `admin_account` / `actor_account` / `old_admin` / `new_admin` | 32 字节账户/公钥 | 人机展示为 SS58,prefix = 2027 |
 | `wasm_hash` / `new_key` / `payload_hash` | 32 字节哈希或非账户密钥 | `0x<64hex>` 小写;默认不进入普通确认字段 |
 | `reason` / `remark` / `account_name` / `sfid_full_name` / `sfid_number` / `province_name` / `actor_province_name` / `peer_id` / `rpc_domain` / `new_domain` | UTF-8 | 原字符串;UI 可截断展示,签名原文不截断 |
 | `admins_len` | u32 | 十进制字符串 |

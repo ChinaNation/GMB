@@ -13,7 +13,7 @@ pub(crate) async fn admin_number_meta(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let scoped = admin_ctx.admin_province.clone();
+    let scoped = admin_ctx.scope_province_name.clone();
     let mut provinces_rows: Vec<SfidProvinceItem> = provinces()
         .iter()
         .filter(|p| scoped.as_deref().map(|v| v == p.name).unwrap_or(true))
@@ -120,7 +120,7 @@ pub(crate) async fn admin_number_meta(
                 },
             ],
             provinces: provinces_rows,
-            scoped_province: scoped,
+            scoped_province_name: scoped,
         },
     })
     .into_response()

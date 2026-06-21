@@ -61,9 +61,9 @@ function statusTag(status: string | null | undefined, labels: Record<string, str
 interface Props {
   auth: AdminAuth;
   category: GovCategory;
-  province: string;
+  province_name: string;
   /** 为空字符串时表示“该省全部市”,用于公安局省级总览。 */
-  city: string;
+  city_name: string;
   onSelectInstitution?: (sfidNumber: string) => void;
   refreshKey?: number;
   searchQuery?: string;
@@ -72,8 +72,8 @@ interface Props {
 export const GovListTable: React.FC<Props> = ({
   auth,
   category,
-  province,
-  city,
+  province_name,
+  city_name,
   onSelectInstitution,
   refreshKey,
   searchQuery,
@@ -83,8 +83,8 @@ export const GovListTable: React.FC<Props> = ({
   const [deterministicPage, setDeterministicPage] = useState(1);
   const isPublicSecurity = category === 'PUBLIC_SECURITY';
   const cacheKey = isPublicSecurity
-    ? publicSecurityCacheKey(auth, province, city)
-    : officialInstitutionCacheKey(auth, province, city);
+    ? publicSecurityCacheKey(auth, province_name, city_name)
+    : officialInstitutionCacheKey(auth, province_name, city_name);
 
   const loadRows = () => {
     const exactQuery = searchQuery?.trim() ?? '';
@@ -105,8 +105,8 @@ export const GovListTable: React.FC<Props> = ({
     const request = isPublicSecurity
       ? listPublicSecurityInstitutions(auth, { page_size: 300 })
       : listOfficialInstitutions(auth, {
-          province_name: province,
-          city_name: city || undefined,
+          province_name,
+          city_name: city_name || undefined,
           q: exactQuery || undefined,
           page_size: 300,
         });
@@ -118,9 +118,9 @@ export const GovListTable: React.FC<Props> = ({
         setDeterministicPage(1);
         if (!exactQuery) {
           if (isPublicSecurity) {
-            writeCachedPublicSecurityRows(cacheKey, auth, province, city, data.items, data.manifest_version);
+            writeCachedPublicSecurityRows(cacheKey, auth, province_name, city_name, data.items, data.manifest_version);
           } else {
-            writeCachedOfficialInstitutionRows(cacheKey, auth, province, city, data.items, data.manifest_version);
+            writeCachedOfficialInstitutionRows(cacheKey, auth, province_name, city_name, data.items, data.manifest_version);
           }
         }
       })
@@ -137,13 +137,13 @@ export const GovListTable: React.FC<Props> = ({
 
   useEffect(() => loadRows(), [
     auth.access_token,
-    auth.admin_pubkey,
-    auth.role,
-    auth.admin_province,
-    auth.admin_city,
+    auth.admin_account,
+    auth.registry_org_code,
+    auth.scope_province_name,
+    auth.scope_city_name,
     category,
-    province,
-    city,
+    province_name,
+    city_name,
     refreshKey,
     searchQuery,
   ]);

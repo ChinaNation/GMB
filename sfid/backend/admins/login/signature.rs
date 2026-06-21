@@ -7,15 +7,15 @@ use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use sp_core::Pair;
 
-use crate::admins::federal_admins::federal_admin_display_name;
+use crate::admins::federal_registry_admins::federal_registry_display_name;
 use crate::*;
 
 pub(crate) fn verify_admin_signature(
-    admin_pubkey: &str,
+    admin_account: &str,
     message: &str,
     signature_text: &str,
 ) -> bool {
-    let Some(pubkey_bytes) = parse_sr25519_pubkey_bytes(admin_pubkey) else {
+    let Some(pubkey_bytes) = parse_sr25519_pubkey_bytes(admin_account) else {
         return false;
     };
     let normalized_sig = strip_0x_prefix(signature_text);
@@ -56,7 +56,7 @@ pub(super) fn build_login_qr_system_signature(
     expires_at: i64,
 ) -> Result<(String, String), String> {
     // ADR-008 Phase 23e:登录二维码的"系统签名"由 SFID main signer(全局唯一)产出。
-    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与联邦管理员/市管理员公民钱包无关。
+    // signer 仍是 SFID 系统签名密钥(SFID_SIGNING_SEED_HEX 派生),与联邦注册局管理员/市注册局管理员公民钱包无关。
     let main_seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
         .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
     let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
@@ -75,20 +75,20 @@ pub(super) fn build_login_qr_system_signature(
 }
 
 /// 解析 Sr25519 公钥，返回统一格式 `0x` + 64 位小写 hex。
-pub(crate) fn parse_sr25519_pubkey(admin_pubkey: &str) -> Option<String> {
-    let raw = admin_pubkey
+pub(crate) fn parse_sr25519_pubkey(admin_account: &str) -> Option<String> {
+    let raw = admin_account
         .trim()
         .strip_prefix("0x")
-        .or_else(|| admin_pubkey.trim().strip_prefix("0X"))
-        .unwrap_or(admin_pubkey.trim());
+        .or_else(|| admin_account.trim().strip_prefix("0X"))
+        .unwrap_or(admin_account.trim());
     if raw.len() == 64 && raw.chars().all(|c| c.is_ascii_hexdigit()) {
         return Some(format!("0x{}", raw.to_ascii_lowercase()));
     }
     None
 }
 
-pub(crate) fn parse_sr25519_pubkey_bytes(admin_pubkey: &str) -> Option<[u8; 32]> {
-    if let Some(hex_pubkey) = parse_sr25519_pubkey(admin_pubkey) {
+pub(crate) fn parse_sr25519_pubkey_bytes(admin_account: &str) -> Option<[u8; 32]> {
+    if let Some(hex_pubkey) = parse_sr25519_pubkey(admin_account) {
         // hex::decode 不接受 0x 前缀，去掉后解码
         let bytes = Vec::from_hex(strip_0x_prefix(&hex_pubkey)).ok()?;
         let arr: [u8; 32] = bytes.as_slice().try_into().ok()?;
@@ -114,7 +114,7 @@ pub(super) fn parse_admin_identity_qr(identity_qr: &str) -> String {
     if trimmed.starts_with('{') {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
             if let Some(v) = value
-                .get("admin_pubkey")
+                .get("admin_account")
                 .or_else(|| value.get("pubkey"))
                 .and_then(|v| v.as_str())
             {
@@ -146,41 +146,47 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
 }
 
 pub(crate) fn build_admin_display_name(
-    admin_pubkey: &str,
-    role: &AdminRole,
-    admin_province: Option<&str>,
+    admin_account: &str,
+    registry_org_code: &RegistryOrgCode,
+    scope_province_name: Option<&str>,
 ) -> String {
-    if *role == AdminRole::FederalAdmin {
-        if let Some(province) = admin_province {
-            return format!("{province}联邦管理员");
+    if *registry_org_code == RegistryOrgCode::FederalRegistry {
+        if let Some(province) = scope_province_name {
+            return format!("{province}联邦注册局管理员");
         }
     }
-    if let Some(name) = federal_admin_display_name(admin_pubkey) {
+    if let Some(name) = federal_registry_display_name(admin_account) {
         return name;
     }
     // ADR-008 后只剩两角色。
-    match role {
-        AdminRole::CityAdmin => "市管理员".to_string(),
-        AdminRole::FederalAdmin => "联邦管理员".to_string(),
+    match registry_org_code {
+        RegistryOrgCode::CityRegistry => "市注册局管理员".to_string(),
+        RegistryOrgCode::FederalRegistry => "联邦注册局管理员".to_string(),
     }
 }
 
 pub(super) fn build_admin_display_name_from_user(
     admin: &AdminUser,
-    admin_province: Option<&str>,
+    scope_province_name: Option<&str>,
 ) -> String {
-    // 二角色统一:优先使用 admin_name(真实姓名),空则 fallback 到角色默认名
-    let name = admin.admin_name.trim();
+    // 二角色统一:优先使用 admin_display_name(真实姓名),空则 fallback 到角色默认名
+    let name = admin.admin_display_name.trim();
     if !name.is_empty() {
         return name.to_string();
     }
-    build_admin_display_name(&admin.admin_pubkey, &admin.role, admin_province)
+    build_admin_display_name(
+        &admin.admin_account,
+        &admin.registry_org_code,
+        scope_province_name,
+    )
 }
 
-/// 仅 CityAdmin 暴露 admin_city，其他角色或空字符串一律返回 None。
-pub(super) fn resolve_admin_city(admin: &AdminUser) -> Option<String> {
-    if admin.role == AdminRole::CityAdmin && !admin.city.trim().is_empty() {
-        Some(admin.city.clone())
+/// 仅 CityRegistry 暴露 scope_city_name，其他角色或空字符串一律返回 None。
+pub(super) fn resolve_scope_city_name(admin: &AdminUser) -> Option<String> {
+    if admin.registry_org_code == RegistryOrgCode::CityRegistry
+        && !admin.city_name.trim().is_empty()
+    {
+        Some(admin.city_name.clone())
     } else {
         None
     }

@@ -22,7 +22,7 @@ export type SfidMetaResult = {
   subject_property_options: SfidOptionItem[];
   institution_options: SfidOptionItem[];
   provinces: SfidProvinceItem[];
-  scoped_province?: string | null;
+  scoped_province_name?: string | null;
 };
 
 export async function getSfidMeta(auth: AdminAuth): Promise<SfidMetaResult> {
@@ -32,8 +32,8 @@ export async function getSfidMeta(auth: AdminAuth): Promise<SfidMetaResult> {
   });
 }
 
-export async function listSfidCities(auth: AdminAuth, province: string): Promise<SfidCityItem[]> {
-  const q = `?province=${encodeURIComponent(province)}`;
+export async function listSfidCities(auth: AdminAuth, province_name: string): Promise<SfidCityItem[]> {
+  const q = `?province_name=${encodeURIComponent(province_name)}`;
   return request<SfidCityItem[]>(`/api/v1/admin/china/cities${q}`, {
     method: 'GET',
     headers: adminHeaders(auth),

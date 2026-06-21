@@ -42,7 +42,7 @@ pub const MIN_DEFAULT_ACCOUNT_COUNT: i64 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ReconcileReport {
-    pub province: String,
+    pub province_name: String,
     pub inserted: usize,
     pub updated: usize,
     pub removed: usize,
@@ -122,9 +122,9 @@ struct OfficialInstitutionTarget {
     category: InstitutionCategory,
     subject_property: String,
     p1: String,
-    province: String,
-    city: String,
-    town: String,
+    province_name: String,
+    city_name: String,
+    town_name: String,
     province_code: String,
     city_code: String,
     town_code: String,
@@ -486,9 +486,9 @@ fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
                 category: InstitutionCategory::PublicSecurity,
                 subject_property: "G".to_string(),
                 p1: "0".to_string(),
-                province: province.name.to_string(),
-                city: city.name.to_string(),
-                town: String::new(),
+                province_name: province.name.to_string(),
+                city_name: city.name.to_string(),
+                town_name: String::new(),
                 province_code: province.code.to_string(),
                 city_code: city.code.to_string(),
                 town_code: String::new(),
@@ -552,9 +552,9 @@ fn push_constant_target(
         category: InstitutionCategory::GovInstitution,
         subject_property,
         p1,
-        province: province.to_string(),
-        city: city.to_string(),
-        town: String::new(),
+        province_name: province.to_string(),
+        city_name: city.to_string(),
+        town_name: String::new(),
         province_code,
         city_code,
         town_code: String::new(),
@@ -781,9 +781,9 @@ fn push_area_template_target(
         category: InstitutionCategory::GovInstitution,
         subject_property: "G".to_string(),
         p1: "0".to_string(),
-        province: province_name.to_string(),
-        city: city_name.to_string(),
-        town: town_name.to_string(),
+        province_name: province_name.to_string(),
+        city_name: city_name.to_string(),
+        town_name: town_name.to_string(),
         province_code: province_code.to_string(),
         city_code: city_code.to_string(),
         town_code: town_code.to_string(),
@@ -1217,9 +1217,9 @@ pub fn check_gov_catalog_db(
                     || sfid_full_name != &target.sfid_full_name
                     || sfid_short_name != &target.sfid_short_name
                     || category != category_text(target.category)
-                    || province != &target.province
-                    || city != &target.city
-                    || town != &target.town
+                    || province != &target.province_name
+                    || city != &target.city_name
+                    || town != &target.town_name
                     || province_code != &target.province_code
                     || city_code != &target.city_code
                     || town_code != &target.town_code
@@ -1354,7 +1354,7 @@ pub fn reconcile_public_security_for_province_db(
         GovTargetKind::PublicSecurity,
     )?;
     Ok(ReconcileReport {
-        province: province_name.to_string(),
+        province_name: province_name.to_string(),
         inserted: report.inserted,
         updated: report.updated,
         removed: report.removed,
@@ -1445,13 +1445,13 @@ fn bulk_write_targets(
                     "{}: [{} | {}{} | inst={} org={}] vs [{} | {}{} | inst={} org={}]",
                     target.sfid_number,
                     prev.sfid_full_name,
-                    prev.city,
-                    prev.town,
+                    prev.city_name,
+                    prev.town_name,
                     prev.institution_code,
                     prev.org_code,
                     target.sfid_full_name,
-                    target.city,
-                    target.town,
+                    target.city_name,
+                    target.town_name,
                     target.institution_code,
                     target.org_code,
                 ));
@@ -1551,17 +1551,17 @@ fn bulk_write_target_chunk(
         .iter()
         .map(|target| target.p1.clone())
         .collect::<Vec<_>>();
-    let provinces = targets
+    let province_names = targets
         .iter()
-        .map(|target| target.province.clone())
+        .map(|target| target.province_name.clone())
         .collect::<Vec<_>>();
-    let cities = targets
+    let city_names = targets
         .iter()
-        .map(|target| target.city.clone())
+        .map(|target| target.city_name.clone())
         .collect::<Vec<_>>();
-    let towns = targets
+    let town_names = targets
         .iter()
-        .map(|target| target.town.clone())
+        .map(|target| target.town_name.clone())
         .collect::<Vec<_>>();
     let institution_codes = targets
         .iter()
@@ -1676,9 +1676,9 @@ fn bulk_write_target_chunk(
             &categories,
             &subject_property_values,
             &p1_values,
-            &provinces,
-            &cities,
-            &towns,
+            &province_names,
+            &city_names,
+            &town_names,
             &institution_codes,
             &org_codes,
             &p_codes,

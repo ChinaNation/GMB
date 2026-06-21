@@ -37,12 +37,12 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 
 | 名 | key/value | 用途 |
 |---|---|---|
-| `PersonalDuoqians` | `StorageMap<address, DuoqianAccount>` | 个人多签账户生命周期状态,保存 `creator / account_name / created_at / status` |
+| `PersonalDuoqians` | `StorageMap<account, DuoqianAccount>` | 个人多签账户生命周期状态,保存 `creator / account_name / created_at / status` |
 | `PendingPersonalCreate` | `StorageMap<proposal_id, CreateDuoqianAction>` | 创建提案投票期 reserve 资金与 fee 快照 |
-| `PendingCloseProposal` | `StorageMap<address, proposal_id>` | 防并发关闭提案 |
+| `PendingCloseProposal` | `StorageMap<account, proposal_id>` | 防并发关闭提案 |
 
 管理员和管理员数量不再存储或镜像在 `PersonalDuoqians`。
-管理员唯一真源为 `admins-change::Subjects[account_id_from_account(personal_address)]`。
+管理员唯一真源为 `admins-change::Subjects[account_id_from_account(personal_account)]`。
 普通动态阈值唯一真源为 `internal-vote::ActiveDynamicThresholds[(ORG_REN, subject)]`。
 旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalDuoqians`。
 
@@ -51,7 +51,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 | call_index | 名 | 入参 | 业务 |
 |---|---|---|---|
 | 0 | `propose_create` | `account_name, admins, regular_threshold, amount` | 发起创建提案；普通动态阈值由用户输入并交投票引擎保存，创建投票阈值为全员 |
-| 1 | `propose_close` | `personal_address, beneficiary` | 发起关闭提案(仅个人地址) |
+| 1 | `propose_close` | `personal_account, beneficiary` | 发起关闭提案(仅个人地址) |
 | 2 | `cleanup_rejected_proposal` | `proposal_id` | 清理被否决/超时的 Pending 残留 |
 
 ## Event
@@ -96,13 +96,13 @@ personal_duoqian_account = Blake2b_256(
 )
 ```
 
-地址只依赖 `creator + account_name`,与管理员列表无关 — 换管理员地址不变。
+账户只依赖 `creator + account_name`,与管理员列表无关 — 换管理员账户不变。
 注销不会改变派生公式；同一创建者使用同一账户名再次注册时仍得到同一地址。
 
 ## 治理主体 ID(AccountId)
 
 ```
-account_id = core_const::account_id_from_account(personal_address)
+account_id = core_const::account_id_from_account(personal_account)
            = byte[0]=PersonalDuoqian AccountId + byte[1..33]=AccountId + byte[33..48]=zeros(15B)
 ```
 

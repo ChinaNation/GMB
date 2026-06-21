@@ -1,17 +1,17 @@
 // 注册局视图 —— 调度器:持有所有状态和副作用,按 mode 分派:
 //   - 'city-registry'    → CityRegistryView(市注册局 tab:城市表格→市注册局机构详情页)
 //   - 'federal-registry' → FederalRegistryView(联邦注册局 tab:联邦注册局机构详情页)
-// 联邦管理员城市表格→点市进详情;市管理员直接进本市/本省详情。
+// 联邦注册局管理员城市表格→点市进详情;市注册局管理员直接进本市/本省详情。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Form, Input, Modal, Space, Typography } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import type { AdminAuth } from '../auth/types';
-import type { CityAdminRow } from './city_admins_api';
-import type { FederalAdminRow } from './api';
+import type { CityRegistryAdminRow } from './city_registry_admins_api';
+import type { FederalRegistryAdminRow } from './api';
 import type { SfidCityItem } from '../china/api';
-import { listCityAdmins, updateCityAdminName } from './city_admins_api';
+import { listCityRegistryAdmins, updateCityRegistryName } from './city_registry_admins_api';
 import {
   commitAdminAction,
   formatAdminCreateError,
@@ -19,11 +19,11 @@ import {
   prepareAdminAction,
   type AdminActionType,
 } from './admin_security_api';
-import { listFederalAdmins } from './api';
+import { listFederalRegistryAdmins } from './api';
 import { loadCachedSfidCities, readCachedSfidCities } from '../china/metaCache';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
-import { MAX_CITY_ADMINS_PER_CITY, sameHexPubkey } from './adminUtils';
-import type { AccountScanTarget, FederalAdminSharedState } from './adminUtils';
+import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
+import type { AccountScanTarget, RegistryAdminsSharedState } from './adminUtils';
 import { CityRegistryView, FederalRegistryView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
@@ -32,7 +32,7 @@ import { notice } from '../utils/notice';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionDetail } from '../subjects/api';
 
-export interface FederalAdminsViewProps {
+export interface RegistryAdminsViewProps {
   /// 'city-registry' = 市注册局 tab(城市表格→市注册局机构详情页);
   /// 'federal-registry' = 联邦注册局 tab(联邦注册局机构详情页)
   mode: 'city-registry' | 'federal-registry';
@@ -62,18 +62,18 @@ interface CachedAdminListPayload<T> {
 }
 
 function adminListCacheKey(
-  kind: 'federal-admins' | 'city-admins',
+  kind: 'federal-registry-admins' | 'city-registry-admins',
   auth: AdminAuth,
-  mode: FederalAdminsViewProps['mode'],
+  mode: RegistryAdminsViewProps['mode'],
 ): string {
   return [
     'sfid:admin-list',
     ADMIN_LIST_CACHE_VERSION,
     kind,
-    auth.admin_pubkey,
-    auth.role,
-    auth.admin_province || 'ALL',
-    auth.admin_city || 'ALL',
+    auth.admin_account,
+    auth.registry_org_code,
+    auth.scope_province_name || 'ALL',
+    auth.scope_city_name || 'ALL',
     mode,
   ].join(':');
 }
@@ -105,47 +105,47 @@ function writeCachedAdminList<T>(key: string, rows: T[]) {
   }
 }
 
-export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
+export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
   const { auth } = useAuth();
 
-  const [federalAdmins, setFederalAdmins] = useState<FederalAdminRow[]>([]);
-  const [federalAdminsLoading, setFederalAdminsLoading] = useState(false);
-  const [selectedFederalAdmin, setSelectedFederalAdmin] = useState<FederalAdminRow | null>(null);
+  const [federalRegistryAdmins, setFederalRegistryAdmins] = useState<FederalRegistryAdminRow[]>([]);
+  const [federalRegistryAdminsLoading, setFederalRegistryAdminsLoading] = useState(false);
+  const [selectedFederalRegistry, setSelectedFederalRegistry] = useState<FederalRegistryAdminRow | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
-  const [adminDetailTab, setAdminDetailTab] = useState<'city-admin' | 'federal-admin'>('city-admin');
-  const adminDetailTabRef = useRef<'city-admin' | 'federal-admin'>('city-admin');
-  const lastSelectedFederalAdminKey = useRef<string | null>(null);
+  const [adminDetailTab, setAdminDetailTab] = useState<'city-registry-admin' | 'federal-registry-admin'>('city-registry-admin');
+  const adminDetailTabRef = useRef<'city-registry-admin' | 'federal-registry-admin'>('city-registry-admin');
+  const lastSelectedFederalRegistryKey = useRef<string | null>(null);
 
-  const [cityAdmins, setCityAdmins] = useState<CityAdminRow[]>([]);
-  const [cityAdminsLoading, setCityAdminsLoading] = useState(false);
-  const [cityAdminListPage, setCityAdminListPage] = useState(1);
+  const [cityRegistryAdmins, setCityRegistryAdmins] = useState<CityRegistryAdminRow[]>([]);
+  const [cityRegistryAdminsLoading, setCityRegistryAdminsLoading] = useState(false);
+  const [cityRegistryAdminListPage, setCityRegistryListPage] = useState(1);
 
-  const initialCityAdminCities = auth?.admin_province
-    ? readCachedSfidCities(auth.admin_province)
+  const initialCityRegistryCities = auth?.scope_province_name
+    ? readCachedSfidCities(auth.scope_province_name)
     : null;
-  const [cityAdminCities, setCityAdminCities] = useState<SfidCityItem[]>(initialCityAdminCities ?? []);
-  const [cityAdminCitiesLoading, setCityAdminCitiesLoading] = useState(
-    !!auth?.admin_province && !initialCityAdminCities,
+  const [cityRegistryAdminCities, setCityRegistryCities] = useState<SfidCityItem[]>(initialCityRegistryCities ?? []);
+  const [cityRegistryAdminCitiesLoading, setCityRegistryCitiesLoading] = useState(
+    !!auth?.scope_province_name && !initialCityRegistryCities,
   );
 
-  const [addCityAdminOpen, setAddCityAdminOpen] = useState(false);
-  const [addCityAdminLoading, setAddCityAdminLoading] = useState(false);
+  const [addCityRegistryOpen, setAddCityRegistryOpen] = useState(false);
+  const [addCityRegistryLoading, setAddCityRegistryLoading] = useState(false);
 
   const [accountScanTarget, setAccountScanTarget] = useState<AccountScanTarget>(null);
 
   // ── 注册局机构详情页数据源(任务卡 20260608) ──
-  // 联邦注册局:全国唯一机构,走 scope-bypass 接口,所有联邦管理员可读。
+  // 联邦注册局:全国唯一机构,走 scope-bypass 接口,所有联邦注册局管理员可读。
   const [federalRegistryDetail, setFederalRegistryDetail] = useState<InstitutionDetail | null>(null);
   const [federalRegistryLoading, setFederalRegistryLoading] = useState(false);
   // 市注册局:当前活动市对应的机构 sfid_number。
   const [cityRegistrySfid, setCityRegistrySfid] = useState<string | null>(null);
   const [cityRegistryLoading, setCityRegistryLoading] = useState(false);
 
-  // 活动省/市:联邦管理员看 selectedFederalAdmin + selectedCity;市管理员锁定本省本市。
-  const activeProvince = selectedFederalAdmin?.province ?? auth?.admin_province ?? null;
-  const activeCity = selectedCity ?? (auth?.role === 'CITY_ADMIN' ? auth?.admin_city ?? null : null);
+  // 活动省/市:联邦注册局管理员看 selectedFederalRegistry + selectedCity;市注册局管理员锁定本省本市。
+  const activeProvince = selectedFederalRegistry?.province_name ?? auth?.scope_province_name ?? null;
+  const activeCity = selectedCity ?? (auth?.registry_org_code === 'CITY_REGISTRY' ? auth?.scope_city_name ?? null : null);
 
-  const [addCityAdminForm] = Form.useForm<{ city_admin_pubkey: string; city_admin_name: string; city_admin_city: string }>();
+  const [addCityRegistryForm] = Form.useForm<{ city_registry_account: string; city_registry_display_name: string; city_scope_city_name: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState(false);
   const [adminActionCommitLoading, setAdminActionCommitLoading] = useState(false);
@@ -156,76 +156,76 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
 
   // ── 数据加载 ──
 
-  const refreshFederalAdmins = async (): Promise<FederalAdminRow[]> => {
+  const refreshFederalRegistryAdmins = async (): Promise<FederalRegistryAdminRow[]> => {
     if (!auth) return [];
-    const cacheKey = adminListCacheKey('federal-admins', auth, mode);
-    const cached = readCachedAdminList<FederalAdminRow>(cacheKey);
+    const cacheKey = adminListCacheKey('federal-registry-admins', auth, mode);
+    const cached = readCachedAdminList<FederalRegistryAdminRow>(cacheKey);
     if (cached !== null) {
-      setFederalAdmins(cached);
-      setFederalAdminsLoading(false);
+      setFederalRegistryAdmins(cached);
+      setFederalRegistryAdminsLoading(false);
     } else {
-      setFederalAdminsLoading(true);
+      setFederalRegistryAdminsLoading(true);
     }
     try {
-      const rows = await listFederalAdmins(auth);
+      const rows = await listFederalRegistryAdmins(auth);
       const list = Array.isArray(rows) ? rows : [];
-      setFederalAdmins(list);
+      setFederalRegistryAdmins(list);
       writeCachedAdminList(cacheKey, list);
       return list;
     } catch (err) {
-      notice.error(err, '加载联邦管理员失败');
+      notice.error(err, '加载联邦注册局管理员失败');
       return cached ?? [];
     } finally {
-      if (cached === null) setFederalAdminsLoading(false);
+      if (cached === null) setFederalRegistryAdminsLoading(false);
     }
   };
 
-  const refreshCityAdmins = async (): Promise<CityAdminRow[]> => {
+  const refreshCityRegistryAdmins = async (): Promise<CityRegistryAdminRow[]> => {
     if (!auth) return [];
-    const cacheKey = adminListCacheKey('city-admins', auth, mode);
-    const cached = readCachedAdminList<CityAdminRow>(cacheKey);
+    const cacheKey = adminListCacheKey('city-registry-admins', auth, mode);
+    const cached = readCachedAdminList<CityRegistryAdminRow>(cacheKey);
     if (cached !== null) {
-      setCityAdmins(cached);
-      setCityAdminsLoading(false);
+      setCityRegistryAdmins(cached);
+      setCityRegistryAdminsLoading(false);
     } else {
-      setCityAdminsLoading(true);
+      setCityRegistryAdminsLoading(true);
     }
     try {
-      const rows = await listCityAdmins(auth);
+      const rows = await listCityRegistryAdmins(auth);
       const list = Array.isArray(rows) ? rows : [];
-      setCityAdmins(list);
+      setCityRegistryAdmins(list);
       writeCachedAdminList(cacheKey, list);
       return list;
     } catch (err) {
-      notice.error(err, '加载市管理员失败');
+      notice.error(err, '加载市注册局管理员失败');
       return cached ?? [];
     } finally {
-      if (cached === null) setCityAdminsLoading(false);
+      if (cached === null) setCityRegistryAdminsLoading(false);
     }
   };
 
   // 首次挂载 / auth 变化时加载数据。
   // 角色分流由 ProvinceDetailView + useScope 自动处理,这里只负责加载数据
-  // 和按当前登录角色定位 selectedFederalAdmin。
+  // 和按当前登录角色定位 selectedFederalRegistry。
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
       if (!auth) return;
-      // 注册局视图(city-registry / federal-registry):联邦/市管理员数据都要
-      const [rows, ops] = await Promise.all([refreshFederalAdmins(), refreshCityAdmins()]);
+      // 注册局视图(city-registry / federal-registry):联邦/市注册局管理员数据都要
+      const [rows, ops] = await Promise.all([refreshFederalRegistryAdmins(), refreshCityRegistryAdmins()]);
       if (cancelled) return;
-      // 自动定位到当前登录角色所属省的 FederalAdmin
-      if (!selectedFederalAdmin) {
-        let target: FederalAdminRow | null = null;
-        if (auth.role === 'FEDERAL_ADMIN') {
-          target = rows.find((r) => sameHexPubkey(r.admin_pubkey, auth.admin_pubkey)) || null;
-        } else if (auth.role === 'CITY_ADMIN') {
-          const me = ops.find((o) => sameHexPubkey(o.admin_pubkey, auth.admin_pubkey));
+      // 自动定位到当前登录角色所属省的 FederalRegistry
+      if (!selectedFederalRegistry) {
+        let target: FederalRegistryAdminRow | null = null;
+        if (auth.registry_org_code === 'FEDERAL_REGISTRY') {
+          target = rows.find((r) => sameHexAccount(r.admin_account, auth.admin_account)) || null;
+        } else if (auth.registry_org_code === 'CITY_REGISTRY') {
+          const me = ops.find((o) => sameHexAccount(o.admin_account, auth.admin_account));
           if (me) {
-            target = rows.find((r) => sameHexPubkey(r.admin_pubkey, me.created_by)) || null;
+            target = rows.find((r) => sameHexAccount(r.admin_account, me.created_by)) || null;
           }
         }
-        if (!cancelled && target) setSelectedFederalAdmin(target);
+        if (!cancelled && target) setSelectedFederalRegistry(target);
       }
     };
     void init();
@@ -233,62 +233,62 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.access_token, mode]);
 
-  // 切换 selectedFederalAdmin 时:
+  // 切换 selectedFederalRegistry 时:
   //   1. 预加载该机构所属省份的城市列表
-  //   2. 重置 sub-tab 到默认(市管理员列表)
-  //   3. 重置市管理员列表分页到第 1 页
+  //   2. 重置 sub-tab 到默认(市注册局管理员列表)
+  //   3. 重置市注册局管理员列表分页到第 1 页
   useEffect(() => {
     if (!auth) {
-      setCityAdminCities([]);
-      setCityAdminCitiesLoading(false);
+      setCityRegistryCities([]);
+      setCityRegistryCitiesLoading(false);
       return;
     }
-    if (!selectedFederalAdmin) {
-      lastSelectedFederalAdminKey.current = null;
-      const cachedRows = auth.admin_province ? readCachedSfidCities(auth.admin_province) : null;
+    if (!selectedFederalRegistry) {
+      lastSelectedFederalRegistryKey.current = null;
+      const cachedRows = auth.scope_province_name ? readCachedSfidCities(auth.scope_province_name) : null;
       if (cachedRows) {
-        setCityAdminCities(cachedRows);
-        setCityAdminCitiesLoading(false);
+        setCityRegistryCities(cachedRows);
+        setCityRegistryCitiesLoading(false);
       } else {
-        setCityAdminCities([]);
-        setCityAdminCitiesLoading(!!auth.admin_province);
+        setCityRegistryCities([]);
+        setCityRegistryCitiesLoading(!!auth.scope_province_name);
       }
       return;
     }
-    const selectedKey = `${selectedFederalAdmin.province}:${selectedFederalAdmin.admin_pubkey}`;
-    const isRealProvinceSwitch = lastSelectedFederalAdminKey.current !== null
-      && lastSelectedFederalAdminKey.current !== selectedKey;
-    lastSelectedFederalAdminKey.current = selectedKey;
-    const cachedRows = readCachedSfidCities(selectedFederalAdmin.province);
+    const selectedKey = `${selectedFederalRegistry.province_name}:${selectedFederalRegistry.admin_account}`;
+    const isRealProvinceSwitch = lastSelectedFederalRegistryKey.current !== null
+      && lastSelectedFederalRegistryKey.current !== selectedKey;
+    lastSelectedFederalRegistryKey.current = selectedKey;
+    const cachedRows = readCachedSfidCities(selectedFederalRegistry.province_name);
     if (cachedRows) {
-      setCityAdminCities(cachedRows);
-      setCityAdminCitiesLoading(false);
+      setCityRegistryCities(cachedRows);
+      setCityRegistryCitiesLoading(false);
     } else {
-      setCityAdminCities([]);
-      setCityAdminCitiesLoading(true);
+      setCityRegistryCities([]);
+      setCityRegistryCitiesLoading(true);
     }
-    // 中文注释:首次自动定位当前省时不能覆盖用户刚点击的“联邦管理员列表”。
+    // 中文注释:首次自动定位当前省时不能覆盖用户刚点击的“联邦注册局管理员列表”。
     // 只有用户真正切换到另一个省时,才把子页签重置回市列表。
-    if (isRealProvinceSwitch && adminDetailTabRef.current !== 'federal-admin') {
-      setAdminDetailTab(auth.passkey_bound === false && auth.role === 'FEDERAL_ADMIN' ? 'federal-admin' : 'city-admin');
+    if (isRealProvinceSwitch && adminDetailTabRef.current !== 'federal-registry-admin') {
+      setAdminDetailTab(auth.passkey_bound === false && auth.registry_org_code === 'FEDERAL_REGISTRY' ? 'federal-registry-admin' : 'city-registry-admin');
     }
-    setCityAdminListPage(1);
+    setCityRegistryListPage(1);
     let cancelled = false;
-    loadCachedSfidCities(auth, selectedFederalAdmin.province)
+    loadCachedSfidCities(auth, selectedFederalRegistry.province_name)
       .then((rows) => {
-        if (!cancelled) setCityAdminCities(rows);
+        if (!cancelled) setCityRegistryCities(rows);
       })
       .catch(() => {
-        if (!cancelled) setCityAdminCities([]);
+        if (!cancelled) setCityRegistryCities([]);
       })
       .finally(() => {
-        if (!cancelled) setCityAdminCitiesLoading(false);
+        if (!cancelled) setCityRegistryCitiesLoading(false);
       });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFederalAdmin?.admin_pubkey, auth?.access_token]);
+  }, [selectedFederalRegistry?.admin_account, auth?.access_token]);
 
   // ── 联邦注册局机构详情:进入联邦注册局 tab 时加载一次(scope-bypass) ──
   useEffect(() => {
@@ -378,16 +378,16 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
 
   // ── 事件处理 ──
 
-  const onCreateCityAdmin = async (values: { city_admin_pubkey: string; city_admin_name: string; city?: string }) => {
+  const onCreateCityRegistry = async (values: { city_registry_account: string; city_registry_display_name: string; city_name?: string }) => {
     if (!auth) return;
-    const inputAddr = values.city_admin_pubkey?.trim();
-    const admin_name = values.city_admin_name?.trim();
-    const city = (values.city ?? '').trim();
+    const inputAddr = values.city_registry_account?.trim();
+    const admin_display_name = values.city_registry_display_name?.trim();
+    const city = (values.city_name ?? '').trim();
     if (!inputAddr) {
       notice.error('请输入管理员账户');
       return;
     }
-    if (!admin_name) {
+    if (!admin_display_name) {
       notice.error('请输入管理员姓名');
       return;
     }
@@ -395,47 +395,47 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
       notice.error('请选择市');
       return;
     }
-    const cityCityAdminCount = cityAdmins.filter((item) => item.city === city).length;
-    if (cityCityAdminCount >= MAX_CITY_ADMINS_PER_CITY) {
-      notice.error(`本市市管理员已满 ${MAX_CITY_ADMINS_PER_CITY} 人，不能继续新增`);
+    const cityCityRegistryCount = cityRegistryAdmins.filter((item) => item.city_name === city).length;
+    if (cityCityRegistryCount >= MAX_CITY_REGISTRY_ADMINS_PER_CITY) {
+      notice.error(`本市市注册局管理员已满 ${MAX_CITY_REGISTRY_ADMINS_PER_CITY} 人，不能继续新增`);
       return;
     }
-    let admin_pubkey: string;
+    let admin_account: string;
     try {
-      admin_pubkey = decodeSs58(inputAddr);
+      admin_account = decodeSs58(inputAddr);
     } catch (err) {
       notice.error(err, '');
       return;
     }
-    setAddCityAdminLoading(true);
+    setAddCityRegistryLoading(true);
     try {
-      const created = await runSecuredAction<CityAdminRow>('CREATE_CITY_ADMIN', {
-        admin_pubkey,
-        admin_name,
-        city,
+      const created = await runSecuredAction<CityRegistryAdminRow>('CREATE_CITY_REGISTRY', {
+        admin_account,
+        admin_display_name,
+        city_name: city,
       });
       notice.success('管理员新增成功');
-      addCityAdminForm.resetFields();
-      setAddCityAdminOpen(false);
-      setCityAdmins((prev) => {
-        const rest = prev.filter((item) => item.admin_pubkey !== created.admin_pubkey);
+      addCityRegistryForm.resetFields();
+      setAddCityRegistryOpen(false);
+      setCityRegistryAdmins((prev) => {
+        const rest = prev.filter((item) => item.admin_account !== created.admin_account);
         return [created, ...rest];
       });
-      await refreshCityAdmins();
+      await refreshCityRegistryAdmins();
     } catch (err) {
-      const msg = formatAdminCreateError(err, 'CITY_ADMIN', '新增管理员失败');
+      const msg = formatAdminCreateError(err, 'CITY_REGISTRY', '新增管理员失败');
       notice.error(msg);
     } finally {
-      setAddCityAdminLoading(false);
+      setAddCityRegistryLoading(false);
     }
   };
 
-  const onUpdateCityAdmin = (row: CityAdminRow) => {
+  const onUpdateCityRegistry = (row: CityRegistryAdminRow) => {
     if (!auth) return;
-    let nextName = row.admin_name;
-    const ss58Address = tryEncodeSs58(row.admin_pubkey);
+    let nextName = row.admin_display_name;
+    const ss58Address = tryEncodeSs58(row.admin_account);
     notice.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市管理员</div>,
+      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市注册局管理员</div>,
       icon: null,
       centered: true,
       zIndex: SFID_MODAL_Z_INDEX.business,
@@ -445,7 +445,7 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
           <div>
             <Typography.Text type="secondary">管理员姓名</Typography.Text>
             <Input
-              defaultValue={row.admin_name}
+              defaultValue={row.admin_display_name}
               placeholder="请输入管理员姓名"
               style={{ marginTop: 6 }}
               onChange={(event) => {
@@ -466,38 +466,38 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
       okText: '确认修改',
       cancelText: '取消',
       onOk: async () => {
-        const admin_name = nextName.trim();
-        if (!admin_name) {
+        const admin_display_name = nextName.trim();
+        if (!admin_display_name) {
           notice.error('请输入管理员姓名');
-          throw new Error('admin_name is required');
+          throw new Error('admin_display_name is required');
         }
-        setCityAdminsLoading(true);
+        setCityRegistryAdminsLoading(true);
         try {
-          await updateCityAdminName(auth, row.id, admin_name);
-          notice.success('市管理员信息已更新');
-          await refreshCityAdmins();
+          await updateCityRegistryName(auth, row.id, admin_display_name);
+          notice.success('市注册局管理员信息已更新');
+          await refreshCityRegistryAdmins();
         } catch (err) {
-          notice.error(err, '更新市管理员信息失败');
+          notice.error(err, '更新市注册局管理员信息失败');
           throw err;
         } finally {
-          setCityAdminsLoading(false);
+          setCityRegistryAdminsLoading(false);
         }
       },
     });
   };
 
-  const onDeleteCityAdmin = (row: CityAdminRow) => {
+  const onDeleteCityRegistry = (row: CityRegistryAdminRow) => {
     if (!auth) return;
-    const ss58Address = tryEncodeSs58(row.admin_pubkey);
+    const ss58Address = tryEncodeSs58(row.admin_account);
     notice.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>删除市管理员</div>,
+      title: <div style={{ textAlign: 'center', width: '100%' }}>删除市注册局管理员</div>,
       icon: null,
       centered: true,
       zIndex: SFID_MODAL_Z_INDEX.business,
       footer: centeredConfirmFooter,
       content: (
         <div style={{ textAlign: 'center' }}>
-          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该市管理员?</Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该市注册局管理员?</Typography.Paragraph>
           <Typography.Text code style={{ wordBreak: 'break-all' }}>{ss58Address}</Typography.Text>
         </div>
       ),
@@ -505,16 +505,16 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
       okButtonProps: { danger: true },
       cancelText: '取消',
       onOk: async () => {
-        setCityAdminsLoading(true);
+        setCityRegistryAdminsLoading(true);
         try {
-          await runSecuredAction('DELETE_CITY_ADMIN', { id: row.id });
-          notice.success('市管理员已删除');
-          await refreshCityAdmins();
+          await runSecuredAction('DELETE_CITY_REGISTRY', { id: row.id });
+          notice.success('市注册局管理员已删除');
+          await refreshCityRegistryAdmins();
         } catch (err) {
-          notice.error(err, '删除市管理员失败');
+          notice.error(err, '删除市注册局管理员失败');
           throw err;
         } finally {
-          setCityAdminsLoading(false);
+          setCityRegistryAdminsLoading(false);
         }
       },
     });
@@ -522,31 +522,31 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
 
   // ── 组装共享状态 ──
 
-  const shared: FederalAdminSharedState = {
-    federalAdmins,
-    federalAdminsLoading,
-    refreshFederalAdmins,
-    selectedFederalAdmin,
-    setSelectedFederalAdmin,
+  const shared: RegistryAdminsSharedState = {
+    federalRegistryAdmins,
+    federalRegistryAdminsLoading,
+    refreshFederalRegistryAdmins,
+    selectedFederalRegistry,
+    setSelectedFederalRegistry,
     selectedCity,
     setSelectedCity,
     adminDetailTab,
     setAdminDetailTab,
-    cityAdmins,
-    cityAdminsLoading,
-    cityAdminListPage,
-    setCityAdminListPage,
-    cityAdminCities,
-    cityAdminCitiesLoading,
-    addCityAdminOpen,
-    setAddCityAdminOpen,
-    addCityAdminLoading,
+    cityRegistryAdmins,
+    cityRegistryAdminsLoading,
+    cityRegistryAdminListPage,
+    setCityRegistryListPage,
+    cityRegistryAdminCities,
+    cityRegistryAdminCitiesLoading,
+    addCityRegistryOpen,
+    setAddCityRegistryOpen,
+    addCityRegistryLoading,
     accountScanTarget,
     setAccountScanTarget,
-    addCityAdminForm,
-    onCreateCityAdmin,
-    onUpdateCityAdmin,
-    onDeleteCityAdmin,
+    addCityRegistryForm,
+    onCreateCityRegistry,
+    onUpdateCityRegistry,
+    onDeleteCityRegistry,
     runSecuredAction,
     federalRegistryDetail,
     federalRegistryLoading,

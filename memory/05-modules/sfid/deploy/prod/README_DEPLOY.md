@@ -24,7 +24,7 @@
 4. 在应用服务器修改 `/etc/sfid/sfid.env`：
    - `DATABASE_URL` 指向主库（建议 `sslmode=verify-full`）。
    - 基础站点必填：`SFID_SIGNING_SEED_HEX`、`SFID_KEY_ID`、`SFID_REDIS_URL`、`SFID_CHINA_DB`
-   - 可后补的链对接项：`SFID_CHAIN_TOKEN`、`SFID_CHAIN_SIGNING_SECRET`、`SFID_CHAIN_WS_URL`、`SFID_CHAIN_GENESIS_HASH`
+   - 链交互启用前必填：`SFID_CHAIN_TOKEN`、`SFID_CHAIN_SIGNING_SECRET`、`SFID_CHAIN_WS_URL`、`SFID_CHAIN_GENESIS_HASH`、`SFID_RUNTIME_ISSUER_SFID_NUMBER`、`SFID_RUNTIME_ISSUER_MAIN_ACCOUNT`、`SFID_RUNTIME_SIGNER_PUBKEY`
    - 可后补的扩展项：`SFID_PUBLIC_SEARCH_TOKEN`、`SFID_PII_KEY`
 5. 启动服务：
    - `systemctl daemon-reload`
@@ -51,6 +51,7 @@
 - 公权机构目录由行政区和模板确定性派生。安装新版行政区后必须先让运行库中的
   `gov.source='GENERATED'` 目录对账到当前 `china.sqlite`,并确认全局 `gov_manifest`
   为 `OK`;手动公权机构 `MANUAL` 不属于自动清理范围。
+- SFID 是由联邦注册局运维的中心化独立系统,链配置只影响投票凭证、人口快照凭证、机构链注册凭证等链交互接口,不得阻断基础站点启动、登录和机构管理。
 - 如果当前目标只是“先把网页、登录和基础后台跑起来”，可以先不填写链对接参数；这些只影响链相关接口，不影响站点基础启动。
 
 ## 自动部署（GitHub Push -> 云服务器自动更新）

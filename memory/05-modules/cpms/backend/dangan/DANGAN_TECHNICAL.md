@@ -87,7 +87,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 本模块承载档案领域业务；操作员只是 `authz` 中的一种角色，不得作为档案业务实现模块。
 - 公民资料库文件存储、元数据和硬删除清理归属本模块。
 - 安装材料读取由 `initialize` 提供。
-- 业务权限由 `authz::require_archive_admin` 统一校验，允许 `ADMIN / OPERATOR` 调用档案接口。
+- 业务权限由 `authz::require_archive_admin` 统一校验，允许 `admins / operators` 调用档案接口。
 
 ## 6.1 列表分页与检索
 
@@ -143,7 +143,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 公民档案详情页固定提供“操作记录”tab，前端入口为 `cpms/frontend/dangan/ArchiveDetail.tsx`，后端入口为 `GET /api/v1/archives/:archive_id/audit-logs`。
 - 操作记录数据来源只允许使用 CPMS 本机 `audit_logs`；不得读取或依赖外部系统日志。
 - 审计记录按 `target_id = archive_id`、`detail->>'archive_id' = archive_id`、`detail->>'archive_no' = archive_no` 聚合，并按 `created_at DESC` 返回最近 100 条。
-- 接口返回 `operator_account`，由 `operator_user_id` 关联 `admin_users.admin_pubkey` 后转换为管理员账户地址；前端表格列固定为“操作、操作者账户、详情、时间”。
+- 接口返回 `operator_account`，由 `operator_user_id` 关联 `admin_users.admin_account` 后转换为管理员账户地址；前端表格列固定为“操作、操作者账户、详情、时间”。
 - 查询操作记录是只读行为，不额外写入审计，避免打开详情页本身制造噪声。
 
 ## 10. 年度状态导出
@@ -153,7 +153,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 管理员从每年 UTC 1 月 1 日起可导出上一年度数据；如果存在多年未导出，系统按最早未导出年度依次补导。
 - 首个需要导出的年度从 `system_install.initialized_at` 所在年份开始，避免新装系统误要求历史年度。
 - 年度报告不再在 UTC 1 月 10 日后关闭导出窗口；只要存在待导出年度，管理员一直可以导出。
-- UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，`OPERATOR` 登录和已有会话都会被锁定；管理员不受影响，必须先补导年度报告。
+- UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，`operators` 登录和已有会话都会被锁定；管理员不受影响，必须先补导年度报告。
 - `GET /api/v1/archives/status-export/state` 返回待导出年度、按钮可用状态、角标状态和操作员锁定状态，供前端系统设置页展示。
 - `cpms_status_exports` 记录每个年度最近一次导出的批次、导出时间、绑定记录数量、释放记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时必须从当前档案数据重新生成并覆盖同年度记录。
 - `citizen_binding_records` 是当前仍有钱包绑定的档案快照，包含 `archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`，用于 SFID 按档案号覆盖本地绑定状态；`voting_eligible` 导出前按公民状态和 16 周岁年龄线重新计算。

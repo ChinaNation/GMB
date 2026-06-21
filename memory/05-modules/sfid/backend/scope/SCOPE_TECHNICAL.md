@@ -1,4 +1,4 @@
-# scope/ — 二角色权限范围过滤
+# scope/ — 注册局机构权限范围过滤
 
 - 最后更新:2026-05-02
 - 任务卡:
@@ -7,7 +7,7 @@
 ## 定位
 
 `scope` 只负责登录管理员的数据可见范围和省/市过滤规则。所有返回多条记录的
-list API 应通过本模块派生 `VisibleScope` 并过滤,避免每个 handler 手写角色分支。
+list API 应通过本模块派生 `VisibleScope` 并过滤,避免每个 handler 手写注册局机构分支。
 
 ## 当前结构
 
@@ -15,18 +15,17 @@ list API 应通过本模块派生 `VisibleScope` 并过滤,避免每个 handler 
 sfid/backend/scope/
 ├── mod.rs             # scope 聚合导出
 ├── rules.rs           # VisibleScope + get_visible_scope(ctx)
-├── filter.rs          # HasProvinceCity + filter_by_scope
-└── admin_province.rs  # 根据 pubkey + role 解析管理员所属省
+└── filter.rs          # HasProvinceCity + filter_by_scope
 ```
 
-## 二角色范围
+## 注册局机构范围
 
-| 角色 | 可见省 | 可见市 | 进 tab 跳过省列表 | 进 tab 跳过市列表 |
+| 注册局机构 | 可见省 | 可见市 | 进 tab 跳过省列表 | 进 tab 跳过市列表 |
 |---|---|---|---|---|
-| FederalAdmin | 本省(`admin_province`) | 本省全部市 | 是 | 否 |
-| CityAdmin | 本省 | 本市(`admin_city`) | 是 | 是 |
+| FEDERAL_REGISTRY | 本省(`scope_province_name`) | 本省全部市 | 是 | 否 |
+| CITY_REGISTRY | 本省 | 本市(`scope_city_name`) | 是 | 是 |
 
-机构创建必须复用上述范围:FederalAdmin 可在本省任意市创建手动机构,CityAdmin 只能在本市创建;业务模块不得再用“是否存在 `admin_city`”额外限制 FederalAdmin 创建 G 公法人。
+机构创建必须复用上述范围:联邦注册局机构的 `admins` 可在本省任意市创建手动机构,市注册局机构的 `admins` 只能在本市创建;业务模块不得再用“是否存在 `scope_city_name`”额外限制联邦注册局创建 G 公法人。
 
 ## 已迁出内容
 
@@ -56,8 +55,8 @@ let filtered = scope::filter_by_scope(&rows, &scope);
 
 ## 安全 fallback
 
-`get_visible_scope` 在 FederalAdmin 缺 `admin_province` 或 CityAdmin 缺
-`admin_city` 时会 fallback 到零范围,确保数据不会被误放行。调用方应在
+`get_visible_scope` 在联邦注册局缺 `scope_province_name` 或市注册局缺
+`scope_city_name` 时会 fallback 到零范围,确保数据不会被误放行。调用方应在
 `require_admin_*` 里先校验必要字段。
 
 ## 铁律

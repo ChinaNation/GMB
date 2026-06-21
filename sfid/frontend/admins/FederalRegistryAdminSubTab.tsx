@@ -1,5 +1,5 @@
-// 中文注释:注册局联邦管理员列表。所有联邦管理员同级,
-// 代码内置初始联邦管理员只作为不可删除安全根保留。
+// 中文注释:注册局联邦注册局管理员列表。所有联邦注册局管理员同级,
+// 代码内置初始联邦注册局管理员只作为不可删除安全根保留。
 
 import { useMemo, useState } from 'react';
 import { Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
@@ -7,32 +7,32 @@ import { useAuth } from '../hooks/useAuth';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
-import { updateFederalAdminName, type FederalAdminRow } from './api';
+import { updateFederalRegistryName, type FederalRegistryAdminRow } from './api';
 import { formatAdminCreateError, type AdminActionType } from './admin_security_api';
-import { sameHexPubkey } from './adminUtils';
+import { sameHexAccount } from './adminUtils';
 import { Passkey } from './Passkey';
 import { notice } from '../utils/notice';
 
-interface FederalAdminSubTabProps {
-  selectedFederalAdmin: FederalAdminRow;
-  federalAdmins: FederalAdminRow[];
-  federalAdminsLoading: boolean;
-  refreshFederalAdmins: () => Promise<FederalAdminRow[]>;
+interface FederalRegistryAdminSubTabProps {
+  selectedFederalRegistry: FederalRegistryAdminRow;
+  federalRegistryAdmins: FederalRegistryAdminRow[];
+  federalRegistryAdminsLoading: boolean;
+  refreshFederalRegistryAdmins: () => Promise<FederalRegistryAdminRow[]>;
   runSecuredAction: <T = unknown>(actionType: AdminActionType, payload: unknown) => Promise<T>;
 }
 
 type AddFormValues = {
-  admin_name: string;
-  admin_pubkey: string;
+  admin_display_name: string;
+  admin_account: string;
 };
 
-export function FederalAdminSubTab({
-  selectedFederalAdmin,
-  federalAdmins,
-  federalAdminsLoading,
-  refreshFederalAdmins,
+export function FederalRegistryAdminSubTab({
+  selectedFederalRegistry,
+  federalRegistryAdmins,
+  federalRegistryAdminsLoading,
+  refreshFederalRegistryAdmins,
   runSecuredAction,
-}: FederalAdminSubTabProps) {
+}: FederalRegistryAdminSubTabProps) {
   const { auth } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
@@ -40,53 +40,53 @@ export function FederalAdminSubTab({
   const [form] = Form.useForm<AddFormValues>();
 
   const provinceAdmins = useMemo(
-    () => federalAdmins.filter((row) => row.province === selectedFederalAdmin.province),
-    [selectedFederalAdmin.province, federalAdmins],
+    () => federalRegistryAdmins.filter((row) => row.province_name === selectedFederalRegistry.province_name),
+    [selectedFederalRegistry.province_name, federalRegistryAdmins],
   );
   const currentAdminRow = auth
-    ? provinceAdmins.find((row) => sameHexPubkey(row.admin_pubkey, auth.admin_pubkey)) || null
+    ? provinceAdmins.find((row) => sameHexAccount(row.admin_account, auth.admin_account)) || null
     : null;
-  const canAddFederalAdmin = auth?.role === 'FEDERAL_ADMIN';
-  const federalAdminLimitReached = provinceAdmins.length >= 5;
-  const canDeleteFederalAdmin = (row: FederalAdminRow) =>
+  const canAddFederalRegistryAdmin = auth?.registry_org_code === 'FEDERAL_REGISTRY';
+  const federalRegistryAdminLimitReached = provinceAdmins.length >= 5;
+  const canDeleteFederalRegistry = (row: FederalRegistryAdminRow) =>
     !!currentAdminRow?.built_in
     && !row.built_in
-    && !sameHexPubkey(row.admin_pubkey, auth?.admin_pubkey);
+    && !sameHexAccount(row.admin_account, auth?.admin_account);
 
   const submitAdd = async (values: AddFormValues) => {
-    const adminName = values.admin_name.trim();
-    if (!adminName) {
-      notice.error('请输入联邦管理员姓名');
+    const adminDisplayName = values.admin_display_name.trim();
+    if (!adminDisplayName) {
+      notice.error('请输入联邦注册局管理员姓名');
       return;
     }
-    let adminPubkey: string;
+    let adminAccount: string;
     try {
-      adminPubkey = decodeSs58(values.admin_pubkey.trim());
+      adminAccount = decodeSs58(values.admin_account.trim());
     } catch (error) {
       notice.error(error, '');
       return;
     }
     setAddLoading(true);
     try {
-      await runSecuredAction<FederalAdminRow>('CREATE_FEDERAL_ADMIN', {
-        admin_pubkey: adminPubkey,
-        admin_name: adminName,
+      await runSecuredAction<FederalRegistryAdminRow>('CREATE_FEDERAL_REGISTRY', {
+        admin_account: adminAccount,
+        admin_display_name: adminDisplayName,
       });
-      notice.success('联邦管理员已新增');
+      notice.success('联邦注册局管理员已新增');
       form.resetFields();
       setAddOpen(false);
-      await refreshFederalAdmins();
+      await refreshFederalRegistryAdmins();
     } catch (error) {
-      notice.error(formatAdminCreateError(error, 'FEDERAL_ADMIN', '新增联邦管理员失败'));
+      notice.error(formatAdminCreateError(error, 'FEDERAL_REGISTRY', '新增联邦注册局管理员失败'));
     } finally {
       setAddLoading(false);
     }
   };
 
-  const editFederalAdmin = (row: FederalAdminRow) => {
-    let nextName = row.admin_name;
+  const editFederalRegistry = (row: FederalRegistryAdminRow) => {
+    let nextName = row.admin_display_name;
     notice.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑联邦管理员</div>,
+      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑联邦注册局管理员</div>,
       icon: null,
       centered: true,
       zIndex: SFID_MODAL_Z_INDEX.business,
@@ -95,7 +95,7 @@ export function FederalAdminSubTab({
           <div>
             <Typography.Text type="secondary">管理员姓名</Typography.Text>
             <Input
-              defaultValue={row.admin_name}
+              defaultValue={row.admin_display_name}
               placeholder="请输入管理员姓名"
               style={{ marginTop: 6 }}
               onChange={(event) => {
@@ -105,7 +105,7 @@ export function FederalAdminSubTab({
           </div>
           <div>
             <Typography.Text type="secondary">账户地址</Typography.Text>
-            <Input value={tryEncodeSs58(row.admin_pubkey)} disabled style={{ marginTop: 6 }} />
+            <Input value={tryEncodeSs58(row.admin_account)} disabled style={{ marginTop: 6 }} />
           </div>
         </Space>
       ),
@@ -118,16 +118,16 @@ export function FederalAdminSubTab({
         </div>
       ),
       onOk: async () => {
-        const adminName = nextName.trim();
-        if (!adminName) {
+        const adminDisplayName = nextName.trim();
+        if (!adminDisplayName) {
           notice.error('请输入管理员姓名');
-          throw new Error('admin_name is required');
+          throw new Error('admin_display_name is required');
         }
         try {
           if (!auth) throw new Error('请先登录');
-          await updateFederalAdminName(auth, row.id, adminName);
-          notice.success('联邦管理员已更新');
-          await refreshFederalAdmins();
+          await updateFederalRegistryName(auth, row.id, adminDisplayName);
+          notice.success('联邦注册局管理员已更新');
+          await refreshFederalRegistryAdmins();
         } catch (error) {
           notice.error(error, '');
           throw error;
@@ -136,16 +136,16 @@ export function FederalAdminSubTab({
     });
   };
 
-  const deleteFederalAdmin = (row: FederalAdminRow) => {
+  const deleteFederalRegistry = (row: FederalRegistryAdminRow) => {
     notice.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>删除联邦管理员</div>,
+      title: <div style={{ textAlign: 'center', width: '100%' }}>删除联邦注册局管理员</div>,
       icon: null,
       centered: true,
       zIndex: SFID_MODAL_Z_INDEX.business,
       content: (
         <div style={{ textAlign: 'center' }}>
-          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该联邦管理员?</Typography.Paragraph>
-          <Typography.Text code style={{ wordBreak: 'break-all' }}>{tryEncodeSs58(row.admin_pubkey)}</Typography.Text>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该联邦注册局管理员?</Typography.Paragraph>
+          <Typography.Text code style={{ wordBreak: 'break-all' }}>{tryEncodeSs58(row.admin_account)}</Typography.Text>
         </div>
       ),
       okText: '确认删除',
@@ -159,9 +159,9 @@ export function FederalAdminSubTab({
       ),
       onOk: async () => {
         try {
-          await runSecuredAction('DELETE_FEDERAL_ADMIN', { id: row.id });
-          notice.success('联邦管理员已删除');
-          await refreshFederalAdmins();
+          await runSecuredAction('DELETE_FEDERAL_REGISTRY', { id: row.id });
+          notice.success('联邦注册局管理员已删除');
+          await refreshFederalRegistryAdmins();
         } catch (error) {
           notice.error(error, '');
           throw error;
@@ -176,9 +176,9 @@ export function FederalAdminSubTab({
         type="inner"
         title={
           <Space size={6} align="center">
-            <span>联邦管理员列表</span>
+            <span>联邦注册局管理员列表</span>
             <span style={{ lineHeight: 1, color: 'rgba(15,23,42,0.45)' }}>·</span>
-            <span>{selectedFederalAdmin.province}</span>
+            <span>{selectedFederalRegistry.province_name}</span>
           </Space>
         }
         extra={
@@ -186,42 +186,42 @@ export function FederalAdminSubTab({
             <Typography.Text type="secondary" style={{ fontWeight: 400, fontSize: 13 }}>
               用户数：{provinceAdmins.length} / 5
             </Typography.Text>
-            {canAddFederalAdmin ? (
+            {canAddFederalRegistryAdmin ? (
               <Button
                 type="primary"
-                disabled={federalAdminLimitReached}
-                title={federalAdminLimitReached ? '联邦管理员已满 5 人' : undefined}
+                disabled={federalRegistryAdminLimitReached}
+                title={federalRegistryAdminLimitReached ? '联邦注册局管理员已满 5 人' : undefined}
                 onClick={() => setAddOpen(true)}
               >
-                新增联邦管理员
+                新增联邦注册局管理员
               </Button>
             ) : null}
           </Space>
         }
       >
-      <Table<FederalAdminRow>
-        rowKey={(row) => `${row.id}-${row.admin_pubkey}`}
-        loading={federalAdminsLoading}
+      <Table<FederalRegistryAdminRow>
+        rowKey={(row) => `${row.id}-${row.admin_account}`}
+        loading={federalRegistryAdminsLoading}
         dataSource={provinceAdmins}
         pagination={false}
         columns={[
           { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => index + 1 },
-          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
-          { title: '账户', dataIndex: 'admin_pubkey', align: 'center', render: (value: string) => tryEncodeSs58(value) },
+          { title: '姓名', dataIndex: 'admin_display_name', align: 'center', width: 160 },
+          { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
           {
             title: '操作',
             width: 260,
             align: 'center',
             render: (_value, row) => {
-              const isSelf = sameHexPubkey(row.admin_pubkey, auth?.admin_pubkey);
+              const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
               return (
                 <Space>
-                  {canAddFederalAdmin ? <Button size="small" onClick={() => editFederalAdmin(row)}>编辑</Button> : null}
+                  {canAddFederalRegistryAdmin ? <Button size="small" onClick={() => editFederalRegistry(row)}>编辑</Button> : null}
                   <Button
                     size="small"
                     danger
-                    disabled={!canDeleteFederalAdmin(row)}
-                    onClick={() => deleteFederalAdmin(row)}
+                    disabled={!canDeleteFederalRegistry(row)}
+                    onClick={() => deleteFederalRegistry(row)}
                   >
                     删除
                   </Button>
@@ -235,7 +235,7 @@ export function FederalAdminSubTab({
       </Card>
 
       <Modal
-        title={<div style={{ textAlign: 'center', width: '100%' }}>新增联邦管理员</div>}
+        title={<div style={{ textAlign: 'center', width: '100%' }}>新增联邦注册局管理员</div>}
         open={addOpen}
         centered
         destroyOnClose
@@ -256,18 +256,18 @@ export function FederalAdminSubTab({
         <Form form={form} layout="vertical" onFinish={submitAdd}>
           <Form.Item
             label="姓名"
-            name="admin_name"
-            rules={[{ required: true, message: '请输入联邦管理员姓名' }]}
+            name="admin_display_name"
+            rules={[{ required: true, message: '请输入联邦注册局管理员姓名' }]}
           >
-            <Input placeholder="请输入联邦管理员姓名" />
+            <Input placeholder="请输入联邦注册局管理员姓名" />
           </Form.Item>
           <Form.Item
             label="账户"
-            name="admin_pubkey"
-            rules={[{ required: true, message: '请扫码或输入联邦管理员账户' }]}
+            name="admin_account"
+            rules={[{ required: true, message: '请扫码或输入联邦注册局管理员账户' }]}
           >
             <Input
-              placeholder="请输入联邦管理员账户(SS58)"
+              placeholder="请输入联邦注册局管理员账户(SS58)"
               suffix={
                 <span
                   title="扫码识别用户码"
@@ -292,7 +292,7 @@ export function FederalAdminSubTab({
         open={scanOpen}
         onClose={() => setScanOpen(false)}
         onResolved={(address) => {
-          form.setFieldsValue({ admin_pubkey: address });
+          form.setFieldsValue({ admin_account: address });
           setScanOpen(false);
         }}
       />

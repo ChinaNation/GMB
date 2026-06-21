@@ -101,7 +101,7 @@ impl crate::bank_check::SfidAccountQuery<AccountId32> for MockSfid {
         }
     }
 
-    fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
+    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
         if sfid_number != BANK_SFID {
             return None;
         }

@@ -3,7 +3,7 @@
 //! 中文注释:
 //! - `PaymentIntent` 是 L3 用私钥签名的原始数据,citizenapp 本地签,链上验。
 //! - 本文件**不引入新的 Storage**,仅提供纯结构与签名哈希函数。
-//! - `OffchainBatchItem` 在 Step 2 引入(当前 lib.rs 的旧结构 Step 2 重写)。
+//! - 批次单条 item 结构由本文件提供(清算行体系)。
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
@@ -71,10 +71,9 @@ pub fn batch_signing_hash<AccountId: Encode>(
     sp_io::hashing::blake2_256(&data)
 }
 
-/// 扫码支付清算体系 Step 2 新增:批次上链的**单条 item 结构**(清算行体系)。
+/// 扫码支付清算体系:批次上链的**单条 item 结构**(清算行体系)。
 ///
-/// 与现有 `pallet::OffchainBatchItem`(旧省储行模型,字段少)并存,Step 2 起
-/// 新 `submit_offchain_batch_v2` extrinsic 使用本结构。
+/// `submit_offchain_batch_v2` extrinsic 使用本结构(旧省储行模型已物理删除)。
 ///
 /// 字段顺序必须与 citizenapp Dart 端的 SCALE 编码逐字段对齐。
 #[derive(

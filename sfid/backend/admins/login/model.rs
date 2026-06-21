@@ -6,12 +6,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::AdminRole;
+use crate::RegistryOrgCode;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LoginChallenge {
     pub(crate) challenge_id: String,
-    pub(crate) admin_pubkey: String,
+    pub(crate) admin_account: String,
     pub(crate) challenge_text: String,
     pub(crate) challenge_token: String,
     pub(crate) qr_aud: String,
@@ -28,8 +28,8 @@ pub(crate) struct LoginChallenge {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminSession {
     pub(crate) token: String,
-    pub(crate) admin_pubkey: String,
-    pub(crate) role: AdminRole,
+    pub(crate) admin_account: String,
+    pub(crate) registry_org_code: RegistryOrgCode,
     pub(crate) expire_at: DateTime<Utc>,
     #[serde(default = "default_now_utc")]
     pub(crate) last_active_at: DateTime<Utc>,
@@ -40,19 +40,19 @@ pub(crate) struct QrLoginResultRecord {
     pub(crate) session_id: String,
     pub(crate) access_token: String,
     pub(crate) expire_at: DateTime<Utc>,
-    pub(crate) admin_pubkey: String,
-    pub(crate) role: AdminRole,
+    pub(crate) admin_account: String,
+    pub(crate) registry_org_code: RegistryOrgCode,
     pub(crate) created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AdminAuthContext {
-    pub(crate) admin_pubkey: String,
-    pub(crate) role: AdminRole,
-    pub(crate) admin_name: String,
-    pub(crate) admin_province: Option<String>,
-    /// 仅 CityAdmin 有值：该市管理员登记的市（用于列表按市过滤、生成时强制锁定）
-    pub(crate) admin_city: Option<String>,
+    pub(crate) admin_account: String,
+    pub(crate) registry_org_code: RegistryOrgCode,
+    pub(crate) admin_display_name: String,
+    pub(crate) scope_province_name: Option<String>,
+    /// 仅 CityRegistry 有值：该市注册局管理员登记的市（用于列表按市过滤、生成时强制锁定）
+    pub(crate) scope_city_name: Option<String>,
     /// 中文注释:当前登录管理员是否已绑定有效 Passkey;前端据此强制进入管理员列表更新密钥。
     pub(crate) passkey_bound: bool,
 }
@@ -60,11 +60,11 @@ pub(crate) struct AdminAuthContext {
 #[derive(Serialize)]
 pub(crate) struct AdminAuthOutput {
     pub(crate) ok: bool,
-    pub(crate) admin_pubkey: String,
-    pub(crate) role: AdminRole,
-    pub(crate) admin_name: String,
-    pub(crate) admin_province: Option<String>,
-    pub(crate) admin_city: Option<String>,
+    pub(crate) admin_account: String,
+    pub(crate) registry_org_code: RegistryOrgCode,
+    pub(crate) admin_display_name: String,
+    pub(crate) scope_province_name: Option<String>,
+    pub(crate) scope_city_name: Option<String>,
     pub(crate) passkey_bound: bool,
 }
 
@@ -75,17 +75,17 @@ pub(crate) struct AdminIdentifyInput {
 
 #[derive(Serialize)]
 pub(crate) struct AdminIdentifyOutput {
-    pub(crate) admin_pubkey: String,
-    pub(crate) role: AdminRole,
-    pub(crate) admin_name: String,
-    pub(crate) admin_province: Option<String>,
-    pub(crate) admin_city: Option<String>,
+    pub(crate) admin_account: String,
+    pub(crate) registry_org_code: RegistryOrgCode,
+    pub(crate) admin_display_name: String,
+    pub(crate) scope_province_name: Option<String>,
+    pub(crate) scope_city_name: Option<String>,
     pub(crate) passkey_bound: bool,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct AdminChallengeInput {
-    pub(crate) admin_pubkey: String,
+    pub(crate) admin_account: String,
     pub(crate) origin: Option<String>,
     pub(crate) domain: Option<String>,
     pub(crate) session_id: Option<String>,
@@ -125,7 +125,7 @@ pub(crate) struct AdminQrCompleteInput {
     #[serde(alias = "request_id", alias = "challenge")]
     pub(crate) challenge_id: String,
     pub(crate) session_id: Option<String>,
-    pub(crate) admin_pubkey: String,
+    pub(crate) admin_account: String,
     #[serde(default, alias = "pubkey", alias = "public_key")]
     pub(crate) signer_pubkey: Option<String>,
     pub(crate) signature: String,

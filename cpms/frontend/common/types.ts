@@ -15,6 +15,6 @@ export interface ApiError {
 
 export interface SessionUser {
   user_id: string;
-  role: string;
-  admin_name: string;
+  user_group: string;
+  admin_display_name: string;
 }

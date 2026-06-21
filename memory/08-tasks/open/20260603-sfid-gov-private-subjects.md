@@ -8,7 +8,7 @@ SFID
 - 机构唯一身份只认 `sfid_number`，不得新增 `identity_key`、`generation_key` 或第二身份键。
 - 表名和目录名保持精简：`subjects / citizens / gov / private / accounts / docs / admins`。
 - 前后端命名统一：公权机构目录均使用 `gov`。
-- 联邦/市管理员权限继续由现有 `admins` 与 `scope` 承接，不新增 `registry_admins`。
+- 联邦注册局机构管理员/市注册局机构管理员权限继续由现有 `admins` 与 `scope` 承接，不新增 `registry_admins`。
 - 智能人功能当前不上线，不创建智能人模块或数据表。
 - 不恢复 `backend/src/`、独立 `backend/chain/`、独立 `frontend/api/` 或独立链业务目录。
 - 不涉及投票流程。
@@ -52,6 +52,6 @@ SFID
 - 已新增公安局和公权机构确定性列表 StoreHandle 只读查询,GET 接口不再执行 backfill、reconcile、写库或分片同步。
 - 已将 `gov/private/accounts/docs/subjects` 重复的 HTTP helper 抽到 `sfid/backend/subjects/http.rs`,并清理旧复制函数。
 - 已将公权/私权新增弹窗表单抽到 `sfid/frontend/core/institution/CreateInstitutionForm.tsx`,`gov` 与 `private` 仅保留 API 包装。
-- 已修复注册局页签中“联邦管理员列表”首次点击被加载流程重置回市列表的问题。
+- 已修复注册局页签中“联邦注册局机构管理员列表”首次点击被加载流程重置回市列表的问题。
 - 已更新 SFID 后端布局、前端布局、技术总览、统一命名、统一协议和相关活跃任务/决策文档。
 - 已再次运行 `cargo check`、`npm run build`。

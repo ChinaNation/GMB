@@ -67,7 +67,7 @@ fn build_genesis() -> Value {
     let nrc_account = CHINA_CB
         .first()
         .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
-        .expect("NRC pallet_address must decode to AccountId");
+        .expect("NRC main_account must decode to AccountId");
 
     // 中文注释：每位国储会管理员创世预置 1000 万元（单位：分）。
     let admin_each: u128 = 1_000_000_000; // 1000万元 = 10亿分
@@ -232,7 +232,7 @@ mod tests {
         let nrc_account = CHINA_CB
             .first()
             .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
-            .expect("NRC pallet_address must decode to AccountId");
+            .expect("NRC main_account must decode to AccountId");
         let nrc_ss58 = account_to_genesis_ss58(&nrc_account);
 
         let nrc_amount = balances

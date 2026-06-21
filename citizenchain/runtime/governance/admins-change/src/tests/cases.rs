@@ -432,42 +432,6 @@ fn dynamic_accounts_can_be_closed() {
 }
 
 #[test]
-fn runtime_upgrade_removes_legacy_closed_dynamic_accounts() {
-    new_test_ext().execute_with(|| {
-        let dynamic = pending_account_id();
-        let builtin = nrc_pallet_id();
-        let admin_a = AccountId32::new([241u8; 32]);
-        let admin_b = AccountId32::new([242u8; 32]);
-
-        assert_ok!(AdminsChange::do_create_pending_admin_account(
-            dynamic.clone(),
-            ORG_REN,
-            AdminAccountKind::PersonalDuoqian,
-            vec![admin_a.clone(), admin_b],
-            admin_a,
-        ));
-        AdminAccounts::<Test>::mutate(dynamic.clone(), |maybe| {
-            let account = maybe.as_mut().expect("dynamic account should exist");
-            account.status = AdminAccountStatus::Closed;
-        });
-        AdminAccounts::<Test>::mutate(builtin.clone(), |maybe| {
-            let account = maybe.as_mut().expect("builtin account should exist");
-            account.status = AdminAccountStatus::Closed;
-        });
-        frame_support::traits::StorageVersion::new(3).put::<AdminsChange>();
-
-        let _ = AdminsChange::on_runtime_upgrade();
-
-        assert!(AdminAccounts::<Test>::get(dynamic.clone()).is_none());
-        assert!(AdminAccounts::<Test>::get(builtin.clone()).is_some());
-        assert_eq!(
-            frame_support::traits::StorageVersion::get::<AdminsChange>(),
-            frame_support::traits::StorageVersion::new(4)
-        );
-    });
-}
-
-#[test]
 fn dynamic_accounts_can_use_admin_set_change_entry() {
     new_test_ext().execute_with(|| {
         for (offset, org, kind) in [

@@ -52,7 +52,7 @@ pub(crate) struct CpmsSiteKeys {
     pub(crate) version: u64,
     #[serde(default)]
     pub(crate) province_code: String,
-    pub(crate) admin_province: String,
+    pub(crate) province_name: String,
     #[serde(default)]
     pub(crate) city_name: String,
     #[serde(default)]
@@ -109,7 +109,7 @@ pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) status: CpmsSiteStatus,
     pub(crate) version: u64,
     pub(crate) province_code: String,
-    pub(crate) admin_province: String,
+    pub(crate) province_name: String,
     pub(crate) city_name: String,
     pub(crate) city_code: String,
     pub(crate) institution_code: String,

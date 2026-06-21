@@ -1,9 +1,9 @@
 // 注册局机构详情视图(两个顶级 tab 各一个):
-//   - CityRegistryView(市注册局 tab):联邦管理员 城市表格→点市→该市注册局机构详情页;
-//                                      市管理员 直接进本市注册局机构详情页。
+//   - CityRegistryView(市注册局 tab):联邦注册局管理员 城市表格→点市→该市注册局机构详情页;
+//                                      市注册局管理员 直接进本市注册局机构详情页。
 //   - FederalRegistryView(联邦注册局 tab):全国唯一联邦注册局机构详情页。
 // 两者 leaf 都是「机构详情页 + 管理员列表 tab」(GovDetailPage.adminListSection),
-// 管理员列表由详情页左侧导航显示。数据由 FederalAdminsView 统一加载。
+// 管理员列表由详情页左侧导航显示。数据由 RegistryAdminsView 统一加载。
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Space, Table, Tag, Typography } from 'antd';
@@ -12,20 +12,20 @@ import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
 import type { SfidCityItem } from '../china/api';
-import type { CityAdminRow } from './city_admins_api';
+import type { CityRegistryAdminRow } from './city_registry_admins_api';
 import { tryEncodeSs58 } from '../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
-import { MAX_CITY_ADMINS_PER_CITY, sameHexPubkey } from './adminUtils';
-import type { FederalAdminSharedState } from './adminUtils';
-import { AddCityAdminModal } from './AddCityAdminModal';
-import { FederalAdminSubTab } from './FederalAdminSubTab';
+import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
+import type { RegistryAdminsSharedState } from './adminUtils';
+import { AddCityRegistryAdminModal } from './AddCityRegistryAdminModal';
+import { FederalRegistryAdminSubTab } from './FederalRegistryAdminSubTab';
 import { Passkey } from './Passkey';
 import { GovDetailPage } from '../gov/GovDetailPage';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionListRow } from '../subjects/api';
 
 interface RegistryViewProps {
-  state: FederalAdminSharedState;
+  state: RegistryAdminsSharedState;
 }
 
 function makeCenteredTitle(center: React.ReactNode) {
@@ -38,20 +38,20 @@ function makeCenteredTitle(center: React.ReactNode) {
   );
 }
 
-// ── 联邦注册局 tab:机构详情页 + 本省联邦管理员列表 ──
+// ── 联邦注册局 tab:机构详情页 + 本省联邦注册局管理员列表 ──
 
 export function FederalRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
   const scope = useScope(auth);
   const {
-    federalAdmins,
-    federalAdminsLoading,
-    selectedFederalAdmin,
+    federalRegistryAdmins,
+    federalRegistryAdminsLoading,
+    selectedFederalRegistry,
     federalRegistryDetail,
     federalRegistryLoading,
   } = state;
 
-  // 稳定引用:复用 FederalAdminsView 预加载的 detail,避免 GovDetailPage 重复触发 load。
+  // 稳定引用:复用 RegistryAdminsView 预加载的 detail,避免 GovDetailPage 重复触发 load。
   const loadFederalRegistry = useCallback(() => {
     if (federalRegistryDetail) return Promise.resolve(federalRegistryDetail);
     if (auth) return getFederalRegistry(auth);
@@ -75,14 +75,14 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
     <GovDetailPage
       auth={auth}
       sfidNumber={federalRegistryDetail.institution.sfid_number}
-      canWrite={scope.canWrite && auth.role === 'FEDERAL_ADMIN'}
+      canWrite={scope.canWrite && auth.registry_org_code === 'FEDERAL_REGISTRY'}
       loadDetail={loadFederalRegistry}
-      adminListSection={selectedFederalAdmin ? (
-        <FederalAdminSubTab
-          selectedFederalAdmin={selectedFederalAdmin}
-          federalAdmins={federalAdmins}
-          federalAdminsLoading={federalAdminsLoading}
-          refreshFederalAdmins={state.refreshFederalAdmins}
+      adminListSection={selectedFederalRegistry ? (
+        <FederalRegistryAdminSubTab
+          selectedFederalRegistry={selectedFederalRegistry}
+          federalRegistryAdmins={federalRegistryAdmins}
+          federalRegistryAdminsLoading={federalRegistryAdminsLoading}
+          refreshFederalRegistryAdmins={state.refreshFederalRegistryAdmins}
           runSecuredAction={state.runSecuredAction}
         />
       ) : null}
@@ -90,38 +90,38 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
   );
 }
 
-// ── 市注册局 tab:城市表格(联邦) / 机构详情页 + 本市市管理员列表 ──
+// ── 市注册局 tab:城市表格(联邦) / 机构详情页 + 本市市注册局管理员列表 ──
 
 export function CityRegistryView({ state }: RegistryViewProps) {
   const { auth } = useAuth();
   const scope = useScope(auth);
   const {
-    selectedFederalAdmin,
+    selectedFederalRegistry,
     selectedCity,
     setSelectedCity,
-    cityAdmins,
-    cityAdminsLoading,
-    cityAdminListPage,
-    setCityAdminListPage,
-    cityAdminCities,
-    cityAdminCitiesLoading,
-    setAddCityAdminOpen,
-    onUpdateCityAdmin,
-    onDeleteCityAdmin,
+    cityRegistryAdmins,
+    cityRegistryAdminsLoading,
+    cityRegistryAdminListPage,
+    setCityRegistryListPage,
+    cityRegistryAdminCities,
+    cityRegistryAdminCitiesLoading,
+    setAddCityRegistryOpen,
+    onUpdateCityRegistry,
+    onDeleteCityRegistry,
     cityRegistrySfid,
   } = state;
 
   if (!auth) return null;
 
-  const effectiveProvince = scope.lockedProvince;
-  const effectiveCity = selectedCity ?? scope.lockedCity;
-  const city_adminsForProvince = selectedFederalAdmin ? cityAdmins : [];
-  // 市管理员只读;联邦管理员可增删改(后端按登录省域二次校验)。
-  const canEditCityAdmins = scope.canWrite && auth.role === 'FEDERAL_ADMIN';
+  const effectiveProvince = scope.lockedProvinceName;
+  const effectiveCity = selectedCity ?? scope.lockedCityName;
+  const cityRegistryAdminsForProvince = selectedFederalRegistry ? cityRegistryAdmins : [];
+  // 市注册局管理员只读;联邦注册局管理员可增删改(后端按登录省域二次校验)。
+  const canEditCityRegistryAdmins = scope.canWrite && auth.registry_org_code === 'FEDERAL_REGISTRY';
 
   let body: React.ReactNode;
   if (!effectiveCity) {
-    // 联邦管理员未选市 → 城市表格(套 Card 显示省份标题)
+    // 联邦注册局管理员未选市 → 城市表格(套 Card 显示省份标题)
     body = (
       <Card
         title={makeCenteredTitle(effectiveProvince ?? '市注册局')}
@@ -131,35 +131,35 @@ export function CityRegistryView({ state }: RegistryViewProps) {
       >
         <CityRegistryListTable
           auth={auth}
-          province={effectiveProvince ?? ''}
-          cities={cityAdminCities.filter((c) => c.code !== '000')}
-          citiesLoading={cityAdminCitiesLoading || (!selectedFederalAdmin && cityAdminCities.length === 0)}
-          cityAdmins={city_adminsForProvince}
-          cityAdminsLoading={cityAdminsLoading}
+          province_name={effectiveProvince ?? ''}
+          cities={cityRegistryAdminCities.filter((c) => c.code !== '000')}
+          citiesLoading={cityRegistryAdminCitiesLoading || (!selectedFederalRegistry && cityRegistryAdminCities.length === 0)}
+          cityRegistryAdmins={cityRegistryAdminsForProvince}
+          cityRegistryAdminsLoading={cityRegistryAdminsLoading}
           onSelectCity={setSelectedCity}
         />
       </Card>
     );
   } else if (cityRegistrySfid) {
-    // 选中市(联邦) / 锁定市(市管理员) → 市注册局机构详情页 + 本市市管理员列表
+    // 选中市(联邦) / 锁定市(市注册局管理员) → 市注册局机构详情页 + 本市市注册局管理员列表
     const canGoBack = !scope.skipCityList;
     body = (
       <GovDetailPage
         auth={auth}
         sfidNumber={cityRegistrySfid}
         canWrite={scope.canWrite}
-        onBack={canGoBack ? () => { setSelectedCity(null); setCityAdminListPage(1); } : undefined}
+        onBack={canGoBack ? () => { setSelectedCity(null); setCityRegistryListPage(1); } : undefined}
         backLabel="返回列表"
         adminListSection={
-          <CityCityAdminsView
-            canEditCityAdmins={canEditCityAdmins}
-            cityAdmins={city_adminsForProvince.filter((op) => op.city === effectiveCity)}
-            cityAdminsLoading={cityAdminsLoading}
-            cityAdminListPage={cityAdminListPage}
-            setCityAdminListPage={setCityAdminListPage}
-            setAddCityAdminOpen={setAddCityAdminOpen}
-            onUpdateCityAdmin={onUpdateCityAdmin}
-            onDeleteCityAdmin={onDeleteCityAdmin}
+          <CityRegistryAdminsView
+            canEditCityRegistryAdmins={canEditCityRegistryAdmins}
+            cityRegistryAdmins={cityRegistryAdminsForProvince.filter((op) => op.city_name === effectiveCity)}
+            cityRegistryAdminsLoading={cityRegistryAdminsLoading}
+            cityRegistryAdminListPage={cityRegistryAdminListPage}
+            setCityRegistryListPage={setCityRegistryListPage}
+            setAddCityRegistryOpen={setAddCityRegistryOpen}
+            onUpdateCityRegistry={onUpdateCityRegistry}
+            onDeleteCityRegistry={onDeleteCityRegistry}
           />
         }
       />
@@ -176,7 +176,7 @@ export function CityRegistryView({ state }: RegistryViewProps) {
   return (
     <>
       {body}
-      <AddCityAdminModal state={state} />
+      <AddCityRegistryAdminModal state={state} />
     </>
   );
 }
@@ -185,22 +185,22 @@ export function CityRegistryView({ state }: RegistryViewProps) {
 
 const CITY_REGISTRY_PAGE_SIZE = 20;
 
-function areaText(row: InstitutionListRow | null, province: string, city: string) {
-  if (!row) return [province, city].filter(Boolean).join('/') || '-';
+function areaText(row: InstitutionListRow | null, province_name: string, city_name: string) {
+  if (!row) return [province_name, city_name].filter(Boolean).join('/') || '-';
   return [row.province_name, row.city_name, row.town_name].filter(Boolean).join('/') || '-';
 }
 
-function nameText(row: InstitutionListRow | null, city: string) {
-  return row?.sfid_full_name || row?.sfid_short_name || `${city}注册局`;
+function nameText(row: InstitutionListRow | null, city_name: string) {
+  return row?.sfid_full_name || row?.sfid_short_name || `${city_name}注册局`;
 }
 
-function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmins, cityAdminsLoading, onSelectCity }: {
+function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cityRegistryAdmins, cityRegistryAdminsLoading, onSelectCity }: {
   auth: AdminAuth;
-  province: string;
+  province_name: string;
   cities: SfidCityItem[];
   citiesLoading: boolean;
-  cityAdmins: CityAdminRow[];
-  cityAdminsLoading: boolean;
+  cityRegistryAdmins: CityRegistryAdminRow[];
+  cityRegistryAdminsLoading: boolean;
   onSelectCity: (city: string) => void;
 }) {
   const [registryRows, setRegistryRows] = useState<InstitutionListRow[]>([]);
@@ -208,14 +208,14 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (!province) {
+    if (!province_name) {
       setRegistryRows([]);
       setRegistryLoading(false);
       return;
     }
     let cancelled = false;
     setRegistryLoading(true);
-    listOfficialInstitutions(auth, { province_name: province, org_code: 'CITY_REGISTRY', page_size: 300 })
+    listOfficialInstitutions(auth, { province_name, org_code: 'CITY_REGISTRY', page_size: 300 })
       .then((res) => {
         if (!cancelled) {
           setRegistryRows(res.items);
@@ -230,19 +230,19 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
     return () => {
       cancelled = true;
     };
-  }, [auth.access_token, province]);
+  }, [auth.access_token, province_name]);
 
   useEffect(() => {
     setPage(1);
-  }, [province, cities.length]);
+  }, [province_name, cities.length]);
 
   const rows = useMemo(() => {
-    return cities.map((city) => {
-      const registry = registryRows.find((row) => row.city_name === city.name) ?? null;
-      const adminCount = cityAdmins.filter((admin) => admin.city === city.name).length;
-      return { city, registry, adminCount };
+    return cities.map((city_item) => {
+      const registry = registryRows.find((row) => row.city_name === city_item.name) ?? null;
+      const adminCount = cityRegistryAdmins.filter((admin) => admin.city_name === city_item.name).length;
+      return { city_item, registry, adminCount };
     });
-  }, [cities, registryRows, cityAdmins]);
+  }, [cities, registryRows, cityRegistryAdmins]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / CITY_REGISTRY_PAGE_SIZE));
   const displayRows = rows.slice(
@@ -267,25 +267,25 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
       title: '市注册局名称',
       width: 180,
       align: 'center',
-      render: (_v, row) => nameText(row.registry, row.city.name),
+      render: (_v, row) => nameText(row.registry, row.city_item.name),
     },
     {
       title: '所属行政区',
       width: 180,
       align: 'center',
-      render: (_v, row) => areaText(row.registry, province, row.city.name),
+      render: (_v, row) => areaText(row.registry, province_name, row.city_item.name),
     },
     {
       title: '管理员数',
       width: 150,
       align: 'center',
       render: (_v, row) => (
-        <Tag color={row.adminCount >= MAX_CITY_ADMINS_PER_CITY ? 'red' : 'teal'}>
-          {row.adminCount} / {MAX_CITY_ADMINS_PER_CITY}
+        <Tag color={row.adminCount >= MAX_CITY_REGISTRY_ADMINS_PER_CITY ? 'red' : 'teal'}>
+          {row.adminCount} / {MAX_CITY_REGISTRY_ADMINS_PER_CITY}
         </Tag>
       ),
     },
-  ], [page, province]);
+  ], [page, province_name]);
 
   if (!citiesLoading && cities.length === 0) {
     return <Typography.Text type="secondary">暂无城市数据</Typography.Text>;
@@ -294,12 +294,12 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
   return (
     <div>
       <Table<(typeof rows)[number]>
-        rowKey={(row) => row.city.code}
-        loading={citiesLoading || registryLoading || cityAdminsLoading}
+        rowKey={(row) => row.city_item.code}
+        loading={citiesLoading || registryLoading || cityRegistryAdminsLoading}
         dataSource={displayRows}
         pagination={false}
         onRow={(row) => ({
-          onClick: () => row.registry && onSelectCity(row.city.name),
+          onClick: () => row.registry && onSelectCity(row.city_item.name),
           style: row.registry ? { cursor: 'pointer' } : { color: '#94a3b8' },
         })}
         columns={columns}
@@ -320,66 +320,66 @@ function CityRegistryListTable({ auth, province, cities, citiesLoading, cityAdmi
   );
 }
 
-// ── 某市的市管理员列表(显示在市注册局机构详情页的“管理员列表”tab) ──
+// ── 某市的市注册局管理员列表(显示在市注册局机构详情页的“管理员列表”tab) ──
 
-function CityCityAdminsView({ canEditCityAdmins, cityAdmins, cityAdminsLoading, cityAdminListPage, setCityAdminListPage, setAddCityAdminOpen, onUpdateCityAdmin, onDeleteCityAdmin }: {
-  canEditCityAdmins: boolean;
-  cityAdmins: CityAdminRow[];
-  cityAdminsLoading: boolean;
-  cityAdminListPage: number;
-  setCityAdminListPage: (v: number) => void;
-  setAddCityAdminOpen: (v: boolean) => void;
-  onUpdateCityAdmin: (row: CityAdminRow) => void;
-  onDeleteCityAdmin: (row: CityAdminRow) => void;
+function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins, cityRegistryAdminsLoading, cityRegistryAdminListPage, setCityRegistryListPage, setAddCityRegistryOpen, onUpdateCityRegistry, onDeleteCityRegistry }: {
+  canEditCityRegistryAdmins: boolean;
+  cityRegistryAdmins: CityRegistryAdminRow[];
+  cityRegistryAdminsLoading: boolean;
+  cityRegistryAdminListPage: number;
+  setCityRegistryListPage: (v: number) => void;
+  setAddCityRegistryOpen: (v: boolean) => void;
+  onUpdateCityRegistry: (row: CityRegistryAdminRow) => void;
+  onDeleteCityRegistry: (row: CityRegistryAdminRow) => void;
 }) {
   const { auth } = useAuth();
-  // 中文注释:本列表已经按当前市过滤,所以长度就是该市市管理员数量。
-  const cityLimitReached = cityAdmins.length >= MAX_CITY_ADMINS_PER_CITY;
+  // 中文注释:本列表已经按当前市过滤,所以长度就是该市市注册局管理员数量。
+  const cityLimitReached = cityRegistryAdmins.length >= MAX_CITY_REGISTRY_ADMINS_PER_CITY;
   return (
     <Card
       type="inner"
-      title="市管理员列表"
+      title="市注册局管理员列表"
       extra={
         <Space size="middle" align="center">
           <Typography.Text type="secondary" style={{ fontWeight: 400, fontSize: 13 }}>
-            用户数：{cityAdmins.length} / {MAX_CITY_ADMINS_PER_CITY}
+            用户数：{cityRegistryAdmins.length} / {MAX_CITY_REGISTRY_ADMINS_PER_CITY}
           </Typography.Text>
-          {canEditCityAdmins ? (
+          {canEditCityRegistryAdmins ? (
             <Button
               type="primary"
               disabled={cityLimitReached}
-              title={cityLimitReached ? `本市市管理员已满 ${MAX_CITY_ADMINS_PER_CITY} 人` : undefined}
-              onClick={() => setAddCityAdminOpen(true)}
+              title={cityLimitReached ? `本市市注册局管理员已满 ${MAX_CITY_REGISTRY_ADMINS_PER_CITY} 人` : undefined}
+              onClick={() => setAddCityRegistryOpen(true)}
             >
-              新增市管理员
+              新增市注册局管理员
             </Button>
           ) : null}
         </Space>
       }
     >
-      <Table<CityAdminRow>
-        rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
-        loading={cityAdminsLoading}
-        dataSource={cityAdmins}
+      <Table<CityRegistryAdminRow>
+        rowKey={(r) => `${r.id}-${r.admin_account}`}
+        loading={cityRegistryAdminsLoading}
+        dataSource={cityRegistryAdmins}
         pagination={{
-          pageSize: 10, current: cityAdminListPage,
-          onChange: (page) => setCityAdminListPage(page),
+          pageSize: 10, current: cityRegistryAdminListPage,
+          onChange: (page) => setCityRegistryListPage(page),
           showSizeChanger: false,
           showTotal: (total) => `共 ${total} 条`,
         }}
         columns={[
-          { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (cityAdminListPage - 1) * 10 + index + 1 },
-          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
-          { title: '账户', dataIndex: 'admin_pubkey', align: 'center', render: (v: string) => tryEncodeSs58(v) },
+          { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (cityRegistryAdminListPage - 1) * 10 + index + 1 },
+          { title: '姓名', dataIndex: 'admin_display_name', align: 'center', width: 160 },
+          { title: '账户', dataIndex: 'admin_account', align: 'center', render: (v: string) => tryEncodeSs58(v) },
           {
             title: '操作', width: 260, align: 'center' as const,
-            render: (_v: unknown, row: CityAdminRow) => (
+            render: (_v: unknown, row: CityRegistryAdminRow) => (
               <Space>
-                {canEditCityAdmins ? <Button size="small" onClick={() => onUpdateCityAdmin(row)}>编辑</Button> : null}
-                {canEditCityAdmins ? <Button size="small" danger onClick={() => onDeleteCityAdmin(row)}>删除</Button> : null}
+                {canEditCityRegistryAdmins ? <Button size="small" onClick={() => onUpdateCityRegistry(row)}>编辑</Button> : null}
+                {canEditCityRegistryAdmins ? <Button size="small" danger onClick={() => onDeleteCityRegistry(row)}>删除</Button> : null}
                 <Passkey
                   size="small"
-                  disabled={!sameHexPubkey(row.admin_pubkey, auth?.admin_pubkey)}
+                  disabled={!sameHexAccount(row.admin_account, auth?.admin_account)}
                 />
               </Space>
             ),

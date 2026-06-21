@@ -69,7 +69,7 @@
 - CPMS 年度 `CPMS_STATUS_EXPORT` 导入时，只有 `citizen_status=NORMAL / voting_eligible=true / 钱包字段有效 / 时间字段有效` 的 `citizen_binding_records` 会按 `archive_no` 覆盖已有 SFID 绑定记录的钱包地址和状态；状态、资格、钱包或时间校验不通过的匹配记录必须从 SFID 公民库删除；`binding_release_records` 也直接删除档案号、身份 ID、钱包地址三者绑定关系，不处理 CPMS 护照号。
 - SFID 导入年度报告前必须校验 CPMS 授权处于 `ACTIVE`、CPMS 公钥已经由档案码验真绑定、`records_hash` 与签名均正确；同一 CPMS 同一年度只允许导入相同 `records_hash`。
 - 后台公民精确查询、绑定 challenge、年度报告导入均按管理员省/市 scope 过滤:
-  联邦管理员只看本省,市管理员只操作本市。
+  联邦注册局机构管理员只看本省,市注册局机构管理员只操作本市。
 - 管理员端公民查询不默认返回任何全量列表；必须输入档案号、身份ID、投票账户地址或投票账户公钥，后端返回 `{ items, page_size, next_cursor, has_more }`。
 - SFID 公民模块不保存公民姓名，任何公民检索都不得按姓名匹配。
 - `citizens` 是管理员浏览器查询用分区表；绑定完成和 CPMS 年度报告导入后同步写入，`archive_no / sfid_number / wallet_pubkey` 三者一对一由公民绑定流程强制。

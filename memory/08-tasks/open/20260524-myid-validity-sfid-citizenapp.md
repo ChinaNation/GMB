@@ -16,7 +16,7 @@ SFID 保存档案码中的电子护照有效期和公民状态，按“公民状
 - `sfid/backend/citizens/`
 - `sfid/frontend/citizens/`
 - `cpms/backend/src/dangan/`
-- `cpms/backend/src/operator_admin/`
+- `cpms/backend/dangan/`
 - `citizenapp/lib/my/myid/`
 - `citizenapp/test/`
 - `memory/01-architecture/`

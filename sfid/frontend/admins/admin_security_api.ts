@@ -5,10 +5,10 @@ import type { AdminAuth } from '../auth/types';
 import { ApiError, adminRequest } from '../utils/http';
 
 export type AdminActionType =
-  | 'CREATE_CITY_ADMIN'
-  | 'DELETE_CITY_ADMIN'
-  | 'CREATE_FEDERAL_ADMIN'
-  | 'DELETE_FEDERAL_ADMIN'
+  | 'CREATE_CITY_REGISTRY'
+  | 'DELETE_CITY_REGISTRY'
+  | 'CREATE_FEDERAL_REGISTRY'
+  | 'DELETE_FEDERAL_REGISTRY'
   | 'INSTITUTION_CREATE'
   | 'INSTITUTION_UPDATE'
   | 'INSTITUTION_CREATE_ACCOUNT'
@@ -27,7 +27,7 @@ export type AdminActionType =
   | 'CPMS_DELETE_KEYS';
 
 export type AdminOperationAuth = 'LOGIN_STATE' | 'PASSKEY' | 'PASSKEY_CHALLENGE';
-export type AdminRoleTarget = 'FEDERAL_ADMIN' | 'CITY_ADMIN';
+export type RegistryOrgCodeTarget = 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
 
 export type SignDisplayField = { key?: string; label: string; value: string };
 
@@ -63,26 +63,26 @@ export type AdminSecurityGrantOutput = {
   expires_at: number;
 };
 
-export function formatAdminCreateError(error: unknown, targetRole: AdminRoleTarget, fallback: string): string {
+export function formatAdminCreateError(error: unknown, targetRegistryOrgCode: RegistryOrgCodeTarget, fallback: string): string {
   if (!(error instanceof ApiError)) {
     return error instanceof Error ? error.message : fallback;
   }
   // 中文注释:管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
-  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN') {
-    return targetRole === 'FEDERAL_ADMIN'
-      ? '该账户已是联邦管理员，不能重复新增'
-      : '该账户已是联邦管理员，不能新增为市管理员';
+  if (error.errorCode === 'SFID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY') {
+    return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
+      ? '该账户已是联邦注册局管理员，不能重复新增'
+      : '该账户已是联邦注册局管理员，不能新增为市注册局管理员';
   }
-  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN') {
-    return targetRole === 'FEDERAL_ADMIN'
-      ? '该账户已是市管理员，不能新增为联邦管理员'
-      : '该账户已是市管理员，不能重复新增';
+  if (error.errorCode === 'SFID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY') {
+    return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
+      ? '该账户已是市注册局管理员，不能新增为联邦注册局管理员'
+      : '该账户已是市注册局管理员，不能重复新增';
   }
-  if (error.errorCode === 'SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED') {
-    return '联邦管理员已满 5 人，不能继续新增';
+  if (error.errorCode === 'SFID_ADMIN_FEDERAL_REGISTRY_PROVINCE_LIMIT_REACHED') {
+    return '联邦注册局管理员已满 5 人，不能继续新增';
   }
-  if (error.errorCode === 'SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED') {
-    return '本市市管理员已满 30 人，不能继续新增';
+  if (error.errorCode === 'SFID_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED') {
+    return '本市市注册局管理员已满 30 人，不能继续新增';
   }
   return error.message || fallback;
 }

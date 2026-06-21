@@ -61,7 +61,7 @@ pub(crate) async fn citizen_bind_challenge(
     let verified = match crate::cpms::verify_cpms_archive_qr(
         &state,
         &archive_code,
-        ctx.admin_province.as_deref(),
+        ctx.scope_province_name.as_deref(),
     )
     .await
     {
@@ -382,7 +382,7 @@ pub(crate) async fn citizen_bind(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_BIND",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         record.sfid_number.clone(),
         serde_json::json!({
             "mode": challenge.mode.clone(),
@@ -420,8 +420,8 @@ fn ensure_verified_archive_in_admin_scope(
                 "cpms install authorization not found",
             )
         })?;
-    if let Some(province) = ctx.admin_province.as_deref() {
-        if site.admin_province != province {
+    if let Some(province) = ctx.scope_province_name.as_deref() {
+        if site.province_name != province {
             return Err(api_error(
                 StatusCode::FORBIDDEN,
                 1003,
@@ -429,7 +429,7 @@ fn ensure_verified_archive_in_admin_scope(
             ));
         }
     }
-    if let Some(city) = ctx.admin_city.as_deref() {
+    if let Some(city) = ctx.scope_city_name.as_deref() {
         if site.city_name != city {
             return Err(api_error(
                 StatusCode::FORBIDDEN,
@@ -515,7 +515,7 @@ fn create_citizen_record(
         birth_town_code: challenge.birth_town_code.clone(),
         election_scope_level: Some(challenge.election_scope_level.clone()),
         bound_at: Some(Utc::now()),
-        bound_by: Some(ctx.admin_pubkey.clone()),
+        bound_by: Some(ctx.admin_account.clone()),
         created_at: Utc::now(),
     })
 }
@@ -629,7 +629,7 @@ fn replace_citizen_record(
     record.birth_town_code = challenge.birth_town_code.clone();
     record.election_scope_level = Some(challenge.election_scope_level.clone());
     record.bound_at = Some(Utc::now());
-    record.bound_by = Some(ctx.admin_pubkey.clone());
+    record.bound_by = Some(ctx.admin_account.clone());
     Ok(record)
 }
 

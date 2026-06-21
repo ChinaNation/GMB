@@ -3,7 +3,7 @@
 ## 任务需求
 
 - 删除 CPMS 前端多余的 `web` 与 `src` 包装层，把 Vite 工程收口到 `cpms/frontend`。
-- 前后端模块命名尽量一致，前端目录按业务拆为初始化、登录、超级管理员、操作管理员、地址、QR、鉴权和通用模块。
+- 前后端模块命名尽量一致，前端目录按业务拆为初始化、登录、CPMS 机构管理员、operators、地址、QR、鉴权和通用模块。
 - 拆分原单文件 API 与类型定义，删除不用的旧页面、旧接口和旧引用。
 - 同步修复脚本、CI、文档和任务卡中写死的旧路径。
 
@@ -38,7 +38,7 @@
 ## 完成记录
 
 - 2026-05-30：删除旧 `web` 与 `src` 包装层，Vite 工程收口到 `cpms/frontend`。
-- 2026-05-30：按业务模块拆分 `initialize / login / super_admin / operator_admin / address / qr / authz / common`。
+- 2026-05-30：按业务模块拆分 `initialize / login / admins / operators / address / qr / authz / common`。
 - 2026-05-30：删除前端旧聚合 `api.ts / types.ts` 和未挂载的旧公民状态页面。
 - 2026-05-30：同步修正 `cpms.sh`、CPMS CI、技术文档、长期记忆和打开任务卡中的旧路径。
 - 2026-05-30：`npm run build` 通过；浏览器打开 `http://127.0.0.1:5175/` 可进入 CPMS 登录页，控制台无错误。

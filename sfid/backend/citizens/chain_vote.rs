@@ -15,7 +15,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::core::chain_runtime::{build_vote_credential, normalize_account_pubkey};
+use crate::core::chain_runtime::{
+    build_vote_credential, is_chain_runtime_config_error, normalize_account_pubkey,
+};
 use crate::*;
 
 #[derive(Deserialize)]
@@ -84,6 +86,10 @@ pub(crate) async fn app_vote_credential(
         ) {
             Ok(cred) => cred,
             Err(message) => {
+                if is_chain_runtime_config_error(message.as_str()) {
+                    let detail = format!("链端签发配置未完成: {message}");
+                    return api_error(StatusCode::SERVICE_UNAVAILABLE, 1006, detail.as_str());
+                }
                 let detail = format!("vote credential sign failed: {message}");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
             }

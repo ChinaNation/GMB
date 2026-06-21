@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import * as api from './api';
-import type { AdminRole, AdminUser } from './types';
+import type { AdminUserGroup, AdminUser } from './types';
 import { parseQrEnvelope, QrParseError } from '../qr/citizenQr';
 import type { UserContactBody } from '../qr/citizenQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
@@ -12,7 +12,7 @@ import { ScanIcon } from '../components/ScanIcon';
 export default function AdminList() {
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [addOpen, setAddOpen] = useState(false);
-  const [newRole, setNewRole] = useState<AdminRole | ''>('');
+  const [newUserGroup, setNewUserGroup] = useState<AdminUserGroup | ''>('');
   const [newName, setNewName] = useState('');
   const [newPubkey, setNewPubkey] = useState('');
   const [editingUserId, setEditingUserId] = useState('');
@@ -32,23 +32,23 @@ export default function AdminList() {
 
   useEffect(() => { load(); }, [load]);
 
-  const adminCount = admins.filter(admin => admin.role === 'ADMIN').length;
+  const adminCount = admins.filter(admin => admin.user_group === 'admins').length;
 
   const handleCreate = async () => {
-    if (!newRole) { setError('请选择管理员类型'); return; }
+    if (!newUserGroup) { setError('请选择管理员类型'); return; }
     if (!newName.trim()) { setError('请输入管理员姓名'); return; }
     if (!newPubkey.trim()) { setError('请输入管理员账户'); return; }
     setError('');
     setLoading(true);
     try {
       await api.createAdmin({
-        role: newRole,
-        admin_name: newName.trim(),
-        admin_pubkey: newPubkey.trim(),
+        user_group: newUserGroup,
+        admin_display_name: newName.trim(),
+        admin_account: newPubkey.trim(),
       });
       setNewPubkey('');
       setNewName('');
-      setNewRole('');
+      setNewUserGroup('');
       setAddOpen(false);
       await load();
     } catch (e) {
@@ -59,7 +59,7 @@ export default function AdminList() {
 
   const handleEdit = (admin: AdminUser) => {
     setEditingUserId(admin.user_id);
-    setEditingName(admin.admin_name);
+    setEditingName(admin.admin_display_name);
     setError('');
   };
 
@@ -80,7 +80,7 @@ export default function AdminList() {
 
   const handleDelete = async (admin: AdminUser) => {
     if (!admin.can_delete) return;
-    if (!confirm(`确认删除管理员 ${admin.admin_name || admin.user_id}？`)) return;
+    if (!confirm(`确认删除管理员 ${admin.admin_display_name || admin.user_id}？`)) return;
     try {
       await api.deleteAdmin(admin.user_id);
       await load();
@@ -92,7 +92,7 @@ export default function AdminList() {
   const resetAddForm = () => {
     setAddOpen(false);
     setError('');
-    setNewRole('');
+    setNewUserGroup('');
     setNewName('');
     setNewPubkey('');
   };
@@ -124,12 +124,12 @@ export default function AdminList() {
             <select
               className="form-input"
               style={{ width: 150, flexShrink: 0 }}
-              value={newRole}
-              onChange={e => setNewRole(e.target.value as AdminRole | '')}
+              value={newUserGroup}
+              onChange={e => setNewUserGroup(e.target.value as AdminUserGroup | '')}
             >
               <option value="">请选择类型</option>
-              <option value="ADMIN" disabled={adminCount >= 5}>管理员</option>
-              <option value="OPERATOR">操作员</option>
+              <option value="admins" disabled={adminCount >= 5}>管理员</option>
+              <option value="operators">操作员</option>
             </select>
             <input
               className="form-input"
@@ -182,7 +182,7 @@ export default function AdminList() {
 
       <table className="table admin-table">
         <thead>
-          <tr><th>姓名</th><th>用户ID</th><th>账户</th><th>角色</th><th>操作</th></tr>
+          <tr><th>姓名</th><th>用户ID</th><th>账户</th><th>分组</th><th>操作</th></tr>
         </thead>
         <tbody>
           {admins.length === 0 ? (
@@ -197,11 +197,11 @@ export default function AdminList() {
                     value={editingName}
                     onChange={e => setEditingName(e.target.value)}
                   />
-                ) : admin.admin_name || '—'}
+                ) : admin.admin_display_name || '—'}
               </td>
               <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.user_id}</td>
-              <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.admin_address || admin.admin_pubkey}</td>
-              <td>{admin.role === 'ADMIN' ? '管理员' : '操作员'}</td>
+              <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.admin_account}</td>
+              <td>{admin.user_group === 'admins' ? '管理员' : '操作员'}</td>
               <td>
                 <div className="admin-table__actions">
                   {editingUserId === admin.user_id ? (

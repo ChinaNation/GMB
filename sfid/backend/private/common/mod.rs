@@ -99,7 +99,7 @@ pub(crate) struct PrivateModuleSpec {
     pub(crate) private_type: PrivateType,
     pub(crate) title: &'static str,
     pub(crate) description: &'static str,
-    pub(crate) allowed_roles: &'static [ParticipantRole],
+    pub(crate) allowed_participant_roles: &'static [ParticipantRole],
 }
 
 /// 把请求强制锁定为某个私权类型。调用方只传业务类型,不信任前端的主体属性和机构码。
@@ -123,9 +123,9 @@ pub(crate) fn assert_module_spec(spec: &PrivateModuleSpec) {
     debug_assert!(!spec.route_segment.is_empty());
     debug_assert_eq!(spec.private_type.label(), spec.title);
     debug_assert!(!spec.description.is_empty());
-    debug_assert!(!spec.allowed_roles.is_empty());
-    for role in spec.allowed_roles {
-        debug_assert!(!role.label().is_empty());
+    debug_assert!(!spec.allowed_participant_roles.is_empty());
+    for participant_role in spec.allowed_participant_roles {
+        debug_assert!(!participant_role.label().is_empty());
     }
 }
 

@@ -12,8 +12,8 @@
 //! **Step 2b-iv-b 彻底清理完成**:原"省储行即时清算"模型(旧 call_index
 //! 0/1/2/9/10/11/14-20/23 + `RecipientClearingInstitution` / `InstitutionRateBp` /
 //! `QueuedBatches` 等 Storage + 相关 Events/Errors + 所有辅助函数)已从源码中
-//! 物理删除,升级路径由 dev 链统一 setCode 启用,不做 on_runtime_upgrade migration
-//! (`STORAGE_VERSION` 从 1 → 2)。
+//! 物理删除。全新创世口径:创世即终态布局,`STORAGE_VERSION` 恒为 v1,
+//! 不做 on_runtime_upgrade migration。
 
 pub use pallet::*;
 
@@ -77,8 +77,8 @@ pub struct ClearingBankNodeInfo<AccountId, BlockNumber> {
     pub registered_by: AccountId,
 }
 
-/// 清算行清算 pallet 的存储版本。Step 2b-iv-c 增加批次序号防重后从 2 → 3。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+/// 清算行清算 pallet 的存储版本。全新创世口径:创世即终态布局,恒为 v1。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -706,7 +706,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 反查 sfid_number 对应的清算行主账户地址(用于校验机构合法性)。
     fn lookup_main_account_by_sfid(sfid_number: &[u8]) -> Result<T::AccountId, pallet::Error<T>> {
         use crate::bank_check::{SfidAccountQuery, ACCOUNT_NAME_MAIN};
-        T::SfidAccountQuery::find_address(sfid_number, ACCOUNT_NAME_MAIN)
+        T::SfidAccountQuery::find_account(sfid_number, ACCOUNT_NAME_MAIN)
             .ok_or(pallet::Error::<T>::NotRegisteredClearingBank)
     }
 

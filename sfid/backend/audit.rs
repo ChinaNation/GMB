@@ -1,4 +1,4 @@
-//! 审计日志 list handler(二角色只读)
+//! 审计日志 list handler(注册局管理员只读)
 //!
 //! 中文注释:审计日志是独立后台能力,不属于权限范围规则本身,因此从
 //! `scope` 目录迁到后端根层 `audit.rs`。
@@ -18,8 +18,8 @@ use crate::*;
 pub(crate) struct AuditLogEntry {
     pub(crate) seq: u64,
     pub(crate) action: String,
-    pub(crate) actor_pubkey: String,
-    pub(crate) target_pubkey: Option<String>,
+    pub(crate) actor_account: String,
+    pub(crate) target_account: Option<String>,
     pub(crate) target_archive_no: Option<String>,
     #[serde(default)]
     pub(crate) request_id: Option<String>,
@@ -34,13 +34,13 @@ pub(crate) struct AuditLogEntry {
 #[derive(Deserialize)]
 pub(crate) struct AuditLogsQuery {
     pub(crate) action: Option<String>,
-    pub(crate) actor_pubkey: Option<String>,
+    pub(crate) actor_account: Option<String>,
     pub(crate) target_sfid: Option<String>,
     pub(crate) keyword: Option<String>,
     pub(crate) limit: Option<usize>,
 }
 
-/// FederalAdmin / CityAdmin 均可访问审计日志(只读)。
+/// 联邦注册局管理员 / 市注册局管理员 均可访问审计日志(只读)。
 pub(crate) async fn admin_list_audit_logs(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -53,14 +53,17 @@ pub(crate) async fn admin_list_audit_logs(
 
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let action = query.action.unwrap_or_default().trim().to_uppercase();
-    let actor = query.actor_pubkey.unwrap_or_default().trim().to_string();
+    let actor = query.actor_account.unwrap_or_default().trim().to_string();
     let target_sfid = query.target_sfid.unwrap_or_default().trim().to_string();
     let keyword = query.keyword.unwrap_or_default().trim().to_lowercase();
     let province_code = ctx
-        .admin_province
+        .scope_province_name
         .as_deref()
         .and_then(crate::china::province_code_by_name);
-    let city_code = match (ctx.admin_province.as_deref(), ctx.admin_city.as_deref()) {
+    let city_code = match (
+        ctx.scope_province_name.as_deref(),
+        ctx.scope_city_name.as_deref(),
+    ) {
         (Some(province), Some(city)) => crate::china::city_code_by_name(province, city),
         _ => None,
     };
@@ -101,8 +104,8 @@ pub(crate) async fn admin_list_audit_logs(
             output.push(AuditLogEntry {
                 seq: u64::try_from(seq).unwrap_or(0),
                 action: row.get(1),
-                actor_pubkey: row.get(2),
-                target_pubkey: row.get(3),
+                actor_account: row.get(2),
+                target_account: row.get(3),
                 target_archive_no: None,
                 request_id: None,
                 actor_ip: None,

@@ -31,5 +31,5 @@
 - 2026-06-13：`cd cpms/backend && cargo check` 通过。
 - 2026-06-13：`cd cpms/backend && cargo test` 通过，32 个测试全部通过。
 - 2026-06-13：临时启动 `CPMS_BIND=127.0.0.1:18080` 后端并服务 `cpms/frontend/dist`，`GET /api/v1/health` 返回 200。
-- 2026-06-13：使用真实超级管理员 cookie 请求 `GET /api/v1/archives/ar_d7fafa0eb7654fb9816c960cbadbff12/audit-logs`，返回 `code=0` 且包含该档案的 CPMS 审计记录。
+- 2026-06-13：使用真实CPMS 机构管理员 cookie 请求 `GET /api/v1/archives/ar_d7fafa0eb7654fb9816c960cbadbff12/audit-logs`，返回 `code=0` 且包含该档案的 CPMS 审计记录。
 - 2026-06-13：浏览器打开 `http://127.0.0.1:18080/admin/archives/ar_d7fafa0eb7654fb9816c960cbadbff12`，确认左侧导航显示“返回列表 / 档案详情 / 资料库 / 操作记录”，默认右侧显示档案详情；点击“操作记录”后右侧显示操作记录表格。

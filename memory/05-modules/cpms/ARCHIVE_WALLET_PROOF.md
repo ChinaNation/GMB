@@ -21,13 +21,13 @@
 
 ## 0.1 管理员权限
 
-CPMS 只有 `ADMIN` 和 `OPERATOR` 两种本地登录角色。`ADMIN` 是市公安局机构管理员
-在 CPMS 的本地镜像，可以执行所有档案业务操作；`OPERATOR` 是 CPMS 内部操作员，
+CPMS 只有 `admins` 和 `operators` 两种本地登录角色。`admins` 是市公安局机构管理员
+在 CPMS 的本地镜像，可以执行所有档案业务操作；`operators` 是 CPMS 内部操作员，
 可以执行日常档案业务，但不能查看系统设置，也不能创建、编辑或删除管理员。初始化绑定的
 管理员不可删除并固定在管理员列表第一行；后续新增的管理员可以删除。管理员总数最多 5 个，
 所有管理员只允许编辑姓名。管理员删除是物理删除，并同步清理其本机会话。
 
-投票账户绑定/更换属于档案业务，允许 `ADMIN` 和 `OPERATOR` 操作。
+投票账户绑定/更换属于档案业务，允许 `admins` 和 `operators` 操作。
 公民状态修改同样属于档案业务，两种管理员都可以操作。
 
 ## 1. 目标
@@ -115,12 +115,12 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 公民档案删除必须走 citizenwallet 签名确认，不能物理删除。CPMS 创建 `CITIZEN_QR_V1 / sign_request`
 删除签名请求，当前登录管理员使用 citizenwallet 签名后返回 `sign_response`。删除签名请求锁定当前
 登录 CPMS 管理员的 `address / pubkey`，其中二维码 `body.pubkey` 和删除 payload 中的
-`admin_pubkey` 必须是 `0x` + 64 位小写 hex。
+`admin_account` 必须是 `0x` + 64 位小写 hex。
 
 删除 payload 固定为:
 
 ```text
-CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_pubkey|expires_at
+CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_account|expires_at
 ```
 
 后端只接受当前登录管理员本人公钥签出的回执。完成接口先锁定删除 challenge 和档案行；

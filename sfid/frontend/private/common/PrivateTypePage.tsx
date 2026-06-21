@@ -18,8 +18,8 @@ import { PrivateListTable } from './PrivateListTable';
 
 export interface PrivateTypePageProps {
   auth: AdminAuth;
-  province: string;
-  city: string;
+  province_name: string;
+  city_name: string;
   canWrite: boolean;
   privateType: PrivateType;
   title: string;
@@ -28,8 +28,8 @@ export interface PrivateTypePageProps {
     input: CreateInstitutionInput,
   ) => Promise<CreateInstitutionOutput>;
   listInstitutions: (auth: AdminAuth, query: {
-    province: string;
-    city?: string;
+    province_name: string;
+    city_name?: string;
     private_type: PrivateType;
     q: string;
     cursor?: string | null;
@@ -40,8 +40,8 @@ export interface PrivateTypePageProps {
 
 export const PrivateTypePage: React.FC<PrivateTypePageProps> = ({
   auth,
-  province,
-  city,
+   province_name,
+   city_name,
   canWrite,
   privateType,
   title,
@@ -94,8 +94,8 @@ export const PrivateTypePage: React.FC<PrivateTypePageProps> = ({
 
       <PrivateListTable
         auth={auth}
-        province={province}
-        city={city}
+        province_name={province_name}
+        city_name={city_name}
         privateType={privateType}
         listInstitutions={listInstitutions}
         refreshKey={refreshKey}
@@ -106,8 +106,8 @@ export const PrivateTypePage: React.FC<PrivateTypePageProps> = ({
       <PrivateCreateModal
         auth={auth}
         open={createOpen}
-        lockedProvince={province}
-        lockedCity={city}
+        lockedProvinceName={province_name}
+        lockedCityName={city_name}
         privateType={privateType}
         createInstitution={createInstitution}
         onCancel={() => setCreateOpen(false)}

@@ -8,7 +8,7 @@ import type { LoginReceiptBody, SignResponseBody } from '../core/qr/citizenQr';
 export type SignedLoginPayload = {
   challenge_id: string;
   session_id?: string;
-  admin_pubkey: string;
+  admin_account: string;
   signer_pubkey?: string;
   signature: string;
 };
@@ -36,7 +36,7 @@ export function parseSignedLoginPayload(
   }
   return {
     challenge_id,
-    admin_pubkey: body.pubkey,
+    admin_account: body.pubkey,
     signer_pubkey: body.pubkey,
     signature: body.signature,
   };

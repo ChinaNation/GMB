@@ -3013,13 +3013,13 @@ extension WalletSettingsEntityQueryProperty on QueryBuilder<
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
-extension GetAdminRoleCacheEntityCollection on Isar {
-  IsarCollection<AdminRoleCacheEntity> get adminRoleCacheEntitys =>
+extension GetAdminGroupCacheEntityCollection on Isar {
+  IsarCollection<AdminGroupCacheEntity> get adminGroupCacheEntitys =>
       this.collection();
 }
 
-const AdminRoleCacheEntitySchema = CollectionSchema(
-  name: r'AdminRoleCacheEntity',
+const AdminGroupCacheEntitySchema = CollectionSchema(
+  name: r'AdminGroupCacheEntity',
   id: -7398263961586602634,
   properties: {
     r'pubkeyHex': PropertySchema(
@@ -3027,9 +3027,9 @@ const AdminRoleCacheEntitySchema = CollectionSchema(
       name: r'pubkeyHex',
       type: IsarType.string,
     ),
-    r'roleName': PropertySchema(
+    r'adminGroupName': PropertySchema(
       id: 1,
-      name: r'roleName',
+      name: r'adminGroupName',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
@@ -3038,10 +3038,10 @@ const AdminRoleCacheEntitySchema = CollectionSchema(
       type: IsarType.long,
     )
   },
-  estimateSize: _adminRoleCacheEntityEstimateSize,
-  serialize: _adminRoleCacheEntitySerialize,
-  deserialize: _adminRoleCacheEntityDeserialize,
-  deserializeProp: _adminRoleCacheEntityDeserializeProp,
+  estimateSize: _adminGroupCacheEntityEstimateSize,
+  serialize: _adminGroupCacheEntitySerialize,
+  deserialize: _adminGroupCacheEntityDeserialize,
+  deserializeProp: _adminGroupCacheEntityDeserializeProp,
   idName: r'id',
   indexes: {
     r'pubkeyHex': IndexSchema(
@@ -3073,49 +3073,49 @@ const AdminRoleCacheEntitySchema = CollectionSchema(
   },
   links: {},
   embeddedSchemas: {},
-  getId: _adminRoleCacheEntityGetId,
-  getLinks: _adminRoleCacheEntityGetLinks,
-  attach: _adminRoleCacheEntityAttach,
+  getId: _adminGroupCacheEntityGetId,
+  getLinks: _adminGroupCacheEntityGetLinks,
+  attach: _adminGroupCacheEntityAttach,
   version: '3.3.2',
 );
 
-int _adminRoleCacheEntityEstimateSize(
-  AdminRoleCacheEntity object,
+int _adminGroupCacheEntityEstimateSize(
+  AdminGroupCacheEntity object,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.pubkeyHex.length * 3;
-  bytesCount += 3 + object.roleName.length * 3;
+  bytesCount += 3 + object.adminGroupName.length * 3;
   return bytesCount;
 }
 
-void _adminRoleCacheEntitySerialize(
-  AdminRoleCacheEntity object,
+void _adminGroupCacheEntitySerialize(
+  AdminGroupCacheEntity object,
   IsarWriter writer,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.pubkeyHex);
-  writer.writeString(offsets[1], object.roleName);
+  writer.writeString(offsets[1], object.adminGroupName);
   writer.writeLong(offsets[2], object.updatedAt);
 }
 
-AdminRoleCacheEntity _adminRoleCacheEntityDeserialize(
+AdminGroupCacheEntity _adminGroupCacheEntityDeserialize(
   Id id,
   IsarReader reader,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  final object = AdminRoleCacheEntity();
+  final object = AdminGroupCacheEntity();
   object.id = id;
   object.pubkeyHex = reader.readString(offsets[0]);
-  object.roleName = reader.readString(offsets[1]);
+  object.adminGroupName = reader.readString(offsets[1]);
   object.updatedAt = reader.readLong(offsets[2]);
   return object;
 }
 
-P _adminRoleCacheEntityDeserializeProp<P>(
+P _adminGroupCacheEntityDeserializeProp<P>(
   IsarReader reader,
   int propertyId,
   int offset,
@@ -3133,26 +3133,26 @@ P _adminRoleCacheEntityDeserializeProp<P>(
   }
 }
 
-Id _adminRoleCacheEntityGetId(AdminRoleCacheEntity object) {
+Id _adminGroupCacheEntityGetId(AdminGroupCacheEntity object) {
   return object.id;
 }
 
-List<IsarLinkBase<dynamic>> _adminRoleCacheEntityGetLinks(
-    AdminRoleCacheEntity object) {
+List<IsarLinkBase<dynamic>> _adminGroupCacheEntityGetLinks(
+    AdminGroupCacheEntity object) {
   return [];
 }
 
-void _adminRoleCacheEntityAttach(
-    IsarCollection<dynamic> col, Id id, AdminRoleCacheEntity object) {
+void _adminGroupCacheEntityAttach(
+    IsarCollection<dynamic> col, Id id, AdminGroupCacheEntity object) {
   object.id = id;
 }
 
-extension AdminRoleCacheEntityByIndex on IsarCollection<AdminRoleCacheEntity> {
-  Future<AdminRoleCacheEntity?> getByPubkeyHex(String pubkeyHex) {
+extension AdminGroupCacheEntityByIndex on IsarCollection<AdminGroupCacheEntity> {
+  Future<AdminGroupCacheEntity?> getByPubkeyHex(String pubkeyHex) {
     return getByIndex(r'pubkeyHex', [pubkeyHex]);
   }
 
-  AdminRoleCacheEntity? getByPubkeyHexSync(String pubkeyHex) {
+  AdminGroupCacheEntity? getByPubkeyHexSync(String pubkeyHex) {
     return getByIndexSync(r'pubkeyHex', [pubkeyHex]);
   }
 
@@ -3164,13 +3164,13 @@ extension AdminRoleCacheEntityByIndex on IsarCollection<AdminRoleCacheEntity> {
     return deleteByIndexSync(r'pubkeyHex', [pubkeyHex]);
   }
 
-  Future<List<AdminRoleCacheEntity?>> getAllByPubkeyHex(
+  Future<List<AdminGroupCacheEntity?>> getAllByPubkeyHex(
       List<String> pubkeyHexValues) {
     final values = pubkeyHexValues.map((e) => [e]).toList();
     return getAllByIndex(r'pubkeyHex', values);
   }
 
-  List<AdminRoleCacheEntity?> getAllByPubkeyHexSync(
+  List<AdminGroupCacheEntity?> getAllByPubkeyHexSync(
       List<String> pubkeyHexValues) {
     final values = pubkeyHexValues.map((e) => [e]).toList();
     return getAllByIndexSync(r'pubkeyHex', values);
@@ -3186,34 +3186,34 @@ extension AdminRoleCacheEntityByIndex on IsarCollection<AdminRoleCacheEntity> {
     return deleteAllByIndexSync(r'pubkeyHex', values);
   }
 
-  Future<Id> putByPubkeyHex(AdminRoleCacheEntity object) {
+  Future<Id> putByPubkeyHex(AdminGroupCacheEntity object) {
     return putByIndex(r'pubkeyHex', object);
   }
 
-  Id putByPubkeyHexSync(AdminRoleCacheEntity object, {bool saveLinks = true}) {
+  Id putByPubkeyHexSync(AdminGroupCacheEntity object, {bool saveLinks = true}) {
     return putByIndexSync(r'pubkeyHex', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByPubkeyHex(List<AdminRoleCacheEntity> objects) {
+  Future<List<Id>> putAllByPubkeyHex(List<AdminGroupCacheEntity> objects) {
     return putAllByIndex(r'pubkeyHex', objects);
   }
 
-  List<Id> putAllByPubkeyHexSync(List<AdminRoleCacheEntity> objects,
+  List<Id> putAllByPubkeyHexSync(List<AdminGroupCacheEntity> objects,
       {bool saveLinks = true}) {
     return putAllByIndexSync(r'pubkeyHex', objects, saveLinks: saveLinks);
   }
 }
 
-extension AdminRoleCacheEntityQueryWhereSort
-    on QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QWhere> {
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhere>
+extension AdminGroupCacheEntityQueryWhereSort
+    on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QWhere> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhere>
       anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhere>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhere>
       anyUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -3223,9 +3223,9 @@ extension AdminRoleCacheEntityQueryWhereSort
   }
 }
 
-extension AdminRoleCacheEntityQueryWhere
-    on QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QWhereClause> {
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+extension AdminGroupCacheEntityQueryWhere
+    on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QWhereClause> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       idEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IdWhereClause.between(
@@ -3235,7 +3235,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       idNotEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
@@ -3258,7 +3258,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       idGreaterThan(Id id, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -3267,7 +3267,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       idLessThan(Id id, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -3276,7 +3276,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       idBetween(
     Id lowerId,
     Id upperId, {
@@ -3293,7 +3293,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       pubkeyHexEqualTo(String pubkeyHex) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
@@ -3303,7 +3303,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       pubkeyHexNotEqualTo(String pubkeyHex) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
@@ -3338,7 +3338,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       updatedAtEqualTo(int updatedAt) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
@@ -3348,7 +3348,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       updatedAtNotEqualTo(int updatedAt) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
@@ -3383,7 +3383,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       updatedAtGreaterThan(
     int updatedAt, {
     bool include = false,
@@ -3398,7 +3398,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       updatedAtLessThan(
     int updatedAt, {
     bool include = false,
@@ -3413,7 +3413,7 @@ extension AdminRoleCacheEntityQueryWhere
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterWhereClause>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       updatedAtBetween(
     int lowerUpdatedAt,
     int upperUpdatedAt, {
@@ -3432,9 +3432,9 @@ extension AdminRoleCacheEntityQueryWhere
   }
 }
 
-extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
-    AdminRoleCacheEntity, QFilterCondition> {
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+extension AdminGroupCacheEntityQueryFilter on QueryBuilder<AdminGroupCacheEntity,
+    AdminGroupCacheEntity, QFilterCondition> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -3444,7 +3444,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> idGreaterThan(
     Id value, {
     bool include = false,
@@ -3458,7 +3458,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> idLessThan(
     Id value, {
     bool include = false,
@@ -3472,7 +3472,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> idBetween(
     Id lower,
     Id upper, {
@@ -3490,7 +3490,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -3504,7 +3504,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexGreaterThan(
     String value, {
     bool include = false,
@@ -3520,7 +3520,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexLessThan(
     String value, {
     bool include = false,
@@ -3536,7 +3536,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexBetween(
     String lower,
     String upper, {
@@ -3556,7 +3556,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexStartsWith(
     String value, {
     bool caseSensitive = true,
@@ -3570,7 +3570,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexEndsWith(
     String value, {
     bool caseSensitive = true,
@@ -3584,7 +3584,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
           QAfterFilterCondition>
       pubkeyHexContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -3596,7 +3596,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
           QAfterFilterCondition>
       pubkeyHexMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -3608,7 +3608,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -3618,7 +3618,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> pubkeyHexIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
@@ -3628,22 +3628,22 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameEqualTo(
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'roleName',
+        property: r'adminGroupName',
         value: value,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameGreaterThan(
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -3651,15 +3651,15 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'roleName',
+        property: r'adminGroupName',
         value: value,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameLessThan(
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -3667,15 +3667,15 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'roleName',
+        property: r'adminGroupName',
         value: value,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameBetween(
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -3684,7 +3684,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'roleName',
+        property: r'adminGroupName',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -3694,79 +3694,79 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameStartsWith(
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'roleName',
+        property: r'adminGroupName',
         value: value,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameEndsWith(
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'roleName',
+        property: r'adminGroupName',
         value: value,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
           QAfterFilterCondition>
-      roleNameContains(String value, {bool caseSensitive = true}) {
+      adminGroupNameContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'roleName',
+        property: r'adminGroupName',
         value: value,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
           QAfterFilterCondition>
-      roleNameMatches(String pattern, {bool caseSensitive = true}) {
+      adminGroupNameMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'roleName',
+        property: r'adminGroupName',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameIsEmpty() {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'roleName',
+        property: r'adminGroupName',
         value: '',
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
-      QAfterFilterCondition> roleNameIsNotEmpty() {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'roleName',
+        property: r'adminGroupName',
         value: '',
       ));
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> updatedAtEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -3776,7 +3776,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> updatedAtGreaterThan(
     int value, {
     bool include = false,
@@ -3790,7 +3790,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> updatedAtLessThan(
     int value, {
     bool include = false,
@@ -3804,7 +3804,7 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity,
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> updatedAtBetween(
     int lower,
     int upper, {
@@ -3823,50 +3823,50 @@ extension AdminRoleCacheEntityQueryFilter on QueryBuilder<AdminRoleCacheEntity,
   }
 }
 
-extension AdminRoleCacheEntityQueryObject on QueryBuilder<AdminRoleCacheEntity,
-    AdminRoleCacheEntity, QFilterCondition> {}
+extension AdminGroupCacheEntityQueryObject on QueryBuilder<AdminGroupCacheEntity,
+    AdminGroupCacheEntity, QFilterCondition> {}
 
-extension AdminRoleCacheEntityQueryLinks on QueryBuilder<AdminRoleCacheEntity,
-    AdminRoleCacheEntity, QFilterCondition> {}
+extension AdminGroupCacheEntityQueryLinks on QueryBuilder<AdminGroupCacheEntity,
+    AdminGroupCacheEntity, QFilterCondition> {}
 
-extension AdminRoleCacheEntityQuerySortBy
-    on QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QSortBy> {
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+extension AdminGroupCacheEntityQuerySortBy
+    on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QSortBy> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       sortByPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       sortByPubkeyHexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.desc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
-      sortByRoleName() {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      sortByAdminGroupName() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'roleName', Sort.asc);
+      return query.addSortBy(r'adminGroupName', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
-      sortByRoleNameDesc() {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      sortByAdminGroupNameDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'roleName', Sort.desc);
+      return query.addSortBy(r'adminGroupName', Sort.desc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       sortByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       sortByUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.desc);
@@ -3874,58 +3874,58 @@ extension AdminRoleCacheEntityQuerySortBy
   }
 }
 
-extension AdminRoleCacheEntityQuerySortThenBy
-    on QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QSortThenBy> {
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+extension AdminGroupCacheEntityQuerySortThenBy
+    on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QSortThenBy> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenByPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenByPubkeyHexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.desc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
-      thenByRoleName() {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      thenByAdminGroupName() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'roleName', Sort.asc);
+      return query.addSortBy(r'adminGroupName', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
-      thenByRoleNameDesc() {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      thenByAdminGroupNameDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'roleName', Sort.desc);
+      return query.addSortBy(r'adminGroupName', Sort.desc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QAfterSortBy>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenByUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.desc);
@@ -3933,23 +3933,23 @@ extension AdminRoleCacheEntityQuerySortThenBy
   }
 }
 
-extension AdminRoleCacheEntityQueryWhereDistinct
-    on QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QDistinct> {
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QDistinct>
+extension AdminGroupCacheEntityQueryWhereDistinct
+    on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct>
       distinctByPubkeyHex({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'pubkeyHex', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QDistinct>
-      distinctByRoleName({bool caseSensitive = true}) {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct>
+      distinctByAdminGroupName({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'roleName', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'adminGroupName', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, AdminRoleCacheEntity, QDistinct>
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct>
       distinctByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'updatedAt');
@@ -3957,29 +3957,29 @@ extension AdminRoleCacheEntityQueryWhereDistinct
   }
 }
 
-extension AdminRoleCacheEntityQueryProperty on QueryBuilder<
-    AdminRoleCacheEntity, AdminRoleCacheEntity, QQueryProperty> {
-  QueryBuilder<AdminRoleCacheEntity, int, QQueryOperations> idProperty() {
+extension AdminGroupCacheEntityQueryProperty on QueryBuilder<
+    AdminGroupCacheEntity, AdminGroupCacheEntity, QQueryProperty> {
+  QueryBuilder<AdminGroupCacheEntity, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, String, QQueryOperations>
+  QueryBuilder<AdminGroupCacheEntity, String, QQueryOperations>
       pubkeyHexProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'pubkeyHex');
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, String, QQueryOperations>
-      roleNameProperty() {
+  QueryBuilder<AdminGroupCacheEntity, String, QQueryOperations>
+      adminGroupNameProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'roleName');
+      return query.addPropertyName(r'adminGroupName');
     });
   }
 
-  QueryBuilder<AdminRoleCacheEntity, int, QQueryOperations>
+  QueryBuilder<AdminGroupCacheEntity, int, QQueryOperations>
       updatedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'updatedAt');

@@ -40,7 +40,7 @@ impl ParticipantRole {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ParticipantDraft {
-    pub(crate) role: ParticipantRole,
+    pub(crate) participant_role: ParticipantRole,
     pub(crate) name: String,
     pub(crate) sfid_number: Option<String>,
 }

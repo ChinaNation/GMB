@@ -12,9 +12,9 @@
 3. **Isar(合并真源)**:基线 + 增量 = 当前目录;UI 永远读 Isar(零延迟、离线、零链读)。
 
 ## 完工清单
-- [ ] 生成脚本 `tools/generate_public_institution_bundle.mjs`:调 SFID 导出 → 写 `citizenapp/assets/public_institutions/<province>.json` + `catalog_version` 戳。
+- [ ] 生成脚本 `tools/generate_public_institution_bundle.mjs`:调 SFID 导出 → 写 `citizenapp/assets/public_institutions/<province_name>.json` + `catalog_version` 戳。
 - [ ] Isar 实体(新增,**先沟通过结构**):
-  - `PublicInstitutionEntity { sfidNumber(unique), sfidFullName, sfidFullName, sfidShortName, province, city, town, institutionCode, orgCode, status, accountCount, customAccountNamesJson, catalogVersion, updatedAtMillis }`
+  - `PublicInstitutionEntity { sfidNumber(unique), sfidFullName, sfidShortName, provinceName, cityName, townName, institutionCode, orgCode, status, accountCount, customAccountNamesJson, catalogVersion, updatedAtMillis }`
   - `PublicInstitutionSubscriptionEntity { walletPubkeyHex+sfidNumber(composite unique), subscribedAtMillis }`
   - 版本戳:复用 AppKvEntity 或新 `PublicCatalogMetaEntity`(全局 catalog_version + 各省 manifest_version)。
 - [ ] 数据包载入器:首次/版本升级幂等 upsert 进 Isar。

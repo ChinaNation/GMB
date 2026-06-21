@@ -4,7 +4,7 @@
 //! 个人多签关闭走 personal-manage::propose_close 入口。
 //!
 //! 业务流程:
-//! 1. 校验地址是机构地址(否则返回 `NotInstitutionDuoqian`)
+//! 1. 校验地址是机构地址(否则返回 `NotInstitutionAccount`)
 //! 2. 校验机构账户已 Active(从 InstitutionAccounts 读)
 //! 3. 校验发起人是该机构账户的活跃管理员(admins-change::AdminAccounts[account account])
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
@@ -38,28 +38,22 @@ use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_institution_close<T: Config>(
     who: T::AccountId,
-    duoqian_account: T::AccountId,
+    account: T::AccountId,
     beneficiary: T::AccountId,
 ) -> DispatchResult {
     // 仅机构地址走本入口
-    let registered = AccountRegisteredSfid::<T>::get(&duoqian_account)
-        .ok_or(Error::<T>::NotInstitutionDuoqian)?;
+    let registered =
+        AccountRegisteredSfid::<T>::get(&account).ok_or(Error::<T>::NotInstitutionAccount)?;
 
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&duoqian_account),
+        !T::ProtectedSourceChecker::is_protected(&account),
         Error::<T>::ProtectedSource
     );
     ensure!(
-        T::InstitutionAsset::can_spend(
-            &duoqian_account,
-            InstitutionAssetAction::DuoqianCloseExecute,
-        ),
+        T::InstitutionAsset::can_spend(&account, InstitutionAssetAction::DuoqianCloseExecute,),
         Error::<T>::ProtectedSource
     );
-    ensure!(
-        beneficiary != duoqian_account,
-        Error::<T>::InvalidBeneficiary
-    );
+    ensure!(beneficiary != account, Error::<T>::InvalidBeneficiary);
     ensure!(
         !T::ReservedAccountChecker::is_reserved(&beneficiary),
         Error::<T>::InvalidBeneficiary
@@ -76,29 +70,28 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     // 校验机构账户已 Active(InstitutionAccounts 状态)
     let account_info =
         InstitutionAccounts::<T>::get(&registered.sfid_number, &registered.account_name)
-            .ok_or(Error::<T>::DuoqianNotFound)?;
+            .ok_or(Error::<T>::AccountNotFound)?;
     ensure!(
         matches!(account_info.status, InstitutionLifecycleStatus::Active),
-        Error::<T>::DuoqianNotActive
+        Error::<T>::AccountNotActive
     );
 
     // 校验发起人是机构账户的活跃管理员
-    let account = Pallet::<T>::resolve_admin_account_for_account(&duoqian_account)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
-    let org = Pallet::<T>::resolve_org_for_account(&duoqian_account)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
+    let admin_account = Pallet::<T>::resolve_admin_account_for_account(&account)
+        .ok_or(Error::<T>::AccountNotFound)?;
+    let org = Pallet::<T>::resolve_org_for_account(&account).ok_or(Error::<T>::AccountNotFound)?;
     ensure!(
-        admins_change::Pallet::<T>::is_active_account_admin(org, account.clone(), &who),
+        admins_change::Pallet::<T>::is_active_account_admin(org, admin_account.clone(), &who),
         Error::<T>::PermissionDenied
     );
 
     // 拒绝并发关闭提案
     ensure!(
-        !InstitutionPendingClose::<T>::contains_key(&duoqian_account),
+        !InstitutionPendingClose::<T>::contains_key(&account),
         Error::<T>::CloseAlreadyPending
     );
 
-    let all_balance = T::Currency::free_balance(&duoqian_account);
+    let all_balance = T::Currency::free_balance(&account);
     ensure!(
         all_balance >= T::MinCloseBalance::get(),
         Error::<T>::CloseBalanceBelowMinimum
@@ -114,12 +107,12 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
     }
     ensure!(
-        T::Currency::reserved_balance(&duoqian_account).is_zero(),
+        T::Currency::reserved_balance(&account).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
 
     let action = CloseInstitutionAction {
-        duoqian_account: duoqian_account.clone(),
+        account: account.clone(),
         beneficiary: beneficiary.clone(),
         proposer: who.clone(),
     };
@@ -130,15 +123,15 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         <T as Config>::InternalVoteEngine::create_lifecycle_internal_proposal_with_data(
             who.clone(),
             org,
-            account,
+            admin_account,
             crate::MODULE_TAG,
             data,
         )?;
-    InstitutionPendingClose::<T>::insert(&duoqian_account, proposal_id);
+    InstitutionPendingClose::<T>::insert(&account, proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCloseProposed {
         proposal_id,
-        duoqian_account,
+        account,
         proposer: who,
         beneficiary,
     });
@@ -154,20 +147,20 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
 ) -> DispatchResult {
     ensure!(
         T::InstitutionAsset::can_spend(
-            &action.duoqian_account,
+            &action.account,
             InstitutionAssetAction::DuoqianCloseExecute,
         ),
         Error::<T>::ProtectedSource
     );
-    let account = Pallet::<T>::resolve_admin_account_for_account(&action.duoqian_account)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
-    let registered = AccountRegisteredSfid::<T>::get(&action.duoqian_account)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
+    let admin_account = Pallet::<T>::resolve_admin_account_for_account(&action.account)
+        .ok_or(Error::<T>::AccountNotFound)?;
+    let registered =
+        AccountRegisteredSfid::<T>::get(&action.account).ok_or(Error::<T>::AccountNotFound)?;
 
-    let all_balance = T::Currency::free_balance(&action.duoqian_account);
+    let all_balance = T::Currency::free_balance(&action.account);
     // 中文注释：执行阶段也复核 reserved，保证注销完成后账户能被彻底清空和复用。
     ensure!(
-        T::Currency::reserved_balance(&action.duoqian_account).is_zero(),
+        T::Currency::reserved_balance(&action.account).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
     let balance_u128: u128 = all_balance.saturated_into();
@@ -183,7 +176,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     if !fee.is_zero() {
         use frame_support::traits::{ExistenceRequirement, OnUnbalanced};
         let fee_imbalance = T::Currency::withdraw(
-            &action.duoqian_account,
+            &action.account,
             fee,
             frame_support::traits::WithdrawReasons::FEE,
             ExistenceRequirement::AllowDeath,
@@ -195,7 +188,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     {
         use frame_support::traits::ExistenceRequirement;
         T::Currency::transfer(
-            &action.duoqian_account,
+            &action.account,
             &action.beneficiary,
             transfer_amount,
             ExistenceRequirement::AllowDeath,
@@ -206,13 +199,13 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     // 中文注释：机构账户注销成功后必须删除账户当前索引；历史事件/提案仍保留在链历史中。
     InstitutionAccounts::<T>::remove(&registered.sfid_number, &registered.account_name);
     SfidRegisteredAccount::<T>::remove(&registered.sfid_number, &registered.account_name);
-    AccountRegisteredSfid::<T>::remove(&action.duoqian_account);
-    Pallet::<T>::close_admin_account(proposal_id, account)?;
-    InstitutionPendingClose::<T>::remove(&action.duoqian_account);
+    AccountRegisteredSfid::<T>::remove(&action.account);
+    Pallet::<T>::close_admin_account(proposal_id, admin_account)?;
+    InstitutionPendingClose::<T>::remove(&action.account);
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionClosed {
         proposal_id,
-        duoqian_account: action.duoqian_account.clone(),
+        account: action.account.clone(),
         beneficiary: action.beneficiary.clone(),
         amount: transfer_amount,
         fee,

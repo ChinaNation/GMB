@@ -38,7 +38,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
     private_type: PrivateType::Association,
     title: "注册协会",
     description: "具有法人资格的协会类组织,管理会员、理事和协会宗旨。",
-    allowed_roles: ASSOCIATION_ROLES,
+    allowed_participant_roles: ASSOCIATION_ROLES,
 };
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {

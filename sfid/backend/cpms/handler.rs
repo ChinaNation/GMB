@@ -186,11 +186,11 @@ impl Db {
 fn append_cpms_audit_log_best_effort(
     state: &AppState,
     action: &'static str,
-    actor_pubkey: &str,
+    actor_account: &str,
     target_sfid: Option<String>,
     detail: serde_json::Value,
 ) {
-    crate::core::runtime_ops::append_audit_log(state, action, actor_pubkey, target_sfid, detail);
+    crate::core::runtime_ops::append_audit_log(state, action, actor_account, target_sfid, detail);
 }
 
 pub(crate) async fn generate_cpms_install_qr(
@@ -198,7 +198,7 @@ pub(crate) async fn generate_cpms_install_qr(
     headers: HeaderMap,
     Json(input): Json<GenerateCpmsInstallInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -257,7 +257,7 @@ pub(crate) async fn generate_cpms_install_qr(
         );
     }
     // federal admin 只能给本省机构发码;federal(无 scope)放行。
-    if let Some(scope) = ctx.admin_province.as_deref() {
+    if let Some(scope) = ctx.scope_province_name.as_deref() {
         if province != scope {
             return api_error(
                 StatusCode::FORBIDDEN,
@@ -312,14 +312,14 @@ pub(crate) async fn generate_cpms_install_qr(
         status: CpmsSiteStatus::Pending,
         version: 1,
         province_code,
-        admin_province: province,
+        province_name: province,
         city_name: city,
         city_code,
         institution_code,
         sfid_full_name,
         qr1_payload: qr1_payload.clone(),
         cpms_pubkey_hash: None,
-        created_by: ctx.admin_pubkey.clone(),
+        created_by: ctx.admin_account.clone(),
         created_at,
         updated_by: None,
         updated_at: None,
@@ -335,7 +335,7 @@ pub(crate) async fn generate_cpms_install_qr(
     append_cpms_audit_log_best_effort(
         &state,
         "CPMS_INSTALL_QR_GENERATE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "city_name": site.city_name.clone(),
@@ -367,14 +367,16 @@ pub(crate) async fn archive_verify(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid archive QR payload"),
     };
     let verified =
-        match verify_cpms_archive_qr(&state, &archive_code, ctx.admin_province.as_deref()).await {
+        match verify_cpms_archive_qr(&state, &archive_code, ctx.scope_province_name.as_deref())
+            .await
+        {
             Ok(v) => v,
             Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
         };
     append_cpms_audit_log_best_effort(
         &state,
         "CPMS_ARCHIVE_VERIFY",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(verified.sfid_number.clone()),
         serde_json::json!({ "archive_no": verified.archive_no.clone() }),
     );
@@ -417,7 +419,7 @@ pub(crate) async fn reissue_install_token(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -463,11 +465,11 @@ pub(crate) async fn reissue_install_token(
     site.cpms_pubkey_hash = None;
     site.status = CpmsSiteStatus::Pending;
     site.version += 1;
-    site.updated_by = Some(ctx.admin_pubkey.clone());
+    site.updated_by = Some(ctx.admin_account.clone());
     site.updated_at = Some(Utc::now());
     let sign_source = build_install_sign_source(
         site.sfid_number.as_str(),
-        site.admin_province.as_str(),
+        site.province_name.as_str(),
         site.city_name.as_str(),
         site.install_secret_hash.as_str(),
     );
@@ -479,7 +481,7 @@ pub(crate) async fn reissue_install_token(
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
         "sfid_number": site.sfid_number,
-        "province_name": site.admin_province,
+        "province_name": site.province_name,
         "city_name": site.city_name,
         "install_secret": site.install_secret,
         "sig": signature,
@@ -505,7 +507,7 @@ pub(crate) async fn reissue_install_token(
     append_cpms_audit_log_best_effort(
         &state,
         "CPMS_INSTALL_QR_REISSUE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(site.sfid_number.clone()),
         // 操作语义已由 action 表达,无额外事实字段
         serde_json::json!({}),
@@ -513,7 +515,7 @@ pub(crate) async fn reissue_install_token(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_display_name),
     })
     .into_response()
 }
@@ -524,7 +526,7 @@ async fn update_cpms_site_token_status(
     sfid_number: String,
     target: InstallTokenStatus,
 ) -> axum::response::Response {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -549,7 +551,7 @@ async fn update_cpms_site_token_status(
     };
     site.install_token_status = target;
     site.version += 1;
-    site.updated_by = Some(ctx.admin_pubkey.clone());
+    site.updated_by = Some(ctx.admin_account.clone());
     site.updated_at = Some(Utc::now());
     if let Err(err) = state.db.upsert_cpms_site(&site) {
         tracing::error!(error = %err, "update cpms token status failed");
@@ -562,14 +564,14 @@ async fn update_cpms_site_token_status(
     append_cpms_audit_log_best_effort(
         &state,
         "CPMS_INSTALL_TOKEN_REVOKE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(site.sfid_number.clone()),
         serde_json::json!({ "status": site.install_token_status.clone() }),
     );
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_display_name),
     })
     .into_response()
 }
@@ -627,7 +629,7 @@ pub(crate) async fn delete_cpms_keys(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -668,7 +670,7 @@ pub(crate) async fn delete_cpms_keys(
     append_cpms_audit_log_best_effort(
         &state,
         "CPMS_KEYS_DELETE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         // 只有待安装(PENDING)站点允许删除,记录删除时的站点状态
         serde_json::json!({ "status": "PENDING" }),
@@ -690,11 +692,11 @@ pub(crate) async fn list_cpms_keys(
     headers: HeaderMap,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let mut rows = match state.db.list_cpms_sites(ctx.admin_province.as_deref()) {
+    let mut rows = match state.db.list_cpms_sites(ctx.scope_province_name.as_deref()) {
         Ok(sites) => sites
             .iter()
             .map(|site| cpms_site_keys_to_list_row_simple(site, site.created_by.clone()))
@@ -731,7 +733,7 @@ pub(crate) async fn get_cpms_site_by_institution(
     headers: HeaderMap,
     Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -748,8 +750,8 @@ pub(crate) async fn get_cpms_site_by_institution(
     };
     let row = match site {
         Some(site) => {
-            if let Some(scope) = ctx.admin_province.as_deref() {
-                if site.admin_province != scope {
+            if let Some(scope) = ctx.scope_province_name.as_deref() {
+                if site.province_name != scope {
                     return api_error(
                         StatusCode::FORBIDDEN,
                         1003,
@@ -779,7 +781,7 @@ async fn update_cpms_site_status(
     target_status: CpmsSiteStatus,
     reason: Option<String>,
 ) -> axum::response::Response {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -825,7 +827,7 @@ async fn update_cpms_site_status(
     if changed {
         site.status = target_status;
         site.version += 1;
-        site.updated_by = Some(ctx.admin_pubkey.clone());
+        site.updated_by = Some(ctx.admin_account.clone());
         site.updated_at = Some(Utc::now());
         if let Err(err) = state.db.upsert_cpms_site(&site) {
             tracing::error!(error = %err, "update cpms site status failed");
@@ -838,7 +840,7 @@ async fn update_cpms_site_status(
         append_cpms_audit_log_best_effort(
             &state,
             "CPMS_KEYS_STATUS_UPDATE",
-            &ctx.admin_pubkey,
+            &ctx.admin_account,
             Some(site.sfid_number.clone()),
             serde_json::json!({
                 "status": site.status.clone(),
@@ -849,7 +851,7 @@ async fn update_cpms_site_status(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_display_name),
     })
     .into_response()
 }
@@ -867,8 +869,8 @@ fn load_scoped_site(
             api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cpms query failed")
         })?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, 1004, "cpms site not found"))?;
-    if let Some(scope) = ctx.admin_province.as_deref() {
-        if site.admin_province != scope {
+    if let Some(scope) = ctx.scope_province_name.as_deref() {
+        if site.province_name != scope {
             return Err(api_error(
                 StatusCode::FORBIDDEN,
                 1003,
@@ -889,7 +891,7 @@ fn cpms_site_keys_to_list_row_simple(
         status: site.status.clone(),
         version: site.version,
         province_code: site.province_code.clone(),
-        admin_province: site.admin_province.clone(),
+        province_name: site.province_name.clone(),
         city_name: site.city_name.clone(),
         city_code: site.city_code.clone(),
         institution_code: site.institution_code.clone(),
@@ -907,7 +909,7 @@ fn cpms_site_keys_to_list_row_simple(
 pub(crate) async fn verify_cpms_archive_qr(
     state: &AppState,
     archive_code: &CpmsArchiveCodePayload,
-    admin_province_scope: Option<&str>,
+    scope_province_name: Option<&str>,
 ) -> Result<VerifiedCpmsArchive, (StatusCode, u32, String)> {
     if archive_code.proto != "SFID_CPMS_V1" {
         return Err((
@@ -949,7 +951,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         archive_code.geo_seal.as_str(),
         archive_code.archive_no.as_str(),
         archive_code.cpms_pubkey.as_str(),
-        admin_province_scope,
+        scope_province_name,
     )
     .await?;
     validate_geo_seal_against_site(&site, &seal)?;
@@ -1050,11 +1052,11 @@ async fn find_site_by_geo_seal(
     geo_seal: &str,
     archive_no: &str,
     cpms_pubkey: &str,
-    admin_province_scope: Option<&str>,
+    scope_province_name: Option<&str>,
 ) -> Result<(CpmsSiteKeys, CpmsGeoSealClaims), (StatusCode, u32, String)> {
     let sites = state
         .db
-        .list_cpms_sites(admin_province_scope)
+        .list_cpms_sites(scope_province_name)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, 1004, err))?;
     for site in sites {
         if site.install_secret.trim().is_empty() {

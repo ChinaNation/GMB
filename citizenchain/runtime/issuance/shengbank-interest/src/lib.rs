@@ -383,7 +383,7 @@ pub mod pallet {
                     continue;
                 }
 
-                // 中文注释：若账户被清理或尚未建户，自动重建对应省储行 pallet_address 后再入账。
+                // 中文注释：若账户被清理或尚未建户，自动重建对应省储行 pallet_account 后再入账。
                 // 中文注释：deposit_creating 返回的 imbalance 在离开作用域时结算，等价于确认增发入账。
                 let _imbalance = T::Currency::deposit_creating(&account, interest);
                 success_count = success_count.saturating_add(1);

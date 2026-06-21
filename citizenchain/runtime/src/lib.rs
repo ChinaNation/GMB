@@ -372,7 +372,8 @@ mod runtime {
     pub type OffchainTransaction = offchain_transaction::pallet;
 
     // 链上发行代币(Plain FT, ADR-011):用户(SFID 机构 + personal-manage 多签)发行 GMB 之外的代币。
-    // 唯一外壳入口,内核挂 pallet_assets;原生 extrinsic 全部由 BaseCallFilter 屏蔽。
+    // 唯一外壳入口,内核挂 pallet_assets;pallet_assets 原生 extrinsic 由 BaseCallFilter 屏蔽。
+    // 当前为空壳(任务卡 A/B 未实装),OnchainIssuance 自身 propose_* 也在 RuntimeCallFilter 中 reject。
     #[runtime::pallet_index(25)]
     pub type OnchainIssuance = onchain_issuance;
 

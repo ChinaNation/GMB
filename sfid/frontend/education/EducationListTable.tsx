@@ -17,8 +17,8 @@ import { notice } from '../utils/notice';
 
 interface Props {
   auth: AdminAuth;
-  province: string;
-  city: string;
+  province_name: string;
+  city_name: string;
   onSelectInstitution?: (sfidNumber: string) => void;
   refreshKey?: number;
   searchQuery?: string;
@@ -26,8 +26,8 @@ interface Props {
 
 export const EducationListTable: React.FC<Props> = ({
   auth,
-  province,
-  city,
+  province_name,
+  city_name,
   onSelectInstitution,
   refreshKey,
   searchQuery,
@@ -38,7 +38,7 @@ export const EducationListTable: React.FC<Props> = ({
   const [searchLoading, setSearchLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const directCacheKey = educationCommitteeCacheKey(auth, province, city);
+  const directCacheKey = educationCommitteeCacheKey(auth, province_name, city_name);
 
   const loadDirectRows = () => {
     const cachedRows = readCachedEducationCommitteeRows(directCacheKey);
@@ -48,14 +48,14 @@ export const EducationListTable: React.FC<Props> = ({
     let cancelled = false;
     if (!hasImmediateRows) setDirectLoading(true);
     listEducationInstitutions(auth, {
-      province_name: province,
-      city_name: city || undefined,
+      province_name,
+      city_name: city_name || undefined,
       page_size: 50,
     })
       .then((data) => {
         if (cancelled) return;
         setDirectRows(data.items);
-        writeCachedEducationCommitteeRows(directCacheKey, auth, province, city, data.items);
+        writeCachedEducationCommitteeRows(directCacheKey, auth, province_name, city_name, data.items);
       })
       .catch((err) => {
         if (!cancelled) notice.error(err, '');
@@ -79,8 +79,8 @@ export const EducationListTable: React.FC<Props> = ({
     let cancelled = false;
     setSearchLoading(true);
     listEducationInstitutions(auth, {
-      province_name: province,
-      city_name: city || undefined,
+      province_name,
+      city_name: city_name || undefined,
       q: exactQuery,
       cursor,
       page_size: 50,
@@ -105,12 +105,12 @@ export const EducationListTable: React.FC<Props> = ({
     return loadDirectRows();
   }, [
     auth.access_token,
-    auth.admin_pubkey,
-    auth.role,
-    auth.admin_province,
-    auth.admin_city,
-    province,
-    city,
+    auth.admin_account,
+    auth.registry_org_code,
+    auth.scope_province_name,
+    auth.scope_city_name,
+     province_name,
+     city_name,
     refreshKey,
     directCacheKey,
   ]);
@@ -120,12 +120,12 @@ export const EducationListTable: React.FC<Props> = ({
     return loadSearchRows(null);
   }, [
     auth.access_token,
-    auth.admin_pubkey,
-    auth.role,
-    auth.admin_province,
-    auth.admin_city,
-    province,
-    city,
+    auth.admin_account,
+    auth.registry_org_code,
+    auth.scope_province_name,
+    auth.scope_city_name,
+     province_name,
+     city_name,
     refreshKey,
     searchQuery,
   ]);

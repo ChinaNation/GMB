@@ -14,7 +14,7 @@
 
 - `cpms/backend/src/dangan`：新增档案生命周期硬删除逻辑。
 - `cpms/backend/src/number`：创建档案时优先领取已释放的一对号码。
-- `cpms/backend/src/operator_admin`：创建档案事务内完成号码领取和档案写入。
+- `cpms/backend/dangan`：创建档案事务内完成号码领取和档案写入。
 - `cpms/backend/db`：新增号码回收池与硬删除记录表。
 - `memory/05-modules/cpms`：同步编号和档案生命周期规则。
 

@@ -50,13 +50,13 @@ class WalletSettingsEntity {
 }
 
 @collection
-class AdminRoleCacheEntity {
+class AdminGroupCacheEntity {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
   late String pubkeyHex;
 
-  late String roleName;
+  late String adminGroupName;
 
   @Index()
   late int updatedAt;
@@ -1003,7 +1003,7 @@ class WalletIsar {
     final schemas = [
       WalletProfileEntitySchema,
       WalletSettingsEntitySchema,
-      AdminRoleCacheEntitySchema,
+      AdminGroupCacheEntitySchema,
       ObservedAccountEntitySchema,
       LoginReplayEntitySchema,
       AppKvEntitySchema,

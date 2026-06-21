@@ -1,7 +1,7 @@
 //! # 公民档案业务路由
 //!
 //! 档案创建/查询、投票账户绑定、软删除、ARCHIVE 二维码更新/打印。
-//! 中文注释：档案业务允许 ADMIN 与 OPERATOR；系统管理才仅限 ADMIN。
+//! 中文注释：档案业务允许 admins 与 operators；系统管理仅限 admins。
 
 use axum::{
     extract::{ConnectInfo, Path, Query, State},
@@ -289,7 +289,7 @@ async fn create_archive(
         install.province_code.as_str(),
         install.city_code.as_str(),
         terminal_id,
-        &admin.admin_pubkey,
+        &admin.admin_account,
     )
     .await?;
 
@@ -609,7 +609,7 @@ async fn list_archive_audit_logs(
     // 中文注释：历史审计 target_id 可能是档案 ID、档案号或资料 ID，因此按档案 ID 和 detail 中的档案事实共同收口。
     let rows = sqlx::query(
         "SELECT l.log_id, l.operator_user_id, l.action, l.target_type, l.target_id, l.result, l.detail, l.created_at,
-                a.admin_pubkey
+                a.admin_account
          FROM audit_logs l
          LEFT JOIN admin_users a ON a.user_id = l.operator_user_id
          WHERE l.target_id = $1
@@ -629,11 +629,11 @@ async fn list_archive_audit_logs(
         .map(|row| {
             let detail: sqlx::types::Json<serde_json::Value> = row.get("detail");
             let operator_user_id: Option<String> = row.get("operator_user_id");
-            let admin_pubkey: Option<String> = row.get("admin_pubkey");
-            let operator_account = admin_pubkey
+            let admin_account: Option<String> = row.get("admin_account");
+            let operator_account = admin_account
                 .as_deref()
                 .and_then(ss58::pubkey_hex_to_ss58)
-                .or(admin_pubkey)
+                .or(admin_account)
                 .or_else(|| operator_user_id.clone());
             ArchiveAuditLogEntry {
                 log_id: row.get("log_id"),
@@ -975,25 +975,25 @@ async fn create_archive_delete_challenge(
     let issued_at = Utc::now().timestamp();
     let expire_at = issued_at + 120;
     let challenge_id = format!("adc_{}", Uuid::new_v4().simple());
-    let admin_address = ss58::pubkey_hex_to_ss58(&admin.admin_pubkey).ok_or_else(|| {
+    let admin_account = ss58::pubkey_hex_to_ss58(&admin.admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid admin pubkey",
+            "invalid admin_account",
         )
     })?;
-    let admin_pubkey_hex = normalize_pubkey_hex(&admin.admin_pubkey).ok_or_else(|| {
+    let admin_account_hex = normalize_pubkey_hex(&admin.admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid admin pubkey",
+            "invalid admin_account",
         )
     })?;
     let delete_payload = build_archive_delete_payload(
         &challenge_id,
         &archive.archive_id,
         &archive.archive_no,
-        &admin_pubkey_hex,
+        &admin_account_hex,
         expire_at,
     )?;
     let payload_hex = format!("0x{}", hex::encode(delete_payload.as_bytes()));
@@ -1001,22 +1001,22 @@ async fn create_archive_delete_challenge(
         &challenge_id,
         issued_at,
         expire_at,
-        &admin_address,
-        &admin_pubkey_hex,
+        &admin_account,
+        &admin_account_hex,
         &payload_hex,
         &archive,
     )?;
 
     sqlx::query(
         "INSERT INTO archive_delete_challenges
-         (challenge_id, archive_id, archive_no, admin_id, admin_pubkey, delete_payload, expire_at, consumed, created_at)
+         (challenge_id, archive_id, archive_no, admin_id, admin_account, delete_payload, expire_at, consumed, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)",
     )
     .bind(&challenge_id)
     .bind(&archive.archive_id)
     .bind(&archive.archive_no)
     .bind(&ctx.user_id)
-    .bind(&admin_pubkey_hex)
+    .bind(&admin_account_hex)
     .bind(&delete_payload)
     .bind(expire_at)
     .bind(issued_at)
@@ -1080,7 +1080,7 @@ async fn complete_archive_delete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
     let row = match sqlx::query(
-        "SELECT challenge_id, archive_id, archive_no, admin_id, admin_pubkey, delete_payload, expire_at, consumed
+        "SELECT challenge_id, archive_id, archive_no, admin_id, admin_account, delete_payload, expire_at, consumed
          FROM archive_delete_challenges
          WHERE challenge_id = $1
          FOR UPDATE",
@@ -1115,7 +1115,7 @@ async fn complete_archive_delete(
 
     let challenge_archive_id: String = row.get("archive_id");
     let challenge_admin_id: String = row.get("admin_id");
-    let challenge_admin_pubkey: String = row.get("admin_pubkey");
+    let challenge_admin_account: String = row.get("admin_account");
     let delete_payload: String = row.get("delete_payload");
     let expire_at: i64 = row.get("expire_at");
     let consumed: bool = row.get("consumed");
@@ -1231,21 +1231,21 @@ async fn complete_archive_delete(
             "delete signer mismatch",
         ));
     };
-    let expected_pubkey = normalize_pubkey_hex(&challenge_admin_pubkey).ok_or_else(|| {
+    let expected_pubkey = normalize_pubkey_hex(&challenge_admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid admin pubkey",
+            "invalid admin_account",
         )
     })?;
-    let current_admin_pubkey = normalize_pubkey_hex(&admin.admin_pubkey).ok_or_else(|| {
+    let current_admin_account = normalize_pubkey_hex(&admin.admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid admin pubkey",
+            "invalid admin_account",
         )
     })?;
-    if signed_pubkey != expected_pubkey || signed_pubkey != current_admin_pubkey {
+    if signed_pubkey != expected_pubkey || signed_pubkey != current_admin_account {
         audit_archive_delete_failure(
             &state,
             &ctx.user_id,
@@ -1414,7 +1414,7 @@ async fn export_status_file(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<StatusExportData>>, (StatusCode, Json<ApiError>)> {
-    authz::require_role(&state, &headers, "ADMIN").await?;
+    authz::require_user_group(&state, &headers, "admins").await?;
     let export_file = dangan::build_and_record_cpms_status_export(&state).await?;
     let file_name = format!("cpms-annual-status-report-{}.json", export_file.exported_at);
     Ok(Json(ok(StatusExportData {
@@ -1427,7 +1427,7 @@ async fn status_export_state(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<StatusExportStateData>>, (StatusCode, Json<ApiError>)> {
-    authz::require_role(&state, &headers, "ADMIN").await?;
+    authz::require_user_group(&state, &headers, "admins").await?;
     let export_state = dangan::status_export_state(&state).await?;
     Ok(Json(ok(StatusExportStateData {
         state: export_state,
@@ -1544,20 +1544,20 @@ fn build_archive_delete_payload(
     challenge_id: &str,
     archive_id: &str,
     archive_no: &str,
-    admin_pubkey: &str,
+    admin_account: &str,
     expire_at: i64,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     // 中文注释：citizenwallet 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
-    let admin_pubkey_hex = normalize_pubkey_hex(admin_pubkey).ok_or_else(|| {
+    let admin_account_hex = normalize_pubkey_hex(admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid admin pubkey",
+            "invalid admin_account",
         )
     })?;
     Ok(format!(
         "CPMS_ARCHIVE_DELETE_V1|{}|{}|{}|{}|{}",
-        challenge_id, archive_id, archive_no, admin_pubkey_hex, expire_at
+        challenge_id, archive_id, archive_no, admin_account_hex, expire_at
     ))
 }
 
@@ -1565,17 +1565,17 @@ fn build_archive_delete_sign_request(
     challenge_id: &str,
     issued_at: i64,
     expire_at: i64,
-    admin_address: &str,
-    admin_pubkey: &str,
+    admin_account: &str,
+    admin_account_pubkey: &str,
     payload_hex: &str,
     archive: &Archive,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     // 中文注释：payload 保留真实删除原文；展示层只放人工可核对的档案号、管理员 SS58 和过期时间。
-    let admin_pubkey_hex = normalize_pubkey_hex(admin_pubkey).ok_or_else(|| {
+    let admin_account_hex = normalize_pubkey_hex(admin_account_pubkey).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid admin pubkey",
+            "invalid admin_account",
         )
     })?;
     let sign_request = serde_json::json!({
@@ -1585,8 +1585,8 @@ fn build_archive_delete_sign_request(
         "issued_at": issued_at,
         "expires_at": expire_at,
         "body": {
-            "address": admin_address,
-            "pubkey": admin_pubkey_hex,
+            "address": admin_account,
+            "pubkey": admin_account_hex,
             "sig_alg": "sr25519",
             "payload_hex": payload_hex,
             "display": {
@@ -1594,7 +1594,7 @@ fn build_archive_delete_sign_request(
                 "summary": "确认删除 CPMS 公民档案",
                 "fields": [
                     { "key": "archive_no", "label": "档案号", "value": archive.archive_no },
-                    { "key": "admin_pubkey", "label": "管理员", "value": admin_address },
+                    { "key": "admin_account", "label": "管理员", "value": admin_account },
                     { "key": "expires_at", "label": "过期时间", "value": expire_at.to_string() }
                 ]
             }
@@ -1843,7 +1843,7 @@ mod tests {
     }
 
     #[test]
-    fn archive_delete_payload_uses_canonical_0x_admin_pubkey() {
+    fn archive_delete_payload_uses_canonical_0x_admin_account() {
         let bare_pubkey = "11".repeat(32);
         let payload = build_archive_delete_payload(
             "adc_test",

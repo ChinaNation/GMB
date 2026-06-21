@@ -1,8 +1,8 @@
 //! 投票通过/否决终态回调时的业务执行体。
 //!
 //! 涵盖:
-//! - `execute_create_with_finalizer`: ACTION_CREATE 通过后入金 + 激活 PersonalDuoqians
-//! - `execute_close_with_finalizer`: ACTION_CLOSE 通过后转出余额 + 删除 PersonalDuoqians
+//! - `execute_create_with_finalizer`: ACTION_CREATE 通过后入金 + 激活 PersonalAccounts
+//! - `execute_close_with_finalizer`: ACTION_CLOSE 通过后转出余额 + 删除 PersonalAccounts
 //!   + 关闭 admin account + 清 PendingCloseProposal
 //! - `cleanup_pending_create`: 创建提案被否决/超时/终态失败时清理 reserve
 
@@ -19,18 +19,18 @@ use sp_runtime::{
 };
 
 use crate::pallet::{
-    Config, Error, Event, Pallet, PendingCloseProposal, PendingPersonalCreate, PersonalDuoqians,
+    Config, Error, Event, Pallet, PendingCloseProposal, PendingPersonalCreate, PersonalAccounts,
 };
-use crate::types::{CloseDuoqianAction, CreateDuoqianAction, DuoqianStatus};
+use crate::types::{PersonalCloseAction, PersonalCreateAction, PersonalStatus};
 use crate::BalanceOf;
 use votingengine::InternalVoteEngine;
 
-/// 执行创建：unreserve + 划转 + 扣手续费 + 激活 PersonalDuoqians。
+/// 执行创建：unreserve + 划转 + 扣手续费 + 激活 PersonalAccounts。
 ///
 /// 资金模型:提案创建时已 reserve(amount + fee),此处先 unreserve 再划转入金 + 扣手续费。
 pub(crate) fn execute_create_with_finalizer<T: Config>(
     proposal_id: u64,
-    action: &CreateDuoqianAction<T::AccountId, BalanceOf<T>>,
+    action: &PersonalCreateAction<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult {
     let fee = action.fee;
     let reserve_total = action.amount.saturating_add(fee);
@@ -51,30 +51,30 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
 
     T::Currency::transfer(
         &action.proposer,
-        &action.duoqian_account,
+        &action.account,
         action.amount,
         ExistenceRequirement::KeepAlive,
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    let account = action.duoqian_account.clone();
+    let account = action.account.clone();
     Pallet::<T>::activate_admin_account(proposal_id, account.clone())?;
-    PersonalDuoqians::<T>::mutate(&action.duoqian_account, |maybe_account| {
+    PersonalAccounts::<T>::mutate(&action.account, |maybe_account| {
         if let Some(account) = maybe_account {
-            account.status = DuoqianStatus::Active;
+            account.status = PersonalStatus::Active;
         }
     });
     let org = votingengine::types::ORG_REN;
     let admins_len = admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())
-        .ok_or(Error::<T>::DuoqianNotFound)?;
+        .ok_or(Error::<T>::PersonalNotFound)?;
     let threshold =
         <T as Config>::InternalVoteEngine::configured_dynamic_threshold(org, account.clone())
-            .ok_or(Error::<T>::DuoqianNotFound)?;
+            .ok_or(Error::<T>::PersonalNotFound)?;
     PendingPersonalCreate::<T>::remove(proposal_id);
 
-    Pallet::<T>::deposit_event(Event::<T>::DuoqianCreated {
+    Pallet::<T>::deposit_event(Event::<T>::PersonalCreated {
         proposal_id,
-        duoqian_account: action.duoqian_account.clone(),
+        account: action.account.clone(),
         creator: action.proposer.clone(),
         admins_len,
         threshold,
@@ -85,29 +85,29 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     Ok(())
 }
 
-/// 执行关闭：转出余额 + 删除 PersonalDuoqians + 关闭 admin account。
+/// 执行关闭：转出余额 + 删除 PersonalAccounts + 关闭 admin account。
 pub(crate) fn execute_close_with_finalizer<T: Config>(
     proposal_id: u64,
-    action: &CloseDuoqianAction<T::AccountId>,
+    action: &PersonalCloseAction<T::AccountId>,
 ) -> DispatchResult {
     ensure!(
         T::InstitutionAsset::can_spend(
-            &action.duoqian_account,
+            &action.account,
             InstitutionAssetAction::DuoqianCloseExecute,
         ),
         Error::<T>::ProtectedSource
     );
-    let account = action.duoqian_account.clone();
+    let account = action.account.clone();
     let org = votingengine::types::ORG_REN;
     let admins_len = admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())
-        .ok_or(Error::<T>::DuoqianNotFound)?;
+        .ok_or(Error::<T>::PersonalNotFound)?;
     let threshold =
         <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())
-            .ok_or(Error::<T>::DuoqianNotFound)?;
-    let all_balance = T::Currency::free_balance(&action.duoqian_account);
+            .ok_or(Error::<T>::PersonalNotFound)?;
+    let all_balance = T::Currency::free_balance(&action.account);
     // 中文注释：注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
     ensure!(
-        T::Currency::reserved_balance(&action.duoqian_account).is_zero(),
+        T::Currency::reserved_balance(&action.account).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
 
@@ -123,7 +123,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
 
     if !fee.is_zero() {
         let fee_imbalance = T::Currency::withdraw(
-            &action.duoqian_account,
+            &action.account,
             fee,
             frame_support::traits::WithdrawReasons::FEE,
             ExistenceRequirement::AllowDeath,
@@ -133,20 +133,20 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     }
 
     T::Currency::transfer(
-        &action.duoqian_account,
+        &action.account,
         &action.beneficiary,
         transfer_amount,
         ExistenceRequirement::AllowDeath,
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    PersonalDuoqians::<T>::remove(&action.duoqian_account);
+    PersonalAccounts::<T>::remove(&action.account);
     Pallet::<T>::close_admin_account(proposal_id, account)?;
-    PendingCloseProposal::<T>::remove(&action.duoqian_account);
+    PendingCloseProposal::<T>::remove(&action.account);
 
-    Pallet::<T>::deposit_event(Event::<T>::DuoqianClosed {
+    Pallet::<T>::deposit_event(Event::<T>::PersonalClosed {
         proposal_id,
-        duoqian_account: action.duoqian_account.clone(),
+        account: action.account.clone(),
         beneficiary: action.beneficiary.clone(),
         admins_len,
         threshold,
@@ -158,31 +158,31 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
 }
 
 /// 创建提案被否决/超时/终态失败时清理:
-/// unreserve(amount + fee) + 删 PersonalDuoqians/PendingPersonalCreate +
+/// unreserve(amount + fee) + 删 PersonalAccounts/PendingPersonalCreate +
 /// 移除 admin account Pending。
 ///
-/// `emit_event = true` 时(否决路径)发 `DuoqianCreateRejected`,终态失败路径不发。
+/// `emit_event = true` 时(否决路径)发 `PersonalCreateRejected`,终态失败路径不发。
 pub(crate) fn cleanup_pending_create<T: Config>(
     proposal_id: u64,
-    action: &CreateDuoqianAction<T::AccountId, BalanceOf<T>>,
+    action: &PersonalCreateAction<T::AccountId, BalanceOf<T>>,
     emit_event: bool,
 ) -> Result<bool, sp_runtime::DispatchError> {
     if !PendingPersonalCreate::<T>::contains_key(proposal_id) {
         return Ok(false);
     }
 
-    Pallet::<T>::remove_pending_admin_account(proposal_id, action.duoqian_account.clone())?;
+    Pallet::<T>::remove_pending_admin_account(proposal_id, action.account.clone())?;
 
     let reserve_total = action.amount.saturating_add(action.fee);
     let _ = T::Currency::unreserve(&action.proposer, reserve_total);
 
-    PersonalDuoqians::<T>::remove(&action.duoqian_account);
+    PersonalAccounts::<T>::remove(&action.account);
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     if emit_event {
-        Pallet::<T>::deposit_event(Event::<T>::DuoqianCreateRejected {
+        Pallet::<T>::deposit_event(Event::<T>::PersonalCreateRejected {
             proposal_id,
-            duoqian_account: action.duoqian_account.clone(),
+            account: action.account.clone(),
         });
     }
     Ok(true)

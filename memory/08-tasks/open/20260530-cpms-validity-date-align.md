@@ -8,7 +8,7 @@
 
 ## 预计修改目录
 
-- `cpms/frontend/operator_admin`：调整档案详情页有效期 DOM 结构。
+- `cpms/frontend/dangan`：调整档案详情页有效期 DOM 结构。
 - `cpms/frontend/assets/styles`：调整有效期两行日期排版样式。
 - `memory/08-tasks`：记录本次 UI 修复和验证结果。
 

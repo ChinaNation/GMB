@@ -285,12 +285,12 @@ fn runtime_signing_context(
         })?;
     let signer_pubkey_raw = std::env::var("SFID_RUNTIME_SIGNER_PUBKEY")
         .map_err(|_| "SFID_RUNTIME_SIGNER_PUBKEY not set".to_string())?;
-    let signer_pubkey = parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str())
-        .ok_or_else(|| {
+    let signer_pubkey =
+        parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str()).ok_or_else(|| {
             "SFID_RUNTIME_SIGNER_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
         })?;
-    let default_scope_province = std::env::var("SFID_RUNTIME_SCOPE_PROVINCE_NAME")
-        .unwrap_or_else(|_| "全国".to_string());
+    let default_scope_province =
+        std::env::var("SFID_RUNTIME_SCOPE_PROVINCE_NAME").unwrap_or_else(|_| "全国".to_string());
     let scope_province_name = scope_province_override
         .map(str::trim)
         .filter(|v| !v.is_empty())
@@ -337,6 +337,15 @@ pub(crate) fn normalize_account_pubkey(account_pubkey: &str) -> Option<String> {
     }
     let bytes = parse_sr25519_pubkey_bytes(account_pubkey)?;
     Some(format!("0x{}", hex::encode(bytes)))
+}
+
+pub(crate) fn is_chain_runtime_config_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    message.contains("SFID_RUNTIME_")
+        || message.contains("SFID_CHAIN_GENESIS_HASH")
+        || message.contains("SFID_SIGNING_SEED_HEX")
+        || lower.contains("genesis hash")
+        || lower.contains("trusted chain")
 }
 
 fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {

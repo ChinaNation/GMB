@@ -226,8 +226,8 @@ lib/
   - `recordKey, walletAddress, walletPubkeyHex, type, amountDeltaFen, transferAmountFen, feeFen, counterpartyAddress, fromAddress, toAddress, status, source, txHash, blockNumber, blockHash, eventIndex, extrinsicIndex, usedNonce, confirmedAtMillis, failureReason, createdAtMillis`
 - `WalletTxSyncCursorEntity`
   - `walletAddress, walletPubkeyHex, trackingStartBlock, lastSyncedBlock, createdAtMillis, updatedAtMillis`
-- `AdminRoleCacheEntity`
-  - `pubkeyHex, roleName, updatedAt`
+- `AdminGroupCacheEntity`
+  - `pubkeyHex, adminGroupName, updatedAt`
 - `ObservedAccountEntity`
   - `accountId, orgName, publicKey, address, balance, source`
 - `LoginReplayEntity`

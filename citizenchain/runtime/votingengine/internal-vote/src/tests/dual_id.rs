@@ -5,7 +5,8 @@
 //! - 展示号 `ProposalDisplayId[id] = (year, seq_in_year)` 跨年自动重置
 //! - 4 张反向索引在 `register_proposal_data` 时同事务写入
 //! - 清理路径(`FinalCleanup`)同步删除反向索引 + 展示号
-//! - migrations/v1 回填存量提案的展示号与索引
+//!
+//! 全新创世:双层 ID 自创世第一块即终态布局,无回填迁移。
 
 use super::*;
 // 这些 storage 在 votingengine 主 crate;dual_id 测试通过 super::* 拿到 votingengine::pallet 的 re-import。

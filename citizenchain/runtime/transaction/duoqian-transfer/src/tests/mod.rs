@@ -668,7 +668,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         // ORG_REN/ORG_PUP/ORG_OTH 的 admin 从 admins-change 读；
         // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
         // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
-        // 测试需要时显式写入 PersonalDuoqians + admins-change AdminAccounts。
+        // 测试需要时显式写入 PersonalAccounts + admins-change AdminAccounts。
         let _ = dq;
     });
     ext

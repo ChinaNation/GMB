@@ -14,7 +14,7 @@ export const authQrChallenge = () =>
 export const authQrComplete = (body: {
   challenge_id: string;
   session_id: string;
-  admin_pubkey: string;
+  admin_account: string;
   signature: string;
 }) => post<null>('/api/v1/admin/auth/qr/complete', body);
 

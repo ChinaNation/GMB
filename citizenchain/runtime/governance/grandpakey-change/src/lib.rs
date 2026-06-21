@@ -12,13 +12,7 @@
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use frame_support::{
-    ensure,
-    pallet_prelude::*,
-    traits::{GetStorageVersion, StorageVersion},
-    weights::Weight,
-    Blake2_128Concat,
-};
+use frame_support::{ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat};
 use frame_system::pallet_prelude::*;
 use primitives::china::china_cb::CHINA_CB;
 use scale_info::TypeInfo;
@@ -37,7 +31,7 @@ pub use pallet::*;
 mod benchmarks;
 pub mod weights;
 
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
@@ -146,73 +140,6 @@ pub mod pallet {
                 CurrentGrandpaKeys::<T>::insert(institution.clone(), node.grandpa_key);
                 GrandpaKeyOwnerByKey::<T>::insert(node.grandpa_key, institution);
             }
-        }
-    }
-
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let onchain = Pallet::<T>::on_chain_storage_version();
-            if onchain < 2 {
-                let mut reads: u64 = 1;
-                let clear_result = GrandpaKeyOwnerByKey::<T>::clear(u32::MAX, None);
-                let mut writes: u64 = 1u64.saturating_add(clear_result.unique as u64);
-                for (inst, key) in CurrentGrandpaKeys::<T>::iter() {
-                    reads = reads.saturating_add(1);
-                    GrandpaKeyOwnerByKey::<T>::insert(key, inst);
-                    writes = writes.saturating_add(1);
-                }
-                STORAGE_VERSION.put::<Pallet<T>>();
-                return T::DbWeight::get().reads_writes(reads, writes);
-            }
-            Weight::zero()
-        }
-
-        #[cfg(feature = "try-runtime")]
-        fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
-            let mut seen = sp_std::collections::btree_set::BTreeSet::new();
-            let mut count: u32 = 0;
-            for (_inst, key) in CurrentGrandpaKeys::<T>::iter() {
-                ensure!(
-                    seen.insert(key),
-                    "CurrentGrandpaKeys 中存在重复 GRANDPA 公钥"
-                );
-                count = count.saturating_add(1);
-            }
-            Ok(count.encode())
-        }
-
-        #[cfg(feature = "try-runtime")]
-        fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
-            let expected_count = u32::decode(&mut &state[..]).map_err(|_| {
-                sp_runtime::TryRuntimeError::Other("grandpakey-change pre_upgrade 状态解码失败")
-            })?;
-
-            ensure!(
-                Pallet::<T>::on_chain_storage_version() >= STORAGE_VERSION,
-                "grandpakey-change storage version 未升级到 v2"
-            );
-
-            let mut current_count: u32 = 0;
-            for (inst, key) in CurrentGrandpaKeys::<T>::iter() {
-                current_count = current_count.saturating_add(1);
-                ensure!(
-                    GrandpaKeyOwnerByKey::<T>::get(key) == Some(inst),
-                    "GrandpaKeyOwnerByKey 反向索引与 CurrentGrandpaKeys 不一致"
-                );
-            }
-
-            let reverse_count = GrandpaKeyOwnerByKey::<T>::iter().count() as u32;
-            ensure!(
-                current_count == expected_count,
-                "CurrentGrandpaKeys 数量在迁移前后不一致"
-            );
-            ensure!(
-                reverse_count == current_count,
-                "GrandpaKeyOwnerByKey 数量与 CurrentGrandpaKeys 不一致"
-            );
-
-            Ok(())
         }
     }
 

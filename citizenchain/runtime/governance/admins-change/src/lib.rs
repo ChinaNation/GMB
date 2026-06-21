@@ -155,9 +155,8 @@ pub trait AdminAccountLifecycle<AccountId> {
 }
 
 /// admins-change pallet on-chain storage 版本。
-/// v3:管理员账户只保存管理员集合和生命周期，阈值归属 internal-vote。
-/// v4:动态多签账户关闭后删除当前状态记录，并迁移清理旧 Closed 动态账户。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+/// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载任何历史迁移。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
     T::AccountId::decode(&mut &raw[..]).ok()
@@ -282,34 +281,6 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let db = T::DbWeight::get();
-            let on_chain = StorageVersion::get::<Pallet<T>>();
-            if on_chain >= STORAGE_VERSION {
-                return db.reads(1);
-            }
-
-            let mut reads: u64 = 1;
-            let mut closed_dynamic_accounts = Vec::new();
-            for (account_id, account) in AdminAccounts::<T>::iter() {
-                reads = reads.saturating_add(1);
-                if account.status == AdminAccountStatus::Closed
-                    && !matches!(account.kind, AdminAccountKind::BuiltinInstitution)
-                {
-                    closed_dynamic_accounts.push(account_id);
-                }
-            }
-
-            let removed = closed_dynamic_accounts.len() as u64;
-            for account in closed_dynamic_accounts {
-                // 中文注释：只删除当前状态墓碑；历史区块、事件和提案仍由链历史保留。
-                AdminAccounts::<T>::remove(account);
-            }
-
-            STORAGE_VERSION.put::<Pallet<T>>();
-            db.reads_writes(reads, removed.saturating_add(1))
-        }
-
         fn integrity_test() {
             let required = NRC_ADMIN_COUNT.max(PRC_ADMIN_COUNT).max(PRB_ADMIN_COUNT);
             assert!(

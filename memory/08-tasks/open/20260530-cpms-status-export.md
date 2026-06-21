@@ -14,8 +14,8 @@
 ## 影响范围
 
 - `cpms/backend/src/dangan`：新增状态导出文件构造逻辑，统一 `REVOKED` 状态校验。
-- `cpms/backend/src/operator_admin`：软删除时强制写入注销状态和无投票资格，新增导出接口。
-- `cpms/backend/src/super_admin`：状态更新逻辑改为正常/注销，并保持注销无投票资格。
+- `cpms/backend/dangan`：软删除时强制写入注销状态和无投票资格，新增导出接口。
+- `cpms/backend/admins`：状态更新逻辑改为正常/注销，并保持注销无投票资格。
 - `cpms/backend/db`：更新 `citizen_status` 约束为 `NORMAL / REVOKED`。
 - `cpms/frontend`：清理“异常/ABNORMAL”残留，改为“注销/REVOKED”。
 - `memory/05-modules` 与 `memory/07-ai`：同步协议、命名和技术文档。
@@ -35,7 +35,7 @@
 - [x] 软删除强制注销和无投票资格。
 - [x] 导出文件包含状态记录和号码释放记录。
 - [x] 清理前端、数据库、文档中的 `ABNORMAL` 残留。
-- [x] 增加年度报告导出状态、超级管理员权限和操作管理员逾期锁定。
+- [x] 增加年度报告导出状态、CPMS 机构管理员权限和operators逾期锁定。
 - [x] 运行 CPMS 后端格式化、测试、clippy 和前端构建。
 
 ## 完成记录
@@ -43,6 +43,6 @@
 - 2026-05-30：新增 `cpms/backend/src/dangan/export.rs`，生成 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT` 离线 JSON 文件。
 - 2026-05-30：统一公民状态为 `NORMAL / REVOKED`，软删除时同步写入注销状态和无投票资格。
 - 2026-05-30：系统设置页新增状态更新文件导出按钮，前端文案清理为“正常/注销”。
-- 2026-05-30：年度报告仅 SUPER_ADMIN 可导出；当前规则改为每年 UTC 1 月 1 日后可补导最早未导出年度，UTC 1 月 11 日后仍未导出则持续锁定 OPERATOR_ADMIN 登录和已有会话，直到补导完成。
+- 2026-05-30：年度报告仅 CPMS 机构 admins 可导出；当前规则改为每年 UTC 1 月 1 日后可补导最早未导出年度，UTC 1 月 11 日后仍未导出则持续锁定 operators 登录和已有会话，直到补导完成。
 - 2026-05-30：同步 CPMS/SFID 协议、命名和模块文档，登记 `CPMS_STATUS_EXPORT`。
 - 2026-05-30：已运行 `cargo fmt`、`cargo test`、`cargo clippy --all-targets -- -D warnings` 和 `npm run build`，均通过。

@@ -46,8 +46,8 @@ export const PrivateShell: React.FC<Props> = ({ auth, sfidMeta, privateType }) =
   const [selectedSfidNumber, setSelectedSfidNumber] = useState<string | null>(null);
 
   const provinces = sfidMeta?.provinces || [];
-  const effectiveProvince = selectedProvince ?? scope.lockedProvince;
-  const effectiveCity = selectedCity ?? (scope.skipCityList ? scope.lockedCity : null);
+  const effectiveProvince = selectedProvince ?? scope.lockedProvinceName;
+  const effectiveCity = selectedCity ?? (scope.skipCityList ? scope.lockedCityName : null);
 
   if (selectedSfidNumber) {
     return (
@@ -73,13 +73,13 @@ export const PrivateShell: React.FC<Props> = ({ auth, sfidMeta, privateType }) =
       canGoBack ? () => setSelectedProvince(null) : undefined,
       '返回省列表',
     );
-    body = <CityGrid auth={auth} province={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
+    body = <CityGrid auth={auth} province_name={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
   } else {
     const canGoBack = !scope.skipCityList;
     const commonProps = {
       auth,
-      province: effectiveProvince,
-      city: effectiveCity,
+      province_name: effectiveProvince,
+      city_name: effectiveCity,
       canWrite: scope.canWrite,
       onSelectInstitution: (sfidNumber: string) => setSelectedSfidNumber(sfidNumber),
     };

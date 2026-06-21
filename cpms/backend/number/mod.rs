@@ -40,13 +40,13 @@ pub(crate) async fn generate_archive_numbers_with_retry(
     province_code: &str,
     city_code: &str,
     terminal_id: &str,
-    admin_pubkey: &str,
+    admin_account: &str,
 ) -> Result<ArchiveNumbers, (StatusCode, Json<ApiError>)> {
     if let Some(numbers) = claim_recycled_archive_numbers(conn, new_archive_id).await? {
         return Ok(numbers);
     }
     let archive_no =
-        generate_archive_no_with_retry(conn, install_secret, terminal_id, admin_pubkey).await?;
+        generate_archive_no_with_retry(conn, install_secret, terminal_id, admin_account).await?;
     let passport_no = generate_passport_no_with_retry(conn, province_code, city_code).await?;
     Ok(ArchiveNumbers {
         archive_no,
@@ -58,7 +58,7 @@ async fn generate_archive_no_with_retry(
     conn: &mut sqlx::PgConnection,
     install_secret: &str,
     terminal_id: &str,
-    admin_pubkey: &str,
+    admin_account: &str,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     let mut counter = allocate_sequence(conn, "archive_no").await?;
 
@@ -68,7 +68,7 @@ async fn generate_archive_no_with_retry(
         let body = archive_no_body(
             install_secret,
             terminal_id,
-            admin_pubkey,
+            admin_account,
             counter,
             random.as_slice(),
         );
@@ -226,7 +226,7 @@ async fn claim_recycled_archive_numbers(
 fn archive_no_body(
     install_secret: &str,
     terminal_id: &str,
-    admin_pubkey: &str,
+    admin_account: &str,
     counter: i64,
     random: &[u8],
 ) -> String {
@@ -236,7 +236,7 @@ fn archive_no_body(
     hasher.update(b"|");
     hasher.update(terminal_id.as_bytes());
     hasher.update(b"|");
-    hasher.update(admin_pubkey.as_bytes());
+    hasher.update(admin_account.as_bytes());
     hasher.update(b"|");
     hasher.update(counter.to_string().as_bytes());
     hasher.update(b"|");

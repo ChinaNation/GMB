@@ -1,7 +1,7 @@
 // 个人多签提案历史聚合服务(req 5)。
 //
 // 双轨制数据源:
-// 1. 链上 `votingengine.ActiveProposalsByInstitution[personal_address || zeros(16)]`
+// 1. 链上 `votingengine.ActiveProposalsByInstitution[personal_account || zeros(16)]`
 //    返回当前活跃(STATUS_VOTING)的提案 ID 列表。
 // 2. 本机 Isar `PersonalDuoqianProposalEntity` 永久保留所有历史快照,覆盖
 //    链上 90 天后已清理的终态提案。

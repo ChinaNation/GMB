@@ -50,7 +50,7 @@ pub fn subject_property_is_private_institution(sfid_bytes: &[u8]) -> bool {
 ```rust
 pub trait SfidAccountQuery<AccountId> {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
-    fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
+    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
     fn is_active(addr: &AccountId) -> bool;
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
@@ -62,7 +62,7 @@ pub trait SfidAccountQuery<AccountId> {
 
 **runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianSfidAccountQuery`):委托给 `organization-manage` / `offchain-transaction` 的链上索引:
 - `AccountRegisteredSfid` → `account_info`
-- `SfidRegisteredAccount` → `find_address`
+- `SfidRegisteredAccount` → `find_account`
 - `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
 - `admins-change` 主体表 → `is_admin_of`
 - `ClearingBankNodes` → `is_registered_clearing_node`

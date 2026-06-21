@@ -61,8 +61,8 @@ import { OperationRecords } from '../gov/OperationRecords';
 
 // 创建者角色中文映射(与列表页保持一致)。
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
-  FEDERAL_ADMIN: '联邦管理员',
-  CITY_ADMIN: '市管理员',
+  FEDERAL_REGISTRY: '联邦注册局管理员',
+  CITY_REGISTRY: '市注册局管理员',
 };
 
 interface Props {

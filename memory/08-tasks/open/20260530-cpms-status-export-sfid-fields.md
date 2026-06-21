@@ -14,7 +14,7 @@
 
 - `cpms/backend/src/dangan`：调整 `CPMS_STATUS_EXPORT` DTO、哈希内容和导出查询，去掉 `passport_no`。
 - `cpms/backend/db`：同步当前基准 schema 和迁移中的年度报告计数字段命名。
-- `cpms/frontend/super_admin`：同步年度报告前端类型。
+- `cpms/frontend/admins`：同步年度报告前端类型。
 - `cpms/CPMS_TECHNICAL.md` 与 `memory/05-modules/cpms`：更新 CPMS 年度报告文档并清理旧字段残留。
 - `memory/05-modules/sfid` 与 `memory/07-ai`：只同步协议字段说明，SFID 实现方案另行输出。
 

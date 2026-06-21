@@ -9,7 +9,6 @@
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod execution;
-pub mod migration;
 pub mod proposal;
 #[cfg(test)]
 mod tests;
@@ -26,9 +25,9 @@ pub const MODULE_TAG: &[u8] = b"res-iss";
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::{migration, proposal::RecipientAmount, weights::WeightInfo};
+    use crate::{proposal::RecipientAmount, weights::WeightInfo};
     use codec::Decode;
-    use frame_support::{pallet_prelude::*, traits::Currency, weights::Weight};
+    use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::pallet_prelude::*;
     use primitives::china::china_cb::CHINA_CB;
     #[cfg(feature = "std")]
@@ -80,8 +79,11 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
+    /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载历史迁移。
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::pallet]
-    #[pallet::storage_version(migration::STORAGE_VERSION)]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// 合法收款账户集合。决议发行只允许向该集合精确分配。
@@ -148,10 +150,6 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            migration::on_runtime_upgrade::<T>()
-        }
-
         #[cfg(feature = "std")]
         fn integrity_test() {
             assert!(

@@ -1,7 +1,7 @@
 //! # 管理员模块 (admins)
 //!
-//! 管理员管理仅 ADMIN 角色可访问。
-//! 中文注释：公民状态变更属于档案业务，允许 ADMIN 与 OPERATOR。
+//! 管理员管理仅 admins 分组可访问。
+//! 中文注释：公民状态变更属于档案业务，允许 admins 与 operators。
 
 use axum::{
     extract::{Path, State},
@@ -22,18 +22,17 @@ use crate::{
 
 #[derive(Deserialize)]
 struct CreateAdminRequest {
-    role: String,
-    admin_pubkey: String,
-    admin_name: String,
+    user_group: String,
+    admin_account: String,
+    admin_display_name: String,
 }
 
 #[derive(Serialize)]
 struct AdminData {
     user_id: String,
-    admin_pubkey: String,
-    admin_address: String,
-    admin_name: String,
-    role: String,
+    admin_account: String,
+    admin_display_name: String,
+    user_group: String,
     immutable: bool,
     can_edit_name: bool,
     can_delete: bool,
@@ -41,7 +40,7 @@ struct AdminData {
 
 #[derive(Deserialize)]
 struct UpdateAdminNameRequest {
-    admin_name: String,
+    admin_display_name: String,
 }
 
 #[derive(Deserialize)]
@@ -62,7 +61,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/admin/admins", get(list_admins).post(create_admin))
         .route(
             "/api/v1/admin/admins/:id",
-            put(update_admin_name).delete(delete_admin),
+            put(update_admin_display_name).delete(delete_admin),
         )
         .route(
             "/api/v1/archives/:archive_id/citizen-status",
@@ -74,17 +73,17 @@ async fn list_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Vec<AdminData>>>, (StatusCode, Json<ApiError>)> {
-    authz::require_role(&state, &headers, "ADMIN").await?;
+    authz::require_user_group(&state, &headers, "admins").await?;
 
     let rows = sqlx::query(
-        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name,
-                role, immutable
+        "SELECT user_id, admin_account, COALESCE(admin_display_name, '') AS admin_display_name,
+                user_group, immutable
          FROM admin_users
-         WHERE role IN ('ADMIN', 'OPERATOR')
+         WHERE user_group IN ('admins', 'operators')
          ORDER BY
            CASE
-             WHEN role = 'ADMIN' AND immutable = TRUE THEN 0
-             WHEN role = 'ADMIN' THEN 1
+             WHEN user_group = 'admins' AND immutable = TRUE THEN 0
+             WHEN user_group = 'admins' THEN 1
              ELSE 2
            END,
            created_at,
@@ -110,15 +109,15 @@ async fn create_admin(
     headers: HeaderMap,
     Json(req): Json<CreateAdminRequest>,
 ) -> Result<Json<ApiResponse<AdminData>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "ADMIN").await?;
-    let role = req.role.trim();
-    if role != "ADMIN" && role != "OPERATOR" {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin role"));
+    let ctx = authz::require_user_group(&state, &headers, "admins").await?;
+    let user_group = req.user_group.trim();
+    if user_group != "admins" && user_group != "operators" {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin user_group"));
     }
-    let admin_name = validate_admin_name(req.admin_name.as_str())?;
-    let admin_pubkey = normalize_admin_pubkey(req.admin_pubkey.as_str())?;
+    let admin_display_name = validate_admin_display_name(req.admin_display_name.as_str())?;
+    let admin_account = normalize_admin_account(req.admin_account.as_str())?;
     let now_ts = Utc::now().timestamp();
-    let user_id = if role == "ADMIN" {
+    let user_id = if user_group == "admins" {
         format!("u_admin_{}", Uuid::new_v4().simple())
     } else {
         format!("u_operator_{}", Uuid::new_v4().simple())
@@ -142,9 +141,9 @@ async fn create_admin(
             )
         })?;
 
-    if role == "ADMIN" {
+    if user_group == "admins" {
         let admins_total: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'ADMIN'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE user_group = 'admins'")
                 .fetch_one(tx.as_mut())
                 .await
                 .map_err(|_| {
@@ -160,13 +159,13 @@ async fn create_admin(
     }
 
     let insert_result = sqlx::query(
-        "INSERT INTO admin_users (user_id, admin_pubkey, admin_name, role, immutable, managed_key_id, created_at, updated_at)
+        "INSERT INTO admin_users (user_id, admin_account, admin_display_name, user_group, immutable, managed_key_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, FALSE, NULL, $5, $6)",
     )
     .bind(&user_id)
-    .bind(&admin_pubkey)
-    .bind(&admin_name)
-    .bind(role)
+    .bind(&admin_account)
+    .bind(&admin_display_name)
+    .bind(user_group)
     .bind(now_ts)
     .bind(now_ts)
     .execute(tx.as_mut())
@@ -175,7 +174,7 @@ async fn create_admin(
         return Err(err(
             StatusCode::CONFLICT,
             3001,
-            "admin_pubkey already exists",
+            "admin_account already exists",
         ));
     }
 
@@ -185,10 +184,9 @@ async fn create_admin(
 
     let admin = AdminData {
         user_id,
-        admin_address: admin_address_for_pubkey(&admin_pubkey),
-        admin_pubkey,
-        admin_name,
-        role: role.to_string(),
+        admin_account,
+        admin_display_name,
+        user_group: user_group.to_string(),
         immutable: false,
         can_edit_name: true,
         can_delete: true,
@@ -201,29 +199,29 @@ async fn create_admin(
         "ADMIN_USER",
         Some(admin.user_id.clone()),
         "SUCCESS",
-        serde_json::json!({"role": admin.role, "admin_name": admin.admin_name}),
+        serde_json::json!({"user_group": admin.user_group, "admin_display_name": admin.admin_display_name}),
     )
     .await?;
 
     Ok(Json(ok(admin)))
 }
 
-async fn update_admin_name(
+async fn update_admin_display_name(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<UpdateAdminNameRequest>,
 ) -> Result<Json<ApiResponse<AdminData>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "ADMIN").await?;
-    let admin_name = validate_admin_name(req.admin_name.as_str())?;
+    let ctx = authz::require_user_group(&state, &headers, "admins").await?;
+    let admin_display_name = validate_admin_display_name(req.admin_display_name.as_str())?;
     let now = Utc::now().timestamp();
     let row = sqlx::query(
         "UPDATE admin_users
-         SET admin_name = $1, updated_at = $2
-         WHERE user_id = $3 AND role IN ('ADMIN', 'OPERATOR')
-         RETURNING user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable",
+         SET admin_display_name = $1, updated_at = $2
+         WHERE user_id = $3 AND user_group IN ('admins', 'operators')
+         RETURNING user_id, admin_account, COALESCE(admin_display_name, '') AS admin_display_name, user_group, immutable",
     )
-    .bind(&admin_name)
+    .bind(&admin_display_name)
     .bind(now)
     .bind(&id)
     .fetch_optional(&state.db)
@@ -244,7 +242,7 @@ async fn update_admin_name(
         "ADMIN_USER",
         Some(id),
         "SUCCESS",
-        serde_json::json!({"admin_name": admin_name}),
+        serde_json::json!({"admin_display_name": admin_display_name}),
     )
     .await?;
 
@@ -256,7 +254,7 @@ async fn delete_admin(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "ADMIN").await?;
+    let ctx = authz::require_user_group(&state, &headers, "admins").await?;
 
     let mut tx = state
         .db
@@ -265,9 +263,9 @@ async fn delete_admin(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable
+        "SELECT user_id, admin_account, COALESCE(admin_display_name, '') AS admin_display_name, user_group, immutable
          FROM admin_users
-         WHERE user_id = $1 AND role IN ('ADMIN', 'OPERATOR')
+         WHERE user_id = $1 AND user_group IN ('admins', 'operators')
          FOR UPDATE",
     )
     .bind(&id)
@@ -284,7 +282,7 @@ async fn delete_admin(
     let Some(row) = row else {
         return Err(err(StatusCode::NOT_FOUND, 3002, "admin not found"));
     };
-    let role: String = row.get("role");
+    let user_group: String = row.get("user_group");
     let immutable: bool = row.get("immutable");
     if immutable {
         return Err(err(
@@ -293,9 +291,8 @@ async fn delete_admin(
             "initial admin cannot be deleted",
         ));
     }
-    let admin_pubkey: String = row.get("admin_pubkey");
-    let admin_address = admin_address_for_pubkey(&admin_pubkey);
-    let admin_name: String = row.get("admin_name");
+    let admin_account: String = row.get("admin_account");
+    let admin_display_name: String = row.get("admin_display_name");
 
     sqlx::query("DELETE FROM sessions WHERE user_id = $1")
         .bind(&id)
@@ -330,10 +327,9 @@ async fn delete_admin(
     .bind(&id)
     .bind(sqlx::types::Json(serde_json::json!({
         "deleted_user_id": id,
-        "admin_pubkey": admin_pubkey,
-        "admin_address": admin_address,
-        "admin_name": admin_name,
-        "role": role,
+        "admin_account": admin_account,
+        "admin_display_name": admin_display_name,
+        "user_group": user_group,
         "immutable": immutable
     })))
     .bind(Utc::now().timestamp())
@@ -349,21 +345,20 @@ async fn delete_admin(
 }
 
 fn row_to_admin_data(row: sqlx::postgres::PgRow) -> AdminData {
-    let admin_pubkey: String = row.get("admin_pubkey");
+    let admin_account: String = row.get("admin_account");
     let immutable: bool = row.get("immutable");
     AdminData {
         user_id: row.get("user_id"),
-        admin_address: admin_address_for_pubkey(&admin_pubkey),
-        admin_pubkey,
-        admin_name: row.get("admin_name"),
-        role: row.get("role"),
+        admin_account,
+        admin_display_name: row.get("admin_display_name"),
+        user_group: row.get("user_group"),
         immutable,
         can_edit_name: true,
         can_delete: !immutable,
     }
 }
 
-fn validate_admin_name(value: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
+fn validate_admin_display_name(value: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
     let name = value.trim();
     if name.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "admin name required"));
@@ -374,10 +369,10 @@ fn validate_admin_name(value: &str) -> Result<String, (StatusCode, Json<ApiError
     Ok(name.to_string())
 }
 
-fn normalize_admin_pubkey(value: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
+fn normalize_admin_account(value: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
     let raw_input = value.trim();
     if raw_input.is_empty() {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_pubkey"));
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_account"));
     }
     let stripped = raw_input
         .strip_prefix("0x")
@@ -395,12 +390,8 @@ fn normalize_admin_pubkey(value: &str) -> Result<String, (StatusCode, Json<ApiEr
     Err(err(
         StatusCode::BAD_REQUEST,
         1001,
-        "admin_pubkey must be SS58 address or 32-byte hex",
+        "admin_account must be SS58 address or 32-byte hex",
     ))
-}
-
-fn admin_address_for_pubkey(admin_pubkey: &str) -> String {
-    ss58::pubkey_hex_to_ss58(admin_pubkey).unwrap_or_else(|| admin_pubkey.to_string())
 }
 
 async fn update_archive_citizen_status(
@@ -534,24 +525,24 @@ async fn update_archive_citizen_status(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_admin_pubkey, validate_admin_name};
+    use super::{normalize_admin_account, validate_admin_display_name};
 
     #[test]
-    fn validate_admin_name_requires_trimmed_name() {
-        assert!(validate_admin_name(" 张三 ").is_ok());
-        assert!(validate_admin_name("   ").is_err());
+    fn validate_admin_display_name_requires_trimmed_name() {
+        assert!(validate_admin_display_name(" 张三 ").is_ok());
+        assert!(validate_admin_display_name("   ").is_err());
     }
 
     #[test]
-    fn validate_admin_name_rejects_over_50_chars() {
+    fn validate_admin_display_name_rejects_over_50_chars() {
         let long_name = "名".repeat(51);
-        assert!(validate_admin_name(&long_name).is_err());
+        assert!(validate_admin_display_name(&long_name).is_err());
     }
 
     #[test]
-    fn normalize_admin_pubkey_accepts_32_byte_hex() {
+    fn normalize_admin_account_accepts_32_byte_hex() {
         let hex = format!("0x{}", "AB".repeat(32));
-        let normalized = match normalize_admin_pubkey(&hex) {
+        let normalized = match normalize_admin_account(&hex) {
             Ok(value) => value,
             Err(_) => panic!("hex pubkey should normalize"),
         };

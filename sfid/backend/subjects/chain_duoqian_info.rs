@@ -12,7 +12,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::core::chain_runtime::build_institution_registration_credential;
+use crate::core::chain_runtime::{
+    build_institution_registration_credential, is_chain_runtime_config_error,
+};
 use crate::core::response::ApiResponse;
 use crate::subjects::service::{
     can_delete_account, default_account_names_for_institution, is_default_account_name,
@@ -277,6 +279,10 @@ pub(crate) async fn app_get_institution_registration_info(
     ) {
         Ok(v) => v,
         Err(message) => {
+            if is_chain_runtime_config_error(message.as_str()) {
+                let detail = format!("链端签发配置未完成: {message}");
+                return api_error(StatusCode::SERVICE_UNAVAILABLE, 1006, detail.as_str());
+            }
             let detail = format!("institution registration credential sign failed: {message}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
         }

@@ -37,7 +37,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
     private_type: PrivateType::Sole,
     title: "个体经营",
     description: "个人经营的商户,无法人资格,由负责人完全负责。",
-    allowed_roles: SOLE_ROLES,
+    allowed_participant_roles: SOLE_ROLES,
 };
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {

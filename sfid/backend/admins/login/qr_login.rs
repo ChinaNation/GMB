@@ -14,13 +14,13 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::admins::repo;
-use crate::crypto::pubkey::same_admin_pubkey;
+use crate::crypto::pubkey::same_admin_account;
 use crate::*;
 
 use super::model::*;
 use super::signature::{
     build_admin_display_name, build_admin_display_name_from_user, build_login_qr_system_signature,
-    extract_domain_from_origin, resolve_admin_city, verify_admin_signature,
+    extract_domain_from_origin, resolve_scope_city_name, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
 
@@ -92,7 +92,7 @@ pub(crate) async fn admin_auth_qr_challenge(
         &state.db,
         &LoginChallenge {
             challenge_id: challenge_id.clone(),
-            admin_pubkey: String::new(),
+            admin_account: String::new(),
             challenge_text: challenge_text.clone(),
             challenge_token: String::new(),
             qr_aud: String::new(),
@@ -131,20 +131,20 @@ pub(crate) async fn admin_auth_qr_complete(
     Json(input): Json<AdminQrCompleteInput>,
 ) -> impl IntoResponse {
     if input.challenge_id.trim().is_empty()
-        || input.admin_pubkey.trim().is_empty()
+        || input.admin_account.trim().is_empty()
         || input.signature.trim().is_empty()
     {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "challenge_id, admin_pubkey, signature are required",
+            "challenge_id, admin_account, signature are required",
         );
     }
 
     let now = Utc::now();
     let challenge_id = input.challenge_id.trim().to_string();
     let client_session_id = input.session_id.clone();
-    let login_pubkey_raw = input.admin_pubkey.trim().to_string();
+    let login_pubkey_raw = input.admin_account.trim().to_string();
     let signer_pubkey = input
         .signer_pubkey
         .as_ref()
@@ -173,17 +173,17 @@ pub(crate) async fn admin_auth_qr_complete(
         let verify_pubkey = signer_pubkey
             .clone()
             .unwrap_or_else(|| login_pubkey_raw.clone());
-        let login_pubkey = repo::resolve_admin_pubkey_key_conn(conn, login_pubkey_raw.as_str())?
+        let login_pubkey = repo::resolve_admin_account_key_conn(conn, login_pubkey_raw.as_str())?
             .or_else(|| {
                 signer_pubkey.as_ref().and_then(|spk| {
-                    repo::resolve_admin_pubkey_key_conn(conn, spk)
+                    repo::resolve_admin_account_key_conn(conn, spk)
                         .ok()
                         .flatten()
                 })
             })
             .unwrap_or_else(|| login_pubkey_raw.clone());
-        if !same_admin_pubkey(login_pubkey.as_str(), verify_pubkey.as_str()) {
-            return Err("http:forbidden:signer_pubkey must match admin_pubkey".to_string());
+        if !same_admin_account(login_pubkey.as_str(), verify_pubkey.as_str()) {
+            return Err("http:forbidden:signer_pubkey must match admin_account".to_string());
         }
         // 中文注释:重建完整签名原文,与 citizenwallet 端 login_receipt 规则一致。
         let verify_message = crate::core::qr::build_signature_message(
@@ -196,25 +196,25 @@ pub(crate) async fn admin_auth_qr_complete(
         if !verify_admin_signature(&verify_pubkey, &verify_message, signature.as_str()) {
             warn!(
                 challenge = %challenge_id,
-                admin_pubkey = %login_pubkey_raw,
+                admin_account = %login_pubkey_raw,
                 signer_pubkey = %verify_pubkey,
                 "qr login signature verify failed"
             );
             return Err("http:unprocessable:signature verify failed".to_string());
         }
-        let admin = repo::get_admin_by_pubkey_conn(conn, login_pubkey.as_str())?
+        let admin = repo::get_admin_by_account_conn(conn, login_pubkey.as_str())?
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
-        let login_role = admin.role.clone();
+        let login_registry_org_code = admin.registry_org_code.clone();
         challenge.consumed = true;
-        challenge.admin_pubkey = login_pubkey.clone();
+        challenge.admin_account = login_pubkey.clone();
         repo::update_login_challenge_conn(conn, &challenge)?;
 
         let access_token = Uuid::new_v4().to_string();
         let expire_at = now + Duration::hours(8);
         let session = AdminSession {
             token: access_token.clone(),
-            admin_pubkey: login_pubkey.clone(),
-            role: login_role.clone(),
+            admin_account: login_pubkey.clone(),
+            registry_org_code: login_registry_org_code.clone(),
             expire_at,
             last_active_at: now,
         };
@@ -223,8 +223,8 @@ pub(crate) async fn admin_auth_qr_complete(
             session_id,
             access_token: access_token.clone(),
             expire_at,
-            admin_pubkey: login_pubkey,
-            role: login_role,
+            admin_account: login_pubkey,
+            registry_org_code: login_registry_org_code,
             created_at: now,
         };
         repo::insert_qr_login_result_conn(conn, challenge_id.as_str(), &qr_result)?;
@@ -245,11 +245,11 @@ pub(crate) async fn admin_auth_qr_complete(
         Err(err) if err == "http:gone:challenge expired" => {
             return api_error(StatusCode::GONE, 1007, "challenge expired")
         }
-        Err(err) if err == "http:forbidden:signer_pubkey must match admin_pubkey" => {
+        Err(err) if err == "http:forbidden:signer_pubkey must match admin_account" => {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
-                "signer_pubkey must match admin_pubkey",
+                "signer_pubkey must match admin_account",
             )
         }
         Err(err) if err == "http:unprocessable:signature verify failed" => {
@@ -309,22 +309,25 @@ pub(crate) async fn admin_auth_qr_result(
         if result.session_id != query.session_id.trim() {
             return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
         }
-        let admin = match repo::get_admin_by_pubkey(&state.db, &result.admin_pubkey) {
+        let admin = match repo::get_admin_by_account(&state.db, &result.admin_account) {
             Ok(v) => v,
             Err(err) => {
                 let message = format!("query admin failed: {err}");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
         };
-        let province =
-            match repo::province_scope_for_role(&state.db, &result.admin_pubkey, &result.role) {
-                Ok(v) => v,
-                Err(err) => {
-                    let message = format!("query admin scope failed: {err}");
-                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
-                }
-            };
-        let passkey_bound = match repo::admin_has_active_passkey(&state.db, &result.admin_pubkey) {
+        let province = match repo::province_scope_for_registry_org(
+            &state.db,
+            &result.admin_account,
+            &result.registry_org_code,
+        ) {
+            Ok(v) => v,
+            Err(err) => {
+                let message = format!("query admin scope failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        };
+        let passkey_bound = match repo::admin_has_active_passkey(&state.db, &result.admin_account) {
             Ok(v) => v,
             Err(err) => {
                 let message = format!("query passkey failed: {err}");
@@ -340,20 +343,20 @@ pub(crate) async fn admin_auth_qr_result(
                 access_token: Some(result.access_token.clone()),
                 expire_at: Some(result.expire_at.timestamp()),
                 admin: Some(AdminIdentifyOutput {
-                    admin_pubkey: result.admin_pubkey.clone(),
-                    role: result.role.clone(),
-                    admin_name: admin
+                    admin_account: result.admin_account.clone(),
+                    registry_org_code: result.registry_org_code.clone(),
+                    admin_display_name: admin
                         .as_ref()
                         .map(|v| build_admin_display_name_from_user(v, province.as_deref()))
                         .unwrap_or_else(|| {
                             build_admin_display_name(
-                                &result.admin_pubkey,
-                                &result.role,
+                                &result.admin_account,
+                                &result.registry_org_code,
                                 province.as_deref(),
                             )
                         }),
-                    admin_province: province,
-                    admin_city: admin.as_ref().and_then(resolve_admin_city),
+                    scope_province_name: province,
+                    scope_city_name: admin.as_ref().and_then(resolve_scope_city_name),
                     passkey_bound,
                 }),
             },

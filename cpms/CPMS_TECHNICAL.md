@@ -5,7 +5,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 当前实现基线：
 - 管理员只允许使用 `CITIZEN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；管理员 15 分钟无活动过期，操作员 30 分钟无活动过期。
-- 角色访问控制：`ADMIN / OPERATOR`。
+- 角色访问控制：`admins / operators`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
 - 行政区快照来自开发库 `sfid/backend/china/china.sqlite`；CPMS 必须离线运行，不主动联网拉取，发布包随附本地只读 `china.sqlite`。
@@ -154,7 +154,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 ## 5.3 档案列表分页与检索
 
-- 档案列表归属 `dangan` 模块，不归属操作员角色模块；`ADMIN / OPERATOR` 只是访问权限。
+- 档案列表归属 `dangan` 模块，不归属操作员角色模块；`admins / operators` 只是访问权限。
 - `GET /api/v1/archives` 使用游标分页，不接受 `page / page_size / q` 小表分页参数，也不接受 `archive_no / passport_no / name` 选择器式查询参数。
 - 默认每页 `50` 条，前端可选 `20 / 50 / 100`，后端最大限制 `100`。
 - 默认排序固定为 `created_at DESC, archive_id DESC`，cursor 由后端编码 `created_at / archive_id`，前端只透传。
@@ -231,7 +231,7 @@ CPMS 后端错误响应包含数字 `code` 和稳定业务 `error_code`。HTTP `
 
 CPMS 只有两种管理员:
 
-| 功能 | `ADMIN` | `OPERATOR` |
+| 功能 | `admins` | `operators` |
 |------|------|------|
 | 查看公民列表 | 可以 | 可以 |
 | 创建/编辑公民档案 | 可以 | 可以 |
@@ -245,7 +245,7 @@ CPMS 只有两种管理员:
 | 删除非初始管理员 | 可以 | 不可以 |
 
 后端档案业务接口统一使用 `authz::require_archive_admin`，允许管理员和操作员。
-系统设置、管理员管理继续使用 `ADMIN` 专属权限。初始化时绑定的管理员固定为
+系统设置、管理员管理继续使用 `admins` 专属权限。初始化时绑定的管理员固定为
 不可删除的初始管理员，并固定显示在管理员列表第一行；后续新增的管理员和操作员都
 只能编辑姓名，且都可以被删除。管理员总数最多 5 个，包括初始化时的 1 个和后续新增的
 最多 4 个。管理员删除为物理删除，并同步清理本机会话，只保留审计快照。
@@ -268,22 +268,22 @@ CPMS 只有两种管理员:
 公民档案删除不是物理删除。详情页点击“删除”后，CPMS 后端创建 `CITIZEN_QR_V1 / sign_request`
 删除签名请求，当前登录管理员必须使用 **citizenwallet** 扫码签名。前端扫描 `sign_response` 后提交
 `delete/complete`。删除签名二维码中的 `body.address / body.pubkey` 锁定当前登录 CPMS 管理员，
-其中 `body.pubkey` 和 payload 内的 `admin_pubkey` 必须统一为 `0x` + 64 位小写 hex；CPMS 管理员表
+其中 `body.pubkey` 和 payload 内的 `admin_account` 必须统一为 `0x` + 64 位小写 hex；CPMS 管理员表
 内部可保存裸 hex，但进入 citizenwallet 二维码前必须规范化，否则冷钱包会拒绝解析。
 冷钱包确认页的人机展示只显示档案号、管理员 SS58 地址和过期时间，`archive_id` 与原始
-`admin_pubkey` 只参与 payload 验真，不作为普通确认字段展示。
+`admin_account` 只参与 payload 验真，不作为普通确认字段展示。
 
 删除 payload 固定为:
 
 ```text
-CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_pubkey|expires_at
+CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_account|expires_at
 ```
 
 前端删除弹窗采用与登录页一致的“双栏扫码”布局：左侧展示删除签名请求二维码，右侧扫描 citizenwallet
 返回的删除签名回执。后端校验:
 
 - challenge 未过期、未消费，且绑定当前档案和当前登录管理员。
-- `sign_response.pubkey` 等于当前登录管理员 `admin_pubkey`。
+- `sign_response.pubkey` 等于当前登录管理员 `admin_account`。
 - `payload_hash` 等于删除 payload 的 SHA-256。
 - sr25519 签名验证通过。
 

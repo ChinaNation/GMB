@@ -1,7 +1,7 @@
 //! 登录会话鉴权守卫。
 //!
 //! 中文注释:会话、管理员身份和 Passkey 绑定状态只读取结构化表。
-//! 业务模块通过 `require_admin_any`、`require_federal_admin` 获取认证上下文;
+//! 业务模块通过 `require_admin_any`、`require_federal_registry` 获取认证上下文;
 //! 写操作的 Passkey/公民钱包级别由 admins::actions 的安全 grant 单独校验。
 
 use axum::http::{HeaderMap, StatusCode};
@@ -50,7 +50,7 @@ pub(super) fn admin_auth(
             return Err("http:unauthorized:invalid access token".to_string());
         };
 
-        let idle_expired = session.role == AdminRole::CityAdmin
+        let idle_expired = session.registry_org_code == RegistryOrgCode::CityRegistry
             && now > session.last_active_at + Duration::minutes(city_idle_timeout_minutes);
         if now > session.expire_at || idle_expired {
             conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
@@ -61,28 +61,37 @@ pub(super) fn admin_auth(
         session.last_active_at = now;
         repo::touch_admin_session_conn(conn, &session)?;
 
-        let admin = repo::get_admin_by_pubkey_conn(conn, &session.admin_pubkey)?
+        let admin = repo::get_admin_by_account_conn(conn, &session.admin_account)?
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
-        let admin_province =
-            repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?;
-        let admin_city = if admin.role == AdminRole::CityAdmin && !admin.city.trim().is_empty() {
-            Some(admin.city.clone())
+        let scope_province_name = repo::province_scope_for_registry_org_conn(
+            conn,
+            &admin.admin_account,
+            &admin.registry_org_code,
+        )?;
+        let scope_city_name = if admin.registry_org_code == RegistryOrgCode::CityRegistry
+            && !admin.city_name.trim().is_empty()
+        {
+            Some(admin.city_name.clone())
         } else {
             None
         };
-        let admin_name = if admin.admin_name.trim().is_empty() {
-            build_admin_display_name(&admin.admin_pubkey, &admin.role, admin_province.as_deref())
+        let admin_display_name = if admin.admin_display_name.trim().is_empty() {
+            build_admin_display_name(
+                &admin.admin_account,
+                &admin.registry_org_code,
+                scope_province_name.as_deref(),
+            )
         } else {
-            admin.admin_name.clone()
+            admin.admin_display_name.clone()
         };
-        let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_pubkey)?;
+        let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_account)?;
 
         Ok(AdminAuthContext {
-            admin_pubkey: admin.admin_pubkey,
-            role: admin.role,
-            admin_name,
-            admin_province,
-            admin_city,
+            admin_account: admin.admin_account,
+            registry_org_code: admin.registry_org_code,
+            admin_display_name,
+            scope_province_name,
+            scope_city_name,
             passkey_bound,
         })
     });
@@ -120,20 +129,20 @@ pub(crate) fn require_admin_any(
     admin_auth(state, headers)
 }
 
-/// 中文注释:注册局治理与 CPMS 授权治理只允许 FederalAdmin。
-pub(crate) fn require_federal_admin(
+/// 中文注释:注册局治理与 CPMS 授权治理只允许 FederalRegistry。
+pub(crate) fn require_federal_registry(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
     let ctx = admin_auth(state, headers)?;
-    if ctx.role != AdminRole::FederalAdmin {
+    if ctx.registry_org_code != RegistryOrgCode::FederalRegistry {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
             "federal admin required",
         ));
     }
-    if ctx.admin_province.is_none() {
+    if ctx.scope_province_name.is_none() {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,

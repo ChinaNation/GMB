@@ -18,8 +18,8 @@ import {
 interface Props {
   auth: AdminAuth;
   open: boolean;
-  lockedProvince: string | null;
-  lockedCity: string | null;
+  lockedProvinceName: string | null;
+  lockedCityName: string | null;
   onCancel: () => void;
   onCreated: (result: CreateInstitutionOutput) => void;
 }

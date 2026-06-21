@@ -15,8 +15,8 @@ import { tryEncodeSs58 } from '../utils/ss58';
 type AuditLogEntry = {
   seq: number;
   action: string;
-  actor_pubkey: string;
-  target_pubkey?: string | null;
+  actor_account: string;
+  target_account?: string | null;
   /** 结构化事实字段(后端 append_audit_log 只存事实);旧文本行/异常值回退 string */
   detail: Record<string, unknown> | string;
   created_at: string;
@@ -180,9 +180,9 @@ export const OperationRecords: React.FC<Props> = ({ auth, sfidNumber }) => {
           },
           {
             title: '操作者账户',
-            dataIndex: 'actor_pubkey',
+            dataIndex: 'actor_account',
             width: 240,
-            // 中文注释:公钥是系统的,SS58 地址才是给人看的;完整显示不截断,允许换行。
+            // 中文注释:账户给人看时优先转 SS58;完整显示不截断,允许换行。
             render: (v: string) => (
               <Typography.Text style={{ fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all' }}>
                 {tryEncodeSs58(v) || v}

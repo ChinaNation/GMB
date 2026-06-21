@@ -5,43 +5,43 @@
 
 use chrono::Utc;
 
-use crate::admins::federal_admins::{federal_admin_mains, federal_admin_province};
+use crate::admins::federal_registry_admins::{federal_registry_mains, federal_scope_province_name};
 use crate::admins::repo;
-use crate::crypto::pubkey::normalize_admin_pubkey;
+use crate::crypto::pubkey::normalize_admin_account;
 use crate::gov::service::{
     reconcile_gov_catalog_db, GovTargetKind, OfficialReconcileReport, OfficialReconcileScope,
 };
-use crate::{AdminRole, AdminUser, AppState};
+use crate::{AdminUser, AppState, RegistryOrgCode};
 
-pub(crate) fn ensure_builtin_federal_admins(state: &AppState) {
+pub(crate) fn ensure_builtin_federal_registry_admins(state: &AppState) {
     if let Err(err) = state.db.with_client(|conn| {
-        for item in federal_admin_mains() {
-            let pubkey = normalize_admin_pubkey(item.pubkey)
-                .unwrap_or_else(|| item.pubkey.trim().to_ascii_lowercase());
-            let province = federal_admin_province(item.pubkey)
-                .unwrap_or(item.province)
+        for item in federal_registry_mains() {
+            let admin_account = normalize_admin_account(item.admin_account)
+                .unwrap_or_else(|| item.admin_account.trim().to_ascii_lowercase());
+            let province = federal_scope_province_name(item.admin_account)
+                .unwrap_or(item.province_name)
                 .to_string();
-            let existing = repo::get_admin_by_pubkey_conn(conn, pubkey.as_str())?;
+            let existing = repo::get_admin_by_account_conn(conn, admin_account.as_str())?;
             let id = existing
                 .as_ref()
                 .map(|admin| admin.id)
                 .unwrap_or(repo::next_admin_id_conn(conn)?);
             let admin = AdminUser {
                 id,
-                admin_pubkey: pubkey,
-                admin_name: format!("{}联邦管理员", item.province),
-                role: AdminRole::FederalAdmin,
+                admin_account: admin_account,
+                admin_display_name: format!("{}联邦注册局管理员", item.province_name),
+                registry_org_code: RegistryOrgCode::FederalRegistry,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
                 created_at: Utc::now(),
                 updated_at: existing.and_then(|admin| admin.updated_at),
-                city: String::new(),
+                city_name: String::new(),
             };
             repo::upsert_admin_conn(conn, &admin, Some(province.as_str()))?;
         }
         Ok(())
     }) {
-        tracing::error!(error = %err, "ensure builtin federal admins failed");
+        tracing::error!(error = %err, "ensure builtin federal registry admins failed");
     }
 }
 
@@ -76,11 +76,11 @@ pub(crate) fn reconcile_official_institutions_explicit(
 pub(crate) fn append_audit_log(
     state: &AppState,
     action: &'static str,
-    actor_pubkey: &str,
+    actor_account: &str,
     target_sfid: Option<String>,
     detail: serde_json::Value,
 ) {
-    let actor = actor_pubkey.to_string();
+    let actor = actor_account.to_string();
     let action = action.to_string();
     let log_action = action.clone();
     let province_code = target_sfid

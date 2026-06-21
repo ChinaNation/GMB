@@ -32,21 +32,21 @@ CREATE TABLE IF NOT EXISTS qr_sign_keys (
 
 CREATE TABLE IF NOT EXISTS admin_users (
   user_id TEXT PRIMARY KEY,
-  admin_pubkey TEXT NOT NULL UNIQUE,
-  admin_name TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'OPERATOR')),
+  admin_account TEXT NOT NULL UNIQUE,
+  admin_display_name TEXT NOT NULL DEFAULT '',
+  user_group TEXT NOT NULL CHECK (user_group IN ('admins', 'operators')),
   immutable BOOLEAN NOT NULL DEFAULT FALSE,
   managed_key_id TEXT UNIQUE,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users (role);
+CREATE INDEX IF NOT EXISTS idx_admin_users_user_group ON admin_users (user_group);
 
 CREATE TABLE IF NOT EXISTS sessions (
   access_token TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
-  role TEXT NOT NULL,
+  user_group TEXT NOT NULL,
   expires_at BIGINT NOT NULL,
   created_at BIGINT NOT NULL
 );
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
 
 CREATE TABLE IF NOT EXISTS login_challenges (
   challenge_id TEXT PRIMARY KEY,
-  admin_pubkey TEXT NOT NULL,
+  admin_account TEXT NOT NULL,
   session_id TEXT NOT NULL,
   expire_at BIGINT NOT NULL,
   consumed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS qr_login_results (
   access_token TEXT NOT NULL,
   expires_in BIGINT NOT NULL,
   user_id TEXT NOT NULL,
-  role TEXT NOT NULL,
+  user_group TEXT NOT NULL,
   created_at BIGINT NOT NULL
 );
 
@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS archive_delete_challenges (
   archive_id TEXT NOT NULL,
   archive_no TEXT NOT NULL,
   admin_id TEXT NOT NULL,
-  admin_pubkey TEXT NOT NULL,
+  admin_account TEXT NOT NULL,
   delete_payload TEXT NOT NULL,
   expire_at BIGINT NOT NULL,
   consumed BOOLEAN NOT NULL DEFAULT FALSE,

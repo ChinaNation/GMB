@@ -5,11 +5,11 @@
 把「注册局机构」（org_code = `CITY_REGISTRY` 市注册局 / `FEDERAL_REGISTRY` 联邦注册局）的机构详情页搬进「注册局」tab，并把对应管理员列表内嵌进机构详情页。功能逻辑不变，只是把管理员列表挪进机构详情页。
 
 - 「公权机构」列表（GOV_INSTITUTION）不再显示注册局机构（CITY_REGISTRY / FEDERAL_REGISTRY）。
-- 「注册局」tab 两个子 tab 改名：`市管理员列表`→`市注册局`，`联邦管理员列表`→`联邦注册局`。
-- **市注册局**：联邦管理员 城市网格→点市→该市注册局机构详情页（内嵌本市市管理员列表，可增删改）；市管理员 直接进本市注册局机构详情页（管理员列表只读）。
-- **联邦注册局**：两角色都进全国唯一联邦注册局机构详情页；内嵌联邦管理员列表只显示登录管理员本省（逻辑不变）；联邦管理员可增删改、市管理员只读。
+- 「注册局」tab 两个子 tab 改名：`市注册局机构管理员列表`→`市注册局`，`联邦注册局机构管理员列表`→`联邦注册局`。
+- **市注册局**：联邦注册局机构管理员 城市网格→点市→该市注册局机构详情页（内嵌本市市注册局机构管理员列表，可增删改）；市注册局机构管理员 直接进本市注册局机构详情页（管理员列表只读）。
+- **联邦注册局**：两角色都进全国唯一联邦注册局机构详情页；内嵌联邦注册局机构管理员列表只显示登录管理员本省（逻辑不变）；联邦注册局机构管理员可增删改、市注册局机构管理员只读。
 - 注册局机构详情页 = 完整机构详情（机构信息+账户列表+资料库+操作记录），管理员列表插在**机构信息卡与账户列表卡之间**。其它普通机构详情页零行为变化。
-- 联邦注册局位于中枢省，现有 scope 校验会 403 拦截外联邦管理员 → 后端新增只读接口，仅返回联邦注册局这一个机构、绕过 scope。
+- 联邦注册局位于中枢省，现有 scope 校验会 403 拦截外联邦注册局机构管理员 → 后端新增只读接口，仅返回联邦注册局这一个机构、绕过 scope。
 
 ## 预计修改目录
 
@@ -19,8 +19,8 @@
 - `sfid/frontend/gov/GovDetailPage.tsx`：新增可选 props `adminListSection` / `loadDetail` / `backLabel`，onBack 改可选；普通机构零行为变化。
 - `sfid/frontend/gov/GovListTable.tsx`：GOV_INSTITUTION 列表过滤掉注册局 org_code。
 - `sfid/frontend/subjects/labels.ts`：导出 `REGISTRY_ORG_CODES` 单一源。
-- `sfid/frontend/admins/FederalAdminsView.tsx`：解析市注册局 sfid、加载联邦注册局 detail。
-- `sfid/frontend/admins/federalAdminUtils.ts`：FederalAdminSharedState 增字段。
+- `sfid/frontend/admins/RegistryAdminsView.tsx`：解析市注册局 sfid、加载联邦注册局 detail。
+- `sfid/frontend/admins/adminUtils.ts`：RegistryAdminsSharedState 增字段。
 - `sfid/frontend/admins/ProvinceDetailView.tsx`：子 tab 改名 + leaf 换成机构详情页（避免 Card 套 Card）。
 - `memory/08-tasks/`、`memory/`：任务流转与回写。
 
@@ -28,9 +28,9 @@
 
 - 公权机构列表（任一城市 / 中枢省）不再出现注册局机构。
 - 注册局 tab 两子 tab 改名为 市注册局 / 联邦注册局。
-- 三角色进入路径符合目标表（联邦管理员可增删改、市管理员只读）。
+- 三角色进入路径符合目标表（联邦注册局机构管理员可增删改、市注册局机构管理员只读）。
 - 注册局机构详情页：管理员列表位于机构信息卡与账户列表卡之间。
-- 联邦注册局：外联邦管理员可正常读取机构详情（200），管理员列表仅本省。
+- 联邦注册局：外联邦注册局机构管理员可正常读取机构详情（200），管理员列表仅本省。
 - 普通机构详情页零行为变化（无管理员列表）。
 - 后端 `cargo check` + `cargo test` 通过；前端 `npm run build`（含 tsc）0 error。
 
@@ -43,16 +43,16 @@
 - 前端 `gov/api.ts` 新增 `getFederalRegistry`。
 - 前端 `gov/GovListTable.tsx`：GOV_INSTITUTION 列表用 `visibleRows` 过滤掉注册局 org_code（公安局列表不受影响）。
 - 前端 `gov/GovDetailPage.tsx`：新增可选 props `adminListSection`/`loadDetail`/`backLabel`，`onBack` 改可选；管理员列表渲染在机构信息卡与账户列表卡之间；普通机构不传这些 props → 零行为变化。
-- 前端 `admins/federalAdminUtils.ts`：`FederalAdminSharedState` 增 4 字段（federalRegistryDetail/Loading、cityRegistrySfid/Loading）。
-- 前端 `admins/FederalAdminsView.tsx`：新增两个 effect——挂载时加载联邦注册局 detail（scope-bypass）；按活动省市解析市注册局 sfid（从 official 目录筛 CITY_REGISTRY）。
-- 前端 `admins/ProvinceDetailView.tsx`：子 tab 改名为「市注册局 / 联邦注册局」；leaf 改为 GovDetailPage + 内嵌管理员列表（CityFederalAdminsView / FederalAdminSubTab，均包 inner Card）；用 `useCallback` 稳定 `loadFederalRegistry` 复用预加载 detail，避免重复请求；联邦管理员城市网格→点市→详情、市管理员直接进本市详情、返回按钮按角色隐藏。
+- 前端 `admins/adminUtils.ts`：`RegistryAdminsSharedState` 增 4 字段（federalRegistryDetail/Loading、cityRegistrySfid/Loading）。
+- 前端 `admins/RegistryAdminsView.tsx`：新增两个 effect——挂载时加载联邦注册局 detail（scope-bypass）；按活动省市解析市注册局 sfid（从 official 目录筛 CITY_REGISTRY）。
+- 前端 `admins/ProvinceDetailView.tsx`：子 tab 改名为「市注册局 / 联邦注册局」；leaf 改为 GovDetailPage + 内嵌管理员列表（CityRegistryAdminsView / FederalRegistryAdminSubTab，均包 inner Card）；用 `useCallback` 稳定 `loadFederalRegistry` 复用预加载 detail，避免重复请求；联邦注册局机构管理员城市网格→点市→详情、市注册局机构管理员直接进本市详情、返回按钮按角色隐藏。
 
 ## 验证
 
 - `cd /Users/rhett/GMB/sfid/backend && cargo check` 通过（exit 0）。
 - `cd /Users/rhett/GMB/sfid/backend && cargo test` 通过（52 passed / 0 failed）。
 - `cd /Users/rhett/GMB/sfid/frontend && npm run build`（tsc -b + vite build）通过，0 type error。
-- 待 user 真机手测三角色路径（见任务卡验收表）+ 确认外联邦管理员可读联邦注册局（200）。
+- 待 user 真机手测三角色路径（见任务卡验收表）+ 确认外联邦注册局机构管理员可读联邦注册局（200）。
 
 ## 迭代二（2026-06-08，user 反馈后）
 
@@ -66,22 +66,22 @@
    - `main.rs` 删除上一版多余的 `get_federal_registry_with_accounts` DB 方法。
 2. **注册局子 tab 提升为顶级 tab**（删 `注册局` tab + 两个子 tab）：
    - `auth/AuthContext.tsx`：`canViewSystemSettings` → `canViewCityRegistry` + `canViewFederalRegistry`。
-   - `App.tsx`：ActiveView 改 `city-registry`/`federal-registry`；tab 顺序 …公安局 → **市注册局 → 联邦注册局**；passkey 未绑定按角色强制进对应注册局 tab（联邦→federal-registry，市级→city-registry）；两个 FederalAdminsView 实例按 viewResetToken 加 key。
-   - `admins/FederalAdminsView.tsx`：mode 改 `list|city-registry|federal-registry`，effect 按新 mode 分流，dispatch 到 CityRegistryView/FederalRegistryView。
+   - `App.tsx`：ActiveView 改 `city-registry`/`federal-registry`；tab 顺序 …公安局 → **市注册局 → 联邦注册局**；passkey 未绑定按角色强制进对应注册局 tab（联邦→federal-registry，市级→city-registry）；两个 RegistryAdminsView 实例按 viewResetToken 加 key。
+   - `admins/RegistryAdminsView.tsx`：mode 改 `list|city-registry|federal-registry`，effect 按新 mode 分流，dispatch 到 CityRegistryView/FederalRegistryView。
    - `admins/ProvinceDetailView.tsx`：拆成 `CityRegistryView` + `FederalRegistryView`（删 SubTabBar/子 tab）。
-   - `admins/FederalAdminsView.tsx`：旧 `mode="system-settings"` → `mode="city-registry"`。
-3. **管理员列表表头布局**：CityFederalAdminsView / FederalAdminSubTab 改为 `Card`，title=「市管理员列表 / 联邦管理员列表」+ 计数（n/上限）紧随其右，`extra`=新增按钮置于统一行最右；删除原内部表头行 + 去掉标题里的计数括号。
+   - `admins/RegistryAdminsView.tsx`：旧 `mode="system-settings"` → `mode="city-registry"`。
+3. **管理员列表表头布局**：CityRegistryAdminsView / FederalRegistryAdminSubTab 改为 `Card`，title=「市注册局机构管理员列表 / 联邦注册局机构管理员列表」+ 计数（n/上限）紧随其右，`extra`=新增按钮置于统一行最右；删除原内部表头行 + 去掉标题里的计数括号。
 
 ### 迭代二验证
 - 后端 `cargo check` + `cargo test`（52 passed）通过。
 - 前端 `npm run build`（tsc + vite）通过，0 type error。
-- 注意:联邦注册局机构在 subjects 表 org_code 仍是 `PUBLIC_ORG`(本次按 sfid_number 定位绕过),故 GovListTable 的 FEDERAL_REGISTRY 过滤对它不生效——中枢联邦管理员的「公权机构」列表里它仍会以"公权机构"出现(仅影响中枢省;5 个总统府联邦局 org_code 缺映射是既有问题,未扩边)。如需一并清掉,后续单列任务补 `org_code_for_constant_name` 的 5 个联邦局分支 + reconcile 重跑。
-- user 确认（迭代二收尾）：只改注册局即可；另外 4 个总统府联邦局保持现状不动；联邦注册局留在中枢省/锦程市公权列表是可接受的（"正好"）。核实 china.sqlite：中枢省(ZS) 001 市=锦程市，联邦注册局正落于此，故锦程市市管理员与中枢省联邦管理员都能在公权列表看到它。
+- 注意:联邦注册局机构在 subjects 表 org_code 仍是 `PUBLIC_ORG`(本次按 sfid_number 定位绕过),故 GovListTable 的 FEDERAL_REGISTRY 过滤对它不生效——中枢联邦注册局机构管理员的「公权机构」列表里它仍会以"公权机构"出现(仅影响中枢省;5 个总统府联邦局 org_code 缺映射是既有问题,未扩边)。如需一并清掉,后续单列任务补 `org_code_for_constant_name` 的 5 个联邦局分支 + reconcile 重跑。
+- user 确认（迭代二收尾）：只改注册局即可；另外 4 个总统府联邦局保持现状不动；联邦注册局留在中枢省/锦程市公权列表是可接受的（"正好"）。核实 china.sqlite：中枢省(ZS) 001 市=锦程市，联邦注册局正落于此，故锦程市市注册局机构管理员与中枢省联邦注册局机构管理员都能在公权列表看到它。
 
 ## 迭代三（2026-06-08，管理员列表表头微调）
 
-1. **FederalAdminSubTab（联邦注册局）**：title 改「联邦管理员列表 · {province}」（中点 `·` 用 `Space align="center"` 垂直居中）；计数「联邦管理员：n/5」→「用户数：n/5」移到 `extra` 内、置于「新增联邦管理员」按钮左侧。
-2. **CityFederalAdminsView（市注册局）**：title 改回纯「市管理员列表」；计数「本市市管理员：n/30」→「用户数：n/30」移到 `extra` 内、置于「新增市管理员」按钮左侧。
+1. **FederalRegistryAdminSubTab（联邦注册局）**：title 改「联邦注册局机构管理员列表 · {province}」（中点 `·` 用 `Space align="center"` 垂直居中）；计数「联邦注册局机构管理员：n/5」→「用户数：n/5」移到 `extra` 内、置于「新增联邦注册局机构管理员」按钮左侧。
+2. **CityRegistryAdminsView（市注册局）**：title 改回纯「市注册局机构管理员列表」；计数「本市市注册局机构管理员：n/30」→「用户数：n/30」移到 `extra` 内、置于「新增市注册局机构管理员」按钮左侧。
 3. **机构类型显示逻辑问题（item 3，仅答疑未改码）**：「机构类型」= `INSTITUTION_CODE_LABEL[institution_code]` + ` / ` + `ORG_CODE_LABEL[org_code]`，后半段恒为 org_code 细类标签；`公权机构` 是 `PUBLIC_ORG` 通用兜底。联邦注册局显示「政府/公权机构」即因 org_code=PUBLIC_ORG。是否改为「政府/联邦注册局」留待 user 定（方案 B 需补 org_code 映射 + 升 GOV_TEMPLATE_VERSION，副作用会从公权列表隐藏它，除非把 GovListTable 过滤改为只过滤 CITY_REGISTRY）。
 
 ### 迭代三验证
@@ -102,4 +102,3 @@ user 发现不止注册局，连「中华民族联邦共和国住房与城镇建
 - 前端 `tsc -b` 通过（exit 0）。
 - **部署 gotcha（必须执行才生效）**：org_code 重写靠 reconcile，**重建后端后须跑一次 gov 目录对账**——`ensure-gov`（v4 已使其不 skip，会自动检出 org_code mismatch 并 force 重写）或 `init-gov`（无条件 force_row_sync）。`serve` 启动本身不触发对账。reconcile 后 manifest_version 变化会顺带让前端公权列表缓存失效、重新拉到正确细类。
 - 待 user 真机验证：跑 ensure-gov 后，住房与城镇建设部/交通运输部/联邦注册局/各省联邦政府 的「机构类型」显示真实细类（不再"公权机构"）。
-

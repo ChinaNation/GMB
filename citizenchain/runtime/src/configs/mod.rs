@@ -173,6 +173,11 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             // 中文注释:任何外部 extrinsic 直接打到 pallet_assets 全部不入块,
             // 这是用户代币治理唯一入口铁律的链端兜底。
             RuntimeCall::Assets(_) => false,
+            // 未启用模块:onchain-issuance(ADR-011 用户代币,当前为空壳,任务卡 A/B 实装前)
+            // 与 offchain-transaction(链下清算行,业务未启用)一律 reject 外部 extrinsic,
+            // 保留 pallet 与 storage;日后启用只需删除对应分支并走一次 setCode,无需重新创世。
+            RuntimeCall::OnchainIssuance(_) => false,
+            RuntimeCall::OffchainTransaction(_) => false,
             _ => true,
         }
     }
@@ -1167,7 +1172,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
             .map(|info| (info.sfid_number.to_vec(), info.account_name.to_vec()))
     }
 
-    fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
+    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
         let id: organization_manage::SfidNumberOf<Runtime> =
             sfid_number.to_vec().try_into().ok()?;
         let an: organization_manage::AccountNameOf<Runtime> =
@@ -1188,10 +1193,10 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         }
 
         // B 阶段(personal-manage 拆分)起,旧多钱账户 mirror 已删除;
-        // 个人多签状态查询走 personal-manage::PersonalDuoqians。
+        // 个人多签状态查询走 personal-manage::PersonalAccounts。
         matches!(
-            personal_manage::PersonalDuoqians::<Runtime>::get(addr).map(|a| a.status),
-            Some(personal_manage::DuoqianStatus::Active)
+            personal_manage::PersonalAccounts::<Runtime>::get(addr).map(|a| a.status),
+            Some(personal_manage::PersonalStatus::Active)
         )
     }
 

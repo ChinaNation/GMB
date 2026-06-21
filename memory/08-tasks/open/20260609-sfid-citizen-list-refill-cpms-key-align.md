@@ -28,7 +28,7 @@
 - [x] `sfid/frontend/gov/GovDetailPage.tsx`：onGenerateCpms 保持 grant payload `{province,city,institution}` 不变（passkey 公民钱包签名内容不动），generate 请求体增 `sfid_number: inst.sfid_number`；loadCpms 真错误改 `notice.error` 提示、不再静默置 null（返回 null=未生成仍正常置空）。
 - [x] `sfid/frontend/cpms/api.ts`：`generateCpmsInstallQr` 入参增 `sfid_number: string`；顺手修正 getCpmsSiteByInstitution 过时注释。
 - [x] `sfid/backend/cpms/model.rs`：`GenerateCpmsInstallInput` 增 `sfid_number: String`（保留 province/city/institution 供 grant 绑定）。
-- [x] `sfid/backend/cpms/handler.rs`：新增 `find_cpms_target_institution_by_sfid(sfid_number)`（按 subjects 主键 sfid 查 PUBLIC/ACTIVE，返回省/市/编码/名称）；`generate_cpms_install_qr` 改用 `input.sfid_number` 查机构+校验 scope（sheng admin: institution.province==ctx.admin_province）+ 以该 sfid 写 `CpmsSiteKeys.sfid_number`；删除三元组解析写入键的旧 `find_cpms_target_institution`（无其它调用者）+ 一并删除仅此处用的 `MAX_PROVINCE/CITY/INSTITUTION_CHARS` 常量。grant_payload 仍取 `{province,city,institution}` 不变。
+- [x] `sfid/backend/cpms/handler.rs`：新增 `find_cpms_target_institution_by_sfid(sfid_number)`（按 subjects 主键 sfid 查 PUBLIC/ACTIVE，返回省/市/编码/名称）；`generate_cpms_install_qr` 改用 `input.sfid_number` 查机构+校验 scope（机构 `province_name` 必须等于 `ctx.scope_province_name`）+ 以该 sfid 写 `CpmsSiteKeys.sfid_number`；删除三元组解析写入键的旧 `find_cpms_target_institution`（无其它调用者）+ 一并删除仅此处用的长度常量。grant_payload 取 `province_name / city_name / institution`。
 
 ## 验收
 - 缺陷 1：注册局点「新增身份ID绑定」走完流程 → 列表自动出现新公民、搜索框回填新身份ID。

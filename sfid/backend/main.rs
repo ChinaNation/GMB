@@ -10,7 +10,6 @@ use chrono::{DateTime, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;
 use serde::Serialize;
-use sp_core::Pair;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -19,6 +18,7 @@ mod accounts;
 mod admins;
 mod audit;
 mod china;
+mod citizenapp;
 mod citizens;
 mod core;
 mod cpms;
@@ -30,7 +30,6 @@ mod number;
 mod private;
 mod scope;
 mod subjects;
-mod citizenapp;
 
 #[cfg(test)]
 mod genesis {
@@ -45,7 +44,7 @@ pub(crate) use crate::core::runtime_ops::*;
 pub(crate) use crate::core::{db::Db, secret::SensitiveSeed};
 pub(crate) use admins::login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_federal_admin,
+    require_federal_registry,
 };
 pub(crate) use admins::model::*;
 pub(crate) use citizens::model::*;
@@ -1597,7 +1596,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
 				                                    COALESCE(ac.account_count, 0),
-				                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+				                                    a.admin_display_name, a.registry_org_code, s.sfid_full_name, s.sfid_short_name,
 				                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
 				                                    s.education_type,
 				                                    s.status
@@ -1611,7 +1610,7 @@ impl Db {
 	                                  AND ($2::text IS NULL OR city_code = $2)
 	                                GROUP BY province_code, sfid_number
 	                             ) ac ON ac.province_code = s.province_code AND ac.sfid_number = s.sfid_number
-	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               {filter_clause}
 	                               AND ($6::text IS NULL OR s.private_type = $6)
@@ -1725,7 +1724,7 @@ impl Db {
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
                                     s.parent_sfid_number, s.created_by, s.created_at,
                                     COALESCE(ac.account_count, 0),
-                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+                                    a.admin_display_name, a.registry_org_code, s.sfid_full_name, s.sfid_short_name,
                                     COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
                                     s.education_type, s.status,
                                     NULL::text, NULL::text, NULL::boolean
@@ -1735,7 +1734,7 @@ impl Db {
                         FROM accounts
                         GROUP BY sfid_number
                      ) ac ON ac.sfid_number = s.sfid_number
-                     LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+                     LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
                      WHERE s.kind = 'PUBLIC'
 	                       AND s.status = 'ACTIVE'
 	                       AND s.institution_code = 'JY'
@@ -1780,7 +1779,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+			                                    a.admin_display_name, a.registry_org_code, s.sfid_full_name, s.sfid_short_name,
 			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.education_type,
 			                                    s.status, cs.status, cs.install_token_status,
@@ -1794,7 +1793,7 @@ impl Db {
 	                                  AND ($2::text IS NULL OR city_code = $2)
 	                                GROUP BY province_code, sfid_number
 		                             ) ac ON ac.province_code = s.province_code AND ac.sfid_number = s.sfid_number
-		                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+		                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
 		                             LEFT JOIN cpms_sites cs ON cs.sfid_number = s.sfid_number
 	                             WHERE s.kind = 'PUBLIC'
 	                               AND s.category = 'PUBLIC_SECURITY'
@@ -1845,7 +1844,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_sfid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.role, s.sfid_full_name, s.sfid_short_name,
+			                                    a.admin_display_name, a.registry_org_code, s.sfid_full_name, s.sfid_short_name,
 			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''), s.org_code,
 			                                    s.education_type,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean
@@ -1859,7 +1858,7 @@ impl Db {
 	                                  AND ($2::text IS NULL OR city_code = $2)
 	                                GROUP BY province_code, sfid_number
 	                             ) ac ON ac.province_code = s.province_code AND ac.sfid_number = s.sfid_number
-	                             LEFT JOIN admins a ON lower(a.admin_pubkey) = lower(s.created_by)
+	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               AND s.status = 'ACTIVE'
 	                               AND (
@@ -2628,27 +2627,12 @@ fn main() {
     let redis_client = RedisClient::open(redis_url.as_str())
         .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
 
-    // 中文注释:SFID_SIGNING_SEED_HEX 是本部署用于签发链端凭证的 sr25519 私钥。
-    // 链端不会信任环境变量本身,只会按 issuer_main_account 的 admins 真源确认
-    // SFID_RUNTIME_SIGNER_PUBKEY 是否属于签发机构管理员。
+    // 中文注释:SFID 是联邦注册局运维的中心化独立系统,启动阶段只校验本地
+    // 主签名密钥格式;链端签发机构/主账户/签名公钥只在链交互路径按需校验。
     {
         let seed_hex = required_env("SFID_SIGNING_SEED_HEX");
-        let signer = crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
+        crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
             .unwrap_or_else(|e| panic!("invalid SFID_SIGNING_SEED_HEX: {e}"));
-        let issuer_sfid_number = required_env("SFID_RUNTIME_ISSUER_SFID_NUMBER");
-        if issuer_sfid_number.trim().is_empty() {
-            panic!("SFID_RUNTIME_ISSUER_SFID_NUMBER must not be empty");
-        }
-        let issuer_main_account = required_env("SFID_RUNTIME_ISSUER_MAIN_ACCOUNT");
-        admins::login::parse_sr25519_pubkey_bytes(issuer_main_account.as_str()).unwrap_or_else(
-            || panic!("SFID_RUNTIME_ISSUER_MAIN_ACCOUNT must be a 32-byte account hex"),
-        );
-        let signer_pubkey = required_env("SFID_RUNTIME_SIGNER_PUBKEY");
-        let signer_pubkey_bytes = admins::login::parse_sr25519_pubkey_bytes(signer_pubkey.as_str())
-            .unwrap_or_else(|| panic!("SFID_RUNTIME_SIGNER_PUBKEY must be a 32-byte pubkey hex"));
-        if signer.public().0 != signer_pubkey_bytes {
-            panic!("SFID_RUNTIME_SIGNER_PUBKEY does not match SFID_SIGNING_SEED_HEX public key");
-        }
     }
     let database_url = required_env("DATABASE_URL");
     if database_url
@@ -2669,7 +2653,7 @@ fn main() {
         db,
         rate_limit_redis: Arc::new(redis_client),
     };
-    ensure_builtin_federal_admins(&state);
+    ensure_builtin_federal_registry_admins(&state);
     info!("initialized database state with defaults");
     if run_gov_directory_command(&state, command.clone()) {
         return;
@@ -2737,10 +2721,13 @@ fn main() {
             );
 
         let admin_routes = Router::new()
-            .route("/api/v1/admin/city-admins", get(admins::list_city_admins))
             .route(
-                "/api/v1/admin/city-admins/:id",
-                patch(admins::actions::update_city_admin_login_state),
+                "/api/v1/admin/city-registry-admins",
+                get(admins::list_city_registry_admins),
+            )
+            .route(
+                "/api/v1/admin/city-registry-admins/:id",
+                patch(admins::actions::update_city_registry_login_state),
             )
             .route(
                 "/api/v1/admin/passkeys/register/start",
@@ -2763,12 +2750,12 @@ fn main() {
                 post(admins::actions::commit_admin_action),
             )
             .route(
-                "/api/v1/admin/federal-admins",
-                get(admins::list_federal_admins),
+                "/api/v1/admin/federal-registry-admins",
+                get(admins::list_federal_registry_admins),
             )
             .route(
-                "/api/v1/admin/federal-admins/:id",
-                patch(admins::actions::update_federal_admin_login_state),
+                "/api/v1/admin/federal-registry-admins/:id",
+                patch(admins::actions::update_federal_registry_login_state),
             )
             .route("/api/v1/admin/cpms-keys", get(cpms::list_cpms_keys))
             .route(
@@ -2907,7 +2894,7 @@ fn main() {
                 "/api/v1/institutions/official",
                 get(gov::handler::list_official_institutions),
             )
-            // 联邦注册局机构详情(只读,绕过 scope,所有联邦管理员可读)
+            // 联邦注册局机构详情(只读,绕过 scope,所有联邦注册局管理员可读)
             .route(
                 "/api/v1/institutions/federal-registry",
                 get(subjects::admin::get_federal_registry),
@@ -3033,8 +3020,8 @@ fn main() {
             .unwrap_or_else(|e| panic!("invalid SFID Passkey configuration: {e}"));
         info!("passkey webauthn configuration validated");
 
-        // 中文注释:联邦管理员采用同级模型;43 个初始联邦管理员只作为
-        // 不可删除安全根,新增联邦管理员走 admins 安全动作落本地管理表。
+        // 中文注释:联邦注册局管理员采用同级模型;43 个初始联邦注册局管理员只作为
+        // 不可删除安全根,新增联邦注册局管理员走 admins 安全动作落本地管理表。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
         let addr = resolve_backend_bind_addr().expect("resolve sfid backend bind address");
@@ -3092,12 +3079,16 @@ fn sfid_error_code(status: StatusCode, message: &str) -> &'static str {
         "cpms_pubkey does not match installed CPMS" => "SFID_CITIZEN_ARCHIVE_PUBKEY_MISMATCH",
         "qr expired" => "SFID_CITIZEN_QR_EXPIRED",
         "qr header invalid" => "SFID_CITIZEN_QR_HEADER_INVALID",
-        "admin pubkey already exists as federal admin" => {
-            "SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN"
+        "admin admin_account already exists as federal admin" => {
+            "SFID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"
         }
-        "admin pubkey already exists as city admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN",
-        "federal admin province limit reached" => "SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED",
-        "city admin city limit reached" => "SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED",
+        "admin admin_account already exists as city admin" => {
+            "SFID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY"
+        }
+        "federal admin province limit reached" => {
+            "SFID_ADMIN_FEDERAL_REGISTRY_PROVINCE_LIMIT_REACHED"
+        }
+        "city admin city limit reached" => "SFID_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED",
         "passkey required" => "SFID_ADMIN_PASSKEY_REQUIRED",
         "security grant required" => "SFID_ADMIN_SECURITY_GRANT_REQUIRED",
         _ if status == StatusCode::UNAUTHORIZED => "SFID_AUTH_UNAUTHORIZED",

@@ -20,7 +20,7 @@
 3. 教育机构新增表单：主体属性 G/S/F 三选；G → p1 锁「0 非盈利」；S → p1 可选 0/1；F → 先选「上级法人属性」(G/S)：上级=G 锁 0，上级=S 再选上级盈利属性、F 的 p1 跟随。上级法人属性仅推导 p1，不在创建时关联具体机构（详情页 search-parents 流程不动）。机构锁 JY，学校名称/法定代表人必填。
 4. 公权页面新增按钮整个删除（手动新增本来只有 JY）；私权机构选项删 JY（剩 ZG/TG）。
 
-后端创建链路零改动（JY 市管理员限制、G 强制 p1="0" 由 generator.rs 硬规则保证）；唯一后端改动是 /api/v1/institution/list 过滤。
+后端创建链路零改动（JY 市注册局机构管理员限制、G 强制 p1="0" 由 generator.rs 硬规则保证）；唯一后端改动是 /api/v1/institution/list 过滤。
 
 ## 实施清单
 
@@ -35,7 +35,7 @@
 - [x] education/ 新模块：api.ts（listEducationInstitutions=category=EDUCATION_INSTITUTION + 创建三件套复制 private）/ EducationCreateModal / EducationListTable（去清算行列、加主体属性列含盈利标注）/ EducationView（精确搜索形态，详情复用 gov/GovDetailPage 调度：S/F→PrivateDetailLayout 可编辑、G→只读；创建成功跳详情）
 - [x] 删 gov/GovCreateModal.tsx；GovView 删新增按钮/createOpen/createLabel；gov/api.ts 删 checkInstitutionName/createInstitution/uploadLegalRepresentativePhoto 及 grant 相关 import
 - [x] private/PrivateCreateModal 写死 category="PRIVATE_INSTITUTION" 删透传；PrivateView 同步简化
-- [x] App.tsx：education tab 插 private 与 gov 之间 + routedView 分支（387 行 ≤400）；AuthContext 加 canViewEducation（联邦/市管理员）
+- [x] App.tsx：education tab 插 private 与 gov 之间 + routedView 分支（387 行 ≤400）；AuthContext 加 canViewEducation（联邦注册局机构管理员/市注册局机构管理员）
 - [x] tsconfig.json include 加 education
 
 ### 文档
@@ -55,7 +55,7 @@
 ## 待用户端到端 QA
 
 1. tab 顺序：首页 → 私权机构 → **教育机构** → 公权机构 → 公安局 → 市注册局 → 联邦注册局。
-2. 教育 tab 新增（市管理员）：G 锁非盈利；S 可选 0/1；F 选上级=公法人锁 0、上级=私法人时 p1 跟随上级盈利属性；机构锁「教育委员会 (JY)」；学校名称查重（G 需先选市）+ 法定代表人必填；创建成功跳详情（S 补企业类型、F 关联所属法人、G 只读）。
+2. 教育 tab 新增（市注册局机构管理员）：G 锁非盈利；S 可选 0/1；F 选上级=公法人锁 0、上级=私法人时 p1 跟随上级盈利属性；机构锁「教育委员会 (JY)」；学校名称查重（G 需先选市）+ 法定代表人必填；创建成功跳详情（S 补企业类型、F 关联所属法人、G 只读）。
 3. 教育 tab 搜索：按学校名/SFID 命中新建 G/S/F 学校。
 4. 私权 tab：新增选项只剩 ZG/TG；搜 JY 学校名返回空。
 5. 公权 tab：市详情页无「新增」按钮；公民教育委员会/国家教育委员会监管本体仍在目录。

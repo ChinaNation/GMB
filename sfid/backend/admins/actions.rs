@@ -17,12 +17,12 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use webauthn_rs::prelude::{PublicKeyCredential, RequestChallengeResponse};
 
-use crate::admins::city_admins::{
-    can_manage_city_admin_conn, city_admin_row_from_user_conn, count_city_admins_in_city_conn,
-    ensure_city_in_creator_province_conn, find_city_admin_by_id_conn, MAX_ADMIN_NAME_CHARS,
-    MAX_CITY_ADMINS_PER_CITY,
+use crate::admins::city_registry_admins::{
+    can_manage_city_registry_conn, city_registry_row_from_user_conn,
+    count_city_registry_admins_in_city_conn, ensure_city_in_creator_province_conn,
+    find_city_registry_by_id_conn, MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
 };
-use crate::admins::federal_admins::federal_admin_province;
+use crate::admins::federal_registry_admins::federal_scope_province_name;
 use crate::admins::login::AdminAuthContext;
 use crate::admins::operation_auth::{
     ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
@@ -35,11 +35,11 @@ use crate::admins::passkeys::{
 use crate::admins::repo;
 use crate::admins::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::qr::{build_sign_request, display_account, display_field as field};
-use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
+use crate::crypto::pubkey::{normalize_admin_account, same_admin_account};
 use crate::*;
 
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
-const MAX_FEDERAL_ADMINS_PER_PROVINCE: usize = 5;
+const MAX_FEDERAL_REGISTRYS_PER_PROVINCE: usize = 5;
 pub(crate) const ADMIN_SECURITY_GRANT_HEADER: &str = "x-sfid-security-grant";
 
 #[derive(Debug, Deserialize)]
@@ -88,40 +88,40 @@ pub(crate) struct PrepareAdminActionOutput {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct CityAdminIdPayload {
+struct CityRegistryIdPayload {
     id: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateCityAdminActionPayload {
+struct UpdateCityRegistryActionPayload {
     id: u64,
     #[serde(default)]
-    admin_name: Option<String>,
+    admin_display_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CreateFederalAdminActionPayload {
-    admin_pubkey: String,
-    admin_name: String,
+struct CreateFederalRegistryActionPayload {
+    admin_account: String,
+    admin_display_name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateFederalAdminActionPayload {
+struct UpdateFederalRegistryActionPayload {
     id: u64,
-    admin_name: String,
+    admin_display_name: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateAdminNameInput {
-    admin_name: String,
+    admin_display_name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct FederalAdminIdPayload {
+struct FederalRegistryIdPayload {
     id: u64,
 }
 
@@ -152,7 +152,7 @@ pub(crate) async fn prepare_admin_action(
             "login state action cannot be prepared",
         );
     }
-    let passkeys = match active_passkeys(&state.db, ctx.admin_pubkey.as_str()) {
+    let passkeys = match active_passkeys(&state.db, ctx.admin_account.as_str()) {
         Ok(v) => v,
         Err(err) => {
             let message = format!("query passkeys failed: {err}");
@@ -190,7 +190,7 @@ pub(crate) async fn prepare_admin_action(
     let now = Utc::now();
     let expires_at = now + Duration::seconds(ADMIN_ACTION_TTL_SECONDS);
     let action_id = format!("sfid-admin-action-{}", Uuid::new_v4());
-    let province = ctx.admin_province.clone().unwrap_or_default();
+    let province = ctx.scope_province_name.clone().unwrap_or_default();
     let request_hash = hash_json(&input.payload);
     let (payload_text, payload_hash, sign_request) =
         if preview.auth_type == AdminOperationAuth::PasskeyChallenge {
@@ -199,7 +199,7 @@ pub(crate) async fn prepare_admin_action(
                 qr_proto: crate::core::qr::CITIZEN_QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
-                actor_pubkey: ctx.admin_pubkey.as_str(),
+                actor_account: ctx.admin_account.as_str(),
                 actor_province_name: province.as_str(),
                 target: preview.target.as_str(),
                 request_hash: request_hash.as_str(),
@@ -212,7 +212,7 @@ pub(crate) async fn prepare_admin_action(
                 action_id.as_str(),
                 now.timestamp(),
                 expires_at.timestamp(),
-                ctx.admin_pubkey.as_str(),
+                ctx.admin_account.as_str(),
                 payload_text.as_str(),
                 input.action_type.label(),
                 preview.display_fields.clone(),
@@ -227,10 +227,10 @@ pub(crate) async fn prepare_admin_action(
     let challenge = AdminActionChallenge {
         action_id: action_id.clone(),
         action_type: input.action_type.as_str().to_string(),
-        actor_pubkey: ctx.admin_pubkey.clone(),
-        actor_role: ctx.role.clone(),
+        actor_account: ctx.admin_account.clone(),
+        actor_registry_org_code: ctx.registry_org_code.clone(),
         actor_province_name: province,
-        actor_city_name: ctx.admin_city.clone(),
+        actor_city_name: ctx.scope_city_name.clone(),
         auth_type: preview.auth_type.clone(),
         target: preview.target,
         payload_text,
@@ -298,7 +298,7 @@ pub(crate) async fn commit_admin_action(
             "admin action expired",
         );
     }
-    if !same_admin_pubkey(challenge.actor_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
+    if !same_admin_account(challenge.actor_account.as_str(), ctx.admin_account.as_str()) {
         return api_error(StatusCode::FORBIDDEN, 1003, "admin action owner mismatch");
     }
     let action_type = match parse_action_type(challenge.action_type.as_str()) {
@@ -349,7 +349,7 @@ pub(crate) async fn commit_admin_action(
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "payload_hash is required"),
         };
         if let Err(resp) = verify_citizen_wallet_signature(
-            ctx.admin_pubkey.as_str(),
+            ctx.admin_account.as_str(),
             signer_pubkey,
             signature,
             payload_hash,
@@ -366,7 +366,7 @@ pub(crate) async fn commit_admin_action(
         move |conn| {
             update_passkey_usage_conn(
                 conn,
-                ctx.admin_pubkey.as_str(),
+                ctx.admin_account.as_str(),
                 &assertion,
                 &auth_result,
                 now,
@@ -390,10 +390,10 @@ pub(crate) async fn commit_admin_action(
                 let grant = AdminSecurityGrant {
                     grant_id: grant_id.clone(),
                     action_type: action_type.as_str().to_string(),
-                    actor_pubkey: ctx.admin_pubkey.clone(),
-                    actor_role: ctx.role.clone(),
-                    actor_province_name: ctx.admin_province.clone().unwrap_or_default(),
-                    actor_city_name: ctx.admin_city.clone(),
+                    actor_account: ctx.admin_account.clone(),
+                    actor_registry_org_code: ctx.registry_org_code.clone(),
+                    actor_province_name: ctx.scope_province_name.clone().unwrap_or_default(),
+                    actor_city_name: ctx.scope_city_name.clone(),
                     auth_type: current.auth_type.clone(),
                     target: current.target.clone(),
                     payload_hash: hash_json(&current.request_payload),
@@ -426,7 +426,7 @@ pub(crate) async fn commit_admin_action(
     .into_response()
 }
 
-pub(crate) async fn update_city_admin_login_state(
+pub(crate) async fn update_city_registry_login_state(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<u64>,
@@ -436,17 +436,17 @@ pub(crate) async fn update_city_admin_login_state(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action_type = AdminActionType::UpdateCityAdmin;
+    let action_type = AdminActionType::UpdateCityRegistry;
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
-    let payload = UpdateCityAdminActionPayload {
+    let payload = UpdateCityRegistryActionPayload {
         id,
-        admin_name: Some(input.admin_name),
+        admin_display_name: Some(input.admin_display_name),
     };
     let result = state
         .db
-        .with_client(move |conn| apply_update_city_admin_conn(conn, &ctx, &payload));
+        .with_client(move |conn| apply_update_city_registry_conn(conn, &ctx, &payload));
     let data = match result {
         Ok(v) => v,
         Err(err) => return admin_action_error(err),
@@ -459,7 +459,7 @@ pub(crate) async fn update_city_admin_login_state(
     .into_response()
 }
 
-pub(crate) async fn update_federal_admin_login_state(
+pub(crate) async fn update_federal_registry_login_state(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<u64>,
@@ -469,17 +469,17 @@ pub(crate) async fn update_federal_admin_login_state(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action_type = AdminActionType::UpdateFederalAdmin;
+    let action_type = AdminActionType::UpdateFederalRegistry;
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
-    let payload = UpdateFederalAdminActionPayload {
+    let payload = UpdateFederalRegistryActionPayload {
         id,
-        admin_name: input.admin_name,
+        admin_display_name: input.admin_display_name,
     };
     let result = state
         .db
-        .with_client(move |conn| apply_update_federal_admin_conn(conn, &ctx, &payload));
+        .with_client(move |conn| apply_update_federal_registry_conn(conn, &ctx, &payload));
     let data = match result {
         Ok(v) => v,
         Err(err) => return admin_action_error(err),
@@ -532,13 +532,13 @@ pub(crate) fn require_admin_security_grant(
         if grant.auth_type != action_type.auth_type() {
             return Err("http:forbidden:security grant auth type mismatch".to_string());
         }
-        if !same_admin_pubkey(grant.actor_pubkey.as_str(), ctx.admin_pubkey.as_str())
-            || grant.actor_role != ctx.role
+        if !same_admin_account(grant.actor_account.as_str(), ctx.admin_account.as_str())
+            || grant.actor_registry_org_code != ctx.registry_org_code
         {
             return Err("http:forbidden:security grant owner mismatch".to_string());
         }
-        if grant.actor_province_name != ctx.admin_province.clone().unwrap_or_default()
-            || grant.actor_city_name.as_deref() != ctx.admin_city.as_deref()
+        if grant.actor_province_name != ctx.scope_province_name.clone().unwrap_or_default()
+            || grant.actor_city_name.as_deref() != ctx.scope_city_name.as_deref()
         {
             return Err("http:forbidden:security grant scope mismatch".to_string());
         }
@@ -566,15 +566,15 @@ fn preview_action_conn(
     payload: &serde_json::Value,
 ) -> Result<ActionPreview, String> {
     match action_type {
-        AdminActionType::CreateCityAdmin => {
-            let input: CreateCityAdminInput = serde_json::from_value(payload.clone())
+        AdminActionType::CreateCityRegistry => {
+            let input: CreateCityRegistryAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
-            let (admin_pubkey, admin_name, city, created_by) =
-                validate_create_city_admin_conn(conn, ctx, &input)?;
+            let (admin_account, admin_display_name, city, created_by) =
+                validate_create_city_registry_conn(conn, ctx, &input)?;
             let after = json!({
-                "role": "CITY_ADMIN",
-                "admin_pubkey": admin_pubkey,
-                "admin_name": admin_name,
+                "registry_org_code": "CITY_REGISTRY",
+                "admin_account": admin_account,
+                "admin_display_name": admin_display_name,
                 "city_name": city,
                 "created_by": created_by,
             });
@@ -582,63 +582,62 @@ fn preview_action_conn(
             Ok(ActionPreview {
                 before_hash: "none".to_string(),
                 after_hash: after_hash.clone(),
-                target: admin_pubkey.clone(),
+                target: admin_account.clone(),
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(action_type, ctx, admin_pubkey.as_str()),
+                display_fields: base_fields(action_type, ctx, admin_account.as_str()),
             })
         }
-        AdminActionType::UpdateCityAdmin => {
-            Err("http:bad_request:update city_admin is login state action".to_string())
+        AdminActionType::UpdateCityRegistry => {
+            Err("http:bad_request:update city_registry is login state action".to_string())
         }
-        AdminActionType::DeleteCityAdmin => {
-            let input: CityAdminIdPayload = serde_json::from_value(payload.clone())
+        AdminActionType::DeleteCityRegistry => {
+            let input: CityRegistryIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
-            let city_admin = require_manageable_city_admin_conn(conn, ctx, input.id)?;
-            let before = city_admin_row_from_user_conn(conn, &city_admin)?;
-            let after =
-                json!({ "deleted": true, "id": input.id, "admin_pubkey": city_admin.admin_pubkey });
+            let city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
+            let before = city_registry_row_from_user_conn(conn, &city_registry)?;
+            let after = json!({ "deleted": true, "id": input.id, "admin_account": city_registry.admin_account });
             let before_hash = hash_serialized(&before);
             let after_hash = hash_json(&after);
             Ok(ActionPreview {
                 before_hash,
                 after_hash,
-                target: city_admin.admin_pubkey,
+                target: city_registry.admin_account,
                 auth_type: action_type.auth_type(),
                 display_fields: base_fields(
                     action_type,
                     ctx,
-                    after["admin_pubkey"].as_str().unwrap_or("*"),
+                    after["admin_account"].as_str().unwrap_or("*"),
                 ),
             })
         }
-        AdminActionType::CreateFederalAdmin => {
-            let input: CreateFederalAdminActionPayload = serde_json::from_value(payload.clone())
+        AdminActionType::CreateFederalRegistry => {
+            let input: CreateFederalRegistryActionPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            let (admin_pubkey, admin_name, province) =
-                validate_create_federal_admin_conn(conn, ctx, &input)?;
+            let (admin_account, admin_display_name, province) =
+                validate_create_federal_registry_conn(conn, ctx, &input)?;
             let after = json!({
-                "role": "FEDERAL_ADMIN",
+                "registry_org_code": "FEDERAL_REGISTRY",
                 "province_name": province,
-                "admin_pubkey": admin_pubkey.clone(),
-                "admin_name": admin_name,
-                "created_by": ctx.admin_pubkey,
+                "admin_account": admin_account.clone(),
+                "admin_display_name": admin_display_name,
+                "created_by": ctx.admin_account,
             });
             let after_hash = hash_serialized(&after);
             Ok(ActionPreview {
                 before_hash: "none".to_string(),
                 after_hash,
-                target: admin_pubkey.clone(),
+                target: admin_account.clone(),
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(action_type, ctx, admin_pubkey.as_str()),
+                display_fields: base_fields(action_type, ctx, admin_account.as_str()),
             })
         }
-        AdminActionType::UpdateFederalAdmin => {
+        AdminActionType::UpdateFederalRegistry => {
             Err("http:bad_request:update federal admin is login state action".to_string())
         }
-        AdminActionType::DeleteFederalAdmin => {
-            let input: FederalAdminIdPayload = serde_json::from_value(payload.clone())
+        AdminActionType::DeleteFederalRegistry => {
+            let input: FederalRegistryIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            let (before, after, target) = preview_delete_federal_admin_conn(conn, ctx, &input)?;
+            let (before, after, target) = preview_delete_federal_registry_conn(conn, ctx, &input)?;
             Ok(ActionPreview {
                 before_hash: hash_serialized(&before),
                 after_hash: hash_serialized(&after),
@@ -684,177 +683,185 @@ fn base_fields(
         field(
             "province_name",
             "省份",
-            ctx.admin_province.as_deref().unwrap_or_default(),
+            ctx.scope_province_name.as_deref().unwrap_or_default(),
         ),
         field(
-            "actor_pubkey",
+            "actor_account",
             "管理员",
-            display_account(ctx.admin_pubkey.as_str()).as_str(),
+            display_account(ctx.admin_account.as_str()).as_str(),
         ),
         field("target", "目标", display_account(target).as_str()),
     ]
 }
 
-fn validate_create_city_admin_conn(
+fn validate_create_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateCityAdminInput,
+    input: &CreateCityRegistryAdminInput,
 ) -> Result<(String, String, String, String), String> {
-    let Some(admin_pubkey) = normalize_admin_pubkey(input.admin_pubkey.as_str()) else {
-        return Err("http:bad_request:admin_pubkey format invalid".to_string());
+    let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
+        return Err("http:bad_request:admin_account format invalid".to_string());
     };
-    let admin_name = validate_admin_name(input.admin_name.as_str())?;
+    let admin_display_name = validate_admin_display_name(input.admin_display_name.as_str())?;
     let created_by = match input.created_by.as_deref().map(str::trim) {
-        None | Some("") => ctx.admin_pubkey.clone(),
+        None | Some("") => ctx.admin_account.clone(),
         Some(raw) => {
-            let Some(normalized) = normalize_admin_pubkey(raw) else {
+            let Some(normalized) = normalize_admin_account(raw) else {
                 return Err("http:bad_request:created_by format invalid".to_string());
             };
-            if !same_admin_pubkey(normalized.as_str(), ctx.admin_pubkey.as_str()) {
+            if !same_admin_account(normalized.as_str(), ctx.admin_account.as_str()) {
                 return Err(
-                    "http:forbidden:FederalAdmin can only create city admins under itself"
+                    "http:forbidden:FederalRegistry can only create city registry admins under itself"
                         .to_string(),
                 );
             }
             normalized
         }
     };
-    if let Some(existing) = repo::resolve_admin_pubkey_key_conn(conn, admin_pubkey.as_str())? {
-        let role = repo::get_admin_by_pubkey_conn(conn, existing.as_str())?
-            .map(|v| v.role)
-            .unwrap_or(AdminRole::CityAdmin);
-        return Err(duplicate_admin_pubkey_error(&role));
+    if let Some(existing) = repo::resolve_admin_account_key_conn(conn, admin_account.as_str())? {
+        let registry_org_code = repo::get_admin_by_account_conn(conn, existing.as_str())?
+            .map(|v| v.registry_org_code)
+            .unwrap_or(RegistryOrgCode::CityRegistry);
+        return Err(duplicate_admin_account_error(&registry_org_code));
     }
     let (province, city) =
-        ensure_city_in_creator_province_conn(conn, created_by.as_str(), input.city.as_str())
+        ensure_city_in_creator_province_conn(conn, created_by.as_str(), input.city_name.as_str())
             .map_err(response_to_string)?;
-    if count_city_admins_in_city_conn(conn, province.as_str(), city.as_str())?
-        >= MAX_CITY_ADMINS_PER_CITY
+    if count_city_registry_admins_in_city_conn(conn, province.as_str(), city.as_str())?
+        >= MAX_CITY_REGISTRY_ADMINS_PER_CITY
     {
         return Err("http:conflict:city admin city limit reached".to_string());
     }
-    Ok((admin_pubkey, admin_name, city, created_by))
+    Ok((admin_account, admin_display_name, city, created_by))
 }
 
-fn validate_admin_name(name: &str) -> Result<String, String> {
+fn validate_admin_display_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("http:bad_request:admin_name is required".to_string());
+        return Err("http:bad_request:admin_display_name is required".to_string());
     }
     if name.chars().count() > MAX_ADMIN_NAME_CHARS {
-        return Err("http:bad_request:admin_name too long".to_string());
+        return Err("http:bad_request:admin_display_name too long".to_string());
     }
     Ok(name.to_string())
 }
 
-fn require_manageable_city_admin_conn(
+fn require_manageable_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
     id: u64,
 ) -> Result<AdminUser, String> {
-    let city_admin = find_city_admin_by_id_conn(conn, id)?
+    let city_registry = find_city_registry_by_id_conn(conn, id)?
         .ok_or_else(|| "http:not_found:city admin not found".to_string())?;
-    if !can_manage_city_admin_conn(
+    if !can_manage_city_registry_conn(
         conn,
-        ctx.admin_pubkey.as_str(),
-        ctx.admin_province.as_deref(),
-        &city_admin,
+        ctx.admin_account.as_str(),
+        ctx.scope_province_name.as_deref(),
+        &city_registry,
     )? {
-        return Err("http:forbidden:cannot manage other province city admins".to_string());
+        return Err("http:forbidden:cannot manage other province city registry admins".to_string());
     }
-    Ok(city_admin)
+    Ok(city_registry)
 }
 
-fn preview_update_city_admin_conn(
+fn preview_update_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &UpdateCityAdminActionPayload,
-) -> Result<(CityAdminRow, CityAdminRow, String), String> {
-    let mut city_admin = require_manageable_city_admin_conn(conn, ctx, input.id)?;
-    let before = city_admin_row_from_user_conn(conn, &city_admin)?;
-    if let Some(next_name) = input.admin_name.as_deref() {
-        city_admin.admin_name = validate_admin_name(next_name)?;
+    input: &UpdateCityRegistryActionPayload,
+) -> Result<(CityRegistryAdminRow, CityRegistryAdminRow, String), String> {
+    let mut city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
+    let before = city_registry_row_from_user_conn(conn, &city_registry)?;
+    if let Some(next_name) = input.admin_display_name.as_deref() {
+        city_registry.admin_display_name = validate_admin_display_name(next_name)?;
     }
-    let after = city_admin_row_from_user_conn(conn, &city_admin)?;
-    Ok((before, after, city_admin.admin_pubkey))
+    let after = city_registry_row_from_user_conn(conn, &city_registry)?;
+    Ok((before, after, city_registry.admin_account))
 }
 
-fn validate_create_federal_admin_conn(
+fn validate_create_federal_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateFederalAdminActionPayload,
+    input: &CreateFederalRegistryActionPayload,
 ) -> Result<(String, String, String), String> {
     let province = ctx
-        .admin_province
+        .scope_province_name
         .clone()
         .ok_or_else(|| "http:forbidden:admin province scope missing".to_string())?;
-    let Some(admin_pubkey) = normalize_admin_pubkey(input.admin_pubkey.as_str()) else {
-        return Err("http:bad_request:admin_pubkey format invalid".to_string());
+    let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
+        return Err("http:bad_request:admin_account format invalid".to_string());
     };
-    let admin_name = validate_admin_name(input.admin_name.as_str())?;
-    if let Some(existing) = repo::resolve_admin_pubkey_key_conn(conn, admin_pubkey.as_str())? {
-        let role = repo::get_admin_by_pubkey_conn(conn, existing.as_str())?
-            .map(|v| v.role)
-            .unwrap_or(AdminRole::FederalAdmin);
-        return Err(duplicate_admin_pubkey_error(&role));
+    let admin_display_name = validate_admin_display_name(input.admin_display_name.as_str())?;
+    if let Some(existing) = repo::resolve_admin_account_key_conn(conn, admin_account.as_str())? {
+        let registry_org_code = repo::get_admin_by_account_conn(conn, existing.as_str())?
+            .map(|v| v.registry_org_code)
+            .unwrap_or(RegistryOrgCode::FederalRegistry);
+        return Err(duplicate_admin_account_error(&registry_org_code));
     }
-    if count_federal_admins_in_province_conn(conn, province.as_str())?
-        >= MAX_FEDERAL_ADMINS_PER_PROVINCE
+    if count_federal_registry_admins_in_province_conn(conn, province.as_str())?
+        >= MAX_FEDERAL_REGISTRYS_PER_PROVINCE
     {
         return Err("http:conflict:federal admin province limit reached".to_string());
     }
-    Ok((admin_pubkey, admin_name, province))
+    Ok((admin_account, admin_display_name, province))
 }
 
-fn count_federal_admins_in_province_conn(
+fn count_federal_registry_admins_in_province_conn(
     conn: &mut Client,
     province: &str,
 ) -> Result<usize, String> {
-    repo::count_federal_admins_by_province_conn(conn, province)
+    repo::count_federal_registry_admins_by_province_conn(conn, province)
 }
 
-fn find_federal_admin_by_id_conn(conn: &mut Client, id: u64) -> Result<Option<AdminUser>, String> {
-    repo::get_admin_by_id_and_role_conn(conn, id, &AdminRole::FederalAdmin)
+fn find_federal_registry_by_id_conn(
+    conn: &mut Client,
+    id: u64,
+) -> Result<Option<AdminUser>, String> {
+    repo::get_admin_by_id_and_registry_org_conn(conn, id, &RegistryOrgCode::FederalRegistry)
 }
 
-fn require_manageable_federal_admin_conn(
+fn require_manageable_federal_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
     id: u64,
 ) -> Result<(AdminUser, String), String> {
     let actor_province_name = ctx
-        .admin_province
+        .scope_province_name
         .clone()
         .ok_or_else(|| "http:forbidden:admin province scope missing".to_string())?;
-    let admin = find_federal_admin_by_id_conn(conn, id)?
+    let admin = find_federal_registry_by_id_conn(conn, id)?
         .ok_or_else(|| "http:not_found:federal admin not found".to_string())?;
-    let target_province =
-        repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?
-            .ok_or_else(|| "http:conflict:federal admin province missing".to_string())?;
+    let target_province = repo::province_scope_for_registry_org_conn(
+        conn,
+        &admin.admin_account,
+        &admin.registry_org_code,
+    )?
+    .ok_or_else(|| "http:conflict:federal admin province missing".to_string())?;
     if target_province != actor_province_name {
-        return Err("http:forbidden:cannot manage other province federal admins".to_string());
+        return Err(
+            "http:forbidden:cannot manage other province federal registry admins".to_string(),
+        );
     }
     Ok((admin, target_province))
 }
 
-fn actor_is_initial_federal_admin(ctx: &AdminAuthContext) -> bool {
-    let Some(province) = ctx.admin_province.as_deref() else {
+fn actor_is_initial_federal_registry(ctx: &AdminAuthContext) -> bool {
+    let Some(province) = ctx.scope_province_name.as_deref() else {
         return false;
     };
-    federal_admin_province(ctx.admin_pubkey.as_str())
+    federal_scope_province_name(ctx.admin_account.as_str())
         .map(|built_in_province| built_in_province == province)
         .unwrap_or(false)
 }
 
-fn federal_admin_row_value(
+fn federal_registry_row_value(
     admin: &AdminUser,
     province: String,
 ) -> Result<serde_json::Value, String> {
-    serde_json::to_value(FederalAdminRow {
+    serde_json::to_value(FederalRegistryAdminRow {
         id: admin.id,
-        province,
-        admin_pubkey: admin.admin_pubkey.clone(),
-        admin_name: admin.admin_name.clone(),
+        province_name: province,
+        admin_account: admin.admin_account.clone(),
+        admin_display_name: admin.admin_display_name.clone(),
         built_in: admin.built_in,
         created_at: admin.created_at,
         updated_at: admin.updated_at,
@@ -862,29 +869,29 @@ fn federal_admin_row_value(
     .map_err(|e| format!("encode federal admin failed: {e}"))
 }
 
-fn preview_delete_federal_admin_conn(
+fn preview_delete_federal_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &FederalAdminIdPayload,
+    input: &FederalRegistryIdPayload,
 ) -> Result<(serde_json::Value, serde_json::Value, String), String> {
-    if !actor_is_initial_federal_admin(ctx) {
+    if !actor_is_initial_federal_registry(ctx) {
         return Err("http:forbidden:initial federal admin required".to_string());
     }
-    let (admin, province) = require_manageable_federal_admin_conn(conn, ctx, input.id)?;
-    if same_admin_pubkey(admin.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
+    let (admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
+    if same_admin_account(admin.admin_account.as_str(), ctx.admin_account.as_str()) {
         return Err("http:forbidden:initial federal admin cannot delete itself".to_string());
     }
-    if admin.built_in || federal_admin_province(admin.admin_pubkey.as_str()).is_some() {
+    if admin.built_in || federal_scope_province_name(admin.admin_account.as_str()).is_some() {
         return Err("http:forbidden:built-in federal admin cannot be deleted".to_string());
     }
-    let before = federal_admin_row_value(&admin, province.clone())?;
+    let before = federal_registry_row_value(&admin, province.clone())?;
     let after = json!({
         "deleted": true,
         "id": input.id,
         "province_name": province,
-        "admin_pubkey": admin.admin_pubkey.clone(),
+        "admin_account": admin.admin_account.clone(),
     });
-    Ok((before, after, admin.admin_pubkey))
+    Ok((before, after, admin.admin_account))
 }
 
 fn recheck_preview_conn(
@@ -909,29 +916,29 @@ fn apply_action_conn(
     let action_type = parse_action_type(challenge.action_type.as_str())
         .map_err(|_| "http:bad_request:unknown action_type".to_string())?;
     match action_type {
-        AdminActionType::CreateCityAdmin => {
-            let input: CreateCityAdminInput =
+        AdminActionType::CreateCityRegistry => {
+            let input: CreateCityRegistryAdminInput =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
-            apply_create_city_admin_conn(conn, ctx, &input)
+            apply_create_city_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::DeleteCityAdmin => {
-            let input: CityAdminIdPayload =
+        AdminActionType::DeleteCityRegistry => {
+            let input: CityRegistryIdPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
-            apply_delete_city_admin_conn(conn, ctx, &input)
+            apply_delete_city_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::CreateFederalAdmin => {
-            let input: CreateFederalAdminActionPayload =
+        AdminActionType::CreateFederalRegistry => {
+            let input: CreateFederalRegistryActionPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            apply_create_federal_admin_conn(conn, ctx, &input)
+            apply_create_federal_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::DeleteFederalAdmin => {
-            let input: FederalAdminIdPayload =
+        AdminActionType::DeleteFederalRegistry => {
+            let input: FederalRegistryIdPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            apply_delete_federal_admin_conn(conn, ctx, &input)
+            apply_delete_federal_registry_conn(conn, ctx, &input)
         }
         _ => Err(
             "http:bad_request:business action cannot be applied by admin governance endpoint"
@@ -940,116 +947,118 @@ fn apply_action_conn(
     }
 }
 
-fn apply_create_city_admin_conn(
+fn apply_create_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateCityAdminInput,
+    input: &CreateCityRegistryAdminInput,
 ) -> Result<serde_json::Value, String> {
-    let (admin_pubkey, admin_name, city, created_by) =
-        validate_create_city_admin_conn(conn, ctx, input)?;
+    let (admin_account, admin_display_name, city, created_by) =
+        validate_create_city_registry_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
-        admin_pubkey: admin_pubkey.clone(),
-        admin_name,
-        role: AdminRole::CityAdmin,
+        admin_account: admin_account.clone(),
+        admin_display_name,
+        registry_org_code: RegistryOrgCode::CityRegistry,
         built_in: false,
         created_by,
         created_at: now,
         updated_at: Some(now),
-        city,
+        city_name: city,
     };
     repo::upsert_admin_conn(conn, &row, None)?;
-    serde_json::to_value(city_admin_row_from_user_conn(conn, &row)?)
+    serde_json::to_value(city_registry_row_from_user_conn(conn, &row)?)
         .map_err(|e| format!("encode city admin failed: {e}"))
 }
 
-fn apply_delete_city_admin_conn(
+fn apply_delete_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CityAdminIdPayload,
+    input: &CityRegistryIdPayload,
 ) -> Result<serde_json::Value, String> {
-    let city_admin = require_manageable_city_admin_conn(conn, ctx, input.id)?;
-    let pubkey = city_admin.admin_pubkey.clone();
-    repo::delete_admin_runtime_state_conn(conn, pubkey.as_str())?;
+    let city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
+    let admin_account = city_registry.admin_account.clone();
+    repo::delete_admin_runtime_state_conn(conn, admin_account.as_str())?;
     conn.execute(
-        "DELETE FROM admins WHERE lower(admin_pubkey) = lower($1)",
-        &[&pubkey],
+        "DELETE FROM admins WHERE lower(admin_account) = lower($1)",
+        &[&admin_account],
     )
     .map_err(|e| format!("delete city admin failed: {e}"))?;
-    Ok(json!({ "deleted": true, "admin_pubkey": pubkey }))
+    Ok(json!({ "deleted": true, "admin_account": admin_account }))
 }
 
-fn apply_update_city_admin_conn(
+fn apply_update_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &UpdateCityAdminActionPayload,
+    input: &UpdateCityRegistryActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (before, after, _) = preview_update_city_admin_conn(conn, ctx, input)?;
-    let mut next = require_manageable_city_admin_conn(conn, ctx, input.id)?;
-    next.admin_name = after.admin_name;
+    let (before, after, _) = preview_update_city_registry_conn(conn, ctx, input)?;
+    let mut next = require_manageable_city_registry_conn(conn, ctx, input.id)?;
+    next.admin_display_name = after.admin_display_name;
     next.updated_at = Some(Utc::now());
     repo::upsert_admin_conn(conn, &next, None)?;
     let _ = before;
-    serde_json::to_value(city_admin_row_from_user_conn(conn, &next)?)
+    serde_json::to_value(city_registry_row_from_user_conn(conn, &next)?)
         .map_err(|e| format!("encode city admin failed: {e}"))
 }
 
-fn apply_create_federal_admin_conn(
+fn apply_create_federal_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &CreateFederalAdminActionPayload,
+    input: &CreateFederalRegistryActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (admin_pubkey, admin_name, province) =
-        validate_create_federal_admin_conn(conn, ctx, input)?;
+    let (admin_account, admin_display_name, province) =
+        validate_create_federal_registry_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
-        admin_pubkey: admin_pubkey.clone(),
-        admin_name,
-        role: AdminRole::FederalAdmin,
+        admin_account: admin_account.clone(),
+        admin_display_name,
+        registry_org_code: RegistryOrgCode::FederalRegistry,
         built_in: false,
-        created_by: ctx.admin_pubkey.clone(),
+        created_by: ctx.admin_account.clone(),
         created_at: now,
         updated_at: Some(now),
-        city: String::new(),
+        city_name: String::new(),
     };
     repo::upsert_admin_conn(conn, &row, Some(province.as_str()))?;
-    federal_admin_row_value(&row, province)
+    federal_registry_row_value(&row, province)
 }
 
-fn apply_update_federal_admin_conn(
+fn apply_update_federal_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &UpdateFederalAdminActionPayload,
+    input: &UpdateFederalRegistryActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (mut admin, province) = require_manageable_federal_admin_conn(conn, ctx, input.id)?;
-    admin.admin_name = validate_admin_name(input.admin_name.as_str())?;
+    let (mut admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
+    admin.admin_display_name = validate_admin_display_name(input.admin_display_name.as_str())?;
     admin.updated_at = Some(Utc::now());
     repo::upsert_admin_conn(conn, &admin, Some(province.as_str()))?;
-    federal_admin_row_value(&admin, province)
+    federal_registry_row_value(&admin, province)
 }
 
-fn apply_delete_federal_admin_conn(
+fn apply_delete_federal_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
-    input: &FederalAdminIdPayload,
+    input: &FederalRegistryIdPayload,
 ) -> Result<serde_json::Value, String> {
-    let (_, _, _) = preview_delete_federal_admin_conn(conn, ctx, input)?;
-    let (removed, _) = require_manageable_federal_admin_conn(conn, ctx, input.id)?;
-    let pubkey = removed.admin_pubkey.clone();
-    repo::delete_admin_runtime_state_conn(conn, pubkey.as_str())?;
-    for mut city_admin in repo::list_city_admins_by_creator_conn(conn, pubkey.as_str())? {
-        city_admin.created_by = ctx.admin_pubkey.clone();
-        city_admin.updated_at = Some(Utc::now());
-        repo::upsert_admin_conn(conn, &city_admin, None)?;
+    let (_, _, _) = preview_delete_federal_registry_conn(conn, ctx, input)?;
+    let (removed, _) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
+    let admin_account = removed.admin_account.clone();
+    repo::delete_admin_runtime_state_conn(conn, admin_account.as_str())?;
+    for mut city_registry in
+        repo::list_city_registry_admins_by_creator_conn(conn, admin_account.as_str())?
+    {
+        city_registry.created_by = ctx.admin_account.clone();
+        city_registry.updated_at = Some(Utc::now());
+        repo::upsert_admin_conn(conn, &city_registry, None)?;
     }
     conn.execute(
-        "DELETE FROM admins WHERE lower(admin_pubkey) = lower($1)",
-        &[&pubkey],
+        "DELETE FROM admins WHERE lower(admin_account) = lower($1)",
+        &[&admin_account],
     )
     .map_err(|e| format!("delete federal admin failed: {e}"))?;
-    Ok(json!({ "deleted": true, "admin_pubkey": pubkey }))
+    Ok(json!({ "deleted": true, "admin_account": admin_account }))
 }
 
 fn hash_serialized<T: Serialize>(value: &T) -> String {
@@ -1066,10 +1075,14 @@ fn normalize_security_target(target: &str) -> String {
     }
 }
 
-fn duplicate_admin_pubkey_error(role: &AdminRole) -> String {
-    match role {
-        AdminRole::FederalAdmin => "http:conflict:admin pubkey already exists as federal admin",
-        AdminRole::CityAdmin => "http:conflict:admin pubkey already exists as city admin",
+fn duplicate_admin_account_error(registry_org_code: &RegistryOrgCode) -> String {
+    match registry_org_code {
+        RegistryOrgCode::FederalRegistry => {
+            "http:conflict:admin admin_account already exists as federal admin"
+        }
+        RegistryOrgCode::CityRegistry => {
+            "http:conflict:admin admin_account already exists as city admin"
+        }
     }
     .to_string()
 }

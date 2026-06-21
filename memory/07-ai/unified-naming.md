@@ -312,13 +312,13 @@
 | `sfid/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
 | `sfid/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
 | `sfid/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
-| `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦管理员、市管理员和管理员列表 DTO |
+| `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦注册局机构管理员、市注册局机构管理员和管理员列表 DTO |
 | `sfid/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
 | `sfid/backend/core/qr/` | QR | core-qr | 后端 CITIZEN_QR_V1 协议辅助和统一 sign_request 构造 |
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
 | `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
 | `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
-| `sfid/backend/admins/` | 管理员 | admins | 联邦管理员、市管理员、Passkey 和签名挑战写操作 |
+| `sfid/backend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
 | `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
 | `sfid/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
 | `sfid/backend/tests/` | 测试 | tests | 后端测试 |
@@ -347,7 +347,7 @@
 | `sfid/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
 | `sfid/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 CITIZEN_QR_V1 工具 |
 | `sfid/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
-| `sfid/frontend/admins/` | 管理员 | admins | 联邦管理员、市管理员、Passkey 和签名挑战前端流程 |
+| `sfid/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
 | `sfid/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
 | `sfid/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
 

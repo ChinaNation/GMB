@@ -1,13 +1,13 @@
 //! 中文注释:管理员 Passkey、公民钱包确认和一次性安全授权模型。
 //!
-//! 这些结构只服务联邦管理员/市管理员安全动作,因此归属 `admins`,不再放在全局
+//! 这些结构只服务联邦注册局管理员/市注册局管理员安全动作,因此归属 `admins`,不再放在全局
 //! `models` 目录里。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use webauthn_rs::prelude::{Passkey, PasskeyAuthentication, PasskeyRegistration};
 
-use crate::admins::model::AdminRole;
+use crate::admins::model::RegistryOrgCode;
 use crate::admins::operation_auth::AdminOperationAuth;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub(crate) enum AdminPasskeyStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminPasskeyCredential {
     pub(crate) credential_id: String,
-    pub(crate) admin_pubkey: String,
+    pub(crate) admin_account: String,
     pub(crate) label: String,
     pub(crate) passkey: Passkey,
     pub(crate) status: AdminPasskeyStatus,
@@ -32,8 +32,8 @@ pub(crate) struct AdminPasskeyCredential {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminPasskeyRegistrationChallenge {
     pub(crate) registration_id: String,
-    pub(crate) admin_pubkey: String,
-    pub(crate) admin_name: String,
+    pub(crate) admin_account: String,
+    pub(crate) admin_display_name: String,
     pub(crate) label: String,
     /// 中文注释:公民钱包确认通过后才生成并保存 WebAuthn registration state。
     #[serde(default)]
@@ -52,8 +52,8 @@ pub(crate) struct AdminPasskeyRegistrationChallenge {
 pub(crate) struct AdminActionChallenge {
     pub(crate) action_id: String,
     pub(crate) action_type: String,
-    pub(crate) actor_pubkey: String,
-    pub(crate) actor_role: AdminRole,
+    pub(crate) actor_account: String,
+    pub(crate) actor_registry_org_code: RegistryOrgCode,
     pub(crate) actor_province_name: String,
     #[serde(default)]
     pub(crate) actor_city_name: Option<String>,
@@ -75,8 +75,8 @@ pub(crate) struct AdminActionChallenge {
 pub(crate) struct AdminSecurityGrant {
     pub(crate) grant_id: String,
     pub(crate) action_type: String,
-    pub(crate) actor_pubkey: String,
-    pub(crate) actor_role: AdminRole,
+    pub(crate) actor_account: String,
+    pub(crate) actor_registry_org_code: RegistryOrgCode,
     pub(crate) actor_province_name: String,
     #[serde(default)]
     pub(crate) actor_city_name: Option<String>,

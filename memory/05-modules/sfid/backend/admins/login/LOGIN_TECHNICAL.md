@@ -25,7 +25,7 @@ sfid/backend/admins/login/
 ├── model.rs      # 登录 challenge、session、二维码结果、请求/响应 DTO
 ├── handler.rs    # 普通登录接口:check/logout/identify/challenge/verify
 ├── qr_login.rs   # CITIZEN_QR_V1 扫码登录 challenge/complete/result
-├── guards.rs     # 登录态与联邦管理员守卫、session 校验
+├── guards.rs     # 登录态与联邦注册局机构管理员守卫、session 校验
 └── signature.rs  # sr25519 验签、公钥解析、challenge 清理、展示名辅助
 ```
 
@@ -42,8 +42,8 @@ sfid/backend/admins/login/
 
 ## 4. 认证模型
 
-- 管理员标识:`admin_pubkey`
-- 角色模型:当前只保留 `FederalAdmin` / `CityAdmin`
+- 管理员标识:`admin_account`
+- 注册局机构模型:当前只保留 `FEDERAL_REGISTRY` / `CITY_REGISTRY`,不再另设管理员权限真源
 - 会话载体:`Bearer <access_token>`
 - 会话缓存:`admin_sessions`,登录后同步写入进程内 GlobalShard。
 - 挑战缓存:`login_challenges`。
@@ -54,7 +54,7 @@ sfid/backend/admins/login/
 
 ### 5.1 普通 Challenge 登录
 
-1. `identify` 根据管理员身份二维码解析 `admin_pubkey` 并返回角色、省市 scope 与 Passkey 绑定状态。
+1. `identify` 根据管理员身份二维码解析 `admin_account` 并返回注册局机构、省市 scope 与 Passkey 绑定状态。
 2. `challenge` 生成带 `origin/domain/session_id/nonce` 的 challenge。
 3. `verify` 校验 sr25519 签名,一次性消费 challenge 并签发 8 小时会话。
 4. 验证成功后签发会话并同步进程内 GlobalShard。
@@ -76,21 +76,21 @@ sfid/backend/admins/login/
 ## 6. 守卫函数
 
 - `require_admin_any`:读取登录态,返回 `AdminAuthContext`。
-- `require_sheng_admin`:只放行 `FederalAdmin`,并要求存在省域 scope。
+- `require_federal_registry`:只放行联邦注册局机构的 `admins`,并要求存在省域 scope。
 - `require_admin_session_middleware`:Axum 路由层会话校验中间件。
 
 写权限不再由登录守卫表达。管理端操作权限统一为
-`LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`:登录态操作只校验会话、角色和 scope;
+`LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`:登录态操作只校验会话、注册局机构和 scope;
 `PASSKEY` 写操作必须先通过 `admins/actions.rs` 发起安全动作,并由
 `admins/passkeys.rs` 完成 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;
 `PASSKEY_CHALLENGE` 写操作必须在 Passkey 基础上再完成当前管理员冷钱包 sr25519 签名。
 
 ## 7. 边界规则
 
-- `admins/login` 不承载机构、公民、CPMS、联邦管理员治理等业务 handler。
+- `admins/login` 不承载机构、公民、CPMS、联邦注册局机构管理员治理等业务 handler。
 - 业务模块不得直接读取 session cache,只能通过 `require_admin_any` 或
-  `require_sheng_admin` 获取认证上下文。
-- 角色范围过滤放在 `scope`,不放回 `admins/login`。
-- 联邦/市管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
+  `require_federal_registry` 获取认证上下文。
+- 注册局机构范围过滤放在 `scope`,不放回 `admins/login`。
+- 联邦注册局机构管理员/市注册局机构管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
 - 管理员高危写操作归 `admins/actions.rs`,Passkey 注册和 WebAuthn 工具归
   `admins/passkeys.rs`,不得放回登录目录。

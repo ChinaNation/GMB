@@ -91,7 +91,7 @@ pub(crate) async fn create_account(
         chain_synced_at: None,
         chain_tx_hash: None,
         chain_block_number: None,
-        created_by: ctx.admin_pubkey.clone(),
+        created_by: ctx.admin_account.clone(),
         created_at: now,
     };
     if let Err(err) = state.db.upsert_institution_account_row(&account) {
@@ -101,7 +101,7 @@ pub(crate) async fn create_account(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_ACCOUNT_CREATE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),
@@ -219,7 +219,7 @@ pub(crate) async fn delete_account(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_ACCOUNT_DELETE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),

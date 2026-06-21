@@ -42,7 +42,7 @@ pub trait SfidAccountQuery<AccountId> {
     /// 地址 → (sfid_number 字节, account_name 字节)。未登记返回 None。
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
     /// (sfid_number, account_name) → 地址。未登记返回 None。
-    fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
+    fn find_account(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
     /// 该地址对应的多签账户是否处于 Active 状态。
     fn is_active(addr: &AccountId) -> bool;
     /// `who` 是否是 `bank` 对应机构多签的管理员之一(经 InstitutionMultisigQuery 反查)。
@@ -67,7 +67,7 @@ impl<AccountId> SfidAccountQuery<AccountId> for () {
     fn account_info(_addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         None
     }
-    fn find_address(_sfid_number: &[u8], _account_name: &[u8]) -> Option<AccountId> {
+    fn find_account(_sfid_number: &[u8], _account_name: &[u8]) -> Option<AccountId> {
         None
     }
     fn is_active(_addr: &AccountId) -> bool {
@@ -158,7 +158,7 @@ pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountI
     let (sfid_bytes, _) = T::SfidAccountQuery::account_info(main_addr)
         .ok_or(Error::<T>::NotRegisteredClearingBank)?;
 
-    T::SfidAccountQuery::find_address(sfid_bytes.as_slice(), ACCOUNT_NAME_FEE)
+    T::SfidAccountQuery::find_account(sfid_bytes.as_slice(), ACCOUNT_NAME_FEE)
         .ok_or(Error::<T>::FeeAccountNotFound)
 }
 
@@ -213,7 +213,7 @@ mod tests {
     fn noop_impl_returns_none_and_inactive() {
         let addr: [u8; 32] = [0u8; 32];
         assert!(<() as SfidAccountQuery<[u8; 32]>>::account_info(&addr).is_none());
-        assert!(<() as SfidAccountQuery<[u8; 32]>>::find_address(
+        assert!(<() as SfidAccountQuery<[u8; 32]>>::find_account(
             b"AH001-SCB0V-123456789-2026",
             b"main"
         )

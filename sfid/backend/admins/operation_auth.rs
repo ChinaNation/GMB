@@ -8,7 +8,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::admins::login::AdminAuthContext;
-use crate::{api_error, AdminRole};
+use crate::{api_error, RegistryOrgCode};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -21,12 +21,12 @@ pub(crate) enum AdminOperationAuth {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminActionType {
-    CreateCityAdmin,
-    UpdateCityAdmin,
-    DeleteCityAdmin,
-    CreateFederalAdmin,
-    UpdateFederalAdmin,
-    DeleteFederalAdmin,
+    CreateCityRegistry,
+    UpdateCityRegistry,
+    DeleteCityRegistry,
+    CreateFederalRegistry,
+    UpdateFederalRegistry,
+    DeleteFederalRegistry,
     InstitutionCreate,
     InstitutionUpdate,
     InstitutionCreateAccount,
@@ -48,12 +48,12 @@ pub(crate) enum AdminActionType {
 impl AdminActionType {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            Self::CreateCityAdmin => "CREATE_CITY_ADMIN",
-            Self::UpdateCityAdmin => "UPDATE_CITY_ADMIN",
-            Self::DeleteCityAdmin => "DELETE_CITY_ADMIN",
-            Self::CreateFederalAdmin => "CREATE_FEDERAL_ADMIN",
-            Self::UpdateFederalAdmin => "UPDATE_FEDERAL_ADMIN",
-            Self::DeleteFederalAdmin => "DELETE_FEDERAL_ADMIN",
+            Self::CreateCityRegistry => "CREATE_CITY_REGISTRY",
+            Self::UpdateCityRegistry => "UPDATE_CITY_REGISTRY",
+            Self::DeleteCityRegistry => "DELETE_CITY_REGISTRY",
+            Self::CreateFederalRegistry => "CREATE_FEDERAL_REGISTRY",
+            Self::UpdateFederalRegistry => "UPDATE_FEDERAL_REGISTRY",
+            Self::DeleteFederalRegistry => "DELETE_FEDERAL_REGISTRY",
             Self::InstitutionCreate => "INSTITUTION_CREATE",
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
@@ -75,12 +75,12 @@ impl AdminActionType {
 
     pub(crate) fn label(&self) -> &'static str {
         match self {
-            Self::CreateCityAdmin => "新增市管理员",
-            Self::UpdateCityAdmin => "编辑市管理员",
-            Self::DeleteCityAdmin => "删除市管理员",
-            Self::CreateFederalAdmin => "新增联邦管理员",
-            Self::UpdateFederalAdmin => "编辑联邦管理员",
-            Self::DeleteFederalAdmin => "删除联邦管理员",
+            Self::CreateCityRegistry => "新增市注册局管理员",
+            Self::UpdateCityRegistry => "编辑市注册局管理员",
+            Self::DeleteCityRegistry => "删除市注册局管理员",
+            Self::CreateFederalRegistry => "新增联邦注册局管理员",
+            Self::UpdateFederalRegistry => "编辑联邦注册局管理员",
+            Self::DeleteFederalRegistry => "删除联邦注册局管理员",
             Self::InstitutionCreate => "创建机构",
             Self::InstitutionUpdate => "更新机构",
             Self::InstitutionCreateAccount => "新增机构账户",
@@ -102,7 +102,9 @@ impl AdminActionType {
 
     pub(crate) fn auth_type(&self) -> AdminOperationAuth {
         match self {
-            Self::UpdateCityAdmin | Self::UpdateFederalAdmin => AdminOperationAuth::LoginState,
+            Self::UpdateCityRegistry | Self::UpdateFederalRegistry => {
+                AdminOperationAuth::LoginState
+            }
             Self::InstitutionCreate
             | Self::InstitutionUpdate
             | Self::InstitutionCreateAccount
@@ -110,10 +112,10 @@ impl AdminActionType {
             | Self::PublicSecurityReconcile
             | Self::CitizenBindCommit
             | Self::CpmsStatusImportConfirm => AdminOperationAuth::Passkey,
-            Self::CreateCityAdmin
-            | Self::DeleteCityAdmin
-            | Self::CreateFederalAdmin
-            | Self::DeleteFederalAdmin
+            Self::CreateCityRegistry
+            | Self::DeleteCityRegistry
+            | Self::CreateFederalRegistry
+            | Self::DeleteFederalRegistry
             | Self::InstitutionDeleteAccount
             | Self::InstitutionDeleteDocument
             | Self::CpmsIssueInstallCode
@@ -133,10 +135,10 @@ impl AdminActionType {
     pub(crate) fn is_governance(&self) -> bool {
         matches!(
             self,
-            Self::CreateCityAdmin
-                | Self::DeleteCityAdmin
-                | Self::CreateFederalAdmin
-                | Self::DeleteFederalAdmin
+            Self::CreateCityRegistry
+                | Self::DeleteCityRegistry
+                | Self::CreateFederalRegistry
+                | Self::DeleteFederalRegistry
         )
     }
 
@@ -158,12 +160,12 @@ pub(crate) fn parse_action_type(
     action_type: &str,
 ) -> Result<AdminActionType, axum::response::Response> {
     match action_type {
-        "CREATE_CITY_ADMIN" => Ok(AdminActionType::CreateCityAdmin),
-        "UPDATE_CITY_ADMIN" => Ok(AdminActionType::UpdateCityAdmin),
-        "DELETE_CITY_ADMIN" => Ok(AdminActionType::DeleteCityAdmin),
-        "CREATE_FEDERAL_ADMIN" => Ok(AdminActionType::CreateFederalAdmin),
-        "UPDATE_FEDERAL_ADMIN" => Ok(AdminActionType::UpdateFederalAdmin),
-        "DELETE_FEDERAL_ADMIN" => Ok(AdminActionType::DeleteFederalAdmin),
+        "CREATE_CITY_REGISTRY" => Ok(AdminActionType::CreateCityRegistry),
+        "UPDATE_CITY_REGISTRY" => Ok(AdminActionType::UpdateCityRegistry),
+        "DELETE_CITY_REGISTRY" => Ok(AdminActionType::DeleteCityRegistry),
+        "CREATE_FEDERAL_REGISTRY" => Ok(AdminActionType::CreateFederalRegistry),
+        "UPDATE_FEDERAL_REGISTRY" => Ok(AdminActionType::UpdateFederalRegistry),
+        "DELETE_FEDERAL_REGISTRY" => Ok(AdminActionType::DeleteFederalRegistry),
         "INSTITUTION_CREATE" => Ok(AdminActionType::InstitutionCreate),
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
@@ -192,7 +194,7 @@ pub(crate) fn ensure_action_role_allowed(
     ctx: &AdminAuthContext,
     action_type: &AdminActionType,
 ) -> Result<(), axum::response::Response> {
-    if ctx.admin_province.is_none() {
+    if ctx.scope_province_name.is_none() {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -200,7 +202,7 @@ pub(crate) fn ensure_action_role_allowed(
         ));
     }
     if (action_type.is_governance() || action_type.is_cpms() || action_type.is_login_state())
-        && ctx.role != AdminRole::FederalAdmin
+        && ctx.registry_org_code != RegistryOrgCode::FederalRegistry
     {
         return Err(api_error(
             StatusCode::FORBIDDEN,

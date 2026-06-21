@@ -19,7 +19,7 @@ use axum::{
 };
 
 use crate::admins::actions::require_admin_security_grant;
-use crate::admins::login::{require_admin_any, require_federal_admin};
+use crate::admins::login::{require_admin_any, require_federal_registry};
 use crate::admins::operation_auth::AdminActionType;
 use crate::china::{city_code_by_name, province_code_by_name};
 use crate::core::response::ApiResponse;
@@ -82,7 +82,7 @@ pub(crate) struct ListPublicSecurityQuery {
 /// GET /api/v1/institutions/public-security
 ///
 /// 中文注释:公安局是按 sfid 省市代码确定性生成的机构,不是普通公权机构搜索结果。
-/// 该接口不接收搜索词:联邦管理员返回本省全部市公安局,市管理员返回本市公安局。
+/// 该接口不接收搜索词:联邦注册局管理员返回本省全部市公安局,市注册局管理员返回本市公安局。
 pub(crate) async fn list_public_security_institutions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -92,13 +92,13 @@ pub(crate) async fn list_public_security_institutions(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let Some(province) = ctx.admin_province.as_deref() else {
+    let Some(province) = ctx.scope_province_name.as_deref() else {
         return api_error(StatusCode::FORBIDDEN, 1003, "province scope required");
     };
     let Some(province_code) = province_code_by_name(province) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
-    let city_code = match ctx.admin_city.as_deref() {
+    let city_code = match ctx.scope_city_name.as_deref() {
         Some(city) => match city_code_by_name(province, city) {
             Some(code) => Some(code),
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city"),
@@ -205,7 +205,7 @@ pub(crate) async fn list_official_institutions(
         manifest_version: None,
         catalog_status: None,
     };
-    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province_name) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_province_name, &query.province_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -215,7 +215,7 @@ pub(crate) async fn list_official_institutions(
             .into_response();
         }
     }
-    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city_name) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_city_name, &query.city_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -226,14 +226,14 @@ pub(crate) async fn list_official_institutions(
         }
     }
     let Some(province) = scope
-        .locked_province
+        .locked_province_name
         .clone()
         .or_else(|| query.province_name.clone())
     else {
         return api_error(StatusCode::FORBIDDEN, 1003, "province scope required");
     };
     let city = scope
-        .locked_city
+        .locked_city_name
         .clone()
         .or_else(|| query.city_name.clone());
     let Some(province_code) = province_code_by_name(&province) else {
@@ -329,7 +329,7 @@ pub(crate) async fn reconcile_public_security(
     headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<ReconcilePublicSecurityQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_federal_admin(&state, &headers) {
+    let ctx = match require_federal_registry(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -374,7 +374,7 @@ pub(crate) async fn reconcile_public_security(
             let report = match reconcile_public_security_for_province_db(
                 &state.db,
                 province,
-                ctx.admin_pubkey.as_str(),
+                ctx.admin_account.as_str(),
             ) {
                 Ok(v) => v,
                 Err(e) => {
@@ -402,7 +402,7 @@ pub(crate) async fn reconcile_public_security(
                 let report = match reconcile_public_security_for_province_db(
                     &state.db,
                     province.as_str(),
-                    ctx.admin_pubkey.as_str(),
+                    ctx.admin_account.as_str(),
                 ) {
                     Ok(v) => v,
                     Err(e) => {

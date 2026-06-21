@@ -112,7 +112,7 @@ export interface InstitutionListRow {
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
   created_by_name?: string | null;
-  /** 创建者角色:FEDERAL_ADMIN / CITY_ADMIN;未命中 null */
+  /** 创建者角色:FEDERAL_REGISTRY / CITY_REGISTRY;未命中 null */
   created_by_role?: string | null;
 }
 
@@ -132,7 +132,7 @@ export interface InstitutionDetail {
   accounts: InstitutionAccount[];
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
   created_by_name?: string | null;
-  /** 创建者角色:FEDERAL_ADMIN / CITY_ADMIN */
+  /** 创建者角色:FEDERAL_REGISTRY / CITY_REGISTRY */
   created_by_role?: string | null;
 }
 

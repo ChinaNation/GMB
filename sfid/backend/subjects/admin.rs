@@ -373,7 +373,7 @@ pub(crate) async fn update_institution(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_UPDATE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),
@@ -580,7 +580,7 @@ pub(crate) async fn get_institution(
 
 /// 联邦注册局机构详情(只读)。
 /// 联邦注册局是全国唯一机构(位于中枢省),所有省份管理员都需要进入它的机构详情页查看
-/// 本省联邦管理员列表,因此这里**不做 scope 校验**(与 get_institution 的唯一区别)。
+/// 本省联邦注册局机构管理员列表,因此这里**不做 scope 校验**(与 get_institution 的唯一区别)。
 /// 仍要求已登录管理员;只返回 FEDERAL_REGISTRY 这一个机构。
 pub(crate) async fn get_federal_registry(
     State(state): State<AppState>,

@@ -24,7 +24,7 @@ fn create_rejected_event_count(pid: u64) -> usize {
         .filter(|record| {
             matches!(
                 &record.event,
-                RuntimeEvent::PersonalManage(pallet::Event::DuoqianCreateRejected {
+                RuntimeEvent::PersonalManage(pallet::Event::PersonalCreateRejected {
                     proposal_id,
                     ..
                 }) if *proposal_id == pid
@@ -95,11 +95,11 @@ fn propose_create_writes_pending_and_reserves_fee() {
         let pid = last_proposal_id();
 
         assert!(pallet::PendingPersonalCreate::<Test>::contains_key(pid));
-        assert!(pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert!(pallet::PersonalAccounts::<Test>::contains_key(&dq));
         let pending_action = pallet::PendingPersonalCreate::<Test>::get(pid).unwrap();
         assert_eq!(pending_action.fee, CREATE_FEE);
-        let pending_account = pallet::PersonalDuoqians::<Test>::get(&dq).unwrap();
-        assert_eq!(pending_account.status, types::DuoqianStatus::Pending);
+        let pending_account = pallet::PersonalAccounts::<Test>::get(&dq).unwrap();
+        assert_eq!(pending_account.status, types::PersonalStatus::Pending);
         assert_eq!(pending_account.account_name, name);
         let account = dq.clone();
         assert_eq!(
@@ -151,8 +151,8 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         assert_eq!(proposal.status, STATUS_EXECUTED);
 
         // 多签账户激活,资金到位,Pending 已清
-        let dq_state = pallet::PersonalDuoqians::<Test>::get(&dq).expect("active duoqian");
-        assert_eq!(dq_state.status, types::DuoqianStatus::Active);
+        let dq_state = pallet::PersonalAccounts::<Test>::get(&dq).expect("active duoqian");
+        assert_eq!(dq_state.status, types::PersonalStatus::Active);
         let account = dq.clone();
         assert_eq!(
             internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_REN, account),
@@ -192,16 +192,16 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
 
         // 拒绝路径下 Executor 应已 cleanup,reserve 释放,storage 清空
         assert_eq!(Balances::reserved_balance(&c), 0);
-        assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingPersonalCreate::<Test>::contains_key(pid));
         assert_eq!(create_rejected_event_count(pid), 1);
     });
 }
 
-// ─── 4. 重复地址被拒绝 ────────────────────────────────────────────────
+// ─── 4. 重复账户被拒绝 ────────────────────────────────────────────────
 
 #[test]
-fn propose_create_rejects_duplicate_personal_address() {
+fn propose_create_rejects_duplicate_personal_account() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_account(&c, b"alice-personal");
@@ -216,7 +216,7 @@ fn propose_create_rejects_duplicate_personal_address() {
                 2,
                 CREATE_AMOUNT,
             ),
-            pallet::Error::<Test>::PersonalDuoqianAlreadyExists
+            pallet::Error::<Test>::PersonalAlreadyExists
         );
     });
 }
@@ -437,7 +437,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
         assert_eq!(Balances::free_balance(&dq), 0);
         let account = dq.clone();
-        assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
         assert!(admins_change::AdminAccounts::<Test>::get(account.clone()).is_none());
         assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_REN, account).is_none());
@@ -525,7 +525,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
         assert_eq!(create_rejected_event_count(pid), 1);
 
         // Executor 已经在 callback 里清掉 Pending,这里 cleanup 进来时应继续返回 Ok,
-        // 但不能重复发 DuoqianCreateRejected。
+        // 但不能重复发 PersonalCreateRejected。
         assert_ok!(PersonalManage::cleanup_rejected_proposal(
             RuntimeOrigin::signed(admin(0)),
             pid,
@@ -564,7 +564,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
         assert_eq!(Balances::reserved_balance(&c), 0);
         assert!(!pallet::PendingPersonalCreate::<Test>::contains_key(pid));
-        assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert_eq!(create_failed_event_count(pid), 1);
     });
 }
@@ -591,7 +591,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
-        assert!(pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert!(pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
         assert_eq!(close_failed_event_count(pid), 1);
     });
@@ -602,7 +602,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
 #[test]
 fn propose_close_rejects_when_not_personal_duoqian() {
     new_test_ext().execute_with(|| {
-        // 没在 PersonalDuoqians 表里的地址
+        // 没在 PersonalAccounts 表里的地址
         let stranger = AccountId32::new([0xCC; 32]);
 
         assert_noop!(
@@ -611,7 +611,7 @@ fn propose_close_rejects_when_not_personal_duoqian() {
                 stranger,
                 beneficiary(),
             ),
-            pallet::Error::<Test>::NotPersonalDuoqian
+            pallet::Error::<Test>::NotPersonalAccount
         );
     });
 }

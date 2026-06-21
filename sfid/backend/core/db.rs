@@ -103,42 +103,53 @@ impl Db {
 
              CREATE TABLE IF NOT EXISTS admins (
                 admin_id BIGINT PRIMARY KEY,
-                admin_pubkey TEXT NOT NULL UNIQUE,
-                admin_name TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('FEDERAL_ADMIN', 'CITY_ADMIN')),
+                admin_account TEXT NOT NULL UNIQUE,
+                admin_display_name TEXT NOT NULL,
+                registry_org_code TEXT NOT NULL CHECK (registry_org_code IN ('FEDERAL_REGISTRY', 'CITY_REGISTRY')),
                 built_in BOOLEAN NOT NULL DEFAULT FALSE,
                 created_by TEXT NOT NULL DEFAULT 'SYSTEM',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ,
-                city TEXT NOT NULL DEFAULT ''
+                city_name TEXT NOT NULL DEFAULT ''
              );
-             CREATE INDEX IF NOT EXISTS idx_admins_role ON admins(role);
-             CREATE INDEX IF NOT EXISTS idx_admins_role_city ON admins(role, city);
-             CREATE INDEX IF NOT EXISTS idx_admins_pubkey_lower ON admins(lower(admin_pubkey));
+             UPDATE admins
+             SET admin_display_name = admin_account
+             WHERE admin_display_name IS NULL OR admin_display_name = '';
+             ALTER TABLE admins
+                ALTER COLUMN admin_account SET NOT NULL,
+                ALTER COLUMN admin_display_name SET NOT NULL,
+                ALTER COLUMN registry_org_code SET NOT NULL,
+                DROP CONSTRAINT IF EXISTS admins_registry_org_code_check,
+                ADD CONSTRAINT admins_registry_org_code_check
+                CHECK (registry_org_code IN ('FEDERAL_REGISTRY', 'CITY_REGISTRY'));
+             CREATE UNIQUE INDEX IF NOT EXISTS admins_admin_account_key ON admins(admin_account);
+             CREATE INDEX IF NOT EXISTS idx_admins_registry_org_code ON admins(registry_org_code);
+             CREATE INDEX IF NOT EXISTS idx_admins_registry_org_code_city_name ON admins(registry_org_code, city_name);
+             CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             CREATE TABLE IF NOT EXISTS federal_admin_scope (
+             CREATE TABLE IF NOT EXISTS federal_registry_scope (
                 admin_id BIGINT PRIMARY KEY REFERENCES admins(admin_id) ON DELETE CASCADE,
                 province_name TEXT NOT NULL REFERENCES provinces(province_name) ON DELETE RESTRICT
              );
-             CREATE INDEX IF NOT EXISTS idx_federal_admin_scope_province_name
-                ON federal_admin_scope(province_name);
+             CREATE INDEX IF NOT EXISTS idx_federal_registry_scope_province_name
+                ON federal_registry_scope(province_name);
 
              CREATE TABLE IF NOT EXISTS admin_passkeys (
                 credential_id TEXT PRIMARY KEY,
-                admin_pubkey TEXT NOT NULL,
+                admin_account TEXT NOT NULL,
                 label TEXT NOT NULL,
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
                 payload JSONB NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL,
                 last_used_at TIMESTAMPTZ
              );
-             CREATE INDEX IF NOT EXISTS idx_admin_passkeys_pubkey_status
-                ON admin_passkeys(admin_pubkey, status);
+             CREATE INDEX IF NOT EXISTS idx_admin_passkeys_account_status
+                ON admin_passkeys(admin_account, status);
 
              CREATE TABLE IF NOT EXISTS admin_passkey_challenges (
                 registration_id TEXT PRIMARY KEY,
-                admin_pubkey TEXT NOT NULL,
+                admin_account TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 consumed BOOLEAN NOT NULL DEFAULT FALSE,
                 payload JSONB NOT NULL
@@ -148,7 +159,7 @@ impl Db {
 
              CREATE TABLE IF NOT EXISTS admin_action_challenges (
                 action_id TEXT PRIMARY KEY,
-                actor_pubkey TEXT NOT NULL,
+                actor_account TEXT NOT NULL,
                 action_type TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 consumed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -159,7 +170,7 @@ impl Db {
 
              CREATE TABLE IF NOT EXISTS admin_security_grants (
                 grant_id TEXT PRIMARY KEY,
-                actor_pubkey TEXT NOT NULL,
+                actor_account TEXT NOT NULL,
                 action_type TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 consumed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -171,7 +182,7 @@ impl Db {
              CREATE TABLE IF NOT EXISTS admin_login_challenges (
                 challenge_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
-                admin_pubkey TEXT NOT NULL DEFAULT '',
+                admin_account TEXT NOT NULL DEFAULT '',
                 expires_at TIMESTAMPTZ NOT NULL,
                 consumed BOOLEAN NOT NULL DEFAULT FALSE,
                 payload JSONB NOT NULL
@@ -192,14 +203,20 @@ impl Db {
 
              CREATE TABLE IF NOT EXISTS admin_sessions (
                 token TEXT PRIMARY KEY,
-                admin_pubkey TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('FEDERAL_ADMIN', 'CITY_ADMIN')),
+                admin_account TEXT NOT NULL,
+                registry_org_code TEXT NOT NULL CHECK (registry_org_code IN ('FEDERAL_REGISTRY', 'CITY_REGISTRY')),
                 expires_at TIMESTAMPTZ NOT NULL,
                 last_active_at TIMESTAMPTZ NOT NULL,
                 payload JSONB NOT NULL
              );
-             CREATE INDEX IF NOT EXISTS idx_admin_sessions_pubkey
-                ON admin_sessions(admin_pubkey);
+             ALTER TABLE admin_sessions
+                ALTER COLUMN admin_account SET NOT NULL,
+                ALTER COLUMN registry_org_code SET NOT NULL,
+                DROP CONSTRAINT IF EXISTS admin_sessions_registry_org_code_check,
+                ADD CONSTRAINT admin_sessions_registry_org_code_check
+                CHECK (registry_org_code IN ('FEDERAL_REGISTRY', 'CITY_REGISTRY'));
+             CREATE INDEX IF NOT EXISTS idx_admin_sessions_account
+                ON admin_sessions(admin_account);
              CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires
                 ON admin_sessions(expires_at);
 
@@ -215,6 +232,32 @@ impl Db {
                 updated_at TIMESTAMPTZ,
                 payload JSONB NOT NULL
              );
+             ALTER TABLE cpms_sites
+                ADD COLUMN IF NOT EXISTS province_code TEXT,
+                ADD COLUMN IF NOT EXISTS city_code TEXT;
+             DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'cpms_sites' AND column_name = 'p_code'
+                ) THEN
+                    UPDATE cpms_sites
+                    SET province_code = p_code
+                    WHERE province_code IS NULL OR province_code = '';
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'cpms_sites' AND column_name = 'c_code'
+                ) THEN
+                    UPDATE cpms_sites
+                    SET city_code = c_code
+                    WHERE city_code IS NULL OR city_code = '';
+                END IF;
+             END $$;
+             ALTER TABLE cpms_sites
+                ALTER COLUMN province_code SET NOT NULL,
+                ALTER COLUMN city_code SET NOT NULL,
+                DROP COLUMN IF EXISTS p_code,
+                DROP COLUMN IF EXISTS c_code;
              CREATE INDEX IF NOT EXISTS idx_cpms_sites_scope
                 ON cpms_sites(province_code, city_code, status);
 
@@ -449,6 +492,63 @@ impl Db {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (province_code, id)
              ) PARTITION BY LIST (province_code);
+
+             -- 中文注释:早期分区父表以 p_code/c_code/t_code 命名分区键和地域列。
+             -- 目标 schema 只保留 province_code/city_code/town_code 等业务字段;
+             -- 这里在创建索引和对账前统一重命名父表列,PostgreSQL 会同步分区子表。
+             DO $$ DECLARE
+                item text[];
+                has_old boolean;
+                has_new boolean;
+             BEGIN
+                FOREACH item SLICE 1 IN ARRAY ARRAY[
+                    ARRAY['ids', 'p_code', 'province_code'],
+                    ARRAY['ids', 'c_code', 'city_code'],
+                    ARRAY['subjects', 'p_code', 'province_code'],
+                    ARRAY['subjects', 'c_code', 'city_code'],
+                    ARRAY['subjects', 't_code', 'town_code'],
+                    ARRAY['subjects', 'short_name', 'sfid_short_name'],
+                    ARRAY['subjects', 'sfid_name', 'sfid_full_name'],
+                    ARRAY['subjects', 'province', 'province_name'],
+                    ARRAY['subjects', 'city', 'city_name'],
+                    ARRAY['subjects', 'town', 'town_name'],
+                    ARRAY['citizens', 'p_code', 'province_code'],
+                    ARRAY['citizens', 'c_code', 'city_code'],
+                    ARRAY['citizens', 'residence_p_code', 'residence_province_code'],
+                    ARRAY['citizens', 'residence_c_code', 'residence_city_code'],
+                    ARRAY['citizens', 'residence_t_code', 'residence_town_code'],
+                    ARRAY['citizens', 'birth_p_code', 'birth_province_code'],
+                    ARRAY['citizens', 'birth_c_code', 'birth_city_code'],
+                    ARRAY['citizens', 'birth_t_code', 'birth_town_code'],
+                    ARRAY['gov', 'p_code', 'province_code'],
+                    ARRAY['gov', 'c_code', 'city_code'],
+                    ARRAY['gov', 't_code', 'town_code'],
+                    ARRAY['private', 'p_code', 'province_code'],
+                    ARRAY['private', 'c_code', 'city_code'],
+                    ARRAY['accounts', 'p_code', 'province_code'],
+                    ARRAY['accounts', 'c_code', 'city_code'],
+                    ARRAY['accounts', 'duoqian_address', 'duoqian_account'],
+                    ARRAY['docs', 'p_code', 'province_code'],
+                    ARRAY['docs', 'c_code', 'city_code'],
+                    ARRAY['audit', 'p_code', 'province_code'],
+                    ARRAY['audit', 'c_code', 'city_code']
+                ] LOOP
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = item[1] AND column_name = item[2]
+                    ) INTO has_old;
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = item[1] AND column_name = item[3]
+                    ) INTO has_new;
+                    IF has_old THEN
+                        IF has_new THEN
+                            EXECUTE format('ALTER TABLE %I DROP COLUMN %I', item[1], item[3]);
+                        END IF;
+                        EXECUTE format('ALTER TABLE %I RENAME COLUMN %I TO %I', item[1], item[2], item[3]);
+                    END IF;
+                END LOOP;
+             END $$;
 
              -- 中文注释:审计 detail 由自由文本改结构化 JSONB(事实与展示分离,
              -- 展示翻译归前端)。旧 TEXT 列存的是写死文案无法结构化,按用户确认

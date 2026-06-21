@@ -78,9 +78,12 @@ propose_create_institution(
   admins,
   threshold,
   register_nonce,
+  issuer_sfid_number,
+  issuer_main_account,
+  signer_pubkey,
+  scope_province_name,
+  scope_city_name,
   signature,
-  province,
-  signer_pubkey
 )
 ```
 

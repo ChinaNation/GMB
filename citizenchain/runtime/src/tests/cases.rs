@@ -314,12 +314,11 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         let who: AccountId = signer1.into_account();
         let admin2: AccountId = MultiSigner::from(p2.public()).into_account();
 
-        let duoqian_account = AccountId::new([77u8; 32]);
+        let account = AccountId::new([77u8; 32]);
         let beneficiary = AccountId::new([78u8; 32]);
-        let admins: personal_manage::pallet::AdminsOf<Runtime> =
-            vec![who.clone(), admin2.clone()]
-                .try_into()
-                .expect("admins should fit");
+        let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
+            .try_into()
+            .expect("admins should fit");
         // 中文注释：propose_create 单账户机构入口已于 2026-05-03 删除；
         // propose_create_personal 已于 B 阶段拆分迁至 PersonalManage(2026-05-06)。
         // 本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
@@ -343,10 +342,10 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         >>::fee_kind(&who, &create_call);
         assert_eq!(create_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
-        let _ = Balances::deposit_creating(&duoqian_account, 777);
+        let _ = Balances::deposit_creating(&account, 777);
         let close_call =
             RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
-                duoqian_account,
+                account,
                 beneficiary,
             });
         let close_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
@@ -375,7 +374,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 }
 
 #[test]
-fn duoqian_reserved_checker_rejects_stake_and_shenfen_fee_accounts() {
+fn duoqian_reserved_checker_rejects_stake_and_fee_accounts() {
     let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account);
     assert!(RuntimeDuoqianReservedAccountChecker::is_reserved(&stake));
 

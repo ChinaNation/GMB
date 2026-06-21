@@ -28,7 +28,7 @@
 - `cpms/backend/common/`:同步共享档案 DTO 字段。
 - `cpms/frontend/address/`:修改地址 API 类型。
 - `cpms/frontend/dangan/`:修改档案创建/编辑页面字段和文案。
-- `cpms/frontend/super_admin/`:修改系统设置地址查看文案。
+- `cpms/frontend/admins/`:修改系统设置地址查看文案。
 - `memory/04-decisions/`:更新行政区唯一真源 ADR。
 - `memory/05-modules/`:更新 SFID / CPMS 技术文档。
 

@@ -16,8 +16,8 @@ export function readStoredAuth(): AdminAuth | null {
       parsed &&
       'access_token' in parsed &&
       typeof parsed.access_token === 'string' &&
-      typeof parsed.admin_pubkey === 'string' &&
-      typeof parsed.role === 'string'
+      typeof parsed.admin_account === 'string' &&
+      typeof parsed.registry_org_code === 'string'
     ) {
       return parsed as AdminAuth;
     }

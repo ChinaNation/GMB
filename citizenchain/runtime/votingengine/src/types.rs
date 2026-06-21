@@ -159,7 +159,7 @@ pub struct Proposal<BlockNumber, AccountId> {
     pub status: u8,
     /// 仅内部投票使用：机构类型（国储会/省储会/省储行）
     pub internal_org: Option<u8>,
-    /// 仅内部投票使用：多签账户地址（全链唯一）
+    /// 仅内部投票使用：多签账户（全链唯一）
     pub internal_institution: Option<AccountId>,
     /// 本阶段起始区块
     pub start: BlockNumber,

@@ -44,13 +44,13 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/install" element={<InstallPage />} />
 
-          <Route element={<ProtectedRoute role="ADMIN,OPERATOR" />}>
+          <Route element={<ProtectedRoute user_group="admins,operators" />}>
             <Route element={<AdminLayout />}>
               {/* 首页：公民信息 */}
               <Route path="/admin" element={<ArchiveList />} />
               <Route path="/admin/create" element={<ArchiveCreate />} />
               <Route path="/admin/archives/:id" element={<ArchiveDetail />} />
-              <Route element={<ProtectedRoute role="ADMIN" />}>
+              <Route element={<ProtectedRoute user_group="admins" />}>
                 {/* 管理员与系统设置仅管理员可访问 */}
                 <Route path="/admin/admins" element={<AdminList />} />
                 <Route path="/admin/settings" element={<SystemSettings />} />

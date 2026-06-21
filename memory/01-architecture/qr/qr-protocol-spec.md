@@ -262,7 +262,7 @@ CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 | `to`(作为 envelope/body 地址字段) | `address` |
 | `account`(作为地址字段) | `address` |
 | `account_pubkey` | `pubkey` |
-| `admin_pubkey` | `pubkey` |
+| `admin_account` | `pubkey` |
 | `public_key` | `pubkey` |
 | `request_id` | `id`(顶层) |
 | `challenge_id` | `id`(顶层) |

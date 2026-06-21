@@ -47,7 +47,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
     private_type: PrivateType::Partnership,
     title: "合伙企业",
     description: "合伙企业分无限合伙和有限合伙,由合伙人关系共同构成。",
-    allowed_roles: PARTNERSHIP_ROLES,
+    allowed_participant_roles: PARTNERSHIP_ROLES,
 };
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {

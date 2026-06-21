@@ -356,10 +356,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           _buildHeader(),
           const SizedBox(height: 12),
           if (_adminLoading && _admins.isEmpty) ...[
-            _buildAdminRoleLoading(),
+            _buildAdminGroupLoading(),
             const SizedBox(height: 12),
           ] else if (_adminError != null && _admins.isEmpty) ...[
-            _buildAdminRoleError(),
+            _buildAdminGroupError(),
             const SizedBox(height: 12),
           ] else if (_isCurrentUserAdmin) ...[
             _buildAdminBadge(),
@@ -695,7 +695,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  Widget _buildAdminRoleLoading() {
+  Widget _buildAdminGroupLoading() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: AppTheme.bannerDecoration(AppTheme.textTertiary),
@@ -721,7 +721,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  Widget _buildAdminRoleError() {
+  Widget _buildAdminGroupError() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: AppTheme.bannerDecoration(AppTheme.danger),

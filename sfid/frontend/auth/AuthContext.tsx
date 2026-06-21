@@ -1,5 +1,5 @@
 // 中文注释:sfid 前端登录态 + 能力标志的全局 Context。
-// 中文注释:角色仅剩 FEDERAL_ADMIN / CITY_ADMIN。
+// 中文注释:角色仅剩 FEDERAL_REGISTRY / CITY_REGISTRY。
 // Passkey 绑定状态只用于引导管理员进入注册局更新密钥,不改变角色能力。
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,9 +12,9 @@ export type RoleCapabilities = {
   canViewInstitutions: boolean;
   canViewPrivate: boolean;
   canViewEducation: boolean;
-  canViewFederalAdmins: boolean;
-  canViewCityAdmins: boolean;
-  canCrudCityAdmins: boolean;
+  canViewFederalRegistryAdmins: boolean;
+  canViewCityRegistryAdmins: boolean;
+  canCrudCityRegistryAdmins: boolean;
   canManageInstitutions: boolean;
   canRegisterInstitutions: boolean;
   canStatusScan: boolean;
@@ -24,22 +24,22 @@ export type RoleCapabilities = {
 };
 
 export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
-  const role = auth?.role;
-  const isFederalAdmin = role === 'FEDERAL_ADMIN';
-  const isCityAdmin = role === 'CITY_ADMIN';
+  const registry_org_code = auth?.registry_org_code;
+  const isFederalRegistry = registry_org_code === 'FEDERAL_REGISTRY';
+  const isCityRegistry = registry_org_code === 'CITY_REGISTRY';
   return {
-    canViewInstitutions: isFederalAdmin || isCityAdmin,
-    canViewPrivate: isFederalAdmin || isCityAdmin,
-    canViewEducation: isFederalAdmin || isCityAdmin,
-    canViewFederalAdmins: isFederalAdmin,
-    canViewCityAdmins: isFederalAdmin || isCityAdmin,
-    canCrudCityAdmins: isFederalAdmin,
-    canManageInstitutions: isFederalAdmin || isCityAdmin,
-    canRegisterInstitutions: isFederalAdmin || isCityAdmin,
-    canStatusScan: isFederalAdmin || isCityAdmin,
-    canBusinessWrite: isFederalAdmin || isCityAdmin,
-    canViewCityRegistry: isFederalAdmin || isCityAdmin,
-    canViewFederalRegistry: isFederalAdmin || isCityAdmin,
+    canViewInstitutions: isFederalRegistry || isCityRegistry,
+    canViewPrivate: isFederalRegistry || isCityRegistry,
+    canViewEducation: isFederalRegistry || isCityRegistry,
+    canViewFederalRegistryAdmins: isFederalRegistry,
+    canViewCityRegistryAdmins: isFederalRegistry || isCityRegistry,
+    canCrudCityRegistryAdmins: isFederalRegistry,
+    canManageInstitutions: isFederalRegistry || isCityRegistry,
+    canRegisterInstitutions: isFederalRegistry || isCityRegistry,
+    canStatusScan: isFederalRegistry || isCityRegistry,
+    canBusinessWrite: isFederalRegistry || isCityRegistry,
+    canViewCityRegistry: isFederalRegistry || isCityRegistry,
+    canViewFederalRegistry: isFederalRegistry || isCityRegistry,
   };
 }
 

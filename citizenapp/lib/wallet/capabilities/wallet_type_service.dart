@@ -11,7 +11,7 @@ class WalletTypeService {
   static const String _kUpdatedAtKey = 'wallet.admin_catalog.updated_at';
 
   final ApiClient _apiClient;
-  Map<String, String>? _memoryRoleMap;
+  Map<String, String>? _memoryAdminGroupMap;
   int? _memoryUpdatedAt;
 
   Future<String> resolveWalletType(String pubkeyHex) async {
@@ -20,14 +20,14 @@ class WalletTypeService {
       return defaultType;
     }
     await _ensureCatalogFresh();
-    final map = await _loadRoleMap();
+    final map = await _loadAdminGroupMap();
     return map[normalized] ?? defaultType;
   }
 
   Future<void> refreshCatalog({bool force = false}) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     if (!force) {
-      final cached = await _loadRoleMap();
+      final cached = await _loadAdminGroupMap();
       final updatedAt = await _loadUpdatedAt();
       if (cached.isNotEmpty &&
           updatedAt != null &&
@@ -43,21 +43,21 @@ class WalletTypeService {
       if (normalized == null) {
         continue;
       }
-      next[normalized] = entry.roleName.trim();
+      next[normalized] = entry.adminGroupName.trim();
     }
 
     await WalletIsar.instance.writeTxn((isar) async {
-      await isar.adminRoleCacheEntitys.clear();
+      await isar.adminGroupCacheEntitys.clear();
       if (next.isNotEmpty) {
         final rows = next.entries
             .map(
-              (entry) => AdminRoleCacheEntity()
+              (entry) => AdminGroupCacheEntity()
                 ..pubkeyHex = entry.key
-                ..roleName = entry.value
+                ..adminGroupName = entry.value
                 ..updatedAt = now,
             )
             .toList(growable: false);
-        await isar.adminRoleCacheEntitys.putAll(rows);
+        await isar.adminGroupCacheEntitys.putAll(rows);
       }
       await isar.appKvEntitys.put(
         AppKvEntity()
@@ -66,15 +66,15 @@ class WalletTypeService {
       );
     });
 
-    _memoryRoleMap = next;
+    _memoryAdminGroupMap = next;
     _memoryUpdatedAt = now;
   }
 
   Future<void> _ensureCatalogFresh() async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final updatedAt = await _loadUpdatedAt();
-    final roleMap = await _loadRoleMap();
-    if (roleMap.isNotEmpty &&
+    final adminGroupMap = await _loadAdminGroupMap();
+    if (adminGroupMap.isNotEmpty &&
         updatedAt != null &&
         now - updatedAt < _catalogTtlSeconds) {
       return;
@@ -86,20 +86,20 @@ class WalletTypeService {
     }
   }
 
-  Future<Map<String, String>> _loadRoleMap() async {
-    final inMemory = _memoryRoleMap;
+  Future<Map<String, String>> _loadAdminGroupMap() async {
+    final inMemory = _memoryAdminGroupMap;
     if (inMemory != null) {
       return inMemory;
     }
 
     final rows = await WalletIsar.instance.read((isar) {
-      return isar.adminRoleCacheEntitys.where().anyId().findAll();
+      return isar.adminGroupCacheEntitys.where().anyId().findAll();
     });
     final out = <String, String>{};
     for (final row in rows) {
-      out[row.pubkeyHex] = row.roleName;
+      out[row.pubkeyHex] = row.adminGroupName;
     }
-    _memoryRoleMap = out;
+    _memoryAdminGroupMap = out;
     return out;
   }
 

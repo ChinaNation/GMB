@@ -23,16 +23,16 @@ pub(crate) fn build_sign_request(
     request_id: &str,
     issued_at: i64,
     expires_at: i64,
-    actor_pubkey: &str,
+    actor_account: &str,
     payload_text: &str,
     summary: &str,
     fields: Vec<serde_json::Value>,
 ) -> Result<String, axum::response::Response> {
-    let Some(address) = pubkey_hex_to_ss58(actor_pubkey) else {
+    let Some(account_ss58) = pubkey_hex_to_ss58(actor_account) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "actor pubkey cannot be encoded as SS58",
+            "actor account cannot be encoded as SS58",
         ));
     };
     let sign_request = json!({
@@ -42,8 +42,8 @@ pub(crate) fn build_sign_request(
         "issued_at": issued_at,
         "expires_at": expires_at,
         "body": {
-            "address": address,
-            "pubkey": actor_pubkey,
+            "address": account_ss58,
+            "pubkey": actor_account,
             "sig_alg": "sr25519",
             "payload_hex": format!("0x{}", hex::encode(payload_text.as_bytes())),
             "display": {

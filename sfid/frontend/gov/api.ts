@@ -158,7 +158,7 @@ export async function getInstitution(
 
 /**
  * 联邦注册局机构详情(只读,绕过 scope)。
- * 联邦注册局是全国唯一机构(位于中枢省),其它联邦管理员被普通 getInstitution 的 scope 拦截,
+ * 联邦注册局是全国唯一机构(位于中枢省),其它联邦注册局管理员被普通 getInstitution 的 scope 拦截,
  * 故走专用只读接口。返回结构与 getInstitution 完全一致。
  */
 export async function getFederalRegistry(

@@ -21,16 +21,16 @@ pub(crate) async fn admin_list_citizens(
         Err(resp) => return resp,
     };
     let scope_province_code = auth_ctx
-        .admin_province
+        .scope_province_name
         .as_deref()
         .and_then(|name| crate::china::provinces().iter().find(|p| p.name == name))
         .map(|p| p.code.to_string());
     let scope_city_code = auth_ctx
-        .admin_city
+        .scope_city_name
         .as_deref()
         .and_then(|city_name| {
             auth_ctx
-                .admin_province
+                .scope_province_name
                 .as_deref()
                 .and_then(|province_name| {
                     crate::china::provinces()
@@ -84,10 +84,8 @@ pub(crate) struct LegalRepresentativeCitizenQuery {
     pub q: Option<String>,
     pub page_size: Option<usize>,
     pub target_sfid_number: Option<String>,
-    #[serde(rename = "province_name")]
-    pub province: Option<String>,
-    #[serde(rename = "city_name")]
-    pub city: Option<String>,
+    pub province_name: Option<String>,
+    pub city_name: Option<String>,
     pub subject_property: Option<String>,
     pub institution: Option<String>,
     pub education_type: Option<String>,
@@ -147,31 +145,31 @@ fn legal_representative_scope_from_create_context(
     auth_ctx: &crate::admins::login::AdminAuthContext,
     query: &LegalRepresentativeCitizenQuery,
 ) -> Result<crate::subjects::service::LegalRepresentativeCitizenScope, axum::response::Response> {
-    let province = query
-        .province
+    let province_name = query
+        .province_name
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "province is required"))?;
-    let city = query
-        .city
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "province_name is required"))?;
+    let city_name = query
+        .city_name
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "city is required"))?;
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "city_name is required"))?;
     let scope = crate::scope::get_visible_scope(auth_ctx);
-    if !scope.includes_province(province) {
+    if !scope.includes_province(province_name) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "province out of current admin scope",
+            "province_name out of current admin scope",
         ));
     }
-    if !scope.includes_city(city) {
+    if !scope.includes_city(city_name) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "city out of current admin scope",
+            "city_name out of current admin scope",
         ));
     }
     let subject_property = query
@@ -192,11 +190,11 @@ fn legal_representative_scope_from_create_context(
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "institution is required"))?;
-    let Some(province_code) = crate::china::province_code_by_name(province) else {
-        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "unknown province"));
+    let Some(province_code) = crate::china::province_code_by_name(province_name) else {
+        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "unknown province_name"));
     };
-    let Some(city_code) = crate::china::city_code_by_name(province, city) else {
-        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "unknown city"));
+    let Some(city_code) = crate::china::city_code_by_name(province_name, city_name) else {
+        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "unknown city_name"));
     };
 
     let parent = match query.parent_sfid_number.as_deref().map(str::trim) {

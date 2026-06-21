@@ -10,12 +10,12 @@ import { notice } from '../../utils/notice';
 
 interface Props {
   auth: AdminAuth;
-  province: string;
-  city: string;
+  province_name: string;
+  city_name: string;
   privateType: PrivateType;
   listInstitutions: (auth: AdminAuth, query: {
-    province: string;
-    city?: string;
+    province_name: string;
+    city_name?: string;
     private_type: PrivateType;
     q: string;
     cursor?: string | null;
@@ -28,8 +28,8 @@ interface Props {
 
 export const PrivateListTable: React.FC<Props> = ({
   auth,
-  province,
-  city,
+   province_name,
+   city_name,
   privateType,
   listInstitutions,
   onSelectInstitution,
@@ -52,8 +52,8 @@ export const PrivateListTable: React.FC<Props> = ({
     let cancelled = false;
     setLoading(true);
     listInstitutions(auth, {
-      province,
-      city: city || undefined,
+       province_name,
+      city_name: city_name || undefined,
       private_type: privateType,
       q: exactQuery,
       cursor,
@@ -80,12 +80,12 @@ export const PrivateListTable: React.FC<Props> = ({
     return loadRows(null);
   }, [
     auth.access_token,
-    auth.admin_pubkey,
-    auth.role,
-    auth.admin_province,
-    auth.admin_city,
-    province,
-    city,
+    auth.admin_account,
+    auth.registry_org_code,
+    auth.scope_province_name,
+    auth.scope_city_name,
+     province_name,
+     city_name,
     privateType,
     listInstitutions,
     refreshKey,

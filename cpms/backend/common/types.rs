@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct AdminUser {
     pub(crate) user_id: String,
-    pub(crate) admin_pubkey: String,
-    pub(crate) admin_name: String,
-    pub(crate) role: String,
+    pub(crate) admin_account: String,
+    pub(crate) admin_display_name: String,
+    pub(crate) user_group: String,
     pub(crate) immutable: bool,
     pub(crate) managed_key_id: Option<String>,
     pub(crate) created_at: i64,

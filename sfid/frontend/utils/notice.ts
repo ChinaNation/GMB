@@ -115,10 +115,10 @@ function domExceptionText(error: DOMException, fallback: string): string {
 
 function translateErrorCode(code: string): string | null {
   const map: Record<string, string> = {
-    SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN: '该账户已是联邦管理员，不能重复新增',
-    SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN: '该账户已是市管理员，不能重复新增',
-    SFID_ADMIN_FEDERAL_ADMIN_PROVINCE_LIMIT_REACHED: '联邦管理员已满 5 人，不能继续新增',
-    SFID_ADMIN_CITY_ADMIN_CITY_LIMIT_REACHED: '本市市管理员已满 30 人，不能继续新增',
+    SFID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY: '该账户已是联邦注册局管理员，不能重复新增',
+    SFID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY: '该账户已是市注册局管理员，不能重复新增',
+    SFID_ADMIN_FEDERAL_REGISTRY_PROVINCE_LIMIT_REACHED: '联邦注册局管理员已满 5 人，不能继续新增',
+    SFID_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED: '本市市注册局管理员已满 30 人，不能继续新增',
     SFID_ADMIN_PASSKEY_REQUIRED: '请先完成通行密钥验证',
     SFID_ADMIN_SECURITY_GRANT_REQUIRED: '请先完成安全确认',
     SFID_AUTH_FORBIDDEN: '权限不足，无法执行该操作',
@@ -150,7 +150,7 @@ function translateKnownMessage(raw: string, fallback: string): string {
     return '无法连接服务器，请检查网络或服务状态';
   }
   if (lower.startsWith('request failed')) return fallback;
-  if (text === 'admin_name is required') return '请输入管理员姓名';
+  if (text === 'admin_display_name is required') return '请输入管理员姓名';
   if (lower.endsWith(' is required')) return requiredFieldText(lower);
   if (lower.startsWith('invalid ')) return invalidFieldText(lower);
   if (lower.startsWith('unknown ')) return unknownFieldText(lower);
@@ -177,8 +177,8 @@ const KNOWN_ENGLISH_MESSAGES: Record<string, string> = {
   'security grant required': '请先完成安全确认',
   'citizen wallet confirmation required first': '请先完成公民钱包确认',
   'admin auth required': '请先登录管理员账户',
-  'federal admin required': '需要联邦管理员权限',
-  'initial federal admin required': '需要初始联邦管理员权限',
+  'federal admin required': '需要联邦注册局管理员权限',
+  'initial federal admin required': '需要初始联邦注册局管理员权限',
   'province scope required': '缺少省级权限范围',
   'admin province scope missing': '缺少管理员省级权限范围',
   'admin city scope missing': '缺少管理员市级权限范围',
@@ -224,7 +224,7 @@ const FIELD_LABELS: Record<string, string> = {
   origin: '来源',
   session_id: '会话',
   identity_qr: '身份二维码',
-  admin_pubkey: '管理员账户',
+  admin_account: '管理员账户',
   signer_pubkey: '签名账户',
   signature: '签名',
   payload_hash: '载荷哈希',

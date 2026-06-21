@@ -97,8 +97,7 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
 #[test]
 fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let institution = registered_duoqian_account();
-        let inst_account = registered_duoqian_account();
+        let personal_account = registered_duoqian_account();
         let dest = beneficiary();
         let admins = BoundedVec::try_from(vec![
             registered_duoqian_admin(0),
@@ -107,20 +106,20 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
         ])
         .expect("admins should fit");
 
-        personal_manage::PersonalDuoqians::<Test>::insert(
-            &inst_account,
-            personal_manage::DuoqianAccount {
+        personal_manage::PersonalAccounts::<Test>::insert(
+            &personal_account,
+            personal_manage::PersonalAccount {
                 creator: registered_duoqian_admin(0),
                 account_name: b"personal"
                     .to_vec()
                     .try_into()
                     .expect("account name should fit"),
                 created_at: 1,
-                status: personal_manage::DuoqianStatus::Active,
+                status: personal_manage::PersonalStatus::Active,
             },
         );
         admins_change::AdminAccounts::<Test>::insert(
-            institution.clone(),
+            personal_account.clone(),
             admins_change::AdminAccount {
                 org: ORG_REN,
                 kind: admins_change::AdminAccountKind::PersonalDuoqian,
@@ -131,13 +130,13 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
                 status: admins_change::AdminAccountStatus::Active,
             },
         );
-        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, institution.clone(), 2);
-        let _ = Balances::deposit_creating(&inst_account, 10_000);
+        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, personal_account.clone(), 2);
+        let _ = Balances::deposit_creating(&personal_account, 10_000);
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(registered_duoqian_admin(0)),
             ORG_REN,
-            institution,
+            personal_account.clone(),
             dest.clone(),
             1_500,
             BoundedVec::default(),
@@ -147,7 +146,7 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
         let vote_pairs = registered_duoqian_pairs(2);
         assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
-        assert_eq!(Balances::free_balance(&inst_account), 8_490);
+        assert_eq!(Balances::free_balance(&personal_account), 8_490);
         assert_eq!(Balances::free_balance(&dest), 1_500);
         assert_eq!(
             votingengine::Pallet::<Test>::proposals(pid)

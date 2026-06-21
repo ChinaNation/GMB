@@ -43,7 +43,7 @@ sfid/backend/
 ├── main.rs                    # Axum 路由、AppState、StoreHandle 等后端入口
 ├── main_tests.rs              # main.rs 的测试模块
 ├── accounts/                  # 机构账户入口
-├── admins/                    # 联邦/市管理员治理、安全动作、Passkey 与登录认证
+├── admins/                    # 注册局机构 admins 治理、安全动作、Passkey 与登录认证
 │   └── login/                 # 管理员登录、扫码登录、鉴权守卫、签名校验
 ├── audit.rs                   # 审计日志查询 handler
 ├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
@@ -81,31 +81,31 @@ sfid/backend/
 - 后端新增功能模块直接放 `sfid/backend/<功能名>/`。
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
 - CPMS 系统管理归 `sfid/backend/cpms/`,不得放入管理员目录。
-- 后端不再维护分散的省级/市管理员双目录;
-  联邦管理员列表、市管理员列表和管理员治理写入口统一归 `admins/`。
+- 后端不再维护分散的省级/市级管理员双目录;
+  联邦注册局机构 admins、市注册局机构 admins 和管理员治理写入口统一归 `admins/`。
 - 公权机构前后端目录统一命名为 `gov`;后端不得再另建 `public` 或 `registry_admins`。
 - 私权机构归 `private`,其下按 `common/sole/partnership/company/corporation/welfare/association/participants`
   拆分私权类型与参与人关系;公民继续使用 `citizens`;智能人功能当前不上线,不得预建智能人目录或表。
 - 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,编码元信息 DTO 归
   `number/model.rs`,不得恢复或塞回 `models/`。
 - HTTP 响应包装归 `core/response.rs`;Store 聚合体归 `store/model.rs`;
-  管理员角色/列表 DTO 归 `admins/model.rs`;管理员 Passkey 和安全挑战模型归
+  注册局机构 admins 列表 DTO 归 `admins/model.rs`;管理员 Passkey 和安全挑战模型归
   `admins/security_model.rs`;审计日志行模型归 `audit.rs`。
 - 行政区划唯一真源归 `china/`;不得恢复 `sfid/`、`province.rs`、`cities.rs`
   或 `city_codes/*.rs` 静态表。
 - 非法人机构能力归 `subjects/uninorg/`;不得放在单侧 `gov/` 或 `private/`。
-- `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或 pubkey 工具。
+- `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或公钥工具。
 - 管理端操作权限类型只允许 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,统一登记在
   `admins/operation_auth.rs`;未登记或类型不匹配的操作必须拒绝。
-- 新增、删除联邦/市管理员不得在列表查询 handler 暴露写入口;
+- 新增、删除注册局机构管理员不得在列表查询 handler 暴露写入口;
   必须统一走 `admins/actions.rs` 的 `PASSKEY_CHALLENGE` 治理动作入口。
-- 新增市管理员必须由 `admins/actions.rs` 调用 `admins/city-admins.rs` 的省市校验和数量统计；
-  同一省同一市最多 30 名市管理员，市名可能跨省重复，统计时必须带省份。
-- 联邦/市管理员姓名修改属于 `LOGIN_STATE`,使用登录态 PATCH handler,但仍必须做省域和角色校验。
-- 市管理员地址属于身份根,`UPDATE_CITY_ADMIN` 不接收 `admin_pubkey`;修改市管理员
+- 新增市注册局机构管理员必须由 `admins/actions.rs` 调用 `admins/city_registry_admins.rs` 的省市校验和数量统计；
+  同一省同一市最多 30 名市注册局机构管理员，市名可能跨省重复，统计时必须带省份。
+- 联邦/市注册局机构管理员姓名修改属于 `LOGIN_STATE`,使用登录态 PATCH handler,但仍必须做省域和注册局机构校验。
+- 市注册局管理员账户属于身份根,`UPDATE_CITY_REGISTRY` 不接收 `admin_account`;修改市注册局管理员
   只允许调整管理员姓名。
-- 联邦管理员采用同级模型;新增、删除联邦管理员统一走
-  `CREATE_FEDERAL_ADMIN / DELETE_FEDERAL_ADMIN` 安全动作;编辑姓名使用登录态 PATCH handler。
+- 联邦注册局机构管理员采用同级模型;新增、删除统一走
+  `CREATE_FEDERAL_REGISTRY / DELETE_FEDERAL_REGISTRY` 安全动作;编辑姓名使用登录态 PATCH handler。
 - 管理员不存在停用状态字段;删除管理员时必须同步清理会话、Passkey、短期挑战和安全 grant。
 - `PASSKEY` 业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
   提供 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;`PASSKEY_CHALLENGE` 写操作必须再叠加
@@ -120,8 +120,8 @@ sfid/backend/
 - 通用 `CITIZEN_QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
   已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
   `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
-- CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归联邦管理员;
-  市管理员不得通过 CPMS handler 操作授权治理。
+- CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归联邦注册局机构 admins;
+  市注册局机构 admins 不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `sfid/backend/core/chain_*`。
 - 非源码目录 `tests/`、`target/` 不参与业务模块平铺;后端源码根下不得恢复空的
   `db/` 或 `scripts/` 目录。
@@ -136,7 +136,7 @@ sfid/backend/
     同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
 - `store/` 内的分片缓存只保留进程内按省访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
-- 数据库当前目标结构由 `main.rs` 启动时创建；初始联邦管理员唯一真源为
+- 数据库当前目标结构由 `main.rs` 启动时创建；初始联邦注册局机构管理员唯一真源为
   `admins/province_admins.rs`。
 - 关系型目标表从初始化阶段即按 `province_code` 创建省级分区,不得写成“数据量变大后再分区”:
   - `ids`:全局 `sfid_number` 唯一约束表,不是第二身份键。
@@ -189,7 +189,7 @@ set -a; source sfid/.env.dev.local; set +a
 curl -fsS http://127.0.0.1:8899/api/v1/health
 curl -sS -i http://127.0.0.1:8899/api/v1/admin/auth/check -H "authorization: Bearer <token>"
 curl -sS -i http://127.0.0.1:8899/api/v1/admin/federal-registry -H "authorization: Bearer <token>"
-curl -sS -i http://127.0.0.1:8899/api/v1/admin/city-admins -H "authorization: Bearer <token>"
+curl -sS -i http://127.0.0.1:8899/api/v1/admin/city-registry-admins -H "authorization: Bearer <token>"
 curl -sS -i http://127.0.0.1:8899/api/v1/institutions/federal-registry -H "authorization: Bearer <token>"
 ```
 
@@ -201,8 +201,8 @@ curl -sS -i http://127.0.0.1:8899/api/v1/institutions/federal-registry -H "autho
 SFID 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员
 登录态无效;公民绑定 challenge 过期、账户不匹配、签名失败、ARCHIVE 验真失败等业务错误
 不得返回 `401`。完整规则见 `memory/05-modules/sfid/ERROR_CODES.md`。
-管理员新增入口必须以规范化 `admin_pubkey` 做全局唯一校验；重复账号按已有角色返回
-`SFID_ADMIN_PUBKEY_EXISTS_AS_FEDERAL_ADMIN` 或 `SFID_ADMIN_PUBKEY_EXISTS_AS_CITY_ADMIN`。
-联邦管理员每省最多 5 人；市管理员每省每市最多 30 人；`federal_admin_scope.province_name` 只能建普通索引,不得建唯一约束。
+管理员新增入口必须以规范化 `admin_account` 做全局唯一校验；重复账号按已有注册局机构返回
+`SFID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY` 或 `SFID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY`。
+联邦注册局机构 admins 每省最多 5 人；市注册局机构 admins 每省每市最多 30 人；`federal_registry_scope.province_name` 只能建普通索引,不得建唯一约束。
 管理员安全写操作必须在返回成功前显式完成 Store 持久化；持久化失败返回
 `SFID_STORE_PERSIST_FAILED`。

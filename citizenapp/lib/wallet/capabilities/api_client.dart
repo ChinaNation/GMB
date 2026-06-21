@@ -20,13 +20,13 @@ class HealthStatus {
 class AdminCatalogEntryResponse {
   const AdminCatalogEntryResponse({
     required this.pubkeyHex,
-    required this.roleName,
+    required this.adminGroupName,
     required this.sfidFullName,
     required this.org,
   });
 
   final String pubkeyHex;
-  final String roleName;
+  final String adminGroupName;
   final String sfidFullName;
   final String org;
 }
@@ -198,15 +198,15 @@ class ApiClient {
       }
       final m = item.map((k, v) => MapEntry(k.toString(), v));
       final pubkey = (m['pubkey_hex']?.toString() ?? '').trim().toLowerCase();
-      final role = (m['role_name']?.toString() ?? '').trim();
+      final adminGroup = (m['admin_group_name']?.toString() ?? '').trim();
       final sfidFullName = (m['sfid_full_name']?.toString() ?? '').trim();
-      if (pubkey.isEmpty || role.isEmpty || sfidFullName.isEmpty) {
+      if (pubkey.isEmpty || adminGroup.isEmpty || sfidFullName.isEmpty) {
         continue;
       }
       entries.add(
         AdminCatalogEntryResponse(
           pubkeyHex: pubkey.startsWith('0x') ? pubkey.substring(2) : pubkey,
-          roleName: role,
+          adminGroupName: adminGroup,
           sfidFullName: sfidFullName,
           org: (m['org']?.toString() ?? 'unknown').trim().toLowerCase(),
         ),

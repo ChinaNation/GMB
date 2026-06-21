@@ -10,9 +10,9 @@ export default function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isAdmin = user?.role === 'ADMIN';
-  const roleLabel = isAdmin ? '管理员' : '操作员';
-  const adminName = user?.admin_name?.trim() || '暂未设置';
+  const isAdmin = user?.user_group === 'admins';
+  const user_groupLabel = isAdmin ? '管理员' : '操作员';
+  const adminDisplayName = user?.admin_display_name?.trim() || '暂未设置';
   const [exportState, setExportState] = useState<CpmsStatusExportState | null>(null);
 
   const loadExportState = useCallback(() => {
@@ -99,9 +99,9 @@ export default function AdminLayout() {
             border: '1px solid rgba(255,255,255,0.15)',
             display: 'inline-flex', alignItems: 'center', gap: 8,
           }}>
-            <span>{roleLabel}</span>
+            <span>{user_groupLabel}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
-            <span>{adminName}</span>
+            <span>{adminDisplayName}</span>
           </span>
           <button
             onClick={handleLogout}

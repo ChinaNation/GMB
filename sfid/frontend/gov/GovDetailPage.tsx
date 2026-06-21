@@ -43,7 +43,7 @@ interface Props {
   auth: AdminAuth;
   sfidNumber: string;
   canWrite: boolean;
-  /** 不传则隐藏返回按钮(注册局 tab 里市管理员直接进详情、或联邦注册局无上一级时)。 */
+  /** 不传则隐藏返回按钮(注册局 tab 里市注册局管理员直接进详情、或联邦注册局无上一级时)。 */
   onBack?: () => void;
   /** 返回按钮文案,默认「返回列表」。 */
   backLabel?: string;
@@ -155,7 +155,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
 
   const inst = detail?.institution;
   const accounts = detail?.accounts || [];
-  const canManageCpms = canWrite && auth.role === 'FEDERAL_ADMIN';
+  const canManageCpms = canWrite && auth.registry_org_code === 'FEDERAL_REGISTRY';
   const administrativeArea = inst
     ? [inst.province_name, inst.city_name, inst.town_name].filter(Boolean).join('/') || '-'
     : '-';
@@ -220,11 +220,11 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         status: 'PENDING',
         version: 1,
         qr1_payload: result.qr1_payload,
-        admin_province: inst.province_name,
+        province_name: inst.province_name,
         city_name: inst.city_name,
         institution_code: inst.institution_code,
         sfid_full_name: inst.sfid_full_name ?? '',
-        created_by: auth.admin_pubkey,
+        created_by: auth.admin_account,
         created_at: new Date().toISOString(),
       });
       notice.success('CPMS 安装码已生成');
@@ -425,7 +425,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
-        qrHint="使用联邦管理员冷钱包扫码签名"
+        qrHint="使用联邦注册局管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}

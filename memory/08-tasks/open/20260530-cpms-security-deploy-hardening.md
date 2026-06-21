@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-- 超级管理员 15 分钟无活动强制退出；操作管理员 30 分钟无活动强制退出。
+- CPMS 机构管理员 15 分钟无活动强制退出；operators 30 分钟无活动强制退出。
 - 正式安装包必须包含前端构建产物，安装后通过后端 8080 直接访问页面。
 - 删除 Docker 残留；保留 CPMS 编译期引用 SFID 工具行政区数据唯一真源。
 - 删除档案签名失败的所有校验分支都写失败审计，且不消费 challenge、不删除档案。
@@ -19,7 +19,7 @@
 - `cpms/backend/src/rate_limit.rs`：新增本机内存限流模块。
 - `cpms/backend/src/main.rs`：挂载限流器、安全响应头和前端目录校验。
 - `cpms/backend/src/initialize`：启动时解密验证本机密钥材料，并给初始化入口接入限流。
-- `cpms/backend/src/operator_admin`：删除签名失败全分支写失败审计，删除完成和资料上传接入限流。
+- `cpms/backend/dangan`：删除签名失败全分支写失败审计，删除完成和资料上传接入限流。
 - `cpms/backend/db`：删除无用 `login_challenges.challenge_payload` 字段。
 - `cpms/scripts`：正式打包时构建并复制前端 `dist`。
 - `cpms/deploy/linux`：安装 `/opt/cpms/frontend` 并配置 `CPMS_FRONTEND_DIR`。

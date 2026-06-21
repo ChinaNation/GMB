@@ -11,11 +11,11 @@
 - 创建：2026-06-20
 - 背景：提交 `25798a52`(统一管理员体系) 把节点后端 Tauri 命令参数 + serde 字段 + 链端字段/事件改名为 `admins`/`org`/`admins_len`/`adminsSs58`，但节点前端 TS 未同步、链端只改字段层未改类型/错误/trait/常量层。本卡把统一收口为「全仓库零例外」。
 - 口径基线：后端新名为规范，旧的一侧一律向新名对齐，不做兼容层。
-- 范围边界：本次只统一「机构/个人多签治理管理员」(真源 `admins-change::AdminAccounts`)。**不动** SFID 省/市注册局管理员(`sfid/frontend/admins/*`) 与 CPMS 操作员(`cpms/frontend/admins/*`)，那是两套独立 admin 域。
+- 范围边界：统一所有机构和个人多签管理员，唯一真源为 `admins-change::AdminAccounts`；SFID 注册局机构管理员和 CPMS 机构管理员都必须收口到机构 `admins`，CPMS 本地非机构人员只叫 `operators`。
 
 ## 改名口径表
-- `new_admins`/`admin_org`/`admin_pubkeys`(Tauri 参数) → `admins`/`org`/`admins`
-- `admin_count`(字段/事件) → `admins_len`；`duoqian_admins_ss58`→`admins_ss58`(serde→`adminsSs58`)
+- 新增或替换管理员参数统一使用 `admins`；不再保留旧管理员公钥数组字段。
+- 管理员数量字段统一为 `admins_len`；多签管理员 SS58 展示字段统一为 `admins_ss58`(serde→`adminsSs58`)。
 - `DuoqianAdminsOf<T>` → `AdminsOf<T>`（`DuoqianTransfer`/`DuoqianAccountOf`/`PersonalDuoqians` 属多签业务域名，保留）
 - `EMPTY_DUOQIAN_ADMINS` → 删除（死常量）
 - `InvalidAdminCount`/`AdminCountMismatch` → `InvalidAdminsLen`/`AdminsLenMismatch`

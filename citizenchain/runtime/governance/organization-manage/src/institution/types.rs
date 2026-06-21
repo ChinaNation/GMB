@@ -3,7 +3,7 @@ use frame_support::pallet_prelude::DecodeWithMemTracking;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-/// SFID 机构登记反向索引项：duoqian_account → (sfid_number, account_name)。
+/// SFID 机构登记反向索引项：account → (sfid_number, account_name)。
 ///
 /// 由 `register_sfid_institution` extrinsic 写入,后续创建/查询机构多签时
 /// 用作反向校验。
@@ -96,7 +96,7 @@ pub struct InstitutionAccountInfo<AccountId, Balance, BlockNumber> {
 /// 关闭机构多签账户提案的业务数据(存入投票引擎 ProposalData)。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CloseInstitutionAction<AccountId> {
-    pub duoqian_account: AccountId,
+    pub account: AccountId,
     pub beneficiary: AccountId,
     pub proposer: AccountId,
 }

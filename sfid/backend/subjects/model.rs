@@ -391,10 +391,10 @@ pub struct InstitutionListRow {
     pub identity_service_status: Option<String>,
     pub created_at: DateTime<Utc>,
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
-    /// 命中:admin_name;未命中:None(前端显示为"未知")
+    /// 命中:admin_display_name;未命中:None(前端显示为"未知")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"FEDERAL_ADMIN" / "CITY_ADMIN" / None
+    /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY" / None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }
@@ -427,7 +427,7 @@ pub struct InstitutionDetailOutput {
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"FEDERAL_ADMIN" / "CITY_ADMIN"
+    /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }

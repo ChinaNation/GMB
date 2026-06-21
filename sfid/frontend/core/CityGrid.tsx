@@ -9,8 +9,8 @@ import { loadCachedSfidCities, readCachedSfidCities } from '../china/metaCache';
 
 interface Props {
   auth: AdminAuth;
-  province: string;
-  onPick: (city: string) => void;
+  province_name: string;
+  onPick: (city_name: string) => void;
 }
 
 const CARD_STYLE: React.CSSProperties = {
@@ -24,8 +24,8 @@ const CARD_STYLE: React.CSSProperties = {
   textAlign: 'center' as const,
 };
 
-export const CityGrid: React.FC<Props> = ({ auth, province, onPick }) => {
-  const cachedCities = readCachedSfidCities(province);
+export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
+  const cachedCities = readCachedSfidCities(province_name);
   const [cities, setCities] = useState<SfidCityItem[]>(
     () => cachedCities?.filter((c) => c.code !== '000') ?? [],
   );
@@ -34,7 +34,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province, onPick }) => {
 
   useEffect(() => {
     let cancelled = false;
-    const cachedRows = readCachedSfidCities(province);
+    const cachedRows = readCachedSfidCities(province_name);
     if (cachedRows) {
       setCities(cachedRows.filter((c) => c.code !== '000'));
       setLoading(false);
@@ -43,7 +43,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province, onPick }) => {
       setLoading(true);
     }
     setError(null);
-    loadCachedSfidCities(auth, province)
+    loadCachedSfidCities(auth, province_name)
       .then((rows) => {
         if (cancelled) return;
         setCities(rows.filter((c) => c.code !== '000'));
@@ -58,7 +58,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province, onPick }) => {
     return () => {
       cancelled = true;
     };
-  }, [auth.access_token, province]);
+  }, [auth.access_token, province_name]);
 
   return (
     <div>

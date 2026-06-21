@@ -193,7 +193,7 @@ async fn create_institution_inner(
         },
         _ => return api_error(StatusCode::BAD_REQUEST, 1001, "学校名称/机构名称不能为空"),
     };
-    let province = match scope.locked_province.clone() {
+    let province = match scope.locked_province_name.clone() {
         Some(locked) => {
             if input
                 .province_name
@@ -225,17 +225,17 @@ async fn create_institution_inner(
     }
     let mut city = input.city_name.trim().to_string();
     // 中文注释:机构创建权限统一由省/市 scope 收口:
-    // 联邦管理员 locked_province=本省且 locked_city=None,可在本省任意市创建;
-    // 市管理员同时锁定省和市,只能创建本市机构。
-    if let Some(locked_city) = scope.locked_city.clone() {
-        if !city.is_empty() && city != locked_city {
+    // 联邦注册局机构管理员 locked_province_name=本省且 locked_city_name=None,可在本省任意市创建;
+    // 市注册局机构管理员同时锁定省和市,只能创建本市机构。
+    if let Some(locked_city_name) = scope.locked_city_name.clone() {
+        if !city.is_empty() && city != locked_city_name {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
                 "city out of current admin scope",
             );
         }
-        city = locked_city;
+        city = locked_city_name;
     }
     if city.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "city is required");
@@ -463,18 +463,18 @@ async fn create_institution_inner(
             legal_rep_photo_name: Some(legal_rep.photo_name.clone()),
             legal_rep_photo_mime: Some(legal_rep.photo_mime.clone()),
             legal_rep_photo_size: Some(legal_rep.photo_size),
-            created_by: ctx.admin_pubkey.clone(),
+            created_by: ctx.admin_account.clone(),
             created_at: Utc::now(),
         };
         if let Err(err) = state.db.upsert_institution_row(&inst) {
             let message = format!("write institution failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
-        insert_default_accounts_best_effort(&state, &inst, &ctx.admin_pubkey).await;
+        insert_default_accounts_best_effort(&state, &inst, &ctx.admin_account).await;
         crate::core::runtime_ops::append_audit_log(
             &state,
             "INSTITUTION_CREATE",
-            &ctx.admin_pubkey,
+            &ctx.admin_account,
             Some(sfid.clone()),
             serde_json::json!({
                 "sfid_number": sfid.clone(),
@@ -593,7 +593,7 @@ async fn list_institutions_inner(
         manifest_version: None,
         catalog_status: None,
     };
-    if let (Some(locked), Some(requested)) = (&scope.locked_province, &query.province_name) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_province_name, &query.province_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -603,7 +603,7 @@ async fn list_institutions_inner(
             .into_response();
         }
     }
-    if let (Some(locked), Some(requested)) = (&scope.locked_city, &query.city_name) {
+    if let (Some(locked), Some(requested)) = (&scope.locked_city_name, &query.city_name) {
         if locked != requested {
             return Json(ApiResponse {
                 code: 0,
@@ -614,7 +614,7 @@ async fn list_institutions_inner(
         }
     }
     let Some(province_name) = scope
-        .locked_province
+        .locked_province_name
         .as_deref()
         .or(query.province_name.as_deref())
     else {
@@ -623,7 +623,7 @@ async fn list_institutions_inner(
     let Some(province_code) = province_code_by_name(province_name) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
-    let city_code = match scope.locked_city.as_deref().or(query.city_name.as_deref()) {
+    let city_code = match scope.locked_city_name.as_deref().or(query.city_name.as_deref()) {
         Some(city_name) => match city_code_by_name(province_name, city_name) {
             Some(code) => Some(code),
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city"),

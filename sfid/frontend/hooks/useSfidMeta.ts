@@ -1,4 +1,4 @@
-// 中文注释:sfid 元信息(subject_property / 机构类型 / 省份 / scoped_province)加载 hook。
+// 中文注释:sfid 元信息(subject_property / 机构类型 / 省份 / scoped_province_name)加载 hook。
 // 步 0 目标:提供一个统一的加载点,机构详情页、注册弹窗、三机构视图等都用这一份。
 // 设计:
 //   - auth 为 null 时不发请求,直接返回 { meta: null, loading: false }

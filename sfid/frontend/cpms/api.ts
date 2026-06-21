@@ -19,7 +19,7 @@ export type CpmsSiteRow = {
   status?: 'PENDING' | 'ACTIVE' | 'DISABLED' | 'REVOKED';
   version?: number;
   province_code?: string;
-  admin_province?: string;
+  province_name?: string;
   city_name?: string;
   city_code?: string;
   institution_code?: string;

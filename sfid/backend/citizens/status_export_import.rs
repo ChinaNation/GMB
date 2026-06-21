@@ -197,7 +197,7 @@ pub(crate) async fn admin_import_cpms_status_export(
         file.export_year,
         &file.export_batch_id,
         &file.records_hash,
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         &file,
     ) {
         tracing::error!(error = %err, "insert cpms status import failed");
@@ -248,14 +248,14 @@ async fn validate_cpms_status_export(
             1004,
             "cpms install authorization not found".to_string(),
         ))?;
-    if !in_scope_cpms_site(&site, ctx.admin_province.as_deref()) {
+    if !in_scope_cpms_site(&site, ctx.scope_province_name.as_deref()) {
         return Err((
             StatusCode::FORBIDDEN,
             1003,
             "cannot manage other province institutions".to_string(),
         ));
     }
-    if let Some(city) = ctx.admin_city.as_deref() {
+    if let Some(city) = ctx.scope_city_name.as_deref() {
         if site.city_name != city {
             return Err((
                 StatusCode::FORBIDDEN,
@@ -491,7 +491,7 @@ fn apply_status_export_to_db(
             record.voting_eligible && record.citizen_status == CitizenStatus::Normal;
         existing.status_updated_at = Some(record.status_updated_at);
         existing.bound_at = chrono::DateTime::<Utc>::from_timestamp(record.wallet_bound_at, 0);
-        existing.bound_by = Some(ctx.admin_pubkey.clone());
+        existing.bound_by = Some(ctx.admin_account.clone());
         state.db.upsert_citizen_row(&existing)?;
         updated_binding_records += 1;
     }
@@ -563,7 +563,7 @@ fn append_import_audit(
     crate::core::runtime_ops::append_audit_log(
         state,
         "CPMS_STATUS_EXPORT_IMPORT",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(file.sfid_number.clone()),
         detail,
     );

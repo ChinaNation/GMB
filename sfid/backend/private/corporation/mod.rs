@@ -38,7 +38,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
     private_type: PrivateType::Corporation,
     title: "股份公司",
     description: "股份有限公司,管理股份类别、发起人和股东关系。",
-    allowed_roles: CORPORATION_ROLES,
+    allowed_participant_roles: CORPORATION_ROLES,
 };
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {

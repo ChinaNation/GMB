@@ -4,7 +4,7 @@
 
 - 公民档案详情页下半部分恢复为真实功能区，命名为“公民资料库”。
 - 资料库用于显示和管理公民照片、出生纸/出生证明复印件、普通复印件、视频和其他资料。
-- 主体业务必须放在 `cpms/backend/src/dangan` 下实现，不能放进 `operator_admin` 作为核心功能。
+- 主体业务必须放在 `cpms/backend/src/dangan` 下实现，不能放进 `operators` 作为核心功能。
 - 完成后更新文档、补中文注释、清理旧占位残留。
 
 ## 预计修改目录
@@ -12,7 +12,7 @@
 - `cpms/backend/src/dangan`：新增资料库模块，负责元数据、文件存储、上传下载删除、硬删除联动。
 - `cpms/backend/db`：新增 `archive_materials` 表结构，保存资料元数据，不保存文件正文。
 - `cpms/backend/src/main.rs`：挂载 dangan 资料库路由并登记错误码。
-- `cpms/frontend/operator_admin`：档案详情页新增“公民资料库”区域、资料上传、显示、下载和删除。
+- `cpms/frontend/dangan`：档案详情页新增“公民资料库”区域、资料上传、显示、下载和删除。
 - `cpms/frontend/assets/styles`：新增资料卡片样式。
 - `cpms/CPMS_TECHNICAL.md` 与 `memory/05-modules/cpms`：同步资料库边界、接口、存储和审计规则。
 - `memory/08-tasks`：记录本次执行和验证结果。

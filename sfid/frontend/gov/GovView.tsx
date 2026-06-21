@@ -64,11 +64,11 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
     setCreateOpen(false);
     setSearchInput('');
     setCommittedSearch('');
-  }, [auth.admin_pubkey, category, resetToken]);
+  }, [auth.admin_account, category, resetToken]);
 
   const provinces = sfidMeta?.provinces || [];
-  const lockedProvince = scope.lockedProvince;
-  const lockedCity = scope.lockedCity;
+  const lockedProvinceName = scope.lockedProvinceName;
+  const lockedCityName = scope.lockedCityName;
 
   // 中文注释:公安局是确定性机构,不走普通公权机构搜索。
   // 前端进入 tab 后由 GovListTable 先读本地缓存,没有缓存才请求后端专用接口。
@@ -89,8 +89,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
     );
   }
 
-  const effectiveProvince = selectedProvince ?? lockedProvince;
-  const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCity : null);
+  const effectiveProvince = selectedProvince ?? lockedProvinceName;
+  const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCityName : null);
 
   // 中文注释:普通公权目录由后端自动生成;手动新增两能力:公权机构(G,ZF/LF/SF/JC)
   // 和公权下属非法人(F,挂公法人)。JY 教育机构统一归教育 tab。
@@ -110,8 +110,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
     // ── 任务卡 6:公安局省详情 = 该省所有公安局表格(跳过市卡片层,无"新增"按钮)──
     // 机构数据由后端 reconcile 按 sfid 工具市清单自动维护,前端不能新建。
     const canGoBack = !scope.skipProvinceList;
-    const titleText = scope.lockedCity
-      ? `${effectiveProvince} · ${scope.lockedCity}`
+    const titleText = scope.lockedCityName
+      ? `${effectiveProvince} · ${scope.lockedCityName}`
       : effectiveProvince;
     title = makeCenteredTitle(
       titleText,
@@ -122,8 +122,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
       <GovListTable
         auth={auth}
         category={category}
-        province={effectiveProvince}
-        city=""
+        province_name={effectiveProvince}
+        city_name=""
         refreshKey={refreshKey}
         onSelectInstitution={(sfidNumber) => setSelectedSfidNumber(sfidNumber)}
       />
@@ -136,7 +136,7 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
       canGoBack ? () => setSelectedProvince(null) : undefined,
       '返回省列表'
     );
-    body = <CityGrid auth={auth} province={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
+    body = <CityGrid auth={auth} province_name={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
   } else {
     // ── 公权/私权的市详情 = 该市机构表格 ──
     // 不使用 Card 的 extra(否则 extra 占用 title 空间,中间标题会被挤到左侧)。
@@ -191,8 +191,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
       <GovListTable
         auth={auth}
         category={category}
-        province={effectiveProvince}
-        city={effectiveCity}
+        province_name={effectiveProvince}
+        city_name={effectiveCity}
         refreshKey={refreshKey}
         searchQuery={committedSearch}
         onSelectInstitution={(sfidNumber) => setSelectedSfidNumber(sfidNumber)}
@@ -217,8 +217,8 @@ export const GovView: React.FC<Props> = ({ auth, category, sfidMeta, resetToken 
         <GovCreateModal
           auth={auth}
           open={createOpen}
-          lockedProvince={effectiveProvince}
-          lockedCity={effectiveCity}
+          lockedProvinceName={effectiveProvince}
+          lockedCityName={effectiveCity}
           onCancel={() => setCreateOpen(false)}
           onCreated={(result) => {
             setCreateOpen(false);

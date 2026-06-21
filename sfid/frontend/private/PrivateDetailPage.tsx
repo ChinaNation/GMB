@@ -161,7 +161,7 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite,
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
-        qrHint="使用联邦管理员冷钱包扫码签名"
+        qrHint="使用联邦注册局管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}

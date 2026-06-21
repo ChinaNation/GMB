@@ -48,7 +48,7 @@
 - 2026-06-13：再次执行 `cd cpms/frontend && npm run build` 通过。
 - 2026-06-13：执行 `cd sfid/frontend && npm run build` 通过；仅有既有 chunk 体积提示。
 - 2026-06-13：当前运行态确认 `127.0.0.1:8080/api/v1/not-exists` 与 `localhost:5174/api/v1/not-exists` 均返回 JSON 404；`127.0.0.1:5173` 返回 `citizenchain` 前端 HTML，不属于 CPMS。
-- 2026-06-13：复用现有未过期超级管理员 session 请求 `localhost:5174/api/v1/archives/ar_d7fafa0eb7654fb9816c960cbadbff12/audit-logs`，返回 `200 application/json`、`code=0`、59 条记录，首条包含 `operator_account`。
+- 2026-06-13：复用现有未过期CPMS 机构管理员 session 请求 `localhost:5174/api/v1/archives/ar_d7fafa0eb7654fb9816c960cbadbff12/audit-logs`，返回 `200 application/json`、`code=0`、59 条记录，首条包含 `operator_account`。
 - 2026-06-13：调整有效期与选举资格排版后，再次执行 `cd cpms/frontend && npm run build` 通过。
 - 2026-06-13：残留扫描确认旧有效期拆行样式、旧 5173 Vite 默认端口、旧 `localhost:8080` 代理目标和旧 HTML 错误提示文案均无命中。
 - 2026-06-13：当前 5174 运行态复验 `GET /api/v1/archives/ar_d7fafa0eb7654fb9816c960cbadbff12/audit-logs`，返回 `200 application/json`、`code=0`、59 条记录。

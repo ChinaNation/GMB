@@ -50,7 +50,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(7);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config + admins_change::Config {
@@ -164,7 +164,7 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// SFID 机构登记：(sfid_number, account_name) -> duoqian_account（由 blake2b_256 派生）。
+    /// SFID 机构登记：(sfid_number, account_name) -> account（由 blake2b_256 派生）。
     /// 同一 sfid_number 可通过不同 account_name 注册多个多签账户。
     #[pallet::storage]
     pub type SfidRegisteredAccount<T: Config> = StorageDoubleMap<
@@ -177,7 +177,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// SFID 机构登记反向索引：duoqian_account -> { sfid_number, nonce }
+    /// SFID 机构登记反向索引：account -> { sfid_number, nonce }
     #[pallet::storage]
     #[pallet::getter(fn account_registered_sfid)]
     pub type AccountRegisteredSfid<T: Config> = StorageMap<
@@ -269,7 +269,7 @@ pub mod pallet {
         /// 机构关闭提案已发起。
         InstitutionCloseProposed {
             proposal_id: u64,
-            duoqian_account: T::AccountId,
+            account: T::AccountId,
             proposer: T::AccountId,
             beneficiary: T::AccountId,
         },
@@ -282,7 +282,7 @@ pub mod pallet {
         /// 机构关闭成功(投票通过,余额转出)。
         InstitutionClosed {
             proposal_id: u64,
-            duoqian_account: T::AccountId,
+            account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -290,7 +290,7 @@ pub mod pallet {
         /// 机构关闭执行失败。
         InstitutionCloseExecutionFailed {
             proposal_id: u64,
-            duoqian_account: T::AccountId,
+            account: T::AccountId,
         },
         /// 机构级创建提案已发起：创建者资金已 reserve，等待管理员投票。
         InstitutionCreateProposed {
@@ -334,7 +334,7 @@ pub mod pallet {
         SfidInstitutionRegistered {
             sfid_number: SfidNumberOf<T>,
             account_name: AccountNameOf<T>,
-            duoqian_account: T::AccountId,
+            account: T::AccountId,
             submitter: T::AccountId,
         },
     }
@@ -370,10 +370,10 @@ pub mod pallet {
         /// 机构账户管理员 org 只能是 ORG_PUP 或 ORG_OTH
         InvalidOrg,
         /// 多签账户不存在
-        DuoqianNotFound,
+        AccountNotFound,
         /// 多签账户处于 pending 状态，不可操作
-        DuoqianNotActive,
-        /// 注销收款账户非法（不允许等于 duoqian_account）
+        AccountNotActive,
+        /// 注销收款账户非法（不允许等于 account）
         InvalidBeneficiary,
         /// 资金转出源地址受保护，不允许转出
         ProtectedSource,
@@ -418,7 +418,7 @@ pub mod pallet {
         /// 机构已经存在
         InstitutionAlreadyExists,
         /// propose_close 校验:仅机构地址可走本入口(个人地址转 personal-manage)。
-        NotInstitutionDuoqian,
+        NotInstitutionAccount,
         /// 机构账户列表为空
         EmptyInstitutionAccounts,
         /// 机构账户数量超过上限
@@ -539,16 +539,16 @@ pub mod pallet {
         ///
         /// 仅服务于 SFID 注册机构地址(`AccountRegisteredSfid` 命中);
         /// 个人多签关闭走 personal-manage::propose_close 入口,
-        /// 输入个人地址会返回 `Error::NotInstitutionDuoqian`。
+        /// 输入个人地址会返回 `Error::NotInstitutionAccount`。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
         pub fn propose_close(
             origin: OriginFor<T>,
-            duoqian_account: T::AccountId,
+            account: T::AccountId,
             beneficiary: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::close::do_propose_institution_close::<T>(who, duoqian_account, beneficiary)
+            crate::close::do_propose_institution_close::<T>(who, account, beneficiary)
         }
 
         /// 发起"创建个人多签账户"提案（无需 SFID 注册）。
@@ -597,7 +597,7 @@ pub mod pallet {
                     let action =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-                    InstitutionPendingClose::<T>::remove(&action.duoqian_account);
+                    InstitutionPendingClose::<T>::remove(&action.account);
                 }
                 _ => return Err(Error::<T>::ProposalActionNotFound.into()),
             }
@@ -678,9 +678,7 @@ pub mod pallet {
         // derive_personal_duoqian_account 已迁至 personal-manage::Pallet,
         // organization-manage 不再提供该派生(机构地址只走 derive_institution_account)。
 
-        pub(crate) fn ensure_unique_admins(
-            admins: &AdminsOf<T>,
-        ) -> Result<(), DispatchError> {
+        pub(crate) fn ensure_unique_admins(admins: &AdminsOf<T>) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
             for admin in admins.iter() {
                 ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
@@ -939,7 +937,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::InstitutionCloseExecutionFailed {
                                 proposal_id,
-                                duoqian_account: action.duoqian_account,
+                                account: action.account,
                             },
                         );
                         return Ok(ProposalExecutionOutcome::RetryableFailed);
@@ -966,7 +964,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     if let Ok(action) =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                     {
-                        InstitutionPendingClose::<T>::remove(&action.duoqian_account);
+                        InstitutionPendingClose::<T>::remove(&action.account);
                     }
                 }
                 _ => {}
@@ -999,7 +997,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 let action =
                     CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                         .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                InstitutionPendingClose::<T>::remove(&action.duoqian_account);
+                InstitutionPendingClose::<T>::remove(&action.account);
             }
             _ => {}
         }

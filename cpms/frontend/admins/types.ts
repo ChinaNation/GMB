@@ -1,13 +1,12 @@
 // CPMS 管理员模块类型。
 
-export type AdminRole = 'ADMIN' | 'OPERATOR';
+export type AdminUserGroup = 'admins' | 'operators';
 
 export interface AdminUser {
   user_id: string;
-  admin_pubkey: string;
-  admin_address: string;
-  admin_name: string;
-  role: AdminRole;
+  admin_account: string;
+  admin_display_name: string;
+  user_group: AdminUserGroup;
   immutable: boolean;
   can_edit_name: boolean;
   can_delete: boolean;

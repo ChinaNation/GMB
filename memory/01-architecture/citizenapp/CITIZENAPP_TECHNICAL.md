@@ -375,7 +375,7 @@ CITIZEN_QR_V1|system|challenge|expires_at
 - `WalletSettingsEntity`
 - `LocalTxEntity`
 - `WalletTxSyncCursorEntity`
-- `AdminRoleCacheEntity`
+- `AdminGroupCacheEntity`
 - `ObservedAccountEntity`
 - `LoginReplayEntity`
 - `AppKvEntity`

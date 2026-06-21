@@ -78,8 +78,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// pallet 自身 StorageVersion。
-    /// v2:动态阈值归属 internal-vote，删除业务显式投票阈值入口。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载历史迁移。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {

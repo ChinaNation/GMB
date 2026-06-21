@@ -18,7 +18,7 @@ SFID 后端源码直接以 `sfid/backend/` 为根目录展开,不恢复 `backend
 5. 创建当前目标索引。
 6. 为 `subjects/citizens/gov/private/accounts/docs/audit` 创建按省分区。
 7. 读取随包只读行政区 SQLite，为 `subjects/citizens/gov/private/accounts/docs/audit` 创建当前 43 个省级分区。
-8. 初始化内置 43 个联邦管理员。
+8. 初始化内置 43 个联邦注册局机构管理员。
 9. 启动交易索引 worker。
 
 schema 初始化和业务目录初始化必须分离。schema 收敛每次启动都可以执行,但只允许把数据库结构调整到当前目标状态,不得保留旧字段或旧接口作为兼容通道。任何依赖新字段的索引、约束或业务 SQL 都必须放在字段收敛和目标状态校验之后执行。
@@ -67,8 +67,8 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 ### 管理员与安全
 
-- `admins`:联邦管理员/市管理员。
-- `federal_admin_scope`:联邦管理员所属省。
+- `admins`:注册局机构管理员账户。
+- `federal_registry_scope`:联邦注册局机构管理员所属省。
 - `admin_sessions`:登录会话。
 - `admin_login_challenges`:签名登录挑战。
 - `admin_qr_login_results`:扫码登录结果。
@@ -95,14 +95,14 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 ## 权限模型
 
-管理员分为联邦管理员和市管理员:
+管理员唯一真源为机构或个人多签的 `admins`。SFID 管理端按登录账户所属注册局机构判定权限:
 
-- 联邦管理员:只能增删改查所属省数据。
-- 市管理员:只能增删改查所属市数据。
+- `registry_org_code=FEDERAL_REGISTRY`:联邦注册局机构的 admins,只能增删改查所属省数据。
+- `registry_org_code=CITY_REGISTRY`:市注册局机构的 admins,只能增删改查所属市数据。
 
 所有列表和 CRUD 接口必须把管理员范围转成 SQL 条件。禁止读取全量数据后在 Rust 或前端过滤。
 
-市管理员范围不单独建表。市管理员记录保存在 `admins`,所属市使用 `admins.city`,所属省通过 `admins.created_by` 指向的联邦管理员和 `federal_admin_scope` 解析。注册局页面统一显示 `联邦管理员列表`、`市管理员列表`;市管理员在该页面只读查看本人所属省的联邦管理员和本人所属市的市管理员目录,不得显示新增、编辑或删除入口。
+市注册局机构管理员范围不单独建表。管理员记录保存在 `admins`,所属市使用 `admins.city_name`,所属省通过 `admins.created_by` 指向的联邦注册局机构管理员和 `federal_registry_scope` 解析。注册局页面统一显示联邦注册局机构 admins、市注册局机构 admins;市注册局机构 admins 在该页面只读查看本人所属省和所属市的管理员目录,不得显示新增、编辑或删除入口。
 
 ## 前端交互与提示
 

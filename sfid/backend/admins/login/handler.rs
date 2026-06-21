@@ -20,7 +20,7 @@ use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::signature::{
     build_admin_display_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
-    resolve_admin_city, verify_admin_signature,
+    resolve_scope_city_name, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
 
@@ -48,11 +48,11 @@ pub(crate) async fn admin_auth_check(
         message: "ok".to_string(),
         data: AdminAuthOutput {
             ok: true,
-            admin_pubkey: ctx.admin_pubkey,
-            role: ctx.role,
-            admin_name: ctx.admin_name,
-            admin_province: ctx.admin_province,
-            admin_city: ctx.admin_city,
+            admin_account: ctx.admin_account,
+            registry_org_code: ctx.registry_org_code,
+            admin_display_name: ctx.admin_display_name,
+            scope_province_name: ctx.scope_province_name,
+            scope_city_name: ctx.scope_city_name,
             passkey_bound: ctx.passkey_bound,
         },
     })
@@ -84,12 +84,12 @@ pub(crate) async fn admin_auth_identify(
     State(state): State<AppState>,
     Json(input): Json<AdminIdentifyInput>,
 ) -> impl IntoResponse {
-    let admin_pubkey = parse_admin_identity_qr(&input.identity_qr);
-    if admin_pubkey.is_empty() {
+    let admin_account = parse_admin_identity_qr(&input.identity_qr);
+    if admin_account.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "identity_qr is required");
     }
 
-    let admin = match repo::get_admin_by_pubkey(&state.db, admin_pubkey.as_str()) {
+    let admin = match repo::get_admin_by_account(&state.db, admin_account.as_str()) {
         Ok(Some(v)) => v,
         Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
         Err(err) => {
@@ -97,15 +97,18 @@ pub(crate) async fn admin_auth_identify(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let province = match repo::province_scope_for_role(&state.db, &admin.admin_pubkey, &admin.role)
-    {
+    let province = match repo::province_scope_for_registry_org(
+        &state.db,
+        &admin.admin_account,
+        &admin.registry_org_code,
+    ) {
         Ok(v) => v,
         Err(err) => {
             let message = format!("query admin scope failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let passkey_bound = match repo::admin_has_active_passkey(&state.db, &admin.admin_pubkey) {
+    let passkey_bound = match repo::admin_has_active_passkey(&state.db, &admin.admin_account) {
         Ok(v) => v,
         Err(err) => {
             let message = format!("query passkey failed: {err}");
@@ -117,11 +120,11 @@ pub(crate) async fn admin_auth_identify(
         code: 0,
         message: "ok".to_string(),
         data: AdminIdentifyOutput {
-            admin_pubkey: admin.admin_pubkey.clone(),
-            role: admin.role.clone(),
-            admin_name: build_admin_display_name_from_user(&admin, province.as_deref()),
-            admin_province: province,
-            admin_city: resolve_admin_city(&admin),
+            admin_account: admin.admin_account.clone(),
+            registry_org_code: admin.registry_org_code.clone(),
+            admin_display_name: build_admin_display_name_from_user(&admin, province.as_deref()),
+            scope_province_name: province,
+            scope_city_name: resolve_scope_city_name(&admin),
             passkey_bound,
         },
     })
@@ -132,8 +135,8 @@ pub(crate) async fn admin_auth_challenge(
     State(state): State<AppState>,
     Json(input): Json<AdminChallengeInput>,
 ) -> impl IntoResponse {
-    if input.admin_pubkey.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "admin_pubkey is required");
+    if input.admin_account.trim().is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "admin_account is required");
     }
     let origin = input.origin.unwrap_or_default().trim().to_string();
     if origin.is_empty() {
@@ -156,7 +159,7 @@ pub(crate) async fn admin_auth_challenge(
     let nonce = Uuid::new_v4().to_string();
     let challenge_text = format!(
         "sfid-login|pubkey={}|origin={}|domain={}|session_id={}|nonce={}|iat={}|exp={}",
-        input.admin_pubkey,
+        input.admin_account,
         origin,
         derived_domain,
         session_id,
@@ -165,7 +168,7 @@ pub(crate) async fn admin_auth_challenge(
         expire_at.timestamp()
     );
 
-    match repo::get_admin_by_pubkey(&state.db, input.admin_pubkey.as_str()) {
+    match repo::get_admin_by_account(&state.db, input.admin_account.as_str()) {
         Ok(Some(_)) => {}
         Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
         Err(err) => {
@@ -177,7 +180,7 @@ pub(crate) async fn admin_auth_challenge(
         &state.db,
         &LoginChallenge {
             challenge_id: challenge_id.clone(),
-            admin_pubkey: input.admin_pubkey,
+            admin_account: input.admin_account,
             challenge_text: challenge_text.clone(),
             challenge_token: String::new(),
             qr_aud: String::new(),
@@ -266,30 +269,34 @@ pub(crate) async fn admin_auth_verify(
         // 中文注释:乐观消费——先标记 consumed 再验签,防止并发请求同时通过 consumed 检查。
         // 验签失败时回退 consumed = false。
         challenge.consumed = true;
-        let admin_pubkey = challenge.admin_pubkey.clone();
+        let admin_account = challenge.admin_account.clone();
         let challenge_text = challenge.challenge_text.clone();
         repo::update_login_challenge_conn(conn, &challenge)?;
 
-        if !verify_admin_signature(&admin_pubkey, &challenge_text, signature.as_str()) {
+        if !verify_admin_signature(&admin_account, &challenge_text, signature.as_str()) {
             challenge.consumed = false;
             repo::update_login_challenge_conn(conn, &challenge)?;
             return Err("http:unprocessable:signature verify failed".to_string());
         }
 
-        let admin = repo::get_admin_by_pubkey_conn(conn, admin_pubkey.as_str())?
+        let admin = repo::get_admin_by_account_conn(conn, admin_account.as_str())?
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
-        let admin_role = admin.role.clone();
-        let admin_province =
-            repo::province_scope_for_role_conn(conn, &admin.admin_pubkey, &admin.role)?;
-        let admin_name = build_admin_display_name_from_user(&admin, admin_province.as_deref());
-        let admin_city = resolve_admin_city(&admin);
-        let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_pubkey)?;
+        let admin_registry_org_code = admin.registry_org_code.clone();
+        let scope_province_name = repo::province_scope_for_registry_org_conn(
+            conn,
+            &admin.admin_account,
+            &admin.registry_org_code,
+        )?;
+        let admin_display_name =
+            build_admin_display_name_from_user(&admin, scope_province_name.as_deref());
+        let scope_city_name = resolve_scope_city_name(&admin);
+        let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_account)?;
         let access_token = Uuid::new_v4().to_string();
         let expire_at = now + Duration::hours(8);
         let new_session = AdminSession {
             token: access_token.clone(),
-            admin_pubkey: admin.admin_pubkey.clone(),
-            role: admin_role.clone(),
+            admin_account: admin.admin_account.clone(),
+            registry_org_code: admin_registry_org_code.clone(),
             expire_at,
             last_active_at: now,
         };
@@ -298,11 +305,11 @@ pub(crate) async fn admin_auth_verify(
             access_token,
             expire_at,
             AdminIdentifyOutput {
-                admin_pubkey: admin.admin_pubkey,
-                role: admin_role,
-                admin_name,
-                admin_province,
-                admin_city,
+                admin_account: admin.admin_account,
+                registry_org_code: admin_registry_org_code,
+                admin_display_name,
+                scope_province_name,
+                scope_city_name,
                 passkey_bound,
             },
         ))

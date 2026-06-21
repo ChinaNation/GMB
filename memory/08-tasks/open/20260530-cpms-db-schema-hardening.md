@@ -39,7 +39,7 @@
 ## 完成记录
 
 - 2026-05-30：`system_install` 新增 `province_code / city_code`，后端安装初始化和运行时读取改为使用显式字段。
-- 2026-05-30：`admin_users.status` 已从基准 schema、鉴权查询、管理员创建和超级管理员绑定响应中移除。
+- 2026-05-30：`admin_users.status` 已从基准 schema、鉴权查询、管理员创建和CPMS 机构管理员绑定响应中移除。
 - 2026-05-30：`archives.birth_date / valid_from / valid_until` 改为 `DATE`，并增加档案状态、公民状态和投票资格组合约束。
 - 2026-05-30：`archive_number_recycle_pool` 改为只约束未使用号码唯一，补充多轮复用后再次入池的数据库测试。
 - 2026-05-30：`cpms_status_exports` 增加 `export_file JSONB`，同一年重复导出返回首次生成的已签名 JSON。

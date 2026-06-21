@@ -36,7 +36,7 @@ fn ensure_province_scope(
     province_name: &str,
 ) -> Result<(), axum::response::Response> {
     let scope = ctx
-        .admin_province
+        .scope_province_name
         .as_deref()
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 1003, "admin province scope missing"))?;
     if scope != province_name {

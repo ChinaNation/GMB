@@ -6,10 +6,10 @@
 //! 2. 派生 `derive_personal_duoqian_account(creator, account_name)` —— 地址只依赖
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
-//!    - 写 Pending PersonalDuoqians 占位
+//!    - 写 Pending PersonalAccounts 占位
 //!    - 调投票引擎 create_registered_account_create_proposal_with_data
 //!    - 调 admins-change 写 Pending 账户
-//! 4. 从投票引擎回读 expires_at,发射 PersonalDuoqianProposed 事件
+//! 4. 从投票引擎回读 expires_at,发射 PersonalCreateProposed 事件
 
 extern crate alloc;
 
@@ -22,10 +22,9 @@ use frame_support::{
 use sp_runtime::DispatchResult;
 
 use crate::pallet::{
-    AccountNameOf, Config, AdminsOf, Error, Event, Pallet, PendingPersonalCreate,
-    PersonalDuoqians,
+    AccountNameOf, AdminsOf, Config, Error, Event, Pallet, PendingPersonalCreate, PersonalAccounts,
 };
-use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus};
+use crate::types::{PersonalAccount, PersonalCreateAction, PersonalStatus};
 use crate::BalanceOf;
 use crate::ACTION_CREATE;
 use primitives::multisig::{
@@ -54,30 +53,29 @@ pub(crate) fn do_propose_create<T: Config>(
 
     let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
-    let duoqian_account =
-        Pallet::<T>::derive_personal_duoqian_account(&who, account_name.as_slice())?;
+    let account = Pallet::<T>::derive_personal_duoqian_account(&who, account_name.as_slice())?;
     ensure!(
-        !PersonalDuoqians::<T>::contains_key(&duoqian_account),
-        Error::<T>::PersonalDuoqianAlreadyExists
+        !PersonalAccounts::<T>::contains_key(&account),
+        Error::<T>::PersonalAlreadyExists
     );
     ensure!(
-        !T::ReservedAccountChecker::is_reserved(&duoqian_account),
+        !T::ReservedAccountChecker::is_reserved(&account),
         Error::<T>::AccountReserved
     );
     ensure!(
-        T::AccountValidator::is_valid(&duoqian_account),
+        T::AccountValidator::is_valid(&account),
         Error::<T>::InvalidAccount
     );
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&duoqian_account),
+        !T::ProtectedSourceChecker::is_protected(&account),
         Error::<T>::ProtectedSource
     );
 
     let now = <frame_system::Pallet<T>>::block_number();
-    let institution = duoqian_account.clone();
+    let institution = account.clone();
     let org = votingengine::types::ORG_REN;
-    let action = CreateDuoqianAction {
-        duoqian_account: duoqian_account.clone(),
+    let action = PersonalCreateAction {
+        account: account.clone(),
         proposer: who.clone(),
         amount,
         fee,
@@ -90,13 +88,13 @@ pub(crate) fn do_propose_create<T: Config>(
         if T::Currency::reserve(&who, reserve_total).is_err() {
             return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
         }
-        PersonalDuoqians::<T>::insert(
-            &duoqian_account,
-            DuoqianAccount {
+        PersonalAccounts::<T>::insert(
+            &account,
+            PersonalAccount {
                 creator: who.clone(),
                 account_name: account_name.clone(),
                 created_at: now,
-                status: DuoqianStatus::Pending,
+                status: PersonalStatus::Pending,
             },
         );
         // 中文注释：regular_threshold 是账户激活后的动态阈值配置；
@@ -130,9 +128,9 @@ pub(crate) fn do_propose_create<T: Config>(
         .map(|p| p.end)
         .ok_or(Error::<T>::VoteEngineError)?;
 
-    Pallet::<T>::deposit_event(Event::<T>::PersonalDuoqianProposed {
+    Pallet::<T>::deposit_event(Event::<T>::PersonalCreateProposed {
         proposal_id,
-        duoqian_account,
+        account,
         proposer: who,
         account_name,
         admins: admins,

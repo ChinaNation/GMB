@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 
 use crate::admins::login::AdminAuthContext;
 use crate::admins::repo;
-use crate::crypto::pubkey::normalize_admin_pubkey;
+use crate::crypto::pubkey::normalize_admin_account;
 use crate::subjects::model::Institution;
 use crate::subjects::service::{build_default_accounts_for_institution, ServiceError};
 use crate::{api_error, AppState};
@@ -53,8 +53,8 @@ pub(crate) fn ensure_institution_visible_to_admin(
     inst: &Institution,
     ctx: &AdminAuthContext,
 ) -> Result<(), axum::response::Response> {
-    if let Some(ref locked_province) = ctx.admin_province {
-        if inst.province_name != *locked_province {
+    if let Some(ref locked_province_name) = ctx.scope_province_name {
+        if inst.province_name != *locked_province_name {
             return Err(api_error(
                 StatusCode::FORBIDDEN,
                 1003,
@@ -62,8 +62,8 @@ pub(crate) fn ensure_institution_visible_to_admin(
             ));
         }
     }
-    if let Some(ref locked_city) = ctx.admin_city {
-        if inst.city_name != *locked_city {
+    if let Some(ref locked_city_name) = ctx.scope_city_name {
+        if inst.city_name != *locked_city_name {
             return Err(api_error(StatusCode::FORBIDDEN, 1003, "city out of scope"));
         }
     }
@@ -74,21 +74,21 @@ pub(crate) fn resolve_created_by(
     state: &AppState,
     created_by: &str,
 ) -> (Option<String>, Option<String>) {
-    let Some(norm) = normalize_admin_pubkey(created_by) else {
+    let Some(norm) = normalize_admin_account(created_by) else {
         return (None, None);
     };
     let result = state.db.with_client(move |conn| {
-        let Some(admin) = repo::get_admin_by_pubkey_conn(conn, norm.as_str())? else {
+        let Some(admin) = repo::get_admin_by_account_conn(conn, norm.as_str())? else {
             return Ok((None, None));
         };
-        let role_str = match admin.role {
-            crate::admins::model::AdminRole::FederalAdmin => "FEDERAL_ADMIN",
-            crate::admins::model::AdminRole::CityAdmin => "CITY_ADMIN",
+        let role_str = match admin.registry_org_code {
+            crate::admins::model::RegistryOrgCode::FederalRegistry => "FEDERAL_REGISTRY",
+            crate::admins::model::RegistryOrgCode::CityRegistry => "CITY_REGISTRY",
         };
-        let name_opt = if admin.admin_name.trim().is_empty() {
+        let name_opt = if admin.admin_display_name.trim().is_empty() {
             None
         } else {
-            Some(admin.admin_name)
+            Some(admin.admin_display_name)
         };
         Ok((name_opt, Some(role_str.to_string())))
     });

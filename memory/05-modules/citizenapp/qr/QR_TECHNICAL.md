@@ -173,7 +173,7 @@ CITIZEN_QR_V1|system|challenge|expires_at
 为兼容不同系统前端实现，服务端接收登录回执时应同时兼容以下字段别名：
 
 - `challenge` 或 `challenge_id` 或 `request_id`
-- `pubkey` 或 `admin_pubkey` 或 `public_key`
+- `pubkey` 或 `admin_account` 或 `public_key`
 - `signature` 或 `sig`
 
 `sig_alg`、`signed_at` 属于可选扩展字段，服务端可记录审计但不应作为当前版本的必填拒绝条件。

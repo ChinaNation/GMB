@@ -53,8 +53,8 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
   const [committedSearch, setCommittedSearch] = useState('');
 
   const provinces = sfidMeta?.provinces || [];
-  const lockedProvince = scope.lockedProvince;
-  const lockedCity = scope.lockedCity;
+  const lockedProvinceName = scope.lockedProvinceName;
+  const lockedCityName = scope.lockedCityName;
 
   // 机构详情页由公权详情页组件按存储 category 调度,列表页自身只维护返回状态。
   if (selectedSfidNumber) {
@@ -71,8 +71,8 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
     );
   }
 
-  const effectiveProvince = selectedProvince ?? lockedProvince;
-  const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCity : null);
+  const effectiveProvince = selectedProvince ?? lockedProvinceName;
+  const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCityName : null);
 
   const createLabel = '新增';
 
@@ -96,7 +96,7 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
       canGoBack ? () => setSelectedProvince(null) : undefined,
       '返回省列表'
     );
-    body = <CityGrid auth={auth} province={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
+    body = <CityGrid auth={auth} province_name={effectiveProvince} onPick={(c) => setSelectedCity(c)} />;
   } else {
     // ── 市详情 = 该市教育机构表格 ──
     // 不使用 Card 的 extra(否则 extra 占用 title 空间,中间标题会被挤到左侧)。
@@ -150,8 +150,8 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
     body = (
       <EducationListTable
         auth={auth}
-        province={effectiveProvince}
-        city={effectiveCity}
+        province_name={effectiveProvince}
+        city_name={effectiveCity}
         refreshKey={refreshKey}
         searchQuery={committedSearch}
         onSelectInstitution={(sfidNumber) => setSelectedSfidNumber(sfidNumber)}
@@ -174,8 +174,8 @@ export const EducationView: React.FC<Props> = ({ auth, sfidMeta }) => {
       <EducationCreateModal
         auth={auth}
         open={createOpen}
-        lockedProvince={effectiveProvince}
-        lockedCity={effectiveCity}
+        lockedProvinceName={effectiveProvince}
+        lockedCityName={effectiveCity}
         onCancel={() => setCreateOpen(false)}
         onCreated={(result) => {
           setCreateOpen(false);

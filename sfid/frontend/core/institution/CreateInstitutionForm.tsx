@@ -40,8 +40,8 @@ import { notice } from '../../utils/notice';
 interface FormValues {
   subject_property: string;
   p1: string;
-  province: string;
-  city: string;
+  province_name: string;
+  city_name: string;
   institution: string;
   education_type?: EducationType;
   private_type?: PrivateType;
@@ -62,7 +62,7 @@ type CheckInstitutionName = (
   auth: AdminAuth,
   name: string,
   subject_property?: string,
-  city?: string,
+  city_name?: string,
 ) => Promise<{ exists: boolean }>;
 
 type CreateInstitution = (
@@ -86,8 +86,8 @@ export interface CreateInstitutionFormProps {
   category: CreateFormCategory;
   privateType?: PrivateType;
   open: boolean;
-  lockedProvince: string | null;
-  lockedCity: string | null;
+  lockedProvinceName: string | null;
+  lockedCityName: string | null;
   checkInstitutionName: CheckInstitutionName;
   createInstitution: CreateInstitution;
   uploadLegalRepresentativePhoto: UploadLegalRepresentativePhoto;
@@ -101,8 +101,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   category,
   privateType,
   open,
-  lockedProvince,
-  lockedCity,
+  lockedProvinceName,
+  lockedCityName,
   checkInstitutionName,
   createInstitution,
   uploadLegalRepresentativePhoto,
@@ -194,8 +194,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     form.setFieldsValue({
       subject_property: defaultSubjectProperty,
       p1: defaultRule?.p1 ?? p1LocksForSubject(defaultSubjectProperty, null).value,
-      province: lockedProvince ?? '',
-      city: lockedCity ?? '',
+      province_name: lockedProvinceName ?? '',
+      city_name: lockedCityName ?? '',
       institution: defaultInstitution,
       education_type: defaultEducationType,
       private_type: privateType,
@@ -211,13 +211,13 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     });
     setLegalRepOptions([]);
     setPhotoName('');
-  }, [open, category, privateType, lockedProvince, lockedCity]);
+  }, [open, category, privateType, lockedProvinceName, lockedCityName]);
 
   useEffect(() => {
-    if (!open || !lockedProvince) return;
+    if (!open || !lockedProvinceName) return;
     let cancelled = false;
     setCitiesLoading(true);
-    loadCachedSfidCities(auth, lockedProvince)
+    loadCachedSfidCities(auth, lockedProvinceName)
       .then((rows) => {
         if (!cancelled) setCities(rows.filter((c) => c.code !== '000'));
       })
@@ -233,7 +233,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [open, lockedProvince, auth.access_token]);
+  }, [open, lockedProvinceName, auth.access_token]);
 
   const onSubjectPropertyChange = (subject_property: string) => {
     setCurrentSubjectProperty(subject_property);
@@ -274,16 +274,16 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   // ── 所属法人搜索/选定(仅 F)────────────────────────────────
 
   const parentSearchOptions = (): SearchParentsOptions | null => {
-    const province = (form.getFieldValue('province') ?? '').trim();
-    const city = (form.getFieldValue('city') ?? '').trim();
-    if (!province || !city) {
+    const province_name = (form.getFieldValue('province_name') ?? '').trim();
+    const city_name = (form.getFieldValue('city_name') ?? '').trim();
+    if (!province_name || !city_name) {
       notice.warning('请先选择市,所属法人按落位省市过滤');
       return null;
     }
     return {
       fInstitution: (form.getFieldValue('institution') ?? '').trim(),
-      province_name: province,
-      city_name: city,
+      province_name:  province_name,
+      city_name:  city_name,
       // 公权入口只挂公法人;教育入口(分校)由后端按学校本部过滤。
       parentProperty: isGov ? 'G' : undefined,
     };
@@ -337,18 +337,18 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       notice.warning(`请先输入${nameLabel}`);
       return;
     }
-    // 中文注释:G(公立学校/公权机构)查重是同市同名(后端 check-name G 分支要求 city),S/F 全国查重。
+    // 中文注释:G(公立学校/公权机构)查重是同市同名(后端 check-name G 分支要求 city_name),S/F 全国查重。
     const isGovName = currentSubjectProperty === 'G';
     if (isGovName) {
-      const city = (form.getFieldValue('city') ?? '').trim();
-      if (!city) {
+      const city_name = (form.getFieldValue('city_name') ?? '').trim();
+      if (!city_name) {
         notice.warning(`${nameLabel}查重需要先选择市`);
         return;
       }
     }
     setNameChecking(true);
     try {
-      const cityVal = isGovName ? (form.getFieldValue('city') ?? '').trim() : undefined;
+      const cityVal = isGovName ? (form.getFieldValue('city_name') ?? '').trim() : undefined;
       const { exists } = await checkInstitutionName(
         auth,
         name,
@@ -382,11 +382,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       notice.warning('请先输入法定代表人身份ID关键字');
       return;
     }
-    const province = (form.getFieldValue('province') ?? '').trim();
-    const city = (form.getFieldValue('city') ?? '').trim();
+    const province_name = (form.getFieldValue('province_name') ?? '').trim();
+    const city_name = (form.getFieldValue('city_name') ?? '').trim();
     const subjectProperty = (form.getFieldValue('subject_property') ?? '').trim();
     const institution = (form.getFieldValue('institution') ?? '').trim();
-    if (!province || !city || !subjectProperty || !institution) {
+    if (!province_name || !city_name || !subjectProperty || !institution) {
       notice.warning('请先选择省、市、主体属性和机构');
       return;
     }
@@ -397,8 +397,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setLegalRepSearching(true);
     try {
       const rows = await searchLegalRepresentativeCitizens(auth, q, {
-        province_name: province,
-        city_name: city,
+        province_name:  province_name,
+        city_name:  city_name,
         subject_property: subjectProperty,
         institution,
         education_type: showEducationType ? form.getFieldValue('education_type') : undefined,
@@ -455,8 +455,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       const result = await createInstitution(auth, {
         subject_property: values.subject_property.trim(),
         p1: values.p1?.trim(),
-        province_name: values.province.trim(),
-        city_name: values.city.trim(),
+        province_name: values.province_name.trim(),
+        city_name: values.city_name.trim(),
         institution: values.institution.trim(),
         education_type: showEducationType ? values.education_type : undefined,
         sfid_full_name: collectNameInModal
@@ -487,7 +487,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     } catch (err) {
       const raw = err instanceof Error ? err.message : '创建机构失败';
       if (raw.includes('本省') && raw.includes('未在线')) {
-        notice.error('本省登录管理员未在线,请联系联邦管理员登录后重试');
+        notice.error('本省登录管理员未在线,请联系联邦注册局机构管理员登录后重试');
       } else if (raw.includes('已被使用') || raw.includes('同名机构')) {
         notice.error('该市已存在同名机构，请更换名称');
         setNameAvailable(false);
@@ -575,15 +575,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         </Row>
         <Row gutter={16}>
           <Col span={12}>
-            <Form.Item label="省" name="province" rules={[{ required: true }]}>
+            <Form.Item label="省" name="province_name" rules={[{ required: true }]}>
               <Input disabled />
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item label="市" name="city" rules={[{ required: true, message: '请选择市' }]}>
+            <Form.Item label="市" name="city_name" rules={[{ required: true, message: '请选择市' }]}>
               <Select
                 loading={citiesLoading}
-                disabled={lockedCity !== null}
+                disabled={lockedCityName !== null}
                 options={cities.map((c) => ({ label: c.name, value: c.name }))}
                 placeholder="请选择市"
                 onChange={() => {

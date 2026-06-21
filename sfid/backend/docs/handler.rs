@@ -293,7 +293,7 @@ pub(crate) async fn upload_document(
         doc_type,
         file_size: file_data.len() as u64,
         file_path: stored_path,
-        uploaded_by: ctx.admin_pubkey.clone(),
+        uploaded_by: ctx.admin_account.clone(),
         uploaded_at: Utc::now(),
     };
     let doc = match state.db.insert_document(&doc) {
@@ -310,7 +310,7 @@ pub(crate) async fn upload_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_DOCUMENT_UPLOAD",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),
@@ -372,7 +372,7 @@ pub(crate) async fn download_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_DOCUMENT_DOWNLOAD",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),
@@ -470,7 +470,7 @@ pub(crate) async fn delete_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_DOCUMENT_DELETE",
-        &ctx.admin_pubkey,
+        &ctx.admin_account,
         Some(sfid_number.clone()),
         serde_json::json!({
             "sfid_number": sfid_number.clone(),

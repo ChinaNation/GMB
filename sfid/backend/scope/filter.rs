@@ -59,26 +59,26 @@ mod tests {
     }
 
     #[test]
-    fn federal_admin_only_own_province() {
+    fn federal_registry_only_own_province() {
         let rows = vec![
             row("安徽省", "合肥市"),
             row("安徽省", "芜湖市"),
             row("广东省", "广州市"),
         ];
-        let scope = VisibleScope::federal_admin("安徽省".to_string());
+        let scope = VisibleScope::federal_registry("安徽省".to_string());
         let filtered = filter_by_scope(&rows, &scope);
         assert_eq!(filtered.len(), 2);
         assert!(filtered.iter().all(|r| r.province == "安徽省"));
     }
 
     #[test]
-    fn city_admin_only_own_city() {
+    fn city_registry_only_own_city() {
         let rows = vec![
             row("安徽省", "合肥市"),
             row("安徽省", "芜湖市"),
             row("广东省", "广州市"),
         ];
-        let scope = VisibleScope::city_admin("安徽省".to_string(), "合肥市".to_string());
+        let scope = VisibleScope::city_registry("安徽省".to_string(), "合肥市".to_string());
         let filtered = filter_by_scope(&rows, &scope);
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].city, "合肥市");

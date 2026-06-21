@@ -1,7 +1,7 @@
 //! cleanup_rejected_proposal extrinsic 的业务体。
 //!
 //! 用于解决投票引擎 on_initialize 超时 reject 后,本模块无法自动收到通知导致
-//! Pending(PersonalDuoqians / PendingPersonalCreate / PendingCloseProposal)残留。
+//! Pending(PersonalAccounts / PendingPersonalCreate / PendingCloseProposal)残留。
 //! 任意签名账户均可调用,但仅对 status == STATUS_REJECTED 的提案生效。
 
 use codec::Decode;
@@ -9,7 +9,7 @@ use frame_support::ensure;
 use sp_runtime::DispatchResult;
 
 use crate::pallet::{
-    CloseDuoqianActionOf, Config, CreateDuoqianActionOf, Error, Pallet, PendingCloseProposal,
+    Config, Error, Pallet, PendingCloseProposal, PersonalCloseActionOf, PersonalCreateActionOf,
 };
 use crate::ACTION_CLOSE;
 use crate::ACTION_CREATE;
@@ -31,14 +31,14 @@ pub(crate) fn do_cleanup_rejected_proposal<T: Config>(proposal_id: u64) -> Dispa
 
     match action_tag {
         ACTION_CREATE => {
-            let action = CreateDuoqianActionOf::<T>::decode(&mut &payload[..])
+            let action = PersonalCreateActionOf::<T>::decode(&mut &payload[..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             crate::execute::cleanup_pending_create::<T>(proposal_id, &action, true)?;
         }
         ACTION_CLOSE => {
-            let action = CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
+            let action = PersonalCloseActionOf::<T>::decode(&mut &payload[..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            PendingCloseProposal::<T>::remove(&action.duoqian_account);
+            PendingCloseProposal::<T>::remove(&action.account);
         }
         _ => return Err(Error::<T>::ProposalActionNotFound.into()),
     }

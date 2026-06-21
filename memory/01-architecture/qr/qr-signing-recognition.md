@@ -88,7 +88,7 @@
 - `display.action == sfid_admin_action`
 - `domain == sfid_admin_governance`
 - `qr_proto == CITIZEN_QR_V1`
-- `display.fields` 只放 `action_type / actor_province_name / actor_pubkey / target` 等用户确认字段;
+- `display.fields` 只放 `action_type / actor_province_name / actor_account / target` 等用户确认字段;
   `before_hash / after_hash / payload_hash` 只参与机器验真,不进入确认页
 - `payload_hash` 必须等于 JSON 文本 SHA-256
 

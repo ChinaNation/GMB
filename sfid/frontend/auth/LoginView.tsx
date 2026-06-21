@@ -61,7 +61,7 @@ export function LoginView() {
       await completeAdminQrLogin({
         challenge_id: payload.challenge_id,
         session_id: payload.session_id || pendingQrLogin.session_id,
-        admin_pubkey: payload.admin_pubkey,
+        admin_account: payload.admin_account,
         signer_pubkey: payload.signer_pubkey,
         signature: payload.signature,
       });
@@ -72,11 +72,11 @@ export function LoginView() {
       if (status.status === 'SUCCESS' && status.access_token && status.admin) {
         const nextAuth: AdminAuth = {
           access_token: status.access_token,
-          admin_pubkey: status.admin.admin_pubkey,
-          role: status.admin.role,
-          admin_name: status.admin.admin_name,
-          admin_province: status.admin.admin_province ?? null,
-          admin_city: status.admin.admin_city ?? null,
+          admin_account: status.admin.admin_account,
+          registry_org_code: status.admin.registry_org_code,
+          admin_display_name: status.admin.admin_display_name,
+          scope_province_name: status.admin.scope_province_name ?? null,
+          scope_city_name: status.admin.scope_city_name ?? null,
           passkey_bound: status.admin.passkey_bound,
         };
         setAuth(nextAuth);
@@ -116,11 +116,11 @@ export function LoginView() {
         if (status.status === 'SUCCESS' && status.access_token && status.admin) {
           const nextAuth: AdminAuth = {
             access_token: status.access_token,
-            admin_pubkey: status.admin.admin_pubkey,
-            role: status.admin.role,
-            admin_name: status.admin.admin_name,
-            admin_province: status.admin.admin_province ?? null,
-            admin_city: status.admin.admin_city ?? null,
+            admin_account: status.admin.admin_account,
+            registry_org_code: status.admin.registry_org_code,
+            admin_display_name: status.admin.admin_display_name,
+            scope_province_name: status.admin.scope_province_name ?? null,
+            scope_city_name: status.admin.scope_city_name ?? null,
             passkey_bound: status.admin.passkey_bound,
           };
           setAuth(nextAuth);

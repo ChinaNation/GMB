@@ -739,7 +739,7 @@ fn propose_close_rejects_when_not_institution_address() {
                 stranger,
                 beneficiary(),
             ),
-            pallet::Error::<Test>::NotInstitutionDuoqian
+            pallet::Error::<Test>::NotInstitutionAccount
         );
     });
 }
@@ -748,7 +748,7 @@ fn propose_close_rejects_when_not_institution_address() {
 fn propose_close_rejects_self_beneficiary() {
     new_test_ext().execute_with(|| {
         let (_sfid, main) = create_and_activate_institution(b"SFID-CL-5", 3);
-        // beneficiary == duoqian_account 应拒
+        // beneficiary == account 应拒
         assert_noop!(
             OrganizationManage::propose_close(RuntimeOrigin::signed(admin(0)), main.clone(), main,),
             pallet::Error::<Test>::InvalidBeneficiary

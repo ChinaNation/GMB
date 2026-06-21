@@ -1,4 +1,4 @@
-// 新增市管理员 Modal
+// 新增市注册局管理员 Modal
 // 当 selectedCity 有值时，城市字段预填并锁定（已在某市详情页内新增）
 
 import { useEffect } from 'react';
@@ -6,57 +6,57 @@ import { Button, Form, Input, Modal, Select } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
-import { MAX_CITY_ADMINS_PER_CITY, type FederalAdminSharedState } from './adminUtils';
+import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, type RegistryAdminsSharedState } from './adminUtils';
 
-interface AddCityAdminModalProps {
-  state: FederalAdminSharedState;
+interface AddCityRegistryAdminModalProps {
+  state: RegistryAdminsSharedState;
 }
 
-export function AddCityAdminModal({ state }: AddCityAdminModalProps) {
+export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalProps) {
   const {
-    addCityAdminOpen,
-    setAddCityAdminOpen,
-    addCityAdminLoading,
-    addCityAdminForm,
-    cityAdmins,
-    cityAdminCities,
-    cityAdminCitiesLoading,
+    addCityRegistryOpen,
+    setAddCityRegistryOpen,
+    addCityRegistryLoading,
+    addCityRegistryForm,
+    cityRegistryAdmins,
+    cityRegistryAdminCities,
+    cityRegistryAdminCitiesLoading,
     selectedCity,
-    onCreateCityAdmin,
+    onCreateCityRegistry,
     accountScanTarget,
     setAccountScanTarget,
   } = state;
-  const selectedCityAdminCity = Form.useWatch('city_admin_city', addCityAdminForm);
+  const selectedCityRegistryCity = Form.useWatch('city_scope_city_name', addCityRegistryForm);
   // 中文注释:新增弹窗只做提前拦截,单市 30 人上限最终以后端校验为准。
-  const cityCityAdminCount = (city: string) => cityAdmins.filter((item) => item.city === city).length;
-  const selectedCityLimitReached = selectedCityAdminCity
-    ? cityCityAdminCount(selectedCityAdminCity) >= MAX_CITY_ADMINS_PER_CITY
+  const cityCityRegistryCount = (city: string) => cityRegistryAdmins.filter((item) => item.city_name === city).length;
+  const selectedCityLimitReached = selectedCityRegistryCity
+    ? cityCityRegistryCount(selectedCityRegistryCity) >= MAX_CITY_REGISTRY_ADMINS_PER_CITY
     : false;
 
   // selectedCity 有值时预填城市字段
   useEffect(() => {
-    if (addCityAdminOpen && selectedCity) {
-      addCityAdminForm.setFieldsValue({ city_admin_city: selectedCity });
+    if (addCityRegistryOpen && selectedCity) {
+      addCityRegistryForm.setFieldsValue({ city_scope_city_name: selectedCity });
     }
-  }, [addCityAdminOpen, selectedCity, addCityAdminForm]);
+  }, [addCityRegistryOpen, selectedCity, addCityRegistryForm]);
 
   return (
     <>
       <Modal
-        title={<div style={{ textAlign: 'center', width: '100%' }}>新增市管理员</div>}
-        open={addCityAdminOpen}
+        title={<div style={{ textAlign: 'center', width: '100%' }}>新增市注册局管理员</div>}
+        open={addCityRegistryOpen}
         onCancel={() => {
-          if (addCityAdminLoading) return;
-          addCityAdminForm.resetFields();
-          setAddCityAdminOpen(false);
+          if (addCityRegistryLoading) return;
+          addCityRegistryForm.resetFields();
+          setAddCityRegistryOpen(false);
         }}
         footer={[
           <Button
             key="cancel"
-            disabled={addCityAdminLoading}
+            disabled={addCityRegistryLoading}
             onClick={() => {
-              addCityAdminForm.resetFields();
-              setAddCityAdminOpen(false);
+              addCityRegistryForm.resetFields();
+              setAddCityRegistryOpen(false);
             }}
           >
             取消新增
@@ -64,47 +64,47 @@ export function AddCityAdminModal({ state }: AddCityAdminModalProps) {
           <Button
             key="submit"
             type="primary"
-            loading={addCityAdminLoading}
+            loading={addCityRegistryLoading}
             disabled={selectedCityLimitReached}
-            title={selectedCityLimitReached ? `本市市管理员已满 ${MAX_CITY_ADMINS_PER_CITY} 人` : undefined}
-            onClick={() => addCityAdminForm.submit()}
+            title={selectedCityLimitReached ? `本市市注册局管理员已满 ${MAX_CITY_REGISTRY_ADMINS_PER_CITY} 人` : undefined}
+            onClick={() => addCityRegistryForm.submit()}
           >
             确认新增
           </Button>,
         ]}
         destroyOnClose
-        closable={!addCityAdminLoading}
-        maskClosable={!addCityAdminLoading}
+        closable={!addCityRegistryLoading}
+        maskClosable={!addCityRegistryLoading}
         zIndex={SFID_MODAL_Z_INDEX.business}
       >
         <Form
-          form={addCityAdminForm}
+          form={addCityRegistryForm}
           layout="vertical"
-          onFinish={(values: { city_admin_name: string; city_admin_pubkey: string; city_admin_city: string }) =>
-            onCreateCityAdmin({
-              city_admin_name: values.city_admin_name,
-              city_admin_pubkey: values.city_admin_pubkey,
-              city: values.city_admin_city,
+          onFinish={(values: { city_registry_display_name: string; city_registry_account: string; city_scope_city_name: string }) =>
+            onCreateCityRegistry({
+              city_registry_display_name: values.city_registry_display_name,
+              city_registry_account: values.city_registry_account,
+              city_name: values.city_scope_city_name,
             })
           }
         >
           <Form.Item
             label="姓名"
-            name="city_admin_name"
-            rules={[{ required: true, message: '请输入市管理员姓名' }]}
+            name="city_registry_display_name"
+            rules={[{ required: true, message: '请输入市注册局管理员姓名' }]}
           >
-            <Input placeholder="请输入市管理员姓名" />
+            <Input placeholder="请输入市注册局管理员姓名" />
           </Form.Item>
           <Form.Item
             label="市"
-            name="city_admin_city"
+            name="city_scope_city_name"
             rules={[
               { required: true, message: '请选择市' },
               {
                 validator: async (_rule, value) => {
                   if (!value) return;
-                  if (cityCityAdminCount(String(value)) >= MAX_CITY_ADMINS_PER_CITY) {
-                    throw new Error(`本市市管理员已满 ${MAX_CITY_ADMINS_PER_CITY} 人`);
+                  if (cityCityRegistryCount(String(value)) >= MAX_CITY_REGISTRY_ADMINS_PER_CITY) {
+                    throw new Error(`本市市注册局管理员已满 ${MAX_CITY_REGISTRY_ADMINS_PER_CITY} 人`);
                   }
                 },
               },
@@ -112,25 +112,25 @@ export function AddCityAdminModal({ state }: AddCityAdminModalProps) {
           >
             <Select
               placeholder="请选择市"
-              loading={cityAdminCitiesLoading}
+              loading={cityRegistryAdminCitiesLoading}
               disabled={selectedCity !== null}
-              options={cityAdminCities
+              options={cityRegistryAdminCities
                 .filter((c) => c.code !== '000')
                 .map((c) => {
-                  const count = cityCityAdminCount(c.name);
+                  const count = cityCityRegistryCount(c.name);
                   return {
-                    label: `${c.name} (${c.code}) ${count}/${MAX_CITY_ADMINS_PER_CITY}`,
+                    label: `${c.name} (${c.code}) ${count}/${MAX_CITY_REGISTRY_ADMINS_PER_CITY}`,
                     value: c.name,
-                    disabled: count >= MAX_CITY_ADMINS_PER_CITY,
+                    disabled: count >= MAX_CITY_REGISTRY_ADMINS_PER_CITY,
                   };
                 })}
             />
           </Form.Item>
           <Form.Item
             label="账户"
-            name="city_admin_pubkey"
+            name="city_registry_account"
             rules={[
-              { required: true, message: '请输入市管理员账户' },
+              { required: true, message: '请输入市注册局管理员账户' },
               {
                 validator: async (_rule, value) => {
                   if (!value) return;
@@ -144,12 +144,12 @@ export function AddCityAdminModal({ state }: AddCityAdminModalProps) {
             ]}
           >
             <Input
-              placeholder="请输入市管理员账户(SS58)"
+              placeholder="请输入市注册局管理员账户(SS58)"
               suffix={
                 <span
                   title="扫码识别用户码"
                   style={{ cursor: 'pointer', display: 'inline-flex', color: '#0d9488' }}
-                  onClick={() => setAccountScanTarget('city_admin')}
+                  onClick={() => setAccountScanTarget('city_registry')}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 7V5a2 2 0 0 1 2-2h2" />
@@ -169,8 +169,8 @@ export function AddCityAdminModal({ state }: AddCityAdminModalProps) {
         open={accountScanTarget !== null}
         onClose={() => setAccountScanTarget(null)}
         onResolved={(addr) => {
-          if (accountScanTarget === 'city_admin') {
-            addCityAdminForm.setFieldsValue({ city_admin_pubkey: addr });
+          if (accountScanTarget === 'city_registry') {
+            addCityRegistryForm.setFieldsValue({ city_registry_account: addr });
           }
           setAccountScanTarget(null);
         }}

@@ -24,8 +24,8 @@ export function createPartnershipInstitution(
 export function listPartnershipInstitutions(
   auth: AdminAuth,
   query: {
-    province: string;
-    city?: string;
+    province_name: string;
+    city_name?: string;
     private_type: PrivateType;
     q: string;
     cursor?: string | null;

@@ -106,7 +106,7 @@ export default function LoginPage() {
       await api.authQrComplete({
         challenge_id: env.id || qrChallenge.challenge_id,
         session_id: qrChallenge.session_id,
-        admin_pubkey: body.pubkey,
+        admin_account: body.pubkey,
         signature: body.signature,
       });
 

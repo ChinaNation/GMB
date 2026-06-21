@@ -32,7 +32,7 @@ import { LoginView } from './auth/LoginView';
 import { GovView } from './gov/GovView';
 import { PrivateShell } from './private/PrivateShell';
 import { EducationView } from './education/EducationView';
-import { FederalAdminsView } from './admins/FederalAdminsView';
+import { RegistryAdminsView } from './admins/RegistryAdminsView';
 import { CitizensView } from './citizens/CitizensView';
 import type { PrivateType } from './subjects/api';
 import { notice } from './utils/notice';
@@ -40,16 +40,16 @@ import { notice } from './utils/notice';
 const { Header, Content } = Layout;
 
 /** Header 右上角管理员身份与姓名,样式与 CPMS 管理端保持一致。 */
-function resolveHeaderAdminIdentity(auth: AdminAuth | null): { roleLabel: string; adminName: string } {
-  if (!auth) return { roleLabel: '', adminName: '' };
-  const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
-  // 中文注释:当前只剩联邦管理员和市管理员两个管理员角色。
-  const roleLabel = auth.role === 'FEDERAL_ADMIN'
-    ? '联邦管理员'
-    : auth.role === 'CITY_ADMIN'
-      ? '市管理员'
+function resolveHeaderAdminIdentity(auth: AdminAuth | null): { registryOrgCodeLabel: string; adminDisplayName: string } {
+  if (!auth) return { registryOrgCodeLabel: '', adminDisplayName: '' };
+  const name = typeof auth.admin_display_name === 'string' ? auth.admin_display_name.trim() : '';
+  // 中文注释:当前只剩联邦注册局管理员和市注册局管理员两个管理员权限。
+  const registryOrgCodeLabel = auth.registry_org_code === 'FEDERAL_REGISTRY'
+    ? '联邦注册局管理员'
+    : auth.registry_org_code === 'CITY_REGISTRY'
+      ? '市注册局管理员'
       : '';
-  return { roleLabel, adminName: name || '暂未设置' };
+  return { registryOrgCodeLabel, adminDisplayName: name || '暂未设置' };
 }
 
 type ActiveView =
@@ -95,7 +95,7 @@ function AppInner() {
 
   useEffect(() => {
     setSfidMeta(null);
-  }, [auth?.admin_pubkey, auth?.role]);
+  }, [auth?.admin_account, auth?.registry_org_code]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,11 +108,11 @@ function AppInner() {
         const checked = await checkAdminAuth(auth);
         const refreshedAuth: AdminAuth = {
           ...auth,
-          admin_pubkey: checked.admin_pubkey,
-          role: checked.role,
-          admin_name: checked.admin_name,
-          admin_province: checked.admin_province ?? null,
-          admin_city: checked.admin_city ?? null,
+          admin_account: checked.admin_account,
+          registry_org_code: checked.registry_org_code,
+          admin_display_name: checked.admin_display_name,
+          scope_province_name: checked.scope_province_name ?? null,
+          scope_city_name: checked.scope_city_name ?? null,
           passkey_bound: checked.passkey_bound,
         };
         setAuth(refreshedAuth);
@@ -135,8 +135,8 @@ function AppInner() {
   const mustUpdatePasskey = !!auth && auth.passkey_bound === false;
 
   // 未绑定 passkey 时强制进入本角色可绑定 passkey 的注册局 tab:
-  //   联邦管理员在「联邦注册局」的联邦管理员列表绑定;市管理员在「市注册局」的市管理员列表绑定。
-  const passkeyBindView: ActiveView = auth?.role === 'CITY_ADMIN' ? 'city-registry' : 'federal-registry';
+  //   联邦注册局管理员在「联邦注册局」的联邦注册局管理员列表绑定;市注册局管理员在「市注册局」的市注册局管理员列表绑定。
+  const passkeyBindView: ActiveView = auth?.registry_org_code === 'CITY_REGISTRY' ? 'city-registry' : 'federal-registry';
   useEffect(() => {
     if (mustUpdatePasskey && activeView !== passkeyBindView) {
       setActiveView(passkeyBindView);
@@ -266,9 +266,9 @@ function AppInner() {
                 display: 'inline-flex', alignItems: 'center', gap: 8,
               }}
             >
-              <span>{headerAdminIdentity.roleLabel}</span>
+              <span>{headerAdminIdentity.registryOrgCodeLabel}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
-              <span>{headerAdminIdentity.adminName}</span>
+              <span>{headerAdminIdentity.adminDisplayName}</span>
             </Typography.Text>
             <Button
               size="small"
@@ -387,9 +387,9 @@ function AppInner() {
           ) : routedView === 'education' && capabilities.canViewEducation && auth ? (
             <EducationView key={`education-${viewResetToken}`} auth={auth} sfidMeta={sfidMeta} />
           ) : routedView === 'city-registry' && capabilities.canViewCityRegistry ? (
-            <FederalAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
+            <RegistryAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
           ) : routedView === 'federal-registry' && capabilities.canViewFederalRegistry ? (
-            <FederalAdminsView key={`federal-registry-${viewResetToken}`} mode="federal-registry" />
+            <RegistryAdminsView key={`federal-registry-${viewResetToken}`} mode="federal-registry" />
           ) : (
             <CitizensView />
           )}

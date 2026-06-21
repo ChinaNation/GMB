@@ -24,7 +24,7 @@ use crate::admins::security_model::{
     AdminPasskeyCredential, AdminPasskeyRegistrationChallenge, AdminPasskeyStatus,
 };
 use crate::core::qr::{build_sign_request, display_account, display_field as field};
-use crate::crypto::pubkey::same_admin_pubkey;
+use crate::crypto::pubkey::same_admin_account;
 use crate::*;
 
 pub(crate) const ADMIN_ACTION_TTL_SECONDS: i64 = 300;
@@ -92,7 +92,7 @@ pub(crate) struct AdminSignedPayload<'a> {
     pub(crate) qr_proto: &'static str,
     pub(crate) action_id: &'a str,
     pub(crate) action_type: &'a str,
-    pub(crate) actor_pubkey: &'a str,
+    pub(crate) actor_account: &'a str,
     pub(crate) actor_province_name: &'a str,
     pub(crate) target: &'a str,
     pub(crate) request_hash: &'a str,
@@ -126,19 +126,19 @@ pub(crate) async fn start_passkey_registration(
     let expires_at = now + Duration::seconds(ADMIN_ACTION_TTL_SECONDS);
     let registration_id = format!("admin-passkey-{}", Uuid::new_v4());
     let request_hash = hash_json(&json!({
-        "admin_pubkey": ctx.admin_pubkey.as_str(),
+        "admin_account": ctx.admin_account.as_str(),
         "label": label.as_str(),
         "registration_id": registration_id.as_str(),
     }));
-    let province = ctx.admin_province.clone().unwrap_or_default();
+    let province = ctx.scope_province_name.clone().unwrap_or_default();
     let payload_text = signed_payload_text(AdminSignedPayload {
         domain: "sfid_admin_governance",
         qr_proto: crate::core::qr::CITIZEN_QR_V1,
         action_id: registration_id.as_str(),
         action_type: "PASSKEY_REGISTER",
-        actor_pubkey: ctx.admin_pubkey.as_str(),
+        actor_account: ctx.admin_account.as_str(),
         actor_province_name: province.as_str(),
-        target: ctx.admin_pubkey.as_str(),
+        target: ctx.admin_account.as_str(),
         request_hash: request_hash.as_str(),
         before_hash: "none",
         after_hash: request_hash.as_str(),
@@ -149,21 +149,21 @@ pub(crate) async fn start_passkey_registration(
         registration_id.as_str(),
         now.timestamp(),
         expires_at.timestamp(),
-        ctx.admin_pubkey.as_str(),
+        ctx.admin_account.as_str(),
         payload_text.as_str(),
         "更新管理员 Passkey",
         vec![
             field("action_type", "操作", "更新 Passkey"),
-            field("province", "省份", province.as_str()),
+            field("province_name", "省份", province.as_str()),
             field(
-                "actor_pubkey",
+                "actor_account",
                 "管理员",
-                display_account(ctx.admin_pubkey.as_str()).as_str(),
+                display_account(ctx.admin_account.as_str()).as_str(),
             ),
             field(
                 "target",
                 "目标账户",
-                display_account(ctx.admin_pubkey.as_str()).as_str(),
+                display_account(ctx.admin_account.as_str()).as_str(),
             ),
         ],
     ) {
@@ -175,8 +175,8 @@ pub(crate) async fn start_passkey_registration(
         &state.db,
         &AdminPasskeyRegistrationChallenge {
             registration_id: registration_id.clone(),
-            admin_pubkey: ctx.admin_pubkey.clone(),
-            admin_name: ctx.admin_name.clone(),
+            admin_account: ctx.admin_account.clone(),
+            admin_display_name: ctx.admin_display_name.clone(),
             label,
             webauthn_state: None,
             payload_text,
@@ -229,11 +229,11 @@ pub(crate) async fn confirm_passkey_registration(
         if challenge.consumed || now > challenge.expires_at {
             return Err("http:unprocessable:passkey registration expired".to_string());
         }
-        if !same_admin_pubkey(challenge.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
+        if !same_admin_account(challenge.admin_account.as_str(), ctx.admin_account.as_str()) {
             return Err("http:forbidden:passkey registration owner mismatch".to_string());
         }
         verify_citizen_wallet_signature(
-            ctx.admin_pubkey.as_str(),
+            ctx.admin_account.as_str(),
             input.signer_pubkey.as_str(),
             input.signature.as_str(),
             input.payload_hash.as_str(),
@@ -241,15 +241,15 @@ pub(crate) async fn confirm_passkey_registration(
             challenge.payload_text.as_str(),
         )
         .map_err(|_| "http:unprocessable:signature verify failed".to_string())?;
-        let existing = repo::active_passkey_credentials_conn(conn, ctx.admin_pubkey.as_str())?
+        let existing = repo::active_passkey_credentials_conn(conn, ctx.admin_account.as_str())?
             .into_iter()
             .map(|record| record.passkey.cred_id().clone())
             .collect::<Vec<_>>();
         let (public_key_options, webauthn_state) = webauthn
             .start_passkey_registration(
-                user_uuid_for_pubkey(ctx.admin_pubkey.as_str()),
-                ctx.admin_pubkey.as_str(),
-                ctx.admin_name.as_str(),
+                user_uuid_for_account(ctx.admin_account.as_str()),
+                ctx.admin_account.as_str(),
+                ctx.admin_display_name.as_str(),
                 Some(existing),
             )
             .map_err(|err| format!("start passkey registration failed: {err}"))?;
@@ -342,7 +342,7 @@ pub(crate) async fn complete_passkey_registration(
             "passkey registration expired",
         );
     }
-    if !same_admin_pubkey(challenge.admin_pubkey.as_str(), ctx.admin_pubkey.as_str()) {
+    if !same_admin_account(challenge.admin_account.as_str(), ctx.admin_account.as_str()) {
         return api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -380,19 +380,19 @@ pub(crate) async fn complete_passkey_registration(
     let credential_id = credential_id_hex(&passkey);
     let label = challenge.label.clone();
     let result = state.db.with_client({
-        let ctx_pubkey = ctx.admin_pubkey.clone();
+        let ctx_account = ctx.admin_account.clone();
         let credential_id = credential_id.clone();
         let registration_id = input.registration_id.clone();
         move |conn| {
             if repo::get_passkey_credential_conn(conn, credential_id.as_str())?.is_some() {
                 return Err("http:conflict:passkey credential already exists".to_string());
             }
-            repo::revoke_active_passkeys_for_admin_conn(conn, ctx_pubkey.as_str())?;
+            repo::revoke_active_passkeys_for_admin_conn(conn, ctx_account.as_str())?;
             repo::upsert_passkey_credential_conn(
                 conn,
                 &AdminPasskeyCredential {
                     credential_id: credential_id.clone(),
-                    admin_pubkey: ctx_pubkey.clone(),
+                    admin_account: ctx_account.clone(),
                     label,
                     passkey,
                     status: AdminPasskeyStatus::Active,
@@ -407,7 +407,7 @@ pub(crate) async fn complete_passkey_registration(
             };
             challenge.consumed = true;
             repo::upsert_passkey_challenge_conn(conn, &challenge)?;
-            repo::active_passkey_credentials_conn(conn, ctx_pubkey.as_str()).map(|v| v.len())
+            repo::active_passkey_credentials_conn(conn, ctx_account.as_str()).map(|v| v.len())
         }
     });
     let count = match result {
@@ -585,10 +585,10 @@ fn optional_env(key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub(crate) fn active_passkeys(db: &Db, admin_pubkey: &str) -> Result<Vec<Passkey>, String> {
-    let admin_pubkey = admin_pubkey.to_string();
+pub(crate) fn active_passkeys(db: &Db, admin_account: &str) -> Result<Vec<Passkey>, String> {
+    let admin_account = admin_account.to_string();
     db.with_client(move |conn| {
-        repo::active_passkey_credentials_conn(conn, admin_pubkey.as_str()).map(|rows| {
+        repo::active_passkey_credentials_conn(conn, admin_account.as_str()).map(|rows| {
             rows.into_iter()
                 .map(|record| record.passkey)
                 .collect::<Vec<_>>()
@@ -598,7 +598,7 @@ pub(crate) fn active_passkeys(db: &Db, admin_pubkey: &str) -> Result<Vec<Passkey
 
 pub(crate) fn update_passkey_usage_conn(
     conn: &mut postgres::Client,
-    admin_pubkey: &str,
+    admin_account: &str,
     assertion: &PublicKeyCredential,
     auth_result: &AuthenticationResult,
     now: DateTime<Utc>,
@@ -617,7 +617,7 @@ pub(crate) fn update_passkey_usage_conn(
         ));
     };
     if record.status != AdminPasskeyStatus::Active
-        || !same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey)
+        || !same_admin_account(record.admin_account.as_str(), admin_account)
     {
         return Err(api_error(
             StatusCode::FORBIDDEN,
@@ -633,8 +633,8 @@ pub(crate) fn update_passkey_usage_conn(
     })
 }
 
-fn user_uuid_for_pubkey(pubkey: &str) -> Uuid {
-    let digest = Sha256::digest(pubkey.as_bytes());
+fn user_uuid_for_account(account: &str) -> Uuid {
+    let digest = Sha256::digest(account.as_bytes());
     let mut bytes = [0_u8; 16];
     bytes.copy_from_slice(&digest[..16]);
     Uuid::from_bytes(bytes)
@@ -658,14 +658,14 @@ pub(crate) fn hash_json(value: &serde_json::Value) -> String {
 }
 
 pub(crate) fn verify_citizen_wallet_signature(
-    expected_actor_pubkey: &str,
+    expected_actor_account: &str,
     signer_pubkey: &str,
     signature: &str,
     submitted_payload_hash: &str,
     expected_payload_hash: &str,
     payload_text: &str,
 ) -> Result<(), axum::response::Response> {
-    if !same_admin_pubkey(expected_actor_pubkey, signer_pubkey) {
+    if !same_admin_account(expected_actor_account, signer_pubkey) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
