@@ -167,7 +167,7 @@ export default function ArchiveList() {
             <tr
               key={a.archive_id}
               className="archive-list-row"
-              user_group="button"
+              role="button"
               tabIndex={0}
               onClick={() => navigate(`/admin/archives/${a.archive_id}`)}
               onKeyDown={event => {

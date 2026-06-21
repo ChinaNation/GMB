@@ -40,7 +40,6 @@ mod genesis {
 
 pub(crate) use crate::core::http_security::*;
 pub(crate) use crate::core::response::*;
-pub(crate) use crate::core::runtime_ops::*;
 pub(crate) use crate::core::{db::Db, secret::SensitiveSeed};
 pub(crate) use admins::login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
@@ -2653,7 +2652,6 @@ fn main() {
         db,
         rate_limit_redis: Arc::new(redis_client),
     };
-    ensure_builtin_federal_registry_admins(&state);
     info!("initialized database state with defaults");
     if run_gov_directory_command(&state, command.clone()) {
         return;

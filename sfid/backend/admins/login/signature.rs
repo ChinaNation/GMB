@@ -7,7 +7,6 @@ use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use sp_core::Pair;
 
-use crate::admins::federal_registry_admins::federal_registry_display_name;
 use crate::*;
 
 pub(crate) fn verify_admin_signature(
@@ -146,7 +145,8 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
 }
 
 pub(crate) fn build_admin_display_name(
-    admin_account: &str,
+    // 中文注释:参数保留以稳定调用签名;内置联邦注册局清单已迁链上,显示名不再按账号反查。
+    _admin_account: &str,
     registry_org_code: &RegistryOrgCode,
     scope_province_name: Option<&str>,
 ) -> String {
@@ -154,9 +154,6 @@ pub(crate) fn build_admin_display_name(
         if let Some(province) = scope_province_name {
             return format!("{province}联邦注册局管理员");
         }
-    }
-    if let Some(name) = federal_registry_display_name(admin_account) {
-        return name;
     }
     // ADR-008 后只剩两角色。
     match registry_org_code {

@@ -22,7 +22,6 @@ use crate::admins::city_registry_admins::{
     count_city_registry_admins_in_city_conn, ensure_city_in_creator_province_conn,
     find_city_registry_by_id_conn, MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
 };
-use crate::admins::federal_registry_admins::federal_scope_province_name;
 use crate::admins::login::AdminAuthContext;
 use crate::admins::operation_auth::{
     ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
@@ -844,12 +843,16 @@ fn require_manageable_federal_registry_conn(
     Ok((admin, target_province))
 }
 
-fn actor_is_initial_federal_registry(ctx: &AdminAuthContext) -> bool {
-    let Some(province) = ctx.scope_province_name.as_deref() else {
+fn actor_is_initial_federal_registry(conn: &mut Client, ctx: &AdminAuthContext) -> bool {
+    if ctx.scope_province_name.is_none() {
         return false;
-    };
-    federal_scope_province_name(ctx.admin_account.as_str())
-        .map(|built_in_province| built_in_province == province)
+    }
+    // 中文注释:内置(初始)联邦注册局管理员以 postgres built_in 标记判定;
+    // 内置管理员真源已迁至链上常量,SFID 不再用本地清单反查省份。
+    repo::get_admin_by_account_conn(conn, ctx.admin_account.as_str())
+        .ok()
+        .flatten()
+        .map(|admin| admin.built_in)
         .unwrap_or(false)
 }
 
@@ -874,14 +877,14 @@ fn preview_delete_federal_registry_conn(
     ctx: &AdminAuthContext,
     input: &FederalRegistryIdPayload,
 ) -> Result<(serde_json::Value, serde_json::Value, String), String> {
-    if !actor_is_initial_federal_registry(ctx) {
+    if !actor_is_initial_federal_registry(conn, ctx) {
         return Err("http:forbidden:initial federal admin required".to_string());
     }
     let (admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
     if same_admin_account(admin.admin_account.as_str(), ctx.admin_account.as_str()) {
         return Err("http:forbidden:initial federal admin cannot delete itself".to_string());
     }
-    if admin.built_in || federal_scope_province_name(admin.admin_account.as_str()).is_some() {
+    if admin.built_in {
         return Err("http:forbidden:built-in federal admin cannot be deleted".to_string());
     }
     let before = federal_registry_row_value(&admin, province.clone())?;

@@ -3020,16 +3020,16 @@ extension GetAdminGroupCacheEntityCollection on Isar {
 
 const AdminGroupCacheEntitySchema = CollectionSchema(
   name: r'AdminGroupCacheEntity',
-  id: -7398263961586602634,
+  id: -6431187929672259628,
   properties: {
-    r'pubkeyHex': PropertySchema(
+    r'adminGroupName': PropertySchema(
       id: 0,
-      name: r'pubkeyHex',
+      name: r'adminGroupName',
       type: IsarType.string,
     ),
-    r'adminGroupName': PropertySchema(
+    r'pubkeyHex': PropertySchema(
       id: 1,
-      name: r'adminGroupName',
+      name: r'pubkeyHex',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
@@ -3085,8 +3085,8 @@ int _adminGroupCacheEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.pubkeyHex.length * 3;
   bytesCount += 3 + object.adminGroupName.length * 3;
+  bytesCount += 3 + object.pubkeyHex.length * 3;
   return bytesCount;
 }
 
@@ -3096,8 +3096,8 @@ void _adminGroupCacheEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.pubkeyHex);
-  writer.writeString(offsets[1], object.adminGroupName);
+  writer.writeString(offsets[0], object.adminGroupName);
+  writer.writeString(offsets[1], object.pubkeyHex);
   writer.writeLong(offsets[2], object.updatedAt);
 }
 
@@ -3108,9 +3108,9 @@ AdminGroupCacheEntity _adminGroupCacheEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = AdminGroupCacheEntity();
+  object.adminGroupName = reader.readString(offsets[0]);
   object.id = id;
-  object.pubkeyHex = reader.readString(offsets[0]);
-  object.adminGroupName = reader.readString(offsets[1]);
+  object.pubkeyHex = reader.readString(offsets[1]);
   object.updatedAt = reader.readLong(offsets[2]);
   return object;
 }
@@ -3147,7 +3147,8 @@ void _adminGroupCacheEntityAttach(
   object.id = id;
 }
 
-extension AdminGroupCacheEntityByIndex on IsarCollection<AdminGroupCacheEntity> {
+extension AdminGroupCacheEntityByIndex
+    on IsarCollection<AdminGroupCacheEntity> {
   Future<AdminGroupCacheEntity?> getByPubkeyHex(String pubkeyHex) {
     return getByIndex(r'pubkeyHex', [pubkeyHex]);
   }
@@ -3223,8 +3224,8 @@ extension AdminGroupCacheEntityQueryWhereSort
   }
 }
 
-extension AdminGroupCacheEntityQueryWhere
-    on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QWhereClause> {
+extension AdminGroupCacheEntityQueryWhere on QueryBuilder<AdminGroupCacheEntity,
+    AdminGroupCacheEntity, QWhereClause> {
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterWhereClause>
       idEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
@@ -3432,8 +3433,146 @@ extension AdminGroupCacheEntityQueryWhere
   }
 }
 
-extension AdminGroupCacheEntityQueryFilter on QueryBuilder<AdminGroupCacheEntity,
-    AdminGroupCacheEntity, QFilterCondition> {
+extension AdminGroupCacheEntityQueryFilter on QueryBuilder<
+    AdminGroupCacheEntity, AdminGroupCacheEntity, QFilterCondition> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'adminGroupName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'adminGroupName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'adminGroupName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'adminGroupName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'adminGroupName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'adminGroupName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+          QAfterFilterCondition>
+      adminGroupNameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'adminGroupName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+          QAfterFilterCondition>
+      adminGroupNameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'adminGroupName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'adminGroupName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
+      QAfterFilterCondition> adminGroupNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'adminGroupName',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
@@ -3629,144 +3768,6 @@ extension AdminGroupCacheEntityQueryFilter on QueryBuilder<AdminGroupCacheEntity
   }
 
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'adminGroupName',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'adminGroupName',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'adminGroupName',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'adminGroupName',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'adminGroupName',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'adminGroupName',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-          QAfterFilterCondition>
-      adminGroupNameContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'adminGroupName',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-          QAfterFilterCondition>
-      adminGroupNameMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'adminGroupName',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'adminGroupName',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
-      QAfterFilterCondition> adminGroupNameIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'adminGroupName',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity,
       QAfterFilterCondition> updatedAtEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -3823,28 +3824,14 @@ extension AdminGroupCacheEntityQueryFilter on QueryBuilder<AdminGroupCacheEntity
   }
 }
 
-extension AdminGroupCacheEntityQueryObject on QueryBuilder<AdminGroupCacheEntity,
-    AdminGroupCacheEntity, QFilterCondition> {}
+extension AdminGroupCacheEntityQueryObject on QueryBuilder<
+    AdminGroupCacheEntity, AdminGroupCacheEntity, QFilterCondition> {}
 
 extension AdminGroupCacheEntityQueryLinks on QueryBuilder<AdminGroupCacheEntity,
     AdminGroupCacheEntity, QFilterCondition> {}
 
 extension AdminGroupCacheEntityQuerySortBy
     on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QSortBy> {
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
-      sortByPubkeyHex() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'pubkeyHex', Sort.asc);
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
-      sortByPubkeyHexDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'pubkeyHex', Sort.desc);
-    });
-  }
-
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       sortByAdminGroupName() {
     return QueryBuilder.apply(this, (query) {
@@ -3856,6 +3843,20 @@ extension AdminGroupCacheEntityQuerySortBy
       sortByAdminGroupNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'adminGroupName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      sortByPubkeyHex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'pubkeyHex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      sortByPubkeyHexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'pubkeyHex', Sort.desc);
     });
   }
 
@@ -3876,6 +3877,20 @@ extension AdminGroupCacheEntityQuerySortBy
 
 extension AdminGroupCacheEntityQuerySortThenBy
     on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QSortThenBy> {
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      thenByAdminGroupName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'adminGroupName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
+      thenByAdminGroupNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'adminGroupName', Sort.desc);
+    });
+  }
+
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenById() {
     return QueryBuilder.apply(this, (query) {
@@ -3905,20 +3920,6 @@ extension AdminGroupCacheEntityQuerySortThenBy
   }
 
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
-      thenByAdminGroupName() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminGroupName', Sort.asc);
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
-      thenByAdminGroupNameDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminGroupName', Sort.desc);
-    });
-  }
-
-  QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QAfterSortBy>
       thenByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
@@ -3936,16 +3937,17 @@ extension AdminGroupCacheEntityQuerySortThenBy
 extension AdminGroupCacheEntityQueryWhereDistinct
     on QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct> {
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct>
-      distinctByPubkeyHex({bool caseSensitive = true}) {
+      distinctByAdminGroupName({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'pubkeyHex', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'adminGroupName',
+          caseSensitive: caseSensitive);
     });
   }
 
   QueryBuilder<AdminGroupCacheEntity, AdminGroupCacheEntity, QDistinct>
-      distinctByAdminGroupName({bool caseSensitive = true}) {
+      distinctByPubkeyHex({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'adminGroupName', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'pubkeyHex', caseSensitive: caseSensitive);
     });
   }
 
@@ -3966,16 +3968,16 @@ extension AdminGroupCacheEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<AdminGroupCacheEntity, String, QQueryOperations>
-      pubkeyHexProperty() {
+      adminGroupNameProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'pubkeyHex');
+      return query.addPropertyName(r'adminGroupName');
     });
   }
 
   QueryBuilder<AdminGroupCacheEntity, String, QQueryOperations>
-      adminGroupNameProperty() {
+      pubkeyHexProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'adminGroupName');
+      return query.addPropertyName(r'pubkeyHex');
     });
   }
 

@@ -5,7 +5,6 @@
 use chrono::{DateTime, Duration, Utc};
 use postgres::Client;
 
-use crate::admins::federal_registry_admins::federal_scope_province_name;
 use crate::admins::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 use crate::admins::model::{AdminUser, RegistryOrgCode};
 use crate::admins::security_model::{
@@ -301,7 +300,9 @@ pub(crate) fn find_federal_registry_scope_conn(
     if let Some(row) = row {
         return Ok(Some(row.get(1)));
     }
-    Ok(federal_scope_province_name(admin_account).map(str::to_string))
+    // 中文注释:内置联邦注册局管理员真源已迁至链上常量,本地不再反查清单;
+    // 省份归属仅以 postgres federal_registry_scope 表为准,无行即 None。
+    Ok(None)
 }
 
 pub(crate) fn admin_has_active_passkey(db: &Db, admin_account: &str) -> Result<bool, String> {

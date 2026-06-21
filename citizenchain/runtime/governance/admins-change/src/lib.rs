@@ -23,6 +23,11 @@ use sp_std::collections::btree_set::BTreeSet;
 
 use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
+use primitives::china::china_jc::CHINA_JC;
+use primitives::china::china_jy::CHINA_JY;
+use primitives::china::china_lf::CHINA_LF;
+use primitives::china::china_sf::CHINA_SF;
+use primitives::china::china_zf::CHINA_ZF;
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use votingengine::{
     types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
@@ -332,6 +337,31 @@ pub mod pallet {
                     build_builtin_institution::<T>(node.sfid_number, ORG_PRB, node.admins),
                 );
             }
+
+            // 中文注释:公权机构(政府/立法/司法/监察/教育)创世内置管理员统一写入 admins-change,
+            // org 一律 ORG_PUP(动态账户,管理员变更走 propose_admin_set_change)。
+            // 总统府联邦注册局随 CHINA_ZF 一并写入,链上单一真源,SFID 不再内置注册局管理员。
+            macro_rules! insert_pup_builtin {
+                ($arr:expr) => {
+                    for node in $arr.iter() {
+                        let Some(institution) = decode_account::<T>(&node.main_account) else {
+                            panic!(
+                                "genesis: sfid_number {} 主账户 decode 失败",
+                                node.sfid_number
+                            );
+                        };
+                        AdminAccounts::<T>::insert(
+                            institution,
+                            build_builtin_institution::<T>(node.sfid_number, ORG_PUP, node.admins),
+                        );
+                    }
+                };
+            }
+            insert_pup_builtin!(CHINA_ZF);
+            insert_pup_builtin!(CHINA_SF);
+            insert_pup_builtin!(CHINA_JC);
+            insert_pup_builtin!(CHINA_JY);
+            insert_pup_builtin!(CHINA_LF);
         }
     }
 

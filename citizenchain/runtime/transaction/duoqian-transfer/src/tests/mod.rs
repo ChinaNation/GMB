@@ -312,7 +312,8 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
-    type MaxAdminsPerInstitution = ConstU32<64>;
+    // 中文注释:与真实 runtime 一致(1989)。联邦注册局创世内置 215 管理员,mock 上限须覆盖。
+    type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<1024>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
     type MaxModuleTagLen = ConstU32<32>;
@@ -358,7 +359,8 @@ impl organization_manage::pallet::Config for Test {
 
 impl admins_change::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type MaxAdminsPerInstitution = ConstU32<64>;
+    // 中文注释:与真实 runtime 一致(1989)。联邦注册局创世内置 215 管理员,mock 上限须覆盖。
+    type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxPersonalAccountAdmins = ConstU32<64>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type WeightInfo = ();

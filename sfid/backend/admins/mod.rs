@@ -2,8 +2,6 @@
 pub(crate) mod actions;
 pub(crate) mod catalog;
 pub(crate) mod city_registry_admins;
-/// 中文注释:内置初始联邦注册局管理员公钥与省份归属清单。
-pub(crate) mod federal_registry_admins;
 /// 中文注释:管理员登录认证能力,归入 admins 边界。
 pub(crate) mod login;
 /// 中文注释:联邦注册局管理员/市注册局管理员实体、角色和列表 DTO。

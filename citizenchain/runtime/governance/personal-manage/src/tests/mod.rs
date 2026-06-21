@@ -241,7 +241,9 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
-    type MaxAdminsPerInstitution = ConstU32<64>;
+    // 中文注释:机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
+    // 个人多签上限是另一项 MaxPersonalAccountAdmins=64,不受此影响。
+    type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<1024>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
     type MaxModuleTagLen = ConstU32<32>;
@@ -266,7 +268,9 @@ impl internal_vote::Config for Test {
 
 impl admins_change::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type MaxAdminsPerInstitution = ConstU32<64>;
+    // 中文注释:机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
+    // 个人多签上限是另一项 MaxPersonalAccountAdmins=64,不受此影响。
+    type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxPersonalAccountAdmins = ConstU32<64>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type WeightInfo = ();

@@ -5,45 +5,10 @@
 
 use chrono::Utc;
 
-use crate::admins::federal_registry_admins::{federal_registry_mains, federal_scope_province_name};
-use crate::admins::repo;
-use crate::crypto::pubkey::normalize_admin_account;
 use crate::gov::service::{
     reconcile_gov_catalog_db, GovTargetKind, OfficialReconcileReport, OfficialReconcileScope,
 };
-use crate::{AdminUser, AppState, RegistryOrgCode};
-
-pub(crate) fn ensure_builtin_federal_registry_admins(state: &AppState) {
-    if let Err(err) = state.db.with_client(|conn| {
-        for item in federal_registry_mains() {
-            let admin_account = normalize_admin_account(item.admin_account)
-                .unwrap_or_else(|| item.admin_account.trim().to_ascii_lowercase());
-            let province = federal_scope_province_name(item.admin_account)
-                .unwrap_or(item.province_name)
-                .to_string();
-            let existing = repo::get_admin_by_account_conn(conn, admin_account.as_str())?;
-            let id = existing
-                .as_ref()
-                .map(|admin| admin.id)
-                .unwrap_or(repo::next_admin_id_conn(conn)?);
-            let admin = AdminUser {
-                id,
-                admin_account: admin_account,
-                admin_display_name: format!("{}联邦注册局管理员", item.province_name),
-                registry_org_code: RegistryOrgCode::FederalRegistry,
-                built_in: true,
-                created_by: "SYSTEM".to_string(),
-                created_at: Utc::now(),
-                updated_at: existing.and_then(|admin| admin.updated_at),
-                city_name: String::new(),
-            };
-            repo::upsert_admin_conn(conn, &admin, Some(province.as_str()))?;
-        }
-        Ok(())
-    }) {
-        tracing::error!(error = %err, "ensure builtin federal registry admins failed");
-    }
-}
+use crate::AppState;
 
 pub(crate) fn cleanup_stale_citizen_bind_records(state: &AppState) -> usize {
     let now = Utc::now();

@@ -185,7 +185,12 @@ fn institution_account_at_max_admins_works() {
         let max =
             <<Test as Config>::MaxAdminsPerInstitution as frame_support::traits::Get<u32>>::get();
         let admins: Vec<AccountId32> = (0..max)
-            .map(|i| AccountId32::new([(i & 0xff) as u8; 32]))
+            .map(|i| {
+                // 中文注释:按 i 写入低 4 字节,保证 max 增大到 >256(如联邦注册局 215)时管理员账户仍唯一。
+                let mut bytes = [0u8; 32];
+                bytes[..4].copy_from_slice(&i.to_le_bytes());
+                AccountId32::new(bytes)
+            })
             .collect();
         let creator = admins[0].clone();
 
