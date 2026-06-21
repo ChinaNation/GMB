@@ -56,7 +56,7 @@ void main() {
         ],
         org: 5,
         adminsLen: 2,
-        adminPubkeys: [admin1, admin2],
+        admins: [admin1, admin2],
         threshold: 2,
         registerNonce: 'reg-nonce-001',
         signatureHex: '0x${hexOf(signature)}',

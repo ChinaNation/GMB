@@ -18,11 +18,11 @@ void main() {
     systemNavigationBarColor: AppTheme.scaffoldBg,
     systemNavigationBarIconBrightness: Brightness.light,
   ));
-  runApp(const CitizenApp());
+  runApp(const CitizenWalletApp());
 }
 
-class CitizenApp extends StatelessWidget {
-  const CitizenApp({super.key});
+class CitizenWalletApp extends StatelessWidget {
+  const CitizenWalletApp({super.key});
 
   @override
   Widget build(BuildContext context) {

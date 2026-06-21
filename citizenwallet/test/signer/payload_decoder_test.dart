@@ -836,7 +836,7 @@ void main() {
       final feeAccount = utf8.encode(secondAccountName);
       final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
       final feeAmount = u128Le(BigInt.from(222)); // 2.22 GMB
-      final adminPubkeys = [
+      final admins = [
         List<int>.filled(32, 0x11),
         List<int>.filled(32, 0x22),
       ];
@@ -869,8 +869,8 @@ void main() {
         2, 0, 0, 0,
         // admins: BoundedVec<AccountId32> count=2
         (2 << 2) & 0xff,
-        ...adminPubkeys[0],
-        ...adminPubkeys[1],
+        ...admins[0],
+        ...admins[1],
         // threshold: u32 LE = 2
         2, 0, 0, 0,
         // register_nonce: Vec<u8>

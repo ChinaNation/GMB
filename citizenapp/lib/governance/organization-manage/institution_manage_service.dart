@@ -81,7 +81,7 @@ class InstitutionManageService {
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int threshold,
     required String registerNonce,
     required String signatureHex,
@@ -100,7 +100,7 @@ class InstitutionManageService {
       accounts: accounts,
       org: org,
       adminsLen: adminsLen,
-      adminPubkeys: adminPubkeys,
+      admins: admins,
       threshold: threshold,
       registerNonce: registerNonce,
       signatureHex: signatureHex,
@@ -127,7 +127,7 @@ class InstitutionManageService {
       accounts: accounts,
       org: org,
       adminsLen: adminsLen,
-      adminPubkeys: adminPubkeys,
+      admins: admins,
       threshold: threshold,
       initialTotalFen: initialTotalFen,
       proposerPubkey: signerPubkey,
@@ -149,7 +149,7 @@ class InstitutionManageService {
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int threshold,
     required String registerNonce,
     required String signatureHex,
@@ -195,7 +195,7 @@ class InstitutionManageService {
     if (org != 4 && org != 5) {
       throw ArgumentError('机构账户管理员 org 必须为 ORG_PUP 或 ORG_OTH');
     }
-    if (adminsLen < 2 || adminsLen != adminPubkeys.length) {
+    if (adminsLen < 2 || adminsLen != admins.length) {
       throw ArgumentError('admins_len 必须 >=2 且等于管理员公钥数量');
     }
     final minThreshold = (adminsLen ~/ 2) + 1;
@@ -245,8 +245,8 @@ class InstitutionManageService {
 
     // admins: BoundedVec<AccountId32> = Compact<u32> length + N × 32 bytes
     output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(adminPubkeys.length)));
-    for (final pubkey in adminPubkeys) {
+        CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
+    for (final pubkey in admins) {
       if (pubkey.length != 32) {
         throw ArgumentError('admins 每项必须为 32 字节');
       }
@@ -518,7 +518,7 @@ class InstitutionManageService {
       result[address] = InstitutionAccountInfo(
         adminsLen: admin.adminsLen,
         threshold: thresholdByAccount[address],
-        adminPubkeys: admin.adminPubkeys,
+        admins: admin.admins,
         status: _statusFromByte(account.statusByte),
       );
     }
@@ -560,7 +560,7 @@ class InstitutionManageService {
     return InstitutionAccountInfo(
       adminsLen: admin.adminsLen,
       threshold: threshold,
-      adminPubkeys: admin.adminPubkeys,
+      admins: admin.admins,
       status: _statusFromByte(account.statusByte),
     );
   }
@@ -659,7 +659,7 @@ class InstitutionManageService {
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int threshold,
     required BigInt initialTotalFen,
     required Uint8List proposerPubkey,
@@ -679,7 +679,7 @@ class InstitutionManageService {
       accounts: accounts,
       org: org,
       adminsLen: adminsLen,
-      adminPubkeys: adminPubkeys,
+      admins: admins,
       threshold: threshold,
       initialTotalFen: initialTotalFen,
       proposerPubkey: proposerPubkey,
@@ -700,7 +700,7 @@ class InstitutionManageService {
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int threshold,
     required BigInt initialTotalFen,
     required Uint8List proposerPubkey,
@@ -734,7 +734,7 @@ class InstitutionManageService {
             accounts: accounts,
             org: org,
             adminsLen: adminsLen,
-            adminPubkeys: adminPubkeys,
+            admins: admins,
             threshold: threshold,
             initialTotalFen: initialTotalFen,
             proposerPubkey: proposerPubkey,
@@ -757,7 +757,7 @@ class InstitutionManageService {
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int threshold,
     required BigInt initialTotalFen,
     required Uint8List proposerPubkey,
@@ -826,7 +826,7 @@ class InstitutionManageService {
           eventAdminsLen == adminsLen &&
           eventThreshold == threshold &&
           eventInitialTotal == initialTotalFen &&
-          _adminListsEqual(eventAdmins, adminPubkeys);
+          _adminListsEqual(eventAdmins, admins);
       if (!matches) return null;
       return (
         proposalId: proposalId,

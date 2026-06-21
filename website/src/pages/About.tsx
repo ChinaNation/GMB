@@ -60,7 +60,7 @@ export default function About() {
         <SectionTitle
           subtitle="核心理念"
           title="五民主义"
-          description="公民币区块链以五民主义为核心思想指导，构建自由、民主、公正的公民社会。"
+          description="公民区块链以五民主义为核心思想指导，构建自由、民主、公正的公民社会。"
         />
 
         <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">

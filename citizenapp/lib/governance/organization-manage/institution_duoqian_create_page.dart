@@ -65,7 +65,7 @@ class _InstitutionDuoqianCreatePageState
   List<InstitutionAccountEntry> _accounts = []; // 机构下所有账户
 
   // 管理员列表（公钥 hex，不含 0x）
-  final List<String> _adminPubkeys = [];
+  final List<String> _admins = [];
   String? _creatorPubkey; // 创建人公钥（始终占管理员列表第一位，不可移除）
 
   late WalletProfile _selectedWallet;
@@ -84,7 +84,7 @@ class _InstitutionDuoqianCreatePageState
     _selectedWallet = widget.adminWallets.first;
     _syncCreatorAdmin(widget.adminWallets.first);
     debugPrint(
-        '[DuoqianCreate-Diag] after sync: _adminPubkeys=${_adminPubkeys.length} '
+        '[DuoqianCreate-Diag] after sync: _admins=${_admins.length} '
         'creator=${_creatorPubkey?.substring(0, 8)}...');
   }
 
@@ -93,11 +93,11 @@ class _InstitutionDuoqianCreatePageState
     var pubkey = wallet.pubkeyHex.toLowerCase();
     if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
     if (_creatorPubkey != null) {
-      _adminPubkeys.remove(_creatorPubkey);
+      _admins.remove(_creatorPubkey);
     }
     _creatorPubkey = pubkey;
-    _adminPubkeys.remove(pubkey);
-    _adminPubkeys.insert(0, pubkey);
+    _admins.remove(pubkey);
+    _admins.insert(0, pubkey);
     _syncThresholdInput();
   }
 
@@ -217,42 +217,42 @@ class _InstitutionDuoqianCreatePageState
   }
 
   void _addAdminPubkey(String hex) {
-    if (_adminPubkeys.contains(hex)) {
+    if (_admins.contains(hex)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该管理员已在列表中')),
       );
       return;
     }
-    if (_adminPubkeys.length >= 64) {
+    if (_admins.length >= 64) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('管理员数量已达上限（64）')),
       );
       return;
     }
     setState(() {
-      _adminPubkeys.add(hex);
+      _admins.add(hex);
       _syncThresholdInput();
     });
   }
 
   void _removeAdmin(int index) {
-    if (_adminPubkeys[index] == _creatorPubkey) return;
+    if (_admins[index] == _creatorPubkey) return;
     setState(() {
-      _adminPubkeys.removeAt(index);
+      _admins.removeAt(index);
       _syncThresholdInput();
     });
   }
 
   void _syncThresholdInput() {
-    if (_adminPubkeys.isEmpty) {
+    if (_admins.isEmpty) {
       _thresholdController.clear();
       return;
     }
-    final minThreshold = (_adminPubkeys.length ~/ 2) + 1;
+    final minThreshold = (_admins.length ~/ 2) + 1;
     final current = int.tryParse(_thresholdController.text.trim());
     if (current == null ||
         current < minThreshold ||
-        current > _adminPubkeys.length) {
+        current > _admins.length) {
       _thresholdController.text = minThreshold.toString();
     }
   }
@@ -288,13 +288,13 @@ class _InstitutionDuoqianCreatePageState
     if (blockedAccounts.isNotEmpty) {
       return '账户已在链上或正在注册中：${blockedAccounts.join('、')}';
     }
-    if (_adminPubkeys.length < 2) return '管理员至少 2 人';
+    if (_admins.length < 2) return '管理员至少 2 人';
 
     final thresholdText = _thresholdController.text.trim();
     final threshold = int.tryParse(thresholdText);
     if (threshold == null) return '请输入有效的阈值';
 
-    final adminsLen = _adminPubkeys.length;
+    final adminsLen = _admins.length;
     final minThreshold = (adminsLen ~/ 2) + 1;
     if (threshold < minThreshold) {
       return '阈值不能小于 $minThreshold（必须过半）';
@@ -390,7 +390,7 @@ class _InstitutionDuoqianCreatePageState
         return;
       }
 
-      final adminPubkeyBytes = _adminPubkeys
+      final adminsBytes = _admins
           .map((hex) => Uint8List.fromList(_hexDecode(hex)))
           .toList();
 
@@ -432,11 +432,11 @@ class _InstitutionDuoqianCreatePageState
               SignDisplayField(
                   key: 'admins_len',
                   label: '管理员数量',
-                  value: _adminPubkeys.length.toString()),
+                  value: _admins.length.toString()),
               SignDisplayField(
                   key: 'threshold',
                   label: '阈值',
-                  value: '$threshold/${_adminPubkeys.length}'),
+                  value: '$threshold/${_admins.length}'),
               SignDisplayField(
                   key: 'total_amount_yuan',
                   label: '初始资金合计',
@@ -492,8 +492,8 @@ class _InstitutionDuoqianCreatePageState
         sfidFullName: registrationInfo.sfidFullName,
         accounts: accounts,
         org: _defaultInstitutionOrg,
-        adminsLen: _adminPubkeys.length,
-        adminPubkeys: adminPubkeyBytes,
+        adminsLen: _admins.length,
+        admins: adminsBytes,
         threshold: threshold,
         registerNonce: registrationInfo.credential.registerNonce,
         signatureHex: registrationInfo.credential.signature,
@@ -586,7 +586,7 @@ class _InstitutionDuoqianCreatePageState
   @override
   Widget build(BuildContext context) {
     debugPrint(
-        '[DuoqianCreate-Diag] build START: _adminPubkeys=${_adminPubkeys.length} '
+        '[DuoqianCreate-Diag] build START: _admins=${_admins.length} '
         '_accounts=${_accounts.length} _checkingSfid=$_checkingSfid');
     return Scaffold(
       backgroundColor: Colors.white,
@@ -683,9 +683,9 @@ class _InstitutionDuoqianCreatePageState
           const SizedBox(height: 20),
 
           // 管理员列表
-          _buildSectionTitle('管理员列表（${_adminPubkeys.length}/64）'),
+          _buildSectionTitle('管理员列表（${_admins.length}/64）'),
           const SizedBox(height: 8),
-          ..._adminPubkeys.asMap().entries.map((entry) {
+          ..._admins.asMap().entries.map((entry) {
             final index = entry.key;
             final pubkey = entry.value;
             final ss58 = _hexToSs58(pubkey);
@@ -765,8 +765,8 @@ class _InstitutionDuoqianCreatePageState
             controller: _thresholdController,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              hintText: _adminPubkeys.length >= 2
-                  ? '范围：${(_adminPubkeys.length + 1) ~/ 2} ~ ${_adminPubkeys.length}'
+              hintText: _admins.length >= 2
+                  ? '范围：${(_admins.length + 1) ~/ 2} ~ ${_admins.length}'
                   : '请先添加管理员',
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(10)),

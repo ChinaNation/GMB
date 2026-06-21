@@ -113,7 +113,7 @@ export default function Ecosystem() {
           <SectionTitle
             subtitle="生态系统"
             title="完整的公民链生态"
-            description="从身份认证到移动钱包，从护照签发到桌面节点，公民币区块链构建了完整的生态系统闭环。"
+            description="从身份认证到移动钱包，从护照签发到桌面节点，公民区块链构建了完整的生态系统闭环。"
           />
         </div>
       </section>

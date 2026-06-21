@@ -1,4 +1,4 @@
-[workspace]                                  # 公民币区块链主体的子工作空间
+[workspace]                                  # 公民区块链主体的子工作空间
 members = [
     "node",                                  # 链节点程序
     "node/vendor",                           # 本地覆盖的 GRANDPA voter 持久化实现

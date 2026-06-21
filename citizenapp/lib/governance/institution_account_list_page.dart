@@ -271,7 +271,7 @@ class _InstitutionAccountListPageState
               personal.duoqianAccount,
               DuoqianLocalDetailSnapshot(
                 status: status,
-                adminPubkeys: info.adminPubkeys,
+                admins: info.admins,
                 threshold: info.threshold,
                 balanceYuan: previousDetail?.balanceYuan,
                 lastBalanceRefreshAtMillis:
@@ -354,7 +354,7 @@ class _InstitutionAccountListPageState
               institution.duoqianAccount,
               DuoqianLocalDetailSnapshot(
                 status: status,
-                adminPubkeys: info.adminPubkeys,
+                admins: info.admins,
                 threshold: info.threshold,
                 balanceYuan: previousDetail?.balanceYuan,
                 lastBalanceRefreshAtMillis:

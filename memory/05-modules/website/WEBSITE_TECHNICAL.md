@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-`website/` 是 GMB 官网前端工程，用于对外展示公民币区块链与项目基础信息。
+`website/` 是 GMB 官网前端工程，用于对外展示公民区块链与项目基础信息。
 
 该模块只负责公开官网页面，不承载 CPMS、SFID、CitizenChain 或 CitizenApp 的信任根逻辑。
 

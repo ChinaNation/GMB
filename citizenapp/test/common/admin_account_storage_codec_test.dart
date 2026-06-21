@@ -19,7 +19,7 @@ void main() {
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
       expect(r.org, 0);
       expect(r.kind, AdminAccountStorageCodec.kindBuiltin);
-      expect(r.adminPubkeysHex, isEmpty);
+      expect(r.adminsHex, isEmpty);
     });
 
     test('成功解码 Personal 含 3 个 admin', () {
@@ -36,7 +36,7 @@ void main() {
       ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
       expect(r.kind, AdminAccountStorageCodec.kindPersonal);
-      expect(r.adminPubkeysHex, ['11' * 32, '22' * 32, '33' * 32]);
+      expect(r.adminsHex, ['11' * 32, '22' * 32, '33' * 32]);
     });
 
     test('成功解码 InstitutionAccount 含 2 个 admin', () {
@@ -52,7 +52,7 @@ void main() {
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
       expect(r.org, 4);
       expect(r.kind, AdminAccountStorageCodec.kindInstitutionAccount);
-      expect(r.adminPubkeysHex, ['44' * 32, '55' * 32]);
+      expect(r.adminsHex, ['44' * 32, '55' * 32]);
     });
 
     test('字节不足返回 null,不抛异常', () {
@@ -84,7 +84,7 @@ void main() {
         bytes.addAll(a);
       }
       final r = AdminAccountStorageCodec.tryDecode(Uint8List.fromList(bytes))!;
-      expect(r.adminPubkeysHex.length, adminsLen);
+      expect(r.adminsHex.length, adminsLen);
     });
   });
 

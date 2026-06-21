@@ -30,7 +30,7 @@ void main() {
         addrHex: addr,
         org: org,
         kind: kind,
-        adminPubkeysHex: admins,
+        adminsHex: admins,
       );
 
   group('AdminAccountsScanService.filterMine', () {

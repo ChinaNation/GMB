@@ -4,7 +4,7 @@
 - 完成记录(2026-06-20)：
   - 60 编译错误全修（test mock 补 SFID-scope 参 + 调用点补 issuer_main_account/scope_province/scope_city + EmptyProvince→EmptyScopeProvinceName + SfidInstitutionVerifier 补第 4 泛型），只改测试码、生产 lib 0 改动、断言无弱化（cases.rs assert 71→71）
   - 修复构建后暴露的 2 个既有逻辑测试 bug：① runtime `resolution_destro_internal_vote_flow` 投票循环 `0..13`→`1..13`（提案人 propose 时已自动一票,与同文件 8 个 1..N 测试一致）② node `compact_u128_big_integer` 测试值 `1_000_000`→`1_073_741_824`(2^30，原值 <2^30 实为 4 字节模式非 big-integer；生产 encode_compact_u128 正确)
-  - 未修：vendored `sc-consensus-grandpa` lib-test E0432（observer.rs 引用被裁掉的 communication::tests）——上游 vendor 测试债，仅在缓存失效时暴露（本次由并发 wuminapp→citizenapp 改名触碰 node/vendor 触发）；GMB 测试命令应 `--exclude sc-consensus-grandpa` 或单独修 vendor，未擅改上游码
+  - 已修(2026-06-20)：vendored `sc-consensus-grandpa` lib-test 曾报 E0432（observer.rs 引用被裁掉的 communication::tests）——上游 vendor 测试债，仅在缓存失效时暴露（本次由并发产品改名触碰 node/vendor 触发）；GMB 测试命令应 `--exclude sc-consensus-grandpa` 或单独修 vendor，未擅改上游码
 - 历史状态：进行中
 - 创建：2026-06-20
 - 背景：PQC/SFID-scope 在途整改把生产签名扩了参，但 `#[cfg(test)]` 测试 mock/调用点没跟上。`cargo check --workspace`(lib) = 0 错误（生产码完整），但 `cargo test --workspace` 60 编译错误、8 个测试 crate 不构建。与 admins 统一无关。

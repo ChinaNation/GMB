@@ -94,7 +94,7 @@ class PersonalManageDiscoveryService {
         duoqianAccountHex: acc.addrHex,
         name: meta.accountName,
         creatorAddrHex: meta.creatorAddressHex,
-        matchedAdmins: acc.adminPubkeysHex
+        matchedAdmins: acc.adminsHex
             .where(myPubkeys.contains)
             .toList(growable: false),
       );

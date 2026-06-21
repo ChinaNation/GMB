@@ -956,7 +956,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 //   * smoldot 刚 gossip-open 完，还没收到 peer 的 block-announce，
                 //     `knows_non_finalized_block` 还不知道这个 peer 拥有该块
                 //
-                // wuminapp 钱包查询时常用 best_block (#64) 而 finalized 是 #62，
+                // citizenapp 钱包查询时常用 best_block (#64) 而 finalized 是 #62，
                 // 走的是 non-finalized 分支；这里同样按 source_best.0 ≥ block_number
                 // 放行，足够覆盖"peer 已经在那个高度但还没来得及把 block-announce
                 // 推过来给 smoldot"的窗口。

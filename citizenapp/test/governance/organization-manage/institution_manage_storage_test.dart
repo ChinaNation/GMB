@@ -121,7 +121,7 @@ void main() {
     expect(info, isNotNull);
     expect(info!.adminsLen, 2);
     expect(info.threshold, 2);
-    expect(info.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+    expect(info.admins, ['aa' * 32, 'bb' * 32]);
     expect(info.status, InstitutionStatus.active);
     expect(rpc.requestedKeys, [refKey, accountKey, adminKey, thresholdKey]);
   });
@@ -174,7 +174,7 @@ void main() {
 
     expect(infos[address]!.adminsLen, 2);
     expect(infos[address]!.threshold, 2);
-    expect(infos[address]!.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+    expect(infos[address]!.admins, ['aa' * 32, 'bb' * 32]);
     expect(infos[address]!.status, InstitutionStatus.active);
     expect(
         rpc.requestedKeys, [refKey, accountKey, adminKey, activeThresholdKey]);

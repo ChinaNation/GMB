@@ -119,7 +119,7 @@ class DuoqianLocalStatusSnapshot {
 class DuoqianLocalDetailSnapshot {
   const DuoqianLocalDetailSnapshot({
     required this.status,
-    required this.adminPubkeys,
+    required this.admins,
     this.threshold,
     this.balanceYuan,
     this.lastChainRefreshAtMillis,
@@ -128,7 +128,7 @@ class DuoqianLocalDetailSnapshot {
   });
 
   final String status;
-  final List<String> adminPubkeys;
+  final List<String> admins;
   final int? threshold;
   final double? balanceYuan;
   final int? lastChainRefreshAtMillis;
@@ -137,7 +137,7 @@ class DuoqianLocalDetailSnapshot {
 
   Map<String, dynamic> toJson() => {
         'status': status,
-        'admins': adminPubkeys,
+        'admins': admins,
         'threshold': threshold,
         'balance_yuan': balanceYuan,
         'last_chain_refresh_at_millis': lastChainRefreshAtMillis,
@@ -161,7 +161,7 @@ class DuoqianLocalDetailSnapshot {
       if (status == null || status.isEmpty) return null;
       return DuoqianLocalDetailSnapshot(
         status: status,
-        adminPubkeys: admins,
+        admins: admins,
         threshold: _toInt(decoded['threshold']),
         balanceYuan: _toDouble(decoded['balance_yuan']),
         lastChainRefreshAtMillis:

@@ -26,12 +26,12 @@ class PersonalManageAdminSnapshot {
   const PersonalManageAdminSnapshot({
     required this.org,
     required this.adminsLen,
-    required this.adminPubkeys,
+    required this.admins,
   });
 
   final int org;
   final int adminsLen;
-  final List<String> adminPubkeys;
+  final List<String> admins;
 }
 
 /// PersonalManage 专属 storage codec。
@@ -112,7 +112,7 @@ class PersonalManageStorageCodec {
     return PersonalManageAdminSnapshot(
       org: org,
       adminsLen: count,
-      adminPubkeys: admins,
+      admins: admins,
     );
   }
 

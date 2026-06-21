@@ -60,7 +60,7 @@ void main() {
 
       expect(decoded.org, 3);
       expect(decoded.adminsLen, 2);
-      expect(decoded.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+      expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
     });
   });
 }

@@ -53,7 +53,7 @@ class PersonalManageService {
         String blockHashHex,
       })> submitProposeCreatePersonal({
     required Uint8List accountName,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required String fromAddress,
@@ -62,7 +62,7 @@ class PersonalManageService {
   }) async {
     final callData = buildProposeCreatePersonalCallData(
       accountName: accountName,
-      adminPubkeys: adminPubkeys,
+      admins: admins,
       regularThreshold: regularThreshold,
       amountFen: amountFen,
     );
@@ -75,7 +75,7 @@ class PersonalManageService {
     final event = await _confirmPersonalDuoqianProposedEvent(
       blockHashHex: submitResult.blockHashHex,
       accountName: accountName,
-      adminPubkeys: adminPubkeys,
+      admins: admins,
       regularThreshold: regularThreshold,
       amountFen: amountFen,
       proposerPubkey: signerPubkey,
@@ -93,24 +93,24 @@ class PersonalManageService {
   @visibleForTesting
   static Uint8List buildProposeCreatePersonalCallData({
     required Uint8List accountName,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int regularThreshold,
     required BigInt amountFen,
   }) {
     if (accountName.isEmpty || accountName.length > 128) {
       throw ArgumentError('account_name 长度需在 1..=128 字节');
     }
-    if (adminPubkeys.length < 2 || adminPubkeys.length > 64) {
+    if (admins.length < 2 || admins.length > 64) {
       throw ArgumentError('个人多签管理员数量需在 2..=64');
     }
-    final minThreshold = minimumRegularThreshold(adminPubkeys.length);
+    final minThreshold = minimumRegularThreshold(admins.length);
     if (regularThreshold < minThreshold ||
-        regularThreshold > adminPubkeys.length) {
+        regularThreshold > admins.length) {
       throw ArgumentError(
-          'regular_threshold 范围必须在 $minThreshold..=${adminPubkeys.length}');
+          'regular_threshold 范围必须在 $minThreshold..=${admins.length}');
     }
     final seen = <String>{};
-    for (final pubkey in adminPubkeys) {
+    for (final pubkey in admins) {
       if (pubkey.length != 32) {
         throw ArgumentError('admins 每项必须为 32 字节');
       }
@@ -134,8 +134,8 @@ class PersonalManageService {
 
     // admins: BoundedVec<AccountId32>
     output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(adminPubkeys.length)));
-    for (final pubkey in adminPubkeys) {
+        CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
+    for (final pubkey in admins) {
       output.write(pubkey);
     }
 
@@ -240,7 +240,7 @@ class PersonalManageService {
     return DuoqianAccountInfo(
       adminsLen: admin.adminsLen,
       threshold: threshold,
-      adminPubkeys: admin.adminPubkeys,
+      admins: admin.admins,
       status: _statusFromByte(personal.statusByte),
     );
   }
@@ -360,7 +360,7 @@ class PersonalManageService {
       result[address] = DuoqianAccountInfo(
         adminsLen: admin.adminsLen,
         threshold: thresholdByAccount[address],
-        adminPubkeys: admin.adminPubkeys,
+        admins: admin.admins,
         status: _statusFromByte(personal.statusByte),
       );
     }
@@ -474,7 +474,7 @@ class PersonalManageService {
       _confirmPersonalDuoqianProposedEvent({
     required String blockHashHex,
     required Uint8List accountName,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required Uint8List proposerPubkey,
@@ -490,7 +490,7 @@ class PersonalManageService {
     final found = _findPersonalDuoqianProposedEvent(
       events,
       accountName: accountName,
-      adminPubkeys: adminPubkeys,
+      admins: admins,
       regularThreshold: regularThreshold,
       amountFen: amountFen,
       proposerPubkey: proposerPubkey,
@@ -507,7 +507,7 @@ class PersonalManageService {
       _findPersonalDuoqianProposedEvent(
     Uint8List data, {
     required Uint8List accountName,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required Uint8List proposerPubkey,
@@ -537,7 +537,7 @@ class PersonalManageService {
             data,
             offset,
             accountName: accountName,
-            adminPubkeys: adminPubkeys,
+            admins: admins,
             regularThreshold: regularThreshold,
             amountFen: amountFen,
             proposerPubkey: proposerPubkey,
@@ -556,7 +556,7 @@ class PersonalManageService {
     Uint8List data,
     int offset, {
     required Uint8List accountName,
-    required List<Uint8List> adminPubkeys,
+    required List<Uint8List> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required Uint8List proposerPubkey,
@@ -590,10 +590,10 @@ class PersonalManageService {
 
       final matches = _bytesEqual(proposer, proposerPubkey) &&
           _bytesEqual(nameRead.bytes, accountName) &&
-          eventAdminsLen == adminPubkeys.length &&
+          eventAdminsLen == admins.length &&
           eventThreshold == regularThreshold &&
           eventAmount == amountFen &&
-          _adminListsEqual(eventAdmins, adminPubkeys);
+          _adminListsEqual(eventAdmins, admins);
       if (!matches) return null;
       return (
         proposalId: proposalId,

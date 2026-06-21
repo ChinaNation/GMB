@@ -113,7 +113,7 @@ class DuoqianAccountInfo {
   const DuoqianAccountInfo({
     required this.adminsLen,
     required this.threshold,
-    required this.adminPubkeys,
+    required this.admins,
     required this.status,
   });
 
@@ -121,7 +121,7 @@ class DuoqianAccountInfo {
   final int? threshold;
 
   /// 管理员公钥列表（hex，不含 0x 前缀）。
-  final List<String> adminPubkeys;
+  final List<String> admins;
 
   final DuoqianStatus status;
 }

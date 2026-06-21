@@ -2,13 +2,13 @@
 
 ## 1. 目录用途
 
-本目录保存 `wuminapp` 当前使用的 `smoldot` Dart FFI 包本地 fork。
+本目录保存 `citizenapp` 当前使用的 `smoldot` Dart FFI 包本地 fork。
 
 目的：
 
 - 不再依赖 pub.dev 上的只读包形态
 - 后续可在本目录内扩展 typed capability 的 Dart 绑定
-- 与 `wuminapp/rust` 和 `wuminapp/smoldot-pow` 一起纳入同一版本治理
+- 与 `citizenapp/rust` 和 `citizenapp/smoldot-pow` 一起纳入同一版本治理
 
 ## 2. 收编来源
 
@@ -18,9 +18,9 @@
 
 ## 3. 当前关系
 
-- `wuminapp/pubspec.yaml` 已改为 path 依赖本目录
+- `citizenapp/pubspec.yaml` 已改为 path 依赖本目录
 - 本目录当前仍保持上游包结构，尚未开始 typed capability 改造
-- App 实际 native 库构建仍以 `wuminapp/rust` 为准，不以本目录自带 `rust/` 为准
+- App 实际 native 库构建仍以 `citizenapp/rust` 为准，不以本目录自带 `rust/` 为准
 
 ## 4. 后续规则
 

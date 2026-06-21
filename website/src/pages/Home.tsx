@@ -142,7 +142,7 @@ export default function Home() {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-navy-900/50 to-navy-950" />
         <div className="relative mx-auto max-w-3xl px-6 text-center">
           <h2 className="text-3xl font-bold text-white md:text-4xl">
-            加入公民币区块链生态
+            加入公民区块链生态
           </h2>
           <p className="mt-6 text-lg text-slate-400">
             下载 CitizenApp 移动客户端，成为公民轻节点，参与区块链治理

@@ -65,7 +65,7 @@ void main() {
       expect(decoded.org, 5);
       expect(decoded.adminsLen, 2);
       expect(decoded.threshold, isNull);
-      expect(decoded.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+      expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
     });
 
     test('decodes institution info and account state', () {
@@ -100,7 +100,7 @@ void main() {
           DuoqianStorageCodec.decodeInstitutionAccount(account)!;
       expect(institutionDecoded.adminsLen, 2);
       expect(institutionDecoded.threshold, 2);
-      expect(institutionDecoded.adminPubkeys, ['11' * 32, '22' * 32]);
+      expect(institutionDecoded.admins, ['11' * 32, '22' * 32]);
       expect(institutionDecoded.statusByte, 1);
       expect(accountDecoded.statusByte, 1);
       expect(accountDecoded.addressHex, 'd1' * 32);

@@ -41,7 +41,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
   final _manageService = PersonalManageService();
 
   bool _submitting = false;
-  final List<String> _adminPubkeys = [];
+  final List<String> _admins = [];
   WalletProfile? _selectedWallet;
   List<WalletProfile> _wallets = [];
   String? _creatorPubkey; // 创建人公钥（始终占管理员列表第一位，不可移除）
@@ -80,11 +80,11 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
     // 移除旧创建人
     if (_creatorPubkey != null) {
-      _adminPubkeys.remove(_creatorPubkey);
+      _admins.remove(_creatorPubkey);
     }
     _creatorPubkey = pubkey;
-    _adminPubkeys.remove(pubkey); // 防重复
-    _adminPubkeys.insert(0, pubkey);
+    _admins.remove(pubkey); // 防重复
+    _admins.insert(0, pubkey);
   }
 
   // ──── 地址预览 ────
@@ -146,41 +146,41 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
   }
 
   void _addAdminPubkey(String hex) {
-    if (_adminPubkeys.contains(hex)) {
+    if (_admins.contains(hex)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该管理员已在列表中')),
       );
       return;
     }
-    if (_adminPubkeys.length >= 64) {
+    if (_admins.length >= 64) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('管理员数量已达上限（64）')),
       );
       return;
     }
     setState(() {
-      _adminPubkeys.add(hex);
+      _admins.add(hex);
       _syncThresholdInput();
     });
   }
 
   void _removeAdmin(int index) {
     // 创建人不可移除
-    if (_adminPubkeys[index] == _creatorPubkey) return;
+    if (_admins[index] == _creatorPubkey) return;
     setState(() {
-      _adminPubkeys.removeAt(index);
+      _admins.removeAt(index);
       _syncThresholdInput();
     });
   }
 
   int? get _minimumRegularThreshold {
-    final count = _adminPubkeys.length;
+    final count = _admins.length;
     if (count < 2) return null;
     return PersonalManageService.minimumRegularThreshold(count);
   }
 
   int? get _regularThreshold {
-    if (_adminPubkeys.length < 2) return null;
+    if (_admins.length < 2) return null;
     return int.tryParse(_thresholdController.text.trim());
   }
 
@@ -192,7 +192,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       _thresholdController.clear();
       return;
     }
-    final max = _adminPubkeys.length;
+    final max = _admins.length;
     final current = int.tryParse(_thresholdController.text.trim());
     final next = current == null
         ? min
@@ -210,8 +210,8 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     final name = _nameController.text.trim();
     if (name.isEmpty) return '请输入多签账户名称';
     if (utf8.encode(name).length > 128) return '名称超过最大长度（128 字节）';
-    if (_adminPubkeys.length < 2) return '管理员至少 2 人';
-    if (_adminPubkeys.length > 64) return '管理员最多 64 人';
+    if (_admins.length < 2) return '管理员至少 2 人';
+    if (_admins.length > 64) return '管理员最多 64 人';
     if (_selectedWallet == null) return '请先导入钱包';
     final minThreshold = _minimumRegularThreshold;
     final regularThreshold = _regularThreshold;
@@ -221,7 +221,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     if (regularThreshold < minThreshold) {
       return '普通阈值不能小于 $minThreshold（必须过半）';
     }
-    if (regularThreshold > _adminPubkeys.length) {
+    if (regularThreshold > _admins.length) {
       return '普通阈值不能超过管理员数量';
     }
 
@@ -264,7 +264,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       final nameText = _nameController.text.trim();
       final nameBytes = Uint8List.fromList(utf8.encode(nameText));
       final regularThreshold = _regularThreshold!;
-      final createThreshold = _adminPubkeys.length;
+      final createThreshold = _admins.length;
       final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
       final amountFen = BigInt.from((amountYuan * 100).round());
       final balanceError = await _checkCreatorBalance(
@@ -280,7 +280,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         return;
       }
 
-      final adminPubkeyBytes = _adminPubkeys
+      final adminsBytes = _admins
           .map((hex) => Uint8List.fromList(_hexDecode(hex)))
           .toList();
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
@@ -315,15 +315,15 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
               SignDisplayField(
                   key: 'admins_len',
                   label: '管理员数量',
-                  value: _adminPubkeys.length.toString()),
+                  value: _admins.length.toString()),
               SignDisplayField(
                   key: 'regular_threshold',
                   label: '普通阈值',
-                  value: '$regularThreshold/${_adminPubkeys.length}'),
+                  value: '$regularThreshold/${_admins.length}'),
               SignDisplayField(
                   key: 'create_threshold',
                   label: '注册阈值',
-                  value: '$createThreshold/${_adminPubkeys.length}'),
+                  value: '$createThreshold/${_admins.length}'),
               SignDisplayField(
                   key: 'amount_yuan',
                   label: '初始资金',
@@ -348,7 +348,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
 
       final result = await _manageService.submitProposeCreatePersonal(
         accountName: nameBytes,
-        adminPubkeys: adminPubkeyBytes,
+        admins: adminsBytes,
         regularThreshold: regularThreshold,
         amountFen: amountFen,
         fromAddress: wallet.address,
@@ -383,7 +383,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         noVotes: 0,
         snapshot: {
           'name': nameText,
-          'admins_len': _adminPubkeys.length,
+          'admins_len': _admins.length,
           'regular_threshold': regularThreshold,
           'create_threshold': createThreshold,
           'amount_fen': amountFen.toString(),
@@ -464,9 +464,9 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
             ),
           ],
           const SizedBox(height: 20),
-          _buildSectionTitle('管理员列表（${_adminPubkeys.length}/64）'),
+          _buildSectionTitle('管理员列表（${_admins.length}/64）'),
           const SizedBox(height: 8),
-          ..._adminPubkeys.asMap().entries.map((entry) {
+          ..._admins.asMap().entries.map((entry) {
             final ss58 = _hexToSs58(entry.value);
             final isCreator = entry.value == _creatorPubkey;
             return ListTile(
@@ -626,7 +626,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       );
 
   Widget _buildThresholdPreview() {
-    final count = _adminPubkeys.length;
+    final count = _admins.length;
     final min = _minimumRegularThreshold;
     final createText = count < 2 ? '至少添加 2 名管理员' : '$count/$count';
     return Container(

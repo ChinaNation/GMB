@@ -23,14 +23,14 @@ class AdminSnapshot {
     required this.org,
     required this.adminsLen,
     required this.threshold,
-    required this.adminPubkeys,
+    required this.admins,
     required this.statusByte,
   });
 
   final int org;
   final int adminsLen;
   final int? threshold;
-  final List<String> adminPubkeys;
+  final List<String> admins;
   final int statusByte;
 }
 
@@ -175,7 +175,7 @@ class DuoqianStorageCodec {
       org: org,
       adminsLen: count,
       threshold: null,
-      adminPubkeys: admins,
+      admins: admins,
       statusByte: 0,
     );
   }
@@ -207,7 +207,7 @@ class DuoqianStorageCodec {
         org: 0,
         adminsLen: adminsLen,
         threshold: threshold,
-        adminPubkeys: admins,
+        admins: admins,
         statusByte: 0,
       );
     }
@@ -218,7 +218,7 @@ class DuoqianStorageCodec {
       org: 0,
       adminsLen: adminsLen,
       threshold: threshold,
-      adminPubkeys: admins,
+      admins: admins,
       statusByte: statusByte,
     );
   }

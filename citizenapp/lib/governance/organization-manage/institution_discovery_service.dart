@@ -110,7 +110,7 @@ class InstitutionDiscoveryService {
         name: ref.accountNameText,
         sfidNumberUtf8: ref.sfidNumberText,
         adminAccountOrg: acc.org,
-        matchedAdmins: acc.adminPubkeysHex
+        matchedAdmins: acc.adminsHex
             .where(myPubkeys.contains)
             .toList(growable: false),
       );

@@ -22,7 +22,7 @@ class ScannedAdminAccount {
     required this.addrHex,
     required this.org,
     required this.kind,
-    required this.adminPubkeysHex,
+    required this.adminsHex,
   });
 
   /// 账户地址小写 hex(无 0x),由 storage key 末 32B 提取。
@@ -35,7 +35,7 @@ class ScannedAdminAccount {
   final int kind;
 
   /// 管理员公钥小写 hex 列表(无 0x,32B = 64 hex)。
-  final List<String> adminPubkeysHex;
+  final List<String> adminsHex;
 }
 
 /// 一次全表扫描的结果。
@@ -137,7 +137,7 @@ class AdminAccountsScanService {
           addrHex: addr,
           org: decoded.org,
           kind: decoded.kind,
-          adminPubkeysHex: decoded.adminPubkeysHex,
+          adminsHex: decoded.adminsHex,
         ));
       }
       onProgress?.call(allKeys.length, allKeys.length, accounts.length);
@@ -162,7 +162,7 @@ class AdminAccountsScanService {
         .where((a) =>
             a.kind == kind &&
             (orgWhitelist == null || orgWhitelist.contains(a.org)) &&
-            a.adminPubkeysHex.any(myPubkeysHex.contains))
+            a.adminsHex.any(myPubkeysHex.contains))
         .toList(growable: false);
   }
 

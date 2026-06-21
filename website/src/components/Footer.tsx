@@ -11,7 +11,7 @@ export default function Footer() {
                 G
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">公民币区块链</div>
+                <div className="text-sm font-semibold text-white">公民区块链</div>
                 <div className="text-[10px] tracking-wider text-gold-400">CITIZENCHAIN</div>
               </div>
             </div>

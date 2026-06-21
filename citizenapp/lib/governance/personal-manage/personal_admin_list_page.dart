@@ -49,7 +49,7 @@ class PersonalAdminListPage extends StatefulWidget {
     super.key,
     required this.institution,
     required this.duoqianStatus,
-    required this.adminPubkeys,
+    required this.admins,
     required this.adminWallets,
     this.creatorPubkeyHex,
   });
@@ -61,7 +61,7 @@ class PersonalAdminListPage extends StatefulWidget {
   final DuoqianStatus duoqianStatus;
 
   /// 管理员公钥列表(小写 hex,无 0x 前缀)。
-  final List<String> adminPubkeys;
+  final List<String> admins;
 
   /// 用户本地能签名的 admin 钱包子集(由调用方过滤好)。
   final List<WalletProfile> adminWallets;
@@ -273,8 +273,8 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
                   const SizedBox(height: 2),
                   Text(
                     widget.duoqianStatus == DuoqianStatus.active
-                        ? '已激活 · ${widget.adminPubkeys.length} 位管理员'
-                        : '待激活 · ${widget.adminPubkeys.length} 位管理员需逐一签名',
+                        ? '已激活 · ${widget.admins.length} 位管理员'
+                        : '待激活 · ${widget.admins.length} 位管理员需逐一签名',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textTertiary,
@@ -298,8 +298,8 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
         side: const BorderSide(color: AppTheme.border),
       ),
       child: Column(
-        children: List.generate(widget.adminPubkeys.length, (index) {
-          final pubkey = widget.adminPubkeys[index].toLowerCase();
+        children: List.generate(widget.admins.length, (index) {
+          final pubkey = widget.admins[index].toLowerCase();
           final ss58 = _pubkeyToSS58(pubkey);
           final isCreator = widget.creatorPubkeyHex != null &&
               widget.creatorPubkeyHex!.toLowerCase() == pubkey;

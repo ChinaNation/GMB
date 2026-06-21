@@ -25,7 +25,7 @@ class AdminAccountStorageDecoded {
   const AdminAccountStorageDecoded({
     required this.org,
     required this.kind,
-    required this.adminPubkeysHex,
+    required this.adminsHex,
   });
 
   /// 治理 org 标识(0=NRC, 1=PRC, 2=PRB, 3=个人多签, 4=PUP, 5=OTH)。
@@ -35,7 +35,7 @@ class AdminAccountStorageDecoded {
   final int kind;
 
   /// 管理员公钥 hex 列表(小写,无 0x 前缀,32 字节 = 64 hex 字符)。
-  final List<String> adminPubkeysHex;
+  final List<String> adminsHex;
 }
 
 /// AdminAccount SCALE 解码工具集 + AccountId 提取工具。
@@ -69,7 +69,7 @@ class AdminAccountStorageCodec {
       return AdminAccountStorageDecoded(
         org: org,
         kind: kind,
-        adminPubkeysHex: admins,
+        adminsHex: admins,
       );
     } catch (_) {
       return null;

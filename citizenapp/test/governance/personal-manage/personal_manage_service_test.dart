@@ -107,7 +107,7 @@ void main() {
 
       final callData = PersonalManageService.buildProposeCreatePersonalCallData(
         accountName: accountName,
-        adminPubkeys: [admin1, admin2],
+        admins: [admin1, admin2],
         regularThreshold: 2,
         amountFen: BigInt.from(111),
       );
@@ -135,7 +135,7 @@ void main() {
       expect(
         () => PersonalManageService.buildProposeCreatePersonalCallData(
           accountName: Uint8List.fromList(utf8.encode('家庭基金')),
-          adminPubkeys: admins,
+          admins: admins,
           regularThreshold: 2,
           amountFen: BigInt.from(111),
         ),
@@ -193,7 +193,7 @@ void main() {
       final info = await service.fetchPersonalAccount(address);
 
       expect(info, isNotNull);
-      expect(info!.adminPubkeys, ['cc' * 32, 'dd' * 32]);
+      expect(info!.admins, ['cc' * 32, 'dd' * 32]);
       expect(info.threshold, 2);
       expect(info.status, DuoqianStatus.active);
       expect(rpc.requestedKeys, [personalKey, adminKey, thresholdKey]);
@@ -240,8 +240,8 @@ void main() {
         secondAddress,
       ]);
 
-      expect(infos[firstAddress]!.adminPubkeys, ['aa' * 32, 'bb' * 32]);
-      expect(infos[secondAddress]!.adminPubkeys, ['cc' * 32, 'dd' * 32]);
+      expect(infos[firstAddress]!.admins, ['aa' * 32, 'bb' * 32]);
+      expect(infos[secondAddress]!.admins, ['cc' * 32, 'dd' * 32]);
       expect(infos[firstAddress]!.threshold, 2);
       expect(infos[secondAddress]!.threshold, 2);
       expect(rpc.requestedKeys, [

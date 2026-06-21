@@ -43,7 +43,7 @@ class _InstitutionAccountInfoPageState
   final ChainRpc _rpc = ChainRpc();
 
   InstitutionAccountInfo? _accountInfo;
-  List<String> _adminPubkeys = const [];
+  List<String> _admins = const [];
   String _localStatus = InstitutionDuoqianLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
   int? _lastBalanceRefreshAtMillis;
@@ -54,7 +54,7 @@ class _InstitutionAccountInfoPageState
     super.initState();
     _localStatus =
         widget.initialLocalStatus ?? InstitutionDuoqianLocalState.statusPending;
-    _adminPubkeys = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
+    _admins = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
     _load();
   }
 
@@ -94,8 +94,8 @@ class _InstitutionAccountInfoPageState
           widget.initialLocalStatus ??
           InstitutionDuoqianLocalState.statusPending;
       final isClosed = status == InstitutionDuoqianLocalState.statusClosed;
-      final admins = local.detail?.adminPubkeys.isNotEmpty == true
-          ? local.detail!.adminPubkeys
+      final admins = local.detail?.admins.isNotEmpty == true
+          ? local.detail!.admins
           : local.entity?.matchedAdminPubkeys.isNotEmpty == true
               ? local.entity!.matchedAdminPubkeys
               : widget.initialAdminPubkeys;
@@ -105,7 +105,7 @@ class _InstitutionAccountInfoPageState
           : InstitutionAccountInfo(
               adminsLen: normalizedAdmins.length,
               threshold: local.detail?.threshold,
-              adminPubkeys: normalizedAdmins,
+              admins: normalizedAdmins,
               status: _statusEnumFromLocal(status),
             );
 
@@ -113,7 +113,7 @@ class _InstitutionAccountInfoPageState
       setState(() {
         _localStatus = status;
         _accountInfo = accountInfo;
-        _adminPubkeys = normalizedAdmins;
+        _admins = normalizedAdmins;
         _balanceYuan = isClosed ? null : local.detail?.balanceYuan;
         _lastDetailRefreshAtMillis = local.detail?.lastChainRefreshAtMillis ??
             local.status?.lastSyncAtMillis;
@@ -161,7 +161,7 @@ class _InstitutionAccountInfoPageState
           widget.institution.duoqianAccount,
           DuoqianLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
-            adminPubkeys: previous?.adminPubkeys ?? _adminPubkeys,
+            admins: previous?.admins ?? _admins,
             threshold: previous?.threshold ?? _accountInfo?.threshold,
             balanceYuan: balance,
             lastChainRefreshAtMillis: previous?.lastChainRefreshAtMillis ??
@@ -215,7 +215,7 @@ class _InstitutionAccountInfoPageState
             widget.institution.duoqianAccount,
             DuoqianLocalDetailSnapshot(
               status: status,
-              adminPubkeys: info.adminPubkeys,
+              admins: info.admins,
               threshold: info.threshold,
               balanceYuan: balance ?? previous?.balanceYuan,
               lastChainRefreshAtMillis: now,
@@ -233,7 +233,7 @@ class _InstitutionAccountInfoPageState
       setState(() {
         _localStatus = status;
         _accountInfo = info;
-        _adminPubkeys = _normalizeAdminPubkeys(info?.adminPubkeys);
+        _admins = _normalizeAdminPubkeys(info?.admins);
         _balanceYuan = status == InstitutionDuoqianLocalState.statusClosed
             ? null
             : balance ?? _balanceYuan;
@@ -390,7 +390,7 @@ class _InstitutionAccountInfoPageState
   Future<List<WalletProfile>> _getAdminWallets() async {
     final wm = WalletManager();
     final wallets = await wm.getWallets();
-    final adminSet = _adminPubkeys.toSet();
+    final adminSet = _admins.toSet();
     return wallets.where((w) {
       var pk = w.pubkeyHex.toLowerCase();
       if (pk.startsWith('0x')) pk = pk.substring(2);
@@ -546,7 +546,7 @@ class _InstitutionAccountInfoPageState
   }
 
   Widget _buildAdminEntryCard(InstitutionAccountInfo? info) {
-    final adminsLen = _adminPubkeys.length;
+    final adminsLen = _admins.length;
     final threshold = info?.threshold;
     final subtitle = threshold == null
         ? '$adminsLen 人'

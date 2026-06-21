@@ -45,13 +45,13 @@
 - [x] **P4 原生层**（2026-06-20 完成）：bundle/namespace/applicationId `org.citizenwallet` / `org.citizenapp`，MethodChannel/EventChannel 三端锁步，Isar 实例名 `citizenwallet`/`citizenapp`，Kotlin 包路径，iOS pbxproj/AppDelegate；已修 pbxproj 残留 bug `[sdk=iphoneos*]=wuminapp`→`org.citizenapp`
 - [x] **P5 CI / OTA / fork**（2026-06-20 完成）：✅ workflow 改名 `citizenapp-ci.yml`/`citizenwallet-ci.yml`、workflow 内 secret 名 `CITIZENAPP_*`/`CITIZENWALLET_*`、OTA manifest/tag/UA/`"app"` key、guardrail 路径。✅ **fork 分支**：gh api 在 ChinaNation/polkadot-sdk 建 `ss58-2027-fix-citizenapp-grandpa`→154590c2（同 commit，旧分支暂留）；citizenchain/Cargo.toml 66 行改新分支；citizenchain/Cargo.lock(176)+sfid/backend/Cargo.lock(70) 重生，**0 旧分支残留**；**citizenchain `cargo check` 通过(57s) + sfid 后端通过(22s)**。✅ **GitHub Secrets**：冷钱包原 4 个 `WUMIN_*` 已删、4 个 `CITIZENWALLET_*` 已建（GitHub secret 只写不可读，原 keystore .jks 本机已丢→开发期 re-key：JBR keytool 生成新 `~/keys/citizenwallet-release.jks` alias=upload，base64 入 secret，key.properties 已指向新库；3 个密码/别名沿用原值）。热钱包 `WUMINAPP_*` 本就不存在（citizenapp 发布签名从未配置）
 - [x] **P6 白皮书 / 官网 / 残余注释**（2026-06-20 完成）：docs 白皮书 + website Ecosystem 展示名、`Citizen Wallet`→`CitizenWallet`、`Wumin`→`CitizenWallet`、cpms 后端函数名 `verify_wumin_login_signature`/`bind_admins_from_wumin`、生成器 JS 变量、**runtime 注释**（wuminapp→citizenapp / wumin→citizenwallet，仅注释，二次确认已授权）
+- [x] **P7 残留复查收口**（2026-06-20 完成）：CitizenWallet 入口类名 `CitizenApp`→`CitizenWalletApp` 并同步 widget test；`wumin_android.iml` / `wumin.iml` 文件名改为 `citizenwallet_android.iml` / `citizenwallet.iml`；smoldot fork UPSTREAM 与 standalone 注释改为 `citizenapp`；白皮书展示名统一为 `CitizenApp` / `CitizenWallet`，并重新生成桌面端本地白皮书缓存；AGENTS/agent-rules 不再直写历史旧名。
 
 ## 完成核验（2026-06-20）
 
-全树 `wuminapp`/`wumin` 命中仅剩 3 类**故意保留**项，其余**100% 零残留**（Cargo fork 已解决）：
-1. 命名废弃规则：AGENTS.md / agent-rules.md 各 1 行（指名旧词=规则本身，必须保留）
-2. smoldot vendored fork：6 行（fork-vendor-baseline 豁免）
-3. done 历史卡：230（保留历史，文件名+内容均不动）
+全树历史旧名命中仅剩 2 类**故意保留**项，其余**100% 零残留**：
+1. 本任务卡迁移记录：保留旧名→新名映射、执行记录和验收命令，作为本次破坏式改名的审计依据。
+2. done 历史卡：保留历史任务记录，文件名和内容均不动。
 
 验收门（全过）：citizenwallet/citizenapp `flutter analyze` 0 + 测试全过；sfid/cpms 前端 `tsc --noEmit` 0；**cpms / sfid / citizenchain 三个 Rust 后端 `cargo check` 全部通过**；fork 分支改名后两个 Cargo.lock 0 旧分支残留。
 

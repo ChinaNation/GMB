@@ -47,7 +47,7 @@ class _PersonalManageAccountInfoPageState
   final ChainRpc _rpc = ChainRpc();
 
   DuoqianAccountInfo? _accountInfo;
-  List<String> _adminPubkeys = const [];
+  List<String> _admins = const [];
   String _localStatus = PersonalDuoqianLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
   int? _lastBalanceRefreshAtMillis;
@@ -62,7 +62,7 @@ class _PersonalManageAccountInfoPageState
     super.initState();
     _localStatus =
         widget.initialLocalStatus ?? PersonalDuoqianLocalState.statusPending;
-    _adminPubkeys = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
+    _admins = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
     _isClosed = _localStatus == PersonalDuoqianLocalState.statusClosed;
     _load();
   }
@@ -105,8 +105,8 @@ class _PersonalManageAccountInfoPageState
           widget.initialLocalStatus ??
           PersonalDuoqianLocalState.statusPending;
       final isClosed = status == PersonalDuoqianLocalState.statusClosed;
-      final admins = local.detail?.adminPubkeys.isNotEmpty == true
-          ? local.detail!.adminPubkeys
+      final admins = local.detail?.admins.isNotEmpty == true
+          ? local.detail!.admins
           : local.entity?.matchedAdminPubkeys.isNotEmpty == true
               ? local.entity!.matchedAdminPubkeys
               : widget.initialAdminPubkeys;
@@ -117,7 +117,7 @@ class _PersonalManageAccountInfoPageState
           : DuoqianAccountInfo(
               adminsLen: normalizedAdmins.length,
               threshold: local.detail?.threshold,
-              adminPubkeys: normalizedAdmins,
+              admins: normalizedAdmins,
               status: statusEnum,
             );
       final balance = isClosed
@@ -130,7 +130,7 @@ class _PersonalManageAccountInfoPageState
       setState(() {
         _localStatus = status;
         _accountInfo = accountInfo;
-        _adminPubkeys = normalizedAdmins;
+        _admins = normalizedAdmins;
         _isClosed = isClosed;
         _balanceYuan = balance;
         _lastDetailRefreshAtMillis = local.detail?.lastChainRefreshAtMillis ??
@@ -180,7 +180,7 @@ class _PersonalManageAccountInfoPageState
           widget.institution.duoqianAccount,
           DuoqianLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
-            adminPubkeys: previous?.adminPubkeys ?? _adminPubkeys,
+            admins: previous?.admins ?? _admins,
             threshold: previous?.threshold ?? _accountInfo?.threshold,
             balanceYuan: balance,
             lastChainRefreshAtMillis: previous?.lastChainRefreshAtMillis ??
@@ -234,7 +234,7 @@ class _PersonalManageAccountInfoPageState
             widget.institution.duoqianAccount,
             DuoqianLocalDetailSnapshot(
               status: status,
-              adminPubkeys: info.adminPubkeys,
+              admins: info.admins,
               threshold: info.threshold,
               balanceYuan: balance ?? previous?.balanceYuan,
               lastChainRefreshAtMillis: now,
@@ -253,7 +253,7 @@ class _PersonalManageAccountInfoPageState
         _localStatus = status;
         _isClosed = status == PersonalDuoqianLocalState.statusClosed;
         _accountInfo = info;
-        _adminPubkeys = _normalizeAdminPubkeys(info?.adminPubkeys);
+        _admins = _normalizeAdminPubkeys(info?.admins);
         _balanceYuan = _isClosed ? null : balance ?? _balanceYuan;
         _lastDetailRefreshAtMillis = now;
         if (_isClosed) {
@@ -397,7 +397,7 @@ class _PersonalManageAccountInfoPageState
   Future<List<WalletProfile>> _getAdminWallets() async {
     final wm = WalletManager();
     final wallets = await wm.getWallets();
-    final adminSet = _adminPubkeys.toSet();
+    final adminSet = _admins.toSet();
     return wallets.where((w) {
       var pk = w.pubkeyHex.toLowerCase();
       if (pk.startsWith('0x')) pk = pk.substring(2);
@@ -734,7 +734,7 @@ class _PersonalManageAccountInfoPageState
 
   /// 管理员列表入口卡片(req 1):点击进入完整管理员列表页。
   Widget _buildAdminEntryCard(DuoqianAccountInfo? info) {
-    final adminsLen = _adminPubkeys.length;
+    final adminsLen = _admins.length;
     final threshold = info?.threshold;
     final subtitle = _isClosed
         ? '已注销'
@@ -800,7 +800,7 @@ class _PersonalManageAccountInfoPageState
   }
 
   Future<void> _openAdminListPage(DuoqianAccountInfo? info) async {
-    if (_adminPubkeys.isEmpty) {
+    if (_admins.isEmpty) {
       await _refreshChainDetail(force: true);
     }
     final wallets = await _getAdminWallets();
@@ -813,7 +813,7 @@ class _PersonalManageAccountInfoPageState
         builder: (_) => PersonalAdminListPage(
           institution: widget.institution,
           duoqianStatus: _statusEnumFromLocal(_localStatus),
-          adminPubkeys: _adminPubkeys,
+          admins: _admins,
           adminWallets: wallets,
           creatorPubkeyHex: creator,
         ),
