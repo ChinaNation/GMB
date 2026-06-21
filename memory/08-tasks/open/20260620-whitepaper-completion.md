@@ -523,3 +523,54 @@
 - `website` 执行 `npm run build` 通过。
 - 本地 Vite 服务运行态资源检查通过，页面源码包含标题组和双语列表项规整逻辑，CSS 包含标题组、`whitepaper-bilingual-item` 和 `whitepaper-li-zh` 样式，且不再包含旧的 `li > p + p` 段落间距 fallback。
 - Chrome headless 打开 `http://127.0.0.1:5174/whitepaper` 后 DOM 验收通过：`1.总则` 与 `1. General Principles` 位于同一 `h1` 内，`1.1.目的` 与 `1.1. Purpose` 位于同一 `h2` 内，列表项已生成 `whitepaper-bilingual-item`，未发现残留的 `li > p + p > .whitepaper-en` 结构。
+
+## 最终修正：白皮书源文档统一排版结构
+
+状态：已完成。
+
+目标：
+- 所有打开白皮书的入口必须使用相同排版结构，包括 VS Code/GitHub Markdown 预览、官网白皮书页和公民链桌面节点白皮书 tab。
+- 不能只在官网或桌面端渲染层做补救；`docs/《白皮书》.md` 必须作为唯一真源直接表达中英文分组关系。
+
+实际修改目录：
+- `docs/`
+  - 修改 `docs/《白皮书》.md`，把标题英文合并到同一 Markdown 标题行，把列表项英文合并到同一列表项行，均使用 `<br><span ...>` 表达换行。涉及文档源结构修改。
+- `website/`
+  - 修改 `website/src/pages/Whitepaper.tsx` 和 `website/src/index.css`，按新的源结构解析标题副文本和列表英文，删除官网侧双语列表二次规整逻辑。涉及官网展示代码和样式修改。
+- `citizenchain/node/frontend/`
+  - 修改 `other/other-tabs/LocalDocViewer.tsx`、`app/styles/global.css` 和重新生成 `generated/local-docs.generated.ts`，使公民链桌面节点白皮书 tab 消费同一源结构。涉及桌面节点前端展示代码、样式和生成物更新。
+- `memory/05-modules/citizenchain/node/`
+  - 更新白皮书 tab 和首页模块技术文档，明确白皮书源文档必须自带统一中英文排版结构。涉及模块文档修改。
+- `memory/08-tasks/`
+  - 回写本次最终修正、修改范围和验收结果。涉及任务文档修改。
+
+实际修改：
+- `docs/《白皮书》.md`
+  - 将 65 个标题中英文对改为 `# 中文标题<br><span class="whitepaper-heading-en">English Title</span>` 或标题页对应 `whitepaper-title-en`。
+  - 将 181 个列表中英文对改为 `* 中文内容<br><span class="whitepaper-en">English content</span>`。
+  - 清理 3 个非列表英文说明的误缩进。
+- `website/src/pages/Whitepaper.tsx`
+  - 标题解析改为从同一标题行中的 `<br><span>` 读取中文标题和英文副标题。
+  - 删除官网侧 `normalizeWhitepaperHtml` 双语列表规整逻辑，避免官网与源文档形成两套排版规则。
+- `website/src/index.css`
+  - 列表项内 `whitepaper-en` 直接按源文档结构显示，清理 `whitepaper-bilingual-item` / `whitepaper-li-zh` 样式残留。
+- `citizenchain/node/frontend/other/other-tabs/LocalDocViewer.tsx`
+  - 目录剥离和文档标题识别改为只读取标题主文本，避免 `目录<br>Table of Contents` 被误判为普通章节。
+  - 删除标题英文搬移逻辑，桌面端白皮书 tab 直接消费源文档中的标题组结构。
+- `citizenchain/node/frontend/app/styles/global.css`
+  - 收紧列表项内英文行距，使同一条中文和英文紧挨着显示。
+- `citizenchain/node/frontend/generated/local-docs.generated.ts`
+  - 通过 `node scripts/generate-local-docs.mjs` 重新生成，内置新的白皮书源结构。
+
+未修改：
+- 未修改任何 `citizenchain/runtime/` 文件。
+- 未修改 `sfid/`、`cpms/`、`wumin/`、`wuminapp/`。
+- 未新建文件或目录。
+
+验收结果：
+- 脚本检查 `docs/《白皮书》.md`：65 个标题英文均已内联到标题行，181 个列表英文均已内联到列表项，旧的“标题下一行英文”“列表空行英文段落”和误缩进英文均为 0。
+- 使用 `marked` 按标准 Markdown 渲染抽样确认：`1.总则` 与 `1. General Principles` 位于同一个 `h1`，`1.1.目的` 与 `1.1. Purpose` 位于同一个 `h2`，列表项中文和英文位于同一个 `li`，未生成 `li > p + p > .whitepaper-en`。
+- 已重新生成公民链桌面节点白皮书 tab 的 `generated/local-docs.generated.ts`。
+- 官网执行 `npm run build` 通过；Chrome headless 打开 `http://127.0.0.1:5174/whitepaper` 验收通过，标题英文位于同一标题节点内，列表英文位于同一列表项内，未发现 `whitepaper-bilingual-item` 或 `li > p + p > .whitepaper-en`。
+- 公民链桌面节点前端执行 `npm run build` 通过；Chrome DevTools 自动打开 `http://127.0.0.1:5175/` 并点击“白皮书”tab 后 DOM 验收通过，`1.总则` 与 `1. General Principles` 位于同一 `h1`，`1.1.目的` 与 `1.1. Purpose` 位于同一 `h2`，列表英文为同一 `li` 的直接子节点，目录未误包含“目录”章节。
+- 本地 Vite 服务已关闭，Chrome headless 临时目录已清理。

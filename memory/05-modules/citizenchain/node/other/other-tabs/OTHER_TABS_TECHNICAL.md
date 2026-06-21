@@ -50,6 +50,12 @@
 `generated/local-docs.generated.ts`。公民宪法不再进入该 generated 文件，而是由
 node 本地 RPC `constitution_getDocument` 从当前链上 runtime 读取。
 
+白皮书 Markdown 真源必须自带统一的中英文排版结构：
+
+- 标题英文写在同一个 Markdown 标题行内，格式为 `# 中文标题<br><span class="whitepaper-heading-en">English Title</span>`。
+- 列表项英文写在同一个列表项内，格式为 `* 中文内容<br><span class="whitepaper-en">English content</span>`。
+- 桌面端白皮书 tab、官网白皮书页、VS Code/GitHub Markdown 预览都应消费该源结构，不再各自维护独立的中英文段落规整逻辑。
+
 ## 5. 安全策略
 
 - 文档使用 `marked` 转 HTML 后再经 `DOMPurify` 清洗，避免 Markdown 内嵌 HTML

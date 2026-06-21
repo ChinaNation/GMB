@@ -259,23 +259,9 @@ body {
 
 .whitepaper-body li .whitepaper-en {
   margin-top: 0;
-  line-height: 1.34;
-}
-
-.whitepaper-body .whitepaper-bilingual-item {
-  line-height: 1;
-}
-
-.whitepaper-body .whitepaper-li-zh {
-  display: block;
-  line-height: 1.34;
-}
-
-.whitepaper-body .whitepaper-bilingual-item > .whitepaper-en {
-  margin-top: -1px;
   border-left: 0;
   padding-left: 0;
-  line-height: 1.32;
+  line-height: 1.34;
 }
 
 .whitepaper-body hr {

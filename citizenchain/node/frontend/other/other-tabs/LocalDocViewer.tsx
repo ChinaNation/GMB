@@ -83,7 +83,7 @@ function upgradeTableCodeBlocks(rootEl: HTMLElement) {
 function stripInlineToc(rootEl: HTMLElement) {
   const normalize = (value: string | null) => (value ?? '').replace(/\s+/g, '');
   const tocHeading = Array.from(rootEl.querySelectorAll('h1, h2, h3')).find(
-    (heading) => normalize(heading.textContent) === '目录',
+    (heading) => normalize(getHeadingMainText(heading)) === '目录',
   );
   if (!tocHeading) return;
 
@@ -117,35 +117,17 @@ function normalizeDocHeading(value: string | null) {
     .replace(/[《》<>「」『』【】\[\]()]/g, '');
 }
 
-function applyDocSpecificClasses(rootEl: HTMLElement) {
-  rootEl.querySelectorAll('h1').forEach((heading) => {
-    const normalized = normalizeDocHeading(heading.textContent);
-    if (normalized.includes('白皮书')) {
-      heading.classList.add('paper-main-title');
-    }
-  });
+function getHeadingMainText(heading: Element) {
+  const clone = heading.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('.whitepaper-title-en, .whitepaper-heading-en').forEach((el) => el.remove());
+  return (clone.textContent ?? '').trim();
 }
 
-function moveWhitepaperHeadingSubtitles(rootEl: HTMLElement) {
-  rootEl.querySelectorAll('h1, h2, h3, h4').forEach((heading) => {
-    const nextEl = heading.nextElementSibling;
-    if (!nextEl) return;
-
-    const subtitleSelector = '.whitepaper-title-en, .whitepaper-heading-en';
-    const directSubtitle = nextEl.matches(subtitleSelector) ? nextEl : null;
-    const wrappedSubtitle =
-      nextEl.tagName === 'P' &&
-      nextEl.children.length === 1 &&
-      nextEl.firstElementChild?.matches(subtitleSelector)
-        ? nextEl.firstElementChild
-        : null;
-    const subtitle = directSubtitle ?? wrappedSubtitle;
-    if (!subtitle) return;
-
-    // 中文注释：英文标题副文本属于同一个标题，移动到标题内后，下划线会落在中英文整体下面。
-    heading.appendChild(subtitle);
-    if (nextEl !== subtitle && !nextEl.textContent?.trim() && nextEl.children.length === 0) {
-      nextEl.remove();
+function applyDocSpecificClasses(rootEl: HTMLElement) {
+  rootEl.querySelectorAll('h1').forEach((heading) => {
+    const normalized = normalizeDocHeading(getHeadingMainText(heading));
+    if (normalized.includes('白皮书')) {
+      heading.classList.add('paper-main-title');
     }
   });
 }
@@ -362,9 +344,6 @@ export function LocalDocViewer({ doc }: Props) {
     stripInlineToc(article);
     stripHorizontalRules(article);
     applyDocSpecificClasses(article);
-    if (doc.key === 'whitepaper') {
-      moveWhitepaperHeadingSubtitles(article);
-    }
 
     const { roots, flat } = buildTocFromDom(article, doc);
     setTocItems(roots);

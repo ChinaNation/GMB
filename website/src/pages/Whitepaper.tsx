@@ -27,7 +27,6 @@ type TocNode = Heading & {
   children: TocNode[]
 }
 
-const headingEnPattern = /<span class="whitepaper-heading-en">([^<]+)<\/span>/
 const headingSubtitlePattern = /<span class="(whitepaper-title-en|whitepaper-heading-en)">([^<]+)<\/span>/
 
 function escapeHtml(value: string) {
@@ -39,12 +38,25 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#39;')
 }
 
-function cleanHeadingText(value: string) {
+function cleanMarkdownText(value: string) {
   return value
     .replaceAll('**', '')
     .replaceAll('__', '')
     .replace(/<[^>]+>/g, '')
     .trim()
+}
+
+function parseHeadingContent(value: string) {
+  const subtitleMatch = headingSubtitlePattern.exec(value)
+  const titleSource = value
+    .replace(/<br\s*\/?>\s*<span class="(?:whitepaper-title-en|whitepaper-heading-en)">[^<]+<\/span>/i, '')
+    .replace(headingSubtitlePattern, '')
+
+  return {
+    title: cleanMarkdownText(titleSource),
+    subtitleClass: subtitleMatch?.[1] ?? '',
+    subtitle: subtitleMatch?.[2]?.trim() ?? '',
+  }
 }
 
 function createHeadingId(title: string, usedIds: Map<string, number>) {
@@ -58,7 +70,7 @@ function createHeadingId(title: string, usedIds: Map<string, number>) {
 }
 
 function removeSourceTableOfContents(markdown: string) {
-  return markdown.replace(/\n# 目录\n[\s\S]*?\n\*{4}\n/, '\n')
+  return markdown.replace(/\n# 目录(?:<br\s*\/?><span class="whitepaper-heading-en">Table of Contents<\/span>)?\n[\s\S]*?\n\*{4}\n/, '\n')
 }
 
 function extractHeadings(markdown: string) {
@@ -72,13 +84,12 @@ function extractHeadings(markdown: string) {
       continue
     }
 
-    const title = cleanHeadingText(match[2])
-    const subtitleMatch = headingEnPattern.exec(lines[index + 1] ?? '')
+    const { title, subtitle } = parseHeadingContent(match[2])
     headings.push({
       id: createHeadingId(title, usedIds),
       level: match[1].length,
       title,
-      subtitle: subtitleMatch?.[1]?.trim() ?? '',
+      subtitle,
     })
   }
 
@@ -134,9 +145,9 @@ function addHeadingIds(markdown: string, headings: Heading[]) {
       continue
     }
 
-    const subtitleMatch = headingSubtitlePattern.exec(lines[index + 1] ?? '')
-    const subtitleHtml = subtitleMatch
-      ? `<span class="${subtitleMatch[1]}">${escapeHtml(subtitleMatch[2].trim())}</span>`
+    const { subtitleClass, subtitle } = parseHeadingContent(match[2])
+    const subtitleHtml = subtitleClass && subtitle
+      ? `<span class="${subtitleClass}">${escapeHtml(subtitle)}</span>`
       : ''
 
     result.push([
@@ -146,9 +157,6 @@ function addHeadingIds(markdown: string, headings: Heading[]) {
       `</h${heading.level}>`,
     ].join(''))
 
-    if (subtitleMatch) {
-      index += 1
-    }
   }
 
   return result.join('\n')
@@ -217,22 +225,13 @@ function resolveAssetUrls(markdown: string) {
   )
 }
 
-function normalizeWhitepaperHtml(html: string) {
-  // 页面展示时将列表中英文收束为一个双语列表项，保证同一条内容的中英文紧贴。
-  return html.replace(
-    /<li>\s*<p>([\s\S]*?)<\/p>\s*<p><span class="whitepaper-en">([\s\S]*?)<\/span><\/p>\s*<\/li>/g,
-    '<li class="whitepaper-bilingual-item"><span class="whitepaper-li-zh">$1</span><span class="whitepaper-en">$2</span></li>',
-  )
-}
-
 function renderWhitepaper(markdown: string, headings: Heading[]) {
   const markdownWithIds = addHeadingIds(markdown, headings)
   const markdownWithTables = renderCodeTables(markdownWithIds)
   const markdownWithAssets = resolveAssetUrls(markdownWithTables)
   const html = marked.parse(markdownWithAssets, { async: false }) as string
-  const normalizedHtml = normalizeWhitepaperHtml(html)
 
-  return DOMPurify.sanitize(normalizedHtml, {
+  return DOMPurify.sanitize(html, {
     ADD_ATTR: ['class', 'id', 'width'],
     ADD_DATA_URI_TAGS: ['img'],
   })

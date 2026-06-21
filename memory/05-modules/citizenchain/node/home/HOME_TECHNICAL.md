@@ -52,6 +52,7 @@ WASM CI 版本规则：
 ## 白皮书显示规则
 
 - 桌面端白皮书由 `docs/《白皮书》.md` 经 `node/frontend/scripts/generate-local-docs.mjs` 内置到前端 bundle，显示样式由 `node/frontend/app/styles/global.css` 的 `.local-doc-shell.doc-whitepaper` 负责
+- `docs/《白皮书》.md` 是白皮书排版结构唯一真源：中文标题与英文标题必须写在同一 Markdown 标题内并用 `<br>` 换行；列表项中文与对应英文必须写在同一个列表项内并用 `<br>` 换行，不能依赖桌面端 tab 或官网二次规整段落结构
 - 白皮书正式文档必须统一使用同一套字体变量 `--doc-font`；标题、正文、英文副标题、代码块和表格不得单独指定书法体、衬线体或等宽字体
 
 ## process/mod.rs

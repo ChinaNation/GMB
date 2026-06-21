@@ -1173,12 +1173,13 @@ select option:checked {
 }
 
 .local-doc-shell.doc-whitepaper .whitepaper-en {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 0.94em;
 }
 
 .local-doc-shell.doc-whitepaper li > .whitepaper-en {
-  margin-top: 3px;
+  margin-top: 0;
+  line-height: 1.34;
 }
 
 .local-doc-shell .markdown-body h2 {
