@@ -299,6 +299,8 @@
 - `memory/08-tasks/done/20260618-cid-gov-admin-division-reconcile.md`
 - `memory/08-tasks/done/20260618-prefecture-city-residual-cleanup.md`
 - `memory/08-tasks/done/20260620-cid-startup-chain-config-boundary.md`
+- `memory/08-tasks/done/20260621-141451-citizencode-ci-e0615.md`
+- `memory/08-tasks/done/20260621-142915-citizenchain-ci-drop-macos-intel.md`
 - `memory/08-tasks/done/20260621-ci-push-manual-boundary.md`
 - `memory/08-tasks/done/20260621-citizen-client-history-purge.md`
 - `memory/08-tasks/done/20260621-gmb-secret-unification.md`

@@ -62,16 +62,6 @@ jobs:
             expected_runner_arch: X64
             cache_key: citizenchain-windows
           - platform: macos
-            name: macOS Intel
-            os: macos-15-intel
-            artifact: 公民链-macOS-Intel
-            installer_name: 公民链-macOS-Intel.dmg
-            push_bundle_targets: dmg
-            manual_bundle_targets: dmg
-            updater_asset_name: citizenchain-updater-macos-intel.app.tar.gz
-            expected_runner_arch: X64
-            cache_key: citizenchain-macos-intel
-          - platform: macos
             name: macOS Apple
             os: macos-15
             artifact: 公民链-macOS-apple
@@ -371,7 +361,7 @@ jobs:
       - name: 拉取发布上下文
         uses: actions/checkout@v5
 
-      - name: 下载五个安装包与 updater 产物
+      - name: 下载四个安装包与 updater 产物
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
@@ -386,7 +376,7 @@ jobs:
 
           tag="citizenchain-v${DESKTOP_VERSION}"
           title="CitizenChain ${DESKTOP_VERSION}"
-          notes="公民链桌面端 ${DESKTOP_VERSION}。本发布的用户安装包固定为 5 个，另包含自动更新专用内部资产；runtime WASM 继续走链上 setCode 协议升级。"
+          notes="公民链桌面端 ${DESKTOP_VERSION}。本发布的用户安装包固定为 4 个，另包含自动更新专用内部资产；runtime WASM 继续走链上 setCode 协议升级。"
 
           node <<'NODE'
           const fs = require('fs');
@@ -408,7 +398,6 @@ jobs:
           const files = new Map(walk(root).map((file) => [path.basename(file), file]));
           const platforms = {};
           const requiredInstallers = [
-            '公民链-macOS-Intel.dmg',
             '公民链-macOS-apple.dmg',
             '公民链-Windows.exe',
             '公民链-Linux-amd.deb',
@@ -440,7 +429,6 @@ jobs:
           addPlatform('linux-x86_64', 'citizenchain-updater-linux-amd.AppImage');
           addPlatform('linux-aarch64', 'citizenchain-updater-linux-arm.AppImage');
           addPlatform('windows-x86_64', '公民链-Windows.exe');
-          addPlatform('darwin-x86_64', 'citizenchain-updater-macos-intel.app.tar.gz');
           addPlatform('darwin-aarch64', 'citizenchain-updater-macos-apple.app.tar.gz');
 
           fs.writeFileSync(

@@ -68,7 +68,7 @@ mod tests {
         let scope = VisibleScope::federal_registry("安徽省".to_string());
         let filtered = filter_by_scope(&rows, &scope);
         assert_eq!(filtered.len(), 2);
-        assert!(filtered.iter().all(|r| r.province == "安徽省"));
+        assert!(filtered.iter().all(|r| r.province() == "安徽省"));
     }
 
     #[test]
@@ -81,6 +81,6 @@ mod tests {
         let scope = VisibleScope::city_registry("安徽省".to_string(), "合肥市".to_string());
         let filtered = filter_by_scope(&rows, &scope);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].city, "合肥市");
+        assert_eq!(filtered[0].city(), "合肥市");
     }
 }

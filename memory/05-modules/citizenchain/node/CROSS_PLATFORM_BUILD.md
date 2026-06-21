@@ -20,8 +20,8 @@
 - `citizenchain/node/tauri.conf.json` `plugins.updater` 段 —— 桌面端打开软件后检查
   GitHub Release 中的 `citizenchain-latest.json`；检查更新不等于安装更新，安装必须由设置页“更新”按钮触发。
 - `.github/workflows/citizenchain.yml` —— push 与手动发布分流：
-  - `push main`：只构建 5 个用户安装包并上传本次 run artifact，不读取 Tauri updater 签名密钥，不发布 Release，不部署服务器。
-  - `Run workflow`：构建同样 5 个用户安装包和 updater 签名产物，发布 GitHub Release，并部署 Linux amd 服务器。
+  - `push main`：只构建 4 个用户安装包并上传本次 run artifact，不读取 Tauri updater 签名密钥，不发布 Release，不部署服务器。
+  - `Run workflow`：构建同样 4 个用户安装包和 updater 签名产物，发布 GitHub Release，并部署 Linux amd 服务器。
 
 ## 3. 桌面端更新协议
 
@@ -34,8 +34,8 @@
   - `GMB_TOP_KEY`：Tauri updater 私钥，用于生成 `.sig`；该私钥不再拆分系统专属 secret。
 - 手动发布时 workflow 会临时把 `bundle.createUpdaterArtifacts` 改为 `true`；push 构建不会打开该开关。
 - GitHub Release 资产包含：
-  - 普通安装包：`公民链-macOS-Intel.dmg` / `公民链-macOS-apple.dmg` / `公民链-Windows.exe` / `公民链-Linux-amd.deb` / `公民链-Linux-arm.deb`
-  - updater 资产与签名：`citizenchain-updater-linux-amd.AppImage`、`citizenchain-updater-linux-arm.AppImage`、`citizenchain-updater-macos-intel.app.tar.gz`、`citizenchain-updater-macos-apple.app.tar.gz`、`公民链-Windows.exe.sig`
+  - 普通安装包：`公民链-macOS-apple.dmg` / `公民链-Windows.exe` / `公民链-Linux-amd.deb` / `公民链-Linux-arm.deb`（macOS 仅保留 ARM）
+  - updater 资产与签名：`citizenchain-updater-linux-amd.AppImage`、`citizenchain-updater-linux-arm.AppImage`、`citizenchain-updater-macos-apple.app.tar.gz`、`公民链-Windows.exe.sig`
   - updater 元数据：`citizenchain-latest.json`
 
 ### 3.2 客户端行为

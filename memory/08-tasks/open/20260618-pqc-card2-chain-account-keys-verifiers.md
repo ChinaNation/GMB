@@ -7,14 +7,14 @@
 1. **GmbPqcAuth TransactionExtension(路线 A)**:
    - `validate` 验 ML-DSA-65 后**返回 `Signed(account)`**(`prepare` 不改 origin);后续 CheckNonce/ChargeTransactionPayment 走标准逻辑。
    - 🔴 **嵌套 `(GmbPqcAuth, AuthorizeCall)` 占第一项**,outer 仍 12 项,不加第 13 项。
-   - 🔴 **(v5)transaction_version 创世一次性设定、非活链 bump**:永久创世烘 wire format 时,因 TxExtension 含新嵌套 `(GmbPqcAuth, AuthorizeCall)`,`transaction_version` 从 0 **设为 1**(本链自创世即新口径);**创世后 PQC-enable setCode 只加验签行为不改 wire format,故不再 bump transaction_version**;`spec_version` 仍每次 setCode 递增。
+   - 🔴 **(v5 修正:创世前对 PQC 零改动,本卡=创世后启用 PQC 的 setCode)**:创世前不加 GmbPqcAuth、`transaction_version` 保持 0;**本次 setCode 把 TxExtension 第一项改成嵌套 `(GmbPqcAuth, AuthorizeCall)` → `transaction_version` 0→1++ 且 `spec_version++`**(`CheckTxVersion` 据此拒未升级旧客户端,那一刻推送 PQC 版客户端=计划内)。详见 ADR §16。
    - 🔴 **(v5)`extra={None|Pqc{account,sig,key_version}|Bootstrap{account,pqc_pubkey,ml_dsa_sig,sr25519_bootstrap_sig,key_version}}`**——`Pqc/Bootstrap` **必带 account**:ML-DSA 无公钥恢复,origin=None 下 validate 必须靠 extra 内 account 查 `AccountPqcKey[account]` 取验签公钥;account 是查表 hint,随后被 ML-DSA 签名+payload 内 account 双重绑定(填他人 account 伪造不出签名)。
    - 🔴 **(v5)`extra=None` 透传语义**:`extra=None` 不改 origin、**不写 storage**;但对 sr25519 signed origin,`validate` **仍读 `AccountPqcKey[signer]`+`PqcPolicy`** 判"已绑定拒 sr25519";origin=None 的 authorized call 直接透传 AuthorizeCall 不误伤。
    - 🔴 **授权模式与 origin 互斥**:`Pqc|Bootstrap` 只许 General Transaction(origin=None);sr25519 signed 夹带 PQC proof → `BadProof`。
    - 🔴 **(v5)`weight()` 纯 self.extra 路由 card1 benchmark 常量、禁读 storage**(weight 须在 PqcPolicy decode 前可算);**`validate()` 可读 storage**(查 AccountPqcKey/PqcPolicy)——二者分工不矛盾;Bootstrap weight 取最坏。
    - 🔴 **(v5)fail-safe 拆三语境**:① 创世初值 `phase=A`/`reject=false`/`allow_bootstrap_unbound=false`(PQC 未 setCode、Pqc/Bootstrap reject-stub);② 正常运营值治理逐阶段设(Phase B 起 已绑定 reject=true、未绑定 allow_bootstrap=true);③ **decode 失败/缺失 fallback = 等价 phase=A 安全态(sr25519 不冻结 + PQC/bootstrap 拒)**,绝不 fail-closed 冻链、绝不 fail-open 开 bootstrap;此 fallback 瞬态(setCode 修复即恢复),非永久锁人。
 2. **account-keys pallet(idx=27)只承载存储/策略/查询/事件/轮换,不承载主交易派发**:
-   - `AccountPqcKey{alg,key_version,pubkey:BoundedVec<u8,ConstU32<2048>>,bound_at}`(删 bootstrap_mode;2048 只覆盖 ML-DSA-65,87 须新 alg+新 schema);`PqcPolicy{phase,bootstrap_deadline,reject_sr25519_when_bound,allow_bootstrap_unbound}` 创世初值 phase=A(见上 fail-safe 三语境)。
+   - `AccountPqcKey{alg,key_version,pubkey:BoundedVec<u8,ConstU32<2048>>,bound_at}`(删 bootstrap_mode;2048 只覆盖 ML-DSA-65,87 须新 alg+新 schema);`PqcPolicy{phase,bootstrap_deadline,reject_sr25519_when_bound,allow_bootstrap_unbound}` 本 setCode 建表初值 phase=A(见上 fail-safe 三语境)。
    - 🔴 **(H3)轮换双签**:当前 PQC 私钥授权 + **新私钥对(新公钥+key_version+account+genesis)自签 PoP**,两签过才 key_version++。
 3. **bootstrap**:
    - 🔴 **(B1)challenge 钉死**:`sr25519_sign(blake2_256(DOMAIN_BOOTSTRAP++SCALE(genesis,spec,tx_version,account,pqc_pubkey_hash,key_version,nonce,call_hash,following_extensions_hash)))`;sr25519 **必须覆盖 pqc_pubkey_hash**;ML-DSA 反向覆盖 `blake2_256(sr25519_sig)`(双向交叉绑定)。
@@ -43,4 +43,4 @@
 验收标准:
 - 嵌套 tuple 编译+按序;following_extensions_hash 链端/钱包逐字节一致;CheckNonce/ChargeTransactionPayment 真实生效。
 - 未绑定首次 bootstrap+execute 成功(post_dispatch 写、内层失败绑定仍留、**冲突不作废区块**);已绑定后续 PQC 成功;已绑定 sr25519 被拒、PQC 不误伤;None+authorized call 透传成功;sr25519 夹带 PQC proof 被拒;改 alg 降级被拒;挪用其它域 sr25519 构造 bootstrap 被拒。
-- 5 验签器分流、ShengSigningPubkey value 容 ML-DSA、6 签名上限放宽生效;L3 已绑定拒 sr25519 payer(settlement 有 PqcPolicy phase 检查)、未绑定 sr25519 可用、MaxBatchSignatureLength=4096;transaction_version 创世即为 1(本链无旧口径交易);fail-safe 三语境单测(创世 phase=A / decode 失败不冻链不开 bootstrap);真实运行态验收。
+- 5 验签器分流、ShengSigningPubkey value 容 ML-DSA、6 签名上限放宽生效;L3 已绑定拒 sr25519 payer(settlement 有 PqcPolicy phase 检查)、未绑定 sr25519 可用、MaxBatchSignatureLength=4096;transaction_version 本 setCode 0→1 bump(未升级旧客户端被 CheckTxVersion 拒);fail-safe 三语境单测(建表 phase=A / decode 失败不冻链不开 bootstrap);真实运行态验收。

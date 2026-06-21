@@ -27,20 +27,19 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 - workflow：`.github/workflows/citizenchain.yml`
 - 主要命中目录：
-  - `push main` 只构建并上传 5 个用户安装包 artifact,不读取 Tauri updater 签名密钥,不发布 GitHub Release,不生成客户端更新通知,不部署服务器
-  - GitHub 页面手动 `Run workflow` 才进入正式发布路径：构建同样 5 个用户安装包，使用 `GMB_TOP_KEY / GMB_TOP_PUBKEY` 生成 updater 签名产物，发布 GitHub Release，更新 `citizenchain-latest.json`，使用 `GMB_SSH_KEY` 部署 Linux 服务器
-  - 单个 workflow 通过 matrix 同时构建 macOS Intel / macOS Apple / Windows / Linux amd / Linux arm，五个安装包使用同一个桌面端版本号
-  - 五个用户安装包名称固定为：
-    - `公民链-macOS-Intel.dmg`
+  - `push main` 只构建并上传 4 个用户安装包 artifact,不读取 Tauri updater 签名密钥,不发布 GitHub Release,不生成客户端更新通知,不部署服务器
+  - GitHub 页面手动 `Run workflow` 才进入正式发布路径：构建同样 4 个用户安装包，使用 `GMB_TOP_KEY / GMB_TOP_PUBKEY` 生成 updater 签名产物，发布 GitHub Release，更新 `citizenchain-latest.json`，使用 `GMB_SSH_KEY` 部署 Linux 服务器
+  - 单个 workflow 通过 matrix 同时构建 macOS Apple / Windows / Linux amd / Linux arm，四个安装包使用同一个桌面端版本号（macOS 仅保留 ARM，不再构建 Intel）
+  - 四个用户安装包名称固定为：
     - `公民链-macOS-apple.dmg`
     - `公民链-Windows.exe`
     - `公民链-Linux-amd.deb`
     - `公民链-Linux-arm.deb`
   - 暂时不做 macOS / Windows / Linux 系统级签名；Tauri updater 签名不属于系统安装包签名，手动正式发布时必须继续保留
-  - 自动更新、GitHub Release、Linux 服务器部署属于正式发布链路，不允许因为统一 5 个用户安装包而删除
+  - 自动更新、GitHub Release、Linux 服务器部署属于正式发布链路，不允许因为统一 4 个用户安装包而删除
   - 三端安装包不下载、不内置最新 `citizenchain-wasm` artifact；现有链运行 runtime 以链上 `System.set_code` 为准
   - 本地开发启动和重新创世脚本使用当前源码构建 runtime，不从 GitHub CI 下载 WASM
-  - 手动发布成功后上传 5 个用户安装包、updater 内部资产、updater 签名产物与 `citizenchain-latest.json` 到 GitHub Release，供桌面端点击更新链路使用
+  - 手动发布成功后上传 4 个用户安装包、updater 内部资产、updater 签名产物与 `citizenchain-latest.json` 到 GitHub Release，供桌面端点击更新链路使用
   - 桌面端启动检查到可用 updater 后，顶部 `设置` tab 显示红点；红点只读取 Tauri updater 状态，不另建已读/未读状态
   - Linux 服务器部署只允许使用 `公民链-Linux-amd.deb`；仅手动发布时，成功上传本次 `公民链-Linux-amd` artifact 后先预检查 6 台服务器 SSH 登录，全部通过后再顺序滚动部署同一个 deb
   - 手动发布与 Linux 服务器部署都成功后，删除上一条 `citizenchain.yml` 已完成 CI run；push 构建不执行清理
