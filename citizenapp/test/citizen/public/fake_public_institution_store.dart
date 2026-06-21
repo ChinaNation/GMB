@@ -13,7 +13,7 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   int upsertItemCount = 0;
   int deleteCalls = 0;
   String? lastCatalogVersion;
-  List<String> lastUpsertSfids = const [];
+  List<String> lastUpsertCids = const [];
 
   PublicInstitutionEntity _entity(PublicInstitutionDto d) =>
       d.toEntity(catalogVersion: 'fake', updatedAtMillis: 0);
@@ -26,9 +26,9 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
     upsertCalls++;
     upsertItemCount += items.length;
     lastCatalogVersion = catalogVersion;
-    lastUpsertSfids = items.map((d) => d.sfidNumber).toList(growable: false);
+    lastUpsertCids = items.map((d) => d.cidNumber).toList(growable: false);
     for (final d in items) {
-      byId[d.sfidNumber] = d;
+      byId[d.cidNumber] = d;
     }
   }
 
@@ -62,8 +62,8 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
           .toList();
 
   @override
-  Future<PublicInstitutionEntity?> getBySfid(String sfidNumber) async {
-    final d = byId[sfidNumber];
+  Future<PublicInstitutionEntity?> getByCid(String cidNumber) async {
+    final d = byId[cidNumber];
     return d == null ? null : _entity(d);
   }
 
@@ -77,16 +77,16 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
           .toList(growable: false);
 
   @override
-  Future<List<String>> sfidsOfProvince(String provinceCode) async => byId.values
+  Future<List<String>> cidsOfProvince(String provinceCode) async => byId.values
       .where((e) => e.provinceCode == provinceCode)
-      .map((e) => e.sfidNumber)
+      .map((e) => e.cidNumber)
       .toList(growable: false);
 
   @override
-  Future<void> deleteBySfids(List<String> sfids) async {
+  Future<void> deleteByCids(List<String> cids) async {
     deleteCalls++;
-    for (final sfid in sfids) {
-      byId.remove(sfid);
+    for (final cid in cids) {
+      byId.remove(cid);
     }
   }
 
@@ -103,18 +103,18 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<void> subscribe(String walletPubkeyHex, String sfidNumber) async {
-    subs.add(subscriptionKeyOf(walletPubkeyHex, sfidNumber));
+  Future<void> subscribe(String walletPubkeyHex, String cidNumber) async {
+    subs.add(subscriptionKeyOf(walletPubkeyHex, cidNumber));
   }
 
   @override
-  Future<void> unsubscribe(String walletPubkeyHex, String sfidNumber) async {
-    subs.remove(subscriptionKeyOf(walletPubkeyHex, sfidNumber));
+  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) async {
+    subs.remove(subscriptionKeyOf(walletPubkeyHex, cidNumber));
   }
 
   @override
-  Future<bool> isSubscribed(String walletPubkeyHex, String sfidNumber) async =>
-      subs.contains(subscriptionKeyOf(walletPubkeyHex, sfidNumber));
+  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) async =>
+      subs.contains(subscriptionKeyOf(walletPubkeyHex, cidNumber));
 
   @override
   Future<List<PublicInstitutionEntity>> listSubscribed(
@@ -123,8 +123,8 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
     final out = <PublicInstitutionEntity>[];
     for (final key in subs) {
       if (!key.startsWith('$walletPubkeyHex|')) continue;
-      final sfid = key.substring(walletPubkeyHex.length + 1);
-      final d = byId[sfid];
+      final cid = key.substring(walletPubkeyHex.length + 1);
+      final d = byId[cid];
       if (d != null) out.add(_entity(d));
     }
     return out;

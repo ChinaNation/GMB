@@ -8,7 +8,7 @@ use crate::governance;
 /// 构建 propose_transfer 签名请求（创建转账提案：pallet=19, call=0）。
 pub fn build_propose_transfer_sign_request(
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
     org_type: u8,
     beneficiary_address: &str,
     amount_yuan: f64,
@@ -41,7 +41,7 @@ pub fn build_propose_transfer_sign_request(
     // node 端支持内置治理机构和注册机构多签账户，明确拒绝个人多签。
     // 内置治理机构可校验“收款地址不能等于主账户”；注册机构账户使用
     // `duoqian:<account_hex>` 传入机构多签 AccountId。
-    let entry = governance::registry::find_institution(sfid_number);
+    let entry = governance::registry::find_institution(cid_number);
     if let Some(entry) = entry {
         let institution_duoqian = hex::decode(entry.main_account_hex())
             .map_err(|e| format!("主账户地址解码失败: {e}"))?;
@@ -51,14 +51,14 @@ pub fn build_propose_transfer_sign_request(
     }
 
     let call_data = build_transfer_call_data(
-        sfid_number,
+        cid_number,
         org_type,
         &beneficiary_bytes,
         amount_fen,
         remark_bytes,
     )?;
 
-    let institution_label = if let Some(hex) = sfid_number.strip_prefix("duoqian:") {
+    let institution_label = if let Some(hex) = cid_number.strip_prefix("duoqian:") {
         let short = if hex.len() > 14 {
             format!("{}...{}", &hex[..8], &hex[hex.len() - 6..])
         } else {
@@ -139,14 +139,14 @@ pub fn build_propose_safety_fund_sign_request(
 /// 构建手续费划转提案签名请求（pallet=19, call=2）。
 pub fn build_propose_sweep_sign_request(
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
     let pubkey_clean = normalize_pubkey(pubkey_hex)?;
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-    let call_data = build_sweep_call_data(sfid_number, amount_yuan)?;
+    let call_data = build_sweep_call_data(cid_number, amount_yuan)?;
 
-    let institution_account = super::account_id::account_id_from_transfer_identity(sfid_number)?;
+    let institution_account = super::account_id::account_id_from_transfer_identity(cid_number)?;
     let institution_label = format!(
         "机构账户 {}",
         governance::signing::pubkey_to_ss58(&institution_account)?
@@ -206,7 +206,7 @@ pub(crate) fn build_safety_fund_call_data(
 
 /// 普通机构多签转账 call_data，供签名构造和签名回执提交复用。
 pub(crate) fn build_transfer_call_data(
-    sfid_number: &str,
+    cid_number: &str,
     org_type: u8,
     beneficiary_bytes: &[u8; 32],
     amount_fen: u128,
@@ -218,7 +218,7 @@ pub(crate) fn build_transfer_call_data(
             remark_bytes.len()
         ));
     }
-    let institution_account = super::account_id::account_id_from_transfer_identity(sfid_number)?;
+    let institution_account = super::account_id::account_id_from_transfer_identity(cid_number)?;
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
     let mut call_data =
         Vec::with_capacity(2 + 1 + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len());
@@ -235,14 +235,14 @@ pub(crate) fn build_transfer_call_data(
 
 /// 手续费划转 call_data，供签名构造和签名回执提交复用。
 pub(crate) fn build_sweep_call_data(
-    sfid_number: &str,
+    cid_number: &str,
     amount_yuan: f64,
 ) -> Result<Vec<u8>, String> {
     if amount_yuan <= 0.0 {
         return Err("划转金额必须大于 0".to_string());
     }
     let amount_fen = (amount_yuan * 100.0).round() as u128;
-    let institution_account = super::account_id::account_id_from_transfer_identity(sfid_number)?;
+    let institution_account = super::account_id::account_id_from_transfer_identity(cid_number)?;
 
     let mut call_data = Vec::with_capacity(2 + 32 + 16);
     call_data.push(19u8);

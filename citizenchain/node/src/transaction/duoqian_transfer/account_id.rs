@@ -10,7 +10,7 @@ pub fn account_id_from_transfer_identity(identity: &str) -> Result<[u8; 32], Str
     }
 
     let entry = governance::registry::find_institution(identity)
-        .ok_or_else(|| format!("未知的治理机构 sfidNumber: {identity}"))?;
+        .ok_or_else(|| format!("未知的治理机构 cidNumber: {identity}"))?;
     account_id_from_hex(&entry.main_account_hex(), "内置机构多签账户")
 }
 

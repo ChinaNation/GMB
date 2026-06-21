@@ -497,7 +497,7 @@ class _InstitutionAccountListPageState
         builder: (_) => InstitutionDuoqianCreatePage(
           institution: const InstitutionInfo(
             name: '新建多签机构',
-            sfidNumber:
+            cidNumber:
                 'duoqian:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.duoqian,
             adminAccountOrg: 5,
@@ -522,7 +522,7 @@ class _InstitutionAccountListPageState
           builder: (_) => PersonalManageAccountInfoPage(
             institution: InstitutionInfo(
               name: item.name,
-              sfidNumber: 'personal:${item.duoqianAccount}',
+              cidNumber: 'personal:${item.duoqianAccount}',
               orgType: OrgType.duoqian,
               duoqianAccount: item.duoqianAccount,
             ),
@@ -535,7 +535,7 @@ class _InstitutionAccountListPageState
           builder: (_) => InstitutionAccountInfoPage(
             institution: InstitutionInfo(
               name: item.name,
-              sfidNumber: registeredDuoqianIdentity(item.duoqianAccount),
+              cidNumber: registeredDuoqianIdentity(item.duoqianAccount),
               orgType: OrgType.duoqian,
               adminAccountOrg: item.institution?.adminAccountOrg,
               duoqianAccount: item.duoqianAccount,

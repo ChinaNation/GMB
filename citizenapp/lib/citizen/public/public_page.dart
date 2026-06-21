@@ -58,7 +58,7 @@ class _PublicPageState extends State<PublicPage> {
   /// 后台增量刷新成功后回写本缓存,保证再次进入既快又新。
   final Map<String, List<_CityVm>> _cityCache = {};
 
-  /// 关注分组每条机构的预 join 所属地(sfidNumber → 「省名·市名」)。
+  /// 关注分组每条机构的预 join 所属地(cidNumber → 「省名·市名」)。
   Map<String, String> _subscribedArea = const {};
   bool _contentLoading = true;
   String? _contentError;
@@ -101,7 +101,7 @@ class _PublicPageState extends State<PublicPage> {
       // 预 join 关注机构的所属地(省名·市名),不在 build 里 await。
       final areas = <String, String>{};
       for (final inst in subs) {
-        areas[inst.sfidNumber] = await _repo.areaPath(
+        areas[inst.cidNumber] = await _repo.areaPath(
           provinceCode: inst.provinceCode,
           cityCode: inst.cityCode,
         );
@@ -158,7 +158,7 @@ class _PublicPageState extends State<PublicPage> {
     } on Exception {
       if (!mounted || _selected != provinceCode) return;
       if (_cities.isEmpty) {
-        setState(() => _contentError = '目录同步失败,请检查 SFID 连接后重试');
+        setState(() => _contentError = '目录同步失败,请检查 CID 连接后重试');
       }
     }
   }
@@ -232,12 +232,12 @@ class _PublicPageState extends State<PublicPage> {
       itemBuilder: (context, i) {
         final inst = _subscribed[i];
         return _InstitutionTile(
-          title: inst.sfidShortName?.isNotEmpty == true
-              ? inst.sfidShortName!
-              : inst.sfidFullName,
+          title: inst.cidShortName?.isNotEmpty == true
+              ? inst.cidShortName!
+              : inst.cidFullName,
           // 预 join 的所属地(省名·市名),字典缺失回退 code(repo 已兜底)。
-          subtitle: _subscribedArea[inst.sfidNumber] ?? '',
-          onTap: () => _openDetail(inst.sfidNumber),
+          subtitle: _subscribedArea[inst.cidNumber] ?? '',
+          onTap: () => _openDetail(inst.cidNumber),
         );
       },
     );
@@ -287,11 +287,11 @@ class _PublicPageState extends State<PublicPage> {
     );
   }
 
-  void _openDetail(String sfidNumber) {
+  void _openDetail(String cidNumber) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PublicInstitutionDetailPage(
-          sfidNumber: sfidNumber,
+          cidNumber: cidNumber,
           repository: _repo,
         ),
       ),

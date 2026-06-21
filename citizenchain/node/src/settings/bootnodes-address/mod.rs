@@ -26,7 +26,7 @@ const NODE_KEY_DIR: &str = "node-key";
 pub struct BootnodeKey {
     pub node_key: Option<String>,
     pub peer_id: Option<String>,
-    pub sfid_full_name: Option<String>,
+    pub cid_full_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -43,7 +43,7 @@ pub struct GenesisBootnodeOption {
 struct StoredBootnodeMeta {
     peer_id: String,
     #[serde(default)]
-    sfid_full_name: Option<String>,
+    cid_full_name: Option<String>,
 }
 
 fn bootnode_meta_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -65,11 +65,11 @@ fn load_bootnode_meta(app: &AppHandle) -> Result<Option<StoredBootnodeMeta>, Str
 fn save_bootnode_meta(
     app: &AppHandle,
     peer_id: &str,
-    sfid_full_name: Option<String>,
+    cid_full_name: Option<String>,
 ) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(&StoredBootnodeMeta {
         peer_id: peer_id.to_string(),
-        sfid_full_name,
+        cid_full_name,
     })
     .map_err(|e| format!("encode bootnode meta failed: {e}"))?;
     security::write_text_atomic(&bootnode_meta_path(app)?, &format!("{raw}\n"))
@@ -190,20 +190,20 @@ pub fn get_bootnode_key(app: AppHandle) -> Result<BootnodeKey, String> {
                 return Ok(BootnodeKey {
                     node_key: None,
                     peer_id: None,
-                    sfid_full_name: None,
+                    cid_full_name: None,
                 });
             }
             Ok(BootnodeKey {
                 // 私钥不回传给前端，避免二次暴露。
                 node_key: None,
                 peer_id: Some(meta.peer_id),
-                sfid_full_name: meta.sfid_full_name,
+                cid_full_name: meta.cid_full_name,
             })
         }
         None => Ok(BootnodeKey {
             node_key: None,
             peer_id: None,
-            sfid_full_name: None,
+            cid_full_name: None,
         }),
     }
 }
@@ -226,12 +226,12 @@ pub fn set_bootnode_key(
             "该私钥不对应任何创世引导节点（推导 Peer ID: {derived_peer_id}）"
         ));
     }
-    let sfid_full_name = find_genesis_bootnode_name_by_peer_id(&derived_peer_id)?;
+    let cid_full_name = find_genesis_bootnode_name_by_peer_id(&derived_peer_id)?;
 
     let secret_bytes =
         decode_hex_32_strict(&normalized).map_err(|_| "node-key hex decode failed".to_string())?;
     write_secret_ed25519(&app, &secret_bytes)?;
-    save_bootnode_meta(&app, &derived_peer_id, sfid_full_name.clone())?;
+    save_bootnode_meta(&app, &derived_peer_id, cid_full_name.clone())?;
 
     // 若节点当前在运行，保存新私钥后立即重启以应用新的 p2p 身份，
     // 并轮询确认本机 PeerId 已切换到目标引导节点。
@@ -259,7 +259,7 @@ pub fn set_bootnode_key(
     Ok(BootnodeKey {
         node_key: None,
         peer_id: Some(derived_peer_id),
-        sfid_full_name,
+        cid_full_name,
     })
 }
 

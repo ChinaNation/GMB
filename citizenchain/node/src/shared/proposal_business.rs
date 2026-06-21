@@ -38,13 +38,13 @@ pub fn fetch_stored_action(proposal_id: u64) -> Result<Option<ProposalAction>, S
 }
 
 /// 生成业务模块列表摘要。
-pub fn format_summary<F>(action: &ProposalAction, resolve_sfid_full_name: F) -> String
+pub fn format_summary<F>(action: &ProposalAction, resolve_cid_full_name: F) -> String
 where
     F: Fn(&str) -> Option<String>,
 {
     match action {
         ProposalAction::TransferModule(action) => {
-            transfer_module::format_summary(action, resolve_sfid_full_name)
+            transfer_module::format_summary(action, resolve_cid_full_name)
         }
     }
 }

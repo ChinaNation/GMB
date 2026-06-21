@@ -6,7 +6,7 @@
 governance/
 ├── mod.rs              # Tauri 命令入口：提案创建、投票、签名请求/提交
 ├── admins_change/      # 管理员管理：激活、主体读取、管理员集合变更、签名提交
-├── organization-manage/# 机构多签管理：SFID 凭证、机构详情、创建机构多签签名请求
+├── organization-manage/# 机构多签管理：CID 凭证、机构详情、创建机构多签签名请求
 ├── runtime_upgrade/    # 协议升级：开发期直升、运行期协议升级业务签名与提交
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
 ├── proposal.rs         # 提案查询与解码：从链上 storage 读取并解析提案详情
@@ -126,13 +126,13 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 
 - 后端只负责读取 WASM、构建协议升级业务 call data、生成公民钱包签名请求、验证签名回执并提交交易。
 - 前端只负责协议升级表单、WASM 选择、公民钱包签名流程和提交结果展示。
-- `runtime_upgrade` 不获取 SFID 人口快照，不接收联合签名上下文，不推进投票状态，不实现联合投票/公民投票流程。
+- `runtime_upgrade` 不获取 CID 人口快照，不接收联合签名上下文，不推进投票状态，不实现联合投票/公民投票流程。
 - 协议升级提案进入链上后，由投票引擎统一负责投票流程、状态、计票、通过/否决判定和结果回调。
 
 ## institution.rs — 机构查询
 
 - 管理员列表读取委托到 `admins_change/storage.rs`
-- 内置机构管理员 account_id 使用 `0x01` Builtin kind tag，与 `core_const::account_id_from_sfid_number` 字节级一致
+- 内置机构管理员 account_id 使用 `0x01` Builtin kind tag，与 `core_const::account_id_from_cid_number` 字节级一致
 - 解码管理员 AccountId 列表
 - 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
 
@@ -140,7 +140,7 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 
 - `twox_128`：Substrate pallet/storage 前缀哈希
 - `blake2b_128`：Blake2_128Concat hasher
-- `account_id_from_sfid_number`：内置机构 AccountId 编码（与 runtime primitives 一致）
+- `account_id_from_cid_number`：内置机构 AccountId 编码（与 runtime primitives 一致）
 - `map_key` / `double_map_key`：完整存储 key 拼接
 
 `AdminsChange::AdminAccounts` 专用 storage key 已收口到 `governance/admins_change/storage.rs`，不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。

@@ -6,8 +6,8 @@ use serde::Serialize;
 pub struct AdminAccountState {
     /// 32 字节机构多签 AccountId，hex 不含 0x。
     pub account_hex: String,
-    /// 内置机构入口使用的 sfidNumber；动态账户可为空。
-    pub sfid_number: Option<String>,
+    /// 内置机构入口使用的 cidNumber；动态账户可为空。
+    pub cid_number: Option<String>,
     /// 链上 org 编码：0=NRC,1=PRC,2=PRB,3=REN(个人多签),4=PUP(公权机构账户),5=OTH(其他机构账户)。
     pub org: u8,
     pub org_label: String,

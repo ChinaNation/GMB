@@ -70,8 +70,8 @@ void main() {
         'manifest_version': 'cz-1',
         'institutions': [
           {
-            'sfid_number': 'ZS001-ZF000-1-2026',
-            'sfid_full_name': '中枢省人民政府',
+            'cid_number': 'ZS001-ZF000-1-2026',
+            'cid_full_name': '中枢省人民政府',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -105,8 +105,8 @@ void main() {
     await store.upsertInstitutions(
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'ZS001-ZF000-1-2026',
-          'sfid_full_name': '旧名机构',
+          'cid_number': 'ZS001-ZF000-1-2026',
+          'cid_full_name': '旧名机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -130,8 +130,8 @@ void main() {
         'manifest_version': 'cz-new',
         'institutions': [
           {
-            'sfid_number': 'ZS001-ZF000-1-2026',
-            'sfid_full_name': '新名机构',
+            'cid_number': 'ZS001-ZF000-1-2026',
+            'cid_full_name': '新名机构',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -145,7 +145,7 @@ void main() {
     final changed = await loader.ensureSynced();
 
     expect(changed, isTrue);
-    expect(store.byId['ZS001-ZF000-1-2026']!.sfidFullName, '新名机构');
+    expect(store.byId['ZS001-ZF000-1-2026']!.cidFullName, '新名机构');
     expect(kv.globalVersion, '1');
     expect(kv.provinceVersions, {'中枢省': 'cz-new'});
   });
@@ -157,24 +157,24 @@ void main() {
     await store.upsertInstitutions(
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'A',
-          'sfid_full_name': '旧名机构',
+          'cid_number': 'A',
+          'cid_full_name': '旧名机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
           'account_count': 1,
         }),
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'B',
-          'sfid_full_name': '待删机构',
+          'cid_number': 'B',
+          'cid_full_name': '待删机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
           'account_count': 1,
         }),
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'X',
-          'sfid_full_name': '岭南机构',
+          'cid_number': 'X',
+          'cid_full_name': '岭南机构',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -200,16 +200,16 @@ void main() {
         'institutions': [
           // A 改名,B 不在(删),C 新增。
           {
-            'sfid_number': 'A',
-            'sfid_full_name': '新名机构',
+            'cid_number': 'A',
+            'cid_full_name': '新名机构',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
             'account_count': 1,
           },
           {
-            'sfid_number': 'C',
-            'sfid_full_name': '新增机构',
+            'cid_number': 'C',
+            'cid_full_name': '新增机构',
             'province_code': 'ZS',
             'city_code': '002',
             'institution_code': 'ZF',
@@ -224,11 +224,11 @@ void main() {
     final changed = await loader.ensureSynced();
 
     expect(changed, isTrue);
-    expect(store.byId['A']!.sfidFullName, '新名机构'); // 改名
+    expect(store.byId['A']!.cidFullName, '新名机构'); // 改名
     expect(store.byId.containsKey('B'), isFalse); // 删除
-    expect(store.byId['C']!.sfidFullName, '新增机构'); // 新增
+    expect(store.byId['C']!.cidFullName, '新增机构'); // 新增
     expect(store.byId.containsKey('X'), isTrue); // 岭南省没动,X 仍在
-    expect(store.lastUpsertSfids, ['A', 'C']); // 只写改名/新增,不重写整省
+    expect(store.lastUpsertCids, ['A', 'C']); // 只写改名/新增,不重写整省
     expect(kv.globalVersion, 'v2');
     expect(kv.provinceVersions, {'中枢省': 'cz-2', '岭南省': 'ln-1'});
   });
@@ -238,7 +238,7 @@ void main() {
     await store.upsertInstitutions(
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'X',
+          'cid_number': 'X',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -283,8 +283,8 @@ void main() {
         'manifest_version': 'cz-1',
         'institutions': [
           {
-            'sfid_number': 'ZS001',
-            'sfid_full_name': '新名机构',
+            'cid_number': 'ZS001',
+            'cid_full_name': '新名机构',
             'province_code': 'ZS',
             'city_code': '001',
             'institution_code': 'ZF',
@@ -297,16 +297,16 @@ void main() {
     await store.upsertInstitutions(
       [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'ZS001',
-          'sfid_full_name': '旧名机构',
+          'cid_number': 'ZS001',
+          'cid_full_name': '旧名机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
           'account_count': 2,
         }),
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': 'STALE',
-          'sfid_full_name': '旧残留机构',
+          'cid_number': 'STALE',
+          'cid_full_name': '旧残留机构',
           'province_code': 'ZS',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -324,7 +324,7 @@ void main() {
     expect(store.upsertCalls, upsertBefore);
     expect(store.deleteCalls, deleteBefore);
     expect(store.byId.containsKey('ZS001'), isTrue);
-    expect(store.byId['ZS001']!.sfidFullName, '旧名机构');
+    expect(store.byId['ZS001']!.cidFullName, '旧名机构');
     expect(store.byId.containsKey('STALE'), isTrue);
     expect(store.provinceOrder, isEmpty);
     expect(await store.listProvinces(), ['ZS']);

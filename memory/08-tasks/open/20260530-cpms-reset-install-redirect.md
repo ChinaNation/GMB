@@ -2,15 +2,15 @@
 
 ## 任务需求
 
-- 修复 `./cpms.sh --reset` 后访问前端根路径被错误强制跳转 `/login` 的问题。
+- 修复 `./citizenpassport.sh --reset` 后访问前端根路径被错误强制跳转 `/login` 的问题。
 - 重置清库后的系统未初始化状态必须优先进入 `/install`。
 - 管理员登录态失效时仍要清理前端用户镜像，并由路由守卫决定是否进入 `/login`。
 
 ## 预计修改目录
 
-- `cpms/frontend`：CPMS 前端工程；涉及通用 HTTP 401 处理、认证上下文和路由守卫联动修复。
+- `citizenpassport/frontend`：CPMS 前端工程；涉及通用 HTTP 401 处理、认证上下文和路由守卫联动修复。
 - `cpms`：CPMS 技术文档；同步说明初始化路由和 401 处理边界。
-- `memory/05-modules/cpms`：CPMS 长期模块文档；更新错误码和前端登录态处理规则。
+- `memory/05-modules/citizenpassport`：CPMS 长期模块文档；更新错误码和前端登录态处理规则。
 - `memory/08-tasks`：任务卡目录；记录本次修复、验证和残留清理结果。
 
 ## 执行清单

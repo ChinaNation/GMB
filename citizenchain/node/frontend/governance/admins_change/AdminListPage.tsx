@@ -15,14 +15,14 @@ import type {
 } from './types';
 
 type Props = {
-  sfidNumber: string;
+  cidNumber: string;
   accountRef: AdminAccountRef;
   onBack: () => void;
 };
 
 type ActivateStep = 'idle' | 'qr' | 'scan' | 'verifying' | 'done' | 'error';
 
-export function AdminListPage({ sfidNumber, accountRef, onBack }: Props) {
+export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [activatedAdmins, setActivatedAdmins] = useState<ActivatedAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +38,8 @@ export function AdminListPage({ sfidNumber, accountRef, onBack }: Props) {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      api.getInstitutionDetail(sfidNumber),
-      api.getActivatedAdmins(sfidNumber, accountRef).catch(() => [] as ActivatedAdmin[]),
+      api.getInstitutionDetail(cidNumber),
+      api.getActivatedAdmins(cidNumber, accountRef).catch(() => [] as ActivatedAdmin[]),
     ])
       .then(([d, aa]) => {
         setDetail(d);
@@ -48,7 +48,7 @@ export function AdminListPage({ sfidNumber, accountRef, onBack }: Props) {
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [sfidNumber, accountRef.sfidNumber, accountRef.accountHex, accountRef.org]);
+  }, [cidNumber, accountRef.cidNumber, accountRef.accountHex, accountRef.org]);
 
   // 激活倒计时
   useEffect(() => {
@@ -66,7 +66,7 @@ export function AdminListPage({ sfidNumber, accountRef, onBack }: Props) {
     setActivatePubkey(pubkeyHex);
     setActivateError(null);
     try {
-      const result = await api.buildActivateAdminRequest(pubkeyHex, sfidNumber, accountRef);
+      const result = await api.buildActivateAdminRequest(pubkeyHex, cidNumber, accountRef);
       setActivateRequest(result);
       setActivateCountdown(90);
       setActivateStep('qr');
@@ -74,7 +74,7 @@ export function AdminListPage({ sfidNumber, accountRef, onBack }: Props) {
       setActivateError(sanitizeError(e));
       setActivateStep('error');
     }
-  }, [sfidNumber, accountRef.sfidNumber, accountRef.accountHex, accountRef.org]);
+  }, [cidNumber, accountRef.cidNumber, accountRef.accountHex, accountRef.org]);
 
   const handleActivateScan = useCallback(async (responseJson: string) => {
     if (!activateRequest) return;

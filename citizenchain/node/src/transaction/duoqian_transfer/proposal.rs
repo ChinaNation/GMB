@@ -117,14 +117,14 @@ pub fn fetch_stored_action(proposal_id: u64) -> Result<Option<ProposalAction>, S
 }
 
 /// 生成 duoqian-transfer 列表摘要。
-pub fn format_summary<F>(action: &ProposalAction, resolve_sfid_full_name: F) -> String
+pub fn format_summary<F>(action: &ProposalAction, resolve_cid_full_name: F) -> String
 where
     F: Fn(&str) -> Option<String>,
 {
     match action {
         ProposalAction::Transfer(detail) => format_transfer_summary(detail),
         ProposalAction::SafetyFund(detail) => format_safety_fund_summary(detail),
-        ProposalAction::Sweep(detail) => format_sweep_summary(detail, resolve_sfid_full_name),
+        ProposalAction::Sweep(detail) => format_sweep_summary(detail, resolve_cid_full_name),
     }
 }
 
@@ -318,12 +318,12 @@ fn format_safety_fund_summary(detail: &SafetyFundProposalDetail) -> String {
     format!("安全基金转账 {} 元", format_amount_fen(&detail.amount_fen))
 }
 
-fn format_sweep_summary<F>(detail: &SweepProposalDetail, resolve_sfid_full_name: F) -> String
+fn format_sweep_summary<F>(detail: &SweepProposalDetail, resolve_cid_full_name: F) -> String
 where
     F: Fn(&str) -> Option<String>,
 {
     let inst_name =
-        resolve_sfid_full_name(&detail.institution_hex).unwrap_or_else(|| "未知机构".to_string());
+        resolve_cid_full_name(&detail.institution_hex).unwrap_or_else(|| "未知机构".to_string());
     format!(
         "手续费划转 {} 元：{inst_name}",
         format_amount_fen(&detail.amount_fen)

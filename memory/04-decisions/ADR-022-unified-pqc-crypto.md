@@ -1,8 +1,13 @@
-# ADR-022:GMB 抗量子签名升级 + 统一加密方案（真源 v4）
+# ADR-022:GMB 抗量子签名升级 + 统一加密方案（真源 v5）
 
-状态:Accepted(2026-06-18)。**本 ADR 是 GMB 抗量子方案的唯一真源**,取代并删除一切旧 PQC 迁移方案文档。
+状态:Accepted(2026-06-18,v5 2026-06-21)。**本 ADR 是 GMB 抗量子方案的唯一真源**,取代并删除一切旧 PQC 迁移方案文档。
 关联:[[feedback_no_compatibility]]、[[feedback_chainspec_frozen]]、[[feedback_pubkey_format_rule]]、[[project_pqc_unified_adr022]]
 v4 变更:并入 8 项已拍板决策(见 §15)+ 7 视角对抗审查的 13 BLOCKER + 关键 HIGH 修正。
+v5 变更(2026-06-21,对抗复审 28 项确认后定稿):
+- 🔴 **`extra` 必带 `account`**(§3/§5):ML-DSA **无公钥恢复**(no ecrecover),General Transaction origin=None 下链端必须靠 extra 内 `account` 查 `AccountPqcKey` 才能取验签公钥;account 是查表 hint,随后被 ML-DSA 签名 + payload 内 account 双重绑定,攻击者填他人 account 也伪造不出签名。
+- 🔴 **fail-safe 拆三语境**(§3/§4):创世初值=phase=A / 正常 Phase B 运营值 / decode 失败 fallback;decode 失败=**sr25519 不冻结 + PQC/bootstrap 关**(保守且瞬态,非永久锁人),不再笼统说"fail-open 到 phase=B"。
+- 🔴 **transaction_version 创世一次性设定**(§3):永久创世烘 GmbPqcAuth wire format 时设为新口径(本链无旧口径交易);创世后 PQC-enable setCode 只加验签行为不改 wire format,**故不再 bump transaction_version**(spec_version 仍每次 setCode 递增)。
+- domain 字面量全文统一 `GMB_PQC_TX_MLDSA65_V1` / `GMB_PQC_BOOTSTRAP_MLDSA65_V1`;`extra=None` 透传澄清(weight 不读 storage,validate 对 sr25519 signed 仍读 AccountPqcKey/PqcPolicy 判已绑定拒);bootstrap 前置 providers 机制纠正(CheckNonce 只查 nonce,费由 ChargeTransactionPayment 拒);txpool DoS 补具体节点级机制;L3/CID 补真实代码行号;HKDF info 字节锁定;login_receipt 补定义;seal 明确排除创世冻结。
 
 ---
 
@@ -36,8 +41,10 @@ ML-DSA-65 签名:   HKDF-SHA512(AccountSeedV1, info="GMB/account/ml-dsa-65/seed3
 > ⚠️ sr25519 分支**绝不套 HKDF**(`HKDF(seed)≠seed`→地址变);账户**不再派生 ML-KEM**(决策3)。
 
 **KDF 精确定义(钉死 golden vector):**
-- HKDF-SHA512(RFC5869)Extract-then-Expand;`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`(ASCII 无 null,**含长度域** `seed32`)。
+- HKDF-SHA512(RFC5869)Extract-then-Expand;`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`。
+- 🔴 **`info` 是字面 ASCII 字符串 `"GMB/account/ml-dsa-65/seed32/v1"`(无 null 结尾、无独立长度前缀字节;串内 `seed32` 只是输出长度的字面标识,不是要额外塞一个长度域字节)**。Rust 传 `&[u8]`,Dart 按 UTF-8 编码;golden vector 锁死这串的精确字节序列(31 字节),三端(Rust 二进制 / iOS-Android FFI / Dart)必须逐字节一致,否则 KDF 输出发散→跨端公钥不同。
 - ML-DSA-65:`HKDF-Expand(PRK, info, L=32)` → 32B ξ,**直接当 ξ** 喂 FIPS204 `KeyGen_internal(ξ)`。
+- **ML-DSA-87(algo 0x03 预留)未来如启用,须用独立 info(如 `"GMB/account/ml-dsa-87/.../v1"`)+ 独立 AccountPqcKey schema/version,不复用 65 的 info,不塞进 `BoundedVec<2048>`。**
 - 🔴 **(B8)强制选用暴露 `KeyGen_internal(ξ)` seed-API 的库**(fips204 锁定版本);**删除一切 DRBG fallback**——库不暴露 ξ-API 则换库,不接受 DRBG 替代(否则同助记词跨端派生不同公钥)。库名+版本+API 名钉进 card1 spike。
 - **golden vector** 必须含中间量 ξ 与最终 {sr25519 SS58, ML-DSA-65 公钥},供冷/热/链/后端逐字节对拍;库升级须重跑。
 
@@ -49,13 +56,17 @@ ML-DSA-65 签名:   HKDF-SHA512(AccountSeedV1, info="GMB/account/ml-dsa-65/seed3
 - **不扩展 `MultiSignature`**;**链上授权 = General Transaction + 自定义 `GmbPqcAuth` TransactionExtension**(废弃 pqc_dispatch pallet call 主路径)。
 - `GmbPqcAuth` 放扩展流水线**最前**:`validate` 验 ML-DSA-65 后**返回 `Signed(account)` origin**(`prepare` 不改 origin);后续 `CheckNonce`/`ChargeTransactionPayment` 走系统标准逻辑。
 - 🔴 **tuple 12 上限**:`TxExtension` 已 12 项(`lib.rs:164-176`)→ 嵌套 `(GmbPqcAuth, AuthorizeCall)` 占第一项槽位,不加第 13 项。
-- 🔴 **(B12)本次升级必须 `spec_version++` 且 `transaction_version`(0→1)++**——改 TxExtension 结构属交易口径变更,让 `CheckTxVersion` 明确拒旧口径交易(而非模糊 BadProof)。
-- **`extra` 必有变体 `{ None | Pqc{sig,key_version} | Bootstrap{pqc_pubkey,ml_dsa_sig,sr25519_bootstrap_sig,key_version} }`**:Phase A/B 普通 sr25519 交易也过此扩展,`None` 表达"非 PQC 授权"。
-- 🔴 **`extra=None` 透明放行**:`extra=None` 时 `GmbPqcAuth` **返回未改动的原 origin**(零副作用)给 `AuthorizeCall` 接手——authorized general call 不被误伤;仅对 `extra=None` 的 **sr25519 signed origin** 才按 `PqcPolicy` 判"已绑定拒 sr25519"。
+- 🔴 **(B12 v5 修正)transaction_version 创世一次性设定,非活链 bump**:永久创世烘 GmbPqcAuth wire format 时,因 TxExtension 结构含新的嵌套 `(GmbPqcAuth, AuthorizeCall)`,`transaction_version` 相对当前 dev runtime 从 0 **设为 1**(本链自创世即新口径,无"旧口径交易"需区分);**创世后 PQC-enable setCode 仅加 `Pqc/Bootstrap` 验签行为、不改 TxExtension 结构,故 `transaction_version` 不再 bump**;`spec_version` 按常规每次 setCode 递增。
+- 🔴 **`extra` 必有变体 `{ None | Pqc{account,sig,key_version} | Bootstrap{account,pqc_pubkey,ml_dsa_sig,sr25519_bootstrap_sig,key_version} }`**(v5:`Pqc/Bootstrap` 必带 `account`):Phase A/B 普通 sr25519 交易也过此扩展,`None` 表达"非 PQC 授权"。
+  - 🔴 **为何 extra 必带 `account`**:ML-DSA **无公钥恢复机制**(不同于 sr25519/ECDSA 的 ecrecover),General Transaction origin=None 下无外层 signer → `GmbPqcAuth.validate` 在验签前**必须先有 `account`** 才能查 `AccountPqcKey[account].pubkey` 取得验签公钥(否则只能遍历全部账户公钥试验签=性能灾难+DoS)。`account` 仅是查表 hint,**不被信任直到验签通过**:ML-DSA 签名须对 `AccountPqcKey[account].pubkey` 验通,且签名 payload 内含 `account`(§5)、`call_hash` 绑定 call → 攻击者填他人 `account` 也伪造不出签名。
+- 🔴 **`extra=None` 透传语义(v5 澄清)**:`extra=None` 时 `GmbPqcAuth` **不改 origin、不写 storage**;但对 **sr25519 signed origin**,`validate` **仍需读 `AccountPqcKey[signer]`+`PqcPolicy`** 判"已绑定账户拒 sr25519"(故 validate 读 storage 是允许的,见下 weight 区分);origin=None 的 authorized general call(无 signer)直接透传给 `AuthorizeCall` 不被误伤。
 - 🔴 **授权模式与 origin 互斥**:`extra=Pqc|Bootstrap` 只允许 General Transaction(origin=None);sr25519 signed extrinsic 携带 PQC proof 直接 `BadProof`。
-- 🔴 **(H1)单测**:① `None`+authorized call → 原 origin 透传 → AuthorizeCall 产 Authorized;② `Pqc` → Signed → AuthorizeCall 不二次授权。
-- 🔴 **(M2)`weight()` 纯 `self.extra` 路由 card1 benchmark 常量,严禁读 storage**;Bootstrap 取最坏(1952B 写入+双验签)。
-- 🔴 **(M10)fail-open**:`PqcPolicy` storage 缺失/解码失败时等价安全默认(phase=B、reject=false),**绝不 fail-closed 冻结全链**。
+- 🔴 **(H1)单测**:① `None`+authorized call → 原 origin 透传 → AuthorizeCall 产 Authorized;② `Pqc` → Signed → AuthorizeCall 不二次授权;③ `None`+sr25519 signed+已绑定账户 → 按 phase 拒/放(覆盖 validate 读 storage 路径)。
+- 🔴 **(M2 v5 澄清)`weight()` 纯 `self.extra` 路由 card1 benchmark 常量、严禁读 storage**(weight 必须在 PqcPolicy decode 之前可算);**`validate()` 可读 storage**(查 AccountPqcKey/PqcPolicy 判绑定与 phase)——二者分工不矛盾。Bootstrap weight 取最坏(1952B 写入+双验签)。
+- 🔴 **(M10 v5 修正)fail-safe 拆三语境**:
+  - **创世初值**(永久创世烘骨架时):`phase=A`/`reject_sr25519_when_bound=false`/`allow_bootstrap_unbound=false`/`deadline=None`——PQC 验签逻辑尚未 setCode,`Pqc/Bootstrap` 是 reject-stub。
+  - **正常运营值**(治理逐阶段设):见 §6(Phase B 起 已绑定账户 reject=true、未绑定 allow_bootstrap=true)。
+  - **decode 失败 / storage 缺失 fallback**:等价 phase=A 安全态 = **sr25519 不冻结 + PQC/bootstrap 拒**;**绝不 fail-closed 冻结全链,也绝不 fail-open 打开 bootstrap**。因 PqcPolicy 是简单结构、修复(setCode)后即恢复,此 fallback 是**瞬态**,不会像 Phase D 那样永久锁人。
 - 🔴 **(M3 修正)metadata 绑定不夸大**:`CheckMetadataHash` 全链保持 **Disabled**(决策7),其 implicit=None;runtime/版本隔离实际靠 `spec_version`+`transaction_version`+`genesis_hash`+`call_hash`,非 metadata hash。
 - **`account-keys` pallet(idx=27)只承载** `AccountPqcKey`/`PqcPolicy` 的存储/查询/事件/密钥轮换;**不承载主交易派发**。
 
@@ -66,9 +77,9 @@ ML-DSA-65 签名:   HKDF-SHA512(AccountSeedV1, info="GMB/account/ml-dsa-65/seed3
 6. `GmbPqcAuth.validate` 按 §5 验序通过 → 返回 `Signed(account)` → nonce/扣费/业务 dispatch;**绑定写 `AccountPqcKey` 在 `post_dispatch`**(nonce/扣费已跑)。
 7. 后续只用 ML-DSA。
 > 🔴 **(H1/post_dispatch)失败语义**:绑定写在 post_dispatch,内层 call 失败绑定仍保留、照常收费;**post_dispatch 绝不返回 Err**(返回 Err 会作废整个区块=远程 DoS)——冲突判定(已绑定不同值)前移到 `validate` 拒,post_dispatch 任何情况返回 `Ok`(未绑定→写、已绑定→no-op)。
-> 🔴 **(H2)bootstrap 账户须 providers/sufficients>0**(已有余额),否则标准 `CheckNonce` 先以 `Payment` 拒;provider=0 账户的 bootstrap 行为须在 GmbPqcAuth 给明确错误语义 + 单测。
+> 🔴 **(H2 v5 修正)bootstrap 账户须有 `AccountInfo`(有余额即 providers>0,nonce 可追踪)且余额≥手续费**。机制纠正:**`CheckNonce` 只查 nonce 窗口,不查 providers/余额**;手续费不足由 **`ChargeTransactionPayment`** 拒(非 CheckNonce)。客户端构造 bootstrap 前必须检查账户存在性 + 可付余额;provider=0(从未收过资产)账户的 bootstrap 须给明确错误语义 + 单测(provider=0 但余额充足应过 CheckNonce、在 ChargeTransactionPayment 生效)。
 
-> **当前固定 sr25519 是 Phase A 真相不是旧残留**(QR/CPMS/SFID `wallet_sig_alg=='sr25519'` 硬编码)→ 改"Phase A 只收 sr25519 → 分流",不删。
+> **当前固定 sr25519 是 Phase A 真相不是旧残留**(QR/CPMS/CID `wallet_sig_alg=='sr25519'` 硬编码)→ 改"Phase A 只收 sr25519 → 分流",不删。
 
 ## 4. 链上存储
 
@@ -77,20 +88,22 @@ AccountPqcKey[AccountId] = { alg:0x02(ML-DSA-65), key_version:u32, pubkey:Bounde
 PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when_bound:bool, allow_bootstrap_unbound:bool }
 ```
 - 删除 `bootstrap_mode` 字段(M15:无第二变体、无消费方、疑似违反 per-account-state 禁令)。
-- `account-keys` **pallet_index=27**(契约真源在此登记;当前 runtime 最高 idx=26,27 空闲)。
-- 🔴 **首次升级 PqcPolicy 安全默认**:`phase=B`/`reject_sr25519_when_bound=false`/`allow_bootstrap_unbound=true`/`bootstrap_deadline=None`。
+- `account-keys` **pallet_index=27**(契约真源在此登记;已核实当前 runtime 用 0..=26,27 空闲;**pallet 集属永久地基,创世前冻结**)。
+- 🔴 **(v5)PqcPolicy 初值 = 永久创世初值 `phase=A`/`reject_sr25519_when_bound=false`/`allow_bootstrap_unbound=false`/`bootstrap_deadline=None`**(创世只烘骨架、PQC 验签未 setCode、`Pqc/Bootstrap` 是 reject-stub,故起步 phase=A)。**创世后 PQC-enable setCode + 治理推进**才进入 Phase B 运营值(`allow_bootstrap_unbound=true`、已绑定账户 `reject_sr25519_when_bound=true`,见 §6)。**decode 失败/storage 缺失的瞬态 fallback 同 phase=A 安全态**(§3 M10)。`2048` 上限只覆盖 ML-DSA-65,ML-DSA-87 须新 alg+新 schema(§2)。
 - **绑定规则**:未绑定→允许首笔 bootstrap;已绑定→拒再次 sr25519 覆盖(first-bind-wins,冲突在 validate 拒)。
 - 🔴 **(H3)密钥轮换双签**:轮换 = ① 当前 PQC 私钥授权 + ② **新 PQC 私钥对 `(新公钥+新 key_version+account+genesis_hash)` 自签(PoP)**,两签皆过才 `key_version++` 写新 `AccountPqcKey`。
 - 🔴 **(决策1/2)无恢复通道**:绑定后授权**只认 ML-DSA**,无 sr25519 锚点回退;**ML-DSA 私钥泄露/丢失无代绑恢复**(用户须妥善备份助记词——助记词在即可确定性重派生同一 ML-DSA 私钥;但若 ML-DSA 私钥被泄露并被攻击者抢先轮换,无回退,账户即失陷)。Phase D 关窗后未绑定老用户=资产终态锁定(见 §6)。
 
 ## 5. 交易载荷 + 验签(反重放域)
 
-**`GmbPqcAuth.extra` 签名 payload(`GMB_PQC_TX_V1`,普通 PQC 交易):**
-域标签 `DOMAIN_TX` ++ SCALE(`genesis_hash`、`spec_version`、`transaction_version`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`key_version`、`following_extensions_hash`)。
+**`GmbPqcAuth.extra` 签名 payload(域标签 `DOMAIN_TX = b"GMB_PQC_TX_MLDSA65_V1"`,普通 PQC 交易):**
+`DOMAIN_TX` ++ SCALE(`genesis_hash`、`spec_version`、`transaction_version`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`key_version`、`following_extensions_hash`)。
+- 签名内含 `account` 与 extra 内 `account` 是同一值(§3:extra 内 account 是查表 hint,此处进 payload 让签名对 account 承诺,双重绑定)。
 - `ss58_format` 为**纯展示字段**(L2:链上无对应扩展 implicit,不参与一致性比对,链域已由 genesis_hash 隐含)。
-- `sig_alg`/`alg` 算法标识**进 DOMAIN 字面量**(如 `DOMAIN_TX = b"GMB_PQC_TX_MLDSA65_V1"`),不另设字段(H7/rank8 域+算法隔离)。
+- `sig_alg`/`alg` 算法标识**进 DOMAIN 字面量**(`GMB_PQC_TX_MLDSA65_V1`),不另设字段(H7/rank8 域+算法隔离)。
 
-**首笔 bootstrap(`GMB_PQC_BOOTSTRAP_V1`):** 字段集**与 GMB_PQC_TX_V1 对齐**(补 transaction_version/tip/era_or_deadline,H4),额外含 `pqc_pubkey_hash`;域标签 `DOMAIN_BOOTSTRAP = b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"`。extrinsic body 携带完整 ML-DSA 公钥(~1952B)+ sr25519 签名(64B)+ ML-DSA 签名(~3309B);后续普通 PQC 交易不带公钥。
+**首笔 bootstrap(域标签 `DOMAIN_BOOTSTRAP = b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"`):** 字段集**与 `GMB_PQC_TX_MLDSA65_V1` 对齐**(补 transaction_version/tip/era_or_deadline,H4),额外含 `pqc_pubkey_hash`。
+- 🔴 **(v5)签名格式是算法相关结构,非裸字节**:sr25519 签名固定 64B,ML-DSA-65 签名 ~3309B,ML-DSA 公钥 ~1952B → bootstrap extrinsic body ≈ `sr25519_sig(64B)+ml_dsa_sig(3309B)+ml_dsa_pubkey(1952B)+call` ≈ **5.3KB+,hex 编码 ~10KB+**(QR 必须分片,见 §8 B11)。后续普通 PQC 交易**不带公钥**,只带 ml_dsa_sig(~3309B)。
 
 🔴 **(B3)`following_extensions_hash` 口径 = SDK `inherited_implication` 精确递归编码,不是扁平拼接**:
 `blake2_256( ImplicationParts{ base: TxBaseImplication((extension_version, call)), explicit:(following_explicit_tail, parent_explicit), implicit:(following_implicit_tail, parent_implicit) }.encode() )`,严格复刻 `runtime traits/transaction_extension/mod.rs:577-598`。嵌套 tuple `(GmbPqcAuth, AuthorizeCall)` 下 GmbPqcAuth 看到的 explicit/implicit tail 是"内层 tail 再与 outer tail 组对"的递归结构。card1 出该字节 golden vector,card2 单测断言链端 `inherited_implication.encode()` 与协议口径逐字节相等(参照 mod.rs:712-869)。
@@ -98,14 +111,14 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 
 🔴 **(B1)bootstrap challenge 字面构造(钉死)**:
 `sr25519_bootstrap_signature = sr25519_sign(blake2_256(DOMAIN_BOOTSTRAP ++ SCALE(genesis_hash, spec_version, transaction_version, account, pqc_pubkey_hash, key_version, nonce, call_hash, following_extensions_hash)))`。
-硬约束:① sr25519 签名**必须覆盖 `pqc_pubkey_hash`**("我授权这把 PQC 公钥");② 专用 DOMAIN_BOOTSTRAP 前缀与 SFID/治理/L3 的 sr25519 签名域不可互换;③ ML-DSA 交易签名**反向覆盖** `blake2_256(sr25519_bootstrap_signature)`(双向交叉绑定,杜绝两签拼接)。card2 单测:挪用其它域 sr25519 签名构造 bootstrap 必拒。
+硬约束:① sr25519 签名**必须覆盖 `pqc_pubkey_hash`**("我授权这把 PQC 公钥");② 专用 DOMAIN_BOOTSTRAP 前缀与 CID/治理/L3 的 sr25519 签名域不可互换;③ ML-DSA 交易签名**反向覆盖** `blake2_256(sr25519_bootstrap_signature)`(双向交叉绑定,杜绝两签拼接)。card2 单测:挪用其它域 sr25519 签名构造 bootstrap 必拒。
 
 **验签顺序(钉死,hash 全 `blake2_256`):**
 - **bootstrap**:① `blake2_256(body.pqc_pubkey)==payload.pqc_pubkey_hash` → ② sr25519 bootstrap challenge(覆盖 pqc_pubkey_hash)→ ③ ML-DSA 交易签名(用 body 公钥,且覆盖 sr25519 签名 hash)→ 通过才 post_dispatch 写。
 - **普通 PQC**:ML-DSA 签名验交易 payload,公钥从 `AccountPqcKey` 按 account 读;`alg` 必须等于 `AccountPqcKey.alg`(防降级)。
 - `account` = sr25519 公钥派生的当前 AccountId;`call_hash` 与 following_extensions_hash 内 call 必须**同一份字节序列**(M6:最简——following 直接复用 call_hash)。
 - **(L9)txpool `provides=(account,nonce)` 由标准 CheckNonce 在 Signed origin 下自动产生,GmbPqcAuth 不重复设**;GmbPqcAuth.validate 对 nonce 只做廉价窗口预检。
-- 🔴 **(H12/B11)body 长度上限硬校验**(按最坏 ~10KB)+ 未绑定账户 bootstrap 按 (account,source) 限速。
+- 🔴 **(H12/B11 v5)txpool DoS 需具体节点级机制,不能只写"限速"**:Substrate txpool **无内建 per-account 限速**。防线分层:① validate 内 cheap-checks **在 ML-DSA 验签之前**全部跑完(body 长度上限 ~10KB 硬校验 / BoundedVec decode / `AccountPqcKey[account]` 存在性 / `alg` 匹配 / nonce 廉价窗口预检)→ 挡掉绝大多数垃圾;② 仍可能有"合法 cheap-check + 错误 ML-DSA sig"灌池逼链端做昂贵验签 → 需 **node 层(citizenchain/node)实装 `(account,source)` 失败签名滑窗计数 + 未绑定 bootstrap 类交易在池中占比上限 + 超限淘汰**;③ 单测:构造 100 笔同账户错误签名 bootstrap,验证 txpool 不被拖垮。card2 必须给出具体节点级实现(非一句"限速")。
 
 🔴 **(B4)era 钉死 immortal(决策4,PoW 难度无问题)**:`era_or_deadline=immortal`,链域靠 genesis_hash,不带 checkpoint;CheckMortality.implicit 仍是 genesis hash(已纳入 following_extensions_hash)。
 
@@ -133,16 +146,16 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 - 🔴 **(B11)QR 分片**:envelope 加 `chunk_index/chunk_total/total_hash`;渲染端多帧轮播(单帧字节预算按 ECC=M version≤40 反推);扫描端分片聚合状态机(按 id 归并/去重补帧/校验 total_hash);放开 32768 上限;最坏 bootstrap(~10KB+)真机实测。
 - **(H18)QR body 四处(冷热 request/response)放开** `sig_alg(sr25519|ml-dsa-65)`+`auth_mode`+`key_version`+`chunk_*`,Phase A 仍只收 sr25519;进签名的 hash 一律 gmb-pqc blake2_256,**禁复用 qr_signer 的 sha256**。
 
-## 9. SFID / CPMS 边界
+## 9. CID / CPMS 边界
 
 - 不托管助记词/seed/私钥;`wallet_sig_alg` 放开枚举但不生成新地址。
 - 🔴 **(决策8/B5/B7/H7)ML-DSA 钱包签名归属验证 = 统一查链 `AccountPqcKey[wallet_address]`**:
-  - **唯一权威源 = 查链上 `AccountPqcKey`**(SFID 经 subxt 0.43.1 查,已具备能力);确认该 ML-DSA 公钥已绑到此 sr25519 锚点才接受;**未完成 bootstrap → 拒 ML-DSA 钱包签名**(退化策略)。SFID/CPMS **必须用同一选项**。
-  - **(B5)SFID `citizens/binding.rs`(:79/340/878)是唯一真实落点**:ML-DSA 时 QR 单独带公钥(不再 ss58 反推)、查链验归属、verify_by_algo 验签;脱离 `[u8;32]`。card4 增列。
-  - **(B7)CPMS 无链客户端**:CPMS **不验钱包签名**(本就不验,P-CRED-002),归属判定下沉 SFID;card5 删①②选项。
-- 🔴 **(B6)SFID MAIN signer 迁 ML-DSA 必须与 card2 链端验签器原子同批上线**(或链端先双 algo 路由再切),否则机构注册/投票/人口快照全红。
+  - **唯一权威源 = 查链上 `AccountPqcKey`**(CID 经 subxt 0.43.1 查,已具备能力);确认该 ML-DSA 公钥已绑到此 sr25519 锚点才接受;**未完成 bootstrap → 拒 ML-DSA 钱包签名**(退化策略)。CID/CPMS **必须用同一选项**。
+  - **(B5)CID `citizens/binding.rs`(:79/340/878)是唯一真实落点**:ML-DSA 时 QR 单独带公钥(不再 ss58 反推)、查链验归属、verify_by_algo 验签;脱离 `[u8;32]`。card4 增列。
+  - **(B7)CPMS 无链客户端**:CPMS **不验钱包签名**(本就不验,P-CRED-002),归属判定下沉 CID;card5 删①②选项。
+- 🔴 **(B6)CID MAIN signer 迁 ML-DSA 必须与 card2 链端验签器原子同批上线**(或链端先双 algo 路由再切),否则机构注册/投票/人口快照全红。
 - **(H9)系统签名原文 `build_signature_message` 必须含 sig_alg 进 preimage**(防算法混淆/降级)。
-- 🔴 **(决策5)CPMS install_sig 补真实验证**:CPMS 启动用 SFID MAIN 公钥真正验 install_sig(顺带补"任何人投递 install QR 即可初始化 CPMS"的安全洞);card4/card5。
+- 🔴 **(决策5)CPMS install_sig 补真实验证**:CPMS 启动用 CID MAIN 公钥真正验 install_sig(顺带补"任何人投递 install QR 即可初始化 CPMS"的安全洞);card4/card5。
 
 ## 10. IM / 传输加密(独立线,不阻塞;账户不派生 KEM)
 
@@ -166,7 +179,7 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 - 未绑定首次 bootstrap+execute 成功(post_dispatch 写、内层失败绑定仍留、**冲突不作废区块**);已绑定后续 PQC 成功;已绑定 sr25519 被拒、PQC 不误伤;`None`+authorized call 透传成功。
 - 挪用其它域 sr25519 签名构造 bootstrap 被拒;sr25519 signed 夹带 PQC proof 被拒;算法降级(改 alg)被拒。
 - L3/批签:已绑定账户拒 sr25519 payer、ML-DSA 走 AccountPqcKey,未绑定 sr25519 仍可用;6 处签名长度上限放宽容纳 ML-DSA(~3309B)。
-- SFID 查链 AccountPqcKey 验 ML-DSA 钱包签名归属;CPMS install_sig 被真实验证;transaction_version 已 bump 旧口径交易被明确拒。
+- CID 查链 AccountPqcKey 验 ML-DSA 钱包签名归属;CPMS install_sig 被真实验证;transaction_version 已 bump 旧口径交易被明确拒。
 - 全签名面(见 §14)无遗漏;真实运行态验收(非仅编译/单测)。
 
 ## 13. 静态加密 + KDF 卫生
@@ -179,7 +192,7 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 ## 14. 全签名面穷尽清单(H15)+ 任务卡
 
 **所有用户/系统签名面(逐项归属,杜绝漏面):**
-① 普通链上交易(GmbPqcAuth, card2/3)② L3/offchain payer 支付(card2)③ SFID 钱包绑定证明 binding.rs(card4)④ 治理/扫码签名(card2/3)⑤ CPMS ARCHIVE/wallet_sig(card5)⑥ **IM 设备绑定 `GMB_IM_WALLET_BINDING_V1`(card6)**⑦ **登录回执 login_receipt(card3)**⑧ SFID MAIN/sheng 系统签名(card4+card2)⑨ **seal 共识签名(card7,独立)**。每项归属验证口径同 §9(ML-DSA 公钥需经 AccountPqcKey 证明属于该地址)。
+① 普通链上交易(GmbPqcAuth, card2/3)② L3/offchain payer 支付(card2)③ CID 钱包绑定证明 binding.rs(card4)④ 治理/扫码签名(card2/3)⑤ CPMS ARCHIVE/wallet_sig(card5)⑥ **IM 设备绑定 `GMB_IM_WALLET_BINDING_V1`(card6)**⑦ **登录回执 login_receipt(card3)**⑧ CID MAIN/sheng 系统签名(card4+card2)⑨ **seal 共识签名(card7,独立)**。每项归属验证口径同 §9(ML-DSA 公钥需经 AccountPqcKey 证明属于该地址)。
 
 | 卡 | 范围 |
 |---|---|
@@ -187,8 +200,8 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 | card1 | gmb-pqc crate(KDF 精确+锁库+golden vector 含ξ)+ §11 全部 spike 闸门 |
 | card2 | GmbPqcAuth 扩展授权(嵌套tuple/following_extensions_hash/transaction_version++)+ account-keys(AccountPqcKey/PqcPolicy/轮换PoP)+ 5验签器algo-tag + 6签名长度上限放宽 + L3 PQC授权 |
 | card3 | 钱包(sr25519直接派生)+ **冷钱包FFI** + **离线metadata策略** + **QR分片** + bootstrap + login_receipt |
-| card4 | SFID MAIN signer ML-DSA(与card2原子上线)+ **binding.rs归属验证(查链)** + verify_cpms_archive_qr + build_signature_message含sig_alg |
-| card5 | CPMS ARCHIVE签名(脱离[u8;32])+ wallet_sig_alg放开(符号定位)+ KDF + **install_sig验证下沉SFID/CPMS验** + 归属下沉SFID |
+| card4 | CID MAIN signer ML-DSA(与card2原子上线)+ **binding.rs归属验证(查链)** + verify_cpms_archive_qr + build_signature_message含sig_alg |
+| card5 | CPMS ARCHIVE签名(脱离[u8;32])+ wallet_sig_alg放开(符号定位)+ KDF + **install_sig验证下沉CID/CPMS验** + 归属下沉CID |
 | card6 | IM X-Wing(ML-KEM-768,一次到位含AES-256)+ TLS X25519MLKEM768 + **GMB_IM_WALLET_BINDING_V1 签名升级** + 群rekey归属 |
 | **card7(新)** | **seal 共识签名 ML-DSA-65 = 节点二进制协调升级**(非 setCode):激活高度 + 新旧节点验块共存窗口;与钱包 PQC 主线解耦;**Phase C/D 收紧治理**(bootstrap_deadline 设定 + 多轮公告 + 无恢复告知) |
 
@@ -201,7 +214,7 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 5. **CPMS install_sig 补真实验证**。
 6. **card0 不动 IM**——IM ciphersuite 一次性由 card6 完成。
 7. **CheckMetadataHash 保持 Disabled**——不启用 metadata 绑定。
-8. **ML-DSA 钱包签名归属验证统一查链 `AccountPqcKey`**——SFID 经 subxt 查,CPMS 下沉 SFID,未 bootstrap 前拒。
+8. **ML-DSA 钱包签名归属验证统一查链 `AccountPqcKey`**——CID 经 subxt 查,CPMS 下沉 CID,未 bootstrap 前拒。
 9. **(2026-06-18)下一步是永久创世(此后不再清链);PQC 接入按"创世前烘骨架 / 创世后慢慢实现"切分,GmbPqcAuth 创世只烘骨架(wire-format),验签逻辑创世后 setCode**(见 §16)。
 
 ## 16. 与永久创世的时序边界(创世前烘骨架 / 创世后实现)
@@ -218,4 +231,4 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 ### 16.2 创世后(固定地基上慢慢实现,全部 setCode/app/治理/协调,**永不再动 wire format**)
 - **一次 setCode 加 `Pqc/Bootstrap` 验签 + bootstrap 逻辑**(纯行为,不改 wire format;bug 也能 setCode 修);启用 PQC = 治理翻 `PqcPolicy.phase` A→B→C→D。
 - 钱包 PQC 路径(card3):General Transaction 编码 / ML-DSA 签名 / bootstrap / QR 分片 / 冷钱包 FFI + 离线 metadata。
-- L3 PQC payer(card2)/ SFID(card4)/ CPMS(card5)/ IM-TLS(card6)/ seal+Phase C/D 治理(card7)/ 静态加密卫生(card0,随时)。
+- L3 PQC payer(card2)/ CID(card4)/ CPMS(card5)/ IM-TLS(card6)/ seal+Phase C/D 治理(card7)/ 静态加密卫生(card0,随时)。

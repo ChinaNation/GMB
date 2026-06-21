@@ -11,7 +11,7 @@ void main() {
         walletAddress: '5F-test-address',
         walletPubkeyHex: 'abcd',
         walletIndex: 1,
-        sfidNumber: 'LN001-GCB05-944805165-2026',
+        cidNumber: 'LN001-GCB05-944805165-2026',
         identityStatus: 'NORMAL',
         validFrom: '2026-05-24',
         validUntil: '2036-05-23',

@@ -9,7 +9,7 @@
 - GitHub Actions workflow
 - CitizenChain 桌面前端
 - CPMS 前端
-- SFID 前端
+- CID 前端
 - 官网前端
 - CitizenChain 构建文档
 
@@ -17,8 +17,8 @@
 
 - `.github/workflows/`：升级 checkout/setup-node action，并固定 CI Node.js 24。
 - `citizenchain/node/frontend/`：声明前端运行基线为 Node.js 24。
-- `cpms/frontend/`：声明前端运行基线为 Node.js 24。
-- `sfid/frontend/`：声明前端运行基线为 Node.js 24。
+- `citizenpassport/frontend/`：声明前端运行基线为 Node.js 24。
+- `citizencode/frontend/`：声明前端运行基线为 Node.js 24。
 - `website/`：声明前端运行基线为 Node.js 24。
 - `memory/05-modules/citizenchain/node/`：同步桌面端跨平台构建文档。
 
@@ -43,5 +43,5 @@
 
 - 2026-05-30：创建任务卡，开始执行。
 - 2026-05-30：GitHub Actions 的 `checkout` 升级为 v5，`setup-node` 升级为 v5，CI Node.js 固定为 24；四个自有前端项目补充 `engines.node >=24`。
-- 2026-05-30：同步 package-lock，清理 CPMS/SFID lockfile 中已不在 package.json 的 `qr-scanner` 残留，更新 CitizenChain 跨平台构建文档。
+- 2026-05-30：同步 package-lock，清理 CPMS/CID lockfile 中已不在 package.json 的 `qr-scanner` 残留，更新 CitizenChain 跨平台构建文档。
 - 2026-05-30：运行 `npm ci --ignore-scripts`、四个前端 `npm run build`、workflow YAML 解析、`git diff --check` 和 Node.js 20/action v4 残留扫描；CitizenChain 构建顺带刷新本地文档生成物，使其与现有白皮书源文档一致。

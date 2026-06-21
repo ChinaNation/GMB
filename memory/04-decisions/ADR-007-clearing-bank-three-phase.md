@@ -17,13 +17,13 @@
 
 把清算行体系实现拆为 **3 个独立阶段**，每阶段独立可发布、可验收：
 
-### Step 1：SFID 端（本任务卡 20260424-step1-sfid-clearing-bank-eligibility）
+### Step 1：CID 端（本任务卡 20260424-step1-cid-clearing-bank-eligibility）
 
-**只动 sfid/backend + sfid/frontend**：
+**只动 citizencode/backend + citizencode/frontend**：
 - 资格白名单判定函数：`is_clearing_bank_eligible(inst, parent) -> bool`
 - 收紧 `GET /api/v1/app/clearing-banks/search` 到资格白名单（已激活的 `K1=S + JOINT_STOCK` 与其下属 `K1=F`）
 - 新增 `GET /api/v1/app/clearing-banks/eligible-search`（桌面节点"添加清算行"用，含未激活机构）
-- SFID 前端机构列表 / 详情页显示"可作为清算行"badge
+- CID 前端机构列表 / 详情页显示"可作为清算行"badge
 - PrivateInstitutionLayout 选择 sub_type=JOINT_STOCK 时增加提示文案
 
 **不做**：runtime 改动、citizenwallet/citizenapp 改动、链上 ClearingBankNodes storage、PeerId 绑定。
@@ -48,24 +48,24 @@
 
 **C. 机构注册凭证收口（Required，开发期彻底切换）**
 
-- 机构注册凭证只包含 `sfid_number / sfid_full_name / account_names[]` 与省级签名凭证字段
-- `subject_property / sub_type / parent_sfid_number` 只在 SFID `eligible-search` 候选资格判定中使用
-- 链上不保存 SFID 内部机构属性副本，开发期 fresh genesis 重建数据
+- 机构注册凭证只包含 `cid_number / cid_full_name / account_names[]` 与省级签名凭证字段
+- `subject_property / sub_type / parent_cid_number` 只在 CID `eligible-search` 候选资格判定中使用
+- 链上不保存 CID 内部机构属性副本，开发期 fresh genesis 重建数据
 
 **D. 资格白名单链上二次校验**
 
 - `bank_check::ensure_can_be_bound` 校验链由 4 重收紧到 6 重：
-  - 原 1-4：AccountRegisteredSfid / account_name="主账户" / K1 ∈ {S,F} / DuoqianAccount.status=Active
-  - **新 5**：资格白名单（`K1=S + JOINT_STOCK` ∨ `K1=F + parent.K1=S + parent.JOINT_STOCK`），通过 SfidAccountQuery trait 查 SFID 筛选结果
-  - **新 6**：sfid_number ∈ ClearingBankNodes（必须是已声明的清算行节点）
+  - 原 1-4：AccountRegisteredCid / account_name="主账户" / K1 ∈ {S,F} / DuoqianAccount.status=Active
+  - **新 5**：资格白名单（`K1=S + JOINT_STOCK` ∨ `K1=F + parent.K1=S + parent.JOINT_STOCK`），通过 CidAccountQuery trait 查 CID 筛选结果
+  - **新 6**：cid_number ∈ ClearingBankNodes（必须是已声明的清算行节点）
 
 **E. 清算行节点声明 storage + extrinsic**
 
-- 新增 `ClearingBankNodes: Map<SfidNumber, ClearingBankNodeInfo>` storage（peer_id / rpc_domain / rpc_port / registered_at / registered_by）
-- 新增 `NodePeerToInstitution: Map<PeerId, SfidNumber>` 反向索引（防 PeerId 冒名）
-- 新增 `register_clearing_bank(sfid_number, peer_id, rpc_domain, rpc_port)` extrinsic（任一 duoqian_admin 单签即可，不走内部投票）
-- 新增 `update_clearing_bank_endpoint(sfid_number, new_domain, new_port)`（仅改端点，不动 PeerId）
-- 新增 `unregister_clearing_bank(sfid_number)`（注销 + 反向索引清理）
+- 新增 `ClearingBankNodes: Map<CidNumber, ClearingBankNodeInfo>` storage（peer_id / rpc_domain / rpc_port / registered_at / registered_by）
+- 新增 `NodePeerToInstitution: Map<PeerId, CidNumber>` 反向索引（防 PeerId 冒名）
+- 新增 `register_clearing_bank(cid_number, peer_id, rpc_domain, rpc_port)` extrinsic（任一 duoqian_admin 单签即可，不走内部投票）
+- 新增 `update_clearing_bank_endpoint(cid_number, new_domain, new_port)`（仅改端点，不动 PeerId）
+- 新增 `unregister_clearing_bank(cid_number)`（注销 + 反向索引清理）
 
 **F. spec_version 2 → 3**
 
@@ -76,8 +76,8 @@
 
 新增 Tauri command（2026-05-02 起按业务拆到 `citizenchain/node/src/offchain/{duoqian_manage,offchain_transaction,settlement}/commands.rs`）：
 
-- `search_eligible_clearing_banks(query, limit)`：转发 SFID `/clearing-banks/eligible-search`
-- `query_clearing_bank_node_info(sfid_number)`：链上查 `ClearingBankNodes[sfid_number]`
+- `search_eligible_clearing_banks(query, limit)`：转发 CID `/clearing-banks/eligible-search`
+- `query_clearing_bank_node_info(cid_number)`：链上查 `ClearingBankNodes[cid_number]`
 - `query_local_peer_id()`：调 RPC `system_localPeerId` 拿本机 PeerId
 - `test_clearing_bank_endpoint_connectivity(domain, port, expected_peer_id)`：连通性自测（DNS + wss 连接 + 链 ID 匹配 + system_localPeerId 匹配）
 - `build_register_clearing_bank_request` / `submit_register_clearing_bank`
@@ -90,8 +90,8 @@
 - `App.tsx` TabKey 加 `'clearing-bank'`，顶部 nav 9 tab：首页 / 挖矿 / 国储会 / 省储会 / 省储行 / **清算行** / 白皮书 / 公民宪法 / 设置
 - 新建 `offchain/section.tsx`，状态机 8 视图：
   ```
-  empty → add-input-sfid → check-status →
-    ├─ register-sfid (链上未注册地址)
+  empty → add-input-cid → check-status →
+    ├─ register-cid (链上未注册地址)
     ├─ propose-create (未创建多签账户)
     ├─ wait-vote     (等其他 admins 投票)
     ├─ declare-node  (Active 后,声明清算行节点)
@@ -107,12 +107,12 @@
 - 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
 - 提交 register_clearing_bank 前**强制桌面节点连通性自测**
 
-#### 2.4 SFID 端 Step 2 末尾联动
+#### 2.4 CID 端 Step 2 末尾联动
 
-- `sfid/backend/subjects/chain_duoqian_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
-  - `AND sfid_number IN (SELECT sfid_number FROM clearing_bank_nodes_cache)`
-- 新建 `sfid/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
-- SFID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_sfid_number`
+- `citizencode/backend/subjects/chain_duoqian_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
+  - `AND cid_number IN (SELECT cid_number FROM clearing_bank_nodes_cache)`
+- 新建 `citizencode/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
+- CID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_cid_number`
 
 ### Step 3：公民端（citizenwallet + citizenapp）
 
@@ -120,13 +120,13 @@
 - citizenwallet pallet_registry action_labels 补对应中文标签
 - citizenapp `bind_clearing_bank_page.dart` 调整：搜索来源切换为新 search API；绑定前查链上 ClearingBankNodes 取 RPC 域名+端口
 - citizenapp `clearing_bank_settings_page.dart` 占位页落地（用户视角的"我的清算行配置"）
-- 端到端验证清单（创建机构 → SFID 注册 → 链上注册清算行 → citizenapp 绑定 → 充值 → 跨行支付 → 提现）
+- 端到端验证清单（创建机构 → CID 注册 → 链上注册清算行 → citizenapp 绑定 → 充值 → 跨行支付 → 提现）
 
 ## 链上准入设计（Step 2 锁定）
 
 清算行准入用 **3 层卡口**：
 
-1. **SFID 身份（Step 1 落地）**：机构必须在 SFID 后端注册成功（subject_property/机构码/sub_type/parent 校验）
+1. **CID 身份（Step 1 落地）**：机构必须在 CID 后端注册成功（subject_property/机构码/sub_type/parent 校验）
 2. **链上资格白名单（Step 2）**：`(K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S ∧ parent.JOINT_STOCK)`，链端只确认账户已注册且 Active
 3. **节点-机构绑定（Step 2）**：管理员私钥签名 + node PeerId 上链；同时配置 RPC 域名供 citizenapp 可达
 
@@ -165,11 +165,11 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 **优点**：
 - 清算行接入门槛低（任意符合条件的私法人股份公司及其下属非法人都能加入），可扩到银行/分支行/第三方支付/大企业
 - 不需要新增链上机构类型 / 新 orgType / 新 institution_code，runtime 改动最小化
-- 资格判定在 SFID 后端 + 链上双层校验，单层故障不影响整体安全
+- 资格判定在 CID 后端 + 链上双层校验，单层故障不影响整体安全
 - 三阶段独立发布，每阶段可验收，降低风险
 
 **取舍**：
-- SFID 后端的"清算行候选"语义会随 Step 2 完成而进一步收窄（加入"已加入清算网络"过滤），是预期演进
+- CID 后端的"清算行候选"语义会随 Step 2 完成而进一步收窄（加入"已加入清算网络"过滤），是预期演进
 - 跨省 parent 查询需要二段读 shard，性能依赖 sharded_store 的并发读能力（已有）
 
 ## 与现存设计的兼容性
@@ -181,5 +181,5 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 ## 引用
 
 - 现有清算 pallet：[citizenchain/runtime/transaction/offchain-transaction/src/lib.rs](../../citizenchain/runtime/transaction/offchain-transaction/src/lib.rs)
-- 现有 SFID 公开 API：[sfid/backend/subjects/chain_duoqian_info.rs](../../sfid/backend/subjects/chain_duoqian_info.rs)（app_search_clearing_banks）
-- ParentInstitutionRow 已含 sub_type 字段：[sfid/backend/subjects/model.rs](../../sfid/backend/subjects/model.rs)
+- 现有 CID 公开 API：[citizencode/backend/subjects/chain_duoqian_info.rs](../../citizencode/backend/subjects/chain_duoqian_info.rs)（app_search_clearing_banks）
+- ParentInstitutionRow 已含 sub_type 字段：[citizencode/backend/subjects/model.rs](../../citizencode/backend/subjects/model.rs)

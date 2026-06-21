@@ -82,9 +82,9 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
           const Divider(height: 1, color: AppTheme.divider),
       itemBuilder: (context, i) {
         final inst = _items[i];
-        final title = inst.sfidShortName?.isNotEmpty == true
-            ? inst.sfidShortName!
-            : inst.sfidFullName;
+        final title = inst.cidShortName?.isNotEmpty == true
+            ? inst.cidShortName!
+            : inst.cidFullName;
         return ListTile(
           title: Text(
             title,
@@ -95,7 +95,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
             ),
           ),
           subtitle: Text(
-            '身份ID ${inst.sfidNumber}',
+            '身份ID ${inst.cidNumber}',
             style:
                 const TextStyle(fontSize: 12.5, color: AppTheme.textTertiary),
           ),
@@ -104,7 +104,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => PublicInstitutionDetailPage(
-                sfidNumber: inst.sfidNumber,
+                cidNumber: inst.cidNumber,
                 repository: widget.repository,
               ),
             ),

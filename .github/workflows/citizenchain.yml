@@ -456,7 +456,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CITIZENCHAIN_DEPLOY_USER: ${{ secrets.CITIZENCHAIN_DEPLOY_USER || vars.CITIZENCHAIN_DEPLOY_USER || 'ubuntu' }}
-      CITIZENCHAIN_DEPLOY_SSH_KEY: ${{ secrets.CITIZENCHAIN_DEPLOY_SSH_KEY || secrets.SFID_DEPLOY_SSH_KEY || secrets.CITIZENCHAIN_SSH_KEY }}
+      CITIZENCHAIN_DEPLOY_SSH_KEY: ${{ secrets.CITIZENCHAIN_DEPLOY_SSH_KEY || secrets.CITIZENCODE_DEPLOY_SSH_KEY || secrets.CITIZENCHAIN_SSH_KEY }}
       CITIZENCHAIN_DEPLOY_SERVERS: |
         147.224.14.117
         64.181.239.233
@@ -479,7 +479,7 @@ jobs:
           set -euo pipefail
 
           if [ -z "${CITIZENCHAIN_DEPLOY_SSH_KEY:-}" ]; then
-            echo "::error::缺少 CITIZENCHAIN_DEPLOY_SSH_KEY、SFID_DEPLOY_SSH_KEY 或 CITIZENCHAIN_SSH_KEY，无法部署服务器。"
+            echo "::error::缺少 CITIZENCHAIN_DEPLOY_SSH_KEY、CITIZENCODE_DEPLOY_SSH_KEY 或 CITIZENCHAIN_SSH_KEY，无法部署服务器。"
             exit 1
           fi
 

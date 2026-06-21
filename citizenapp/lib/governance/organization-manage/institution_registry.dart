@@ -30,7 +30,7 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
     ...kProvincialBanks
   ]) {
     final encoded = institutionIdentityToAccountId(
-      inst.sfidNumber,
+      inst.cidNumber,
       mainAccount: inst.mainAccount,
     );
     if (_bytesEqual(encoded, accountIdBytes)) return inst;
@@ -40,7 +40,7 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
   if (adminAccountOrg == 4 || adminAccountOrg == 5) {
     return InstitutionInfo(
       name: '机构账户 ${duoqianAccount.substring(0, 8)}',
-      sfidNumber: registeredDuoqianIdentity(duoqianAccount),
+      cidNumber: registeredDuoqianIdentity(duoqianAccount),
       orgType: OrgType.duoqian,
       duoqianAccount: duoqianAccount,
       adminAccountOrg: adminAccountOrg,
@@ -48,7 +48,7 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
   }
   return InstitutionInfo(
     name: '个人多签 ${duoqianAccount.substring(0, 8)}',
-    sfidNumber: 'personal:$duoqianAccount',
+    cidNumber: 'personal:$duoqianAccount',
     orgType: OrgType.duoqian,
     duoqianAccount: duoqianAccount,
   );

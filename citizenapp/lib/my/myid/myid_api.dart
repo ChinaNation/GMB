@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:citizenapp/sfid_api_config.dart';
+import 'package:citizenapp/cid_api_config.dart';
 
 class MyIdStatusResponse {
   const MyIdStatusResponse({
     required this.bindStatus,
     this.walletAddress,
-    this.sfidNumber,
+    this.cidNumber,
     this.citizenStatus,
     this.votingEligible,
     this.voteStatus,
@@ -22,7 +22,7 @@ class MyIdStatusResponse {
   /// "pending" | "bound" | "unset"
   final String bindStatus;
   final String? walletAddress;
-  final String? sfidNumber;
+  final String? cidNumber;
   final String? citizenStatus;
   final bool? votingEligible;
   final String? voteStatus;
@@ -33,7 +33,7 @@ class MyIdStatusResponse {
 }
 
 class MyIdApi {
-  MyIdApi() : _baseUrl = SfidApiConfig.defaultBaseUrl;
+  MyIdApi() : _baseUrl = CidApiConfig.defaultBaseUrl;
 
   final String _baseUrl;
 
@@ -52,7 +52,7 @@ class MyIdApi {
       throw Exception('电子护照状态查询超时，请检查网络连接');
     } on SocketException catch (_) {
       if (Platform.isAndroid || Platform.isIOS) {
-        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
+        throw Exception(CidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
@@ -75,7 +75,7 @@ class MyIdApi {
     return MyIdStatusResponse(
       bindStatus: (data['bind_status']?.toString() ?? 'unset').trim(),
       walletAddress: data['wallet_address']?.toString(),
-      sfidNumber: data['sfid_number']?.toString(),
+      cidNumber: data['cid_number']?.toString(),
       citizenStatus: data['citizen_status']?.toString(),
       votingEligible: _parseBool(data['voting_eligible']),
       voteStatus: data['vote_status']?.toString(),

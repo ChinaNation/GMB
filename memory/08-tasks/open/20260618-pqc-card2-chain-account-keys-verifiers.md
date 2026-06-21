@@ -22,7 +22,7 @@
    - 🔴 **(H2)bootstrap 账户须 providers/sufficients>0**(否则 CheckNonce 以 Payment 先拒),provider=0 给明确错误语义 + 单测。
    - 🔴 **(H12)body 长度上限硬校验(~10KB)+ 未绑定 bootstrap 按 (account,source) 限速**。
 4. **payload/反重放**:`GMB_PQC_TX_V1`/`GMB_PQC_BOOTSTRAP_V1`(字段集对齐,bootstrap 补 tx_version/tip/era;含 `following_extensions_hash`);🔴 **(B3)`following_extensions_hash` = SDK `inherited_implication` 精确递归编码**(ImplicationParts{base,explicit,implicit},非扁平拼接),单测断言链端 `inherited_implication.encode()` 与协议口径逐字节相等;hash 全 blake2_256;**era immortal**(CheckMortality.implicit 仍 genesis,纳入 hash);**CheckMetadataHash 保持 Disabled**(implicit=None);txpool provides=(account,nonce) 由 CheckNonce 自动产生,GmbPqcAuth 不重复设。
-5. **5 个 SFID/机构验签器 algo-tag 路由**(`configs/mod.rs:781/890/961/1037` + organization-manage)→ verify_by_algo。🔴 **(B6)与 card4(SFID MAIN signer 迁 ML-DSA)原子同批上线**,或链端先双 algo 路由再切。
+5. **5 个 CID/机构验签器 algo-tag 路由**(`configs/mod.rs:781/890/961/1037` + organization-manage)→ verify_by_algo。🔴 **(B6)与 card4(CID MAIN signer 迁 ML-DSA)原子同批上线**,或链端先双 algo 路由再切。
 6. **ShengSigningPubkey/ShengAdmins**:🔴 **(H6)value(签名公钥)→ BoundedVec 容 ML-DSA ~1952B;key 索引保持 `[u8;32]` admin 身份键不动**;4 验签器 from_raw(32)+sr25519_verify 整体改 verify_by_algo。
 7. 🔴 **(H5)6 处签名长度上限放宽**:`MaxRegisterSignatureLength(:800)`/`MaxCredentialSignatureLength(:970)`/`MaxVoteSignatureLength(:1410)`/population-snapshot 签名上限/`MaxBatchSignatureLength` → 容 ML-DSA(~3309B,建议 ConstU32<4096>)。
 8. **(B4)L3/offchain PQC 授权**:`settlement.rs:172`/`lib.rs:644-663` 废 `sr25519_pubkey_from_account` 假设;payer_sig/batch_signature 改**带 sig_alg 标签的变长结构**,ML-DSA 走 AccountPqcKey 查公钥;**Phase C/D 已绑定账户拒 sr25519 payer**,未绑定 sr25519 仍可用(双算法共存到 Phase D)。

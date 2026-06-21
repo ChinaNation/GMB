@@ -10,7 +10,7 @@
 
 在区块链中引入「除 GMB 主币外其他人发行代币」的功能。
 
-发行人范围:**SFID 注册机构 + personal-manage 注册个人多签**(裸账户禁止)。
+发行人范围:**CID 注册机构 + personal-manage 注册个人多签**(裸账户禁止)。
 代币种类:**第一期只 FT(同质化代币),Plain 类(无锚定,Pegged 留 Phase 2)**。
 治理铁律:**GMB 是唯一计费/治理代币**,所有用户代币操作只收 GMB。
 
@@ -21,7 +21,7 @@
 - citizenapp(用户钱包资产视图)
 - citizenwallet(冷钱包 QR decoder)
 
-不涉及:node/frontend(矿工端,`feedback_desktop_is_miner`)、sfid-frontend(Phase 1 不进监管入口)、chainspec.json(由用户单独处理重新创世)。
+不涉及:node/frontend(矿工端,`feedback_desktop_is_miner`)、cid-frontend(Phase 1 不进监管入口)、chainspec.json(由用户单独处理重新创世)。
 
 ## 输入文档
 
@@ -56,7 +56,7 @@
 
 | 项 | 决议 |
 |---|---|
-| 谁能发 | SFID 机构 + personal-manage |
+| 谁能发 | CID 机构 + personal-manage |
 | 资产种类 | 第一期 FT only,Plain only |
 | GMB 唯一性 | 计费 / 治理 / gas 统一 GMB,用户代币禁用 |
 | decimals | 用户自定义,范围 0..=18 |
@@ -159,8 +159,8 @@
 ### 顺手修复(超出 review 15 项,但属测试基础设施)
 
 - `primitives/derive.rs` 既存测试 bug 2 处:
-  - `sfid_number_starts_with_0x02`:错调 `account_id_from_sfid_number(&str)`,改为 `account_id_from_registered_sfid_number(&[u8])`
-  - `builtin_id_starts_with_0x01`:硬编码 `id[1..34]` 与 29B 实际字符串长度不匹配,改用动态 `n = sfid_number.len()`
+  - `cid_number_starts_with_0x02`:错调 `account_id_from_cid_number(&str)`,改为 `account_id_from_registered_cid_number(&[u8])`
+  - `builtin_id_starts_with_0x01`:硬编码 `id[1..34]` 与 29B 实际字符串长度不匹配,改用动态 `n = cid_number.len()`
 - 这 2 处既存 bug 阻塞 `cargo test -p primitives`,与 v2 修订无直接关系但作为验证基础设施顺手修;原本派出的 spawn_task chip(修复同一 bug)可作废,用户可 dismiss
 
 ---

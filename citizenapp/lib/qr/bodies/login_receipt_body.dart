@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// kind = login_receipt
 ///
-/// 由冷钱包 citizenwallet 生成,笔记本摄像头反扫后提交给 SFID/CPMS 后端验证。
+/// 由冷钱包 citizenwallet 生成,笔记本摄像头反扫后提交给 CID/CPMS 后端验证。
 class LoginReceiptBody implements QrBody {
   const LoginReceiptBody({
     required this.system,
@@ -37,8 +37,8 @@ class LoginReceiptBody implements QrBody {
     final signature = data['signature'];
     final payloadHash = data['payload_hash'];
     final signedAt = data['signed_at'];
-    if (system is! String || (system != 'sfid' && system != 'cpms')) {
-      throw const FormatException('login_receipt.system 必须为 sfid 或 cpms');
+    if (system is! String || (system != 'cid' && system != 'cpms')) {
+      throw const FormatException('login_receipt.system 必须为 cid 或 cpms');
     }
     if (pubkey is! String || !pubkey.startsWith('0x')) {
       throw const FormatException('login_receipt.pubkey 必填 0x hex');

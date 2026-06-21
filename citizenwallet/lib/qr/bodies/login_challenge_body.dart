@@ -25,7 +25,7 @@ class LoginChallengeBody implements QrBody {
     if (system is! String || system.isEmpty) {
       throw const FormatException('login_challenge.system 必填');
     }
-    if (system != 'sfid' && system != 'cpms') {
+    if (system != 'cid' && system != 'cpms') {
       throw FormatException('login_challenge.system 非法: $system');
     }
     if (sysPubkey is! String || !sysPubkey.startsWith('0x')) {

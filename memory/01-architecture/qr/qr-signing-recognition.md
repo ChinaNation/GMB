@@ -43,7 +43,7 @@
 
 补充校验:
 
-- `body.system` 非空,当前只允许 `sfid` / `cpms`
+- `body.system` 非空,当前只允许 `cid` / `cpms`
 - `body.sys_pubkey` 是合法 `0x<64hex>`
 - `body.sys_sig` 是合法 `0x<128hex>`
 - 按 `qr-protocol-spec.md` 的签名原文规则验证 `sys_sig`
@@ -80,13 +80,13 @@
 
 仅满足以上条件时绿色放行。除此之外,任何 decode 失败都红色拒绝。
 
-## 七、SFID 管理员治理 JSON 载荷
+## 七、CID 管理员治理 JSON 载荷
 
-`sfid_admin_action` 使用既有 `CITIZEN_QR_V1 / sign_request`,不新增协议。`payload_hex`
-是 `sfid_admin_governance` canonical JSON 的 UTF-8 hex,冷钱包必须解出并交叉校验:
+`cid_admin_action` 使用既有 `CITIZEN_QR_V1 / sign_request`,不新增协议。`payload_hex`
+是 `cid_admin_governance` canonical JSON 的 UTF-8 hex,冷钱包必须解出并交叉校验:
 
-- `display.action == sfid_admin_action`
-- `domain == sfid_admin_governance`
+- `display.action == cid_admin_action`
+- `domain == cid_admin_governance`
 - `qr_proto == CITIZEN_QR_V1`
 - `display.fields` 只放 `action_type / actor_province_name / actor_account / target` 等用户确认字段;
   `before_hash / after_hash / payload_hash` 只参与机器验真,不进入确认页
@@ -122,7 +122,7 @@ field 或 pallet/call 组合都不得恢复。
 8. `propose_create_personal` / `propose_close_personal`
 9. `propose_transfer` / `propose_safety_fund_transfer` / `propose_sweep_to_main`
 10. `propose_runtime_upgrade` / `developer_direct_upgrade` 的 32 字节哈希签名例外
-11. `sfid_admin_action`
+11. `cid_admin_action`
 
 ### 应红色拒绝
 

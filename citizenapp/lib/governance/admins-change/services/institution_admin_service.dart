@@ -15,7 +15,7 @@ class InstitutionAdminState {
 /// 管理员查询门面。
 ///
 /// 中文注释：调用方必须传入明确的 `AdminAccountIdentity`，不再把
-/// `sfidNumber` 当作个人多签、机构账户和治理机构共用的模糊参数。
+/// `cidNumber` 当作个人多签、机构账户和治理机构共用的模糊参数。
 class InstitutionAdminService {
   InstitutionAdminService({ChainRpc? chainRpc})
       : _accountService = AdminAccountService(chainRpc: chainRpc);

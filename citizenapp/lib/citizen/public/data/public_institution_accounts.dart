@@ -32,14 +32,14 @@ class PublicAccountRow {
 List<PublicAccountRow> deriveAccountRows(PublicInstitutionEntity inst) {
   final rows = <PublicAccountRow>[];
 
-  final main = deriveInstitutionMainAccountId(inst.sfidNumber);
+  final main = deriveInstitutionMainAccountId(inst.cidNumber);
   rows.add(PublicAccountRow(
     label: kReservedNameMain,
     addressHex: hexFromAccountId(main),
     addressSs58: ss58FromAccountId(main),
   ));
 
-  final fee = deriveInstitutionFeeAccountId(inst.sfidNumber);
+  final fee = deriveInstitutionFeeAccountId(inst.cidNumber);
   rows.add(PublicAccountRow(
     label: kReservedNameFee,
     addressHex: hexFromAccountId(fee),
@@ -48,7 +48,7 @@ List<PublicAccountRow> deriveAccountRows(PublicInstitutionEntity inst) {
 
   for (final name in inst.customAccountNames) {
     if (name.isEmpty || isForbiddenAccountName(name)) continue;
-    final id = deriveInstitutionCustomAccountId(inst.sfidNumber, name);
+    final id = deriveInstitutionCustomAccountId(inst.cidNumber, name);
     rows.add(PublicAccountRow(
       label: name,
       addressHex: hexFromAccountId(id),

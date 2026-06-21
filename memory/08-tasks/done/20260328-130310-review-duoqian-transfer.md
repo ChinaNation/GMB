@@ -68,8 +68,8 @@
 
 3. 模块单测当前无法通过编译，说明测试 mock 已和上游接口脱节。
    - 证据：`cargo test -p duoqian-transfer` 失败，报错包括：
-     - `SfidInstitutionVerifier` 现在需要 3 个泛型参数，但测试只实现了 2 个。
-     - `duoqian_manage::Config for Test` 缺少 `FeeRouter`、`MaxSfidNameLength`。
+     - `CidInstitutionVerifier` 现在需要 3 个泛型参数，但测试只实现了 2 个。
+     - `duoqian_manage::Config for Test` 缺少 `FeeRouter`、`MaxCidNameLength`。
 
 4. 技术文档的 `Config Trait` 描述仍是旧口径，和现代码不一致。
    - 证据：文档仍把 `Currency`、`InternalVoteEngine`、`ProtectedSourceChecker` 写成当前模块自身 `Config` 项；但现代码里的本模块 `Config` 只声明 `RuntimeEvent`、`MaxRemarkLen`、`FeeRouter`、`WeightInfo`，其余通过父 trait 继承。

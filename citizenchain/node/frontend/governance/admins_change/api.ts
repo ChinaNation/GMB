@@ -11,18 +11,18 @@ import type {
 
 // 管理员更换模块前端 API。激活、更换与账户读取统一聚合到 admins_change。
 const accountRefParams = (accountRef: AdminAccountRef) => ({
-  sfidNumber: accountRef.sfidNumber ?? null,
+  cidNumber: accountRef.cidNumber ?? null,
   accountHex: accountRef.accountHex ?? null,
   expectedOrg: accountRef.org ?? null,
 });
 
 export const adminsChangeApi = {
-  getInstitutionDetail: (sfidNumber: string) =>
-    invoke<InstitutionDetail>('get_institution_detail', { sfidNumber }),
-  buildActivateAdminRequest: (pubkeyHex: string, sfidNumber: string, accountRef?: AdminAccountRef) =>
+  getInstitutionDetail: (cidNumber: string) =>
+    invoke<InstitutionDetail>('get_institution_detail', { cidNumber }),
+  buildActivateAdminRequest: (pubkeyHex: string, cidNumber: string, accountRef?: AdminAccountRef) =>
     invoke<ActivateRequestResult>('build_activate_admin_request', {
       pubkeyHex,
-      sfidNumber,
+      cidNumber,
       accountHex: accountRef?.accountHex ?? null,
       expectedOrg: accountRef?.org ?? null,
     }),
@@ -40,16 +40,16 @@ export const adminsChangeApi = {
       payloadHex,
       responseJson,
     }),
-  getActivatedAdmins: (sfidNumber: string, accountRef?: AdminAccountRef) =>
+  getActivatedAdmins: (cidNumber: string, accountRef?: AdminAccountRef) =>
     invoke<ActivatedAdmin[]>('get_activated_admins', {
-      sfidNumber,
+      cidNumber,
       accountHex: accountRef?.accountHex ?? null,
       expectedOrg: accountRef?.org ?? null,
     }),
-  deactivateAdmin: (pubkeyHex: string, sfidNumber: string, accountRef: AdminAccountRef, unlockPassword: string) =>
+  deactivateAdmin: (pubkeyHex: string, cidNumber: string, accountRef: AdminAccountRef, unlockPassword: string) =>
     invoke<void>('deactivate_admin', {
       pubkeyHex,
-      sfidNumber,
+      cidNumber,
       accountHex: accountRef.accountHex ?? null,
       expectedOrg: accountRef.org ?? null,
       unlockPassword,

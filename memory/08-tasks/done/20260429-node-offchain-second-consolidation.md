@@ -68,7 +68,7 @@
 - 已新增 `node/src/offchain/bootstrap.rs`，`service.rs` 只保留节点通用启动接线。
 - 已将清算行前端专属 Tauri API 迁入 `node/frontend/offchain/api.ts`。
 - 已将清算行页面样式迁入 `node/frontend/offchain/styles.css`，并由 `section.tsx` 引入。
-- 已更新 node offchain、SFID 清算行资格、ADR-007 与相关任务卡文档。
+- 已更新 node offchain、CID 清算行资格、ADR-007 与相关任务卡文档。
 - 已用 `rg` 检查旧代码路径残留；当前代码层无旧 `ui/clearing_bank`、`frontend/clearing-bank`、`crate::offchain_keystore` 引用。
 
 ## 验证记录

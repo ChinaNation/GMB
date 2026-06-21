@@ -13,15 +13,15 @@
 
 ## 影响范围
 
-- `cpms/backend/src/dangan`：新增档案列表分页、cursor 和统计读取能力，作为档案业务归属。
-- `cpms/backend/src/operator_admin`：清理档案列表分页实现残留，操作管理员模块不再承载列表分页业务。
-- `cpms/backend/db`：新增档案统计表和百万级列表/检索索引。
-- `cpms/frontend`：档案列表页面与 API 从 `operator_admin` 迁入档案领域目录。
-- `memory/05-modules/cpms` 与 `cpms/CPMS_TECHNICAL.md`：更新分页模型和模块边界。
+- `citizenpassport/backend/dangan`：新增档案列表分页、cursor 和统计读取能力，作为档案业务归属。
+- `citizenpassport/backend/operator_admin`：清理档案列表分页实现残留，操作管理员模块不再承载列表分页业务。
+- `citizenpassport/backend/db`：新增档案统计表和百万级列表/检索索引。
+- `citizenpassport/frontend`：档案列表页面与 API 从 `operator_admin` 迁入档案领域目录。
+- `memory/05-modules/citizenpassport` 与 `citizenpassport/CITIZENPASSPORT_TECHNICAL.md`：更新分页模型和模块边界。
 
 ## 主要风险点
 
-- 当前工作树已有其他 CPMS/SFID 改动，必须避免误回滚。
+- 当前工作树已有其他 CPMS/CID 改动，必须避免误回滚。
 - Axum 路由不能重复覆盖同一路径，需要保证 `/api/v1/archives` 的 GET/POST 合并清晰。
 - 游标分页必须保持排序稳定，不能使用 `OFFSET`。
 - 统计表必须与创建/删除档案事务一致更新，避免总数漂移。

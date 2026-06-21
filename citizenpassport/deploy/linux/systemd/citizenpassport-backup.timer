@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CitizenPassport backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=citizenpassport-backup.service
+
+[Install]
+WantedBy=timers.target

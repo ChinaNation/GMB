@@ -10,7 +10,7 @@
 // `settlement::keystore::OffchainKeystore` 加载到 `KeystoreBatchSigner` 的
 // `Arc<RwLock<Option<SigningKey>>>` 槽位。本模块的"解密"含义是:
 //   1. citizenwallet 签 challenge → 节点 sr25519 验签 → 证明操作员持有该公钥的冷钱包
-//   2. 把 (pubkey, sfid_number) 标记为内存内"授权可用",packer 攒批前 cross-check
+//   2. 把 (pubkey, cid_number) 标记为内存内"授权可用",packer 攒批前 cross-check
 //      该入口存在才会启动签名(防误用启动密码加载的 SigningKey)
 //
 // Step 3(citizenwallet/citizenapp 完工后)再做完整的"per-admin 加密 seed 文件 +
@@ -39,7 +39,7 @@ const DEFAULT_TTL_SECS: u64 = 90;
 
 /// 当前正在内存中"已解密"的管理员表(节点重启清空)。
 ///
-/// key = lowercase pubkey hex(不含 0x),value = (sfid_number, decrypted_at_ms)。
+/// key = lowercase pubkey hex(不含 0x),value = (cid_number, decrypted_at_ms)。
 static DECRYPTED_ADMINS: OnceLock<Mutex<HashMap<String, MemoryEntry>>> = OnceLock::new();
 
 /// 等待"解密"响应的进行中 challenge 上下文。前端拿到 request_id,扫描回执时
@@ -48,14 +48,14 @@ static PENDING_CHALLENGES: OnceLock<Mutex<HashMap<String, ChallengeContext>>> = 
 
 #[derive(Clone)]
 struct MemoryEntry {
-    sfid_number: String,
+    cid_number: String,
     decrypted_at_ms: u64,
 }
 
 #[derive(Clone)]
 struct ChallengeContext {
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
     payload: Vec<u8>,
     issued_at_ms: u64,
 }
@@ -82,12 +82,12 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// 拼装 challenge payload:`PREFIX(14) || sfid_number(48 padded) || pubkey(32) || ts_le(8) || nonce(16)`。
-fn build_challenge_payload(pubkey_bytes: &[u8; 32], sfid_number: &str, timestamp: u64) -> Vec<u8> {
+/// 拼装 challenge payload:`PREFIX(14) || cid_number(48 padded) || pubkey(32) || ts_le(8) || nonce(16)`。
+fn build_challenge_payload(pubkey_bytes: &[u8; 32], cid_number: &str, timestamp: u64) -> Vec<u8> {
     let mut out = Vec::with_capacity(CHALLENGE_TOTAL_LEN);
     out.extend_from_slice(DECRYPT_PREFIX);
 
-    let id_bytes = sfid_number.as_bytes();
+    let id_bytes = cid_number.as_bytes();
     let mut id_buf = [0u8; 48];
     let copy_len = id_bytes.len().min(48);
     id_buf[..copy_len].copy_from_slice(&id_bytes[..copy_len]);
@@ -109,7 +109,7 @@ fn generate_request_id() -> String {
 /// 构造解密请求 QR JSON,把 ChallengeContext 暂存以备验签。
 pub fn build_decrypt_admin_request(
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
 ) -> Result<DecryptAdminRequestResult, String> {
     let clean = pubkey_hex
         .strip_prefix("0x")
@@ -118,8 +118,8 @@ pub fn build_decrypt_admin_request(
     if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效,应为 64 位十六进制".to_string());
     }
-    if sfid_number.is_empty() || sfid_number.len() > 48 {
-        return Err("sfid_number 长度需在 1..=48".to_string());
+    if cid_number.is_empty() || cid_number.len() > 48 {
+        return Err("cid_number 长度需在 1..=48".to_string());
     }
     let pubkey_bytes = hex::decode(&clean).map_err(|e| format!("公钥解码失败:{e}"))?;
     let pubkey_arr: [u8; 32] = pubkey_bytes
@@ -128,7 +128,7 @@ pub fn build_decrypt_admin_request(
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
 
     let timestamp = now_secs();
-    let payload = build_challenge_payload(&pubkey_arr, sfid_number, timestamp);
+    let payload = build_challenge_payload(&pubkey_arr, cid_number, timestamp);
     let payload_hex = format!("0x{}", hex::encode(&payload));
     let payload_hash = sha256_hash_public(&payload);
     let payload_hash_hex = format!("0x{}", hex::encode(payload_hash));
@@ -136,12 +136,12 @@ pub fn build_decrypt_admin_request(
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
     // display.fields 提供给 citizenwallet decoder 构造确认页(action=decrypt_admin)。
-    // Step 3 citizenwallet 端补对应 decoder 分支后,签名页文案为"解密管理员 - {sfid_number}"。
+    // Step 3 citizenwallet 端补对应 decoder 分支后,签名页文案为"解密管理员 - {cid_number}"。
     let display = serde_json::json!({
         "action": "decrypt_admin",
-        "summary": format!("解密清算行管理员 - {sfid_number}"),
+        "summary": format!("解密清算行管理员 - {cid_number}"),
         "fields": [
-            { "key": "sfid_number", "label": "机构身份号码", "value": sfid_number }
+            { "key": "cid_number", "label": "机构身份号码", "value": cid_number }
         ]
     });
 
@@ -171,7 +171,7 @@ pub fn build_decrypt_admin_request(
             request_id.clone(),
             ChallengeContext {
                 pubkey_hex: clean,
-                sfid_number: sfid_number.to_string(),
+                cid_number: cid_number.to_string(),
                 payload,
                 issued_at_ms: now_ms(),
             },
@@ -194,7 +194,7 @@ pub struct VerifyDecryptAdminInput {
     pub response_json: String,
 }
 
-/// 验证 citizenwallet 签名响应,通过则把 (pubkey, sfid_number) 写入内存解密表。
+/// 验证 citizenwallet 签名响应,通过则把 (pubkey, cid_number) 写入内存解密表。
 pub fn verify_and_decrypt_admin(
     input: VerifyDecryptAdminInput,
 ) -> Result<DecryptedAdminInfo, String> {
@@ -297,37 +297,37 @@ pub fn verify_and_decrypt_admin(
         .insert(
             pubkey_clean.clone(),
             MemoryEntry {
-                sfid_number: context.sfid_number.clone(),
+                cid_number: context.cid_number.clone(),
                 decrypted_at_ms: now,
             },
         );
 
     log::info!(
-        "[ClearingBank] 管理员 {} 已解密(sfid={},耗时 {} ms)",
+        "[ClearingBank] 管理员 {} 已解密(cid={},耗时 {} ms)",
         &pubkey_clean[..8],
-        context.sfid_number,
+        context.cid_number,
         now.saturating_sub(context.issued_at_ms),
     );
 
     Ok(DecryptedAdminInfo {
         pubkey_hex: format!("0x{pubkey_clean}"),
-        sfid_number: context.sfid_number,
+        cid_number: context.cid_number,
         decrypted_at_ms: now,
     })
 }
 
 /// 列出某机构当前在内存中已解密的管理员。
-pub fn list_decrypted_admins(sfid_number: &str) -> Vec<DecryptedAdminInfo> {
+pub fn list_decrypted_admins(cid_number: &str) -> Vec<DecryptedAdminInfo> {
     let guard = match decrypted_map().lock() {
         Ok(g) => g,
         Err(e) => e.into_inner(),
     };
     guard
         .iter()
-        .filter(|(_, v)| v.sfid_number == sfid_number)
+        .filter(|(_, v)| v.cid_number == cid_number)
         .map(|(k, v)| DecryptedAdminInfo {
             pubkey_hex: format!("0x{k}"),
-            sfid_number: v.sfid_number.clone(),
+            cid_number: v.cid_number.clone(),
             decrypted_at_ms: v.decrypted_at_ms,
         })
         .collect()
@@ -372,18 +372,18 @@ mod tests {
     }
 
     #[test]
-    fn list_decrypted_admins_filters_by_sfid() {
+    fn list_decrypted_admins_filters_by_cid() {
         decrypted_map().lock().unwrap().insert(
             "aa".repeat(32),
             MemoryEntry {
-                sfid_number: "AH001-SCB0V-123456789-2026".to_string(),
+                cid_number: "AH001-SCB0V-123456789-2026".to_string(),
                 decrypted_at_ms: 1,
             },
         );
         decrypted_map().lock().unwrap().insert(
             "bb".repeat(32),
             MemoryEntry {
-                sfid_number: "AH001-SCB0H-202605070-2026".to_string(),
+                cid_number: "AH001-SCB0H-202605070-2026".to_string(),
                 decrypted_at_ms: 2,
             },
         );
@@ -400,7 +400,7 @@ mod tests {
         decrypted_map().lock().unwrap().insert(
             "cc".repeat(32),
             MemoryEntry {
-                sfid_number: "AH001-SCB0E-202605180-2026".to_string(),
+                cid_number: "AH001-SCB0E-202605180-2026".to_string(),
                 decrypted_at_ms: 10,
             },
         );

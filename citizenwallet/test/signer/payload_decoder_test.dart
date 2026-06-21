@@ -178,7 +178,7 @@ void main() {
 
     test('decodes cast_referendum (pallet=23 call=1) admins 签发凭证', () {
       // JointVote.cast_referendum = pallet 23 / call 1(联合公投联合公投)。
-      final issuerSfid = utf8.encode('CN000-GZF0A-000000001-2026');
+      final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
       final issuerMain = List<int>.generate(32, (i) => 0x90 + (i & 0x0F));
       final signerPubkey = List<int>.generate(32, (i) => 0xA0 + (i & 0x0F));
       final scopeProvince = utf8.encode('安徽省');
@@ -189,7 +189,7 @@ void main() {
         ...List.filled(32, 0), // binding_id = 0x00 × 32
         0, // Vec nonce len = 0
         0, // Vec sig len = 0
-        issuerSfid.length << 2, ...issuerSfid,
+        issuerCid.length << 2, ...issuerCid,
         ...issuerMain,
         ...signerPubkey,
         scopeProvince.length << 2, ...scopeProvince,
@@ -203,7 +203,7 @@ void main() {
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
       expect(
-          decoded.fields['issuer_sfid_number'], 'CN000-GZF0A-000000001-2026');
+          decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
       expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerMain));
       expect(decoded.fields['scope_province_name'], '安徽省');
       expect(decoded.fields['scope_city_name'], '合肥市');
@@ -253,11 +253,11 @@ void main() {
       expect(PayloadDecoder.decode('0x02'), isNull);
     });
 
-    test('decodes sfid_admin_action with SS58 review fields', () {
+    test('decodes cid_admin_action with SS58 review fields', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
       final payload = jsonEncode({
-        'domain': 'sfid_admin_governance',
+        'domain': 'cid_admin_governance',
         'qr_proto': 'CITIZEN_QR_V1',
         'action_id': 'admin-action-test',
         'action_type': 'PASSKEY_REGISTER',
@@ -273,7 +273,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(utf8.encode(payload)));
 
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'sfid_admin_action');
+      expect(decoded!.action, 'cid_admin_action');
       expect(decoded.fields['action_type'], '更新 Passkey');
       expect(decoded.reviewFields['actor_province_name'], '广东省');
       expect(decoded.reviewFields['actor_pubkey'], ss58FromHex(actor));
@@ -281,7 +281,7 @@ void main() {
       expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
     });
 
-    test('decodes sfid admin target role action labels', () {
+    test('decodes cid admin target role action labels', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
       final cases = {
@@ -291,7 +291,7 @@ void main() {
 
       for (final entry in cases.entries) {
         final payload = jsonEncode({
-          'domain': 'sfid_admin_governance',
+          'domain': 'cid_admin_governance',
           'qr_proto': 'CITIZEN_QR_V1',
           'action_id': 'admin-action-${entry.key}',
           'action_type': entry.key,
@@ -326,13 +326,13 @@ void main() {
     });
 
     test('decodes clearing bank register node call', () {
-      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
+      const cidNumber = 'AH001-SZG1Z-883241719-2026';
       const peerId = '12D3KooWABCDEFG1234567890abcdefghijk';
       const domain = 'l2.example.com';
       final payload = Uint8List.fromList([
         21,
         50,
-        ...compactVec(sfidNumber),
+        ...compactVec(cidNumber),
         ...compactVec(peerId),
         ...compactVec(domain),
         ...u16Le(9944),
@@ -342,19 +342,19 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_clearing_bank');
-      expect(decoded.fields['sfid_number'], sfidNumber);
+      expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.fields['peer_id'], peerId);
       expect(decoded.fields['rpc_domain'], domain);
       expect(decoded.fields['rpc_port'], '9944');
     });
 
     test('decodes clearing bank endpoint update call', () {
-      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
+      const cidNumber = 'AH001-SZG1Z-883241719-2026';
       const domain = 'new-l2.example.com';
       final payload = Uint8List.fromList([
         21,
         51,
-        ...compactVec(sfidNumber),
+        ...compactVec(cidNumber),
         ...compactVec(domain),
         ...u16Le(443),
       ]);
@@ -363,30 +363,30 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'update_clearing_bank_endpoint');
-      expect(decoded.fields['sfid_number'], sfidNumber);
+      expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.fields['new_domain'], domain);
       expect(decoded.fields['new_port'], '443');
     });
 
     test('decodes clearing bank unregister call', () {
-      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
+      const cidNumber = 'AH001-SZG1Z-883241719-2026';
       final payload = Uint8List.fromList([
         21,
         52,
-        ...compactVec(sfidNumber),
+        ...compactVec(cidNumber),
       ]);
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'unregister_clearing_bank');
-      expect(decoded.fields['sfid_number'], sfidNumber);
+      expect(decoded.fields['cid_number'], cidNumber);
     });
 
     test('decodes clearing bank decrypt challenge', () {
-      const sfidNumber = 'AH001-SZG1Z-883241719-2026';
+      const cidNumber = 'AH001-SZG1Z-883241719-2026';
       final idBytes = List<int>.filled(48, 0);
-      final rawId = ascii.encode(sfidNumber);
+      final rawId = ascii.encode(cidNumber);
       for (var i = 0; i < rawId.length; i++) {
         idBytes[i] = rawId[i];
       }
@@ -409,7 +409,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'decrypt_admin');
-      expect(decoded.fields['sfid_number'], sfidNumber);
+      expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.summary, contains('解密清算行管理员'));
     });
 
@@ -811,7 +811,7 @@ void main() {
     // -----------------------------------------------------------------------
     // 机构/决议创建 decoder:
     // - propose_create_institution(17.5):机构多签账户创建提案
-    //   (走 SFID 后端签发机构 admins 凭证)
+    //   (走 CID 后端签发机构 admins 凭证)
     // - propose_resolution_issuance(8.0):决议发行联合提案
     //   (人口快照由 JointVote 单独准备)
     // -----------------------------------------------------------------------
@@ -830,7 +830,7 @@ void main() {
         return out;
       }
 
-      final sfid = utf8.encode('AH001-SCB0N-202605010-2026');
+      final cid = utf8.encode('AH001-SCB0N-202605010-2026');
       final instName = utf8.encode('安徽省储行');
       final mainAccount = utf8.encode('主账户');
       final feeAccount = utf8.encode(secondAccountName);
@@ -842,17 +842,17 @@ void main() {
       ];
       final registerNonce = utf8.encode('reg-nonce-001');
       final signature = List<int>.filled(64, 0xDD);
-      final issuerSfid = utf8.encode('CN000-GZF0A-000000001-2026');
+      final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
       final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
       final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
       final scopeProvince = utf8.encode('安徽省');
       final scopeCity = utf8.encode('合肥市');
       final payload = <int>[
         0x11, 0x05, // pallet=17 call=5
-        // sfid_number: Vec<u8>
-        (sfid.length << 2) & 0xff,
-        ...sfid,
-        // sfid_full_name: Vec<u8>
+        // cid_number: Vec<u8>
+        (cid.length << 2) & 0xff,
+        ...cid,
+        // cid_full_name: Vec<u8>
         (instName.length << 2) & 0xff,
         ...instName,
         // accounts: Vec<{name, amount}> count=2
@@ -879,9 +879,9 @@ void main() {
         // signature: Vec<u8> 64B (Compact mode 1)
         0x01, 0x01,
         ...signature,
-        // issuer_sfid_number: Vec<u8>
-        (issuerSfid.length << 2) & 0xff,
-        ...issuerSfid,
+        // issuer_cid_number: Vec<u8>
+        (issuerCid.length << 2) & 0xff,
+        ...issuerCid,
         // issuer_main_account: AccountId32
         ...issuerMain,
         // signer_pubkey: [u8;32]
@@ -917,8 +917,8 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
-      expect(decoded.fields['sfid_number'], 'AH001-SCB0N-202605010-2026');
-      expect(decoded.fields['sfid_full_name'], '安徽省储行');
+      expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
+      expect(decoded.fields['cid_full_name'], '安徽省储行');
       expect(decoded.fields['org'], '机构账户');
       expect(decoded.fields['admins_len'], '2');
       expect(decoded.fields['threshold'], '2/2');
@@ -927,7 +927,7 @@ void main() {
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
       expect(decoded.fields.containsKey('subject_property'), isFalse);
       expect(
-          decoded.fields['issuer_sfid_number'], 'CN000-GZF0A-000000001-2026');
+          decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
       expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerMain));
       expect(decoded.fields['scope_province_name'], '安徽省');
       expect(decoded.fields['scope_city_name'], '合肥市');
@@ -943,7 +943,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNull,
           reason:
-              'P-TX-001 禁止 subject_property/sub_type/parent_sfid_number 多余尾字段');
+              'P-TX-001 禁止 subject_property/sub_type/parent_cid_number 多余尾字段');
     });
 
     // CANON 决策2：制度专属保留名（永久质押/安全基金/两和基金）禁止作为机构
@@ -1113,8 +1113,8 @@ void main() {
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
-      expect(decoded.fields['issuer_sfid_number'],
-          (caseEntry['fields'] as Map)['issuer_sfid_number']);
+      expect(decoded.fields['issuer_cid_number'],
+          (caseEntry['fields'] as Map)['issuer_cid_number']);
       expect(
           decoded.fields['issuer_main_account'],
           ss58FromHex((caseEntry['fields'] as Map)['issuer_main_account_hex']

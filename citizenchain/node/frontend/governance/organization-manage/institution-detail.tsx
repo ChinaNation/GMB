@@ -1,4 +1,4 @@
-// 清算行机构详情页(链上 organization-manage::Institutions[sfid_number] 已存在时展示)。
+// 清算行机构详情页(链上 organization-manage::Institutions[cid_number] 已存在时展示)。
 //
 // 风格参考 governance/InstitutionDetailPage 的卡片栅格 + 折叠子页入口,
 // 但数据源全部走 chain/organization-manage,通过 organizationManageApi.fetchInstitutionDetail 获取。
@@ -15,18 +15,18 @@ import { organizationManageApi } from './api';
 import type { InstitutionDetail, InstitutionProposalItem } from './types';
 
 type Props = {
-  sfidNumber: string;
+  cidNumber: string;
   onBack: () => void;
   onOpenOtherAccounts: (detail: InstitutionDetail) => void;
   onOpenAdminList: (detail: InstitutionDetail) => void;
-  onDeclareNode: (sfidNumber: string, sfidFullName: string) => void;
+  onDeclareNode: (cidNumber: string, cidFullName: string) => void;
   onCreateAdminSetChange: (detail: InstitutionDetail) => void;
 };
 
 const PROPOSAL_PAGE_SIZE = 10;
 
 export function ClearingBankInstitutionDetailPage({
-  sfidNumber,
+  cidNumber,
   onBack,
   onOpenOtherAccounts,
   onOpenAdminList,
@@ -45,10 +45,10 @@ export function ClearingBankInstitutionDetailPage({
     setLoading(true);
     setError(null);
     Promise.all([
-      organizationManageApi.fetchInstitutionDetail(sfidNumber),
-      offchainApi.queryClearingBankNodeInfo(sfidNumber).catch(() => null),
+      organizationManageApi.fetchInstitutionDetail(cidNumber),
+      offchainApi.queryClearingBankNodeInfo(cidNumber).catch(() => null),
       organizationManageApi
-        .fetchInstitutionProposals(sfidNumber, 0, PROPOSAL_PAGE_SIZE)
+        .fetchInstitutionProposals(cidNumber, 0, PROPOSAL_PAGE_SIZE)
         .catch(() => ({ items: [], hasMore: false })),
     ])
       .then(([d, n, page]) => {
@@ -67,7 +67,7 @@ export function ClearingBankInstitutionDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [sfidNumber]);
+  }, [cidNumber]);
 
   if (loading) {
     return (
@@ -101,7 +101,7 @@ export function ClearingBankInstitutionDetailPage({
       <button className="back-button" onClick={onBack}>← 返回</button>
 
       <div className="institution-title-row">
-        <h2>{detail.sfidFullName}</h2>
+        <h2>{detail.cidFullName}</h2>
         {detail.status === 'Pending' && (
           <span className="status-badge status-pending" style={{ marginLeft: 8 }}>
             创建提案投票中
@@ -111,7 +111,7 @@ export function ClearingBankInstitutionDetailPage({
           <button
             className="primary-button"
             style={{ marginLeft: 'auto' }}
-            onClick={() => onDeclareNode(sfidNumber, detail.sfidFullName)}
+            onClick={() => onDeclareNode(cidNumber, detail.cidFullName)}
           >
             声明本机为清算行节点 →
           </button>
@@ -139,9 +139,9 @@ export function ClearingBankInstitutionDetailPage({
       <div className="institution-detail-grid">
         <div className="metric-card">
           <div className="metric-label">
-            机构身份ID <code className="metric-label-id">{detail.sfidNumber}</code>
+            机构身份ID <code className="metric-label-id">{detail.cidNumber}</code>
           </div>
-          <div className="metric-value">{detail.sfidNumber}</div>
+          <div className="metric-value">{detail.cidNumber}</div>
         </div>
 
         <div className="metric-card">

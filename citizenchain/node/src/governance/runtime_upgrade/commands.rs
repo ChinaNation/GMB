@@ -14,13 +14,13 @@ fn normalize_pubkey_hex(pubkey_hex: &str) -> String {
 }
 
 async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result<(), String> {
-    let nrc_sfid_number = registry::governance_overview()
+    let nrc_cid_number = registry::governance_overview()
         .national_councils
         .first()
-        .map(|item| item.sfid_number.clone())
+        .map(|item| item.cid_number.clone())
         .ok_or_else(|| "国储会机构常量缺失，无法发起开发升级".to_string())?;
     let pubkey_clean = normalize_pubkey_hex(pubkey_hex);
-    let admins = activation::get_activated_admins(app.clone(), nrc_sfid_number, None, None).await?;
+    let admins = activation::get_activated_admins(app.clone(), nrc_cid_number, None, None).await?;
     if admins
         .iter()
         .any(|admin| normalize_pubkey_hex(&admin.pubkey_hex) == pubkey_clean)

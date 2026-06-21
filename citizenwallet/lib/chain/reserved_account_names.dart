@@ -9,7 +9,7 @@
 ///
 /// - 主账户 / 费用账户：每个机构强制生成的默认账户，创建时强制路由
 ///   OP_MAIN / OP_FEE，不得作为自定义命名账户（"强制"而非"禁止"）。
-/// - 永久质押 / 安全基金 / 两和基金：制度专属账户，普通 SFID 机构禁止注册，
+/// - 永久质押 / 安全基金 / 两和基金：制度专属账户，普通 CID 机构禁止注册，
 ///   account_name 命中即拒绝（链端 ReservedAccountName）。
 class ReservedAccountNames {
   const ReservedAccountNames._();

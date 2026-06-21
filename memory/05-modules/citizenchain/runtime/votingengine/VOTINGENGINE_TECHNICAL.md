@@ -39,9 +39,9 @@
 - 联合投票在 `STAGE_JOINT` 管理员参与阶段占用所有参与治理主体的普通互斥锁，进入 `STAGE_CITIZEN` 后释放。
 
 ### 0.4 公民投票功能需求
-- 仅允许具备资格的 SFID 哈希参与公民投票。
+- 仅允许具备资格的 CID 哈希参与公民投票。
 - 每个 `proposal_id + binding_id` 只能投一次，且投票凭证必须防重放。
-- 公民投票只接收 SFID 哈希，不接收链上明文 SFID。
+- 公民投票只接收 CID 哈希，不接收链上明文 CID。
 - 赞成票必须“严格大于 50%”才算通过；到期后按同一规则结算。
 
 ### 0.5 状态机与安全需求
@@ -193,7 +193,7 @@ any → unknown
 ### 3.3 公民投票
 1. `citizen_vote` 入口参数为：`(proposal_id, binding_id, nonce, signature, approve)`。
 2. `do_citizen_vote` 校验阶段、资格、凭证、去重后计票。
-3. 公民投票链路仅接收 `binding_id`，Runtime 不再接收/处理 SFID 明文字段。
+3. 公民投票链路仅接收 `binding_id`，Runtime 不再接收/处理 CID 明文字段。
 4. 赞成票超过 50%（严格大于）时立即 `Passed`；反对票达到 50% 时立即 `Rejected`。阈值比较使用 `u128` 中间值，避免 `u64` 极端大数乘法饱和导致误判。
 5. 未达阈值且到期后，`on_initialize` 自动走 `do_finalize_citizen_timeout`，按阈值判定 `Passed/Rejected`（未达阈值即 `Rejected`）。
 
@@ -353,7 +353,7 @@ any → unknown
 - 业务模块不得在自己的 extrinsic、DTO、ProposalData 或测试 mock 中接收人口快照验签字段；统一由投票引擎使用 `eligible_total / snapshot_nonce / signature / scope_province_name / scope_city_name / signer_pubkey`。
 - 业务模块只能调用 `JointVoteEngine::create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，提交业务摘要和可选对象。
 - `joint-vote` 的 `prepare_joint_population_snapshot` 是唯一快照准备入口；它完成验签、防重放和暂存。
-- `do_create_joint_proposal` 是唯一快照消费入口；它只接受与提案创建同一区块准备的快照，把 `eligible_total` 写入 `Proposals.citizen_eligible_total`，并删除对应暂存快照。提案创建后，即使 SFID 公民人数变化，也不再刷新该提案的公民投票分母。
+- `do_create_joint_proposal` 是唯一快照消费入口；它只接受与提案创建同一区块准备的快照，把 `eligible_total` 写入 `Proposals.citizen_eligible_total`，并删除对应暂存快照。提案创建后，即使 CID 公民人数变化，也不再刷新该提案的公民投票分母。
 - 未准备快照时拒绝创建联合提案，不保留任何旧签名或兼容入口。
 
 ### 5.9.2 治理固定阈值与注册多签动态阈值边界

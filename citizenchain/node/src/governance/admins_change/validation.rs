@@ -79,7 +79,7 @@ mod tests {
     fn state(kind: u8, org: u8, admins: Vec<String>) -> AdminAccountState {
         AdminAccountState {
             account_hex: "11".repeat(32),
-            sfid_number: Some("TEST-SFID".to_string()),
+            cid_number: Some("TEST-CID".to_string()),
             org,
             org_label: String::new(),
             kind,

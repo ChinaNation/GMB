@@ -51,7 +51,7 @@ class PublicInstitutionBundleLoader {
   ///
   /// 中文注释:先 reconcile 行政区字典(机构 join 字典名),再 reconcile 机构。
   /// 机构同步只信省级 ver 表;全局 version 只作完成标记,不能短路省级检查。
-  /// 变了的省读取 `<省名>.json` 分片后做行级 diff:只 upsert 变化行、只删 absent sfid。
+  /// 变了的省读取 `<省名>.json` 分片后做行级 diff:只 upsert 变化行、只删 absent cid。
   /// manifest 缺省级版本表时视为无效数据包,直接拒绝写库。
   /// 返回机构部分是否发生写入。
   Future<bool> ensureSynced() async {
@@ -104,7 +104,7 @@ class PublicInstitutionBundleLoader {
 
   /// 强制按数据包 reconcile。无数据包时返回 false。
   ///
-  /// 中文注释:首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧 sfid。
+  /// 中文注释:首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧 cid。
   Future<bool> loadFromBundle() async {
     final manifest = await _readManifest();
     if (manifest == null) return false;
@@ -135,7 +135,7 @@ class PublicInstitutionBundleLoader {
     return changed;
   }
 
-  /// reconcile 单省:读 `<省名>.json` 分片 → 只 upsert 变化行 → 删包里已没有的废 sfid。
+  /// reconcile 单省:读 `<省名>.json` 分片 → 只 upsert 变化行 → 删包里已没有的废 cid。
   Future<bool> _reconcileProvince(
     String provinceName, {
     required String fallbackVersion,
@@ -149,7 +149,7 @@ class PublicInstitutionBundleLoader {
         .map((e) => PublicInstitutionDto.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
 
-    // 删包里没有的废 sfid:provinceCode 取自机构记录自带字段(同省一致)。
+    // 删包里没有的废 cid:provinceCode 取自机构记录自带字段(同省一致)。
     final provinceCode = _provinceCodeOf(
       items,
       fallback: shard['province_name']?.toString(),
@@ -157,21 +157,21 @@ class PublicInstitutionBundleLoader {
     var changed = false;
     if (provinceCode != null) {
       final oldRows = await store.institutionsOfProvince(provinceCode);
-      final oldBySfid = {for (final e in oldRows) e.sfidNumber: e};
+      final oldByCid = {for (final e in oldRows) e.cidNumber: e};
       final changedItems = items
-          .where((d) => !_sameInstitution(oldBySfid[d.sfidNumber], d))
+          .where((d) => !_sameInstitution(oldByCid[d.cidNumber], d))
           .toList(growable: false);
       if (changedItems.isNotEmpty) {
         await store.upsertInstitutions(changedItems, catalogVersion: version);
         changed = true;
       }
 
-      final newSfids = items.map((d) => d.sfidNumber).toSet();
-      final oldSfids = oldBySfid.keys;
-      final staleSfids =
-          oldSfids.where((s) => !newSfids.contains(s)).toList(growable: false);
-      if (staleSfids.isNotEmpty) {
-        await store.deleteBySfids(staleSfids);
+      final newCids = items.map((d) => d.cidNumber).toSet();
+      final oldCids = oldByCid.keys;
+      final staleCids =
+          oldCids.where((s) => !newCids.contains(s)).toList(growable: false);
+      if (staleCids.isNotEmpty) {
+        await store.deleteByCids(staleCids);
         changed = true;
       }
     }
@@ -233,16 +233,16 @@ class PublicInstitutionBundleLoader {
     PublicInstitutionDto dto,
   ) {
     if (old == null) return false;
-    return old.sfidNumber == dto.sfidNumber &&
-        old.sfidFullName == (dto.sfidFullName ?? dto.sfidNumber) &&
-        old.sfidShortName == dto.sfidShortName &&
+    return old.cidNumber == dto.cidNumber &&
+        old.cidFullName == (dto.cidFullName ?? dto.cidNumber) &&
+        old.cidShortName == dto.cidShortName &&
         old.status == dto.status &&
         old.provinceCode == dto.provinceCode &&
         old.cityCode == dto.cityCode &&
         old.townCode == dto.townCode &&
         old.institutionCode == dto.institutionCode &&
         old.orgCode == dto.orgCode &&
-        old.parentSfidNumber == dto.parentSfidNumber &&
+        old.parentCidNumber == dto.parentCidNumber &&
         old.hasLegalPersonality == dto.hasLegalPersonality &&
         old.legalRepName == dto.legalRepName &&
         old.accountCount == dto.accountCount &&

@@ -8,34 +8,34 @@ use super::{
 };
 
 fn resolve_account_state(
-    sfid_number: Option<String>,
+    cid_number: Option<String>,
     account_hex: Option<String>,
     expected_org: Option<u8>,
 ) -> Result<AdminAccountState, String> {
-    validate_account_lookup(expected_org, account_hex.as_deref(), sfid_number.as_deref())?;
+    validate_account_lookup(expected_org, account_hex.as_deref(), cid_number.as_deref())?;
     if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
         let account_id = account_id::account_id_from_hex(&account_hex)?;
-        let state = storage::fetch_admin_account(&account_id, sfid_number)?
+        let state = storage::fetch_admin_account(&account_id, cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?;
         return ensure_expected_org(state, expected_org);
     }
-    if let Some(sfid_number) = sfid_number.filter(|item| !item.trim().is_empty()) {
-        let state = storage::fetch_admin_account_by_sfid_number(&sfid_number)?
+    if let Some(cid_number) = cid_number.filter(|item| !item.trim().is_empty()) {
+        let state = storage::fetch_admin_account_by_cid_number(&cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?;
         return ensure_expected_org(state, expected_org);
     }
-    Err("必须提供 sfidNumber 或 accountHex".to_string())
+    Err("必须提供 cidNumber 或 accountHex".to_string())
 }
 
 fn validate_account_lookup(
     expected_org: Option<u8>,
     account_hex: Option<&str>,
-    sfid_number: Option<&str>,
+    cid_number: Option<&str>,
 ) -> Result<(), String> {
     let has_account_id = account_hex
         .map(|item| !item.trim().is_empty())
         .unwrap_or(false);
-    let has_sfid = sfid_number
+    let has_cid = cid_number
         .map(|item| !item.trim().is_empty())
         .unwrap_or(false);
     if let Some(org) = expected_org {
@@ -45,12 +45,12 @@ fn validate_account_lookup(
         if is_dynamic_org(org) && !has_account_id {
             return Err("个人多签或机构账户管理员更换必须提供 accountHex".to_string());
         }
-        if is_governance_org(org) && !has_account_id && !has_sfid {
-            return Err("治理机构管理员更换必须提供 sfidNumber 或 accountHex".to_string());
+        if is_governance_org(org) && !has_account_id && !has_cid {
+            return Err("治理机构管理员更换必须提供 cidNumber 或 accountHex".to_string());
         }
     }
-    if !has_account_id && !has_sfid {
-        return Err("必须提供 sfidNumber 或 accountHex".to_string());
+    if !has_account_id && !has_cid {
+        return Err("必须提供 cidNumber 或 accountHex".to_string());
     }
     Ok(())
 }
@@ -74,7 +74,7 @@ fn ensure_expected_org(
 #[tauri::command]
 pub async fn get_admin_account_state(
     app: AppHandle,
-    sfid_number: Option<String>,
+    cid_number: Option<String>,
     account_hex: Option<String>,
     expected_org: Option<u8>,
 ) -> Result<Option<AdminAccountState>, String> {
@@ -83,22 +83,22 @@ pub async fn get_admin_account_state(
         return Err("节点未运行，无法查询管理员账户".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        validate_account_lookup(expected_org, account_hex.as_deref(), sfid_number.as_deref())?;
+        validate_account_lookup(expected_org, account_hex.as_deref(), cid_number.as_deref())?;
         if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
             let account_id = account_id::account_id_from_hex(&account_hex)?;
-            let state = storage::fetch_admin_account(&account_id, sfid_number)?;
+            let state = storage::fetch_admin_account(&account_id, cid_number)?;
             match state {
                 Some(state) => ensure_expected_org(state, expected_org).map(Some),
                 None => Ok(None),
             }
-        } else if let Some(sfid_number) = sfid_number.filter(|item| !item.trim().is_empty()) {
-            let state = storage::fetch_admin_account_by_sfid_number(&sfid_number)?;
+        } else if let Some(cid_number) = cid_number.filter(|item| !item.trim().is_empty()) {
+            let state = storage::fetch_admin_account_by_cid_number(&cid_number)?;
             match state {
                 Some(state) => ensure_expected_org(state, expected_org).map(Some),
                 None => Ok(None),
             }
         } else {
-            Err("必须提供 sfidNumber 或 accountHex".to_string())
+            Err("必须提供 cidNumber 或 accountHex".to_string())
         }
     })
     .await
@@ -110,7 +110,7 @@ pub async fn get_admin_account_state(
 pub async fn build_admin_set_change_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: Option<String>,
+    cid_number: Option<String>,
     account_hex: Option<String>,
     expected_org: Option<u8>,
     admins: Vec<String>,
@@ -120,7 +120,7 @@ pub async fn build_admin_set_change_request(
         return Err("节点未运行，无法构建管理员更换签名请求".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let state = resolve_account_state(sfid_number, account_hex, expected_org)?;
+        let state = resolve_account_state(cid_number, account_hex, expected_org)?;
         signing::build_admin_set_change_sign_request(&state, &pubkey_hex, &admins)
     })
     .await
@@ -134,7 +134,7 @@ pub async fn submit_admin_set_change(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_number: Option<String>,
+    cid_number: Option<String>,
     account_hex: Option<String>,
     expected_org: Option<u8>,
     admins: Vec<String>,
@@ -147,7 +147,7 @@ pub async fn submit_admin_set_change(
         return Err("节点未运行，无法提交管理员更换提案".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let state = resolve_account_state(sfid_number, account_hex, expected_org)?;
+        let state = resolve_account_state(cid_number, account_hex, expected_org)?;
         signing::submit_admin_set_change(
             &state,
             &request_id,

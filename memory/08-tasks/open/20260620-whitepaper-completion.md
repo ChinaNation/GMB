@@ -9,7 +9,7 @@
 - docs
 - website
 - citizenchain
-- sfid
+- cid
 - cpms
 - citizenwallet
 - citizenapp
@@ -21,8 +21,8 @@
 - memory/00-vision/trust-boundary.md
 - memory/01-architecture/repo-map.md
 - memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md
-- memory/01-architecture/sfid/SFID_TECHNICAL.md
-- memory/01-architecture/cpms/CPMS_TECHNICAL.md
+- memory/01-architecture/citizencode/CID_TECHNICAL.md
+- memory/01-architecture/citizenpassport/CPMS_TECHNICAL.md
 - memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md
 - memory/04-decisions/ADR-022-unified-pqc-crypto.md
 - memory/05-modules/citizenchain/runtime/votingengine/VOTINGENGINE_TECHNICAL.md
@@ -30,11 +30,11 @@
 - memory/05-modules/citizenchain/runtime/transaction/onchain-transaction/ONCHAIN_TECHNICAL.md
 - memory/05-modules/citizenchain/runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md
 - memory/05-modules/citizenchain/node/offchain-clearing/L2_CLEARING_PROTOCOL.md
-- memory/05-modules/sfid/SFID-CPMS-QR-v1.md
-- memory/05-modules/sfid/backend/citizens/CITIZENS_TECHNICAL.md
+- memory/05-modules/citizencode/CID-CPMS-QR-v1.md
+- memory/05-modules/citizencode/backend/citizens/CITIZENS_TECHNICAL.md
 - memory/05-modules/citizenapp/im/IM_TECHNICAL.md
 - memory/05-modules/citizenwallet/CITIZENWALLET_PQC_TECHNICAL.md
-- memory/08-tasks/open/20260615-cpms-sfid-birthplace-election-scope.md
+- memory/08-tasks/open/20260615-cpms-cid-birthplace-election-scope.md
 
 必须遵守：
 - 使用中文沟通。
@@ -67,7 +67,7 @@
 3. 第 2 步：补全发行与经济模型。
 4. 第 3 步：补全节点、清算与交易体系。
 5. 第 4 步：补全治理、投票与运行时状态机。
-6. 第 5 步：补全身份、CPMS/SFID、投票/参选资格边界。
+6. 第 5 步：补全身份、CPMS/CID、投票/参选资格边界。
 7. 第 6 步：补全安全模型、钱包、PQC 与隐私通信。
 8. 第 7 步：统一英文、图表、路径、网页渲染并验收。
 
@@ -92,14 +92,14 @@
 - `docs/《白皮书》.md:486` 仍引用旧路径 `primitives/src/count_const.rs`，应改为当前 `citizenchain/runtime/primitives/src/count_const.rs`。
 - `docs/《白皮书》.md` 链下交易章节已改为当前 `citizenchain/runtime/primitives/china/china_cb.rs/main_account` 字段；后续仍需按当前清算模型整体重写制度表述。
 - `docs/《白皮书》.md:218` 已写“全节点注册清算行节点”，但 `docs/《白皮书》.md:639` 到 `644` 仍按“省储行节点自行设定链下交易费率、手续费归省储行节点”表述；当前有效模型应统一为“注册清算行节点 + 收款方清算行主导 settlement”。
-- 白皮书尚未系统说明 CPMS 离线实名真源、SFID 在线身份与投票资格、居住地投票范围、出生地参选范围、无资格公民从 SFID 删除等边界。
+- 白皮书尚未系统说明 CPMS 离线实名真源、CID 在线身份与投票资格、居住地投票范围、出生地参选范围、无资格公民从 CID 删除等边界。
 - 白皮书尚未说明 ADR-022 的 PQC 路线：当前 sr25519，未来通过 runtime 与钱包升级原地址在位切换到 ML-DSA，不换助记词、不换地址、不换余额归属。
 
 可直接引用的当前真源：
 - 清算模型当前有效描述：`memory/05-modules/citizenchain/node/offchain-clearing/L2_CLEARING_PROTOCOL.md`
 - 投票引擎职责和状态机：`memory/05-modules/citizenchain/runtime/votingengine/VOTINGENGINE_TECHNICAL.md`
-- CPMS/SFID 档案码与资格边界：`memory/05-modules/sfid/SFID-CPMS-QR-v1.md`
-- SFID citizens 模块边界：`memory/05-modules/sfid/backend/citizens/CITIZENS_TECHNICAL.md`
+- CPMS/CID 档案码与资格边界：`memory/05-modules/citizencode/CID-CPMS-QR-v1.md`
+- CID citizens 模块边界：`memory/05-modules/citizencode/backend/citizens/CITIZENS_TECHNICAL.md`
 - 抗量子唯一真源：`memory/04-decisions/ADR-022-unified-pqc-crypto.md`
 
 第 0 步未修改：
@@ -117,7 +117,7 @@
   - 将“国家名称与五民主义”改为“国家名称与公民主义”。
   - 将英文 `Five Civic Principles` 改为 `Citizenism`。
   - 将 1.4 中对应中文句式同步到公民宪法第三条当前表达。
-  - 增补一小节“术语与命名约定”，统一公民链、公民币、公民钱包、公民、SFID、CPMS、清算行、投票资格、参选范围等中英文称谓。
+  - 增补一小节“术语与命名约定”，统一公民链、公民币、公民钱包、公民、CID、CPMS、清算行、投票资格、参选范围等中英文称谓。
   - 修正白皮书中已发现的旧源码路径引用。
 - `memory/08-tasks/open/20260620-whitepaper-completion.md`
   - 回写第 1 步执行结果和验收。
@@ -136,7 +136,7 @@
 
 已执行：
 - 在 `docs/《白皮书》.md` 的 1.2 下新增 `1.2.1.术语与命名约定`。
-- 统一术语：公民主义/Citizenism、公民链/CitizenChain、公民币/Citizen Coin、公民钱包/citizenwallet、公民/citizenapp、SFID、CPMS、档案码、清算行、投票资格、投票范围、参选范围。
+- 统一术语：公民主义/Citizenism、公民链/CitizenChain、公民币/Citizen Coin、公民钱包/citizenwallet、公民/citizenapp、CID、CPMS、档案码、清算行、投票资格、投票范围、参选范围。
 - 将 1.4 中“国家名称与五民主义 / Five Civic Principles”同步为“国家名称与公民主义 / Citizenism”，并按公民宪法第三条当前表达同步中英文。
 - 将 `GMB/primitives/china/china_ch.rs` 改为 `citizenchain/runtime/primitives/china/china_ch.rs`。
 - 将 `primitives/china/china_ch.rs/citizens_number` 改为 `citizenchain/runtime/primitives/china/china_ch.rs/citizens_number`。
@@ -237,7 +237,7 @@
 已执行：
 - 重写白皮书 2.1 节点概览表，新增清算行节点列，并将省储行权益节点职责从“链下交易验证”改为“永久质押与省储行治理”。
 - 修正 2.4 省储行权益节点：删除省储行费用账户作为链下清算网络账户、接收用户存款、支付链下付款、收取支付交易费等旧职责；删除“更换链下交易验证密钥”旧职责。
-- 补全 2.5 全节点：明确清算行不是新机构类型，而是完成 SFID 资格和链上节点声明后的全节点链下清算角色；补充 PeerId、RPC 端点、收款方清算行手续费归属。
+- 补全 2.5 全节点：明确清算行不是新机构类型，而是完成 CID 资格和链上节点声明后的全节点链下清算角色；补充 PeerId、RPC 端点、收款方清算行手续费归属。
 - 重写 5.5.1 链上交易：补全 0.1%、最低 0.1 元、投票固定 1 元、未知费用类型拒绝、80%:10%:10% 分账和失败份额销毁规则。
 - 重写 5.5.2 链下交易：将旧省储行清算模型改为注册清算行全节点模型；补充绑定、充值、提现、切换清算行、PaymentIntent、`submit_offchain_batch_v2`、收款方清算行主导 settlement、链下手续费 0.01% 至 0.1% 且最低 0.01 元。
 - 补全 5.5.3 多签名链上交易：明确多签转账只处理链上授权转账，不处理链下清算流程。
@@ -317,12 +317,12 @@
 - `website` 执行 `npm run build` 通过，白皮书新增表格和状态机可正常参与生产构建。
 - `website/dist` 未产生 git 改动。
 
-## 第 5 步：补全身份、CPMS/SFID、投票资格与范围边界
+## 第 5 步：补全身份、CPMS/CID、投票资格与范围边界
 
 状态：已完成。
 
 目标：
-- 补全身份、CPMS/SFID、档案码、投票资格、投票范围和参选范围边界，统一白皮书中的离线实名真源、在线身份系统、居住地投票、出生地参选和无资格公民剔除规则。
+- 补全身份、CPMS/CID、档案码、投票资格、投票范围和参选范围边界，统一白皮书中的离线实名真源、在线身份系统、居住地投票、出生地参选和无资格公民剔除规则。
 
 实际修改目录：
 - `docs/`
@@ -335,23 +335,23 @@
 实际修改：
 - `docs/《白皮书》.md`
   - 在 5.6.1 补充身份识别码校验只处理身份绑定凭证、投票资格凭证和人口快照凭证，不内嵌投票流程；投票创建、资格快照、计票和通过/否决判定统一归属投票引擎。
-  - 在 6.3 补全 SFID 录入档案码时必须校验档案码签名、CPMS 授权分区、加密地区封印、公民状态、投票资格、投票账户、钱包地址、公钥和签名算法。
-  - 明确 SFID 只保存可验证身份 ID、CPMS 授权安装分区、居住地行政区代码、出生地行政区代码、选举登记精度和钱包绑定关系，不保存姓名等完整实名档案。
+  - 在 6.3 补全 CID 录入档案码时必须校验档案码签名、CPMS 授权分区、加密地区封印、公民状态、投票资格、投票账户、钱包地址、公钥和签名算法。
+  - 明确 CID 只保存可验证身份 ID、CPMS 授权安装分区、居住地行政区代码、出生地行政区代码、选举登记精度和钱包绑定关系，不保存姓名等完整实名档案。
   - 明确 CPMS 安装码中的省市只表示被授权安装和签发档案码的公安局所属省市，不等同于公民居住地或出生地。
   - 明确投票范围按居住地判断：全国、居住省、市级精度下的居住市、镇级精度下的居住镇。
   - 明确参选范围按出生地判断：全国、出生省、市级精度下的出生市、镇级精度下的出生镇，迁居不改变出生地对应的参选范围。
-  - 明确 CPMS 新增公民时居住地可变，出生地从 SFID 唯一行政区划真源随包嵌入的只读行政区划数据中选择，保存后不得更改。
+  - 明确 CPMS 新增公民时居住地可变，出生地从 CID 唯一行政区划真源随包嵌入的只读行政区划数据中选择，保存后不得更改。
   - 明确档案码明文字段不得暴露姓名、证件、完整住址或中文地区名称；居住地和出生地只以行政区划代码写入加密地区封印。
-  - 明确 CPMS 与 SFID 不在线直连；SFID 导入年度状态报告时重新校验状态、资格、账户、签名和有效期，校验不通过的数据删除，不保留影子旧记录。
+  - 明确 CPMS 与 CID 不在线直连；CID 导入年度状态报告时重新校验状态、资格、账户、签名和有效期，校验不通过的数据删除，不保留影子旧记录。
 
 第 5 步未修改：
-- 未修改 `sfid/` 代码。
-- 未修改 `cpms/` 代码。
+- 未修改 `citizencode/` 代码。
+- 未修改 `citizenpassport/` 代码。
 - 未修改 `citizenchain/runtime/`。
 - 未修改 `website/` 源码。
 
 验收结果：
-- `rg` 已确认白皮书包含 `投票范围按居住地判断`、`参选范围按出生地判断`、`投票账户`、`年度状态报告`、`行政区划代码`、`加密地区封印`、`安装码中的省市`、`SFID 唯一行政区划真源` 和 `投票引擎` 等关键边界。
+- `rg` 已确认白皮书包含 `投票范围按居住地判断`、`参选范围按出生地判断`、`投票账户`、`年度状态报告`、`行政区划代码`、`加密地区封印`、`安装码中的省市`、`CID 唯一行政区划真源` 和 `投票引擎` 等关键边界。
 - `rg` 已确认白皮书没有把出生地写成投票范围、把居住地写成参选范围的混乱表述。
 - `git diff --check -- docs/《白皮书》.md memory/08-tasks/open/20260620-whitepaper-completion.md` 通过。
 - `website` 执行 `npm run build` 通过，白皮书页面可正常参与生产构建。
@@ -380,16 +380,16 @@
   - 补全后量子签名升级：以 ADR-022 为唯一真源，未来通过公民链 runtime 升级和公民钱包、公民客户端升级，在不更换助记词、钱包、账户地址和余额归属的前提下，在位切换到 ML-DSA-65；AccountId 仍为身份锚点，签名算法只是授权方式。
   - 补全 6.2 公民：明确 citizenapp 是公民链轻节点、热钱包、链上状态查询、交易提交、身份绑定、公民投票、治理交互、清算支付和去中心化通信入口。
   - 明确热钱包负责联网广播、余额查询、清算行绑定、扫码支付和投票交互；资产、身份绑定、投票或治理敏感动作必须经过账户签名。
-  - 明确钱包私钥不得交给 SFID、CPMS、通信全节点、清算行、网站前端或任何链下服务。
-  - 补全去中心化通信：通信不上链，不依赖 SFID，不使用中心化消息服务器；通信全节点是私人节点，只服务自己的手机和收件箱，只保存密文 mailbox，不解密消息，不替第三方存消息，不做公共中继。
+  - 明确钱包私钥不得交给 CID、CPMS、通信全节点、清算行、网站前端或任何链下服务。
+  - 补全去中心化通信：通信不上链，不依赖 CID，不使用中心化消息服务器；通信全节点是私人节点，只服务自己的手机和收件箱，只保存密文 mailbox，不解密消息，不替第三方存消息，不做公共中继。
   - 明确聊天账户使用钱包地址，IM 设备密钥与钱包账户分层，钱包私钥只用于证明设备属于该钱包地址，不用于 OpenMLS 消息加密。
-  - 补全隐私边界：CPMS 离线保存完整实名档案，SFID 在线只保存可验证身份、资格、行政区代码和钱包绑定关系，链上只接收账户地址、签名、凭证、哈希和必要状态。
+  - 补全隐私边界：CPMS 离线保存完整实名档案，CID 在线只保存可验证身份、资格、行政区代码和钱包绑定关系，链上只接收账户地址、签名、凭证、哈希和必要状态。
 
 第 6 步未修改：
 - 未修改 `citizenwallet/` 代码。
 - 未修改 `citizenapp/` 代码。
-- 未修改 `sfid/` 代码。
-- 未修改 `cpms/` 代码。
+- 未修改 `citizencode/` 代码。
+- 未修改 `citizenpassport/` 代码。
 - 未修改 `citizenchain/runtime/`。
 - 未修改 `website/` 源码。
 - 未新增安全协议或兼容旧流程。
@@ -397,7 +397,7 @@
 验收结果：
 - `rg` 已确认白皮书包含 `公民钱包`、`citizenwallet`、`公民（citizenapp）`、`冷钱包`、`热钱包`、`离线签名`、`PaymentIntent`、`后量子`、`ML-DSA-65`、`AccountId`、`OpenMLS`、`通信全节点`、`中心化消息服务器`、`隐私边界` 和 `钱包私钥` 等关键边界。
 - `rg` 已确认白皮书没有把 citizenwallet 写成轻节点、没有把 citizenapp 写成离线冷钱包、没有错误产品称谓。
-- `rg` 已确认白皮书没有把钱包私钥写成可交给通信节点、SFID、CPMS、清算行或链下服务。
+- `rg` 已确认白皮书没有把钱包私钥写成可交给通信节点、CID、CPMS、清算行或链下服务。
 - `git diff --check -- docs/《白皮书》.md memory/08-tasks/open/20260620-whitepaper-completion.md` 通过。
 - `website` 执行 `npm run build` 通过，白皮书页面可正常参与生产构建。
 - `website/dist` 未产生 git 改动。
@@ -422,14 +422,14 @@
   - 修正目录 2.6 的显示文字，将半角冒号统一为正文标题使用的中文冒号，并通过脚本确认目录锚点全部可匹配正文标题。
   - 将 4 章中“感谢 Polkadot 团队的奉献”从未编号二级标题改为普通说明条目，避免干扰目录和章节编号结构。
   - 清理发布稿中的过渡口径，把“旧称谓/legacy/no longer/不再作为旧模型对比”等表述改为目标状态陈述。
-  - 同步修正管理员更换、机构多签、决议发行、链下交易、CPMS/SFID 年度状态等段落的中英文表述。
+  - 同步修正管理员更换、机构多签、决议发行、链下交易、CPMS/CID 年度状态等段落的中英文表述。
   - 保留发行达到上限后的制度含义，同时改写为“后续认证节点无奖励”“此后全节点铸造新块不获得铸块奖励”等目标态描述。
   - 复核投票引擎、联合投票/联合公投、公民投票、居住地投票范围、出生地参选范围、钱包安全和通信隐私边界，未发现互相矛盾。
 
 第 7 步未修改：
 - 未修改任何业务代码。
 - 未修改 `citizenchain/runtime/`。
-- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
+- 未修改 `citizencode/`、`citizenpassport/`、`citizenwallet/`、`citizenapp/`。
 - 未修改 `website/` 源码。
 - 未新建白皮书拆分文件。
 - 未新增协议或兼容旧流程。
@@ -439,7 +439,7 @@
 - `awk` 检查条目英文对应关系通过，未发现新增条目缺英文说明。
 - `rg` 已确认白皮书关键旧残留为 0。
 - `rg` 已确认白皮书不出现错误产品名、不出现联合公投阶段进入公民投票模块、不出现出生地投票范围/居住地参选范围、不出现钱包私钥错误托管或通信节点错误职责。
-- `rg` 已确认公民主义、公民链、公民币、公民钱包、公民、SFID、CPMS、清算行、投票引擎、联合投票、公民投票、投票范围、参选范围、后量子签名等关键目标术语均出现。
+- `rg` 已确认公民主义、公民链、公民币、公民钱包、公民、CID、CPMS、清算行、投票引擎、联合投票、公民投票、投票范围、参选范围、后量子签名等关键目标术语均出现。
 - `git diff --check -- docs/《白皮书》.md memory/08-tasks/open/20260620-whitepaper-completion.md` 通过。
 - `website` 执行 `npm run build` 通过，白皮书页面可正常参与生产构建。
 - `website/dist` 未产生 git 改动。
@@ -474,7 +474,7 @@
 未修改：
 - 未修改任何业务代码。
 - 未修改 `citizenchain/runtime/`。
-- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
+- 未修改 `citizencode/`、`citizenpassport/`、`citizenwallet/`、`citizenapp/`。
 - 未新建文件或目录。
 
 验收结果：
@@ -514,7 +514,7 @@
 - 未修改 `docs/《白皮书》.md` 正文内容。
 - 未修改任何业务代码。
 - 未修改 `citizenchain/runtime/`。
-- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
+- 未修改 `citizencode/`、`citizenpassport/`、`citizenwallet/`、`citizenapp/`。
 - 未新建文件或目录。
 
 验收结果：
@@ -564,7 +564,7 @@
 
 未修改：
 - 未修改任何 `citizenchain/runtime/` 文件。
-- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
+- 未修改 `citizencode/`、`citizenpassport/`、`citizenwallet/`、`citizenapp/`。
 - 未新建文件或目录。
 
 验收结果：

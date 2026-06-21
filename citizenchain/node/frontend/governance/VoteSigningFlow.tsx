@@ -10,7 +10,7 @@ type Props = {
   proposalId: number;
   proposalKind: number;
   adminWallets: AdminWalletMatch[];
-  sfidNumber?: string;
+  cidNumber?: string;
   onClose: () => void;
   onSuccess: (txHash: string) => void;
 };
@@ -18,7 +18,7 @@ type Props = {
 type FlowStep = 'select' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function VoteSigningFlow({
-  proposalId, proposalKind, adminWallets, sfidNumber, onClose, onSuccess,
+  proposalId, proposalKind, adminWallets, cidNumber, onClose, onSuccess,
 }: Props) {
   const [step, setStep] = useState<FlowStep>('select');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -53,8 +53,8 @@ export function VoteSigningFlow({
       let cdHex: string;
       // 内部投票(管理员一人一票)统一走 InternalVote::cast(22.0),
       // 联合投票走 JointVote::cast_admin(23.0),由 proposalKind===1 分支决定。
-      if (proposalKind === 1 && sfidNumber) {
-        result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, sfidNumber, approve);
+      if (proposalKind === 1 && cidNumber) {
+        result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, cidNumber, approve);
         cdHex = result.callDataHex;
       } else {
         result = await api.buildVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
@@ -69,7 +69,7 @@ export function VoteSigningFlow({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [proposalId, proposalKind, selectedWallet, approve, sfidNumber]);
+  }, [proposalId, proposalKind, selectedWallet, approve, cidNumber]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;

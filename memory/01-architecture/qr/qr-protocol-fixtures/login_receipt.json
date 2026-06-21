@@ -5,7 +5,7 @@
   "issued_at": 1712650000,
   "expires_at": 1712650090,
   "body": {
-    "system": "sfid",
+    "system": "cid",
     "pubkey": "0xddccbbaaffeeddccbbaaffeeddccbbaaffeeddccbbaaffeeddccbbaaffeedd00",
     "sig_alg": "sr25519",
     "signature": "0x9988776655443322119988776655443322119988776655443322119988776655443322119988776655443322119988776655443322119988776655443322",

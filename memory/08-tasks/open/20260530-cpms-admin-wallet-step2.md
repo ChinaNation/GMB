@@ -12,14 +12,14 @@
 
 ## 预计修改目录
 
-- `cpms/backend/db`：收口当前基准 schema，增加钱包公钥唯一索引。
-- `cpms/backend/dangan`：增加钱包唯一绑定校验和错误返回。
-- `cpms/backend/admins`：升级管理员列表、创建、编辑姓名和删除规则。
-- `cpms/backend/src/main.rs`：补管理员错误码映射。
-- `cpms/frontend/admins`：管理员列表 UI、角色选择、编辑姓名、删除按钮规则和 API/type 命名。
-- `cpms/frontend/dangan`：钱包重复绑定错误提示。
-- `cpms/.gitignore`：忽略本机公民资料库运行数据目录，避免运行数据进入代码变更。
-- `cpms/CPMS_TECHNICAL.md` 与 `memory/05-modules/cpms`：同步规则和错误码。
+- `citizenpassport/backend/db`：收口当前基准 schema，增加钱包公钥唯一索引。
+- `citizenpassport/backend/dangan`：增加钱包唯一绑定校验和错误返回。
+- `citizenpassport/backend/admins`：升级管理员列表、创建、编辑姓名和删除规则。
+- `citizenpassport/backend/main.rs`：补管理员错误码映射。
+- `citizenpassport/frontend/admins`：管理员列表 UI、角色选择、编辑姓名、删除按钮规则和 API/type 命名。
+- `citizenpassport/frontend/dangan`：钱包重复绑定错误提示。
+- `citizenpassport/.gitignore`：忽略本机公民资料库运行数据目录，避免运行数据进入代码变更。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md` 与 `memory/05-modules/citizenpassport`：同步规则和错误码。
 - `memory/08-tasks`：记录执行与验证结果。
 
 ## 执行清单
@@ -34,8 +34,8 @@
 
 ## 验证结果
 
-- `cargo test --manifest-path cpms/backend/Cargo.toml`：通过，31 个后端测试全部通过。
-- `cargo clippy --manifest-path cpms/backend/Cargo.toml --all-targets -- -D warnings`：通过。
-- `npm run build`（`cpms/frontend`）：通过。
+- `cargo test --manifest-path citizenpassport/backend/Cargo.toml`：通过，31 个后端测试全部通过。
+- `cargo clippy --manifest-path citizenpassport/backend/Cargo.toml --all-targets -- -D warnings`：通过。
+- `npm run build`（`citizenpassport/frontend`）：通过。
 - `git diff --check`：通过。
 - 残留扫描：未发现历史注册局接口、`OperatorList`、历史操作员接口或历史“操作员”文案残留。

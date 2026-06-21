@@ -30,6 +30,6 @@ void main() {
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0x22));
-    expect(findInstitutionByAccountId(id)?.sfidNumber, 'personal:$address');
+    expect(findInstitutionByAccountId(id)?.cidNumber, 'personal:$address');
   });
 }

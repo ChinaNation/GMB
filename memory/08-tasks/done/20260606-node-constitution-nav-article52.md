@@ -25,7 +25,7 @@
 
 - 公民宪法 HTML 编入 runtime，正式链生效需要发布 runtime 升级或重新构建对应 runtime。
 - 本任务不修改 Tauri CSP，不放宽 iframe sandbox 安全边界。
-- 本任务不触碰 SFID 当前未提交改动。
+- 本任务不触碰 CID 当前未提交改动。
 
 ## 执行记录
 

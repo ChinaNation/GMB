@@ -30,7 +30,7 @@
 | tx_id | H256 | 交易唯一标识 |
 | payer | AccountId32 | 付款方地址 |
 | amount_with_fee | u128 | transfer_amount + fee_amount |
-| clearing_bank | Vec<u8> | 负责清算的省储行 sfid_number（UTF-8） |
+| clearing_bank | Vec<u8> | 负责清算的省储行 cid_number（UTF-8） |
 | timestamp | u64 | 确认时间（Unix 秒） |
 
 ### Settled（结算完成通知）
@@ -40,7 +40,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | tx_ids | Vec<H256> | 已结算的交易 ID 列表 |
-| clearing_bank | Vec<u8> | 省储行 sfid_number |
+| clearing_bank | Vec<u8> | 省储行 cid_number |
 
 ## Gossip 广播流程
 
@@ -87,7 +87,7 @@ virtual_balance = onchain_balance - local_pending - remote_pending
 
 ### 打包签名
 
-batch 签名消息构造：sfid_number（补零到 48 字节）+ batch_seq（LE u64）+ 每笔交易的 tx_id/payer/recipient/transfer_amount/fee_amount 拼接后取 BLAKE2-256 哈希，使用省储行管理员 sr25519 密钥签名。与链上 `offchain-transaction` 的验证逻辑保持一致。
+batch 签名消息构造：cid_number（补零到 48 字节）+ batch_seq（LE u64）+ 每笔交易的 tx_id/payer/recipient/transfer_amount/fee_amount 拼接后取 BLAKE2-256 哈希，使用省储行管理员 sr25519 密钥签名。与链上 `offchain-transaction` 的验证逻辑保持一致。
 
 ### 结算生命周期
 

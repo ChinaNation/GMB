@@ -424,10 +424,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Uint8List _institutionAccountId(InstitutionInfo institution) {
-    // 中文注释：联合投票 storage 使用机构多签 AccountId，不从 sfid_number 派生主体。
+    // 中文注释：联合投票 storage 使用机构多签 AccountId，不从 cid_number 派生主体。
     return Uint8List.fromList(
       institutionIdentityToAccountId(
-        institution.sfidNumber,
+        institution.cidNumber,
         mainAccount: institution.mainAccount,
       ),
     );
@@ -1149,7 +1149,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (_isAdmin && _jointVoteOpen) {
       return _buildVoteButtons();
     }
-    // 联合公投阶段：所有用户显示投票按钮（SFID 绑定校验后续完善）
+    // 联合公投阶段：所有用户显示投票按钮（CID 绑定校验后续完善）
     if (_citizenVoteOpen) {
       return _buildCitizenVoteButtons();
     }

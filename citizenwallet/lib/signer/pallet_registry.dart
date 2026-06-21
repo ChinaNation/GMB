@@ -50,7 +50,7 @@ class PalletRegistry {
   static const int jointVoteCall = 0;
 
   /// `cast_referendum(proposal_id, binding_id, nonce, signature, ...)` —
-  /// 联合公投联合公投阶段(SFID 持有者投票)。
+  /// 联合公投联合公投阶段(CID 持有者投票)。
   static const int castReferendumCall = 1;
 
   // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
@@ -76,13 +76,13 @@ class PalletRegistry {
   // 机构多签最少 2 账户,统一走 call_index=5。
   static const int organizationManagePallet = 17;
   static const int proposeCloseCall = 1;
-  static const int registerSfidInstitutionCall = 2;
+  static const int registerCidInstitutionCall = 2;
   static const int cleanupRejectedProposalCall = 4;
 
-  /// `propose_create_institution(sfid_number, sfid_full_name, accounts,
+  /// `propose_create_institution(cid_number, cid_full_name, accounts,
   /// org, admins_len, admins, threshold, register_nonce, signature,
-  /// issuer_sfid_number, issuer_main_account, signer_pubkey, scope_*)` —
-  /// 机构多签账户创建提案,凭证由 SFID 后端按签发机构 admins 真源签发。
+  /// issuer_cid_number, issuer_main_account, signer_pubkey, scope_*)` —
+  /// 机构多签账户创建提案,凭证由 CID 后端按签发机构 admins 真源签发。
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- PersonalManage (7) ----

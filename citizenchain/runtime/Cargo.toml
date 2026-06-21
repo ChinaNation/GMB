@@ -65,7 +65,7 @@ shengbank-interest = { path = "issuance/shengbank-interest", default-features = 
 fullnode-issuance = { path = "issuance/fullnode-issuance", default-features = false }
 citizen-issuance = { path = "issuance/citizen-issuance", default-features = false }
 onchain-issuance = { path = "issuance/onchain-issuance", default-features = false }
-sfid-system = { path = "otherpallet/sfid-system", default-features = false }
+cid-system = { path = "otherpallet/cid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
 organization-manage = { path = "governance/organization-manage", default-features = false }
@@ -106,7 +106,7 @@ std = [
 	"fullnode-issuance/std",
 	"citizen-issuance/std",
 	"onchain-issuance/std",
-	"sfid-system/std",
+	"cid-system/std",
 	"pow-difficulty/std",
 	"onchain-transaction/std",
 	"organization-manage/std",
@@ -160,7 +160,7 @@ runtime-benchmarks = [
 	"fullnode-issuance/runtime-benchmarks",
 	"citizen-issuance/runtime-benchmarks",
 	"onchain-issuance/runtime-benchmarks",
-	"sfid-system/runtime-benchmarks",
+	"cid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
 	"organization-manage/runtime-benchmarks",
@@ -194,7 +194,7 @@ try-runtime = [
 	"fullnode-issuance/try-runtime",
 	"citizen-issuance/try-runtime",
 	"onchain-issuance/try-runtime",
-	"sfid-system/try-runtime",
+	"cid-system/try-runtime",
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",
 	"organization-manage/try-runtime",

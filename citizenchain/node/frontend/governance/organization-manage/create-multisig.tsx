@@ -1,20 +1,20 @@
 // 创建机构多签页:链上 propose_create_institution(pallet=17, call=5)。
 //
 // 流程:
-//   1. 加载时调 organizationManageApi.fetchInstitutionRegistrationInfo(sfidNumber) 拉注册专用信息
+//   1. 加载时调 organizationManageApi.fetchInstitutionRegistrationInfo(cidNumber) 拉注册专用信息
 //      响应自带 register_nonce / signature / issuer_* / signer_pubkey / scope_*。
-//   2. 账户列表完全以 SFID 返回的 account_names 为准,前端只允许填写每个账户的初始资金。
+//   2. 账户列表完全以 CID 返回的 account_names 为准,前端只允许填写每个账户的初始资金。
 //   3. 管理员列表:创建人(选中的本机冷钱包)自动占第一位 + 扫码添加管理员
 //   4. 阈值范围 ⌈n/2⌉ ~ n
 //   5. 选签名冷钱包 → buildProposeCreateInstitutionRequest → QR 两段握手 →
 //      submitProposeCreateInstitution → 成功跳 wait-vote
 //
-// 中文注释:链上注册 payload 只接收 SFID号、机构名称、账户名称列表和 SFID 签发凭证。
-// 机构类型三件套只属于 SFID 候选查询和资格判断,不再进入本页面提交链路。
+// 中文注释:链上注册 payload 只接收 CID号、机构名称、账户名称列表和 CID 签发凭证。
+// 机构类型三件套只属于 CID 候选查询和资格判断,不再进入本页面提交链路。
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';
-import { saveKnownSfid } from '../../transaction/offchain-transaction/section';
+import { saveKnownCid } from '../../transaction/offchain-transaction/section';
 import { organizationManageApi } from './api';
 import type { InitialAccountInputDto, InstitutionRegistrationInfoResp } from './types';
 
@@ -27,13 +27,13 @@ type AdminWalletProfile = {
 };
 
 type Props = {
-  sfidNumber: string;
+  cidNumber: string;
   /** 节点桌面已激活的冷钱包列表(参考 governance/AdminListPage 同款机制)。
    *  由父级 section.tsx 在进入本页前预先加载。 */
   coldWallets: AdminWalletProfile[];
   onBack: () => void;
   /** 提案提交成功后,跳 wait-vote 视图。 */
-  onSubmitted: (sfidNumber: string, sfidFullName: string) => void;
+  onSubmitted: (cidNumber: string, cidFullName: string) => void;
 };
 
 type AccountForm = {
@@ -55,7 +55,7 @@ function yuanToFenString(yuan: string): string | null {
 }
 
 export function CreateMultisigInstitutionPage({
-  sfidNumber,
+  cidNumber,
   coldWallets,
   onBack,
   onSubmitted,
@@ -75,11 +75,11 @@ export function CreateMultisigInstitutionPage({
   useEffect(() => {
     let cancelled = false;
     organizationManageApi
-      .fetchInstitutionRegistrationInfo(sfidNumber)
+      .fetchInstitutionRegistrationInfo(cidNumber)
       .then((info) => {
         if (cancelled) return;
         setRegistrationInfo(info);
-        // 中文注释:账户名称由 SFID registration-info 签名覆盖,前端不得自行增删账户。
+        // 中文注释:账户名称由 CID registration-info 签名覆盖,前端不得自行增删账户。
         setAccounts(info.account_names.map((name) => ({ accountName: name, amountYuan: '' })));
       })
       .catch((e) => {
@@ -89,7 +89,7 @@ export function CreateMultisigInstitutionPage({
     return () => {
       cancelled = true;
     };
-  }, [sfidNumber]);
+  }, [cidNumber]);
 
   // 创建人(选中的冷钱包公钥)自动占管理员第一位。
   useEffect(() => {
@@ -138,7 +138,7 @@ export function CreateMultisigInstitutionPage({
 
   const validate = (): string | null => {
     if (!registrationInfo) return '机构注册信息未加载';
-    if (registrationInfo.account_names.length === 0) return 'SFID 未返回账户名称列表';
+    if (registrationInfo.account_names.length === 0) return 'CID 未返回账户名称列表';
     if (!selectedWallet) return '请选择签名冷钱包';
     if (adminsLen < 2) return '管理员至少 2 人(创建人占第 1 位,需扫码再加 1 人以上)';
     if (!thresholdValid) {
@@ -170,25 +170,25 @@ export function CreateMultisigInstitutionPage({
         amountFen: yuanToFenString(a.amountYuan)!,
       }));
       const threshold = parseInt(thresholdInput.trim(), 10);
-      const sfidFullName = registrationInfo.sfid_full_name.trim();
-      const sfidCredential = registrationInfo.credential;
+      const cidFullName = registrationInfo.cid_full_name.trim();
+      const cidCredential = registrationInfo.credential;
 
       // Step 1: 构 QR 签名请求
       const reqResult = await organizationManageApi.buildProposeCreateInstitutionRequest({
         pubkeyHex: selectedWallet.pubkeyHex,
-        sfidNumber,
-        sfidFullName,
+        cidNumber,
+        cidFullName,
         accounts: accountInputs,
         org: CLEARING_BANK_ADMIN_ORG,
         admins,
         threshold,
-        registerNonce: sfidCredential.register_nonce,
-        signatureHex: sfidCredential.signature,
-        issuerSfidNumber: sfidCredential.issuer_sfid_number,
-        issuerMainAccount: sfidCredential.issuer_main_account,
-        signerPubkey: sfidCredential.signer_pubkey,
-        scopeProvinceName: sfidCredential.scope_province_name,
-        scopeCityName: sfidCredential.scope_city_name,
+        registerNonce: cidCredential.register_nonce,
+        signatureHex: cidCredential.signature,
+        issuerCidNumber: cidCredential.issuer_cid_number,
+        issuerMainAccount: cidCredential.issuer_main_account,
+        signerPubkey: cidCredential.signer_pubkey,
+        scopeProvinceName: cidCredential.scope_province_name,
+        scopeCityName: cidCredential.scope_city_name,
       });
 
       // Step 2: 弹 QR 两段握手(对接现有 citizenwallet sign_request page)。
@@ -206,12 +206,12 @@ export function CreateMultisigInstitutionPage({
       //     ...全部 propose_create_institution 入参...
       //     signNonce, signBlockNumber, responseJson,
       //   });
-      // 成功后才入条目(链上 Institutions[sfid_number] = Pending,可被
+      // 成功后才入条目(链上 Institutions[cid_number] = Pending,可被
       // wait-vote 与 institution-detail 复用)。F3 follow-up 接入冷钱包
-      // 真实回签后,本 saveKnownSfid 调用应紧挨 submit 成功之后,而不是
+      // 真实回签后,本 saveKnownCid 调用应紧挨 submit 成功之后,而不是
       // 在 alert 占位之后(防止占位被点掉但实际 extrinsic 没提交)。
-      saveKnownSfid({ sfidNumber, sfidFullName });
-      onSubmitted(sfidNumber, sfidFullName);
+      saveKnownCid({ cidNumber, cidFullName });
+      onSubmitted(cidNumber, cidFullName);
     } catch (e) {
       setSubmitError(sanitizeError(e));
     } finally {
@@ -236,20 +236,20 @@ export function CreateMultisigInstitutionPage({
     );
   }
 
-  const sfidFullName = registrationInfo.sfid_full_name;
+  const cidFullName = registrationInfo.cid_full_name;
 
   return (
     <>
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
         <h2>创建机构多签</h2>
-        <code className="admin-card-address">{sfidNumber}</code>
+        <code className="admin-card-address">{cidNumber}</code>
       </div>
 
       {/* 顶部:机构名(只读) */}
       <div className="metric-card">
-        <div className="metric-label">机构名(SFID 系统)</div>
-        <div className="metric-value">{sfidFullName || '(机构名待 SFID 后台命名)'}</div>
+        <div className="metric-label">机构名(CID 系统)</div>
+        <div className="metric-value">{cidFullName || '(机构名待 CID 后台命名)'}</div>
       </div>
 
       {/* 账户区:每账户初始资金由创建人填(最低 1.11 元) */}

@@ -3,7 +3,7 @@
 // 中文注释:版本(MAX updated_at)无变化则跳过(零拉取);有变化时走 **keyset + since
 // 增量**——带本地版本 since 去问,后端只回 updated_at 之后变过的行(通常空或几条),
 // keyset 翻页直到无更多,upsert 写回 + 推进版本戳。首次(无本地版本)since=null 即全量。
-// R3:走 SFID HTTP,不扫链。
+// R3:走 CID HTTP,不扫链。
 
 import 'public_institution_api.dart';
 import 'public_institution_dto.dart';
@@ -32,17 +32,17 @@ class PublicInstitutionSyncService {
     // 有本地版本→只拉 updated_at 之后的增量;无本地版本→全量(since=null)。
     final since = localVersion;
     final changed = <PublicInstitutionDto>[];
-    String? afterSfid;
+    String? afterCid;
     while (true) {
       final page = await api.fetchPage(
         provinceName: province,
         sinceVersion: since,
-        afterSfid: afterSfid,
+        afterCid: afterCid,
         pageSize: 500,
       );
       changed.addAll(page.items);
       if (!page.hasMore || page.items.isEmpty) break;
-      afterSfid = page.nextCursor ?? page.items.last.sfidNumber;
+      afterCid = page.nextCursor ?? page.items.last.cidNumber;
     }
 
     if (changed.isNotEmpty) {

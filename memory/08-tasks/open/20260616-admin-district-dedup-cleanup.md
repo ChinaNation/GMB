@@ -5,7 +5,7 @@
 状态:**部分执行(2026-06-16)**。#4/#7/#2/#5/#1#5纯重复 已应用到真实 china.sqlite(78市/1251镇/16385村,CI PASS);#6幽灵地级市因独有镇归户精度不可靠暂 hold;残留 21市级+325镇级同父重名待新规则。
 
 ## 执行记录(2026-06-16)
-- 迁移脚本:`sfid/backend/china/dedup_cleanup.py`(dry-run + `--apply [--skip-phantoms]`,孪生验证/分块归户/审查文件)。
+- 迁移脚本:`citizencode/backend/china/dedup_cleanup.py`(dry-run + `--apply [--skip-phantoms]`,孪生验证/分块归户/审查文件)。
 - 已应用(--skip-phantoms):甘肃市辖市删(=北京复制)、西康35市+热河12市从原省删(逐镇验孪生)、攀枝花东029→攀枝花市并西030/仁和031留、南市HU075→南县市、北市LI058→北镇市、其余方位市19个验孪生后删、浦东新市→浦东市;高新市×9+兰州新/沈北新/工业园删。
 - china.sqlite:3185→**3107市** / 47574→**46323镇** / 715071→**698686村**;sha256 `de067292…`;metadata 已同步;`check_code_immutable.py` PASS。
 - 备份:`/tmp/china_prededup_20260616.bak`(原 sha `fae7426c…`)。审查文件 `dedup_review.txt`(3条:LI/SC高新镇·JS工业园镇 随城删)。
@@ -18,7 +18,7 @@
 
 ## 下游(本次 china 改动生效需,可与 #6 批处理)
 1. 重生字典包 `citizenapp/tools/generate_admin_division_bundle.mjs`(manifest 带新 sha256)。
-2. **用户侧**跑 `sfid-backend purge-orphan-institutions --dry-run`(核被删78市下孤儿机构)→ `--apply`。
+2. **用户侧**跑 `citizencode-backend purge-orphan-institutions --dry-run`(核被删78市下孤儿机构)→ `--apply`。
 3. 重生机构包 `generate_public_institution_bundle.mjs`;二次 dry-run 零孤儿。
 
 ## 执行记录 Phase2(2026-06-16)
@@ -34,7 +34,7 @@
 
 ## 下游(两轮 china 改动生效,你侧跑)
 1. 重生字典包 `generate_admin_division_bundle.mjs`。
-2. `sfid-backend purge-orphan-institutions --dry-run`→`--apply`(核 157 删市下孤儿)。
+2. `citizencode-backend purge-orphan-institutions --dry-run`→`--apply`(核 157 删市下孤儿)。
 3. 重生机构包 `generate_public_institution_bundle.mjs`,二次 dry-run 零孤儿。
 
 ## 执行记录 Phase3(2026-06-16)
@@ -51,7 +51,7 @@
 
 ## 下游(三轮 china 改动生效,你侧跑)
 1. 重生字典包 `generate_admin_division_bundle.mjs`。
-2. `sfid-backend purge-orphan-institutions --dry-run`→`--apply`(累计删 176 市的孤儿)。
+2. `citizencode-backend purge-orphan-institutions --dry-run`→`--apply`(累计删 176 市的孤儿)。
 3. 重生机构包 `generate_public_institution_bundle.mjs`。
 
 ## 执行记录 Phase4 — 跨省同地(2026-06-16)
@@ -114,7 +114,7 @@
 - china.sqlite 是行政区唯一真源;机构存 code,删市=孤儿机构,必须走 purge。
 - code 不可变不复用(ADR-021);并案只改 name 不改 code。
 - 删除不可逆,先 baseline + purge 先 pg_dump。
-- 不动 SFID 号生成/省码/链上常量/chainspec。
+- 不动 CID 号生成/省码/链上常量/chainspec。
 
 ## 执行记录 跨省+恢复(2026-06-16)
 - **跨省同地复制** `dedup_xprov.py`:68 组同名跨省市,按"共享镇真实归属=真身省"留真身删副本(白云/朝阳类真不同地两边都留各自真镇);双湖移阿里→昆仑。84→**0**。
@@ -151,11 +151,11 @@
 
 ## 第4步 删功能区 + 代码统一重排(2026-06-16)
 - 删 146 个开发区/高新区/园区/保税/科创/综改示范类镇 + 苏州工业园市整删,残留0。
-- **代码统一重排** `renumber_codes.py`:市码按省、镇码按市重排连续 **001..N 无空档**(市2720/镇1118 个重排,级联更新引用),清空 town_tombstones(全量重排=code空间重置,旧墓碑作废)。**前提=用户要重新生成 SFID**,故 ADR-021 code不可变顾虑解除。第四层当时仅更新父级引用。
+- **代码统一重排** `renumber_codes.py`:市码按省、镇码按市重排连续 **001..N 无空档**(市2720/镇1118 个重排,级联更新引用),清空 town_tombstones(全量重排=code空间重置,旧墓碑作废)。**前提=用户要重新生成 CID**,故 ADR-021 code不可变顾虑解除。第四层当时仅更新父级引用。
 - 终态:2942市/39727镇/603914第四层项,各省市码001..连续、各市镇码001..连续、0孤儿、CI PASS、四类同父重名0、全国市名唯一。sha256 `57e71415…`,备份 phase1-8 在 /tmp/。
 
 ## 下游(用户侧)
-- **重新生成 SFID 号**(用户本轮目标,代码已统一就绪)。
+- **重新生成 CID 号**(用户本轮目标,代码已统一就绪)。
 - 字典包重生 generate_admin_division_bundle.mjs + 机构包重生。
 - 注:第四层当时仍有旧结构记录,后续已改为无行政区 code 的地址段。
 
@@ -165,11 +165,11 @@
 - 第四层靠 (province_code,city_code,town_code,name) 定位,同镇零重名项保持唯一。
 - `renumber_codes.py` 留作脚本记录。
 
-## 最终编码结构(SFID 重生就绪)
+## 最终编码结构(CID 重生就绪)
 - 省=2字母唯一码 / 市=每省001..N连续 / 镇=每市001..M连续 / 第四层=无码(name+父级定位)。
 - 43省 / 2942市 / 39727镇 / 603914第四层项;sha256 `bb1c45a8…`;备份 phase1-9 在 /tmp/。
 
-状态:**行政区+编码全部统一定稿,可重新生成 SFID(2026-06-16)**。
+状态:**行政区+编码全部统一定稿,可重新生成 CID(2026-06-16)**。
 
 ## 追加执行记录 — 民族描述名与公权机构同步(2026-06-18)
 

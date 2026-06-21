@@ -13,15 +13,15 @@
 
 ## 预计修改目录
 
-- `cpms/backend/dangan`：补出生日期后端校验和注销状态选举资格兜底。
-- `cpms/backend/src/login`：登录态返回管理员姓名。
-- `cpms/backend/admins`：管理员列表返回 SS58 地址。
-- `cpms/backend/src/main.rs`：管理员结构读取姓名字段。
-- `cpms/frontend/common`：登录态用户类型增加姓名。
-- `cpms/frontend/login`：登录结果类型同步管理员姓名。
-- `cpms/frontend/dangan`：档案创建/编辑表单、公民列表省市展示。
-- `cpms/frontend/admins`：顶部身份显示、设置页清理、管理员列表文案与完整字段展示。
-- `cpms/CPMS_TECHNICAL.md` 与 `memory/05-modules/cpms`：同步第 1 类规则。
+- `citizenpassport/backend/dangan`：补出生日期后端校验和注销状态选举资格兜底。
+- `citizenpassport/backend/login`：登录态返回管理员姓名。
+- `citizenpassport/backend/admins`：管理员列表返回 SS58 地址。
+- `citizenpassport/backend/main.rs`：管理员结构读取姓名字段。
+- `citizenpassport/frontend/common`：登录态用户类型增加姓名。
+- `citizenpassport/frontend/login`：登录结果类型同步管理员姓名。
+- `citizenpassport/frontend/dangan`：档案创建/编辑表单、公民列表省市展示。
+- `citizenpassport/frontend/admins`：顶部身份显示、设置页清理、管理员列表文案与完整字段展示。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md` 与 `memory/05-modules/citizenpassport`：同步第 1 类规则。
 - `memory/08-tasks`：记录本次修复与验证结果。
 
 ## 执行清单
@@ -36,8 +36,8 @@
 
 ## 验证结果
 
-- `cargo test --manifest-path cpms/backend/Cargo.toml`：通过，28 个测试通过。
-- `cargo clippy --manifest-path cpms/backend/Cargo.toml --all-targets -- -D warnings`：通过。
-- `npm run build`（`cpms/frontend`）：通过。
+- `cargo test --manifest-path citizenpassport/backend/Cargo.toml`：通过，28 个测试通过。
+- `cargo clippy --manifest-path citizenpassport/backend/Cargo.toml --all-targets -- -D warnings`：通过。
+- `npm run build`（`citizenpassport/frontend`）：通过。
 - `git diff --check`：通过。
 - 残留扫描：未发现 `系统管理员列表`、旧 `系统管理员` 文案、旧 `具体地址` 文案、出生日期允许当天的前端校验残留。

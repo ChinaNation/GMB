@@ -43,7 +43,7 @@ class PersonalManageService {
     0x74
   ]; // "per-mgmt"
 
-  /// 提交 PersonalManage::propose_create extrinsic（个人多签，无需 SFID）。
+  /// 提交 PersonalManage::propose_create extrinsic（个人多签，无需 CID）。
   Future<
       ({
         String txHash,

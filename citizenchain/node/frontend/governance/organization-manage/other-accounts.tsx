@@ -6,18 +6,18 @@
 import type { AccountWithBalance } from './types';
 
 type Props = {
-  sfidNumber: string;
+  cidNumber: string;
   otherAccounts: AccountWithBalance[];
   onBack: () => void;
 };
 
-export function OtherAccountsListPage({ sfidNumber, otherAccounts, onBack }: Props) {
+export function OtherAccountsListPage({ cidNumber, otherAccounts, onBack }: Props) {
   return (
     <>
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
         <h2>其他账户列表（{otherAccounts.length} 个）</h2>
-        <code className="admin-card-address">{sfidNumber}</code>
+        <code className="admin-card-address">{cidNumber}</code>
       </div>
 
       {otherAccounts.length === 0 ? (

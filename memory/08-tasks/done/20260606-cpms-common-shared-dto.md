@@ -17,7 +17,7 @@
 
 ## 影响范围
 
-- 新建 `cpms/backend/common/{response,types,admin,audit,encoding}.rs`；改 `common/mod.rs` 再导出。
+- 新建 `citizenpassport/backend/common/{response,types,admin,audit,encoding}.rs`；改 `common/mod.rs` 再导出。
 - `main.rs`：删上述结构体/函数；`health()` 加 `use common::{ok, ApiResponse}`；清理失效 import（base64 STANDARD、serde、uuid、sqlx Row、axum StatusCode）。
 - 13 个消费方 `use crate::{...}` 把 `err/ok/ApiError/ApiResponse/Archive/write_audit/find_admin_*` 改成 `common::{...}` 来源；`crate::decode_bytes`(dangan/routes + login×2)→`crate::common::decode_bytes`。调用点（err()/ok() 等 264+ 处）不变。
 - `CPMS_TECHNICAL.md` 模块表补 common 子模块。

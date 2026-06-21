@@ -12,9 +12,9 @@
 
 ## 影响范围
 
-- `cpms/frontend/dangan/ArchiveList.tsx`：加载当前市镇列表并按 `town_code` 显示镇名。
-- `cpms/frontend/dangan/types.ts`：清理操作管理员命名残留。
-- `cpms/CPMS_TECHNICAL.md`：记录档案列表显示“市镇”列。
+- `citizenpassport/frontend/dangan/ArchiveList.tsx`：加载当前市镇列表并按 `town_code` 显示镇名。
+- `citizenpassport/frontend/dangan/types.ts`：清理操作管理员命名残留。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md`：记录档案列表显示“市镇”列。
 
 ## 主要风险点
 

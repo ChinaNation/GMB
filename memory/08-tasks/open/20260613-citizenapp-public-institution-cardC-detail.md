@@ -7,7 +7,7 @@
 **v1 范围/真机延后**:发起提案/换管理员本期不做(detail 不放入口);真实余额/管理员/提案需联网(LivePublicInstitutionChainData),走既有基础设施,**真机验证待跑**(注入 fake 已覆盖 UI 逻辑)。finalized 订阅刷新未接(v1 进页加载一次;订阅集动态刷新留 follow-up)。
 
 ## 需求(用户口径)
-详情页展示:名称、身份ID(sfid_number)、主账户+余额、费用账户+余额、更多账户(卡片→该机构所有账户页)、提案卡片(→ 发起提案;v1 隐藏非管理员)、管理员列表(→ 管理员列表页)、提案列表。右上角**订阅按钮** → 订阅进"关注"。
+详情页展示:名称、身份ID(cid_number)、主账户+余额、费用账户+余额、更多账户(卡片→该机构所有账户页)、提案卡片(→ 发起提案;v1 隐藏非管理员)、管理员列表(→ 管理员列表页)、提案列表。右上角**订阅按钮** → 订阅进"关注"。
 
 ## 完工清单
 - [ ] 新建 `citizen/public/public_institution_detail_page.dart`,复用 organization-manage/institution_detail_page 布局(~80%)。
@@ -33,7 +33,7 @@
 
 ## 不做(边界)
 - v1 不做发起提案/换管理员全流程(下一期,复用 duoqian-transfer + admins-change)。
-- 不动链端、不动 SFID 写入。
+- 不动链端、不动 CID 写入。
 
 ## 改动目录(中文注释)
 - 新增 `citizenapp/lib/citizen/public/public_institution_detail_page.dart` + 更多账户/管理员列表子页,代码。

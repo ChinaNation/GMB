@@ -18,7 +18,7 @@ ADR §九 图把它列在 `governance/shared/`,但消费者 `ChainRpc` 在 `lib/
 - [x] 新建 `lib/rpc/chain_read_cache.dart`:单例;`read(keys, finalizedHashProvider, fetchMissing, forceFresh, now)`;命名空间换块清空 + in-flight 合并 + 负缓存 + `invalidate()` + 15s 门控复查。
 - [x] `ChainRpc.fetchStorageBatch` 接缓存:取 finalizedHash(`getStatusSnapshot().finalizedBlockHash`)→ ChainReadCache,未命中才 `_rawFetchFinalizedStorage`(原下沉逻辑);加 `forceFresh` 参数。
 - [x] 单发 `fetchFinalizedBalance` 改委托 `fetchFinalizedBalances([pubkey])`(行为等价 free 口径),离开 `getFinalizedSystemAccountSnapshot`,自动经 batch+缓存;`fetchFinalizedBalances` 加 `forceFresh` 透传。
-- [x] `fetchCurrentSfidMainPubkeyHex` 改走 `fetchStorageBatch`,**删** `_cachedCurrentSfidMainPubkeyHex` 永久缓存字段(改块内缓存,密钥轮换后自动失效更正确)。
+- [x] `fetchCurrentCidMainPubkeyHex` 改走 `fetchStorageBatch`,**删** `_cachedCurrentCidMainPubkeyHex` 永久缓存字段(改块内缓存,密钥轮换后自动失效更正确)。
 - [x] `ChainTxMonitor._onEvent` 的 `newFinalizedBlock` 分支调 `ChainReadCache.instance.invalidate()`(即时失效)。
 - [x] `DuoqianTransferBalanceGuard` 转账前余额校验走 `forceFresh: true`(旁路缓存读最新)。
 - [x] 清残留:删孤儿 `_normalizeAccountHex`(原仅旧单发余额使用)。`getFinalizedSystemAccountSnapshot` 改道后无调用方,系 smoldot 底层能力绑定保留(非业务残留)。

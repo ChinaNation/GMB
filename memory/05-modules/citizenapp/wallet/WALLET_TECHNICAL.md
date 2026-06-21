@@ -245,7 +245,7 @@ lib/
 
 ### 5.3 其他 SharedPreferences（尚未迁移）
 
-- `sfid.bind.*`（`lib/my/myid/MyIdService` 继续使用的旧存储键）
+- `cid.bind.*`（`lib/my/myid/MyIdService` 继续使用的旧存储键）
 
 ### 5.4 钱包详情页布局 `WalletDetailPage`
 
@@ -363,15 +363,15 @@ mnemonic
 
 - 联合提案必须包含 `eligible_total/snapshot_nonce/signature` 三元组。
 - 公民投票必须包含 `binding_id/nonce/signature` 三元组。
-- 钱包模块负责提供签名账户上下文，不负责生成 SFID 凭证签名。
+- 钱包模块负责提供签名账户上下文，不负责生成 CID 凭证签名。
 - 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
 
-## 12. SFID 联调约束
+## 12. CID 联调约束
 
-- `ApiClient` 的 `baseUrl` 统一来自 `SfidApiConfig.defaultBaseUrl`。
-- 生产版固定访问 `https://sfid.crcfrcn.com`。
-- 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 SFID 后端。
-- 不允许钱包模块自行读取或拼接 SFID API URL，也不允许从本地开发失败自动回退到生产。
+- `ApiClient` 的 `baseUrl` 统一来自 `CidApiConfig.defaultBaseUrl`。
+- 生产版固定访问 `https://cid.crcfrcn.com`。
+- 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 CID 后端。
+- 不允许钱包模块自行读取或拼接 CID API URL，也不允许从本地开发失败自动回退到生产。
 
 ## 13. PQC 抗量子签名升级(设计,待实现)
 
@@ -383,6 +383,6 @@ mnemonic
 - **签名/交易**:无感 bootstrap——未绑定账户首次交易构造 `bootstrap_pqc_dispatch`(sr25519 bootstrap 签名 + ML-DSA 交易签名,一次确认);后续走 `pqc_dispatch` general-tx(`signed_extrinsic_builder.dart:103/186`,**不扩 MultiSignature**)。
 - **QR**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `chunk_index/chunk_total` 分片(ML-DSA ~3.3KB,最坏体积按 bootstrap 实测)。
 - **UI**:只展示一个账户/地址/余额,不暴露多公钥/绑定状态机/换账户。
-- **安全**:`AccountSeedV1`/PQC 私钥不出本机;SFID 不托管。
+- **安全**:`AccountSeedV1`/PQC 私钥不出本机;CID 不托管。
 
 > 实现以本节 + ADR-022 为准,旧路线不再适用。

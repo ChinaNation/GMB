@@ -64,7 +64,7 @@
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `sfid` 主签名登记 + `ORG_PUP / ORG_OTH` 内部投票 |
+| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `cid` 主签名登记 + `ORG_PUP / ORG_OTH` 内部投票 |
 | `duoqian-transfer` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系

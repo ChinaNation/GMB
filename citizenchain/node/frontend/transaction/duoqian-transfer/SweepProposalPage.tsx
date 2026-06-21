@@ -8,8 +8,8 @@ import { duoqianTransferApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
-  sfidNumber: string;
-  sfidFullName: string;
+  cidNumber: string;
+  cidFullName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -18,7 +18,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function SweepProposalPage({
-  sfidNumber, sfidFullName, adminWallets, onBack, onSuccess,
+  cidNumber, cidFullName, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -57,7 +57,7 @@ export function SweepProposalPage({
     try {
       formValuesRef.current = { amountYuan: amount };
       const result = await api.buildProposeSweepRequest(
-        selectedWallet.pubkeyHex, sfidNumber, amount,
+        selectedWallet.pubkeyHex, cidNumber, amount,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -78,7 +78,7 @@ export function SweepProposalPage({
     try {
       const result = await api.submitProposeSweep(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        sfidNumber, formValuesRef.current.amountYuan,
+        cidNumber, formValuesRef.current.amountYuan,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -87,13 +87,13 @@ export function SweepProposalPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [sfidNumber]);
+  }, [cidNumber]);
 
   return (
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回</button>
       <h2>手续费划转提案</h2>
-      <p className="proposal-institution-name">{sfidFullName}</p>
+      <p className="proposal-institution-name">{cidFullName}</p>
 
       {step === 'form' && (
         <div className="create-proposal-form">

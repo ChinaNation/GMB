@@ -11,7 +11,7 @@
 - 第一轮不得直接开始写代码或宣称已开始实现
 - 进入真实开发前必须创建任务卡
 - 只读报错诊断例外：当用户在修复报错语境中输入内容包含 `检查为什么报错` 时，直接检查问题原因并输出检查结果，不创建任务卡，不修改代码
-- 进入执行阶段后按需自动分工给 `Blockchain Agent / SFID Agent / CPMS Agent / Mobile Agent`
+- 进入执行阶段后按需自动分工给 `Blockchain Agent / CID Agent / CPMS Agent / Mobile Agent`
 
 优先遵守：
 

@@ -17,7 +17,7 @@ class InstitutionInitialAccountInput {
     required this.amountFen,
   });
 
-  /// 账户名称必须使用 SFID `/registration-info.account_names` 返回值。
+  /// 账户名称必须使用 CID `/registration-info.account_names` 返回值。
   final String accountName;
 
   /// 初始资金,单位为分。
@@ -30,7 +30,7 @@ class InstitutionInitialAccountInput {
 /// 机构多签管理链上交互服务（对应 OrganizationManage pallet 17）。
 ///
 /// 负责 propose_create_institution / propose_close 等机构提案创建类
-/// extrinsic 的编码与提交,以及 SFID 注册状态和机构多签账户 storage 查询。
+/// extrinsic 的编码与提交,以及 CID 注册状态和机构多签账户 storage 查询。
 ///
 /// Phase 3(2026-04-22): 本 pallet 内部的管理员投票入口已从链端物理删除,
 /// 管理员投票一律走 `InternalVote::cast`(22.0),
@@ -65,9 +65,9 @@ class InstitutionManageService {
   /// 提交机构多签 propose_create_institution extrinsic。
   ///
   /// 参数编码以 `memory/07-ai/unified-protocols.md` 的 P-TX-001 为准：
-  /// [0x11][0x05] + sfid_number + sfid_full_name + accounts + org + admins_len
+  /// [0x11][0x05] + cid_number + cid_full_name + accounts + org + admins_len
   ///   + admins + threshold + register_nonce + signature
-  ///   + issuer_sfid_number + issuer_main_account + signer_pubkey + scope_*。
+  ///   + issuer_cid_number + issuer_main_account + signer_pubkey + scope_*。
   Future<
       ({
         String txHash,
@@ -76,8 +76,8 @@ class InstitutionManageService {
         String mainAccountHex,
         String blockHashHex,
       })> submitProposeCreateInstitution({
-    required String sfidNumber,
-    required String sfidFullName,
+    required String cidNumber,
+    required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
@@ -85,7 +85,7 @@ class InstitutionManageService {
     required int threshold,
     required String registerNonce,
     required String signatureHex,
-    required String issuerSfidNumber,
+    required String issuerCidNumber,
     required String issuerMainAccountHex,
     required String signerPubkeyHex,
     required String scopeProvinceName,
@@ -95,8 +95,8 @@ class InstitutionManageService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final callData = buildProposeCreateInstitutionCallData(
-      sfidNumber: sfidNumber,
-      sfidFullName: sfidFullName,
+      cidNumber: cidNumber,
+      cidFullName: cidFullName,
       accounts: accounts,
       org: org,
       adminsLen: adminsLen,
@@ -104,7 +104,7 @@ class InstitutionManageService {
       threshold: threshold,
       registerNonce: registerNonce,
       signatureHex: signatureHex,
-      issuerSfidNumber: issuerSfidNumber,
+      issuerCidNumber: issuerCidNumber,
       issuerMainAccountHex: issuerMainAccountHex,
       signerPubkeyHex: signerPubkeyHex,
       scopeProvinceName: scopeProvinceName,
@@ -122,8 +122,8 @@ class InstitutionManageService {
     );
     final event = await _confirmInstitutionCreateProposedEvent(
       blockHashHex: submitResult.blockHashHex,
-      sfidNumber: sfidNumber,
-      sfidFullName: sfidFullName,
+      cidNumber: cidNumber,
+      cidFullName: cidFullName,
       accounts: accounts,
       org: org,
       adminsLen: adminsLen,
@@ -144,8 +144,8 @@ class InstitutionManageService {
   /// 构造机构创建 call_data。仅用于生产提交与测试逐字节对齐。
   @visibleForTesting
   static Uint8List buildProposeCreateInstitutionCallData({
-    required String sfidNumber,
-    required String sfidFullName,
+    required String cidNumber,
+    required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
@@ -153,19 +153,19 @@ class InstitutionManageService {
     required int threshold,
     required String registerNonce,
     required String signatureHex,
-    required String issuerSfidNumber,
+    required String issuerCidNumber,
     required String issuerMainAccountHex,
     required String signerPubkeyHex,
     required String scopeProvinceName,
     required String scopeCityName,
   }) {
-    final sfidBytes = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
+    final cidBytes = Uint8List.fromList(utf8.encode(cidNumber.trim()));
     final institutionNameBytes =
-        Uint8List.fromList(utf8.encode(sfidFullName.trim()));
+        Uint8List.fromList(utf8.encode(cidFullName.trim()));
     final registerNonceBytes =
         Uint8List.fromList(utf8.encode(registerNonce.trim()));
-    final issuerSfidNumberBytes =
-        Uint8List.fromList(utf8.encode(issuerSfidNumber.trim()));
+    final issuerCidNumberBytes =
+        Uint8List.fromList(utf8.encode(issuerCidNumber.trim()));
     final scopeProvinceNameBytes =
         Uint8List.fromList(utf8.encode(scopeProvinceName.trim()));
     final scopeCityNameBytes =
@@ -183,11 +183,11 @@ class InstitutionManageService {
       fieldName: 'signer_pubkey',
     );
 
-    if (sfidBytes.isEmpty || sfidBytes.length > 96) {
-      throw ArgumentError('sfid_number 长度需在 1..=96 字节');
+    if (cidBytes.isEmpty || cidBytes.length > 96) {
+      throw ArgumentError('cid_number 长度需在 1..=96 字节');
     }
     if (institutionNameBytes.isEmpty || institutionNameBytes.length > 128) {
-      throw ArgumentError('sfid_full_name 长度需在 1..=128 字节');
+      throw ArgumentError('cid_full_name 长度需在 1..=128 字节');
     }
     if (accounts.isEmpty) {
       throw ArgumentError('accounts 不可为空');
@@ -205,8 +205,8 @@ class InstitutionManageService {
     if (registerNonceBytes.isEmpty) {
       throw ArgumentError('register_nonce 不可为空');
     }
-    if (issuerSfidNumberBytes.isEmpty) {
-      throw ArgumentError('issuer_sfid_number 不可为空');
+    if (issuerCidNumberBytes.isEmpty) {
+      throw ArgumentError('issuer_cid_number 不可为空');
     }
     if (scopeProvinceNameBytes.isEmpty) {
       throw ArgumentError('scope_province_name 不可为空');
@@ -216,10 +216,10 @@ class InstitutionManageService {
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCreateInstitutionCallIndex);
 
-    // sfid_number: BoundedVec<u8> = Compact<u32> length + bytes
-    _writeBoundedBytes(output, sfidBytes);
+    // cid_number: BoundedVec<u8> = Compact<u32> length + bytes
+    _writeBoundedBytes(output, cidBytes);
 
-    // sfid_full_name: BoundedVec<u8>
+    // cid_full_name: BoundedVec<u8>
     _writeBoundedBytes(output, institutionNameBytes);
 
     // accounts: BoundedVec<InstitutionInitialAccount> = Compact<N> + N 项。
@@ -256,10 +256,10 @@ class InstitutionManageService {
     // threshold: u32 little-endian
     output.write(_u32ToLeBytesStatic(threshold));
 
-    // register_nonce / signature / issuer_sfid_number / issuer_main_account / signer_pubkey / scope_*
+    // register_nonce / signature / issuer_cid_number / issuer_main_account / signer_pubkey / scope_*
     _writeBoundedBytes(output, registerNonceBytes);
     _writeBoundedBytes(output, signatureBytes);
-    _writeBoundedBytes(output, issuerSfidNumberBytes);
+    _writeBoundedBytes(output, issuerCidNumberBytes);
     output.write(issuerMainAccount);
     output.write(signerPubkey);
     _writeBoundedBytes(output, scopeProvinceNameBytes);
@@ -320,13 +320,13 @@ class InstitutionManageService {
 
   // ──── 链上查询 ────
 
-  /// 查询 SFID (sfid_number + account_name) 是否已注册，返回派生的多签账户 hex（null 表示未注册）。
-  Future<String?> fetchSfidRegisteredAccount(
-      Uint8List sfidNumber, Uint8List accountName) async {
+  /// 查询 CID (cid_number + account_name) 是否已注册，返回派生的多签账户 hex（null 表示未注册）。
+  Future<String?> fetchCidRegisteredAccount(
+      Uint8List cidNumber, Uint8List accountName) async {
     final key = _buildDoubleMapStorageKey(
       'OrganizationManage',
-      'SfidRegisteredAccount',
-      sfidNumber,
+      'CidRegisteredAccount',
+      cidNumber,
       accountName,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
@@ -334,7 +334,7 @@ class InstitutionManageService {
     return _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
   }
 
-  /// 批量反查多个机构账户的 SFID 归属(`AccountRegisteredSfid` 精确整键)。
+  /// 批量反查多个机构账户的 CID 归属(`AccountRegisteredCid` 精确整键)。
   ///
   /// 返回以入参账户原样为键的 map;未注册或解码失败的账户值为 null。
   /// 机构多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
@@ -352,7 +352,7 @@ class InstitutionManageService {
     final storageKeyByAccount = <String, String>{
       for (final address in addresses)
         address:
-            '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredSfidKey(address))}',
+            '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredCidKey(address))}',
     };
 
     final values = await _rpc.fetchStorageBatchChunked(
@@ -372,7 +372,7 @@ class InstitutionManageService {
 
   /// 查询机构多签账户信息。
   ///
-  /// 注册机构账户走 `AccountRegisteredSfid -> InstitutionAccounts`
+  /// 注册机构账户走 `AccountRegisteredCid -> InstitutionAccounts`
   /// + `AdminsChange::AdminAccounts`。
   Future<InstitutionAccountInfo?> fetchDuoqianAccount(
       String duoqianAccountHex) async {
@@ -381,7 +381,7 @@ class InstitutionManageService {
 
   /// 批量查询机构多签账户状态。
   ///
-  /// 中文注释：机构多签需要先从账户反查 SFID 与账户名，再读取账户主体和
+  /// 中文注释：机构多签需要先从账户反查 CID 与账户名，再读取账户主体和
   /// 管理员主体，所以必须分阶段批量读取，不能简单逐个调用详情查询。
   Future<Map<String, InstitutionAccountInfo?>> fetchDuoqianAccountsBatch(
     Iterable<String> duoqianAccountHexList, {
@@ -398,7 +398,7 @@ class InstitutionManageService {
     final refKeyByAccount = <String, String>{};
     for (final address in addresses) {
       refKeyByAccount[address] =
-          '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredSfidKey(address))}';
+          '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredCidKey(address))}';
     }
 
     final refValues = await _rpc.fetchStorageBatchChunked(
@@ -430,7 +430,7 @@ class InstitutionManageService {
       );
       final accountKey =
           '0x${_hexEncode(DuoqianStorageCodec.institutionAccountKey(
-        entry.value.sfidNumber,
+        entry.value.cidNumber,
         entry.value.accountName,
       ))}';
       final adminKey =
@@ -529,7 +529,7 @@ class InstitutionManageService {
   Future<InstitutionAccountInfo?> _fetchInstitutionDuoqianAccount(
     String duoqianAccountHex,
   ) async {
-    final refKey = DuoqianStorageCodec.accountRegisteredSfidKey(
+    final refKey = DuoqianStorageCodec.accountRegisteredCidKey(
       duoqianAccountHex,
     );
     final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
@@ -538,7 +538,7 @@ class InstitutionManageService {
     if (ref == null) return null;
 
     final accountKey = DuoqianStorageCodec.institutionAccountKey(
-      ref.sfidNumber,
+      ref.cidNumber,
       ref.accountName,
     );
     final accountData = await _rpc.fetchStorage('0x${_hexEncode(accountKey)}');
@@ -654,8 +654,8 @@ class InstitutionManageService {
   Future<({int proposalId, String mainAccountHex})>
       _confirmInstitutionCreateProposedEvent({
     required String blockHashHex,
-    required String sfidNumber,
-    required String sfidFullName,
+    required String cidNumber,
+    required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
@@ -674,8 +674,8 @@ class InstitutionManageService {
     }
     final found = _findInstitutionCreateProposedEvent(
       events,
-      sfidNumber: sfidNumber,
-      sfidFullName: sfidFullName,
+      cidNumber: cidNumber,
+      cidFullName: cidFullName,
       accounts: accounts,
       org: org,
       adminsLen: adminsLen,
@@ -695,8 +695,8 @@ class InstitutionManageService {
   ({int proposalId, String mainAccountHex})?
       _findInstitutionCreateProposedEvent(
     Uint8List data, {
-    required String sfidNumber,
-    required String sfidFullName,
+    required String cidNumber,
+    required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
@@ -729,8 +729,8 @@ class InstitutionManageService {
           final decoded = _decodeInstitutionCreateProposedEvent(
             data,
             offset,
-            sfidNumber: sfidNumber,
-            sfidFullName: sfidFullName,
+            cidNumber: cidNumber,
+            cidFullName: cidFullName,
             accounts: accounts,
             org: org,
             adminsLen: adminsLen,
@@ -752,8 +752,8 @@ class InstitutionManageService {
       _decodeInstitutionCreateProposedEvent(
     Uint8List data,
     int offset, {
-    required String sfidNumber,
-    required String sfidFullName,
+    required String cidNumber,
+    required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
     required int org,
     required int adminsLen,
@@ -768,9 +768,9 @@ class InstitutionManageService {
       final proposalId = _readU64Le(data, pos);
       pos += 8;
 
-      final sfidRead = _readCompactBytes(data, pos);
-      if (sfidRead == null) return null;
-      pos = sfidRead.nextOffset;
+      final cidRead = _readCompactBytes(data, pos);
+      if (cidRead == null) return null;
+      pos = cidRead.nextOffset;
       final nameRead = _readCompactBytes(data, pos);
       if (nameRead == null) return null;
       pos = nameRead.nextOffset;
@@ -817,9 +817,9 @@ class InstitutionManageService {
       pos += 4;
       final eventInitialTotal = _readU128Le(data.sublist(pos, pos + 16));
 
-      final expectedSfid = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
-      final expectedName = Uint8List.fromList(utf8.encode(sfidFullName.trim()));
-      final matches = _bytesEqual(sfidRead.bytes, expectedSfid) &&
+      final expectedCid = Uint8List.fromList(utf8.encode(cidNumber.trim()));
+      final expectedName = Uint8List.fromList(utf8.encode(cidFullName.trim()));
+      final matches = _bytesEqual(cidRead.bytes, expectedCid) &&
           _bytesEqual(nameRead.bytes, expectedName) &&
           _bytesEqual(proposer, proposerPubkey) &&
           eventOrg == org &&

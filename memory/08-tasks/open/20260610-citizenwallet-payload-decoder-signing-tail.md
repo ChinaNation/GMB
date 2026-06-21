@@ -28,7 +28,7 @@
 
 ## 方案(只改 citizenwallet,不动链端/节点端)
 
-统一新增 `_hasValidSigningTail(bytes, callEnd)`:校验 call_data 在 callEnd 结束、其后是合法扩展尾(era 0x00 / nonce compact / tip compact / mode 0x00 / 固定 73B 且末字节 0x00)。**所有链上 extrinsic 分支**统一接上(含原本容忍尾部的分支,一并收紧);非链上 challenge 分支(管理员激活/解密/CPMS 删档/SFID 治理 JSON)保持原样;WASM 升级哈希直签例外路径不变。
+统一新增 `_hasValidSigningTail(bytes, callEnd)`:校验 call_data 在 callEnd 结束、其后是合法扩展尾(era 0x00 / nonce compact / tip compact / mode 0x00 / 固定 73B 且末字节 0x00)。**所有链上 extrinsic 分支**统一接上(含原本容忍尾部的分支,一并收紧);非链上 challenge 分支(管理员激活/解密/CPMS 删档/CID 治理 JSON)保持原样;WASM 升级哈希直签例外路径不变。
 
 测试:夹具加 `withSigningTail()` 拼真实尾部;每个链上分支补"无尾 → null"与"篡改尾 → null"用例。
 
@@ -41,7 +41,7 @@
 
 ## 完工记录(2026-06-10,代码完工,待真机验证)
 
-- `citizenwallet/lib/signer/payload_decoder.dart`:新增 `_hasValidSigningTail(bytes, callEnd)`(era 0x00 → Compact nonce → Compact tip → mode 0x00 → 固定 73B,末字节 0x00,immortal 下 birth==genesis 逐字节比对);**全部链上 extrinsic 分支**统一接上(9 个必红分支修复 + 原容忍尾部的 transfer/internal_vote/finalize/proposalIdOnly/cast_referendum/resolution_issuance/清算行 7 类一并收紧);`_decodeCancelPassedProposal` 顺带修正"把尾部误读进 reason"。非链上 challenge 分支(激活/解密/CPMS 删档/SFID JSON)与 WASM 哈希直签例外不动。
+- `citizenwallet/lib/signer/payload_decoder.dart`:新增 `_hasValidSigningTail(bytes, callEnd)`(era 0x00 → Compact nonce → Compact tip → mode 0x00 → 固定 73B,末字节 0x00,immortal 下 birth==genesis 逐字节比对);**全部链上 extrinsic 分支**统一接上(9 个必红分支修复 + 原容忍尾部的 transfer/internal_vote/finalize/proposalIdOnly/cast_referendum/resolution_issuance/清算行 7 类一并收紧);`_decodeCancelPassedProposal` 顺带修正"把尾部误读进 reason"。非链上 challenge 分支(激活/解密/CPMS 删档/CID JSON)与 WASM 哈希直签例外不动。
 - `citizenwallet/test/signer/payload_decoder_test.dart`:新增 `signingTail()/withSigningTail()` 夹具,全部链上用例改带尾构造;step2d fixture(纯 call_data 真源)在 decode 前拼尾;新增 4 个回归用例锁死约定。
 - `citizenwallet/test/signer/offline_sign_service_test.dart`:3 个裸 call_data 夹具改带尾;顺带修掉 transfer 夹具里旧解码器容忍的垃圾尾字节 `0x91`。
 - 链端/节点端 0 改动。

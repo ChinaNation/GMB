@@ -28,14 +28,14 @@
 
 ## 完成记录
 
-- 已删除 node 后端 `runtime_upgrade` 内部的 SFID 人口快照获取。
-- 已删除 `governance/sfid_api.rs`，并从治理聚合入口移除。
+- 已删除 node 后端 `runtime_upgrade` 内部的 CID 人口快照获取。
+- 已删除 `governance/cid_api.rs`，并从治理聚合入口移除。
 - 已删除 node 后端 `runtime_upgrade` 的 `eligible_total / joint_nonce / joint_signature / province / signer_pubkey` 入参。
 - 已删除 node 前端 `runtime-upgrade` 的联合提案上下文 DTO 和缺上下文报错。
 - 已接入省储会协议升级入口，国储会和省储会管理员均可进入协议升级业务提案页。
 - 已删除前端 runtime-upgrade 页面里的快照返回保存和“获取人口快照”文案。
 - 已更新模块技术文档，补充 node 侧边界。
-- 已更新统一协议登记和 SFID 人口快照 handler 注释，明确人口快照只服务投票引擎流程。
+- 已更新统一协议登记和 CID 人口快照 handler 注释，明确人口快照只服务投票引擎流程。
 - 2026-05-10 追加修复：node 提案聚合层已删除协议升级摘要 `status` 解码，协议升级真实状态只读取 `VotingEngine::Proposals.status`。
 
 ## 阻塞记录

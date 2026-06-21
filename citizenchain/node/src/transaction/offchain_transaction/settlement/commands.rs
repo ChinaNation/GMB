@@ -17,14 +17,14 @@ use super::admin_unlock::VerifyDecryptAdminInput;
 pub async fn build_decrypt_admin_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
 ) -> Result<DecryptAdminRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::admin_unlock::build_decrypt_admin_request(&pubkey_hex, &sfid_number)
+        super::admin_unlock::build_decrypt_admin_request(&pubkey_hex, &cid_number)
     })
     .await
     .map_err(|e| format!("build_decrypt_admin_request task failed:{e}"))?
@@ -50,8 +50,8 @@ pub async fn verify_and_decrypt_admin(
 }
 
 #[tauri::command]
-pub async fn list_decrypted_admins(sfid_number: String) -> Result<Vec<DecryptedAdminInfo>, String> {
-    Ok(super::admin_unlock::list_decrypted_admins(&sfid_number))
+pub async fn list_decrypted_admins(cid_number: String) -> Result<Vec<DecryptedAdminInfo>, String> {
+    Ok(super::admin_unlock::list_decrypted_admins(&cid_number))
 }
 
 #[tauri::command]

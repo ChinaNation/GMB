@@ -43,7 +43,7 @@
 
 - 任务卡已创建
 - 已读取模块入口、内部投票、联合投票、公民投票、清理调度、活跃提案上限、benchmark、weights、技术文档
-- 已核对 runtime 接线与上游 `sfid-system` / 下游联合回调契约
+- 已核对 runtime 接线与上游 `cid-system` / 下游联合回调契约
 - 已执行 `cargo test -p voting-engine`
 - 已执行 `cargo check -p voting-engine`
 - 已执行 `cargo check -p voting-engine --features runtime-benchmarks`
@@ -55,7 +55,7 @@
 ### 已确认
 
 - 未发现普通外部用户可直接利用的高危权限绕过漏洞
-- 三段式状态机、联合回调原子回滚、自动超时重试、90 天延迟清理、SFID 投票凭证防重放这些主路径已实现
+- 三段式状态机、联合回调原子回滚、自动超时重试、90 天延迟清理、CID 投票凭证防重放这些主路径已实现
 - 单测、模块编译、runtime-benchmarks 编译和 runtime 总体编译均通过
 - 中文注释总体完整，关键状态机、回调原子性、清理策略与投票资格约束都有说明
 
@@ -69,7 +69,7 @@
 2. `weights.rs` 明显失真，且存在低估风险。
    - `create_internal_proposal` 的 weight 只申报了 `NextProposalId + Proposals`，但当前真实路径还会读写 `CurrentProposalYear`、`YearProposalCounter`、`ActiveProposalsByInstitution`、`ProposalsByExpiry`
    - `joint_vote` 的 weight 注释没有反映 `JointVotesByAdmin`、`JointInstitutionTallies`、动态管理员/阈值提供器等实际路径
-   - `citizen_vote` 仍引用已删除的 `SfidSystem::SfidToAccount`
+   - `citizen_vote` 仍引用已删除的 `CidSystem::CidToAccount`
    - 当前 weight 不能视为可信
 
 3. benchmark 已与当前 ID/存储模型脱节。

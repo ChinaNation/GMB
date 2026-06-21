@@ -7,7 +7,7 @@
 //! `--clearing-bank` / `--clearing-bank-password` flag)在此加密存取管理员
 //! sr25519 seed,`offchain::settlement::{signer, submitter}` 消费。
 //!
-//! `SigningKey.sfid_number` 表示清算行管理员身份标识，由 CLI 启动参数传入，
+//! `SigningKey.cid_number` 表示清算行管理员身份标识，由 CLI 启动参数传入，
 //! 链上不存储该字段。本模块通过 `save_signing_key` / `load_signing_key`
 //! 向清算行签名链路提供加密密钥读写能力。
 
@@ -25,8 +25,8 @@ const PBKDF2_ITERATIONS: u32 = 100_000;
 /// PBKDF2 salt 长度（16 字节）。
 const SALT_LEN: usize = 16;
 
-/// 加密存储文件格式：[salt:16][nonce:12][sfid_number_len:1][sfid_number:N][ciphertext+tag:48+16]
-/// sfid_number 最长 48 字节，私钥固定 32 字节。
+/// 加密存储文件格式：[salt:16][nonce:12][cid_number_len:1][cid_number:N][ciphertext+tag:48+16]
+/// cid_number 最长 48 字节，私钥固定 32 字节。
 
 /// 清算行管理员密钥（内存中的解密状态）。
 pub struct SigningKey {
@@ -35,7 +35,7 @@ pub struct SigningKey {
     /// 清算行管理员身份标识(CLI 启动时外部传入;字段名保留以避免 blast radius,
     /// Step 3 清算行 UI 收敛时一并 rename 为 `admin_id`)。
     #[allow(dead_code)]
-    pub sfid_number: String,
+    pub cid_number: String,
 }
 
 /// 链下签名密钥管理器。
@@ -67,7 +67,7 @@ impl OffchainKeystore {
         &self,
         password: &str,
         seed: &[u8; 32],
-        sfid_number: &str,
+        cid_number: &str,
     ) -> Result<(), String> {
         // 确保目录存在
         if let Some(parent) = self.file_path.parent() {
@@ -91,7 +91,7 @@ impl OffchainKeystore {
         aes_key.zeroize();
 
         // 组装文件内容
-        let shenfen_bytes = sfid_number.as_bytes();
+        let shenfen_bytes = cid_number.as_bytes();
         let shenfen_len = shenfen_bytes.len() as u8;
         let mut data = Vec::with_capacity(
             SALT_LEN + NONCE_LEN + 1 + shenfen_bytes.len() + ciphertext.len() + tag.len(),
@@ -123,8 +123,8 @@ impl OffchainKeystore {
         if data.len() < header_len + 32 + 16 {
             return Err("密钥文件长度不足".to_string());
         }
-        let sfid_number = String::from_utf8(data[SALT_LEN + NONCE_LEN + 1..header_len].to_vec())
-            .map_err(|_| "sfid_number 编码错误".to_string())?;
+        let cid_number = String::from_utf8(data[SALT_LEN + NONCE_LEN + 1..header_len].to_vec())
+            .map_err(|_| "cid_number 编码错误".to_string())?;
         let ciphertext = &data[header_len..header_len + 32];
         let tag = &data[header_len + 32..header_len + 32 + 16];
 
@@ -141,8 +141,8 @@ impl OffchainKeystore {
         seed.zeroize();
         let pair = <sr25519::Pair as Pair>::from_seed(&seed_array);
 
-        log::info!("[Offchain] 签名管理员私钥已解密到内存（{}）", sfid_number);
-        Ok(SigningKey { pair, sfid_number })
+        log::info!("[Offchain] 签名管理员私钥已解密到内存（{}）", cid_number);
+        Ok(SigningKey { pair, cid_number })
     }
 
     /// 中文注释：删除本地加密密钥文件。

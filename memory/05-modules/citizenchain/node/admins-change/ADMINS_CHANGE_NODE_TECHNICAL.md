@@ -40,7 +40,7 @@ Tauri 命令：
 - `verify_activate_admin`：验证冷钱包激活签名并写入本地激活记录。
 - `get_activated_admins`：按 subject 读取已激活管理员，并与链上当前管理员集合交叉校验；个人多签和机构账户必须附带 `accountIdHex + expectedOrg`。
 - `deactivate_admin`：取消本地管理员激活。
-- `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `sfidNumber + expectedOrg`；个人多签和机构账户必须用 `accountIdHex + expectedOrg`。
+- `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `cidNumber + expectedOrg`；个人多签和机构账户必须用 `accountIdHex + expectedOrg`。
 - `build_admin_set_change_request`：校验当前管理员身份、主体 org 和新管理员集合，构建公民钱包签名请求。
 - `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
 
@@ -93,7 +93,7 @@ citizenchain/node/frontend/governance/admins_change/
 
 主体引用：
 
-- `AdminAccountRef.sfidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带 `org=0/1/2` 防止错主体。
+- `AdminAccountRef.cidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带 `org=0/1/2` 防止错主体。
 - `AdminAccountRef.accountIdHex`：用于个人多签和机构账户，必须带 `org=3/4/5`。缺少 `accountIdHex` 时后端直接拒绝动态主体管理员激活和管理员更换。
 - `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员激活、更换读取、校验、QR 和提交仍全部走 `governance/admins_change`。
 

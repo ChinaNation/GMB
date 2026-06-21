@@ -1,6 +1,6 @@
 // 行政区字典数据包载入 —— 版本驱动增量 reconcile(ADR-021 §A2/A3)。
 //
-// 中文注释:发布期由 `tools/generate_admin_division_bundle.mjs` 直接 dump china.sqlite
+// 中文注释:发布期由 `citizenapp/tools/generate_admin_division_bundle.mjs` 直接 dump china.sqlite
 // 生成静态数据包。客户端无服务端,数据靠 assets 包分发;包版本变了就增量刷新——
 // 变的换、删的清、没变的不动,零旧数据残留(只读派生数据,无用户数据)。
 // 数据包结构:

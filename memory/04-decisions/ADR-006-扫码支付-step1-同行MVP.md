@@ -3,7 +3,7 @@
 - **日期**:2026-04-19
 - **状态**:Accepted
 - **决策者**:GMB AI 主入口
-- **范围**:citizenchain runtime / node,sfid backend,citizenapp
+- **范围**:citizenchain runtime / node,cid backend,citizenapp
 - **任务卡**:`memory/08-tasks/open/20260419-扫码支付-step1-同行MVP.md`
 
 ---
@@ -23,13 +23,13 @@
 
 ### 3.1 清算行身份
 
-- SFID `K1` 必须是 **S(私法人)**或 **F(非法人)**两者之一 → 私权机构
-- 每个清算行在 SFID 系统注册时一次性生成:
-  - `sfid_number`
-  - 主账户地址 = `blake2b_256("GMB_DUOQIAN" || sfid_number || "主账户" || nonce_1)[0..32]`
-  - 费用账户地址 = `blake2b_256("GMB_DUOQIAN" || sfid_number || "费用账户" || nonce_2)[0..32]`
+- CID `K1` 必须是 **S(私法人)**或 **F(非法人)**两者之一 → 私权机构
+- 每个清算行在 CID 系统注册时一次性生成:
+  - `cid_number`
+  - 主账户地址 = `blake2b_256("GMB_DUOQIAN" || cid_number || "主账户" || nonce_1)[0..32]`
+  - 费用账户地址 = `blake2b_256("GMB_DUOQIAN" || cid_number || "费用账户" || nonce_2)[0..32]`
 - **管理员数量 N 由链上 `propose_create` 时写入**,阈值 T ≥ ⌈N/2⌉,非固定 9
-- 清算行在链上两步注册(SFID 颁证 + duoqian-manage),**不经省储行审批**
+- 清算行在链上两步注册(CID 颁证 + duoqian-manage),**不经省储行审批**
 
 ### 3.2 L3 绑定
 
@@ -85,7 +85,7 @@ offchain-transaction/src/
 - `duoqian-manage`:**不动**,负责机构多签账户的链上注册
 - `duoqian-transfer`:**不动**,负责机构多签账户之间的转账
 - `onchain-transaction`:**不动**,链上支付独立入口
-- `sfid-system`:**不动**
+- `cid-system`:**不动**
 - `institution-asset`:Step 1 微调新增 4 个 Action(L3DepositIn / L3WithdrawOut / L2ClearingDebit / L2FeeCollect)
 
 ### 4.3 现有 lib.rs 中的旧逻辑处置

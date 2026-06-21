@@ -49,11 +49,11 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 当前仓库规则已经明确为：
 
-- `sfid`
-  - CI：`.github/workflows/sfid-ci.yml`
-  - 部署：`.github/workflows/sfid-deploy.yml`
+- `cid`
+  - CI：`.github/workflows/citizencode-ci.yml`
+  - 部署：`.github/workflows/cid-deploy.yml`
 - `cpms`
-  - CI：`.github/workflows/cpms-ci.yml`
+  - CI：`.github/workflows/citizenpassport-ci.yml`
 - `citizenapp`
   - CI：`.github/workflows/citizenapp-ci.yml`
 - `docs`

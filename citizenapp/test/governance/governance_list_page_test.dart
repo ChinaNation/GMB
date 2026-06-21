@@ -7,13 +7,13 @@ import 'package:citizenapp/governance/shared/institution_info.dart';
 
 InstitutionInfo _institution(
   String name,
-  String sfidNumber,
+  String cidNumber,
   int orgType,
   int hexSeed,
 ) {
   return InstitutionInfo(
     name: name,
-    sfidNumber: sfidNumber,
+    cidNumber: cidNumber,
     orgType: orgType,
     duoqianAccount: hexSeed.toRadixString(16).padLeft(64, '0'),
   );
@@ -68,7 +68,7 @@ void main() {
     );
 
     expect(
-      ordered.map((institution) => institution.sfidNumber),
+      ordered.map((institution) => institution.cidNumber),
       ['prc-b', 'prc-a', 'prc-c'],
     );
   });
@@ -77,7 +77,7 @@ void main() {
     final reordered = reorderGovernanceInstitutions(councils, 0, 2);
 
     expect(
-      reordered.map((institution) => institution.sfidNumber),
+      reordered.map((institution) => institution.cidNumber),
       ['prc-b', 'prc-c', 'prc-a'],
     );
   });

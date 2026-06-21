@@ -5,13 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 当前钱包绑定清算行的本地快照。
 ///
 /// 中文注释:
-/// - 链上权威仍然是 `UserBank[user]` 与 `ClearingBankNodes[sfid_number]`。
+/// - 链上权威仍然是 `UserBank[user]` 与 `ClearingBankNodes[cid_number]`。
 /// - 本地只缓存 UI 和扫码付款所需的索引字段,每次关键操作前都要重新查链上
 ///   或清算行节点确认,不能把本快照当作信任根。
 class ClearingBankBindingSnapshot {
   const ClearingBankBindingSnapshot({
-    required this.sfidNumber,
-    required this.sfidFullName,
+    required this.cidNumber,
+    required this.cidFullName,
     required this.mainAccount,
     required this.feeAccount,
     required this.peerId,
@@ -21,8 +21,8 @@ class ClearingBankBindingSnapshot {
     required this.lastVerifiedAtMs,
   });
 
-  final String sfidNumber;
-  final String sfidFullName;
+  final String cidNumber;
+  final String cidFullName;
   final String mainAccount;
   final String? feeAccount;
   final String peerId;
@@ -38,8 +38,8 @@ class ClearingBankBindingSnapshot {
   }
 
   Map<String, dynamic> toJson() => {
-        'sfid_number': sfidNumber,
-        'sfid_full_name': sfidFullName,
+        'cid_number': cidNumber,
+        'cid_full_name': cidFullName,
         'main_account': mainAccount,
         'fee_account': feeAccount,
         'peer_id': peerId,
@@ -51,8 +51,8 @@ class ClearingBankBindingSnapshot {
 
   factory ClearingBankBindingSnapshot.fromJson(Map<String, dynamic> json) {
     return ClearingBankBindingSnapshot(
-      sfidNumber: (json['sfid_number'] as String?) ?? '',
-      sfidFullName: (json['sfid_full_name'] as String?) ?? '',
+      cidNumber: (json['cid_number'] as String?) ?? '',
+      cidFullName: (json['cid_full_name'] as String?) ?? '',
       mainAccount: (json['main_account'] as String?) ?? '',
       feeAccount: json['fee_account'] as String?,
       peerId: (json['peer_id'] as String?) ?? '',
@@ -68,7 +68,7 @@ class ClearingBankBindingSnapshot {
 ///
 /// 中文注释:
 /// - 链上 `OffchainTransaction::UserBank[user]` 存的是**主账户** `AccountId32`
-///   (32 字节),**不是** SFID `sfid_number` 字符串。citizenapp 同时需要 sfid_number、
+///   (32 字节),**不是** CID `cid_number` 字符串。citizenapp 同时需要 cid_number、
 ///   主账户和链上 `ClearingBankNodes` 端点,所以本地缓存升级为 JSON 快照。
 /// - 快照仅是用户体验缓存;绑定、支付、充值、提现前仍要查链上或清算行节点。
 /// - 缓存按 `walletIndex` 隔离,同 App 多钱包互不干扰。
@@ -99,7 +99,7 @@ class ClearingBankPrefs {
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final snapshot = ClearingBankBindingSnapshot.fromJson(json);
-      if (snapshot.sfidNumber.isEmpty ||
+      if (snapshot.cidNumber.isEmpty ||
           snapshot.mainAccount.isEmpty ||
           snapshot.rpcDomain.isEmpty ||
           snapshot.rpcPort <= 0) {
@@ -111,12 +111,12 @@ class ClearingBankPrefs {
     }
   }
 
-  /// 只写入 `sfid_number` 的旧便捷入口不再作为业务真源使用。
+  /// 只写入 `cid_number` 的旧便捷入口不再作为业务真源使用。
   ///
   /// 这里保留给少量测试和过渡调用,会写入一个不可用于支付的最小快照;真实绑定
   /// 页面必须调用 [saveSnapshot]。
-  static Future<void> save(int walletIndex, String sfidNumber) async {
-    final trimmed = sfidNumber.trim();
+  static Future<void> save(int walletIndex, String cidNumber) async {
+    final trimmed = cidNumber.trim();
     if (trimmed.isEmpty) {
       await clear(walletIndex);
     } else {
@@ -124,8 +124,8 @@ class ClearingBankPrefs {
       await saveSnapshot(
         walletIndex,
         ClearingBankBindingSnapshot(
-          sfidNumber: trimmed,
-          sfidFullName: '',
+          cidNumber: trimmed,
+          cidFullName: '',
           mainAccount: '',
           feeAccount: null,
           peerId: '',
@@ -138,15 +138,15 @@ class ClearingBankPrefs {
     }
   }
 
-  /// 读取 `sfid_number`,未绑定/未写入返回 `null`。
+  /// 读取 `cid_number`,未绑定/未写入返回 `null`。
   static Future<String?> load(int walletIndex) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('$_keyPrefix$walletIndex');
     if (raw == null || raw.trim().isEmpty) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      final sfidNumber = (json['sfid_number'] as String?)?.trim();
-      return (sfidNumber == null || sfidNumber.isEmpty) ? null : sfidNumber;
+      final cidNumber = (json['cid_number'] as String?)?.trim();
+      return (cidNumber == null || cidNumber.isEmpty) ? null : cidNumber;
     } catch (_) {
       return null;
     }

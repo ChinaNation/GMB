@@ -16,9 +16,9 @@ pub fn account_id_from_hex(account_hex: &str) -> Result<[u8; 32], String> {
 }
 
 /// 内置治理机构用 runtime 常量中的机构多签主账户作为管理员治理账户。
-pub fn account_id_from_builtin_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
-    let entry = registry::find_institution(sfid_number)
-        .ok_or_else(|| format!("未知的内置治理机构 sfidNumber: {sfid_number}"))?;
+pub fn account_id_from_builtin_cid(cid_number: &str) -> Result<[u8; 32], String> {
+    let entry = registry::find_institution(cid_number)
+        .ok_or_else(|| format!("未知的内置治理机构 cidNumber: {cid_number}"))?;
     account_id_from_hex(&entry.main_account_hex())
 }
 

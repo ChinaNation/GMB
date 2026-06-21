@@ -50,7 +50,7 @@
 - 已新增 `InternalThresholdSnapshot`，内部提案创建时同时锁定管理员快照和阈值快照，投票期间不再实时读取主体状态。
 - 已把 runtime provider 改为普通路径读取 Active API、Pending 创建路径读取 Pending 快照 API。
 - 已把 `duoqian-manage` 的机构多签/个人多签创建路径切到 Pending 专用入口，关闭多签继续使用普通 Active 内部提案入口。
-- 已修复 `duoqian-manage` benchmark 中 `register_sfid_institution` 旧参数残留。
+- 已修复 `duoqian-manage` benchmark 中 `register_cid_institution` 旧参数残留。
 - 已更新 admins-change、voting-engine、duoqian-manage 技术文档。
 - 已执行残留扫描，代码和相关文档中未再发现旧 `is_subject_admin / subject_admins / subject_threshold / subject_admin_count` API 使用。
 

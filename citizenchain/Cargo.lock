@@ -1542,7 +1542,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
- "sfid-system",
+ "cid-system",
  "sp-io",
  "sp-runtime",
 ]
@@ -1606,7 +1606,7 @@ dependencies = [
  "runtime-upgrade",
  "scale-info",
  "serde_json",
- "sfid-system",
+ "cid-system",
  "shengbank-interest",
  "sp-api",
  "sp-block-builder",
@@ -7975,7 +7975,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
- "sfid-system",
+ "cid-system",
  "sp-core",
  "sp-io",
  "sp-runtime",
@@ -12417,7 +12417,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sfid-system"
+name = "cid-system"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",

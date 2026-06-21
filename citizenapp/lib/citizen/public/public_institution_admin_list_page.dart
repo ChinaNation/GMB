@@ -7,18 +7,18 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 公权机构管理员列表页(只读)。
 ///
-/// 中文注释:公权机构管理员来自 SFID 系统、尚未对接,本页**只读展示**链上已有的
+/// 中文注释:公权机构管理员来自 CID 系统、尚未对接,本页**只读展示**链上已有的
 /// 管理员公钥(转 SS58,prefix=2027),不做冷钱包导入/扫码激活——那是治理机构
 /// `AdminListPage` 的能力,公权端本期不引入重型桥接。无管理员时显示占位文案。
 class PublicInstitutionAdminListPage extends StatelessWidget {
   const PublicInstitutionAdminListPage({
     super.key,
-    required this.sfidFullName,
+    required this.cidFullName,
     required this.admins,
   });
 
   /// 机构展示名(简称优先,由调用方决定)。
-  final String sfidFullName;
+  final String cidFullName;
 
   /// 管理员公钥列表(hex,可能带 0x);来自链上 AdminsChange::AdminAccounts。
   final List<String> admins;
@@ -61,7 +61,7 @@ class PublicInstitutionAdminListPage extends StatelessWidget {
                 style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
             SizedBox(height: 6),
             Text(
-              '管理员数据待与 SFID 系统对接',
+              '管理员数据待与 CID 系统对接',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12.5, color: AppTheme.textTertiary),
             ),

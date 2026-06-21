@@ -8,7 +8,7 @@ use tauri::AppHandle;
 pub async fn build_duoqian_transfer_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
     org_type: u8,
     beneficiary_address: String,
     amount_yuan: f64,
@@ -21,7 +21,7 @@ pub async fn build_duoqian_transfer_request(
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_transfer_sign_request(
             &pubkey_hex,
-            &sfid_number,
+            &cid_number,
             org_type,
             &beneficiary_address,
             amount_yuan,
@@ -39,7 +39,7 @@ pub async fn submit_duoqian_transfer(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_number: String,
+    cid_number: String,
     org_type: u8,
     beneficiary_address: String,
     amount_yuan: f64,
@@ -57,7 +57,7 @@ pub async fn submit_duoqian_transfer(
         let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;
         let remark_bytes = remark.as_bytes();
         let call_data = super::signing::build_transfer_call_data(
-            &sfid_number,
+            &cid_number,
             org_type,
             &beneficiary_bytes,
             amount_fen,
@@ -146,7 +146,7 @@ pub async fn submit_duoqian_safety_fund(
 pub async fn build_duoqian_sweep_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -154,7 +154,7 @@ pub async fn build_duoqian_sweep_request(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::signing::build_propose_sweep_sign_request(&pubkey_hex, &sfid_number, amount_yuan)
+        super::signing::build_propose_sweep_sign_request(&pubkey_hex, &cid_number, amount_yuan)
     })
     .await
     .map_err(|e| format!("build duoqian sweep failed: {e}"))?
@@ -167,7 +167,7 @@ pub async fn submit_duoqian_sweep(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_number: String,
+    cid_number: String,
     amount_yuan: f64,
     sign_nonce: u32,
     sign_block_number: u64,
@@ -178,7 +178,7 @@ pub async fn submit_duoqian_sweep(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = super::signing::build_sweep_call_data(&sfid_number, amount_yuan)?;
+        let call_data = super::signing::build_sweep_call_data(&cid_number, amount_yuan)?;
         governance::signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

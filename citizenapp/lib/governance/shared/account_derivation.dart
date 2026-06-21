@@ -21,25 +21,25 @@ import 'reserved_account_names.dart';
 const int kGmbSs58Prefix = 2027;
 
 // ── 地址派生 op_tag(0x00-0x0F),对齐 core_const.rs,不得复用 ──
-/// 所有机构主账户 · payload = sfid_number。
+/// 所有机构主账户 · payload = cid_number。
 const int kOpMain = 0x00;
 
-/// 所有机构费用账户 · payload = sfid_number。
+/// 所有机构费用账户 · payload = cid_number。
 const int kOpFee = 0x01;
 
-/// 永久质押(制度专属)· payload = sfid_number。
+/// 永久质押(制度专属)· payload = cid_number。
 const int kOpStake = 0x02;
 
-/// 安全基金(制度专属)· payload = sfid_number。
+/// 安全基金(制度专属)· payload = cid_number。
 const int kOpAnquan = 0x03;
 
-/// 两和基金(制度专属)· payload = sfid_number。
+/// 两和基金(制度专属)· payload = cid_number。
 const int kOpHe = 0x04;
 
 /// 个人多签账户 · payload = creator(32B) || account_name。
 const int kOpPersonal = 0x05;
 
-/// SFID 机构自定义命名账户 · payload = sfid_number || account_name。
+/// CID 机构自定义命名账户 · payload = cid_number || account_name。
 const int kOpInstitution = 0x06;
 
 const String _domain = 'DUOQIAN';
@@ -68,36 +68,36 @@ String hexFromAccountId(Uint8List id) =>
 String ss58FromAccountId(Uint8List id, {int ss58Prefix = kGmbSs58Prefix}) =>
     Keyring().encodeAddress(id, ss58Prefix);
 
-// ── 机构账户(payload 含 sfid_number)──
+// ── 机构账户(payload 含 cid_number)──
 
-/// 机构主账户 id(OP_MAIN,payload = sfid_number,不含名字)。
+/// 机构主账户 id(OP_MAIN,payload = cid_number,不含名字)。
 Uint8List deriveInstitutionMainAccountId(
-  String sfidNumber, {
+  String cidNumber, {
   int ss58Prefix = kGmbSs58Prefix,
 }) =>
     deriveDuoqianAccountId(
       opTag: kOpMain,
-      payload: utf8.encode(sfidNumber),
+      payload: utf8.encode(cidNumber),
       ss58Prefix: ss58Prefix,
     );
 
-/// 机构费用账户 id(OP_FEE,payload = sfid_number,不含名字)。
+/// 机构费用账户 id(OP_FEE,payload = cid_number,不含名字)。
 Uint8List deriveInstitutionFeeAccountId(
-  String sfidNumber, {
+  String cidNumber, {
   int ss58Prefix = kGmbSs58Prefix,
 }) =>
     deriveDuoqianAccountId(
       opTag: kOpFee,
-      payload: utf8.encode(sfidNumber),
+      payload: utf8.encode(cidNumber),
       ss58Prefix: ss58Prefix,
     );
 
-/// 机构自定义命名账户 id(OP_INSTITUTION,payload = sfid_number || account_name)。
+/// 机构自定义命名账户 id(OP_INSTITUTION,payload = cid_number || account_name)。
 ///
 /// 字节对齐链端:account_name 取原始字节不 trim;空名抛错(对齐 EmptyAccountName);
 /// 受限保留名不得作为自定义名(主/费走各自 op_tag,制度专属名禁注册)。
 Uint8List deriveInstitutionCustomAccountId(
-  String sfidNumber,
+  String cidNumber,
   String accountName, {
   int ss58Prefix = kGmbSs58Prefix,
 }) {
@@ -109,16 +109,16 @@ Uint8List deriveInstitutionCustomAccountId(
   }
   return deriveDuoqianAccountId(
     opTag: kOpInstitution,
-    payload: <int>[...utf8.encode(sfidNumber), ...utf8.encode(accountName)],
+    payload: <int>[...utf8.encode(cidNumber), ...utf8.encode(accountName)],
     ss58Prefix: ss58Prefix,
   );
 }
 
-/// 按 account_name 路由派生机构账户 id —— 镜像 SFID `accounts/derive.rs` 单一源:
+/// 按 account_name 路由派生机构账户 id —— 镜像 CID `accounts/derive.rs` 单一源:
 /// 主/费/质押/安全基金/两和基金 → 各自 op_tag(payload 不含名字);其他非空名
 /// → OP_INSTITUTION(payload 追加名字)。空名抛错。
 Uint8List deriveInstitutionAccountIdByName(
-  String sfidNumber,
+  String cidNumber,
   String accountName, {
   int ss58Prefix = kGmbSs58Prefix,
 }) {
@@ -134,7 +134,7 @@ Uint8List deriveInstitutionAccountIdByName(
     _ => (kOpInstitution, true),
   };
   final payload = <int>[
-    ...utf8.encode(sfidNumber),
+    ...utf8.encode(cidNumber),
     if (appendName) ...utf8.encode(accountName),
   ];
   return deriveDuoqianAccountId(

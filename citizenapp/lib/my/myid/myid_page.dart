@@ -122,13 +122,13 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   String _identityIdText() {
-    final sfidNumber = _state.sfidNumber?.trim();
-    return sfidNumber == null || sfidNumber.isEmpty ? '未绑定' : sfidNumber;
+    final cidNumber = _state.cidNumber?.trim();
+    return cidNumber == null || cidNumber.isEmpty ? '未绑定' : cidNumber;
   }
 
   String _identityStatusText() {
     // 中文注释：identityStatus 是身份ID状态，不是绑定状态；
-    // 只有 SFID 明确返回 NORMAL 才显示正常，其他状态统一按异常展示。
+    // 只有 CID 明确返回 NORMAL 才显示正常，其他状态统一按异常展示。
     return _state.identityStatus?.trim().toUpperCase() == 'NORMAL'
         ? '状态：正常'
         : '状态：异常';

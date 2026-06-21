@@ -355,7 +355,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   }
 
   String _coldWalletInstitutionLabel() {
-    final identity = widget.institution.sfidNumber;
+    final identity = widget.institution.cidNumber;
     final registered = registeredDuoqianAddressFromIdentity(identity);
     if (registered != null) {
       return '机构账户 ${_shortHex(registered)}';

@@ -1,14 +1,14 @@
-// 公权机构目录 SFID 公开接口客户端(匿名只读)。
+// 公权机构目录 CID 公开接口客户端(匿名只读)。
 //
-// 对应 SFID BFF(混合模式:keyset 翻页 + updated_at 增量):
-//   GET /api/v1/app/public-institutions?province_name=&city_name=&since_version=&after_sfid=&page_size=
+// 对应 CID BFF(混合模式:keyset 翻页 + updated_at 增量):
+//   GET /api/v1/app/public-institutions?province_name=&city_name=&since_version=&after_cid=&page_size=
 //   GET /api/v1/app/public-institutions/version?province_name=&city_name=
-// 走 SfidApiConfig 唯一地址策略,无鉴权头,带超时(杜绝无限转)。
+// 走 CidApiConfig 唯一地址策略,无鉴权头,带超时(杜绝无限转)。
 
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:citizenapp/sfid_api_config.dart';
+import 'package:citizenapp/cid_api_config.dart';
 
 import 'public_institution_dto.dart';
 
@@ -34,7 +34,7 @@ class PublicInstitutionApi {
     String? baseUrl,
     http.Client? client,
     Duration? timeout,
-  })  : _baseUrl = baseUrl ?? SfidApiConfig.defaultBaseUrl,
+  })  : _baseUrl = baseUrl ?? CidApiConfig.defaultBaseUrl,
         _client = client ?? http.Client(),
         _timeout = timeout ?? const Duration(seconds: 15);
 
@@ -47,7 +47,7 @@ class PublicInstitutionApi {
     required String provinceName,
     String? cityName,
     String? sinceVersion,
-    String? afterSfid,
+    String? afterCid,
     int pageSize = 500,
   }) async {
     final params = <String, String>{
@@ -60,8 +60,8 @@ class PublicInstitutionApi {
     if (sinceVersion != null && sinceVersion.isNotEmpty) {
       params['since_version'] = sinceVersion;
     }
-    if (afterSfid != null && afterSfid.isNotEmpty) {
-      params['after_sfid'] = afterSfid;
+    if (afterCid != null && afterCid.isNotEmpty) {
+      params['after_cid'] = afterCid;
     }
 
     final uri = Uri.parse('$_baseUrl/api/v1/app/public-institutions')

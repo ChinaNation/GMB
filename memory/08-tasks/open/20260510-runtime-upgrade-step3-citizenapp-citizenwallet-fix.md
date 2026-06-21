@@ -12,7 +12,7 @@
 - 不新增 votingengine 目录。
 - 不修改 node。
 - 不修改 runtime。
-- 不修改 SFID。
+- 不修改 CID。
 
 ## 修复原则
 

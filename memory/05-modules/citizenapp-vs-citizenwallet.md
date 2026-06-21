@@ -10,7 +10,7 @@
 |---|---|---|
 | 中文名 | 热钱包 | 冷钱包(软件形态的硬件钱包) |
 | pubspec name | `citizenapp` | `citizenwallet` |
-| 网络连接 | 连链(smoldot 轻节点) / 连 SFID/CPMS 后端 | **完全离线** |
+| 网络连接 | 连链(smoldot 轻节点) / 连 CID/CPMS 后端 | **完全离线** |
 | 主题 | Light | Dark |
 | 依赖关系 | 不依赖 citizenwallet | 不依赖 citizenapp |
 | 代码共享 | **无** —— 两个独立 Flutter app |
@@ -32,7 +32,7 @@
 | `user_duoqian` | ✅ 生成+扫 | ❌ |
 
 **核心结论**:
-- **登录**是 citizenwallet 公民钱包专属能力(SFID/CPMS 后端只认冷钱包签的登录回执)
+- **登录**是 citizenwallet 公民钱包专属能力(CID/CPMS 后端只认冷钱包签的登录回执)
 - **交易签名**是两端协作(热端发起 → 冷端签名 → 热端广播)
 - **用户码/联系人/收款/多签**是 citizenapp 热钱包专属能力
 
@@ -62,10 +62,10 @@
 
 | 后端 | 生成 | 接收 |
 |---|---|---|
-| `sfid/backend/admins/login/mod.rs` | `login_challenge` | `login_receipt` |
-| `cpms/backend/login/mod.rs` | `login_challenge` | `login_receipt` |
+| `citizencode/backend/admins/login/mod.rs` | `login_challenge` | `login_receipt` |
+| `citizenpassport/backend/login/mod.rs` | `login_challenge` | `login_receipt` |
 
-sfid / cpms 前端只是扫码 UI 宿主:
+cid / cpms 前端只是扫码 UI 宿主:
 - 笔记本浏览器显示 `login_challenge` 二维码
 - 手机 citizenwallet 扫码
 - 手机 citizenwallet 展示 `login_receipt` 二维码
@@ -76,14 +76,14 @@ sfid / cpms 前端只是扫码 UI 宿主:
 | 前端 | 消费的 kind | 用途 |
 |---|---|---|
 | `citizenchain/node/frontend` | `user_contact` / `user_transfer` | 治理转账提案收款地址、手续费收款地址、安全基金提案收款地址 |
-| `sfid/frontend` | `user_contact` / `login_receipt` | 管理员账户绑定(扫 citizenapp 用户码)、登录(显示 challenge 给 citizenwallet 扫) |
-| `cpms/frontend`(登录部分) | `login_receipt` | 登录(显示 challenge 给 citizenwallet 扫) |
+| `citizencode/frontend` | `user_contact` / `login_receipt` | 管理员账户绑定(扫 citizenapp 用户码)、登录(显示 challenge 给 citizenwallet 扫) |
+| `citizenpassport/frontend`(登录部分) | `login_receipt` | 登录(显示 challenge 给 citizenwallet 扫) |
 
-**注意**:CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `CITIZEN_QR_V1` 无关,永远不合并。相关代码位于:
-- `cpms/backend/initialize/mod.rs`
-- `cpms/backend/dangan/mod.rs`
-- `cpms/frontend/initialize/`
-- `cpms/frontend/admins/`
-- `cpms/frontend/dangan/`
+**注意**:CPMS 的 `CID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `CITIZEN_QR_V1` 无关,永远不合并。相关代码位于:
+- `citizenpassport/backend/initialize/mod.rs`
+- `citizenpassport/backend/dangan/mod.rs`
+- `citizenpassport/frontend/initialize/`
+- `citizenpassport/frontend/admins/`
+- `citizenpassport/frontend/dangan/`
 
 这些目录在协议统一任务的零命中 grep 扫描中**被排除**。

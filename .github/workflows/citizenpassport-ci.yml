@@ -1,0 +1,103 @@
+name: CitizenPassport CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenpassport-ci.yml"
+      - "citizenpassport/**"
+      # 中文注释：CitizenPassport 安装包随附 CID 维护的行政区唯一源，数据变更时一并重验。
+      - "citizencode/backend/china/china.sqlite"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenpassport-ci.yml"
+      - "citizenpassport/**"
+      # 中文注释：CitizenPassport 安装包随附 CID 维护的行政区唯一源，数据变更时一并重验。
+      - "citizencode/backend/china/china.sqlite"
+  workflow_dispatch:
+
+concurrency:
+  group: citizenpassport-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: CitizenPassport ${{ matrix.arch }} 编译与测试
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+        with:
+          lfs: false # china.sqlite 走 LFS，先只取指针，避免每个 job 都下载 84MB
+
+      # 中文注释：china.sqlite(行政区唯一源)走 Git LFS。CPMS 安装包构建必须用到它。
+      # 缓存键按工作树里的“指针文件”哈希计算：blob 不变 → 键不变 → 永久命中 → 0 流量；
+      # 仅当 china.sqlite 真被更新(指针变)才会重新下载一次。
+      - name: 缓存 china.sqlite (LFS 对象)
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-china-sqlite-${{ hashFiles('citizencode/backend/china/china.sqlite') }}
+
+      - name: 拉取 china.sqlite (LFS)
+        run: git lfs pull --include="citizencode/backend/china/china.sqlite"
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装 Node.js
+        # 固定使用 Node.js 24,与项目 package.json engines 和 GitHub Actions node24 运行时一致。
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizenpassport/frontend/package-lock.json
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenpassport-backend-${{ matrix.arch }}"
+          workspaces: citizenpassport/backend -> target
+
+      # ── 后端 ──
+      - name: 编译后端
+        working-directory: citizenpassport/backend
+        run: cargo build --release
+
+      - name: 运行后端测试
+        working-directory: citizenpassport/backend
+        run: cargo test
+
+      # ── 前端 ──
+      - name: 安装前端依赖
+        working-directory: citizenpassport/frontend
+        run: npm ci
+
+      - name: 构建前端
+        working-directory: citizenpassport/frontend
+        run: npm run build
+
+      # ── 手动运行才构建正式离线安装包；push / pull_request 只做 CI 校验 ──
+      - name: 构建 citizenpassport-ubuntu24-${{ matrix.arch }}.run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: bash citizenpassport/scripts/build_linux_host_installer.sh --arch "${{ matrix.arch }}"
+
+      - name: 上传 citizenpassport-ubuntu24-${{ matrix.arch }}.run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenpassport-ubuntu24-${{ matrix.arch }}
+          path: |
+            citizenpassport/dist/citizenpassport-ubuntu24-${{ matrix.arch }}.run
+            citizenpassport/dist/citizenpassport-ubuntu24-${{ matrix.arch }}.run.sha256
+            citizenpassport/docs/CITIZENPASSPORT_INSTALL_GUIDE.md
+          retention-days: 30

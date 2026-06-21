@@ -7,7 +7,7 @@
 详情页动态(余额/提案/管理员/订阅按钮)留卡C。
 
 **UI 修订(2026-06-13,user review 3 项)**:
-1. 左栏省份改由 `data/public_provinces.dart::publicProvinceNames()` **复用治理 `kProvincialCouncils` 同一行政区**(去 `公民储备委员会` 后缀,**保留"省"**→ `中枢省`,与 china.sqlite/SFID province 字段逐字对齐),始终全显 43 省,不再依赖数据包是否加载(原 repo.listProvinces 空 manifest 致只剩"关注"的 bug 修复)。
+1. 左栏省份改由 `data/public_provinces.dart::publicProvinceNames()` **复用治理 `kProvincialCouncils` 同一行政区**(去 `公民储备委员会` 后缀,**保留"省"**→ `中枢省`,与 china.sqlite/CID province 字段逐字对齐),始终全显 43 省,不再依赖数据包是否加载(原 repo.listProvinces 空 manifest 致只剩"关注"的 bug 修复)。
 2. 恢复顶部"公权机构"标题(fontSize 22/w700,与治理 tab"治理机构"对称);布局改 Column(标题 → Row(左栏|内容))。
 3. 左栏重设计:删竖线(容器右边框)、删选中左强调条、删灰底面板;关注+省直接在页面背景上排列,可上下滚动,选中态仅文字加粗变色 + 轻量圆角底(无任何线)。
 测试同步更新省名为 `中枢省`;citizen/public 17/17 + 全量 232/232 无回归。
@@ -24,7 +24,7 @@
 - [ ] 选某省:右侧渲染该省市列表(listCitiesByProvince),点市 → `city_institution_list_page.dart`。
 - [ ] `city_institution_list_page.dart`:listInstitutionsByCity → 机构列表(简要名称),点进详情页(卡 C)。
 - [ ] 列表项展示简要信息(名称/简称 + 机构类型),复用 governance_list_page 样式与 hex→SS58 风格。
-- [ ] 全程**只读 Isar,零网络**(导航不触发链读/SFID 调用)。
+- [ ] 全程**只读 Isar,零网络**(导航不触发链读/CID 调用)。
 
 ## 单测/widget 测
 - [ ] 左列含 关注+中枢+省;关注默认选中。

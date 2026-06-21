@@ -13,13 +13,12 @@ GMB/
   .vscode/
   memory/
   citizenchain/
-  sfid/
-  cpms/
+  citizencode/
+  citizenpassport/
   citizenwallet/
   citizenapp/
   website/
   docs/
-  tools/
   scripts/
   AGENTS.md
   CODEX.md
@@ -36,14 +35,13 @@ GMB/
 - `.vscode/`：共享编辑器设置
 - `memory/`：AI 编程系统、项目长期记忆、产品文档与模块文档真源
 - `citizenchain/`：区块链 runtime、节点程序、节点桌面 UI、打包发布
-- `sfid/`：在线身份系统
-- `cpms/`：离线实名系统，包含 Rust 后端、React/Vite 前端、数据库迁移和部署脚本
+- `citizencode/`：在线身份系统
+- `citizenpassport/`：离线实名系统，包含 Rust 后端、React/Vite 前端、数据库迁移和部署脚本
 - `citizenwallet/`：公民钱包，负责离线签名、扫码识别和钱包 UI
 - `citizenapp/`：公民，负责公民端钱包、治理、投票和链上状态展示
 - `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
 - `docs/`：静态发布文档和展示资产，不承载系统权威记忆
-- `tools/`：仓库级工具脚本和生成器
-- `scripts/`：仓库级自动化脚本
+- `scripts/`：仓库级脚本、生成器和自动化工具
 
 根入口文件职责：
 
@@ -122,38 +120,38 @@ citizenchain/
 
 当前结构已经完成物理整合，后续新增 桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
 
-## 6b. SFID 目录策略
+## 6b. CID 目录策略
 
-2026-05-02 起,SFID 后端旧源码壳、SFID 前端旧源码壳、前端旧 views 壳、
+2026-05-02 起,CID 后端旧源码壳、CID 前端旧源码壳、前端旧 views 壳、
 后端独立 chain 业务目录、前端独立 chain 业务目录、前端独立业务 API 目录均已删除。
-SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
+CID 前后端都直接以各自根目录为代码根,按业务功能展开。
 
-- `sfid/backend/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
-- `sfid/backend/core/`:跨业务底层工具,含 `chain_*` 通用链工具、HTTP 安全、统一响应与 QR 协议辅助。
-- `sfid/backend/citizens/`:公民身份业务和公民链交互 `chain_*`。
-- `sfid/backend/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
-- `sfid/backend/gov/`:公权机构和公安局确定性目录入口。
-- `sfid/backend/private/`:私权机构注册和精确查询入口。
-- `sfid/backend/accounts/`:机构账户入口。
-- `sfid/backend/docs/`:机构资料库入口。
-- `sfid/backend/china/`:中国行政区划 SQLite 真源。
-- `sfid/backend/number/`:身份 ID 编码协议、SubjectProperty、机构码、生成和校验。
-- `sfid/backend/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、Passkey 注册与签名挑战写操作。
-- `sfid/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
-- `sfid/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
-- `sfid/frontend/china/`:行政区划元数据 API 与本地缓存。
-- `sfid/frontend/subjects/`:主体共享类型、字段标签和 `chain_duoqian_info.ts`。
-- `sfid/frontend/gov/`:公权机构页面入口。
-- `sfid/frontend/private/`:私权机构页面入口。
-- `sfid/frontend/accounts/`:机构账户组件。
-- `sfid/frontend/docs/`:机构资料库组件。
-- `sfid/frontend/admins/`:联邦注册局机构管理员/市注册局机构管理员页面、API、Passkey 与签名挑战前端流程。
+- `citizencode/backend/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
+- `citizencode/backend/core/`:跨业务底层工具,含 `chain_*` 通用链工具、HTTP 安全、统一响应与 QR 协议辅助。
+- `citizencode/backend/citizens/`:公民身份业务和公民链交互 `chain_*`。
+- `citizencode/backend/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
+- `citizencode/backend/gov/`:公权机构和公安局确定性目录入口。
+- `citizencode/backend/private/`:私权机构注册和精确查询入口。
+- `citizencode/backend/accounts/`:机构账户入口。
+- `citizencode/backend/docs/`:机构资料库入口。
+- `citizencode/backend/china/`:中国行政区划 SQLite 真源。
+- `citizencode/backend/number/`:身份 ID 编码协议、SubjectProperty、机构码、生成和校验。
+- `citizencode/backend/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、Passkey 注册与签名挑战写操作。
+- `citizencode/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
+- `citizencode/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
+- `citizencode/frontend/china/`:行政区划元数据 API 与本地缓存。
+- `citizencode/frontend/subjects/`:主体共享类型、字段标签和 `chain_duoqian_info.ts`。
+- `citizencode/frontend/gov/`:公权机构页面入口。
+- `citizencode/frontend/private/`:私权机构页面入口。
+- `citizencode/frontend/accounts/`:机构账户组件。
+- `citizencode/frontend/docs/`:机构资料库组件。
+- `citizencode/frontend/admins/`:联邦注册局机构管理员/市注册局机构管理员页面、API、Passkey 与签名挑战前端流程。
 
 同名对齐规则:
 
-- 后端链交互文件:`sfid/backend/<功能模块>/chain_*.rs`
-- 前端链交互文件:`sfid/frontend/<功能模块>/chain_*`
-- runtime 辅助目录:`citizenchain/runtime/otherpallet/sfid-system/src/sheng_admins/`
+- 后端链交互文件:`citizencode/backend/<功能模块>/chain_*.rs`
+- 前端链交互文件:`citizencode/frontend/<功能模块>/chain_*`
+- runtime 辅助目录:`citizenchain/runtime/otherpallet/cid-system/src/sheng_admins/`
 
 ## 7. GitHub Actions 路径分流原则
 
@@ -173,10 +171,10 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
   - `.github/workflows/citizenchain-runtime-src.yml`
 - `citizenchain/runtime/transaction`
   - `.github/workflows/citizenchain-runtime-transaction.yml`
-- `sfid`
-  - `.github/workflows/sfid-ci.yml`
+- `cid`
+  - `.github/workflows/citizencode-ci.yml`
 - `cpms`
-  - `.github/workflows/cpms-ci.yml`
+  - `.github/workflows/citizenpassport-ci.yml`
 - `citizenapp`
   - `.github/workflows/citizenapp-ci.yml`
 - `website`
@@ -184,6 +182,6 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
 
 补充说明：
 
-- `sfid` 部署仍由 `.github/workflows/sfid-deploy.yml` 单独负责
+- `cid` 部署仍由 `.github/workflows/cid-deploy.yml` 单独负责
 - Pages 只在 `docs/**` 或自身 workflow 变更时触发
 - 共享 Rust 根目录变更允许触发多个 citizenchain workflow，这是保留的安全边界

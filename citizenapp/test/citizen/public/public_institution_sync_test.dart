@@ -31,7 +31,7 @@ class _FakeApi extends PublicInstitutionApi {
     required String provinceName,
     String? cityName,
     String? sinceVersion,
-    String? afterSfid,
+    String? afterCid,
     int pageSize = 500,
   }) async {
     final page = pages[pageCalls.clamp(0, pages.length - 1)];
@@ -40,9 +40,9 @@ class _FakeApi extends PublicInstitutionApi {
   }
 }
 
-PublicInstitutionDto _dto(String sfid, String cityCode) =>
+PublicInstitutionDto _dto(String cid, String cityCode) =>
     PublicInstitutionDto.fromJson(<String, dynamic>{
-      'sfid_number': sfid,
+      'cid_number': cid,
       'province_code': 'ZS',
       'city_code': cityCode,
       'institution_code': 'ZF',

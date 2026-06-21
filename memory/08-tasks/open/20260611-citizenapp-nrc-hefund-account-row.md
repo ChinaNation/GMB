@@ -9,7 +9,7 @@
 
 链端 `NRC_HE_ACCOUNT`(两和基金,`ce19b7f0…`,china_cb.rs)已存在,citizenapp 数据链路缺位:
 
-1. 生成器 `tools/generate_citizenapp_governance_registry.mjs` 提取 `NRC_HE_ACCOUNT` → 国储会条目新增 `heAccount`,重生成注册表;
+1. 生成器 `scripts/generate_citizenapp_governance_registry.mjs` 提取 `NRC_HE_ACCOUNT` → 国储会条目新增 `heAccount`,重生成注册表;
 2. 模型 `InstitutionAccounts` 新增 `heAccount`(仅国储会非空);
 3. 详情页 `_extraAccountSources()` 在安全基金账户后插入「两和基金账户」行(行序:费用 → 安全基金 → 两和基金);余额复用现有展开拉取逻辑;
 4. 金额右对齐:三账户共用同一行组件(`_buildExpandedAccountItem`,金额行右端 `textAlign.right`),新增行自动继承,真机核验。

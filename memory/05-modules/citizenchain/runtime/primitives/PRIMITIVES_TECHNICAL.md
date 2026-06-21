@@ -84,7 +84,7 @@
 | ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 NRC_ANQUAN_ACCOUNT |
 
 **5 类交易费用模型**(由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 强制):
-- 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + OrganizationManage::register_sfid_institution + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + SfidSystem + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
+- 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + OrganizationManage::register_cid_institution + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + CidSystem + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
 - 链上交易费 OnchainAmount(`max(amount × 0.1%, 0.1 元)`):Balances 明确金额调用 + OffchainTransaction deposit/withdraw。治理提案内的真实执行手续费由业务 pallet 在执行阶段按同一公式另行扣取。
 - 链下交易费 OffchainFee:OffchainTransaction::submit_offchain_batch_v2 标记为链下清算费，实际手续费在清算结算阶段按 `OFFCHAIN_*` 转账，不进入链上 80/10/10 分账。
 - 免费 Free:System / Timestamp / ShengBankInterest / CitizenIssuance / ResolutionIssuance 维护型调用 / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / Assets 编译期兜底。

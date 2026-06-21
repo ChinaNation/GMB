@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/offchain_pay_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
-import 'package:citizenapp/sfid_api_config.dart';
+import 'package:citizenapp/cid_api_config.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 链下扫码支付入口流程。
@@ -10,7 +10,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 中文注释:
 /// - 钱包页 / 交易页只负责放入口按钮,真正的扫码、校验清算行、查询收款方节点
 ///   与跳转付款确认页都收口在 offchain 功能域。
-/// - 扫码结果必须携带 `UserTransferBody.bank`,该字段是收款方清算行 `sfid_number`。
+/// - 扫码结果必须携带 `UserTransferBody.bank`,该字段是收款方清算行 `cid_number`。
 Future<void> openOffchainScanPaymentFlow({
   required BuildContext context,
   required WalletProfile? wallet,
@@ -36,8 +36,8 @@ Future<void> openOffchainScanPaymentFlow({
     return;
   }
 
-  final sfidBaseUrl = SfidApiConfig.defaultBaseUrl;
-  final directory = ClearingBankDirectory(sfidBaseUrl: sfidBaseUrl);
+  final cidBaseUrl = CidApiConfig.defaultBaseUrl;
+  final directory = ClearingBankDirectory(cidBaseUrl: cidBaseUrl);
   final endpoint = await directory.fetchEndpoint(result.bank!);
   if (!context.mounted) return;
   if (endpoint == null) {
@@ -52,9 +52,9 @@ Future<void> openOffchainScanPaymentFlow({
       builder: (_) => OffchainClearingPayPage(
         wallet: wallet,
         toAddress: result.toAddress,
-        recipientBankSfidNumber: result.bank!,
+        recipientBankCidNumber: result.bank!,
         clearingNodeWssUrl: endpoint.wssUrl,
-        sfidBaseUrl: sfidBaseUrl,
+        cidBaseUrl: cidBaseUrl,
         initialAmountYuan: result.amount,
         memo: result.memo,
       ),

@@ -3,14 +3,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/onchain_clearing_bank_rpc.dart';
-import 'package:citizenapp/rpc/sfid_public.dart';
+import 'package:citizenapp/rpc/cid_public.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 扫码支付清算体系 Step 1 新增:绑定**清算行**(L2)确认页。
 ///
 /// 中文注释:
-/// - 清算行(L2)体系唯一绑定页。数据源:SFID 搜索结果传入的 `ClearingBankInfo`;
+/// - 清算行(L2)体系唯一绑定页。数据源:CID 搜索结果传入的 `ClearingBankInfo`;
 ///   链上调用 `bind_clearing_bank(bank_main_account)`(call_index 30)。
 ///   原省储行绑定页 + `bind_clearing_institution` extrinsic 已在 Step 2b-iv-b
 ///   随老 pallet 一起删除。
@@ -42,7 +42,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
   @override
   Widget build(BuildContext context) {
     final b = widget.bank;
-    final name = b.sfidFullName.isEmpty ? '(未命名机构)' : b.sfidFullName;
+    final name = b.cidFullName.isEmpty ? '(未命名机构)' : b.cidFullName;
     return Scaffold(
       appBar: AppBar(title: Text(widget.switchMode ? '切换清算行' : '绑定清算行')),
       body: ListView(
@@ -57,8 +57,8 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
             subtitle: Text('${b.provinceName} ${b.cityName}'),
           ),
           ListTile(
-            title: const Text('SFID'),
-            subtitle: SelectableText(b.sfidNumber),
+            title: const Text('CID'),
+            subtitle: SelectableText(b.cidNumber),
           ),
           ListTile(
             title: const Text('主账户地址'),
@@ -150,8 +150,8 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
         await ClearingBankPrefs.saveSnapshot(
           wallet.walletIndex,
           ClearingBankBindingSnapshot(
-            sfidNumber: widget.bank.sfidNumber,
-            sfidFullName: widget.bank.sfidFullName,
+            cidNumber: widget.bank.cidNumber,
+            cidFullName: widget.bank.cidFullName,
             mainAccount: _normalizeHex(widget.bank.mainAccount ?? ''),
             feeAccount: widget.bank.feeAccount == null
                 ? null
@@ -165,7 +165,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
         );
       } else {
         await ClearingBankPrefs.save(
-            wallet.walletIndex, widget.bank.sfidNumber);
+            wallet.walletIndex, widget.bank.cidNumber);
       }
 
       if (!mounted) return;

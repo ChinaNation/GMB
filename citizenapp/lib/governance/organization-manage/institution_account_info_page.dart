@@ -500,8 +500,8 @@ class _InstitutionAccountInfoPageState
                   _buildInfoRow('名称', widget.institution.name),
                   const Divider(height: 20),
                   _buildInfoRow(
-                    'SFID ID',
-                    _extractSfidNumber(widget.institution.sfidNumber),
+                    'CID ID',
+                    _extractCidNumber(widget.institution.cidNumber),
                   ),
                   const Divider(height: 20),
                   _buildInfoRow(
@@ -673,11 +673,11 @@ class _InstitutionAccountInfoPageState
     );
   }
 
-  String _extractSfidNumber(String sfidNumber) {
-    if (isRegisteredDuoqianIdentity(sfidNumber)) {
-      return registeredDuoqianAddressFromIdentity(sfidNumber) ?? sfidNumber;
+  String _extractCidNumber(String cidNumber) {
+    if (isRegisteredDuoqianIdentity(cidNumber)) {
+      return registeredDuoqianAddressFromIdentity(cidNumber) ?? cidNumber;
     }
-    return sfidNumber;
+    return cidNumber;
   }
 
   String _hexToSs58(String hex) {

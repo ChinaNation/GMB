@@ -42,11 +42,11 @@
 ## 实施记录
 
 - 任务卡已创建
-- 已读取启动协议、模块技术文档、上游 `sfid-system` 接线、常量来源、runtime 配置与 benchmark/weight 文件
+- 已读取启动协议、模块技术文档、上游 `cid-system` 接线、常量来源、runtime 配置与 benchmark/weight 文件
 - 已执行 `cargo test -p citizen-issuance`
 - 已执行 `cargo check -p citizen-issuance`
 - 已执行 `cargo check -p citizen-issuance --features runtime-benchmarks`
-- 已执行 `cargo test -p sfid-system`
+- 已执行 `cargo test -p cid-system`
 - 已执行 `cargo check -p citizenchain`
 
 ## 审查结论
@@ -60,17 +60,17 @@
 
 ### 已确认问题与改进点
 
-1. 上游 `sfid-system` 的 `bind_sfid` 权重文件与当前代码实现明显漂移，影响本模块回调接线后的总 weight 可信度。
-   - `sfid-system/src/weights.rs` 仍引用 `UsedCredentialNonce`、`SfidToAccount`、`AccountToSfid`、`CredentialNoncesByExpiry`
+1. 上游 `cid-system` 的 `bind_cid` 权重文件与当前代码实现明显漂移，影响本模块回调接线后的总 weight 可信度。
+   - `cid-system/src/weights.rs` 仍引用 `UsedCredentialNonce`、`CidToAccount`、`AccountToCid`、`CredentialNoncesByExpiry`
    - 当前实际代码已是 `UsedBindNonce`、`BindingIdToAccount`、`AccountToBindingId`，且没有 `CredentialNoncesByExpiry`
-   - 这说明上游 weight 很可能未按当前实现重新 benchmark；本模块自身 weight 正常，但集成后的 `bind_sfid` 总 weight 可信度不足
+   - 这说明上游 weight 很可能未按当前实现重新 benchmark；本模块自身 weight 正常，但集成后的 `bind_cid` 总 weight 可信度不足
 
-2. 缺少真正覆盖 `bind_sfid -> OnSfidBound -> reward issuance` 的集成测试。
-   - `sfid-system` 测试里 `type OnSfidBound = ()`
+2. 缺少真正覆盖 `bind_cid -> OnCidBound -> reward issuance` 的集成测试。
+   - `cid-system` 测试里 `type OnCidBound = ()`
    - 当前只能证明两个 crate 分别自洽，不能证明 runtime 接线后的真实行为不会回归
 
 3. 模块技术文档存在漂移。
-   - `CITIZENISS_TECHNICAL.md` 中 `SkipReason` 写的是 `DuplicateSfid`，代码实际是 `DuplicateBindingId`
+   - `CITIZENISS_TECHNICAL.md` 中 `SkipReason` 写的是 `DuplicateCid`，代码实际是 `DuplicateBindingId`
    - 文档记录的 weight 生成日期为 `2026-03-12`，实际 `src/weights.rs` 文件头是 `2026-03-17`
    - 测试覆盖章节未完整反映现有测试用例
 
@@ -79,7 +79,7 @@
 
 ### 建议处理顺序
 
-1. 先重新 benchmark 并更新 `sfid-system/src/weights.rs`
-2. 增加至少一条跨模块集成测试，覆盖 `bind_sfid` 成功后奖励发放与跳过事件
+1. 先重新 benchmark 并更新 `cid-system/src/weights.rs`
+2. 增加至少一条跨模块集成测试，覆盖 `bind_cid` 成功后奖励发放与跳过事件
 3. 同步更新 `CITIZENISS_TECHNICAL.md`
 4. 给 `memory/scripts/load-context.sh` 增加 `citizenchain/runtime/issuance/citizen-issuance` 映射

@@ -18,7 +18,7 @@ class AdminAccountIdentity {
   });
 
   factory AdminAccountIdentity.fromInstitution(InstitutionInfo institution) {
-    final personal = personalDuoqianAddressFromIdentity(institution.sfidNumber);
+    final personal = personalDuoqianAddressFromIdentity(institution.cidNumber);
     if (personal != null) {
       return AdminAccountIdentity.personalDuoqian(
         accountHex: personal,
@@ -27,7 +27,7 @@ class AdminAccountIdentity {
     }
 
     final account =
-        registeredDuoqianAddressFromIdentity(institution.sfidNumber);
+        registeredDuoqianAddressFromIdentity(institution.cidNumber);
     if (account != null) {
       final org = institution.adminAccountOrg;
       if (org == null) {

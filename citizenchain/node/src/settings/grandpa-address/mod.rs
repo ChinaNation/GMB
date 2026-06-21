@@ -29,13 +29,13 @@ const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// 前端展示的 GRANDPA 私钥绑定状态。
 pub struct GrandpaKey {
     pub key: Option<String>,
-    pub sfid_full_name: Option<String>,
+    pub cid_full_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredGrandpaMeta {
     #[serde(default)]
-    sfid_full_name: Option<String>,
+    cid_full_name: Option<String>,
     #[serde(default)]
     pubkey_hex: Option<String>,
 }
@@ -159,11 +159,11 @@ fn load_grandpa_meta(app: &AppHandle) -> Result<Option<StoredGrandpaMeta>, Strin
 
 fn save_grandpa_meta(
     app: &AppHandle,
-    sfid_full_name: Option<String>,
+    cid_full_name: Option<String>,
     pubkey_hex: Option<String>,
 ) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(&StoredGrandpaMeta {
-        sfid_full_name,
+        cid_full_name,
         pubkey_hex,
     })
     .map_err(|e| format!("encode grandpa meta failed: {e}"))?;
@@ -222,7 +222,7 @@ fn restore_grandpa_persisted_state(
     backup: &GrandpaPersistedStateBackup,
 ) -> Result<(), String> {
     match &backup.meta {
-        Some(meta) => save_grandpa_meta(app, meta.sfid_full_name.clone(), meta.pubkey_hex.clone())?,
+        Some(meta) => save_grandpa_meta(app, meta.cid_full_name.clone(), meta.pubkey_hex.clone())?,
         None => clear_grandpa_meta(app)?,
     }
 
@@ -272,7 +272,7 @@ fn grandpa_institution_options() -> Result<Vec<(String, String)>, String> {
     Ok(out)
 }
 
-fn sfid_full_name_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>, String> {
+fn cid_full_name_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>, String> {
     Ok(grandpa_institution_options()?
         .into_iter()
         .find(|(_, key)| key.eq_ignore_ascii_case(pubkey_hex))
@@ -341,7 +341,7 @@ pub(crate) fn prepare_grandpa_for_start(app: &AppHandle) -> Result<bool, String>
     let Some(meta) = load_grandpa_meta(app)? else {
         return Ok(false);
     };
-    if meta.sfid_full_name.is_none() {
+    if meta.cid_full_name.is_none() {
         return Ok(false);
     }
     let Some(pubkey) = meta.pubkey_hex.as_deref() else {
@@ -349,7 +349,7 @@ pub(crate) fn prepare_grandpa_for_start(app: &AppHandle) -> Result<bool, String>
     };
 
     // 校验公钥仍在当前机构清单中，防止清单更新后误启动 validator。
-    if sfid_full_name_by_grandpa_pubkey(pubkey)?.is_none() {
+    if cid_full_name_by_grandpa_pubkey(pubkey)?.is_none() {
         return Err(format!(
             "已保存的投票公钥不在当前 GRANDPA 权威列表中（公钥: 0x{pubkey}）"
         ));
@@ -385,11 +385,11 @@ pub(crate) fn verify_grandpa_after_start(app: &AppHandle) -> Result<(), String> 
 #[tauri::command]
 pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
     let meta = load_grandpa_meta(&app)?;
-    let sfid_full_name = meta.as_ref().and_then(|v| v.sfid_full_name.clone());
-    if sfid_full_name.is_none() {
+    let cid_full_name = meta.as_ref().and_then(|v| v.cid_full_name.clone());
+    if cid_full_name.is_none() {
         return Ok(GrandpaKey {
             key: None,
-            sfid_full_name: None,
+            cid_full_name: None,
         });
     }
     // 若 meta 记录了机构但 keystore 文件已不存在（如链数据被清除），
@@ -400,14 +400,14 @@ pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
             clear_grandpa_meta(&app)?;
             return Ok(GrandpaKey {
                 key: None,
-                sfid_full_name: None,
+                cid_full_name: None,
             });
         }
     }
     Ok(GrandpaKey {
         // 私钥不回传给前端，避免二次暴露。
         key: None,
-        sfid_full_name,
+        cid_full_name,
     })
 }
 
@@ -426,14 +426,14 @@ pub fn set_grandpa_key(
     let backup = snapshot_grandpa_persisted_state(&app)?;
     let normalized = normalize_grandpa_key(&key)?;
     let pubkey = grandpa_pubkey_from_private_hex(&normalized)?;
-    let sfid_full_name = sfid_full_name_by_grandpa_pubkey(&pubkey)?
+    let cid_full_name = cid_full_name_by_grandpa_pubkey(&pubkey)?
         .ok_or_else(|| format!("私钥与任何机构 GRANDPA 公钥不匹配（推导公钥: 0x{pubkey}）"))?;
 
     let normalized = Zeroizing::new(normalized);
     let mut node_stopped_for_restart = false;
     let mut new_node_started = false;
     let apply_result = (|| -> Result<(), String> {
-        save_grandpa_meta(&app, Some(sfid_full_name.clone()), Some(pubkey.clone()))?;
+        save_grandpa_meta(&app, Some(cid_full_name.clone()), Some(pubkey.clone()))?;
         write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
 
         // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
@@ -490,6 +490,6 @@ pub fn set_grandpa_key(
 
     Ok(GrandpaKey {
         key: None,
-        sfid_full_name: Some(sfid_full_name),
+        cid_full_name: Some(cid_full_name),
     })
 }

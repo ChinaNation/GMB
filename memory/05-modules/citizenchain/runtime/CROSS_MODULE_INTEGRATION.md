@@ -13,7 +13,7 @@
 | `organization-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admins-change` |
 | `duoqian-transfer` | `frame_system`, `votingengine`, `organization-manage`, `admins-change`（测试/runtime 约束） |
 | `offchain-transaction` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
-| `sfid-system` | `frame_system` |
+| `cid-system` | `frame_system` |
 | `citizen-issuance` | `frame_system`, `pallet_balances`（通过 Currency） |
 
 ## 关键 Trait 提供矩阵
@@ -31,11 +31,11 @@
 | `FeePayerExtractor` (CallFeePayer) | `onchain-transaction` | `RuntimeFeePayerExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `FeeKindClassifier` (CallFeeKind) | `onchain-transaction` | `RuntimeFeeKindClassifier` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `ProtectedSourceChecker` | `organization-manage` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `organization-manage`, `offchain-transaction` |
-| `SfidEligibility` | `votingengine` | `RuntimeSfidEligibility` (委托 sfid-system) | `votingengine` |
+| `CidEligibility` | `votingengine` | `RuntimeCidEligibility` (委托 cid-system) | `votingengine` |
 | `PopulationSnapshotVerifier` | `votingengine` | `RuntimePopulationSnapshotVerifier` | `votingengine` |
 | `JointVoteResultCallback` | `votingengine` | `RuntimeJointVoteResultCallback` | `votingengine` (投票通过后回调) |
-| `SfidInstitutionVerifier` | `organization-manage` | `RuntimeSfidInstitutionVerifier` | `organization-manage` |
-| `SfidVerifier` / `SfidVoteVerifier` | `sfid-system` | `RuntimeSfidVerifier` / `RuntimeSfidVoteVerifier` | `sfid-system` |
+| `CidInstitutionVerifier` | `organization-manage` | `RuntimeCidInstitutionVerifier` | `organization-manage` |
+| `CidVerifier` / `CidVoteVerifier` | `cid-system` | `RuntimeCidVerifier` / `RuntimeCidVoteVerifier` | `cid-system` |
 
 ## Runtime 级别适配器说明
 

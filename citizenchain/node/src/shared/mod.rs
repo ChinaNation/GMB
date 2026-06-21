@@ -4,5 +4,5 @@ pub(crate) mod keystore;
 pub(crate) mod proposal_business;
 pub(crate) mod rpc;
 pub(crate) mod security;
-pub(crate) mod sfid_config;
+pub(crate) mod cid_config;
 pub(crate) mod validation;

@@ -5,15 +5,15 @@
 - CPMS 机构管理员从每年 1 月 1 日起可导出上一年度数据；未导出时不再在 1 月 10 日后关闭导出窗口。
 - 超过 1 月 10 日仍未导出时，operators一直不能登录，直到CPMS 机构管理员完成导出。
 - 系统设置页导出按钮按状态变灰或可点击；待导出期间显示角标提示，导出完成后角标消失。
-- SFID 是否收到数据、是否禁用 CPMS 安装码由 SFID 系统实现，CPMS 不处理。
+- CID 是否收到数据、是否禁用 CPMS 安装码由 CID 系统实现，CPMS 不处理。
 
 ## 预计修改目录
 
-- `cpms/backend/src/dangan`：年度待导出年度、补导、逾期锁定和状态查询规则。
-- `cpms/backend/dangan`：新增年度导出状态接口，导出接口调用新规则。
-- `cpms/frontend/admins`：系统设置页按钮状态、系统设置页签角标、年度导出 API/type。
-- `cpms/CPMS_TECHNICAL.md`：同步 CPMS 技术文档中的年度导出规则。
-- `memory/05-modules/cpms`：同步登录、档案导出和错误码模块文档。
+- `citizenpassport/backend/dangan`：年度待导出年度、补导、逾期锁定和状态查询规则。
+- `citizenpassport/backend/dangan`：新增年度导出状态接口，导出接口调用新规则。
+- `citizenpassport/frontend/admins`：系统设置页按钮状态、系统设置页签角标、年度导出 API/type。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md`：同步 CPMS 技术文档中的年度导出规则。
+- `memory/05-modules/citizenpassport`：同步登录、档案导出和错误码模块文档。
 - `memory/08-tasks`：记录本次执行、验证和残留清理。
 
 ## 执行清单

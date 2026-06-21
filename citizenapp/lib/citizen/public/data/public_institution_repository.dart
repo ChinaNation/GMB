@@ -56,8 +56,8 @@ class PublicInstitutionRepository {
     String cityCode,
   ) =>
       store.listInstitutionsByCity(provinceCode, cityCode);
-  Future<PublicInstitutionEntity?> getBySfid(String sfidNumber) =>
-      store.getBySfid(sfidNumber);
+  Future<PublicInstitutionEntity?> getByCid(String cidNumber) =>
+      store.getByCid(cidNumber);
 
   // ── 行政区字典 join(ADR-021;UI 显示名唯一来自字典/链上常量省名)──
 
@@ -120,12 +120,12 @@ class PublicInstitutionRepository {
   }
 
   // ── 订阅("关注")──
-  Future<void> subscribe(String walletPubkeyHex, String sfidNumber) =>
-      store.subscribe(walletPubkeyHex, sfidNumber);
-  Future<void> unsubscribe(String walletPubkeyHex, String sfidNumber) =>
-      store.unsubscribe(walletPubkeyHex, sfidNumber);
-  Future<bool> isSubscribed(String walletPubkeyHex, String sfidNumber) =>
-      store.isSubscribed(walletPubkeyHex, sfidNumber);
+  Future<void> subscribe(String walletPubkeyHex, String cidNumber) =>
+      store.subscribe(walletPubkeyHex, cidNumber);
+  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) =>
+      store.unsubscribe(walletPubkeyHex, cidNumber);
+  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) =>
+      store.isSubscribed(walletPubkeyHex, cidNumber);
   Future<List<PublicInstitutionEntity>> listSubscribed(
     String walletPubkeyHex,
   ) =>

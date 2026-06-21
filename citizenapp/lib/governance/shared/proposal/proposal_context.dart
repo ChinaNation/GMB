@@ -37,7 +37,7 @@ class ProposalContext {
   /// 是否为管理员。
   bool get isAdmin => role == ProposalRole.admin;
 
-  /// 是否为公民（有 SFID 绑定）。
+  /// 是否为公民（有 CID 绑定）。
   bool get isCitizen =>
       role == ProposalRole.citizen || role == ProposalRole.admin;
 
@@ -50,7 +50,7 @@ enum ProposalRole {
   /// 管理员：有冷钱包匹配到链上管理员列表。
   admin,
 
-  /// 公民：有 SFID 绑定的钱包（暂未实现，预留）。
+  /// 公民：有 CID 绑定的钱包（暂未实现，预留）。
   citizen,
 
   /// 查看者：无关联钱包。
@@ -77,23 +77,23 @@ class ProposalContextResolver {
   /// 已缓存的钱包列表（同一次会话内复用）。
   List<WalletProfile>? _wallets;
 
-  /// 静态缓存：用户已确认为管理员的机构 sfidNumber 集合。
+  /// 静态缓存：用户已确认为管理员的机构 cidNumber 集合。
   ///
   /// 当用户浏览某个机构详情页后，如果匹配到管理员身份，
-  /// 该机构 sfidNumber 会被加入此集合。机构列表页据此渲染绿色卡片和排序。
+  /// 该机构 cidNumber 会被加入此集合。机构列表页据此渲染绿色卡片和排序。
   static final Set<String> _institutionAdminIds = {};
 
   /// 记录某机构的管理员状态。
-  static void markInstitutionAdmin(String sfidNumber) {
-    _institutionAdminIds.add(sfidNumber);
+  static void markInstitutionAdmin(String cidNumber) {
+    _institutionAdminIds.add(cidNumber);
   }
 
   /// 查询某机构是否已确认为管理员。
-  static bool isInstitutionAdmin(String sfidNumber) {
-    return _institutionAdminIds.contains(sfidNumber);
+  static bool isInstitutionAdmin(String cidNumber) {
+    return _institutionAdminIds.contains(cidNumber);
   }
 
-  /// 获取所有已确认的管理员机构 sfidNumber 集合。
+  /// 获取所有已确认的管理员机构 cidNumber 集合。
   static Set<String> get institutionAdminIds =>
       Set.unmodifiable(_institutionAdminIds);
 
@@ -350,7 +350,7 @@ class VoteChecker {
         internalByPid[t.proposalId] = pubkeys;
       } else if (t.kind == 1 && t.institution != null) {
         final inst = Uint8List.fromList(institutionIdentityToAccountId(
-          t.institution!.sfidNumber,
+          t.institution!.cidNumber,
           mainAccount: t.institution!.mainAccount,
         ));
         if (inst.length == 32) {

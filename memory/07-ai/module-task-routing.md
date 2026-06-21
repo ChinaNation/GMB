@@ -8,11 +8,11 @@
 
 - 关键词：节点、出块、同步、CLI、矿工、挖矿、节点 UI、桌面端、节点状态、设置页、Tauri、React 前端
 
-## sfid/backend
+## citizencode/backend
 
 - 关键词：permit、绑定、验签、在线身份、登录授权
 
-## cpms/backend
+## citizenpassport/backend
 
 - 关键词：离线实名、柜员、审批、审计、二维码签发
 

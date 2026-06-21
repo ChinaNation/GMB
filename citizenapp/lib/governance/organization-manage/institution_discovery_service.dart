@@ -2,7 +2,7 @@
 //
 // 只负责"后处理":从共享的 AdminAccounts 单次扫描结果(AdminAccountsScanService)
 // 里筛出机构多签(kind=InstitutionAccount,org ∈ {PUP,OTH},且管理员含本地钱包),
-// 反查 SFID 归属后 upsert 到 Isar。扫描、节流、本地钱包读取统一收口在
+// 反查 CID 归属后 upsert 到 Isar。扫描、节流、本地钱包读取统一收口在
 // `MultisigDiscoveryCoordinator`,本服务不再各自扫链。
 //
 // 个人多签后处理见 lib/governance/personal-manage/personal_manage_discovery_service.dart。
@@ -21,7 +21,7 @@ import 'institution_manage_service.dart';
 class DiscoveryStats {
   const DiscoveryStats({
     required this.institutionsScanned,
-    required this.matchedSfidAccounts,
+    required this.matchedCidAccounts,
     required this.newlyAdded,
     required this.orphansRemoved,
     required this.elapsed,
@@ -31,8 +31,8 @@ class DiscoveryStats {
   /// 本轮扫描到的 AdminAccounts key 总数。
   final int institutionsScanned;
 
-  /// 命中并成功反查 SFID 的机构账户数。
-  final int matchedSfidAccounts;
+  /// 命中并成功反查 CID 的机构账户数。
+  final int matchedCidAccounts;
 
   /// 新增到 Isar 的机构数。
   final int newlyAdded;
@@ -45,7 +45,7 @@ class DiscoveryStats {
 
   static const empty = DiscoveryStats(
     institutionsScanned: 0,
-    matchedSfidAccounts: 0,
+    matchedCidAccounts: 0,
     newlyAdded: 0,
     orphansRemoved: 0,
     elapsed: Duration.zero,
@@ -63,7 +63,7 @@ class InstitutionDiscoveryService {
   /// 机构多签 org 白名单:PUP(4) / OTH(5)。
   static const _institutionOrgWhitelist = {4, 5};
 
-  /// 处理一次共享扫描结果:筛出我的机构多签 → 批量反查 SFID → upsert Isar + 孤儿校验。
+  /// 处理一次共享扫描结果:筛出我的机构多签 → 批量反查 CID → upsert Isar + 孤儿校验。
   Future<DiscoveryStats> processScanned(
     AdminAccountsScanResult scan, {
     required Set<String> myPubkeys,
@@ -77,18 +77,18 @@ class InstitutionDiscoveryService {
       orgWhitelist: _institutionOrgWhitelist,
     );
 
-    // 批量反查 SFID 归属(AccountRegisteredSfid 精确整键),取代循环内逐条(ADR-018 R2)。
+    // 批量反查 CID 归属(AccountRegisteredCid 精确整键),取代循环内逐条(ADR-018 R2)。
     Map<String, RegisteredInstitutionRef?> refs;
     try {
       refs = await _manage.fetchRegisteredInstitutionRefsBatch(
         mine.map((a) => a.addrHex),
       );
     } catch (e) {
-      debugPrint('[DuoqianDiscovery] 批量反查 SFID 失败: $e');
+      debugPrint('[DuoqianDiscovery] 批量反查 CID 失败: $e');
       // 中文注释:反查整体失败时不做孤儿删除,避免把一次瞬时 RPC 失败误判为账户注销。
       return DiscoveryStats(
         institutionsScanned: scan.totalKeys,
-        matchedSfidAccounts: 0,
+        matchedCidAccounts: 0,
         newlyAdded: 0,
         orphansRemoved: 0,
         elapsed: DateTime.now().difference(start),
@@ -97,7 +97,7 @@ class InstitutionDiscoveryService {
     }
 
     final scannedDuoqianAddrs = <String>{};
-    var matchedSfidAccountsCount = 0;
+    var matchedCidAccountsCount = 0;
     var newlyAdded = 0;
 
     for (final acc in mine) {
@@ -108,21 +108,21 @@ class InstitutionDiscoveryService {
       final added = await _upsertInstitution(
         duoqianAccountHex: acc.addrHex,
         name: ref.accountNameText,
-        sfidNumberUtf8: ref.sfidNumberText,
+        cidNumberUtf8: ref.cidNumberText,
         adminAccountOrg: acc.org,
         matchedAdmins: acc.adminsHex
             .where(myPubkeys.contains)
             .toList(growable: false),
       );
       if (added) newlyAdded++;
-      matchedSfidAccountsCount++;
+      matchedCidAccountsCount++;
     }
 
     final orphans = await _reverseValidateAndDelete(scannedDuoqianAddrs);
 
     return DiscoveryStats(
       institutionsScanned: scan.totalKeys,
-      matchedSfidAccounts: matchedSfidAccountsCount,
+      matchedCidAccounts: matchedCidAccountsCount,
       newlyAdded: newlyAdded,
       orphansRemoved: orphans,
       elapsed: DateTime.now().difference(start),
@@ -133,7 +133,7 @@ class InstitutionDiscoveryService {
   Future<bool> _upsertInstitution({
     required String duoqianAccountHex,
     required String name,
-    required String sfidNumberUtf8,
+    required String cidNumberUtf8,
     required int? adminAccountOrg,
     required List<String> matchedAdmins,
   }) async {
@@ -153,7 +153,7 @@ class InstitutionDiscoveryService {
 
       final entity = InstitutionEntity()
         ..duoqianAccount = duoqianAccountHex
-        ..sfidNumber = sfidNumberUtf8
+        ..cidNumber = cidNumberUtf8
         ..adminAccountOrg = adminAccountOrg
         ..name = name
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch

@@ -12,10 +12,10 @@
 
 ## 预计修改目录
 
-- `cpms/backend/db`：更新当前基准 schema/migration；涉及数据库结构和约束调整。
-- `cpms/backend/src`：同步 SQL 查询、写入、类型读取、年度导出和初始化逻辑。
+- `citizenpassport/backend/db`：更新当前基准 schema/migration；涉及数据库结构和约束调整。
+- `citizenpassport/backend`：同步 SQL 查询、写入、类型读取、年度导出和初始化逻辑。
 - `cpms`：更新 CPMS 技术文档，说明当前数据库结构。
-- `memory/01-architecture/cpms`：同步架构技术文档。
+- `memory/01-architecture/citizenpassport`：同步架构技术文档。
 - `memory/08-tasks`：登记任务卡和完成记录。
 
 ## 执行清单

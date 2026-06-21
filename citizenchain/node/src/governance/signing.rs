@@ -19,9 +19,9 @@ use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
 
-fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
-    let entry = super::registry::find_institution(sfid_number)
-        .ok_or_else(|| format!("未知的治理机构 sfidNumber: {sfid_number}"))?;
+fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
+    let entry = super::registry::find_institution(cid_number)
+        .ok_or_else(|| format!("未知的治理机构 cidNumber: {cid_number}"))?;
     let clean = entry.main_account_hex();
     let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
     bytes
@@ -231,11 +231,11 @@ pub fn build_vote_sign_request(
 /// sub-pallet 拆分(2026-05-05):JointVote 独立成 pallet,`cast_admin` 在 23.0,
 /// `cast_referendum` 在 23.1(联合公投阶段需 ADR-008 step3 双层凭证,本函数不覆盖)。
 ///
-/// sfid_number 用于查找机构多签 AccountId32 参数。
+/// cid_number 用于查找机构多签 AccountId32 参数。
 pub fn build_joint_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
     let pubkey_clean = pubkey_hex
@@ -247,7 +247,7 @@ pub fn build_joint_vote_sign_request(
     }
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
-    let institution_account = institution_account_from_sfid(sfid_number)?;
+    let institution_account = institution_account_from_cid(cid_number)?;
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -430,7 +430,7 @@ pub fn verify_and_submit(
     eprintln!("[签名提交] sign_nonce={sign_nonce}, sign_block_number={sign_block_number}");
     // immortal era(单字节 0x00):PoW 链块速变化大 + 冷钱包签名流程数分钟,
     // mortal era=64 块经常导致 "ancient birth block",改 immortal 永不过期。
-    // 防重放靠 nonce(链上一次性消费)。规则:feedback_sfid_pow_chain_recipe.md
+    // 防重放靠 nonce(链上一次性消费)。规则:feedback_cid_pow_chain_recipe.md
     let era_bytes = vec![0x00u8];
     eprintln!("[签名提交] era_bytes: {:?}", era_bytes);
     let nonce_compact = encode_compact_u32(sign_nonce);

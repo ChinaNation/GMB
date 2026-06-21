@@ -5,7 +5,7 @@
 //
 // ADR-021 行政区唯一真源:机构记录只存 province/city/town code;省名走链上常量
 // (`kProvincialCouncils`,认可的省名源),市/镇名走 china.sqlite 派生字典。
-// 省 code 从省储会 sfidNumber 前缀派生(`ZS001-...` → `ZS`),与字典 provinces.json
+// 省 code 从省储会 cidNumber 前缀派生(`ZS001-...` → `ZS`),与字典 provinces.json
 // 的 code 一一对应。`publicProvinceNamesSet()` 给单测断言「链上省名集合==字典省名集合」
 // 用,把"逐字对齐"变守卫。
 
@@ -21,7 +21,7 @@ class PublicProvinceItem {
     required this.displayName,
   });
 
-  /// 省 code(= 省储会 sfidNumber 前 2 字符),与字典 provinces.json code 对齐。
+  /// 省 code(= 省储会 cidNumber 前 2 字符),与字典 provinces.json code 对齐。
   final String code;
 
   /// 规范全名(含"省"),与 china.sqlite 省名逐字对齐。
@@ -35,9 +35,9 @@ String _fullNameOf(String councilName) => councilName.endsWith(_kCouncilSuffix)
     ? councilName.substring(0, councilName.length - _kCouncilSuffix.length)
     : councilName;
 
-String _codeOf(String sfidNumber) {
-  // 省储会 sfidNumber 形如 `ZS001-GCB0R-...`,前 2 字符为省 code。
-  return sfidNumber.length >= 2 ? sfidNumber.substring(0, 2) : sfidNumber;
+String _codeOf(String cidNumber) {
+  // 省储会 cidNumber 形如 `ZS001-GCB0R-...`,前 2 字符为省 code。
+  return cidNumber.length >= 2 ? cidNumber.substring(0, 2) : cidNumber;
 }
 
 String _displayOf(String fullName) => fullName.endsWith('省')
@@ -49,7 +49,7 @@ List<PublicProvinceItem> publicProvinceItems() {
   return kProvincialCouncils.map((c) {
     final fullName = _fullNameOf(c.name);
     return PublicProvinceItem(
-      code: _codeOf(c.sfidNumber),
+      code: _codeOf(c.cidNumber),
       fullName: fullName,
       displayName: _displayOf(fullName),
     );

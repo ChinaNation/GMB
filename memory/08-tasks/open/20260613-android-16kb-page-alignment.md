@@ -40,4 +40,4 @@
 - `citizenapp/smoldot-dart/`(自有 .so 构建):NDK/链接器对齐参数,代码/构建。
 - `citizenapp/pubspec.yaml`:mobile_scanner / datastore / isar 版本升级,依赖。
 - `citizenapp/android/`(必要时):packaging/NDK 配置,构建。
-- 新增对齐校验脚本 `tools/`。
+- 新增对齐校验脚本 `scripts/`。

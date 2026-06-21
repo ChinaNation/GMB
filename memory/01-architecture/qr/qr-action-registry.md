@@ -81,9 +81,9 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 |---|---|---|---|---|
 | `propose_close_institution` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | citizenapp |
 | `cleanup_rejected_proposal` | 4 | `cleanup_rejected_proposal` | `proposal_id` | citizenapp |
-| `propose_create_institution` | 5 | `propose_create_institution` | `sfid_number`, `sfid_full_name`, `admins_len`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_pubkey` | node_ui, citizenapp |
+| `propose_create_institution` | 5 | `propose_create_institution` | `cid_number`, `cid_full_name`, `admins_len`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_pubkey` | node_ui, citizenapp |
 
-`register_sfid_institution(call_index = 2)` 由 SFID 后端签发凭证并由链端验签,不走冷钱包扫码签名,不在本表范围。`call_index = 0 / 3` 已留洞不复用。
+`register_cid_institution(call_index = 2)` 由 CID 后端签发凭证并由链端验签,不走冷钱包扫码签名,不在本表范围。`call_index = 0 / 3` 已留洞不复用。
 
 ### 1.10 DuoqianTransfer(pallet_index = 19)
 
@@ -103,9 +103,9 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `deposit_clearing_bank` | 31 | `deposit` | `amount_yuan` | node_ui, citizenapp |
 | `withdraw_clearing_bank` | 32 | `withdraw` | `amount_yuan` | node_ui, citizenapp |
 | `switch_clearing_bank` | 33 | `switch_bank` | `new_bank` | node_ui, citizenapp |
-| `register_clearing_bank` | 50 | `register_clearing_bank` | `sfid_number`, `peer_id`, `rpc_domain`, `rpc_port` | node_ui |
-| `update_clearing_bank_endpoint` | 51 | `update_clearing_bank_endpoint` | `sfid_number`, `new_domain`, `new_port` | node_ui |
-| `unregister_clearing_bank` | 52 | `unregister_clearing_bank` | `sfid_number` | node_ui |
+| `register_clearing_bank` | 50 | `register_clearing_bank` | `cid_number`, `peer_id`, `rpc_domain`, `rpc_port` | node_ui |
+| `update_clearing_bank_endpoint` | 51 | `update_clearing_bank_endpoint` | `cid_number`, `new_domain`, `new_port` | node_ui |
+| `unregister_clearing_bank` | 52 | `unregister_clearing_bank` | `cid_number` | node_ui |
 
 ### 1.12 InternalVote(pallet_index = 22)
 
@@ -127,10 +127,10 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | action | payload 结构 | fields(顺序固定) | 签发方 | 用途 |
 |---|---|---|---|---|
 | `activate_admin_account` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `account_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / citizenapp | subject 级管理员激活 |
-| `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
-| `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | citizenapp 电子护照绑定签名 |
+| `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `cid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `cid_number` | node_ui | 清算行管理员解密 challenge |
+| `citizen_bind` | `cid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | cid 后端 | citizenapp 电子护照绑定签名 |
 | `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|admin_account\|expires_at` | `archive_no`, `admin_account`, `expires_at` | cpms | CPMS 公民档案软删除 |
-| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `actor_province_name`, `actor_account`, `target` | sfid 后端 | 注册局机构管理员治理和 Passkey 更新公民钱包确认 |
+| `cid_admin_action` | `cid_admin_governance` canonical JSON hex | `action_type`, `actor_province_name`, `actor_account`, `target` | cid 后端 | 注册局机构管理员治理和 Passkey 更新公民钱包确认 |
 
 ## 二、字段渲染规则
 
@@ -141,11 +141,11 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `proposal_id` / `eligible_total` / `allocation_count` / `rpc_port` / `new_port` | 整数 | 十进制字符串 |
 | `approve` | bool | `"true"` / `"false"` |
 | `org` | u8 / u32 机构代号 | 机构中文名;找不到时回退为 `机构<raw>` |
-| `institution` | 48B sfid_number | 优先转机构中文名;找不到时回退原 sfid_number |
+| `institution` | 48B cid_number | 优先转机构中文名;找不到时回退原 cid_number |
 | `wasm_size` | u32 字节 | `"X.XX MB"` 或 `"X KB"` |
 | `pubkey` / `signer_pubkey` / `admin_account` / `actor_account` / `old_admin` / `new_admin` | 32 字节账户/公钥 | 人机展示为 SS58,prefix = 2027 |
 | `wasm_hash` / `new_key` / `payload_hash` | 32 字节哈希或非账户密钥 | `0x<64hex>` 小写;默认不进入普通确认字段 |
-| `reason` / `remark` / `account_name` / `sfid_full_name` / `sfid_number` / `province_name` / `actor_province_name` / `peer_id` / `rpc_domain` / `new_domain` | UTF-8 | 原字符串;UI 可截断展示,签名原文不截断 |
+| `reason` / `remark` / `account_name` / `cid_full_name` / `cid_number` / `province_name` / `actor_province_name` / `peer_id` / `rpc_domain` / `new_domain` | UTF-8 | 原字符串;UI 可截断展示,签名原文不截断 |
 | `admins_len` | u32 | 十进制字符串 |
 | `threshold` | u32 | `"<threshold>/<admins_len>"` |
 | `archive_no` / `archive_id` / `expires_at` | UTF-8 | 原字符串 |

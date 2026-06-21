@@ -6,7 +6,7 @@
 - 对外输入统一为任务需求，不要求手工拆标题和目标
 - 当前主聊天入口是默认总调度器
 - 首轮默认先做需求分析，再决定是否进入执行
-- 进入执行阶段后，当前主聊天入口必须根据任务所属模块，按需调度 `Blockchain Agent`、`SFID Agent`、`CPMS Agent`、`Mobile Agent`
+- 进入执行阶段后，当前主聊天入口必须根据任务所属模块，按需调度 `Blockchain Agent`、`CID Agent`、`CPMS Agent`、`Mobile Agent`
 - 用户不需要手工指定分配给哪个 Agent，模块识别、任务拆分和调度由当前主聊天入口负责
 
 ## 2. Agent 角色
@@ -15,7 +15,7 @@
 
 - `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
-- `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
+- `cid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - `cpms`：Rust + Axum + SQLx + PostgreSQL 后端，React + TypeScript + Vite 前端
 - `citizenapp`：Flutter + Dart + Isar
 
@@ -35,10 +35,10 @@
 - 包括 `runtime/`
 - 包括区块链相关文档和打包流程
 
-### SFID Agent
+### CID Agent
 
-- 由当前主聊天入口在任务涉及 `sfid` 时按需调度
-- 负责 `sfid` 后端、前端、数据库与文档
+- 由当前主聊天入口在任务涉及 `cid` 时按需调度
+- 负责 `cid` 后端、前端、数据库与文档
 
 ### CPMS Agent
 
@@ -73,7 +73,7 @@
 - 每次输出技术方案都必须包含“预计修改目录”清单；清单中每个目录必须附中文注释，说明该目录的修改用途、边界和是否涉及代码、文档或残留清理
 - 代码必须补中文注释
 - 产品命名硬规则：公民（在线/热钱包）= 英文名 `CitizenApp`、模块 id/目录 `citizenapp`、中文名“公民”；公民钱包（离线/冷钱包）= 英文名 `CitizenWallet`、模块 id/目录 `citizenwallet`、中文名“公民钱包”。任何历史旧名及非目标中英文产品名一律废弃，不得在代码、文档、命名、注释中生成；改名进度见任务卡 `20260620-product-rename-citizenapp-citizenwallet`
-- 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；SFID 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支；CPMS 本地非机构操作人员统一为 `operators`。
+- 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；CID 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支；CPMS 本地非机构操作人员统一为 `operators`。
 - runtime 二次确认硬规则：任何涉及 `citizenchain/runtime/` 的修改，无论是业务逻辑、常量、权重、runtime primitives、注释、格式化、生成物还是仅由格式化工具造成的无逻辑 diff，都必须在执行前单独向用户说明完整路径、预计改动内容和原因，并得到用户明确的第二次确认；没有二次确认时，禁止读写工具、格式化命令或批量命令产生 runtime diff。
 - 代码更新后必须更新文档
 - 代码更新后必须清理残留
@@ -95,9 +95,9 @@
 - 文件名长度不得超过 80 字符（含扩展名），详细描述放在文件内容里，不要塞进文件名
 - `memory/08-tasks/` 下的任务卡文件名（含 `.md` 扩展名）不得超过 160 个 UTF-8 字节；标题与详细需求写入文件内容，文件名只保留短 slug
 - 相同功能必须在前后端创建相同文件夹；功能不大时直接在对应文件夹下创建相同文件，功能过大时再按需下钻一级同名子文件夹；不确定边界时必须先询问用户
-- SFID 后端不得新建或恢复 `backend/src/` 源码壳；后端源码直接以 `sfid/backend/` 为根目录展开
-- SFID 系统不得新建或恢复独立 `backend/chain/`、`frontend/chain/` 业务目录；各功能模块如需和区块链交互，必须在所属功能模块目录中新建 `chain_` 开头文件；跨模块链底层工具只允许放 `core/chain_*`
-- SFID 前端不得新建或恢复独立 `frontend/api/` 业务目录；某功能需要后端 API 时,必须在所属功能模块目录中新建 `api.ts`；通用 HTTP 请求封装只允许放 `frontend/utils/http.ts`,且不得承载业务接口
+- CID 后端不得新建或恢复 `backend/src/` 源码壳；后端源码直接以 `citizencode/backend/` 为根目录展开
+- CID 系统不得新建或恢复独立 `backend/chain/`、`frontend/chain/` 业务目录；各功能模块如需和区块链交互，必须在所属功能模块目录中新建 `chain_` 开头文件；跨模块链底层工具只允许放 `core/chain_*`
+- CID 前端不得新建或恢复独立 `frontend/api/` 业务目录；某功能需要后端 API 时,必须在所属功能模块目录中新建 `api.ts`；通用 HTTP 请求封装只允许放 `frontend/utils/http.ts`,且不得承载业务接口
 
 ## 4. 开发闭环
 
@@ -155,14 +155,14 @@ citizenapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/0
 
 - **R1 统一字段查询**:列表类数据一律"短 key 索引(`ProposalsByYear`/整表扫描)取一次 → 客户端按已解码字段过滤"。**禁止**对嵌 32 字节 AccountId 或 `blake2_128(x)+x` 的**长前缀**做 `getKeysPagedFinalized`(轻节点静默返回空)。精确整键 `fetchStorage(完整key)` 不受限,可用。
 - **R2 降低全节点依赖**:① 多 key 一律 `fetchStorageBatch`/`fetchFinalizedBalances`,**禁止循环内逐条** `fetchStorage`/`fetchFinalizedBalance`(N+1);② 同一数据跨页面取一次进共享缓存复用;③ 链状态页用 finalized 头订阅驱动刷新,禁止 `Timer.periodic` 轮询查链;④ 能用已缓存/已解码数据客户端算出的,不再联网。
-- **R3 外部后端(SFID/HTTP)缓存**:health/catalog/机构注册证/电子护照状态等读取加 Isar + TTL 缓存。
+- **R3 外部后端(CID/HTTP)缓存**:health/catalog/机构注册证/电子护照状态等读取加 Isar + TTL 缓存。
 - **豁免**:交易提交管线(nonce/dry-run/submit/runtime-version/genesis/提交用 best 块)+ UI 倒计时 Timer。
 
 ## 死规则:行政区唯一真源 + code 不可变不复用(ADR-021)
 
-- **唯一真源**:行政区(省/市/镇/村/路)只有一个入口 = `sfid/backend/china/`。开发库 `sfid/backend/china/china.sqlite` 是唯一权威源；生产 `SFID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套行政区名字**。
-- **发布消费**:行政区变更必须修改开发库并递增 `metadata.admin_division_version`；SFID、citizenapp、CPMS 发布包都从开发库派生本地只读快照。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
-- **目录红线**:不得恢复 `sfid/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `sfid/backend/china/`。
+- **唯一真源**:行政区(省/市/镇/村/路)只有一个入口 = `citizencode/backend/china/`。开发库 `citizencode/backend/china/china.sqlite` 是唯一权威源；生产 `CID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套行政区名字**。
+- **发布消费**:行政区变更必须修改开发库并递增 `metadata.admin_division_version`；CID、citizenapp、CPMS 发布包都从开发库派生本地只读快照。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
+- **目录红线**:不得恢复 `citizencode/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `citizencode/backend/china/`。
 - **code 不可变、不复用**:省 code 固定且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `name` 不改 `code`;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
-- **校验**:`china/store.rs::load_provinces` 加载即断言省名和市名全国唯一、(省,市,镇) code 无重复；CI `sfid/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
+- **校验**:`china/store.rs::load_provinces` 加载即断言省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizencode/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
 - **红线**:行政区开发库变更不直接修改 `citizenchain/runtime/`。`/primitives/china/` 的行政区和保护机构常量需要变更时,必须走 runtime 升级二次确认。

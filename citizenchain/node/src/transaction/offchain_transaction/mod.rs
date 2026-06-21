@@ -3,7 +3,7 @@
 //! 中文注释:
 //! - 本目录统一承载 node 层清算行功能,包括清算行管理命令、本地账本、
 //!   对 citizenapp 的 RPC、批次打包器、链上事件监听同步、主账对账。
-//! - 清算行注册机构的多签创建、SFID 查询、链上机构详情已经归位到
+//! - 清算行注册机构的多签创建、CID 查询、链上机构详情已经归位到
 //!   `governance/organization-manage`。
 //! - 本 mod 直接挂载扫码收单+RPC+ledger 文件;`settlement` 子目录承载结算 worker。
 //! - `service::new_full` 检测到 `--clearing-bank` CLI flag 时,调

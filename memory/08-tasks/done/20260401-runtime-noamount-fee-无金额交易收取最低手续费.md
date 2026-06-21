@@ -15,7 +15,7 @@
 - DuoqianManage：vote_create、vote_close、propose_create_personal、cleanup_rejected_proposal、兜底
 - DuoqianTransfer：propose_transfer、vote_transfer、propose_safety_fund_transfer、vote_safety_fund_transfer、propose_sweep_to_main、vote_sweep_to_main
 - VotingEngine：joint_vote、citizen_vote
-- SfidSystem：bind_sfid、unbind_sfid、rotate_sfid_keys
+- CidSystem：bind_cid、unbind_cid、rotate_cid_keys
 - AdminsChange：propose_admin_replacement、vote_admin_replacement
 - ResolutionIssuanceGov：propose_resolution_issuance
 - RuntimeUpgrade：propose_runtime_upgrade、developer_direct_upgrade
@@ -32,7 +32,7 @@
 - ResolutionIssuanceGov：finalize_joint_vote、set_allowed_recipients
 - VotingEngine：create_internal_proposal、create_joint_proposal、internal_vote、finalize_proposal
 - RuntimeUpgrade：finalize_joint_vote
-- DuoqianManage：register_sfid_institution
+- DuoqianManage：register_cid_institution
 - DuoqianTransfer：execute_transfer
 - AdminsChange：execute_admin_replacement
 - ResolutionDestro：execute_destroy

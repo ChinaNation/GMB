@@ -45,7 +45,7 @@
 - 已将 `resolution-issuance-gov` 与 `resolution-issuance-iss` 合并为 `citizenchain/runtime/issuance/resolution-issuance`
 - 已保留 runtime pallet index 8，并删除原 index 7 的执行模块注册
 - 已将提案、联合投票回调、发行执行、暂停维护、幂等清理拆分到 `proposal.rs`、`execution.rs`、`validation.rs`、`migration.rs`、`weights.rs`、`benchmarks.rs`
-- 已更新 runtime 配置、创世 JSON key、benchmark 脚本、SFID 事件解析、冷钱包 pallet registry、网站模块说明与技术文档
+- 已更新 runtime 配置、创世 JSON key、benchmark 脚本、CID 事件解析、冷钱包 pallet registry、网站模块说明与技术文档
 - 已删除旧代码目录和旧模块技术文档目录，并完成旧模块名残留搜索
 - 已验证 `cargo test -p resolution-issuance`、`cargo check -p resolution-issuance --features runtime-benchmarks`、`CARGO_TARGET_DIR=/private/tmp/gmb-citizenchain-target WASM_BUILD_WORKSPACE_HINT=/Users/rhett/GMB/citizenchain WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain`、`flutter test test/signer/pallet_registry_test.dart`
 

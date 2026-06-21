@@ -166,7 +166,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 **Step 2b-iv**(清理):
 - 删除 `node/src/offchain_{ledger,packer,gossip}.rs`
 - 删除 `main.rs` 里对应 mod 声明
-- 删除 `rpc.rs::FullDeps` 中 `offchain_ledger` / `offchain_sfid_number` / `offchain_gossip_tx`(老省储行清算字段)
+- 删除 `rpc.rs::FullDeps` 中 `offchain_ledger` / `offchain_cid_number` / `offchain_gossip_tx`(老省储行清算字段)
 - runtime `offchain-transaction` 删除 call_index 0 旧 `submit_offchain_batch` / 9 旧 `bind_clearing_institution` / 1/2 旧 `propose_institution_rate`
 
 ## 8. 变更记录

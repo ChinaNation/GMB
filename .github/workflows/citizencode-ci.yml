@@ -1,0 +1,208 @@
+name: CitizenCode CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizencode-ci.yml"
+      - "citizencode/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizencode-ci.yml"
+      - "citizencode/**"
+  workflow_dispatch:
+
+concurrency:
+  group: citizencode-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: CitizenCode 编译、测试与打包
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+        with:
+          lfs: false # china.sqlite 走 LFS，先只取指针，避免每个 job 都下载 84MB
+
+      # 中文注释：CID 后端运行时按路径只读 china.sqlite(省/市/镇查询),cargo test 会打开它。
+      # 缓存键按指针文件哈希:blob 不变 → 永久命中 → 0 流量;仅 china.sqlite 更新才重下一次。
+      - name: 缓存 china.sqlite (LFS 对象)
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-china-sqlite-${{ hashFiles('citizencode/backend/china/china.sqlite') }}
+
+      - name: 拉取 china.sqlite (LFS)
+        run: git lfs pull --include="citizencode/backend/china/china.sqlite"
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装 Node.js
+        # 固定使用 Node.js 24,与项目 package.json engines 和 GitHub Actions node24 运行时一致。
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizencode/frontend/package-lock.json
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizencode-backend"
+          workspaces: citizencode/backend -> target
+
+      - name: 安装系统依赖
+        run: sudo apt-get update && sudo apt-get install -y pkg-config
+
+      # ── 后端 ──
+      - name: 编译后端
+        working-directory: citizencode/backend
+        run: cargo build --release --locked
+
+      - name: 运行后端测试
+        working-directory: citizencode/backend
+        run: cargo test --locked
+
+      # ── 前端 ──
+      - name: 安装前端依赖
+        working-directory: citizencode/frontend
+        run: npm ci
+
+      - name: 构建前端
+        working-directory: citizencode/frontend
+        run: npm run build
+
+      # ── 构建 .deb 安装包 ──
+      - name: 构建 citizencode.deb
+        run: |
+          DEB_ROOT="deb-pkg"
+          mkdir -p "$DEB_ROOT/DEBIAN"
+          mkdir -p "$DEB_ROOT/opt/citizencode/bin"
+          mkdir -p "$DEB_ROOT/opt/citizencode/china"
+          mkdir -p "$DEB_ROOT/opt/citizencode/frontend"
+          mkdir -p "$DEB_ROOT/var/lib/citizencode"
+          mkdir -p "$DEB_ROOT/etc/systemd/system"
+          mkdir -p "$DEB_ROOT/etc/nginx/sites-available"
+
+          # 后端二进制
+          cp citizencode/backend/target/release/citizencode-backend "$DEB_ROOT/opt/citizencode/bin/"
+          chmod 755 "$DEB_ROOT/opt/citizencode/bin/citizencode-backend"
+
+          # 行政区 SQLite 随包只读源
+          cp citizencode/backend/china/china.sqlite "$DEB_ROOT/opt/citizencode/china/china.sqlite"
+
+          # 前端静态文件
+          cp -r citizencode/frontend/dist/* "$DEB_ROOT/opt/citizencode/frontend/"
+
+          # deb 控制文件
+          cat > "$DEB_ROOT/DEBIAN/control" << 'EOF'
+          Package: citizencode
+          Version: 1.0.0
+          Section: web
+          Priority: optional
+          Architecture: amd64
+          Depends: postgresql, redis-server, nginx
+          Maintainer: GMB <noreply@gmb.org>
+          Description: CID 系统
+           公民身份识别码系统服务端，包含后端 API 和前端静态文件。
+          EOF
+
+          # 安装后脚本
+          cat > "$DEB_ROOT/DEBIAN/postinst" << 'POSTINST'
+          #!/bin/bash
+          set -e
+          # 创建用户
+          if ! id -u cid >/dev/null 2>&1; then
+            useradd --system --no-create-home --shell /usr/sbin/nologin cid
+          fi
+          # 环境变量模板
+          if [ ! -f /opt/citizencode/.env ]; then
+            cat > /opt/citizencode/.env << 'ENVEOF'
+          CID_ENV=production
+          DATABASE_URL=postgres://cid:cid_pwd@127.0.0.1:5432/cid
+          CID_REDIS_URL=redis://127.0.0.1:6379/0
+          CID_CHINA_DB=/opt/citizencode/china/china.sqlite
+          CID_SIGNING_SEED_HEX=<替换为主签名种子>
+          CID_CHAIN_WS_URL=ws://127.0.0.1:9944
+          CID_BIND_ADDR=127.0.0.1:8899
+          CID_CHAIN_TOKEN=<替换为链路鉴权 token>
+          CID_CHAIN_SIGNING_SECRET=<替换为签名密钥>
+          CID_PUBLIC_SEARCH_TOKEN=<替换为公共搜索 token>
+          ENVEOF
+            echo "请编辑 /opt/citizencode/.env 配置环境变量"
+          fi
+          chown -R cid:cid /opt/citizencode /var/lib/citizencode
+          systemctl daemon-reload
+          systemctl enable citizencode-backend
+          echo "CID 安装完成。启动: sudo systemctl start citizencode-backend"
+          POSTINST
+          chmod 755 "$DEB_ROOT/DEBIAN/postinst"
+
+          # systemd 服务
+          cat > "$DEB_ROOT/etc/systemd/system/citizencode-backend.service" << 'EOF'
+          [Unit]
+          Description=CID Server
+          After=network.target postgresql.service redis.service
+
+          [Service]
+          Type=simple
+          User=cid
+          WorkingDirectory=/opt/citizencode
+          EnvironmentFile=/opt/citizencode/.env
+          ExecStart=/opt/citizencode/bin/citizencode-backend
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # nginx 配置
+          cat > "$DEB_ROOT/etc/nginx/sites-available/cid" << 'EOF'
+          server {
+              listen 443 ssl;
+              server_name cid.example.com;
+              ssl_certificate     /etc/ssl/citizencode/cert.pem;
+              ssl_certificate_key /etc/ssl/citizencode/key.pem;
+              root /opt/citizencode/frontend;
+              index index.html;
+              location / {
+                  try_files $uri $uri/ /index.html;
+              }
+              location /api/ {
+                  proxy_pass http://127.0.0.1:8899;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+          EOF
+
+          # 构建 deb
+          dpkg-deb --build "$DEB_ROOT" citizencode.deb
+          echo "产出: citizencode.deb ($(du -h citizencode.deb | cut -f1))"
+
+      - name: 清理旧 artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.name == "citizencode") | .id' \
+          | while read -r id; do
+              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
+            done
+
+      - name: 上传 citizencode.deb
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizencode
+          path: citizencode.deb
+          retention-days: 30

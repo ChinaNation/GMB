@@ -17,8 +17,8 @@
   - `memory/01-architecture/gmb/GMB_TECHNICAL.md`
 - 产品技术文档：
   - `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
-  - `memory/01-architecture/sfid/SFID_TECHNICAL.md`
-  - `memory/01-architecture/cpms/CPMS_TECHNICAL.md`
+  - `memory/01-architecture/citizencode/CID_TECHNICAL.md`
+  - `memory/01-architecture/citizenpassport/CPMS_TECHNICAL.md`
   - `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
 - 模块技术文档：
   - 位于 `memory/05-modules/` 中，按产品和模块目录归档，命名统一为 `*_TECHNICAL.md`
@@ -36,7 +36,7 @@
 
 仓库当前包含 4 个核心产品：
 - `citizenchain`：区块链主产品，负责链上状态、共识、治理、发行、交易、节点运行与桌面节点软件。
-- `sfid`：身份识别码系统，负责公民绑定、资格校验、人口快照、公民投票凭证、管理员站点与链侧接口。
+- `cid`：身份识别码系统，负责公民绑定、资格校验、人口快照、公民投票凭证、管理员站点与链侧接口。
 - `cpms`：离线档案与二维码签发系统，负责建档、签章二维码、机构公钥登记二维码。
 - `citizenapp`：公民，负责钱包、登录签名、治理入口、交易入口与端上状态展示。
 
@@ -53,9 +53,9 @@
   - 治理、发行、交易、资格接入
   - 原生节点程序与桌面节点软件
 
-### 4.2 SFID
-- 代码目录：`/Users/rhett/GMB/sfid`
-- 产品文档：`/Users/rhett/GMB/memory/01-architecture/sfid/SFID_TECHNICAL.md`
+### 4.2 CID
+- 代码目录：`/Users/rhett/GMB/cid`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizencode/CID_TECHNICAL.md`
 - 当前技术栈：
   - 前端：React + TypeScript + Vite + Ant Design
   - 后端：Rust + Axum + PostgreSQL
@@ -66,11 +66,11 @@
   - 管理员与机构管理
 
 ### 4.3 CPMS
-- 代码目录：`/Users/rhett/GMB/cpms`
-- 产品文档：`/Users/rhett/GMB/memory/01-architecture/cpms/CPMS_TECHNICAL.md`
+- 代码目录：`/Users/rhett/GMB/citizenpassport`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizenpassport/CPMS_TECHNICAL.md`
 - 当前技术栈：
   - 后端：Rust + Axum + SQLx + PostgreSQL
-  - 前端：当前仓库仅保留 `cpms/frontend/` 预留目录，未落地独立前端实现
+  - 前端：当前仓库仅保留 `citizenpassport/frontend/` 预留目录，未落地独立前端实现
 - 核心职责：
   - 离线档案录入
   - 档案二维码签发与打印
@@ -94,20 +94,20 @@
 ### 5.1 公民绑定主流程
 1. `citizenchain` 接收链上账户与绑定请求。
 2. `CPMS` 在线下生成带签名档案二维码。
-3. `SFID` 管理员站扫码并验签二维码，完成档案号与区块链公钥绑定。
-4. `SFID` 将绑定结果回传给 `citizenchain`。
+3. `CID` 管理员站扫码并验签二维码，完成档案号与区块链公钥绑定。
+4. `CID` 将绑定结果回传给 `citizenchain`。
 5. `citizenapp` 或其他链上客户端读取绑定状态并展示用户身份能力。
 
 ### 5.2 公民投票主流程
 1. `citizenchain` 创建联合投票 / 公民投票提案。
-2. `SFID` 提供人口快照、投票资格校验、投票凭证签名验证。
+2. `CID` 提供人口快照、投票资格校验、投票凭证签名验证。
 3. `citizenapp` 作为公民端入口提交投票签名或交易。
 4. `citizenchain` 在 runtime 中完成投票记账、状态流转与最终结果处理。
 
 ### 5.3 管理员扫码登录主流程
-1. `CPMS` 或 `SFID` 生成登录 challenge。
+1. `CPMS` 或 `CID` 生成登录 challenge。
 2. `citizenapp` 扫码并完成签名。
-3. `CPMS` / `SFID` 回收签名回执并完成验签。
+3. `CPMS` / `CID` 回收签名回执并完成验签。
 4. 对应管理后台生成会话并授权。
 
 ### 5.4 节点部署与使用主流程
@@ -122,7 +122,7 @@
 - 协议名：`CITIZEN_QR_V1`
 - 相关产品：
   - `citizenapp`
-  - `sfid`
+  - `cid`
   - `cpms`
 - 要求：
   - 挑战字段、签名原文、`aud` 口径必须一致
@@ -130,7 +130,7 @@
 
 ### 6.2 CPMS 业务二维码协议
 - 生产方：`cpms`
-- 消费方：`sfid`
+- 消费方：`cid`
 - 用途：
   - 公民档案二维码验签
   - 机构公钥登记二维码验签
@@ -142,29 +142,29 @@
 - 相关产品：
   - `citizenchain`
   - `citizenapp`
-  - `sfid`（链侧接口）
+  - `cid`（链侧接口）
 - 要求：
   - 地址显示、链 ID、Token 展示口径统一
 
-### 6.4 SFID 链侧五项能力口径
-- 机构 SFID 登记前置
+### 6.4 CID 链侧五项能力口径
+- 机构 CID 登记前置
 - 公民身份绑定凭证
 - 公民投票凭证
 - 联合投票人口快照
-- SFID 主备验签账户管理
+- CID 主备验签账户管理
 
-这 5 项能力的详细归属在 `memory/01-architecture/sfid/SFID_TECHNICAL.md` 中定义，但其链侧承接能力由 `citizenchain` 负责落地。
+这 5 项能力的详细归属在 `memory/01-architecture/citizencode/CID_TECHNICAL.md` 中定义，但其链侧承接能力由 `citizenchain` 负责落地。
 
 ## 7. 仓库目录结构与共享层
 
 ```text
 GMB/
 ├── citizenchain/   # 区块链主产品代码
-├── sfid/           # 身份识别码系统代码
-├── cpms/           # 离线档案系统代码
+├── citizencode/           # 身份识别码系统代码
+├── citizenpassport/           # 离线档案系统代码
 ├── citizenapp/       # 公民代码
 ├── memory/         # AI 编程系统与正式文档真源
-├── tools/          # 环境与开发工具
+├── scripts/        # 仓库级脚本与生成器
 ├── docs/           # 图片、白皮书素材与参考资料
 └── .github/        # CI/CD、脚本、安装包流水线
 ```
@@ -174,9 +174,9 @@ GMB/
 - 是正式文档真源，不在产品目录中复制第二份。
 - 任意产品实现变更后，都应优先回写 `memory/` 中的对应文档。
 
-### 7.2 `tools/`
-- 提供环境安装、辅助脚本、身份相关工具
-- `tools/zhujichi.py` 用于批量生成助记词与公钥清单，当前默认输出为 `vault_without_salt.txt` 纯文本文件
+### 7.2 `scripts/`
+- 提供仓库级辅助脚本、生成器和身份相关工具
+- `scripts/zhujichi.py` 用于批量生成助记词与公钥清单，当前默认输出为 `vault_without_salt.txt` 纯文本文件
 - 不承载产品主业务逻辑
 
 ### 7.3 `docs/`
@@ -205,7 +205,7 @@ GMB/
 
 ### 8.3 Web / Backend 发布
 - 适用产品：
-  - `sfid`
+  - `cid`
   - `cpms`
 - 触发条件：
   - API、数据库、前后端管理页、权限逻辑变更
@@ -219,7 +219,7 @@ GMB/
   - Flutter UI、钱包、签名、扫码流程、端上存储策略变更
 - 影响：
   - 需要重新打包移动端
-  - 若涉及共享协议，必须与 `SFID/CPMS/citizenchain` 联调
+  - 若涉及共享协议，必须与 `CID/CPMS/citizenchain` 联调
 
 ### 8.5 Chain Spec / Genesis 变更
 - 主要发生在 `citizenchain/node` 与 `citizenchain/runtime/src/genesis_config_presets.rs`
@@ -231,10 +231,10 @@ GMB/
 ## 9. 联调与变更控制
 
 ### 9.1 必须同步联调的改动
-- 登录扫码协议改动：`citizenapp + sfid + cpms`
-- CPMS 二维码字段 / 签名串改动：`cpms + sfid`
-- 链地址口径 / SS58 / 交易字段改动：`citizenchain + citizenapp + sfid`
-- 绑定 / 投票凭证 / 人口快照改动：`citizenchain + sfid`
+- 登录扫码协议改动：`citizenapp + cid + cpms`
+- CPMS 二维码字段 / 签名串改动：`cpms + cid`
+- 链地址口径 / SS58 / 交易字段改动：`citizenchain + citizenapp + cid`
+- 绑定 / 投票凭证 / 人口快照改动：`citizenchain + cid`
 
 ### 9.2 必须同步更新文档的改动
 - 产品边界变化：更新仓库文档 + 对应产品文档
@@ -251,8 +251,8 @@ GMB/
 
 ## 10. 产品技术文档索引
 - `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
-- `memory/01-architecture/sfid/SFID_TECHNICAL.md`
-- `memory/01-architecture/cpms/CPMS_TECHNICAL.md`
+- `memory/01-architecture/citizencode/CID_TECHNICAL.md`
+- `memory/01-architecture/citizenpassport/CPMS_TECHNICAL.md`
 - `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
 
 ## 11. 结论性维护要求

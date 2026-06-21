@@ -74,7 +74,7 @@
 
 - P0：公民钱包 `citizenwallet/lib/signer/payload_decoder.dart` 需要同步 `propose_admin_set_change(org, subject, admins[])`，否则会导致严格签名校验拒签，或在非严格路径下造成冷钱包展示字段与真实 call data 不一致。2026-05-10 已在本任务中修复解码、action label 与测试。
 - P0/P1：citizenapp 已将注册机构身份解析为 `InstitutionAccount(0x05)` 主体，但 runtime `organization-manage` 创建/激活注册机构管理员主体仍使用 `注册机构归属关系(0x02)`。在第 4 步 `organization-manage` 改造完成前，注册机构账户级管理员变更链路不能视为完成。
-- 已修复：node 前后端已统一为 `AdminAccountRef`，内置治理机构走 `sfidNumber + org`，个人多签和机构账户走 `accountIdHex + org`，动态主体缺少 `accountIdHex` 时后端拒绝。
+- 已修复：node 前后端已统一为 `AdminAccountRef`，内置治理机构走 `cidNumber + org`，个人多签和机构账户走 `accountIdHex + org`，动态主体缺少 `accountIdHex` 时后端拒绝。
 - 已修复：QR 注册表要求 `propose_admin_set_change` 展示字段为 `org, subject, admins[]`。2026-05-10 node、citizenwallet 公民钱包、citizenapp QR adapter 均已统一到该字段集，`subject/admins` 使用 `0x` 小写 hex。
 - P2：citizenapp `AdminAccountService` 按 identity 缓存管理员主体，提交管理员更换后没有看到自动清理缓存路径，可能导致页面继续展示旧管理员集合。
 - P2：旧路径文档和注释需要更新或删除旧说法。2026-05-10 已将任务卡、citizenapp governance 技术文档和 `institution_admin_service.dart` 注释更新到当前目录口径。
@@ -129,7 +129,7 @@
 
 ### 2026-05-10 node 前后端 admins-change 修复记录
 
-- 已将 node 后端 `get_admin_account_state / build_admin_set_change_request / submit_admin_set_change` 统一为 `AdminAccountRef`：内置治理机构可用 `sfidNumber + org`，个人多签和机构账户必须用 `accountIdHex + org`。
+- 已将 node 后端 `get_admin_account_state / build_admin_set_change_request / submit_admin_set_change` 统一为 `AdminAccountRef`：内置治理机构可用 `cidNumber + org`，个人多签和机构账户必须用 `accountIdHex + org`。
 - 已将 `注册机构归属关系` 从 node 管理员更换前置校验中排除；`PersonalDuoqian` 只能走 `ORG_REN`，`InstitutionAccount` 只能走 `ORG_PUP / ORG_OTH`。
 - 已将 node QR display 字段统一为 `org / subject / admins`，与 citizenwallet 公民钱包 `propose_admin_set_change` 解码字段一致。
 - 已将前端 `AdminSetChangePage` 改为接收 `accountRef`，NRC/PRC/PRB 入口带治理 org，清算行入口从主账户派生 `InstitutionAccount(0x05)` subject 并按 `ORG_OTH` 进入 `governance/admins_change`。
@@ -161,10 +161,10 @@
 - 已新增 `AdminAccountIdentity` 三类主体：`governanceInstitution`、`personalDuoqian`、`institutionAccount`。
 - 已删除 citizenapp admins-change 的旧模糊字符串查询入口；`InstitutionAdminService`、`AdminAccountService`、`ActivationService`、`AdminSetChangePage` 均要求传入明确 `AdminAccountIdentity`。
 - 已将管理员激活存储切到 `activated_admins_v3`，只保存 `accountIdHex / identityKey / org / kind`，不读取、不迁移旧 `activated_admins_v1/v2`。
-- 已同步 citizenwallet 公民钱包管理员激活解码：新增 `GMB_ACTIVATE_SUBJECT_V1` / `activate_admin_account`，展示字段为 `org / subject / pubkey`，旧 `sfid_number` 激活 payload 不再识别为当前 admins-change 激活协议。
+- 已同步 citizenwallet 公民钱包管理员激活解码：新增 `GMB_ACTIVATE_SUBJECT_V1` / `activate_admin_account`，展示字段为 `org / subject / pubkey`，旧 `cid_number` 激活 payload 不再识别为当前 admins-change 激活协议。
 - 已改造机构详情、管理员列表、提案上下文、个人多签详情、机构账户详情、转账详情、runtime 升级详情等调用点，统一从 `InstitutionInfo` 派生 `AdminAccountIdentity` 后再调用 admins-change 服务。
 - 已清理 citizenapp 当前代码中的旧机构类泛称残留；通用 `OrgType.duoqian` 显示为“多签账户”，具体身份由 admins-change identity 区分。
-- 已补充 citizenapp admins-change 测试：机构账户、个人多签、治理机构 identity 派生；v3 激活记录按 `accountIdHex` 过滤并忽略旧 `sfidNumber` 记录。
+- 已补充 citizenapp admins-change 测试：机构账户、个人多签、治理机构 identity 派生；v3 激活记录按 `accountIdHex` 过滤并忽略旧 `cidNumber` 记录。
 - 已补充 citizenwallet 公民钱包测试：subject 级管理员激活 payload 可解码，旧激活 payload 被拒绝。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change lib/governance/shared/institution_info.dart lib/governance/organization-manage/institution_registry.dart lib/governance/organization-manage/institution_admin_list_page.dart lib/governance/organization-manage/institution_detail_page.dart lib/governance/governance_proposals_page.dart lib/governance/shared/proposal/proposal_context.dart lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart lib/governance/duoqian_manage_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_page.dart lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart`（`citizenapp`）：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`citizenwallet`）：通过。
@@ -175,10 +175,10 @@
 ### 2026-05-10 admins-change 本模块复查修复记录
 
 - 已修复 runtime admins-change 读侧防线：`active_subject_*` 与 `pending_subject_*_for_snapshot` 返回前重新校验 kind/org，旧 `注册机构归属关系` 管理员主体和 `InstitutionAccount + ORG_REN` 脏数据不再暴露给投票引擎或业务模块。
-- 已将 node 后端管理员激活从旧 `GMB_ACTIVATE / activate_admin / sfid_number` 切到 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_account`。
+- 已将 node 后端管理员激活从旧 `GMB_ACTIVATE / activate_admin / cid_number` 切到 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_account`。
 - 已将 node 本地激活记录从 `activated-admins.json` 切到 `activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧文件不读取、不迁移。
 - 已将 node 前端管理员列表、机构详情、提案详情和清算行节点声明页的已激活管理员读取统一为 subject 级 `AdminAccountRef`。
-- 已更新 node / runtime / citizenapp 文档和 citizenapp 激活服务注释，清理当前协议里的旧 `sfid_number` 激活说明。
+- 已更新 node / runtime / citizenapp 文档和 citizenapp 激活服务注释，清理当前协议里的旧 `cid_number` 激活说明。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：通过，43 个测试通过。
 - `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change`（`citizenapp`）：通过。
@@ -187,7 +187,7 @@
 ### 2026-05-10 admins-change 交互模块修复记录
 
 - 已修复 `organization-manage` 创建机构时的 admins-change 主体：`propose_create_institution` 新增 `org`，只允许 `ORG_PUP / ORG_OTH`；Pending/Active 管理员主体改为主账户地址派生的 `InstitutionAccount(0x05)`，不再使用 `注册机构归属关系(0x02)`。
-- 已将机构账户关闭、`InstitutionMultisigQuery`、`DuoqianSfidAccountQuery::is_admin_of` 改为读取账户级 subject 和 `Institutions[sfid].org`；`duoqian-transfer` 对机构账户传 `ORG_REN` 会返回 `InstitutionOrgMismatch`。
+- 已将机构账户关闭、`InstitutionMultisigQuery`、`DuoqianCidAccountQuery::is_admin_of` 改为读取账户级 subject 和 `Institutions[cid].org`；`duoqian-transfer` 对机构账户传 `ORG_REN` 会返回 `InstitutionOrgMismatch`。
 - 已同步 node 后端 `propose_create_institution` QR/call_data 为 11 字段布局，并在机构详情读取 `org` 和 active admins-change 主体；Pending 阶段回退显示创建快照。
 - 已同步 node 前端创建机构入口传 `adminOrg=ORG_OTH`；citizenapp 创建机构、机构账户发现、提案上下文、转账入口均携带/使用 `adminSubjectOrg`，不再把机构账户当作个人多签。
 - 已同步 citizenwallet 公民钱包 `propose_create_institution` decoder：读取并展示 `org`，只接受 `ORG_PUP / ORG_OTH`，字段顺序与 runtime/node/citizenapp 一致。

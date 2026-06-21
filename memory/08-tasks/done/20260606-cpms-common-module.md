@@ -14,8 +14,8 @@
 
 ## 影响范围
 
-- `cpms/backend/ss58.rs` → `common/ss58.rs`；`rate_limit.rs` → `common/rate_limit.rs`（git mv）。
-- 新建 `cpms/backend/common/mod.rs`：`pub mod rate_limit; pub mod ss58;`。
+- `citizenpassport/backend/ss58.rs` → `common/ss58.rs`；`rate_limit.rs` → `common/rate_limit.rs`（git mv）。
+- 新建 `citizenpassport/backend/common/mod.rs`：`pub mod rate_limit; pub mod ss58;`。
 - `main.rs`：`mod rate_limit;`+`mod ss58;` → `mod common;`；`rate_limit::RateLimiter` → `common::rate_limit::RateLimiter`（2 处）。
 - `initialize/mod.rs`：use 组 `rate_limit`→`common::rate_limit`；`crate::ss58::`→`crate::common::ss58::`。
 - `dangan/materials.rs`：use 组 `rate_limit`→`common::rate_limit`。
@@ -45,4 +45,4 @@
 ## 完成记录
 
 - 2026-06-06：创建任务卡，开始执行。
-- 2026-06-06：执行完成。ss58.rs + rate_limit.rs 收进 `cpms/backend/common/`（对齐前端 `common/`），main.rs 顶层两个 `mod` 合为 `mod common;`。纯结构搬迁、0 行为变化；`use crate::{... rate_limit, ss58}` 改 `common::rate_limit`/`common::ss58` 后调用点零改。main.rs 的共享 DTO 本轮按确认未动。fmt/clippy/test 全绿（32 passed）。
+- 2026-06-06：执行完成。ss58.rs + rate_limit.rs 收进 `citizenpassport/backend/common/`（对齐前端 `common/`），main.rs 顶层两个 `mod` 合为 `mod common;`。纯结构搬迁、0 行为变化；`use crate::{... rate_limit, ss58}` 改 `common::rate_limit`/`common::ss58` 后调用点零改。main.rs 的共享 DTO 本轮按确认未动。fmt/clippy/test 全绿（32 passed）。

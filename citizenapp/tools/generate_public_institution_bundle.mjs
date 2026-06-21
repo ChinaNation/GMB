@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 // 公权机构目录数据包生成器(ADR-018 §九 混合模式 ①)。
 //
-// 发布期从 SFID 公开接口**keyset 翻页**拉全量公权机构目录,写成 assets 数据包(基线):
+// 发布期从 CID 公开接口**keyset 翻页**拉全量公权机构目录,写成 assets 数据包(基线):
 //   assets/public_institutions/manifest.json = { version, generated_at, provinces: [{name,ver}] }
 //   assets/public_institutions/<省全名>.json  = { province, manifest_version, count, institutions: [...] }
-// App 启动后按省级 ver 做本地 reconcile:只写变化行,并删除包内已消失的 sfid。
+// App 启动后按省级 ver 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
 //
-// 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_sfid),
+// 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_cid),
 // 否则 OFFSET 深翻 O(n²) 会非常慢。
 //
-// 用法(需新二进制的 SFID 后端在跑):
-//   SFID_BASE_URL=http://127.0.0.1:8899 node tools/generate_public_institution_bundle.mjs
+// 用法(需新二进制的 CID 后端在跑):
+//   CID_BASE_URL=http://127.0.0.1:8899 node tools/generate_public_institution_bundle.mjs
 //   可选 --provinces 中枢省,岭南省 只生成部分省;--version 2026-06-13 指定包版本。
 //
-// 省全名(含"省")与 china.sqlite / SFID `province` 字段逐字对齐;展示去"省"由客户端做。
+// 省全名(含"省")与 china.sqlite / CID `province` 字段逐字对齐;展示去"省"由客户端做。
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -21,10 +21,10 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'assets', 'public_institutions');
-const BASE_URL = process.env.SFID_BASE_URL || 'http://127.0.0.1:8899';
+const BASE_URL = process.env.CID_BASE_URL || 'http://127.0.0.1:8899';
 const PAGE_SIZE = 500;
 // 后端默认限流 120 请求/分钟/IP。页间默认延时 550ms(≈109/min,留余量)+ 429 退避重试。
-// 后端临时调高限流(SFID_RATE_LIMIT_PER_MIN=大值)时可设 GEN_DELAY_MS=0 跑满速。
+// 后端临时调高限流(CID_RATE_LIMIT_PER_MIN=大值)时可设 GEN_DELAY_MS=0 跑满速。
 const DELAY_MS = Number(process.env.GEN_DELAY_MS ?? '550');
 const MAX_RETRY_429 = 8;
 
@@ -45,11 +45,11 @@ function arg(name, fallback) {
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback;
 }
 
-async function fetchPage(province, afterSfid) {
+async function fetchPage(province, afterCid) {
   const url = new URL(`${BASE_URL}/api/v1/app/public-institutions`);
   url.searchParams.set('province', province);
   url.searchParams.set('page_size', String(PAGE_SIZE));
-  if (afterSfid) url.searchParams.set('after_sfid', afterSfid);
+  if (afterCid) url.searchParams.set('after_cid', afterCid);
 
   // 429 限流退避重试:读 Retry-After,否则指数退避(2s/4s/8s… 上限 30s)。
   for (let attempt = 0; ; attempt++) {
@@ -71,17 +71,17 @@ async function fetchPage(province, afterSfid) {
 
 async function fetchProvince(province) {
   const institutions = [];
-  let afterSfid = '';
+  let afterCid = '';
   let manifestVersion = null;
-  // keyset:每页用上一页末尾 sfid 作游标,恒定快。
+  // keyset:每页用上一页末尾 cid 作游标,恒定快。
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const data = await fetchPage(province, afterSfid);
+    const data = await fetchPage(province, afterCid);
     manifestVersion = data.manifest_version ?? manifestVersion;
     const items = data.items ?? [];
     institutions.push(...items);
     if (!data.has_more || items.length === 0) break;
-    afterSfid = data.next_cursor || items[items.length - 1].sfid_number;
+    afterCid = data.next_cursor || items[items.length - 1].cid_number;
   }
   return {
     province,

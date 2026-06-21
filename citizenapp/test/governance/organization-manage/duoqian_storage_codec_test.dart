@@ -42,7 +42,7 @@ void main() {
       ]);
 
       final decoded = DuoqianStorageCodec.decodeRegisteredInstitution(data)!;
-      expect(decoded.sfidNumberText, 'AH001-SCB0H-202605070-2026');
+      expect(decoded.cidNumberText, 'AH001-SCB0H-202605070-2026');
       expect(decoded.accountNameText, '主账户');
     });
 

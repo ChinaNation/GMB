@@ -19,8 +19,8 @@ typedef LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
 /// 展示用辅助:从 LoginChallengeEnvelope 获取人可读系统名。
 String loginSystemDisplayName(LoginChallengeEnvelope c) {
   switch (c.body.system.toLowerCase()) {
-    case 'sfid':
-      return 'SFID 身份系统';
+    case 'cid':
+      return 'CID 身份系统';
     case 'cpms':
       return 'CPMS 机构系统';
     default:
@@ -66,7 +66,7 @@ LoginChallengeEnvelope parseLoginChallenge(String raw) {
   );
 }
 
-/// 验证系统签名(确认 QR 确实由 SFID/CPMS 后端签发)。
+/// 验证系统签名(确认 QR 确实由 CID/CPMS 后端签发)。
 bool verifySystemSignature(LoginChallengeEnvelope c) {
   final message = buildSignatureMessage(
     kind: QrKind.loginChallenge,

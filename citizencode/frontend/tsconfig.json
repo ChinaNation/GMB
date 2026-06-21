@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+  },
+  "include": [
+    "main.tsx",
+    "App.tsx",
+    "vite-env.d.ts",
+    "auth",
+    "accounts",
+    "citizens",
+    "common",
+    "cpms",
+    "docs",
+    "education",
+    "gov",
+    "hooks",
+    "private",
+    "qr",
+    "cid",
+    "subjects",
+    "admins",
+    "theme",
+    "utils"
+  ]
+}

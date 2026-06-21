@@ -37,6 +37,6 @@
 不同产品域还必须对照各自的模块级完成标准：
 
 - `memory/07-ai/module-definition-of-done/citizenchain.md`
-- `memory/07-ai/module-definition-of-done/sfid.md`
-- `memory/07-ai/module-definition-of-done/cpms.md`
+- `memory/07-ai/module-definition-of-done/citizencode.md`
+- `memory/07-ai/module-definition-of-done/citizenpassport.md`
 - `memory/07-ai/module-definition-of-done/citizenapp.md`

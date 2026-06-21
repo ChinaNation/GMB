@@ -51,7 +51,7 @@
 | 常量 | SCREAMING_SNAKE_CASE(Rust) / lowerCamelCase 或 static const(Dart) | `MODULE_TAG` / `actionCreate` |
 | JSON / API 字段 | snake_case | `signer_pubkey` |
 | storage 字段 | PascalCase | `InstitutionAccounts` |
-| QR display field key | snake_case | `sfid_full_name` |
+| QR display field key | snake_case | `cid_full_name` |
 | 任务卡文件名 | 短日期 + 短 slug | `20260507-ai-unified-naming.md` |
 | 技术文档文件名 | SCREAMING_SNAKE_CASE | `BACKEND_LAYOUT.md` |
 
@@ -66,7 +66,7 @@
 | `memory/00-vision/` | 愿景 | vision | 项目目标、信任边界和长期方向 |
 | `memory/01-architecture/` | 架构 | architecture | 仓库级和产品级架构文档 |
 | `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | CITIZEN_QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
-| `memory/01-architecture/sfid/` | SFID 架构 | sfid-architecture | SFID 产品架构、技术框架和并发框架文档 |
+| `memory/01-architecture/citizencode/` | CID 架构 | cid-architecture | CID 产品架构、技术框架和并发框架文档 |
 | `memory/03-security/` | 安全 | security | 安全规则、边界和风险要求 |
 | `memory/04-decisions/` | 架构决策 | decisions | ADR 和重要设计决策 |
 | `memory/05-modules/` | 模块文档 | modules | 各产品、各模块技术文档 |
@@ -82,9 +82,9 @@
 | `citizenchain/` | 公民链 | citizenchain | runtime、节点、桌面端和打包 |
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
-| `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
-| `sfid/backend/number/` | 身份 ID 编码协议 | number | SFID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
-| `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
+| `citizencode/` | 在线身份系统 | cid | CID 后端、前端和部署配置 |
+| `citizencode/backend/number/` | 身份 ID 编码协议 | number | CID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
+| `citizenpassport/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
 | `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
 | `citizenapp/im/proto/` | citizenapp 信息协议 | citizenapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
@@ -99,8 +99,7 @@
 | `website/` | 官网 | website | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
 | `citizenchain/runtime/primitives/src/CitizenConstitution.html` | 公民宪法真源 | citizen-constitution-source | 公民宪法 HTML 唯一真源，编入 runtime WASM，修改后必须通过 runtime 升级生效 |
-| `tools/` | 工具 | tools | 仓库级脚本工具 |
-| `scripts/` | 脚本 | scripts | 仓库级自动化脚本 |
+| `scripts/` | 脚本 | scripts | 仓库级脚本工具、生成器和自动化脚本 |
 
 ## 5. 当前核心命名登记
 
@@ -141,46 +140,46 @@
 | 治理主体 | `Subjects` | storage | 管理员主体 storage |
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
 | 机构账户主体 | `InstitutionAccount` | AdminAccountKind / 类型 | 注册机构账户级内部投票主体，已使用 `AdminAccountKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
-| 主体身份号码 | `sfid_number` | API / call data / storage key | SFID 对外身份 ID 字段,所有主体统一使用该字段名 |
-| 机构全称 | `sfid_full_name` | API / call data | 机构全称,可随机构法定名称变更 |
-| 机构简称 | `sfid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
+| 主体身份号码 | `cid_number` | API / call data / storage key | CID 对外身份 ID 字段,所有主体统一使用该字段名 |
+| 机构全称 | `cid_full_name` | API / call data | 机构全称,可随机构法定名称变更 |
+| 机构简称 | `cid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |
-| 签发机构 SFID 号 | `issuer_sfid_number` | credential / call data | 签发凭证的机构 SFID 号 |
+| 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
 | 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |
 | 签发管理员公钥 | `signer_pubkey` | credential / call data | 签发机构 `admins` 中实际签名管理员的公钥 |
 | 业务作用域省名称 | `scope_province_name` | credential / call data | 凭证适用的省级业务作用域 |
 | 业务作用域市名称 | `scope_city_name` | credential / call data | 凭证适用的市级业务作用域 |
 | 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `citizenapp/lib/rpc/` | 统一构造 citizenapp 在线 signed extrinsic，固定执行 immortal era 协议 |
-| 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / citizenapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
+| 电子护照档案号 | `archive_no` | CPMS ARCHIVE / CID citizens / citizenapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
 | 电子护照护照号 | `passport_no` | CPMS archives / CPMS frontend | CPMS 后端自动生成并印刷在公民护照上的 11 位护照号 |
-| 电子护照公民状态 | `citizen_status` | CPMS ARCHIVE / SFID citizens / citizenapp myid | CPMS 公民状态，三端统一使用完整字段名 |
-| 电子护照选举资格 | `voting_eligible` | CPMS ARCHIVE / SFID citizens / citizenapp myid | CPMS 选举资格，三端统一使用完整字段名 |
-| 电子护照投票状态 | `vote_status` | SFID citizens / citizenapp myid | SFID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
-| 电子护照身份状态 | `identity_status` | SFID citizens / citizenapp myid | SFID 按公民状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
-| 电子护照生效日期 | `valid_from` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
-| 电子护照截止日期 | `valid_until` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
-| 公民状态更新时间 | `status_updated_at` | CPMS ARCHIVE / SFID citizens | SFID 内部用于拒绝旧档案码覆盖新状态的秒级时间戳 |
-| 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
-| 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / SFID citizens / citizenapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
-| 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 固定 `sr25519` |
-| 电子护照身份ID | `sfid_number` | SFID citizens / citizenapp myid | SFID 生成并返回给用户展示的身份ID号码 |
-| 电子护照绑定状态 | `bind_status` | SFID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
-| CPMS 编号工具 | `number` | `cpms/backend/number/` | CPMS 后端档案号与护照号生成模块 |
-| CPMS 档案生命周期 | `lifecycle` | `cpms/backend/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
-| CPMS 状态导出 | `export` | `cpms/backend/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
-| CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/SFID 离线 JSON 文件 | CPMS 给 SFID 导入的年度状态与档案号绑定释放凭证 |
-| CPMS 前端鉴权 | `authz` | `cpms/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
-| CPMS 前端初始化 | `initialize` | `cpms/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
-| CPMS 前端登录 | `login` | `cpms/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
-| CPMS 前端管理员 | `admins` | `cpms/frontend/admins/` | CPMS 前端管理员页面、操作员管理和年度报告导出 |
-| CPMS 前端档案业务 | `dangan` | `cpms/frontend/dangan/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
-| CPMS 前端地址 | `address` | `cpms/frontend/address/` | CPMS 前端镇和地址段查询 API 与类型 |
-| 镇下地址段 | `address_unit` | SFID china / CPMS archives / CPMS frontend | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
+| 电子护照公民状态 | `citizen_status` | CPMS ARCHIVE / CID citizens / citizenapp myid | CPMS 公民状态，三端统一使用完整字段名 |
+| 电子护照选举资格 | `voting_eligible` | CPMS ARCHIVE / CID citizens / citizenapp myid | CPMS 选举资格，三端统一使用完整字段名 |
+| 电子护照投票状态 | `vote_status` | CID citizens / citizenapp myid | CID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
+| 电子护照身份状态 | `identity_status` | CID citizens / citizenapp myid | CID 按公民状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
+| 电子护照生效日期 | `valid_from` | CPMS ARCHIVE / CID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
+| 电子护照截止日期 | `valid_until` | CPMS ARCHIVE / CID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
+| 公民状态更新时间 | `status_updated_at` | CPMS ARCHIVE / CID citizens | CID 内部用于拒绝旧档案码覆盖新状态的秒级时间戳 |
+| 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / CID citizens / citizenapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
+| 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / CID citizens / citizenapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
+| 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / CID citizens / citizenapp myid | 固定 `sr25519` |
+| 电子护照身份ID | `cid_number` | CID citizens / citizenapp myid | CID 生成并返回给用户展示的身份ID号码 |
+| 电子护照绑定状态 | `bind_status` | CID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
+| CPMS 编号工具 | `number` | `citizenpassport/backend/number/` | CPMS 后端档案号与护照号生成模块 |
+| CPMS 档案生命周期 | `lifecycle` | `citizenpassport/backend/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
+| CPMS 状态导出 | `export` | `citizenpassport/backend/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
+| CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/CID 离线 JSON 文件 | CPMS 给 CID 导入的年度状态与档案号绑定释放凭证 |
+| CPMS 前端鉴权 | `authz` | `citizenpassport/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
+| CPMS 前端初始化 | `initialize` | `citizenpassport/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
+| CPMS 前端登录 | `login` | `citizenpassport/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
+| CPMS 前端管理员 | `admins` | `citizenpassport/frontend/admins/` | CPMS 前端管理员页面、操作员管理和年度报告导出 |
+| CPMS 前端档案业务 | `dangan` | `citizenpassport/frontend/dangan/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
+| CPMS 前端地址 | `address` | `citizenpassport/frontend/address/` | CPMS 前端镇和地址段查询 API 与类型 |
+| 镇下地址段 | `address_unit` | CID china / CPMS archives / CPMS frontend | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
 | 镇下地址段 ID | `address_unit_id` | CPMS archives / address_units | CPMS 档案选择的地址段稳定 ID |
 | 详细地址输入段 | `address_detail` | CPMS archives / CPMS frontend | 管理员录入的可变详细地址文本，与地址段组合为完整详细地址 |
 | 完整详细地址快照 | `address_full_snapshot` | CPMS archives | 保存时由地址段名称和详细地址输入段组成的只读快照 |
-| CPMS 前端二维码 | `qr` | `cpms/frontend/qr/` | CPMS 前端 CITIZEN_QR_V1 解析和浏览器扫码工具 |
-| CPMS 前端通用层 | `common` | `cpms/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
+| CPMS 前端二维码 | `qr` | `citizenpassport/frontend/qr/` | CPMS 前端 CITIZEN_QR_V1 解析和浏览器扫码工具 |
+| CPMS 前端通用层 | `common` | `citizenpassport/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
 
 ## 6. 新命名登记模板
 
@@ -240,10 +239,10 @@
 
 禁止新增或恢复以下目录：
 
-- SFID 后端源码壳目录。
-- SFID 后端独立链业务目录。
-- SFID 前端独立链业务目录。
-- SFID 前端独立业务 API 目录。
+- CID 后端源码壳目录。
+- CID 后端独立链业务目录。
+- CID 前端独立链业务目录。
+- CID 前端独立业务 API 目录。
 - citizenapp 旧大写 Isar 目录。
 
 历史文件或外部工具生成物中已有的，不因此自动修改；新建命名禁止使用。
@@ -267,8 +266,8 @@
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
 | `memory/05-modules/citizenchain/` | 公民链模块文档 | citizenchain-module-docs | citizenchain runtime、node、桌面端模块文档 |
-| `memory/05-modules/cpms/` | CPMS 模块文档 | cpms-module-docs | CPMS 后端、安装和档案模块文档 |
-| `memory/05-modules/sfid/` | SFID 模块文档 | sfid-module-docs | SFID 后端、前端和业务模块文档 |
+| `memory/05-modules/citizenpassport/` | CPMS 模块文档 | cpms-module-docs | CPMS 后端、安装和档案模块文档 |
+| `memory/05-modules/citizencode/` | CID 模块文档 | cid-module-docs | CID 后端、前端和业务模块文档 |
 | `memory/05-modules/website/` | 官网模块文档 | website-module-docs | 官网模块文档 |
 | `memory/05-modules/citizenapp/` | citizenapp 模块文档 | citizenapp-module-docs | citizenapp 移动端模块文档 |
 | `memory/05-modules/citizenapp/governance/` | citizenapp 治理 | citizenapp-governance | 移动端治理流程文档 |
@@ -284,72 +283,72 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `memory/05-modules/sfid/ERROR_CODES.md` | SFID 错误码规范 | sfid-error-codes | SFID HTTP 状态码、稳定业务错误码和前端错误处理规则 |
-| `memory/05-modules/cpms/ERROR_CODES.md` | CPMS 错误码规范 | cpms-error-codes | CPMS 离线系统 HTTP 状态码、稳定业务错误码和前端错误处理规则 |
+| `memory/05-modules/citizencode/ERROR_CODES.md` | CID 错误码规范 | cid-error-codes | CID HTTP 状态码、稳定业务错误码和前端错误处理规则 |
+| `memory/05-modules/citizenpassport/ERROR_CODES.md` | CPMS 错误码规范 | cpms-error-codes | CPMS 离线系统 HTTP 状态码、稳定业务错误码和前端错误处理规则 |
 
-## 11. SFID 功能目录命名登记
+## 11. CID 功能目录命名登记
 
-### SFID 后端目录
-
-| 路径 | 中文名称 | English name | 简介 |
-|---|---|---|---|
-| `sfid/backend/core/` | 应用核心 | core | 后端启动、路由、HTTP 响应、HTTP 安全、跨模块核心能力和通用链工具 |
-| `sfid/backend/citizens/` | 公民 | citizens | 公民身份与资料管理 |
-| `sfid/backend/cpms/` | CPMS 对接 | cpms | SFID 与 CPMS 对接能力 |
-| `sfid/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
-| `sfid/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
-| `sfid/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
-| `sfid/backend/private/` | 私权机构 | private | 六类私权机构路由边界;根层不得恢复总 handler |
-| `sfid/backend/private/common/` | 私权共用规则 | private-common | 私权类型到主体属性、机构码、盈利属性和法人资格的规则单一来源 |
-| `sfid/backend/private/sole/` | 个体经营 | sole | 个体经营模型、校验、创建和列表边界 |
-| `sfid/backend/private/partnership/` | 合伙企业 | partnership | 有限合伙和无限合伙模型、校验、创建和列表边界 |
-| `sfid/backend/private/company/` | 股权公司 | company | 股权有限公司/有限责任公司模型、校验、创建和列表边界 |
-| `sfid/backend/private/corporation/` | 股份公司 | corporation | 股份有限公司模型、校验、创建和列表边界 |
-| `sfid/backend/private/welfare/` | 公益组织 | welfare | 非营利法人模型、校验、创建和列表边界 |
-| `sfid/backend/private/association/` | 注册协会 | association | 具有法人资格的协会类组织边界 |
-| `sfid/backend/private/participants/` | 参与人关系 | participants | 负责人、合伙人、股东、成员等通用关系边界 |
-| `sfid/backend/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
-| `sfid/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
-| `sfid/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
-| `sfid/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
-| `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦注册局机构管理员、市注册局机构管理员和管理员列表 DTO |
-| `sfid/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
-| `sfid/backend/core/qr/` | QR | core-qr | 后端 CITIZEN_QR_V1 协议辅助和统一 sign_request 构造 |
-| `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
-| `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
-| `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
-| `sfid/backend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
-| `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
-| `sfid/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
-| `sfid/backend/tests/` | 测试 | tests | 后端测试 |
-
-### SFID 前端目录
+### CID 后端目录
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `sfid/frontend/assets/` | 静态资产 | assets | 图片、字体等前端静态资产 |
-| `sfid/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
-| `sfid/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
-| `sfid/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、公民钱包签名面板和 QR 工具 |
-| `sfid/frontend/cpms/` | CPMS 对接 | cpms | CPMS 对接界面 |
-| `sfid/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
-| `sfid/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
-| `sfid/frontend/private/` | 私权机构 Shell | private | 省市选择、当前私权类型页面和详情跳转 |
-| `sfid/frontend/private/common/` | 私权机构前端共用 | private-common | 共用 API、列表、创建弹窗和单类型页面壳 |
-| `sfid/frontend/private/sole/` | 个体经营前端 | sole | 个体经营页面、API 和类型边界 |
-| `sfid/frontend/private/partnership/` | 合伙企业前端 | partnership | 合伙企业页面、API 和类型边界 |
-| `sfid/frontend/private/company/` | 股权公司前端 | company | 股权公司页面、API 和类型边界 |
-| `sfid/frontend/private/corporation/` | 股份公司前端 | corporation | 股份公司页面、API 和类型边界 |
-| `sfid/frontend/private/welfare/` | 公益组织前端 | welfare | 公益组织页面、API 和类型边界 |
-| `sfid/frontend/private/association/` | 注册协会前端 | association | 注册协会页面、API 和类型边界 |
-| `sfid/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
-| `sfid/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
-| `sfid/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
-| `sfid/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 CITIZEN_QR_V1 工具 |
-| `sfid/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
-| `sfid/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
-| `sfid/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
-| `sfid/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
+| `citizencode/backend/core/` | 应用核心 | core | 后端启动、路由、HTTP 响应、HTTP 安全、跨模块核心能力和通用链工具 |
+| `citizencode/backend/citizens/` | 公民 | citizens | 公民身份与资料管理 |
+| `citizencode/backend/citizenpassport/` | CPMS 对接 | cpms | CID 与 CPMS 对接能力 |
+| `citizencode/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
+| `citizencode/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
+| `citizencode/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
+| `citizencode/backend/private/` | 私权机构 | private | 六类私权机构路由边界;根层不得恢复总 handler |
+| `citizencode/backend/private/common/` | 私权共用规则 | private-common | 私权类型到主体属性、机构码、盈利属性和法人资格的规则单一来源 |
+| `citizencode/backend/private/sole/` | 个体经营 | sole | 个体经营模型、校验、创建和列表边界 |
+| `citizencode/backend/private/partnership/` | 合伙企业 | partnership | 有限合伙和无限合伙模型、校验、创建和列表边界 |
+| `citizencode/backend/private/company/` | 股权公司 | company | 股权有限公司/有限责任公司模型、校验、创建和列表边界 |
+| `citizencode/backend/private/corporation/` | 股份公司 | corporation | 股份有限公司模型、校验、创建和列表边界 |
+| `citizencode/backend/private/welfare/` | 公益组织 | welfare | 非营利法人模型、校验、创建和列表边界 |
+| `citizencode/backend/private/association/` | 注册协会 | association | 具有法人资格的协会类组织边界 |
+| `citizencode/backend/private/participants/` | 参与人关系 | participants | 负责人、合伙人、股东、成员等通用关系边界 |
+| `citizencode/backend/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
+| `citizencode/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
+| `citizencode/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
+| `citizencode/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
+| `citizencode/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦注册局机构管理员、市注册局机构管理员和管理员列表 DTO |
+| `citizencode/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
+| `citizencode/backend/core/qr/` | QR | core-qr | 后端 CITIZEN_QR_V1 协议辅助和统一 sign_request 构造 |
+| `citizencode/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
+| `citizencode/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
+| `citizencode/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
+| `citizencode/backend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
+| `citizencode/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | CID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
+| `citizencode/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
+| `citizencode/backend/tests/` | 测试 | tests | 后端测试 |
+
+### CID 前端目录
+
+| 路径 | 中文名称 | English name | 简介 |
+|---|---|---|---|
+| `citizencode/frontend/assets/` | 静态资产 | assets | 图片、字体等前端静态资产 |
+| `citizencode/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
+| `citizencode/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
+| `citizencode/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、公民钱包签名面板和 QR 工具 |
+| `citizencode/frontend/citizenpassport/` | CPMS 对接 | cpms | CPMS 对接界面 |
+| `citizencode/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
+| `citizencode/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
+| `citizencode/frontend/private/` | 私权机构 Shell | private | 省市选择、当前私权类型页面和详情跳转 |
+| `citizencode/frontend/private/common/` | 私权机构前端共用 | private-common | 共用 API、列表、创建弹窗和单类型页面壳 |
+| `citizencode/frontend/private/sole/` | 个体经营前端 | sole | 个体经营页面、API 和类型边界 |
+| `citizencode/frontend/private/partnership/` | 合伙企业前端 | partnership | 合伙企业页面、API 和类型边界 |
+| `citizencode/frontend/private/company/` | 股权公司前端 | company | 股权公司页面、API 和类型边界 |
+| `citizencode/frontend/private/corporation/` | 股份公司前端 | corporation | 股份公司页面、API 和类型边界 |
+| `citizencode/frontend/private/welfare/` | 公益组织前端 | welfare | 公益组织页面、API 和类型边界 |
+| `citizencode/frontend/private/association/` | 注册协会前端 | association | 注册协会页面、API 和类型边界 |
+| `citizencode/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
+| `citizencode/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
+| `citizencode/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
+| `citizencode/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 CITIZEN_QR_V1 工具 |
+| `citizencode/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
+| `citizencode/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
+| `citizencode/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
+| `citizencode/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
 
 ## 12. citizenapp 功能目录命名登记
 
@@ -381,7 +380,7 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizenchain/node/src/governance/organization-manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、SFID 凭证、链上机构详情与创建签名请求 |
+| `citizenchain/node/src/governance/organization-manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、CID 凭证、链上机构详情与创建签名请求 |
 | `citizenchain/node/frontend/governance/organization-manage/` | 机构多签管理前端 | organization-manage | node 前端机构多签管理页面、Tauri API 和 DTO |
 
 ## 13. citizenchain runtime 目录命名登记
@@ -403,7 +402,7 @@
 | `citizenchain/runtime/issuance/shengbank-interest/` | 省行利息 | shengbank-interest | 省行利息 pallet |
 | `citizenchain/runtime/otherpallet/` | 其他 pallet | otherpallet | 非治理、非交易、非发行类 pallet |
 | `citizenchain/runtime/otherpallet/pow-difficulty/` | PoW 难度 | pow-difficulty | PoW 难度 pallet |
-| `citizenchain/runtime/otherpallet/sfid-system/` | SFID 系统 | sfid-system | 链上 SFID 系统 pallet |
+| `citizenchain/runtime/otherpallet/cid-system/` | CID 系统 | cid-system | 链上 CID 系统 pallet |
 | `citizenchain/runtime/primitives/` | 运行时基础类型 | primitives | runtime 共享基础类型 |
 | `citizenchain/runtime/src/` | runtime 入口 | runtime-src | runtime 配置、类型和测试入口 |
 | `citizenchain/runtime/transaction/` | 交易 | transaction | 交易类 pallet |
@@ -442,17 +441,17 @@
 
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
-| SFID 号码 | `sfid_number` | API / call data / storage key | 机构或公民 SFID 编号 |
-| 机构全称 | `sfid_full_name` | API / call data / QR display | 机构全称,可随机构法定名称变更 |
-| 机构简称 | `sfid_short_name` | API / call data / QR display | 机构简称,用于列表和紧凑展示 |
-| 账户名称列表 | `account_names` | SFID registration-info API | 机构账户名数组 |
+| CID 号码 | `cid_number` | API / call data / storage key | 机构或公民 CID 编号 |
+| 机构全称 | `cid_full_name` | API / call data / QR display | 机构全称,可随机构法定名称变更 |
+| 机构简称 | `cid_short_name` | API / call data / QR display | 机构简称,用于列表和紧凑展示 |
+| 账户名称列表 | `account_names` | CID registration-info API | 机构账户名数组 |
 | 账户名称 | `account_name` | API / call data / QR display | 单个机构或个人账户名 |
-| 私权机构类型 | `private_type` | SFID API / subjects / private | 私权机构目标类型,取值 `SOLE/PARTNERSHIP/COMPANY/CORPORATION/WELFARE/ASSOCIATION` |
-| 合伙类型 | `partnership_kind` | SFID API / subjects / private | 合伙企业内部类型,取值 `GENERAL/LIMITED` |
-| 法人资格 | `has_legal_personality` | SFID API / subjects / private | 私权机构是否具有法人资格 |
-| 注册随机数 | `register_nonce` | credential / call data | SFID 机构注册凭证随机数 |
+| 私权机构类型 | `private_type` | CID API / subjects / private | 私权机构目标类型,取值 `SOLE/PARTNERSHIP/COMPANY/CORPORATION/WELFARE/ASSOCIATION` |
+| 合伙类型 | `partnership_kind` | CID API / subjects / private | 合伙企业内部类型,取值 `GENERAL/LIMITED` |
+| 法人资格 | `has_legal_personality` | CID API / subjects / private | 私权机构是否具有法人资格 |
+| 注册随机数 | `register_nonce` | credential / call data | CID 机构注册凭证随机数 |
 | 省名称 | `province_name` | API / call data / storage | 行政区省级名称 |
-| 签发机构 SFID 号 | `issuer_sfid_number` | credential / call data | 签发凭证的机构 SFID 号 |
+| 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
 | 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |
 | 签发管理员公钥 | `signer_pubkey` | credential / call data | 签发机构 `admins` 中实际签名管理员的公钥 |
 | 业务作用域省名称 | `scope_province_name` | credential / call data | 凭证适用的省级业务作用域 |
@@ -471,9 +470,9 @@
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | 操作 | `action` | QR display | 签名请求动作名 |
-| SFID 号码 | `sfid_number` | QR display | 机构或主体 SFID 编号 |
-| 机构全称 | `sfid_full_name` | QR display | 机构全称 |
-| 机构简称 | `sfid_short_name` | QR display | 机构简称 |
+| CID 号码 | `cid_number` | QR display | 机构或主体 CID 编号 |
+| 机构全称 | `cid_full_name` | QR display | 机构全称 |
+| 机构简称 | `cid_short_name` | QR display | 机构简称 |
 | 账户名称 | `account_name` | QR display | 单个账户名称 |
 | 管理员数量 | `admins_len` | QR display | 管理员总数 |
 | 阈值 | `threshold` | QR display | 多签通过阈值 |

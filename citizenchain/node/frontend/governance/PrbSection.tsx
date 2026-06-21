@@ -12,25 +12,25 @@ import type { AdminWalletMatch } from './types';
 
 type PrbView =
   | { page: 'list' }
-  | { page: 'detail'; sfidNumber: string }
-  | { page: 'admin-list'; sfidNumber: string; orgType: number }
-  | { page: 'admin-set-change'; sfidNumber: string; orgType: number; sfidFullName: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
-  | { page: 'create-proposal'; sfidNumber: string; orgType: number; sfidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; sfidNumber: string; sfidFullName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'detail'; cidNumber: string }
+  | { page: 'admin-list'; cidNumber: string; orgType: number }
+  | { page: 'admin-set-change'; cidNumber: string; orgType: number; cidFullName: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string; originCidNumber: string }
+  | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'propose-sweep'; cidNumber: string; cidFullName: string; adminWallets: AdminWalletMatch[] };
 
 export function PrbSection() {
   const [view, setView] = useState<PrbView>({ page: 'list' });
 
   const backToList = () => setView({ page: 'list' });
-  const backToDetail = (sfidNumber: string) => setView({ page: 'detail', sfidNumber });
+  const backToDetail = (cidNumber: string) => setView({ page: 'detail', cidNumber });
 
   if (view.page === 'admin-list') {
     return (
       <AdminListPage
-        sfidNumber={view.sfidNumber}
-        accountRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
-        onBack={() => backToDetail(view.sfidNumber)}
+        cidNumber={view.cidNumber}
+        accountRef={{ cidNumber: view.cidNumber, org: view.orgType }}
+        onBack={() => backToDetail(view.cidNumber)}
       />
     );
   }
@@ -40,8 +40,8 @@ export function PrbSection() {
       <ProposalDetailPage
         proposalId={view.proposalId}
         adminWallets={view.adminWallets}
-        sfidNumber={view.sfidNumber}
-        onBack={() => backToDetail(view.originSfidNumber)}
+        cidNumber={view.cidNumber}
+        onBack={() => backToDetail(view.originCidNumber)}
       />
     );
   }
@@ -49,13 +49,13 @@ export function PrbSection() {
   if (view.page === 'create-proposal') {
     return (
       <CreateDuoqianTransferPage
-        sfidNumber={view.sfidNumber}
+        cidNumber={view.cidNumber}
         orgType={view.orgType}
-        sfidFullName={view.sfidFullName}
+        cidFullName={view.cidFullName}
         mainAccount={view.mainAccount}
         adminWallets={view.adminWallets}
-        onBack={() => backToDetail(view.sfidNumber)}
-        onSuccess={() => backToDetail(view.sfidNumber)}
+        onBack={() => backToDetail(view.cidNumber)}
+        onSuccess={() => backToDetail(view.cidNumber)}
       />
     );
   }
@@ -63,11 +63,11 @@ export function PrbSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        accountRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
-        sfidFullName={view.sfidFullName}
+        accountRef={{ cidNumber: view.cidNumber, org: view.orgType }}
+        cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
-        onBack={() => backToDetail(view.sfidNumber)}
-        onSuccess={() => backToDetail(view.sfidNumber)}
+        onBack={() => backToDetail(view.cidNumber)}
+        onSuccess={() => backToDetail(view.cidNumber)}
       />
     );
   }
@@ -75,33 +75,33 @@ export function PrbSection() {
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
-        sfidNumber={view.sfidNumber}
-        sfidFullName={view.sfidFullName}
+        cidNumber={view.cidNumber}
+        cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
-        onBack={() => backToDetail(view.sfidNumber)}
-        onSuccess={() => backToDetail(view.sfidNumber)}
+        onBack={() => backToDetail(view.cidNumber)}
+        onSuccess={() => backToDetail(view.cidNumber)}
       />
     );
   }
 
   if (view.page === 'detail') {
-    const sfidNumber = view.sfidNumber;
+    const cidNumber = view.cidNumber;
     return (
       <InstitutionDetailPage
-        sfidNumber={sfidNumber}
+        cidNumber={cidNumber}
         onBack={backToList}
-        onOpenAdminList={(sid, orgType) => setView({ page: 'admin-list', sfidNumber: sid, orgType })}
+        onOpenAdminList={(sid, orgType) => setView({ page: 'admin-list', cidNumber: sid, orgType })}
         onSelectProposal={(proposalId, adminWallets, sid) =>
-          setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid, originSfidNumber: sfidNumber })
+          setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid, originCidNumber: cidNumber })
         }
         onCreateProposal={(sid, orgType, name, mainAccount, aw) =>
-          setView({ page: 'create-proposal', sfidNumber: sid, orgType, sfidFullName: name, mainAccount, adminWallets: aw })
+          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName: name, mainAccount, adminWallets: aw })
         }
         onCreateAdminSetChange={(sid, orgType, name, aw) =>
-          setView({ page: 'admin-set-change', sfidNumber: sid, orgType, sfidFullName: name, adminWallets: aw })
+          setView({ page: 'admin-set-change', cidNumber: sid, orgType, cidFullName: name, adminWallets: aw })
         }
         onCreateSweep={(sid, name, aw) =>
-          setView({ page: 'propose-sweep', sfidNumber: sid, sfidFullName: name, adminWallets: aw })
+          setView({ page: 'propose-sweep', cidNumber: sid, cidFullName: name, adminWallets: aw })
         }
       />
     );
@@ -111,7 +111,7 @@ export function PrbSection() {
   return (
     <InstitutionListView
       orgTypeFilter={2}
-      onSelect={(sfidNumber) => setView({ page: 'detail', sfidNumber })}
+      onSelect={(cidNumber) => setView({ page: 'detail', cidNumber })}
     />
   );
 }

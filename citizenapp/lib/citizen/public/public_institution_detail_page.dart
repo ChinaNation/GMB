@@ -19,13 +19,13 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 class PublicInstitutionDetailPage extends StatefulWidget {
   const PublicInstitutionDetailPage({
     super.key,
-    required this.sfidNumber,
+    required this.cidNumber,
     required this.repository,
     this.chainData,
     this.walletPubkeyProvider,
   });
 
-  final String sfidNumber;
+  final String cidNumber;
   final PublicInstitutionRepository repository;
 
   /// 链上数据源(余额/管理员/提案);测试注入,默认 Live。
@@ -77,7 +77,7 @@ class _PublicInstitutionDetailPageState
   }
 
   Future<void> _load() async {
-    final inst = await widget.repository.getBySfid(widget.sfidNumber);
+    final inst = await widget.repository.getByCid(widget.cidNumber);
     final pubkey = await _resolvePubkey();
     if (!mounted) return;
     if (inst == null) {
@@ -86,7 +86,7 @@ class _PublicInstitutionDetailPageState
     }
     final subscribed = pubkey == null
         ? false
-        : await widget.repository.isSubscribed(pubkey, inst.sfidNumber);
+        : await widget.repository.isSubscribed(pubkey, inst.cidNumber);
     // 所属地预 join(省名·市名[·镇名]),不在 build 里 await。
     final areaPath = await widget.repository.institutionAreaPath(inst);
     if (!mounted) return;
@@ -119,7 +119,7 @@ class _PublicInstitutionDetailPageState
     try {
       final admins = await _chainData.admins(
         mainAccountHex: mainHex,
-        displayName: inst.sfidFullName,
+        displayName: inst.cidFullName,
       );
       if (mounted) setState(() => _admins = admins);
     } on Exception {
@@ -127,7 +127,7 @@ class _PublicInstitutionDetailPageState
     }
     // 提案(按主账户 id 过滤年缓存)。
     try {
-      final mainId = deriveInstitutionMainAccountId(inst.sfidNumber);
+      final mainId = deriveInstitutionMainAccountId(inst.cidNumber);
       final proposals = await _chainData.proposals(mainId);
       if (mounted) setState(() => _proposals = proposals);
     } on Exception {
@@ -140,9 +140,9 @@ class _PublicInstitutionDetailPageState
     final pubkey = _activePubkey;
     if (inst == null || pubkey == null) return;
     if (_subscribed) {
-      await widget.repository.unsubscribe(pubkey, inst.sfidNumber);
+      await widget.repository.unsubscribe(pubkey, inst.cidNumber);
     } else {
-      await widget.repository.subscribe(pubkey, inst.sfidNumber);
+      await widget.repository.subscribe(pubkey, inst.cidNumber);
     }
     if (!mounted) return;
     setState(() => _subscribed = !_subscribed);
@@ -157,9 +157,9 @@ class _PublicInstitutionDetailPageState
         title: Text(
           inst == null
               ? '公权机构'
-              : (inst.sfidShortName?.isNotEmpty == true
-                  ? inst.sfidShortName!
-                  : inst.sfidFullName),
+              : (inst.cidShortName?.isNotEmpty == true
+                  ? inst.cidShortName!
+                  : inst.cidFullName),
         ),
         backgroundColor: AppTheme.surfaceWhite,
         foregroundColor: AppTheme.textPrimary,
@@ -225,7 +225,7 @@ class _PublicInstitutionDetailPageState
             _infoTile(
               icon: Icons.badge_outlined,
               label: '身份ID',
-              value: inst.sfidNumber,
+              value: inst.cidNumber,
             ),
             const Divider(height: 18),
             // 主账户:卡0 本地派生的主账户 SS58(完整,不截断)。
@@ -241,7 +241,7 @@ class _PublicInstitutionDetailPageState
               value: _mainBalanceLabel(),
             ),
             const Divider(height: 18),
-            // 法定代表人来自 SFID subjects.legal_rep_name;未录入则留空。
+            // 法定代表人来自 CID subjects.legal_rep_name;未录入则留空。
             _infoTile(
               icon: Icons.person_outline,
               label: '法定代表人',
@@ -287,7 +287,7 @@ class _PublicInstitutionDetailPageState
   // ──── ③ 提案发起入口(行高/图标与其他行齐,本期占位)────
 
   /// 「提案」徽章 + 副文 + 右箭头;图标 36×36(与机构账户/管理员行齐高)。
-  /// 公权机构可发起 转账 / 费用划转 / 更换管理员 提案,发起流程需与 SFID 管理员
+  /// 公权机构可发起 转账 / 费用划转 / 更换管理员 提案,发起流程需与 CID 管理员
   /// 来源对接,本期**只占位**:点击给开发中反馈,不接真实发起页。
   Widget _proposalEntry() {
     return Container(
@@ -356,9 +356,9 @@ class _PublicInstitutionDetailPageState
   // ──── ④ 管理员入口(治理同款 36px Card → 管理员列表)────
 
   Widget _adminsEntry(PublicInstitutionEntity inst) {
-    final name = inst.sfidShortName?.isNotEmpty == true
-        ? inst.sfidShortName!
-        : inst.sfidFullName;
+    final name = inst.cidShortName?.isNotEmpty == true
+        ? inst.cidShortName!
+        : inst.cidFullName;
     return _entryCard(
       icon: Icons.people_outline,
       title: '管理员',
@@ -366,7 +366,7 @@ class _PublicInstitutionDetailPageState
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PublicInstitutionAdminListPage(
-            sfidFullName: name,
+            cidFullName: name,
             admins: _admins,
           ),
         ),

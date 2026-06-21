@@ -6,7 +6,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 中文注释:`ClearingBankSettingsPage` 基础渲染测试。
 ///
-/// 默认状态不主动调 SFID / 链上 API;测试只断言:
+/// 默认状态不主动调 CID / 链上 API;测试只断言:
 /// - AppBar 标题「设置清算行」可见
 /// - 顶部搜索框(TextField)存在,hint 为「搜索清算行」
 /// - 空态提示「暂无结果」可见

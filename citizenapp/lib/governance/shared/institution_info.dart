@@ -5,7 +5,7 @@
 /// - 内置治理机构静态注册表（`kNationalCouncil`/`kProvincialCouncils`/`kProvincialBanks`）+
 ///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 已迁至
 ///   `lib/organization-manage/institution_registry.dart`。
-/// - 治理主体统一为机构多签 AccountId；sfid_number 只用于查找机构资料。
+/// - 治理主体统一为机构多签 AccountId；cid_number 只用于查找机构资料。
 library;
 
 import 'package:citizenapp/governance/shared/proposal/proposal_models.dart';
@@ -88,7 +88,7 @@ class InstitutionAccounts {
 class InstitutionInfo {
   const InstitutionInfo({
     required this.name,
-    required this.sfidNumber,
+    required this.cidNumber,
     required this.orgType,
     this.accounts,
     String? duoqianAccount,
@@ -100,9 +100,9 @@ class InstitutionInfo {
   /// 显示名称。
   final String name;
 
-  /// 链上身份标识（与 Rust 常量 `sfid_number` 完全一致）。
-  /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId，不再从 sfid_number 派生主体。
-  final String sfidNumber;
+  /// 链上身份标识（与 Rust 常量 `cid_number` 完全一致）。
+  /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId，不再从 cid_number 派生主体。
+  final String cidNumber;
 
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
   final int orgType;
@@ -129,7 +129,7 @@ class InstitutionInfo {
 
   /// 是否为链上注册的机构账户。
   bool get isRegisteredDuoqian =>
-      orgType == OrgType.duoqian && isRegisteredDuoqianIdentity(sfidNumber);
+      orgType == OrgType.duoqian && isRegisteredDuoqianIdentity(cidNumber);
 
   /// 内部投票通过阈值。
   int get internalThreshold {
@@ -163,7 +163,7 @@ class InstitutionInfo {
 
   InstitutionInfo copyWith({
     String? name,
-    String? sfidNumber,
+    String? cidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
     String? duoqianAccount,
@@ -172,7 +172,7 @@ class InstitutionInfo {
   }) {
     return InstitutionInfo(
       name: name ?? this.name,
-      sfidNumber: sfidNumber ?? this.sfidNumber,
+      cidNumber: cidNumber ?? this.cidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
       duoqianAccount: duoqianAccount ?? _singleMainAccount,

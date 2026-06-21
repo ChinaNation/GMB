@@ -8,7 +8,7 @@
 ## 根因
 
 ### CPMS CI(`npm run build` → `tsc -b` 失败,amd64/arm64 同)
-- `cpms/frontend/dangan/ArchiveList.tsx:170` 把原生 `<tr>` 的 ARIA 属性 `role="button"` 改成了 `user_group="button"`,干净类型里 `<tr>` 无 `user_group` → TS2322。
+- `citizenpassport/frontend/dangan/ArchiveList.tsx:170` 把原生 `<tr>` 的 ARIA 属性 `role="button"` 改成了 `user_group="button"`,干净类型里 `<tr>` 无 `user_group` → TS2322。
 - `App.tsx:47/53` 的 `<ProtectedRoute user_group=...>` 合法(组件确有该 prop),非 bug。
 - 附带发现:那次全局替换连本地 `node_modules` 也改了,`@types/react/index.d.ts` 里 `role?: AriaRole` 被改成 `user_group?: AriaUserGroup`(本地污染,node_modules 不入库,不影响 CI/仓库)。
 
@@ -20,7 +20,7 @@
 
 - CPMS:`ArchiveList.tsx:170` `user_group="button"` → `role="button"`(恢复 ARIA 角色,与"管理员角色"概念无关)。
 - CitizenApp:`cd citizenapp && dart run build_runner build` 重生 .g.dart;collection id 由 `isar_community_generator` 按新名重算为 `-6431187929672259628`,与 name 一致。**铁律:生成文件只能重生,不能手改。**
-- 本地清理:`cd cpms/frontend && npm ci` 还原被污染的 @types/react。
+- 本地清理:`cd citizenpassport/frontend && npm ci` 还原被污染的 @types/react。
 
 ## 验收
 

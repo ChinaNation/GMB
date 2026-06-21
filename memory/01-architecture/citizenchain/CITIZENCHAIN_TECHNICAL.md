@@ -2,7 +2,7 @@
 
 ## 1. 文档目的
 - 固化 `citizenchain` 当前产品级技术基线，作为开发、联调、测试、运维、打包发布的统一参考。
-- 说明 `citizenchain` 在 `GMB` 仓库中的定位，以及与 `SFID`、`CPMS`、`citizenapp` 的边界。
+- 说明 `citizenchain` 在 `GMB` 仓库中的定位，以及与 `CID`、`CPMS`、`citizenapp` 的边界。
 - 建立产品技术文档与模块技术文档之间的映射关系，避免后续只维护模块文档、不维护产品全局口径。
 
 ## 2. 文档体系定位
@@ -22,7 +22,7 @@
 - `runtime/primitives/`：运行时共享常量、基础类型与制度数据。
 
 ### 2.3 本文范围外
-- `SFID` 的链外网站、签名服务与数据库内部实现。
+- `CID` 的链外网站、签名服务与数据库内部实现。
 - `CPMS` 的离线档案录入与打印系统内部实现。
 - `citizenapp` 的移动端 UI、钱包与登录实现细节。
 - 仓库级 CI/CD、安装器流水线、工具库、白皮书与宣传性文档。
@@ -37,8 +37,8 @@
   - 桌面节点软件：`node/src/desktop.rs`、`node/src/<功能名>` 与 `node/frontend`
 
 ### 3.2 对外协作边界
-- 对 `SFID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
-- 对 `CPMS`：不直接集成，只通过 `SFID` 间接承接公民身份可信输入。
+- 对 `CID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
+- 对 `CPMS`：不直接集成，只通过 `CID` 间接承接公民身份可信输入。
 - 对 `citizenapp`：提供链上账户、交易、治理、节点状态、奖励与网络可观测能力。
 
 ## 4. 当前目录结构
@@ -157,11 +157,11 @@ citizenchain/
 - `onchain-transaction`
 
 ### 9.4 其他模块（`runtime/otherpallet/`）
-- 负责 SFID 链上绑定 / 资格校验、PoW 难度调整等基础能力。
+- 负责 CID 链上绑定 / 资格校验、PoW 难度调整等基础能力。
 
 当前模块：
 - `pow-difficulty`
-- `sfid-system`
+- `cid-system`
 
 ## 10. 桌面节点软件（`node/`）
 
@@ -222,7 +222,7 @@ citizenchain/
 
 ### 12.4 其他链上模块
 - `runtime/otherpallet/pow-difficulty/POW_DIFFICULTY_TECHNICAL.md`
-- `runtime/otherpallet/sfid-system/SFID_SYSTEM_TECHNICAL.md`
+- `runtime/otherpallet/cid-system/CID_SYSTEM_TECHNICAL.md`
 
 ### 12.5 桌面节点 UI
 - `memory/05-modules/citizenchain/node/home/HOME_TECHNICAL.md`

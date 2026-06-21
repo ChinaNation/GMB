@@ -15,7 +15,7 @@
 | 职责 | 后端路径 | 前端路径 |
 |---|---|---|
 | 功能入口/状态机 | `citizenchain/node/src/offchain/commands.rs` | `citizenchain/node/frontend/offchain/section.tsx` |
-| SFID 查询 | `citizenchain/node/src/offchain/sfid.rs` | `citizenchain/node/frontend/offchain/sfid.tsx` |
+| CID 查询 | `citizenchain/node/src/offchain/cid.rs` | `citizenchain/node/frontend/offchain/cid.tsx` |
 | 清算行节点声明 | `citizenchain/node/src/offchain/signing.rs` | `citizenchain/node/frontend/offchain/register.tsx` |
 | 链上节点查询 | `citizenchain/node/src/offchain/chain.rs` | `citizenchain/node/frontend/offchain/detail.tsx` |
 | 管理员解密 | `citizenchain/node/src/offchain/decrypt.rs` | `citizenchain/node/frontend/offchain/admin.tsx` |
@@ -80,7 +80,7 @@ Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 **新增**:
 - `OffchainComponents` 聚合 `Arc<Ledger>` / `Arc<Packer>` / `Arc<EventListener>` / `Arc<RpcImpl>`
 - `start_clearing_bank_components(base_path, bank_main, password)`:一次性组装 + 磁盘恢复
-- `commands.rs`:清算行页面的 SFID 查询、节点查询、端点自测、扫码签名、管理员解密命令。
+- `commands.rs`:清算行页面的 CID 查询、节点查询、端点自测、扫码签名、管理员解密命令。
 
 Step 2b-ii 之后由 `offchain/bootstrap.rs` 统一处理 CLI 参数、密钥解锁、
 `start_clearing_bank_components` 调用和三个后台 worker spawn；`service.rs`

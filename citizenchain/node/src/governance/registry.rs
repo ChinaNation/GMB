@@ -15,15 +15,15 @@ pub(crate) enum InstitutionRef {
 impl InstitutionRef {
     pub(crate) fn name(self) -> &'static str {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.sfid_full_name,
-            InstitutionRef::Prb(item) => item.sfid_full_name,
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.cid_full_name,
+            InstitutionRef::Prb(item) => item.cid_full_name,
         }
     }
 
-    pub(crate) fn sfid_number(self) -> &'static str {
+    pub(crate) fn cid_number(self) -> &'static str {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.sfid_number,
-            InstitutionRef::Prb(item) => item.sfid_number,
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.cid_number,
+            InstitutionRef::Prb(item) => item.cid_number,
         }
     }
 
@@ -67,7 +67,7 @@ impl InstitutionRef {
         let org_type = self.org_type();
         InstitutionListItem {
             name: self.name().to_string(),
-            sfid_number: self.sfid_number().to_string(),
+            cid_number: self.cid_number().to_string(),
             org_type: org_type as u8,
             org_type_label: org_type.label().to_string(),
             main_account: self.main_account_hex(),
@@ -95,10 +95,10 @@ pub(crate) fn governance_overview() -> GovernanceOverview {
     }
 }
 
-pub(crate) fn find_institution(sfid_number: &str) -> Option<InstitutionRef> {
+pub(crate) fn find_institution(cid_number: &str) -> Option<InstitutionRef> {
     if let Some(index) = CHINA_CB
         .iter()
-        .position(|item| item.sfid_number == sfid_number)
+        .position(|item| item.cid_number == cid_number)
     {
         return Some(if index == 0 {
             InstitutionRef::Nrc(&CHINA_CB[index])
@@ -109,7 +109,7 @@ pub(crate) fn find_institution(sfid_number: &str) -> Option<InstitutionRef> {
 
     CHINA_CH
         .iter()
-        .find(|item| item.sfid_number == sfid_number)
+        .find(|item| item.cid_number == cid_number)
         .map(InstitutionRef::Prb)
 }
 

@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EligibleClearingBankCandidate {
-    pub sfid_number: String,
+    pub cid_number: String,
     /// 机构中文名;两步式未命名时为空串。
-    pub sfid_full_name: String,
+    pub cid_full_name: String,
     pub ref_property: String,
     pub sub_type: Option<String>,
-    pub parent_sfid_number: Option<String>,
-    pub parent_sfid_full_name: Option<String>,
+    pub parent_cid_number: Option<String>,
+    pub parent_cid_full_name: Option<String>,
     pub parent_ref_property: Option<String>,
     pub province_name: String,
     pub city_name: String,
@@ -41,12 +41,12 @@ pub struct AccountWithBalance {
     pub is_default: bool,
 }
 
-/// 机构详情 = `organization-manage::Institutions[sfid_number]` + 各账户余额 + 友好标签。
+/// 机构详情 = `organization-manage::Institutions[cid_number]` + 各账户余额 + 友好标签。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {
-    pub sfid_number: String,
-    pub sfid_full_name: String,
+    pub cid_number: String,
+    pub cid_full_name: String,
     /// 管理员更换使用的机构多签 AccountId。当前清算行以主账户作为机构管理员账户。
     pub admin_account_hex: String,
     /// 管理员更换使用的 org。清算行属于 ORG_OTH 机构账户。
@@ -84,17 +84,17 @@ pub struct InstitutionProposalItem {
     pub summary: String,
 }
 
-/// SFID `/api/v1/app/institutions/:sfid_number/registration-info` 的响应形态。
+/// CID `/api/v1/app/institutions/:cid_number/registration-info` 的响应形态。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct InstitutionRegistrationInfoResp {
-    pub sfid_number: String,
-    pub sfid_full_name: String,
+    pub cid_number: String,
+    pub cid_full_name: String,
     pub account_names: Vec<String>,
     pub credential: InstitutionRegistrationCredentialResp,
 }
 
-/// SFID 对机构注册 payload 签发的凭证。
+/// CID 对机构注册 payload 签发的凭证。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct InstitutionRegistrationCredentialResp {
@@ -102,8 +102,8 @@ pub struct InstitutionRegistrationCredentialResp {
     pub genesis_hash: String,
     /// 防重放 nonce(本次响应生成的随机字符串)。
     pub register_nonce: String,
-    /// 签发机构 SFID 号。
-    pub issuer_sfid_number: String,
+    /// 签发机构 CID 号。
+    pub issuer_cid_number: String,
     /// 签发机构主账户(SS58 或 32 字节 hex)。
     pub issuer_main_account: String,
     /// 本次签名所用机构管理员公钥(32 字节 hex)。
@@ -114,6 +114,6 @@ pub struct InstitutionRegistrationCredentialResp {
     pub scope_city_name: String,
     /// 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。
     pub signature: String,
-    /// SFID 端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
+    /// CID 端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
     pub meta: serde_json::Value,
 }

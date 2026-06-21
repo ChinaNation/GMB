@@ -89,8 +89,8 @@ class ChainRpc {
   }
 
   static final _keyring = Keyring();
-  static final Uint8List _sfidMainAccountKey =
-      _buildStorageValueKey('SfidSystem', 'SfidMainAccount');
+  static final Uint8List _cidMainAccountKey =
+      _buildStorageValueKey('CidSystem', 'CidMainAccount');
 
   // ──── 批量查询 ────
 
@@ -766,14 +766,14 @@ class ChainRpc {
     return fen.toDouble() / 100.0;
   }
 
-  /// 读取链上当前 SFID 主验签公钥（32 字节 AccountId）。
+  /// 读取链上当前 CID 主验签公钥（32 字节 AccountId）。
   ///
-  /// 存储项：`SfidSystem::SfidMainAccount`，类型为 `Option<AccountId32>`。
+  /// 存储项：`CidSystem::CidMainAccount`，类型为 `Option<AccountId32>`。
   /// 中文注释(ADR-018 卡⑤)：改走 [fetchStorageBatch],纳入 ChainReadCache 块内
-  /// 缓存。原先的 `_cachedCurrentSfidMainPubkeyHex` 永久缓存永不失效,密钥轮换后会
+  /// 缓存。原先的 `_cachedCurrentCidMainPubkeyHex` 永久缓存永不失效,密钥轮换后会
   /// 读到旧值;块内缓存随换块自然失效,更正确。
-  Future<String?> fetchCurrentSfidMainPubkeyHex() async {
-    final keyHex = '0x${_hexEncode(_sfidMainAccountKey)}';
+  Future<String?> fetchCurrentCidMainPubkeyHex() async {
+    final keyHex = '0x${_hexEncode(_cidMainAccountKey)}';
     final batch = await fetchStorageBatch([keyHex]);
     final data = batch[keyHex];
     if (data == null || data.isEmpty) {
@@ -786,7 +786,7 @@ class ChainRpc {
     } else if (data.length == 32) {
       pubkeyBytes = data;
     } else {
-      throw Exception('SfidMainAccount 存储格式异常');
+      throw Exception('CidMainAccount 存储格式异常');
     }
 
     return '0x${_hexEncode(pubkeyBytes)}';
@@ -930,8 +930,8 @@ class ChainRpc {
         15 => 'DuoqianNotActive',
         16 => 'InvalidBeneficiary',
         18 => 'InstitutionNotRegistered',
-        20 => 'SfidAlreadyRegistered',
-        21 => 'EmptySfidNumber',
+        20 => 'CidAlreadyRegistered',
+        21 => 'EmptyCidNumber',
         22 => 'RegisterNonceAlreadyUsed',
         25 => 'ReservedBalanceRemaining',
         30 => 'TransferFailed',
@@ -958,8 +958,8 @@ class ChainRpc {
         10 => '发起人不是该机构账户管理员',
         11 => '管理员数量不符合链上规则',
         13 => '机构账户管理员组织只能是 ORG_PUP 或 ORG_OTH',
-        18 => 'SFID 机构尚未登记',
-        20 => '该 SFID 账户名已登记',
+        18 => 'CID 机构尚未登记',
+        20 => '该 CID 账户名已登记',
         25 => '账户仍有保留余额，不能注销',
         32 => '账户名称不能为空',
         33 => '机构创建必须包含主账户',

@@ -11,7 +11,7 @@ class MyIdState {
     this.walletAddress,
     this.walletPubkeyHex,
     this.walletIndex,
-    this.sfidNumber,
+    this.cidNumber,
     this.citizenStatus,
     this.votingEligible,
     this.voteStatus,
@@ -27,7 +27,7 @@ class MyIdState {
   final String? walletAddress;
   final String? walletPubkeyHex;
   final int? walletIndex;
-  final String? sfidNumber;
+  final String? cidNumber;
   final String? citizenStatus;
   final bool? votingEligible;
   final String? voteStatus;
@@ -46,7 +46,7 @@ class MyIdService {
   static const _kAddress = 'myid.wallet_address';
   static const _kPubkeyHex = 'myid.wallet_pubkey_hex';
   static const _kWalletIndex = 'myid.wallet_index';
-  static const _kSfidNumber = 'myid.sfid_number';
+  static const _kCidNumber = 'myid.cid_number';
   static const _kCitizenStatus = 'myid.citizen_status';
   static const _kVotingEligible = 'myid.voting_eligible';
   static const _kVoteStatus = 'myid.vote_status';
@@ -70,7 +70,7 @@ class MyIdService {
       walletAddress: prefs.getString(_kAddress),
       walletPubkeyHex: prefs.getString(_kPubkeyHex),
       walletIndex: prefs.getInt(_kWalletIndex),
-      sfidNumber: prefs.getString(_kSfidNumber),
+      cidNumber: prefs.getString(_kCidNumber),
       citizenStatus: prefs.getString(_kCitizenStatus),
       votingEligible: prefs.getBool(_kVotingEligible),
       voteStatus: prefs.getString(_kVoteStatus),
@@ -86,7 +86,7 @@ class MyIdService {
   /// 选择电子护照使用的钱包。
   ///
   /// 中文注释：CPMS 阶段只需要扫描钱包地址;真正的钱包签名与已绑定确认
-  /// 统一放到 SFID 绑定阶段,所以这里不联网注册、不写 bound。
+  /// 统一放到 CID 绑定阶段,所以这里不联网注册、不写 bound。
   Future<MyIdState> selectWallet({
     required String walletAddress,
     required String walletPubkeyHex,
@@ -123,7 +123,7 @@ class MyIdService {
         case 'bound':
           await prefs.setString(_kBindStatus, 'bound');
           await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-          await _setOptionalString(prefs, _kSfidNumber, remote.sfidNumber);
+          await _setOptionalString(prefs, _kCidNumber, remote.cidNumber);
           await _setOptionalString(
             prefs,
             _kCitizenStatus,
@@ -150,7 +150,7 @@ class MyIdService {
         case 'pending':
           await prefs.setString(_kBindStatus, 'pending');
           await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-          await _setOptionalString(prefs, _kSfidNumber, remote.sfidNumber);
+          await _setOptionalString(prefs, _kCidNumber, remote.cidNumber);
           await _setOptionalString(
             prefs,
             _kCitizenStatus,
@@ -176,12 +176,12 @@ class MyIdService {
           );
         default:
           if (localState.bindStatus == MyIdBindStatus.bound) {
-            // 中文注释：只有曾经由 SFID 确认 bound 的状态,才允许远端 unset 清空。
+            // 中文注释：只有曾经由 CID 确认 bound 的状态,才允许远端 unset 清空。
             await prefs.setString(_kBindStatus, 'unset');
             await prefs.remove(_kAddress);
             await prefs.remove(_kPubkeyHex);
             await prefs.remove(_kWalletIndex);
-            await prefs.remove(_kSfidNumber);
+            await prefs.remove(_kCidNumber);
             await prefs.remove(_kCitizenStatus);
             await prefs.remove(_kVotingEligible);
             await prefs.remove(_kVoteStatus);
@@ -208,7 +208,7 @@ class MyIdService {
     await prefs.remove(_kAddress);
     await prefs.remove(_kPubkeyHex);
     await prefs.remove(_kWalletIndex);
-    await prefs.remove(_kSfidNumber);
+    await prefs.remove(_kCidNumber);
     await prefs.remove(_kCitizenStatus);
     await prefs.remove(_kVotingEligible);
     await prefs.remove(_kVoteStatus);

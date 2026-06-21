@@ -102,11 +102,11 @@ fn load_balance_at_block(
 }
 
 fn collect_admins(
-    sfid_number: &str,
+    cid_number: &str,
     block_hash: Option<&str>,
     warnings: &mut Vec<String>,
 ) -> Vec<types::AdminInfo> {
-    let pubkeys = match institution::fetch_admins(sfid_number) {
+    let pubkeys = match institution::fetch_admins(cid_number) {
         Ok(items) => items,
         Err(e) => {
             warnings.push(format!("查询管理员失败: {e}"));
@@ -173,15 +173,15 @@ fn collect_institution_balances(
 
 fn build_institution_detail_sync(
     app: &AppHandle,
-    sfid_number: &str,
+    cid_number: &str,
 ) -> Result<InstitutionDetail, String> {
-    let entry = registry::find_institution(sfid_number)
-        .ok_or_else(|| format!("未知的机构 sfidNumber: {sfid_number}"))?;
+    let entry = registry::find_institution(cid_number)
+        .ok_or_else(|| format!("未知的机构 cidNumber: {cid_number}"))?;
     let org_type = entry.org_type();
     let mut context = build_chain_query_context(app)?;
     let admins = if context.running {
         collect_admins(
-            sfid_number,
+            cid_number,
             context.block_hash.as_deref(),
             &mut context.warnings,
         )
@@ -211,7 +211,7 @@ fn build_institution_detail_sync(
 
     Ok(InstitutionDetail {
         name: entry.name().to_string(),
-        sfid_number: sfid_number.to_string(),
+        cid_number: cid_number.to_string(),
         org_type: org_type as u8,
         org_type_label: org_type.label().to_string(),
         main_account: entry.main_account_hex(),
@@ -235,16 +235,16 @@ fn build_institution_detail_sync(
 
 pub(super) fn build_institution_balance_update_sync(
     app: &AppHandle,
-    sfid_number: &str,
+    cid_number: &str,
 ) -> Result<InstitutionBalanceUpdate, String> {
-    let entry = registry::find_institution(sfid_number)
-        .ok_or_else(|| format!("未知的机构 sfidNumber: {sfid_number}"))?;
+    let entry = registry::find_institution(cid_number)
+        .ok_or_else(|| format!("未知的机构 cidNumber: {cid_number}"))?;
     let mut context = build_chain_query_context(app)?;
     let balances =
         collect_institution_balances(entry, context.block_hash.as_deref(), &mut context.warnings);
 
     Ok(InstitutionBalanceUpdate {
-        sfid_number: sfid_number.to_string(),
+        cid_number: cid_number.to_string(),
         balance_fen: balances.balance_fen,
         staking_balance_fen: balances.staking_balance_fen,
         fee_balance_fen: balances.fee_balance_fen,
@@ -265,9 +265,9 @@ pub async fn get_governance_overview() -> Result<GovernanceOverview, String> {
 #[tauri::command]
 pub async fn get_institution_detail(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
 ) -> Result<InstitutionDetail, String> {
-    tauri::async_runtime::spawn_blocking(move || build_institution_detail_sync(&app, &sfid_number))
+    tauri::async_runtime::spawn_blocking(move || build_institution_detail_sync(&app, &cid_number))
         .await
         .map_err(|e| format!("institution detail task failed: {e}"))?
 }
@@ -319,14 +319,14 @@ pub async fn get_next_proposal_id(app: AppHandle) -> Result<u64, String> {
 #[tauri::command]
 pub async fn get_institution_proposals(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
 ) -> Result<Vec<proposal::ProposalListItem>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行，无法查询提案".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let ids = proposal::fetch_active_proposal_ids(&sfid_number)?;
+        let ids = proposal::fetch_active_proposal_ids(&cid_number)?;
         let mut items = Vec::new();
         for id in ids.iter().rev() {
             match proposal::fetch_proposal_page(*id, 1) {
@@ -346,7 +346,7 @@ pub async fn get_institution_proposals(
 #[tauri::command]
 pub async fn get_institution_proposal_page(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
     start_id: u64,
     count: u32,
 ) -> Result<proposal::ProposalPageResult, String> {
@@ -355,7 +355,7 @@ pub async fn get_institution_proposal_page(
         return Err("节点未运行，无法查询提案".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        proposal::fetch_institution_proposal_page(&sfid_number, start_id, count)
+        proposal::fetch_institution_proposal_page(&cid_number, start_id, count)
     })
     .await
     .map_err(|e| format!("institution proposal page task failed: {e}"))?
@@ -394,14 +394,14 @@ pub async fn list_proposals_by_org(app: AppHandle, org: u8) -> Result<Vec<u64>, 
 #[tauri::command]
 pub async fn list_proposals_by_institution(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
 ) -> Result<Vec<u64>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行,无法查询反向索引".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        proposal::fetch_proposals_by_institution(&sfid_number)
+        proposal::fetch_proposals_by_institution(&cid_number)
     })
     .await
     .map_err(|e| format!("proposals by institution task failed: {e}"))?
@@ -452,7 +452,7 @@ pub async fn build_joint_vote_request(
     app: AppHandle,
     proposal_id: u64,
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
     approve: bool,
 ) -> Result<signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -460,7 +460,7 @@ pub async fn build_joint_vote_request(
         return Err("节点未运行，无法构建签名请求".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        signing::build_joint_vote_sign_request(proposal_id, &pubkey_hex, &sfid_number, approve)
+        signing::build_joint_vote_sign_request(proposal_id, &pubkey_hex, &cid_number, approve)
     })
     .await
     .map_err(|e| format!("build joint vote request task failed: {e}"))?
@@ -507,14 +507,14 @@ pub async fn check_vote_status(
     app: AppHandle,
     proposal_id: u64,
     pubkey_hex: String,
-    sfid_number: Option<String>,
+    cid_number: Option<String>,
 ) -> Result<proposal::UserVoteStatus, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行，无法查询投票状态".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        proposal::fetch_user_vote_status(proposal_id, &pubkey_hex, sfid_number.as_deref())
+        proposal::fetch_user_vote_status(proposal_id, &pubkey_hex, cid_number.as_deref())
     })
     .await
     .map_err(|e| format!("check vote status task failed: {e}"))?

@@ -33,7 +33,7 @@ class _NoopApi extends PublicInstitutionApi {
     required String provinceName,
     String? cityName,
     String? sinceVersion,
-    String? afterSfid,
+    String? afterCid,
     int pageSize = 500,
   }) async =>
       const PublicInstitutionPage(items: [], hasMore: false);
@@ -50,7 +50,7 @@ class _EmptyBundle extends AssetBundle {
 /// 构造机构 seed DTO。行政区只带 code(ADR-021);[cityName] 仅供 harness 同步
 /// seed 字典(市名 join),不进机构记录。
 PublicInstitutionDto seedDto(
-  String sfid, {
+  String cid, {
   required String provinceCode,
   required String cityCode,
   String? name,
@@ -58,8 +58,8 @@ PublicInstitutionDto seedDto(
   String townCode = '',
 }) =>
     PublicInstitutionDto.fromJson(<String, dynamic>{
-      'sfid_number': sfid,
-      'sfid_full_name': name ?? '$cityCode$code机构',
+      'cid_number': cid,
+      'cid_full_name': name ?? '$cityCode$code机构',
       'province_code': provinceCode,
       'city_code': cityCode,
       'town_code': townCode,
@@ -75,7 +75,7 @@ PublicInstitutionDto seedDto(
 Future<PublicInstitutionRepository> buildSeededRepo({
   required List<String> provinceOrder,
   required List<PublicInstitutionDto> institutions,
-  Map<String, String>? subscriptions, // pubkey -> sfid
+  Map<String, String>? subscriptions, // pubkey -> cid
   Map<String, String>? cityNames, // "<pcode>|<ccode>" -> name
   Map<String, String>? townNames, // "<pcode>|<ccode>|<tcode>" -> name
 }) async {

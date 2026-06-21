@@ -113,7 +113,7 @@ pub fn create_benchmark_extrinsic(
         .ok()
         .flatten()
         .expect("Genesis block exists; qed");
-    // immortal era(feedback_sfid_pow_chain_recipe.md):PoW 链一律 immortal,
+    // immortal era(feedback_cid_pow_chain_recipe.md):PoW 链一律 immortal,
     // CheckEra::additional_signed 取 block_hash(0) = genesis_hash。
     let tx_ext: runtime::TxExtension = (
         frame_system::AuthorizeCall::<runtime::Runtime>::new(),

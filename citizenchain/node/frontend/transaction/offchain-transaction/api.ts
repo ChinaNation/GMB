@@ -9,8 +9,8 @@ import type {
 
 // 清算行 offchain 网络专用 Tauri API。机构多签命令归 governance/organization-manage/api.ts。
 export const offchainApi = {
-  queryClearingBankNodeInfo: (sfidNumber: string) =>
-    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { sfidNumber }),
+  queryClearingBankNodeInfo: (cidNumber: string) =>
+    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { cidNumber }),
 
   queryLocalPeerId: () => invoke<string>('query_local_peer_id'),
 
@@ -23,14 +23,14 @@ export const offchainApi = {
 
   buildRegisterClearingBankRequest: (
     pubkeyHex: string,
-    sfidNumber: string,
+    cidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_register_clearing_bank_request', {
       pubkeyHex,
-      sfidNumber,
+      cidNumber,
       peerId,
       rpcDomain,
       rpcPort,
@@ -40,7 +40,7 @@ export const offchainApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidNumber: string,
+    cidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
@@ -52,7 +52,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidNumber,
+      cidNumber,
       peerId,
       rpcDomain,
       rpcPort,
@@ -63,13 +63,13 @@ export const offchainApi = {
 
   buildUpdateClearingBankEndpointRequest: (
     pubkeyHex: string,
-    sfidNumber: string,
+    cidNumber: string,
     newDomain: string,
     newPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_update_clearing_bank_endpoint_request', {
       pubkeyHex,
-      sfidNumber,
+      cidNumber,
       newDomain,
       newPort,
     }),
@@ -78,7 +78,7 @@ export const offchainApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidNumber: string,
+    cidNumber: string,
     newDomain: string,
     newPort: number,
     signNonce: number,
@@ -89,7 +89,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidNumber,
+      cidNumber,
       newDomain,
       newPort,
       signNonce,
@@ -97,14 +97,14 @@ export const offchainApi = {
       responseJson,
     }),
 
-  buildUnregisterClearingBankRequest: (pubkeyHex: string, sfidNumber: string) =>
-    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', { pubkeyHex, sfidNumber }),
+  buildUnregisterClearingBankRequest: (pubkeyHex: string, cidNumber: string) =>
+    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', { pubkeyHex, cidNumber }),
 
   submitUnregisterClearingBank: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidNumber: string,
+    cidNumber: string,
     signNonce: number,
     signBlockNumber: number,
     responseJson: string,
@@ -113,14 +113,14 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidNumber,
+      cidNumber,
       signNonce,
       signBlockNumber,
       responseJson,
     }),
 
-  buildDecryptAdminRequest: (pubkeyHex: string, sfidNumber: string) =>
-    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', { pubkeyHex, sfidNumber }),
+  buildDecryptAdminRequest: (pubkeyHex: string, cidNumber: string) =>
+    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', { pubkeyHex, cidNumber }),
 
   verifyAndDecryptAdmin: (
     requestId: string,
@@ -135,8 +135,8 @@ export const offchainApi = {
       responseJson,
     }),
 
-  listDecryptedAdmins: (sfidNumber: string) =>
-    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { sfidNumber }),
+  listDecryptedAdmins: (cidNumber: string) =>
+    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { cidNumber }),
 
   lockDecryptedAdmin: (pubkeyHex: string) =>
     invoke<void>('lock_decrypted_admin', { pubkeyHex }),

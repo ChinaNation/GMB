@@ -55,5 +55,5 @@ lib/transaction/offchain-transaction/services/offchain_scan_flow.dart
 
 1. 打开通用 `QrScanPage`
 2. 校验收款码必须包含 `UserTransferBody.bank`
-3. 读取链上 `ClearingBankNodes[sfid_number]`
+3. 读取链上 `ClearingBankNodes[cid_number]`
 4. 跳转 `lib/transaction/offchain-transaction/pages/offchain_pay_page.dart`

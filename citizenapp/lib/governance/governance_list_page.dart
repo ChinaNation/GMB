@@ -25,15 +25,15 @@ List<InstitutionInfo> applyGovernanceInstitutionOrder(
   List<String>? savedOrder,
 ) {
   final byId = <String, InstitutionInfo>{
-    for (final institution in source) institution.sfidNumber: institution,
+    for (final institution in source) institution.cidNumber: institution,
   };
   final ordered = <InstitutionInfo>[];
   final used = <String>{};
 
   if (savedOrder != null) {
-    for (final sfidNumber in savedOrder) {
-      final institution = byId[sfidNumber];
-      if (institution != null && used.add(sfidNumber)) {
+    for (final cidNumber in savedOrder) {
+      final institution = byId[cidNumber];
+      if (institution != null && used.add(cidNumber)) {
         ordered.add(institution);
       }
     }
@@ -41,7 +41,7 @@ List<InstitutionInfo> applyGovernanceInstitutionOrder(
 
   // 中文注释：静态注册表未来若有新增机构，本机旧顺序里没有的项必须补回末尾。
   for (final institution in source) {
-    if (used.add(institution.sfidNumber)) {
+    if (used.add(institution.cidNumber)) {
       ordered.add(institution);
     }
   }
@@ -184,7 +184,7 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
         prefsKey,
-        next.map((institution) => institution.sfidNumber).toList(),
+        next.map((institution) => institution.cidNumber).toList(),
       );
     } catch (e) {
       if (!mounted) return;
@@ -357,7 +357,7 @@ class _GovernanceSection extends StatelessWidget {
                     for (final inst in institutions)
                       SizedBox(
                         key: ValueKey(
-                          'governance_national_card_${inst.sfidNumber}',
+                          'governance_national_card_${inst.cidNumber}',
                         ),
                         height: governanceCardHeight,
                         child: _GovernanceCard(
@@ -365,7 +365,7 @@ class _GovernanceSection extends StatelessWidget {
                           icon: icon,
                           badgeColor: badgeColor,
                           isAdmin: ProposalContextResolver.isInstitutionAdmin(
-                            inst.sfidNumber,
+                            inst.cidNumber,
                           ),
                           onReturnFromDetail: onReturnFromDetail,
                         ),
@@ -387,7 +387,7 @@ class _GovernanceSection extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final inst = institutions[index];
                   final isAdmin = ProposalContextResolver.isInstitutionAdmin(
-                    inst.sfidNumber,
+                    inst.cidNumber,
                   );
                   final reorder = onReorder;
                   if (reorder == null) {

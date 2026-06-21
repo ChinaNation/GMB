@@ -1,6 +1,6 @@
 # ADR-017：出块即固化 + 全端 finalized 单一口径
 
-- 状态:Accepted / 代码已实施(2026-06-12 卡1链端+卡2 citizenapp+卡3桌面端全部完工,sfid 后端经盘点本就达标零改动;**待 user 重建节点二进制并全网滚动重启后生效**,实施明细见 20260612-adr017-card1/2/3 三张任务卡)
+- 状态:Accepted / 代码已实施(2026-06-12 卡1链端+卡2 citizenapp+卡3桌面端全部完工,cid 后端经盘点本就达标零改动;**待 user 重建节点二进制并全网滚动重启后生效**,实施明细见 20260612-adr017-card1/2/3 三张任务卡)
 - 背景事故:2026-06-10~12 机构详情提案列表为空/余额不动/转账看似成功不上链系列排查,最终根因 = 难度 100 分叉风暴 + GRANDPA 默认投票规则(best−2)+ 跳空块三者叠加,轻节点链视图漂移(详见任务卡 20260611-citizenapp-keyspaged-pin-finalized 三次诊断)。
 
 ## 决策
@@ -21,7 +21,7 @@
 - **收口 P0**:`ChainRpc.fetchStorage/fetchStorageBatch/fetchStorageBatchChunked` 底层从 `getStorageValuesHex`(best)切 `getFinalizedStorageValuesHex`;废弃的 fetchBalance/fetchTotalBalance/fetchBalances(best)删除。
 - **索引扫描**:`getKeysPagedAtBest` → 钉 finalized 哈希(ensureSynced 之后取快照),改名 `getKeysPagedFinalized`;4 调用点跟随。
 - **交易监控**:`ChainTxMonitor` 删 best 链扫描(`_syncBestUnfinalized`/`fetchLatestBlock` 路径),只扫 finalized 链;`_processBlock` 的 `state_getStorage` 改带 finalized 块哈希;交易状态三态收敛两态(已提交→已确认);`chain_event_subscription` 业务刷新只挂 finalizedHeads。
-- **杂项 A 类**:`fetchConfirmedNonce`(监控用)、`fetchCurrentSfidMainPubkeyHex`、clearing_bank_directory 等随收口自动/逐点切换。
+- **杂项 A 类**:`fetchConfirmedNonce`(监控用)、`fetchCurrentCidMainPubkeyHex`、clearing_bank_directory 等随收口自动/逐点切换。
 - **豁免保持**:`fetchNonce`/`getAccountNextIndexAsync`/`fetchRuntimeVersion`/`fetchMetadata`/`fetchGenesisHash`/`submitExtrinsic*`/`signed_extrinsic_builder`。
 - **诊断面**:`getStatusSnapshot` 同时含 best/finalized 高度,仅供链况横幅诊断展示,业务逻辑不得取 best 字段。
 
@@ -30,7 +30,7 @@
 - A 类 15 处机械替换:governance/proposal.rs(9)、admins_change/storage.rs(1)、organization-manage/chain.rs(3)、offchain_transaction/endpoint.rs(1)、settings/fee-address(1)。
 - B 类豁免:signing.rs 提交管线(nonce/dry-run/submit/后台核对)。C 类 8 处已 finalized 不动。
 
-### sfid 后端——基本已达标
+### cid 后端——基本已达标
 - indexer 已 `subscribe_finalized` + finalized head(C 类)✓;推链三件套保持"只等 InBestBlock"(豁免;可选升级等 Finalized,P2 决策项)。
 - cpms 后端不读链 ✓;citizenwallet 公民钱包离线 ✓。
 

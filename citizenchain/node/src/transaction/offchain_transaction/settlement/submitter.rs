@@ -223,7 +223,7 @@ pub fn build_signed_extrinsic(
         .map_err(|e| format!("读取 genesis_hash 失败:{e}"))?
         .ok_or_else(|| "Genesis block 尚未可用".to_string())?;
 
-    // immortal era(feedback_sfid_pow_chain_recipe.md):PoW 链 offchain submitter 一律 immortal
+    // immortal era(feedback_cid_pow_chain_recipe.md):PoW 链 offchain submitter 一律 immortal
     let tx_ext: runtime::TxExtension = (
         frame_system::AuthorizeCall::<runtime::Runtime>::new(),
         frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),

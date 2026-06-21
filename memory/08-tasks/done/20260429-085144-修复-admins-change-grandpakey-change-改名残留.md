@@ -13,7 +13,7 @@
 ## 改动范围
 
 - `citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`
-- `memory/08-tasks/done/20260408-sfid-三角色命名统一-任务卡0.5.md`
+- `memory/08-tasks/done/20260408-cid-三角色命名统一-任务卡0.5.md`
 - `memory/08-tasks/done/20260328-112311-审查-admins-change-模块安全与质量.md`
 - `memory/08-tasks/open/20260429-runtime-step2-admins-change-unified-subjects.md`
 - `memory/08-tasks/index.md`

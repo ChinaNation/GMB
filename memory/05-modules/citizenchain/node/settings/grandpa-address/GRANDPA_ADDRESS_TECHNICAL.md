@@ -31,7 +31,7 @@
   - 文件内容：`"0x<private_hex>"`
   - 通过原子写入落盘，避免异常中断时文件损坏。
 - 本地元数据文件：`<app_data_dir>/grandpa-meta.json`
-  - `sfid_full_name`
+  - `cid_full_name`
   - `pubkey_hex`
 
 ## 4. 关键流程

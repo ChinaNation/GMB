@@ -3,7 +3,7 @@
 //! 用于禁止 organization-manage 抢注这些机构地址。
 //!
 //! 派生统一走 `primitives::core_const::DUOQIAN` + op_tag，由
-//! `tools/duoqian.py` 一次性生成，禁止手改。
+//! `scripts/duoqian.py` 一次性生成，禁止手改。
 
 use hex_literal::hex;
 

@@ -507,13 +507,13 @@ class InstitutionEntity {
   @Index(unique: true, replace: true)
   late String duoqianAccount;
 
-  /// SFID 标识（UTF-8 字符串）。
-  late String sfidNumber;
+  /// CID 标识（UTF-8 字符串）。
+  late String cidNumber;
 
   /// 机构账户管理员更换 org：4=公权机构账户，5=其他机构账户。
   int? adminAccountOrg;
 
-  /// 机构名称（链上升级前暂用 sfidNumber 代替）。
+  /// 机构名称（链上升级前暂用 cidNumber 代替）。
   late String name;
 
   /// 添加时间戳（毫秒），用于排序。
@@ -568,19 +568,19 @@ class AdminDivisionEntity {
 
 /// 公权机构目录本地完整缓存(ADR-018 §九 混合模式)。
 ///
-/// 中文注释:数据来自发布期数据包(基线)+ SFID 公开接口增量同步;UI 永远读本表,
+/// 中文注释:数据来自发布期数据包(基线)+ CID 公开接口增量同步;UI 永远读本表,
 /// 省/市/机构导航零链读零现查。主/费账户本地派生不入库,仅自定义账户名(op_tag=0x06)
 /// 入 [customAccountNames](绝大多数机构为空)。
 @collection
 class PublicInstitutionEntity {
   Id id = Isar.autoIncrement;
 
-  /// 机构身份 ID(sfid_number),全局唯一。
+  /// 机构身份 ID(cid_number),全局唯一。
   @Index(unique: true, replace: true)
-  late String sfidNumber;
+  late String cidNumber;
 
-  late String sfidFullName;
-  String? sfidShortName;
+  late String cidFullName;
+  String? cidShortName;
   late String status;
 
   /// 所属省 code(行政区唯一真源键;名字由 [AdminDivisionEntity] 字典 join,
@@ -599,10 +599,10 @@ class PublicInstitutionEntity {
   late String institutionCode;
 
   String? orgCode;
-  String? parentSfidNumber;
+  String? parentCidNumber;
   bool? hasLegalPersonality;
 
-  /// 法定代表人姓名(公开目录字段,来自 SFID subjects.legal_rep_name);无则 null → 留空。
+  /// 法定代表人姓名(公开目录字段,来自 CID subjects.legal_rep_name);无则 null → 留空。
   String? legalRepName;
   late int accountCount;
 
@@ -617,13 +617,13 @@ class PublicInstitutionEntity {
 
 /// 公权机构订阅("关注"分组)。
 ///
-/// 中文注释:按钱包公钥隔离的纯本地决策表;[subscriptionKey] = `pubkeyHex|sfidNumber`
+/// 中文注释:按钱包公钥隔离的纯本地决策表;[subscriptionKey] = `pubkeyHex|cidNumber`
 /// 复合唯一,只有订阅的机构才纳入动态刷新集(详情页卡C),目录浏览不依赖本表。
 @collection
 class PublicInstitutionSubscriptionEntity {
   Id id = Isar.autoIncrement;
 
-  /// 复合唯一键:`walletPubkeyHex|sfidNumber`。
+  /// 复合唯一键:`walletPubkeyHex|cidNumber`。
   @Index(unique: true, replace: true)
   late String subscriptionKey;
 
@@ -631,7 +631,7 @@ class PublicInstitutionSubscriptionEntity {
   @Index()
   late String walletPubkeyHex;
 
-  late String sfidNumber;
+  late String cidNumber;
   late int subscribedAtMillis;
 }
 
@@ -768,7 +768,7 @@ class ImRouteCacheEntity {
   late int updatedAtMillis;
 }
 
-/// 本地钱包余额变化流水（持久化存储，去中心化设计，不依赖 SFID 服务器）。
+/// 本地钱包余额变化流水（持久化存储，去中心化设计，不依赖 CID 服务器）。
 @collection
 class LocalTxEntity {
   Id id = Isar.autoIncrement;

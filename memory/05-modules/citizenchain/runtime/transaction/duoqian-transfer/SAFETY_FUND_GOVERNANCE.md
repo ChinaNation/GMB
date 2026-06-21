@@ -11,7 +11,7 @@ pub const NRC_ANQUAN_ACCOUNT: [u8; 32] =
     hex!("045bdb35046c60c1346ba48e1e79049519edf4c009e40c7ecead1bebd1884a37");
 ```
 
-地址派生方式：`BLAKE2-256(DUOQIAN + OP_AN + SS58_PREFIX_LE + 国储会 sfid_number)`，详见 BLAKE2_ADDRESS_DERIVATION.md。
+地址派生方式：`BLAKE2-256(DUOQIAN + OP_AN + SS58_PREFIX_LE + 国储会 cid_number)`，详见 BLAKE2_ADDRESS_DERIVATION.md。
 
 ## 存储
 

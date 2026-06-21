@@ -6,10 +6,10 @@ CPMS 后端 `china_db_path()` 当前只有「env `CPMS_CHINA_DB` → 默认 `./c
 
 ## 背景结论（分析已确认）
 
-- 单仓 monorepo，cpms 与 sfid 同仓；`china.sqlite` 是 88MB 普通 blob 直接进 git（非 LFS）。
-- `actions/checkout@v5` 默认全量检出 → CI 一定带 `sfid/backend/china/china.sqlite`。
-- CI 两条路径已通：`cargo test`（测试 helper 指向 manifest 相对 SFID 源，CI 有文件 → 真跑且过）、`workflow_dispatch` 出 `.run`（build 脚本从 sfid 路径 `cp`）。唯一缺口是本地 `cargo run`。
-- 房子约定：SFID `china/store.rs` 用 `concat!(env!("CARGO_MANIFEST_DIR"), "/china/china.sqlite")` 编译期定位。
+- 单仓 monorepo，cpms 与 cid 同仓；`china.sqlite` 是 88MB 普通 blob 直接进 git（非 LFS）。
+- `actions/checkout@v5` 默认全量检出 → CI 一定带 `citizencode/backend/china/china.sqlite`。
+- CI 两条路径已通：`cargo test`（测试 helper 指向 manifest 相对 CID 源，CI 有文件 → 真跑且过）、`workflow_dispatch` 出 `.run`（build 脚本从 cid 路径 `cp`）。唯一缺口是本地 `cargo run`。
+- 房子约定：CID `china/store.rs` 用 `concat!(env!("CARGO_MANIFEST_DIR"), "/china/china.sqlite")` 编译期定位。
 
 ## 建议模块
 
@@ -19,13 +19,13 @@ CPMS 后端 `china_db_path()` 当前只有「env `CPMS_CHINA_DB` → 默认 `./c
 
 ## 影响范围
 
-- `cpms/backend/china.rs`：`china_db_path()` 改三层兜底：
-  1. env `CPMS_CHINA_DB` 非空 → 用它（生产 install_host 写 `/opt/cpms/data/china.sqlite`；dev 也可手动覆盖）。
-  2. 二进制旁 `<exe_dir>/../data/china.sqlite`（部署自定位：`/opt/cpms/bin` → `/opt/cpms/data`，env 丢失也能找到）。
-  3. `concat!(env!("CARGO_MANIFEST_DIR"), "/../../sfid/backend/china/china.sqlite")`（dev 源码，`cargo run` 零配置）。
+- `citizenpassport/backend/china.rs`：`china_db_path()` 改三层兜底：
+  1. env `CPMS_CHINA_DB` 非空 → 用它（生产 install_host 写 `/opt/citizenpassport/data/china.sqlite`；dev 也可手动覆盖）。
+  2. 二进制旁 `<exe_dir>/../data/china.sqlite`（部署自定位：`/opt/citizenpassport/bin` → `/opt/citizenpassport/data`，env 丢失也能找到）。
+  3. `concat!(env!("CARGO_MANIFEST_DIR"), "/../../citizencode/backend/china/china.sqlite")`（dev 源码，`cargo run` 零配置）。
   涉及代码。
-- `.github/workflows/cpms-ci.yml`：`paths:` 触发补 `sfid/backend/china/china.sqlite`，SFID 行政区数据变更时 CPMS 也重验。涉及 CI 配置。
-- `cpms/CPMS_TECHNICAL.md` 第 11 节：补三层兜底说明。涉及文档。
+- `.github/workflows/citizenpassport-ci.yml`：`paths:` 触发补 `citizencode/backend/china/china.sqlite`，CID 行政区数据变更时 CPMS 也重验。涉及 CI 配置。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md` 第 11 节：补三层兜底说明。涉及文档。
 
 ## 主要风险点
 
@@ -39,17 +39,17 @@ CPMS 后端 `china_db_path()` 当前只有「env `CPMS_CHINA_DB` → 默认 `./c
 
 ## 执行清单
 
-- [x] `china.rs` 改 `china_db_path()` 三层兜底（env → exe 旁 `../data/china.sqlite` → manifest 相对 SFID 源）。
-- [x] `cpms-ci.yml` push/pull_request paths 触发补 `sfid/backend/china/china.sqlite`。
+- [x] `china.rs` 改 `china_db_path()` 三层兜底（env → exe 旁 `../data/china.sqlite` → manifest 相对 CID 源）。
+- [x] `citizenpassport-ci.yml` push/pull_request paths 触发补 `citizencode/backend/china/china.sqlite`。
 - [x] `CPMS_TECHNICAL.md` 第 11 节补三层兜底说明。
 - [x] `cargo fmt --check` OK + `cargo clippy --all-targets` 零警告 + `cargo test` 32 passed。
-- [x] 验证第 3 层 dev 兜底从 `cpms/backend` manifest 解析命中真源 `/Users/rhett/GMB/sfid/backend/china/china.sqlite`（cargo run 启动期先连 postgres，china 定位逻辑已按路径解析验证）。
+- [x] 验证第 3 层 dev 兜底从 `citizenpassport/backend` manifest 解析命中真源 `/Users/rhett/GMB/citizencode/backend/china/china.sqlite`（cargo run 启动期先连 postgres，china 定位逻辑已按路径解析验证）。
 
 ## 完成记录
 
 - 2026-06-06：创建任务卡，开始执行。
 - 2026-06-06：执行完成。
-  - `china_db_path()` 三层兜底落地；本地 `cargo run` 不再需要手动设 `CPMS_CHINA_DB`，编译期 manifest 相对路径直指 SFID 唯一源。
-  - 生产仍以 `CPMS_CHINA_DB` 为准，新增的 exe 旁 `../data/china.sqlite` 自定位让 env 丢失时也能找到 `/opt/cpms/data/china.sqlite`。
+  - `china_db_path()` 三层兜底落地；本地 `cargo run` 不再需要手动设 `CPMS_CHINA_DB`，编译期 manifest 相对路径直指 CID 唯一源。
+  - 生产仍以 `CPMS_CHINA_DB` 为准，新增的 exe 旁 `../data/china.sqlite` 自定位让 env 丢失时也能找到 `/opt/citizenpassport/data/china.sqlite`。
   - CPMS CI paths 触发纳入 china 数据文件；确认 monorepo 全量 checkout 自带该 88MB blob，CI 的 `cargo test` 与 `workflow_dispatch` 出包两条路径本就可用。
   - 文档同步。fmt/clippy/test 全绿。

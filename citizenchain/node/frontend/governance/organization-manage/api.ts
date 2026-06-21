@@ -13,33 +13,33 @@ export const organizationManageApi = {
   searchEligibleClearingBanks: (query: string, limit?: number) =>
     invoke<EligibleClearingBankCandidate[]>('search_eligible_clearing_banks', { query, limit }),
 
-  fetchInstitutionDetail: (sfidNumber: string) =>
-    invoke<InstitutionDetail | null>('fetch_clearing_bank_institution_detail', { sfidNumber }),
+  fetchInstitutionDetail: (cidNumber: string) =>
+    invoke<InstitutionDetail | null>('fetch_clearing_bank_institution_detail', { cidNumber }),
 
-  fetchInstitutionProposals: (sfidNumber: string, startId: number, pageSize: number) =>
+  fetchInstitutionProposals: (cidNumber: string, startId: number, pageSize: number) =>
     invoke<InstitutionProposalPage>('fetch_clearing_bank_institution_proposals', {
-      sfidNumber,
+      cidNumber,
       startId,
       pageSize,
     }),
 
-  fetchInstitutionRegistrationInfo: (sfidNumber: string) =>
+  fetchInstitutionRegistrationInfo: (cidNumber: string) =>
     invoke<InstitutionRegistrationInfoResp>(
       'fetch_clearing_bank_institution_registration_info',
-      { sfidNumber },
+      { cidNumber },
     ),
 
   buildProposeCreateInstitutionRequest: (params: {
     pubkeyHex: string;
-    sfidNumber: string;
-    sfidFullName: string;
+    cidNumber: string;
+    cidFullName: string;
     accounts: InitialAccountInputDto[];
     org: number;
     admins: string[];
     threshold: number;
     registerNonce: string;
     signatureHex: string;
-    issuerSfidNumber: string;
+    issuerCidNumber: string;
     issuerMainAccount: string;
     signerPubkey: string;
     scopeProvinceName: string;
@@ -47,15 +47,15 @@ export const organizationManageApi = {
   }) =>
     invoke<VoteSignRequestResult>('build_propose_create_institution_request', {
       pubkeyHex: params.pubkeyHex,
-      sfidNumber: params.sfidNumber,
-      sfidFullName: params.sfidFullName,
+      cidNumber: params.cidNumber,
+      cidFullName: params.cidFullName,
       accounts: params.accounts,
       org: params.org,
       admins: params.admins,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
-      issuerSfidNumber: params.issuerSfidNumber,
+      issuerCidNumber: params.issuerCidNumber,
       issuerMainAccount: params.issuerMainAccount,
       signerPubkey: params.signerPubkey,
       scopeProvinceName: params.scopeProvinceName,
@@ -66,15 +66,15 @@ export const organizationManageApi = {
     requestId: string;
     expectedPubkeyHex: string;
     expectedPayloadHash: string;
-    sfidNumber: string;
-    sfidFullName: string;
+    cidNumber: string;
+    cidFullName: string;
     accounts: InitialAccountInputDto[];
     org: number;
     admins: string[];
     threshold: number;
     registerNonce: string;
     signatureHex: string;
-    issuerSfidNumber: string;
+    issuerCidNumber: string;
     issuerMainAccount: string;
     signerPubkey: string;
     scopeProvinceName: string;
@@ -87,15 +87,15 @@ export const organizationManageApi = {
       requestId: params.requestId,
       expectedPubkeyHex: params.expectedPubkeyHex,
       expectedPayloadHash: params.expectedPayloadHash,
-      sfidNumber: params.sfidNumber,
-      sfidFullName: params.sfidFullName,
+      cidNumber: params.cidNumber,
+      cidFullName: params.cidFullName,
       accounts: params.accounts,
       org: params.org,
       admins: params.admins,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
-      issuerSfidNumber: params.issuerSfidNumber,
+      issuerCidNumber: params.issuerCidNumber,
       issuerMainAccount: params.issuerMainAccount,
       signerPubkey: params.signerPubkey,
       scopeProvinceName: params.scopeProvinceName,

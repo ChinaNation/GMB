@@ -11,9 +11,9 @@ const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
 /// 多签管理提案 TAG — 不属于治理提案，在治理列表中过滤掉。
 const TAG_ORGANIZATION_MANAGE: &[u8] = b"org-mgmt";
 
-fn institution_account_from_sfid(sfid_number: &str) -> Result<[u8; 32], String> {
-    let entry = super::registry::find_institution(sfid_number)
-        .ok_or_else(|| format!("未知的治理机构 sfidNumber: {sfid_number}"))?;
+fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
+    let entry = super::registry::find_institution(cid_number)
+        .ok_or_else(|| format!("未知的治理机构 cidNumber: {cid_number}"))?;
     let clean = entry.main_account_hex();
     let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
     bytes
@@ -97,7 +97,7 @@ pub struct ProposalFullInfo {
     pub joint_tally: Option<JointVoteTally>,
     pub referendum_tally: Option<ReferendumVoteTally>,
     /// 关联机构名称（通过 institutionBytes 反查）。
-    pub sfid_full_name: Option<String>,
+    pub cid_full_name: Option<String>,
 }
 
 /// 费率提案详情。
@@ -149,7 +149,7 @@ pub struct ProposalListItem {
     pub stage_label: String,
     pub status: u8,
     pub status_label: String,
-    pub sfid_full_name: Option<String>,
+    pub cid_full_name: Option<String>,
     /// 简要描述（转账提案：金额+备注，升级提案：reason 前 50 字）。
     pub summary: String,
 }
@@ -260,7 +260,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let sfid_full_name = resolve_sfid_full_name(meta.institution_hex.as_deref());
+                let cid_full_name = resolve_cid_full_name(meta.institution_hex.as_deref());
                 // 双层 ID v1:展示号从 ProposalDisplayId 反查;查不到 fallback `#id`
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
 
@@ -273,7 +273,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     stage_label: stage_label(meta.stage).to_string(),
                     status: display.status,
                     status_label: display.status_label,
-                    sfid_full_name,
+                    cid_full_name,
                     summary: display.summary,
                 });
             }
@@ -339,7 +339,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         None
     };
 
-    let sfid_full_name = resolve_sfid_full_name(meta.institution_hex.as_deref());
+    let cid_full_name = resolve_cid_full_name(meta.institution_hex.as_deref());
 
     Ok(ProposalFullInfo {
         meta,
@@ -351,7 +351,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         internal_tally,
         joint_tally,
         referendum_tally,
-        sfid_full_name,
+        cid_full_name,
     })
 }
 
@@ -414,7 +414,7 @@ fn split_action_into_details(
 /// 通过机构多签 AccountId 反向索引读取本机构提案。
 /// 每页最多返回 count 条，has_more 表示是否还有更早的提案。
 pub fn fetch_institution_proposal_page(
-    sfid_number: &str,
+    cid_number: &str,
     start_id: u64,
     count: u32,
 ) -> Result<ProposalPageResult, String> {
@@ -423,7 +423,7 @@ pub fn fetch_institution_proposal_page(
 
     // 双层 ID v1:走 ProposalsByInstitution 反向索引,O(本机构提案数),
     // 不再扫主键 + 客户端过滤。
-    let mut ids = fetch_proposals_by_institution(sfid_number)?;
+    let mut ids = fetch_proposals_by_institution(cid_number)?;
     ids.sort_by(|a, b| b.cmp(a)); // 降序(主键单调,降序即按时间倒序)
 
     // start_id 是上一次翻页返回的最后一个 id - 1。本次取 ids 中 ≤ start_id 的部分。
@@ -454,7 +454,7 @@ pub fn fetch_institution_proposal_page(
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let sfid_full_name = resolve_sfid_full_name(meta.institution_hex.as_deref());
+                let cid_full_name = resolve_cid_full_name(meta.institution_hex.as_deref());
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
                 items.push(ProposalListItem {
                     proposal_id: id,
@@ -465,7 +465,7 @@ pub fn fetch_institution_proposal_page(
                     stage_label: stage_label(meta.stage).to_string(),
                     status: display.status,
                     status_label: display.status_label,
-                    sfid_full_name,
+                    cid_full_name,
                     summary: display.summary,
                 });
             }
@@ -490,8 +490,8 @@ pub fn fetch_institution_proposal_page(
 }
 
 /// 查询机构的活跃提案 ID 列表。
-pub fn fetch_active_proposal_ids(sfid_number: &str) -> Result<Vec<u64>, String> {
-    let institution_account = institution_account_from_sfid(sfid_number)?;
+pub fn fetch_active_proposal_ids(cid_number: &str) -> Result<Vec<u64>, String> {
+    let institution_account = institution_account_from_cid(cid_number)?;
     let key = storage_keys::map_key(
         "VotingEngine",
         "ActiveProposalsByInstitution",
@@ -968,8 +968,8 @@ pub fn fetch_proposals_by_org(org: u8) -> Result<Vec<u64>, String> {
 }
 
 /// 反向索引:`ProposalsByInstitution[account]` → 本机构多签账户所有 proposal_id。
-pub fn fetch_proposals_by_institution(sfid_number: &str) -> Result<Vec<u64>, String> {
-    let institution_account = institution_account_from_sfid(sfid_number)?;
+pub fn fetch_proposals_by_institution(cid_number: &str) -> Result<Vec<u64>, String> {
+    let institution_account = institution_account_from_cid(cid_number)?;
     fetch_proposal_ids_by_index("ProposalsByInstitution", &institution_account)
 }
 
@@ -1008,7 +1008,7 @@ fn status_label(status: u8) -> &'static str {
 }
 
 /// 从机构多签 AccountId32 hex 反查机构名称。
-fn resolve_sfid_full_name(institution_hex: Option<&str>) -> Option<String> {
+fn resolve_cid_full_name(institution_hex: Option<&str>) -> Option<String> {
     let hex_str = institution_hex?;
     let bytes = hex::decode(hex_str).ok()?;
     if bytes.len() != 32 {
@@ -1028,7 +1028,7 @@ fn fetch_proposal_display(
     let (summary, status, status_label_s) = match action {
         ProposalAction::Business(action) => (
             proposal_business::format_summary(&action, |institution_hex| {
-                resolve_sfid_full_name(Some(institution_hex))
+                resolve_cid_full_name(Some(institution_hex))
             }),
             meta.status,
             status_label(meta.status).to_string(),
@@ -1098,7 +1098,7 @@ fn format_issuance_summary(d: &ResolutionIssuanceDetail) -> String {
 fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
     let amount: u128 = d.amount_fen.parse().unwrap_or(0);
     let inst_name =
-        resolve_sfid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
+        resolve_cid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
     format!(
         "决议销毁 {} 元：{inst_name}",
         signing::format_amount(amount as f64 / 100.0)
@@ -1108,7 +1108,7 @@ fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
 fn format_fee_rate_summary(d: &FeeRateProposalDetail) -> String {
     let rate_percent = format!("{:.2}%", d.new_rate_bp as f64 / 100.0);
     let inst_name =
-        resolve_sfid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
+        resolve_cid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
     format!("费率设置 {rate_percent}：{inst_name}")
 }
 
@@ -1134,7 +1134,7 @@ pub struct UserVoteStatus {
 pub fn fetch_user_vote_status(
     proposal_id: u64,
     pubkey_hex: &str,
-    sfid_number: Option<&str>,
+    cid_number: Option<&str>,
 ) -> Result<UserVoteStatus, String> {
     let meta =
         fetch_proposal_meta(proposal_id)?.ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
@@ -1153,10 +1153,10 @@ pub fn fetch_user_vote_status(
     };
 
     // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (InstitutionAccount32 ++ AccountId32)> → bool）
-    let joint_vote = if meta.kind == 1 && sfid_number.is_some() {
-        // sfid_number.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
+    let joint_vote = if meta.kind == 1 && cid_number.is_some() {
+        // cid_number.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
         let institution_account =
-            institution_account_from_sfid(sfid_number.expect("guarded by is_some()"))?;
+            institution_account_from_cid(cid_number.expect("guarded by is_some()"))?;
         let mut composite_key = Vec::with_capacity(32 + 32);
         composite_key.extend_from_slice(&institution_account);
         composite_key.extend_from_slice(&pubkey_bytes);

@@ -9,9 +9,9 @@ import { duoqianTransferApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
-  sfidNumber: string;
+  cidNumber: string;
   orgType: number;
-  sfidFullName: string;
+  cidFullName: string;
   mainAccount: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
@@ -21,7 +21,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function CreateDuoqianTransferPage({
-  sfidNumber, orgType, sfidFullName, mainAccount, adminWallets, onBack, onSuccess,
+  cidNumber, orgType, cidFullName, mainAccount, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
@@ -83,7 +83,7 @@ export function CreateDuoqianTransferPage({
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildDuoqianTransferRequest(
-        selectedWallet!.pubkeyHex, sfidNumber, orgType,
+        selectedWallet!.pubkeyHex, cidNumber, orgType,
         beneficiary.trim(), amount, remark,
       );
 
@@ -112,7 +112,7 @@ export function CreateDuoqianTransferPage({
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitDuoqianTransfer(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        sfidNumber, orgType, ben, amt, rmk,
+        cidNumber, orgType, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -121,13 +121,13 @@ export function CreateDuoqianTransferPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [sfidNumber, orgType]);
+  }, [cidNumber, orgType]);
 
   return (
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回</button>
       <h2>发起转账提案</h2>
-      <p className="proposal-institution-name">{sfidFullName}</p>
+      <p className="proposal-institution-name">{cidFullName}</p>
 
       {step === 'form' && (
         <div className="create-proposal-form">

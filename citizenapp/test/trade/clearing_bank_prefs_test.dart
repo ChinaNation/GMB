@@ -44,8 +44,8 @@ void main() {
       await ClearingBankPrefs.saveSnapshot(
         0,
         const ClearingBankBindingSnapshot(
-          sfidNumber: 'GD001-SCB05-000000001-2026',
-          sfidFullName: '测试清算行',
+          cidNumber: 'GD001-SCB05-000000001-2026',
+          cidFullName: '测试清算行',
           mainAccount: 'aa',
           feeAccount: 'bb',
           peerId: '12D3KooWTest',
@@ -58,7 +58,7 @@ void main() {
 
       final snapshot = await ClearingBankPrefs.loadSnapshot(0);
       expect(snapshot, isNotNull);
-      expect(snapshot!.sfidNumber, 'GD001-SCB05-000000001-2026');
+      expect(snapshot!.cidNumber, 'GD001-SCB05-000000001-2026');
       expect(snapshot.wssUrl, 'ws://127.0.0.1:9944');
       expect(await ClearingBankPrefs.load(0), 'GD001-SCB05-000000001-2026');
     });

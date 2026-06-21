@@ -254,7 +254,7 @@ class DuoqianTransferProposalFeed {
   }
 
   static String _balanceKey(InstitutionInfo institution) {
-    return '${institution.sfidNumber}:${institution.mainAccount}';
+    return '${institution.cidNumber}:${institution.mainAccount}';
   }
 }
 

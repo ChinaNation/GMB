@@ -10756,9 +10756,9 @@ const InstitutionEntitySchema = CollectionSchema(
       name: r'name',
       type: IsarType.string,
     ),
-    r'sfidNumber': PropertySchema(
+    r'cidNumber': PropertySchema(
       id: 6,
-      name: r'sfidNumber',
+      name: r'cidNumber',
       type: IsarType.string,
     )
   },
@@ -10831,7 +10831,7 @@ int _institutionEntityEstimateSize(
     }
   }
   bytesCount += 3 + object.name.length * 3;
-  bytesCount += 3 + object.sfidNumber.length * 3;
+  bytesCount += 3 + object.cidNumber.length * 3;
   return bytesCount;
 }
 
@@ -10847,7 +10847,7 @@ void _institutionEntitySerialize(
   writer.writeString(offsets[3], object.duoqianAccount);
   writer.writeStringList(offsets[4], object.matchedAdminPubkeys);
   writer.writeString(offsets[5], object.name);
-  writer.writeString(offsets[6], object.sfidNumber);
+  writer.writeString(offsets[6], object.cidNumber);
 }
 
 InstitutionEntity _institutionEntityDeserialize(
@@ -10864,7 +10864,7 @@ InstitutionEntity _institutionEntityDeserialize(
   object.id = id;
   object.matchedAdminPubkeys = reader.readStringList(offsets[4]) ?? [];
   object.name = reader.readString(offsets[5]);
-  object.sfidNumber = reader.readString(offsets[6]);
+  object.cidNumber = reader.readString(offsets[6]);
   return object;
 }
 
@@ -11945,13 +11945,13 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberEqualTo(
+      cidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11959,7 +11959,7 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberGreaterThan(
+      cidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11967,7 +11967,7 @@ extension InstitutionEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11975,7 +11975,7 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberLessThan(
+      cidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11983,7 +11983,7 @@ extension InstitutionEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11991,7 +11991,7 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberBetween(
+      cidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -12000,7 +12000,7 @@ extension InstitutionEntityQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -12011,13 +12011,13 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberStartsWith(
+      cidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -12025,13 +12025,13 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberEndsWith(
+      cidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -12039,10 +12039,10 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberContains(String value, {bool caseSensitive = true}) {
+      cidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -12050,10 +12050,10 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+      cidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -12061,20 +12061,20 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberIsEmpty() {
+      cidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      sfidNumberIsNotEmpty() {
+      cidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: '',
       ));
     });
@@ -12160,16 +12160,16 @@ extension InstitutionEntityQuerySortBy
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      sortBySfidNumber() {
+      sortByCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.asc);
+      return query.addSortBy(r'cidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      sortBySfidNumberDesc() {
+      sortByCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.desc);
+      return query.addSortBy(r'cidNumber', Sort.desc);
     });
   }
 }
@@ -12260,16 +12260,16 @@ extension InstitutionEntityQuerySortThenBy
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      thenBySfidNumber() {
+      thenByCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.asc);
+      return query.addSortBy(r'cidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      thenBySfidNumberDesc() {
+      thenByCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.desc);
+      return query.addSortBy(r'cidNumber', Sort.desc);
     });
   }
 }
@@ -12320,9 +12320,9 @@ extension InstitutionEntityQueryWhereDistinct
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
-      distinctBySfidNumber({bool caseSensitive = true}) {
+      distinctByCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'cidNumber', caseSensitive: caseSensitive);
     });
   }
 }
@@ -12377,9 +12377,9 @@ extension InstitutionEntityQueryProperty
   }
 
   QueryBuilder<InstitutionEntity, String, QQueryOperations>
-      sfidNumberProperty() {
+      cidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'sfidNumber');
+      return query.addPropertyName(r'cidNumber');
     });
   }
 }
@@ -14074,9 +14074,9 @@ const PublicInstitutionEntitySchema = CollectionSchema(
       name: r'orgCode',
       type: IsarType.string,
     ),
-    r'parentSfidNumber': PropertySchema(
+    r'parentCidNumber': PropertySchema(
       id: 8,
-      name: r'parentSfidNumber',
+      name: r'parentCidNumber',
       type: IsarType.string,
     ),
     r'provinceCode': PropertySchema(
@@ -14084,19 +14084,19 @@ const PublicInstitutionEntitySchema = CollectionSchema(
       name: r'provinceCode',
       type: IsarType.string,
     ),
-    r'sfidFullName': PropertySchema(
+    r'cidFullName': PropertySchema(
       id: 10,
-      name: r'sfidFullName',
+      name: r'cidFullName',
       type: IsarType.string,
     ),
-    r'sfidNumber': PropertySchema(
+    r'cidNumber': PropertySchema(
       id: 11,
-      name: r'sfidNumber',
+      name: r'cidNumber',
       type: IsarType.string,
     ),
-    r'sfidShortName': PropertySchema(
+    r'cidShortName': PropertySchema(
       id: 12,
-      name: r'sfidShortName',
+      name: r'cidShortName',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
@@ -14121,14 +14121,14 @@ const PublicInstitutionEntitySchema = CollectionSchema(
   deserializeProp: _publicInstitutionEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'sfidNumber': IndexSchema(
+    r'cidNumber': IndexSchema(
       id: 694615574634332730,
-      name: r'sfidNumber',
+      name: r'cidNumber',
       unique: true,
       replace: true,
       properties: [
         IndexPropertySchema(
-          name: r'sfidNumber',
+          name: r'cidNumber',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -14203,16 +14203,16 @@ int _publicInstitutionEntityEstimateSize(
     }
   }
   {
-    final value = object.parentSfidNumber;
+    final value = object.parentCidNumber;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
   }
   bytesCount += 3 + object.provinceCode.length * 3;
-  bytesCount += 3 + object.sfidFullName.length * 3;
-  bytesCount += 3 + object.sfidNumber.length * 3;
+  bytesCount += 3 + object.cidFullName.length * 3;
+  bytesCount += 3 + object.cidNumber.length * 3;
   {
-    final value = object.sfidShortName;
+    final value = object.cidShortName;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -14236,11 +14236,11 @@ void _publicInstitutionEntitySerialize(
   writer.writeString(offsets[5], object.institutionCode);
   writer.writeString(offsets[6], object.legalRepName);
   writer.writeString(offsets[7], object.orgCode);
-  writer.writeString(offsets[8], object.parentSfidNumber);
+  writer.writeString(offsets[8], object.parentCidNumber);
   writer.writeString(offsets[9], object.provinceCode);
-  writer.writeString(offsets[10], object.sfidFullName);
-  writer.writeString(offsets[11], object.sfidNumber);
-  writer.writeString(offsets[12], object.sfidShortName);
+  writer.writeString(offsets[10], object.cidFullName);
+  writer.writeString(offsets[11], object.cidNumber);
+  writer.writeString(offsets[12], object.cidShortName);
   writer.writeString(offsets[13], object.status);
   writer.writeString(offsets[14], object.townCode);
   writer.writeLong(offsets[15], object.updatedAtMillis);
@@ -14262,11 +14262,11 @@ PublicInstitutionEntity _publicInstitutionEntityDeserialize(
   object.institutionCode = reader.readString(offsets[5]);
   object.legalRepName = reader.readStringOrNull(offsets[6]);
   object.orgCode = reader.readStringOrNull(offsets[7]);
-  object.parentSfidNumber = reader.readStringOrNull(offsets[8]);
+  object.parentCidNumber = reader.readStringOrNull(offsets[8]);
   object.provinceCode = reader.readString(offsets[9]);
-  object.sfidFullName = reader.readString(offsets[10]);
-  object.sfidNumber = reader.readString(offsets[11]);
-  object.sfidShortName = reader.readStringOrNull(offsets[12]);
+  object.cidFullName = reader.readString(offsets[10]);
+  object.cidNumber = reader.readString(offsets[11]);
+  object.cidShortName = reader.readStringOrNull(offsets[12]);
   object.status = reader.readString(offsets[13]);
   object.townCode = reader.readString(offsets[14]);
   object.updatedAtMillis = reader.readLong(offsets[15]);
@@ -14333,60 +14333,60 @@ void _publicInstitutionEntityAttach(
 
 extension PublicInstitutionEntityByIndex
     on IsarCollection<PublicInstitutionEntity> {
-  Future<PublicInstitutionEntity?> getBySfidNumber(String sfidNumber) {
-    return getByIndex(r'sfidNumber', [sfidNumber]);
+  Future<PublicInstitutionEntity?> getByCidNumber(String cidNumber) {
+    return getByIndex(r'cidNumber', [cidNumber]);
   }
 
-  PublicInstitutionEntity? getBySfidNumberSync(String sfidNumber) {
-    return getByIndexSync(r'sfidNumber', [sfidNumber]);
+  PublicInstitutionEntity? getByCidNumberSync(String cidNumber) {
+    return getByIndexSync(r'cidNumber', [cidNumber]);
   }
 
-  Future<bool> deleteBySfidNumber(String sfidNumber) {
-    return deleteByIndex(r'sfidNumber', [sfidNumber]);
+  Future<bool> deleteByCidNumber(String cidNumber) {
+    return deleteByIndex(r'cidNumber', [cidNumber]);
   }
 
-  bool deleteBySfidNumberSync(String sfidNumber) {
-    return deleteByIndexSync(r'sfidNumber', [sfidNumber]);
+  bool deleteByCidNumberSync(String cidNumber) {
+    return deleteByIndexSync(r'cidNumber', [cidNumber]);
   }
 
-  Future<List<PublicInstitutionEntity?>> getAllBySfidNumber(
-      List<String> sfidNumberValues) {
-    final values = sfidNumberValues.map((e) => [e]).toList();
-    return getAllByIndex(r'sfidNumber', values);
+  Future<List<PublicInstitutionEntity?>> getAllByCidNumber(
+      List<String> cidNumberValues) {
+    final values = cidNumberValues.map((e) => [e]).toList();
+    return getAllByIndex(r'cidNumber', values);
   }
 
-  List<PublicInstitutionEntity?> getAllBySfidNumberSync(
-      List<String> sfidNumberValues) {
-    final values = sfidNumberValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'sfidNumber', values);
+  List<PublicInstitutionEntity?> getAllByCidNumberSync(
+      List<String> cidNumberValues) {
+    final values = cidNumberValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'cidNumber', values);
   }
 
-  Future<int> deleteAllBySfidNumber(List<String> sfidNumberValues) {
-    final values = sfidNumberValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'sfidNumber', values);
+  Future<int> deleteAllByCidNumber(List<String> cidNumberValues) {
+    final values = cidNumberValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'cidNumber', values);
   }
 
-  int deleteAllBySfidNumberSync(List<String> sfidNumberValues) {
-    final values = sfidNumberValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'sfidNumber', values);
+  int deleteAllByCidNumberSync(List<String> cidNumberValues) {
+    final values = cidNumberValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'cidNumber', values);
   }
 
-  Future<Id> putBySfidNumber(PublicInstitutionEntity object) {
-    return putByIndex(r'sfidNumber', object);
+  Future<Id> putByCidNumber(PublicInstitutionEntity object) {
+    return putByIndex(r'cidNumber', object);
   }
 
-  Id putBySfidNumberSync(PublicInstitutionEntity object,
+  Id putByCidNumberSync(PublicInstitutionEntity object,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'sfidNumber', object, saveLinks: saveLinks);
+    return putByIndexSync(r'cidNumber', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllBySfidNumber(List<PublicInstitutionEntity> objects) {
-    return putAllByIndex(r'sfidNumber', objects);
+  Future<List<Id>> putAllByCidNumber(List<PublicInstitutionEntity> objects) {
+    return putAllByIndex(r'cidNumber', objects);
   }
 
-  List<Id> putAllBySfidNumberSync(List<PublicInstitutionEntity> objects,
+  List<Id> putAllByCidNumberSync(List<PublicInstitutionEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'sfidNumber', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'cidNumber', objects, saveLinks: saveLinks);
   }
 }
 
@@ -14471,44 +14471,44 @@ extension PublicInstitutionEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterWhereClause> sfidNumberEqualTo(String sfidNumber) {
+      QAfterWhereClause> cidNumberEqualTo(String cidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'sfidNumber',
-        value: [sfidNumber],
+        indexName: r'cidNumber',
+        value: [cidNumber],
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterWhereClause> sfidNumberNotEqualTo(String sfidNumber) {
+      QAfterWhereClause> cidNumberNotEqualTo(String cidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'sfidNumber',
+              indexName: r'cidNumber',
               lower: [],
-              upper: [sfidNumber],
+              upper: [cidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'sfidNumber',
-              lower: [sfidNumber],
+              indexName: r'cidNumber',
+              lower: [cidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'sfidNumber',
-              lower: [sfidNumber],
+              indexName: r'cidNumber',
+              lower: [cidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'sfidNumber',
+              indexName: r'cidNumber',
               lower: [],
-              upper: [sfidNumber],
+              upper: [cidNumber],
               includeUpper: false,
             ));
       }
@@ -15722,31 +15722,31 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberIsNull() {
+      QAfterFilterCondition> parentCidNumberIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberIsNotNull() {
+      QAfterFilterCondition> parentCidNumberIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberEqualTo(
+      QAfterFilterCondition> parentCidNumberEqualTo(
     String? value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -15754,7 +15754,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberGreaterThan(
+      QAfterFilterCondition> parentCidNumberGreaterThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -15762,7 +15762,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -15770,7 +15770,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberLessThan(
+      QAfterFilterCondition> parentCidNumberLessThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -15778,7 +15778,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -15786,7 +15786,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberBetween(
+      QAfterFilterCondition> parentCidNumberBetween(
     String? lower,
     String? upper, {
     bool includeLower = true,
@@ -15795,7 +15795,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -15806,13 +15806,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberStartsWith(
+      QAfterFilterCondition> parentCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -15820,13 +15820,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberEndsWith(
+      QAfterFilterCondition> parentCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -15835,10 +15835,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      parentSfidNumberContains(String value, {bool caseSensitive = true}) {
+      parentCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -15847,10 +15847,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      parentSfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+      parentCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -15858,20 +15858,20 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberIsEmpty() {
+      QAfterFilterCondition> parentCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> parentSfidNumberIsNotEmpty() {
+      QAfterFilterCondition> parentCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'parentSfidNumber',
+        property: r'parentCidNumber',
         value: '',
       ));
     });
@@ -16016,13 +16016,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameEqualTo(
+      QAfterFilterCondition> cidFullNameEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16030,7 +16030,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameGreaterThan(
+      QAfterFilterCondition> cidFullNameGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -16038,7 +16038,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16046,7 +16046,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameLessThan(
+      QAfterFilterCondition> cidFullNameLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -16054,7 +16054,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16062,7 +16062,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameBetween(
+      QAfterFilterCondition> cidFullNameBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -16071,7 +16071,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -16082,13 +16082,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameStartsWith(
+      QAfterFilterCondition> cidFullNameStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16096,13 +16096,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameEndsWith(
+      QAfterFilterCondition> cidFullNameEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16111,10 +16111,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      sfidFullNameContains(String value, {bool caseSensitive = true}) {
+      cidFullNameContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16123,10 +16123,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      sfidFullNameMatches(String pattern, {bool caseSensitive = true}) {
+      cidFullNameMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -16134,33 +16134,33 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameIsEmpty() {
+      QAfterFilterCondition> cidFullNameIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: '',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidFullNameIsNotEmpty() {
+      QAfterFilterCondition> cidFullNameIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sfidFullName',
+        property: r'cidFullName',
         value: '',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberEqualTo(
+      QAfterFilterCondition> cidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16168,7 +16168,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberGreaterThan(
+      QAfterFilterCondition> cidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -16176,7 +16176,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16184,7 +16184,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberLessThan(
+      QAfterFilterCondition> cidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -16192,7 +16192,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16200,7 +16200,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberBetween(
+      QAfterFilterCondition> cidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -16209,7 +16209,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -16220,13 +16220,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberStartsWith(
+      QAfterFilterCondition> cidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16234,13 +16234,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberEndsWith(
+      QAfterFilterCondition> cidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16249,10 +16249,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      sfidNumberContains(String value, {bool caseSensitive = true}) {
+      cidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16261,10 +16261,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+      cidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -16272,51 +16272,51 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberIsEmpty() {
+      QAfterFilterCondition> cidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidNumberIsNotEmpty() {
+      QAfterFilterCondition> cidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameIsNull() {
+      QAfterFilterCondition> cidShortNameIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'sfidShortName',
+        property: r'cidShortName',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameIsNotNull() {
+      QAfterFilterCondition> cidShortNameIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'sfidShortName',
+        property: r'cidShortName',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameEqualTo(
+      QAfterFilterCondition> cidShortNameEqualTo(
     String? value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16324,7 +16324,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameGreaterThan(
+      QAfterFilterCondition> cidShortNameGreaterThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -16332,7 +16332,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16340,7 +16340,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameLessThan(
+      QAfterFilterCondition> cidShortNameLessThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -16348,7 +16348,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16356,7 +16356,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameBetween(
+      QAfterFilterCondition> cidShortNameBetween(
     String? lower,
     String? upper, {
     bool includeLower = true,
@@ -16365,7 +16365,7 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -16376,13 +16376,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameStartsWith(
+      QAfterFilterCondition> cidShortNameStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16390,13 +16390,13 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameEndsWith(
+      QAfterFilterCondition> cidShortNameEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16405,10 +16405,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      sfidShortNameContains(String value, {bool caseSensitive = true}) {
+      cidShortNameContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -16417,10 +16417,10 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
           QAfterFilterCondition>
-      sfidShortNameMatches(String pattern, {bool caseSensitive = true}) {
+      cidShortNameMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -16428,20 +16428,20 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameIsEmpty() {
+      QAfterFilterCondition> cidShortNameIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: '',
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> sfidShortNameIsNotEmpty() {
+      QAfterFilterCondition> cidShortNameIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sfidShortName',
+        property: r'cidShortName',
         value: '',
       ));
     });
@@ -16887,16 +16887,16 @@ extension PublicInstitutionEntityQuerySortBy
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortByParentSfidNumber() {
+      sortByParentCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'parentSfidNumber', Sort.asc);
+      return query.addSortBy(r'parentCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortByParentSfidNumberDesc() {
+      sortByParentCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'parentSfidNumber', Sort.desc);
+      return query.addSortBy(r'parentCidNumber', Sort.desc);
     });
   }
 
@@ -16915,44 +16915,44 @@ extension PublicInstitutionEntityQuerySortBy
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortBySfidFullName() {
+      sortByCidFullName() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidFullName', Sort.asc);
+      return query.addSortBy(r'cidFullName', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortBySfidFullNameDesc() {
+      sortByCidFullNameDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidFullName', Sort.desc);
+      return query.addSortBy(r'cidFullName', Sort.desc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortBySfidNumber() {
+      sortByCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.asc);
+      return query.addSortBy(r'cidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortBySfidNumberDesc() {
+      sortByCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.desc);
+      return query.addSortBy(r'cidNumber', Sort.desc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortBySfidShortName() {
+      sortByCidShortName() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidShortName', Sort.asc);
+      return query.addSortBy(r'cidShortName', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortBySfidShortNameDesc() {
+      sortByCidShortNameDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidShortName', Sort.desc);
+      return query.addSortBy(r'cidShortName', Sort.desc);
     });
   }
 
@@ -17114,16 +17114,16 @@ extension PublicInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenByParentSfidNumber() {
+      thenByParentCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'parentSfidNumber', Sort.asc);
+      return query.addSortBy(r'parentCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenByParentSfidNumberDesc() {
+      thenByParentCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'parentSfidNumber', Sort.desc);
+      return query.addSortBy(r'parentCidNumber', Sort.desc);
     });
   }
 
@@ -17142,44 +17142,44 @@ extension PublicInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenBySfidFullName() {
+      thenByCidFullName() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidFullName', Sort.asc);
+      return query.addSortBy(r'cidFullName', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenBySfidFullNameDesc() {
+      thenByCidFullNameDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidFullName', Sort.desc);
+      return query.addSortBy(r'cidFullName', Sort.desc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenBySfidNumber() {
+      thenByCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.asc);
+      return query.addSortBy(r'cidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenBySfidNumberDesc() {
+      thenByCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.desc);
+      return query.addSortBy(r'cidNumber', Sort.desc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenBySfidShortName() {
+      thenByCidShortName() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidShortName', Sort.asc);
+      return query.addSortBy(r'cidShortName', Sort.asc);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenBySfidShortNameDesc() {
+      thenByCidShortNameDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidShortName', Sort.desc);
+      return query.addSortBy(r'cidShortName', Sort.desc);
     });
   }
 
@@ -17287,9 +17287,9 @@ extension PublicInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
-      distinctByParentSfidNumber({bool caseSensitive = true}) {
+      distinctByParentCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'parentSfidNumber',
+      return query.addDistinctBy(r'parentCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -17302,23 +17302,23 @@ extension PublicInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
-      distinctBySfidFullName({bool caseSensitive = true}) {
+      distinctByCidFullName({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'sfidFullName', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'cidFullName', caseSensitive: caseSensitive);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
-      distinctBySfidNumber({bool caseSensitive = true}) {
+      distinctByCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'cidNumber', caseSensitive: caseSensitive);
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
-      distinctBySfidShortName({bool caseSensitive = true}) {
+      distinctByCidShortName({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'sfidShortName',
+      return query.addDistinctBy(r'cidShortName',
           caseSensitive: caseSensitive);
     });
   }
@@ -17410,9 +17410,9 @@ extension PublicInstitutionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
-      parentSfidNumberProperty() {
+      parentCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'parentSfidNumber');
+      return query.addPropertyName(r'parentCidNumber');
     });
   }
 
@@ -17424,23 +17424,23 @@ extension PublicInstitutionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
-      sfidFullNameProperty() {
+      cidFullNameProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'sfidFullName');
+      return query.addPropertyName(r'cidFullName');
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, String, QQueryOperations>
-      sfidNumberProperty() {
+      cidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'sfidNumber');
+      return query.addPropertyName(r'cidNumber');
     });
   }
 
   QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
-      sfidShortNameProperty() {
+      cidShortNameProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'sfidShortName');
+      return query.addPropertyName(r'cidShortName');
     });
   }
 
@@ -17478,9 +17478,9 @@ const PublicInstitutionSubscriptionEntitySchema = CollectionSchema(
   name: r'PublicInstitutionSubscriptionEntity',
   id: -8652922314920949356,
   properties: {
-    r'sfidNumber': PropertySchema(
+    r'cidNumber': PropertySchema(
       id: 0,
-      name: r'sfidNumber',
+      name: r'cidNumber',
       type: IsarType.string,
     ),
     r'subscribedAtMillis': PropertySchema(
@@ -17546,7 +17546,7 @@ int _publicInstitutionSubscriptionEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.sfidNumber.length * 3;
+  bytesCount += 3 + object.cidNumber.length * 3;
   bytesCount += 3 + object.subscriptionKey.length * 3;
   bytesCount += 3 + object.walletPubkeyHex.length * 3;
   return bytesCount;
@@ -17558,7 +17558,7 @@ void _publicInstitutionSubscriptionEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.sfidNumber);
+  writer.writeString(offsets[0], object.cidNumber);
   writer.writeLong(offsets[1], object.subscribedAtMillis);
   writer.writeString(offsets[2], object.subscriptionKey);
   writer.writeString(offsets[3], object.walletPubkeyHex);
@@ -17573,7 +17573,7 @@ PublicInstitutionSubscriptionEntity
 ) {
   final object = PublicInstitutionSubscriptionEntity();
   object.id = id;
-  object.sfidNumber = reader.readString(offsets[0]);
+  object.cidNumber = reader.readString(offsets[0]);
   object.subscribedAtMillis = reader.readLong(offsets[1]);
   object.subscriptionKey = reader.readString(offsets[2]);
   object.walletPubkeyHex = reader.readString(offsets[3]);
@@ -17932,13 +17932,13 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberEqualTo(
+      QAfterFilterCondition> cidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17948,7 +17948,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberGreaterThan(
+      QAfterFilterCondition> cidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -17956,7 +17956,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17966,7 +17966,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberLessThan(
+      QAfterFilterCondition> cidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -17974,7 +17974,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17984,7 +17984,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberBetween(
+      QAfterFilterCondition> cidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -17993,7 +17993,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -18006,13 +18006,13 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberStartsWith(
+      QAfterFilterCondition> cidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -18022,13 +18022,13 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberEndsWith(
+      QAfterFilterCondition> cidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -18037,10 +18037,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
           PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
-      sfidNumberContains(String value, {bool caseSensitive = true}) {
+      cidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -18049,10 +18049,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
           PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
-      sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
+      cidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -18062,10 +18062,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberIsEmpty() {
+      QAfterFilterCondition> cidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: '',
       ));
     });
@@ -18074,10 +18074,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> sfidNumberIsNotEmpty() {
+      QAfterFilterCondition> cidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sfidNumber',
+        property: r'cidNumber',
         value: '',
       ));
     });
@@ -18471,18 +18471,18 @@ extension PublicInstitutionSubscriptionEntityQuerySortBy on QueryBuilder<
     PublicInstitutionSubscriptionEntity,
     QSortBy> {
   QueryBuilder<PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity, QAfterSortBy> sortBySfidNumber() {
+      PublicInstitutionSubscriptionEntity, QAfterSortBy> sortByCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.asc);
+      return query.addSortBy(r'cidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterSortBy> sortBySfidNumberDesc() {
+      QAfterSortBy> sortByCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.desc);
+      return query.addSortBy(r'cidNumber', Sort.desc);
     });
   }
 
@@ -18560,18 +18560,18 @@ extension PublicInstitutionSubscriptionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenBySfidNumber() {
+      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenByCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.asc);
+      return query.addSortBy(r'cidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterSortBy> thenBySfidNumberDesc() {
+      QAfterSortBy> thenByCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidNumber', Sort.desc);
+      return query.addSortBy(r'cidNumber', Sort.desc);
     });
   }
 
@@ -18637,9 +18637,9 @@ extension PublicInstitutionSubscriptionEntityQueryWhereDistinct on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QDistinct> distinctBySfidNumber({bool caseSensitive = true}) {
+      QDistinct> distinctByCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'cidNumber', caseSensitive: caseSensitive);
     });
   }
 
@@ -18685,9 +18685,9 @@ extension PublicInstitutionSubscriptionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionSubscriptionEntity, String, QQueryOperations>
-      sfidNumberProperty() {
+      cidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'sfidNumber');
+      return query.addPropertyName(r'cidNumber');
     });
   }
 

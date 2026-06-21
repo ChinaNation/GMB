@@ -21,7 +21,7 @@
 - `citizenchain/runtime/src/benchmarks.rs`
 - `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs`
 - `citizenchain/runtime/transaction/duoqian-transfer/`
-- `sfid/backend/super-admins/institutions.rs`
+- `citizencode/backend/super-admins/institutions.rs`
 - `memory/05-modules/`
 - `memory/08-tasks/`
 - `tools/duoqian.py`
@@ -36,7 +36,7 @@
 
 1. 重命名目录、crate 名和 Rust 模块引用。
 2. 更新 runtime pallet 别名与相关 call/type 引用。
-3. 更新 SFID 后台固定 pallet 名字符串。
+3. 更新 CID 后台固定 pallet 名字符串。
 4. 更新模块文档、白皮书、工具说明和任务卡引用。
 5. 运行最小验证并回写结果。
 
@@ -50,7 +50,7 @@
 
 - 已把 `citizenchain/runtime/transaction/duoqian-manage/` 目录、crate 名和所有 Rust 引用统一为新命名。
 - 已把 runtime pallet 别名统一为 `DuoqianManage`。
-- 已同步更新 SFID 后台固定 pallet 名字符串，避免后台继续提交到旧 pallet 名。
+- 已同步更新 CID 后台固定 pallet 名字符串，避免后台继续提交到旧 pallet 名。
 - 已同步更新模块文档、白皮书、工具说明、任务卡和索引中的旧命名引用。
 - 已确认主工作树源码与 `memory/` 下不再残留旧命名字符串。
 
@@ -58,4 +58,4 @@
 
 - `cargo check -p citizenchain`：通过
 - `cargo test -p duoqian-manage`：通过
-- `git diff --check -- citizenchain sfid memory tools`：通过
+- `git diff --check -- citizenchain cid memory tools`：通过

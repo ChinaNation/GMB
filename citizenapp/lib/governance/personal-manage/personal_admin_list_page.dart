@@ -54,7 +54,7 @@ class PersonalAdminListPage extends StatefulWidget {
     this.creatorPubkeyHex,
   });
 
-  /// 多签元信息(名称 / 多签地址 / sfidNumber 等)。
+  /// 多签元信息(名称 / 多签地址 / cidNumber 等)。
   final InstitutionInfo institution;
 
   /// 多签当前状态(Pending / Active)。

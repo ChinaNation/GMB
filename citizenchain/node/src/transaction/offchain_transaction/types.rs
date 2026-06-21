@@ -6,13 +6,13 @@
 
 use serde::Serialize;
 
-/// 链上 `ClearingBankNodes[sfid_number]` 解码后的对前端形态。
+/// 链上 `ClearingBankNodes[cid_number]` 解码后的对前端形态。
 ///
 /// 字段为字符串/u32 友好类型,前端无需做 Bytes/SS58 自行处理。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClearingBankNodeOnChainInfo {
-    pub sfid_number: String,
+    pub cid_number: String,
     /// libp2p PeerId 字符串("12D3KooW..." 形式)。
     pub peer_id: String,
     pub rpc_domain: String,
@@ -49,7 +49,7 @@ pub struct ConnectivityTestReport {
 pub struct DecryptedAdminInfo {
     /// 管理员公钥(0x 前缀 hex,小写)。
     pub pubkey_hex: String,
-    pub sfid_number: String,
+    pub cid_number: String,
     /// 解密时间(毫秒时间戳)。
     pub decrypted_at_ms: u64,
 }

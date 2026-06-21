@@ -2,12 +2,12 @@
 
 ## 任务目标
 
-修复 CPMS CI 在 `cpms-ubuntu24-amd64.run` 打包阶段失败的问题。失败原因是打包脚本直接使用 GitHub runner 主机 apt 环境递归解析依赖，受到 runner 预装源和第三方源污染，解析出不可下载的虚拟包和 PGDG PostgreSQL 版本。
+修复 CPMS CI 在 `citizenpassport-ubuntu24-amd64.run` 打包阶段失败的问题。失败原因是打包脚本直接使用 GitHub runner 主机 apt 环境递归解析依赖，受到 runner 预装源和第三方源污染，解析出不可下载的虚拟包和 PGDG PostgreSQL 版本。
 
 ## 范围
 
-- `cpms/scripts/build_linux_host_installer.sh`：离线 deb 依赖闭包改为在官方 `ubuntu:24.04` Docker 容器内解析和下载。
-- `cpms/CPMS_TECHNICAL.md`：补充 CI 打包阶段使用干净 Ubuntu 容器收集依赖的规则。
+- `citizenpassport/scripts/build_linux_host_installer.sh`：离线 deb 依赖闭包改为在官方 `ubuntu:24.04` Docker 容器内解析和下载。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md`：补充 CI 打包阶段使用干净 Ubuntu 容器收集依赖的规则。
 - `memory/08-tasks/index.md`：登记和归档任务卡。
 
 ## 验收标准
@@ -31,7 +31,7 @@
 
 ## 验证
 
-- `bash -n cpms/scripts/build_linux_host_installer.sh`
+- `bash -n citizenpassport/scripts/build_linux_host_installer.sh`
 - `git diff --check`
 - 残留搜索确认旧的 `apt-cache depends --recurse`、`sudo apt-get download` 不再存在。
 - 本机无 Docker，完整 `.run` 打包需由 GitHub Actions 运行验证。

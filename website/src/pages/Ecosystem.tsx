@@ -3,7 +3,7 @@ import GlowCard from '../components/GlowCard'
 
 const systems = [
   {
-    name: 'SFID 身份系统',
+    name: 'CID 身份系统',
     subtitle: '身份识别码系统',
     desc: '中央身份绑定与验证系统，将公民身份一对一映射到区块链公钥，管理投票资格与公民快照。',
     features: [
@@ -87,12 +87,12 @@ const workflow = [
   {
     step: '01',
     title: '公民绑定',
-    desc: 'CitizenChain 发起请求 → CPMS 离线生成签名 QR 码 → SFID 扫描验签 → 链上绑定完成',
+    desc: 'CitizenChain 发起请求 → CPMS 离线生成签名 QR 码 → CID 扫描验签 → 链上绑定完成',
   },
   {
     step: '02',
     title: '治理投票',
-    desc: '链上创建提案 → SFID 提供选民快照与资格验证 → CitizenApp 移动端投票 → 链上记录与执行',
+    desc: '链上创建提案 → CID 提供选民快照与资格验证 → CitizenApp 移动端投票 → 链上记录与执行',
   },
   {
     step: '03',

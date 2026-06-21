@@ -23,24 +23,24 @@ pub async fn search_eligible_clearing_banks(
 ) -> Result<Vec<EligibleClearingBankCandidate>, String> {
     let limit = limit.unwrap_or(20);
     tauri::async_runtime::spawn_blocking(move || {
-        super::sfid::search_eligible_clearing_banks(&query, limit)
+        super::cid::search_eligible_clearing_banks(&query, limit)
     })
     .await
     .map_err(|e| format!("search_eligible_clearing_banks task failed:{e}"))?
 }
 
-/// 链上查询某机构的多签信息。返回 `None` = 该 sfid_number 链上尚未创建机构。
+/// 链上查询某机构的多签信息。返回 `None` = 该 cid_number 链上尚未创建机构。
 #[tauri::command]
 pub async fn fetch_clearing_bank_institution_detail(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
 ) -> Result<Option<InstitutionDetail>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行,无法查询链上数据".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::chain::fetch_institution_detail(&sfid_number)
+        super::chain::fetch_institution_detail(&cid_number)
     })
     .await
     .map_err(|e| format!("fetch_clearing_bank_institution_detail task failed:{e}"))?
@@ -50,7 +50,7 @@ pub async fn fetch_clearing_bank_institution_detail(
 #[tauri::command]
 pub async fn fetch_clearing_bank_institution_proposals(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
     start_id: u64,
     page_size: u32,
 ) -> Result<InstitutionProposalPage, String> {
@@ -59,19 +59,19 @@ pub async fn fetch_clearing_bank_institution_proposals(
         return Err("节点未运行,无法查询链上数据".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::chain::fetch_institution_proposals(&sfid_number, start_id, page_size)
+        super::chain::fetch_institution_proposals(&cid_number, start_id, page_size)
     })
     .await
     .map_err(|e| format!("fetch_clearing_bank_institution_proposals task failed:{e}"))?
 }
 
-/// 调 SFID 拉链上注册专用机构信息 + 签发凭证。
+/// 调 CID 拉链上注册专用机构信息 + 签发凭证。
 #[tauri::command]
 pub async fn fetch_clearing_bank_institution_registration_info(
-    sfid_number: String,
+    cid_number: String,
 ) -> Result<InstitutionRegistrationInfoResp, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        super::sfid::fetch_institution_registration_info(&sfid_number)
+        super::cid::fetch_institution_registration_info(&cid_number)
     })
     .await
     .map_err(|e| format!("fetch_clearing_bank_institution_registration_info task failed:{e}"))?
@@ -108,15 +108,15 @@ fn parse_initial_accounts(
 pub async fn build_propose_create_institution_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: String,
-    sfid_full_name: String,
+    cid_number: String,
+    cid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
     org: u8,
     admins: Vec<String>,
     threshold: u32,
     register_nonce: String,
     signature_hex: String,
-    issuer_sfid_number: String,
+    issuer_cid_number: String,
     issuer_main_account: String,
     signer_pubkey: String,
     scope_province_name: String,
@@ -131,8 +131,8 @@ pub async fn build_propose_create_institution_request(
         let admins_len = admins.len() as u32;
         super::signing::build_propose_create_institution_sign_request(
             &pubkey_hex,
-            &sfid_number,
-            &sfid_full_name,
+            &cid_number,
+            &cid_full_name,
             &parsed_accounts,
             org,
             admins_len,
@@ -140,7 +140,7 @@ pub async fn build_propose_create_institution_request(
             threshold,
             &register_nonce,
             &signature_hex,
-            &issuer_sfid_number,
+            &issuer_cid_number,
             &issuer_main_account,
             &signer_pubkey,
             &scope_province_name,
@@ -158,15 +158,15 @@ pub async fn submit_propose_create_institution(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_number: String,
-    sfid_full_name: String,
+    cid_number: String,
+    cid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
     org: u8,
     admins: Vec<String>,
     threshold: u32,
     register_nonce: String,
     signature_hex: String,
-    issuer_sfid_number: String,
+    issuer_cid_number: String,
     issuer_main_account: String,
     signer_pubkey: String,
     scope_province_name: String,
@@ -183,8 +183,8 @@ pub async fn submit_propose_create_institution(
         let parsed_accounts = parse_initial_accounts(&accounts)?;
         let admins_len = admins.len() as u32;
         let call_data = super::signing::build_propose_create_institution_call_data(
-            &sfid_number,
-            &sfid_full_name,
+            &cid_number,
+            &cid_full_name,
             &parsed_accounts,
             org,
             admins_len,
@@ -192,7 +192,7 @@ pub async fn submit_propose_create_institution(
             threshold,
             &register_nonce,
             &signature_hex,
-            &issuer_sfid_number,
+            &issuer_cid_number,
             &issuer_main_account,
             &signer_pubkey,
             &scope_province_name,

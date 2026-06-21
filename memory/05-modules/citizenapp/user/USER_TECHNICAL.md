@@ -92,7 +92,7 @@
 ### 4.3 电子护照
 
 电子护照状态归属 `lib/my/myid/MyIdService`，用户模块不直接读写电子护照状态。
-电子护照页展示字段由 SFID 状态接口同步：绑定状态、身份ID号码、投票账户地址、身份ID状态。
+电子护照页展示字段由 CID 状态接口同步：绑定状态、身份ID号码、投票账户地址、身份ID状态。
 绑定状态、投票状态和身份ID状态必须分离；citizenapp 状态接口缓存 `citizen_status / voting_eligible / vote_status / identity_status`，其中 `identity_status == NORMAL` 显示“状态：正常”，其他值显示“状态：异常”。
 
 ## 5. 页面与交互流程
@@ -126,7 +126,7 @@
 2. 跳转 `lib/my/myid/MyIdPage`
 3. 电子护照设置、状态同步和现场签名由 `lib/my/myid/` 负责
 4. 页面展示“身份ID / 投票账户 / 状态”，其中“状态”是身份ID状态，不是绑定状态徽标
-5. 现场签名页 `lib/my/myid/myid_sign_page.dart` 扫描 SFID 管理端签名请求时，扫码区域必须是
+5. 现场签名页 `lib/my/myid/myid_sign_page.dart` 扫描 CID 管理端签名请求时，扫码区域必须是
    固定正方形相机框并带四角提示，不得继续使用整块矩形相机画面。
 
 ### 5.6 通讯录

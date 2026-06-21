@@ -12,11 +12,11 @@ import { VoteSigningFlow } from './VoteSigningFlow';
 type Props = {
   proposalId: number;
   adminWallets: AdminWalletMatch[];
-  sfidNumber?: string;
+  cidNumber?: string;
   onBack: () => void;
 };
 
-function institutionHexToSfidNumber(hex: string): string {
+function institutionHexToCidNumber(hex: string): string {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   const bytes: number[] = [];
   for (let i = 0; i < clean.length; i += 2) {
@@ -27,7 +27,7 @@ function institutionHexToSfidNumber(hex: string): string {
   return new TextDecoder().decode(new Uint8Array(bytes.slice(0, end)));
 }
 
-export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWallets, sfidNumber: externalSfidNumber, onBack }: Props) {
+export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWallets, cidNumber: externalCidNumber, onBack }: Props) {
   const [info, setInfo] = useState<ProposalFullInfo | null>(null);
   const [institution, setInstitution] = useState<InstitutionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const [votingWallet, setVotingWallet] = useState<AdminWalletMatch | null>(null);
   const [voteStatuses, setVoteStatuses] = useState<Record<string, UserVoteStatus>>({});
   const [detectedAdminWallets, setDetectedAdminWallets] = useState<AdminWalletMatch[]>([]);
-  const [resolvedSfidNumber, setResolvedSfidNumber] = useState<string | undefined>(externalSfidNumber);
+  const [resolvedCidNumber, setResolvedCidNumber] = useState<string | undefined>(externalCidNumber);
   // 投票中（已提交但未确认上链）的钱包 pubkey → 提交时间
   const [pendingVotes, setPendingVotes] = useState<Map<string, number>>(new Map());
   // 双层 ID v1:展示号反查值,链上 ProposalDisplayId[id] 拉取
@@ -47,7 +47,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
 
   const adminWallets = externalAdminWallets.length > 0 ? externalAdminWallets : detectedAdminWallets;
-  const sfidNumber = resolvedSfidNumber;
+  const cidNumber = resolvedCidNumber;
 
   const fetchVoteStatuses = useCallback(async (
     pid: number, admins: string[], sid: string | undefined,
@@ -67,7 +67,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
 
   const refreshData = useCallback(async (inst?: InstitutionDetail | null, sid?: string) => {
     const curInst = inst ?? institution;
-    const curSid = sid ?? sfidNumber;
+    const curSid = sid ?? cidNumber;
     try {
       const d = await api.getProposalDetail(proposalId);
       setInfo(d);
@@ -87,7 +87,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         return next;
       });
     }
-  }, [proposalId, institution, sfidNumber, fetchVoteStatuses]);
+  }, [proposalId, institution, cidNumber, fetchVoteStatuses]);
 
   useEffect(() => {
     setLoading(true);
@@ -98,10 +98,10 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       ]);
       setInfo(d);
       setDisplayMeta(dm ?? null);
-      let sid = externalSfidNumber;
+      let sid = externalCidNumber;
       if (!sid && d.meta.institutionHex) {
-        sid = institutionHexToSfidNumber(d.meta.institutionHex);
-        setResolvedSfidNumber(sid);
+        sid = institutionHexToCidNumber(d.meta.institutionHex);
+        setResolvedCidNumber(sid);
       }
       let wallets = externalAdminWallets;
       if (sid) {
@@ -110,7 +110,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           setInstitution(inst);
           if (externalAdminWallets.length === 0) {
             const activated = await adminsChangeApi.getActivatedAdmins(sid, {
-              sfidNumber: sid,
+              cidNumber: sid,
               org: inst.orgType,
             });
             wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, name: '' }));
@@ -166,8 +166,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>← 返回</button>
       <h2>提案 {displayId}</h2>
-      {info.sfidFullName && (
-        <p className="proposal-institution-name">{info.sfidFullName}</p>
+      {info.cidFullName && (
+        <p className="proposal-institution-name">{info.cidFullName}</p>
       )}
 
       {votingWallet && (
@@ -175,7 +175,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           proposalId={meta.proposalId}
           proposalKind={meta.kind}
           adminWallets={[votingWallet]}
-          sfidNumber={sfidNumber}
+          cidNumber={cidNumber}
           onClose={() => setVotingWallet(null)}
           onSuccess={handleVoteSuccess}
         />

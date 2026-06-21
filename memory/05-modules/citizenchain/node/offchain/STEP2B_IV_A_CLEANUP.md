@@ -32,7 +32,7 @@ Step 2b-iii-b 完成后,新清算行节点(citizenapp RPC → ledger → packer 
 ### 2.2 `offchain/keystore.rs`(保留 + 迁入 offchain 功能域)
 
 - 头注释改为"节点签名管理员 sr25519 私钥加密存储模块",并添加 Step 2b-iv-a 历史说明
-- 明确 `SigningKey.sfid_number` 字段当前语义是"清算行管理员身份标识",字段 rename 留 Step 3
+- 明确 `SigningKey.cid_number` 字段当前语义是"清算行管理员身份标识",字段 rename 留 Step 3
 - 2026-04-29 二次目录收口时,根级 `node/src/offchain_keystore.rs` 已迁入
   `node/src/offchain/keystore.rs`,引用统一改为 `crate::offchain::keystore::*`
 
@@ -46,12 +46,12 @@ Step 2b-iii-b 完成后,新清算行节点(citizenapp RPC → ledger → packer 
 | 删除 | 行号(清理前) |
 |---|---|
 | `static OFFCHAIN_CONFIG` | L43 |
-| `pub struct OffchainConfig` + `ledger` + `sfid_number` 字段 | L46-49 |
+| `pub struct OffchainConfig` + `ledger` + `cid_number` 字段 | L46-49 |
 | `pub fn set_offchain_config` | L52-54 |
 | `fn get_offchain_config` | L57-59 |
 | 老 `offchain_clearing_notification_service` 协议注册 | L483-491 |
 | 老 `offchain_gossip_tx/rx` channel 创建 | L555-561 |
-| `rpc_extensions_builder` 闭包 `offchain_ledger` / `offchain_sfid_number` / `offchain_gossip_tx` 三字段赋值 | L693-696 |
+| `rpc_extensions_builder` 闭包 `offchain_ledger` / `offchain_cid_number` / `offchain_gossip_tx` 三字段赋值 | L693-696 |
 | 老 `offchain-clearing-gossip` spawn 块 | L712-725 |
 
 ### 2.5 `rpc.rs`
@@ -61,7 +61,7 @@ Step 2b-iii-b 完成后,新清算行节点(citizenapp RPC → ledger → packer 
 | 删除 | 说明 |
 |---|---|
 | `use crate::offchain_ledger::*;` | 顶部 import |
-| `FullDeps::{offchain_ledger, offchain_sfid_number, offchain_gossip_tx}` | 3 个字段 |
+| `FullDeps::{offchain_ledger, offchain_cid_number, offchain_gossip_tx}` | 3 个字段 |
 | `create_full` destructure 三字段 | 跟随字段删除 |
 | `offchain_submitSignedTx` RPC 注册块 | ~210 行(签名验证 + 虚拟余额 + ledger 入账 + gossip 推送) |
 | `offchain_queryTxStatus` RPC 注册块 | ~65 行(三级状态查询) |
@@ -116,7 +116,7 @@ No issues found!
 |---|---|---|
 | citizenapp 里 `lib/rpc/offchain.dart` + `lib/trade/offchain/offchain_pay_page.dart` 仍引用已删 RPC | **P2** | 入口在 `onchain_trade_page.dart` 已下架(SnackBar 提示);两个文件本身留 Step 2c 重写时删除 |
 | CLI 清算行模式下 `stop_node` 不再有 pending 保护 | **P2** | UI 路径本来就没启动清算行;CLI `Ctrl+C` 会 drop task_manager → 所有 spawn 的 task 被取消,packer/listener/monitor 最后一次 tick 可能漏做。Step 3 改为 spawn_essential_handle + graceful shutdown 通道 |
-| `offchain::keystore::SigningKey.sfid_number` 字段名语义漂移 | **P3** | 本步仅改注释,不改字段名(避免 blast radius);rename 留 Step 3 |
+| `offchain::keystore::SigningKey.cid_number` 字段名语义漂移 | **P3** | 本步仅改注释,不改字段名(避免 blast radius);rename 留 Step 3 |
 | 跨行 ghost account bug(Step 2b-iii-a 发现) | **P2** | 已登记为独立任务,Step 3 跨行前修复;本步 Step 1 同行不触发 |
 | Runtime 侧老 Calls 仍存在占 `RuntimeCall` 枚举槽位 | **P3** | `OnchainTxAmountExtractor` 分类还在;不影响功能,Step 2b-iv-b 删除 |
 

@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-按最新确认实现 CPMS 侧 P2.6 的号码注销规则：SFID 号由 SFID 系统自行处理，CPMS 只处理档案号和护照号。公民档案详情页删除按钮触发的删除即注销软删除；软删除后 100 年内档案号和护照号继续占用，不参与生成；从删除时间起满 100 年后自动硬删除档案资料，并将同一档案绑定的一对档案号和护照号放入回收池。CPMS 按年通过 `dangan/export.rs` 导出状态给 SFID。
+按最新确认实现 CPMS 侧 P2.6 的号码注销规则：CID 号由 CID 系统自行处理，CPMS 只处理档案号和护照号。公民档案详情页删除按钮触发的删除即注销软删除；软删除后 100 年内档案号和护照号继续占用，不参与生成；从删除时间起满 100 年后自动硬删除档案资料，并将同一档案绑定的一对档案号和护照号放入回收池。CPMS 按年通过 `dangan/export.rs` 导出状态给 CID。
 
 ## 建议模块
 
@@ -12,11 +12,11 @@
 
 ## 影响范围
 
-- `cpms/backend/src/dangan`：新增档案生命周期硬删除逻辑。
-- `cpms/backend/src/number`：创建档案时优先领取已释放的一对号码。
-- `cpms/backend/dangan`：创建档案事务内完成号码领取和档案写入。
-- `cpms/backend/db`：新增号码回收池与硬删除记录表。
-- `memory/05-modules/cpms`：同步编号和档案生命周期规则。
+- `citizenpassport/backend/dangan`：新增档案生命周期硬删除逻辑。
+- `citizenpassport/backend/number`：创建档案时优先领取已释放的一对号码。
+- `citizenpassport/backend/dangan`：创建档案事务内完成号码领取和档案写入。
+- `citizenpassport/backend/db`：新增号码回收池与硬删除记录表。
+- `memory/05-modules/citizenpassport`：同步编号和档案生命周期规则。
 
 ## 主要风险点
 
@@ -36,7 +36,7 @@
 
 ## 完成记录
 
-- 2026-05-30：确认 SFID 号不在 CPMS 处理；CPMS 只回收档案号和护照号。
+- 2026-05-30：确认 CID 号不在 CPMS 处理；CPMS 只回收档案号和护照号。
 - 2026-05-30：新增 `dangan/lifecycle.rs`，启动时和每日后台任务执行满 100 年注销档案硬删除。
 - 2026-05-30：新增 `archive_number_recycle_pool` 与 `archive_hard_delete_logs`，新建档案时事务内优先领取成对回收号码。
 - 2026-05-30：回收池唯一约束收口为“未使用号码唯一”，支持同一档案号和护照号多轮复用后的再次硬删除入池。

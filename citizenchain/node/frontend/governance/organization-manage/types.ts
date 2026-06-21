@@ -1,12 +1,12 @@
 // 机构多签管理 DTO,与 Tauri 后端 governance/organization-manage/types.rs 对齐。
 
 export type EligibleClearingBankCandidate = {
-  sfidNumber: string;
-  sfidFullName: string;
+  cidNumber: string;
+  cidFullName: string;
   subjectProperty: string;
   subType?: string | null;
-  parentSfidNumber?: string | null;
-  parentSfidFullName?: string | null;
+  parentCidNumber?: string | null;
+  parentCidFullName?: string | null;
   parentSubjectProperty?: string | null;
   provinceName: string;
   cityName: string;
@@ -28,8 +28,8 @@ export type AccountWithBalance = {
 };
 
 export type InstitutionDetail = {
-  sfidNumber: string;
-  sfidFullName: string;
+  cidNumber: string;
+  cidFullName: string;
   /** 管理员更换使用的机构多签 AccountId，清算行当前指向主账户。 */
   adminAccountHex: string;
   /** 管理员更换使用的 org：清算行属于 ORG_OTH。 */
@@ -64,21 +64,21 @@ export type InstitutionProposalPage = {
   hasMore: boolean;
 };
 
-/** SFID `/registration-info` 响应形态(snake_case 直传)。 */
+/** CID `/registration-info` 响应形态(snake_case 直传)。 */
 export type InstitutionRegistrationInfoResp = {
-  sfid_number: string;
-  sfid_full_name: string;
+  cid_number: string;
+  cid_full_name: string;
   account_names: string[];
   credential: InstitutionRegistrationCredentialResp;
 };
 
-/** SFID 对链上注册 payload 签发的凭证。 */
+/** CID 对链上注册 payload 签发的凭证。 */
 export type InstitutionRegistrationCredentialResp = {
   genesis_hash: string;
   /** 防重放 nonce(本次响应生成的随机字符串)。 */
   register_nonce: string;
-  /** 签发机构 SFID 号。 */
-  issuer_sfid_number: string;
+  /** 签发机构 CID 号。 */
+  issuer_cid_number: string;
   /** 签发机构主账户(32 字节 hex)。 */
   issuer_main_account: string;
   /** 本次签名所用机构管理员公钥(32 字节 hex)。 */

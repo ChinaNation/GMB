@@ -61,14 +61,14 @@ lib/signer/
 - 任务卡:`memory/08-tasks/open/20260526-cpms-wallet-address-only.md`
 
 citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CITIZEN_QR_V1 / user_contact`
-钱包地址二维码，并把地址写入真实档案。钱包私钥控制权验证统一放到 SFID 绑定阶段，
-由 SFID 生成绑定 `sign_request`，citizenapp 再输出 `CITIZEN_QR_V1 / sign_response`。
+钱包地址二维码，并把地址写入真实档案。钱包私钥控制权验证统一放到 CID 绑定阶段，
+由 CID 生成绑定 `sign_request`，citizenapp 再输出 `CITIZEN_QR_V1 / sign_response`。
 
 验收规则:
 
 - 普通签名请求的 `body.pubkey` 必须与当前钱包公钥一致。
 - 签名对象为 `payload_hex` 对应的业务原文。
-- SFID 绑定阶段的回执 `pubkey / payload_hash / signature` 必须能被 SFID 验证。
+- CID 绑定阶段的回执 `pubkey / payload_hash / signature` 必须能被 CID 验证。
 
 签名场景：
 
@@ -82,7 +82,7 @@ citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CI
 - citizenapp 不接收“无法独立验证但仍允许签名”的冷钱包结果；外部签名设备必须按 citizenwallet 的两色规则独立验证后返回回执。
 - `display` 不是签名内容，真实签名对象始终是 `payload_hex` 解码后的原始字节。
 
-### 4.1 SFID 电子护照绑定签名
+### 4.1 CID 电子护照绑定签名
 
 文件：`lib/my/myid/myid_sign_page.dart`
 
@@ -91,14 +91,14 @@ citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CI
 - 校验 `sign_request.body.pubkey` 与当前钱包公钥一致。
 - 校验 `sign_request.body.account` 与当前钱包 SS58 地址一致。
 - 校验 `display.action = citizen_bind`。
-- 独立解析 `payload_hex` 中的 `sfid-citizen-bind-v1` 业务原文。
+- 独立解析 `payload_hex` 中的 `cid-citizen-bind-v1` 业务原文。
 - 校验业务原文中的 `wallet_pubkey` 与当前钱包公钥一致。
 - 若请求包含 `display.fields`，逐项校验 `mode / archive_no / voting_eligible / citizen_status / wallet_address` 与业务原文一致。
 - 校验通过后才使用当前钱包对 `payload_hex` 原始字节签名。
 
 ### 4.2 公民钱包签名边界
 
-- citizenwallet 公民钱包负责独立解码链上 call data、SFID 管理员操作、CPMS 档案删除等签名请求。
+- citizenwallet 公民钱包负责独立解码链上 call data、CID 管理员操作、CPMS 档案删除等签名请求。
 - citizenwallet 公民钱包只能在独立验证通过时绿色放行，不能独立验证或展示字段不一致时红色拒签。
 - citizenapp 只负责展示在线请求二维码、扫描回执、校验 `request_id / pubkey / payload_hash / signature` 后提交业务。
 
@@ -152,7 +152,7 @@ citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CI
 - `governance`（规划）：
   - 负责提案/投票业务字段编排
   - 通过 `Signer` 完成链上交易签名
-  - SFID 凭证签名字段由外部 SFID 系统生成，App 负责透传与校验格式
+  - CID 凭证签名字段由外部 CID 系统生成，App 负责透传与校验格式
 
 ## 7. 签名域标准
 
@@ -170,7 +170,7 @@ CITIZEN_QR_V1|system|request_id|challenge|nonce|expires_at
 - App 不自行重组链上 SCALE payload，必须直接签 `payload_hex` 解码后的原始字节。
 - 签名结果统一为 `sr25519` 64 字节签名（`0x` hex）。
 
-### 7.3 SFID 凭证签名域（由 SFID 系统产出）
+### 7.3 CID 凭证签名域（由 CID 系统产出）
 
 - 人口快照签名（投票引擎人口快照准备流程字段）：
 

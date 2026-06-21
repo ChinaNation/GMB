@@ -19,14 +19,14 @@ members = [
     "runtime/issuance/onchain-issuance",         # 发行-链上发行代币(Plain FT, ADR-011) pallet
     "runtime/issuance/resolution-issuance",        # 发行-决议发行完整流程模块 pallet
     "runtime/issuance/shengbank-interest",   # 发行-省储行利息模块 pallet
-    "runtime/otherpallet/sfid-system",          # 其他-SFID 绑定与资格校验模块 pallet
+    "runtime/otherpallet/cid-system",          # 其他-CID 绑定与资格校验模块 pallet
     "runtime/otherpallet/pow-difficulty",   # 其他-PoW 动态难度调整模块 pallet
     "runtime/genesis",                           # 创世模块 pallet
 
     "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet
     "runtime/transaction/onchain-transaction",  # 交易-链上交易手续费模块 pallet
     "runtime/governance/organization-manage",        # 治理-机构管理:承载机构多签注册/创建/关闭生命周期
-    "runtime/governance/personal-manage",        # 治理-个人多签管理:承载用户自定义多签账户的注册/创建/关闭生命周期(无 SFID 归属)
+    "runtime/governance/personal-manage",        # 治理-个人多签管理:承载用户自定义多签账户的注册/创建/关闭生命周期(无 CID 归属)
     "runtime/transaction/duoqian-transfer",     # 交易-机构多签名地址转账模块 pallet
     "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 

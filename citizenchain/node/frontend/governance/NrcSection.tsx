@@ -11,19 +11,19 @@ import { SweepProposalPage } from '../transaction/duoqian-transfer/SweepProposal
 import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 
-// 国储会 sfidNumber（全链唯一，直接进入详情）。
-const NRC_SFID_NUMBER = 'LN001-GCB05-944805165-2026';
+// 国储会 cidNumber（全链唯一，直接进入详情）。
+const NRC_CID_NUMBER = 'LN001-GCB05-944805165-2026';
 
 type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
-  | { page: 'admin-set-change'; sfidFullName: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string }
-  | { page: 'create-proposal'; orgType: number; sfidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'admin-set-change'; cidFullName: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string }
+  | { page: 'create-proposal'; orgType: number; cidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
   | { page: 'protocol-upgrade'; adminWallets: AdminWalletMatch[] }
   | { page: 'developer-upgrade'; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-safety-fund'; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; sfidFullName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'propose-sweep'; cidFullName: string; adminWallets: AdminWalletMatch[] };
 
 export function NrcSection() {
   const [view, setView] = useState<NrcView>({ page: 'detail' });
@@ -33,8 +33,8 @@ export function NrcSection() {
   if (view.page === 'admin-list') {
     return (
       <AdminListPage
-        sfidNumber={NRC_SFID_NUMBER}
-        accountRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
+        cidNumber={NRC_CID_NUMBER}
+        accountRef={{ cidNumber: NRC_CID_NUMBER, org: 0 }}
         onBack={backToDetail}
       />
     );
@@ -45,7 +45,7 @@ export function NrcSection() {
       <ProposalDetailPage
         proposalId={view.proposalId}
         adminWallets={view.adminWallets}
-        sfidNumber={view.sfidNumber}
+        cidNumber={view.cidNumber}
         onBack={backToDetail}
       />
     );
@@ -54,8 +54,8 @@ export function NrcSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        accountRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
-        sfidFullName={view.sfidFullName}
+        accountRef={{ cidNumber: NRC_CID_NUMBER, org: 0 }}
+        cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -66,9 +66,9 @@ export function NrcSection() {
   if (view.page === 'create-proposal') {
     return (
       <CreateDuoqianTransferPage
-        sfidNumber={NRC_SFID_NUMBER}
+        cidNumber={NRC_CID_NUMBER}
         orgType={view.orgType}
-        sfidFullName={view.sfidFullName}
+        cidFullName={view.cidFullName}
         mainAccount={view.mainAccount}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
@@ -110,8 +110,8 @@ export function NrcSection() {
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
-        sfidNumber={NRC_SFID_NUMBER}
-        sfidFullName={view.sfidFullName}
+        cidNumber={NRC_CID_NUMBER}
+        cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -122,18 +122,18 @@ export function NrcSection() {
   // 默认直接渲染国储会机构详情（hideBackButton 以保持 tab 语义）。
   return (
     <InstitutionDetailPage
-      sfidNumber={NRC_SFID_NUMBER}
+      cidNumber={NRC_CID_NUMBER}
       onBack={backToDetail}
       hideBackButton
       onOpenAdminList={() => setView({ page: 'admin-list' })}
       onSelectProposal={(proposalId, adminWallets, sid) =>
-        setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid })
+        setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid })
       }
       onCreateProposal={(_sid, orgType, name, mainAccount, aw) =>
-        setView({ page: 'create-proposal', orgType, sfidFullName: name, mainAccount, adminWallets: aw })
+        setView({ page: 'create-proposal', orgType, cidFullName: name, mainAccount, adminWallets: aw })
       }
       onCreateAdminSetChange={(_sid, _orgType, name, aw) =>
-        setView({ page: 'admin-set-change', sfidFullName: name, adminWallets: aw })
+        setView({ page: 'admin-set-change', cidFullName: name, adminWallets: aw })
       }
       onCreateProtocolUpgrade={(aw) =>
         setView({ page: 'protocol-upgrade', adminWallets: aw })
@@ -145,7 +145,7 @@ export function NrcSection() {
         setView({ page: 'propose-safety-fund', adminWallets: aw })
       }
       onCreateSweep={(_sid, name, aw) =>
-        setView({ page: 'propose-sweep', sfidFullName: name, adminWallets: aw })
+        setView({ page: 'propose-sweep', cidFullName: name, adminWallets: aw })
       }
     />
   );

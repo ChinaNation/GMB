@@ -58,7 +58,7 @@ citizenapp/test/governance/admins-change/
 
 1. `proposal_types_page.dart` 的“换管理员”入口进入 `AdminSetChangePage`。
 2. 入口页或调用方先构造 `AdminAccountIdentity`，再交给 `AdminAccountService` 查询目标 `AccountId`：
-   - 内置治理机构：`0x01 Builtin + sfidNumber`。
+   - 内置治理机构：`0x01 Builtin + cidNumber`。
    - 个人多签：`PersonalDuoqian AccountId + AccountId`。
    - 机构账户：`InstitutionAccount AccountId + AccountId`。
 3. 读取 `AdminsChange::AdminAccounts` 并解码完整 `AdminAccount`。

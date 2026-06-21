@@ -1,6 +1,6 @@
 // 热钱包扫码签名页。
 //
-// 用户到 SFID 现场后：
+// 用户到 CID 现场后：
 // 1. 打开此页，摄像头扫描身份ID系统的 sign_request 二维码
 // 2. 验证 pubkey 与当前绑定钱包一致
 // 3. 用热钱包私钥签名 payload
@@ -341,7 +341,7 @@ class _CitizenBindPayload {
   static _CitizenBindPayload decode(String payloadHex) {
     final text = utf8.decode(_hexToBytes(payloadHex), allowMalformed: false);
     final parts = text.split('|');
-    if (parts.length != 11 || parts[0] != 'sfid-citizen-bind-v1') {
+    if (parts.length != 11 || parts[0] != 'cid-citizen-bind-v1') {
       throw Exception('无法独立验证身份ID绑定载荷');
     }
     final mode = parts[2];

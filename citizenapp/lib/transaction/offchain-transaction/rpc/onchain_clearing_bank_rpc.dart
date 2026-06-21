@@ -35,7 +35,7 @@ class OnchainClearingBankRpc {
   ///
   /// [fromAddress]      L3 用户 SS58 地址
   /// [signerPubkey]     L3 用户公钥(32 字节)
-  /// [bankMainAccount]  目标清算行**主账户**地址(32 字节,从 SFID API 拿到 hex 后解码)
+  /// [bankMainAccount]  目标清算行**主账户**地址(32 字节,从 CID API 拿到 hex 后解码)
   /// [sign]             签名回调
   Future<({String txHash, int usedNonce})> bindClearingBank({
     required String fromAddress,

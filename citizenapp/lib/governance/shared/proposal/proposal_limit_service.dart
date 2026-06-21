@@ -23,7 +23,7 @@ class ProposalLimitService {
       'ActiveProposalsByInstitution',
       Uint8List.fromList(
         institutionIdentityToAccountId(
-          institution.sfidNumber,
+          institution.cidNumber,
           mainAccount: institution.mainAccount,
         ),
       ),

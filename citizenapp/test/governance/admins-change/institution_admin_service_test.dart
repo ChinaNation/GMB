@@ -190,7 +190,7 @@ void main() {
     final personalAddress = '44' * 32;
     final personal = AdminAccountIdentity.fromInstitution(InstitutionInfo(
       name: '个人账户',
-      sfidNumber: 'personal:$personalAddress',
+      cidNumber: 'personal:$personalAddress',
       orgType: OrgType.duoqian,
       duoqianAccount: personalAddress,
     ));
@@ -202,7 +202,7 @@ void main() {
     final institutionAccount =
         AdminAccountIdentity.fromInstitution(InstitutionInfo(
       name: '机构账户',
-      sfidNumber: registeredDuoqianIdentity(accountAddress),
+      cidNumber: registeredDuoqianIdentity(accountAddress),
       orgType: OrgType.duoqian,
       adminAccountOrg: 5,
       duoqianAccount: accountAddress,
@@ -215,7 +215,7 @@ void main() {
     final governance =
         AdminAccountIdentity.fromInstitution(const InstitutionInfo(
       name: '省储行',
-      sfidNumber: 'LN001-GCB05-944805165-2026',
+      cidNumber: 'LN001-GCB05-944805165-2026',
       orgType: OrgType.prb,
       accounts: InstitutionAccounts(mainAccount: '66'),
     ));
@@ -224,7 +224,7 @@ void main() {
     expect(governance.kind, 0);
   });
 
-  test('activation records use v3 account identity without sfidNumber',
+  test('activation records use v3 account identity without cidNumber',
       () async {
     final identity = AdminAccountIdentity.personalDuoqian(
       accountHex: '77' * 32,
@@ -272,7 +272,7 @@ void main() {
 
     final records = await service.getActivatedAdmins(identity);
     expect(records.map((item) => item.pubkeyHex).toList(), ['aa' * 32]);
-    expect(records.single.toJson().containsKey('sfidNumber'), isFalse);
+    expect(records.single.toJson().containsKey('cidNumber'), isFalse);
 
     final all = await service.loadAll();
     expect(all.map((item) => item.pubkeyHex).toSet(), {'aa' * 32, 'cc' * 32});

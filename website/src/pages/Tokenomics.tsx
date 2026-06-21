@@ -119,7 +119,7 @@ export default function Tokenomics() {
             <div className="h-full rounded-full bg-gradient-to-r from-gold-300 to-gold-500" style={{ width: '77.30%' }} />
           </div>
           <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
-            <span className="text-sm text-slate-400">经 SFID 认证的公民，按认证数量获得公民币认证奖励，共 1,443,497,378 个名额。</span>
+            <span className="text-sm text-slate-400">经 CID 认证的公民，按认证数量获得公民币认证奖励，共 1,443,497,378 个名额。</span>
             <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-white">15,719.81 亿</span>
               <span className="whitespace-nowrap rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-400">

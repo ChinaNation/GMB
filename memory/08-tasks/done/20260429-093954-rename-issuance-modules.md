@@ -45,11 +45,11 @@
 
 - 任务卡已创建
 - 已确认本轮执行范围为彻底改名：目录名、crate 名、runtime pallet 名、metadata 名、storage prefix 调用方和文档引用同步更新。
-- 已完成三类发行模块源码目录、Cargo crate、runtime pallet 名、node 调用方、SFID 事件解析、benchmark 脚本、网站展示、模块文档和历史任务索引的新命名收口。
+- 已完成三类发行模块源码目录、Cargo crate、runtime pallet 名、node 调用方、CID 事件解析、benchmark 脚本、网站展示、模块文档和历史任务索引的新命名收口。
 - 已将 runtime `spec_version` 提升到 9；pallet index 与 call index 保持不变。
 - 已执行 `cargo fmt`。
 - 已执行 `cargo test -p citizen-issuance -p fullnode-issuance -p shengbank-interest --lib`，结果通过。
-- 已执行 `cargo test -p citizen-issuance --test integration_bind_sfid`，结果通过。
+- 已执行 `cargo test -p citizen-issuance --test integration_bind_cid`，结果通过。
 - 已执行 `cargo check -p onchain-transaction --lib`，结果通过。
 - 已执行旧发行模块名残留扫描，源码、文档和任务卡路径中未发现旧名残留。
 - 2026-04-29 二次宽松扫描发现 `citizen-issuance` 技术文档标题仍含自然语言旧称残留，已修正为 `CITIZEN Issuance`。

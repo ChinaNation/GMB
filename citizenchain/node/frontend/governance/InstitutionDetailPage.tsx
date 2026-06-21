@@ -15,21 +15,21 @@ import type {
 } from './types';
 
 type Props = {
-  sfidNumber: string;
+  cidNumber: string;
   onBack: () => void;
-  onOpenAdminList?: (sfidNumber: string, orgType: number) => void;
-  onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], sfidNumber: string) => void;
-  onCreateProposal?: (sfidNumber: string, orgType: number, sfidFullName: string, mainAccount: string, adminWallets: AdminWalletMatch[]) => void;
+  onOpenAdminList?: (cidNumber: string, orgType: number) => void;
+  onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], cidNumber: string) => void;
+  onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, mainAccount: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateProtocolUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateSweep?: (sfidNumber: string, sfidFullName: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateAdminSetChange?: (sfidNumber: string, orgType: number, sfidFullName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateSweep?: (cidNumber: string, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateAdminSetChange?: (cidNumber: string, orgType: number, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, onCreateAdminSetChange, hideBackButton }: Props) {
+export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, onCreateAdminSetChange, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -51,10 +51,10 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
 
   useEffect(() => {
     setLoading(true);
-    api.getInstitutionDetail(sfidNumber)
+    api.getInstitutionDetail(cidNumber)
       .then(async (d) => {
         const aa = await adminsChangeApi
-          .getActivatedAdmins(sfidNumber, { sfidNumber, org: d.orgType })
+          .getActivatedAdmins(cidNumber, { cidNumber, org: d.orgType })
           .catch(() => [] as ActivatedAdmin[]);
         setDetail(d);
         setActivatedAdmins(aa);
@@ -62,7 +62,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
           // 双层 ID v1:不再需要 getNextProposalId 找起点 — 反向索引内部按 startId 过滤,
           // 用 Number.MAX_SAFE_INTEGER 作首页起点等价于"从最新一条开始取"。
           const page = await api.getInstitutionProposalPage(
-            sfidNumber,
+            cidNumber,
             Number.MAX_SAFE_INTEGER,
             PROPOSAL_PAGE_SIZE,
           );
@@ -79,7 +79,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [sfidNumber]);
+  }, [cidNumber]);
 
   // 只刷新链上金额和告警，不改现有页面结构。
   useEffect(() => {
@@ -92,11 +92,11 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
         unlisten = await listen<InstitutionBalanceUpdate>(
           'governance-balance-updated',
           (event) => {
-            if (cancelled || event.payload.sfidNumber !== sfidNumber) return;
+            if (cancelled || event.payload.cidNumber !== cidNumber) return;
             setDetail((prev) => (prev ? { ...prev, ...event.payload } : prev));
           },
         );
-        await api.startGovernanceBalanceWatch(sfidNumber);
+        await api.startGovernanceBalanceWatch(cidNumber);
       } catch {
         // 监听不可用时静默降级为详情页初次加载结果。
       }
@@ -105,15 +105,15 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
     return () => {
       cancelled = true;
       unlisten?.();
-      api.stopGovernanceBalanceWatch(sfidNumber).catch(() => undefined);
+      api.stopGovernanceBalanceWatch(cidNumber).catch(() => undefined);
     };
-  }, [sfidNumber]);
+  }, [cidNumber]);
 
   // 加载更多提案
   const loadMoreProposals = useCallback(() => {
     if (loadingMoreProposals || proposalNextStartId == null || !proposalHasMore) return;
     setLoadingMoreProposals(true);
-    api.getInstitutionProposalPage(sfidNumber, proposalNextStartId, PROPOSAL_PAGE_SIZE)
+    api.getInstitutionProposalPage(cidNumber, proposalNextStartId, PROPOSAL_PAGE_SIZE)
       .then((page) => {
         setProposals(prev => [...prev, ...page.items]);
         setProposalHasMore(page.hasMore);
@@ -126,7 +126,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
       })
       .catch(() => setProposalHasMore(false))
       .finally(() => setLoadingMoreProposals(false));
-  }, [sfidNumber, loadingMoreProposals, proposalNextStartId, proposalHasMore]);
+  }, [cidNumber, loadingMoreProposals, proposalNextStartId, proposalHasMore]);
 
   if (loading) {
     return <div className="governance-section"><p>加载中…</p></div>;
@@ -163,7 +163,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
       {/* 机构信息卡片 */}
       <div className="institution-detail-grid">
         <div className="metric-card">
-          <div className="metric-label">机构类型 /身份ID <code className="metric-label-id">{detail.sfidNumber}</code></div>
+          <div className="metric-label">机构类型 /身份ID <code className="metric-label-id">{detail.cidNumber}</code></div>
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
@@ -238,10 +238,10 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
       <div className="institution-info-section">
         <div
           className="metric-card admin-entry-card"
-          onClick={() => detail && onOpenAdminList?.(sfidNumber, detail.orgType)}
+          onClick={() => detail && onOpenAdminList?.(cidNumber, detail.orgType)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && detail && onOpenAdminList?.(sfidNumber, detail.orgType)}
+          onKeyDown={(e) => e.key === 'Enter' && detail && onOpenAdminList?.(cidNumber, detail.orgType)}
         >
           <div className="admin-entry-left">
             <div className="admin-entry-title">管理员列表（{detail.admins.length} 人）</div>
@@ -261,20 +261,20 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
             className="proposal-type-button"
             disabled={!isAdmin}
             onClick={() => isAdmin && onCreateProposal?.(
-              sfidNumber, detail.orgType, detail.name, detail.mainAccount, adminWallets
+              cidNumber, detail.orgType, detail.name, detail.mainAccount, adminWallets
             )}
           >转账</button>
           <button
             className="proposal-type-button"
             disabled={!isAdmin}
-            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(sfidNumber, detail.orgType, detail.name, adminWallets)}
+            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(cidNumber, detail.orgType, detail.name, adminWallets)}
           >换管理员</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button
               className="proposal-type-button"
               disabled={!isAdmin}
-              onClick={() => isAdmin && onCreateSweep?.(sfidNumber, detail.name, adminWallets)}
+              onClick={() => isAdmin && onCreateSweep?.(cidNumber, detail.name, adminWallets)}
             >手续费划转</button>
           )}
           {detail.orgType === 0 && (
@@ -320,7 +320,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
                 key={item.proposalId}
                 className="proposal-card clickable"
                 onClick={() => {
-                  onSelectProposal?.(item.proposalId, adminWallets, sfidNumber);
+                  onSelectProposal?.(item.proposalId, adminWallets, cidNumber);
                 }}
               >
                 <div className="proposal-card-header">

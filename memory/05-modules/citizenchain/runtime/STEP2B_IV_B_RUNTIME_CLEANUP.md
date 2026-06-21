@@ -103,7 +103,7 @@ test result: ok. 10 passed; 0 failed
  内老 Call 测试 13 个随代码一并删除)
 
 $ cargo check --workspace --exclude node
-(citizenchain runtime / institution-asset / sfid-backend / 其他 crate 全绿)
+(citizenchain runtime / institution-asset / citizencode-backend / 其他 crate 全绿)
 
 $ cd ../citizenapp && flutter analyze
 No issues found!  (Dart 端不依赖 Rust 枚举,不受影响)

@@ -1,4 +1,4 @@
-// 公权机构目录 DTO —— 对应 SFID BFF `PublicInstitutionRow` / `PageResult`
+// 公权机构目录 DTO —— 对应 CID BFF `PublicInstitutionRow` / `PageResult`
 // (`GET /api/v1/app/public-institutions`)。数据包 JSON 与接口响应共用本解析。
 
 import 'package:citizenapp/isar/wallet_isar.dart';
@@ -6,25 +6,25 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 /// 公权机构目录行(白名单字段,与后端 PublicInstitutionRow 一一对应)。
 class PublicInstitutionDto {
   const PublicInstitutionDto({
-    required this.sfidNumber,
+    required this.cidNumber,
     required this.status,
     required this.provinceCode,
     required this.cityCode,
     required this.institutionCode,
     required this.accountCount,
-    this.sfidFullName,
-    this.sfidShortName,
+    this.cidFullName,
+    this.cidShortName,
     this.townCode = '',
     this.orgCode,
-    this.parentSfidNumber,
+    this.parentCidNumber,
     this.hasLegalPersonality,
     this.legalRepName,
     this.customAccountNames = const [],
   });
 
-  final String sfidNumber;
-  final String? sfidFullName;
-  final String? sfidShortName;
+  final String cidNumber;
+  final String? cidFullName;
+  final String? cidShortName;
   final String status;
 
   /// 所属省 code(行政区唯一真源键;名字由字典 join,见 ADR-021)。
@@ -37,19 +37,19 @@ class PublicInstitutionDto {
   final String townCode;
   final String institutionCode;
   final String? orgCode;
-  final String? parentSfidNumber;
+  final String? parentCidNumber;
   final bool? hasLegalPersonality;
 
-  /// 法定代表人姓名(公开目录字段,来自 SFID subjects.legal_rep_name);无则 null → 留空。
+  /// 法定代表人姓名(公开目录字段,来自 CID subjects.legal_rep_name);无则 null → 留空。
   final String? legalRepName;
   final int accountCount;
   final List<String> customAccountNames;
 
   static PublicInstitutionDto fromJson(Map<String, dynamic> json) {
     return PublicInstitutionDto(
-      sfidNumber: json['sfid_number'] as String,
-      sfidFullName: json['sfid_full_name'] as String?,
-      sfidShortName: json['sfid_short_name'] as String?,
+      cidNumber: json['cid_number'] as String,
+      cidFullName: json['cid_full_name'] as String?,
+      cidShortName: json['cid_short_name'] as String?,
       status: json['status'] as String? ?? 'ACTIVE',
       // 行政区只吃 code(province_code/city_code/town_code);无名字 fallback
       // (ADR-021 死规则:名字唯一来自字典,不留旧方案)。
@@ -58,7 +58,7 @@ class PublicInstitutionDto {
       townCode: json['town_code'] as String? ?? '',
       institutionCode: json['institution_code'] as String? ?? '',
       orgCode: json['org_code'] as String?,
-      parentSfidNumber: json['parent_sfid_number'] as String?,
+      parentCidNumber: json['parent_cid_number'] as String?,
       hasLegalPersonality: json['has_legal_personality'] as bool?,
       legalRepName: json['legal_rep_name'] as String?,
       accountCount: (json['account_count'] as num?)?.toInt() ?? 0,
@@ -75,16 +75,16 @@ class PublicInstitutionDto {
     required int updatedAtMillis,
   }) {
     return PublicInstitutionEntity()
-      ..sfidNumber = sfidNumber
-      ..sfidFullName = sfidFullName ?? sfidNumber
-      ..sfidShortName = sfidShortName
+      ..cidNumber = cidNumber
+      ..cidFullName = cidFullName ?? cidNumber
+      ..cidShortName = cidShortName
       ..status = status
       ..provinceCode = provinceCode
       ..cityCode = cityCode
       ..townCode = townCode
       ..institutionCode = institutionCode
       ..orgCode = orgCode
-      ..parentSfidNumber = parentSfidNumber
+      ..parentCidNumber = parentCidNumber
       ..hasLegalPersonality = hasLegalPersonality
       ..legalRepName = legalRepName
       ..accountCount = accountCount

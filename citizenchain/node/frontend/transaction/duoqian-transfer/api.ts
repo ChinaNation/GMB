@@ -5,7 +5,7 @@ import type { VoteSignRequestResult, VoteSubmitResult } from './types';
 export const duoqianTransferApi = {
   buildDuoqianTransferRequest: (
     pubkeyHex: string,
-    sfidNumber: string,
+    cidNumber: string,
     orgType: number,
     beneficiaryAddress: string,
     amountYuan: number,
@@ -13,7 +13,7 @@ export const duoqianTransferApi = {
   ) =>
     invoke<VoteSignRequestResult>('build_duoqian_transfer_request', {
       pubkeyHex,
-      sfidNumber,
+      cidNumber,
       orgType,
       beneficiaryAddress,
       amountYuan,
@@ -23,7 +23,7 @@ export const duoqianTransferApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidNumber: string,
+    cidNumber: string,
     orgType: number,
     beneficiaryAddress: string,
     amountYuan: number,
@@ -36,7 +36,7 @@ export const duoqianTransferApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidNumber,
+      cidNumber,
       orgType,
       beneficiaryAddress,
       amountYuan,
@@ -45,17 +45,17 @@ export const duoqianTransferApi = {
       signBlockNumber,
       responseJson,
     }),
-  buildProposeSweepRequest: (pubkeyHex: string, sfidNumber: string, amountYuan: number) =>
+  buildProposeSweepRequest: (pubkeyHex: string, cidNumber: string, amountYuan: number) =>
     invoke<VoteSignRequestResult>('build_duoqian_sweep_request', {
       pubkeyHex,
-      sfidNumber,
+      cidNumber,
       amountYuan,
     }),
   submitProposeSweep: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidNumber: string,
+    cidNumber: string,
     amountYuan: number,
     signNonce: number,
     signBlockNumber: number,
@@ -65,7 +65,7 @@ export const duoqianTransferApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidNumber,
+      cidNumber,
       amountYuan,
       signNonce,
       signBlockNumber,

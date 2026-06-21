@@ -14,7 +14,7 @@ export type {
 } from '../../governance/organization-manage/types';
 
 export type ClearingBankNodeOnChainInfo = {
-  sfidNumber: string;
+  cidNumber: string;
   peerId: string;
   rpcDomain: string;
   rpcPort: number;
@@ -36,7 +36,7 @@ export type ConnectivityTestReport = {
 
 export type DecryptedAdminInfo = {
   pubkeyHex: string;
-  sfidNumber: string;
+  cidNumber: string;
   decryptedAtMs: number;
 };
 
@@ -51,8 +51,8 @@ export type DecryptAdminRequestResult = {
  * offchain/section.tsx 状态机(2026-05-01 重构)。
  *
  *   empty                        初始 — 顶部 +添加清算行 按钮
- *   add-input-sfid               输入 sfid_number 或机构名,debounce 自动搜 SFID 候选
- *   check-multisig               链上查 Institutions[sfid_number]
+ *   add-input-cid               输入 cid_number 或机构名,debounce 自动搜 CID 候选
+ *   check-multisig               链上查 Institutions[cid_number]
  *                                  ├─ 已存在 -> institution-detail
  *                                  └─ 不存在 -> create-multisig-institution
  *   institution-detail           机构详情卡片栅格 + 折叠子页入口 + 节点信息内联
@@ -65,19 +65,19 @@ export type DecryptAdminRequestResult = {
  */
 export type ClearingBankView =
   | { kind: 'empty' }
-  | { kind: 'add-input-sfid' }
-  | { kind: 'check-multisig'; sfidNumber: string; sfidFullName: string }
-  | { kind: 'institution-detail'; sfidNumber: string }
+  | { kind: 'add-input-cid' }
+  | { kind: 'check-multisig'; cidNumber: string; cidFullName: string }
+  | { kind: 'institution-detail'; cidNumber: string }
   | {
       kind: 'admin-set-change';
-      sfidNumber: string;
-      sfidFullName: string;
+      cidNumber: string;
+      cidFullName: string;
       adminAccountHex: string;
       org: number;
       adminWallets: AdminWalletMatch[];
     }
-  | { kind: 'create-multisig-institution'; sfidNumber: string }
-  | { kind: 'wait-vote'; sfidNumber: string; sfidFullName: string }
-  | { kind: 'declare-node'; sfidNumber: string; sfidFullName: string }
-  | { kind: 'other-accounts-list'; sfidNumber: string; otherAccounts: AccountWithBalance[] }
-  | { kind: 'admin-list'; sfidNumber: string; admins: string[]; threshold: number; adminsLen: number };
+  | { kind: 'create-multisig-institution'; cidNumber: string }
+  | { kind: 'wait-vote'; cidNumber: string; cidFullName: string }
+  | { kind: 'declare-node'; cidNumber: string; cidFullName: string }
+  | { kind: 'other-accounts-list'; cidNumber: string; otherAccounts: AccountWithBalance[] }
+  | { kind: 'admin-list'; cidNumber: string; admins: string[]; threshold: number; adminsLen: number };

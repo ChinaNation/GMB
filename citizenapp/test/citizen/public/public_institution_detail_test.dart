@@ -14,7 +14,7 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 
 import 'public_nav_harness.dart';
 
-const _nrcSfid = 'LN001-GCB05-944805165-2026';
+const _nrcCid = 'LN001-GCB05-944805165-2026';
 const _nrcMainHex =
     '39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d';
 
@@ -43,8 +43,8 @@ class _FakeChainData implements PublicInstitutionChainData {
 
 PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
       <String, dynamic>{
-        'sfid_number': _nrcSfid,
-        'sfid_full_name': '国家公民储备委员会',
+        'cid_number': _nrcCid,
+        'cid_full_name': '国家公民储备委员会',
         'province_code': 'LN',
         'city_code': '001',
         'institution_code': 'ZF',
@@ -64,7 +64,7 @@ void main() {
       // 自定义地址 = 卡0 派生
       expect(
         rows.last.addressHex,
-        hexFromAccountId(deriveInstitutionCustomAccountId(_nrcSfid, '业务专户')),
+        hexFromAccountId(deriveInstitutionCustomAccountId(_nrcCid, '业务专户')),
       );
     });
   });
@@ -81,8 +81,8 @@ void main() {
       institutions: [
         // 复用 harness seedDto 不便带 custom,这里直接用 entity 的 dto。
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': _nrcSfid,
-          'sfid_full_name': '国家公民储备委员会',
+          'cid_number': _nrcCid,
+          'cid_full_name': '国家公民储备委员会',
           'province_code': 'GD',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -98,7 +98,7 @@ void main() {
       proposalList: const [PublicProposalSummary(idLabel: '提案 #7', status: 1)],
     );
     await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
-      sfidNumber: _nrcSfid,
+      cidNumber: _nrcCid,
       repository: repo,
       chainData: chain,
       walletPubkeyProvider: () async => 'aa',
@@ -106,7 +106,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('国家公民储备委员会'), findsWidgets);
-    expect(find.text(_nrcSfid), findsOneWidget);
+    expect(find.text(_nrcCid), findsOneWidget);
     // ① 机构信息:主账户 + 主账户余额 + 法定代表人 + 所属地(图标 tile + 分隔线)。
     expect(find.text('主账户'), findsOneWidget);
     expect(find.text('主账户余额'), findsOneWidget);
@@ -134,8 +134,8 @@ void main() {
       provinceOrder: const ['LN'],
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': _nrcSfid,
-          'sfid_full_name': '国家公民储备委员会',
+          'cid_number': _nrcCid,
+          'cid_full_name': '国家公民储备委员会',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -145,7 +145,7 @@ void main() {
       cityNames: const {'LN|001': '中央'},
     );
     await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
-      sfidNumber: _nrcSfid,
+      cidNumber: _nrcCid,
       repository: repo,
       chainData: _FakeChainData(adminList: const ['0xadminpubkey001']),
       walletPubkeyProvider: () async => 'aa',
@@ -164,8 +164,8 @@ void main() {
       provinceOrder: const ['LN'],
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'sfid_number': _nrcSfid,
-          'sfid_full_name': '国家公民储备委员会',
+          'cid_number': _nrcCid,
+          'cid_full_name': '国家公民储备委员会',
           'province_code': 'LN',
           'city_code': '001',
           'institution_code': 'ZF',
@@ -175,20 +175,20 @@ void main() {
       cityNames: const {'LN|001': '中央'},
     );
     await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
-      sfidNumber: _nrcSfid,
+      cidNumber: _nrcCid,
       repository: repo,
       chainData: _FakeChainData(),
       walletPubkeyProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 
-    expect(await repo.isSubscribed('aa', _nrcSfid), isFalse);
+    expect(await repo.isSubscribed('aa', _nrcCid), isFalse);
     await tester.tap(find.byIcon(Icons.bookmark_border));
     await tester.pumpAndSettle();
-    expect(await repo.isSubscribed('aa', _nrcSfid), isTrue);
+    expect(await repo.isSubscribed('aa', _nrcCid), isTrue);
 
     await tester.tap(find.byIcon(Icons.bookmark));
     await tester.pumpAndSettle();
-    expect(await repo.isSubscribed('aa', _nrcSfid), isFalse);
+    expect(await repo.isSubscribed('aa', _nrcCid), isFalse);
   });
 }

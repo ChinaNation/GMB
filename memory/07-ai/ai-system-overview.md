@@ -24,7 +24,7 @@ GMB 的 AI 编程系统优先解决以下问题：
 
 - 你在 Codex 或 Claude 聊天窗口直接输入中文任务需求
 - AI 先做需求分析
-- 当前主聊天入口根据模块边界按需分配给 `Blockchain Agent / SFID Agent / CPMS Agent / Mobile Agent`
+- 当前主聊天入口根据模块边界按需分配给 `Blockchain Agent / CID Agent / CPMS Agent / Mobile Agent`
 - 分析完成后再进入任务创建和开发
 
 ## 3. 系统结构
@@ -36,7 +36,7 @@ Codex / Claude（聊天入口）
         ↓
 当前主聊天入口（需求分析 + 总调度）
         ↓
-Architect / Blockchain / SFID / CPMS / Mobile 工作线程
+Architect / Blockchain / CID / CPMS / Mobile 工作线程
         ↓
 memory/（项目目标、边界、ADR、规则、任务模板）
         ↓
@@ -61,7 +61,7 @@ GitHub PR / Actions
 
 - `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
-- `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
+- `cid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - `cpms`：Rust + Axum + SQLx + PostgreSQL；`frontend/` 当前仅为预留目录
 - `citizenapp`：Flutter + Dart + Isar
 

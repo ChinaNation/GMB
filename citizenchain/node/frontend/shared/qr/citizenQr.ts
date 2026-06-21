@@ -33,13 +33,13 @@ export function isFixedKind(kind: QrKind): boolean {
 // ------- body types -------
 
 export interface LoginChallengeBody {
-  system: 'sfid' | 'cpms';
+  system: 'cid' | 'cpms';
   sys_pubkey: string;
   sys_sig: string;
 }
 
 export interface LoginReceiptBody {
-  system: 'sfid' | 'cpms';
+  system: 'cid' | 'cpms';
   pubkey: string;
   sig_alg: 'sr25519';
   signature: string;
@@ -143,7 +143,7 @@ function require0xHex(obj: Record<string, unknown>, key: string): string {
 
 function parseLoginChallengeBody(b: Record<string, unknown>): LoginChallengeBody {
   const system = requireString(b, 'system');
-  if (system !== 'sfid' && system !== 'cpms') {
+  if (system !== 'cid' && system !== 'cpms') {
     throw new QrParseError(`login_challenge.system 非法: ${system}`);
   }
   return {
@@ -155,7 +155,7 @@ function parseLoginChallengeBody(b: Record<string, unknown>): LoginChallengeBody
 
 function parseLoginReceiptBody(b: Record<string, unknown>): LoginReceiptBody {
   const system = requireString(b, 'system');
-  if (system !== 'sfid' && system !== 'cpms') {
+  if (system !== 'cid' && system !== 'cpms') {
     throw new QrParseError(`login_receipt.system 非法: ${system}`);
   }
   const sigAlg = requireString(b, 'sig_alg');

@@ -12,10 +12,10 @@
 
 ## 影响范围
 
-- `cpms/frontend/dangan/ArchiveList.tsx`：删除字段选择器，统一输入框、表格居中。
-- `cpms/frontend/dangan/api.ts`：列表参数改为 `search`。
-- `cpms/backend/src/dangan/routes.rs`：列表接口用 `search` 精确匹配档案号、护照号或姓名。
-- `cpms/CPMS_TECHNICAL.md` 与 dangan 模块文档：同步检索规则。
+- `citizenpassport/frontend/dangan/ArchiveList.tsx`：删除字段选择器，统一输入框、表格居中。
+- `citizenpassport/frontend/dangan/api.ts`：列表参数改为 `search`。
+- `citizenpassport/backend/dangan/routes.rs`：列表接口用 `search` 精确匹配档案号、护照号或姓名。
+- `citizenpassport/CITIZENPASSPORT_TECHNICAL.md` 与 dangan 模块文档：同步检索规则。
 
 ## 主要风险点
 

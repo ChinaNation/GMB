@@ -65,8 +65,8 @@ fn encode_u128_le(v: u128) -> [u8; 16] {
 /// 严格一致。任一字段顺序变更必须同步改本函数和冷钱包 decoder。
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_call_data(
-    sfid_number: &str,
-    sfid_full_name: &str,
+    cid_number: &str,
+    cid_full_name: &str,
     accounts: &[InitialAccountInput],
     org: u8,
     admins_len: u32,
@@ -74,17 +74,17 @@ pub fn build_propose_create_institution_call_data(
     threshold: u32,
     register_nonce: &str,
     signature_hex: &str,
-    issuer_sfid_number: &str,
+    issuer_cid_number: &str,
     issuer_main_account: &str,
     signer_pubkey: &str,
     scope_province_name: &str,
     scope_city_name: &str,
 ) -> Result<Vec<u8>, String> {
-    if sfid_number.is_empty() || sfid_number.len() > 96 {
-        return Err("sfid_number 长度需在 1..=96".to_string());
+    if cid_number.is_empty() || cid_number.len() > 96 {
+        return Err("cid_number 长度需在 1..=96".to_string());
     }
-    if sfid_full_name.is_empty() || sfid_full_name.len() > 128 {
-        return Err("sfid_full_name 长度需在 1..=128".to_string());
+    if cid_full_name.is_empty() || cid_full_name.len() > 128 {
+        return Err("cid_full_name 长度需在 1..=128".to_string());
     }
     if accounts.is_empty() {
         return Err("accounts 至少 1 项(主账户)".to_string());
@@ -115,8 +115,8 @@ pub fn build_propose_create_institution_call_data(
             signature_bytes.len()
         ));
     }
-    if issuer_sfid_number.is_empty() {
-        return Err("issuer_sfid_number 不可为空".to_string());
+    if issuer_cid_number.is_empty() {
+        return Err("issuer_cid_number 不可为空".to_string());
     }
     if scope_province_name.is_empty() {
         return Err("scope_province_name 不可为空".to_string());
@@ -128,10 +128,10 @@ pub fn build_propose_create_institution_call_data(
     call.push(DUOQIAN_PALLET_INDEX);
     call.push(CALL_PROPOSE_CREATE_INSTITUTION);
 
-    // 1. sfid_number: BoundedVec<u8>
-    call.extend_from_slice(&encode_bytes_with_len(sfid_number.as_bytes()));
-    // 2. sfid_full_name: BoundedVec<u8>
-    call.extend_from_slice(&encode_bytes_with_len(sfid_full_name.as_bytes()));
+    // 1. cid_number: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
+    // 2. cid_full_name: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(cid_full_name.as_bytes()));
     // 3. accounts: BoundedVec<InstitutionInitialAccount> = Compact(N) + N × (account_name + amount)
     call.extend_from_slice(&encode_compact_u32_pub(accounts.len() as u32));
     for acc in accounts {
@@ -160,8 +160,8 @@ pub fn build_propose_create_institution_call_data(
     call.extend_from_slice(&encode_bytes_with_len(register_nonce.as_bytes()));
     // 9. signature: BoundedVec<u8>(64 字节)
     call.extend_from_slice(&encode_bytes_with_len(&signature_bytes));
-    // 10. issuer_sfid_number: Vec<u8>
-    call.extend_from_slice(&encode_bytes_with_len(issuer_sfid_number.as_bytes()));
+    // 10. issuer_cid_number: Vec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(issuer_cid_number.as_bytes()));
     // 11. issuer_main_account: AccountId32
     call.extend_from_slice(&issuer_main_account_bytes);
     // 12. signer_pubkey: [u8; 32](固定 32 字节,无长度前缀)
@@ -178,8 +178,8 @@ pub fn build_propose_create_institution_call_data(
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_sign_request(
     pubkey_hex: &str,
-    sfid_number: &str,
-    sfid_full_name: &str,
+    cid_number: &str,
+    cid_full_name: &str,
     accounts: &[InitialAccountInput],
     org: u8,
     admins_len: u32,
@@ -187,7 +187,7 @@ pub fn build_propose_create_institution_sign_request(
     threshold: u32,
     register_nonce: &str,
     signature_hex: &str,
-    issuer_sfid_number: &str,
+    issuer_cid_number: &str,
     issuer_main_account: &str,
     signer_pubkey: &str,
     scope_province_name: &str,
@@ -195,8 +195,8 @@ pub fn build_propose_create_institution_sign_request(
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_propose_create_institution_call_data(
-        sfid_number,
-        sfid_full_name,
+        cid_number,
+        cid_full_name,
         accounts,
         org,
         admins_len,
@@ -204,17 +204,17 @@ pub fn build_propose_create_institution_sign_request(
         threshold,
         register_nonce,
         signature_hex,
-        issuer_sfid_number,
+        issuer_cid_number,
         issuer_main_account,
         signer_pubkey,
         scope_province_name,
         scope_city_name,
     )?;
     let total_amount_fen: u128 = accounts.iter().map(|a| a.amount_fen).sum();
-    let summary = format!("创建清算行机构多签 {sfid_full_name}({sfid_number})");
+    let summary = format!("创建清算行机构多签 {cid_full_name}({cid_number})");
     let mut fields = vec![
-        serde_json::json!({ "key": "sfid_number", "label": "机构身份号码", "value": sfid_number }),
-        serde_json::json!({ "key": "sfid_full_name", "label": "机构名称", "value": sfid_full_name }),
+        serde_json::json!({ "key": "cid_number", "label": "机构身份号码", "value": cid_number }),
+        serde_json::json!({ "key": "cid_full_name", "label": "机构名称", "value": cid_full_name }),
         serde_json::json!({ "key": "org", "label": "管理员组织类型", "value": qr_org_display_value(org) }),
         serde_json::json!({ "key": "admins_len", "label": "管理员数量", "value": admins_len.to_string() }),
         serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admins_len}") }),
@@ -240,9 +240,9 @@ pub fn build_propose_create_institution_sign_request(
     let issuer_main_account_bytes = parse_account32(issuer_main_account)?;
     let issuer_main_account_display = pubkey_to_ss58(&issuer_main_account_bytes)?;
     fields.push(serde_json::json!({
-        "key": "issuer_sfid_number",
-        "label": "签发机构 SFID",
-        "value": issuer_sfid_number,
+        "key": "issuer_cid_number",
+        "label": "签发机构 CID",
+        "value": issuer_cid_number,
     }));
     fields.push(serde_json::json!({
         "key": "issuer_main_account",

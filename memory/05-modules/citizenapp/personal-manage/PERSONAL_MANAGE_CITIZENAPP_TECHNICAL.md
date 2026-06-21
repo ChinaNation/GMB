@@ -4,7 +4,7 @@
 
 `citizenapp/lib/governance/personal-manage/` 是 citizenapp 端个人多签主业务目录，对齐 runtime `citizenchain/runtime/governance/personal-manage/`。
 
-本目录只处理个人多签，不承载机构多签、机构 SFID 账户、多签转账业务。
+本目录只处理个人多签，不承载机构多签、机构 CID 账户、多签转账业务。
 
 ## 2. 当前边界
 
@@ -25,7 +25,7 @@
 
 ### 不负责
 
-- 机构多签创建、关闭、SFID 机构账户查询：继续由 `citizenapp/lib/governance/organization-manage/` 机构路径处理。
+- 机构多签创建、关闭、CID 机构账户查询：继续由 `citizenapp/lib/governance/organization-manage/` 机构路径处理。
 - 多签转账：唯一实现目录仍是 `citizenapp/lib/transaction/duoqian-transfer/`。
 - Isar schema 定义：仍在 `citizenapp/lib/isar/`，本模块只使用既有实体。
 - Isar 读写队列：由 `citizenapp/lib/isar/wallet_isar.dart` 统一提供，本模块不得直接打开 DB 实例。

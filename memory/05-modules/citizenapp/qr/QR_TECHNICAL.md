@@ -17,7 +17,7 @@
 - 一个 `QrRouter` 统一路由，各子模块各自负责解析与校验
 - 登录模块原位于 `lib/login/`，因其唯一用途为扫码登录，已整体迁入 `lib/qr/login/`
 - 签名算法由 `lib/signer/` 提供，本模块不直接实现签名细节
-- SFID 公民绑定使用 `sign_request / sign_response` 通用签名协议;
+- CID 公民绑定使用 `sign_request / sign_response` 通用签名协议;
   `sign_response.id` 必须原样回传 `sign_request.id`,不得在 App 侧改写。
 - CPMS 阶段只使用 `user_contact` 钱包地址码，不使用签名请求。
 
@@ -35,7 +35,7 @@ body.address = 钱包 SS58 地址
 body.name = 电子护照钱包
 ```
 
-钱包签名验证属于 SFID 绑定阶段：SFID 读取 CPMS 出具的 ARCHIVE 后，再生成 SFID 绑定
+钱包签名验证属于 CID 绑定阶段：CID 读取 CPMS 出具的 ARCHIVE 后，再生成 CID 绑定
 `sign_request`，citizenapp 签名并返回 `sign_response`。
 
 ## 2. 目录结构
@@ -96,9 +96,9 @@ lib/qr/
 
 ### 5.1 系统架构
 
-- SFID：运行在一台云服务器上的在线系统
+- CID：运行在一台云服务器上的在线系统
 - CPMS：运行在千千万万台电脑上的离线系统
-- 登录协议只用于 `sfid/cpms` 扫码登录，不用于链上转账、投票或治理签名
+- 登录协议只用于 `citizencode/citizenpassport` 扫码登录，不用于链上转账、投票或治理签名
 - 登录为双层签名：
   - 第一层：系统使用自身私钥对登录二维码签名，手机验 `sys_pubkey + sys_sig`
   - 第二层：管理员钱包对 challenge 签名，系统再用内置管理员公钥名单验签
@@ -108,7 +108,7 @@ lib/qr/
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `proto` | string | 是 | 固定 `CITIZEN_QR_V1` |
-| `system` | string | 是 | `sfid` 或 `cpms` |
+| `system` | string | 是 | `cid` 或 `cpms` |
 | `challenge` | string | 是 | 随机挑战值 |
 | `issued_at` | int | 是 | 签发时间（秒级 epoch） |
 | `expires_at` | int | 是 | 过期时间（秒级 epoch） |
@@ -125,11 +125,11 @@ proto|system|challenge|issued_at|expires_at|sys_pubkey
 
 验证逻辑：
 
-- SFID 场景：
+- CID 场景：
   - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
 - CPMS 场景：
   - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
-  - 不再要求链上或 SFID 证书链参与手机端登录验签
+  - 不再要求链上或 CID 证书链参与手机端登录验签
 
 ### 5.4 挑战校验规则
 
@@ -152,7 +152,7 @@ CITIZEN_QR_V1|system|challenge|expires_at
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `proto` | string | 固定 `CITIZEN_QR_V1` |
-| `system` | string | 回执来源系统（`sfid` 或 `cpms`） |
+| `system` | string | 回执来源系统（`cid` 或 `cpms`） |
 | `challenge` | string | 与挑战码对应 |
 | `pubkey` | string | 用户公钥（`0x` + hex） |
 | `sig_alg` | string | 固定 `sr25519` |
@@ -365,7 +365,7 @@ CITIZEN_QR_V1|system|challenge|expires_at
 - `id` 必须与当前会话的 `sign_request.id` 一致
 - `pubkey` 必须与页面发起签名时选中的钱包公钥一致
 - 任一校验失败都必须拒绝回执，不能把错误钱包的签名继续交给业务模块
-- SFID 公民绑定场景下,该 id 是后端原始 challenge UUID;前端和 App 都不得加业务前缀。
+- CID 公民绑定场景下,该 id 是后端原始 challenge UUID;前端和 App 都不得加业务前缀。
 
 ### 12.4 UI 元素
 

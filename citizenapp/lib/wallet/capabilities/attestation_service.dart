@@ -100,18 +100,18 @@ class AttestationService {
     });
   }
 
-  Future<SfidBindDraft> buildSfidBindDraft({
+  Future<CidBindDraft> buildCidBindDraft({
     required WalletProfile wallet,
-    required String sfidNumber,
+    required String cidNumber,
   }) async {
     final state = await getState();
     if (!state.isValid || state.token == null) {
-      throw Exception('未拿到官方证明，不能绑定 SFID');
+      throw Exception('未拿到官方证明，不能绑定 CID');
     }
     final challenge = _issueChallenge();
     final signature = _signChallengeLocally(challenge, wallet);
-    return SfidBindDraft(
-      sfidNumber: sfidNumber,
+    return CidBindDraft(
+      cidNumber: cidNumber,
       attestationToken: state.token!,
       challenge: challenge,
       challengeSignature: signature,
@@ -193,15 +193,15 @@ class AttestationService {
   }
 }
 
-class SfidBindDraft {
-  const SfidBindDraft({
-    required this.sfidNumber,
+class CidBindDraft {
+  const CidBindDraft({
+    required this.cidNumber,
     required this.attestationToken,
     required this.challenge,
     required this.challengeSignature,
   });
 
-  final String sfidNumber;
+  final String cidNumber;
   final String attestationToken;
   final String challenge;
   final String challengeSignature;

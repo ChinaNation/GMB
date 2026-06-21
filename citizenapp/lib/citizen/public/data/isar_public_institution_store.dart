@@ -40,7 +40,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }) async {
     if (items.isEmpty) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    // 中文注释:走唯一索引批量 upsert(putAllBySfidNumber),无需逐条 findFirst;
+    // 中文注释:走唯一索引批量 upsert(putAllByCidNumber),无需逐条 findFirst;
     // 分块成多个小事务,首次灌大包不卡 UI、不撑内存。
     for (var start = 0; start < items.length; start += _upsertChunk) {
       final end = (start + _upsertChunk).clamp(0, items.length);
@@ -52,7 +52,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
               ))
           .toList(growable: false);
       await _write((isar) async {
-        await isar.publicInstitutionEntitys.putAllBySfidNumber(entities);
+        await isar.publicInstitutionEntitys.putAllByCidNumber(entities);
       });
     }
   }
@@ -124,11 +124,11 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<PublicInstitutionEntity?> getBySfid(String sfidNumber) async {
+  Future<PublicInstitutionEntity?> getByCid(String cidNumber) async {
     final isar = await _db();
     return isar.publicInstitutionEntitys
         .filter()
-        .sfidNumberEqualTo(sfidNumber)
+        .cidNumberEqualTo(cidNumber)
         .findFirst();
   }
 
@@ -144,19 +144,19 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<List<String>> sfidsOfProvince(String provinceCode) async {
+  Future<List<String>> cidsOfProvince(String provinceCode) async {
     final rows = await institutionsOfProvince(provinceCode);
-    return rows.map((e) => e.sfidNumber).toList(growable: false);
+    return rows.map((e) => e.cidNumber).toList(growable: false);
   }
 
   @override
-  Future<void> deleteBySfids(List<String> sfids) async {
-    if (sfids.isEmpty) return;
-    for (var start = 0; start < sfids.length; start += _upsertChunk) {
-      final end = (start + _upsertChunk).clamp(0, sfids.length);
-      final chunk = sfids.sublist(start, end);
+  Future<void> deleteByCids(List<String> cids) async {
+    if (cids.isEmpty) return;
+    for (var start = 0; start < cids.length; start += _upsertChunk) {
+      final end = (start + _upsertChunk).clamp(0, cids.length);
+      final chunk = cids.sublist(start, end);
       await _write((isar) async {
-        await isar.publicInstitutionEntitys.deleteAllBySfidNumber(chunk);
+        await isar.publicInstitutionEntitys.deleteAllByCidNumber(chunk);
       });
     }
   }
@@ -191,8 +191,8 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<void> subscribe(String walletPubkeyHex, String sfidNumber) async {
-    final key = subscriptionKeyOf(walletPubkeyHex, sfidNumber);
+  Future<void> subscribe(String walletPubkeyHex, String cidNumber) async {
+    final key = subscriptionKeyOf(walletPubkeyHex, cidNumber);
     await _write((isar) async {
       final existing = await isar.publicInstitutionSubscriptionEntitys
           .filter()
@@ -202,15 +202,15 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
       final entity = PublicInstitutionSubscriptionEntity()
         ..subscriptionKey = key
         ..walletPubkeyHex = walletPubkeyHex
-        ..sfidNumber = sfidNumber
+        ..cidNumber = cidNumber
         ..subscribedAtMillis = DateTime.now().millisecondsSinceEpoch;
       await isar.publicInstitutionSubscriptionEntitys.put(entity);
     });
   }
 
   @override
-  Future<void> unsubscribe(String walletPubkeyHex, String sfidNumber) async {
-    final key = subscriptionKeyOf(walletPubkeyHex, sfidNumber);
+  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) async {
+    final key = subscriptionKeyOf(walletPubkeyHex, cidNumber);
     await _write((isar) async {
       final existing = await isar.publicInstitutionSubscriptionEntitys
           .filter()
@@ -223,11 +223,11 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<bool> isSubscribed(String walletPubkeyHex, String sfidNumber) async {
+  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) async {
     final isar = await _db();
     final hit = await isar.publicInstitutionSubscriptionEntitys
         .filter()
-        .subscriptionKeyEqualTo(subscriptionKeyOf(walletPubkeyHex, sfidNumber))
+        .subscriptionKeyEqualTo(subscriptionKeyOf(walletPubkeyHex, cidNumber))
         .findFirst();
     return hit != null;
   }
@@ -245,7 +245,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
     for (final sub in subs) {
       final inst = await isar.publicInstitutionEntitys
           .filter()
-          .sfidNumberEqualTo(sub.sfidNumber)
+          .cidNumberEqualTo(sub.cidNumber)
           .findFirst();
       if (inst != null) out.add(inst);
     }

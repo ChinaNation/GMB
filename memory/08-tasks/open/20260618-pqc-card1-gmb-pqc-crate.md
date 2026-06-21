@@ -4,7 +4,7 @@
 状态:open(**先行 spike,card2/card3 依赖本卡;spike 绿了才动**)
 
 任务需求:
-建立全系统单一抗量子原语基座 `gmb-pqc`(runtime no_std WASM + sfid/cpms/node 后端 + 钱包 FFI 共用):
+建立全系统单一抗量子原语基座 `gmb-pqc`(runtime no_std WASM + citizencode/citizenpassport/node 后端 + 钱包 FFI 共用):
 1. **HKDF-SHA512 账户派生单一源(精确口径,钉 golden vector)**:`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`(ASCII 无 null、**含长度域**):**仅** `GMB/account/ml-dsa-65/seed32/v1` → `HKDF-Expand L=32` → 32B ξ → FIPS204 `KeyGen_internal(ξ)`。🔴 **账户不派生 ML-KEM**(决策3:机密性 KEM 在 IM/TLS 层,不进账户体系)。🔴 **sr25519 锚点不在此表**(现有 `fromSeed(AccountSeedV1)` 直接派生,绝不套 HKDF)。
 2. 🔴 **(B8)锁库**:强制选用暴露 `KeyGen_internal(ξ)` seed-API 的 fips204 锁定版本,**删一切 DRBG fallback**(不暴露 ξ-API 则换库);库名+版本+API 名钉进本卡产出。
 3. **algo 常量**:`0x01` sr25519 / `0x02` ML-DSA-65 / `0x03` ML-DSA-87(预留)。

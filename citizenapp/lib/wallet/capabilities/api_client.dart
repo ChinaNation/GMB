@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:citizenapp/sfid_api_config.dart';
+import 'package:citizenapp/cid_api_config.dart';
 
 class HealthStatus {
   const HealthStatus({
@@ -21,13 +21,13 @@ class AdminCatalogEntryResponse {
   const AdminCatalogEntryResponse({
     required this.pubkeyHex,
     required this.adminGroupName,
-    required this.sfidFullName,
+    required this.cidFullName,
     required this.org,
   });
 
   final String pubkeyHex;
   final String adminGroupName;
-  final String sfidFullName;
+  final String cidFullName;
   final String org;
 }
 
@@ -47,9 +47,9 @@ class AdminCatalogResponse {
   final List<AdminCatalogEntryResponse> entries;
 }
 
-/// SFID 人口快照响应。
+/// CID 人口快照响应。
 ///
-/// SFID 人口快照凭证统一使用签发机构模型。
+/// CID 人口快照凭证统一使用签发机构模型。
 ///
 /// 链端按 issuer_main_account 读取 admins-change 的 admins 真源,确认
 /// signer_pubkey 属于该签发机构管理员后再验签。
@@ -60,7 +60,7 @@ class PopulationSnapshotResponse {
     required this.snapshotNonce,
     required this.signature,
     required this.who,
-    required this.issuerSfidNumber,
+    required this.issuerCidNumber,
     required this.issuerMainAccount,
     required this.signerPubkey,
     required this.scopeProvinceName,
@@ -79,22 +79,22 @@ class PopulationSnapshotResponse {
   /// 归一化后的账户公钥 hex。
   final String who;
 
-  final String issuerSfidNumber;
+  final String issuerCidNumber;
   final String issuerMainAccount;
   final String signerPubkey;
   final String scopeProvinceName;
   final String scopeCityName;
 }
 
-/// SFID 机构注册凭证。
+/// CID 机构注册凭证。
 ///
-/// 中文注释:这些字段只用于链端验签和防重放,不得混入 subject_property/sub_type/parent_sfid_number
+/// 中文注释:这些字段只用于链端验签和防重放,不得混入 subject_property/sub_type/parent_cid_number
 /// 等业务分类字段。
 class InstitutionRegistrationCredential {
   const InstitutionRegistrationCredential({
     required this.genesisHash,
     required this.registerNonce,
-    required this.issuerSfidNumber,
+    required this.issuerCidNumber,
     required this.issuerMainAccount,
     required this.signerPubkey,
     required this.scopeProvinceName,
@@ -104,7 +104,7 @@ class InstitutionRegistrationCredential {
 
   final String genesisHash;
   final String registerNonce;
-  final String issuerSfidNumber;
+  final String issuerCidNumber;
   final String issuerMainAccount;
   final String signerPubkey;
   final String scopeProvinceName;
@@ -112,23 +112,23 @@ class InstitutionRegistrationCredential {
   final String signature;
 }
 
-/// SFID 机构链端注册信息。
+/// CID 机构链端注册信息。
 class InstitutionRegistrationInfoResponse {
   const InstitutionRegistrationInfoResponse({
-    required this.sfidNumber,
-    required this.sfidFullName,
+    required this.cidNumber,
+    required this.cidFullName,
     required this.accountNames,
     required this.credential,
   });
 
-  final String sfidNumber;
-  final String sfidFullName;
+  final String cidNumber;
+  final String cidFullName;
   final List<String> accountNames;
   final InstitutionRegistrationCredential credential;
 }
 
 class ApiClient {
-  ApiClient() : _baseUrl = SfidApiConfig.defaultBaseUrl;
+  ApiClient() : _baseUrl = CidApiConfig.defaultBaseUrl;
 
   final String _baseUrl;
 
@@ -199,15 +199,15 @@ class ApiClient {
       final m = item.map((k, v) => MapEntry(k.toString(), v));
       final pubkey = (m['pubkey_hex']?.toString() ?? '').trim().toLowerCase();
       final adminGroup = (m['admin_group_name']?.toString() ?? '').trim();
-      final sfidFullName = (m['sfid_full_name']?.toString() ?? '').trim();
-      if (pubkey.isEmpty || adminGroup.isEmpty || sfidFullName.isEmpty) {
+      final cidFullName = (m['cid_full_name']?.toString() ?? '').trim();
+      if (pubkey.isEmpty || adminGroup.isEmpty || cidFullName.isEmpty) {
         continue;
       }
       entries.add(
         AdminCatalogEntryResponse(
           pubkeyHex: pubkey.startsWith('0x') ? pubkey.substring(2) : pubkey,
           adminGroupName: adminGroup,
-          sfidFullName: sfidFullName,
+          cidFullName: cidFullName,
           org: (m['org']?.toString() ?? 'unknown').trim().toLowerCase(),
         ),
       );
@@ -238,7 +238,7 @@ class ApiClient {
       );
     } on SocketException catch (_) {
       if (Platform.isAndroid || Platform.isIOS) {
-        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
+        throw Exception(CidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
@@ -260,16 +260,16 @@ class ApiClient {
       throw Exception('population snapshot invalid response: missing data');
     }
 
-    final issuerSfidNumber =
-        (data['issuer_sfid_number']?.toString() ?? '').trim();
+    final issuerCidNumber =
+        (data['issuer_cid_number']?.toString() ?? '').trim();
     final issuerMainAccountRaw =
         (data['issuer_main_account']?.toString() ?? '').trim();
     final signerPubkeyRaw = (data['signer_pubkey']?.toString() ?? '').trim();
     final scopeProvinceName =
         (data['scope_province_name']?.toString() ?? '').trim();
     final scopeCityName = (data['scope_city_name']?.toString() ?? '').trim();
-    if (issuerSfidNumber.isEmpty) {
-      throw Exception('population snapshot 缺少 issuer_sfid_number 字段');
+    if (issuerCidNumber.isEmpty) {
+      throw Exception('population snapshot 缺少 issuer_cid_number 字段');
     }
     if (issuerMainAccountRaw.isEmpty) {
       throw Exception('population snapshot 缺少 issuer_main_account 字段');
@@ -287,7 +287,7 @@ class ApiClient {
       genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
       signature: (data['signature']?.toString() ?? '').trim(),
       who: (data['who']?.toString() ?? '').trim(),
-      issuerSfidNumber: issuerSfidNumber,
+      issuerCidNumber: issuerCidNumber,
       issuerMainAccount:
           _normalizePubkeyHex(issuerMainAccountRaw).toLowerCase(),
       signerPubkey: _normalizePubkeyHex(signerPubkeyRaw).toLowerCase(),
@@ -298,13 +298,13 @@ class ApiClient {
 
   /// 查询机构下所有多签账户。
   ///
-  /// 调用 SFID 后端 `GET /api/v1/app/institutions/:sfid_number/accounts`，
+  /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/accounts`，
   /// 返回机构名称 + 账户列表（account_name / duoqian_account / chain_status）。
   Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
-      String sfidNumber) async {
-    final trimmed = sfidNumber.trim();
+      String cidNumber) async {
+    final trimmed = cidNumber.trim();
     if (trimmed.isEmpty) {
-      throw Exception('SFID ID 不能为空');
+      throw Exception('CID ID 不能为空');
     }
     final uri = Uri.parse(
         '$_baseUrl/api/v1/app/institutions/${Uri.encodeComponent(trimmed)}/accounts');
@@ -317,12 +317,12 @@ class ApiClient {
       throw Exception('查询超时，请检查网络连接');
     } on SocketException catch (_) {
       if (Platform.isAndroid || Platform.isIOS) {
-        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
+        throw Exception(CidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
     if (response.statusCode == 404) {
-      throw Exception('未找到该 SFID 机构');
+      throw Exception('未找到该 CID 机构');
     }
     if (response.statusCode != 200) {
       throw Exception('查询机构账户失败: ${response.statusCode}');
@@ -349,7 +349,7 @@ class ApiClient {
         accounts.add(InstitutionAccountEntry(
           accountName: (m['account_name']?.toString() ?? '').trim(),
           duoqianAccount: m['duoqian_account']?.toString(),
-          // 中文注释:SFID 后端公开接口返回 SCREAMING_SNAKE_CASE；
+          // 中文注释:CID 后端公开接口返回 SCREAMING_SNAKE_CASE；
           // 这里兼容旧口径 Pending/Confirmed/Failed，统一折叠成同一套状态。
           chainStatus: InstitutionAccountEntry.normalizeChainStatus(
             m['chain_status']?.toString(),
@@ -359,21 +359,21 @@ class ApiClient {
     }
 
     return InstitutionAccountsResponse(
-      sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
-      sfidFullName: (data['sfid_full_name']?.toString() ?? '').trim(),
+      cidNumber: (data['cid_number']?.toString() ?? trimmed).trim(),
+      cidFullName: (data['cid_full_name']?.toString() ?? '').trim(),
       accounts: accounts,
     );
   }
 
   /// 查询机构链端注册信息。
   ///
-  /// 调用 SFID 后端 `GET /api/v1/app/institutions/:sfid_number/registration-info`。
+  /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/registration-info`。
   /// 该接口是 `OrganizationManage.propose_create_institution` 的唯一凭证来源。
   Future<InstitutionRegistrationInfoResponse> fetchInstitutionRegistrationInfo(
-      String sfidNumber) async {
-    final trimmed = sfidNumber.trim();
+      String cidNumber) async {
+    final trimmed = cidNumber.trim();
     if (trimmed.isEmpty) {
-      throw Exception('SFID ID 不能为空');
+      throw Exception('CID ID 不能为空');
     }
     final uri = Uri.parse(
         '$_baseUrl/api/v1/app/institutions/${Uri.encodeComponent(trimmed)}/registration-info');
@@ -386,12 +386,12 @@ class ApiClient {
       throw Exception('查询注册凭证超时，请检查网络连接');
     } on SocketException catch (_) {
       if (Platform.isAndroid || Platform.isIOS) {
-        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
+        throw Exception(CidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
     if (response.statusCode == 404) {
-      throw Exception('未找到该 SFID 机构');
+      throw Exception('未找到该 CID 机构');
     }
     if (response.statusCode != 200) {
       throw Exception('查询机构注册凭证失败: ${response.statusCode}');
@@ -426,11 +426,11 @@ class ApiClient {
       throw Exception('机构注册凭证 account_names 为空');
     }
 
-    final sfidFullName = (data['sfid_full_name']?.toString() ?? '').trim();
+    final cidFullName = (data['cid_full_name']?.toString() ?? '').trim();
     final registerNonce =
         (credentialMap['register_nonce']?.toString() ?? '').trim();
-    final issuerSfidNumber =
-        (credentialMap['issuer_sfid_number']?.toString() ?? '').trim();
+    final issuerCidNumber =
+        (credentialMap['issuer_cid_number']?.toString() ?? '').trim();
     final issuerMainAccountRaw =
         (credentialMap['issuer_main_account']?.toString() ?? '').trim();
     final signerPubkeyRaw =
@@ -440,14 +440,14 @@ class ApiClient {
     final scopeCityName =
         (credentialMap['scope_city_name']?.toString() ?? '').trim();
     final signature = (credentialMap['signature']?.toString() ?? '').trim();
-    if (sfidFullName.isEmpty) {
-      throw Exception('机构注册凭证 sfid_full_name 为空');
+    if (cidFullName.isEmpty) {
+      throw Exception('机构注册凭证 cid_full_name 为空');
     }
     if (registerNonce.isEmpty) {
       throw Exception('机构注册凭证 register_nonce 为空');
     }
-    if (issuerSfidNumber.isEmpty) {
-      throw Exception('机构注册凭证 issuer_sfid_number 为空');
+    if (issuerCidNumber.isEmpty) {
+      throw Exception('机构注册凭证 issuer_cid_number 为空');
     }
     if (issuerMainAccountRaw.isEmpty) {
       throw Exception('机构注册凭证 issuer_main_account 为空');
@@ -475,13 +475,13 @@ class ApiClient {
       }
     }
     return InstitutionRegistrationInfoResponse(
-      sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
-      sfidFullName: sfidFullName,
+      cidNumber: (data['cid_number']?.toString() ?? trimmed).trim(),
+      cidFullName: cidFullName,
       accountNames: accountNames,
       credential: InstitutionRegistrationCredential(
         genesisHash: (credentialMap['genesis_hash']?.toString() ?? '').trim(),
         registerNonce: registerNonce,
-        issuerSfidNumber: issuerSfidNumber,
+        issuerCidNumber: issuerCidNumber,
         issuerMainAccount: issuerMainAccount,
         signerPubkey: signerPubkey,
         scopeProvinceName: scopeProvinceName,
@@ -493,9 +493,9 @@ class ApiClient {
     );
   }
 
-  /// 从 SFID 获取公民投票凭证。
+  /// 从 CID 获取公民投票凭证。
   ///
-  /// 公民投票时，App 先从 SFID 获取投票资格证明（binding_id + vote_nonce + signature），
+  /// 公民投票时，App 先从 CID 获取投票资格证明（binding_id + vote_nonce + signature），
   /// 再将凭证提交到链上。
   Future<VoteCredentialResponse> fetchVoteCredential(
       String accountPubkeyHex, int proposalId) async {
@@ -514,7 +514,7 @@ class ApiClient {
       );
     } on SocketException catch (_) {
       if (Platform.isAndroid || Platform.isIOS) {
-        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
+        throw Exception(CidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
@@ -542,7 +542,7 @@ class ApiClient {
       bindingId: (data['binding_id']?.toString() ?? '').trim(),
       proposalId: (data['proposal_id'] as num?)?.toInt() ?? proposalId,
       voteNonce: (data['vote_nonce']?.toString() ?? '').trim(),
-      issuerSfidNumber: (data['issuer_sfid_number']?.toString() ?? '').trim(),
+      issuerCidNumber: (data['issuer_cid_number']?.toString() ?? '').trim(),
       issuerMainAccount: _normalizePubkeyHex(
           (data['issuer_main_account']?.toString() ?? '').trim()),
       signerPubkey:
@@ -560,7 +560,7 @@ class VoteCredentialResponse {
   final String bindingId;
   final int proposalId;
   final String voteNonce;
-  final String issuerSfidNumber;
+  final String issuerCidNumber;
   final String issuerMainAccount;
   final String signerPubkey;
   final String scopeProvinceName;
@@ -573,7 +573,7 @@ class VoteCredentialResponse {
     required this.bindingId,
     required this.proposalId,
     required this.voteNonce,
-    required this.issuerSfidNumber,
+    required this.issuerCidNumber,
     required this.issuerMainAccount,
     required this.signerPubkey,
     required this.scopeProvinceName,
@@ -601,7 +601,7 @@ class InstitutionAccountEntry {
 
   bool get isRegistered => chainStatus == 'Active';
 
-  /// 把 SFID app 接口返回的各种 main_chain_status 取值统一映射为
+  /// 把 CID app 接口返回的各种 main_chain_status 取值统一映射为
   /// `Pending` / `Active` / `Closed` / `Failed`（CANON 第 5 条）：
   ///   NotOnChain / PendingOnChain → Pending
   ///   ActiveOnChain               → Active
@@ -637,12 +637,12 @@ class InstitutionAccountEntry {
 /// 机构账户列表响应。
 class InstitutionAccountsResponse {
   const InstitutionAccountsResponse({
-    required this.sfidNumber,
-    required this.sfidFullName,
+    required this.cidNumber,
+    required this.cidFullName,
     required this.accounts,
   });
 
-  final String sfidNumber;
-  final String sfidFullName;
+  final String cidNumber;
+  final String cidFullName;
   final List<InstitutionAccountEntry> accounts;
 }

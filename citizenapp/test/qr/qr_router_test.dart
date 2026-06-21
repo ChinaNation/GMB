@@ -20,7 +20,7 @@ void main() {
         'issued_at': 1000,
         'expires_at': 1090,
         'body': {
-          'system': 'sfid',
+          'system': 'cid',
           'sys_pubkey': '0xaabb',
           'sys_sig': '0xccdd',
         },

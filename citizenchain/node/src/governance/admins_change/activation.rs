@@ -173,19 +173,19 @@ fn validate_activation_account(
 }
 
 fn fetch_chain_account(
-    sfid_number: &str,
+    cid_number: &str,
     account_hex: Option<String>,
     expected_org: Option<u8>,
 ) -> Result<AdminAccountState, String> {
     let state = if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
         let account_id = account_id::account_id_from_hex(&account_hex)?;
-        storage::fetch_admin_account(&account_id, Some(sfid_number.to_string()))?
+        storage::fetch_admin_account(&account_id, Some(cid_number.to_string()))?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?
     } else {
         if matches!(expected_org, Some(3 | 4 | 5)) {
             return Err("个人多签或机构账户管理员激活必须提供 accountHex".to_string());
         }
-        storage::fetch_admin_account_by_sfid_number(sfid_number)?
+        storage::fetch_admin_account_by_cid_number(cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?
     };
     validate_activation_account(&state, expected_org)?;
@@ -193,7 +193,7 @@ fn fetch_chain_account(
 }
 
 fn resolve_activation_account_hex(
-    sfid_number: &str,
+    cid_number: &str,
     account_hex: Option<String>,
     expected_org: Option<u8>,
 ) -> Result<String, String> {
@@ -204,7 +204,7 @@ fn resolve_activation_account_hex(
     if matches!(expected_org, Some(3 | 4 | 5)) {
         return Err("个人多签或机构账户管理员激活必须提供 accountHex".to_string());
     }
-    let account_id = account_id::account_id_from_builtin_sfid(sfid_number)?;
+    let account_id = account_id::account_id_from_builtin_cid(cid_number)?;
     Ok(hex::encode(account_id))
 }
 
@@ -276,7 +276,7 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
 pub async fn build_activate_admin_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
     account_hex: Option<String>,
     expected_org: Option<u8>,
 ) -> Result<ActivateRequestResult, String> {
@@ -292,7 +292,7 @@ pub async fn build_activate_admin_request(
         .try_into()
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
 
-    let sid = sfid_number.clone();
+    let sid = cid_number.clone();
     let account = account_hex.clone();
     let state = tauri::async_runtime::spawn_blocking(move || {
         fetch_chain_account(&sid, account, expected_org)
@@ -521,12 +521,12 @@ pub async fn verify_activate_admin(
 #[tauri::command]
 pub async fn get_activated_admins(
     app: AppHandle,
-    sfid_number: String,
+    cid_number: String,
     account_hex: Option<String>,
     expected_org: Option<u8>,
 ) -> Result<Vec<ActivatedAdmin>, String> {
     let lookup_account_hex =
-        resolve_activation_account_hex(&sfid_number, account_hex.clone(), expected_org)?;
+        resolve_activation_account_hex(&cid_number, account_hex.clone(), expected_org)?;
     let mut activations = load_activations(&app)?;
 
     let account_activations: Vec<&StoredActivation> = activations
@@ -540,7 +540,7 @@ pub async fn get_activated_admins(
 
     let status = home::current_status(&app)?;
     if status.running {
-        let sid = sfid_number.clone();
+        let sid = cid_number.clone();
         let account = account_hex.clone();
         let state = tauri::async_runtime::spawn_blocking(move || {
             fetch_chain_account(&sid, account, expected_org)
@@ -588,7 +588,7 @@ pub async fn get_activated_admins(
 pub fn deactivate_admin(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_number: String,
+    cid_number: String,
     account_hex: Option<String>,
     expected_org: Option<u8>,
     unlock_password: String,
@@ -602,7 +602,7 @@ pub fn deactivate_admin(
 
     let pubkey_clean = account_id::normalize_pubkey_hex(&pubkey_hex)?;
     let lookup_account_hex =
-        resolve_activation_account_hex(&sfid_number, account_hex, expected_org)?;
+        resolve_activation_account_hex(&cid_number, account_hex, expected_org)?;
 
     let mut activations = load_activations(&app)?;
     let before_len = activations.len();

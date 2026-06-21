@@ -10,7 +10,7 @@
 
 ## 模块定位
 
-**个人多签账户的注册/创建/关闭生命周期入口**。用户自定义多签账户,无 SFID 归属,由 `creator + account_name` 派生地址。
+**个人多签账户的注册/创建/关闭生命周期入口**。用户自定义多签账户,无 CID 归属,由 `creator + account_name` 派生地址。
 
 与 `organization-manage`(机构多签)完全独立 — storage / event / error / extrinsic 命名空间完全隔离。
 
@@ -112,12 +112,12 @@ account_id = core_const::account_id_from_account(personal_account)
 
 | 关注点 | personal-manage | organization-manage |
 |---|---|---|
-| 主体来源 | 用户自定义 | SFID 注册机构 |
-| 地址派生 | creator + account_name | sfid_number + account_name(主/费用/自创) |
-| 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(SfidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
+| 主体来源 | 用户自定义 | CID 注册机构 |
+| 地址派生 | creator + account_name | cid_number + account_name(主/费用/自创) |
+| 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(CidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
 | MODULE_TAG | `b"per-mgmt"` | `b"org-mgmt"` |
 | pallet_index | 7 | 17 |
-| 客户端 dispatch | `PersonalDuoqians.has(addr)` 命中走此 pallet | `AccountRegisteredSfid.has(addr)` 命中走 organization-manage |
+| 客户端 dispatch | `PersonalDuoqians.has(addr)` 命中走此 pallet | `AccountRegisteredCid.has(addr)` 命中走 organization-manage |
 
 ## 客户端协议
 
@@ -163,7 +163,7 @@ flutter test test/signer/payload_decoder_test.dart
 - `organization-manage`:24 passed。
 - `citizenapp` 多签相关测试:10 passed。
 - `citizenwallet` 公民钱包 payload decoder:30 passed。
-- `sfid/backend`:cargo check 通过。
+- `citizencode/backend`:cargo check 通过。
 
 ## benchmarks
 
@@ -200,4 +200,4 @@ flutter test test/signer/payload_decoder_test.dart
 - `PersonalDuoqianProposed` 事件补充 `fee`。
 - `weights.rs` 从 0 权重改为保守非零权重。
 - citizenapp storage codec 和 ProposalData 解码同步新 SCALE 布局。
-- SFID indexer 已读取 `DuoqianCreated / DuoqianClosed` 事件中的 `fee` 字段。
+- CID indexer 已读取 `DuoqianCreated / DuoqianClosed` 事件中的 `fee` 字段。

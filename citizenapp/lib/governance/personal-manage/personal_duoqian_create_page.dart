@@ -22,7 +22,7 @@ import 'package:citizenapp/governance/shared/account_derivation.dart';
 import 'personal_manage_service.dart';
 import 'personal_proposal_history_service.dart';
 
-/// 个人多签账户创建页面（无需 SFID）。
+/// 个人多签账户创建页面（无需 CID）。
 class PersonalDuoqianCreatePage extends StatefulWidget {
   const PersonalDuoqianCreatePage({super.key});
 

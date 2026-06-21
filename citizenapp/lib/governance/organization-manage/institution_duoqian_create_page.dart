@@ -27,7 +27,7 @@ import 'institution_manage_service.dart';
 
 /// 创建机构多签账户提案页面。
 ///
-/// 用户输入 SFID ID 查询注册状态，填写管理员列表、阈值、初始资金后发起提案。
+/// 用户输入 CID ID 查询注册状态，填写管理员列表、阈值、初始资金后发起提案。
 class InstitutionDuoqianCreatePage extends StatefulWidget {
   const InstitutionDuoqianCreatePage({
     super.key,
@@ -47,7 +47,7 @@ const int _defaultInstitutionOrg = 5;
 
 class _InstitutionDuoqianCreatePageState
     extends State<InstitutionDuoqianCreatePage> {
-  final _sfidNumberController = TextEditingController();
+  final _cidNumberController = TextEditingController();
   final _thresholdController = TextEditingController();
   final Map<String, TextEditingController> _accountAmountControllers = {};
 
@@ -55,12 +55,12 @@ class _InstitutionDuoqianCreatePageState
   final _apiClient = ApiClient();
 
   bool _submitting = false;
-  String? _sfidError;
-  bool _checkingSfid = false;
+  String? _cidError;
+  bool _checkingCid = false;
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
-  // ── 机构账户列表（从 SFID 后端查询） ──
+  // ── 机构账户列表（从 CID 后端查询） ──
   String? _institutionName; // 查到的机构名称
   List<InstitutionAccountEntry> _accounts = []; // 机构下所有账户
 
@@ -103,58 +103,58 @@ class _InstitutionDuoqianCreatePageState
 
   @override
   void dispose() {
-    _sfidNumberController.dispose();
+    _cidNumberController.dispose();
     _thresholdController.dispose();
     _disposeAccountAmountControllers();
     super.dispose();
   }
 
-  // ──── SFID 查询（通过 SFID 后端 API） ────
+  // ──── CID 查询（通过 CID 后端 API） ────
 
-  /// 输入 SFID ID 后点击"查询"：从 SFID 后端获取机构名称 + 账户列表。
-  Future<void> _checkSfidRegistration() async {
-    final sfidText = _sfidNumberController.text.trim();
-    if (sfidText.isEmpty) {
-      setState(() => _sfidError = 'SFID ID 不能为空');
+  /// 输入 CID ID 后点击"查询"：从 CID 后端获取机构名称 + 账户列表。
+  Future<void> _checkCidRegistration() async {
+    final cidText = _cidNumberController.text.trim();
+    if (cidText.isEmpty) {
+      setState(() => _cidError = 'CID ID 不能为空');
       return;
     }
 
-    final sfidBytes = Uint8List.fromList(utf8.encode(sfidText));
-    if (sfidBytes.length > 96) {
-      setState(() => _sfidError = 'SFID ID 超过最大长度（96 字节）');
+    final cidBytes = Uint8List.fromList(utf8.encode(cidText));
+    if (cidBytes.length > 96) {
+      setState(() => _cidError = 'CID ID 超过最大长度（96 字节）');
       return;
     }
 
     setState(() {
-      _checkingSfid = true;
-      _sfidError = null;
+      _checkingCid = true;
+      _cidError = null;
       _institutionName = null;
       _accounts = [];
     });
     _disposeAccountAmountControllers();
 
     try {
-      final resp = await _apiClient.fetchInstitutionAccounts(sfidText);
+      final resp = await _apiClient.fetchInstitutionAccounts(cidText);
       if (!mounted) return;
 
       if (resp.accounts.isEmpty) {
         setState(() {
-          _sfidError = '该机构尚未创建任何账户';
-          _checkingSfid = false;
+          _cidError = '该机构尚未创建任何账户';
+          _checkingCid = false;
         });
       } else {
         _replaceAccountAmountControllers(resp.accounts);
         setState(() {
-          _institutionName = resp.sfidFullName;
+          _institutionName = resp.cidFullName;
           _accounts = resp.accounts;
-          _checkingSfid = false;
+          _checkingCid = false;
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _sfidError = '查询失败：$e';
-        _checkingSfid = false;
+        _cidError = '查询失败：$e';
+        _checkingCid = false;
       });
     }
   }
@@ -351,10 +351,10 @@ class _InstitutionDuoqianCreatePageState
     setState(() => _submitting = true);
 
     try {
-      final sfidText = _sfidNumberController.text.trim();
+      final cidText = _cidNumberController.text.trim();
       final threshold = int.parse(_thresholdController.text.trim());
       final registrationInfo =
-          await _apiClient.fetchInstitutionRegistrationInfo(sfidText);
+          await _apiClient.fetchInstitutionRegistrationInfo(cidText);
       final accounts = <InstitutionInitialAccountInput>[];
       var totalAmountFen = BigInt.zero;
       for (final accountName in registrationInfo.accountNames) {
@@ -420,13 +420,13 @@ class _InstitutionDuoqianCreatePageState
             summary: '发起创建机构多签账户提案',
             fields: [
               SignDisplayField(
-                  key: 'sfid_number',
-                  label: 'SFID ID',
-                  value: registrationInfo.sfidNumber),
+                  key: 'cid_number',
+                  label: 'CID ID',
+                  value: registrationInfo.cidNumber),
               SignDisplayField(
-                  key: 'sfid_full_name',
+                  key: 'cid_full_name',
                   label: '机构名称',
-                  value: registrationInfo.sfidFullName),
+                  value: registrationInfo.cidFullName),
               const SignDisplayField(
                   key: 'org', label: '管理员组织类型', value: '其他机构账户'),
               SignDisplayField(
@@ -449,9 +449,9 @@ class _InstitutionDuoqianCreatePageState
                 ),
               ),
               SignDisplayField(
-                  key: 'issuer_sfid_number',
-                  label: '签发机构 SFID',
-                  value: registrationInfo.credential.issuerSfidNumber),
+                  key: 'issuer_cid_number',
+                  label: '签发机构 CID',
+                  value: registrationInfo.credential.issuerCidNumber),
               SignDisplayField(
                   key: 'issuer_main_account',
                   label: '签发机构主账户',
@@ -488,8 +488,8 @@ class _InstitutionDuoqianCreatePageState
       }
 
       final result = await _manageService.submitProposeCreateInstitution(
-        sfidNumber: registrationInfo.sfidNumber,
-        sfidFullName: registrationInfo.sfidFullName,
+        cidNumber: registrationInfo.cidNumber,
+        cidFullName: registrationInfo.cidFullName,
         accounts: accounts,
         org: _defaultInstitutionOrg,
         adminsLen: _admins.length,
@@ -497,7 +497,7 @@ class _InstitutionDuoqianCreatePageState
         threshold: threshold,
         registerNonce: registrationInfo.credential.registerNonce,
         signatureHex: registrationInfo.credential.signature,
-        issuerSfidNumber: registrationInfo.credential.issuerSfidNumber,
+        issuerCidNumber: registrationInfo.credential.issuerCidNumber,
         issuerMainAccountHex: registrationInfo.credential.issuerMainAccount,
         signerPubkeyHex: registrationInfo.credential.signerPubkey,
         scopeProvinceName: registrationInfo.credential.scopeProvinceName,
@@ -512,10 +512,10 @@ class _InstitutionDuoqianCreatePageState
         // 快照；列表返回时只精准刷新该账户，不再依赖全量 discovery 扫描。
         final entity = InstitutionEntity()
           ..duoqianAccount = result.mainAccountHex
-          ..sfidNumber = registrationInfo.sfidNumber
+          ..cidNumber = registrationInfo.cidNumber
           ..adminAccountOrg = _defaultInstitutionOrg
           ..name = accounts.isEmpty
-              ? registrationInfo.sfidFullName
+              ? registrationInfo.cidFullName
               : accounts.first.accountName
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
           ..discoveredViaAdmin = false
@@ -587,7 +587,7 @@ class _InstitutionDuoqianCreatePageState
   Widget build(BuildContext context) {
     debugPrint(
         '[DuoqianCreate-Diag] build START: _admins=${_admins.length} '
-        '_accounts=${_accounts.length} _checkingSfid=$_checkingSfid');
+        '_accounts=${_accounts.length} _checkingCid=$_checkingCid');
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -605,12 +605,12 @@ class _InstitutionDuoqianCreatePageState
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           ChainProgressBanner(
-            busy: _submitting || _checkingSfid,
+            busy: _submitting || _checkingCid,
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // SFID ID 输入
-          _buildSectionTitle('SFID ID'),
+          // CID ID 输入
+          _buildSectionTitle('CID ID'),
           const SizedBox(height: 8),
           // 中文注释：ElevatedButton 不能直接放在水平 unbounded 约束下，否则
           // _RenderInputPadding 会抛 "BoxConstraints forces an infinite width"，
@@ -622,10 +622,10 @@ class _InstitutionDuoqianCreatePageState
             children: [
               Expanded(
                 child: TextField(
-                  controller: _sfidNumberController,
+                  controller: _cidNumberController,
                   decoration: InputDecoration(
-                    hintText: '输入 SFID 机构标识',
-                    errorText: _sfidError,
+                    hintText: '输入 CID 机构标识',
+                    errorText: _cidError,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -639,13 +639,13 @@ class _InstitutionDuoqianCreatePageState
                 width: 84,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: _checkingSfid ? null : _checkSfidRegistration,
+                  onPressed: _checkingCid ? null : _checkCidRegistration,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryDark,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.zero,
                   ),
-                  child: _checkingSfid
+                  child: _checkingCid
                       ? const SizedBox(
                           width: 16,
                           height: 16,

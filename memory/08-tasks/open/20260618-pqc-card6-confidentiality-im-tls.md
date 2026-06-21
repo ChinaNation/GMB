@@ -7,7 +7,7 @@
 1. 🔴 **(决策6)IM/MLS 一次到位升级(card0 不动 IM)**:`citizenapp/rust/src/im_mls.rs:27-28` 当前 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`(经典 X25519 + **AES-128**)→ **一次性**换 X-Wing(X25519+ML-KEM-768 混合 KEM)+ **AES-256/ChaCha20-256**(不分两步,避免 MLS 套件二次变更破坏已有会话)。
    - **阻断点**:`openmls_rust_crypto 0.5.1` 对 X-Wing `unimplemented!()`(`provider.rs:61-63`),`supports()` 只接经典 3 套 → **必须换 libcrux/X-Wing-capable provider**,升 `citizenapp/rust/Cargo.toml:29-33` openmls 全家桶。Dart 侧 `im_mls_native.dart` 零改(cipherSuite 透传)。
    - 🔴 **(决策3)IM 的 ML-KEM 是 MLS 设备/会话密钥,与 `AccountSeedV1` 无关**(账户不派生 ML-KEM);走前向保密 rekey,绝不复用账户密钥。
-2. 🔴 **(H15)IM 设备绑定签名 `GMB_IM_WALLET_BINDING_V1`**(P-IM-001:钱包 sr25519 对 IM 设备/PeerId/端点签名)纳入升级——量子破后可伪造劫持 IM 设备绑定。按 sig_alg 升 ML-DSA;归属验证同 §9(ML-DSA 公钥经 SFID 查链 AccountPqcKey 证明属于该地址)。
+2. 🔴 **(H15)IM 设备绑定签名 `GMB_IM_WALLET_BINDING_V1`**(P-IM-001:钱包 sr25519 对 IM 设备/PeerId/端点签名)纳入升级——量子破后可伪造劫持 IM 设备绑定。按 sig_alg 升 ML-DSA;归属验证同 §9(ML-DSA 公钥经 CID 查链 AccountPqcKey 证明属于该地址)。
 3. **P2P/RPC TLS 混合**:`citizenchain/node/libp2p-websocket/src/tls.rs:82/129/150` `rustls::crypto::ring::default_provider` → `aws-lc-rs` 配 `kx_groups=[X25519MLKEM768]`(ring 0.17 无 ML-KEM);`Cargo.toml:40-42` futures-rustls 版本对齐(全工作区 rustls/ring/aws-lc-rs 统一,否则编译冲突)。
 4. 🔴 **(L6)既有 MLS 群 rekey 归属**:明确 rekey 由谁触发(升级后自动/群主/用户)、新旧套件群迁移期共存策略、未 rekey 旧群降级处理;把"既有群已 rekey"拆成可执行子步骤,非仅验收断言。
 5. **上游受限项记录**:节点 Noise 握手(substrate sc-network,经典 X25519)= 仓外上游依赖,等 libp2p/substrate 提供 PQC Noise,显式列 blocker。

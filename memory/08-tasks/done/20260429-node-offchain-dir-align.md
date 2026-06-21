@@ -22,7 +22,7 @@
 ## 影响范围
 
 - 清算行 Tauri command 注册入口
-- 清算行 SFID 查询、链上查询、扫码签名、管理员解密
+- 清算行 CID 查询、链上查询、扫码签名、管理员解密
 - 清算行 offchain 运行组件
 - 清算行前端页面与类型引用
 - node offchain 技术文档
@@ -67,7 +67,7 @@
 - 已删除旧的清算行业务目录。
 - 已更新 ADR 与 node offchain 技术文档。
 - 已修正旧路径和旧文件名相关中文注释。
-- 已清理 `clearing_bank` / `clearing-bank` 目录残留,保留的 `/clearing-banks/...` 仅为 SFID API 路径。
+- 已清理 `clearing_bank` / `clearing-bank` 目录残留,保留的 `/clearing-banks/...` 仅为 CID API 路径。
 
 ## 验证结果
 

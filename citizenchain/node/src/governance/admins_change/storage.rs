@@ -17,16 +17,16 @@ pub fn admin_accounts_key(account_id: &[u8; 32]) -> String {
     format!("0x{}", hex::encode(key))
 }
 
-pub fn fetch_admin_account_by_sfid_number(
-    sfid_number: &str,
+pub fn fetch_admin_account_by_cid_number(
+    cid_number: &str,
 ) -> Result<Option<AdminAccountState>, String> {
-    let account_id = account_id::account_id_from_builtin_sfid(sfid_number)?;
-    fetch_admin_account(&account_id, Some(sfid_number.to_string()))
+    let account_id = account_id::account_id_from_builtin_cid(cid_number)?;
+    fetch_admin_account(&account_id, Some(cid_number.to_string()))
 }
 
 pub fn fetch_admin_account(
     account_id: &[u8; 32],
-    sfid_number: Option<String>,
+    cid_number: Option<String>,
 ) -> Result<Option<AdminAccountState>, String> {
     let storage_key = admin_accounts_key(account_id);
     // 中文注释(ADR-017):管理员账户状态按 finalized 口径读取,禁止 best。
@@ -38,7 +38,7 @@ pub fn fetch_admin_account(
     let decoded = codec::decode_admin_account(&data)?;
     Ok(Some(AdminAccountState {
         account_hex: hex::encode(account_id),
-        sfid_number,
+        cid_number,
         org: decoded.org,
         org_label: org_label(decoded.org).to_string(),
         kind: decoded.kind,
@@ -52,8 +52,8 @@ pub fn fetch_admin_account(
     }))
 }
 
-pub fn fetch_admins_by_sfid_number(sfid_number: &str) -> Result<Vec<String>, String> {
-    Ok(fetch_admin_account_by_sfid_number(sfid_number)?
+pub fn fetch_admins_by_cid_number(cid_number: &str) -> Result<Vec<String>, String> {
+    Ok(fetch_admin_account_by_cid_number(cid_number)?
         .map(|state| state.admins)
         .unwrap_or_default())
 }

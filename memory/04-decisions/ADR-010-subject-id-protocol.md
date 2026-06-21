@@ -32,8 +32,8 @@ pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32]
 
 ## 主体边界
 
-- 内置机构：创世表内置，`sfid_number -> DUOQIAN -> AccountId`。
-- 注册机构：SFID 注册，`sfid_number + account_name -> DUOQIAN -> AccountId`。
+- 内置机构：创世表内置，`cid_number -> DUOQIAN -> AccountId`。
+- 注册机构：CID 注册，`cid_number + account_name -> DUOQIAN -> AccountId`。
 - 个人多签：`creator + account_name -> DUOQIAN -> AccountId`。
 - onchain-issuance：发行资格主体、治理主体和管理员主体均为机构多签 `AccountId`。
 - `asset_id`：只作为资产编号，标识被治理的资产，不承担投票身份。
@@ -44,7 +44,7 @@ pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32]
 - `admins-change` 的管理员账户 storage key 为 `AccountId`。
 - `duoqian-transfer` 的支出机构为 `AccountId`。
 - `onchain-issuance` 的 issuer/governance/admin 均为 `AccountId`；`asset_id` 仅作为资产编号。
-- SFID、citizenwallet、citizenapp、tools 不得再定义第二套 DUOQIAN domain、op_tag 或 hash preimage。
+- CID、citizenwallet、citizenapp、tools 不得再定义第二套 DUOQIAN domain、op_tag 或 hash preimage。
 
 ## 迁移结论
 

@@ -3,17 +3,17 @@ import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 
-/// `OrganizationManage::AccountRegisteredSfid` 反查结果。
+/// `OrganizationManage::AccountRegisteredCid` 反查结果。
 class RegisteredInstitutionRef {
   const RegisteredInstitutionRef({
-    required this.sfidNumber,
+    required this.cidNumber,
     required this.accountName,
   });
 
-  final Uint8List sfidNumber;
+  final Uint8List cidNumber;
   final Uint8List accountName;
 
-  String get sfidNumberText => utf8.decode(sfidNumber, allowMalformed: true);
+  String get cidNumberText => utf8.decode(cidNumber, allowMalformed: true);
   String get accountNameText => utf8.decode(accountName, allowMalformed: true);
 }
 
@@ -74,26 +74,26 @@ class DuoqianStorageCodec {
     );
   }
 
-  static Uint8List accountRegisteredSfidKey(String duoqianAccountHex) {
+  static Uint8List accountRegisteredCidKey(String duoqianAccountHex) {
     return storageMapKey(
       'OrganizationManage',
-      'AccountRegisteredSfid',
+      'AccountRegisteredCid',
       hexDecode(duoqianAccountHex),
     );
   }
 
-  static Uint8List institutionKey(Uint8List sfidNumber) {
-    return storageMapKey('OrganizationManage', 'Institutions', sfidNumber);
+  static Uint8List institutionKey(Uint8List cidNumber) {
+    return storageMapKey('OrganizationManage', 'Institutions', cidNumber);
   }
 
   static Uint8List institutionAccountKey(
-    Uint8List sfidNumber,
+    Uint8List cidNumber,
     Uint8List accountName,
   ) {
     return storageDoubleMapKey(
       'OrganizationManage',
       'InstitutionAccounts',
-      sfidNumber,
+      cidNumber,
       accountName,
     );
   }
@@ -144,13 +144,13 @@ class DuoqianStorageCodec {
 
   static RegisteredInstitutionRef? decodeRegisteredInstitution(Uint8List data) {
     var offset = 0;
-    final sfid = readBoundedBytes(data, offset);
-    if (sfid == null) return null;
-    offset = sfid.nextOffset;
+    final cid = readBoundedBytes(data, offset);
+    if (cid == null) return null;
+    offset = cid.nextOffset;
     final accountName = readBoundedBytes(data, offset);
     if (accountName == null) return null;
     return RegisteredInstitutionRef(
-      sfidNumber: sfid.value,
+      cidNumber: cid.value,
       accountName: accountName.value,
     );
   }

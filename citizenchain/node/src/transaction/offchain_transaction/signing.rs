@@ -4,9 +4,9 @@
 //
 // pallet_index = 21(OffchainTransaction,见 runtime/src/lib.rs:366)
 // call_index:
-//   50 = register_clearing_bank(sfid_number, peer_id, rpc_domain, rpc_port)
-//   51 = update_clearing_bank_endpoint(sfid_number, new_domain, new_port)
-//   52 = unregister_clearing_bank(sfid_number)
+//   50 = register_clearing_bank(cid_number, peer_id, rpc_domain, rpc_port)
+//   51 = update_clearing_bank_endpoint(cid_number, new_domain, new_port)
+//   52 = unregister_clearing_bank(cid_number)
 //
 // 入参 SCALE 编码:
 //   BoundedVec<u8, ConstU32<N>> 等价 Vec<u8> = Compact<u32>(len) || bytes
@@ -36,7 +36,7 @@ fn parse_pubkey(pubkey_hex: &str) -> Result<(String, Vec<u8>), String> {
     Ok((clean, bytes))
 }
 
-/// 把 sfid_number / peer_id / domain 等可变长字段按 SCALE Vec<u8> 编码:
+/// 把 cid_number / peer_id / domain 等可变长字段按 SCALE Vec<u8> 编码:
 /// `Compact<u32>(len) || raw_bytes`。
 fn encode_bytes_with_len(raw: &[u8]) -> Vec<u8> {
     let mut out = encode_compact_u32_pub(raw.len() as u32);
@@ -46,13 +46,13 @@ fn encode_bytes_with_len(raw: &[u8]) -> Vec<u8> {
 
 /// 构造 register_clearing_bank 的 call_data。
 pub fn build_register_call_data(
-    sfid_number: &str,
+    cid_number: &str,
     peer_id: &str,
     rpc_domain: &str,
     rpc_port: u16,
 ) -> Result<Vec<u8>, String> {
-    if sfid_number.is_empty() || sfid_number.len() > 64 {
-        return Err("sfid_number 长度需在 1..=64".to_string());
+    if cid_number.is_empty() || cid_number.len() > 64 {
+        return Err("cid_number 长度需在 1..=64".to_string());
     }
     if peer_id.is_empty() || peer_id.len() > 64 {
         return Err("peer_id 长度需在 1..=64".to_string());
@@ -65,11 +65,11 @@ pub fn build_register_call_data(
     }
 
     let mut call = Vec::with_capacity(
-        2 + 1 + sfid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2,
+        2 + 1 + cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2,
     );
     call.push(PALLET_INDEX);
     call.push(CALL_REGISTER);
-    call.extend_from_slice(&encode_bytes_with_len(sfid_number.as_bytes()));
+    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
     call.extend_from_slice(&encode_bytes_with_len(peer_id.as_bytes()));
     call.extend_from_slice(&encode_bytes_with_len(rpc_domain.as_bytes()));
     call.extend_from_slice(&rpc_port.to_le_bytes());
@@ -78,12 +78,12 @@ pub fn build_register_call_data(
 
 /// 构造 update_clearing_bank_endpoint 的 call_data。
 pub fn build_update_endpoint_call_data(
-    sfid_number: &str,
+    cid_number: &str,
     new_domain: &str,
     new_port: u16,
 ) -> Result<Vec<u8>, String> {
-    if sfid_number.is_empty() || sfid_number.len() > 64 {
-        return Err("sfid_number 长度需在 1..=64".to_string());
+    if cid_number.is_empty() || cid_number.len() > 64 {
+        return Err("cid_number 长度需在 1..=64".to_string());
     }
     if new_domain.is_empty() || new_domain.len() > 128 {
         return Err("rpc_domain 长度需在 1..=128".to_string());
@@ -91,41 +91,41 @@ pub fn build_update_endpoint_call_data(
     if new_port < 1024 {
         return Err("rpc_port 必须 >= 1024".to_string());
     }
-    let mut call = Vec::with_capacity(2 + 1 + sfid_number.len() + 1 + new_domain.len() + 2);
+    let mut call = Vec::with_capacity(2 + 1 + cid_number.len() + 1 + new_domain.len() + 2);
     call.push(PALLET_INDEX);
     call.push(CALL_UPDATE_ENDPOINT);
-    call.extend_from_slice(&encode_bytes_with_len(sfid_number.as_bytes()));
+    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
     call.extend_from_slice(&encode_bytes_with_len(new_domain.as_bytes()));
     call.extend_from_slice(&new_port.to_le_bytes());
     Ok(call)
 }
 
 /// 构造 unregister_clearing_bank 的 call_data。
-pub fn build_unregister_call_data(sfid_number: &str) -> Result<Vec<u8>, String> {
-    if sfid_number.is_empty() || sfid_number.len() > 64 {
-        return Err("sfid_number 长度需在 1..=64".to_string());
+pub fn build_unregister_call_data(cid_number: &str) -> Result<Vec<u8>, String> {
+    if cid_number.is_empty() || cid_number.len() > 64 {
+        return Err("cid_number 长度需在 1..=64".to_string());
     }
-    let mut call = Vec::with_capacity(2 + 1 + sfid_number.len());
+    let mut call = Vec::with_capacity(2 + 1 + cid_number.len());
     call.push(PALLET_INDEX);
     call.push(CALL_UNREGISTER);
-    call.extend_from_slice(&encode_bytes_with_len(sfid_number.as_bytes()));
+    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
     Ok(call)
 }
 
 /// register_clearing_bank QR 签名请求。
 pub fn build_register_sign_request(
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
     peer_id: &str,
     rpc_domain: &str,
     rpc_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data = build_register_call_data(sfid_number, peer_id, rpc_domain, rpc_port)?;
-    let summary = format!("声明清算行节点 {sfid_number} @ {rpc_domain}:{rpc_port}");
+    let call_data = build_register_call_data(cid_number, peer_id, rpc_domain, rpc_port)?;
+    let summary = format!("声明清算行节点 {cid_number} @ {rpc_domain}:{rpc_port}");
     // display.fields key/value 必须与 citizenwallet PayloadDecoder 输出 1:1 对齐。
     let fields = serde_json::json!([
-        { "key": "sfid_number", "label": "机构身份号码", "value": sfid_number },
+        { "key": "cid_number", "label": "机构身份号码", "value": cid_number },
         { "key": "peer_id", "label": "节点 PeerId", "value": peer_id },
         { "key": "rpc_domain", "label": "RPC 域名", "value": rpc_domain },
         { "key": "rpc_port", "label": "RPC 端口", "value": rpc_port.to_string() },
@@ -143,15 +143,15 @@ pub fn build_register_sign_request(
 /// update_clearing_bank_endpoint QR 签名请求。
 pub fn build_update_endpoint_sign_request(
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
     new_domain: &str,
     new_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data = build_update_endpoint_call_data(sfid_number, new_domain, new_port)?;
-    let summary = format!("更新清算行 {sfid_number} 端点 → {new_domain}:{new_port}");
+    let call_data = build_update_endpoint_call_data(cid_number, new_domain, new_port)?;
+    let summary = format!("更新清算行 {cid_number} 端点 → {new_domain}:{new_port}");
     let fields = serde_json::json!([
-        { "key": "sfid_number", "label": "机构身份号码", "value": sfid_number },
+        { "key": "cid_number", "label": "机构身份号码", "value": cid_number },
         { "key": "new_domain", "label": "新域名", "value": new_domain },
         { "key": "new_port", "label": "新端口", "value": new_port.to_string() },
     ]);
@@ -168,13 +168,13 @@ pub fn build_update_endpoint_sign_request(
 /// unregister_clearing_bank QR 签名请求。
 pub fn build_unregister_sign_request(
     pubkey_hex: &str,
-    sfid_number: &str,
+    cid_number: &str,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data = build_unregister_call_data(sfid_number)?;
-    let summary = format!("注销清算行节点 {sfid_number}");
+    let call_data = build_unregister_call_data(cid_number)?;
+    let summary = format!("注销清算行节点 {cid_number}");
     let fields = serde_json::json!([
-        { "key": "sfid_number", "label": "机构身份号码", "value": sfid_number },
+        { "key": "cid_number", "label": "机构身份号码", "value": cid_number },
     ]);
     build_sign_request_from_call_data(
         &clean,
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn register_call_rejects_empty_sfid() {
+    fn register_call_rejects_empty_cid() {
         let err = build_register_call_data(
             "",
             "12D3KooWaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -215,7 +215,7 @@ mod tests {
             9944,
         )
         .unwrap_err();
-        assert!(err.contains("sfid_number"));
+        assert!(err.contains("cid_number"));
     }
 
     #[test]
@@ -231,14 +231,14 @@ mod tests {
     }
 
     #[test]
-    fn unregister_call_only_has_sfid() {
-        let sfid_number = "AH001-SCB0V-123456789-2026";
-        let cd = build_unregister_call_data(sfid_number).unwrap();
+    fn unregister_call_only_has_cid() {
+        let cid_number = "AH001-SCB0V-123456789-2026";
+        let cd = build_unregister_call_data(cid_number).unwrap();
         assert_eq!(cd[0], PALLET_INDEX);
         assert_eq!(cd[1], CALL_UNREGISTER);
         // 单字节模式 compact: len << 2
-        assert_eq!(cd[2], (sfid_number.len() as u8) << 2);
-        assert_eq!(&cd[3..], sfid_number.as_bytes());
+        assert_eq!(cd[2], (cid_number.len() as u8) << 2);
+        assert_eq!(&cd[3..], cid_number.as_bytes());
     }
 
     #[test]

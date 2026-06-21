@@ -17,7 +17,7 @@
 - 联动模块：`citizenchain/runtime/governance`
 - 联动模块：`citizenchain/runtime/votingengine`
 - 可能联动：`citizenchain/runtime/otherpallet`
-- 可能联动：`sfid`
+- 可能联动：`cid`
 - 可能联动：`cpms`
 - 可能联动：`citizenapp`
 - 可能联动：`citizenwallet`
@@ -114,8 +114,8 @@
 - `citizenchain/runtime/governance/`：接入基金设立、追加、暂停、关闭等治理事项；只做业务提案语义绑定，不实现投票流程；涉及代码、中文注释、测试和残留清理。
 - `citizenchain/runtime/votingengine/`：仅在现有 trait 能力不足时评估是否扩展统一投票能力；不得让基金模块自建投票；可能涉及代码和文档。
 - `citizenchain/runtime/otherpallet/`：如需要承载匿名 claim、资格凭证状态或项目索引，可在所属边界内增加链上状态；涉及代码、中文注释、测试和残留清理。
-- `sfid/`：如需要在线身份绑定、permit 或资格凭证验签接入，只处理在线身份和授权，不保存原始实名和受害材料；可能涉及代码、文档和残留清理。
-- `cpms/`：如需要离线实名材料录入、审核或凭证签发，只作为离线可信入口，不联网；可能涉及代码、文档和残留清理。
+- `citizencode/`：如需要在线身份绑定、permit 或资格凭证验签接入，只处理在线身份和授权，不保存原始实名和受害材料；可能涉及代码、文档和残留清理。
+- `citizenpassport/`：如需要离线实名材料录入、审核或凭证签发，只作为离线可信入口，不联网；可能涉及代码、文档和残留清理。
 - `citizenapp/`：如新增领取、项目拨款或治理交易，需同步移动端交易展示、签名、状态查询和用户交互；可能涉及代码、测试、文档和残留清理。
 - `citizenwallet/`：如新增 QR 签名请求或交易载荷，需同步冷钱包解码、展示和验签字段；可能涉及代码、测试、文档和残留清理。
 - `memory/05-modules/citizenchain/`：同步专项发行、治理、隐私和审计规则；涉及文档。

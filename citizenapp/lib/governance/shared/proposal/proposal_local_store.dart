@@ -25,15 +25,15 @@ class ProposalLocalStore {
       'governance.proposal.index.institution.';
   static const String _globalIndexKey = 'governance.proposal.index.global';
 
-  String institutionIndexKey(String sfidNumber) =>
-      '$_institutionIndexPrefix$sfidNumber';
+  String institutionIndexKey(String cidNumber) =>
+      '$_institutionIndexPrefix$cidNumber';
 
   Future<ProposalLocalIndex?> readGlobalIndex() {
     return _readIndex(_globalIndexKey);
   }
 
-  Future<ProposalLocalIndex?> readInstitutionIndex(String sfidNumber) {
-    return _readIndex(institutionIndexKey(sfidNumber));
+  Future<ProposalLocalIndex?> readInstitutionIndex(String cidNumber) {
+    return _readIndex(institutionIndexKey(cidNumber));
   }
 
   Future<bool> isGlobalIndexFresh() async {
@@ -41,8 +41,8 @@ class ProposalLocalStore {
     return index != null && index.isFresh(globalIndexTtl);
   }
 
-  Future<bool> isInstitutionIndexFresh(String sfidNumber) async {
-    final index = await readInstitutionIndex(sfidNumber);
+  Future<bool> isInstitutionIndexFresh(String cidNumber) async {
+    final index = await readInstitutionIndex(cidNumber);
     return index != null && index.isFresh(institutionIndexTtl);
   }
 
@@ -60,9 +60,9 @@ class ProposalLocalStore {
   }
 
   Future<List<LocalProposalSummary>> readInstitutionSummaries(
-    String sfidNumber,
+    String cidNumber,
   ) async {
-    final index = await readInstitutionIndex(sfidNumber);
+    final index = await readInstitutionIndex(cidNumber);
     if (index == null || index.ids.isEmpty) return const [];
     return readSummariesForIds(index.ids);
   }
@@ -88,8 +88,8 @@ class ProposalLocalStore {
     return _putIndex(_globalIndexKey, ids);
   }
 
-  Future<void> putInstitutionIndex(String sfidNumber, List<int> ids) {
-    return _putIndex(institutionIndexKey(sfidNumber), ids);
+  Future<void> putInstitutionIndex(String cidNumber, List<int> ids) {
+    return _putIndex(institutionIndexKey(cidNumber), ids);
   }
 
   Future<void> upsertSummaries(List<LocalProposalSummary> summaries) async {
@@ -201,8 +201,8 @@ class LocalProposalSummary {
     this.institutionBytesHex,
     this.displayYear,
     this.displaySeqInYear,
-    this.institutionSfidNumber,
-    this.sfidFullName,
+    this.institutionCidNumber,
+    this.cidFullName,
   });
 
   final int proposalId;
@@ -213,8 +213,8 @@ class LocalProposalSummary {
   final String? institutionBytesHex;
   final int? displayYear;
   final int? displaySeqInYear;
-  final String? institutionSfidNumber;
-  final String? sfidFullName;
+  final String? institutionCidNumber;
+  final String? cidFullName;
   final String title;
   final String subtitle;
   final String listSubtitle;
@@ -324,8 +324,8 @@ class LocalProposalSummary {
       institutionBytesHex: _bytesToHex(meta.institutionBytes),
       displayYear: meta.displayMeta?.year,
       displaySeqInYear: meta.displayMeta?.seqInYear,
-      institutionSfidNumber: institution?.sfidNumber,
-      sfidFullName: institution?.name,
+      institutionCidNumber: institution?.cidNumber,
+      cidFullName: institution?.name,
       title: title,
       subtitle: subtitle,
       listSubtitle: listSubtitle,
@@ -343,8 +343,8 @@ class LocalProposalSummary {
         'institution_bytes_hex': institutionBytesHex,
         'display_year': displayYear,
         'display_seq_in_year': displaySeqInYear,
-        'institution_sfid_number': institutionSfidNumber,
-        'sfid_full_name': sfidFullName,
+        'institution_cid_number': institutionCidNumber,
+        'cid_full_name': cidFullName,
         'title': title,
         'subtitle': subtitle,
         'list_subtitle': listSubtitle,
@@ -387,9 +387,9 @@ class LocalProposalSummary {
             _toNullableString(decoded['institution_bytes_hex']),
         displayYear: _toInt(decoded['display_year']),
         displaySeqInYear: _toInt(decoded['display_seq_in_year']),
-        institutionSfidNumber:
-            _toNullableString(decoded['institution_sfid_number']),
-        sfidFullName: _toNullableString(decoded['sfid_full_name']),
+        institutionCidNumber:
+            _toNullableString(decoded['institution_cid_number']),
+        cidFullName: _toNullableString(decoded['cid_full_name']),
         title: title,
         subtitle: subtitle,
         listSubtitle: listSubtitle,

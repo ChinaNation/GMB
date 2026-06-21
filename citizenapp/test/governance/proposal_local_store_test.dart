@@ -42,7 +42,7 @@ void main() {
     expect(page, hasLength(1));
     expect(page.single.proposalId, 12);
     expect(page.single.displayId, '2026000003');
-    expect(page.single.sfidFullName, nationalCouncil.name);
+    expect(page.single.cidFullName, nationalCouncil.name);
     expect(await ProposalLocalStore.instance.isGlobalIndexFresh(), isTrue);
   });
 
@@ -64,12 +64,12 @@ void main() {
 
     await ProposalLocalStore.instance.upsertSummaries([summary]);
     await ProposalLocalStore.instance.putInstitutionIndex(
-      nationalCouncil.sfidNumber,
+      nationalCouncil.cidNumber,
       [33],
     );
 
     final list = await ProposalLocalStore.instance.readInstitutionSummaries(
-      nationalCouncil.sfidNumber,
+      nationalCouncil.cidNumber,
     );
 
     expect(list, hasLength(1));
@@ -77,7 +77,7 @@ void main() {
     expect(list.single.status, 1);
     expect(
       await ProposalLocalStore.instance.isInstitutionIndexFresh(
-        nationalCouncil.sfidNumber,
+        nationalCouncil.cidNumber,
       ),
       isTrue,
     );

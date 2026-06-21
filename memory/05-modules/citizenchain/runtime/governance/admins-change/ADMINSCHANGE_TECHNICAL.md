@@ -40,7 +40,7 @@
 对应底层 `AccountId` 协议见 ADR-010：
 
 - `0x01 Builtin`
-- `0x02 注册机构归属关系`，仅表示同一 SFID 机构归属/检索。
+- `0x02 注册机构归属关系`，仅表示同一 CID 机构归属/检索。
 - `PersonalDuoqian AccountId`
 - `0x04 asset_id 资产编号`
 - `InstitutionAccount AccountId`，payload 为账户 `AccountId` 前 32 字节并右填零。

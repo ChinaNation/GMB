@@ -37,9 +37,9 @@ ADR-015 后，机构管理按账户级治理：
 
 | 账户 | op_tag | preimage |
 |---|---:|---|
-| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN || OP_MAIN || ss58_le || sfid_number` |
-| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN || OP_FEE || ss58_le || sfid_number` |
-| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN || OP_INSTITUTION || ss58_le || sfid_number || account_name` |
+| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN || OP_MAIN || ss58_le || cid_number` |
+| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN || OP_FEE || ss58_le || cid_number` |
+| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN || OP_INSTITUTION || ss58_le || cid_number || account_name` |
 | 个人多签 | `OP_PERSONAL = 0x04` | `DUOQIAN || OP_PERSONAL || ss58_le || creator || account_name` |
 
 `"主账户"` 和 `"费用账户"` 是保留名，只能分别落到 `OP_MAIN` 和 `OP_FEE`；禁止作为自定义账户名进入 `OP_INSTITUTION` 命名空间。
@@ -48,11 +48,11 @@ ADR-015 后，机构管理按账户级治理：
 
 核心 storage：
 
-- `Institutions<sfid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`org`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
-- `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
+- `Institutions<cid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`org`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
+- `InstitutionAccounts<(cid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
-- `SfidRegisteredAccount` / `AccountRegisteredSfid`：继续作为链上账户索引。
+- `CidRegisteredAccount` / `AccountRegisteredCid`：继续作为链上账户索引。
 - 个人多签账户不在本模块保存，当前真源为 `personal-manage::PersonalDuoqians`。
 
 管理员主体：
@@ -70,15 +70,15 @@ ADR-015 后，机构管理按账户级治理：
 
 ```text
 propose_create_institution(
-  sfid_number,
-  sfid_full_name,
+  cid_number,
+  cid_full_name,
   accounts,
   org,
   admins_len,
   admins,
   threshold,
   register_nonce,
-  issuer_sfid_number,
+  issuer_cid_number,
   issuer_main_account,
   signer_pubkey,
   scope_province_name,
@@ -96,10 +96,10 @@ propose_create_institution(
 - 账户名不得重复。
 - 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；动态阈值由用户输入，必须严格过半且不得超过管理员数量。
 - 创建者必须在管理员列表中。
-- SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
-- `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / sfid_full_name / account_names[]`。
+- CID 登记 nonce 必须未使用，签名必须通过 `CidInstitutionVerifier`。
+- `CidInstitutionVerifier` 的注册业务字段只覆盖 `cid_number / cid_full_name / account_names[]`。
 - `issuer_main_account + signer_pubkey` 用于在 `admins-change::AdminAccounts` 中确认签发机构管理员,`scope_province_name / scope_city_name` 只表示业务作用域。
-- `subject_property / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
+- `subject_property / sub_type / parent_cid_number` 只属于 CID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
 
@@ -109,7 +109,7 @@ propose_create_institution(
 - 投票通过执行时，先 unreserve，再扣手续费，再把各账户初始余额划入对应机构账户。
 - 投票拒绝时释放 reserve 并清理 pending 索引；自动执行暂时失败时保留 pending 数据供重试；进入 `STATUS_EXECUTION_FAILED` 终态时由 votingengine 的终态回调释放 reserve 并清理 pending 索引。
 - 机构账户关闭执行时，先扣链上手续费，再把 `free_balance - fee` 转入用户提供的收款地址；执行阶段再次拒绝 reserved 余额，保证账户能被清空。
-- 机构账户关闭成功后删除 `InstitutionAccounts[(sfid, account_name)]`、`SfidRegisteredAccount[(sfid, account_name)]`、`AccountRegisteredSfid[address]` 和 `admins-change::Subjects[subject]` 当前状态。历史事件和历史提案不删除。
+- 机构账户关闭成功后删除 `InstitutionAccounts[(cid, account_name)]`、`CidRegisteredAccount[(cid, account_name)]`、`AccountRegisteredCid[address]` 和 `admins-change::Subjects[subject]` 当前状态。历史事件和历史提案不删除。
 
 ## 6. 投票回调
 
@@ -120,7 +120,7 @@ propose_create_institution(
 投票引擎终态回调规则：
 
 - `approved = true`：调用 `execute_create_institution`，激活 `Institutions`、`InstitutionAccounts`、主账户生命周期记录和管理员主体。
-- `approved = false`：调用 `cleanup_pending_institution_create`，释放创建者 reserve，删除机构 pending storage、SFID 地址索引和管理员主体。
+- `approved = false`：调用 `cleanup_pending_institution_create`，释放创建者 reserve，删除机构 pending storage、CID 地址索引和管理员主体。
 - 管理员主体的激活、拒绝清理、执行失败终态清理和关闭都必须带 `proposal_id` 调用 `admins-change::SubjectLifecycle`，由 admins-change 校验提案 owner、状态和 callback 作用域。
 
 执行成功事件：
@@ -132,7 +132,7 @@ propose_create_institution(
 
 ## 7. 对外入口
 
-- `register_sfid_institution`
+- `register_cid_institution`
 - `propose_create`
 - `propose_create_personal`
 - `propose_close`
@@ -144,9 +144,9 @@ runtime 适配：
 - `RuntimeInternalAdminProvider / RuntimeInternalAdminsLenProvider` 统一读取 `admins-change`。
 - 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
-- `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
-- `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
-- `DuoqianSfidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;SFID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 SFID 机构账户。
+- `DuoqianCidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
+- `DuoqianCidAccountQuery::is_active` 对 CID 机构账户读取 `InstitutionAccounts` 的激活状态。
+- `DuoqianCidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;CID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 CID 机构账户。
 
 ## 8. 测试覆盖
 
@@ -157,7 +157,7 @@ runtime 适配：
 - 机构级创建提案在提案、Pending 主体、reserve、地址索引任一步失败时整体回滚。
 - 缺少主账户时拒绝。
 - 账户初始余额低于最低金额时拒绝。
-- 批量 SFID 机构注册按 `sfid_full_name + account_names[]` 验签并写入地址索引。
+- 批量 CID 机构注册按 `cid_full_name + account_names[]` 验签并写入地址索引。
 - 个人多签路径可创建和激活。
 - 关闭、重复管理员、重放投票等回归路径通过；关闭用例覆盖余额转出、pending 清理、账户索引清理、管理员主体清理和动态阈值清理。
 
@@ -169,6 +169,6 @@ runtime 适配：
 
 ## 9. 变更记录
 
-- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `subject_property/sub_type/parent_sfid_number`,签名业务字段收口为 `sfid_number / sfid_full_name / account_names[]`。
+- 2026-05-02:机构注册协议对齐 CID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `subject_property/sub_type/parent_cid_number`,签名业务字段收口为 `cid_number / cid_full_name / account_names[]`。
 - 2026-05-02:创建 Pending 多签主体改为 votingengine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。
 - 2026-05-17:机构账户关闭成功后删除账户正向/反向索引和管理员主体当前状态；已转出的余额不继承到重新注册的新当前状态。

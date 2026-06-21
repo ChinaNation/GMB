@@ -43,7 +43,7 @@ const Map<String, String> actionLabels = {
   // 已删除,所有手动重试/取消统一显示为 retry_passed_proposal /
   // cancel_passed_proposal(在 votingengine 段已声明)。
   'cleanup_rejected_proposal': '清理被否决提案',
-  'register_sfid_institution': '登记 SFID 机构信息',
+  'register_cid_institution': '登记 CID 机构信息',
 
   // 协议升级
   'propose_runtime_upgrade': '协议升级提案',
@@ -59,5 +59,5 @@ const Map<String, String> actionLabels = {
   'register_clearing_bank': '声明清算行节点',
   'update_clearing_bank_endpoint': '更新清算行端点',
   'unregister_clearing_bank': '注销清算行节点',
-  'sfid_admin_action': 'SFID 管理员治理',
+  'cid_admin_action': 'CID 管理员治理',
 };

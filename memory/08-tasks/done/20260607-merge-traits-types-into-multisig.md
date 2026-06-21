@@ -14,7 +14,7 @@
 - 下游 8 文件 `primitives::traits` / `primitives::types` → `primitives::multisig`（含 organization-manage 本地 traits.rs 的 re-export `pub use` 与 doc 注释）：
   - organization-manage/src/{lib.rs, traits.rs, tests/mod.rs}
   - personal-manage/src/{lib.rs, create.rs, close.rs, traits.rs, tests/mod.rs}
-- 未动：china_zb.rs、duoqian-transfer（不引用）、各 pallet 本地业务 trait（InstitutionMultisigQuery / SfidInstitutionVerifier / PersonalMultisigQuery 等）。
+- 未动：china_zb.rs、duoqian-transfer（不引用）、各 pallet 本地业务 trait（InstitutionMultisigQuery / CidInstitutionVerifier / PersonalMultisigQuery 等）。
 - 踩坑记录：批量替换首次用 shell 变量 `$FILES` 传参，zsh 不做无引号分词，perl 把 8 路径当成 1 个文件名→替换未执行；改为把 8 路径直接作为 perl 参数后成功。
 
 ## 验证记录

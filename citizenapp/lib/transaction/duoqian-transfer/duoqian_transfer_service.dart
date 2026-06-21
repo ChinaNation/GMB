@@ -92,7 +92,7 @@ class DuoqianTransferService {
     final fromPubkey = _accountHexToAccountId(institution.mainAccount, '转出主账户');
     final callData = _buildProposeTransferCall(
       org: identity.org,
-      institutionIdentity: institution.sfidNumber,
+      institutionIdentity: institution.cidNumber,
       mainAccount: institution.mainAccount,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: amountFen,
@@ -185,7 +185,7 @@ class DuoqianTransferService {
     final institutionBytes = _institutionAccountId(institution);
     final toPubkey = _accountHexToAccountId(institution.mainAccount, '机构主账户');
     final callData = _buildProposeSweepCall(
-      institutionIdentity: institution.sfidNumber,
+      institutionIdentity: institution.cidNumber,
       mainAccount: institution.mainAccount,
       amountYuan: amountYuan,
     );
@@ -1652,7 +1652,7 @@ class DuoqianTransferService {
 
   Uint8List _institutionAccountId(InstitutionInfo institution) {
     return _institutionIdentityToAccountId(
-      institution.sfidNumber,
+      institution.cidNumber,
       institution.mainAccount,
     );
   }

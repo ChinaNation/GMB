@@ -2,22 +2,22 @@
 
 ## 任务需求
 
-按最新确认统一 CPMS 公民状态模型：公民状态只分 `NORMAL`（正常）和 `REVOKED`（注销）；投票资格只分有和没有。正常公民可以有或没有投票资格，注销公民必须没有投票资格。软删除就是注销，年度导出文件用于让 SFID 更新该档案号对应的公民状态和投票资格；硬删除只用于释放档案号、护照号复用，不再表示公民状态变化。
+按最新确认统一 CPMS 公民状态模型：公民状态只分 `NORMAL`（正常）和 `REVOKED`（注销）；投票资格只分有和没有。正常公民可以有或没有投票资格，注销公民必须没有投票资格。软删除就是注销，年度导出文件用于让 CID 更新该档案号对应的公民状态和投票资格；硬删除只用于释放档案号、护照号复用，不再表示公民状态变化。
 
 ## 建议模块
 
 - CPMS 后端
 - CPMS 前端
 - CPMS 数据库
-- CPMS/SFID 协议与模块文档
+- CPMS/CID 协议与模块文档
 
 ## 影响范围
 
-- `cpms/backend/src/dangan`：新增状态导出文件构造逻辑，统一 `REVOKED` 状态校验。
-- `cpms/backend/dangan`：软删除时强制写入注销状态和无投票资格，新增导出接口。
-- `cpms/backend/admins`：状态更新逻辑改为正常/注销，并保持注销无投票资格。
-- `cpms/backend/db`：更新 `citizen_status` 约束为 `NORMAL / REVOKED`。
-- `cpms/frontend`：清理“异常/ABNORMAL”残留，改为“注销/REVOKED”。
+- `citizenpassport/backend/dangan`：新增状态导出文件构造逻辑，统一 `REVOKED` 状态校验。
+- `citizenpassport/backend/dangan`：软删除时强制写入注销状态和无投票资格，新增导出接口。
+- `citizenpassport/backend/admins`：状态更新逻辑改为正常/注销，并保持注销无投票资格。
+- `citizenpassport/backend/db`：更新 `citizen_status` 约束为 `NORMAL / REVOKED`。
+- `citizenpassport/frontend`：清理“异常/ABNORMAL”残留，改为“注销/REVOKED”。
 - `memory/05-modules` 与 `memory/07-ai`：同步协议、命名和技术文档。
 
 ## 主要风险点
@@ -40,9 +40,9 @@
 
 ## 完成记录
 
-- 2026-05-30：新增 `cpms/backend/src/dangan/export.rs`，生成 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT` 离线 JSON 文件。
+- 2026-05-30：新增 `citizenpassport/backend/dangan/export.rs`，生成 `CID_CPMS_V1 / CPMS_STATUS_EXPORT` 离线 JSON 文件。
 - 2026-05-30：统一公民状态为 `NORMAL / REVOKED`，软删除时同步写入注销状态和无投票资格。
 - 2026-05-30：系统设置页新增状态更新文件导出按钮，前端文案清理为“正常/注销”。
 - 2026-05-30：年度报告仅 CPMS 机构 admins 可导出；当前规则改为每年 UTC 1 月 1 日后可补导最早未导出年度，UTC 1 月 11 日后仍未导出则持续锁定 operators 登录和已有会话，直到补导完成。
-- 2026-05-30：同步 CPMS/SFID 协议、命名和模块文档，登记 `CPMS_STATUS_EXPORT`。
+- 2026-05-30：同步 CPMS/CID 协议、命名和模块文档，登记 `CPMS_STATUS_EXPORT`。
 - 2026-05-30：已运行 `cargo fmt`、`cargo test`、`cargo clippy --all-targets -- -D warnings` 和 `npm run build`，均通过。

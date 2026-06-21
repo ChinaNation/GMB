@@ -29,27 +29,27 @@ struct OnChainNodeInfo {
     registered_by: AccountId32,
 }
 
-/// SCALE 编码 sfid_number 的 `BoundedVec<u8, ConstU32<64>>` 形式(用作 storage key data)。
+/// SCALE 编码 cid_number 的 `BoundedVec<u8, ConstU32<64>>` 形式(用作 storage key data)。
 ///
 /// 字段编码:`Compact<u32>(len)` + `bytes`。
-fn encode_sfid_key_data(sfid_number: &str) -> Result<Vec<u8>, String> {
-    let raw = sfid_number.as_bytes();
+fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
+    let raw = cid_number.as_bytes();
     if raw.is_empty() || raw.len() > 64 {
         return Err(format!(
-            "sfid_number 长度需在 1..=64 字节,实际:{}",
+            "cid_number 长度需在 1..=64 字节,实际:{}",
             raw.len()
         ));
     }
     let bv: BoundedVec<u8, ConstU32<64>> = raw
         .to_vec()
         .try_into()
-        .map_err(|_| "sfid_number 超出链上 BoundedVec<u8, 64>".to_string())?;
+        .map_err(|_| "cid_number 超出链上 BoundedVec<u8, 64>".to_string())?;
     Ok(bv.encode())
 }
 
-/// 构造 `OffchainTransaction::ClearingBankNodes(sfid_number)` 的 storage key(hex 含 0x 前缀)。
-pub fn clearing_bank_nodes_key(sfid_number: &str) -> Result<String, String> {
-    let key_data = encode_sfid_key_data(sfid_number)?;
+/// 构造 `OffchainTransaction::ClearingBankNodes(cid_number)` 的 storage key(hex 含 0x 前缀)。
+pub fn clearing_bank_nodes_key(cid_number: &str) -> Result<String, String> {
+    let key_data = encode_cid_key_data(cid_number)?;
     Ok(storage_keys::map_key(
         "OffchainTransaction",
         "ClearingBankNodes",
@@ -57,11 +57,11 @@ pub fn clearing_bank_nodes_key(sfid_number: &str) -> Result<String, String> {
     ))
 }
 
-/// 链上查询单条清算行节点声明信息。返回 None 表示该 sfid_number 尚未注册节点。
+/// 链上查询单条清算行节点声明信息。返回 None 表示该 cid_number 尚未注册节点。
 pub fn fetch_clearing_bank_node(
-    sfid_number: &str,
+    cid_number: &str,
 ) -> Result<Option<ClearingBankNodeOnChainInfo>, String> {
-    let key = clearing_bank_nodes_key(sfid_number)?;
+    let key = clearing_bank_nodes_key(cid_number)?;
     // 中文注释(ADR-017):节点声明属于业务读取,按 finalized 口径,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(None),
@@ -81,7 +81,7 @@ pub fn fetch_clearing_bank_node(
             let ss58 = pubkey_to_ss58(&registered_by_bytes)?;
 
             Ok(Some(ClearingBankNodeOnChainInfo {
-                sfid_number: sfid_number.to_string(),
+                cid_number: cid_number.to_string(),
                 peer_id,
                 rpc_domain,
                 rpc_port: info.rpc_port,
@@ -98,24 +98,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encode_sfid_key_data_round_trip() {
+    fn encode_cid_key_data_round_trip() {
         let raw = "LN001-GCB05-944805165-2026";
-        let encoded = encode_sfid_key_data(raw).unwrap();
+        let encoded = encode_cid_key_data(raw).unwrap();
         // Compact<u32> 长度前缀(单字节模式 raw.len() < 64)+ raw 字节
         assert_eq!(encoded[0], (raw.len() as u8) << 2);
         assert_eq!(&encoded[1..], raw.as_bytes());
     }
 
     #[test]
-    fn empty_sfid_rejected() {
-        let err = encode_sfid_key_data("").unwrap_err();
+    fn empty_cid_rejected() {
+        let err = encode_cid_key_data("").unwrap_err();
         assert!(err.contains("长度"));
     }
 
     #[test]
-    fn over_long_sfid_rejected() {
+    fn over_long_cid_rejected() {
         let s = "a".repeat(65);
-        let err = encode_sfid_key_data(&s).unwrap_err();
+        let err = encode_cid_key_data(&s).unwrap_err();
         assert!(err.contains("长度"));
     }
 

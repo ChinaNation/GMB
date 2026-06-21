@@ -23,7 +23,7 @@ import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_detail_pag
 import 'package:citizenapp/governance/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
-import 'package:citizenapp/citizen/public/data/sfid_directory_lookup.dart';
+import 'package:citizenapp/citizen/public/data/cid_directory_lookup.dart';
 import 'package:citizenapp/governance/organization-manage/institution_accounts_page.dart';
 
 /// 机构详情页。
@@ -91,10 +91,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   AdminAccountIdentity get _accountIdentity =>
       AdminAccountIdentity.fromInstitution(widget.institution);
 
-  /// 机构目录信息(法定代表人/所属地):按 sfid 反查公权目录本地库,与公权详情统一展示。
-  /// 内置治理机构都带真实 SFID 号且在确定性目录内;注册机构账户反查不到则留空。
-  final SfidDirectoryLookup _directoryLookup = SfidDirectoryLookup();
-  SfidDirectoryInfo? _directory;
+  /// 机构目录信息(法定代表人/所属地):按 cid 反查公权目录本地库,与公权详情统一展示。
+  /// 内置治理机构都带真实 CID 号且在确定性目录内;注册机构账户反查不到则留空。
+  final CidDirectoryLookup _directoryLookup = CidDirectoryLookup();
+  CidDirectoryInfo? _directory;
 
   @override
   void initState() {
@@ -105,7 +105,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _loadDirectory() async {
     try {
-      final info = await _directoryLookup.lookup(widget.institution.sfidNumber);
+      final info = await _directoryLookup.lookup(widget.institution.cidNumber);
       if (mounted && info != null) setState(() => _directory = info);
     } on Exception {
       // 反查失败留空,不影响主信息展示。
@@ -154,7 +154,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       // 中文注释：这里只记录已确认的管理员机构，用于列表页本地视觉提示，不改变链上排序或身份。
       if (ctx.isAdmin) {
         ProposalContextResolver.markInstitutionAdmin(
-          widget.institution.sfidNumber,
+          widget.institution.cidNumber,
         );
       }
 
@@ -254,7 +254,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (!mounted) return;
     final localLoaded = await _loadLocalProposalSummaries();
     final localFresh = await ProposalLocalStore.instance
-        .isInstitutionIndexFresh(widget.institution.sfidNumber)
+        .isInstitutionIndexFresh(widget.institution.cidNumber)
         .catchError((_) => false);
     if (!force && localLoaded && localFresh) {
       if (!mounted) return;
@@ -286,7 +286,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           .toList(growable: false);
       await ProposalLocalStore.instance.upsertSummaries(summaries);
       await ProposalLocalStore.instance.putInstitutionIndex(
-        widget.institution.sfidNumber,
+        widget.institution.cidNumber,
         summaries.map((summary) => summary.proposalId).toList(growable: false),
       );
       if (!mounted) return;
@@ -311,7 +311,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   Future<bool> _loadLocalProposalSummaries() async {
     try {
       final summaries = await ProposalLocalStore.instance
-          .readInstitutionSummaries(widget.institution.sfidNumber);
+          .readInstitutionSummaries(widget.institution.cidNumber);
       if (!mounted || summaries.isEmpty) return summaries.isNotEmpty;
       setState(() {
         _proposalSummaries = summaries;
@@ -396,7 +396,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             _buildAccountInfoTile(
               icon: Icons.badge_outlined,
               label: '身份ID',
-              value: inst.sfidNumber,
+              value: inst.cidNumber,
             ),
             const Divider(height: 18),
             _buildAccountInfoTile(
@@ -413,7 +413,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
               valueColor: _mainBalanceColor(),
             ),
             const Divider(height: 18),
-            // 法定代表人/所属地:按 sfid 反查公权目录库(与公权详情同源),反查不到留空。
+            // 法定代表人/所属地:按 cid 反查公权目录库(与公权详情同源),反查不到留空。
             _buildAccountInfoTile(
               icon: Icons.person_outline,
               label: '法定代表人',

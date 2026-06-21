@@ -79,14 +79,14 @@ void main() {
     final rpc = FakeChainRpc();
     final service = InstitutionManageService(chainRpc: rpc);
     final address = '11' * 32;
-    final sfidNumber =
+    final cidNumber =
         Uint8List.fromList(utf8.encode('AH001-SCB0H-202605070-2026'));
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
-        '0x${hexOf(DuoqianStorageCodec.accountRegisteredSfidKey(address))}';
+        '0x${hexOf(DuoqianStorageCodec.accountRegisteredCidKey(address))}';
     final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
-      sfidNumber,
+      cidNumber,
       accountName,
     ))}';
     final adminKey = '0x${hexOf(DuoqianStorageCodec.adminAccountKey(
@@ -131,14 +131,14 @@ void main() {
     final rpc = FakeChainRpc();
     final service = InstitutionManageService(chainRpc: rpc);
     final address = '22' * 32;
-    final sfidNumber =
+    final cidNumber =
         Uint8List.fromList(utf8.encode('AH001-SCB0E-202605180-2026'));
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
-        '0x${hexOf(DuoqianStorageCodec.accountRegisteredSfidKey(address))}';
+        '0x${hexOf(DuoqianStorageCodec.accountRegisteredCidKey(address))}';
     final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
-      sfidNumber,
+      cidNumber,
       accountName,
     ))}';
     final adminKey = '0x${hexOf(DuoqianStorageCodec.adminAccountKey(

@@ -35,10 +35,10 @@
 
 - 已删除 `citizenchain/node/src/offchain` 根层旧重复 Rust 文件:
   `bootstrap.rs`、`chain.rs`、`commands.rs`、`decrypt.rs`、`health.rs`、`keystore.rs`、
-  `ledger.rs`、`reserve.rs`、`rpc.rs`、`sfid.rs`、`signing.rs`、`types.rs`。
+  `ledger.rs`、`reserve.rs`、`rpc.rs`、`cid.rs`、`signing.rs`、`types.rs`。
 - 已删除 `citizenchain/node/frontend/offchain` 根层旧重复 TSX 文件:
   `admin_list.tsx`、`create_multisig.tsx`、`institution_detail.tsx`、`other_accounts.tsx`、
-  `register.tsx`、`sfid.tsx`。
+  `register.tsx`、`cid.tsx`。
 - 已把 Rust 入口重接到 `duoqian_manage`、`offchain_transaction`、`settlement` 新目录。
 - 已把前端 `section.tsx` 重接到 `duoqian-manage`、`offchain-transaction`、`settlement` 新目录。
 - 已更新 `NODE_CLEARING_BANK_TECHNICAL.md` 与 `ADR-007` 当前目录说明。

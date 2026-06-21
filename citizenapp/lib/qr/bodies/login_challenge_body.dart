@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// kind = login_challenge
 ///
-/// 由 SFID/CPMS 后端生成,冷钱包 citizenwallet 扫码后验证系统签名。
+/// 由 CID/CPMS 后端生成,冷钱包 citizenwallet 扫码后验证系统签名。
 class LoginChallengeBody implements QrBody {
   const LoginChallengeBody({
     required this.system,
@@ -10,7 +10,7 @@ class LoginChallengeBody implements QrBody {
     required this.sysSig,
   });
 
-  /// `"sfid"` 或 `"cpms"`
+  /// `"cid"` 或 `"cpms"`
   final String system;
 
   /// 系统公钥 `0x` + hex
@@ -33,7 +33,7 @@ class LoginChallengeBody implements QrBody {
     if (system is! String || system.isEmpty) {
       throw const FormatException('login_challenge.system 必填');
     }
-    if (system != 'sfid' && system != 'cpms') {
+    if (system != 'cid' && system != 'cpms') {
       throw FormatException('login_challenge.system 非法: $system');
     }
     if (sysPubkey is! String || !sysPubkey.startsWith('0x')) {

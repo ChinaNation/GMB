@@ -5,16 +5,16 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/rpc/sfid_public.dart';
+import 'package:citizenapp/rpc/cid_public.dart';
 
 /// 清算行节点链上声明。
 ///
 /// 中文注释:
-/// - 该结构来自链上 `OffchainTransaction::ClearingBankNodes[sfid_number]`。
-/// - SFID 只提供机构资料;节点端点必须以链上 storage 为准。
+/// - 该结构来自链上 `OffchainTransaction::ClearingBankNodes[cid_number]`。
+/// - CID 只提供机构资料;节点端点必须以链上 storage 为准。
 class ClearingBankNodeEndpoint {
   const ClearingBankNodeEndpoint({
-    required this.sfidNumber,
+    required this.cidNumber,
     required this.peerId,
     required this.rpcDomain,
     required this.rpcPort,
@@ -22,7 +22,7 @@ class ClearingBankNodeEndpoint {
     required this.registeredBy,
   });
 
-  final String sfidNumber;
+  final String cidNumber;
   final String peerId;
   final String rpcDomain;
   final int rpcPort;
@@ -36,7 +36,7 @@ class ClearingBankNodeEndpoint {
   }
 }
 
-/// SFID 清算行资料 + 链上节点端点的组合结果。
+/// CID 清算行资料 + 链上节点端点的组合结果。
 class ClearingBankCandidate {
   const ClearingBankCandidate({
     required this.info,
@@ -55,25 +55,25 @@ class ClearingBankCandidate {
 /// citizenapp 清算行目录服务。
 ///
 /// 中文注释:
-/// - 搜索入口使用 SFID 公开 API。
+/// - 搜索入口使用 CID 公开 API。
 /// - 端点入口读取链上 `ClearingBankNodes`,避免继续依赖固定启动参数。
 /// - 用户绑定状态读取链上 `UserBank[user]`,本地缓存只做 UI 快照。
 class ClearingBankDirectory {
   ClearingBankDirectory({
-    required this.sfidBaseUrl,
+    required this.cidBaseUrl,
     ChainRpc? chainRpc,
   }) : _chainRpc = chainRpc ?? ChainRpc();
 
-  final String sfidBaseUrl;
+  final String cidBaseUrl;
   final ChainRpc _chainRpc;
 
   Future<List<ClearingBankCandidate>> search(String query) async {
-    final api = SfidPublicApi(baseUrl: sfidBaseUrl);
+    final api = CidPublicApi(baseUrl: cidBaseUrl);
     try {
       final result = await api.searchClearingBanks(keyword: query, size: 20);
       final out = <ClearingBankCandidate>[];
       for (final item in result.items) {
-        final endpoint = await fetchEndpoint(item.sfidNumber);
+        final endpoint = await fetchEndpoint(item.cidNumber);
         out.add(ClearingBankCandidate(info: item, endpoint: endpoint));
       }
       return out;
@@ -82,13 +82,13 @@ class ClearingBankDirectory {
     }
   }
 
-  Future<ClearingBankNodeEndpoint?> fetchEndpoint(String sfidNumber) async {
-    final cached = await _ClearingBankCache.readEndpoint(sfidNumber);
+  Future<ClearingBankNodeEndpoint?> fetchEndpoint(String cidNumber) async {
+    final cached = await _ClearingBankCache.readEndpoint(cidNumber);
     if (cached != null && cached.isEndpointFresh) return cached.endpoint;
-    final key = _clearingBankNodesKey(sfidNumber);
+    final key = _clearingBankNodesKey(cidNumber);
     final raw = await _chainRpc.fetchStorage(key);
     if (raw == null || raw.isEmpty) return null;
-    final endpoint = _decodeEndpoint(sfidNumber, raw);
+    final endpoint = _decodeEndpoint(cidNumber, raw);
     if (endpoint != null) {
       await _ClearingBankCache.writeEndpoint(endpoint);
     }
@@ -109,7 +109,7 @@ class ClearingBankDirectory {
   }
 
   static ClearingBankNodeEndpoint? _decodeEndpoint(
-    String sfidNumber,
+    String cidNumber,
     Uint8List raw,
   ) {
     var offset = 0;
@@ -129,7 +129,7 @@ class ClearingBankDirectory {
       2027,
     );
     return ClearingBankNodeEndpoint(
-      sfidNumber: sfidNumber,
+      cidNumber: cidNumber,
       peerId: peerId,
       rpcDomain: domain,
       rpcPort: port,
@@ -138,8 +138,8 @@ class ClearingBankDirectory {
     );
   }
 
-  static String _clearingBankNodesKey(String sfidNumber) {
-    final keyData = _encodeBytes(utf8.encode(sfidNumber));
+  static String _clearingBankNodesKey(String cidNumber) {
+    final keyData = _encodeBytes(utf8.encode(cidNumber));
     return _mapKey('OffchainTransaction', 'ClearingBankNodes', keyData);
   }
 
@@ -219,12 +219,12 @@ class _ClearingBankCache {
   static const _userBankTtl = Duration(minutes: 3);
 
   static Future<_CachedClearingBankEndpoint?> readEndpoint(
-    String sfidNumber,
+    String cidNumber,
   ) async {
     try {
       return WalletIsar.instance.read((isar) async {
         final entity = await isar.appKvEntitys.getByKey(
-          '$_endpointPrefix$sfidNumber',
+          '$_endpointPrefix$cidNumber',
         );
         return _CachedClearingBankEndpoint.fromJsonString(entity?.stringValue);
       });
@@ -241,7 +241,7 @@ class _ClearingBankCache {
     );
     try {
       await WalletIsar.instance.writeTxn((isar) async {
-        final key = '$_endpointPrefix${endpoint.sfidNumber}';
+        final key = '$_endpointPrefix${endpoint.cidNumber}';
         final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
         entity
           ..key = key
@@ -308,7 +308,7 @@ class _CachedClearingBankEndpoint {
   Map<String, Object?> toJson() => {
         'updated_at_millis': updatedAtMillis,
         'endpoint': {
-          'sfid_number': endpoint.sfidNumber,
+          'cid_number': endpoint.cidNumber,
           'peer_id': endpoint.peerId,
           'rpc_domain': endpoint.rpcDomain,
           'rpc_port': endpoint.rpcPort,
@@ -325,14 +325,14 @@ class _CachedClearingBankEndpoint {
       final endpointRaw = decoded['endpoint'];
       if (endpointRaw is! Map<String, dynamic>) return null;
       final updatedAtMillis = _toInt(decoded['updated_at_millis']);
-      final sfidNumber = endpointRaw['sfid_number']?.toString();
+      final cidNumber = endpointRaw['cid_number']?.toString();
       final peerId = endpointRaw['peer_id']?.toString();
       final rpcDomain = endpointRaw['rpc_domain']?.toString();
       final rpcPort = _toInt(endpointRaw['rpc_port']);
       final registeredAt = _toInt(endpointRaw['registered_at']);
       final registeredBy = endpointRaw['registered_by']?.toString();
       if (updatedAtMillis == null ||
-          sfidNumber == null ||
+          cidNumber == null ||
           peerId == null ||
           rpcDomain == null ||
           rpcPort == null ||
@@ -343,7 +343,7 @@ class _CachedClearingBankEndpoint {
       return _CachedClearingBankEndpoint(
         updatedAtMillis: updatedAtMillis,
         endpoint: ClearingBankNodeEndpoint(
-          sfidNumber: sfidNumber,
+          cidNumber: cidNumber,
           peerId: peerId,
           rpcDomain: rpcDomain,
           rpcPort: rpcPort,

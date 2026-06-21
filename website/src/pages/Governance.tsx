@@ -26,7 +26,7 @@ const votingTiers = [
     tier: '第三级',
     name: '公民投票',
     scope: '全体认证公民',
-    desc: '所有经 SFID 认证并绑定的公民轻节点均有投票权，实现真正的公民民主',
+    desc: '所有经 CID 认证并绑定的公民轻节点均有投票权，实现真正的公民民主',
     voters: '全体认证公民',
     threshold: '>50% 通过',
     extraTag: '',
@@ -68,8 +68,8 @@ const rules = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
       </svg>
     ),
-    title: 'SFID 验证',
-    desc: '公民投票需经 SFID 身份认证，确保一人一票，防止重复投票',
+    title: 'CID 验证',
+    desc: '公民投票需经 CID 身份认证，确保一人一票，防止重复投票',
   },
 ]
 

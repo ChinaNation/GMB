@@ -1,14 +1,14 @@
 # 行政区重新创世清理
 
 - 状态:完成
-- 模块:SFID 行政区
+- 模块:CID 行政区
 - 创建时间:2026-06-19
 
 ## 目标
 
-按重新创世口径清理 `sfid/backend/china/china.sqlite` 中的行政区数据,只处理行政区名字、归属、伪行政区和 code 重排。
+按重新创世口径清理 `citizencode/backend/china/china.sqlite` 中的行政区数据,只处理行政区名字、归属、伪行政区和 code 重排。
 
-本任务不生成 citizenapp 行政区包、不生成 CPMS 快照、不生成 SFID 公权机构,不修改 `citizenchain/runtime/**`。
+本任务不生成 citizenapp 行政区包、不生成 CPMS 快照、不生成 CID 公权机构,不修改 `citizenchain/runtime/**`。
 
 ## 规则
 
@@ -45,20 +45,20 @@
 - 568 条 `xx虚拟路` 已归一为 `xx`;3 条纯 `虚拟路` 已删除,其中 2 条对应的功能区壳镇同步删除。
 - 46 条原始名含 `社区` 的纯功能词地址段已恢复为 `xx社区`;26 条 `LOCAL-*` 来源的 `xx虚拟路` 合成占位地址段已删除,同步删除因此空掉的 24 个镇并重排受影响市的镇 code。
 - 2026-06-20:已重新生成 citizenapp 行政区包,manifest `version=1`,43 省、2872 市、39227 镇。
-- 2026-06-20:已执行 SFID 公权机构 `reconcile-gov --changed-only` 和 `check-gov --strict`;本轮复跑 reconcile 为 `scopes=0 inserted=0 updated=0 account_inserted=0 removed=0`,strict 结果为 `target_count=245716 active_count=245716 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
-- 2026-06-20:已通过当前 SFID 真实公开接口重新生成 citizenapp 公权机构包,43 省、245716 条,并完成行政区 code 交叉检查 `bad_count=0`。
+- 2026-06-20:已执行 CID 公权机构 `reconcile-gov --changed-only` 和 `check-gov --strict`;本轮复跑 reconcile 为 `scopes=0 inserted=0 updated=0 account_inserted=0 removed=0`,strict 结果为 `target_count=245716 active_count=245716 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
+- 2026-06-20:已通过当前 CID 真实公开接口重新生成 citizenapp 公权机构包,43 省、245716 条,并完成行政区 code 交叉检查 `bad_count=0`。
 
 ## 不做范围
 
 - 已生成 citizenapp 行政区包和公权机构包。
 - CPMS 不维护第二份行政区数据包源码;发布安装包时从同一 `china.sqlite` 拷贝随包快照。
-- 已同步 SFID 运行库自动公权机构目录。
+- 已同步 CID 运行库自动公权机构目录。
 - 不修改 runtime。
 
 ## 验收
 
 - `PRAGMA integrity_check`:ok。
-- `python3 sfid/backend/china/check_code_immutable.py`:PASS。
+- `python3 citizencode/backend/china/check_code_immutable.py`:PASS。
 - 省名重复:0。
 - 市名全国重复:0。
 - 同市镇名重复:0。
@@ -67,4 +67,4 @@
 - 内蒙古旗类 `旗市` 残留:0。
 - `县市` 残留:0。
 - 镇级伪行政区关键词命中:0。
-- 本轮按要求未生成 citizenapp / CPMS 数据包,未生成 SFID 公权机构。
+- 本轮按要求未生成 citizenapp / CPMS 数据包,未生成 CID 公权机构。

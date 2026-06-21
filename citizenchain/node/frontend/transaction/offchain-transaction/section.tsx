@@ -2,8 +2,8 @@
 //
 // 重构(2026-05-01)后状态机:
 //   empty                        列表 + ＋添加清算行
-//   add-input-sfid               输入 sfid_number 自动 debounce 搜索 SFID 候选(不再带"查询"按钮)
-//   check-multisig               链上查 Institutions[sfid_number]
+//   add-input-cid               输入 cid_number 自动 debounce 搜索 CID 候选(不再带"查询"按钮)
+//   check-multisig               链上查 Institutions[cid_number]
 //                                  ├─ 已存在 → institution-detail
 //                                  └─ 不存在 → create-multisig-institution
 //   institution-detail           机构详情 = 卡片栅格 + 折叠卡片(其他账户 / 管理员) + 节点信息
@@ -12,12 +12,12 @@
 //   admin-list                   子页:管理员列表
 //   admin-set-change             子页:复用 governance/admins_change 更换管理员流程
 //   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
-//   wait-vote                    等待管理员投票通过(轮询 Institutions[sfid_number].status === 'Active')
+//   wait-vote                    等待管理员投票通过(轮询 Institutions[cid_number].status === 'Active')
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
 //
 // 已下架(2026-05-01):
-//   - register-sfid info 终态(SFID 端没找到候选时改为内联红条)
-//   - propose-create info 终态("去 SFID 后台"长说明,改为直接进 create-multisig-institution)
+//   - register-cid info 终态(CID 端没找到候选时改为内联红条)
+//   - propose-create info 终态("去 CID 后台"长说明,改为直接进 create-multisig-institution)
 //   - 老 detail 视图(只展示节点信息),并入 institution-detail 内联节点信息卡
 
 import { useEffect, useState, useCallback } from 'react';
@@ -41,80 +41,80 @@ import { ClearingBankDeclareNodePage } from './node-register';
 import { ClearingBankAdminListPage } from './settlement/admin-unlock';
 import './styles.css';
 
-const STORAGE_KEY = 'gmb-clearing-bank-known-sfids';
+const STORAGE_KEY = 'gmb-clearing-bank-known-cids';
 
-type KnownSfidEntry = { sfidNumber: string; sfidFullName: string };
+type KnownCidEntry = { cidNumber: string; cidFullName: string };
 
-function loadKnownSfids(): KnownSfidEntry[] {
+function loadKnownCids(): KnownCidEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
-      (e): e is KnownSfidEntry =>
+      (e): e is KnownCidEntry =>
         typeof e === 'object' && e !== null
-        && typeof (e as { sfidNumber?: unknown }).sfidNumber === 'string'
-        && typeof (e as { sfidFullName?: unknown }).sfidFullName === 'string',
+        && typeof (e as { cidNumber?: unknown }).cidNumber === 'string'
+        && typeof (e as { cidFullName?: unknown }).cidFullName === 'string',
     );
   } catch {
     return [];
   }
 }
 
-/// 把已确认存在(链上有 Institutions[sfid_number] 或刚提交 propose_create_institution
+/// 把已确认存在(链上有 Institutions[cid_number] 或刚提交 propose_create_institution
 /// 成功)的机构入条目加入本机已添加列表。**不要**在用户只是选了候选时调本函数,
 /// 否则若链上没有 + 创建流程失败,EmptyView 会显示孤儿卡。
-export function saveKnownSfid(entry: KnownSfidEntry) {
-  const list = loadKnownSfids().filter((e) => e.sfidNumber !== entry.sfidNumber);
+export function saveKnownCid(entry: KnownCidEntry) {
+  const list = loadKnownCids().filter((e) => e.cidNumber !== entry.cidNumber);
   list.unshift(entry);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
 }
 
-/// 从本机已添加列表中删除指定 sfid_number 条目(链上判定为 None 或用户主动移除时调)。
-function removeKnownSfid(sfidNumber: string) {
-  const list = loadKnownSfids().filter((e) => e.sfidNumber !== sfidNumber);
+/// 从本机已添加列表中删除指定 cid_number 条目(链上判定为 None 或用户主动移除时调)。
+function removeKnownCid(cidNumber: string) {
+  const list = loadKnownCids().filter((e) => e.cidNumber !== cidNumber);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
 }
 
 export function ClearingBankSection() {
   const [view, setView] = useState<ClearingBankView>({ kind: 'empty' });
-  const [knownSfids, setKnownSfids] = useState<KnownSfidEntry[]>(() => loadKnownSfids());
+  const [knownCids, setKnownCids] = useState<KnownCidEntry[]>(() => loadKnownCids());
 
   const goEmpty = useCallback(() => {
-    setKnownSfids(loadKnownSfids());
+    setKnownCids(loadKnownCids());
     setView({ kind: 'empty' });
   }, []);
 
-  const goAdd = useCallback(() => setView({ kind: 'add-input-sfid' }), []);
+  const goAdd = useCallback(() => setView({ kind: 'add-input-cid' }), []);
 
-  const goCheckMultisig = useCallback((sfidNumber: string, sfidFullName: string) => {
-    // 中文注释:**不在此处** saveKnownSfid。用户只是选了候选,链上未必存在,
+  const goCheckMultisig = useCallback((cidNumber: string, cidFullName: string) => {
+    // 中文注释:**不在此处** saveKnownCid。用户只是选了候选,链上未必存在,
     // 创建流程也可能立即失败。只有 goInstitutionDetail(链上确认存在)与
-    // create_multisig.tsx 提案上链成功 callback 才能调 saveKnownSfid。
-    setView({ kind: 'check-multisig', sfidNumber, sfidFullName });
+    // create_multisig.tsx 提案上链成功 callback 才能调 saveKnownCid。
+    setView({ kind: 'check-multisig', cidNumber, cidFullName });
   }, []);
 
-  const goInstitutionDetail = useCallback((sfidNumber: string, sfidFullName?: string) => {
-    if (sfidFullName) {
-      saveKnownSfid({ sfidNumber, sfidFullName });
-      setKnownSfids(loadKnownSfids());
+  const goInstitutionDetail = useCallback((cidNumber: string, cidFullName?: string) => {
+    if (cidFullName) {
+      saveKnownCid({ cidNumber, cidFullName });
+      setKnownCids(loadKnownCids());
     }
-    setView({ kind: 'institution-detail', sfidNumber });
+    setView({ kind: 'institution-detail', cidNumber });
   }, []);
 
   const goAdminSetChange = useCallback(async (detail: InstitutionDetail) => {
     const accountRef = {
-      sfidNumber: detail.sfidNumber,
+      cidNumber: detail.cidNumber,
       accountHex: detail.adminAccountHex,
       org: detail.org,
     };
     try {
-      const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.sfidNumber, accountRef);
+      const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.cidNumber, accountRef);
       setView({
         kind: 'admin-set-change',
-        sfidNumber: detail.sfidNumber,
-        sfidFullName: detail.sfidFullName,
+        cidNumber: detail.cidNumber,
+        cidFullName: detail.cidFullName,
         adminAccountHex: detail.adminAccountHex,
         org: detail.org,
         adminWallets: activatedAdmins.map((admin) => ({
@@ -132,52 +132,52 @@ export function ClearingBankSection() {
     <div className="governance-section clearing-bank-section">
       {view.kind === 'empty' && (
         <EmptyView
-          knownSfids={knownSfids}
+          knownCids={knownCids}
           onAdd={goAdd}
-          onOpen={(s) => goInstitutionDetail(s.sfidNumber, s.sfidFullName)}
+          onOpen={(s) => goInstitutionDetail(s.cidNumber, s.cidFullName)}
         />
       )}
 
-      {view.kind === 'add-input-sfid' && (
+      {view.kind === 'add-input-cid' && (
         <ClearingBankAddPage
           onBack={goEmpty}
-          onSelectCandidate={(c) => goCheckMultisig(c.sfidNumber, c.sfidFullName)}
-          onSelectKnownSfid={(s) => goCheckMultisig(s, '')}
+          onSelectCandidate={(c) => goCheckMultisig(c.cidNumber, c.cidFullName)}
+          onSelectKnownCid={(s) => goCheckMultisig(s, '')}
         />
       )}
 
       {view.kind === 'check-multisig' && (
         <CheckMultisigView
-          sfidNumber={view.sfidNumber}
-          sfidFullName={view.sfidFullName}
+          cidNumber={view.cidNumber}
+          cidFullName={view.cidFullName}
           onBack={goEmpty}
-          onExists={() => goInstitutionDetail(view.sfidNumber, view.sfidFullName)}
-          onMissing={() => setView({ kind: 'create-multisig-institution', sfidNumber: view.sfidNumber })}
+          onExists={() => goInstitutionDetail(view.cidNumber, view.cidFullName)}
+          onMissing={() => setView({ kind: 'create-multisig-institution', cidNumber: view.cidNumber })}
         />
       )}
 
       {view.kind === 'institution-detail' && (
         <ClearingBankInstitutionDetailPage
-          sfidNumber={view.sfidNumber}
+          cidNumber={view.cidNumber}
           onBack={goEmpty}
           onOpenOtherAccounts={(detail) =>
             setView({
               kind: 'other-accounts-list',
-              sfidNumber: view.sfidNumber,
+              cidNumber: view.cidNumber,
               otherAccounts: detail.otherAccounts,
             })
           }
           onOpenAdminList={(detail) =>
             setView({
               kind: 'admin-list',
-              sfidNumber: view.sfidNumber,
+              cidNumber: view.cidNumber,
               admins: detail.adminsSs58,
               threshold: detail.threshold,
               adminsLen: detail.adminsLen,
             })
           }
-          onDeclareNode={(sfidNumber, sfidFullName) =>
-            setView({ kind: 'declare-node', sfidNumber, sfidFullName })
+          onDeclareNode={(cidNumber, cidFullName) =>
+            setView({ kind: 'declare-node', cidNumber, cidFullName })
           }
           onCreateAdminSetChange={goAdminSetChange}
         />
@@ -186,63 +186,63 @@ export function ClearingBankSection() {
       {view.kind === 'admin-set-change' && (
         <AdminSetChangePage
           accountRef={{
-            sfidNumber: view.sfidNumber,
+            cidNumber: view.cidNumber,
             accountHex: view.adminAccountHex,
             org: view.org,
           }}
-          sfidFullName={view.sfidFullName}
+          cidFullName={view.cidFullName}
           adminWallets={view.adminWallets}
-          onBack={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
-          onSuccess={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
+          onBack={() => setView({ kind: 'institution-detail', cidNumber: view.cidNumber })}
+          onSuccess={() => setView({ kind: 'institution-detail', cidNumber: view.cidNumber })}
         />
       )}
 
       {view.kind === 'other-accounts-list' && (
         <OtherAccountsListPage
-          sfidNumber={view.sfidNumber}
+          cidNumber={view.cidNumber}
           otherAccounts={view.otherAccounts}
-          onBack={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
+          onBack={() => setView({ kind: 'institution-detail', cidNumber: view.cidNumber })}
         />
       )}
 
       {view.kind === 'admin-list' && (
         <ClearingBankAdminListPage
-          sfidNumber={view.sfidNumber}
+          cidNumber={view.cidNumber}
           admins={view.admins}
           threshold={view.threshold}
           adminsLen={view.adminsLen}
-          onBack={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
+          onBack={() => setView({ kind: 'institution-detail', cidNumber: view.cidNumber })}
         />
       )}
 
       {view.kind === 'create-multisig-institution' && (
         <CreateMultisigInstitutionPage
-          sfidNumber={view.sfidNumber}
+          cidNumber={view.cidNumber}
           coldWallets={[]}
           onBack={goEmpty}
-          onSubmitted={(sfidNumber, sfidFullName) =>
-            setView({ kind: 'wait-vote', sfidNumber, sfidFullName })
+          onSubmitted={(cidNumber, cidFullName) =>
+            setView({ kind: 'wait-vote', cidNumber, cidFullName })
           }
         />
       )}
 
       {view.kind === 'wait-vote' && (
         <WaitVoteView
-          sfidNumber={view.sfidNumber}
-          sfidFullName={view.sfidFullName}
+          cidNumber={view.cidNumber}
+          cidFullName={view.cidFullName}
           onBack={goEmpty}
           onActivated={() =>
-            setView({ kind: 'declare-node', sfidNumber: view.sfidNumber, sfidFullName: view.sfidFullName })
+            setView({ kind: 'declare-node', cidNumber: view.cidNumber, cidFullName: view.cidFullName })
           }
         />
       )}
 
       {view.kind === 'declare-node' && (
         <ClearingBankDeclareNodePage
-          sfidNumber={view.sfidNumber}
-          sfidFullName={view.sfidFullName}
+          cidNumber={view.cidNumber}
+          cidFullName={view.cidFullName}
           onBack={goEmpty}
-          onSuccess={() => goInstitutionDetail(view.sfidNumber, view.sfidFullName)}
+          onSuccess={() => goInstitutionDetail(view.cidNumber, view.cidFullName)}
         />
       )}
     </div>
@@ -251,39 +251,39 @@ export function ClearingBankSection() {
 
 // ─── 子组件:空视图 + 已添加列表 ───
 //
-// 中文注释:挂载时自愈本地脏数据 ——— 对每个 knownSfid 条目调
-// fetchInstitutionDetail(sfidNumber);链上 None 即从 localStorage 移除。
+// 中文注释:挂载时自愈本地脏数据 ——— 对每个 knownCid 条目调
+// fetchInstitutionDetail(cidNumber);链上 None 即从 localStorage 移除。
 // 这样旧版本(2026-05-01 之前)误存的"选候选即落条目"的孤儿卡能自动消失。
 //
 // 链查失败(网络/节点未运行)时**保留**条目(避免误删合法记录)。
 function EmptyView({
-  knownSfids: initialKnown,
+  knownCids: initialKnown,
   onAdd,
   onOpen,
 }: {
-  knownSfids: KnownSfidEntry[];
+  knownCids: KnownCidEntry[];
   onAdd: () => void;
-  onOpen: (entry: KnownSfidEntry) => void;
+  onOpen: (entry: KnownCidEntry) => void;
 }) {
-  const [knownSfids, setKnownSfids] = useState<KnownSfidEntry[]>(initialKnown);
+  const [knownCids, setKnownCids] = useState<KnownCidEntry[]>(initialKnown);
 
   useEffect(() => {
     let cancelled = false;
     const cleanup = async () => {
-      const next: KnownSfidEntry[] = [];
+      const next: KnownCidEntry[] = [];
       for (const entry of initialKnown) {
         try {
-          const detail = await organizationManageApi.fetchInstitutionDetail(entry.sfidNumber);
+          const detail = await organizationManageApi.fetchInstitutionDetail(entry.cidNumber);
           if (detail !== null) {
             next.push(entry); // 链上有(Pending / Active 都保留)
           } else {
-            removeKnownSfid(entry.sfidNumber); // 链上明确不存在 → 移除孤儿
+            removeKnownCid(entry.cidNumber); // 链上明确不存在 → 移除孤儿
           }
         } catch {
           next.push(entry); // 链查失败保守保留
         }
       }
-      if (!cancelled) setKnownSfids(next);
+      if (!cancelled) setKnownCids(next);
     };
     cleanup();
     return () => {
@@ -297,11 +297,11 @@ function EmptyView({
         <h2>清算行</h2>
         <button className="primary-button" onClick={onAdd}>+ 添加清算行</button>
       </div>
-      {knownSfids.length > 0 && (
+      {knownCids.length > 0 && (
         <div className="admin-grid">
-          {knownSfids.map((s) => (
+          {knownCids.map((s) => (
             <div
-              key={s.sfidNumber}
+              key={s.cidNumber}
               className="metric-card admin-card"
               role="button"
               tabIndex={0}
@@ -312,8 +312,8 @@ function EmptyView({
             >
               <span className="admin-card-index">→</span>
               <div>
-                <strong>{s.sfidFullName}</strong>
-                <code className="admin-card-address" style={{ marginLeft: 8 }}>{s.sfidNumber}</code>
+                <strong>{s.cidFullName}</strong>
+                <code className="admin-card-address" style={{ marginLeft: 8 }}>{s.cidNumber}</code>
               </div>
             </div>
           ))}
@@ -325,14 +325,14 @@ function EmptyView({
 
 // ─── 子组件:链上查机构是否已存在,已存在跳详情,不存在跳创建 ───
 function CheckMultisigView({
-  sfidNumber,
-  sfidFullName,
+  cidNumber,
+  cidFullName,
   onBack,
   onExists,
   onMissing,
 }: {
-  sfidNumber: string;
-  sfidFullName: string;
+  cidNumber: string;
+  cidFullName: string;
   onBack: () => void;
   onExists: () => void;
   onMissing: () => void;
@@ -343,7 +343,7 @@ function CheckMultisigView({
     let cancelled = false;
     setError(null);
     organizationManageApi
-      .fetchInstitutionDetail(sfidNumber)
+      .fetchInstitutionDetail(cidNumber)
       .then((detail) => {
         if (cancelled) return;
         if (detail) onExists();
@@ -355,7 +355,7 @@ function CheckMultisigView({
     return () => {
       cancelled = true;
     };
-  }, [sfidNumber, onExists, onMissing]);
+  }, [cidNumber, onExists, onMissing]);
 
   return (
     <>
@@ -363,7 +363,7 @@ function CheckMultisigView({
       {error ? (
         <div className="error">{error}</div>
       ) : (
-        <p>正在判定 {sfidFullName || sfidNumber} 链上多签状态…</p>
+        <p>正在判定 {cidFullName || cidNumber} 链上多签状态…</p>
       )}
     </>
   );
@@ -371,13 +371,13 @@ function CheckMultisigView({
 
 // ─── 子组件:等其他管理员投票通过 ───
 function WaitVoteView({
-  sfidNumber,
-  sfidFullName,
+  cidNumber,
+  cidFullName,
   onBack,
   onActivated,
 }: {
-  sfidNumber: string;
-  sfidFullName: string;
+  cidNumber: string;
+  cidFullName: string;
   onBack: () => void;
   onActivated: () => void;
 }) {
@@ -388,7 +388,7 @@ function WaitVoteView({
     const id = setInterval(async () => {
       if (cancelled) return;
       try {
-        const detail = await organizationManageApi.fetchInstitutionDetail(sfidNumber);
+        const detail = await organizationManageApi.fetchInstitutionDetail(cidNumber);
         if (detail && detail.status === 'Active') {
           onActivated();
         }
@@ -401,7 +401,7 @@ function WaitVoteView({
       cancelled = true;
       clearInterval(id);
     };
-  }, [sfidNumber, onActivated]);
+  }, [cidNumber, onActivated]);
 
   return (
     <>
@@ -410,8 +410,8 @@ function WaitVoteView({
         <h2>等待管理员投票通过</h2>
       </div>
       <p>
-        机构 {sfidFullName} ({sfidNumber}) 的创建提案已发起,正在等待其他管理员
-        通过冷钱包投赞成达阈值。投票通过后链上 Institutions[sfid_number].status 由
+        机构 {cidFullName} ({cidNumber}) 的创建提案已发起,正在等待其他管理员
+        通过冷钱包投赞成达阈值。投票通过后链上 Institutions[cid_number].status 由
         Pending 变 Active,本页自动跳转到"声明本机为清算行节点"。
       </p>
       <p className="muted">每 5 秒自动检查 1 次链上状态(已检查 {tick} 次)…</p>

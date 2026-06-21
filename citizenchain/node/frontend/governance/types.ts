@@ -55,7 +55,7 @@ export type ActivateRequestResult = {
 
 export type InstitutionListItem = {
   name: string;
-  sfidNumber: string;
+  cidNumber: string;
   orgType: number;
   orgTypeLabel: string;
   mainAccount: string;
@@ -75,7 +75,7 @@ export type AdminInfo = {
 
 export type InstitutionDetail = {
   name: string;
-  sfidNumber: string;
+  cidNumber: string;
   orgType: number;
   orgTypeLabel: string;
   mainAccount: string;
@@ -97,7 +97,7 @@ export type InstitutionDetail = {
 };
 
 export type InstitutionBalanceUpdate = {
-  sfidNumber: string;
+  cidNumber: string;
   balanceFen: string | null;
   stakingBalanceFen: string | null;
   feeBalanceFen: string | null;
@@ -124,7 +124,7 @@ export type ProposalListItem = {
   stageLabel: string;
   status: number;
   statusLabel: string;
-  sfidFullName: string | null;
+  cidFullName: string | null;
   summary: string;
 };
 
@@ -161,5 +161,5 @@ export type ProposalFullInfo = DuoqianTransferProposalDetails & {
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
   citizenTally: { yes: number; no: number } | null;
-  sfidFullName: string | null;
+  cidFullName: string | null;
 };

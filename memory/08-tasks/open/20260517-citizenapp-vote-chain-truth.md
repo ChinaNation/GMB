@@ -62,7 +62,7 @@ citizenapp
 - 已修正 `OnchainRpc.checkTxStatus` 注释：明确 confirmed 只代表 nonce 已推进，不代表投票类业务成功。
 - 已同步 citizenapp 架构文档、治理技术文档和多签转账技术文档。
 - 已补充 pending 20 分钟确认窗口：链上无投票记录、nonce 未推进且超时后清除 pending，避免管理员明细无限“投票中”。
-- 已修复 runtime 升级联合投票 `AccountId` 编码：删除页面内裸 sfid `[u8;48]` 编码，统一走 `institutionIdentityToPalletId()`。
+- 已修复 runtime 升级联合投票 `AccountId` 编码：删除页面内裸 cid `[u8;48]` 编码，统一走 `institutionIdentityToPalletId()`。
 - 已修复多签转账和 runtime 升级投票提交后的按钮转圈：拿到 txHash 后后台刷新，不再 `await _load()`。
 
 验证记录：
@@ -73,4 +73,4 @@ citizenapp
 - 残留搜索 `txFailureEvent / event.isFailure / PendingVoteStore.instance.remove / confirmAll / 投票成功 / 交易已出块 / 未出块，已清除`：未发现旧的“watch 失败直接恢复未投票”流程残留；保留的 remove 均在链上投票记录复核或 nonce 消耗后执行。
 - 本次补修后复跑 `cd citizenapp && dart analyze lib test`：通过，No issues found。
 - 本次补修后复跑 `cd citizenapp && flutter test`：通过，182 passed。
-- 本次补修残留搜索 `await _load / _sfidNumberToFixed48 / _votePendingTimeout / institutionIdentityToPalletId`：投票提交路径已无 `await _load()`；runtime 升级页已无错误 `_sfidNumberToFixed48()`；pending 20 分钟确认窗口和统一 AccountId 编码已落地。
+- 本次补修残留搜索 `await _load / _cidNumberToFixed48 / _votePendingTimeout / institutionIdentityToPalletId`：投票提交路径已无 `await _load()`；runtime 升级页已无错误 `_cidNumberToFixed48()`；pending 20 分钟确认窗口和统一 AccountId 编码已落地。

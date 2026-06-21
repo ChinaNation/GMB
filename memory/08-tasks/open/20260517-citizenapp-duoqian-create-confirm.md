@@ -74,7 +74,7 @@ citizenapp
 - 已修复 `admins-change` 动态主体关闭逻辑：个人/机构多签注销成功后删除 `Subjects[subject]` 当前状态，不再保留 `Closed` 墓碑。
 - 已新增 `admins-change` storage v4 迁移：升级时清理旧链上遗留的 Closed 动态主体；历史事件和提案不删除。
 - 已在个人多签关闭执行阶段复核 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
-- 已在机构账户关闭成功后清理 `InstitutionAccounts`、`SfidRegisteredAccount`、`AccountRegisteredSfid` 和管理员主体当前状态，与个人多签关闭口径对齐。
+- 已在机构账户关闭成功后清理 `InstitutionAccounts`、`CidRegisteredAccount`、`AccountRegisteredCid` 和管理员主体当前状态，与个人多签关闭口径对齐。
 - 已在 citizenapp `ChainRpc` 增加 `System.ExtrinsicFailed` 模块错误解析，个人/机构创建确认在找成功事件前先显示真实链上失败原因。
 - 已更新 runtime 与 citizenapp 技术文档，并补充测试覆盖。
 

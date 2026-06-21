@@ -11,7 +11,7 @@
 ## 进度(2026-06-12)
 - [x] institution_detail_page `_loadExtraAccounts`:更多账户余额循环逐条 `fetchFinalizedBalance` → 收集未命中地址一次 `fetchFinalizedBalances` 批量(analyze0/test196)。
 - [ ] vote_view `_loadItemsForIds`:每提案调一次 hasUnvotedWallet → 需新增跨提案批量投票查询接口(InternalVoteQueryService.fetchAdminVotesForProposals)。
-- [ ] institution_manage_service / personal_manage_service:账户详情多次 fetchStorage → fetchStorageBatch(与卡②listSfidAccounts 整表化一并)。
+- [ ] institution_manage_service / personal_manage_service:账户详情多次 fetchStorage → fetchStorageBatch(与卡②listCidAccounts 整表化一并)。
 - [ ] chain_tx_monitor:每事件/钱包余额 → 同块去重后批量(N 小,低优先)。
 
 ## 附带修复:广场重复卡片(2026-06-13)

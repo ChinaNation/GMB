@@ -3,7 +3,7 @@
 - 版本:`CITIZEN_QR_V1`
 - 创建日期:2026-04-09
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:全仓库所有二维码(CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 除外)
+- 范围:全仓库所有二维码(CPMS 的 `CID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 除外)
 
 ## 1. 设计铁律
 
@@ -45,11 +45,11 @@
 
 | kind | 类型 | 生成者 | 扫描者 | 说明 |
 |---|---|---|---|---|
-| `login_challenge` | 临时 | SFID/CPMS 后端 | citizenwallet | 登录挑战码 |
-| `login_receipt` | 临时 | citizenwallet | SFID/CPMS 后端 | 登录回执码 |
+| `login_challenge` | 临时 | CID/CPMS 后端 | citizenwallet | 登录挑战码 |
+| `login_receipt` | 临时 | citizenwallet | CID/CPMS 后端 | 登录回执码 |
 | `sign_request` | 临时 | citizenapp / citizenchain/node / CPMS | citizenwallet | 离线签名请求 |
 | `sign_response` | 临时 | citizenwallet | citizenapp | 离线签名回执 |
-| `user_contact` | **固定** | citizenapp | citizenapp / citizenchain / sfid 前端 | 个人联系码 |
+| `user_contact` | **固定** | citizenapp | citizenapp / citizenchain / cid 前端 | 个人联系码 |
 | `user_transfer` | 临时 | citizenapp | citizenapp / citizenchain | 临时收款码 |
 
 > 注:`user_duoqian` 协议已于 **2026-05-03 下线** — citizenapp 改为通过链上反向索引(遍历 `AdminsChange::AdminAccounts` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。2026-05-08 起发现范围明确为 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId`;`0x02 注册机构归属关系` 只保留给机构归属/检索。
@@ -60,7 +60,7 @@
 
 ```jsonc
 "body": {
-  "system":     "sfid" | "cpms",
+  "system":     "cid" | "cpms",
   "sys_pubkey": "0x<hex>",
   "sys_sig":    "0x<hex>"
 }
@@ -68,7 +68,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `system` | string | 是 | 目标系统,`"sfid"` 或 `"cpms"` |
+| `system` | string | 是 | 目标系统,`"cid"` 或 `"cpms"` |
 | `sys_pubkey` | string | 是 | 系统公钥,`0x` + hex |
 | `sys_sig` | string | 是 | 系统对签名原文的 sr25519 签名,`0x` + hex |
 
@@ -76,7 +76,7 @@
 
 ```jsonc
 "body": {
-  "system":       "sfid" | "cpms",
+  "system":       "cid" | "cpms",
   "pubkey":       "0x<hex>",
   "sig_alg":      "sr25519",
   "signature":    "0x<hex>",
@@ -205,7 +205,7 @@
 
 ### 4.7 `user_duoqian` — **已下线**(2026-05-03)
 
-原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:citizenapp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalDuoqian AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 SFID 机构,不再作为账户发现或转账支出主体。
+原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:citizenapp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalDuoqian AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 CID 机构,不再作为账户发现或转账支出主体。
 
 相关代码下线清单:
 - `lib/qr/bodies/user_duoqian_body.dart` — 删除整文件
@@ -289,7 +289,7 @@ QrSignResponse
 
 ## 9. 测试契约
 
-所有 citizenapp / citizenwallet / citizenchain / sfid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
+所有 citizenapp / citizenwallet / citizenchain / cid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
 
 - 序列化测试:`toJson(body) + envelope` 必须**逐字节**等于对应 fixture
 - 反序列化测试:`parse(fixture)` 必须解出预期字段,字段数量、类型、值全相等

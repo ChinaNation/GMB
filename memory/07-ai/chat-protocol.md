@@ -52,7 +52,7 @@ AI 每次输出技术方案时，必须包含 `预计修改目录` 小节。
 
 - 第一轮先分析
 - 主线程负责需求分析、模块识别和任务调度
-- 工作线程由当前主聊天入口按需分配给 `Blockchain Agent`、`SFID Agent`、`CPMS Agent`、`Mobile Agent`
+- 工作线程由当前主聊天入口按需分配给 `Blockchain Agent`、`CID Agent`、`CPMS Agent`、`Mobile Agent`
 - 关键结论写回 `memory/` 或任务卡
 - 不依赖某个线程私有的聊天历史当长期记忆
 

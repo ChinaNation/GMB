@@ -34,8 +34,8 @@ class LoginReceiptBody implements QrBody {
     final signature = data['signature'];
     final payloadHash = data['payload_hash'];
     final signedAt = data['signed_at'];
-    if (system is! String || (system != 'sfid' && system != 'cpms')) {
-      throw const FormatException('login_receipt.system 必须为 sfid 或 cpms');
+    if (system is! String || (system != 'cid' && system != 'cpms')) {
+      throw const FormatException('login_receipt.system 必须为 cid 或 cpms');
     }
     if (pubkey is! String || !pubkey.startsWith('0x')) {
       throw const FormatException('login_receipt.pubkey 必填 0x hex');

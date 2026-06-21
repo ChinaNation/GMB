@@ -72,13 +72,13 @@ class PayloadDecoder {
   static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
     'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
   );
-  static const String _sfidAdminActionDomain = 'sfid_admin_governance';
+  static const String _cidAdminActionDomain = 'cid_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {
     // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
     try {
       final raw = _hexToBytes(payloadHex);
-      final adminAction = _decodeSfidAdminAction(raw);
+      final adminAction = _decodeCidAdminAction(raw);
       if (adminAction != null) {
         return adminAction;
       }
@@ -183,8 +183,8 @@ class PayloadDecoder {
       // ── OrganizationManage(17) ──
       // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
       // propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
-      // register_sfid_institution(call=2) 当前不作为冷钱包 action 暴露;
-      // SFID 机构注册凭证等待签发机构管理员业务签名流程接入后再恢复。
+      // register_cid_institution(call=2) 当前不作为冷钱包 action 暴露;
+      // CID 机构注册凭证等待签发机构管理员业务签名流程接入后再恢复。
       // propose_create_institution(call=5) 由 citizenapp 在线端构造、走冷钱包扫码签名;
       // 凭证尾部带签发机构、签发管理员和业务作用域字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
@@ -320,12 +320,12 @@ class PayloadDecoder {
     }
   }
 
-  static DecodedPayload? _decodeSfidAdminAction(Uint8List raw) {
+  static DecodedPayload? _decodeCidAdminAction(Uint8List raw) {
     try {
       final text = utf8.decode(raw);
       final value = jsonDecode(text);
       if (value is! Map<String, dynamic>) return null;
-      if (value['domain'] != _sfidAdminActionDomain) return null;
+      if (value['domain'] != _cidAdminActionDomain) return null;
       if (value['qr_proto'] != 'CITIZEN_QR_V1') return null;
       final actionType = value['action_type'];
       final province = value['actor_province_name'];
@@ -345,10 +345,10 @@ class PayloadDecoder {
       final actorAddress = _pubkeyHexToSs58OrRaw(actorPubkey);
       final targetAddress = _pubkeyHexToSs58OrRaw(target);
       return DecodedPayload(
-        action: 'sfid_admin_action',
-        summary: 'SFID 管理员治理',
+        action: 'cid_admin_action',
+        summary: 'CID 管理员治理',
         fields: <String, String>{
-          'action_type': _sfidAdminActionLabel(actionType),
+          'action_type': _cidAdminActionLabel(actionType),
           'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
@@ -357,7 +357,7 @@ class PayloadDecoder {
           'payload_hash': payloadHash,
         },
         reviewFields: <String, String>{
-          'action_type': _sfidAdminActionLabel(actionType),
+          'action_type': _cidAdminActionLabel(actionType),
           'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
@@ -368,7 +368,7 @@ class PayloadDecoder {
     }
   }
 
-  static String _sfidAdminActionLabel(String actionType) {
+  static String _cidAdminActionLabel(String actionType) {
     switch (actionType) {
       case 'PASSKEY_REGISTER':
         return '更新 Passkey';
@@ -628,10 +628,10 @@ class PayloadDecoder {
   //
   // 签发机构 admins 凭证。
   // 格式：[0x17][0x01][proposal_id:u64_le][binding_id:32]
-  //       [Vec nonce][Vec sig][Vec issuer_sfid_number][issuer_main_account:32]
+  //       [Vec nonce][Vec sig][Vec issuer_cid_number][issuer_main_account:32]
   //       [[u8;32] signer_pubkey][Vec scope_province_name][Vec scope_city_name][approve:bool]
   //
-  // 签发身份必须进 payload,链端 RuntimeSfidVoteVerifier 按 issuer_main_account
+  // 签发身份必须进 payload,链端 RuntimeCidVoteVerifier 按 issuer_main_account
   // 读取 admins-change::AdminAccounts.admins 确认 signer_pubkey。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCastReferendum(Uint8List bytes) {
@@ -657,11 +657,11 @@ class PayloadDecoder {
     if (offset + sigLen > bytes.length) return null;
     offset += sigLen;
 
-    // Vec<u8> issuer_sfid_number
+    // Vec<u8> issuer_cid_number
     final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
     offset += issuerLenSize;
     if (offset + issuerLen > bytes.length) return null;
-    final issuerSfidNumber = utf8.decode(
+    final issuerCidNumber = utf8.decode(
       bytes.sublist(offset, offset + issuerLen),
       allowMalformed: true,
     );
@@ -710,7 +710,7 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
-        'issuer_sfid_number': issuerSfidNumber,
+        'issuer_cid_number': issuerCidNumber,
         'issuer_main_account': _bytesToSs58(issuerMainAccount),
         'signer_pubkey': _bytesToSs58(signerPubkey),
         'scope_province_name': scopeProvinceName,
@@ -774,7 +774,7 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // 清算行管理员解密（非链上交易）
-  // 格式：GMB_DECRYPT_V1(14B) + sfid_number(48B, 右补零) + pubkey(32B)
+  // 格式：GMB_DECRYPT_V1(14B) + cid_number(48B, 右补零) + pubkey(32B)
   //      + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
@@ -786,13 +786,13 @@ class PayloadDecoder {
       endIndex--;
     }
     if (endIndex == 0) return null;
-    final sfidNumber = String.fromCharCodes(idBytes.sublist(0, endIndex));
+    final cidNumber = String.fromCharCodes(idBytes.sublist(0, endIndex));
 
     return DecodedPayload(
       action: 'decrypt_admin',
-      summary: '解密清算行管理员 - $sfidNumber',
+      summary: '解密清算行管理员 - $cidNumber',
       fields: {
-        'sfid_number': sfidNumber,
+        'cid_number': cidNumber,
       },
     );
   }
@@ -803,8 +803,8 @@ class PayloadDecoder {
   // 链端签名(签发机构 admins 凭证):
   //   pub fn propose_create_institution(
   //     origin,
-  //     sfid_number: SfidNumberOf<T>,                 // BoundedVec<u8>
-  //     sfid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
+  //     cid_number: CidNumberOf<T>,                 // BoundedVec<u8>
+  //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
   //     org: u8,                        // ORG_PUP / ORG_OTH
@@ -813,34 +813,34 @@ class PayloadDecoder {
   //     threshold: u32,
   //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
   //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
-  //     issuer_sfid_number: Vec<u8>,
+  //     issuer_cid_number: Vec<u8>,
   //     issuer_main_account: AccountId32,
   //     signer_pubkey: [u8; 32],
   //     scope_province_name: Vec<u8>,
   //     scope_city_name: Vec<u8>,
   //   )
   //
-  // SCALE 顺序与上述完全一致。链端 RuntimeSfidInstitutionVerifier 按
+  // SCALE 顺序与上述完全一致。链端 RuntimeCidInstitutionVerifier 按
   // issuer_main_account 的 admins 真源确认 signer_pubkey。
-  // 禁止在尾部追加 subject_property/sub_type/parent_sfid_number 等多余字段。
+  // 禁止在尾部追加 subject_property/sub_type/parent_cid_number 等多余字段。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
     if (bytes.length < 10) return null;
     var offset = 2;
 
-    // sfid_number: BoundedVec<u8>
-    final (sfidLen, sfidLenSize) = _decodeCompactU32(bytes, offset);
-    offset += sfidLenSize;
-    if (offset + sfidLen > bytes.length) return null;
-    final sfidNumber = utf8.decode(bytes.sublist(offset, offset + sfidLen),
+    // cid_number: BoundedVec<u8>
+    final (cidLen, cidLenSize) = _decodeCompactU32(bytes, offset);
+    offset += cidLenSize;
+    if (offset + cidLen > bytes.length) return null;
+    final cidNumber = utf8.decode(bytes.sublist(offset, offset + cidLen),
         allowMalformed: true);
-    offset += sfidLen;
+    offset += cidLen;
 
-    // sfid_full_name: BoundedVec<u8>
+    // cid_full_name: BoundedVec<u8>
     final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
     offset += nameLenSize;
     if (offset + nameLen > bytes.length) return null;
-    final sfidFullName = utf8.decode(bytes.sublist(offset, offset + nameLen),
+    final cidFullName = utf8.decode(bytes.sublist(offset, offset + nameLen),
         allowMalformed: true);
     offset += nameLen;
 
@@ -909,11 +909,11 @@ class PayloadDecoder {
     if (offset + sigLen > bytes.length) return null;
     offset += sigLen;
 
-    // issuer_sfid_number: Vec<u8>
+    // issuer_cid_number: Vec<u8>
     final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
     offset += issuerLenSize;
     if (offset + issuerLen > bytes.length) return null;
-    final issuerSfidNumber = utf8.decode(
+    final issuerCidNumber = utf8.decode(
       bytes.sublist(offset, offset + issuerLen),
       allowMalformed: true,
     );
@@ -954,8 +954,8 @@ class PayloadDecoder {
 
     final amountYuan = _fenToYuan(accountsTotal);
     final fields = <String, String>{
-      'sfid_number': sfidNumber,
-      'sfid_full_name': sfidFullName,
+      'cid_number': cidNumber,
+      'cid_full_name': cidFullName,
       'org': _orgName(org),
       'admins_len': adminsLen.toString(),
       'threshold': '$threshold/$adminsLen',
@@ -964,7 +964,7 @@ class PayloadDecoder {
     for (final entry in accountAmounts.entries) {
       fields['amount_${entry.key}'] = '${_fenToYuan(entry.value)} GMB';
     }
-    fields['issuer_sfid_number'] = issuerSfidNumber;
+    fields['issuer_cid_number'] = issuerCidNumber;
     fields['issuer_main_account'] = _bytesToSs58(issuerMainAccount);
     fields['signer_pubkey'] = _bytesToSs58(signerPubkey);
     fields['scope_province_name'] = scopeProvinceName;
@@ -973,7 +973,7 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_create_institution',
       summary:
-          '创建机构多签账户「$sfidFullName」（$adminsLen 管理员，阈值 $threshold，入金 $amountYuan 元）',
+          '创建机构多签账户「$cidFullName」（$adminsLen 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: fields,
     );
   }
@@ -1357,13 +1357,13 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OffchainTransaction(21) / register_clearing_bank(50)
-  // 格式：[21][50][Vec sfid_number][Vec peer_id][Vec rpc_domain][u16 rpc_port]
+  // 格式：[21][50][Vec cid_number][Vec peer_id][Vec rpc_domain][u16 rpc_port]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeRegisterClearingBank(Uint8List bytes) {
     var offset = 2;
-    final (sfidNumber, sfidNext) = _readUtf8Vec(bytes, offset);
-    if (sfidNumber == null) return null;
-    offset = sfidNext;
+    final (cidNumber, cidNext) = _readUtf8Vec(bytes, offset);
+    if (cidNumber == null) return null;
+    offset = cidNext;
     final (peerId, peerNext) = _readUtf8Vec(bytes, offset);
     if (peerId == null) return null;
     offset = peerNext;
@@ -1376,9 +1376,9 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'register_clearing_bank',
-      summary: '声明清算行节点 $sfidNumber @ $rpcDomain:$rpcPort',
+      summary: '声明清算行节点 $cidNumber @ $rpcDomain:$rpcPort',
       fields: {
-        'sfid_number': sfidNumber,
+        'cid_number': cidNumber,
         'peer_id': peerId,
         'rpc_domain': rpcDomain,
         'rpc_port': rpcPort.toString(),
@@ -1388,13 +1388,13 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OffchainTransaction(21) / update_clearing_bank_endpoint(51)
-  // 格式：[21][51][Vec sfid_number][Vec new_domain][u16 new_port]
+  // 格式：[21][51][Vec cid_number][Vec new_domain][u16 new_port]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeUpdateClearingBankEndpoint(Uint8List bytes) {
     var offset = 2;
-    final (sfidNumber, sfidNext) = _readUtf8Vec(bytes, offset);
-    if (sfidNumber == null) return null;
-    offset = sfidNext;
+    final (cidNumber, cidNext) = _readUtf8Vec(bytes, offset);
+    if (cidNumber == null) return null;
+    offset = cidNext;
     final (newDomain, domainNext) = _readUtf8Vec(bytes, offset);
     if (newDomain == null) return null;
     offset = domainNext;
@@ -1404,9 +1404,9 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'update_clearing_bank_endpoint',
-      summary: '更新清算行 $sfidNumber 端点 → $newDomain:$newPort',
+      summary: '更新清算行 $cidNumber 端点 → $newDomain:$newPort',
       fields: {
-        'sfid_number': sfidNumber,
+        'cid_number': cidNumber,
         'new_domain': newDomain,
         'new_port': newPort.toString(),
       },
@@ -1415,17 +1415,17 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OffchainTransaction(21) / unregister_clearing_bank(52)
-  // 格式：[21][52][Vec sfid_number]
+  // 格式：[21][52][Vec cid_number]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
-    final (sfidNumber, sfidEnd) = _readUtf8Vec(bytes, 2);
-    if (sfidNumber == null) return null;
-    if (!_hasValidSigningTail(bytes, sfidEnd)) return null;
+    final (cidNumber, cidEnd) = _readUtf8Vec(bytes, 2);
+    if (cidNumber == null) return null;
+    if (!_hasValidSigningTail(bytes, cidEnd)) return null;
     return DecodedPayload(
       action: 'unregister_clearing_bank',
-      summary: '注销清算行节点 $sfidNumber',
+      summary: '注销清算行节点 $cidNumber',
       fields: {
-        'sfid_number': sfidNumber,
+        'cid_number': cidNumber,
       },
     );
   }
