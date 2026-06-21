@@ -73,7 +73,7 @@ export function AdminSetChangeSigningFlow({
 
   return (
     <div className="vote-signing-body qr-step">
-      <p className="qr-instruction">用 wumin 离线设备扫描此二维码完成签名</p>
+      <p className="qr-instruction">用 citizenwallet 离线设备扫描此二维码完成签名</p>
       <div className="qr-container"><QRCodeSVG value={requestJson} size={280} level="L" /></div>
       <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
       <code className="tx-hash">请求 ID: {request.requestId}</code>

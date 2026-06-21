@@ -3,7 +3,7 @@
 - **日期**:2026-04-19
 - **状态**:Accepted
 - **决策者**:GMB AI 主入口
-- **范围**:citizenchain runtime / node,sfid backend,wuminapp
+- **范围**:citizenchain runtime / node,sfid backend,citizenapp
 - **任务卡**:`memory/08-tasks/open/20260419-扫码支付-step1-同行MVP.md`
 
 ---
@@ -17,7 +17,7 @@
 - **L0** citizenchain PoW 链
 - **L1** 省储行(借贷、监督、仲裁,**退出日常清算**)
 - **L2** 清算行(商业银行支行/第三方支付机构,**承担所有清算**)
-- **L3** 轻节点(C/B 端,wuminapp)
+- **L3** 轻节点(C/B 端,citizenapp)
 
 ## 3. 核心决策
 
@@ -51,7 +51,7 @@
   - 付款方 L3 必须已绑定清算行
   - 收款方 L3 必须已绑定清算行
   - 收款方清算行 DuoqianAccount Active
-- 二维码遵循 `memory/01-architecture/qr/qr-protocol-spec.md` 的 `WUMIN_QR_V1 + user_transfer`,`body.bank` 填**收款方绑定的清算行主账户 SS58**
+- 二维码遵循 `memory/01-architecture/qr/qr-protocol-spec.md` 的 `CITIZEN_QR_V1 + user_transfer`,`body.bank` 填**收款方绑定的清算行主账户 SS58**
 - 每笔 L3 私钥 sr25519 签名 `PaymentIntent`,防重放通过 `L3PaymentNonce` 单调 + `ProcessedOffchainTx`
 - 费率 Step 1 **全局硬编码 5 bp(0.05%)**,最低 1 分;Step 2 改为 `L2FeeRateBp` Storage + 延迟生效
 - 手续费**全部归收款方清算行费用账户**,无省储行分成
@@ -100,7 +100,7 @@ Step 1 新建目录 `citizenchain/node/src/offchain/`(本步不立即删除旧 `
 node/src/offchain/
 ├── mod.rs               # 聚合 + 启动器
 ├── ledger.rs            # 本地账本(缓存)
-├── rpc.rs               # 对 wuminapp RPC + WS
+├── rpc.rs               # 对 citizenapp RPC + WS
 ├── packer.rs            # 批次打包(Step 2 启用批次上链)
 └── event_listener.rs    # 监听链上事件同步本地
 ```

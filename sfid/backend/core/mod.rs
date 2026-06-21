@@ -5,7 +5,7 @@ pub(crate) mod chain_url;
 /// 中文注释:PostgreSQL 连接池和当前结构化 schema 初始化。
 pub(crate) mod db;
 pub(crate) mod http_security;
-/// 中文注释:WUMIN_QR_V1 协议和 SFID 管理端签名二维码构造。
+/// 中文注释:CITIZEN_QR_V1 协议和 SFID 管理端签名二维码构造。
 #[allow(dead_code)]
 pub(crate) mod qr;
 /// 中文注释:HTTP API 通用响应、分页和健康检查输出模型。

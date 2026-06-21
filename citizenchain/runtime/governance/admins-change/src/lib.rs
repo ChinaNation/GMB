@@ -409,7 +409,7 @@ pub mod pallet {
         /// 机构类型与 org 参数不匹配
         InstitutionOrgMismatch,
         /// 管理员数量不符合固定人数约束
-        InvalidAdminCount,
+        InvalidAdminsLen,
         /// 非该机构管理员，无权限
         UnauthorizedAdmin,
         /// 管理员集合没有发生变化
@@ -523,21 +523,21 @@ pub mod pallet {
                         expected_admins_len(org).ok_or(Error::<T>::InvalidInstitution)?;
                     ensure!(
                         admins_len == expected as usize,
-                        Error::<T>::InvalidAdminCount
+                        Error::<T>::InvalidAdminsLen
                     );
                 }
                 AdminAccountKind::PersonalDuoqian => {
-                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
                     ensure!(
                         admins_len <= <T as Config>::MaxPersonalAccountAdmins::get() as usize,
-                        Error::<T>::InvalidAdminCount
+                        Error::<T>::InvalidAdminsLen
                     );
                 }
                 AdminAccountKind::InstitutionAccount => {
-                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
                     ensure!(
                         admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
-                        Error::<T>::InvalidAdminCount
+                        Error::<T>::InvalidAdminsLen
                     );
                 }
             }
@@ -654,7 +654,7 @@ pub mod pallet {
 
             let bounded: AdminsOf<T> = admins
                 .try_into()
-                .map_err(|_| Error::<T>::InvalidAdminCount)?;
+                .map_err(|_| Error::<T>::InvalidAdminsLen)?;
             let now = frame_system::Pallet::<T>::block_number();
             let admins_len = bounded.len() as u32;
             AdminAccounts::<T>::insert(

@@ -5,7 +5,7 @@
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`(其第 5 节 "Step 2 留档"即本步)
 - **总任务卡**:`memory/08-tasks/open/20260419-扫码支付-step1-同行MVP.md`
 - **前置文档**:`STEP1_TECHNICAL.md`(Step 1 Runtime)
-- **后续文档**:`STEP2B_NODE.md`(节点接入)、`STEP2C_WUMINAPP.md`(前端)、`STEP2D_CLEANUP.md`(删除旧代码)
+- **后续文档**:`STEP2B_NODE.md`(节点接入)、`STEP2C_CITIZENAPP.md`(前端)、`STEP2D_CLEANUP.md`(删除旧代码)
 
 ---
 
@@ -29,7 +29,7 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 
 **明确不做**(留 Step 2b/2c/2d):
 - Node 层接入(Step 2b)
-- wuminapp 改造(Step 2c)
+- citizenapp 改造(Step 2c)
 - 删除旧 `submit_offchain_batch` / `bind_clearing_institution` / `RecipientClearingInstitution` / `InstitutionRateBp`(Step 2d)
 - 联合投票回调 `set_max_l2_fee_rate`(Step 2b 接入;当前为 Root Origin)
 - 争议仲裁 / 保证金(Step 3)
@@ -167,7 +167,7 @@ $ cargo check -p offchain-transaction
 - `service.rs` / `rpc.rs` 按节点角色启动 + 注册 RPC namespace
 - 删除旧 `offchain_ledger.rs` / `offchain_packer.rs` / `offchain_gossip.rs`(Step 2b 完成时)
 
-**Step 2c · wuminapp**:
+**Step 2c · citizenapp**:
 - 重写 `trade/offchain/offchain_pay_page.dart`:走清算行节点 `offchain_submitPayment`,每笔 L3 签名
 - 改造 `wallet/ui/receive_qr_page.dart`:`body.bank` 填清算行主账户 SS58
 - 冷钱包 QR 签名接入绑定/充值/提现(沿用旧 `bind_clearing_page.dart` 模式)

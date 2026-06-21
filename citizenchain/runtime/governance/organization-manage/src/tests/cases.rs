@@ -42,7 +42,10 @@ fn register_sfid_institution_with_valid_signature_succeeds() {
             register_nonce(b"nonce-1"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
 
         assert!(pallet::SfidRegisteredAccount::<Test>::contains_key(
@@ -78,7 +81,10 @@ fn register_rejects_invalid_sfid_institution_signature() {
                 register_nonce(b"nonce-bs"),
                 invalid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::InvalidSfidInstitutionSignature
         );
@@ -99,7 +105,10 @@ fn register_rejects_duplicate_sfid_account_name() {
             register_nonce(b"nonce-a1"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
         // 第二次相同 sfid + 主账户:SfidAlreadyRegistered
         assert_noop!(
@@ -111,7 +120,10 @@ fn register_rejects_duplicate_sfid_account_name() {
                 register_nonce(b"nonce-a2"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::SfidAlreadyRegistered
         );
@@ -131,7 +143,10 @@ fn register_rejects_replayed_nonce() {
             register_nonce(b"nonce-replay"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
         // 第二次同 nonce 不同 sfid:RegisterNonceAlreadyUsed
         assert_noop!(
@@ -143,7 +158,10 @@ fn register_rejects_replayed_nonce() {
                 register_nonce(b"nonce-replay"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::RegisterNonceAlreadyUsed
         );
@@ -164,7 +182,10 @@ fn register_rejects_empty_required_fields() {
                 register_nonce(b"nonce-empty1"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::EmptySfidNumber
         );
@@ -178,7 +199,10 @@ fn register_rejects_empty_required_fields() {
                 register_nonce(b"nonce-empty2"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::EmptyAccountName
         );
@@ -191,10 +215,13 @@ fn register_rejects_empty_required_fields() {
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty3"),
                 valid_signature(),
-                alloc::vec::Vec::new(),
+                province_name(),
+                creator(),
                 signer_pubkey(),
+                alloc::vec::Vec::new(),
+                b"city".to_vec(),
             ),
-            pallet::Error::<Test>::EmptyProvince
+            pallet::Error::<Test>::EmptyScopeProvinceName
         );
     });
 }
@@ -221,7 +248,10 @@ fn propose_create_institution_writes_pending_and_reserves() {
             register_nonce(b"nonce-cr-1"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
 
         let pid = last_proposal_id();
@@ -259,7 +289,10 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             register_nonce(b"nonce-cr-2"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
         let pid = last_proposal_id();
         assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
@@ -307,7 +340,10 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
             register_nonce(b"nonce-cr-3"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
         let pid = last_proposal_id();
 
@@ -342,7 +378,10 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 register_nonce(b"nonce-min"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::AccountInitialAmountBelowMinimum
         );
@@ -372,7 +411,10 @@ fn propose_create_rejects_duplicate_account_name() {
                 register_nonce(b"nonce-dup"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::DuplicateAccountName
         );
@@ -424,7 +466,10 @@ fn propose_create_rejects_reserved_system_account_name() {
                 register_nonce(b"nonce-rsv"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::ReservedAccountName
         );
@@ -449,7 +494,10 @@ fn propose_create_rejects_missing_main_account() {
                 register_nonce(b"nonce-nm"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::MissingMainAccount
         );
@@ -474,7 +522,10 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 register_nonce(b"nonce-t1"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::InvalidThreshold
         );
@@ -492,7 +543,10 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 register_nonce(b"nonce-t2"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::InvalidThreshold
         );
@@ -518,7 +572,10 @@ fn propose_create_rejects_when_institution_already_exists() {
             register_nonce(b"nonce-ae1"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
         // 第二次同 sfid 应拒
         assert_noop!(
@@ -534,7 +591,10 @@ fn propose_create_rejects_when_institution_already_exists() {
                 register_nonce(b"nonce-ae2"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::InstitutionAlreadyExists
         );
@@ -566,7 +626,10 @@ fn create_and_activate_institution(
         register_nonce(sfid_number_bytes),
         valid_signature(),
         province_name(),
+        creator(),
         signer_pubkey(),
+        province_name(),
+        b"city".to_vec(),
     ));
     let pid = last_proposal_id();
     assert_ok!(cast_yes_votes(
@@ -715,7 +778,10 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
             register_nonce(b"nonce-cu"),
             valid_signature(),
             province_name(),
+            creator(),
             signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
         ));
         let pid = last_proposal_id();
 
@@ -755,7 +821,10 @@ fn non_admin_cannot_propose_create() {
                 register_nonce(b"nonce-na"),
                 valid_signature(),
                 province_name(),
+                creator(),
                 signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
             ),
             pallet::Error::<Test>::PermissionDenied
         );

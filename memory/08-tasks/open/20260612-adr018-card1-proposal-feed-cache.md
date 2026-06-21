@@ -1,6 +1,6 @@
 # 任务卡:卡①ProposalFeedCache+提案三页统一(机构详情/广场/个人多签),收口本次bug+最大降载
 
-属 ADR-018(memory/04-decisions/ADR-018-wuminapp-unified-query-low-load.md)。
+属 ADR-018(memory/04-decisions/ADR-018-citizenapp-unified-query-low-load.md)。
 
 卡①ProposalFeedCache+提案三页统一(机构详情/广场/个人多签),收口本次bug+最大降载
 

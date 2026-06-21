@@ -26,7 +26,7 @@ import { MAX_CITY_ADMINS_PER_CITY, sameHexPubkey } from './adminUtils';
 import type { AccountScanTarget, FederalAdminSharedState } from './adminUtils';
 import { CityRegistryView, FederalRegistryView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../core/WuminSignatureModal';
+import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
 import { notice } from '../utils/notice';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
@@ -563,7 +563,7 @@ export function FederalAdminsView({ mode }: FederalAdminsViewProps) {
   return (
     <>
       {content}
-      <WuminSignatureModal
+      <CitizenSignatureModal
         title="公民钱包签名确认"
         open={!!adminActionModal}
         onCancel={() => {

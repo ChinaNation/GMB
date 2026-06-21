@@ -2,7 +2,7 @@
 
 - 版本:2026-05-07
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:wumin 公民钱包扫描 QR 后的识别、展示与签名放行规则
+- 范围:citizenwallet 公民钱包扫描 QR 后的识别、展示与签名放行规则
 - 依赖:
   - `memory/01-architecture/qr/qr-protocol-spec.md`
   - `memory/01-architecture/qr/qr-protocol-fixtures/`
@@ -10,7 +10,7 @@
 
 ## 一、四条铁律
 
-1. **扫码协议只有一个**:`WUMIN_QR_V1`。
+1. **扫码协议只有一个**:`CITIZEN_QR_V1`。
 2. **两色终态**:绿色 = 识别通过并允许签名;红色 = 识别失败并禁止签名。
 3. **识别 = 结构识别 + payload 交叉验证**。envelope 合法、payload 可被冷钱包完整解码、display 与 decoder 输出逐字一致,才允许签名。
 4. **不残留、不兼容、不过渡**。旧 action、旧 pallet/call、旧字段门控不得作为兼容分支保留。
@@ -30,7 +30,7 @@
 
 全部为真才进入 kind 专属校验:
 
-- `envelope.proto == 'WUMIN_QR_V1'`
+- `envelope.proto == 'CITIZEN_QR_V1'`
 - `envelope.kind ∈ {login_challenge, sign_request}`
 - `envelope.id` 长度 16-128,字符集 `[a-zA-Z0-9_-]`
 - `envelope.issued_at` 与 `envelope.expires_at` 均存在
@@ -82,12 +82,12 @@
 
 ## 七、SFID 管理员治理 JSON 载荷
 
-`sfid_admin_action` 使用既有 `WUMIN_QR_V1 / sign_request`,不新增协议。`payload_hex`
+`sfid_admin_action` 使用既有 `CITIZEN_QR_V1 / sign_request`,不新增协议。`payload_hex`
 是 `sfid_admin_governance` canonical JSON 的 UTF-8 hex,冷钱包必须解出并交叉校验:
 
 - `display.action == sfid_admin_action`
 - `domain == sfid_admin_governance`
-- `qr_proto == WUMIN_QR_V1`
+- `qr_proto == CITIZEN_QR_V1`
 - `display.fields` 只放 `action_type / actor_province_name / actor_pubkey / target` 等用户确认字段;
   `before_hash / after_hash / payload_hash` 只参与机器验真,不进入确认页
 - `payload_hash` 必须等于 JSON 文本 SHA-256
@@ -126,7 +126,7 @@ field 或 pallet/call 组合都不得恢复。
 
 ### 应红色拒绝
 
-1. `proto != WUMIN_QR_V1`
+1. `proto != CITIZEN_QR_V1`
 2. 未登记 kind
 3. 已过期 envelope
 4. 随机 `payload_hex`

@@ -1,5 +1,5 @@
 //! 中文注释:公民电子护照记录、绑定状态机、查询接口 DTO,
-//! 含 CPMS 档案码验真结果和 wuminapp 扫码签名绑定结果。
+//! 含 CPMS 档案码验真结果和 citizenapp 扫码签名绑定结果。
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -112,7 +112,7 @@ pub(crate) enum CitizenBindStatus {
     Bound,
 }
 
-/// 绑定 challenge（wumin 签名验证）。
+/// 绑定 challenge（citizenwallet 签名验证）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenBindChallenge {
     pub(crate) challenge_id: String,
@@ -157,7 +157,7 @@ pub(crate) struct CitizenBindChallengeOutput {
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,
-    /// WUMIN_QR_V1 签名请求 JSON（前端直接展示为二维码）。
+    /// CITIZEN_QR_V1 签名请求 JSON（前端直接展示为二维码）。
     pub(crate) sign_request: String,
     pub(crate) expire_at: i64,
 }
@@ -178,11 +178,11 @@ pub(crate) struct CitizenBindChallengeInput {
 pub(crate) struct CitizenBindInput {
     /// challenge ID
     pub(crate) challenge_id: String,
-    /// WUMIN_QR_V1 sign_response.pubkey。
+    /// CITIZEN_QR_V1 sign_response.pubkey。
     pub(crate) pubkey: String,
-    /// WUMIN_QR_V1 sign_response.signature。
+    /// CITIZEN_QR_V1 sign_response.signature。
     pub(crate) signature: String,
-    /// WUMIN_QR_V1 sign_response.payload_hash。
+    /// CITIZEN_QR_V1 sign_response.payload_hash。
     pub(crate) payload_hash: String,
 }
 
@@ -271,9 +271,9 @@ pub(crate) struct CitizenRow {
     pub(crate) bind_status: CitizenBindStatus,
 }
 
-// ── wuminapp 电子护照状态接口类型 ──
+// ── citizenapp 电子护照状态接口类型 ──
 
-/// wuminapp 查询电子护照状态。
+/// citizenapp 查询电子护照状态。
 #[derive(Deserialize)]
 pub(crate) struct MyIdStatusQuery {
     pub(crate) wallet_address: String,

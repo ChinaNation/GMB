@@ -63,7 +63,7 @@ GitHub PR / Actions
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - `cpms`：Rust + Axum + SQLx + PostgreSQL；`frontend/` 当前仅为预留目录
-- `wuminapp`：Flutter + Dart + Isar
+- `citizenapp`：Flutter + Dart + Isar
 
 ## 5. 第一阶段建设内容
 

@@ -564,11 +564,11 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
 
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
-pub trait InternalAdminCountProvider<AccountId> {
+pub trait InternalAdminsLenProvider<AccountId> {
     fn admins_len(org: u8, institution: AccountId) -> Option<u32>;
 }
 
-impl<AccountId> InternalAdminCountProvider<AccountId> for () {
+impl<AccountId> InternalAdminsLenProvider<AccountId> for () {
     fn admins_len(_org: u8, _institution: AccountId) -> Option<u32> {
         None
     }

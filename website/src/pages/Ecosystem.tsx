@@ -33,7 +33,7 @@ const systems = [
     color: 'blue',
   },
   {
-    name: 'WuminApp',
+    name: 'CitizenApp',
     subtitle: '公民移动客户端',
     desc: '面向全体公民的移动端应用，集成钱包管理、交易转账、治理投票、QR 码扫描等核心功能。',
     features: [
@@ -64,13 +64,13 @@ const systems = [
     fullWidth: false,
   },
   {
-    name: 'Wumin 冷钱包',
+    name: 'CitizenWallet 冷钱包',
     subtitle: '离线签名冷钱包',
-    desc: '完全离线运行的签名钱包，用于关键身份与治理操作的气隙式 Sr25519 签名，与 WuminApp 热钱包形成"冷热分离"的双钱包体系。',
+    desc: '完全离线运行的签名钱包，用于关键身份与治理操作的气隙式 Sr25519 签名，与 CitizenApp 热钱包形成"冷热分离"的双钱包体系。',
     features: [
       '完全离线运行（气隙）',
       'Sr25519 离线签名',
-      'WUMIN_QR_V1 统一扫码协议',
+      'CITIZEN_QR_V1 统一扫码协议',
       '加密 keystore 私钥保管',
       '交易离线签名',
       '管理员激活签名',
@@ -92,7 +92,7 @@ const workflow = [
   {
     step: '02',
     title: '治理投票',
-    desc: '链上创建提案 → SFID 提供选民快照与资格验证 → WuminApp 移动端投票 → 链上记录与执行',
+    desc: '链上创建提案 → SFID 提供选民快照与资格验证 → CitizenApp 移动端投票 → 链上记录与执行',
   },
   {
     step: '03',

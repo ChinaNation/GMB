@@ -73,7 +73,7 @@ Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 **新增**:
 - `offchain_submitPayment(intent_hex, payer_sig_hex) -> SubmitPaymentResp`
 - `SubmitPaymentResp { tx_id, l2_ack_sig, accepted_at }`(Serialize/Deserialize)
-- 本地工具 `decode_hex` / `encode_hex`(沿用 wuminapp 端 hex 风格,支持 `0x` 前缀)
+- 本地工具 `decode_hex` / `encode_hex`(沿用 citizenapp 端 hex 风格,支持 `0x` 前缀)
 
 ### 2.3 `mod.rs` / `commands.rs`
 
@@ -91,7 +91,7 @@ Step 2b-ii 之后由 `offchain/bootstrap.rs` 统一处理 CLI 参数、密钥解
 ## 3. 签名验证流程(Step 2b-i 端到端)
 
 ```
-wuminapp(Dart)                   清算行节点(Rust,本步)
+citizenapp(Dart)                   清算行节点(Rust,本步)
 ──────────────                   ─────────────────────────
 1. 构造 PaymentIntent
 2. SCALE 编码 → intent_bytes
@@ -131,9 +131,9 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 
 | 层 | 约束 |
 |---|---|
-| 签名哈希 | `blake2_256(b"GMB_L3_PAY_V1" || SCALE(intent))` 逐字节一致:wuminapp Dart / node Rust / runtime pallet |
+| 签名哈希 | `blake2_256(b"GMB_L3_PAY_V1" || SCALE(intent))` 逐字节一致:citizenapp Dart / node Rust / runtime pallet |
 | `NodePaymentIntent` 字段顺序 | 与 runtime `PaymentIntent` 严格一致(tx_id / payer / payer_bank / recipient / recipient_bank / amount / fee / nonce / expires_at) |
-| `PaymentIntent` Hash 语义 | 本步 `intent.tx_id: H256` 由 wuminapp 本地生成(如 `blake2_256(payer||nonce||...)`),runtime 端 `execute_clearing_bank_batch` 通过 `T::Hash::decode(&intent.tx_id.as_bytes())` 兼容 |
+| `PaymentIntent` Hash 语义 | 本步 `intent.tx_id: H256` 由 citizenapp 本地生成(如 `blake2_256(payer||nonce||...)`),runtime 端 `execute_clearing_bank_batch` 通过 `T::Hash::decode(&intent.tx_id.as_bytes())` 兼容 |
 
 ## 6. 后续对接清单
 

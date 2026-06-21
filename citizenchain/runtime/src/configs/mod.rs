@@ -1460,7 +1460,7 @@ impl votingengine::Config for Runtime {
         grandpakey_change::InternalVoteExecutor<Runtime>,
     );
     type InternalAdminProvider = RuntimeInternalAdminProvider;
-    type InternalAdminCountProvider = RuntimeInternalAdminCountProvider;
+    type InternalAdminsLenProvider = RuntimeInternalAdminsLenProvider;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type TimeProvider = pallet_timestamp::Pallet<Runtime>;
     type WeightInfo = votingengine::weights::SubstrateWeight<Runtime>;
@@ -1527,9 +1527,9 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
     }
 }
 
-pub struct RuntimeInternalAdminCountProvider;
+pub struct RuntimeInternalAdminsLenProvider;
 
-impl votingengine::InternalAdminCountProvider<AccountId> for RuntimeInternalAdminCountProvider {
+impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdminsLenProvider {
     fn admins_len(org: u8, institution: AccountId) -> Option<u32> {
         admins_change::Pallet::<Runtime>::active_account_admins_len(org, institution)
     }

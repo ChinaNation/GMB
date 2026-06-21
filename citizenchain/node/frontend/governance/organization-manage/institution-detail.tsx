@@ -154,7 +154,7 @@ export function ClearingBankInstitutionDetailPage({
         <div className="metric-card">
           <div className="metric-label">内部投票阈值</div>
           <div className="metric-value">
-            {detail.threshold} / {detail.adminCount} 票
+            {detail.threshold} / {detail.adminsLen} 票
           </div>
         </div>
 
@@ -195,7 +195,7 @@ export function ClearingBankInstitutionDetailPage({
         >
           <div className="admin-entry-left">
             <div className="admin-entry-title">
-              管理员列表（{detail.duoqianAdminsSs58.length} 人）
+              管理员列表（{detail.adminsSs58.length} 人）
             </div>
           </div>
           <span className="admin-entry-arrow">→</span>

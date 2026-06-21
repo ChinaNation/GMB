@@ -125,7 +125,7 @@ def build_admin_block(pubkeys: list[str], indent: str, field_name: str) -> str:
 def replace_admin_field_in_block(block_text: str, field_name: str, pubkeys: list[str]) -> str:
     """只替换单个机构块中的管理员字段，避免全局误替换。"""
     field_re = re.compile(
-        rf"^(\s*){field_name}:\s*(?:EMPTY_DUOQIAN_ADMINS|&\[[\s\S]*?\]),\s*$",
+        rf"^(\s*){field_name}:\s*&\[[\s\S]*?\],\s*$",
         re.MULTILINE,
     )
     match = field_re.search(block_text)

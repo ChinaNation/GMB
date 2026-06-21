@@ -87,13 +87,13 @@
 - 需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
 - `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 raw chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
 - fresh raw chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
-- 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `wuminapp/assets/chainspec.json`,保证全节点和轻节点使用同一创世。
+- 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`,保证全节点和轻节点使用同一创世。
 
 2026-06-19 预上线重新创世收口:
 
 - runtime 本地 release WASM blake2:`f213cdc476fb0d1e723421a5bd1f5afafc792b5180852d2266346b967386e680`
 - raw chainspec sha256:`cdf74fd89148ab8d681b020c65f59ff8f93e238a1404da44a7b47fae8bb4757a`
-- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `wuminapp/assets/chainspec.json` 完全一致。
+- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json` 完全一致。
 - bootNodes 保持 44 个;伊犁省权威节点域名为 `prcyls.crcfrcn.com`。
 
 历史:2026-05-06 首次冻结,源 nrcgch.crcfrcn.com,sha256 `2b9f46e4aefb66f892d5dc170b2c2bfc33b6b12a88192617b06c18e8ea38a2db`。
@@ -199,7 +199,7 @@
 - 业务边界：`src/im/` 不处理治理、投票、实名信息或交易业务；联系人详情里的“转账”继续归公民既有交易页面处理。
 - 用户入口：公民端从“我的 -> 用户资料”设置通信账户，从“我的通讯录 -> 联系人详情 -> 消息”进入聊天；“信息”Tab 只展示会话列表。
 - 配对入口：桌面设置页 `frontend/settings/communication-node/CommunicationNodeSection.tsx` 读取 `get_communication_node`，展示 `im_node_pairing` 固定二维码；公民端在“我的 -> 设置 -> 设置通信节点”扫码保存或更换自己的电脑通信节点。
-- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和不含 RPC URL / 有效期的 WUMIN_QR_V1 配对二维码生成。
+- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和不含 RPC URL / 有效期的 CITIZEN_QR_V1 配对二维码生成。
 - 当前命令：
   - `get_communication_node`：读取通信节点功能状态、PeerId、multiaddr 和配对二维码 payload。
   - `set_communication_node_enabled`：独立开启/关闭通信节点功能，不改变归档/普通全节点模式，不注册手机 RPC。

@@ -66,7 +66,7 @@ AI 每次输出技术方案时，必须包含 `预计修改目录` 小节。
 
 ## 5. runtime 与扫码签名联动规则
 
-- 当任务涉及 `citizenchain/runtime`，且可能影响 `wuminapp` 在线端或 `wumin` 公民钱包二维码签名/验签兼容性时，AI 必须强制中止单边 runtime 修改
+- 当任务涉及 `citizenchain/runtime`，且可能影响 `citizenapp` 在线端或 `citizenwallet` 公民钱包二维码签名/验签兼容性时，AI 必须强制中止单边 runtime 修改
 - AI 必须明确提示这是双端联动任务，并先创建跨模块任务卡
-- 只有在 `wuminapp` 在线端与 `wumin` 公民钱包的对应更新已纳入本次执行范围后，才允许继续修改 runtime
+- 只有在 `citizenapp` 在线端与 `citizenwallet` 公民钱包的对应更新已纳入本次执行范围后，才允许继续修改 runtime
 - 如果本轮只允许分析，不允许直接给出“先改 runtime，双端后补”的建议

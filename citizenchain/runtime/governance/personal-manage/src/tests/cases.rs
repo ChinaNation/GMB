@@ -302,7 +302,7 @@ fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() 
 fn sixty_five_admin_personal_create_cannot_be_encoded() {
     new_test_ext().execute_with(|| {
         let admins: alloc::vec::Vec<AccountId32> = (0..65u8).map(admin).collect();
-        assert!(pallet::DuoqianAdminsOf::<Test>::try_from(admins).is_err());
+        assert!(pallet::AdminsOf::<Test>::try_from(admins).is_err());
     });
 }
 
@@ -313,7 +313,7 @@ fn propose_create_rejects_duplicate_admins() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let v = vec![admin(0), admin(1), admin(0)]; // admin(0) 重复
-        let dup_admins: pallet::DuoqianAdminsOf<Test> = BoundedVec::try_from(v).expect("fits");
+        let dup_admins: pallet::AdminsOf<Test> = BoundedVec::try_from(v).expect("fits");
 
         assert_noop!(
             PersonalManage::propose_create(

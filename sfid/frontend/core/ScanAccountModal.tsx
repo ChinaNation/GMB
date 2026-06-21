@@ -1,11 +1,11 @@
-// 通用"扫码识别账户"弹窗。调用摄像头扫描 WUMIN_QR_V1 用户码,
+// 通用"扫码识别账户"弹窗。调用摄像头扫描 CITIZEN_QR_V1 用户码,
 // 从中提取 body.address(SS58)回填。供密钥管理 / 新增市管理员等场景复用。
 // 使用统一的 BarcodeDetector 方案(cameraScanner.ts),与登录/绑定/CPMS 等场景一致。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Modal, Typography } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
-import { parseQrEnvelope, QrParseError } from './qr/wuminQr';
+import { parseQrEnvelope, QrParseError } from './qr/citizenQr';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { SFID_MODAL_Z_INDEX } from './modalStack';
 
@@ -66,7 +66,7 @@ export function ScanAccountModal(props: {
           if (e instanceof QrParseError) {
             setError(e.message);
           } else {
-            setError('二维码不是有效 WUMIN_QR_V1 格式');
+            setError('二维码不是有效 CITIZEN_QR_V1 格式');
           }
         }
       },

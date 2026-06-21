@@ -10,7 +10,7 @@ use std::{
 use tauri::AppHandle;
 
 const COMMUNICATION_NODE_FILE_NAME: &str = "communication-node.json";
-const IM_NODE_PAIRING_QR_PROTO: &str = "WUMIN_QR_V1";
+const IM_NODE_PAIRING_QR_PROTO: &str = "CITIZEN_QR_V1";
 const IM_NODE_PAIRING_KIND: &str = "im_node_pairing";
 const IM_NODE_PAIRING_BODY_PROTO: &str = "GMB_IM_NODE_PAIRING_V1";
 const IM_P2P_PORT: u16 = 30333;
@@ -178,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn pairing_payload_matches_wumin_qr_envelope() {
+    fn pairing_payload_matches_citizen_qr_envelope() {
         let endpoint = CommunicationNodeEndpoint {
             multiaddr: "/ip4/192.168.1.8/tcp/30333/wss/p2p/12D3KooWTest".to_string(),
             kind: "ip4".to_string(),
@@ -186,7 +186,7 @@ mod tests {
         let raw = build_pairing_payload("12D3KooWTest", &endpoint).expect("payload should encode");
         let value: Value = serde_json::from_str(&raw).expect("payload is JSON");
 
-        assert_eq!(value["proto"], "WUMIN_QR_V1");
+        assert_eq!(value["proto"], "CITIZEN_QR_V1");
         assert_eq!(value["kind"], "im_node_pairing");
         assert!(value.get("id").is_none());
         assert!(value.get("issued_at").is_none());

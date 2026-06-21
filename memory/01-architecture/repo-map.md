@@ -15,8 +15,8 @@ GMB/
   citizenchain/
   sfid/
   cpms/
-  wumin/
-  wuminapp/
+  citizenwallet/
+  citizenapp/
   website/
   docs/
   tools/
@@ -38,8 +38,8 @@ GMB/
 - `citizenchain/`：区块链 runtime、节点程序、节点桌面 UI、打包发布
 - `sfid/`：在线身份系统
 - `cpms/`：离线实名系统，包含 Rust 后端、React/Vite 前端、数据库迁移和部署脚本
-- `wumin/`：公民钱包，负责离线签名、扫码识别和钱包 UI
-- `wuminapp/`：公民，负责公民端钱包、治理、投票和链上状态展示
+- `citizenwallet/`：公民钱包，负责离线签名、扫码识别和钱包 UI
+- `citizenapp/`：公民，负责公民端钱包、治理、投票和链上状态展示
 - `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
 - `docs/`：静态发布文档和展示资产，不承载系统权威记忆
 - `tools/`：仓库级工具脚本和生成器
@@ -177,8 +177,8 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
   - `.github/workflows/sfid-ci.yml`
 - `cpms`
   - `.github/workflows/cpms-ci.yml`
-- `wuminapp`
-  - `.github/workflows/wuminapp-ci.yml`
+- `citizenapp`
+  - `.github/workflows/citizenapp-ci.yml`
 - `website`
   - 当前暂无专用 GitHub Actions，官网发布前需在本地执行 `npm run build` 并部署 `website/dist/`
 

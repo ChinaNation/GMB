@@ -1,6 +1,6 @@
 // 清算行管理员密钥解密(unlock)流程。
 //
-// 与 governance/admins_change/activation.rs 中的"激活"语义一致——wumin 冷钱包扫码签 challenge,
+// 与 governance/admins_change/activation.rs 中的"激活"语义一致——citizenwallet 冷钱包扫码签 challenge,
 // 节点本地验签——但本流程**仅在清算行 tab 用**,术语为"解密"以区别于 NRC/PRC/PRB
 // 的"激活"。区别:
 // - 激活(activation):写入 activated-admins.json 长期持久化
@@ -9,11 +9,11 @@
 // 实际私钥的 AES-GCM 加密文件由 CLI 启动路径(`--clearing-bank-password`)生成,
 // `settlement::keystore::OffchainKeystore` 加载到 `KeystoreBatchSigner` 的
 // `Arc<RwLock<Option<SigningKey>>>` 槽位。本模块的"解密"含义是:
-//   1. wumin 签 challenge → 节点 sr25519 验签 → 证明操作员持有该公钥的冷钱包
+//   1. citizenwallet 签 challenge → 节点 sr25519 验签 → 证明操作员持有该公钥的冷钱包
 //   2. 把 (pubkey, sfid_number) 标记为内存内"授权可用",packer 攒批前 cross-check
 //      该入口存在才会启动签名(防误用启动密码加载的 SigningKey)
 //
-// Step 3(wumin/wuminapp 完工后)再做完整的"per-admin 加密 seed 文件 +
+// Step 3(citizenwallet/citizenapp 完工后)再做完整的"per-admin 加密 seed 文件 +
 // challenge-derived AES key"模型;Step 2 先把 UI 与协议跑通即可。
 
 use rand::Rng;
@@ -31,7 +31,7 @@ use crate::transaction::offchain_transaction::types::{
     DecryptAdminRequestResult, DecryptedAdminInfo,
 };
 
-const PROTOCOL_VERSION: &str = "WUMIN_QR_V1";
+const PROTOCOL_VERSION: &str = "CITIZEN_QR_V1";
 const DECRYPT_PREFIX: &[u8; 14] = b"GMB_DECRYPT_V1";
 /// challenge payload 长度:14 + 48 + 32 + 8 + 16 = 118 字节
 const CHALLENGE_TOTAL_LEN: usize = 14 + 48 + 32 + 8 + 16;
@@ -135,8 +135,8 @@ pub fn build_decrypt_admin_request(
     let request_id = generate_request_id();
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    // display.fields 提供给 wumin decoder 构造确认页(action=decrypt_admin)。
-    // Step 3 wumin 端补对应 decoder 分支后,签名页文案为"解密管理员 - {sfid_number}"。
+    // display.fields 提供给 citizenwallet decoder 构造确认页(action=decrypt_admin)。
+    // Step 3 citizenwallet 端补对应 decoder 分支后,签名页文案为"解密管理员 - {sfid_number}"。
     let display = serde_json::json!({
         "action": "decrypt_admin",
         "summary": format!("解密清算行管理员 - {sfid_number}"),
@@ -194,7 +194,7 @@ pub struct VerifyDecryptAdminInput {
     pub response_json: String,
 }
 
-/// 验证 wumin 签名响应,通过则把 (pubkey, sfid_number) 写入内存解密表。
+/// 验证 citizenwallet 签名响应,通过则把 (pubkey, sfid_number) 写入内存解密表。
 pub fn verify_and_decrypt_admin(
     input: VerifyDecryptAdminInput,
 ) -> Result<DecryptedAdminInfo, String> {

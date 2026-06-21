@@ -121,16 +121,16 @@ account_id = core_const::account_id_from_account(personal_address)
 
 ## 客户端协议
 
-- wuminapp `lib/personal-manage/*` 直接调 pallet=7 的 propose_create/propose_close。
-- wuminapp `PersonalManageService.submitProposeCreatePersonal` 编码：
+- citizenapp `lib/personal-manage/*` 直接调 pallet=7 的 propose_create/propose_close。
+- citizenapp `PersonalManageService.submitProposeCreatePersonal` 编码：
   `0x07 0x00 + account_name + admins + regular_threshold + amount`。
-- wuminapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
+- citizenapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
   `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员读
   `AdminsChange::AdminAccounts`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
-- wuminapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
+- citizenapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
 - 创建类交易入块后若未找到成功事件，客户端必须先解析 `System.ExtrinsicFailed` 并显示真实 `PersonalManage / AdminsChange` 模块错误，不能只提示“未找到成功事件”。
-- wumin `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
-- wumin `payload_decoder.dart` 解析 PersonalManage(7) 新编码，并拒绝旧
+- citizenwallet `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
+- citizenwallet `payload_decoder.dart` 解析 PersonalManage(7) 新编码，并拒绝旧
   `admins_len + threshold` 交易载荷。
 
 ## 测试
@@ -161,8 +161,8 @@ flutter test test/signer/payload_decoder_test.dart
 - `internal-vote`:86 passed。
 - `duoqian-transfer`:22 passed。
 - `organization-manage`:24 passed。
-- `wuminapp` 多签相关测试:10 passed。
-- `wumin` 公民钱包 payload decoder:30 passed。
+- `citizenapp` 多签相关测试:10 passed。
+- `citizenwallet` 公民钱包 payload decoder:30 passed。
 - `sfid/backend`:cargo check 通过。
 
 ## benchmarks
@@ -199,5 +199,5 @@ flutter test test/signer/payload_decoder_test.dart
 - `DuoqianClosed` 事件补充 `admins_len / threshold`。
 - `PersonalDuoqianProposed` 事件补充 `fee`。
 - `weights.rs` 从 0 权重改为保守非零权重。
-- wuminapp storage codec 和 ProposalData 解码同步新 SCALE 布局。
+- citizenapp storage codec 和 ProposalData 解码同步新 SCALE 布局。
 - SFID indexer 已读取 `DuoqianCreated / DuoqianClosed` 事件中的 `fee` 字段。

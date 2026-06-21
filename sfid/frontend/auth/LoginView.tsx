@@ -8,7 +8,7 @@ import { QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
-import { WuminSignaturePanel } from '../core/WuminSignaturePanel';
+import { CitizenSignaturePanel } from '../core/CitizenSignaturePanel';
 import type { AdminAuth } from './types';
 import type { AdminQrChallengeResult } from './api';
 import {
@@ -187,7 +187,7 @@ export function LoginView() {
 
       {/* 登录内容区域 */}
       <div style={{ padding: '32px 36px 36px' }}>
-        <WuminSignaturePanel
+        <CitizenSignaturePanel
           qrTitle="登录二维码"
           qrValue={pendingQrLogin?.login_qr_payload}
           qrPlaceholderValue="SFID_LOGIN_PENDING"

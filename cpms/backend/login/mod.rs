@@ -234,7 +234,7 @@ async fn auth_qr_complete(
     if admin.role == "OPERATOR" {
         crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
     }
-    // 重建完整签名原文(包含签名者公钥),与 wumin 端
+    // 重建完整签名原文(包含签名者公钥),与 citizenwallet 端
     // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
     let verify_message = crate::qr::build_signature_message(
         crate::qr::QrKind::LoginReceipt,
@@ -243,7 +243,7 @@ async fn auth_qr_complete(
         Some(expire_at),
         req.admin_pubkey.trim(),
     );
-    if verify_wumin_login_signature(
+    if verify_citizenwallet_login_signature(
         req.admin_pubkey.trim(),
         &verify_message,
         req.signature.trim(),
@@ -574,7 +574,7 @@ fn extract_domain_from_origin(origin: &str) -> Option<String> {
     Some(domain.to_string())
 }
 
-pub(crate) fn verify_wumin_login_signature(
+pub(crate) fn verify_citizenwallet_login_signature(
     admin_pubkey: &str,
     signed_message: &str,
     signature: &str,

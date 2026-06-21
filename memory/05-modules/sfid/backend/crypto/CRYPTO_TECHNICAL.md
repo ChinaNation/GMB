@@ -27,6 +27,6 @@ sfid/backend/crypto/
 ## 4. 钱包密钥托管边界(抗量子签名升级,ADR-022)
 
 - SFID **不**保存钱包助记词、`AccountSeedV1`、私钥或 PQC(ML-DSA-65)私钥;链上/SFID 只持有账户公钥(`AccountId`)与必要的公钥派生物。
-- 钱包的 sr25519 与 ML-DSA-65 钥匙由用户的助记词在 `wuminapp`/`wumin` 本机派生(共享 `gmb-pqc` crate),不经过 SFID。
+- 钱包的 sr25519 与 ML-DSA-65 钥匙由用户的助记词在 `citizenapp`/`citizenwallet` 本机派生(共享 `gmb-pqc` crate),不经过 SFID。
 - SFID 的角色仅限账户绑定与管理员安全动作边界;PQC 公钥绑定到链上账户由 `account-keys` pallet 负责,不在 SFID。
 - 关联:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`。

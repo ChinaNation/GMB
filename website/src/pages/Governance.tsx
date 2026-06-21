@@ -168,7 +168,7 @@ export default function Governance() {
         <div className="mx-auto max-w-3xl px-6 text-center">
           <h2 className="text-3xl font-bold text-white">公民的权利，链上的保障</h2>
           <p className="mt-6 text-lg text-slate-400">
-            每一票都记录在区块链上，透明、不可篡改。通过 WuminApp 客户端，
+            每一票都记录在区块链上，透明、不可篡改。通过 CitizenApp 客户端，
             每位认证公民都可以直接参与链上治理投票。
           </p>
         </div>

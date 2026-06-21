@@ -118,9 +118,9 @@ SFID 前端提示统一由 `sfid/frontend/utils/notice.ts` 管理。业务组件
 
 业务组件捕获异常时必须把原始错误对象传给 `notice.error(error, '中文兜底提示')`,不得先取 `error.message` 再传入提示入口。后端 `ApiError.error_code` 和原始 `message` 的翻译只允许在 `notice.ts` 中实现;无法识别的英文错误必须在统一入口降级为中文兜底提示,不得原样显示给用户。
 
-管理员扫码登录的端侧职责固定为:SFID 页面生成 `WUMIN_QR_V1 / login_challenge`,
-`wumin` 公民钱包扫描并生成 `login_receipt`,SFID 页面再扫描该登录回执。`wuminapp`
-不承担管理员登录 QR 职责,前端文案不得引导用户使用 wuminapp 处理登录挑战。
+管理员扫码登录的端侧职责固定为:SFID 页面生成 `CITIZEN_QR_V1 / login_challenge`,
+`citizenwallet` 公民钱包扫描并生成 `login_receipt`,SFID 页面再扫描该登录回执。`citizenapp`
+不承担管理员登录 QR 职责,前端文案不得引导用户使用 citizenapp 处理登录挑战。
 
 ## 公权机构
 

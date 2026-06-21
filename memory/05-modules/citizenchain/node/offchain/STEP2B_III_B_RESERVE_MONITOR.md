@@ -10,7 +10,7 @@
 
 ## 1. 为什么要做这一步
 
-Step 2b-iii-a 完成后,扫码支付进入"wuminapp RPC → ledger → packer → pool → runtime → listener → ledger 清 pending"的完整闭环。但这个闭环里 listener 是**唯一**的本地账面同步路径:
+Step 2b-iii-a 完成后,扫码支付进入"citizenapp RPC → ledger → packer → pool → runtime → listener → ledger 清 pending"的完整闭环。但这个闭环里 listener 是**唯一**的本地账面同步路径:
 
 - listener 进程崩溃 / tokio task panic
 - `import_notification_stream` 短暂断流

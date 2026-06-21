@@ -68,12 +68,12 @@ task_manager.spawn_handle().spawn(
 ## 3. 端到端数据流(闭环打通)
 
 ```
-wuminapp                清算行节点                             链上 runtime
+citizenapp                清算行节点                             链上 runtime
 ────────                ──────────                             ────────────
 扫 QR → RPC   → OffchainClearingRpcImpl.submit_payment
                 → ledger.accept_payment
                   pending.push(...)
-                  tx_id 返回给 wuminapp
+                  tx_id 返回给 citizenapp
 
 30s tick        → packer.pack_and_submit
                 → submitter.submit  → pool.submit_one  →  TxPool
@@ -171,4 +171,4 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 
 ## 8. 变更记录
 
-- 2026-04-19:Step 2b-iii-a 完整落地,`settlement/listener.rs` 真实订阅 `import_notification_stream`,清算行节点闭环打通(wuminapp RPC → ledger → packer → pool → extrinsic → runtime event → listener → ledger.pending 清理)。listener + service.rs + ledger.rs 可见性修复,零编译错误;新增 3 个 convert_event 单测 + 保留原 3 个 handle 单测。
+- 2026-04-19:Step 2b-iii-a 完整落地,`settlement/listener.rs` 真实订阅 `import_notification_stream`,清算行节点闭环打通(citizenapp RPC → ledger → packer → pool → extrinsic → runtime event → listener → ledger.pending 清理)。listener + service.rs + ledger.rs 可见性修复,零编译错误;新增 3 个 convert_event 单测 + 保留原 3 个 handle 单测。

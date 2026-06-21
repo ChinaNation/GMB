@@ -11,8 +11,8 @@
 - citizenchain
 - sfid
 - cpms
-- wumin
-- wuminapp
+- citizenwallet
+- citizenapp
 
 输入文档：
 - docs/《白皮书》.md
@@ -23,7 +23,7 @@
 - memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md
 - memory/01-architecture/sfid/SFID_TECHNICAL.md
 - memory/01-architecture/cpms/CPMS_TECHNICAL.md
-- memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md
+- memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md
 - memory/04-decisions/ADR-022-unified-pqc-crypto.md
 - memory/05-modules/citizenchain/runtime/votingengine/VOTINGENGINE_TECHNICAL.md
 - memory/05-modules/citizenchain/runtime/primitives/PRIMITIVES_TECHNICAL.md
@@ -32,8 +32,8 @@
 - memory/05-modules/citizenchain/node/offchain-clearing/L2_CLEARING_PROTOCOL.md
 - memory/05-modules/sfid/SFID-CPMS-QR-v1.md
 - memory/05-modules/sfid/backend/citizens/CITIZENS_TECHNICAL.md
-- memory/05-modules/wuminapp/im/IM_TECHNICAL.md
-- memory/05-modules/wumin/WUMIN_PQC_TECHNICAL.md
+- memory/05-modules/citizenapp/im/IM_TECHNICAL.md
+- memory/05-modules/citizenwallet/CITIZENWALLET_PQC_TECHNICAL.md
 - memory/08-tasks/open/20260615-cpms-sfid-birthplace-election-scope.md
 
 必须遵守：
@@ -136,7 +136,7 @@
 
 已执行：
 - 在 `docs/《白皮书》.md` 的 1.2 下新增 `1.2.1.术语与命名约定`。
-- 统一术语：公民主义/Citizenism、公民链/CitizenChain、公民币/Citizen Coin、公民钱包/wumin、公民/wuminapp、SFID、CPMS、档案码、清算行、投票资格、投票范围、参选范围。
+- 统一术语：公民主义/Citizenism、公民链/CitizenChain、公民币/Citizen Coin、公民钱包/citizenwallet、公民/citizenapp、SFID、CPMS、档案码、清算行、投票资格、投票范围、参选范围。
 - 将 1.4 中“国家名称与五民主义 / Five Civic Principles”同步为“国家名称与公民主义 / Citizenism”，并按公民宪法第三条当前表达同步中英文。
 - 将 `GMB/primitives/china/china_ch.rs` 改为 `citizenchain/runtime/primitives/china/china_ch.rs`。
 - 将 `primitives/china/china_ch.rs/citizens_number` 改为 `citizenchain/runtime/primitives/china/china_ch.rs/citizens_number`。
@@ -374,11 +374,11 @@
 
 实际修改：
 - `docs/《白皮书》.md`
-  - 补全 6.1 公民钱包：明确 wumin 是公民链离线冷钱包，只负责账户创建、账户导入、助记词和私钥本地保存、离线签名、扫码识别签名请求和输出签名结果。
+  - 补全 6.1 公民钱包：明确 citizenwallet 是公民链离线冷钱包，只负责账户创建、账户导入、助记词和私钥本地保存、离线签名、扫码识别签名请求和输出签名结果。
   - 明确公民钱包不承担轻节点、链上查询、交易广播、治理浏览、即时通信、清算行绑定或投票交互职责。
   - 明确二维码签名请求必须展示账户、收款方、金额、治理动作、登录动作或身份绑定动作等用户可理解语义，不得诱导签署黑盒载荷。
   - 补全后量子签名升级：以 ADR-022 为唯一真源，未来通过公民链 runtime 升级和公民钱包、公民客户端升级，在不更换助记词、钱包、账户地址和余额归属的前提下，在位切换到 ML-DSA-65；AccountId 仍为身份锚点，签名算法只是授权方式。
-  - 补全 6.2 公民：明确 wuminapp 是公民链轻节点、热钱包、链上状态查询、交易提交、身份绑定、公民投票、治理交互、清算支付和去中心化通信入口。
+  - 补全 6.2 公民：明确 citizenapp 是公民链轻节点、热钱包、链上状态查询、交易提交、身份绑定、公民投票、治理交互、清算支付和去中心化通信入口。
   - 明确热钱包负责联网广播、余额查询、清算行绑定、扫码支付和投票交互；资产、身份绑定、投票或治理敏感动作必须经过账户签名。
   - 明确钱包私钥不得交给 SFID、CPMS、通信全节点、清算行、网站前端或任何链下服务。
   - 补全去中心化通信：通信不上链，不依赖 SFID，不使用中心化消息服务器；通信全节点是私人节点，只服务自己的手机和收件箱，只保存密文 mailbox，不解密消息，不替第三方存消息，不做公共中继。
@@ -386,8 +386,8 @@
   - 补全隐私边界：CPMS 离线保存完整实名档案，SFID 在线只保存可验证身份、资格、行政区代码和钱包绑定关系，链上只接收账户地址、签名、凭证、哈希和必要状态。
 
 第 6 步未修改：
-- 未修改 `wumin/` 代码。
-- 未修改 `wuminapp/` 代码。
+- 未修改 `citizenwallet/` 代码。
+- 未修改 `citizenapp/` 代码。
 - 未修改 `sfid/` 代码。
 - 未修改 `cpms/` 代码。
 - 未修改 `citizenchain/runtime/`。
@@ -395,8 +395,8 @@
 - 未新增安全协议或兼容旧流程。
 
 验收结果：
-- `rg` 已确认白皮书包含 `公民钱包`、`wumin`、`公民（wuminapp）`、`冷钱包`、`热钱包`、`离线签名`、`PaymentIntent`、`后量子`、`ML-DSA-65`、`AccountId`、`OpenMLS`、`通信全节点`、`中心化消息服务器`、`隐私边界` 和 `钱包私钥` 等关键边界。
-- `rg` 已确认白皮书没有把 wumin 写成轻节点、没有把 wuminapp 写成离线冷钱包、没有错误产品称谓。
+- `rg` 已确认白皮书包含 `公民钱包`、`citizenwallet`、`公民（citizenapp）`、`冷钱包`、`热钱包`、`离线签名`、`PaymentIntent`、`后量子`、`ML-DSA-65`、`AccountId`、`OpenMLS`、`通信全节点`、`中心化消息服务器`、`隐私边界` 和 `钱包私钥` 等关键边界。
+- `rg` 已确认白皮书没有把 citizenwallet 写成轻节点、没有把 citizenapp 写成离线冷钱包、没有错误产品称谓。
 - `rg` 已确认白皮书没有把钱包私钥写成可交给通信节点、SFID、CPMS、清算行或链下服务。
 - `git diff --check -- docs/《白皮书》.md memory/08-tasks/open/20260620-whitepaper-completion.md` 通过。
 - `website` 执行 `npm run build` 通过，白皮书页面可正常参与生产构建。
@@ -429,7 +429,7 @@
 第 7 步未修改：
 - 未修改任何业务代码。
 - 未修改 `citizenchain/runtime/`。
-- 未修改 `sfid/`、`cpms/`、`wumin/`、`wuminapp/`。
+- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
 - 未修改 `website/` 源码。
 - 未新建白皮书拆分文件。
 - 未新增协议或兼容旧流程。
@@ -474,7 +474,7 @@
 未修改：
 - 未修改任何业务代码。
 - 未修改 `citizenchain/runtime/`。
-- 未修改 `sfid/`、`cpms/`、`wumin/`、`wuminapp/`。
+- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
 - 未新建文件或目录。
 
 验收结果：
@@ -514,7 +514,7 @@
 - 未修改 `docs/《白皮书》.md` 正文内容。
 - 未修改任何业务代码。
 - 未修改 `citizenchain/runtime/`。
-- 未修改 `sfid/`、`cpms/`、`wumin/`、`wuminapp/`。
+- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
 - 未新建文件或目录。
 
 验收结果：
@@ -564,7 +564,7 @@
 
 未修改：
 - 未修改任何 `citizenchain/runtime/` 文件。
-- 未修改 `sfid/`、`cpms/`、`wumin/`、`wuminapp/`。
+- 未修改 `sfid/`、`cpms/`、`citizenwallet/`、`citizenapp/`。
 - 未新建文件或目录。
 
 验收结果：

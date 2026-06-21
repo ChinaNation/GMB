@@ -5,10 +5,10 @@
 - 范围:`kind = sign_request` 的 `body.display.action` 与 `body.display.fields`
 - 依赖:
   - `memory/01-architecture/qr/qr-signing-recognition.md`
-  - `wumin/lib/signer/pallet_registry.dart`
-  - `wumin/lib/signer/payload_decoder.dart`
+  - `citizenwallet/lib/signer/pallet_registry.dart`
+  - `citizenwallet/lib/signer/payload_decoder.dart`
 
-任何一端(`wumin/lib/signer/payload_decoder.dart` / `citizenchain/node/src/` / `wuminapp/lib/`)新增或修改 action / field key,必须先改本文件,再改代码。字段 key、字段顺序、渲染值必须逐字对齐。
+任何一端(`citizenwallet/lib/signer/payload_decoder.dart` / `citizenchain/node/src/` / `citizenapp/lib/`)新增或修改 action / field key,必须先改本文件,再改代码。字段 key、字段顺序、渲染值必须逐字对齐。
 
 ## 一、Action 清单
 
@@ -16,29 +16,29 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `transfer` | 3 | `transfer_keep_alive` | `to`, `amount_yuan` | node_ui, wuminapp |
+| `transfer` | 3 | `transfer_keep_alive` | `to`, `amount_yuan` | node_ui, citizenapp |
 
 ### 1.2 PersonalManage(pallet_index = 7)
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_create_personal` | 0 | `propose_create` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | wuminapp |
-| `propose_close_personal` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | wuminapp |
-| `cleanup_rejected_personal_proposal` | 2 | `cleanup_rejected_proposal` | `proposal_id` | wuminapp |
+| `propose_create_personal` | 0 | `propose_create` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | citizenapp |
+| `propose_close_personal` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | citizenapp |
+| `cleanup_rejected_personal_proposal` | 2 | `cleanup_rejected_proposal` | `proposal_id` | citizenapp |
 
 ### 1.3 ResolutionIssuance(pallet_index = 8)
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_resolution_issuance` | 0 | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | node_ui, wuminapp |
+| `propose_resolution_issuance` | 0 | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | node_ui, citizenapp |
 
 ### 1.4 VotingEngine(pallet_index = 9)
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `finalize_proposal` | 3 | `finalize_proposal` | `proposal_id` | node_ui, wuminapp |
-| `retry_passed_proposal` | 4 | `retry_passed_proposal` | `proposal_id` | node_ui, wuminapp |
-| `cancel_passed_proposal` | 5 | `cancel_passed_proposal` | `proposal_id`, `reason` | node_ui, wuminapp |
+| `finalize_proposal` | 3 | `finalize_proposal` | `proposal_id` | node_ui, citizenapp |
+| `retry_passed_proposal` | 4 | `retry_passed_proposal` | `proposal_id` | node_ui, citizenapp |
+| `cancel_passed_proposal` | 5 | `cancel_passed_proposal` | `proposal_id`, `reason` | node_ui, citizenapp |
 
 `VotingEngine(9)` 只承载提案生命周期入口。管理员投票不得再登记到 `VotingEngine(9)`。
 
@@ -46,7 +46,7 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_admin_set_change` | 0 | `propose_admin_set_change` | `org`, `subject`, `admins[]` | node_ui, wuminapp |
+| `propose_admin_set_change` | 0 | `propose_admin_set_change` | `org`, `subject`, `admins[]` | node_ui, citizenapp |
 
 `call_index = 1` 已留洞不复用。手动重试统一走 `VotingEngine.retry_passed_proposal(9.4)`。
 
@@ -54,8 +54,8 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_runtime_upgrade` | 0 | `propose_runtime_upgrade` | `reason`, `wasm_size`, `wasm_hash`, `eligible_total` | node_ui, wuminapp |
-| `developer_direct_upgrade` | 2 | `developer_direct_upgrade` | `wasm_size`, `wasm_hash` | node_ui, wuminapp |
+| `propose_runtime_upgrade` | 0 | `propose_runtime_upgrade` | `reason`, `wasm_size`, `wasm_hash`, `eligible_total` | node_ui, citizenapp |
+| `developer_direct_upgrade` | 2 | `developer_direct_upgrade` | `wasm_size`, `wasm_hash` | node_ui, citizenapp |
 
 Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;冷钱包走哈希直签例外,但必须展示 `wasm_hash` 供用户核对。
 
@@ -63,7 +63,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_destroy` | 0 | `propose_destroy` | `org`, `amount_yuan` | wuminapp |
+| `propose_destroy` | 0 | `propose_destroy` | `org`, `amount_yuan` | citizenapp |
 
 `call_index = 1` 已留洞不复用。手动重试统一走 `VotingEngine.retry_passed_proposal(9.4)`。
 
@@ -79,9 +79,9 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_close_institution` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | wuminapp |
-| `cleanup_rejected_proposal` | 4 | `cleanup_rejected_proposal` | `proposal_id` | wuminapp |
-| `propose_create_institution` | 5 | `propose_create_institution` | `sfid_number`, `sfid_full_name`, `admins_len`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_pubkey` | node_ui, wuminapp |
+| `propose_close_institution` | 1 | `propose_close` | `duoqian_account`, `beneficiary` | citizenapp |
+| `cleanup_rejected_proposal` | 4 | `cleanup_rejected_proposal` | `proposal_id` | citizenapp |
+| `propose_create_institution` | 5 | `propose_create_institution` | `sfid_number`, `sfid_full_name`, `admins_len`, `threshold`, `total_amount_yuan`, `amount_<account_name>*`, `province_name`, `signer_pubkey` | node_ui, citizenapp |
 
 `register_sfid_institution(call_index = 2)` 由 SFID 后端签发凭证并由链端验签,不走冷钱包扫码签名,不在本表范围。`call_index = 0 / 3` 已留洞不复用。
 
@@ -89,9 +89,9 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_transfer` | 0 | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | node_ui, wuminapp |
-| `propose_safety_fund_transfer` | 1 | `propose_safety_fund` | `beneficiary`, `amount_yuan`, `remark` | node_ui, wuminapp |
-| `propose_sweep_to_main` | 2 | `propose_sweep` | `institution`, `amount_yuan` | node_ui, wuminapp |
+| `propose_transfer` | 0 | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | node_ui, citizenapp |
+| `propose_safety_fund_transfer` | 1 | `propose_safety_fund` | `beneficiary`, `amount_yuan`, `remark` | node_ui, citizenapp |
+| `propose_sweep_to_main` | 2 | `propose_sweep` | `institution`, `amount_yuan` | node_ui, citizenapp |
 
 `call_index = 3 / 4 / 5` 已留洞不复用。手动重试统一走 `VotingEngine.retry_passed_proposal(9.4)`。
 
@@ -99,10 +99,10 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `bind_clearing_bank` | 30 | `bind_clearing_bank` | `bank_main` | node_ui, wuminapp |
-| `deposit_clearing_bank` | 31 | `deposit` | `amount_yuan` | node_ui, wuminapp |
-| `withdraw_clearing_bank` | 32 | `withdraw` | `amount_yuan` | node_ui, wuminapp |
-| `switch_clearing_bank` | 33 | `switch_bank` | `new_bank` | node_ui, wuminapp |
+| `bind_clearing_bank` | 30 | `bind_clearing_bank` | `bank_main` | node_ui, citizenapp |
+| `deposit_clearing_bank` | 31 | `deposit` | `amount_yuan` | node_ui, citizenapp |
+| `withdraw_clearing_bank` | 32 | `withdraw` | `amount_yuan` | node_ui, citizenapp |
+| `switch_clearing_bank` | 33 | `switch_bank` | `new_bank` | node_ui, citizenapp |
 | `register_clearing_bank` | 50 | `register_clearing_bank` | `sfid_number`, `peer_id`, `rpc_domain`, `rpc_port` | node_ui |
 | `update_clearing_bank_endpoint` | 51 | `update_clearing_bank_endpoint` | `sfid_number`, `new_domain`, `new_port` | node_ui |
 | `unregister_clearing_bank` | 52 | `unregister_clearing_bank` | `sfid_number` | node_ui |
@@ -111,14 +111,14 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `internal_vote` | 0 | `cast` | `proposal_id`, `approve` | node_ui, wuminapp |
+| `internal_vote` | 0 | `cast` | `proposal_id`, `approve` | node_ui, citizenapp |
 
 ### 1.13 JointVote(pallet_index = 23)
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `joint_vote` | 0 | `cast_admin` | `proposal_id`, `approve` | node_ui, wuminapp |
-| `cast_referendum` | 1 | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_pubkey` | wuminapp |
+| `joint_vote` | 0 | `cast_admin` | `proposal_id`, `approve` | node_ui, citizenapp |
+| `cast_referendum` | 1 | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_pubkey` | citizenapp |
 
 `joint_vote` 的 call data 内含 48 字节 `institution_id`,当前冷钱包 decoder 只展示 `proposal_id` / `approve`。若要展示机构身份,必须先更新本表和 decoder。
 
@@ -126,9 +126,9 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | payload 结构 | fields(顺序固定) | 签发方 | 用途 |
 |---|---|---|---|---|
-| `activate_admin_account` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `account_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / wuminapp | subject 级管理员激活 |
+| `activate_admin_account` | `GMB_ACTIVATE_SUBJECT_V1`(23B) + `account_id`(48B) + `org`(u8) + `kind`(u8) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 130B | `org`, `subject`, `pubkey` | node_ui / citizenapp | subject 级管理员激活 |
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
-| `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | wuminapp 电子护照绑定签名 |
+| `citizen_bind` | `sfid-citizen-bind-v1\|challenge_id\|mode\|archive_no\|citizen_status\|voting_eligible\|valid_from\|valid_until\|status_updated_at\|wallet_pubkey\|issued_at` | `mode`, `archive_no`, `voting_eligible`, `citizen_status`, `wallet_address` | sfid 后端 | citizenapp 电子护照绑定签名 |
 | `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
 | `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `actor_province_name`, `actor_pubkey`, `target` | sfid 后端 | 联邦管理员治理和 Passkey 更新公民钱包确认 |
 
@@ -162,10 +162,10 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 ## 四、新增或修改 action 流程
 
 1. 先修改本文件,加入或调整 pallet_index / call_index / fields / 签发方。
-2. 修改 `wumin/lib/signer/pallet_registry.dart` 的索引常量。
-3. 修改 `wumin/lib/signer/payload_decoder.dart`,确保 `decoded.action` 和 `decoded.fields` 与本表逐字对齐。
-4. 修改签发方代码(`citizenchain/node/src/` 或 `wuminapp/lib/`),确保 `display.action` 和 `SignDisplayField.key` 与本表逐字对齐。
-5. 补 `wumin/test/` 单测和 `memory/01-architecture/qr/qr-protocol-fixtures/` golden fixture。
+2. 修改 `citizenwallet/lib/signer/pallet_registry.dart` 的索引常量。
+3. 修改 `citizenwallet/lib/signer/payload_decoder.dart`,确保 `decoded.action` 和 `decoded.fields` 与本表逐字对齐。
+4. 修改签发方代码(`citizenchain/node/src/` 或 `citizenapp/lib/`),确保 `display.action` 和 `SignDisplayField.key` 与本表逐字对齐。
+5. 补 `citizenwallet/test/` 单测和 `memory/01-architecture/qr/qr-protocol-fixtures/` golden fixture。
 6. 补端到端 Flutter / Rust 测试。
 7. PR 标题包含 `[qr-registry]`,CI 门禁扫本文件 vs 三端实现。
 

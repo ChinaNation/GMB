@@ -23,7 +23,7 @@
 | `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `organization-manage`, `duoqian-transfer`(间接), `admins-change`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
 | `JointVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `resolution-issuance`, `runtime-upgrade` |
 | `InternalAdminProvider` | `votingengine` | `RuntimeInternalAdminProvider` | `votingengine` (Config 注入) |
-| `InternalAdminCountProvider` | `votingengine` | `RuntimeInternalAdminCountProvider` | `votingengine` (Config 注入) |
+| `InternalAdminsLenProvider` | `votingengine` | `RuntimeInternalAdminsLenProvider` | `votingengine` (Config 注入) |
 | `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `organization-manage`, `duoqian-transfer`(间接), `offchain-transaction` |
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
@@ -42,7 +42,7 @@
 | 适配器 | 作用 |
 |--------|------|
 | `RuntimeInternalAdminProvider` | 所有内部投票主体统一读 `admins_change::Subjects` |
-| `RuntimeInternalAdminCountProvider` | 所有内部投票主体统一读 `admins_change::Subjects.admins.len()` |
+| `RuntimeInternalAdminsLenProvider` | 所有内部投票主体统一读 `admins_change::Subjects.admins.len()` |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
 | `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `OnchainFeeRouter` 80/10/10 分账 |
 | `RuntimeSafetyFundAccountProvider` | 将安全基金制度常量 `NRC_ANQUAN_ACCOUNT` 转为 runtime 账户，避免手续费分账热路径重复 decode |

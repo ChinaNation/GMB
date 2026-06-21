@@ -134,7 +134,7 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 说明:
 
 - `0x04` 已由 ADR-011 预留给 `asset_id 资产编号`。
-- 本 ADR 只确定业务模型;执行阶段必须同步更新 ADR-010、`unified-protocols.md`、runtime primitive、wuminapp 和 wumin 解码契约。
+- 本 ADR 只确定业务模型;执行阶段必须同步更新 ADR-010、`unified-protocols.md`、runtime primitive、citizenapp 和 citizenwallet 解码契约。
 
 ## 影响
 
@@ -143,8 +143,8 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 - `personal-manage` 的 `threshold` 输入应被移除或忽略,改由链端派生。
 - `organization-manage` 必须为每个可操作账户创建独立管理员主体;机构只作为账户归属分组。
 - `duoqian-transfer` 等业务模块必须绑定具体账户治理主体。
-- `wuminapp` 需要按账户展示管理员、阈值、待投提案和投票进度。
-- `wumin` 公民钱包需要按账户级 AccountId 展示待签交易。
+- `citizenapp` 需要按账户展示管理员、阈值、待投提案和投票进度。
+- `citizenwallet` 公民钱包需要按账户级 AccountId 展示待签交易。
 
 ## 备选方案
 
@@ -162,7 +162,7 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 2. 第 2 步改造 `internal-vote`:账户级快照、全员生命周期阈值、动态普通阈值。已于 2026-05-08 完成。
 3. 第 3 步改造 `personal-manage`:注册个人账户管理员上限 64,阈值链端派生。已于 2026-05-08 完成。
 4. 第 4 步改造 `organization-manage`:注册机构账户管理员上限 1989,每账户独立主体。
-5. 第 5 步改造 `duoqian-transfer`、`wuminapp`、`wumin`。已于 2026-05-08 先行完成转账链路接入；第 4 步仍需随后补齐机构管理创建/注销全流程。
+5. 第 5 步改造 `duoqian-transfer`、`citizenapp`、`citizenwallet`。已于 2026-05-08 先行完成转账链路接入；第 4 步仍需随后补齐机构管理创建/注销全流程。
 
 ## 第 1 步执行结果
 
@@ -210,8 +210,8 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 - `CreateDuoqianAction` 不再保存管理员数量和阈值，但保存创建时 `fee` 快照。
 - 提案通过后，同一执行事务内完成入金、激活 `admins-change` 主体、激活个人账户。
 - `duoqian-transfer` 的个人多签管理员查询已从 `admins-change` 读取。
-- wuminapp 创建页、提案解码、账户查询和本地快照已切到新格式。
-- wumin 公民钱包 payload decoder 已按新格式展示派生日常阈值与创建全员阈值，并拒绝旧 `admins_len + threshold` 载荷。
+- citizenapp 创建页、提案解码、账户查询和本地快照已切到新格式。
+- citizenwallet 公民钱包 payload decoder 已按新格式展示派生日常阈值与创建全员阈值，并拒绝旧 `admins_len + threshold` 载荷。
 - 本步骤未修改 `spec_version`。
 
 回归结果：
@@ -229,10 +229,10 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 
 - `duoqian-transfer::registered_duoqian_account` 拆成 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId` 两条账户级路径；`0x02 注册机构归属关系` 明确拒绝作为转账支出主体。
 - 个人多签账户状态由 `PersonalQuery::is_active` 校验，机构账户状态由 `InstitutionQuery::is_active` 校验；管理员和阈值仍由投票引擎快照读取 `admins-change::Subjects`。
-- wuminapp `institution_data.dart`、`duoqian_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `InstitutionAccount AccountId` 编码/解码。
-- wuminapp 多签自动发现只把 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId` 落为本地账户；`0x02 注册机构归属关系` 只作归属/检索。
-- wuminapp 注册机构账户详情查询改为 `AccountRegisteredSfid -> InstitutionAccounts -> AdminsChange::AdminAccounts[0x05]`，不再从 `0x02` 读取账户管理员。
-- wumin 公民钱包 `propose_transfer` 只接受 `0x01 / 0x03 / 0x05` 可支出主体，拒绝旧裸 sfid 与 `0x02`；QR 展示字段新增 `institution`，显示内置机构名、个人多签短地址或机构账户短地址。
+- citizenapp `institution_data.dart`、`duoqian_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `InstitutionAccount AccountId` 编码/解码。
+- citizenapp 多签自动发现只把 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId` 落为本地账户；`0x02 注册机构归属关系` 只作归属/检索。
+- citizenapp 注册机构账户详情查询改为 `AccountRegisteredSfid -> InstitutionAccounts -> AdminsChange::AdminAccounts[0x05]`，不再从 `0x02` 读取账户管理员。
+- citizenwallet 公民钱包 `propose_transfer` 只接受 `0x01 / 0x03 / 0x05` 可支出主体，拒绝旧裸 sfid 与 `0x02`；QR 展示字段新增 `institution`，显示内置机构名、个人多签短地址或机构账户短地址。
 - 本步骤未修改 `spec_version`。
 
 回归结果：

@@ -27,7 +27,7 @@
 - `sfid/backend/subjects/`:新增教育分类模型、创建校验、列表过滤与详情边界;彻底删除学校内部部门的独立主体实现。
 - `sfid/backend/citizens/`:法定代表人候选公民搜索按目标机构 scope 查询,不再按登录管理员辖区硬切。
 - `sfid/backend/gov/`:自动公民教育委员会写入教育分类,并从公权机构列表移出。
-- `sfid/backend/wuminapp/`:清理公开公权目录中的教育体系残留,避免公权目录继续暴露教育委员会。
+- `sfid/backend/citizenapp/`:清理公开公权目录中的教育体系残留,避免公权目录继续暴露教育委员会。
 - `sfid/frontend/education/`:教育列表改为确定性教育委员会直显 + 普通教育机构搜索。
 - `sfid/frontend/china/`:教育机构市详情直显的确定性市公民教育委员会列表走前端缓存,不缓存学校和 `F+JY` 搜索结果。
 - `sfid/frontend/core/`:新增学校类型选择,不提供学校内部部门手动创建。

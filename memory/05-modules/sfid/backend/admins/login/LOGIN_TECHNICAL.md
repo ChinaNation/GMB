@@ -24,7 +24,7 @@ sfid/backend/admins/login/
 ├── mod.rs        # 模块聚合与对外 API re-export
 ├── model.rs      # 登录 challenge、session、二维码结果、请求/响应 DTO
 ├── handler.rs    # 普通登录接口:check/logout/identify/challenge/verify
-├── qr_login.rs   # WUMIN_QR_V1 扫码登录 challenge/complete/result
+├── qr_login.rs   # CITIZEN_QR_V1 扫码登录 challenge/complete/result
 ├── guards.rs     # 登录态与联邦管理员守卫、session 校验
 └── signature.rs  # sr25519 验签、公钥解析、challenge 清理、展示名辅助
 ```
@@ -61,17 +61,17 @@ sfid/backend/admins/login/
 
 ### 5.2 二维码登录
 
-1. `qr/challenge` 生成 WUMIN_QR_V1 登录挑战和 SFID 系统签名。
-2. `wumin` 公民钱包扫码后按 `login_receipt` 原文签名,并由网页扫描登录回执提交 `qr/complete`。
+1. `qr/challenge` 生成 CITIZEN_QR_V1 登录挑战和 SFID 系统签名。
+2. `citizenwallet` 公民钱包扫码后按 `login_receipt` 原文签名,并由网页扫描登录回执提交 `qr/complete`。
 3. 后端验签成功后写入 `qr_login_results` 并签发会话。
 4. 网页轮询 `qr/result` 获取 `PENDING / SUCCESS / EXPIRED`。
 
-二维码登录统一遵循 `WUMIN_QR_V1`:
+二维码登录统一遵循 `CITIZEN_QR_V1`:
 
 - 系统签名由 `SFID_SIGNING_SEED_HEX` 派生的 SFID main signer 产出。
-- `wumin` 公民钱包验签原文由 `core::qr::build_signature_message` 生成。
+- `citizenwallet` 公民钱包验签原文由 `core::qr::build_signature_message` 生成。
 - 登录协议禁止重新引入 `aud` 作为移动端扫码验签字段。
-- `wuminapp` 不承担管理员扫码登录职责;前端不得把登录挑战文案引导到 wuminapp。
+- `citizenapp` 不承担管理员扫码登录职责;前端不得把登录挑战文案引导到 citizenapp。
 
 ## 6. 守卫函数
 

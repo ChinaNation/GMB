@@ -74,8 +74,8 @@ pub fn build_propose_transfer_sign_request(
         }
     };
 
-    // display.fields 必须与 wumin PayloadDecoder 解码结果的 key/value 完全一致。
-    // wumin 解码 propose_transfer 返回: institution / beneficiary / amount_yuan / remark。
+    // display.fields 必须与 citizenwallet PayloadDecoder 解码结果的 key/value 完全一致。
+    // citizenwallet 解码 propose_transfer 返回: institution / beneficiary / amount_yuan / remark。
     let fields = serde_json::json!([
         { "key": "institution", "label": "转出账户", "value": institution_label },
         { "key": "beneficiary", "label": "收款地址", "value": beneficiary_address },

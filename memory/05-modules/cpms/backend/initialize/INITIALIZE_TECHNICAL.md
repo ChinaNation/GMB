@@ -52,7 +52,7 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 - 初始化阶段只允许绑定 1 个初始管理员，`admin_pubkey` 不允许重复；该初始管理员不可删除。
 - `admin_users` 不保留停用状态字段；后续通过管理员管理最多新增 4 个管理员，使管理员总数不超过 5 个。除初始管理员外，其他管理员删除即物理删除并清理会话。
 - 初始化和初始管理员绑定入口有本机 IP 级限流，防止脚本误刷；CPMS 仍不引入复杂远程验签或联网确认流程。
-- 初始化前端只允许摄像头扫描 SFID 安装码和 wumin 管理员名片二维码。
+- 初始化前端只允许摄像头扫描 SFID 安装码和 citizenwallet 管理员名片二维码。
 
 ## 6. 模块边界
 - 初始化相关路由与本机安装材料读取集中在 `initialize`。

@@ -1,8 +1,8 @@
 # ADR-019:AdminAccounts 按成员反向索引(轻节点多签发现 O(n)→O(1))
 
 - 状态:提案(2026-06-13)。**需 runtime 升级**(走链上 setCode),ADR-018"不动链端"范围外单列。
-- 关联:[[ADR-018]](ADR-018-wuminapp-unified-query-low-load.md) §九 L2;[[ADR-017]](ADR-017-finalized-unification.md)
-- 触发:wuminapp"我的多签"(机构多签 + 个人多签)发现当前只能**全表扫** `AdminsChange::AdminAccounts`。
+- 关联:[[ADR-018]](ADR-018-citizenapp-unified-query-low-load.md) §九 L2;[[ADR-017]](ADR-017-finalized-unification.md)
+- 触发:citizenapp"我的多签"(机构多签 + 个人多签)发现当前只能**全表扫** `AdminsChange::AdminAccounts`。
 
 ## 一、问题
 - `AdminAccounts: StorageMap<Blake2_128Concat, AccountId(账户地址), AdminAccount{org,kind,admins[],...}>`(`runtime/governance/admins-change/src/lib.rs:223`)。
@@ -24,7 +24,7 @@
 
 ## 四、影响
 - 链端:admins-change pallet 加 1 storage + 5 处写路径 + try-runtime hook + spec_version bump(setCode,chainspec 不重生 — `feedback_chainspec_frozen`)。
-- 客户端(wuminapp):卡② 的 `admin_accounts_scan_service` 全表扫改为按本地钱包精确枚举;删全表扫路径。
+- 客户端(citizenapp):卡② 的 `admin_accounts_scan_service` 全表扫改为按本地钱包精确枚举;删全表扫路径。
 
 ## 五、待办
 - [ ] 评审反向索引形态(DoubleMap vs Map<BoundedVec>)与上限取舍。

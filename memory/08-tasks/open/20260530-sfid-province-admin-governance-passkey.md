@@ -2,12 +2,12 @@
 
 ## 任务目标
 
-修复联邦管理员治理安全模型：联邦管理员只负责管理员治理，不再持有或使用云端业务签名私钥；联邦管理员写操作必须通过登录态、Passkey、`WUMIN_QR_V1` 冷钱包 sr25519 挑战签名。
+修复联邦管理员治理安全模型：联邦管理员只负责管理员治理，不再持有或使用云端业务签名私钥；联邦管理员写操作必须通过登录态、Passkey、`CITIZEN_QR_V1` 冷钱包 sr25519 挑战签名。
 
 ## 固定约束
 
 - SFID 生产 Passkey 域名固定为 `sfid.crcfrcn.com`;开发环境可用 `localhost` 独立注册开发 Passkey。
-- 全仓库只允许 `WUMIN_QR_V1` 一个二维码协议。
+- 全仓库只允许 `CITIZEN_QR_V1` 一个二维码协议。
 - 不新增 `SFID_ADMIN_ACTION_V1` 或其它协议。
 - 不做旧 signer 兼容，不迁移旧 seed，不读取旧路径。
 - 不使用的代码、注释、文档必须清理。
@@ -29,7 +29,7 @@
 - 2026-05-31：市管理员直接写接口改为只读列表 + 安全动作提交；联邦管理员改为同级模型。
 - 2026-05-30：删除联邦管理员云端代签源码与旧路由，持久化快照改为保存 Passkey 凭据和短期挑战。
 - 2026-05-30：前端管理员目录接入浏览器 Passkey、公民钱包签名二维码和签名回执扫描。
-- 2026-05-30：wumin 公民钱包 decoder 支持 `sfid_admin_governance` JSON 载荷，继续使用 `WUMIN_QR_V1 / sign_request`。
+- 2026-05-30：citizenwallet 公民钱包 decoder 支持 `sfid_admin_governance` JSON 载荷，继续使用 `CITIZEN_QR_V1 / sign_request`。
 - 2026-05-30：更新 SFID、QR、前后端目录文档并清理旧管理员目录文档残留。
 - 2026-05-31：Passkey WebAuthn RP ID / Origin 改为环境变量配置;生产环境启动期强制限制为 `sfid.crcfrcn.com`。
 - 2026-05-31：管理员操作权限改为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,编辑联邦/市管理员姓名改为登录态接口。

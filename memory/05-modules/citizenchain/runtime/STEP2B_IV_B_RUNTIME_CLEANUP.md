@@ -81,7 +81,7 @@ Step 3 再补。
    - `system_version = 0`
 2. 重新编译 WASM 后使用新的 genesis 启动链。
 3. 旧 dev 链上的 Call enum、Storage 残留和 in-flight 交易不进入兼容范围。
-4. wumin 公民钱包只接受当前 fresh genesis 的 `spec_version = 0`,旧 spec 离线签名请求
+4. citizenwallet 公民钱包只接受当前 fresh genesis 的 `spec_version = 0`,旧 spec 离线签名请求
    直接拒绝解码。
 
 **开发期代价**:
@@ -105,7 +105,7 @@ test result: ok. 10 passed; 0 failed
 $ cargo check --workspace --exclude node
 (citizenchain runtime / institution-asset / sfid-backend / 其他 crate 全绿)
 
-$ cd ../wuminapp && flutter analyze
+$ cd ../citizenapp && flutter analyze
 No issues found!  (Dart 端不依赖 Rust 枚举,不受影响)
 ```
 

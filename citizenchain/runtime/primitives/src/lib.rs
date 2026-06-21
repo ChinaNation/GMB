@@ -1,5 +1,5 @@
 //! 全链统一常量模块=primitives
-//! 所有 Pallet、runtime、chain_spec、node、wuminapp等均可安全引用。
+//! 所有 Pallet、runtime、chain_spec、node、citizenapp等均可安全引用。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

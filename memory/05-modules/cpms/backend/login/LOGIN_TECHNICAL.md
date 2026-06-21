@@ -8,7 +8,7 @@
 ## 2. 职责范围
 ### 2.1 本模块负责
 - QR 登录挑战码下发
-- wumin 登录回执签名验签
+- citizenwallet 登录回执签名验签
 - 登录结果轮询，且结果领取一次后立即删除
 - 登录会话创建与登出
 - 当前登录管理员查询；`auth/me` 和 QR 登录成功结果返回 `user_id / role / admin_name`
@@ -52,13 +52,13 @@
 - 登录 challenge、登录完成和登录结果轮询均有本机 IP 级限流，超限返回 `429 / CPMS_RATE_LIMITED`。
 - UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的 `CPMS_STATUS_EXPORT` 年度报告，`OPERATOR` 登录完成和登录结果领取都会被拒绝；已有操作员会话在鉴权时也会被清理。`ADMIN` 不受该锁定影响，用于补导年度报告。
 
-## 6. 扫码登录协议（与 wumin 对齐）
+## 6. 扫码登录协议（与 citizenwallet 对齐）
 ### 6.1 挑战二维码字段
 登录二维码使用统一 envelope：
 
 ```json
 {
-  "proto": "WUMIN_QR_V1",
+  "proto": "CITIZEN_QR_V1",
   "kind": "login_challenge",
   "id": "login_xxx",
   "issued_at": 1779990000,
@@ -73,12 +73,12 @@
 
 后端保存的 `session_id` 只用于浏览器轮询绑定，不进入二维码主载荷。
 
-### 6.2 验签拼串（后端与 wumin 一致）
+### 6.2 验签拼串（后端与 citizenwallet 一致）
 ```text
-WUMIN_QR_V1|login_challenge|{challenge_id}|cpms|{expires_at}|{cpms_pubkey_without_0x}
+CITIZEN_QR_V1|login_challenge|{challenge_id}|cpms|{expires_at}|{cpms_pubkey_without_0x}
 ```
 
-wumin 返回 `login_receipt` 后，CPMS 校验回执公钥、签名算法和签名值；通过后创建
+citizenwallet 返回 `login_receipt` 后，CPMS 校验回执公钥、签名算法和签名值；通过后创建
 `sessions` 记录，并在 `qr/result` 的成功响应中设置 HttpOnly Cookie。
 
 ## 7. 依赖边界

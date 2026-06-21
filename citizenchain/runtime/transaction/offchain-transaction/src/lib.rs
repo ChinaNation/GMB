@@ -50,8 +50,8 @@ use sp_io::crypto::sr25519_verify;
 ///
 /// 一家清算行机构(sfid_number)在链上声明其对外服务的全节点身份 + RPC 接入点。
 /// 用于:
-/// - wuminapp 通过 sfid_number 反查清算行节点的 wss URL
-/// - wuminapp 校验对端 PeerId 防 DNS 劫持
+/// - citizenapp 通过 sfid_number 反查清算行节点的 wss URL
+/// - citizenapp 校验对端 PeerId 防 DNS 劫持
 /// - node 网络面板统计 clearing_nodes 数量
 #[derive(
     Encode,
@@ -595,7 +595,7 @@ pub mod pallet {
         /// 2. sfid_number 已注册清算行节点
         /// 3. 调用方是该机构的激活管理员
         ///
-        /// 注销后该机构 sfid_number 不再被 wuminapp 显示为可绑定清算行(SFID 后端
+        /// 注销后该机构 sfid_number 不再被 citizenapp 显示为可绑定清算行(SFID 后端
         /// `app_search_clearing_banks` 过滤会去掉该 sfid_number)。
         /// 已绑定到该机构的用户需要主动 switch_bank 切换或继续使用直到迁移完成。
         #[pallet::call_index(52)]

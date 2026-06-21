@@ -59,6 +59,6 @@ cpms/.cpms_key
 **/android/local.properties
 
 # Android signing secrets
-wuminapp/android/key.properties
-wuminapp/android/app/*.jks
-wuminapp/android/app/*.keystore
+citizenapp/android/key.properties
+citizenapp/android/app/*.jks
+citizenapp/android/app/*.keystore

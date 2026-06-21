@@ -7,7 +7,7 @@
 ## 背景(纠正原卡定义)
 审计确认:
 - `listSfidAccounts` 是**死代码**(全仓零调用),且 `SfidRegisteredAccount` 正向枚举是 R1 禁区。
-- wuminapp 真正发现机构/个人多签走**全表扫 `AdminsChange::AdminAccounts`**(两个发现服务各扫一遍,同一张表扫两次=纯浪费)。
+- citizenapp 真正发现机构/个人多签走**全表扫 `AdminsChange::AdminAccounts`**(两个发现服务各扫一遍,同一张表扫两次=纯浪费)。
 - 多签 = "我的"(我的钱包某钱包是管理员才显示);治理机构走注册表、公权机构走后端 catalog(卡⑥),均与本卡无关。
 
 ## 完工清单

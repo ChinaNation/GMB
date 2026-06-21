@@ -27,7 +27,7 @@ export function AdminSetChangePage({
   onSuccess,
 }: Props) {
   const [account, setAccount] = useState<AdminAccountState | null>(null);
-  const [newAdmins, setNewAdmins] = useState<string[]>([]);
+  const [admins, setAdmins] = useState<string[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
     adminWallets.length === 1 ? adminWallets[0] : null,
   );
@@ -42,12 +42,12 @@ export function AdminSetChangePage({
   const [signFlowVersion, setSignFlowVersion] = useState(0);
   const signRequestRef = useRef<VoteSignRequestResult | null>(null);
   const selectedWalletRef = useRef<AdminWalletMatch | null>(null);
-  const newAdminsRef = useRef<string[]>([]);
+  const adminsRef = useRef<string[]>([]);
   const accountRefRef = useRef<AdminAccountRef>(accountRef);
 
   signRequestRef.current = signRequest;
   selectedWalletRef.current = selectedWallet;
-  newAdminsRef.current = newAdmins;
+  adminsRef.current = admins;
   accountRefRef.current = accountRef;
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export function AdminSetChangePage({
     api.getAdminAccountState(accountRef)
       .then((state) => {
         setAccount(state);
-        setNewAdmins(state?.admins ?? []);
+        setAdmins(state?.admins ?? []);
         setFormError(null);
       })
       .catch((e) => setFormError(sanitizeError(e)))
@@ -70,7 +70,7 @@ export function AdminSetChangePage({
       const result = await api.buildAdminSetChangeRequest(
         selectedWallet.pubkeyHex,
         accountRef,
-        newAdmins,
+        admins,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -101,7 +101,7 @@ export function AdminSetChangePage({
         wallet.pubkeyHex,
         req.expectedPayloadHash,
         accountRefRef.current,
-        newAdminsRef.current,
+        adminsRef.current,
         req.signNonce,
         req.signBlockNumber,
         responseJson,
@@ -147,11 +147,11 @@ export function AdminSetChangePage({
             disabled={submitting}
             onChange={setSelectedWallet}
           />
-          <AdminSetEditor admins={newAdmins} disabled={submitting} onChange={setNewAdmins} />
-          <AdminSetDiff currentAdmins={account.admins} newAdmins={newAdmins} />
+          <AdminSetEditor admins={admins} disabled={submitting} onChange={setAdmins} />
+          <AdminSetDiff currentAdmins={account.admins} admins={admins} />
           <button
             className="vote-signing-confirm"
-            disabled={submitting || !selectedWallet || newAdmins.length === 0}
+            disabled={submitting || !selectedWallet || admins.length === 0}
             onClick={buildRequest}
           >
             {submitting ? '生成中…' : '生成签名请求'}

@@ -16,7 +16,7 @@
 - 生产读取:`SFID_CHINA_DB=/opt/sfid/china/china.sqlite`
 - 职责:提供省、市、镇和镇下地址段数据,以及市/镇 tombstones 和只读查询能力。
 
-`china.sqlite` 是行政区唯一权威源。SFID 后端只读打开该 SQLite;wuminapp、CPMS 和公权机构资产包都从这份开发库派生随包只读快照。系统运行中不修改行政区,也不提供行政区管理 tab。
+`china.sqlite` 是行政区唯一权威源。SFID 后端只读打开该 SQLite;citizenapp、CPMS 和公权机构资产包都从这份开发库派生随包只读快照。系统运行中不修改行政区,也不提供行政区管理 tab。
 
 ## 数据规模
 
@@ -49,7 +49,7 @@ town_tombstones: 0
 - 岭南省已拆分 `香港市`、`九龙市`,并新增 `香洲市`;`香洲市` 包含 `坦洲镇`、`神湾镇`、`三乡镇`、`唐家湾镇`。
 - 广东省 `中山市` 已重建为一个市,原中山镇级伪市壳合并回 `中山市`;原 `东升镇` 并入 `小榄镇`。
 - 广东省东莞区域不恢复为单一旧市,而是按重新创世口径拆为 `中堂市`、`莞城市`、`石龙市`、`万江市`、`虎门市`、`常平市`、`塘厦市` 七个市,完整承载原东莞 4 个街道和 28 个镇;功能区壳已删除。
-- 2026-06-19 行政区名称归属清理仅更新 `china.sqlite`,未生成 wuminapp / CPMS 数据包,未生成 SFID 公权机构。
+- 2026-06-19 行政区名称归属清理仅更新 `china.sqlite`,未生成 citizenapp / CPMS 数据包,未生成 SFID 公权机构。
 - 河南 `人和市` 保留为现实平顶山市石龙区的系统唯一名,并补齐 `龙兴镇/北郎店社区村`;广东 `石龙市` 保留,全国只存在一个 `石龙市`。
 - 海南儋州区域从一镇一市收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
 - 矿区按重新创世规则清理:5 个及以上镇的正式矿区改为普通市名,少于 5 个镇的矿区壳删除并入相邻市。
@@ -93,12 +93,12 @@ sfid-backend check-gov --strict
 manifest 都必须一致。自动目录只清理 `gov.source='GENERATED'` 的派生机构;管理员手动创建的
 `MANUAL` 公权机构不由行政区同步删除。
 
-wuminapp 公权机构包通过真实 SFID 公开接口生成,公民端“公权机构”显示完整公权目录。
+citizenapp 公权机构包通过真实 SFID 公开接口生成,公民端“公权机构”显示完整公权目录。
 完整目录包含 SFID 自动公权目录(公安局、教育委员会、省储行等)、管理员手动创建的
 公法人、以及上级为公法人的非法人。SFID 管理端可以按“公权机构 / 市公安局 /
-教育机构”等后台功能分区管理,但这些分区不得影响 wuminapp 公民端公权列表。
+教育机构”等后台功能分区管理,但这些分区不得影响 citizenapp 公民端公权列表。
 
-2026-06-20 已按当前 `china.sqlite` 完成发布资产收口:重新生成 wuminapp 行政区包、执行 SFID 公权机构运行库对账和 strict check,并通过当前 SFID 真实公开接口重新生成 wuminapp 公权机构包。CPMS 不维护第二份行政区源码;发布安装包时由 `cpms/scripts/build_linux_host_installer.sh` 把同一份 `sfid/backend/china/china.sqlite` 拷入 payload。
+2026-06-20 已按当前 `china.sqlite` 完成发布资产收口:重新生成 citizenapp 行政区包、执行 SFID 公权机构运行库对账和 strict check,并通过当前 SFID 真实公开接口重新生成 citizenapp 公权机构包。CPMS 不维护第二份行政区源码;发布安装包时由 `cpms/scripts/build_linux_host_installer.sh` 把同一份 `sfid/backend/china/china.sqlite` 拷入 payload。
 
 当前公权目录收口结果:
 
@@ -112,7 +112,7 @@ check-gov --strict:
   ok=true manifest_current=true target_count=245716 active_count=245716
   missing=0 mismatched=0 missing_accounts=0 obsolete=0
   catalog_hash=499c1ee8af974f0a79affe6731883d491052da1767f4a99ae072ff29c1f42ea6
-wuminapp public_institutions:
+citizenapp public_institutions:
   version=1 provinces=43 total=245716 YL=1697
   完整公权目录包含 CITY_POLICE=2872,CITY_EDU=2872,JY=2873,PUBLIC_SECURITY=2872
   target_count - public_institutions = 0
@@ -143,4 +143,4 @@ sqlite3 sfid/backend/china/china.sqlite "select count(*) from sqlite_master wher
 sqlite3 sfid/backend/china/china.sqlite "PRAGMA integrity_check"
 ```
 
-本轮地址段改造不生成 wuminapp 公权机构包,不执行公权机构 reconcile。CPMS 运行库在初始化和启动时从随包 `china.sqlite` 同步当前市镇与地址段。
+本轮地址段改造不生成 citizenapp 公权机构包,不执行公权机构 reconcile。CPMS 运行库在初始化和启动时从随包 `china.sqlite` 同步当前市镇与地址段。

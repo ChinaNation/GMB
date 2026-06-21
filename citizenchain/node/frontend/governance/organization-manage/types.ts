@@ -33,17 +33,17 @@ export type InstitutionDetail = {
   /** 管理员更换使用的机构多签 AccountId，清算行当前指向主账户。 */
   adminAccountHex: string;
   /** 管理员更换使用的 org：清算行属于 ORG_OTH。 */
-  adminOrg: number;
+  org: number;
 
   mainAccount: AccountWithBalance;
   feeAccount: AccountWithBalance;
   /** 主账户/费用账户之外的其它账户(自定义初始账户)。 */
   otherAccounts: AccountWithBalance[];
 
-  adminCount: number;
+  adminsLen: number;
   threshold: number;
   /** 管理员公钥 32B 的 SS58 列表。 */
-  duoqianAdminsSs58: string[];
+  adminsSs58: string[];
 
   /** 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。 */
   status: 'Pending' | 'Active' | 'Closed';

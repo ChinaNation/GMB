@@ -138,7 +138,7 @@ propose_create_institution(
 
 runtime 适配：
 
-- `RuntimeInternalAdminProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
+- `RuntimeInternalAdminProvider / RuntimeInternalAdminsLenProvider` 统一读取 `admins-change`。
 - 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
 - `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_org_for_account` 读取 `ORG_PUP / ORG_OTH`。

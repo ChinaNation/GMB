@@ -1,7 +1,7 @@
 # ADR-021:行政区唯一真源 —— 开发库 china.sqlite 随包只读
 
 状态:Accepted(2026-06-18)
-关联:[[ADR-018]](wuminapp 混合模式)、reference_wuminapp_public_institution_bundle、feedback_no_compatibility
+关联:[[ADR-018]](citizenapp 混合模式)、reference_citizenapp_public_institution_bundle、feedback_no_compatibility
 
 ## 背景 / 问题
 
@@ -11,7 +11,7 @@
 sfid/backend/china/china.sqlite
 ```
 
-此前讨论过“SFID 运行库可管理 + wuminapp 在线拉新版 + CPMS 离线导入”的方案。该方案会形成开发库、运行库、客户端包三条数据线,一旦管理员运行中修改或代码升级替换种子,就会出现数据漂移。
+此前讨论过“SFID 运行库可管理 + citizenapp 在线拉新版 + CPMS 离线导入”的方案。该方案会形成开发库、运行库、客户端包三条数据线,一旦管理员运行中修改或代码升级替换种子,就会出现数据漂移。
 
 当前决策改为:行政区以开发库 SQLite 为准。开发期仍允许重新创世刷新版本 1 基线;重新创世任务只修改 `sfid/backend/china/china.sqlite` 时,不生成客户端数据包和公权机构。进入正式发布冻结后,每次行政区变更必须修改开发库 SQLite、递增 `metadata.admin_division_version`,再由发布流程生成各系统随包只读数据。
 
@@ -23,7 +23,7 @@ sfid/backend/china/china.sqlite
 
 - SFID 后端运行时只读 `SFID_CHINA_DB` 指向的随包 SQLite。正式部署固定为 `/opt/sfid/china/china.sqlite`。
 - SFID 不提供行政区管理 tab,也不提供运行中新增、改名、删除行政区 API。
-- wuminapp 安装包内置 `assets/admin_divisions/` 行政区字典,启动走**版本驱动增量 reconcile**(见下「客户端增量同步」),不向 SFID 联网拉行政区新版。
+- citizenapp 安装包内置 `assets/admin_divisions/` 行政区字典,启动走**版本驱动增量 reconcile**(见下「客户端增量同步」),不向 SFID 联网拉行政区新版。
 - CPMS 安装包内置同源 `china.sqlite` 只读快照,运行中不得联网更新行政区。
 - SFID 运行库中的自动公权机构必须由同一 `china.sqlite` 对账生成,`gov_manifest` 必须记录当前 SQLite hash 和目录 hash。
 - 公权机构包 `assets/public_institutions/` 必须由对账并通过严格校验后的 SFID 真实接口导出,避免旧行政区 code 残留。
@@ -71,7 +71,7 @@ town_tombstones: 0
 - 河南 `人和市` 对应现实平顶山市石龙区,用于避让广东 `石龙市`;广东 `石龙市` 保留,全国仅一个 `石龙市`。
 - 海南儋州区域收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
 - 本轮已清理已确认的截断名、`县市` 后缀名、跨省错挂名、重复壳和伪镇,并按重新创世重排市镇 code。最终审计发现的 42 个镇级伪行政区已删除,同步删除其下 235 条地址段;镇级伪行政区关键词命中归零。
-- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-20 已按当前 `china.sqlite` 重新生成 wuminapp 行政区包、执行 SFID 公权机构运行库对账和 strict check,并通过当前 SFID 真实公开接口重新生成 wuminapp 公权机构包。
+- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-20 已按当前 `china.sqlite` 重新生成 citizenapp 行政区包、执行 SFID 公权机构运行库对账和 strict check,并通过当前 SFID 真实公开接口重新生成 citizenapp 公权机构包。
 - 镇下第四层已迁移为 `address_units`;其中 535084 条补齐 2023 统计局镜像来源码和原始基层组织名,系统名保留地址段核心,例如 `xx办事处社区 -> xx社区`、`xx管委会路 -> xx路`。2026-06-20 已删除无公开源且无镇/地址段的原金门市,补齐 10 个非港澳台空地址段市,并为 160 个高置信市补齐 19226 条 `source_code/raw_name`;随后按用户确认合并原 `HN/006 天涯市` 到崖州市,并补齐崖州区 33 条来源码。剩余无法高置信绑定官方统计局来源的地址段已补入本地稳定来源码 `LOCAL-省市镇-地址段ID`,已有地址段 `source_code` 空值归零。最终审计已重排福建、海南删除/合并后的市 code 空洞,删除 42 个镇级伪行政区及其下 235 条地址段,清理 154 条地址段名称中的组织或管理机构词,将 568 条 `xx虚拟路` 归一为 `xx`,并删除 3 条纯 `虚拟路` 及其中 2 个功能区壳镇。随后对纯功能词地址段做二次收口:46 条原始名含 `社区` 的 `开发区/新区/农场/工业园` 等地址段恢复为 `xx社区`,26 条 `LOCAL-*` 来源的 `xx虚拟路` 合成占位地址段删除,同步删除因此空掉的 24 个镇并重排受影响市的镇 code。`raw_name` 保留原始来源名称用于审计,不作为前端展示名。当前 `FJ/043` 为 `石狮市`,当前 `HN/006` 为 `崖州市`;`LN/001`、`LN/002`、`LN/003`、`LN/004` 与 5 个台湾同名自建市当前无地址段行,按港澳台豁免不产生地址段来源码。
 
 当前发布验收:
@@ -107,15 +107,15 @@ public_institutions bundle:
 1. 修改 `sfid/backend/china/china.sqlite`。
 2. 更新 `metadata.admin_division_version` 和 `admin_division_versions`。
 3. 运行 `python3 sfid/backend/china/check_code_immutable.py`。
-4. 运行 `node wuminapp/tools/generate_admin_division_bundle.mjs` 生成行政区字典包。
+4. 运行 `node citizenapp/tools/generate_admin_division_bundle.mjs` 生成行政区字典包。
 5. 用指向同一 `china.sqlite` 的 SFID 后端执行 `sfid-backend reconcile-gov --changed-only`。
 6. 执行 `sfid-backend check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
-7. 运行 `node wuminapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
-8. SFID、wuminapp、CPMS 发布安装包时只携带上述同源快照。
+7. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
+8. SFID、citizenapp、CPMS 发布安装包时只携带上述同源快照。
 
-## 客户端增量同步(wuminapp,2026-06-18)
+## 客户端增量同步(citizenapp,2026-06-18)
 
-wuminapp 无服务端,数据靠 assets 包随版本分发。包版本变了就**增量刷新:变的换、删的清、没变的不动**,零旧数据残留(行政区/公权机构都是只读派生数据,无用户数据)。
+citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就**增量刷新:变的换、删的清、没变的不动**,零旧数据残留(行政区/公权机构都是只读派生数据,无用户数据)。
 
 - **包内版本表**:两个 manifest 都带 `version`(全局,= `admin_division_version`)+ `provinces:[{code/name, ver}]`(省级内容版本)。行政区 `ver` = 该省市/镇分片内容 sha256;公权机构 `ver` = 该省目录 `manifest_version`。省内容(改名/删码/重排)一变 `ver` 即变。
 - **客户端 `ensureSynced()`**(`*_bundle_loader.dart`):
@@ -131,5 +131,5 @@ wuminapp 无服务端,数据靠 assets 包随版本分发。包版本变了就**
 
 1. 不得恢复 `sfid/backend/china/data/`。
 2. 不得恢复 SFID 行政区管理 tab 或 `/api/v1/app/admin-divisions/*`。
-3. 不得在 wuminapp/CPMS 内维护第二套行政区名字。
+3. 不得在 citizenapp/CPMS 内维护第二套行政区名字。
 4. 任何重复洪江旧壳、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。

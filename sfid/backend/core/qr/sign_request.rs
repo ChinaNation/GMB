@@ -1,4 +1,4 @@
-//! WUMIN_QR_V1/sign_request 构造工具。
+//! CITIZEN_QR_V1/sign_request 构造工具。
 //!
 //! 中文注释:这里只负责把已确定的签名原文包装成统一二维码 envelope;
 //! 业务模块仍负责决定签名内容、字段展示和权限语义。
@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 use crate::citizens::binding::pubkey_hex_to_ss58;
-use crate::{api_error, core::qr::WUMIN_QR_V1};
+use crate::{api_error, core::qr::CITIZEN_QR_V1};
 
 pub(crate) const ADMIN_SIGN_ACTION: &str = "sfid_admin_action";
 
@@ -36,7 +36,7 @@ pub(crate) fn build_sign_request(
         ));
     };
     let sign_request = json!({
-        "proto": WUMIN_QR_V1,
+        "proto": CITIZEN_QR_V1,
         "kind": "sign_request",
         "id": request_id,
         "issued_at": issued_at,

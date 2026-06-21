@@ -19,7 +19,7 @@
   - `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
   - `memory/01-architecture/sfid/SFID_TECHNICAL.md`
   - `memory/01-architecture/cpms/CPMS_TECHNICAL.md`
-  - `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md`
+  - `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
 - 模块技术文档：
   - 位于 `memory/05-modules/` 中，按产品和模块目录归档，命名统一为 `*_TECHNICAL.md`
 
@@ -38,7 +38,7 @@
 - `citizenchain`：区块链主产品，负责链上状态、共识、治理、发行、交易、节点运行与桌面节点软件。
 - `sfid`：身份识别码系统，负责公民绑定、资格校验、人口快照、公民投票凭证、管理员站点与链侧接口。
 - `cpms`：离线档案与二维码签发系统，负责建档、签章二维码、机构公钥登记二维码。
-- `wuminapp`：公民，负责钱包、登录签名、治理入口、交易入口与端上状态展示。
+- `citizenapp`：公民，负责钱包、登录签名、治理入口、交易入口与端上状态展示。
 
 ## 4. 产品矩阵与职责分工
 
@@ -77,9 +77,9 @@
   - 机构公钥登记二维码生成
   - 机构管理员 / 系统管理员管理
 
-### 4.4 WuminApp
-- 代码目录：`/Users/rhett/GMB/wuminapp`
-- 产品文档：`/Users/rhett/GMB/memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md`
+### 4.4 CitizenApp
+- 代码目录：`/Users/rhett/GMB/citizenapp`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
 - 当前技术栈：
   - Flutter + Dart
   - Secure Storage + Isar
@@ -96,17 +96,17 @@
 2. `CPMS` 在线下生成带签名档案二维码。
 3. `SFID` 管理员站扫码并验签二维码，完成档案号与区块链公钥绑定。
 4. `SFID` 将绑定结果回传给 `citizenchain`。
-5. `wuminapp` 或其他链上客户端读取绑定状态并展示用户身份能力。
+5. `citizenapp` 或其他链上客户端读取绑定状态并展示用户身份能力。
 
 ### 5.2 公民投票主流程
 1. `citizenchain` 创建联合投票 / 公民投票提案。
 2. `SFID` 提供人口快照、投票资格校验、投票凭证签名验证。
-3. `wuminapp` 作为公民端入口提交投票签名或交易。
+3. `citizenapp` 作为公民端入口提交投票签名或交易。
 4. `citizenchain` 在 runtime 中完成投票记账、状态流转与最终结果处理。
 
 ### 5.3 管理员扫码登录主流程
 1. `CPMS` 或 `SFID` 生成登录 challenge。
-2. `wuminapp` 扫码并完成签名。
+2. `citizenapp` 扫码并完成签名。
 3. `CPMS` / `SFID` 回收签名回执并完成验签。
 4. 对应管理后台生成会话并授权。
 
@@ -114,14 +114,14 @@
 1. `citizenchain/node` 提供原生节点程序、桌面端 Rust 后端、React 前端与 Tauri 打包入口。
 2. `citizenchain/node` 将节点程序与桌面界面打包为同一个桌面应用。
 3. 用户安装桌面节点软件后可直接启动本地节点。
-4. `wuminapp` 与其他产品通过 RPC、链侧接口或间接服务读取链状态。
+4. `citizenapp` 与其他产品通过 RPC、链侧接口或间接服务读取链状态。
 
 ## 6. 共享协议与统一口径
 
 ### 6.1 登录扫码协议
-- 协议名：`WUMIN_QR_V1`
+- 协议名：`CITIZEN_QR_V1`
 - 相关产品：
-  - `wuminapp`
+  - `citizenapp`
   - `sfid`
   - `cpms`
 - 要求：
@@ -141,7 +141,7 @@
 - 地址编码：`SS58 = 2027`
 - 相关产品：
   - `citizenchain`
-  - `wuminapp`
+  - `citizenapp`
   - `sfid`（链侧接口）
 - 要求：
   - 地址显示、链 ID、Token 展示口径统一
@@ -162,7 +162,7 @@ GMB/
 ├── citizenchain/   # 区块链主产品代码
 ├── sfid/           # 身份识别码系统代码
 ├── cpms/           # 离线档案系统代码
-├── wuminapp/       # 公民代码
+├── citizenapp/       # 公民代码
 ├── memory/         # AI 编程系统与正式文档真源
 ├── tools/          # 环境与开发工具
 ├── docs/           # 图片、白皮书素材与参考资料
@@ -214,7 +214,7 @@ GMB/
   - 若涉及共享协议，必须同步联调其他产品
 
 ### 8.4 Mobile App 发布
-- 适用产品：`wuminapp`
+- 适用产品：`citizenapp`
 - 触发条件：
   - Flutter UI、钱包、签名、扫码流程、端上存储策略变更
 - 影响：
@@ -231,9 +231,9 @@ GMB/
 ## 9. 联调与变更控制
 
 ### 9.1 必须同步联调的改动
-- 登录扫码协议改动：`wuminapp + sfid + cpms`
+- 登录扫码协议改动：`citizenapp + sfid + cpms`
 - CPMS 二维码字段 / 签名串改动：`cpms + sfid`
-- 链地址口径 / SS58 / 交易字段改动：`citizenchain + wuminapp + sfid`
+- 链地址口径 / SS58 / 交易字段改动：`citizenchain + citizenapp + sfid`
 - 绑定 / 投票凭证 / 人口快照改动：`citizenchain + sfid`
 
 ### 9.2 必须同步更新文档的改动
@@ -253,7 +253,7 @@ GMB/
 - `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
 - `memory/01-architecture/sfid/SFID_TECHNICAL.md`
 - `memory/01-architecture/cpms/CPMS_TECHNICAL.md`
-- `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md`
+- `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
 
 ## 11. 结论性维护要求
 - `memory/01-architecture/gmb/GMB_TECHNICAL.md` 只描述仓库级总览、跨产品协议、发布边界与维护规则。

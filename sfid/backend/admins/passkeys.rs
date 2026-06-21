@@ -133,7 +133,7 @@ pub(crate) async fn start_passkey_registration(
     let province = ctx.admin_province.clone().unwrap_or_default();
     let payload_text = signed_payload_text(AdminSignedPayload {
         domain: "sfid_admin_governance",
-        qr_proto: crate::core::qr::WUMIN_QR_V1,
+        qr_proto: crate::core::qr::CITIZEN_QR_V1,
         action_id: registration_id.as_str(),
         action_type: "PASSKEY_REGISTER",
         actor_pubkey: ctx.admin_pubkey.as_str(),

@@ -1,6 +1,6 @@
 // 交易模块：冷钱包管理 + 链上转账（Balances::transfer_keep_alive）。
 //
-// 冷钱包仅存储 SS58 地址，签名通过 WUMIN_QR_V1 协议由离线设备完成。
+// 冷钱包仅存储 SS58 地址，签名通过 CITIZEN_QR_V1 协议由离线设备完成。
 // 转账构建和提交复用 governance/signing.rs 中的通用基础设施。
 
 pub(crate) mod wallet_store;
@@ -507,8 +507,8 @@ mod tests {
 
     #[test]
     fn compact_u128_big_integer() {
-        // 10000 元 = 1_000_000 分
-        let result = encode_compact_u128(1_000_000);
+        // 2^30 = 1_073_741_824:超出 4 字节 compact 上限(2^30-1),进入 big-integer 模式。
+        let result = encode_compact_u128(1_073_741_824);
         assert_eq!(result[0] & 0x03, 0x03); // big-integer mode
     }
 

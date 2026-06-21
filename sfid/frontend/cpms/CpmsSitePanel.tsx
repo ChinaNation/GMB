@@ -26,7 +26,7 @@ import {
 } from '../admins/admin_security_api';
 import { notice } from '../utils/notice';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../core/WuminSignatureModal';
+import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { SFID_MODAL_Z_INDEX } from '../core/modalStack';
 
 interface Props {
@@ -274,7 +274,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
           )}
         </div>
       </div>
-      <WuminSignatureModal
+      <CitizenSignatureModal
         title="公民钱包签名确认"
         open={!!securityModal}
         onCancel={() => {

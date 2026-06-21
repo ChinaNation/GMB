@@ -1,4 +1,4 @@
-// 登录页:WUMIN_QR_V1 双向扫码登录
+// 登录页:CITIZEN_QR_V1 双向扫码登录
 // 左侧展示 challenge 二维码 → 手机扫码签名
 // 右侧摄像头扫码 → 扫描手机签名回执 → 完成登录
 
@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../authz/AuthProvider';
 import * as api from './api';
-import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
+import { parseQrEnvelope, QrParseError } from '../qr/citizenQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
 import type { SessionUser } from '../common/types';
 

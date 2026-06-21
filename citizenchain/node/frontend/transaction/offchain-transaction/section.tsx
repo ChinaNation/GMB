@@ -107,7 +107,7 @@ export function ClearingBankSection() {
     const accountRef = {
       sfidNumber: detail.sfidNumber,
       accountHex: detail.adminAccountHex,
-      org: detail.adminOrg,
+      org: detail.org,
     };
     try {
       const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.sfidNumber, accountRef);
@@ -116,7 +116,7 @@ export function ClearingBankSection() {
         sfidNumber: detail.sfidNumber,
         sfidFullName: detail.sfidFullName,
         adminAccountHex: detail.adminAccountHex,
-        adminOrg: detail.adminOrg,
+        org: detail.org,
         adminWallets: activatedAdmins.map((admin) => ({
           address: hexToSs58(admin.pubkeyHex),
           pubkeyHex: admin.pubkeyHex,
@@ -171,9 +171,9 @@ export function ClearingBankSection() {
             setView({
               kind: 'admin-list',
               sfidNumber: view.sfidNumber,
-              admins: detail.duoqianAdminsSs58,
+              admins: detail.adminsSs58,
               threshold: detail.threshold,
-              adminCount: detail.adminCount,
+              adminsLen: detail.adminsLen,
             })
           }
           onDeclareNode={(sfidNumber, sfidFullName) =>
@@ -188,7 +188,7 @@ export function ClearingBankSection() {
           accountRef={{
             sfidNumber: view.sfidNumber,
             accountHex: view.adminAccountHex,
-            org: view.adminOrg,
+            org: view.org,
           }}
           sfidFullName={view.sfidFullName}
           adminWallets={view.adminWallets}
@@ -210,7 +210,7 @@ export function ClearingBankSection() {
           sfidNumber={view.sfidNumber}
           admins={view.admins}
           threshold={view.threshold}
-          adminCount={view.adminCount}
+          adminsLen={view.adminsLen}
           onBack={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
         />
       )}

@@ -10,8 +10,8 @@
 - 前端仅限 `citizenchain/node/frontend/governance/runtime-upgrade` 及必要的 runtime-upgrade 类型残留。
 - 不新增、不迁移、不修改投票引擎目录。
 - 不修改 runtime 链上 pallet。
-- 不修改 wuminapp。
-- 不修改 wumin 公民钱包。
+- 不修改 citizenapp。
+- 不修改 citizenwallet 公民钱包。
 
 ## 修复原则
 

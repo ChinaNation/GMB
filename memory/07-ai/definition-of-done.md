@@ -39,4 +39,4 @@
 - `memory/07-ai/module-definition-of-done/citizenchain.md`
 - `memory/07-ai/module-definition-of-done/sfid.md`
 - `memory/07-ai/module-definition-of-done/cpms.md`
-- `memory/07-ai/module-definition-of-done/wuminapp.md`
+- `memory/07-ai/module-definition-of-done/citizenapp.md`

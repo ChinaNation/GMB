@@ -30,7 +30,7 @@ mod number;
 mod private;
 mod scope;
 mod subjects;
-mod wuminapp;
+mod citizenapp;
 
 #[cfg(test)]
 mod genesis {
@@ -2965,7 +2965,7 @@ fn main() {
         // App routes:公民 与节点桌面 chain pull 用的统一命名空间。
         //
         // 全部端点都汇集在 chain/ 子目录(duoqian_info / joint_vote / citizen_vote)。
-        // wuminapp 自有功能(钱包交易索引、电子护照状态查询)继续留 indexer / citizens 模块。
+        // citizenapp 自有功能(钱包交易索引、电子护照状态查询)继续留 indexer / citizens 模块。
         let app_routes = Router::new()
             // ── 联合投票:获取公民人数快照凭证 ──
             .route(
@@ -2977,12 +2977,12 @@ fn main() {
                 "/api/v1/app/vote/credential",
                 post(citizens::chain_vote::app_vote_credential),
             )
-            // ── 钱包交易索引(wuminapp 自有,与链交互无关) ──
+            // ── 钱包交易索引(citizenapp 自有,与链交互无关) ──
             .route(
                 "/api/v1/app/wallet/:address/transactions",
                 get(indexer::api::wallet_transactions),
             )
-            // ── wuminapp 电子护照状态查询 ──
+            // ── citizenapp 电子护照状态查询 ──
             .route(
                 "/api/v1/app/myid/status",
                 get(citizens::vote::app_myid_status),
@@ -3004,14 +3004,14 @@ fn main() {
                 "/api/v1/app/institutions/:sfid_number/accounts",
                 get(subjects::chain_duoqian_info::app_list_accounts),
             )
-            // ── 公权机构目录(wuminapp BFF,匿名只读,数据来自 SFID Postgres 确定性目录)──
+            // ── 公权机构目录(citizenapp BFF,匿名只读,数据来自 SFID Postgres 确定性目录)──
             .route(
                 "/api/v1/app/public-institutions",
-                get(wuminapp::public_institution::list_public_institutions),
+                get(citizenapp::public_institution::list_public_institutions),
             )
             .route(
                 "/api/v1/app/public-institutions/version",
-                get(wuminapp::public_institution::public_institutions_version),
+                get(citizenapp::public_institution::public_institutions_version),
             );
 
         let app_state = state.clone();

@@ -85,8 +85,11 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _province: &[u8],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         true
     }
@@ -105,8 +108,11 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _province: &[u8],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         true
     }
@@ -185,7 +191,7 @@ impl votingengine::Config for Test {
     // 挂上本模块 Executor,让提案通过后自动触发销毁执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminCountProvider = ();
+    type InternalAdminsLenProvider = ();
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
     type InternalFinalizer = InternalVote;

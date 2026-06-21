@@ -130,7 +130,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
                   - 通过 → Institutions[sfid_number] = Pending,创建投票提案
                   - 失败 → DispatchError,extrinsic 回滚
 [节点桌面] ⑩ wait-vote 视图轮询 fetchInstitutionDetail(sfid_number).status
-[其他管理员] ⑪ wumin 公民钱包扫 vote 提案 → 投赞成
+[其他管理员] ⑪ citizenwallet 公民钱包扫 vote 提案 → 投赞成
           │
           ▼ ⑫ 票数达 threshold → InternalVoteExecutor 自动执行 → status = Active
           │
@@ -146,9 +146,9 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
 | # | 项 | 触发条件 |
 |---|---|---|
 | F1 | 机构提案列表 full scan(`fetch_institution_proposals`)| votingengine 提案存储扫描 + institution_hex 过滤 |
-| F2 | 节点桌面"扫码添加管理员"接 wumin user_contact / user_duoqian QR | 当前 create-multisig 用粘贴兜底 |
+| F2 | 节点桌面"扫码添加管理员"接 citizenwallet user_contact / user_duoqian QR | 当前 create-multisig 用粘贴兜底 |
 | F3 | 创建机构 extrinsic 提交后冷钱包两段握手实际接入(`VoteSigningFlow` 复用) | 当前 alert 占位 |
-| F4 | wumin decoder 加新版 `propose_create_institution` action 分支 | 已按 11 字段新布局同步，后续字段变更仍需三端同时更新 |
+| F4 | citizenwallet decoder 加新版 `propose_create_institution` action 分支 | 已按 11 字段新布局同步，后续字段变更仍需三端同时更新 |
 | F5 | 发起提案按钮组的具体提案类型(转账 / 关闭多签 / 换管理员 / 手续费划转) | 当前全部 disabled "即将上线" |
 | F6 | 节点端"管理员激活"机制(冷钱包列表的来源)集成到 create-multisig 选签名钱包 | 当前 coldWallets={[]} 占位 |
 
@@ -163,7 +163,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
 - ✅ 节点桌面状态机重构,删除 register-sfid / propose-create info 终态 + 老 detail.tsx + admin.tsx + node.tsx
 - ✅ sfid.tsx 删"查询"按钮,改 debounce 自动搜
 - ✅ 4 个新页面:institution_detail / create_multisig / other_accounts / admin_list
-- ⏳ 端到端冷钱包签 + 上链 + 等投票 + 声明节点(完整跑通需 wumin decoder follow-up)
+- ⏳ 端到端冷钱包签 + 上链 + 等投票 + 声明节点(完整跑通需 citizenwallet decoder follow-up)
 
 ## 8. 变更记录
 

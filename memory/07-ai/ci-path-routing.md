@@ -54,8 +54,8 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - 部署：`.github/workflows/sfid-deploy.yml`
 - `cpms`
   - CI：`.github/workflows/cpms-ci.yml`
-- `wuminapp`
-  - CI：`.github/workflows/wuminapp-ci.yml`
+- `citizenapp`
+  - CI：`.github/workflows/citizenapp-ci.yml`
 - `docs`
   - Pages：`.github/workflows/pages.yml`
 

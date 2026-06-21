@@ -1,6 +1,6 @@
 //! 公民电子护照绑定 handler。
 //!
-//! SFID 只接受 CPMS 档案码中的钱包信息，并要求 wuminapp 对 SFID 下发的
+//! SFID 只接受 CPMS 档案码中的钱包信息，并要求 citizenapp 对 SFID 下发的
 //! `sign_request` 完成 sr25519 签名；验签通过后，SFID 本地写入绑定结果。
 
 use axum::{
@@ -789,7 +789,7 @@ fn build_citizen_bind_sign_request(
         "确认新增公民"
     };
     let sign_request = serde_json::json!({
-        "proto": crate::core::qr::WUMIN_QR_V1,
+        "proto": crate::core::qr::CITIZEN_QR_V1,
         "kind": "sign_request",
         "id": challenge_id,
         "issued_at": issued_at.timestamp(),

@@ -145,7 +145,7 @@ export default function Home() {
             加入公民币区块链生态
           </h2>
           <p className="mt-6 text-lg text-slate-400">
-            下载 WuminApp 移动客户端，成为公民轻节点，参与区块链治理
+            下载 CitizenApp 移动客户端，成为公民轻节点，参与区块链治理
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link

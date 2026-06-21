@@ -97,7 +97,7 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = TestJointVoteResultCallback;
     type InternalVoteResultCallback = TestInternalVoteResultCallback;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminCountProvider = ();
+    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
@@ -299,13 +299,16 @@ impl
         eligible_total: u64,
         nonce: &votingengine::pallet::VoteNonceOf<Test>,
         signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        province_name: &[u8],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         eligible_total > 0
             && !nonce.is_empty()
             && signature.as_slice() == b"snapshot-ok"
-            && !province_name.is_empty()
+            && !scope_province_name.is_empty()
     }
 }
 
@@ -320,13 +323,16 @@ impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for Test
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
-        province_name: &[u8],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         if !Self::is_eligible(binding_id, who)
             || signature != b"vote-ok"
             || nonce.is_empty()
-            || province_name.is_empty()
+            || scope_province_name.is_empty()
         {
             return false;
         }
@@ -624,6 +630,24 @@ fn snapshot_sig_ok() -> votingengine::pallet::VoteSignatureOf<Test> {
         .expect("snapshot signature should fit")
 }
 
+fn issuer_sfid_number_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<128>> {
+    b"SFID001"
+        .to_vec()
+        .try_into()
+        .expect("issuer_sfid_number should fit")
+}
+
+fn issuer_main_account_ok() -> AccountId32 {
+    AccountId32::new([1u8; 32])
+}
+
+fn city_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
+    b"shenyang"
+        .to_vec()
+        .try_into()
+        .expect("city_name should fit")
+}
+
 fn prepare_population_snapshot_for(
     who: AccountId32,
     eligible_total: u64,
@@ -634,8 +658,11 @@ fn prepare_population_snapshot_for(
         eligible_total,
         nonce,
         snapshot_sig_ok(),
-        province_ok(),
+        issuer_sfid_number_ok(),
+        issuer_main_account_ok(),
         signer_pubkey_ok(),
+        province_ok(),
+        city_ok(),
     ));
 }
 

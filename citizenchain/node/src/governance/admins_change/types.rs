@@ -69,7 +69,7 @@ pub fn is_dynamic_org(org: u8) -> bool {
     matches!(org, 3 | 4 | 5)
 }
 
-/// 返回必须与 wumin 冷钱包 PayloadDecoder 解码出的 org 字段一致的展示值。
+/// 返回必须与 citizenwallet 冷钱包 PayloadDecoder 解码出的 org 字段一致的展示值。
 pub fn qr_org_display_value(org: u8) -> String {
     match org {
         0 | 1 | 2 => org_label(org).to_string(),

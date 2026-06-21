@@ -213,7 +213,7 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
 
       {step === 'qr' && (
         <div className="vote-signing-body qr-step">
-          <p className="qr-instruction">用 wumin 离线设备扫描此二维码完成签名</p>
+          <p className="qr-instruction">用 citizenwallet 离线设备扫描此二维码完成签名</p>
           <div className="qr-container">
             <QRCodeSVG value={requestJson} size={280} level="L" />
           </div>

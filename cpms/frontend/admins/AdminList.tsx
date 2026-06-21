@@ -4,8 +4,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as api from './api';
 import type { AdminRole, AdminUser } from './types';
-import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
-import type { UserContactBody } from '../qr/wuminQr';
+import { parseQrEnvelope, QrParseError } from '../qr/citizenQr';
+import type { UserContactBody } from '../qr/citizenQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
 import { ScanIcon } from '../components/ScanIcon';
 

@@ -163,7 +163,7 @@ export function AdminListPage({ sfidNumber, accountRef, onBack }: Props) {
             {activateStep === 'qr' && activateRequest && (
               <>
                 <h3>扫码激活管理员</h3>
-                <p>使用 wumin 冷钱包扫描以下二维码完成身份验证</p>
+                <p>使用 citizenwallet 冷钱包扫描以下二维码完成身份验证</p>
                 <div className="qr-container">
                   <QRCodeSVG value={activateRequest.requestJson} size={280} level="L" />
                 </div>

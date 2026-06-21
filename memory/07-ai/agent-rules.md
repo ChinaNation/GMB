@@ -17,7 +17,7 @@
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - `cpms`：Rust + Axum + SQLx + PostgreSQL 后端，React + TypeScript + Vite 前端
-- `wuminapp`：Flutter + Dart + Isar
+- `citizenapp`：Flutter + Dart + Isar
 
 ### Architect Agent
 
@@ -47,8 +47,8 @@
 
 ### Mobile Agent
 
-- 由当前主聊天入口在任务涉及 `wuminapp` 时按需调度
-- 负责 `wuminapp`
+- 由当前主聊天入口在任务涉及 `citizenapp` 时按需调度
+- 负责 `citizenapp`
 - 负责 Flutter 移动端与 Isar 本地存储
 
 ### Review Agent
@@ -72,7 +72,7 @@
 - 每次输出技术方案都必须包含：更新文档、完善注释、清理残留
 - 每次输出技术方案都必须包含“预计修改目录”清单；清单中每个目录必须附中文注释，说明该目录的修改用途、边界和是否涉及代码、文档或残留清理
 - 代码必须补中文注释
-- 产品命名硬规则：`wumin` 的中文名称是“公民钱包”；`wuminapp` 的中文名称是“公民”。不得对二者使用任何非目标中文产品名
+- 产品命名硬规则：公民（在线/热钱包）= 英文名 `CitizenApp`、模块 id/目录 `citizenapp`、中文名“公民”；公民钱包（离线/冷钱包）= 英文名 `CitizenWallet`、模块 id/目录 `citizenwallet`、中文名“公民钱包”。旧名 `wuminapp` / `wumin` 及任何非目标中英文产品名一律废弃，不得在代码、文档、命名、注释中生成；改名进度见任务卡 `20260620-product-rename-citizenapp-citizenwallet`
 - 管理员命名硬规则：联邦注册局管理员，简称“联邦管理员”，角色值只允许 `FEDERAL_ADMIN`；市注册局管理员，简称“市管理员”，角色值只允许 `CITY_ADMIN`
 - runtime 二次确认硬规则：任何涉及 `citizenchain/runtime/` 的修改，无论是业务逻辑、常量、权重、runtime primitives、注释、格式化、生成物还是仅由格式化工具造成的无逻辑 diff，都必须在执行前单独向用户说明完整路径、预计改动内容和原因，并得到用户明确的第二次确认；没有二次确认时，禁止读写工具、格式化命令或批量命令产生 runtime diff。
 - 代码更新后必须更新文档
@@ -82,13 +82,13 @@
 - 每次设计、编程、改协议、改命名、改文档、改流程前，必须先读取并遵守 `memory/07-ai/unified-required-reading.md`
 - 不允许擅自突破模块边界
 - 投票职责边界硬规则：所有业务模块不得实现、复刻、绕过或内嵌任何投票流程；所有投票流程统一归属投票引擎。业务模块只允许调用投票引擎已经提供的内部投票、联合投票、公民投票模块接口来创建或绑定投票，不得自行处理人口快照、投票资格、联合签名、投票状态推进、计票、通过/否决判定
-- 涉及 `citizenchain/runtime` 且会影响 `wuminapp` 在线端或 `wumin` 公民钱包二维码签名/验签兼容性的任务，必须作为跨模块任务处理；不得只改单侧 runtime
-- 上述任务必须同时装载 `citizenchain` 与 `wuminapp` / `wumin` 上下文，并同步更新双端代码、文档与测试；未完成双端更新前，不允许继续 runtime 改动
+- 涉及 `citizenchain/runtime` 且会影响 `citizenapp` 在线端或 `citizenwallet` 公民钱包二维码签名/验签兼容性的任务，必须作为跨模块任务处理；不得只改单侧 runtime
+- 上述任务必须同时装载 `citizenchain` 与 `citizenapp` / `citizenwallet` 上下文，并同步更新双端代码、文档与测试；未完成双端更新前，不允许继续 runtime 改动
 - 不允许跳过契约直接扩展系统规则
 - 涉及扫码、交易载荷、接口契约、字段顺序、签名验签、nonce、era、pallet/call index、storage key、subject id 的任务，必须先读取并遵守 `memory/07-ai/unified-protocols.md`
-- 设计或修改任何协议/载荷/接口契约前，必须先更新 `memory/07-ai/unified-protocols.md`；扫码协议只有 `WUMIN_QR_V1`，内层交易载荷格式不得被称为新增扫码协议
-- 检查 wuminapp 轻节点连接问题时，禁止把未部署 bootNodes 的 DNS/握手失败当作根因；只要存在有效 peer 且 best/finalized 状态可读或推进，就应判断区块链网络已连接
-- 检查 wuminapp 轻节点连接问题时，禁止把本地开发期 `30334` bootnode/ADB reverse 作为必要条件；默认真机连接不依赖本地 `30334`
+- 设计或修改任何协议/载荷/接口契约前，必须先更新 `memory/07-ai/unified-protocols.md`；扫码协议只有 `CITIZEN_QR_V1`，内层交易载荷格式不得被称为新增扫码协议
+- 检查 citizenapp 轻节点连接问题时，禁止把未部署 bootNodes 的 DNS/握手失败当作根因；只要存在有效 peer 且 best/finalized 状态可读或推进，就应判断区块链网络已连接
+- 检查 citizenapp 轻节点连接问题时，禁止把本地开发期 `30334` bootnode/ADB reverse 作为必要条件；默认真机连接不依赖本地 `30334`
 - 涉及新建或重命名目录、文件、字段、变量、类、模块、API 字段、storage 字段、QR display 字段、任务卡文件名、文档文件名的任务，必须先读取并遵守 `memory/07-ai/unified-naming.md`
 - 所有新命名必须尽量精简；不确定的命名必须先报告用户确认，不得擅自新建
 - 不允许删除、迁出或重命名 AI 编程系统核心基础设施
@@ -149,9 +149,9 @@
 - 出现"读不到数据/连不上"类问题时,**严禁**检查 DNS、严禁说"手机没连上网络/没连上节点"。必须先看 App 自报的 peerCount/finalized 状态确认是否已同步,已同步就从业务代码路径找原因。
 - 对比定位法优先:同样读链上数据,A 处能读、B 处读不到,直接对比 A/B 两条代码路径的差异,不要到处大海捞针。
 
-## 死规则:wuminapp 链上查询(ADR-018)
+## 死规则:citizenapp 链上查询(ADR-018)
 
-wuminapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/04-decisions/ADR-018`):
+citizenapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/04-decisions/ADR-018`):
 
 - **R1 统一字段查询**:列表类数据一律"短 key 索引(`ProposalsByYear`/整表扫描)取一次 → 客户端按已解码字段过滤"。**禁止**对嵌 32 字节 AccountId 或 `blake2_128(x)+x` 的**长前缀**做 `getKeysPagedFinalized`(轻节点静默返回空)。精确整键 `fetchStorage(完整key)` 不受限,可用。
 - **R2 降低全节点依赖**:① 多 key 一律 `fetchStorageBatch`/`fetchFinalizedBalances`,**禁止循环内逐条** `fetchStorage`/`fetchFinalizedBalance`(N+1);② 同一数据跨页面取一次进共享缓存复用;③ 链状态页用 finalized 头订阅驱动刷新,禁止 `Timer.periodic` 轮询查链;④ 能用已缓存/已解码数据客户端算出的,不再联网。
@@ -161,7 +161,7 @@ wuminapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/04-
 ## 死规则:行政区唯一真源 + code 不可变不复用(ADR-021)
 
 - **唯一真源**:行政区(省/市/镇/村/路)只有一个入口 = `sfid/backend/china/`。开发库 `sfid/backend/china/china.sqlite` 是唯一权威源；生产 `SFID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套行政区名字**。
-- **发布消费**:行政区变更必须修改开发库并递增 `metadata.admin_division_version`；SFID、wuminapp、CPMS 发布包都从开发库派生本地只读快照。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,wuminapp 不联网拉取行政区新版。
+- **发布消费**:行政区变更必须修改开发库并递增 `metadata.admin_division_version`；SFID、citizenapp、CPMS 发布包都从开发库派生本地只读快照。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
 - **目录红线**:不得恢复 `sfid/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `sfid/backend/china/`。
 - **code 不可变、不复用**:省 code 固定且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `name` 不改 `code`;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
 - **校验**:`china/store.rs::load_provinces` 加载即断言省名和市名全国唯一、(省,市,镇) code 无重复；CI `sfid/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。

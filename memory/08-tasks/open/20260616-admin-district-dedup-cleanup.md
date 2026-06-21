@@ -17,7 +17,7 @@
 - **残留 21 市级同省重名**(=原鼓楼市问题:跨地级市同区名拍平到同省,如 JS鼓楼×2/HB桥西×3/TW多个)+ **325 镇级同市重名**:7条指令未覆盖,需新规则。
 
 ## 下游(本次 china 改动生效需,可与 #6 批处理)
-1. 重生字典包 `wuminapp/tools/generate_admin_division_bundle.mjs`(manifest 带新 sha256)。
+1. 重生字典包 `citizenapp/tools/generate_admin_division_bundle.mjs`(manifest 带新 sha256)。
 2. **用户侧**跑 `sfid-backend purge-orphan-institutions --dry-run`(核被删78市下孤儿机构)→ `--apply`。
 3. 重生机构包 `generate_public_institution_bundle.mjs`;二次 dry-run 零孤儿。
 
@@ -105,10 +105,10 @@
 1. `git tag` + git-lfs commit china.sqlite baseline(删不可逆唯一回滚)。
 2. 写 `migration_2026_06_16_dedup_cleanup.sql`(幂等 WHERE name 定位;并案=改 name 不动 code,合 ADR-021;退役 code 进墓碑)。
 3. 应用 + `REINDEX` + 重算 sha256;`check_code_immutable.py` PASS。
-4. 重生字典包 `wuminapp/tools/generate_admin_division_bundle.mjs`。
+4. 重生字典包 `citizenapp/tools/generate_admin_division_bundle.mjs`。
 5. **用户侧**跑 `purge-orphan-institutions --dry-run` 核对孤儿机构(agent 安全护栏不能加载 DB 凭据)→ `--apply`(自动 pg_dump 备份)。
 6. 重生机构包 `generate_public_institution_bundle.mjs`;二次 dry-run 零孤儿。
-7. wuminapp flutter test --concurrency=1。
+7. citizenapp flutter test --concurrency=1。
 
 ## 红线
 - china.sqlite 是行政区唯一真源;机构存 code,删市=孤儿机构,必须走 purge。

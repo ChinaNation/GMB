@@ -18,8 +18,8 @@
 
 - citizenchain runtime(主战场)
 - primitives(协议位扩展)
-- wuminapp(用户钱包资产视图)
-- wumin(冷钱包 QR decoder)
+- citizenapp(用户钱包资产视图)
+- citizenwallet(冷钱包 QR decoder)
 
 不涉及:node/frontend(矿工端,`feedback_desktop_is_miner`)、sfid-frontend(Phase 1 不进监管入口)、chainspec.json(由用户单独处理重新创世)。
 
@@ -41,7 +41,7 @@
 
 ## 必须遵守
 
-- 不可突破模块边界(链端 / wuminapp / wumin 三段各管各)
+- 不可突破模块边界(链端 / citizenapp / citizenwallet 三段各管各)
 - 不可绕过既有契约(VotingEngine 单一入口、AccountId 协议、fee_policy 权威源、QR 两色识别)
 - 不可擅自修改安全红线(BaseCallFilter 屏蔽 pallet_assets 原生 extrinsic 不可松开)
 - pallet_assets 仅作内核,对外只能通过 OnchainIssuance pallet 包装入口暴露
@@ -88,8 +88,8 @@
 
 ### 客户端
 
-- `wuminapp/lib/asset/` 新建模块(shared / entity / pages / widgets 骨架文件)
-- `wumin/lib/qr/bodies/onchain_asset_*_body.dart` 10 个文件骨架
+- `citizenapp/lib/asset/` 新建模块(shared / entity / pages / widgets 骨架文件)
+- `citizenwallet/lib/qr/bodies/onchain_asset_*_body.dart` 10 个文件骨架
 
 ### 文档
 
@@ -103,7 +103,7 @@
 - 链端 `cargo check -p onchain-issuance` 通过
 - 链端 `cargo check -p citizenchain` 通过
 - workspace `cargo check --workspace` 不引入新警告
-- wuminapp / wumin Dart 骨架文件 `flutter analyze` 不报错(允许 unused warning)
+- citizenapp / citizenwallet Dart 骨架文件 `flutter analyze` 不报错(允许 unused warning)
 - ADR-011 落盘,关键决议齐全
 - ADR-010 增量段写明 0x04 协议位
 - MEMORY.md / 08-tasks/index.md 索引同步
@@ -120,8 +120,8 @@
 
 - 子任务 A:onchain-issuance pallet 业务实装(issue/mint/burn/close/transfer)
 - 子任务 B:onchain-issuance pallet 监管实装(NRC freeze/unfreeze/confiscate/forceTransfer/forceClose)
-- 子任务 C:wuminapp 资产视图业务实装
-- 子任务 D:wumin 公民钱包 QR decoder 10 个 ACTION 解码逻辑
+- 子任务 C:citizenapp 资产视图业务实装
+- 子任务 D:citizenwallet 公民钱包 QR decoder 10 个 ACTION 解码逻辑
 - 子任务 E:端到端联调验证(发行 / 转账 / 监管 / 关闭)
 
 ---
@@ -138,9 +138,9 @@
 | 4 | 🔴 | 计费表订正:mint/burn/transfer/close 全部 VOTE_FLAT_FEE = 1 元(走 InternalVote) | ADR-011 6 节 |
 | 5 | 🔴 | ForceCloseSchedule storage(BlockNumber → Vec<asset_id>) + on_finalize O(1) take + MaxScheduledPerBlock | ADR-011 5.6 / 8 节 / lib.rs / monitor.rs |
 | 6 | 🔴 | onchain-issuance/Cargo.toml `try-runtime` feature 传播给 frame/balances/assets/votingengine | onchain-issuance/Cargo.toml |
-| 7 | 🟡 | AccountId 0x04 payload 简化:8B+4B+35B → 4B+43B(去 issuer_subject_short) | ADR-010 / ADR-011 2 节 / derive.rs / wuminapp codec |
+| 7 | 🟡 | AccountId 0x04 payload 简化:8B+4B+35B → 4B+43B(去 issuer_subject_short) | ADR-010 / ADR-011 2 节 / derive.rs / citizenapp codec |
 | 8 | 🟡 | 哈希算法依赖随 #7 自动消失 | derive.rs |
-| 9 | 🟡 | OnchainAssetMeta 去 `monitor_account_id` 字段(NRC 全局,非每条) | types.rs / wuminapp query |
+| 9 | 🟡 | OnchainAssetMeta 去 `monitor_account_id` 字段(NRC 全局,非每条) | types.rs / citizenapp query |
 | 10 | 🟡 | OnchainAssetMeta 去 `asset_id` 字段(AccountId byte[1..5] 即可反推),保留 AssetIdIndex | types.rs |
 | 11 | 🟡 | metadata 永久不可改铁律写入 ADR-011 5.7 节 + Error::MetadataImmutable | ADR-011 / lib.rs |
 | 12 | 🟢 | fee.rs `let _ = (...)` 死代码清理 | fee.rs |
@@ -153,8 +153,8 @@
 - `cargo check -p citizenchain` 0 警告(WASM_FILE=/tmp/stub.wasm)
 - `cargo test -p primitives --lib derive` 11/11 ok(含 4 个新 onchain_asset 测试)
 - `cargo test -p onchain-issuance --lib` 8/8 ok
-- `flutter analyze lib/asset/`(wuminapp)0 issue
-- `flutter analyze lib/qr/bodies/`(wumin)0 issue
+- `flutter analyze lib/asset/`(citizenapp)0 issue
+- `flutter analyze lib/qr/bodies/`(citizenwallet)0 issue
 
 ### 顺手修复(超出 review 15 项,但属测试基础设施)
 
@@ -167,31 +167,31 @@
 
 ## v3 修订记录(2026-05-07,模块编号 / call 同步对齐)
 
-用户问"模块编号和 call 都同步了吗?区块链和 wumin 公民钱包等端"时识别出 v2 严重对齐错位:
+用户问"模块编号和 call 都同步了吗?区块链和 citizenwallet 公民钱包等端"时识别出 v2 严重对齐错位:
 
 **根本错误**:v2 把 unified_voting_entry phase 4 铁律("业务 pallet wrapper extrinsic 全删")扩展过头,误把 propose_X 也归入"不暴露",与 GMB 现有架构(duoqian-transfer / personal-manage / organization-manage 等业务 pallet **都暴露 propose_X extrinsic**)严重背离。phase 4 实际删除的只是 execute/cancel wrapper(由 VotingEngine 9.4/9.5 统一承载),不是 propose_X。
 
-**连锁错误**:wumin 把 10 个 ACTION 实现为 `lib/qr/bodies/onchain_asset_*_body.dart` QR envelope 顶层 body,与 wumin "sign_request envelope 中 payload_hex 走 SCALE RuntimeCall 解码" 机制完全脱节(应该在 `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支)。
+**连锁错误**:citizenwallet 把 10 个 ACTION 实现为 `lib/qr/bodies/onchain_asset_*_body.dart` QR envelope 顶层 body,与 citizenwallet "sign_request envelope 中 payload_hex 走 SCALE RuntimeCall 解码" 机制完全脱节(应该在 `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支)。
 
 | # | v3 修订 | 文件 |
 |---|---|---|
 | 1 | onchain-issuance lib.rs `#[pallet::call]` 实装 10 个 propose_X extrinsic 框架(call_index 0..=4 业务 / 10..=14 监管),不再为空 | [lib.rs](citizenchain/runtime/issuance/onchain-issuance/src/lib.rs) |
 | 2 | configs/mod.rs `OnchainTxAmountExtractor::RuntimeCall::OnchainIssuance(_)` 改为 VOTE_FLAT_FEE = 1 元(每个 propose_X 都 1 元,与 GMB 其他业务 pallet 一致) | [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs) |
 | 3 | RuntimeCallFilter:OnchainIssuance 走默认 true(propose_X 是合法入口),Assets 仍全 reject | [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs) |
-| 4 | wumin `pallet_registry.dart` 加 `onchainIssuancePallet = 25` + 10 个 call_index 常量 | [wumin/lib/signer/pallet_registry.dart](wumin/lib/signer/pallet_registry.dart) |
-| 5 | wumin `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支 + 10 个 `_decodeOnchainAssetPlaceholder` 占位(框架阶段返回 action/summary,业务字段解码任务卡 D 实装) | [wumin/lib/signer/payload_decoder.dart](wumin/lib/signer/payload_decoder.dart) |
-| 6 | **删除** `wumin/lib/qr/bodies/onchain_asset_*_body.dart` 10 个错位文件 | wumin/lib/qr/bodies/ |
-| 7 | wuminapp `onchain_asset_constants.dart` 加 pallet_index / 10 个 call_index 常量 | [wuminapp/lib/asset/shared/onchain_asset_constants.dart](wuminapp/lib/asset/shared/onchain_asset_constants.dart) |
-| 8 | ADR-011 v3:第 5.4 节订正 propose_X 暴露铁律 + 第 6 节计费表订正 + 第 9 节加 call_index 分配表 + 第 10 节加 wumin 路由要求 | [ADR-011](memory/04-decisions/ADR-011-onchain-issuance-plain-ft.md) |
+| 4 | citizenwallet `pallet_registry.dart` 加 `onchainIssuancePallet = 25` + 10 个 call_index 常量 | [citizenwallet/lib/signer/pallet_registry.dart](citizenwallet/lib/signer/pallet_registry.dart) |
+| 5 | citizenwallet `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支 + 10 个 `_decodeOnchainAssetPlaceholder` 占位(框架阶段返回 action/summary,业务字段解码任务卡 D 实装) | [citizenwallet/lib/signer/payload_decoder.dart](citizenwallet/lib/signer/payload_decoder.dart) |
+| 6 | **删除** `citizenwallet/lib/qr/bodies/onchain_asset_*_body.dart` 10 个错位文件 | citizenwallet/lib/qr/bodies/ |
+| 7 | citizenapp `onchain_asset_constants.dart` 加 pallet_index / 10 个 call_index 常量 | [citizenapp/lib/asset/shared/onchain_asset_constants.dart](citizenapp/lib/asset/shared/onchain_asset_constants.dart) |
+| 8 | ADR-011 v3:第 5.4 节订正 propose_X 暴露铁律 + 第 6 节计费表订正 + 第 9 节加 call_index 分配表 + 第 10 节加 citizenwallet 路由要求 | [ADR-011](memory/04-decisions/ADR-011-onchain-issuance-plain-ft.md) |
 
 ### v3 验收
 
 - `WASM_FILE=/tmp/stub.wasm cargo check -p citizenchain` 0 警告
 - `cargo test -p onchain-issuance --lib` **8/8** ok
 - `cargo test -p primitives --lib derive` **11/11** ok
-- `flutter analyze lib/asset/`(wuminapp)0 issue
-- `flutter analyze lib/signer/ lib/qr/`(wumin)0 issue
-- `flutter test`(wumin 完整套件)**96/96 全过**(含 PalletRegistry 索引唯一性测试,确认 onchainIssuancePallet=25 不冲突)
+- `flutter analyze lib/asset/`(citizenapp)0 issue
+- `flutter analyze lib/signer/ lib/qr/`(citizenwallet)0 issue
+- `flutter test`(citizenwallet 完整套件)**96/96 全过**(含 PalletRegistry 索引唯一性测试,确认 onchainIssuancePallet=25 不冲突)
 
 ### 模块编号 / call 同步矩阵
 
@@ -201,7 +201,7 @@
 | 链端 RuntimeCall | OnchainIssuance 10 个 propose_X(0..=4 / 10..=14)| ✅ |
 | 链端 OnchainTxAmountExtractor | OnchainIssuance(_) → VOTE_FLAT_FEE | ✅ |
 | 链端 RuntimeCallFilter | Assets 全 reject / OnchainIssuance 默认通过 | ✅ |
-| wumin PalletRegistry | onchainIssuancePallet=25 + 10 call_index | ✅ |
-| wumin payload_decoder | OnchainIssuance(25) 路由 + 10 占位解码器 | ✅ |
-| wuminapp constants | onchainIssuancePalletIndex=25 + 10 call 常量 | ✅ |
+| citizenwallet PalletRegistry | onchainIssuancePallet=25 + 10 call_index | ✅ |
+| citizenwallet payload_decoder | OnchainIssuance(25) 路由 + 10 占位解码器 | ✅ |
+| citizenapp constants | onchainIssuancePalletIndex=25 + 10 call 常量 | ✅ |
 | ADR-011 v3 | 9 / 10 节完整 call_index 分配表 + 客户端硬编码同步要求 | ✅ |

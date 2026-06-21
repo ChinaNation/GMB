@@ -54,7 +54,7 @@ const RESERVED_NAME_HE: &str = "两和基金";
 
 /// 全部 5 个受限保留账户名(单一源,与链端字节对齐)。
 /// 自定义账户判定:account_name 命中其一即非自定义(走各自 op_tag),否则为
-/// `OP_INSTITUTION` 自定义命名账户。wuminapp BFF 据此过滤 custom_account_names。
+/// `OP_INSTITUTION` 自定义命名账户。citizenapp BFF 据此过滤 custom_account_names。
 pub(crate) const RESERVED_ACCOUNT_NAMES: [&str; 5] = [
     RESERVED_NAME_MAIN,
     RESERVED_NAME_FEE,

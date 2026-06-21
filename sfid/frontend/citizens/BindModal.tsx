@@ -1,5 +1,5 @@
 // 中文注释:身份ID绑定弹窗。新增和更换共用扫码签名步骤,但 mode 分别提交 create/replace。
-// 扫 CPMS ARCHIVE 档案码 -> 展示 wuminapp sign_request -> 扫 sign_response -> 提交 SFID。
+// 扫 CPMS ARCHIVE 档案码 -> 展示 citizenapp sign_request -> 扫 sign_response -> 提交 SFID。
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Descriptions, Modal, QRCode, Typography, Upload } from 'antd';

@@ -183,7 +183,7 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/install/status", get(install_status))
         .route("/api/v1/install/initialize", post(initialize_install))
-        .route("/api/v1/install/admins/bind", post(bind_admins_from_wumin))
+        .route("/api/v1/install/admins/bind", post(bind_admins_from_citizenwallet))
 }
 
 pub(crate) async fn ensure_secret_config(db: &sqlx::PgPool) -> Result<(), String> {
@@ -471,7 +471,7 @@ async fn initialize_install(
     })))
 }
 
-async fn bind_admins_from_wumin(
+async fn bind_admins_from_citizenwallet(
     State(state): State<AppState>,
     ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,

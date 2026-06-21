@@ -191,7 +191,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 转账提案已创建。wuminapp 可扫描此事件展示投票详情。
+        /// 转账提案已创建。citizenapp 可扫描此事件展示投票详情。
         TransferProposed {
             proposal_id: u64,
             org: u8,
@@ -203,7 +203,7 @@ pub mod pallet {
             amount: BalanceOf<T>,
             /// 原文 remark,供管理员投票前核对。
             remark: BoundedVec<u8, T::MaxRemarkLen>,
-            /// 投票引擎分配的超时区块,供 wuminapp 倒计时
+            /// 投票引擎分配的超时区块,供 citizenapp 倒计时
             expires_at: BlockNumberFor<T>,
         },
         /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 VotingEngine 统一入口手动重试）
@@ -394,7 +394,7 @@ pub mod pallet {
                     encoded,
                 )?;
 
-            // 从投票引擎回读 proposal.end 作为 expires_at,供 wuminapp 倒计时。
+            // 从投票引擎回读 proposal.end 作为 expires_at,供 citizenapp 倒计时。
             let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
                 .map(|p| p.end)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;

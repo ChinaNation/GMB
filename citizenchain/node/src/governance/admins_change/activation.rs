@@ -4,7 +4,7 @@
 // 1. 用户点击管理员行的"激活"按钮；
 // 2. 后端读取链上 AdminsChange::AdminAccounts，确认目标 pubkey 是当前 Active 管理员；
 // 3. 后端生成 activate_admin_account 签名请求 QR JSON；
-// 4. 用户用 wumin 冷钱包扫码确认并签名；
+// 4. 用户用 citizenwallet 冷钱包扫码确认并签名；
 // 5. 后端验证签名、payload、链上账户仍一致后，写入本地激活记录；
 // 6. 管理员状态变为已激活，提案按钮解锁。
 //
@@ -271,7 +271,7 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
 /// 构建管理员激活签名请求 QR JSON（需要节点运行）。
 ///
 /// 验证公钥确实在该 admins-change 账户的链上管理员列表中，
-/// 然后生成 WUMIN_QR_V1 格式的 AccountId 级签名请求。
+/// 然后生成 CITIZEN_QR_V1 格式的 AccountId 级签名请求。
 #[tauri::command]
 pub async fn build_activate_admin_request(
     app: AppHandle,
@@ -337,7 +337,7 @@ pub async fn build_activate_admin_request(
 
     let now = now_secs();
     let request = signing::QrSignRequest {
-        proto: "WUMIN_QR_V1".to_string(),
+        proto: "CITIZEN_QR_V1".to_string(),
         kind: "sign_request".to_string(),
         id: request_id.clone(),
         issued_at: now,
@@ -383,9 +383,9 @@ pub async fn verify_activate_admin(
     let response: signing::QrSignResponse =
         serde_json::from_str(&response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
 
-    if response.proto != "WUMIN_QR_V1" {
+    if response.proto != "CITIZEN_QR_V1" {
         return Err(format!(
-            "协议版本不匹配：期望 WUMIN_QR_V1，实际 {}",
+            "协议版本不匹配：期望 CITIZEN_QR_V1，实际 {}",
             response.proto
         ));
     }

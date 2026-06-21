@@ -23,7 +23,7 @@ pub fn build_admin_set_change_sign_request(
         state.admins.len(),
         normalized.len()
     );
-    // display.fields 必须和 wumin PayloadDecoder 对 propose_admin_set_change
+    // display.fields 必须和 citizenwallet PayloadDecoder 对 propose_admin_set_change
     // 解出的字段逐项一致：org / account / admins。
     let fields = json!([
         {

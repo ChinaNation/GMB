@@ -18,7 +18,7 @@ Step 1 节点层交付**骨架 + 数据结构 + 单测**,**不接入 `service.rs
 citizenchain/node/src/offchain/
 ├── mod.rs              # 模块聚合 + Step 1/2 范围说明
 ├── ledger.rs           # 清算行本地 L3 存款缓存账本
-├── rpc.rs              # 对 wuminapp 的 JSON-RPC(Step 1 只读查询)
+├── rpc.rs              # 对 citizenapp 的 JSON-RPC(Step 1 只读查询)
 ├── reserve.rs          # 主账对账
 └── settlement/
     ├── packer.rs       # 批次打包器骨架(Step 2 启用 submit)

@@ -19,7 +19,7 @@
 
 - 正式版与开发版必须完全隔离本地 App 数据。
 - 开发版默认使用 `gmb.dev`，正式版默认使用 `gmb`。
-- 不再使用旧的 `org.chinanation.citizenchain.desktop/node-data` 作为节点数据库路径。
+- 不再使用旧的 `org.citizenappchain.desktop/node-data` 作为节点数据库路径。
 - 删除旧数据库前必须确认并停止仍在占用旧库的 citizenchain 进程。
 
 ## 执行记录
@@ -30,5 +30,5 @@
 - 2026-05-22：已修改开发脚本，`run.sh` 与 `clean-run.sh` 固定使用开发版数据目录 `gmb.dev`，`clean-run.sh` 只清开发版 `chains/citizenchain/db`。
 - 2026-05-22：已同步首页、keystore、GRANDPA 技术文档中的数据目录说明。
 - 2026-05-22：已通过 `cargo check --manifest-path citizenchain/node/Cargo.toml --bin citizenchain` 与 `git diff --check`。
-- 2026-05-22：已确认无 citizenchain 进程占用旧库，并删除旧区块数据库 `~/Library/Application Support/org.chinanation.citizenchain.desktop/node-data/chains/citizenchain/db`。
-- 2026-05-22：按用户要求彻底删除旧数据根目录 `~/Library/Application Support/org.chinanation.citizenchain.desktop`，包括旧钱包缓存、旧审计日志、旧 node-data 和临时残留文件。
+- 2026-05-22：已确认无 citizenchain 进程占用旧库，并删除旧区块数据库 `~/Library/Application Support/org.citizenappchain.desktop/node-data/chains/citizenchain/db`。
+- 2026-05-22：按用户要求彻底删除旧数据根目录 `~/Library/Application Support/org.citizenappchain.desktop`，包括旧钱包缓存、旧审计日志、旧 node-data 和临时残留文件。

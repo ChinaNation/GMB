@@ -1,0 +1,51 @@
+# 任务卡：citizenapp 反向索引扫描钉死块哈希(二次修正:钉 best)
+
+## 二次修正(2026-06-11,user 复测仍空后 harness 再实证)
+
+钉 finalized 方案有两个缺陷:① 快照取在 ensureSynced 之前,追块窗口内拿旧哈希/null,等于复发原 bug;② harness 实证钉 finalized 的前缀扫描显著慢于钉 best(首轮 2 分钟未应答),真机 WAN 会超时/悬死。同时实证轻节点钉 **best** 秒回且数据正确,与详情读取的原生 chain_storage_values 同口径。
+
+修正:helper 改名 `getKeysPagedAtBest`,顺序改为 ensureSynced → 取快照 → 钉 `bestBlockHash`,哈希缺失抛错(不再假装空列表);4 个调用点同步改名。analyze 0 + test 196/196(串行)。
+
+## 根因(smoldot 同栈复现实证)
+
+48 守卫修复后,广场点击可进详情,但机构详情提案列表依然为空。用 smoldot-pow 同分叉 + 同 chainspec 搭轻节点 harness 对照实验:
+
+- 追块窗口内发起 `state_getKeysPaged`(org/机构两个前缀)→ **全部返回 `[]`,无任何错误**;同刻全节点返回 1 条。
+- 同步到链头后发起同样查询 → 全部返回正确数据。
+
+机制(smoldot `light-base/json_rpc_service/background.rs`):legacy `state_getKeysPaged` 不带 `hash` 参数时,在请求入队那一刻钉死 legacy 服务的 `current_best_block`;轻节点启动后追块的窗口期内这是旧块 → 返回**旧状态的空列表**。App 把空当真相:机构详情显示「暂无提案」并写空缓存。广场不受影响(Isar 摘要缓存兜底);点击详情不受影响(走原生 `chain_storage_values`,有 ensureSynced 把关)。
+
+`methods.rs:432`:`state_getKeysPaged` 支持第 4 参 `hash`,显式传哈希直通 `BlockHashKnown` 精确钉块。原生绑定快照已暴露 `finalizedBlockHash`。
+
+## 修复(纯 Dart,统一切换不留双轨)
+
+1. `SmoldotClientManager` 新增 `getKeysPagedFinalized(prefixHex)`:ensureSynced → 取快照 finalizedBlockHash → `state_getKeysPaged(prefix, count, null, finalizedHash)`。
+2. 全仓 4 个 `state_getKeysPaged` 调用点全部改走该入口:
+   - `duoqian_transfer_service.dart:340`(提案反向索引,本次事主)
+   - `institution_discovery_service.dart:112`
+   - `institution_manage_service.dart:328`
+   - `personal_manage_discovery_service.dart:90`
+3. 口径统一:索引扫描从"不确定的旧 best"变为 finalized,与 20260521「确定状态=finalized」死规则一致。
+
+## 验收
+
+- [x] `flutter analyze` 0 issue + `flutter test --concurrency=1` 196/196 全过(并行偶发红为既有 Isar 测试并发问题,单跑/串行全绿)
+- [ ] 真机:机构详情提案列表显示提案(user 验证)
+- [x] 临时诊断 harness(smoldot-pow/light-base/examples/diag_keyspaged.rs)已删除
+
+## 完工记录(2026-06-11)
+
+- `smoldot_client.dart` 新增 `getKeysPagedFinalized(prefixHex, {count, startKey})`:取快照 finalizedBlockHash 作第 4 参显式钉块。
+- 4 个调用点统一切换:duoqian_transfer_service(提案反向索引)/ institution_discovery_service / institution_manage_service / personal_manage_discovery_service,全仓不再有裸 `state_getKeysPaged`。
+- 复现实验数据留档:追块窗口内 org/inst 两前缀扫描 + 提案本体读取全部空,同步到头后全部正确;全节点同刻全部有数据。
+
+## 三次诊断(2026-06-12,模拟器实机复现,未动代码)
+
+用户 21:07 构建(含钉 best 修复)仍复现。本机起 Android 模拟器装**同一个 APK** 复现成功:余额/管理员正常、提案列表「暂无提案」(干净空态,非报错)。证据链:
+
+- 模拟器 smoldot 日志:对同一分叉头 `0x3cbf…ea8c` 无限循环重复请求祖先头(299 次,下载成功但永不接受),finalized_height=14;
+- 同一时刻:本机全节点 best=#14(昨日曾 #16),宿主机 dart 全栈测试看到服务器 best=#16(0x6b05…)——**三个观察点三条链视图,全网正处于多分支分叉竞争**;
+- smoldot 源码证实证明失败会返回 -32000 错误而非空列表 → 模拟器扫描返回 `[]` 是"诚实的空"=钉住的 best 是**从 #12/#13 分出的兄弟分叉**,其状态里没有 #14 的提案交易;
+- 广场能显示靠 Isar 缓存(模拟器首次启动窗口侥幸扫到过);点击详情时灵时不灵随轻节点链视图漂移。
+
+**最终根因:POW_INITIAL_DIFFICULTY=100 分叉风暴(任务卡 20260608,一直 open)→ 全网多分支竞争 → 轻节点链视图漂移/卡死在不含提案的兄弟分叉上 → 按 best 钉块的索引扫描诚实返回空。** App 端三轮修复(注册表/48 守卫/钉块)各自真实有效,但都修不掉链层分叉根源。候选缓解:索引扫描改钉 finalized(固化状态必含提案);根治:难度修复。附带观察:广场列表曾重复显示同一提案两次(缓存 dup,待查)。

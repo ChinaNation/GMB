@@ -19,7 +19,7 @@ governance/
 
 - 为前端治理页面提供所有 Tauri 命令（提案列表、提案详情、发起提案、投票、执行）
 - 实现管理员激活机制（冷钱包扫码签名 → 本地验证 → 解锁提案操作）
-- 实现 WUMIN_QR_V1 QR 签名协议（离线签名设备 ↔ 节点桌面端）
+- 实现 CITIZEN_QR_V1 QR 签名协议（离线签名设备 ↔ 节点桌面端）
 - 从链上 RPC 解码提案数据（联合投票/内部投票/机构管理员/销毁/发行/运行时升级）
 - 治理聚合层不得实现投票流程、人口快照获取、计票或投票状态推进；这些职责统一归投票引擎
 - 治理详情中的余额、发行/销毁/多签转账等金额字段统一按 finalized block hash 读取；提案/交易进度仍可展示 pending、inBlock、finalized 状态
@@ -30,7 +30,7 @@ governance/
 - `node/frontend/governance/runtime-upgrade/`：协议升级与开发升级页面，只提交业务提案，不实现投票流程
 - `node/frontend/governance/organization-manage/`：机构多签管理页面、API 和 DTO
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
-- `node/frontend/shared/qr/`：QR 扫码组件与 WUMIN_QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
+- `node/frontend/shared/qr/`：QR 扫码组件与 CITIZEN_QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
 - `node/frontend/shared/ss58.ts` / `node/frontend/shared/format.ts`：SS58 地址展示与金额格式化
 
 ## admins_change/activation.rs — 管理员激活
@@ -45,8 +45,8 @@ governance/
 1. 用户点击管理员行的"激活"按钮
 2. 后端验证公钥在链上管理员列表中
 3. 构建 `GMB_ACTIVATE_SUBJECT_V1` subject 级签名 payload（非链上交易）
-4. 生成 WUMIN_QR_V1 格式的 QR 签名请求
-5. 用户用 wumin 公民钱包扫码签名
+4. 生成 CITIZEN_QR_V1 格式的 QR 签名请求
+5. 用户用 citizenwallet 公民钱包扫码签名
 6. 后端验证 sr25519 签名，并重新确认链上主体仍 Active
 7. 签名验证成功 → 写入本地加密存储
 8. 前端刷新 → 管理员变绿 + 提案按钮可操作

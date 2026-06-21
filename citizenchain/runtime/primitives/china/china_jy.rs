@@ -11,8 +11,6 @@ pub struct ChinaJy {
     pub admins: &'static [[u8; 32]],
 }
 
-pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
-
 pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
     sfid_full_name: "中华民族联邦共和国国家公民教育委员会",
     sfid_number: "BP001-GJY0Y-689724263-2026",

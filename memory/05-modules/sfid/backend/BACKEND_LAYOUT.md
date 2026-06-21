@@ -48,7 +48,7 @@ sfid/backend/
 ├── audit.rs                   # 审计日志查询 handler
 ├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
 ├── core/                      # 跨业务底层工具,含 HTTP 响应、HTTP 安全、运行期工具、chain_*、QR 协议
-│   └── qr/                    # WUMIN_QR_V1 协议辅助和统一 sign_request 构造
+│   └── qr/                    # CITIZEN_QR_V1 协议辅助和统一 sign_request 构造
 ├── cpms/                      # CPMS 安装授权、ARCHIVE 验真、档案导入、站点状态治理
 ├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
 ├── china/                     # 中国行政区划 SQLite 真源和省市查询接口
@@ -115,9 +115,9 @@ sfid/backend/
   `localhost / http://localhost:5179`,生产环境 `SFID_ENV=prod|production` 启动期强制
   `sfid.crcfrcn.com / https://sfid.crcfrcn.com`。
 - Passkey 注册流程固定为 `register/start -> register/confirm -> register/complete`;
-  `start` 只生成 `WUMIN_QR_V1 / sign_request` 公民钱包签名请求,`confirm` 验证 sr25519 回执后
+  `start` 只生成 `CITIZEN_QR_V1 / sign_request` 公民钱包签名请求,`confirm` 验证 sr25519 回执后
   才生成 WebAuthn creation options,`complete` 完成浏览器凭据 attestation 并替换当前管理员有效 Passkey。
-- 通用 `WUMIN_QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
+- 通用 `CITIZEN_QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
   已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
   `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
 - CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归联邦管理员;

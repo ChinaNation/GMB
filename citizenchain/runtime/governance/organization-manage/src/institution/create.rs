@@ -17,7 +17,7 @@ use crate::institution::types::{
     CreateInstitutionAction, InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
 };
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredSfid, Config, DuoqianAdminsOf, Error, Event,
+    AccountNameOf, AccountRegisteredSfid, Config, AdminsOf, Error, Event,
     InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
     PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, SfidNumberOf,
     SfidRegisteredAccount, UsedRegisterNonce, ACTION_CREATE_INSTITUTION,
@@ -43,7 +43,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     accounts: InstitutionInitialAccountsOf<T>,
     org: u8,
     admins_len: u32,
-    admins: DuoqianAdminsOf<T>,
+    admins: AdminsOf<T>,
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
@@ -74,7 +74,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     Pallet::<T>::ensure_admin_config(&who, admins_len, &admins, threshold)?;
     ensure!(
         matches!(org, ORG_PUP | ORG_OTH),
-        Error::<T>::InvalidAdminOrg
+        Error::<T>::InvalidOrg
     );
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());

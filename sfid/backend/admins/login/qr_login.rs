@@ -1,6 +1,6 @@
 //! 管理员二维码登录 handler。
 //!
-//! 只承接 WUMIN_QR_V1 登录挑战生成、手机扫码完成、网页轮询结果;普通 challenge
+//! 只承接 CITIZEN_QR_V1 登录挑战生成、手机扫码完成、网页轮询结果;普通 challenge
 //! 登录仍在 `handler.rs`。
 
 use axum::{
@@ -46,14 +46,14 @@ pub(crate) async fn admin_auth_qr_challenge(
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
-    // challenge_text:客户端签 login_receipt 时的原文(与 wumin 端的
+    // challenge_text:客户端签 login_receipt 时的原文(与 citizenwallet 端的
     // buildSignatureMessage(kind=login_receipt, ...) 拼接规则保持一致)。
     // 注意 <principal> 位置由客户端签名时填入自己的 pubkey,后端验证时同样
     // 以客户端 pubkey 为 principal 重新拼接。这里保存的 challenge_text 仅作
     // 回放保护用的唯一 token,实际验证在 admin_auth_qr_complete 中重建。
     let challenge_text = format!(
         "{}|{}|{}|{}|{}|",
-        crate::core::qr::WUMIN_QR_V1,
+        crate::core::qr::CITIZEN_QR_V1,
         crate::core::qr::QrKind::LoginReceipt.wire(),
         challenge_id,
         "sfid",
@@ -185,7 +185,7 @@ pub(crate) async fn admin_auth_qr_complete(
         if !same_admin_pubkey(login_pubkey.as_str(), verify_pubkey.as_str()) {
             return Err("http:forbidden:signer_pubkey must match admin_pubkey".to_string());
         }
-        // 中文注释:重建完整签名原文,与 wumin 端 login_receipt 规则一致。
+        // 中文注释:重建完整签名原文,与 citizenwallet 端 login_receipt 规则一致。
         let verify_message = crate::core::qr::build_signature_message(
             crate::core::qr::QrKind::LoginReceipt,
             challenge_id.as_str(),

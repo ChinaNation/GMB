@@ -4,7 +4,7 @@
 
 ## 背景
 
-仓库审计常涉及多产品(citizenchain / wumin / wuminapp / sfid / cpms)+ 大量历史叙述(ADR / 阶段记录 / OBSOLETE 标记)。把审计完全外包给 Explore subagent **会出大问题**:
+仓库审计常涉及多产品(citizenchain / citizenwallet / citizenapp / sfid / cpms)+ 大量历史叙述(ADR / 阶段记录 / OBSOLETE 标记)。把审计完全外包给 Explore subagent **会出大问题**:
 
 - subagent prompt 里的"背景叙述"是经过我简化的二手信息
 - subagent 据此做模式匹配,把所有命中"OLD 名"/"已废弃"字眼的位置全部标 [DEAD]
@@ -48,7 +48,7 @@
 
 ### 6. fork/vendor 残留标记必须单独统计
 
-`wuminapp/smoldot-pow/` 和 `citizenchain/node/vendor/` 属于收编 fork/vendor,保留上游注释脉络。普通清理任务只统计这些目录的残留标记,不和 GMB 自有代码清零门禁混算。具体边界见 `memory/07-ai/fork-vendor-baseline.md`。
+`citizenapp/smoldot-pow/` 和 `citizenchain/node/vendor/` 属于收编 fork/vendor,保留上游注释脉络。普通清理任务只统计这些目录的残留标记,不和 GMB 自有代码清零门禁混算。具体边界见 `memory/07-ai/fork-vendor-baseline.md`。
 
 ## 适用范围
 

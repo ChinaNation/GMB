@@ -4,7 +4,7 @@
 CPMS（Citizen Passport Management System）是市公安局使用的公民档案管理系统，后端使用 Rust/Axum，前端使用 React/Vite，数据使用 PostgreSQL 持久化。
 
 当前实现基线：
-- 管理员只允许使用 `WUMIN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；管理员 15 分钟无活动过期，操作员 30 分钟无活动过期。
+- 管理员只允许使用 `CITIZEN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；管理员 15 分钟无活动过期，操作员 30 分钟无活动过期。
 - 角色访问控制：`ADMIN / OPERATOR`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
@@ -58,7 +58,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | admins | `frontend/admins/` | 管理员系统设置、管理员管理、年度报告导出 |
 | dangan | `frontend/dangan/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇和地址段查询 API 和类型 |
-| qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
+| qr | `frontend/qr/` | CITIZEN_QR_V1 解析和浏览器扫码工具 |
 | components | `frontend/components/` | 通用展示与输入组件，日期输入统一使用 `DateInput` |
 | common | `frontend/common/` | HTTP 封装、共享类型和通用组件 |
 
@@ -100,9 +100,9 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 3. CPMS 根据 INSTALL 的 R5 段从内置 SFID 行政区快照中重建当前市镇和地址段表。
 4. CPMS 生成本机 `ARCHIVE` 签发密钥，公钥保存为 `cpms_pubkey`。
 5. CPMS 创建档案时由 `number` 模块同步生成一对一绑定的档案号和护照号；档案号供 SFID 使用，护照号印刷在护照上。
-6. 用户在 wumin 电子护照页出示投票账户地址二维码，CPMS 扫描后保存投票账户。
+6. 用户在 citizenwallet 电子护照页出示投票账户地址二维码，CPMS 扫描后保存投票账户。
 7. CPMS 生成携带钱包地址/公钥的 ARCHIVE 二维码。
-8. SFID 扫描 ARCHIVE，解 `geo_seal`、验 CPMS 签名，并在 SFID 绑定阶段要求 wumin 钱包签名。
+8. SFID 扫描 ARCHIVE，解 `geo_seal`、验 CPMS 签名，并在 SFID 绑定阶段要求 citizenwallet 钱包签名。
 
 ## 5. 数据库表
 | 表 | 说明 |
@@ -119,7 +119,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `archive_number_recycle_pool` | 满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史 |
 | `archive_hard_delete_logs` | 满 100 年硬删除最小日志，不保存实名原文 |
 | `cpms_status_exports` | 年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告 |
-| `archive_delete_challenges` | 档案软删除前的 wumin 签名挑战 |
+| `archive_delete_challenges` | 档案软删除前的 citizenwallet 签名挑战 |
 | `address_towns` | 当前 CPMS 实例所属市的镇 |
 | `address_units` | 当前 CPMS 实例所属市的镇下地址段 |
 | `sequence_counters` | 本机序列 |
@@ -265,11 +265,11 @@ CPMS 只有两种管理员:
 
 ## 9.1 档案软删除
 
-公民档案删除不是物理删除。详情页点击“删除”后，CPMS 后端创建 `WUMIN_QR_V1 / sign_request`
-删除签名请求，当前登录管理员必须使用 **wumin** 扫码签名。前端扫描 `sign_response` 后提交
+公民档案删除不是物理删除。详情页点击“删除”后，CPMS 后端创建 `CITIZEN_QR_V1 / sign_request`
+删除签名请求，当前登录管理员必须使用 **citizenwallet** 扫码签名。前端扫描 `sign_response` 后提交
 `delete/complete`。删除签名二维码中的 `body.address / body.pubkey` 锁定当前登录 CPMS 管理员，
 其中 `body.pubkey` 和 payload 内的 `admin_pubkey` 必须统一为 `0x` + 64 位小写 hex；CPMS 管理员表
-内部可保存裸 hex，但进入 wumin 二维码前必须规范化，否则冷钱包会拒绝解析。
+内部可保存裸 hex，但进入 citizenwallet 二维码前必须规范化，否则冷钱包会拒绝解析。
 冷钱包确认页的人机展示只显示档案号、管理员 SS58 地址和过期时间，`archive_id` 与原始
 `admin_pubkey` 只参与 payload 验真，不作为普通确认字段展示。
 
@@ -279,7 +279,7 @@ CPMS 只有两种管理员:
 CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_pubkey|expires_at
 ```
 
-前端删除弹窗采用与登录页一致的“双栏扫码”布局：左侧展示删除签名请求二维码，右侧扫描 wumin
+前端删除弹窗采用与登录页一致的“双栏扫码”布局：左侧展示删除签名请求二维码，右侧扫描 citizenwallet
 返回的删除签名回执。后端校验:
 
 - challenge 未过期、未消费，且绑定当前档案和当前登录管理员。

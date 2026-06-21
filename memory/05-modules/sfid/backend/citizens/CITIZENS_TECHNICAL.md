@@ -9,15 +9,15 @@
 
 - 路径：`sfid/backend/citizens`
 - 职责：承载公民电子护照绑定、CPMS 状态扫码、公民投票凭证签发和联合投票人口快照凭证签发。
-- 电子护照绑定边界：CPMS 档案码提供 `archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`，并在加密 `geo_seal` 中提供居住地代码、出生地代码和 `election_scope_level`；SFID 只允许 `citizen_status=NORMAL / voting_eligible=true / 钱包已设置` 的公民进入本地公民库；SFID 验档案码后生成 `WUMIN_QR_V1 / sign_request`；wuminapp 使用对应钱包签名；SFID 验签通过后直接写入本地绑定结果并向 wuminapp 状态接口返回。
+- 电子护照绑定边界：CPMS 档案码提供 `archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`，并在加密 `geo_seal` 中提供居住地代码、出生地代码和 `election_scope_level`；SFID 只允许 `citizen_status=NORMAL / voting_eligible=true / 钱包已设置` 的公民进入本地公民库；SFID 验档案码后生成 `CITIZEN_QR_V1 / sign_request`；citizenapp 使用对应钱包签名；SFID 验签通过后直接写入本地绑定结果并向 citizenapp 状态接口返回。
 
 ## 2. 模块结构
 
 - `binding.rs`
-  - `citizen_bind_challenge`：验 CPMS `ARCHIVE` 档案码并签发 wuminapp 签名请求。
-  - `citizen_bind`：消费管理员 Passkey grant,验 wuminapp `sign_response` 并完成电子护照绑定。
+  - `citizen_bind_challenge`：验 CPMS `ARCHIVE` 档案码并签发 citizenapp 签名请求。
+  - `citizen_bind`：消费管理员 Passkey grant,验 citizenapp `sign_response` 并完成电子护照绑定。
 - `vote.rs`
-  - `app_myid_status`：wuminapp 查询电子护照绑定状态。
+  - `app_myid_status`：citizenapp 查询电子护照绑定状态。
 - `chain_vote.rs`
   - `app_vote_credential`：公民投票凭证签发接口。
 - `chain_joint_vote.rs`
@@ -52,11 +52,11 @@
 - 依赖：
   - `cpms::verify_cpms_archive_qr`：验 CPMS 档案码和归属密文。
   - `admins::actions::require_admin_security_grant`：确认 `PASSKEY` 写操作已经通过 Passkey。
-  - `login::parse_sr25519_pubkey_bytes`：解析 wuminapp 钱包公钥。
+  - `login::parse_sr25519_pubkey_bytes`：解析 citizenapp 钱包公钥。
   - 全局公共能力：鉴权、审计、状态存储。
 - 边界：
   - 电子护照绑定必须以 CPMS `ARCHIVE` 档案码为入口。
-  - 绑定必须使用 wuminapp 对 SFID challenge 的 sr25519 签名。
+  - 绑定必须使用 citizenapp 对 SFID challenge 的 sr25519 签名。
 - `citizens` 不实现投票流程；公民投票只调用投票凭证签发接口。
 - 公民 DTO 放 `citizens/model.rs`，不得塞入全局 `models`。
 - CPMS 年度报告导入实现放 `citizens/status_export_import.rs`，不再保留旧 CPMS 状态扫码入口。
@@ -84,7 +84,7 @@
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
 - `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
-- wuminapp 扫描 `citizen_bind` 请求时必须先独立解析 `payload_hex`，确认 action、档案号、公民状态、选举权利和钱包地址与 display 一致后才签名。
+- citizenapp 扫描 `citizen_bind` 请求时必须先独立解析 `payload_hex`，确认 action、档案号、公民状态、选举权利和钱包地址与 display 一致后才签名。
 - `archive_no / sfid_number / wallet_pubkey` 三者保持一对一唯一关系。
 - `status_updated_at` 参与 CPMS `ARCHIVE` 签名原文；旧时间戳档案码不得覆盖新状态。
 
@@ -94,4 +94,4 @@
 |------|---------|---------|
 | `CITIZEN_BIND` | 管理员完成电子护照绑定 | wallet_pubkey, archive_no, sfid_number |
 | `CPMS_STATUS_EXPORT_IMPORT` | 管理员导入 CPMS 年度报告 | sfid_number, export_year, records_hash |
-| `APP_VOTE_CREDENTIAL` | wuminapp 请求公民投票凭证 | wallet_pubkey, proposal_id |
+| `APP_VOTE_CREDENTIAL` | citizenapp 请求公民投票凭证 | wallet_pubkey, proposal_id |

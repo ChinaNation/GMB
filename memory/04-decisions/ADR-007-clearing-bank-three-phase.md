@@ -26,7 +26,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - SFID 前端机构列表 / 详情页显示"可作为清算行"badge
 - PrivateInstitutionLayout 选择 sub_type=JOINT_STOCK 时增加提示文案
 
-**不做**：runtime 改动、wumin/wuminapp 改动、链上 ClearingBankNodes storage、PeerId 绑定。
+**不做**：runtime 改动、citizenwallet/citizenapp 改动、链上 ClearingBankNodes storage、PeerId 绑定。
 
 ### Step 2：区块链端（citizenchain，2026-04-27 完工）
 
@@ -70,7 +70,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 **F. spec_version 2 → 3**
 
 - runtime 代码 bump，dev 链直接用新版
-- **主网升级**：Step 2 不上链；等 Step 3 wumin decoder + wuminapp 兼容做完后，由 Architect 主入口走 `propose_runtime_upgrade` 联合提案上链
+- **主网升级**：Step 2 不上链；等 Step 3 citizenwallet decoder + citizenapp 兼容做完后，由 Architect 主入口走 `propose_runtime_upgrade` 联合提案上链
 
 #### 2.2 node Tauri 后端改动
 
@@ -100,7 +100,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - 复用 `governance/InstitutionDetailPage` 展示 5 卡片 + 提案列表
 - **管理员列表 UI 仅在清算行 tab 用"解密"术语**（NRC/PRC/PRB 沿用原"激活"不动）：
   - 列表行新增"解密"按钮 + 状态指示绿点
-  - 解密 = wumin 扫码签 challenge → 节点验签 → 解密本地加密存储的私钥到内存
+  - 解密 = citizenwallet 扫码签 challenge → 节点验签 → 解密本地加密存储的私钥到内存
   - 内存中密钥永久驻留至节点重启，无时间限制
   - 解密后 packer 攒批可直接用内存中密钥签 `submit_offchain_batch_v2`
 - 提案按钮：转账 / 手续费划转启用；换管理员 / 费率设置 disabled "即将上线"
@@ -114,13 +114,13 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - 新建 `sfid/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
 - SFID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_sfid_number`
 
-### Step 3：公民端（wumin + wuminapp）
+### Step 3：公民端（citizenwallet + citizenapp）
 
-- wumin 公民钱包 decoder 补 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 扫码签名分支
-- wumin pallet_registry action_labels 补对应中文标签
-- wuminapp `bind_clearing_bank_page.dart` 调整：搜索来源切换为新 search API；绑定前查链上 ClearingBankNodes 取 RPC 域名+端口
-- wuminapp `clearing_bank_settings_page.dart` 占位页落地（用户视角的"我的清算行配置"）
-- 端到端验证清单（创建机构 → SFID 注册 → 链上注册清算行 → wuminapp 绑定 → 充值 → 跨行支付 → 提现）
+- citizenwallet 公民钱包 decoder 补 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 扫码签名分支
+- citizenwallet pallet_registry action_labels 补对应中文标签
+- citizenapp `bind_clearing_bank_page.dart` 调整：搜索来源切换为新 search API；绑定前查链上 ClearingBankNodes 取 RPC 域名+端口
+- citizenapp `clearing_bank_settings_page.dart` 占位页落地（用户视角的"我的清算行配置"）
+- 端到端验证清单（创建机构 → SFID 注册 → 链上注册清算行 → citizenapp 绑定 → 充值 → 跨行支付 → 提现）
 
 ## 链上准入设计（Step 2 锁定）
 
@@ -128,7 +128,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 1. **SFID 身份（Step 1 落地）**：机构必须在 SFID 后端注册成功（subject_property/机构码/sub_type/parent 校验）
 2. **链上资格白名单（Step 2）**：`(K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S ∧ parent.JOINT_STOCK)`，链端只确认账户已注册且 Active
-3. **节点-机构绑定（Step 2）**：管理员私钥签名 + node PeerId 上链；同时配置 RPC 域名供 wuminapp 可达
+3. **节点-机构绑定（Step 2）**：管理员私钥签名 + node PeerId 上链；同时配置 RPC 域名供 citizenapp 可达
 
 PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不变；域名作为辅助字段，可单独 update 不影响 PeerId 主键。
 
@@ -137,7 +137,7 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 - 用户 `bind_clearing_bank` = 在该清算行开户（无预存费）
 - 充值：用户钱包 → 清算行主账户（Currency 真转），同时 `DepositBalance[bank][user] += amount`
 - 用户支付（核心修订）：
-  - **wuminapp 把签名 PaymentIntent 发给收款方清算行的 wss 端口**（不再发给付款方）
+  - **citizenapp 把签名 PaymentIntent 发给收款方清算行的 wss 端口**（不再发给付款方）
   - 收款方清算行（Y）的 packer 攒批 → Y 的某个已解密管理员密钥自动签 `submit_offchain_batch_v2`
   - 链上验 A 签名 → 扣 X 主账户（A 的存款方） → 本金到 Y 主账户 + fee 到 Y 费用账户
 - 同行支付：A、B 都在 X，X 自己作为收款方清算行清算；DepositBalance 内部轧差；fee 进 X 自己费用账户

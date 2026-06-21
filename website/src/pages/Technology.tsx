@@ -65,7 +65,7 @@ const topNodeTypes = [
   {
     type: '轻节点',
     count: '无限',
-    desc: '公民用户运行的轻客户端（WuminApp），经 SFID 认证后可参与链上投票',
+    desc: '公民用户运行的轻客户端（CitizenApp），经 SFID 认证后可参与链上投票',
     features: ['SFID 认证', '转账交易', '公民投票'],
   },
 ]

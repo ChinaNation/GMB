@@ -8,7 +8,7 @@ v4 变更:并入 8 项已拍板决策(见 §15)+ 7 视角对抗审查的 13 BLOC
 
 ## 0. 方案目标 + 钉死点
 
-GMB **当前继续用 sr25519 签名**(链上已有真实用户);**未来通过链 runtime 升级 + wuminapp/wumin 客户端升级,在位切换到 PQC 签名**。用户不换助记词/账户/地址/余额。**核心原则:AccountId 是账户身份锚点,签名算法只是该账户的授权方式。**
+GMB **当前继续用 sr25519 签名**(链上已有真实用户);**未来通过链 runtime 升级 + citizenapp/citizenwallet 客户端升级,在位切换到 PQC 签名**。用户不换助记词/账户/地址/余额。**核心原则:AccountId 是账户身份锚点,签名算法只是该账户的授权方式。**
 
 - **一条链活链在位升级**(非新链/非重新创世)。
 - **sr25519 分两段**:现在 sr25519 签名 → PQC 上链后 ML-DSA-65 签名;AccountId(=sr25519 公钥)全程不变。
@@ -122,13 +122,13 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 - "已绑定拒 sr25519"由 **GmbPqcAuth 同一扩展**负责(读 AccountPqcKey+PqcPolicy),全局一处不漏 call。
 - 🔴 **安全硬约束 + 决策1(无恢复)**:bootstrap 强度=sr25519,窗口(`bootstrap_deadline`)必须赶在 sr25519 被量子破前关闭;**关窗后未绑定老用户无恢复通道 = 资产终态锁定**。因此 `bootstrap_deadline` 的治理设定 + **多轮充分公告**是硬前置(见 card7),且必须在宪法/白皮书层向用户提前告知"逾期不升级即永久锁定"。
 
-## 7. wuminapp(热钱包)
+## 7. citizenapp(热钱包)
 
 同一地址;Rust FFI(gmb-pqc)`ml_dsa65_public_from_seed`/`ml_dsa65_sign`;查 `PqcPolicy` 分流(Sr25519Only→sr25519;PqcPrepared/PqcPrimary→PQC General Transaction;未绑定→首笔 bootstrap);UI 不展示 PQC 公钥/绑定过程/换账户;同助记词恢复同地址+同 ML-DSA 密钥。
 
-## 8. wumin(冷钱包)+ QR
+## 8. citizenwallet(冷钱包)+ QR
 
-- 🔴 **(B9)冷钱包新建 Rust FFI 子工程**(wumin 现纯 Dart 无 rust/):对标 wuminapp/rust 的 cdylib/staticlib + Android/iOS target + cbindgen,把 gmb-pqc 编进冷热两端。
+- 🔴 **(B9)冷钱包新建 Rust FFI 子工程**(citizenwallet 现纯 Dart 无 rust/):对标 citizenapp/rust 的 cdylib/staticlib + Android/iOS target + cbindgen,把 gmb-pqc 编进冷热两端。
 - 🔴 **(B10)离线 metadata 策略**:"按 metadata 重建 following_extensions_hash"整体留在在线热钱包;QR 携带重建所需最小要素(extension_version + 各后续扩展显式值 + 预算 hash),**冷钱包用 gmb-pqc 本地 SCALE 重算并比对**,且**自己从助记词派生 ML-DSA 公钥核对 `pqc_pubkey_hash`**(不盲信 QR 公钥),核对通过才出双签;**严禁退化成 wasm 式纯哈希盲签**(保持两色识别·decodeFailed 即拒)。
 - 🔴 **(B11)QR 分片**:envelope 加 `chunk_index/chunk_total/total_hash`;渲染端多帧轮播(单帧字节预算按 ECC=M version≤40 反推);扫描端分片聚合状态机(按 id 归并/去重补帧/校验 total_hash);放开 32768 上限;最坏 bootstrap(~10KB+)真机实测。
 - **(H18)QR body 四处(冷热 request/response)放开** `sig_alg(sr25519|ml-dsa-65)`+`auth_mode`+`key_version`+`chunk_*`,Phase A 仍只收 sr25519;进签名的 hash 一律 gmb-pqc blake2_256,**禁复用 qr_signer 的 sha256**。
@@ -171,7 +171,7 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 
 ## 13. 静态加密 + KDF 卫生
 
-- 🔴 node 清算行假 AES-GCM(`keystore.rs:181-220` XOR+blake2,函数名说谎)→ 真 `Aes256Gcm`+`Argon2id`+改注释;**每次 12B CSPRNG 随机 nonce**(或 XChaCha20-Poly1305 24B nonce 规避 GCM nonce 悬崖);**Argon2id 参数(m/t/p)单一常量源跨 wumin/wuminapp/node 统一**;旧 XOR `.enc` 作废、重新 `save_signing_key` 导入。
+- 🔴 node 清算行假 AES-GCM(`keystore.rs:181-220` XOR+blake2,函数名说谎)→ 真 `Aes256Gcm`+`Argon2id`+改注释;**每次 12B CSPRNG 随机 nonce**(或 XChaCha20-Poly1305 24B nonce 规避 GCM nonce 悬崖);**Argon2id 参数(m/t/p)单一常量源跨 citizenwallet/citizenapp/node 统一**;旧 XOR `.enc` 作废、重新 `save_signing_key` 导入。
 - CPMS master/geo_seal(Blake2b 单次)→ HKDF-SHA512(info **带固定域前缀**,非裸 key_id);App 锁口令 → Argon2id;对称统一 AES-256-GCM。
 - `gmb-pqc` crate:HKDF 派生表(仅 ML-DSA account domain)+ algo 常量 + **domain 常量强制 `[u8;N]`**(修 `batch_item.rs:39/42` 的 `&[u8]`)+ `verify_by_algo`。
 - **(决策6)card0 不含 IM**:card0 = 清算行真 AES-GCM + App 锁 KDF + 热钱包 at-rest;IM 归 card6。
@@ -202,3 +202,20 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 6. **card0 不动 IM**——IM ciphersuite 一次性由 card6 完成。
 7. **CheckMetadataHash 保持 Disabled**——不启用 metadata 绑定。
 8. **ML-DSA 钱包签名归属验证统一查链 `AccountPqcKey`**——SFID 经 subxt 查,CPMS 下沉 SFID,未 bootstrap 前拒。
+9. **(2026-06-18)下一步是永久创世(此后不再清链);PQC 接入按"创世前烘骨架 / 创世后慢慢实现"切分,GmbPqcAuth 创世只烘骨架(wire-format),验签逻辑创世后 setCode**(见 §16)。
+
+## 16. 与永久创世的时序边界(创世前烘骨架 / 创世后实现)
+
+下一步将**清链重新创世,此后不再清链**=永久链。切分原则:**动了就要改 wire format / transaction_version / 地址派生 / pallet 集 / 永久 metadata 的 → 创世前;纯行为 / app / 治理 / 协调升级、能后续 setCode 的 → 创世后。**
+
+### 16.1 创世前(永久地基,做完再清链重新创世)
+**只烘骨架(决策9):锁住唯一永久不可变的 wire format,不烘验签逻辑。**
+1. **card1 全部**:gmb-pqc crate + 锁 fips204 版本 + ML-DSA 派生口径 + golden vector(含 ξ);🚦 **S2/S3 闸门 spike 跑通**(polkadart 能编 General Transaction / 嵌套 `following_extensions_hash` 逐字节对拍)——**跑不通则路线 A 不成立,创世前必须有答案**。
+2. **card2 wire-format 骨架**:`GmbPqcAuth` 进 TxExtension(嵌套 `(GmbPqcAuth,AuthorizeCall)`)+ `extra={None|Pqc|Bootstrap}` enum 解码 + **None 透传**(`Pqc/Bootstrap` 暂为 reject-stub,验签逻辑留创世后);`account-keys` pallet(idx=27)+ `AccountPqcKey`/`PqcPolicy` 存储类型(空起步,`phase=A`);**transaction_version 设定**。
+3. **card3 客户端 wire-format**:citizenapp/citizenwallet 让 polkadart 认识 `GmbPqcAuth`,给普通 sr25519 signed extrinsic 的 `extra` 加 `None` + 其 implicit——创世后每笔交易(含 sr25519)都过 GmbPqcAuth,客户端必须能按新 wire format 签发。
+4. **确认**:地址派生=最终 sr25519 直接派生(创世账户按此);前向兼容钩子(AuthorizeCall/MultiSignature/SS58=2027/miniSecretFromEntropy/QR sig_alg)完好;创世 chainspec 按此 runtime 烘焙。
+
+### 16.2 创世后(固定地基上慢慢实现,全部 setCode/app/治理/协调,**永不再动 wire format**)
+- **一次 setCode 加 `Pqc/Bootstrap` 验签 + bootstrap 逻辑**(纯行为,不改 wire format;bug 也能 setCode 修);启用 PQC = 治理翻 `PqcPolicy.phase` A→B→C→D。
+- 钱包 PQC 路径(card3):General Transaction 编码 / ML-DSA 签名 / bootstrap / QR 分片 / 冷钱包 FFI + 离线 metadata。
+- L3 PQC payer(card2)/ SFID(card4)/ CPMS(card5)/ IM-TLS(card6)/ seal+Phase C/D 治理(card7)/ 静态加密卫生(card0,随时)。

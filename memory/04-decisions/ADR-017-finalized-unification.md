@@ -1,7 +1,7 @@
 # ADR-017：出块即固化 + 全端 finalized 单一口径
 
-- 状态:Accepted / 代码已实施(2026-06-12 卡1链端+卡2 wuminapp+卡3桌面端全部完工,sfid 后端经盘点本就达标零改动;**待 user 重建节点二进制并全网滚动重启后生效**,实施明细见 20260612-adr017-card1/2/3 三张任务卡)
-- 背景事故:2026-06-10~12 机构详情提案列表为空/余额不动/转账看似成功不上链系列排查,最终根因 = 难度 100 分叉风暴 + GRANDPA 默认投票规则(best−2)+ 跳空块三者叠加,轻节点链视图漂移(详见任务卡 20260611-wuminapp-keyspaged-pin-finalized 三次诊断)。
+- 状态:Accepted / 代码已实施(2026-06-12 卡1链端+卡2 citizenapp+卡3桌面端全部完工,sfid 后端经盘点本就达标零改动;**待 user 重建节点二进制并全网滚动重启后生效**,实施明细见 20260612-adr017-card1/2/3 三张任务卡)
+- 背景事故:2026-06-10~12 机构详情提案列表为空/余额不动/转账看似成功不上链系列排查,最终根因 = 难度 100 分叉风暴 + GRANDPA 默认投票规则(best−2)+ 跳空块三者叠加,轻节点链视图漂移(详见任务卡 20260611-citizenapp-keyspaged-pin-finalized 三次诊断)。
 
 ## 决策
 
@@ -17,7 +17,7 @@
 ### 链端(citizenchain/node)——1 处,不动 runtime/创世,滚动重启生效
 - `core/service.rs:723` `voting_rule` → 无约束规则。
 
-### wuminapp ——收口点改造,~40+ A 类散点自动生效
+### citizenapp ——收口点改造,~40+ A 类散点自动生效
 - **收口 P0**:`ChainRpc.fetchStorage/fetchStorageBatch/fetchStorageBatchChunked` 底层从 `getStorageValuesHex`(best)切 `getFinalizedStorageValuesHex`;废弃的 fetchBalance/fetchTotalBalance/fetchBalances(best)删除。
 - **索引扫描**:`getKeysPagedAtBest` → 钉 finalized 哈希(ensureSynced 之后取快照),改名 `getKeysPagedFinalized`;4 调用点跟随。
 - **交易监控**:`ChainTxMonitor` 删 best 链扫描(`_syncBestUnfinalized`/`fetchLatestBlock` 路径),只扫 finalized 链;`_processBlock` 的 `state_getStorage` 改带 finalized 块哈希;交易状态三态收敛两态(已提交→已确认);`chain_event_subscription` 业务刷新只挂 finalizedHeads。
@@ -32,7 +32,7 @@
 
 ### sfid 后端——基本已达标
 - indexer 已 `subscribe_finalized` + finalized head(C 类)✓;推链三件套保持"只等 InBestBlock"(豁免;可选升级等 Finalized,P2 决策项)。
-- cpms 后端不读链 ✓;wumin 公民钱包离线 ✓。
+- cpms 后端不读链 ✓;citizenwallet 公民钱包离线 ✓。
 
 ### 原生层(smoldot)——0 改动
 - `chain_finalized_storage_values` 等 finalized 原生变体已齐;Dart 路由切换即可。无按任意哈希钉块的原生读取能力(本方案不需要;留备忘)。
@@ -40,7 +40,7 @@
 ## 验收
 
 1. 链端:改规则滚动重启后,发一笔交易 → 数秒内 `finalized == best`;静默期最后一块也被固化(历史死结场景)。
-2. wuminapp:analyze 0 + test 全过;模拟器 E2E(机构详情提案列表/余额/广场/点击/转账两态)。
+2. citizenapp:analyze 0 + test 全过;模拟器 E2E(机构详情提案列表/余额/广场/点击/转账两态)。
 3. 桌面端:cargo check/test + UI 冒烟(提案列表/总览/机构页)。
 4. 残留扫描:业务代码零裸 best 读取(grep getStorageValuesHex/fetchStorage 旧入口/state_getStorage 无 at)。
 

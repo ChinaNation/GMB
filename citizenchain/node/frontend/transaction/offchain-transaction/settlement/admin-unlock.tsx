@@ -1,14 +1,14 @@
 // 清算行机构管理员列表子页(机构详情下的折叠卡片入口)。
 //
 // 简洁版展示:N 位管理员 SS58 + 内部投票阈值。
-// 复杂的"已激活/未激活"区分需要 wumin 冷钱包"解密"流程,本任务暂不集成,
+// 复杂的"已激活/未激活"区分需要 citizenwallet 冷钱包"解密"流程,本任务暂不集成,
 // 沿用 governance/AdminListPage 模式即可。
 
 type Props = {
   sfidNumber: string;
   admins: string[];
   threshold: number;
-  adminCount: number;
+  adminsLen: number;
   onBack: () => void;
 };
 
@@ -16,14 +16,14 @@ export function ClearingBankAdminListPage({
   sfidNumber,
   admins,
   threshold,
-  adminCount,
+  adminsLen,
   onBack,
 }: Props) {
   return (
     <>
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
-        <h2>管理员列表（{admins.length} 人,阈值 {threshold}/{adminCount}）</h2>
+        <h2>管理员列表（{admins.length} 人,阈值 {threshold}/{adminsLen}）</h2>
         <code className="admin-card-address">{sfidNumber}</code>
       </div>
 

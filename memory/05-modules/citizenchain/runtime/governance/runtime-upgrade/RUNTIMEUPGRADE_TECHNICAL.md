@@ -60,10 +60,10 @@
 - node 的 `runtime_upgrade` 不获取人口快照、不接收联合签名上下文、不拥有投票引擎状态、不展示投票终态。
 - 协议升级提案详情展示真实状态时必须以 `VotingEngine::Proposals.status` 为准，`runtime-upgrade` 摘要里不保存业务状态字段。
 
-wuminapp / wumin 边界：
-- wuminapp 的 `governance/runtime-upgrade` 不发起协议升级提案，不选择 WASM，不获取人口快照，不提交 `propose_runtime_upgrade`。
-- wuminapp 只展示协议升级介绍、协议升级提案详情，并保留现有提案详情页投票入口。
-- wumin 公民钱包不恢复 runtime-upgrade SCALE decoder；大 WASM 交易继续走哈希直签例外，由用户核对显示字段中的代码哈希。
+citizenapp / citizenwallet 边界：
+- citizenapp 的 `governance/runtime-upgrade` 不发起协议升级提案，不选择 WASM，不获取人口快照，不提交 `propose_runtime_upgrade`。
+- citizenapp 只展示协议升级介绍、协议升级提案详情，并保留现有提案详情页投票入口。
+- citizenwallet 公民钱包不恢复 runtime-upgrade SCALE decoder；大 WASM 交易继续走哈希直签例外，由用户核对显示字段中的代码哈希。
 
 ## 2. 运行时接线
 Runtime 配置位置：

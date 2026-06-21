@@ -56,7 +56,7 @@ GMB_ACTIVATE_SUBJECT_V1
 + nonce(16)
 ```
 
-激活 QR `display.action = activate_admin_account`，字段必须为 `org / subject / pubkey`，并与 wumin 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
+激活 QR `display.action = activate_admin_account`，字段必须为 `org / subject / pubkey`，并与 citizenwallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
 
 链上 call data：
 
@@ -88,7 +88,7 @@ citizenchain/node/frontend/governance/admins_change/
 2. `AdminSetChangePage` 读取 `AdminsChange::AdminAccounts`。
 3. 用户选择已激活管理员钱包，编辑完整的新管理员集合。
 4. 后端构建 `propose_admin_set_change` 签名请求。
-5. 前端展示 WUMIN_QR_V1 二维码，扫码签名回执后提交。
+5. 前端展示 CITIZEN_QR_V1 二维码，扫码签名回执后提交。
 6. 成功后返回机构详情页。
 
 主体引用：

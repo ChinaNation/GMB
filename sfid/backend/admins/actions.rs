@@ -1,4 +1,4 @@
-//! 管理员安全动作:Passkey 与 WUMIN_QR_V1/sign_request 公民钱包签名。
+//! 管理员安全动作:Passkey 与 CITIZEN_QR_V1/sign_request 公民钱包签名。
 //!
 //! 中文注释:管理员治理动作、业务安全授权和短期挑战全部使用结构化表。
 //! 本文件不保留旧内存聚合体,也不做旧格式兼容。
@@ -196,7 +196,7 @@ pub(crate) async fn prepare_admin_action(
         if preview.auth_type == AdminOperationAuth::PasskeyChallenge {
             let payload_text = signed_payload_text(AdminSignedPayload {
                 domain: "sfid_admin_governance",
-                qr_proto: crate::core::qr::WUMIN_QR_V1,
+                qr_proto: crate::core::qr::CITIZEN_QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
                 actor_pubkey: ctx.admin_pubkey.as_str(),

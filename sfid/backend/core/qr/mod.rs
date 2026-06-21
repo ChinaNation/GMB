@@ -1,9 +1,9 @@
-//! WUMIN_QR_V1 统一二维码协议 envelope。
+//! CITIZEN_QR_V1 统一二维码协议 envelope。
 //!
 //! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
 //! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
-//! 与 wuminapp/wumin 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS
+//! 与 citizenapp/citizenwallet 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS
 //! envelope 字段逐字节一致。本模块仅定义 SFID 后端需要的 kind
 //! (login_challenge / login_receipt),其余 kind 后端不参与。
 
@@ -13,7 +13,7 @@ pub(crate) use sign_request::{build_sign_request, display_account, display_field
 
 use serde::{Deserialize, Serialize};
 
-pub const WUMIN_QR_V1: &str = "WUMIN_QR_V1";
+pub const CITIZEN_QR_V1: &str = "CITIZEN_QR_V1";
 
 /// 统一 kind 枚举(snake_case 序列化)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,7 +85,7 @@ pub type LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
 impl LoginChallengeEnvelope {
     pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
         Self {
-            proto: WUMIN_QR_V1.to_string(),
+            proto: CITIZEN_QR_V1.to_string(),
             kind: QrKind::LoginChallenge.wire().to_string(),
             id: Some(id),
             issued_at: Some(issued_at),
@@ -98,7 +98,7 @@ impl LoginChallengeEnvelope {
 impl LoginReceiptEnvelope {
     pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginReceiptBody) -> Self {
         Self {
-            proto: WUMIN_QR_V1.to_string(),
+            proto: CITIZEN_QR_V1.to_string(),
             kind: QrKind::LoginReceipt.wire().to_string(),
             id: Some(id),
             issued_at: Some(issued_at),
@@ -112,7 +112,7 @@ impl LoginReceiptEnvelope {
 ///
 /// 格式(与 Dart/TS 逐字节一致):
 /// ```text
-/// WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+/// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 /// ```
 /// `principal` 去掉 `0x` 前缀,小写。
 pub fn build_signature_message(
@@ -131,7 +131,7 @@ pub fn build_signature_message(
         .to_lowercase();
     format!(
         "{}|{}|{}|{}|{}|{}",
-        WUMIN_QR_V1,
+        CITIZEN_QR_V1,
         kind.wire(),
         id,
         sys,
@@ -155,7 +155,7 @@ impl std::fmt::Display for QrParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadJson(m) => write!(f, "QR JSON 非法: {}", m),
-            Self::BadProto(m) => write!(f, "proto 必须为 WUMIN_QR_V1, 实际: {}", m),
+            Self::BadProto(m) => write!(f, "proto 必须为 CITIZEN_QR_V1, 实际: {}", m),
             Self::BadKind(m) => write!(f, "未知 kind: {}", m),
             Self::BadField(m) => write!(f, "字段错误: {}", m),
             Self::FixedCodeHasTemporal(m) => {
@@ -167,7 +167,7 @@ impl std::fmt::Display for QrParseError {
 
 impl std::error::Error for QrParseError {}
 
-/// 解析 login_receipt envelope。后端收到 wumin 公民钱包的回执后使用。
+/// 解析 login_receipt envelope。后端收到 citizenwallet 公民钱包的回执后使用。
 pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseError> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| QrParseError::BadJson(e.to_string()))?;
@@ -176,7 +176,7 @@ pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseErr
         .ok_or_else(|| QrParseError::BadJson("不是对象".into()))?;
 
     match obj.get("proto").and_then(|v| v.as_str()) {
-        Some(WUMIN_QR_V1) => {}
+        Some(CITIZEN_QR_V1) => {}
         other => return Err(QrParseError::BadProto(format!("{:?}", other))),
     }
     match obj.get("kind").and_then(|v| v.as_str()) {
@@ -216,7 +216,7 @@ pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseErr
     }
 
     Ok(LoginReceiptEnvelope {
-        proto: WUMIN_QR_V1.to_string(),
+        proto: CITIZEN_QR_V1.to_string(),
         kind: "login_receipt".to_string(),
         id: Some(id),
         issued_at: Some(issued_at),

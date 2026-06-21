@@ -19,7 +19,7 @@
 - 触发条件：任务涉及 `citizenchain/node`、`citizenchain/runtime`、链脚本或链文档
 - 负责 `citizenchain` 全域
 - 包括 `runtime`、`node` 原生节点、桌面节点、node 前端与打包流程
-- 若 `runtime` 变更会影响 `wuminapp` 在线端或 `wumin` 公民钱包二维码签名/验签兼容性，必须联动 `Mobile Agent`；不得只改单侧 runtime
+- 若 `runtime` 变更会影响 `citizenapp` 在线端或 `citizenwallet` 公民钱包二维码签名/验签兼容性，必须联动 `Mobile Agent`；不得只改单侧 runtime
 
 ## SFID Agent
 
@@ -33,10 +33,10 @@
 
 ## Mobile Agent
 
-- 触发条件：任务涉及 `wuminapp`、Flutter 移动端交互、扫码、签名或 Isar 本地存储
-- 负责 `wuminapp`
+- 触发条件：任务涉及 `citizenapp`、Flutter 移动端交互、扫码、签名或 Isar 本地存储
+- 负责 `citizenapp`
 - 负责 Flutter 移动端与 Isar 本地存储
-- 当 `runtime` 兼容性变更触发扫码签名联动时，同时负责 `wuminapp` 在线端与 `wumin` 公民钱包的二维码签名、payload 解码、`spec_version` / `pallet_registry` 对齐
+- 当 `runtime` 兼容性变更触发扫码签名联动时，同时负责 `citizenapp` 在线端与 `citizenwallet` 公民钱包的二维码签名、payload 解码、`spec_version` / `pallet_registry` 对齐
 
 ## Review Agent
 

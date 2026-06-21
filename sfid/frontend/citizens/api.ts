@@ -58,7 +58,7 @@ export type CitizenBindChallengeResult = {
   valid_from: string;
   valid_until: string;
   status_updated_at: number;
-  /** WUMIN_QR_V1 签名请求 JSON,前端直接展示为二维码。 */
+  /** CITIZEN_QR_V1 签名请求 JSON,前端直接展示为二维码。 */
   sign_request: string;
   expire_at: number;
 };

@@ -7,7 +7,7 @@ import type { ButtonProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../core/WuminSignatureModal';
+import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import {
   confirmPasskeyRegistration,
   completePasskeyRegistration,
@@ -117,7 +117,7 @@ export function Passkey({
           {updateButton}
         </Badge>
       ) : updateButton}
-      <WuminSignatureModal
+      <CitizenSignatureModal
         title="通行密钥公民钱包确认"
         open={!!passkeyStart}
         onCancel={() => {

@@ -19,7 +19,7 @@ Step C 把 pallet 代码压缩到 434 行,但也把 20+ 个 pallet 测试(大多
 
 **不做**:
 - dev chain 启动(需 chain_spec.rs 加 dev preset,属于 Layer C)
-- wuminapp Flutter E2E(太重,回报低)
+- citizenapp Flutter E2E(太重,回报低)
 - 跨行 `submit_offchain_batch_v2` 场景(需要第二个清算行 fixture,留 Step 3)
 
 ---
@@ -127,7 +127,7 @@ test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured
 ## 5. 后续
 
 - **Layer C · dev chain 进程级 E2E**:起 dev chain + 清算行节点 + mock
-  wuminapp RPC,完整跑 `STEP2C_MANUAL_SMOKE.md` SOP。前置:`chain_spec.rs`
+  citizenapp RPC,完整跑 `STEP2C_MANUAL_SMOKE.md` SOP。前置:`chain_spec.rs`
   加 `dev` preset 预置 mock 清算行 + L2FeeRateBp + 预置 L3 账户余额
 - **跨行 fixture**:加第二家 `BANK2_MAIN`(另一个 SFID + main/fee 对),扩
   `MockSfid` 与 `new_test_ext` 预置;补跨行 settlement 测试(需 Step E bug 修复先落地)

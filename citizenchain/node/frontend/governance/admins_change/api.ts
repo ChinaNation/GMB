@@ -57,18 +57,18 @@ export const adminsChangeApi = {
   hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
   getAdminAccountState: (accountRef: AdminAccountRef) =>
     invoke<AdminAccountState | null>('get_admin_account_state', accountRefParams(accountRef)),
-  buildAdminSetChangeRequest: (pubkeyHex: string, accountRef: AdminAccountRef, newAdmins: string[]) =>
+  buildAdminSetChangeRequest: (pubkeyHex: string, accountRef: AdminAccountRef, admins: string[]) =>
     invoke<VoteSignRequestResult>('build_admin_set_change_request', {
       pubkeyHex,
       ...accountRefParams(accountRef),
-      newAdmins,
+      admins,
     }),
   submitAdminSetChange: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
     accountRef: AdminAccountRef,
-    newAdmins: string[],
+    admins: string[],
     signNonce: number,
     signBlockNumber: number,
     responseJson: string,
@@ -78,7 +78,7 @@ export const adminsChangeApi = {
       expectedPubkeyHex,
       expectedPayloadHash,
       ...accountRefParams(accountRef),
-      newAdmins,
+      admins,
       signNonce,
       signBlockNumber,
       responseJson,

@@ -74,7 +74,7 @@ GitHub 自动运行：
 ```
 
 ```text
-@claude 请重点检查这个 PR 是否突破了 CPMS、SFID、CitizenChain、WuMinApp 的边界。
+@claude 请重点检查这个 PR 是否突破了 CPMS、SFID、CitizenChain、CitizenApp 的边界。
 ```
 
 ## 4. 遇到问题时的判断顺序

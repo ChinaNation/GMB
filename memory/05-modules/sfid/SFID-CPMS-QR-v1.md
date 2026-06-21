@@ -87,7 +87,7 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
 | `status_updated_at` | CPMS 公民状态更新时间，Unix 秒 |
 | `cpms_pubkey` | CPMS 本机签发公钥 |
 | `geo_seal` | 只有 SFID 能按安装授权解开的归属密文 |
-| `wallet_address` | wuminapp 钱包地址，由 CPMS 扫 wuminapp 钱包二维码保存 |
+| `wallet_address` | citizenapp 钱包地址，由 CPMS 扫 citizenapp 钱包二维码保存 |
 | `wallet_pubkey` | `wallet_address` 对应的 0x 公钥 |
 | `wallet_sig_alg` | 钱包签名算法，固定 `sr25519` |
 | `sig` | CPMS 本机私钥对档案核心字段签名 |
@@ -209,8 +209,8 @@ sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{e
 6. 校验 CPMS 本机签名 `sig`。
 7. 首次验真成功时绑定 `cpms_pubkey_hash`；后续同一授权只能接受同一 CPMS 本机公钥。
 8. SFID 确认 `citizen_status=NORMAL`、`voting_eligible=true`，且 `wallet_address / wallet_pubkey / wallet_sig_alg` 已由 CPMS 档案码携带；否则不得录入 SFID 公民库。
-9. SFID 根据 ARCHIVE 生成 wuminapp `sign_request`，并锁定 `wallet_address / wallet_pubkey`。
-10. wuminapp 返回 `sign_response` 后，SFID 校验签名和 `payload_hash`。
+9. SFID 根据 ARCHIVE 生成 citizenapp `sign_request`，并锁定 `wallet_address / wallet_pubkey`。
+10. citizenapp 返回 `sign_response` 后，SFID 校验签名和 `payload_hash`。
 11. SFID 检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，并按 CPMS 授权分区写入 `citizens.province_code / city_code`；按 `geo_seal` 另存 `residence_* / birth_* / election_scope_level`。后续投票区域按居住地判断，参选区域按出生地判断，具体流程只由投票引擎实现。
 
 ## 授权状态
@@ -227,4 +227,4 @@ sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{e
 | 协议 | 用途 | 使用场景 |
 |---|---|---|
 | `SFID_CPMS_V1` | SFID 与 CPMS 业务交换 | `INSTALL` / `ARCHIVE` |
-| `WUMIN_QR_V1` | 扫码登录、离线签名、用户联系和收款 | SFID/CPMS/wuminapp |
+| `CITIZEN_QR_V1` | 扫码登录、离线签名、用户联系和收款 | SFID/CPMS/citizenapp |

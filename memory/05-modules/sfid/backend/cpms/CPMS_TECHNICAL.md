@@ -66,7 +66,7 @@ sfid/backend/cpms/
 4. 校验 `geo_seal.election_scope_level` 与 `residence / birthplace` 代码精度一致：`PROVINCE` 只允许省，`CITY` 允许省市，`TOWN` 允许省市镇；居住省市必须与 CPMS 授权分区一致。
 5. 校验 CPMS 本机签名；首次成功时把 `cpms_pubkey_hash / ACTIVE / USED`
    写入 `store_cpms` 主数据，后续只接受同一公钥。
-6. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 wuminapp 签名通过后完成。
+6. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 citizenapp 签名通过后完成。
 7. 绑定流程检查 `archive_no / sfid_number / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
 
 ## 4. 归属说明

@@ -37,7 +37,7 @@
 - isar 迁移若风险大,先只出评估方案,迁移单列子卡。
 
 ## 改动目录(中文注释)
-- `wuminapp/smoldot-dart/`(自有 .so 构建):NDK/链接器对齐参数,代码/构建。
-- `wuminapp/pubspec.yaml`:mobile_scanner / datastore / isar 版本升级,依赖。
-- `wuminapp/android/`(必要时):packaging/NDK 配置,构建。
+- `citizenapp/smoldot-dart/`(自有 .so 构建):NDK/链接器对齐参数,代码/构建。
+- `citizenapp/pubspec.yaml`:mobile_scanner / datastore / isar 版本升级,依赖。
+- `citizenapp/android/`(必要时):packaging/NDK 配置,构建。
 - 新增对齐校验脚本 `tools/`。

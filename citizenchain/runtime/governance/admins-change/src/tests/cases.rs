@@ -141,7 +141,7 @@ fn institution_account_below_two_admins_rejected() {
                 vec![admin_a.clone()],
                 admin_a,
             ),
-            Error::<Test>::InvalidAdminCount
+            Error::<Test>::InvalidAdminsLen
         );
     });
 }

@@ -64,7 +64,7 @@ export function CreateMultisigInstitutionPage({
     useState<InstitutionRegistrationInfoResp | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<AccountForm[]>([]);
-  const [adminPubkeys, setAdminPubkeys] = useState<string[]>([]);
+  const [admins, setAdmins] = useState<string[]>([]);
   const [thresholdInput, setThresholdInput] = useState('');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletProfile | null>(
     coldWallets[0] ?? null,
@@ -94,21 +94,21 @@ export function CreateMultisigInstitutionPage({
   // 创建人(选中的冷钱包公钥)自动占管理员第一位。
   useEffect(() => {
     if (!selectedWallet) {
-      setAdminPubkeys((prev) => prev.length === 0 ? prev : []);
+      setAdmins((prev) => prev.length === 0 ? prev : []);
       return;
     }
     const creatorPk = selectedWallet.pubkeyHex.toLowerCase().replace(/^0x/, '');
-    setAdminPubkeys((prev) => {
+    setAdmins((prev) => {
       const without = prev.filter((p) => p.toLowerCase() !== creatorPk);
       return [creatorPk, ...without];
     });
   }, [selectedWallet]);
 
   const onScanAddAdmin = async () => {
-    // 中文注释:节点桌面 wumin 扫码添加管理员路径。
+    // 中文注释:节点桌面 citizenwallet 扫码添加管理员路径。
     // 现有 governance 模块没有把通用扫码 helper 暴露到 offchain,
     // 本任务先用 prompt 输入 32 字节 pubkey hex 作为兜底(用户已强烈反对粘贴,
-    // 但 follow-up:节点桌面接入 wumin user_contact QR 扫码)。
+    // 但 follow-up:节点桌面接入 citizenwallet user_contact QR 扫码)。
     const raw = window.prompt('扫码功能 follow-up:暂用粘贴方式输入管理员公钥 (64 hex 字符)');
     if (!raw) return;
     const clean = raw.trim().toLowerCase().replace(/^0x/, '');
@@ -116,33 +116,33 @@ export function CreateMultisigInstitutionPage({
       alert('公钥必须是 64 位十六进制字符');
       return;
     }
-    if (adminPubkeys.length >= 64) {
+    if (admins.length >= 64) {
       alert('管理员数量上限 64 人');
       return;
     }
-    setAdminPubkeys((prev) => (prev.includes(clean) ? prev : [...prev, clean]));
+    setAdmins((prev) => (prev.includes(clean) ? prev : [...prev, clean]));
   };
 
   const removeAdmin = (idx: number) => {
     if (idx === 0) return; // 创建人占第一位,不可移除
-    setAdminPubkeys((prev) => prev.filter((_, i) => i !== idx));
+    setAdmins((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const adminCount = adminPubkeys.length;
-  const minThreshold = Math.max(2, Math.ceil(adminCount / 2));
+  const adminsLen = admins.length;
+  const minThreshold = Math.max(2, Math.ceil(adminsLen / 2));
   const thresholdValid =
     thresholdInput.trim() !== ''
     && /^\d+$/.test(thresholdInput.trim())
     && parseInt(thresholdInput.trim(), 10) >= minThreshold
-    && parseInt(thresholdInput.trim(), 10) <= adminCount;
+    && parseInt(thresholdInput.trim(), 10) <= adminsLen;
 
   const validate = (): string | null => {
     if (!registrationInfo) return '机构注册信息未加载';
     if (registrationInfo.account_names.length === 0) return 'SFID 未返回账户名称列表';
     if (!selectedWallet) return '请选择签名冷钱包';
-    if (adminCount < 2) return '管理员至少 2 人(创建人占第 1 位,需扫码再加 1 人以上)';
+    if (adminsLen < 2) return '管理员至少 2 人(创建人占第 1 位,需扫码再加 1 人以上)';
     if (!thresholdValid) {
-      return `阈值范围必须在 ${minThreshold}..=${adminCount}`;
+      return `阈值范围必须在 ${minThreshold}..=${adminsLen}`;
     }
     for (const a of accounts) {
       const fen = yuanToFenString(a.amountYuan);
@@ -179,8 +179,8 @@ export function CreateMultisigInstitutionPage({
         sfidNumber,
         sfidFullName,
         accounts: accountInputs,
-        adminOrg: CLEARING_BANK_ADMIN_ORG,
-        adminPubkeys,
+        org: CLEARING_BANK_ADMIN_ORG,
+        admins,
         threshold,
         registerNonce: sfidCredential.register_nonce,
         signatureHex: sfidCredential.signature,
@@ -191,16 +191,16 @@ export function CreateMultisigInstitutionPage({
         scopeCityName: sfidCredential.scope_city_name,
       });
 
-      // Step 2: 弹 QR 两段握手(对接现有 wumin sign_request page)。
+      // Step 2: 弹 QR 两段握手(对接现有 citizenwallet sign_request page)。
       // 中文注释:节点桌面 governance 已有 VoteSigningFlow 标准流程,本任务
       // follow-up 将复用该 flow;暂用提示替代,确保 cargo/tsc 全绿。
       alert(
         `[follow-up] 待接入冷钱包扫码握手:\nrequest_id=${reqResult.requestId}\n` +
           `payload_hash=${reqResult.expectedPayloadHash}\n` +
-          `节点已构建 QR sign_request,等 wumin 端补 propose_create_institution decoder 后端到端打通。`,
+          `节点已构建 QR sign_request,等 citizenwallet 端补 propose_create_institution decoder 后端到端打通。`,
       );
 
-      // 真正的 submit 在 wumin 回签后调:
+      // 真正的 submit 在 citizenwallet 回签后调:
       //   await organizationManageApi.submitProposeCreateInstitution({
       //     requestId, expectedPubkeyHex, expectedPayloadHash,
       //     ...全部 propose_create_institution 入参...
@@ -277,11 +277,11 @@ export function CreateMultisigInstitutionPage({
 
       {/* 管理员区:创建人占第 1 位 + 扫码添加 */}
       <div className="institution-info-section">
-        <h3>管理员列表（{adminCount}/64）</h3>
-        {adminPubkeys.length === 0 && (
+        <h3>管理员列表（{adminsLen}/64）</h3>
+        {admins.length === 0 && (
           <p className="no-data">请先选择签名冷钱包,创建人会自动占管理员第 1 位</p>
         )}
-        {adminPubkeys.map((pk, idx) => (
+        {admins.map((pk, idx) => (
           <div key={pk} className="metric-card admin-card">
             <span className="admin-card-index">{idx + 1}</span>
             <code className="admin-card-address">0x{pk}</code>
@@ -308,12 +308,12 @@ export function CreateMultisigInstitutionPage({
           <input
             type="text"
             placeholder={
-              adminCount >= 2 ? `范围:${minThreshold} ~ ${adminCount}` : '请先添加管理员'
+              adminsLen >= 2 ? `范围:${minThreshold} ~ ${adminsLen}` : '请先添加管理员'
             }
             value={thresholdInput}
             onChange={(e) => setThresholdInput(e.target.value)}
           />
-          <span className="muted">/ {adminCount}</span>
+          <span className="muted">/ {adminsLen}</span>
         </div>
       </div>
 

@@ -6,10 +6,10 @@
 任务需求:
 修复 3 处与 PQC 算法无关、但属"对称/KDF 基线"的现存弱加密(**IM 套件升级移到 card6**,决策6:card0 不动 IM):
 1. **node 清算行假 AES-GCM(CRITICAL)**:`...settlement/keystore.rs:181-220` 实为 `XOR(blake2 keystream)+截断 16B blake2 tag`,`derive_key:169-177` 仅 100 轮 blake2。换真 `Aes256Gcm`(node `Cargo.toml` 加 `aes-gcm`)+ `Argon2id`,改掉说谎函数名/注释;🔴 **每次 12B CSPRNG 随机 nonce**(或 XChaCha20-Poly1305 24B nonce 规避 GCM nonce 悬崖);🔴 **旧 XOR `.enc` 作废、重新 `save_signing_key` 导入**(chain-in-dev 无迁移)。
-2. **App 锁 KDF 统一**:`wumin/.../app_lock_service.dart:148`(1M)与 `wuminapp/.../app_lock_service.dart:166`(100K)收敛 **Argon2id**;🔴 **参数(m/t/p)单一常量源,跨 wumin/wuminapp/node 与清算行 Argon2id 同源统一**。
-3. **热钱包 at-rest 对齐**:`wuminapp` 助记词无应用层加密(只靠 secure_storage),补一层 AES-256-GCM,对齐 `wumin/lib/wallet/mnemonic_cipher.dart`。
+2. **App 锁 KDF 统一**:`citizenwallet/.../app_lock_service.dart:148`(1M)与 `citizenapp/.../app_lock_service.dart:166`(100K)收敛 **Argon2id**;🔴 **参数(m/t/p)单一常量源,跨 citizenwallet/citizenapp/node 与清算行 Argon2id 同源统一**。
+3. **热钱包 at-rest 对齐**:`citizenapp` 助记词无应用层加密(只靠 secure_storage),补一层 AES-256-GCM,对齐 `citizenwallet/lib/wallet/mnemonic_cipher.dart`。
 
-所属模块:Blockchain(node)+ Mobile(wuminapp/wumin)
+所属模块:Blockchain(node)+ Mobile(citizenapp/citizenwallet)
 
 输入文档:
 - memory/04-decisions/ADR-022-unified-pqc-crypto.md

@@ -3,7 +3,7 @@
 //! 中文注释:
 //! - 权威账本在链上 `offchain_transaction::DepositBalance` /
 //!   `BankTotalDeposits`。本模块只是**缓存**,用于:
-//!     1. wuminapp 查询余额时的快速响应(避免每次落到链上 state 查询)
+//!     1. citizenapp 查询余额时的快速响应(避免每次落到链上 state 查询)
 //!     2. 扫码支付时本地验"可用余额 = confirmed - pending_debit"(Step 2 用)
 //!     3. 从链上事件(`Deposited` / `Withdrawn` / `PaymentSettled`)增量同步
 //! - 加密持久化采用 blake2_256 XOR + HMAC 方式(节点启动密码派生 key),
@@ -147,7 +147,7 @@ impl OffchainLedger {
         self.get_state(user).available()
     }
 
-    /// 查下一个应提交的 nonce(Step 2 起 wuminapp RPC 调用)。
+    /// 查下一个应提交的 nonce(Step 2 起 citizenapp RPC 调用)。
     ///
     /// 中文注释:跨行收款方节点不会把付款方写入本地 `accounts`,因此这里必须把
     /// 已接受的 cross-bank pending 也纳入计算,避免连续两笔跨行支付都拿到同一个
@@ -222,7 +222,7 @@ impl OffchainLedger {
     ///   进来调用本方法(上游已过滤);兜底:不动任何账户
     ///
     /// `tx_id` 仍从本地 pending 列表和 `accepted_tx_ids` 中清除(即使本行不是
-    /// payer_bank,也可能是 wuminapp 误路由的 accept_payment,留着会导致 pending
+    /// payer_bank,也可能是 citizenapp 误路由的 accept_payment,留着会导致 pending
     /// 永远不消)。
     pub fn on_payment_settled(
         &self,
@@ -353,7 +353,7 @@ impl OffchainLedger {
 
     // ---------------- Step 2b 新增:扫码支付核心业务逻辑 ----------------
 
-    /// 接收 wuminapp 通过 RPC 提交的签名支付意图,执行完整本地校验 + 入账。
+    /// 接收 citizenapp 通过 RPC 提交的签名支付意图,执行完整本地校验 + 入账。
     ///
     /// 语义:
     /// 1. sr25519 验签(对 `intent.signing_hash()` 重算,与链上逻辑一致)

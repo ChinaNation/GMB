@@ -1,8 +1,8 @@
-// 治理投票 QR 签名：构建 WUMIN_QR_V1 签名请求、验证响应、提交 extrinsic。
+// 治理投票 QR 签名：构建 CITIZEN_QR_V1 签名请求、验证响应、提交 extrinsic。
 //
 // 协议流程：
 // 1. 后端构建未签名 signing payload + QR 请求 JSON
-// 2. 前端显示 QR 码 → 用户用 wumin 离线设备扫码签名
+// 2. 前端显示 QR 码 → 用户用 citizenwallet 离线设备扫码签名
 // 3. 前端摄像头扫描响应 QR → 传回后端
 // 4. 后端验证 payload_hash → 构建 signed extrinsic → 提交到链
 
@@ -12,7 +12,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub(crate) const PROTOCOL_VERSION: &str = "WUMIN_QR_V1";
+pub(crate) const PROTOCOL_VERSION: &str = "CITIZEN_QR_V1";
 pub(crate) const DEFAULT_TTL_SECS: u64 = 90;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
@@ -68,7 +68,7 @@ pub struct SignRequestBody {
     pub display: serde_json::Value,
 }
 
-/// WUMIN_QR_V1 sign_request envelope。
+/// CITIZEN_QR_V1 sign_request envelope。
 #[derive(Debug, Serialize)]
 pub struct QrSignRequest {
     pub proto: String,
@@ -90,7 +90,7 @@ pub struct SignResponseBody {
     pub signed_at: u64,
 }
 
-/// WUMIN_QR_V1 sign_response envelope。
+/// CITIZEN_QR_V1 sign_response envelope。
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct QrSignResponse {
@@ -186,8 +186,8 @@ pub fn build_vote_sign_request(
     // SS58 编码账户地址
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    // display.fields 必须与 wumin PayloadDecoder 解码结果的 key/value 完全一致。
-    // wumin 解码 internal_vote 返回: proposal_id=数字字符串, approve="true"/"false"
+    // display.fields 必须与 citizenwallet PayloadDecoder 解码结果的 key/value 完全一致。
+    // citizenwallet 解码 internal_vote 返回: proposal_id=数字字符串, approve="true"/"false"
     let display = serde_json::json!({
         "action": "internal_vote",
         "summary": format!("管理员投票 提案 #{proposal_id}：{}", if approve { "赞成" } else { "反对" }),
@@ -275,8 +275,8 @@ pub fn build_joint_vote_sign_request(
     let request_id = generate_request_id("jvote");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    // display.fields 必须与 wumin PayloadDecoder 解码结果的 key/value 完全一致。
-    // wumin 解码 joint_vote 返回: proposal_id=数字字符串, approve="true"/"false"
+    // display.fields 必须与 citizenwallet PayloadDecoder 解码结果的 key/value 完全一致。
+    // citizenwallet 解码 joint_vote 返回: proposal_id=数字字符串, approve="true"/"false"
     let display = serde_json::json!({
         "action": "joint_vote",
         "summary": format!("联合投票 提案 #{proposal_id}：{}", if approve { "赞成" } else { "反对" }),

@@ -16,8 +16,8 @@ import sys
 from pathlib import Path
 
 ROOTS = [
-    Path("/Users/rhett/GMB/wuminapp"),
-    Path("/Users/rhett/GMB/wumin"),
+    Path("/Users/rhett/GMB/citizenapp"),
+    Path("/Users/rhett/GMB/citizenwallet"),
     Path("/Users/rhett/GMB/citizenchain"),
     Path("/Users/rhett/GMB/sfid"),
 ]

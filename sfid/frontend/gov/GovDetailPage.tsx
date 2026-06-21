@@ -30,7 +30,7 @@ import {
   type AdminSecurityGrantOutput,
 } from '../admins/admin_security_api';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { WuminSignatureModal } from '../core/WuminSignatureModal';
+import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import {
   institutionDetailCacheKey,
   readCachedInstitutionDetail,
@@ -415,7 +415,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onB
           ) : renderOfficialDetail()}
         </>
       )}
-      <WuminSignatureModal
+      <CitizenSignatureModal
         title="公民钱包签名确认"
         open={!!securityModal}
         onCancel={() => {

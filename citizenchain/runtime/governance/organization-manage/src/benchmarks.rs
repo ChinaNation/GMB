@@ -14,7 +14,7 @@ use votingengine::STATUS_PASSED;
 
 use crate::{
     pallet::{
-        AccountNameOf, AccountRegisteredSfid, DuoqianAdminsOf, InstitutionAccountNamesOf,
+        AccountNameOf, AccountRegisteredSfid, AdminsOf, InstitutionAccountNamesOf,
         RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAccount,
     },
     BalanceOf, Call, Config, DuoqianAccountValidator, DuoqianReservedAccountChecker, Pallet,

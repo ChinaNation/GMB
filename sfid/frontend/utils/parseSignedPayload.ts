@@ -1,9 +1,9 @@
 // 统一的签名二维码 payload 解析工具。
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// 使用 WUMIN_QR_V1 envelope,不支持字段别名。
+// 使用 CITIZEN_QR_V1 envelope,不支持字段别名。
 
-import { parseQrEnvelope, QrParseError } from '../core/qr/wuminQr';
-import type { LoginReceiptBody, SignResponseBody } from '../core/qr/wuminQr';
+import { parseQrEnvelope, QrParseError } from '../core/qr/citizenQr';
+import type { LoginReceiptBody, SignResponseBody } from '../core/qr/citizenQr';
 
 export type SignedLoginPayload = {
   challenge_id: string;
@@ -50,7 +50,7 @@ export type SignedReceiptPayload = {
 };
 
 // 中文注释:解析"挑战签名回执"二维码 payload。
-// 只接受 WUMIN_QR_V1 envelope(login_receipt/sign_response)。
+// 只接受 CITIZEN_QR_V1 envelope(login_receipt/sign_response)。
 // 返回结构供调用方提交后端 verify/commit。
 export function parseSignedReceiptPayload(
   raw: string,
@@ -61,7 +61,7 @@ export function parseSignedReceiptPayload(
     throw new Error('签名二维码内容为空');
   }
   if (!trimmed.startsWith('{')) {
-    throw new Error('签名二维码必须使用 WUMIN_QR_V1 envelope');
+    throw new Error('签名二维码必须使用 CITIZEN_QR_V1 envelope');
   }
   let env;
   try {

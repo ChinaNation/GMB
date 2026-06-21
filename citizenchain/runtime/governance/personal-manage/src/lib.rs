@@ -12,7 +12,7 @@
 //! `admins-change::AdminAccountKind::PersonalDuoqian`。
 
 /// 模块标识前缀(8 字节,与 organization-manage 的 b"org-mgmt" 长度对仗)。
-/// admins-change / wumin / wuminapp 三方解码必须保持一致。
+/// admins-change / citizenwallet / citizenapp 三方解码必须保持一致。
 pub const MODULE_TAG: &[u8] = b"per-mgmt";
 
 /// 提案动作类型常量,独立命名空间(从 0 起编号),与 organization-manage 的 ACTION 互不干扰。
@@ -96,7 +96,7 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub type DuoqianAdminsOf<T> = BoundedVec<
+    pub type AdminsOf<T> = BoundedVec<
         <T as frame_system::Config>::AccountId,
         <T as admins_change::Config>::MaxPersonalAccountAdmins,
     >;
@@ -176,13 +176,13 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// 个人多签账户创建提案已发起(pending 状态预写入)。
-        /// wuminapp 扫描此事件后引导其他管理员到投票引擎统一入口 `internal_vote` 投票。
+        /// citizenapp 扫描此事件后引导其他管理员到投票引擎统一入口 `internal_vote` 投票。
         PersonalDuoqianProposed {
             proposal_id: u64,
             duoqian_account: T::AccountId,
             proposer: T::AccountId,
             account_name: AccountNameOf<T>,
-            admins: DuoqianAdminsOf<T>,
+            admins: AdminsOf<T>,
             admins_len: u32,
             threshold: u32,
             amount: BalanceOf<T>,
@@ -244,8 +244,8 @@ pub mod pallet {
         CreateAmountBelowMinimum,
         CloseBalanceBelowMinimum,
         PermissionDenied,
-        InvalidAdminCount,
-        AdminCountMismatch,
+        InvalidAdminsLen,
+        AdminsLenMismatch,
         DuoqianNotFound,
         DuoqianNotActive,
         InvalidBeneficiary,
@@ -280,7 +280,7 @@ pub mod pallet {
         pub fn propose_create(
             origin: OriginFor<T>,
             account_name: AccountNameOf<T>,
-            admins: DuoqianAdminsOf<T>,
+            admins: AdminsOf<T>,
             regular_threshold: u32,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
@@ -342,14 +342,14 @@ pub mod pallet {
         /// 校验管理员集合和用户输入的普通业务动态阈值。
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
-            admins: &DuoqianAdminsOf<T>,
+            admins: &AdminsOf<T>,
             regular_threshold: u32,
         ) -> Result<u32, DispatchError> {
             let admins_len = admins.len() as u32;
-            ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+            ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
             ensure!(
                 admins_len <= <T as admins_change::Config>::MaxPersonalAccountAdmins::get(),
-                Error::<T>::InvalidAdminCount
+                Error::<T>::InvalidAdminsLen
             );
             ensure!(
                 regular_threshold > 0
@@ -366,7 +366,7 @@ pub mod pallet {
         }
 
         pub(crate) fn ensure_unique_admins(
-            admins: &DuoqianAdminsOf<T>,
+            admins: &AdminsOf<T>,
         ) -> Result<(), DispatchError> {
             use sp_std::collections::btree_set::BTreeSet;
             let mut seen = BTreeSet::new();
@@ -403,7 +403,7 @@ pub mod pallet {
             proposal_id: u64,
             institution_id: T::AccountId,
             kind: admins_change::AdminAccountKind,
-            admins: &DuoqianAdminsOf<T>,
+            admins: &AdminsOf<T>,
             creator: &T::AccountId,
         ) -> DispatchResult {
             admins_change::Pallet::<T>::create_pending_admin_account_for_proposal(

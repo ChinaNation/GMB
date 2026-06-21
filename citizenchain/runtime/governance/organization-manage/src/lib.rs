@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
-/// 长度 8 字节（`b"org-mgmt"`）；admins-change / wumin / wuminapp 三方解码必须保持一致。
+/// 长度 8 字节（`b"org-mgmt"`）；admins-change / citizenwallet / citizenapp 三方解码必须保持一致。
 pub const MODULE_TAG: &[u8] = b"org-mgmt";
 
 pub use pallet::*;
@@ -112,7 +112,7 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub type DuoqianAdminsOf<T> =
+    pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
 
     pub type SfidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxSfidNumberLength>;
@@ -139,7 +139,7 @@ pub mod pallet {
         BoundedVec<CreateInstitutionAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
     /// 机构级多签信息。
     pub type InstitutionInfoOf<T> = InstitutionInfo<
-        DuoqianAdminsOf<T>,
+        AdminsOf<T>,
         <T as frame_system::Config>::AccountId,
         BlockNumberFor<T>,
         AccountNameOf<T>,
@@ -156,7 +156,7 @@ pub mod pallet {
         AccountNameOf<T>,
         <T as frame_system::Config>::AccountId,
         BalanceOf<T>,
-        DuoqianAdminsOf<T>,
+        AdminsOf<T>,
         CreateInstitutionAccountsOf<T>,
     >;
 
@@ -300,7 +300,7 @@ pub mod pallet {
             main_account: T::AccountId,
             proposer: T::AccountId,
             accounts: CreateInstitutionAccountsOf<T>,
-            admins: DuoqianAdminsOf<T>,
+            admins: AdminsOf<T>,
             org: u8,
             admins_len: u32,
             threshold: u32,
@@ -364,11 +364,11 @@ pub mod pallet {
         /// 权限不足
         PermissionDenied,
         /// 管理员数量不合法（必须 >=2）
-        InvalidAdminCount,
+        InvalidAdminsLen,
         /// 管理员数量与列表长度不一致
-        AdminCountMismatch,
+        AdminsLenMismatch,
         /// 机构账户管理员 org 只能是 ORG_PUP 或 ORG_OTH
-        InvalidAdminOrg,
+        InvalidOrg,
         /// 多签账户不存在
         DuoqianNotFound,
         /// 多签账户处于 pending 状态，不可操作
@@ -505,7 +505,7 @@ pub mod pallet {
             accounts: InstitutionInitialAccountsOf<T>,
             org: u8,
             admins_len: u32,
-            admins: DuoqianAdminsOf<T>,
+            admins: AdminsOf<T>,
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
@@ -679,7 +679,7 @@ pub mod pallet {
         // organization-manage 不再提供该派生(机构地址只走 derive_institution_account)。
 
         pub(crate) fn ensure_unique_admins(
-            admins: &DuoqianAdminsOf<T>,
+            admins: &AdminsOf<T>,
         ) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
             for admin in admins.iter() {
@@ -691,8 +691,8 @@ pub mod pallet {
         /// 计算 `admins_root = blake2_256(SCALE.encode(sorted_admins))`。
         ///
         /// 排序规则:按 `AccountId` 的字节序(Substrate AccountId32 默认 Ord 即字典序)。
-        /// wuminapp 端需要用同样的排序规则 + SCALE 布局,保证签名消息字节一致。
-        pub fn compute_admins_root(admins: &DuoqianAdminsOf<T>) -> [u8; 32] {
+        /// citizenapp 端需要用同样的排序规则 + SCALE 布局,保证签名消息字节一致。
+        pub fn compute_admins_root(admins: &AdminsOf<T>) -> [u8; 32] {
             let mut sorted: Vec<T::AccountId> = admins.iter().cloned().collect();
             sorted.sort();
             sp_io::hashing::blake2_256(&sorted.encode())
@@ -715,14 +715,14 @@ pub mod pallet {
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
             admins_len: u32,
-            admins: &DuoqianAdminsOf<T>,
+            admins: &AdminsOf<T>,
             threshold: u32,
         ) -> DispatchResult {
             ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
-            ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+            ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
             ensure!(
                 admins.len() as u32 == admins_len,
-                Error::<T>::AdminCountMismatch
+                Error::<T>::AdminsLenMismatch
             );
             ensure!(
                 threshold > 0
@@ -743,7 +743,7 @@ pub mod pallet {
             org: u8,
             institution_id: T::AccountId,
             kind: admins_change::AdminAccountKind,
-            admins: &DuoqianAdminsOf<T>,
+            admins: &AdminsOf<T>,
             creator: &T::AccountId,
         ) -> DispatchResult {
             admins_change::Pallet::<T>::create_pending_admin_account_for_proposal(

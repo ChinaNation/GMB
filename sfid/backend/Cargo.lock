@@ -756,7 +756,7 @@ dependencies = [
 [[package]]
 name = "binary-merkle-tree"
 version = "16.1.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "hash-db",
  "log",
@@ -1748,7 +1748,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "45.1.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "aquamarine",
  "array-bytes",
@@ -1769,9 +1769,9 @@ dependencies = [
  "serde_json",
  "sp-api",
  "sp-arithmetic",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-crypto-hashing-proc-macro",
- "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-genesis-builder",
  "sp-inherents",
  "sp-io",
@@ -1779,7 +1779,7 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-state-machine",
- "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-tracing",
  "sp-trie",
  "sp-weights",
@@ -1789,7 +1789,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "36.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -1802,14 +1802,14 @@ dependencies = [
  "proc-macro-warning",
  "proc-macro2",
  "quote",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "syn 2.0.116",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools"
 version = "13.0.1"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate",
@@ -1821,7 +1821,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "12.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3620,9 +3620,9 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-api",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-runtime",
- "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
 ]
 
 [[package]]
@@ -4808,7 +4808,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "40.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "docify",
  "hash-db",
@@ -4816,8 +4816,8 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-api-proc-macro",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-metadata-ir",
  "sp-runtime",
  "sp-runtime-interface",
@@ -4830,7 +4830,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "26.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "Inflector",
  "blake2",
@@ -4844,19 +4844,19 @@ dependencies = [
 [[package]]
 name = "sp-application-crypto"
 version = "44.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-io",
 ]
 
 [[package]]
 name = "sp-arithmetic"
 version = "28.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "docify",
  "integer-sqrt",
@@ -4917,7 +4917,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "39.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "ark-vrf",
  "array-bytes",
@@ -4948,13 +4948,13 @@ dependencies = [
  "secrecy",
  "serde",
  "sha2 0.10.9",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-storage 22.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-storage 22.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "ss58-registry",
- "substrate-bip39 0.6.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "substrate-bip39 0.6.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "thiserror 1.0.69",
  "tracing",
  "w3f-bls",
@@ -4991,7 +4991,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing"
 version = "0.1.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -5004,10 +5004,10 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing-proc-macro"
 version = "0.1.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "quote",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "syn 2.0.116",
 ]
 
@@ -5024,7 +5024,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5044,17 +5044,17 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.31.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "environmental",
  "parity-scale-codec",
- "sp-storage 22.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-storage 22.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
 ]
 
 [[package]]
 name = "sp-genesis-builder"
 version = "0.21.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -5066,7 +5066,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "40.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -5079,7 +5079,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "44.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "bytes",
  "docify",
@@ -5090,9 +5090,9 @@ dependencies = [
  "polkavm-derive",
  "rustversion",
  "secp256k1",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-keystore",
  "sp-runtime-interface",
  "sp-state-machine",
@@ -5105,18 +5105,18 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.45.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "parity-scale-codec",
  "parking_lot",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
 ]
 
 [[package]]
 name = "sp-metadata-ir"
 version = "0.12.1"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "frame-metadata",
  "parity-scale-codec",
@@ -5126,7 +5126,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "13.0.2"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "backtrace",
  "regex",
@@ -5135,7 +5135,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "45.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "binary-merkle-tree",
  "bytes",
@@ -5153,9 +5153,9 @@ dependencies = [
  "simple-mermaid",
  "sp-application-crypto",
  "sp-arithmetic",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-io",
- "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-trie",
  "sp-weights",
  "strum",
@@ -5166,16 +5166,16 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "33.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
  "parity-scale-codec",
  "polkavm-derive",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-runtime-interface-proc-macro",
- "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-storage 22.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-storage 22.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-tracing",
  "sp-wasm-interface",
  "static_assertions",
@@ -5184,7 +5184,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "20.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "Inflector",
  "expander",
@@ -5197,20 +5197,20 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "42.1.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "impl-trait-for-tuples",
  "parity-scale-codec",
  "scale-info",
  "serde",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-runtime",
 ]
 
 [[package]]
 name = "sp-state-machine"
 version = "0.49.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "hash-db",
  "log",
@@ -5218,8 +5218,8 @@ dependencies = [
  "parking_lot",
  "rand 0.8.5",
  "smallvec",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-panic-handler",
  "sp-trie",
  "thiserror 1.0.69",
@@ -5235,7 +5235,7 @@ source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-f
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 
 [[package]]
 name = "sp-storage"
@@ -5252,19 +5252,19 @@ dependencies = [
 [[package]]
 name = "sp-storage"
 version = "22.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
  "ref-cast",
  "serde",
- "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
 ]
 
 [[package]]
 name = "sp-tracing"
 version = "19.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "parity-scale-codec",
  "regex",
@@ -5276,7 +5276,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "42.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "ahash",
  "foldhash",
@@ -5289,8 +5289,8 @@ dependencies = [
  "rand 0.8.5",
  "scale-info",
  "schnellru",
- "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
- "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-core 39.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
+ "sp-externalities 0.31.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "substrate-prometheus-endpoint",
  "thiserror 1.0.69",
  "tracing",
@@ -5301,7 +5301,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "43.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -5310,7 +5310,7 @@ dependencies = [
  "serde",
  "sp-crypto-hashing-proc-macro",
  "sp-runtime",
- "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-std 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
  "sp-version-proc-macro",
  "thiserror 1.0.69",
 ]
@@ -5318,7 +5318,7 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "15.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "parity-scale-codec",
  "proc-macro-warning",
@@ -5330,7 +5330,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "24.0.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -5341,7 +5341,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "33.2.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "bounded-collections",
  "parity-scale-codec",
@@ -5349,7 +5349,7 @@ dependencies = [
  "serde",
  "smallvec",
  "sp-arithmetic",
- "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa)",
+ "sp-debug-derive 14.0.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa)",
 ]
 
 [[package]]
@@ -5449,7 +5449,7 @@ dependencies = [
 [[package]]
 name = "substrate-bip39"
 version = "0.6.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "hmac 0.12.1",
  "pbkdf2",
@@ -5461,7 +5461,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.17.7"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-wuminapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix-citizenapp-grandpa#154590c2839f28095237dde09e81b854ccb58a66"
 dependencies = [
  "http-body-util",
  "hyper",

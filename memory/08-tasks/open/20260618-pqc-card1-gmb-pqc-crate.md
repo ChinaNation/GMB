@@ -10,7 +10,7 @@
 3. **algo 常量**:`0x01` sr25519 / `0x02` ML-DSA-65 / `0x03` ML-DSA-87(预留)。
 4. **domain 常量强制 `[u8;N]`**(铁律 `feedback_scale_domain_must_be_array`):`DOMAIN_TX=b"GMB_PQC_TX_MLDSA65_V1"`、`DOMAIN_BOOTSTRAP=b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"`(算法标识编进域字面量);并迁 `batch_item.rs:39/42` 的 `L3_PAY/BATCH_SIGNING_DOMAIN` `&[u8]`→`[u8;N]`。
 5. **`verify_by_algo` trait**:链端 ML-DSA 验签封装(fips204),校验 payload `alg` 与 `AccountPqcKey.alg` 一致后路由。
-6. **golden vector**:固定助记词 → AccountSeedV1 →(中间量 **ξ**)→ {sr25519 SS58, ML-DSA-65 公钥};版本化文件,Rust/wuminapp-FFI/wumin-FFI 三端对拍,库升级须重跑。
+6. **golden vector**:固定助记词 → AccountSeedV1 →(中间量 **ξ**)→ {sr25519 SS58, ML-DSA-65 公钥};版本化文件,Rust/citizenapp-FFI/citizenwallet-FFI 三端对拍,库升级须重跑。
 
 **🔴 spike 闸门(全绿才进 card2/card3):**
 - S1 fips204 no_std + 编进 runtime WASM + **iOS/Android 移动端编译** + 体积 + 单次验签 weight;一个区块最多容多少次 PQC 验签。

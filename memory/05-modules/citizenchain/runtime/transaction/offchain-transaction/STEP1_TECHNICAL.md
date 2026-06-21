@@ -91,7 +91,7 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
 pub const L3_PAY_SIGNING_DOMAIN: &[u8] = b"GMB_L3_PAY_V1";
 ```
 
-wuminapp(Dart 端)必须逐字节对齐 `L3_PAY_SIGNING_DOMAIN` 与 SCALE 编码顺序,否则链上验签失败。
+citizenapp(Dart 端)必须逐字节对齐 `L3_PAY_SIGNING_DOMAIN` 与 SCALE 编码顺序,否则链上验签失败。
 
 ## 6. 新增 Storage
 

@@ -44,7 +44,7 @@ pub fn derive_duoqian_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32]
 - `admins-change` 的管理员账户 storage key 为 `AccountId`。
 - `duoqian-transfer` 的支出机构为 `AccountId`。
 - `onchain-issuance` 的 issuer/governance/admin 均为 `AccountId`；`asset_id` 仅作为资产编号。
-- SFID、wumin、wuminapp、tools 不得再定义第二套 DUOQIAN domain、op_tag 或 hash preimage。
+- SFID、citizenwallet、citizenapp、tools 不得再定义第二套 DUOQIAN domain、op_tag 或 hash preimage。
 
 ## 迁移结论
 

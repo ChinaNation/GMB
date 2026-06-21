@@ -1,13 +1,13 @@
-//! WUMIN_QR_V1 统一二维码协议 envelope。
+//! CITIZEN_QR_V1 统一二维码协议 envelope。
 //!
 //! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
 //! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
-//! 与 wumin 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS envelope 字段逐字节一致。
+//! 与 citizenwallet 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS envelope 字段逐字节一致。
 
 use serde::{Deserialize, Serialize};
 
-pub const WUMIN_QR_V1: &str = "WUMIN_QR_V1";
+pub const CITIZEN_QR_V1: &str = "CITIZEN_QR_V1";
 
 /// 统一 kind 枚举(snake_case 序列化)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,7 +64,7 @@ pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
 impl LoginChallengeEnvelope {
     pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
         Self {
-            proto: WUMIN_QR_V1.to_string(),
+            proto: CITIZEN_QR_V1.to_string(),
             kind: QrKind::LoginChallenge.wire().to_string(),
             id: Some(id),
             issued_at: Some(issued_at),
@@ -78,7 +78,7 @@ impl LoginChallengeEnvelope {
 ///
 /// 格式(与 Dart/TS 逐字节一致):
 /// ```text
-/// WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+/// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 /// ```
 /// `principal` 去掉 `0x` 前缀,小写。
 pub fn build_signature_message(
@@ -97,7 +97,7 @@ pub fn build_signature_message(
         .to_lowercase();
     format!(
         "{}|{}|{}|{}|{}|{}",
-        WUMIN_QR_V1,
+        CITIZEN_QR_V1,
         kind.wire(),
         id,
         sys,

@@ -2,13 +2,13 @@ import { hexToSs58 } from '../../shared/ss58';
 
 type Props = {
   currentAdmins: string[];
-  newAdmins: string[];
+  admins: string[];
 };
 
-export function AdminSetDiff({ currentAdmins, newAdmins }: Props) {
+export function AdminSetDiff({ currentAdmins, admins }: Props) {
   const current = new Set(currentAdmins.map((item) => item.toLowerCase()));
-  const next = new Set(newAdmins.map((item) => item.toLowerCase()));
-  const added = newAdmins.filter((item) => !current.has(item.toLowerCase()));
+  const next = new Set(admins.map((item) => item.toLowerCase()));
+  const added = admins.filter((item) => !current.has(item.toLowerCase()));
   const removed = currentAdmins.filter((item) => !next.has(item.toLowerCase()));
 
   return (

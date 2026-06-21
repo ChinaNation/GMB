@@ -54,7 +54,7 @@ pub struct DecryptedAdminInfo {
     pub decrypted_at_ms: u64,
 }
 
-/// 解密管理员密钥的请求构建结果(WUMIN_QR_V1 challenge envelope)。
+/// 解密管理员密钥的请求构建结果(CITIZEN_QR_V1 challenge envelope)。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecryptAdminRequestResult {

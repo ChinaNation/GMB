@@ -22,7 +22,7 @@ use frame_support::{
 use sp_runtime::DispatchResult;
 
 use crate::pallet::{
-    AccountNameOf, Config, DuoqianAdminsOf, Error, Event, Pallet, PendingPersonalCreate,
+    AccountNameOf, Config, AdminsOf, Error, Event, Pallet, PendingPersonalCreate,
     PersonalDuoqians,
 };
 use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus};
@@ -36,7 +36,7 @@ use votingengine::InternalVoteEngine;
 pub(crate) fn do_propose_create<T: Config>(
     who: T::AccountId,
     account_name: AccountNameOf<T>,
-    admins: DuoqianAdminsOf<T>,
+    admins: AdminsOf<T>,
     regular_threshold: u32,
     amount: BalanceOf<T>,
 ) -> DispatchResult {

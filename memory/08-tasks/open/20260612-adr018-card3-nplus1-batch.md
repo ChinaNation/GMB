@@ -1,6 +1,6 @@
 # 任务卡:卡③全部N+1循环逐条改批量(余额/storage/投票)
 
-属 ADR-018(memory/04-decisions/ADR-018-wuminapp-unified-query-low-load.md)。
+属 ADR-018(memory/04-decisions/ADR-018-citizenapp-unified-query-low-load.md)。
 
 卡③全部N+1循环逐条改批量(余额/storage/投票)
 

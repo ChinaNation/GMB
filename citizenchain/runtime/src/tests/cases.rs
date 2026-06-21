@@ -213,7 +213,8 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
 
         let pid = VotingEngine::next_proposal_id().saturating_sub(1);
 
-        for i in 0..13 {
+        // 提案人 admins[0] 在 propose_destroy 时已自动计一票,从 admins[1] 起补足到阈值 13。
+        for i in 1..13 {
             assert_ok!(InternalVote::cast(
                 RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[i])),
                 pid,
@@ -315,7 +316,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 
         let duoqian_account = AccountId::new([77u8; 32]);
         let beneficiary = AccountId::new([78u8; 32]);
-        let admins: personal_manage::pallet::DuoqianAdminsOf<Runtime> =
+        let admins: personal_manage::pallet::AdminsOf<Runtime> =
             vec![who.clone(), admin2.clone()]
                 .try_into()
                 .expect("admins should fit");

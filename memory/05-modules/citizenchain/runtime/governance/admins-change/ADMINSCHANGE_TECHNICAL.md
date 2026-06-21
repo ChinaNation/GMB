@@ -198,7 +198,7 @@ propose_admin_set_change(org, subject, admins, new_threshold)
 - `admins_change::Config::MaxAdminsPerInstitution = 1989`。
 - `admins_change::Config::MaxPersonalAccountAdmins = 64`。
 - `RuntimeInternalAdminProvider` 统一读取 `admins-change` Active / Pending API。
-- `RuntimeInternalAdminCountProvider` 从 `active_subject_admins_len` 读取。
+- `RuntimeInternalAdminsLenProvider` 从 `active_subject_admins_len` 读取。
 
 ## 10. 事件
 

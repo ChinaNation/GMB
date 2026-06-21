@@ -1289,7 +1289,7 @@ async fn complete_archive_delete(
         return Err(err(StatusCode::GONE, 3012, "delete challenge expired"));
     }
 
-    if let Err(reason) = crate::login::verify_wumin_login_signature(
+    if let Err(reason) = crate::login::verify_citizenwallet_login_signature(
         &signed_pubkey,
         &delete_payload,
         req.signature.trim(),
@@ -1318,7 +1318,7 @@ async fn complete_archive_delete(
     )
     .bind(deleted_at)
     .bind(&ctx.user_id)
-    .bind("wumin signed archive delete")
+    .bind("citizenwallet signed archive delete")
     .bind(&archive_id)
     .execute(tx.as_mut())
     .await
@@ -1547,7 +1547,7 @@ fn build_archive_delete_payload(
     admin_pubkey: &str,
     expire_at: i64,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    // 中文注释：wumin 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
+    // 中文注释：citizenwallet 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
     let admin_pubkey_hex = normalize_pubkey_hex(admin_pubkey).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1579,7 +1579,7 @@ fn build_archive_delete_sign_request(
         )
     })?;
     let sign_request = serde_json::json!({
-        "proto": crate::qr::WUMIN_QR_V1,
+        "proto": crate::qr::CITIZEN_QR_V1,
         "kind": crate::qr::QrKind::SignRequest.wire(),
         "id": challenge_id,
         "issued_at": issued_at,

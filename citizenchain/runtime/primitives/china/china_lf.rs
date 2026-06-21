@@ -11,8 +11,6 @@ pub struct ChinaLf {
     pub admins: &'static [[u8; 32]],
 }
 
-pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
-
 pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         sfid_full_name: "中华民族联邦共和国国家立法院",

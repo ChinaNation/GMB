@@ -143,7 +143,7 @@ pub mod pallet {
         /// `STATUS_PASSED` / `STATUS_REJECTED` 时广播到每个成员。
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
-        type InternalAdminCountProvider: InternalAdminCountProvider<Self::AccountId>;
+        type InternalAdminsLenProvider: InternalAdminsLenProvider<Self::AccountId>;
         /// 每个机构最大管理员数量（与 admins-change 一致），用于管理员快照 BoundedVec。
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;

@@ -65,12 +65,12 @@
 | `memory/` | AI 系统永久记忆 | memory | 仓库文档、规则、任务卡和 AI 系统主目录 |
 | `memory/00-vision/` | 愿景 | vision | 项目目标、信任边界和长期方向 |
 | `memory/01-architecture/` | 架构 | architecture | 仓库级和产品级架构文档 |
-| `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | WUMIN_QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
+| `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | CITIZEN_QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
 | `memory/01-architecture/sfid/` | SFID 架构 | sfid-architecture | SFID 产品架构、技术框架和并发框架文档 |
 | `memory/03-security/` | 安全 | security | 安全规则、边界和风险要求 |
 | `memory/04-decisions/` | 架构决策 | decisions | ADR 和重要设计决策 |
 | `memory/05-modules/` | 模块文档 | modules | 各产品、各模块技术文档 |
-| `memory/05-modules/wuminapp/rpc/` | wuminapp RPC | wuminapp-rpc | wuminapp 轻节点、RPC 和 smoldot 模块技术文档 |
+| `memory/05-modules/citizenapp/rpc/` | citizenapp RPC | citizenapp-rpc | citizenapp 轻节点、RPC 和 smoldot 模块技术文档 |
 | `memory/06-quality/` | 质量 | quality | 测试、缺陷、变更记录模板 |
 | `memory/06-quality/fixtures/` | 测试数据 | fixtures | 跨端共享测试 fixture，作为测试数据唯一真源 |
 | `memory/07-ai/` | AI 系统规则 | ai-system | AI 编程系统规则、流程、统一入口 |
@@ -85,16 +85,16 @@
 | `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
 | `sfid/backend/number/` | 身份 ID 编码协议 | number | SFID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
-| `wumin/` | 公民钱包 | wumin | 离线签名、扫码识别和钱包 UI |
-| `wuminapp/` | 公民 | wuminapp | Flutter 客户端、钱包、治理和轻节点能力 |
-| `wuminapp/im/proto/` | wuminapp 信息协议 | wuminapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
-| `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
-| `wuminapp/lib/im/` | wuminapp 信息 | wuminapp-im | 公民信息 Tab、聊天详情、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
-| `wuminapp/lib/im/crypto/` | wuminapp 信息加密 | wuminapp-im-crypto | IM 设备密钥、OpenMLS、KeyPackage、安全码和钱包账户绑定 |
-| `wuminapp/lib/im/storage/` | wuminapp 信息本地存储 | wuminapp-im-storage | IM 会话、路由缓存、消息、发送队列和附件缓存的本地存储边界 |
-| `wuminapp/lib/im/transport/` | wuminapp 信息传输 | wuminapp-im-transport | 通信节点传输、近场传输、自动路由和去重 |
-| `wuminapp/android/im/` | Android 信息近场 | android-im | wuminapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
-| `wuminapp/ios/im/` | iOS 信息近场 | ios-im | wuminapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
+| `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
+| `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
+| `citizenapp/im/proto/` | citizenapp 信息协议 | citizenapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
+| `citizenapp/lib/isar/` | citizenapp 本地数据库 | citizenapp-isar | citizenapp Isar 本地持久化实体、schema 和数据库入口 |
+| `citizenapp/lib/im/` | citizenapp 信息 | citizenapp-im | 公民信息 Tab、聊天详情、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
+| `citizenapp/lib/im/crypto/` | citizenapp 信息加密 | citizenapp-im-crypto | IM 设备密钥、OpenMLS、KeyPackage、安全码和钱包账户绑定 |
+| `citizenapp/lib/im/storage/` | citizenapp 信息本地存储 | citizenapp-im-storage | IM 会话、路由缓存、消息、发送队列和附件缓存的本地存储边界 |
+| `citizenapp/lib/im/transport/` | citizenapp 信息传输 | citizenapp-im-transport | 通信节点传输、近场传输、自动路由和去重 |
+| `citizenapp/android/im/` | Android 信息近场 | android-im | citizenapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
+| `citizenapp/ios/im/` | iOS 信息近场 | ios-im | citizenapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
 | `citizenchain/node/src/im/` | 通信节点 IM | node-im | 通信节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
 | `website/` | 官网 | website | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
@@ -109,28 +109,28 @@
 | 统一命名文件 | `unified-naming.md` | `memory/07-ai/` | 管理目录、文件、字段等新命名 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
-| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `wuminapp/im/proto/im_envelope.proto` / `wuminapp/lib/im/` / `citizenchain/node/src/im/` | 公民 P2P IM 的 Protobuf 外层协议与通信节点接口契约 |
-| IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `wuminapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
-| IM 路由记录 | `ImRouteRecord` | `GMB_IM_V1` / `wuminapp/lib/im/storage/im_isar_store.dart` / `wuminapp/lib/isar/wallet_isar.dart` | IM 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码和通信节点端点，不替代“我的通讯录” |
-| IM KeyPackage | `ImKeyPackage` / `ImMlsKeyPackage` | `GMB_IM_V1` / `citizenchain/node/src/im/keypackage.rs` / `wuminapp/lib/im/crypto/` | OpenMLS 设备预密钥包，发布到自己通信节点的对应钱包账号池并一次性消费 |
-| IM OpenMLS native 实现 | `NativeImMlsCrypto` / `ImMlsNativeBindings` | `wuminapp/lib/im/crypto/im_mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
-| IM OpenMLS 会话模型 | `ImMlsWireMessage` / `ImMlsOutboundMessage` / `ImMlsInboundMessage` / `ImMlsMessageKind` | `wuminapp/lib/im/crypto/im_mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
-| IM OpenMLS 状态目录 | `ImMlsStateStore` | `wuminapp/lib/im/crypto/im_mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
-| IM OpenMLS Rust FFI | `gmb_im_mls_create_key_package_json` / `gmb_im_mls_two_party_smoke_json` / `gmb_im_mls_encrypt_json` / `gmb_im_mls_decrypt_json` | `wuminapp/rust/src/im_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
-| IM 消息流状态机 | `ImMessageFlow` | `wuminapp/lib/im/im_message_flow.dart` | 远程通信节点链路的发送、接收、pending 重放和 ack 编排 |
-| IM 运行态编排 | `ImRuntime` / `ImPairedNodeConfig` | `wuminapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、自己的通信节点端点配置和后续专用 P2P 收发同步 |
-| IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | `wuminapp/lib/qr/bodies/im_node_pairing_body.dart` / `citizenchain/node/src/settings/communication-node/mod.rs` | 公民在“我的 -> 设置 -> 设置通信节点”扫描桌面设置页二维码，保存或更换自己的电脑通信节点 |
+| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/im/proto/im_envelope.proto` / `citizenapp/lib/im/` / `citizenchain/node/src/im/` | 公民 P2P IM 的 Protobuf 外层协议与通信节点接口契约 |
+| IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `citizenapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
+| IM 路由记录 | `ImRouteRecord` | `GMB_IM_V1` / `citizenapp/lib/im/storage/im_isar_store.dart` / `citizenapp/lib/isar/wallet_isar.dart` | IM 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码和通信节点端点，不替代“我的通讯录” |
+| IM KeyPackage | `ImKeyPackage` / `ImMlsKeyPackage` | `GMB_IM_V1` / `citizenchain/node/src/im/keypackage.rs` / `citizenapp/lib/im/crypto/` | OpenMLS 设备预密钥包，发布到自己通信节点的对应钱包账号池并一次性消费 |
+| IM OpenMLS native 实现 | `NativeImMlsCrypto` / `ImMlsNativeBindings` | `citizenapp/lib/im/crypto/im_mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
+| IM OpenMLS 会话模型 | `ImMlsWireMessage` / `ImMlsOutboundMessage` / `ImMlsInboundMessage` / `ImMlsMessageKind` | `citizenapp/lib/im/crypto/im_mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
+| IM OpenMLS 状态目录 | `ImMlsStateStore` | `citizenapp/lib/im/crypto/im_mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
+| IM OpenMLS Rust FFI | `gmb_im_mls_create_key_package_json` / `gmb_im_mls_two_party_smoke_json` / `gmb_im_mls_encrypt_json` / `gmb_im_mls_decrypt_json` | `citizenapp/rust/src/im_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
+| IM 消息流状态机 | `ImMessageFlow` | `citizenapp/lib/im/im_message_flow.dart` | 远程通信节点链路的发送、接收、pending 重放和 ack 编排 |
+| IM 运行态编排 | `ImRuntime` / `ImPairedNodeConfig` | `citizenapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、自己的通信节点端点配置和后续专用 P2P 收发同步 |
+| IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | `citizenapp/lib/qr/bodies/im_node_pairing_body.dart` / `citizenchain/node/src/settings/communication-node/mod.rs` | 公民在“我的 -> 设置 -> 设置通信节点”扫描桌面设置页二维码，保存或更换自己的电脑通信节点 |
 | 桌面通信节点功能设置 | `CommunicationNodeState` / `get_communication_node` / `set_communication_node_enabled` | `citizenchain/node/src/settings/communication-node/mod.rs` / `citizenchain/node/frontend/settings/communication-node/` | 区块链软件设置页独立 IM 能力开关，不属于归档/普通全节点模式选择 |
-| IM Isar 消息库 | `ImIsarStore` / `ImConversationEntity` / `ImRouteCacheEntity` / `ImMessageEntity` / `ImOutboundQueueEntity` / `ImPendingInboundEntity` | `wuminapp/lib/im/storage/im_isar_store.dart` / `wuminapp/lib/isar/wallet_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
-| IM 路由缓存记录 | `ImRouteRecord` | `wuminapp/lib/im/storage/im_isar_store.dart` | 公民端 IM 路由缓存模型，保存对方钱包聊天账户、IM 设备公钥、安全码和通信节点端点 |
-| IM 聊天页面 | `ImChatPage` | `wuminapp/lib/im/im_chat_page.dart` | 通讯录详情“消息”按钮和信息 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ImRuntime` 注入真实 P2P/MLS 发送和同步回调 |
-| IM 聊天 UI 适配器 | `imStoredMessageToChatMessage` / `imStoredMessagesToChatMessages` | `wuminapp/lib/im/im_chat_ui_adapter.dart` | 将本地 IM 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
-| IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | `citizenchain/node/src/im/endpoint.rs` / `wuminapp/lib/im/transport/` | 通信节点的 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型 |
-| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenchain/node/src/im/binding.rs` / `wuminapp/lib/im/crypto/` | 钱包聊天账户、IM 设备密钥和通信节点的绑定载荷 |
+| IM Isar 消息库 | `ImIsarStore` / `ImConversationEntity` / `ImRouteCacheEntity` / `ImMessageEntity` / `ImOutboundQueueEntity` / `ImPendingInboundEntity` | `citizenapp/lib/im/storage/im_isar_store.dart` / `citizenapp/lib/isar/wallet_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
+| IM 路由缓存记录 | `ImRouteRecord` | `citizenapp/lib/im/storage/im_isar_store.dart` | 公民端 IM 路由缓存模型，保存对方钱包聊天账户、IM 设备公钥、安全码和通信节点端点 |
+| IM 聊天页面 | `ImChatPage` | `citizenapp/lib/im/im_chat_page.dart` | 通讯录详情“消息”按钮和信息 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ImRuntime` 注入真实 P2P/MLS 发送和同步回调 |
+| IM 聊天 UI 适配器 | `imStoredMessageToChatMessage` / `imStoredMessagesToChatMessages` | `citizenapp/lib/im/im_chat_ui_adapter.dart` | 将本地 IM 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
+| IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | `citizenchain/node/src/im/endpoint.rs` / `citizenapp/lib/im/transport/` | 通信节点的 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型 |
+| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenchain/node/src/im/binding.rs` / `citizenapp/lib/im/crypto/` | 钱包聊天账户、IM 设备密钥和通信节点的绑定载荷 |
 | IM 直连投递请求 | `ImDirectDeliveryRequest` | `citizenchain/node/src/im/direct.rs` | 显式 PeerId + multiaddr 到对方通信节点的密文投递请求 |
-| IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | `citizenchain/node/src/im/keypackage.rs` / `wuminapp/lib/im/transport/` | 显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求 |
+| IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | `citizenchain/node/src/im/keypackage.rs` / `citizenapp/lib/im/transport/` | 显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求 |
 | IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | `citizenchain/node/src/im/network.rs` | `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应 |
-| Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | wumin / wuminapp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
+| Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | citizenwallet / citizenapp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
 | 机构管理 | `organization-manage` | runtime crate / pallet | 机构多签管理 pallet |
 | 个人多签管理 | `personal-manage` | runtime crate / pallet | 个人多签管理 pallet |
 | 管理员变更 | `admins-change` | runtime crate / pallet | 管理员主体、阈值和管理员变更 |
@@ -150,21 +150,21 @@
 | 签发管理员公钥 | `signer_pubkey` | credential / call data | 签发机构 `admins` 中实际签名管理员的公钥 |
 | 业务作用域省名称 | `scope_province_name` | credential / call data | 凭证适用的省级业务作用域 |
 | 业务作用域市名称 | `scope_city_name` | credential / call data | 凭证适用的市级业务作用域 |
-| 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `wuminapp/lib/rpc/` | 统一构造 wuminapp 在线 signed extrinsic，固定执行 immortal era 协议 |
-| 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
+| 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `citizenapp/lib/rpc/` | 统一构造 citizenapp 在线 signed extrinsic，固定执行 immortal era 协议 |
+| 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / citizenapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
 | 电子护照护照号 | `passport_no` | CPMS archives / CPMS frontend | CPMS 后端自动生成并印刷在公民护照上的 11 位护照号 |
-| 电子护照公民状态 | `citizen_status` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 公民状态，三端统一使用完整字段名 |
-| 电子护照选举资格 | `voting_eligible` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 选举资格，三端统一使用完整字段名 |
-| 电子护照投票状态 | `vote_status` | SFID citizens / wuminapp myid | SFID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
-| 电子护照身份状态 | `identity_status` | SFID citizens / wuminapp myid | SFID 按公民状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
-| 电子护照生效日期 | `valid_from` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
-| 电子护照截止日期 | `valid_until` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
+| 电子护照公民状态 | `citizen_status` | CPMS ARCHIVE / SFID citizens / citizenapp myid | CPMS 公民状态，三端统一使用完整字段名 |
+| 电子护照选举资格 | `voting_eligible` | CPMS ARCHIVE / SFID citizens / citizenapp myid | CPMS 选举资格，三端统一使用完整字段名 |
+| 电子护照投票状态 | `vote_status` | SFID citizens / citizenapp myid | SFID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
+| 电子护照身份状态 | `identity_status` | SFID citizens / citizenapp myid | SFID 按公民状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
+| 电子护照生效日期 | `valid_from` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
+| 电子护照截止日期 | `valid_until` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
 | 公民状态更新时间 | `status_updated_at` | CPMS ARCHIVE / SFID citizens | SFID 内部用于拒绝旧档案码覆盖新状态的秒级时间戳 |
-| 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
-| 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / SFID citizens / wuminapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
-| 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 固定 `sr25519` |
-| 电子护照身份ID | `sfid_number` | SFID citizens / wuminapp myid | SFID 生成并返回给用户展示的身份ID号码 |
-| 电子护照绑定状态 | `bind_status` | SFID citizens / wuminapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
+| 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
+| 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / SFID citizens / citizenapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
+| 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / citizenapp myid | 固定 `sr25519` |
+| 电子护照身份ID | `sfid_number` | SFID citizens / citizenapp myid | SFID 生成并返回给用户展示的身份ID号码 |
+| 电子护照绑定状态 | `bind_status` | SFID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
 | CPMS 编号工具 | `number` | `cpms/backend/number/` | CPMS 后端档案号与护照号生成模块 |
 | CPMS 档案生命周期 | `lifecycle` | `cpms/backend/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
 | CPMS 状态导出 | `export` | `cpms/backend/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
@@ -179,7 +179,7 @@
 | 镇下地址段 ID | `address_unit_id` | CPMS archives / address_units | CPMS 档案选择的地址段稳定 ID |
 | 详细地址输入段 | `address_detail` | CPMS archives / CPMS frontend | 管理员录入的可变详细地址文本，与地址段组合为完整详细地址 |
 | 完整详细地址快照 | `address_full_snapshot` | CPMS archives | 保存时由地址段名称和详细地址输入段组成的只读快照 |
-| CPMS 前端二维码 | `qr` | `cpms/frontend/qr/` | CPMS 前端 WUMIN_QR_V1 解析和浏览器扫码工具 |
+| CPMS 前端二维码 | `qr` | `cpms/frontend/qr/` | CPMS 前端 CITIZEN_QR_V1 解析和浏览器扫码工具 |
 | CPMS 前端通用层 | `common` | `cpms/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
 
 ## 6. 新命名登记模板
@@ -244,7 +244,7 @@
 - SFID 后端独立链业务目录。
 - SFID 前端独立链业务目录。
 - SFID 前端独立业务 API 目录。
-- wuminapp 旧大写 Isar 目录。
+- citizenapp 旧大写 Isar 目录。
 
 历史文件或外部工具生成物中已有的，不因此自动修改；新建命名禁止使用。
 
@@ -270,15 +270,15 @@
 | `memory/05-modules/cpms/` | CPMS 模块文档 | cpms-module-docs | CPMS 后端、安装和档案模块文档 |
 | `memory/05-modules/sfid/` | SFID 模块文档 | sfid-module-docs | SFID 后端、前端和业务模块文档 |
 | `memory/05-modules/website/` | 官网模块文档 | website-module-docs | 官网模块文档 |
-| `memory/05-modules/wuminapp/` | wuminapp 模块文档 | wuminapp-module-docs | wuminapp 移动端模块文档 |
-| `memory/05-modules/wuminapp/governance/` | wuminapp 治理 | wuminapp-governance | 移动端治理流程文档 |
-| `memory/05-modules/wuminapp/offchain/` | wuminapp 链下 | wuminapp-offchain | 移动端链下交互文档 |
-| `memory/05-modules/wuminapp/onchain/` | wuminapp 链上 | wuminapp-onchain | 移动端链上交互文档 |
-| `memory/05-modules/wuminapp/qr/` | wuminapp QR | wuminapp-qr | 移动端扫码和签名二维码文档 |
-| `memory/05-modules/wuminapp/rpc/` | wuminapp RPC | wuminapp-rpc | 移动端 RPC 和轻节点文档 |
-| `memory/05-modules/wuminapp/signer/` | wuminapp 签名 | wuminapp-signer | 移动端签名流程文档 |
-| `memory/05-modules/wuminapp/user/` | wuminapp 用户 | wuminapp-user | 移动端用户模块文档 |
-| `memory/05-modules/wuminapp/wallet/` | wuminapp 钱包 | wuminapp-wallet | 移动端钱包模块文档 |
+| `memory/05-modules/citizenapp/` | citizenapp 模块文档 | citizenapp-module-docs | citizenapp 移动端模块文档 |
+| `memory/05-modules/citizenapp/governance/` | citizenapp 治理 | citizenapp-governance | 移动端治理流程文档 |
+| `memory/05-modules/citizenapp/offchain/` | citizenapp 链下 | citizenapp-offchain | 移动端链下交互文档 |
+| `memory/05-modules/citizenapp/onchain/` | citizenapp 链上 | citizenapp-onchain | 移动端链上交互文档 |
+| `memory/05-modules/citizenapp/qr/` | citizenapp QR | citizenapp-qr | 移动端扫码和签名二维码文档 |
+| `memory/05-modules/citizenapp/rpc/` | citizenapp RPC | citizenapp-rpc | 移动端 RPC 和轻节点文档 |
+| `memory/05-modules/citizenapp/signer/` | citizenapp 签名 | citizenapp-signer | 移动端签名流程文档 |
+| `memory/05-modules/citizenapp/user/` | citizenapp 用户 | citizenapp-user | 移动端用户模块文档 |
+| `memory/05-modules/citizenapp/wallet/` | citizenapp 钱包 | citizenapp-wallet | 移动端钱包模块文档 |
 
 ## 10b. 错误码文档命名登记
 
@@ -314,7 +314,7 @@
 | `sfid/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
 | `sfid/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦管理员、市管理员和管理员列表 DTO |
 | `sfid/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
-| `sfid/backend/core/qr/` | QR | core-qr | 后端 WUMIN_QR_V1 协议辅助和统一 sign_request 构造 |
+| `sfid/backend/core/qr/` | QR | core-qr | 后端 CITIZEN_QR_V1 协议辅助和统一 sign_request 构造 |
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
 | `sfid/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
 | `sfid/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
@@ -345,37 +345,37 @@
 | `sfid/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
 | `sfid/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
 | `sfid/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
-| `sfid/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 WUMIN_QR_V1 工具 |
+| `sfid/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 CITIZEN_QR_V1 工具 |
 | `sfid/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
 | `sfid/frontend/admins/` | 管理员 | admins | 联邦管理员、市管理员、Passkey 和签名挑战前端流程 |
 | `sfid/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
 | `sfid/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
 
-## 12. wuminapp 功能目录命名登记
+## 12. citizenapp 功能目录命名登记
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `wuminapp/lib/citizen/` | 公民 | citizen | wuminapp 底部“公民”Tab 入口、公民投票页和公共页 |
-| `wuminapp/lib/governance/organization-manage/` | 机构多签管理 | organization-manage | wuminapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
-| `wuminapp/lib/governance/personal-manage/` | 个人多签管理 | personal-manage | wuminapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
-| `wuminapp/lib/governance/shared/` | 治理共享 | shared | 治理提案通用模型、上下文、查询、缓存、机构信息和 Subject 解码 |
-| `wuminapp/lib/transaction/duoqian-transfer/` | 多签转账 | duoqian-transfer | wuminapp 多签转账提案、详情、投票、余额提示和转账入口 |
-| `wuminapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
-| `wuminapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
-| `wuminapp/lib/transaction/offchain-transaction/` | 链下 | offchain | 链下请求和链下业务辅助 |
-| `wuminapp/lib/transaction/onchain-transaction/` | 链上 | onchain | 链上交易和链上状态辅助 |
-| `wuminapp/lib/transaction/shared/` | 交易共享 | shared | 本地交易记录与 pending 对账等交易共享底座 |
-| `wuminapp/lib/qr/` | QR | qr | 扫码、二维码和签名请求 |
-| `wuminapp/lib/rpc/` | RPC | rpc | RPC 客户端、轻节点和 extrinsic 构造 |
-| `wuminapp/lib/security/` | 安全 | security | 移动端安全策略和工具 |
-| `wuminapp/lib/signer/` | 签名 | signer | 移动端签名辅助 |
-| `wuminapp/lib/transaction/` | 交易 | transaction | 交易 Tab、链上支付、链下支付、多签转账与交易共享能力 |
-| `wuminapp/lib/ui/` | UI | ui | 移动端通用 UI |
-| `wuminapp/lib/my/` | 我的 | my | 我的页、电子护照、用户身份和个人工具 |
-| `wuminapp/lib/votingengine/internal-vote/` | 内部投票 | internal-vote | wuminapp 内部投票查询、提交、待确认和投票 UI |
-| `wuminapp/lib/votingengine/joint-vote/` | 联合投票 | joint-vote | wuminapp 联合投票客户端预留目录 |
-| `wuminapp/lib/votingengine/citizen-vote/` | 公民投票 | citizen-vote | wuminapp 公民投票客户端预留目录 |
-| `wuminapp/lib/wallet/` | 钱包 | wallet | 钱包账户和资产 |
+| `citizenapp/lib/citizen/` | 公民 | citizen | citizenapp 底部“公民”Tab 入口、公民投票页和公共页 |
+| `citizenapp/lib/governance/organization-manage/` | 机构多签管理 | organization-manage | citizenapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
+| `citizenapp/lib/governance/personal-manage/` | 个人多签管理 | personal-manage | citizenapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
+| `citizenapp/lib/governance/shared/` | 治理共享 | shared | 治理提案通用模型、上下文、查询、缓存、机构信息和 Subject 解码 |
+| `citizenapp/lib/transaction/duoqian-transfer/` | 多签转账 | duoqian-transfer | citizenapp 多签转账提案、详情、投票、余额提示和转账入口 |
+| `citizenapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
+| `citizenapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
+| `citizenapp/lib/transaction/offchain-transaction/` | 链下 | offchain | 链下请求和链下业务辅助 |
+| `citizenapp/lib/transaction/onchain-transaction/` | 链上 | onchain | 链上交易和链上状态辅助 |
+| `citizenapp/lib/transaction/shared/` | 交易共享 | shared | 本地交易记录与 pending 对账等交易共享底座 |
+| `citizenapp/lib/qr/` | QR | qr | 扫码、二维码和签名请求 |
+| `citizenapp/lib/rpc/` | RPC | rpc | RPC 客户端、轻节点和 extrinsic 构造 |
+| `citizenapp/lib/security/` | 安全 | security | 移动端安全策略和工具 |
+| `citizenapp/lib/signer/` | 签名 | signer | 移动端签名辅助 |
+| `citizenapp/lib/transaction/` | 交易 | transaction | 交易 Tab、链上支付、链下支付、多签转账与交易共享能力 |
+| `citizenapp/lib/ui/` | UI | ui | 移动端通用 UI |
+| `citizenapp/lib/my/` | 我的 | my | 我的页、电子护照、用户身份和个人工具 |
+| `citizenapp/lib/votingengine/internal-vote/` | 内部投票 | internal-vote | citizenapp 内部投票查询、提交、待确认和投票 UI |
+| `citizenapp/lib/votingengine/joint-vote/` | 联合投票 | joint-vote | citizenapp 联合投票客户端预留目录 |
+| `citizenapp/lib/votingengine/citizen-vote/` | 公民投票 | citizen-vote | citizenapp 公民投票客户端预留目录 |
+| `citizenapp/lib/wallet/` | 钱包 | wallet | 钱包账户和资产 |
 
 ## 12b. citizenchain node 治理功能目录命名登记
 
@@ -466,7 +466,7 @@
 
 ## 16. QR display field key 命名登记
 
-本节登记 `WUMIN_QR_V1 / sign_request` 中 `body.display.fields[*].key` 的当前命名；字段语义和 action 对照以 `memory/01-architecture/qr/qr-action-registry.md` 为准。
+本节登记 `CITIZEN_QR_V1 / sign_request` 中 `body.display.fields[*].key` 的当前命名；字段语义和 action 对照以 `memory/01-architecture/qr/qr-action-registry.md` 为准。
 
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|

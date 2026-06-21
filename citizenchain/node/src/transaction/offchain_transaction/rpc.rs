@@ -1,4 +1,4 @@
-//! 清算行节点对 wuminapp 的 RPC 接口(Step 1 骨架)。
+//! 清算行节点对 citizenapp 的 RPC 接口(Step 1 骨架)。
 //!
 //! 中文注释:
 //! - Step 1 仅暴露**只读查询**:余额、下一个 nonce、待上链笔数。
@@ -31,7 +31,7 @@ use crate::core::service::FullClient;
 /// `reserve.rs` 保持一致,storage key 前缀计算 `twox_128(PALLET_NAME)` 依赖它。
 const PALLET_NAME: &[u8] = b"OffchainTransaction";
 
-/// 清算行节点暴露给 wuminapp 的查询 RPC。
+/// 清算行节点暴露给 citizenapp 的查询 RPC。
 ///
 /// 命名空间 `offchain`,方法名与扫码支付协议保持一致。
 #[rpc(server, namespace = "offchain")]
@@ -44,7 +44,7 @@ pub trait OffchainClearingRpc {
 
     /// 查询 L3 下一个应使用的 `nonce`(Step 2 扫码支付前调用)。
     ///
-    /// wuminapp 本地保管 nonce 的同时,每次签名前问一次以防错位。
+    /// citizenapp 本地保管 nonce 的同时,每次签名前问一次以防错位。
     #[method(name = "queryNextNonce")]
     fn query_next_nonce(&self, user: AccountId32) -> RpcResult<u64>;
 
@@ -54,7 +54,7 @@ pub trait OffchainClearingRpc {
 
     // ─── Step 2b 新增:扫码支付提交入口 ───
 
-    /// 扫码支付提交入口。wuminapp 本地对 `PaymentIntent` 做 SCALE 编码后
+    /// 扫码支付提交入口。citizenapp 本地对 `PaymentIntent` 做 SCALE 编码后
     /// 用 L3 sr25519 私钥签名,把 hex 形式的 intent 和 64 字节签名一起提交。
     ///
     /// 节点侧:
@@ -70,11 +70,11 @@ pub trait OffchainClearingRpc {
         payer_sig_hex: String,
     ) -> RpcResult<SubmitPaymentResp>;
 
-    // ─── Step 2c-i 新增:wuminapp 扫码前置查询 ───
+    // ─── Step 2c-i 新增:citizenapp 扫码前置查询 ───
 
     /// 查询 L3 当前绑定的清算行主账户地址(对应链上 `UserBank[user]`)。
     ///
-    /// wuminapp 在扫码付款前调用,以确定"本人付款方清算行"(`payer_bank`)。
+    /// citizenapp 在扫码付款前调用,以确定"本人付款方清算行"(`payer_bank`)。
     /// 未绑定返回 `None`,调用方据此提示用户先完成绑定流程。
     #[method(name = "queryUserBank")]
     fn query_user_bank(&self, user: AccountId32) -> RpcResult<Option<AccountId32>>;
@@ -82,7 +82,7 @@ pub trait OffchainClearingRpc {
     /// 查询指定清算行当前生效费率(对应链上 `L2FeeRateBp[bank]`)。
     ///
     /// 返回 `rate_bp`(万分之一)与 `min_fee_fen`(最低手续费,分)。
-    /// wuminapp 据此在 UI 上展示费率与预计扣费,并本地预计算 `fee_amount`
+    /// citizenapp 据此在 UI 上展示费率与预计扣费,并本地预计算 `fee_amount`
     /// 以便构造 `PaymentIntent`。runtime `ValueQuery` 默认 0,本 RPC 同步
     /// 把 0 映射为"费率未设置"提示,调用方应拒绝提交。
     #[method(name = "queryFeeRate")]
@@ -340,7 +340,7 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
     }
 }
 
-/// 清算行 ACK 签名域,供 wuminapp 验证"节点确实接受了该支付意图"。
+/// 清算行 ACK 签名域,供 citizenapp 验证"节点确实接受了该支付意图"。
 const L2_ACK_SIGNING_DOMAIN: &[u8] = b"GMB_L2_ACK_V1";
 
 /// 与 runtime `settlement::calc_fee` 保持一致:按万分比四舍五入,最低取 `primitives::fee_policy::OFFCHAIN_MIN_FEE`。
@@ -432,7 +432,7 @@ fn deposit_balance_storage_key(bank: &AccountId32, user: &AccountId32) -> Storag
 
 // ─── 内部工具 ───
 
-/// 解析 hex(支持 `0x` 前缀),与现有 wuminapp / offchain 客户端风格一致。
+/// 解析 hex(支持 `0x` 前缀),与现有 citizenapp / offchain 客户端风格一致。
 fn decode_hex(input: &str) -> Result<Vec<u8>, String> {
     let text = input.strip_prefix("0x").unwrap_or(input);
     if text.is_empty() {

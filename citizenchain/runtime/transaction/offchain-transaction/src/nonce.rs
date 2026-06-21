@@ -25,9 +25,9 @@ pub fn consume_nonce<T: Config>(
     Ok(())
 }
 
-/// 查询 L3 的"下一个应该使用的 nonce"(供 wuminapp RPC 查询)。
+/// 查询 L3 的"下一个应该使用的 nonce"(供 citizenapp RPC 查询)。
 ///
-/// wuminapp 在签名前先问清算行节点拿这个值,避免本地 nonce 与链上错位。
+/// citizenapp 在签名前先问清算行节点拿这个值,避免本地 nonce 与链上错位。
 pub fn next_nonce<T: Config>(payer: &T::AccountId) -> u64 {
     L3PaymentNonce::<T>::get(payer).saturating_add(1)
 }

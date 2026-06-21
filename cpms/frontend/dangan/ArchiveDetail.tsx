@@ -8,7 +8,7 @@ import { installStatus } from '../initialize/api';
 import * as api from './api';
 import type { Archive, ArchiveAuditLog, ArchiveMaterial, ArchiveMaterialType, ElectionScopeLevel } from './types';
 import type { AddressUnit, Town } from '../address/types';
-import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
+import { parseQrEnvelope, type SignResponseBody } from '../qr/citizenQr';
 import CameraQrScanner from '../qr/CameraQrScanner';
 import { ScanIcon } from '../components/ScanIcon';
 import { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
@@ -418,7 +418,7 @@ export default function ArchiveDetail() {
     try {
       const env = parseQrEnvelope(text);
       if (env.kind !== 'user_contact') {
-        throw new Error('请扫描 wumin 的钱包地址二维码');
+        throw new Error('请扫描 citizenwallet 的钱包地址二维码');
       }
       const body = env.body as { address: string };
       return body.address.trim();
@@ -544,7 +544,7 @@ export default function ArchiveDetail() {
     try {
       const env = parseQrEnvelope(raw.trim());
       if (env.kind !== 'sign_response') {
-        throw new Error('请扫描 wumin 返回的删除签名回执');
+        throw new Error('请扫描 citizenwallet 返回的删除签名回执');
       }
       if (env.id !== deleteChallenge.challenge_id) {
         throw new Error('删除签名回执和当前请求不一致');
@@ -1173,7 +1173,7 @@ export default function ArchiveDetail() {
                   有效期至 {new Date(deleteChallenge.expire_at * 1000).toLocaleTimeString()}
                 </div>
                 <div style={{ marginTop: 6, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                  当前登录管理员使用 wumin 扫码签名
+                  当前登录管理员使用 citizenwallet 扫码签名
                 </div>
               </div>
 
@@ -1190,7 +1190,7 @@ export default function ArchiveDetail() {
                   onActiveChange={setDeleteScannerActive}
                   onDetected={handleDeleteReceiptScanned}
                   onError={setDeleteScanError}
-                  hint="扫描 wumin 返回的删除签名回执"
+                  hint="扫描 citizenwallet 返回的删除签名回执"
                   busy={deleteBusy}
                   loadingText="摄像头初始化中..."
                 />

@@ -24,7 +24,7 @@ node 端只支持：
 
 node 端明确拒绝：
 
-- `PersonalDuoqian AccountId`：个人多签转账，该能力只在 wuminapp 端实现。
+- `PersonalDuoqian AccountId`：个人多签转账，该能力只在 citizenapp 端实现。
 
 ## QR 字段
 

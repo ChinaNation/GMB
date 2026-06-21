@@ -4,7 +4,7 @@
 //   1. 用户填 RPC 域名 + 端口
 //   2. 点"自测连通性",节点桌面端跑 DNS/wss/链ID/PeerId 4 重检查
 //   3. 全部通过才解锁"扫码签名提交"按钮
-//   4. wumin 冷钱包扫请求 QR → 摄像头扫响应 QR → 链上 register_clearing_bank
+//   4. citizenwallet 冷钱包扫请求 QR → 摄像头扫响应 QR → 链上 register_clearing_bank
 //
 // 注:peer_id 由本机 system_localPeerId RPC 拉,用户不可手改(防输错;同时与连通性
 //    自测的远端校验形成闭环——远端必须返回与本字段相同的 PeerId 才放行)。
@@ -61,7 +61,7 @@ export function ClearingBankDeclareNodePage({ sfidNumber, sfidFullName, onBack, 
           ? adminsChangeApi.getActivatedAdmins(sfidNumber, {
               sfidNumber,
               accountHex: detail.adminAccountHex,
-              org: detail.adminOrg,
+              org: detail.org,
             })
           : [] as ActivatedAdmin[])
         .catch(() => [] as ActivatedAdmin[]),
@@ -261,7 +261,7 @@ export function ClearingBankDeclareNodePage({ sfidNumber, sfidFullName, onBack, 
         <div className="modal-overlay" onClick={() => setStep('tested')}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>扫码签名声明清算行节点</h3>
-            <p>使用 wumin 冷钱包扫描以下二维码完成签名</p>
+            <p>使用 citizenwallet 冷钱包扫描以下二维码完成签名</p>
             <div className="qr-container">
               <QRCodeSVG value={signRequest.requestJson} size={280} level="L" />
             </div>

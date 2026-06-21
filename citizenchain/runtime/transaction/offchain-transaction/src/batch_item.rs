@@ -1,7 +1,7 @@
 //! 扫码支付清算体系 Step 1 新增:支付意图与签名数据结构。
 //!
 //! 中文注释:
-//! - `PaymentIntent` 是 L3 用私钥签名的原始数据,wuminapp 本地签,链上验。
+//! - `PaymentIntent` 是 L3 用私钥签名的原始数据,citizenapp 本地签,链上验。
 //! - 本文件**不引入新的 Storage**,仅提供纯结构与签名哈希函数。
 //! - `OffchainBatchItem` 在 Step 2 引入(当前 lib.rs 的旧结构 Step 2 重写)。
 
@@ -10,9 +10,9 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_std::vec::Vec;
 
-/// L3 扫码支付意图,wuminapp 本地 sr25519 签名的原始数据。
+/// L3 扫码支付意图,citizenapp 本地 sr25519 签名的原始数据。
 ///
-/// 字段顺序**必须与 wuminapp 的 Dart 实现逐字段对齐**,否则签名哈希不一致。
+/// 字段顺序**必须与 citizenapp 的 Dart 实现逐字段对齐**,否则签名哈希不一致。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct PaymentIntent<AccountId, BlockNumber> {
     /// 全局唯一交易 ID(防重放,与链上 ProcessedOffchainTx 联动)。
@@ -35,7 +35,7 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
     pub expires_at: BlockNumber,
 }
 
-/// L3 签名域分隔符,与 wuminapp 保持**逐字节一致**。
+/// L3 签名域分隔符,与 citizenapp 保持**逐字节一致**。
 pub const L3_PAY_SIGNING_DOMAIN: &[u8] = b"GMB_L3_PAY_V1";
 
 /// 清算行批次级签名域分隔符,必须与 node/offchain/packer.rs 保持一致。
@@ -44,7 +44,7 @@ pub const BATCH_SIGNING_DOMAIN: &[u8] = b"GMB_OFFCHAIN_BATCH_V1";
 impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumber> {
     /// 生成签名消息哈希:`blake2_256(DOMAIN || SCALE(intent))`。
     ///
-    /// wuminapp 的 Dart 端必须用同样的拼接顺序,否则签名验证失败。
+    /// citizenapp 的 Dart 端必须用同样的拼接顺序,否则签名验证失败。
     pub fn signing_hash(&self) -> [u8; 32] {
         let mut data = Vec::new();
         data.extend_from_slice(L3_PAY_SIGNING_DOMAIN);
@@ -76,7 +76,7 @@ pub fn batch_signing_hash<AccountId: Encode>(
 /// 与现有 `pallet::OffchainBatchItem`(旧省储行模型,字段少)并存,Step 2 起
 /// 新 `submit_offchain_batch_v2` extrinsic 使用本结构。
 ///
-/// 字段顺序必须与 wuminapp Dart 端的 SCALE 编码逐字段对齐。
+/// 字段顺序必须与 citizenapp Dart 端的 SCALE 编码逐字段对齐。
 #[derive(
     Clone,
     Debug,
@@ -169,8 +169,8 @@ mod tests {
     // ─── 扫码支付 Step 2c-ii-a golden vectors ────────────────────────────
     //
     // 目的:锁定 `PaymentIntent` 的 SCALE 编码布局 + signing_hash 算法,使
-    // wuminapp `payment_intent.dart::NodePaymentIntent` 端的编码/哈希必须逐
-    // 字节一致。wuminapp 端 `test/trade/payment_intent_golden_test.dart` 写入
+    // citizenapp `payment_intent.dart::NodePaymentIntent` 端的编码/哈希必须逐
+    // 字节一致。citizenapp 端 `test/trade/payment_intent_golden_test.dart` 写入
     // **相同的 fixture + 相同的期望 hex**,任一端实现漂移 → 两端 CI 同时红。
     //
     // 布局(固定 204 字节,详见 batch_item.rs 结构注释):

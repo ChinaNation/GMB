@@ -11,9 +11,9 @@
   - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
   - `memory/08-tasks/done/20260525-sfid-bind-upload-qr.md`
-  - `memory/08-tasks/done/20260525-sfid-bind-sign-request-wumin-scan.md`
+  - `memory/08-tasks/done/20260525-sfid-bind-sign-request-citizenwallet-scan.md`
   - `memory/08-tasks/done/20260525-sfid-bind-copy-myid-scan-square.md`
-  - `memory/08-tasks/done/20260525-175008-sfid绑定签名回执与wuminapp启动anr修复.md`
+  - `memory/08-tasks/done/20260525-175008-sfid绑定签名回执与citizenapp启动anr修复.md`
   - `memory/08-tasks/open/20260530-sfid-admins-module-unify.md`
   - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
@@ -45,9 +45,9 @@ sfid/frontend/
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── china/                     # 行政区只读元数据 API 和确定性列表缓存
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
-├── core/                      # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
+├── core/                      # 跨业务复用组件,含 CITIZEN_QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
 │   └── institution/           # 私权/教育共用机构新增表单,不承载业务 API
-│   └── qr/                    # WUMIN_QR_V1 前端解析器
+│   └── qr/                    # CITIZEN_QR_V1 前端解析器
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── docs/                      # 机构资料库前端出口
 ├── education/                 # 教育机构页面入口,统一管理 JY 教育委员会、法人学校和 F+JY 分支机构
@@ -89,10 +89,10 @@ sfid/frontend/
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 联邦/市管理员本地后台接口统一放 `admins/`;联邦管理员目录接口放 `admins/api.ts`,
   市管理员列表接口放 `admins/city_admins_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
-- `core/WuminSignaturePanel.tsx` 与 `core/WuminSignatureModal.tsx` 是统一签名 UI;
+- `core/CitizenSignaturePanel.tsx` 与 `core/CitizenSignatureModal.tsx` 是统一签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
-- 管理员扫码登录页面必须明确引导 `wumin` 公民钱包生成登录回执;`wuminapp` 不处理
-  `login_challenge / login_receipt`,不得在登录页文案中引导到 `wuminapp`。
+- 管理员扫码登录页面必须明确引导 `citizenwallet` 公民钱包生成登录回执;`citizenapp` 不处理
+  `login_challenge / login_receipt`,不得在登录页文案中引导到 `citizenapp`。
 - `core/institution/CreateInstitutionForm.tsx` 是私权/公权/教育新增弹窗唯一表单实现;
   `private/PrivateCreateModal.tsx`、`gov/GovCreateModal.tsx` 和 `education/EducationCreateModal.tsx`
   只做本模块 API 注入,不得再复制表单逻辑。
@@ -107,17 +107,17 @@ sfid/frontend/
   操作范围覆盖机构创建、详情编辑、账户创建/删除、资料上传/下载/删除和 CPMS 安装授权状态。
 - `core/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 公民钱包签名弹窗固定在最高安全层。
-- `core/qr/wuminQr.ts` 是前端 WUMIN_QR_V1 envelope 解析唯一入口;不得恢复独立
+- `core/qr/citizenQr.ts` 是前端 CITIZEN_QR_V1 envelope 解析唯一入口;不得恢复独立
   `frontend/qr/` 目录。
 - 管理端权限类型统一为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`;前端类型必须与后端
   `admins/operation_auth.rs` 对齐,不得恢复二级权限命名。
 - `PASSKEY` 业务写操作不得直接裸调用 CRUD 端点;必须先通过
   `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
 - `PASSKEY_CHALLENGE` 写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
-  `WUMIN_QR_V1` 公民钱包签名流程取得一次性 grant。
+  `CITIZEN_QR_V1` 公民钱包签名流程取得一次性 grant。
 - `PASSKEY_CHALLENGE` 写操作触发 Passkey + 公民钱包签名时,不得为了规避遮挡而关闭编辑、新增或删除确认弹窗。
   正确顺序是:底层业务弹窗保持打开并进入 loading/禁用状态,浏览器 Passkey 原生验证完成后,
-  `WuminSignatureModal` 以最高安全层展示在所有业务弹窗前面;签名成功后先关闭签名弹窗,
+  `CitizenSignatureModal` 以最高安全层展示在所有业务弹窗前面;签名成功后先关闭签名弹窗,
   再关闭或刷新原业务弹窗。失败或取消时底层业务弹窗保留,方便用户修改后重试。
 - 签名弹窗扫码按钮不得复用底层业务 loading。底层业务 loading 只负责防止重复提交;
   扫码按钮只在已经识别到签名回执并提交 `commitAdminAction` 时进入 loading/禁用,
@@ -127,9 +127,9 @@ sfid/frontend/
 
 ## 公民绑定弹窗 UI 口径
 
-- `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 wuminapp `sign_request`、扫描 wuminapp `sign_response`、提交 SFID 绑定。
+- `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 citizenapp `sign_request`、扫描 citizenapp `sign_response`、提交 SFID 绑定。
 - 扫码框提示统一为“点击扫描档案码”；签名回执页提示为“点击扫描签名回执”。
-- 进入签名二维码展示步骤后，弹窗标题切换为“wuminapp 签名”；进入签名回执扫描页后，弹窗标题切换为“扫描签名回执”。
+- 进入签名二维码展示步骤后，弹窗标题切换为“citizenapp 签名”；进入签名回执扫描页后，弹窗标题切换为“扫描签名回执”。
 - 绑定签名回执的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
   不得给公民绑定挑战额外添加 `bind-` 前缀,否则 SFID 后端会查不到 challenge。
 - “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用

@@ -6,13 +6,13 @@
 
 ## 背景
 
-冷钱包（wumin）属于离线设备，不经常更新。但在线端（wuminapp）的签名类型会持续增加（更换管理员、更换投票 key、决议发行投票等）。
+冷钱包（citizenwallet）属于离线设备，不经常更新。但在线端（citizenapp）的签名类型会持续增加（更换管理员、更换投票 key、决议发行投票等）。
 
 原有协议中 `display.fields` 是 `Map<String, String>`，冷钱包需要硬编码 `_fieldLabels` 将 key 翻译成中文标签。每新增一个签名类型，必须同时修改三个位置：
 
-1. wuminapp 在线端构造 display.fields
-2. wumin `offline_sign_page.dart` 的 `_fieldLabels` 映射表
-3. wumin `offline_sign_page.dart` 的 `_actionLabels` 映射表
+1. citizenapp 在线端构造 display.fields
+2. citizenwallet `offline_sign_page.dart` 的 `_fieldLabels` 映射表
+3. citizenwallet `offline_sign_page.dart` 的 `_actionLabels` 映射表
 
 这种模式不可持续，容易遗漏且强制冷钱包同步更新。
 
@@ -43,11 +43,11 @@
 
 ## 影响
 
-### wuminapp（在线端）
+### citizenapp（在线端）
 - 所有构造 `display` 的位置改为 List 格式
 - 新增 `action_label` 字段传递交易类型中文名
 
-### wumin（冷钱包）
+### citizenwallet（冷钱包）
 - 删除 `_fieldLabels` 和 `_actionLabels` 静态映射表
 - 渲染逻辑改为遍历 List，直接使用每个条目的 `label`
 - `format: "currency"` 时应用千分位格式化（仅影响显示，不影响验证）
@@ -59,7 +59,7 @@
 
 ### 协议兼容性
 - 此变更不向后兼容，两端必须同步更新
-- 协议版本号保持 `WUMIN_QR_V1` 不变（冷钱包与在线端始终配套部署）
+- 协议版本号保持 `CITIZEN_QR_V1` 不变（冷钱包与在线端始终配套部署）
 
 ## 好处
 

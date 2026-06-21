@@ -1,13 +1,13 @@
-# WUMIN_QR_V1 统一二维码协议规范
+# CITIZEN_QR_V1 统一二维码协议规范
 
-- 版本:`WUMIN_QR_V1`
+- 版本:`CITIZEN_QR_V1`
 - 创建日期:2026-04-09
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有二维码(CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 除外)
 
 ## 1. 设计铁律
 
-1. **唯一协议字符串**:`WUMIN_QR_V1`。不存在任何其他 proto 字符串。
+1. **唯一协议字符串**:`CITIZEN_QR_V1`。不存在任何其他 proto 字符串。
 2. **唯一 kind 枚举**:6 个当前值,见第 3 节。不存在任何 `type` / `purpose` / `msg_type` 字段。
 3. **唯一字段命名**:见第 4 节字段字典。不存在任何别名、兼容读、`a ?? b`。
 4. **唯一签名原文拼接**:见第 5 节。所有需要 sr25519 签名的 kind 共用一个拼接函数。
@@ -18,7 +18,7 @@
 
 ```jsonc
 {
-  "proto": "WUMIN_QR_V1",
+  "proto": "CITIZEN_QR_V1",
   "kind":  "<6 个当前 kind 之一>",
   "id":    "<临时码必填,固定码省略>",
   "issued_at":  <临时码必填,固定码省略,unix 秒>,
@@ -28,7 +28,7 @@
 ```
 
 **字段规则**:
-- `proto`:恒为 `"WUMIN_QR_V1"`
+- `proto`:恒为 `"CITIZEN_QR_V1"`
 - `kind`:恒为第 3 节 6 个当前值之一,snake_case
 - `id`:临时码必填,字符长度 16-128,允许 `[a-zA-Z0-9_-]`;固定码**字段不出现**
 - `issued_at` / `expires_at`:临时码必填,unix 秒级整数;固定码**字段不出现**
@@ -38,21 +38,21 @@
 - 顶层字段**只有** `proto` / `kind` / `id` / `issued_at` / `expires_at` / `body` 六个
 - `body` 里**绝对不重复**顶层字段
 - 解析器遇到未知顶层字段:**报错**
-- 解析器遇到 `proto != "WUMIN_QR_V1"`:**报错**
+- 解析器遇到 `proto != "CITIZEN_QR_V1"`:**报错**
 - 解析器遇到 `kind` 不在 6 个当前值列表:**报错**
 
 ## 3. 6 个当前 kind 清单
 
 | kind | 类型 | 生成者 | 扫描者 | 说明 |
 |---|---|---|---|---|
-| `login_challenge` | 临时 | SFID/CPMS 后端 | wumin | 登录挑战码 |
-| `login_receipt` | 临时 | wumin | SFID/CPMS 后端 | 登录回执码 |
-| `sign_request` | 临时 | wuminapp / citizenchain/node / CPMS | wumin | 离线签名请求 |
-| `sign_response` | 临时 | wumin | wuminapp | 离线签名回执 |
-| `user_contact` | **固定** | wuminapp | wuminapp / citizenchain / sfid 前端 | 个人联系码 |
-| `user_transfer` | 临时 | wuminapp | wuminapp / citizenchain | 临时收款码 |
+| `login_challenge` | 临时 | SFID/CPMS 后端 | citizenwallet | 登录挑战码 |
+| `login_receipt` | 临时 | citizenwallet | SFID/CPMS 后端 | 登录回执码 |
+| `sign_request` | 临时 | citizenapp / citizenchain/node / CPMS | citizenwallet | 离线签名请求 |
+| `sign_response` | 临时 | citizenwallet | citizenapp | 离线签名回执 |
+| `user_contact` | **固定** | citizenapp | citizenapp / citizenchain / sfid 前端 | 个人联系码 |
+| `user_transfer` | 临时 | citizenapp | citizenapp / citizenchain | 临时收款码 |
 
-> 注:`user_duoqian` 协议已于 **2026-05-03 下线** — wuminapp 改为通过链上反向索引(遍历 `AdminsChange::AdminAccounts` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。2026-05-08 起发现范围明确为 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId`;`0x02 注册机构归属关系` 只保留给机构归属/检索。
+> 注:`user_duoqian` 协议已于 **2026-05-03 下线** — citizenapp 改为通过链上反向索引(遍历 `AdminsChange::AdminAccounts` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。2026-05-08 起发现范围明确为 `PersonalDuoqian AccountId` 与 `InstitutionAccount AccountId`;`0x02 注册机构归属关系` 只保留给机构归属/检索。
 
 ## 4. body 字段字典(按 kind 派发)
 
@@ -88,7 +88,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `system` | string | 是 | 原样回传自挑战码 |
-| `pubkey` | string | 是 | 签名者(wumin 公民钱包)公钥,`0x` + hex |
+| `pubkey` | string | 是 | 签名者(citizenwallet 公民钱包)公钥,`0x` + hex |
 | `sig_alg` | string | 是 | 固定 `"sr25519"` |
 | `signature` | string | 是 | 对签名原文的签名,`0x` + hex |
 | `payload_hash` | string | 是 | 签名原文字节的 SHA-256,`0x` + hex |
@@ -165,7 +165,7 @@
 
 ```jsonc
 {
-  "proto": "WUMIN_QR_V1",
+  "proto": "CITIZEN_QR_V1",
   "kind":  "user_contact",
   "body": {
     "address": "<SS58>",
@@ -205,7 +205,7 @@
 
 ### 4.7 `user_duoqian` — **已下线**(2026-05-03)
 
-原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:wuminapp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalDuoqian AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 SFID 机构,不再作为账户发现或转账支出主体。
+原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:citizenapp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalDuoqian AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 SFID 机构,不再作为账户发现或转账支出主体。
 
 相关代码下线清单:
 - `lib/qr/bodies/user_duoqian_body.dart` — 删除整文件
@@ -220,7 +220,7 @@
 所有需要 sr25519 签名的 kind(`login_challenge` 的 `sys_sig`、`login_receipt` 的 `signature`、`sign_response` 的 `signature`)共用这一个拼接:
 
 ```
-WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 ```
 
 字段之间用 `|` 分隔;缺失字段以空串占位(对 `system`)或 `0` 占位(对 `expires_at`);`<principal>` 按 kind 取值:
@@ -274,8 +274,8 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 
 **协议字符串规则**:
 
-- 当前唯一合法协议字符串:`WUMIN_QR_V1`
-- 禁止新增或恢复第二套扫码协议字符串,包括 `WUMINAPP_USER_CARD_V1`
+- 当前唯一合法协议字符串:`CITIZEN_QR_V1`
+- 禁止新增或恢复第二套扫码协议字符串,包括 `CITIZENAPP_USER_CARD_V1`
 
 **绝对不允许出现的旧类型名**:
 ```
@@ -289,7 +289,7 @@ QrSignResponse
 
 ## 9. 测试契约
 
-所有 wuminapp / wumin / citizenchain / sfid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
+所有 citizenapp / citizenwallet / citizenchain / sfid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
 
 - 序列化测试:`toJson(body) + envelope` 必须**逐字节**等于对应 fixture
 - 反序列化测试:`parse(fixture)` 必须解出预期字段,字段数量、类型、值全相等

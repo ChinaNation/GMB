@@ -174,8 +174,11 @@ impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
-        _province: &[u8],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         true
     }
@@ -194,8 +197,11 @@ impl
         _eligible_total: u64,
         _nonce: &votingengine::pallet::VoteNonceOf<Test>,
         _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _province: &[u8],
+        _issuer_sfid_number: &[u8],
+        _issuer_main_account: &AccountId32,
         _signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
     ) -> bool {
         true
     }
@@ -232,7 +238,7 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = ();
-    type InternalAdminCountProvider = ();
+    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
