@@ -284,6 +284,59 @@ pub(crate) fn province_scope_for_registry_org_conn(
     }
 }
 
+/// 中文注释:解析当前管理员所属机构的简称(cid_short_name 单一真源)。
+/// 联邦注册局管理员 → org_code='FEDERAL_REGISTRY' 的全局唯一机构(总统府联邦注册局,简称=联邦注册局);
+/// 市注册局管理员   → org_code='CITY_REGISTRY' AND province_name AND city_name 的本市机构(如 合肥市注册局)。
+/// 无对应行返回 None(前端按空处理,绝不另造名字)。
+pub(crate) fn resolve_home_institution_short_name_conn(
+    conn: &mut Client,
+    registry_org_code: &RegistryOrgCode,
+    scope_province_name: Option<&str>,
+    scope_city_name: Option<&str>,
+) -> Result<Option<String>, String> {
+    let row = match registry_org_code {
+        RegistryOrgCode::FederalRegistry => conn
+            .query_opt(
+                "SELECT cid_short_name FROM subjects \
+                 WHERE org_code = 'FEDERAL_REGISTRY' AND status = 'ACTIVE' LIMIT 1",
+                &[],
+            )
+            .map_err(|e| format!("query federal registry short name failed: {e}"))?,
+        RegistryOrgCode::CityRegistry => {
+            let (Some(province), Some(city)) = (scope_province_name, scope_city_name) else {
+                return Ok(None);
+            };
+            conn.query_opt(
+                "SELECT cid_short_name FROM subjects \
+                 WHERE org_code = 'CITY_REGISTRY' AND status = 'ACTIVE' \
+                   AND province_name = $1 AND city_name = $2 LIMIT 1",
+                &[&province, &city],
+            )
+            .map_err(|e| format!("query city registry short name failed: {e}"))?
+        }
+    };
+    Ok(row.and_then(|r| r.get::<usize, Option<String>>(0)))
+}
+
+pub(crate) fn resolve_home_institution_short_name(
+    db: &Db,
+    registry_org_code: &RegistryOrgCode,
+    scope_province_name: Option<&str>,
+    scope_city_name: Option<&str>,
+) -> Result<Option<String>, String> {
+    let registry_org_code = registry_org_code.clone();
+    let province = scope_province_name.map(str::to_string);
+    let city = scope_city_name.map(str::to_string);
+    db.with_client(move |conn| {
+        resolve_home_institution_short_name_conn(
+            conn,
+            &registry_org_code,
+            province.as_deref(),
+            city.as_deref(),
+        )
+    })
+}
+
 pub(crate) fn find_federal_registry_scope_conn(
     conn: &mut Client,
     admin_account: &str,
@@ -911,4 +964,132 @@ pub(crate) fn passkey_status_text(status: &AdminPasskeyStatus) -> &'static str {
         AdminPasskeyStatus::Active => "ACTIVE",
         AdminPasskeyStatus::Revoked => "REVOKED",
     }
+}
+
+/// 中文注释:已签发注销凭证行(下发 /deregistration-info 用)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct DeregistrationCredentialRow {
+    pub(crate) scope: i16,
+    pub(crate) account_name: String,
+    pub(crate) target_account: String,
+    pub(crate) deregister_nonce: String,
+    pub(crate) signature: Option<String>,
+    pub(crate) issuer_cid_number: String,
+    pub(crate) issuer_main_account: String,
+    pub(crate) signer_pubkey: String,
+}
+
+/// 中文注释:写入注册局域注销态(ISSUED,signature 待 commit 层回填)。
+/// 同账户已有活跃 ISSUED(唯一索引)或 nonce 重复时返回 conflict。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn insert_deregistration_issued_conn(
+    conn: &mut Client,
+    cid_number: &str,
+    account_name: &str,
+    scope: u8,
+    target_account: &str,
+    deregister_nonce: &str,
+    issuer_cid_number: &str,
+    issuer_main_account: &str,
+    signer_pubkey: &str,
+    issued_by: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO institution_deregistrations
+            (cid_number, account_name, scope, target_account, deregister_nonce,
+             issuer_cid_number, issuer_main_account, signer_pubkey, issued_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        &[
+            &cid_number,
+            &account_name,
+            &(scope as i16),
+            &target_account,
+            &deregister_nonce,
+            &issuer_cid_number,
+            &issuer_main_account,
+            &signer_pubkey,
+            &issued_by,
+        ],
+    )
+    .map_err(|e| {
+        if e.code() == Some(&postgres::error::SqlState::UNIQUE_VIOLATION) {
+            "http:conflict:deregistration already pending for this account".to_string()
+        } else {
+            format!("insert deregistration failed: {}", postgres_error_text(&e))
+        }
+    })?;
+    Ok(())
+}
+
+/// 中文注释:commit 层签发成功后回填签名 + issuer(issuer 来自 env runtime_signing_context,
+/// 与签名同源,下发时直读不再查 env)。
+pub(crate) fn set_deregistration_credential_conn(
+    conn: &mut Client,
+    deregister_nonce: &str,
+    signature: &str,
+    issuer_cid_number: &str,
+    issuer_main_account: &str,
+    signer_pubkey: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE institution_deregistrations
+            SET signature = $2, issuer_cid_number = $3,
+                issuer_main_account = $4, signer_pubkey = $5
+         WHERE deregister_nonce = $1 AND status = 'ISSUED'",
+        &[
+            &deregister_nonce,
+            &signature,
+            &issuer_cid_number,
+            &issuer_main_account,
+            &signer_pubkey,
+        ],
+    )
+    .map_err(|e| {
+        format!(
+            "set deregistration credential failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
+    Ok(())
+}
+
+/// 中文注释:签发失败时清掉无签名的 ISSUED 行,保持一致(不留无签名残行)。
+pub(crate) fn delete_deregistration_by_nonce_conn(
+    conn: &mut Client,
+    deregister_nonce: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM institution_deregistrations WHERE deregister_nonce = $1",
+        &[&deregister_nonce],
+    )
+    .map_err(|e| format!("delete deregistration failed: {}", postgres_error_text(&e)))?;
+    Ok(())
+}
+
+/// 中文注释:取该机构当前已签发(ISSUED 且已回填签名)的注销凭证,供机构管理员下发。
+pub(crate) fn get_active_deregistration_by_cid_conn(
+    conn: &mut Client,
+    cid_number: &str,
+) -> Result<Option<DeregistrationCredentialRow>, String> {
+    let row = conn
+        .query_opt(
+            "SELECT scope, account_name, target_account, deregister_nonce, signature,
+                    issuer_cid_number, issuer_main_account, signer_pubkey
+             FROM institution_deregistrations
+             WHERE cid_number = $1 AND status = 'ISSUED' AND signature IS NOT NULL
+             ORDER BY issued_at DESC
+             LIMIT 1",
+            &[&cid_number],
+        )
+        .map_err(|e| format!("query deregistration failed: {}", postgres_error_text(&e)))?;
+    Ok(row.map(|r| DeregistrationCredentialRow {
+        scope: r.get(0),
+        account_name: r.get(1),
+        target_account: r.get(2),
+        deregister_nonce: r.get(3),
+        signature: r.get(4),
+        issuer_cid_number: r.get(5),
+        issuer_main_account: r.get(6),
+        signer_pubkey: r.get(7),
+    }))
 }

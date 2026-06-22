@@ -120,7 +120,7 @@ Future<String> _injectLightSyncState(String chainSpecJson) async {
 ### CP-2：冻结规则排除 lightSyncState（Shell + 文档·P0）
 
 **文件**：
-- `scripts/check-chainspec-frozen.sh:26`
+- `citizenapp/scripts/check-chainspec-frozen.sh:26`
 - `citizenapp/scripts/citizenapp-run.sh:49`
 - `memory/07-ai/chainspec-frozen.md:48,80`
 
@@ -130,7 +130,7 @@ Future<String> _injectLightSyncState(String chainSpecJson) async {
 
 **改法**：
 
-`scripts/check-chainspec-frozen.sh:26`：
+`citizenapp/scripts/check-chainspec-frozen.sh:26`：
 ```bash
 # 旧
 ACTUAL="$(jq -cS 'del(.bootNodes)' "$CHAINSPEC" | shasum -a 256 | awk '{print $1}')"

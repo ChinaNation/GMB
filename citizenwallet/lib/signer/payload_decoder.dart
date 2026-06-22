@@ -191,11 +191,9 @@ class PayloadDecoder {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
         // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
         if (callIndex == PalletRegistry.proposeCloseCall) {
-          return _decodeProposeClose(
-            bytes,
-            action: 'propose_close_institution',
-            summaryLabel: '机构多签',
-          );
+          // 中文注释:机构 propose_close 携带注销凭证(nonce/签名/签发机构/签发管理员公钥),
+          // 比个人多签多 3 个 Vec + 2×32,需专用解码;个人多签仍走 66 字节 _decodeProposeClose。
+          return _decodeProposeCloseInstitution(bytes);
         }
         if (callIndex == PalletRegistry.proposeCreateInstitutionCall) {
           return _decodeProposeCreateInstitution(bytes);
@@ -1092,6 +1090,43 @@ class PayloadDecoder {
   // PersonalManage(7) / propose_close(1)
   // 格式：[17][1][account:32][beneficiary:32]
   // ---------------------------------------------------------------------------
+  /// 机构注销 propose_close(OrganizationManage 17.1)。
+  /// call_data:[2][account:32][beneficiary:32]
+  ///   [register_nonce:Vec][signature:Vec][issuer_cid_number:Vec]
+  ///   [issuer_main_account:32][signer_pubkey:32] + 签名尾。
+  /// 注销凭证由注册局在 CID 签发,机构管理员冷签上链(见 ADR-023 §6.3)。
+  static DecodedPayload? _decodeProposeCloseInstitution(Uint8List bytes) {
+    var offset = 2;
+    if (bytes.length < offset + 64) return null;
+    final accountId = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final beneficiaryId = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    // 依次跳过三个 Vec<u8>:register_nonce / signature / issuer_cid_number。
+    for (var i = 0; i < 3; i++) {
+      final (len, lenSize) = _decodeCompactU32(bytes, offset);
+      if (lenSize == 0) return null;
+      offset += lenSize + len;
+      if (offset > bytes.length) return null;
+    }
+    // issuer_main_account:32 + signer_pubkey:32。
+    if (offset + 64 > bytes.length) return null;
+    offset += 64;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    final account = Keyring().encodeAddress(accountId.toList(), _ss58Prefix);
+    final beneficiary =
+        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    return DecodedPayload(
+      action: 'propose_close_institution',
+      summary:
+          '提案注销机构多签 ${_truncateAddress(account)}(余额转 ${_truncateAddress(beneficiary)})',
+      fields: {
+        'account': account,
+        'beneficiary': beneficiary,
+      },
+    );
+  }
+
   static DecodedPayload? _decodeProposeClose(
     Uint8List bytes, {
     required String action,

@@ -40,16 +40,14 @@ import { notice } from './utils/notice';
 const { Header, Content } = Layout;
 
 /** Header 右上角管理员身份与姓名,样式与 CPMS 管理端保持一致。 */
-function resolveHeaderAdminIdentity(auth: AdminAuth | null): { registryOrgCodeLabel: string; adminDisplayName: string } {
-  if (!auth) return { registryOrgCodeLabel: '', adminDisplayName: '' };
+function resolveHeaderAdminIdentity(auth: AdminAuth | null): { institutionShortName: string; adminDisplayName: string } {
+  if (!auth) return { institutionShortName: '', adminDisplayName: '' };
   const name = typeof auth.admin_display_name === 'string' ? auth.admin_display_name.trim() : '';
-  // 中文注释:当前只剩联邦注册局管理员和市注册局管理员两个管理员权限。
-  const registryOrgCodeLabel = auth.registry_org_code === 'FEDERAL_REGISTRY'
-    ? '联邦注册局管理员'
-    : auth.registry_org_code === 'CITY_REGISTRY'
-      ? '市注册局管理员'
-      : '';
-  return { registryOrgCodeLabel, adminDisplayName: name || '暂未设置' };
+  // 中文注释:左段显示所属机构简称,取自 auth.institution_short_name(= subjects.cid_short_name 单一真源),
+  // 不再由 registry_org_code 硬编码另造名字;空时(简称未加载)整段留空,不显示伪造名。
+  const institutionShortName =
+    typeof auth.institution_short_name === 'string' ? auth.institution_short_name.trim() : '';
+  return { institutionShortName, adminDisplayName: name || '暂未设置' };
 }
 
 type ActiveView =
@@ -114,6 +112,7 @@ function AppInner() {
           scope_province_name: checked.scope_province_name ?? null,
           scope_city_name: checked.scope_city_name ?? null,
           passkey_bound: checked.passkey_bound,
+          institution_short_name: checked.institution_short_name ?? null,
         };
         setAuth(refreshedAuth);
         writeStoredAuth(refreshedAuth);
@@ -266,8 +265,12 @@ function AppInner() {
                 display: 'inline-flex', alignItems: 'center', gap: 8,
               }}
             >
-              <span>{headerAdminIdentity.registryOrgCodeLabel}</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
+              {headerAdminIdentity.institutionShortName && (
+                <>
+                  <span>{headerAdminIdentity.institutionShortName}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
+                </>
+              )}
               <span>{headerAdminIdentity.adminDisplayName}</span>
             </Typography.Text>
             <Button

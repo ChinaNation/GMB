@@ -646,6 +646,10 @@ fn official_name_pair(name: &str) -> (String, String) {
             format!("{COUNTRY}国家监察院联邦调查署"),
             "联邦调查署".to_string(),
         ),
+        // 中文注释:总统府联邦注册局简称=联邦注册局(全称保留)。缺此臂会落默认 _ => (name,name),
+        // 致 cid_short_name==cid_full_name,前端只能另造"联邦注册局"第二源。此处是唯一真源。
+        // 兄弟 4 局(安全/情报/特勤/人事)同样缺简称,因无 CID 登录管理员且简称值未定,留 follow-up。
+        "总统府联邦注册局" => ("总统府联邦注册局".to_string(), "联邦注册局".to_string()),
         _ if name.ends_with("省联邦政府") => {
             (name.to_string(), name.replace("省联邦政府", "省政府"))
         }

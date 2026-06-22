@@ -54,6 +54,7 @@ pub(crate) async fn admin_auth_check(
             scope_province_name: ctx.scope_province_name,
             scope_city_name: ctx.scope_city_name,
             passkey_bound: ctx.passkey_bound,
+            institution_short_name: ctx.institution_short_name,
         },
     })
     .into_response()
@@ -115,6 +116,14 @@ pub(crate) async fn admin_auth_identify(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
+    let scope_city_name = resolve_scope_city_name(&admin);
+    let institution_short_name = repo::resolve_home_institution_short_name(
+        &state.db,
+        &admin.registry_org_code,
+        province.as_deref(),
+        scope_city_name.as_deref(),
+    )
+    .unwrap_or(None);
 
     Json(ApiResponse {
         code: 0,
@@ -124,8 +133,9 @@ pub(crate) async fn admin_auth_identify(
             registry_org_code: admin.registry_org_code.clone(),
             admin_display_name: build_admin_display_name_from_user(&admin, province.as_deref()),
             scope_province_name: province,
-            scope_city_name: resolve_scope_city_name(&admin),
+            scope_city_name,
             passkey_bound,
+            institution_short_name,
         },
     })
     .into_response()
@@ -291,6 +301,12 @@ pub(crate) async fn admin_auth_verify(
             build_admin_display_name_from_user(&admin, scope_province_name.as_deref());
         let scope_city_name = resolve_scope_city_name(&admin);
         let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_account)?;
+        let institution_short_name = repo::resolve_home_institution_short_name_conn(
+            conn,
+            &admin.registry_org_code,
+            scope_province_name.as_deref(),
+            scope_city_name.as_deref(),
+        )?;
         let access_token = Uuid::new_v4().to_string();
         let expire_at = now + Duration::hours(8);
         let new_session = AdminSession {
@@ -311,6 +327,7 @@ pub(crate) async fn admin_auth_verify(
                 scope_province_name,
                 scope_city_name,
                 passkey_bound,
+                institution_short_name,
             },
         ))
     });

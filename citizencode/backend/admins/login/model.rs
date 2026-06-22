@@ -55,6 +55,9 @@ pub(crate) struct AdminAuthContext {
     pub(crate) scope_city_name: Option<String>,
     /// 中文注释:当前登录管理员是否已绑定有效 Passkey;前端据此强制进入管理员列表更新密钥。
     pub(crate) passkey_bound: bool,
+    /// 中文注释:当前管理员所属机构的简称(联邦注册局/{市}注册局),取自 subjects.cid_short_name 单一真源;
+    /// 前端右上角徽标据此显示简称,不再由 registry_org_code 硬编码另造名字。
+    pub(crate) institution_short_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -66,6 +69,7 @@ pub(crate) struct AdminAuthOutput {
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
     pub(crate) passkey_bound: bool,
+    pub(crate) institution_short_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -81,6 +85,7 @@ pub(crate) struct AdminIdentifyOutput {
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
     pub(crate) passkey_bound: bool,
+    pub(crate) institution_short_name: Option<String>,
 }
 
 #[derive(Deserialize)]

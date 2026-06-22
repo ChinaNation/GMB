@@ -5,4 +5,4 @@ set -e
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # chainspec.json 冻结守卫（bootNodes 变更不受限，仅校验创世内容）
-"$REPO_ROOT/scripts/check-chainspec-frozen.sh"
+"$REPO_ROOT/citizenapp/scripts/check-chainspec-frozen.sh"

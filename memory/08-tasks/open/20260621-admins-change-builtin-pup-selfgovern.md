@@ -1,7 +1,7 @@
 # 任务卡：链端 — PUP 自治 + 机构注销凭证 close + 根账户硬保护（先沟通）
 
 - 任务编号：20260621-admins-change-builtin-pup-selfgovern
-- 状态：in_progress（admins-change 部分已落地验证;organization-manage + CID + 钱包 + 前端待续）
+- 状态：in_progress（链端 + CID 后端 + 钱包 decoder + CID 前端入口全落地验证;仅剩 node propose_close 调用面适配 + 运行期端到端冒烟 + runtime 级集成测试 3 项 follow-up）
 - 所属模块：citizenchain/runtime/governance/{admins-change, organization-manage} + citizencode/backend（注销态+凭证）
 - 当前负责人：Blockchain Agent（链端）+ CID Agent（CID 注销态+凭证签发）
 - 创建时间：2026-06-21（2026-06-21 并入 close 设计）
@@ -32,16 +32,28 @@
   - 注销凭证签发器 `chain_runtime::build_institution_deregistration_credential`(citizencode/backend/core/chain_runtime.rs),payload=`DUOQIAN‖OP_SIGN_DEREGISTER(0x14)‖genesis_hash‖scope‖cid_number‖account_name‖target_account‖nonce‖issuer×3`,与链端 `verify_institution_deregistration` **逐字节一致**;抽纯函数 `deregistration_payload_digest` + **golden 测试锁死字节**(任何类型/顺序漂移即红)。
   - 最严档动作 `AdminActionType::InstitutionDeregister/InstitutionAccountDeregister`(operation_auth.rs:enum/as_str/label/parse/`auth_type=PasskeyChallenge`)。
   - **注销态表**(D1):`core/db.rs init_current_schema` 新增 `institution_deregistrations`(cid_number/account_name/scope/target_account/deregister_nonce UNIQUE/signature/status[ISSUED|ONCHAIN_CLOSED]/issued_by/issued_at/closed_at)+ 活跃唯一索引(同账户同时仅一张 ISSUED)。
-  - citizencode backend cargo test 64/64、0 warning、fmt 过。签发器暂 `#[allow(dead_code)]`(待 actions 接入,同其它 credential DTO 风格)。
-- **待续(D 剩余)— handler 接线 + 路由**:
-  - 🔑 **关键架构约束(已摸清)**:注销凭证签名要 `&AppState`(`build_institution_deregistration_credential`),且机构查存+管辖要 `state.db.get_institution_with_accounts(cid)` + `get_visible_scope(ctx).includes_province/city`(`subjects/admin.rs:543 get_institution` 是范本)——这两者都是 **state 级**,而通用派发 `apply_action_conn`/`preview_action_conn` 是 **conn 级**。**正解:把 InstitutionDeregister/...AccountDeregister 当特例在 `prepare_admin_action`/`commit_admin_action` 的 state 层处理**(机构查存→管辖判定→创世/治理拒签(`inst.created_by='SYSTEM'`)→`derive_account(cid,account_name)`→`parse_sr25519_pubkey_bytes`→`[u8;32]` target→生成 nonce→建凭证→写 ISSUED+signature),不走 conn 级 apply 派发(它对 business action 本就返回错误)。
-  - repo:`insert_deregistration_issued_conn`/`set_deregistration_signature_conn`/`get_active_deregistration_by_cid_conn`(随 handler 一并加,避免 unused)。
-  - 路由:`GET /api/v1/app/institutions/:cid/deregistration-info`(镜像 `chain_duoqian_info.rs:208 app_get_institution_registration_info`),下发 ISSUED 凭证给机构管理员构造 propose_close。
-  - 测试:创世/治理拒签、管辖外拒、target_account=derive_account 一致、ISSUED 唯一约束、deregistration-info 仅返 ISSUED。
+  - **注销态表**(D1):`core/db.rs init_current_schema` 新增 `institution_deregistrations`(+ issuer×3 列,签发时回填供下发直读)+ `deregister_nonce` UNIQUE + 活跃唯一索引。
+  - **handler 接线 + 路由(D 剩余,2026-06-21 完成)**:
+    - conn 级机构查询:`main.rs` 抽 `Db::get_institution_with_accounts_conn`(原方法薄包装,零行为变化),让 preview/apply 派发留在 conn 级。
+    - `actions.rs`:`validate_institution_deregister_conn`(查存→`get_visible_scope` 管辖→`created_by='SYSTEM'` 拒根基→account 活跃→`derive_account` 派生 target,与链端同源)+ preview/apply 两 match 分支 + `is_governance` 纳入两动作 + **commit 后处理(state 层)建凭证 + 回填 signature/issuer,失败删 ISSUED 行**。
+    - repo:`insert_deregistration_issued_conn`/`set_deregistration_credential_conn`/`delete_deregistration_by_nonce_conn`/`get_active_deregistration_by_cid_conn` + `DeregistrationCredentialRow`。
+    - 路由:`GET /api/v1/app/institutions/:cid/deregistration-info`(镜像 registration-info,只读 ISSUED 凭证下发)。
+  - **验证**:citizencode backend cargo test **64/64 + golden 字节锁**、**0 warning**、fmt 过;`institution_deregistrations` 表 + 索引在开发库**实测落库**(14 列 + 唯一约束齐)。
+  - 设计微调:`SCOPE_INSTITUTION/SCOPE_ACCOUNT` 在 CID 侧定义为 0/1(与链端同值);issuer 字段 commit 回填(env 源,与签名同源)。
+- **D 完成。** 运行期端到端(真实机构+管理员+passkey+冷签)需带 dev DB 的集成冒烟,留作验收。
 
-**再后(E/F/node)**:
-- CitizenWallet(E):propose_close 带凭证 decoder。CID 前端(F):注销入口(PasskeyChallenge 交互)。
+**已完成并验证 — CitizenWallet decoder(E)+ CID 前端注销入口(F,2026-06-21)**:
+- **E CitizenWallet decoder**:`lib/signer/payload_decoder.dart` 机构 `propose_close`(pallet OrganizationManage=17,call=1)分支改走**专用** `_decodeProposeCloseInstitution`(不再复用个人 66 字节 `_decodeProposeClose`):解 `[scope:2][account:32][beneficiary:32]` 后顺序 skip 3 个 `Vec<u8>`(register_nonce/signature/issuer_cid_number,各 `_decodeCompactU32` 读长跳过)再 issuer_main_account:32 + signer_pubkey:32,末尾 `_hasValidSigningTail`;返回 action `propose_close_institution`/摘要"提案注销机构多签…"。个人多签 `propose_close`(per-mgmt 7.1)仍走原 66 字节解码,不动。`action_labels.dart` 机构标签改"注销机构多签提案"。**dart analyze 0 issue**。
+- **F CID 前端注销入口**:`gov/GovDetailPage.tsx` 机构信息卡 `extra` 用 `<Space>` 包 CPMS 按钮 + `<Popconfirm>` 包 `<Button danger>注销机构</Button>`,门控 `canWrite && status==='ACTIVE' && created_by!=='SYSTEM'`(创世/治理机构前端即隐藏,后端 `is_genesis_protected`/org 闸权威兜底);`onDeregisterInstitution` 复用 `runPasskeyChallengeGrant('INSTITUTION_DEREGISTER', {target,cid_number})` → 成功提示后 `load()`。`admins/admin_security_api.ts` `AdminActionType` 补 `INSTITUTION_DEREGISTER`/`INSTITUTION_ACCOUNT_DEREGISTER`。**npx tsc --noEmit 0 error**。
+
+**已完成并验证 — CID 前端两处登录/列表修复(2026-06-21)**:
+- **无 passkey 登录直达管理员列表 tab**(#2):`core/InstitutionDetailNavLayout.tsx` 加 `initialActiveKey?` prop,`useState` 初始化优先取(命中 availableItems 才用);`gov/GovDetailPage.tsx` 传 `initialActiveKey={auth.passkey_bound===false && adminListSection ? 'admins' : undefined}`。无 passkey 管理员登录后直接落在【管理员列表】tab,看得到待绑 passkey 红点。
+- **管理员姓名列显示哈希修复**(#3):`backend/admins/seed.rs` 联邦注册局 215 admin 的 `admin_display_name` 原写空串(`String::new()`),导致前端无 catalog 回退时裸显 0xd641… 哈希;改 `format!("{province}联邦注册局管理员{seat}")`(seat=`idx % FEDERAL_ADMINS_PER_PROVINCE + 1`)。开发库实测 0xd641…→"中枢省联邦注册局管理员1"。
+
+**仅剩 follow-up(node + 集成测试)**:
 - node:凡构造 propose_close 的 Tauri/前端调用面随签名变更补齐新参数(动态构造不阻断编译)。
+- runtime 级集成测试(真实 InternalAdminProvider)验创世 PUP 自治全流程。
+- 运行期端到端冒烟:真实机构 + 管理员 + passkey + 冷签 + 上链 close,带 dev DB。
 
 ---
 
@@ -89,5 +101,5 @@ PUP 内置**保持 `BuiltinInstitution`**,放宽两处校验接受 PUP：
 - 关主账户级联关该机构全部账户。
 - 注销由注册局管理员在 CID 发起,走 PasskeyChallenge 最严档(passkey + 冷钱包确认 + 一次性授权)。
 
-## 待确认问题（仅剩 1 项,定了即可开工）
-- 链上 close 提案谁提交:(a) 注册局直接提交可强制处置违规机构 / (b) 机构 admin 带凭证提交需机构配合 / (c) 两者皆可。建议 (a) 或 (c)。
+## 已拍板补充（2026-06-21,落地即定）
+- 链上 close 提案谁提交 = **(b) 机构 admin 带凭证提交**:CID 注册局只签发注销凭证(不代签 extrinsic),机构管理员在 CitizenWallet 冷签 `propose_close` 上链;CID 端绝不持机构私钥,符合"CID 不代签"红线。强制处置(a)若需,另立卡走治理投票路径,不混入本注销凭证通道。

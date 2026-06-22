@@ -311,6 +311,45 @@ pub(crate) async fn app_get_institution_registration_info(
     .into_response()
 }
 
+/// 中文注释:机构管理员拉取已签发的注销凭证(注册局在 CID 注销动作中签好),
+/// 用于构造 propose_close 上链冷签。签名不在此处生成,只读 institution_deregistrations 的 ISSUED 行。
+pub(crate) async fn app_get_institution_deregistration_info(
+    State(state): State<AppState>,
+    Path(cid_number): Path<String>,
+) -> impl IntoResponse {
+    let cid_number = cid_number.trim().to_string();
+    if cid_number.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number is required");
+    }
+    let row = match state.db.with_client({
+        let cid = cid_number.clone();
+        move |conn| crate::admins::repo::get_active_deregistration_by_cid_conn(conn, &cid)
+    }) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "query deregistration info failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "deregistration query failed",
+            );
+        }
+    };
+    let Some(row) = row else {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            1004,
+            "no issued deregistration for institution",
+        );
+    };
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: row,
+    })
+    .into_response()
+}
+
 pub(crate) async fn app_list_accounts(
     State(state): State<AppState>,
     Path(cid_number): Path<String>,

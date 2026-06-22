@@ -3,11 +3,6 @@
 
 export type RegistryOrgCode = 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
 
-export const RegistryOrgCodeLabel: Record<RegistryOrgCode, string> = {
-  FEDERAL_REGISTRY: '联邦注册局管理员',
-  CITY_REGISTRY: '市注册局管理员',
-};
-
 export type TokenAdminAuth = {
   access_token: string;
   admin_account: string;
@@ -18,6 +13,8 @@ export type TokenAdminAuth = {
   scope_city_name?: string | null;
   /** 当前管理员是否已绑定有效 Passkey。 */
   passkey_bound?: boolean;
+  /** 当前管理员所属机构的简称(取自 subjects.cid_short_name 单一真源);右上角徽标显示用。 */
+  institution_short_name?: string | null;
 };
 
 export type AdminAuth = TokenAdminAuth;

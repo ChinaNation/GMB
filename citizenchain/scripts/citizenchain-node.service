@@ -1,0 +1,23 @@
+[Unit]
+Description=CitizenChain Node
+After=network.target
+
+[Service]
+Type=simple
+User=citizenchain
+ExecStart=/usr/bin/citizenchain \
+  --base-path /opt/citizenchain/data \
+  --node-key-file /opt/citizenchain/data/node-key/secret_ed25519 \
+  --rpc-port 9944 \
+  --rpc-external \
+  --rpc-methods Safe \
+  --rpc-cors all \
+  --no-prometheus \
+  --state-pruning archive \
+  --trie-cache-size 268435456 \
+  --listen-addr /ip4/0.0.0.0/tcp/30333/wss
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

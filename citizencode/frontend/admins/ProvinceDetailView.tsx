@@ -84,6 +84,7 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
           federalRegistryAdminsLoading={federalRegistryAdminsLoading}
           refreshFederalRegistryAdmins={state.refreshFederalRegistryAdmins}
           runSecuredAction={state.runSecuredAction}
+          federalRegistryShortName={federalRegistryDetail.institution.cid_short_name}
         />
       ) : null}
     />
@@ -190,8 +191,9 @@ function areaText(row: InstitutionListRow | null, province_name: string, city_na
   return [row.province_name, row.city_name, row.town_name].filter(Boolean).join('/') || '-';
 }
 
-function nameText(row: InstitutionListRow | null, city_name: string) {
-  return row?.cid_full_name || row?.cid_short_name || `${city_name}注册局`;
+// 中文注释:机构名只取 cid_full_name/cid_short_name 单一真源;查无机构行时显示「-」,绝不用 city_name 伪造名字。
+function nameText(row: InstitutionListRow | null) {
+  return row?.cid_full_name || row?.cid_short_name || '-';
 }
 
 function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cityRegistryAdmins, cityRegistryAdminsLoading, onSelectCity }: {
@@ -267,7 +269,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
       title: '市注册局名称',
       width: 180,
       align: 'center',
-      render: (_v, row) => nameText(row.registry, row.city_item.name),
+      render: (_v, row) => nameText(row.registry),
     },
     {
       title: '所属行政区',

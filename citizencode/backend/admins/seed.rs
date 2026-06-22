@@ -93,14 +93,17 @@ pub(crate) fn run_seed_federal_admins(state: &AppState) -> Result<(), String> {
     let seeded = state.db.with_client(move |conn| {
         for (idx, raw) in admins.iter().enumerate() {
             let province = FEDERAL_ADMIN_PROVINCES[idx / FEDERAL_ADMINS_PER_PROVINCE];
+            let seat = idx % FEDERAL_ADMINS_PER_PROVINCE + 1;
             // 内部统一 0x 小写 hex(见 [[feedback_pubkey_format_rule]]);与链投影冲突键 lower(admin_account) 对齐。
             let admin_account = format!("0x{}", hex::encode(raw));
             let id = repo::next_admin_id_conn(conn)?;
             let admin = AdminUser {
                 id,
                 admin_account,
-                // 显示名留空,catalog 层按「{省}联邦注册局管理员」回退;链上无昵称。
-                admin_display_name: String::new(),
+                // 中文注释:链上无昵称,这里给每名联邦注册局管理员写有意义的显示名
+                //「{省}联邦注册局管理员{席位}」,使所有视图(含机构信息 tab 的链上 admin 展示、
+                // 不过 catalog 通名回退的路径)都显示名字而非空/公钥哈希。
+                admin_display_name: format!("{province}联邦注册局管理员{seat}"),
                 registry_org_code: RegistryOrgCode::FederalRegistry,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),

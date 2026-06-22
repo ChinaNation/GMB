@@ -30,7 +30,7 @@ const Map<String, String> actionLabels = {
   // 'propose_create_personal' 仍为 decoder 输出 action 字符串,显式区分个人/机构提示文案。
   'propose_create_personal': '创建个人多签',
   'propose_create_institution': '创建机构多签账户',
-  'propose_close_institution': '关闭机构多签提案',
+  'propose_close_institution': '注销机构多签提案',
   'propose_close_personal': '关闭个人多签提案',
   'cleanup_rejected_personal_proposal': '清理被拒个人多签提案',
   'propose_destroy': '销毁决议提案',

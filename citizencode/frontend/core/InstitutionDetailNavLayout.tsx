@@ -28,6 +28,9 @@ interface Props {
   subtitle?: React.ReactNode;
   status?: React.ReactNode;
   headerExtra?: React.ReactNode;
+  /** 中文注释:首屏默认选中的 section（须在 items 内,否则回退首项）。
+   *  用于「未绑定 passkey 时直接落到 管理员列表」让用户看到绑定红点。 */
+  initialActiveKey?: string;
 }
 
 function defaultIcon(key: string) {
@@ -54,12 +57,18 @@ export const InstitutionDetailNavLayout: React.FC<Props> = ({
   subtitle,
   status,
   headerExtra,
+  initialActiveKey,
 }) => {
   const availableItems = useMemo(
     () => items.filter((item) => item.content !== null && item.content !== undefined),
     [items],
   );
-  const [activeKey, setActiveKey] = useState(() => availableItems[0]?.key ?? '');
+  const [activeKey, setActiveKey] = useState(() => {
+    if (initialActiveKey && availableItems.some((item) => item.key === initialActiveKey)) {
+      return initialActiveKey;
+    }
+    return availableItems[0]?.key ?? '';
+  });
 
   useEffect(() => {
     if (!availableItems.some((item) => item.key === activeKey)) {

@@ -334,6 +334,14 @@ pub(crate) async fn admin_auth_qr_result(
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
         };
+        let scope_city_name = admin.as_ref().and_then(resolve_scope_city_name);
+        let institution_short_name = repo::resolve_home_institution_short_name(
+            &state.db,
+            &result.registry_org_code,
+            province.as_deref(),
+            scope_city_name.as_deref(),
+        )
+        .unwrap_or(None);
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -356,8 +364,9 @@ pub(crate) async fn admin_auth_qr_result(
                             )
                         }),
                     scope_province_name: province,
-                    scope_city_name: admin.as_ref().and_then(resolve_scope_city_name),
+                    scope_city_name,
                     passkey_bound,
+                    institution_short_name,
                 }),
             },
         })

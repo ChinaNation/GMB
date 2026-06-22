@@ -85,6 +85,12 @@ pub(super) fn admin_auth(
             admin.admin_display_name.clone()
         };
         let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_account)?;
+        let institution_short_name = repo::resolve_home_institution_short_name_conn(
+            conn,
+            &admin.registry_org_code,
+            scope_province_name.as_deref(),
+            scope_city_name.as_deref(),
+        )?;
 
         Ok(AdminAuthContext {
             admin_account: admin.admin_account,
@@ -93,6 +99,7 @@ pub(super) fn admin_auth(
             scope_province_name,
             scope_city_name,
             passkey_bound,
+            institution_short_name,
         })
     });
 

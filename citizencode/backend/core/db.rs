@@ -112,6 +112,9 @@ impl Db {
                 target_account   TEXT NOT NULL,
                 deregister_nonce TEXT NOT NULL UNIQUE,
                 signature        TEXT,
+                issuer_cid_number   TEXT NOT NULL DEFAULT '',
+                issuer_main_account TEXT NOT NULL DEFAULT '',
+                signer_pubkey       TEXT NOT NULL DEFAULT '',
                 status           TEXT NOT NULL DEFAULT 'ISSUED'
                     CHECK (status IN ('ISSUED', 'ONCHAIN_CLOSED')),
                 issued_by        TEXT NOT NULL,

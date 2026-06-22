@@ -149,6 +149,8 @@ impl AdminActionType {
                 | Self::DeleteCityRegistry
                 | Self::CreateFederalRegistry
                 | Self::DeleteFederalRegistry
+                | Self::InstitutionDeregister
+                | Self::InstitutionAccountDeregister
         )
     }
 

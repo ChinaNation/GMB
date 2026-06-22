@@ -78,6 +78,7 @@ export function LoginView() {
           scope_province_name: status.admin.scope_province_name ?? null,
           scope_city_name: status.admin.scope_city_name ?? null,
           passkey_bound: status.admin.passkey_bound,
+          institution_short_name: status.admin.institution_short_name ?? null,
         };
         setAuth(nextAuth);
         writeStoredAuth(nextAuth);
@@ -122,6 +123,7 @@ export function LoginView() {
             scope_province_name: status.admin.scope_province_name ?? null,
             scope_city_name: status.admin.scope_city_name ?? null,
             passkey_bound: status.admin.passkey_bound,
+            institution_short_name: status.admin.institution_short_name ?? null,
           };
           setAuth(nextAuth);
           writeStoredAuth(nextAuth);

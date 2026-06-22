@@ -311,9 +311,6 @@ fn deregistration_payload_digest(
 /// 中文注释:签发机构/账户注销凭证(对称 `build_institution_registration_credential`)。
 /// scope=`SCOPE_INSTITUTION`(0,关主账户=注销整机构)/ `SCOPE_ACCOUNT`(1,只关该非主账户)。
 /// 由注册局管理员动作(PasskeyChallenge 最严档)校验通过后调用;机构管理员持此凭证冷签 propose_close。
-// 中文注释:签发器已就绪并经 golden 测试锁字节;接入点(admins/actions.rs 的
-// InstitutionDeregister/InstitutionAccountDeregister 派发)为本特性下一子步,故暂标 dead_code。
-#[allow(dead_code)]
 pub(crate) fn build_institution_deregistration_credential(
     state: &AppState,
     scope: u8,

@@ -472,7 +472,23 @@ impl Db {
         String,
     > {
         let cid_number = cid_number.trim().to_string();
-        self.with_client(move |conn| {
+        self.with_client(move |conn| Self::get_institution_with_accounts_conn(conn, &cid_number))
+    }
+
+    /// 中文注释:`get_institution_with_accounts` 的 conn 级版本,供已持有连接的
+    /// 注册局动作派发(admins/actions.rs 注销校验）直接复用,避免嵌套 with_client。
+    pub(crate) fn get_institution_with_accounts_conn(
+        conn: &mut postgres::Client,
+        cid_number: &str,
+    ) -> Result<
+        Option<(
+            crate::subjects::Institution,
+            Vec<crate::subjects::InstitutionAccount>,
+        )>,
+        String,
+    > {
+        let cid_number = cid_number.trim().to_string();
+        {
             let row = conn
                 .query_opt(
                     "SELECT s.cid_number, s.name, s.category,
@@ -521,7 +537,7 @@ impl Db {
                 });
             }
             Ok(Some((inst, accounts)))
-        })
+        }
     }
 
     pub(crate) fn upsert_citizen_row(&self, record: &CitizenRecord) -> Result<(), String> {
@@ -2981,6 +2997,10 @@ fn main() {
             .route(
                 "/api/v1/app/institutions/:cid_number/registration-info",
                 get(subjects::chain_duoqian_info::app_get_institution_registration_info),
+            )
+            .route(
+                "/api/v1/app/institutions/:cid_number/deregistration-info",
+                get(subjects::chain_duoqian_info::app_get_institution_deregistration_info),
             )
             .route(
                 "/api/v1/app/institutions/:cid_number",

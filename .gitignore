@@ -1,8 +1,9 @@
 /target
 .claude/
 citizenchain/target
-scripts/
-**/scripts/
+
+# 根目录 scripts 是本机私密脚本区；各产品/模块自己的 scripts 目录允许进 Git。
+/scripts/
 target/
 citizenchain/citizenui/target/
 citizenchain/citizenui/desktop/src-tauri/binaries/
