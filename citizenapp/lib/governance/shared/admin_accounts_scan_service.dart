@@ -3,7 +3,7 @@
 // 背景(ADR-018 §九):机构多签与个人多签发现都依赖同一张
 // `AdminsChange::AdminAccounts` 反向索引。历史上两个发现服务各自全表扫一遍,
 // 同一张表扫两次纯属浪费。本服务把"翻页 getKeysPaged + 批量 fetchStorageBatch
-// + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;各业务模块按 kind/org
+// + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;各业务模块按 kind/institutionCode
 // 客户端过滤,不再各自扫链。
 //
 // 扫描走轻节点 smoldot 的**短前缀整表**(prefix = twox128(pallet) || twox128(storage),
@@ -20,7 +20,7 @@ import 'package:citizenapp/rpc/smoldot_client.dart';
 class ScannedAdminAccount {
   const ScannedAdminAccount({
     required this.addrHex,
-    required this.org,
+    required this.institutionCode,
     required this.kind,
     required this.adminsHex,
   });
@@ -28,8 +28,8 @@ class ScannedAdminAccount {
   /// 账户小写 hex(无 0x),由 storage key 末 32B 提取。
   final String addrHex;
 
-  /// 治理 org 标识(0=NRC,1=PRC,2=PRB,3=个人多签,4=PUP,5=OTH)。
-  final int org;
+  /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
+  final String institutionCode;
 
   /// 管理员账户类型(0=Builtin,1=Personal,2=InstitutionAccount)。
   final int kind;
@@ -135,7 +135,7 @@ class AdminAccountsScanService {
         if (addr == null) continue;
         accounts.add(ScannedAdminAccount(
           addrHex: addr,
-          org: decoded.org,
+          institutionCode: decoded.institutionCode,
           kind: decoded.kind,
           adminsHex: decoded.adminsHex,
         ));
@@ -150,19 +150,22 @@ class AdminAccountsScanService {
     );
   }
 
-  /// 纯函数:从扫描结果里筛出"我的"账户(指定 kind,可选 org 白名单,
+  /// 纯函数:从扫描结果里筛出"我的"账户(指定 kind,可选机构码白名单,
   /// 且管理员集合含本地任一钱包公钥)。供机构/个人多签模块复用,便于单测。
   static List<ScannedAdminAccount> filterMine(
     AdminAccountsScanResult scan, {
     required Set<String> myPubkeysHex,
     required int kind,
-    Set<int>? orgWhitelist,
+    Set<String>? codeWhitelist,
   }) {
     return scan.accounts
-        .where((a) =>
-            a.kind == kind &&
-            (orgWhitelist == null || orgWhitelist.contains(a.org)) &&
-            a.adminsHex.any(myPubkeysHex.contains))
+        .where(
+          (a) =>
+              a.kind == kind &&
+              (codeWhitelist == null ||
+                  codeWhitelist.contains(a.institutionCode)) &&
+              a.adminsHex.any(myPubkeysHex.contains),
+        )
         .toList(growable: false);
   }
 

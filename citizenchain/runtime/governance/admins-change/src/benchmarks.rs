@@ -6,11 +6,12 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use crate::Pallet as AdminsChange;
-use crate::{BlockNumberFor, Call, Config, Pallet, CHINA_CB, ORG_PRC};
+use crate::{BlockNumberFor, Call, Config, Pallet, CHINA_CB};
 use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
+use votingengine::types::PRC;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -40,7 +41,7 @@ mod benchmarks {
         let stale_new_admin: T::AccountId = frame_benchmarking::account("stale_new_admin", 0, 0);
         let account = crate::AdminAccounts::<T>::get(institution.clone())
             .expect("benchmark genesis account should exist");
-        let threshold = votingengine::types::fixed_governance_pass_threshold(ORG_PRC).unwrap_or(2);
+        let threshold = votingengine::types::fixed_governance_pass_threshold(&PRC).unwrap_or(2);
         let mut stale_admins = account.admins.clone();
         stale_admins[1] = stale_new_admin;
         let mut admins = account.admins;
@@ -49,7 +50,7 @@ mod benchmarks {
         // 先发一个"陈旧"提案,让它自然超时被终结,验证新提案不会冲突。
         assert!(AdminsChange::<T>::propose_admin_set_change(
             RawOrigin::Signed(proposer.clone()).into(),
-            ORG_PRC,
+            PRC,
             institution.clone(),
             stale_admins,
             threshold,
@@ -71,7 +72,7 @@ mod benchmarks {
         #[extrinsic_call]
         propose_admin_set_change(
             RawOrigin::Signed(proposer),
-            ORG_PRC,
+            PRC,
             institution,
             admins,
             threshold,

@@ -6,6 +6,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
 import '../chain/reserved_account_names.dart';
+import 'institution_code.dart';
 import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
@@ -83,7 +84,7 @@ class PayloadDecoder {
         return adminAction;
       }
       if (raw.length ==
-              _activateAdminPrefix.length + 32 + 1 + 1 + 32 + 8 + 16 &&
+              _activateAdminPrefix.length + 32 + 4 + 1 + 32 + 8 + 16 &&
           _hasPrefix(raw, _activateAdminPrefix)) {
         return _decodeActivateAdminAccount(raw);
       }
@@ -452,21 +453,22 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // DuoqianTransfer(19) / propose_transfer(0)
-  // 格式：[0x13][0x00][org:u8][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
+  // 格式：[0x13][0x00][institution_code:[u8;4]][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
-    // 最小长度：2 + 1 + 32 + 32 + 16 + 1 = 84
-    if (bytes.length < 84) return null;
+    // 最小长度：2 + 4 + 32 + 32 + 16 + 1 = 87
+    if (bytes.length < 87) return null;
 
     var offset = 2;
 
-    // org: u8 用于展示机构类型；实际治理账户是 32 字节 AccountId。
-    final org = bytes[offset];
-    offset += 1;
+    // institution_code: [u8;4] 用于展示机构类型；实际治理账户是 32 字节 AccountId。
+    final codeBytes = bytes.sublist(offset, offset + 4);
+    offset += 4;
+    final code = InstitutionCode.codeToString(codeBytes);
 
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final institutionLabel = _institutionAccountLabel(org, institutionBytes);
+    final institutionLabel = _institutionAccountLabel(code, institutionBytes);
 
     // beneficiary: 32 bytes（无 MultiAddress 前缀）
     final beneficiaryId = bytes.sublist(offset, offset + 32);
@@ -729,35 +731,38 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // 管理员激活（非链上交易）
-  // 格式：GMB_ACTIVATE_ADMIN_V1 + account_id(32B) + org(u8) + kind(u8)
+  // 格式：GMB_ACTIVATE_ADMIN_V1 + account_id(32B) + institution_code([u8;4]) + kind(u8)
   //      + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeActivateAdminAccount(Uint8List bytes) {
     final expectedLength =
-        _activateAdminPrefix.length + 32 + 1 + 1 + 32 + 8 + 16;
+        _activateAdminPrefix.length + 32 + 4 + 1 + 32 + 8 + 16;
     if (bytes.length != expectedLength) return null;
 
     var offset = _activateAdminPrefix.length;
     final accountBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
 
-    final org = bytes[offset++];
+    final codeBytes = bytes.sublist(offset, offset + 4);
+    offset += 4;
+    final code = InstitutionCode.codeToString(codeBytes);
     final kind = bytes[offset++];
-    if (!_activationAccountKindMatchesOrg(org, kind)) return null;
+    if (!_activationAccountKindMatchesCode(code, kind)) return null;
 
     final pubkey = bytes.sublist(offset, offset + 32);
     final accountHex = _bytesToLowerHex(accountBytes);
+    final institutionLabel = InstitutionCode.codeLabel(code);
 
     return DecodedPayload(
       action: 'activate_admin_account',
-      summary: '激活${_orgName(org)}管理员',
+      summary: '激活$institutionLabel管理员',
       fields: {
-        'org': _orgName(org),
+        'institution_code': institutionLabel,
         'account': accountHex,
         'pubkey': _bytesToSs58(pubkey),
       },
       reviewFields: {
-        'org': _orgName(org),
+        'institution_code': institutionLabel,
         'account': _bytesToSs58(accountBytes),
         'pubkey': _bytesToSs58(pubkey),
       },
@@ -799,7 +804,7 @@ class PayloadDecoder {
   //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
-  //     org: u8,                        // ORG_PUP / ORG_OTH
+  //     institution_code: [u8; 4],      // 注册多签机构码(公权/私权/非法人法人)
   //     admins_len: u32,
   //     admins: AdminsOf<T>,   // BoundedVec<AccountId32>
   //     threshold: u32,
@@ -861,11 +866,11 @@ class PayloadDecoder {
       offset += 16;
     }
 
-    // org: u8。机构账户只能使用 ORG_PUP(4) 或 ORG_OTH(5)。
-    if (offset + 1 > bytes.length) return null;
-    final org = bytes[offset];
-    if (org != 4 && org != 5) return null;
-    offset += 1;
+    // institution_code: [u8;4]。机构账户只能使用注册多签机构码(公权/私权/非法人法人)。
+    if (offset + 4 > bytes.length) return null;
+    final code = InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    if (!InstitutionCode.isInstitution(code)) return null;
+    offset += 4;
 
     // admins_len: u32 (LE)
     if (offset + 4 > bytes.length) return null;
@@ -948,7 +953,7 @@ class PayloadDecoder {
     final fields = <String, String>{
       'cid_number': cidNumber,
       'cid_full_name': cidFullName,
-      'org': _orgName(org),
+      'institution_code': InstitutionCode.codeLabel(code),
       'admins_len': adminsLen.toString(),
       'threshold': '$threshold/$adminsLen',
       'total_amount_yuan': '$amountYuan GMB',
@@ -1209,24 +1214,25 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // ResolutionDestro(14) / propose_destroy(0)
-  // 格式：[14][0][org:u8][institution:AccountId32][amount:u128]
+  // 格式：[14][0][institution_code:[u8;4]][institution:AccountId32][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
-    // call_data: 2 + 1 + 32 + 16 = 51
-    if (bytes.length < 51 || !_hasValidSigningTail(bytes, 51)) return null;
+    // call_data: 2 + 4 + 32 + 16 = 54
+    if (bytes.length < 54 || !_hasValidSigningTail(bytes, 54)) return null;
     var offset = 2;
-    final org = bytes[offset];
-    offset += 1;
+    final code = InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    offset += 4;
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final institutionLabel = _institutionAccountLabel(org, institutionBytes);
+    final institutionLabel = _institutionAccountLabel(code, institutionBytes);
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: 'propose_destroy',
-      summary: '${_orgName(org)} 决议销毁 $amountYuan GMB：$institutionLabel',
+      summary:
+          '${InstitutionCode.codeLabel(code)} 决议销毁 $amountYuan GMB：$institutionLabel',
       fields: {
-        'org': _orgName(org),
+        'institution_code': InstitutionCode.codeLabel(code),
         'institution': institutionLabel,
         'amount_yuan': '$amountYuan GMB',
       },
@@ -1235,13 +1241,13 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // AdminsChange(12) / propose_admin_set_change(0)
-  // 格式：[12][0][org:u8][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
+  // 格式：[12][0][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
-    if (bytes.length < 72) return null;
+    if (bytes.length < 75) return null;
     var offset = 2;
-    final org = bytes[offset];
-    offset += 1;
+    final code = InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    offset += 4;
     final accountBytes = bytes.sublist(offset, offset + 32);
     final accountHex = _bytesToLowerHex(accountBytes);
     offset += 32;
@@ -1262,22 +1268,23 @@ class PayloadDecoder {
     if (offset + 4 > bytes.length) return null;
     if (!_hasValidSigningTail(bytes, offset + 4)) return null;
     final newThreshold = _readU32Le(bytes, offset);
-    if (!_validAdminChangeThreshold(org, adminsLen, newThreshold)) {
+    if (!_validAdminChangeThreshold(code, adminsLen, newThreshold)) {
       return null;
     }
     final thresholdLabel = '$newThreshold/$adminsLen';
+    final institutionLabel = InstitutionCode.codeLabel(code);
 
     return DecodedPayload(
       action: 'propose_admin_set_change',
       summary:
-          '${_orgName(org)} 管理员集合变更：${_bytesToSs58(accountBytes)} → $adminsLen 人，阈值 $thresholdLabel',
+          '$institutionLabel 管理员集合变更：${_bytesToSs58(accountBytes)} → $adminsLen 人，阈值 $thresholdLabel',
       fields: {
-        'org': _orgName(org),
+        'institution_code': institutionLabel,
         'account': accountHex,
         'admins': admins.join(','),
       },
       reviewFields: {
-        'org': _orgName(org),
+        'institution_code': institutionLabel,
         'account': _bytesToSs58(accountBytes),
         'admins': adminAddresses.join(','),
         'new_threshold': thresholdLabel,
@@ -1532,22 +1539,21 @@ class PayloadDecoder {
     }
   }
 
-  static String _institutionAccountLabel(int? org, Uint8List accountBytes) {
-    switch (org) {
-      case 0:
-        return '国储会';
-      case 1:
-        return '省储会';
-      case 2:
-        return '省储行';
-      case 3:
-        return '个人多签 ${_bytesToSs58(accountBytes)}';
-      case 4:
-      case 5:
-        return '机构账户 ${_bytesToSs58(accountBytes)}';
-      default:
-        return '机构账户 ${_bytesToSs58(accountBytes)}';
+  /// 机构账户人机标签。
+  ///
+  /// [code] 为机构码字符串(转账/销毁分支从 4 字节 institution_code 解出);
+  /// 当 wire 格式不携带机构码时(sweep / grandpa_key)传 null,统一展示为"机构账户"。
+  static String _institutionAccountLabel(String? code, Uint8List accountBytes) {
+    if (code == null) {
+      return '机构账户 ${_bytesToSs58(accountBytes)}';
     }
+    if (InstitutionCode.isFixedGovernance(code)) {
+      return InstitutionCode.codeLabel(code);
+    }
+    if (InstitutionCode.isPersonal(code)) {
+      return '个人多签 ${_bytesToSs58(accountBytes)}';
+    }
+    return '机构账户 ${_bytesToSs58(accountBytes)}';
   }
 
   static Uint8List _hexToBytes(String input) {
@@ -1593,20 +1599,27 @@ class PayloadDecoder {
     return (adminsLen ~/ 2) + 1;
   }
 
+  /// 管理员集合变更阈值合法性。
+  ///
+  /// 固定治理档机构码走制度常量(国储会 19/13、省储会/省储行 9/6),
+  /// 注册多签账户(个人多签/机构账户)走动态严格过半。逐字保留旧 org 分档语义。
   static bool _validAdminChangeThreshold(
-    int org,
+    String code,
     int adminsLen,
     int threshold,
   ) {
-    return switch (org) {
-      0 => adminsLen == 19 && threshold == 13,
-      1 || 2 => adminsLen == 9 && threshold == 6,
-      3 ||
-      4 ||
-      5 =>
-        adminsLen >= 2 && threshold > adminsLen ~/ 2 && threshold <= adminsLen,
-      _ => false,
-    };
+    if (code == 'NRC') {
+      return adminsLen == 19 && threshold == 13;
+    }
+    if (code == 'PRC' || code == 'PRB') {
+      return adminsLen == 9 && threshold == 6;
+    }
+    if (InstitutionCode.isRegisteredMultisig(code)) {
+      return adminsLen >= 2 &&
+          threshold > adminsLen ~/ 2 &&
+          threshold <= adminsLen;
+    }
+    return false;
   }
 
   /// 解码 SCALE Compact<BigInt>，返回 (值, 消耗字节数)。
@@ -1661,41 +1674,24 @@ class PayloadDecoder {
     return (text, offset + len);
   }
 
-  /// 机构代号映射。
-  static String _orgName(int org) {
-    switch (org) {
-      case 0:
-        return '国储会';
-      case 1:
-        return '省储会';
-      case 2:
-        return '省储行';
-      case 3:
-        return '个人多签';
-      case 4:
-      case 5:
-        // 公权(ORG_PUP=4)/其他(ORG_OTH=5)对外统一展示为"机构账户",
-        // 与 _institutionAccountLabel 措辞一致，消除同一 org 数字跨函数标签不一致。
-        return '机构账户';
-      default:
-        return '机构$org';
+  /// 激活凭证里的账户 kind 与机构码是否匹配。
+  ///
+  /// kind 语义对齐链端 admins-change::AdminAccountKind(SCALE 判别值),
+  /// 逐字保留旧 org→kind 映射(org 0/1/2→0,org 3→1,org 4/5→2):
+  ///   0 = BuiltinInstitution(创世内置固定治理档:国储会/省储会/省储行)
+  ///   1 = PersonalAccount(个人多签 PMUL)
+  ///   2 = InstitutionAccount(organization-manage 注册的机构账户:公权/私权/非法人)
+  static bool _activationAccountKindMatchesCode(String code, int kind) {
+    if (InstitutionCode.isFixedGovernance(code)) {
+      return kind == 0;
     }
-  }
-
-  static bool _activationAccountKindMatchesOrg(int org, int kind) {
-    switch (org) {
-      case 0:
-      case 1:
-      case 2:
-        return kind == 0;
-      case 3:
-        return kind == 1;
-      case 4:
-      case 5:
-        return kind == 2;
-      default:
-        return false;
+    if (InstitutionCode.isPersonal(code)) {
+      return kind == 1;
     }
+    if (InstitutionCode.isInstitution(code)) {
+      return kind == 2;
+    }
+    return false;
   }
 
   static DecodedPayload? _decodeCpmsArchiveDelete(Uint8List bytes) {

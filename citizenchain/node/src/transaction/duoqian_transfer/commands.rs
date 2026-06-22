@@ -9,7 +9,7 @@ pub async fn build_duoqian_transfer_request(
     app: AppHandle,
     pubkey_hex: String,
     cid_number: String,
-    org_type: u8,
+    institution_code: String,
     beneficiary_address: String,
     amount_yuan: f64,
     remark: String,
@@ -18,11 +18,12 @@ pub async fn build_duoqian_transfer_request(
     if !status.running {
         return Err("节点未运行，无法构建签名请求".to_string());
     }
+    let code = primitives::institution_code::code_bytes(&institution_code);
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_transfer_sign_request(
             &pubkey_hex,
             &cid_number,
-            org_type,
+            code,
             &beneficiary_address,
             amount_yuan,
             &remark,
@@ -40,7 +41,7 @@ pub async fn submit_duoqian_transfer(
     expected_pubkey_hex: String,
     expected_payload_hash: String,
     cid_number: String,
-    org_type: u8,
+    institution_code: String,
     beneficiary_address: String,
     amount_yuan: f64,
     remark: String,
@@ -52,13 +53,14 @@ pub async fn submit_duoqian_transfer(
     if !status.running {
         return Err("节点未运行，无法提交提案".to_string());
     }
+    let code = primitives::institution_code::code_bytes(&institution_code);
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
         let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;
         let remark_bytes = remark.as_bytes();
         let call_data = super::signing::build_transfer_call_data(
             &cid_number,
-            org_type,
+            &code,
             &beneficiary_bytes,
             amount_fen,
             remark_bytes,

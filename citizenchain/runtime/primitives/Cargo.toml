@@ -19,6 +19,10 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 frame-support = { workspace = true }
 
+# 仅金标导出/断言集成测试使用(tests/account_derive_golden.rs),需 std。
+[dev-dependencies]
+serde_json = { workspace = true, default-features = false, features = ["std"] }
+
 [features]
 default = ["std"]
 

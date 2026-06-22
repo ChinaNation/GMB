@@ -5,6 +5,7 @@
 // - 清算行节点声明、连通性检测、管理员解锁等 offchain 网络能力继续留在
 //   `offchain/common/types.rs`,避免机构多签边界再次散落。
 
+use primitives::institution_code::InstitutionCode;
 use serde::{Deserialize, Serialize};
 
 /// 节点桌面"添加清算行"页用的候选机构记录(序列化给 Tauri 前端)。
@@ -49,8 +50,8 @@ pub struct InstitutionDetail {
     pub cid_full_name: String,
     /// 管理员更换使用的机构多签 AccountId。当前清算行以主账户作为机构管理员账户。
     pub admin_account_hex: String,
-    /// 管理员更换使用的 org。清算行属于 ORG_OTH 机构账户。
-    pub org: u8,
+    /// 管理员更换使用的机构码（CID institution_code，[u8;4]）。清算行属于私权法人机构码。
+    pub institution_code: InstitutionCode,
     pub main_account: AccountWithBalance,
     pub fee_account: AccountWithBalance,
     /// 主账户/费用账户之外的全部账户(自定义初始账户)。

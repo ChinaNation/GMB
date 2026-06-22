@@ -15,7 +15,8 @@ use frame_support::BoundedVec;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
-use crate::{BalanceOf, Call, Config, Pallet, CHINA_CB, ORG_PRC};
+use crate::{BalanceOf, Call, Config, Pallet, CHINA_CB};
+use votingengine::types::PRC;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -55,7 +56,7 @@ mod benchmarks {
         #[extrinsic_call]
         propose_transfer(
             RawOrigin::Signed(proposer.clone()),
-            ORG_PRC,
+            PRC,
             institution,
             beneficiary,
             amount,

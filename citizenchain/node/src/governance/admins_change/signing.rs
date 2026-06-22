@@ -4,7 +4,7 @@ use crate::governance::signing::{self as gov_signing, VoteSignRequestResult, Vot
 
 use super::account_id;
 use super::call_data::build_admin_set_change_call_data;
-use super::types::{qr_org_display_value, AdminAccountState};
+use super::types::{qr_institution_code_display_value, AdminAccountState};
 use super::validation::validate_admin_set_change;
 
 pub fn build_admin_set_change_sign_request(
@@ -16,7 +16,7 @@ pub fn build_admin_set_change_sign_request(
     let pubkey_clean = account_id::normalize_pubkey_hex(pubkey_hex)?;
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
-    let call_data = build_admin_set_change_call_data(state.org, &account_id, &normalized)?;
+    let call_data = build_admin_set_change_call_data(&state.institution_code, &account_id, &normalized)?;
     let summary = format!(
         "{} 管理员更换：{} 人 -> {} 人",
         state.kind_label,
@@ -24,12 +24,12 @@ pub fn build_admin_set_change_sign_request(
         normalized.len()
     );
     // display.fields 必须和 citizenwallet PayloadDecoder 对 propose_admin_set_change
-    // 解出的字段逐项一致：org / account / admins。
+    // 解出的字段逐项一致：institution_code / account / admins。
     let fields = json!([
         {
-            "key": "org",
-            "label": "组织类型",
-            "value": qr_org_display_value(state.org),
+            "key": "institution_code",
+            "label": "机构码",
+            "value": qr_institution_code_display_value(&state.institution_code),
         },
         {
             "key": "account",
@@ -69,7 +69,8 @@ pub fn submit_admin_set_change(
 ) -> Result<VoteSubmitResult, String> {
     let normalized = validate_admin_set_change(state, expected_pubkey_hex, admins)?;
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
-    let call_data = build_admin_set_change_call_data(state.org, &account_id, &normalized)?;
+    let call_data =
+        build_admin_set_change_call_data(&state.institution_code, &account_id, &normalized)?;
     gov_signing::verify_and_submit(
         request_id,
         expected_pubkey_hex,

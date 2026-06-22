@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 
@@ -16,7 +17,7 @@ class ActivatedAdmin {
     required this.pubkeyHex,
     required this.identityKey,
     required this.accountHex,
-    required this.org,
+    required this.institutionCode,
     required this.kind,
     required this.activatedAtMs,
   });
@@ -30,8 +31,8 @@ class ActivatedAdmin {
   /// admins-change 链上管理员账户 AccountId hex（不含 0x，小写）。
   final String accountHex;
 
-  /// 链上 org 编码。
-  final int org;
+  /// 链上 institution_code（4 字节机构码字符串，如 "NRC"/"PMUL"/"CGOV"）。
+  final String institutionCode;
 
   /// 链上 AdminAccountKind 编码。
   final int kind;
@@ -43,7 +44,7 @@ class ActivatedAdmin {
         'pubkeyHex': pubkeyHex,
         'identityKey': identityKey,
         'accountHex': accountHex,
-        'org': org,
+        'institution_code': institutionCode,
         'kind': kind,
         'activatedAtMs': activatedAtMs,
       };
@@ -52,10 +53,27 @@ class ActivatedAdmin {
         pubkeyHex: json['pubkeyHex'] as String,
         identityKey: json['identityKey'] as String,
         accountHex: json['accountHex'] as String,
-        org: json['org'] as int,
+        // 向后兼容旧 'org' int 键：旧记录失效后不再激活，产生新记录时写新键
+        institutionCode: json['institution_code'] as String? ??
+            _orgIntToCode(json['org'] as int?),
         kind: json['kind'] as int,
         activatedAtMs: json['activatedAtMs'] as int,
       );
+
+  static String _orgIntToCode(int? org) {
+    switch (org) {
+      case 0:
+        return 'NRC';
+      case 1:
+        return 'PRC';
+      case 2:
+        return 'PRB';
+      case 3:
+        return 'PMUL';
+      default:
+        return '';
+    }
+  }
 }
 
 /// 管理员激活服务（QR 扫码签名激活模式）。
@@ -158,6 +176,7 @@ class ActivationService {
 
     final signer = QrSigner();
     final requestId = QrSigner.generateRequestId(prefix: 'act-');
+    final codeLabel = InstitutionCodeLabel.codeLabel(identity.institutionCode);
     final request = signer.buildRequest(
       requestId: requestId,
       address: account,
@@ -165,13 +184,20 @@ class ActivationService {
       payloadHex: payloadHex,
       display: SignDisplay(
         action: 'activate_admin_account',
-        summary: '激活${identity.orgLabel}管理员',
+        summary: '激活$codeLabel管理员',
         fields: [
-          SignDisplayField(key: 'org', label: '组织类型', value: identity.orgLabel),
+          // 字段键 'institution_code' 与冷钱包 _decodeActivateAdminAccount 的
+          // fields 输出完全一致(冷钱包 payload_decoder.dart:760)。
           SignDisplayField(
-              key: 'account',
-              label: '管理员账户',
-              value: '0x${identity.accountHex}'),
+            key: 'institution_code',
+            label: '组织类型',
+            value: codeLabel,
+          ),
+          SignDisplayField(
+            key: 'account',
+            label: '管理员账户',
+            value: '0x${identity.accountHex}',
+          ),
           SignDisplayField(key: 'pubkey', label: '管理员公钥', value: account),
         ],
       ),
@@ -211,7 +237,7 @@ class ActivationService {
       pubkeyHex: pk,
       identityKey: identity.identityKey,
       accountHex: identity.accountHex,
-      org: identity.org,
+      institutionCode: identity.institutionCode,
       kind: identity.kind,
       activatedAtMs: now,
     );
@@ -248,16 +274,22 @@ class ActivationService {
 
   Uint8List _buildActivatePayload(
       AdminAccountIdentity identity, String pubkeyHex) {
+    // 格式：GMB_ACTIVATE_ADMIN_V1(21B) + account_id(32B) + institution_code([u8;4])
+    //      + kind(1B) + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B)
+    // 逐字镜像冷钱包 payload_decoder.dart::_decodeActivateAdminAccount 的期望格式。
     final accountId = AdminAccountIdCodec.fromHex(identity.accountHex);
     final pubkey = _hexToBytes(pubkeyHex);
+    final codeBytes =
+        Uint8List.fromList(InstitutionCodeLabel.codeBytes(identity.institutionCode));
     final payload =
-        Uint8List(_activatePrefix.length + 32 + 1 + 1 + 32 + 8 + 16);
+        Uint8List(_activatePrefix.length + 32 + 4 + 1 + 32 + 8 + 16);
     var offset = 0;
     payload.setAll(offset, _activatePrefix);
     offset += _activatePrefix.length;
     payload.setAll(offset, accountId);
     offset += 32;
-    payload[offset++] = identity.org;
+    payload.setAll(offset, codeBytes);
+    offset += 4;
     payload[offset++] = identity.kind;
     payload.setAll(offset, pubkey);
     offset += 32;

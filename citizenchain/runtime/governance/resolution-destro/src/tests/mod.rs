@@ -120,20 +120,24 @@ impl
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
         let who_bytes = who.encode();
         if who_bytes.len() != 32 {
             return false;
         }
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
@@ -142,13 +146,16 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         }
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<sp_std::vec::Vec<AccountId32>> {
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 
 /// `OrganizationManage::AccountRegisteredCid` 反查结果。
 class RegisteredInstitutionRef {
@@ -20,14 +21,14 @@ class RegisteredInstitutionRef {
 /// 管理员与阈值快照。
 class AdminSnapshot {
   const AdminSnapshot({
-    required this.org,
+    required this.institutionCode,
     required this.adminsLen,
     required this.threshold,
     required this.admins,
     required this.statusByte,
   });
 
-  final int org;
+  final String institutionCode;
   final int adminsLen;
   final int? threshold;
   final List<String> admins;
@@ -63,13 +64,13 @@ class DuoqianStorageCodec {
 
   static Uint8List dynamicThresholdKey({
     required String storageName,
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) {
     return storageDoubleMapKey(
       'InternalVote',
       storageName,
-      Uint8List.fromList([org]),
+      Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)),
       accountId,
     );
   }
@@ -156,9 +157,13 @@ class DuoqianStorageCodec {
   }
 
   static AdminSnapshot? decodeAdminAccount(Uint8List data) {
-    if (data.length <= 2) return null;
+    if (data.length <= 5) return null;
     var offset = 0;
-    final org = data[offset++];
+    // institution_code: [u8;4]
+    final code = InstitutionCodeLabel.codeToString(
+      data.sublist(offset, offset + 4),
+    );
+    offset += 4;
     offset++; // AdminAccountKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
@@ -169,10 +174,10 @@ class DuoqianStorageCodec {
       offset += 32;
     }
     // 中文注释：AdminsChange::AdminAccounts 后续字段是 creator/时间/status，
-    // 动态阈值不在这里保存，必须按 org + account 从 InternalVote 查询。
+    // 动态阈值不在这里保存，必须按 institution_code + account 从 InternalVote 查询。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return AdminSnapshot(
-      org: org,
+      institutionCode: code,
       adminsLen: count,
       threshold: null,
       admins: admins,
@@ -185,10 +190,14 @@ class DuoqianStorageCodec {
     final name = readBoundedBytes(data, offset);
     if (name == null) return null;
     offset = name.nextOffset;
-    if (offset + 32 + 32 + 1 + 4 + 4 > data.length) return null;
+    // institution_code:[u8;4] + main_account(32) + fee_account(32) + admins_len(u32) + threshold(u32)
+    if (offset + 4 + 32 + 32 + 4 + 4 > data.length) return null;
+    final code = InstitutionCodeLabel.codeToString(
+      data.sublist(offset, offset + 4),
+    );
+    offset += 4;
     offset += 32; // main_account
     offset += 32; // fee_account
-    offset += 1; // org
     final adminsLen = readU32Le(data, offset);
     offset += 4;
     final threshold = readU32Le(data, offset);
@@ -204,7 +213,7 @@ class DuoqianStorageCodec {
     }
     if (offset + 32 + 4 + 1 > data.length) {
       return AdminSnapshot(
-        org: 0,
+        institutionCode: code,
         adminsLen: adminsLen,
         threshold: threshold,
         admins: admins,
@@ -215,7 +224,7 @@ class DuoqianStorageCodec {
     offset += 4; // created_at: BlockNumber(u32)
     final statusByte = data[offset];
     return AdminSnapshot(
-      org: 0,
+      institutionCode: code,
       adminsLen: adminsLen,
       threshold: threshold,
       admins: admins,

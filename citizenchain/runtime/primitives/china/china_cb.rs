@@ -15,20 +15,20 @@ pub struct ChinaCb {
 
 /// 国储会安全基金账户地址（DUOQIAN + OP_AN + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
 pub const NRC_ANQUAN_ACCOUNT: [u8; 32] =
-    hex!("c878e700bde52b5c9c2a94bcf5296c4f6a75ca61b8e920a4e53a01c6da433e52");
+    hex!("24b62e1756a27dd00946f33507004ce7973be28b0728cb4dc786231c40348a92");
 
 /// 国储会两和基金账户地址（DUOQIAN + OP_HE + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
 /// 两和基金 = 历史和解与和平建国基金，创世一次性发行 195,818,501,966.00 元，国储会内部投票管理。
 pub const NRC_HE_ACCOUNT: [u8; 32] =
-    hex!("ce19b7f0df3e9ba6c88b02364aa97cd1994df25aaa86c36e790ee85eea009f76");
+    hex!("37994b77b6ae316d1916e343a14e3d18c02ebe74686e4c2652202f55ae0e66fc");
 
 /// 所有国储会+省储会数组
 pub const CHINA_CB: &[ChinaCb] = &[
     ChinaCb {
         cid_full_name: "国家公民储备委员会",
-        cid_number: "LN001-GCB05-944805165-2026",
-        main_account: hex!("39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d"),
-        fee_account: hex!("66d1de031e332facb67bd20ae428e187ae4bbf3caa0a1421bd0023c49fb228d3"),
+        cid_number: "LN001-NRC0G-944805165-2026",
+        main_account: hex!("e97b09bf079f00a243de874e1129ca04cca12de75bd0943b25519e8c1153b005"),
+        fee_account: hex!("34435d3c37634342f6b7044fe556c9be25dbe7cf237fe9a71c29e64ddf11e0ad"),
         grandpa_key: hex!("3719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b5"),
         admins: &[
             hex!("6832b6f09d231e1ddf34be1a81f68eb958da88be370f999e2d98f3407cb72d05"),
@@ -54,9 +54,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "中枢省公民储备委员会",
-        cid_number: "ZS001-GCB0R-016974075-2026",
-        main_account: hex!("1a2853434d5b7bb336670dab136b2479a029fdbbb447f49482f09be80660024a"),
-        fee_account: hex!("5bc1f22ef6e4147e61ac745f50e77f17656c0d6d789d600a1ffe014e5d44ab58"),
+        cid_number: "ZS001-PRC0E-016974075-2026",
+        main_account: hex!("26d09d54d2284662bb35c23591ba7ef970038a22a0d484c0a5835a9984432fdf"),
+        fee_account: hex!("f38aaa5b3688ba54b9c916055403399b86a6f62e004a4eac2b18decff63647c4"),
         grandpa_key: hex!("14803cd63d5ad6c76e0141f730f18f2c4a30ecfaa3631681e490cb5e25ca0958"),
         admins: &[
             hex!("36e64c89c71651e470b897c0014d9c64edfdc5a27d70acd80020d1cb1cdfc614"),
@@ -72,9 +72,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "岭南省公民储备委员会",
-        cid_number: "LN001-GCB0I-773405642-2026",
-        main_account: hex!("9c30e747b1112ee82b8ad553ae19746328fcb7107d2ef67a4332e85071d0e197"),
-        fee_account: hex!("7ad835b5f7e6e72da144f5011c04b03a06cc0dec3bbf425300f5146acb09cf97"),
+        cid_number: "LN001-PRC05-773405642-2026",
+        main_account: hex!("b19e5915f588844fd7d4fce0fc9840b0237bd9ccf167a00eb591ed6d66c288d2"),
+        fee_account: hex!("c73e7d5f50ead9e6986c077d0ee31b9b9c9177f1b1eb0707c21762c354167c1c"),
         grandpa_key: hex!("8d9de5d1b44d39f9567b76a5348d68a497d06b73215d5e89bfdf4f6a6b2f36aa"),
         admins: &[
             hex!("c24043655f86afe9e38f811eb9a5ccd3fadb0c01461ba5c50c4650c91e1cbd6c"),
@@ -90,9 +90,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "广东省公民储备委员会",
-        cid_number: "GD001-GCB08-067440774-2026",
-        main_account: hex!("e126c45b313e182a52a89dc9573fef09c34e08043ddeeaafe8524aa8132d0f2e"),
-        fee_account: hex!("5a8629fe12292877a16be390b77a1224cca65d011f828c514a2d1fc30a404a34"),
+        cid_number: "GD001-PRC0V-067440774-2026",
+        main_account: hex!("b1d8c292e8c9d80a8859cbc74e949fb915c30a52c69a99d2a29fefca9e8fc5dd"),
+        fee_account: hex!("e773f4ee2aa2fad4f85d6ca55fd11eab7fda40d1a6f36504dc9b6071288f84d2"),
         grandpa_key: hex!("febdaa3b1c416bffc6ba1e13f799b5295c4644a0d695fe6da7bff3cf6754a903"),
         admins: &[
             hex!("9ef3f954efcadd7019c09d1648f9f00db94d31773281a764493a602107fab653"),
@@ -108,9 +108,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "广西省公民储备委员会",
-        cid_number: "GX001-GCB0P-663454043-2026",
-        main_account: hex!("3494bb8aa47bbf4c4f8a7a4e102267709fe191257a238821b5cec3081d2408e7"),
-        fee_account: hex!("9f54f42e73c04c04fc5e8387c54e2a668f49fe1ceef0d6718933b1caa00de960"),
+        cid_number: "GX001-PRC0C-663454043-2026",
+        main_account: hex!("4b8cc2064fa68c762a68c9e065f318f8422d90fc7309815dfb44302d516a54a3"),
+        fee_account: hex!("3033e01652e5f51c26f8c71dd787160a1150147e9339ae112b97e74b7ae7b49e"),
         grandpa_key: hex!("669d64a0c7c7ba5be629580d8898f9003105b13d18372392cd85562b2782b233"),
         admins: &[
             hex!("2ccc2bcf757337b58afcc51a0bf97d49884e7e6d43f3adfe812299f6a1374820"),
@@ -126,9 +126,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "福建省公民储备委员会",
-        cid_number: "FJ001-GCB0V-389570546-2026",
-        main_account: hex!("e2477f00c3529e3e703c9be2b659f68228ddacbbe7643f8772bb38c1ea7b1c43"),
-        fee_account: hex!("51d4ee733dd933dd920f3e14d9d71bb47e5218d68a7a312743945e6f01f2a5bb"),
+        cid_number: "FJ001-PRC0I-389570546-2026",
+        main_account: hex!("bf8c477d995bf67c2851b9c64125cbf13830afc50021ca3ffaa0e619cd27f898"),
+        fee_account: hex!("856ebbe38cf48b0e6ee4ef0f6a9c83905740c2d67474fe155013e2a8baa3427d"),
         grandpa_key: hex!("8860948348df8b4efe240829671408476643dbf8d2e07d0bca8f3ea6271c5c51"),
         admins: &[
             hex!("4ab76c9f6d49a57b1e869265716911f08195f5a744cbf4d103a336b7c38bbb4e"),
@@ -144,9 +144,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "海南省公民储备委员会",
-        cid_number: "HN001-GCB05-545676096-2026",
-        main_account: hex!("c988fa2303032471ce2303e53952ffd3d36d0e0fa3222e628c484f41eeb864dd"),
-        fee_account: hex!("2fd7d9549ea1214deb2c32ad9b06971eda967aa3f76969bdfab0bc076bb4ca3c"),
+        cid_number: "HN001-PRC0S-545676096-2026",
+        main_account: hex!("79097820f9ed276d615a503224a7b9b3fecebebb66f05b5b728851c180a0a3f1"),
+        fee_account: hex!("ac16123e738704125a27477cec635f9ba68cad7560d724a19d403d06e68701d3"),
         grandpa_key: hex!("2d6cfe57d3212c066260cb568645ed0d442a632b24031930b97ca3242111e021"),
         admins: &[
             hex!("f433269884a6d155667b13eccddf666f0d47cb319f2db7028d13243d3a98cd04"),
@@ -162,9 +162,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "云南省公民储备委员会",
-        cid_number: "YN001-GCB09-145427171-2026",
-        main_account: hex!("60888a2563a4ea470053b9da52377870011b1308d3947181eb4dd267b33abbec"),
-        fee_account: hex!("73cc53484e1f1d2ee9008510c925c1eea7d8cdf86598b48c1b8ae98d28b3efdd"),
+        cid_number: "YN001-PRC0W-145427171-2026",
+        main_account: hex!("d701c9230195b5c35ca329b62c9d3dfdd9924b2eb000ddfe67d8414ef821e0a6"),
+        fee_account: hex!("a3c43e0f6a2451e24f0adac98cec23a81a10a66f0f828aff4c29680b83c4ea84"),
         grandpa_key: hex!("26498679676d181b1346964f5815b94bf766bd284d529ce8e5625547af1fbab3"),
         admins: &[
             hex!("b8fc3fa57be8aa1fc4a520aa1d5432a947845b77a08fe169f4f7a03511eb526c"),
@@ -180,9 +180,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "贵州省公民储备委员会",
-        cid_number: "GZ001-GCB0F-969970096-2026",
-        main_account: hex!("28731a234ad27f5cca1ea23fa237278027341e6c305136262348c2566a96b243"),
-        fee_account: hex!("c658f015dcb92160b14972e9eb4e031abfceaa4f63ed0bcf107ee72ec07be30a"),
+        cid_number: "GZ001-PRC02-969970096-2026",
+        main_account: hex!("7e818624c9f3c46f523612fcdb0c9459ce71191d29bac1a38cb9bcae3d8dbc84"),
+        fee_account: hex!("91123be54e191aa2f900d55875c14dcaecbf3bdcb8e6cfbab80745df630b4d76"),
         grandpa_key: hex!("1c03da677a1ae2e9b4907dc72016ea65adc3d20711f93b8e96f2aa75468072c0"),
         admins: &[
             hex!("e0fb43daac7243a64e90b95250e4ffac3d47549c72b53b086785c902365ed148"),
@@ -198,9 +198,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "湖南省公民储备委员会",
-        cid_number: "HU001-GCB02-400319700-2026",
-        main_account: hex!("0fc718e73994724ad6d3106df5bf301234e12395999999571702c3243f3b71e1"),
-        fee_account: hex!("6e6d0810a422c696909b59e48c8684cddfe8fc4b8474611b5d6c9c95e75c8588"),
+        cid_number: "HU001-PRC0P-400319700-2026",
+        main_account: hex!("fa74c11655fe1a950fd1064d9b342805d15b06ff379e36d2f1b5df0be0cb4a59"),
+        fee_account: hex!("d0b4e10c273b2923776435f272a201ada40f5a3673967b459125478b0fd439df"),
         grandpa_key: hex!("4b9547092662fba8d70658eee8c999c5f5044b2574054a3ce62b2ed19b5645d1"),
         admins: &[
             hex!("7ca56451d3543ee5740951272dcb89e40891ed4f0fad3a4bb097de86705e847c"),
@@ -216,9 +216,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "江西省公民储备委员会",
-        cid_number: "JX001-GCB0W-458681566-2026",
-        main_account: hex!("329317ae1c34170c6bd84f7c82f63454b6771a8eefbb74678b47f50da21fe63b"),
-        fee_account: hex!("d0c01c8a5d044a14bf6bea0421f026e87d2c3baee93d47754f64d234d0d8d584"),
+        cid_number: "JX001-PRC0J-458681566-2026",
+        main_account: hex!("3a31b63db36c21f8880889b7b9450a8db31d5e6ca689e4ef20d9c378bf8e9275"),
+        fee_account: hex!("55729a5417725684fd8285aba320521c2fbeb82da421eccf2c8f7e8e6fea3793"),
         grandpa_key: hex!("782c1fc618af8c3e1eb225f1b068eb35dfc54e3db2c8067a0ddb55308d62a3d4"),
         admins: &[
             hex!("443e0e4a4a215622010f4410f77d5f154721c1a10e9f951591e0481023447322"),
@@ -234,9 +234,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "浙江省公民储备委员会",
-        cid_number: "ZJ001-GCB0L-471270801-2026",
-        main_account: hex!("d23c3717cf286427e8f64dfe2ab2fffc497b2c877fcceda7bdb428274a709069"),
-        fee_account: hex!("60e899456f4ce442106861fe4bf25c05325ed3ccb89d4b4f638851546b3a5b97"),
+        cid_number: "ZJ001-PRC08-471270801-2026",
+        main_account: hex!("1486ac02464ddd913bcbb93f93bafc8de69b79fd7fe9fc011c76332e415e07b5"),
+        fee_account: hex!("a2a83bc042df7d02ed8c2431fceb0512c14c9066c2761aab88b5696fd377fda0"),
         grandpa_key: hex!("a2a7643951e81f6189834bd5c70ee27eddd402ac7c4ef749f40955042b4bb43e"),
         admins: &[
             hex!("962634d0a5d6f037d3571742d5166ceb496249667b4b767ca9f468e23d03ed24"),
@@ -252,9 +252,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "江苏省公民储备委员会",
-        cid_number: "JS001-GCB01-358467174-2026",
-        main_account: hex!("fb3e341388899cd56990744505f62a57eee830febe59845757d957cc2a824559"),
-        fee_account: hex!("96050787ea606f1fec767fe7a128f544922fc25b42ba8088be27fe4094d50ae2"),
+        cid_number: "JS001-PRC0O-358467174-2026",
+        main_account: hex!("022757a4129d93d71270ab97a7bfe5b8adf8846bb4936d4fdaa05b029e088bd4"),
+        fee_account: hex!("865edf8b99bfa40100273f2d32e52292546adb431a3f88e9e348b4ff9dc5bcb0"),
         grandpa_key: hex!("a3819330ccac67a93f09679f81e919e5cc2eedf7166e69a62d402be6ec39de2a"),
         admins: &[
             hex!("beab132b103ef629f7e4015df7510180cee2e61b034cd0e91f888201828ce34f"),
@@ -270,9 +270,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "山东省公民储备委员会",
-        cid_number: "SD001-GCB0K-027328848-2026",
-        main_account: hex!("cdf192f50b63c3c039c9fc52c5699b2faa9b54216c4f392a3f3cb72c70271bb5"),
-        fee_account: hex!("11e10219d26dd19aaa99d7edf4d6067f06af6278edbdfbfb0e5c7fa9f375bb62"),
+        cid_number: "SD001-PRC07-027328848-2026",
+        main_account: hex!("3b4aa5d4c2d25ae694cd0ac18ba48f61c6c40d8a6433703aff5d40cddba08a38"),
+        fee_account: hex!("f0942f6f88e26921d964113dd42dbe14a86c0fdb82d2c37b0c63a0ba28b8abe8"),
         grandpa_key: hex!("ecbfcf8a0c4e9954f0d8ea71d85b91ad0142b5c5821a74fab99a041be4192948"),
         admins: &[
             hex!("34917d22a17b566faf9af6787385a689b1f64e8acd1da183132dd28b0dc85c7c"),
@@ -288,9 +288,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "山西省公民储备委员会",
-        cid_number: "SX001-GCB01-104465679-2026",
-        main_account: hex!("a19117c80c894af3b644384d9aab951ae7f3f4b2315a225cbe0741f4f4d8ff50"),
-        fee_account: hex!("23504f08462e75df40322cb9b3711637bcd8a5359e55bd90d6d577ec92001bcc"),
+        cid_number: "SX001-PRC0O-104465679-2026",
+        main_account: hex!("a6910ef8bd8297ec15f970a27e57f0b6e9c6ffb5d59f5bdb2b89e38e6aea5da4"),
+        fee_account: hex!("89811950cd3ee67a9f3738d4df2b0542a3976b4c7b093ffeb4ea869a2f59e02d"),
         grandpa_key: hex!("63e4ac90760504c650773312df9c4ce2faec662c544aeec9c6fcad41654a78c8"),
         admins: &[
             hex!("0420f71558255ad2eb00e00aeb82e4c31e4d0618f71e7fd2480ae5b7acebc071"),
@@ -306,9 +306,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河南省公民储备委员会",
-        cid_number: "HE001-GCB05-849245626-2026",
-        main_account: hex!("1077dedeae824a1e7a74fa6bee267cf32ccfc6c36137603a4f1978e5bff3bcb4"),
-        fee_account: hex!("787d12fac8c0bb711141c0fe5461c13148db0e5411f35a49756a030d399d51aa"),
+        cid_number: "HE001-PRC0S-849245626-2026",
+        main_account: hex!("d74ffd4b37c7aa43c24fe6f6ed63ebbdb846744164c755521044f138229d557e"),
+        fee_account: hex!("a501821113e4036ca8468abb5f7a2aeee6e270ecfdd2bb5e0c4a939b102053a4"),
         grandpa_key: hex!("e9227e239d61c3ba1463ac0b2206cecf35ebe73a48c7a702a76aeac20327c653"),
         admins: &[
             hex!("ce08dab991bd8b5cd37bc7a11d360ca5b5157bc021606088901d6ff685971a24"),
@@ -324,9 +324,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河北省公民储备委员会",
-        cid_number: "HB001-GCB09-499533387-2026",
-        main_account: hex!("895d3722a1ba33819bdb871869fb4607976b8457857757968836d454920dffcd"),
-        fee_account: hex!("1dd3c397c680a5499cf1c45c1fb64420bd8da10d5a949e38c92d90bc092a95c8"),
+        cid_number: "HB001-PRC0W-499533387-2026",
+        main_account: hex!("332cb4fe167ed56c4559acded147cebc9554571ed1b857df4ee88b7a2a2144c9"),
+        fee_account: hex!("d730f66b03d00047ad7edde249fb1e542860074cbe73cc5f928716e99136587b"),
         grandpa_key: hex!("7ce0745ab3270b66570b4b2fa7ef0ea2fd4df5065488c05282cd8ed8c938c199"),
         admins: &[
             hex!("4e3df6bdac65b48ea340a09463d64bd071aede8b7837bb951c20836c6925693c"),
@@ -342,9 +342,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "湖北省公民储备委员会",
-        cid_number: "HI001-GCB0Q-659443961-2026",
-        main_account: hex!("af605b27f80119dbc413519086d499930baf44b0ad403e2f6a410372a24f8ad2"),
-        fee_account: hex!("1527a93825adb1c68d5745a27e85ac047e04b0800cdaeb2954eae37e3d34c8ec"),
+        cid_number: "HI001-PRC0D-659443961-2026",
+        main_account: hex!("eb21e0f3088320c9ff2139ad1d635485afb7a72c3de745c8410dfc5d126b1fcd"),
+        fee_account: hex!("c871114150b71c4902de7401ade1598c066f8a74d395edccb3289c755508f9d4"),
         grandpa_key: hex!("b10a24b974dabe5f008973007ea3fb67c4af2c7ae77b71f01e0249ac366daab8"),
         admins: &[
             hex!("0ccde5b418f9fc572d28afa64d3a4b474d4590438e1edcea4031959d6f01a946"),
@@ -360,9 +360,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "陕西省公民储备委员会",
-        cid_number: "SI001-GCB06-711309909-2026",
-        main_account: hex!("8710c1a5c5021fb374401b67ddaab7b3ced0e8c5dddd54dd3583d520d1e2e180"),
-        fee_account: hex!("bc1a93347c9099e82afce1e0baf71cf4d69f1ba70d4bbc9557ab9fb730a495b5"),
+        cid_number: "SI001-PRC0T-711309909-2026",
+        main_account: hex!("3632eb7489038a0d73c8ef884840a6b3ba8e7b3a90e4fad1412f7dcd38fdff5a"),
+        fee_account: hex!("563522fe4c097f94260854021d9c187b01da73662d4bb17d507eb77ab0352482"),
         grandpa_key: hex!("14cd5c8e07f738cc3719b4e66c33d81fa3a4baf6f6e50ae1d48d4e2ffb8e47b2"),
         admins: &[
             hex!("5c652aa8012ce7fba7665b6836116651cdc290e1c4ce17b926944351389af75e"),
@@ -378,9 +378,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "重庆省公民储备委员会",
-        cid_number: "CQ001-GCB0J-478472058-2026",
-        main_account: hex!("5dadca1cf98697186d3cd2afafcf9652245d8639d297fbd642e42f73d6135e17"),
-        fee_account: hex!("8417860a0364f3e5038fa108d884d55210c7071315c242f277be4f7ece051c4f"),
+        cid_number: "CQ001-PRC06-478472058-2026",
+        main_account: hex!("ea5376d58108e950f0164b18d020fdc688cf56e79d3e79f4ab8719c55cc8d1e8"),
+        fee_account: hex!("c96e1ebb718aa02cd7eb0fecb76d6efa79142aa708768e3816b66781524031f9"),
         grandpa_key: hex!("599aa6bb3cf9d48d99599de3c5948308e32dbb427f49346cdab95fe82863b747"),
         admins: &[
             hex!("2ef4db13e343f5395c9dda46c323d7ffb592d96f4af55d06f9088a54c7c2ae48"),
@@ -396,9 +396,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "四川省公民储备委员会",
-        cid_number: "SC001-GCB0B-935659021-2026",
-        main_account: hex!("b9b062b16f40ba8769d0fb2271b4e6430ed3a66b1cf9f4453f1985196c481c18"),
-        fee_account: hex!("cbf48b589d4ceca43d90b1c1d8c3551931a3a6ab809f948aa19f9a0589edd8e6"),
+        cid_number: "SC001-PRC0Y-935659021-2026",
+        main_account: hex!("9abb47bf5f889cb54c9dd14e6dc02d5ae1a607d8125f1878e574cfa90969f4ff"),
+        fee_account: hex!("a78062f28462cbda4510c617faacaa3d5bbe4e32a6138a968a60beca9181b5d6"),
         grandpa_key: hex!("26daeb08619448a235d712daa63bf81b97710f684801d22c847624e070e4f600"),
         admins: &[
             hex!("16212ee287e95f381f1e85e036af61c79e361411b9fb8b7f0ab9b7dcf4347230"),
@@ -414,9 +414,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "甘肃省公民储备委员会",
-        cid_number: "GS001-GCB0Y-679051155-2026",
-        main_account: hex!("5482543d25b68467851621d8b4b33a947d924f4fa347415ce2c0ab61e8b079d8"),
-        fee_account: hex!("c050ddd4e1f5e2cf4e366152f8d91df845901aeba3dbea50a4cadaa37998c275"),
+        cid_number: "GS001-PRC0L-679051155-2026",
+        main_account: hex!("a311932c50ca748f0fd24b65cd4f1dec3b3b115659ad07f33aa7b9d86f55ee10"),
+        fee_account: hex!("98c5afc5dd5a0e9d1306e3669554153a94a2136c15888892ba6ea542a4bb2d9b"),
         grandpa_key: hex!("fa9e7becc8a5984cf15c50ca83e3918adc79521281e2d75ebfcccb7d3e5be8f3"),
         admins: &[
             hex!("869bb482411a81f4e3b6264cb0ee292b684c003446dc434164d987bdb831c30b"),
@@ -432,9 +432,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "北平省公民储备委员会",
-        cid_number: "BP001-GCB04-189323546-2026",
-        main_account: hex!("b318c753c28a570cbd81df49850592c30801afc48cafe41bb625d6e3a723cfdd"),
-        fee_account: hex!("bc300e1f3a839b1645da45a9804ed8fccbf7399720fb1d1fd7fc5eef0c2496b2"),
+        cid_number: "BP001-PRC0R-189323546-2026",
+        main_account: hex!("52b778d81a6cad379b2179992d35ac972fd8623759e8d69a931154fbccd674a2"),
+        fee_account: hex!("c99c4f381c37e986d623e36d2f8d33788e2d3de1e361ac062092b58d5d9f7013"),
         grandpa_key: hex!("e0dfc5bde6f32d6d41648006c69f6489dea06c37259c57b716ff025fa4fa31af"),
         admins: &[
             hex!("721b9533444e208d357ee90bfcf0e2eee6f27e0f90df6c4a5e17e3d5a5105233"),
@@ -450,9 +450,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "海滨省公民储备委员会",
-        cid_number: "HA001-GCB0B-214178517-2026",
-        main_account: hex!("52fb0396a94447838aca50f8b539ed2a38997b337a7ec3981d2442ce009ff855"),
-        fee_account: hex!("a98bffa5a69ff4a280f4035678972b2fd3e757c8884d419343f8dec60963d671"),
+        cid_number: "HA001-PRC0Y-214178517-2026",
+        main_account: hex!("8fd51d6d81d0bdd8bbedac4122823a57e4c953cc707c996b9cd7f32f72be43fc"),
+        fee_account: hex!("f167b19cda5bc7698902cf565a846c40b65e959e9ab1caa7975dbaa0a6f68ef2"),
         grandpa_key: hex!("015829c6f8588903ecbf17207b5fad6d5e766f7512325b13850b43ddd2886305"),
         admins: &[
             hex!("aae591c8f6a4ab4dd02a9c6e07685da23b2e678df559e0444bc84b1897a58478"),
@@ -468,9 +468,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "松江省公民储备委员会",
-        cid_number: "SJ001-GCB0M-044490898-2026",
-        main_account: hex!("f6dc51119d922808f58200ac090d412b2991db2885616efd3a04c4fe755d3216"),
-        fee_account: hex!("a1408b8701b3ee02cf097d2ff27b6cd2d21bdb64dda21229bd9e7a33b004be36"),
+        cid_number: "SJ001-PRC09-044490898-2026",
+        main_account: hex!("515f2e19341b916e15b651efde76c1ee7b99f0fd2322bb3a06edfefcc0f4e8ef"),
+        fee_account: hex!("c5490cdb2919509dae64a7e5372c7aaacb4b27822c66c71f31a81ccac0adefa3"),
         grandpa_key: hex!("1527123566372a8082a2d1b62f2dbd00ae3c56f2f71b51b8228178400774c3f3"),
         admins: &[
             hex!("f209b25849cf6a8b4067b853c969def73a60bb29cd11804b1a121ba98508653b"),
@@ -486,9 +486,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "龙江省公民储备委员会",
-        cid_number: "LJ001-GCB0L-279890045-2026",
-        main_account: hex!("c03742e08fc5f1dac94997fec3fce2eeaf1b445a606768ec90c2392410cce813"),
-        fee_account: hex!("622afe058889e3e176fb4b36860ef9cd6114cde638da7a38ba7f079f59779565"),
+        cid_number: "LJ001-PRC08-279890045-2026",
+        main_account: hex!("440f31d90586ba47e23fd4ac3f888ef5c83b87dfe08cdad113fdf07915abc985"),
+        fee_account: hex!("94ca5265a83623176d279115974b708973d7d6429b8cf80be1c7fc5b53e8de00"),
         grandpa_key: hex!("db5d32816bddb7a0e1d0d17d3863923eb32f76eed87604d0d410a74900195b87"),
         admins: &[
             hex!("da4c7a7d4d3a2bf0ad33d0fce6f0a48aceb60a29f3de3d1fbce7034d4e04c620"),
@@ -504,9 +504,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "吉林省公民储备委员会",
-        cid_number: "JL001-GCB0I-850461124-2026",
-        main_account: hex!("29d7801c4d7bc1ef9bc7d7f8a9cfc9beb0c17f987ff38cc8b9e7d1bf5efe6449"),
-        fee_account: hex!("3739247dbc14c4ee98a745c0a2057b82c100398f73dd0e484a4a69b517ddebf7"),
+        cid_number: "JL001-PRC05-850461124-2026",
+        main_account: hex!("10e7420d12ef291bb599bd32dc78d9684d839ff17384ed81f52c753606d2a28e"),
+        fee_account: hex!("9a9c0219ae2dde6b0334f78a22351d293df2bdb87b8d7ddaae0085303618a2eb"),
         grandpa_key: hex!("9ffdedc39ab82f7766022a3b53149ffb0f2611567961c0570880adab1a01af88"),
         admins: &[
             hex!("f4845565b8c154dcbfd80c9ce7519058afe55f143433b06fa0d537ad7360cd1a"),
@@ -522,9 +522,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "辽宁省公民储备委员会",
-        cid_number: "LI001-GCB06-978545133-2026",
-        main_account: hex!("37c142883a379b8d56d47218408189e5c0b484370ff60243f777893d09a09efd"),
-        fee_account: hex!("74696b21f7cb01605901fe98e4565f13eba7e8dec791defdbbda1ecaf0a99622"),
+        cid_number: "LI001-PRC0T-978545133-2026",
+        main_account: hex!("37f3817972e1abcce557e32a9c0b1c19afcae2e9baa3d8bf4aacf214b400c980"),
+        fee_account: hex!("bb0f6e2e864d31682419575981cafb39883748262ac4b35d93f49fcca5675b84"),
         grandpa_key: hex!("8133cf439c9142737b34655c48658135d7f946c9d60615a80ed14bad4fec1141"),
         admins: &[
             hex!("5ce10023b13c3820b38b2eaa2b25f38d423c8ebff8fa9987da6043d2301bb41f"),
@@ -540,9 +540,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "宁夏省公民储备委员会",
-        cid_number: "NX001-GCB0W-389752794-2026",
-        main_account: hex!("5b0cef9dee73d5055921ab0f078a250ebc3bd7e2c44fa432cf53f9ffe22c285e"),
-        fee_account: hex!("4087d6ddcb2edaf6f5f1992864f344f4a8602c816d9e212b535e80389e287b57"),
+        cid_number: "NX001-PRC0J-389752794-2026",
+        main_account: hex!("bf2fc01d64a26e95844f5572a06d66a86076db40d7cb0dedeb2d8bb32e3a197b"),
+        fee_account: hex!("c35312ece6c32f759156e4518149dc16430971fb050f15f5347984a572b8b72f"),
         grandpa_key: hex!("94a7d8f2f0b613dbb1509cc31ffa832188af9f547a0ce25ffe4be56a1cb10e07"),
         admins: &[
             hex!("04379eb91f117b2783a9c768025eb37f77107f4b8a8642bf0beb96be544ea34b"),
@@ -558,9 +558,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "青海省公民储备委员会",
-        cid_number: "QH001-GCB0P-882026762-2026",
-        main_account: hex!("ca0ffc8e3ec26cd679b1aa9f904f4342ab0793f87ad3b10de8326409d0517315"),
-        fee_account: hex!("6a52994daf82140cddbfcd965255c8f45ba75f258eef45741ac05695faebea01"),
+        cid_number: "QH001-PRC0C-882026762-2026",
+        main_account: hex!("a50d1007599d8a21693dcd074a26998ea0f2e40e4d99f1187abd9e1ac36b8c68"),
+        fee_account: hex!("1a520b9c4a52d65528d9cd12dbad23101b76dcfbe45d9e834573213a012d2c88"),
         grandpa_key: hex!("6c5ee4dd2a7b9f82a2f04e9eb3bf5ba970adce79cffa662d2dc84adc4ce42492"),
         admins: &[
             hex!("1cb7f16cda56e42c93f76460247a84de444a6f24164442c782e5e96535011778"),
@@ -576,9 +576,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "安徽省公民储备委员会",
-        cid_number: "AH001-GCB0D-589856828-2026",
-        main_account: hex!("acecd778d6cfb5f2c53926cf7e56c61096b329509dd38ddd361ba2b5c12c6798"),
-        fee_account: hex!("03057c7f4e95fe220dfecc53f3246ed2f880969bfaf7af8500b04d76eff2bd0e"),
+        cid_number: "AH001-PRC00-589856828-2026",
+        main_account: hex!("64684bedb642195fb12d1b34e5519ed343e33dac934e7fb0a52c01b38139771c"),
+        fee_account: hex!("6ff371ae229dc712a1b0bcf2a1b4e20103f8e9bb72b28f89c069b3116ea23541"),
         grandpa_key: hex!("903f1fcba7a60aeca0221c0fe9dad52b28437775732360a318bc07326638dd39"),
         admins: &[
             hex!("92a4067c099c83db7853da7e8dc923ee6aceb09bd30feb547f3ed77a4e3bd74f"),
@@ -594,9 +594,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "台湾省公民储备委员会",
-        cid_number: "TW001-GCB0K-265218823-2026",
-        main_account: hex!("eee2b2aff955485bda54faca13ab4ddb870c6a1110e27aea86f282de5f984553"),
-        fee_account: hex!("21784ee42ec77f61c144f85dc76a6eb9cf5dc12e29144ff08ff9f1df3d602ad5"),
+        cid_number: "TW001-PRC07-265218823-2026",
+        main_account: hex!("a06e5338b4b24a93d6a4b39b8eb8ff48c105e76eefedf65515c564b0c83b9456"),
+        fee_account: hex!("0b32fe2697cecce360eea5b5da2518af8c4090d791faa74c4bd92399a6239d26"),
         grandpa_key: hex!("2f0fcd64f31a318077484148bdf3db0d95de25860764985214356dc3371d598e"),
         admins: &[
             hex!("14dd7aa11f3c8d7745ac0bce6d160701ebe1f382a3b9f503e258ca34c5730835"),
@@ -612,9 +612,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "西藏省公民储备委员会",
-        cid_number: "XZ001-GCB0F-435616961-2026",
-        main_account: hex!("9ecdeb733773a8a94e3ea429969154c64809786eb46259bbec28ecf221be7693"),
-        fee_account: hex!("4b6f895705f3339398f4ef2e94689f1db5bfb4a1440e2d81f9f7514003bb21fd"),
+        cid_number: "XZ001-PRC02-435616961-2026",
+        main_account: hex!("bd1bffac79a29f9b60f75e9b540ad77e99ac4d7a75e88e2efa5ed9903fc8c5df"),
+        fee_account: hex!("b99b6ca8055b1f96c3cc6a3d69e9cba26b565290b638170ea5f4060e2bc515d3"),
         grandpa_key: hex!("eaf447ce1635e7165e9588b6d2864ddf31e2a33ccff69f7a46d69ee2317b4a52"),
         admins: &[
             hex!("6c3b884d685780ebd05603dd24d467033316b1ccc91dd9b85714978de4c7c632"),
@@ -630,9 +630,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "新疆省公民储备委员会",
-        cid_number: "XJ001-GCB0F-671044381-2026",
-        main_account: hex!("f20190cd9836cf8c17e50f39fb4723c50e99891dab252c4a54c54970115308c4"),
-        fee_account: hex!("d5bad25c3e5e71064bd284797eb14c55ee1716db3a6bdc4ecc3475d6de71371b"),
+        cid_number: "XJ001-PRC02-671044381-2026",
+        main_account: hex!("641352be82f3e5aa0e20ad6c2ef2031be08952a49443b7ad3b6253ae2fc50256"),
+        fee_account: hex!("b8b2398a8fa33560660fc32f8ed9efd4a18f3bb2f4adea3ca925af8e34edbc46"),
         grandpa_key: hex!("004de5bc4fa8fe5cdce4c1cb00ddce6db55ce5926b8189741cb3cd43d8155f99"),
         admins: &[
             hex!("d0a03917c1501fd6e37bfa574a9f9c7415af43982e44d8bd2f2262a7241c9366"),
@@ -648,9 +648,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "西康省公民储备委员会",
-        cid_number: "XK001-GCB02-695945392-2026",
-        main_account: hex!("dc28bbd6b0cd88d1581cc0cc9d48fa7a11cb93f903b55da23b5ce2f73c2f2770"),
-        fee_account: hex!("0a9b0cacc6ed47d4810cdcdc42a1fc460834c35f60ae4393a9ca97b5c82fdee0"),
+        cid_number: "XK001-PRC0P-695945392-2026",
+        main_account: hex!("30a8934b142898221901f1427d2ce5641f999f49d205856247b84b9de99ccaa8"),
+        fee_account: hex!("adac69e2efc0df73832edb17fcb5bc5a9e4c70fef792ef8dcdd2016dd85cc734"),
         grandpa_key: hex!("ad9ea30f1f967672f8d1b7aabbd8443d860dd2af2e9c9fd9b6a0358fe1690d20"),
         admins: &[
             hex!("0881de91b1a1ab4c57b89be8f7e630af9aada874fdb8acfd45f5975db173d467"),
@@ -666,9 +666,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "阿里省公民储备委员会",
-        cid_number: "AL001-GCB0Q-487847725-2026",
-        main_account: hex!("b853d97d7507b7eb35be86f4ed8d2ad4d9e0e472865a361c0d8d6f84ca02de23"),
-        fee_account: hex!("62c7a82421b6e734ca5531eb8246276229bb02bcef98f406da303139847ecba8"),
+        cid_number: "AL001-PRC0D-487847725-2026",
+        main_account: hex!("cb09539b0ffe54bb3c6f23c2b0bc73973dfd5a4dc540dafa739f21f7d4db2fb5"),
+        fee_account: hex!("e5b04cea0258e77835c3ff571393261725cf7c44e49f7c02ec1f727661fbd26f"),
         grandpa_key: hex!("e1dfa8bc752665d0becd9287b28415ced4193371f7cde21e244a8f5b6a1a1a48"),
         admins: &[
             hex!("e8e3c20ca22c65654c68335a7a140287c6df906e971065485794a839aa4c766c"),
@@ -684,9 +684,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "葱岭省公民储备委员会",
-        cid_number: "CL001-GCB0W-771698743-2026",
-        main_account: hex!("dc8477ea88ff303d553e7d546cb179a590ad64a4f39c5dd55ff6b351fa66af0e"),
-        fee_account: hex!("9e4543c79af9d748b246cbcb2218d7eb65fd0cc0d4c61325da17349431ab62b7"),
+        cid_number: "CL001-PRC0J-771698743-2026",
+        main_account: hex!("ccd6e383073dd63480b2f2934d2f094e84a8725d0241fe4d510d8c7bf63e1467"),
+        fee_account: hex!("38d21944472e77fe0136fdc1399e12e88b6f015e41d0c7eb480585cf9d50359e"),
         grandpa_key: hex!("ad5fa47ad61097e5dbe077066f34e3cdba31ca0194c184fe556a2f62c4c18172"),
         admins: &[
             hex!("a87c4b41c8d1494e2e05fb30f7c263b393c8f77701952f6a18e8561238749571"),
@@ -702,9 +702,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "伊犁省公民储备委员会",
-        cid_number: "YL001-GCB0C-293160581-2026",
-        main_account: hex!("8c4aed1db017d5dcdbaf42aa58e0d349d2688f3093198d55ee0ea6de7b377853"),
-        fee_account: hex!("f902eee902d2857d32004b45ceca638d43dc06da055900001ea9d27ee67fc1cd"),
+        cid_number: "YL001-PRC0Q-293160581-2026",
+        main_account: hex!("c245039fa1a1f5849fb8a0daa514e99858a2c80419c83fa0056b5c0a281ea234"),
+        fee_account: hex!("dc663f25f95ee97fa18b1ca3b57ab9aaa8e771a34c19429cfdc4f590304871f9"),
         grandpa_key: hex!("ae47a89d45e0649ac98aa832eb7d6ae10d6111b30cf64eb118c428c24a00081d"),
         admins: &[
             hex!("24acc05f6487a97c7ffc6a319cc532cca81e05f26935e56f3867bd54ddf57274"),
@@ -720,9 +720,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河西省公民储备委员会",
-        cid_number: "HX001-GCB0Q-475713213-2026",
-        main_account: hex!("01d6e4602f4a959b4615c69355dacf9855a0bfe3f83fdc833c2b29c181b8a3ac"),
-        fee_account: hex!("b6feeb6f734dbbc5348f35d9928942f11e2136924000380d365d4910677db349"),
+        cid_number: "HX001-PRC0D-475713213-2026",
+        main_account: hex!("75bf0a42e5a1b5a0ba4ec5bd162cefe3df3ef2b0b46afa06a7d4e1d9072bc278"),
+        fee_account: hex!("36373c60b3be38bd2b9409976c85ea8231480f648f088e99dc7b1aa01857a928"),
         grandpa_key: hex!("82842c89fe9ce2eca5df47ad92d787e255c0b0dd3ec18947b801077b57743520"),
         admins: &[
             hex!("fa350c6790bdce5f2f39b8ff4dc7994200e6e7b79a77ab0e7707190472e61d07"),
@@ -738,9 +738,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "昆仑省公民储备委员会",
-        cid_number: "KL001-GCB01-091969119-2026",
-        main_account: hex!("898c07c20f4a5a63d04ec7978800520fefd8c1128a0bd05e1b2248e8a605630b"),
-        fee_account: hex!("de3e80497ff74120a15c51e9c20662f5fcc16376fa52e7b2213acf7adda34746"),
+        cid_number: "KL001-PRC0O-091969119-2026",
+        main_account: hex!("4f81995eed779cc1a74e50e4cc1bde47b319d14b8929f90113bbac715ab86900"),
+        fee_account: hex!("96cdfa942d22f0e5b5003cd71c6f78a10a190236e63ae539af3fe7e0f3c40ab4"),
         grandpa_key: hex!("4684cd4740972bca1df018cce973771df605cf404c3762c1976f52f9700db391"),
         admins: &[
             hex!("32320497967509f7db42bd389f6087e30235557abc0cc1c29142446f5d8b9b3f"),
@@ -756,9 +756,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河套省公民储备委员会",
-        cid_number: "HT001-GCB0D-481172908-2026",
-        main_account: hex!("ab06c990c8adc427db3ee78c6e66c0a4c3677dc4deef5d3456c118e66d2c7048"),
-        fee_account: hex!("6b53378f00158813218465eb2000841934d4fe233df624cefba5dca4470e3dcc"),
+        cid_number: "HT001-PRC00-481172908-2026",
+        main_account: hex!("3d69f0ef94d5fbc6be4d644e4232e30ccc98744b95a5512816fce98079356904"),
+        fee_account: hex!("b5d40b55fb67180b171f50909e0518673449afa8dfe906fdfee13eb46c9587ce"),
         grandpa_key: hex!("87f64d53701b846b019341f356e738a87d6c20b244bf2e2d89351717b385a8f3"),
         admins: &[
             hex!("1a3356518d94c59d2a2f182955d5d05806cfe80c927042e6f6928555bf4f657c"),
@@ -774,9 +774,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "热河省公民储备委员会",
-        cid_number: "RH001-GCB0S-697831866-2026",
-        main_account: hex!("3fdf0f790bf1d1dd64cd19b3eda163bc2deb89587fd96d4cb4d9f4ff2a15a54c"),
-        fee_account: hex!("4d4d52d030353a3901cdf38f59c7fcd0172fe510955fe5af963b95c6c95fd841"),
+        cid_number: "RH001-PRC0F-697831866-2026",
+        main_account: hex!("4a66873273f160a0c5140b698848549bdfb0ad8b457c6e296f213df6abb34850"),
+        fee_account: hex!("2627e52b7e6fd4e8f38b2c062f61598d7dadf067371eec919c0523b3c2de7dd7"),
         grandpa_key: hex!("e7ef1b4ae92e95e9c8b3fb5856e86ea77f596e82c75af20802d61106ca26a25d"),
         admins: &[
             hex!("045a9f06c01d50bd09ab61a58e35889263df42399069754ed316504f151c3f74"),
@@ -792,9 +792,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "兴安省公民储备委员会",
-        cid_number: "XA001-GCB0U-384161601-2026",
-        main_account: hex!("7a160d892cc77d03c4ea89ab53f953b7de101443ba2288b284d4273979fa95f8"),
-        fee_account: hex!("baa48e7a6228b3b9caa2e6418d0cc6409457088c361c49d0e92f8a7bc7841e64"),
+        cid_number: "XA001-PRC0H-384161601-2026",
+        main_account: hex!("3972b00978cb3b98fa95406ea657e3191e6f975c40b47156c9bbaca856e7d4c3"),
+        fee_account: hex!("ddaccca95b4300af85384f8beb2d5c3e91f2a83469eacf74cdca8081bfd432ee"),
         grandpa_key: hex!("0bde5599cdd158c196a45025689be5166a0e4e0ef9e932523040debed85f8b59"),
         admins: &[
             hex!("f8fe916bd56ee3af0267fcd5ab1de6f09e2efe4efd8c2bb3cc4d90b91a50211c"),
@@ -810,9 +810,9 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "合江省公民储备委员会",
-        cid_number: "HJ001-GCB08-963948997-2026",
-        main_account: hex!("f0b6a54689d5c9c32977130b1b47db66c4b56728a84108dba5f6ae05317ad51d"),
-        fee_account: hex!("0b87b228498811433d50bf7abd723a18bef47d9c9879033eb1365a02cbb1005c"),
+        cid_number: "HJ001-PRC0V-963948997-2026",
+        main_account: hex!("2a217cc580f1072581e4155324769dcab7beecbf95cf968ea54730c2e0a302c6"),
+        fee_account: hex!("7123ed2a52eeb9ad5d0ff109b1ad2b6ee0f8e636bf789807e631186ad115247d"),
         grandpa_key: hex!("a69514c16012e39f3bc49941afa58871aeb46bbfb7825bd296133bad9cd0db9a"),
         admins: &[
             hex!("e2df7a8927683de5554e541d4e1d028fb159cf42d5663cdef310f16a177f2369"),

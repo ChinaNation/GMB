@@ -7,6 +7,7 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
+use primitives::institution_code::InstitutionCode;
 
 // 中文注释:机构多签与个人多签共用账户校验 trait,单一来源在 primitives::multisig。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
@@ -14,13 +15,13 @@ pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, Reserve
 /// 机构多签账户的查询 trait,供 duoqian-transfer / runtime config 等下游调用。
 ///
 /// 输入任意机构账户(主/费用/自创)都返回该账户的 admin 配置,
-/// 实现:`AccountRegisteredCid[addr]` → `Institutions[cid].org`
+/// 实现:`AccountRegisteredCid[addr]` → `Institutions[cid].institution_code`
 /// → `admins-change::AdminAccounts[addr]`。
 /// 与 personal-manage::PersonalMultisigQuery 对仗,duoqian-transfer 通过 union
 /// 查询(先 personal、再 institution)定位多签 admin 配置。
 pub trait InstitutionMultisigQuery<AccountId> {
-    /// 返回机构账户管理员账户 org。机构账户只能是 ORG_PUP 或 ORG_OTH。
-    fn lookup_org(addr: &AccountId) -> Option<u8>;
+    /// 返回机构账户管理员账户机构码。机构账户只能是公权/私权法人机构码。
+    fn lookup_org(addr: &AccountId) -> Option<InstitutionCode>;
 
     fn lookup_admin_config(
         addr: &AccountId,
@@ -29,7 +30,7 @@ pub trait InstitutionMultisigQuery<AccountId> {
 }
 
 impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
-    fn lookup_org(_addr: &AccountId) -> Option<u8> {
+    fn lookup_org(_addr: &AccountId) -> Option<InstitutionCode> {
         None
     }
 

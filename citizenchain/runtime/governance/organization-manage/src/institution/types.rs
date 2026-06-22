@@ -1,5 +1,6 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::DecodeWithMemTracking;
+use primitives::institution_code::InstitutionCode;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
@@ -62,8 +63,8 @@ pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName> {
     pub cid_full_name: AccountName,
     pub main_account: AccountId,
     pub fee_account: AccountId,
-    /// 管理员更换使用的 org：机构账户只能是 ORG_PUP 或 ORG_OTH。
-    pub org: u8,
+    /// 管理员更换使用的机构码：机构账户只能是公权/私权法人机构码。
+    pub institution_code: InstitutionCode,
     pub admins_len: u32,
     pub threshold: u32,
     pub admins: AdminList,
@@ -165,8 +166,8 @@ pub struct CreateInstitutionAction<
     pub main_account: AccountId,
     pub fee_account: AccountId,
     pub proposer: AccountId,
-    /// 创建阶段写入 pending admin account 的机构账户 org。
-    pub org: u8,
+    /// 创建阶段写入 pending admin account 的机构账户机构码。
+    pub institution_code: InstitutionCode,
     pub admins_len: u32,
     pub threshold: u32,
     pub admins: AdminList,

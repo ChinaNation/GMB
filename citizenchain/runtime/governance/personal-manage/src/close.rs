@@ -73,9 +73,13 @@ pub(crate) fn do_propose_close<T: Config>(
 
     // 个人多签治理账户直接使用个人多签账户地址。
     let institution = account.clone();
-    let org = votingengine::types::ORG_REN;
+    let institution_code = votingengine::types::PMUL;
     ensure!(
-        admins_change::Pallet::<T>::is_active_account_admin(org, institution.clone(), &who),
+        admins_change::Pallet::<T>::is_active_account_admin(
+            institution_code,
+            institution.clone(),
+            &who
+        ),
         Error::<T>::PermissionDenied
     );
 
@@ -115,7 +119,7 @@ pub(crate) fn do_propose_close<T: Config>(
     let proposal_id =
         <T as Config>::InternalVoteEngine::create_lifecycle_internal_proposal_with_data(
             who.clone(),
-            org,
+            institution_code,
             institution,
             crate::MODULE_TAG,
             data,

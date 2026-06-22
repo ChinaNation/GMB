@@ -22,7 +22,7 @@ extern crate alloc;
 use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ACCOUNT};
 use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
-    types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
+    types::{is_institution_code, InstitutionCode, NRC, PMUL, PRB, PRC},
     InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -99,13 +99,13 @@ fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], account: &T::Acc
 }
 
 /// 中文注释：判断内置机构属于 NRC/PRC/PRB；注册多签由链上存储判断。
-fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<u8> {
+fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<InstitutionCode> {
     if CHINA_CB
         .first()
         .map(|n| raw_account_matches::<T>(&n.main_account, institution))
         .unwrap_or(false)
     {
-        return Some(ORG_NRC);
+        return Some(NRC);
     }
 
     if CHINA_CB
@@ -113,14 +113,14 @@ fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<u8
         .skip(1)
         .any(|n| raw_account_matches::<T>(&n.main_account, institution))
     {
-        return Some(ORG_PRC);
+        return Some(PRC);
     }
 
     if CHINA_CH
         .iter()
         .any(|n| raw_account_matches::<T>(&n.main_account, institution))
     {
-        return Some(ORG_PRB);
+        return Some(PRB);
     }
 
     None
@@ -194,7 +194,7 @@ pub mod pallet {
         /// 转账提案已创建。citizenapp 可扫描此事件展示投票详情。
         TransferProposed {
             proposal_id: u64,
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             proposer: T::AccountId,
             /// 资金源(= 机构主账户)。
@@ -268,7 +268,7 @@ pub mod pallet {
     pub enum Error<T> {
         /// 中文注释：机构不属于 NRC/PRC/PRB 且非注册多签机构。
         InvalidInstitution,
-        /// 中文注释：调用者声明的 org 类型与机构实际类型不一致。
+        /// 中文注释：调用者声明的机构码与机构实际机构码不一致。
         InstitutionOrgMismatch,
         /// 中文注释：调用者不是该机构的管理员。
         UnauthorizedAdmin,
@@ -317,7 +317,7 @@ pub mod pallet {
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_transfer())]
         pub fn propose_transfer(
             origin: OriginFor<T>,
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
@@ -328,9 +328,12 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
             let (actual_org, institution_account) =
                 Self::resolve_institution_account(institution.clone())?;
-            ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
             ensure!(
-                Self::is_internal_admin(org, institution.clone(), &who),
+                actual_org == institution_code,
+                Error::<T>::InstitutionOrgMismatch
+            );
+            ensure!(
+                Self::is_internal_admin(institution_code, institution.clone(), &who),
                 Error::<T>::UnauthorizedAdmin
             );
             ensure!(
@@ -388,7 +391,7 @@ pub mod pallet {
             let proposal_id =
                 <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
-                    org,
+                    institution_code,
                     institution.clone(),
                     crate::MODULE_TAG,
                     encoded,
@@ -401,7 +404,7 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::TransferProposed {
                 proposal_id,
-                org,
+                institution_code,
                 institution,
                 proposer: who,
                 from: institution_account,
@@ -432,7 +435,7 @@ pub mod pallet {
             let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_account)?;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    ORG_NRC,
+                    NRC,
                     nrc_institution.clone(),
                     &who,
                 ),
@@ -468,7 +471,7 @@ pub mod pallet {
             let proposal_id =
                 <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
-                    ORG_NRC,
+                    NRC,
                     nrc_institution,
                     crate::MODULE_TAG,
                     sp_runtime::Vec::from(SAFETY_FUND_OWNER_DATA),
@@ -512,11 +515,11 @@ pub mod pallet {
             let amount_u128: u128 = amount.saturated_into();
             ensure!(amount_u128 > 0, Error::<T>::InvalidSweepAmount);
 
-            // 动态判断 org 类型
-            let org = Self::resolve_sweep_org(&institution)?;
+            // 动态判断机构码类型
+            let institution_code = Self::resolve_sweep_org(&institution)?;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    org,
+                    institution_code,
                     institution.clone(),
                     &who,
                 ),
@@ -526,7 +529,7 @@ pub mod pallet {
             let proposal_id =
                 <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
-                    org,
+                    institution_code,
                     institution.clone(),
                     crate::MODULE_TAG,
                     sp_runtime::Vec::from(SWEEP_OWNER_DATA),
@@ -569,7 +572,7 @@ pub mod pallet {
 
         fn resolve_institution_account(
             institution: T::AccountId,
-        ) -> Result<(u8, T::AccountId), Error<T>> {
+        ) -> Result<(InstitutionCode, T::AccountId), Error<T>> {
             use organization_manage::traits::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
 
@@ -578,44 +581,48 @@ pub mod pallet {
             }
 
             if <T as Config>::PersonalQuery::is_active(&institution) {
-                return Ok((ORG_REN, institution));
+                return Ok((PMUL, institution));
             }
 
             ensure!(
                 <T as Config>::InstitutionQuery::is_active(&institution),
                 Error::<T>::InvalidInstitution
             );
-            let org = <T as Config>::InstitutionQuery::lookup_org(&institution)
+            let institution_code = <T as Config>::InstitutionQuery::lookup_org(&institution)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                matches!(org, ORG_PUP | ORG_OTH),
+                is_institution_code(&institution_code),
                 Error::<T>::InvalidInstitution
             );
-            Ok((org, institution))
+            Ok((institution_code, institution))
         }
 
-        fn is_internal_admin(org: u8, institution: T::AccountId, who: &T::AccountId) -> bool {
+        fn is_internal_admin(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+            who: &T::AccountId,
+        ) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                org,
+                institution_code,
                 institution,
                 who,
             )
         }
 
-        /// 判断机构的 org 类型用于 sweep 提案。
-        fn resolve_sweep_org(institution: &T::AccountId) -> Result<u8, Error<T>> {
+        /// 判断机构的机构码类型用于 sweep 提案。
+        fn resolve_sweep_org(institution: &T::AccountId) -> Result<InstitutionCode, Error<T>> {
             if CHINA_CB
                 .first()
                 .map(|n| raw_account_matches::<T>(&n.main_account, institution))
                 .unwrap_or(false)
             {
-                return Ok(ORG_NRC);
+                return Ok(NRC);
             }
             if CHINA_CH
                 .iter()
                 .any(|n| raw_account_matches::<T>(&n.main_account, institution))
             {
-                return Ok(ORG_PRB);
+                return Ok(PRB);
             }
             Err(Error::<T>::InvalidInstitution)
         }

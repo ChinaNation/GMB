@@ -5,7 +5,6 @@
 pub const MODULE_TAG: &[u8] = b"org-mgmt";
 
 pub use pallet::*;
-pub mod address;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod close;
@@ -33,10 +32,13 @@ pub use traits::{
     ReservedAccountGuard,
 };
 use votingengine::{
-    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
+    types::InstitutionCode, InternalVoteEngine, InternalVoteResultCallback,
+    ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
-pub use address::{InstitutionAccountRole, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
+pub use primitives::account_derive::{
+    AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN,
+};
 pub use institution::types::{
     CloseInstitutionAction, CreateInstitutionAccount, CreateInstitutionAction,
     InstitutionAccountInfo, InstitutionInfo, InstitutionInitialAccount, InstitutionLifecycleStatus,
@@ -306,7 +308,7 @@ pub mod pallet {
             proposer: T::AccountId,
             accounts: CreateInstitutionAccountsOf<T>,
             admins: AdminsOf<T>,
-            org: u8,
+            institution_code: InstitutionCode,
             admins_len: u32,
             threshold: u32,
             initial_total: BalanceOf<T>,
@@ -372,7 +374,7 @@ pub mod pallet {
         InvalidAdminsLen,
         /// 管理员数量与列表长度不一致
         AdminsLenMismatch,
-        /// 机构账户管理员 org 只能是 ORG_PUP 或 ORG_OTH
+        /// 机构账户管理员机构码只能是公权/私权法人机构码
         InvalidOrg,
         /// 多签账户不存在
         AccountNotFound,
@@ -520,7 +522,7 @@ pub mod pallet {
             cid_number: CidNumberOf<T>,
             cid_full_name: AccountNameOf<T>,
             accounts: InstitutionInitialAccountsOf<T>,
-            org: u8,
+            institution_code: InstitutionCode,
             admins_len: u32,
             admins: AdminsOf<T>,
             threshold: u32,
@@ -538,7 +540,7 @@ pub mod pallet {
                 cid_number,
                 cid_full_name,
                 accounts,
-                org,
+                institution_code,
                 admins_len,
                 admins,
                 threshold,
@@ -639,73 +641,55 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 按角色派生机构多签账户地址（所有机构统一走这条路径）。
+        /// 由 (cid_number, account_name) 派生机构账户地址 + 返回其 `AccountKind`。
         ///
-        /// 派生统一调用 `primitives::core_const::derive_account`：
-        /// - `Main` → `OP_MAIN + cid_number`
-        /// - `Fee`  → `OP_FEE + cid_number`
-        /// - `Named(account_name)` → `OP_INSTITUTION + cid_number + account_name`
+        /// 唯一真源 = `primitives::account_derive`(op_tag/保留名/路由/payload/派生入口)。
+        /// 本函数仅做薄适配:把 `account_derive` 的派生结果 + 注册策略翻译成本 pallet 的
+        /// `DispatchError`,并把 32 字节 digest 解码为 `T::AccountId`:
+        /// - 空 account_name → `EmptyAccountName`
+        /// - `永久质押`/`安全基金`/`两和基金`(制度专属)→ `ReservedAccountName`(普通机构禁止注册)
+        /// - `主账户`/`费用账户` → `InstitutionMain`/`InstitutionFee`(强制默认路由)
+        /// - 其他非空 → `InstitutionNamed`
         ///
-        /// 保留名校验：`Named(b"主账户")`/`Named(b"费用账户")` 被拒绝（强制走 `Main`/`Fee`
-        /// 分支避免命名空间重叠）；`永久质押`/`安全基金`/`两和基金` 为制度专属账户，普通机构
-        /// 禁止注册，命中即拒（均返回 `ReservedAccountName`）。空 account_name 的 `Named`
-        /// 返回 `EmptyAccountName`。
-        pub fn derive_institution_account(
-            cid_number: &[u8],
-            role: InstitutionAccountRole<'_>,
-        ) -> Result<T::AccountId, DispatchError> {
-            let (op_tag, name_suffix): (u8, &[u8]) = match role {
-                InstitutionAccountRole::Main => (primitives::core_const::OP_MAIN, &[]),
-                InstitutionAccountRole::Fee => (primitives::core_const::OP_FEE, &[]),
-                InstitutionAccountRole::Named(n) => {
-                    ensure!(!n.is_empty(), Error::<T>::EmptyAccountName);
-                    ensure!(
-                        n != RESERVED_NAME_MAIN
-                            && n != RESERVED_NAME_FEE
-                            && !primitives::core_const::is_forbidden_account_name(n),
-                        Error::<T>::ReservedAccountName
-                    );
-                    (primitives::core_const::OP_INSTITUTION, n)
-                }
-            };
-            let mut payload = cid_number.to_vec();
-            payload.extend_from_slice(name_suffix);
-            let digest =
-                primitives::core_const::derive_account(op_tag, T::SS58Prefix::get(), &payload);
-            T::AccountId::decode(&mut &digest[..])
-                .map_err(|_| Error::<T>::DerivedAccountDecodeFailed.into())
+        /// 这是 `register_cid_institution` / 机构创建 / 关闭等入口的唯一派生入口。
+        ///
+        /// 返回的 `AccountKind` 借用入参 `cid_number`/`account_name`,供调用方分支判断
+        /// 主账户/费用账户/自定义账户(`is_default_account` / `is_main_account`)。
+        pub fn derive_registered_account<'a>(
+            cid_number: &'a [u8],
+            account_name: &'a [u8],
+        ) -> Result<(T::AccountId, AccountKind<'a>), DispatchError> {
+            ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
+            ensure!(
+                !primitives::account_derive::is_forbidden_account_name(account_name),
+                Error::<T>::ReservedAccountName
+            );
+            // institution_kind_by_name 对非空名必返回 Some(空名已在上面拦截)。
+            // 命中保留名 → Main/Fee;否则 → Named。质押/安全/两和已被 forbidden 拦下,
+            // 故此处只可能得到 Main/Fee/Named 三种机构种类。
+            let kind = primitives::account_derive::institution_kind_by_name(cid_number, account_name)
+                .ok_or(Error::<T>::EmptyAccountName)?;
+            let digest = kind.derive(T::SS58Prefix::get());
+            let account = T::AccountId::decode(&mut &digest[..])
+                .map_err(|_| Error::<T>::DerivedAccountDecodeFailed)?;
+            Ok((account, kind))
         }
 
-        /// 把 CID 账户名 bytes 翻译成 `InstitutionAccountRole`：
-        /// - `"主账户"` → `Main`
-        /// - `"费用账户"` → `Fee`
-        /// - `"永久质押"`/`"安全基金"`/`"两和基金"` → `ReservedAccountName`（制度专属，禁止注册）
-        /// - 其他非空 → `Named(account_name)`
-        /// - 空 → 返回 `EmptyAccountName`
-        ///
-        /// 这是 `register_cid_institution` 等 extrinsic 的唯一入口——禁止调用方
-        /// 绕开此函数直接构造 `Role::Named("主账户")`（虽然 `derive_institution_account`
-        /// 里也会拦截，但这里作为第一道防线更清晰）。
-        pub fn role_from_account_name(
-            account_name: &[u8],
-        ) -> Result<InstitutionAccountRole<'_>, DispatchError> {
-            if account_name.is_empty() {
-                return Err(Error::<T>::EmptyAccountName.into());
-            }
-            if account_name == RESERVED_NAME_MAIN {
-                Ok(InstitutionAccountRole::Main)
-            } else if account_name == RESERVED_NAME_FEE {
-                Ok(InstitutionAccountRole::Fee)
-            } else if primitives::core_const::is_forbidden_account_name(account_name) {
-                // 永久质押/安全基金/两和基金 为制度专属账户，普通 CID 机构禁止注册。
-                Err(Error::<T>::ReservedAccountName.into())
-            } else {
-                Ok(InstitutionAccountRole::Named(account_name))
-            }
+        /// 该 `AccountKind` 是否为机构强制默认账户(主账户 / 费用账户)。
+        pub fn is_default_account(kind: &AccountKind<'_>) -> bool {
+            matches!(
+                kind,
+                AccountKind::InstitutionMain { .. } | AccountKind::InstitutionFee { .. }
+            )
+        }
+
+        /// 该 `AccountKind` 是否为机构主账户。
+        pub fn is_main_account(kind: &AccountKind<'_>) -> bool {
+            matches!(kind, AccountKind::InstitutionMain { .. })
         }
 
         // derive_personal_account 已迁至 personal-manage::Pallet,
-        // organization-manage 不再提供该派生(机构地址只走 derive_institution_account)。
+        // organization-manage 不再提供该派生(机构地址只走 derive_registered_account)。
 
         pub(crate) fn ensure_unique_admins(admins: &AdminsOf<T>) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
@@ -767,7 +751,7 @@ pub mod pallet {
 
         pub(crate) fn create_pending_admin_account_for_proposal(
             proposal_id: u64,
-            org: u8,
+            institution_code: InstitutionCode,
             institution_id: T::AccountId,
             kind: admins_change::AdminAccountKind,
             admins: &AdminsOf<T>,
@@ -777,7 +761,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-                org,
+                institution_code,
                 kind,
                 admins.iter().cloned().collect(),
                 creator.clone(),
@@ -826,12 +810,12 @@ pub mod pallet {
             Some(institution.main_account)
         }
 
-        /// 从任意机构账户反查管理员更换 org。
+        /// 从任意机构账户反查管理员更换机构码。
         ///
-        /// 中文注释:机构账户必须使用 ORG_PUP/ORG_OTH；ORG_REN 只属于个人多签。
-        pub fn resolve_org_for_account(account: &T::AccountId) -> Option<u8> {
+        /// 中文注释:机构账户必须使用公权/私权法人机构码；PMUL 只属于个人多签。
+        pub fn resolve_org_for_account(account: &T::AccountId) -> Option<InstitutionCode> {
             let registered = AccountRegisteredCid::<T>::get(account)?;
-            Institutions::<T>::get(&registered.cid_number).map(|inst| inst.org)
+            Institutions::<T>::get(&registered.cid_number).map(|inst| inst.institution_code)
         }
 
         // account_names_payload_from_initial_accounts 已迁至 institution::accounts。
@@ -858,22 +842,25 @@ pub mod pallet {
 // ──── InstitutionMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
 //
 // 输入任意机构账户(主/费用/自创),直接以账户地址读取 admins-change 账户。
-// 再按 Institutions[cid_number].org 读取 org。这条路径保证
-// 机构账户只使用 ORG_PUP/ORG_OTH,不再把机构账户错误塞到 ORG_REN。
+// 再按 Institutions[cid_number].institution_code 读取机构码。这条路径保证
+// 机构账户只使用公权/私权法人机构码,不再把机构账户错误塞到 PMUL。
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
-    fn lookup_org(addr: &T::AccountId) -> Option<u8> {
+    fn lookup_org(addr: &T::AccountId) -> Option<InstitutionCode> {
         pallet::Pallet::<T>::resolve_org_for_account(addr)
     }
 
     fn lookup_admin_config(
         addr: &T::AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
-        let org = Self::lookup_org(addr)?;
+        let institution_code = Self::lookup_org(addr)?;
         let account = pallet::Pallet::<T>::resolve_admin_account_for_account(addr)?;
-        let admins = admins_change::Pallet::<T>::active_account_admins(org, account.clone())?;
-        let threshold =
-            <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())?;
+        let admins =
+            admins_change::Pallet::<T>::active_account_admins(institution_code, account.clone())?;
+        let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(
+            institution_code,
+            account.clone(),
+        )?;
         let admins_len = admins.len() as u32;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,

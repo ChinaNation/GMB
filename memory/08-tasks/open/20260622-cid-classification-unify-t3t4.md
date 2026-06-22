@@ -113,6 +113,25 @@ NRC→NRC 固定档 / PRC→PRC / PRB→PRB / 其余公法人单体+省市镇公
 - 链端 ORG 常量 `citizenchain/runtime/votingengine/src/types.rs:16-27` / 阈值 :44-56 / `admins-change/src/lib.rs` org 字段:118 ensure_account_kind_matches_org:594-616
 - org_code 真源 `citizencode/backend/gov/service.rs:670-709` + 模板:144-343
 
+## 待处理发现:CID 种子约定 + 撞号重试应收进 number/(2026-06-22，另一线程核查)
+
+**问题:** `number/generate_cid_number` 把 `account_pubkey` 当不透明输入；而**确定性、可复现的种子直接决定最终 CID**，却散在 number/ 外：
+- gov `GOV-{scope}-省码-市码-镇码-机构码`（`gov/service.rs:689`，确定性，无重试）
+- 公民绑定 `wallet_pubkey` [+ `#retry`]（`citizens/binding.rs:824`，确定性身份派生，自带 1000 次 DB 查重循环）
+- 动态注册 随机 UUID（`subjects/registration.rs:407`，纯熵，自带 1000 次循环）
+
+generator.rs 注释还明写"调用方 1000 次重试逃逸碰撞" = 把重试策略也推到 number/ 外。**当前 = 3 套种子约定 + 2 份重复重试循环散落。**
+
+**做法（彻底单源）:** number/ 拥有"决定一个号的全部" = 种子约定 + 撞号重试，对外按用途暴露构造器：
+- `number::official_institution_cid(scope, 省码, 市码, 镇码, 机构码, exists_fn)`（确定性 GOV 种子；T3/T4 china 重烤 + federal 常量种子也走它）
+- `number::citizen_cid(wallet_pubkey, 省, exists_fn)`（确定性身份种子 + #retry）
+- `number::dynamic_institution_cid(省, 市, 机构码, p1, exists_fn)`（随机熵 + 重试）
+
+gov / binding / registration 改成只调这些。**唯一边界例外:** DB 查重不能进 number/（保持存储无关），用回调 `exists_fn` 传入——number/ 拥有重试循环，调用方只提供查重谓词（依赖倒置）。
+
+**顺带 doc rot:** `number/generator.rs:5-9` 头注释列调用方 `cpms/subjects/citizens::binding/core::runtime_ops` 已过期，实际 = `registration/binding/gov`（列了不存在的 cpms/runtime_ops、漏了 gov），整改时一并修。
+
 ## 阻塞与协调
 - 并行线程 dirty：`china_cb/jc/lf/sf.rs` + `gov/service.rs` + `citizenwallet payload_decoder_test.dart`。阶段 2/3 必须先等其提交或协调，否则硬冲突。
 - 阶段 1 (number/) 不碰这些文件，可立即开工。
+- federal 常量 CID 种子约定 + 上面的 `number::official_institution_cid` 收敛，都在 Phase 3 china 重烤一并落（决策 B：CID 域归本卡）。

@@ -64,12 +64,15 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
             account.status = PersonalStatus::Active;
         }
     });
-    let org = votingengine::types::ORG_REN;
-    let admins_len = admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())
-        .ok_or(Error::<T>::PersonalNotFound)?;
-    let threshold =
-        <T as Config>::InternalVoteEngine::configured_dynamic_threshold(org, account.clone())
+    let institution_code = votingengine::types::PMUL;
+    let admins_len =
+        admins_change::Pallet::<T>::active_account_admins_len(institution_code, account.clone())
             .ok_or(Error::<T>::PersonalNotFound)?;
+    let threshold = <T as Config>::InternalVoteEngine::configured_dynamic_threshold(
+        institution_code,
+        account.clone(),
+    )
+    .ok_or(Error::<T>::PersonalNotFound)?;
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::PersonalCreated {
@@ -98,12 +101,15 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
         Error::<T>::ProtectedSource
     );
     let account = action.account.clone();
-    let org = votingengine::types::ORG_REN;
-    let admins_len = admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())
-        .ok_or(Error::<T>::PersonalNotFound)?;
-    let threshold =
-        <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())
+    let institution_code = votingengine::types::PMUL;
+    let admins_len =
+        admins_change::Pallet::<T>::active_account_admins_len(institution_code, account.clone())
             .ok_or(Error::<T>::PersonalNotFound)?;
+    let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(
+        institution_code,
+        account.clone(),
+    )
+    .ok_or(Error::<T>::PersonalNotFound)?;
     let all_balance = T::Currency::free_balance(&action.account);
     // 中文注释：注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
     ensure!(

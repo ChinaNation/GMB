@@ -6,6 +6,7 @@
 //   `offchain_transaction::endpoint`,避免"节点声明"与"机构多签"混在一起。
 
 use codec::{Decode, Encode};
+use primitives::institution_code::InstitutionCode;
 use serde_json::Value;
 use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
@@ -64,7 +65,7 @@ struct OnChainInstitution {
     cid_full_name: BoundedVec<u8, ConstU32<128>>,
     main_account: AccountId32,
     fee_account: AccountId32,
-    org: u8,
+    institution_code: InstitutionCode,
     admins_len: u32,
     threshold: u32,
     admins: BoundedVec<AccountId32, ConstU32<64>>,
@@ -245,7 +246,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
 
     let admin_state = admins_storage::fetch_admin_account(&admin_account_id, None)?;
     let (admins_ss58, admins_len, threshold) = match admin_state {
-        Some(state) if state.org == inst.org => {
+        Some(state) if state.institution_code == inst.institution_code => {
             let admins = state
                 .admins
                 .iter()
@@ -276,7 +277,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         cid_number: cid_number.to_string(),
         cid_full_name,
         admin_account_hex: hex::encode(admin_account_id),
-        org: inst.org,
+        institution_code: inst.institution_code,
         main_account,
         fee_account,
         other_accounts,

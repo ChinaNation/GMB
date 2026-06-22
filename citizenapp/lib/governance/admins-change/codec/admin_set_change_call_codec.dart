@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 
 class AdminSetChangeCallCodec {
   AdminSetChangeCallCodec._();
@@ -10,7 +11,7 @@ class AdminSetChangeCallCodec {
   static const int proposeAdminSetChangeCallIndex = 0;
 
   static Uint8List build({
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
     required List<String> admins,
     required int newThreshold,
@@ -24,7 +25,8 @@ class AdminSetChangeCallCodec {
     final output = ByteOutput();
     output.pushByte(palletIndex);
     output.pushByte(proposeAdminSetChangeCallIndex);
-    output.pushByte(org);
+    // institution_code: [u8;4]
+    output.write(Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
     output.write(accountId);
     output
         .write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));

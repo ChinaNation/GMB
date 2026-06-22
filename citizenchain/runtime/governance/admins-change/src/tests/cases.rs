@@ -3,8 +3,8 @@
 use super::*;
 use primitives::count_const::{NRC_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD};
 
-// 中文注释：生命周期事件按 account + org 精确计数，确保索引器可直接按组织分桶。
-fn activated_event_count(account: AccountId32, org: u8) -> usize {
+// 中文注释：生命周期事件按 account + institution_code 精确计数，确保索引器可直接按机构码分桶。
+fn activated_event_count(account: AccountId32, institution_code: InstitutionCode) -> usize {
     System::events()
         .iter()
         .filter(|record| {
@@ -12,14 +12,14 @@ fn activated_event_count(account: AccountId32, org: u8) -> usize {
                 &record.event,
                 RuntimeEvent::AdminsChange(Event::AdminAccountActivated {
                     account: event_account,
-                    org: event_org,
-                }) if *event_account == account && *event_org == org
+                    institution_code: event_code,
+                }) if *event_account == account && *event_code == institution_code
             )
         })
         .count()
 }
 
-fn pending_removed_event_count(account: AccountId32, org: u8) -> usize {
+fn pending_removed_event_count(account: AccountId32, institution_code: InstitutionCode) -> usize {
     System::events()
         .iter()
         .filter(|record| {
@@ -27,14 +27,14 @@ fn pending_removed_event_count(account: AccountId32, org: u8) -> usize {
                 &record.event,
                 RuntimeEvent::AdminsChange(Event::AdminAccountPendingRemoved {
                     account: event_account,
-                    org: event_org,
-                }) if *event_account == account && *event_org == org
+                    institution_code: event_code,
+                }) if *event_account == account && *event_code == institution_code
             )
         })
         .count()
 }
 
-fn closed_event_count(account: AccountId32, org: u8) -> usize {
+fn closed_event_count(account: AccountId32, institution_code: InstitutionCode) -> usize {
     System::events()
         .iter()
         .filter(|record| {
@@ -42,8 +42,8 @@ fn closed_event_count(account: AccountId32, org: u8) -> usize {
                 &record.event,
                 RuntimeEvent::AdminsChange(Event::AdminAccountClosed {
                     account: event_account,
-                    org: event_org,
-                }) if *event_account == account && *event_org == org
+                    institution_code: event_code,
+                }) if *event_account == account && *event_code == institution_code
             )
         })
         .count()
@@ -58,18 +58,21 @@ fn dynamic_threshold_is_not_stored_by_admins_change() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_PUP,
+            code_bytes("CGOV"),
             AdminAccountKind::InstitutionAccount,
             vec![admin_a.clone(), admin_b],
             admin_a,
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_eq!(
-            AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
+            AdminsChange::active_account_admins_len(code_bytes("CGOV"), institution.clone()),
             Some(2)
         );
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution.clone()),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(
+                code_bytes("CGOV"),
+                institution.clone()
+            ),
             None
         );
     });
@@ -84,14 +87,14 @@ fn institution_account_min_admins_two_works() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_PUP,
+            code_bytes("CGOV"),
             AdminAccountKind::InstitutionAccount,
             vec![admin_a.clone(), admin_b],
             admin_a,
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_eq!(
-            AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
+            AdminsChange::active_account_admins_len(code_bytes("CGOV"), institution.clone()),
             Some(2)
         );
     });
@@ -109,18 +112,21 @@ fn institution_account_admins_len_does_not_create_threshold() {
 
             assert_ok!(AdminsChange::do_create_pending_admin_account(
                 institution.clone(),
-                ORG_PUP,
+                code_bytes("CGOV"),
                 AdminAccountKind::InstitutionAccount,
                 admins,
                 creator,
             ));
             assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
             assert_eq!(
-                AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
+                AdminsChange::active_account_admins_len(code_bytes("CGOV"), institution.clone()),
                 Some(count)
             );
             assert_eq!(
-                internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution.clone()),
+                internal_vote::ActiveDynamicThresholds::<Test>::get(
+                    code_bytes("CGOV"),
+                    institution.clone()
+                ),
                 None
             );
         }
@@ -136,7 +142,7 @@ fn institution_account_below_two_admins_rejected() {
         assert_noop!(
             AdminsChange::do_create_pending_admin_account(
                 institution.clone(),
-                ORG_PUP,
+                code_bytes("CGOV"),
                 AdminAccountKind::InstitutionAccount,
                 vec![admin_a.clone()],
                 admin_a,
@@ -153,21 +159,23 @@ fn institution_account_requires_org_pup_or_oth() {
         let admin_a = AccountId32::new([140u8; 32]);
         let admin_b = AccountId32::new([141u8; 32]);
 
-        for org in [ORG_PUP, ORG_OTH] {
+        // 中文注释：每个机构码用唯一非零 offset 派生独立机构账户，避免与下方
+        // pending_account_id()（offset 0）的复用机构冲突。
+        for (offset, institution_code) in [(4u8, code_bytes("CGOV")), (5u8, code_bytes("SFLP"))] {
             assert_ok!(AdminsChange::do_create_pending_admin_account(
-                pending_account_with_offset(org),
-                org,
+                pending_account_with_offset(offset),
+                institution_code,
                 AdminAccountKind::InstitutionAccount,
                 vec![admin_a.clone(), admin_b.clone()],
                 admin_a.clone(),
             ));
         }
 
-        for wrong_org in [ORG_NRC, ORG_PRC, ORG_PRB, ORG_REN] {
+        for wrong_code in [NRC, PRC, PRB, PMUL] {
             assert_noop!(
                 AdminsChange::do_create_pending_admin_account(
                     institution.clone(),
-                    wrong_org,
+                    wrong_code,
                     AdminAccountKind::InstitutionAccount,
                     vec![admin_a.clone(), admin_b.clone()],
                     admin_a.clone(),
@@ -196,18 +204,21 @@ fn institution_account_at_max_admins_works() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_OTH,
+            code_bytes("SFLP"),
             AdminAccountKind::InstitutionAccount,
             admins,
             creator,
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_eq!(
-            AdminsChange::active_account_admins_len(ORG_OTH, institution.clone()),
+            AdminsChange::active_account_admins_len(code_bytes("SFLP"), institution.clone()),
             Some(max)
         );
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, institution.clone()),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(
+                code_bytes("SFLP"),
+                institution.clone()
+            ),
             None
         );
     });
@@ -227,7 +238,7 @@ fn remove_pending_account_requires_existing_pending_account() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_REN,
+            PMUL,
             AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b],
             admin_a,
@@ -249,20 +260,20 @@ fn account_lifecycle_events_include_org() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_REN,
+            PMUL,
             AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b.clone()],
             admin_a.clone(),
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert_ok!(AdminsChange::do_close_admin_account(institution.clone()));
-        assert_eq!(activated_event_count(institution.clone(), ORG_REN), 1);
-        assert_eq!(closed_event_count(institution.clone(), ORG_REN), 1);
+        assert_eq!(activated_event_count(institution.clone(), PMUL), 1);
+        assert_eq!(closed_event_count(institution.clone(), PMUL), 1);
 
         let institution = pending_account_with_second_byte(43);
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_REN,
+            PMUL,
             AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b],
             admin_a,
@@ -270,7 +281,7 @@ fn account_lifecycle_events_include_org() {
         assert_ok!(AdminsChange::do_remove_pending_admin_account(
             institution.clone()
         ));
-        assert_eq!(pending_removed_event_count(institution.clone(), ORG_REN), 1);
+        assert_eq!(pending_removed_event_count(institution.clone(), PMUL), 1);
     });
 }
 
@@ -283,32 +294,31 @@ fn pending_account_is_not_exposed_to_active_business_api() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_REN,
+            PMUL,
             AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b.clone()],
             admin_a.clone()
         ));
 
         assert!(!AdminsChange::is_active_account_admin(
-            ORG_REN,
+            PMUL,
             institution.clone(),
             &admin_a
         ));
-        assert!(AdminsChange::active_account_admins(ORG_REN, institution.clone()).is_none());
+        assert!(AdminsChange::active_account_admins(PMUL, institution.clone()).is_none());
         assert_eq!(
-            AdminsChange::pending_account_admins_for_snapshot(ORG_REN, institution.clone())
+            AdminsChange::pending_account_admins_for_snapshot(PMUL, institution.clone())
                 .expect("pending snapshot admins should exist"),
             vec![admin_a.clone(), admin_b.clone()]
         );
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
         assert!(AdminsChange::is_active_account_admin(
-            ORG_REN,
+            PMUL,
             institution.clone(),
             &admin_a
         ));
         assert!(
-            AdminsChange::pending_account_admins_for_snapshot(ORG_REN, institution.clone())
-                .is_none()
+            AdminsChange::pending_account_admins_for_snapshot(PMUL, institution.clone()).is_none()
         );
     });
 }
@@ -323,7 +333,7 @@ fn account_lifecycle_trait_requires_votingengine_scope_for_activation() {
             AccountId32,
         >>::create_registered_account_create_proposal_with_data(
             admin_a.clone(),
-            ORG_REN,
+            PMUL,
             institution.clone(),
             vec![admin_a.clone(), admin_b.clone()],
             2,
@@ -336,7 +346,7 @@ fn account_lifecycle_trait_requires_votingengine_scope_for_activation() {
             proposal_id,
             b"org-mgmt",
             institution.clone(),
-            ORG_REN,
+            PMUL,
             AdminAccountKind::PersonalAccount,
             vec![admin_a.clone(), admin_b],
             admin_a.clone()
@@ -378,9 +388,9 @@ fn account_lifecycle_trait_requires_votingengine_scope_for_activation() {
 fn builtin_accounts_cannot_be_closed() {
     new_test_ext().execute_with(|| {
         for (institution, org, admin) in [
-            (nrc_pallet_id(), ORG_NRC, nrc_admin(0)),
-            (prc_pallet_id(), ORG_PRC, prc_admin(0)),
-            (prb_pallet_id(), ORG_PRB, prb_admin(0)),
+            (nrc_pallet_id(), NRC, nrc_admin(0)),
+            (prc_pallet_id(), PRC, prc_admin(0)),
+            (prb_pallet_id(), PRB, prb_admin(0)),
         ] {
             assert_noop!(
                 AdminsChange::do_close_admin_account(institution.clone()),
@@ -404,9 +414,17 @@ fn builtin_accounts_cannot_be_closed() {
 fn dynamic_accounts_can_be_closed() {
     new_test_ext().execute_with(|| {
         for (offset, org, kind) in [
-            (0u8, ORG_REN, AdminAccountKind::PersonalAccount),
-            (1u8, ORG_PUP, AdminAccountKind::InstitutionAccount),
-            (2u8, ORG_OTH, AdminAccountKind::InstitutionAccount),
+            (0u8, PMUL, AdminAccountKind::PersonalAccount),
+            (
+                1u8,
+                code_bytes("CGOV"),
+                AdminAccountKind::InstitutionAccount,
+            ),
+            (
+                2u8,
+                code_bytes("SFLP"),
+                AdminAccountKind::InstitutionAccount,
+            ),
         ] {
             let institution = pending_account_with_offset(offset);
             let admin_a = AccountId32::new([221u8.saturating_add(offset); 32]);
@@ -440,9 +458,17 @@ fn dynamic_accounts_can_be_closed() {
 fn dynamic_accounts_can_use_admin_set_change_entry() {
     new_test_ext().execute_with(|| {
         for (offset, org, kind) in [
-            (0u8, ORG_REN, AdminAccountKind::PersonalAccount),
-            (1u8, ORG_PUP, AdminAccountKind::InstitutionAccount),
-            (2u8, ORG_OTH, AdminAccountKind::InstitutionAccount),
+            (0u8, PMUL, AdminAccountKind::PersonalAccount),
+            (
+                1u8,
+                code_bytes("CGOV"),
+                AdminAccountKind::InstitutionAccount,
+            ),
+            (
+                2u8,
+                code_bytes("SFLP"),
+                AdminAccountKind::InstitutionAccount,
+            ),
         ] {
             let institution = pending_account_with_offset(10u8.saturating_add(offset));
             let admin_a = AccountId32::new([41u8.saturating_add(offset); 32]);
@@ -480,21 +506,28 @@ fn dynamic_account_set_change_can_add_delete_and_recalculate_threshold() {
 
         assert_ok!(AdminsChange::do_create_pending_admin_account(
             institution.clone(),
-            ORG_PUP,
+            code_bytes("CGOV"),
             AdminAccountKind::InstitutionAccount,
             vec![admin_a.clone(), admin_b.clone()],
             admin_a.clone()
         ));
         assert_ok!(AdminsChange::do_activate_admin_account(institution.clone()));
-        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_PUP, institution.clone(), 2);
+        internal_vote::ActiveDynamicThresholds::<Test>::insert(
+            code_bytes("CGOV"),
+            institution.clone(),
+            2,
+        );
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution.clone()),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(
+                code_bytes("CGOV"),
+                institution.clone()
+            ),
             Some(2)
         );
 
         assert_ok!(AdminsChange::propose_admin_set_change(
             RuntimeOrigin::signed(admin_a.clone()),
-            ORG_PUP,
+            code_bytes("CGOV"),
             institution.clone(),
             bounded_admins(vec![admin_a.clone(), admin_b.clone(), admin_c.clone()]),
             2,
@@ -503,17 +536,20 @@ fn dynamic_account_set_change_can_add_delete_and_recalculate_threshold() {
         // 中文注释：发起人创建变更提案后，投票引擎已经自动记一票赞成。
         assert_ok!(cast_vote(admin_b.clone(), add_pid, true));
         assert_eq!(
-            AdminsChange::active_account_admins_len(ORG_PUP, institution.clone()),
+            AdminsChange::active_account_admins_len(code_bytes("CGOV"), institution.clone()),
             Some(3)
         );
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution.clone()),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(
+                code_bytes("CGOV"),
+                institution.clone()
+            ),
             Some(2)
         );
 
         assert_ok!(AdminsChange::propose_admin_set_change(
             RuntimeOrigin::signed(admin_c.clone()),
-            ORG_PUP,
+            code_bytes("CGOV"),
             institution.clone(),
             bounded_admins(vec![admin_a.clone(), admin_c.clone()]),
             2,
@@ -522,11 +558,14 @@ fn dynamic_account_set_change_can_add_delete_and_recalculate_threshold() {
         // 中文注释：删除管理员提案同样只需要其他管理员补足阈值。
         assert_ok!(cast_vote(admin_a.clone(), delete_pid, true));
         assert_eq!(
-            AdminsChange::active_account_admins(ORG_PUP, institution.clone()).unwrap(),
+            AdminsChange::active_account_admins(code_bytes("CGOV"), institution.clone()).unwrap(),
             vec![admin_a, admin_c]
         );
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution.clone()),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(
+                code_bytes("CGOV"),
+                institution.clone()
+            ),
             Some(2)
         );
     });
@@ -541,7 +580,7 @@ fn nrc_set_change_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -572,7 +611,7 @@ fn non_nrc_admin_cannot_propose_nrc_set_change() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(prc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 nrc_admin(1),
                 AccountId32::new([77u8; 32])
@@ -588,7 +627,7 @@ fn non_nrc_admin_cannot_vote_nrc_set_change() {
         let institution = nrc_pallet_id();
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(1),
             AccountId32::new([88u8; 32])
@@ -611,7 +650,7 @@ fn replaced_new_admin_can_propose_next_set_change() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             old_admin,
             new_admin.clone()
@@ -623,7 +662,7 @@ fn replaced_new_admin_can_propose_next_set_change() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(new_admin),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(2),
             AccountId32::new([67u8; 32])
@@ -640,7 +679,7 @@ fn prc_set_change_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prc_admin(0)),
-            ORG_PRC,
+            PRC,
             institution.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -667,7 +706,7 @@ fn prb_set_change_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prb_admin(0)),
-            ORG_PRB,
+            PRB,
             institution.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -693,7 +732,7 @@ fn non_prc_admin_cannot_propose_or_vote_prc_set_change() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(prb_admin(0)),
-                ORG_PRC,
+                PRC,
                 institution.clone(),
                 prc_admin(1),
                 AccountId32::new([57u8; 32])
@@ -703,7 +742,7 @@ fn non_prc_admin_cannot_propose_or_vote_prc_set_change() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prc_admin(0)),
-            ORG_PRC,
+            PRC,
             institution.clone(),
             prc_admin(1),
             AccountId32::new([58u8; 32])
@@ -725,7 +764,7 @@ fn non_prb_admin_cannot_propose_or_vote_prb_set_change() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(prc_admin(0)),
-                ORG_PRB,
+                PRB,
                 institution.clone(),
                 prb_admin(1),
                 AccountId32::new([59u8; 32])
@@ -735,7 +774,7 @@ fn non_prb_admin_cannot_propose_or_vote_prb_set_change() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prb_admin(0)),
-            ORG_PRB,
+            PRB,
             institution.clone(),
             prb_admin(1),
             AccountId32::new([60u8; 32])
@@ -757,7 +796,7 @@ fn regular_internal_proposal_blocks_admin_set_change() {
             AccountId32,
         >>::create_general_internal_proposal_with_data(
             nrc_admin(0),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             b"test",
             b"payload".to_vec(),
@@ -766,7 +805,7 @@ fn regular_internal_proposal_blocks_admin_set_change() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(1)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 nrc_admin(2),
                 AccountId32::new([89u8; 32])
@@ -785,7 +824,7 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             old_admin.clone(),
             new_admin
@@ -804,11 +843,10 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
         assert_eq!(finalized_event_count(pid, STATUS_EXECUTION_FAILED), 1);
-        assert!(votingengine::Pallet::<Test>::internal_proposal_mutex(
-            ORG_NRC,
-            institution.clone()
-        )
-        .is_none());
+        assert!(
+            votingengine::Pallet::<Test>::internal_proposal_mutex(NRC, institution.clone())
+                .is_none()
+        );
         let data = votingengine::Pallet::<Test>::get_proposal_data(pid)
             .expect("proposal data should exist");
         assert!(votingengine::Pallet::<Test>::is_proposal_owner(
@@ -829,7 +867,7 @@ fn org_mismatch_is_rejected() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_PRC,
+                PRC,
                 nrc_pallet_id(),
                 nrc_admin(1),
                 AccountId32::new([74u8; 32])
@@ -848,7 +886,7 @@ fn reject_vote_does_not_trigger_execution() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -874,7 +912,7 @@ fn propose_fails_when_admin_set_unchanged() {
         assert_noop!(
             AdminsChange::propose_admin_set_change(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 bounded_admins(current_admins(institution.clone())),
                 NRC_INTERNAL_THRESHOLD,
@@ -894,7 +932,7 @@ fn propose_fails_when_admin_set_only_reordered() {
         assert_noop!(
             AdminsChange::propose_admin_set_change(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 bounded_admins(admins),
                 NRC_INTERNAL_THRESHOLD,
@@ -910,7 +948,7 @@ fn propose_fails_when_admin_set_has_duplicate_admin() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 nrc_pallet_id(),
                 nrc_admin(1),
                 nrc_admin(2)
@@ -927,7 +965,7 @@ fn executed_proposal_cannot_be_executed_again() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(1),
             AccountId32::new([203u8; 32])
@@ -951,7 +989,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         let institution = nrc_pallet_id();
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(1),
             AccountId32::new([206u8; 32])
@@ -976,7 +1014,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         // 中文注释：投票引擎全局限额管控后，被拒绝的提案不再阻塞同机构新提案。
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(2),
             AccountId32::new([207u8; 32])
@@ -993,7 +1031,7 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -1016,11 +1054,10 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
             STATUS_EXECUTION_FAILED
         );
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
-        assert!(votingengine::Pallet::<Test>::internal_proposal_mutex(
-            ORG_NRC,
-            institution.clone()
-        )
-        .is_none());
+        assert!(
+            votingengine::Pallet::<Test>::internal_proposal_mutex(NRC, institution.clone())
+                .is_none()
+        );
 
         AdminAccounts::<Test>::mutate(institution.clone(), |maybe| {
             let account = maybe.as_mut().expect("institution should exist");
@@ -1044,7 +1081,7 @@ fn execute_admin_set_change_rejects_wrong_proposal_kind_or_stage() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(1),
             AccountId32::new([209u8; 32])
@@ -1086,7 +1123,7 @@ fn execute_admin_set_change_rejects_proposal_metadata_mismatch() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(1),
             AccountId32::new([210u8; 32])
@@ -1106,7 +1143,7 @@ fn execute_admin_set_change_rejects_proposal_metadata_mismatch() {
         votingengine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
             let proposal = maybe.as_mut().expect("proposal should exist");
             proposal.internal_institution = Some(institution.clone());
-            proposal.internal_org = Some(ORG_PRC);
+            proposal.internal_code = Some(PRC);
         });
         assert_ok!(VotingEngine::retry_passed_proposal(
             RuntimeOrigin::signed(nrc_admin(0)),
@@ -1130,7 +1167,7 @@ fn vote_below_threshold_does_not_trigger_execution() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -1155,7 +1192,7 @@ fn invalid_institution_is_rejected() {
         assert_noop!(
             AdminsChange::propose_admin_set_change(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 AccountId32::new([0u8; 32]),
                 bounded_admins(vec![nrc_admin(0), AccountId32::new([205u8; 32])]),
                 NRC_INTERNAL_THRESHOLD,
@@ -1183,7 +1220,7 @@ fn nrc_full_cycle_set_change_keeps_admins_len_stable() {
 
             assert_ok!(propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 old_admin.clone(),
                 new_admin.clone()
@@ -1208,7 +1245,7 @@ fn nrc_full_cycle_set_change_keeps_admins_len_stable() {
                 "round {i}: old admin must be out"
             );
             assert!(
-                votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution.clone())
+                votingengine::Pallet::<Test>::internal_proposal_mutex(NRC, institution.clone())
                     .is_none(),
                 "round {i}: mutex must be released after finalize"
             );
@@ -1225,7 +1262,7 @@ fn concurrent_nrc_admin_set_changes_blocked_by_mutex() {
 
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             nrc_admin(13),
             AccountId32::new([220u8; 32])
@@ -1234,7 +1271,7 @@ fn concurrent_nrc_admin_set_changes_blocked_by_mutex() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 nrc_admin(14),
                 AccountId32::new([221u8; 32])
@@ -1245,7 +1282,7 @@ fn concurrent_nrc_admin_set_changes_blocked_by_mutex() {
         assert_noop!(
             propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(1)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 nrc_admin(13),
                 AccountId32::new([222u8; 32])
@@ -1268,7 +1305,7 @@ fn prc_set_change_isolates_provinces() {
         let new_admin = AccountId32::new([240u8; 32]);
         assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prc_admin(0)),
-            ORG_PRC,
+            PRC,
             prc_a.clone(),
             old_admin.clone(),
             new_admin.clone()
@@ -1330,7 +1367,7 @@ fn pup_builtin_clears_admins_change_validation_for_set_change() {
         let threshold = admins.len() as u32 / 2 + 1;
         let res = AdminsChange::propose_admin_set_change(
             RuntimeOrigin::signed(old_admin),
-            ORG_PUP,
+            pup_builtin_code(),
             account,
             bounded_admins(admins),
             threshold,

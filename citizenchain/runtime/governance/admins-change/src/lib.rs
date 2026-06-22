@@ -30,7 +30,10 @@ use primitives::china::china_sf::CHINA_SF;
 use primitives::china::china_zf::CHINA_ZF;
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use votingengine::{
-    types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
+    types::{
+        institution_code_from_cid_number, is_institution_code, is_personal_code,
+        is_public_legal_code, InstitutionCode, NRC, PRB, PRC,
+    },
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
     STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
@@ -115,7 +118,7 @@ pub enum AdminAccountStatus {
 )]
 #[scale_info(skip_type_params(AdminList))]
 pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
-    pub org: u8,
+    pub institution_code: InstitutionCode,
     pub kind: AdminAccountKind,
     pub admins: AdminList,
     pub creator: AccountId,
@@ -134,7 +137,7 @@ pub trait AdminAccountLifecycle<AccountId> {
         proposal_id: u64,
         module_tag: &[u8],
         institution: AccountId,
-        org: u8,
+        institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<AccountId>,
         creator: AccountId,
@@ -167,17 +170,11 @@ fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountI
     T::AccountId::decode(&mut &raw[..]).ok()
 }
 
-fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    CHINA_CB
-        .first()
-        .and_then(|n| decode_account::<T>(&n.main_account))
-}
-
-fn expected_admins_len(org: u8) -> Option<u32> {
-    match org {
-        ORG_NRC => Some(NRC_ADMIN_COUNT),
-        ORG_PRC => Some(PRC_ADMIN_COUNT),
-        ORG_PRB => Some(PRB_ADMIN_COUNT),
+fn expected_admins_len(institution_code: InstitutionCode) -> Option<u32> {
+    match institution_code {
+        NRC => Some(NRC_ADMIN_COUNT),
+        PRC => Some(PRC_ADMIN_COUNT),
+        PRB => Some(PRB_ADMIN_COUNT),
         _ => None,
     }
 }
@@ -257,7 +254,7 @@ pub mod pallet {
     /// 所有 panic 都携带 `cid_number` 便于运维定位是哪条记录出错。
     fn build_builtin_institution<T: Config>(
         cid_number: &'static str,
-        org: u8,
+        institution_code: InstitutionCode,
         raw_admins: &'static [[u8; 32]],
     ) -> AdminAccountOf<T> {
         let admins: Vec<T::AccountId> = raw_admins
@@ -281,7 +278,7 @@ pub mod pallet {
             )
         });
         AdminAccount {
-            org,
+            institution_code,
             kind: AdminAccountKind::BuiltinInstitution,
             admins: bounded,
             creator,
@@ -314,37 +311,9 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            for node in CHINA_CB.iter() {
-                let Some(institution) = decode_account::<T>(&node.main_account) else {
-                    panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
-                };
-                let org = if Some(institution.clone()) == nrc_account::<T>() {
-                    ORG_NRC
-                } else {
-                    ORG_PRC
-                };
-                ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
-                AdminAccounts::<T>::insert(
-                    institution,
-                    build_builtin_institution::<T>(node.cid_number, org, node.admins),
-                );
-            }
-
-            for node in CHINA_CH.iter() {
-                let Some(institution) = decode_account::<T>(&node.main_account) else {
-                    panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
-                };
-                ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
-                AdminAccounts::<T>::insert(
-                    institution,
-                    build_builtin_institution::<T>(node.cid_number, ORG_PRB, node.admins),
-                );
-            }
-
-            // 中文注释:公权机构(政府/立法/司法/监察/教育)创世内置管理员统一写入 admins-change,
-            // org 一律 ORG_PUP(动态账户,管理员变更走 propose_admin_set_change)。
-            // 总统府联邦注册局随 CHINA_ZF 一并写入,链上单一真源,CID 不再内置注册局管理员。
-            macro_rules! insert_pup_builtin {
+            // 中文注释:创世内置机构的治理分类一律从 cid_number 派生机构码,
+            // 不再按 nrc_account 判 NRC/PRC,机构码即治理分类唯一真源。
+            macro_rules! insert_builtin {
                 ($arr:expr) => {
                     for node in $arr.iter() {
                         let Some(institution) = decode_account::<T>(&node.main_account) else {
@@ -353,19 +322,30 @@ pub mod pallet {
                                 node.cid_number
                             );
                         };
+                        let institution_code = institution_code_from_cid_number(node.cid_number)
+                            .expect("china builtin cid_number must encode institution code");
                         ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
                         AdminAccounts::<T>::insert(
                             institution,
-                            build_builtin_institution::<T>(node.cid_number, ORG_PUP, node.admins),
+                            build_builtin_institution::<T>(
+                                node.cid_number,
+                                institution_code,
+                                node.admins,
+                            ),
                         );
                     }
                 };
             }
-            insert_pup_builtin!(CHINA_ZF);
-            insert_pup_builtin!(CHINA_SF);
-            insert_pup_builtin!(CHINA_JC);
-            insert_pup_builtin!(CHINA_JY);
-            insert_pup_builtin!(CHINA_LF);
+            insert_builtin!(CHINA_CB);
+            insert_builtin!(CHINA_CH);
+            // 中文注释:公权机构(政府/立法/司法/监察/教育)创世内置管理员统一写入 admins-change,
+            // 机构码从 cid_number 派生(动态账户,管理员变更走 propose_admin_set_change)。
+            // 总统府联邦注册局随 CHINA_ZF 一并写入,链上单一真源,CID 不再内置注册局管理员。
+            insert_builtin!(CHINA_ZF);
+            insert_builtin!(CHINA_SF);
+            insert_builtin!(CHINA_JC);
+            insert_builtin!(CHINA_JY);
+            insert_builtin!(CHINA_LF);
         }
     }
 
@@ -375,7 +355,7 @@ pub mod pallet {
         /// 已发起管理员集合变更提案（并已在投票引擎创建内部提案）
         AdminSetChangeProposed {
             proposal_id: u64,
-            org: u8,
+            institution_code: InstitutionCode,
             account: T::AccountId,
             proposer: T::AccountId,
             old_admins_len: u32,
@@ -394,24 +374,33 @@ pub mod pallet {
         /// 多签账户管理员配置已写入 Pending。
         AdminAccountPendingCreated {
             account: T::AccountId,
-            org: u8,
+            institution_code: InstitutionCode,
             kind: AdminAccountKind,
             creator: T::AccountId,
             admins_len: u32,
         },
         /// 多签账户管理员配置已激活。
-        AdminAccountActivated { account: T::AccountId, org: u8 },
+        AdminAccountActivated {
+            account: T::AccountId,
+            institution_code: InstitutionCode,
+        },
         /// Pending 多签账户管理员配置已清理。
-        AdminAccountPendingRemoved { account: T::AccountId, org: u8 },
+        AdminAccountPendingRemoved {
+            account: T::AccountId,
+            institution_code: InstitutionCode,
+        },
         /// 多签账户管理员配置已关闭。
-        AdminAccountClosed { account: T::AccountId, org: u8 },
+        AdminAccountClosed {
+            account: T::AccountId,
+            institution_code: InstitutionCode,
+        },
     }
 
     #[pallet::error]
     pub enum Error<T> {
         /// 无效机构
         InvalidInstitution,
-        /// 机构类型与 org 参数不匹配
+        /// 机构类型与 institution_code 参数不匹配
         InstitutionOrgMismatch,
         /// 管理员数量不符合固定人数约束
         InvalidAdminsLen,
@@ -439,7 +428,7 @@ pub mod pallet {
         AdminAccountNotActive,
         /// 内置治理机构永远不可关闭
         BuiltinAdminAccountCannotClose,
-        /// 管理员账户类型与 org 不匹配
+        /// 管理员账户类型与 institution_code 不匹配
         InvalidAdminAccountKind,
         /// 阈值不合法
         InvalidThreshold,
@@ -455,26 +444,33 @@ pub mod pallet {
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]
         pub fn propose_admin_set_change(
             origin: OriginFor<T>,
-            org: u8,
+            institution_code: InstitutionCode,
             account: T::AccountId,
             admins: AdminsOf<T>,
             new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // 1) 校验管理员账户已激活且 org 匹配。
+            // 1) 校验管理员账户已激活且机构码匹配。
             let current =
                 AdminAccounts::<T>::get(account.clone()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 current.status == AdminAccountStatus::Active,
                 Error::<T>::AdminAccountNotActive
             );
-            ensure!(current.org == org, Error::<T>::InstitutionOrgMismatch);
+            ensure!(
+                current.institution_code == institution_code,
+                Error::<T>::InstitutionOrgMismatch
+            );
 
             // 2) 校验发起人与目标管理员集合合法性。
             let current_admins = current.admins.clone().into_inner();
             ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-            Self::validate_admin_set_for_account(current.kind, current.org, admins.as_slice())?;
+            Self::validate_admin_set_for_account(
+                current.kind,
+                current.institution_code,
+                admins.as_slice(),
+            )?;
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
@@ -490,7 +486,7 @@ pub mod pallet {
                 let proposal_id =
                     match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
                         who.clone(),
-                        org,
+                        institution_code,
                         account.clone(),
                         admins.len() as u32,
                         new_threshold,
@@ -503,7 +499,7 @@ pub mod pallet {
 
                 Self::deposit_event(Event::<T>::AdminSetChangeProposed {
                     proposal_id,
-                    org,
+                    institution_code,
                     account,
                     proposer: who,
                     old_admins_len: current_admins.len() as u32,
@@ -524,19 +520,20 @@ pub mod pallet {
 
         fn validate_admins_len_for_account(
             kind: AdminAccountKind,
-            org: u8,
+            institution_code: InstitutionCode,
             admins_len: usize,
         ) -> DispatchResult {
             match kind {
-                AdminAccountKind::BuiltinInstitution => match expected_admins_len(org) {
+                AdminAccountKind::BuiltinInstitution => match expected_admins_len(institution_code)
+                {
                     // 治理机构固定人数约束：国储会19，省储会9，省储行9。
                     Some(expected) => ensure!(
                         admins_len == expected as usize,
                         Error::<T>::InvalidAdminsLen
                     ),
-                    // 中文注释:PUP 创世机构(如联邦注册局)管理员数动态(自治可增减),
-                    // 走与 InstitutionAccount 相同的可变上限,不锁固定人数。org 已由
-                    // ensure_account_kind_matches_org 限定,此处 None 即 ORG_PUP。
+                    // 中文注释:公权创世机构(如联邦注册局)管理员数动态(自治可增减),
+                    // 走与 InstitutionAccount 相同的可变上限,不锁固定人数。机构码已由
+                    // ensure_account_kind_matches_org 限定,此处 None 即非固定治理档公权机构。
                     None => {
                         ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
                         ensure!(
@@ -565,11 +562,11 @@ pub mod pallet {
 
         fn validate_admin_set_for_account(
             kind: AdminAccountKind,
-            org: u8,
+            institution_code: InstitutionCode,
             admins: &[T::AccountId],
         ) -> DispatchResult {
-            Self::ensure_account_kind_matches_org(kind, org)?;
-            Self::validate_admins_len_for_account(kind, org, admins.len())?;
+            Self::ensure_account_kind_matches_org(kind, institution_code)?;
+            Self::validate_admins_len_for_account(kind, institution_code, admins.len())?;
             Self::ensure_unique_admins(admins)?;
             Ok(())
         }
@@ -591,23 +588,29 @@ pub mod pallet {
             left_set == right_set
         }
 
-        fn ensure_account_kind_matches_org(kind: AdminAccountKind, org: u8) -> DispatchResult {
+        fn ensure_account_kind_matches_org(
+            kind: AdminAccountKind,
+            institution_code: InstitutionCode,
+        ) -> DispatchResult {
             match kind {
                 AdminAccountKind::BuiltinInstitution => {
-                    // 中文注释:创世内置机构含治理机构(NRC/PRC/PRB)与公权机构(PUP,如联邦
-                    // 注册局/顶层政府)。PUP 内置走动态管理员自治(propose_admin_set_change),
-                    // 故同样接受 ORG_PUP;人数约束在 validate_admins_len_for_account 内分流。
+                    // 中文注释:创世内置机构含治理机构(NRC/PRC/PRB)与公权法人机构(如联邦
+                    // 注册局/顶层政府)。公权内置走动态管理员自治(propose_admin_set_change),
+                    // 故统一接受公权法人机构码;人数约束在 validate_admins_len_for_account 内分流。
                     ensure!(
-                        matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_PUP),
+                        is_public_legal_code(&institution_code),
                         Error::<T>::InvalidAdminAccountKind
                     );
                 }
                 AdminAccountKind::PersonalAccount => {
-                    ensure!(org == ORG_REN, Error::<T>::InvalidAdminAccountKind);
+                    ensure!(
+                        is_personal_code(&institution_code),
+                        Error::<T>::InvalidAdminAccountKind
+                    );
                 }
                 AdminAccountKind::InstitutionAccount => {
                     ensure!(
-                        matches!(org, ORG_PUP | ORG_OTH),
+                        is_institution_code(&institution_code),
                         Error::<T>::InvalidAdminAccountKind
                     );
                 }
@@ -619,7 +622,7 @@ pub mod pallet {
             proposal_id: u64,
             module_tag: &[u8],
             institution: T::AccountId,
-            org: u8,
+            institution_code: InstitutionCode,
             expected_status: u8,
             require_callback_scope: bool,
         ) -> DispatchResult {
@@ -642,7 +645,7 @@ pub mod pallet {
                 Error::<T>::ProposalInstitutionMismatch
             );
             ensure!(
-                proposal.internal_org == Some(org),
+                proposal.internal_code == Some(institution_code),
                 Error::<T>::ProposalOrgMismatch
             );
             ensure!(
@@ -663,7 +666,7 @@ pub mod pallet {
         /// 中文注释：生命周期写入只能经 `AdminAccountLifecycle` trait 做提案上下文校验后进入。
         pub(crate) fn do_create_pending_admin_account(
             institution: T::AccountId,
-            org: u8,
+            institution_code: InstitutionCode,
             kind: AdminAccountKind,
             admins: Vec<T::AccountId>,
             creator: T::AccountId,
@@ -672,7 +675,7 @@ pub mod pallet {
                 !AdminAccounts::<T>::contains_key(institution.clone()),
                 Error::<T>::InstitutionAlreadyExists
             );
-            Self::validate_admin_set_for_account(kind, org, &admins)?;
+            Self::validate_admin_set_for_account(kind, institution_code, &admins)?;
 
             let bounded: AdminsOf<T> = admins
                 .try_into()
@@ -682,7 +685,7 @@ pub mod pallet {
             AdminAccounts::<T>::insert(
                 institution.clone(),
                 AdminAccount {
-                    org,
+                    institution_code,
                     kind,
                     admins: bounded,
                     creator: creator.clone(),
@@ -693,7 +696,7 @@ pub mod pallet {
             );
             Self::deposit_event(Event::<T>::AdminAccountPendingCreated {
                 account: institution,
-                org,
+                institution_code,
                 kind,
                 creator,
                 admins_len,
@@ -703,9 +706,9 @@ pub mod pallet {
 
         /// 将 Pending 管理员账户激活。
         pub(crate) fn do_activate_admin_account(institution: T::AccountId) -> DispatchResult {
-            let org = AdminAccounts::<T>::try_mutate(
+            let institution_code = AdminAccounts::<T>::try_mutate(
                 institution.clone(),
-                |maybe| -> Result<u8, DispatchError> {
+                |maybe| -> Result<InstitutionCode, DispatchError> {
                     let account = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
                     ensure!(
                         account.status == AdminAccountStatus::Pending,
@@ -713,12 +716,12 @@ pub mod pallet {
                     );
                     account.status = AdminAccountStatus::Active;
                     account.updated_at = frame_system::Pallet::<T>::block_number();
-                    Ok(account.org)
+                    Ok(account.institution_code)
                 },
             )?;
             Self::deposit_event(Event::<T>::AdminAccountActivated {
                 account: institution,
-                org,
+                institution_code,
             });
             Ok(())
         }
@@ -732,11 +735,11 @@ pub mod pallet {
                 account.status == AdminAccountStatus::Pending,
                 Error::<T>::AdminAccountNotPending
             );
-            let org = account.org;
+            let institution_code = account.institution_code;
             AdminAccounts::<T>::remove(institution.clone());
             Self::deposit_event(Event::<T>::AdminAccountPendingRemoved {
                 account: institution,
-                org,
+                institution_code,
             });
             Ok(())
         }
@@ -754,48 +757,60 @@ pub mod pallet {
                 !matches!(account.kind, AdminAccountKind::BuiltinInstitution),
                 Error::<T>::BuiltinAdminAccountCannotClose
             );
-            let org = account.org;
+            let institution_code = account.institution_code;
             // 中文注释：动态多签注销完成后不保留 Closed 当前状态墓碑；
             // 同名确定性地址可在资金清空后重新走全新的注册流程。
             AdminAccounts::<T>::remove(institution.clone());
             Self::deposit_event(Event::<T>::AdminAccountClosed {
                 account: institution,
-                org,
+                institution_code,
             });
             Ok(())
         }
 
         fn admin_account_with_status(
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             status: AdminAccountStatus,
         ) -> Option<AdminAccountOf<T>> {
             let account = AdminAccounts::<T>::get(institution)?;
-            if account.org != org || account.status != status {
+            if account.institution_code != institution_code || account.status != status {
                 return None;
             }
             // 中文注释：读侧也要执行账户类型边界校验，避免升级前写入的旧脏数据
             // 继续通过 active/pending 查询 API 被其他业务模块当作有效管理员账户。
-            if Self::ensure_account_kind_matches_org(account.kind, account.org).is_err() {
+            if Self::ensure_account_kind_matches_org(account.kind, account.institution_code)
+                .is_err()
+            {
                 return None;
             }
             Some(account)
         }
 
         /// 查询 Active 账户是否存在。普通业务账户合法性判断只使用 Active 账户。
-        pub fn active_admin_account_exists(org: u8, institution: T::AccountId) -> bool {
-            Self::admin_account_with_status(org, institution, AdminAccountStatus::Active).is_some()
+        pub fn active_admin_account_exists(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+        ) -> bool {
+            Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Active,
+            )
+            .is_some()
         }
 
         /// 查询 Active 账户管理员权限。普通业务授权只能使用 Active 账户。
         pub fn is_active_account_admin(
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            let Some(account) =
-                Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)
-            else {
+            let Some(account) = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Active,
+            ) else {
                 return false;
             };
             account.admins.iter().any(|admin| admin == who)
@@ -803,35 +818,54 @@ pub mod pallet {
 
         /// 读取 Active 账户管理员列表。普通业务提案创建和投票快照默认使用此 API。
         pub fn active_account_admins(
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
-            let account =
-                Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)?;
+            let account = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Active,
+            )?;
             Some(account.admins.into_inner())
         }
 
         /// 读取 Active 账户管理员数量。普通业务阈值兜底判断只能使用 Active 账户。
-        pub fn active_account_admins_len(org: u8, institution: T::AccountId) -> Option<u32> {
-            let account =
-                Self::admin_account_with_status(org, institution, AdminAccountStatus::Active)?;
+        pub fn active_account_admins_len(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+        ) -> Option<u32> {
+            let account = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Active,
+            )?;
             Some(account.admins.len() as u32)
         }
 
         /// 查询 Pending 账户是否存在。仅用于创建/激活该账户时判断账户合法性。
-        pub fn pending_account_exists_for_snapshot(org: u8, institution: T::AccountId) -> bool {
-            Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending).is_some()
+        pub fn pending_account_exists_for_snapshot(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+        ) -> bool {
+            Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Pending,
+            )
+            .is_some()
         }
 
         /// 查询 Pending 账户管理员权限。仅用于创建/激活该账户时锁定投票快照。
         pub fn is_pending_account_admin_for_snapshot(
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            let Some(account) =
-                Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending)
-            else {
+            let Some(account) = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Pending,
+            ) else {
                 return false;
             };
             account.admins.iter().any(|admin| admin == who)
@@ -839,21 +873,27 @@ pub mod pallet {
 
         /// 读取 Pending 账户管理员列表。仅供投票引擎 Pending 创建入口写快照。
         pub fn pending_account_admins_for_snapshot(
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
-            let account =
-                Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending)?;
+            let account = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Pending,
+            )?;
             Some(account.admins.into_inner())
         }
 
         /// 读取 Pending 账户管理员数量。仅用于创建/激活该账户的快照语义。
         pub fn pending_account_admins_len_for_snapshot(
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
         ) -> Option<u32> {
-            let account =
-                Self::admin_account_with_status(org, institution, AdminAccountStatus::Pending)?;
+            let account = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Pending,
+            )?;
             Some(account.admins.len() as u32)
         }
 
@@ -888,18 +928,18 @@ pub mod pallet {
                 Error::<T>::ProposalInstitutionMismatch
             );
             ensure!(
-                proposal.internal_org == Some(account.org),
+                proposal.internal_code == Some(account.institution_code),
                 Error::<T>::ProposalOrgMismatch
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
-                account.org,
+                account.institution_code,
                 action.account.clone(),
                 proposal_id,
             )?;
             let current_admins = account.admins.clone().into_inner();
             Self::validate_admin_set_for_account(
                 account.kind,
-                account.org,
+                account.institution_code,
                 action.admins.as_slice(),
             )?;
             ensure!(
@@ -930,7 +970,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
         proposal_id: u64,
         module_tag: &[u8],
         institution: T::AccountId,
-        org: u8,
+        institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<T::AccountId>,
         creator: T::AccountId,
@@ -939,11 +979,11 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
             proposal_id,
             module_tag,
             institution.clone(),
-            org,
+            institution_code,
             STATUS_VOTING,
             false,
         )?;
-        Self::do_create_pending_admin_account(institution, org, kind, admins, creator)
+        Self::do_create_pending_admin_account(institution, institution_code, kind, admins, creator)
     }
 
     fn activate_admin_account_for_proposal(
@@ -957,7 +997,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
             proposal_id,
             module_tag,
             institution.clone(),
-            account.org,
+            account.institution_code,
             STATUS_PASSED,
             true,
         )?;
@@ -981,7 +1021,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
             proposal_id,
             module_tag,
             institution.clone(),
-            account.org,
+            account.institution_code,
             proposal.status,
             false,
         )?;
@@ -999,7 +1039,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
             proposal_id,
             module_tag,
             institution.clone(),
-            account.org,
+            account.institution_code,
             STATUS_PASSED,
             true,
         )?;

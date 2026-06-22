@@ -26,7 +26,7 @@ class AdminSetChangeService {
       newThreshold: newThreshold,
     );
     return AdminSetChangeCallCodec.build(
-      org: account.org,
+      institutionCode: account.institutionCode,
       accountId: AdminAccountIdCodec.fromHex(account.accountHex),
       admins: normalized.admins,
       newThreshold: normalized.threshold,

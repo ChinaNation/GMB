@@ -4,18 +4,21 @@ use super::types::AdminAccountDecoded;
 /// 解码 `AdminsChange::AdminAccounts` 的完整核心字段。
 ///
 /// 链上布局:
-/// org:u8 + kind:u8 + admins:BoundedVec<AccountId32>
+/// institution_code:[u8;4] + kind:u8 + admins:BoundedVec<AccountId32>
 /// + creator:AccountId32 + created_at:u32 + updated_at:u32 + status:u8。
 /// 中文注释:created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
 pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
-    if data.len() < 2 {
+    if data.len() < 5 {
         return Err("AdminAccount 数据不足".to_string());
     }
-    let org = data[0];
-    let kind = data[1];
+    // institution_code: [u8;4] 定长数组,4 个裸字节无长度前缀。
+    let institution_code: [u8; 4] = data[0..4]
+        .try_into()
+        .map_err(|_| "AdminAccount 机构码数据不足".to_string())?;
+    let kind = data[4];
 
-    let (count, len_size) = read_compact_u32(data, 2)?;
-    let mut offset = 2 + len_size;
+    let (count, len_size) = read_compact_u32(data, 5)?;
+    let mut offset = 5 + len_size;
     let mut admins = Vec::with_capacity(count as usize);
     for _ in 0..count {
         if offset + 32 > data.len() {
@@ -49,7 +52,7 @@ pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> 
     let status = data[offset];
 
     Ok(AdminAccountDecoded {
-        org,
+        institution_code,
         kind,
         admins,
         creator_hex,
@@ -133,13 +136,18 @@ mod tests {
 
     #[test]
     fn decode_admin_account_full_layout() {
-        let mut data = vec![0, 0, 0x04];
+        use primitives::institution_code::NRC;
+        // institution_code(4B = b"NRC\0") + kind(1B=0) + admins Compact 长度(0x04 = 1 项)。
+        let mut data = NRC.to_vec();
+        data.push(0);
+        data.push(0x04);
         data.extend_from_slice(&[0xaa; 32]);
         data.extend_from_slice(&[0xbb; 32]);
         data.extend_from_slice(&7u32.to_le_bytes());
         data.extend_from_slice(&9u32.to_le_bytes());
         data.push(1);
         let decoded = decode_admin_account(&data).unwrap();
+        assert_eq!(decoded.institution_code, NRC);
         assert_eq!(decoded.admins, vec!["aa".repeat(32)]);
         assert_eq!(decoded.status, 1);
     }

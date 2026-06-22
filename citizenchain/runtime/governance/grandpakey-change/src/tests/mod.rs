@@ -122,11 +122,15 @@ impl
 }
 
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
         let mut who_raw = [0u8; 32];
         who_raw.copy_from_slice(who.as_ref());
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|node| AccountId32::new(node.main_account) == institution)
                 .map(|node| node.admins.iter().any(|admin| *admin == who_raw))
@@ -135,9 +139,12 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         }
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<sp_std::vec::Vec<AccountId32>> {
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|node| AccountId32::new(node.main_account) == institution)
                 .map(|node| {

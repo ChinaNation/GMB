@@ -7,6 +7,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/governance/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
@@ -214,29 +215,29 @@ class AdminAccountService {
     AdminAccountState state,
     Uint8List accountId,
   ) async {
-    final fixed = _fixedGovernanceThreshold(state.org);
+    final fixed = _fixedGovernanceThreshold(state.institutionCode);
     if (fixed != null) return fixed;
     final active = await _fetchDynamicThreshold(
       storageName: 'ActiveDynamicThresholds',
-      org: state.org,
+      institutionCode: state.institutionCode,
       accountId: accountId,
     );
     if (active != null) return active;
     return _fetchDynamicThreshold(
       storageName: 'PendingDynamicThresholds',
-      org: state.org,
+      institutionCode: state.institutionCode,
       accountId: accountId,
     );
   }
 
   Future<int?> _fetchDynamicThreshold({
     required String storageName,
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) async {
     final key = _internalVoteDoubleMapKey(
       storageName: storageName,
-      org: org,
+      institutionCode: institutionCode,
       accountId: accountId,
     );
     final data =
@@ -247,12 +248,15 @@ class AdminAccountService {
 
   Uint8List _internalVoteDoubleMapKey({
     required String storageName,
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) {
     final palletHash = Hasher.twoxx128.hashString('InternalVote');
     final storageHash = Hasher.twoxx128.hashString(storageName);
-    final orgKey = _blake2128Concat(Uint8List.fromList([org]));
+    // K1 type is now InstitutionCode ([u8;4]) with Blake2_128Concat hasher.
+    final orgKey = _blake2128Concat(
+      Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)),
+    );
     final accountKey = _blake2128Concat(accountId);
     final key = Uint8List(
       palletHash.length +
@@ -279,10 +283,10 @@ class AdminAccountService {
     return result;
   }
 
-  int? _fixedGovernanceThreshold(int org) {
-    return switch (org) {
-      0 => 13,
-      1 || 2 => 6,
+  int? _fixedGovernanceThreshold(String code) {
+    return switch (code) {
+      'NRC' => 13,
+      'PRC' || 'PRB' => 6,
       _ => null,
     };
   }
@@ -315,7 +319,7 @@ class _PersistedAdminAccount {
         'updated_at_millis': updatedAtMillis,
         'state': {
           'account_id_hex': state.accountHex,
-          'org': state.org,
+          'institution_code': state.institutionCode,
           'kind': state.kind,
           'admins': state.admins,
           'threshold': state.threshold,
@@ -334,7 +338,9 @@ class _PersistedAdminAccount {
       final stateRaw = decoded['state'];
       if (stateRaw is! Map<String, dynamic>) return null;
       final accountHex = stateRaw['account_id_hex']?.toString();
-      final org = _toInt(stateRaw['org']);
+      // 向后兼容: 旧缓存有 'org':int，新缓存写 'institution_code':String
+      final institutionCode = stateRaw['institution_code']?.toString() ??
+          _orgIntToCode(_toInt(stateRaw['org']));
       final kind = _toInt(stateRaw['kind']);
       final threshold = _toInt(stateRaw['threshold']);
       final createdAt = _toInt(stateRaw['created_at']);
@@ -342,7 +348,6 @@ class _PersistedAdminAccount {
       final status = _toInt(stateRaw['status']);
       final updatedAtMillis = _toInt(decoded['updated_at_millis']);
       if (accountHex == null ||
-          org == null ||
           kind == null ||
           threshold == null ||
           createdAt == null ||
@@ -355,7 +360,7 @@ class _PersistedAdminAccount {
         updatedAtMillis: updatedAtMillis,
         state: AdminAccountState(
           accountHex: AdminAccountIdCodec.normalizeHex(accountHex),
-          org: org,
+          institutionCode: institutionCode,
           kind: kind,
           admins: _stringList(stateRaw['admins']),
           threshold: threshold,

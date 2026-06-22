@@ -6,6 +6,7 @@
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
+use crate::types::InstitutionCode;
 use crate::{ProposalCancelDecision, ProposalExecutionOutcome};
 
 pub trait JointVoteEngine<AccountId> {
@@ -58,7 +59,7 @@ pub trait InternalVoteEngine<AccountId> {
     /// 创建一般内部投票提案。用于转账、销毁、GRANDPA key 更换等普通业务。
     fn create_general_internal_proposal_with_data(
         who: AccountId,
-        org: u8,
+        institution_code: InstitutionCode,
         institution: AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
@@ -69,7 +70,7 @@ pub trait InternalVoteEngine<AccountId> {
     /// 中文注释：生命周期投票由投票引擎按 active 管理员快照写入全员通过阈值。
     fn create_lifecycle_internal_proposal_with_data(
         _who: AccountId,
-        _org: u8,
+        _institution_code: InstitutionCode,
         _institution: AccountId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
@@ -83,7 +84,7 @@ pub trait InternalVoteEngine<AccountId> {
     /// 本次注册投票阈值由投票引擎按 `admins.len()` 写全员通过快照。
     fn create_registered_account_create_proposal_with_data(
         _who: AccountId,
-        _org: u8,
+        _institution_code: InstitutionCode,
         _institution: AccountId,
         _admins: sp_std::vec::Vec<AccountId>,
         _dynamic_threshold: u32,
@@ -101,7 +102,7 @@ pub trait InternalVoteEngine<AccountId> {
     /// 写入投票引擎的下一阶段动态阈值。
     fn create_admin_change_internal_proposal_with_data(
         _who: AccountId,
-        _org: u8,
+        _institution_code: InstitutionCode,
         _institution: AccountId,
         _new_admins_len: u32,
         _new_threshold: u32,
@@ -114,12 +115,12 @@ pub trait InternalVoteEngine<AccountId> {
     }
 
     /// 读取已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
-    fn active_dynamic_threshold(_org: u8, _institution: AccountId) -> Option<u32> {
+    fn active_dynamic_threshold(_institution_code: InstitutionCode, _institution: AccountId) -> Option<u32> {
         None
     }
 
     /// 读取 pending 或 active 动态阈值。注册回调在激活前发事件时使用。
-    fn configured_dynamic_threshold(_org: u8, _institution: AccountId) -> Option<u32> {
+    fn configured_dynamic_threshold(_institution_code: InstitutionCode, _institution: AccountId) -> Option<u32> {
         None
     }
 }
@@ -127,7 +128,7 @@ pub trait InternalVoteEngine<AccountId> {
 impl<AccountId> InternalVoteEngine<AccountId> for () {
     fn create_general_internal_proposal_with_data(
         _who: AccountId,
-        _org: u8,
+        _institution_code: InstitutionCode,
         _institution: AccountId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
@@ -527,29 +528,29 @@ impl<
 /// 中文注释：内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
 ///
 /// 一致性契约：
-/// - `is_internal_admin(org, institution, who) == true` 时，同一链上状态读取到的
-///   `get_admin_list(org, institution)` 必须包含 `who`。
+/// - `is_internal_admin(institution_code, institution, who) == true` 时，同一链上状态读取到的
+///   `get_admin_list(institution_code, institution)` 必须包含 `who`。
 /// - Pending 版本的 `is_pending_internal_admin` 与 `get_pending_admin_list`
 ///   必须满足同样强一致关系。
 ///
 /// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
 /// drift，会被视为权限错误并回滚提案创建。
 pub trait InternalAdminProvider<AccountId> {
-    fn is_internal_admin(org: u8, institution: AccountId, who: &AccountId) -> bool;
+    fn is_internal_admin(institution_code: InstitutionCode, institution: AccountId, who: &AccountId) -> bool;
 
     /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
-    fn get_admin_list(_org: u8, _institution: AccountId) -> Option<sp_std::vec::Vec<AccountId>> {
+    fn get_admin_list(_institution_code: InstitutionCode, _institution: AccountId) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 
     /// 查询 Pending 账户管理员权限。仅供创建/激活该账户的投票入口使用。
-    fn is_pending_internal_admin(_org: u8, _institution: AccountId, _who: &AccountId) -> bool {
+    fn is_pending_internal_admin(_institution_code: InstitutionCode, _institution: AccountId, _who: &AccountId) -> bool {
         false
     }
 
     /// 获取 Pending 账户管理员列表。仅供创建/激活该账户时锁定快照。
     fn get_pending_admin_list(
-        _org: u8,
+        _institution_code: InstitutionCode,
         _institution: AccountId,
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
@@ -557,7 +558,7 @@ pub trait InternalAdminProvider<AccountId> {
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
-    fn is_internal_admin(_org: u8, _institution: AccountId, _who: &AccountId) -> bool {
+    fn is_internal_admin(_institution_code: InstitutionCode, _institution: AccountId, _who: &AccountId) -> bool {
         false
     }
 }
@@ -565,11 +566,11 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
 pub trait InternalAdminsLenProvider<AccountId> {
-    fn admins_len(org: u8, institution: AccountId) -> Option<u32>;
+    fn admins_len(institution_code: InstitutionCode, institution: AccountId) -> Option<u32>;
 }
 
 impl<AccountId> InternalAdminsLenProvider<AccountId> for () {
-    fn admins_len(_org: u8, _institution: AccountId) -> Option<u32> {
+    fn admins_len(_institution_code: InstitutionCode, _institution: AccountId) -> Option<u32> {
         None
     }
 }

@@ -11,7 +11,7 @@ fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest.clone(),
             1_000,
@@ -43,7 +43,7 @@ fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(prc_admin(0)),
-            ORG_PRC,
+            PRC,
             institution,
             dest.clone(),
             2_000,
@@ -73,7 +73,7 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(prb_admin(0)),
-            ORG_PRB,
+            PRB,
             institution,
             dest.clone(),
             3_000,
@@ -121,7 +121,7 @@ fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
         admins_change::AdminAccounts::<Test>::insert(
             personal_account.clone(),
             admins_change::AdminAccount {
-                org: ORG_REN,
+                institution_code: PERSONAL_CODE,
                 kind: admins_change::AdminAccountKind::PersonalAccount,
                 admins,
                 creator: registered_account_admin(0),
@@ -131,7 +131,7 @@ fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
             },
         );
         internal_vote::ActiveDynamicThresholds::<Test>::insert(
-            ORG_REN,
+            PERSONAL_CODE,
             personal_account.clone(),
             2,
         );
@@ -139,7 +139,7 @@ fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(registered_account_admin(0)),
-            ORG_REN,
+            PERSONAL_CODE,
             personal_account.clone(),
             dest.clone(),
             1_500,
@@ -179,7 +179,7 @@ fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() 
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(registered_institution_admin(0)),
-            ORG_OTH,
+            PRIVATE_CODE,
             institution,
             dest.clone(),
             2_000,
@@ -219,7 +219,7 @@ fn institution_account_rejects_personal_org() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(registered_institution_admin(0)),
-                ORG_REN,
+                PERSONAL_CODE,
                 institution.clone(),
                 beneficiary(),
                 1_000,
@@ -238,7 +238,7 @@ fn unknown_account_cannot_be_used_as_transfer_source() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(registered_institution_admin(0)),
-                ORG_REN,
+                PERSONAL_CODE,
                 institution.clone(),
                 beneficiary(),
                 1_000,
@@ -258,7 +258,7 @@ fn zero_amount_is_rejected() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 dest,
                 0,
@@ -278,7 +278,7 @@ fn self_transfer_is_rejected() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution,
                 inst_account,
                 100,
@@ -300,7 +300,7 @@ fn insufficient_balance_is_rejected_on_propose() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 dest.clone(),
                 9_990,
@@ -312,7 +312,7 @@ fn insufficient_balance_is_rejected_on_propose() {
         // amount=9_989 时 required=9_989+10+1=10_000 → 刚好通过
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest,
             9_989,
@@ -329,7 +329,7 @@ fn multiple_proposals_allowed_within_limit() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             dest.clone(),
             100,
@@ -339,7 +339,7 @@ fn multiple_proposals_allowed_within_limit() {
         // 活跃提案数限制由 votingengine 全局管控（上限 10），第二个提案可以成功
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest,
             200,
@@ -356,7 +356,7 @@ fn executed_transfer_does_not_block_new_proposal() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             dest.clone(),
             100,
@@ -374,7 +374,7 @@ fn executed_transfer_does_not_block_new_proposal() {
         // 转账已执行，可以创建新提案
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest,
             200,
@@ -391,7 +391,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             dest.clone(),
             100,
@@ -417,7 +417,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         // 被拒绝后可以创建新提案
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest,
             50,
@@ -437,7 +437,7 @@ fn existential_deposit_is_preserved() {
         // required = 9_989 + 10(fee) + 1(ED) = 10_000
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest.clone(),
             9_989,
@@ -468,7 +468,7 @@ fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
         // 使余额仅 1_000,自动执行因余额不足失败,但提案保留,可统一手动重试。
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest.clone(),
             9_000,
@@ -525,7 +525,7 @@ fn retry_passed_transfer_rejects_non_passed_proposal() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest,
             100,
@@ -552,7 +552,7 @@ fn retry_passed_transfer_rejects_non_admin() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest.clone(),
             100,
@@ -598,7 +598,7 @@ fn executed_transfer_cannot_be_executed_again() {
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest.clone(),
             1_000,
@@ -641,7 +641,7 @@ fn protected_account_is_rejected() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution,
                 protected,
                 100,
@@ -663,7 +663,7 @@ fn institution_spend_guard_blocks_transfer_proposal() {
         assert_noop!(
             DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution,
                 dest,
                 100,
@@ -687,7 +687,7 @@ fn fee_respects_minimum_on_small_amount() {
         // required = 1 + 10 + 1(ED) = 12
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution,
             dest.clone(),
             1,

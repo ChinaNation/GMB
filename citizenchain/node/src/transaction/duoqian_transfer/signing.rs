@@ -9,7 +9,7 @@ use crate::governance;
 pub fn build_propose_transfer_sign_request(
     pubkey_hex: &str,
     cid_number: &str,
-    org_type: u8,
+    institution_code: [u8; 4],
     beneficiary_address: &str,
     amount_yuan: f64,
     remark: &str,
@@ -52,7 +52,7 @@ pub fn build_propose_transfer_sign_request(
 
     let call_data = build_transfer_call_data(
         cid_number,
-        org_type,
+        &institution_code,
         &beneficiary_bytes,
         amount_fen,
         remark_bytes,
@@ -66,11 +66,14 @@ pub fn build_propose_transfer_sign_request(
         };
         format!("机构账户 {short}")
     } else {
-        match org_type {
-            0 => "国储会".to_string(),
-            1 => "省储会".to_string(),
-            2 => "省储行".to_string(),
-            _ => "未知".to_string(),
+        // 机构码 → 展示标签(治理机构特化,其余显示码字符串)。
+        match institution_code {
+            primitives::institution_code::NRC => "国储会".to_string(),
+            primitives::institution_code::PRC => "省储会".to_string(),
+            primitives::institution_code::PRB => "省储行".to_string(),
+            other => String::from_utf8_lossy(&other)
+                .trim_end_matches('\0')
+                .to_string(),
         }
     };
 
@@ -207,7 +210,7 @@ pub(crate) fn build_safety_fund_call_data(
 /// 普通机构多签转账 call_data，供签名构造和签名回执提交复用。
 pub(crate) fn build_transfer_call_data(
     cid_number: &str,
-    org_type: u8,
+    institution_code: &[u8; 4],
     beneficiary_bytes: &[u8; 32],
     amount_fen: u128,
     remark_bytes: &[u8],
@@ -221,10 +224,11 @@ pub(crate) fn build_transfer_call_data(
     let institution_account = super::account_id::account_id_from_transfer_identity(cid_number)?;
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
     let mut call_data =
-        Vec::with_capacity(2 + 1 + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len());
+        Vec::with_capacity(2 + 4 + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len());
     call_data.push(19u8);
     call_data.push(0u8);
-    call_data.push(org_type);
+    // 机构码 [u8;4](取代旧 org_type 1 字节,与 runtime propose_transfer 线格式一致)。
+    call_data.extend_from_slice(institution_code);
     call_data.extend_from_slice(&institution_account);
     call_data.extend_from_slice(beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());

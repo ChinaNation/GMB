@@ -20,7 +20,6 @@ use sp_runtime::{
     DispatchError,
 };
 
-use crate::address::InstitutionAccountRole;
 use crate::institution::types::CreateInstitutionAccount;
 use crate::pallet::{
     AccountRegisteredCid, CidNumberOf, CidRegisteredAccount, Config, CreateInstitutionAccountsOf,
@@ -85,12 +84,11 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             Error::<T>::DuplicateAccountName
         );
 
-        let role = Pallet::<T>::role_from_account_name(item.account_name.as_slice())?;
-        let is_default = matches!(
-            role,
-            InstitutionAccountRole::Main | InstitutionAccountRole::Fee
-        );
-        let address = Pallet::<T>::derive_institution_account(cid_number.as_slice(), role)?;
+        let (address, kind) = Pallet::<T>::derive_registered_account(
+            cid_number.as_slice(),
+            item.account_name.as_slice(),
+        )?;
+        let is_default = Pallet::<T>::is_default_account(&kind);
 
         ensure!(
             !CidRegisteredAccount::<T>::contains_key(cid_number, &item.account_name),
@@ -113,16 +111,16 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             Error::<T>::ProtectedSource
         );
 
-        match role {
-            InstitutionAccountRole::Main => {
+        match kind {
+            primitives::account_derive::AccountKind::InstitutionMain { .. } => {
                 has_main = true;
                 main_account = Some(address.clone());
             }
-            InstitutionAccountRole::Fee => {
+            primitives::account_derive::AccountKind::InstitutionFee { .. } => {
                 has_fee = true;
                 fee_account = Some(address.clone());
             }
-            InstitutionAccountRole::Named(_) => {}
+            _ => {}
         }
 
         initial_total = initial_total

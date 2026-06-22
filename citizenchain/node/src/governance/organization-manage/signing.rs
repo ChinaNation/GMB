@@ -5,7 +5,9 @@
 //! - 清算行节点声明(register/update/unregister)属于扫码支付网络准入,
 //!   放在 `offchain_transaction::signing`。
 
-use crate::governance::admins_change::types::qr_org_display_value;
+use primitives::institution_code::{is_institution_code, InstitutionCode};
+
+use crate::governance::admins_change::types::qr_institution_code_display_value;
 use crate::governance::signing::{
     build_sign_request_from_call_data, encode_compact_u32_pub, pubkey_to_ss58,
     VoteSignRequestResult,
@@ -68,7 +70,7 @@ pub fn build_propose_create_institution_call_data(
     cid_number: &str,
     cid_full_name: &str,
     accounts: &[InitialAccountInput],
-    org: u8,
+    institution_code: &InstitutionCode,
     admins_len: u32,
     admins: &[String],
     threshold: u32,
@@ -89,8 +91,8 @@ pub fn build_propose_create_institution_call_data(
     if accounts.is_empty() {
         return Err("accounts 至少 1 项(主账户)".to_string());
     }
-    if !matches!(org, 4 | 5) {
-        return Err("机构账户管理员 org 必须是 ORG_PUP(4) 或 ORG_OTH(5)".to_string());
+    if !is_institution_code(institution_code) {
+        return Err("机构账户管理员机构码必须是公权/私权法人机构码".to_string());
     }
     if admins_len < 2 {
         return Err("admins_len 必须 >= 2".to_string());
@@ -144,8 +146,8 @@ pub fn build_propose_create_institution_call_data(
         call.extend_from_slice(&encode_bytes_with_len(acc.account_name.as_bytes()));
         call.extend_from_slice(&encode_u128_le(acc.amount_fen));
     }
-    // 4. org: u8(ORG_PUP/ORG_OTH)
-    call.push(org);
+    // 4. institution_code: InstitutionCode([u8; 4]) = 4 个裸字节，无长度前缀。
+    call.extend_from_slice(institution_code);
     // 5. admins_len: u32 LE
     call.extend_from_slice(&admins_len.to_le_bytes());
     // 6. admins: BoundedVec<AccountId32> = Compact(N) + N × 32B
@@ -181,7 +183,7 @@ pub fn build_propose_create_institution_sign_request(
     cid_number: &str,
     cid_full_name: &str,
     accounts: &[InitialAccountInput],
-    org: u8,
+    institution_code: &InstitutionCode,
     admins_len: u32,
     admins: &[String],
     threshold: u32,
@@ -198,7 +200,7 @@ pub fn build_propose_create_institution_sign_request(
         cid_number,
         cid_full_name,
         accounts,
-        org,
+        institution_code,
         admins_len,
         admins,
         threshold,
@@ -215,7 +217,7 @@ pub fn build_propose_create_institution_sign_request(
     let mut fields = vec![
         serde_json::json!({ "key": "cid_number", "label": "机构身份号码", "value": cid_number }),
         serde_json::json!({ "key": "cid_full_name", "label": "机构名称", "value": cid_full_name }),
-        serde_json::json!({ "key": "org", "label": "管理员组织类型", "value": qr_org_display_value(org) }),
+        serde_json::json!({ "key": "institution_code", "label": "管理员机构码", "value": qr_institution_code_display_value(institution_code) }),
         serde_json::json!({ "key": "admins_len", "label": "管理员数量", "value": admins_len.to_string() }),
         serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admins_len}") }),
         serde_json::json!({

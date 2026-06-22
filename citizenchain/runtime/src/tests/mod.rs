@@ -49,7 +49,7 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
     admins_change::pallet::AdminAccounts::<Runtime>::insert(
         issuer_main_account,
         admins_change::AdminAccount {
-            org: votingengine::types::ORG_PRC,
+            institution_code: votingengine::types::PRC,
             kind: admins_change::AdminAccountKind::BuiltinInstitution,
             admins,
             creator: AccountId::new(main_admin_pubkey),

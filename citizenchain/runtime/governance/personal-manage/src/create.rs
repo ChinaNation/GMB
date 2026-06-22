@@ -71,7 +71,7 @@ pub(crate) fn do_propose_create<T: Config>(
 
     let now = <frame_system::Pallet<T>>::block_number();
     let institution = account.clone();
-    let org = votingengine::types::ORG_REN;
+    let institution_code = votingengine::types::PMUL;
     let action = PersonalCreateAction {
         account: account.clone(),
         proposer: who.clone(),
@@ -99,7 +99,7 @@ pub(crate) fn do_propose_create<T: Config>(
         // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
         let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_account_create_proposal_with_data(
             who.clone(),
-            org,
+            institution_code,
             institution.clone(),
             admins.iter().cloned().collect(),
             regular_threshold,

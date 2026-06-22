@@ -10,12 +10,15 @@
 //
 // 激活 payload 格式（非链上交易）：
 //   "GMB_ACTIVATE_ADMIN_V1"(23B)
-//   + account_id(32B) + org(1B) + kind(1B) + pubkey(32B)
-//   + timestamp(8B) + nonce(16B) = 113 bytes
+//   + account_id(32B) + institution_code(4B) + kind(1B) + pubkey(32B)
+//   + timestamp(8B) + nonce(16B) = 116 bytes
 
 use crate::home;
 use crate::settings::device_password;
 use crate::shared::security;
+use primitives::institution_code::{
+    code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code, InstitutionCode,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -28,14 +31,25 @@ use crate::governance::admins_change::storage;
 use crate::governance::signing::{self, pubkey_to_ss58};
 
 use super::account_id;
-use super::types::{qr_org_display_value, AdminAccountState};
+use super::types::{
+    institution_code_label, qr_institution_code_display_value, AdminAccountState,
+};
+
+/// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
+fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
+    expected
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(code_bytes)
+}
 
 /// AccountId 级激活管理员存储文件名。旧文件不读取、不迁移。
 const ACTIVATED_ADMINS_FILE: &str = "activated-admin-accounts.json";
 
 /// 管理员本地激活签名 payload 前缀。
 const ACTIVATE_ADMIN_PREFIX: &[u8] = b"GMB_ACTIVATE_ADMIN_V1";
-const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = ACTIVATE_ADMIN_PREFIX.len() + 32 + 1 + 1 + 32 + 8 + 16;
+// account_id(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
+const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = ACTIVATE_ADMIN_PREFIX.len() + 32 + 4 + 1 + 32 + 8 + 16;
 
 // ──── 数据结构 ────
 
@@ -47,8 +61,8 @@ pub struct ActivatedAdmin {
     pub pubkey_hex: String,
     /// admins-change 链上账户 AccountId hex（不含 0x，小写）。
     pub account_hex: String,
-    /// 链上 org 编码。
-    pub org: u8,
+    /// 链上机构码（CID institution_code，[u8;4]）。
+    pub institution_code: InstitutionCode,
     /// 链上 AdminAccountKind 编码。
     pub kind: u8,
     /// 激活时间（毫秒时间戳）。
@@ -62,8 +76,8 @@ struct StoredActivation {
     pubkey_hex: String,
     /// admins-change 链上账户 AccountId hex（不含 0x，小写）。
     account_hex: String,
-    /// 链上 org 编码。
-    org: u8,
+    /// 链上机构码（CID institution_code，[u8;4]）。
+    institution_code: InstitutionCode,
     /// 链上 AdminAccountKind 编码。
     kind: u8,
     /// 激活时间（毫秒时间戳）。
@@ -77,7 +91,7 @@ struct StoredActivation {
 /// 解码后的 AccountId 级激活 payload。
 struct ActivationPayload {
     account_id: [u8; 32],
-    org: u8,
+    institution_code: InstitutionCode,
     kind: u8,
     pubkey_hex: String,
 }
@@ -151,13 +165,14 @@ fn now_secs() -> u64 {
 
 fn validate_activation_account(
     state: &AdminAccountState,
-    expected_org: Option<u8>,
+    expected_code: Option<InstitutionCode>,
 ) -> Result<(), String> {
-    if let Some(org) = expected_org {
-        if state.org != org {
+    if let Some(code) = expected_code {
+        if state.institution_code != code {
             return Err(format!(
-                "管理员账户 org 不匹配：请求 org={}，链上 org={}",
-                org, state.org
+                "管理员账户机构码不匹配：请求 {}，链上 {}",
+                institution_code_label(&code),
+                institution_code_label(&state.institution_code)
             ));
         }
     }
@@ -165,43 +180,48 @@ fn validate_activation_account(
         return Err("管理员账户不是已激活状态，不能激活本地管理员身份".to_string());
     }
     match state.kind {
-        0 if matches!(state.org, 0 | 1 | 2) => Ok(()),
-        1 if state.org == 3 => Ok(()),
-        2 if matches!(state.org, 4 | 5) => Ok(()),
-        _ => Err("管理员账户类型与 org 不匹配，不能激活".to_string()),
+        0 if is_fixed_governance_code(&state.institution_code) => Ok(()),
+        1 if is_personal_code(&state.institution_code) => Ok(()),
+        2 if is_institution_code(&state.institution_code) => Ok(()),
+        _ => Err("管理员账户类型与机构码不匹配，不能激活".to_string()),
     }
+}
+
+/// 动态机构码(个人多签 / 机构账户)激活必须提供 accountHex,内置 cidNumber 无法定位。
+fn requires_account_hex(expected_code: Option<InstitutionCode>) -> bool {
+    matches!(expected_code, Some(code) if !is_fixed_governance_code(&code))
 }
 
 fn fetch_chain_account(
     cid_number: &str,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_code: Option<InstitutionCode>,
 ) -> Result<AdminAccountState, String> {
     let state = if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
         let account_id = account_id::account_id_from_hex(&account_hex)?;
         storage::fetch_admin_account(&account_id, Some(cid_number.to_string()))?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?
     } else {
-        if matches!(expected_org, Some(3 | 4 | 5)) {
+        if requires_account_hex(expected_code) {
             return Err("个人多签或机构账户管理员激活必须提供 accountHex".to_string());
         }
         storage::fetch_admin_account_by_cid_number(cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?
     };
-    validate_activation_account(&state, expected_org)?;
+    validate_activation_account(&state, expected_code)?;
     Ok(state)
 }
 
 fn resolve_activation_account_hex(
     cid_number: &str,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_code: Option<InstitutionCode>,
 ) -> Result<String, String> {
     if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
         let account_id = account_id::account_id_from_hex(&account_hex)?;
         return Ok(hex::encode(account_id));
     }
-    if matches!(expected_org, Some(3 | 4 | 5)) {
+    if requires_account_hex(expected_code) {
         return Err("个人多签或机构账户管理员激活必须提供 accountHex".to_string());
     }
     let account_id = account_id::account_id_from_builtin_cid(cid_number)?;
@@ -211,7 +231,7 @@ fn resolve_activation_account_hex(
 /// 构建 AccountId 级激活 payload。
 fn build_activate_payload(
     account_id: &[u8; 32],
-    org: u8,
+    institution_code: &InstitutionCode,
     kind: u8,
     pubkey: &[u8; 32],
     timestamp: u64,
@@ -219,7 +239,8 @@ fn build_activate_payload(
     let mut payload = Vec::with_capacity(ACTIVATE_ADMIN_PAYLOAD_LEN);
     payload.extend_from_slice(ACTIVATE_ADMIN_PREFIX);
     payload.extend_from_slice(account_id);
-    payload.push(org);
+    // institution_code: [u8;4] 定长，4 个裸字节。
+    payload.extend_from_slice(institution_code);
     payload.push(kind);
     payload.extend_from_slice(pubkey);
     payload.extend_from_slice(&timestamp.to_le_bytes());
@@ -243,14 +264,16 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
     let mut account_id = [0u8; 32];
     account_id.copy_from_slice(&payload_bytes[offset..offset + 32]);
     offset += 32;
-    let org = payload_bytes[offset];
-    offset += 1;
+    let institution_code: InstitutionCode = payload_bytes[offset..offset + 4]
+        .try_into()
+        .map_err(|_| "激活 payload 机构码长度无效".to_string())?;
+    offset += 4;
     let kind = payload_bytes[offset];
     offset += 1;
     let pubkey_hex = hex::encode(&payload_bytes[offset..offset + 32]);
     Ok(ActivationPayload {
         account_id,
-        org,
+        institution_code,
         kind,
         pubkey_hex,
     })
@@ -260,7 +283,7 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
     ActivatedAdmin {
         pubkey_hex: item.pubkey_hex.clone(),
         account_hex: item.account_hex.clone(),
-        org: item.org,
+        institution_code: item.institution_code,
         kind: item.kind,
         activated_at_ms: item.activated_at_ms,
     }
@@ -278,7 +301,7 @@ pub async fn build_activate_admin_request(
     pubkey_hex: String,
     cid_number: String,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
 ) -> Result<ActivateRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
@@ -292,10 +315,11 @@ pub async fn build_activate_admin_request(
         .try_into()
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
 
+    let expected_code = parse_expected_code(expected_institution_code.as_deref());
     let sid = cid_number.clone();
     let account = account_hex.clone();
     let state = tauri::async_runtime::spawn_blocking(move || {
-        fetch_chain_account(&sid, account, expected_org)
+        fetch_chain_account(&sid, account, expected_code)
     })
     .await
     .map_err(|e| format!("查询管理员账户失败: {e}"))??;
@@ -308,7 +332,7 @@ pub async fn build_activate_admin_request(
     if activations.iter().any(|a| {
         a.pubkey_hex == pubkey_clean
             && a.account_hex == state.account_hex
-            && a.org == state.org
+            && a.institution_code == state.institution_code
             && a.kind == state.kind
     }) {
         return Err("该管理员已激活，无需重复操作".to_string());
@@ -316,8 +340,13 @@ pub async fn build_activate_admin_request(
 
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
     let timestamp = now_secs();
-    let payload =
-        build_activate_payload(&account_id, state.org, state.kind, &pubkey_array, timestamp);
+    let payload = build_activate_payload(
+        &account_id,
+        &state.institution_code,
+        state.kind,
+        &pubkey_array,
+        timestamp,
+    );
     let payload_hex = format!("0x{}", hex::encode(&payload));
 
     let payload_hash = signing::sha256_hash_public(&payload);
@@ -327,9 +356,9 @@ pub async fn build_activate_admin_request(
 
     let display = serde_json::json!({
         "action": "activate_admin_account",
-        "summary": format!("激活{}管理员", state.org_label),
+        "summary": format!("激活{}管理员", state.institution_code_label),
         "fields": [
-            { "key": "org", "label": "组织类型", "value": qr_org_display_value(state.org) },
+            { "key": "institution_code", "label": "机构码", "value": qr_institution_code_display_value(&state.institution_code) },
             { "key": "account", "label": "管理员账户", "value": format!("0x{}", state.account_hex) },
             { "key": "pubkey", "label": "管理员公钥", "value": account_ss58.clone() }
         ]
@@ -434,10 +463,11 @@ pub async fn verify_activate_admin(
     })
     .await
     .map_err(|e| format!("查询管理员账户失败: {e}"))??;
-    if state.org != decoded.org {
+    if state.institution_code != decoded.institution_code {
         return Err(format!(
-            "激活 payload org 与链上账户不一致：payload={}，链上={}",
-            decoded.org, state.org
+            "激活 payload 机构码与链上账户不一致：payload={}，链上={}",
+            institution_code_label(&decoded.institution_code),
+            institution_code_label(&state.institution_code)
         ));
     }
     if state.kind != decoded.kind {
@@ -446,7 +476,7 @@ pub async fn verify_activate_admin(
             decoded.kind, state.kind
         ));
     }
-    validate_activation_account(&state, Some(decoded.org))?;
+    validate_activation_account(&state, Some(decoded.institution_code))?;
     if !state.admins.iter().any(|a| *a == pubkey_clean) {
         return Err("该公钥不在此管理员账户的链上管理员列表中".to_string());
     }
@@ -483,7 +513,7 @@ pub async fn verify_activate_admin(
     activations.push(StoredActivation {
         pubkey_hex: pubkey_clean.clone(),
         account_hex: account_hex.clone(),
-        org: decoded.org,
+        institution_code: decoded.institution_code,
         kind: decoded.kind,
         activated_at_ms: activated_at,
         signature_hex: sig_hex.to_string(),
@@ -506,7 +536,7 @@ pub async fn verify_activate_admin(
     Ok(ActivatedAdmin {
         pubkey_hex: pubkey_clean,
         account_hex,
-        org: decoded.org,
+        institution_code: decoded.institution_code,
         kind: decoded.kind,
         activated_at_ms: activated_at,
     })
@@ -523,10 +553,11 @@ pub async fn get_activated_admins(
     app: AppHandle,
     cid_number: String,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
 ) -> Result<Vec<ActivatedAdmin>, String> {
+    let expected_code = parse_expected_code(expected_institution_code.as_deref());
     let lookup_account_hex =
-        resolve_activation_account_hex(&cid_number, account_hex.clone(), expected_org)?;
+        resolve_activation_account_hex(&cid_number, account_hex.clone(), expected_code)?;
     let mut activations = load_activations(&app)?;
 
     let account_activations: Vec<&StoredActivation> = activations
@@ -543,7 +574,7 @@ pub async fn get_activated_admins(
         let sid = cid_number.clone();
         let account = account_hex.clone();
         let state = tauri::async_runtime::spawn_blocking(move || {
-            fetch_chain_account(&sid, account, expected_org)
+            fetch_chain_account(&sid, account, expected_code)
         })
         .await
         .map_err(|e| format!("查询管理员账户失败: {e}"));
@@ -555,7 +586,7 @@ pub async fn get_activated_admins(
                     if a.account_hex != lookup_account_hex {
                         return true;
                     }
-                    a.org == state.org
+                    a.institution_code == state.institution_code
                         && a.kind == state.kind
                         && state.admins.iter().any(|admin| *admin == a.pubkey_hex)
                 });
@@ -566,7 +597,7 @@ pub async fn get_activated_admins(
             Ok(Err(e))
                 if e.contains("链上不存在")
                     || e.contains("不是已激活")
-                    || e.contains("类型与 org 不匹配") =>
+                    || e.contains("类型与机构码不匹配") =>
             {
                 activations.retain(|a| a.account_hex != lookup_account_hex);
                 let _ = save_activations(&app, &activations);
@@ -590,7 +621,7 @@ pub fn deactivate_admin(
     pubkey_hex: String,
     cid_number: String,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
     unlock_password: String,
 ) -> Result<(), String> {
     if let Err(e) = security::append_audit_log(&app, "deactivate_admin", "attempt") {
@@ -601,8 +632,9 @@ pub fn deactivate_admin(
     device_password::verify_device_login_password(&app, unlock)?;
 
     let pubkey_clean = account_id::normalize_pubkey_hex(&pubkey_hex)?;
+    let expected_code = parse_expected_code(expected_institution_code.as_deref());
     let lookup_account_hex =
-        resolve_activation_account_hex(&cid_number, account_hex, expected_org)?;
+        resolve_activation_account_hex(&cid_number, account_hex, expected_code)?;
 
     let mut activations = load_activations(&app)?;
     let before_len = activations.len();

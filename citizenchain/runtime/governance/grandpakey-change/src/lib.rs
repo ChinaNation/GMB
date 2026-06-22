@@ -19,7 +19,7 @@ use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
-    types::{ORG_NRC, ORG_PRC},
+    types::{InstitutionCode, NRC, PRC},
     InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -55,9 +55,9 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
 
 /// 中文注释：判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
 /// PRB（省储行）不参与 GRANDPA 共识出块，故不纳入密钥治理范围。
-fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8> {
+fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<InstitutionCode> {
     if Some(institution.clone()) == nrc_account::<T>() {
-        return Some(ORG_NRC);
+        return Some(NRC);
     }
 
     if CHINA_CB
@@ -66,7 +66,7 @@ fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8>
         .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|pid| pid == institution)
     {
-        return Some(ORG_PRC);
+        return Some(PRC);
     }
 
     None
@@ -128,10 +128,7 @@ pub mod pallet {
             // 中文注释：初始 GRANDPA 公钥与 CHINA_CB 的机构地址一一对应（1 国储会 + 43 省储会）。
             for node in CHINA_CB.iter() {
                 let Some(institution) = decode_account::<T>(&node.main_account) else {
-                    panic!(
-                        "genesis: cid_number {} 主账户 decode 失败",
-                        node.cid_number
-                    );
+                    panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
                 };
                 assert!(
                     !GrandpaKeyOwnerByKey::<T>::contains_key(node.grandpa_key),
@@ -149,7 +146,7 @@ pub mod pallet {
         /// 已发起 GRANDPA 密钥替换提案（并已在投票引擎创建内部提案）
         GrandpaKeyReplacementProposed {
             proposal_id: u64,
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             proposer: T::AccountId,
             old_key: [u8; 32],
@@ -257,7 +254,7 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::GrandpaKeyReplacementProposed {
                 proposal_id,
-                org: actual_org,
+                institution_code: actual_org,
                 institution,
                 proposer: who,
                 old_key,
@@ -273,9 +270,13 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// 中文注释：检查调用者是否为指定机构的内部管理员。
-        fn is_internal_admin(org: u8, institution: T::AccountId, who: &T::AccountId) -> bool {
+        fn is_internal_admin(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+            who: &T::AccountId,
+        ) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                org,
+                institution_code,
                 institution,
                 who,
             )

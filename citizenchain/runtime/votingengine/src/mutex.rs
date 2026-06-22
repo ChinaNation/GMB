@@ -8,24 +8,25 @@
 //! 本文件提供三个对外入口:
 //! - `acquire_internal_proposal_mutex` — 创建提案时获取互斥锁,登记反向绑定。
 //! - `release_internal_proposal_mutexes` — 终态/阶段切换时释放该提案持有的全部锁。
-//! - `ensure_admin_set_mutation_lock_owner` — 校验某 (org, institution) 当前是否
+//! - `ensure_admin_set_mutation_lock_owner` — 校验某 (institution_code, institution) 当前是否
 //!   被指定 proposal_id 的管理员变更提案占用。
 
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 
 use crate::pallet::{self, Error, InternalProposalMutexes, ProposalMutexBindings};
+use crate::types::InstitutionCode;
 use crate::{InternalProposalMutexBinding, InternalProposalMutexKind, InternalProposalMutexState};
 
 impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn acquire_internal_proposal_mutex(
         proposal_id: u64,
-        org: u8,
+        institution_code: InstitutionCode,
         institution: T::AccountId,
         kind: InternalProposalMutexKind,
     ) -> DispatchResult {
         InternalProposalMutexes::<T>::try_mutate_exists(
-            org,
+            institution_code,
             institution.clone(),
             |maybe| -> DispatchResult {
                 let state = maybe.get_or_insert_with(InternalProposalMutexState::default);
@@ -59,7 +60,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         ProposalMutexBindings::<T>::try_mutate(proposal_id, |bindings| {
             bindings
                 .try_push(InternalProposalMutexBinding {
-                    org,
+                    institution_code,
                     institution,
                     kind,
                 })
@@ -72,7 +73,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         let bindings = ProposalMutexBindings::<T>::take(proposal_id);
         for binding in bindings {
             InternalProposalMutexes::<T>::mutate_exists(
-                binding.org,
+                binding.institution_code,
                 binding.institution,
                 |maybe| {
                     let Some(state) = maybe.as_mut() else {
@@ -98,11 +99,11 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     pub fn ensure_admin_set_mutation_lock_owner(
-        org: u8,
+        institution_code: InstitutionCode,
         institution: T::AccountId,
         proposal_id: u64,
     ) -> DispatchResult {
-        let state = InternalProposalMutexes::<T>::get(org, institution)
+        let state = InternalProposalMutexes::<T>::get(institution_code, institution)
             .ok_or(Error::<T>::InternalProposalMutexOwnerMismatch)?;
         ensure!(
             state.admin_set_mutation_proposal == Some(proposal_id),

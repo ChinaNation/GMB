@@ -1,5 +1,9 @@
 use std::collections::BTreeSet;
 
+use primitives::institution_code::{
+    is_institution_code, is_personal_code, InstitutionCode, NRC, PRB, PRC,
+};
+
 use super::call_data::normalize_admins;
 use super::types::AdminAccountState;
 
@@ -18,7 +22,7 @@ pub fn validate_admin_set_change(
     }
 
     let normalized = normalize_admins(admins)?;
-    validate_count(state.kind, state.org, normalized.len())?;
+    validate_count(state.kind, &state.institution_code, normalized.len())?;
 
     let mut seen = BTreeSet::new();
     for admin in &normalized {
@@ -35,29 +39,29 @@ pub fn validate_admin_set_change(
     Ok(normalized)
 }
 
-fn validate_count(kind: u8, org: u8, count: usize) -> Result<(), String> {
+fn validate_count(kind: u8, institution_code: &InstitutionCode, count: usize) -> Result<(), String> {
     match kind {
         0 => {
-            let expected = match org {
-                0 => 19,
-                1 | 2 => 9,
-                _ => return Err("内置治理机构 org 无效".to_string()),
+            let expected = match *institution_code {
+                NRC => 19,
+                PRC | PRB => 9,
+                _ => return Err("内置治理机构机构码无效".to_string()),
             };
             if count != expected {
                 return Err(format!("内置治理机构管理员数量必须保持 {expected} 人"));
             }
         }
         1 => {
-            if org != 3 {
-                return Err("个人多签管理员更换必须使用 ORG_REN".to_string());
+            if !is_personal_code(institution_code) {
+                return Err("个人多签管理员更换必须使用个人多签机构码".to_string());
             }
             if !(2..=64).contains(&count) {
                 return Err("个人多签管理员数量必须在 2..=64 之间".to_string());
             }
         }
         2 => {
-            if !matches!(org, 4 | 5) {
-                return Err("机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH".to_string());
+            if !is_institution_code(institution_code) {
+                return Err("机构账户管理员更换必须使用机构账户机构码".to_string());
             }
             if !(2..=1989).contains(&count) {
                 return Err("机构账户管理员数量必须在 2..=1989 之间".to_string());
@@ -72,16 +76,18 @@ fn validate_count(kind: u8, org: u8, count: usize) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    use primitives::institution_code::{code_bytes, PMUL};
+
     fn admin(seed: u8) -> String {
         format!("{seed:02x}").repeat(32)
     }
 
-    fn state(kind: u8, org: u8, admins: Vec<String>) -> AdminAccountState {
+    fn state(kind: u8, institution_code: InstitutionCode, admins: Vec<String>) -> AdminAccountState {
         AdminAccountState {
             account_hex: "11".repeat(32),
             cid_number: Some("TEST-CID".to_string()),
-            org,
-            org_label: String::new(),
+            institution_code,
+            institution_code_label: String::new(),
             kind,
             kind_label: String::new(),
             admins,
@@ -94,24 +100,29 @@ mod tests {
     }
 
     #[test]
-    fn personal_account_requires_org_ren() {
+    fn personal_account_requires_personal_code() {
         let current = vec![admin(1), admin(2)];
         let next = vec![admin(1), admin(3)];
-        let err = validate_admin_set_change(&state(1, 4, current), &admin(1), &next).unwrap_err();
-        assert_eq!(err, "个人多签账户管理员更换必须使用 ORG_REN");
+        // kind=1(个人多签)但机构码是机构账户码 → 拒绝。
+        let err =
+            validate_admin_set_change(&state(1, code_bytes("CGOV"), current), &admin(1), &next)
+                .unwrap_err();
+        assert_eq!(err, "个人多签管理员更换必须使用个人多签机构码");
     }
 
     #[test]
-    fn institution_account_requires_org_pup_or_oth() {
+    fn institution_account_requires_institution_code() {
         let current = vec![admin(1), admin(2)];
         let next = vec![admin(1), admin(3)];
 
-        for org in [4u8, 5u8] {
-            validate_admin_set_change(&state(2, org, current.clone()), &admin(1), &next)
-                .expect("PUP/OTH 机构账户应允许管理员更换");
+        for code in [code_bytes("CGOV"), code_bytes("SFLP")] {
+            validate_admin_set_change(&state(2, code, current.clone()), &admin(1), &next)
+                .expect("公权/私权机构账户应允许管理员更换");
         }
 
-        let err = validate_admin_set_change(&state(2, 3, current), &admin(1), &next).unwrap_err();
-        assert_eq!(err, "机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH");
+        // kind=2(机构账户)但机构码是个人多签码 → 拒绝。
+        let err =
+            validate_admin_set_change(&state(2, PMUL, current), &admin(1), &next).unwrap_err();
+        assert_eq!(err, "机构账户管理员更换必须使用机构账户机构码");
     }
 }

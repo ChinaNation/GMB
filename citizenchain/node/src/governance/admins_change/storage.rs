@@ -1,6 +1,6 @@
 use super::account_id;
 use super::codec;
-use super::types::{kind_label, org_label, status_label, AdminAccountState};
+use super::types::{institution_code_label, kind_label, status_label, AdminAccountState};
 use crate::governance::{chain_query, storage_keys};
 
 /// 构造 `AdminsChange::AdminAccounts` 的 StorageMap key。
@@ -39,8 +39,8 @@ pub fn fetch_admin_account(
     Ok(Some(AdminAccountState {
         account_hex: hex::encode(account_id),
         cid_number,
-        org: decoded.org,
-        org_label: org_label(decoded.org).to_string(),
+        institution_code: decoded.institution_code,
+        institution_code_label: institution_code_label(&decoded.institution_code),
         kind: decoded.kind,
         kind_label: kind_label(decoded.kind).to_string(),
         admins: decoded.admins,

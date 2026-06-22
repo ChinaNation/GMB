@@ -70,7 +70,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             },
         );
 
-        // 双层 ID v1:写入 4 张反向索引(org / institution / owner / year)。
+        // 双层 ID v1:写入 4 张反向索引(institution_code / institution / owner / year)。
         // 索引依赖此时已落地的 Proposals[id](allocate_proposal_id 已写入)与
         // ProposalDisplayId[id](同上)。任一失败,本事务整体回滚。
         let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
@@ -78,7 +78,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             ProposalDisplayId::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
         Self::register_proposal_indexes(
             proposal_id,
-            proposal.internal_org,
+            proposal.internal_code,
             proposal.internal_institution,
             owner,
             display.year,

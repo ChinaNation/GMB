@@ -1,7 +1,7 @@
 // `AdminsChange::AdminAccounts` value 的最小 SCALE 解码器(req 3 反向索引依赖)。
 //
 // 链上 [AdminAccount<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
-//   org: u8                                       (1B)
+//   institution_code: [u8;4]                      (4B)
 //   kind: AdminAccountKind                         (1B,Enum 0/1/2)
 //   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B))
 //   creator: AccountId                             (32B)
@@ -9,7 +9,7 @@
 //   updated_at: BlockNumber(u64)                   (8B)
 //   status: AdminAccountStatus                     (1B,Enum 0/1/2)
 //
-// 反向索引只需 (org, kind, admins) 三字段过滤,后面字段都跳过(只算长度,不解析)。
+// 反向索引只需 (institutionCode, kind, admins) 三字段过滤,后面字段都跳过。
 //
 // 链端定义参考:
 // - [admins-change/src/lib.rs::AdminAccount]
@@ -20,16 +20,18 @@
 
 import 'dart:typed_data';
 
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
+
 /// SCALE 解码后的 AdminAccount 关键字段。
 class AdminAccountStorageDecoded {
   const AdminAccountStorageDecoded({
-    required this.org,
+    required this.institutionCode,
     required this.kind,
     required this.adminsHex,
   });
 
-  /// 治理 org 标识(0=NRC, 1=PRC, 2=PRB, 3=个人多签, 4=PUP, 5=OTH)。
-  final int org;
+  /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
+  final String institutionCode;
 
   /// 管理员账户类型:0=Builtin / 1=Personal / 2=InstitutionAccount。
   final int kind;
@@ -50,12 +52,14 @@ class AdminAccountStorageCodec {
   /// 解码 AdminAccount SCALE bytes;格式不符返回 null(容错,不抛异常)。
   static AdminAccountStorageDecoded? tryDecode(Uint8List bytes) {
     try {
-      if (bytes.length < 2) return null;
-      final org = bytes[0];
-      final kind = bytes[1];
+      // institution_code: [u8;4] + kind: u8 = 5 bytes minimum before admins
+      if (bytes.length < 5) return null;
+      final institutionCode =
+          InstitutionCodeLabel.codeToString(bytes.sublist(0, 4));
+      final kind = bytes[4];
 
       // admins: Compact<u32> 长度前缀 + N × 32B
-      var offset = 2;
+      var offset = 5;
       final (count, lenBytesRead) = _decodeCompactU32(bytes, offset);
       offset += lenBytesRead;
       if (offset + count * 32 > bytes.length) return null;
@@ -67,7 +71,7 @@ class AdminAccountStorageCodec {
       }
 
       return AdminAccountStorageDecoded(
-        org: org,
+        institutionCode: institutionCode,
         kind: kind,
         adminsHex: admins,
       );

@@ -28,7 +28,7 @@ class AdminSetValidation {
       throw StateError('当前签名钱包不是该主体管理员');
     }
     final normalized = admins.map(_normalizePubkey).toList(growable: false);
-    _validateCount(account.kind, account.org, normalized.length);
+    _validateCount(account.kind, account.institutionCode, normalized.length);
     if (normalized.toSet().length != normalized.length) {
       throw StateError('新管理员列表存在重复公钥');
     }
@@ -37,7 +37,7 @@ class AdminSetValidation {
       throw StateError('新管理员集合与当前集合没有变化');
     }
     _validateThreshold(
-        account.kind, account.org, normalized.length, newThreshold);
+        account.kind, account.institutionCode, normalized.length, newThreshold);
     return AdminSetValidationResult(
         admins: normalized, threshold: newThreshold);
   }
@@ -46,10 +46,11 @@ class AdminSetValidation {
     return (adminsLen ~/ 2) + 1;
   }
 
-  static int? fixedGovernanceThreshold(int org) {
-    return switch (org) {
-      0 => 13,
-      1 || 2 => 6,
+  /// 固定治理阈值：NRC=13，PRC/PRB=6，其他=null（动态）。
+  static int? fixedGovernanceThreshold(String code) {
+    return switch (code) {
+      'NRC' => 13,
+      'PRC' || 'PRB' => 6,
       _ => null,
     };
   }
@@ -62,25 +63,25 @@ class AdminSetValidation {
     return clean;
   }
 
-  static void _validateCount(int kind, int org, int count) {
+  static void _validateCount(int kind, String code, int count) {
     if (kind == 0) {
-      final expected = switch (org) {
-        0 => 19,
-        1 || 2 => 9,
-        _ => throw StateError('内置治理机构 org 无效'),
+      final expected = switch (code) {
+        'NRC' => 19,
+        'PRC' || 'PRB' => 9,
+        _ => throw StateError('内置治理机构 institution_code 无效: $code'),
       };
       if (count != expected) throw StateError('内置治理机构管理员数量必须保持 $expected 人');
       return;
     }
     if (kind == 1) {
-      if (org != 3) throw StateError('个人多签管理员更换必须使用 ORG_REN');
+      if (code != 'PMUL') {
+        throw StateError('个人多签管理员更换必须使用 PMUL');
+      }
       if (count < 2 || count > 64) throw StateError('个人多签管理员数量必须在 2..=64 之间');
       return;
     }
     if (kind == 2) {
-      if (org != 4 && org != 5) {
-        throw StateError('机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH');
-      }
+      // 中文注释：机构账户 kind=2，institution_code 为注册机构码（非治理固定码）。
       if (count < 2 || count > 1989) {
         throw StateError('机构账户管理员数量必须在 2..=1989 之间');
       }
@@ -91,13 +92,13 @@ class AdminSetValidation {
 
   static void _validateThreshold(
     int kind,
-    int org,
+    String code,
     int count,
     int threshold,
   ) {
     if (kind == 0) {
-      final expected =
-          fixedGovernanceThreshold(org) ?? (throw StateError('内置治理机构 org 无效'));
+      final expected = fixedGovernanceThreshold(code) ??
+          (throw StateError('内置治理机构 institution_code 无效: $code'));
       if (threshold != expected) {
         throw StateError('内置治理机构固定阈值必须为 $expected');
       }

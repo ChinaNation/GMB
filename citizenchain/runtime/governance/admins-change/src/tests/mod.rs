@@ -8,7 +8,7 @@ use primitives::china::china_ch::CHINA_CH;
 use primitives::china::china_zf::CHINA_ZF;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
-    types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
+    types::{code_bytes, fixed_governance_pass_threshold, InstitutionCode, NRC, PMUL, PRB, PRC},
     InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
 };
 
@@ -100,12 +100,19 @@ impl
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
-        pallet::Pallet::<Test>::is_active_account_admin(org, institution, who)
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        pallet::Pallet::<Test>::is_active_account_admin(institution_code, institution, who)
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<Vec<AccountId32>> {
-        pallet::Pallet::<Test>::active_account_admins(org, institution)
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<Vec<AccountId32>> {
+        pallet::Pallet::<Test>::active_account_admins(institution_code, institution)
     }
 }
 
@@ -203,10 +210,16 @@ fn prb_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CH[0].admins[index])
 }
 
-/// 中文注释:一个 PUP 创世内置机构(CHINA_ZF[0]=总统府,org=ORG_PUP,BuiltinInstitution)。
-/// 用于验证 PUP 内置可自治换管理员(动态人数)+ 被创世封存。
+/// 中文注释:一个公权法人创世内置机构(CHINA_ZF[0]=总统府,institution_code=PRS,BuiltinInstitution)。
+/// 用于验证公权内置可自治换管理员(动态人数)+ 被创世封存。
 fn pup_builtin_id() -> AccountId32 {
     AccountId32::new(CHINA_ZF[0].main_account)
+}
+
+/// 该创世内置机构的机构码,从自身 cid_number 派生(单一真源,随 china re-bake 自动跟变)。
+fn pup_builtin_code() -> votingengine::types::InstitutionCode {
+    votingengine::types::institution_code_from_cid_number(CHINA_ZF[0].cid_number)
+        .expect("CHINA_ZF[0] cid_number 必须编码合法机构码")
 }
 
 fn pup_builtin_admin(index: usize) -> AccountId32 {
@@ -247,15 +260,15 @@ fn bounded_admins(admins: Vec<AccountId32>) -> AdminsOf<Test> {
         .expect("test admin list should fit MaxAdminsPerInstitution")
 }
 
-fn current_vote_threshold(org: u8, account: AccountId32) -> u32 {
-    votingengine::types::fixed_governance_pass_threshold(org)
-        .or_else(|| internal_vote::ActiveDynamicThresholds::<Test>::get(org, account))
+fn current_vote_threshold(institution_code: InstitutionCode, account: AccountId32) -> u32 {
+    fixed_governance_pass_threshold(&institution_code)
+        .or_else(|| internal_vote::ActiveDynamicThresholds::<Test>::get(institution_code, account))
         .unwrap_or(2)
 }
 
 fn propose_admin_set_replacement(
     origin: RuntimeOrigin,
-    org: u8,
+    institution_code: InstitutionCode,
     account: AccountId32,
     old_admin: AccountId32,
     new_admin: AccountId32,
@@ -266,8 +279,14 @@ fn propose_admin_set_replacement(
         .position(|admin| admin == &old_admin)
         .expect("old admin must exist in test account");
     admins[old_pos] = new_admin;
-    let threshold = current_vote_threshold(org, account.clone());
-    AdminsChange::propose_admin_set_change(origin, org, account, bounded_admins(admins), threshold)
+    let threshold = current_vote_threshold(institution_code, account.clone());
+    AdminsChange::propose_admin_set_change(
+        origin,
+        institution_code,
+        account,
+        bounded_admins(admins),
+        threshold,
+    )
 }
 
 fn mark_proposal_passed_without_callback(proposal_id: u64) {

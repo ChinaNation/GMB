@@ -103,7 +103,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
         assert_eq!(pending_account.account_name, name);
         let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
             Some(2)
         );
         assert_eq!(
@@ -155,7 +155,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         assert_eq!(dq_state.status, types::PersonalStatus::Active);
         let account = dq.clone();
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_REN, account),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, account),
             Some(2)
         );
         assert_eq!(Balances::free_balance(&dq), CREATE_AMOUNT);
@@ -238,7 +238,7 @@ fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold()
         let pid = last_proposal_id();
         let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
             Some(2)
         );
         assert_eq!(
@@ -263,7 +263,7 @@ fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() 
         let pid = last_proposal_id();
         let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
             Some(2)
         );
         assert_eq!(
@@ -288,7 +288,7 @@ fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() 
         let pid = last_proposal_id();
         let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
             Some(33)
         );
         assert_eq!(
@@ -440,7 +440,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
         assert!(admins_change::AdminAccounts::<Test>::get(account.clone()).is_none());
-        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_REN, account).is_none());
+        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, account).is_none());
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),

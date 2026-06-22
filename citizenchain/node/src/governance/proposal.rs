@@ -1,9 +1,27 @@
 // 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngine 链上存储。
 
 use crate::shared::proposal_business;
+use primitives::institution_code::InstitutionCode;
 use serde::Serialize;
 
 use super::{chain_query, signing, storage_keys};
+
+/// 把机构码 [u8;4] 序列化为 4 字符展示串(末尾 `\0` 填充去掉),便于前端消费。
+fn serialize_internal_code<S>(
+    code: &Option<InstitutionCode>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match code {
+        Some(code) => {
+            let end = code.iter().position(|&b| b == 0).unwrap_or(code.len());
+            serializer.serialize_some(&String::from_utf8_lossy(&code[..end]))
+        }
+        None => serializer.serialize_none(),
+    }
+}
 
 const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
 const TAG_RESOLUTION_ISSUANCE: &[u8] = b"res-iss";
@@ -43,7 +61,9 @@ pub struct ProposalMeta {
     pub stage: u8,
     /// 0=投票中, 1=通过, 2=否决, 3=已执行, 4=执行失败。
     pub status: u8,
-    pub internal_org: Option<u8>,
+    /// 仅内部投票:机构码(CID institution_code),序列化为 4 字符展示串。
+    #[serde(serialize_with = "serialize_internal_code")]
+    pub internal_code: Option<InstitutionCode>,
     /// 机构多签 AccountId32 hex（不含 0x）。
     pub institution_hex: Option<String>,
 }
@@ -684,13 +704,13 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
 
     let mut offset = 3;
 
-    // internal_org: Option<u8>
-    let internal_org = if offset < data.len() && data[offset] == 1 {
+    // internal_code: Option<InstitutionCode>([u8;4])
+    let internal_code = if offset < data.len() && data[offset] == 1 {
         offset += 1;
-        if offset < data.len() {
-            let v = data[offset];
-            offset += 1;
-            Some(v)
+        if offset + 4 <= data.len() {
+            let code: InstitutionCode = data[offset..offset + 4].try_into().ok()?;
+            offset += 4;
+            Some(code)
         } else {
             None
         }
@@ -716,7 +736,7 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         kind,
         stage,
         status,
-        internal_org,
+        internal_code,
         institution_hex,
     })
 }
@@ -962,9 +982,13 @@ fn fetch_proposal_ids_by_index(storage_name: &str, key1: &[u8]) -> Result<Vec<u6
     Ok(ids)
 }
 
-/// 反向索引:`ProposalsByOrg[org]` → 该 org 下所有 proposal_id。
-pub fn fetch_proposals_by_org(org: u8) -> Result<Vec<u64>, String> {
-    fetch_proposal_ids_by_index("ProposalsByOrg", &[org])
+/// 反向索引:`ProposalsByOrg[institution_code]` → 该机构码下所有 proposal_id。
+///
+/// 链上第一腿 key 已从 `org: u8`(1 字节)改为 `InstitutionCode`([u8;4]),
+/// `institution_code` 入参是 4 字符机构码字符串(如 "NRC"/"CGOV")。
+pub fn fetch_proposals_by_institution_code(institution_code: &str) -> Result<Vec<u64>, String> {
+    let code = primitives::institution_code::code_bytes(institution_code.trim());
+    fetch_proposal_ids_by_index("ProposalsByOrg", &code)
 }
 
 /// 反向索引:`ProposalsByInstitution[account]` → 本机构多签账户所有 proposal_id。

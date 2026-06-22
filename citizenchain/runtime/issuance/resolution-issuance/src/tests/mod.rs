@@ -294,7 +294,7 @@ fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
             kind: votingengine::PROPOSAL_KIND_JOINT,
             stage: votingengine::STAGE_JOINT,
             status,
-            internal_org: None,
+            internal_code: None,
             internal_institution: None,
             start: 0u64,
             end: 100u64,

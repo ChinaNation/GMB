@@ -40,7 +40,7 @@ const int kOpHe = 0x04;
 const int kOpPersonal = 0x05;
 
 /// CID 机构自定义命名账户 · payload = cid_number || account_name。
-const int kOpInstitution = 0x06;
+const int kOpName = 0x06;
 
 const String _domain = 'DUOQIAN';
 
@@ -92,23 +92,21 @@ Uint8List deriveInstitutionFeeAccountId(
       ss58Prefix: ss58Prefix,
     );
 
-/// 机构自定义命名账户 id(OP_INSTITUTION,payload = cid_number || account_name)。
+/// 机构自定义命名账户 id(OP_NAME,payload = cid_number || account_name)。
 ///
-/// 字节对齐链端:account_name 取原始字节不 trim;空名抛错(对齐 EmptyAccountName);
-/// 受限保留名不得作为自定义名(主/费走各自 op_tag,制度专属名禁注册)。
+/// 字节对齐链端:account_name 取原始字节不 trim;空名/主/费/制度专属名一律拒绝
+/// (对齐链端注册策略 is_registrable_custom_name:空→EmptyAccountName,
+/// 主/费走各自 op_tag,质押/安全/两和禁注册)。
 Uint8List deriveInstitutionCustomAccountId(
   String cidNumber,
   String accountName, {
   int ss58Prefix = kGmbSs58Prefix,
 }) {
-  if (accountName.isEmpty) {
-    throw ArgumentError('自定义账户名不能为空(对齐链端 EmptyAccountName)');
-  }
-  if (isForbiddenAccountName(accountName)) {
-    throw ArgumentError('自定义账户名不得为受限保留名: $accountName');
+  if (!isRegistrableCustomName(accountName)) {
+    throw ArgumentError('自定义账户名不可注册(空/主/费/制度专属): $accountName');
   }
   return deriveAccountId(
-    opTag: kOpInstitution,
+    opTag: kOpName,
     payload: <int>[...utf8.encode(cidNumber), ...utf8.encode(accountName)],
     ss58Prefix: ss58Prefix,
   );
@@ -131,7 +129,7 @@ Uint8List deriveInstitutionAccountIdByName(
     kReservedNameStake => (kOpStake, false),
     kReservedNameAnquan => (kOpAnquan, false),
     kReservedNameHe => (kOpHe, false),
-    _ => (kOpInstitution, true),
+    _ => (kOpName, true),
   };
   final payload = <int>[
     ...utf8.encode(cidNumber),

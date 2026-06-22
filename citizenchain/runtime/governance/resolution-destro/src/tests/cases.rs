@@ -8,7 +8,7 @@ fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             100
         ));
@@ -30,7 +30,7 @@ fn prc_destroy_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(prc_admin(0)),
-            ORG_PRC,
+            PRC,
             institution.clone(),
             200
         ));
@@ -52,7 +52,7 @@ fn prb_destroy_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(prb_admin(0)),
-            ORG_PRB,
+            PRB,
             institution.clone(),
             300
         ));
@@ -74,7 +74,7 @@ fn non_admin_cannot_propose_or_vote() {
         assert_noop!(
             ResolutionDestro::propose_destroy(
                 RuntimeOrigin::signed(prc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 100
             ),
@@ -83,7 +83,7 @@ fn non_admin_cannot_propose_or_vote() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             100
         ));
@@ -104,7 +104,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
         assert_noop!(
             ResolutionDestro::propose_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
+                NRC,
                 institution.clone(),
                 0
             ),
@@ -113,7 +113,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             2_000
         ));
@@ -163,7 +163,7 @@ fn existential_deposit_is_preserved() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             1_000
         ));
@@ -195,7 +195,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         let institution = nrc_pallet_id();
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             100
         ));
@@ -218,7 +218,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             50
         ));
@@ -236,7 +236,7 @@ fn execute_destroy_succeeds_after_failed_auto_execution() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             1_100
         ));
@@ -272,7 +272,7 @@ fn executed_proposal_does_not_block_new_proposal() {
         let institution = nrc_pallet_id();
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             100
         ));
@@ -284,7 +284,7 @@ fn executed_proposal_does_not_block_new_proposal() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             50
         ));
@@ -299,7 +299,7 @@ fn duplicate_vote_is_rejected_by_votingengine() {
         let institution = nrc_pallet_id();
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             100
         ));
@@ -321,7 +321,7 @@ fn execute_destroy_requires_snapshot_admin() {
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            ORG_NRC,
+            NRC,
             institution.clone(),
             1_100
         ));

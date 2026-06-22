@@ -11,6 +11,7 @@
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
 use crate::pallet::{self, AdminSnapshot, Error};
+use crate::types::InstitutionCode;
 use crate::InternalAdminProvider;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
@@ -46,14 +47,14 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 如果管理员数量超过 MaxAdminsPerInstitution,触发 defensive 告警。
     pub fn snapshot_institution_admins(
         proposal_id: u64,
-        org: u8,
+        institution_code: InstitutionCode,
         institution: T::AccountId,
         pending_account: bool,
     ) -> DispatchResult {
         let admins = if pending_account {
-            T::InternalAdminProvider::get_pending_admin_list(org, institution.clone())
+            T::InternalAdminProvider::get_pending_admin_list(institution_code, institution.clone())
         } else {
-            T::InternalAdminProvider::get_admin_list(org, institution.clone())
+            T::InternalAdminProvider::get_admin_list(institution_code, institution.clone())
         }
         .ok_or(Error::<T>::InvalidInstitution)?;
 

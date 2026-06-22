@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:citizenwallet/signer/institution_code.dart';
 import 'package:citizenwallet/signer/payload_decoder.dart';
 
 void main() {
@@ -460,7 +461,7 @@ void main() {
       final payload = Uint8List.fromList([
         0x13,
         0x00,
-        0x05,
+        ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
         ...institutionAccount,
         ...beneficiary,
         ...u128LeForTest(BigInt.from(12345)),
@@ -481,6 +482,8 @@ void main() {
     });
 
     test('rejects legacy 48-byte transfer account payload', () {
+      // 旧布局 [org:u8][subject:48B]。新布局是 [institution_code:4B][account:32B],
+      // 48B 主体读出的"机构码"是垃圾且非法人机构码 → null。
       final payload = Uint8List.fromList([
         0x13,
         0x00,
@@ -612,7 +615,7 @@ void main() {
       final admin2 = List<int>.filled(32, 0x22);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
-        0x03, // org = 个人多签
+        ...InstitutionCode.codeBytes('PMUL'), // institution_code = 个人多签
         ...account,
         0x08, // Compact(2)
         ...admin1,
@@ -624,7 +627,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_admin_set_change');
-      expect(decoded.fields['org'], '个人多签');
+      expect(decoded.fields['institution_code'], '个人多签');
       expect(decoded.fields['account'], '0x${hexLower(account)}');
       expect(
         decoded.fields['admins'],
@@ -642,7 +645,7 @@ void main() {
       final payload = Uint8List.fromList([
         0x0c,
         0x00,
-        0x03,
+        ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
         ...List<int>.filled(32, 0x11),
@@ -657,7 +660,7 @@ void main() {
       final payload = Uint8List.fromList([
         0x0c,
         0x00,
-        0x03,
+        ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
         ...List<int>.filled(32, 0x11),
@@ -673,7 +676,7 @@ void main() {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
-        0x03,
+        ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x0c, // Compact(3)
         ...List<int>.filled(32, 0x11),
@@ -690,7 +693,7 @@ void main() {
       final account = List<int>.generate(32, (i) => 0x40 + i);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
-        0x00,
+        ...InstitutionCode.codeBytes('NRC'), // 国储会固定治理档 19/13
         ...account,
         0x4c, // Compact(19)
         for (var i = 0; i < 19; i++) ...List<int>.filled(32, i + 1),
@@ -706,7 +709,7 @@ void main() {
       final payload = Uint8List.fromList([
         ...utf8.encode('GMB_ACTIVATE_ADMIN_V1'),
         ...account,
-        0x05, // org = 机构账户 (ORG_OTH)
+        ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
         0x02, // kind = InstitutionAccount
         ...pubkey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
@@ -717,26 +720,26 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'activate_admin_account');
-      expect(decoded.fields['org'], '机构账户');
+      expect(decoded.fields['institution_code'], 'CGOV');
       expect(decoded.fields['account'], '0x${hexLower(account)}');
       expect(decoded.fields['pubkey'], ss58FromBytes(pubkey));
       expect(decoded.reviewFields['account'], ss58FromBytes(account));
       expect(decoded.reviewFields['pubkey'], ss58FromBytes(pubkey));
     });
 
-    test('decodes institution-account admin set change org labels', () {
+    test('decodes institution-account admin set change institution_code labels',
+        () {
       final account = List<int>.generate(32, (i) => 0x30 + i);
       final admin1 = List<int>.filled(32, 0x44);
       final admin2 = List<int>.filled(32, 0x55);
 
-      for (final entry in {
-        0x04: '机构账户',
-        0x05: '机构账户',
-      }.entries) {
+      // 公权机构账户码(CGOV)与私权机构账户码(SFLP)都属注册多签机构账户,
+      // codeLabel 返回码字符串本身(非固定治理档/个人多签特化)。
+      for (final code in const ['CGOV', 'SFLP']) {
         final payload = Uint8List.fromList([
           0x0c,
           0x00,
-          entry.key,
+          ...InstitutionCode.codeBytes(code),
           ...account,
           0x08,
           ...admin1,
@@ -747,12 +750,14 @@ void main() {
         final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
         expect(decoded, isNotNull);
-        expect(decoded!.fields['org'], entry.value);
+        expect(decoded!.fields['institution_code'], code);
         expect(decoded.fields['account'], '0x${hexLower(account)}');
       }
     });
 
     test('rejects legacy 48-byte admin account payload', () {
+      // 旧布局 [org:u8][subject:48B]。新布局 [institution_code:4B][account:32B],
+      // 48B 主体下偏移全部错位 → 签名尾校验失败 → null。
       final legacySubject = List<int>.filled(48, 0x66);
       final admin1 = List<int>.filled(32, 0x11);
       final admin2 = List<int>.filled(32, 0x22);
@@ -885,8 +890,8 @@ void main() {
         (feeAccount.length << 2) & 0xff,
         ...feeAccount,
         ...feeAmount,
-        // org: ORG_OTH (机构账户)
-        5,
+        // institution_code: [u8;4] 机构账户码(取代旧 org=ORG_OTH=5)
+        ...InstitutionCode.codeBytes('CGOV'),
         // admins_len: u32 LE
         2, 0, 0, 0,
         // admins: BoundedVec<AccountId32> count=2
@@ -941,7 +946,7 @@ void main() {
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['cid_full_name'], '安徽省储行');
-      expect(decoded.fields['org'], '机构账户');
+      expect(decoded.fields['institution_code'], 'CGOV');
       expect(decoded.fields['admins_len'], '2');
       expect(decoded.fields['threshold'], '2/2');
       expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
@@ -1212,7 +1217,7 @@ void main() {
 
     List<int> buildNrcTransferCallData() => [
           0x13, 0x00,
-          0x00, // org = 国储会
+          ...InstitutionCode.codeBytes('NRC'), // institution_code = 国储会
           ...List<int>.filled(32, 0x66), // institution AccountId32
           ...List<int>.filled(32, 0x44), // beneficiary
           ...u128LeForTest(BigInt.from(12345)),

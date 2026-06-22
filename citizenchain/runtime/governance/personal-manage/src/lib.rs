@@ -273,7 +273,7 @@ pub mod pallet {
         /// 发起"创建个人多签账户"提案(无需 CID 注册)。
         ///
         /// 地址由 `creator + account_name` 派生，统一调用
-        /// `primitives::core_const::derive_account(OP_PERSONAL, ss58, creator || name)`。
+        /// `primitives::account_derive::AccountKind::Personal { creator, account_name }.derive(ss58)`。
         ///
         /// 投票通过后由 `InternalVoteExecutor` 自动执行入金 + 激活。
         #[pallet::call_index(0)]
@@ -329,13 +329,17 @@ pub mod pallet {
             creator: &T::AccountId,
             account_name: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
-            let mut payload = creator.encode();
-            payload.extend_from_slice(account_name);
-            let digest = primitives::core_const::derive_account(
-                primitives::core_const::OP_PERSONAL,
-                <T as frame_system::Config>::SS58Prefix::get(),
-                &payload,
-            );
+            // creator (AccountId32) 编码即 32 字节原始 pubkey;account_derive 的
+            // Personal payload = creator(32B) || account_name,与历史拼装逐字节一致。
+            let encoded = creator.encode();
+            ensure!(encoded.len() >= 32, Error::<T>::DerivedAccountDecodeFailed);
+            let mut creator_32 = [0u8; 32];
+            creator_32.copy_from_slice(&encoded[..32]);
+            let digest = primitives::account_derive::AccountKind::Personal {
+                creator: &creator_32,
+                account_name,
+            }
+            .derive(<T as frame_system::Config>::SS58Prefix::get());
             T::AccountId::decode(&mut &digest[..])
                 .map_err(|_| Error::<T>::DerivedAccountDecodeFailed.into())
         }
@@ -409,7 +413,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-                votingengine::types::ORG_REN,
+                votingengine::types::PMUL,
                 kind,
                 admins.iter().cloned().collect(),
                 creator.clone(),
@@ -478,12 +482,17 @@ impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::
             return None;
         }
         let account = addr.clone();
-        let org = votingengine::types::ORG_REN;
-        let admins = admins_change::Pallet::<T>::active_account_admins(org, account.clone())?;
-        let admins_len =
-            admins_change::Pallet::<T>::active_account_admins_len(org, account.clone())?;
-        let threshold =
-            <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, account.clone())?;
+        let institution_code = votingengine::types::PMUL;
+        let admins =
+            admins_change::Pallet::<T>::active_account_admins(institution_code, account.clone())?;
+        let admins_len = admins_change::Pallet::<T>::active_account_admins_len(
+            institution_code,
+            account.clone(),
+        )?;
+        let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(
+            institution_code,
+            account.clone(),
+        )?;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
             admins_len,

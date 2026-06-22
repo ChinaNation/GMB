@@ -24,7 +24,7 @@ use primitives::count_const::{
 
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
-    types::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
+    types::{fixed_governance_pass_threshold, InstitutionCode, NRC, PRB, PRC},
     InternalAdminProvider, InternalProposalMutexKind, PopulationSnapshotVerifier, Proposal,
     PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
@@ -40,17 +40,17 @@ use super::{decode_account, institution_info, is_joint_unanimous, nrc_account};
 use codec::Encode;
 
 // ──────────────────────────────────────────────────────────────────
-// 私有 helper:发起人机构解析 + (org, weight) profile
+// 私有 helper:发起人机构解析 + (institution_code, weight) profile
 // ──────────────────────────────────────────────────────────────────
 
-pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(u8, u32)> {
+pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(InstitutionCode, u32)> {
     if CHINA_CB
         .first()
         .and_then(|n| decode_account::<T>(&n.main_account))
         .as_ref()
         == Some(id)
     {
-        return Some((ORG_NRC, NRC_JOINT_VOTE_WEIGHT));
+        return Some((NRC, NRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CB
         .iter()
@@ -58,14 +58,14 @@ pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(u8, u
         .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|account| &account == id)
     {
-        return Some((ORG_PRC, PRC_JOINT_VOTE_WEIGHT));
+        return Some((PRC, PRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CH
         .iter()
         .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|account| &account == id)
     {
-        return Some((ORG_PRB, PRB_JOINT_VOTE_WEIGHT));
+        return Some((PRB, PRB_JOINT_VOTE_WEIGHT));
     }
     None
 }
@@ -75,7 +75,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
     {
         if let Some(nrc) = nrc_account::<T>() {
             if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                ORG_NRC,
+                NRC,
                 nrc.clone(),
                 who,
             ) {
@@ -85,7 +85,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
         for entry in CHINA_CB.iter().skip(1) {
             if let Some(prc) = decode_account::<T>(&entry.main_account) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    ORG_PRC,
+                    PRC,
                     prc.clone(),
                     who,
                 ) {
@@ -99,7 +99,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
     {
         if let Some(nrc) = nrc_account::<T>() {
             if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                ORG_NRC,
+                NRC,
                 nrc.clone(),
                 who,
             ) {
@@ -109,7 +109,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
         for entry in CHINA_CB.iter().skip(1) {
             if let Some(prc) = decode_account::<T>(&entry.main_account) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    ORG_PRC,
+                    PRC,
                     prc.clone(),
                     who,
                 ) {
@@ -236,7 +236,7 @@ impl<T: Config> Pallet<T> {
             kind: PROPOSAL_KIND_JOINT,
             stage: STAGE_JOINT,
             status: votingengine::STATUS_VOTING,
-            internal_org: None,
+            internal_code: None,
             internal_institution: Some(proposer_institution.clone()),
             start: now,
             end,
@@ -259,14 +259,14 @@ impl<T: Config> Pallet<T> {
             if let Some(nrc) = nrc_account::<T>() {
                 if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                     id,
-                    ORG_NRC,
+                    NRC,
                     nrc.clone(),
                     InternalProposalMutexKind::Regular,
                 ) {
                     return TransactionOutcome::Rollback(Err(err));
                 }
                 if let Err(err) =
-                    <votingengine::Pallet<T>>::snapshot_institution_admins(id, ORG_NRC, nrc, false)
+                    <votingengine::Pallet<T>>::snapshot_institution_admins(id, NRC, nrc, false)
                 {
                     return TransactionOutcome::Rollback(Err(err));
                 }
@@ -275,14 +275,14 @@ impl<T: Config> Pallet<T> {
                 if let Some(prc) = decode_account::<T>(&entry.main_account) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
-                        ORG_PRC,
+                        PRC,
                         prc.clone(),
                         InternalProposalMutexKind::Regular,
                     ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
                     if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                        id, ORG_PRC, prc, false,
+                        id, PRC, prc, false,
                     ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
@@ -292,14 +292,14 @@ impl<T: Config> Pallet<T> {
                 if let Some(prb) = decode_account::<T>(&entry.main_account) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
-                        ORG_PRB,
+                        PRB,
                         prb.clone(),
                         InternalProposalMutexKind::Regular,
                     ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
                     if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                        id, ORG_PRB, prb, false,
+                        id, PRB, prb, false,
                     ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
@@ -351,7 +351,7 @@ impl<T: Config> Pallet<T> {
             !JointVotesByInstitution::<T>::contains_key(proposal_id, institution.clone()),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let (org, _) = institution_profile::<T>(&institution)
+        let (institution_code, _) = institution_profile::<T>(&institution)
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         ensure!(
             <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution.clone(), &who,),
@@ -380,7 +380,7 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let threshold = fixed_governance_pass_threshold(org)
+        let threshold = fixed_governance_pass_threshold(&institution_code)
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         let admins_len =
             <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution.clone())

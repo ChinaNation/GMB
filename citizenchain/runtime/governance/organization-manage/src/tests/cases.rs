@@ -1,6 +1,6 @@
 use super::*;
-use crate::address::{
-    RESERVED_NAME_ANQUAN, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
+use primitives::account_derive::{
+    AccountKind, RESERVED_NAME_ANQUAN, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
     RESERVED_NAME_STAKE,
 };
 use crate::institution::types::InstitutionLifecycleStatus;
@@ -57,11 +57,12 @@ fn register_cid_institution_with_valid_signature_succeeds() {
             &account_name(RESERVED_NAME_FEE),
         ));
         // 反向索引也写入
-        let main_addr = OrganizationManage::derive_institution_account(
+        let main_addr = OrganizationManage::derive_registered_account(
             cid.as_slice(),
-            crate::address::InstitutionAccountRole::Main,
+            RESERVED_NAME_MAIN,
         )
-        .expect("derive main");
+        .expect("derive main")
+        .0;
         assert!(pallet::AccountRegisteredCid::<Test>::contains_key(
             &main_addr
         ));
@@ -241,7 +242,7 @@ fn propose_create_institution_writes_pending_and_reserves() {
             cid.clone(),
             cid_full_name("机构甲".as_bytes()),
             typical_accounts(),
-            ORG_OTH,
+            code_bytes("SFLP"),
             3,
             admins_vec(3),
             2,
@@ -262,8 +263,10 @@ fn propose_create_institution_writes_pending_and_reserves() {
             InstitutionLifecycleStatus::Pending,
         );
         assert_eq!(
-            pallet::Institutions::<Test>::get(&cid).unwrap().org,
-            ORG_OTH,
+            pallet::Institutions::<Test>::get(&cid)
+                .unwrap()
+                .institution_code,
+            code_bytes("SFLP"),
         );
         // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
         assert_eq!(Balances::reserved_balance(&c), 2_000 + 10);
@@ -282,7 +285,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             cid.clone(),
             cid_full_name("机构乙".as_bytes()),
             typical_accounts(),
-            ORG_OTH,
+            code_bytes("SFLP"),
             3,
             admins_vec(3),
             2,
@@ -305,16 +308,12 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             InstitutionLifecycleStatus::Active,
         );
         // 主账户和费用账户都被划账
-        let main = OrganizationManage::derive_institution_account(
-            cid.as_slice(),
-            crate::address::InstitutionAccountRole::Main,
-        )
-        .unwrap();
-        let fee_acc = OrganizationManage::derive_institution_account(
-            cid.as_slice(),
-            crate::address::InstitutionAccountRole::Fee,
-        )
-        .unwrap();
+        let main = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+            .unwrap()
+            .0;
+        let fee_acc = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
+            .unwrap()
+            .0;
         assert_eq!(Balances::free_balance(&main), ACCT_AMOUNT);
         assert_eq!(Balances::free_balance(&fee_acc), ACCT_AMOUNT);
         assert_eq!(Balances::reserved_balance(&c), 0);
@@ -333,7 +332,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
             cid.clone(),
             cid_full_name("机构丙".as_bytes()),
             typical_accounts(),
-            ORG_OTH,
+            code_bytes("SFLP"),
             3,
             admins_vec(3),
             2,
@@ -371,7 +370,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 cid_number(b"CID-MIN"),
                 cid_full_name(b"X"),
                 bad_accounts,
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 2,
@@ -404,7 +403,7 @@ fn propose_create_rejects_duplicate_account_name() {
                 cid_number(b"CID-DUP"),
                 cid_full_name(b"X"),
                 dup,
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 2,
@@ -422,24 +421,30 @@ fn propose_create_rejects_duplicate_account_name() {
 }
 
 #[test]
-fn role_from_account_name_rejects_reserved_system_names() {
+fn derive_registered_account_rejects_reserved_system_names() {
     new_test_ext().execute_with(|| {
+        let cid = cid_number(b"CID-RESV");
         // 永久质押/安全基金/两和基金 为制度专属账户,普通机构禁止注册。
         for name in [RESERVED_NAME_STAKE, RESERVED_NAME_ANQUAN, RESERVED_NAME_HE] {
             assert_eq!(
-                OrganizationManage::role_from_account_name(name).unwrap_err(),
+                OrganizationManage::derive_registered_account(cid.as_slice(), name).unwrap_err(),
                 pallet::Error::<Test>::ReservedAccountName.into()
             );
         }
-        // 主账户/费用账户仍强制路由,不报错。
-        assert!(matches!(
-            OrganizationManage::role_from_account_name(RESERVED_NAME_MAIN).unwrap(),
-            crate::address::InstitutionAccountRole::Main
-        ));
-        assert!(matches!(
-            OrganizationManage::role_from_account_name(RESERVED_NAME_FEE).unwrap(),
-            crate::address::InstitutionAccountRole::Fee
-        ));
+        // 空名拒绝。
+        assert_eq!(
+            OrganizationManage::derive_registered_account(cid.as_slice(), b"").unwrap_err(),
+            pallet::Error::<Test>::EmptyAccountName.into()
+        );
+        // 主账户/费用账户仍强制路由到对应种类,不报错。
+        let (_, main_kind) =
+            OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+                .unwrap();
+        assert!(matches!(main_kind, AccountKind::InstitutionMain { .. }));
+        let (_, fee_kind) =
+            OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
+                .unwrap();
+        assert!(matches!(fee_kind, AccountKind::InstitutionFee { .. }));
     });
 }
 
@@ -459,7 +464,7 @@ fn propose_create_rejects_reserved_system_account_name() {
                 cid_number(b"CID-RSV"),
                 cid_full_name(b"X"),
                 bad,
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 2,
@@ -487,7 +492,7 @@ fn propose_create_rejects_missing_main_account() {
                 cid_number(b"CID-NM"),
                 cid_full_name(b"X"),
                 no_main,
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 2,
@@ -515,7 +520,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 cid_number(b"CID-T1"),
                 cid_full_name(b"X"),
                 typical_accounts(),
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 1,
@@ -536,7 +541,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 cid_number(b"CID-T2"),
                 cid_full_name(b"X"),
                 typical_accounts(),
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 4,
@@ -565,7 +570,7 @@ fn propose_create_rejects_when_institution_already_exists() {
             cid.clone(),
             cid_full_name(b"A"),
             typical_accounts(),
-            ORG_OTH,
+            code_bytes("SFLP"),
             3,
             admins_vec(3),
             2,
@@ -584,7 +589,7 @@ fn propose_create_rejects_when_institution_already_exists() {
                 cid,
                 cid_full_name(b"B"),
                 typical_accounts(),
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_vec(3),
                 2,
@@ -619,7 +624,7 @@ fn create_and_activate_institution(
         cid.clone(),
         cid_full_name(b"X"),
         typical_accounts(),
-        ORG_OTH,
+        code_bytes("SFLP"),
         admins_len as u32,
         admins_vec(admins_len),
         admins_len.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
@@ -638,11 +643,9 @@ fn create_and_activate_institution(
         pid
     ));
 
-    let main = OrganizationManage::derive_institution_account(
-        cid.as_slice(),
-        crate::address::InstitutionAccountRole::Main,
-    )
-    .unwrap();
+    let main = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+        .unwrap()
+        .0;
     (cid, main)
 }
 
@@ -700,7 +703,10 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
         ));
         assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(&main));
         assert!(admins_change::AdminAccounts::<Test>::get(account.clone()).is_none());
-        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, account).is_none());
+        assert!(
+            internal_vote::ActiveDynamicThresholds::<Test>::get(code_bytes("SFLP"), account)
+                .is_none()
+        );
     });
 }
 
@@ -765,7 +771,7 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
             cid_number(b"CID-CU"),
             cid_full_name(b"X"),
             typical_accounts(),
-            ORG_OTH,
+            code_bytes("SFLP"),
             3,
             admins_vec(3),
             2,
@@ -808,7 +814,7 @@ fn non_admin_cannot_propose_create() {
                 cid_number(b"CID-NA"),
                 cid_full_name(b"X"),
                 typical_accounts(),
-                ORG_OTH,
+                code_bytes("SFLP"),
                 3,
                 admins_no_creator,
                 2,
@@ -863,11 +869,9 @@ fn close_non_main_account_only_removes_that_account() {
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
         let fee_name = account_name(RESERVED_NAME_FEE);
-        let fee_acc = OrganizationManage::derive_institution_account(
-            cid.as_slice(),
-            crate::address::InstitutionAccountRole::Fee,
-        )
-        .unwrap();
+        let fee_acc = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
+            .unwrap()
+            .0;
 
         // 机构管理员(admin0)注销【非主】费用账户:role=Fee → scope=account。
         // 授权靠 resolve 统一解析到机构主账户的管理员集(子账户无独立管理员)。
@@ -881,8 +885,12 @@ fn close_non_main_account_only_removes_that_account() {
         assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
         // 仅费用账户被删;机构主账户 + AdminAccount + 机构记录保留(机构不消亡)。
-        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(&cid, &fee_name));
-        assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(&fee_acc));
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid, &fee_name
+        ));
+        assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(
+            &fee_acc
+        ));
         assert!(pallet::AccountRegisteredCid::<Test>::contains_key(&main));
         assert!(admins_change::AdminAccounts::<Test>::get(main).is_some());
         // 仅费用账户余额(1000-10)转 beneficiary。

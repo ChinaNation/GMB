@@ -34,8 +34,8 @@ use crate::pallet::{
 use crate::traits::{
     AccountValidator, CidInstitutionVerifier, ProtectedSourceChecker, ReservedAccountGuard,
 };
-use crate::{BalanceOf, InstitutionAccountRole};
-use votingengine::types::{ORG_NRC, ORG_PRB, ORG_PRC};
+use crate::BalanceOf;
+use votingengine::types::is_fixed_governance_code;
 use votingengine::InternalVoteEngine;
 
 #[allow(clippy::too_many_arguments)]
@@ -87,7 +87,8 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     // 校验发起人是【机构】管理员(resolve 统一解析到机构主账户承载的管理员集)
     let admin_account = Pallet::<T>::resolve_admin_account_for_account(&account)
         .ok_or(Error::<T>::AccountNotFound)?;
-    let org = Pallet::<T>::resolve_org_for_account(&account).ok_or(Error::<T>::AccountNotFound)?;
+    let institution_code =
+        Pallet::<T>::resolve_org_for_account(&account).ok_or(Error::<T>::AccountNotFound)?;
 
     // ── 硬保护(纵深防御):创世初始机构 / 治理机构 永不可注销关闭 ──
     // 创世机构本就不在 organization-manage 注册(会先报 NotInstitutionAccount),
@@ -97,20 +98,29 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         Error::<T>::CannotCloseGenesisInstitution
     );
     ensure!(
-        !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
+        !is_fixed_governance_code(&institution_code),
         Error::<T>::CannotCloseGovernance
     );
 
     // 作用域由被关账户角色推出:主账户=整机构(级联关全部账户),非主=只关该账户。
-    let role = Pallet::<T>::role_from_account_name(registered.account_name.as_slice())?;
-    let scope = if matches!(role, InstitutionAccountRole::Main) {
+    let is_main = primitives::account_derive::institution_kind_by_name(
+        registered.cid_number.as_slice(),
+        registered.account_name.as_slice(),
+    )
+    .map(|kind| Pallet::<T>::is_main_account(&kind))
+    .unwrap_or(false);
+    let scope = if is_main {
         SCOPE_INSTITUTION
     } else {
         SCOPE_ACCOUNT
     };
 
     ensure!(
-        admins_change::Pallet::<T>::is_active_account_admin(org, admin_account.clone(), &who),
+        admins_change::Pallet::<T>::is_active_account_admin(
+            institution_code,
+            admin_account.clone(),
+            &who
+        ),
         Error::<T>::PermissionDenied
     );
 
@@ -173,7 +183,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     let proposal_id =
         <T as Config>::InternalVoteEngine::create_lifecycle_internal_proposal_with_data(
             who.clone(),
-            org,
+            institution_code,
             admin_account,
             crate::MODULE_TAG,
             data,
@@ -201,7 +211,10 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     use frame_support::traits::{ExistenceRequirement, OnUnbalanced, WithdrawReasons};
 
     ensure!(
-        T::InstitutionAsset::can_spend(&action.account, InstitutionAssetAction::DuoqianCloseExecute,),
+        T::InstitutionAsset::can_spend(
+            &action.account,
+            InstitutionAssetAction::DuoqianCloseExecute,
+        ),
         Error::<T>::ProtectedSource
     );
     let admin_account = Pallet::<T>::resolve_admin_account_for_account(&action.account)

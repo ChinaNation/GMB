@@ -23,7 +23,7 @@ fn fee_payer_returns_none_for_transfer() {
     let institution = AccountId::new(CHINA_CB[0].main_account);
     let beneficiary = AccountId::new([99u8; 32]);
     let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
-        org: 0,
+        institution_code: votingengine::types::NRC,
         institution,
         beneficiary,
         amount: 10000,
@@ -142,7 +142,7 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                 kind: votingengine::PROPOSAL_KIND_JOINT,
                 stage: votingengine::STAGE_JOINT,
                 status: votingengine::STATUS_PASSED,
-                internal_org: None,
+                internal_code: None,
                 internal_institution: None,
                 start: 0u32,
                 end: 100u32,
@@ -206,7 +206,7 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
 
         assert_ok!(ResolutionDestro::propose_destroy(
             RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[0])),
-            votingengine::types::ORG_NRC,
+            votingengine::types::NRC,
             nrc_institution,
             destroy_amount,
         ));
@@ -278,7 +278,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         let nrc_institution = AccountId::new(CHINA_CB[0].main_account);
         let resolution_destro_call =
             RuntimeCall::ResolutionDestro(resolution_destro::pallet::Call::propose_destroy {
-                org: votingengine::types::ORG_NRC,
+                institution_code: votingengine::types::NRC,
                 institution: nrc_institution,
                 amount: 456,
             });
@@ -343,10 +343,17 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         assert_eq!(create_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
         let _ = Balances::deposit_creating(&account, 777);
+        // 中文注释:propose_close 已加注销凭证字段(register_nonce/signature/issuer_*/signer_pubkey);
+        // 本测试只验证该 Call 走投票统一价分类,凭证值无关,填默认值即可。
         let close_call =
             RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
                 account,
                 beneficiary,
+                register_nonce: Default::default(),
+                signature: Default::default(),
+                issuer_cid_number: Vec::new(),
+                issuer_main_account: AccountId::new([0u8; 32]),
+                signer_pubkey: [0u8; 32],
             });
         let close_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
@@ -358,7 +365,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         let institution = AccountId::new(primitives::china::china_cb::CHINA_CB[0].main_account);
         let transfer_call =
             RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
-                org: 0,
+                institution_code: votingengine::types::NRC,
                 institution,
                 beneficiary: AccountId::new([79u8; 32]),
                 amount: 88_888,
@@ -505,7 +512,7 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                 kind: votingengine::PROPOSAL_KIND_JOINT,
                 stage: votingengine::STAGE_JOINT,
                 status: votingengine::STATUS_REJECTED,
-                internal_org: None,
+                internal_code: None,
                 internal_institution: None,
                 start: 0u32,
                 end: 100u32,
@@ -856,7 +863,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         assert!(!is_nrc_admin(&nrc_admin));
         assert!(!is_nrc_admin(&outsider));
         assert!(!RuntimeInternalAdminProvider::is_internal_admin(
-            votingengine::types::ORG_NRC,
+            votingengine::types::NRC,
             nrc_id,
             &nrc_admin
         ));

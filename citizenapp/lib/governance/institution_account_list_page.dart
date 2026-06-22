@@ -498,7 +498,9 @@ class _InstitutionAccountListPageState
             cidNumber:
                 'institution-account:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.account,
-            adminAccountOrg: 5,
+            // 设计缺口: 新建机构时尚无 CID 码，占位用空字符串；实际 CID 码在创建完成后
+// 由 institution_manage_service 从链上读取并写入 Isar。
+adminAccountCode: '',
             account:
                 '0000000000000000000000000000000000000000000000000000000000000000',
           ),

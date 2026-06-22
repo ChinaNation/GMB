@@ -394,10 +394,7 @@ fn custom_account_names_for(
     }
     let province_code = province_code.to_string();
     let cids: Vec<String> = cid_numbers.to_vec();
-    let reserved: Vec<String> = crate::accounts::derive::RESERVED_ACCOUNT_NAMES
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let reserved: Vec<String> = crate::accounts::derive::reserved_account_names().to_vec();
     state.db.with_client(move |conn| {
         let rows = conn
             .query(

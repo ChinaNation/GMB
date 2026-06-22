@@ -18,7 +18,12 @@ use votingengine::pallet::{
     ProposalsByExpiry, ProposalsByInstitution, ProposalsByOrg, ProposalsByOwner, ProposalsByYear,
     YearProposalCounter,
 };
-use votingengine::types::{ORG_OTH, ORG_PUP, ORG_REN};
+use votingengine::types::{code_bytes, InstitutionCode, PMUL};
+// 测试用机构码:个人多签 / 公权法人 / 私权法人,均属"注册多签动态账户"。
+// 取代旧的数字治理标签(语义不变,统一走 CID 机构码)。
+const PERSONAL_CODE: InstitutionCode = PMUL;
+const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
+const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
 // joint mode storage 在 joint-vote sub-pallet
 use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
@@ -184,13 +189,21 @@ fn registered_account_admin(index: usize) -> AccountId32 {
 }
 
 fn set_registered_account_threshold(threshold: u32) {
-    for org in [ORG_REN, ORG_PUP, ORG_OTH] {
-        ActiveDynamicThresholds::<Test>::insert(org, registered_account_institution(), threshold);
+    for institution_code in [PERSONAL_CODE, PUBLIC_CODE, PRIVATE_CODE] {
+        ActiveDynamicThresholds::<Test>::insert(
+            institution_code,
+            registered_account_institution(),
+            threshold,
+        );
     }
 }
 
 fn set_pending_account_threshold(threshold: u32) {
-    PendingDynamicThresholds::<Test>::insert(ORG_REN, pending_account_institution(), threshold);
+    PendingDynamicThresholds::<Test>::insert(
+        PERSONAL_CODE,
+        pending_account_institution(),
+        threshold,
+    );
 }
 
 fn set_registered_admin_list_override(admins: Vec<AccountId32>) {
@@ -198,7 +211,11 @@ fn set_registered_admin_list_override(admins: Vec<AccountId32>) {
 }
 
 impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
         let who_bytes = who.encode();
         if who_bytes.len() != 32 {
             return false;
@@ -206,18 +223,18 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
 
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_REN | ORG_PUP | ORG_OTH => {
+            PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE => {
                 institution == registered_account_institution()
                     && [
                         registered_account_admin(0),
@@ -231,17 +248,22 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         }
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<sp_std::vec::Vec<AccountId32>> {
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            ORG_REN | ORG_PUP | ORG_OTH if institution == registered_account_institution() => {
+            PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE
+                if institution == registered_account_institution() =>
+            {
                 let override_admins =
                     REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
                 Some(override_admins.unwrap_or_else(|| {
@@ -256,8 +278,12 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         }
     }
 
-    fn is_pending_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
-        is_registered_multisig_org(org)
+    fn is_pending_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        is_registered_multisig_code(&institution_code)
             && institution == pending_account_institution()
             && [pending_account_admin(0), pending_account_admin(1)]
                 .iter()
@@ -265,10 +291,12 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     }
 
     fn get_pending_admin_list(
-        org: u8,
+        institution_code: InstitutionCode,
         institution: AccountId32,
     ) -> Option<sp_std::vec::Vec<AccountId32>> {
-        if !is_registered_multisig_org(org) || institution != pending_account_institution() {
+        if !is_registered_multisig_code(&institution_code)
+            || institution != pending_account_institution()
+        {
             return None;
         }
         Some(sp_std::vec![
@@ -719,10 +747,14 @@ fn has_used_vote_nonce(
     })
 }
 
-fn create_internal_proposal_via_engine(who: AccountId32, org: u8, institution: AccountId32) -> u64 {
+fn create_internal_proposal_via_engine(
+    who: AccountId32,
+    institution_code: InstitutionCode,
+    institution: AccountId32,
+) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
         who,
-        org,
+        institution_code,
         institution.clone(),
         b"test",
         b"payload".to_vec(),
@@ -732,15 +764,15 @@ fn create_internal_proposal_via_engine(who: AccountId32, org: u8, institution: A
 
 fn create_pending_account_proposal_via_engine(
     who: AccountId32,
-    org: u8,
+    institution_code: InstitutionCode,
     institution: AccountId32,
 ) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
         who,
-        org,
+        institution_code,
         institution.clone(),
         sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
-        PendingDynamicThresholds::<Test>::get(ORG_REN, pending_account_institution()).unwrap_or(2),
+        PendingDynamicThresholds::<Test>::get(PERSONAL_CODE, pending_account_institution()).unwrap_or(2),
         b"test",
         b"payload".to_vec(),
     )
@@ -749,20 +781,21 @@ fn create_pending_account_proposal_via_engine(
 
 fn create_admin_set_mutation_proposal_via_engine(
     who: AccountId32,
-    org: u8,
+    institution_code: InstitutionCode,
     institution: AccountId32,
 ) -> u64 {
-    let new_threshold = if is_registered_multisig_org(org) {
+    let new_threshold = if is_registered_multisig_code(&institution_code) {
         2
     } else {
-        votingengine::types::fixed_governance_pass_threshold(org).expect("fixed threshold")
+        votingengine::types::fixed_governance_pass_threshold(&institution_code)
+            .expect("fixed threshold")
     };
     <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
         who,
-        org,
+        institution_code,
         institution.clone(),
         <TestInternalAdminProvider as InternalAdminProvider<AccountId32>>::get_admin_list(
-            org,
+            institution_code,
             institution,
         )
         .map(|admins| admins.len() as u32)
@@ -802,7 +835,7 @@ fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
             kind: PROPOSAL_KIND_JOINT,
             stage: STAGE_REFERENDUM,
             status: STATUS_VOTING,
-            internal_org: None,
+            internal_code: None,
             internal_institution: None,
             start: System::block_number(),
             end,

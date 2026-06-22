@@ -2,7 +2,9 @@
 
 ## 状态
 
-**设计锁定，执行未开始（2026-06-22）。** 取代原 `20260622-derive-domain-rename-gmb-op-name.md`（改名并入本卡 Tier 3）。Tier 1/2 行为中性（地址不变，本不需创世）；Tier 3 域字节变更随 `20260622-cid-classification-unify-t3t4` 末尾**一起创世**。
+**Tier 1/2 + `gmb.py` 改名 已实现（2026-06-22，行为中性，地址逐字节零变化已金标验证）。** 取代原 `20260622-derive-domain-rename-gmb-op-name.md`（改名并入本卡 Tier 3）。Tier 1/2 行为中性（地址不变，本不需创世）；**Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后**（缺最终态 cid_number，本卡内不能独立闭环）。详见 ADR-024「实施记录」节。
+
+**决策 B（2026-06-22 用户拍板）：** china CID 重烤（=T3/T4 Phase 3，含 federal 常量种子约定）**留 T3/T4 线程**，本线程不吸收。本线程现在做范围 = **Tier 1 + Tier 2 + `duoqian.py→gmb.py` 改名**（regex 读取路径 op_tag 改到 `account_derive.rs`，域 GMB 留 Tier 3）；待 T3/T4 出新码 CID，本线程再 Tier 3 + 跑 `gmb.py` 账户重生 + 一次创世。
 
 ## 任务需求
 
@@ -93,7 +95,37 @@
 - Tier 1/2 = 纯收敛 + 修漂移，同算法同路由 → **地址不变，本不需创世**。
 - 仅 Tier 3 域字节变 → 地址变 → 随 T3/T4 末尾创世。
 
+## 前置依赖（2026-06-22 代码核查 — 用户问「CID 重构是否具备重生账户」）
+
+**结论：不具备。** 账户派生吃 `cid_number`，创世机构 cid 来自 `china_*.rs`，但 china 仍是**旧格式死码**：
+- `china_*.rs` cid 仍 `GCB05`/`GZF02`/`GJC`/`GLF`/`GSF`/`SCH`（旧段二码 ZF/JC/LF/SF/JY/CB 已从 code.rs 删 = 死码，`&str` 编译不报错→静默过期）。
+- `number/code.rs` 新码 ✅、`gov/service.rs` 模板 ✅，但 **china 创世 CID 未重烤**。
+- china 账户字面值 `main/fee_account` 基于旧 CID + 旧域 DUOQIAN，双重过期。
+
+**账户重烤工具 = `scripts/duoqian.py`（第 5 个派生镜像，474 行）**：读 china cid + regex 读 core_const 的 DUOQIAN/SS58/OP_* → 算 main/fee/stake 写回 china_*.rs；**只读 cid 不生成 cid**。Tier 1 迁 op_tag + Tier 3 改 GMB → 它 regex 必断，须改读取路径 + 纳入金标。
+
+**创世内顺序（最后一次）：** ①T3/T4 Phase3 重烤 china cid（前置未做）→ ②ADR-024 Tier3 域 GMB → ③跑 duoqian.py 用「新CID+GMB」重算账户 → ④bake-chainspec.sh + 重跑 generate_public_institution_bundle.mjs。
+
+**新增守卫测试**：每条 china cid_number 必须 `from_str` 过新码表，否则 CI 红（防静默过期）。
+
 ## 阻塞与协调
-- **强绑定 `20260622-cid-classification-unify-t3t4.md`**：Tier 3 + 创世并入其 Phase 3。
+- **强绑定 `20260622-cid-classification-unify-t3t4.md`**：Tier 3 + 账户重生 **硬 gated 在其 Phase 3（china CID 重烤）之后**；Tier 1/2 行为中性可先行。
 - 并行线程 dirty 的 `china_cb/ch/zb.rs` + `gov/service.rs`：创世重烤前等其提交。
+- `scripts/duoqian.py` 第 5 镜像须同步改（op_tag 改读 account_derive.rs、域改读 GMB/`&[u8;3]`）。
 - `feedback_no_compatibility`：改即全切不留旧源；`feedback_scale_domain_must_be_array`：域常量保持 `&[u8;N]`。
+
+## 实施记录（2026-06-22，Tier 1/2 + gmb.py 完成）
+
+**实际改动文件清单**
+- 新建单源：`citizenchain/runtime/primitives/src/account_derive.rs`
+- 瘦身：`citizenchain/runtime/primitives/src/core_const.rs`（删账户 op_tag/保留名/`derive_account`/`is_forbidden`，留 `DUOQIAN` + `OP_SIGN_*`）
+- 链端调用方：`organization-manage`（删 `address.rs`/`InstitutionAccountRole`）、`personal-manage/lib.rs`、`primitives/china/mod.rs`
+- 后端调用方：`citizencode/backend/accounts/derive.rs`（委托新源）、`subjects/service.rs`
+- Dart 单源：`citizenapp/lib/governance/shared/account_derivation.dart` + `reserved_account_names.dart`（citizenapp + citizenwallet，修 isForbidden 漂移=3 名不 trim）
+- 金标：`citizenchain/runtime/primitives/tests/account_derive_golden.rs` + 两份 `account_derive_vectors.json` + `tools/sync_account_derive_vectors.sh`
+- 改名：`scripts/duoqian.py → scripts/gmb.py`
+- 收尾(本切片)：`number/generator.rs` 头注释调用方列表修正(registration/binding/gov)、`account_derive.rs`/`core_const.rs` 注释完善、两份 fixture `_comment` 的 `duoqian.py→gmb.py`、本卡 + ADR-024 状态更新
+
+**测试结果**：链端 `cargo test -p primitives -p organization-manage -p personal-manage` 全绿（organization-manage 29 + personal-manage 23 + primitives lib 20 + golden 1 + 3 doc-tests，0 failed）；后端 `cargo test` 71 + 5 integration（含 `accounts::derive::tests` 6 项）0 failed；`ACCOUNT_DERIVE_UPDATE=1` 二次重跑后 fixture `git diff --stat` 为空 = 地址零变化。
+
+**仍 gated（Tier 3）**：域 `DUOQIAN→GMB` + china CID 重烤 + 跑 `gmb.py` 账户重生 + 一次创世 + 重跑公权机构数据包生成器。

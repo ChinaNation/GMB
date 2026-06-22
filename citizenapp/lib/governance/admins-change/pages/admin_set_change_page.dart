@@ -145,7 +145,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   }
 
   Widget _buildThresholdCard(AdminAccountState account) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.org);
+    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
     if (account.kind == 0 && fixed != null) {
       return Card(
         elevation: 0,
@@ -190,7 +190,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   }
 
   void _syncThresholdInput(AdminAccountState account, int adminsLen) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.org);
+    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
     if (account.kind == 0 && fixed != null) {
       _thresholdController.text = fixed.toString();
       return;
@@ -207,7 +207,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   }
 
   int _readNewThreshold(AdminAccountState account) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.org);
+    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
     if (account.kind == 0 && fixed != null) return fixed;
     final value = int.tryParse(_thresholdController.text.trim());
     if (value == null) throw StateError('请输入有效阈值');

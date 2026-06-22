@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 
 /// 个人多签账户生命周期快照。
 ///
@@ -24,12 +25,12 @@ class PersonalManageAccountSnapshot {
 /// 管理员与阈值快照。
 class PersonalManageAdminSnapshot {
   const PersonalManageAdminSnapshot({
-    required this.org,
+    required this.institutionCode,
     required this.adminsLen,
     required this.admins,
   });
 
-  final int org;
+  final String institutionCode;
   final int adminsLen;
   final List<String> admins;
 }
@@ -60,13 +61,13 @@ class PersonalManageStorageCodec {
 
   static Uint8List dynamicThresholdKey({
     required String storageName,
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) {
     return storageDoubleMapKey(
       'InternalVote',
       storageName,
-      Uint8List.fromList([org]),
+      Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)),
       accountId,
     );
   }
@@ -94,9 +95,12 @@ class PersonalManageStorageCodec {
   }
 
   static PersonalManageAdminSnapshot? decodeAdminAccount(Uint8List data) {
-    if (data.length <= 2) return null;
+    // institution_code: [u8;4] + kind: u8 = 5 bytes minimum before admins
+    if (data.length <= 5) return null;
     var offset = 0;
-    final org = data[offset++];
+    final institutionCode =
+        InstitutionCodeLabel.codeToString(data.sublist(offset, offset + 4));
+    offset += 4;
     offset++; // AdminAccountKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
@@ -110,7 +114,7 @@ class PersonalManageStorageCodec {
     // 后续字段是 creator/created_at/updated_at/status，阈值必须另查 InternalVote。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return PersonalManageAdminSnapshot(
-      org: org,
+      institutionCode: institutionCode,
       adminsLen: count,
       admins: admins,
     );

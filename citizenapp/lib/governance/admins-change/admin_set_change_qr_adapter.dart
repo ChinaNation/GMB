@@ -18,7 +18,8 @@ class AdminSetChangeQrAdapter {
       summary:
           '${account.kindLabel} 管理员更换：${account.admins.length} 人 -> ${admins.length} 人',
       fields: [
-        SignDisplayField(key: 'org', label: '组织类型', value: account.orgLabel),
+        SignDisplayField(
+            key: 'institution_code', label: '组织类型', value: account.orgLabel),
         SignDisplayField(
             key: 'account', label: '管理员账户', value: '0x${account.accountHex}'),
         SignDisplayField(

@@ -47,7 +47,7 @@ List<PublicAccountRow> deriveAccountRows(PublicInstitutionEntity inst) {
   ));
 
   for (final name in inst.customAccountNames) {
-    if (name.isEmpty || isForbiddenAccountName(name)) continue;
+    if (!isRegistrableCustomName(name)) continue;
     final id = deriveInstitutionCustomAccountId(inst.cidNumber, name);
     rows.add(PublicAccountRow(
       label: name,

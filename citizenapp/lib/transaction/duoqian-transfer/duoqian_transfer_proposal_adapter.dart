@@ -232,13 +232,13 @@ class DuoqianTransferProposalFeed {
     return _service.filterInstitutionVisible(all, institution);
   }
 
-  /// 广场治理提案 id:从共享年缓存按 org 过滤,替代 3 次 `ProposalsByOrg` 查询。
+  /// 广场治理提案 id:从共享年缓存按机构码过滤,替代 3 次 `ProposalsByOrg` 查询。
   Future<List<int>> fetchGovernanceProposalIds(
-    Set<int> orgs, {
+    Set<String> codes, {
     bool forceRefresh = false,
   }) async {
     final all = await currentYearProposals(forceRefresh: forceRefresh);
-    return _service.filterGovernanceIds(all, orgs);
+    return _service.filterGovernanceIds(all, codes);
   }
 
   Future<List<ProposalWithDetail>> fetchProposalsByIds(List<int> ids) {

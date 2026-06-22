@@ -1,34 +1,47 @@
+use primitives::institution_code::{code_bytes, InstitutionCode};
 use tauri::AppHandle;
 
 use crate::{governance::signing::VoteSignRequestResult, home};
 
 use super::{
     account_id, signing, storage,
-    types::{is_dynamic_org, is_governance_org, is_valid_org, AdminAccountState},
+    types::{
+        institution_code_label, is_dynamic_code, is_governance_code, is_valid_institution_code,
+        AdminAccountState,
+    },
 };
+
+/// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
+fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
+    expected
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(code_bytes)
+}
 
 fn resolve_account_state(
     cid_number: Option<String>,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
 ) -> Result<AdminAccountState, String> {
-    validate_account_lookup(expected_org, account_hex.as_deref(), cid_number.as_deref())?;
+    let expected_code = parse_expected_code(expected_institution_code.as_deref());
+    validate_account_lookup(expected_code, account_hex.as_deref(), cid_number.as_deref())?;
     if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
         let account_id = account_id::account_id_from_hex(&account_hex)?;
         let state = storage::fetch_admin_account(&account_id, cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?;
-        return ensure_expected_org(state, expected_org);
+        return ensure_expected_code(state, expected_code);
     }
     if let Some(cid_number) = cid_number.filter(|item| !item.trim().is_empty()) {
         let state = storage::fetch_admin_account_by_cid_number(&cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?;
-        return ensure_expected_org(state, expected_org);
+        return ensure_expected_code(state, expected_code);
     }
     Err("必须提供 cidNumber 或 accountHex".to_string())
 }
 
 fn validate_account_lookup(
-    expected_org: Option<u8>,
+    expected_code: Option<InstitutionCode>,
     account_hex: Option<&str>,
     cid_number: Option<&str>,
 ) -> Result<(), String> {
@@ -38,14 +51,14 @@ fn validate_account_lookup(
     let has_cid = cid_number
         .map(|item| !item.trim().is_empty())
         .unwrap_or(false);
-    if let Some(org) = expected_org {
-        if !is_valid_org(org) {
-            return Err("org 必须在 0..=5 范围内".to_string());
+    if let Some(code) = expected_code {
+        if !is_valid_institution_code(&code) {
+            return Err("机构码非法".to_string());
         }
-        if is_dynamic_org(org) && !has_account_id {
+        if is_dynamic_code(&code) && !has_account_id {
             return Err("个人多签或机构账户管理员更换必须提供 accountHex".to_string());
         }
-        if is_governance_org(org) && !has_account_id && !has_cid {
+        if is_governance_code(&code) && !has_account_id && !has_cid {
             return Err("治理机构管理员更换必须提供 cidNumber 或 accountHex".to_string());
         }
     }
@@ -55,15 +68,16 @@ fn validate_account_lookup(
     Ok(())
 }
 
-fn ensure_expected_org(
+fn ensure_expected_code(
     state: AdminAccountState,
-    expected_org: Option<u8>,
+    expected_code: Option<InstitutionCode>,
 ) -> Result<AdminAccountState, String> {
-    if let Some(org) = expected_org {
-        if state.org != org {
+    if let Some(code) = expected_code {
+        if state.institution_code != code {
             return Err(format!(
-                "管理员账户 org 不匹配：请求 org={}，链上 org={}",
-                org, state.org
+                "管理员账户机构码不匹配：请求 {}，链上 {}",
+                institution_code_label(&code),
+                institution_code_label(&state.institution_code)
             ));
         }
     }
@@ -76,25 +90,26 @@ pub async fn get_admin_account_state(
     app: AppHandle,
     cid_number: Option<String>,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
 ) -> Result<Option<AdminAccountState>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行，无法查询管理员账户".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        validate_account_lookup(expected_org, account_hex.as_deref(), cid_number.as_deref())?;
+        let expected_code = parse_expected_code(expected_institution_code.as_deref());
+        validate_account_lookup(expected_code, account_hex.as_deref(), cid_number.as_deref())?;
         if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
             let account_id = account_id::account_id_from_hex(&account_hex)?;
             let state = storage::fetch_admin_account(&account_id, cid_number)?;
             match state {
-                Some(state) => ensure_expected_org(state, expected_org).map(Some),
+                Some(state) => ensure_expected_code(state, expected_code).map(Some),
                 None => Ok(None),
             }
         } else if let Some(cid_number) = cid_number.filter(|item| !item.trim().is_empty()) {
             let state = storage::fetch_admin_account_by_cid_number(&cid_number)?;
             match state {
-                Some(state) => ensure_expected_org(state, expected_org).map(Some),
+                Some(state) => ensure_expected_code(state, expected_code).map(Some),
                 None => Ok(None),
             }
         } else {
@@ -112,7 +127,7 @@ pub async fn build_admin_set_change_request(
     pubkey_hex: String,
     cid_number: Option<String>,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
     admins: Vec<String>,
 ) -> Result<VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -120,7 +135,7 @@ pub async fn build_admin_set_change_request(
         return Err("节点未运行，无法构建管理员更换签名请求".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let state = resolve_account_state(cid_number, account_hex, expected_org)?;
+        let state = resolve_account_state(cid_number, account_hex, expected_institution_code)?;
         signing::build_admin_set_change_sign_request(&state, &pubkey_hex, &admins)
     })
     .await
@@ -136,7 +151,7 @@ pub async fn submit_admin_set_change(
     expected_payload_hash: String,
     cid_number: Option<String>,
     account_hex: Option<String>,
-    expected_org: Option<u8>,
+    expected_institution_code: Option<String>,
     admins: Vec<String>,
     sign_nonce: u32,
     sign_block_number: u64,
@@ -147,7 +162,7 @@ pub async fn submit_admin_set_change(
         return Err("节点未运行，无法提交管理员更换提案".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let state = resolve_account_state(cid_number, account_hex, expected_org)?;
+        let state = resolve_account_state(cid_number, account_hex, expected_institution_code)?;
         signing::submit_admin_set_change(
             &state,
             &request_id,

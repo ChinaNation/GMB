@@ -1,11 +1,10 @@
 //! CID 号生成器
 //!
 //! 中文注释:
-//! 这是 cid 系统**唯一**的 CID 号生成入口,供所有业务模块调用:
-//! - `cpms` 公安局 CPMS 站点 CID 生成
-//! - `subjects`                   法人/非法人主体 CID 生成
+//! 这是 cid 系统**唯一**的 CID 号生成入口(`generate_cid_number`),供所有业务模块调用:
+//! - `subjects::registration`     法人/非法人主体 CID 生成
 //! - `citizens::binding`          公民绑定兜底 CID 生成
-//! - `core::runtime_ops`      seed 阶段 CID 生成
+//! - `gov::service`               公权机构(政府模板)CID 生成
 //!
 //! 生成的 CID 号结构见 `number/validator.rs` 顶部注释。
 //! 主体属性(K1)已从号码删除,由机构码自带语义;盈利属性由机构码 `profit_policy()` 决定,

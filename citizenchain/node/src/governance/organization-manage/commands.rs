@@ -4,6 +4,7 @@
 //! - 本文件只面向"清算行注册机构"的多签创建和机构详情查询。
 //! - 普通注册机构多签、个人多签仍由 citizenapp 操作,不进入节点软件目录。
 
+use primitives::institution_code::code_bytes;
 use tauri::AppHandle;
 
 use super::types::{
@@ -111,7 +112,7 @@ pub async fn build_propose_create_institution_request(
     cid_number: String,
     cid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
-    org: u8,
+    institution_code: String,
     admins: Vec<String>,
     threshold: u32,
     register_nonce: String,
@@ -129,12 +130,13 @@ pub async fn build_propose_create_institution_request(
     tauri::async_runtime::spawn_blocking(move || {
         let parsed_accounts = parse_initial_accounts(&accounts)?;
         let admins_len = admins.len() as u32;
+        let code = code_bytes(institution_code.trim());
         super::signing::build_propose_create_institution_sign_request(
             &pubkey_hex,
             &cid_number,
             &cid_full_name,
             &parsed_accounts,
-            org,
+            &code,
             admins_len,
             &admins,
             threshold,
@@ -161,7 +163,7 @@ pub async fn submit_propose_create_institution(
     cid_number: String,
     cid_full_name: String,
     accounts: Vec<InitialAccountInputDto>,
-    org: u8,
+    institution_code: String,
     admins: Vec<String>,
     threshold: u32,
     register_nonce: String,
@@ -182,11 +184,12 @@ pub async fn submit_propose_create_institution(
     tauri::async_runtime::spawn_blocking(move || {
         let parsed_accounts = parse_initial_accounts(&accounts)?;
         let admins_len = admins.len() as u32;
+        let code = code_bytes(institution_code.trim());
         let call_data = super::signing::build_propose_create_institution_call_data(
             &cid_number,
             &cid_full_name,
             &parsed_accounts,
-            org,
+            &code,
             admins_len,
             &admins,
             threshold,

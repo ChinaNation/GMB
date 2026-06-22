@@ -11,7 +11,7 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-use votingengine::types::{is_registered_multisig_org, ORG_OTH};
+use votingengine::types::{code_bytes, is_registered_multisig_code, InstitutionCode};
 
 type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -208,7 +208,7 @@ impl
     }
 }
 
-// ── Provider:支持注册多签动态机构账户(ORG_REN/ORG_PUP/ORG_OTH) ──
+// ── Provider:支持注册多签动态机构账户(PMUL/公权法人/私权法人) ──
 //
 // 机构账户 institution = 注册机构 main AccountId。
 // 测试环境直接读 admins-change::AdminAccounts[institution] 的管理员列表。
@@ -216,8 +216,12 @@ impl
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
-        if !is_registered_multisig_org(org) {
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        if !is_registered_multisig_code(&institution_code) {
             return false;
         }
         admins_change::AdminAccounts::<Test>::get(institution)
@@ -225,8 +229,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             .unwrap_or(false)
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<alloc::vec::Vec<AccountId32>> {
-        if !is_registered_multisig_org(org) {
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<alloc::vec::Vec<AccountId32>> {
+        if !is_registered_multisig_code(&institution_code) {
             return None;
         }
         admins_change::AdminAccounts::<Test>::get(institution).map(|s| s.admins.into_inner())
@@ -235,8 +242,8 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
 pub struct TestInternalAdminsLenProvider;
 impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn admins_len(org: u8, institution: AccountId32) -> Option<u32> {
-        if !is_registered_multisig_org(org) {
+    fn admins_len(institution_code: InstitutionCode, institution: AccountId32) -> Option<u32> {
+        if !is_registered_multisig_code(&institution_code) {
             return None;
         }
         admins_change::AdminAccounts::<Test>::get(institution).map(|s| s.admins.len() as u32)
@@ -447,8 +454,10 @@ pub fn close_with_cred(
 ) -> sp_runtime::DispatchResult {
     let nonce: crate::pallet::RegisterNonceOf<Test> =
         vec![nonce_seed, 0xDE].try_into().expect("nonce fits bound");
-    let signature: crate::pallet::RegisterSignatureOf<Test> =
-        b"deregister-ok".to_vec().try_into().expect("sig fits bound");
+    let signature: crate::pallet::RegisterSignatureOf<Test> = b"deregister-ok"
+        .to_vec()
+        .try_into()
+        .expect("sig fits bound");
     OrganizationManage::propose_close(
         origin,
         account,

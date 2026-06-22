@@ -12,7 +12,7 @@ use sp_runtime::traits::{CheckedAdd, Zero};
 use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
-    types::{ORG_NRC, ORG_PRB, ORG_PRC},
+    types::{InstitutionCode, NRC, PRB, PRC},
     InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -45,9 +45,9 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
         .and_then(|n| decode_account::<T>(&n.main_account))
 }
 
-fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8> {
+fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<InstitutionCode> {
     if Some(institution.clone()) == nrc_account::<T>() {
-        return Some(ORG_NRC);
+        return Some(NRC);
     }
 
     if CHINA_CB
@@ -56,7 +56,7 @@ fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8>
         .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|pid| pid == institution)
     {
-        return Some(ORG_PRC);
+        return Some(PRC);
     }
 
     if CHINA_CH
@@ -64,7 +64,7 @@ fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<u8>
         .filter_map(|n| decode_account::<T>(&n.main_account))
         .any(|pid| pid == institution)
     {
-        return Some(ORG_PRB);
+        return Some(PRB);
     }
 
     None
@@ -102,7 +102,7 @@ pub mod pallet {
         /// 已发起销毁提案（并已在投票引擎创建内部提案）
         DestroyProposed {
             proposal_id: u64,
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             proposer: T::AccountId,
             amount: BalanceOf<T>,
@@ -142,7 +142,7 @@ pub mod pallet {
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_destroy())]
         pub fn propose_destroy(
             origin: OriginFor<T>,
-            org: u8,
+            institution_code: InstitutionCode,
             institution: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
@@ -151,10 +151,13 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
             let actual_org =
                 account_org::<T>(institution.clone()).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
+            ensure!(
+                actual_org == institution_code,
+                Error::<T>::InstitutionOrgMismatch
+            );
             // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
             ensure!(
-                Self::is_internal_admin(org, institution.clone(), &who),
+                Self::is_internal_admin(institution_code, institution.clone(), &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
@@ -166,7 +169,7 @@ pub mod pallet {
             encoded.extend_from_slice(&action.encode());
             let proposal_id = T::InternalVoteEngine::create_general_internal_proposal_with_data(
                 who.clone(),
-                org,
+                institution_code,
                 institution.clone(),
                 crate::MODULE_TAG,
                 encoded,
@@ -174,7 +177,7 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::DestroyProposed {
                 proposal_id,
-                org,
+                institution_code,
                 institution,
                 proposer: who,
                 amount,
@@ -186,9 +189,13 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn is_internal_admin(org: u8, institution: T::AccountId, who: &T::AccountId) -> bool {
+        fn is_internal_admin(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+            who: &T::AccountId,
+        ) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                org,
+                institution_code,
                 institution,
                 who,
             )

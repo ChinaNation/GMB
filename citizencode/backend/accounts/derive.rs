@@ -1,11 +1,13 @@
-//! DUOQIAN 机构账户地址派生。
+//! DUOQIAN 机构账户地址派生(后端薄适配)。
 //!
-//! 与链端 `citizenchain/runtime/primitives/src/core_const.rs`
-//! `derive_account` + `organization-manage` 的账户名路由完全对齐,用于:
+//! 账户派生唯一真源 = 链端 `primitives::account_derive`(ADR-024 Tier 1):op_tag、
+//! 5 个受限保留名、name→种类路由、payload 字段拼装、唯一派生入口 `AccountKind::derive`
+//! 全部收敛在那里。本模块**不再**本地重声明保留名或重写路由,仅做 `&str` → `&[u8]`
+//! 适配 + hex 编码,用于:
 //!   - 创建账户时立即在本地算出 `account`,无需等激活上链
 //!   - 激活成功后做 receipt 地址 ↔ 本地派生值的一致性断言,抓链端路由 / domain 漂移
 //!
-//! ## DUOQIAN 协议
+//! ## DUOQIAN 协议(定义见 `primitives::account_derive`)
 //!
 //! | op_tag | 账户类型            | account_name              | preimage 是否含 account_name |
 //! |--------|---------------------|---------------------------|------------------------------|
@@ -24,86 +26,48 @@
 //!         || account_name.as_bytes()         // 仅 0x06 追加;0x00 / 0x01 不追加
 //! account = blake2b_256(preimage)    // 32 字节
 //! ```
-//!
-//! ## 链端唯一真源
-//!
-//! - `primitives/src/core_const.rs`:`DUOQIAN = b"DUOQIAN"`、`OP_MAIN = 0x00`、
-//!   `OP_FEE = 0x01`、`OP_STAKE = 0x02`、`OP_AN = 0x03`、`OP_HE = 0x04`、
-//!   `OP_INSTITUTION = 0x06`、`derive_account(op_tag, ss58, payload)`
-//!   = `blake2_256(DUOQIAN || op_tag || ss58.to_le_bytes() || payload)`
-//! - `organization-manage/src/lib.rs` `derive_institution_account`:
-//!   `payload = cid_number || name_suffix`,`Main`/`Fee`/制度账户的 name_suffix 为空
-//! - `organization-manage/src/lib.rs` `role_from_account_name`:
-//!   保留账户名走固定角色;其他非空 → `Named(account_name)`
 
-use primitives::core_const::{
-    derive_account as derive_account_bytes, OP_AN, OP_FEE, OP_HE, OP_INSTITUTION, OP_MAIN,
-    OP_STAKE, SS58_FORMAT,
-};
+use primitives::account_derive::{self, RESERVED_ACCOUNT_NAMES as RESERVED_ACCOUNT_NAME_BYTES};
+use primitives::core_const::SS58_FORMAT;
 
-/// 主账户保留名(UTF-8 字节,9 字节)。链端同字节常量。
-const RESERVED_NAME_MAIN: &str = "主账户";
-/// 费用账户保留名(UTF-8 字节,12 字节)。
-const RESERVED_NAME_FEE: &str = "费用账户";
-/// 省储行永久质押账户保留名。
-const RESERVED_NAME_STAKE: &str = "永久质押";
-/// 国储会安全基金账户保留名。
-const RESERVED_NAME_ANQUAN: &str = "安全基金";
-/// 国储会两和基金账户保留名。
-const RESERVED_NAME_HE: &str = "两和基金";
-
-/// 全部 5 个受限保留账户名(单一源,与链端字节对齐)。
+/// 全部 5 个受限保留账户名(单一源 = 链端 `account_derive`,UTF-8 字符串视图)。
+///
 /// 自定义账户判定:account_name 命中其一即非自定义(走各自 op_tag),否则为
-/// `OP_INSTITUTION` 自定义命名账户。citizenapp BFF 据此过滤 custom_account_names。
-pub(crate) const RESERVED_ACCOUNT_NAMES: [&str; 5] = [
-    RESERVED_NAME_MAIN,
-    RESERVED_NAME_FEE,
-    RESERVED_NAME_STAKE,
-    RESERVED_NAME_ANQUAN,
-    RESERVED_NAME_HE,
-];
+/// `OP_NAME` 自定义命名账户。citizenapp BFF 据此过滤 custom_account_names。
+pub(crate) fn reserved_account_names() -> [String; 5] {
+    [
+        String::from_utf8_lossy(RESERVED_ACCOUNT_NAME_BYTES[0]).into_owned(),
+        String::from_utf8_lossy(RESERVED_ACCOUNT_NAME_BYTES[1]).into_owned(),
+        String::from_utf8_lossy(RESERVED_ACCOUNT_NAME_BYTES[2]).into_owned(),
+        String::from_utf8_lossy(RESERVED_ACCOUNT_NAME_BYTES[3]).into_owned(),
+        String::from_utf8_lossy(RESERVED_ACCOUNT_NAME_BYTES[4]).into_owned(),
+    ]
+}
 
 /// 按 `account_name` 路由并派生机构账户的 `account`(小写 hex,32 字节 → 64 字符)。
+///
+/// 路由 / op_tag / payload 拼装全部委托给 `account_derive::institution_kind_by_name`
+/// + `AccountKind::derive`(唯一真源)。
 ///
 /// 返回 `None` 当 `account_name` 为空串(与链端 `EmptyAccountName` 对齐的前置拒绝,
 /// 不做 trim:链端按原始字节派生,本端必须字节对齐)。
 ///
-/// ### 路由
+/// ### 路由(定义在 `account_derive`)
 /// - `"主账户"` → `OP_MAIN`(preimage 不含 account_name)
 /// - `"费用账户"` → `OP_FEE`(preimage 不含 account_name)
 /// - `"永久质押"` → `OP_STAKE`(preimage 不含 account_name)
 /// - `"安全基金"` → `OP_AN`(preimage 不含 account_name)
 /// - `"两和基金"` → `OP_HE`(preimage 不含 account_name)
-/// - 其他非空 → `OP_INSTITUTION`(preimage 追加 account_name 字节)
+/// - 其他非空 → `OP_NAME`(preimage 追加 account_name 字节)
 pub fn derive_account(cid_number: &str, account_name: &str) -> Option<String> {
-    let name = account_name;
-    if name.is_empty() {
-        return None;
-    }
-    let (op_tag, name_suffix): (u8, &[u8]) = if name == RESERVED_NAME_MAIN {
-        (OP_MAIN, &[])
-    } else if name == RESERVED_NAME_FEE {
-        (OP_FEE, &[])
-    } else if name == RESERVED_NAME_STAKE {
-        (OP_STAKE, &[])
-    } else if name == RESERVED_NAME_ANQUAN {
-        (OP_AN, &[])
-    } else if name == RESERVED_NAME_HE {
-        (OP_HE, &[])
-    } else {
-        (OP_INSTITUTION, name.as_bytes())
-    };
-    let cid_bytes = cid_number.as_bytes();
-    let mut payload = Vec::with_capacity(cid_bytes.len() + name_suffix.len());
-    payload.extend_from_slice(cid_bytes);
-    payload.extend_from_slice(name_suffix);
-    let digest = derive_account_bytes(op_tag, SS58_FORMAT, &payload);
-    Some(hex::encode(digest))
+    account_derive::institution_kind_by_name(cid_number.as_bytes(), account_name.as_bytes())
+        .map(|kind| hex::encode(kind.derive(SS58_FORMAT)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use primitives::account_derive::{AccountKind, OP_NAME};
 
     #[test]
     fn main_account_preimage_excludes_name() {
@@ -130,7 +94,7 @@ mod tests {
         let wage = derive_account(cid, "工资账户").unwrap();
         let case = derive_account(cid, "办案账户").unwrap();
         assert_ne!(wage, case);
-        // 英文 "Main" / "Fee" 作为 Named 走 OP_INSTITUTION,不应等于主/费账户地址
+        // 英文 "Main" / "Fee" 作为 Named 走 OP_NAME,不应等于主/费账户地址
         let named_main = derive_account(cid, "Main").unwrap();
         let reserved_main = derive_account(cid, "主账户").unwrap();
         assert_ne!(named_main, reserved_main);
@@ -142,14 +106,26 @@ mod tests {
         let stake = derive_account(cid, "永久质押").unwrap();
         let anquan = derive_account(cid, "安全基金").unwrap();
         let he = derive_account(cid, "两和基金").unwrap();
-        let named_stake = derive_account_bytes(
-            OP_INSTITUTION,
-            SS58_FORMAT,
-            "LN001-GCB05-944805165-2026永久质押".as_bytes(),
+        // 同名走 OP_NAME(cid||name)的地址不应等于走专属 OP_STAKE 的地址
+        let named_stake = hex::encode(
+            AccountKind::InstitutionNamed {
+                cid_number: cid.as_bytes(),
+                account_name: "永久质押".as_bytes(),
+            }
+            .derive(SS58_FORMAT),
         );
-        assert_ne!(stake, hex::encode(named_stake));
+        assert_ne!(stake, named_stake);
         assert_ne!(stake, anquan);
         assert_ne!(anquan, he);
+        // 显式确认自定义命名走 OP_NAME=0x06
+        assert_eq!(
+            AccountKind::InstitutionNamed {
+                cid_number: cid.as_bytes(),
+                account_name: "办案账户".as_bytes(),
+            }
+            .op_tag(),
+            OP_NAME
+        );
     }
 
     #[test]

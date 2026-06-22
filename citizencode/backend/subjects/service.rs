@@ -10,7 +10,7 @@ use crate::number::{
 };
 use crate::subjects::model::{Institution, InstitutionAccount};
 use crate::subjects::MultisigChainStatus;
-use primitives::core_const::is_forbidden_account_name;
+use primitives::account_derive::is_forbidden_account_name;
 
 pub const ACCOUNT_NAME_MAIN: &str = "主账户";
 pub const ACCOUNT_NAME_FEE: &str = "费用账户";
@@ -294,7 +294,7 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
         ));
     }
     // 制度专属保留名(永久质押/安全基金/两和基金)禁止注册为自定义账户名,
-    // 与链端 primitives::core_const::is_forbidden_account_name 单一权威源一致。
+    // 与链端 primitives::account_derive::is_forbidden_account_name 单一权威源一致。
     if is_forbidden_account_name(trimmed.as_bytes()) {
         return Err(ServiceError::BadInput(
             "account_name 命中制度专属保留名(永久质押/安全基金/两和基金)",

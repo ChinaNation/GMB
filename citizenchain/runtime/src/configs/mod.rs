@@ -1253,19 +1253,20 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCid
     /// 扫码支付 Step 2 新增:判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
-    /// 中文注释:机构账户按自身地址作为治理账户,org 来自
-    /// `Institutions[cid].org`;ORG_REN 只给 personal-manage 使用。
+    /// 中文注释:机构账户按自身地址作为治理账户,institution_code 来自
+    /// `Institutions[cid].institution_code`;PMUL 只给 personal-manage 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(account) =
             organization_manage::Pallet::<Runtime>::resolve_admin_account_for_account(bank)
         else {
             return false;
         };
-        let Some(org) = organization_manage::Pallet::<Runtime>::resolve_org_for_account(bank)
+        let Some(institution_code) =
+            organization_manage::Pallet::<Runtime>::resolve_org_for_account(bank)
         else {
             return false;
         };
-        admins_change::Pallet::<Runtime>::is_active_account_admin(org, account, who)
+        admins_change::Pallet::<Runtime>::is_active_account_admin(institution_code, account, who)
     }
 
     /// Step 2(2026-05-02):清算行资格由 CID 系统的 eligible-search 负责筛选。
@@ -1343,7 +1344,7 @@ pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一账户表。
     admins_change::Pallet::<Runtime>::is_active_account_admin(
-        votingengine::types::ORG_NRC,
+        votingengine::types::NRC,
         nrc_institution,
         who,
     )
@@ -1376,12 +1377,16 @@ fn is_joint_proposer(who: &AccountId) -> bool {
     use primitives::china::china_cb::CHINA_CB;
     for (idx, entry) in CHINA_CB.iter().enumerate() {
         let institution = AccountId::new(entry.main_account);
-        let org = if idx == 0 {
-            votingengine::types::ORG_NRC
+        let institution_code = if idx == 0 {
+            votingengine::types::NRC
         } else {
-            votingengine::types::ORG_PRC
+            votingengine::types::PRC
         };
-        if admins_change::Pallet::<Runtime>::is_active_account_admin(org, institution, who) {
+        if admins_change::Pallet::<Runtime>::is_active_account_admin(
+            institution_code,
+            institution,
+            who,
+        ) {
             return true;
         }
     }
@@ -1558,35 +1563,56 @@ impl genesis_pallet::Config for Runtime {
 pub struct RuntimeInternalAdminProvider;
 
 impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId, who: &AccountId) -> bool {
-        admins_change::Pallet::<Runtime>::is_active_account_admin(org, institution, who)
+    fn is_internal_admin(
+        institution_code: votingengine::types::InstitutionCode,
+        institution: AccountId,
+        who: &AccountId,
+    ) -> bool {
+        admins_change::Pallet::<Runtime>::is_active_account_admin(
+            institution_code,
+            institution,
+            who,
+        )
     }
 
-    fn get_admin_list(org: u8, institution: AccountId) -> Option<alloc::vec::Vec<AccountId>> {
-        admins_change::Pallet::<Runtime>::active_account_admins(org, institution)
+    fn get_admin_list(
+        institution_code: votingengine::types::InstitutionCode,
+        institution: AccountId,
+    ) -> Option<alloc::vec::Vec<AccountId>> {
+        admins_change::Pallet::<Runtime>::active_account_admins(institution_code, institution)
     }
 
-    fn is_pending_internal_admin(org: u8, institution: AccountId, who: &AccountId) -> bool {
+    fn is_pending_internal_admin(
+        institution_code: votingengine::types::InstitutionCode,
+        institution: AccountId,
+        who: &AccountId,
+    ) -> bool {
         admins_change::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
-            org,
+            institution_code,
             institution,
             who,
         )
     }
 
     fn get_pending_admin_list(
-        org: u8,
+        institution_code: votingengine::types::InstitutionCode,
         institution: AccountId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
-        admins_change::Pallet::<Runtime>::pending_account_admins_for_snapshot(org, institution)
+        admins_change::Pallet::<Runtime>::pending_account_admins_for_snapshot(
+            institution_code,
+            institution,
+        )
     }
 }
 
 pub struct RuntimeInternalAdminsLenProvider;
 
 impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdminsLenProvider {
-    fn admins_len(org: u8, institution: AccountId) -> Option<u32> {
-        admins_change::Pallet::<Runtime>::active_account_admins_len(org, institution)
+    fn admins_len(
+        institution_code: votingengine::types::InstitutionCode,
+        institution: AccountId,
+    ) -> Option<u32> {
+        admins_change::Pallet::<Runtime>::active_account_admins_len(institution_code, institution)
     }
 }
 

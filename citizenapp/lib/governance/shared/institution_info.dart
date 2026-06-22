@@ -92,7 +92,7 @@ class InstitutionInfo {
     required this.orgType,
     this.accounts,
     String? account,
-    this.adminAccountOrg,
+    this.adminAccountCode,
     this.internalThresholdOverride,
   })  : assert(accounts != null || account != null),
         _singleMainAccount = account;
@@ -107,8 +107,8 @@ class InstitutionInfo {
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
   final int orgType;
 
-  /// 注册机构账户管理员更换使用的 org：4=公权机构账户，5=其他机构账户。
-  final int? adminAccountOrg;
+  /// 注册机构账户管理员更换使用的机构码（如 "CGOV"/"CGOV" 等注册机构 CID 码）。
+  final String? adminAccountCode;
 
   /// 制度账户集合。
   ///
@@ -167,7 +167,7 @@ class InstitutionInfo {
     int? orgType,
     InstitutionAccounts? accounts,
     String? account,
-    int? adminAccountOrg,
+    String? adminAccountCode,
     int? internalThresholdOverride,
   }) {
     return InstitutionInfo(
@@ -176,7 +176,7 @@ class InstitutionInfo {
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
       account: account ?? _singleMainAccount,
-      adminAccountOrg: adminAccountOrg ?? this.adminAccountOrg,
+      adminAccountCode: adminAccountCode ?? this.adminAccountCode,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
     );

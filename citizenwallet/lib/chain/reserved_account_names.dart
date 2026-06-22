@@ -1,6 +1,6 @@
 /// 机构账户受限注册保留名（Dart 端单一权威源）。
 ///
-/// 取值逐字对齐链端 primitives::core_const（CANON 决策2 第 5 类）：
+/// 取值逐字对齐链端 primitives::account_derive（ADR-024 唯一权威源）：
 ///   RESERVED_NAME_MAIN  = "主账户"
 ///   RESERVED_NAME_FEE   = "费用账户"
 ///   RESERVED_NAME_STAKE = "永久质押"
@@ -34,7 +34,8 @@ class ReservedAccountNames {
 
   /// account_name 是否为"禁止注册"的制度专属保留名（永久质押/安全基金/两和基金）。
   ///
-  /// 与链端 core_const::is_forbidden_account_name 语义逐字一致：
+  /// 唯一权威源是链端 primitives::account_derive::is_forbidden_account_name，
+  /// 本方法仅为冷钱包签名展示对齐，语义须逐字一致：
   /// 主账户/费用账户不在此列（走强制默认路由，是"强制"而非"禁止"）。
   static bool isForbidden(String name) {
     return name == stake || name == anquan || name == he;

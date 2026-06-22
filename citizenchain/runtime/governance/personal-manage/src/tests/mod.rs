@@ -12,7 +12,7 @@ use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use std::cell::RefCell;
-use votingengine::types::ORG_REN;
+use votingengine::types::{InstitutionCode, PMUL};
 
 type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -163,54 +163,68 @@ impl
     }
 }
 
-// ── Provider:仅支持 ORG_REN(个人多签),其他 org 返回 None/false ──
+// ── Provider:仅支持 PMUL(个人多签),其他 institution_code 返回 None/false ──
 //
 // personal-manage 测试只走个人多签业务,固定治理 (NRC/PRC/PRB) 不参与;
 // 因此 Provider 只需要从 admins-change 读 admins / count。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
-        if org != ORG_REN {
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        if institution_code != PMUL {
             return false;
         }
-        admins_change::Pallet::<Test>::is_active_account_admin(org, institution, who)
+        admins_change::Pallet::<Test>::is_active_account_admin(institution_code, institution, who)
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<alloc::vec::Vec<AccountId32>> {
-        if org != ORG_REN {
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<alloc::vec::Vec<AccountId32>> {
+        if institution_code != PMUL {
             return None;
         }
-        admins_change::Pallet::<Test>::active_account_admins(org, institution)
+        admins_change::Pallet::<Test>::active_account_admins(institution_code, institution)
     }
 
-    fn is_pending_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
-        org == ORG_REN
+    fn is_pending_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        institution_code == PMUL
             && admins_change::Pallet::<Test>::is_pending_account_admin_for_snapshot(
-                org,
+                institution_code,
                 institution,
                 who,
             )
     }
 
     fn get_pending_admin_list(
-        org: u8,
+        institution_code: InstitutionCode,
         institution: AccountId32,
     ) -> Option<alloc::vec::Vec<AccountId32>> {
-        if org != ORG_REN {
+        if institution_code != PMUL {
             return None;
         }
-        admins_change::Pallet::<Test>::pending_account_admins_for_snapshot(org, institution)
+        admins_change::Pallet::<Test>::pending_account_admins_for_snapshot(
+            institution_code,
+            institution,
+        )
     }
 }
 
 pub struct TestInternalAdminsLenProvider;
 impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn admins_len(org: u8, institution: AccountId32) -> Option<u32> {
-        if org != ORG_REN {
+    fn admins_len(institution_code: InstitutionCode, institution: AccountId32) -> Option<u32> {
+        if institution_code != PMUL {
             return None;
         }
-        admins_change::Pallet::<Test>::active_account_admins_len(org, institution)
+        admins_change::Pallet::<Test>::active_account_admins_len(institution_code, institution)
     }
 }
 
@@ -393,11 +407,11 @@ pub fn seed_active_duoqian(
     let admins_ac: admins_change::AdminsOf<Test> =
         BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");
     let threshold = (admins.len() as u32 / 2).saturating_add(1);
-    internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, account.clone(), threshold);
+    internal_vote::ActiveDynamicThresholds::<Test>::insert(PMUL, account.clone(), threshold);
     admins_change::AdminAccounts::<Test>::insert(
         account.clone(),
         admins_change::AdminAccount {
-            org: ORG_REN,
+            institution_code: PMUL,
             kind: admins_change::AdminAccountKind::PersonalAccount,
             admins: admins_ac,
             creator: creator.clone(),

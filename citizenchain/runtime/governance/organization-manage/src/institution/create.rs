@@ -31,7 +31,7 @@ use frame_support::{
     traits::ReservableCurrency,
 };
 use sp_runtime::{traits::Hash, DispatchResult};
-use votingengine::types::{ORG_OTH, ORG_PUP};
+use votingengine::types::{is_institution_code, InstitutionCode};
 use votingengine::InternalVoteEngine;
 
 /// 机构整体创建提案 (call_index=5,ADR-008 step2b)。
@@ -41,7 +41,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     cid_number: CidNumberOf<T>,
     cid_full_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
-    org: u8,
+    institution_code: InstitutionCode,
     admins_len: u32,
     admins: AdminsOf<T>,
     threshold: u32,
@@ -72,7 +72,10 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         Error::<T>::InstitutionAlreadyExists
     );
     Pallet::<T>::ensure_admin_config(&who, admins_len, &admins, threshold)?;
-    ensure!(matches!(org, ORG_PUP | ORG_OTH), Error::<T>::InvalidOrg);
+    ensure!(
+        is_institution_code(&institution_code),
+        Error::<T>::InvalidOrg
+    );
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
     ensure!(
@@ -104,14 +107,13 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     let now = <frame_system::Pallet<T>>::block_number();
     // 中文注释：管理员更换与内部投票直接使用机构主账户。
     let institution = main_account.clone();
-    let org = org;
     let action = CreateInstitutionAction {
         cid_number: cid_number.clone(),
         cid_full_name: cid_full_name.clone(),
         main_account: main_account.clone(),
         fee_account: fee_account.clone(),
         proposer: who.clone(),
-        org,
+        institution_code,
         admins_len,
         threshold,
         admins: admins.clone(),
@@ -134,7 +136,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                 cid_full_name: cid_full_name.clone(),
                 main_account: main_account.clone(),
                 fee_account: fee_account.clone(),
-                org,
+                institution_code,
                 admins_len,
                 threshold,
                 admins: admins.clone(),
@@ -175,7 +177,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
         let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_account_create_proposal_with_data(
             who.clone(),
-            org,
+            institution_code,
             institution.clone(),
             admins.iter().cloned().collect(),
             threshold,
@@ -189,7 +191,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
         if let Err(err) = Pallet::<T>::create_pending_admin_account_for_proposal(
             proposal_id,
-            org,
+            institution_code,
             institution.clone(),
             admins_change::AdminAccountKind::InstitutionAccount,
             &admins,
@@ -212,7 +214,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         proposer: who,
         accounts: created_accounts,
         admins: admins,
-        org,
+        institution_code,
         admins_len,
         threshold,
         initial_total,

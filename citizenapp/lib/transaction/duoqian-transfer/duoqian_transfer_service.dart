@@ -13,6 +13,7 @@ import 'package:citizenapp/governance/personal-manage/personal_manage_service.da
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_cache.dart';
 import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_service.dart';
@@ -91,7 +92,7 @@ class DuoqianTransferService {
     // 不能按 SS58/Base58 解码，否则 hex 中的 0 会被当成非法 Base58 字符。
     final fromPubkey = _accountHexToAccountId(institution.mainAccount, '转出主账户');
     final callData = _buildProposeTransferCall(
-      org: identity.org,
+      institutionCode: identity.institutionCode,
       institutionIdentity: institution.cidNumber,
       mainAccount: institution.mainAccount,
       beneficiaryAddress: beneficiaryAddress,
@@ -106,7 +107,7 @@ class DuoqianTransferService {
     );
     final proposalId = await _confirmTransferProposedEvent(
       blockHashHex: submitResult.blockHashHex,
-      org: identity.org,
+      institutionCode: identity.institutionCode,
       institutionBytes: institutionBytes,
       proposerPubkey: signerPubkey,
       fromPubkey: fromPubkey,
@@ -438,14 +439,17 @@ class DuoqianTransferService {
     final stage = data[1];
     final status = data[2];
 
-    // internal_org: Option<u8>
+    // internal_code: Option<InstitutionCode> = Option<[u8;4]>
+    // 0x00 = None (1B), 0x01 + 4 bytes code = Some(code)
     var offset = 3;
-    int? internalOrg;
+    String? internalCode;
     if (offset < data.length && data[offset] == 1) {
       offset++;
-      if (offset < data.length) {
-        internalOrg = data[offset];
-        offset++;
+      if (offset + 4 <= data.length) {
+        internalCode = InstitutionCodeLabel.codeToString(
+          data.sublist(offset, offset + 4),
+        );
+        offset += 4;
       }
     } else {
       offset++; // skip 0x00 (None)
@@ -477,7 +481,7 @@ class DuoqianTransferService {
       kind: kind,
       stage: stage,
       status: status,
-      internalOrg: internalOrg,
+      internalCode: internalCode,
       institutionBytes: institutionBytes,
       displayMeta: displayMeta,
     );
@@ -555,7 +559,7 @@ class DuoqianTransferService {
             kind: meta.kind,
             stage: meta.stage,
             status: meta.status,
-            internalOrg: meta.internalOrg,
+            internalCode: meta.internalCode,
             institutionBytes: meta.institutionBytes,
             displayMeta: dm,
           );
@@ -773,14 +777,14 @@ class DuoqianTransferService {
     return visible;
   }
 
-  /// 从当前年提案全集过滤出指定治理类型(org)的提案 id(广场用,纯客户端)。
+  /// 从当前年提案全集过滤出指定治理类型(机构码)的提案 id(广场用,纯客户端)。
   List<int> filterGovernanceIds(
     List<ProposalWithDetail> all,
-    Set<int> orgs,
+    Set<String> codes,
   ) {
     final ids = all
         .where((p) =>
-            p.meta.internalOrg != null && orgs.contains(p.meta.internalOrg))
+            p.meta.internalCode != null && codes.contains(p.meta.internalCode))
         .map((p) => p.meta.proposalId)
         .toList();
     ids.sort((a, b) => b.compareTo(a));
@@ -843,13 +847,16 @@ class DuoqianTransferService {
     final stage = data[1];
     final status = data[2];
 
+    // internal_code: Option<[u8;4]>
     var offset = 3;
-    int? internalOrg;
+    String? internalCode;
     if (offset < data.length && data[offset] == 1) {
       offset++;
-      if (offset < data.length) {
-        internalOrg = data[offset];
-        offset++;
+      if (offset + 4 <= data.length) {
+        internalCode = InstitutionCodeLabel.codeToString(
+          data.sublist(offset, offset + 4),
+        );
+        offset += 4;
       }
     } else {
       offset++;
@@ -869,7 +876,7 @@ class DuoqianTransferService {
       kind: kind,
       stage: stage,
       status: status,
-      internalOrg: internalOrg,
+      internalCode: internalCode,
       institutionBytes: institutionBytes,
     );
   }
@@ -1094,9 +1101,9 @@ class DuoqianTransferService {
 
   /// 构造 propose_transfer call data。
   ///
-  /// 格式：[0x13][0x00][org:u8][institution:AccountId32][beneficiary:32bytes][amount:u128][Vec remark]
+  /// 格式：[0x13][0x00][institution_code:[u8;4]][institution:AccountId32][beneficiary:32bytes][amount:u128][Vec remark]
   Uint8List _buildProposeTransferCall({
-    required int org,
+    required String institutionCode,
     required String institutionIdentity,
     required String mainAccount,
     required String beneficiaryAddress,
@@ -1107,8 +1114,8 @@ class DuoqianTransferService {
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCallIndex);
 
-    // org: u8
-    output.pushByte(org);
+    // institution_code: [u8;4]
+    output.write(Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
 
     // institution: AccountId32
     output.write(
@@ -1285,7 +1292,7 @@ class DuoqianTransferService {
 
   Future<int> _confirmTransferProposedEvent({
     required String blockHashHex,
-    required int org,
+    required String institutionCode,
     required Uint8List institutionBytes,
     required Uint8List proposerPubkey,
     required Uint8List fromPubkey,
@@ -1299,7 +1306,7 @@ class DuoqianTransferService {
       decode: (data, offset) => _decodeTransferProposedEvent(
         data,
         offset,
-        org: org,
+        institutionCode: institutionCode,
         institutionBytes: institutionBytes,
         proposerPubkey: proposerPubkey,
         fromPubkey: fromPubkey,
@@ -1383,7 +1390,7 @@ class DuoqianTransferService {
   })? _decodeTransferProposedEvent(
     Uint8List data,
     int offset, {
-    required int org,
+    required String institutionCode,
     required Uint8List institutionBytes,
     required Uint8List proposerPubkey,
     required Uint8List fromPubkey,
@@ -1391,13 +1398,18 @@ class DuoqianTransferService {
     required BigInt amountFen,
   }) {
     // 中文注释：TransferProposed 事件字段顺序必须与 runtime Event enum 完全一致。
-    const fixedBytes = 8 + 1 + 32 + 32 + 32 + 32 + 16;
+    // 字段：proposal_id(u64) + institution_code([u8;4]) + institution(32B)
+    //      + proposer(32B) + from(32B) + beneficiary(32B) + amount(u128)
+    //      + remark(Vec) + expires_at(u32) + topics
+    const fixedBytes = 8 + 4 + 32 + 32 + 32 + 32 + 16;
     if (offset + fixedBytes > data.length) return null;
     var pos = offset;
     final proposalId = _readU64LE(data, pos);
     pos += 8;
-    final eventOrg = data[pos];
-    pos += 1;
+    // institution_code: [u8;4]
+    final eventCodeBytes = data.sublist(pos, pos + 4);
+    final eventCode = InstitutionCodeLabel.codeToString(eventCodeBytes);
+    pos += 4;
     final eventInstitution = Uint8List.fromList(data.sublist(pos, pos + 32));
     pos += 32;
     final eventProposer = Uint8List.fromList(data.sublist(pos, pos + 32));
@@ -1420,7 +1432,7 @@ class DuoqianTransferService {
     pos += 4;
 
     if (_skipTopics(data, pos) == null) return null;
-    final matches = eventOrg == org &&
+    final matches = eventCode == institutionCode &&
         _bytesEqual(eventInstitution, institutionBytes) &&
         _bytesEqual(eventProposer, proposerPubkey) &&
         _bytesEqual(eventFrom, fromPubkey) &&

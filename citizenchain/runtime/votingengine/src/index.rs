@@ -1,7 +1,7 @@
 //! 反向索引(spec_version v1)。
 //!
 //! 链上 4 张反向索引让客户端按"分类"O(分类内规模)迭代提案,不用扫全表:
-//! - **`ProposalsByOrg[org][id]`** — 按 ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH 反查
+//! - **`ProposalsByOrg[institution_code][id]`** — 按 CID 机构码(NRC / PRC / PRB / PMUL / 公权法人 / 私权法人)反查
 //! - **`ProposalsByInstitution[account][id]`** — 按多签账户反查
 //!   (如某省储行所有提案、某个多签账户所有提案)
 //! - **`ProposalsByOwner[module_tag][id]`** — 按业务模块 MODULE_TAG 反查
@@ -17,6 +17,7 @@ use crate::pallet::{
     self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByOrg,
     ProposalsByOwner, ProposalsByYear,
 };
+use crate::types::InstitutionCode;
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 写入四张反向索引。
     ///
@@ -25,13 +26,13 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// - 不写 `ProposalData` 的占位提案(仅创建阶段失败回滚的)不会污染索引
     pub fn register_proposal_indexes(
         proposal_id: u64,
-        org: Option<u8>,
+        institution_code: Option<InstitutionCode>,
         institution: Option<T::AccountId>,
         module_tag: BoundedVec<u8, T::MaxModuleTagLen>,
         year: u16,
     ) {
-        if let Some(org) = org {
-            ProposalsByOrg::<T>::insert(org, proposal_id, ());
+        if let Some(institution_code) = institution_code {
+            ProposalsByOrg::<T>::insert(institution_code, proposal_id, ());
         }
         if let Some(inst) = institution {
             ProposalsByInstitution::<T>::insert(inst, proposal_id, ());
@@ -43,15 +44,15 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 释放该提案在 4 张反向索引中的所有条目 + ProposalDisplayId。
     ///
     /// 由清理路径(`cleanup` / 90 天保留期)调用。需要从 `Proposals` /
-    /// `ProposalOwner` / `ProposalDisplayId` 反查 (org, institution, owner, year),
+    /// `ProposalOwner` / `ProposalDisplayId` 反查 (institution_code, institution, owner, year),
     /// 顺序无关紧要,所有 4 张索引 + 展示号表一次清干净。
     ///
     /// **必须在 `Proposals[id]` / `ProposalOwner[id]` / `ProposalDisplayId[id]`
     /// 自身被删除之前调用**(否则反查不到分类键无法清索引)。
     pub fn cleanup_proposal_indexes(proposal_id: u64) {
         if let Some(proposal) = Proposals::<T>::get(proposal_id) {
-            if let Some(org) = proposal.internal_org {
-                ProposalsByOrg::<T>::remove(org, proposal_id);
+            if let Some(institution_code) = proposal.internal_code {
+                ProposalsByOrg::<T>::remove(institution_code, proposal_id);
             }
             if let Some(inst) = proposal.internal_institution {
                 ProposalsByInstitution::<T>::remove(inst, proposal_id);

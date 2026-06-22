@@ -41,7 +41,6 @@ pub use pallet::*;
 pub use traits::*;
 pub use traits::{CidEligibility, VoteCredentialCleanup};
 pub use types::*;
-pub use types::{ORG_OTH, ORG_PUP, ORG_REN};
 
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
@@ -348,13 +347,13 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 同一治理账户的内部提案互斥状态：(org, institution) → 锁状态。
+    /// 同一治理账户的内部提案互斥状态：(institution_code, institution) → 锁状态。
     #[pallet::storage]
     #[pallet::getter(fn internal_proposal_mutex)]
     pub type InternalProposalMutexes<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        u8,
+        InstitutionCode,
         Blake2_128Concat,
         T::AccountId,
         InternalProposalMutexState,
@@ -382,11 +381,11 @@ pub mod pallet {
     pub type ProposalDisplayId<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, ProposalDisplayMeta, OptionQuery>;
 
-    /// 反向索引:org → 该 org 下所有提案 ID。
+    /// 反向索引:institution_code → 该机构码下所有提案 ID。
     /// 客户端按"国储会/省储会/省储行/多签"分类查询时直接迭代该表,无需扫全表。
     #[pallet::storage]
     pub type ProposalsByOrg<T: Config> =
-        StorageDoubleMap<_, Twox64Concat, u8, Twox64Concat, u64, (), OptionQuery>;
+        StorageDoubleMap<_, Twox64Concat, InstitutionCode, Twox64Concat, u64, (), OptionQuery>;
 
     /// 反向索引:institution(48 字节 PalletId) → 该机构所有提案 ID。
     /// 机构详情页直接迭代该表,不再走"全年扫描 + 客户端过滤"。

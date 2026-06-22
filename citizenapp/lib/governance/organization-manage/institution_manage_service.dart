@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 
@@ -65,8 +66,8 @@ class InstitutionManageService {
   /// 提交机构多签 propose_create_institution extrinsic。
   ///
   /// 参数编码以 `memory/07-ai/unified-protocols.md` 的 P-TX-001 为准：
-  /// [0x11][0x05] + cid_number + cid_full_name + accounts + org + admins_len
-  ///   + admins + threshold + register_nonce + signature
+  /// [0x11][0x05] + cid_number + cid_full_name + accounts + institution_code(4B)
+  ///   + admins_len + admins + threshold + register_nonce + signature
   ///   + issuer_cid_number + issuer_main_account + signer_pubkey + scope_*。
   Future<
       ({
@@ -79,7 +80,7 @@ class InstitutionManageService {
     required String cidNumber,
     required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
-    required int org,
+    required String institutionCode,
     required int adminsLen,
     required List<Uint8List> admins,
     required int threshold,
@@ -98,7 +99,7 @@ class InstitutionManageService {
       cidNumber: cidNumber,
       cidFullName: cidFullName,
       accounts: accounts,
-      org: org,
+      institutionCode: institutionCode,
       adminsLen: adminsLen,
       admins: admins,
       threshold: threshold,
@@ -125,7 +126,7 @@ class InstitutionManageService {
       cidNumber: cidNumber,
       cidFullName: cidFullName,
       accounts: accounts,
-      org: org,
+      institutionCode: institutionCode,
       adminsLen: adminsLen,
       admins: admins,
       threshold: threshold,
@@ -147,7 +148,7 @@ class InstitutionManageService {
     required String cidNumber,
     required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
-    required int org,
+    required String institutionCode,
     required int adminsLen,
     required List<Uint8List> admins,
     required int threshold,
@@ -192,8 +193,8 @@ class InstitutionManageService {
     if (accounts.isEmpty) {
       throw ArgumentError('accounts 不可为空');
     }
-    if (org != 4 && org != 5) {
-      throw ArgumentError('机构账户管理员 org 必须为 ORG_PUP 或 ORG_OTH');
+    if (!InstitutionCodeLabel.isInstitution(institutionCode)) {
+      throw ArgumentError('机构账户 institution_code 必须为注册多签机构码(公权/私权/非法人)');
     }
     if (adminsLen < 2 || adminsLen != admins.length) {
       throw ArgumentError('admins_len 必须 >=2 且等于管理员公钥数量');
@@ -237,8 +238,10 @@ class InstitutionManageService {
       output.write(_u128ToLeBytesStatic(account.amountFen));
     }
 
-    // org: u8。机构账户只能使用 ORG_PUP(4) 或 ORG_OTH(5)。
-    output.pushByte(org);
+    // institution_code: [u8;4]。机构账户只能使用注册多签机构码(公权/私权/非法人)。
+    output.write(
+      Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)),
+    );
 
     // admins_len: u32 little-endian
     output.write(_u32ToLeBytesStatic(adminsLen));
@@ -469,7 +472,7 @@ class InstitutionManageService {
       activeThresholdKeyByAccount[entry.key] =
           '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
-        org: entry.value.org,
+        institutionCode: entry.value.institutionCode,
         accountId: accountIdByAccount[entry.key]!,
       ))}';
     }
@@ -490,7 +493,7 @@ class InstitutionManageService {
         pendingThresholdKeyByAccount[entry.key] =
             '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
-          org: admin.org,
+          institutionCode: admin.institutionCode,
           accountId: accountIdByAccount[entry.key]!,
         ))}';
       }
@@ -552,7 +555,7 @@ class InstitutionManageService {
     final admin = DuoqianStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
     final threshold = await _fetchInstitutionDynamicThreshold(
-      org: admin.org,
+      institutionCode: admin.institutionCode,
       accountId: accountId,
     );
     return InstitutionAccountInfo(
@@ -564,7 +567,7 @@ class InstitutionManageService {
   }
 
   Future<int?> _fetchInstitutionDynamicThreshold({
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) async {
     for (final storageName in const [
@@ -573,7 +576,7 @@ class InstitutionManageService {
     ]) {
       final key = DuoqianStorageCodec.dynamicThresholdKey(
         storageName: storageName,
-        org: org,
+        institutionCode: institutionCode,
         accountId: accountId,
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
@@ -655,7 +658,7 @@ class InstitutionManageService {
     required String cidNumber,
     required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
-    required int org,
+    required String institutionCode,
     required int adminsLen,
     required List<Uint8List> admins,
     required int threshold,
@@ -675,7 +678,7 @@ class InstitutionManageService {
       cidNumber: cidNumber,
       cidFullName: cidFullName,
       accounts: accounts,
-      org: org,
+      institutionCode: institutionCode,
       adminsLen: adminsLen,
       admins: admins,
       threshold: threshold,
@@ -696,7 +699,7 @@ class InstitutionManageService {
     required String cidNumber,
     required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
-    required int org,
+    required String institutionCode,
     required int adminsLen,
     required List<Uint8List> admins,
     required int threshold,
@@ -730,7 +733,7 @@ class InstitutionManageService {
             cidNumber: cidNumber,
             cidFullName: cidFullName,
             accounts: accounts,
-            org: org,
+            institutionCode: institutionCode,
             adminsLen: adminsLen,
             admins: admins,
             threshold: threshold,
@@ -753,7 +756,7 @@ class InstitutionManageService {
     required String cidNumber,
     required String cidFullName,
     required List<InstitutionInitialAccountInput> accounts,
-    required int org,
+    required String institutionCode,
     required int adminsLen,
     required List<Uint8List> admins,
     required int threshold,
@@ -798,18 +801,22 @@ class InstitutionManageService {
         }
       }
 
-      final (adminsLen, adminsLenBytes) = _decodeCompact(data, pos);
+      final (eventAdminsLen, adminsLenBytes) = _decodeCompact(data, pos);
       pos += adminsLenBytes;
-      if (adminsLen < 0 || pos + adminsLen * 32 > data.length) return null;
+      if (eventAdminsLen < 0 || pos + eventAdminsLen * 32 > data.length) {
+        return null;
+      }
       final eventAdmins = <Uint8List>[];
-      for (var i = 0; i < adminsLen; i++) {
+      for (var i = 0; i < eventAdminsLen; i++) {
         eventAdmins.add(Uint8List.fromList(data.sublist(pos, pos + 32)));
         pos += 32;
       }
-      if (pos + 1 + 4 + 4 + 16 + 16 > data.length) return null;
-      final eventOrg = data[pos];
-      pos += 1;
-      final eventAdminsLen = _readU32Le(data, pos);
+      // institution_code: [u8;4] + admins_len(u32) + threshold(u32) + initial_total(u128)
+      if (pos + 4 + 4 + 4 + 16 > data.length) return null;
+      final eventCodeBytes = data.sublist(pos, pos + 4);
+      final eventCode = InstitutionCodeLabel.codeToString(eventCodeBytes);
+      pos += 4;
+      final eventAdminsLenU32 = _readU32Le(data, pos);
       pos += 4;
       final eventThreshold = _readU32Le(data, pos);
       pos += 4;
@@ -820,8 +827,8 @@ class InstitutionManageService {
       final matches = _bytesEqual(cidRead.bytes, expectedCid) &&
           _bytesEqual(nameRead.bytes, expectedName) &&
           _bytesEqual(proposer, proposerPubkey) &&
-          eventOrg == org &&
-          eventAdminsLen == adminsLen &&
+          eventCode == institutionCode &&
+          eventAdminsLenU32 == adminsLen &&
           eventThreshold == threshold &&
           eventInitialTotal == initialTotalFen &&
           _adminListsEqual(eventAdmins, admins);

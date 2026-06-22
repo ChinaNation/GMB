@@ -90,8 +90,8 @@ pub(crate) fn do_register_cid_institution<T: pallet::Config>(
             !CidRegisteredAccount::<T>::contains_key(&cid_number, account_name),
             Error::<T>::CidAlreadyRegistered
         );
-        let role = Pallet::<T>::role_from_account_name(account_name.as_slice())?;
-        let account = Pallet::<T>::derive_institution_account(cid_number.as_slice(), role)?;
+        let (account, _kind) =
+            Pallet::<T>::derive_registered_account(cid_number.as_slice(), account_name.as_slice())?;
         ensure!(
             !AccountRegisteredCid::<T>::contains_key(&account),
             Error::<T>::AccountAlreadyExists

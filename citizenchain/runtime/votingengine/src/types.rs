@@ -10,50 +10,16 @@ pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
 pub const PROPOSAL_KIND_JOINT: u8 = 1;
 
 // ──────────────────────────────────────────────────────────────────
-// ORG 类型常量(共用,internal-vote / joint-vote / 业务 pallet 都引用)
+// 机构码治理分类(全链唯一真源 = primitives::institution_code,见铁律)
+// 旧的 ORG_xx 数字标签已彻底删除;治理统一用 CID 机构码 [u8; 4]。
+// 这里整体 re-export,使 internal-vote / joint-vote / 业务 pallet 仍可写
+// `votingengine::types::{InstitutionCode, NRC, fixed_governance_pass_threshold, ...}`。
 // ──────────────────────────────────────────────────────────────────
-
-/// 治理机构:国储会
-pub const ORG_NRC: u8 = 0;
-/// 治理机构:省储会
-pub const ORG_PRC: u8 = 1;
-/// 治理机构:省储行
-pub const ORG_PRB: u8 = 2;
-/// 注册多签:个人多签账户(管理员由 admins-change 提供,动态阈值由 internal-vote 保存)
-pub const ORG_REN: u8 = 3;
-/// 注册多签:公权机构账户(政府/教育/司法/立法/监察)
-pub const ORG_PUP: u8 = 4;
-/// 注册多签:其他机构账户(公司/银行/基金/...)
-pub const ORG_OTH: u8 = 5;
-
-/// 是否为内部投票支持的 org。
-pub fn is_valid_org(org: u8) -> bool {
-    matches!(
-        org,
-        ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN | ORG_PUP | ORG_OTH
-    )
-}
-
-/// 是否为注册多签动态账户 org。
-///
-/// 中文注释：REN 只代表个人多签；PUP/OTH 代表机构账户，不能互相代替。
-pub fn is_registered_multisig_org(org: u8) -> bool {
-    matches!(org, ORG_REN | ORG_PUP | ORG_OTH)
-}
-
-/// 治理机构(NRC/PRC/PRB)的固定制度阈值。
-/// 中文注释:三类治理机构阈值是永久治理常量,不读取注册多签账户配置。
-pub fn fixed_governance_pass_threshold(org: u8) -> Option<u32> {
-    use primitives::count_const::{
-        NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD,
-    };
-    match org {
-        ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
-        ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
-        ORG_PRB => Some(PRB_INTERNAL_THRESHOLD),
-        _ => None,
-    }
-}
+pub use primitives::institution_code::{
+    code_bytes, fixed_governance_pass_threshold, institution_code_from_cid_number,
+    is_fixed_governance_code, is_institution_code, is_personal_code, is_public_legal_code,
+    is_registered_multisig_code, is_valid_governance_code, InstitutionCode, NRC, PMUL, PRB, PRC,
+};
 
 /// 内部投票 pallet 的 stage(单阶段提案)。
 pub const STAGE_INTERNAL: u8 = 0;
@@ -129,7 +95,7 @@ impl InternalProposalMutexState {
 /// proposal_id 到互斥锁的反向绑定，用于终态/阶段切换时释放锁。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct InternalProposalMutexBinding<AccountId> {
-    pub org: u8,
+    pub institution_code: InstitutionCode,
     pub institution: AccountId,
     pub kind: InternalProposalMutexKind,
 }
@@ -157,8 +123,8 @@ pub struct Proposal<BlockNumber, AccountId> {
     pub stage: u8,
     /// 当前提案状态：投票中/通过/否决
     pub status: u8,
-    /// 仅内部投票使用：机构类型（国储会/省储会/省储行）
-    pub internal_org: Option<u8>,
+    /// 仅内部投票使用：机构码（CID institution_code，治理分类唯一真源）
+    pub internal_code: Option<InstitutionCode>,
     /// 仅内部投票使用：多签账户（全链唯一）
     pub internal_institution: Option<AccountId>,
     /// 本阶段起始区块

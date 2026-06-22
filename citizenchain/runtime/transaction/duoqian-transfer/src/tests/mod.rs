@@ -9,7 +9,13 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+use votingengine::types::{code_bytes, is_registered_multisig_code, InstitutionCode};
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
+
+// 测试用机构码:个人多签 / 私权法人,均属"注册多签动态账户"。
+// 取代旧的数字治理标签(语义不变,统一走 CID 机构码)。
+const PERSONAL_CODE: InstitutionCode = PMUL;
+const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
 
 type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -123,6 +129,24 @@ impl
             && signer_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
+
+    fn verify_institution_deregistration(
+        scope: u8,
+        cid_number: &[u8],
+        _account_name: &[u8],
+        _target_account: &AccountId32,
+        nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
+        signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
+        _issuer_cid_number: &[u8],
+        _issuer_main_account: &AccountId32,
+        signer_pubkey: &[u8; 32],
+    ) -> bool {
+        scope <= organization_manage::pallet::SCOPE_ACCOUNT
+            && !cid_number.is_empty()
+            && !nonce.is_empty()
+            && signer_pubkey != &[0u8; 32]
+            && signature.as_slice() == b"deregister-ok"
+    }
 }
 
 pub struct TestCidEligibility;
@@ -175,30 +199,46 @@ impl
 // 测试扩展:
 // 原 TestInternalAdminProvider 只读 CHINA_CB/CHINA_CH 硬编码 admin(非真实 sr25519 公钥,无法签名)。
 // 为支持 `internal_vote` 的可签名测试账户,新增 thread_local 覆盖层:
-//   - EXTRA_ADMINS 按 (org, institution AccountId) 注入 sr25519 派生 admin 集合。
+//   - EXTRA_ADMINS 按 (institution_code, institution AccountId) 注入 sr25519 派生 admin 集合。
 // NRC/PRC/PRB 的内部阈值是 votingengine 固定制度常量,测试必须注入足够管理员并投满该阈值。
-// 若某 (org, institution) 在 thread_local 有注入,优先用;否则 fallback 到原硬编码逻辑。
+// 若某 (institution_code, institution) 在 thread_local 有注入,优先用;否则 fallback 到原硬编码逻辑。
 thread_local! {
     static EXTRA_ADMINS: core::cell::RefCell<
-        alloc::collections::BTreeMap<(u8, AccountId32), alloc::vec::Vec<AccountId32>>,
+        alloc::collections::BTreeMap<(InstitutionCode, AccountId32), alloc::vec::Vec<AccountId32>>,
     > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
 }
 
-fn set_extra_admins(org: u8, institution: AccountId32, admins: Vec<AccountId32>) {
+fn set_extra_admins(
+    institution_code: InstitutionCode,
+    institution: AccountId32,
+    admins: Vec<AccountId32>,
+) {
     EXTRA_ADMINS.with(|m| {
-        m.borrow_mut().insert((org, institution), admins);
+        m.borrow_mut()
+            .insert((institution_code, institution), admins);
     });
 }
 
-fn get_extra_admins(org: u8, institution: &AccountId32) -> Option<Vec<AccountId32>> {
-    EXTRA_ADMINS.with(|m| m.borrow().get(&(org, institution.clone())).cloned())
+fn get_extra_admins(
+    institution_code: InstitutionCode,
+    institution: &AccountId32,
+) -> Option<Vec<AccountId32>> {
+    EXTRA_ADMINS.with(|m| {
+        m.borrow()
+            .get(&(institution_code, institution.clone()))
+            .cloned()
+    })
 }
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(org: u8, institution: AccountId32, who: &AccountId32) -> bool {
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
         // 优先:测试注入的 sr25519 派生 admin
-        if let Some(admins) = get_extra_admins(org, &institution) {
+        if let Some(admins) = get_extra_admins(institution_code, &institution) {
             return admins.iter().any(|a| a == who);
         }
         // Fallback:原硬编码 admin
@@ -208,39 +248,46 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         }
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_REN | ORG_PUP | ORG_OTH => {
-                admins_change::Pallet::<Test>::is_active_account_admin(org, institution, who)
+            c if is_registered_multisig_code(&c) => {
+                admins_change::Pallet::<Test>::is_active_account_admin(
+                    institution_code,
+                    institution,
+                    who,
+                )
             }
             _ => false,
         }
     }
 
-    fn get_admin_list(org: u8, institution: AccountId32) -> Option<Vec<AccountId32>> {
-        if let Some(admins) = get_extra_admins(org, &institution) {
+    fn get_admin_list(
+        institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<Vec<AccountId32>> {
+        if let Some(admins) = get_extra_admins(institution_code, &institution) {
             return Some(admins);
         }
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            ORG_REN | ORG_PUP | ORG_OTH => {
-                admins_change::Pallet::<Test>::active_account_admins(org, institution)
+            c if is_registered_multisig_code(&c) => {
+                admins_change::Pallet::<Test>::active_account_admins(institution_code, institution)
             }
             _ => None,
         }
@@ -249,18 +296,21 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
 pub struct TestInternalAdminsLenProvider;
 impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn admins_len(org: u8, institution: AccountId32) -> Option<u32> {
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
+    fn admins_len(institution_code: InstitutionCode, institution: AccountId32) -> Option<u32> {
+        match institution_code {
+            NRC | PRC => CHINA_CB
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .and_then(|n| u32::try_from(n.admins.len()).ok()),
-            ORG_PRB => CHINA_CH
+            PRB => CHINA_CH
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .and_then(|n| u32::try_from(n.admins.len()).ok()),
-            ORG_REN | ORG_PUP | ORG_OTH => {
-                admins_change::Pallet::<Test>::active_account_admins_len(org, institution)
+            c if is_registered_multisig_code(&c) => {
+                admins_change::Pallet::<Test>::active_account_admins_len(
+                    institution_code,
+                    institution,
+                )
             }
             _ => None,
         }
@@ -391,17 +441,17 @@ impl pallet::Config for Test {
     type WeightInfo = ();
 }
 
-/// 测试 helper:从 (org, institution AccountId, index) 派生 sr25519 keypair。
+/// 测试 helper:从 (institution_code, institution AccountId, index) 派生 sr25519 keypair。
 ///
-/// 同 (org, institution AccountId, index) 每次调用返回相同 keypair,保证测试确定性。
+/// 同 (institution_code, institution AccountId, index) 每次调用返回相同 keypair,保证测试确定性。
 /// 公钥的 32 字节直接作为 AccountId32,满足 `pubkey_from_accountid` 的铁律。
 fn derive_admin_pair(
-    org: u8,
+    institution_code: InstitutionCode,
     institution: &AccountId32,
     index: u8,
 ) -> (AccountId32, sr25519::Pair) {
     let mut seed_bytes = [0u8; 32];
-    seed_bytes[0] = org;
+    seed_bytes[0] = institution_code[0];
     seed_bytes[1] = index;
     // 后 30 字节由机构 AccountId 前 30 字节填充,保证不同机构的 seed 不同。
     let institution_bytes: &[u8] = institution.as_ref();
@@ -412,15 +462,15 @@ fn derive_admin_pair(
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(ORG_NRC, &nrc_pallet_id(), index as u8).0
+    derive_admin_pair(NRC, &nrc_pallet_id(), index as u8).0
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(ORG_PRC, &prc_pallet_id(), index as u8).0
+    derive_admin_pair(PRC, &prc_pallet_id(), index as u8).0
 }
 
 fn prb_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(ORG_PRB, &prb_pallet_id(), index as u8).0
+    derive_admin_pair(PRB, &prb_pallet_id(), index as u8).0
 }
 
 // 统一状态机整改:业务模块不再持有独立 vote/finalize call,投票统一走
@@ -450,10 +500,10 @@ fn registered_account_admin(index: usize) -> AccountId32 {
     registered_account_pair(index).0
 }
 
-/// 注册个人账户(ORG_REN)的 admin sr25519 keypair helper。
-/// seed 按 (ORG_REN, registered_account, index) 派生,保证确定性。
+/// 注册个人账户(PERSONAL_CODE)的 admin sr25519 keypair helper。
+/// seed 按 (PERSONAL_CODE, registered_account, index) 派生,保证确定性。
 fn registered_account_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(ORG_REN, &registered_account(), index as u8)
+    derive_admin_pair(PERSONAL_CODE, &registered_account(), index as u8)
 }
 
 fn registered_account_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
@@ -470,9 +520,9 @@ fn registered_institution_admin(index: usize) -> AccountId32 {
     registered_institution_pair(index).0
 }
 
-/// 机构账户(ORG_OTH / 0x05)的 admin sr25519 keypair helper。
+/// 机构账户(PRIVATE_CODE / 0x05)的 admin sr25519 keypair helper。
 fn registered_institution_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(ORG_OTH, &registered_institution_account(), index as u8)
+    derive_admin_pair(PRIVATE_CODE, &registered_institution_account(), index as u8)
 }
 
 fn registered_institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
@@ -519,7 +569,7 @@ fn insert_active_registered_institution_account(
             cid_full_name: test_account_name(),
             main_account: account.clone(),
             fee_account: AccountId32::new([0x67; 32]),
-            org: ORG_OTH,
+            institution_code: PRIVATE_CODE,
             admins_len: institution_admins.len() as u32,
             threshold: 2,
             admins: institution_admins,
@@ -543,7 +593,7 @@ fn insert_active_registered_institution_account(
     admins_change::AdminAccounts::<Test>::insert(
         account.clone(),
         admins_change::AdminAccount {
-            org: ORG_OTH,
+            institution_code: PRIVATE_CODE,
             kind: admins_change::AdminAccountKind::InstitutionAccount,
             admins,
             creator: registered_institution_admin(0),
@@ -552,7 +602,7 @@ fn insert_active_registered_institution_account(
             status: admins_change::AdminAccountStatus::Active,
         },
     );
-    internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_OTH, account.clone(), 2);
+    internal_vote::ActiveDynamicThresholds::<Test>::insert(PRIVATE_CODE, account.clone(), 2);
 }
 
 /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -565,23 +615,27 @@ fn last_proposal_id() -> u64 {
     votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
 }
 
-/// 返回 (org, institution) 对应的前 `count` 个 sr25519 admin keypair。
-fn admin_pairs(org: u8, institution: AccountId32, count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+/// 返回 (institution_code, institution) 对应的前 `count` 个 sr25519 admin keypair。
+fn admin_pairs(
+    institution_code: InstitutionCode,
+    institution: AccountId32,
+    count: u8,
+) -> Vec<(AccountId32, sr25519::Pair)> {
     (0..count)
-        .map(|i| derive_admin_pair(org, &institution, i))
+        .map(|i| derive_admin_pair(institution_code, &institution, i))
         .collect()
 }
 
 fn nrc_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    admin_pairs(ORG_NRC, nrc_pallet_id(), count)
+    admin_pairs(NRC, nrc_pallet_id(), count)
 }
 
 fn prc_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    admin_pairs(ORG_PRC, prc_pallet_id(), count)
+    admin_pairs(PRC, prc_pallet_id(), count)
 }
 
 fn prb_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    admin_pairs(ORG_PRB, prb_pallet_id(), count)
+    admin_pairs(PRB, prb_pallet_id(), count)
 }
 
 fn nrc_pass_count() -> usize {
@@ -662,10 +716,10 @@ fn new_test_ext() -> sp_io::TestExternalities {
         let nrc_accts: Vec<AccountId32> = nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prc_accts: Vec<AccountId32> = prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prb_accts: Vec<AccountId32> = prb_pass_pairs().into_iter().map(|(a, _)| a).collect();
-        set_extra_admins(ORG_NRC, nrc, nrc_accts);
-        set_extra_admins(ORG_PRC, prc, prc_accts);
-        set_extra_admins(ORG_PRB, prb, prb_accts);
-        // ORG_REN/ORG_PUP/ORG_OTH 的 admin 从 admins-change 读；
+        set_extra_admins(NRC, nrc, nrc_accts);
+        set_extra_admins(PRC, prc, prc_accts);
+        set_extra_admins(PRB, prb, prb_accts);
+        // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 admins-change 读；
         // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
         // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
         // 测试需要时显式写入 PersonalAccounts + admins-change AdminAccounts。

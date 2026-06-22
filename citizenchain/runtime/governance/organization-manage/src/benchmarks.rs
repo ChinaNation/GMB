@@ -24,10 +24,10 @@ fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), Benchmar
             .try_into()
             .map_err(|_| BenchmarkError::Stop("benchmark cid id should fit"))?;
 
-        // benchmark 场景用 Role::Main 派生，哈希公式等价于历史空 account_name 路径。
-        let Ok(account) = Pallet::<T>::derive_institution_account(
+        // benchmark 场景用主账户名派生，走机构主账户 OP_MAIN 路径。
+        let Ok((account, _kind)) = Pallet::<T>::derive_registered_account(
             cid_number.as_slice(),
-            crate::InstitutionAccountRole::Main,
+            crate::RESERVED_NAME_MAIN,
         ) else {
             continue;
         };
