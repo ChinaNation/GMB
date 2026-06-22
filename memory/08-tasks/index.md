@@ -111,6 +111,10 @@
 - `memory/08-tasks/open/20260620-unify-cid-fields.md`
 - `memory/08-tasks/open/20260620-whitepaper-completion.md`
 - `memory/08-tasks/open/20260621-143758-china-sqlite.md`
+- `memory/08-tasks/open/20260621-163413-china.md`
+- `memory/08-tasks/open/20260621-admins-action-deprecate.md`
+- `memory/08-tasks/open/20260621-admins-chain-sync.md`
+- `memory/08-tasks/open/20260621-admins-change-builtin-pup-selfgovern.md`
 - `memory/08-tasks/open/20260621-citizenapp-cpms-ci-fix.md`
 - `memory/08-tasks/open/20260621-federal-registry-onchain-single-source.md`
 - `memory/08-tasks/open/20260621-product-rename-citizencode-citizenpassport.md`
@@ -306,3 +310,4 @@
 - `memory/08-tasks/done/20260621-citizen-client-history-purge.md`
 - `memory/08-tasks/done/20260621-gmb-secret-unification.md`
 - `memory/08-tasks/done/20260621-root-tools-to-scripts.md`
+- `memory/08-tasks/done/20260621-seed-federal-admins.md`

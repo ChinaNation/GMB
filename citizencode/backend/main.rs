@@ -1947,6 +1947,8 @@ fn disable_core_dumps() {
 enum BackendCommand {
     Serve,
     EnsureGov,
+    /// 中文注释:从 china_zf 常量播种联邦注册局管理员(P0 止血 / 离线引导,见 ADR-023)。
+    SeedFederalAdmins,
     InitGov,
     CheckGov {
         strict: bool,
@@ -1976,6 +1978,7 @@ fn parse_backend_command() -> BackendCommand {
     match command {
         "serve" => BackendCommand::Serve,
         "ensure-gov" => BackendCommand::EnsureGov,
+        "seed-federal-admins" => BackendCommand::SeedFederalAdmins,
         "init-gov" => BackendCommand::InitGov,
         "check-gov" => BackendCommand::CheckGov {
             strict: args.iter().any(|arg| arg == "--strict"),
@@ -2290,6 +2293,11 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
         BackendCommand::Serve => return false,
         BackendCommand::EnsureGov => {
             run_ensure_gov_command(state).unwrap_or_else(|e| panic!("ensure-gov failed: {e}"));
+            return true;
+        }
+        BackendCommand::SeedFederalAdmins => {
+            crate::admins::seed::run_seed_federal_admins(state)
+                .unwrap_or_else(|e| panic!("seed-federal-admins failed: {e}"));
             return true;
         }
         BackendCommand::InitGov => (OfficialReconcileScope::All, true, "init-gov"),

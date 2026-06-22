@@ -574,6 +574,17 @@ pub fn federal_registry_cid_number() -> Option<&'static str> {
         .map(|item| item.cid_number)
 }
 
+/// 中文注释:联邦注册局(全国唯一)内置管理员公钥集,取自创世常量 china_zf.rs。
+/// 唯一真源是链上 admins-change::AdminAccounts;本取值器只服务 CID 侧的【重新创世后/
+/// 链不可达】止血播种(admins::seed),稳态由 chain_sync 从链投影接管,见 ADR-023。
+/// 仅取「总统府联邦注册局」单条的 admins,不会混入其它联邦机构(安全局/情报局等)的管理员。
+pub(crate) fn federal_registry_admins() -> Option<&'static [[u8; 32]]> {
+    china_zf_constants::CHINA_ZF
+        .iter()
+        .find(|item| item.cid_full_name == "总统府联邦注册局")
+        .map(|item| item.admins)
+}
+
 fn official_name_pair(name: &str) -> (String, String) {
     const COUNTRY: &str = "中华民族联邦共和国";
     match name {
