@@ -27,98 +27,15 @@ pub(crate) async fn admin_number_meta(
         code: 0,
         message: "ok".to_string(),
         data: AdminCidMetaOutput {
-            subject_property_options: vec![
-                CidOptionItem {
-                    label: "公民",
-                    value: "M",
-                },
-                CidOptionItem {
-                    label: "自然人",
-                    value: "Z",
-                },
-                CidOptionItem {
-                    label: "智能人",
-                    value: "N",
-                },
-                CidOptionItem {
-                    label: "公法人",
-                    value: "G",
-                },
-                CidOptionItem {
-                    label: "私法人",
-                    value: "S",
-                },
-                CidOptionItem {
-                    label: "非法人",
-                    value: "F",
-                },
-            ],
-            institution_options: vec![
-                CidOptionItem {
-                    label: "中国",
-                    value: "ZG",
-                },
-                CidOptionItem {
-                    label: "政府",
-                    value: "ZF",
-                },
-                CidOptionItem {
-                    label: "立法院",
-                    value: "LF",
-                },
-                CidOptionItem {
-                    label: "司法院",
-                    value: "SF",
-                },
-                CidOptionItem {
-                    label: "监察院",
-                    value: "JC",
-                },
-                CidOptionItem {
-                    label: "公民教育委员会",
-                    value: "JY",
-                },
-                CidOptionItem {
-                    label: "公民储备委员会",
-                    value: "CB",
-                },
-                CidOptionItem {
-                    label: "公民储备银行",
-                    value: "CH",
-                },
-                CidOptionItem {
-                    label: "他国",
-                    value: "TG",
-                },
-                CidOptionItem {
-                    label: "个体经营",
-                    value: "GT",
-                },
-                CidOptionItem {
-                    label: "无限合伙",
-                    value: "GP",
-                },
-                CidOptionItem {
-                    label: "有限合伙",
-                    value: "LP",
-                },
-                CidOptionItem {
-                    label: "股权公司",
-                    value: "GQ",
-                },
-                CidOptionItem {
-                    label: "股份公司",
-                    value: "GF",
-                },
-                CidOptionItem {
-                    label: "公益组织",
-                    value: "GY",
-                },
-                CidOptionItem {
-                    label: "注册协会",
-                    value: "AS",
-                },
-            ],
+            // 机构码选项由 InstitutionCode::ALL 单源派生(86 码,新版 T3/T4);
+            // 主体属性已由机构码派生,不再单列(K1 旧输入已删)。
+            institution_options: crate::number::InstitutionCode::ALL
+                .iter()
+                .map(|c| CidOptionItem {
+                    label: c.label_zh(),
+                    value: c.as_code(),
+                })
+                .collect(),
             provinces: provinces_rows,
             scoped_province_name: scoped,
         },

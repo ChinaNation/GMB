@@ -217,7 +217,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
     }
     let cancelled = false;
     setRegistryLoading(true);
-    listOfficialInstitutions(auth, { province_name, org_code: 'CITY_REGISTRY', page_size: 300 })
+    listOfficialInstitutions(auth, { province_name, institution_code: 'CREG', page_size: 300 })
       .then((res) => {
         if (!cancelled) {
           setRegistryRows(res.items);

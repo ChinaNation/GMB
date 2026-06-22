@@ -28,7 +28,6 @@ pub(crate) struct AppInstitutionDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cid_full_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
-    pub(crate) subject_property: String,
     pub(crate) p1: String,
     pub(crate) province_name: String,
     pub(crate) city_name: String,
@@ -56,7 +55,6 @@ pub(crate) struct AppInstitutionSearchRow {
     pub(crate) cid_number: String,
     pub(crate) cid_full_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
-    pub(crate) subject_property: String,
     pub(crate) province_name: String,
     pub(crate) city_name: String,
 }
@@ -121,7 +119,7 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT cid_number, name, category, subject_property, province_name, city_name
+                "SELECT cid_number, name, category, province_name, city_name
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
                    AND status = 'ACTIVE'
@@ -141,9 +139,8 @@ pub(crate) async fn app_search_institutions(
                 cid_number: row.get(0),
                 cid_full_name: row.get(1),
                 category: parse_category(row.get::<_, String>(2).as_str()),
-                subject_property: row.get(3),
-                province_name: row.get(4),
-                city_name: row.get(5),
+                province_name: row.get(3),
+                city_name: row.get(4),
             })
             .collect::<Vec<_>>())
     }) {
@@ -189,7 +186,6 @@ pub(crate) async fn app_get_institution(
             cid_number: inst.cid_number,
             cid_full_name: inst.cid_full_name,
             category: inst.category,
-            subject_property: inst.subject_property,
             p1: inst.p1,
             province_name: inst.province_name,
             city_name: inst.city_name,

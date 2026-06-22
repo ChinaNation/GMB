@@ -45,18 +45,18 @@ fn name_uniqueness_public_allows_cross_city() {
 #[test]
 fn private_type_maps_to_subject_and_code() {
     let rows = [
-        ("SOLE", None, "F", "GT"),
-        ("PARTNERSHIP", Some("GENERAL"), "F", "GP"),
-        ("PARTNERSHIP", Some("LIMITED"), "S", "LP"),
-        ("COMPANY", None, "S", "GQ"),
-        ("CORPORATION", None, "S", "GF"),
-        ("WELFARE", None, "S", "GY"),
-        ("ASSOCIATION", None, "S", "AS"),
+        ("SOLE", None, "F", "SFGT"),
+        ("PARTNERSHIP", Some("GENERAL"), "F", "SFGP"),
+        ("PARTNERSHIP", Some("LIMITED"), "S", "SFLP"),
+        ("COMPANY", None, "S", "SFGQ"),
+        ("CORPORATION", None, "S", "SFGF"),
+        ("WELFARE", None, "S", "SFGY"),
+        ("ASSOCIATION", None, "S", "SFAS"),
     ];
 
     assert_eq!(rows.len(), 7);
-    assert!(rows.contains(&("SOLE", None, "F", "GT")));
-    assert!(rows.contains(&("ASSOCIATION", None, "S", "AS")));
+    assert!(rows.contains(&("SOLE", None, "F", "SFGT")));
+    assert!(rows.contains(&("ASSOCIATION", None, "S", "SFAS")));
 }
 
 /// 文档类型枚举校验。

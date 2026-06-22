@@ -86,7 +86,6 @@ pub(crate) struct LegalRepresentativeCitizenQuery {
     pub target_cid_number: Option<String>,
     pub province_name: Option<String>,
     pub city_name: Option<String>,
-    pub subject_property: Option<String>,
     pub institution: Option<String>,
     pub education_type: Option<String>,
     pub parent_cid_number: Option<String>,
@@ -172,18 +171,6 @@ fn legal_representative_scope_from_create_context(
             "city_name out of current admin scope",
         ));
     }
-    let subject_property = query
-        .subject_property
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| {
-            api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "subject_property is required",
-            )
-        })?;
     let institution = query
         .institution
         .as_deref()
@@ -220,8 +207,8 @@ fn legal_representative_scope_from_create_context(
             }) else {
                 return Err(api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在"));
             };
-            if !crate::subjects::uninorg::can_attach_to_parent_subject(
-                parent.subject_property.as_str(),
+            if !crate::subjects::uninorg::can_attach_to_parent(
+                parent.institution_code.as_str(),
             ) {
                 return Err(api_error(
                     StatusCode::BAD_REQUEST,
@@ -231,7 +218,7 @@ fn legal_representative_scope_from_create_context(
             }
             Some(parent)
         }
-        _ if crate::subjects::uninorg::requires_parent(subject_property, institution) => {
+        _ if crate::subjects::uninorg::requires_parent(institution) => {
             return Err(api_error(StatusCode::BAD_REQUEST, 1001, "请先选择所属法人"));
         }
         _ => None,
@@ -239,9 +226,7 @@ fn legal_representative_scope_from_create_context(
 
     Ok(
         crate::subjects::service::resolve_legal_representative_scope_for_codes(
-            subject_property,
             institution,
-            None,
             query.education_type.as_deref().map(str::trim),
             province_code,
             city_code,

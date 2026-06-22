@@ -14076,33 +14076,28 @@ const PublicInstitutionEntitySchema = CollectionSchema(
       name: r'legalRepName',
       type: IsarType.string,
     ),
-    r'orgCode': PropertySchema(
-      id: 10,
-      name: r'orgCode',
-      type: IsarType.string,
-    ),
     r'parentCidNumber': PropertySchema(
-      id: 11,
+      id: 10,
       name: r'parentCidNumber',
       type: IsarType.string,
     ),
     r'provinceCode': PropertySchema(
-      id: 12,
+      id: 11,
       name: r'provinceCode',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 13,
+      id: 12,
       name: r'status',
       type: IsarType.string,
     ),
     r'townCode': PropertySchema(
-      id: 14,
+      id: 13,
       name: r'townCode',
       type: IsarType.string,
     ),
     r'updatedAtMillis': PropertySchema(
-      id: 15,
+      id: 14,
       name: r'updatedAtMillis',
       type: IsarType.long,
     )
@@ -14197,12 +14192,6 @@ int _publicInstitutionEntityEstimateSize(
     }
   }
   {
-    final value = object.orgCode;
-    if (value != null) {
-      bytesCount += 3 + value.length * 3;
-    }
-  }
-  {
     final value = object.parentCidNumber;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -14230,12 +14219,11 @@ void _publicInstitutionEntitySerialize(
   writer.writeBool(offsets[7], object.hasLegalPersonality);
   writer.writeString(offsets[8], object.institutionCode);
   writer.writeString(offsets[9], object.legalRepName);
-  writer.writeString(offsets[10], object.orgCode);
-  writer.writeString(offsets[11], object.parentCidNumber);
-  writer.writeString(offsets[12], object.provinceCode);
-  writer.writeString(offsets[13], object.status);
-  writer.writeString(offsets[14], object.townCode);
-  writer.writeLong(offsets[15], object.updatedAtMillis);
+  writer.writeString(offsets[10], object.parentCidNumber);
+  writer.writeString(offsets[11], object.provinceCode);
+  writer.writeString(offsets[12], object.status);
+  writer.writeString(offsets[13], object.townCode);
+  writer.writeLong(offsets[14], object.updatedAtMillis);
 }
 
 PublicInstitutionEntity _publicInstitutionEntityDeserialize(
@@ -14256,12 +14244,11 @@ PublicInstitutionEntity _publicInstitutionEntityDeserialize(
   object.id = id;
   object.institutionCode = reader.readString(offsets[8]);
   object.legalRepName = reader.readStringOrNull(offsets[9]);
-  object.orgCode = reader.readStringOrNull(offsets[10]);
-  object.parentCidNumber = reader.readStringOrNull(offsets[11]);
-  object.provinceCode = reader.readString(offsets[12]);
-  object.status = reader.readString(offsets[13]);
-  object.townCode = reader.readString(offsets[14]);
-  object.updatedAtMillis = reader.readLong(offsets[15]);
+  object.parentCidNumber = reader.readStringOrNull(offsets[10]);
+  object.provinceCode = reader.readString(offsets[11]);
+  object.status = reader.readString(offsets[12]);
+  object.townCode = reader.readString(offsets[13]);
+  object.updatedAtMillis = reader.readLong(offsets[14]);
   return object;
 }
 
@@ -14295,14 +14282,12 @@ P _publicInstitutionEntityDeserializeProp<P>(
     case 10:
       return (reader.readStringOrNull(offset)) as P;
     case 11:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 12:
       return (reader.readString(offset)) as P;
     case 13:
       return (reader.readString(offset)) as P;
     case 14:
-      return (reader.readString(offset)) as P;
-    case 15:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -15990,162 +15975,6 @@ extension PublicInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeIsNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'orgCode',
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeIsNotNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'orgCode',
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeEqualTo(
-    String? value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'orgCode',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeGreaterThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'orgCode',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeLessThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'orgCode',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeBetween(
-    String? lower,
-    String? upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'orgCode',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'orgCode',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'orgCode',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-          QAfterFilterCondition>
-      orgCodeContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'orgCode',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-          QAfterFilterCondition>
-      orgCodeMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'orgCode',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'orgCode',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
-      QAfterFilterCondition> orgCodeIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'orgCode',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
       QAfterFilterCondition> parentCidNumberIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -16907,20 +16736,6 @@ extension PublicInstitutionEntityQuerySortBy
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortByOrgCode() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'orgCode', Sort.asc);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      sortByOrgCodeDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'orgCode', Sort.desc);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
       sortByParentCidNumber() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'parentCidNumber', Sort.asc);
@@ -17134,20 +16949,6 @@ extension PublicInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenByOrgCode() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'orgCode', Sort.asc);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
-      thenByOrgCodeDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'orgCode', Sort.desc);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QAfterSortBy>
       thenByParentCidNumber() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'parentCidNumber', Sort.asc);
@@ -17293,13 +17094,6 @@ extension PublicInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
-      distinctByOrgCode({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'orgCode', caseSensitive: caseSensitive);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity, QDistinct>
       distinctByParentCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'parentCidNumber',
@@ -17411,13 +17205,6 @@ extension PublicInstitutionEntityQueryProperty on QueryBuilder<
       legalRepNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'legalRepName');
-    });
-  }
-
-  QueryBuilder<PublicInstitutionEntity, String?, QQueryOperations>
-      orgCodeProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'orgCode');
     });
   }
 

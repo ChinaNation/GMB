@@ -285,8 +285,8 @@ pub(crate) fn province_scope_for_registry_org_conn(
 }
 
 /// 中文注释:解析当前管理员所属机构的简称(cid_short_name 单一真源)。
-/// 联邦注册局管理员 → org_code='FEDERAL_REGISTRY' 的全局唯一机构(总统府联邦注册局,简称=联邦注册局);
-/// 市注册局管理员   → org_code='CITY_REGISTRY' AND province_name AND city_name 的本市机构(如 合肥市注册局)。
+/// 联邦注册局管理员 → institution_code='FRG' 的全局唯一机构(总统府联邦注册局,简称=联邦注册局);
+/// 市注册局管理员   → institution_code='CREG' AND province_name AND city_name 的本市机构(如 合肥市注册局)。
 /// 无对应行返回 None(前端按空处理,绝不另造名字)。
 pub(crate) fn resolve_home_institution_short_name_conn(
     conn: &mut Client,
@@ -298,7 +298,7 @@ pub(crate) fn resolve_home_institution_short_name_conn(
         RegistryOrgCode::FederalRegistry => conn
             .query_opt(
                 "SELECT cid_short_name FROM subjects \
-                 WHERE org_code = 'FEDERAL_REGISTRY' AND status = 'ACTIVE' LIMIT 1",
+                 WHERE institution_code = 'FRG' AND status = 'ACTIVE' LIMIT 1",
                 &[],
             )
             .map_err(|e| format!("query federal registry short name failed: {e}"))?,
@@ -308,7 +308,7 @@ pub(crate) fn resolve_home_institution_short_name_conn(
             };
             conn.query_opt(
                 "SELECT cid_short_name FROM subjects \
-                 WHERE org_code = 'CITY_REGISTRY' AND status = 'ACTIVE' \
+                 WHERE institution_code = 'CREG' AND status = 'ACTIVE' \
                    AND province_name = $1 AND city_name = $2 LIMIT 1",
                 &[&province, &city],
             )

@@ -241,7 +241,6 @@ class PublicInstitutionBundleLoader {
         old.cityCode == dto.cityCode &&
         old.townCode == dto.townCode &&
         old.institutionCode == dto.institutionCode &&
-        old.orgCode == dto.orgCode &&
         old.parentCidNumber == dto.parentCidNumber &&
         old.hasLegalPersonality == dto.hasLegalPersonality &&
         old.legalRepName == dto.legalRepName &&

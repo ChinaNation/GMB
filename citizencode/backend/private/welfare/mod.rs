@@ -27,7 +27,7 @@ pub(crate) struct WelfareProfile {
 }
 
 pub(crate) const PROFILE: WelfareProfile = WelfareProfile {
-    identity_code: "GY",
+    identity_code: "SFGY",
     p1: "0",
     has_legal_personality: true,
     purpose_label: "公益目的",
@@ -43,7 +43,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {
     assert_module_spec(&SPEC);
-    debug_assert_eq!(PROFILE.identity_code, "GY");
+    debug_assert_eq!(PROFILE.identity_code, "SFGY");
     debug_assert_eq!(PROFILE.p1, "0");
     debug_assert!(PROFILE.has_legal_personality);
     debug_assert_eq!(PROFILE.purpose_label, "公益目的");

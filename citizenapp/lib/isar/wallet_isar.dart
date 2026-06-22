@@ -594,10 +594,9 @@ class PublicInstitutionEntity {
   /// 所属镇 code(可空,空串表示机构只定位到市级)。
   String townCode = '';
 
-  /// 机构类型:ZF/LF/SF/JC/JY 等。
+  /// 机构类型机构码(CID 单一真源,如 PRS/PGV/CGOV/CREG 等)。
   late String institutionCode;
 
-  String? orgCode;
   String? parentCidNumber;
   bool? hasLegalPersonality;
 

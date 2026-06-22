@@ -1,27 +1,27 @@
 //! 非法人机构能力。
 //!
-//! 中文注释:非法人不是法人资格,但不等于全部必须挂靠。个体经营(F+GT)和无限合伙(F+GP)
-//! 是独立非法人;教育分校(F+JY)以及公权下属非法人仍必须从属于一个具有法人资格的主体。
+//! 中文注释:非法人不是法人资格,但不等于全部必须挂靠。个体经营(SFGT)和无限合伙(SFGP)
+//! 是独立非法人;非法人组织(UNIN,含学校分校/公权下属/公司分支)必须从属于一个法人主体。
 //! 公权机构和私权机构都可能拥有从属非法人机构,所以能力放在 `subjects/uninorg`。
 //!
 //! 本模块是非法人挂靠规则的单一权威源,创建(create_institution)、改挂
 //! (update_institution)和所属法人搜索(search_parent_institutions 的 SQL 预过滤)
 //! 三处必须与这里同源,缺一处就有绕过口:
-//! - 父级属性:仅私法人(S)/公法人(G)可作所属法人;
-//! - 代码一致性:F+JY(非法人教育机构/分支机构) ⇔ 父级是法人教育机构(手动 JY 行);
-//! - 地域规则:见 [`parent_locality_rule`];
+//! - 父级属性:仅私法人(S)/公法人(G)可作所属法人;UNIN 通用从属,挂任意 S/G 父级;
+//! - 地域规则:见 [`parent_locality_rule`](父级是学校/大学 → 分校同市);
 //! - 盈利属性继承:见 [`inherited_p1`]。
 
-pub(crate) fn is_unincorporated_subject(subject_property: &str) -> bool {
-    subject_property == "F"
+use crate::number::{AdminLevel, InstitutionCode};
+
+pub(crate) fn requires_parent(institution_code: &str) -> bool {
+    // 个体经营(SFGT)/无限合伙(SFGP)是独立非法人;只有非法人组织(UNIN)必须挂靠法人父级。
+    institution_code == "UNIN"
 }
 
-pub(crate) fn requires_parent(subject_property: &str, institution_code: &str) -> bool {
-    is_unincorporated_subject(subject_property) && !matches!(institution_code, "GT" | "GP")
-}
-
-pub(crate) fn can_attach_to_parent_subject(parent_subject_property: &str) -> bool {
-    matches!(parent_subject_property, "S" | "G")
+pub(crate) fn can_attach_to_parent(parent_institution_code: &str) -> bool {
+    // 父级是公法人或私法人才可作所属法人。
+    InstitutionCode::from_str(parent_institution_code)
+        .map_or(false, |c| c.is_public_legal() || c.is_private_legal())
 }
 
 pub(crate) fn parent_subject_requirement_message() -> &'static str {
@@ -39,45 +39,30 @@ pub(crate) enum ParentLocalityRule {
     SameCity,
 }
 
-/// 判定父级是否法人教育机构(手动 JY 行,公立 G+JY / 私立 S+JY)。
-/// 确定性国家/市公民教育委员会 org_code 非空,不算学校或校区所属法人。
-pub(crate) fn parent_is_education_school(
-    parent_institution_code: &str,
-    parent_org_code: Option<&str>,
-) -> bool {
-    parent_institution_code == "JY" && parent_org_code.is_none()
+/// 判定父级是否学校/大学(公立大学 GUN/私立大学 SUN/公立学校 GSCH/私立学校 SFSC)。
+/// 教育委员会(NED/CEDU)是公权委员会,不是学校,不算分校所属法人。
+pub(crate) fn parent_is_education_school(parent_institution_code: &str) -> bool {
+    matches!(parent_institution_code, "GUN" | "SUN" | "GSCH" | "SFSC")
 }
 
 /// 所属法人的地域规则:
 /// - 私法人(S)父级 → 全国不限(唯一允许跨省市;S+JY 学校例外,分校与本部同市);
 /// - 法人教育机构父级 → 同市;
-/// - 公法人(G)父级按行政层级:org_code 为空(手动公权机构)或 CITY_/TOWN_ 前缀 → 同市,
-///   PROVINCE_ 前缀 → 同省,NATIONAL_/MINISTRY_/FEDERAL_ 前缀(国家级)→ 全国;
-///   未知前缀防御性按最严的同市处理,不放权。
-pub(crate) fn parent_locality_rule(
-    parent_subject_property: &str,
-    parent_institution_code: &str,
-    parent_org_code: Option<&str>,
-) -> ParentLocalityRule {
-    if parent_is_education_school(parent_institution_code, parent_org_code) {
+/// - 公法人(G)父级按机构码行政层级:市级/镇级/无层级(含手动公权机构)→ 同市,
+///   省级 → 同省,国家级 → 全国。
+pub(crate) fn parent_locality_rule(parent_institution_code: &str) -> ParentLocalityRule {
+    if parent_is_education_school(parent_institution_code) {
         return ParentLocalityRule::SameCity;
     }
-    if parent_subject_property == "S" {
+    if InstitutionCode::from_str(parent_institution_code).map_or(false, |c| c.is_private_legal()) {
         return ParentLocalityRule::Nationwide;
     }
-    // 公法人(G)按 org_code 前缀判层级
-    match parent_org_code {
-        None => ParentLocalityRule::SameCity,
-        Some(code) if code.starts_with("PROVINCE_") => ParentLocalityRule::SameProvince,
-        Some(code)
-            if code.starts_with("NATIONAL_")
-                || code.starts_with("MINISTRY_")
-                || code.starts_with("FEDERAL_") =>
-        {
-            ParentLocalityRule::Nationwide
-        }
-        // CITY_/TOWN_ 及一切未知前缀 → 同市
-        Some(_) => ParentLocalityRule::SameCity,
+    // 公法人(G)按机构码行政层级判级
+    match InstitutionCode::from_str(parent_institution_code).and_then(|c| c.admin_level()) {
+        Some(AdminLevel::National) => ParentLocalityRule::Nationwide,
+        Some(AdminLevel::Province) => ParentLocalityRule::SameProvince,
+        // 市级、镇级及一切无层级公权机构 → 同市
+        Some(AdminLevel::City) | Some(AdminLevel::Town) | None => ParentLocalityRule::SameCity,
     }
 }
 
@@ -108,26 +93,18 @@ pub(crate) fn locality_violation(
     }
 }
 
-/// 非法人机构代码与父级类型一致性:F+JY 分支机构的父级必须是法人教育机构,
-/// 法人教育机构下也只能挂 F+JY 分支机构。违规时返回提示文案。
+/// 非法人(UNIN)是通用从属机构,可挂任意法人父级(S/G):挂学校即分校、挂政府即下属、
+/// 挂公司即分支。父级合法性由 [`can_attach_to_parent`] 校验,机构码不再做交叉约束。
 pub(crate) fn code_consistency_violation(
-    f_institution_code: &str,
-    parent_institution_code: &str,
-    parent_org_code: Option<&str>,
+    _f_institution_code: &str,
+    _parent_institution_code: &str,
 ) -> Option<&'static str> {
-    let school_parent = parent_is_education_school(parent_institution_code, parent_org_code);
-    if f_institution_code == "JY" && !school_parent {
-        return Some("非法人教育机构(F+JY)的所属法人必须是法人教育机构");
-    }
-    if f_institution_code != "JY" && school_parent {
-        return Some("法人教育机构下只能挂非法人教育机构(F+JY)");
-    }
     None
 }
 
 /// 非法人盈利属性附属于所属法人:公法人父级恒非盈利(0),私法人父级继承其 p1。
-pub(crate) fn inherited_p1(parent_subject_property: &str, parent_p1: &str) -> String {
-    if parent_subject_property == "G" {
+pub(crate) fn inherited_p1(parent_institution_code: &str, parent_p1: &str) -> String {
+    if InstitutionCode::from_str(parent_institution_code).map_or(false, |c| c.is_public_legal()) {
         "0".to_string()
     } else {
         parent_p1.to_string()
@@ -140,67 +117,33 @@ mod tests {
 
     #[test]
     fn education_school_parent_requires_same_city() {
-        // 公立本部(G+JY 手动)和私立本部(S+JY 手动)都锁同市
-        assert_eq!(
-            parent_locality_rule("G", "JY", None),
-            ParentLocalityRule::SameCity
-        );
-        assert_eq!(
-            parent_locality_rule("S", "JY", None),
-            ParentLocalityRule::SameCity
-        );
+        // 公立学校(GSCH)和私立学校(SFSC)父级都锁同市(分校与本部同市)
+        assert_eq!(parent_locality_rule("GSCH"), ParentLocalityRule::SameCity);
+        assert_eq!(parent_locality_rule("SFSC"), ParentLocalityRule::SameCity);
     }
 
     #[test]
     fn private_parent_is_nationwide() {
-        assert_eq!(
-            parent_locality_rule("S", "GQ", None),
-            ParentLocalityRule::Nationwide
-        );
+        assert_eq!(parent_locality_rule("SFGQ"), ParentLocalityRule::Nationwide);
     }
 
     #[test]
-    fn gov_parent_locality_follows_org_code_level() {
-        // 手动公权机构(org_code 空) = 市级
-        assert_eq!(
-            parent_locality_rule("G", "ZF", None),
-            ParentLocalityRule::SameCity
-        );
-        // 市级/镇级自动目录
-        assert_eq!(
-            parent_locality_rule("G", "ZF", Some("CITY_GOV")),
-            ParentLocalityRule::SameCity
-        );
-        assert_eq!(
-            parent_locality_rule("G", "ZF", Some("TOWN_GOV")),
-            ParentLocalityRule::SameCity
-        );
-        // 监管本体(公民教育委员会)是市级公权机构,不是学校
-        assert_eq!(
-            parent_locality_rule("G", "JY", Some("CITY_EDU")),
-            ParentLocalityRule::SameCity
-        );
-        // 省级
-        assert_eq!(
-            parent_locality_rule("G", "ZF", Some("PROVINCE_GOV")),
-            ParentLocalityRule::SameProvince
-        );
-        // 国家级三类前缀
-        for code in [
-            "NATIONAL_LEGISLATURE",
-            "MINISTRY_FOREIGN",
-            "FEDERAL_REGISTRY",
-        ] {
+    fn gov_parent_locality_follows_institution_code_level() {
+        // 市级机构码 → 同市
+        assert_eq!(parent_locality_rule("CGOV"), ParentLocalityRule::SameCity);
+        // 镇级机构码 → 同市
+        assert_eq!(parent_locality_rule("TGOV"), ParentLocalityRule::SameCity);
+        // 监管本体(公民教育委员会 CEDU)是市级公权机构,不是学校
+        assert_eq!(parent_locality_rule("CEDU"), ParentLocalityRule::SameCity);
+        // 省级机构码 → 同省
+        assert_eq!(parent_locality_rule("PGV"), ParentLocalityRule::SameProvince);
+        // 国家级机构码 → 全国
+        for code in ["NLG", "MFA", "FRG"] {
             assert_eq!(
-                parent_locality_rule("G", "ZF", Some(code)),
+                parent_locality_rule(code),
                 ParentLocalityRule::Nationwide
             );
         }
-        // 未知前缀防御性收紧到同市
-        assert_eq!(
-            parent_locality_rule("G", "ZF", Some("PUBLIC_ORG")),
-            ParentLocalityRule::SameCity
-        );
     }
 
     #[test]
@@ -240,22 +183,28 @@ mod tests {
     }
 
     #[test]
-    fn branch_school_code_must_match_school_parent() {
-        // F+JY 必须挂学校本部
-        assert!(code_consistency_violation("JY", "JY", None).is_none());
-        assert!(code_consistency_violation("JY", "ZF", Some("CITY_GOV")).is_some());
-        // 监管本体(org_code 非空)不算学校,F+JY 不能挂
-        assert!(code_consistency_violation("JY", "JY", Some("CITY_EDU")).is_some());
-        // 学校本部下只能挂分校
-        assert!(code_consistency_violation("ZG", "JY", None).is_some());
-        assert!(code_consistency_violation("ZG", "ZF", Some("CITY_GOV")).is_none());
+    fn uninorg_attaches_to_any_legal_parent() {
+        // UNIN 通用从属:挂学校/政府/公司都不报机构码错(父级合法性另由 can_attach_to_parent 校验)
+        assert!(code_consistency_violation("UNIN", "GSCH").is_none());
+        assert!(code_consistency_violation("UNIN", "CGOV").is_none());
+        assert!(code_consistency_violation("UNIN", "SFGQ").is_none());
+    }
+
+    #[test]
+    fn schools_recognized_committees_are_not() {
+        // 学校/大学码 → 学校;教育委员会(CEDU)不是学校
+        assert!(parent_is_education_school("GSCH"));
+        assert!(parent_is_education_school("SFSC"));
+        assert!(parent_is_education_school("GUN"));
+        assert!(!parent_is_education_school("CEDU"));
     }
 
     #[test]
     fn p1_inherits_from_parent() {
-        assert_eq!(inherited_p1("G", "0"), "0");
-        assert_eq!(inherited_p1("G", "1"), "0"); // 公法人恒非盈利,容错
-        assert_eq!(inherited_p1("S", "1"), "1");
-        assert_eq!(inherited_p1("S", "0"), "0");
+        // 公法人父级(PGV)恒非盈利;私法人父级(SFGQ)继承其 p1。
+        assert_eq!(inherited_p1("PGV", "0"), "0");
+        assert_eq!(inherited_p1("PGV", "1"), "0"); // 公法人恒非盈利,容错
+        assert_eq!(inherited_p1("SFGQ", "1"), "1");
+        assert_eq!(inherited_p1("SFGQ", "0"), "0");
     }
 }

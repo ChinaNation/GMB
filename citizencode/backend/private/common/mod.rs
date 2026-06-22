@@ -86,7 +86,6 @@ impl PartnershipKind {
 pub(crate) struct PrivateTypeRule {
     pub(crate) private_type: PrivateType,
     pub(crate) partnership_kind: Option<PartnershipKind>,
-    pub(crate) subject_property: &'static str,
     pub(crate) institution_code: &'static str,
     pub(crate) p1: &'static str,
     pub(crate) has_legal_personality: bool,
@@ -106,7 +105,6 @@ pub(crate) struct PrivateModuleSpec {
 pub(crate) fn lock_input_to_rule(input: &mut CreateInstitutionInput, rule: PrivateTypeRule) {
     input.private_type = Some(rule.private_type.as_code().to_string());
     input.partnership_kind = rule.partnership_kind.map(|kind| kind.as_code().to_string());
-    input.subject_property = rule.subject_property.to_string();
     input.institution = rule.institution_code.to_string();
     input.p1 = Some(rule.p1.to_string());
     // 中文注释:六类目标私权机构都是独立主体;非法人个体经营/无限合伙也不挂靠所属法人。
@@ -129,7 +127,7 @@ pub(crate) fn assert_module_spec(spec: &PrivateModuleSpec) {
     }
 }
 
-/// 按私权类型解析身份字段。调用方不得让前端自带 subject_property / institution_code 覆盖本规则。
+/// 按私权类型解析身份字段。调用方不得让前端自带 institution_code 覆盖本规则。
 pub(crate) fn resolve_private_type_rule(
     private_type: &str,
     partnership_kind: Option<&str>,
@@ -140,8 +138,7 @@ pub(crate) fn resolve_private_type_rule(
         PrivateType::Sole => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            subject_property: "F",
-            institution_code: "GT",
+            institution_code: "SFGT",
             p1: "1",
             has_legal_personality: false,
         },
@@ -152,16 +149,14 @@ pub(crate) fn resolve_private_type_rule(
             PartnershipKind::General => PrivateTypeRule {
                 private_type,
                 partnership_kind: Some(PartnershipKind::General),
-                subject_property: "F",
-                institution_code: "GP",
+                institution_code: "SFGP",
                 p1: "1",
                 has_legal_personality: false,
             },
             PartnershipKind::Limited => PrivateTypeRule {
                 private_type,
                 partnership_kind: Some(PartnershipKind::Limited),
-                subject_property: "S",
-                institution_code: "LP",
+                institution_code: "SFLP",
                 p1: "1",
                 has_legal_personality: true,
             },
@@ -169,32 +164,29 @@ pub(crate) fn resolve_private_type_rule(
         PrivateType::Company => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            subject_property: "S",
-            institution_code: "GQ",
+            institution_code: "SFGQ",
             p1: "1",
             has_legal_personality: true,
         },
         PrivateType::Corporation => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            subject_property: "S",
-            institution_code: "GF",
+            institution_code: "SFGF",
             p1: "1",
             has_legal_personality: true,
         },
         PrivateType::Welfare => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            subject_property: "S",
-            institution_code: "GY",
+            institution_code: "SFGY",
             p1: "0",
             has_legal_personality: true,
         },
         PrivateType::Association => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            subject_property: "S",
-            institution_code: "AS",
+            // 注册协会(SFAS)盈利可变,p1 默认非盈利;按实例选盈利属后续增强(需注册 API 传入)。
+            institution_code: "SFAS",
             p1: "0",
             has_legal_personality: true,
         },

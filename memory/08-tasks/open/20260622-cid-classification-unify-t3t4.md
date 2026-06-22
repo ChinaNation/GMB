@@ -2,7 +2,40 @@
 
 ## 状态
 
-设计已锁定（2026-06-22，用户逐项确认）。实施未开始；当前阻塞点：并行线程仍在改 `citizenchain/runtime/primitives/china/china_*.rs` + `citizencode/backend/gov/service.rs`，链/gov 阶段须先协调。后端 `number/` 阶段不冲突，可先行。
+**Phase 1 后端 完成 + 二轮整改（2026-06-22）。** `cargo check` 0 错误 0 警告,76 测试全过,**零旧码残留(单+双引号+注释+文档全清)**,26 文件,未提交未推送。
+
+二轮整改(用户 5 点):
+1. `number/institution_code.rs` → `number/code.rs`(全仓库机构码唯一真源,number/=cid 号唯一管理处)
+2. 大学改 3 位:GUNV→GUN(公立)/SFUN→SUN(私立);放开 3 位布局盈利位 0/1(私立大学可变,校验仍 mod-36 全强度);大学联邦+市注册局都可创建(教育绕过层级门自动满足)。终态:3 位=国家/省部+公私大学+国家教委;4 位=市镇+私权+市教委+初小中
+3. 镇级补全部门码(86 码总):TDEF/THSC/TCOM/TENR/TTRN(国防/国安/商贸/能源/交通科),具体启用由市注册局管理员运行期增删(不进自动模板)
+4. **16 处 SQL 单引号残留全清**(我首轮漏了单引号):gov 列表排除全部教育码(NED/CEDU/GUN/SUN/GSCH/SFSC,进独立教育 tab)、排序 CASE 改分支秩、admin 父级搜索改 UNIN 通用模型(学校同市∪非校 S 全国∪非校 G 按层级)、model.rs/db.rs/main.rs/public_institution 全清
+5. K1 残迹清:删 `SubjectProperty::from_str`(M|公民 解析),registration 主体属性一律从机构码派生,derive_category 改 (code,name) 内部派生
+
+**subject_property(旧 K1)已彻底消除(三轮整改 2026-06-22)**:删 SubjectProperty 枚举 + DB 列(subjects/private 两表) + ~50 处 SQL/DTO/结构体/参数;全部由机构码派生(InstitutionCode 新增 is_person/is_public_legal/is_private_legal/is_unincorporated;classify(code,name);uninorg 函数改吃 institution_code)。SQL 过滤映射:`=G`→category IN(GOV/PUBLIC_SECURITY)、`IN(S,F)`→category=PRIVATE、`=F`→institution_code IN(SFGT/SFGP/UNIN)、`=S`→institution_code IN(私法人码)。已独立核验 INSERT 占位符/绑定数 + reader↔SELECT 列序对齐无错位。全 crate subject_property 残留=0。number/admin.rs subject_property_options 下拉也已删。**0 错误 0 警告,76 测试,29 文件,未提交。**
+
+**待续**:org_code 列(同类活,Phase 2)/ Phase 3 链端去 ORG_xx + china CID 重烤(重新创世)。
+
+历史(基础阶段)已通过编译 + 70 单测:
+- ✅ `number/` 全模块重写：`institution_code.rs`(77 码 enum + 盈利策略 + 主体属性派生 + ALL) / `validator.rs`(双布局 index3 分流 + mod-36/10/26 校验 + 新 CidNumberParts) / `generator.rs`(删 K1、按码盈利、N9 去 K1、双布局) / `category.rs`(classify 改用 Cpol 码)
+- ✅ gov 赋码：省厅 11 + 市级 16 + 镇级 5 模板 institution_code 全改新码;CITY_POLICE→CPOL;国家两院 NSN/NRP;`parse_cid_institution_parts` 改用新格式派生
+- ✅ 消费方:3 个 generate_cid_number 调用点删 subject_property;binding 公民→CTZN;`default_account_names_for_codes` CB/CH→NRC/PRB;`derive_category` 测试改新码
+- ✅ 私权模块 `private/{common,sole,welfare,association,corporation,partnership,company}`:institution_code/identity_code GT/GP/LP/GQ/GF/GY/AS → SFxx
+- ✅ `number/admin.rs` institution_options 改为 InstitutionCode::ALL 单源派生
+
+**教育码缺口已解决（2026-06-22 用户定，已加进 enum，编译+6 单测过）:** 新增 4 码(81 总)——`GUNV`公立大学(G,非盈利)/`SFUN`私立大学(S,可变)/`GSCH`公立学校(G,非盈利)/`SFSC`私立学校(S,可变);初/小/中三级靠 education_type 字段(级别)区分,大学独立码;非法人学校复用 UNIN。
+
+**Phase 1 剩余（推定模型待用户确认后实现）:**
+- 教育注册逻辑:`is_education_school_type` 去掉「大学」(现为码)只留初/小/中;`registration.rs:138` is_education_school→GSCH/SFSC(需级别)+ is_education_institution→GUNV/SFUN/GSCH/SFSC(免 private_type);`:182` ZG→UNIN
+- uninorg 模型:UNIN=通用从属(挂任意 S/G 法人父级);SFGT/SFGP 独立;父级是学校(GSCH/SFSC/GUNV/SFUN)→分校同市;删旧 F+JY⇔学校 1:1 交叉校验(UNIN 已通用);`requires_parent` GT/GP→SFGT/SFGP;tests 旧码全改
+- `subjects/admin.rs:427` f_is_branch_school "JY"→"UNIN"
+- 🔴 **政策问题(待用户):`registration.rs:271` 手动可创建公权类型**。旧允许 ZF/LF/SF/JC(政府/立法院/司法院/监察院 generic);新方案手动创建哪些码?(城市级 CGOV/CLEG/CJUD/CSUP?)且与 Phase 2 是否保留 org_code 耦合
+- 🟠 `citizenapp/public_institution.rs:443(默认"ZF")/483`;`tests/integration/institution_tests.rs:48-59(GT..→SFxx)`
+- ⏳ SFAS/SMTP/私立大学/私立学校 按实例选盈利(注册 API 传 p1)——增强项
+- 🟠 语义残留(还引用旧码,需按新码或改判据重写):`subjects/registration.rs:182(!="ZG")/271(matches!("ZF"|"LF"|"SF"|"JC")公权判定→可改 subject_property()==G)`;`subjects/uninorg/mod.rs:20(matches!("GT"|"GP")→SFGT/SFGP)/48/119/122/145(JY)`;`subjects/admin.rs:427(=="JY")`
+- 🟠 `citizenapp/public_institution.rs:443(默认"ZF")/483(测试)`;`tests/integration/institution_tests.rs:48-59(私权码 GT.. → SFxx)`
+- ⏳ SFAS/SMTP 按实例选盈利属(注册 API 传 p1)——增强项
+
+**后续 Phase（未开始,部分须等链端）:** Phase 2 删 org_code 列 + 全消费方;Phase 3 链端去 ORG_xx + china_*.rs CID 重烤(重新创世) + 重跑公权数据包生成器;之后机构全称/简称统一。
 
 ## 任务需求
 

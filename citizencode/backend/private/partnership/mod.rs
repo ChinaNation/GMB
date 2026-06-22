@@ -30,7 +30,7 @@ pub(crate) struct PartnershipProfile {
 pub(crate) const GENERAL_PROFILE: PartnershipProfile = PartnershipProfile {
     kind: PartnershipKind::General,
     required_roles: &[ParticipantRole::GeneralPartner],
-    identity_code: "GP",
+    identity_code: "SFGP",
 };
 
 pub(crate) const LIMITED_PROFILE: PartnershipProfile = PartnershipProfile {
@@ -39,7 +39,7 @@ pub(crate) const LIMITED_PROFILE: PartnershipProfile = PartnershipProfile {
         ParticipantRole::GeneralPartner,
         ParticipantRole::LimitedPartner,
     ],
-    identity_code: "LP",
+    identity_code: "SFLP",
 };
 
 pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {

@@ -303,7 +303,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.access_token, mode]);
 
-  // ── 市注册局机构 cid 解析:从该市公权机构目录里筛 org_code='CITY_REGISTRY' 那条 ──
+  // ── 市注册局机构 cid 解析:从该市公权机构目录里筛 institution_code='CREG' 那条 ──
   useEffect(() => {
     if (!auth || mode !== 'city-registry' || !activeProvince || !activeCity) {
       setCityRegistryCid(null);
@@ -316,7 +316,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     listOfficialInstitutions(auth, { province_name: activeProvince, city_name: activeCity, page_size: 300 })
       .then((res) => {
         if (cancelled) return;
-        const row = res.items.find((r) => r.org_code === 'CITY_REGISTRY');
+        const row = res.items.find((r) => r.institution_code === 'CREG');
         setCityRegistryCid(row?.cid_number ?? null);
       })
       .catch((err) => { if (!cancelled) notice.error(err, '加载市注册局失败'); })

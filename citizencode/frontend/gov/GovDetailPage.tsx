@@ -6,7 +6,6 @@ import { Button, Card, Col, Descriptions, Popconfirm, Row, Space, Tag, Typograph
 import {
   EDUCATION_TYPE_LABEL,
   INSTITUTION_CODE_LABEL,
-  ORG_CODE_LABEL,
 } from '../subjects/labels';
 import { getInstitution, type InstitutionDetail } from './api';
 import { deleteAccount } from '../accounts/api';
@@ -299,7 +298,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
               <Descriptions.Item label="行政区">{administrativeArea}</Descriptions.Item>
               <Descriptions.Item label="机构类型">
                 {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
-                {inst.org_code ? ` / ${ORG_CODE_LABEL[inst.org_code] || inst.org_code}` : ''}
               </Descriptions.Item>
               {inst.education_type && (
                 <Descriptions.Item label="教育分类">

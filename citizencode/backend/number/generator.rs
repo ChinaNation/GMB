@@ -8,14 +8,15 @@
 //! - `core::runtime_ops`      seed 阶段 CID 生成
 //!
 //! 生成的 CID 号结构见 `number/validator.rs` 顶部注释。
+//! 主体属性(K1)已从号码删除,由机构码自带语义;盈利属性由机构码 `profit_policy()` 决定,
+//! 仅 Variable/InheritParent 策略的码读取 `p1` 入参(非法人组织由调用方传入父级盈利属性)。
 
 use blake2::{digest::consts::U32, Blake2b, Digest};
 use chrono::Utc;
 
 use crate::china::{city_code_by_name, province_code_by_name};
-use crate::number::category::SubjectProperty;
-use crate::number::institution_code::InstitutionCode;
-use crate::number::validator::cid_checksum;
+use crate::number::code::{InstitutionCode, ProfitPolicy};
+use crate::number::validator::{checksum_char_m1, checksum_char_mod36};
 
 type Blake2b256 = Blake2b<U32>;
 
@@ -23,10 +24,12 @@ const RESERVED_PROVINCE_CITY_CODE: &str = "000";
 
 pub struct GenerateCidInput<'a> {
     pub account_pubkey: &'a str,
-    pub subject_property: &'a str,
+    /// 盈利输入,仅 Variable(注册协会/智能人)与 InheritParent(非法人组织,传父级)
+    /// 策略的机构码读取;固定盈利策略的码忽略本字段。取值 0/1 或 非盈利/盈利。
     pub p1: &'a str,
     pub province_name: &'a str,
     pub city_name: &'a str,
+    /// 机构码(3 或 4 字符代码,或中文类型标签),全仓库机构分类唯一真源。
     pub institution: &'a str,
 }
 
@@ -37,124 +40,81 @@ fn hash_text(input: &str) -> u32 {
     u32::from_le_bytes(out)
 }
 
-fn resolve_p1(p1: &str) -> Result<&'static str, &'static str> {
-    let v = p1.trim();
-    match v {
-        "0" | "非盈利" => Ok("0"),
-        "1" | "盈利" => Ok("1"),
-        _ => Err("p1 must be 0/1"),
+fn resolve_profit(p1: &str) -> Result<bool, &'static str> {
+    match p1.trim() {
+        "0" | "非盈利" => Ok(false),
+        "1" | "盈利" => Ok(true),
+        _ => Err("p1 must be 0/1 for variable/inherit institution code"),
     }
 }
 
 pub fn generate_cid_number(input: GenerateCidInput<'_>) -> Result<String, &'static str> {
     if input.account_pubkey.trim().is_empty()
-        || input.subject_property.trim().is_empty()
         || input.province_name.trim().is_empty()
         || input.city_name.trim().is_empty()
         || input.institution.trim().is_empty()
     {
-        return Err(
-            "account_pubkey, subject_property, province_name, city_name, institution are required",
-        );
+        return Err("account_pubkey, province_name, city_name, institution are required");
     }
 
-    let subject_property = SubjectProperty::from_str(input.subject_property)
-        .ok_or("subject_property must be one of M/Z/N/G/S/F")?;
-    let t2 = InstitutionCode::from_str(input.institution)
+    let code = InstitutionCode::from_str(input.institution)
         .ok_or("institution must be a registered CID institution code")?;
-    let p1 = match subject_property {
-        SubjectProperty::M | SubjectProperty::Z => "1",
-        SubjectProperty::G => "0",
-        SubjectProperty::N | SubjectProperty::S | SubjectProperty::F => resolve_p1(input.p1)?,
+    if code == InstitutionCode::Pmul {
+        return Err("personal multisig (PMUL) has no cid number");
+    }
+
+    // 盈利属性由机构码策略决定;可变/继承策略读取入参。
+    let profit = match code.profit_policy() {
+        ProfitPolicy::NonProfit => false,
+        ProfitPolicy::Profit => true,
+        ProfitPolicy::Variable | ProfitPolicy::InheritParent => resolve_profit(input.p1)?,
     };
-    if subject_property == SubjectProperty::G
-        && !matches!(
-            t2,
-            InstitutionCode::ZF
-                | InstitutionCode::LF
-                | InstitutionCode::SF
-                | InstitutionCode::JC
-                | InstitutionCode::JY
-                | InstitutionCode::CB
-        )
-    {
-        return Err("public legal subject requires institution in ZF/LF/SF/JC/JY/CB");
-    }
-    if matches!(subject_property, SubjectProperty::M | SubjectProperty::N)
-        && t2 != InstitutionCode::ZG
-    {
-        return Err("citizen/smart person subject requires institution ZG");
-    }
-    if subject_property == SubjectProperty::Z && t2 != InstitutionCode::TG {
-        return Err("natural person subject requires institution TG");
-    }
-    if subject_property == SubjectProperty::S
-        && !matches!(
-            t2,
-            InstitutionCode::LP
-                | InstitutionCode::GQ
-                | InstitutionCode::GF
-                | InstitutionCode::GY
-                | InstitutionCode::AS
-                | InstitutionCode::JY
-        )
-    {
-        return Err("private legal subject requires institution in LP/GQ/GF/GY/AS or education JY");
-    }
-    if subject_property == SubjectProperty::F
-        && !matches!(
-            t2,
-            InstitutionCode::GT | InstitutionCode::GP | InstitutionCode::JY | InstitutionCode::ZG
-        )
-    {
-        return Err("unincorporated subject requires institution in GT/GP, education JY, or public subordinate ZG");
-    }
-    // 中文注释:D4 段只取年份,生成结果固定符合 R5-K3P1C1-N9-D4。
-    // 同 (主体属性, 省, 市, 机构, year) 5 元组共享 10 亿 n9 桶,
-    // 单省 1.5 亿人口仅占 15% 桶填充,搭配调用方 1000 次重试基本不会撞光。
+
+    // 公民人/自然人/智能人的公开编码只精确到省,市级段统一固定为 000。
+    let person_level = code.is_person();
+
     let d = Utc::now().format("%Y").to_string();
     let province_code = province_code_by_name(input.province_name)
         .ok_or("province not found in code table")?
         .to_string();
-    // 中文注释:公民/自然人/智能人的公开编码只精确到省,市级段统一固定为 000。
-    let city_code = if matches!(
-        subject_property,
-        SubjectProperty::M | SubjectProperty::Z | SubjectProperty::N
-    ) {
+    let city_code = if person_level {
         RESERVED_PROVINCE_CITY_CODE.to_string()
     } else {
         city_code_by_name(input.province_name, input.city_name)
             .ok_or("city not found in province code table")?
             .to_string()
     };
-    let normalized_city_for_hash = if matches!(
-        subject_property,
-        SubjectProperty::M | SubjectProperty::Z | SubjectProperty::N
-    ) {
+    let normalized_city_for_hash = if person_level {
         RESERVED_PROVINCE_CITY_CODE
     } else {
         input.city_name
     };
-    let k1 = subject_property.as_code();
-    let t2 = t2.as_code();
+
+    let code_str = code.as_code();
     let r5 = format!("{province_code}{city_code}");
+    // 同 (机构码, 省, 市, year) 4 元组共享 10 亿 n9 桶,调用方 1000 次重试逃逸碰撞。
     let n9 = format!(
         "{:09}",
         (hash_text(&format!(
-            "{}|{}|{}|{}|{}|{}",
-            input.account_pubkey,
-            k1,
-            input.province_name,
-            normalized_city_for_hash,
-            input.institution,
-            d
+            "{}|{}|{}|{}|{}",
+            input.account_pubkey, code_str, input.province_name, normalized_city_for_hash, d
         )) as usize)
             % 1_000_000_000
     );
-    let k3 = format!("{k1}{t2}");
-    let payload = format!("{r5}{k3}{p1}{n9}{d}");
-    let c1 = cid_checksum(&payload);
-    Ok(format!("{r5}-{k3}{p1}{c1}-{n9}-{d}"))
+
+    if code.is_three_char() {
+        // A 布局:码(3) + 盈利位(0/1,按盈利策略) + 校验(mod-36)。
+        // 国家/省部/公立大学非盈利→0;私立大学(SUN)可变,按实例 0/1。
+        let profit_char = if profit { "1" } else { "0" };
+        let payload = format!("{r5}{code_str}{profit_char}{n9}{d}");
+        let c = checksum_char_mod36(&payload);
+        Ok(format!("{r5}-{code_str}{profit_char}{c}-{n9}-{d}"))
+    } else {
+        // B 布局:码(4) + M1(数字=盈利/字母=非盈利,值=校验)。
+        let payload = format!("{r5}{code_str}{n9}{d}");
+        let m1 = checksum_char_m1(&payload, profit);
+        Ok(format!("{r5}-{code_str}{m1}-{n9}-{d}"))
+    }
 }
 
 #[cfg(test)]
@@ -165,14 +125,12 @@ mod tests {
     fn citizen_uses_reserved_province_city_code() {
         let code = generate_cid_number(GenerateCidInput {
             account_pubkey: "0x1234",
-            subject_property: "M",
             p1: "1",
             province_name: "广东省",
             city_name: "荔湾市",
-            institution: "ZG",
+            institution: "CTZN",
         })
         .expect("citizen cid should generate");
-
         assert_eq!(code.split('-').next(), Some("GD000"));
     }
 
@@ -180,19 +138,40 @@ mod tests {
     fn public_legal_keeps_real_city_code() {
         let code = generate_cid_number(GenerateCidInput {
             account_pubkey: "0x5678",
-            subject_property: "G",
             p1: "0",
             province_name: "广东省",
             city_name: "荔湾市",
-            institution: "ZF",
+            institution: "CGOV",
         })
         .expect("public legal cid should generate");
-
         assert_eq!(code.split('-').next(), Some("GD001"));
     }
 
     #[test]
-    fn example_checksum_matches_current_payload() {
-        assert_eq!(cid_checksum("LN001GCB09448051652026"), '5');
+    fn three_char_national_layout_shape() {
+        let code = generate_cid_number(GenerateCidInput {
+            account_pubkey: "0x9999",
+            p1: "0",
+            province_name: "广东省",
+            city_name: "荔湾市",
+            institution: "NRC",
+        })
+        .expect("nrc cid should generate");
+        let seg2 = code.split('-').nth(1).unwrap();
+        assert_eq!(seg2.len(), 5);
+        assert_eq!(&seg2[0..3], "NRC");
+        assert_eq!(&seg2[3..4], "0"); // 盈利位恒 0,index3 数字 → A 布局
+    }
+
+    #[test]
+    fn pmul_has_no_number() {
+        let r = generate_cid_number(GenerateCidInput {
+            account_pubkey: "0x1",
+            p1: "0",
+            province_name: "广东省",
+            city_name: "荔湾市",
+            institution: "PMUL",
+        });
+        assert!(r.is_err());
     }
 }

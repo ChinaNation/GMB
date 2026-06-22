@@ -26,11 +26,11 @@ pub const EDUCATION_TYPE_PRIMARY_SCHOOL: &str = "PRIMARY_SCHOOL";
 pub const EDUCATION_TYPE_SECONDARY_SCHOOL: &str = "SECONDARY_SCHOOL";
 pub const EDUCATION_TYPE_UNIVERSITY: &str = "UNIVERSITY";
 
+// 中文注释:基础教育级别(初学/小学/中学)。大学已拆为独立机构码(GUN/SUN),不再是 education_type 级别。
 pub const EDUCATION_SCHOOL_TYPES: &[&str] = &[
     EDUCATION_TYPE_EARLY_SCHOOL,
     EDUCATION_TYPE_PRIMARY_SCHOOL,
     EDUCATION_TYPE_SECONDARY_SCHOOL,
-    EDUCATION_TYPE_UNIVERSITY,
 ];
 
 pub const EDUCATION_COMMITTEE_TYPES: &[&str] = &[
@@ -84,8 +84,6 @@ pub struct Institution {
     pub status: String,
     /// 机构分类(公安局/公权机构/私权机构)。
     pub category: InstitutionCategory,
-    /// 主体属性(G/S/F)。
-    pub subject_property: String,
     /// 盈利属性("0"/"1")。
     pub p1: String,
     /// 所属省名称(如"安徽省")。
@@ -107,9 +105,6 @@ pub struct Institution {
     pub town_code: String,
     /// 机构类型代码(ZF/LF/SF/...)。
     pub institution_code: String,
-    /// 公权机构细类代码,例如 CITY_FINANCE、TOWN_GOV。私权机构可为空。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub org_code: Option<String>,
     /// 教育机构业务分类。只用于教育 tab 分类,不参与 CID 号生成。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub education_type: Option<String>,
@@ -123,8 +118,8 @@ pub struct Institution {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_legal_personality: Option<bool>,
     /// 从属关系引用。字段值始终是另一个机构已有的 `cid_number`,不是第二套身份 ID。
-    /// - 需要挂靠的 SubjectProperty=F 非法人:指向所属法人。
-    /// 个体经营(F+GT)和无限合伙(F+GP)是独立非法人,不填写本字段。
+    /// - 需要挂靠的非法人组织(UNIN):指向所属法人。
+    /// 个体经营(SFGT)和无限合伙(SFGP)是独立非法人,不填写本字段。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_cid_number: Option<String>,
     /// 法定代表人姓名。初始化目录机构允许为空;机构资料编辑保存时必须补齐。
@@ -224,7 +219,6 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInstitutionInput {
-    pub subject_property: String,
     pub p1: Option<String>,
     pub province_name: Option<String>,
     pub city_name: String,
@@ -342,13 +336,13 @@ impl InstitutionListFilter {
             }
             Self::Gov => {
                 "AND ((s.category = 'GOV_INSTITUTION'
-                       AND s.institution_code <> 'JY')
-                      OR (s.subject_property = 'F' AND s.institution_code <> 'JY'
-                          AND par.subject_property = 'G'))"
+                       AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'GSCH', 'SFSC'))
+                      OR (s.institution_code IN ('SFGT', 'SFGP', 'UNIN')
+                          AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'GSCH', 'SFSC')
+                          AND par.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')))"
             }
             Self::Education => {
-                "AND s.institution_code = 'JY'
-                 AND COALESCE(s.org_code, '') NOT IN ('NATIONAL_EDU', 'CITY_EDU')"
+                "AND s.institution_code IN ('GUN', 'SUN', 'GSCH', 'SFSC')"
             }
         }
     }
@@ -363,15 +357,12 @@ pub struct InstitutionListRow {
     pub cid_short_name: Option<String>,
     pub status: String,
     pub category: InstitutionCategory,
-    pub subject_property: String,
     pub p1: String,
     pub province_name: String,
     pub city_name: String,
     #[serde(default)]
     pub town_name: String,
     pub institution_code: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub org_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub education_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -404,7 +395,6 @@ pub struct InstitutionListRow {
 pub struct ParentInstitutionRow {
     pub cid_number: String,
     pub cid_full_name: String,
-    pub subject_property: String,
     /// 私权机构类型。前端只用于展示父级机构事实,不派生链上业务角色。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_type: Option<String>,

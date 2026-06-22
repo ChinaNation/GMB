@@ -33,7 +33,8 @@ export interface ListOfficialInstitutionQuery {
   province_name?: string;
   city_name?: string;
   q?: string;
-  org_code?: string;
+  /** 机构码精确过滤(单源,如市注册局=CREG);省略=不过滤。 */
+  institution_code?: string;
   cursor?: string | null;
   page_size?: number;
 }
@@ -60,7 +61,8 @@ export async function listOfficialInstitutions(
   if (query?.province_name) params.set('province_name', query.province_name);
   if (query?.city_name) params.set('city_name', query.city_name);
   if (query?.q && query.q.trim()) params.set('q', query.q.trim());
-  if (query?.org_code && query.org_code.trim()) params.set('org_code', query.org_code.trim());
+  if (query?.institution_code && query.institution_code.trim())
+    params.set('institution_code', query.institution_code.trim());
   if (query?.cursor) params.set('cursor', query.cursor);
   if (query?.page_size) params.set('page_size', String(query.page_size));
   const qs = params.toString();

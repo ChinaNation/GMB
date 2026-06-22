@@ -178,7 +178,8 @@ pub(crate) struct ListOfficialInstitutionQuery {
     pub province_name: Option<String>,
     pub city_name: Option<String>,
     pub q: Option<String>,
-    pub org_code: Option<String>,
+    /// 机构码精确过滤(单源,如市注册局=CREG);空=不过滤。
+    pub institution_code: Option<String>,
     pub cursor: Option<String>,
     pub page_size: Option<usize>,
 }
@@ -261,7 +262,11 @@ pub(crate) async fn list_official_institutions(
     };
 
     let keyword = query.q.as_deref().map(str::trim).unwrap_or("");
-    let org_code = query.org_code.as_deref().map(str::trim).unwrap_or("");
+    let institution_code_filter = query
+        .institution_code
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
     let directory_scope = match city_code {
         Some(code) => OfficialReconcileScope::City {
             province_code: province_code.to_string(),
@@ -275,7 +280,7 @@ pub(crate) async fn list_official_institutions(
         province_code,
         city_code,
         keyword,
-        org_code,
+        institution_code_filter,
         offset,
         page_size,
     ) {

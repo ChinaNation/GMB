@@ -22,7 +22,6 @@ pub(crate) struct CidCityItem {
 
 #[derive(Serialize)]
 pub(crate) struct AdminCidMetaOutput {
-    pub(crate) subject_property_options: Vec<CidOptionItem>,
     pub(crate) institution_options: Vec<CidOptionItem>,
     pub(crate) provinces: Vec<CidProvinceItem>,
     pub(crate) scoped_province_name: Option<String>,

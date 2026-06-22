@@ -5,31 +5,27 @@
 //! 中文注释:
 //! cid 号结构(4 段,连字符分隔,ASCII 大写字母 + 数字):
 //! ```
-//! R5(5) - K3P1C1(5) - N9(9) - D4(4)
-//! 例:LN001 - GCB05    - 944805165 - 2026
+//! R5(5) - 段二(5) - N9(9) - D4(4)
 //! ```
+//! 段二(核心段)按机构码长度分两种布局,靠**段二 index 3** 字符是数字/字母分流:
+//! - A 国家/省部(3 字符码): `码(3) + 盈利位(1,恒 0,数字) + 校验(1, mod-36)`
+//! - B 其他(4 字符码):      `码(4) + M1(1)`,M1 数字=盈利(校验 mod-10)/字母=非盈利(校验 mod-26)
 //!
 //! - R5:5 字符,省代码(2) + 市代码(3)
-//! - K3:3 字符,K1 主体属性(M/Z/N/G/S/F) + T2 机构代码(ZG/ZF/LF/SF/JC/JY/CB/CH/TG)
-//! - P1:1 字符,盈利属性(0/1)
-//! - C1:1 字符,校验位,按原校验算法对 `R5 + K3 + P1 + N9 + D4` 生成
 //! - N9:9 字符,全数字 hash 号
 //! - D4:4 字符,生成年份 YYYY
 //!
-//! 容量分析:同 (主体属性, 省, 市, 机构, year) 5 元组下,n9 是 hash mod 10^9 = 10 亿桶。
-//! 单省最大人口 1.5 亿(15% 填充),撞了由调用方 1000 次重试逃逸,基本不可能用尽。
-//!
-//! cid_number 字节上限唯一权威源 = `primitives::core_const::CID_NUMBER_MAX_BYTES`,
-//! 与链端 `register_cid_institution` 对 cid_number 的 BoundedVec 上限同源,本文件不再本地写死。
+//! 主体属性(K1)已从号码删除,机构类别一律由机构码自身语义派生。
+//! cid_number 字节上限唯一权威源 = `primitives::core_const::CID_NUMBER_MAX_BYTES`。
 
-use crate::number::category::SubjectProperty;
-use crate::number::institution_code::InstitutionCode;
+use crate::number::code::{InstitutionCode, ProfitPolicy};
 use primitives::core_const::CID_NUMBER_MAX_BYTES;
 
-const CHECKSUM_ALPHABET: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const CHECKSUM_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 pub const CID_NUMBER_SEGMENT_COUNT: usize = 4;
 pub const CID_NUMBER_SEGMENT_R5_LEN: usize = 5;
+/// 段二(核心段)长度,两种布局都恒为 5 字符。
 pub const CID_NUMBER_SEGMENT_K3P1C1_LEN: usize = 5;
 pub const CID_NUMBER_SEGMENT_N9_LEN: usize = 9;
 pub const CID_NUMBER_SEGMENT_D4_LEN: usize = 4;
@@ -37,31 +33,51 @@ pub const CID_NUMBER_SEGMENT_D4_LEN: usize = 4;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CidNumberParts {
     pub r5: String,
-    pub k1: String,
-    pub t2: String,
-    pub k3: String,
-    pub p1: String,
-    pub c1: char,
+    /// 机构码(全仓库机构分类唯一真源)。
+    pub institution: InstitutionCode,
+    /// 机构码原文(3 或 4 字符)。
+    pub code: String,
+    /// 盈利属性(3 字符布局恒 false;4 字符布局由 M1 数字/字母解出)。
+    pub profit: bool,
+    /// 校验位(3 字符布局 = mod-36 字符;4 字符布局 = M1)。
+    pub checksum: char,
     pub n9: String,
     pub d4: String,
 }
 
-pub(crate) fn cid_checksum(payload: &str) -> char {
+/// 校验和累加器(不取模,留给上层按 10/26/36 取模)。
+pub(crate) fn checksum_acc(payload: &str) -> usize {
     let mut total: usize = 0;
     for (idx, ch) in payload.chars().enumerate() {
-        let pos = CHECKSUM_ALPHABET.find(ch).unwrap_or(0);
-        total = (total + (idx + 1) * pos) % 36;
+        let pos = CHECKSUM_ALPHABET
+            .iter()
+            .position(|&b| b == ch as u8)
+            .unwrap_or(0);
+        total = total.wrapping_add((idx + 1) * pos);
     }
-    CHECKSUM_ALPHABET.as_bytes()[total] as char
+    total
+}
+
+/// 3 字符布局校验位:mod-36,返回 `0-9A-Z` 单字符。
+pub(crate) fn checksum_char_mod36(payload: &str) -> char {
+    CHECKSUM_ALPHABET[checksum_acc(payload) % 36] as char
+}
+
+/// 4 字符布局 M1:盈利→数字(mod-10),非盈利→字母(mod-26)。
+pub(crate) fn checksum_char_m1(payload: &str, profit: bool) -> char {
+    if profit {
+        (b'0' + (checksum_acc(payload) % 10) as u8) as char
+    } else {
+        (b'A' + (checksum_acc(payload) % 26) as u8) as char
+    }
 }
 
 /// 校验 cid 号字符串格式,通过返回标准化后的字符串(trim + 保持大小写)。
-/// 失败返回静态错误字符串,便于调用方直接透传给 HTTP 响应。
 pub fn validate_cid_number_format(raw: &str) -> Result<String, &'static str> {
     parse_cid_number_parts(raw).map(|_| raw.trim().to_string())
 }
 
-/// 解析并校验新版 cid_number,通过后返回拆分后的协议字段。
+/// 解析并校验 cid_number,通过后返回拆分后的协议字段。
 pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str> {
     let normalized = raw.trim();
     if normalized.is_empty() {
@@ -95,21 +111,7 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
             .chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
     {
-        return Err("cid_number k3p1c1 segment invalid");
-    }
-    let k3p1c1 = segments[1];
-    let k1 = &k3p1c1[0..1];
-    let t2 = &k3p1c1[1..3];
-    let p1 = &k3p1c1[3..4];
-    let c1 = k3p1c1.as_bytes()[4] as char;
-    if SubjectProperty::from_str(k1).is_none() {
-        return Err("cid_number k1 subject_property invalid");
-    }
-    if InstitutionCode::from_str(t2).is_none() {
-        return Err("cid_number t2 institution invalid");
-    }
-    if !matches!(p1, "0" | "1") {
-        return Err("cid_number p1 profit_property invalid");
+        return Err("cid_number core segment invalid");
     }
     if segments[2].len() != CID_NUMBER_SEGMENT_N9_LEN
         || !segments[2].chars().all(|c| c.is_ascii_digit())
@@ -121,20 +123,77 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
     {
         return Err("cid_number date segment invalid");
     }
-    let payload = format!(
-        "{}{}{}{}{}{}",
-        segments[0], k1, t2, p1, segments[2], segments[3]
-    );
-    if cid_checksum(&payload) != c1 {
-        return Err("cid_number checksum invalid");
-    }
+
+    let seg2 = segments[1];
+    let seg2_bytes = seg2.as_bytes();
+    let index3 = seg2_bytes[3] as char;
+
+    let (institution, code, profit, checksum) = if index3.is_ascii_digit() {
+        // A 布局:3 字符码 + 盈利位 + 校验。
+        let code = &seg2[0..3];
+        let profit_char = &seg2[3..4];
+        let checksum = seg2_bytes[4] as char;
+        let institution =
+            InstitutionCode::from_str(code).ok_or("cid_number institution code invalid")?;
+        if !institution.is_three_char() {
+            return Err("cid_number 3-char layout code mismatch");
+        }
+        // 盈利位 0/1,须与机构码盈利策略一致(国家/省部/公立大学非盈利=0;私立大学可变)。
+        let profit = match profit_char {
+            "0" => false,
+            "1" => true,
+            _ => return Err("cid_number 3-char layout profit must be 0/1"),
+        };
+        match institution.profit_policy() {
+            ProfitPolicy::NonProfit if profit => {
+                return Err("cid_number profit conflicts with code policy")
+            }
+            ProfitPolicy::Profit if !profit => {
+                return Err("cid_number profit conflicts with code policy")
+            }
+            _ => {}
+        }
+        let payload = format!(
+            "{}{}{}{}{}",
+            segments[0], code, profit_char, segments[2], segments[3]
+        );
+        if checksum_char_mod36(&payload) != checksum {
+            return Err("cid_number checksum invalid");
+        }
+        (institution, code.to_string(), profit, checksum)
+    } else {
+        // B 布局:4 字符码 + M1。
+        let code = &seg2[0..4];
+        let m1 = seg2_bytes[4] as char;
+        let institution =
+            InstitutionCode::from_str(code).ok_or("cid_number institution code invalid")?;
+        if institution.is_three_char() {
+            return Err("cid_number 4-char layout code mismatch");
+        }
+        let profit = m1.is_ascii_digit();
+        // M1 解出的盈利属性必须与机构码盈利策略一致。
+        match institution.profit_policy() {
+            ProfitPolicy::NonProfit if profit => {
+                return Err("cid_number profit conflicts with code policy")
+            }
+            ProfitPolicy::Profit if !profit => {
+                return Err("cid_number profit conflicts with code policy")
+            }
+            _ => {}
+        }
+        let payload = format!("{}{}{}{}", segments[0], code, segments[2], segments[3]);
+        if checksum_char_m1(&payload, profit) != m1 {
+            return Err("cid_number checksum invalid");
+        }
+        (institution, code.to_string(), profit, m1)
+    };
+
     Ok(CidNumberParts {
         r5: segments[0].to_string(),
-        k1: k1.to_string(),
-        t2: t2.to_string(),
-        k3: format!("{k1}{t2}"),
-        p1: p1.to_string(),
-        c1,
+        institution,
+        code,
+        profit,
+        checksum,
         n9: segments[2].to_string(),
         d4: segments[3].to_string(),
     })
@@ -143,16 +202,82 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::number::generator::{generate_cid_number, GenerateCidInput};
+
+    fn gen(institution: &str, p1: &str, province: &str, city: &str) -> String {
+        generate_cid_number(GenerateCidInput {
+            account_pubkey: "0xabcd",
+            p1,
+            province_name: province,
+            city_name: city,
+            institution,
+        })
+        .expect("cid should generate")
+    }
 
     #[test]
-    fn accepts_valid_format() {
-        let r = validate_cid_number_format("LN001-GCB05-944805165-2026");
-        assert_eq!(r, Ok("LN001-GCB05-944805165-2026".to_string()));
+    fn roundtrip_three_char_layout() {
+        // 国储会:3 字符码 NRC,非盈利,盈利位 0。
+        let code = gen("NRC", "0", "广东省", "荔湾市");
+        let parts = parse_cid_number_parts(&code).expect("must parse");
+        assert_eq!(parts.institution, InstitutionCode::Nrc);
+        assert_eq!(parts.code, "NRC");
+        assert!(!parts.profit);
+        assert!(validate_cid_number_format(&code).is_ok());
+    }
+
+    #[test]
+    fn roundtrip_four_char_profit() {
+        // 股权公司:4 字符码 SFGQ,固定盈利 → M1 数字。
+        let code = gen("SFGQ", "1", "广东省", "荔湾市");
+        let parts = parse_cid_number_parts(&code).expect("must parse");
+        assert_eq!(parts.institution, InstitutionCode::Sfgq);
+        assert!(parts.profit);
+        assert!(parts.checksum.is_ascii_digit());
+    }
+
+    #[test]
+    fn roundtrip_four_char_nonprofit() {
+        // 市政府:4 字符码 CGOV,非盈利 → M1 字母。
+        let code = gen("CGOV", "0", "广东省", "荔湾市");
+        let parts = parse_cid_number_parts(&code).expect("must parse");
+        assert_eq!(parts.institution, InstitutionCode::Cgov);
+        assert!(!parts.profit);
+        assert!(parts.checksum.is_ascii_uppercase());
+    }
+
+    #[test]
+    fn all_codes_roundtrip_generate_parse() {
+        // 遍历全部 81 码(除不发号的 PMUL):生成→解析必须还原同一机构码且格式校验通过。
+        // 确定性覆盖三/四字符两种布局、盈利数字/字母 M1、3 字符盈利位与各档校验。
+        for code in InstitutionCode::ALL {
+            if code == InstitutionCode::Pmul {
+                continue;
+            }
+            let number = generate_cid_number(GenerateCidInput {
+                account_pubkey: "0xfeed",
+                // 仅 Variable/InheritParent 策略读取;固定策略忽略。取 1 让可变码盈利一致。
+                p1: "1",
+                province_name: "广东省",
+                city_name: "荔湾市",
+                institution: code.as_code(),
+            })
+            .unwrap_or_else(|e| panic!("{} should generate: {e}", code.as_code()));
+            let parts = parse_cid_number_parts(&number)
+                .unwrap_or_else(|e| panic!("{} should parse: {e}", code.as_code()));
+            assert_eq!(
+                parts.institution,
+                code,
+                "roundtrip code mismatch for {}",
+                code.as_code()
+            );
+            assert!(validate_cid_number_format(&number).is_ok());
+        }
     }
 
     #[test]
     fn rejects_bad_segment_count() {
-        assert!(validate_cid_number_format("LN001-GCB05-944805165").is_err());
+        assert!(validate_cid_number_format("GD001-CGOVX-944805165").is_err());
     }
 
     #[test]
@@ -162,39 +287,30 @@ mod tests {
     }
 
     #[test]
-    fn rejects_lowercase_subject_property() {
-        assert!(validate_cid_number_format("LN001-gCB05-944805165-2026").is_err());
+    fn rejects_lowercase() {
+        let code = gen("CGOV", "0", "广东省", "荔湾市");
+        let lowered = code.to_lowercase();
+        assert!(validate_cid_number_format(&lowered).is_err());
     }
 
     #[test]
-    fn trims_whitespace() {
-        assert_eq!(
-            validate_cid_number_format("  LN001-GCB05-944805165-2026  "),
-            Ok("LN001-GCB05-944805165-2026".to_string())
-        );
-    }
-
-    #[test]
-    fn rejects_extra_segment_format() {
-        assert!(validate_cid_number_format("LN001-GCB05-944805165-2026-EXTRA").is_err());
-    }
-
-    #[test]
-    fn rejects_legacy_five_segment_format() {
-        // 旧版 5 段号(A3-R5-T2P1C1-N9-D4)必须校验失败,供 purge-legacy-cid 判定旧号。
+    fn rejects_legacy_format() {
+        // 旧版号(含 K1 主体属性段)必须校验失败。
+        assert!(validate_cid_number_format("LN001-GCB05-944805165-2026").is_err());
         assert!(validate_cid_number_format("GFR-AH001-ZF0X-898100720-2026").is_err());
-        // 新版 4 段号必须通过。
-        assert!(validate_cid_number_format("LN001-GCB05-944805165-2026").is_ok());
     }
 
     #[test]
-    fn parses_protocol_parts() {
-        let parts = parse_cid_number_parts("LN001-GCB05-944805165-2026").unwrap();
-        assert_eq!(parts.r5, "LN001");
-        assert_eq!(parts.k1, "G");
-        assert_eq!(parts.t2, "CB");
-        assert_eq!(parts.k3, "GCB");
-        assert_eq!(parts.p1, "0");
-        assert_eq!(parts.c1, '5');
+    fn rejects_tampered_checksum() {
+        let code = gen("NRC", "0", "广东省", "荔湾市");
+        // 改最后一个段二字符(校验位)使其失配。
+        let chars: Vec<char> = code.chars().collect();
+        // 段二在第一个 '-' 之后;找到第二段最后一位。
+        let parts: Vec<&str> = code.split('-').collect();
+        let seg2 = parts[1];
+        let bad_checksum = if seg2.ends_with('0') { '1' } else { '0' };
+        let tampered = format!("{}-{}{}-{}-{}", parts[0], &seg2[..4], bad_checksum, parts[2], parts[3]);
+        let _ = chars; // silence
+        assert!(validate_cid_number_format(&tampered).is_err());
     }
 }

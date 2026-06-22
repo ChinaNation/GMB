@@ -77,7 +77,6 @@ async fn create_institution_inner(
         );
     }
     let grant_payload = serde_json::json!({
-        "subject_property": input.subject_property.clone(),
         "p1": input.p1.clone(),
         "province_name": input.province_name.clone(),
         "city_name": input.city_name.clone(),
@@ -116,70 +115,63 @@ async fn create_institution_inner(
         }
         None => None,
     };
-    // 中文注释:私权入口一旦传入 private_type,主体属性、机构码、P1 与法人资格全部由后端规则锁定,
-    // 不信任前端同时提交的旧 subject_property / institution / p1。
-    let subject_property = private_rule
-        .map(|rule| rule.subject_property.to_string())
-        .unwrap_or_else(|| input.subject_property.trim().to_string());
+    // 中文注释:私权入口一旦传入 private_type,机构码/P1/法人资格由后端规则锁定,不信任前端旧字段。
     let institution_code = private_rule
         .map(|rule| rule.institution_code.to_string())
         .unwrap_or_else(|| input.institution.trim().to_string());
+    // 主体属性概念已删除:机构类别一律由机构码派生(K1 已从 cid 号删除)。
+    let institution = crate::number::InstitutionCode::from_str(&institution_code);
     let p1 = private_rule
         .map(|rule| rule.p1.to_string())
         .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string());
-    if subject_property.is_empty() || institution_code.is_empty() {
+    if institution.is_none() || institution_code.is_empty() {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "subject_property and institution are required",
+            "institution is required",
         );
     }
-    let is_private = matches!(subject_property.as_str(), "S" | "F");
-    let is_education_school = institution_code == "JY";
+    // 私权机构 = 私法人或非法人(由机构码判定)。
+    let is_private = institution
+        .map(|c| c.is_private_legal() || c.is_unincorporated())
+        .unwrap_or(false);
+    // 教育机构(公私大学/学校)走通用路径、免 private_type;基础教育学校(GSCH/SFSC,初/小/中)
+    // 需要 education_type 级别,大学(GUN/SUN)不需要。
+    let is_education_institution = institution
+        .map(|c| c.is_education_institution())
+        .unwrap_or(false);
+    let requires_education_level = institution
+        .map(|c| c.requires_education_level())
+        .unwrap_or(false);
     let education_type = input
         .education_type
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_string);
-    let education_type = if is_education_school {
-        match subject_property.as_str() {
-            "G" | "S" => {
-                let Some(value) = education_type else {
-                    return api_error(StatusCode::BAD_REQUEST, 1001, "必须选择教育机构类型");
-                };
-                if !is_education_school_type(value.as_str()) {
-                    return api_error(
-                        StatusCode::BAD_REQUEST,
-                        1001,
-                        "教育机构类型仅允许初学/小学/中学/大学",
-                    );
-                }
-                Some(value)
-            }
-            "F" => {
-                if education_type.is_some() {
-                    return api_error(
-                        StatusCode::BAD_REQUEST,
-                        1001,
-                        "F+JY 分支机构不使用教育阶段分类",
-                    );
-                }
-                None
-            }
-            _ => None,
+    let education_type = if requires_education_level {
+        let Some(value) = education_type else {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "必须选择教育级别(初学/小学/中学)");
+        };
+        if !is_education_school_type(value.as_str()) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "教育级别仅允许初学/小学/中学",
+            );
         }
+        Some(value)
     } else {
         if education_type.is_some() {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "education_type 仅允许教育机构使用",
+                "education_type 仅基础教育学校(初学/小学/中学)使用",
             );
         }
         None
     };
-    if private_rule.is_none() && is_private && !is_education_school && institution_code != "ZG" {
+    if private_rule.is_none() && is_private && !is_education_institution && institution_code != "UNIN" {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -244,7 +236,6 @@ async fn create_institution_inner(
         return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
     }
     let category = match derive_category(
-        &subject_property,
         &institution_code,
         cid_full_name.as_deref().unwrap_or(""),
     ) {
@@ -253,7 +244,7 @@ async fn create_institution_inner(
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "subject_property/institution combination is not a valid institution",
+                "institution is not a valid institution",
             )
         }
     };
@@ -264,19 +255,28 @@ async fn create_institution_inner(
             "公安局由系统按行政区划自动生成,不得手动创建",
         );
     }
-    // 中文注释:手动公权机构开放 ZF/LF/SF/JC 四类(教育委员会 JY 走教育 tab 学校流程);
-    // 公民储备委员会/省储行不开放手动创建,创世目录已确定性生成。
-    if matches!(category, InstitutionCategory::GovInstitution)
-        && !is_education_school
-        && !matches!(institution_code.as_str(), "ZF" | "LF" | "SF" | "JC")
-    {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "手动公权机构仅允许 ZF/LF/SF/JC,公民储备委员会/省储行由系统生成",
-        );
+    // 中文注释:手动公权机构按管理员注册局角色 + 机构层级开放:
+    // 联邦注册局管理员 → 国家/省/部级(3 字符码);市注册局管理员 → 市/镇级(4 字符码)。
+    // 公权教育机构(大学/学校)走教育流程,不受此限。
+    if matches!(category, InstitutionCategory::GovInstitution) && !is_education_institution {
+        let needs_federal = institution.map(|c| c.is_three_char()).unwrap_or(false);
+        let is_federal_admin = scope.locked_city_name.is_none();
+        if needs_federal && !is_federal_admin {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "国家/省/部级公权机构由联邦注册局管理员创建",
+            );
+        }
+        if !needs_federal && is_federal_admin {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "市/镇级公权机构由市注册局管理员创建",
+            );
+        }
     }
-    if matches!(subject_property.as_str(), "S" | "F") && p1 != "0" && p1 != "1" {
+    if is_private && p1 != "0" && p1 != "1" {
         return api_error(StatusCode::BAD_REQUEST, 1001, "P1 非法(仅 0/1)");
     }
     // ── 非法人挂靠规则:个体经营/无限合伙是独立非法人,教育分校等从属非法人才需要所属法人 ──
@@ -287,13 +287,13 @@ async fn create_institution_inner(
         .filter(|v| !v.is_empty())
     {
         Some(raw) => {
-            if !uninorg::requires_parent(subject_property.as_str(), institution_code.as_str()) {
+            if !uninorg::requires_parent(institution_code.as_str()) {
                 return api_error(StatusCode::BAD_REQUEST, 1001, "该主体类型不接受所属法人");
             }
             Some(raw.to_string())
         }
         None => {
-            if uninorg::requires_parent(subject_property.as_str(), institution_code.as_str()) {
+            if uninorg::requires_parent(institution_code.as_str()) {
                 return api_error(
                     StatusCode::BAD_REQUEST,
                     1001,
@@ -314,7 +314,7 @@ async fn create_institution_inner(
         }) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在");
         };
-        if !uninorg::can_attach_to_parent_subject(parent.subject_property.as_str()) {
+        if !uninorg::can_attach_to_parent(parent.institution_code.as_str()) {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
@@ -324,15 +324,10 @@ async fn create_institution_inner(
         if let Some(msg) = uninorg::code_consistency_violation(
             institution_code.as_str(),
             parent.institution_code.as_str(),
-            parent.org_code.as_deref(),
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        let rule = uninorg::parent_locality_rule(
-            parent.subject_property.as_str(),
-            parent.institution_code.as_str(),
-            parent.org_code.as_deref(),
-        );
+        let rule = uninorg::parent_locality_rule(parent.institution_code.as_str());
         if let Some(msg) = uninorg::locality_violation(
             rule,
             &parent.province_name,
@@ -343,7 +338,7 @@ async fn create_institution_inner(
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
         // 盈利属性附属于所属法人:前端推导值必须与父级一致,防客户端漂移
-        let expected_p1 = uninorg::inherited_p1(parent.subject_property.as_str(), &parent.p1);
+        let expected_p1 = uninorg::inherited_p1(parent.institution_code.as_str(), &parent.p1);
         if p1 != expected_p1 {
             return api_error(
                 StatusCode::BAD_REQUEST,
@@ -371,9 +366,7 @@ async fn create_institution_inner(
         Err(e) => return service_error_to_response(e),
     };
     let legal_rep_scope = resolve_legal_representative_scope_for_codes(
-        subject_property.as_str(),
         institution_code.as_str(),
-        None,
         education_type.as_deref(),
         province_code_for_legal_rep,
         city_code_for_legal_rep,
@@ -412,7 +405,6 @@ async fn create_institution_inner(
         let random_account = Uuid::new_v4().to_string();
         let cid = match generate_cid_number(GenerateCidInput {
             account_pubkey: random_account.as_str(),
-            subject_property: subject_property.as_str(),
             p1: p1.as_str(),
             province_name: province.as_str(),
             city_name: city.as_str(),
@@ -440,7 +432,6 @@ async fn create_institution_inner(
             cid_short_name: cid_full_name.clone(),
             status: "ACTIVE".to_string(),
             category,
-            subject_property: subject_property.clone(),
             p1: p1.clone(),
             province_name: province.clone(),
             city_name: city.clone(),
@@ -449,7 +440,6 @@ async fn create_institution_inner(
             city_code: extract_city_code(&cid),
             town_code: String::new(),
             institution_code: institution_code.clone(),
-            org_code: None,
             education_type: education_type.clone(),
             private_type: private_rule.map(|rule| rule.private_type.as_code().to_string()),
             partnership_kind: private_rule
@@ -479,7 +469,6 @@ async fn create_institution_inner(
             serde_json::json!({
                 "cid_number": cid.clone(),
                 "cid_full_name": cid_full_name.clone().unwrap_or_default(),
-                "subject_property": subject_property.clone(),
                 "institution": institution_code.clone(),
                 "education_type": inst.education_type.clone(),
                 "category": category_text_for_audit(category),

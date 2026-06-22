@@ -40,14 +40,15 @@ pub(crate) async fn check_cid_full_name(
     if name.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "name is required");
     }
-    let subject_property = params
-        .subject_property
+    // 机构类别由机构码派生(主体属性已删除):公法人(公权机构)走"同市同名"查重。
+    let is_public_legal = params
+        .institution
         .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_string();
+        .map(str::trim)
+        .and_then(crate::number::InstitutionCode::from_str)
+        .map_or(false, |c| c.is_public_legal());
     let city = params.city_name.as_deref().unwrap_or("").trim().to_string();
-    let exists = if subject_property == "G" {
+    let exists = if is_public_legal {
         if city.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "公权机构查重需要 city 参数");
         }
@@ -90,7 +91,8 @@ pub(crate) async fn check_cid_full_name(
 #[derive(Debug, serde::Deserialize)]
 pub struct CheckNameQuery {
     pub name: String,
-    pub subject_property: Option<String>,
+    /// 机构码:公法人机构走"同市同名"查重。
+    pub institution: Option<String>,
     pub city_name: Option<String>,
 }
 
@@ -256,10 +258,7 @@ pub(crate) async fn update_institution(
             .unwrap_or("")
             .trim()
             .to_string();
-        if !uninorg::requires_parent(
-            existing.subject_property.as_str(),
-            existing.institution_code.as_str(),
-        ) {
+        if !uninorg::requires_parent(existing.institution_code.as_str()) {
             return api_error(StatusCode::BAD_REQUEST, 1001, "该主体类型不接受所属法人");
         }
         if raw.is_empty() {
@@ -274,7 +273,7 @@ pub(crate) async fn update_institution(
         }) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在");
         };
-        if !uninorg::can_attach_to_parent_subject(target.subject_property.as_str()) {
+        if !uninorg::can_attach_to_parent(target.institution_code.as_str()) {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
@@ -286,15 +285,10 @@ pub(crate) async fn update_institution(
         if let Some(msg) = uninorg::code_consistency_violation(
             existing.institution_code.as_str(),
             target.institution_code.as_str(),
-            target.org_code.as_deref(),
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        let rule = uninorg::parent_locality_rule(
-            target.subject_property.as_str(),
-            target.institution_code.as_str(),
-            target.org_code.as_deref(),
-        );
+        let rule = uninorg::parent_locality_rule(target.institution_code.as_str());
         if let Some(msg) = uninorg::locality_violation(
             rule,
             &target.province_name,
@@ -304,7 +298,7 @@ pub(crate) async fn update_institution(
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        let expected_p1 = uninorg::inherited_p1(target.subject_property.as_str(), &target.p1);
+        let expected_p1 = uninorg::inherited_p1(target.institution_code.as_str(), &target.p1);
         if existing.p1 != expected_p1 {
             return api_error(
                 StatusCode::BAD_REQUEST,
@@ -394,8 +388,6 @@ pub(crate) async fn update_institution(
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct SearchParentsQuery {
     pub q: Option<String>,
-    /// 非法人(F)的机构代码:JY=教育分校(只搜本市学校本部),其它按从属非法人规则搜索。
-    pub f_institution: Option<String>,
     /// 非法人的落位省/市,用于地域预过滤(规则同 subjects/uninorg::parent_locality_rule)。
     pub province_name: Option<String>,
     pub city_name: Option<String>,
@@ -424,7 +416,6 @@ pub(crate) async fn search_parent_institutions(
         })
         .into_response();
     }
-    let f_is_branch_school = query.f_institution.as_deref().map(str::trim) == Some("JY");
     let province = query
         .province_name
         .as_deref()
@@ -452,40 +443,41 @@ pub(crate) async fn search_parent_institutions(
         Some(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "parent_property 仅 S/G"),
     };
     let result = state.db.with_client(move |conn| {
-        // 中文注释:候选父级按非法人规则预过滤(与 uninorg::parent_locality_rule /
-        // code_consistency_violation 同源):
-        //   分校(F+JY) → 本市学校本部;
-        //   其它 F → S 非学校(全国) ∪ G 非学校(手动/CITY_/TOWN_ 同市、PROVINCE_ 同省、
-        //            NATIONAL_/MINISTRY_/FEDERAL_ 不限、未知前缀同市)。
-        let candidate_clause = if f_is_branch_school {
-            "s.institution_code = 'JY' AND s.org_code IS NULL
-             AND s.subject_property IN ('S', 'G')
-             AND s.parent_cid_number IS NULL
-             AND (
-                  s.education_type IS NULL
-                  OR s.education_type IN ('EARLY_SCHOOL', 'PRIMARY_SCHOOL', 'SECONDARY_SCHOOL', 'UNIVERSITY')
-             )
-             AND s.province_name = $2 AND s.city_name = $3"
-        } else {
-            "NOT (s.institution_code = 'JY' AND s.org_code IS NULL)
-             AND (
-                  (s.subject_property = 'S' AND $4::text IS DISTINCT FROM 'G')
-                  OR (
-                       s.subject_property = 'G' AND $4::text IS DISTINCT FROM 'S'
-                       AND (
-                            split_part(COALESCE(s.org_code, ''), '_', 1)
-                                IN ('NATIONAL', 'MINISTRY', 'FEDERAL')
-                            OR (split_part(COALESCE(s.org_code, ''), '_', 1) = 'PROVINCE'
-                                AND s.province_name = $2)
-                            OR (split_part(COALESCE(s.org_code, ''), '_', 1)
-                                    NOT IN ('NATIONAL', 'MINISTRY', 'FEDERAL', 'PROVINCE')
-                                AND s.province_name = $2 AND s.city_name = $3)
-                       )
-                  )
-             )"
-        };
+        // 中文注释:候选父级按非法人规则预过滤(与 uninorg::parent_locality_rule 同源)。
+        // UNIN 是通用从属,可挂任意法人父级(私法人 S / 公法人 G)。地域规则:学校/大学父级 → 同市,
+        // 非学校私法人 → 全国,非学校公法人 → 按机构码行政层级。$4 = parent_property 过滤(S/G)。
+        // 主体属性已删除:私法人由机构码集合判定,公法人由 category 判定,层级由 institution_code 集合判定。
+        let candidate_clause = "(
+                  (s.institution_code IN ('GUN', 'SUN', 'GSCH', 'SFSC')
+                   AND s.province_name = $2 AND s.city_name = $3
+                   AND ((s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'SFSC')
+                         AND $4::text IS DISTINCT FROM 'G')
+                        OR (s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')
+                            AND $4::text IS DISTINCT FROM 'S')))
+                  OR (s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'SFSC')
+                      AND s.institution_code NOT IN ('GUN', 'SUN', 'GSCH', 'SFSC')
+                      AND $4::text IS DISTINCT FROM 'G')
+                  OR (s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')
+                      AND s.institution_code NOT IN ('GUN', 'SUN', 'GSCH', 'SFSC')
+                      AND $4::text IS DISTINCT FROM 'S'
+                      AND (
+                           s.institution_code IN (
+                               'PRS','FSC','FIB','FSS','FPR','FRG','MFA','MDF','MHS','MCW','MHU',
+                               'MAG','MCM','MFT','MEN','MTR','NLG','NJD','NSP','FAC','FAU','FIV',
+                               'NED','NRC','NSN','NRP')
+                           OR (s.institution_code IN (
+                                   'PGV','PLG','PJD','PSP','PRC','PRB','PDF','PHS','PCW','PHU','PAG',
+                                   'PCM','PFT','PEN','PTR','PSN','PRP')
+                               AND s.province_name = $2)
+                           OR (s.institution_code IN (
+                                   'CGOV','CLEG','CSUP','CJUD','CEDU','CSLF','CDEF','CHSC','CCWF',
+                                   'CHUD','CAGR','CCOM','CFIN','CENR','CTRN','CREG','CPOL',
+                                   'TGOV','TCWF','THUD','TAGR','TFIN','TDEF','THSC','TCOM','TENR','TTRN')
+                               AND s.province_name = $2 AND s.city_name = $3)
+                      ))
+             )";
         let sql = format!(
-            "SELECT s.cid_number, s.name, s.subject_property, s.private_type, s.partnership_kind, s.category,
+            "SELECT s.cid_number, s.name, s.private_type, s.partnership_kind, s.category,
                     s.p1, s.province_name, s.city_name, COALESCE(s.town_name, '')
              FROM subjects s
              WHERE s.kind IN ('PUBLIC', 'PRIVATE')
@@ -497,15 +489,12 @@ pub(crate) async fn search_parent_institutions(
              ORDER BY s.name ASC, s.cid_number ASC
              LIMIT 20"
         );
-        let rows = if f_is_branch_school {
-            conn.query(sql.as_str(), &[&q, &province, &city])
-        } else {
-            conn.query(sql.as_str(), &[&q, &province, &city, &parent_property])
-        }
-        .map_err(|e| format!("query parent institutions failed: {e}"))?;
+        let rows = conn
+            .query(sql.as_str(), &[&q, &province, &city, &parent_property])
+            .map_err(|e| format!("query parent institutions failed: {e}"))?;
         let mut output = Vec::with_capacity(rows.len());
         for row in rows {
-            let category_text: String = row.get(5);
+            let category_text: String = row.get(4);
             let Some(category) = crate::institution_category_from_text(category_text.as_str())
             else {
                 continue;
@@ -513,14 +502,13 @@ pub(crate) async fn search_parent_institutions(
             output.push(ParentInstitutionRow {
                 cid_number: row.get(0),
                 cid_full_name: row.get(1),
-                subject_property: row.get(2),
-                private_type: row.get(3),
-                partnership_kind: row.get(4),
+                private_type: row.get(2),
+                partnership_kind: row.get(3),
                 category,
-                p1: row.get(6),
-                province_name: row.get(7),
-                city_name: row.get(8),
-                town_name: row.get(9),
+                p1: row.get(5),
+                province_name: row.get(6),
+                city_name: row.get(7),
+                town_name: row.get(8),
             });
         }
         Ok(output)
@@ -587,7 +575,7 @@ pub(crate) async fn get_federal_registry(
     if let Err(resp) = require_admin_any(&state, &headers) {
         return resp;
     }
-    // 联邦注册局 cid 来自创世常量(china_zf),按 cid_number 直接定位,绕过 org_code 与 scope。
+    // 联邦注册局 cid 来自创世常量(china_zf),按 cid_number 直接定位,绕过 scope。
     let Some(cid_number) = crate::gov::service::federal_registry_cid_number() else {
         return api_error(
             StatusCode::NOT_FOUND,

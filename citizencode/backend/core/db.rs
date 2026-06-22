@@ -374,7 +374,6 @@ impl Db {
                 cid_short_name TEXT,
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
                 category TEXT,
-                subject_property TEXT,
                 p1 TEXT,
                 province_name TEXT,
                 city_name TEXT,
@@ -383,7 +382,6 @@ impl Db {
                 city_code TEXT,
                 town_code TEXT,
                 institution_code TEXT,
-                org_code TEXT,
                 education_type TEXT,
                 private_type TEXT,
                 partnership_kind TEXT,
@@ -434,7 +432,6 @@ impl Db {
 		                city_code TEXT,
 		                town_code TEXT,
 		                institution_code TEXT NOT NULL,
-		                org_code TEXT,
                 source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('GENERATED', 'MANUAL')),
                 home_p TEXT,
                 home_c TEXT,
@@ -449,7 +446,6 @@ impl Db {
                 private_type TEXT NOT NULL CHECK (private_type IN ('SOLE', 'PARTNERSHIP', 'COMPANY', 'CORPORATION', 'WELFARE', 'ASSOCIATION')),
                 partnership_kind TEXT CHECK (partnership_kind IN ('GENERAL', 'LIMITED')),
                 has_legal_personality BOOLEAN NOT NULL,
-                subject_property TEXT NOT NULL CHECK (subject_property IN ('S', 'F')),
                 p1 TEXT NOT NULL CHECK (p1 IN ('0', '1')),
                 parent_cid_number TEXT,
                 PRIMARY KEY (province_code, cid_number)
@@ -565,15 +561,14 @@ impl Db {
         conn.batch_execute(
             "UPDATE subjects
              SET education_type = CASE
-                WHEN org_code = 'NATIONAL_EDU' THEN 'NATIONAL_CITIZEN_EDU_COMMITTEE'
-                WHEN org_code = 'CITY_EDU' THEN 'CITY_CITIZEN_EDU_COMMITTEE'
+                WHEN institution_code = 'NED' THEN 'NATIONAL_CITIZEN_EDU_COMMITTEE'
+                WHEN institution_code = 'CEDU' THEN 'CITY_CITIZEN_EDU_COMMITTEE'
                 ELSE education_type
              END
-             WHERE institution_code = 'JY'
-               AND org_code IN ('NATIONAL_EDU', 'CITY_EDU')
+             WHERE institution_code IN ('NED', 'CEDU')
                AND education_type IS DISTINCT FROM CASE
-                    WHEN org_code = 'NATIONAL_EDU' THEN 'NATIONAL_CITIZEN_EDU_COMMITTEE'
-                    WHEN org_code = 'CITY_EDU' THEN 'CITY_CITIZEN_EDU_COMMITTEE'
+                    WHEN institution_code = 'NED' THEN 'NATIONAL_CITIZEN_EDU_COMMITTEE'
+                    WHEN institution_code = 'CEDU' THEN 'CITY_CITIZEN_EDU_COMMITTEE'
                     ELSE education_type
                END;",
         )
@@ -611,8 +606,6 @@ impl Db {
                 ON citizens (birth_province_code, birth_city_code, birth_town_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_gov_city
                 ON gov (province_code, city_code, institution_code);
-             CREATE INDEX IF NOT EXISTS idx_gov_org
-                ON gov (province_code, org_code);
              CREATE INDEX IF NOT EXISTS idx_private_city
                 ON private (province_code, city_code, private_type, code);
              CREATE INDEX IF NOT EXISTS idx_accounts_cid
@@ -694,7 +687,6 @@ impl Db {
             "legal_rep_photo_name",
             "legal_rep_photo_mime",
             "legal_rep_photo_size",
-            "subject_property",
             "private_type",
             "partnership_kind",
             "has_legal_personality",
@@ -702,7 +694,6 @@ impl Db {
         ] {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
-        Self::ensure_column_state(conn, "private", "subject_property", true)?;
         for column in ["private_type", "partnership_kind", "has_legal_personality"] {
             Self::ensure_column_state(conn, "private", column, true)?;
         }

@@ -42,7 +42,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {
     assert_module_spec(&SPEC);
-    debug_assert_eq!(PROFILE.identity_code(), "GT");
+    debug_assert_eq!(PROFILE.identity_code(), "SFGT");
     debug_assert_eq!(PROFILE.responsible_role, ParticipantRole::ResponsiblePerson);
     debug_assert!(!PROFILE.has_legal_personality);
     debug_assert!(!PROFILE.liability_description.is_empty());
@@ -53,7 +53,7 @@ fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {
 
 impl SoleProfile {
     fn identity_code(&self) -> &'static str {
-        "GT"
+        "SFGT"
     }
 }
 

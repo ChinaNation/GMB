@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 use crate::number::{
-    classify, validate_cid_number_format, InstitutionCategory, InstitutionCode, SubjectProperty,
+    classify, validate_cid_number_format, AdminLevel, InstitutionCategory, InstitutionCode,
 };
 use crate::subjects::model::{Institution, InstitutionAccount};
 use crate::subjects::MultisigChainStatus;
@@ -105,48 +105,47 @@ fn local_public_scope(province_code: &str, city_code: &str) -> LegalRepresentati
 }
 
 fn public_org_scope(
-    org_code: Option<&str>,
+    institution_code: &str,
     province_code: &str,
     city_code: &str,
 ) -> LegalRepresentativeCitizenScope {
-    match org_code.map(str::trim).filter(|v| !v.is_empty()) {
-        Some(code)
-            if code.starts_with("NATIONAL_")
-                || code.starts_with("MINISTRY_")
-                || code.starts_with("FEDERAL_") =>
-        {
-            LegalRepresentativeCitizenScope::Nationwide
-        }
-        Some(code) if code.starts_with("PROVINCE_") => LegalRepresentativeCitizenScope::Province {
+    match InstitutionCode::from_str(institution_code).and_then(|c| c.admin_level()) {
+        Some(AdminLevel::National) => LegalRepresentativeCitizenScope::Nationwide,
+        Some(AdminLevel::Province) => LegalRepresentativeCitizenScope::Province {
             province_code: province_code.trim().to_string(),
         },
-        // 手动公权机构、CITY_/TOWN_ 公权机构以及未知前缀都按落位省市收口;若没有市码则按省级处理。
-        _ => local_public_scope(province_code, city_code),
+        // 市级、镇级、无层级公权机构都按落位省市收口;若没有市码则按省级处理。
+        Some(AdminLevel::City) | Some(AdminLevel::Town) | None => {
+            local_public_scope(province_code, city_code)
+        }
     }
 }
 
 pub fn resolve_legal_representative_scope_for_codes(
-    subject_property: &str,
     institution_code: &str,
-    org_code: Option<&str>,
     _education_type: Option<&str>,
     province_code: &str,
     city_code: &str,
     parent: Option<&Institution>,
 ) -> LegalRepresentativeCitizenScope {
-    if subject_property == "G" {
-        return public_org_scope(org_code, province_code, city_code);
+    let code = crate::number::InstitutionCode::from_str(institution_code);
+    let is_public_legal = code.map_or(false, |c| c.is_public_legal());
+    let is_unincorporated = code.map_or(false, |c| c.is_unincorporated());
+    if is_public_legal {
+        return public_org_scope(institution_code, province_code, city_code);
     }
 
     let parent_is_public_legal_person = parent
-        .map(|parent| parent.subject_property.as_str() == "G")
+        .map(|parent| {
+            crate::number::InstitutionCode::from_str(parent.institution_code.as_str())
+                .map_or(false, |c| c.is_public_legal())
+        })
         .unwrap_or(false);
-    if subject_property == "F" && parent_is_public_legal_person {
+    if is_unincorporated && parent_is_public_legal_person {
         return local_public_scope(province_code, city_code);
     }
 
     // 私法人、私法人学校、挂靠私法人的非法人学校/机构都允许全国正常公民担任法定代表人。
-    let _ = institution_code;
     LegalRepresentativeCitizenScope::Nationwide
 }
 
@@ -155,9 +154,7 @@ pub fn resolve_legal_representative_scope_for_institution(
     parent: Option<&Institution>,
 ) -> LegalRepresentativeCitizenScope {
     resolve_legal_representative_scope_for_codes(
-        inst.subject_property.as_str(),
         inst.institution_code.as_str(),
-        inst.org_code.as_deref(),
         inst.education_type.as_deref(),
         inst.province_code.as_str(),
         inst.city_code.as_str(),
@@ -179,19 +176,16 @@ pub fn can_delete_account(account: &InstitutionAccount) -> bool {
         )
 }
 
-pub fn default_account_names_for_codes(
-    institution_code: &str,
-    org_code: Option<&str>,
-) -> &'static [&'static str] {
-    match (institution_code, org_code.unwrap_or("")) {
-        ("CB", "NATIONAL_RESERVE") => NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES,
-        ("CH", "PROVINCE_RESERVE_BANK") => PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES,
+pub fn default_account_names_for_codes(institution_code: &str) -> &'static [&'static str] {
+    match institution_code {
+        "NRC" => NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES,
+        "PRB" => PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES,
         _ => COMMON_DEFAULT_ACCOUNT_NAMES,
     }
 }
 
 pub fn default_account_names_for_institution(inst: &Institution) -> &'static [&'static str] {
-    default_account_names_for_codes(inst.institution_code.as_str(), inst.org_code.as_deref())
+    default_account_names_for_codes(inst.institution_code.as_str())
 }
 
 /// 机构 / 账户 service 层错误。
@@ -309,18 +303,16 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
     Ok(trimmed.to_string())
 }
 
-/// 判定机构分类。subject_property + institution_code + cid_full_name → InstitutionCategory。
+/// 判定机构分类。机构码 + cid_full_name → InstitutionCategory。
 ///
-/// 解析失败(subject_property 或 institution_code 不识别)或不属于任何机构分类(公民类)返回 None,
-/// 调用方应当直接拒绝请求。
+/// 主体属性由机构码派生(K1 已从号码删除)。机构码不识别或不属于任何机构分类(个人/个人多签)
+/// 返回 None,调用方应当直接拒绝请求。
 pub fn derive_category(
-    subject_property: &str,
     institution_code: &str,
     cid_full_name: &str,
 ) -> Option<InstitutionCategory> {
-    let subject_property = SubjectProperty::from_str(subject_property)?;
     let code = InstitutionCode::from_str(institution_code)?;
-    classify(subject_property, code, cid_full_name)
+    classify(code, cid_full_name)
 }
 
 /// 按机构类型构造默认未上链账户。
@@ -355,12 +347,11 @@ pub fn build_default_accounts_for_codes(
     cid_number: &str,
     actor: &str,
     institution_code: &str,
-    org_code: Option<&str>,
 ) -> Vec<InstitutionAccount> {
     build_default_accounts_for_names(
         cid_number,
         actor,
-        default_account_names_for_codes(institution_code, org_code),
+        default_account_names_for_codes(institution_code),
     )
 }
 
@@ -390,19 +381,22 @@ mod tests {
 
     #[test]
     fn derive_category_rules() {
+        // 主体属性由机构码派生;公安局由专用码 CPOL 判定。
         assert_eq!(
-            derive_category("G", "ZF", "广州市公安局"),
+            derive_category("CPOL", "广州市公安局"),
             Some(InstitutionCategory::PublicSecurity)
         );
         assert_eq!(
-            derive_category("G", "ZF", "别的机构"),
+            derive_category("CGOV", "别的机构"),
             Some(InstitutionCategory::GovInstitution)
         );
         assert_eq!(
-            derive_category("S", "GQ", "某公司"),
+            derive_category("SFGQ", "某公司"),
             Some(InstitutionCategory::PrivateInstitution)
         );
-        assert_eq!(derive_category("M", "ZG", "xxx"), None);
-        assert_eq!(derive_category("INVALID", "ZG", "xxx"), None);
+        // 个人主体(公民人)不是注册型机构 → None。
+        assert_eq!(derive_category("CTZN", "xxx"), None);
+        // 无效机构码 → None。
+        assert_eq!(derive_category("XYZ", "xxx"), None);
     }
 }

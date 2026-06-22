@@ -828,11 +828,11 @@ fn generate_unique_citizen_cid(
         };
         let candidate = match crate::number::generate_cid_number(crate::number::GenerateCidInput {
             account_pubkey: attempt_pubkey.as_str(),
-            subject_property: "M",
+            // 公民人:新版个人主体码 CTZN(固定盈利,p1 被忽略,市级段固定 000)。
             p1: "1",
             province_name,
             city_name: "省辖市",
-            institution: "ZG",
+            institution: "CTZN",
         }) {
             Ok(v) => v,
             Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),

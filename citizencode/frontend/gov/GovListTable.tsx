@@ -10,7 +10,7 @@ import {
 } from './api';
 import type { AdminAuth } from '../auth/types';
 import type { InstitutionListRow } from '../subjects/api';
-import { INSTITUTION_CODE_LABEL, ORG_CODE_LABEL } from '../subjects/labels';
+import { INSTITUTION_CODE_LABEL } from '../subjects/labels';
 import {
   officialInstitutionCacheKey,
   publicSecurityCacheKey,
@@ -148,11 +148,11 @@ export const GovListTable: React.FC<Props> = ({
     searchQuery,
   ]);
 
-  // 市注册局(CITY_REGISTRY)已搬进「市注册局」tab,公权机构列表不再展示;
-  // 联邦注册局(FEDERAL_REGISTRY)是中枢省的国家级机构,按 user 决定保留在公权列表里。
+  // 市注册局(CREG)已搬进「市注册局」tab,公权机构列表不再展示;
+  // 联邦注册局(FRG)是中枢省的国家级机构,按 user 决定保留在公权列表里。
   const visibleRows = isPublicSecurity
     ? rows
-    : rows.filter((r) => r.org_code !== 'CITY_REGISTRY');
+    : rows.filter((r) => r.institution_code !== 'CREG');
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / DETERMINISTIC_PAGE_SIZE));
   const displayRows = visibleRows.slice(
     (deterministicPage - 1) * DETERMINISTIC_PAGE_SIZE,
@@ -207,11 +207,7 @@ export const GovListTable: React.FC<Props> = ({
         dataIndex: 'institution_code',
         width: 130,
         align: 'center',
-        render: (v: string, row) => {
-          const base = INSTITUTION_CODE_LABEL[v] || v;
-          const org = row.org_code ? (ORG_CODE_LABEL[row.org_code] || row.org_code) : '';
-          return org ? `${base} / ${org}` : base;
-        },
+        render: (v: string) => INSTITUTION_CODE_LABEL[v] || v,
       },
       {
         title: '状态',

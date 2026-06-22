@@ -26,7 +26,7 @@ pub(crate) struct CompanyProfile {
 }
 
 pub(crate) const PROFILE: CompanyProfile = CompanyProfile {
-    identity_code: "GQ",
+    identity_code: "SFGQ",
     has_legal_personality: true,
     shareholder_role: ParticipantRole::EquityShareholder,
 };
@@ -41,7 +41,7 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
 
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {
     assert_module_spec(&SPEC);
-    debug_assert_eq!(PROFILE.identity_code, "GQ");
+    debug_assert_eq!(PROFILE.identity_code, "SFGQ");
     debug_assert!(PROFILE.has_legal_personality);
     debug_assert_eq!(PROFILE.shareholder_role, ParticipantRole::EquityShareholder);
     let rule = fixed_rule(SPEC.private_type)?;

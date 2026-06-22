@@ -11,7 +11,7 @@
 //! ## 子模块
 //!
 //! - [`category`]         — 主体属性与机构分类
-//! - [`institution_code`] — 机构类型枚举(ZG/ZF/LF/SF/JC/JY/CB/CH/TG)
+//! - [`code`]             — 机构类型代码枚举(全仓库机构代码唯一真源,81 码)
 //! - [`validator`]        — CID 号格式校验
 //! - [`generator`]        — CID 号生成
 //! - [`model`]            — 身份 ID 编码元信息 DTO
@@ -20,17 +20,17 @@
 pub(crate) mod admin;
 pub mod category;
 pub mod generator;
-pub mod institution_code;
+pub mod code;
 pub(crate) mod model;
 pub mod validator;
 
 // 中文注释:对外聚合导出,方便业务模块只写 `use crate::number::*`。
 pub use category::{
-    all_subject_properties, classify, InstitutionCategory, SubjectProperty,
+    classify, InstitutionCategory,
     PUBLIC_SECURITY_INSTITUTION_SUFFIX,
 };
 pub use generator::{generate_cid_number, GenerateCidInput};
-pub use institution_code::InstitutionCode;
+pub use code::{AdminLevel, InstitutionCode};
 #[allow(unused_imports)]
 pub(crate) use model::*;
 pub use validator::{

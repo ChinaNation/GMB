@@ -53,7 +53,6 @@ export interface Institution {
   city_code?: string;
   town_code?: string;
   institution_code: string;
-  org_code?: string | null;
   /** 教育机构业务分类,只用于教育 tab 分类,不参与身份 ID 生成。 */
   education_type?: EducationType | null;
   /** 私权机构类型。仅私权目标类型机构有值。 */
@@ -99,7 +98,6 @@ export interface InstitutionListRow {
   city_name: string;
   town_name?: string;
   institution_code: string;
-  org_code?: string | null;
   education_type?: EducationType | null;
   private_type?: PrivateType | null;
   partnership_kind?: PartnershipKind | null;

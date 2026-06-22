@@ -15,7 +15,6 @@ class PublicInstitutionDto {
     this.cidFullName,
     this.cidShortName,
     this.townCode = '',
-    this.orgCode,
     this.parentCidNumber,
     this.hasLegalPersonality,
     this.legalRepName,
@@ -36,7 +35,6 @@ class PublicInstitutionDto {
   /// 所属镇 code(空串=只定位到市级)。
   final String townCode;
   final String institutionCode;
-  final String? orgCode;
   final String? parentCidNumber;
   final bool? hasLegalPersonality;
 
@@ -57,7 +55,6 @@ class PublicInstitutionDto {
       cityCode: json['city_code'] as String? ?? '',
       townCode: json['town_code'] as String? ?? '',
       institutionCode: json['institution_code'] as String? ?? '',
-      orgCode: json['org_code'] as String?,
       parentCidNumber: json['parent_cid_number'] as String?,
       hasLegalPersonality: json['has_legal_personality'] as bool?,
       legalRepName: json['legal_rep_name'] as String?,
@@ -83,7 +80,6 @@ class PublicInstitutionDto {
       ..cityCode = cityCode
       ..townCode = townCode
       ..institutionCode = institutionCode
-      ..orgCode = orgCode
       ..parentCidNumber = parentCidNumber
       ..hasLegalPersonality = hasLegalPersonality
       ..legalRepName = legalRepName

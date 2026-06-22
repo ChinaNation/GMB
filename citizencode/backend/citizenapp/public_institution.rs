@@ -45,8 +45,9 @@ const GOV_FROM_WHERE: &str = "
             (s.kind = 'PUBLIC'
              AND g.cid_number IS NOT NULL
              AND s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY'))
-            OR s.subject_property = 'G'
-            OR (s.subject_property = 'F' AND par.subject_property = 'G')
+            OR s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')
+            OR (s.institution_code IN ('SFGT', 'SFGP', 'UNIN')
+                AND par.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY'))
           )
       AND s.province_code = $1
       AND ($2::text IS NULL OR s.city_code = $2)
@@ -76,7 +77,6 @@ pub(crate) struct PublicInstitutionRow {
     pub cid_short_name: Option<String>,
     pub status: String,
     pub category: InstitutionCategory,
-    pub subject_property: String,
     pub p1: String,
     /// 行政区**唯一真源键**:省/市/镇 code(= subjects province_code/city_code/town_code)。
     /// 名字一律由客户端按 (province_code,city_code,town_code) 查行政区字典(china.sqlite 派生)得到,
@@ -86,8 +86,6 @@ pub(crate) struct PublicInstitutionRow {
     #[serde(default)]
     pub town_code: String,
     pub institution_code: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub org_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_legal_personality: Option<bool>,
     /// 法定代表人姓名(公开目录字段)。来自 subjects.legal_rep_name;无则不下发。
@@ -112,13 +110,11 @@ impl PublicInstitutionRow {
             cid_short_name: row.get("cid_short_name"),
             status: row.get("status"),
             category: parse_category(row.get::<_, String>("category").as_str()),
-            subject_property: row.get("subject_property"),
             p1: row.get("p1"),
             province_code: row.get("province_code"),
             city_code: row.get("city_code"),
             town_code: row.get("town_code"),
             institution_code: row.get("institution_code"),
-            org_code: row.get("org_code"),
             parent_cid_number: row.get("parent_cid_number"),
             has_legal_personality: row.get("has_legal_personality"),
             legal_rep_name: row.get("legal_rep_name"),
@@ -320,10 +316,10 @@ fn query_public_institutions(
     let sql = format!(
         "SELECT s.cid_number,
                 s.cid_full_name, s.cid_short_name, s.status, s.category,
-                s.subject_property, s.p1,
+                s.p1,
                 s.province_code AS province_code, s.city_code AS city_code,
                 COALESCE(s.town_code, '') AS town_code,
-                s.institution_code, s.org_code, s.parent_cid_number, s.has_legal_personality,
+                s.institution_code, s.parent_cid_number, s.has_legal_personality,
                 (SELECT COUNT(*) FROM accounts a
                    WHERE a.province_code = s.province_code AND a.cid_number = s.cid_number) AS account_count,
                 s.created_at, s.legal_rep_name
@@ -430,18 +426,16 @@ mod tests {
 
     fn sample_row() -> PublicInstitutionRow {
         PublicInstitutionRow {
-            cid_number: "AH001-ZF000-123456789-2026".to_string(),
+            cid_number: "AH001-PGV0C-123456789-2026".to_string(),
             cid_full_name: Some("安徽省人民政府".to_string()),
             cid_short_name: Some("皖府".to_string()),
             status: "ACTIVE".to_string(),
             category: InstitutionCategory::GovInstitution,
-            subject_property: "G".to_string(),
             p1: "0".to_string(),
             province_code: "AH".to_string(),
             city_code: "001".to_string(),
             town_code: String::new(),
-            institution_code: "ZF".to_string(),
-            org_code: None,
+            institution_code: "PGV".to_string(),
             has_legal_personality: Some(true),
             legal_rep_name: Some("张三".to_string()),
             parent_cid_number: None,
@@ -478,17 +472,18 @@ mod tests {
     #[test]
     fn public_dto_keeps_directory_fields() {
         let row = sample_row();
-        assert_eq!(row.cid_number, "AH001-ZF000-123456789-2026");
+        assert_eq!(row.cid_number, "AH001-PGV0C-123456789-2026");
         assert_eq!(row.account_count, 2);
-        assert_eq!(row.institution_code, "ZF");
+        assert_eq!(row.institution_code, "PGV");
     }
 
     #[test]
     fn citizen_public_filter_keeps_all_public_institutions() {
         assert!(GOV_FROM_WHERE.contains("s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')"));
-        assert!(GOV_FROM_WHERE.contains("s.subject_property = 'G'"));
-        assert!(GOV_FROM_WHERE.contains("par.subject_property = 'G'"));
+        assert!(GOV_FROM_WHERE.contains("s.institution_code IN ('SFGT', 'SFGP', 'UNIN')"));
+        assert!(GOV_FROM_WHERE.contains("par.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')"));
         assert!(!GOV_FROM_WHERE.contains("CITY_POLICE"));
-        assert!(!GOV_FROM_WHERE.contains("s.institution_code <> 'JY'"));
+        // 公民端公权视图不排除教育机构(教育也在此展示)。
+        assert!(!GOV_FROM_WHERE.contains("institution_code NOT IN ('NED'"));
     }
 }
