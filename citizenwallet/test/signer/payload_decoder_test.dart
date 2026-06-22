@@ -780,11 +780,33 @@ void main() {
     });
 
     test('decodes organization close action as propose_close_institution', () {
-      final payload = Uint8List.fromList([
+      // 机构注销 propose_close(17.1) 携带注册局签发的注销凭证:
+      // account + beneficiary + register_nonce(Vec) + signature(Vec)
+      // + issuer_cid_number(Vec) + issuer_main_account(32) + signer_pubkey(32)。
+      // 链端签名见 organization-manage/src/lib.rs::propose_close(ADR-023 §6.3)。
+      final registerNonce = utf8.encode('reg-nonce-001');
+      final signature = List<int>.filled(64, 0xDD);
+      final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
+      final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
+      final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      final payload = <int>[
         0x11, 0x01, // OrganizationManage.propose_close
-        ...List<int>.filled(32, 0x11),
-        ...List<int>.filled(32, 0x22),
-      ]);
+        ...List<int>.filled(32, 0x11), // account
+        ...List<int>.filled(32, 0x22), // beneficiary
+        // register_nonce: Vec<u8>
+        (registerNonce.length << 2) & 0xff,
+        ...registerNonce,
+        // signature: Vec<u8> 64B (Compact mode 1)
+        0x01, 0x01,
+        ...signature,
+        // issuer_cid_number: Vec<u8>
+        (issuerCid.length << 2) & 0xff,
+        ...issuerCid,
+        // issuer_main_account: AccountId32
+        ...issuerMain,
+        // signer_pubkey: [u8;32]
+        ...signerPubkey,
+      ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_institution');

@@ -26,7 +26,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "中枢省立法院",
+        cid_full_name: "中枢省联邦立法院",
         cid_number: "ZS001-GLF03-644733085-2026",
         main_account: hex!("de572cdf62dae60f75bd19c71eea2bf46d88d39d255ea07f18a2d7621ec5742f"),
         fee_account: hex!("ea94057a8ec85a34d68b5b7d401f6ea847dfdc5eda4a648490ba2f6b867cb158"),
@@ -39,7 +39,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "岭南省立法院",
+        cid_full_name: "岭南省联邦立法院",
         cid_number: "LN001-GLF0A-878298183-2026",
         main_account: hex!("d75661c13c8db9687c37893889492be4cd64c6155752e39a69acbf236ffe64f1"),
         fee_account: hex!("5562da11f9eda52e597c864c51a9834c2bf4fbbdc60ba8b3a9a4ff2f5b6d69e4"),
@@ -52,7 +52,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "广东省立法院",
+        cid_full_name: "广东省联邦立法院",
         cid_number: "GD001-GLF09-816684820-2026",
         main_account: hex!("656eea897eec33f1a2ea35e8bb77efb647c2692714ae8188d0da64a398228195"),
         fee_account: hex!("dbd2f8780d6f38043bd4dc4729b7d09c2b687c6568ac4ef178d05bd97cacf722"),
@@ -65,7 +65,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "广西省立法院",
+        cid_full_name: "广西省联邦立法院",
         cid_number: "GX001-GLF09-874140992-2026",
         main_account: hex!("ab5b247ce468771b8668f0156b061c1506a2f4936d9965e14f36fb736b7b89f8"),
         fee_account: hex!("0ed230dd3932e4d8c7cd27e46d70a647906d40ffc5d9a1bec0cdae10988d1947"),
@@ -78,7 +78,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "福建省立法院",
+        cid_full_name: "福建省联邦立法院",
         cid_number: "FJ001-GLF0W-954635732-2026",
         main_account: hex!("05413f5bbaa7739ee91d39ea61619142f401d26ad720839e9b7b84f9308e892c"),
         fee_account: hex!("4e47f9b77082162fa127b2548de6ff9fec575440b941ee566115823faf8f9512"),
@@ -91,7 +91,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "海南省立法院",
+        cid_full_name: "海南省联邦立法院",
         cid_number: "HN001-GLF0V-044038681-2026",
         main_account: hex!("5a912e521dcae5622d39a613cd3c26fb7868bd6503663f2a2f118ede9274d678"),
         fee_account: hex!("3db65955efec0b489fff564b13ac4e159ccd05a785b89ba1387eb4e69be52a77"),
@@ -104,7 +104,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "云南省立法院",
+        cid_full_name: "云南省联邦立法院",
         cid_number: "YN001-GLF0U-654714868-2026",
         main_account: hex!("2803b92781a8357448b925feafb7ea3c024c000a1f52eb5fed7533061adbe052"),
         fee_account: hex!("b1389f0646105808ee7e768d622cf6e3553241f334c1e769508d7e97ff75c826"),
@@ -117,7 +117,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "贵州省立法院",
+        cid_full_name: "贵州省联邦立法院",
         cid_number: "GZ001-GLF0W-276394684-2026",
         main_account: hex!("024e488b9dd56b17a25d25c534939ded58dc1cbf23c52188e25b6e77c4e7ec6a"),
         fee_account: hex!("85ad8a66289c967d2ba621222337acfe22ad59e4d044cb9804f82ca439f30dad"),
@@ -130,7 +130,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "湖南省立法院",
+        cid_full_name: "湖南省联邦立法院",
         cid_number: "HU001-GLF0L-382265990-2026",
         main_account: hex!("7deb5bc4a71220957fabedaf4cfddb582a5f5422eef779794598c8caeef74f76"),
         fee_account: hex!("62e69b2394a5a6f9754eb45fbf612e480efdfa35b78cc163a4e952e0f6ca124b"),
@@ -143,7 +143,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "江西省立法院",
+        cid_full_name: "江西省联邦立法院",
         cid_number: "JX001-GLF01-225875733-2026",
         main_account: hex!("0bcb27a418567178a183b1540b8accf38c9a82f1bd6c56205d0bdb0e1e897267"),
         fee_account: hex!("954613eda3114a33cd83590f434e3ee7dafc946ec0b644c95ac1f7c9b8b59788"),
@@ -156,7 +156,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "浙江省立法院",
+        cid_full_name: "浙江省联邦立法院",
         cid_number: "ZJ001-GLF0N-978002879-2026",
         main_account: hex!("d40978c158ecd9a212f5e3ceab4f4358107629cad7ea4b54c8db7e332d5d991f"),
         fee_account: hex!("b59505142a343550d1ae12033ae85d9100c6a9d14acf49e17ae9e6c8f1ebcff4"),
@@ -169,7 +169,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "江苏省立法院",
+        cid_full_name: "江苏省联邦立法院",
         cid_number: "JS001-GLF0U-787656153-2026",
         main_account: hex!("59fb6e3511f02dfd095aefc3f497df2b57715b77fc7f0ccdc80ac6906669d777"),
         fee_account: hex!("0b51abbb2852c686e0f65af86d68ceb71dfc9e7bc8b2e8af5c6e473d019d9d84"),
@@ -182,7 +182,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "山东省立法院",
+        cid_full_name: "山东省联邦立法院",
         cid_number: "SD001-GLF0U-539878832-2026",
         main_account: hex!("133aef8b300c54794a3af68e6ffe7776ec64040329f7454de9db45738bdcc579"),
         fee_account: hex!("8a273877b072b9a9fc0ca6518b56e33542c035a9859857706dcb4d8669480899"),
@@ -195,7 +195,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "山西省立法院",
+        cid_full_name: "山西省联邦立法院",
         cid_number: "SX001-GLF0B-117228307-2026",
         main_account: hex!("be0d94222b93526331650b351838ce82f813f998236562297e873c77c7b8381b"),
         fee_account: hex!("74fcbbe1526ef3791c3d9a5a6a642c67ffda42559920028262c9a10dc88291b9"),
@@ -208,7 +208,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "河南省立法院",
+        cid_full_name: "河南省联邦立法院",
         cid_number: "HE001-GLF04-221059646-2026",
         main_account: hex!("7c68970547dbae748d4dd09b3c1726d70306c8af443d3ab9259ecdfbd19c7fdf"),
         fee_account: hex!("b5d9bdeeebcaed856845e2826022537626605464e425ae94498af7e0600e7ac8"),
@@ -221,7 +221,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "河北省立法院",
+        cid_full_name: "河北省联邦立法院",
         cid_number: "HB001-GLF09-067760814-2026",
         main_account: hex!("a1760183b62936ad995c960338e3cc9515e053a049009964d6490b799e70fae4"),
         fee_account: hex!("b0c349111124073e0a6e1910eac9427690f5c2f7425c2eab8ad36aae4c3a322f"),
@@ -234,7 +234,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "湖北省立法院",
+        cid_full_name: "湖北省联邦立法院",
         cid_number: "HI001-GLF0N-623669499-2026",
         main_account: hex!("067cb49f791e72afca44263d7327db95a389c5c0ec92e2373b39fc3bba2fabb4"),
         fee_account: hex!("0367864517c77d08ffa391feb599abd8c28badfd53d28422ce2984d5f5d787d1"),
@@ -247,7 +247,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "陕西省立法院",
+        cid_full_name: "陕西省联邦立法院",
         cid_number: "SI001-GLF09-623044953-2026",
         main_account: hex!("a1c45a327e9b6b94e5fe0f76ec4eb7d497ea08a0b49719f4dea6c752d1becef5"),
         fee_account: hex!("8ae959bba6ec17bd2b4ca73617da2d7b77b4864348017f4e957926e0b33a2dbe"),
@@ -260,7 +260,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "重庆省立法院",
+        cid_full_name: "重庆省联邦立法院",
         cid_number: "CQ001-GLF0U-047757902-2026",
         main_account: hex!("3aad5e71b9d77cc574dcdad1660094a49604ad91a1a32723a52fb6f556f31f08"),
         fee_account: hex!("468c0b79325ad5b104d4e28368f221d041397c35a0fc1e301605ea7272781692"),
@@ -273,7 +273,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "四川省立法院",
+        cid_full_name: "四川省联邦立法院",
         cid_number: "SC001-GLF03-507781091-2026",
         main_account: hex!("610be7353acafdaea03bb954eecde42fe917be2fe72baec84fbd959c5ea92f59"),
         fee_account: hex!("ffe84dad492f9ca505d026c48840d7be6721e4b1e8bccb73847acda22e89c018"),
@@ -286,7 +286,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "甘肃省立法院",
+        cid_full_name: "甘肃省联邦立法院",
         cid_number: "GS001-GLF02-142928851-2026",
         main_account: hex!("34d8c4bad96c873aa1bf5b78cda57d4a2e19f20a5b602299a9907373e726558a"),
         fee_account: hex!("17e94d8b592c0c2fb40c1470e1057f797c3aca82c9fe838912e3d028aaf17f11"),
@@ -299,7 +299,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "北平省立法院",
+        cid_full_name: "北平省联邦立法院",
         cid_number: "BP001-GLF0V-205551286-2026",
         main_account: hex!("9926af7a7990708e122b3ffcc5c8aec734735075c689a2d35f88b379a00d26bd"),
         fee_account: hex!("e3c9a7d0eebfdb358496b8398c3da520e989bc492d2de690a1d40f97f38792de"),
@@ -312,7 +312,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "海滨省立法院",
+        cid_full_name: "海滨省联邦立法院",
         cid_number: "HA001-GLF08-617993406-2026",
         main_account: hex!("a61e5de780cdf0c7b8177f81ddb793421384feabf908f7dcdd0683ff4cd78356"),
         fee_account: hex!("3d00094ffd9b2997839e2c577ee65593db3a7f9705f39253ffb40b34b4a9185e"),
@@ -325,7 +325,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "松江省立法院",
+        cid_full_name: "松江省联邦立法院",
         cid_number: "SJ001-GLF0Y-021675715-2026",
         main_account: hex!("311a5afee5356abc77f0656d28e93c11f7807adb28985029859297545b72f904"),
         fee_account: hex!("1e2080946f78f0063a9fac2e863a0c82b667602962652f2286c010b7dd7b56a2"),
@@ -338,7 +338,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "龙江省立法院",
+        cid_full_name: "龙江省联邦立法院",
         cid_number: "LJ001-GLF02-609538144-2026",
         main_account: hex!("02142d4fd5a3cd38a0a5e5170bb12a3e2f14631475664988883d429647ecb53e"),
         fee_account: hex!("71cd0673389c49b8c088ccf949defe9e4f3e8b31d51ced53ec753f37b26c9c81"),
@@ -351,7 +351,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "吉林省立法院",
+        cid_full_name: "吉林省联邦立法院",
         cid_number: "JL001-GLF0T-625028107-2026",
         main_account: hex!("78f864e18ae864ea3fb1c4f30da2c427fce3b511a2001e3cb7079950546a359b"),
         fee_account: hex!("01a6ed121f6eb4f09550814b24022534dd384081d6413aed59bde28d82a5cce3"),
@@ -364,7 +364,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "辽宁省立法院",
+        cid_full_name: "辽宁省联邦立法院",
         cid_number: "LI001-GLF0I-050554057-2026",
         main_account: hex!("4f6ab980170dc3818cd1f7e4ce15e044bd29eb5686dabdc1915aea519160244b"),
         fee_account: hex!("982f5ed58910dc2c6660e65a74e1bd07c00891ae86fdbd13b47b6c443a1a6a86"),
@@ -377,7 +377,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "宁夏省立法院",
+        cid_full_name: "宁夏省联邦立法院",
         cid_number: "NX001-GLF0L-467590691-2026",
         main_account: hex!("1799e7673bac3e1278e4fe025f6d95a693eff05f2d202f99a58e464fb0f94748"),
         fee_account: hex!("2504f96b41ac0ebd32bf3af4065a8d15f58fe269526b1ce33c58e7d0d6ba39a7"),
@@ -390,7 +390,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "青海省立法院",
+        cid_full_name: "青海省联邦立法院",
         cid_number: "QH001-GLF01-677246229-2026",
         main_account: hex!("be750251707232b6ddc38164da28831c449f4ee022ad4246c06e026efb61b6e2"),
         fee_account: hex!("2b8a7b6d2def976af84253a6a80833beb221d9fc5e13b6d157bd741e4fa2ad3c"),
@@ -403,7 +403,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "安徽省立法院",
+        cid_full_name: "安徽省联邦立法院",
         cid_number: "AH001-GLF09-346310047-2026",
         main_account: hex!("c0f888e4982eb6ed35c7214299a67eca7f1a5927247252a3b493a1b36d3620bc"),
         fee_account: hex!("426733a257909999032f793476aeb61d6971169047580b09b9e2ffc7f327a6fa"),
@@ -416,7 +416,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "台湾省立法院",
+        cid_full_name: "台湾省联邦立法院",
         cid_number: "TW001-GLF06-832531085-2026",
         main_account: hex!("6199df19240035e47aa4c086e25f7b47c7484d765e5e7654e32ef3b8a9511ecb"),
         fee_account: hex!("5b01d51cd2b27519f21a89e1083f20172b60bcc651b6be9b8260f04e62c9830c"),
@@ -429,7 +429,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "西藏省立法院",
+        cid_full_name: "西藏省联邦立法院",
         cid_number: "XZ001-GLF0Q-284065900-2026",
         main_account: hex!("ec8b4ed33bda5e53dd41c2bd5100ab3cedb4d7f48b36fc382d668716f426d905"),
         fee_account: hex!("29cfcd5e21cba29eb30dc3bcd198e70b463519c235da4908f281b8d452c3f7db"),
@@ -442,7 +442,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "新疆省立法院",
+        cid_full_name: "新疆省联邦立法院",
         cid_number: "XJ001-GLF03-207265599-2026",
         main_account: hex!("2bd86d17db675e720e33521c10789252cb51a7f15ad6795ce2a1ceaadb374672"),
         fee_account: hex!("a2debf99ed7b2e66aaa0ae467263d0f8b069722e97782e47c2586719987bbcd5"),
@@ -455,7 +455,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "西康省立法院",
+        cid_full_name: "西康省联邦立法院",
         cid_number: "XK001-GLF0V-631421441-2026",
         main_account: hex!("31d4202e774ad681abbd8d4acdd8e12d0b5ed18d7f75311a7bdd2d9705761977"),
         fee_account: hex!("50ef0988d0d18d379ca683575b6945bc74e99422fb13cdbc4d79251da3201928"),
@@ -468,7 +468,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "阿里省立法院",
+        cid_full_name: "阿里省联邦立法院",
         cid_number: "AL001-GLF0S-683617532-2026",
         main_account: hex!("ae194f6f0acd56541ed8d754ebcbbbe859016356880beb063ca5e049ca439289"),
         fee_account: hex!("120db3035d03cb34f97b9003cf6fd0eec8626e269f26edba2fa224f18e74aef3"),
@@ -481,7 +481,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "葱岭省立法院",
+        cid_full_name: "葱岭省联邦立法院",
         cid_number: "CL001-GLF0F-236388314-2026",
         main_account: hex!("a65b1f377d697f1faaf4032fed5e7ab64a39f7cc0403e7c02a2442c5cb5f4c02"),
         fee_account: hex!("2062282149923301380aa2ff1903997507ee545db6d17803e556ea686759ac8f"),
@@ -494,7 +494,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "伊犁省立法院",
+        cid_full_name: "伊犁省联邦立法院",
         cid_number: "YL001-GLF0N-396001522-2026",
         main_account: hex!("1a20eba6278fdf7bfdc22fdbc5b95cbe78d5e86e90dcb7c60b632b872d33dc3a"),
         fee_account: hex!("92107dfb2b098d74ae6b333a48562ef474c61842bd981e86e520b32f7cbdfcaa"),
@@ -507,7 +507,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "河西省立法院",
+        cid_full_name: "河西省联邦立法院",
         cid_number: "HX001-GLF03-931966305-2026",
         main_account: hex!("b5c674faa952063b47430abfc299fb3a9ff2a7b069fc8fb91e93a0da043c6fbf"),
         fee_account: hex!("8eec4fcf266ae83e6e5477478f2292bdb20bafdbc4084e7e2773f4efac36abd2"),
@@ -520,7 +520,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "昆仑省立法院",
+        cid_full_name: "昆仑省联邦立法院",
         cid_number: "KL001-GLF02-915429086-2026",
         main_account: hex!("22a1b32a9867def2867dd9e5f47a41f0ae3674d807866be0f5c9b692b3d9311b"),
         fee_account: hex!("42fe411a075358aefe4ef2e6c10b4030314b11e87c3a79d4e6a0350b6290b84c"),
@@ -533,7 +533,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "河套省立法院",
+        cid_full_name: "河套省联邦立法院",
         cid_number: "HT001-GLF0J-256350263-2026",
         main_account: hex!("1339c9821ee9be5168354ea15b79974926213f447a4605af76fda4431161a442"),
         fee_account: hex!("2f4c8e3f09967f7efff4142a127516c06c1788a0ce88bee3d85262176c571c72"),
@@ -546,7 +546,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "热河省立法院",
+        cid_full_name: "热河省联邦立法院",
         cid_number: "RH001-GLF0F-444333104-2026",
         main_account: hex!("a86e3261654bc56d82cb372a3d11700f7bf2661c275b44f0535020d75dbfb72b"),
         fee_account: hex!("c952d54c2e0685011c04dc85040d3d4065aef25930cec454dc3898f54caa6028"),
@@ -559,7 +559,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "兴安省立法院",
+        cid_full_name: "兴安省联邦立法院",
         cid_number: "XA001-GLF0R-064693399-2026",
         main_account: hex!("e9b1376ea48d01470a81acaa164f10e92d801e19754be2e00cb96c4310b2e295"),
         fee_account: hex!("c8d607278b49e0f4a37c0801cfe42dc5d6cc1ab9b1a7458b5d36573531af5101"),
@@ -572,7 +572,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         ],
     },
     ChinaLf {
-        cid_full_name: "合江省立法院",
+        cid_full_name: "合江省联邦立法院",
         cid_number: "HJ001-GLF0J-472199879-2026",
         main_account: hex!("17c322663a46881b9c3f161620a3883236cdcd4f07f2e13b1fcbc150454ad1e9"),
         fee_account: hex!("8785dd5891c89d9114d2a1efde42e9ef76399bbed89d31cf89fd91f69ce042bd"),

@@ -26,7 +26,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "中枢省司法院",
+        cid_full_name: "中枢省联邦司法院",
         cid_number: "ZS001-GSF06-801633498-2026",
         main_account: hex!("ab22c7a7e74cc62a50e731d0c9a235e4c83085f06d23bdf6639ae0bbfde1f4ad"),
         fee_account: hex!("fba1ccb23ba2dc94bd91a44e0d7a6242c3fd548a4e0056cbd4cca938c06c275b"),
@@ -39,7 +39,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "岭南省司法院",
+        cid_full_name: "岭南省联邦司法院",
         cid_number: "LN001-GSF0P-735985207-2026",
         main_account: hex!("81e8ba42478cccedaf27ff2f13744cbf466381cd9856636b727f18533a48e11c"),
         fee_account: hex!("c24ea555c1f70e35421e3e7c1d9cbba1f6fceb7ac2721311ef5a9c1fae1ee741"),
@@ -52,7 +52,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "广东省司法院",
+        cid_full_name: "广东省联邦司法院",
         cid_number: "GD001-GSF03-237972883-2026",
         main_account: hex!("2dbb61bb5a226bdbb59ab243433dcfa885f7ccff5a878b9510786535c3aae93b"),
         fee_account: hex!("9a934d7655bba6bc3effa014efa95f724fea0424b8c123db197ebbaa17519bf9"),
@@ -65,7 +65,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "广西省司法院",
+        cid_full_name: "广西省联邦司法院",
         cid_number: "GX001-GSF0T-695571731-2026",
         main_account: hex!("80df3afefcd831d40f572d880589fcb6771b4f1a5d1d507092919c60ccc492d3"),
         fee_account: hex!("28dcc97c3122f8ce57a6db2f3c44d812db877c6372448bfebe3630c4387b0e7a"),
@@ -78,7 +78,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "福建省司法院",
+        cid_full_name: "福建省联邦司法院",
         cid_number: "FJ001-GSF0N-514142694-2026",
         main_account: hex!("4e54068417498957197be835606e82114f7a7afbf7f098f138c439094e623f4f"),
         fee_account: hex!("1c40b09a74f9eac0d3f1e0f5e3be171c7c6b2825458274fced1492466cbabc0d"),
@@ -91,7 +91,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "海南省司法院",
+        cid_full_name: "海南省联邦司法院",
         cid_number: "HN001-GSF07-404444213-2026",
         main_account: hex!("1c29e505c607486fcfe1c75c4aaf8ddb893d5bc9069975eb1a5c5b16da89cfaa"),
         fee_account: hex!("fc215cacbfd86e96f1f5f6af9ddb9b4680b922583d784483a6f18a51d5d4f2e6"),
@@ -104,7 +104,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "云南省司法院",
+        cid_full_name: "云南省联邦司法院",
         cid_number: "YN001-GSF0X-150332223-2026",
         main_account: hex!("6f22d67ddf74059f3b42f72d6fd063938400488fdc5c9b4e34219e2d8c8febea"),
         fee_account: hex!("e38a1049d5b15d818a7f88adc99098e6a164b9fcfedbc36fd8e5ddc98c4e49e3"),
@@ -117,7 +117,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "贵州省司法院",
+        cid_full_name: "贵州省联邦司法院",
         cid_number: "GZ001-GSF0H-943624249-2026",
         main_account: hex!("c02324efc1b56e12e937ecf4d33c0ad83856c19b92311db086dcf87a86b12939"),
         fee_account: hex!("5e1f9beb4a49d5be6b202a7e7a5e3c6182c9d1778b1430c637e1ab9d58657c69"),
@@ -130,7 +130,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "湖南省司法院",
+        cid_full_name: "湖南省联邦司法院",
         cid_number: "HU001-GSF06-664701408-2026",
         main_account: hex!("633afaff2d47a761922c98b476c17d83d8f6624a09d65d1fca264eaf2ed50371"),
         fee_account: hex!("33f8e952929f67fe034cf730384d3e7cb2e27091f8d5cc649b4404bdc583266d"),
@@ -143,7 +143,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "江西省司法院",
+        cid_full_name: "江西省联邦司法院",
         cid_number: "JX001-GSF08-437316566-2026",
         main_account: hex!("1800fd1830b736b9a8c5a6e0bdc89f16134739fa2e61fda16e5f3b2a68521fe7"),
         fee_account: hex!("562c4fc71e56975f496610c160b0acdd8bbd74f64b11b32acd36294a99f76c16"),
@@ -156,7 +156,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "浙江省司法院",
+        cid_full_name: "浙江省联邦司法院",
         cid_number: "ZJ001-GSF0X-604747113-2026",
         main_account: hex!("b95fc73ecf0d4b90bc4a15a74cf30fd513a6b0bf112326e2b5788a7f334c409c"),
         fee_account: hex!("7f8a460217b131849bbf72a43ecca7051ee91ed9984ef6e711a48e9bb209fd0f"),
@@ -169,7 +169,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "江苏省司法院",
+        cid_full_name: "江苏省联邦司法院",
         cid_number: "JS001-GSF0A-777156747-2026",
         main_account: hex!("49026f539bc6387fce34355f34751f54180eeb5e2166f4de4abc50f2c84f7ea9"),
         fee_account: hex!("ac7f9e9b3edb244569737bd15b7dcd2d8b2230476251f1256000e52870b76d72"),
@@ -182,7 +182,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "山东省司法院",
+        cid_full_name: "山东省联邦司法院",
         cid_number: "SD001-GSF0E-333858828-2026",
         main_account: hex!("f141156823b3cf1dda3e24ed3e7b8488e226c1f865821df9eefa2a4ca14c4d2b"),
         fee_account: hex!("66f26140b0743bf3ffe842ca577e5411d811a55a490dd7a2d99ab46a4271de03"),
@@ -195,7 +195,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "山西省司法院",
+        cid_full_name: "山西省联邦司法院",
         cid_number: "SX001-GSF00-384489008-2026",
         main_account: hex!("1c6ac001b636186f0737554803b4d61516caf1b8b95708137c3dd26b21856ced"),
         fee_account: hex!("d821a73a43cb55cd41fd1b729db4e51d3148528c32eebe4c5515ee71095d6101"),
@@ -208,7 +208,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "河南省司法院",
+        cid_full_name: "河南省联邦司法院",
         cid_number: "HE001-GSF0R-954910656-2026",
         main_account: hex!("31d494f7b96114ac3fe0d9cb33a7fad872062b336c43ea663f847e1a4161ca5b"),
         fee_account: hex!("db9daad78bc66194d38beb0691089fbc7db4104cdb097178baa053a4c5654e8c"),
@@ -221,7 +221,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "河北省司法院",
+        cid_full_name: "河北省联邦司法院",
         cid_number: "HB001-GSF0Y-157451848-2026",
         main_account: hex!("063436e4cf703c2b32844ff5fdd09d26a46413126b02b48b2d56a0b2cb760abf"),
         fee_account: hex!("a94e9ca87fea2a0d22f99684b0623b581b5db2d766a99d9ff4d44c0ccab14f75"),
@@ -234,7 +234,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "湖北省司法院",
+        cid_full_name: "湖北省联邦司法院",
         cid_number: "HI001-GSF0N-077291390-2026",
         main_account: hex!("90ab3b7adbcc846370f2b0d20c788209cf73021c266ee7f1d7da376fec9fa968"),
         fee_account: hex!("27b1b29a7a66e013a1e14747f8833d26372e2676c4451854143e401e6c6f2a7d"),
@@ -247,7 +247,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "陕西省司法院",
+        cid_full_name: "陕西省联邦司法院",
         cid_number: "SI001-GSF06-249824979-2026",
         main_account: hex!("f9f39071d6b1dcf81a086abf095116db15f7ecf83f18bdce5bfb61f4a043900e"),
         fee_account: hex!("6393b1c57f61f0a1b2986c500ddac5ab94988d5dcd7da36ba2b5b33bc82ba292"),
@@ -260,7 +260,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "重庆省司法院",
+        cid_full_name: "重庆省联邦司法院",
         cid_number: "CQ001-GSF05-088530239-2026",
         main_account: hex!("b0915b5a02a5533285d55bcb21c62bcdc16e9cdbd796e2c8861e4edeed0ebdad"),
         fee_account: hex!("6bb6ba20254737b047f5a653224511587b51e673240804ce9df9f0c1a6cdc2ea"),
@@ -273,7 +273,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "四川省司法院",
+        cid_full_name: "四川省联邦司法院",
         cid_number: "SC001-GSF0C-802330322-2026",
         main_account: hex!("c8be037580b3549ed22de03c3560f84b568cf9de4734879a6d3b07841165456f"),
         fee_account: hex!("26cf4fdf41fc78fd748dad91f6d8ef2e87b92e2b48d1e44cf12d9a5a8338f329"),
@@ -286,7 +286,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "甘肃省司法院",
+        cid_full_name: "甘肃省联邦司法院",
         cid_number: "GS001-GSF09-611023108-2026",
         main_account: hex!("db0e6b03c08837fd5507ebfa9d38b98e6f6ced434ba9c11d766b38f1ac7d9c7c"),
         fee_account: hex!("e127a730648a7624aff9542ba54633da669d9d6b24137c24c4bd0025135372e7"),
@@ -299,7 +299,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "北平省司法院",
+        cid_full_name: "北平省联邦司法院",
         cid_number: "BP001-GSF0E-779326321-2026",
         main_account: hex!("676cbae87b03fbbb30cbca45f09b10fe6dd0c87c0547b12c8cca665f15db0339"),
         fee_account: hex!("10bd57c5e3da283f9124d099e6dafe15c291ec680cafdec44b05e0aaa44b7b59"),
@@ -312,7 +312,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "海滨省司法院",
+        cid_full_name: "海滨省联邦司法院",
         cid_number: "HA001-GSF05-346164340-2026",
         main_account: hex!("6759bb18503bb9abcc2944ea0e5ed8bbffd4eeada2b111b27332b9a3b8ff875c"),
         fee_account: hex!("9c4f3978fa74a986d06113ee2915a6752bfb740b34faf30313844bdc7a135f2c"),
@@ -325,7 +325,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "松江省司法院",
+        cid_full_name: "松江省联邦司法院",
         cid_number: "SJ001-GSF0T-743382317-2026",
         main_account: hex!("aecf9e286efa62bf977b20221ecfb9546bb3328bc5ef508296cb1e27d1a15f1c"),
         fee_account: hex!("945d1e487b0b4d1c209b8a31b84f5b90ff0e5f913f1dd192f1192b971bef7937"),
@@ -338,7 +338,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "龙江省司法院",
+        cid_full_name: "龙江省联邦司法院",
         cid_number: "LJ001-GSF02-503014903-2026",
         main_account: hex!("d6073852c2b464be5e613d53253256291363e9feff36cb38cbd45fb5a9ffe058"),
         fee_account: hex!("f46724f130d446d9c2a9aa95f253fbc6768cb7debda68320abdbcd0fd76a64c9"),
@@ -351,7 +351,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "吉林省司法院",
+        cid_full_name: "吉林省联邦司法院",
         cid_number: "JL001-GSF02-140130793-2026",
         main_account: hex!("09f6d235be85905fadd8f178f340c206ba12ab4a2b6a225b65498e9b4c15e33d"),
         fee_account: hex!("f828903ec4a8e52118278fe1bf691af8c68e1a047b072d09efc30368fafa1e7b"),
@@ -364,7 +364,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "辽宁省司法院",
+        cid_full_name: "辽宁省联邦司法院",
         cid_number: "LI001-GSF0V-647021209-2026",
         main_account: hex!("dfe0f52782a41b5b12236cf6950c13b5c10402c7cc143cfa4243046b26236ae4"),
         fee_account: hex!("f00f4dd2816c83f70c28eeb996602258c0eae21c1236cf3012074c3af6949d60"),
@@ -377,7 +377,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "宁夏省司法院",
+        cid_full_name: "宁夏省联邦司法院",
         cid_number: "NX001-GSF0E-853238754-2026",
         main_account: hex!("c7d5d26db15c7ac34a1a515e40ff0102dab470828bcc30c2cbf230b83fcc6082"),
         fee_account: hex!("6882832b66460581fbe1b92a88e444466fb07e6cb06aa74c2bd4ba58f0cd319c"),
@@ -390,7 +390,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "青海省司法院",
+        cid_full_name: "青海省联邦司法院",
         cid_number: "QH001-GSF0O-940195791-2026",
         main_account: hex!("ef7947c29eb196ca68e88944fbb8c506ffffe4eee09a1d3c306ef78befc73e74"),
         fee_account: hex!("1f03b3ca52d1c3959a949889f35789bdde133aa487e9b3157e38c4514f05cebb"),
@@ -403,7 +403,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "安徽省司法院",
+        cid_full_name: "安徽省联邦司法院",
         cid_number: "AH001-GSF0R-454040736-2026",
         main_account: hex!("8f87b93fb3c58e923d19439f28eed1407d341dedd5174ff0b9ec52c04f7dec00"),
         fee_account: hex!("37c8abf58d78f96ca23a3868bcf2068bc0227e942cfc6bdad0ea654ca9141a10"),
@@ -416,7 +416,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "台湾省司法院",
+        cid_full_name: "台湾省联邦司法院",
         cid_number: "TW001-GSF0P-338903264-2026",
         main_account: hex!("0e05cd9f8c579156c594b8c799ad139f83e3af2616667c4c81245ebe10ed83c5"),
         fee_account: hex!("80f7cc951fd8cf036c9c330b0f7c1ea6d113cb89d7da5e7f072b3416e6728d6f"),
@@ -429,7 +429,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "西藏省司法院",
+        cid_full_name: "西藏省联邦司法院",
         cid_number: "XZ001-GSF03-489864159-2026",
         main_account: hex!("72bf3312ea8f8838ef4d9ecd7cd5879af51409ff01dda6460fc1d965721483d2"),
         fee_account: hex!("65195f637487237023f29b4892195411922e695788e0287fd7ab514ddda7ff96"),
@@ -442,7 +442,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "新疆省司法院",
+        cid_full_name: "新疆省联邦司法院",
         cid_number: "XJ001-GSF0R-665697727-2026",
         main_account: hex!("c1d2d103c2cee3d30ea462955a87c6ebee0bf0fee4ef2c38f6845b70f03968d5"),
         fee_account: hex!("5848cd1ccc157d6b7b1837113ef1ee2e0bdaf478177a6ac4894ec1200ad9a02d"),
@@ -455,7 +455,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "西康省司法院",
+        cid_full_name: "西康省联邦司法院",
         cid_number: "XK001-GSF0A-039776546-2026",
         main_account: hex!("0bfe47044d827f13aff3a47863734bf7024b820cf2423e8b484596c70b3a92eb"),
         fee_account: hex!("77b2e9f302261ce16a2787d243b3620fd932622b866692394278ab454faac803"),
@@ -468,7 +468,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "阿里省司法院",
+        cid_full_name: "阿里省联邦司法院",
         cid_number: "AL001-GSF0K-773834149-2026",
         main_account: hex!("868023c51e996b641c35d58f74ecbc4ce4548e368c9aa4b0fcaa1ec8e81f6c56"),
         fee_account: hex!("c551847b5bbd8d74837b358a57ee895dbc4cdd046e3282f6e5f1d65bfbf449b4"),
@@ -481,7 +481,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "葱岭省司法院",
+        cid_full_name: "葱岭省联邦司法院",
         cid_number: "CL001-GSF08-213372415-2026",
         main_account: hex!("01be7248e9730086fdc27afad5e3fc4f3bc76e4cd19ec56af531a3ed24267e92"),
         fee_account: hex!("aa9c835c3c2c010bf5a6b63ddf5fcc0d574883608d97845b2d9884b3b3663bad"),
@@ -494,7 +494,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "伊犁省司法院",
+        cid_full_name: "伊犁省联邦司法院",
         cid_number: "YL001-GSF00-940493250-2026",
         main_account: hex!("b31007b83654f343ffd9a809803ed1985ca90c74a02f91973ea53b5928d56923"),
         fee_account: hex!("f38dca9b089f3a5652b9f02e3c020fff336ae4c6e4d37ee4c81a02d80e056147"),
@@ -507,7 +507,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "河西省司法院",
+        cid_full_name: "河西省联邦司法院",
         cid_number: "HX001-GSF0V-433393508-2026",
         main_account: hex!("a585280a61f2b4df504a49179e989012175bd13017fefbd7a4f2d080a687efab"),
         fee_account: hex!("dc5ca5936c789a3f868d647a3ace652043131dcab71ff69af9335630187a7f88"),
@@ -520,7 +520,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "昆仑省司法院",
+        cid_full_name: "昆仑省联邦司法院",
         cid_number: "KL001-GSF0S-811822340-2026",
         main_account: hex!("1ea26b46660bda68a91ee6ffc8e7c96eaddc79dfe5095eda6ed0dac62303b5cd"),
         fee_account: hex!("6cd93ce3e3c2534d0118752bee3bc13a3534c010dad39d86fa35fabc459d7140"),
@@ -533,7 +533,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "河套省司法院",
+        cid_full_name: "河套省联邦司法院",
         cid_number: "HT001-GSF02-354283262-2026",
         main_account: hex!("859f1ca294f53892118487891539695750de6ca3e9ac91265bf52a25e6be642d"),
         fee_account: hex!("4a625d3ea854789acbdf8c7cfc07c8a5ab3f29adf541431c0634a20e9bde8c2b"),
@@ -546,7 +546,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "热河省司法院",
+        cid_full_name: "热河省联邦司法院",
         cid_number: "RH001-GSF0O-647806782-2026",
         main_account: hex!("b47b70e1345f6a59a47f55e047034a8e8b160321891551be3145b2d960893e8a"),
         fee_account: hex!("8967c47c2d39c72f819ecd7068c581fdd2936ab5ca436a68eec0f16b63af13b3"),
@@ -559,7 +559,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "兴安省司法院",
+        cid_full_name: "兴安省联邦司法院",
         cid_number: "XA001-GSF0W-948269419-2026",
         main_account: hex!("1654f5ed6b9c4be0d154f34ab5439407649931908f80186edd76668cdc2f7e61"),
         fee_account: hex!("2449252d64cb6de60464df466142bd66513c506532b9d27d0e97df70788da4e4"),
@@ -572,7 +572,7 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        cid_full_name: "合江省司法院",
+        cid_full_name: "合江省联邦司法院",
         cid_number: "HJ001-GSF0S-251417549-2026",
         main_account: hex!("5ece4ec4fd1499cc246d0e9f8ce50ac7dd2e5677abaf05aba4697a2edf8a44a6"),
         fee_account: hex!("a653cb596b454ab4a185e055756f56d40701b7f741b7c354aa667894f0beba0d"),

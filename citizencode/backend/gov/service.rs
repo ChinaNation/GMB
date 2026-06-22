@@ -699,9 +699,9 @@ fn org_code_for_constant_name(name: &str) -> &'static str {
         "国家教育委员会" | "公民教育委员会" => "NATIONAL_EDU",
         // ── 省级:按现名后缀匹配(省联邦政府/省公民储备委员会/省公民储备银行) ──
         _ if name.ends_with("省联邦政府") => "PROVINCE_GOV",
-        _ if name.ends_with("省立法院") => "PROVINCE_LEGISLATURE",
-        _ if name.ends_with("省司法院") => "PROVINCE_COURT",
-        _ if name.ends_with("省监察院") => "PROVINCE_SUPERVISION",
+        _ if name.ends_with("省联邦立法院") => "PROVINCE_LEGISLATURE",
+        _ if name.ends_with("省联邦司法院") => "PROVINCE_COURT",
+        _ if name.ends_with("省联邦监察院") => "PROVINCE_SUPERVISION",
         _ if name.ends_with("省公民储备委员会") => "PROVINCE_RESERVE",
         _ if name.ends_with("省公民储备银行") => "PROVINCE_RESERVE_BANK",
         _ => "PUBLIC_ORG",
