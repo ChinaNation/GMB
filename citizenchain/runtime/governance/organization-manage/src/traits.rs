@@ -61,6 +61,21 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         scope_province_name: &[u8],
         scope_city_name: &[u8],
     ) -> bool;
+
+    /// 中文注释:注销凭证验签(注册局在 CID 注销机构/账户后签发,机构管理员发起链上
+    /// close 时携带)。与 `verify_institution_registration` 对称;`target_account` 与
+    /// `scope`(0=整机构/1=单账户)进签名,防止换账户/换范围重放。
+    fn verify_institution_deregistration(
+        scope: u8,
+        cid_number: &[u8],
+        account_name: &[u8],
+        target_account: &AccountId,
+        nonce: &Nonce,
+        signature: &Signature,
+        issuer_cid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+    ) -> bool;
 }
 
 impl<AccountId, AccountName, Nonce, Signature>
@@ -77,6 +92,20 @@ impl<AccountId, AccountName, Nonce, Signature>
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
         _scope_city_name: &[u8],
+    ) -> bool {
+        false
+    }
+
+    fn verify_institution_deregistration(
+        _scope: u8,
+        _cid_number: &[u8],
+        _account_name: &[u8],
+        _target_account: &AccountId,
+        _nonce: &Nonce,
+        _signature: &Signature,
+        _issuer_cid_number: &[u8],
+        _issuer_main_account: &AccountId,
+        _signer_pubkey: &[u8; 32],
     ) -> bool {
         false
     }

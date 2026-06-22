@@ -46,9 +46,13 @@
 - **P0 止血(已落地,见 `20260621-seed-federal-admins`)**:`citizencode-backend seed-federal-admins` 直读编译期 china_zf 常量恢复联邦 215 人登录,不依赖链。降级为"重新创世/链不可达"应急位,不是稳态读链路径。
 - **重新创世顺序**:重生 chainspec(含联邦 215 写入 AdminAccounts)→ 起链 → `seed-federal-admins` → `ensure-gov` → 重跑 `generate_public_institution_bundle.mjs`([[feedback_registry_regen_after_genesis]])→ P1 快照接管。
 
-## 6. 链端待修(`20260621-admins-change-builtin-pup-selfgovern`,先沟通)
+## 6. 链端:PUP 自治 + 机构注销 close + 创世封存(`20260621-admins-change-builtin-pup-selfgovern`)
 
-创世 PUP 内置机构 `kind=BuiltinInstitution`,而 `ensure_account_kind_matches_org` 只准 NRC/PRC/PRB + `validate_admins_len_for_account` 对 PUP 无 expected → **联邦注册局当前无法发 `propose_admin_set_change`**。回归点:`BuiltinInstitution` 还管"禁止关闭"(`lib.rs:724`),不能简单改成 InstitutionAccount。推荐方案 A:保持 BuiltinInstitution,放宽两处校验接受 PUP,关闭保护自然保留。需用户确认(runtime 规则改动)。
+**6.1 PUP 自治(方案A,admins-change 已落地 2026-06-21)**:PUP 内置保持 `BuiltinInstitution`,放宽 `ensure_account_kind_matches_org`(接受 ORG_PUP)+ `validate_admins_len_for_account`(PUP 走可变上限,NRC/PRC/PRB 仍精确)。联邦注册局可发 `propose_admin_set_change` 自治。cargo test 43/43。
+
+**6.2 创世封存(已落地)**:`ProtectedGenesisAccounts` StorageMap,`build()` 写入全部 china/ 机构主账户(联邦注册局/治理/顶层政府司法监察教育立法=CID 根基,永不可注销);`is_genesis_protected` 供关闭入口调。
+
+**6.3 机构注销 close(organization-manage 已落地 2026-06-21)**:统一模型——**管理员属于机构不属于账户**(`resolve_admin_account_for_account` 任意账户解析到机构主账户的管理员集),故一个 `propose_close` 按被关账户 role 分流:Main=注销整机构(级联关全部账户余额→同一 beneficiary + 关 AdminAccount)、非主=只删该账户(不动 AdminAccount)。真源方向不循环——注册局在 CID 设注册局域注销态(区别于链投影 RevokedOnChain)+ 签发注销凭证(对称创建凭证,CID 系统签,payload 用 `OP_SIGN_DEREGISTER=0x14`,target+scope 入签名防重放);机构【自己的管理员】冷签发起 propose_close 带凭证(链上提案只能机构 admin 发起);链验:发起人∈机构admins + 凭证有效 + `UsedDeregisterNonce` 防重放 + `ensure_closeable` 三层硬闸(`is_genesis_protected` / `org∈{NRC,PRC,PRB}` / 724)。注销动作走 CID PasskeyChallenge 最严档(待 CID 侧实现)。机构 admin 拒签则链上账户滞留(非强制处置,强制吊销需另设治理通道,本期不做)。链端 cargo test 29/29 + 全 runtime check 通过。**待续**:CID 后端注销态+凭证签发(PasskeyChallenge)、CitizenWallet decoder、CID 前端、node 调用面随 propose_close 签名适配。
 
 ## 7. 实施阶段
 

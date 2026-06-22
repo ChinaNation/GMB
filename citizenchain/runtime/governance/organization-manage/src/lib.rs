@@ -223,6 +223,11 @@ pub mod pallet {
     pub type UsedRegisterNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
+    /// 中文注释:已用注销凭证 nonce(防同一注销凭证重放/关多账户)。
+    #[pallet::storage]
+    pub type UsedDeregisterNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+
     /// 机构多签当前进行中的关闭提案 ID（防止并发注销提案）。
     /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
     /// B 阶段 PendingCloseProposal 拆为两份:个人侧在 personal-manage 自持,
@@ -442,12 +447,24 @@ pub mod pallet {
         ReservedAccountName,
         /// sr25519 签名长度必须恰好为 64 字节
         MalformedSignature,
+        /// 创世初始机构(联邦注册局/治理机构/顶层政府等)永不可注销关闭
+        CannotCloseGenesisInstitution,
+        /// 治理机构(国储会/省储会/省储行)永不可注销关闭
+        CannotCloseGovernance,
+        /// 注销凭证验签失败
+        InvalidDeregisterCredential,
+        /// 注销凭证 nonce 已使用(防重放)
+        DeregisterNonceAlreadyUsed,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
     /// ACTION = 1 永久保留空位,不复用。
     pub const ACTION_CLOSE: u8 = 2;
     pub const ACTION_CREATE_INSTITUTION: u8 = 3;
+
+    /// 注销凭证作用域:整机构(关主账户=级联关全部账户)/ 单账户(只关该非主账户)。
+    pub const SCOPE_INSTITUTION: u8 = 0;
+    pub const SCOPE_ACCOUNT: u8 = 1;
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -542,13 +559,28 @@ pub mod pallet {
         /// 输入个人地址会返回 `Error::NotInstitutionAccount`。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
+        #[allow(clippy::too_many_arguments)]
         pub fn propose_close(
             origin: OriginFor<T>,
             account: T::AccountId,
             beneficiary: T::AccountId,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            issuer_cid_number: Vec<u8>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::close::do_propose_institution_close::<T>(who, account, beneficiary)
+            crate::close::do_propose_institution_close::<T>(
+                who,
+                account,
+                beneficiary,
+                register_nonce,
+                signature,
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+            )
         }
 
         /// 发起"创建个人多签账户"提案（无需 CID 注册）。
@@ -785,9 +817,13 @@ pub mod pallet {
         /// 从任意机构多签账户反查其管理员账户账户地址。
         ///
         /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
+        /// 中文注释:管理员属于机构(不属于账户)。任意机构账户(主/费用/自定义)都解析到
+        /// 本机构【主账户】——即 admins-change 里承载该机构唯一管理员集的键。这样机构管理员
+        /// 统一管理机构及其全部账户(创建/注销账户都由这套管理员授权)。
         pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
-            AccountRegisteredCid::<T>::get(account)?;
-            Some(account.clone())
+            let registered = AccountRegisteredCid::<T>::get(account)?;
+            let institution = Institutions::<T>::get(&registered.cid_number)?;
+            Some(institution.main_account)
         }
 
         /// 从任意机构账户反查管理员更换 org。

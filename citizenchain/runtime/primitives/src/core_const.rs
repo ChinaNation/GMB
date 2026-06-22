@@ -101,5 +101,6 @@ pub const OP_SIGN_BIND: u8 = 0x10; // 公民身份绑定
 pub const OP_SIGN_VOTE: u8 = 0x11; // 公民投票
 pub const OP_SIGN_POP: u8 = 0x12; // 人口快照
 pub const OP_SIGN_INST: u8 = 0x13; // CID 机构登记
+pub const OP_SIGN_DEREGISTER: u8 = 0x14; // CID 机构/账户注销凭证(注册局签发,链端 close 验签)
                                    // 所有治理投票一律走 `InternalVote::cast` 公开 call,业务模块
                                    // 新业务从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。

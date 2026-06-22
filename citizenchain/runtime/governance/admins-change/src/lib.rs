@@ -227,6 +227,16 @@ pub mod pallet {
     pub type AdminAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, AdminAccountOf<T>, OptionQuery>;
 
+    /// 中文注释:创世初始机构封存表（CID 系统根基,永不可注销关闭）。
+    ///
+    /// 仅 `build()` 写入 china_cb/ch/zf/sf/jc/jy/lf 的机构主账户(联邦注册局、治理机构、
+    /// 顶层政府/立法/司法/监察/教育);创世后无任何 extrinsic 可改。organization-manage
+    /// 的关闭入口据此硬拒(见 `is_genesis_protected` + `ensure_closeable`)。行政区生成、
+    /// 由 organization-manage 创建出来的机构(市注册局/公安局/公司)不在此表,可正常注销。
+    #[pallet::storage]
+    pub type ProtectedGenesisAccounts<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, (), OptionQuery>;
+
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub _phantom: core::marker::PhantomData<T>,
@@ -313,6 +323,7 @@ pub mod pallet {
                 } else {
                     ORG_PRC
                 };
+                ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
                 AdminAccounts::<T>::insert(
                     institution,
                     build_builtin_institution::<T>(node.cid_number, org, node.admins),
@@ -323,6 +334,7 @@ pub mod pallet {
                 let Some(institution) = decode_account::<T>(&node.main_account) else {
                     panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
                 };
+                ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
                 AdminAccounts::<T>::insert(
                     institution,
                     build_builtin_institution::<T>(node.cid_number, ORG_PRB, node.admins),
@@ -341,6 +353,7 @@ pub mod pallet {
                                 node.cid_number
                             );
                         };
+                        ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
                         AdminAccounts::<T>::insert(
                             institution,
                             build_builtin_institution::<T>(node.cid_number, ORG_PUP, node.admins),
@@ -503,21 +516,35 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 中文注释:账户是否为创世封存的初始机构(CID 系统根基,永不可注销关闭)。
+        /// 供 organization-manage 关闭入口做硬保护;数据由 `build()` 写入 `ProtectedGenesisAccounts`。
+        pub fn is_genesis_protected(account: &T::AccountId) -> bool {
+            ProtectedGenesisAccounts::<T>::contains_key(account)
+        }
+
         fn validate_admins_len_for_account(
             kind: AdminAccountKind,
             org: u8,
             admins_len: usize,
         ) -> DispatchResult {
             match kind {
-                AdminAccountKind::BuiltinInstitution => {
-                    // 固定人数约束：国储会19，省储会9，省储行9。
-                    let expected =
-                        expected_admins_len(org).ok_or(Error::<T>::InvalidInstitution)?;
-                    ensure!(
+                AdminAccountKind::BuiltinInstitution => match expected_admins_len(org) {
+                    // 治理机构固定人数约束：国储会19，省储会9，省储行9。
+                    Some(expected) => ensure!(
                         admins_len == expected as usize,
                         Error::<T>::InvalidAdminsLen
-                    );
-                }
+                    ),
+                    // 中文注释:PUP 创世机构(如联邦注册局)管理员数动态(自治可增减),
+                    // 走与 InstitutionAccount 相同的可变上限,不锁固定人数。org 已由
+                    // ensure_account_kind_matches_org 限定,此处 None 即 ORG_PUP。
+                    None => {
+                        ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
+                        ensure!(
+                            admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                            Error::<T>::InvalidAdminsLen
+                        );
+                    }
+                },
                 AdminAccountKind::PersonalAccount => {
                     ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
                     ensure!(
@@ -567,8 +594,11 @@ pub mod pallet {
         fn ensure_account_kind_matches_org(kind: AdminAccountKind, org: u8) -> DispatchResult {
             match kind {
                 AdminAccountKind::BuiltinInstitution => {
+                    // 中文注释:创世内置机构含治理机构(NRC/PRC/PRB)与公权机构(PUP,如联邦
+                    // 注册局/顶层政府)。PUP 内置走动态管理员自治(propose_admin_set_change),
+                    // 故同样接受 ORG_PUP;人数约束在 validate_admins_len_for_account 内分流。
                     ensure!(
-                        matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
+                        matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_PUP),
                         Error::<T>::InvalidAdminAccountKind
                     );
                 }

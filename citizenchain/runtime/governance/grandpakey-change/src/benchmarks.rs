@@ -46,7 +46,6 @@ mod benchmarks {
         assert!(votingengine::Pallet::<T>::get_proposal_data(0).is_some());
     }
 
-    // execute_replace_grandpa_key / cancel_failed_replace_grandpa_key benchmark
-    // 已废弃: 两个 wrapper extrinsic 已统一到 VotingEngine 的 retry/cancel
-    // 入口,benchmark 由 votingengine 自身覆盖。
+    // 重试/取消已通过提案的 wrapper extrinsic 已废弃,统一到 VotingEngine
+    // 的 retry/cancel 入口,benchmark 由 votingengine 自身覆盖。
 }

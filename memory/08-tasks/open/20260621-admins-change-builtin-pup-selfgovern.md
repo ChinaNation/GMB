@@ -1,10 +1,36 @@
 # 任务卡：链端 — PUP 自治 + 机构注销凭证 close + 根账户硬保护（先沟通）
 
 - 任务编号：20260621-admins-change-builtin-pup-selfgovern
-- 状态：open（先沟通条件:涉及 runtime 规则改动;设计已与用户收敛,实施前再确认一次）
+- 状态：in_progress（admins-change 部分已落地验证;organization-manage + CID + 钱包 + 前端待续）
 - 所属模块：citizenchain/runtime/governance/{admins-change, organization-manage} + citizencode/backend（注销态+凭证）
 - 当前负责人：Blockchain Agent（链端）+ CID Agent（CID 注销态+凭证签发）
 - 创建时间：2026-06-21（2026-06-21 并入 close 设计）
+
+---
+
+## 实施进度（2026-06-21）
+
+**已完成并验证 — admins-change（甲 + 乙的封存/检查器底座）**：
+- 甲 PUP 自治(方案A):`ensure_account_kind_matches_org`(lib.rs:567)BuiltinInstitution 分支加 `| ORG_PUP`;`validate_admins_len_for_account`(lib.rs:512)BuiltinInstitution 改 `match expected_admins_len(org)`(NRC/PRC/PRB 精确数,PUP 走可变上限 `>=2 && <=Max`)。
+- 乙 创世封存:新增 `ProtectedGenesisAccounts` StorageMap(lib.rs:237);`build()` 三处插入循环(CB/CH/insert_pup_builtin 宏)同步写入(lib.rs:326/337/356);新增 `pub fn is_genesis_protected`(lib.rs:521)供 organization-manage 调。
+- 724 `!BuiltinInstitution` 兜底保持不变。
+- 测试:新增 `genesis_protected_seals_every_builtin_institution`(封存条数==admin账户条数,治理+PUP都封存,非创世不封)+ `pup_builtin_clears_admins_change_validation_for_set_change`(PUP 创世过 admins-change 校验;完整投票流转因单测桩 InternalAdminProvider 仅到投票引擎边界,运行时 provider=admins-change 本身可全通)。**cargo test 43/43、0 warning、fmt 过**。
+- 发现:admins-change 单测夹具用桩 `TestInternalAdminProvider`(mod.rs:101),无法端到端跑创世 PUP 投票;**需补一个 runtime 级集成测试**(真实 provider)验证创世 PUP 自治全流程——记为本卡 follow-up。
+
+**已完成并验证 — organization-manage（机构注销 close 统一模型,2026-06-21）**:
+- **管理员属于机构**:`resolve_admin_account_for_account`(lib.rs:788)改为任意账户→`Institutions[cid].main_account`,机构管理员统一授权所有账户(顺带修好 `lookup_admin_config` 对非主账户返回机构管理员)。
+- 凭证 verifier:`traits.rs` `CidInstitutionVerifier` 加 `verify_institution_deregistration`(+`()` impl);`runtime/src/configs/mod.rs` 加具体实现,payload=`DUOQIAN‖OP_SIGN_DEREGISTER(0x14,新增于 primitives core_const)‖genesis_hash‖scope‖cid_number‖account_name‖target_account‖nonce‖issuer…`(target+scope 入签名防重放)。
+- `propose_close`(lib.rs:566)加 `register_nonce/signature/issuer_cid_number/issuer_main_account/signer_pubkey` 参数。
+- `do_propose_institution_close`(close.rs):org 解析 → **ensure_closeable 三层硬闸**(`is_genesis_protected` / `org∈{NRC,PRC,PRB}` / admins-change 724 兜底)→ **role 推 scope**(Main=整机构/非主=单账户)→ is_active_account_admin(机构管理员)→ **验注销凭证 + `UsedDeregisterNonce` 防重放**。scope 由 role 推导经签名绑定,故不需要独立 scope 参数/错误(原计划的 `DeregisterScopeMismatch/InvalidDeregisterScope` 实为死码,未落地)。
+- 级联:`CloseInstitutionAction` 加 `scope`;`execute_institution_close_with_finalizer` 按 scope 分流——整机构 `InstitutionAccounts::iter_prefix(cid)` 收集全部账户逐个(扣费后,dust 子账户整额免费转)→ 同一 beneficiary,末尾 `close_admin_account` 一次;单账户只关该账户不动 AdminAccount。整体 AllowDeath。
+- 存储/错误/常量:`UsedDeregisterNonce`、`SCOPE_INSTITUTION=0/SCOPE_ACCOUNT=1`、`OP_SIGN_DEREGISTER=0x14`、4 个错误(GenesisInstitution/Governance/InvalidDeregisterCredential/DeregisterNonceAlreadyUsed)。
+- **测试**:新增 非主账户只删该账户(机构/AdminAccount 保留)、凭证拒签、nonce 重放拒;更新 2 个级联断言(关主=级联两账户 beneficiary 收 1980)。**organization-manage cargo test 29/29、0 warning、fmt 过;全 citizenchain runtime cargo check 通过**。
+- 注:propose_close 签名变更属 runtime,预创世重生 chainspec 生效;benchmarks 无 propose_close 实际调用,无需改。
+
+**再后(后续步骤)**:
+- CID 后端(D):注册局域注销态 + `InstitutionDeregister/...AccountDeregister`(PasskeyChallenge)+ 凭证签发器(payload 与 DOMAIN_DEREGISTER 对齐)。
+- CitizenWallet(E):propose_close 带凭证 decoder。CID 前端(F):注销入口。
+- node:凡构造 propose_close 的 Tauri/前端调用面随签名变更适配。
 
 ---
 

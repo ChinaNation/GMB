@@ -4,21 +4,16 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use codec::Decode;
 use frame_benchmarking::v2::*;
-use frame_support::traits::Currency;
 use frame_system::RawOrigin;
-use sp_runtime::traits::SaturatedConversion;
-use sp_std::vec;
-use votingengine::STATUS_PASSED;
+use sp_std::{vec, vec::Vec};
 
 use crate::{
     pallet::{
-        AccountNameOf, AccountRegisteredCid, AdminsOf, CidNumberOf, CidRegisteredAccount,
+        AccountNameOf, AccountRegisteredCid, CidNumberOf, CidRegisteredAccount,
         InstitutionAccountNamesOf, RegisterNonceOf, RegisterSignatureOf,
     },
-    AccountValidator, BalanceOf, Call, Config, Pallet, ProtectedSourceChecker,
-    ReservedAccountGuard,
+    AccountValidator, Call, Config, Pallet, ProtectedSourceChecker, ReservedAccountGuard,
 };
 
 fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), BenchmarkError> {
@@ -62,85 +57,19 @@ fn bench_account_name<T: Config>() -> Result<AccountNameOf<T>, BenchmarkError> {
         .map_err(|_| BenchmarkError::Stop("benchmark account_name should fit"))
 }
 
-fn register_institution<T: Config>(
-    relayer: &T::AccountId,
-    cid_number: &CidNumberOf<T>,
-) -> Result<T::AccountId, BenchmarkError> {
-    let account_name = bench_account_name::<T>()?;
-    let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
-        .to_vec()
-        .try_into()
-        .map_err(|_| BenchmarkError::Stop("benchmark register nonce should fit"))?;
-    let signature: RegisterSignatureOf<T> = vec![1u8; 64]
-        .try_into()
-        .map_err(|_| BenchmarkError::Stop("benchmark register signature should fit"))?;
-    let account_names: InstitutionAccountNamesOf<T> = vec![account_name.clone()]
-        .try_into()
-        .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
-    Pallet::<T>::register_cid_institution(
-        RawOrigin::Signed(relayer.clone()).into(),
-        cid_number.clone(),
-        account_name.clone(),
-        account_names,
-        register_nonce,
-        signature,
-        b"LN".to_vec(),
-        [1u8; 32],
-    )?;
-    CidRegisteredAccount::<T>::get(cid_number, &account_name)
-        .ok_or(BenchmarkError::Stop("benchmark cid should be registered"))
+fn issuer_cid_number() -> Vec<u8> {
+    b"BENCH-ISSUER".to_vec()
 }
 
-fn find_safe_beneficiary<T: Config>(
-    account: &T::AccountId,
-) -> Result<T::AccountId, BenchmarkError> {
-    for index in 0..64u32 {
-        let beneficiary: T::AccountId = frame_benchmarking::account("beneficiary", index, 0);
-        if &beneficiary == account {
-            continue;
-        }
-        if T::ReservedAccountChecker::is_reserved(&beneficiary) {
-            continue;
-        }
-        if T::ProtectedSourceChecker::is_protected(&beneficiary) {
-            continue;
-        }
-        if !T::AccountValidator::is_valid(&beneficiary) {
-            continue;
-        }
-        return Ok(beneficiary);
-    }
-
-    Err(BenchmarkError::Stop(
-        "failed to find a benchmark-safe beneficiary",
-    ))
+fn scope_province_name() -> Vec<u8> {
+    b"BENCH-PROVINCE".to_vec()
 }
 
-/// Benchmark 辅助:让指定提案通过(绕开投票路径,benchmark 只关心后续业务执行开销)。
-fn pass_proposal<T: Config>(proposal_id: u64) -> Result<(), BenchmarkError> {
-    votingengine::Proposals::<T>::mutate(proposal_id, |maybe| {
-        if let Some(proposal) = maybe {
-            proposal.status = STATUS_PASSED;
-        }
-    });
-    let now = frame_system::Pallet::<T>::block_number();
-    votingengine::ProposalExecutionRetryStates::<T>::insert(
-        proposal_id,
-        votingengine::ExecutionRetryState {
-            manual_attempts: 0,
-            first_auto_failed_at: now,
-            retry_deadline: now,
-            last_attempt_at: None,
-        },
-    );
-    Ok(())
+fn scope_city_name() -> Vec<u8> {
+    b"BENCH-CITY".to_vec()
 }
 
-#[benchmarks(where
-    T: Config,
-    <T as frame_system::Config>::AccountId: Decode,
-    BalanceOf<T>: Ord + sp_runtime::traits::Saturating + Copy,
-)]
+#[benchmarks(where T: Config)]
 mod benchmarks {
     use super::*;
 
@@ -169,8 +98,11 @@ mod benchmarks {
             account_names,
             register_nonce,
             signature,
-            b"LN".to_vec(),
+            issuer_cid_number(),
+            relayer.clone(),
             [1u8; 32],
+            scope_province_name(),
+            scope_city_name(),
         );
 
         assert_eq!(
@@ -181,8 +113,7 @@ mod benchmarks {
         Ok(())
     }
 
-    // 当前 organization-manage 仅保留 register_cid_institution + propose_create_institution
-    // + cleanup_rejected_proposal 三个 benchmark;CI 运行时影响范围与 weights.rs 占位等价。
-    // propose_close 的 benchmark 重写需完整 register_cid_institution +
-    // propose_create_institution + pass 流水线,留待 follow-up 任务卡补齐。
+    // 当前 organization-manage 仅保留 register_cid_institution benchmark。
+    // propose_create_institution / propose_close / cleanup_rejected_proposal
+    // 需补齐真实投票流水线 fixture 后再生成正式权重。
 }

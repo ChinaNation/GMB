@@ -266,10 +266,9 @@ pub mod pallet {
             Ok(())
         }
 
-        // call_index = 1, 2 已废弃: execute_replace_grandpa_key /
-        // cancel_failed_replace_grandpa_key 已统一到 VotingEngine 的
-        // retry_passed_proposal / cancel_passed_proposal —— 前端必须直接调用
-        // 投票引擎入口,业务 pallet 不再保留 wrapper extrinsic。
+        // call_index = 1, 2 永久留空:重试/取消已通过提案统一到
+        // VotingEngine::retry_passed_proposal / VotingEngine::cancel_passed_proposal,
+        // 前端必须直接调用投票引擎入口,业务 pallet 不再保留 wrapper extrinsic。
     }
 
     impl<T: Config> Pallet<T> {
@@ -373,8 +372,8 @@ pub mod pallet {
 //
 // 失败语义:自动执行失败(如 GRANDPA pending change 未清理)时发
 // `GrandpaKeyExecutionFailed` 事件,提案状态保留 PASSED,任何签名管理员可以通过
-// `execute_replace_grandpa_key` 手动重试,或用 `cancel_failed_replace_grandpa_key`
-// 清理确定无法执行的提案。
+// `VotingEngine::retry_passed_proposal` 手动重试,或用
+// `VotingEngine::cancel_passed_proposal` 清理确定无法执行的提案。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {

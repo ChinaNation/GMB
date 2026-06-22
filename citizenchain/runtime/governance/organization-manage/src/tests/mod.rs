@@ -141,6 +141,24 @@ impl
             && signer_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
+
+    fn verify_institution_deregistration(
+        scope: u8,
+        cid_number: &[u8],
+        _account_name: &[u8],
+        _target_account: &AccountId32,
+        nonce: &crate::pallet::RegisterNonceOf<Test>,
+        signature: &crate::pallet::RegisterSignatureOf<Test>,
+        _issuer_cid_number: &[u8],
+        _issuer_main_account: &AccountId32,
+        signer_pubkey: &[u8; 32],
+    ) -> bool {
+        scope <= crate::pallet::SCOPE_ACCOUNT
+            && !cid_number.is_empty()
+            && !nonce.is_empty()
+            && signer_pubkey != &[0u8; 32]
+            && signature.as_slice() == b"deregister-ok"
+    }
 }
 
 pub struct TestCidEligibility;
@@ -417,6 +435,30 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
         }
     }
     Ok(())
+}
+
+/// 测试用:带一组通过 TestCidInstitutionVerifier 的注销凭证发起关闭。
+/// `nonce_seed` 区分同一测试内多次调用的 nonce,避免 `UsedDeregisterNonce` 冲突。
+pub fn close_with_cred(
+    origin: RuntimeOrigin,
+    account: AccountId32,
+    beneficiary: AccountId32,
+    nonce_seed: u8,
+) -> sp_runtime::DispatchResult {
+    let nonce: crate::pallet::RegisterNonceOf<Test> =
+        vec![nonce_seed, 0xDE].try_into().expect("nonce fits bound");
+    let signature: crate::pallet::RegisterSignatureOf<Test> =
+        b"deregister-ok".to_vec().try_into().expect("sig fits bound");
+    OrganizationManage::propose_close(
+        origin,
+        account,
+        beneficiary,
+        nonce,
+        signature,
+        b"ISSUER-CID".to_vec(),
+        AccountId32::new([7u8; 32]),
+        [9u8; 32],
+    )
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

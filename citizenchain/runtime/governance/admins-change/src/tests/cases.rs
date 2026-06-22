@@ -1289,3 +1289,60 @@ fn prc_set_change_isolates_provinces() {
         );
     });
 }
+
+#[test]
+fn genesis_protected_seals_every_builtin_institution() {
+    new_test_ext().execute_with(|| {
+        // 中文注释:每个创世内置机构都必须进封存表——封存条数应与 admin 账户条数一致,
+        // 防止遗漏 build() 某个插入循环。
+        let admin_count = AdminAccounts::<Test>::iter().count();
+        let protected_count = ProtectedGenesisAccounts::<Test>::iter().count();
+        assert!(admin_count > 0, "创世应写入内置机构");
+        assert_eq!(
+            admin_count, protected_count,
+            "每个创世 admin 账户都必须进封存表"
+        );
+        // 治理机构 + PUP 内置都在封存表。
+        assert!(AdminsChange::is_genesis_protected(&nrc_pallet_id()));
+        assert!(AdminsChange::is_genesis_protected(&prb_pallet_id()));
+        assert!(AdminsChange::is_genesis_protected(&pup_builtin_id()));
+        // 非创世账户不在封存表。
+        assert!(!AdminsChange::is_genesis_protected(&pending_account_id()));
+    });
+}
+
+#[test]
+fn pup_builtin_clears_admins_change_validation_for_set_change() {
+    new_test_ext().execute_with(|| {
+        // 中文注释:PUP 创世内置机构(联邦注册局/总统府等)能通过 admins-change 自身的
+        // kind/org/len 校验发起换管理员(自治)。修复前 BuiltinInstitution+PUP 会被
+        // ensure_account_kind_matches_org 直接以 InvalidAdminAccountKind 拒。
+        // 本单测验证 admins-change 边界放行;完整投票流转依赖真实 InternalAdminProvider
+        // (运行时=admins-change 本身),由 internal-vote 自身测试套覆盖,此处桩 provider
+        // 仅能到投票引擎边界,故只断言"不再被 admins-change 这层校验拒绝"。
+        let account = pup_builtin_id();
+        // 封存只挡"注销关闭",不挡"换管理员自治"。
+        assert!(AdminsChange::is_genesis_protected(&account));
+        let old_admin = pup_builtin_admin(0);
+        let new_admin = pending_account_id();
+        let mut admins = current_admins(account.clone());
+        admins[0] = new_admin;
+        let threshold = admins.len() as u32 / 2 + 1;
+        let res = AdminsChange::propose_admin_set_change(
+            RuntimeOrigin::signed(old_admin),
+            ORG_PUP,
+            account,
+            bounded_admins(admins),
+            threshold,
+        );
+        if let Err(err) = res {
+            let detail = format!("{err:?}");
+            assert!(
+                !detail.contains("InvalidAdminAccountKind")
+                    && !detail.contains("InvalidAdminsLen")
+                    && !detail.contains("InstitutionOrgMismatch"),
+                "admins-change 不应再拒绝 PUP 创世机构自治: {detail}"
+            );
+        }
+    });
+}

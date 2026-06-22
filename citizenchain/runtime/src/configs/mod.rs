@@ -813,6 +813,62 @@ impl
             sr25519_verify(&signature, &msg, &public)
         }
     }
+
+    fn verify_institution_deregistration(
+        scope: u8,
+        cid_number: &[u8],
+        account_name: &[u8],
+        target_account: &AccountId,
+        nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
+        signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
+        issuer_cid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (
+                scope,
+                account_name,
+                target_account,
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+            );
+            return !cid_number.is_empty() && !nonce.is_empty() && !signature.is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
+                return false;
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
+
+            // 中文注释:必须与 CID 端注销凭证签发 payload 严格一致。
+            // payload:DUOQIAN + OP_SIGN_DEREGISTER + genesis_hash + scope + cid_number
+            // + account_name + target_account + nonce + 签发机构 + 签发管理员公钥。
+            // scope 与 target_account 入签名,防换范围/换账户重放。
+            let payload = (
+                primitives::core_const::DUOQIAN,
+                primitives::core_const::OP_SIGN_DEREGISTER,
+                frame_system::Pallet::<Runtime>::block_hash(0),
+                scope,
+                cid_number,
+                account_name,
+                target_account,
+                nonce.as_slice(),
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+            );
+            let msg = blake2_256(&payload.encode());
+
+            sr25519_verify(&signature, &msg, &public)
+        }
+    }
 }
 
 impl organization_manage::Config for Runtime {

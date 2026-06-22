@@ -11,7 +11,7 @@ use crate::pallet::{
 use crate::BindCredential;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
-use sp_runtime::traits::Hash;
+use sp_runtime::{sp_std::vec, traits::Hash};
 
 const BENCH_ISSUER_CID: &[u8] = b"CID-BENCH-ISSUER";
 const BENCH_SCOPE_PROVINCE: &[u8] = b"bench-province";

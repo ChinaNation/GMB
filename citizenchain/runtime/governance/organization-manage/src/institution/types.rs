@@ -99,6 +99,8 @@ pub struct CloseInstitutionAction<AccountId> {
     pub account: AccountId,
     pub beneficiary: AccountId,
     pub proposer: AccountId,
+    /// 注销作用域:`SCOPE_INSTITUTION`(关主账户=级联关整个机构)/ `SCOPE_ACCOUNT`(只关该非主账户)。
+    pub scope: u8,
 }
 
 /// 创建机构时用户填写的账户初始余额项。

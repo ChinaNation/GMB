@@ -131,7 +131,7 @@ fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
 }
 
 #[test]
-fn cancel_failed_replace_grandpa_key_cleans_up_passed_but_invalid_proposal() {
+fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
         let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
@@ -201,7 +201,7 @@ fn cancel_failed_replace_grandpa_key_cleans_up_passed_but_invalid_proposal() {
 }
 
 #[test]
-fn cancel_failed_replace_grandpa_key_rejects_temporarily_blocked_proposal() {
+fn votingengine_cancel_passed_proposal_rejects_temporarily_blocked_proposal() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
         let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())

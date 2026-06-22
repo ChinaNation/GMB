@@ -5,6 +5,7 @@ use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
 use frame_system as system;
 use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
+use primitives::china::china_zf::CHINA_ZF;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
     types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
@@ -200,6 +201,16 @@ fn prb_pallet_id() -> AccountId32 {
 
 fn prb_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CH[0].admins[index])
+}
+
+/// 中文注释:一个 PUP 创世内置机构(CHINA_ZF[0]=总统府,org=ORG_PUP,BuiltinInstitution)。
+/// 用于验证 PUP 内置可自治换管理员(动态人数)+ 被创世封存。
+fn pup_builtin_id() -> AccountId32 {
+    AccountId32::new(CHINA_ZF[0].main_account)
+}
+
+fn pup_builtin_admin(index: usize) -> AccountId32 {
+    AccountId32::new(CHINA_ZF[0].admins[index])
 }
 
 fn pending_account_id() -> AccountId32 {

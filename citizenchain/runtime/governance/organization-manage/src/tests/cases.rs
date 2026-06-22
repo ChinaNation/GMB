@@ -651,10 +651,11 @@ fn propose_close_writes_pending() {
     new_test_ext().execute_with(|| {
         let (_cid, main) = create_and_activate_institution(b"CID-CL-1", 3);
 
-        assert_ok!(OrganizationManage::propose_close(
+        assert_ok!(close_with_cred(
             RuntimeOrigin::signed(admin(0)),
             main.clone(),
             beneficiary(),
+            1,
         ));
         let pid = last_proposal_id();
         assert_eq!(
@@ -673,10 +674,11 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
         let main_name = account_name(RESERVED_NAME_MAIN);
         let account = main.clone();
 
-        assert_ok!(OrganizationManage::propose_close(
+        assert_ok!(close_with_cred(
             RuntimeOrigin::signed(admin(0)),
             main.clone(),
             beneficiary_acc.clone(),
+            2,
         ));
         let pid = last_proposal_id();
         assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
@@ -684,8 +686,8 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
         assert_eq!(proposal.status, STATUS_EXECUTED);
 
-        // ACCT_AMOUNT=1000 → fee = max(1, 10) = 10,beneficiary 收 990
-        assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
+        // 级联注销整个机构(主+费用账户):每账户 1000 扣 fee 10 → 各 990,beneficiary 收 1980。
+        assert_eq!(Balances::free_balance(&beneficiary_acc), 1980);
         assert_eq!(Balances::free_balance(&main), 0);
         assert!(!pallet::InstitutionPendingClose::<Test>::contains_key(
             &main
@@ -718,11 +720,7 @@ fn propose_close_rejects_close_balance_below_minimum() {
         );
 
         assert_noop!(
-            OrganizationManage::propose_close(
-                RuntimeOrigin::signed(admin(0)),
-                main,
-                beneficiary(),
-            ),
+            close_with_cred(RuntimeOrigin::signed(admin(0)), main, beneficiary(), 3),
             pallet::Error::<Test>::CloseBalanceBelowMinimum
         );
     });
@@ -734,11 +732,7 @@ fn propose_close_rejects_when_not_institution_account() {
         // 没在 AccountRegisteredCid 表里的地址
         let stranger = AccountId32::new([0xEE; 32]);
         assert_noop!(
-            OrganizationManage::propose_close(
-                RuntimeOrigin::signed(admin(0)),
-                stranger,
-                beneficiary(),
-            ),
+            close_with_cred(RuntimeOrigin::signed(admin(0)), stranger, beneficiary(), 4),
             pallet::Error::<Test>::NotInstitutionAccount
         );
     });
@@ -750,7 +744,7 @@ fn propose_close_rejects_self_beneficiary() {
         let (_cid, main) = create_and_activate_institution(b"CID-CL-5", 3);
         // beneficiary == account 应拒
         assert_noop!(
-            OrganizationManage::propose_close(RuntimeOrigin::signed(admin(0)), main.clone(), main,),
+            close_with_cred(RuntimeOrigin::signed(admin(0)), main.clone(), main, 5),
             pallet::Error::<Test>::InvalidBeneficiary
         );
     });
@@ -838,17 +832,18 @@ fn existential_deposit_is_preserved_after_close() {
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
 
-        assert_ok!(OrganizationManage::propose_close(
+        assert_ok!(close_with_cred(
             RuntimeOrigin::signed(admin(0)),
             main.clone(),
             beneficiary_acc.clone(),
+            6,
         ));
         let pid = last_proposal_id();
         assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
-        // 主账户转空(AllowDeath),beneficiary 拿到 990
+        // 级联注销主+费用账户(AllowDeath 转空),beneficiary 拿到 990+990=1980。
         assert_eq!(Balances::free_balance(&main), 0);
-        assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
+        assert_eq!(Balances::free_balance(&beneficiary_acc), 1980);
     });
 }
 
@@ -858,5 +853,82 @@ fn admin_account_is_main_account() {
         // 管理员更换主体必须是机构 main AccountId,不是 CID 机构号或派生主体。
         let main = AccountId32::new([0x42; 32]);
         assert_eq!(main, AccountId32::new([0x42; 32]));
+    });
+}
+
+#[test]
+fn close_non_main_account_only_removes_that_account() {
+    new_test_ext().execute_with(|| {
+        let (cid, main) = create_and_activate_institution(b"CID-SUB", 3);
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
+        let beneficiary_acc = beneficiary();
+        let fee_name = account_name(RESERVED_NAME_FEE);
+        let fee_acc = OrganizationManage::derive_institution_account(
+            cid.as_slice(),
+            crate::address::InstitutionAccountRole::Fee,
+        )
+        .unwrap();
+
+        // 机构管理员(admin0)注销【非主】费用账户:role=Fee → scope=account。
+        // 授权靠 resolve 统一解析到机构主账户的管理员集(子账户无独立管理员)。
+        assert_ok!(close_with_cred(
+            RuntimeOrigin::signed(admin(0)),
+            fee_acc.clone(),
+            beneficiary_acc.clone(),
+            8,
+        ));
+        let pid = last_proposal_id();
+        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
+
+        // 仅费用账户被删;机构主账户 + AdminAccount + 机构记录保留(机构不消亡)。
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(&cid, &fee_name));
+        assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(&fee_acc));
+        assert!(pallet::AccountRegisteredCid::<Test>::contains_key(&main));
+        assert!(admins_change::AdminAccounts::<Test>::get(main).is_some());
+        // 仅费用账户余额(1000-10)转 beneficiary。
+        assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
+        assert_eq!(Balances::free_balance(&fee_acc), 0);
+    });
+}
+
+#[test]
+fn propose_close_rejects_invalid_deregister_credential() {
+    new_test_ext().execute_with(|| {
+        let (_cid, main) = create_and_activate_institution(b"CID-BC", 3);
+        let bad_sig: pallet::RegisterSignatureOf<Test> =
+            b"wrong-sig".to_vec().try_into().expect("sig fits");
+        let nonce: pallet::RegisterNonceOf<Test> = vec![0xAB, 0xCD].try_into().expect("nonce fits");
+        assert_noop!(
+            OrganizationManage::propose_close(
+                RuntimeOrigin::signed(admin(0)),
+                main,
+                beneficiary(),
+                nonce,
+                bad_sig,
+                b"ISSUER".to_vec(),
+                AccountId32::new([7u8; 32]),
+                [9u8; 32],
+            ),
+            pallet::Error::<Test>::InvalidDeregisterCredential
+        );
+    });
+}
+
+#[test]
+fn propose_close_rejects_replayed_deregister_nonce() {
+    new_test_ext().execute_with(|| {
+        let (_cid, main) = create_and_activate_institution(b"CID-NR", 3);
+        // 首次注销(nonce seed 7)成功 → nonce 标记已用。
+        assert_ok!(close_with_cred(
+            RuntimeOrigin::signed(admin(0)),
+            main.clone(),
+            beneficiary(),
+            7,
+        ));
+        // 同 nonce 再发起 → DeregisterNonceAlreadyUsed(nonce 检查先于并发检查命中)。
+        assert_noop!(
+            close_with_cred(RuntimeOrigin::signed(admin(0)), main, beneficiary(), 7),
+            pallet::Error::<Test>::DeregisterNonceAlreadyUsed
+        );
     });
 }
