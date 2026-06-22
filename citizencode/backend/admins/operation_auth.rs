@@ -31,6 +31,10 @@ pub(crate) enum AdminActionType {
     InstitutionUpdate,
     InstitutionCreateAccount,
     InstitutionDeleteAccount,
+    /// 注销整个机构(关主账户=级联关全部账户);签发整机构 scope 注销凭证。
+    InstitutionDeregister,
+    /// 注销机构单个非主账户;签发单账户 scope 注销凭证。
+    InstitutionAccountDeregister,
     InstitutionUploadDocument,
     InstitutionDeleteDocument,
     PublicSecurityReconcile,
@@ -58,6 +62,8 @@ impl AdminActionType {
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
             Self::InstitutionDeleteAccount => "INSTITUTION_DELETE_ACCOUNT",
+            Self::InstitutionDeregister => "INSTITUTION_DEREGISTER",
+            Self::InstitutionAccountDeregister => "INSTITUTION_ACCOUNT_DEREGISTER",
             Self::InstitutionUploadDocument => "INSTITUTION_UPLOAD_DOCUMENT",
             Self::InstitutionDeleteDocument => "INSTITUTION_DELETE_DOCUMENT",
             Self::PublicSecurityReconcile => "PUBLIC_SECURITY_RECONCILE",
@@ -85,6 +91,8 @@ impl AdminActionType {
             Self::InstitutionUpdate => "更新机构",
             Self::InstitutionCreateAccount => "新增机构账户",
             Self::InstitutionDeleteAccount => "删除机构账户",
+            Self::InstitutionDeregister => "注销机构",
+            Self::InstitutionAccountDeregister => "注销机构账户",
             Self::InstitutionUploadDocument => "上传机构文档",
             Self::InstitutionDeleteDocument => "删除机构文档",
             Self::PublicSecurityReconcile => "公安局机构对账",
@@ -117,6 +125,8 @@ impl AdminActionType {
             | Self::CreateFederalRegistry
             | Self::DeleteFederalRegistry
             | Self::InstitutionDeleteAccount
+            | Self::InstitutionDeregister
+            | Self::InstitutionAccountDeregister
             | Self::InstitutionDeleteDocument
             | Self::CpmsIssueInstallCode
             | Self::CpmsRevokeInstallToken
@@ -170,6 +180,8 @@ pub(crate) fn parse_action_type(
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
         "INSTITUTION_DELETE_ACCOUNT" => Ok(AdminActionType::InstitutionDeleteAccount),
+        "INSTITUTION_DEREGISTER" => Ok(AdminActionType::InstitutionDeregister),
+        "INSTITUTION_ACCOUNT_DEREGISTER" => Ok(AdminActionType::InstitutionAccountDeregister),
         "INSTITUTION_UPLOAD_DOCUMENT" => Ok(AdminActionType::InstitutionUploadDocument),
         "INSTITUTION_DELETE_DOCUMENT" => Ok(AdminActionType::InstitutionDeleteDocument),
         "PUBLIC_SECURITY_RECONCILE" => Ok(AdminActionType::PublicSecurityReconcile),

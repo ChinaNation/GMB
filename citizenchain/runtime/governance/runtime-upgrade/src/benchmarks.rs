@@ -7,10 +7,13 @@ use frame_benchmarking::v2::*;
 use frame_support::traits::Get;
 use frame_system::RawOrigin;
 use primitives::china::china_cb::CHINA_CB;
-use sp_runtime::sp_std::vec;
+use sp_runtime::{
+    sp_std::vec,
+    traits::{Hash, SaturatedConversion, Saturating},
+};
 
 use crate::pallet::{CodeOf, Config, ReasonOf};
-use crate::{Call, Pallet};
+use crate::Pallet;
 
 const BENCH_MAX_REASON_LEN: u32 = 1024;
 const BENCH_MAX_CODE_SIZE: u32 = 5 * 1024 * 1024;
@@ -45,7 +48,24 @@ fn code_max<T: Config>() -> CodeOf<T> {
         .expect("benchmark runtime code should fit")
 }
 
-#[benchmarks]
+fn prepare_joint_population_snapshot<T>(who: &T::AccountId)
+where
+    T: Config + joint_vote::Config,
+{
+    let now = frame_system::Pallet::<T>::block_number();
+    let prepared_at = now.saturating_add(1u32.saturated_into());
+    let nonce_hash = T::Hashing::hash(b"benchmark-runtime-upgrade-population");
+    joint_vote::PendingPopulationSnapshots::<T>::insert(
+        who,
+        joint_vote::PreparedPopulationSnapshot {
+            eligible_total: 10u64,
+            nonce_hash,
+            prepared_at,
+        },
+    );
+}
+
+#[benchmarks(where T: Config + joint_vote::Config)]
 mod benchmarks {
     use super::*;
 
@@ -54,9 +74,13 @@ mod benchmarks {
         let proposer = nrc_admin::<T>();
         let reason = reason_max::<T>();
         let code = code_max::<T>();
+        prepare_joint_population_snapshot::<T>(&proposer);
 
-        #[extrinsic_call]
-        propose_runtime_upgrade(RawOrigin::Signed(proposer), reason, code);
+        #[block]
+        {
+            Pallet::<T>::propose_runtime_upgrade(RawOrigin::Signed(proposer).into(), reason, code)
+                .expect("benchmark runtime upgrade proposal should succeed");
+        }
 
         let proposal_id = votingengine::Pallet::<T>::next_proposal_id().saturating_sub(1);
         assert!(

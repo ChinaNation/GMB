@@ -1,7 +1,8 @@
 /target
 .claude/
 citizenchain/target
-citizenchain/scripts
+citizenchain/scripts/*
+!citizenchain/scripts/benchmark-weight-template.hbs
 target/
 citizenchain/citizenui/target/
 citizenchain/citizenui/desktop/src-tauri/binaries/

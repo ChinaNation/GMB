@@ -27,10 +27,21 @@
 - **测试**:新增 非主账户只删该账户(机构/AdminAccount 保留)、凭证拒签、nonce 重放拒;更新 2 个级联断言(关主=级联两账户 beneficiary 收 1980)。**organization-manage cargo test 29/29、0 warning、fmt 过;全 citizenchain runtime cargo check 通过**。
 - 注:propose_close 签名变更属 runtime,预创世重生 chainspec 生效;benchmarks 无 propose_close 实际调用,无需改。
 
-**再后(后续步骤)**:
-- CID 后端(D):注册局域注销态 + `InstitutionDeregister/...AccountDeregister`(PasskeyChallenge)+ 凭证签发器(payload 与 DOMAIN_DEREGISTER 对齐)。
-- CitizenWallet(E):propose_close 带凭证 decoder。CID 前端(F):注销入口。
-- node:凡构造 propose_close 的 Tauri/前端调用面随签名变更适配。
+**CID 后端(D)进行中(2026-06-21)**:
+- **已完成并验证**:
+  - 注销凭证签发器 `chain_runtime::build_institution_deregistration_credential`(citizencode/backend/core/chain_runtime.rs),payload=`DUOQIAN‖OP_SIGN_DEREGISTER(0x14)‖genesis_hash‖scope‖cid_number‖account_name‖target_account‖nonce‖issuer×3`,与链端 `verify_institution_deregistration` **逐字节一致**;抽纯函数 `deregistration_payload_digest` + **golden 测试锁死字节**(任何类型/顺序漂移即红)。
+  - 最严档动作 `AdminActionType::InstitutionDeregister/InstitutionAccountDeregister`(operation_auth.rs:enum/as_str/label/parse/`auth_type=PasskeyChallenge`)。
+  - **注销态表**(D1):`core/db.rs init_current_schema` 新增 `institution_deregistrations`(cid_number/account_name/scope/target_account/deregister_nonce UNIQUE/signature/status[ISSUED|ONCHAIN_CLOSED]/issued_by/issued_at/closed_at)+ 活跃唯一索引(同账户同时仅一张 ISSUED)。
+  - citizencode backend cargo test 64/64、0 warning、fmt 过。签发器暂 `#[allow(dead_code)]`(待 actions 接入,同其它 credential DTO 风格)。
+- **待续(D 剩余)— handler 接线 + 路由**:
+  - 🔑 **关键架构约束(已摸清)**:注销凭证签名要 `&AppState`(`build_institution_deregistration_credential`),且机构查存+管辖要 `state.db.get_institution_with_accounts(cid)` + `get_visible_scope(ctx).includes_province/city`(`subjects/admin.rs:543 get_institution` 是范本)——这两者都是 **state 级**,而通用派发 `apply_action_conn`/`preview_action_conn` 是 **conn 级**。**正解:把 InstitutionDeregister/...AccountDeregister 当特例在 `prepare_admin_action`/`commit_admin_action` 的 state 层处理**(机构查存→管辖判定→创世/治理拒签(`inst.created_by='SYSTEM'`)→`derive_account(cid,account_name)`→`parse_sr25519_pubkey_bytes`→`[u8;32]` target→生成 nonce→建凭证→写 ISSUED+signature),不走 conn 级 apply 派发(它对 business action 本就返回错误)。
+  - repo:`insert_deregistration_issued_conn`/`set_deregistration_signature_conn`/`get_active_deregistration_by_cid_conn`(随 handler 一并加,避免 unused)。
+  - 路由:`GET /api/v1/app/institutions/:cid/deregistration-info`(镜像 `chain_duoqian_info.rs:208 app_get_institution_registration_info`),下发 ISSUED 凭证给机构管理员构造 propose_close。
+  - 测试:创世/治理拒签、管辖外拒、target_account=derive_account 一致、ISSUED 唯一约束、deregistration-info 仅返 ISSUED。
+
+**再后(E/F/node)**:
+- CitizenWallet(E):propose_close 带凭证 decoder。CID 前端(F):注销入口(PasskeyChallenge 交互)。
+- node:凡构造 propose_close 的 Tauri/前端调用面随签名变更补齐新参数(动态构造不阻断编译)。
 
 ---
 

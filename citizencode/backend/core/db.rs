@@ -101,6 +101,28 @@ impl Db {
                 province_name TEXT PRIMARY KEY
              );
 
+             -- 中文注释:机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
+             -- 注册局管理员发起注销(PasskeyChallenge）后写 ISSUED;机构管理员持凭证上链 propose_close,
+             -- indexer 收到链上关闭后置 ONCHAIN_CLOSED(投影子项）。见 ADR-023 §6.3。
+             CREATE TABLE IF NOT EXISTS institution_deregistrations (
+                id               BIGSERIAL PRIMARY KEY,
+                cid_number       TEXT NOT NULL,
+                account_name     TEXT NOT NULL,
+                scope            SMALLINT NOT NULL,
+                target_account   TEXT NOT NULL,
+                deregister_nonce TEXT NOT NULL UNIQUE,
+                signature        TEXT,
+                status           TEXT NOT NULL DEFAULT 'ISSUED'
+                    CHECK (status IN ('ISSUED', 'ONCHAIN_CLOSED')),
+                issued_by        TEXT NOT NULL,
+                issued_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+                closed_at        TIMESTAMPTZ
+             );
+             CREATE INDEX IF NOT EXISTS idx_inst_dereg_cid
+                ON institution_deregistrations(cid_number, status);
+             CREATE UNIQUE INDEX IF NOT EXISTS idx_inst_dereg_target_active
+                ON institution_deregistrations(lower(target_account)) WHERE status = 'ISSUED';
+
              CREATE TABLE IF NOT EXISTS admins (
                 admin_id BIGINT PRIMARY KEY,
                 admin_account TEXT NOT NULL UNIQUE,

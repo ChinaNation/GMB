@@ -46,7 +46,7 @@ mod benchmarks {
         let institution = prc_institution::<T>();
         let proposer = prc_admin::<T>(0);
         let beneficiary = beneficiary_account::<T>();
-        let amount: BalanceOf<T> = 100u128.saturated_into();
+        let amount: BalanceOf<T> = 111u128.saturated_into();
         let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
 
         let institution_account = institution.clone();

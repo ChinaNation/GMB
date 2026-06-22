@@ -17,6 +17,7 @@ sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
+joint-vote = { path = "../../votingengine/joint-vote", default-features = false }
 genesis-pallet = { path = "../../genesis", default-features = false }
 
 [features]
@@ -31,12 +32,14 @@ std = [
     "sp-io/std",
     "primitives/std",
     "votingengine/std",
+    "joint-vote/std",
     "genesis-pallet/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
+    "joint-vote/runtime-benchmarks",
 ]
 try-runtime = []
 

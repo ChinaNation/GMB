@@ -3,7 +3,9 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::Encode;
-use primitives::core_const::{DUOQIAN, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};
+use primitives::core_const::{
+    DUOQIAN, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE,
+};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -92,6 +94,23 @@ pub(crate) struct RuntimeInstitutionRegistrationCredential {
     pub(crate) signer_pubkey: String,
     pub(crate) scope_province_name: String,
     pub(crate) scope_city_name: String,
+    pub(crate) signature: String,
+    pub(crate) payload_digest: String,
+    pub(crate) meta: RuntimeSignatureMeta,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct RuntimeInstitutionDeregistrationCredential {
+    pub(crate) genesis_hash: String,
+    pub(crate) scope: u8,
+    pub(crate) cid_number: String,
+    pub(crate) account_name: String,
+    pub(crate) target_account: String,
+    pub(crate) deregister_nonce: String,
+    pub(crate) issuer_cid_number: String,
+    pub(crate) issuer_main_account: String,
+    pub(crate) signer_pubkey: String,
     pub(crate) signature: String,
     pub(crate) payload_digest: String,
     pub(crate) meta: RuntimeSignatureMeta,
@@ -250,6 +269,92 @@ pub(crate) fn build_institution_registration_credential(
         signer_pubkey: signing_ctx.signer_pubkey_hex,
         scope_province_name: signing_ctx.scope_province_name,
         scope_city_name: signing_ctx.scope_city_name,
+        signature,
+        payload_digest: hex::encode(payload_digest),
+        meta: runtime_signature_meta(state),
+    })
+}
+
+/// 中文注释:注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
+///
+/// **铁律**:元素顺序与 SCALE 类型必须与链端 `organization-manage` 的
+/// `verify_institution_deregistration`(runtime/src/configs/mod.rs)逐字节一致——
+/// `[u8;32]`/`&[u8;32]` 无长度前缀、`u8` 1 字节、`&[u8]` 带 Compact 长度前缀。
+/// target_account 与 scope 入签名,杜绝换账户/换范围/换机构重放。
+fn deregistration_payload_digest(
+    genesis_hash: &[u8; 32],
+    scope: u8,
+    cid_number: &[u8],
+    account_name: &[u8],
+    target_account: &[u8; 32],
+    deregister_nonce: &[u8],
+    issuer_cid_number: &[u8],
+    issuer_main_account: &[u8; 32],
+    signer_pubkey: &[u8; 32],
+) -> [u8; 32] {
+    let payload = (
+        DUOQIAN,
+        OP_SIGN_DEREGISTER,
+        genesis_hash,
+        scope,
+        cid_number,
+        account_name,
+        target_account,
+        deregister_nonce,
+        issuer_cid_number,
+        issuer_main_account,
+        signer_pubkey,
+    );
+    blake2_256(&payload.encode())
+}
+
+/// 中文注释:签发机构/账户注销凭证(对称 `build_institution_registration_credential`)。
+/// scope=`SCOPE_INSTITUTION`(0,关主账户=注销整机构)/ `SCOPE_ACCOUNT`(1,只关该非主账户)。
+/// 由注册局管理员动作(PasskeyChallenge 最严档)校验通过后调用;机构管理员持此凭证冷签 propose_close。
+// 中文注释:签发器已就绪并经 golden 测试锁字节;接入点(admins/actions.rs 的
+// InstitutionDeregister/InstitutionAccountDeregister 派发)为本特性下一子步,故暂标 dead_code。
+#[allow(dead_code)]
+pub(crate) fn build_institution_deregistration_credential(
+    state: &AppState,
+    scope: u8,
+    cid_number: &str,
+    account_name: &str,
+    target_account: &[u8; 32],
+    deregister_nonce: String,
+) -> Result<RuntimeInstitutionDeregistrationCredential, String> {
+    if cid_number.trim().is_empty() {
+        return Err("cid_number is required".to_string());
+    }
+    if account_name.trim().is_empty() {
+        return Err("account_name is required".to_string());
+    }
+    if deregister_nonce.trim().is_empty() {
+        return Err("deregister_nonce is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let signing_ctx = runtime_signing_context(None, None)?;
+    let payload_digest = deregistration_payload_digest(
+        &genesis_hash,
+        scope,
+        cid_number.trim().as_bytes(),
+        account_name.trim().as_bytes(),
+        target_account,
+        deregister_nonce.trim().as_bytes(),
+        signing_ctx.issuer_cid_number.as_bytes(),
+        &signing_ctx.issuer_main_account,
+        &signing_ctx.signer_pubkey,
+    );
+    let signature = sign_runtime_digest(state, &payload_digest)?;
+    Ok(RuntimeInstitutionDeregistrationCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        scope,
+        cid_number: cid_number.trim().to_string(),
+        account_name: account_name.trim().to_string(),
+        target_account: format!("0x{}", hex::encode(target_account)),
+        deregister_nonce,
+        issuer_cid_number: signing_ctx.issuer_cid_number,
+        issuer_main_account: signing_ctx.issuer_main_account_hex,
+        signer_pubkey: signing_ctx.signer_pubkey_hex,
         signature,
         payload_digest: hex::encode(payload_digest),
         meta: runtime_signature_meta(state),
@@ -562,7 +667,40 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_production_mode, parse_hex_hash32, trusted_production_chain_by_hash};
+    use super::{
+        deregistration_payload_digest, is_production_mode, parse_hex_hash32,
+        trusted_production_chain_by_hash,
+    };
+
+    #[test]
+    fn deregistration_payload_digest_is_byte_locked() {
+        // 中文注释:golden 测试锁死注销凭证 payload 的 SCALE 字节编码。
+        // 该摘要口径必须与链端 verify_institution_deregistration(runtime configs)逐字节一致;
+        // 任何字段类型/顺序漂移都会改变摘要,此断言立即红。
+        let genesis_hash = [0x11u8; 32];
+        let target = [0x22u8; 32];
+        let issuer_main = [0x33u8; 32];
+        let signer = [0x44u8; 32];
+        let digest = deregistration_payload_digest(
+            &genesis_hash,
+            0u8, // SCOPE_INSTITUTION
+            b"AH001-ZF001-123456789-2026",
+            "主账户".as_bytes(),
+            &target,
+            b"dereg-nonce-1",
+            b"ZS001-GZF0P-249474503-2026",
+            &issuer_main,
+            &signer,
+        );
+        // golden 值:DUOQIAN/OP_SIGN_DEREGISTER + 上述固定输入的 SCALE 编码 blake2_256。
+        // 已逐字段核对链端 verify_institution_deregistration 的 tuple 类型/顺序一致
+        // (AccountId32=[u8;32]、H256=[u8;32] 均 32 字节无前缀;cid/account_name/nonce/issuer &[u8] 均 Compact 前缀)。
+        assert_eq!(
+            hex::encode(digest),
+            "fb4202876f62f2b27b27e35912e0a0bbc4524e4ee8cd8fe70eb876dfc1e284b7",
+            "注销凭证 payload 字节编码漂移(与链端口径不一致)"
+        );
+    }
 
     #[test]
     fn parse_hex_hash32_accepts_prefixed_hash() {

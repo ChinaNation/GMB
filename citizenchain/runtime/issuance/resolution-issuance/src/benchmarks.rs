@@ -7,7 +7,7 @@ use frame_benchmarking::v2::*;
 use frame_support::{traits::Get, BoundedVec};
 use frame_system::RawOrigin;
 use primitives::china::china_cb::CHINA_CB;
-use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, Hash, SaturatedConversion, Saturating, Zero};
 use sp_std::{vec, vec::Vec};
 
 use crate::{pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount};
@@ -60,7 +60,24 @@ fn full_allocations<T: pallet::Config>() -> (pallet::AllocationOf<T>, pallet::Ba
     )
 }
 
-#[benchmarks]
+fn prepare_joint_population_snapshot<T>(who: &T::AccountId)
+where
+    T: pallet::Config + joint_vote::Config,
+{
+    let now = frame_system::Pallet::<T>::block_number();
+    let prepared_at = now.saturating_add(1u32.saturated_into());
+    let nonce_hash = T::Hashing::hash(b"benchmark-resolution-issuance-population");
+    joint_vote::PendingPopulationSnapshots::<T>::insert(
+        who,
+        joint_vote::PreparedPopulationSnapshot {
+            eligible_total: 10u64,
+            nonce_hash,
+            prepared_at,
+        },
+    );
+}
+
+#[benchmarks(where T: Config + joint_vote::Config)]
 mod benchmarks {
     use super::*;
 
@@ -81,17 +98,21 @@ mod benchmarks {
         let recipients = prc_recipients::<T>();
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);
+        prepare_joint_population_snapshot::<T>(&proposer);
 
         let reason = reason_max::<T>();
         let (allocations, total_amount) = full_allocations::<T>();
 
-        #[extrinsic_call]
-        propose_resolution_issuance(
-            RawOrigin::Signed(proposer),
-            reason,
-            total_amount,
-            allocations,
-        );
+        #[block]
+        {
+            Pallet::<T>::propose_resolution_issuance(
+                RawOrigin::Signed(proposer).into(),
+                reason,
+                total_amount,
+                allocations,
+            )
+            .expect("benchmark resolution issuance proposal should succeed");
+        }
 
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);
     }
