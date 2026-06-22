@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'assets', 'admin_divisions');
-const DEFAULT_DB = resolve(__dirname, '..', '..', 'cid', 'backend', 'china', 'china.sqlite');
+const DEFAULT_DB = resolve(__dirname, '..', '..', 'citizencode', 'backend', 'china', 'china.sqlite');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);

@@ -15,8 +15,8 @@
 //!   (删除 updated_at 抓不到,删机构罕见,留低频全量对账兜底。)
 //!
 //! 路由(挂 app_routes,非 admin):
-//!   GET /api/v1/app/public-institutions?province=&city=&since_version=&after_cid=&page_size=
-//!   GET /api/v1/app/public-institutions/version?province=&city=
+//!   GET /api/v1/app/public-institutions?province_name=&city_name=&since_version=&after_cid=&page_size=
+//!   GET /api/v1/app/public-institutions/version?province_name=&city_name=
 
 use std::collections::HashMap;
 

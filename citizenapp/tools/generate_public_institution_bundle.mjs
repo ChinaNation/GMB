@@ -3,7 +3,7 @@
 //
 // 发布期从 CID 公开接口**keyset 翻页**拉全量公权机构目录,写成 assets 数据包(基线):
 //   assets/public_institutions/manifest.json = { version, generated_at, provinces: [{name,ver}] }
-//   assets/public_institutions/<省全名>.json  = { province, manifest_version, count, institutions: [...] }
+//   assets/public_institutions/<省全名>.json  = { province_name, manifest_version, count, institutions: [...] }
 // App 启动后按省级 ver 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
 //
 // 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_cid),
@@ -47,7 +47,7 @@ function arg(name, fallback) {
 
 async function fetchPage(province, afterCid) {
   const url = new URL(`${BASE_URL}/api/v1/app/public-institutions`);
-  url.searchParams.set('province', province);
+  url.searchParams.set('province_name', province);
   url.searchParams.set('page_size', String(PAGE_SIZE));
   if (afterCid) url.searchParams.set('after_cid', afterCid);
 
@@ -84,7 +84,7 @@ async function fetchProvince(province) {
     afterCid = data.next_cursor || items[items.length - 1].cid_number;
   }
   return {
-    province,
+    province_name: province,
     manifest_version: manifestVersion ?? '',
     count: institutions.length,
     institutions,

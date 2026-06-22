@@ -23,17 +23,17 @@
 当前行政区版本:
 
 ```text
-version:   1
+version:   2
 provinces: 43
 cities:    2872
-towns:     39227
+towns:     39087
 address_units: 598655
 source_code_filled: 598655
 official_source_codes: 535084
 local_source_codes:    63571
-sha256:    c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb
+sha256:    0a7bbe497fa04a084cebe37cef24b8683a27e8c618727f4f4ca07f5b83c7853c
 city_tombstones: 0
-town_tombstones: 0
+town_tombstones: 140
 ```
 
 重点修正:
@@ -100,20 +100,22 @@ citizenapp 公权机构包通过真实 CID 公开接口生成,公民端“公权
 
 2026-06-20 已按当前 `china.sqlite` 完成发布资产收口:重新生成 citizenapp 行政区包、执行 CID 公权机构运行库对账和 strict check,并通过当前 CID 真实公开接口重新生成 citizenapp 公权机构包。CPMS 不维护第二份行政区源码;发布安装包时由 `citizenpassport/scripts/build_linux_host_installer.sh` 把同一份 `citizencode/backend/china/china.sqlite` 拷入 payload。
 
+2026-06-21 镇名残留清理后增量传播:`china.sqlite` 镇名残留清理(剥省/老地级市前缀、功能区企业名删除或并入驻地镇、对照国家统计局2024)使 towns 39227→39087(86 改名 + 17 并入已有镇 + 94 并入驻地镇删壳 + 29 删空壳,共 140 移除码进 `town_tombstones`),admin_division_version 1→2。下游只更新改动的:行政区字典包按省增量重生(33 省 towns 分片变);`reconcile-gov --changed-only` 把 430 个镇级公权机构改名(cid 不变,确定性派生)、清 700 个孤儿(移除镇),仅 33 省写库;公权机构包重生全 43 省(33 省按数据变,10 省仅 manifest_version 同步早前对账)。strict check 通过。残留清理:`generate_admin_division_bundle.mjs` 默认库路径 `cid/→citizencode/`;`generate_public_institution_bundle.mjs` 请求参数与输出键 `province→province_name`(与后端/客户端对齐);`public_institution.rs` 接口注释参数名同步。
+
 当前公权目录收口结果:
 
 ```text
 admin_divisions bundle:
-  version=1 provinces=43 cities=2872 towns=39227
-  china_sqlite_sha256=c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb
+  version=2 provinces=43 cities=2872 towns=39087
+  china_sqlite_sha256=0a7bbe497fa04a084cebe37cef24b8683a27e8c618727f4f4ca07f5b83c7853c
 reconcile-gov --changed-only:
-  scopes=43 inserted=55354 updated=190362 account_inserted=491475 removed=58281
+  scopes=33 inserted=0 updated=211347 account_inserted=422727 removed=700
 check-gov --strict:
-  ok=true manifest_current=true target_count=245716 active_count=245716
+  ok=true manifest_current=true target_count=245016 active_count=245016
   missing=0 mismatched=0 missing_accounts=0 obsolete=0
-  catalog_hash=499c1ee8af974f0a79affe6731883d491052da1767f4a99ae072ff29c1f42ea6
+  catalog_hash=a3d7f875388543cec87088333c03a9df148d3dad60b8be1f528d8b073705b89f
 citizenapp public_institutions:
-  version=1 provinces=43 total=245716 YL=1697
+  version=2026-06-22 provinces=43 total=245016 YL=1697
   完整公权目录包含 CITY_POLICE=2872,CITY_EDU=2872,JY=2873,PUBLIC_SECURITY=2872
   target_count - public_institutions = 0
   code cross-check bad_count=0
