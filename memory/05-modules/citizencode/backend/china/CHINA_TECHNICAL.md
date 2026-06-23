@@ -16,7 +16,7 @@
 - 生产读取:`CID_CHINA_DB=/opt/citizencode/china/china.sqlite`
 - 职责:提供省、市、镇和镇下地址段数据,以及市/镇 tombstones 和只读查询能力。
 
-`china.sqlite` 是行政区唯一权威源。CID 后端只读打开该 SQLite;citizenapp、CPMS 和公权机构资产包都从这份开发库派生随包只读快照。系统运行中不修改行政区,也不提供行政区管理 tab。
+`china.sqlite` 是行政区唯一权威源。CID 后端只读打开该 SQLite;CitizenApp、CPMS 和公权机构资产包都从这份开发库派生随包只读快照。系统运行中不修改行政区,也不提供行政区管理 tab。
 
 ## 数据规模
 
@@ -49,7 +49,7 @@ town_tombstones: 140
 - 岭南省已拆分 `香港市`、`九龙市`,并新增 `香洲市`;`香洲市` 包含 `坦洲镇`、`神湾镇`、`三乡镇`、`唐家湾镇`。
 - 广东省 `中山市` 已重建为一个市,原中山镇级伪市壳合并回 `中山市`;原 `东升镇` 并入 `小榄镇`。
 - 广东省东莞区域不恢复为单一旧市,而是按重新创世口径拆为 `中堂市`、`莞城市`、`石龙市`、`万江市`、`虎门市`、`常平市`、`塘厦市` 七个市,完整承载原东莞 4 个街道和 28 个镇;功能区壳已删除。
-- 2026-06-19 行政区名称归属清理仅更新 `china.sqlite`,未生成 citizenapp / CPMS 数据包,未生成 CID 公权机构。
+- 2026-06-19 行政区名称归属清理仅更新 `china.sqlite`,未生成 CitizenApp / CPMS 数据包,未生成 CID 公权机构。
 - 河南 `人和市` 保留为现实平顶山市石龙区的系统唯一名,并补齐 `龙兴镇/北郎店社区村`;广东 `石龙市` 保留,全国只存在一个 `石龙市`。
 - 海南儋州区域从一镇一市收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
 - 矿区按重新创世规则清理:5 个及以上镇的正式矿区改为普通市名,少于 5 个镇的矿区壳删除并入相邻市。
@@ -93,12 +93,12 @@ citizencode-backend check-gov --strict
 manifest 都必须一致。自动目录只清理 `gov.source='GENERATED'` 的派生机构;管理员手动创建的
 `MANUAL` 公权机构不由行政区同步删除。
 
-citizenapp 公权机构包通过真实 CID 公开接口生成,公民端“公权机构”显示完整公权目录。
+CitizenApp 公权机构包通过真实 CID 公开接口生成,公民端“公权机构”显示完整公权目录。
 完整目录包含 CID 自动公权目录(公安局、教育委员会、省储行等)、管理员手动创建的
 公法人、以及上级为公法人的非法人。CID 管理端可以按“公权机构 / 市公安局 /
-教育机构”等后台功能分区管理,但这些分区不得影响 citizenapp 公民端公权列表。
+教育机构”等后台功能分区管理,但这些分区不得影响 CitizenApp 公民端公权列表。
 
-2026-06-20 已按当前 `china.sqlite` 完成发布资产收口:重新生成 citizenapp 行政区包、执行 CID 公权机构运行库对账和 strict check,并通过当前 CID 真实公开接口重新生成 citizenapp 公权机构包。CPMS 不维护第二份行政区源码;发布安装包时由 `citizenpassport/scripts/build_linux_host_installer.sh` 把同一份 `citizencode/backend/china/china.sqlite` 拷入 payload。
+2026-06-20 已按当前 `china.sqlite` 完成发布资产收口:重新生成 CitizenApp 行政区包、执行 CID 公权机构运行库对账和 strict check,并通过当前 CID 真实公开接口重新生成 CitizenApp 公权机构包。CPMS 不维护第二份行政区源码;发布安装包时由 `citizenpassport/scripts/build_linux_host_installer.sh` 把同一份 `citizencode/backend/china/china.sqlite` 拷入 payload。
 
 2026-06-21 镇名残留清理后增量传播:`china.sqlite` 镇名残留清理(剥省/老地级市前缀、功能区企业名删除或并入驻地镇、对照国家统计局2024)使 towns 39227→39087(86 改名 + 17 并入已有镇 + 94 并入驻地镇删壳 + 29 删空壳,共 140 移除码进 `town_tombstones`),admin_division_version 1→2。下游只更新改动的:行政区字典包按省增量重生(33 省 towns 分片变);`reconcile-gov --changed-only` 把 430 个镇级公权机构改名(cid 不变,确定性派生)、清 700 个孤儿(移除镇),仅 33 省写库;公权机构包重生全 43 省(33 省按数据变,10 省仅 manifest_version 同步早前对账)。strict check 通过。残留清理:`generate_admin_division_bundle.mjs` 默认库路径 `cid/→citizencode/`;`generate_public_institution_bundle.mjs` 请求参数与输出键 `province→province_name`(与后端/客户端对齐);`public_institution.rs` 接口注释参数名同步。
 
@@ -114,7 +114,7 @@ check-gov --strict:
   ok=true manifest_current=true target_count=245016 active_count=245016
   missing=0 mismatched=0 missing_accounts=0 obsolete=0
   catalog_hash=a3d7f875388543cec87088333c03a9df148d3dad60b8be1f528d8b073705b89f
-citizenapp public_institutions:
+CitizenApp public_institutions:
   version=2026-06-22 provinces=43 total=245016 YL=1697
   完整公权目录包含 CITY_POLICE=2872,CITY_EDU=2872,JY=2873,PUBLIC_SECURITY=2872
   target_count - public_institutions = 0
@@ -145,4 +145,4 @@ sqlite3 citizencode/backend/china/china.sqlite "select count(*) from sqlite_mast
 sqlite3 citizencode/backend/china/china.sqlite "PRAGMA integrity_check"
 ```
 
-本轮地址段改造不生成 citizenapp 公权机构包,不执行公权机构 reconcile。CPMS 运行库在初始化和启动时从随包 `china.sqlite` 同步当前市镇与地址段。
+本轮地址段改造不生成 CitizenApp 公权机构包,不执行公权机构 reconcile。CPMS 运行库在初始化和启动时从随包 `china.sqlite` 同步当前市镇与地址段。

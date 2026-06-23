@@ -1,4 +1,4 @@
-// 清算行 offchain 网络 Tauri command 用 DTO 集合,与前端 offchain/types.ts 对齐。
+// 清算行链下网络 Tauri command 用 DTO 集合,与前端 transaction/offchain-transaction/types.ts 对齐。
 //
 // 中文注释:
 // - 本文件只保留清算行节点声明、连通性检测、管理员解锁等 offchain 网络类型。

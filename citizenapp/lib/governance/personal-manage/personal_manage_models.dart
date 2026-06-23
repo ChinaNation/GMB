@@ -5,8 +5,8 @@ import 'dart:typed_data';
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CREATE=0 之后）：
 ///   account: AccountId32(32) + proposer: AccountId32(32)
 ///   + amount: u128(16) + fee: u128(16)。
-class CreateDuoqianProposalInfo {
-  const CreateDuoqianProposalInfo({
+class CreateMultisigProposalInfo {
+  const CreateMultisigProposalInfo({
     required this.proposalId,
     required this.account,
     required this.proposer,
@@ -40,8 +40,8 @@ class CreateDuoqianProposalInfo {
     return Uint8List.fromList(_hexDecode(account));
   }
 
-  CreateDuoqianProposalInfo copyWithStatus(int? newStatus) {
-    return CreateDuoqianProposalInfo(
+  CreateMultisigProposalInfo copyWithStatus(int? newStatus) {
+    return CreateMultisigProposalInfo(
       proposalId: proposalId,
       account: account,
       proposer: proposer,
@@ -57,8 +57,8 @@ class CreateDuoqianProposalInfo {
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CLOSE=1 之后）：
 ///   account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)。
-class CloseDuoqianProposalInfo {
-  const CloseDuoqianProposalInfo({
+class CloseMultisigProposalInfo {
+  const CloseMultisigProposalInfo({
     required this.proposalId,
     required this.account,
     required this.beneficiary,
@@ -85,8 +85,8 @@ class CloseDuoqianProposalInfo {
     return Uint8List.fromList(_hexDecode(account));
   }
 
-  CloseDuoqianProposalInfo copyWithStatus(int? newStatus) {
-    return CloseDuoqianProposalInfo(
+  CloseMultisigProposalInfo copyWithStatus(int? newStatus) {
+    return CloseMultisigProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiary,
@@ -97,7 +97,7 @@ class CloseDuoqianProposalInfo {
 }
 
 /// 个人多签账户状态。
-enum DuoqianStatus {
+enum MultisigStatus {
   /// 提案投票中，尚未激活。
   pending,
 
@@ -123,7 +123,7 @@ class AccountInfo {
   /// 管理员公钥列表（hex，不含 0x 前缀）。
   final List<String> admins;
 
-  final DuoqianStatus status;
+  final MultisigStatus status;
 }
 
 Uint8List _hexDecode(String hex) {

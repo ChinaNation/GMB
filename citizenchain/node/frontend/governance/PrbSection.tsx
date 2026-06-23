@@ -5,8 +5,8 @@ import { AdminListPage, AdminSetChangePage } from './admins-change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateDuoqianTransferPage } from '../transaction/duoqian-transfer/CreateProposalPage';
-import { SweepProposalPage } from '../transaction/duoqian-transfer/SweepProposalPage';
+import { CreateMultisigTransferPage } from '../transaction/multisig-transfer/CreateProposalPage';
+import { SweepProposalPage } from '../transaction/multisig-transfer/SweepProposalPage';
 import type { AdminWalletMatch } from './types';
 
 type PrbView =
@@ -47,7 +47,7 @@ export function PrbSection() {
 
   if (view.page === 'create-proposal') {
     return (
-      <CreateDuoqianTransferPage
+      <CreateMultisigTransferPage
         cidNumber={view.cidNumber}
         institutionCode="PRB"
         cidFullName={view.cidFullName}

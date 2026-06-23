@@ -3,7 +3,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// 扫码内容的路由分类结果。统一协议 CITIZEN_QR_V1 下按 kind 分派。
 enum QrRouteType {
-  /// 登录挑战码(citizenapp 不处理,展示明确错误)。
+  /// 登录挑战码(CitizenApp 不处理,展示明确错误)。
   loginChallenge,
 
   /// 用户码 - 联系人(user_contact)
@@ -21,7 +21,7 @@ enum QrRouteType {
   /// 交易签名回执(sign_response)
   signResponse,
 
-  /// login_receipt(citizenapp 既不生成也不扫)
+  /// login_receipt(CitizenApp 既不生成也不扫)
   loginReceipt,
 
   /// 裸 SS58 地址或 `gmb://account/<addr>` — 向后兼容转账。

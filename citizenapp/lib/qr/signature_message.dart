@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 
 /// 唯一的签名原文拼接函数。
 ///
-/// 格式(逐字节与 citizenwallet / Rust 后端 / TS 前端一致):
+/// 格式(逐字节与 CitizenWallet / Rust 后端 / TS 前端一致):
 /// ```
 /// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 /// ```

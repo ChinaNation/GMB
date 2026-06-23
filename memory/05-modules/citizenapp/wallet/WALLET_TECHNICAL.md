@@ -160,7 +160,7 @@ lib/
 1. 钱包新建或导入到本机后，`ChainTxMonitor` 为该钱包建立 `WalletTxSyncCursorEntity`，finalized 补同步起点为当前 finalized 区块；不查询、不补录导入前历史。
 2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `Balances::Transfer` 写成 `inBlock`，启动、重连和 finalized 后还会补扫 `finalized+1..best` 的未确认区块，避免错过 newHeads 的收款记录；监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
 3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；不再单独保存 `direction`。
-4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / duoqian_transfer`；列表方向由金额正负号推导。
+4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / multisig_transfer`；列表方向由金额正负号推导。
 5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
 6. 删除钱包时同步删除该 `walletPubkeyHex` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
 7. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
@@ -180,13 +180,13 @@ lib/
 - **冷钱包**：
   1. `LoginService.buildExternalSignRequest()` 将登录签名原文包装为 `QrSignRequest`
   2. 在线手机导航到 `QrSignSessionPage` 展示请求二维码
-  3. citizenwallet 离线设备扫描请求，独立验证 payload 与 display 后使用冷钱包私钥签名
+  3. CitizenWallet 离线设备扫描请求，独立验证 payload 与 display 后使用冷钱包私钥签名
   4. 在线手机扫描回执后，`LoginService.buildReceiptFromSignature()` 校验签名（含 `payload_hash`）并生成登录回执
 
 ### 4.7 链上支付签名（由 onchain 调用）
 
 - **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainPaymentService`（seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其与当前 `WalletProfile.pubkeyHex` 完全一致，不一致直接拒绝签名
-- **冷钱包**：构造 `QrSignRequest`（含 `display` 字段）→ 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用 citizenwallet 离线设备扫码签名（离线端独立解码 payload 并与 display 交叉验证）→ 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey + payload_hash` → 签名回调注入
+- **冷钱包**：构造 `QrSignRequest`（含 `display` 字段）→ 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用 CitizenWallet 离线设备扫码签名（离线端独立解码 payload 并与 display 交叉验证）→ 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey + payload_hash` → 签名回调注入
 
 `OnchainPaymentService.submitTransfer()` 接受 `sign` 回调参数，由 UI 层根据 `signMode` 提供不同实现。
 
@@ -253,7 +253,7 @@ lib/
 
 1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
 2. 二维码：`CITIZEN_QR_V1 kind=user_contact`，`body.address` 为当前钱包 SS58 地址，下载按钮浮在二维码正中间（半透明圆形背景）
-3. 冷钱包离线签名入口由 `citizenwallet` 承担；citizenapp 钱包详情页不承载 `QrOfflineSignPage`
+3. 冷钱包离线签名入口由 CitizenWallet 承担；CitizenApp 钱包详情页不承载 `QrOfflineSignPage`
 4. 地址+复制：地址居中两行显示，复制图标在右侧
 5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
 6. 最近交易记录：最多显示 5 条，显示与完整列表一致的状态标签，点击单条进入交易详情

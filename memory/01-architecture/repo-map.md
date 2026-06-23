@@ -140,7 +140,7 @@ CID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `citizencode/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `citizencode/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
 - `citizencode/frontend/china/`:行政区划元数据 API 与本地缓存。
-- `citizencode/frontend/subjects/`:主体共享类型、字段标签和 `chain_duoqian_info.ts`。
+- `citizencode/frontend/subjects/`:主体共享类型、字段标签和 `chain_multisig_info.ts`。
 - `citizencode/frontend/gov/`:公权机构页面入口。
 - `citizencode/frontend/private/`:私权机构页面入口。
 - `citizencode/frontend/accounts/`:机构账户组件。

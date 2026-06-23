@@ -56,7 +56,7 @@ GMB_ACTIVATE_SUBJECT_V1
 + nonce(16)
 ```
 
-激活 QR `display.action = activate_admin_account`，字段必须为 `institution_code / subject / pubkey`，并与 citizenwallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / institutionCode / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
+激活 QR `display.action = activate_admin_account`，字段必须为 `institution_code / subject / pubkey`，并与 CitizenWallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / institutionCode / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
 
 链上 call data：
 

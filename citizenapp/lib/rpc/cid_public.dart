@@ -6,8 +6,8 @@ import 'package:http/http.dart' as http;
 ///
 /// 中文注释:
 /// - 对接 citizencode-backend 的 `GET /api/v1/app/clearing-banks/search` 端点
-///   (实现见 `citizencode/backend/institutions/handler.rs::app_search_clearing_banks`)。
-/// - 该端点**无鉴权**,citizenapp 在用户绑定清算行前展示列表用。
+///   (实现见 `citizencode/backend/subjects/chain_multisig_info.rs` 的清算行公开查询)。
+/// - 该端点**无鉴权**,CitizenApp 在用户绑定清算行前展示列表用。
 /// - 仅返回 `is_clearing_bank == true` 的机构,带主账户/费用账户地址。
 class CidPublicApi {
   /// [baseUrl] 必须是不带末尾斜杠的根地址,例如 `https://cid.example.com`。

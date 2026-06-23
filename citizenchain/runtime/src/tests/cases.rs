@@ -22,7 +22,7 @@ fn fee_payer_returns_none_for_transfer() {
 
     let institution = AccountId::new(CHINA_CB[0].main_account);
     let beneficiary = AccountId::new([99u8; 32]);
-    let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
+    let call = RuntimeCall::MultisigTransfer(multisig_transfer::pallet::Call::propose_transfer {
         institution_code: votingengine::types::NRC,
         institution,
         beneficiary,
@@ -35,7 +35,7 @@ fn fee_payer_returns_none_for_transfer() {
     let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
     assert!(
         payer.is_none(),
-        "fee_payer must return None for DuoqianTransfer (fees handled internally)"
+        "fee_payer must return None for MultisigTransfer (fees handled internally)"
     );
 }
 
@@ -56,7 +56,7 @@ fn governance_module_tags_are_globally_unique() {
         ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
         ("organization_manage", organization_manage::MODULE_TAG),
         ("personal_manage", personal_manage::MODULE_TAG),
-        ("duoqian_transfer", duoqian_transfer::MODULE_TAG),
+        ("multisig_transfer", multisig_transfer::MODULE_TAG),
     ];
     let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();
     assert_eq!(
@@ -362,7 +362,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 
         let institution = AccountId::new(primitives::china::china_cb::CHINA_CB[0].main_account);
         let transfer_call =
-            RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
+            RuntimeCall::MultisigTransfer(multisig_transfer::pallet::Call::propose_transfer {
                 institution_code: votingengine::types::NRC,
                 institution,
                 beneficiary: AccountId::new([79u8; 32]),
@@ -379,7 +379,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 }
 
 #[test]
-fn duoqian_reserved_checker_rejects_stake_and_fee_accounts() {
+fn multisig_reserved_checker_rejects_stake_and_fee_accounts() {
     let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account);
     assert!(RuntimeReservedAccountGuard::is_reserved(&stake));
 
@@ -1013,11 +1013,11 @@ fn stake_account_is_completely_blocked() {
     let account = stake_account();
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianTransferExecute
+        InstitutionAssetAction::MultisigTransferExecute
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianCloseExecute
+        InstitutionAssetAction::MultisigCloseExecute
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
@@ -1030,15 +1030,15 @@ fn stake_account_is_completely_blocked() {
 }
 
 #[test]
-fn reserved_duoqian_only_allows_transfer_and_close() {
+fn reserved_multisig_only_allows_transfer_and_close() {
     let account = reserved_main_account();
     assert!(RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianTransferExecute
+        InstitutionAssetAction::MultisigTransferExecute
     ));
     assert!(RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianCloseExecute
+        InstitutionAssetAction::MultisigCloseExecute
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
@@ -1055,11 +1055,11 @@ fn reserved_fee_account_only_allows_fee_sweep() {
     let account = reserved_fee_account();
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianTransferExecute
+        InstitutionAssetAction::MultisigTransferExecute
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianCloseExecute
+        InstitutionAssetAction::MultisigCloseExecute
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
@@ -1076,11 +1076,11 @@ fn ordinary_account_allows_all_actions() {
     let account = ordinary_account();
     assert!(RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianTransferExecute
+        InstitutionAssetAction::MultisigTransferExecute
     ));
     assert!(RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianCloseExecute
+        InstitutionAssetAction::MultisigCloseExecute
     ));
     assert!(RuntimeInstitutionAsset::can_spend(
         &account,

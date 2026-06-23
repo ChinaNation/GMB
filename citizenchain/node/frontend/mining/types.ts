@@ -31,9 +31,9 @@ export type MiningDashboard = {
 
 export type NetworkOverview = {
   onlineNodes: number;
-  guochuhuiNodes: number;
-  shengchuhuiNodes: number;
-  shengchuhangNodes: number;
+  nrcNodes: number;
+  prcNodes: number;
+  prbNodes: number;
   fullNodes: number;
   lightNodes: number;
   warning: string | null;

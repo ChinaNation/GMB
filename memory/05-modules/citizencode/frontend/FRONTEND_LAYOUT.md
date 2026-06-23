@@ -2,7 +2,7 @@
 
 - 最后更新:2026-06-14
 - 任务卡:
-  - `memory/08-tasks/done/20260502-cid-duoqian-info-layout.md`
+  - `memory/08-tasks/done/20260502-cid-multisig-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-cid-联邦注册局机构管理员相关前后端与-runtime-目录结构.md`
   - `memory/08-tasks/open/20260502-cid-chain目录归并功能模块.md`
   - `memory/08-tasks/done/20260502-cid-cpms-sheng目录整改.md`
@@ -78,7 +78,7 @@ citizencode/frontend/
   编码选项走 `/api/v1/admin/number/meta`。
 - `subjects/api.ts` 只保留跨公权/私权共用的数据类型和公共边界;业务 CRUD API
   分别放 `gov/api.ts`、`private/<type>/api.ts`、`education/api.ts`、`accounts/api.ts`、`docs/api.ts`。
-  机构与区块链交互继续放 `subjects/chain_duoqian_info.ts`。
+  机构与区块链交互继续放 `subjects/chain_multisig_info.ts`。
 - 公权机构页面入口放 `gov/`,前后端统一使用 `gov` 命名;前端不得新建 `public/` 业务目录。
 - 六类私权机构入口放 `private/`;其下按 `common/sole/partnership/company/corporation/welfare/association`
   拆分六类私权机构前端边界。教育机构(JY 教育体系机构)页面入口放 `education/`;
@@ -91,8 +91,8 @@ citizencode/frontend/
   市注册局机构管理员列表接口放 `admins/city_registry_admins_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `core/CitizenSignaturePanel.tsx` 与 `core/CitizenSignatureModal.tsx` 是统一签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
-- 管理员扫码登录页面必须明确引导 `citizenwallet` 公民钱包生成登录回执;`citizenapp` 不处理
-  `login_challenge / login_receipt`,不得在登录页文案中引导到 `citizenapp`。
+- 管理员扫码登录页面必须明确引导 CitizenWallet 公民钱包生成登录回执;CitizenApp 不处理
+  `login_challenge / login_receipt`,不得在登录页文案中引导到 CitizenApp。
 - `core/institution/CreateInstitutionForm.tsx` 是私权/公权/教育新增弹窗唯一表单实现;
   `private/PrivateCreateModal.tsx`、`gov/GovCreateModal.tsx` 和 `education/EducationCreateModal.tsx`
   只做本模块 API 注入,不得再复制表单逻辑。
@@ -127,9 +127,9 @@ citizencode/frontend/
 
 ## 公民绑定弹窗 UI 口径
 
-- `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 citizenapp `sign_request`、扫描 citizenapp `sign_response`、提交 CID 绑定。
+- `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 CitizenApp `sign_request`、扫描 CitizenApp `sign_response`、提交 CID 绑定。
 - 扫码框提示统一为“点击扫描档案码”；签名回执页提示为“点击扫描签名回执”。
-- 进入签名二维码展示步骤后，弹窗标题切换为“citizenapp 签名”；进入签名回执扫描页后，弹窗标题切换为“扫描签名回执”。
+- 进入签名二维码展示步骤后，弹窗标题切换为“CitizenApp 签名”；进入签名回执扫描页后，弹窗标题切换为“扫描签名回执”。
 - 绑定签名回执的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
   不得给公民绑定挑战额外添加 `bind-` 前缀,否则 CID 后端会查不到 challenge。
 - “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用
@@ -229,12 +229,12 @@ citizencode/frontend/
 
 | 前端文件 | 后端文件 | 职责 |
 |---|---|---|
-| `subjects/chain_duoqian_info.ts` | `subjects/chain_duoqian_info.rs` | 机构查询、注册信息凭证、账户列表 |
+| `subjects/chain_multisig_info.ts` | `subjects/chain_multisig_info.rs` | 机构查询、注册信息凭证、账户列表 |
 
 联邦注册局机构管理员/市注册局机构管理员治理 Passkey/签名挑战不列入链交互表。
 CPMS 系统管理也不列入链交互表,归 `citizenpassport/`。
 
-### `subjects/chain_duoqian_info.ts` 边界
+### `subjects/chain_multisig_info.ts` 边界
 
 - 不放 CID 内部机构创建/修改页面,这些归 `frontend/gov/`、`frontend/private/`、
   `frontend/accounts/`、`frontend/docs/`。

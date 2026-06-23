@@ -7,7 +7,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/services/admin_activation_service.dart';
 import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 import 'package:citizenapp/governance/institution_manage_detail_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -46,8 +46,8 @@ class InstitutionDetailPage extends StatefulWidget {
 class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final WalletManager _walletManager = WalletManager();
-  final DuoqianTransferProposalFeed _duoqianTransferFeed =
-      DuoqianTransferProposalFeed();
+  final MultisigTransferProposalFeed _multisigTransferFeed =
+      MultisigTransferProposalFeed();
   final ActivationService _activationService = ActivationService();
   late final ProposalContextResolver _contextResolver = ProposalContextResolver(
     adminService: _adminService,
@@ -117,7 +117,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       _adminService.clearCache(_accountIdentity);
       _contextResolver.clearWalletCache();
       ProposalCache.clear();
-      DuoqianTransferProposalAdapter.clearCache();
+      MultisigTransferProposalAdapter.clearCache();
     }
 
     await Future.wait([
@@ -219,7 +219,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     });
 
     try {
-      final balance = await _duoqianTransferFeed.fetchInstitutionBalance(
+      final balance = await _multisigTransferFeed.fetchInstitutionBalance(
         widget.institution,
         forceRefresh: force,
       );
@@ -272,7 +272,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
     try {
       final proposals =
-          await _duoqianTransferFeed.fetchInstitutionVisibleProposals(
+          await _multisigTransferFeed.fetchInstitutionVisibleProposals(
         widget.institution,
         forceRefresh: force,
       );
@@ -519,7 +519,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     final accounts = widget.institution.accounts;
     var count = 1; // 主账户
     if (accounts?.feeAccount != null) count++;
-    if (accounts?.anquanAccount != null) count++;
+    if (accounts?.safetyFundAccount != null) count++;
     if (accounts?.heAccount != null) count++;
     if (accounts?.stakeAccount != null) count++;
     return count;
@@ -1019,8 +1019,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       'transfer' => Icons.send_outlined,
       'safety_fund' => Icons.health_and_safety_outlined,
       'sweep' => Icons.account_balance_wallet_outlined,
-      'create_duoqian' => Icons.group_add,
-      'close_duoqian' => Icons.group_remove,
+      'create_multisig' => Icons.group_add,
+      'close_multisig' => Icons.group_remove,
       'runtime_upgrade' => Icons.arrow_upward,
       'resolution_issuance' => Icons.add_circle_outline,
       'resolution_destroy' => Icons.remove_circle_outline,
@@ -1146,15 +1146,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
       );
-    } else if (DuoqianTransferProposalAdapter.matches(proposal)) {
-      await DuoqianTransferProposalAdapter.openDetail(
+    } else if (MultisigTransferProposalAdapter.matches(proposal)) {
+      await MultisigTransferProposalAdapter.openDetail(
         context,
         proposal: proposal,
         institution: widget.institution,
         proposalContext: ctx,
       );
-    } else if (proposal.createDuoqianDetail != null ||
-        proposal.closeDuoqianDetail != null) {
+    } else if (proposal.createMultisigDetail != null ||
+        proposal.closeMultisigDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => InstitutionManageDetailPage(
@@ -1183,7 +1183,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (cached != null) return cached;
     try {
       final fresh =
-          await _duoqianTransferFeed.fetchProposalsByIds([summary.proposalId]);
+          await _multisigTransferFeed.fetchProposalsByIds([summary.proposalId]);
       if (fresh.isEmpty) return null;
       final proposal = fresh.first;
       final refreshedSummary = LocalProposalSummary.fromProposal(

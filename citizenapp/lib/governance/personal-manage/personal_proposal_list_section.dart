@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/governance/institution_manage_detail_page.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_detail_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -65,7 +65,7 @@ class _PersonalProposalListSectionState
     // 终态后可能拉不到完整数据;但仍允许进入展示已知信息。
     //
     // 按 view.action 分流到对应详情页:
-    // - transfer → DuoqianTransferDetailPage(转账提案专用页)
+    // - transfer → MultisigTransferDetailPage(转账提案专用页)
     // - create / close → InstitutionManageDetailPage(多签管理提案,只懂 create/close)
     final ctx = ProposalContext(
       institution: widget.institution,
@@ -76,7 +76,7 @@ class _PersonalProposalListSectionState
     );
     final Widget page;
     if (view.action == PersonalProposalAction.transfer) {
-      page = DuoqianTransferDetailPage(
+      page = MultisigTransferDetailPage(
         institution: widget.institution,
         proposalId: view.proposalId,
         proposalContext: ctx,

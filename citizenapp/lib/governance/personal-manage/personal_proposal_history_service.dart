@@ -320,12 +320,12 @@ class PersonalProposalHistoryService {
   /// 从链上 `VotingEngine.ProposalData[id]` 原始字节解码 `PersonalProposalAction`。
   ///
   /// ProposalData 是 BoundedVec<u8>:Compact<len> + bytes,bytes 格式:
-  /// `MODULE_TAG`(per-mgmt 8B / dq-xfer 7B) + `action_byte`(1B) + 业务参数。
+  /// `MODULE_TAG` + `action_byte`(1B) + 业务参数。
   ///
   /// 个人多签提案能命中的映射:
   /// - per-mgmt + 0 → create (PersonalManage::propose_create)
   /// - per-mgmt + 1 → close  (PersonalManage::propose_close)
-  /// - dq-xfer + 0 → transfer (DuoqianTransfer::propose_transfer)
+  /// - multisig-transfer + 0 → transfer (MultisigTransfer::propose_transfer)
   /// 个人多签不会触发 safety_fund/sweep,无需识别。
   String? _decodeActionFromProposalData(Uint8List raw) {
     if (raw.length < 2) return null;
@@ -342,16 +342,15 @@ class PersonalProposalHistoryService {
     }
     // per-mgmt = b"per-mgmt" 8 字节
     const perMgmt = [0x70, 0x65, 0x72, 0x2d, 0x6d, 0x67, 0x6d, 0x74];
-    // dq-xfer = b"dq-xfer" 7 字节
-    const dqXfer = [0x64, 0x71, 0x2d, 0x78, 0x66, 0x65, 0x72];
+    final multisigTransfer = 'multisig-transfer'.codeUnits;
     if (_startsWithAt(raw, perMgmt, offset)) {
       if (offset + perMgmt.length >= raw.length) return null;
       final action = raw[offset + perMgmt.length];
       if (action == 0) return PersonalProposalAction.create;
       if (action == 1) return PersonalProposalAction.close;
-    } else if (_startsWithAt(raw, dqXfer, offset)) {
-      if (offset + dqXfer.length >= raw.length) return null;
-      final action = raw[offset + dqXfer.length];
+    } else if (_startsWithAt(raw, multisigTransfer, offset)) {
+      if (offset + multisigTransfer.length >= raw.length) return null;
+      final action = raw[offset + multisigTransfer.length];
       if (action == 0) return PersonalProposalAction.transfer;
     }
     return null;

@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// kind = login_receipt
 ///
-/// 由冷钱包 citizenwallet 生成,笔记本摄像头反扫后提交给 CID/CPMS 后端验证。
+/// 由冷钱包 CitizenWallet 生成,笔记本摄像头反扫后提交给 CID/CPMS 后端验证。
 class LoginReceiptBody implements QrBody {
   const LoginReceiptBody({
     required this.system,

@@ -838,7 +838,7 @@ pub mod pallet {
     }
 }
 
-// ──── InstitutionMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
+// ──── InstitutionMultisigQuery 实现:对 multisig-transfer / runtime config 暴露查询 ────
 //
 // 输入任意机构账户(主/费用/自创),直接以账户地址读取 admins-change 账户。
 // 再按 Institutions[cid_number].institution_code 读取机构码。这条路径保证

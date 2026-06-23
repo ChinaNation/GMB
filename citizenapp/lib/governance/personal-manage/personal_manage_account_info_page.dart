@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -122,7 +122,7 @@ class _PersonalManageAccountInfoPageState
             );
       final balance = isClosed
           ? null
-          : statusEnum == DuoqianStatus.active
+          : statusEnum == MultisigStatus.active
               ? local.detail?.balanceYuan
               : local.pendingBalance ?? local.detail?.balanceYuan;
 
@@ -178,7 +178,7 @@ class _PersonalManageAccountInfoPageState
         await PersonalAccountLocalState.putDetailInTxn(
           isar,
           widget.institution.account,
-          DuoqianLocalDetailSnapshot(
+          MultisigLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
             admins: previous?.admins ?? _admins,
             threshold: previous?.threshold ?? _accountInfo?.threshold,
@@ -232,14 +232,14 @@ class _PersonalManageAccountInfoPageState
           await PersonalAccountLocalState.putDetailInTxn(
             isar,
             widget.institution.account,
-            DuoqianLocalDetailSnapshot(
+            MultisigLocalDetailSnapshot(
               status: status,
               admins: info.admins,
               threshold: info.threshold,
               balanceYuan: balance ?? previous?.balanceYuan,
               lastChainRefreshAtMillis: now,
               lastBalanceRefreshAtMillis:
-                  info.status == DuoqianStatus.active && balance != null
+                  info.status == MultisigStatus.active && balance != null
                       ? now
                       : previous?.lastBalanceRefreshAtMillis,
               updatedAtMillis: now,
@@ -267,8 +267,8 @@ class _PersonalManageAccountInfoPageState
     }
   }
 
-  Future<double?> _resolveBalance(DuoqianStatus? status) async {
-    if (status == DuoqianStatus.active) {
+  Future<double?> _resolveBalance(MultisigStatus? status) async {
+    if (status == MultisigStatus.active) {
       try {
         return await _rpc.fetchFinalizedBalance(widget.institution.account);
       } catch (_) {
@@ -301,16 +301,16 @@ class _PersonalManageAccountInfoPageState
     }
   }
 
-  String _localStatusFromInfo(DuoqianStatus status) {
-    return status == DuoqianStatus.active
+  String _localStatusFromInfo(MultisigStatus status) {
+    return status == MultisigStatus.active
         ? PersonalAccountLocalState.statusActive
         : PersonalAccountLocalState.statusPending;
   }
 
-  DuoqianStatus _statusEnumFromLocal(String status) {
+  MultisigStatus _statusEnumFromLocal(String status) {
     return status == PersonalAccountLocalState.statusActive
-        ? DuoqianStatus.active
-        : DuoqianStatus.pending;
+        ? MultisigStatus.active
+        : MultisigStatus.pending;
   }
 
   List<String> _normalizeAdminPubkeys(List<String>? admins) {
@@ -700,7 +700,7 @@ class _PersonalManageAccountInfoPageState
 
           if (!_isClosed) ...[
             const SizedBox(height: 16),
-            DuoqianTransferEntryCard(
+            MultisigTransferEntryCard(
               institution: widget.institution,
               isPersonal: true,
               enabled: _localStatus == PersonalAccountLocalState.statusActive,
@@ -811,7 +811,7 @@ class _PersonalManageAccountInfoPageState
       MaterialPageRoute(
         builder: (_) => PersonalAdminListPage(
           institution: widget.institution,
-          duoqianStatus: _statusEnumFromLocal(_localStatus),
+          multisigStatus: _statusEnumFromLocal(_localStatus),
           admins: _admins,
           adminWallets: wallets,
           creatorPubkeyHex: creator,
@@ -848,10 +848,10 @@ class _PersonalManageAccountInfoPageState
   /// 账户余额行(bug 4):
   /// - Active:链上 free_balance 实时(无标签)
   /// - Pending:发起人承诺金额(snapshot.amount_fen)+ "不可用" 灰色标签
-  Widget _buildBalanceRow(DuoqianStatus? status) {
+  Widget _buildBalanceRow(MultisigStatus? status) {
     final balanceStr =
         _balanceYuan == null ? '—' : AmountFormat.format(_balanceYuan!);
-    final isPending = status != DuoqianStatus.active;
+    final isPending = status != MultisigStatus.active;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

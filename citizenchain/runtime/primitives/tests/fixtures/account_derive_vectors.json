@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-024 账户派生金标向量 (canonical, Rust 权威源). 行为中性基线: domain=GMB, ss58_format=2027. china_* 来源的 Main/Fee/Stake/Anquan/He address_hex 必须与 china_*.rs 字面值逐字节一致(创世账户烘焙器 scripts/gmb.py 用 GMB+OP_* 派生的真值,原名 duoqian.py). InstitutionNamed / Personal 的 address_hex 由 Rust 导出测试(ACCOUNT_DERIVE_UPDATE=1)用 account_derive 计算后回填,勿手算. 重生方式: tools/sync_account_derive_vectors.sh.",
+  "_comment": "ADR-024 账户派生金标向量 (canonical, Rust 权威源). 行为中性基线: domain=GMB, ss58_format=2027. china_* 来源的 Main/Fee/Stake/SafetyFund/He address_hex 必须与 china_*.rs 字面值逐字节一致(创世账户烘焙器 scripts/gmb.py 用 GMB+OP_* 派生的真值,原名 multisig.py). InstitutionNamed / Personal 的 address_hex 由 Rust 导出测试(ACCOUNT_DERIVE_UPDATE=1)用 account_derive 计算后回填,勿手算. 重生方式: tools/sync_account_derive_vectors.sh.",
   "domain": "GMB",
   "ss58_format": 2027,
   "vectors": [
@@ -18,8 +18,8 @@
     {
       "address_hex": "d78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa",
       "cid_number": "LN001-NRC0G-944805165-2026",
-      "kind": "InstitutionAnquan",
-      "source": "china_cb NRC_ANQUAN_ACCOUNT 安全基金"
+      "kind": "InstitutionSafetyFund",
+      "source": "china_cb SAFETY_FUND_ACCOUNT 安全基金"
     },
     {
       "address_hex": "4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53",

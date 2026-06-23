@@ -234,7 +234,7 @@ async fn auth_qr_complete(
     if admin.user_group == "operators" {
         crate::archive::ensure_operator_annual_export_unlocked(&state).await?;
     }
-    // 重建完整签名原文(包含签名者公钥),与 citizenwallet 端
+    // 重建完整签名原文(包含签名者公钥),与 CitizenWallet 端
     // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
     let verify_message = crate::qr::build_signature_message(
         crate::qr::QrKind::LoginReceipt,

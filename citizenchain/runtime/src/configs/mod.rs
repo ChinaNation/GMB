@@ -111,8 +111,8 @@ fn is_reserved_fee_account(address: &AccountId) -> bool {
 }
 
 /// 检查是否为国储会安全基金账户。
-fn is_nrc_anquan_account(address: &AccountId) -> bool {
-    address == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT)
+fn is_safety_fund_account(address: &AccountId) -> bool {
+    address == &AccountId::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT)
 }
 
 /// 检查是否为国储会两和基金账户。
@@ -306,7 +306,7 @@ impl onchain_transaction::SafetyFundAccountProvider<AccountId>
     for RuntimeSafetyFundAccountProvider
 {
     fn safety_fund_account() -> AccountId {
-        AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT)
+        AccountId::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT)
     }
 }
 
@@ -395,7 +395,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 免费调用交易：系统内部 / 自动化 / 货币政策类
             RuntimeCall::System(_) => FeeChargeKind::Free,
             RuntimeCall::Timestamp(_) => FeeChargeKind::Free,
-            RuntimeCall::ShengBankInterest(_) => FeeChargeKind::Free,
+            RuntimeCall::ProvincialBankInterest(_) => FeeChargeKind::Free,
             RuntimeCall::CitizenIssuance(_) => FeeChargeKind::Free,
             // GRANDPA pallet:report_equivocation(签名版)/ report_equivocation_unsigned(unsigned 路径
             // 不走 ChargeTransactionPayment) / note_stalled(Root,本链无 sudo 实际不可达)。
@@ -431,11 +431,11 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             RuntimeCall::RuntimeUpgrade(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::GrandpaKeyChange(_) => FeeChargeKind::VoteFlat,
             // 中文注释：多签转账 propose_X 只是创建治理提案，交易本身固定收 1 元；
-            // 真正转账执行时，duoqian-transfer 内部再按转出金额 × 0.1% 收链上交易费。
-            RuntimeCall::DuoqianTransfer(ref dt_call) => match dt_call {
-                duoqian_transfer::pallet::Call::propose_transfer { .. }
-                | duoqian_transfer::pallet::Call::propose_safety_fund_transfer { .. }
-                | duoqian_transfer::pallet::Call::propose_sweep_to_main { .. } => {
+            // 真正转账执行时，multisig-transfer 内部再按转出金额 × 0.1% 收链上交易费。
+            RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
+                multisig_transfer::pallet::Call::propose_transfer { .. }
+                | multisig_transfer::pallet::Call::propose_safety_fund_transfer { .. }
+                | multisig_transfer::pallet::Call::propose_sweep_to_main { .. } => {
                     FeeChargeKind::VoteFlat
                 }
                 // 兜底:未来若新增非金额型管理 extrinsic 按投票统一价 1 元/次。
@@ -522,10 +522,10 @@ impl onchain_transaction::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePay
 /// 省储行利息模块配置：
 /// - 使用 Balances 作为铸币/记账货币
 /// - 每年区块数统一采用 primitives 中的制度常量
-impl shengbank_interest::Config for Runtime {
+impl provincialbank_interest::Config for Runtime {
     type Currency = Balances;
     type BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>;
-    type WeightInfo = shengbank_interest::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = provincialbank_interest::weights::SubstrateWeight<Runtime>;
 }
 
 /// PoW 作者解析器：
@@ -596,7 +596,7 @@ impl organization_manage::AccountValidator<AccountId> for RuntimeAccountValidato
         }
 
         // 中文注释：禁止占用国储会安全基金账户。
-        if is_nrc_anquan_account(account) {
+        if is_safety_fund_account(account) {
             return false;
         }
 
@@ -654,7 +654,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         }
 
         // 4. 国储会安全基金账户：只允许安全基金转账
-        if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT) {
+        if source == &AccountId::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT) {
             return matches!(
                 action,
                 institution_asset::InstitutionAssetAction::NrcSafetyFundTransfer
@@ -665,8 +665,8 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         if is_reserved_main_account(source) {
             return matches!(
                 action,
-                institution_asset::InstitutionAssetAction::DuoqianTransferExecute
-                    | institution_asset::InstitutionAssetAction::DuoqianCloseExecute
+                institution_asset::InstitutionAssetAction::MultisigTransferExecute
+                    | institution_asset::InstitutionAssetAction::MultisigCloseExecute
             );
         }
 
@@ -694,7 +694,7 @@ impl organization_manage::ReservedAccountGuard<AccountId> for RuntimeReservedAcc
         }
 
         // 中文注释：禁止占用国储会安全基金账户。
-        if is_nrc_anquan_account(account) {
+        if is_safety_fund_account(account) {
             return true;
         }
 
@@ -1200,15 +1200,15 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
     }
 }
 
-impl duoqian_transfer::Config for Runtime {
+impl multisig_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
     // 多签 admin 配置查询拆给两个独立 pallet。
-    // 转账治理时 duoqian-transfer 通过 union 调用,先问个人侧、再问机构侧。
+    // 转账治理时 multisig-transfer 通过 union 调用,先问个人侧、再问机构侧。
     type PersonalQuery = personal_manage::Pallet<Runtime>;
     type InstitutionQuery = organization_manage::Pallet<Runtime>;
-    type WeightInfo = duoqian_transfer::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1219,9 +1219,9 @@ impl duoqian_transfer::Config for Runtime {
 ///
 /// 委托给 `organization-manage` 的 CID 地址索引和机构账户表；
 /// 管理员校验再统一转给 `admins-change::AdminAccounts`。
-pub struct DuoqianCidAccountQuery;
+pub struct MultisigCidAccountQuery;
 
-impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCidAccountQuery {
+impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         organization_manage::AccountRegisteredCid::<Runtime>::get(addr)
             .map(|info| (info.cid_number.to_vec(), info.account_name.to_vec()))
@@ -1314,7 +1314,7 @@ impl offchain_transaction::Config for Runtime {
     type MaxBatchSize = ConstU32<100_000>;
     type MaxBatchSignatureLength = ConstU32<128>;
     type InstitutionAsset = RuntimeInstitutionAsset;
-    type CidAccountQuery = DuoqianCidAccountQuery;
+    type CidAccountQuery = MultisigCidAccountQuery;
     type WeightInfo = offchain_transaction::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1515,7 +1515,7 @@ impl votingengine::Config for Runtime {
     // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
     // 非己方提案直接 Ok(()) skip,顺序不影响行为正确性。
     type InternalVoteResultCallback = (
-        duoqian_transfer::InternalVoteExecutor<Runtime>,
+        multisig_transfer::InternalVoteExecutor<Runtime>,
         organization_manage::InternalVoteExecutor<Runtime>,
         personal_manage::InternalVoteExecutor<Runtime>,
         admins_change::InternalVoteExecutor<Runtime>,

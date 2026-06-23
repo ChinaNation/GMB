@@ -60,7 +60,7 @@ class _GovernanceInstitutionAccountsPageState
     if (fee != null) {
       items.add((name: '费用账户', hex: fee, icon: Icons.receipt_long_outlined));
     }
-    final safety = accounts?.anquanAccount;
+    final safety = accounts?.safetyFundAccount;
     if (safety != null) {
       items.add((
         name: '安全基金账户',

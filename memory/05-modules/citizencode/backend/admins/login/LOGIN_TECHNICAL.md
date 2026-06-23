@@ -62,16 +62,16 @@ citizencode/backend/admins/login/
 ### 5.2 二维码登录
 
 1. `qr/challenge` 生成 CITIZEN_QR_V1 登录挑战和 CID 系统签名。
-2. `citizenwallet` 公民钱包扫码后按 `login_receipt` 原文签名,并由网页扫描登录回执提交 `qr/complete`。
+2. CitizenWallet 公民钱包扫码后按 `login_receipt` 原文签名,并由网页扫描登录回执提交 `qr/complete`。
 3. 后端验签成功后写入 `qr_login_results` 并签发会话。
 4. 网页轮询 `qr/result` 获取 `PENDING / SUCCESS / EXPIRED`。
 
 二维码登录统一遵循 `CITIZEN_QR_V1`:
 
 - 系统签名由 `CID_SIGNING_SEED_HEX` 派生的 CID main signer 产出。
-- `citizenwallet` 公民钱包验签原文由 `core::qr::build_signature_message` 生成。
+- CitizenWallet 公民钱包验签原文由 `core::qr::build_signature_message` 生成。
 - 登录协议禁止重新引入 `aud` 作为移动端扫码验签字段。
-- `citizenapp` 不承担管理员扫码登录职责;前端不得把登录挑战文案引导到 citizenapp。
+- CitizenApp 不承担管理员扫码登录职责;前端不得把登录挑战文案引导到 CitizenApp。
 
 ## 6. 守卫函数
 

@@ -79,7 +79,7 @@ class ClearingBankBindingSnapshot {
 ///
 /// 中文注释:
 /// - 链上 `OffchainTransaction::UserBank[user]` 存的是**主账户** `AccountId32`
-///   (32 字节),**不是** CID `cid_number` 字符串。citizenapp 同时需要 cid_number、
+///   (32 字节),**不是** CID `cid_number` 字符串。CitizenApp 同时需要 cid_number、
 ///   主账户和链上 `ClearingBankNodes` 端点,所以本地缓存升级为 JSON 快照。
 /// - 快照仅是用户体验缓存;绑定、支付、充值、提现前仍要查链上或清算行节点。
 /// - 缓存按 `walletIndex` 隔离,同 App 多钱包互不干扰。

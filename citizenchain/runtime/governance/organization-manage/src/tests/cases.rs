@@ -2,7 +2,7 @@ use super::*;
 use crate::institution::types::InstitutionLifecycleStatus;
 use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
 use primitives::account_derive::{
-    AccountKind, RESERVED_NAME_ANQUAN, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
+    AccountKind, RESERVED_NAME_SAFETYFUND, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
     RESERVED_NAME_STAKE,
 };
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED};
@@ -425,7 +425,7 @@ fn derive_registered_account_rejects_reserved_system_names() {
     new_test_ext().execute_with(|| {
         let cid = cid_number(b"CID-RESV");
         // 永久质押/安全基金/两和基金 为制度专属账户,普通机构禁止注册。
-        for name in [RESERVED_NAME_STAKE, RESERVED_NAME_ANQUAN, RESERVED_NAME_HE] {
+        for name in [RESERVED_NAME_STAKE, RESERVED_NAME_SAFETYFUND, RESERVED_NAME_HE] {
             assert_eq!(
                 OrganizationManage::derive_registered_account(cid.as_slice(), name).unwrap_err(),
                 pallet::Error::<Test>::ReservedAccountName.into()
@@ -456,7 +456,7 @@ fn propose_create_rejects_reserved_system_account_name() {
         let bad = initial_accounts(&[
             (RESERVED_NAME_MAIN, ACCT_AMOUNT),
             (RESERVED_NAME_FEE, ACCT_AMOUNT),
-            (RESERVED_NAME_ANQUAN, ACCT_AMOUNT),
+            (RESERVED_NAME_SAFETYFUND, ACCT_AMOUNT),
         ]);
         assert_noop!(
             OrganizationManage::propose_create_institution(

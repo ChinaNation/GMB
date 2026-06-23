@@ -46,7 +46,7 @@ pub(crate) async fn admin_auth_qr_challenge(
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
-    // challenge_text:客户端签 login_receipt 时的原文(与 citizenwallet 端的
+    // challenge_text:客户端签 login_receipt 时的原文(与 CitizenWallet 端的
     // buildSignatureMessage(kind=login_receipt, ...) 拼接规则保持一致)。
     // 注意 <principal> 位置由客户端签名时填入自己的 pubkey,后端验证时同样
     // 以客户端 pubkey 为 principal 重新拼接。这里保存的 challenge_text 仅作
@@ -185,7 +185,7 @@ pub(crate) async fn admin_auth_qr_complete(
         if !same_admin_account(login_pubkey.as_str(), verify_pubkey.as_str()) {
             return Err("http:forbidden:signer_pubkey must match admin_account".to_string());
         }
-        // 中文注释:重建完整签名原文,与 citizenwallet 端 login_receipt 规则一致。
+        // 中文注释:重建完整签名原文,与 CitizenWallet 端 login_receipt 规则一致。
         let verify_message = crate::core::qr::build_signature_message(
             crate::core::qr::QrKind::LoginReceipt,
             challenge_id.as_str(),

@@ -45,14 +45,14 @@
 
 | kind | 类型 | 生成者 | 扫描者 | 说明 |
 |---|---|---|---|---|
-| `login_challenge` | 临时 | CID/CPMS 后端 | citizenwallet | 登录挑战码 |
-| `login_receipt` | 临时 | citizenwallet | CID/CPMS 后端 | 登录回执码 |
-| `sign_request` | 临时 | citizenapp / citizenchain/node / CPMS | citizenwallet | 离线签名请求 |
-| `sign_response` | 临时 | citizenwallet | citizenapp | 离线签名回执 |
-| `user_contact` | **固定** | citizenapp | citizenapp / citizenchain / cid 前端 | 个人联系码 |
-| `user_transfer` | 临时 | citizenapp | citizenapp / citizenchain | 临时收款码 |
+| `login_challenge` | 临时 | CID/CPMS 后端 | CitizenWallet | 登录挑战码 |
+| `login_receipt` | 临时 | CitizenWallet | CID/CPMS 后端 | 登录回执码 |
+| `sign_request` | 临时 | CitizenApp / citizenchain/node / CPMS | CitizenWallet | 离线签名请求 |
+| `sign_response` | 临时 | CitizenWallet | CitizenApp | 离线签名回执 |
+| `user_contact` | **固定** | CitizenApp | CitizenApp / citizenchain / cid 前端 | 个人联系码 |
+| `user_transfer` | 临时 | CitizenApp | CitizenApp / citizenchain | 临时收款码 |
 
-> 注:`user_duoqian` 协议已于 **2026-05-03 下线** — citizenapp 改为通过链上反向索引(遍历 `AdminsChange::AdminAccounts` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。2026-05-08 起发现范围明确为 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId`;`0x02 注册机构归属关系` 只保留给机构归属/检索。
+> 注:`user_multisig` 协议已于 **2026-05-03 下线** — CitizenApp 改为通过链上反向索引(遍历 `AdminsChange::AdminAccounts` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。2026-05-08 起发现范围明确为 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId`;`0x02 注册机构归属关系` 只保留给机构归属/检索。
 
 ## 4. body 字段字典(按 kind 派发)
 
@@ -88,7 +88,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `system` | string | 是 | 原样回传自挑战码 |
-| `pubkey` | string | 是 | 签名者(citizenwallet 公民钱包)公钥,`0x` + hex |
+| `pubkey` | string | 是 | 签名者(CitizenWallet 公民钱包)公钥,`0x` + hex |
 | `sig_alg` | string | 是 | 固定 `"sr25519"` |
 | `signature` | string | 是 | 对签名原文的签名,`0x` + hex |
 | `payload_hash` | string | 是 | 签名原文字节的 SHA-256,`0x` + hex |
@@ -203,17 +203,17 @@
 | `memo` | string | 是 | 备注,允许空串 |
 | `bank` | string | 是 | 清算省储行标识,允许空串 |
 
-### 4.7 `user_duoqian` — **已下线**(2026-05-03)
+### 4.7 `user_multisig` — **已下线**(2026-05-03)
 
-原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:citizenapp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalAccount AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 CID 机构,不再作为账户发现或转账支出主体。
+原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:CitizenApp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalAccount AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 CID 机构,不再作为账户发现或转账支出主体。
 
 相关代码下线清单:
-- `lib/qr/bodies/user_duoqian_body.dart` — 删除整文件
+- `lib/qr/bodies/user_multisig_body.dart` — 删除整文件
 - 旧多签二维码弹窗文件 — 删除整文件
-- `lib/qr/qr_protocols.dart::QrKind.userDuoqian` — 枚举值删除
-- `lib/qr/envelope.dart::QrKind.userDuoqian` 解析分支 — 删除
-- `lib/qr/qr_router.dart::QrRouteType.userDuoqian` — 枚举值删除
-- `memory/01-architecture/qr/qr-protocol-fixtures/user_duoqian.json` — 删除
+- `lib/qr/qr_protocols.dart::QrKind.userMultisig` — 枚举值删除
+- `lib/qr/envelope.dart::QrKind.userMultisig` 解析分支 — 删除
+- `lib/qr/qr_router.dart::QrRouteType.userMultisig` — 枚举值删除
+- `memory/01-architecture/qr/qr-protocol-fixtures/user_multisig.json` — 删除
 
 ## 5. 签名原文拼接(统一函数)
 
@@ -289,7 +289,7 @@ QrSignResponse
 
 ## 9. 测试契约
 
-所有 citizenapp / citizenwallet / citizenchain / cid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
+所有 CitizenApp / CitizenWallet / citizenchain / cid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
 
 - 序列化测试:`toJson(body) + envelope` 必须**逐字节**等于对应 fixture
 - 反序列化测试:`parse(fixture)` 必须解出预期字段,字段数量、类型、值全相等
@@ -305,7 +305,7 @@ memory/01-architecture/qr/qr-protocol-fixtures/user_contact.json
 memory/01-architecture/qr/qr-protocol-fixtures/user_transfer.json
 ```
 
-> 注:`user_duoqian.json` 已于 2026-05-03 删除(协议下线,改走链上反向索引)。
+> 注:`user_multisig.json` 已于 2026-05-03 删除(协议下线,改走链上反向索引)。
 
 ## 10. 修改规范的流程
 

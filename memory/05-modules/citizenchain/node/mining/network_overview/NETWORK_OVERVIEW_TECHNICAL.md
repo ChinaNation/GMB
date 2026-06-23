@@ -31,9 +31,9 @@
 
 - `NetworkOverview {`
   - `online_nodes`
-  - `guochuhui_nodes`
-  - `shengchuhui_nodes`
-  - `shengchuhang_nodes`
+  - `nrc_nodes`
+  - `prc_nodes`
+  - `prb_nodes`
   - `full_nodes`
   - `light_nodes`
   - `warning`
@@ -51,7 +51,7 @@
    - 先采集 `system_peers` 到 `online_peer_ids`（集合）。
    - 本机节点运行时优先插入 `system_localPeerId`；失败则按本机在线 `+1` 估算。
 2. 分类统计：
-   - 按创世引导节点配置中的 `role` 精确匹配（`guochuhui`/`shengchuhui`/`shengchuhang`）对在线 PeerId 分类。
+   - 按创世引导节点配置中的 `role` 精确匹配（`nrc`/`prc`/`prb`）对在线 PeerId 分类。
 3. 全节点统计：
    - 远端 light 节点按唯一 PeerId 去重。
    - 本机在线但角色检测失败或角色未知时默认计入 full（降级行为，不产生告警）。

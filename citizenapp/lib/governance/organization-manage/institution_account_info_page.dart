@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -12,7 +12,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-import 'institution_duoqian_close_page.dart';
+import 'institution_multisig_close_page.dart';
 import 'institution_manage_models.dart';
 import 'institution_manage_service.dart';
 
@@ -44,7 +44,7 @@ class _InstitutionAccountInfoPageState
 
   InstitutionAccountInfo? _accountInfo;
   List<String> _admins = const [];
-  String _localStatus = InstitutionDuoqianLocalState.statusPending;
+  String _localStatus = InstitutionMultisigLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
   int? _lastBalanceRefreshAtMillis;
   double? _balanceYuan;
@@ -53,7 +53,7 @@ class _InstitutionAccountInfoPageState
   void initState() {
     super.initState();
     _localStatus =
-        widget.initialLocalStatus ?? InstitutionDuoqianLocalState.statusPending;
+        widget.initialLocalStatus ?? InstitutionMultisigLocalState.statusPending;
     _admins = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
     _load();
   }
@@ -74,11 +74,11 @@ class _InstitutionAccountInfoPageState
             .filter()
             .accountEqualTo(widget.institution.account)
             .findFirst();
-        final statuses = await InstitutionDuoqianLocalState.readStatusSnapshots(
+        final statuses = await InstitutionMultisigLocalState.readStatusSnapshots(
           isar,
           [widget.institution.account],
         );
-        final detail = await InstitutionDuoqianLocalState.readDetail(
+        final detail = await InstitutionMultisigLocalState.readDetail(
           isar,
           widget.institution.account,
         );
@@ -92,8 +92,8 @@ class _InstitutionAccountInfoPageState
       final status = local.status?.status ??
           local.detail?.status ??
           widget.initialLocalStatus ??
-          InstitutionDuoqianLocalState.statusPending;
-      final isClosed = status == InstitutionDuoqianLocalState.statusClosed;
+          InstitutionMultisigLocalState.statusPending;
+      final isClosed = status == InstitutionMultisigLocalState.statusClosed;
       final admins = local.detail?.admins.isNotEmpty == true
           ? local.detail!.admins
           : local.entity?.matchedAdminPubkeys.isNotEmpty == true
@@ -129,14 +129,14 @@ class _InstitutionAccountInfoPageState
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
       _lastDetailRefreshAtMillis!,
     );
-    final ttl = _localStatus == InstitutionDuoqianLocalState.statusActive
+    final ttl = _localStatus == InstitutionMultisigLocalState.statusActive
         ? const Duration(minutes: 60)
         : const Duration(minutes: 10);
     return DateTime.now().difference(lastSyncAt) >= ttl;
   }
 
   bool _shouldRefreshBalance() {
-    if (_localStatus != InstitutionDuoqianLocalState.statusActive) return false;
+    if (_localStatus != InstitutionMultisigLocalState.statusActive) return false;
     if (_balanceYuan == null) return true;
     if (_lastBalanceRefreshAtMillis == null) return true;
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
@@ -152,14 +152,14 @@ class _InstitutionAccountInfoPageState
           await _rpc.fetchFinalizedBalance(widget.institution.account);
       final now = DateTime.now().millisecondsSinceEpoch;
       await WalletIsar.instance.writeTxn((isar) async {
-        final previous = await InstitutionDuoqianLocalState.readDetail(
+        final previous = await InstitutionMultisigLocalState.readDetail(
           isar,
           widget.institution.account,
         );
-        await InstitutionDuoqianLocalState.putDetailInTxn(
+        await InstitutionMultisigLocalState.putDetailInTxn(
           isar,
           widget.institution.account,
-          DuoqianLocalDetailSnapshot(
+          MultisigLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
             admins: previous?.admins ?? _admins,
             threshold: previous?.threshold ?? _accountInfo?.threshold,
@@ -189,31 +189,31 @@ class _InstitutionAccountInfoPageState
       );
       final info = infos[_normalizeHex(widget.institution.account)];
       final status = info == null
-          ? InstitutionDuoqianLocalState.statusClosed
+          ? InstitutionMultisigLocalState.statusClosed
           : _localStatusFromInfo(info.status);
       final balance = info == null ? null : await _resolveBalance(info.status);
       final now = DateTime.now().millisecondsSinceEpoch;
 
       await WalletIsar.instance.writeTxn((isar) async {
-        await InstitutionDuoqianLocalState.putStatusInTxn(
+        await InstitutionMultisigLocalState.putStatusInTxn(
           isar,
           widget.institution.account,
           status,
         );
         if (info == null) {
-          await InstitutionDuoqianLocalState.deleteDetailInTxn(
+          await InstitutionMultisigLocalState.deleteDetailInTxn(
             isar,
             widget.institution.account,
           );
         } else {
-          final previous = await InstitutionDuoqianLocalState.readDetail(
+          final previous = await InstitutionMultisigLocalState.readDetail(
             isar,
             widget.institution.account,
           );
-          await InstitutionDuoqianLocalState.putDetailInTxn(
+          await InstitutionMultisigLocalState.putDetailInTxn(
             isar,
             widget.institution.account,
-            DuoqianLocalDetailSnapshot(
+            MultisigLocalDetailSnapshot(
               status: status,
               admins: info.admins,
               threshold: info.threshold,
@@ -234,11 +234,11 @@ class _InstitutionAccountInfoPageState
         _localStatus = status;
         _accountInfo = info;
         _admins = _normalizeAdminPubkeys(info?.admins);
-        _balanceYuan = status == InstitutionDuoqianLocalState.statusClosed
+        _balanceYuan = status == InstitutionMultisigLocalState.statusClosed
             ? null
             : balance ?? _balanceYuan;
         _lastDetailRefreshAtMillis = now;
-        if (status == InstitutionDuoqianLocalState.statusClosed) {
+        if (status == InstitutionMultisigLocalState.statusClosed) {
           _lastBalanceRefreshAtMillis = null;
         } else if (balance != null) {
           _lastBalanceRefreshAtMillis = now;
@@ -260,12 +260,12 @@ class _InstitutionAccountInfoPageState
 
   String _localStatusFromInfo(InstitutionStatus status) {
     return status == InstitutionStatus.active
-        ? InstitutionDuoqianLocalState.statusActive
-        : InstitutionDuoqianLocalState.statusPending;
+        ? InstitutionMultisigLocalState.statusActive
+        : InstitutionMultisigLocalState.statusPending;
   }
 
   InstitutionStatus _statusEnumFromLocal(String status) {
-    return status == InstitutionDuoqianLocalState.statusActive
+    return status == InstitutionMultisigLocalState.statusActive
         ? InstitutionStatus.active
         : InstitutionStatus.pending;
   }
@@ -327,7 +327,7 @@ class _InstitutionAccountInfoPageState
     final closed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => InstitutionDuoqianClosePage(
+        builder: (_) => InstitutionMultisigClosePage(
           institution: widget.institution,
           adminWallets: wallets,
         ),
@@ -340,19 +340,19 @@ class _InstitutionAccountInfoPageState
   }
 
   bool get _isClosed =>
-      _localStatus == InstitutionDuoqianLocalState.statusClosed;
+      _localStatus == InstitutionMultisigLocalState.statusClosed;
 
   bool _shouldShowMenu() =>
-      _localStatus == InstitutionDuoqianLocalState.statusActive || _isClosed;
+      _localStatus == InstitutionMultisigLocalState.statusActive || _isClosed;
 
   Future<void> _removeFromLocal() async {
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.institutionEntitys.deleteByAccount(widget.institution.account);
-      await InstitutionDuoqianLocalState.deleteStatusInTxn(
+      await InstitutionMultisigLocalState.deleteStatusInTxn(
         isar,
         widget.institution.account,
       );
-      await InstitutionDuoqianLocalState.deleteDetailInTxn(
+      await InstitutionMultisigLocalState.deleteDetailInTxn(
         isar,
         widget.institution.account,
       );
@@ -419,7 +419,7 @@ class _InstitutionAccountInfoPageState
                 if (value == 'delete') _confirmDeleteLocal();
               },
               itemBuilder: (_) => [
-                if (_localStatus == InstitutionDuoqianLocalState.statusActive)
+                if (_localStatus == InstitutionMultisigLocalState.statusActive)
                   const PopupMenuItem(
                     value: 'close',
                     child: Text(
@@ -458,12 +458,12 @@ class _InstitutionAccountInfoPageState
     final info = _accountInfo;
     final statusLabel = _isClosed
         ? '已注销'
-        : _localStatus == InstitutionDuoqianLocalState.statusActive
+        : _localStatus == InstitutionMultisigLocalState.statusActive
             ? '已激活'
             : '待激活';
     final statusColor = _isClosed
         ? AppTheme.textTertiary
-        : _localStatus == InstitutionDuoqianLocalState.statusActive
+        : _localStatus == InstitutionMultisigLocalState.statusActive
             ? AppTheme.success
             : AppTheme.warning;
 
@@ -529,11 +529,11 @@ class _InstitutionAccountInfoPageState
           ),
           const SizedBox(height: 16),
           if (!_isClosed) ...[
-            DuoqianTransferEntryCard(
+            MultisigTransferEntryCard(
               institution: widget.institution,
               isPersonal: false,
               enabled:
-                  _localStatus == InstitutionDuoqianLocalState.statusActive,
+                  _localStatus == InstitutionMultisigLocalState.statusActive,
               loadAdminWallets: _getAdminWallets,
               onCreated: () => _refreshChainDetail(force: true),
             ),

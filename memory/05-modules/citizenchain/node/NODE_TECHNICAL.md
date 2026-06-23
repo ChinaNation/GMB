@@ -110,7 +110,7 @@
 ## 6. 治理桌面页账户数据链路
 
 - 地址真源：
-  - `node/src/governance/registry.rs` 直接读取 `runtime/primitives/china/china_cb.rs`、`runtime/primitives/china/china_ch.rs` 和 `NRC_ANQUAN_ACCOUNT`
+  - `node/src/governance/registry.rs` 直接读取 `runtime/primitives/china/china_cb.rs`、`runtime/primitives/china/china_ch.rs` 和 `SAFETY_FUND_ACCOUNT`
   - `治理 -> 国储会 / 省储会 / 省储行` 页面的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 不再允许 node 侧手抄第二份地址表
 - 金额真源：
   - `node/src/governance/institution.rs` 先取 `chain_getFinalizedHead`

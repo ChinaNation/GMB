@@ -179,7 +179,7 @@ String _businessTypeLabel(String type) {
       return '增发';
     case 'burn':
       return '资金销毁';
-    case 'duoqian_transfer':
+    case 'multisig_transfer':
       return '多签转账';
     default:
       return type;
@@ -290,7 +290,7 @@ class LocalTxRecordTile extends StatelessWidget {
         return Icons.receipt_long;
       case 'burn':
         return Icons.delete_forever;
-      case 'duoqian_transfer':
+      case 'multisig_transfer':
         return Icons.groups_2_outlined;
       default:
         return _isExpense ? Icons.arrow_upward : Icons.arrow_downward;

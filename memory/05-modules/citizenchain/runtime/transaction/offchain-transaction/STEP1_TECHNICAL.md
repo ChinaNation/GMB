@@ -60,7 +60,7 @@ pub trait CidAccountQuery<AccountId> {
 // 默认 () 实现返回未登记,供测试用。
 ```
 
-**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianCidAccountQuery`):委托给 `organization-manage` / `offchain-transaction` 的链上索引:
+**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `MultisigCidAccountQuery`):委托给 `organization-manage` / `offchain-transaction` 的链上索引:
 - `AccountRegisteredCid` → `account_info`
 - `CidRegisteredAccount` → `find_account`
 - `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
@@ -155,7 +155,7 @@ L2FeeCollect     # Step 2:扫码清算时向 fee_account 收费
 | 模块 | 动向 |
 |---|---|
 | `organization-manage` | **不动**(清算行注册复用现有机制) |
-| `duoqian-transfer` | **不动** |
+| `multisig-transfer` | **不动** |
 | `onchain-transaction` | **不动** |
 | `cid-system` | **不动** |
 | `institution-asset` | **扩展 4 枚举**(代码改动见上) |

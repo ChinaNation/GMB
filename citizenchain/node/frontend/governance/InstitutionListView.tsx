@@ -64,8 +64,7 @@ export function InstitutionListView({ onSelect, orgTypeFilter }: Props) {
             className="institution-card"
             onClick={() => onSelect(item.cidNumber)}
           >
-            <div className="institution-card-name">{item.cidShortName || item.cidFullName}</div>
-            <div className="institution-card-full-name">{item.cidFullName}</div>
+            <div className="institution-card-name">{item.cidShortName}</div>
             <div className="institution-card-meta">
               <span className="institution-card-type">{item.orgTypeLabel}</span>
             </div>

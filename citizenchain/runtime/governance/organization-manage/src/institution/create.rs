@@ -169,7 +169,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         }
 
         // 机构主账户的管理员配置真源在 admins-change::AdminAccounts[main_account 账户]；
-        // 动态阈值真源在 internal-vote，duoqian-transfer 通过查询 trait 合并读取。
+        // 动态阈值真源在 internal-vote，multisig-transfer 通过查询 trait 合并读取。
 
         // 中文注释:threshold 是账户激活后的动态阈值配置；
         // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。

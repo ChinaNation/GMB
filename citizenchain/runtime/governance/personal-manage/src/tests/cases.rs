@@ -151,7 +151,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         assert_eq!(proposal.status, STATUS_EXECUTED);
 
         // 多签账户激活,资金到位,Pending 已清
-        let dq_state = pallet::PersonalAccounts::<Test>::get(&dq).expect("active duoqian");
+        let dq_state = pallet::PersonalAccounts::<Test>::get(&dq).expect("active multisig");
         assert_eq!(dq_state.status, types::PersonalStatus::Active);
         let account = dq.clone();
         assert_eq!(
@@ -206,7 +206,7 @@ fn propose_create_rejects_duplicate_personal_account() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"alice-personal");
         // 直接把目标地址灌成 Active,模拟"地址已存在"
-        seed_active_duoqian(&dq, &c, &[admin(0), admin(1), admin(2)], 500);
+        seed_active_multisig(&dq, &c, &[admin(0), admin(1), admin(2)], 500);
 
         assert_noop!(
             PersonalManage::propose_create(
@@ -388,7 +388,7 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"close-pending");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
+        seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
         let beneficiary_acc = beneficiary();
 
@@ -417,7 +417,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"close-active");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
+        seed_active_multisig(&dq, &c, &admins_acc, 1_000);
         let beneficiary_acc = beneficiary();
 
         assert_ok!(PersonalManage::propose_close(
@@ -461,7 +461,7 @@ fn propose_close_rejects_when_balance_below_minimum() {
         let dq = proposed_account(&c, b"low-balance");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         // MinCloseBalance = 111,这里灌 50 → 应拒
-        seed_active_duoqian(&dq, &c, &admins_acc, 50);
+        seed_active_multisig(&dq, &c, &admins_acc, 50);
 
         assert_noop!(
             PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
@@ -476,7 +476,7 @@ fn propose_close_rejects_reserved_and_protected_beneficiary() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"close-protected");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
+        seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
         assert_noop!(
             PersonalManage::propose_close(
@@ -577,7 +577,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"exec-fail-close");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
+        seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
         assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -663,7 +663,7 @@ fn existential_deposit_is_preserved_after_close() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"ed-check");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 500);
+        seed_active_multisig(&dq, &c, &admins_acc, 500);
         let beneficiary_acc = beneficiary();
 
         assert_ok!(PersonalManage::propose_close(

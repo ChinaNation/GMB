@@ -24,7 +24,7 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 - 新增 3 个 Call:`submit_offchain_batch_v2`(34)/ `propose_l2_fee_rate`(40)/ `set_max_l2_fee_rate`(41)
 - 新增 trait 方法:`CidAccountQuery::is_admin_of`
 - 扩展 `on_initialize`:激活到期费率提案
-- runtime 层 `DuoqianCidAccountQuery` 实现 `is_admin_of`
+- runtime 层 `MultisigCidAccountQuery` 实现 `is_admin_of`
 - runtime 层 `RuntimeFeeKindClassifier` 分类 3 个新 call
 
 **明确不做**(留 Step 2b/2c/2d):
@@ -84,7 +84,7 @@ pub struct OffchainBatchItemV2<AccountId, BlockNumber> {
 
 ### 2.5 `bank_check::CidAccountQuery::is_admin_of`
 
-trait 新增方法,`()` 默认返回 false。runtime 侧 `DuoqianCidAccountQuery` 先通过 `organization_manage::Pallet::resolve_admin_account_for_account` 找到机构或个人多签对应的管理员主体，再委托 `admins_change::Pallet::is_subject_admin` 校验。
+trait 新增方法,`()` 默认返回 false。runtime 侧 `MultisigCidAccountQuery` 先通过 `organization_manage::Pallet::resolve_admin_account_for_account` 找到机构或个人多签对应的管理员主体，再委托 `admins_change::Pallet::is_subject_admin` 校验。
 
 2026-04-29 补齐：清算行管理员真源不再由业务账户表镜像保存，所有内部投票和清算权限统一读取 `admins-change::Subjects`。
 

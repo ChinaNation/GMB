@@ -1,4 +1,4 @@
-# DUOQIAN_TECHNICAL
+# GMB_TECHNICAL
 
 模块：`organization-manage`  
 最新更新：2026-05-17，动态阈值由用户输入并交 `internal-vote` 保存；机构账户关闭成功后清空资金并删除账户当前状态索引。
@@ -25,7 +25,7 @@ ADR-015 后，机构管理按账户级治理：
 
 ## 2. 目录结构
 
-- `src/address.rs`：`DUOQIAN` 地址角色语义，包含主账户、费用账户、自定义账户的角色定义。
+- `src/address.rs`：`GMB` 地址角色语义，包含主账户、费用账户、自定义账户的角色定义。
 - `src/institution/`：机构多签业务分区。
 - `src/institution/types.rs`：机构级 storage/action 类型。
 - `src/personal/`：个人多签业务分区。
@@ -35,14 +35,14 @@ ADR-015 后，机构管理按账户级治理：
 
 ## 3. 地址规则
 
-机构账户继续严格遵守 `DUOQIAN`：
+机构账户继续严格遵守 `GMB`：
 
 | 账户 | op_tag | preimage |
 |---|---:|---|
-| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN || OP_MAIN || ss58_le || cid_number` |
-| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN || OP_FEE || ss58_le || cid_number` |
-| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN || OP_INSTITUTION || ss58_le || cid_number || account_name` |
-| 个人多签 | `OP_PERSONAL = 0x04` | `DUOQIAN || OP_PERSONAL || ss58_le || creator || account_name` |
+| 主账户 | `OP_MAIN = 0x00` | `GMB || OP_MAIN || ss58_le || cid_number` |
+| 费用账户 | `OP_FEE = 0x01` | `GMB || OP_FEE || ss58_le || cid_number` |
+| 自定义账户 | `OP_INSTITUTION = 0x05` | `GMB || OP_INSTITUTION || ss58_le || cid_number || account_name` |
+| 个人多签 | `OP_PERSONAL = 0x04` | `GMB || OP_PERSONAL || ss58_le || creator || account_name` |
 
 `"主账户"` 和 `"费用账户"` 是保留名，只能分别落到 `OP_MAIN` 和 `OP_FEE`；禁止作为自定义账户名进入 `OP_INSTITUTION` 命名空间。
 
@@ -146,9 +146,9 @@ runtime 适配：
 - `RuntimeInternalAdminProvider / RuntimeInternalAdminsLenProvider` 统一读取 `admins-change`。
 - 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
-- `DuoqianCidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_institution_code_for_account` 读取机构账户码（`is_institution_code`）。
-- `DuoqianCidAccountQuery::is_active` 对 CID 机构账户读取 `InstitutionAccounts` 的激活状态。
-- `DuoqianCidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;CID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 CID 机构账户。
+- `MultisigCidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_institution_code_for_account` 读取机构账户码（`is_institution_code`）。
+- `MultisigCidAccountQuery::is_active` 对 CID 机构账户读取 `InstitutionAccounts` 的激活状态。
+- `MultisigCidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;CID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 CID 机构账户。
 
 ## 8. 测试覆盖
 

@@ -1,8 +1,8 @@
-# ADR-010 DUOQIAN AccountId 派生唯一协议
+# ADR-010 GMB AccountId 派生唯一协议
 
 - 状态:Superseded by target-state AccountId governance
 - 决议日期:2026-06-07
-- 关联任务卡:`memory/08-tasks/done/20260607-duoqian-accountid-governance.md`
+- 关联任务卡:`memory/08-tasks/done/20260607-gmb-accountid-governance.md`
 
 ## 决议
 
@@ -13,18 +13,18 @@
 唯一真源位于 `citizenchain/runtime/primitives/src/core_const.rs`。
 
 ```rust
-pub const DUOQIAN: &[u8; 7] = b"DUOQIAN";
+pub const GMB: &[u8; 3] = b"GMB";
 
 pub const OP_MAIN: u8 = 0x00;
 pub const OP_FEE: u8 = 0x01;
 pub const OP_STAKE: u8 = 0x02;
-pub const OP_AN: u8 = 0x03;
+pub const OP_SAFETY: u8 = 0x03;
 pub const OP_HE: u8 = 0x04;
 pub const OP_PERSONAL: u8 = 0x05;
 pub const OP_INSTITUTION: u8 = 0x06;
 
 pub fn derive_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
-    // DUOQIAN || op_tag || ss58.to_le_bytes() || payload -> blake2_256
+    // GMB || op_tag || ss58.to_le_bytes() || payload -> blake2_256
 }
 ```
 
@@ -32,9 +32,9 @@ pub fn derive_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
 
 ## 主体边界
 
-- 内置机构：创世表内置，`cid_number -> DUOQIAN -> AccountId`。
-- 注册机构：CID 注册，`cid_number + account_name -> DUOQIAN -> AccountId`。
-- 个人多签：`creator + account_name -> DUOQIAN -> AccountId`。
+- 内置机构：创世表内置，`cid_number -> GMB -> AccountId`。
+- 注册机构：CID 注册，`cid_number + account_name -> GMB -> AccountId`。
+- 个人多签：`creator + account_name -> GMB -> AccountId`。
 - onchain-issuance：发行资格主体、治理主体和管理员主体均为机构多签 `AccountId`。
 - `asset_id`：只作为资产编号，标识被治理的资产，不承担投票身份。
 
@@ -42,10 +42,10 @@ pub fn derive_account(op_tag: u8, ss58: u16, payload: &[u8]) -> [u8; 32] {
 
 - `votingengine` 只接收 `AccountId` 作为内部投票主体。
 - `admins-change` 的管理员账户 storage key 为 `AccountId`。
-- `duoqian-transfer` 的支出机构为 `AccountId`。
+- `multisig-transfer` 的支出机构为 `AccountId`。
 - `onchain-issuance` 的 issuer/governance/admin 均为 `AccountId`；`asset_id` 仅作为资产编号。
-- CID、citizenwallet、citizenapp、tools 不得再定义第二套 DUOQIAN domain、op_tag 或 hash preimage。
+- CID、citizenwallet、citizenapp、tools 不得再定义第二套 GMB domain、op_tag 或 hash preimage。
 
 ## 迁移结论
 
-旧 48 字节主体包装协议、资产编号派生治理身份、以及第二套 DUOQIAN 派生常量均不再作为目标态的一部分。历史 ADR 内容如需追溯，应以 Git 历史查看；当前文档只记录目标态。
+旧 48 字节主体包装协议、资产编号派生治理身份、以及第二套 GMB 派生常量均不再作为目标态的一部分。历史 ADR 内容如需追溯，应以 Git 历史查看；当前文档只记录目标态。

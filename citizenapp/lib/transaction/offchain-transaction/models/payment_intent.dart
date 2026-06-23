@@ -6,10 +6,10 @@ import 'package:citizenapp/signer/signing.dart';
 /// 扫码支付 Step 2c-i:**L3 扫码支付意图**(`NodePaymentIntent`)。
 ///
 /// 中文注释:
-/// - 与 `citizenchain/node/src/offchain/ledger.rs::NodePaymentIntent` 字段顺序
+/// - 与 `citizenchain/node/src/transaction/offchain_transaction/ledger.rs::NodePaymentIntent` 字段顺序
 ///   与字节布局**严格一致**,否则 SCALE 编解码跨端不对称、签名消息哈希不匹配、
 ///   节点侧 `sr25519_verify` 必然失败。
-/// - L3 客户端(citizenapp)构造本对象 → `scaleEncode()` 得定长 204 字节 →
+/// - L3 客户端(CitizenApp)构造本对象 → `scaleEncode()` 得定长 204 字节 →
 ///   `signingHash()` 得 32 字节摘要 → 用本人 sr25519 私钥签名 → 得 64 字节签名 →
 ///   通过 `offchain_submitPayment(intent_hex, sig_hex)` 提交清算行节点。
 /// - 字段语义与单位:
@@ -18,7 +18,7 @@ import 'package:citizenapp/signer/signing.dart';
 ///     - `amount` / `fee` 以**分**为单位。
 ///     - `nonce` 单调递增,从节点 `offchain_queryNextNonce` 取。
 ///     - `expiresAt` 是链上**块高**(block number),runtime `execute_clearing_bank_batch`
-///       会校验 `now <= expires_at`;citizenapp 端设为"当前块高 + 合理缓冲"(例如
+///       会校验 `now <= expires_at`;CitizenApp 端设为"当前块高 + 合理缓冲"(例如
 ///       100 块)。Step 2c-i 暂由调用方传入,后续可 wrap 成自动补充。
 ///     - `txId` 是 L3 本地生成的 32 字节随机数,作为本笔支付唯一标识 + 防重放键。
 ///

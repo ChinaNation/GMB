@@ -51,13 +51,13 @@ case "$MODULE" in
     print_if_exists "citizenchain/runtime/README.md"
     print_if_exists "memory/05-modules/citizenchain/runtime/issuance/fullnode-issuance/FULLNODE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/issuance/shengbank-interest|citizenchain/issuance/shengbank-interest)
+  citizenchain/runtime/issuance/provincialbank-interest|citizenchain/issuance/provincialbank-interest)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/shengbank-interest/SHENGBANK_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/provincialbank-interest/PROVINCIALBANK_TECHNICAL.md"
     ;;
   citizenchain/runtime/otherpallet/cid-system|citizenchain/otherpallet/cid-system|cid-system)
     print_base_context
@@ -123,13 +123,13 @@ case "$MODULE" in
     print_if_exists "citizenchain/runtime/README.md"
     print_if_exists "memory/05-modules/citizenchain/runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/transaction/duoqian-transfer|citizenchain/transaction/duoqian-transfer|duoqian-transfer)
+  citizenchain/runtime/transaction/multisig-transfer|citizenchain/transaction/multisig-transfer|multisig-transfer)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/multisig-transfer/MULTISIG_TRANSFER_TECHNICAL.md"
     ;;
   citizenchain/runtime/governance/organization-manage|organization-manage)
     print_base_context

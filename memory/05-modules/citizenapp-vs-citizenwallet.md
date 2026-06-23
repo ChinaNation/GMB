@@ -29,7 +29,7 @@
 | `sign_response`(接收) | ✅ 扫回,广播交易 | ❌ |
 | `user_contact` | ✅ 生成+扫 | ❌ 不涉及用户码 |
 | `user_transfer` | ✅ 生成+扫 | ❌ |
-| `user_duoqian` | ✅ 生成+扫 | ❌ |
+| `user_multisig` | ✅ 生成+扫 | ❌ |
 
 **核心结论**:
 - **登录**是 citizenwallet 公民钱包专属能力(CID/CPMS 后端只认冷钱包签的登录回执)
@@ -81,9 +81,9 @@ cid / cpms 前端只是扫码 UI 宿主:
 
 **注意**:CPMS 的 `CID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `CITIZEN_QR_V1` 无关,永远不合并。相关代码位于:
 - `citizenpassport/backend/initialize/mod.rs`
-- `citizenpassport/backend/dangan/mod.rs`
+- `citizenpassport/backend/archive/mod.rs`
 - `citizenpassport/frontend/initialize/`
 - `citizenpassport/frontend/admins/`
-- `citizenpassport/frontend/dangan/`
+- `citizenpassport/frontend/archive/`
 
 这些目录在协议统一任务的零命中 grep 扫描中**被排除**。

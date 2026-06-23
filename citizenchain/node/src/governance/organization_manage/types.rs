@@ -2,8 +2,8 @@
 //
 // 中文注释:
 // - 本文件只承载 OrganizationManage 机构多签管理相关的输入输出类型。
-// - 清算行节点声明、连通性检测、管理员解锁等 offchain 网络能力继续留在
-//   `offchain/common/types.rs`,避免机构多签边界再次散落。
+// - 清算行节点声明、连通性检测、管理员解锁等链下网络能力继续留在
+//   `transaction/offchain_transaction/types.rs`,避免机构多签边界再次散落。
 
 use primitives::institution_code::InstitutionCode;
 use serde::{Deserialize, Serialize};

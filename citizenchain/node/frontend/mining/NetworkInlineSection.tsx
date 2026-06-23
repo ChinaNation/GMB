@@ -13,9 +13,9 @@ import type { NetworkOverview } from './types';
 export function NetworkInlineSection() {
   const [network, setNetwork] = useState<NetworkOverview>({
     onlineNodes: 0,
-    guochuhuiNodes: 0,
-    shengchuhuiNodes: 0,
-    shengchuhangNodes: 0,
+    nrcNodes: 0,
+    prcNodes: 0,
+    prbNodes: 0,
     fullNodes: 0,
     lightNodes: 0,
     warning: null,
@@ -61,9 +61,9 @@ export function NetworkInlineSection() {
 
   // 治理节点 3 列子网格：每列一个数字 + 其名称，数字和名称上下对齐。
   const governanceCols: Array<{ name: string; value: number }> = [
-    { name: '国储会', value: network.guochuhuiNodes },
-    { name: '省储会', value: network.shengchuhuiNodes },
-    { name: '省储行', value: network.shengchuhangNodes },
+    { name: '国储会', value: network.nrcNodes },
+    { name: '省储会', value: network.prcNodes },
+    { name: '省储行', value: network.prbNodes },
   ];
 
   return (

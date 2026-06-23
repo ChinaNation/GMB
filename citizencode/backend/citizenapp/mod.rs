@@ -1,6 +1,6 @@
-//! citizenapp BFF(Backend-For-Frontend)—— 公民端匿名只读接口归口。
+//! CitizenApp BFF(Backend-For-Frontend)—— 公民端匿名只读接口归口。
 //!
-//! 中文注释:本目录只承载 citizenapp 公民端**匿名只读**接口的薄 handler + DTO;
+//! 中文注释:本目录只承载 CitizenApp 公民端**匿名只读**接口的薄 handler + DTO;
 //! 领域逻辑一律留在各领域模块(公权机构目录查询留 `gov`/`Db`,本层只调不复制)。
 //! 安全红线:目录整层即匿名可读边界,**只透白名单公开字段**,严禁带
 //! created_by / cpms / passkey 等管理员/PII 字段(见 public_institution::PublicInstitutionRow)。

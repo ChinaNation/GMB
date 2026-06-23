@@ -51,7 +51,7 @@ echo "==> 使用 benchmark runtime WASM: $RUNTIME_WASM"
 # - onchain_issuance:业务仍是 stub,正式权重必须等业务实装后生成。
 # - genesis_pallet:无 extrinsic,WeightInfo 为空实现。
 PALLETS=(
-    "shengbank_interest:runtime/issuance/shengbank-interest/src/weights.rs"
+    "provincialbank_interest:runtime/issuance/provincialbank-interest/src/weights.rs"
     "fullnode_issuance:runtime/issuance/fullnode-issuance/src/weights.rs"
     "citizen_issuance:runtime/issuance/citizen-issuance/src/weights.rs"
     "resolution_issuance:runtime/issuance/resolution-issuance/src/weights.rs"
@@ -60,7 +60,7 @@ PALLETS=(
     "admins_change:runtime/governance/admins-change/src/weights.rs"
     "resolution_destro:runtime/governance/resolution-destro/src/weights.rs"
     "grandpakey_change:runtime/governance/grandpakey-change/src/weights.rs"
-    "duoqian_transfer:runtime/transaction/duoqian-transfer/src/weights.rs"
+    "multisig_transfer:runtime/transaction/multisig-transfer/src/weights.rs"
     "runtime_upgrade:runtime/governance/runtime-upgrade/src/weights.rs"
 )
 

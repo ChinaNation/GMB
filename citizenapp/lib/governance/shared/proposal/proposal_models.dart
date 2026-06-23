@@ -63,8 +63,8 @@ class ProposalWithDetail {
   const ProposalWithDetail({
     required this.meta,
     this.runtimeUpgradeDetail,
-    this.createDuoqianDetail,
-    this.closeDuoqianDetail,
+    this.createMultisigDetail,
+    this.closeMultisigDetail,
     this.businessDetails = const {},
     this.resolutionIssuanceSummary,
     this.resolutionDestroySummary,
@@ -76,10 +76,10 @@ class ProposalWithDetail {
   final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
 
   /// 创建多签账户提案详情。
-  final CreateDuoqianProposalInfo? createDuoqianDetail;
+  final CreateMultisigProposalInfo? createMultisigDetail;
 
   /// 关闭多签账户提案详情。
-  final CloseDuoqianProposalInfo? closeDuoqianDetail;
+  final CloseMultisigProposalInfo? closeMultisigDetail;
 
   /// 业务模块详情集合。proposal/shared 只按字符串键保存不透明对象，
   /// 具体键名、模型和页面跳转由所属业务模块自己定义。

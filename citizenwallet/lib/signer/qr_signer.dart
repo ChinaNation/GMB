@@ -51,7 +51,7 @@ class QrSigner {
     return id.length > 128 ? id.substring(0, 128) : id;
   }
 
-  /// 解析 sign_request envelope(citizenwallet 公民钱包从 citizenapp 扫到的内容)。
+  /// 解析 sign_request envelope(CitizenWallet 公民钱包从 CitizenApp 扫到的内容)。
   SignRequestEnvelope parseRequest(String raw) {
     if (raw.isEmpty || raw.length > maxPayloadChars) {
       throw const QrSignException(
@@ -97,7 +97,7 @@ class QrSigner {
     );
   }
 
-  /// 构造 sign_response envelope(citizenwallet 公民钱包签名完成后生成)。
+  /// 构造 sign_response envelope(CitizenWallet 公民钱包签名完成后生成)。
   SignResponseEnvelope buildResponse({
     required SignRequestEnvelope request,
     required String signatureHex,

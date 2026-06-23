@@ -17,15 +17,15 @@ extract_pallet_index() {
   grep -A1 "pallet_index($1)" "$RUNTIME_LIB" | grep "pub type $2" > /dev/null && echo "$1"
 }
 BALANCES_IDX=$(grep -B1 'pub type Balances' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
-DUOQIAN_IDX=$(grep -B1 'pub type DuoqianTransfer' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+MULTISIG_IDX=$(grep -B1 'pub type MultisigTransfer' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 VOTING_IDX=$(grep -B1 'pub type VotingEngine' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 
 sed -i '' "s/balancesPallet = [0-9]*/balancesPallet = $BALANCES_IDX/" "$REGISTRY"
-sed -i '' "s/duoqianTransferPallet = [0-9]*/duoqianTransferPallet = $DUOQIAN_IDX/" "$REGISTRY"
+sed -i '' "s/multisigTransferPallet = [0-9]*/multisigTransferPallet = $MULTISIG_IDX/" "$REGISTRY"
 sed -i '' "s/votingEnginePallet = [0-9]*/votingEnginePallet = $VOTING_IDX/" "$REGISTRY"
 
 # 从各 pallet crate 提取 call_index
-TRANSFER_PALLET="$REPO_ROOT/citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs"
+TRANSFER_PALLET="$REPO_ROOT/citizenchain/runtime/transaction/multisig-transfer/src/lib.rs"
 JOINT_VOTE_PALLET="$REPO_ROOT/citizenchain/runtime/votingengine/joint-vote/src/lib.rs"
 
 PROPOSE_CALL=$(grep -B2 'fn propose_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
@@ -38,7 +38,7 @@ sed -i '' "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" 
 sed -i '' "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
 sed -i '' "s/castReferendumCall = [0-9]*/castReferendumCall = $REFERENDUM_CALL/" "$REGISTRY"
 
-echo "    Balances=$BALANCES_IDX DuoqianTransfer=$DUOQIAN_IDX VotingEngine=$VOTING_IDX"
+echo "    Balances=$BALANCES_IDX MultisigTransfer=$MULTISIG_IDX VotingEngine=$VOTING_IDX"
 echo "    propose=$PROPOSE_CALL joint=$JOINT_CALL referendum=$REFERENDUM_CALL"
 
 echo "==> 清空构建缓存..."

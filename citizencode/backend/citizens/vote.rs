@@ -1,6 +1,6 @@
-//! citizenapp 电子护照状态查询 handler。
+//! CitizenApp 电子护照状态查询 handler。
 //!
-//! 绑定由 CID 后台扫描 CPMS 档案码并校验 citizenapp 签名完成；App 侧只查询
+//! 绑定由 CID 后台扫描 CPMS 档案码并校验 CitizenApp 签名完成；App 侧只查询
 //! CID 已落库的结果。
 
 use axum::{
@@ -13,7 +13,7 @@ use axum::{
 use super::binding::ss58_to_pubkey_hex;
 use crate::*;
 
-/// citizenapp 查询电子护照绑定状态（公共接口）。
+/// CitizenApp 查询电子护照绑定状态（公共接口）。
 pub(crate) async fn app_myid_status(
     State(state): State<AppState>,
     Query(params): Query<MyIdStatusQuery>,

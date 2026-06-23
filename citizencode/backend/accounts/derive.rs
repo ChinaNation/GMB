@@ -33,7 +33,7 @@ use primitives::core_const::SS58_FORMAT;
 /// 全部 5 个受限保留账户名(单一源 = 链端 `account_derive`,UTF-8 字符串视图)。
 ///
 /// 自定义账户判定:account_name 命中其一即非自定义(走各自 op_tag),否则为
-/// `OP_NAME` 自定义命名账户。citizenapp BFF 据此过滤 custom_account_names。
+/// `OP_NAME` 自定义命名账户。CitizenApp BFF 据此过滤 custom_account_names。
 pub(crate) fn reserved_account_names() -> [String; 5] {
     [
         String::from_utf8_lossy(RESERVED_ACCOUNT_NAME_BYTES[0]).into_owned(),
@@ -56,7 +56,7 @@ pub(crate) fn reserved_account_names() -> [String; 5] {
 /// - `"主账户"` → `OP_MAIN`(preimage 不含 account_name)
 /// - `"费用账户"` → `OP_FEE`(preimage 不含 account_name)
 /// - `"永久质押"` → `OP_STAKE`(preimage 不含 account_name)
-/// - `"安全基金"` → `OP_AN`(preimage 不含 account_name)
+/// - `"安全基金"` → `OP_SAFETY`(preimage 不含 account_name)
 /// - `"两和基金"` → `OP_HE`(preimage 不含 account_name)
 /// - 其他非空 → `OP_NAME`(preimage 追加 account_name 字节)
 pub fn derive_account(cid_number: &str, account_name: &str) -> Option<String> {
@@ -104,7 +104,7 @@ mod tests {
     fn reserved_policy_accounts_use_dedicated_tags() {
         let cid = "LN001-NRC0G-944805165-2026";
         let stake = derive_account(cid, "永久质押").unwrap();
-        let anquan = derive_account(cid, "安全基金").unwrap();
+        let safety_fund = derive_account(cid, "安全基金").unwrap();
         let he = derive_account(cid, "两和基金").unwrap();
         // 同名走 OP_NAME(cid||name)的地址不应等于走专属 OP_STAKE 的地址
         let named_stake = hex::encode(
@@ -115,8 +115,8 @@ mod tests {
             .derive(SS58_FORMAT),
         );
         assert_ne!(stake, named_stake);
-        assert_ne!(stake, anquan);
-        assert_ne!(anquan, he);
+        assert_ne!(stake, safety_fund);
+        assert_ne!(safety_fund, he);
         // 显式确认自定义命名走 OP_NAME=0x06
         assert_eq!(
             AccountKind::InstitutionNamed {

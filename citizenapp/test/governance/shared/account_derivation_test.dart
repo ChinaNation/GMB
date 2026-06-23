@@ -4,7 +4,7 @@
 // 制度账户 hex —— 这些地址即链上派生结果,可交叉验证本端派生与
 // citizenchain primitives::core_const::derive_account 字节对齐:
 //   preimage = b"GMB" || op_tag || ss58.to_le_bytes() || payload
-//   OP_MAIN(0x00)/OP_FEE(0x01)/OP_AN(0x03)/OP_HE(0x04): payload = cid_number
+//   OP_MAIN(0x00)/OP_FEE(0x01)/OP_SAFETY(0x03)/OP_HE(0x04): payload = cid_number
 //   OP_INSTITUTION(0x06): payload = cid_number || account_name
 
 import 'dart:convert';
@@ -62,10 +62,10 @@ void main() {
       );
     });
 
-    test('名字路由:安全基金 OP_AN / 两和基金 OP_HE', () {
+    test('名字路由:安全基金 OP_SAFETY / 两和基金 OP_HE', () {
       expect(
         hexFromAccountId(
-          deriveInstitutionAccountIdByName(nrcCid, kReservedNameAnquan),
+          deriveInstitutionAccountIdByName(nrcCid, kReservedNameSafetyFund),
         ),
         nrcSafety,
       );

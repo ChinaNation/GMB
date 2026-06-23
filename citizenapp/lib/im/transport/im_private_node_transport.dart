@@ -172,7 +172,7 @@ class ImPrivateNodeTransport implements ImTransport {
   /// 本机正在使用的通信钱包账户。
   final String ownerChatAccount;
 
-  /// 本机 citizenapp 的 IM 设备 ID。
+  /// 本机 CitizenApp 的 IM 设备 ID。
   final String ownerDeviceId;
 
   /// 用户自己的通信节点端点。

@@ -142,7 +142,7 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 - `internal-vote` 继续保持一人一票一笔交易,但创建提案时读取账户级管理员快照与阈值快照。
 - `personal-manage` 的 `threshold` 输入应被移除或忽略,改由链端派生。
 - `organization-manage` 必须为每个可操作账户创建独立管理员主体;机构只作为账户归属分组。
-- `duoqian-transfer` 等业务模块必须绑定具体账户治理主体。
+- `multisig-transfer` 等业务模块必须绑定具体账户治理主体。
 - `citizenapp` 需要按账户展示管理员、阈值、待投提案和投票进度。
 - `citizenwallet` 公民钱包需要按账户级 AccountId 展示待签交易。
 
@@ -162,7 +162,7 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 2. 第 2 步改造 `internal-vote`:账户级快照、全员生命周期阈值、动态普通阈值。已于 2026-05-08 完成。
 3. 第 3 步改造 `personal-manage`:注册个人账户管理员上限 64,阈值链端派生。已于 2026-05-08 完成。
 4. 第 4 步改造 `organization-manage`:注册机构账户管理员上限 1989,每账户独立主体。
-5. 第 5 步改造 `duoqian-transfer`、`citizenapp`、`citizenwallet`。已于 2026-05-08 先行完成转账链路接入；第 4 步仍需随后补齐机构管理创建/注销全流程。
+5. 第 5 步改造 `multisig-transfer`、`citizenapp`、`citizenwallet`。已于 2026-05-08 先行完成转账链路接入；第 4 步仍需随后补齐机构管理创建/注销全流程。
 
 ## 第 1 步执行结果
 
@@ -207,9 +207,9 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 - 普通阈值统一调用 `admins-change::derived_threshold` 派生：个人多签使用 `PersonalAccount + 个人多签码（is_personal_code，PMUL）`，机构账户使用 `InstitutionAccount + 机构账户码（is_institution_code）`，`注册机构归属关系` 不再作为管理员主体。（机构分类唯一真源 = CID 机构码 `institution_code`，见 [[ADR-025]]）
 - 创建提案内部投票阈值为拟定管理员全员数量；关闭提案仍为当前管理员全员数量。
 - `PersonalManage::PersonalAccounts` 不再镜像管理员列表、管理员数量和阈值，只保存 `creator / account_name / created_at / status`。
-- `CreateDuoqianAction` 不再保存管理员数量和阈值，但保存创建时 `fee` 快照。
+- `CreateMultisigAction` 不再保存管理员数量和阈值，但保存创建时 `fee` 快照。
 - 提案通过后，同一执行事务内完成入金、激活 `admins-change` 主体、激活个人账户。
-- `duoqian-transfer` 的个人多签管理员查询已从 `admins-change` 读取。
+- `multisig-transfer` 的个人多签管理员查询已从 `admins-change` 读取。
 - citizenapp 创建页、提案解码、账户查询和本地快照已切到新格式。
 - citizenwallet 公民钱包 payload decoder 已按新格式展示派生日常阈值与创建全员阈值，并拒绝旧 `admins_len + threshold` 载荷。
 - 本步骤未修改 `spec_version`。
@@ -219,17 +219,17 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 - `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：23 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：41 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
-- `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：20 passed。
-- `flutter test test/duoqian/account_manage_service_test.dart test/duoqian/duoqian_storage_codec_test.dart test/duoqian/duoqian_manage_storage_test.dart`：10 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p multisig-transfer --lib`：20 passed。
+- `flutter test test/gmb/account_manage_service_test.dart test/gmb/gmb_storage_codec_test.dart test/gmb/organization_manage_storage_test.dart`：10 passed。
 - `flutter test test/signer/payload_decoder_test.dart`：30 passed。
 
 ## 第 5 步执行结果
 
 2026-05-08 已完成：
 
-- `duoqian-transfer::registered_account` 拆成 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId` 两条账户级路径；`0x02 注册机构归属关系` 明确拒绝作为转账支出主体。
+- `multisig-transfer::registered_account` 拆成 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId` 两条账户级路径；`0x02 注册机构归属关系` 明确拒绝作为转账支出主体。
 - 个人多签账户状态由 `PersonalQuery::is_active` 校验，机构账户状态由 `InstitutionQuery::is_active` 校验；管理员和阈值仍由投票引擎快照读取 `admins-change::Subjects`。
-- citizenapp `institution_data.dart`、`duoqian_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `InstitutionAccount AccountId` 编码/解码。
+- citizenapp `institution_data.dart`、`gmb_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `InstitutionAccount AccountId` 编码/解码。
 - citizenapp 多签自动发现只把 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId` 落为本地账户；`0x02 注册机构归属关系` 只作归属/检索。
 - citizenapp 注册机构账户详情查询改为 `AccountRegisteredCid -> InstitutionAccounts -> AdminsChange::AdminAccounts[0x05]`，不再从 `0x02` 读取账户管理员。
 - citizenwallet 公民钱包 `propose_transfer` 只接受 `0x01 / 0x03 / 0x05` 可支出主体，拒绝旧裸 cid 与 `0x02`；QR 展示字段新增 `institution`，显示内置机构名、个人多签短地址或机构账户短地址。
@@ -237,6 +237,6 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 
 回归结果：
 
-- `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：22 passed。
-- `flutter test test/duoqian test/institution`：49 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p multisig-transfer --lib`：22 passed。
+- `flutter test test/gmb test/institution`：49 passed。
 - `flutter test test/signer`：61 passed。

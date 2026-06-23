@@ -16,8 +16,8 @@ pub struct ChinaCb {
     pub admins: &'static [[u8; 32]],
 }
 
-/// 国储会安全基金账户地址（GMB + OP_AN + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
-pub const NRC_ANQUAN_ACCOUNT: [u8; 32] =
+/// 国储会安全基金账户地址（GMB + OP_SAFETY + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
+pub const SAFETY_FUND_ACCOUNT: [u8; 32] =
     hex!("d78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa");
 
 /// 国储会两和基金账户地址（GMB + OP_HE + ss58 小端 + 国储会 cid_number → BLAKE2-256）。

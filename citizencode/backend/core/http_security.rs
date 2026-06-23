@@ -284,7 +284,7 @@ pub(crate) fn require_public_search_auth(
     Ok(())
 }
 
-// chain pull 端点(duoqian_info / joint_vote / citizen_vote)的安全模型是
+// chain pull 端点(multisig_info / joint_vote / citizen_vote)的安全模型是
 // "返回签名凭证只对请求者 account_pubkey 有效",不需要请求侧 HMAC。
 
 pub(crate) fn env_flag_enabled(key: &str) -> bool {

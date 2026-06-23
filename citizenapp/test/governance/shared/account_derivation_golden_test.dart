@@ -71,9 +71,9 @@ Uint8List _deriveForVector(Map<String, dynamic> v, int ss58) {
         payload: utf8.encode(v['cid_number'] as String),
         ss58Prefix: ss58,
       );
-    case 'InstitutionAnquan':
+    case 'InstitutionSafetyFund':
       return deriveAccountId(
-        opTag: kOpAnquan,
+        opTag: kOpSafetyFund,
         payload: utf8.encode(v['cid_number'] as String),
         ss58Prefix: ss58,
       );

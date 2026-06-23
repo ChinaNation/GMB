@@ -8,7 +8,7 @@ void main() {
     test('pallet 索引常量已定义且互不相同', () {
       final pallets = {
         PalletRegistry.balancesPallet,
-        PalletRegistry.duoqianTransferPallet,
+        PalletRegistry.multisigTransferPallet,
         PalletRegistry.organizationManagePallet,
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,

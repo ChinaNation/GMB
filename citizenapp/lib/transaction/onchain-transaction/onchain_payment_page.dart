@@ -68,7 +68,7 @@ class OnchainPaymentPanel extends StatefulWidget {
   final String? initialToAddress;
 
   /// 中文注释：交易 Tab 可在链状态提示下方、链上支付表单上方插入入口。
-  /// onchain 模块不直接 import offchain / duoqian，跨功能编排留在 ui 层。
+  /// onchain 模块不直接 import offchain / multisig，跨功能编排留在 ui 层。
   final OnchainPaymentExtraEntriesBuilder? extraEntriesBuilder;
 
   /// 中文注释：默认打开我的钱包选择页；测试或宿主页面可替换选择流程。
@@ -422,7 +422,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
               summary: '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
               fields: [
                 // transfer 链端 fields 按 Registry = (to, amount_yuan)。
-                // citizenwallet decoder 输出 "X.XX GMB"(千分位),citizenapp 的
+                // CitizenWallet decoder 输出 "X.XX GMB"(千分位),CitizenApp 的
                 // $amountFormatted 来自 AmountFormat.format 已自带千分位。
                 SignDisplayField(key: 'to', label: '收款账户', value: toAddr),
                 SignDisplayField(

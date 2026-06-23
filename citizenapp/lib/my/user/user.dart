@@ -426,7 +426,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       expiresAt: null,
       body: UserContactBody(
         address: _profile.communicationAddress?.trim() ?? '',
-        name: _profile.nickname,
+        contactName: _profile.nickname,
       ),
     ).toRawJson();
   }
@@ -906,7 +906,7 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
         expiresAt: null,
         body: UserContactBody(
           address: widget.address,
-          name: widget.nickname,
+          contactName: widget.nickname,
         ),
       ).toRawJson();
 
@@ -1077,7 +1077,7 @@ class _ContactDetailPage extends StatelessWidget {
       expiresAt: null,
       body: UserContactBody(
         address: contact.address,
-        name: contact.displayNickname,
+        contactName: contact.displayNickname,
       ),
     ).toRawJson();
 

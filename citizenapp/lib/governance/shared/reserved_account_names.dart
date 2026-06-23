@@ -14,7 +14,7 @@ const String kReservedNameFee = '费用账户';
 const String kReservedNameStake = '永久质押';
 
 /// 安全基金（制度专属，禁止自定义）。
-const String kReservedNameAnquan = '安全基金';
+const String kReservedNameSafetyFund = '安全基金';
 
 /// 两和基金（制度专属，禁止自定义）。
 const String kReservedNameHe = '两和基金';
@@ -24,7 +24,7 @@ const List<String> kReservedAccountNames = <String>[
   kReservedNameMain,
   kReservedNameFee,
   kReservedNameStake,
-  kReservedNameAnquan,
+  kReservedNameSafetyFund,
   kReservedNameHe,
 ];
 
@@ -34,7 +34,7 @@ const List<String> kReservedAccountNames = <String>[
 /// **不 trim**（trim 仅允许在 UI 输入层，绝不进派生/校验）。
 bool isForbiddenAccountName(String name) {
   return name == kReservedNameStake ||
-      name == kReservedNameAnquan ||
+      name == kReservedNameSafetyFund ||
       name == kReservedNameHe;
 }
 

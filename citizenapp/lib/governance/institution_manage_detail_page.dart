@@ -70,8 +70,8 @@ class _InstitutionManageDetailPageState
   int? _status;
 
   // 提案详情（二选一）
-  personal_models.CreateDuoqianProposalInfo? _createInfo;
-  personal_models.CloseDuoqianProposalInfo? _closeInfo;
+  personal_models.CreateMultisigProposalInfo? _createInfo;
+  personal_models.CloseMultisigProposalInfo? _closeInfo;
 
   bool get _isCreateProposal => _createInfo != null;
 
@@ -161,20 +161,20 @@ class _InstitutionManageDetailPageState
       final key = _buildProposalDataStorageKey(widget.proposalId);
       final raw = await rpc.fetchStorage('0x${_hexEncode(key)}');
       debugPrint('[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
-      personal_models.CreateDuoqianProposalInfo? createInfo;
-      personal_models.CloseDuoqianProposalInfo? closeInfo;
+      personal_models.CreateMultisigProposalInfo? createInfo;
+      personal_models.CloseMultisigProposalInfo? closeInfo;
       if (raw != null && raw.isNotEmpty) {
         final personalDetail = _personalManageService
             .decodePersonalProposalData(widget.proposalId, raw);
-        if (personalDetail is personal_models.CreateDuoqianProposalInfo) {
+        if (personalDetail is personal_models.CreateMultisigProposalInfo) {
           createInfo = personalDetail;
-        } else if (personalDetail is personal_models.CloseDuoqianProposalInfo) {
+        } else if (personalDetail is personal_models.CloseMultisigProposalInfo) {
           closeInfo = personalDetail;
         } else {
           final orgDetail =
               _manageService.decodeManageProposalData(widget.proposalId, raw);
-          if (orgDetail is org_models.CloseDuoqianProposalInfo) {
-            closeInfo = personal_models.CloseDuoqianProposalInfo(
+          if (orgDetail is org_models.CloseMultisigProposalInfo) {
+            closeInfo = personal_models.CloseMultisigProposalInfo(
               proposalId: orgDetail.proposalId,
               account: orgDetail.account,
               beneficiary: orgDetail.beneficiary,
@@ -190,7 +190,7 @@ class _InstitutionManageDetailPageState
       debugPrint(
           '[VoteDetail._load] step3: PendingVoteStore.confirmAllDetailed');
       final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
-        'duoqian_manage',
+        'institution_multisig',
         widget.proposalId,
         OnchainRpc(),
       );
@@ -277,7 +277,7 @@ class _InstitutionManageDetailPageState
   Future<ProposalDetailSnapshot?> _applyLocalSnapshot() async {
     try {
       final snapshot =
-          await _detailStore.read('duoqian_manage', widget.proposalId);
+          await _detailStore.read('institution_multisig', widget.proposalId);
       if (snapshot == null || !mounted) return snapshot;
       final admins = snapshot.admins;
       final pendingPks = snapshot.pendingPubkeys.toSet();
@@ -322,12 +322,12 @@ class _InstitutionManageDetailPageState
     required List<String> admins,
     required Map<String, bool?> votes,
     required Set<String> pendingPks,
-    required personal_models.CreateDuoqianProposalInfo? createInfo,
-    required personal_models.CloseDuoqianProposalInfo? closeInfo,
+    required personal_models.CreateMultisigProposalInfo? createInfo,
+    required personal_models.CloseMultisigProposalInfo? closeInfo,
   }) {
     return ProposalDetailSnapshot(
       proposalId: widget.proposalId,
-      typeKey: 'duoqian_manage',
+      typeKey: 'institution_multisig',
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
       status: status,
       yesCount: tally.yes,
@@ -347,7 +347,7 @@ class _InstitutionManageDetailPageState
   }
 
   Map<String, Object?> _createInfoToJson(
-    personal_models.CreateDuoqianProposalInfo info,
+    personal_models.CreateMultisigProposalInfo info,
   ) {
     return {
       'kind': 'create',
@@ -360,7 +360,7 @@ class _InstitutionManageDetailPageState
   }
 
   Map<String, Object?> _closeInfoToJson(
-    personal_models.CloseDuoqianProposalInfo info,
+    personal_models.CloseMultisigProposalInfo info,
   ) {
     return {
       'kind': 'close',
@@ -371,7 +371,7 @@ class _InstitutionManageDetailPageState
     };
   }
 
-  personal_models.CreateDuoqianProposalInfo? _createInfoFromSnapshot(
+  personal_models.CreateMultisigProposalInfo? _createInfoFromSnapshot(
     ProposalDetailSnapshot snapshot,
   ) {
     final detail = snapshot.detail;
@@ -382,7 +382,7 @@ class _InstitutionManageDetailPageState
     if (amountFen == null || feeFen == null || account == null) {
       return null;
     }
-    return personal_models.CreateDuoqianProposalInfo(
+    return personal_models.CreateMultisigProposalInfo(
       proposalId: snapshot.proposalId,
       account: account,
       proposer: detail['proposer']?.toString() ?? '',
@@ -392,14 +392,14 @@ class _InstitutionManageDetailPageState
     );
   }
 
-  personal_models.CloseDuoqianProposalInfo? _closeInfoFromSnapshot(
+  personal_models.CloseMultisigProposalInfo? _closeInfoFromSnapshot(
     ProposalDetailSnapshot snapshot,
   ) {
     final detail = snapshot.detail;
     if (detail['kind'] != 'close') return null;
     final account = detail['account']?.toString();
     if (account == null) return null;
-    return personal_models.CloseDuoqianProposalInfo(
+    return personal_models.CloseMultisigProposalInfo(
       proposalId: snapshot.proposalId,
       account: account,
       beneficiary: detail['beneficiary']?.toString() ?? '',
@@ -600,7 +600,7 @@ class _InstitutionManageDetailPageState
       // 中文注释：服务层已经确认 runtime 投票记录，新流程不再写 pending。
       // 这里只清除旧版本可能残留的同管理员 pending 记录。
       await PendingVoteStore.instance.remove(
-        'duoqian_manage',
+        'institution_multisig',
         widget.proposalId,
         pubkey,
       );

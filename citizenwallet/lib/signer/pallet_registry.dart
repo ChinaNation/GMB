@@ -58,9 +58,9 @@ class PalletRegistry {
   // 投票统一走 `InternalVote(22).cast(0)`,手动重试/取消统一走
   // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。
 
-  // ---- DuoqianTransfer (19) ----
+  // ---- MultisigTransfer (19) ----
   // call_index 3/4/5 留洞不复用。
-  static const int duoqianTransferPallet = 19;
+  static const int multisigTransferPallet = 19;
   static const int proposeTransferCall = 0;
   static const int proposeSafetyFundCall = 1;
   static const int proposeSweepCall = 2;

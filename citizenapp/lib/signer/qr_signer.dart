@@ -51,7 +51,7 @@ class QrSigner {
     return id.length > 128 ? id.substring(0, 128) : id;
   }
 
-  /// 构造 sign_request envelope(citizenapp 热钱包调用)。
+  /// 构造 sign_request envelope(CitizenApp 热钱包调用)。
   ///
   /// 链端验签需要的 runtime 版本信息位于 `payload_hex` 内部的签名载荷，
   /// envelope body 不单独携带版本字段。
@@ -112,7 +112,7 @@ class QrSigner {
     );
   }
 
-  /// 解析 sign_response envelope(citizenapp 热钱包扫回)。
+  /// 解析 sign_response envelope(CitizenApp 热钱包扫回)。
   SignResponseEnvelope parseResponse(
     String raw, {
     required String expectedRequestId,

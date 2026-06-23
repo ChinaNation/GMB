@@ -108,5 +108,5 @@ citizenapp/test/governance/admins-change/
 - 个人多签、机构账户、治理机构三类主体在 App 侧明确区分；`注册机构归属关系(0x02)` 不进入管理员更换。
 - 机构账户发现、提案上下文和本地多签实体都会携带 `adminSubjectInstitutionCode`（CID 机构码）；转账、管理员更换和投票匹配按机构账户码（`is_institution_code`）进入，不再把机构账户当作个人多签码（`is_personal_code`）。
 - 管理员更换成功后按 `accountIdHex` 清理缓存；投票执行返回和详情刷新仍可清理对应 identity。
-- 通用 `OrgType.duoqian` 文案改为“多签账户”，具体“个人多签 / 机构账户”由 admins-change identity 展示。
+- 通用 `OrgType.multisig` 文案改为“多签账户”，具体“个人多签 / 机构账户”由 admins-change identity 展示。
 - 本机 `flutter test test/governance/admins-change` 被 Flutter SDK 缓存写权限阻断：`/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`；`dart test` 因 Flutter 项目未引入 `package:test` 不能替代。当前已通过 `dart analyze` 与残留扫描完成验证。

@@ -4,7 +4,7 @@
 - 任务卡:
   - `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
   - `memory/08-tasks/done/20260502-node-offchain-duplicate-cleanup.md`
-  - `memory/08-tasks/done/20260502-duoqian-registration-info-align.md`
+  - `memory/08-tasks/done/20260502-multisig-registration-info-align.md`
 - 承接: `20260501-cid-chain-folder-restructure.md`(CID 端 chain/ 目录重构)
 
 ## 0. 概览
@@ -63,11 +63,11 @@ Tauri 命令按业务拆分:
 | `governance/organization_manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
 | `governance/organization_manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 CID `GET /api/v1/app/institutions/:cid_number/registration-info` 拉链上注册专用信息 |
 | `governance/organization_manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 公民钱包签名并提交 `propose_create_institution` |
-| `offchain/offchain_transaction/commands.rs` | `query_clearing_bank_node_info` / `query_local_peer_id` / `test_clearing_bank_endpoint_connectivity` | 清算行节点声明和端点自测 |
-| `offchain/offchain_transaction/commands.rs` | `build_register_*` / `submit_register_*` / `build_update_*` / `submit_update_*` / `build_unregister_*` / `submit_unregister_*` | 清算行节点注册、端点更新、注销 |
-| `offchain/settlement/commands.rs` | `build_decrypt_admin_request` / `verify_and_decrypt_admin` / `list_decrypted_admins` / `lock_decrypted_admin` | 结算前管理员解锁 |
+| `transaction/offchain_transaction/commands.rs` | `query_clearing_bank_node_info` / `query_local_peer_id` / `test_clearing_bank_endpoint_connectivity` | 清算行节点声明和端点自测 |
+| `transaction/offchain_transaction/commands.rs` | `build_register_*` / `submit_register_*` / `build_update_*` / `submit_update_*` / `build_unregister_*` | 清算行节点注册、端点更新、注销 |
+| `transaction/offchain_transaction/settlement/commands.rs` | `build_decrypt_admin_request` / `verify_and_decrypt_admin` / `list_decrypted_admins` / `lock_decrypted_admin` | 结算前管理员解锁 |
 
-DTO 统一见 `offchain/common/types.rs`。
+DTO 统一见 `transaction/offchain_transaction/types.rs`。
 
 ## 4. propose_create_institution(call_index 5)字节布局
 
@@ -108,7 +108,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
                   - 取签发机构主账户和当前签名管理员公钥
                   - 生成 register_nonce = uuid_v4 字符串
                   - signature = IssuerAdminSigner.sign(blake2_256(scale_encode(
-                        DUOQIAN ++ OP_SIGN_INST ++ genesis_hash
+                        GMB ++ OP_SIGN_INST ++ genesis_hash
                         ++ cid_number ++ cid_full_name ++ account_names[]
                         ++ register_nonce
                         ++ issuer_cid_number ++ issuer_main_account ++ signer_pubkey
@@ -130,7 +130,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
                   - 通过 → Institutions[cid_number] = Pending,创建投票提案
                   - 失败 → DispatchError,extrinsic 回滚
 [节点桌面] ⑩ wait-vote 视图轮询 fetchInstitutionDetail(cid_number).status
-[其他管理员] ⑪ citizenwallet 公民钱包扫 vote 提案 → 投赞成
+[其他管理员] ⑪ CitizenWallet 公民钱包扫 vote 提案 → 投赞成
           │
           ▼ ⑫ 票数达 threshold → InternalVoteExecutor 自动执行 → status = Active
           │
@@ -146,16 +146,16 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
 | # | 项 | 触发条件 |
 |---|---|---|
 | F1 | 机构提案列表 full scan(`fetch_institution_proposals`)| votingengine 提案存储扫描 + institution_hex 过滤 |
-| F2 | 节点桌面"扫码添加管理员"接 citizenwallet user_contact / user_duoqian QR | 当前 create-multisig 用粘贴兜底 |
+| F2 | 节点桌面"扫码添加管理员"接 CitizenWallet user_contact / user_multisig QR | 当前 create-multisig 用粘贴兜底 |
 | F3 | 创建机构 extrinsic 提交后冷钱包两段握手实际接入(`VoteSigningFlow` 复用) | 当前 alert 占位 |
-| F4 | citizenwallet decoder 加新版 `propose_create_institution` action 分支 | 已按 11 字段新布局同步，后续字段变更仍需三端同时更新 |
+| F4 | CitizenWallet decoder 加新版 `propose_create_institution` action 分支 | 已按 11 字段新布局同步，后续字段变更仍需三端同时更新 |
 | F5 | 发起提案按钮组的具体提案类型(转账 / 关闭多签 / 换管理员 / 手续费划转) | 当前全部 disabled "即将上线" |
 | F6 | 节点端"管理员激活"机制(冷钱包列表的来源)集成到 create-multisig 选签名钱包 | 当前 coldWallets={[]} 占位 |
 
 ## 7. 验收标准达成情况
 
 - ✅ `cargo check -p organization-manage --tests` 通过
-- ✅ `cargo check -p duoqian-transfer --tests` 通过
+- ✅ `cargo check -p multisig-transfer --tests` 通过
 - ✅ `cargo check -p offchain-transaction --tests` 通过
 - ✅ `cargo check -p node` 带 `WASM_FILE=target/ci-wasm/citizenchain.compact.compressed.wasm` 通过(仅既有 unsafe/dead_code 警告)
 - ✅ `npm run build`(node frontend) 通过
@@ -163,7 +163,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
 - ✅ 节点桌面状态机重构,删除 register-cid / propose-create info 终态 + 老 detail.tsx + admin.tsx + node.tsx
 - ✅ cid.tsx 删"查询"按钮,改 debounce 自动搜
 - ✅ 4 个新页面:institution_detail / create_multisig / other_accounts / admin_list
-- ⏳ 端到端冷钱包签 + 上链 + 等投票 + 声明节点(完整跑通需 citizenwallet decoder follow-up)
+- ⏳ 端到端冷钱包签 + 上链 + 等投票 + 声明节点(完整跑通需 CitizenWallet decoder follow-up)
 
 ## 8. 变更记录
 

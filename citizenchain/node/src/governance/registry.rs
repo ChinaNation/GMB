@@ -1,6 +1,6 @@
 // 治理机构注册表：直接读取 runtime 常量，避免 node 侧再维护过期地址副本。
 
-use primitives::china::china_cb::{ChinaCb, CHINA_CB, NRC_ANQUAN_ACCOUNT};
+use primitives::china::china_cb::{ChinaCb, CHINA_CB, SAFETY_FUND_ACCOUNT};
 use primitives::china::china_ch::{ChinaCh, CHINA_CH};
 
 use super::types::{GovernanceOverview, InstitutionListItem, OrgType};
@@ -77,9 +77,9 @@ impl InstitutionRef {
         }
     }
 
-    pub(crate) fn anquan_account_hex(self) -> Option<String> {
+    pub(crate) fn safety_fund_account_hex(self) -> Option<String> {
         match self {
-            InstitutionRef::Nrc(_) => Some(hex::encode(NRC_ANQUAN_ACCOUNT)),
+            InstitutionRef::Nrc(_) => Some(hex::encode(SAFETY_FUND_ACCOUNT)),
             InstitutionRef::Prc(_) | InstitutionRef::Prb(_) => None,
         }
     }

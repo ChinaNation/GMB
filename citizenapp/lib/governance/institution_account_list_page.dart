@@ -23,7 +23,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'organization-manage/institution_account_info_page.dart';
 import 'organization-manage/institution_manage_models.dart' as org_models;
 import 'organization-manage/institution_manage_service.dart';
-import 'organization-manage/institution_duoqian_create_page.dart';
+import 'organization-manage/institution_multisig_create_page.dart';
 import 'personal-manage/personal_account_create_page.dart';
 import 'personal-manage/personal_manage_account_info_page.dart';
 import 'personal-manage/personal_manage_models.dart';
@@ -86,13 +86,13 @@ class _InstitutionAccountListPageState
   final PersonalManageService _personalManageService = PersonalManageService();
   final PersonalProposalHistoryService _personalProposalHistoryService =
       PersonalProposalHistoryService();
-  final InstitutionManageService _duoqianManageService =
+  final InstitutionManageService _multisigManageService =
       InstitutionManageService();
 
   static const _activeStatusTtl = Duration(minutes: 60);
   static const _inactiveStatusTtl = Duration(minutes: 10);
   static const _discoveryWalletFingerprintKey =
-      'duoqian_discovery_wallet_fingerprint';
+      'multisig_discovery_wallet_fingerprint';
 
   @override
   void initState() {
@@ -124,7 +124,7 @@ class _InstitutionAccountListPageState
         personals.map((p) => p.account),
       );
       final institutionStatuses =
-          await InstitutionDuoqianLocalState.readStatuses(
+          await InstitutionMultisigLocalState.readStatuses(
         isar,
         institutions.map((p) => p.account),
       );
@@ -172,7 +172,7 @@ class _InstitutionAccountListPageState
         personals.map((p) => p.account),
       );
       final institutionStatuses =
-          await InstitutionDuoqianLocalState.readStatusSnapshots(
+          await InstitutionMultisigLocalState.readStatusSnapshots(
         isar,
         institutions.map((p) => p.account),
       );
@@ -210,13 +210,13 @@ class _InstitutionAccountListPageState
     await _readFromIsar();
   }
 
-  bool _shouldRefreshStatus(DuoqianLocalStatusSnapshot? snapshot) {
+  bool _shouldRefreshStatus(MultisigLocalStatusSnapshot? snapshot) {
     if (snapshot?.lastSyncAtMillis == null) return true;
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
       snapshot!.lastSyncAtMillis!,
     );
     final ttl = snapshot.status == PersonalAccountLocalState.statusActive ||
-            snapshot.status == InstitutionDuoqianLocalState.statusActive
+            snapshot.status == InstitutionMultisigLocalState.statusActive
         ? _activeStatusTtl
         : _inactiveStatusTtl;
     return DateTime.now().difference(lastSyncAt) >= ttl;
@@ -245,7 +245,7 @@ class _InstitutionAccountListPageState
         }
         final status = info == null
             ? PersonalAccountLocalState.statusClosed
-            : info.status == DuoqianStatus.active
+            : info.status == MultisigStatus.active
                 ? PersonalAccountLocalState.statusActive
                 : PersonalAccountLocalState.statusPending;
         await WalletIsar.instance.writeTxn((isar) async {
@@ -267,7 +267,7 @@ class _InstitutionAccountListPageState
             await PersonalAccountLocalState.putDetailInTxn(
               isar,
               personal.account,
-              DuoqianLocalDetailSnapshot(
+              MultisigLocalDetailSnapshot(
                 status: status,
                 admins: info.admins,
                 threshold: info.threshold,
@@ -315,7 +315,7 @@ class _InstitutionAccountListPageState
     if (institutions.isEmpty) return;
     Map<String, org_models.InstitutionAccountInfo?> infos;
     try {
-      infos = await _duoqianManageService.fetchAccountsBatch(
+      infos = await _multisigManageService.fetchAccountsBatch(
         institutions.map((p) => p.account),
       );
     } catch (_) {
@@ -326,31 +326,31 @@ class _InstitutionAccountListPageState
       try {
         final info = infos[_normalizeHex(institution.account)];
         final status = info == null
-            ? InstitutionDuoqianLocalState.statusClosed
+            ? InstitutionMultisigLocalState.statusClosed
             : info.status == org_models.InstitutionStatus.active
-                ? InstitutionDuoqianLocalState.statusActive
-                : InstitutionDuoqianLocalState.statusPending;
+                ? InstitutionMultisigLocalState.statusActive
+                : InstitutionMultisigLocalState.statusPending;
         await WalletIsar.instance.writeTxn((isar) async {
-          await InstitutionDuoqianLocalState.putStatusInTxn(
+          await InstitutionMultisigLocalState.putStatusInTxn(
             isar,
             institution.account,
             status,
           );
           if (info == null) {
-            await InstitutionDuoqianLocalState.deleteDetailInTxn(
+            await InstitutionMultisigLocalState.deleteDetailInTxn(
               isar,
               institution.account,
             );
           } else {
             final previousDetail =
-                await InstitutionDuoqianLocalState.readDetail(
+                await InstitutionMultisigLocalState.readDetail(
               isar,
               institution.account,
             );
-            await InstitutionDuoqianLocalState.putDetailInTxn(
+            await InstitutionMultisigLocalState.putDetailInTxn(
               isar,
               institution.account,
-              DuoqianLocalDetailSnapshot(
+              MultisigLocalDetailSnapshot(
                 status: status,
                 admins: info.admins,
                 threshold: info.threshold,
@@ -395,7 +395,7 @@ class _InstitutionAccountListPageState
       anyChanged = result.anyChanged;
       completed = result.completed;
     } catch (e) {
-      debugPrint('[DuoqianListPage] discovery 失败: $e');
+      debugPrint('[MultisigListPage] discovery 失败: $e');
     } finally {
       if (anyChanged) {
         await _readFromIsar();
@@ -492,7 +492,7 @@ class _InstitutionAccountListPageState
     final createdAddress = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (_) => InstitutionDuoqianCreatePage(
+        builder: (_) => InstitutionMultisigCreatePage(
           institution: const InstitutionInfo(
             cidFullName: '新建多签机构',
             cidShortName: '新建多签机构',
@@ -687,7 +687,7 @@ class _InstitutionAccountListPageState
     final tag = isPersonal ? '个人' : '机构';
     final isClosed =
         item.localStatus == PersonalAccountLocalState.statusClosed ||
-            item.localStatus == InstitutionDuoqianLocalState.statusClosed;
+            item.localStatus == InstitutionMultisigLocalState.statusClosed;
     final subtitleParts = <String>[
       _truncateAddress(ss58),
       if (item.discoveredViaAdmin) '我作为 ${item.matchedAdminsLen} 位管理员之一参与',

@@ -62,7 +62,7 @@ class InstitutionAccounts {
   const InstitutionAccounts({
     required this.mainAccount,
     this.feeAccount,
-    this.anquanAccount,
+    this.safetyFundAccount,
     this.heAccount,
     this.stakeAccount,
   });
@@ -74,7 +74,7 @@ class InstitutionAccounts {
   final String? feeAccount;
 
   /// 安全基金账户 AccountId hex；仅国储会存在。
-  final String? anquanAccount;
+  final String? safetyFundAccount;
 
   /// 两和基金账户 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国储会存在。
   final String? heAccount;

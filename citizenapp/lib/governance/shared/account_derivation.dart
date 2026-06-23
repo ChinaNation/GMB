@@ -31,7 +31,7 @@ const int kOpFee = 0x01;
 const int kOpStake = 0x02;
 
 /// 安全基金(制度专属)· payload = cid_number。
-const int kOpAnquan = 0x03;
+const int kOpSafetyFund = 0x03;
 
 /// 两和基金(制度专属)· payload = cid_number。
 const int kOpHe = 0x04;
@@ -127,7 +127,7 @@ Uint8List deriveInstitutionAccountIdByName(
     kReservedNameMain => (kOpMain, false),
     kReservedNameFee => (kOpFee, false),
     kReservedNameStake => (kOpStake, false),
-    kReservedNameAnquan => (kOpAnquan, false),
+    kReservedNameSafetyFund => (kOpSafetyFund, false),
     kReservedNameHe => (kOpHe, false),
     _ => (kOpName, true),
   };

@@ -1,6 +1,6 @@
 //! 公民电子护照绑定 handler。
 //!
-//! CID 只接受 CPMS 档案码中的钱包信息，并要求 citizenapp 对 CID 下发的
+//! CID 只接受 CPMS 档案码中的钱包信息，并要求 CitizenApp 对 CID 下发的
 //! `sign_request` 完成 sr25519 签名；验签通过后，CID 本地写入绑定结果。
 
 use axum::{

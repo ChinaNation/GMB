@@ -86,13 +86,13 @@ fee: Balance
 
 ## trait(对外暴露)
 
-- `PersonalMultisigQuery<AccountId>`(`src/traits.rs`):暴露 `lookup_admin_config / is_active`,duoqian-transfer 通过它 union 查询多签 admin 配置
+- `PersonalMultisigQuery<AccountId>`(`src/traits.rs`):暴露 `lookup_admin_config / is_active`,multisig-transfer 通过它 union 查询多签 admin 配置
 
 ## 派生公式
 
 ```
 personal_account = Blake2b_256(
-    DUOQIAN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || account_name_utf8
+    GMB || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || account_name_utf8
 )
 ```
 
@@ -127,7 +127,7 @@ account_id = core_const::account_id_from_account(personal_account)
 - citizenapp 查询个人多签时，状态读 `PersonalManage::PersonalAccounts`，
   `creator/account_name` 也读 `PersonalManage::PersonalAccounts`，管理员读
   `AdminsChange::AdminAccounts`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
-- citizenapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
+- citizenapp 解码 `PersonalManage::CreateMultisigAction` 时必须读取 `amount + fee` 两个 u128 字段。
 - 创建类交易入块后若未找到成功事件，客户端必须先解析 `System.ExtrinsicFailed` 并显示真实 `PersonalManage / AdminsChange` 模块错误，不能只提示“未找到成功事件”。
 - citizenwallet `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
 - citizenwallet `payload_decoder.dart` 解析 PersonalManage(7) 新编码，并拒绝旧
@@ -148,9 +148,9 @@ cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib
 ```bash
 cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib
-cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib
+cargo test --manifest-path citizenchain/Cargo.toml -p multisig-transfer --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib
-flutter test test/organization-manage/account_manage_service_test.dart test/organization-manage/duoqian_storage_codec_test.dart test/organization-manage/duoqian_manage_storage_test.dart
+flutter test test/organization-manage/account_manage_service_test.dart test/organization-manage/multisig_storage_codec_test.dart test/organization-manage/institution_multisig_storage_test.dart
 flutter test test/signer/payload_decoder_test.dart
 ```
 
@@ -159,7 +159,7 @@ flutter test test/signer/payload_decoder_test.dart
 - `personal-manage`:23 passed。
 - `admins-change`:44 passed。
 - `internal-vote`:86 passed。
-- `duoqian-transfer`:22 passed。
+- `multisig-transfer`:22 passed。
 - `organization-manage`:24 passed。
 - `citizenapp` 多签相关测试:10 passed。
 - `citizenwallet` 公民钱包 payload decoder:30 passed。
@@ -189,8 +189,8 @@ flutter test test/signer/payload_decoder_test.dart
 
 ## 重新创世前总审计修复结果(2026-05-08)
 
-- `CreateDuoqianAction` 新增 `fee` 快照字段,执行/清理不再按当前 fee policy 重算创建手续费。
-- `cleanup_pending_create` 先检查 `PendingPersonalCreate` 是否存在,重复手动 cleanup 不再重复发 `DuoqianCreateRejected`。
+- `CreateMultisigAction` 新增 `fee` 快照字段,执行/清理不再按当前 fee policy 重算创建手续费。
+- `cleanup_pending_create` 先检查 `PendingPersonalCreate` 是否存在,重复手动 cleanup 不再重复发 `MultisigCreateRejected`。
 - 旧反向索引 storage 和 meta 类型已删除,`account_name` 合并进 `PersonalAccounts`。
 - `remove_pending_admin_account` 不再吞掉 `admins-change` 错误,清理路径会向上返回失败。
 - `execute_create_with_finalizer` / `execute_close_with_finalizer` 已删除死参数。

@@ -20,9 +20,9 @@ use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
 #[serde(rename_all = "camelCase")]
 pub struct NetworkOverview {
     pub online_nodes: u64,
-    pub guochuhui_nodes: u64,
-    pub shengchuhui_nodes: u64,
-    pub shengchuhang_nodes: u64,
+    pub nrc_nodes: u64,
+    pub prc_nodes: u64,
+    pub prb_nodes: u64,
     pub full_nodes: u64,
     pub light_nodes: u64,
     pub warning: Option<String>,
@@ -121,9 +121,9 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     if !status.running {
         return Ok(NetworkOverview {
             online_nodes: 0,
-            guochuhui_nodes: 0,
-            shengchuhui_nodes: 0,
-            shengchuhang_nodes: 0,
+            nrc_nodes: 0,
+            prc_nodes: 0,
+            prb_nodes: 0,
             full_nodes: 0,
             light_nodes: 0,
             warning: None,
@@ -299,16 +299,16 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         warnings.push("未能判定本机轻/全节点，本机按全节点口径计入 fullNodes".to_string());
     }
 
-    let mut guochuhui_nodes = 0u64;
-    let mut shengchuhui_nodes = 0u64;
-    let mut shengchuhang_nodes = 0u64;
+    let mut nrc_nodes = 0u64;
+    let mut prc_nodes = 0u64;
+    let mut prb_nodes = 0u64;
     let mut uncategorized_bootnodes = 0u64;
     for pid in &online_peer_ids {
         if let Some(role) = bootnode_role_map.get(pid) {
             match role.as_str() {
-                "guochuhui" => guochuhui_nodes = guochuhui_nodes.saturating_add(1),
-                "shengchuhui" => shengchuhui_nodes = shengchuhui_nodes.saturating_add(1),
-                "shengchuhang" => shengchuhang_nodes = shengchuhang_nodes.saturating_add(1),
+                "nrc" => nrc_nodes = nrc_nodes.saturating_add(1),
+                "prc" => prc_nodes = prc_nodes.saturating_add(1),
+                "prb" => prb_nodes = prb_nodes.saturating_add(1),
                 _ => uncategorized_bootnodes = uncategorized_bootnodes.saturating_add(1),
             }
         }
@@ -324,9 +324,9 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
 
     Ok(NetworkOverview {
         online_nodes,
-        guochuhui_nodes,
-        shengchuhui_nodes,
-        shengchuhang_nodes,
+        nrc_nodes,
+        prc_nodes,
+        prb_nodes,
         full_nodes,
         light_nodes,
         warning: if warnings.is_empty() {
@@ -392,9 +392,9 @@ mod tests {
     fn network_overview_json_excludes_removed_cards() {
         let overview = NetworkOverview {
             online_nodes: 2,
-            guochuhui_nodes: 1,
-            shengchuhui_nodes: 0,
-            shengchuhang_nodes: 0,
+            nrc_nodes: 1,
+            prc_nodes: 0,
+            prb_nodes: 0,
             full_nodes: 1,
             light_nodes: 1,
             warning: None,

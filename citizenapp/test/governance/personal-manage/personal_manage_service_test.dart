@@ -169,8 +169,8 @@ void main() {
 
       final decoded = service.decodePersonalProposalData(7, raw);
 
-      expect(decoded, isA<CreateDuoqianProposalInfo>());
-      final info = decoded as CreateDuoqianProposalInfo;
+      expect(decoded, isA<CreateMultisigProposalInfo>());
+      final info = decoded as CreateMultisigProposalInfo;
       expect(info.proposalId, 7);
       expect(info.account, '33' * 32);
       expect(info.amountFen, BigInt.from(111));
@@ -204,7 +204,7 @@ void main() {
       expect(info, isNotNull);
       expect(info!.admins, ['cc' * 32, 'dd' * 32]);
       expect(info.threshold, 2);
-      expect(info.status, DuoqianStatus.active);
+      expect(info.status, MultisigStatus.active);
       expect(rpc.requestedKeys, [personalKey, adminKey, thresholdKey]);
     });
 

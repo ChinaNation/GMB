@@ -85,7 +85,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 `register_cid_institution(call_index = 2)` 由 CID 后端签发凭证并由链端验签,不走冷钱包扫码签名,不在本表范围。`call_index = 0 / 3` 已留洞不复用。
 
-### 1.10 DuoqianTransfer(pallet_index = 19)
+### 1.10 MultisigTransfer(pallet_index = 19)
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
@@ -174,12 +174,12 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 - `VotingEngine(9).internal_vote`
 - `VotingEngine(9).joint_vote`
 - `VotingEngine(9).citizen_vote`
-- `DuoqianManage(pallet_index = 17)` 旧命名
+- `MultisigManage(pallet_index = 17)` 旧命名
 - `OrganizationManage(17).propose_create(call_index = 0)`
 - `OrganizationManage(17).propose_create_personal(call_index = 3)`
-- `DuoqianTransfer(19).execute_transfer(call_index = 3)`
-- `DuoqianTransfer(19).execute_safety_fund_transfer(call_index = 4)`
-- `DuoqianTransfer(19).execute_sweep_to_main(call_index = 5)`
+- `MultisigTransfer(19).execute_transfer(call_index = 3)`
+- `MultisigTransfer(19).execute_safety_fund_transfer(call_index = 4)`
+- `MultisigTransfer(19).execute_sweep_to_main(call_index = 5)`
 - `AdminsChange(12).execute_admin_replacement(call_index = 1)`
 - `ResolutionDestro(14).execute_destroy(call_index = 1)`
 - `GrandpaKeyChange(16).execute_replace_grandpa_key(call_index = 1)`

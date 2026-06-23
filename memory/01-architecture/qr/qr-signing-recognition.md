@@ -2,7 +2,7 @@
 
 - 版本:2026-05-07
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:citizenwallet 公民钱包扫描 QR 后的识别、展示与签名放行规则
+- 范围:CitizenWallet 公民钱包扫描 QR 后的识别、展示与签名放行规则
 - 依赖:
   - `memory/01-architecture/qr/qr-protocol-spec.md`
   - `memory/01-architecture/qr/qr-protocol-fixtures/`
@@ -24,7 +24,7 @@
 | `login_challenge` | `login_receipt` | 通过后允许生成登录回执 |
 | `sign_request` | `sign_response` | 通过后允许签名并生成签名回执 |
 
-其余 4 种当前 kind(`login_receipt` / `sign_response` / `user_contact` / `user_transfer`)不由冷钱包消费,扫到即红色拒绝。已下线的 `user_duoqian` 不属于当前 kind 枚举。
+其余 4 种当前 kind(`login_receipt` / `sign_response` / `user_contact` / `user_transfer`)不由冷钱包消费,扫到即红色拒绝。已下线的 `user_multisig` 不属于当前 kind 枚举。
 
 ## 三、envelope 层校验
 
@@ -132,7 +132,7 @@ field 或 pallet/call 组合都不得恢复。
 4. 随机 `payload_hex`
 5. `display.action` 与 decoder action 不一致
 6. `display.fields` 与 decoder fields 不一致
-7. 旧 `spec_version` 门控、旧 wrapper action、旧 `DuoqianManage` 名称试图作为当前协议依据
+7. 旧 `spec_version` 门控、旧 wrapper action、旧 `MultisigManage` 名称试图作为当前协议依据
 
 ## 十一、拒绝的替代方案
 

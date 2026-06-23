@@ -210,7 +210,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn genesis_contains_nrc_and_all_shengbank_balances() {
+    fn genesis_contains_nrc_and_all_provincialbank_balances() {
         let patch = genesis_config();
         let balances = patch["balances"]["balances"]
             .as_array()
@@ -267,12 +267,12 @@ mod tests {
                     .expect("each balance amount must be u64 number or u128 string")
             })
             .sum();
-        let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
+        let total_provincialbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
         // 中文注释：创世总注入 = 创世发行 + 省储行创立发行 + 两和基金发行。
         assert_eq!(
             total_in_patch,
-            GENESIS_ISSUANCE + total_shengbank_stake + HE_FUND_ISSUANCE
+            GENESIS_ISSUANCE + total_provincialbank_stake + HE_FUND_ISSUANCE
         );
     }
 

@@ -52,7 +52,7 @@ class ClearingBankCandidate {
       info.mainAccount!.isNotEmpty;
 }
 
-/// citizenapp 清算行目录服务。
+/// CitizenApp 清算行目录服务。
 ///
 /// 中文注释:
 /// - 搜索入口使用 CID 公开 API。

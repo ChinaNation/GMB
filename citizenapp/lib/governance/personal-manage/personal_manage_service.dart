@@ -410,7 +410,7 @@ class PersonalManageService {
     }
   }
 
-  CreateDuoqianProposalInfo? _decodeCreateAction(
+  CreateMultisigProposalInfo? _decodeCreateAction(
     int proposalId,
     Uint8List data,
   ) {
@@ -431,7 +431,7 @@ class PersonalManageService {
 
     final feeFen = _readU128Le(data.sublist(offset, offset + 16));
 
-    return CreateDuoqianProposalInfo(
+    return CreateMultisigProposalInfo(
       proposalId: proposalId,
       account: account,
       proposer: proposerSs58,
@@ -440,7 +440,7 @@ class PersonalManageService {
     );
   }
 
-  CloseDuoqianProposalInfo? _decodeCloseAction(
+  CloseMultisigProposalInfo? _decodeCloseAction(
     int proposalId,
     Uint8List data,
   ) {
@@ -460,7 +460,7 @@ class PersonalManageService {
     final proposerSs58 =
         Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
 
-    return CloseDuoqianProposalInfo(
+    return CloseMultisigProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiarySs58,
@@ -635,8 +635,8 @@ class PersonalManageService {
     );
   }
 
-  static DuoqianStatus _statusFromByte(int statusByte) {
-    return statusByte == 1 ? DuoqianStatus.active : DuoqianStatus.pending;
+  static MultisigStatus _statusFromByte(int statusByte) {
+    return statusByte == 1 ? MultisigStatus.active : MultisigStatus.pending;
   }
 
   /// 普通提案最低阈值：必须严格过半。

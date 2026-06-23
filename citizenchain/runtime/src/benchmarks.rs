@@ -29,7 +29,7 @@ frame_benchmarking::define_benchmarks!(
     [frame_system_extensions, SystemExtensionsBench::<Runtime>]
     [pallet_balances, Balances]
     [pallet_timestamp, Timestamp]
-    [shengbank_interest, ShengBankInterest]
+    [provincialbank_interest, ProvincialBankInterest]
     [fullnode_issuance, FullnodeIssuance]
     [citizen_issuance, CitizenIssuance]
     [resolution_issuance, ResolutionIssuance]
@@ -42,7 +42,7 @@ frame_benchmarking::define_benchmarks!(
     // personal_manage benchmark 用例待 follow-up;当前 benchmarks.rs 是空骨架,
     // 不挂载到 list_benchmarks 避免 Benchmarking trait 缺失编译错误。
     // [personal_manage, PersonalManage]
-    [duoqian_transfer, DuoqianTransfer]
+    [multisig_transfer, MultisigTransfer]
     // internal-vote / joint-vote 删除 migration benchmark 后暂无 benchmark fn,
     // cast / finalize 权重待补;votingengine 引擎核心 + citizen-vote 同样暂无。
     // 无 benchmark fn 的 pallet 不挂载,避免 Benchmarking trait 缺失编译错误。

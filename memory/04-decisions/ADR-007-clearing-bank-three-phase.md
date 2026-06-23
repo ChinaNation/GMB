@@ -35,7 +35,7 @@
 **A. 清算方向反转：收款方主导清算**
 
 - `submit_offchain_batch_v2` 校验改为 `item.recipient_bank == institution_main`（原为 `payer_bank`）
-- batch 提交者 = 收款方清算行的某个 duoqian_admin（不再是付款方）
+- batch 提交者 = 收款方清算行的某个 admin（不再是付款方）
 - fee 流向统一：永远归 `fee_account_of(recipient_bank)`（同行 / 跨行统一规则，简化 settlement.rs 分支逻辑）
 - 链上验签流程不变：A 的 sr25519 签名 PaymentIntent 是核心授权，pallet 凭授权 mutate Currency，谁提交 batch 不影响安全
 
@@ -63,7 +63,7 @@
 
 - 新增 `ClearingBankNodes: Map<CidNumber, ClearingBankNodeInfo>` storage（peer_id / rpc_domain / rpc_port / registered_at / registered_by）
 - 新增 `NodePeerToInstitution: Map<PeerId, CidNumber>` 反向索引（防 PeerId 冒名）
-- 新增 `register_clearing_bank(cid_number, peer_id, rpc_domain, rpc_port)` extrinsic（任一 duoqian_admin 单签即可，不走内部投票）
+- 新增 `register_clearing_bank(cid_number, peer_id, rpc_domain, rpc_port)` extrinsic（任一 admin 单签即可，不走内部投票）
 - 新增 `update_clearing_bank_endpoint(cid_number, new_domain, new_port)`（仅改端点，不动 PeerId）
 - 新增 `unregister_clearing_bank(cid_number)`（注销 + 反向索引清理）
 
@@ -74,7 +74,7 @@
 
 #### 2.2 node Tauri 后端改动
 
-新增 Tauri command（2026-05-02 起按业务拆到 `citizenchain/node/src/offchain/{duoqian_manage,offchain_transaction,settlement}/commands.rs`）：
+新增 Tauri command（2026-05-02 起按业务拆到 `citizenchain/node/src/offchain/{organization_manage,offchain_transaction,settlement}/commands.rs`）：
 
 - `search_eligible_clearing_banks(query, limit)`：转发 CID `/clearing-banks/eligible-search`
 - `query_clearing_bank_node_info(cid_number)`：链上查 `ClearingBankNodes[cid_number]`
@@ -109,7 +109,7 @@
 
 #### 2.4 CID 端 Step 2 末尾联动
 
-- `citizencode/backend/subjects/chain_duoqian_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
+- `citizencode/backend/subjects/chain_multisig_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
   - `AND cid_number IN (SELECT cid_number FROM clearing_bank_nodes_cache)`
 - 新建 `citizencode/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
 - CID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_cid_number`
@@ -181,5 +181,5 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 ## 引用
 
 - 现有清算 pallet：[citizenchain/runtime/transaction/offchain-transaction/src/lib.rs](../../citizenchain/runtime/transaction/offchain-transaction/src/lib.rs)
-- 现有 CID 公开 API：[citizencode/backend/subjects/chain_duoqian_info.rs](../../citizencode/backend/subjects/chain_duoqian_info.rs)（app_search_clearing_banks）
+- 现有 CID 公开 API：[citizencode/backend/subjects/chain_multisig_info.rs](../../citizencode/backend/subjects/chain_multisig_info.rs)（app_search_clearing_banks）
 - ParentInstitutionRow 已含 sub_type 字段：[citizencode/backend/subjects/model.rs](../../citizencode/backend/subjects/model.rs)

@@ -1318,7 +1318,7 @@ async fn complete_archive_delete(
     )
     .bind(deleted_at)
     .bind(&ctx.user_id)
-    .bind("citizenwallet signed archive delete")
+    .bind("CitizenWallet signed archive delete")
     .bind(&archive_id)
     .execute(tx.as_mut())
     .await
@@ -1547,7 +1547,7 @@ fn build_archive_delete_payload(
     admin_account: &str,
     expire_at: i64,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    // 中文注释：citizenwallet 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
+    // 中文注释：CitizenWallet 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
     let admin_account_hex = normalize_pubkey_hex(admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,

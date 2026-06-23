@@ -3,7 +3,7 @@
 //! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
 //! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
-//! 与 citizenwallet 的 Dart envelope、citizenchain/citizencode/citizenpassport 前端的 TS envelope 字段逐字节一致。
+//! 与 CitizenWallet 的 Dart envelope、citizenchain/citizencode/citizenpassport 前端的 TS envelope 字段逐字节一致。
 
 use serde::{Deserialize, Serialize};
 

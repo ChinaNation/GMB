@@ -5,8 +5,8 @@ import 'dart:typed_data';
 /// 链上 SCALE 布局（`org-mgmt` + ACTION_CLOSE = 2 前缀之后）：
 ///   account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)
-class CloseDuoqianProposalInfo {
-  const CloseDuoqianProposalInfo({
+class CloseMultisigProposalInfo {
+  const CloseMultisigProposalInfo({
     required this.proposalId,
     required this.account,
     required this.beneficiary,
@@ -34,8 +34,8 @@ class CloseDuoqianProposalInfo {
     return Uint8List.fromList(addrBytes);
   }
 
-  CloseDuoqianProposalInfo copyWithStatus(int? newStatus) {
-    return CloseDuoqianProposalInfo(
+  CloseMultisigProposalInfo copyWithStatus(int? newStatus) {
+    return CloseMultisigProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiary,

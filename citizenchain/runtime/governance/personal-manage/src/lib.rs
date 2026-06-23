@@ -471,7 +471,7 @@ pub mod pallet {
 // `votingengine::InternalVoteResultCallback` tuple 广播回来。
 // 本 Executor 按 `MODULE_TAG + ACTION_*` 前缀认领本模块提案,
 // approved=true 分派 execute_create / execute_close;approved=false 清理 Pending 存储。
-// ──── PersonalMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
+// ──── PersonalMultisigQuery 实现:对 multisig-transfer / runtime config 暴露查询 ────
 
 impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::Pallet<T> {
     fn lookup_admin_config(

@@ -144,6 +144,10 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
   if (!detail) return null;
 
   const activatedCount = activatedAdmins.length;
+  const showShortName =
+    detail.cidShortName &&
+    detail.cidShortName !== detail.cidFullName &&
+    detail.orgType !== 0;
 
   return (
     <div className="governance-section">
@@ -153,7 +157,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
 
       <div className="institution-title-row">
         <h2>{detail.cidFullName}</h2>
-        {detail.cidShortName && detail.cidShortName !== detail.cidFullName && (
+        {showShortName && (
           <span className="institution-short-name">{detail.cidShortName}</span>
         )}
         {isAdmin && (
@@ -225,12 +229,12 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             </div>
           </div>
         )}
-        {detail.nrcAnquanAccount && (
+        {detail.safetyFundAccount && (
           <div className="metric-card">
-            <div className="metric-label">安全基金账户 <code className="metric-label-id">{hexToSs58(detail.nrcAnquanAccount)}</code></div>
+            <div className="metric-label">安全基金账户 <code className="metric-label-id">{hexToSs58(detail.safetyFundAccount)}</code></div>
             <div className="metric-value">
-              {detail.nrcAnquanBalanceFen != null
-                ? formatBalance(detail.nrcAnquanBalanceFen)
+              {detail.safetyFundBalanceFen != null
+                ? formatBalance(detail.safetyFundBalanceFen)
                 : '—'}
             </div>
           </div>

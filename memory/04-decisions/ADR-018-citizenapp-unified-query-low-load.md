@@ -60,7 +60,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 ### A. R1 必改 — 长前缀 keysPaged(功能性坏,2 处)
 | 位置 | 索引 | 改法 |
 |---|---|---|
-| `transaction/duoqian-transfer/duoqian_transfer_service.dart:290` fetchProposalIdsByInstitution | `ProposalsByInstitution[account]` | 删,机构详情改走 ProposalFeedCache 按年取+过滤(**本次 bug 收口**) |
+| `transaction/multisig-transfer/multisig_transfer_service.dart:290` fetchProposalIdsByInstitution | `ProposalsByInstitution[account]` | 删,机构详情改走 ProposalFeedCache 按年取+过滤(**本次 bug 收口**) |
 | `governance/organization-manage/institution_manage_service.dart:327` listCidAccounts | `CidRegisteredAccount[blake2(cid)+cid]` | **~~改整表扫~~ 已被 §九 取代**:审计确认此方法为死代码(全仓零调用),且多签账户清单应走 `AccountRegisteredCid` 精确反查而非正向枚举 → **直接删除**,不整表化 |
 
 ### B. R2 必改 — N+1 循环逐条链读(费节点,核心降载)
@@ -78,7 +78,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 | 位置 | 现状 | 改法 |
 |---|---|---|
 | `ui/chain_progress_banner.dart:74/104` | 6s 轮询 `fetchChainProgress` | 订阅 finalized 头 / 仅 syncing 时轮询且延长 |
-| `transaction/duoqian-transfer/duoqian_transfer_detail_page.dart:142/520` | 20s 轮询待投票状态 | finalized 头订阅驱动刷新 |
+| `transaction/multisig-transfer/multisig_transfer_detail_page.dart:142/520` | 20s 轮询待投票状态 | finalized 头订阅驱动刷新 |
 | `governance/institution_manage_detail_page.dart:455` | 20s 轮询 | 同上 |
 | (qr_sign_session 1s、pin_input 1s = UI 倒计时,**不查链,豁免**) | — | 保留 |
 

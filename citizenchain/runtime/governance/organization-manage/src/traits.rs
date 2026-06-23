@@ -2,7 +2,7 @@
 //!
 //! 通用的地址校验 / 资金保护 3 个 trait(`AccountValidator`/
 //! `ReservedAccountGuard`/`ProtectedSourceChecker`)已提到 `primitives::multisig`,
-//! 由 personal-manage / organization-manage / duoqian-transfer 共用,
+//! 由 personal-manage / organization-manage / multisig-transfer 共用,
 //! 这里仅保留机构专属的 CID 注册验签抽象。
 
 extern crate alloc;
@@ -12,12 +12,12 @@ use primitives::institution_code::InstitutionCode;
 // 中文注释:机构多签与个人多签共用账户校验 trait,单一来源在 primitives::multisig。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 
-/// 机构多签账户的查询 trait,供 duoqian-transfer / runtime config 等下游调用。
+/// 机构多签账户的查询 trait,供 multisig-transfer / runtime config 等下游调用。
 ///
 /// 输入任意机构账户(主/费用/自创)都返回该账户的 admin 配置,
 /// 实现:`AccountRegisteredCid[addr]` → `Institutions[cid].institution_code`
 /// → `admins-change::AdminAccounts[addr]`。
-/// 与 personal-manage::PersonalMultisigQuery 对仗,duoqian-transfer 通过 union
+/// 与 personal-manage::PersonalMultisigQuery 对仗,multisig-transfer 通过 union
 /// 查询(先 personal、再 institution)定位多签 admin 配置。
 pub trait InstitutionMultisigQuery<AccountId> {
     /// 返回机构账户管理员账户机构码。机构账户只能是公权/私权法人机构码。

@@ -8,7 +8,7 @@
 
 cid 后端通过 `subxt = 0.43.1` 向 citizenchain 提交两类 extrinsic：
 
-- `DuoqianManage.register_cid_institution`（生成机构 CID 后上链登记）
+- `OrganizationManage.register_cid_institution`（生成机构 CID 后上链登记）
 - `CidSystem.rotate_cid_keys`（密钥环旋转）
 
 citizenchain 是 **PoW 链**：出块依赖矿工算力，GRANDPA finality 显著落后 best block
@@ -40,12 +40,12 @@ subxt 0.43 默认 `DefaultExtrinsicParams` + `inject_account_nonce_and_block`
 `&[u8]`，与链端 verifier 用的 `b"GMB_CID_INSTITUTION_V2"`（类型 `&[u8; 23]`）
 SCALE 编码不同（`&[u8]` 多写 1 字节 Compact 长度前缀），导致
 `build_institution_credential` 算出的 blake2_256 与链端 verifier 算出的不一致，
-链端返回 `Pallet error: DuoqianManage::InvalidCidInstitutionSignature`。
+链端返回 `Pallet error: OrganizationManage::InvalidCidInstitutionSignature`。
 这是协议对齐 bug，与上述 PoW 链坑无关，但本次一并修掉。
 
 > **尾注 · 2026-04-20**: 上述 `GMB_CID_INSTITUTION_V2` 域名已在
-> `20260420-unified-DUOQIAN-domain` 任务中彻底退役，改用
-> `(DUOQIAN = b"DUOQIAN", OP_SIGN_INST = 0x13, ...)`。SCALE
+> `20260420-unified-GMB-domain` 任务中彻底退役，改用
+> `(GMB = b"GMB", OP_SIGN_INST = 0x13, ...)`。SCALE
 > 类型对齐铁律（`[u8; N]` 无长度前缀）在新方案下依旧适用。
 
 ## 决策

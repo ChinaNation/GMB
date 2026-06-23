@@ -1586,7 +1586,6 @@ dependencies = [
  "cid-system",
  "citizen-issuance",
  "citizen-vote",
- "duoqian-transfer",
  "ed25519-dalek",
  "frame-benchmarking",
  "frame-executive",
@@ -1604,6 +1603,7 @@ dependencies = [
  "institution-asset",
  "internal-vote",
  "joint-vote",
+ "multisig-transfer",
  "offchain-transaction",
  "onchain-issuance",
  "onchain-transaction",
@@ -1618,12 +1618,12 @@ dependencies = [
  "personal-manage",
  "pow-difficulty",
  "primitives",
+ "provincialbank-interest",
  "resolution-destro",
  "resolution-issuance",
  "runtime-upgrade",
  "scale-info",
  "serde_json",
- "shengbank-interest",
  "sp-api",
  "sp-block-builder",
  "sp-consensus-grandpa",
@@ -3083,29 +3083,6 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
-
-[[package]]
-name = "duoqian-transfer"
-version = "1.0.0"
-dependencies = [
- "admins-change",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "institution-asset",
- "internal-vote",
- "onchain-transaction",
- "organization-manage",
- "pallet-balances",
- "parity-scale-codec",
- "personal-manage",
- "primitives",
- "scale-info",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "votingengine",
-]
 
 [[package]]
 name = "dyn-clonable"
@@ -7218,6 +7195,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
+name = "multisig-transfer"
+version = "1.0.0"
+dependencies = [
+ "admins-change",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "institution-asset",
+ "internal-vote",
+ "onchain-transaction",
+ "organization-manage",
+ "pallet-balances",
+ "parity-scale-codec",
+ "personal-manage",
+ "primitives",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "votingengine",
+]
+
+[[package]]
 name = "multistream-select"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9741,6 +9741,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8991c4cbdb8bc5b11f0b074ffe286c30e523de90fee5ba8132f1399f23cb3dd7"
 dependencies = [
  "prost 0.14.3",
+]
+
+[[package]]
+name = "provincialbank-interest"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -12487,23 +12504,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
-]
-
-[[package]]
-name = "shengbank-interest"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "pallet-balances",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "sp-std",
 ]
 
 [[package]]

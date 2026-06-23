@@ -13,7 +13,7 @@ use crate::governance::signing::{
     VoteSignRequestResult,
 };
 
-const DUOQIAN_PALLET_INDEX: u8 = 17;
+const ORGANIZATION_MANAGE_PALLET_INDEX: u8 = 17;
 const CALL_PROPOSE_CREATE_INSTITUTION: u8 = 5;
 
 /// 创建机构时每个账户的初始资金条目(已派生 hex 地址 / 字符串金额"分")。
@@ -127,7 +127,7 @@ pub fn build_propose_create_institution_call_data(
     let signer_pubkey_bytes = parse_account32(signer_pubkey)?;
 
     let mut call: Vec<u8> = Vec::with_capacity(512);
-    call.push(DUOQIAN_PALLET_INDEX);
+    call.push(ORGANIZATION_MANAGE_PALLET_INDEX);
     call.push(CALL_PROPOSE_CREATE_INSTITUTION);
 
     // 1. cid_number: BoundedVec<u8>

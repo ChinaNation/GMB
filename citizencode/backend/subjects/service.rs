@@ -17,7 +17,7 @@ use primitives::account_derive::is_forbidden_account_name;
 pub const ACCOUNT_NAME_MAIN: &str = primitives::account_derive::RESERVED_NAME_MAIN_STR;
 pub const ACCOUNT_NAME_FEE: &str = primitives::account_derive::RESERVED_NAME_FEE_STR;
 pub const ACCOUNT_NAME_STAKE: &str = primitives::account_derive::RESERVED_NAME_STAKE_STR;
-pub const ACCOUNT_NAME_ANQUAN: &str = primitives::account_derive::RESERVED_NAME_ANQUAN_STR;
+pub const ACCOUNT_NAME_SAFETYFUND: &str = primitives::account_derive::RESERVED_NAME_SAFETYFUND_STR;
 pub const ACCOUNT_NAME_HE: &str = primitives::account_derive::RESERVED_NAME_HE_STR;
 
 pub const COMMON_DEFAULT_ACCOUNT_NAMES: &[&str] = &[ACCOUNT_NAME_MAIN, ACCOUNT_NAME_FEE];
@@ -26,7 +26,7 @@ pub const PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES: &[&str] =
 pub const NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES: &[&str] = &[
     ACCOUNT_NAME_MAIN,
     ACCOUNT_NAME_FEE,
-    ACCOUNT_NAME_ANQUAN,
+    ACCOUNT_NAME_SAFETYFUND,
     ACCOUNT_NAME_HE,
 ];
 
@@ -34,7 +34,7 @@ pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &[
     ACCOUNT_NAME_MAIN,
     ACCOUNT_NAME_FEE,
     ACCOUNT_NAME_STAKE,
-    ACCOUNT_NAME_ANQUAN,
+    ACCOUNT_NAME_SAFETYFUND,
     ACCOUNT_NAME_HE,
 ];
 

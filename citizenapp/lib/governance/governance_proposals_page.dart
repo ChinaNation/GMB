@@ -9,9 +9,9 @@ import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/pages/admin_set_change_page.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_limit_service.dart';
 import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_page.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_page.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/safety_fund_transfer_page.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/sweep_to_main_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/safety_fund_transfer_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/sweep_to_main_page.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -196,7 +196,7 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
             enabled: proposalActionsEnabled,
             onTap: () => _checkAndOpenProposal(
               context,
-              () => DuoqianTransferPage(
+              () => MultisigTransferPage(
                 institution: widget.institution,
                 icon: widget.icon,
                 badgeColor: widget.badgeColor,

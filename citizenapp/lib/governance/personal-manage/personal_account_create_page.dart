@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/governance/shared/duoqian_create_amount_rules.dart';
+import 'package:citizenapp/governance/shared/multisig_create_amount_rules.dart';
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
@@ -238,11 +238,11 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
   }) async {
     final balanceYuan =
         await ChainRpc().fetchFinalizedBalance(wallet.pubkeyHex);
-    final balanceFen = DuoqianCreateAmountRules.yuanToFen(balanceYuan);
+    final balanceFen = MultisigCreateAmountRules.yuanToFen(balanceYuan);
     final requiredFen =
-        DuoqianCreateAmountRules.requiredBalanceFen(initialAmountFen);
+        MultisigCreateAmountRules.requiredBalanceFen(initialAmountFen);
     if (balanceFen >= requiredFen) return null;
-    return DuoqianCreateAmountRules.insufficientBalanceMessage(
+    return MultisigCreateAmountRules.insufficientBalanceMessage(
       actionLabel: '创建个人多签',
       balanceYuan: balanceYuan,
       initialAmountFen: initialAmountFen,

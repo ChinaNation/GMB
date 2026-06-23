@@ -56,7 +56,7 @@ struct GrandpaPersistedStateBackup {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InstitutionCatalogEntry {
     pub authority_node_label: String,
-    /// 权威节点角色：`guochuhui` | `shengchuhui` | `shengchuhang`
+    /// 权威节点角色：`nrc` | `prc` | `prb`
     #[serde(default)]
     pub role: String,
     pub peer_id: String,

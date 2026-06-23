@@ -174,8 +174,8 @@ fn match_event(
             })
         }
 
-        // ─── shengbank_interest (index 5) ─────────────────────
-        ("ShengBankInterest", "ShengBankInterestMinted") => {
+        // ─── provincialbank_interest (index 5) ─────────────────────
+        ("ProvincialBankInterest", "ProvincialBankInterestMinted") => {
             let account = fields.at("account").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             Some(TxRecordInsert {
@@ -224,8 +224,8 @@ fn match_event(
             })
         }
 
-        // ─── duoqian_transfer (index 19) ────────────────────────
-        ("DuoqianTransfer", "TransferExecuted") => {
+        // ─── multisig_transfer (index 19) ────────────────────────
+        ("MultisigTransfer", "TransferExecuted") => {
             let beneficiary = fields.at("beneficiary").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             let fee = fields.at("fee").and_then(extract_balance);
@@ -243,10 +243,10 @@ fn match_event(
         }
 
         // ─── personal_manage (index 7) ──────────────────────────
-        // DuoqianCreated/DuoqianClosed 由 PersonalManage 发射;
+        // MultisigCreated/MultisigClosed 由 PersonalManage 发射;
         // 机构多签的创建/关闭事件名为 InstitutionCreated/InstitutionClosed,本 indexer 不收录。
-        ("PersonalManage", "DuoqianCreated") => {
-            let duoqian = fields.at("account").and_then(extract_account_id)?;
+        ("PersonalManage", "MultisigCreated") => {
+            let multisig = fields.at("account").and_then(extract_account_id)?;
             let creator = fields.at("creator").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             let fee = fields.at("fee").and_then(extract_balance);
@@ -254,16 +254,16 @@ fn match_event(
                 block_number,
                 extrinsic_index,
                 event_index: 0,
-                tx_type: "duoqian_create",
+                tx_type: "institution_multisig_create",
                 from_address: Some(account_to_ss58(&creator)),
-                to_address: Some(account_to_ss58(&duoqian)),
+                to_address: Some(account_to_ss58(&multisig)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: fee.map(balance_to_i64),
                 block_timestamp: block_ts,
             })
         }
-        ("PersonalManage", "DuoqianClosed") => {
-            let duoqian = fields.at("account").and_then(extract_account_id)?;
+        ("PersonalManage", "MultisigClosed") => {
+            let multisig = fields.at("account").and_then(extract_account_id)?;
             let beneficiary = fields.at("beneficiary").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             let fee = fields.at("fee").and_then(extract_balance);
@@ -271,8 +271,8 @@ fn match_event(
                 block_number,
                 extrinsic_index,
                 event_index: 0,
-                tx_type: "duoqian_close",
-                from_address: Some(account_to_ss58(&duoqian)),
+                tx_type: "institution_multisig_close",
+                from_address: Some(account_to_ss58(&multisig)),
                 to_address: Some(account_to_ss58(&beneficiary)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: fee.map(balance_to_i64),

@@ -15,7 +15,7 @@ CID 是注册局运营的身份 ID 系统。系统登记三类主体:
 - `citizencode/backend/gov`:公权机构和公安局确定性目录。
 - `citizencode/backend/private`:个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会六类私权机构能力。
 - `citizencode/backend/subjects`:主体公共模型、通用注册内核、主体详情和公开查询。
-- `citizencode/backend/citizens`:公民绑定、状态导入、citizenapp 查询和投票凭证。
+- `citizencode/backend/citizens`:公民绑定、状态导入、CitizenApp 查询和投票凭证。
 - `citizencode/backend/citizenpassport`:CPMS 安装授权和档案码验真。
 - `citizencode/backend/accounts`:机构账户管理。
 - `citizencode/backend/docs`:机构资料库。

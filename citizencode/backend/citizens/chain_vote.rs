@@ -1,6 +1,6 @@
 //! 公民投票凭证签发 handler。
 //!
-//! citizenapp 调本接口拿到凭证后,将凭证作为 vote() extrinsic 入参提交上链。
+//! CitizenApp 调本接口拿到凭证后,将凭证作为 vote() extrinsic 入参提交上链。
 //! 链端 runtime 会按签发机构主账户的 admins 真源确认 signer_pubkey,并消费 vote_nonce 防重放。
 //!
 //! 无 token 鉴权:返回的凭证仅对请求者 `account_pubkey` 有效,链上还会再次验签,

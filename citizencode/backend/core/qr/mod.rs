@@ -3,7 +3,7 @@
 //! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
 //! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
-//! 与 citizenapp/citizenwallet 的 Dart envelope、citizenchain/citizencode/citizenpassport 前端的 TS
+//! 与 CitizenApp / CitizenWallet 的 Dart envelope、citizenchain/citizencode/citizenpassport 前端的 TS
 //! envelope 字段逐字节一致。本模块仅定义 CID 后端需要的 kind
 //! (login_challenge / login_receipt),其余 kind 后端不参与。
 
@@ -167,7 +167,7 @@ impl std::fmt::Display for QrParseError {
 
 impl std::error::Error for QrParseError {}
 
-/// 解析 login_receipt envelope。后端收到 citizenwallet 公民钱包的回执后使用。
+/// 解析 login_receipt envelope。后端收到 CitizenWallet 公民钱包的回执后使用。
 pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseError> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| QrParseError::BadJson(e.to_string()))?;

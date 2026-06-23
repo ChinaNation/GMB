@@ -14,7 +14,7 @@ import 'package:citizenapp/governance/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
-import 'duoqian_storage_codec.dart';
+import 'multisig_storage_codec.dart';
 import 'institution_manage_service.dart';
 
 /// 机构多签后处理统计。
@@ -80,7 +80,7 @@ class InstitutionDiscoveryService {
         mine.map((a) => a.addrHex),
       );
     } catch (e) {
-      debugPrint('[DuoqianDiscovery] 批量反查 CID 失败: $e');
+      debugPrint('[MultisigDiscovery] 批量反查 CID 失败: $e');
       // 中文注释:反查整体失败时不做孤儿删除,避免把一次瞬时 RPC 失败误判为账户注销。
       return DiscoveryStats(
         institutionsScanned: scan.totalKeys,
@@ -92,7 +92,7 @@ class InstitutionDiscoveryService {
       );
     }
 
-    final scannedDuoqianAddrs = <String>{};
+    final scannedMultisigAddrs = <String>{};
     var matchedCidAccountsCount = 0;
     var newlyAdded = 0;
 
@@ -100,7 +100,7 @@ class InstitutionDiscoveryService {
       final ref = refs[acc.addrHex];
       if (ref == null) continue;
 
-      scannedDuoqianAddrs.add(acc.addrHex);
+      scannedMultisigAddrs.add(acc.addrHex);
       final added = await _upsertInstitution(
         accountHex: acc.addrHex,
         accountName: ref.accountNameText,
@@ -113,7 +113,7 @@ class InstitutionDiscoveryService {
       matchedCidAccountsCount++;
     }
 
-    final orphans = await _reverseValidateAndDelete(scannedDuoqianAddrs);
+    final orphans = await _reverseValidateAndDelete(scannedMultisigAddrs);
 
     return DiscoveryStats(
       institutionsScanned: scan.totalKeys,

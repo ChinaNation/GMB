@@ -6,7 +6,7 @@
 //!
 //! ## 反序列化契约
 //!
-//! CID 端响应形态(参见 citizencode/backend/institutions/chain_duoqian_info.rs):
+//! CID 端响应形态(参见 citizencode/backend/subjects/chain_multisig_info.rs):
 //! ```json
 //! {
 //!   "code": 0,
@@ -93,7 +93,7 @@ enum CidMultisigChainStatus {
 
 /// 把 CID 端枚举映射成节点 UI 友好的字符串。
 ///
-/// 节点桌面 TS 端([citizenchain/node/frontend/offchain/types.ts])期望:
+/// 节点桌面 TS 端([citizenchain/node/frontend/transaction/offchain-transaction/types.ts])期望:
 /// `'Pending' | 'Active' | 'Closed' | 'Failed'`。
 fn map_chain_status(status: CidMultisigChainStatus) -> &'static str {
     match status {

@@ -1,13 +1,13 @@
 # 扫码支付(清算行)手工 E2E 冒烟测试 SOP
 
 - **日期**:2026-04-20
-- **范围**:同行 MVP 付款 + 收款的**可复现验证步骤**。目的是:(1) Layer A 协议字节对齐之上再验证真实 citizenapp ↔ 清算行节点 ↔ runtime 全链路;(2) 作为 demo 脚本。
+- **范围**:同行 MVP 付款 + 收款的**可复现验证步骤**。目的是:(1) Layer A 协议字节对齐之上再验证真实 CitizenApp ↔ 清算行节点 ↔ runtime 全链路;(2) 作为 demo 脚本。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置技术文档**:
   - `STEP2C_I_PAY_PAGE.md`(付款端)
   - `STEP2C_II_A_RECEIVE_QR.md`(收款端)
   - `STEP2C_GOLDEN_VECTORS.md`(协议字节锁)
-  - `memory/05-modules/citizenchain/node/offchain/STEP2B_II_B_2_B_INTEGRATION.md`(清算行节点启动)
+  - `memory/05-modules/citizenchain/node/offchain-transaction/STEP2B_II_B_2_B_INTEGRATION.md`(清算行节点启动)
 
 ---
 
@@ -61,7 +61,7 @@ cargo build --release --bin citizenchain
 
 ---
 
-## 2. 启动 citizenapp(连清算行节点 + CID)
+## 2. 启动 CitizenApp(连清算行节点 + CID)
 
 ```bash
 cd /Users/rhett/GMB/citizenapp
@@ -204,7 +204,7 @@ B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则
 - `pallet_balances::Balance[bank_main]` 减 `1` 分(同行 fee 转出)
 - `pallet_balances::Balance[fee_account]` 加 `1` 分
 
-### citizenapp
+### CitizenApp
 
 - A 的收款页或充值页余额查询:`89.99 元`
 - B 的收款页:`10.00 元`(5 秒轮询内刷新)
@@ -226,7 +226,7 @@ B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则
 | `清算行费率未配置(rate_bp=0)` | `L2FeeRateBp[bank_main]` = 0 | 由清算行管理员 `propose_l2_fee_rate(bank, 5)` → 等 7 天或 Root `set_max_l2_fee_rate` 后再提 |
 | 提交后 30 秒过了 packer 无反应 | keystore 密码不对 → `sign_batch` Err 回滚 | 查节点 `[ClearingPacker]` 日志是否有 rollback;重启节点传正确密码 |
 | packer 反复 `TxPool full / Invalid nonce` | 清算行管理员账户 nonce 不对齐(有其他提交在排队) | 等当前队列清空,或用 `system_accountNextIndex` 强制拉一次 |
-| `PaymentSettled` 事件到了但 citizenapp 余额不刷新 | citizenapp 5s 轮询失败(WSS 断开) | 检查 WSS 连通;citizenapp 自动下一 tick 恢复 |
+| `PaymentSettled` 事件到了但 CitizenApp 余额不刷新 | CitizenApp 5s 轮询失败(WSS 断开) | 检查 WSS 连通;CitizenApp 自动下一 tick 恢复 |
 | `[ReserveMonitor] 对账偏差!` | listener 漏事件 / ledger 持久化损坏 | 删 `<base-path>/offchain_step1/ledger.enc` 重启(从事件流重建) |
 
 ---
@@ -238,7 +238,7 @@ B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则
     · ClearingBank 组件已启动
     · ReserveMonitor 启动
     · EventListener 订阅开始
-[ ] citizenapp 启动 + dart-define 两个 URL 正确
+[ ] CitizenApp 启动 + dart-define 两个 URL 正确
 [ ] CID 能搜到目标清算行
 [ ] 两个钱包 A/B 都已绑定到同一家清算行
 [ ] A 余额 ≥ 110 元(绑定 1 元 + 充值 100 + 手续费冗余)
@@ -259,4 +259,4 @@ B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则
 
 ## 12. 变更记录
 
-- 2026-04-20:首版落地。基于 Step 2c-ii-a 完成点写就。范围聚焦 citizenapp ↔ 清算行节点 ↔ runtime 的付款/收款交互;创建清算行机构 / 配置费率 / 注册 CID 等前置环境准备明确列为 out-of-scope。
+- 2026-04-20:首版落地。基于 Step 2c-ii-a 完成点写就。范围聚焦 CitizenApp ↔ 清算行节点 ↔ runtime 的付款/收款交互;创建清算行机构 / 配置费率 / 注册 CID 等前置环境准备明确列为 out-of-scope。

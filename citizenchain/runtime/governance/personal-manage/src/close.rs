@@ -48,7 +48,7 @@ pub(crate) fn do_propose_close<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(
-        T::InstitutionAsset::can_spend(&account, InstitutionAssetAction::DuoqianCloseExecute,),
+        T::InstitutionAsset::can_spend(&account, InstitutionAssetAction::MultisigCloseExecute,),
         Error::<T>::ProtectedSource
     );
     ensure!(beneficiary != account, Error::<T>::InvalidBeneficiary);

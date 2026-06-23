@@ -4,8 +4,8 @@ import { AdminListPage, AdminSetChangePage } from './admins-change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateDuoqianTransferPage } from '../transaction/duoqian-transfer/CreateProposalPage';
-import { SweepProposalPage } from '../transaction/duoqian-transfer/SweepProposalPage';
+import { CreateMultisigTransferPage } from '../transaction/multisig-transfer/CreateProposalPage';
+import { SweepProposalPage } from '../transaction/multisig-transfer/SweepProposalPage';
 import { ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 
@@ -48,7 +48,7 @@ export function PrcSection() {
 
   if (view.page === 'create-proposal') {
     return (
-      <CreateDuoqianTransferPage
+      <CreateMultisigTransferPage
         cidNumber={view.cidNumber}
         institutionCode="PRC"
         cidFullName={view.cidFullName}

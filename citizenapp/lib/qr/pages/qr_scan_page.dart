@@ -125,7 +125,7 @@ class _QrScanPageState extends State<QrScanPage> {
     try {
       final result = _router.route(raw);
 
-      // 登录 QR(login_challenge / login_receipt)是冷钱包 citizenwallet 的专属职责。
+      // 登录 QR(login_challenge / login_receipt)是冷钱包 CitizenWallet 的专属职责。
       if (result.type == QrRouteType.loginChallenge ||
           result.type == QrRouteType.loginReceipt) {
         await _showLoginNotSupported();
@@ -346,7 +346,7 @@ class _QrScanPageState extends State<QrScanPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('无法处理'),
-        content: const Text('登录二维码请用冷钱包 citizenwallet 扫描'),
+        content: const Text('登录二维码请用冷钱包 CitizenWallet 扫描'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

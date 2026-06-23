@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { hexToSs58 } from '../shared/ss58';
-import { DuoqianTransferProposalDetailSection } from '../transaction/duoqian-transfer/ProposalDetailSection';
+import { MultisigTransferProposalDetailSection } from '../transaction/multisig-transfer/ProposalDetailSection';
 import { adminsChangeApi } from './admins-change/api';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
@@ -206,7 +206,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         )}
       </div>
 
-      <DuoqianTransferProposalDetailSection info={info} />
+      <MultisigTransferProposalDetailSection info={info} />
 
       {/* 协议升级提案详情 */}
       {info.runtimeUpgradeDetail && (

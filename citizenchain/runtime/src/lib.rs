@@ -79,7 +79,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
     // admins-change / organization-manage / personal-manage / votingengine /
-    // duoqian-transfer / offchain-transaction / onchain-transaction / institution-asset。
+    // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 1,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
@@ -296,7 +296,7 @@ mod runtime {
 
     // 省储行利息模块：按年度给固定省储行账户发放质押利息
     #[runtime::pallet_index(5)]
-    pub type ShengBankInterest = shengbank_interest;
+    pub type ProvincialBankInterest = provincialbank_interest;
 
     // 全节点发行模块：出块成功后发放固定铸块奖励
     #[runtime::pallet_index(6)]
@@ -361,7 +361,7 @@ mod runtime {
 
     // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 account）
     #[runtime::pallet_index(19)]
-    pub type DuoqianTransfer = duoqian_transfer;
+    pub type MultisigTransfer = multisig_transfer;
 
     // 创世模块：存储创世期/运行期阶段、出块目标时间、开发者直升开关、创世常量
     #[runtime::pallet_index(20)]

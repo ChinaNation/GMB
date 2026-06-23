@@ -144,14 +144,14 @@ citizenchain/
 - `citizen-issuance`
 - `fullnode-issuance`
 - `resolution-issuance`
-- `shengbank-interest`
+- `provincialbank-interest`
 
 ### 9.3 交易模块（`runtime/transaction/`）
 - 负责链上交易手续费、链下交易手续费、机构多签交易能力。
 
 当前模块：
 - `organization-manage`
-- `duoqian-transfer`
+- `multisig-transfer`
 - `institution-asset`
 - `offchain-transaction`
 - `onchain-transaction`
@@ -216,11 +216,11 @@ citizenchain/
 - `runtime/issuance/citizen-issuance/CITIZENISS_TECHNICAL.md`
 - `runtime/issuance/fullnode-issuance/FULLNODE_TECHNICAL.md`
 - `runtime/issuance/resolution-issuance/RESOLUTIONISSUANCE_TECHNICAL.md`
-- `runtime/issuance/shengbank-interest/SHENGBANK_TECHNICAL.md`
+- `runtime/issuance/provincialbank-interest/PROVINCIALBANK_TECHNICAL.md`
 
 ### 12.3 交易
 - `runtime/governance/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md`
-- `runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md`
+- `runtime/transaction/multisig-transfer/MULTISIG_TRANSFER_TECHNICAL.md`
 - `runtime/transaction/institution-asset/INSTITUTION_ASSET_TECHNICAL.md`
 - `runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md`
 - `runtime/transaction/offchain-transaction/STEP2A_RUNTIME.md`
@@ -232,13 +232,13 @@ citizenchain/
 
 ### 12.5 桌面节点 UI
 - `memory/05-modules/citizenchain/node/home/HOME_TECHNICAL.md`
-- `memory/05-modules/citizenchain/node/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
-- `memory/05-modules/citizenchain/node/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/mining/dashboard/MINING_DASHBOARD_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/mining/network_overview/NETWORK_OVERVIEW_TECHNICAL.md`
 - `memory/05-modules/citizenchain/node/other/other-tabs/OTHER_TABS_TECHNICAL.md`
-- `memory/05-modules/citizenchain/node/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/bootnodes_address/BOOTNODES_ADDRESS_TECHNICAL.md`
 - `memory/05-modules/citizenchain/node/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
-- `memory/05-modules/citizenchain/node/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
-- `memory/05-modules/citizenchain/node/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/fee_account/FEE_ACCOUNT_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/grandpa_address/GRANDPA_ADDRESS_TECHNICAL.md`
 - `memory/05-modules/citizenchain/node/NODE_TECHNICAL.md`（第 9 节记录全节点模式设置边界）
 
 ## 13. 维护要求

@@ -24,7 +24,7 @@ use sp_std::vec::Vec;
 pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: cid_number
 pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: cid_number
 pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: cid_number
-pub const OP_AN: u8 = 0x03; // 安全基金 · input: cid_number
+pub const OP_SAFETY: u8 = 0x03; // 安全基金 · input: cid_number
 pub const OP_HE: u8 = 0x04; // 两和基金 · input: cid_number
 pub const OP_PERSONAL: u8 = 0x05; // 个人多签账户 · input: creator_32 || account_name
 pub const OP_NAME: u8 = 0x06; // CID 机构自定义命名账户 · input: cid_number || account_name
@@ -40,13 +40,13 @@ pub const OP_NAME: u8 = 0x06; // CID 机构自定义命名账户 · input: cid_n
 pub const RESERVED_NAME_MAIN_STR: &str = "主账户";
 pub const RESERVED_NAME_FEE_STR: &str = "费用账户";
 pub const RESERVED_NAME_STAKE_STR: &str = "永久质押";
-pub const RESERVED_NAME_ANQUAN_STR: &str = "安全基金";
+pub const RESERVED_NAME_SAFETYFUND_STR: &str = "安全基金";
 pub const RESERVED_NAME_HE_STR: &str = "两和基金";
 
 pub const RESERVED_NAME_MAIN: &[u8] = RESERVED_NAME_MAIN_STR.as_bytes();
 pub const RESERVED_NAME_FEE: &[u8] = RESERVED_NAME_FEE_STR.as_bytes();
 pub const RESERVED_NAME_STAKE: &[u8] = RESERVED_NAME_STAKE_STR.as_bytes();
-pub const RESERVED_NAME_ANQUAN: &[u8] = RESERVED_NAME_ANQUAN_STR.as_bytes();
+pub const RESERVED_NAME_SAFETYFUND: &[u8] = RESERVED_NAME_SAFETYFUND_STR.as_bytes();
 pub const RESERVED_NAME_HE: &[u8] = RESERVED_NAME_HE_STR.as_bytes();
 
 /// 全部 5 个受限保留名,供各端遍历校验。
@@ -54,7 +54,7 @@ pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 5] = [
     RESERVED_NAME_MAIN,
     RESERVED_NAME_FEE,
     RESERVED_NAME_STAKE,
-    RESERVED_NAME_ANQUAN,
+    RESERVED_NAME_SAFETYFUND,
     RESERVED_NAME_HE,
 ];
 
@@ -62,7 +62,7 @@ pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 5] = [
 ///
 /// 主账户/费用账户不在此列:它们走强制默认路由,不是"禁止"而是"强制"。不 trim。
 pub fn is_forbidden_account_name(name: &[u8]) -> bool {
-    name == RESERVED_NAME_STAKE || name == RESERVED_NAME_ANQUAN || name == RESERVED_NAME_HE
+    name == RESERVED_NAME_STAKE || name == RESERVED_NAME_SAFETYFUND || name == RESERVED_NAME_HE
 }
 
 /// op_tag + payload 字段 schema 的唯一权威映射。
@@ -82,7 +82,7 @@ pub enum AccountKind<'a> {
     InstitutionStake {
         cid_number: &'a [u8],
     },
-    InstitutionAnquan {
+    InstitutionSafetyFund {
         cid_number: &'a [u8],
     },
     InstitutionHe {
@@ -105,7 +105,7 @@ impl<'a> AccountKind<'a> {
             AccountKind::InstitutionMain { .. } => OP_MAIN,
             AccountKind::InstitutionFee { .. } => OP_FEE,
             AccountKind::InstitutionStake { .. } => OP_STAKE,
-            AccountKind::InstitutionAnquan { .. } => OP_AN,
+            AccountKind::InstitutionSafetyFund { .. } => OP_SAFETY,
             AccountKind::InstitutionHe { .. } => OP_HE,
             AccountKind::InstitutionNamed { .. } => OP_NAME,
             AccountKind::Personal { .. } => OP_PERSONAL,
@@ -118,7 +118,7 @@ impl<'a> AccountKind<'a> {
             AccountKind::InstitutionMain { cid_number }
             | AccountKind::InstitutionFee { cid_number }
             | AccountKind::InstitutionStake { cid_number }
-            | AccountKind::InstitutionAnquan { cid_number }
+            | AccountKind::InstitutionSafetyFund { cid_number }
             | AccountKind::InstitutionHe { cid_number } => cid_number.to_vec(),
             AccountKind::InstitutionNamed {
                 cid_number,
@@ -179,8 +179,8 @@ pub fn institution_kind_by_name<'a>(
     if name == RESERVED_NAME_STAKE {
         return Some(AccountKind::InstitutionStake { cid_number });
     }
-    if name == RESERVED_NAME_ANQUAN {
-        return Some(AccountKind::InstitutionAnquan { cid_number });
+    if name == RESERVED_NAME_SAFETYFUND {
+        return Some(AccountKind::InstitutionSafetyFund { cid_number });
     }
     if name == RESERVED_NAME_HE {
         return Some(AccountKind::InstitutionHe { cid_number });

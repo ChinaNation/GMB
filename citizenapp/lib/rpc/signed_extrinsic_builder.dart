@@ -35,7 +35,7 @@ class SignedExtrinsicTrace {
   final int blockNumber;
 }
 
-/// citizenapp 在线 signed extrinsic 统一构造器。
+/// CitizenApp 在线 signed extrinsic 统一构造器。
 ///
 /// P-SIGN-001：Citizenchain PoW 链在线交易统一使用 immortal era。签名 payload
 /// 和最终 extrinsic body 必须同时使用 `era = 0x00`，且 CheckEra 的 additional

@@ -1,4 +1,4 @@
-// citizenwallet 公民钱包登录 QR 处理器:解析 CITIZEN_QR_V1 login_challenge、
+// CitizenWallet 公民钱包登录 QR 处理器:解析 CITIZEN_QR_V1 login_challenge、
 // 验证系统签名、构建 login_receipt envelope。
 
 import 'dart:convert';
@@ -82,7 +82,7 @@ bool verifySystemSignature(LoginChallengeEnvelope c) {
   );
 }
 
-/// 构建用户签名消息(citizenwallet 钱包用自己的私钥签这串)。
+/// 构建用户签名消息(CitizenWallet 钱包用自己的私钥签这串)。
 String buildSignMessage(LoginChallengeEnvelope c, String pubkeyHex) {
   return buildSignatureMessage(
     kind: QrKind.loginReceipt,

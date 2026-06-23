@@ -317,7 +317,7 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 3;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
-  bool _duoqianTabLoaded = false;
+  bool _multisigTabLoaded = false;
 
   @override
   void initState() {
@@ -355,7 +355,7 @@ class _AppShellState extends State<AppShell> {
   // 中文注释：多签列表涉及本地账户发现，等用户真正点击多签 Tab 后再构建。
   List<Widget> get _pages => [
         _citizenPage,
-        _duoqianTabLoaded
+        _multisigTabLoaded
             ? const InstitutionAccountListPage()
             : const SizedBox.shrink(),
         ImTabPage(runtime: ImRuntime()),
@@ -415,7 +415,7 @@ class _AppShellState extends State<AppShell> {
           onDestinationSelected: (index) {
             setState(() {
               if (index == 1) {
-                _duoqianTabLoaded = true;
+                _multisigTabLoaded = true;
               }
               _currentIndex = index;
             });

@@ -3,7 +3,7 @@
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // Golden fixtures:memory/01-architecture/qr/qr-protocol-fixtures/*.json
 //
-// 与 citizenapp/citizenwallet 的 Dart envelope 字段逐字节一致。
+// 与 CitizenApp / CitizenWallet 的 Dart envelope 字段逐字节一致。
 
 export const CITIZEN_QR_V1 = 'CITIZEN_QR_V1' as const;
 

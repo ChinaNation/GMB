@@ -1,0 +1,519 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
+import 'package:citizenapp/governance/shared/institution_info.dart';
+import 'package:citizenapp/qr/bodies/sign_request_body.dart';
+import 'package:citizenapp/qr/pages/qr_scan_page.dart'
+    show QrScanMode, QrScanPage, QrScanTransferResult;
+import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
+import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
+
+import 'institution_manage_service.dart';
+
+/// 关闭机构多签账户提案页面。
+///
+/// 指定受益人地址后发起机构多签账户关闭提案。
+class InstitutionMultisigClosePage extends StatefulWidget {
+  const InstitutionMultisigClosePage({
+    super.key,
+    required this.institution,
+    required this.adminWallets,
+  });
+
+  final InstitutionInfo institution;
+  final List<WalletProfile> adminWallets;
+
+  @override
+  State<InstitutionMultisigClosePage> createState() =>
+      _InstitutionMultisigClosePageState();
+}
+
+class _InstitutionMultisigClosePageState
+    extends State<InstitutionMultisigClosePage> {
+  final _beneficiaryController = TextEditingController();
+  final _manageService = InstitutionManageService();
+
+  bool _submitting = false;
+  bool _loadingBalance = true;
+  double? _availableBalance;
+  String? _addressError;
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
+
+  late WalletProfile _selectedWallet;
+  late String _accountSs58;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedWallet = widget.adminWallets.first;
+    _accountSs58 = _hexToSs58(widget.institution.account);
+    _fetchBalance();
+  }
+
+  @override
+  void dispose() {
+    _beneficiaryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchBalance() async {
+    final store = AccountBalanceSnapshotStore.instance;
+    final local = await store.read(widget.institution.account);
+    if (local != null && mounted) {
+      setState(() {
+        _availableBalance = local.balanceYuan;
+        _loadingBalance = false;
+      });
+      if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
+    }
+    try {
+      final balance =
+          await ChainRpc().fetchFinalizedBalance(widget.institution.account);
+      try {
+        await store.put(
+          accountHex: widget.institution.account,
+          balanceYuan: balance,
+        );
+      } catch (_) {
+        // 余额快照写入失败不影响当前链上余额展示。
+      }
+      if (!mounted) return;
+      setState(() {
+        _availableBalance = balance;
+        _loadingBalance = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      if (local == null) setState(() => _loadingBalance = false);
+    }
+  }
+
+  // ──── 校验 ────
+
+  bool _validateAddress(String address) {
+    if (address.isEmpty) {
+      setState(() => _addressError = '请输入受益人地址');
+      return false;
+    }
+    try {
+      Keyring().decodeAddress(address);
+    } catch (_) {
+      setState(() => _addressError = '地址格式无效');
+      return false;
+    }
+
+    // 受益人不能是机构多签账户本身
+    if (address == _accountSs58) {
+      setState(() => _addressError = '受益人不能与机构多签账户相同');
+      return false;
+    }
+
+    setState(() => _addressError = null);
+    return true;
+  }
+
+  // ──── 提交 ────
+
+  Future<void> _submit() async {
+    final blockedReason = _submitBlockedReason;
+    if (blockedReason != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedReason)),
+      );
+      return;
+    }
+
+    final beneficiary = _beneficiaryController.text.trim();
+    if (!_validateAddress(beneficiary)) return;
+
+    if (_availableBalance != null && (_availableBalance! * 100).round() < 111) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('账户余额不足（最低 1.11 元）')),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+
+    try {
+      final wallet = _selectedWallet;
+      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
+
+      // 热钱包先认证(生物/密码),后续 signCallback 用本地 seed 签名;
+      // 冷钱包走 QR 签名。对齐 [institution_manage_detail_page._submitVote] 同款分流。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
+      Future<Uint8List> signCallback(Uint8List payload) async {
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(
+              wallet.walletIndex, payload);
+        }
+        // 冷钱包路径
+        final qrSigner = QrSigner();
+        final request = qrSigner.buildRequest(
+          requestId: QrSigner.generateRequestId(prefix: 'close-dq-'),
+          address: wallet.address,
+          pubkey: '0x${wallet.pubkeyHex}',
+          payloadHex: '0x${_toHex(payload)}',
+          display: SignDisplay(
+            action: 'propose_close_institution',
+            summary: '发起关闭机构多签账户提案',
+            fields: [
+              // 链端 call 名仍为 propose_close,QR action 为
+              // propose_close_institution,fields 按 Registry =
+              // (account, beneficiary)。"当前余额" 属辅助展示,
+              // 页面已独立显示,不塞 display.fields 避免对齐失败。
+              SignDisplayField(
+                key: 'account',
+                label: '机构多签账户',
+                value: _accountSs58,
+              ),
+              SignDisplayField(
+                  key: 'beneficiary', label: '受益人', value: beneficiary),
+            ],
+          ),
+        );
+        final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
+        final response = await Navigator.push<SignResponseEnvelope>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => QrSignSessionPage(
+                request: request,
+                requestJson: requestJson,
+                expectedPubkey: '0x${wallet.pubkeyHex}'),
+          ),
+        );
+        if (response == null) throw Exception('签名已取消');
+        return Uint8List.fromList(_hexDecode(response.body.signature));
+      }
+
+      final result = await _manageService.submitProposeCloseInstitution(
+        account: widget.institution.account,
+        beneficiaryAddress: beneficiary,
+        fromAddress: wallet.address,
+        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        sign: signCallback,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('提案已提交：${_truncateAddress(result.txHash)}'),
+          backgroundColor: AppTheme.primaryDark,
+        ),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('提交失败：$e'), backgroundColor: AppTheme.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  bool get _canSubmit => !_submitting && _submitBlockedReason == null;
+
+  /// 中文注释：关闭机构多签会直接动到账户资金，链不同步时不允许继续发起。
+  String? get _submitBlockedReason {
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，暂不能发起关闭机构多签提案';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能发起关闭机构多签提案';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能发起关闭机构多签提案';
+    }
+    return null;
+  }
+
+  // ──── UI ────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          '关闭机构多签',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: AppTheme.primaryDark,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          ChainProgressBanner(
+            busy: _submitting || _loadingBalance,
+            onProgressChanged: _handleChainProgressChanged,
+            onErrorChanged: _handleChainProgressErrorChanged,
+          ),
+          // 机构多签账户（只读）
+          _buildSectionTitle('机构多签账户'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceMuted,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              _accountSs58,
+              style: const TextStyle(
+                fontSize: 13,
+                fontFamily: 'monospace',
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // 当前余额
+          _buildSectionTitle('机构多签余额'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceMuted,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: _loadingBalance
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    _availableBalance != null
+                        ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
+                        : '查询失败',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: _availableBalance != null
+                          ? AppTheme.primaryDark
+                          : AppTheme.danger,
+                    ),
+                  ),
+          ),
+
+          const SizedBox(height: 20),
+
+          _buildSectionTitle('阈值规则', note: '注销须全员同意'),
+
+          const SizedBox(height: 20),
+
+          // 受益人地址
+          _buildSectionTitle('受益人地址'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _beneficiaryController,
+                  decoration: InputDecoration(
+                    hintText: '输入或扫码',
+                    errorText: _addressError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '扫码填入受益人地址',
+                icon: SvgPicture.asset(
+                  'assets/icons/scan-line.svg',
+                  width: 22,
+                  height: 22,
+                ),
+                onPressed: () async {
+                  // QrScanPage transfer 模式 pop 的是 QrScanTransferResult
+                  // 而不是 String,旧 push<String> 写法 cast 失败拿到 null。
+                  final result = await Navigator.push<QrScanTransferResult>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const QrScanPage(
+                        mode: QrScanMode.transfer,
+                        customTitle: '扫描收款码',
+                      ),
+                    ),
+                  );
+                  if (result == null || !mounted) return;
+                  setState(() {
+                    _beneficiaryController.text = result.toAddress;
+                  });
+                },
+              ),
+            ],
+          ),
+
+          if (widget.adminWallets.length > 1) ...[
+            const SizedBox(height: 20),
+            _buildSectionTitle('签名钱包'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<WalletProfile>(
+              initialValue: _selectedWallet,
+              items: widget.adminWallets.map((w) {
+                return DropdownMenuItem(
+                  value: w,
+                  child: Text(
+                    '${w.walletName} (${_truncateAddress(w.address)})',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                );
+              }).toList(),
+              onChanged: (w) {
+                if (w != null) setState(() => _selectedWallet = w);
+              },
+              decoration: InputDecoration(
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 28),
+
+          // 提交按钮
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _canSubmit ? _submit : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('发起关闭机构多签提案',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            ),
+          ),
+          if (_submitBlockedReason != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _submitBlockedReason!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, {String? note}) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.primaryDark,
+          ),
+        ),
+        if (note != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            note,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ──── 工具 ────
+
+  String _truncateAddress(String address) {
+    if (address.length <= 14) return address;
+    return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+  }
+
+  String _hexToSs58(String hex) {
+    final bytes = _hexDecode(hex);
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
+  }
+
+  String _toHex(List<int> bytes) {
+    const chars = '0123456789abcdef';
+    final buf = StringBuffer();
+    for (final b in bytes) {
+      buf
+        ..write(chars[(b >> 4) & 0x0f])
+        ..write(chars[b & 0x0f]);
+    }
+    return buf.toString();
+  }
+
+  Uint8List _hexDecode(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final result = Uint8List(h.length ~/ 2);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return result;
+  }
+}

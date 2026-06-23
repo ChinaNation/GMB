@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// kind = sign_response
 ///
-/// 由 citizenwallet 公民钱包生成,citizenapp 热钱包扫回后广播交易。
+/// 由 CitizenWallet 公民钱包生成,CitizenApp 热钱包扫回后广播交易。
 class SignResponseBody implements QrBody {
   const SignResponseBody({
     required this.pubkey,

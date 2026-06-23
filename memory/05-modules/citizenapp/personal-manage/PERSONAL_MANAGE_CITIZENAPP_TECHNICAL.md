@@ -26,7 +26,7 @@
 ### 不负责
 
 - 机构多签创建、关闭、CID 机构账户查询：继续由 `citizenapp/lib/governance/organization-manage/` 机构路径处理。
-- 多签转账：唯一实现目录仍是 `citizenapp/lib/transaction/duoqian-transfer/`。
+- 多签转账：唯一实现目录仍是 `citizenapp/lib/transaction/multisig-transfer/`。
 - Isar schema 定义：仍在 `citizenapp/lib/isar/`，本模块只使用既有实体。
 - Isar 读写队列：由 `citizenapp/lib/isar/wallet_isar.dart` 统一提供，本模块不得直接打开 DB 实例。
 - 通用投票、签名、RPC：仍使用 `proposal/shared`、`signer`、`rpc` 等共用能力。

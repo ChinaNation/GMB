@@ -1,4 +1,4 @@
-# 扫码支付 Step 2c-ii-a 技术说明 · citizenapp 收款端基础
+# 扫码支付 Step 2c-ii-a 技术说明 · CitizenApp 收款端基础
 
 - **日期**:2026-04-20
 - **目录说明**:本文记录收款端基础设计。2026-04-30 后 offchain 业务目录统一为
@@ -165,5 +165,5 @@ All tests passed!  (5 个)
 - 2026-04-20:Step 2c-ii-a 完整落地。新增 `clearing_bank_prefs.dart` 小工具 +
   5 个单测(全绿);新增 `offchain_receive_page.dart`(QR 生成 + 5s 轮询
   余额);`bind_clearing_bank_page` 绑定成功后写缓存;`offchain_home_page`
-  追加"生成收款码"入口。`flutter analyze` 零 issue;单测全通过;citizenapp 其他
+  追加"生成收款码"入口。`flutter analyze` 零 issue;单测全通过;CitizenApp 其他
   路径不变。

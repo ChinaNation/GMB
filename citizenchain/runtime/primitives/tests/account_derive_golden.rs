@@ -6,7 +6,7 @@
 //! - `ACCOUNT_DERIVE_UPDATE=1`:用 account_derive 重算每条向量的 address_hex 并写回
 //!   canonical fixture(`tests/fixtures/account_derive_vectors.json`)。
 //! - 默认(未设环境变量):读取 fixture,断言 account_derive 的派生结果逐字节 == fixture,
-//!   且 china_* 来源(Main/Fee/Stake/Anquan/He)必须 == china_*.rs 字面常量。
+//!   且 china_* 来源(Main/Fee/Stake/SafetyFund/He)必须 == china_*.rs 字面常量。
 //!
 //! CI 守卫脚本 `tools/sync_account_derive_vectors.sh` 跑 update + git diff --exit-code。
 
@@ -69,7 +69,7 @@ fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
             cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
         .derive(SS58_FORMAT),
-        "InstitutionAnquan" => AccountKind::InstitutionAnquan {
+        "InstitutionSafetyFund" => AccountKind::InstitutionSafetyFund {
             cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
         .derive(SS58_FORMAT),
@@ -103,7 +103,7 @@ fn load_fixture() -> serde_json::Value {
 /// china_*.rs 字面常量索引(cid_number, kind) → address_hex。
 /// 行为中性基线的第二道防线:这些值不仅要 == account_derive,还要 == china_*.rs 源码字面值。
 fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
-    use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ACCOUNT, NRC_HE_ACCOUNT};
+    use primitives::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT, NRC_HE_ACCOUNT};
     use primitives::china::china_ch::CHINA_CH;
 
     match kind {
@@ -131,7 +131,7 @@ fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
             .iter()
             .find(|c| c.cid_number == cid)
             .map(|c| c.stake_account),
-        "InstitutionAnquan" => Some(NRC_ANQUAN_ACCOUNT),
+        "InstitutionSafetyFund" => Some(SAFETY_FUND_ACCOUNT),
         "InstitutionHe" => Some(NRC_HE_ACCOUNT),
         _ => None,
     }

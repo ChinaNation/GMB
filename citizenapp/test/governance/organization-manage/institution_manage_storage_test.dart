@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/governance/organization-manage/institution_manage_models.dart';
 import 'package:citizenapp/governance/organization-manage/institution_manage_service.dart';
-import 'package:citizenapp/governance/organization-manage/duoqian_storage_codec.dart';
+import 'package:citizenapp/governance/organization-manage/multisig_storage_codec.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class FakeChainRpc extends ChainRpc {
@@ -92,18 +92,18 @@ void main() {
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
-        '0x${hexOf(DuoqianStorageCodec.accountRegisteredCidKey(address))}';
-    final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
+        '0x${hexOf(MultisigStorageCodec.accountRegisteredCidKey(address))}';
+    final accountKey = '0x${hexOf(MultisigStorageCodec.institutionAccountKey(
       cidNumber,
       accountName,
     ))}';
-    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminAccountKey(
-      DuoqianStorageCodec.accountIdFromAccountHex(address),
+    final adminKey = '0x${hexOf(MultisigStorageCodec.adminAccountKey(
+      MultisigStorageCodec.accountIdFromAccountHex(address),
     ))}';
-    final thresholdKey = '0x${hexOf(DuoqianStorageCodec.dynamicThresholdKey(
+    final thresholdKey = '0x${hexOf(MultisigStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       institutionCode: 'UNIN',
-      accountId: DuoqianStorageCodec.accountIdFromAccountHex(
+      accountId: MultisigStorageCodec.accountIdFromAccountHex(
         address,
       ),
     ))}';
@@ -144,19 +144,19 @@ void main() {
     final accountName = Uint8List.fromList(utf8.encode('主账户'));
 
     final refKey =
-        '0x${hexOf(DuoqianStorageCodec.accountRegisteredCidKey(address))}';
-    final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
+        '0x${hexOf(MultisigStorageCodec.accountRegisteredCidKey(address))}';
+    final accountKey = '0x${hexOf(MultisigStorageCodec.institutionAccountKey(
       cidNumber,
       accountName,
     ))}';
-    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminAccountKey(
-      DuoqianStorageCodec.accountIdFromAccountHex(address),
+    final adminKey = '0x${hexOf(MultisigStorageCodec.adminAccountKey(
+      MultisigStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final activeThresholdKey =
-        '0x${hexOf(DuoqianStorageCodec.dynamicThresholdKey(
+        '0x${hexOf(MultisigStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       institutionCode: 'UNIN',
-      accountId: DuoqianStorageCodec.accountIdFromAccountHex(
+      accountId: MultisigStorageCodec.accountIdFromAccountHex(
         address,
       ),
     ))}';

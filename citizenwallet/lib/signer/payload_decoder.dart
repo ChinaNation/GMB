@@ -65,10 +65,10 @@ class PayloadDecoder {
   // primitives::sign::signing_message(blake2_256(GMB||op_tag||SCALE)) 的哈希域
   // 结构不同(它们不进 SIGN_OP_TAGS,不走 signingMessage)。
   //
-  // 四方逐字节锁步(node 构造 / node 验签解析 / 本 decoder 解码 / citizenapp 构造):
+  // 四方逐字节锁步(node 构造 / node 验签解析 / 本 decoder 解码 / CitizenApp 构造):
   //   - citizenchain node: governance/admins_change/activation.rs(build/decode)、
   //     transaction/.../settlement/admin_unlock.rs(build_challenge_payload)
-  //   - citizenapp: governance/admins-change/services/admin_activation_service.dart
+  //   - CitizenApp: governance/admins-change/services/admin_activation_service.dart
   // 金标布局: citizenchain/runtime/primitives/tests/fixtures/
   //   binary_prefix_domain_vectors.json(本仓副本 test/signer/fixtures/)。
   //
@@ -182,11 +182,11 @@ class PayloadDecoder {
         }
       }
 
-      // ── DuoqianTransfer(19) ──
+      // ── MultisigTransfer(19) ──
       // 投票入口统一到 InternalVote::cast(22.0),
       // 手动重试入口统一到 VotingEngine::retry_passed_proposal(9.4),
       // 本 pallet 仅保留 3 条 propose_X。
-      if (palletIndex == PalletRegistry.duoqianTransferPallet) {
+      if (palletIndex == PalletRegistry.multisigTransferPallet) {
         if (callIndex == PalletRegistry.proposeTransferCall) {
           return _decodeProposeTransfer(bytes);
         }
@@ -210,7 +210,7 @@ class PayloadDecoder {
       // propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
       // register_cid_institution(call=2) 当前不作为冷钱包 action 暴露;
       // CID 机构注册凭证等待签发机构管理员业务签名流程接入后再恢复。
-      // propose_create_institution(call=5) 由 citizenapp 在线端构造、走冷钱包扫码签名;
+      // propose_create_institution(call=5) 由 CitizenApp 在线端构造、走冷钱包扫码签名;
       // 凭证尾部带签发机构、签发管理员和业务作用域字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
@@ -476,7 +476,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransfer(19) / propose_transfer(0)
+  // MultisigTransfer(19) / propose_transfer(0)
   // 格式：[0x13][0x00][institution_code:[u8;4]][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
@@ -538,7 +538,7 @@ class PayloadDecoder {
   // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
   //
   // 统一入口:所有业务 pallet(admins/resolution_destro/grandpa_key/
-  // organization_manage/duoqian_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
+  // organization_manage/multisig_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
@@ -1165,23 +1165,23 @@ class PayloadDecoder {
   }) {
     // call_data: 2 + 32 + 32 = 66
     if (bytes.length < 66 || !_hasValidSigningTail(bytes, 66)) return null;
-    final duoqianId = bytes.sublist(2, 34);
+    final multisigId = bytes.sublist(2, 34);
     final beneficiaryId = bytes.sublist(34, 66);
-    final duoqian = Keyring().encodeAddress(duoqianId.toList(), _ss58Prefix);
+    final multisig = Keyring().encodeAddress(multisigId.toList(), _ss58Prefix);
     final beneficiary =
         Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
     return DecodedPayload(
       action: action,
-      summary: '提案关闭$summaryLabel ${_truncateAddress(duoqian)}',
+      summary: '提案关闭$summaryLabel ${_truncateAddress(multisig)}',
       fields: {
-        'account': duoqian,
+        'account': multisig,
         'beneficiary': beneficiary,
       },
     );
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransfer(19) / propose_safety_fund(1)
+  // MultisigTransfer(19) / propose_safety_fund(1)
   // 格式：[19][1][beneficiary:32][amount:u128][BoundedVec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
@@ -1216,7 +1216,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransfer(19) / propose_sweep(2)
+  // MultisigTransfer(19) / propose_sweep(2)
   // 格式：[19][2][institution:AccountId32][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
@@ -1352,7 +1352,7 @@ class PayloadDecoder {
   //
   // 所有这类 call 的 `display.fields` 按 Registry 统一为
   //   { proposal_id: <decimal string> }
-  // 与节点 Tauri UI / citizenapp 的 sign_request 逐字对齐 → 🟢 绿色识别。
+  // 与节点 Tauri UI / CitizenApp 的 sign_request 逐字对齐 → 🟢 绿色识别。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposalIdOnly(
     Uint8List bytes, {
@@ -1503,7 +1503,7 @@ class PayloadDecoder {
   /// 校验 call_data 在 [callEnd] 处结束,其后是合法的 SigningPayload 扩展尾。
   ///
   /// QR 的 payload_hex 是完整 SigningPayload,call_data 永远不会顶到末尾;
-  /// 尾部布局与节点端 build_signing_payload / citizenapp polkadart 编码一致:
+  /// 尾部布局与节点端 build_signing_payload / CitizenApp polkadart 编码一致:
   /// era(0x00 immortal,P-SIGN-001) + Compact<nonce> + Compact<tip>
   /// + mode(0x00) + 固定 73 字节(末字节 Option::None=0x00,immortal 下
   /// birth hash 必等于 genesis hash)。

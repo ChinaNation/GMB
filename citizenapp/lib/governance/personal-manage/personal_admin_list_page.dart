@@ -48,7 +48,7 @@ class PersonalAdminListPage extends StatefulWidget {
   const PersonalAdminListPage({
     super.key,
     required this.institution,
-    required this.duoqianStatus,
+    required this.multisigStatus,
     required this.admins,
     required this.adminWallets,
     this.creatorPubkeyHex,
@@ -58,7 +58,7 @@ class PersonalAdminListPage extends StatefulWidget {
   final InstitutionInfo institution;
 
   /// 多签当前状态(Pending / Active)。
-  final DuoqianStatus duoqianStatus;
+  final MultisigStatus multisigStatus;
 
   /// 管理员公钥列表(小写 hex,无 0x 前缀)。
   final List<String> admins;
@@ -98,7 +98,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
 
     try {
       // 多签已激活时无需查投票:激活按钮整体不显示。
-      if (widget.duoqianStatus != DuoqianStatus.pending) {
+      if (widget.multisigStatus != MultisigStatus.pending) {
         if (!mounted) return;
         setState(() {
           _loading = false;
@@ -139,7 +139,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
 
   _ActivateButtonState _resolveButtonState(String adminPubkeyHex) {
     // 多签已激活 → 全部隐藏
-    if (widget.duoqianStatus != DuoqianStatus.pending) {
+    if (widget.multisigStatus != MultisigStatus.pending) {
       return _ActivateButtonState.hidden;
     }
     // 创建者 → 隐藏(创建即同意)
@@ -272,7 +272,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    widget.duoqianStatus == DuoqianStatus.active
+                    widget.multisigStatus == MultisigStatus.active
                         ? '已激活 · ${widget.admins.length} 位管理员'
                         : '待激活 · ${widget.admins.length} 位管理员需逐一签名',
                     style: const TextStyle(

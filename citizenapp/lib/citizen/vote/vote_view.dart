@@ -15,7 +15,7 @@ import 'package:citizenapp/governance/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_models.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 
 /// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
 ///
@@ -47,8 +47,8 @@ class _VoteViewState extends State<VoteView> {
   static const String _codePrc = 'PRC';
   static const String _codePrb = 'PRB';
 
-  final DuoqianTransferProposalFeed _duoqianTransferFeed =
-      DuoqianTransferProposalFeed();
+  final MultisigTransferProposalFeed _multisigTransferFeed =
+      MultisigTransferProposalFeed();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final ProposalContextResolver _contextResolver = ProposalContextResolver();
   final VoteChecker _voteChecker = VoteChecker();
@@ -156,7 +156,7 @@ class _VoteViewState extends State<VoteView> {
   /// ADR-018:从共享年缓存按 org 过滤,替代原来 3 次 `ProposalsByOrg` 查询,
   /// 与机构详情共用同一份当前年提案缓存(全应用一次按年取)。
   Future<List<int>> _fetchAllGovernanceIds() async {
-    return _duoqianTransferFeed
+    return _multisigTransferFeed
         .fetchGovernanceProposalIds({_codeNrc, _codePrc, _codePrb});
   }
 
@@ -286,7 +286,7 @@ class _VoteViewState extends State<VoteView> {
     if (ids.isEmpty) return const [];
 
     // 批量取提案详情(meta + 业务详情)
-    final proposals = await _duoqianTransferFeed.fetchProposalsByIds(ids);
+    final proposals = await _multisigTransferFeed.fetchProposalsByIds(ids);
 
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
@@ -388,7 +388,7 @@ class _VoteViewState extends State<VoteView> {
           _adminService.clearCache();
           _contextResolver.clearWalletCache();
           ProposalCache.clear();
-          DuoqianTransferProposalAdapter.clearCache();
+          MultisigTransferProposalAdapter.clearCache();
           await _loadFirstPage(force: true);
         },
         child: ListView(
@@ -403,7 +403,7 @@ class _VoteViewState extends State<VoteView> {
         _adminService.clearCache();
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
-        DuoqianTransferProposalAdapter.clearCache();
+        MultisigTransferProposalAdapter.clearCache();
         await _loadFirstPage(force: true);
       },
       child: ListView.separated(
@@ -575,8 +575,8 @@ class _VoteViewState extends State<VoteView> {
       'transfer' => Icons.send_outlined,
       'safety_fund' => Icons.health_and_safety_outlined,
       'sweep' => Icons.account_balance_wallet_outlined,
-      'create_duoqian' => Icons.group_add,
-      'close_duoqian' => Icons.group_remove,
+      'create_multisig' => Icons.group_add,
+      'close_multisig' => Icons.group_remove,
       'runtime_upgrade' => Icons.arrow_upward,
       'resolution_issuance' => Icons.add_circle_outline,
       'resolution_destroy' => Icons.remove_circle_outline,
@@ -608,15 +608,15 @@ class _VoteViewState extends State<VoteView> {
           ),
         ),
       );
-    } else if (DuoqianTransferProposalAdapter.matches(proposal)) {
-      await DuoqianTransferProposalAdapter.openDetail(
+    } else if (MultisigTransferProposalAdapter.matches(proposal)) {
+      await MultisigTransferProposalAdapter.openDetail(
         context,
         proposal: proposal,
         institution: inst,
         proposalContext: proposalContext,
       );
-    } else if ((proposal.createDuoqianDetail != null ||
-            proposal.closeDuoqianDetail != null) &&
+    } else if ((proposal.createMultisigDetail != null ||
+            proposal.closeMultisigDetail != null) &&
         inst != null) {
       // 多签管理提案
       await Navigator.of(context).push(
@@ -640,7 +640,7 @@ class _VoteViewState extends State<VoteView> {
     if (mounted) {
       _adminService.clearCache();
       ProposalCache.clear();
-      DuoqianTransferProposalAdapter.clearCache();
+      MultisigTransferProposalAdapter.clearCache();
       _loadFirstPage(force: true);
     }
   }
@@ -655,7 +655,7 @@ class _VoteViewState extends State<VoteView> {
 
     try {
       final proposals =
-          await _duoqianTransferFeed.fetchProposalsByIds([item.proposalId]);
+          await _multisigTransferFeed.fetchProposalsByIds([item.proposalId]);
       if (proposals.isEmpty) return null;
       final proposal = proposals.first;
       final contexts = await _contextResolver.resolveBatch(

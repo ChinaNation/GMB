@@ -9,7 +9,7 @@ import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_servic
 /// 投票引擎统一投票入口服务。
 ///
 /// - 所有业务 pallet(admins_change / resolution_destro /
-///   grandpakey_change / duoqian_manage / transaction 业务)的
+///   grandpakey_change / institution_multisig / transaction 业务)的
 ///   管理员一人一票一律走
 ///   `InternalVote::cast(proposal_id, approve)` 一条路径。
 /// - 业务 service(InstitutionManageService 等)

@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// kind = login_challenge
 ///
-/// 由 CID/CPMS 后端生成,冷钱包 citizenwallet 扫码后验证系统签名。
+/// 由 CID/CPMS 后端生成,冷钱包 CitizenWallet 扫码后验证系统签名。
 class LoginChallengeBody implements QrBody {
   const LoginChallengeBody({
     required this.system,

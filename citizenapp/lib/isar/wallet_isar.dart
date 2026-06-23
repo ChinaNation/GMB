@@ -102,8 +102,8 @@ class AppKvEntity {
 ///
 /// 中文注释：`status` 负责 UI 展示，`lastSyncAtMillis` 负责判断是否需要
 /// 再次查链；两者都复用 AppKvEntity，避免为 TTL 新增 Isar schema。
-class DuoqianLocalStatusSnapshot {
-  const DuoqianLocalStatusSnapshot({
+class MultisigLocalStatusSnapshot {
+  const MultisigLocalStatusSnapshot({
     required this.status,
     required this.lastSyncAtMillis,
   });
@@ -116,8 +116,8 @@ class DuoqianLocalStatusSnapshot {
 ///
 /// 中文注释：这不是短期内存缓存，而是详情页首屏可直接使用的本机状态。
 /// 链上刷新成功后覆盖写入；链上失败时保留旧值，避免进详情页被 RPC 卡住。
-class DuoqianLocalDetailSnapshot {
-  const DuoqianLocalDetailSnapshot({
+class MultisigLocalDetailSnapshot {
+  const MultisigLocalDetailSnapshot({
     required this.status,
     required this.admins,
     this.threshold,
@@ -145,7 +145,7 @@ class DuoqianLocalDetailSnapshot {
         'updated_at_millis': updatedAtMillis,
       };
 
-  static DuoqianLocalDetailSnapshot? fromJsonString(String? raw) {
+  static MultisigLocalDetailSnapshot? fromJsonString(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -159,7 +159,7 @@ class DuoqianLocalDetailSnapshot {
           : const <String>[];
       final status = decoded['status']?.toString();
       if (status == null || status.isEmpty) return null;
-      return DuoqianLocalDetailSnapshot(
+      return MultisigLocalDetailSnapshot(
         status: status,
         admins: admins,
         threshold: _toInt(decoded['threshold']),
@@ -213,17 +213,17 @@ class PersonalAccountLocalState {
     return snapshots.map((key, value) => MapEntry(key, value.status));
   }
 
-  static Future<Map<String, DuoqianLocalStatusSnapshot>> readStatusSnapshots(
+  static Future<Map<String, MultisigLocalStatusSnapshot>> readStatusSnapshots(
     Isar isar,
     Iterable<String> personalAccountsHex,
   ) async {
-    final result = <String, DuoqianLocalStatusSnapshot>{};
+    final result = <String, MultisigLocalStatusSnapshot>{};
     for (final address in personalAccountsHex) {
       final normalized = _normalizeHex(address);
       final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
       final status = entity?.stringValue;
       if (status != null && status.isNotEmpty) {
-        result[normalized] = DuoqianLocalStatusSnapshot(
+        result[normalized] = MultisigLocalStatusSnapshot(
           status: status,
           lastSyncAtMillis: entity?.intValue,
         );
@@ -232,20 +232,20 @@ class PersonalAccountLocalState {
     return result;
   }
 
-  static Future<DuoqianLocalDetailSnapshot?> readDetail(
+  static Future<MultisigLocalDetailSnapshot?> readDetail(
     Isar isar,
     String personalAccountHex,
   ) async {
     final entity =
         await isar.appKvEntitys.getByKey(detailKey(personalAccountHex));
-    return DuoqianLocalDetailSnapshot.fromJsonString(entity?.stringValue);
+    return MultisigLocalDetailSnapshot.fromJsonString(entity?.stringValue);
   }
 
   /// 写入个人多签详情快照；调用方必须处在 Isar writeTxn 内。
   static Future<void> putDetailInTxn(
     Isar isar,
     String personalAccountHex,
-    DuoqianLocalDetailSnapshot snapshot,
+    MultisigLocalDetailSnapshot snapshot,
   ) async {
     final key = detailKey(personalAccountHex);
     final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
@@ -305,16 +305,16 @@ class PersonalAccountLocalState {
 ///
 /// 中文注释：机构多签链上关闭后也继续留在本机账户列表，显示“已注销”；
 /// 用户主动点详情页右上角“删除”时，才清理本机机构账户记录。
-class InstitutionDuoqianLocalState {
+class InstitutionMultisigLocalState {
   static const statusPending = 'pending';
   static const statusActive = 'active';
   static const statusClosed = 'closed';
 
   static String statusKey(String accountHex) =>
-      'institution_duoqian_status:${_normalizeHex(accountHex)}';
+      'institution_multisig_status:${_normalizeHex(accountHex)}';
 
   static String detailKey(String accountHex) =>
-      'institution_duoqian_detail:${_normalizeHex(accountHex)}';
+      'institution_multisig_detail:${_normalizeHex(accountHex)}';
 
   static Future<Map<String, String>> readStatuses(
     Isar isar,
@@ -324,17 +324,17 @@ class InstitutionDuoqianLocalState {
     return snapshots.map((key, value) => MapEntry(key, value.status));
   }
 
-  static Future<Map<String, DuoqianLocalStatusSnapshot>> readStatusSnapshots(
+  static Future<Map<String, MultisigLocalStatusSnapshot>> readStatusSnapshots(
     Isar isar,
     Iterable<String> accountsHex,
   ) async {
-    final result = <String, DuoqianLocalStatusSnapshot>{};
+    final result = <String, MultisigLocalStatusSnapshot>{};
     for (final address in accountsHex) {
       final normalized = _normalizeHex(address);
       final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
       final status = entity?.stringValue;
       if (status != null && status.isNotEmpty) {
-        result[normalized] = DuoqianLocalStatusSnapshot(
+        result[normalized] = MultisigLocalStatusSnapshot(
           status: status,
           lastSyncAtMillis: entity?.intValue,
         );
@@ -343,19 +343,19 @@ class InstitutionDuoqianLocalState {
     return result;
   }
 
-  static Future<DuoqianLocalDetailSnapshot?> readDetail(
+  static Future<MultisigLocalDetailSnapshot?> readDetail(
     Isar isar,
     String accountHex,
   ) async {
     final entity = await isar.appKvEntitys.getByKey(detailKey(accountHex));
-    return DuoqianLocalDetailSnapshot.fromJsonString(entity?.stringValue);
+    return MultisigLocalDetailSnapshot.fromJsonString(entity?.stringValue);
   }
 
   /// 写入机构多签详情快照；调用方必须处在 Isar writeTxn 内。
   static Future<void> putDetailInTxn(
     Isar isar,
     String accountHex,
-    DuoqianLocalDetailSnapshot snapshot,
+    MultisigLocalDetailSnapshot snapshot,
   ) async {
     final key = detailKey(accountHex);
     final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
@@ -409,11 +409,11 @@ class InstitutionDuoqianLocalState {
   static Future<void> clearAllInTxn(Isar isar) async {
     await isar.appKvEntitys
         .filter()
-        .keyStartsWith('institution_duoqian_status:')
+        .keyStartsWith('institution_multisig_status:')
         .deleteAll();
     await isar.appKvEntitys
         .filter()
-        .keyStartsWith('institution_duoqian_detail:')
+        .keyStartsWith('institution_multisig_detail:')
         .deleteAll();
   }
 
@@ -788,7 +788,7 @@ class LocalTxEntity {
   @Index()
   late String walletPubkeyHex;
 
-  /// 业务类型：transfer / fee / reward / interest / issuance / burn / duoqian_transfer。
+  /// 业务类型：transfer / fee / reward / interest / issuance / burn / multisig_transfer。
   late String type;
 
   /// 该钱包实际余额变化（分），带正负号；正数=增加，负数=减少。
@@ -1175,11 +1175,11 @@ class WalletIsarMigration {
         await isar.walletTxSyncCursorEntitys.clear();
       }
       if (version < 4) {
-        // 中文注释：DuoqianInstitutionEntity 改名为 InstitutionEntity（collection
+        // 中文注释：MultisigInstitutionEntity 改名为 InstitutionEntity（collection
         // 名变更），旧 collection 数据仅为本地缓存，丢弃后由反向索引重新发现即可，
         // 无需数据迁移。这里清空新 collection 兜底，避免新旧叠加出现脏数据。
         await isar.institutionEntitys.clear();
-        await InstitutionDuoqianLocalState.clearAllInTxn(isar);
+        await InstitutionMultisigLocalState.clearAllInTxn(isar);
       }
       if (version < 7) {
         // 中文注释（ADR-021 行政区唯一真源）：公权机构目录从「存行政区名字」

@@ -12,7 +12,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 
 /// 提案摘要(详情页列表用)。
 class PublicProposalSummary {
@@ -50,14 +50,14 @@ class LivePublicInstitutionChainData implements PublicInstitutionChainData {
   LivePublicInstitutionChainData({
     ChainRpc? chainRpc,
     InstitutionAdminService? adminService,
-    DuoqianTransferProposalFeed? feed,
+    MultisigTransferProposalFeed? feed,
   })  : _chainRpc = chainRpc ?? ChainRpc(),
         _adminService = adminService ?? InstitutionAdminService(),
-        _feed = feed ?? DuoqianTransferProposalFeed();
+        _feed = feed ?? MultisigTransferProposalFeed();
 
   final ChainRpc _chainRpc;
   final InstitutionAdminService _adminService;
-  final DuoqianTransferProposalFeed _feed;
+  final MultisigTransferProposalFeed _feed;
 
   @override
   Future<Map<String, double>> balances(List<String> pubkeyHexes) {

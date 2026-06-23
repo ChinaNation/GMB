@@ -12,7 +12,7 @@
 - `wallet` 管钱包与密钥材料生命周期
 - `signer` 管签名算法与签名协议
 - `login`、`onchain`、`myid` 只编排流程，不直接写签名细节
-- 冷钱包离线解码和独立确认由 `citizenwallet/lib/signer/` 承担，citizenapp 不实现公民钱包签名放行规则
+- 冷钱包离线解码和独立确认由 `citizenwallet/lib/signer/` 承担，CitizenApp 不实现公民钱包签名放行规则
 
 ## 2. 目录结构
 
@@ -60,9 +60,9 @@ lib/signer/
 - 最后更新:2026-05-26
 - 任务卡:`memory/08-tasks/open/20260526-cpms-wallet-address-only.md`
 
-citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CITIZEN_QR_V1 / user_contact`
+CitizenApp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CITIZEN_QR_V1 / user_contact`
 钱包地址二维码，并把地址写入真实档案。钱包私钥控制权验证统一放到 CID 绑定阶段，
-由 CID 生成绑定 `sign_request`，citizenapp 再输出 `CITIZEN_QR_V1 / sign_response`。
+由 CID 生成绑定 `sign_request`，CitizenApp 再输出 `CITIZEN_QR_V1 / sign_response`。
 
 验收规则:
 
@@ -79,7 +79,7 @@ citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CI
 
 - 协议编解码与基础校验能力已接入登录、链上交易、治理、电子护照等业务页面。
 - `QrSignSessionPage` 负责在线手机展示请求二维码并扫描外部签名回执。
-- citizenapp 不接收“无法独立验证但仍允许签名”的冷钱包结果；外部签名设备必须按 citizenwallet 的两色规则独立验证后返回回执。
+- CitizenApp 不接收“无法独立验证但仍允许签名”的冷钱包结果；外部签名设备必须按 CitizenWallet 的两色规则独立验证后返回回执。
 - `display` 不是签名内容，真实签名对象始终是 `payload_hex` 解码后的原始字节。
 
 ### 4.1 CID 电子护照绑定签名
@@ -98,9 +98,9 @@ citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CI
 
 ### 4.2 公民钱包签名边界
 
-- citizenwallet 公民钱包负责独立解码链上 call data、CID 管理员操作、CPMS 档案删除等签名请求。
-- citizenwallet 公民钱包只能在独立验证通过时绿色放行，不能独立验证或展示字段不一致时红色拒签。
-- citizenapp 只负责展示在线请求二维码、扫描回执、校验 `request_id / pubkey / payload_hash / signature` 后提交业务。
+- CitizenWallet 公民钱包负责独立解码链上 call data、CID 管理员操作、CPMS 档案删除等签名请求。
+- CitizenWallet 公民钱包只能在独立验证通过时绿色放行，不能独立验证或展示字段不一致时红色拒签。
+- CitizenApp 只负责展示在线请求二维码、扫描回执、校验 `request_id / pubkey / payload_hash / signature` 后提交业务。
 
 ## 5. 协议口径（CITIZEN_QR_V1）
 
@@ -144,11 +144,11 @@ citizenapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `CI
 - `qr/login`：
   - 负责挑战解析、防重放、系统签名验证、签名前确认
   - 热钱包通过 `WalletManager.signUtf8WithWallet()` 本机签名
-  - 冷钱包通过 `QrSigner + QrSignSessionPage` 发起外部签名会话，由 citizenwallet 独立验证后返回回执
+  - 冷钱包通过 `QrSigner + QrSignSessionPage` 发起外部签名会话，由 CitizenWallet 独立验证后返回回执
 - `onchain`：
   - 负责交易草稿校验、prepare/submit/status 编排
   - 热钱包通过 `WalletManager.signWithWallet()` 本机签名
-  - 冷钱包通过 `QrSigner + QrSignSessionPage` 发起外部签名会话，由 citizenwallet 校验 payload/display 后签名
+  - 冷钱包通过 `QrSigner + QrSignSessionPage` 发起外部签名会话，由 CitizenWallet 校验 payload/display 后签名
 - `governance`（规划）：
   - 负责提案/投票业务字段编排
   - 通过 `Signer` 完成链上交易签名
@@ -175,13 +175,13 @@ CITIZEN_QR_V1|system|request_id|challenge|nonce|expires_at
 - 人口快照签名（投票引擎人口快照准备流程字段）：
 
 ```text
-(DUOQIAN, OP_SIGN_POP, genesis_hash, who, eligible_total, nonce)
+(GMB, OP_SIGN_POP, genesis_hash, who, eligible_total, nonce)
 ```
 
 - 公民投票凭证签名：
 
 ```text
-(DUOQIAN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, nonce)
+(GMB, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, nonce)
 ```
 
 两类消息均采用 `blake2_256(SCALE.encode(payload))` 后做 `sr25519` 签名。

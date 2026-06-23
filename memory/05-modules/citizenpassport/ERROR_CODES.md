@@ -94,9 +94,9 @@ ARCHIVE 签发、打印和审计状态,不得引入在线认证或 CID 远程调
 | `CPMS_ARCHIVE_DELETE_CHALLENGE_CONSUMED` | 409 | 删除签名 challenge 已消费 |
 | `CPMS_ARCHIVE_DELETE_CHALLENGE_EXPIRED` | 410 | 删除签名 challenge 已过期 |
 | `CPMS_ARCHIVE_DELETE_CHALLENGE_MISMATCH` | 422 | 删除签名 challenge 与当前档案或管理员不匹配 |
-| `CPMS_ARCHIVE_DELETE_SIGNER_MISMATCH` | 422 | citizenwallet 签名账户不是当前登录管理员账户 |
-| `CPMS_ARCHIVE_DELETE_PAYLOAD_HASH_MISMATCH` | 422 | citizenwallet 回执 payload_hash 与删除 payload 不一致 |
-| `CPMS_ARCHIVE_DELETE_SIGNATURE_INVALID` | 422 | citizenwallet 删除签名验签失败 |
+| `CPMS_ARCHIVE_DELETE_SIGNER_MISMATCH` | 422 | CitizenWallet 签名账户不是当前登录管理员账户 |
+| `CPMS_ARCHIVE_DELETE_PAYLOAD_HASH_MISMATCH` | 422 | CitizenWallet 回执 payload_hash 与删除 payload 不一致 |
+| `CPMS_ARCHIVE_DELETE_SIGNATURE_INVALID` | 422 | CitizenWallet 删除签名验签失败 |
 | `CPMS_ARCHIVE_MATERIAL_NOT_FOUND` | 404 | 公民资料库记录不存在或已删除 |
 | `CPMS_ARCHIVE_MATERIAL_FILE_NOT_FOUND` | 404 | 公民资料库文件正文不存在 |
 | `CPMS_ARCHIVE_MATERIAL_TYPE_INVALID` | 400 | 公民资料类型非法 |

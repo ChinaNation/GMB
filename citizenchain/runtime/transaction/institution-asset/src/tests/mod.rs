@@ -7,11 +7,11 @@ fn default_asset_allows_all_actions() {
     let account = [7u8; 32];
     assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianTransferExecute,
+        InstitutionAssetAction::MultisigTransferExecute,
     ));
     assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(
         &account,
-        InstitutionAssetAction::DuoqianCloseExecute,
+        InstitutionAssetAction::MultisigCloseExecute,
     ));
     assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(
         &account,

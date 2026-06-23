@@ -15,7 +15,7 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `authz/`：HttpOnly Cookie session 校验与角色检查。
 - `rate_limit.rs`：登录、初始化、删除签名和资料上传的本机内存限流。
 - `admins/`：管理员新增、姓名编辑、删除和年度状态导出入口。
-- `dangan/`：档案创建、查询、游标分页、更新、软删除、ARCHIVE 生成和打印记录、公民资料库、100 年硬删除、年度状态导出、`geo_seal` 加密、ARCHIVE 签名。
+- `archive/`：档案创建、查询、游标分页、更新、软删除、ARCHIVE 生成和打印记录、公民资料库、100 年硬删除、年度状态导出、`geo_seal` 加密、ARCHIVE 签名。
 - `address.rs`：镇、村/路地址维护。
 
 ## 2.1 前端模块
@@ -24,7 +24,7 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `login/`：QR-only 登录页面和登录 API。
 - `authz/`：登录态上下文与路由守卫。
 - `admins/`：管理员页面、管理员管理、年度报告导出 API 和类型。
-- `dangan/`：档案列表、创建、详情、编辑、公民资料库入口、软删除签名、档案 QR 操作 API 和类型。
+- `archive/`：档案列表、创建、详情、编辑、公民资料库入口、软删除签名、档案 QR 操作 API 和类型。
 - `address/`：镇村查询 API 和类型。
 - `qr/`：CITIZEN_QR_V1 解析与浏览器扫码工具。
 - `common/`：通用 HTTP 封装、共享类型和基础布局组件；`401` 只通知认证上下文清理用户镜像，不直接改写路由。
@@ -103,7 +103,7 @@ cid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `login_challenges`：登录挑战。
 - `qr_login_results`：扫码登录结果。
 - `archives`：公民档案和 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用数据库 `DATE`。
-- `archive_materials`：公民资料库元数据；文件正文由 `dangan/materials.rs` 保存到本机资料目录。
+- `archive_materials`：公民资料库元数据；文件正文由 `archive/materials.rs` 保存到本机资料目录。
 - `archive_number_recycle_pool`：满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史。
 - `archive_hard_delete_logs`：满 100 年硬删除最小日志，不保存实名原文。
 - `cpms_status_exports`：年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告。

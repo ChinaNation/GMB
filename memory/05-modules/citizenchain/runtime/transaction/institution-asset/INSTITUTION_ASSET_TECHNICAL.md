@@ -7,7 +7,7 @@
 
 - 统一定义“哪些内部执行动作可以从哪些制度账户扣钱”。
 - 只管内部资金动作白名单，不管提案、投票、管理员变更等纯治理行为。
-- 供 `organization-manage`、`duoqian-transfer`、`offchain-transaction` 复用。
+- 供 `organization-manage`、`multisig-transfer`、`offchain-transaction` 复用。
 
 ## 1. 设计边界
 
@@ -22,8 +22,8 @@
 
 当前定义 4 类动作：
 
-1. `DuoqianTransferExecute`
-2. `DuoqianCloseExecute`
+1. `MultisigTransferExecute`
+2. `MultisigCloseExecute`
 3. `OffchainBatchDebit`
 4. `OffchainFeeSweepExecute`
 
@@ -49,8 +49,8 @@ pub trait InstitutionAsset<AccountId> {
 1. `stake_account`
    - 一律拒绝
 2. 制度保留 `main_account`
-   - 只允许 `DuoqianTransferExecute`
-   - 只允许 `DuoqianCloseExecute`
+   - 只允许 `MultisigTransferExecute`
+   - 只允许 `MultisigCloseExecute`
 3. 制度 `fee_account`
    - 只允许 `OffchainFeeSweepExecute`
 4. 其他普通账户
@@ -63,7 +63,7 @@ pub trait InstitutionAsset<AccountId> {
 - `propose_close`
 - `execute_close_with_finalizer`(internal helper,投票通过后的 callback 执行路径)
 
-### 4.2 duoqian-transfer
+### 4.2 multisig-transfer
 
 - `propose_transfer`
 - `try_execute_transfer_from_callback`(internal helper,投票通过后的 callback 执行路径)

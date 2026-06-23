@@ -120,7 +120,7 @@ impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
 struct MockSafetyFundAccountProvider;
 impl SafetyFundAccountProvider<AccountId32> for MockSafetyFundAccountProvider {
     fn safety_fund_account() -> AccountId32 {
-        AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ACCOUNT)
+        AccountId32::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT)
     }
 }
 

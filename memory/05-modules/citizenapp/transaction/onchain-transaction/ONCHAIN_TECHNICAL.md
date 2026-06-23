@@ -94,7 +94,7 @@ citizenapp/lib/transaction/shared/
 - `OnchainPaymentService.submitTransfer()` 只接收签名回调，不读取 seed
 - 热钱包 seed 只在 `WalletManager` 内短暂存在，签名后清零
 - 公民钱包签名通过 `CITIZEN_QR_V1` 的 `sign_request / sign_response`
-- `citizenapp` 只负责生成待签名 payload、校验回执、广播交易；离线签名由 `citizenwallet` 完成
+- CitizenApp 只负责生成待签名 payload、校验回执、广播交易；离线签名由 CitizenWallet 完成
 
 ## 7. 手续费
 
@@ -111,7 +111,7 @@ fee = max(amount_fen * 0.001, 10 fen)
 
 ## 8. 边界规则
 
-- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在链状态提示下方、链上支付表单上方插入扫码支付入口；onchain 模块自身不 import `offchain` 或 `duoqian`
+- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在链状态提示下方、链上支付表单上方插入扫码支付入口；onchain 模块自身不 import `offchain` 或 `multisig`
 - `lib/transaction/onchain-transaction/` 不放治理提案、投票、多签、链下支付、清算行、钱包密钥管理、二维码协议底座，也不提供“交易/金融”聚合入口
 - 新增普通链上支付 UI / model / service 时才进入 `lib/transaction/onchain-transaction/`
 - 若新增能力需要 pallet index / call index，必须先确认是否仍属于“普通链上支付”；否则放回对应业务模块

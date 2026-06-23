@@ -16,7 +16,7 @@ import 'storage/im_isar_store.dart';
 import 'transport/im_private_node_transport.dart';
 import 'transport/im_transport.dart';
 
-/// citizenapp 与用户电脑通信节点完成配对后的本机配置。
+/// CitizenApp 与用户电脑通信节点完成配对后的本机配置。
 class ImPairedNodeConfig {
   const ImPairedNodeConfig({
     required this.peerId,

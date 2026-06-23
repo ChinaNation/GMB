@@ -4,7 +4,7 @@
 //! 公权机构业务放 `gov`,私权机构业务放 `private`,公民仍放 `citizens`。
 
 pub(crate) mod admin;
-pub(crate) mod chain_duoqian_info;
+pub(crate) mod chain_multisig_info;
 pub(crate) mod http;
 pub(crate) mod model;
 pub(crate) mod registration;

@@ -18,7 +18,7 @@ use crate::{
 
 fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), BenchmarkError> {
     for candidate in 0..2_048u32 {
-        let mut raw = b"duoqian-benchmark-cid-".to_vec();
+        let mut raw = b"multisig-benchmark-cid-".to_vec();
         raw.extend_from_slice(&candidate.to_le_bytes());
         let cid_number: CidNumberOf<T> = raw
             .try_into()

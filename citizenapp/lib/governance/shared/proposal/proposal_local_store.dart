@@ -6,7 +6,7 @@ import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
-import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_models.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
 
 /// 提案列表本地持久化读库。
 ///
@@ -252,11 +252,11 @@ class LocalProposalSummary {
     final displayId = formatProposalId(meta.displayMeta);
     final status = _statusLabel(meta.status);
     final transfer =
-        proposal.businessDetails[DuoqianTransferProposalDetailKeys.transfer];
+        proposal.businessDetails[MultisigTransferProposalDetailKeys.transfer];
     final safetyFund =
-        proposal.businessDetails[DuoqianTransferProposalDetailKeys.safetyFund];
+        proposal.businessDetails[MultisigTransferProposalDetailKeys.safetyFund];
     final sweep =
-        proposal.businessDetails[DuoqianTransferProposalDetailKeys.sweep];
+        proposal.businessDetails[MultisigTransferProposalDetailKeys.sweep];
 
     String title;
     String subtitle;
@@ -281,16 +281,16 @@ class LocalProposalSummary {
           '手续费划转 ${AmountFormat.format(sweep.amountYuan, symbol: '')} 元';
       subtitle = '$listSubtitle · $status';
       iconKind = 'sweep';
-    } else if (proposal.createDuoqianDetail != null) {
+    } else if (proposal.createMultisigDetail != null) {
       title = '创建多签 $displayId';
       listSubtitle = '创建个人多签';
       subtitle = '创建个人多签账户 · $status';
-      iconKind = 'create_duoqian';
-    } else if (proposal.closeDuoqianDetail != null) {
+      iconKind = 'create_multisig';
+    } else if (proposal.closeMultisigDetail != null) {
       title = '关闭多签 $displayId';
       listSubtitle = '关闭多签';
       subtitle = '关闭多签账户 · $status';
-      iconKind = 'close_duoqian';
+      iconKind = 'close_multisig';
     } else if (proposal.runtimeUpgradeDetail != null) {
       title = '协议升级 $displayId';
       listSubtitle = '协议升级';

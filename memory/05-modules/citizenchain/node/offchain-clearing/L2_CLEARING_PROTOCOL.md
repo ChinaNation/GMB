@@ -5,7 +5,7 @@
 > 本文描述的是旧"43 个省储行组成 L2 清算网络"方案，仅作为历史留档。
 > 当前有效模型为 **注册清算行节点 + 收款方清算行主导 settlement**，
 > 入口见 `memory/04-decisions/ADR-007-clearing-bank-three-phase.md` 与
-> `memory/05-modules/citizenchain/node/offchain/STEP2B_II_B_2_B_INTEGRATION.md`。
+> `memory/05-modules/citizenchain/node/offchain-transaction/STEP2B_II_B_2_B_INTEGRATION.md`。
 > 新实现不再使用本文中的 `/gmb/offchain-clearing/1`、`offchain_submitSignedTx`
 > 或全局 remote_pending 账本。
 

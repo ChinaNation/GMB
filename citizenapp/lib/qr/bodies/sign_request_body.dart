@@ -2,7 +2,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// kind = sign_request
 ///
-/// 由 citizenapp 热钱包生成,citizenwallet 公民钱包扫码后展示交易摘要并签名。
+/// 由 CitizenApp 热钱包生成,CitizenWallet 公民钱包扫码后展示交易摘要并签名。
 class SignRequestBody implements QrBody {
   const SignRequestBody({
     required this.address,
@@ -108,8 +108,8 @@ class SignDisplay {
 class SignDisplayField {
   const SignDisplayField({this.key, required this.label, required this.value});
 
-  /// 中文注释：可选的英文字段标识，用于让 citizenwallet 公民钱包与本地解码结果交叉比对。
-  /// 链端 signing.rs 会发送此字段，citizenapp 生成时也应按 action registry 对齐。
+  /// 中文注释：可选的英文字段标识，用于让 CitizenWallet 公民钱包与本地解码结果交叉比对。
+  /// 链端 signing.rs 会发送此字段，CitizenApp 生成时也应按 action registry 对齐。
   final String? key;
   final String label;
   final String value;

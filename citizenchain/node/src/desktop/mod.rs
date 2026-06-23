@@ -14,7 +14,7 @@ use crate::{
     governance,
     home::{self, cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState},
     im, mining, other, settings,
-    transaction::duoqian_transfer,
+    transaction::multisig_transfer,
 };
 use std::sync::Mutex;
 
@@ -89,12 +89,12 @@ pub fn run_desktop() {
             governance::admins_change::commands::submit_admin_set_change,
             governance::build_vote_request,
             governance::build_joint_vote_request,
-            duoqian_transfer::commands::build_duoqian_transfer_request,
-            duoqian_transfer::commands::submit_duoqian_transfer,
-            duoqian_transfer::commands::build_duoqian_safety_fund_request,
-            duoqian_transfer::commands::submit_duoqian_safety_fund,
-            duoqian_transfer::commands::build_duoqian_sweep_request,
-            duoqian_transfer::commands::submit_duoqian_sweep,
+            multisig_transfer::commands::build_multisig_transfer_request,
+            multisig_transfer::commands::submit_multisig_transfer,
+            multisig_transfer::commands::build_multisig_safety_fund_request,
+            multisig_transfer::commands::submit_multisig_safety_fund,
+            multisig_transfer::commands::build_multisig_sweep_request,
+            multisig_transfer::commands::submit_multisig_sweep,
             governance::runtime_upgrade::commands::build_developer_upgrade_request,
             governance::runtime_upgrade::commands::submit_developer_upgrade,
             governance::runtime_upgrade::commands::build_propose_upgrade_request,

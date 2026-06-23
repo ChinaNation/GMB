@@ -46,7 +46,7 @@ governance/
 2. 后端验证公钥在链上管理员列表中
 3. 构建 `GMB_ACTIVATE_SUBJECT_V1` subject 级签名 payload（非链上交易）
 4. 生成 CITIZEN_QR_V1 格式的 QR 签名请求
-5. 用户用 citizenwallet 公民钱包扫码签名
+5. 用户用 CitizenWallet 公民钱包扫码签名
 6. 后端验证 sr25519 签名，并重新确认链上主体仍 Active
 7. 签名验证成功 → 写入本地加密存储
 8. 前端刷新 → 管理员变绿 + 提案按钮可操作

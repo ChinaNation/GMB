@@ -1,5 +1,5 @@
 //! 中文注释:公民电子护照记录、绑定状态机、查询接口 DTO,
-//! 含 CPMS 档案码验真结果和 citizenapp 扫码签名绑定结果。
+//! 含 CPMS 档案码验真结果和 CitizenApp 扫码签名绑定结果。
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -112,7 +112,7 @@ pub(crate) enum CitizenBindStatus {
     Bound,
 }
 
-/// 绑定 challenge（citizenwallet 签名验证）。
+/// 绑定 challenge（CitizenApp 签名验证）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenBindChallenge {
     pub(crate) challenge_id: String,
@@ -271,9 +271,9 @@ pub(crate) struct CitizenRow {
     pub(crate) bind_status: CitizenBindStatus,
 }
 
-// ── citizenapp 电子护照状态接口类型 ──
+// ── CitizenApp 电子护照状态接口类型 ──
 
-/// citizenapp 查询电子护照状态。
+/// CitizenApp 查询电子护照状态。
 #[derive(Deserialize)]
 pub(crate) struct MyIdStatusQuery {
     pub(crate) wallet_address: String,

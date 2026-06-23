@@ -49,7 +49,7 @@ struct InstitutionBalances {
     fee_balance_fen: Option<String>,
     cb_fee_balance_fen: Option<String>,
     nrc_fee_balance_fen: Option<String>,
-    nrc_anquan_balance_fen: Option<String>,
+    safety_fund_balance_fen: Option<String>,
 }
 
 struct ChainQueryContext {
@@ -152,13 +152,13 @@ fn collect_institution_balances(
     match entry {
         InstitutionRef::Nrc(_) => {
             let fee_account = entry.fee_account_hex();
-            let anquan_account = entry
-                .anquan_account_hex()
+            let safety_fund_account = entry
+                .safety_fund_account_hex()
                 .expect("国储会安全基金账户 AccountId必须存在");
             balances.nrc_fee_balance_fen =
                 load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
-            balances.nrc_anquan_balance_fen =
-                load_balance_at_block(&anquan_account, block_hash, "安全基金账户余额", warnings);
+            balances.safety_fund_balance_fen =
+                load_balance_at_block(&safety_fund_account, block_hash, "安全基金账户余额", warnings);
         }
         InstitutionRef::Prc(_) => {
             let fee_account = entry.fee_account_hex();
@@ -199,14 +199,14 @@ fn build_institution_detail_sync(
     };
     let balances =
         collect_institution_balances(entry, context.block_hash.as_deref(), &mut context.warnings);
-    let (stake_account, fee_account, cb_fee_account, nrc_fee_account, nrc_anquan_account) =
+    let (stake_account, fee_account, cb_fee_account, nrc_fee_account, safety_fund_account) =
         match entry {
             InstitutionRef::Nrc(_) => (
                 None,
                 None,
                 None,
                 Some(entry.fee_account_hex()),
-                entry.anquan_account_hex(),
+                entry.safety_fund_account_hex(),
             ),
             InstitutionRef::Prc(_) => (None, None, Some(entry.fee_account_hex()), None, None),
             InstitutionRef::Prb(_) => (
@@ -239,8 +239,8 @@ fn build_institution_detail_sync(
         cb_fee_balance_fen: balances.cb_fee_balance_fen,
         nrc_fee_account,
         nrc_fee_balance_fen: balances.nrc_fee_balance_fen,
-        nrc_anquan_account,
-        nrc_anquan_balance_fen: balances.nrc_anquan_balance_fen,
+        safety_fund_account,
+        safety_fund_balance_fen: balances.safety_fund_balance_fen,
         warning: join_warnings(context.warnings),
     })
 }
@@ -262,7 +262,7 @@ pub(super) fn build_institution_balance_update_sync(
         fee_balance_fen: balances.fee_balance_fen,
         cb_fee_balance_fen: balances.cb_fee_balance_fen,
         nrc_fee_balance_fen: balances.nrc_fee_balance_fen,
-        nrc_anquan_balance_fen: balances.nrc_anquan_balance_fen,
+        safety_fund_balance_fen: balances.safety_fund_balance_fen,
         warning: join_warnings(context.warnings),
     })
 }

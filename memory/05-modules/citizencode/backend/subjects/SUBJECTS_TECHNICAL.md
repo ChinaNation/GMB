@@ -128,7 +128,7 @@
 | `private::sole` / `private::partnership` / `private::company` / `private::corporation` / `private::welfare` / `private::association` | 六类私权机构创建、校验和精确查询 |
 | `accounts::handler` | 机构账户 CRUD |
 | `docs::handler` | 机构资料库 CRUD |
-| `subjects::chain_duoqian_info` | 区块链软件和钱包公开查询 |
+| `subjects::chain_multisig_info` | 区块链软件和钱包公开查询 |
 
 外部公开查询路径仍保留 `/api/v1/app/institutions/...` 作为协议路径,不得据此恢复
 `backend/institutions/` 源码目录。
@@ -143,7 +143,7 @@ citizencode/backend/subjects/
 ├── store.rs
 ├── service.rs
 ├── admin.rs
-├── chain_duoqian_info.rs
+├── chain_multisig_info.rs
 └── unincorporated_org/
     └── mod.rs
 ```

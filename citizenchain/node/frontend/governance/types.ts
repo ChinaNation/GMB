@@ -1,5 +1,5 @@
 // 治理模块前端类型定义，与后端 governance::types 和 admins_change::activation 对应。
-import type { DuoqianTransferProposalDetails } from '../transaction/duoqian-transfer/types';
+import type { MultisigTransferProposalDetails } from '../transaction/multisig-transfer/types';
 
 // ── 签名请求/响应 ──
 
@@ -97,8 +97,8 @@ export type InstitutionDetail = {
   cbFeeBalanceFen: string | null;
   nrcFeeAccount: string | null;
   nrcFeeBalanceFen: string | null;
-  nrcAnquanAccount: string | null;
-  nrcAnquanBalanceFen: string | null;
+  safetyFundAccount: string | null;
+  safetyFundBalanceFen: string | null;
   warning: string | null;
 };
 
@@ -109,7 +109,7 @@ export type InstitutionBalanceUpdate = {
   feeBalanceFen: string | null;
   cbFeeBalanceFen: string | null;
   nrcFeeBalanceFen: string | null;
-  nrcAnquanBalanceFen: string | null;
+  safetyFundBalanceFen: string | null;
   warning: string | null;
 };
 
@@ -161,7 +161,7 @@ export type RuntimeUpgradeDetail = {
   codeHashHex: string;
 };
 
-export type ProposalFullInfo = DuoqianTransferProposalDetails & {
+export type ProposalFullInfo = MultisigTransferProposalDetails & {
   meta: ProposalMeta;
   runtimeUpgradeDetail: RuntimeUpgradeDetail | null;
   internalTally: VoteTally | null;

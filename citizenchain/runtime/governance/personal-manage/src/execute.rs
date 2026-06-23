@@ -96,7 +96,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     ensure!(
         T::InstitutionAsset::can_spend(
             &action.account,
-            InstitutionAssetAction::DuoqianCloseExecute,
+            InstitutionAssetAction::MultisigCloseExecute,
         ),
         Error::<T>::ProtectedSource
     );

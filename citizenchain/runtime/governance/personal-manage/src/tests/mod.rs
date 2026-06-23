@@ -311,7 +311,7 @@ pub fn derive_admin_pair(creator_seed: u8, index: u8) -> (AccountId32, sr25519::
     let mut seed_bytes = [0u8; 32];
     seed_bytes[0] = creator_seed;
     seed_bytes[1] = index;
-    seed_bytes[2] = 0xAB; // 区分本测试套和 duoqian-transfer 的 seed 命名空间
+    seed_bytes[2] = 0xAB; // 区分本测试套和 multisig-transfer 的 seed 命名空间
     let pair = sr25519::Pair::from_seed(&seed_bytes);
     let account = AccountId32::new(pair.public().0);
     (account, pair)
@@ -386,7 +386,7 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
 
 /// 直接灌已激活的个人多签账户 + admins-change 管理员账户,跳过 propose/vote 链路。
 /// 用于关闭/资金边界测试,避免每个用例都重复一遍创建流程。
-pub fn seed_active_duoqian(
+pub fn seed_active_multisig(
     account: &AccountId32,
     creator: &AccountId32,
     admins: &[AccountId32],

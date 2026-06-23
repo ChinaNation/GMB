@@ -2,7 +2,7 @@
 //!
 //! 本模块不是 pallet，不含 storage 或 extrinsic。
 //! 仅提供 `InstitutionAssetAction` 枚举和 `InstitutionAsset` trait，
-//! 供 `organization-manage`、`personal-manage`、`duoqian-transfer`、`offchain-transaction` 复用。
+//! 供 `organization-manage`、`personal-manage`、`multisig-transfer`、`offchain-transaction` 复用。
 //! 实际放行/拒绝规则由 runtime 的 `RuntimeInstitutionAsset` 实现。
 //!
 //! # Safety
@@ -22,14 +22,14 @@ use scale_info::TypeInfo;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InstitutionAssetAction {
     /// 机构多签转账执行：从 `main_account` 向外部收款地址转账，并扣手续费。
-    DuoqianTransferExecute,
+    MultisigTransferExecute,
     /// 多签账户关闭执行：把 `main_account` 的余额整体转出。
-    DuoqianCloseExecute,
+    MultisigCloseExecute,
     /// 链下清算批次执行：允许普通付款账户作为批次 source。
     OffchainBatchDebit,
     /// 省储行手续费账户归集：从 `fee_account` 划回机构主账户。
     OffchainFeeSweepExecute,
-    /// 国储会安全基金转账：从 `NRC_ANQUAN_ACCOUNT` 向指定收款地址转账。
+    /// 国储会安全基金转账：从 `SAFETY_FUND_ACCOUNT` 向指定收款地址转账。
     NrcSafetyFundTransfer,
     // ========== 清算行(L2)体系动作 ==========
     /// L3 用户向清算行主账户充值。source 为 L3 自持账户。

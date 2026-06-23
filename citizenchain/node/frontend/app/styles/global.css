@@ -1535,7 +1535,7 @@ select option:checked {
 }
 
 .shenfen-id,
-.duoqian-address {
+.multisig-address {
   display: block;
   font-size: 12px;
   color: var(--text-secondary);

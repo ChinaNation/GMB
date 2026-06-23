@@ -163,7 +163,7 @@ class ChainRpc {
 
   /// 查询 runtime `frame_system::Account.nonce` 给出的账户 nonce。
   ///
-  /// 中文注释：citizenapp 不缓存、不预占、不自增 nonce；每次签名前都
+  /// 中文注释：CitizenApp 不缓存、不预占、不自增 nonce；每次签名前都
   /// 通过原生 runtime call 读取当前 nonce，并把该值交给 signed extrinsic。
   Future<int> fetchNonce(String ss58Address) async {
     // 中文注释：轻节点模式先在 Dart 侧解出 accountId，再交给原生 runtime call，避免继续依赖 legacy `system_accountNextIndex`。
@@ -921,8 +921,8 @@ class ChainRpc {
         10 => 'PermissionDenied',
         11 => 'InvalidAdminsLen',
         13 => 'InvalidOrg',
-        14 => 'DuoqianNotFound',
-        15 => 'DuoqianNotActive',
+        14 => 'MultisigNotFound',
+        15 => 'MultisigNotActive',
         16 => 'InvalidBeneficiary',
         18 => 'InstitutionNotRegistered',
         20 => 'CidAlreadyRegistered',
@@ -935,7 +935,7 @@ class ChainRpc {
         34 => 'MissingFeeAccount',
         35 => 'DuplicateAccountName',
         36 => 'InstitutionAlreadyExists',
-        37 => 'NotInstitutionDuoqian',
+        37 => 'NotInstitutionMultisig',
         38 => 'EmptyInstitutionAccounts',
         39 => 'TooManyInstitutionAccounts',
         40 => 'InitialAmountOverflow',

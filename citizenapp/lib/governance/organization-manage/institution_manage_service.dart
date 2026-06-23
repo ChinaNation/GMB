@@ -9,7 +9,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 
 import 'institution_manage_models.dart';
-import 'duoqian_storage_codec.dart';
+import 'multisig_storage_codec.dart';
 
 /// 机构多签创建时的初始账户资金条目。
 class InstitutionInitialAccountInput {
@@ -353,7 +353,7 @@ class InstitutionManageService {
     final storageKeyByAccount = <String, String>{
       for (final address in addresses)
         address:
-            '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredCidKey(address))}',
+            '0x${_hexEncode(MultisigStorageCodec.accountRegisteredCidKey(address))}',
     };
 
     final values = await _rpc.fetchStorageBatchChunked(
@@ -366,7 +366,7 @@ class InstitutionManageService {
       final data = values[entry.value];
       result[entry.key] = data == null
           ? null
-          : DuoqianStorageCodec.decodeRegisteredInstitution(data);
+          : MultisigStorageCodec.decodeRegisteredInstitution(data);
     }
     return result;
   }
@@ -398,7 +398,7 @@ class InstitutionManageService {
     final refKeyByAccount = <String, String>{};
     for (final address in addresses) {
       refKeyByAccount[address] =
-          '0x${_hexEncode(DuoqianStorageCodec.accountRegisteredCidKey(address))}';
+          '0x${_hexEncode(MultisigStorageCodec.accountRegisteredCidKey(address))}';
     }
 
     final refValues = await _rpc.fetchStorageBatchChunked(
@@ -412,7 +412,7 @@ class InstitutionManageService {
         result[address] = null;
         continue;
       }
-      final ref = DuoqianStorageCodec.decodeRegisteredInstitution(refData);
+      final ref = MultisigStorageCodec.decodeRegisteredInstitution(refData);
       if (ref == null) {
         result[address] = null;
         continue;
@@ -425,16 +425,16 @@ class InstitutionManageService {
     final accountIdByAccount = <String, Uint8List>{};
     final secondRoundKeys = <String>[];
     for (final entry in refByAddress.entries) {
-      final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
+      final accountId = MultisigStorageCodec.accountIdFromAccountHex(
         entry.key,
       );
       final accountKey =
-          '0x${_hexEncode(DuoqianStorageCodec.institutionAccountKey(
+          '0x${_hexEncode(MultisigStorageCodec.institutionAccountKey(
         entry.value.cidNumber,
         entry.value.accountName,
       ))}';
       final adminKey =
-          '0x${_hexEncode(DuoqianStorageCodec.adminAccountKey(accountId))}';
+          '0x${_hexEncode(MultisigStorageCodec.adminAccountKey(accountId))}';
       accountIdByAccount[entry.key] = accountId;
       accountKeyByAccount[entry.key] = accountKey;
       adminKeyByAccount[entry.key] = adminKey;
@@ -456,8 +456,8 @@ class InstitutionManageService {
         result[address] = null;
         continue;
       }
-      final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
-      final admin = DuoqianStorageCodec.decodeAdminAccount(adminData);
+      final account = MultisigStorageCodec.decodeInstitutionAccount(accountData);
+      final admin = MultisigStorageCodec.decodeAdminAccount(adminData);
       if (account == null || admin == null) {
         result[address] = null;
         continue;
@@ -469,7 +469,7 @@ class InstitutionManageService {
     final activeThresholdKeyByAccount = <String, String>{};
     for (final entry in adminByAccount.entries) {
       activeThresholdKeyByAccount[entry.key] =
-          '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
+          '0x${_hexEncode(MultisigStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
         institutionCode: entry.value.institutionCode,
         accountId: accountIdByAccount[entry.key]!,
@@ -483,14 +483,14 @@ class InstitutionManageService {
     final thresholdByAccount = <String, int?>{};
     final pendingThresholdKeyByAccount = <String, String>{};
     for (final entry in activeThresholdKeyByAccount.entries) {
-      final threshold = DuoqianStorageCodec.decodeDynamicThreshold(
+      final threshold = MultisigStorageCodec.decodeDynamicThreshold(
         activeThresholdValues[entry.value],
       );
       thresholdByAccount[entry.key] = threshold;
       if (threshold == null) {
         final admin = adminByAccount[entry.key]!;
         pendingThresholdKeyByAccount[entry.key] =
-            '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
+            '0x${_hexEncode(MultisigStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
           institutionCode: admin.institutionCode,
           accountId: accountIdByAccount[entry.key]!,
@@ -505,7 +505,7 @@ class InstitutionManageService {
       );
       for (final entry in pendingThresholdKeyByAccount.entries) {
         thresholdByAccount[entry.key] =
-            DuoqianStorageCodec.decodeDynamicThreshold(
+            MultisigStorageCodec.decodeDynamicThreshold(
           pendingThresholdValues[entry.value],
         );
       }
@@ -529,29 +529,29 @@ class InstitutionManageService {
   Future<InstitutionAccountInfo?> _fetchInstitutionAccount(
     String accountHex,
   ) async {
-    final refKey = DuoqianStorageCodec.accountRegisteredCidKey(
+    final refKey = MultisigStorageCodec.accountRegisteredCidKey(
       accountHex,
     );
     final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
     if (refData == null) return null;
-    final ref = DuoqianStorageCodec.decodeRegisteredInstitution(refData);
+    final ref = MultisigStorageCodec.decodeRegisteredInstitution(refData);
     if (ref == null) return null;
 
-    final accountKey = DuoqianStorageCodec.institutionAccountKey(
+    final accountKey = MultisigStorageCodec.institutionAccountKey(
       ref.cidNumber,
       ref.accountName,
     );
     final accountData = await _rpc.fetchStorage('0x${_hexEncode(accountKey)}');
     if (accountData == null) return null;
-    final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
+    final account = MultisigStorageCodec.decodeInstitutionAccount(accountData);
     if (account == null) return null;
-    final accountId = DuoqianStorageCodec.accountIdFromAccountHex(
+    final accountId = MultisigStorageCodec.accountIdFromAccountHex(
       accountHex,
     );
-    final adminKey = DuoqianStorageCodec.adminAccountKey(accountId);
+    final adminKey = MultisigStorageCodec.adminAccountKey(accountId);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
     if (adminData == null) return null;
-    final admin = DuoqianStorageCodec.decodeAdminAccount(adminData);
+    final admin = MultisigStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
     final threshold = await _fetchInstitutionDynamicThreshold(
       institutionCode: admin.institutionCode,
@@ -573,13 +573,13 @@ class InstitutionManageService {
       'ActiveDynamicThresholds',
       'PendingDynamicThresholds',
     ]) {
-      final key = DuoqianStorageCodec.dynamicThresholdKey(
+      final key = MultisigStorageCodec.dynamicThresholdKey(
         storageName: storageName,
         institutionCode: institutionCode,
         accountId: accountId,
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-      final threshold = DuoqianStorageCodec.decodeDynamicThreshold(data);
+      final threshold = MultisigStorageCodec.decodeDynamicThreshold(data);
       if (threshold != null) return threshold;
     }
     return null;
@@ -590,7 +590,7 @@ class InstitutionManageService {
   /// ProposalData 存储为 BoundedVec<u8>，SCALE：Compact<len> + [ACTION_TYPE(1B)] + action.encode()
   /// OrganizationManage ACTION_CLOSE(2): account(32B) + beneficiary(32B) + proposer(32B)
   ///
-  /// 返回 CloseDuoqianProposalInfo，解码失败返回 null。
+  /// 返回 CloseMultisigProposalInfo，解码失败返回 null。
   /// PersonalManage 提案解码在 `PersonalManageService`。
   static const _orgModuleTag = [
     0x6f,
@@ -625,7 +625,7 @@ class InstitutionManageService {
     }
   }
 
-  CloseDuoqianProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
+  CloseMultisigProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
     // account(32) + beneficiary(32) + proposer(32)
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
@@ -643,7 +643,7 @@ class InstitutionManageService {
     final proposerSs58 =
         Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
 
-    return CloseDuoqianProposalInfo(
+    return CloseMultisigProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiarySs58,

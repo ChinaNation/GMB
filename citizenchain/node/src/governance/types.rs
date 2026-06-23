@@ -79,9 +79,9 @@ pub struct InstitutionDetail {
     /// 国储会手续费账户余额（分，仅 NRC）。
     pub nrc_fee_balance_fen: Option<String>,
     /// 国储会安全基金账户 AccountId hex（仅 NRC）。
-    pub nrc_anquan_account: Option<String>,
+    pub safety_fund_account: Option<String>,
     /// 国储会安全基金账户余额（分，仅 NRC）。
-    pub nrc_anquan_balance_fen: Option<String>,
+    pub safety_fund_balance_fen: Option<String>,
     /// 告警信息。
     pub warning: Option<String>,
 }
@@ -103,7 +103,7 @@ pub struct InstitutionBalanceUpdate {
     /// 国储会费用账户链上余额（分，仅 NRC）。
     pub nrc_fee_balance_fen: Option<String>,
     /// 国储会安全基金账户链上余额（分，仅 NRC）。
-    pub nrc_anquan_balance_fen: Option<String>,
+    pub safety_fund_balance_fen: Option<String>,
     /// 链上查询告警。
     pub warning: Option<String>,
 }
