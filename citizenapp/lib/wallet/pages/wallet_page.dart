@@ -10,8 +10,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/my/user/user_service.dart'
-    show UserProfileService;
+import 'package:citizenapp/my/user/user_service.dart' show UserProfileService;
 import 'package:citizenapp/ui/widgets/bip39_input.dart';
 import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -107,11 +106,9 @@ String? extractColdWalletImportAddress(String raw) {
       return body.address.trim();
     case QrRouteType.legacyAddress:
       return result.extractedAddress?.trim();
-    case QrRouteType.loginChallenge:
     case QrRouteType.signRequest:
     case QrRouteType.signResponse:
     case QrRouteType.imNodePairing:
-    case QrRouteType.loginReceipt:
     case QrRouteType.unknown:
       if (_coldWalletPubkeyPattern.hasMatch(text)) {
         return text;

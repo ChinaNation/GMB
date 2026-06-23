@@ -1,23 +1,74 @@
-// 治理投票 QR 签名：构建 CITIZEN_QR_V1 签名请求、验证响应、提交 extrinsic。
+// 治理投票 QR 签名：构建 QR_V1 签名请求、验证响应、提交 extrinsic。
 //
 // 协议流程：
 // 1. 后端构建未签名 signing payload + QR 请求 JSON
 // 2. 前端显示 QR 码 → 用户用 citizenwallet 离线设备扫码签名
 // 3. 前端摄像头扫描响应 QR → 传回后端
-// 4. 后端验证 payload_hash → 构建 signed extrinsic → 提交到链
+// 4. 后端按本地 session 校验 request id/pubkey → 构建 signed extrinsic → 提交到链
 
 use crate::shared::rpc;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub(crate) const PROTOCOL_VERSION: &str = "CITIZEN_QR_V1";
+pub(crate) const PROTOCOL_VERSION: &str = "QR_V1";
 pub(crate) const DEFAULT_TTL_SECS: u64 = 90;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
+
+pub(crate) const QR_KIND_SIGN_REQUEST: u8 = primitives::sign::QR_KIND_SIGN_REQUEST;
+pub(crate) const QR_KIND_SIGN_RESPONSE: u8 = primitives::sign::QR_KIND_SIGN_RESPONSE;
+
+pub(crate) fn chain_action_code(call_data: &[u8]) -> Result<u16, String> {
+    if call_data.len() < 2 {
+        return Err("call_data 至少需要 pallet/call 两字节".to_string());
+    }
+    Ok(((call_data[0] as u16) << 8) | call_data[1] as u16)
+}
+
+pub(crate) fn pubkey_b64(pubkey_bytes: &[u8]) -> Result<String, String> {
+    if pubkey_bytes.len() != 32 {
+        return Err("公钥长度必须为 32 字节".to_string());
+    }
+    Ok(URL_SAFE_NO_PAD.encode(pubkey_bytes))
+}
+
+pub(crate) fn payload_b64(payload: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(payload)
+}
+
+fn b64_to_prefixed_hex(value: &str, expected_len: usize, field: &str) -> Result<String, String> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(value)
+        .map_err(|e| format!("{field} base64url 解码失败: {e}"))?;
+    if bytes.len() != expected_len {
+        return Err(format!(
+            "{field} 长度无效：期望 {expected_len} 字节，实际 {}",
+            bytes.len()
+        ));
+    }
+    Ok(format!("0x{}", hex::encode(bytes)))
+}
+
+fn deserialize_b64_pubkey<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    b64_to_prefixed_hex(&value, 32, "b.u").map_err(serde::de::Error::custom)
+}
+
+fn deserialize_b64_signature<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    b64_to_prefixed_hex(&value, 64, "b.s").map_err(serde::de::Error::custom)
+}
 
 fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
     let entry = super::registry::find_institution(cid_number)
@@ -54,50 +105,61 @@ pub(crate) fn format_amount(yuan: f64) -> String {
 
 // ──── QR 协议数据结构 ────
 
-/// 签名请求 body(节点桌面端 → 离线设备)。
-///
-/// SCALE additional_signed 的 spec_version 在 payload_hex 内部 4 字节编码,
-/// 链端验签直接拿这个,不依赖 envelope 字段。
+/// QR_V1/k=1 签名请求 body(节点桌面端 → 离线设备)。
 #[derive(Debug, Serialize)]
 pub struct SignRequestBody {
-    pub address: String,
+    /// a:链交易动作码,固定为 `(pallet_index << 8) | call_index`。
+    #[serde(rename = "a")]
+    pub action: u16,
+    /// g:签名算法,1 固定为 sr25519。
+    #[serde(rename = "g")]
+    pub sig_alg: u8,
+    /// u:签名账户 32B 公钥,base64url(no padding)。
+    #[serde(rename = "u")]
     pub pubkey: String,
-    pub sig_alg: String,
-    pub payload_hex: String,
-    pub display: serde_json::Value,
+    /// d:完整 signing payload bytes,base64url(no padding)。
+    #[serde(rename = "d")]
+    pub payload: String,
 }
 
-/// CITIZEN_QR_V1 sign_request envelope。
+/// QR_V1/k=1 sign_request envelope。
 #[derive(Debug, Serialize)]
 pub struct QrSignRequest {
+    #[serde(rename = "p")]
     pub proto: String,
-    pub kind: String,
+    #[serde(rename = "k")]
+    pub kind: u8,
+    #[serde(rename = "i")]
     pub id: String,
-    pub issued_at: u64,
+    #[serde(rename = "e")]
     pub expires_at: u64,
+    #[serde(rename = "b")]
     pub body: SignRequestBody,
 }
 
-/// 签名响应 body(离线设备 → 节点桌面端)。
+/// QR_V1/k=2 签名响应 body(离线设备 → 节点桌面端)。
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct SignResponseBody {
+    #[serde(rename = "u", deserialize_with = "deserialize_b64_pubkey")]
     pub pubkey: String,
-    pub sig_alg: String,
+    #[serde(rename = "s", deserialize_with = "deserialize_b64_signature")]
     pub signature: String,
-    pub payload_hash: String,
-    pub signed_at: u64,
 }
 
-/// CITIZEN_QR_V1 sign_response envelope。
+/// QR_V1/k=2 sign_response envelope。
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct QrSignResponse {
+    #[serde(rename = "p")]
     pub proto: String,
-    pub kind: String,
+    #[serde(rename = "k")]
+    pub kind: u8,
+    #[serde(rename = "i")]
     pub id: String,
-    pub issued_at: u64,
+    #[serde(rename = "e")]
     pub expires_at: u64,
+    #[serde(rename = "b")]
     pub body: SignResponseBody,
 }
 
@@ -181,33 +243,17 @@ pub fn build_vote_sign_request(
     // 生成请求 ID
     let request_id = generate_request_id("vote");
 
-    // SS58 编码账户地址
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    // display.fields 必须与 citizenwallet PayloadDecoder 解码结果的 key/value 完全一致。
-    // citizenwallet 解码 internal_vote 返回: proposal_id=数字字符串, approve="true"/"false"
-    let display = serde_json::json!({
-        "action": "internal_vote",
-        "summary": format!("管理员投票 提案 #{proposal_id}：{}", if approve { "赞成" } else { "反对" }),
-        "fields": [
-            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
-            { "key": "approve", "label": "投票", "value": approve.to_string() }
-        ]
-    });
-
     let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
+        kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
         body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            display,
+            action: chain_action_code(&call_data)?,
+            sig_alg: 1,
+            pubkey: pubkey_b64(&pubkey_bytes)?,
+            payload: payload_b64(&payload),
         },
     };
 
@@ -271,32 +317,18 @@ pub fn build_joint_vote_sign_request(
     );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("jvote");
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    // display.fields 必须与 citizenwallet PayloadDecoder 解码结果的 key/value 完全一致。
-    // citizenwallet 解码 joint_vote 返回: proposal_id=数字字符串, approve="true"/"false"
-    let display = serde_json::json!({
-        "action": "joint_vote",
-        "summary": format!("联合投票 提案 #{proposal_id}：{}", if approve { "赞成" } else { "反对" }),
-        "fields": [
-            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
-            { "key": "approve", "label": "投票", "value": approve.to_string() }
-        ]
-    });
 
     let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
+        kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
         body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            display,
+            action: chain_action_code(&call_data)?,
+            sig_alg: 1,
+            pubkey: pubkey_b64(&pubkey_bytes)?,
+            payload: payload_b64(&payload),
         },
     };
 
@@ -368,6 +400,12 @@ pub fn verify_and_submit(
             response.proto
         ));
     }
+    if response.kind != QR_KIND_SIGN_RESPONSE {
+        return Err(format!(
+            "二维码类型不匹配：期望 k={QR_KIND_SIGN_RESPONSE}，实际 k={}",
+            response.kind
+        ));
+    }
 
     // 验证请求 ID 匹配
     if response.id != request_id {
@@ -389,19 +427,11 @@ pub fn verify_and_submit(
         return Err("公钥不匹配".to_string());
     }
 
-    // 验证 payload hash
-    let expected_hash = expected_payload_hash
-        .strip_prefix("0x")
-        .unwrap_or(expected_payload_hash)
-        .to_ascii_lowercase();
-    let response_hash = response
-        .body
-        .payload_hash
-        .strip_prefix("0x")
-        .unwrap_or(&response.body.payload_hash)
-        .to_ascii_lowercase();
-    if response_hash != expected_hash {
-        return Err("payload hash 不匹配,签名数据可能被篡改".to_string());
+    // 中文注释：QR_V1 的 k=2 响应只包含 u/s。
+    // expected_payload_hash 只用于生成方本地 session 绑定,
+    // 防止前端把其它请求的签名响应提交到当前请求。
+    if expected_payload_hash.trim().is_empty() {
+        return Err("本地签名 session 缺少 payload hash".to_string());
     }
 
     // 提取签名
@@ -824,16 +854,13 @@ pub(crate) fn generate_request_id_public(prefix: &str) -> String {
     generate_request_id(prefix)
 }
 
-/// 通用签名请求构建：给定 call_data + display 信息，返回完整的 QR 签名请求。
+/// 通用签名请求构建：给定 call_data,返回完整的 QR_V1/k=1 签名请求。
 ///
 /// 供 transaction 模块等外部调用方使用，避免重复获取链上参数和构建 payload。
 pub fn build_sign_request_from_call_data(
     pubkey_hex: &str,
     pubkey_bytes: &[u8],
     call_data: &[u8],
-    action: &str,
-    summary: &str,
-    fields: &serde_json::Value,
 ) -> Result<VoteSignRequestResult, String> {
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -850,28 +877,19 @@ pub fn build_sign_request_from_call_data(
         tx_version,
     );
     let payload_hash = sha256_hash(&payload);
-    let request_id = generate_request_id(action);
-    let account_ss58 = pubkey_to_ss58(pubkey_bytes)?;
-
-    let display = serde_json::json!({
-        "action": action,
-        "summary": summary,
-        "fields": fields
-    });
+    let request_id = generate_request_id("chain");
 
     let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
+        kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
         body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_hex}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            display,
+            action: chain_action_code(call_data)?,
+            sig_alg: 1,
+            pubkey: pubkey_b64(pubkey_bytes)?,
+            payload: payload_b64(&payload),
         },
     };
 

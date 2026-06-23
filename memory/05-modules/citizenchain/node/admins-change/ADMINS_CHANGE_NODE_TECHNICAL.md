@@ -30,7 +30,7 @@ citizenchain/node/src/governance/admins_change/
 ├── call_data.rs        # propose_admin_set_change call data 构造
 ├── validation.rs       # 桌面端前置校验
 ├── storage.rs          # AdminsChange::AdminAccounts storage key 与 RPC 读取
-├── signing.rs          # QR 签名请求构造、回执验证、交易提交
+├── signing.rs          # QR 签名请求构造、签名响应验证、交易提交
 └── commands.rs         # Tauri 命令入口
 ```
 
@@ -42,13 +42,13 @@ Tauri 命令：
 - `deactivate_admin`：取消本地管理员激活。
 - `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `cidNumber + expectedInstitutionCode`；个人多签和机构账户必须用 `accountIdHex + expectedInstitutionCode`。
 - `build_admin_set_change_request`：校验当前管理员身份、主体 institution_code 和新管理员集合，构建公民钱包签名请求。
-- `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
+- `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包签名响应并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
 
 管理员激活 payload：
 
 ```text
-GMB_ACTIVATE_SUBJECT_V1
-+ account_id(48)
+GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
++ account_id(32)
 + institution_code([u8;4])
 + kind(u8)
 + pubkey(32)
@@ -56,7 +56,7 @@ GMB_ACTIVATE_SUBJECT_V1
 + nonce(16)
 ```
 
-激活 QR `display.action = activate_admin_account`，字段必须为 `institution_code / subject / pubkey`，并与 CitizenWallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / institutionCode / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
+激活 QR 使用 QR_V1 `a=5 activate_admin_account`，扫码端解码展示字段必须为 `institution_code / subject / pubkey`，并与 CitizenWallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-accounts.json`，只按 `accountHex / institutionCode / kind / pubkeyHex` 归档；旧文件不读取、不迁移。
 
 链上 call data：
 
@@ -88,7 +88,7 @@ citizenchain/node/frontend/governance/admins-change/
 2. `AdminSetChangePage` 读取 `AdminsChange::AdminAccounts`。
 3. 用户选择已激活管理员钱包，编辑完整的新管理员集合。
 4. 后端构建 `propose_admin_set_change` 签名请求。
-5. 前端展示 CITIZEN_QR_V1 二维码，扫码签名回执后提交。
+5. 前端展示 QR_V1 二维码，扫码签名响应后提交。
 6. 成功后返回机构详情页。
 
 主体引用：
@@ -107,7 +107,7 @@ citizenchain/node/frontend/governance/admins-change/
 - `注册机构归属关系` 只用于机构归属、检索、展示和反查，不允许作为管理员更换主体。
 - 个人多签必须使用个人多签码（`is_personal_code`，PMUL），管理员数量：`2..=64`。
 - 机构账户必须使用机构账户码（`is_institution_code`），管理员数量：`2..=1989`。
-- 管理员激活 QR `display.fields` 必须与冷钱包解码保持一致：`institution_code`、`subject`、`pubkey`。
-- 管理员更换 QR `display.fields` 必须与冷钱包解码保持一致：`institution_code`、`subject`、`admins`；`subject/admins` 使用 `0x` 小写 hex。
+- 管理员激活 QR `b.d 解码展示字段` 必须与冷钱包解码保持一致：`institution_code`、`subject`、`pubkey`。
+- 管理员更换 QR `b.d 解码展示字段` 必须与冷钱包解码保持一致：`institution_code`、`subject`、`admins`；`subject/admins` 使用 `0x` 小写 hex。
 
 链端仍是最终裁判；桌面端校验只用于提前给出明确错误。

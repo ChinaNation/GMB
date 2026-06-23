@@ -79,35 +79,6 @@ impl AdminActionType {
         }
     }
 
-    pub(crate) fn label(&self) -> &'static str {
-        match self {
-            Self::CreateCityRegistry => "新增市注册局管理员",
-            Self::UpdateCityRegistry => "编辑市注册局管理员",
-            Self::DeleteCityRegistry => "删除市注册局管理员",
-            Self::CreateFederalRegistry => "新增联邦注册局管理员",
-            Self::UpdateFederalRegistry => "编辑联邦注册局管理员",
-            Self::DeleteFederalRegistry => "删除联邦注册局管理员",
-            Self::InstitutionCreate => "创建机构",
-            Self::InstitutionUpdate => "更新机构",
-            Self::InstitutionCreateAccount => "新增机构账户",
-            Self::InstitutionDeleteAccount => "删除机构账户",
-            Self::InstitutionDeregister => "注销机构",
-            Self::InstitutionAccountDeregister => "注销机构账户",
-            Self::InstitutionUploadDocument => "上传机构文档",
-            Self::InstitutionDeleteDocument => "删除机构文档",
-            Self::PublicSecurityReconcile => "公安局机构对账",
-            Self::CitizenBindCommit => "确认电子护照绑定",
-            Self::CpmsStatusImportConfirm => "导入 CPMS 年度报告",
-            Self::CpmsIssueInstallCode => "签发 CPMS 安装码",
-            Self::CpmsRevokeInstallToken => "作废 CPMS 安装令牌",
-            Self::CpmsReissueInstallToken => "重新签发 CPMS 安装码",
-            Self::CpmsDisableKeys => "禁用 CPMS 授权",
-            Self::CpmsEnableKeys => "启用 CPMS 授权",
-            Self::CpmsRevokeKeys => "吊销 CPMS 授权",
-            Self::CpmsDeleteKeys => "删除 CPMS 授权",
-        }
-    }
-
     pub(crate) fn auth_type(&self) -> AdminOperationAuth {
         match self {
             Self::UpdateCityRegistry | Self::UpdateFederalRegistry => {

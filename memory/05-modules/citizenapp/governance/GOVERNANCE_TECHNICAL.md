@@ -386,7 +386,7 @@ message = blake2_256(SCALE.encode(payload))
 - QR call data：`[AdminsChange=12][call=0][institution_code:[u8;4]][account_id:48][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`。
 - 内置治理机构只读展示固定阈值，不展示输入框；提交管理员更换提案时 `new_threshold` 必须等于制度固定阈值。
 - 个人多签和机构账户展示动态阈值输入框，校验公式为 `threshold * 2 > admins_len && threshold <= admins_len`。
-- QR display 字段必须与 CitizenWallet 公民钱包 decoder 严格一致：`institution_code`、`subject`、`admins`、`new_threshold`，其中 `subject/admins` 均使用 `0x` 小写 hex。
+- QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与 CitizenWallet 公民钱包 decoder 严格一致：`institution_code`、`subject`、`admins`、`new_threshold`，其中 `subject/admins` 均使用 `0x` 小写 hex。
 - 提交成功后必须按 `accountIdHex` 清理 `AdminAccountService` 缓存，避免页面继续展示旧管理员集合。
 
 ### 7.2 机构详情页结构

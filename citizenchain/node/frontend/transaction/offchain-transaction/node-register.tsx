@@ -265,7 +265,7 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
               <QRCodeSVG value={signRequest.requestJson} size={280} level="L" />
             </div>
             <p className="countdown">有效时间:{countdown} 秒</p>
-            <button className="primary-button" onClick={() => setStep('scan')}>已签名,扫描回执</button>
+            <button className="primary-button" onClick={() => setStep('scan')}>已签名,扫描响应</button>
             <button className="secondary-button" onClick={() => setStep('tested')}>取消</button>
           </div>
         </div>
@@ -274,7 +274,7 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
       {step === 'scan' && (
         <div className="modal-overlay" onClick={() => setStep('qr')}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>扫描签名回执</h3>
+            <h3>扫描签名响应</h3>
             <QrScanner
               onScan={handleScan}
               onError={(e) => { setError(e); setStep('error'); }}

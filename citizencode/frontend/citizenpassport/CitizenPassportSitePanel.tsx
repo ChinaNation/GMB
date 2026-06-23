@@ -91,14 +91,17 @@ export const CitizenPassportSitePanel: React.FC<Props> = ({ auth, site, canWrite
     try {
       const signed = parseSignedReceiptPayload(raw, securityModal.actionId);
       if (signed.challenge_id !== securityModal.actionId) {
-        throw new Error('签名回执与当前请求不匹配');
+        throw new Error('签名响应与当前请求不匹配');
+      }
+      if (!signed.signer_pubkey) {
+        throw new Error('签名响应缺少 signer_pubkey');
       }
       const grant = await commitAdminAction<AdminSecurityGrantOutput>(auth, {
         action_id: securityModal.actionId,
         passkey_assertion: securityModal.passkeyAssertion,
         signer_pubkey: signed.signer_pubkey,
         signature: signed.signature,
-        payload_hash: signed.payload_hash,
+        payload_hash: securityModal.payloadHash,
       });
       securityModal.resolve(grant);
       setSecurityModal(null);
@@ -285,7 +288,7 @@ export const CitizenPassportSitePanel: React.FC<Props> = ({ auth, site, canWrite
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
         qrHint="使用管理员冷钱包扫码签名"
-        scannerHint="扫描冷钱包生成的签名回执二维码"
+        scannerHint="扫描冷钱包生成的签名响应二维码"
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}

@@ -35,7 +35,7 @@ export default function InstallPage() {
     setBindLoading(true);
     setBindScannerActive(false);
     try {
-      // CITIZEN_QR_V1 统一协议：解析 user_contact envelope，取 address（SS58）
+      // QR_V1 统一协议：解析 user_contact envelope，取 address（SS58）
       const env = parseQrEnvelope(raw);
       if (env.kind !== 'user_contact') {
         throw new Error(`需要扫描公民名片二维码（user_contact），当前为 ${env.kind}`);

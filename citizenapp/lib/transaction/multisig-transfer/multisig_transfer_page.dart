@@ -19,7 +19,7 @@ import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dar
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -258,37 +258,11 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         }
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
-        final beneficiary = _beneficiaryController.text.trim();
-        final institutionLabel = _coldWalletInstitutionLabel();
-        // 中文注释：公民钱包确认页按同一金额格式展示，确保 display 字段逐字可核对。
-        final amountFormatted = AmountFormat.format(
-                AmountFormat.tryParse(_amountController.text) ?? 0,
-                symbol: '')
-            .trim();
-        final remarkText = _remarkController.text;
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'propose_transfer',
-            summary:
-                '$institutionLabel 提案转账 $amountFormatted GMB 给 $beneficiary',
-            fields: [
-              // propose_transfer 冷钱包按机构 AccountId 展示真实支出账户;
-              // org 只是链端路由,不进入 display.fields,避免个人多签被显示成机构。
-              SignDisplayField(
-                  key: 'institution', label: '转出账户', value: institutionLabel),
-              SignDisplayField(
-                  key: 'beneficiary', label: '收款账户', value: beneficiary),
-              SignDisplayField(
-                  key: 'amount_yuan',
-                  label: '金额',
-                  value: '$amountFormatted GMB'),
-              SignDisplayField(key: 'remark', label: '备注', value: remarkText),
-            ],
-          ),
+          action: QrActions.multisigTransfer,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -302,7 +276,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexToBytes(response.body.signature));
+        return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
       }
 
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));

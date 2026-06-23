@@ -26,7 +26,7 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `admins/`：管理员页面、管理员管理、年度报告导出 API 和类型。
 - `archive/`：档案列表、创建、详情、编辑、公民资料库入口、软删除签名、档案 QR 操作 API 和类型。
 - `address/`：镇村查询 API 和类型。
-- `qr/`：CITIZEN_QR_V1 解析与浏览器扫码工具。
+- `qr/`：QR_V1 解析与浏览器扫码工具。
 - `common/`：通用 HTTP 封装、共享类型和基础布局组件；`401` 只通知认证上下文清理用户镜像，不直接改写路由。
 
 ## 3. 初始化流程
@@ -100,7 +100,7 @@ cid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `qr_sign_keys`：本机 ARCHIVE 签发密钥。
 - `admin_users`：管理员和操作员账号；不保留停用状态字段，操作员删除即物理删除。
 - `sessions`：登录会话。
-- `login_challenges`：登录挑战。
+- `sign_requests`：登录签名请求。
 - `qr_login_results`：扫码登录结果。
 - `archives`：公民档案和 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用数据库 `DATE`。
 - `archive_materials`：公民资料库元数据；文件正文由 `archive/materials.rs` 保存到本机资料目录。
@@ -127,7 +127,7 @@ cid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `POST /api/v1/install/super-admin/bind`
 
 登录：
-- `POST /api/v1/admin/auth/qr/challenge`
+- `POST /api/v1/admin/auth/qr/sign-request`
 - `POST /api/v1/admin/auth/qr/complete`
 - `GET /api/v1/admin/auth/qr/result`
 - `GET /api/v1/admin/auth/me`

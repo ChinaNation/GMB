@@ -11,7 +11,6 @@ import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
@@ -189,7 +188,7 @@ class _InstitutionMultisigCreatePageState
     );
     if (result == null || !mounted) return;
 
-    // 解析 CITIZEN_QR_V1 user_contact(多签发现走反向索引)
+    // 解析 QR_V1 k=3 user_contact(多签发现走反向索引)
     try {
       final env = QrEnvelope.parse(result.trim());
       if (env.kind == QrKind.userContact) {
@@ -409,69 +408,9 @@ class _InstitutionMultisigCreatePageState
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'create-dq-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'propose_create_institution',
-            summary: '发起创建机构多签账户提案',
-            fields: [
-              SignDisplayField(
-                  key: 'cid_number',
-                  label: 'CID ID',
-                  value: registrationInfo.cidNumber),
-              SignDisplayField(
-                  key: 'cid_full_name',
-                  label: '机构全称',
-                  value: registrationInfo.cidFullName),
-              SignDisplayField(
-                  key: 'cid_short_name',
-                  label: '机构简称',
-                  value: registrationInfo.cidShortName),
-              const SignDisplayField(
-                  key: 'org', label: '管理员组织类型', value: '其他机构账户'),
-              SignDisplayField(
-                  key: 'admins_len',
-                  label: '管理员数量',
-                  value: _admins.length.toString()),
-              SignDisplayField(
-                  key: 'threshold',
-                  label: '阈值',
-                  value: '$threshold/${_admins.length}'),
-              SignDisplayField(
-                  key: 'total_amount_yuan',
-                  label: '初始资金合计',
-                  value: _formatFenAsGmb(totalAmountFen)),
-              ...accounts.map(
-                (account) => SignDisplayField(
-                  key: 'amount_${account.accountName}',
-                  label: '${account.accountName} 初始资金',
-                  value: _formatFenAsGmb(account.amountFen),
-                ),
-              ),
-              SignDisplayField(
-                  key: 'issuer_cid_number',
-                  label: '签发机构 CID',
-                  value: registrationInfo.credential.issuerCidNumber),
-              SignDisplayField(
-                  key: 'issuer_main_account',
-                  label: '签发机构主账户',
-                  value: _hexToSs58(
-                      registrationInfo.credential.issuerMainAccount)),
-              SignDisplayField(
-                  key: 'signer_pubkey',
-                  label: '签发管理员',
-                  value: _hexToSs58(registrationInfo.credential.signerPubkey)),
-              SignDisplayField(
-                  key: 'scope_province_name',
-                  label: '作用域省',
-                  value: registrationInfo.credential.scopeProvinceName),
-              SignDisplayField(
-                  key: 'scope_city_name',
-                  label: '作用域市',
-                  value: registrationInfo.credential.scopeCityName),
-            ],
-          ),
+          action: QrActions.organizationCreate,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -485,7 +424,7 @@ class _InstitutionMultisigCreatePageState
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.body.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
       final result = await _manageService.submitProposeCreateInstitution(

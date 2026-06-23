@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 
 void main() {
@@ -10,23 +10,14 @@ void main() {
     late SignRequestEnvelope request;
     late String requestJson;
 
-    const display = SignDisplay(
-      action: 'transfer',
-      summary: '转账 1.00 GMB',
-      fields: [
-        SignDisplayField(label: '金额', value: '1.00 GMB'),
-      ],
-    );
-
     setUp(() {
       signer = QrSigner();
       request = signer.buildRequest(
         requestId: 'tx-test-12345678901234',
-        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        display: display,
+        action: QrActions.balancesTransfer,
       );
       requestJson = signer.encodeRequest(request);
     });
@@ -37,7 +28,7 @@ void main() {
           home: QrSignSessionPage(
             request: request,
             requestJson: requestJson,
-            expectedPubkey: request.body.pubkey,
+            expectedPubkey: request.body.pubkeyHex,
           ),
         ),
       );
@@ -46,7 +37,7 @@ void main() {
       expect(find.textContaining('签名请求有效期剩余'), findsOneWidget);
       expect(find.textContaining('请用离线设备扫描此二维码'), findsOneWidget);
       expect(find.text('取消'), findsOneWidget);
-      expect(find.text('扫描回执'), findsOneWidget);
+      expect(find.text('扫描响应'), findsOneWidget);
     });
 
     testWidgets('cancel should pop with null', (tester) async {
@@ -63,7 +54,7 @@ void main() {
                     builder: (_) => QrSignSessionPage(
                       request: request,
                       requestJson: requestJson,
-                      expectedPubkey: request.body.pubkey,
+                      expectedPubkey: request.body.pubkeyHex,
                     ),
                   ),
                 );
@@ -87,11 +78,10 @@ void main() {
         (tester) async {
       final expiredRequest = signer.buildRequest(
         requestId: 'tx-expired-12345678901',
-        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        display: display,
+        action: QrActions.balancesTransfer,
         nowEpochSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
       );
       final expiredJson = signer.encodeRequest(expiredRequest);
@@ -101,7 +91,7 @@ void main() {
           home: QrSignSessionPage(
             request: expiredRequest,
             requestJson: expiredJson,
-            expectedPubkey: expiredRequest.body.pubkey,
+            expectedPubkey: expiredRequest.body.pubkeyHex,
           ),
         ),
       );
@@ -109,7 +99,7 @@ void main() {
       expect(find.textContaining('签名请求已过期'), findsOneWidget);
 
       final scanButton = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '扫描回执'),
+        find.widgetWithText(FilledButton, '扫描响应'),
       );
       expect(scanButton.onPressed, isNull);
     });

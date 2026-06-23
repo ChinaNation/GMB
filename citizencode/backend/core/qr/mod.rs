@@ -1,110 +1,101 @@
-//! CITIZEN_QR_V1 统一二维码协议 envelope。
+//! QR_V1 统一二维码协议 envelope。
 //!
-//! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
-//! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
-//!
-//! 与 CitizenApp / CitizenWallet 的 Dart envelope、citizenchain/citizencode/citizenpassport 前端的 TS
-//! envelope 字段逐字节一致。本模块仅定义 CID 后端需要的 kind
-//! (login_challenge / login_receipt),其余 kind 后端不参与。
+//! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`。
+//! 本模块只保留 CID 后端需要的紧凑签名请求/响应结构。
 
 mod sign_request;
 
-pub(crate) use sign_request::{build_sign_request, display_account, display_field};
+pub(crate) use sign_request::build_sign_request;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 
-pub const CITIZEN_QR_V1: &str = "CITIZEN_QR_V1";
+pub const QR_V1: &str = "QR_V1";
 
-/// 统一 kind 枚举(snake_case 序列化)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// QR_V1 顶层 k 字段。登录也复用签名请求/响应场景。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QrKind {
-    LoginChallenge,
-    LoginReceipt,
-    SignRequest,
-    SignResponse,
-    UserContact,
-    UserTransfer,
+    SignRequest = 1,
+    SignResponse = 2,
+    UserContact = 3,
+    UserTransfer = 4,
 }
 
 impl QrKind {
-    pub fn wire(&self) -> &'static str {
-        match self {
-            Self::LoginChallenge => "login_challenge",
-            Self::LoginReceipt => "login_receipt",
-            Self::SignRequest => "sign_request",
-            Self::SignResponse => "sign_response",
-            Self::UserContact => "user_contact",
-            Self::UserTransfer => "user_transfer",
-        }
-    }
-
-    pub fn is_fixed(&self) -> bool {
-        matches!(self, Self::UserContact)
+    pub fn code(self) -> u8 {
+        self as u8
     }
 }
 
-// ---------- body ----------
+pub const ACTION_LOGIN: u16 = 1;
+pub const ACTION_CITIZEN_BIND: u16 = 2;
+pub const ACTION_CID_ADMIN: u16 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoginChallengeBody {
-    pub system: String,
-    pub sys_pubkey: String,
-    pub sys_sig: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoginReceiptBody {
-    pub system: String,
+pub struct SignRequestBody {
+    /// a:动作码。登录=1,公民绑定=2,CID 管理员动作=3。
+    #[serde(rename = "a")]
+    pub action: u16,
+    /// g:签名算法。1 固定为 sr25519。
+    #[serde(rename = "g")]
+    pub sig_alg: u8,
+    /// u:签名者/系统公钥,32B base64url(no padding)。
+    #[serde(rename = "u")]
     pub pubkey: String,
-    pub sig_alg: String,
-    pub signature: String,
-    pub payload_hash: String,
-    pub signed_at: i64,
+    /// d:待签 payload bytes 的 base64url(no padding)。
+    #[serde(rename = "d")]
+    pub payload: String,
 }
 
-// ---------- envelope ----------
+#[derive(Debug, Clone)]
+pub struct SignResponseBody {
+    /// 0x + 32B hex 公钥。parse 时由 b.u 解码得到。
+    pub pubkey: String,
+    /// 0x + 64B hex 签名。parse 时由 b.s 解码得到。
+    pub signature: String,
+}
 
-/// 通用 envelope, 按 kind 决定 body 类型。后端一般使用下面两个便利别名。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QrEnvelope<B> {
+    /// p:协议版本,固定 QR_V1。
+    #[serde(rename = "p")]
     pub proto: String,
-    pub kind: String,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    /// k:二维码场景数字码。
+    #[serde(rename = "k")]
+    pub kind: u8,
+    /// i:临时二维码一次性 id。
+    #[serde(rename = "i", skip_serializing_if = "Option::is_none", default)]
     pub id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub issued_at: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    /// e:过期秒级时间戳。
+    #[serde(rename = "e", skip_serializing_if = "Option::is_none", default)]
     pub expires_at: Option<i64>,
+    /// b:场景 body。
+    #[serde(rename = "b")]
     pub body: B,
 }
 
-pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
-pub type LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
+pub type SignRequestEnvelope = QrEnvelope<SignRequestBody>;
+pub type SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 
-impl LoginChallengeEnvelope {
-    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
+impl SignRequestEnvelope {
+    pub fn new(id: String, _issued_at: i64, expires_at: i64, body: SignRequestBody) -> Self {
         Self {
-            proto: CITIZEN_QR_V1.to_string(),
-            kind: QrKind::LoginChallenge.wire().to_string(),
+            proto: QR_V1.to_string(),
+            kind: QrKind::SignRequest.code(),
             id: Some(id),
-            issued_at: Some(issued_at),
             expires_at: Some(expires_at),
             body,
         }
     }
 }
 
-impl LoginReceiptEnvelope {
-    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginReceiptBody) -> Self {
-        Self {
-            proto: CITIZEN_QR_V1.to_string(),
-            kind: QrKind::LoginReceipt.wire().to_string(),
-            id: Some(id),
-            issued_at: Some(issued_at),
-            expires_at: Some(expires_at),
-            body,
-        }
+/// 登录签名请求 payload 固定为 `system|sys_sig` 的 UTF-8 字节。
+pub fn login_request_body(system: &str, sys_pubkey: &str, sys_sig: &str) -> SignRequestBody {
+    SignRequestBody {
+        action: ACTION_LOGIN,
+        sig_alg: 1,
+        pubkey: pubkey_hex_to_b64(sys_pubkey).unwrap_or_default(),
+        payload: URL_SAFE_NO_PAD.encode(format!("{}|{}", system, sys_sig).as_bytes()),
     }
 }
 
@@ -112,7 +103,7 @@ impl LoginReceiptEnvelope {
 ///
 /// 格式(与 Dart/TS 逐字节一致):
 /// ```text
-/// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+/// QR_V1|<k>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 /// ```
 /// `principal` 去掉 `0x` 前缀,小写。
 pub fn build_signature_message(
@@ -124,23 +115,9 @@ pub fn build_signature_message(
 ) -> String {
     let sys = system.unwrap_or("");
     let exp = expires_at.unwrap_or(0);
-    let pp = principal
-        .strip_prefix("0x")
-        .or_else(|| principal.strip_prefix("0X"))
-        .unwrap_or(principal)
-        .to_lowercase();
-    format!(
-        "{}|{}|{}|{}|{}|{}",
-        CITIZEN_QR_V1,
-        kind.wire(),
-        id,
-        sys,
-        exp,
-        pp
-    )
+    let pp = normalize_hex_no_prefix(principal);
+    format!("{}|{}|{}|{}|{}|{}", QR_V1, kind.code(), id, sys, exp, pp)
 }
-
-// ---------- parse helpers ----------
 
 #[derive(Debug)]
 pub enum QrParseError {
@@ -148,79 +125,100 @@ pub enum QrParseError {
     BadProto(String),
     BadKind(String),
     BadField(String),
-    FixedCodeHasTemporal(String),
 }
 
 impl std::fmt::Display for QrParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadJson(m) => write!(f, "QR JSON 非法: {}", m),
-            Self::BadProto(m) => write!(f, "proto 必须为 CITIZEN_QR_V1, 实际: {}", m),
-            Self::BadKind(m) => write!(f, "未知 kind: {}", m),
+            Self::BadProto(m) => write!(f, "p 必须为 QR_V1,实际: {}", m),
+            Self::BadKind(m) => write!(f, "未知 k: {}", m),
             Self::BadField(m) => write!(f, "字段错误: {}", m),
-            Self::FixedCodeHasTemporal(m) => {
-                write!(f, "固定码 {} 不应包含 id/issued_at/expires_at", m)
-            }
         }
     }
 }
 
 impl std::error::Error for QrParseError {}
 
-/// 解析 login_receipt envelope。后端收到 CitizenWallet 公民钱包的回执后使用。
-pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseError> {
+#[derive(Deserialize)]
+struct CompactResponseBody {
+    u: String,
+    s: String,
+}
+
+/// 解析 QR_V1/k=2 签名响应。后端收到签名方响应后使用。
+pub fn parse_sign_response(raw: &str) -> Result<SignResponseEnvelope, QrParseError> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| QrParseError::BadJson(e.to_string()))?;
     let obj = value
         .as_object()
         .ok_or_else(|| QrParseError::BadJson("不是对象".into()))?;
 
-    match obj.get("proto").and_then(|v| v.as_str()) {
-        Some(CITIZEN_QR_V1) => {}
+    match obj.get("p").and_then(|v| v.as_str()) {
+        Some(QR_V1) => {}
         other => return Err(QrParseError::BadProto(format!("{:?}", other))),
     }
-    match obj.get("kind").and_then(|v| v.as_str()) {
-        Some("login_receipt") => {}
+    match obj.get("k").and_then(|v| v.as_u64()) {
+        Some(2) => {}
         other => return Err(QrParseError::BadKind(format!("{:?}", other))),
     }
 
     let id = obj
-        .get("id")
+        .get("i")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| QrParseError::BadField("id 必填".into()))?
+        .ok_or_else(|| QrParseError::BadField("i 必填".into()))?
         .to_string();
-    let issued_at = obj
-        .get("issued_at")
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| QrParseError::BadField("issued_at 必填整数".into()))?;
     let expires_at = obj
-        .get("expires_at")
+        .get("e")
         .and_then(|v| v.as_i64())
-        .ok_or_else(|| QrParseError::BadField("expires_at 必填整数".into()))?;
-
+        .ok_or_else(|| QrParseError::BadField("e 必填整数".into()))?;
     let body_val = obj
-        .get("body")
-        .ok_or_else(|| QrParseError::BadField("body 必填".into()))?;
-    let body: LoginReceiptBody = serde_json::from_value(body_val.clone())
-        .map_err(|e| QrParseError::BadField(format!("body: {}", e)))?;
-    if body.sig_alg != "sr25519" {
-        return Err(QrParseError::BadField(
-            "login_receipt.sig_alg 必须为 sr25519".into(),
-        ));
+        .get("b")
+        .ok_or_else(|| QrParseError::BadField("b 必填".into()))?;
+    let body: CompactResponseBody = serde_json::from_value(body_val.clone())
+        .map_err(|e| QrParseError::BadField(format!("b: {}", e)))?;
+    let pubkey = b64_to_prefixed_hex(&body.u, 32, "b.u")?;
+    let signature = b64_to_prefixed_hex(&body.s, 64, "b.s")?;
+
+    Ok(SignResponseEnvelope {
+        proto: QR_V1.to_string(),
+        kind: QrKind::SignResponse.code(),
+        id: Some(id),
+        expires_at: Some(expires_at),
+        body: SignResponseBody { pubkey, signature },
+    })
+}
+
+pub(crate) fn pubkey_hex_to_b64(value: &str) -> Option<String> {
+    let cleaned = normalize_hex_no_prefix(value);
+    let bytes = hex::decode(cleaned).ok()?;
+    if bytes.len() != 32 {
+        return None;
     }
-    if body.system != "cid" && body.system != "cpms" {
+    Some(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+pub(crate) fn bytes_to_b64(bytes: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn b64_to_prefixed_hex(value: &str, len: usize, field: &str) -> Result<String, QrParseError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(value)
+        .map_err(|_| QrParseError::BadField(format!("{} 必须为 base64url", field)))?;
+    if bytes.len() != len {
         return Err(QrParseError::BadField(format!(
-            "login_receipt.system 非法: {}",
-            body.system
+            "{} 长度必须为 {} 字节",
+            field, len
         )));
     }
+    Ok(format!("0x{}", hex::encode(bytes)))
+}
 
-    Ok(LoginReceiptEnvelope {
-        proto: CITIZEN_QR_V1.to_string(),
-        kind: "login_receipt".to_string(),
-        id: Some(id),
-        issued_at: Some(issued_at),
-        expires_at: Some(expires_at),
-        body,
-    })
+fn normalize_hex_no_prefix(value: &str) -> String {
+    value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value)
+        .to_lowercase()
 }

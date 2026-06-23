@@ -11,8 +11,8 @@ use std::{
 use tauri::AppHandle;
 
 const COMMUNICATION_NODE_FILE_NAME: &str = "communication-node.json";
-const IM_NODE_PAIRING_QR_PROTO: &str = "CITIZEN_QR_V1";
-const IM_NODE_PAIRING_KIND: &str = "im_node_pairing";
+const IM_NODE_PAIRING_QR_PROTO: &str = "QR_V1";
+const IM_NODE_PAIRING_KIND: u8 = 5;
 // QR body 协议版本串单一真源 = primitives::sign::IM_NODE_PAIRING_PROTO。
 const IM_NODE_PAIRING_BODY_PROTO: &str = IM_NODE_PAIRING_PROTO;
 const IM_P2P_PORT: u16 = 30333;
@@ -100,9 +100,9 @@ fn build_pairing_payload(
     endpoint: &CommunicationNodeEndpoint,
 ) -> Result<String, String> {
     let payload = json!({
-        "proto": IM_NODE_PAIRING_QR_PROTO,
-        "kind": IM_NODE_PAIRING_KIND,
-        "body": {
+        "p": IM_NODE_PAIRING_QR_PROTO,
+        "k": IM_NODE_PAIRING_KIND,
+        "b": {
             "proto": IM_NODE_PAIRING_BODY_PROTO,
             "node_peer_id": peer_id,
             "node_multiaddr": endpoint.multiaddr,
@@ -188,14 +188,13 @@ mod tests {
         let raw = build_pairing_payload("12D3KooWTest", &endpoint).expect("payload should encode");
         let value: Value = serde_json::from_str(&raw).expect("payload is JSON");
 
-        assert_eq!(value["proto"], "CITIZEN_QR_V1");
-        assert_eq!(value["kind"], "im_node_pairing");
-        assert!(value.get("id").is_none());
-        assert!(value.get("issued_at").is_none());
-        assert!(value.get("expires_at").is_none());
-        assert_eq!(value["body"]["proto"], "GMB_IM_NODE_PAIRING_V1");
-        assert_eq!(value["body"]["node_peer_id"], "12D3KooWTest");
-        assert_eq!(value["body"]["endpoint_kind"], "ip4");
-        assert!(value["body"].get("rpc_url").is_none());
+        assert_eq!(value["p"], "QR_V1");
+        assert_eq!(value["k"], 5);
+        assert!(value.get("i").is_none());
+        assert!(value.get("e").is_none());
+        assert_eq!(value["b"]["proto"], "GMB_IM_NODE_PAIRING_V1");
+        assert_eq!(value["b"]["node_peer_id"], "12D3KooWTest");
+        assert_eq!(value["b"]["endpoint_kind"], "ip4");
+        assert!(value["b"].get("rpc_url").is_none());
     }
 }

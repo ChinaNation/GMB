@@ -1,10 +1,8 @@
-use serde_json::json;
-
 use crate::governance::signing::{self as gov_signing, VoteSignRequestResult, VoteSubmitResult};
 
 use super::account_id;
 use super::call_data::build_admin_set_change_call_data;
-use super::types::{qr_institution_code_display_value, AdminAccountState};
+use super::types::AdminAccountState;
 use super::validation::validate_admin_set_change;
 
 pub fn build_admin_set_change_sign_request(
@@ -18,44 +16,7 @@ pub fn build_admin_set_change_sign_request(
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
     let call_data =
         build_admin_set_change_call_data(&state.institution_code, &account_id, &normalized)?;
-    let summary = format!(
-        "{} 管理员更换：{} 人 -> {} 人",
-        state.kind_label,
-        state.admins.len(),
-        normalized.len()
-    );
-    // display.fields 必须和 citizenwallet PayloadDecoder 对 propose_admin_set_change
-    // 解出的字段逐项一致：institution_code / account / admins。
-    let fields = json!([
-        {
-            "key": "institution_code",
-            "label": "机构码",
-            "value": qr_institution_code_display_value(&state.institution_code),
-        },
-        {
-            "key": "account",
-            "label": "管理员账户",
-            "value": format!("0x{}", state.account_hex),
-        },
-        {
-            "key": "admins",
-            "label": "新管理员",
-            "value": normalized
-                .iter()
-                .map(|admin| format!("0x{admin}"))
-                .collect::<Vec<_>>()
-                .join(","),
-        }
-    ]);
-
-    gov_signing::build_sign_request_from_call_data(
-        &pubkey_clean,
-        &pubkey_bytes,
-        &call_data,
-        "propose_admin_set_change",
-        &summary,
-        &fields,
-    )
+    gov_signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
 
 pub fn submit_admin_set_change(

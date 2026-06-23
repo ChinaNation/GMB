@@ -188,6 +188,7 @@ pub(crate) async fn citizen_bind_challenge(
         &wallet_pubkey,
         now,
     );
+    let payload_hash = payload_hash_for_text(&challenge_text);
     let expire_at = now + chrono::Duration::seconds(BIND_CHALLENGE_TTL_SECONDS);
     let sign_request_str = build_citizen_bind_sign_request(
         &challenge_id,
@@ -253,6 +254,7 @@ pub(crate) async fn citizen_bind_challenge(
             valid_until: verified.valid_until,
             status_updated_at: verified.status_updated_at,
             sign_request: sign_request_str,
+            payload_hash,
             expire_at: expire_at.timestamp(),
         },
     })
@@ -763,53 +765,26 @@ fn build_challenge_text(
 
 fn build_citizen_bind_sign_request(
     challenge_id: &str,
-    issued_at: DateTime<Utc>,
+    _issued_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     challenge_text: &str,
-    wallet_address: &str,
+    _wallet_address: &str,
     wallet_pubkey: &str,
-    archive_no: &str,
-    citizen_status: &CitizenStatus,
-    voting_eligible: bool,
-    mode: &str,
+    _archive_no: &str,
+    _citizen_status: &CitizenStatus,
+    _voting_eligible: bool,
+    _mode: &str,
 ) -> String {
-    let citizen_status_text = match citizen_status {
-        CitizenStatus::Normal => "正常",
-        CitizenStatus::Revoked => "注销",
-    };
-    let voting_eligible_text = if voting_eligible { "有" } else { "无" };
-    let mode_label = if mode == "replace" {
-        "更换绑定"
-    } else {
-        "新增公民"
-    };
-    let summary = if mode == "replace" {
-        "确认更换绑定"
-    } else {
-        "确认新增公民"
-    };
     let sign_request = serde_json::json!({
-        "proto": crate::core::qr::CITIZEN_QR_V1,
-        "kind": "sign_request",
-        "id": challenge_id,
-        "issued_at": issued_at.timestamp(),
-        "expires_at": expires_at.timestamp(),
-        "body": {
-            "address": wallet_address,
-            "pubkey": wallet_pubkey,
-            "sig_alg": "sr25519",
-            "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
-            "display": {
-                "action": "citizen_bind",
-                "summary": summary,
-                "fields": [
-                    { "key": "mode", "label": "操作", "value": mode_label },
-                    { "key": "archive_no", "label": "档案号", "value": archive_no },
-                    { "key": "voting_eligible", "label": "选举权利", "value": voting_eligible_text },
-                    { "key": "citizen_status", "label": "公民状态", "value": citizen_status_text },
-                    { "key": "wallet_address", "label": "投票账户", "value": wallet_address }
-                ]
-            }
+        "p": crate::core::qr::QR_V1,
+        "k": 1,
+        "i": challenge_id,
+        "e": expires_at.timestamp(),
+        "b": {
+            "a": crate::core::qr::ACTION_CITIZEN_BIND,
+            "g": 1,
+            "u": crate::core::qr::pubkey_hex_to_b64(wallet_pubkey).unwrap_or_default(),
+            "d": crate::core::qr::bytes_to_b64(challenge_text.as_bytes()),
         }
     });
     serde_json::to_string(&sign_request).unwrap_or_default()
@@ -1139,13 +1114,18 @@ mod tests {
     fn citizen_bind_sign_request_includes_locked_wallet() {
         let issued_at = Utc.timestamp_opt(1_000, 0).single().unwrap();
         let expires_at = Utc.timestamp_opt(1_300, 0).single().unwrap();
+        let wallet_pubkey = format!("0x{}", "11".repeat(32));
         let raw = build_citizen_bind_sign_request(
             "challenge-1",
             issued_at,
             expires_at,
-            "cid-citizen-bind-v1|challenge-1|create|ARCHIVE-1|NORMAL|true|2026-05-24|2036-05-23|1000|0xabc|1000",
+            format!(
+                "cid-citizen-bind-v1|challenge-1|create|ARCHIVE-1|NORMAL|true|2026-05-24|2036-05-23|1000|{}|1000",
+                wallet_pubkey
+            )
+            .as_str(),
             "addr2027",
-            "0xabc",
+            wallet_pubkey.as_str(),
             "ARCHIVE-1",
             &CitizenStatus::Normal,
             true,
@@ -1153,10 +1133,12 @@ mod tests {
         );
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
 
-        assert_eq!(value["kind"], "sign_request");
-        assert_eq!(value["id"], "challenge-1");
-        assert_eq!(value["body"]["address"], "addr2027");
-        assert_eq!(value["body"]["pubkey"], "0xabc");
-        assert_eq!(value["body"]["display"]["fields"][4]["value"], "addr2027");
+        assert_eq!(value["p"], "QR_V1");
+        assert_eq!(value["k"], 1);
+        assert_eq!(value["i"], "challenge-1");
+        assert_eq!(value["b"]["a"], crate::core::qr::ACTION_CITIZEN_BIND);
+        assert_eq!(value["b"]["g"], 1);
+        assert!(value["b"]["u"].as_str().unwrap_or_default().len() > 20);
+        assert!(value["b"]["d"].as_str().unwrap_or_default().len() > 20);
     }
 }

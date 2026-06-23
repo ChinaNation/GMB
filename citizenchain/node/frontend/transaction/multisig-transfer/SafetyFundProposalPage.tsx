@@ -218,13 +218,13 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
             <QRCodeSVG value={requestJson} size={280} level="L" />
           </div>
           <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
-          <button className="vote-signing-confirm" onClick={() => setStep('scan')}>已签名，扫描回执</button>
+          <button className="vote-signing-confirm" onClick={() => setStep('scan')}>已签名，扫描响应</button>
         </div>
       )}
 
       {step === 'scan' && (
         <div className="vote-signing-body">
-          <p className="qr-instruction">将签名回执二维码对准摄像头</p>
+          <p className="qr-instruction">将签名响应二维码对准摄像头</p>
           <QrScanner onScan={handleScanResult} onError={(e) => { setError(e); setStep('error'); }} />
           <button className="cancel-button" onClick={() => setStep('qr')}>返回</button>
         </div>

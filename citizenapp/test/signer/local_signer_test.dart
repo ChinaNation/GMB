@@ -21,7 +21,7 @@ void main() {
       );
       final result = await signer.signUtf8(
         walletSecret: secret,
-        message: 'CITIZEN_QR_V1|login_receipt|ch_01|cpms|1090|aabb',
+        message: 'QR_V1|2|ch_01|cpms|1090|aabb',
       );
 
       expect(result.account, secret.profile.address);

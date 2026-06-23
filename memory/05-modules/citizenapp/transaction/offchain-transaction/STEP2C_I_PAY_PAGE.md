@@ -7,7 +7,7 @@
   `offchain_submitPayment` RPC、清算行目录查询、绑定缓存与跨行收款方主导支付。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2B_IV_A_CLEANUP.md`(老节点代码 + CitizenApp 老入口下架)
-- **后续**:`STEP2C_II_A_RECEIVE_QR.md`(收款码与 CITIZEN_QR_V1 协议完整化)
+- **后续**:`STEP2C_II_A_RECEIVE_QR.md`(收款码与 QR_V1 协议完整化)
 
 ---
 
@@ -176,7 +176,7 @@ No issues found!  (全项目)
 
 ## 7. 不做(留后续)
 
-- **Step 2c-ii**:`receive_qr_page` 实时余额推送 + CITIZEN_QR_V1 协议规范化(统一
+- **Step 2c-ii**:`receive_qr_page` 实时余额推送 + QR_V1 协议规范化(统一
   商户码格式)
 - **冷钱包支付**:必须先改为可独立验证的 PaymentIntent 原文签名协议，再接入 QR 签名
 - **提交成功后本地历史记录**:暂不写入本地 `LocalTxStore`(老路径用,新清算行

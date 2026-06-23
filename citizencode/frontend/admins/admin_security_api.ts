@@ -31,8 +31,6 @@ export type AdminActionType =
 export type AdminOperationAuth = 'LOGIN_STATE' | 'PASSKEY' | 'PASSKEY_CHALLENGE';
 export type RegistryOrgCodeTarget = 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
 
-export type SignDisplayField = { key?: string; label: string; value: string };
-
 export type PasskeyStartOutput = {
   registration_id: string;
   request_id: string;

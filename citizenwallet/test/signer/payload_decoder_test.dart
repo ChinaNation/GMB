@@ -258,7 +258,7 @@ void main() {
       final target = '0x${List.filled(32, '22').join()}';
       final payload = jsonEncode({
         'domain': 'cid_admin_governance',
-        'qr_proto': 'CITIZEN_QR_V1',
+        'qr_proto': 'QR_V1',
         'action_id': 'admin-action-test',
         'action_type': 'PASSKEY_REGISTER',
         'actor_pubkey': actor,
@@ -293,7 +293,7 @@ void main() {
       for (final entry in cases.entries) {
         final payload = jsonEncode({
           'domain': 'cid_admin_governance',
-          'qr_proto': 'CITIZEN_QR_V1',
+          'qr_proto': 'QR_V1',
           'action_id': 'admin-action-${entry.key}',
           'action_type': entry.key,
           'actor_pubkey': actor,
@@ -392,7 +392,7 @@ void main() {
         idBytes[i] = rawId[i];
       }
       final payload = Uint8List.fromList([
-        // ADR-026 Phase 2 二进制前缀 GMB || 0x19(取代旧 14B "GMB_DECRYPT_V1")。
+        // ADR-026 Phase 2 二进制前缀 GMB || 0x19。
         0x47, 0x4D, 0x42, 0x19,
         ...idBytes,
         ...List<int>.filled(32, 0xAA),
@@ -708,7 +708,7 @@ void main() {
       final account = List<int>.generate(32, (i) => 0x20 + i);
       final pubkey = List<int>.filled(32, 0xaa);
       final payload = Uint8List.fromList([
-        // ADR-026 Phase 2 二进制前缀 GMB || 0x18(取代旧 21B "GMB_ACTIVATE_ADMIN_V1")。
+        // ADR-026 Phase 2 二进制前缀 GMB || 0x18。
         0x47, 0x4D, 0x42, 0x18,
         ...account,
         ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
@@ -818,6 +818,16 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_institution');
       expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
+    });
+
+    test('rejects legacy organization close payload without credential', () {
+      final payload = Uint8List.fromList([
+        0x11, 0x01, // OrganizationManage.propose_close
+        ...List<int>.filled(32, 0x11),
+        ...List<int>.filled(32, 0x22),
+      ]);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNull);
     });
 
     test('decodes personal close action as propose_close_personal', () {
@@ -1287,7 +1297,8 @@ void main() {
     final vectors = (root['vectors'] as List).cast<Map<String, dynamic>>();
     final byName = {for (final v in vectors) v['name'] as String: v};
 
-    test('ACTIVATE_ADMIN fixture payload → decode 解出 activate_admin_account', () {
+    test('ACTIVATE_ADMIN fixture payload → decode 解出 activate_admin_account',
+        () {
       final v = byName['ACTIVATE_ADMIN']!;
       final decoded = PayloadDecoder.decode('0x${v['payload_hex']}');
       expect(decoded, isNotNull);

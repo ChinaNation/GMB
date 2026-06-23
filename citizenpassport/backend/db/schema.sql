@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
 
-CREATE TABLE IF NOT EXISTS login_challenges (
+CREATE TABLE IF NOT EXISTS login_sign_requests (
   challenge_id TEXT PRIMARY KEY,
   admin_account TEXT NOT NULL,
   session_id TEXT NOT NULL,
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS login_challenges (
   created_at BIGINT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_login_challenges_expire_at ON login_challenges (expire_at);
+CREATE INDEX IF NOT EXISTS idx_login_sign_requests_expire_at ON login_sign_requests (expire_at);
 
 CREATE TABLE IF NOT EXISTS qr_login_results (
   challenge_id TEXT PRIMARY KEY,

@@ -21,7 +21,7 @@ impl StoreDb {
             .bind(now_ts)
             .execute(&self.pool)
             .await;
-        let _ = sqlx::query("DELETE FROM login_challenges WHERE expire_at < $1")
+        let _ = sqlx::query("DELETE FROM login_sign_requests WHERE expire_at < $1")
             .bind(now_ts)
             .execute(&self.pool)
             .await;

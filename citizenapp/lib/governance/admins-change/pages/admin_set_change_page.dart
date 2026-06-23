@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/pages/admin_set_change_confirm_page.dart';
-import 'package:citizenapp/governance/admins-change/admin_set_change_qr_adapter.dart';
 import 'package:citizenapp/governance/admins-change/services/admin_set_change_service.dart';
 import 'package:citizenapp/governance/admins-change/services/admin_set_validation.dart';
 import 'package:citizenapp/governance/admins-change/services/admin_account_service.dart';
@@ -14,6 +13,7 @@ import 'package:citizenapp/governance/admins-change/widgets/admin_set_editor.dar
 import 'package:citizenapp/governance/admins-change/widgets/admin_account_card.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -145,7 +145,8 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   }
 
   Widget _buildThresholdCard(AdminAccountState account) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
+    final fixed =
+        AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
     if (account.kind == 0 && fixed != null) {
       return Card(
         elevation: 0,
@@ -180,9 +181,8 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             labelText: '通过阈值',
-            helperText: _admins.isEmpty
-                ? '请先添加管理员'
-                : '范围：$min ~ ${_admins.length}',
+            helperText:
+                _admins.isEmpty ? '请先添加管理员' : '范围：$min ~ ${_admins.length}',
           ),
         ),
       ),
@@ -190,7 +190,8 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   }
 
   void _syncThresholdInput(AdminAccountState account, int adminsLen) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
+    final fixed =
+        AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
     if (account.kind == 0 && fixed != null) {
       _thresholdController.text = fixed.toString();
       return;
@@ -207,7 +208,8 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   }
 
   int _readNewThreshold(AdminAccountState account) {
-    final fixed = AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
+    final fixed =
+        AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
     if (account.kind == 0 && fixed != null) return fixed;
     final value = int.tryParse(_thresholdController.text.trim());
     if (value == null) throw StateError('请输入有效阈值');
@@ -243,14 +245,9 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'admin-change-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${AdminAccountIdCodec.hexEncode(payload)}',
-          display: AdminSetChangeQrAdapter.buildDisplay(
-            account: account,
-            admins: validated.admins,
-            newThreshold: validated.threshold,
-          ),
+          action: QrActions.adminsChange,
         );
         final response = await Navigator.of(context).push(
           MaterialPageRoute(
@@ -262,7 +259,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return AdminAccountIdCodec.hexDecode(response.body.signature);
+        return AdminAccountIdCodec.hexDecode(response.body.signatureHex);
       }
 
       final result = await _changeService.submit(

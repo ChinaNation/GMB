@@ -4,7 +4,7 @@
 CPMS（Citizen Passport Management System）是市公安局使用的公民档案管理系统，后端使用 Rust/Axum，前端使用 React/Vite，数据使用 PostgreSQL 持久化。
 
 当前实现基线：
-- 管理员只允许使用 `CITIZEN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；管理员 15 分钟无活动过期，操作员 30 分钟无活动过期。
+- 管理员只允许使用 `QR_V1 / sign_request` 扫码登录，登录态写入 HttpOnly Cookie；管理员 15 分钟无活动过期，操作员 30 分钟无活动过期。
 - 角色访问控制：`admins / operators`。
 - 消费 CID 签发的 `CID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
@@ -58,7 +58,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | admins | `frontend/admins/` | 管理员系统设置、管理员管理、年度报告导出 |
 | archive | `frontend/archive/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇和地址段查询 API 和类型 |
-| qr | `frontend/qr/` | CITIZEN_QR_V1 解析和浏览器扫码工具 |
+| qr | `frontend/qr/` | QR_V1 解析和浏览器扫码工具 |
 | components | `frontend/components/` | 通用展示与输入组件，日期输入统一使用 `DateInput` |
 | common | `frontend/common/` | HTTP 封装、共享类型和通用组件 |
 
@@ -69,7 +69,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - `POST /api/v1/install/admins/bind`
 
 认证：
-- `POST /api/v1/admin/auth/qr/challenge`
+- `POST /api/v1/admin/auth/qr/sign-request`
 - `POST /api/v1/admin/auth/qr/complete`
 - `GET /api/v1/admin/auth/qr/result`
 - `GET /api/v1/admin/auth/me`
@@ -111,7 +111,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `qr_sign_keys` | ARCHIVE 签发密钥 |
 | `admin_users` | 管理员；不保留停用状态字段，初始管理员不可删除，其他管理员删除即物理删除 |
 | `sessions` | HttpOnly Cookie 对应的本机会话 |
-| `login_challenges` | 扫码登录挑战 |
+| `sign_requests` | 扫码登录签名请求 |
 | `qr_login_results` | 扫码登录结果 |
 | `archives` | 公民档案、护照号、投票账户与 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用 `DATE` |
 | `archive_stats` | 档案列表总量统计；创建和注销软删除同事务维护，列表页不得实时 `COUNT(*)` |
@@ -265,7 +265,7 @@ CPMS 只有两种管理员:
 
 ## 9.1 档案软删除
 
-公民档案删除不是物理删除。详情页点击“删除”后，CPMS 后端创建 `CITIZEN_QR_V1 / sign_request`
+公民档案删除不是物理删除。详情页点击“删除”后，CPMS 后端创建 `QR_V1 / sign_request`
 删除签名请求，当前登录管理员必须使用 **CitizenWallet** 扫码签名。前端扫描 `sign_response` 后提交
 `delete/complete`。删除签名二维码中的 `body.address / body.pubkey` 锁定当前登录 CPMS 管理员，
 其中 `body.pubkey` 和 payload 内的 `admin_account` 必须统一为 `0x` + 64 位小写 hex；CPMS 管理员表
@@ -280,11 +280,11 @@ CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_account|expir
 ```
 
 前端删除弹窗采用与登录页一致的“双栏扫码”布局：左侧展示删除签名请求二维码，右侧扫描 CitizenWallet
-返回的删除签名回执。后端校验:
+返回的删除签名响应。后端校验:
 
 - challenge 未过期、未消费，且绑定当前档案和当前登录管理员。
 - `sign_response.pubkey` 等于当前登录管理员 `admin_account`。
-- `payload_hash` 等于删除 payload 的 SHA-256。
+- 签名响应只携带 `u/s`;后端按本地删除签名请求找回 payload 后验签。
 - sr25519 签名验证通过。
 
 通过后 `archives.status` 更新为 `DELETED`，并记录 `deleted_at / deleted_by / delete_reason`。

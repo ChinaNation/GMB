@@ -7,10 +7,8 @@
 
 use primitives::institution_code::{is_institution_code, InstitutionCode};
 
-use crate::governance::admins_change::types::qr_institution_code_display_value;
 use crate::governance::signing::{
-    build_sign_request_from_call_data, encode_compact_u32_pub, pubkey_to_ss58,
-    VoteSignRequestResult,
+    build_sign_request_from_call_data, encode_compact_u32_pub, VoteSignRequestResult,
 };
 
 const ORGANIZATION_MANAGE_PALLET_INDEX: u8 = 17;
@@ -212,66 +210,5 @@ pub fn build_propose_create_institution_sign_request(
         scope_province_name,
         scope_city_name,
     )?;
-    let total_amount_fen: u128 = accounts.iter().map(|a| a.amount_fen).sum();
-    let summary = format!("创建清算行机构多签 {cid_full_name}({cid_number})");
-    let mut fields = vec![
-        serde_json::json!({ "key": "cid_number", "label": "机构身份号码", "value": cid_number }),
-        serde_json::json!({ "key": "cid_full_name", "label": "机构名称", "value": cid_full_name }),
-        serde_json::json!({ "key": "institution_code", "label": "管理员机构码", "value": qr_institution_code_display_value(institution_code) }),
-        serde_json::json!({ "key": "admins_len", "label": "管理员数量", "value": admins_len.to_string() }),
-        serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admins_len}") }),
-        serde_json::json!({
-            "key": "total_amount_yuan",
-            "label": "初始资金合计",
-            "value": format!("{}.{:02} GMB", total_amount_fen / 100, (total_amount_fen % 100) as u8),
-        }),
-    ];
-    for acc in accounts {
-        fields.push(serde_json::json!({
-            "key": format!("amount_{}", acc.account_name),
-            "label": format!("{} 初始资金", acc.account_name),
-            "value": format!(
-                "{}.{:02} GMB",
-                acc.amount_fen / 100,
-                (acc.amount_fen % 100) as u8
-            ),
-        }));
-    }
-    let signer_pubkey_bytes = parse_account32(signer_pubkey)?;
-    let signer_pubkey_display = pubkey_to_ss58(&signer_pubkey_bytes)?;
-    let issuer_main_account_bytes = parse_account32(issuer_main_account)?;
-    let issuer_main_account_display = pubkey_to_ss58(&issuer_main_account_bytes)?;
-    fields.push(serde_json::json!({
-        "key": "issuer_cid_number",
-        "label": "签发机构 CID",
-        "value": issuer_cid_number,
-    }));
-    fields.push(serde_json::json!({
-        "key": "issuer_main_account",
-        "label": "签发机构主账户",
-        "value": issuer_main_account_display,
-    }));
-    fields.push(serde_json::json!({
-        "key": "signer_pubkey",
-        "label": "签发管理员",
-        "value": signer_pubkey_display,
-    }));
-    fields.push(serde_json::json!({
-        "key": "scope_province_name",
-        "label": "作用域省",
-        "value": scope_province_name,
-    }));
-    fields.push(serde_json::json!({
-        "key": "scope_city_name",
-        "label": "作用域市",
-        "value": scope_city_name,
-    }));
-    build_sign_request_from_call_data(
-        &clean,
-        &bytes,
-        &call_data,
-        "propose_create_institution",
-        &summary,
-        &serde_json::Value::Array(fields),
-    )
+    build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }

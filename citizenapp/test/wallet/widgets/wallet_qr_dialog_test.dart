@@ -42,7 +42,7 @@ void main() {
               onPressed: () => WalletQrDialog.show(
                 context,
                 wallet: wallet,
-                name: '我的钱包',
+                walletName: '我的钱包',
               ),
               child: const Text('open'),
             ),
@@ -103,7 +103,7 @@ void main() {
     expect(find.byType(QrImageView), findsOneWidget);
   });
 
-  test('user_contact envelope raw json contains CITIZEN_QR_V1 and kind', () {
+  test('user_contact envelope raw json contains QR_V1 and numeric kind', () {
     final raw = QrEnvelope<UserContactBody>(
       kind: QrKind.userContact,
       id: null,
@@ -112,9 +112,9 @@ void main() {
       body: UserContactBody(address: wallet.address, contactName: '我的钱包'),
     ).toRawJson();
     expect(raw.contains(QrProtocols.v1), isTrue,
-        reason: 'payload should include CITIZEN_QR_V1 proto');
-    expect(raw.contains('user_contact'), isTrue,
-        reason: 'payload should include kind user_contact');
+        reason: 'payload should include QR_V1 protocol');
+    expect(raw.contains('"k":${QrKind.userContact.code}'), isTrue,
+        reason: 'payload should include numeric k=3');
     expect(raw.contains(wallet.address), isTrue);
   });
 }

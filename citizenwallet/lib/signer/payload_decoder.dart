@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
@@ -11,8 +10,8 @@ import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
 ///
-/// 离线设备用此结果向用户展示交易详情，
-/// 并与 sign_request 中的 display 字段交叉比对。
+/// 离线设备用此结果向用户展示交易详情，并把解出的动作与
+/// QR_V1 `b.a` 数字动作码交叉比对。
 class DecodedPayload {
   const DecodedPayload({
     required this.action,
@@ -21,19 +20,19 @@ class DecodedPayload {
     Map<String, String>? reviewFields,
   }) : reviewFields = reviewFields ?? fields;
 
-  /// 动作标识，与 display.action 一致。
+  /// 动作标识，供本地动作码表映射和确认页展示使用。
   final String action;
 
   /// 一句话摘要。
   final String summary;
 
-  /// 结构化字段，用于与 display.fields 逐一比对。
+  /// 结构化机器字段，用于从 payload 独立验真。
   final Map<String, String> fields;
 
   /// 用户确认页展示字段。
   ///
   /// 中文注释：`fields` 保留独立验真的机器字段，`reviewFields` 只放人能判断的
-  /// 中文业务信息和 SS58 地址，避免把 payload_hash、内部 ID、原始公钥 hex 暴露为确认内容。
+  /// 中文业务信息和 SS58 地址，避免把内部 ID、原始公钥 hex 暴露为确认内容。
   final Map<String, String> reviewFields;
 }
 
@@ -99,10 +98,9 @@ class PayloadDecoder {
   static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
     'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
   );
-  // 'cid_admin_governance' 是 **QR 动作类型 tag**(JSON
+  // 'cid_admin_governance' 是 CID 管理员 payload 的业务域(JSON
   // envelope 的 domain 字段值),不是 signing_message 的哈希签名域 —— 整段 JSON
-  // 字节由 sr25519 直接签名,payload_hash 仅为 sha256 展示指纹。故不并入
-  // op_tag 注册表。
+  // 字节由 sr25519 直接签名,故不并入 op_tag 注册表。
   static const String _cidAdminActionDomain = 'cid_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {
@@ -133,7 +131,7 @@ class PayloadDecoder {
 
     // 防误签由 strict 两色模式独家把关:
     // - decoder 解析失败(任何分支不匹配返回 null) → decodeFailed → 禁止签名
-    // - 解析成功但 display.action != decoded.action → mismatched → 禁止签名
+    // - 解析成功但 QR 动作码与 decoded.action 不一致 → mismatched → 禁止签名
     // 不按 spec_version 锁布局,合法新 spec 可直接解码,布局变了 strict 模式自动拦截。
     try {
       final bytes = _hexToBytes(payloadHex);
@@ -202,8 +200,8 @@ class PayloadDecoder {
       // 路由分支删除:propose_runtime_upgrade / developer_direct_upgrade 的
       // call_data 含完整 WASM(600KB+),物理上塞不进 QR。server 在 QR 里只放
       // blake2_256(payload) = 32 字节哈希,decoder 拿不到 call_data,无法
-      // SCALE 解析。改走 OfflineSignService.verifyPayload 的"哈希直签例外"
-      // 路径:用户在冷钱包屏幕上肉眼核对 display.fields.wasm_hash 即放行。
+      // SCALE 解析。改走 OfflineSignService.verifyPayload 的"哈希直签例外":
+      // 用户在冷钱包屏幕上核对 32 字节哈希后放行。
 
       // ── OrganizationManage(17) ──
       // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
@@ -349,7 +347,7 @@ class PayloadDecoder {
       final value = jsonDecode(text);
       if (value is! Map<String, dynamic>) return null;
       if (value['domain'] != _cidAdminActionDomain) return null;
-      if (value['qr_proto'] != 'CITIZEN_QR_V1') return null;
+      if (value['qr_proto'] != 'QR_V1') return null;
       final actionType = value['action_type'];
       final province = value['actor_province_name'];
       final actorPubkey = value['actor_pubkey'];
@@ -364,7 +362,6 @@ class PayloadDecoder {
           afterHash is! String) {
         return null;
       }
-      final payloadHash = '0x${sha256.convert(raw).toString()}';
       final actorAddress = _pubkeyHexToSs58OrRaw(actorPubkey);
       final targetAddress = _pubkeyHexToSs58OrRaw(target);
       return DecodedPayload(
@@ -377,7 +374,6 @@ class PayloadDecoder {
           'target': targetAddress,
           'before_hash': beforeHash,
           'after_hash': afterHash,
-          'payload_hash': payloadHash,
         },
         reviewFields: <String, String>{
           'action_type': _cidAdminActionLabel(actionType),
@@ -627,7 +623,7 @@ class PayloadDecoder {
     if (bytes.length < 43 || !_hasValidSigningTail(bytes, 43)) return null;
 
     final proposalId = _readU64Le(bytes, 2);
-    // institution AccountId32 跳过（不在 display 中展示细节）
+    // institution AccountId32 跳过,扫码页只展示投票结论所需字段。
     final approve = bytes[42] != 0;
     final voteText = approve ? '赞成' : '反对';
 
@@ -747,10 +743,9 @@ class PayloadDecoder {
   //   - wasm_bytes 不在 QR 里,故 decoder 无法复算 sha256(wasm_bytes)
   //
   // 走 OfflineSignService.verifyPayload 的"哈希直签例外":
-  //   - 收到 32 字节 payload + display.action ∈ {两个 wasm 升级 action}
-  //     + display.fields 含 wasm_hash → matched
-  //   - 用户在冷钱包屏幕上肉眼核对 display.fields.wasm_hash 与桌面 app 显示
-  //     的 sha256 一致即放行,签的就是这份 WASM。
+  //   - 收到 32 字节 payload + QR 动作码 ∈ {两个 wasm 升级 action}
+  //   - 用户在冷钱包屏幕上核对桌面 app 显示的 WASM 哈希后放行,
+  //     签的就是这份 WASM 哈希。
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
@@ -894,7 +889,8 @@ class PayloadDecoder {
 
     // institution_code: [u8;4]。机构账户只能使用注册多签机构码(公权/私权/非法人法人)。
     if (offset + 4 > bytes.length) return null;
-    final code = InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    final code =
+        InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
     if (!InstitutionCode.isInstitution(code)) return null;
     offset += 4;
 
@@ -1246,7 +1242,8 @@ class PayloadDecoder {
     // call_data: 2 + 4 + 32 + 16 = 54
     if (bytes.length < 54 || !_hasValidSigningTail(bytes, 54)) return null;
     var offset = 2;
-    final code = InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    final code =
+        InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
     offset += 4;
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
@@ -1272,7 +1269,8 @@ class PayloadDecoder {
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
     if (bytes.length < 75) return null;
     var offset = 2;
-    final code = InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    final code =
+        InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
     offset += 4;
     final accountBytes = bytes.sublist(offset, offset + 32);
     final accountHex = _bytesToLowerHex(accountBytes);
@@ -1350,9 +1348,7 @@ class PayloadDecoder {
   //     pub fn <name>(origin, proposal_id: u64) -> DispatchResult
   // SCALE 编码恒为 `[pallet_idx][call_idx][proposal_id:u64_le]` = 10 bytes。
   //
-  // 所有这类 call 的 `display.fields` 按 Registry 统一为
-  //   { proposal_id: <decimal string> }
-  // 与节点 Tauri UI / CitizenApp 的 sign_request 逐字对齐 → 🟢 绿色识别。
+  // 所有这类 call 由扫码端从 payload 解出 proposal_id,再按 QR 动作码确认场景。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposalIdOnly(
     Uint8List bytes, {

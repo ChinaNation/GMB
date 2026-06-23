@@ -6,7 +6,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/governance/shared/multisig_create_amount_rules.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
@@ -119,7 +118,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     );
     if (result == null || !mounted) return;
 
-    // 解析 CITIZEN_QR_V1 user_contact(多签发现走反向索引)
+    // 解析 QR_V1 k=3 user_contact(多签发现走反向索引)
     try {
       final env = QrEnvelope.parse(result.trim());
       if (env.kind == QrKind.userContact) {
@@ -300,35 +299,9 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'personal-dq-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'propose_create_personal',
-            summary: '发起创建个人多签账户提案',
-            fields: [
-              // propose_create_personal 链端 fields 与 citizenwallet decoder 对齐：
-              // 普通阈值由用户输入，注册提案阈值固定全员通过。
-              SignDisplayField(
-                  key: 'account_name', label: '名称', value: nameText),
-              SignDisplayField(
-                  key: 'admins_len',
-                  label: '管理员数量',
-                  value: _admins.length.toString()),
-              SignDisplayField(
-                  key: 'regular_threshold',
-                  label: '普通阈值',
-                  value: '$regularThreshold/${_admins.length}'),
-              SignDisplayField(
-                  key: 'create_threshold',
-                  label: '注册阈值',
-                  value: '$createThreshold/${_admins.length}'),
-              SignDisplayField(
-                  key: 'amount_yuan',
-                  label: '初始资金',
-                  value: AmountFormat.format(amountYuan)),
-            ],
-          ),
+          action: QrActions.personalCreate,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -342,7 +315,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.body.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
       final result = await _manageService.submitProposeCreatePersonal(

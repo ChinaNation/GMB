@@ -19,7 +19,7 @@ governance/
 
 - 为前端治理页面提供所有 Tauri 命令（提案列表、提案详情、发起提案、投票、执行）
 - 实现管理员激活机制（冷钱包扫码签名 → 本地验证 → 解锁提案操作）
-- 实现 CITIZEN_QR_V1 QR 签名协议（离线签名设备 ↔ 节点桌面端）
+- 实现 QR_V1 QR 签名协议（离线签名设备 ↔ 节点桌面端）
 - 从链上 RPC 解码提案数据（联合投票/内部投票/机构管理员/销毁/发行/运行时升级）
 - 治理聚合层不得实现投票流程、人口快照获取、计票或投票状态推进；这些职责统一归投票引擎
 - 治理详情中的余额、发行/销毁/多签转账等金额字段统一按 finalized block hash 读取；提案/交易进度仍可展示 pending、inBlock、finalized 状态
@@ -30,7 +30,7 @@ governance/
 - `node/frontend/governance/runtime-upgrade/`：协议升级与开发升级页面，只提交业务提案，不实现投票流程
 - `node/frontend/governance/organization_manage/`：机构多签管理页面、API 和 DTO
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
-- `node/frontend/shared/qr/`：QR 扫码组件与 CITIZEN_QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
+- `node/frontend/shared/qr/`：QR 扫码组件与 QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
 - `node/frontend/shared/ss58.ts` / `node/frontend/shared/format.ts`：SS58 地址展示与金额格式化
 
 ## admins_change/activation.rs — 管理员激活
@@ -44,8 +44,8 @@ governance/
 
 1. 用户点击管理员行的"激活"按钮
 2. 后端验证公钥在链上管理员列表中
-3. 构建 `GMB_ACTIVATE_SUBJECT_V1` subject 级签名 payload（非链上交易）
-4. 生成 CITIZEN_QR_V1 格式的 QR 签名请求
+3. 构建 `GMB || OP_SIGN_ACTIVATE_ADMIN(0x18)` subject 级签名 payload（非链上交易）
+4. 生成 QR_V1 格式的 QR 签名请求
 5. 用户用 CitizenWallet 公民钱包扫码签名
 6. 后端验证 sr25519 签名，并重新确认链上主体仍 Active
 7. 签名验证成功 → 写入本地加密存储
@@ -54,14 +54,14 @@ governance/
 ### 激活 payload 格式
 
 ```
-GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
-+ account_id (48 字节)
-+ org (1 字节)
+GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
++ account_id (32 字节)
++ institution_code (4 字节)
 + kind (1 字节)
 + pubkey (32 字节)
 + timestamp (8 字节, u64 LE)
 + random_nonce (16 字节)
-= 总计 129 字节
+= 总计 97 字节
 ```
 
 非链上交易，不需要 nonce/era/genesis_hash 等扩展。
@@ -124,7 +124,7 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 
 ## runtime_upgrade/ — 协议升级
 
-- 后端只负责读取 WASM、构建协议升级业务 call data、生成公民钱包签名请求、验证签名回执并提交交易。
+- 后端只负责读取 WASM、构建协议升级业务 call data、生成公民钱包签名请求、验证签名响应并提交交易。
 - 前端只负责协议升级表单、WASM 选择、公民钱包签名流程和提交结果展示。
 - `runtime_upgrade` 不获取 CID 人口快照，不接收联合签名上下文，不推进投票状态，不实现联合投票/公民投票流程。
 - 协议升级提案进入链上后，由投票引擎统一负责投票流程、状态、计票、通过/否决判定和结果回调。

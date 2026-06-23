@@ -58,8 +58,10 @@ export type CitizenBindChallengeResult = {
   valid_from: string;
   valid_until: string;
   status_updated_at: number;
-  /** CITIZEN_QR_V1 签名请求 JSON,前端直接展示为二维码。 */
+  /** QR_V1 签名请求 JSON,前端直接展示为二维码。 */
   sign_request: string;
+  /** 生成方 session 保存的待签 payload hash,二维码响应不携带。 */
+  payload_hash: string;
   expire_at: number;
 };
 

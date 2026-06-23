@@ -228,7 +228,7 @@ pub(crate) struct GlobalShard {
     pub(crate) sheng_admin_province_by_pubkey: HashMap<String, String>,
 
     // 登录 challenge + session
-    pub(crate) login_challenges: HashMap<String, LoginChallenge>,
+    pub(crate) sign_requests: HashMap<String, LoginSignRequest>,
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
 
@@ -727,7 +727,7 @@ pub(crate) async fn migrate_legacy_store_if_needed(
         }
     }
     global.sheng_admin_province_by_pubkey = legacy_store.sheng_admin_province_by_pubkey.clone();
-    global.login_challenges = legacy_store.login_challenges.clone();
+    global.sign_requests = legacy_store.sign_requests.clone();
     global.qr_login_results = legacy_store.qr_login_results.clone();
     global.admin_sessions = legacy_store.admin_sessions.clone();
     global.consumed_qr_ids = legacy_store.consumed_qr_ids.clone();

@@ -125,13 +125,6 @@ class _QrScanPageState extends State<QrScanPage> {
     try {
       final result = _router.route(raw);
 
-      // 登录 QR(login_challenge / login_receipt)是冷钱包 CitizenWallet 的专属职责。
-      if (result.type == QrRouteType.loginChallenge ||
-          result.type == QrRouteType.loginReceipt) {
-        await _showLoginNotSupported();
-        return;
-      }
-
       switch (widget.mode) {
         case QrScanMode.transfer:
           // 扫码支付:接受 user_transfer / user_contact / 裸地址
@@ -246,7 +239,7 @@ class _QrScanPageState extends State<QrScanPage> {
       }
       final contactResult = await _contactService.addContact(
         address: body.address,
-        name: name,
+        contactName: name,
         selfAddress: widget.selfAddress,
       );
       if (!mounted) return;
@@ -288,7 +281,7 @@ class _QrScanPageState extends State<QrScanPage> {
       final body = result.envelope!.body as UserContactBody;
       final addResult = await _contactService.addContact(
         address: body.address,
-        name: body.contactName,
+        contactName: body.contactName,
         selfAddress: widget.selfAddress,
       );
       if (!mounted) return;
@@ -339,23 +332,6 @@ class _QrScanPageState extends State<QrScanPage> {
         QrScanMode.contact => '扫码添加好友',
         QrScanMode.raw => '扫描二维码',
       };
-
-  Future<void> _showLoginNotSupported() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('无法处理'),
-        content: const Text('登录二维码请用冷钱包 CitizenWallet 扫描'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Future<void> _showUnrecognized() async {
     if (!mounted) {

@@ -148,7 +148,7 @@ B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则
 - 页面顶部显示 `收款地址`(B 的 SS58)与 `清算行`(B 的 `cid_number`)
 - 输入金额 `10`(元)
 - QR 码即时渲染,扫出来是 JSON,含:
-  - `proto=CITIZEN_QR_V1`, `kind=user_transfer`
+  - `proto=QR_V1`, `kind=user_transfer`
   - `body.address` = B 的 SS58
   - `body.bank` = B 绑定的清算行 `cid_number`
   - `body.amount` = `"10"`

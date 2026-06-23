@@ -7,7 +7,7 @@ import '../login/login_qr_handler.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
 
-/// 登录签名页面：显示登录挑战详情 → 用户确认 → 签名 → 展示 receipt QR。
+/// 登录签名页面：显示登录签名请求详情 → 用户确认 → 签名 → 展示签名响应 QR。
 class LoginSignPage extends StatefulWidget {
   const LoginSignPage({
     super.key,
@@ -23,8 +23,8 @@ class LoginSignPage extends StatefulWidget {
 }
 
 class _LoginSignPageState extends State<LoginSignPage> {
-  LoginChallengeEnvelope? _challenge;
-  LoginReceiptEnvelope? _receipt;
+  LoginSignRequestEnvelope? _request;
+  LoginSignResponseEnvelope? _response;
   String? _error;
   bool _signing = false;
   Timer? _timer;
@@ -33,7 +33,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
   @override
   void initState() {
     super.initState();
-    _parseChallenge();
+    _parseSignRequest();
   }
 
   @override
@@ -42,21 +42,21 @@ class _LoginSignPageState extends State<LoginSignPage> {
     super.dispose();
   }
 
-  void _parseChallenge() {
+  void _parseSignRequest() {
     try {
-      final challenge = parseLoginChallenge(widget.challengeRaw);
-      if (!verifySystemSignature(challenge)) {
+      final request = parseLoginSignRequest(widget.challengeRaw);
+      if (!verifySystemSignature(request)) {
         setState(() => _error = '系统签名验证失败,二维码可能被篡改');
         return;
       }
-      if (isLoginChallengeExpired(challenge)) {
+      if (isLoginSignRequestExpired(request)) {
         setState(() => _error = '登录二维码已过期');
         return;
       }
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       setState(() {
-        _challenge = challenge;
-        _remainingSeconds = (challenge.expiresAt ?? 0) - now;
+        _request = request;
+        _remainingSeconds = (request.expiresAt ?? 0) - now;
       });
       _startCountdown();
     } on LoginQrException catch (e) {
@@ -73,7 +73,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
         _remainingSeconds--;
         if (_remainingSeconds <= 0) {
           _timer?.cancel();
-          if (_receipt == null) {
+          if (_response == null) {
             _error = '登录二维码已过期';
           }
         }
@@ -82,29 +82,29 @@ class _LoginSignPageState extends State<LoginSignPage> {
   }
 
   Future<void> _confirmAndSign() async {
-    final challenge = _challenge;
-    if (challenge == null || _signing) return;
+    final request = _request;
+    if (request == null || _signing) return;
 
     setState(() => _signing = true);
 
     try {
       final walletManager = WalletManager();
       // 以当前钱包公钥为 principal 构造签名原文
-      final signMessage = buildSignMessage(challenge, widget.wallet.pubkeyHex);
+      final signMessage = buildSignMessage(request, widget.wallet.pubkeyHex);
       final result = await walletManager.signUtf8WithWallet(
         widget.wallet.walletIndex,
         signMessage,
       );
 
-      final receipt = buildLoginReceipt(
-        challenge: challenge,
+      final response = buildLoginSignResponse(
+        request: request,
         pubkeyHex: result.pubkeyHex,
         signatureHex: result.signatureHex,
       );
 
       if (!mounted) return;
       setState(() {
-        _receipt = receipt;
+        _response = response;
         _signing = false;
       });
     } catch (e) {
@@ -129,9 +129,9 @@ class _LoginSignPageState extends State<LoginSignPage> {
       body: SafeArea(
         child: _error != null
             ? _buildError()
-            : _receipt != null
-                ? _buildReceipt()
-                : _challenge != null
+            : _response != null
+                ? _buildResponse()
+                : _request != null
                     ? _buildConfirm()
                     : const Center(child: CircularProgressIndicator()),
       ),
@@ -164,7 +164,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
   }
 
   Widget _buildConfirm() {
-    final c = _challenge!;
+    final c = _request!;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
@@ -190,9 +190,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
                   _infoRow('钱包', _shortenAddress(widget.wallet.address)),
                   _infoRow(
                     '剩余时间',
-                    _remainingSeconds > 0
-                        ? '$_remainingSeconds秒'
-                        : '已过期',
+                    _remainingSeconds > 0 ? '$_remainingSeconds秒' : '已过期',
                   ),
                 ],
               ),
@@ -229,8 +227,8 @@ class _LoginSignPageState extends State<LoginSignPage> {
     );
   }
 
-  Widget _buildReceipt() {
-    final json = _receipt!.toRawJson();
+  Widget _buildResponse() {
+    final json = _response!.toRawJson();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
@@ -246,7 +244,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            loginSystemDisplayName(_challenge!),
+            loginSystemDisplayName(_request!),
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 24),
@@ -287,7 +285,8 @@ class _LoginSignPageState extends State<LoginSignPage> {
             width: 80,
             child: Text(
               label,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
           ),
           Expanded(

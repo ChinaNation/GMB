@@ -1,6 +1,6 @@
-// 登录页:CITIZEN_QR_V1 双向扫码登录
-// 左侧展示 challenge 二维码 → 手机扫码签名
-// 右侧摄像头扫码 → 扫描手机签名回执 → 完成登录
+// 登录页:QR_V1 双向扫码登录
+// 左侧展示签名请求二维码 → 手机扫码签名
+// 右侧摄像头扫码 → 扫描手机签名响应 → 完成登录
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,7 +15,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [qrChallenge, setQrChallenge] = useState<{
+  const [qrSignRequest, setQrSignRequest] = useState<{
     challenge_id: string;
     login_qr_payload: string;
     session_id: string;
@@ -54,9 +54,9 @@ export default function LoginPage() {
     stopPolling();
     loggedInRef.current = false;
     try {
-      const res = await api.authQrChallenge();
+      const res = await api.authQrSignRequest();
       if (res.data) {
-        setQrChallenge(res.data);
+        setQrSignRequest(res.data);
         const { challenge_id, session_id } = res.data;
         pollingRef.current = window.setInterval(async () => {
           try {
@@ -66,7 +66,7 @@ export default function LoginPage() {
             } else if (r.data?.status === 'EXPIRED') {
               stopPolling();
               setError('二维码已过期，请重新生成');
-              setQrChallenge(null);
+              setQrSignRequest(null);
             }
           } catch { /* keep polling */ }
         }, 1500);
@@ -79,20 +79,20 @@ export default function LoginPage() {
   };
 
   const handleReceiptScanned = async (raw: string) => {
-    if (!qrChallenge) return;
+    if (!qrSignRequest) return;
     setScanSubmitting(true);
     try {
       let env;
       try {
         env = parseQrEnvelope(raw);
       } catch (e) {
-        const msg = e instanceof QrParseError ? e.message : '签名二维码格式无效';
+        const msg = e instanceof QrParseError ? e.message : '签名响应二维码格式无效';
         setError(msg);
         setScanSubmitting(false);
         return;
       }
-      if (env.kind !== 'login_receipt') {
-        setError(`期望 login_receipt,实际: ${env.kind}`);
+      if (env.kind !== 'sign_response') {
+        setError(`期望 sign_response,实际: ${env.kind}`);
         setScanSubmitting(false);
         return;
       }
@@ -104,13 +104,13 @@ export default function LoginPage() {
       }
 
       await api.authQrComplete({
-        challenge_id: env.id || qrChallenge.challenge_id,
-        session_id: qrChallenge.session_id,
+        challenge_id: env.id || qrSignRequest.challenge_id,
+        session_id: qrSignRequest.session_id,
         admin_account: body.pubkey,
         signature: body.signature,
       });
 
-      const result = await api.authQrResult(qrChallenge.challenge_id, qrChallenge.session_id);
+      const result = await api.authQrResult(qrSignRequest.challenge_id, qrSignRequest.session_id);
       if (result.data?.status === 'SUCCESS' && result.data.user) {
         doLogin(result.data.user);
         return;
@@ -157,19 +157,19 @@ export default function LoginPage() {
                 overflow: 'hidden',
               }}>
                 <div style={{
-                  filter: qrChallenge ? 'none' : 'blur(3px) opacity(0.4)',
+                  filter: qrSignRequest ? 'none' : 'blur(3px) opacity(0.4)',
                   transition: 'filter 0.3s ease',
                 }}>
                   <QRCodeSVG
-                    value={qrChallenge?.login_qr_payload || 'CPMS_LOGIN_PENDING'}
+                    value={qrSignRequest?.login_qr_payload || 'CPMS_LOGIN_PENDING'}
                     size={228}
                     fgColor="#134e4a"
                   />
                 </div>
               </div>
               <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                {qrChallenge
-                  ? `有效期至 ${new Date(qrChallenge.expire_at * 1000).toLocaleTimeString()}`
+                {qrSignRequest
+                  ? `有效期至 ${new Date(qrSignRequest.expire_at * 1000).toLocaleTimeString()}`
                   : '请点击按钮生成二维码'}
               </div>
               <button
@@ -178,7 +178,7 @@ export default function LoginPage() {
                 onClick={handleGenerateQr}
                 disabled={loading}
               >
-                {loading ? '生成中...' : qrChallenge ? '重新生成' : '生成二维码'}
+                {loading ? '生成中...' : qrSignRequest ? '重新生成' : '生成二维码'}
               </button>
             </div>
 
@@ -196,7 +196,7 @@ export default function LoginPage() {
                 active={scannerActive}
                 onActiveChange={(active) => {
                   if (active) {
-                    if (!qrChallenge) {
+                    if (!qrSignRequest) {
                       setError('请先生成登录二维码');
                       return;
                     }
@@ -206,7 +206,7 @@ export default function LoginPage() {
                 }}
                 onDetected={handleReceiptScanned}
                 onError={setError}
-                hint="开启摄像头扫描签名回执二维码"
+                hint="开启摄像头扫描签名响应二维码"
                 busy={scanSubmitting}
               />
             </div>

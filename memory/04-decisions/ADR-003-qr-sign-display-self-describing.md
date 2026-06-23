@@ -1,4 +1,4 @@
-# ADR-003: QR 签名 display.fields 改为自描述 List 格式
+# ADR-003: QR 签名 b.d 解码展示字段 改为自描述 List 格式
 
 ## 状态
 
@@ -8,9 +8,9 @@
 
 冷钱包（citizenwallet）属于离线设备，不经常更新。但在线端（citizenapp）的签名类型会持续增加（更换管理员、更换投票 key、决议发行投票等）。
 
-原有协议中 `display.fields` 是 `Map<String, String>`，冷钱包需要硬编码 `_fieldLabels` 将 key 翻译成中文标签。每新增一个签名类型，必须同时修改三个位置：
+原有协议中 `b.d 解码展示字段` 是 `Map<String, String>`，冷钱包需要硬编码 `_fieldLabels` 将 key 翻译成中文标签。每新增一个签名类型，必须同时修改三个位置：
 
-1. citizenapp 在线端构造 display.fields
+1. citizenapp 在线端构造 b.d 解码展示字段
 2. citizenwallet `offline_sign_page.dart` 的 `_fieldLabels` 映射表
 3. citizenwallet `offline_sign_page.dart` 的 `_actionLabels` 映射表
 
@@ -18,7 +18,7 @@
 
 ## 决策
 
-将 `display.fields` 从 `Map<String, String>` 改为 `List<Map<String, dynamic>>`，每个条目自带 label：
+将 `b.d 解码展示字段` 从 `Map<String, String>` 改为 `List<Map<String, dynamic>>`，每个条目自带 label：
 
 ```json
 {
@@ -59,7 +59,7 @@
 
 ### 协议兼容性
 - 此变更不向后兼容，两端必须同步更新
-- 协议版本号保持 `CITIZEN_QR_V1` 不变（冷钱包与在线端始终配套部署）
+- 协议版本号保持 `QR_V1` 不变（冷钱包与在线端始终配套部署）
 
 ## 好处
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/qr/qr_router.dart';
 
@@ -11,33 +12,32 @@ void main() {
     router = QrRouter();
   });
 
-  group('QrRouter CITIZEN_QR_V1', () {
-    test('should route login_challenge', () {
+  group('QrRouter QR_V1', () {
+    test('should route login sign_request', () {
       final raw = jsonEncode({
-        'proto': QrProtocols.v1,
-        'kind': 'login_challenge',
-        'id': 'ch_01',
-        'issued_at': 1000,
-        'expires_at': 1090,
-        'body': {
-          'system': 'cid',
-          'sys_pubkey': '0xaabb',
-          'sys_sig': '0xccdd',
-        },
+        'p': QrProtocols.v1,
+        'k': QrKind.signRequest.code,
+        'i': 'ch-0123456789abcdef',
+        'e': 1090,
+        'b': SignRequestBody.fromHex(
+          action: QrActions.login,
+          pubkeyHex:
+              '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          payloadHex: '0x6369647c736967',
+        ).toJson(),
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.loginChallenge);
+      expect(result.type, QrRouteType.signRequest);
       expect(result.envelope, isNotNull);
     });
 
     test('should route user_transfer', () {
       final raw = jsonEncode({
-        'proto': QrProtocols.v1,
-        'kind': 'user_transfer',
-        'id': 'tx_01',
-        'issued_at': 1000,
-        'expires_at': 1600,
-        'body': {
+        'p': QrProtocols.v1,
+        'k': QrKind.userTransfer.code,
+        'i': 'tx-0123456789abcdef',
+        'e': 1600,
+        'b': {
           'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
           'recipient_name': '张三',
           'amount': '100.50',
@@ -50,11 +50,11 @@ void main() {
       expect(result.type, QrRouteType.userTransfer);
     });
 
-    test('should route user_contact (fixed, no id/issued_at/expires_at)', () {
+    test('should route user_contact fixed code', () {
       final raw = jsonEncode({
-        'proto': QrProtocols.v1,
-        'kind': 'user_contact',
-        'body': {
+        'p': QrProtocols.v1,
+        'k': QrKind.userContact.code,
+        'b': {
           'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
           'contact_name': '张三',
         },
@@ -65,22 +65,16 @@ void main() {
 
     test('should route sign_request', () {
       final raw = jsonEncode({
-        'proto': QrProtocols.v1,
-        'kind': 'sign_request',
-        'id': 'req_01',
-        'issued_at': 1000,
-        'expires_at': 1090,
-        'body': {
-          'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-          'pubkey': '0xaabb',
-          'sig_alg': 'sr25519',
-          'payload_hex': '0xccdd',
-          'display': {
-            'action': 'transfer',
-            'summary': '转账',
-            'fields': [],
-          },
-        },
+        'p': QrProtocols.v1,
+        'k': QrKind.signRequest.code,
+        'i': 'req-0123456789abcdef',
+        'e': 1090,
+        'b': SignRequestBody.fromHex(
+          action: QrActions.balancesTransfer,
+          pubkeyHex:
+              '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          payloadHex: '0xccdd',
+        ).toJson(),
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.signRequest);
@@ -113,7 +107,7 @@ void main() {
     });
 
     test('should return unknown for JSON with unknown proto', () {
-      final raw = jsonEncode({'proto': 'UNKNOWN_V99', 'foo': 'bar'});
+      final raw = jsonEncode({'p': 'UNKNOWN_V99', 'foo': 'bar'});
       final result = router.route(raw);
       expect(result.type, QrRouteType.unknown);
     });

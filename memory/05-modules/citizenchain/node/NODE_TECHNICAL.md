@@ -199,7 +199,7 @@
 - 业务边界：`src/im/` 不处理治理、投票、实名信息或交易业务；联系人详情里的“转账”继续归公民既有交易页面处理。
 - 用户入口：公民端从“我的 -> 用户资料”设置通信账户，从“我的通讯录 -> 联系人详情 -> 消息”进入聊天；“信息”Tab 只展示会话列表。
 - 配对入口：桌面设置页 `frontend/settings/communication-node/CommunicationNodeSection.tsx` 读取 `get_communication_node`，展示 `im_node_pairing` 固定二维码；公民端在“我的 -> 设置 -> 设置通信节点”扫码保存或更换自己的电脑通信节点。
-- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和不含 RPC URL / 有效期的 CITIZEN_QR_V1 配对二维码生成。
+- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和不含 RPC URL / 有效期的 QR_V1 配对二维码生成。
 - 当前命令：
   - `get_communication_node`：读取通信节点功能状态、PeerId、multiaddr 和配对二维码 payload。
   - `set_communication_node_enabled`：独立开启/关闭通信节点功能，不改变归档/普通全节点模式，不注册手机 RPC。

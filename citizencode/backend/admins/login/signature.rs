@@ -62,7 +62,7 @@ pub(super) fn build_login_qr_system_signature(
     let sys_pubkey = format!("0x{}", hex::encode(signer.public().0));
     let _ = state; // 签名走 env + crypto helper,不取自 state
     let message = crate::core::qr::build_signature_message(
-        crate::core::qr::QrKind::LoginChallenge,
+        crate::core::qr::QrKind::SignRequest,
         challenge,
         Some(system),
         Some(expires_at),

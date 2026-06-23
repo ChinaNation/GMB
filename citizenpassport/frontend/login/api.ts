@@ -5,9 +5,9 @@ export const authLogout = () => post<null>('/api/v1/admin/auth/logout');
 
 export const authMe = () => get<SessionUser>('/api/v1/admin/auth/me');
 
-export const authQrChallenge = () =>
+export const authQrSignRequest = () =>
   post<{ challenge_id: string; login_qr_payload: string; session_id: string; expire_at: number }>(
-    '/api/v1/admin/auth/qr/challenge',
+    '/api/v1/admin/auth/qr/sign-request',
     { origin: window.location.origin }
   );
 

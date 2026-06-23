@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/governance/admins-change/codec/admin_set_change_call_codec.dart';
 import 'package:citizenapp/governance/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
-import 'package:citizenapp/governance/admins-change/admin_set_change_qr_adapter.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/services/admin_set_validation.dart';
 
@@ -159,37 +158,6 @@ void main() {
         ).admins,
         ['aa' * 32, 'cc' * 32],
       );
-    });
-
-    test('builds QR display fields matching cold wallet decoder keys', () {
-      final account = AdminAccountState(
-        accountHex: '11' * 32,
-        institutionCode: 'UNIN',
-        kind: 2,
-        admins: ['aa' * 32, 'bb' * 32],
-        threshold: 2,
-        creatorHex: 'aa' * 32,
-        createdAt: 1,
-        updatedAt: 1,
-        status: 1,
-      );
-
-      final display = AdminSetChangeQrAdapter.buildDisplay(
-        account: account,
-        admins: ['0x${'aa' * 32}', 'cc' * 32],
-        newThreshold: 2,
-      );
-      final fields = {
-        for (final field in display.fields) field.key: field.value
-      };
-
-      expect(fields['institution_code'], 'UNIN');
-      expect(fields['account'], '0x${'11' * 32}');
-      expect(fields['admins'], '0x${'aa' * 32},0x${'cc' * 32}');
-      expect(fields['new_threshold'], '2/2');
-      expect(fields.containsKey('account_id'), isFalse);
-      expect(fields.containsKey('admins_len'), isFalse);
-      expect(fields.containsKey('threshold'), isFalse);
     });
   });
 }

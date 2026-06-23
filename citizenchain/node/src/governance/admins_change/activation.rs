@@ -29,11 +29,11 @@ use std::{
 use tauri::AppHandle;
 
 use crate::governance::admins_change::storage;
-use crate::governance::signing::{self, pubkey_to_ss58};
+use crate::governance::signing;
 use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN};
 
 use super::account_id;
-use super::types::{institution_code_label, qr_institution_code_display_value, AdminAccountState};
+use super::types::{institution_code_label, AdminAccountState};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
@@ -295,7 +295,7 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
 /// 构建管理员激活签名请求 QR JSON（需要节点运行）。
 ///
 /// 验证公钥确实在该 admins-change 账户的链上管理员列表中，
-/// 然后生成 CITIZEN_QR_V1 格式的 AccountId 级签名请求。
+/// 然后生成 QR_V1/k=1 格式的 AccountId 级签名请求。
 #[tauri::command]
 pub async fn build_activate_admin_request(
     app: AppHandle,
@@ -353,31 +353,18 @@ pub async fn build_activate_admin_request(
     let payload_hash = signing::sha256_hash_public(&payload);
     let payload_hash_hex = format!("0x{}", hex::encode(payload_hash));
     let request_id = signing::generate_request_id_public("activate-admin-account");
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    let display = serde_json::json!({
-        "action": "activate_admin_account",
-        "summary": format!("激活{}管理员", state.institution_code_label),
-        "fields": [
-            { "key": "institution_code", "label": "机构码", "value": qr_institution_code_display_value(&state.institution_code) },
-            { "key": "account", "label": "管理员账户", "value": format!("0x{}", state.account_hex) },
-            { "key": "pubkey", "label": "管理员公钥", "value": account_ss58.clone() }
-        ]
-    });
 
     let now = now_secs();
     let request = signing::QrSignRequest {
-        proto: "CITIZEN_QR_V1".to_string(),
-        kind: "sign_request".to_string(),
+        proto: signing::PROTOCOL_VERSION.to_string(),
+        kind: signing::QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        issued_at: now,
         expires_at: now + 90,
         body: signing::SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: payload_hex.clone(),
-            display,
+            action: primitives::sign::QR_ACTION_ACTIVATE_ADMIN,
+            sig_alg: 1,
+            pubkey: signing::pubkey_b64(&pubkey_bytes)?,
+            payload: signing::payload_b64(&payload),
         },
     };
 
@@ -413,10 +400,18 @@ pub async fn verify_activate_admin(
     let response: signing::QrSignResponse =
         serde_json::from_str(&response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
 
-    if response.proto != "CITIZEN_QR_V1" {
+    if response.proto != signing::PROTOCOL_VERSION {
         return Err(format!(
-            "协议版本不匹配：期望 CITIZEN_QR_V1，实际 {}",
+            "协议版本不匹配：期望 {}，实际 {}",
+            signing::PROTOCOL_VERSION,
             response.proto
+        ));
+    }
+    if response.kind != signing::QR_KIND_SIGN_RESPONSE {
+        return Err(format!(
+            "二维码类型不匹配：期望 k={}，实际 k={}",
+            signing::QR_KIND_SIGN_RESPONSE,
+            response.kind
         ));
     }
     if response.id != request_id {
@@ -437,14 +432,8 @@ pub async fn verify_activate_admin(
         .strip_prefix("0x")
         .unwrap_or(&expected_payload_hash)
         .to_ascii_lowercase();
-    let response_hash = response
-        .body
-        .payload_hash
-        .strip_prefix("0x")
-        .unwrap_or(&response.body.payload_hash)
-        .to_ascii_lowercase();
-    if response_hash != expected_hash {
-        return Err("payload hash 不匹配，签名数据可能被篡改".to_string());
+    if expected_hash.is_empty() {
+        return Err("本地签名 session 缺少 payload hash".to_string());
     }
 
     let payload_clean = payload_hex.strip_prefix("0x").unwrap_or(&payload_hex);
@@ -518,7 +507,7 @@ pub async fn verify_activate_admin(
         kind: decoded.kind,
         activated_at_ms: activated_at,
         signature_hex: sig_hex.to_string(),
-        payload_hash_hex: response_hash,
+        payload_hash_hex: expected_hash,
     });
     save_activations(&app, &activations)?;
 

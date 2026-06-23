@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-清除"第二真源":废弃 `actions.rs` 里直写 postgres `admins` 的注册局管理员增删路径,改为生成 `propose_admin_set_change` / `propose_create_institution` 的 CITIZEN_QR_V1 凭证,由 CitizenWallet 冷签提交,CID 不代签。详见 ADR-023。
+清除"第二真源":废弃 `actions.rs` 里直写 postgres `admins` 的注册局管理员增删路径,改为生成 `propose_admin_set_change` / `propose_create_institution` 的 QR_V1 凭证,由 CitizenWallet 冷签提交,CID 不代签。详见 ADR-023。
 
 ## 落地内容
 

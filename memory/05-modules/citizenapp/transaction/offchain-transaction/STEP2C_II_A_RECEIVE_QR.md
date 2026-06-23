@@ -53,7 +53,7 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 | 文件 | 内容 |
 |---|---|
 | `lib/transaction/offchain-transaction/services/clearing_bank_prefs.dart` | 4 个静态方法 `save` / `load` / `clear`(按 walletIndex 隔离);空串等价于清除 |
-| `lib/transaction/offchain-transaction/pages/offchain_receive_page.dart` | 新收款页:WalletProfile + 可选 `clearingNodeWssUrl`;读 prefs → 生成 `CITIZEN_QR_V1 kind=user_transfer` QR(`address` / `name` / `amount` / `memo` / `bank=cid_number`);每 5 秒轮询 `offchain_queryBalance(user)` 刷新余额 |
+| `lib/transaction/offchain-transaction/pages/offchain_receive_page.dart` | 新收款页:WalletProfile + 可选 `clearingNodeWssUrl`;读 prefs → 生成 `QR_V1 kind=user_transfer` QR(`address` / `name` / `amount` / `memo` / `bank=cid_number`);每 5 秒轮询 `offchain_queryBalance(user)` 刷新余额 |
 | `test/trade/clearing_bank_prefs_test.dart` | 5 个单测(空 load / 双 walletIndex roundtrip / 空串等价清除 / 选择性 clear / 覆盖写入)。全部通过 |
 
 ### 3.2 修改
@@ -74,7 +74,7 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 
 ## 4. QR 载荷
 
-`CITIZEN_QR_V1 kind=user_transfer` envelope,body 为 `UserTransferBody`:
+`QR_V1 kind=user_transfer` envelope,body 为 `UserTransferBody`:
 
 ```json
 {

@@ -354,22 +354,22 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     try {
       const signed = parseSignedReceiptPayload(raw, adminActionModal.actionId);
       if (signed.challenge_id !== adminActionModal.actionId) {
-        throw new Error('签名回执与当前请求不匹配');
+        throw new Error('签名响应与当前请求不匹配');
       }
-      if (!signed.signer_pubkey || !signed.payload_hash) {
-        throw new Error('签名回执缺少 signer_pubkey 或 payload_hash');
+      if (!signed.signer_pubkey) {
+        throw new Error('签名响应缺少 signer_pubkey');
       }
       const result = await commitAdminAction(auth, {
         action_id: adminActionModal.actionId,
         passkey_assertion: adminActionModal.passkeyAssertion,
         signer_pubkey: signed.signer_pubkey,
         signature: signed.signature,
-        payload_hash: signed.payload_hash,
+        payload_hash: adminActionModal.payloadHash,
       });
       adminActionModal.resolve(result);
       setAdminActionModal(null);
     } catch (error) {
-      notice.error(error, '签名回执处理失败');
+      notice.error(error, '签名响应处理失败');
       adminActionModal.reject(error);
     } finally {
       setAdminActionCommitLoading(false);
@@ -574,7 +574,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
         qrTitle="签名二维码"
         qrValue={adminActionModal?.signRequest}
         qrHint="使用当前管理员冷钱包扫码签名"
-        scannerHint="扫描冷钱包生成的签名回执二维码"
+        scannerHint="扫描冷钱包生成的签名响应二维码"
         scannerDisabled={adminActionCommitLoading}
         scannerLoading={adminActionCommitLoading}
         onDetected={handleAdminActionSignedResponse}

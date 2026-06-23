@@ -289,7 +289,7 @@ citizenapp 本地：
 - `citizenchain/node/src/im/mailbox.rs` 已支持一台通信节点服务多个钱包账号和多个授权设备。
 - `citizenchain/node/src/im/keypackage.rs` 已支持多钱包账号 KeyPackage 池。
 - `citizenchain/node/src/settings/node-mode/mod.rs` 已移除旧 `communication` 选项，全节点模式只保留归档/普通链数据模式。
-- `citizenchain/node/src/settings/communication-node/mod.rs` 已提供独立通信节点功能开关、IPv4/IPv6 配对端点和不含 RPC URL / 有效期的 CITIZEN_QR_V1 固定配对二维码。
+- `citizenchain/node/src/settings/communication-node/mod.rs` 已提供独立通信节点功能开关、IPv4/IPv6 配对端点和不含 RPC URL / 有效期的 QR_V1 固定配对二维码。
 - `citizenchain/scripts/im-two-node-smoke.sh` 已覆盖双节点 KeyPackage、直连投递、重启恢复、ack 和第三方 mailbox 拒绝。
 
 ## 11. 预计修改目录

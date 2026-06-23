@@ -88,10 +88,10 @@
 - 上述任务必须同时装载 `citizenchain` 与 `citizenapp` / `citizenwallet` 上下文，并同步更新双端代码、文档与测试；未完成双端更新前，不允许继续 runtime 改动
 - 不允许跳过契约直接扩展系统规则
 - 涉及扫码、交易载荷、接口契约、字段顺序、签名验签、nonce、era、pallet/call index、storage key、subject id 的任务，必须先读取并遵守 `memory/07-ai/unified-protocols.md`
-- 设计或修改任何协议/载荷/接口契约前，必须先更新 `memory/07-ai/unified-protocols.md`；扫码协议只有 `CITIZEN_QR_V1`，内层交易载荷格式不得被称为新增扫码协议
+- 设计或修改任何协议/载荷/接口契约前，必须先更新 `memory/07-ai/unified-protocols.md`；扫码协议只有 `QR_V1`，内层交易载荷格式不得被称为新增扫码协议
 - 检查 citizenapp 轻节点连接问题时，禁止把未部署 bootNodes 的 DNS/握手失败当作根因；只要存在有效 peer 且 best/finalized 状态可读或推进，就应判断区块链网络已连接
 - 检查 citizenapp 轻节点连接问题时，禁止把本地开发期 `30334` bootnode/ADB reverse 作为必要条件；默认真机连接不依赖本地 `30334`
-- 涉及新建或重命名目录、文件、字段、变量、类、模块、API 字段、storage 字段、QR display 字段、任务卡文件名、文档文件名的任务，必须先读取并遵守 `memory/07-ai/unified-naming.md`
+- 涉及新建或重命名目录、文件、字段、变量、类、模块、API 字段、storage 字段、扫码端解码展示字段、任务卡文件名、文档文件名的任务，必须先读取并遵守 `memory/07-ai/unified-naming.md`
 - 所有新命名必须尽量精简；不确定的命名必须先报告用户确认，不得擅自新建
 - 不允许删除、迁出或重命名 AI 编程系统核心基础设施
 - 文件名长度不得超过 80 字符（含扩展名），详细描述放在文件内容里，不要塞进文件名

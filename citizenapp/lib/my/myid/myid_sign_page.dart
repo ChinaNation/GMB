@@ -5,7 +5,7 @@
 // 2. 验证 pubkey 与当前绑定钱包一致
 // 3. 用热钱包私钥签名 payload
 // 4. 构造 sign_response envelope
-// 5. 展示回执二维码，等管理端扫描
+// 5. 展示签名响应二维码，等管理端扫描
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -65,12 +65,9 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       final request = qrSigner.parseRequest(raw);
 
       final expectedPubkey = '0x${widget.wallet.pubkeyHex}'.toLowerCase();
-      final requestPubkey = request.body.pubkey.toLowerCase();
+      final requestPubkey = request.body.pubkeyHex.toLowerCase();
       if (requestPubkey != expectedPubkey) {
         throw Exception('签名请求中的公钥与当前钱包不一致');
-      }
-      if (request.body.address.trim() != widget.wallet.address.trim()) {
-        throw Exception('签名请求中的地址与当前钱包不一致');
       }
       _verifyCitizenBindRequest(request);
 
@@ -86,19 +83,15 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       // 构造 sign_response envelope
       final sigHex =
           '0x${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final payloadHash = QrSigner.computePayloadHash(request.body.payloadHex);
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final responseEnvelope = QrEnvelope<SignResponseBody>(
         kind: QrKind.signResponse,
         id: request.id,
         issuedAt: now,
         expiresAt: now + 120,
-        body: SignResponseBody(
-          pubkey: request.body.pubkey,
-          sigAlg: 'sr25519',
-          signature: sigHex,
-          payloadHash: payloadHash,
-          signedAt: now,
+        body: SignResponseBody.fromHex(
+          pubkeyHex: request.body.pubkeyHex,
+          signatureHex: sigHex,
         ),
       );
       final json = responseEnvelope.toRawJson();
@@ -260,28 +253,16 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
 
   void _verifyCitizenBindRequest(SignRequestEnvelope request) {
     final body = request.body;
-    if (body.display.action != 'citizen_bind') {
+    if (body.action != QrActions.citizenBind) {
       throw Exception('只能签名身份ID绑定请求');
     }
     final decoded = _CitizenBindPayload.decode(body.payloadHex);
-    if (decoded.walletPubkey.toLowerCase() != body.pubkey.toLowerCase()) {
+    if (decoded.walletPubkey.toLowerCase() != body.pubkeyHex.toLowerCase()) {
       throw Exception('绑定载荷中的钱包公钥与签名请求不一致');
     }
-
-    final expected = <String, String>{
-      'mode': decoded.modeLabel,
-      'archive_no': decoded.archiveNo,
-      'voting_eligible': decoded.votingEligibleLabel,
-      'citizen_status': decoded.citizenStatusLabel,
-      'wallet_address': body.address,
-    };
-    for (final field in body.display.fields) {
-      final key = field.key;
-      if (key == null) continue;
-      final expectedValue = expected[key];
-      if (expectedValue != null && expectedValue != field.value) {
-        throw Exception('签名请求展示字段与真实绑定载荷不一致');
-      }
+    if (decoded.walletPubkey.toLowerCase() !=
+        '0x${widget.wallet.pubkeyHex}'.toLowerCase()) {
+      throw Exception('绑定载荷中的钱包公钥与当前钱包不一致');
     }
   }
 }

@@ -15,9 +15,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:
 /// - 职能:在钱包详情页第 2 张身份卡右侧 QR 小图标点击时弹出大二维码,
-///   内容 = `CITIZEN_QR_V1 kind=user_contact { address, contact_name }`(固定码,
-///   envelope 顶层无 id / issued_at / expires_at)。
-/// - 三种扫码场景由扫码方自行处理(通讯录、扫码支付、地址栏),不生成多份 QR。
+///   内容 = `QR_V1 k=3 { address, contact_name }`(固定码,envelope 顶层无 i/e)。
+/// - 扫码场景由扫码方处理(通讯录、扫码支付、地址栏),不生成多份 QR。
 /// - 新增地址后复制图标 + 关闭右侧下载图标(RepaintBoundary + SaverGallery)。
 /// - 删掉副标题 / 地址 Stack 居中,复制图标 Positioned 浮右(size 14) /
 ///   下载与关闭对称等宽 TextButton(下载 loading 时显示进度圈)。
@@ -27,12 +26,12 @@ class WalletQrDialog {
   /// 参数:
   /// - [context]:用于 showDialog 的 BuildContext。
   /// - [wallet]:钱包档案,仅用于取 address 做 QR payload + 底部文字展示。
-  /// - [name]:展示态钱包名(与 WalletIdentityCard 当前编辑的名字保持一致,
+  /// - [walletName]:展示态钱包名(与 WalletIdentityCard 当前编辑的名字保持一致,
   ///   不直接读 `wallet.walletName` 是为了支持编辑态未落盘时的预览)。
   static Future<void> show(
     BuildContext context, {
     required WalletProfile wallet,
-    required String name,
+    required String walletName,
   }) {
     return showDialog<void>(
       context: context,
@@ -40,23 +39,21 @@ class WalletQrDialog {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        child: _WalletQrDialogContent(wallet: wallet, name: name),
+        child: _WalletQrDialogContent(wallet: wallet, walletName: walletName),
       ),
     );
   }
 }
 
-/// 弹窗主体内容。改成 StatefulWidget 是因为需要:
-/// - 持有 `GlobalKey` 引用 `RepaintBoundary` 做截图。
-/// - 跟踪 `_isSaving` 状态实现保存过程中下载按钮禁用 + 进度圈。
+/// 弹窗主体内容,负责渲染二维码并保存图片。
 class _WalletQrDialogContent extends StatefulWidget {
   const _WalletQrDialogContent({
     required this.wallet,
-    required this.name,
+    required this.walletName,
   });
 
   final WalletProfile wallet;
-  final String name;
+  final String walletName;
 
   @override
   State<_WalletQrDialogContent> createState() => _WalletQrDialogContentState();
@@ -69,8 +66,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
   /// 是否正在保存到相册。保存过程中按钮禁用 + 进度圈替换。
   bool _isSaving = false;
 
-  /// 构造 QR payload:顶层 envelope(CITIZEN_QR_V1 + kind=user_contact)
-  /// + body(address + contact_name)。
+  /// 构造 QR payload:顶层 envelope(QR_V1 + k=3) + body(address + contact_name)。
   String get _qrPayload => QrEnvelope<UserContactBody>(
         kind: QrKind.userContact,
         id: null,
@@ -78,7 +74,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
         expiresAt: null,
         body: UserContactBody(
           address: widget.wallet.address,
-          contactName: widget.name,
+          contactName: widget.walletName,
         ),
       ).toRawJson();
 
@@ -145,7 +141,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
         children: [
           // 钱包名
           Text(
-            widget.name,
+            widget.walletName,
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,

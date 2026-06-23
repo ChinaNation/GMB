@@ -21,7 +21,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::governance::signing::{
-    pubkey_to_ss58, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
+    payload_b64, pubkey_b64, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
+    PROTOCOL_VERSION, QR_KIND_SIGN_REQUEST, QR_KIND_SIGN_RESPONSE,
 };
 use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_DECRYPT};
 
@@ -29,7 +30,6 @@ use crate::transaction::offchain_transaction::types::{
     DecryptAdminRequestResult, DecryptedAdminInfo,
 };
 
-const PROTOCOL_VERSION: &str = "CITIZEN_QR_V1";
 // 解密 challenge payload 前缀 = GMB || OP_SIGN_DECRYPT(4B 二进制前缀，单一真源
 // primitives::sign)。
 /// challenge payload 长度:4 + 48 + 32 + 8 + 16 = 108 字节
@@ -41,7 +41,7 @@ const DEFAULT_TTL_SECS: u64 = 90;
 /// key = lowercase pubkey hex(不含 0x),value = (cid_number, decrypted_at_ms)。
 static DECRYPTED_ADMINS: OnceLock<Mutex<HashMap<String, MemoryEntry>>> = OnceLock::new();
 
-/// 等待"解密"响应的进行中 challenge 上下文。前端拿到 request_id,扫描回执时
+/// 等待"解密"响应的进行中 challenge 上下文。前端拿到 request_id,扫描签名响应时
 /// 由 verify 阶段从此表查回 payload 做本地验签。
 static PENDING_CHALLENGES: OnceLock<Mutex<HashMap<String, ChallengeContext>>> = OnceLock::new();
 
@@ -132,31 +132,18 @@ pub fn build_decrypt_admin_request(
     let payload_hash = sha256_hash_public(&payload);
     let payload_hash_hex = format!("0x{}", hex::encode(payload_hash));
     let request_id = generate_request_id();
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    // display.fields 提供给 citizenwallet decoder 构造确认页(action=decrypt_admin)。
-    // citizenwallet decoder 分支签名页文案为"解密管理员 - {cid_number}"。
-    let display = serde_json::json!({
-        "action": "decrypt_admin",
-        "summary": format!("解密清算行管理员 - {cid_number}"),
-        "fields": [
-            { "key": "cid_number", "label": "机构身份号码", "value": cid_number }
-        ]
-    });
 
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
+        kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
         body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: payload_hex.clone(),
-            display,
+            action: primitives::sign::QR_ACTION_DECRYPT_ADMIN,
+            sig_alg: 1,
+            pubkey: pubkey_b64(&pubkey_bytes)?,
+            payload: payload_b64(&payload),
         },
     };
 
@@ -206,6 +193,12 @@ pub fn verify_and_decrypt_admin(
             response.proto
         ));
     }
+    if response.kind != QR_KIND_SIGN_RESPONSE {
+        return Err(format!(
+            "二维码类型不匹配:期望 k={QR_KIND_SIGN_RESPONSE},实际 k={}",
+            response.kind
+        ));
+    }
     if response.id != input.request_id {
         return Err("请求 ID 不匹配".to_string());
     }
@@ -230,14 +223,8 @@ pub fn verify_and_decrypt_admin(
         .strip_prefix("0x")
         .unwrap_or(&input.expected_payload_hash)
         .to_ascii_lowercase();
-    let response_hash = response
-        .body
-        .payload_hash
-        .strip_prefix("0x")
-        .unwrap_or(&response.body.payload_hash)
-        .to_ascii_lowercase();
-    if response_hash != expected_hash {
-        return Err("payload hash 不匹配,签名数据可能被篡改".to_string());
+    if expected_hash.is_empty() {
+        return Err("本地签名 session 缺少 payload hash".to_string());
     }
 
     // 拉回原 challenge payload 做本地 sr25519 验签。

@@ -15,9 +15,9 @@ import 'package:citizenapp/governance/shared/proposal/proposal_detail_local_stor
 import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/onchain.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart';
@@ -471,16 +471,15 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     required WalletProfile wallet,
     required Uint8List payload,
     required String requestPrefix,
-    required SignDisplay display,
+    required int action,
   }) async {
     // 管理员投票统一通过 QR 码签名（citizenwallet 公民钱包）
     final qrSigner = QrSigner();
     final request = qrSigner.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: '$requestPrefix-'),
-      address: wallet.address,
       pubkey: '0x${wallet.pubkeyHex}',
       payloadHex: '0x${_toHex(payload)}',
-      display: display,
+      action: action,
     );
     final requestJson = qrSigner.encodeRequest(request);
     if (!mounted) throw Exception('页面已关闭');
@@ -497,7 +496,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (response == null) {
       throw Exception('签名已取消');
     }
-    return _hexDecode(response.body.signature);
+    return _hexDecode(response.body.signatureHex);
   }
 
   Future<void> _submitJointVote(bool approve) async {
@@ -516,27 +515,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         fromAddress: voteWallet.address,
         signerPubkey: _hexDecode(voteWallet.pubkeyHex),
         sign: (payload) {
-          final voteText = approve ? '赞成' : '反对';
           return _signPayloadWithWallet(
             wallet: voteWallet,
             payload: payload,
             requestPrefix: approve ? 'runtime-joint-yes' : 'runtime-joint-no',
-            display: SignDisplay(
-              action: 'joint_vote',
-              summary: '联合投票 提案 #${widget.proposalId}：$voteText',
-              fields: [
-                // joint_vote 当前 decoder 输出 fields = (proposal_id, approve),
-                // account_id 在 payload 里但 decoder 跳过不回填 display。
-                // _proposalInfo(提案人/理由/代码哈希)属辅助展示,
-                // 页面已独立显示,不塞 display.fields 避免对齐失败。
-                SignDisplayField(
-                    key: 'proposal_id',
-                    label: '提案编号',
-                    value: widget.proposalId.toString()),
-                SignDisplayField(
-                    key: 'approve', label: '投票', value: approve.toString()),
-              ],
-            ),
+            action: QrActions.jointVote,
           );
         },
       );

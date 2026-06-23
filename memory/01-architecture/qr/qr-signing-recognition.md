@@ -1,145 +1,108 @@
-# 冷钱包扫码签名两色识别方案
+# QR_V1 扫码签名两色识别方案
 
-- 版本:2026-05-07
+- 更新日期:2026-06-22
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:CitizenWallet 公民钱包扫描 QR 后的识别、展示与签名放行规则
+- 范围:CitizenWallet / CitizenApp 扫描 QR 后的识别、展示、签名放行和签名响应验签规则
 - 依赖:
   - `memory/01-architecture/qr/qr-protocol-spec.md`
-  - `memory/01-architecture/qr/qr-protocol-fixtures/`
   - `memory/01-architecture/qr/qr-action-registry.md`
 
-## 一、四条铁律
+## 1. 两色终态
 
-1. **扫码协议只有一个**:`CITIZEN_QR_V1`。
-2. **两色终态**:绿色 = 识别通过并允许签名;红色 = 识别失败并禁止签名。
-3. **识别 = 结构识别 + payload 交叉验证**。envelope 合法、payload 可被冷钱包完整解码、display 与 decoder 输出逐字一致,才允许签名。
-4. **不残留、不兼容、不过渡**。旧 action、旧 pallet/call、旧字段门控不得作为兼容分支保留。
-
-## 二、冷钱包消费的 kind
-
-`qr-protocol-spec.md` 当前登记 6 种 kind。冷钱包只消费 2 种:
-
-| 扫入 kind | 冷钱包产出 | 结果 |
+| 颜色 | 含义 | 行为 |
 |---|---|---|
-| `login_challenge` | `login_receipt` | 通过后允许生成登录回执 |
-| `sign_request` | `sign_response` | 通过后允许签名并生成签名回执 |
+| 绿色 | QR 结构合法,action 已登记,payload 可独立解码,签名者匹配 | 允许签名或提交 |
+| 红色 | 任一校验失败 | 禁止签名或提交 |
 
-其余 4 种当前 kind(`login_receipt` / `sign_response` / `user_contact` / `user_transfer`)不由冷钱包消费,扫到即红色拒绝。已下线的 `user_multisig` 不属于当前 kind 枚举。
+扫码端不得因为 QR 里有文字摘要而放行。QR_V1 不携带摘要;所有展示内容必须由本地 decoder 从 `a + d` 推导。
 
-## 三、envelope 层校验
+## 2. k=1 签名请求校验
 
-全部为真才进入 kind 专属校验:
+进入签名页前必须全部通过:
 
-- `envelope.proto == 'CITIZEN_QR_V1'`
-- `envelope.kind ∈ {login_challenge, sign_request}`
-- `envelope.id` 长度 16-128,字符集 `[a-zA-Z0-9_-]`
-- `envelope.issued_at` 与 `envelope.expires_at` 均存在
-- `now <= envelope.expires_at`
-- `envelope.body` 字段集匹配 `qr-protocol-spec.md`,不得出现未知字段、旧字段、别名字段
+1. `p == QR_V1`
+2. `k == 1`
+3. `i` 合法且未过期
+4. `b.a` 是已登记动作码
+5. `b.g == 1`
+6. `b.u` 解码为 32 字节公钥
+7. `b.d` 解码为非空 payload
+8. 当前钱包公钥等于 `b.u`
 
-任一失败即红色拒绝。
+业务识别:
 
-## 四、kind = login_challenge
+1. 对链交易 action,`a` 必须等于 `(payload[0] << 8) | payload[1]`。
+2. 对文本/二进制专用 action,decoder 必须识别 payload domain 或固定前缀。
+3. Runtime 升级哈希直签只允许 32B payload。
+4. decoder 失败或 `a` 与 payload 不一致,红色拒签。
 
-补充校验:
+签名字节:
 
-- `body.system` 非空,当前只允许 `cid` / `cpms`
-- `body.sys_pubkey` 是合法 `0x<64hex>`
-- `body.sys_sig` 是合法 `0x<128hex>`
-- 按 `qr-protocol-spec.md` 的签名原文规则验证 `sys_sig`
+1. 链交易 payload 长度 ≤256B:签 payload 原文。
+2. 链交易 payload 长度 >256B:签 `blake2_256(payload)`。
+3. 非链文本/二进制 payload:签原文。
+4. Runtime hash-only:签 32B hash 原文。
 
-全过即绿色,允许生成 `login_receipt`。UI 必须展示 `system`,由用户确认是否为预期登录系统。
+## 3. k=2 签名响应校验
 
-## 五、kind = sign_request
+生成方收到签名响应后必须从本地 session 取回原请求,不得信任签名响应携带的业务信息。
 
-补充校验:
+1. `p == QR_V1`
+2. `k == 2`
+3. `i == session.request_id`
+4. `e` 未过期
+5. `b.u == session.expected_pubkey`
+6. `b.s` 解码为 64 字节
+7. 按 session 的 `a + payload` 计算签名字节后 sr25519 验签通过
 
-- `body.address` 是 SS58 地址
-- `body.pubkey` 是合法 `0x<64hex>`
-- `body.sig_alg == 'sr25519'`
-- `body.payload_hex` 是非空 `0x<hex>`
-- `body.display.action` 非空,且已登记在 `qr-action-registry.md`
-- `body.display.fields[*].key` 若存在,必须是 registry 已登记字段
-- `PayloadDecoder.decode(body.payload_hex)` 返回 `decoded != null`
-- `decoded.action == body.display.action`
-- 对 `decoded.fields` 每一项 `(key, value)`,在 `body.display.fields` 中按同名 `key`
-  找到的 value 必须与 decoded 侧 value 逐字相等
-- 公民钱包确认页只展示 `decoded.reviewFields`:中文标签、业务字段和 SS58 地址;内部哈希、
-  nonce、原始公钥 hex、内部 ID 不作为用户确认内容展示
+签名响应中不得出现 payload、payload hash、签名时间、摘要字段。若出现旧字段,解析器应报错。
 
-全过即绿色,允许生成 `sign_response`。
+## 4. 登录签名
 
-## 六、Runtime 升级哈希签名例外
+登录不再有独立 QR kind。CID/CPMS 生成 `k=1,a=1`:
 
-`propose_runtime_upgrade` 与 `developer_direct_upgrade` 的完整 WASM call data 体积过大,不能放入 QR。当前规则:
+| 字段 | 规则 |
+|---|---|
+| `b.u` | 系统公钥 |
+| `b.d` | UTF-8 `system|system_signature` |
+| 用户签名 | CitizenWallet 对 `b.d` 原文字节签名 |
+| 签名响应 | `k=2` 的 `u/s` |
 
-- `display.action ∈ {propose_runtime_upgrade, developer_direct_upgrade}`
-- `payload_hex` 必须是 32 字节 hash
-- `display.fields` 必须包含 `wasm_hash`
-- 用户必须在冷钱包屏幕核对 `wasm_hash`
+系统签名原文使用 `QR_V1|1|i|system|e|system_pubkey_without_0x`。
 
-仅满足以上条件时绿色放行。除此之外,任何 decode 失败都红色拒绝。
+## 5. CID / CPMS 文本载荷
 
-## 七、CID 管理员治理 JSON 载荷
+| action | domain / 前缀 | 必须展示 |
+|---:|---|---|
+| 2 | `cid-citizen-bind-v1` | 绑定模式、档案号、公民状态、投票资格、钱包地址 |
+| 3 | `cid_admin_governance` | 动作类型、注册局、省份、操作者/目标账户 |
+| 4 | `CPMS_ARCHIVE_DELETE_V1` | 档案号、管理员账户、过期时间 |
 
-`cid_admin_action` 使用既有 `CITIZEN_QR_V1 / sign_request`,不新增协议。`payload_hex`
-是 `cid_admin_governance` canonical JSON 的 UTF-8 hex,冷钱包必须解出并交叉校验:
+文本载荷内部的 `payload_hash` 只用于生成方本地 session 或 API 防重放,不进入 QR 签名响应。
 
-- `display.action == cid_admin_action`
-- `domain == cid_admin_governance`
-- `qr_proto == CITIZEN_QR_V1`
-- `display.fields` 只放 `action_type / actor_province_name / actor_account / target` 等用户确认字段;
-  `before_hash / after_hash / payload_hash` 只参与机器验真,不进入确认页
-- `payload_hash` 必须等于 JSON 文本 SHA-256
+## 6. 应绿色通过
 
-## 八、action / fields 对齐规则
+1. `a=1` 登录
+2. `a=2` 公民绑定
+3. `a=3` CID 管理员治理/Passkey 更新
+4. `a=4` CPMS 档案删除
+5. `a=5/6` 管理员激活/解密
+6. `a=7` Runtime 32B hash
+7. 所有 `qr-action-registry.md` 登记的链交易 action
 
-唯一详细登记:`memory/01-architecture/qr/qr-action-registry.md`
+## 7. 应红色拒绝
 
-任何一端新增或修改 action / field key,必须:
+1. 旧协议名或旧字段名。
+2. 未登记 `k` 或 `a`。
+3. 过期请求。
+4. 当前钱包公钥与 `b.u` 不一致。
+5. `a` 与 payload 解码出的动作不一致。
+6. payload 无法解码。
+7. 链 payload >256B 却签原文而不是 `blake2_256(payload)`。
+8. 签名响应签名校验失败。
 
-1. 先改 registry。
-2. 再改 decoder 与签发方。
-3. 补 fixture 与测试。
-4. 扫描旧 action、旧 pallet/call、旧字段门控残留。
+## 8. 已拒绝方案
 
-## 九、已废弃识别规则
-
-任何不在 `qr-protocol-spec.md` 与 `qr-action-registry.md` 当前登记内的 kind、action、
-field 或 pallet/call 组合都不得恢复。
-
-## 十、验证清单
-
-### 应绿色通过
-
-1. `login_challenge` → `login_receipt`
-2. `transfer`
-3. `internal_vote`
-4. `joint_vote`
-5. `cast_referendum`
-6. `finalize_proposal` / `retry_passed_proposal` / `cancel_passed_proposal`
-7. `propose_create_institution` / `propose_close_institution`
-8. `propose_create_personal` / `propose_close_personal`
-9. `propose_transfer` / `propose_safety_fund_transfer` / `propose_sweep_to_main`
-10. `propose_runtime_upgrade` / `developer_direct_upgrade` 的 32 字节哈希签名例外
-11. `cid_admin_action`
-
-### 应红色拒绝
-
-1. `proto != CITIZEN_QR_V1`
-2. 未登记 kind
-3. 已过期 envelope
-4. 随机 `payload_hex`
-5. `display.action` 与 decoder action 不一致
-6. `display.fields` 与 decoder fields 不一致
-7. 旧 `spec_version` 门控、旧 wrapper action、旧 `MultisigManage` 名称试图作为当前协议依据
-
-## 十一、拒绝的替代方案
-
-### 10.1 envelope 内嵌 issuer_sig
-
-桌面端和移动端都是客户端程序,反编译即可拿到打包私钥。把来源证明放到客户端不能建立稳定 provenance,反而会制造两套判断模型。拒绝。
-
-### 10.2 老版兼容模式
-
-本仓库处于重新创世前收口阶段,协议固定前必须清掉旧分支。拒绝。
+1. QR 内携带 `display` 摘要。会导致第二真源和伪造摘要风险,已删除。
+2. 登录独立 kind。会增加协议分支,已统一为 `k=1,a=1`。
+3. 旧协议兼容解析。会让同一扫码链路出现两套真源,禁止恢复。

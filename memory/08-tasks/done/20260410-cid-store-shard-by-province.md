@@ -127,7 +127,7 @@ pub(crate) struct GlobalShard {
 
 
     // 登录 challenge(全局会话)
-    pub(crate) login_challenges: HashMap<String, LoginChallenge>,
+    pub(crate) sign_requests: HashMap<String, LoginSignRequest>,
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
 

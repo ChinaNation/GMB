@@ -18,7 +18,7 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_servi
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/rpc/onchain.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart';
@@ -67,7 +67,8 @@ class MultisigTransferDetailPage extends StatefulWidget {
       _MultisigTransferDetailPageState();
 }
 
-class _MultisigTransferDetailPageState extends State<MultisigTransferDetailPage> {
+class _MultisigTransferDetailPageState
+    extends State<MultisigTransferDetailPage> {
   static const int _statusVoting = 0;
 
   final MultisigTransferService _proposalService = MultisigTransferService();
@@ -603,28 +604,11 @@ class _MultisigTransferDetailPageState extends State<MultisigTransferDetailPage>
         }
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
-        final voteText = approve ? '赞成' : '反对';
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: _signAction,
-            summary: '$_kindLabel #${widget.proposalId} 投票：$voteText',
-            fields: [
-              // 转账提案管理员投票统一走 internal_vote,
-              // fields 按 Registry 恒为 (proposal_id, approve)。
-              // 类型特有字段(收款账户/金额/备注/机构/划转金额/目标)属辅助展示,
-              // 页面已独立显示,不塞 display.fields 避免对齐失败。
-              SignDisplayField(
-                  key: 'proposal_id',
-                  label: '提案编号',
-                  value: widget.proposalId.toString()),
-              SignDisplayField(
-                  key: 'approve', label: '投票', value: approve.toString()),
-            ],
-          ),
+          action: QrActions.internalVote,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -638,7 +622,7 @@ class _MultisigTransferDetailPageState extends State<MultisigTransferDetailPage>
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.body.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
       // 所有管理员投票统一走 InternalVote::cast(22.0)。

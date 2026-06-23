@@ -1,6 +1,6 @@
 //! 多签转账签名请求构造。
 //!
-//! 本文件只负责 `MultisigTransfer::propose_transfer` 的 call_data 和离线签名展示字段；
+//! 本文件只负责 `MultisigTransfer::propose_transfer` 的 call_data；
 //! 通用 QR 协议、nonce、payload 和提交校验复用治理签名基础设施。
 
 use crate::governance;
@@ -58,50 +58,7 @@ pub fn build_propose_transfer_sign_request(
         remark_bytes,
     )?;
 
-    let institution_label = if let Some(hex) = cid_number.strip_prefix("institution-account:") {
-        let short = if hex.len() > 14 {
-            format!("{}...{}", &hex[..8], &hex[hex.len() - 6..])
-        } else {
-            hex.to_string()
-        };
-        format!("机构账户 {short}")
-    } else {
-        // 机构码 → 展示标签(治理机构特化,其余显示码字符串)。
-        match institution_code {
-            primitives::institution_code::NRC => "国储会".to_string(),
-            primitives::institution_code::PRC => "省储会".to_string(),
-            primitives::institution_code::PRB => "省储行".to_string(),
-            other => String::from_utf8_lossy(&other)
-                .trim_end_matches('\0')
-                .to_string(),
-        }
-    };
-
-    // display.fields 必须与 citizenwallet PayloadDecoder 解码结果的 key/value 完全一致。
-    // citizenwallet 解码 propose_transfer 返回: institution / beneficiary / amount_yuan / remark。
-    let fields = serde_json::json!([
-        { "key": "institution", "label": "转出账户", "value": institution_label },
-        { "key": "beneficiary", "label": "收款地址", "value": beneficiary_address },
-        {
-            "key": "amount_yuan",
-            "label": "金额",
-            "value": format!("{} GMB", governance::signing::format_amount(amount_yuan))
-        },
-        { "key": "remark", "label": "备注", "value": remark }
-    ]);
-    let summary = format!(
-        "{institution_label} 提案转账 {} GMB 给 {beneficiary_address}",
-        governance::signing::format_amount(amount_yuan)
-    );
-
-    governance::signing::build_sign_request_from_call_data(
-        &pubkey_clean,
-        &pubkey_bytes,
-        &call_data,
-        "propose_transfer",
-        &summary,
-        &fields,
-    )
+    governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
 
 /// 构建安全基金转账提案签名请求（pallet=19, call=1）。
@@ -115,28 +72,7 @@ pub fn build_propose_safety_fund_sign_request(
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let call_data = build_safety_fund_call_data(beneficiary_address, amount_yuan, remark)?;
 
-    let fields = serde_json::json!([
-        { "key": "beneficiary", "label": "收款地址", "value": beneficiary_address },
-        {
-            "key": "amount_yuan",
-            "label": "金额",
-            "value": format!("{} GMB", governance::signing::format_amount(amount_yuan))
-        },
-        { "key": "remark", "label": "备注", "value": remark }
-    ]);
-    let summary = format!(
-        "安全基金转账 {} GMB 给 {beneficiary_address}",
-        governance::signing::format_amount(amount_yuan)
-    );
-
-    governance::signing::build_sign_request_from_call_data(
-        &pubkey_clean,
-        &pubkey_bytes,
-        &call_data,
-        "propose_safety_fund_transfer",
-        &summary,
-        &fields,
-    )
+    governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
 
 /// 构建手续费划转提案签名请求（pallet=19, call=2）。
@@ -149,35 +85,10 @@ pub fn build_propose_sweep_sign_request(
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let call_data = build_sweep_call_data(cid_number, amount_yuan)?;
 
-    let institution_account = super::account_id::account_id_from_transfer_identity(cid_number)?;
-    let institution_label = format!(
-        "机构账户 {}",
-        governance::signing::pubkey_to_ss58(&institution_account)?
-    );
-    let fields = serde_json::json!([
-        { "key": "institution", "label": "机构", "value": institution_label },
-        {
-            "key": "amount_yuan",
-            "label": "金额",
-            "value": format!("{} GMB", governance::signing::format_amount(amount_yuan))
-        }
-    ]);
-    let summary = format!(
-        "{institution_label} 手续费划转 {} 元",
-        governance::signing::format_amount(amount_yuan)
-    );
-
-    governance::signing::build_sign_request_from_call_data(
-        &pubkey_clean,
-        &pubkey_bytes,
-        &call_data,
-        "propose_sweep_to_main",
-        &summary,
-        &fields,
-    )
+    governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
 
-/// 安全基金转账 call_data，供签名构造和签名回执提交复用。
+/// 安全基金转账 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_safety_fund_call_data(
     beneficiary_address: &str,
     amount_yuan: f64,
@@ -207,7 +118,7 @@ pub(crate) fn build_safety_fund_call_data(
     Ok(call_data)
 }
 
-/// 普通机构多签转账 call_data，供签名构造和签名回执提交复用。
+/// 普通机构多签转账 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_transfer_call_data(
     cid_number: &str,
     institution_code: &[u8; 4],
@@ -237,7 +148,7 @@ pub(crate) fn build_transfer_call_data(
     Ok(call_data)
 }
 
-/// 手续费划转 call_data，供签名构造和签名回执提交复用。
+/// 手续费划转 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_sweep_call_data(cid_number: &str, amount_yuan: f64) -> Result<Vec<u8>, String> {
     if amount_yuan <= 0.0 {
         return Err("划转金额必须大于 0".to_string());

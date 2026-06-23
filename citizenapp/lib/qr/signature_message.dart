@@ -4,7 +4,7 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 ///
 /// 格式(逐字节与 CitizenWallet / Rust 后端 / TS 前端一致):
 /// ```
-/// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+/// QR_V1|<k>|<i>|<system 或空>|<e 或 0>|<principal>
 /// ```
 ///
 /// - `system` 为 null 时写空串
@@ -12,9 +12,9 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 /// - `principal` 去掉 `0x` 前缀,小写 hex
 ///
 /// 用于:
-/// - `login_challenge.body.sys_sig`(principal = sys_pubkey)
-/// - `login_receipt.body.signature`(principal = pubkey)
-/// - `sign_response` 本身不用此函数签名 envelope,而是对 `payload_hex` 原字节签名
+/// - `k=1,a=1` 登录请求的系统签名(principal = sys_pubkey)
+/// - `k=2` 登录签名响应的 envelope 消息(principal = pubkey)
+/// - 普通交易 `k=2` 响应本身不用此函数签 envelope,而是对请求载荷签名
 String buildSignatureMessage({
   required QrKind kind,
   required String id,
@@ -27,5 +27,5 @@ String buildSignatureMessage({
   final pp = principal.startsWith('0x') || principal.startsWith('0X')
       ? principal.substring(2).toLowerCase()
       : principal.toLowerCase();
-  return '${QrProtocols.v1}|${kind.wire}|$id|$sys|$exp|$pp';
+  return '${QrProtocols.v1}|${kind.code}|$id|$sys|$exp|$pp';
 }

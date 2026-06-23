@@ -169,7 +169,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
                 </div>
                 <p className="countdown">有效时间：{activateCountdown} 秒</p>
                 <button className="primary-button" onClick={() => setActivateStep('scan')}>
-                  已签名，扫描回执
+                  已签名，扫描响应
                 </button>
                 <button className="secondary-button" onClick={() => setActivateStep('idle')}>
                   取消
@@ -178,7 +178,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
             )}
             {activateStep === 'scan' && (
               <>
-                <h3>扫描签名回执</h3>
+                <h3>扫描签名响应</h3>
                 <QrScanner
                   onScan={handleActivateScan}
                   onError={(e) => { setActivateError(e); setActivateStep('error'); }}

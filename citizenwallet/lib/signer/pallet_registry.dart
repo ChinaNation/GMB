@@ -3,7 +3,7 @@
 /// 索引由 runtime 的 `construct_runtime!` 宏中声明顺序决定。
 /// 链升级调整 pallet 顺序后，需同步更新此文件中的常量。
 ///
-/// 防误签靠两色严格模式:decoder 解析失败 / display.action 与 decoded.action 不一致
+/// 防误签靠两色严格模式:decoder 解析失败 / QR action 与 payload 解码动作不一致
 /// 直接红色拒签。
 ///
 /// 投票引擎统一入口:

@@ -67,11 +67,6 @@ pub fn is_dynamic_code(code: &InstitutionCode) -> bool {
     is_registered_multisig_code(code)
 }
 
-/// 返回必须与 citizenwallet 冷钱包 PayloadDecoder 解码出的机构码字段一致的展示值。
-pub fn qr_institution_code_display_value(code: &InstitutionCode) -> String {
-    institution_code_label(code)
-}
-
 pub fn status_label(status: u8) -> &'static str {
     match status {
         0 => "待激活",

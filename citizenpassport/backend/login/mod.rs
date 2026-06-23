@@ -49,13 +49,13 @@ pub(crate) struct SessionUser {
 }
 
 #[derive(Deserialize)]
-struct QrChallengeRequest {
+struct QrSignRequestRequest {
     origin: Option<String>,
     domain: Option<String>,
 }
 
 #[derive(Serialize)]
-struct QrChallengeData {
+struct QrSignRequestData {
     challenge_id: String,
     login_qr_payload: String,
     origin: String,
@@ -88,20 +88,31 @@ struct QrResultData {
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/admin/auth/qr/challenge", post(auth_qr_challenge))
+        .route(
+            "/api/v1/admin/auth/qr/sign-request",
+            post(auth_qr_sign_request),
+        )
         .route("/api/v1/admin/auth/qr/complete", post(auth_qr_complete))
         .route("/api/v1/admin/auth/qr/result", get(auth_qr_result))
         .route("/api/v1/admin/auth/me", get(auth_me))
         .route("/api/v1/admin/auth/logout", post(auth_logout))
 }
 
-async fn auth_qr_challenge(
+async fn auth_qr_sign_request(
     State(state): State<AppState>,
     ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    Json(req): Json<QrChallengeRequest>,
-) -> Result<Json<ApiResponse<QrChallengeData>>, (StatusCode, Json<ApiError>)> {
-    rate_limit::check(&state, client_addr, &headers, "auth_qr_challenge", 20, 60).await?;
+    Json(req): Json<QrSignRequestRequest>,
+) -> Result<Json<ApiResponse<QrSignRequestData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(
+        &state,
+        client_addr,
+        &headers,
+        "auth_qr_sign_request",
+        20,
+        60,
+    )
+    .await?;
 
     let origin = req.origin.unwrap_or_default().trim().to_string();
     if origin.is_empty() {
@@ -128,7 +139,7 @@ async fn auth_qr_challenge(
     .await?;
 
     sqlx::query(
-        "INSERT INTO login_challenges (challenge_id, admin_account, session_id, expire_at, consumed, created_at)
+        "INSERT INTO login_sign_requests (challenge_id, admin_account, session_id, expire_at, consumed, created_at)
          VALUES ($1, '', $2, $3, FALSE, $4)",
     )
     .bind(&challenge_id)
@@ -137,21 +148,17 @@ async fn auth_qr_challenge(
     .bind(issued_at)
     .execute(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save challenge failed"))?;
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save sign request failed"))?;
 
-    let login_qr_payload = serde_json::to_string(&crate::qr::LoginChallengeEnvelope::new(
+    let login_qr_payload = serde_json::to_string(&crate::qr::SignRequestEnvelope::new(
         challenge_id.clone(),
         issued_at,
         expire_at,
-        crate::qr::LoginChallengeBody {
-            system: "cpms".to_string(),
-            sys_pubkey: sys_pubkey.clone(),
-            sys_sig: sys_sig.clone(),
-        },
+        crate::qr::login_request_body("cpms", &sys_pubkey, &sys_sig),
     ))
     .unwrap_or_default();
 
-    Ok(Json(ok(QrChallengeData {
+    Ok(Json(ok(QrSignRequestData {
         challenge_id,
         login_qr_payload,
         origin,
@@ -190,7 +197,7 @@ async fn auth_qr_complete(
 
     let row = sqlx::query(
         "SELECT session_id, expire_at, consumed
-         FROM login_challenges
+         FROM login_sign_requests
          WHERE challenge_id = $1
          FOR UPDATE",
     )
@@ -201,17 +208,17 @@ async fn auth_qr_complete(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "query challenge failed",
+            "query sign request failed",
         )
     })?
-    .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
+    .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "sign request not found"))?;
 
     let consumed: bool = row.get("consumed");
     if consumed {
         return Err(err(
             StatusCode::BAD_REQUEST,
             2005,
-            "challenge already consumed",
+            "sign request already consumed",
         ));
     }
 
@@ -220,24 +227,24 @@ async fn auth_qr_complete(
         return Err(err(StatusCode::GONE, 2006, "challenge expired"));
     }
 
-    let challenge_session_id: String = row.get("session_id");
-    if challenge_session_id != req.session_id.trim() {
+    let sign_request_session_id: String = row.get("session_id");
+    if sign_request_session_id != req.session_id.trim() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             2004,
-            "challenge session mismatch",
+            "sign request session mismatch",
         ));
     }
 
-    // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
+    // 先验签和查管理员，全部通过后才消费登录签名请求（失败时 tx 自动回滚）
     let admin = find_admin_by_pubkey(&state, req.admin_account.trim()).await?;
     if admin.user_group == "operators" {
         crate::archive::ensure_operator_annual_export_unlocked(&state).await?;
     }
     // 重建完整签名原文(包含签名者公钥),与 CitizenWallet 端
-    // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
+    // buildSignatureMessage(kind=signResponse, principal=pubkey) 一致。
     let verify_message = crate::qr::build_signature_message(
-        crate::qr::QrKind::LoginReceipt,
+        crate::qr::QrKind::SignResponse,
         req.challenge_id.trim(),
         Some("cpms"),
         Some(expire_at),
@@ -257,9 +264,9 @@ async fn auth_qr_complete(
         ));
     }
 
-    // 验签通过，消费 challenge
+    // 验签通过，消费登录签名请求
     sqlx::query(
-        "UPDATE login_challenges
+        "UPDATE login_sign_requests
          SET consumed = TRUE, admin_account = $1
          WHERE challenge_id = $2",
     )
@@ -271,7 +278,7 @@ async fn auth_qr_complete(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "consume challenge failed",
+            "consume sign request failed",
         )
     })?;
 
@@ -431,26 +438,27 @@ async fn auth_qr_result(
         return Ok(response);
     }
 
-    let challenge_row =
-        sqlx::query("SELECT session_id, expire_at FROM login_challenges WHERE challenge_id = $1")
-            .bind(query.challenge_id.trim())
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|_| {
-                err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    5001,
-                    "query challenge failed",
-                )
-            })?
-            .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
+    let challenge_row = sqlx::query(
+        "SELECT session_id, expire_at FROM login_sign_requests WHERE challenge_id = $1",
+    )
+    .bind(query.challenge_id.trim())
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query sign request failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "sign request not found"))?;
 
-    let challenge_session_id: String = challenge_row.get("session_id");
-    if challenge_session_id != query.session_id.trim() {
+    let sign_request_session_id: String = challenge_row.get("session_id");
+    if sign_request_session_id != query.session_id.trim() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             2004,
-            "challenge session mismatch",
+            "sign request session mismatch",
         ));
     }
     let expire_at: i64 = challenge_row.get("expire_at");
@@ -630,7 +638,7 @@ pub(crate) async fn build_login_qr_system_signature(
     let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
     let _ = issued_at; // 统一签名原文不再包含 issued_at
     let message = crate::qr::build_signature_message(
-        crate::qr::QrKind::LoginChallenge,
+        crate::qr::QrKind::SignRequest,
         challenge,
         Some(system),
         Some(expires_at),

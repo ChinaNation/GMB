@@ -7,9 +7,9 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
 import 'package:citizenapp/governance/shared/institution_info.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
 import 'package:citizenapp/signer/qr_signer.dart';
@@ -69,7 +69,8 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     _selectedWallet = widget.adminWallets.first;
     final hex = widget.institution.accounts?.safetyFundAccount;
     if (hex == null) {
-      throw StateError('国储会 InstitutionAccounts.safetyFundAccount 为空,无法发起安全基金转账');
+      throw StateError(
+          '国储会 InstitutionAccounts.safetyFundAccount 为空,无法发起安全基金转账');
     }
     _safetyFundAccountHex = hex;
     _fromSs58 = _accountHexToSs58(_safetyFundAccountHex);
@@ -249,32 +250,11 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
               wallet.walletIndex, payload);
         }
         final qrSigner = QrSigner();
-        final beneficiary = _beneficiaryController.text.trim();
-        final amountFormatted = AmountFormat.format(
-                AmountFormat.tryParse(_amountController.text) ?? 0,
-                symbol: '')
-            .trim();
-        final remarkText = _remarkController.text;
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-safety-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'propose_safety_fund_transfer',
-            summary: '国储会安全基金 提案转账 $amountFormatted GMB 给 $beneficiary',
-            fields: [
-              const SignDisplayField(
-                  key: 'institution', label: '转出账户', value: '国储会安全基金账户'),
-              SignDisplayField(
-                  key: 'beneficiary', label: '收款账户', value: beneficiary),
-              SignDisplayField(
-                  key: 'amount_yuan',
-                  label: '金额',
-                  value: '$amountFormatted GMB'),
-              SignDisplayField(key: 'remark', label: '备注', value: remarkText),
-            ],
-          ),
+          action: QrActions.safetyFundTransfer,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -288,7 +268,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexToBytes(response.body.signature));
+        return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
       }
 
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));

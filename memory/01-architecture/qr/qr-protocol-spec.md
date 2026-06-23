@@ -1,320 +1,223 @@
-# CITIZEN_QR_V1 统一二维码协议规范
+# QR_V1 统一二维码协议规范
 
-- 版本:`CITIZEN_QR_V1`
-- 创建日期:2026-04-09
+- 版本:`QR_V1`
+- 更新日期:2026-06-22
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:全仓库所有二维码(CPMS 的 `CID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 除外)
+- 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
+- 例外:CPMS 安装/档案业务码 `CID_CPMS_V1 / INSTALL / ARCHIVE` 不是签名扫码协议,不并入本文件
 
 ## 1. 设计铁律
 
-1. **唯一协议字符串**:`CITIZEN_QR_V1`。不存在任何其他 proto 字符串。
-2. **唯一 kind 枚举**:6 个当前值,见第 3 节。不存在任何 `type` / `purpose` / `msg_type` 字段。
-3. **唯一字段命名**:见第 4 节字段字典。不存在任何别名、兼容读、`a ?? b`。
-4. **唯一签名原文拼接**:见第 5 节。所有需要 sr25519 签名的 kind 共用一个拼接函数。
-5. **固定码不出现时效字段**:`id` / `issued_at` / `expires_at` 三字段**直接不存在于 JSON**,不是 `null`,不是 `0`,不是 `""`。
-6. **0 兼容**:删除所有历史字段别名代码,不保留任何过渡期。
+1. 唯一协议字符串:`QR_V1`。不得恢复历史协议名、登录专用 QR kind 或任何第二套扫码协议名。
+2. 唯一 envelope 字段:`p/k/i/e/b`。不得恢复 `proto/kind/id/issued_at/expires_at/body` 作为线上 QR 字段。
+3. 唯一签名请求字段:`a/g/u/d`。业务场景放在 `a`,扫码流向放在 `k`。
+4. 唯一签名响应字段:`u/s`。签名响应不携带 payload、payload hash、签名时间或展示字段。
+5. 唯一验签真源:生成方按 `i` 找回本地 session 中的 action、payload、公钥和过期时间后验签。
+6. 唯一展示真源:扫码端必须由 `a + d(payload)` 本地解码展示;QR 不携带 `display`、`summary`、`fields`。
+7. 固定码不出现时效字段:`i/e` 直接不存在,不是 `null`、`0` 或空串。
+8. 不兼容旧字段。解析器遇到旧字段、别名字段、未知字段必须报错。
 
-## 2. 顶层 envelope 结构
+## 2. 顶层 Envelope
 
 ```jsonc
 {
-  "proto": "CITIZEN_QR_V1",
-  "kind":  "<6 个当前 kind 之一>",
-  "id":    "<临时码必填,固定码省略>",
-  "issued_at":  <临时码必填,固定码省略,unix 秒>,
-  "expires_at": <临时码必填,固定码省略,unix 秒>,
-  "body":  { ... 按 kind 派发 ... }
+  "p": "QR_V1",
+  "k": 1,
+  "i": "req_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "e": 1780000000,
+  "b": {}
 }
 ```
 
-**字段规则**:
-- `proto`:恒为 `"CITIZEN_QR_V1"`
-- `kind`:恒为第 3 节 6 个当前值之一,snake_case
-- `id`:临时码必填,字符长度 16-128,允许 `[a-zA-Z0-9_-]`;固定码**字段不出现**
-- `issued_at` / `expires_at`:临时码必填,unix 秒级整数;固定码**字段不出现**
-- `body`:必填,对象,字段集合由 kind 决定(第 4 节)
-
-**严格规则**:
-- 顶层字段**只有** `proto` / `kind` / `id` / `issued_at` / `expires_at` / `body` 六个
-- `body` 里**绝对不重复**顶层字段
-- 解析器遇到未知顶层字段:**报错**
-- 解析器遇到 `proto != "CITIZEN_QR_V1"`:**报错**
-- 解析器遇到 `kind` 不在 6 个当前值列表:**报错**
-
-## 3. 6 个当前 kind 清单
-
-| kind | 类型 | 生成者 | 扫描者 | 说明 |
-|---|---|---|---|---|
-| `login_challenge` | 临时 | CID/CPMS 后端 | CitizenWallet | 登录挑战码 |
-| `login_receipt` | 临时 | CitizenWallet | CID/CPMS 后端 | 登录回执码 |
-| `sign_request` | 临时 | CitizenApp / citizenchain/node / CPMS | CitizenWallet | 离线签名请求 |
-| `sign_response` | 临时 | CitizenWallet | CitizenApp | 离线签名回执 |
-| `user_contact` | **固定** | CitizenApp | CitizenApp / citizenchain / cid 前端 | 个人联系码 |
-| `user_transfer` | 临时 | CitizenApp | CitizenApp / citizenchain | 临时收款码 |
-
-> 注:`user_multisig` 协议已于 **2026-05-03 下线** — CitizenApp 改为通过链上反向索引(遍历 `AdminsChange::AdminAccounts` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。2026-05-08 起发现范围明确为 `PersonalAccount AccountId` 与 `InstitutionAccount AccountId`;`0x02 注册机构归属关系` 只保留给机构归属/检索。
-
-## 4. body 字段字典(按 kind 派发)
-
-### 4.1 `login_challenge`(临时)
-
-```jsonc
-"body": {
-  "system":     "cid" | "cpms",
-  "sys_pubkey": "0x<hex>",
-  "sys_sig":    "0x<hex>"
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
+| 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `system` | string | 是 | 目标系统,`"cid"` 或 `"cpms"` |
-| `sys_pubkey` | string | 是 | 系统公钥,`0x` + hex |
-| `sys_sig` | string | 是 | 系统对签名原文的 sr25519 签名,`0x` + hex |
+| `p` | string | 是 | 协议版本,恒为 `QR_V1` |
+| `k` | int | 是 | 扫码流向码,见第 3 节 |
+| `i` | string | 临时码必填 | request/session id,16-128 字符,允许 `[A-Za-z0-9_-]` |
+| `e` | int | 临时码必填 | 过期 unix 秒;固定码不出现 |
+| `b` | object | 是 | body,字段由 `k` 决定 |
 
-### 4.2 `login_receipt`(临时)
+顶层字段只允许 `p/k/i/e/b`。临时码必须有 `i/e`;固定码禁止有 `i/e`。
 
-```jsonc
-"body": {
-  "system":       "cid" | "cpms",
-  "pubkey":       "0x<hex>",
-  "sig_alg":      "sr25519",
-  "signature":    "0x<hex>",
-  "payload_hash": "0x<hex>",
-  "signed_at":    1712650010
-}
-```
+## 3. k 扫码流向码
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `system` | string | 是 | 原样回传自挑战码 |
-| `pubkey` | string | 是 | 签名者(CitizenWallet 公民钱包)公钥,`0x` + hex |
-| `sig_alg` | string | 是 | 固定 `"sr25519"` |
-| `signature` | string | 是 | 对签名原文的签名,`0x` + hex |
-| `payload_hash` | string | 是 | 签名原文字节的 SHA-256,`0x` + hex |
-| `signed_at` | int | 是 | 签名完成时间,unix 秒 |
+| k | 名称 | 类型 | 生成方 | 扫码方 | 注释 |
+|---:|---|---|---|---|---|
+| 1 | `sign_request` | 临时 | CitizenApp / CitizenWallet / CID / CPMS / citizenchain node | 签名方 | 请求扫码方签名 `b.d` |
+| 2 | `sign_response` | 临时 | 签名方 | 请求生成方 | 回传签名结果 |
+| 3 | `user_contact` | 固定 | CitizenApp / CitizenWallet | 需要地址的一方 | 展示钱包地址和联系人名 |
+| 4 | `user_transfer` | 临时 | 收款方 | 付款方 | 收款码,可带金额和备注 |
+| 5 | `im_node_pairing` | 固定 | citizenchain node | CitizenApp | 通信节点配对 |
 
-### 4.3 `sign_request`(临时)
+登录、CID 绑定、管理员确认、交易签名、运行时升级等都不新增 `k`;它们统一是 `k=1` 签名请求,具体业务由 `b.a` 区分。
+
+## 4. k=1 sign_request
 
 ```jsonc
-"body": {
-  "address":      "<SS58>",
-  "pubkey":       "0x<hex>",
-  "sig_alg":      "sr25519",
-  "payload_hex":  "0x<hex>",
-  "display": {
-    "action":  "transfer",
-    "summary": "转账 100.00 GMB 给 5Grw...",
-    "fields":  [
-      { "key": "to", "label": "收款方", "value": "5Grw..." },
-      { "key": "amount_yuan", "label": "金额", "value": "100.00 GMB" }
-    ]
+{
+  "p": "QR_V1",
+  "k": 1,
+  "i": "req_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "e": 1780000000,
+  "b": {
+    "a": 515,
+    "g": 1,
+    "u": "1DWTxxX90xxhFBq9BKmf1oIshViFTM3jmlaE56Vton0",
+    "d": "AgMA1DWTxxX90xxhFBq9BKmf1oIshViFTM3jmlaE56Vton1BnA"
   }
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
+| 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `address` | string | 是 | 签名者 SS58 地址 |
-| `pubkey` | string | 是 | 签名者公钥,`0x` + hex |
-| `sig_alg` | string | 是 | 固定 `"sr25519"` |
-| `payload_hex` | string | 是 | 待签 payload 字节,`0x` + hex,≤32768 字符 |
-| `display` | object | 是 | 在线端提供的人可读摘要,冷钱包必须以本地 decoder 独立解析结果为准 |
-| `display.action` | string | 是 | 动作 key,必须登记在 `qr-action-registry.md` |
-| `display.summary` | string | 是 | 一句话摘要,离线端必须显示 |
-| `display.fields` | array | 否 | 结构化提示字段,每项 `{key, label, value}`;若 key 与 decoder 验真字段同名,value 必须逐字一致 |
+| `a` | int | 是 | 业务动作码,见 `qr-action-registry.md` |
+| `g` | int | 是 | 签名算法码,当前只允许 `1 = sr25519` |
+| `u` | string | 是 | 期望签名者 32 字节公钥,base64url 无填充 |
+| `d` | string | 是 | 待签 payload 原始字节,base64url 无填充 |
 
-**真实签名内容与展示分层**:
+签名字节规则:
 
-- `payload_hex` 是唯一真实待签内容。`sign_response.signature` 必须签
-  `hex_decode(payload_hex)` 的原始字节,不得签 `display`。
-- 冷钱包 decoder 必须从 `payload_hex` 解出验真字段。能独立解码并交叉验证时绿色通过;
-  不能独立解码或 display 与 decoder 冲突时红色拒签。
-- 人机确认字段只显示中文业务信息和 SS58 地址。`payload_hash`、内部 ID、nonce、原始
-  `0x<64hex>` 公钥等仅机器校验字段默认不进入确认页。
-- 机器交互可以继续使用 `0x` 公钥/哈希;所有人机可见账户必须转为 CitizenChain
-  SS58(prefix=2027),无法确认是 32 字节账户时才显示原字段。
+| 场景 | `a` 规则 | 签名字节 |
+|---|---|---|
+| 普通链交易 | `a = (pallet_index << 8) | call_index` | payload 长度 ≤256B 签原文,>256B 签 `blake2_256(payload)` |
+| 登录 / CID / CPMS 文本载荷 | `a = 1..4` | 签 payload 原文 |
+| 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
+| Runtime 升级哈希签名 | `a = 7` 或 RuntimeUpgrade 链 action | `d` 必须是 32B hash,签该 32B |
 
-### 4.4 `sign_response`(临时)
-
-```jsonc
-"body": {
-  "pubkey":       "0x<hex>",
-  "sig_alg":      "sr25519",
-  "signature":    "0x<hex>",
-  "payload_hash": "0x<hex>",
-  "signed_at":    1712650010
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `pubkey` | string | 是 | 签名者公钥,必须与请求一致 |
-| `sig_alg` | string | 是 | 固定 `"sr25519"` |
-| `signature` | string | 是 | 对 `payload_hex` 原字节的签名 |
-| `payload_hash` | string | 是 | `payload_hex` 原字节的 SHA-256 |
-| `signed_at` | int | 是 | 签名完成时间 |
-
-**验证规则**:在线端接收后,必须:
-1. `id == request.id`
-2. `pubkey == request.body.pubkey`
-3. `payload_hash == sha256(hex_decode(request.body.payload_hex))`
-4. sr25519 验证 `signature` 对 `hex_decode(payload_hex)`
-
-### 4.5 `user_contact`(**固定**,无时效)
+## 5. k=2 sign_response
 
 ```jsonc
 {
-  "proto": "CITIZEN_QR_V1",
-  "kind":  "user_contact",
-  "body": {
-    "address": "<SS58>",
-    "name":    "<昵称>"
+  "p": "QR_V1",
+  "k": 2,
+  "i": "req_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "e": 1780000000,
+  "b": {
+    "u": "1DWTxxX90xxhFBq9BKmf1oIshViFTM3jmlaE56Vton0",
+    "s": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg"
   }
 }
 ```
 
-**注意顶层无 `id` / `issued_at` / `expires_at`**。
-
-| 字段 | 类型 | 必填 | 说明 |
+| 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `address` | string | 是 | 用户 SS58 地址 |
-| `name` | string | 是 | 用户昵称 |
+| `u` | string | 是 | 实际签名者 32 字节公钥,base64url 无填充 |
+| `s` | string | 是 | 64 字节 sr25519 签名,base64url 无填充 |
 
-### 4.6 `user_transfer`(临时)
+生成方验签必须使用本地 session:
+
+1. `p == QR_V1`
+2. `k == 2`
+3. `i == 本地请求 id`
+4. `e` 未过期
+5. `b.u == 本地 expected pubkey`
+6. 按本地 session 的 `a + payload` 计算签名字节后验证 `b.s`
+
+## 6. k=3 user_contact
+
+固定码,不带 `i/e`。
 
 ```jsonc
-"body": {
-  "address": "<SS58>",
-  "name":    "<收款方昵称>",
-  "amount":  "",
-  "symbol":  "GMB",
-  "memo":    "",
-  "bank":    ""
+{
+  "p": "QR_V1",
+  "k": 3,
+  "b": {
+    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "contact_name": "张三"
+  }
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
+| 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `address` | string | 是 | 收款方 SS58 地址 |
-| `name` | string | 是 | 收款方昵称,允许空串 |
-| `amount` | string | 是 | 建议金额,字符串避免浮点精度,空串表示由付款方输入 |
-| `symbol` | string | 是 | 币种,默认 `"GMB"` |
+| `address` | string | 是 | SS58 钱包地址 |
+| `contact_name` | string | 是 | 联系人名,允许空串仅在 UI 层兜底 |
+
+## 7. k=4 user_transfer
+
+临时码,带 `i/e`。
+
+```jsonc
+{
+  "p": "QR_V1",
+  "k": 4,
+  "i": "pay_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "e": 1780000000,
+  "b": {
+    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "recipient_name": "张三",
+    "amount": "100.50",
+    "symbol": "GMB",
+    "memo": "房租",
+    "bank": ""
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 注释 |
+|---|---|---|---|
+| `address` | string | 是 | 收款方 SS58 钱包地址 |
+| `recipient_name` | string | 是 | 收款方显示名,允许空串 |
+| `amount` | string | 是 | 建议金额,字符串避免浮点精度,空串表示付款方输入 |
+| `symbol` | string | 是 | 币种,当前 `GMB` |
 | `memo` | string | 是 | 备注,允许空串 |
-| `bank` | string | 是 | 清算省储行标识,允许空串 |
+| `bank` | string | 是 | 清算行/清算网络标识,允许空串 |
 
-### 4.7 `user_multisig` — **已下线**(2026-05-03)
+## 8. k=5 im_node_pairing
 
-原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:CitizenApp 启动期遍历 `AdminsChange::AdminAccounts`,自动发现本钱包账户作为 admin 的所有多签(`PersonalAccount AccountId` + `InstitutionAccount AccountId`),无需 QR 协议。`0x02 注册机构归属关系` 只用于把多个机构账户归到同一个 CID 机构,不再作为账户发现或转账支出主体。
+固定码,不带 `i/e`。
 
-相关代码下线清单:
-- `lib/qr/bodies/user_multisig_body.dart` — 删除整文件
-- 旧多签二维码弹窗文件 — 删除整文件
-- `lib/qr/qr_protocols.dart::QrKind.userMultisig` — 枚举值删除
-- `lib/qr/envelope.dart::QrKind.userMultisig` 解析分支 — 删除
-- `lib/qr/qr_router.dart::QrRouteType.userMultisig` — 枚举值删除
-- `memory/01-architecture/qr/qr-protocol-fixtures/user_multisig.json` — 删除
-
-## 5. 签名原文拼接(统一函数)
-
-所有需要 sr25519 签名的 kind(`login_challenge` 的 `sys_sig`、`login_receipt` 的 `signature`、`sign_response` 的 `signature`)共用这一个拼接:
-
-```
-CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+```jsonc
+{
+  "p": "QR_V1",
+  "k": 5,
+  "b": {
+    "node_peer_id": "12D3KooWNode",
+    "node_multiaddr": "/ip4/127.0.0.1/tcp/30333/ws/p2p/12D3KooWNode",
+    "endpoint_kind": "ip4"
+  }
+}
 ```
 
-字段之间用 `|` 分隔;缺失字段以空串占位(对 `system`)或 `0` 占位(对 `expires_at`);`<principal>` 按 kind 取值:
+| 字段 | 类型 | 必填 | 注释 |
+|---|---|---|---|
+| `node_peer_id` | string | 是 | 通信节点 libp2p PeerId |
+| `node_multiaddr` | string | 是 | 配对 multiaddr,不携带 RPC URL |
+| `endpoint_kind` | string | 是 | `ip4` 或 `ip6` |
 
-| kind | `<principal>` 取值 |
+## 9. 签名原文拼接
+
+只有系统对 QR envelope 元信息签名时使用该函数。普通交易签名响应不签 envelope,只签请求 payload。
+
+```
+QR_V1|<k>|<i>|<system 或空>|<e 或 0>|<principal>
+```
+
+| 字段 | 注释 |
 |---|---|
-| `login_challenge` | `body.sys_pubkey`(去掉 `0x` 前缀) |
-| `login_receipt` | `body.pubkey`(去掉 `0x` 前缀) |
-| `sign_response` | `body.pubkey`(去掉 `0x` 前缀) |
+| `k` | 数字扫码流向码 |
+| `i` | 请求 id |
+| `system` | `cid` / `cpms` / 空串 |
+| `e` | 过期 unix 秒;无则为 `0` |
+| `principal` | 去掉 `0x` 的小写 hex 公钥 |
 
-**Dart / Rust / TS 三端必须逐字节一致**。
+## 10. Fixture 契约
 
-**`sign_request` 不在此列** —— 离线端对 `payload_hex` 的原字节签名(不是对 envelope 签名),仅 `signed_at`/`payload_hash` 进 `sign_response.body`。
+当前 fixture:
 
-## 6. 一次性 ID 规则
-
-- 生成时机:临时码生成时分配,固定码无 ID
-- 格式:`[a-zA-Z0-9_-]{16,128}`,推荐 nanoid(22 字符)或 32 hex
-- 消费:解析器必须对 `login_challenge.id` 和 `sign_request.id` 执行一次性消费(防重放),存储键名 `qr.used_ids`
-
-## 7. 时效规则
-
-- `issued_at` ≤ 当前时间 + 30 秒(时钟偏差容限)
-- `expires_at` > 当前时间(解析时)
-- `expires_at - issued_at`:
-  - `login_challenge`:90 秒(固定)
-  - `sign_request`:最大 300 秒
-  - `login_receipt` / `sign_response`:跟随对应请求的 `expires_at`
-  - `user_transfer`:默认 600 秒(10 分钟),可配
-
-## 8. 字段命名铁律
-
-以下规则约束 QR envelope/body 的协议字段命名。`display.fields[*].key` 属于交易展示字段,以 `qr-action-registry.md` 为准。
-
-**绝对不允许在 QR envelope/body 中出现的字段名**(CPMS 安装 4 码目录除外):
-
-| 旧名 | 新名 |
-|---|---|
-| `to`(作为 envelope/body 地址字段) | `address` |
-| `account`(作为地址字段) | `address` |
-| `account_pubkey` | `pubkey` |
-| `admin_account` | `pubkey` |
-| `public_key` | `pubkey` |
-| `request_id` | `id`(顶层) |
-| `challenge_id` | `id`(顶层) |
-| `challenge`(作为字段名) | `id`(顶层) |
-| `nickname` | `name` |
-| `type`(作为顶层消息类型) | `kind`(顶层) |
-| `purpose` | `kind`(顶层) |
-| `msg_type` | `kind`(顶层) |
-
-**协议字符串规则**:
-
-- 当前唯一合法协议字符串:`CITIZEN_QR_V1`
-- 禁止新增或恢复第二套扫码协议字符串,包括 `CITIZENAPP_USER_CARD_V1`
-
-**绝对不允许出现的旧类型名**:
-```
-TransferQrPayload
-UserQrPayload
-LoginChallenge
-LoginReceipt
-QrSignRequest
-QrSignResponse
-```
-
-## 9. 测试契约
-
-所有 CitizenApp / CitizenWallet / citizenchain / cid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
-
-- 序列化测试:`toJson(body) + envelope` 必须**逐字节**等于对应 fixture
-- 反序列化测试:`parse(fixture)` 必须解出预期字段,字段数量、类型、值全相等
-- 解析器负向测试:改一个字段名 / 多一个字段 / 少一个字段 —— 必须全部报错
-
-fixture 文件命名:
-```
-memory/01-architecture/qr/qr-protocol-fixtures/login_challenge.json
-memory/01-architecture/qr/qr-protocol-fixtures/login_receipt.json
+```text
 memory/01-architecture/qr/qr-protocol-fixtures/sign_request.json
 memory/01-architecture/qr/qr-protocol-fixtures/sign_response.json
 memory/01-architecture/qr/qr-protocol-fixtures/user_contact.json
 memory/01-architecture/qr/qr-protocol-fixtures/user_transfer.json
 ```
 
-> 注:`user_multisig.json` 已于 2026-05-03 删除(协议下线,改走链上反向索引)。
+不得新增登录专用 fixture。登录统一复用 `sign_request.json` / `sign_response.json`,业务含义由 `b.a=1` 表达。
 
-## 10. 修改规范的流程
+## 11. 修改流程
 
-本 spec 是当前详细事实源。改规范前必须:
-
-1. 先改本文件
-2. 同步改 fixtures(两者永远一致)
-3. 再改所有端的代码
-4. 跑全量测试(所有端的测试都读取 fixture,任一端不同步 → 测试红)
-5. 更新任务卡
-
-**绝不允许**"先在代码里改,再回来补 spec" —— 这是字段散乱的历史根源。
+1. 先改本文件和 `qr-action-registry.md`。
+2. 同步 fixtures。
+3. 同步 Rust / TS / Dart 的解析、生成、验签入口。
+4. 跑真实扫码签名链路或对应端到端测试。
+5. 更新任务卡和模块文档。

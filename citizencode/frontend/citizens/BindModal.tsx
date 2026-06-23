@@ -141,8 +141,8 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     setArchiveCodeScanLoading(true);
     try {
       const payload = parseSignedReceiptPayload(raw.trim(), bindChallenge.challenge_id);
-      if (!payload.signer_pubkey || !payload.payload_hash) {
-        throw new Error('签名回执必须是 sign_response，并包含 pubkey 和 payload_hash');
+      if (!payload.signer_pubkey) {
+        throw new Error('签名响应必须是 sign_response，并包含 pubkey');
       }
       setBindScannerActive(false);
       stopBindScanner();
@@ -150,7 +150,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         challenge_id: payload.challenge_id,
         pubkey: payload.signer_pubkey,
         signature: payload.signature,
-        payload_hash: payload.payload_hash,
+        payload_hash: bindChallenge.payload_hash,
       });
       notice.success(`${modalTitle}成功${result.cid_number ? `，身份ID：${result.cid_number}` : ''}`);
       onClose();
@@ -297,7 +297,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
           </Typography.Paragraph>
           <div style={{ textAlign: 'center' }}>
             <Button type="primary" onClick={() => { setBindStep('scan_signature'); setBindScannerActive(true); }}>
-              扫描签名回执
+              扫描签名响应
             </Button>
           </div>
         </>
@@ -305,7 +305,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
 
       {bindStep === 'scan_signature' && (
         <>
-          {scannerBox('点击扫描签名回执')}
+          {scannerBox('点击扫描签名响应')}
           <div style={{ textAlign: 'center' }}>
             <Button onClick={onToggleBindScanner} loading={archiveCodeScanLoading}>
               {bindScannerActive ? '停止扫码' : '开启扫码'}

@@ -1,5 +1,5 @@
-// 中文注释:统一的 CITIZEN_QR_V1 公民钱包签名面板。
-// 左侧展示待签名二维码,右侧开启摄像头扫描签名回执;登录、Passkey、
+// 中文注释:统一的 QR_V1 公民钱包签名面板。
+// 左侧展示待签名二维码,右侧开启摄像头扫描签名响应;登录、Passkey、
 // 管理员重要操作都复用这一套视觉和扫码生命周期。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';

@@ -1,78 +1,41 @@
-// CITIZEN_QR_V1 统一协议 TS 类型与解析器。
+// QR_V1 统一协议 TS 类型与解析器。
 //
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// Golden fixtures:memory/01-architecture/qr/qr-protocol-fixtures/*.json
-//
-// 与 citizenwallet 的 Dart envelope 字段逐字节一致。
+// 与 CitizenWallet 的 Dart envelope 字段逐字节一致。
 
-export const CITIZEN_QR_V1 = 'CITIZEN_QR_V1' as const;
+export const QR_V1 = 'QR_V1' as const;
 
-export type QrKind =
-  | 'login_challenge'
-  | 'login_receipt'
-  | 'sign_request'
-  | 'sign_response'
-  | 'user_contact'
-  | 'user_transfer';
+export type QrKind = 'sign_request' | 'sign_response' | 'user_contact' | 'user_transfer';
 
-export const QR_KINDS: readonly QrKind[] = [
-  'login_challenge',
-  'login_receipt',
-  'sign_request',
-  'sign_response',
-  'user_contact',
-  'user_transfer',
-];
+const KIND_TO_CODE: Record<QrKind, number> = {
+  sign_request: 1,
+  sign_response: 2,
+  user_contact: 3,
+  user_transfer: 4,
+};
 
-export const FIXED_KINDS: readonly QrKind[] = ['user_contact'];
+const CODE_TO_KIND: Record<number, QrKind> = {
+  1: 'sign_request',
+  2: 'sign_response',
+  3: 'user_contact',
+  4: 'user_transfer',
+};
 
 export function isFixedKind(kind: QrKind): boolean {
-  return FIXED_KINDS.includes(kind);
-}
-
-// ------- body types -------
-
-export interface LoginChallengeBody {
-  system: 'cid' | 'cpms';
-  sys_pubkey: string;
-  sys_sig: string;
-}
-
-export interface LoginReceiptBody {
-  system: 'cid' | 'cpms';
-  pubkey: string;
-  sig_alg: 'sr25519';
-  signature: string;
-  payload_hash: string;
-  signed_at: number;
-}
-
-export interface SignDisplayField {
-  key?: string;
-  label: string;
-  value: string;
-}
-
-export interface SignDisplay {
-  action: string;
-  summary: string;
-  fields: SignDisplayField[];
+  return kind === 'user_contact';
 }
 
 export interface SignRequestBody {
-  address: string;
+  action: number;
+  sig_alg: 1;
   pubkey: string;
-  sig_alg: 'sr25519';
+  payload: string;
   payload_hex: string;
-  display: SignDisplay;
 }
 
 export interface SignResponseBody {
   pubkey: string;
-  sig_alg: 'sr25519';
   signature: string;
-  payload_hash: string;
-  signed_at: number;
 }
 
 export interface UserContactBody {
@@ -90,8 +53,6 @@ export interface UserTransferBody {
 }
 
 export type QrBodyByKind = {
-  login_challenge: LoginChallengeBody;
-  login_receipt: LoginReceiptBody;
   sign_request: SignRequestBody;
   sign_response: SignResponseBody;
   user_contact: UserContactBody;
@@ -99,16 +60,12 @@ export type QrBodyByKind = {
 };
 
 export interface QrEnvelope<K extends QrKind = QrKind> {
-  proto: typeof CITIZEN_QR_V1;
+  proto: typeof QR_V1;
   kind: K;
-  // 固定码省略以下三项
   id?: string;
-  issued_at?: number;
   expires_at?: number;
   body: QrBodyByKind[K];
 }
-
-// ------- parser -------
 
 export class QrParseError extends Error {
   constructor(message: string) {
@@ -133,98 +90,60 @@ function requireInt(obj: Record<string, unknown>, key: string): number {
   return v;
 }
 
-function require0xHex(obj: Record<string, unknown>, key: string): string {
-  const v = obj[key];
-  if (typeof v !== 'string' || !v.startsWith('0x')) {
-    throw new QrParseError(`字段 ${key} 必填 0x hex`);
-  }
+function requireCompactB64(obj: Record<string, unknown>, key: string): string {
+  const v = requireString(obj, key);
+  if (!/^[A-Za-z0-9_-]+$/.test(v)) throw new QrParseError(`字段 ${key} 必须为 base64url`);
   return v;
 }
 
-function parseLoginChallengeBody(b: Record<string, unknown>): LoginChallengeBody {
-  const system = requireString(b, 'system');
-  if (system !== 'cid' && system !== 'cpms') {
-    throw new QrParseError(`login_challenge.system 非法: ${system}`);
-  }
-  return {
-    system,
-    sys_pubkey: require0xHex(b, 'sys_pubkey'),
-    sys_sig: require0xHex(b, 'sys_sig'),
+function b64ToBytes(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  const g = globalThis as typeof globalThis & {
+    atob?: (input: string) => string;
+    Buffer?: { from(input: string, encoding: string): Uint8Array };
   };
+  if (typeof g.atob === 'function') {
+    const binary = g.atob(padded);
+    return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+  }
+  if (g.Buffer) return Uint8Array.from(g.Buffer.from(padded, 'base64'));
+  throw new QrParseError('当前环境不支持 base64url 解码');
 }
 
-function parseLoginReceiptBody(b: Record<string, unknown>): LoginReceiptBody {
-  const system = requireString(b, 'system');
-  if (system !== 'cid' && system !== 'cpms') {
-    throw new QrParseError(`login_receipt.system 非法: ${system}`);
-  }
-  const sigAlg = requireString(b, 'sig_alg');
-  if (sigAlg !== 'sr25519') {
-    throw new QrParseError('login_receipt.sig_alg 必须为 sr25519');
-  }
-  return {
-    system,
-    pubkey: require0xHex(b, 'pubkey'),
-    sig_alg: 'sr25519',
-    signature: require0xHex(b, 'signature'),
-    payload_hash: require0xHex(b, 'payload_hash'),
-    signed_at: requireInt(b, 'signed_at'),
-  };
+function b64ToHex(value: string, expectedLength: number, field: string): string {
+  const bytes = b64ToBytes(value);
+  if (bytes.length !== expectedLength) throw new QrParseError(`${field} 长度必须为 ${expectedLength} 字节`);
+  return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function parseSignDisplay(d: Record<string, unknown>): SignDisplay {
-  const action = requireString(d, 'action');
-  const summary = requireString(d, 'summary');
-  const fieldsRaw = d['fields'];
-  const fields: SignDisplayField[] = [];
-  if (Array.isArray(fieldsRaw)) {
-    for (const f of fieldsRaw) {
-      if (f && typeof f === 'object') {
-        const label = (f as Record<string, unknown>)['label'];
-        const value = (f as Record<string, unknown>)['value'];
-        if (typeof label === 'string' && typeof value === 'string') {
-          const key = (f as Record<string, unknown>)['key'];
-          fields.push({
-            ...(typeof key === 'string' ? { key } : {}),
-            label,
-            value,
-          });
-        }
-      }
-    }
-  }
-  return { action, summary, fields };
+function b64ToPayloadHex(value: string): string {
+  const bytes = b64ToBytes(value);
+  if (bytes.length === 0) throw new QrParseError('b.d 不能为空');
+  return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
-  const sigAlg = requireString(b, 'sig_alg');
-  if (sigAlg !== 'sr25519') {
-    throw new QrParseError('sign_request.sig_alg 必须为 sr25519');
-  }
-  const display = b['display'];
-  if (!display || typeof display !== 'object') {
-    throw new QrParseError('sign_request.display 必填对象');
-  }
+  const action = requireInt(b, 'a');
+  const sigAlg = requireInt(b, 'g');
+  if (sigAlg !== 1) throw new QrParseError('b.g 必须为 1(sr25519)');
+  const u = requireCompactB64(b, 'u');
+  const d = requireCompactB64(b, 'd');
   return {
-    address: requireString(b, 'address'),
-    pubkey: require0xHex(b, 'pubkey'),
-    sig_alg: 'sr25519',
-    payload_hex: require0xHex(b, 'payload_hex'),
-    display: parseSignDisplay(display as Record<string, unknown>),
+    action,
+    sig_alg: 1,
+    pubkey: b64ToHex(u, 32, 'b.u'),
+    payload: d,
+    payload_hex: b64ToPayloadHex(d),
   };
 }
 
 function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
-  const sigAlg = requireString(b, 'sig_alg');
-  if (sigAlg !== 'sr25519') {
-    throw new QrParseError('sign_response.sig_alg 必须为 sr25519');
-  }
+  const u = requireCompactB64(b, 'u');
+  const s = requireCompactB64(b, 's');
   return {
-    pubkey: require0xHex(b, 'pubkey'),
-    sig_alg: 'sr25519',
-    signature: require0xHex(b, 'signature'),
-    payload_hash: require0xHex(b, 'payload_hash'),
-    signed_at: requireInt(b, 'signed_at'),
+    pubkey: b64ToHex(u, 32, 'b.u'),
+    signature: b64ToHex(s, 64, 'b.s'),
   };
 }
 
@@ -249,17 +168,11 @@ function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
     typeof memo !== 'string' ||
     typeof bank !== 'string'
   ) {
-    throw new QrParseError(
-      'user_transfer 的 name/amount/symbol/memo/bank 必须为字符串',
-    );
+    throw new QrParseError('user_transfer 的 name/amount/symbol/memo/bank 必须为字符串');
   }
   return { address, name, amount, symbol, memo, bank };
 }
 
-/**
- * 解析 CITIZEN_QR_V1 envelope。
- * 遇到 proto 不符、kind 未知、字段缺失/类型错,一律抛 QrParseError。
- */
 export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelope {
   let data: Record<string, unknown>;
   if (typeof raw === 'string') {
@@ -271,47 +184,27 @@ export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelo
   } else {
     data = raw;
   }
-  if (!data || typeof data !== 'object') {
-    throw new QrParseError('QR 内容不是对象');
-  }
-  if (data['proto'] !== CITIZEN_QR_V1) {
-    throw new QrParseError(`proto 必须为 ${CITIZEN_QR_V1},实际: ${data['proto']}`);
-  }
-  const kindRaw = data['kind'];
-  if (typeof kindRaw !== 'string' || !QR_KINDS.includes(kindRaw as QrKind)) {
-    throw new QrParseError(`未知 kind: ${kindRaw}`);
-  }
-  const kind = kindRaw as QrKind;
+  if (!data || typeof data !== 'object') throw new QrParseError('QR 内容不是对象');
+  if (data['p'] !== QR_V1) throw new QrParseError(`p 必须为 ${QR_V1},实际: ${data['p']}`);
+  const code = requireInt(data, 'k');
+  const kind = CODE_TO_KIND[code];
+  if (!kind) throw new QrParseError(`未知 k: ${code}`);
 
   let id: string | undefined;
-  let issuedAt: number | undefined;
   let expiresAt: number | undefined;
   if (isFixedKind(kind)) {
-    if ('id' in data || 'issued_at' in data || 'expires_at' in data) {
-      throw new QrParseError(`固定码 ${kind} 不应包含 id/issued_at/expires_at`);
-    }
+    if ('i' in data || 'e' in data) throw new QrParseError(`固定码 ${kind} 不应包含 i/e`);
   } else {
-    id = requireString(data, 'id');
-    issuedAt = requireInt(data, 'issued_at');
-    expiresAt = requireInt(data, 'expires_at');
+    id = requireString(data, 'i');
+    expiresAt = requireInt(data, 'e');
   }
 
-  const bodyRaw = data['body'];
-  if (!bodyRaw || typeof bodyRaw !== 'object') {
-    throw new QrParseError('缺少 body 对象');
-  }
+  const bodyRaw = data['b'];
+  if (!bodyRaw || typeof bodyRaw !== 'object') throw new QrParseError('缺少 b 对象');
   const b = bodyRaw as Record<string, unknown>;
 
-  // 按 kind 派发 body 解析
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let body: any;
+  let body: QrBodyByKind[typeof kind];
   switch (kind) {
-    case 'login_challenge':
-      body = parseLoginChallengeBody(b);
-      break;
-    case 'login_receipt':
-      body = parseLoginReceiptBody(b);
-      break;
     case 'sign_request':
       body = parseSignRequestBody(b);
       break;
@@ -326,41 +219,28 @@ export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelo
       break;
   }
 
-  const env: QrEnvelope = {
-    proto: CITIZEN_QR_V1,
-    kind,
-    body,
-  };
+  const env: QrEnvelope = { proto: QR_V1, kind, body };
   if (id !== undefined) env.id = id;
-  if (issuedAt !== undefined) env.issued_at = issuedAt;
   if (expiresAt !== undefined) env.expires_at = expiresAt;
   return env;
 }
 
-/**
- * 构造 envelope 的 JSON 字符串(序列化时固定码不出现时效字段)。
- */
 export function serializeQrEnvelope(env: QrEnvelope): string {
   const out: Record<string, unknown> = {
-    proto: CITIZEN_QR_V1,
-    kind: env.kind,
+    p: QR_V1,
+    k: KIND_TO_CODE[env.kind],
   };
   if (!isFixedKind(env.kind)) {
-    if (env.id === undefined || env.issued_at === undefined || env.expires_at === undefined) {
-      throw new QrParseError(`临时码 ${env.kind} 必须提供 id/issued_at/expires_at`);
+    if (env.id === undefined || env.expires_at === undefined) {
+      throw new QrParseError(`临时码 ${env.kind} 必须提供 id/expires_at`);
     }
-    out['id'] = env.id;
-    out['issued_at'] = env.issued_at;
-    out['expires_at'] = env.expires_at;
+    out['i'] = env.id;
+    out['e'] = env.expires_at;
   }
-  out['body'] = env.body;
+  out['b'] = env.body;
   return JSON.stringify(out);
 }
 
-/**
- * 签名原文拼接,与 Dart/Rust 逐字节一致:
- *   CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
- */
 export function buildSignatureMessage(args: {
   kind: QrKind;
   id: string;
@@ -373,5 +253,5 @@ export function buildSignatureMessage(args: {
   let pp = args.principal;
   if (pp.startsWith('0x') || pp.startsWith('0X')) pp = pp.slice(2);
   pp = pp.toLowerCase();
-  return `${CITIZEN_QR_V1}|${args.kind}|${args.id}|${sys}|${exp}|${pp}`;
+  return `${QR_V1}|${KIND_TO_CODE[args.kind]}|${args.id}|${sys}|${exp}|${pp}`;
 }

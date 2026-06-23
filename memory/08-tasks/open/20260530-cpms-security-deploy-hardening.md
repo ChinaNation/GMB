@@ -20,7 +20,7 @@
 - `citizenpassport/backend/main.rs`：挂载限流器、安全响应头和前端目录校验。
 - `citizenpassport/backend/initialize`：启动时解密验证本机密钥材料，并给初始化入口接入限流。
 - `citizenpassport/backend/dangan`：删除签名失败全分支写失败审计，删除完成和资料上传接入限流。
-- `citizenpassport/backend/db`：删除无用 `login_challenges.challenge_payload` 字段。
+- `citizenpassport/backend/db`：删除无用 `sign_requests.challenge_payload` 字段。
 - `citizenpassport/scripts`：正式打包时构建并复制前端 `dist`。
 - `citizenpassport/deploy/linux`：安装 `/opt/citizenpassport/frontend` 并配置 `CPMS_FRONTEND_DIR`。
 - `citizenpassport/deploy` 与 `citizenpassport/backend`：删除 Docker 残留文件。

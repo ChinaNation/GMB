@@ -4,7 +4,7 @@ import 'package:citizenwallet/qr/qr_protocols.dart';
 ///
 /// 格式:
 /// ```
-/// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+/// QR_V1|<k>|<i>|<system 或空>|<e 或 0>|<principal>
 /// ```
 String buildSignatureMessage({
   required QrKind kind,
@@ -18,5 +18,5 @@ String buildSignatureMessage({
   final pp = principal.startsWith('0x') || principal.startsWith('0X')
       ? principal.substring(2).toLowerCase()
       : principal.toLowerCase();
-  return '${QrProtocols.v1}|${kind.wire}|$id|$sys|$exp|$pp';
+  return '${QrProtocols.v1}|${kind.code}|$id|$sys|$exp|$pp';
 }

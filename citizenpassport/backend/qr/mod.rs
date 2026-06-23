@@ -1,76 +1,82 @@
-//! CITIZEN_QR_V1 统一二维码协议 envelope。
+//! QR_V1 统一二维码协议 envelope。
 //!
-//! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
-//! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
-//!
-//! 与 CitizenWallet 的 Dart envelope、citizenchain/citizencode/citizenpassport 前端的 TS envelope 字段逐字节一致。
+//! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`。
+//! CPMS 后端只生成登录签名请求和档案删除签名请求。
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 
-pub const CITIZEN_QR_V1: &str = "CITIZEN_QR_V1";
+pub const QR_V1: &str = "QR_V1";
 
-/// 统一 kind 枚举(snake_case 序列化)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QrKind {
-    LoginChallenge,
-    LoginReceipt,
-    SignRequest,
-    SignResponse,
-    UserContact,
-    UserTransfer,
+    SignRequest = 1,
+    SignResponse = 2,
+    UserContact = 3,
+    UserTransfer = 4,
 }
 
 impl QrKind {
-    pub fn wire(&self) -> &'static str {
-        match self {
-            Self::LoginChallenge => "login_challenge",
-            Self::LoginReceipt => "login_receipt",
-            Self::SignRequest => "sign_request",
-            Self::SignResponse => "sign_response",
-            Self::UserContact => "user_contact",
-            Self::UserTransfer => "user_transfer",
+    pub fn code(self) -> u8 {
+        self as u8
+    }
+}
+
+pub const ACTION_LOGIN: u16 = 1;
+pub const ACTION_CPMS_ARCHIVE_DELETE: u16 = 4;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignRequestBody {
+    /// a:动作码。登录=1,CPMS 档案删除=4。
+    #[serde(rename = "a")]
+    pub action: u16,
+    /// g:签名算法。1 固定为 sr25519。
+    #[serde(rename = "g")]
+    pub sig_alg: u8,
+    /// u:签名者/系统公钥,32B base64url(no padding)。
+    #[serde(rename = "u")]
+    pub pubkey: String,
+    /// d:待签 payload bytes 的 base64url(no padding)。
+    #[serde(rename = "d")]
+    pub payload: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QrEnvelope<B> {
+    #[serde(rename = "p")]
+    pub proto: String,
+    #[serde(rename = "k")]
+    pub kind: u8,
+    #[serde(rename = "i", skip_serializing_if = "Option::is_none", default)]
+    pub id: Option<String>,
+    #[serde(rename = "e", skip_serializing_if = "Option::is_none", default)]
+    pub expires_at: Option<i64>,
+    #[serde(rename = "b")]
+    pub body: B,
+}
+
+pub type SignRequestEnvelope = QrEnvelope<SignRequestBody>;
+
+impl SignRequestEnvelope {
+    pub fn new(id: String, _issued_at: i64, expires_at: i64, body: SignRequestBody) -> Self {
+        Self {
+            proto: QR_V1.to_string(),
+            kind: QrKind::SignRequest.code(),
+            id: Some(id),
+            expires_at: Some(expires_at),
+            body,
         }
     }
 }
 
-// ---------- body ----------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoginChallengeBody {
-    pub system: String,
-    pub sys_pubkey: String,
-    pub sys_sig: String,
-}
-
-// ---------- envelope ----------
-
-/// 通用 envelope, 按 kind 决定 body 类型。后端一般使用下面两个便利别名。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QrEnvelope<B> {
-    pub proto: String,
-    pub kind: String,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub issued_at: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub expires_at: Option<i64>,
-    pub body: B,
-}
-
-pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
-
-impl LoginChallengeEnvelope {
-    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
-        Self {
-            proto: CITIZEN_QR_V1.to_string(),
-            kind: QrKind::LoginChallenge.wire().to_string(),
-            id: Some(id),
-            issued_at: Some(issued_at),
-            expires_at: Some(expires_at),
-            body,
-        }
+/// 登录签名请求 payload 固定为 `system|sys_sig` 的 UTF-8 字节。
+pub fn login_request_body(system: &str, sys_pubkey: &str, sys_sig: &str) -> SignRequestBody {
+    SignRequestBody {
+        action: ACTION_LOGIN,
+        sig_alg: 1,
+        pubkey: pubkey_hex_to_b64(sys_pubkey).unwrap_or_default(),
+        payload: bytes_to_b64(format!("{}|{}", system, sys_sig).as_bytes()),
     }
 }
 
@@ -78,7 +84,7 @@ impl LoginChallengeEnvelope {
 ///
 /// 格式(与 Dart/TS 逐字节一致):
 /// ```text
-/// CITIZEN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
+/// QR_V1|<k>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 /// ```
 /// `principal` 去掉 `0x` 前缀,小写。
 pub fn build_signature_message(
@@ -90,18 +96,27 @@ pub fn build_signature_message(
 ) -> String {
     let sys = system.unwrap_or("");
     let exp = expires_at.unwrap_or(0);
-    let pp = principal
+    let pp = normalize_hex_no_prefix(principal);
+    format!("{}|{}|{}|{}|{}|{}", QR_V1, kind.code(), id, sys, exp, pp)
+}
+
+pub(crate) fn pubkey_hex_to_b64(value: &str) -> Option<String> {
+    let cleaned = normalize_hex_no_prefix(value);
+    let bytes = hex::decode(cleaned).ok()?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    Some(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+pub(crate) fn bytes_to_b64(bytes: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn normalize_hex_no_prefix(value: &str) -> String {
+    value
         .strip_prefix("0x")
-        .or_else(|| principal.strip_prefix("0X"))
-        .unwrap_or(principal)
-        .to_lowercase();
-    format!(
-        "{}|{}|{}|{}|{}|{}",
-        CITIZEN_QR_V1,
-        kind.wire(),
-        id,
-        sys,
-        exp,
-        pp
-    )
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value)
+        .to_lowercase()
 }

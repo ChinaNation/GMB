@@ -92,7 +92,7 @@
 - 优先修复冷钱包 `citizenwallet/lib/signer/` 的 `propose_admin_set_change` 解码、展示字段和测试。
 - 继续推进 `organization-manage` 第 4 步账户级管理员主体改造，使 runtime 与 citizenapp 的 `InstitutionAccount(0x05)` 规则闭合。
 - 后续只剩 Flutter SDK 写权限恢复后补跑 Flutter 级测试；当前 admins-change 代码已用 Dart 静态分析覆盖。
-- 统一 QR display 字段到 `memory/01-architecture/qr/qr-action-registry.md`。
+- 统一 QR_V1 扫码端解码展示字段到 `memory/01-architecture/qr/qr-action-registry.md`。
 - 更新或删除旧路径文档和注释，再重新运行 Flutter SDK 级验证。
 
 ### 2026-05-10 执行记录
@@ -131,7 +131,7 @@
 
 - 已将 node 后端 `get_admin_account_state / build_admin_set_change_request / submit_admin_set_change` 统一为 `AdminAccountRef`：内置治理机构可用 `cidNumber + org`，个人多签和机构账户必须用 `accountIdHex + org`。
 - 已将 `注册机构归属关系` 从 node 管理员更换前置校验中排除；`PersonalAccount` 只能走 `ORG_REN`，`InstitutionAccount` 只能走 `ORG_PUP / ORG_OTH`。
-- 已将 node QR display 字段统一为 `org / subject / admins`，与 citizenwallet 公民钱包 `propose_admin_set_change` 解码字段一致。
+- 已将 node QR_V1 扫码端解码展示字段统一为 `org / subject / admins`，与 citizenwallet 公民钱包 `propose_admin_set_change` 解码字段一致。
 - 已将前端 `AdminSetChangePage` 改为接收 `accountRef`，NRC/PRC/PRB 入口带治理 org，清算行入口从主账户派生 `InstitutionAccount(0x05)` subject 并按 `ORG_OTH` 进入 `governance/admins_change`。
 - 已补充 node 后端单测覆盖 `注册机构归属关系` 拒绝、`PersonalAccount + 非 REN` 拒绝、`InstitutionAccount + PUP/OTH` 允许。
 - 已清理 node / citizenwallet 公民钱包 QR 展示中的旧机构类泛称：`ORG_REN` 显示为“个人多签”。
@@ -144,13 +144,13 @@
 ### 2026-05-10 citizenapp + citizenwallet 公民钱包 admins-change 修复记录
 
 - 已将 citizenapp `AdminSetValidation` 对齐 runtime/node：`注册机构归属关系` 拒绝，`PersonalAccount` 只允许 `ORG_REN`，`InstitutionAccount` 只允许 `ORG_PUP / ORG_OTH`。
-- 已将 citizenapp `AdminSetChangeQrAdapter` 的 display 字段从旧 `account_id/admins_len/threshold` 改为 `org/subject/admins`，并统一 `0x` 小写 hex，避免冷钱包 strict display 比对失败。
+- 已将 citizenapp `AdminSetChangeQrAdapter` 的扫码端解码展示字段统一为 `org/subject/admins`，并统一 `0x` 小写 hex，避免冷钱包内容比对失败。
 - 已将 citizenapp `AdminAccountService` 缓存 key 改为 `accountIdHex`，并在管理员更换提交成功后清理对应 subject 缓存。
 - 已将 citizenwallet 公民钱包 `propose_admin_set_change` 解码增强为主体类型与 org 匹配校验：`0/1/2 -> Builtin`、`3 -> PersonalAccount`、`4/5 -> InstitutionAccount`；`注册机构归属关系` 和错配主体拒绝解码。
 - 已同步 citizenwallet 公民钱包 org 展示：`ORG_REN=个人多签`、`ORG_PUP=公权机构账户`、`ORG_OTH=其他机构账户`。
-- 已补充 citizenapp admins-change 测试：主体/org 错配拒绝、QR display 字段、`accountIdHex` 缓存清理。
+- 已补充 citizenapp admins-change 测试：主体/org 错配拒绝、扫码端解码展示字段、`accountIdHex` 缓存清理。
 - 已补充 citizenwallet 公民钱包测试：个人多签管理员集合变更、PUP/OTH 机构账户展示、subject kind 与 org 错配拒绝。
-- 已同步 node QR display 的 `subject/admins` 为 `0x` 小写 hex，并将 PUP/OTH 展示值与冷钱包 decoder 对齐，保证桌面端发出的 QR 也能通过 strict 比对。
+- 已同步 node QR_V1 解码展示中的 `subject/admins` 为 `0x` 小写 hex，并将 PUP/OTH 展示值与冷钱包 decoder 对齐，保证桌面端发出的 QR 能通过内容比对。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change`（`citizenapp`）：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`citizenwallet`）：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：通过，7 个 node admins_change 相关测试通过。
@@ -161,7 +161,7 @@
 - 已新增 `AdminAccountIdentity` 三类主体：`governanceInstitution`、`personalAccount`、`institutionAccount`。
 - 已删除 citizenapp admins-change 的旧模糊字符串查询入口；`InstitutionAdminService`、`AdminAccountService`、`ActivationService`、`AdminSetChangePage` 均要求传入明确 `AdminAccountIdentity`。
 - 已将管理员激活存储切到 `activated_admins_v3`，只保存 `accountIdHex / identityKey / org / kind`，不读取、不迁移旧 `activated_admins_v1/v2`。
-- 已同步 citizenwallet 公民钱包管理员激活解码：新增 `GMB_ACTIVATE_SUBJECT_V1` / `activate_admin_account`，展示字段为 `org / subject / pubkey`，旧 `cid_number` 激活 payload 不再识别为当前 admins-change 激活协议。
+- 已同步 citizenwallet 公民钱包管理员激活解码：QR_V1 `a=5 activate_admin_account` 使用 `GMB || 0x18` payload，展示字段为 `org / subject / pubkey`。
 - 已改造机构详情、管理员列表、提案上下文、个人多签详情、机构账户详情、转账详情、runtime 升级详情等调用点，统一从 `InstitutionInfo` 派生 `AdminAccountIdentity` 后再调用 admins-change 服务。
 - 已清理 citizenapp 当前代码中的旧机构类泛称残留；通用 `OrgType.duoqian` 显示为“多签账户”，具体身份由 admins-change identity 区分。
 - 已补充 citizenapp admins-change 测试：机构账户、个人多签、治理机构 identity 派生；v3 激活记录按 `accountIdHex` 过滤并忽略旧 `cidNumber` 记录。
@@ -175,7 +175,7 @@
 ### 2026-05-10 admins-change 本模块复查修复记录
 
 - 已修复 runtime admins-change 读侧防线：`active_subject_*` 与 `pending_subject_*_for_snapshot` 返回前重新校验 kind/org，旧 `注册机构归属关系` 管理员主体和 `InstitutionAccount + ORG_REN` 脏数据不再暴露给投票引擎或业务模块。
-- 已将 node 后端管理员激活从旧 `GMB_ACTIVATE / activate_admin / cid_number` 切到 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_account`。
+- 已将 node 后端管理员激活统一为 QR_V1 `a=5 activate_admin_account` 和 `GMB || 0x18` payload。
 - 已将 node 本地激活记录从 `activated-admins.json` 切到 `activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧文件不读取、不迁移。
 - 已将 node 前端管理员列表、机构详情、提案详情和清算行节点声明页的已激活管理员读取统一为 subject 级 `AdminAccountRef`。
 - 已更新 node / runtime / citizenapp 文档和 citizenapp 激活服务注释，清理当前协议里的旧 `cid_number` 激活说明。
@@ -206,7 +206,7 @@
 - 已将 citizenapp `AdminsChange::propose_admin_set_change` call data 切到最终 ABI：`org / account_id / admins / new_threshold`。
 - 已删除 citizenapp 对 `AdminsChange::AdminAccounts.threshold` 的旧读取口径；管理员主体 storage 只解码 `org/kind/admins/creator/created_at/updated_at/status`，固定阈值走制度常量，动态阈值读取 `InternalVote.ActiveDynamicThresholds / PendingDynamicThresholds`。
 - 已将 citizenapp 管理员更换页面补齐阈值 UI：内置治理机构只读固定阈值，个人多签和机构账户可输入动态阈值并按严格过半公式校验。
-- 已将 citizenapp 管理员更换 QR display 同步为 `org / subject / admins / new_threshold`，与冷钱包 decoder 严格比对。
+- 已将 citizenapp 管理员更换 QR_V1 解码展示同步为 `org / subject / admins / new_threshold`，与冷钱包 decoder 严格比对。
 - 已将 citizenwallet 公民钱包 `propose_admin_set_change` decoder 切到新载荷，缺少 `new_threshold` 的旧载荷和尾部多余字节直接拒签。
 - 已补齐机构多签注销后的本地显示：统一账户列表继续显示“已注销”，详情页不显示余额，右上角显示“删除”，确认后清理本机机构多签数据。
 - 已将个人多签创建/注销提案本地初始票数改为 `yesVotes = 1`，对齐投票引擎发起人自动赞成票。

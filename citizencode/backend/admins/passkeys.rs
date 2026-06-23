@@ -23,7 +23,7 @@ use crate::admins::repo;
 use crate::admins::security_model::{
     AdminPasskeyCredential, AdminPasskeyRegistrationChallenge, AdminPasskeyStatus,
 };
-use crate::core::qr::{build_sign_request, display_account, display_field as field};
+use crate::core::qr::build_sign_request;
 use crate::crypto::pubkey::same_admin_account;
 use crate::*;
 
@@ -92,7 +92,7 @@ pub(crate) struct AdminSignedPayload<'a> {
     pub(crate) qr_proto: &'static str,
     pub(crate) action_id: &'a str,
     pub(crate) action_type: &'a str,
-    pub(crate) actor_account: &'a str,
+    pub(crate) actor_pubkey: &'a str,
     pub(crate) actor_province_name: &'a str,
     pub(crate) target: &'a str,
     pub(crate) request_hash: &'a str,
@@ -133,10 +133,10 @@ pub(crate) async fn start_passkey_registration(
     let province = ctx.scope_province_name.clone().unwrap_or_default();
     let payload_text = signed_payload_text(AdminSignedPayload {
         domain: "cid_admin_governance",
-        qr_proto: crate::core::qr::CITIZEN_QR_V1,
+        qr_proto: crate::core::qr::QR_V1,
         action_id: registration_id.as_str(),
         action_type: "PASSKEY_REGISTER",
-        actor_account: ctx.admin_account.as_str(),
+        actor_pubkey: ctx.admin_account.as_str(),
         actor_province_name: province.as_str(),
         target: ctx.admin_account.as_str(),
         request_hash: request_hash.as_str(),
@@ -151,21 +151,7 @@ pub(crate) async fn start_passkey_registration(
         expires_at.timestamp(),
         ctx.admin_account.as_str(),
         payload_text.as_str(),
-        "更新管理员 Passkey",
-        vec![
-            field("action_type", "操作", "更新 Passkey"),
-            field("province_name", "省份", province.as_str()),
-            field(
-                "actor_account",
-                "管理员",
-                display_account(ctx.admin_account.as_str()).as_str(),
-            ),
-            field(
-                "target",
-                "目标账户",
-                display_account(ctx.admin_account.as_str()).as_str(),
-            ),
-        ],
+        crate::core::qr::ACTION_CID_ADMIN,
     ) {
         Ok(v) => v,
         Err(resp) => return resp,

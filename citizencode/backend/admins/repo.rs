@@ -1,11 +1,11 @@
 //! 中文注释:管理员结构化表读写。
 //!
-//! 管理员、登录挑战、会话和 Passkey 状态全部以数据库表为唯一持久化真源。
+//! 管理员、登录签名请求、会话和 Passkey 状态全部以数据库表为唯一持久化真源。
 
 use chrono::{DateTime, Duration, Utc};
 use postgres::Client;
 
-use crate::admins::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
+use crate::admins::login::{AdminSession, LoginSignRequest, QrLoginResultRecord};
 use crate::admins::model::{AdminUser, RegistryOrgCode};
 use crate::admins::security_model::{
     AdminActionChallenge, AdminPasskeyCredential, AdminPasskeyRegistrationChallenge,
@@ -745,14 +745,14 @@ pub(crate) fn cleanup_login_state_conn(
     let stale_login_before = now - Duration::minutes(10);
     let consumed_login_before = now;
     conn.execute(
-        "DELETE FROM admin_login_challenges
+        "DELETE FROM admin_login_sign_requests
          WHERE expires_at < $1
             OR (consumed = true AND expires_at < $2)",
         &[&stale_login_before, &consumed_login_before],
     )
     .map_err(|e| {
         format!(
-            "cleanup login challenges failed: {}",
+            "cleanup login sign requests failed: {}",
             postgres_error_text(&e)
         )
     })?;
@@ -773,14 +773,17 @@ pub(crate) fn cleanup_login_state_conn(
     Ok(())
 }
 
-pub(crate) fn insert_login_challenge(db: &Db, challenge: &LoginChallenge) -> Result<(), String> {
+pub(crate) fn insert_login_sign_request(
+    db: &Db,
+    challenge: &LoginSignRequest,
+) -> Result<(), String> {
     let challenge = challenge.clone();
     db.with_client(move |conn| {
         cleanup_login_state_conn(conn, Utc::now())?;
         let payload = serde_json::to_value(&challenge)
-            .map_err(|e| format!("encode login challenge failed: {e}"))?;
+            .map_err(|e| format!("encode login sign request failed: {e}"))?;
         conn.execute(
-            "INSERT INTO admin_login_challenges(challenge_id, session_id, admin_account, expires_at, consumed, payload)
+            "INSERT INTO admin_login_sign_requests(challenge_id, session_id, admin_account, expires_at, consumed, payload)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (challenge_id) DO UPDATE SET
                 session_id = EXCLUDED.session_id,
@@ -797,34 +800,39 @@ pub(crate) fn insert_login_challenge(db: &Db, challenge: &LoginChallenge) -> Res
                 &payload,
             ],
         )
-        .map_err(|e| format!("insert login challenge failed: {}", postgres_error_text(&e)))?;
+        .map_err(|e| format!("insert login sign request failed: {}", postgres_error_text(&e)))?;
         Ok(())
     })
 }
 
-pub(crate) fn get_login_challenge_conn(
+pub(crate) fn get_login_sign_request_conn(
     conn: &mut Client,
     challenge_id: &str,
-) -> Result<Option<LoginChallenge>, String> {
+) -> Result<Option<LoginSignRequest>, String> {
     let row = conn
         .query_opt(
-            "SELECT payload FROM admin_login_challenges WHERE challenge_id = $1",
+            "SELECT payload FROM admin_login_sign_requests WHERE challenge_id = $1",
             &[&challenge_id],
         )
-        .map_err(|e| format!("query login challenge failed: {}", postgres_error_text(&e)))?;
-    row.map(|r| serde_json::from_value::<LoginChallenge>(r.get(0)))
+        .map_err(|e| {
+            format!(
+                "query login sign request failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    row.map(|r| serde_json::from_value::<LoginSignRequest>(r.get(0)))
         .transpose()
-        .map_err(|e| format!("decode login challenge failed: {e}"))
+        .map_err(|e| format!("decode login sign request failed: {e}"))
 }
 
-pub(crate) fn update_login_challenge_conn(
+pub(crate) fn update_login_sign_request_conn(
     conn: &mut Client,
-    challenge: &LoginChallenge,
+    challenge: &LoginSignRequest,
 ) -> Result<(), String> {
     let payload = serde_json::to_value(challenge)
-        .map_err(|e| format!("encode login challenge failed: {e}"))?;
+        .map_err(|e| format!("encode login sign request failed: {e}"))?;
     conn.execute(
-        "UPDATE admin_login_challenges
+        "UPDATE admin_login_sign_requests
          SET admin_account = $2, expires_at = $3, consumed = $4, payload = $5
          WHERE challenge_id = $1",
         &[
@@ -835,7 +843,12 @@ pub(crate) fn update_login_challenge_conn(
             &payload,
         ],
     )
-    .map_err(|e| format!("update login challenge failed: {}", postgres_error_text(&e)))?;
+    .map_err(|e| {
+        format!(
+            "update login sign request failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
     Ok(())
 }
 

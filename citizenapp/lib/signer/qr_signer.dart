@@ -1,12 +1,14 @@
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:sr25519/sr25519.dart' as sr25519;
-import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/bodies/sign_response_body.dart';
+import 'package:citizenapp/qr/envelope.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 
 enum QrSignErrorCode {
   invalidFormat,
@@ -30,56 +32,45 @@ class QrSignException implements Exception {
   String toString() => message;
 }
 
-/// 交易签名请求/回执的 envelope 便利别名。
 typedef SignRequestEnvelope = QrEnvelope<SignRequestBody>;
 typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 
 class QrSigner {
   static const int defaultTtlSeconds = 90;
-  static const int maxClockSkewSeconds = 30;
   static const int maxPayloadChars = 32768;
-  static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9._:-]{16,128}$');
-  static final RegExp _addressPattern =
-      RegExp(r'^[1-9A-HJ-NP-Za-km-z]{30,80}$');
+  static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
-  /// 生成加密安全的随机 request ID(32 字符 hex)。
+  /// 生成加密安全的随机 request id。base64url 比 hex 短,可降低二维码密度。
   static String generateRequestId({String prefix = ''}) {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    final id = prefix.isEmpty ? hex : '$prefix$hex';
+    final token = base64Url.encode(bytes).replaceAll('=', '');
+    final id = prefix.isEmpty ? token : '$prefix$token';
     return id.length > 128 ? id.substring(0, 128) : id;
   }
 
-  /// 构造 sign_request envelope(CitizenApp 热钱包调用)。
-  ///
-  /// 链端验签需要的 runtime 版本信息位于 `payload_hex` 内部的签名载荷，
-  /// envelope body 不单独携带版本字段。
+  /// 构造 QR_V1 签名请求。
   SignRequestEnvelope buildRequest({
     required String requestId,
-    required String address,
     required String pubkey,
     required String payloadHex,
-    required SignDisplay display,
+    required int action,
     int? nowEpochSeconds,
     int ttlSeconds = defaultTtlSeconds,
   }) {
     final now = nowEpochSeconds ?? _now();
     _validateRequestId(requestId);
-    _validateAddress(address);
     _validateHexField(pubkey, 'pubkey');
-    _validateHexField(payloadHex, 'payload_hex');
+    _validateHexField(payloadHex, 'payload');
     return QrEnvelope<SignRequestBody>(
       kind: QrKind.signRequest,
       id: requestId,
       issuedAt: now,
       expiresAt: now + ttlSeconds,
-      body: SignRequestBody(
-        address: address,
-        pubkey: pubkey,
-        sigAlg: 'sr25519',
+      body: SignRequestBody.fromHex(
+        action: action,
+        pubkeyHex: pubkey,
         payloadHex: payloadHex,
-        display: display,
       ),
     );
   }
@@ -88,7 +79,6 @@ class QrSigner {
 
   String encodeResponse(SignResponseEnvelope response) => response.toRawJson();
 
-  /// 解析 sign_request envelope。
   SignRequestEnvelope parseRequest(String raw) {
     QrEnvelope<QrBody> env;
     try {
@@ -101,8 +91,7 @@ class QrSigner {
     }
     final body = env.body as SignRequestBody;
     _validateRequestId(env.id!);
-    _validateAddress(body.address);
-    _validateExpiry(issuedAt: env.issuedAt!, expiresAt: env.expiresAt!);
+    _validateExpiry(expiresAt: env.expiresAt!);
     return QrEnvelope<SignRequestBody>(
       kind: QrKind.signRequest,
       id: env.id,
@@ -112,13 +101,15 @@ class QrSigner {
     );
   }
 
-  /// 解析 sign_response envelope(CitizenApp 热钱包扫回)。
+  /// 解析签名响应。QR_V1 响应不再携带 payload hash,生成端必须用 request id
+  /// 找回本地 session 中的 action/payload/pubkey 后验签。
   SignResponseEnvelope parseResponse(
     String raw, {
     required String expectedRequestId,
     String? expectedPubkey,
     String? expectedPayloadHash,
     String? expectedPayloadHex,
+    int? expectedAction,
   }) {
     QrEnvelope<QrBody> env;
     try {
@@ -127,40 +118,42 @@ class QrSigner {
       throw QrSignException(QrSignErrorCode.invalidFormat, e.message);
     }
     if (env.kind != QrKind.signResponse) {
-      throw const QrSignException(QrSignErrorCode.invalidField, '二维码类型不是签名回执');
+      throw const QrSignException(QrSignErrorCode.invalidField, '二维码类型不是签名响应');
     }
     final body = env.body as SignResponseBody;
     _validateRequestId(env.id!);
-    _validateSignedAt(body.signedAt);
 
     if (env.id != expectedRequestId) {
       throw const QrSignException(
         QrSignErrorCode.mismatchedRequest,
-        '签名回执 id 与请求不一致',
+        '签名响应 id 与请求不一致',
       );
     }
-    if (expectedPubkey != null) {
-      if (_normalizeHex(body.pubkey) != _normalizeHex(expectedPubkey)) {
-        throw const QrSignException(
-          QrSignErrorCode.mismatchedPubkey,
-          '签名回执公钥与当前选中钱包不一致',
-        );
-      }
+    if (expectedPubkey != null &&
+        _normalizeHex(body.pubkeyHex) != _normalizeHex(expectedPubkey)) {
+      throw const QrSignException(
+        QrSignErrorCode.mismatchedPubkey,
+        '签名响应公钥与当前选中钱包不一致',
+      );
     }
-    if (expectedPayloadHash != null) {
-      if (_normalizeHex(body.payloadHash) !=
-          _normalizeHex(expectedPayloadHash)) {
+    if (expectedPayloadHash != null && expectedPayloadHex != null) {
+      final currentHash = computePayloadHash(expectedPayloadHex);
+      if (_normalizeHex(currentHash) != _normalizeHex(expectedPayloadHash)) {
         throw const QrSignException(
           QrSignErrorCode.mismatchedPayloadHash,
-          '签名回执 payload_hash 与请求不一致',
+          '本地签名 session 的 payload hash 不一致',
         );
       }
     }
     if (expectedPayloadHex != null) {
-      if (!verifySr25519Signature(
-        pubkeyHex: body.pubkey,
-        signatureHex: body.signature,
+      final message = signingBytesForHex(
         payloadHex: expectedPayloadHex,
+        action: expectedAction ?? 0,
+      );
+      if (!verifySr25519Signature(
+        pubkeyHex: body.pubkeyHex,
+        signatureHex: body.signatureHex,
+        message: message,
       )) {
         throw const QrSignException(
           QrSignErrorCode.invalidSignature,
@@ -186,25 +179,33 @@ class QrSigner {
   static bool verifySr25519Signature({
     required String pubkeyHex,
     required String signatureHex,
-    required String payloadHex,
+    required Uint8List message,
   }) {
     try {
       final pubBytes = Uint8List.fromList(_hexToBytes(pubkeyHex));
       final sigBytes = Uint8List.fromList(_hexToBytes(signatureHex));
-      final msgBytes = Uint8List.fromList(_hexToBytes(payloadHex));
       final publicKey = sr25519.PublicKey.newPublicKey(pubBytes);
       final signature = sr25519.Signature.fromBytes(sigBytes);
       final (verified, _) =
-          sr25519.Sr25519.verify(publicKey, signature, msgBytes);
+          sr25519.Sr25519.verify(publicKey, signature, message);
       return verified;
     } catch (_) {
       return false;
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 内部工具
-  // ---------------------------------------------------------------------------
+  /// Substrate 交易签名必须复刻 SignedPayload::using_encoded:
+  /// payload <= 256B 签原文,>256B 签 blake2_256(payload)。
+  static Uint8List signingBytesForHex({
+    required String payloadHex,
+    required int action,
+  }) {
+    final payload = Uint8List.fromList(_hexToBytes(payloadHex));
+    if (QrActions.isChainAction(action) && payload.length > 256) {
+      return Hasher.blake2b256.hash(payload);
+    }
+    return payload;
+  }
 
   void _validateRequestId(String requestId) {
     if (!_idPattern.hasMatch(requestId)) {
@@ -212,14 +213,7 @@ class QrSigner {
     }
   }
 
-  void _validateAddress(String address) {
-    if (!_addressPattern.hasMatch(address)) {
-      throw const QrSignException(QrSignErrorCode.invalidField, 'address 格式错误');
-    }
-  }
-
   void _validateHexField(String value, String field) {
-    // sign_request 机读字段统一使用 0x hex,这里源头拦截。
     if (!value.startsWith('0x')) {
       throw QrSignException(QrSignErrorCode.invalidField, '$field 必须以 0x 开头');
     }
@@ -238,36 +232,19 @@ class QrSigner {
         : value.toLowerCase();
   }
 
-  void _validateExpiry({
-    required int issuedAt,
-    required int expiresAt,
-  }) {
+  void _validateExpiry({required int expiresAt}) {
     final now = _now();
-    if (expiresAt <= issuedAt) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, 'expires_at 必须晚于 issued_at');
-    }
-    if (issuedAt > now + maxClockSkewSeconds) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, 'issued_at 超出设备时间范围');
-    }
     if (expiresAt < now) {
       throw const QrSignException(QrSignErrorCode.expired, '交易签名请求已过期');
-    }
-  }
-
-  void _validateSignedAt(int signedAt) {
-    final now = _now();
-    if (signedAt > now + maxClockSkewSeconds) {
-      throw const QrSignException(
-          QrSignErrorCode.invalidField, 'signed_at 超出设备时间范围');
     }
   }
 
   int _now() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   static List<int> _hexToBytes(String input) {
-    final text = input.startsWith('0x') ? input.substring(2) : input;
+    final text = input.startsWith('0x') || input.startsWith('0X')
+        ? input.substring(2)
+        : input;
     if (text.isEmpty || text.length.isOdd) return const <int>[];
     return List<int>.generate(
       text.length ~/ 2,

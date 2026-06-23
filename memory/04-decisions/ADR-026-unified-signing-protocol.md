@@ -5,7 +5,7 @@
   - Phase 2:ACTIVATE_ADMIN(0x18)/DECRYPT(0x19) 内嵌前缀 → `GMB||op_tag` 4B 二进制前缀(原始字节可解析保留,payload 97B/108B,node 构造/验签/冷钱包/citizenapp 四方 + 金标 fixture 逐字节一致);IM_WALLET_BINDING/IM_NODE_PAIRING 版本串集中 primitives::sign 单源(原构造不变,不占签名 op_tag)。
   - 验证:链端 cargo check --workspace + primitives/node/offchain-transaction test;后端 77(golden 不变);citizenapp signer/trade + citizenwallet payload_decoder flutter test 全绿。
 - **4 域裁决（2026-06-22 用户拍板"抖中方案"）**:这 4 个不是 `blake2_256(域||SCALE)` 哈希域,**不强折成 hash**(会丢原始字节可解析性):
-  - `ACTIVATE_ADMIN(0x18)` / `DECRYPT(0x19)`:签**原始可解析字节**,域是内嵌前缀。把前缀从 `b"GMB_ACTIVATE_ADMIN_V1"`(21B)/`b"GMB_DECRYPT_V1"`(14B)换成 **`GMB || op_tag`(4B)二进制前缀**,保留原始字节签名 + 按偏移解析(前缀变短,冷钱包/node/citizenapp 锁步;DECRYPT 的 CHALLENGE_TOTAL_LEN + sha256 完整性字段同步)。
+  - `ACTIVATE_ADMIN(0x18)` / `DECRYPT(0x19)`:签**原始可解析字节**,域是内嵌前缀,统一为 **`GMB || op_tag`(4B)二进制前缀**,保留原始字节签名 + 按偏移解析(冷钱包/node/citizenapp 锁步;DECRYPT 的 CHALLENGE_TOTAL_LEN + sha256 完整性字段同步)。
   - `IM_WALLET_BINDING(0x1B)`:管道分隔 UTF-8 字符串 canonical,**保留原构造**,仅把版本串常量集中进 primitives 单源。
   - `IM_NODE_PAIRING(0x1A)`:QR body 协议版本字符串,**不签名**,仅常量集中单源(不是 signing_message op_tag)。
   - 注册表收口:0x10-0x19 为签名域(hash 或二进制前缀);IM 两个改为集中的字符串常量,不占签名 op_tag(撤 0x1A/0x1B 悬空或标注为字符串域 id)。
@@ -23,8 +23,8 @@
 | GMB_L3_PAY_V1 | L3 支付 | runtime batch_item + node ledger + dart×2 + test（5） |
 | GMB_OFFCHAIN_BATCH_V1 | 批次结算 | runtime batch_item + node packer + node signer（3） |
 | GMB_L2_ACK_V1 | L2 确认 | node rpc（1） |
-| GMB_ACTIVATE_ADMIN_V1 | 管理员激活 | node activation + dart + 冷钱包 + test（4） |
-| GMB_DECRYPT_V1 | 解密授权 | node admin_unlock + 冷钱包 + test（3） |
+| GMB \|\| 0x18 | 管理员激活 | node activation + dart + 冷钱包 + test（4） |
+| GMB \|\| 0x19 | 解密授权 | node admin_unlock + 冷钱包 + test（3） |
 | GMB_IM_NODE_PAIRING_V1 | IM 节点配对 | node + dart（2） |
 | GMB_IM_WALLET_BINDING_V1 | IM 钱包绑定 | node + dart×2（3） |
 

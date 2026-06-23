@@ -1,11 +1,8 @@
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/qr/envelope.dart';
 
-/// 扫码内容的路由分类结果。统一协议 CITIZEN_QR_V1 下按 kind 分派。
+/// 扫码内容的路由分类结果。统一协议 QR_V1 下按 `k` 分派。
 enum QrRouteType {
-  /// 登录挑战码(CitizenApp 不处理,展示明确错误)。
-  loginChallenge,
-
   /// 用户码 - 联系人(user_contact)
   userContact,
 
@@ -18,11 +15,8 @@ enum QrRouteType {
   /// 交易签名请求(sign_request)
   signRequest,
 
-  /// 交易签名回执(sign_response)
+  /// 交易签名响应(sign_response)
   signResponse,
-
-  /// login_receipt(CitizenApp 既不生成也不扫)
-  loginReceipt,
 
   /// 裸 SS58 地址或 `gmb://account/<addr>` — 向后兼容转账。
   legacyAddress,
@@ -64,13 +58,11 @@ class QrRouter {
       return QrRouteResult(type: QrRouteType.unknown, raw: raw);
     }
 
-    // 1. 尝试 CITIZEN_QR_V1 envelope
+    // 1. 尝试 QR_V1 envelope
     if (text.startsWith('{')) {
       try {
         final env = QrEnvelope.parse(text);
         final type = switch (env.kind) {
-          QrKind.loginChallenge => QrRouteType.loginChallenge,
-          QrKind.loginReceipt => QrRouteType.loginReceipt,
           QrKind.signRequest => QrRouteType.signRequest,
           QrKind.signResponse => QrRouteType.signResponse,
           QrKind.userContact => QrRouteType.userContact,

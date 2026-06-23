@@ -69,16 +69,16 @@ export function Passkey({
     try {
       const signed = parseSignedReceiptPayload(raw, passkeyStart.request_id);
       if (signed.challenge_id !== passkeyStart.request_id) {
-        throw new Error('签名回执与当前通行密钥请求不匹配');
+        throw new Error('签名响应与当前通行密钥请求不匹配');
       }
-      if (!signed.signer_pubkey || !signed.payload_hash) {
-        throw new Error('签名回执缺少 signer_pubkey 或 payload_hash');
+      if (!signed.signer_pubkey) {
+        throw new Error('签名响应缺少 signer_pubkey');
       }
       const confirmed = await confirmPasskeyRegistration(auth, {
         registration_id: passkeyStart.registration_id,
         signer_pubkey: signed.signer_pubkey,
         signature: signed.signature,
-        payload_hash: signed.payload_hash,
+        payload_hash: passkeyStart.payload_hash,
       });
       const credential = await createPasskeyCredential(confirmed.public_key_options);
       await completePasskeyRegistration(auth, {
@@ -130,7 +130,7 @@ export function Passkey({
             ? `有效期至 ${new Date(passkeyStart.expires_at * 1000).toLocaleTimeString()}`
             : '请先发起通行密钥更新'
         }
-        scannerHint="使用当前管理员冷钱包扫码签名后，再扫描签名回执"
+        scannerHint="使用当前管理员冷钱包扫码签名后，再扫描签名响应"
         scannerDisabled={loading}
         scannerLoading={loading}
         onDetected={handleSignedResponse}

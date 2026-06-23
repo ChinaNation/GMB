@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::RegistryOrgCode;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct LoginChallenge {
+pub(crate) struct LoginSignRequest {
     pub(crate) challenge_id: String,
     pub(crate) admin_account: String,
     pub(crate) challenge_text: String,
@@ -107,14 +107,14 @@ pub(crate) struct AdminChallengeOutput {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct AdminQrChallengeInput {
+pub(crate) struct AdminQrSignRequestInput {
     pub(crate) origin: Option<String>,
     pub(crate) domain: Option<String>,
     pub(crate) session_id: Option<String>,
 }
 
 #[derive(Serialize)]
-pub(crate) struct AdminQrChallengeOutput {
+pub(crate) struct AdminQrSignRequestOutput {
     pub(crate) challenge_id: String,
     pub(crate) challenge_payload: String,
     pub(crate) login_qr_payload: String,

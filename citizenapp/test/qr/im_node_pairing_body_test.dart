@@ -5,7 +5,7 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/qr/qr_router.dart';
 
 void main() {
-  test('通信节点二维码按 CITIZEN_QR_V1 解析并路由', () {
+  test('通信节点二维码按 QR_V1 解析并路由', () {
     const body = ImNodePairingBody(
       nodePeerId: '12D3KooWNode',
       nodeMultiaddr: '/ip4/192.168.1.8/tcp/30333/wss/p2p/12D3KooWNode',

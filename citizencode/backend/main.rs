@@ -2701,8 +2701,8 @@ fn main() {
                 post(admins::login::admin_auth_verify),
             )
             .route(
-                "/api/v1/admin/auth/qr/challenge",
-                post(admins::login::admin_auth_qr_challenge),
+                "/api/v1/admin/auth/qr/sign-request",
+                post(admins::login::admin_auth_qr_sign_request),
             )
             .route(
                 "/api/v1/admin/auth/qr/complete",

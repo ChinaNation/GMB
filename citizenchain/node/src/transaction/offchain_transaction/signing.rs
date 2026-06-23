@@ -1,6 +1,6 @@
 // 清算行 register/update/unregister 三个 extrinsic 的 QR 签名请求构建 +
 // call_data 重建。复用 `governance::signing::build_sign_request_from_call_data`
-// 与 `verify_and_submit`,只在本模块构造 call_data 与 display 字段。
+// 与 `verify_and_submit`,只在本模块构造 call_data。
 //
 // pallet_index = 21(OffchainTransaction,见 runtime/src/lib.rs:366)
 // call_index:
@@ -121,22 +121,7 @@ pub fn build_register_sign_request(
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_register_call_data(cid_number, peer_id, rpc_domain, rpc_port)?;
-    let summary = format!("声明清算行节点 {cid_number} @ {rpc_domain}:{rpc_port}");
-    // display.fields key/value 必须与 citizenwallet PayloadDecoder 输出 1:1 对齐。
-    let fields = serde_json::json!([
-        { "key": "cid_number", "label": "机构身份号码", "value": cid_number },
-        { "key": "peer_id", "label": "节点 PeerId", "value": peer_id },
-        { "key": "rpc_domain", "label": "RPC 域名", "value": rpc_domain },
-        { "key": "rpc_port", "label": "RPC 端口", "value": rpc_port.to_string() },
-    ]);
-    build_sign_request_from_call_data(
-        &clean,
-        &bytes,
-        &call_data,
-        "register_clearing_bank",
-        &summary,
-        &fields,
-    )
+    build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 /// update_clearing_bank_endpoint QR 签名请求。
@@ -148,20 +133,7 @@ pub fn build_update_endpoint_sign_request(
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_update_endpoint_call_data(cid_number, new_domain, new_port)?;
-    let summary = format!("更新清算行 {cid_number} 端点 → {new_domain}:{new_port}");
-    let fields = serde_json::json!([
-        { "key": "cid_number", "label": "机构身份号码", "value": cid_number },
-        { "key": "new_domain", "label": "新域名", "value": new_domain },
-        { "key": "new_port", "label": "新端口", "value": new_port.to_string() },
-    ]);
-    build_sign_request_from_call_data(
-        &clean,
-        &bytes,
-        &call_data,
-        "update_clearing_bank_endpoint",
-        &summary,
-        &fields,
-    )
+    build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 /// unregister_clearing_bank QR 签名请求。
@@ -171,18 +143,7 @@ pub fn build_unregister_sign_request(
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_unregister_call_data(cid_number)?;
-    let summary = format!("注销清算行节点 {cid_number}");
-    let fields = serde_json::json!([
-        { "key": "cid_number", "label": "机构身份号码", "value": cid_number },
-    ]);
-    build_sign_request_from_call_data(
-        &clean,
-        &bytes,
-        &call_data,
-        "unregister_clearing_bank",
-        &summary,
-        &fields,
-    )
+    build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 #[cfg(test)]

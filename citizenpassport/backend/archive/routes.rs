@@ -130,6 +130,7 @@ struct WalletBindRequest {
 struct ArchiveDeleteChallengeData {
     challenge_id: String,
     sign_request: String,
+    payload_hash: String,
     expire_at: i64,
 }
 
@@ -997,6 +998,7 @@ async fn create_archive_delete_challenge(
         expire_at,
     )?;
     let payload_hex = format!("0x{}", hex::encode(delete_payload.as_bytes()));
+    let payload_hash = payload_sha256_hex(delete_payload.as_bytes());
     let sign_request = build_archive_delete_sign_request(
         &challenge_id,
         issued_at,
@@ -1033,6 +1035,7 @@ async fn create_archive_delete_challenge(
     Ok(Json(ok(ArchiveDeleteChallengeData {
         challenge_id,
         sign_request,
+        payload_hash,
         expire_at,
     })))
 }
@@ -1563,14 +1566,14 @@ fn build_archive_delete_payload(
 
 fn build_archive_delete_sign_request(
     challenge_id: &str,
-    issued_at: i64,
+    _issued_at: i64,
     expire_at: i64,
-    admin_account: &str,
+    _admin_account: &str,
     admin_account_pubkey: &str,
     payload_hex: &str,
-    archive: &Archive,
+    _archive: &Archive,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    // 中文注释：payload 保留真实删除原文；展示层只放人工可核对的档案号、管理员 SS58 和过期时间。
+    // 中文注释：payload 保留真实删除原文；二维码只放动作码、公钥和待签字节。
     let admin_account_hex = normalize_pubkey_hex(admin_account_pubkey).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1578,26 +1581,30 @@ fn build_archive_delete_sign_request(
             "invalid admin_account",
         )
     })?;
+    let admin_pubkey_b64 = crate::qr::pubkey_hex_to_b64(&admin_account_hex).ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid admin_account",
+        )
+    })?;
+    let payload_bytes = crate::common::decode_bytes(payload_hex).ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid delete payload",
+        )
+    })?;
     let sign_request = serde_json::json!({
-        "proto": crate::qr::CITIZEN_QR_V1,
-        "kind": crate::qr::QrKind::SignRequest.wire(),
-        "id": challenge_id,
-        "issued_at": issued_at,
-        "expires_at": expire_at,
-        "body": {
-            "address": admin_account,
-            "pubkey": admin_account_hex,
-            "sig_alg": "sr25519",
-            "payload_hex": payload_hex,
-            "display": {
-                "action": "archive_delete",
-                "summary": "确认删除 CPMS 公民档案",
-                "fields": [
-                    { "key": "archive_no", "label": "档案号", "value": archive.archive_no },
-                    { "key": "admin_account", "label": "管理员", "value": admin_account },
-                    { "key": "expires_at", "label": "过期时间", "value": expire_at.to_string() }
-                ]
-            }
+        "p": crate::qr::QR_V1,
+        "k": crate::qr::QrKind::SignRequest.code(),
+        "i": challenge_id,
+        "e": expire_at,
+        "b": {
+            "a": crate::qr::ACTION_CPMS_ARCHIVE_DELETE,
+            "g": 1,
+            "u": admin_pubkey_b64,
+            "d": crate::qr::bytes_to_b64(&payload_bytes),
         }
     });
     serde_json::to_string(&sign_request)
@@ -1864,7 +1871,7 @@ mod tests {
     }
 
     #[test]
-    fn archive_delete_sign_request_keeps_pubkey_and_displays_ss58() {
+    fn archive_delete_sign_request_keeps_pubkey_and_payload_compact() {
         let bare_pubkey = "22".repeat(32);
         let qr = build_archive_delete_sign_request(
             "adc_test",
@@ -1879,10 +1886,12 @@ mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&qr).expect("sign request should be valid json");
 
-        assert_eq!(json["body"]["pubkey"], format!("0x{}", bare_pubkey));
-        assert_eq!(
-            json["body"]["display"]["fields"][1]["value"],
-            "5AdminAddress"
-        );
+        assert_eq!(json["p"], "QR_V1");
+        assert_eq!(json["k"], 1);
+        assert_eq!(json["i"], "adc_test");
+        assert_eq!(json["b"]["a"], crate::qr::ACTION_CPMS_ARCHIVE_DELETE);
+        assert_eq!(json["b"]["g"], 1);
+        assert!(json["b"]["u"].as_str().unwrap_or_default().len() > 20);
+        assert!(json["b"]["d"].as_str().unwrap_or_default().len() > 4);
     }
 }

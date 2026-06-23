@@ -9,13 +9,14 @@ import '../ui/app_theme.dart';
 import '../signer/action_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
+import '../qr/qr_protocols.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 
 /// 离线签名页面。
 ///
 /// 扫描在线手机展示的签名请求二维码，
-/// 在本机完成签名后展示回执二维码。
+/// 在本机完成签名后展示签名响应二维码。
 class OfflineSignPage extends StatefulWidget {
   const OfflineSignPage({
     super.key,
@@ -351,23 +352,23 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   Widget _buildTransactionDetails(
       SignRequestEnvelope request, OfflineSignVerification verification) {
     final decoded = verification.decoded;
-    final match = verification.displayMatch;
+    final match = verification.contentMatch;
 
     final Widget statusBanner;
     switch (match) {
-      case DisplayMatchStatus.matched:
+      case ContentMatchStatus.matched:
         statusBanner = _buildBanner(
           color: AppTheme.success,
           icon: Icons.verified_rounded,
-          text: '交易内容已独立验证,与摘要一致',
+          text: '交易内容已独立验证,可安全签名',
         );
-      case DisplayMatchStatus.mismatched:
+      case ContentMatchStatus.mismatched:
         statusBanner = _buildBanner(
           color: AppTheme.danger,
           icon: Icons.dangerous_rounded,
-          text: '警告:交易内容与摘要不符,禁止签名',
+          text: '警告:二维码动作与交易内容不符,禁止签名',
         );
-      case DisplayMatchStatus.decodeFailed:
+      case ContentMatchStatus.decodeFailed:
         // 两色识别模型:无法解码 → 红色拒签。
         statusBanner = _buildBanner(
           color: AppTheme.danger,
@@ -376,28 +377,22 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         );
     }
 
-    final display = request.body.display;
-    final actionLabel = actionLabels[display.action] ?? display.action;
+    final actionLabel = decoded != null
+        ? actionLabels[decoded.action] ?? decoded.action
+        : _actionLabel(request.body.action);
 
     final List<Widget> detailRows;
     if (decoded != null) {
       detailRows = [
         _detailRow('交易类型', actionLabel),
         ...decoded.reviewFields.entries.map((e) {
-          // 优先从 display.fields 中找中文标签
-          final displayLabel = display.fields
-              .where((f) => f.key == e.key)
-              .map((f) => f.label)
-              .firstOrNull;
-          return _detailRow(displayLabel ?? e.key, _fieldValue(e.key, e.value));
+          return _detailRow(e.key, _fieldValue(e.key, e.value));
         }),
       ];
     } else {
       detailRows = [
         _detailRow('交易类型', actionLabel),
-        ...display.fields.map(
-          (f) => _detailRow(f.label, _fieldValue(f.key ?? f.label, f.value)),
-        ),
+        _detailRow('载荷', '${request.body.payloadBytes.length} 字节'),
       ];
     }
 
@@ -482,10 +477,10 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     final expired = _remainingSeconds <= 0;
     final verification = _verification;
     final isMismatched =
-        verification?.displayMatch == DisplayMatchStatus.mismatched;
+        verification?.contentMatch == ContentMatchStatus.mismatched;
     // 两色识别模型:decodeFailed 一律红色拒签。
     final isDecodeFailed =
-        verification?.displayMatch == DisplayMatchStatus.decodeFailed;
+        verification?.contentMatch == ContentMatchStatus.decodeFailed;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -523,7 +518,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _detailRow('请求 ID', request.id ?? ''),
-              _detailRow('签名账户', request.body.address),
+              _detailRow('签名公钥', _truncate(request.body.pubkeyHex)),
             ],
           ),
         ),
@@ -589,7 +584,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         _buildBanner(
           color: AppTheme.success,
           icon: Icons.check_circle_rounded,
-          text: '签名已完成，请用在线手机扫描下方回执二维码',
+          text: '签名已完成，请用在线手机扫描下方签名响应二维码',
         ),
         const SizedBox(height: 24),
         // QR 码容器
@@ -631,7 +626,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           child: Column(
             children: [
               _detailRow('请求 ID', response.id ?? ''),
-              _detailRow('签名公钥', _truncate(response.body.pubkey)),
+              _detailRow('签名公钥', _truncate(response.body.pubkeyHex)),
             ],
           ),
         ),
@@ -661,6 +656,11 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           : (request != null ? _buildRequestSummary(request) : _buildScanner()),
     );
   }
+}
+
+String _actionLabel(int action) {
+  if (QrActions.isRuntimeHashOnly(action)) return 'Runtime 升级签名';
+  return '动作 $action';
 }
 
 class _ScanOverlayPainter extends CustomPainter {

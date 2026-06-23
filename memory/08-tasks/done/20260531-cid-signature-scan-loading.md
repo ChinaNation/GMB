@@ -14,7 +14,7 @@
 - 已拆分 CPMS 安装码签发的 `cpmsBusy` 与 `securityCommitLoading`。
 - 已拆分 CPMS 站点管理的 `busy` 与 `securityCommitLoading`。
 - 签名弹窗刚打开时，“开启扫码”按钮不再使用底层业务 loading。
-- 只有识别到签名回执并提交 `commitAdminAction` 时，扫码按钮才进入 loading。
+- 只有识别到签名响应并提交 `commitAdminAction` 时，扫码按钮才进入 loading。
 - 已更新 CID 前端文档中的签名弹窗 loading 边界。
 
 ## 验证

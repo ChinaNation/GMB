@@ -92,7 +92,7 @@ citizenapp/test/governance/admins-change/
 - 内置治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 阈值真源不在 `AdminsChange::AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
-- QR display 必须与冷钱包 decoder 字段逐字一致：`institution_code / subject / admins / new_threshold`。
+- QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。
 
 ## 管理员激活
 
@@ -100,7 +100,7 @@ citizenapp/test/governance/admins-change/
 
 激活记录使用 `activated_admins_v3`，只保存 `identityKey / accountIdHex / institutionCode / kind / pubkeyHex / activatedAtMs`，查询和清理都按 `accountIdHex + pubkeyHex` 精确匹配。
 
-激活 QR 与 node 桌面端统一使用 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_account`，字段为 `institution_code / subject / pubkey`。
+激活 QR 与 node 桌面端统一使用 QR_V1 `a=5 activate_admin_account`；payload 前缀为 `GMB || 0x18`，扫码端解码展示字段为 `institution_code / subject / pubkey`。
 
 ## 2026-05-10 修复记录
 

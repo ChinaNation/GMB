@@ -9,7 +9,7 @@
 
 - 路径：`citizencode/backend/citizens`
 - 职责：承载公民电子护照绑定、CPMS 状态扫码、公民投票凭证签发和联合投票人口快照凭证签发。
-- 电子护照绑定边界：CPMS 档案码提供 `archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`，并在加密 `geo_seal` 中提供居住地代码、出生地代码和 `election_scope_level`；CID 只允许 `citizen_status=NORMAL / voting_eligible=true / 钱包已设置` 的公民进入本地公民库；CID 验档案码后生成 `CITIZEN_QR_V1 / sign_request`；CitizenApp 使用对应钱包签名；CID 验签通过后直接写入本地绑定结果并向 CitizenApp 状态接口返回。
+- 电子护照绑定边界：CPMS 档案码提供 `archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`，并在加密 `geo_seal` 中提供居住地代码、出生地代码和 `election_scope_level`；CID 只允许 `citizen_status=NORMAL / voting_eligible=true / 钱包已设置` 的公民进入本地公民库；CID 验档案码后生成 `QR_V1 / sign_request`；CitizenApp 使用对应钱包签名；CID 验签通过后直接写入本地绑定结果并向 CitizenApp 状态接口返回。
 
 ## 2. 模块结构
 
@@ -83,8 +83,9 @@
 - 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-cid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
-- `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
-- CitizenApp 扫描 `citizen_bind` 请求时必须先独立解析 `payload_hex`，确认 action、档案号、公民状态、选举权利和钱包地址与 display 一致后才签名。
+- `citizen_bind` 必须校验签名响应公钥等于 challenge 锁定的 `wallet_pubkey`。
+- 生成方本地 session 的 `payload_hash` 必须等于 challenge 原文哈希；二维码响应不得携带 `payload_hash`。
+- CitizenApp 扫描 `citizen_bind` 请求时必须先按 QR_V1 `b.a + b.d` 独立解析载荷，确认 action、档案号、公民状态、选举权利和钱包地址与解码展示内容一致后才签名。
 - `archive_no / cid_number / wallet_pubkey` 三者保持一对一唯一关系。
 - `status_updated_at` 参与 CPMS `ARCHIVE` 签名原文；旧时间戳档案码不得覆盖新状态。
 

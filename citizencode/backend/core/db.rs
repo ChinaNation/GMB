@@ -216,7 +216,7 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admin_security_grants_expires
                 ON admin_security_grants(expires_at);
 
-             CREATE TABLE IF NOT EXISTS admin_login_challenges (
+             CREATE TABLE IF NOT EXISTS admin_login_sign_requests (
                 challenge_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
                 admin_account TEXT NOT NULL DEFAULT '',
@@ -224,8 +224,8 @@ impl Db {
                 consumed BOOLEAN NOT NULL DEFAULT FALSE,
                 payload JSONB NOT NULL
              );
-             CREATE INDEX IF NOT EXISTS idx_admin_login_challenges_expires
-                ON admin_login_challenges(expires_at);
+             CREATE INDEX IF NOT EXISTS idx_admin_login_sign_requests_expires
+                ON admin_login_sign_requests(expires_at);
 
              CREATE TABLE IF NOT EXISTS admin_qr_login_results (
                 challenge_id TEXT PRIMARY KEY,

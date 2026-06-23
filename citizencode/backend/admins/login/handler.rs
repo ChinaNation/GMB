@@ -22,7 +22,7 @@ use super::signature::{
     build_admin_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
     resolve_scope_city_name, verify_admin_signature,
 };
-use super::LOGIN_CHALLENGE_TTL_SECONDS;
+use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
 pub(crate) async fn require_admin_session_middleware(
     State(state): State<AppState>,
@@ -164,7 +164,7 @@ pub(crate) async fn admin_auth_challenge(
     }
 
     let now = Utc::now();
-    let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
+    let expire_at = now + Duration::seconds(LOGIN_SIGN_REQUEST_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
     let nonce = Uuid::new_v4().to_string();
     let challenge_text = format!(
@@ -186,9 +186,9 @@ pub(crate) async fn admin_auth_challenge(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     }
-    if let Err(err) = repo::insert_login_challenge(
+    if let Err(err) = repo::insert_login_sign_request(
         &state.db,
-        &LoginChallenge {
+        &LoginSignRequest {
             challenge_id: challenge_id.clone(),
             admin_account: input.admin_account,
             challenge_text: challenge_text.clone(),
@@ -258,7 +258,7 @@ pub(crate) async fn admin_auth_verify(
     let verify_domain_for_db = verify_domain.clone();
     let result = state.db.with_client(move |conn| {
         repo::cleanup_login_state_conn(conn, now)?;
-        let Some(mut challenge) = repo::get_login_challenge_conn(conn, challenge_id.as_str())?
+        let Some(mut challenge) = repo::get_login_sign_request_conn(conn, challenge_id.as_str())?
         else {
             return Err("http:not_found:challenge not found".to_string());
         };
@@ -281,11 +281,11 @@ pub(crate) async fn admin_auth_verify(
         challenge.consumed = true;
         let admin_account = challenge.admin_account.clone();
         let challenge_text = challenge.challenge_text.clone();
-        repo::update_login_challenge_conn(conn, &challenge)?;
+        repo::update_login_sign_request_conn(conn, &challenge)?;
 
         if !verify_admin_signature(&admin_account, &challenge_text, signature.as_str()) {
             challenge.consumed = false;
-            repo::update_login_challenge_conn(conn, &challenge)?;
+            repo::update_login_sign_request_conn(conn, &challenge)?;
             return Err("http:unprocessable:signature verify failed".to_string());
         }
 

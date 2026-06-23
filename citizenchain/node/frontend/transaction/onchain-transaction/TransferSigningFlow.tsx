@@ -175,14 +175,14 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
             </div>
             <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
             <button className="transfer-signing-confirm" onClick={() => setStep('scan')}>
-              已签名，扫描回执
+              已签名，扫描响应
             </button>
           </div>
         )}
 
         {step === 'scan' && (
           <div className="transfer-signing-body">
-            <p className="qr-instruction">将签名回执二维码对准摄像头</p>
+            <p className="qr-instruction">将签名响应二维码对准摄像头</p>
             <QrScanner
               onScan={handleScanResult}
               onError={(e) => { setError(e); setStep('error'); }}

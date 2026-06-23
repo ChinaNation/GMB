@@ -1,6 +1,6 @@
 // 交易模块：冷钱包管理 + 链上转账（Balances::transfer_keep_alive）。
 //
-// 冷钱包仅存储 SS58 地址，签名通过 CITIZEN_QR_V1 协议由离线设备完成。
+// 冷钱包仅存储 SS58 地址，签名通过 QR_V1 协议由离线设备完成。
 // 转账构建和提交复用 governance/signing.rs 中的通用基础设施。
 
 pub(crate) mod wallet_store;
@@ -293,22 +293,8 @@ pub fn build_transfer_request(
     call_data.extend_from_slice(&encode_compact_u128(amount_fen));
 
     // 获取链上参数并构建签名载荷
-    let result = signing::build_sign_request_from_call_data(
-        &sender_clean,
-        &sender_bytes,
-        &call_data,
-        "transfer",
-        &format!(
-            "转账 {} GMB 给 {}...{}",
-            signing::format_amount(amount_yuan),
-            &to_address[..8],
-            &to_address[to_address.len() - 6..]
-        ),
-        &serde_json::json!([
-            { "key": "to", "label": "收款地址", "value": to_address },
-            { "key": "amount_yuan", "label": "金额", "value": format!("{} GMB", signing::format_amount(amount_yuan)) }
-        ]),
-    )?;
+    let result =
+        signing::build_sign_request_from_call_data(&sender_clean, &sender_bytes, &call_data)?;
 
     Ok(TransferSignRequestResult {
         request_json: result.request_json,

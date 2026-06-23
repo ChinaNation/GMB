@@ -43,7 +43,7 @@ citizenapp/lib/transaction/shared/
    - 从通讯录进入时，`ContactBookPage` 返回的联系人 `address` 已经是 SS58，页面直接填入收款栏，不做 AccountId hex 转换
 3. 页面根据钱包类型注入签名回调：
    - 热钱包：先调用 `WalletManager.authenticateForSigning()`，再用 `signWithWalletNoAuth()` 签名
-   - 冷钱包：构造 `sign_request` 二维码，等待 `sign_response` 回执
+   - 冷钱包：构造 `sign_request` 二维码，等待 `sign_response` 响应
 4. 调用 `OnchainPaymentService.submitTransfer()`
 5. 服务调用 `OnchainRpc.transferKeepAlive()` 完成 extrinsic 构造、签名和广播
 6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=...)`
@@ -93,8 +93,8 @@ citizenapp/lib/transaction/shared/
 - 签名算法固定 `sr25519`
 - `OnchainPaymentService.submitTransfer()` 只接收签名回调，不读取 seed
 - 热钱包 seed 只在 `WalletManager` 内短暂存在，签名后清零
-- 公民钱包签名通过 `CITIZEN_QR_V1` 的 `sign_request / sign_response`
-- CitizenApp 只负责生成待签名 payload、校验回执、广播交易；离线签名由 CitizenWallet 完成
+- 公民钱包签名通过 `QR_V1` 的 `sign_request / sign_response`
+- CitizenApp 只负责生成待签名 payload、校验签名响应、广播交易；离线签名由 CitizenWallet 完成
 
 ## 7. 手续费
 

@@ -56,7 +56,7 @@ export const printArchiveQr = (id: string) =>
   );
 
 export const createArchiveDeleteChallenge = (id: string) =>
-  post<{ challenge_id: string; sign_request: string; expire_at: number }>(
+  post<{ challenge_id: string; sign_request: string; payload_hash: string; expire_at: number }>(
     `/api/v1/archives/${id}/delete/challenge`
   );
 

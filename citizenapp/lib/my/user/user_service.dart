@@ -252,11 +252,12 @@ class UserContactService {
   /// 添加或更新通讯录联系人。
   Future<ContactImportResult> addContact({
     required String address,
-    required String name,
+    required String contactName,
     String? selfAddress,
   }) async {
     final incomingAddress = normalizeAddress(address);
-    if (incomingAddress.isEmpty || name.trim().isEmpty) {
+    final normalizedContactName = contactName.trim();
+    if (incomingAddress.isEmpty || normalizedContactName.isEmpty) {
       throw const FormatException('地址或名称为空');
     }
     final self = selfAddress?.trim() ?? '';
@@ -270,7 +271,7 @@ class UserContactService {
         contacts.indexWhere((item) => item.address == incomingAddress);
     if (index >= 0) {
       final updated = contacts[index].copyWith(
-        sourceNickname: name.trim(),
+        sourceNickname: normalizedContactName,
         updatedAtMillis: now,
       );
       contacts[index] = updated;
@@ -280,7 +281,7 @@ class UserContactService {
 
     final created = UserContact(
       address: incomingAddress,
-      sourceNickname: name.trim(),
+      sourceNickname: normalizedContactName,
       addedAtMillis: now,
       updatedAtMillis: now,
     );

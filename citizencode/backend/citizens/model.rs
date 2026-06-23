@@ -157,8 +157,10 @@ pub(crate) struct CitizenBindChallengeOutput {
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,
-    /// CITIZEN_QR_V1 签名请求 JSON（前端直接展示为二维码）。
+    /// QR_V1 签名请求 JSON（前端直接展示为二维码）。
     pub(crate) sign_request: String,
+    /// 本地 challenge payload hash。前端提交签名响应时原样带回,二维码不携带。
+    pub(crate) payload_hash: String,
     pub(crate) expire_at: i64,
 }
 
@@ -178,11 +180,11 @@ pub(crate) struct CitizenBindChallengeInput {
 pub(crate) struct CitizenBindInput {
     /// challenge ID
     pub(crate) challenge_id: String,
-    /// CITIZEN_QR_V1 sign_response.pubkey。
+    /// QR_V1 k=2 签名响应公钥。
     pub(crate) pubkey: String,
-    /// CITIZEN_QR_V1 sign_response.signature。
+    /// QR_V1 k=2 签名响应签名。
     pub(crate) signature: String,
-    /// CITIZEN_QR_V1 sign_response.payload_hash。
+    /// 本地 challenge payload hash,不再来自二维码响应。
     pub(crate) payload_hash: String,
 }
 

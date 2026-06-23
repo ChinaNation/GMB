@@ -447,7 +447,7 @@ pub(crate) struct AdminUser {
 }
 ```
 
-- 登录挑战应答:`admin_pubkey` 作为验签公钥(现有流程不变)
+- 登录签名请求应答:`admin_pubkey` 作为验签公钥(现有流程不变)
 - 推链签名:从内存 cache 里按 `admin_province` 索引到对应 AdminUser,用解密后的 privkey 构造 `PairSigner`
 - 轮换 = 调用 `replace_sheng_admin` 接口,内部动作:
   1. 后端生成新 sr25519 keypair

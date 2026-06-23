@@ -13,7 +13,7 @@ import 'package:citizenapp/wallet/widgets/wallet_qr_dialog.dart';
 /// - 钱包名可点击进入编辑态;提交(回车 / onTapOutside)时通过 [onNameChanged]
 ///   回调让外层落盘。空字符串或与现值相同则回滚不报错,由编辑态自行处理。
 /// - 地址点击复制并弹 SnackBar,展示规则为短地址 `前 8...后 6`。
-/// - 右侧 QR 小图标弹出 WalletQrDialog,内容 `user_contact` 维持 CITIZEN_QR_V1。
+/// - 右侧 QR 小图标弹出 WalletQrDialog,内容为 QR_V1 `k=3` 用户联系码。
 /// - 编辑态 TextField 字体/光标/下划线改黑色系,避开 Material TextField 默认
 ///   白底导致白字看不见的问题。展示态保持白色不变。
 class WalletIdentityCard extends StatefulWidget {
@@ -198,7 +198,7 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
             onTap: () => WalletQrDialog.show(
               context,
               wallet: widget.wallet,
-              name: _walletName,
+              walletName: _walletName,
             ),
             child: Container(
               width: 36,

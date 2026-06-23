@@ -70,12 +70,12 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 - `admins`:注册局机构管理员账户。
 - `federal_registry_scope`:联邦注册局机构管理员所属省。
 - `admin_sessions`:登录会话。
-- `admin_login_challenges`:签名登录挑战。
+- `admin_sign_requests`:签名登录签名请求。
 - `admin_qr_login_results`:扫码登录结果。
 - `admin_passkeys`、`admin_passkey_challenges`:Passkey 凭据和挑战。
 - `admin_action_challenges`、`admin_security_grants`:高风险操作二次确认。
 
-登录挑战、二维码结果和会话属于短生命周期安全运行态。清理逻辑必须在 Rust 中先计算明确截止时间,再把时间点传给 SQL 比较;SQL 中不得使用 `$1 - interval '...'` 这类参数参与 interval 运算的写法,避免 PostgreSQL 无法推断绑定参数类型。数据库错误必须展开 PostgreSQL 的 SQLSTATE、message、detail 和 hint,不得只把 `db error` 传到前端或启动日志。
+登录签名请求、二维码结果和会话属于短生命周期安全运行态。清理逻辑必须在 Rust 中先计算明确截止时间,再把时间点传给 SQL 比较;SQL 中不得使用 `$1 - interval '...'` 这类参数参与 interval 运算的写法,避免 PostgreSQL 无法推断绑定参数类型。数据库错误必须展开 PostgreSQL 的 SQLSTATE、message、detail 和 hint,不得只把 `db error` 传到前端或启动日志。
 任何会在持有数据库连接锁时读取 `postgres::Row` 的代码,必须保证 SELECT 字段顺序和 `row.get(index)`
 逐项一致;越界 panic 会污染连接池并导致后续接口出现 `postgres client lock poisoned`。
 
@@ -118,9 +118,9 @@ CID 前端提示统一由 `citizencode/frontend/utils/notice.ts` 管理。业务
 
 业务组件捕获异常时必须把原始错误对象传给 `notice.error(error, '中文兜底提示')`,不得先取 `error.message` 再传入提示入口。后端 `ApiError.error_code` 和原始 `message` 的翻译只允许在 `notice.ts` 中实现;无法识别的英文错误必须在统一入口降级为中文兜底提示,不得原样显示给用户。
 
-管理员扫码登录的端侧职责固定为:CID 页面生成 `CITIZEN_QR_V1 / login_challenge`,
-CitizenWallet 公民钱包扫描并生成 `login_receipt`,CID 页面再扫描该登录回执。CitizenApp
-不承担管理员登录 QR 职责,前端文案不得引导用户使用 CitizenApp 处理登录挑战。
+管理员扫码登录的端侧职责固定为:CID 页面生成 `QR_V1 / sign_request`,
+CitizenWallet 公民钱包扫描并生成 `sign_response`,CID 页面再扫描该登录签名响应。CitizenApp
+不承担管理员登录 QR 职责,前端文案不得引导用户使用 CitizenApp 处理登录签名请求。
 
 ## 公权机构
 

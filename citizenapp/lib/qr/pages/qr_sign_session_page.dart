@@ -11,7 +11,7 @@ import 'package:citizenapp/signer/qr_signer.dart';
 ///
 /// 两阶段交互：
 /// 1. 展示签名请求二维码，等待离线设备扫描。
-/// 2. 用户点击"扫描回执"，打开相机扫描离线设备生成的签名回执二维码。
+/// 2. 用户点击"扫描响应"，打开相机扫描离线设备生成的签名响应二维码。
 ///
 /// 返回 [SignResponseEnvelope](成功)或 `null`(取消/超时)。
 class QrSignSessionPage extends StatefulWidget {
@@ -76,6 +76,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
         expectedPubkey: widget.expectedPubkey,
         expectedPayloadHash: expectedHash,
         expectedPayloadHex: widget.request.body.payloadHex,
+        expectedAction: widget.request.body.action,
       );
       if (!mounted) return;
       Navigator.of(context).pop(response);
@@ -84,7 +85,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('签名回执解析失败'),
+          title: const Text('签名响应解析失败'),
           content: Text(e.message),
           actions: [
             TextButton(
@@ -164,7 +165,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
 
           // 提示文字
           const Text(
-            '请用离线设备扫描此二维码完成签名，\n然后点击下方按钮扫描回执二维码。',
+            '请用离线设备扫描此二维码完成签名，\n然后点击下方按钮扫描签名响应二维码。',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppTheme.textSecondary),
           ),
@@ -183,7 +184,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
               Expanded(
                 child: FilledButton(
                   onPressed: expired ? null : _scanResponse,
-                  child: const Text('扫描回执'),
+                  child: const Text('扫描响应'),
                 ),
               ),
             ],
@@ -264,7 +265,7 @@ class _SimpleScannerState extends State<_SimpleScanner> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('扫描签名回执'),
+        title: const Text('扫描签名响应'),
         centerTitle: true,
       ),
       body: Stack(
@@ -301,7 +302,7 @@ class _SimpleScannerState extends State<_SimpleScanner> {
             child: Transform.translate(
               offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 24),
               child: const Text(
-                '扫描离线设备上的签名回执二维码',
+                '扫描离线设备上的签名响应二维码',
                 style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ),

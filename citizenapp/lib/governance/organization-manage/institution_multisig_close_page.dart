@@ -5,7 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:citizenapp/governance/shared/institution_info.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage, QrScanTransferResult;
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
@@ -166,26 +166,9 @@ class _InstitutionMultisigClosePageState
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'close-dq-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'propose_close_institution',
-            summary: '发起关闭机构多签账户提案',
-            fields: [
-              // 链端 call 名仍为 propose_close,QR action 为
-              // propose_close_institution,fields 按 Registry =
-              // (account, beneficiary)。"当前余额" 属辅助展示,
-              // 页面已独立显示,不塞 display.fields 避免对齐失败。
-              SignDisplayField(
-                key: 'account',
-                label: '机构多签账户',
-                value: _accountSs58,
-              ),
-              SignDisplayField(
-                  key: 'beneficiary', label: '受益人', value: beneficiary),
-            ],
-          ),
+          action: QrActions.organizationClose,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -199,7 +182,7 @@ class _InstitutionMultisigClosePageState
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.body.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
       final result = await _manageService.submitProposeCloseInstitution(

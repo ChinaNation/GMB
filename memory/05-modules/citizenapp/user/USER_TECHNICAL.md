@@ -59,11 +59,11 @@
 
 协议号：
 
-- `CITIZEN_QR_V1`
+- `QR_V1`
 
 字段：
 
-- `proto` — 协议标识（固定 `CITIZEN_QR_V1`）
+- `proto` — 协议标识（固定 `QR_V1`）
 - `kind` — 固定 `user_contact`
 - `body.address` — 通信账户 SS58 地址
 - `body.name` — 用户昵称（= 通信钱包名称）

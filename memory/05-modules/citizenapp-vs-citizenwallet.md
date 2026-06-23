@@ -21,8 +21,8 @@
 
 | kind | citizenapp | citizenwallet |
 |---|---|---|
-| `login_challenge`(接收) | ❌ 不处理 | ✅ 扫码,展示,签名 |
-| `login_receipt`(生成) | ❌ 不处理 | ✅ 签完生成,展示给笔记本摄像头 |
+| `sign_request`(接收) | ❌ 不处理 | ✅ 扫码,展示,签名 |
+| `sign_response`(生成) | ❌ 不处理 | ✅ 签完生成,展示给笔记本摄像头 |
 | `sign_request`(生成) | ✅ 热端构造交易,展示给冷钱包扫 | ❌ |
 | `sign_request`(接收) | ❌ | ✅ 扫码,展示交易摘要 |
 | `sign_response`(生成) | ❌ | ✅ 签完生成,展示给热端扫 |
@@ -32,7 +32,7 @@
 | `user_multisig` | ✅ 生成+扫 | ❌ |
 
 **核心结论**:
-- **登录**是 citizenwallet 公民钱包专属能力(CID/CPMS 后端只认冷钱包签的登录回执)
+- **登录**是 citizenwallet 公民钱包专属能力(CID/CPMS 后端只认冷钱包签的登录签名响应)
 - **交易签名**是两端协作(热端发起 → 冷端签名 → 热端广播)
 - **用户码/联系人/收款/多签**是 citizenapp 热钱包专属能力
 
@@ -53,7 +53,7 @@
 
 ## 实现约束
 
-1. **citizenapp 禁止出现任何登录二维码生成代码**(`login_challenge` / `login_receipt`)。如果历史上有,按协议统一任务一并删除。
+1. **citizenapp 禁止出现任何登录二维码生成代码**(`sign_request` / `sign_response`)。如果历史上有,按协议统一任务一并删除。
 2. **citizenwallet 禁止出现任何用户码生成代码**(`user_*`)。如果历史上有,按协议统一任务一并删除。
 3. **两端的 `QrEnvelope` / `QrKind` / `bodies/*.dart` / `signature_message.dart` 必须逐字节一致**。通过 golden fixture 测试强制对齐:两端测试都从 `memory/01-architecture/qr/qr-protocol-fixtures/` 读取同一批样本。
 4. 扫到自己不处理的 kind:显示明确错误("此二维码需用 XX 钱包扫描"),不能静默忽略。
@@ -62,24 +62,24 @@
 
 | 后端 | 生成 | 接收 |
 |---|---|---|
-| `citizencode/backend/admins/login/mod.rs` | `login_challenge` | `login_receipt` |
-| `citizenpassport/backend/login/mod.rs` | `login_challenge` | `login_receipt` |
+| `citizencode/backend/admins/login/mod.rs` | `sign_request` | `sign_response` |
+| `citizenpassport/backend/login/mod.rs` | `sign_request` | `sign_response` |
 
 cid / cpms 前端只是扫码 UI 宿主:
-- 笔记本浏览器显示 `login_challenge` 二维码
+- 笔记本浏览器显示 `sign_request` 二维码
 - 手机 citizenwallet 扫码
-- 手机 citizenwallet 展示 `login_receipt` 二维码
-- 笔记本摄像头反扫 `login_receipt` → 前端调后端 API 验证
+- 手机 citizenwallet 展示 `sign_response` 二维码
+- 笔记本摄像头反扫 `sign_response` → 前端调后端 API 验证
 
 ## 前端其他角色
 
 | 前端 | 消费的 kind | 用途 |
 |---|---|---|
 | `citizenchain/node/frontend` | `user_contact` / `user_transfer` | 治理转账提案收款地址、手续费收款地址、安全基金提案收款地址 |
-| `citizencode/frontend` | `user_contact` / `login_receipt` | 管理员账户绑定(扫 citizenapp 用户码)、登录(显示 challenge 给 citizenwallet 扫) |
-| `citizenpassport/frontend`(登录部分) | `login_receipt` | 登录(显示 challenge 给 citizenwallet 扫) |
+| `citizencode/frontend` | `user_contact` / `sign_response` | 管理员账户绑定(扫 citizenapp 用户码)、登录(显示签名请求给 citizenwallet 扫) |
+| `citizenpassport/frontend`(登录部分) | `sign_response` | 登录(显示签名请求给 citizenwallet 扫) |
 
-**注意**:CPMS 的 `CID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `CITIZEN_QR_V1` 无关,永远不合并。相关代码位于:
+**注意**:CPMS 的 `CID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `QR_V1` 无关,永远不合并。相关代码位于:
 - `citizenpassport/backend/initialize/mod.rs`
 - `citizenpassport/backend/archive/mod.rs`
 - `citizenpassport/frontend/initialize/`

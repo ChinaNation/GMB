@@ -24,6 +24,7 @@ workspace = true
 
 [dependencies]
 async-channel = "1.9"
+base64 = "0.22"
 hex = "0.4"
 hex-literal = "0.4"
 clap = { workspace = true }

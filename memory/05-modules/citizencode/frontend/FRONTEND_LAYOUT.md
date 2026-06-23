@@ -13,7 +13,7 @@
   - `memory/08-tasks/done/20260525-cid-bind-upload-qr.md`
   - `memory/08-tasks/done/20260525-cid-bind-sign-request-citizenwallet-scan.md`
   - `memory/08-tasks/done/20260525-cid-bind-copy-myid-scan-square.md`
-  - `memory/08-tasks/done/20260525-175008-cid绑定签名回执与citizenapp启动anr修复.md`
+  - `memory/08-tasks/done/20260525-175008-cid绑定签名响应与citizenapp启动anr修复.md`
   - `memory/08-tasks/open/20260530-cid-admins-module-unify.md`
   - `memory/08-tasks/open/20260530-cid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-cid-admin-permission-step2.md`
@@ -45,9 +45,9 @@ citizencode/frontend/
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── china/                     # 行政区只读元数据 API 和确定性列表缓存
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
-├── core/                      # 跨业务复用组件,含 CITIZEN_QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
+├── core/                      # 跨业务复用组件,含 QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
 │   └── institution/           # 私权/教育共用机构新增表单,不承载业务 API
-│   └── qr/                    # CITIZEN_QR_V1 前端解析器
+│   └── qr/                    # QR_V1 前端解析器
 ├── citizenpassport/                      # CPMS 系统管理组件和 citizenpassport/api.ts
 ├── docs/                      # 机构资料库前端出口
 ├── education/                 # 教育机构页面入口,统一管理 JY 教育委员会、法人学校和 F+JY 分支机构
@@ -91,8 +91,8 @@ citizencode/frontend/
   市注册局机构管理员列表接口放 `admins/city_registry_admins_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `core/CitizenSignaturePanel.tsx` 与 `core/CitizenSignatureModal.tsx` 是统一签名 UI;
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
-- 管理员扫码登录页面必须明确引导 CitizenWallet 公民钱包生成登录回执;CitizenApp 不处理
-  `login_challenge / login_receipt`,不得在登录页文案中引导到 CitizenApp。
+- 管理员扫码登录页面必须明确引导 CitizenWallet 公民钱包生成登录签名响应;CitizenApp 不处理
+  `sign_request / sign_response`,不得在登录页文案中引导到 CitizenApp。
 - `core/institution/CreateInstitutionForm.tsx` 是私权/公权/教育新增弹窗唯一表单实现;
   `private/PrivateCreateModal.tsx`、`gov/GovCreateModal.tsx` 和 `education/EducationCreateModal.tsx`
   只做本模块 API 注入,不得再复制表单逻辑。
@@ -107,20 +107,20 @@ citizencode/frontend/
   操作范围覆盖机构创建、详情编辑、账户创建/删除、资料上传/下载/删除和 CPMS 安装授权状态。
 - `core/modalStack.ts` 是 CID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 公民钱包签名弹窗固定在最高安全层。
-- `core/qr/citizenQr.ts` 是前端 CITIZEN_QR_V1 envelope 解析唯一入口;不得恢复独立
+- `core/qr/citizenQr.ts` 是前端 QR_V1 envelope 解析唯一入口;不得恢复独立
   `frontend/qr/` 目录。
 - 管理端权限类型统一为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`;前端类型必须与后端
   `admins/operation_auth.rs` 对齐,不得恢复二级权限命名。
 - `PASSKEY` 业务写操作不得直接裸调用 CRUD 端点;必须先通过
   `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
 - `PASSKEY_CHALLENGE` 写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
-  `CITIZEN_QR_V1` 公民钱包签名流程取得一次性 grant。
+  `QR_V1` 公民钱包签名流程取得一次性 grant。
 - `PASSKEY_CHALLENGE` 写操作触发 Passkey + 公民钱包签名时,不得为了规避遮挡而关闭编辑、新增或删除确认弹窗。
   正确顺序是:底层业务弹窗保持打开并进入 loading/禁用状态,浏览器 Passkey 原生验证完成后,
   `CitizenSignatureModal` 以最高安全层展示在所有业务弹窗前面;签名成功后先关闭签名弹窗,
   再关闭或刷新原业务弹窗。失败或取消时底层业务弹窗保留,方便用户修改后重试。
 - 签名弹窗扫码按钮不得复用底层业务 loading。底层业务 loading 只负责防止重复提交;
-  扫码按钮只在已经识别到签名回执并提交 `commitAdminAction` 时进入 loading/禁用,
+  扫码按钮只在已经识别到签名响应并提交 `commitAdminAction` 时进入 loading/禁用,
   Passkey 完成后刚打开签名弹窗时必须允许用户点击“开启扫码”。
 - Passkey 更新流程固定为 `start -> confirm -> complete`:先扫描公民钱包签名请求并确认当前管理员,
   再调用浏览器 WebAuthn 创建凭据,最后提交后端落库;不得恢复先注册浏览器凭据再公民钱包确认的流程。
@@ -128,9 +128,9 @@ citizencode/frontend/
 ## 公民绑定弹窗 UI 口径
 
 - `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 CitizenApp `sign_request`、扫描 CitizenApp `sign_response`、提交 CID 绑定。
-- 扫码框提示统一为“点击扫描档案码”；签名回执页提示为“点击扫描签名回执”。
-- 进入签名二维码展示步骤后，弹窗标题切换为“CitizenApp 签名”；进入签名回执扫描页后，弹窗标题切换为“扫描签名回执”。
-- 绑定签名回执的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
+- 扫码框提示统一为“点击扫描档案码”；签名响应页提示为“点击扫描签名响应”。
+- 进入签名二维码展示步骤后，弹窗标题切换为“CitizenApp 签名”；进入签名响应扫描页后，弹窗标题切换为“扫描签名响应”。
+- 绑定签名响应的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
   不得给公民绑定挑战额外添加 `bind-` 前缀,否则 CID 后端会查不到 challenge。
 - “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用
   `utils/cameraScanner.ts` 的 `BarcodeDetector` 解析图片,解析出的二维码原文继续走同一条档案码绑定流程,
@@ -204,7 +204,7 @@ citizencode/frontend/
 - `admins/RegistryAdminsView.tsx` 的联邦注册局机构管理员列表和市注册局机构管理员列表有本地缓存时必须先显示缓存,再后台刷新后端数据,避免进入注册局详情时反复空白转圈。
 - `admins/RegistryAdminsView.tsx` 首次按登录角色自动定位所属省时不得覆盖用户已经点击的“联邦注册局机构管理员列表”页签；只有用户真正切换省份时才重置回默认市列表页签。
 - `admin_security_api.ts` 负责 Passkey 注册、写操作 prepare/commit、浏览器 WebAuthn、
-  `PASSKEY` grant、`PASSKEY_CHALLENGE` 公民钱包签名回执提交和管理员新增错误码文案转换。
+  `PASSKEY` grant、`PASSKEY_CHALLENGE` 公民钱包签名响应提交和管理员新增错误码文案转换。
 - 管理员新增失败时，前端只能按 `ApiError.errorCode` 展示角色级重复、联邦注册局机构管理员上限和市注册局机构管理员上限提示，禁止解析后端
   `message`。
 - 联邦注册局机构管理员和市注册局机构管理员都在管理员列表操作栏通过“更新密钥”使用 `Passkey.tsx`

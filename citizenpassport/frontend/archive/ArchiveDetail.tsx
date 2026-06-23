@@ -184,7 +184,7 @@ export default function ArchiveDetail() {
   const [walletElectionCityChecked, setWalletElectionCityChecked] = useState(false);
   const [walletElectionTownChecked, setWalletElectionTownChecked] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteChallenge, setDeleteChallenge] = useState<{ challenge_id: string; sign_request: string; expire_at: number } | null>(null);
+  const [deleteChallenge, setDeleteChallenge] = useState<{ challenge_id: string; sign_request: string; payload_hash: string; expire_at: number } | null>(null);
   const [deleteScannerActive, setDeleteScannerActive] = useState(false);
   const [deleteScanError, setDeleteScanError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -544,10 +544,10 @@ export default function ArchiveDetail() {
     try {
       const env = parseQrEnvelope(raw.trim());
       if (env.kind !== 'sign_response') {
-        throw new Error('请扫描 citizenwallet 返回的删除签名回执');
+        throw new Error('请扫描 citizenwallet 返回的删除签名响应');
       }
       if (env.id !== deleteChallenge.challenge_id) {
-        throw new Error('删除签名回执和当前请求不一致');
+        throw new Error('删除签名响应和当前请求不一致');
       }
       const body = env.body as SignResponseBody;
       void completeDeleteReceipt(body);
@@ -566,10 +566,10 @@ export default function ArchiveDetail() {
       await api.completeArchiveDelete(id, {
         challenge_id: deleteChallenge.challenge_id,
         pubkey: body.pubkey,
-        sig_alg: body.sig_alg,
+        sig_alg: 'sr25519',
         signature: body.signature,
-        payload_hash: body.payload_hash,
-        signed_at: body.signed_at,
+        payload_hash: deleteChallenge.payload_hash,
+        signed_at: Math.floor(Date.now() / 1000),
       });
       setDeleteModalOpen(false);
       setDeleteScannerActive(false);
@@ -1190,7 +1190,7 @@ export default function ArchiveDetail() {
                   onActiveChange={setDeleteScannerActive}
                   onDetected={handleDeleteReceiptScanned}
                   onError={setDeleteScanError}
-                  hint="扫描 citizenwallet 返回的删除签名回执"
+                  hint="扫描 citizenwallet 返回的删除签名响应"
                   busy={deleteBusy}
                   loadingText="摄像头初始化中..."
                 />

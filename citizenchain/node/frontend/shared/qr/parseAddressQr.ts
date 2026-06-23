@@ -1,8 +1,8 @@
 // 解析收款地址二维码。
 //
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// 只接受 CITIZEN_QR_V1 envelope,kind ∈ { user_contact, user_transfer }。
-// 其他 kind(login_*、sign_*)不是收款码,直接报错。
+// 只接受 QR_V1 envelope,k ∈ {3(user_contact),4(user_transfer)}。
+// 其他 k 不是收款码,直接报错。
 // 裸 SS58 地址和 gmb://account/<addr> 仍然支持(非二维码协议的本地输入兜底)。
 
 import { parseQrEnvelope, QrParseError, type UserContactBody, type UserTransferBody } from './citizenQr';
@@ -19,7 +19,7 @@ const GMB_ACCOUNT_RE = /^gmb:\/\/account\/([1-9A-HJ-NP-Za-km-z]{30,80})$/;
 export function parseAddressQr(raw: string): AddressScanResult {
   const trimmed = raw.trim();
 
-  // 1. CITIZEN_QR_V1 envelope
+  // 1. QR_V1 envelope
   if (trimmed.startsWith('{')) {
     let env;
     try {

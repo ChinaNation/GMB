@@ -142,7 +142,7 @@ pub async fn build_admin_set_change_request(
     .map_err(|e| format!("build admin set change request task failed: {e}"))?
 }
 
-/// 验证签名回执并提交管理员更换提案。
+/// 验证签名响应并提交管理员更换提案。
 #[tauri::command]
 pub async fn submit_admin_set_change(
     app: AppHandle,

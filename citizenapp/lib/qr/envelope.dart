@@ -1,25 +1,22 @@
 import 'dart:convert';
 
 import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/qr/bodies/login_challenge_body.dart';
-import 'package:citizenapp/qr/bodies/login_receipt_body.dart';
 import 'package:citizenapp/qr/bodies/im_node_pairing_body.dart';
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/bodies/sign_response_body.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 
-/// CITIZEN_QR_V1 统一 envelope。
+/// QR_V1 统一 envelope。
 ///
 /// 所有二维码 JSON 顶层结构:
 /// ```
 /// {
-///   "proto": "CITIZEN_QR_V1",
-///   "kind":  "<统一 kind>",
-///   "id":    "<临时码必填,固定码省略>",
-///   "issued_at":  <临时码必填,固定码省略>,
-///   "expires_at": <临时码必填,固定码省略>,
-///   "body":  { ... }
+///   "p": "QR_V1",
+///   "k": 1,
+///   "i": "<临时码必填,固定码省略>",
+///   "e": 1780000000,
+///   "b": { ... }
 /// }
 /// ```
 class QrEnvelope<T extends QrBody> {
@@ -46,22 +43,21 @@ class QrEnvelope<T extends QrBody> {
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{
-      'proto': QrProtocols.v1,
-      'kind': kind.wire,
+      'p': QrProtocols.v1,
+      'k': kind.code,
     };
     if (kind.temporary) {
-      if (id == null || issuedAt == null || expiresAt == null) {
-        throw StateError('临时码 ${kind.wire} 必须包含 id/issued_at/expires_at');
+      if (id == null || expiresAt == null) {
+        throw StateError('临时码 ${kind.code} 必须包含 i/e');
       }
-      map['id'] = id;
-      map['issued_at'] = issuedAt;
-      map['expires_at'] = expiresAt;
+      map['i'] = id;
+      map['e'] = expiresAt;
     } else {
       if (id != null || issuedAt != null || expiresAt != null) {
-        throw StateError('固定码 ${kind.wire} 不能包含 id/issued_at/expires_at');
+        throw StateError('固定码 ${kind.code} 不能包含 i/e');
       }
     }
-    map['body'] = body.toJson();
+    map['b'] = body.toJson();
     return map;
   }
 
@@ -77,42 +73,32 @@ class QrEnvelope<T extends QrBody> {
   }
 
   static QrEnvelope<QrBody> fromJson(Map<String, dynamic> data) {
-    final proto = data['proto'];
+    final proto = data['p'];
     if (proto != QrProtocols.v1) {
-      throw FormatException('proto 必须为 ${QrProtocols.v1},实际: $proto');
+      throw FormatException('p 必须为 ${QrProtocols.v1},实际: $proto');
     }
-    final kindWire = data['kind'];
-    if (kindWire is! String) {
-      throw const FormatException('缺少 kind 字段');
-    }
+    final kindWire = data['k'];
     final kind = QrKind.fromWire(kindWire);
 
     String? id;
     int? issuedAt;
     int? expiresAt;
     if (kind.temporary) {
-      id = _requireString(data, 'id');
-      issuedAt = _requireInt(data, 'issued_at');
-      expiresAt = _requireInt(data, 'expires_at');
+      id = _requireString(data, 'i');
+      expiresAt = _requireInt(data, 'e');
     } else {
-      if (data.containsKey('id') ||
-          data.containsKey('issued_at') ||
-          data.containsKey('expires_at')) {
-        throw FormatException('固定码 ${kind.wire} 不应包含 id/issued_at/expires_at');
+      if (data.containsKey('i') || data.containsKey('e')) {
+        throw FormatException('固定码 ${kind.code} 不应包含 i/e');
       }
     }
 
-    final bodyRaw = data['body'];
+    final bodyRaw = data['b'];
     if (bodyRaw is! Map<String, dynamic>) {
-      throw const FormatException('缺少 body 对象');
+      throw const FormatException('缺少 b 对象');
     }
 
     final QrBody body;
     switch (kind) {
-      case QrKind.loginChallenge:
-        body = LoginChallengeBody.fromJson(bodyRaw);
-      case QrKind.loginReceipt:
-        body = LoginReceiptBody.fromJson(bodyRaw);
       case QrKind.signRequest:
         body = SignRequestBody.fromJson(bodyRaw);
       case QrKind.signResponse:

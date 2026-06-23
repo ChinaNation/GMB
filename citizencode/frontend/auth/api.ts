@@ -35,7 +35,7 @@ export type AdminChallengeResult = {
   expire_at: number;
 };
 
-export type AdminQrChallengeResult = {
+export type AdminQrSignRequestResult = {
   challenge_id: string;
   challenge_payload: string;
   login_qr_payload: string;
@@ -80,11 +80,11 @@ export async function createAdminChallenge(input: {
   });
 }
 
-export async function createAdminQrChallenge(input: {
+export async function createAdminQrSignRequest(input: {
   origin: string;
   session_id: string;
-}): Promise<AdminQrChallengeResult> {
-  return request<AdminQrChallengeResult>('/api/v1/admin/auth/qr/challenge', {
+}): Promise<AdminQrSignRequestResult> {
+  return request<AdminQrSignRequestResult>('/api/v1/admin/auth/qr/sign-request', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

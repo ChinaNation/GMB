@@ -56,7 +56,7 @@ void main() {
 
       final created = await service.addContact(
         address: address,
-        name: '轻节点A',
+        contactName: '轻节点A',
       );
       expect(created.created, isTrue);
       expect(created.contact.displayNickname, '轻节点A');
@@ -73,12 +73,12 @@ void main() {
     test('re-adding updates source nickname but keeps local alias', () async {
       final service = UserContactService();
       const address = 'w5BdS7eTPBdtPHq22ViUGARtNnHUszX9A7f4369bufEtoejq6';
-      await service.addContact(address: address, name: '旧昵称');
+      await service.addContact(address: address, contactName: '旧昵称');
       await service.renameContact(address, '本地昵称');
 
       final updated = await service.addContact(
         address: address,
-        name: '新昵称',
+        contactName: '新昵称',
       );
 
       expect(updated.created, isFalse);
@@ -93,7 +93,7 @@ void main() {
       await expectLater(
         service.addContact(
           address: address,
-          name: '自己',
+          contactName: '自己',
           selfAddress: address,
         ),
         throwsA(isA<FormatException>()),

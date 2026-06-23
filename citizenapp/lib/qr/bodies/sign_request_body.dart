@@ -1,139 +1,126 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:citizenapp/qr/envelope.dart';
 
-/// kind = sign_request
+/// k = 1 签名请求。
 ///
-/// 由 CitizenApp 热钱包生成,CitizenWallet 公民钱包扫码后展示交易摘要并签名。
+/// CitizenApp、CID、CPMS、节点桌面端都只生成这一种请求流向;具体业务场景由
+/// `action`(`a`) 区分,扫码端展示内容必须由 `action + payload` 本地解码得出。
 class SignRequestBody implements QrBody {
   const SignRequestBody({
-    required this.address,
-    required this.pubkey,
-    required this.sigAlg,
-    required this.payloadHex,
-    required this.display,
+    required this.action,
+    required this.signerPubkey,
+    required this.payload,
+    this.sigAlg = 1,
   });
 
-  final String address;
-  final String pubkey;
-  final String sigAlg;
-  final String payloadHex;
-  final SignDisplay display;
+  /// 业务动作码 `a`:扫码流向以 `k` 表达,业务语义统一放这里。
+  final int action;
+
+  /// 签名算法 `g`:当前 1=sr25519。
+  final int sigAlg;
+
+  /// 期望签名者公钥 `u`:32 字节公钥的 base64url 无填充编码。
+  final String signerPubkey;
+
+  /// 待签载荷 `d`:原始 payload bytes 的 base64url 无填充编码。
+  final String payload;
+
+  Uint8List get payloadBytes => _b64ToBytes(payload, 'd');
+
+  Uint8List get pubkeyBytes => _b64ToBytes(signerPubkey, 'u');
+
+  String get payloadHex => '0x${_toHex(payloadBytes)}';
+
+  String get pubkeyHex => '0x${_toHex(pubkeyBytes)}';
 
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'address': address,
-        'pubkey': pubkey,
-        'sig_alg': sigAlg,
-        'payload_hex': payloadHex,
-        'display': display.toJson(),
+        'a': action,
+        'g': sigAlg,
+        'u': signerPubkey,
+        'd': payload,
       };
 
-  /// 反序列化 sign_request body。
   static SignRequestBody fromJson(Map<String, dynamic> data) {
-    final address = data['address'];
-    final pubkey = data['pubkey'];
-    final sigAlg = data['sig_alg'];
-    final payloadHex = data['payload_hex'];
-    final display = data['display'];
-    if (sigAlg != 'sr25519') {
-      throw const FormatException('sign_request.sig_alg 必须为 sr25519');
+    final action = data['a'];
+    final sigAlg = data['g'];
+    final signerPubkey = data['u'];
+    final payload = data['d'];
+    if (action is! int || action <= 0) {
+      throw const FormatException('签名请求 a 必须为正整数');
     }
-    if (payloadHex is! String || !payloadHex.startsWith('0x')) {
-      throw const FormatException('sign_request.payload_hex 必填 0x hex');
+    if (sigAlg != 1) {
+      throw const FormatException('签名请求 g 目前只允许 1(sr25519)');
     }
-    if (payloadHex.length > 32768) {
-      throw const FormatException('sign_request.payload_hex 超过 32768 字符');
+    if (signerPubkey is! String || signerPubkey.isEmpty) {
+      throw const FormatException('签名请求 u 必填');
     }
-    if (display is! Map<String, dynamic>) {
-      throw const FormatException('sign_request.display 必填对象');
+    if (_b64ToBytes(signerPubkey, 'u').length != 32) {
+      throw const FormatException('签名请求 u 必须解码为 32 字节');
     }
-    if (address is! String || address.isEmpty) {
-      throw const FormatException('sign_request.address 必填');
+    if (payload is! String || payload.isEmpty) {
+      throw const FormatException('签名请求 d 必填');
     }
-    if (pubkey is! String || !pubkey.startsWith('0x')) {
-      throw const FormatException('sign_request.pubkey 必填 0x hex');
+    if (_b64ToBytes(payload, 'd').isEmpty) {
+      throw const FormatException('签名请求 d 不能为空载荷');
     }
     return SignRequestBody(
-      address: address,
-      pubkey: pubkey,
-      sigAlg: sigAlg,
-      payloadHex: payloadHex,
-      display: SignDisplay.fromJson(display),
-    );
-  }
-}
-
-class SignDisplay {
-  const SignDisplay({
-    required this.action,
-    required this.summary,
-    this.fields = const [],
-  });
-
-  final String action;
-  final String summary;
-  final List<SignDisplayField> fields;
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'action': action,
-        'summary': summary,
-        'fields': fields.map((f) => f.toJson()).toList(),
-      };
-
-  static SignDisplay fromJson(Map<String, dynamic> data) {
-    final action = data['action'];
-    final summary = data['summary'];
-    final fields = data['fields'];
-    if (action is! String || action.isEmpty) {
-      throw const FormatException('display.action 必填');
-    }
-    if (summary is! String || summary.isEmpty) {
-      throw const FormatException('display.summary 必填');
-    }
-    final parsedFields = <SignDisplayField>[];
-    if (fields is List) {
-      for (final f in fields) {
-        if (f is Map<String, dynamic>) {
-          parsedFields.add(SignDisplayField.fromJson(f));
-        }
-      }
-    }
-    return SignDisplay(
       action: action,
-      summary: summary,
-      fields: parsedFields,
+      sigAlg: sigAlg as int,
+      signerPubkey: signerPubkey,
+      payload: payload,
+    );
+  }
+
+  static SignRequestBody fromHex({
+    required int action,
+    required String pubkeyHex,
+    required String payloadHex,
+  }) {
+    return SignRequestBody(
+      action: action,
+      signerPubkey: _b64NoPad(_hexToBytes(pubkeyHex)),
+      payload: _b64NoPad(_hexToBytes(payloadHex)),
     );
   }
 }
 
-class SignDisplayField {
-  const SignDisplayField({this.key, required this.label, required this.value});
+String _b64NoPad(List<int> bytes) =>
+    base64Url.encode(bytes).replaceAll('=', '');
 
-  /// 中文注释：可选的英文字段标识，用于让 CitizenWallet 公民钱包与本地解码结果交叉比对。
-  /// 链端 signing.rs 会发送此字段，CitizenApp 生成时也应按 action registry 对齐。
-  final String? key;
-  final String label;
-  final String value;
-
-  Map<String, dynamic> toJson() {
-    final map = <String, dynamic>{
-      'label': label,
-      'value': value,
-    };
-    if (key != null) map['key'] = key;
-    return map;
+Uint8List _b64ToBytes(String input, String field) {
+  final normalized =
+      input.padRight(input.length + ((4 - input.length % 4) % 4), '=');
+  try {
+    return Uint8List.fromList(base64Url.decode(normalized));
+  } catch (_) {
+    throw FormatException('签名请求 $field 必须为 base64url');
   }
+}
 
-  static SignDisplayField fromJson(Map<String, dynamic> data) {
-    final label = data['label'];
-    final value = data['value'];
-    if (label is! String || value is! String) {
-      throw const FormatException('display.fields[*] 需含 label 与 value');
-    }
-    final key = data['key'];
-    return SignDisplayField(
-      key: key is String ? key : null,
-      label: label,
-      value: value,
-    );
+List<int> _hexToBytes(String input) {
+  final text = input.startsWith('0x') || input.startsWith('0X')
+      ? input.substring(2)
+      : input;
+  if (text.isEmpty || text.length.isOdd) {
+    throw const FormatException('hex 必须为偶数字节');
   }
+  return List<int>.generate(
+    text.length ~/ 2,
+    (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),
+    growable: false,
+  );
+}
+
+String _toHex(List<int> bytes) {
+  const chars = '0123456789abcdef';
+  final buffer = StringBuffer();
+  for (final byte in bytes) {
+    buffer
+      ..write(chars[(byte >> 4) & 0x0f])
+      ..write(chars[byte & 0x0f]);
+  }
+  return buffer.toString();
 }

@@ -32,10 +32,9 @@ String _withSigningTailHex(String callDataHex) {
 
 SignRequestEnvelope _buildTestRequest({
   required String requestId,
-  required String address,
   required String pubkey,
   required String payloadHex,
-  required SignDisplay display,
+  required int action,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   return QrEnvelope<SignRequestBody>(
@@ -43,12 +42,10 @@ SignRequestEnvelope _buildTestRequest({
     id: requestId,
     issuedAt: now,
     expiresAt: now + 90,
-    body: SignRequestBody(
-      address: address,
-      pubkey: pubkey,
-      sigAlg: 'sr25519',
+    body: SignRequestBody.fromHex(
+      action: action,
+      pubkeyHex: pubkey,
       payloadHex: payloadHex,
-      display: display,
     ),
   );
 }
@@ -72,18 +69,9 @@ void main() {
       final payloadHex = _withSigningTailHex('0x1600010000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
-        address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: payloadHex,
-        display: const SignDisplay(
-          action: 'internal_vote',
-          summary: '管理员投票 提案 #1：赞成',
-          fields: [
-            // 两色识别模型要求 display.fields 的 key 与 decoder 输出逐字对齐。
-            SignDisplayField(key: 'proposal_id', label: '提案', value: '1'),
-            SignDisplayField(key: 'approve', label: '投票', value: 'true'),
-          ],
-        ),
+        action: QrActions.internalVote,
       );
 
       final payloadBytes = _hexToBytes(payloadHex);
@@ -94,33 +82,25 @@ void main() {
       );
 
       expect(response.id, request.id);
-      expect(response.body.pubkey, '0x${hotWallet.pubkeyHex}');
+      expect(response.body.pubkeyHex, '0x${hotWallet.pubkeyHex}');
       expect(
         _verifySr25519(
-          pubkeyHex: response.body.pubkey,
+          pubkeyHex: response.body.pubkeyHex,
           message: Uint8List.fromList(payloadBytes),
-          signatureHex: response.body.signature,
+          signatureHex: response.body.signatureHex,
         ),
         isTrue,
       );
     });
 
     test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
-      // decode 成功但 display.action 和 decoded.action 不一致 → 红色拒签。
+      // decode 成功但 QR action 和 decoded.action 不一致 → 红色拒签。
       final payloadHex = _withSigningTailHex('0x1600070000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-action-mismatch',
-        address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: payloadHex,
-        display: const SignDisplay(
-          action: 'joint_vote', // decoder 会解码为 'internal_vote'
-          summary: '恶意伪造',
-          fields: [
-            SignDisplayField(key: 'proposal_id', label: '提案', value: '7'),
-            SignDisplayField(key: 'approve', label: '投票', value: 'true'),
-          ],
-        ),
+        action: QrActions.jointVote,
       );
 
       expect(
@@ -132,7 +112,7 @@ void main() {
           isA<OfflineSignException>().having(
             (e) => e.code,
             'code',
-            OfflineSignErrorCode.displayMismatch,
+            OfflineSignErrorCode.contentMismatch,
           ),
         ),
       );
@@ -143,19 +123,11 @@ void main() {
       // MultiAddress::Id prefix=0x00, then 32 bytes dest, then compact amount
       final request = _buildTestRequest(
         requestId: 'offline-req-test-known',
-        address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         // call_data: [02][03][00][dest 32B][Compact(1) = 0x04] → 0.01 GMB
         payloadHex: _withSigningTailHex(
             '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa04'),
-        display: const SignDisplay(
-          action: 'transfer',
-          summary: 'test transfer',
-          fields: [
-            SignDisplayField(
-                key: 'amount_yuan', label: '金额', value: '0.01 GMB'),
-          ],
-        ),
+        action: QrActions.balancesTransfer,
       );
 
       final verification = service.verifyPayload(request);
@@ -167,14 +139,10 @@ void main() {
     test('signParsedRequest should reject mismatched pubkey', () async {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0002',
-        address: hotWallet.address,
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x0102',
-        display: const SignDisplay(
-          action: 'login',
-          summary: 'test login',
-        ),
+        action: QrActions.login,
       );
 
       expect(

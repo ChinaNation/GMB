@@ -24,7 +24,7 @@
 - `citizenpassport/frontend/dangan/`：投票账户与档案码 UI 文案。
 - `citizencode/backend/citizenpassport/`：ARCHIVE 验真与字段解析。
 - `citizencode/backend/citizens/`：电子护照绑定 challenge、验签、状态查询。
-- `citizencode/frontend/citizens/`：扫描档案码、签名请求、签名回执、绑定完成 UI。
+- `citizencode/frontend/citizens/`：扫描档案码、签名请求、签名响应、绑定完成 UI。
 - `citizenapp/lib/my/myid/`：电子护照钱包选择、扫码签名、状态查询。
 - `memory/`：协议、架构、模块文档和任务记录。
 

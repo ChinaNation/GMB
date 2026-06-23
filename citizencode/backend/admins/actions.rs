@@ -1,4 +1,4 @@
-//! 管理员安全动作:Passkey 与 CITIZEN_QR_V1/sign_request 公民钱包签名。
+//! 管理员安全动作:Passkey 与 QR_V1/k=1 公民钱包签名。
 //!
 //! 中文注释:管理员治理动作、业务安全授权和短期挑战全部使用结构化表。
 
@@ -32,7 +32,7 @@ use crate::admins::passkeys::{
 };
 use crate::admins::repo;
 use crate::admins::security_model::{AdminActionChallenge, AdminSecurityGrant};
-use crate::core::qr::{build_sign_request, display_account, display_field as field};
+use crate::core::qr::build_sign_request;
 use crate::crypto::pubkey::{normalize_admin_account, same_admin_account};
 use crate::*;
 
@@ -147,7 +147,6 @@ struct ActionPreview {
     after_hash: String,
     target: String,
     auth_type: AdminOperationAuth,
-    display_fields: Vec<serde_json::Value>,
 }
 
 pub(crate) async fn prepare_admin_action(
@@ -213,10 +212,10 @@ pub(crate) async fn prepare_admin_action(
         if preview.auth_type == AdminOperationAuth::PasskeyChallenge {
             let payload_text = signed_payload_text(AdminSignedPayload {
                 domain: "cid_admin_governance",
-                qr_proto: crate::core::qr::CITIZEN_QR_V1,
+                qr_proto: crate::core::qr::QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
-                actor_account: ctx.admin_account.as_str(),
+                actor_pubkey: ctx.admin_account.as_str(),
                 actor_province_name: province.as_str(),
                 target: preview.target.as_str(),
                 request_hash: request_hash.as_str(),
@@ -231,8 +230,7 @@ pub(crate) async fn prepare_admin_action(
                 expires_at.timestamp(),
                 ctx.admin_account.as_str(),
                 payload_text.as_str(),
-                input.action_type.label(),
-                preview.display_fields.clone(),
+                crate::core::qr::ACTION_CID_ADMIN,
             ) {
                 Ok(v) => v,
                 Err(resp) => return resp,
@@ -680,7 +678,6 @@ fn preview_action_conn(
                 after_hash: after_hash.clone(),
                 target: admin_account.clone(),
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(action_type, ctx, admin_account.as_str()),
             })
         }
         AdminActionType::UpdateCityRegistry => {
@@ -699,11 +696,6 @@ fn preview_action_conn(
                 after_hash,
                 target: city_registry.admin_account,
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(
-                    action_type,
-                    ctx,
-                    after["admin_account"].as_str().unwrap_or("*"),
-                ),
             })
         }
         AdminActionType::CreateFederalRegistry => {
@@ -724,7 +716,6 @@ fn preview_action_conn(
                 after_hash,
                 target: admin_account.clone(),
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(action_type, ctx, admin_account.as_str()),
             })
         }
         AdminActionType::UpdateFederalRegistry => {
@@ -739,7 +730,6 @@ fn preview_action_conn(
                 after_hash: hash_serialized(&after),
                 target: target.clone(),
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(action_type, ctx, target.as_str()),
             })
         }
         AdminActionType::InstitutionDeregister | AdminActionType::InstitutionAccountDeregister => {
@@ -755,15 +745,13 @@ fn preview_action_conn(
                 after_hash: hash_json(&after),
                 target: target.target_hex.clone(),
                 auth_type: action_type.auth_type(),
-                display_fields: base_fields(action_type, ctx, target.target_hex.as_str()),
             })
         }
-        _ => preview_security_action(ctx, action_type, payload),
+        _ => preview_security_action(action_type, payload),
     }
 }
 
 fn preview_security_action(
-    ctx: &AdminAuthContext,
     action_type: &AdminActionType,
     payload: &serde_json::Value,
 ) -> Result<ActionPreview, String> {
@@ -781,29 +769,7 @@ fn preview_security_action(
         after_hash: request_hash.clone(),
         target: target.clone(),
         auth_type: action_type.auth_type(),
-        display_fields: base_fields(action_type, ctx, target.as_str()),
     })
-}
-
-fn base_fields(
-    action_type: &AdminActionType,
-    ctx: &AdminAuthContext,
-    target: &str,
-) -> Vec<serde_json::Value> {
-    vec![
-        field("action_type", "操作", action_type.label()),
-        field(
-            "province_name",
-            "省份",
-            ctx.scope_province_name.as_deref().unwrap_or_default(),
-        ),
-        field(
-            "actor_account",
-            "管理员",
-            display_account(ctx.admin_account.as_str()).as_str(),
-        ),
-        field("target", "目标", display_account(target).as_str()),
-    ]
 }
 
 fn validate_create_city_registry_conn(

@@ -4,8 +4,8 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
 import 'package:citizenapp/governance/shared/institution_info.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
 import 'package:citizenapp/signer/qr_signer.dart';
@@ -193,32 +193,11 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
               wallet.walletIndex, payload);
         }
         final qrSigner = QrSigner();
-        final amountFormatted = AmountFormat.format(
-                AmountFormat.tryParse(_amountController.text) ?? 0,
-                symbol: '')
-            .trim();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-sweep-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'propose_sweep_to_main',
-            summary:
-                '${widget.institution.cidShortName} 提案手续费划转 $amountFormatted GMB → 主账户',
-            fields: [
-              SignDisplayField(
-                  key: 'institution',
-                  label: '机构',
-                  value: widget.institution.cidShortName),
-              SignDisplayField(
-                  key: 'amount_yuan',
-                  label: '金额',
-                  value: '$amountFormatted GMB'),
-              const SignDisplayField(
-                  key: 'destination', label: '划入账户', value: '本机构主账户'),
-            ],
-          ),
+          action: QrActions.sweepToMain,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -232,7 +211,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexToBytes(response.body.signature));
+        return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
       }
 
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));

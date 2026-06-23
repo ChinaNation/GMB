@@ -7,8 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
-import 'package:citizenapp/governance/shared/institution_code_label.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/signer/signing.dart';
 
@@ -63,7 +62,7 @@ class ActivatedAdmin {
 /// 管理员激活服务（QR 扫码签名激活模式）。
 ///
 /// 用户在管理员列表页点击"激活"→ 展示签名请求 QR →
-/// 持有私钥的外部设备扫码签名 → QrSignSessionPage 校验签名回执 →
+/// 持有私钥的外部设备扫码签名 → QrSignSessionPage 校验签名响应 →
 /// 本服务复核链上管理员账户和签名公钥 → 写入本地存储。
 class ActivationService {
   ActivationService({
@@ -158,50 +157,27 @@ class ActivationService {
     final pk = _normalize(pubkeyHex);
 
     final pkBytes = _hexToBytes(pk);
-    final account = Keyring().encodeAddress(pkBytes, 2027);
-
     final payload = _buildActivatePayload(identity, pk);
-    // sign_request 机读字段使用 0x hex,display 人读字段使用 SS58。
     final payloadHex = '0x${_bytesToHex(payload)}';
 
     final signer = QrSigner();
     final requestId = QrSigner.generateRequestId(prefix: 'act-');
-    final codeLabel = InstitutionCodeLabel.codeLabel(identity.institutionCode);
     final request = signer.buildRequest(
       requestId: requestId,
-      address: account,
       pubkey: '0x$pk',
       payloadHex: payloadHex,
-      display: SignDisplay(
-        action: 'activate_admin_account',
-        summary: '激活$codeLabel管理员',
-        fields: [
-          // 字段键 'institution_code' 与冷钱包 _decodeActivateAdminAccount 的
-          // fields 输出完全一致(冷钱包 payload_decoder.dart:760)。
-          SignDisplayField(
-            key: 'institution_code',
-            label: '组织类型',
-            value: codeLabel,
-          ),
-          SignDisplayField(
-            key: 'account',
-            label: '管理员账户',
-            value: '0x${identity.accountHex}',
-          ),
-          SignDisplayField(key: 'pubkey', label: '管理员公钥', value: account),
-        ],
-      ),
+      action: QrActions.activateAdmin,
     );
     final json = signer.encodeRequest(request);
 
     return (request: request, json: json);
   }
 
-  /// 通过 QR 签名回执完成激活。
+  /// 通过 QR 签名响应完成激活。
   ///
   /// [pubkeyHex] 管理员公钥。
   /// [identity] 管理员账户。
-  /// [response] 从 QrSignSessionPage 获取的签名回执。
+  /// [response] 从 QrSignSessionPage 获取的签名响应。
   Future<ActivatedAdmin> activateViaQr({
     required String pubkeyHex,
     required AdminAccountIdentity identity,
@@ -210,7 +186,7 @@ class ActivationService {
     final pk = _normalize(pubkeyHex);
 
     // 验证签名者与目标管理员一致
-    final responsePk = _normalize(response.body.pubkey);
+    final responsePk = _normalize(response.body.pubkeyHex);
     if (responsePk != pk) {
       throw Exception('签名公钥与管理员公钥不一致');
     }

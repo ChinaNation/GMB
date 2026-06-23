@@ -29,7 +29,7 @@ pub(crate) fn developer_direct_upgrade(wasm_code: &[u8]) -> Vec<u8> {
     call_data
 }
 
-/// 从文件重建开发期直接升级 call_data,用于签名回执提交阶段。
+/// 从文件重建开发期直接升级 call_data,用于签名响应提交阶段。
 pub(crate) fn developer_direct_upgrade_from_file(wasm_path: &str) -> Result<Vec<u8>, String> {
     let (wasm_code, _) = read_wasm(wasm_path)?;
     Ok(developer_direct_upgrade(&wasm_code))

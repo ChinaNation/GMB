@@ -1,6 +1,4 @@
-import 'dart:typed_data';
-
-import '../qr/bodies/sign_request_body.dart';
+import '../qr/qr_protocols.dart';
 import '../wallet/wallet_manager.dart';
 import 'payload_decoder.dart';
 import 'qr_signer.dart';
@@ -10,7 +8,7 @@ enum OfflineSignErrorCode {
   coldWalletUnsupported,
   walletMismatch,
   invalidPayload,
-  displayMismatch,
+  contentMismatch,
   expired,
 }
 
@@ -28,14 +26,14 @@ class OfflineSignException implements Exception {
 class OfflineSignVerification {
   const OfflineSignVerification({
     required this.decoded,
-    required this.displayMatch,
+    required this.contentMatch,
   });
 
   final DecodedPayload? decoded;
-  final DisplayMatchStatus displayMatch;
+  final ContentMatchStatus contentMatch;
 }
 
-enum DisplayMatchStatus {
+enum ContentMatchStatus {
   matched,
   mismatched,
   decodeFailed,
@@ -59,24 +57,18 @@ class OfflineSignService {
   OfflineSignVerification verifyPayload(SignRequestEnvelope request) {
     final body = request.body;
 
-    // 哈希签名例外:WASM 升级 call_data 体积过大,二维码只承载链端实际待签的
-    // 32 字节哈希。仅当 action 和 wasm_hash 展示字段同时满足规则时绿色通过。
-    final action = body.display.action;
-    final isWasmUpgrade = action == 'developer_direct_upgrade' ||
-        action == 'propose_runtime_upgrade';
-    if (isWasmUpgrade) {
-      final payloadBytes = _hexToBytes(body.payloadHex);
-      final hasWasmHash = body.display.fields.any((f) => f.key == 'wasm_hash');
-      if (payloadBytes.length == 32 && hasWasmHash) {
+    // Runtime 升级只在 QR 中携带 32B 待签摘要,原始 WASM call_data 留在生成端 session。
+    if (QrActions.isRuntimeHashOnly(body.action)) {
+      if (body.payloadBytes.length == 32) {
         return const OfflineSignVerification(
           decoded: null,
-          displayMatch: DisplayMatchStatus.matched,
+          contentMatch: ContentMatchStatus.matched,
         );
       }
       // 例外条件不全(payload 不是 32B / 缺 wasm_hash 字段),仍按 decodeFailed 处理。
       return const OfflineSignVerification(
         decoded: null,
-        displayMatch: DisplayMatchStatus.decodeFailed,
+        contentMatch: ContentMatchStatus.decodeFailed,
       );
     }
 
@@ -85,30 +77,21 @@ class OfflineSignService {
     if (decoded == null) {
       return const OfflineSignVerification(
         decoded: null,
-        displayMatch: DisplayMatchStatus.decodeFailed,
+        contentMatch: ContentMatchStatus.decodeFailed,
       );
     }
 
-    if (body.display.action != decoded.action) {
+    final decodedAction = QrActions.fromDecodedAction(decoded.action);
+    if (decodedAction != 0 && decodedAction != body.action) {
       return OfflineSignVerification(
         decoded: decoded,
-        displayMatch: DisplayMatchStatus.mismatched,
+        contentMatch: ContentMatchStatus.mismatched,
       );
-    }
-
-    for (final entry in decoded.fields.entries) {
-      final displayValue = _findFieldValue(body.display.fields, entry.key);
-      if (displayValue != null && displayValue != entry.value) {
-        return OfflineSignVerification(
-          decoded: decoded,
-          displayMatch: DisplayMatchStatus.mismatched,
-        );
-      }
     }
 
     return OfflineSignVerification(
       decoded: decoded,
-      displayMatch: DisplayMatchStatus.matched,
+      contentMatch: ContentMatchStatus.matched,
     );
   }
 
@@ -148,38 +131,31 @@ class OfflineSignService {
       );
     }
 
-    if (_normalizeHex(wallet.pubkeyHex) != _normalizeHex(body.pubkey)) {
+    if (_normalizeHex(wallet.pubkeyHex) != _normalizeHex(body.pubkeyHex)) {
       throw const OfflineSignException(
         OfflineSignErrorCode.walletMismatch,
         '签名请求中的公钥与当前钱包不一致',
       );
     }
-    if (wallet.address.trim() != body.address.trim()) {
-      throw const OfflineSignException(
-        OfflineSignErrorCode.walletMismatch,
-        '签名请求中的地址与当前钱包不一致',
-      );
-    }
 
     final verification = verifyPayload(request);
-    // 两色识别模型:
-    //   matched → 绿色放行; mismatched / decodeFailed → 红色拒签。
-    switch (verification.displayMatch) {
-      case DisplayMatchStatus.matched:
+    // 两色识别模型:action 与 payload 解码一致才绿色放行。
+    switch (verification.contentMatch) {
+      case ContentMatchStatus.matched:
         break;
-      case DisplayMatchStatus.mismatched:
+      case ContentMatchStatus.mismatched:
         throw const OfflineSignException(
-          OfflineSignErrorCode.displayMismatch,
+          OfflineSignErrorCode.contentMismatch,
           '交易内容与摘要不符,拒绝签名',
         );
-      case DisplayMatchStatus.decodeFailed:
+      case ContentMatchStatus.decodeFailed:
         throw const OfflineSignException(
-          OfflineSignErrorCode.displayMismatch,
+          OfflineSignErrorCode.contentMismatch,
           '无法独立验证交易内容,禁止签名',
         );
     }
 
-    final payloadBytes = _hexToBytes(body.payloadHex);
+    final payloadBytes = QrSigner.signingBytesFor(body);
     if (payloadBytes.isEmpty) {
       throw const OfflineSignException(
         OfflineSignErrorCode.invalidPayload,
@@ -189,32 +165,12 @@ class OfflineSignService {
 
     final signature = await _walletManager.signWithWallet(
       wallet.walletIndex,
-      Uint8List.fromList(payloadBytes),
+      payloadBytes,
     );
 
     return _signer.buildResponse(
       request: request,
       signatureHex: '0x${_toHex(signature)}',
-    );
-  }
-
-  /// 从 display.fields 中按 key 查找 value（用于与解码结果交叉比对）。
-  static String? _findFieldValue(List<SignDisplayField> fields, String key) {
-    for (final field in fields) {
-      if (field.key == key) return field.value;
-    }
-    return null;
-  }
-
-  List<int> _hexToBytes(String input) {
-    final text = _normalizeHex(input);
-    if (text.isEmpty || text.length.isOdd) {
-      return const <int>[];
-    }
-    return List<int>.generate(
-      text.length ~/ 2,
-      (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),
-      growable: false,
     );
   }
 

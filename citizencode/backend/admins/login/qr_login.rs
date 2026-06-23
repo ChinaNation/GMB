@@ -1,7 +1,6 @@
 //! 管理员二维码登录 handler。
 //!
-//! 只承接 CITIZEN_QR_V1 登录挑战生成、手机扫码完成、网页轮询结果;普通 challenge
-//! 登录仍在 `handler.rs`。
+//! 只承接 QR_V1 登录签名请求生成、手机扫码签名、网页轮询结果;普通登录仍在 `handler.rs`。
 
 use axum::{
     extract::{Query, State},
@@ -22,11 +21,11 @@ use super::signature::{
     build_admin_name, build_admin_name_from_user, build_login_qr_system_signature,
     extract_domain_from_origin, resolve_scope_city_name, verify_admin_signature,
 };
-use super::LOGIN_CHALLENGE_TTL_SECONDS;
+use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
-pub(crate) async fn admin_auth_qr_challenge(
+pub(crate) async fn admin_auth_qr_sign_request(
     State(state): State<AppState>,
-    Json(input): Json<AdminQrChallengeInput>,
+    Json(input): Json<AdminQrSignRequestInput>,
 ) -> impl IntoResponse {
     let origin = input.origin.unwrap_or_default().trim().to_string();
     if origin.is_empty() {
@@ -44,17 +43,17 @@ pub(crate) async fn admin_auth_qr_challenge(
     }
 
     let now = Utc::now();
-    let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
+    let expire_at = now + Duration::seconds(LOGIN_SIGN_REQUEST_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
-    // challenge_text:客户端签 login_receipt 时的原文(与 CitizenWallet 端的
-    // buildSignatureMessage(kind=login_receipt, ...) 拼接规则保持一致)。
+    // challenge_text:客户端生成 k=2 登录签名响应时的原文(与 CitizenWallet 端的
+    // buildSignatureMessage(kind=signResponse, ...) 拼接规则保持一致)。
     // 注意 <principal> 位置由客户端签名时填入自己的 pubkey,后端验证时同样
     // 以客户端 pubkey 为 principal 重新拼接。这里保存的 challenge_text 仅作
     // 回放保护用的唯一 token,实际验证在 admin_auth_qr_complete 中重建。
     let challenge_text = format!(
         "{}|{}|{}|{}|{}|",
-        crate::core::qr::CITIZEN_QR_V1,
-        crate::core::qr::QrKind::LoginReceipt.wire(),
+        crate::core::qr::QR_V1,
+        crate::core::qr::QrKind::SignResponse.code(),
         challenge_id,
         "cid",
         expire_at.timestamp()
@@ -76,21 +75,17 @@ pub(crate) async fn admin_auth_qr_challenge(
             );
         }
     };
-    let login_qr_payload = serde_json::to_string(&crate::core::qr::LoginChallengeEnvelope::new(
+    let login_qr_payload = serde_json::to_string(&crate::core::qr::SignRequestEnvelope::new(
         challenge_id.clone(),
         now.timestamp(),
         expire_at.timestamp(),
-        crate::core::qr::LoginChallengeBody {
-            system: "cid".to_string(),
-            sys_pubkey: sys_pubkey.clone(),
-            sys_sig: sys_sig.clone(),
-        },
+        crate::core::qr::login_request_body("cid", &sys_pubkey, &sys_sig),
     ))
     .unwrap_or_default();
 
-    if let Err(err) = repo::insert_login_challenge(
+    if let Err(err) = repo::insert_login_sign_request(
         &state.db,
-        &LoginChallenge {
+        &LoginSignRequest {
             challenge_id: challenge_id.clone(),
             admin_account: String::new(),
             challenge_text: challenge_text.clone(),
@@ -106,14 +101,14 @@ pub(crate) async fn admin_auth_qr_challenge(
             consumed: false,
         },
     ) {
-        let message = format!("insert qr challenge failed: {err}");
+        let message = format!("insert qr sign request failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
 
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: AdminQrChallengeOutput {
+        data: AdminQrSignRequestOutput {
             challenge_id,
             challenge_payload: challenge_text,
             login_qr_payload,
@@ -153,20 +148,20 @@ pub(crate) async fn admin_auth_qr_complete(
     let signature = input.signature.trim().to_string();
     let result = state.db.with_client(move |conn| {
         repo::cleanup_login_state_conn(conn, now)?;
-        let Some(mut challenge) = repo::get_login_challenge_conn(conn, challenge_id.as_str())?
+        let Some(mut challenge) = repo::get_login_sign_request_conn(conn, challenge_id.as_str())?
         else {
-            return Err("http:not_found:challenge not found".to_string());
+            return Err("http:not_found:sign request not found".to_string());
         };
         if challenge.consumed {
-            return Err("http:conflict:challenge already consumed".to_string());
+            return Err("http:conflict:sign request already consumed".to_string());
         }
         if let Some(client_sid) = client_session_id.as_ref() {
             if challenge.session_id != client_sid.trim() {
-                return Err("http:forbidden:challenge session mismatch".to_string());
+                return Err("http:forbidden:sign request session mismatch".to_string());
             }
         }
         if now > challenge.expire_at {
-            return Err("http:gone:challenge expired".to_string());
+            return Err("http:gone:sign request expired".to_string());
         }
         let session_id = challenge.session_id.clone();
         let challenge_expire_at = challenge.expire_at.timestamp();
@@ -185,9 +180,9 @@ pub(crate) async fn admin_auth_qr_complete(
         if !same_admin_account(login_pubkey.as_str(), verify_pubkey.as_str()) {
             return Err("http:forbidden:signer_pubkey must match admin_account".to_string());
         }
-        // 中文注释:重建完整签名原文,与 CitizenWallet 端 login_receipt 规则一致。
+        // 中文注释:重建完整签名原文,与 CitizenWallet 端 k=2 登录签名响应规则一致。
         let verify_message = crate::core::qr::build_signature_message(
-            crate::core::qr::QrKind::LoginReceipt,
+            crate::core::qr::QrKind::SignResponse,
             challenge_id.as_str(),
             Some("cid"),
             Some(challenge_expire_at),
@@ -195,7 +190,7 @@ pub(crate) async fn admin_auth_qr_complete(
         );
         if !verify_admin_signature(&verify_pubkey, &verify_message, signature.as_str()) {
             warn!(
-                challenge = %challenge_id,
+                request = %challenge_id,
                 admin_account = %login_pubkey_raw,
                 signer_pubkey = %verify_pubkey,
                 "qr login signature verify failed"
@@ -207,7 +202,7 @@ pub(crate) async fn admin_auth_qr_complete(
         let login_registry_org_code = admin.registry_org_code.clone();
         challenge.consumed = true;
         challenge.admin_account = login_pubkey.clone();
-        repo::update_login_challenge_conn(conn, &challenge)?;
+        repo::update_login_sign_request_conn(conn, &challenge)?;
 
         let access_token = Uuid::new_v4().to_string();
         let expire_at = now + Duration::hours(8);
@@ -233,17 +228,17 @@ pub(crate) async fn admin_auth_qr_complete(
 
     match result {
         Ok(()) => {}
-        Err(err) if err == "http:not_found:challenge not found" => {
-            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
+        Err(err) if err == "http:not_found:sign request not found" => {
+            return api_error(StatusCode::NOT_FOUND, 1004, "sign request not found");
         }
-        Err(err) if err == "http:conflict:challenge already consumed" => {
-            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed");
+        Err(err) if err == "http:conflict:sign request already consumed" => {
+            return api_error(StatusCode::CONFLICT, 1007, "sign request already consumed");
         }
-        Err(err) if err == "http:forbidden:challenge session mismatch" => {
-            return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
+        Err(err) if err == "http:forbidden:sign request session mismatch" => {
+            return api_error(StatusCode::FORBIDDEN, 1003, "sign request session mismatch");
         }
-        Err(err) if err == "http:gone:challenge expired" => {
-            return api_error(StatusCode::GONE, 1007, "challenge expired");
+        Err(err) if err == "http:gone:sign request expired" => {
+            return api_error(StatusCode::GONE, 1007, "sign request expired");
         }
         Err(err) if err == "http:forbidden:signer_pubkey must match admin_account" => {
             return api_error(
@@ -294,7 +289,7 @@ pub(crate) async fn admin_auth_qr_result(
     let result = state.db.with_client(move |conn| {
         repo::cleanup_login_state_conn(conn, now)?;
         let result = repo::get_qr_login_result_conn(conn, challenge_id.as_str())?;
-        let challenge = repo::get_login_challenge_conn(conn, challenge_id.as_str())?;
+        let challenge = repo::get_login_sign_request_conn(conn, challenge_id.as_str())?;
         Ok((result, challenge))
     });
     let (qr_result, challenge) = match result {

@@ -102,8 +102,11 @@ class _ScanPageState extends State<ScanPage> {
   bool _isLoginProtocol(String raw) {
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
-      return data['proto'] == QrProtocols.v1 &&
-          data['kind'] == QrKind.loginChallenge.wire;
+      final body = data['b'];
+      return data['p'] == QrProtocols.v1 &&
+          data['k'] == QrKind.signRequest.code &&
+          body is Map<String, dynamic> &&
+          body['a'] == QrActions.login;
     } catch (_) {
       return false;
     }

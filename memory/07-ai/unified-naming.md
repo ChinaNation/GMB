@@ -16,7 +16,7 @@
 - 变量名 / 常量名
 - API 字段名
 - storage 字段名
-- QR display 字段名
+- 扫码端解码展示字段名
 - 任务卡文件名
 - 文档文件名
 
@@ -51,7 +51,7 @@
 | 常量 | SCREAMING_SNAKE_CASE(Rust) / lowerCamelCase 或 static const(Dart) | `MODULE_TAG` / `actionCreate` |
 | JSON / API 字段 | snake_case | `signer_pubkey` |
 | storage 字段 | PascalCase | `InstitutionAccounts` |
-| QR display field key | snake_case | `cid_full_name` |
+| 扫码端解码展示字段 | snake_case | `cid_full_name` |
 | 任务卡文件名 | 短日期 + 短 slug | `20260507-ai-unified-naming.md` |
 | 技术文档文件名 | SCREAMING_SNAKE_CASE | `BACKEND_LAYOUT.md` |
 
@@ -74,7 +74,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `memory/` | AI 系统永久记忆 | memory | 仓库文档、规则、任务卡和 AI 系统主目录 |
 | `memory/00-vision/` | 愿景 | vision | 项目目标、信任边界和长期方向 |
 | `memory/01-architecture/` | 架构 | architecture | 仓库级和产品级架构文档 |
-| `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | CITIZEN_QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
+| `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
 | `memory/01-architecture/citizencode/` | CID 架构 | cid-architecture | CID 产品架构、技术框架和并发框架文档 |
 | `memory/03-security/` | 安全 | security | 安全规则、边界和风险要求 |
 | `memory/04-decisions/` | 架构决策 | decisions | ADR 和重要设计决策 |
@@ -190,7 +190,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 镇下地址段 ID | `address_unit_id` | CPMS archives / address_units | CPMS 档案选择的地址段稳定 ID |
 | 详细地址输入段 | `address_detail` | CPMS archives / CPMS frontend | 管理员录入的可变详细地址文本，与地址段组合为完整详细地址 |
 | 完整详细地址快照 | `address_full_snapshot` | CPMS archives | 保存时由地址段名称和详细地址输入段组成的只读快照 |
-| CPMS 前端二维码 | `qr` | `citizenpassport/frontend/qr/` | CPMS 前端 CITIZEN_QR_V1 解析和浏览器扫码工具 |
+| CPMS 前端二维码 | `qr` | `citizenpassport/frontend/qr/` | CPMS 前端 QR_V1 解析和浏览器扫码工具 |
 | CPMS 前端通用层 | `common` | `citizenpassport/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
 
 ## 5.1 机构名称字段硬规则
@@ -210,7 +210,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 - 行政区字典记录:`{ code, name }`。
 - 账户名称变量或链上 `name` 参数,但对外字段必须是 `account_name` / `accountName`。
-- 钱包名、联系人姓名、文件名和自然人姓名。
+- 钱包名、文件名和自然人姓名；联系人姓名必须使用 `contact_name` / `contactName`。
 - UI 局部派生展示变量可以使用 `title` / `label`,但不得作为 API、DTO、数据库或持久化字段承载机构名称。
 
 ## 5.2 非机构姓名与展示字段硬规则
@@ -229,8 +229,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 行政区市名称 | `city_name` | `cityName` | CID 行政区 API、App/前端市级选择 |
 | App 行政区内部名称 | `division_name` | `divisionName` | App Isar 行政区缓存内部字段 |
 | App 省级展示名称 | `province_display_name` | `provinceDisplayName` | App 省级入口展示 |
-| 用户联系人姓名 | `contact_name` | `contactName` | `CITIZEN_QR_V1/user_contact` body |
-| 转账收款人姓名 | `recipient_name` | `recipientName` | `CITIZEN_QR_V1/user_transfer` body |
+| 用户联系人姓名 | `contact_name` | `contactName` | `QR_V1/k=3` body、通讯录导入服务 |
+| 转账收款人姓名 | `recipient_name` | `recipientName` | `QR_V1/k=4` body |
 
 遗留 `admin_display_name` 只允许出现在数据库启动迁移中,用途是把旧列一次性改名为 `admin_name`;目标表结构、API、前端和文档不得继续输出旧字段。
 
@@ -398,7 +398,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizencode/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
 | `citizencode/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦注册局机构管理员、市注册局机构管理员和管理员列表 DTO |
 | `citizencode/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
-| `citizencode/backend/core/qr/` | QR | core-qr | 后端 CITIZEN_QR_V1 协议辅助和统一 sign_request 构造 |
+| `citizencode/backend/core/qr/` | QR | core-qr | 后端 QR_V1 协议辅助和统一 sign_request 构造 |
 | `citizencode/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
 | `citizencode/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
 | `citizencode/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
@@ -429,7 +429,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizencode/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
 | `citizencode/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
 | `citizencode/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
-| `citizencode/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 CITIZEN_QR_V1 工具 |
+| `citizencode/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 QR_V1 工具 |
 | `citizencode/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
 | `citizencode/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
 | `citizencode/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
@@ -527,12 +527,12 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | CID 号码 | `cid_number` | API / call data / storage key | 机构或公民 CID 编号 |
-| 机构全称 | `cid_full_name` | API / call data / QR display | 机构全称,可随机构法定名称变更 |
-| 机构简称 | `cid_short_name` | API / call data / QR display | 机构简称,用于列表和紧凑展示 |
-| 机构英文全称 | `cid_full_name_en` | API / call data / QR display | 机构英文全称 |
-| 机构英文简称 | `cid_short_name_en` | API / call data / QR display | 机构英文简称 |
+| 机构全称 | `cid_full_name` | API / call data / 扫码端解码展示 | 机构全称,可随机构法定名称变更 |
+| 机构简称 | `cid_short_name` | API / call data / 扫码端解码展示 | 机构简称,用于列表和紧凑展示 |
+| 机构英文全称 | `cid_full_name_en` | API / call data / 扫码端解码展示 | 机构英文全称 |
+| 机构英文简称 | `cid_short_name_en` | API / call data / 扫码端解码展示 | 机构英文简称 |
 | 账户名称列表 | `account_names` | CID registration-info API | 机构账户名数组 |
-| 账户名称 | `account_name` | API / call data / QR display | 单个机构或个人账户名 |
+| 账户名称 | `account_name` | API / call data / 扫码端解码展示 | 单个机构或个人账户名 |
 | 私权机构类型 | `private_type` | CID API / subjects / private | 私权机构目标类型,取值 `SOLE/PARTNERSHIP/COMPANY/CORPORATION/WELFARE/ASSOCIATION` |
 | 合伙类型 | `partnership_kind` | CID API / subjects / private | 合伙企业内部类型,取值 `GENERAL/LIMITED` |
 | 法人资格 | `has_legal_personality` | CID API / subjects / private | 私权机构是否具有法人资格 |
@@ -544,7 +544,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 钱包标签 | `wallet_label` | node frontend wallet selector | 钱包候选展示标签,不作为机构名称真源 |
 | 权威节点标签 | `authority_node_label` | node settings bootnode / GRANDPA | 节点身份或 GRANDPA 私钥匹配到的权威节点标签,不作为机构名称真源 |
 | IM 路由显示名 | `route_display_name` | IM protobuf / local cache | 通信路由列表展示,不作为联系人或机构名称真源 |
-| 联系人姓名 | `contact_name` | QR body | 用户联系方式二维码中的联系人姓名 |
+| 联系人姓名 | `contact_name` | QR body / Dart service | 用户联系方式二维码和通讯录导入服务中的联系人姓名 |
 | 收款人姓名 | `recipient_name` | QR body | 用户转账二维码中的收款人姓名 |
 | 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
 | 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |
@@ -553,31 +553,40 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 业务作用域市名称 | `scope_city_name` | credential / call data | 凭证适用的市级业务作用域 |
 | 签名 | `signature` | credential / call data | 凭证签名 |
 | 主体 ID | `account_id` | call data / storage key | 管理员主体统一 ID |
-| 公钥 | `pubkey` | QR body | 发起签名请求的公钥 |
-| 签名算法 | `sig_alg` | QR body | 签名算法标识 |
-| 载荷十六进制 | `payload_hex` | QR body | 待签名或待解码 payload |
-| display 字段 key | `display.fields[*].key` | QR body | 展示字段 key，具体值见第 16 节 |
+| QR 协议版本 | `p` | QR envelope | 固定 `QR_V1` |
+| QR 流向码 | `k` | QR envelope | 数字流向码 |
+| QR 请求 ID | `i` | QR envelope | 临时码 request/session id |
+| QR 过期时间 | `e` | QR envelope | 临时码过期 unix 秒 |
+| QR body | `b` | QR envelope | 由 `k` 决定的 body 对象 |
+| QR 动作码 | `a` | QR sign_request body | `k=1` 的业务动作码 |
+| QR 签名算法码 | `g` | QR sign_request body | 当前 `1 = sr25519` |
+| QR 公钥 | `u` | QR sign_request/sign_response body | 32B 公钥 base64url |
+| QR payload | `d` | QR sign_request body | 待签 payload bytes base64url |
+| QR 签名 | `s` | QR sign_response body | 64B sr25519 signature base64url |
 
-## 16. QR display field key 命名登记
+## 16. QR_V1 字段命名登记
 
-本节登记 `CITIZEN_QR_V1 / sign_request` 中 `body.display.fields[*].key` 的当前命名；字段语义和 action 对照以 `memory/01-architecture/qr/qr-action-registry.md` 为准。
+本节登记 `QR_V1` 线上字段。扫码确认页的人类展示字段不进入 QR,只能由 `b.a + b.d` 在扫码端解码生成；字段语义和 action 对照以 `memory/01-architecture/qr/qr-action-registry.md` 为准。
 
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
-| 操作 | `action` | QR display | 签名请求动作名 |
-| CID 号码 | `cid_number` | QR display | 机构或主体 CID 编号 |
-| 机构全称 | `cid_full_name` | QR display | 机构全称 |
-| 机构简称 | `cid_short_name` | QR display | 机构简称 |
-| 账户名称 | `account_name` | QR display | 单个账户名称 |
-| 管理员数量 | `admins_len` | QR display | 管理员总数 |
-| 阈值 | `threshold` | QR display | 多签通过阈值 |
-| 金额 | `amount_yuan` | QR display | 人民币元口径金额 |
-| 总金额 | `total_amount_yuan` | QR display | 总发行或总转账金额 |
-| 账户金额 | `amount_<account_name>` | QR display | 按账户名展开的金额字段 |
-| 签发省份名称 | `province_name` | QR display | 签发凭证省份名称 |
-| 签发管理员公钥 | `signer_pubkey` | QR display | 签发管理员公钥 |
-| 提案 ID | `proposal_id` | QR display | 链上提案 ID |
-| 是否同意 | `approve` | QR display | 投票是否同意 |
-| 收款人 | `beneficiary` | QR display | 转账或关闭后的收款地址 |
-| 备注 | `remark` | QR display | 交易备注 |
-| 多签账户 | `account` | QR display | 个人或机构多签账户 |
+| 协议版本 | `p` | QR envelope | 恒为 `QR_V1` |
+| 流向码 | `k` | QR envelope | `1=sign_request,2=sign_response,3=user_contact,4=user_transfer,5=im_node_pairing` |
+| 请求 ID | `i` | QR envelope | 临时码 request/session id |
+| 过期时间 | `e` | QR envelope | 临时码过期 unix 秒 |
+| Body | `b` | QR envelope | body 对象 |
+| 动作码 | `a` | `k=1` body | 业务动作码 |
+| 签名算法码 | `g` | `k=1` body | 当前 `1 = sr25519` |
+| 公钥 | `u` | `k=1/2` body | 32B 公钥 base64url |
+| Payload | `d` | `k=1` body | 待签 payload bytes base64url |
+| 签名 | `s` | `k=2` body | 64B 签名 base64url |
+| 钱包地址 | `address` | `k=3/4` body | SS58 钱包地址 |
+| 联系人姓名 | `contact_name` | `k=3` body | 联系人名 |
+| 收款人姓名 | `recipient_name` | `k=4` body | 收款人名 |
+| 收款金额 | `amount` | `k=4` body | 字符串金额 |
+| 币种 | `symbol` | `k=4` body | 当前 `GMB` |
+| 备注 | `memo` | `k=4` body | 收款备注 |
+| 清算标识 | `bank` | `k=4` body | 清算网络/清算行标识 |
+| 节点 PeerId | `node_peer_id` | `k=5` body | 通信节点 PeerId |
+| 节点 Multiaddr | `node_multiaddr` | `k=5` body | 通信节点 multiaddr |
+| 端点类型 | `endpoint_kind` | `k=5` body | `ip4` 或 `ip6` |

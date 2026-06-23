@@ -1,4 +1,4 @@
-// 中文注释:独立的登录页组件:渲染未登录态(QR 扫码登录 + 签名挑战应答),
+// 中文注释:独立的登录页组件:渲染未登录态(QR 扫码登录 + 签名请求/响应),
 // 持有登录相关 state / handler / useEffect / videoRef,
 // 登录成功后通过 useAuth().setAuth 写入全局,App.tsx 只负责在 !auth 时渲染 <LoginView />。
 
@@ -10,10 +10,10 @@ import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
 import { CitizenSignaturePanel } from '../core/CitizenSignaturePanel';
 import type { AdminAuth } from './types';
-import type { AdminQrChallengeResult } from './api';
+import type { AdminQrSignRequestResult } from './api';
 import {
   completeAdminQrLogin,
-  createAdminQrChallenge,
+  createAdminQrSignRequest,
   queryAdminQrLoginResult,
 } from './api';
 import { notice } from '../utils/notice';
@@ -27,7 +27,7 @@ function createSessionId(): string {
 
 export function LoginView() {
   const { auth, setAuth } = useAuth();
-  const [pendingQrLogin, setPendingQrLogin] = useState<AdminQrChallengeResult | null>(null);
+  const [pendingQrLogin, setPendingQrLogin] = useState<AdminQrSignRequestResult | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
 
@@ -36,7 +36,7 @@ export function LoginView() {
     try {
       const sessionId = createSessionId();
       const origin = window.location.origin;
-      const challenge = await createAdminQrChallenge({
+      const challenge = await createAdminQrSignRequest({
         origin,
         session_id: sessionId,
       });
@@ -90,7 +90,7 @@ export function LoginView() {
       if (msg.toLowerCase().includes('admin not found')) {
         notice.error('非管理员禁止登录本系统');
       } else {
-        notice.error(err, '登录回执处理失败');
+        notice.error(err, '登录签名响应处理失败');
       }
     } finally {
       setScanSubmitting(false);
@@ -183,7 +183,7 @@ export function LoginView() {
           管理员扫码登录
         </Typography.Title>
         <Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-          使用公民钱包扫描登录二维码并回扫登录回执
+          使用公民钱包扫描登录二维码并回扫签名响应
         </Typography.Text>
       </div>
 
@@ -198,7 +198,7 @@ export function LoginView() {
               ? `有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
               : '请点击按钮生成二维码'
           }
-          scannerHint="开启摄像头扫描公民钱包生成的登录回执二维码"
+          scannerHint="开启摄像头扫描公民钱包生成的签名响应二维码"
           primaryActionText={pendingQrLogin ? '重新生成' : '生成二维码'}
           primaryActionLoading={challengeLoading}
           onPrimaryAction={onCreateQrLogin}

@@ -10,7 +10,7 @@ AI 开工前按以下顺序装载上下文：
 6. `memory/07-ai/agent-rules.md`
 7. `memory/07-ai/workflow.md`
 8. 涉及协议、载荷、接口契约、字段顺序、签名验签、nonce、era、pallet/call index、storage key、subject id 时，必须读取 `memory/07-ai/unified-protocols.md`
-9. 涉及新建或重命名目录、文件、字段、变量、类、模块、API 字段、storage 字段、QR display 字段、任务卡文件名、文档文件名时，必须读取 `memory/07-ai/unified-naming.md`
+9. 涉及新建或重命名目录、文件、字段、变量、类、模块、API 字段、storage 字段、扫码端解码展示字段、任务卡文件名、文档文件名时，必须读取 `memory/07-ai/unified-naming.md`
 10. 对应模块技术文档
 11. 对应模块执行清单
 12. 对应模块完成标准

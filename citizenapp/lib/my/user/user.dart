@@ -100,7 +100,7 @@ class _ProfilePageState extends State<ProfilePage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _MyQrCodePage(
-          nickname: _userProfile.nickname,
+          contactName: _userProfile.nickname,
           address: address,
         ),
       ),
@@ -886,9 +886,9 @@ class _ContactBookPageState extends State<ContactBookPage> {
 }
 
 class _MyQrCodePage extends StatefulWidget {
-  const _MyQrCodePage({required this.nickname, required this.address});
+  const _MyQrCodePage({required this.contactName, required this.address});
 
-  final String nickname;
+  final String contactName;
   final String address;
 
   @override
@@ -906,7 +906,7 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
         expiresAt: null,
         body: UserContactBody(
           address: widget.address,
-          contactName: widget.nickname,
+          contactName: widget.contactName,
         ),
       ).toRawJson();
 
@@ -951,7 +951,7 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
         children: [
           const Spacer(),
           Text(
-            widget.nickname,
+            widget.contactName,
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,

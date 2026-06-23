@@ -15,7 +15,7 @@ import 'package:citizenapp/rpc/onchain.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/my/user/user.dart' show ContactBookPage;
 import 'package:citizenapp/my/user/user_service.dart' show UserContact;
@@ -406,31 +406,11 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         signCallback = (Uint8List payload) async {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'tx-');
-          final toAddr = _toController.text.trim();
-          // 中文注释：公民钱包确认页按同一金额格式展示，确保 display 字段逐字可核对。
-          final amountFormatted = AmountFormat.format(
-                  AmountFormat.tryParse(_amountController.text) ?? 0,
-                  symbol: '')
-              .trim();
           final request = qrSigner.buildRequest(
             requestId: requestId,
-            address: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
-            display: SignDisplay(
-              action: 'transfer',
-              summary: '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
-              fields: [
-                // transfer 链端 fields 按 Registry = (to, amount_yuan)。
-                // CitizenWallet decoder 输出 "X.XX GMB"(千分位),CitizenApp 的
-                // $amountFormatted 来自 AmountFormat.format 已自带千分位。
-                SignDisplayField(key: 'to', label: '收款账户', value: toAddr),
-                SignDisplayField(
-                    key: 'amount_yuan',
-                    label: '金额',
-                    value: '$amountFormatted $_selectedSymbol'),
-              ],
-            ),
+            action: QrActions.balancesTransfer,
           );
           final requestJson = qrSigner.encodeRequest(request);
 
@@ -452,7 +432,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
             throw Exception('签名已取消');
           }
 
-          return Uint8List.fromList(_hexToBytes(response.body.signature));
+          return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
         };
       }
 

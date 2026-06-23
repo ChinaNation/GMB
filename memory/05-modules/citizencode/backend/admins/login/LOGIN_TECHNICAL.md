@@ -1,96 +1,72 @@
-# CID admins/login 模块技术文档
+# CID Backend Admin Login 技术说明
 
-- 最后更新:2026-06-12
-- 任务卡:
-  - `memory/08-tasks/done/20260502-cid-cleanup残留整改.md`
-  - `memory/08-tasks/done/20260525-cid-cpms-store.md`
-  - `memory/08-tasks/open/20260530-cid-province-admin-governance-passkey.md`
-  - `memory/08-tasks/done/20260530-cid-admin-permission-step2.md`
-  - `memory/08-tasks/done/20260604-cid-core-number-store-refactor.md`
-  - `memory/08-tasks/open/20260612-cid-no-compat-cleanup-acceptance.md`
+- 更新日期:2026-06-22
+- 协议事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
 
-## 1. 模块目标
+## 1. 职责
 
-`citizencode/backend/admins/login` 负责 CID 管理员认证链路,统一处理登录挑战生成、
-签名验签、会话签发、二维码登录和会话校验。
+`citizencode/backend/admins/login/` 负责 CID 管理员认证:
 
-本模块只负责 Authentication 和登录态守卫。业务权限、数据范围、链交互动作
-必须留在各业务模块内继续校验,不得把业务 handler 塞回登录目录。
+1. 普通管理员身份识别、登录签名、会话守卫。
+2. 生成 `QR_V1 k=1,a=1` 管理员扫码登录签名请求。
+3. 接收 CitizenWallet 公民钱包返回的 `QR_V1 k=2` 签名响应。
+4. 校验管理员、公钥、签名、会话和过期时间。
+5. 返回登录结果给前端轮询。
 
-## 2. 当前目录
+## 2. 文件边界
 
-```text
-citizencode/backend/admins/login/
-├── mod.rs        # 模块聚合与对外 API re-export
-├── model.rs      # 登录 challenge、session、二维码结果、请求/响应 DTO
-├── handler.rs    # 普通登录接口:check/logout/identify/challenge/verify
-├── qr_login.rs   # CITIZEN_QR_V1 扫码登录 challenge/complete/result
-├── guards.rs     # 登录态与联邦注册局机构管理员守卫、session 校验
-└── signature.rs  # sr25519 验签、公钥解析、challenge 清理、展示名辅助
+| 文件 | 注释 |
+|---|---|
+| `model.rs` | 登录会话、登录签名请求、QR 登录结果和 DTO |
+| `handler.rs` | 普通登录与会话接口 |
+| `qr_login.rs` | QR 登录签名请求、签名响应提交、结果轮询 |
+| `signature.rs` | 登录签名原文、系统签名和管理员验签 |
+| `guards.rs` | 登录态守卫 |
+
+## 3. QR API
+
+| 方法 | 路径 | 注释 |
+|---|---|---|
+| `POST` | `/api/v1/admin/auth/qr/sign-request` | 生成登录签名请求二维码 |
+| `POST` | `/api/v1/admin/auth/qr/complete` | 提交签名响应并完成登录 |
+| `GET` | `/api/v1/admin/auth/qr/result` | 前端轮询登录结果 |
+
+## 4. 运行态表
+
+| 表 | 注释 |
+|---|---|
+| `admin_login_sign_requests` | QR/普通登录的一次性签名请求状态 |
+| `admin_qr_login_results` | QR 登录轮询结果 |
+| `admin_sessions` | 管理员登录会话 |
+
+运行态清理由 `cleanup_login_state_conn()` 执行。不得恢复旧登录二维码表名。
+
+## 5. QR 字段
+
+登录签名请求:
+
+```json
+{"p":"QR_V1","k":1,"i":"...","e":1780000000,"b":{"a":1,"g":1,"u":"...","d":"..."}}
 ```
 
-## 3. 对外接口
+`b.d` 为 UTF-8 `cid|system_signature`。CitizenWallet 先验系统签名,再让管理员确认登录。
 
-- `GET /api/v1/admin/auth/check`
-- `POST /api/v1/admin/auth/logout`
-- `POST /api/v1/admin/auth/identify`
-- `POST /api/v1/admin/auth/challenge`
-- `POST /api/v1/admin/auth/verify`
-- `POST /api/v1/admin/auth/qr/challenge`
-- `POST /api/v1/admin/auth/qr/complete`
-- `GET /api/v1/admin/auth/qr/result`
+签名响应:
 
-## 4. 认证模型
+```json
+{"p":"QR_V1","k":2,"i":"...","e":1780000000,"b":{"u":"...","s":"..."}}
+```
 
-- 管理员标识:`admin_account`
-- 注册局机构模型:当前只保留 `FEDERAL_REGISTRY` / `CITY_REGISTRY`,不再另设管理员权限真源
-- 会话载体:`Bearer <access_token>`
-- 会话缓存:`admin_sessions`,登录后同步写入进程内 GlobalShard。
-- 挑战缓存:`login_challenges`。
-- 二维码登录结果缓存:`qr_login_results`。
-- 登录短期状态持久化归 `store_ops` 模块快照表。
+CID 后端必须按本地 `admin_login_sign_requests` 重建签名原文:
 
-## 5. 核心流程
+```text
+QR_V1|2|i|cid|e|pubkey_without_0x
+```
 
-### 5.1 普通 Challenge 登录
+## 6. 安全规则
 
-1. `identify` 根据管理员身份二维码解析 `admin_account` 并返回注册局机构、省市 scope 与 Passkey 绑定状态。
-2. `challenge` 生成带 `origin/domain/session_id/nonce` 的 challenge。
-3. `verify` 校验 sr25519 签名,一次性消费 challenge 并签发 8 小时会话。
-4. 验证成功后签发会话并同步进程内 GlobalShard。
-
-### 5.2 二维码登录
-
-1. `qr/challenge` 生成 CITIZEN_QR_V1 登录挑战和 CID 系统签名。
-2. CitizenWallet 公民钱包扫码后按 `login_receipt` 原文签名,并由网页扫描登录回执提交 `qr/complete`。
-3. 后端验签成功后写入 `qr_login_results` 并签发会话。
-4. 网页轮询 `qr/result` 获取 `PENDING / SUCCESS / EXPIRED`。
-
-二维码登录统一遵循 `CITIZEN_QR_V1`:
-
-- 系统签名由 `CID_SIGNING_SEED_HEX` 派生的 CID main signer 产出。
-- CitizenWallet 公民钱包验签原文由 `core::qr::build_signature_message` 生成。
-- 登录协议禁止重新引入 `aud` 作为移动端扫码验签字段。
-- CitizenApp 不承担管理员扫码登录职责;前端不得把登录挑战文案引导到 CitizenApp。
-
-## 6. 守卫函数
-
-- `require_admin_any`:读取登录态,返回 `AdminAuthContext`。
-- `require_federal_registry`:只放行联邦注册局机构的 `admins`,并要求存在省域 scope。
-- `require_admin_session_middleware`:Axum 路由层会话校验中间件。
-
-写权限不再由登录守卫表达。管理端操作权限统一为
-`LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`:登录态操作只校验会话、注册局机构和 scope;
-`PASSKEY` 写操作必须先通过 `admins/actions.rs` 发起安全动作,并由
-`admins/passkeys.rs` 完成 WebAuthn 验证后换取一次性 `x-cid-security-grant`;
-`PASSKEY_CHALLENGE` 写操作必须在 Passkey 基础上再完成当前管理员冷钱包 sr25519 签名。
-
-## 7. 边界规则
-
-- `admins/login` 不承载机构、公民、CPMS、联邦注册局机构管理员治理等业务 handler。
-- 业务模块不得直接读取 session cache,只能通过 `require_admin_any` 或
-  `require_federal_registry` 获取认证上下文。
-- 注册局机构范围过滤放在 `scope`,不放回 `admins/login`。
-- 联邦注册局机构管理员/市注册局机构管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
-- 管理员高危写操作归 `admins/actions.rs`,Passkey 注册和 WebAuthn 工具归
-  `admins/passkeys.rs`,不得放回登录目录。
+1. CitizenApp 不承担管理员扫码登录职责。
+2. CitizenWallet 公民钱包是管理员扫码登录唯一签名端。
+3. 签名响应不携带 payload、payload hash 或展示字段。
+4. 前端只负责展示二维码、扫描签名响应和提交 API。
+5. 联邦注册局/市注册局身份仍由 `registry_org_code` 表达,不得恢复独立管理员授权真源。

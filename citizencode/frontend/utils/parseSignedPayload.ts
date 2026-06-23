@@ -1,9 +1,9 @@
 // 统一的签名二维码 payload 解析工具。
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// 使用 CITIZEN_QR_V1 envelope,不支持字段别名。
+// 使用 QR_V1 envelope,不支持字段别名。
 
 import { parseQrEnvelope, QrParseError } from '../core/qr/citizenQr';
-import type { LoginReceiptBody, SignResponseBody } from '../core/qr/citizenQr';
+import type { SignResponseBody } from '../core/qr/citizenQr';
 
 export type SignedLoginPayload = {
   challenge_id: string;
@@ -26,10 +26,10 @@ export function parseSignedLoginPayload(
     }
     throw e;
   }
-  if (env.kind !== 'login_receipt') {
-    throw new Error(`期望 login_receipt,实际: ${env.kind}`);
+  if (env.kind !== 'sign_response') {
+    throw new Error(`期望 sign_response,实际: ${env.kind}`);
   }
-  const body = env.body as LoginReceiptBody;
+  const body = env.body as SignResponseBody;
   const challenge_id = env.id || fallbackChallengeId;
   if (!challenge_id || !body.pubkey || !body.signature) {
     throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
@@ -49,8 +49,8 @@ export type SignedReceiptPayload = {
   payload_hash?: string;
 };
 
-// 中文注释:解析"挑战签名回执"二维码 payload。
-// 只接受 CITIZEN_QR_V1 envelope(login_receipt/sign_response)。
+// 中文注释:解析"挑战签名响应"二维码 payload。
+// 只接受 QR_V1 envelope(sign_response)。
 // 返回结构供调用方提交后端 verify/commit。
 export function parseSignedReceiptPayload(
   raw: string,
@@ -61,7 +61,7 @@ export function parseSignedReceiptPayload(
     throw new Error('签名二维码内容为空');
   }
   if (!trimmed.startsWith('{')) {
-    throw new Error('签名二维码必须使用 CITIZEN_QR_V1 envelope');
+    throw new Error('签名二维码必须使用 QR_V1 envelope');
   }
   let env;
   try {
@@ -72,25 +72,13 @@ export function parseSignedReceiptPayload(
     }
     throw e;
   }
-  if (env.kind !== 'login_receipt' && env.kind !== 'sign_response') {
-    throw new Error(`期望 login_receipt/sign_response,实际: ${env.kind}`);
+  if (env.kind !== 'sign_response') {
+    throw new Error(`期望 sign_response,实际: ${env.kind}`);
   }
   const challenge_id = env.id || fallbackChallengeId;
-  if (env.kind === 'sign_response') {
-    const body = env.body as SignResponseBody;
-    if (!challenge_id || !body.signature || !body.pubkey) {
-      throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
-    }
-    return {
-      challenge_id,
-      signature: body.signature,
-      signer_pubkey: body.pubkey,
-      payload_hash: body.payload_hash,
-    };
-  }
-  const body = env.body as LoginReceiptBody;
-  if (!challenge_id || !body.signature) {
-    throw new Error('签名二维码缺少必要字段(id/signature)');
+  const body = env.body as SignResponseBody;
+  if (!challenge_id || !body.signature || !body.pubkey) {
+    throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
   }
   return { challenge_id, signature: body.signature, signer_pubkey: body.pubkey };
 }

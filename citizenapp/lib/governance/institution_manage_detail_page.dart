@@ -15,8 +15,8 @@ import 'package:citizenapp/rpc/chain_event_subscription.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_detail_local_store.dart';
 import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart';
 import 'package:citizenapp/governance/shared/proposal/proposal_query_service.dart';
-import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/onchain.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
@@ -168,7 +168,8 @@ class _InstitutionManageDetailPageState
             .decodePersonalProposalData(widget.proposalId, raw);
         if (personalDetail is personal_models.CreateMultisigProposalInfo) {
           createInfo = personalDetail;
-        } else if (personalDetail is personal_models.CloseMultisigProposalInfo) {
+        } else if (personalDetail
+            is personal_models.CloseMultisigProposalInfo) {
           closeInfo = personalDetail;
         } else {
           final orgDetail =
@@ -541,28 +542,11 @@ class _InstitutionManageDetailPageState
         }
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
-        final voteText = approve ? '赞成' : '反对';
-        final summaryType = _isCreateProposal ? '创建多签' : '关闭多签';
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          display: SignDisplay(
-            action: 'internal_vote',
-            summary: '$summaryType提案 #${widget.proposalId} 投票：$voteText',
-            fields: [
-              // internal_vote 链端 fields 按 Registry = (proposal_id, approve)。
-              // _createInfo / _closeInfo 属辅助上下文,页面已独立展示,
-              // 不塞 display.fields 避免对齐失败。
-              SignDisplayField(
-                  key: 'proposal_id',
-                  label: '提案编号',
-                  value: widget.proposalId.toString()),
-              SignDisplayField(
-                  key: 'approve', label: '投票', value: approve.toString()),
-            ],
-          ),
+          action: QrActions.internalVote,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -576,7 +560,7 @@ class _InstitutionManageDetailPageState
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.body.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
       // 创建/关闭多签的投票都走 InternalVote::cast(22.0),

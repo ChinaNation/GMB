@@ -1,8 +1,9 @@
 use super::call_data;
 use crate::governance::signing::{
-    build_signing_payload, fetch_genesis_hash, fetch_latest_block, fetch_nonce,
-    fetch_runtime_version, generate_request_id, now_secs, pubkey_to_ss58, sha256_hash,
+    build_signing_payload, chain_action_code, fetch_genesis_hash, fetch_latest_block, fetch_nonce,
+    fetch_runtime_version, generate_request_id, now_secs, payload_b64, pubkey_b64, sha256_hash,
     QrSignRequest, SignRequestBody, VoteSignRequestResult, DEFAULT_TTL_SECS, PROTOCOL_VERSION,
+    QR_KIND_SIGN_REQUEST,
 };
 
 fn normalize_pubkey(pubkey_hex: &str) -> Result<(String, Vec<u8>), String> {
@@ -22,7 +23,6 @@ fn build_hashed_payload_request(
     pubkey_clean: &str,
     pubkey_bytes: &[u8],
     call_data: &[u8],
-    display: serde_json::Value,
 ) -> Result<VoteSignRequestResult, String> {
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -39,7 +39,6 @@ fn build_hashed_payload_request(
         tx_version,
     );
     let request_id = generate_request_id(request_prefix);
-    let account_ss58 = pubkey_to_ss58(pubkey_bytes)?;
 
     // Runtime WASM 交易 payload 远大于 QR 承载能力。Substrate sr25519 在 payload
     // 超过 256 字节时实际签 blake2_256(payload),所以这里把同一个 32 字节摘要交给冷钱包。
@@ -50,16 +49,14 @@ fn build_hashed_payload_request(
     let now = now_secs()?;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
+        kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
         body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
-            display,
+            action: chain_action_code(call_data)?,
+            sig_alg: 1,
+            pubkey: pubkey_b64(pubkey_bytes)?,
+            payload: payload_b64(payload_for_qr.as_bytes()),
         },
     };
 
@@ -82,19 +79,10 @@ pub(crate) fn build_developer_upgrade_sign_request(
     wasm_path: &str,
 ) -> Result<VoteSignRequestResult, String> {
     let (pubkey_clean, pubkey_bytes) = normalize_pubkey(pubkey_hex)?;
-    let (wasm_code, wasm_size_mb) = call_data::read_wasm(wasm_path)?;
+    let (wasm_code, _wasm_size_mb) = call_data::read_wasm(wasm_path)?;
     let call_data = call_data::developer_direct_upgrade(&wasm_code);
 
-    let display = serde_json::json!({
-        "action": "developer_direct_upgrade",
-        "summary": format!("开发期直接升级（{wasm_size_mb:.2} MB）"),
-        "fields": [
-            { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
-            { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) }
-        ]
-    });
-
-    build_hashed_payload_request("devupg", &pubkey_clean, &pubkey_bytes, &call_data, display)
+    build_hashed_payload_request("devupg", &pubkey_clean, &pubkey_bytes, &call_data)
 }
 
 /// 构建运行期协议升级提案签名请求。
@@ -104,18 +92,8 @@ pub(crate) fn build_propose_runtime_upgrade_sign_request(
     reason: &str,
 ) -> Result<VoteSignRequestResult, String> {
     let (pubkey_clean, pubkey_bytes) = normalize_pubkey(pubkey_hex)?;
-    let (wasm_code, wasm_size_mb) = call_data::read_wasm(wasm_path)?;
+    let (wasm_code, _wasm_size_mb) = call_data::read_wasm(wasm_path)?;
     let call_data = call_data::propose_runtime_upgrade(&wasm_code, reason)?;
 
-    let display = serde_json::json!({
-        "action": "propose_runtime_upgrade",
-        "summary": format!("提交协议升级提案（{wasm_size_mb:.2} MB）"),
-        "fields": [
-            { "key": "reason", "label": "升级理由", "value": reason },
-            { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
-            { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) }
-        ]
-    });
-
-    build_hashed_payload_request("upgrade", &pubkey_clean, &pubkey_bytes, &call_data, display)
+    build_hashed_payload_request("upgrade", &pubkey_clean, &pubkey_bytes, &call_data)
 }

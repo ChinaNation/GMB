@@ -1,8 +1,8 @@
 {
-  "proto": "CITIZEN_QR_V1",
-  "kind": "user_contact",
-  "body": {
+  "p": "QR_V1",
+  "k": 3,
+  "b": {
     "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-    "name": "张三"
+    "contact_name": "张三"
   }
 }
