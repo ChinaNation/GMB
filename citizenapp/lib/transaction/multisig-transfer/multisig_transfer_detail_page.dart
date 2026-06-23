@@ -116,12 +116,6 @@ class _MultisigTransferDetailPageState
     }
   }
 
-  /// QR 签名 action 字段。
-  ///
-  /// 所有管理员投票统一走 `internal_vote`,冷钱包按 action
-  /// 识别并解码同一套 call 格式；业务类型仅通过 summary/fields 文案体现。
-  String get _signAction => 'internal_vote';
-
   // 投票计数
   int _yesCount = 0;
   int _noCount = 0;

@@ -141,9 +141,14 @@ class _PublicPageState extends State<PublicPage> {
     if (codes.isEmpty) return const [];
     // 一次取全省市名映射,避免逐市查字典的 N+1(ADR-018 R2)。
     final nameMap = await _repo.cityNameMap(provinceCode);
-    return codes
-        .map((code) => _CityVm(code: code, name: nameMap[code] ?? code))
-        .toList(growable: false);
+    return codes.map((code) {
+      // 字典名缺失(null)或为空串都回退 code,绝不渲染留白(ADR-021 字典 join)。
+      final joined = nameMap[code];
+      return _CityVm(
+        code: code,
+        name: (joined != null && joined.isNotEmpty) ? joined : code,
+      );
+    }).toList(growable: false);
   }
 
   /// 后台增量刷新某省(provinceCode);成功后静默刷新市列表,失败仅在本地空时提示。
@@ -262,8 +267,8 @@ class _PublicPageState extends State<PublicPage> {
       itemBuilder: (context, i) {
         final city = _cities[i];
         return _InstitutionTile(
+          // 市卡片只显市名「xx市」;进入后由列表页顶部展示「xx市公权机构」。
           title: city.name,
-          subtitle: '查看 ${city.name} 公权机构',
           trailing: const Icon(Icons.chevron_right,
               color: AppTheme.textTertiary, size: 20),
           onTap: () => _openCity(city),
@@ -417,21 +422,25 @@ class _ProvinceRail extends StatelessWidget {
 }
 
 /// 机构/市通用行。
+///
+/// 中文注释:[subtitle] 可空——市卡片只显市名「xx市」时不传副文,
+/// 关注列表项才传所属地副文。
 class _InstitutionTile extends StatelessWidget {
   const _InstitutionTile({
     required this.title,
-    required this.subtitle,
     required this.onTap,
+    this.subtitle,
     this.trailing,
   });
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final VoidCallback onTap;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final sub = subtitle;
     return ListTile(
       onTap: onTap,
       title: Text(
@@ -442,10 +451,13 @@ class _InstitutionTile extends StatelessWidget {
           color: AppTheme.textPrimary,
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(fontSize: 12.5, color: AppTheme.textTertiary),
-      ),
+      subtitle: (sub != null && sub.isNotEmpty)
+          ? Text(
+              sub,
+              style:
+                  const TextStyle(fontSize: 12.5, color: AppTheme.textTertiary),
+            )
+          : null,
       trailing: trailing,
     );
   }

@@ -1,7 +1,6 @@
 //! 联合投票 — 内部投票阶段。
 //!
-//! 国储会 / 省储会 / 省储行管理员按机构投票,任一机构反对或超时进入
-//! 联合公投阶段(jointreferendum)。
+//! 国储会 / 省储会 / 省储行管理员按机构投票,任一机构反对或超时都进入联合公投阶段(jointreferendum)。
 //!
 //! 业务函数挂在 `super::Pallet<T>` 上,在 super(lib.rs)的 #[pallet::call]
 //! `cast_admin` extrinsic 与 `JointVoteEngine` / `JointProposalFinalizer`
@@ -149,8 +148,7 @@ impl<T: Config> Pallet<T> {
 
     /// 准备联合投票人口快照。
     ///
-    /// 中文注释：这是投票引擎内部能力。业务模块不再传快照材料，只能在发起
-    /// 联合提案前由管理员调用本入口，让 joint-vote 验签、去重并缓存总人数。
+    /// 中文注释：这是投票引擎内部能力。业务模块不再传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 验签、去重并缓存总人数。
     pub fn do_prepare_population_snapshot(
         who: T::AccountId,
         eligible_total: u64,
@@ -217,7 +215,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + PRBs)管理员快照,
+    /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + 43 PRB)管理员快照,
     /// 并消费已准备的人口快照总分母，后续阶段切换不再改写。
     pub fn do_create_joint_proposal(who: T::AccountId) -> Result<u64, DispatchError> {
         let proposer_institution = resolve_proposer_institution::<T>(&who)
@@ -255,7 +253,7 @@ impl<T: Config> Pallet<T> {
                 return TransactionOutcome::Rollback(Err(err));
             }
 
-            // 锁定所有参与机构(NRC + 43 PRC + PRBs)的管理员快照。
+            // 锁定所有参与机构(NRC + 43 PRC + 43 PRB)的管理员快照。
             if let Some(nrc) = nrc_account::<T>() {
                 if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                     id,

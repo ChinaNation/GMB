@@ -1856,10 +1856,10 @@ impl Db {
 	                                    (s.category = 'GOV_INSTITUTION'
 	                                     AND g.cid_number IS NOT NULL
 	                                     AND s.institution_code <> 'CPOL'
-	                                     AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'GSCH', 'SFSC'))
+	                                     AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
 	                                    OR (s.category = 'GOV_INSTITUTION'
 	                                        AND g.cid_number IS NULL
-	                                        AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'GSCH', 'SFSC'))
+	                                        AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
 	                                    OR (s.institution_code IN ('SFGT', 'SFGP', 'UNIN')
 	                                        AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'GSCH', 'SFSC')
 	                                        AND par.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY'))

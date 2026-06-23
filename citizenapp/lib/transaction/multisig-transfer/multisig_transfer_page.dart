@@ -328,25 +328,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     }
   }
 
-  String _coldWalletInstitutionLabel() {
-    final identity = widget.institution.cidNumber;
-    final registered = registeredAccountHexFromIdentity(identity);
-    if (registered != null) {
-      return '机构账户 ${_shortHex(registered)}';
-    }
-    final personal = personalAccountHexFromIdentity(identity);
-    if (personal != null) {
-      return '个人多签 ${_shortHex(personal)}';
-    }
-    return widget.institution.cidShortName;
-  }
-
-  String _shortHex(String hex) {
-    final value = hex.startsWith('0x') ? hex.substring(2) : hex;
-    if (value.length <= 14) return value;
-    return '${value.substring(0, 8)}...${value.substring(value.length - 6)}';
-  }
-
   /// 仅当 [widget.institution] 是个人多签时,把转账提案写入 Isar 历史
   /// (`PersonalAccountProposalEntity`),让详情页"提案列表"区域立即看到。
   /// 机构多签的提案历史由其他模块负责,这里 silent skip。

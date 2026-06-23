@@ -5,7 +5,7 @@
 //! - 清算行节点声明(register/update/unregister)属于扫码支付网络准入,
 //!   放在 `offchain_transaction::signing`。
 
-use primitives::institution_code::{is_institution_code, InstitutionCode};
+use primitives::code::{is_institution_code, InstitutionCode};
 
 use crate::governance::signing::{
     build_sign_request_from_call_data, encode_compact_u32_pub, VoteSignRequestResult,

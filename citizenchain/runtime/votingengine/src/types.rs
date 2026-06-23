@@ -10,12 +10,12 @@ pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
 pub const PROPOSAL_KIND_JOINT: u8 = 1;
 
 // ──────────────────────────────────────────────────────────────────
-// 机构码治理分类(全链唯一真源 = primitives::institution_code,见铁律)
-// 旧的 ORG_xx 数字标签已彻底删除;治理统一用 CID 机构码 [u8; 4]。
+// 机构码治理分类(全链唯一真源 = primitives::code,见铁律)
+// 治理统一用 CID 机构码 [u8; 4]。
 // 这里整体 re-export,使 internal-vote / joint-vote / 业务 pallet 仍可写
 // `votingengine::types::{InstitutionCode, NRC, fixed_governance_pass_threshold, ...}`。
 // ──────────────────────────────────────────────────────────────────
-pub use primitives::institution_code::{
+pub use primitives::code::{
     code_bytes, fixed_governance_pass_threshold, institution_code_from_cid_number,
     is_fixed_governance_code, is_institution_code, is_personal_code, is_public_legal_code,
     is_registered_multisig_code, is_valid_governance_code, InstitutionCode, NRC, PMUL, PRB, PRC,

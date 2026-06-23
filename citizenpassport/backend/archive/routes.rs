@@ -1595,18 +1595,17 @@ fn build_archive_delete_sign_request(
             "invalid delete payload",
         )
     })?;
-    let sign_request = serde_json::json!({
-        "p": crate::qr::QR_V1,
-        "k": crate::qr::QrKind::SignRequest.code(),
-        "i": challenge_id,
-        "e": expire_at,
-        "b": {
-            "a": crate::qr::ACTION_CPMS_ARCHIVE_DELETE,
-            "g": 1,
-            "u": admin_pubkey_b64,
-            "d": crate::qr::bytes_to_b64(&payload_bytes),
-        }
-    });
+    let sign_request = crate::qr::SignRequestEnvelope::new(
+        challenge_id.to_string(),
+        _issued_at,
+        expire_at,
+        crate::qr::SignRequestBody {
+            action: crate::qr::ACTION_CPMS_ARCHIVE_DELETE,
+            sig_alg: 1,
+            pubkey: admin_pubkey_b64,
+            payload: crate::qr::bytes_to_b64(&payload_bytes),
+        },
+    );
     serde_json::to_string(&sign_request)
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))
 }

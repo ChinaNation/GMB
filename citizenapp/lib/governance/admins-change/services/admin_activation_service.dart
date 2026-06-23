@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
 import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/signer/signing.dart';
@@ -156,7 +156,6 @@ class ActivationService {
   }) {
     final pk = _normalize(pubkeyHex);
 
-    final pkBytes = _hexToBytes(pk);
     final payload = _buildActivatePayload(identity, pk);
     final payloadHex = '0x${_bytesToHex(payload)}';
 

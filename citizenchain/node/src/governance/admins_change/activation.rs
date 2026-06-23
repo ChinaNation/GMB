@@ -17,7 +17,7 @@
 use crate::home;
 use crate::settings::device_password;
 use crate::shared::security;
-use primitives::institution_code::{
+use primitives::code::{
     code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code, InstitutionCode,
 };
 use serde::{Deserialize, Serialize};

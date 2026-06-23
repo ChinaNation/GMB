@@ -50,7 +50,7 @@ fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], id: &T::AccountI
     decode_account::<T>(raw).as_ref() == Some(id)
 }
 
-/// 机构多签账户 → 联合投票票权(NRC=43 / PRC=43 / PRB=19)。
+/// 机构多签账户 → 联合投票票权(NRC=19 / PRC=1×43 / PRB=1×43，总票权=105)。
 pub fn institution_info<T: frame_system::Config>(id: &T::AccountId) -> Option<u32> {
     if CHINA_CB
         .first()

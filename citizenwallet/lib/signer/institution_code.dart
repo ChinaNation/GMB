@@ -4,7 +4,7 @@ import 'dart:typed_data';
 /// 机构码(CID institution_code)冷钱包端表示与治理分类 = institution_code.dart
 ///
 /// 中文注释(铁律):
-/// 本文件逐字镜像链端 `primitives::institution_code`(同一套 86 码)。链上治理用
+/// 本文件逐字镜像链端 `primitives::code`(同一套 92 码)。链上治理用
 /// 4 字节 `institution_code`([u8;4] 原始码字节,3 字符码右补 `0`)。
 /// 冷钱包离线解码用本文件的纯函数从机构码派生治理分类
 /// (是不是固定治理档 / 个人多签 / 机构账户),绝不另立第二套分类。
@@ -41,7 +41,9 @@ class InstitutionCode {
       end--;
     }
     if (end == 0) return '';
-    return utf8.decode(bytes.sublist(0, end), allowMalformed: true).toUpperCase();
+    return utf8
+        .decode(bytes.sublist(0, end), allowMalformed: true)
+        .toUpperCase();
   }
 
   /// 字符串机构码 → 4 字节(右补 0,超 4 截断)。
@@ -58,7 +60,7 @@ class InstitutionCode {
   // 机构码分类清单(与链端 PUBLIC/PRIVATE/UNINCORPORATED 同源)
   // ──────────────────────────────────────────────────────────────────
 
-  /// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 10 + 公立大学/学校 2)= 72。
+  /// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 14 + 公立大学/学校 2)= 76。
   static const Set<String> _publicLegalCodes = <String>{
     // A 国家级单体(26)
     'PRS', 'FSC', 'FIB', 'FSS', 'FPR', 'FRG', 'MFA', 'MDF',
@@ -72,21 +74,31 @@ class InstitutionCode {
     // C 市级类型(17)
     'CGOV', 'CLEG', 'CSUP', 'CJUD', 'CEDU', 'CSLF', 'CDEF', 'CHSC', 'CCWF',
     'CHUD', 'CAGR', 'CCOM', 'CFIN', 'CENR', 'CTRN', 'CREG', 'CPOL',
-    // D 镇级类型(10)
+    // D 镇级类型(14)
     'TGOV', 'TCWF', 'THUD', 'TAGR', 'TFIN', 'TDEF', 'THSC', 'TCOM', 'TENR',
-    'TTRN',
+    'TTRN', 'TPOL', 'TSLF', 'TSUP', 'TJUD',
     // 公立大学 / 公立学校
     'GUN', 'GSCH',
   };
 
-  /// 私权法人机构码(有限合伙/股权/股份/公益/注册协会 + 私立大学/学校)= 7。
+  /// 私权法人机构码(有限合伙/股权/股份/公益/注册协会 + 私立/教会大学/学校)= 9。
   static const Set<String> _privateLegalCodes = <String>{
-    'SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'SFSC',
+    'SFLP',
+    'SFGQ',
+    'SFGF',
+    'SFGY',
+    'SFAS',
+    'SUN',
+    'JUN',
+    'SFSC',
+    'JSCH',
   };
 
   /// 非法人机构码(个体经营/无限合伙/非法人组织)= 3。
   static const Set<String> _unincorporatedCodes = <String>{
-    'SFGT', 'SFGP', 'UNIN',
+    'SFGT',
+    'SFGP',
+    'UNIN',
   };
 
   // ──────────────────────────────────────────────────────────────────

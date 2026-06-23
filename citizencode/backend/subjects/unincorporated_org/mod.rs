@@ -39,10 +39,13 @@ pub(crate) enum ParentLocalityRule {
     SameCity,
 }
 
-/// 判定父级是否学校/大学(公立大学 GUN/私立大学 SUN/公立学校 GSCH/私立学校 SFSC)。
+/// 判定父级是否学校/大学(公立 GUN/私立 SUN/教会 JUN 大学 + 公立 GSCH/私立 SFSC/教会 JSCH 学校)。
 /// 教育委员会(NED/CEDU)是公权委员会,不是学校,不算分校所属法人。
 pub(crate) fn parent_is_education_school(parent_institution_code: &str) -> bool {
-    matches!(parent_institution_code, "GUN" | "SUN" | "GSCH" | "SFSC")
+    matches!(
+        parent_institution_code,
+        "GUN" | "SUN" | "JUN" | "GSCH" | "SFSC" | "JSCH"
+    )
 }
 
 /// 所属法人的地域规则:

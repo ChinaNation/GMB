@@ -1,9 +1,7 @@
 //! 费率规则常量库 = fee_policy.rs
 //!
 //! 全链费率定义的**单一权威源**。所有链上交易计费 / 链下清算行扣费 / 投票治理统一价 / 链上手续费分账比例,都以本文件常量为唯一参考。
-//!
 //! ## 类交易费用模型(规则定义)
-//!
 //! | 类别 | 规则 | 实际收费 |
 //! |---|---|---|
 //! | 免费 | 不进费率公式 | 0 |
@@ -11,7 +9,6 @@
 //! | 链上交易费 | `max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)` | 0.1 元起 |
 //! | 链下交易费 | 清算模块按 `OFFCHAIN_*` 执行 | 不进入链上分账 |
 //! | 未识别 | 拒绝交易 | 不入块 |
-//!
 //! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`决定;新增 extrinsic 必须在该 match 中显式归类。
 
 use sp_runtime::Perbill;

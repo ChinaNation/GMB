@@ -875,16 +875,6 @@ class _InstitutionMultisigCreatePageState
     return buf.toString();
   }
 
-  String _formatFenAsGmb(BigInt fen) {
-    final yuan = fen ~/ BigInt.from(100);
-    final remainder = (fen % BigInt.from(100)).toInt().abs();
-    final intPart = yuan.toString().replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
-        );
-    return '$intPart.${remainder.toString().padLeft(2, '0')} GMB';
-  }
-
   List<int> _hexDecode(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     final result = List<int>.filled(h.length ~/ 2, 0);

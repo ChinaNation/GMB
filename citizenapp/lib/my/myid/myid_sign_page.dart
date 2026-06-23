@@ -13,8 +13,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:citizenapp/qr/bodies/sign_response_body.dart';
-import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -80,21 +78,12 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
         payloadBytes,
       );
 
-      // 构造 sign_response envelope
+      // 统一通过 QrSigner 构造 sign_response,避免页面私自拼接二维码结构。
       final sigHex =
           '0x${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final responseEnvelope = QrEnvelope<SignResponseBody>(
-        kind: QrKind.signResponse,
-        id: request.id,
-        issuedAt: now,
-        expiresAt: now + 120,
-        body: SignResponseBody.fromHex(
-          pubkeyHex: request.body.pubkeyHex,
-          signatureHex: sigHex,
-        ),
-      );
-      final json = responseEnvelope.toRawJson();
+      final responseEnvelope =
+          qrSigner.buildResponse(request: request, signatureHex: sigHex);
+      final json = qrSigner.encodeResponse(responseEnvelope);
 
       if (!mounted) return;
       setState(() {

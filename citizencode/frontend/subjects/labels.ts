@@ -115,6 +115,10 @@ export const INSTITUTION_CODE_LABEL: Record<string, string> = {
   TCOM: '镇商贸科',
   TENR: '镇能源科',
   TTRN: '镇交通科',
+  TPOL: '镇公安科',
+  TSLF: '镇自治委',
+  TSUP: '镇监察院',
+  TJUD: '镇司法院',
   SFGT: '个体经营',
   SFGP: '无限合伙',
   SFLP: '有限合伙',
@@ -124,8 +128,10 @@ export const INSTITUTION_CODE_LABEL: Record<string, string> = {
   SFAS: '注册协会',
   GUN: '公立大学',
   SUN: '私立大学',
+  JUN: '教会大学',
   GSCH: '公立学校',
   SFSC: '私立学校',
+  JSCH: '教会学校',
   CTZN: '公民人',
   NATP: '自然人',
   SMTP: '智能人',
@@ -329,8 +335,10 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
 export const EDUCATION_INSTITUTION_CODE_LABEL: Record<string, string> = {
   GUN: '公立大学',
   SUN: '私立大学',
+  JUN: '教会大学',
   GSCH: '公立学校',
   SFSC: '私立学校',
+  JSCH: '教会学校',
   UNIN: '分校(非法人组织)',
 };
 

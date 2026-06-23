@@ -88,7 +88,8 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
               (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{c.city_name}</div>
+            {/* 市名为空(字典/缓存未同步)时回退 code,绝不渲染空白细卡 */}
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{c.city_name || c.code}</div>
           </div>
         ))}
       </div>

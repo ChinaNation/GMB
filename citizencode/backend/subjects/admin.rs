@@ -451,17 +451,17 @@ pub(crate) async fn search_parent_institutions(
         // 非学校私法人 → 全国,非学校公法人 → 按机构码行政层级。$4 = parent_property 过滤(S/G)。
         // 私法人由机构码集合判定,公法人由 category 判定,层级由 institution_code 集合判定。
         let candidate_clause = "(
-                  (s.institution_code IN ('GUN', 'SUN', 'GSCH', 'SFSC')
+                  (s.institution_code IN ('GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH')
                    AND s.province_name = $2 AND s.city_name = $3
-                   AND ((s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'SFSC')
+                   AND ((s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'JUN', 'SFSC', 'JSCH')
                          AND $4::text IS DISTINCT FROM 'G')
                         OR (s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')
                             AND $4::text IS DISTINCT FROM 'S')))
-                  OR (s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'SFSC')
-                      AND s.institution_code NOT IN ('GUN', 'SUN', 'GSCH', 'SFSC')
+                  OR (s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'JUN', 'SFSC', 'JSCH')
+                      AND s.institution_code NOT IN ('GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH')
                       AND $4::text IS DISTINCT FROM 'G')
                   OR (s.category IN ('GOV_INSTITUTION', 'PUBLIC_SECURITY')
-                      AND s.institution_code NOT IN ('GUN', 'SUN', 'GSCH', 'SFSC')
+                      AND s.institution_code NOT IN ('GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH')
                       AND $4::text IS DISTINCT FROM 'S'
                       AND (
                            s.institution_code IN (
@@ -475,7 +475,8 @@ pub(crate) async fn search_parent_institutions(
                            OR (s.institution_code IN (
                                    'CGOV','CLEG','CSUP','CJUD','CEDU','CSLF','CDEF','CHSC','CCWF',
                                    'CHUD','CAGR','CCOM','CFIN','CENR','CTRN','CREG','CPOL',
-                                   'TGOV','TCWF','THUD','TAGR','TFIN','TDEF','THSC','TCOM','TENR','TTRN')
+                                   'TGOV','TCWF','THUD','TAGR','TFIN','TDEF','THSC','TCOM','TENR','TTRN',
+                                   'TPOL','TSLF','TSUP','TJUD')
                                AND s.province_name = $2 AND s.city_name = $3)
                       ))
              )";

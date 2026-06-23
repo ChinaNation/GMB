@@ -1,7 +1,7 @@
-//! 机构码(CID institution_code)链上表示与治理分类 = institution_code.rs
+//! 机构码(CID institution_code)链上表示与治理分类 = code.rs(与 backend `number/code.rs` 对称)
 //!
 //! 中文注释(铁律):
-//! 机构分类全链唯一真源是 CID 号里的**机构码**(backend `number/code.rs` 同一套 86 码)。
+//! 机构分类全链唯一真源是 CID 号里的**机构码**(backend `number/code.rs` 同一套 92 码)。
 //! 链上治理统一用本文件的 `InstitutionCode`([u8; 4] 原始码字节)作机构分类。
 //! 所有"用哪种阈值 / 是不是个人多签 / 是不是
 //! 机构账户"的治理策略都由本文件的纯函数从机构码派生,绝不另立第二套分类。
@@ -66,30 +66,33 @@ pub const PRB: InstitutionCode = *b"PRB\0";
 pub const PMUL: InstitutionCode = *b"PMUL";
 
 // ──────────────────────────────────────────────────────────────────
-// 机构码分类清单(与 backend number/code.rs 同源的 86 码)
+// 机构码分类清单(与 backend number/code.rs 同源的 92 码,A-I 九组)
 // ──────────────────────────────────────────────────────────────────
 
-/// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 10 + 公立大学/学校 2)= 72。
+/// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 14 + 公立大学/学校 2)= 76。
 const PUBLIC_LEGAL_CODES: &[InstitutionCode] = &[
     // A 国家级单体(26)
     *b"PRS\0", *b"FSC\0", *b"FIB\0", *b"FSS\0", *b"FPR\0", *b"FRG\0", *b"MFA\0", *b"MDF\0",
     *b"MHS\0", *b"MCW\0", *b"MHU\0", *b"MAG\0", *b"MCM\0", *b"MFT\0", *b"MEN\0", *b"MTR\0",
     *b"NLG\0", *b"NJD\0", *b"NSP\0", *b"FAC\0", *b"FAU\0", *b"FIV\0", *b"NED\0", *b"NRC\0",
-    *b"NSN\0", *b"NRP\0", // B 省级类型(17)
+    *b"NSN\0", *b"NRP\0", 
+    // B 省级类型(17)
     *b"PGV\0", *b"PLG\0", *b"PJD\0", *b"PSP\0", *b"PRC\0", *b"PRB\0", *b"PDF\0", *b"PHS\0",
     *b"PCW\0", *b"PHU\0", *b"PAG\0", *b"PCM\0", *b"PFT\0", *b"PEN\0", *b"PTR\0", *b"PSN\0",
-    *b"PRP\0", // C 市级类型(17)
+    *b"PRP\0", 
+    // C 市级类型(17)
     *b"CGOV", *b"CLEG", *b"CSUP", *b"CJUD", *b"CEDU", *b"CSLF", *b"CDEF", *b"CHSC", *b"CCWF",
     *b"CHUD", *b"CAGR", *b"CCOM", *b"CFIN", *b"CENR", *b"CTRN", *b"CREG", *b"CPOL",
-    // D 镇级类型(10)
+    // D 镇级类型(14)
     *b"TGOV", *b"TCWF", *b"THUD", *b"TAGR", *b"TFIN", *b"TDEF", *b"THSC", *b"TCOM", *b"TENR",
-    *b"TTRN", // 公立大学 / 公立学校
+    *b"TTRN", *b"TPOL", *b"TSLF", *b"TSUP", *b"TJUD",
+    // F 教育学校 公立大学 / 公立学校
     *b"GUN\0", *b"GSCH",
 ];
 
-/// 私权法人机构码(有限合伙/股权/股份/公益/注册协会 + 私立大学/学校)= 7。
+/// 私权法人机构码(有限合伙/股权/股份/公益/注册协会 + 私立/教会大学/学校)= 9。
 const PRIVATE_LEGAL_CODES: &[InstitutionCode] = &[
-    *b"SFLP", *b"SFGQ", *b"SFGF", *b"SFGY", *b"SFAS", *b"SUN\0", *b"SFSC",
+    *b"SFLP", *b"SFGQ", *b"SFGF", *b"SFGY", *b"SFAS", *b"SUN\0", *b"JUN\0", *b"SFSC", *b"JSCH",
 ];
 
 /// 非法人机构码(个体经营/无限合伙/非法人组织)= 3。
@@ -97,6 +100,36 @@ const UNINCORPORATED_CODES: &[InstitutionCode] = &[*b"SFGT", *b"SFGP", *b"UNIN"]
 
 /// 个人主体机构码(公民人/自然人/智能人)= 3。
 const PERSON_CODES: &[InstitutionCode] = &[*b"CTZN", *b"NATP", *b"SMTP"];
+
+/// 全部 92 个机构码,按 A-I 九组排列(与 backend `number/code.rs` 的
+/// `InstitutionCode::ALL` 逐一对应、同序)。链上 `[u8; 4]`,3 字符码右补 `0`。
+pub const ALL_CODES: [InstitutionCode; 92] = [
+    // A 国家级单体(26,3 位)
+    *b"PRS\0", *b"FSC\0", *b"FIB\0", *b"FSS\0", *b"FPR\0", *b"FRG\0", *b"MFA\0", *b"MDF\0",
+    *b"MHS\0", *b"MCW\0", *b"MHU\0", *b"MAG\0", *b"MCM\0", *b"MFT\0", *b"MEN\0", *b"MTR\0",
+    *b"NLG\0", *b"NJD\0", *b"NSP\0", *b"FAC\0", *b"FAU\0", *b"FIV\0", *b"NED\0", *b"NRC\0",
+    *b"NSN\0", *b"NRP\0",
+    // B 省级类型(17,3 位)
+    *b"PGV\0", *b"PLG\0", *b"PJD\0", *b"PSP\0", *b"PRC\0", *b"PRB\0", *b"PDF\0", *b"PHS\0",
+    *b"PCW\0", *b"PHU\0", *b"PAG\0", *b"PCM\0", *b"PFT\0", *b"PEN\0", *b"PTR\0", *b"PSN\0",
+    *b"PRP\0",
+    // C 市级类型(17,4 位)
+    *b"CGOV", *b"CLEG", *b"CSUP", *b"CJUD", *b"CEDU", *b"CSLF", *b"CDEF", *b"CHSC", *b"CCWF",
+    *b"CHUD", *b"CAGR", *b"CCOM", *b"CFIN", *b"CENR", *b"CTRN", *b"CREG", *b"CPOL",
+    // D 镇级类型(14,4 位)
+    *b"TGOV", *b"TCWF", *b"THUD", *b"TAGR", *b"TFIN", *b"TDEF", *b"THSC", *b"TCOM", *b"TENR",
+    *b"TTRN", *b"TPOL", *b"TSLF", *b"TSUP", *b"TJUD",
+    // E 私权机构(7,4 位)
+    *b"SFGT", *b"SFGP", *b"SFLP", *b"SFGQ", *b"SFGF", *b"SFGY", *b"SFAS",
+    // F 教育学校(6:公私教大学 GUN/SUN/JUN=3 位 / 公私教中小初学 GSCH/SFSC/JSCH=4 位)
+    *b"GUN\0", *b"SUN\0", *b"JUN\0", *b"GSCH", *b"SFSC", *b"JSCH",
+    // G 个人主体(3,4 位)
+    *b"CTZN", *b"NATP", *b"SMTP",
+    // H 非法人组织(1,4 位)
+    *b"UNIN",
+    // I 个人多签(1,4 位,不发号)
+    *b"PMUL",
+];
 
 // ──────────────────────────────────────────────────────────────────
 // 治理策略派生(纯函数,链上唯一分类来源)
@@ -195,11 +228,35 @@ mod tests {
     }
 
     #[test]
-    fn public_legal_table_has_72_codes() {
-        assert_eq!(PUBLIC_LEGAL_CODES.len(), 72);
-        assert_eq!(PRIVATE_LEGAL_CODES.len(), 7);
+    fn public_legal_table_has_76_codes() {
+        assert_eq!(PUBLIC_LEGAL_CODES.len(), 76);
+        assert_eq!(PRIVATE_LEGAL_CODES.len(), 9);
         assert_eq!(UNINCORPORATED_CODES.len(), 3);
         assert_eq!(PERSON_CODES.len(), 3);
+    }
+
+    #[test]
+    fn all_codes_has_92_unique() {
+        assert_eq!(ALL_CODES.len(), 92);
+        // no_std 无 set:O(n²) 唯一性校验。
+        for i in 0..ALL_CODES.len() {
+            for j in (i + 1)..ALL_CODES.len() {
+                assert_ne!(ALL_CODES[i], ALL_CODES[j], "duplicate at {i},{j}");
+            }
+        }
+    }
+
+    #[test]
+    fn all_codes_matches_governance_buckets() {
+        // A-I 九组主表的每个码必须恰好落入一个治理桶(公权/私权/非法人/个人/个人多签)。
+        for c in ALL_CODES {
+            let hits = u8::from(PUBLIC_LEGAL_CODES.contains(&c))
+                + u8::from(PRIVATE_LEGAL_CODES.contains(&c))
+                + u8::from(UNINCORPORATED_CODES.contains(&c))
+                + u8::from(PERSON_CODES.contains(&c))
+                + u8::from(c == PMUL);
+            assert_eq!(hits, 1, "{c:?} 必须恰好落入一个治理桶");
+        }
     }
 
     #[test]

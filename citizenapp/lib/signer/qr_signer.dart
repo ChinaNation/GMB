@@ -79,6 +79,24 @@ class QrSigner {
 
   String encodeResponse(SignResponseEnvelope response) => response.toRawJson();
 
+  /// 构造 sign_response envelope。签名响应只携带 u/s,请求绑定由 id 完成。
+  SignResponseEnvelope buildResponse({
+    required SignRequestEnvelope request,
+    required String signatureHex,
+  }) {
+    _validateHexField(signatureHex, 'signature');
+    return QrEnvelope<SignResponseBody>(
+      kind: QrKind.signResponse,
+      id: request.id,
+      issuedAt: request.issuedAt,
+      expiresAt: request.expiresAt,
+      body: SignResponseBody.fromHex(
+        pubkeyHex: request.body.pubkeyHex,
+        signatureHex: signatureHex,
+      ),
+    );
+  }
+
   SignRequestEnvelope parseRequest(String raw) {
     QrEnvelope<QrBody> env;
     try {

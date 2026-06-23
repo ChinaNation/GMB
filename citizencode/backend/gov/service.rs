@@ -305,6 +305,26 @@ const TOWN_TEMPLATES: &[OfficialOrgTemplate] = &[
         suffix: "财税科",
         full_suffix: "财政与税务科",
     },
+    OfficialOrgTemplate {
+        institution_code: "TPOL",
+        suffix: "公安科",
+        full_suffix: "公安科",
+    },
+    OfficialOrgTemplate {
+        institution_code: "TSLF",
+        suffix: "自治委",
+        full_suffix: "公民自治委员会",
+    },
+    OfficialOrgTemplate {
+        institution_code: "TSUP",
+        suffix: "监察院",
+        full_suffix: "监察院",
+    },
+    OfficialOrgTemplate {
+        institution_code: "TJUD",
+        suffix: "司法院",
+        full_suffix: "司法院",
+    },
 ];
 
 impl OfficialReconcileScope {

@@ -9,10 +9,10 @@
 //!   - 4 字符码:`码(4) + M1(1, 数字=盈利 mod-10 / 字母=非盈利 mod-26)`
 //! - 盈利属性由 `profit_policy()` 决定;可变实体(SFAS/SMTP/UNIN)按实例/继承父级。
 //!
-//! 码表(86 个):
+//! 码表(92 个):
 //! A 国家级单体(26,3 位)    B 省级类型(17,3 位)   C 市级类型(17,4 位)
-//! D 镇级类型(10,4 位)     E 私权机构(7,4 位)    E2 教育学校(4:大学2=3位/中小初学2=4位)
-//! F 个人主体(3,4 位)      G 非法人组织(1,4 位)  H 个人多签(1,4 位,不发号)
+//! D 镇级类型(14,4 位)     E 私权机构(7,4 位)    F 教育学校(6:大学3=3位/中小初学3=4位)
+//! G 个人主体(3,4 位)      H 非法人组织(1,4 位)  I 个人多签(1,4 位,不发号)
 
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ pub enum AdminLevel {
     Province,
     /// 市级(17 个 C 组市级类型)。
     City,
-    /// 镇级(10 个 D 组镇级类型)。
+    /// 镇级(14 个 D 组镇级类型)。
     Town,
 }
 
@@ -107,7 +107,7 @@ pub enum InstitutionCode {
     Ctrn, // 市交通局
     Creg, // 市注册局
     Cpol, // 市公安局
-    // D 镇级类型(10,4 位,非盈利;部门是否启用由市注册局管理员运行期增删)
+    // D 镇级类型(14,4 位,非盈利;部门是否启用由市注册局管理员运行期增删)
     Tgov, // 镇政府
     Tcwf, // 镇民生科
     Thud, // 镇住建科
@@ -118,6 +118,10 @@ pub enum InstitutionCode {
     Tcom, // 镇商贸科
     Tenr, // 镇能源科
     Ttrn, // 镇交通科
+    Tpol, // 镇公安科
+    Tslf, // 镇自治委
+    Tsup, // 镇监察院
+    Tjud, // 镇司法院
     // E 私权机构(7,4 位)
     Sfgt, // 个体经营(盈利,非法人)
     Sfgp, // 无限合伙(盈利,非法人)
@@ -126,18 +130,20 @@ pub enum InstitutionCode {
     Sfgf, // 股份公司(盈利,私法人)
     Sfgy, // 公益组织(非盈利,私法人)
     Sfas, // 注册协会(可盈利可不,私法人)
-    // E2 教育学校(公私大学=3 位 GUN/SUN / 公私中小学=4 位;委员会 NED/CEDU 不是学校)
+    // F 教育学校(公私大学=3 位 GUN/SUN / 公私中小初学=4 位;教育委员会 NED/CEDU 不是学校)
     Gun,  // 公立大学(公法人,非盈利,3 位)
     Sun,  // 私立大学(私法人,可盈利可不,3 位;盈利位 0/1 按实例)
+    Jun,  // 教会大学(私法人,可盈利可不,3 位;盈利位 0/1 按实例)
     Gsch, // 公立学校(公法人,非盈利,4 位,初学/小学/中学)
     Sfsc, // 私立学校(私法人,可盈利可不,4 位,初学/小学/中学)
-    // F 个人主体(3,4 位)
+    Jsch, // 教会学校(私法人,可盈利可不,4 位,初学/小学/中学)
+    // G 个人主体(3,4 位)
     Ctzn, // 公民人(盈利)
     Natp, // 自然人(盈利)
     Smtp, // 智能人(可盈利可不)
-    // G 非法人组织(1,4 位)
+    // H 非法人组织(1,4 位)
     Unin, // 非法人组织(挂父级法人,盈利继承父级)
-    // H 个人多签(1,4 位,不发号,仅链上/后端分类常量)
+    // I 个人多签(1,4 位,不发号,仅链上/后端分类常量)
     Pmul,
 }
 
@@ -215,6 +221,10 @@ impl InstitutionCode {
             Self::Tcom => "TCOM",
             Self::Tenr => "TENR",
             Self::Ttrn => "TTRN",
+            Self::Tpol => "TPOL",
+            Self::Tslf => "TSLF",
+            Self::Tsup => "TSUP",
+            Self::Tjud => "TJUD",
             Self::Sfgt => "SFGT",
             Self::Sfgp => "SFGP",
             Self::Sflp => "SFLP",
@@ -224,8 +234,10 @@ impl InstitutionCode {
             Self::Sfas => "SFAS",
             Self::Gun => "GUN",
             Self::Sun => "SUN",
+            Self::Jun => "JUN",
             Self::Gsch => "GSCH",
             Self::Sfsc => "SFSC",
+            Self::Jsch => "JSCH",
             Self::Ctzn => "CTZN",
             Self::Natp => "NATP",
             Self::Smtp => "SMTP",
@@ -307,6 +319,10 @@ impl InstitutionCode {
             Self::Tcom => "镇商贸科",
             Self::Tenr => "镇能源科",
             Self::Ttrn => "镇交通科",
+            Self::Tpol => "镇公安科",
+            Self::Tslf => "镇自治委",
+            Self::Tsup => "镇监察院",
+            Self::Tjud => "镇司法院",
             Self::Sfgt => "个体经营",
             Self::Sfgp => "无限合伙",
             Self::Sflp => "有限合伙",
@@ -316,8 +332,10 @@ impl InstitutionCode {
             Self::Sfas => "注册协会",
             Self::Gun => "公立大学",
             Self::Sun => "私立大学",
+            Self::Jun => "教会大学",
             Self::Gsch => "公立学校",
             Self::Sfsc => "私立学校",
+            Self::Jsch => "教会学校",
             Self::Ctzn => "公民人",
             Self::Natp => "自然人",
             Self::Smtp => "智能人",
@@ -327,7 +345,7 @@ impl InstitutionCode {
     }
 
     /// 全部 86 个机构码(用于 from_str 反查、前端枚举、生成器白名单)。
-    pub const ALL: [InstitutionCode; 86] = [
+    pub const ALL: [InstitutionCode; 92] = [
         Self::Prs,
         Self::Fsc,
         Self::Fib,
@@ -398,6 +416,10 @@ impl InstitutionCode {
         Self::Tcom,
         Self::Tenr,
         Self::Ttrn,
+        Self::Tpol,
+        Self::Tslf,
+        Self::Tsup,
+        Self::Tjud,
         Self::Sfgt,
         Self::Sfgp,
         Self::Sflp,
@@ -407,8 +429,10 @@ impl InstitutionCode {
         Self::Sfas,
         Self::Gun,
         Self::Sun,
+        Self::Jun,
         Self::Gsch,
         Self::Sfsc,
+        Self::Jsch,
         Self::Ctzn,
         Self::Natp,
         Self::Smtp,
@@ -448,7 +472,9 @@ impl InstitutionCode {
             // 公益组织:固定非盈利
             Self::Sfgy => ProfitPolicy::NonProfit,
             // 注册协会 / 智能人 / 私立大学 / 私立学校:按实例可变
-            Self::Sfas | Self::Smtp | Self::Sun | Self::Sfsc => ProfitPolicy::Variable,
+            Self::Sfas | Self::Smtp | Self::Sun | Self::Sfsc | Self::Jun | Self::Jsch => {
+                ProfitPolicy::Variable
+            }
             // 非法人组织:继承父级法人
             Self::Unin => ProfitPolicy::InheritParent,
             // 其余(国家/省部/市镇公权、个人多签):固定非盈利
@@ -470,7 +496,15 @@ impl InstitutionCode {
     pub fn is_private_legal(self) -> bool {
         matches!(
             self,
-            Self::Sflp | Self::Sfgq | Self::Sfgf | Self::Sfgy | Self::Sfas | Self::Sun | Self::Sfsc
+            Self::Sflp
+                | Self::Sfgq
+                | Self::Sfgf
+                | Self::Sfgy
+                | Self::Sfas
+                | Self::Sun
+                | Self::Sfsc
+                | Self::Jun
+                | Self::Jsch
         )
     }
 
@@ -485,16 +519,19 @@ impl InstitutionCode {
     /// 是否教育机构(公私大学/学校)。教育机构走通用注册路径、免 private_type,
     /// 且公权教育机构不受手动公权机构类型限制(走教育流程)。
     pub fn is_education_institution(self) -> bool {
-        matches!(self, Self::Gun | Self::Sun | Self::Gsch | Self::Sfsc)
+        matches!(
+            self,
+            Self::Gun | Self::Sun | Self::Jun | Self::Gsch | Self::Sfsc | Self::Jsch
+        )
     }
 
     /// 是否基础教育学校(初学/小学/中学),需要 education_type 级别字段。大学不需要。
     pub fn requires_education_level(self) -> bool {
-        matches!(self, Self::Gsch | Self::Sfsc)
+        matches!(self, Self::Gsch | Self::Sfsc | Self::Jsch)
     }
 
     /// 机构码所属行政层级。
-    /// 仅 4 组公权机构码(国家 26 / 省 17 / 市 17 / 镇 10)有层级;
+    /// 仅 4 组公权机构码(国家 26 / 省 17 / 市 17 / 镇 14)有层级;
     /// 私权 / 教育 / 个人 / 非法人 / 个人多签返回 None。
     pub fn admin_level(self) -> Option<AdminLevel> {
         match self {
@@ -561,7 +598,7 @@ impl InstitutionCode {
             | Self::Ctrn
             | Self::Creg
             | Self::Cpol => Some(AdminLevel::City),
-            // D 镇级类型(10)
+            // D 镇级类型(14)
             Self::Tgov
             | Self::Tcwf
             | Self::Thud
@@ -571,7 +608,11 @@ impl InstitutionCode {
             | Self::Thsc
             | Self::Tcom
             | Self::Tenr
-            | Self::Ttrn => Some(AdminLevel::Town),
+            | Self::Ttrn
+            | Self::Tpol
+            | Self::Tslf
+            | Self::Tsup
+            | Self::Tjud => Some(AdminLevel::Town),
             // 其余(私权 / 教育 / 个人 / 非法人 / 个人多签)无行政层级
             _ => None,
         }
@@ -609,7 +650,7 @@ mod tests {
                 code.as_code()
             );
         }
-        assert_eq!(seen.len(), 86);
+        assert_eq!(seen.len(), 92);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use primitives::institution_code::{
+use primitives::code::{
     fixed_governance_pass_threshold, is_registered_multisig_code, InstitutionCode,
 };
 
@@ -53,7 +53,7 @@ pub fn normalize_admins(admins: &[String]) -> Result<Vec<String>, String> {
 mod tests {
     use super::*;
     use primitives::count_const::NRC_INTERNAL_THRESHOLD;
-    use primitives::institution_code::{code_bytes, NRC};
+    use primitives::code::{code_bytes, NRC};
 
     #[test]
     fn builds_admin_set_change_call_prefix() {

@@ -3,8 +3,10 @@
 //! 投票基础设施模块，统一承载三类投票流程：
 //! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票，赞成 ≥ 阈值提前通过，
 //!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
-//! - **联合机构投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票，
-//!   105 票全票通过直接执行，任一机构反对立即进入公民投票，30 天超时进入公民投票。
+
+//! - **联合投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票，
+//!   105 票全票通过直接执行，任一机构反对立即进入联合公投，30 天超时进入联合公投。
+
 //! - **公民投票**（CITIZEN）：CID 持有者按 >50% 严格多数投票，
 //!   赞成 > 50% 提前通过，反对 ≥ 50% 提前否决，30 天超时按最终票数判定。
 //!
@@ -179,7 +181,7 @@ pub mod pallet {
 
     /// VotingEngine 主 pallet on-chain storage 版本。
     ///
-    /// 全新创世即 v1 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
+    /// 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
     /// ProposalsByCode/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
     pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 

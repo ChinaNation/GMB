@@ -775,19 +775,15 @@ fn build_citizen_bind_sign_request(
     _voting_eligible: bool,
     _mode: &str,
 ) -> String {
-    let sign_request = serde_json::json!({
-        "p": crate::core::qr::QR_V1,
-        "k": 1,
-        "i": challenge_id,
-        "e": expires_at.timestamp(),
-        "b": {
-            "a": crate::core::qr::ACTION_CITIZEN_BIND,
-            "g": 1,
-            "u": crate::core::qr::pubkey_hex_to_b64(wallet_pubkey).unwrap_or_default(),
-            "d": crate::core::qr::bytes_to_b64(challenge_text.as_bytes()),
-        }
-    });
-    serde_json::to_string(&sign_request).unwrap_or_default()
+    crate::core::qr::build_sign_request(
+        challenge_id,
+        _issued_at.timestamp(),
+        expires_at.timestamp(),
+        wallet_pubkey,
+        challenge_text,
+        crate::core::qr::ACTION_CITIZEN_BIND,
+    )
+    .unwrap_or_default()
 }
 
 fn generate_unique_citizen_cid(
