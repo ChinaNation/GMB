@@ -52,10 +52,9 @@ class OnchainRpc {
     );
   }
 
-  // 2026-04-23 整改:`findTxInRecentBlocks` 已删除。
-  // 原实现逐块调 `fetchBlockExtrinsicHashes` → `getBlockExtrinsics`,
-  // 触发 substrate block-request 反滥用机制(MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2)
-  // 把轻节点 peer ban 掉。钱包交易流水改由区块事件监听写入本地记录。
+  // 钱包交易流水由区块事件监听写入本地记录,不逐块拉 extrinsic 搜索
+  // (逐块拉 body 会触发 substrate block-request 反滥用机制
+  // MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2 把轻节点 peer ban 掉)。
 
   // ──── 手续费估算 ────
 

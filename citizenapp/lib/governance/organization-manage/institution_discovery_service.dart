@@ -3,7 +3,7 @@
 // 只负责"后处理":从共享的 AdminAccounts 单次扫描结果(AdminAccountsScanService)
 // 里筛出机构多签(kind=InstitutionAccount,org ∈ {PUP,OTH},且管理员含本地钱包),
 // 反查 CID 归属后 upsert 到 Isar。扫描、节流、本地钱包读取统一收口在
-// `MultisigDiscoveryCoordinator`,本服务不再各自扫链。
+// `MultisigDiscoveryCoordinator`,本服务只做后处理。
 //
 // 个人多签后处理见 lib/governance/personal-manage/personal_manage_discovery_service.dart。
 
@@ -73,7 +73,7 @@ class InstitutionDiscoveryService {
       kind: AdminAccountStorageCodec.kindInstitutionAccount,
     );
 
-    // 批量反查 CID 归属(AccountRegisteredCid 精确整键),取代循环内逐条(ADR-018 R2)。
+    // 批量反查 CID 归属(AccountRegisteredCid 精确整键)。
     Map<String, RegisteredInstitutionRef?> refs;
     try {
       refs = await _manage.fetchRegisteredInstitutionRefsBatch(

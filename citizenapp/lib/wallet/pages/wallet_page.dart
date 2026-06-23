@@ -120,13 +120,12 @@ String? extractColdWalletImportAddress(String raw) {
   }
 }
 
-/// v6 改版（2026-04-24）：
-/// - 卡片样式抄 citizenwallet/lib/ui/home_page.dart 的钱包卡片，单列横向布局；
-/// - 无 active 视觉，点击卡片直接进详情(已删「当前」小标签)；
+/// 钱包列表页：
+/// - 卡片单列横向布局，点击卡片直接进详情；
 /// - 钱包图标按冷热配色：热=墨绿主色 / 冷=蓝(离线签名设备调性)；
-/// - 三点菜单只保留「重命名 / 删除钱包」2 项，去掉 citizenwallet 端的「钱包详情」；
-/// - 列表布局从 GridView 2 列改为 ReorderableListView 单列，长按拖拽排序；
-/// - 删除入口从 Dismissible 滑动改为三点菜单「删除钱包」+ 二次确认。
+/// - 三点菜单保留「重命名 / 删除钱包」2 项；
+/// - ReorderableListView 单列，长按拖拽排序；
+/// - 删除入口走三点菜单「删除钱包」+ 二次确认。
 class _MyWalletPageState extends State<MyWalletPage> {
   final WalletManager _walletService = WalletManager();
   final ChainRpc _chainRpc = ChainRpc();
@@ -1068,7 +1067,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     );
   }
 
-  /// 交易记录区块:标题跳转 + 最近 5 条列表。从原 build 方法拆出,便于阅读。
+  /// 交易记录区块:标题跳转 + 最近 5 条列表。
   List<Widget> _buildTransactionHistorySection() {
     return [
       InkWell(

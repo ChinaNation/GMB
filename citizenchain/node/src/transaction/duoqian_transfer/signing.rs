@@ -227,7 +227,7 @@ pub(crate) fn build_transfer_call_data(
         Vec::with_capacity(2 + 4 + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len());
     call_data.push(19u8);
     call_data.push(0u8);
-    // 机构码 [u8;4](取代旧 org_type 1 字节,与 runtime propose_transfer 线格式一致)。
+    // 机构码 [u8;4](与 runtime propose_transfer 线格式一致)。
     call_data.extend_from_slice(institution_code);
     call_data.extend_from_slice(&institution_account);
     call_data.extend_from_slice(beneficiary_bytes);

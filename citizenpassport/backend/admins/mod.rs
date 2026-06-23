@@ -15,9 +15,9 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    authz,
+    archive, authz,
     common::{err, ok, ss58, write_audit, ApiError, ApiResponse, Archive},
-    dangan, AppState,
+    AppState,
 };
 
 #[derive(Deserialize)]
@@ -405,7 +405,7 @@ async fn update_archive_citizen_status(
     Json(req): Json<UpdateCitizenStatusRequest>,
 ) -> Result<Json<ApiResponse<UpdateCitizenStatusData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_archive_admin(&state, &headers).await?;
-    dangan::validate_citizen_status(&req.citizen_status)?;
+    archive::validate_citizen_status(&req.citizen_status)?;
 
     let row = sqlx::query(
         "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(address_unit_id,'') AS address_unit_id, COALESCE(address_unit_name_snapshot,'') AS address_unit_name_snapshot, COALESCE(address_detail,'') AS address_detail, COALESCE(address_full_snapshot,'') AS address_full_snapshot, birth_province_code, birth_city_code, birth_town_code, COALESCE(election_scope_level,'PROVINCE') AS election_scope_level, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
@@ -447,7 +447,7 @@ async fn update_archive_citizen_status(
         birth_town_code: row.try_get("birth_town_code").unwrap_or_default(),
         election_scope_level: row
             .try_get("election_scope_level")
-            .unwrap_or_else(|_| dangan::ELECTION_SCOPE_PROVINCE.to_string()),
+            .unwrap_or_else(|_| archive::ELECTION_SCOPE_PROVINCE.to_string()),
         status: row.get("status"),
         citizen_status: row.get("citizen_status"),
         voting_eligible: row.try_get("voting_eligible").unwrap_or(true),
@@ -479,7 +479,7 @@ async fn update_archive_citizen_status(
     let birth_date = NaiveDate::parse_from_str(&archive.birth_date, "%Y-%m-%d")
         .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"))?;
     archive.voting_eligible =
-        dangan::resolve_voting_eligible(&archive.citizen_status, birth_date, None, true, now)?;
+        archive::resolve_voting_eligible(&archive.citizen_status, birth_date, None, true, now)?;
     archive.citizen_status_updated_at = now;
     archive.updated_at = archive.citizen_status_updated_at;
     archive.archive_qr_payload = String::new();
@@ -499,7 +499,7 @@ async fn update_archive_citizen_status(
                 "update archive failed",
             )
         })?;
-    dangan::clear_archive_qr_payload(&state, &archive_id, archive.updated_at).await?;
+    archive::clear_archive_qr_payload(&state, &archive_id, archive.updated_at).await?;
 
     write_audit(
         &state,

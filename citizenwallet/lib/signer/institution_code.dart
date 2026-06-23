@@ -4,9 +4,9 @@ import 'dart:typed_data';
 /// 机构码(CID institution_code)冷钱包端表示与治理分类 = institution_code.dart
 ///
 /// 中文注释(铁律):
-/// 本文件逐字镜像链端 `primitives::institution_code`(同一套 86 码)。链上治理不再使用
-/// 任何独立的 ORG_xx 单字节数字标签;链上已全部替换为 4 字节 `institution_code`([u8;4]
-/// 原始码字节,3 字符码右补 `0`)。冷钱包离线解码用本文件的纯函数从机构码派生治理分类
+/// 本文件逐字镜像链端 `primitives::institution_code`(同一套 86 码)。链上治理用
+/// 4 字节 `institution_code`([u8;4] 原始码字节,3 字符码右补 `0`)。
+/// 冷钱包离线解码用本文件的纯函数从机构码派生治理分类
 /// (是不是固定治理档 / 个人多签 / 机构账户),绝不另立第二套分类。
 ///
 /// 字节表示:机构码是 3~4 个大写 ASCII 字符,统一用 4 字节,3 字符码右补 `0`:
@@ -111,7 +111,7 @@ class InstitutionCode {
 
   /// 是否为机构账户机构码(公权/私权/非法人法人实体,经 organization-manage 注册多签)。
   ///
-  /// 取代旧 `org∈{4,5}`(ORG_PUP/ORG_OTH)判定:个人/个人多签不算机构账户;
+  /// 个人/个人多签不算机构账户;
   /// 固定治理档(NRC/PRC/PRB)是 china 内建创世账户,走固定治理路径,也不算机构账户。
   static bool isInstitution(String code) {
     if (isFixedGovernance(code)) return false;

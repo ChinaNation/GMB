@@ -48,7 +48,7 @@ passport_no = province_code + crockford_base32_8(body_number) + check
 ## 5. 回收规则
 
 - 软删除就是注销，但软删除未满 100 年时，`archives` 行仍保留，档案号和护照号继续被唯一约束占用。
-- 满 100 年硬删除后，`dangan/lifecycle.rs` 将档案号和护照号成对写入 `archive_number_recycle_pool`。
+- 满 100 年硬删除后，`archive/lifecycle.rs` 将档案号和护照号成对写入 `archive_number_recycle_pool`。
 - 新建档案时，`number` 模块优先在同一事务内领取一对未使用的回收号码；没有可用回收号码时再生成新号码。
 - 回收池领取会写入 `used_at / used_by_archive_id`；事务回滚时领取状态同步回滚，号码仍保持可用。
 - 档案号和护照号必须成对领取，不允许只回收或只复用其中一个。
@@ -57,7 +57,7 @@ passport_no = province_code + crockford_base32_8(body_number) + check
 ## 6. 模块边界
 
 - `number` 只负责编号生成和校验字符计算。
-- `dangan` 负责档案创建流程、调用 `number`、写入数据库、ARCHIVE 载荷、签名、`geo_seal`、有效期规则，以及档案生命周期硬删除。
+- `archive` 负责档案创建流程、调用 `number`、写入数据库、ARCHIVE 载荷、签名、`geo_seal`、有效期规则，以及档案生命周期硬删除。
 - `initialize` 负责提供安装码解析得到的省市代码和 `install_secret`。
 
 ## 7. 测试覆盖

@@ -14,9 +14,6 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
-// 统一状态机整改:原业务自有投票/finalize 路径所依赖的
-// `sr25519::{Public, Signature}` / `Vec` / `BTreeSet` 已全部随投票统一入口
-// 改造下线,不再从此处导入。
 extern crate alloc;
 
 use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ACCOUNT};

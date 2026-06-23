@@ -609,7 +609,7 @@ class _GovernanceIconBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
       ),
       child: Center(
-        // 中文注释：省储会/省储行使用指定 SVG 图案；国储会继续使用原 Material 图标。
+        // 中文注释：省储会/省储行使用指定 SVG 图案；国储会使用 Material 图标。
         child: asset == null
             ? Icon(icon, size: iconSize, color: color)
             : SvgPicture.asset(

@@ -1,15 +1,13 @@
-//! ADR-024 账户派生金标向量导出/断言测试。
+//! 账户派生金标向量导出/断言测试。
 //!
 //! 唯一权威算法源 = `primitives::account_derive::AccountKind::derive`。本测试是
 //! 跨语言(Rust ↔ Dart)防漂移的金标兜底:
 //!
 //! - `ACCOUNT_DERIVE_UPDATE=1`:用 account_derive 重算每条向量的 address_hex 并写回
 //!   canonical fixture(`tests/fixtures/account_derive_vectors.json`)。
-//!   用于初次回填 InstitutionNamed / Personal 真值,以及 Tier 3(域 GMB)创世后刷新。
 //! - 默认(未设环境变量):读取 fixture,断言 account_derive 的派生结果逐字节 == fixture,
 //!   且 china_* 来源(Main/Fee/Stake/Anquan/He)必须 == china_*.rs 字面常量。
 //!
-//! 行为中性铁律:Tier 1/2 期间 fixture 的 address_hex 不得变化(地址不变)。
 //! CI 守卫脚本 `tools/sync_account_derive_vectors.sh` 跑 update + git diff --exit-code。
 
 use primitives::account_derive::AccountKind;

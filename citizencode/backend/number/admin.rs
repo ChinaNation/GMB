@@ -27,8 +27,8 @@ pub(crate) async fn admin_number_meta(
         code: 0,
         message: "ok".to_string(),
         data: AdminCidMetaOutput {
-            // 机构码选项由 InstitutionCode::ALL 单源派生(86 码,新版 T3/T4);
-            // 主体属性已由机构码派生,不再单列(K1 旧输入已删)。
+            // 机构码选项由 InstitutionCode::ALL 单源派生(86 码);
+            // 机构类别由机构码派生,不单列。
             institution_options: crate::number::InstitutionCode::ALL
                 .iter()
                 .map(|c| CidOptionItem {

@@ -371,8 +371,6 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 );
                 FeeChargeKind::OnchainAmount(value)
             }
-            // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 物理删除,机构走 propose_create_institution。
-            // call_index=3 (propose_create_personal) 已迁至 PersonalManage(B 阶段拆分,2026-05-06)。
             // 中文注释：PersonalManage 的 propose_create/propose_close 是治理提案交易，
             // 交易本身固定收 1 元；执行阶段的资金手续费由对应 pallet 内部按金额另行处理。
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
@@ -426,10 +424,9 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             RuntimeCall::CidSystem(_) => FeeChargeKind::VoteFlat,
             // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
             RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
-            // 业务治理 pallet 的 execute_xxx / cancel_failed_xxx wrapper 已于 2026-05-02
-            // (Phase 4) 物理删除,手动重试/取消统一收口至 votingengine::retry_passed_proposal /
-            // cancel_passed_proposal(已在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
-            // 业务 pallet 剩下的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
+            // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /
+            // cancel_passed_proposal(在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
+            // 业务 pallet 的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
             RuntimeCall::AdminsChange(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::RuntimeUpgrade(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::GrandpaKeyChange(_) => FeeChargeKind::VoteFlat,
@@ -444,7 +441,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 // 兜底:未来若新增非金额型管理 extrinsic 按投票统一价 1 元/次。
                 _ => FeeChargeKind::VoteFlat,
             },
-            // 清算行(L2)扫码支付清算:Step 2b-iv-b 清理后只剩新体系 Call。
+            // 清算行(L2)扫码支付清算。
             RuntimeCall::OffchainTransaction(ref offchain_call) => {
                 match offchain_call {
                     // L3 充值 / 提现:按金额计费(链上资金交易 0.1% 最低 0.1 元)
@@ -478,7 +475,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             //   InternalVote::cast / JointVote::cast_admin / JointVote::cast_referendum
             RuntimeCall::InternalVote(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::JointVote(_) => FeeChargeKind::VoteFlat,
-            // ADR-011 v3:OnchainIssuance 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
+            // OnchainIssuance 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
             // 全部按 VOTE_FLAT_FEE = 1 元/次,与 GMB 其他业务 pallet 的 propose_X 一致。
             // 1000 GMB 创建费走 onchain_issuance::fee::reserve_creation_deposit 内部 reserve(propose_issue 内部完成),
             // 与 RuntimeFeeKindClassifier 计费正交。
@@ -486,7 +483,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // pallet_assets 内核所有原生 extrinsic 已被 RuntimeCallFilter 拦在入口,
             // 永远到不了本路径;此分支仅供编译期 exhaustive 检查。
             RuntimeCall::Assets(_) => FeeChargeKind::Free,
-            // CitizenVote 当前是空骨架(无 extrinsic / 无 RuntimeCall 变体),Phase 3 业务接入后再补。
+            // CitizenVote 当前是空骨架(无 extrinsic / 无 RuntimeCall 变体)。
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
             //
             // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
@@ -504,8 +501,8 @@ impl onchain_transaction::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePay
         match call {
             // 清算行 V2 批次:链上 gas 由 institution_main 的费用账户直接承担。
             //
-            // Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**模型下,
-            // institution_main 现在 = 收款方清算行主账户。fee_account_of(institution_main)
+            // **收款方主导清算**模型下,
+            // institution_main = 收款方清算行主账户。fee_account_of(institution_main)
             // = 收款方清算行费用账户 = 同一账户既收清算手续费又付链上 gas,自给自足闭环。
             //
             // 提交者(origin)是该机构的某个激活管理员(已在节点端解密私钥,自动签),
@@ -794,7 +791,7 @@ impl
             // 中文注释：这里必须和 CID 端 `/registration-info` 的签名 payload 严格一致。
             // payload 字段(GMB + OP_SIGN_INST 域头由 signing_message 统一拼接):
             // genesis_hash + cid_number + cid_full_name + account_names[] + nonce
-            // + 签发机构 + 作用域。ADR-026:改调原语后逐字节不变。
+            // + 签发机构 + 作用域。
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
@@ -853,7 +850,7 @@ impl
             // payload 字段(GMB + OP_SIGN_DEREGISTER 域头由 signing_message 统一拼接):
             // genesis_hash + scope + cid_number + account_name + target_account
             // + nonce + 签发机构 + 签发管理员公钥。scope 与 target_account 入签名,
-            // 防换范围/换账户重放。ADR-026:改调原语后逐字节不变(deregistration golden)。
+            // 防换范围/换账户重放。
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 scope,
@@ -952,7 +949,6 @@ impl
 
             // payload 字段(GMB + OP_SIGN_BIND 域头由 signing_message 统一拼接):
             //   block_hash(0) + account + binding_id + bind_nonce + 签发机构 + 作用域。
-            //   ADR-026:改调原语后逐字节不变。
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
@@ -1022,7 +1018,6 @@ impl
 
             // payload 字段(GMB + OP_SIGN_VOTE 域头由 signing_message 统一拼接):
             //   block_hash(0) + account + binding_id + proposal_id + nonce + 签发机构 + 作用域。
-            //   ADR-026:改调原语后逐字节不变。
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
@@ -1053,7 +1048,7 @@ impl cid_system::Config for Runtime {
     type CidVerifier = RuntimeCidVerifier;
     type CidVoteVerifier = RuntimeCidVoteVerifier;
     type OnCidBound = CitizenIssuance;
-    // ADR-008 step2a：unbind_cid 不再依赖已删除的 CidMainAccount，临时由 Root 治理 origin 鉴权。
+    // unbind_cid 由 Root 治理 origin 鉴权。
     // step2b 起结合 organization-manage 凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
     type UnbindOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = cid_system::weights::SubstrateWeight<Runtime>;
@@ -1103,7 +1098,6 @@ impl
 
             // payload 字段(GMB + OP_SIGN_POP 域头由 signing_message 统一拼接):
             //   block_hash(0) + who + eligible_total + nonce + 签发机构 + 作用域。
-            //   ADR-026:改调原语后逐字节不变。
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,
@@ -1210,7 +1204,7 @@ impl duoqian_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
-    // B 阶段(personal-manage 拆分)新增:把多签 admin 配置查询拆给两个独立 pallet。
+    // 多签 admin 配置查询拆给两个独立 pallet。
     // 转账治理时 duoqian-transfer 通过 union 调用,先问个人侧、再问机构侧。
     type PersonalQuery = personal_manage::Pallet<Runtime>;
     type InstitutionQuery = organization_manage::Pallet<Runtime>;
@@ -1221,7 +1215,7 @@ impl duoqian_transfer::Config for Runtime {
 // 链下交易清算模块配置
 // ---------------------------------------------------------------------------
 
-/// 扫码支付 Step 1 新增:CID 机构登记表查询实现。
+/// CID 机构登记表查询实现。
 ///
 /// 委托给 `organization-manage` 的 CID 地址索引和机构账户表；
 /// 管理员校验再统一转给 `admins-change::AdminAccounts`。
@@ -1252,7 +1246,6 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCid
             );
         }
 
-        // B 阶段(personal-manage 拆分)起,旧多钱账户 mirror 已删除;
         // 个人多签状态查询走 personal-manage::PersonalAccounts。
         matches!(
             personal_manage::PersonalAccounts::<Runtime>::get(addr).map(|a| a.status),
@@ -1260,7 +1253,7 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCid
         )
     }
 
-    /// 扫码支付 Step 2 新增:判定 `who` 是否是 `bank` 多签账户的管理员之一。
+    /// 判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
     /// 中文注释:机构账户按自身地址作为治理账户,institution_code 来自
@@ -1279,8 +1272,8 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCid
         admins_change::Pallet::<Runtime>::is_active_account_admin(institution_code, account, who)
     }
 
-    /// Step 2(2026-05-02):清算行资格由 CID 系统的 eligible-search 负责筛选。
-    /// 链上不再保存 subject_property/sub_type/parent_cid_number,这里只确认该地址属于已注册且 Active 的
+    /// 清算行资格由 CID 系统的 eligible-search 负责筛选。
+    /// 链上不保存 subject_property/sub_type/parent_cid_number,这里只确认该地址属于已注册且 Active 的
     /// CID 机构账户,避免把 CID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
         let registered = match organization_manage::AccountRegisteredCid::<Runtime>::get(addr) {
@@ -1297,7 +1290,7 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCid
         )
     }
 
-    /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
+    /// 判定 `bank` 主账户对应的机构是否
     /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 cid_number 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
         let registered = match organization_manage::AccountRegisteredCid::<Runtime>::get(bank) {
@@ -1516,7 +1509,7 @@ impl votingengine::Config for Runtime {
     type CidEligibility = RuntimeCidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
-    // Phase 2:内部投票终态回调注册 5 个业务 Executor。
+    // 内部投票终态回调注册 5 个业务 Executor。
     // 顺序按调用频率降序:transfer / multisig manage 类业务最频繁,
     // grandpa key 替换最稀有放最后(tuple iterate 时命中越早越省 gas)。
     // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
@@ -1781,7 +1774,7 @@ impl pallet_assets::Config for Runtime {
     type BenchmarkHelper = ();
 }
 
-/// OnchainIssuance pallet 配置(ADR-011 v2 修订项 #1:NRC 账户 / 费用账户语义分离)。
+/// OnchainIssuance pallet 配置(NRC 账户 / 费用账户语义分离)。
 ///
 /// 中文注释:onchain-issuance 拆为两个独立 trait:
 /// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_account(monitor 调用方校验用)

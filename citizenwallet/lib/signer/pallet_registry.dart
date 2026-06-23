@@ -59,7 +59,7 @@ class PalletRegistry {
   // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。
 
   // ---- DuoqianTransfer (19) ----
-  // call_index 3/4/5 留洞不复用(原 execute_xxx wrapper 已物理删除)。
+  // call_index 3/4/5 留洞不复用。
   static const int duoqianTransferPallet = 19;
   static const int proposeTransferCall = 0;
   static const int proposeSafetyFundCall = 1;
@@ -71,8 +71,8 @@ class PalletRegistry {
   static const int developerDirectUpgradeCall = 2;
 
   // ---- OrganizationManage (17) ----
-  // call_index=0 留洞不复用(原 propose_create 单账户机构已物理删除)。
-  // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
+  // call_index=0 留洞不复用。
+  // call_index=3 留洞不复用(propose_create_personal 在 PersonalManage(7))。
   // 机构多签最少 2 账户,统一走 call_index=5。
   static const int organizationManagePallet = 17;
   static const int proposeCloseCall = 1;
@@ -86,7 +86,7 @@ class PalletRegistry {
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- PersonalManage (7) ----
-  // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
+  // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
   // ACTION enum 独立命名空间(ACTION_CREATE=0/ACTION_CLOSE=1)。
   // propose_create(account_name, admins, regular_threshold, amount):
   // admins_len 由 admins 长度派生,regular_threshold 由用户输入且必须严格过半。
@@ -114,7 +114,7 @@ class PalletRegistry {
   static const int resolutionIssuancePallet = 8;
   static const int proposeResolutionIssuanceCall = 0;
 
-  // ---- OnchainIssuance (25) · 链上发行代币(Plain FT, ADR-011 v3) ----
+  // ---- OnchainIssuance (25) · 链上发行代币(Plain FT) ----
   // call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。
   // 业务调用走 propose_X(InternalVote),监管调用走 propose_monitor_X(JointVote)。
   // 投票/重试/取消统一走 InternalVote(22)/JointVote(23)/VotingEngine(9.4/9.5)。

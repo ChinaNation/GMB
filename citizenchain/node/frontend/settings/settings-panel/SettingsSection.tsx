@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { adminsChangeApi } from '../../governance/admins_change/api';
+import { adminsChangeApi } from '../../governance/admins-change/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
 import { CommunicationNodeSection } from '../communication-node/CommunicationNodeSection';

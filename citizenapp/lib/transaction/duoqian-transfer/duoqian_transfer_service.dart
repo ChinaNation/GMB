@@ -274,12 +274,10 @@ class DuoqianTransferService {
     return result;
   }
 
-  // ADR-018:`fetchProposalIdsByOrg` / `fetchProposalIdsByInstitution` /
-  // `fetchProposalIdsByOwner` 已删除。前两者的 `ProposalsByOrg` 走统一的
-  // 按年取 + 客户端 org 过滤(filterGovernanceIds);`ProposalsByInstitution`
-  // 是嵌 32 字节 account 的长前缀扫描,轻节点静默返回空,改走按年取 +
-  // 客户端 institution 过滤(filterInstitutionVisible)。`ProposalsByOwner`
-  // 无调用方,一并移除。`ProposalsByYear`(短 key)是唯一保留的反向索引入口。
+  // 提案查询统一走按年取 + 客户端过滤:org 过滤(filterGovernanceIds)、
+  // institution 过滤(filterInstitutionVisible)。`ProposalsByInstitution`
+  // 是嵌 32 字节 account 的长前缀扫描,轻节点静默返回空,故不直接用。
+  // `ProposalsByYear`(短 key)是唯一的反向索引入口。
 
   /// 通用反向索引迭代器。
   ///
@@ -490,9 +488,9 @@ class DuoqianTransferService {
   // ──── 分页 + 缓存 + 批量查询 ────
 
   /// 给定一组 proposal_id,batch 查 meta + 业务详情 + 展示号,
-  /// 返回 `ProposalWithDetail` 列表(顺序按 ids 入参,**不再重排**)。
+  /// 返回 `ProposalWithDetail` 列表(顺序按 ids 入参,不重排)。
   ///
-  /// 双层 ID v1 模式下,客户端先通过反向索引拿 ID 列表,再调本方法取详情。
+  /// 双层 ID 模式下,客户端先通过反向索引拿 ID 列表,再调本方法取详情。
   /// 多签管理提案(ACTION_CREATE_PERSONAL / ACTION_CLOSE)按既有规则过滤掉。
   Future<List<ProposalWithDetail>> fetchProposalsByIds(List<int> ids) async {
     if (ids.isEmpty) return const [];
@@ -683,8 +681,6 @@ class DuoqianTransferService {
       final createDuoqianDetail = cachedCreateDuoqianDetails[id];
       final closeDuoqianDetail = cachedCloseDuoqianDetails[id];
       // 如果都没匹配到，尝试安全基金 / 手续费划转提案。
-      // 原"省储行费率提案"(`RateProposalActions`)在 Step 2b-iv-b 随老省储
-      // 行 pallet 一起下线,此处不再枚举 feeRateDetail。
       SafetyFundProposalInfo? safetyFundDetail;
       SweepProposalInfo? sweepDetail;
       if (transferDetail == null &&
@@ -920,8 +916,7 @@ class DuoqianTransferService {
   }
 
   /// 测试入口：暴露批量解码路径（_decodeProposalData），用链上真实
-  /// payload 字节做布局回归，防止再出现"守卫长度与链端布局漂移"导致
-  /// 提案静默消失（2026-06-11 旧 48 字节主体残留事故）。
+  /// payload 字节做布局回归，防止"守卫长度与链端布局漂移"导致提案静默消失。
   @visibleForTesting
   TransferProposalInfo? debugDecodeProposalData(int proposalId, Uint8List raw) {
     return _decodeProposalData(proposalId, raw);

@@ -111,7 +111,7 @@ pub const BLOCK_HASH_COUNT: BlockNumber = primitives::core_const::BLOCK_HASH_COU
 pub const FEN: Balance = 1;
 pub const YUAN: Balance = 100 * FEN;
 
-// 为兼容模板中可能使用的 UNIT 命名，保留 UNIT 并指向 1 元（100 分）。
+// UNIT 别名指向 1 元（100 分）。
 pub const UNIT: Balance = YUAN;
 
 /// 账户存在最小余额（单位：分），统一采用 primitives 制度常量。
@@ -318,7 +318,7 @@ mod runtime {
     #[runtime::pallet_index(23)]
     pub type JointVote = joint_vote;
 
-    // 公民投票 sub-pallet:多模式选举/公投(Phase 3 业务实现)
+    // 公民投票 sub-pallet:多模式选举/公投
     #[runtime::pallet_index(24)]
     pub type CitizenVote = citizen_vote;
 
@@ -351,7 +351,7 @@ mod runtime {
     pub type OrganizationManage = organization_manage;
 
     // 个人多签管理模块:用户自定义多签账户的注册/创建/关闭(无 CID 归属,creator+account_name 派生)。
-    // pallet_index=7 重用历史空位(B 阶段 personal-manage 拆分,2026-05-06)。
+    // pallet_index=7。
     #[runtime::pallet_index(7)]
     pub type PersonalManage = personal_manage;
 

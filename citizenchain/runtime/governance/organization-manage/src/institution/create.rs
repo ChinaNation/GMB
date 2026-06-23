@@ -1,9 +1,8 @@
 //! 机构创建流程实现。
 //!
-//! 机构最少必须有 2 个账户(主账户 + 费用账户),所以原 `propose_create`
-//! (单账户机构,call_index=0) 已于 2026-05-03 删除。
+//! 机构最少必须有 2 个账户(主账户 + 费用账户)。
 //!
-//! 唯一入口: `do_propose_create_institution`(call_index=5,ADR-008 step2b)
+//! 唯一入口: `do_propose_create_institution`(call_index=5)
 //! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
 //! - 凭证带签发机构 CID、签发机构主账户和签发管理员公钥
 //! - 资金模型: 发起时 reserve, 通过后划转, 拒绝后 unreserve
@@ -34,7 +33,7 @@ use sp_runtime::{traits::Hash, DispatchResult};
 use votingengine::types::{is_institution_code, InstitutionCode};
 use votingengine::InternalVoteEngine;
 
-/// 机构整体创建提案 (call_index=5,ADR-008 step2b)。
+/// 机构整体创建提案 (call_index=5)。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_create_institution<T: Config>(
     who: T::AccountId,
@@ -101,7 +100,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
 
     let (created_accounts, main_account, fee_account, initial_total) =
         validate_initial_accounts::<T>(&cid_number, &accounts)?;
-    // 共用余额预检查 helper(2026-05-03):amount + fee + ED 必须够。
+    // 共用余额预检查 helper:amount + fee + ED 必须够。
     let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
@@ -169,7 +168,6 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             );
         }
 
-        // B 阶段(personal-manage 拆分)起,Accounts mirror 已删除;
         // 机构主账户的管理员配置真源在 admins-change::AdminAccounts[main_account 账户]；
         // 动态阈值真源在 internal-vote，duoqian-transfer 通过查询 trait 合并读取。
 

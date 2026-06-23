@@ -1,9 +1,8 @@
 /// 内置治理机构静态注册表 + 联合投票常量 + 反向查找入口。
 ///
 /// 中文注释：
-/// - 此文件由 `lib/institution/institution_data.dart` 拆分而来（2026-05-09 模块边界整改）。
 /// - 通用类型 `InstitutionInfo` / `InstitutionAccounts` / `OrgType` + 身份编码工具
-///   `institutionIdentityToAccountId` / `registeredAccountIdentity` 等已迁至
+///   `institutionIdentityToAccountId` / `registeredAccountIdentity` 等在
 ///   `lib/governance/shared/institution_info.dart`。
 /// - 静态注册表仅包含国储会/省储会/省储行三类内置治理机构，机构账户与个人多签
 ///   不在此表中（动态从链上读取 `AdminsChange::AdminAccounts`）。

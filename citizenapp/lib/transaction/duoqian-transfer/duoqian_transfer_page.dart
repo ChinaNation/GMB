@@ -241,7 +241,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
     setState(() => _submitting = true);
 
     try {
-      // 多签管理员的转账提案签名(2026-05-03 整改):
+      // 多签管理员的转账提案签名:
       // 多签管理员(个人 + 机构)支持冷热钱包双路径,与 personal_account_create_page 对齐;
       // 治理机构(NRC/PRC/PRB)和区块链软件端管理员才只支持冷钱包(QR)。
       // 这里多签提案 → 热钱包优先 → 冷钱包 fallback 走 QR。

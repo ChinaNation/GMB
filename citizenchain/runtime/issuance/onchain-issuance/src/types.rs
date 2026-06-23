@@ -9,8 +9,8 @@ use sp_runtime::RuntimeDebug;
 
 /// 资产种类:第一期只 Plain,Pegged 协议位预留。
 ///
-/// 中文注释:Pegged 路径在 `validation::ensure_class_supported` reject,
-/// Phase 2 启用时把 reject 改为接受 + 校验 PegDeclaration。
+/// 中文注释:Pegged 路径当前在 `validation::ensure_class_supported` reject,
+/// 启用时改为接受 + 校验 PegDeclaration。
 #[derive(
     Encode,
     Decode,
@@ -26,7 +26,7 @@ use sp_runtime::RuntimeDebug;
 pub enum AssetClass {
     /// 无锚定声明(第一期唯一允许值)。
     Plain,
-    /// 有锚定声明(法币 / 资产凭证),Phase 2 启用,当前 reject。
+    /// 有锚定声明(法币 / 资产凭证),当前 reject。
     Pegged,
 }
 

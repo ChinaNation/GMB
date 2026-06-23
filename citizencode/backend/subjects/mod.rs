@@ -10,7 +10,7 @@ pub(crate) mod model;
 pub(crate) mod registration;
 pub(crate) mod schema;
 pub(crate) mod service;
-pub(crate) mod uninorg;
+pub(crate) mod unincorporated_org;
 
 #[allow(unused_imports)]
 pub use model::{

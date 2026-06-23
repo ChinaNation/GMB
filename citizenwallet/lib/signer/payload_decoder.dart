@@ -57,7 +57,7 @@ class PayloadDecoder {
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
   /// 返回 null 表示无法识别或解码失败 → strict 模式下 decodeFailed → 禁止签名。
-  // ADR-026 Phase 2 二进制前缀域(抖中方案,2026-06-22 落地):
+  // 二进制前缀域:
   //   ACTIVATE_ADMIN → 前 4 字节 GMB(3B) || 0x18
   //   DECRYPT        → 前 4 字节 GMB(3B) || 0x19
   // 这两个域签的是**原始可解析字节**:冷钱包对整段 payloadHex 直接 sr25519 签名,
@@ -87,22 +87,22 @@ class PayloadDecoder {
   /// DECRYPT op_tag(对齐 OP_SIGN_DECRYPT)。
   static const _opSignDecrypt = 0x19;
 
-  /// ACTIVATE_ADMIN 4 字节二进制前缀 GMB || 0x18(取代旧 21B 字符串前缀)。
+  /// ACTIVATE_ADMIN 4 字节二进制前缀 GMB || 0x18。
   static final _activateAdminPrefix = Uint8List.fromList(
     [..._gmbPrefix, _opSignActivateAdmin],
   );
 
-  /// DECRYPT 4 字节二进制前缀 GMB || 0x19(取代旧 14B "GMB_DECRYPT_V1" 前缀)。
+  /// DECRYPT 4 字节二进制前缀 GMB || 0x19。
   static final _decryptPrefix = Uint8List.fromList(
     [..._gmbPrefix, _opSignDecrypt],
   );
   static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
     'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
   );
-  // ADR-026 评估结论:'cid_admin_governance' 是 **QR 动作类型 tag**(JSON
+  // 'cid_admin_governance' 是 **QR 动作类型 tag**(JSON
   // envelope 的 domain 字段值),不是 signing_message 的哈希签名域 —— 整段 JSON
   // 字节由 sr25519 直接签名,payload_hash 仅为 sha256 展示指纹。故不并入
-  // op_tag 注册表,保留原值不正名为 GMB_*_V1。
+  // op_tag 注册表。
   static const String _cidAdminActionDomain = 'cid_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {
@@ -134,7 +134,7 @@ class PayloadDecoder {
     // 防误签由 strict 两色模式独家把关:
     // - decoder 解析失败(任何分支不匹配返回 null) → decodeFailed → 禁止签名
     // - 解析成功但 display.action != decoded.action → mismatched → 禁止签名
-    // 不再额外按 spec_version 锁布局,合法新 spec 可直接解码,布局变了 strict 模式自动拦截。
+    // 不按 spec_version 锁布局,合法新 spec 可直接解码,布局变了 strict 模式自动拦截。
     try {
       final bytes = _hexToBytes(payloadHex);
       if (bytes.length < 2) return null;
@@ -214,7 +214,7 @@ class PayloadDecoder {
       // 凭证尾部带签发机构、签发管理员和业务作用域字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
-        // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
+        // call_index=3 留洞不复用(propose_create_personal 在 PersonalManage(7))。
         if (callIndex == PalletRegistry.proposeCloseCall) {
           // 中文注释:机构 propose_close 携带注销凭证(nonce/签名/签发机构/签发管理员公钥),
           // 比个人多签多 3 个 Vec + 2×32,需专用解码;个人多签仍走 66 字节 _decodeProposeClose。
@@ -233,7 +233,7 @@ class PayloadDecoder {
       }
 
       // ── PersonalManage(7) ──
-      // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
+      // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
       // ACTION enum 独立(ACTION_CREATE=0/ACTION_CLOSE=1),与 organization-manage 互不干扰。
       if (palletIndex == PalletRegistry.personalManagePallet) {
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
@@ -331,7 +331,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── OnchainIssuance(25) · 链上发行代币(Plain FT, ADR-011 v3) ──
+      // ── OnchainIssuance(25) · 链上发行代币(Plain FT) ──
       // 当前未实现完整 SCALE 字段解析,不能独立验证业务内容,因此红色拒签。
       if (palletIndex == PalletRegistry.onchainIssuancePallet) {
         return null;
@@ -740,11 +740,11 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // 协议升级 RuntimeUpgrade(13) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
   //
-  // 已删除原 SCALE decoder:
+  // 无 SCALE decoder:
   //   - call_data 含完整 WASM(600KB+),物理上塞不进 QR
   //   - server signing.rs 对这两个 action 在 QR 里只放 blake2_256(payload)
-  //     = 32 字节哈希,decoder 永远拿不到完整 call_data
-  //   - "在 decoder 里复算 sha256(wasm_bytes)"是死路径,因为 wasm_bytes 不在 QR 里
+  //     = 32 字节哈希,decoder 拿不到完整 call_data
+  //   - wasm_bytes 不在 QR 里,故 decoder 无法复算 sha256(wasm_bytes)
   //
   // 走 OfflineSignService.verifyPayload 的"哈希直签例外":
   //   - 收到 32 字节 payload + display.action ∈ {两个 wasm 升级 action}
@@ -754,7 +754,7 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // 管理员激活（非链上交易，二进制前缀域 ADR-026 Phase 2）
+  // 管理员激活（非链上交易，二进制前缀域）
   // 格式：prefix(4B = GMB||0x18) + account_id(32B) + institution_code([u8;4])
   //      + kind(u8) + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B) = 97B
   // ---------------------------------------------------------------------------
@@ -794,7 +794,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // 清算行管理员解密（非链上交易，二进制前缀域 ADR-026 Phase 2）
+  // 清算行管理员解密（非链上交易，二进制前缀域）
   // 格式：prefix(4B = GMB||0x19) + cid_number(48B, 右补零) + pubkey(32B)
   //      + timestamp(8B, u64 LE) + nonce(16B) = 108B
   // ---------------------------------------------------------------------------
@@ -1062,8 +1062,8 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // PersonalManage(7) / propose_create(0)
   // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
-  // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
-  // 历史 OrganizationManage(17) call=3 已废除(留洞不复用)。
+  // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
+  // OrganizationManage(17) call=3 留洞不复用。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
     if (bytes.length < 2 + 1 + 1 + 32 * 2 + 16) return null;
@@ -1345,7 +1345,7 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // 通用:只取 proposal_id: u64_le 的兜底执行/取消/清理类 call。
   //
-  // 链端 Phase 3 保留的若干 `execute_X` / `cancel_failed_X` /
+  // 链端若干 `execute_X` / `cancel_failed_X` /
   // `cleanup_rejected_X` 签名完全一致:
   //     pub fn <name>(origin, proposal_id: u64) -> DispatchResult
   // SCALE 编码恒为 `[pallet_idx][call_idx][proposal_id:u64_le]` = 10 bytes。

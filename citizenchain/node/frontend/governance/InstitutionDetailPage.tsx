@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { formatBalance } from '../shared/format';
 import { hexToSs58 } from '../shared/ss58';
-import { adminsChangeApi } from './admins_change/api';
+import { adminsChangeApi } from './admins-change/api';
 import { governanceApi as api } from './api';
 import type {
   ActivatedAdmin,

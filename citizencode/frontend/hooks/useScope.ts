@@ -37,7 +37,7 @@ function makeScope(base: Omit<VisibleScope, 'includesProvince' | 'includesCity' 
   return {
     ...base,
     includesProvince(_province: string) {
-      // ADR-008 起前端 Dashboard 全局视图:任意省都"可见",只是写权限按 lockedProvinceName 收紧。
+      // 前端 Dashboard 全局视图:任意省都"可见",只是写权限按 lockedProvinceName 收紧。
       return true;
     },
     includesCity(_city: string) {

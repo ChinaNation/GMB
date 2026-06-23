@@ -8,14 +8,14 @@
 //!     - 笔数 ≥ `PACK_TX_THRESHOLD`(10 万)
 //!     - 距上次打包 ≥ `PACK_BLOCK_THRESHOLD` 区块
 //! - 签名 + 提交路径通过 **两个 trait** 解耦:
-//!     - `BatchSigner`:Step 2b-ii-α 默认 `NoopBatchSigner`,Step 2b-ii-β 接
-//!       `settlement::keystore::SigningKey` 后实现 `KeystoreBatchSigner`。
-//!     - `BatchSubmitter`:Step 2b-ii-α 默认 `NoopBatchSubmitter`,Step 2b-ii-β
-//!       接 substrate `TransactionPool` 后实现 `PoolBatchSubmitter`。
+//!     - `BatchSigner`:`KeystoreBatchSigner` 用 `settlement::keystore::SigningKey` 签名,
+//!       未接入时用 `NoopBatchSigner`。
+//!     - `BatchSubmitter`:`PoolBatchSubmitter` 走 substrate `TransactionPool`,
+//!       未接入时用 `NoopBatchSubmitter`。
 //! - `pack_and_submit` 失败时调用 `ledger.reject_pending` 回滚本地 pending,
 //!   确保 `cached_nonce` 链不断。
-//! - 成功提交上链后**不立即 settle**;`ledger.on_payment_settled` 由 Step 2b-iii
-//!   的 `settlement::listener` 收到链上 `PaymentSettled` 事件时调用。
+//! - 成功提交上链后**不立即 settle**;`ledger.on_payment_settled` 由
+//!   `settlement::listener` 收到链上 `PaymentSettled` 事件时调用。
 
 #![allow(dead_code)]
 
@@ -38,10 +38,9 @@ pub const PACK_BLOCK_THRESHOLD: u64 = 10;
 /// `NodeBatchItem`:节点层批次项,字节级对齐 runtime 端
 /// `offchain_transaction::batch_item::OffchainBatchItemV2`。
 ///
-/// 之所以再定义一份而不直接引用 pallet 类型:
-/// - 避免 `node/Cargo.toml` 直接 dep 到 `offchain-transaction` pallet
-///   (`citizenchain` runtime 已传递依赖,但我们希望 node/offchain 子树可以
-///   独立于 runtime 升级节奏编译)。
+/// 再定义一份而不直接引用 pallet 类型:
+/// - 避免 `node/Cargo.toml` 直接 dep 到 `offchain-transaction` pallet,
+///   让 node/offchain 子树可以独立于 runtime 升级节奏编译。
 /// - SCALE 编码只看**字段顺序和宽度**,两边逐字段对齐即可跨 crate 互认。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct NodeBatchItem {
@@ -78,8 +77,8 @@ impl From<PendingPayment> for NodeBatchItem {
 
 /// 批次签名提供者。清算行多签管理员对 batch 签名的入口。
 ///
-/// Step 2b-ii-α:`NoopBatchSigner` 占位;Step 2b-ii-β 接入 `settlement::keystore`
-/// 里存的清算行管理员私钥。
+/// `KeystoreBatchSigner` 用 `settlement::keystore` 里存的清算行管理员私钥;
+/// 未接入时用 `NoopBatchSigner` 占位。
 pub trait BatchSigner: Send + Sync {
     /// 对 `message = signing_message(OP_SIGN_OFFCHAIN_BATCH, institution || batch_seq || batch.encode())`
     /// 做 sr25519 签名,返回 64 字节签名(见 `batch_signing_message`)。
@@ -90,8 +89,8 @@ pub trait BatchSigner: Send + Sync {
 /// `offchain_transaction::Call::submit_offchain_batch_v2` extrinsic 并提
 /// 交到节点的 `TransactionPool`。
 ///
-/// Step 2b-ii-α:`NoopBatchSubmitter` 占位;Step 2b-ii-β 接 substrate client +
-/// `TransactionPool`。
+/// `PoolBatchSubmitter` 接 substrate client + `TransactionPool`;
+/// 未接入时用 `NoopBatchSubmitter` 占位。
 pub trait BatchSubmitter: Send + Sync {
     fn submit(
         &self,
@@ -103,7 +102,7 @@ pub trait BatchSubmitter: Send + Sync {
 }
 
 /// 未接入真实签名器的占位实现。调用即返回 Err,让 `pack_and_submit` 正常回
-/// 滚 pending 并打印 warning。Step 2b-ii-β 启动后用真实 impl 替换。
+/// 滚 pending 并打印 warning。
 pub struct NoopBatchSigner;
 
 impl BatchSigner for NoopBatchSigner {
@@ -142,7 +141,7 @@ pub struct OffchainPacker {
 }
 
 impl OffchainPacker {
-    /// 构造 packer,注入 signer / submitter(Step 2b-ii-α 传 Noop;β 传真实 impl)。
+    /// 构造 packer,注入 signer / submitter(未接入时传 Noop,生产传真实 impl)。
     pub fn new(
         ledger: Arc<OffchainLedger>,
         institution_main: AccountId32,
@@ -192,8 +191,8 @@ impl OffchainPacker {
     /// 6. 失败 → `ledger.reject_pending(tx_id)` 逐个回滚
     /// 7. 成功 → 记录 `last_pack_block`,返回 `tx_hash`
     ///
-    /// 注意:成功路径下 pending **不会**立即从 ledger 移除——移除由 Step 2b-iii
-    /// 的 `settlement::listener` 收到链上事件时完成。
+    /// 注意:成功路径下 pending **不会**立即从 ledger 移除——移除由
+    /// `settlement::listener` 收到链上事件时完成。
     pub async fn pack_and_submit(&self, current_block: u64) -> Result<Option<H256>, String> {
         let pending = self.ledger.take_pending_for_batch(PACK_TX_THRESHOLD);
         if pending.is_empty() {
@@ -250,7 +249,7 @@ impl OffchainPacker {
 
 // ---------------- 纯函数工具 ----------------
 
-/// 构造清算行批次签名消息(ADR-026 唯一原语):
+/// 构造清算行批次签名消息(唯一原语):
 /// `signing_message(OP_SIGN_OFFCHAIN_BATCH, institution || batch_seq_le || batch_bytes)`
 /// = `blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || institution || batch_seq_le || batch_bytes)`。
 ///
@@ -266,10 +265,7 @@ pub fn batch_signing_message(
     scale_payload.extend_from_slice(institution_main.as_ref());
     scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
     scale_payload.extend_from_slice(batch_bytes);
-    primitives::sign::signing_message(
-        primitives::sign::OP_SIGN_OFFCHAIN_BATCH,
-        &scale_payload,
-    )
+    primitives::sign::signing_message(primitives::sign::OP_SIGN_OFFCHAIN_BATCH, &scale_payload)
 }
 
 // ---------------- 单元测试 ----------------

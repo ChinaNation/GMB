@@ -69,7 +69,7 @@ citizencode/backend/
 ├── store/                     # Store 聚合体、省级进程内分片缓存和存储边界模型
 ├── subjects/                  # 身份主体共享模型、目标分区表、主体详情、非法人能力
 │   ├── registration.rs        # 公权/教育通用注册内核;私权六类模块调用私权专用内核
-│   └── uninorg/               # 非法人机构从属关系能力
+│   └── unincorporated_org/               # 非法人机构从属关系能力
 ├── tests/                     # 集成/e2e 测试
 └── target/                    # Cargo 构建产物,不得纳入源码整理
 ```
@@ -93,7 +93,7 @@ citizencode/backend/
   `admins/security_model.rs`;审计日志行模型归 `audit.rs`。
 - 行政区划唯一真源归 `china/`;不得恢复 `citizencode/`、`province.rs`、`cities.rs`
   或 `city_codes/*.rs` 静态表。
-- 非法人机构能力归 `subjects/uninorg/`;不得放在单侧 `gov/` 或 `private/`。
+- 非法人机构能力归 `subjects/unincorporated_org/`;不得放在单侧 `gov/` 或 `private/`。
 - `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或公钥工具。
 - 管理端操作权限类型只允许 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,统一登记在
   `admins/operation_auth.rs`;未登记或类型不匹配的操作必须拒绝。

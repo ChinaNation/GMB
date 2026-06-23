@@ -48,7 +48,7 @@ export type DecryptAdminRequestResult = {
 };
 
 /**
- * offchain/section.tsx 状态机(2026-05-01 重构)。
+ * offchain/section.tsx 状态机。
  *
  *   empty                        初始 — 顶部 +添加清算行 按钮
  *   add-input-cid               输入 cid_number 或机构名,debounce 自动搜 CID 候选
@@ -56,7 +56,7 @@ export type DecryptAdminRequestResult = {
  *                                  ├─ 已存在 -> institution-detail
  *                                  └─ 不存在 -> create-multisig-institution
  *   institution-detail           机构详情卡片栅格 + 折叠子页入口 + 节点信息内联
- *   admin-set-change             进入 admins_change 管理员更换流程
+ *   admin-set-change             进入 admins-change 管理员更换流程
  *   other-accounts-list          其他账户列表子页(折叠卡片入口)
  *   admin-list                   管理员列表子页(折叠卡片入口)
  *   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)

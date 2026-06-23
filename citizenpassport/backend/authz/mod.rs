@@ -94,7 +94,7 @@ pub(crate) async fn require_auth(
     let expires_at: i64 = row.get("expires_at");
 
     if user_group == "operators" {
-        match crate::dangan::ensure_operator_annual_export_unlocked(state).await {
+        match crate::archive::ensure_operator_annual_export_unlocked(state).await {
             Ok(()) => {}
             Err((status, body)) if status == StatusCode::LOCKED => {
                 let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")

@@ -1,10 +1,10 @@
 //! 业务路径执行入口(issue/mint/burn/close/transfer)— 框架占位。
 //!
-//! 与 ADR-011 v2 第 5.4 节(业务审批 — 多签内部执行)对齐:
+//! 业务审批走多签内部执行:
 //! 本 pallet **不暴露 wrapper extrinsic**,业务由 VotingEngine InternalVote 通过后,
 //! 通过 callback 回调本模块入口函数,内部以 root 调用 `pallet_assets`。
 //!
-//! ADR-011 v2 修订要点:
+//! 规则要点:
 //! - propose origin 校验:proposer ∈ issuer admins(防 spam)
 //! - 创建费 1000 GMB 三态机制(reserve / release / refund)走 `fee.rs`
 //! - `asset_id` 只表示资产编号,治理身份只来自机构多签账户

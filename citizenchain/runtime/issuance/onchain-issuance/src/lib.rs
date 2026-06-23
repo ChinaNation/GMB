@@ -98,8 +98,7 @@ pub mod pallet {
         /// - monitor 5 动作的 origin 校验:proposer ∈ admins(NRC main account)
         /// - 监管 JointVote 提案的发起人识别
         ///
-        /// ADR-011 v2 修订项 #1:与 `NrcFeeAccountProvider` 语义分离,
-        /// 不可复用同一 trait(v1 错误地复用了 onchain_transaction::NrcAccountProvider)。
+        /// 与 `NrcFeeAccountProvider` 语义分离,不可复用同一 trait。
         type NrcMainAccountProvider: NrcMainAccountProvider<Self::AccountId>;
 
         /// **NRC 费用账户(收创建费 fee_account)** 提供器:
@@ -132,7 +131,7 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
     }
 
-    /// **NRC 治理账户(治理多签 main_account)** trait — ADR-011 v2 拆分语义后的独立 trait。
+    /// **NRC 治理账户(治理多签 main_account)** trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcMainAccountProvider`,
     /// 返回 `china_cb[0].main_account`。
@@ -140,7 +139,7 @@ pub mod pallet {
         fn nrc_main_account() -> Option<AccountId>;
     }
 
-    /// **NRC 费用账户(收创建费 fee_account)** trait — ADR-011 v2 拆分语义后的独立 trait。
+    /// **NRC 费用账户(收创建费 fee_account)** trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcAccountProvider`(复用既有,
     /// 返回 `china_cb[0].fee_account`,与 onchain_transaction::NrcAccountProvider 同源)。
@@ -195,7 +194,7 @@ pub mod pallet {
 
     /// 强制销毁倒计时调度队列:expire_block → 该块到期的 asset_id 列表。
     ///
-    /// ADR-011 v2 修订项 #5:NRC `monitor_force_close` 入此队列,30 天后由 `on_finalize`
+    /// NRC `monitor_force_close` 入此队列,30 天后由 `on_finalize`
     /// 通过 `ForceCloseSchedule::take(n)` O(1) 取出处理,**避免全表扫描 Assets**。
     #[pallet::storage]
     #[pallet::getter(fn force_close_schedule)]
@@ -369,7 +368,7 @@ pub mod pallet {
         ScheduleFull,
     }
 
-    /// ADR-011 v3:业务 pallet 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
+    /// 业务 pallet 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
     ///
     /// 不暴露 execute/cancel wrapper(走 VotingEngine::retry_passed_proposal 9.4 / cancel_passed_proposal 9.5)。
     /// 框架阶段每个 fn 只 ensure_signed + 占位 stub,业务逻辑(propose origin 校验 / reserve 押金 /

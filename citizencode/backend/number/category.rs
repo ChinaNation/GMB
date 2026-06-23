@@ -2,8 +2,7 @@
 
 //! 机构分类 — 由机构码(InstitutionCode)直接派生,供前端按 tab 过滤和按角色授权。
 //!
-//! 中文注释:主体属性(旧 K1)已从 CID 号删除,机构类别一律由机构码判定,不再有独立的
-//! 主体属性枚举。分类规则由 `classify(code, cid_full_name)` 决定:
+//! 中文注释:机构类别一律由机构码判定。分类规则由 `classify(code, cid_full_name)` 决定:
 //!
 //! - PublicSecurity     公安局      公法人 + 专用公安局码 Cpol
 //! - GovInstitution     公权机构    公法人 + 其他(非 Cpol)

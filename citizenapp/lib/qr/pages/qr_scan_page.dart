@@ -135,7 +135,7 @@ class _QrScanPageState extends State<QrScanPage> {
       switch (widget.mode) {
         case QrScanMode.transfer:
           // 扫码支付:接受 user_transfer / user_contact / 裸地址
-          // (多签分享码已于 2026-05-03 下线 — 多签发现走反向索引)
+          // (多签发现走反向索引)
           if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
           } else if (result.type == QrRouteType.userContact) {

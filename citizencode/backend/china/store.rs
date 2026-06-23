@@ -120,7 +120,7 @@ fn load_provinces() -> &'static [ProvinceCode] {
         });
     }
 
-    // 铁律(ADR-021):省名、城市名全国唯一；市/镇 code 不可变且不可复用。
+    // 铁律:省名、城市名全国唯一；市/镇 code 不可变且不可复用。
     // 这里在服务启动读取时同步校验,让错误数据立即暴露。
     let mut province_names = std::collections::HashSet::new();
     let mut city_names = std::collections::HashSet::new();
@@ -218,8 +218,8 @@ pub fn province_name_by_code(code: &str) -> Option<&'static str> {
 
 /// 判定 (省,市,镇) 三元组是否对应当前行政区划真源里的一个活镇。
 ///
-/// 中文注释:孤儿机构清理(ADR-021 §B5)的唯一判定依据。被删/退役复用 code 下的旧机构
-/// 其 `town_code` 会指向一个已不存在于 china.sqlite 的镇。空 `tc` 永远返回 true(市级机构、
+/// 中文注释:孤儿机构清理的唯一判定依据。若机构 `town_code` 指向一个不存在于
+/// china.sqlite 的镇,即视为孤儿。空 `tc` 永远返回 true(市级机构、
 /// 储委会、部委等合法态没有镇维度),由调用方负责跳过空 town_code 行;此处也对空 tc 直接判存在以防误删。
 pub fn town_exists(pc: &str, cc: &str, tc: &str) -> bool {
     if tc.trim().is_empty() {

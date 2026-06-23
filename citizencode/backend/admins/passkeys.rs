@@ -1,7 +1,7 @@
 //! 管理员 Passkey 注册与 WebAuthn 工具。
 //!
 //! 中文注释:Passkey 凭据、注册挑战和一次性安全动作均落到 admins 结构化表。
-//! 本模块只保留 WebAuthn、公民钱包签名校验和哈希工具,不再维护进程内状态。
+//! 本模块只承载 WebAuthn、公民钱包签名校验和哈希工具。
 
 use axum::{
     extract::State,

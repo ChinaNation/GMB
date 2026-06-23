@@ -276,7 +276,7 @@
 - `frontend/app/`：React/Tauri 前端入口，包含 `App.tsx`、`main.tsx` 与全局样式。
 - `frontend/core/`：前端基础适配层，目前统一封装 Tauri `invoke` 与错误消息清理。
 - `frontend/shared/`：跨功能复用能力，包含金额格式化、SS58 编解码与 `shared/qr/` 扫码协议组件。
-- `frontend/home/`、`frontend/mining/`、`frontend/governance/`、`frontend/offchain/`、`frontend/settings/`、`frontend/other/`：与后端 `src/<功能名>` 保持同名边界。
+- `frontend/home/`、`frontend/mining/`、`frontend/governance/`、`frontend/transaction/offchain-transaction/`、`frontend/settings/`、`frontend/other/`：与后端 `src/<功能名>` 保持同名边界。
 - 各功能目录自持 `api.ts` 与 `types.ts`；根层不再保留全局 `api.ts`、`types.ts`、`format.ts`，避免新功能继续污染前端根层。
 - 前端构建脚本使用 `tsc --noEmit && vite build`；`vite.config.ts` 由主 `tsconfig.json` 直接类型检查，不再通过 `tsconfig.node.json` 产出 `vite.config.js` / `vite.config.d.ts` 或 `*.tsbuildinfo`。
 

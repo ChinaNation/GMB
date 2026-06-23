@@ -56,7 +56,7 @@ citizencode/backend/number/
 - `G` 机构码允许 `ZF/LF/SF/JC/JY/CB`。
 - `S` 允许私权法人 `LP/GQ/GF/GY/AS` 和私法人教育机构 `JY`。
 - `F` 允许独立非法人私权机构 `GT/GP`、教育分校 `JY` 和现有公权附属非法人 `ZG`;
-  是否需要所属法人由 `subjects/uninorg` 校验。
+  是否需要所属法人由 `subjects/unincorporated_org` 校验。
 - 教育阶段、国家/市公民教育委员会分类由 `subjects.education_type` 表达,不进入
   `GenerateCidInput`,也不得改变 `G/S/F + JY` 的 CID 生成语义。
 - `ZG/TG` 不再用于私权机构分类;它们保留给人类主体来源分类,其中 `ZG` 仍承担既有公权附属

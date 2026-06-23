@@ -230,8 +230,8 @@ pub mod pallet {
 
     /// 机构多签当前进行中的关闭提案 ID（防止并发注销提案）。
     /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
-    /// B 阶段 PendingCloseProposal 拆为两份:个人侧在 personal-manage 自持,
-    /// 机构侧由本表承载,作用域只剩机构多签账户。
+    /// PendingCloseProposal 分两份:个人侧在 personal-manage 自持,
+    /// 机构侧由本表承载,作用域为机构多签账户。
     #[pallet::storage]
     #[pallet::getter(fn institution_pending_close)]
     pub type InstitutionPendingClose<T: Config> =
@@ -590,7 +590,7 @@ pub mod pallet {
         /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
         /// 本模块无法自动收到通知导致的 Pending / InstitutionPendingClose 残留。
         ///
-        /// B 阶段后仅处理 ACTION_CREATE_INSTITUTION 与 ACTION_CLOSE 两类机构提案;
+        /// 仅处理 ACTION_CREATE_INSTITUTION 与 ACTION_CLOSE 两类机构提案;
         /// 个人多签的清理由 personal-manage::cleanup_rejected_proposal 自持。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_proposal())]
@@ -687,8 +687,8 @@ pub mod pallet {
             matches!(kind, AccountKind::InstitutionMain { .. })
         }
 
-        // derive_personal_account 已迁至 personal-manage::Pallet,
-        // organization-manage 不再提供该派生(机构地址只走 derive_registered_account)。
+        // derive_personal_account 在 personal-manage::Pallet;
+        // organization-manage 的机构地址只走 derive_registered_account。
 
         pub(crate) fn ensure_unique_admins(admins: &AdminsOf<T>) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
@@ -817,7 +817,7 @@ pub mod pallet {
             Institutions::<T>::get(&registered.cid_number).map(|inst| inst.institution_code)
         }
 
-        // account_names_payload_from_initial_accounts 已迁至 institution::accounts。
+        // account_names_payload_from_initial_accounts 在 institution::accounts。
 
         /// 中文注释:把批量 register 入口的 account_names 抽成验签 payload。
         pub(crate) fn account_names_payload_from_names(
@@ -834,7 +834,7 @@ pub mod pallet {
         // 投票回调执行体:
         // - ACTION_CLOSE → crate::close::execute_institution_close_with_finalizer
         // - ACTION_CREATE_INSTITUTION 与 cleanup → crate::institution::execute
-        // (ACTION_CREATE_PERSONAL 已在 B 阶段迁至 personal-manage 独立 pallet)
+        // (ACTION_CREATE_PERSONAL 在 personal-manage 独立 pallet)
     }
 }
 
@@ -890,7 +890,7 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
 //   / `close::execute_institution_close_with_finalizer`;执行失败发事件,不回滚投票
 //   (提案保留 PASSED,可用 cleanup_rejected_proposal 或手动重试处理);
 // - `approved = false` → 清理 Pending 存储(InstitutionPendingClose 等),释放地址占用。
-// (ACTION_CREATE_PERSONAL 已在 B 阶段迁至 personal-manage::InternalVoteExecutor)
+// (ACTION_CREATE_PERSONAL 在 personal-manage::InternalVoteExecutor)
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {

@@ -20,7 +20,6 @@ use votingengine::pallet::{
 };
 use votingengine::types::{code_bytes, InstitutionCode, PMUL};
 // 测试用机构码:个人多签 / 公权法人 / 私权法人,均属"注册多签动态账户"。
-// 取代旧的数字治理标签(语义不变,统一走 CID 机构码)。
 const PERSONAL_CODE: InstitutionCode = PMUL;
 const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
 const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
@@ -134,7 +133,7 @@ thread_local! {
 thread_local! {
     static JOINT_CALLBACK_OVERRIDE_STATUS: RefCell<Option<u8>> = const { RefCell::new(None) };
 }
-// Phase 1 新增:内部投票终态回调测试桩。
+// 内部投票终态回调测试桩。
 // INTERNAL_CALLBACK_SHOULD_FAIL = true → on_internal_vote_finalized 返回 Err,
 //   触发 set_status_and_emit 回滚;用于验证事务原子性。
 // INTERNAL_CALLBACK_LOG 记录每次被调用的 (proposal_id, approved),
@@ -809,7 +808,7 @@ fn create_admin_set_mutation_proposal_via_engine(
 
 /// 测试辅助:走公开 `internal_vote` extrinsic 投票。
 ///
-/// Phase 1 改造后,管理员投票只能通过公开 call(不再经 trait 转发),
+/// 管理员投票只能通过公开 call,
 /// 此函数包裹 `RuntimeOrigin::signed(who)` 让测试代码保持简洁。
 fn cast_internal_vote_via_extrinsic(
     who: AccountId32,

@@ -1,4 +1,4 @@
-// 挖矿 tab 类型，对齐后端 src/mining/dashboard 与 src/mining/network-overview。
+// 挖矿 tab 类型，对齐后端 src/mining/dashboard 与 src/mining/network_overview。
 
 export type MiningIncome = {
   totalIncome: string;

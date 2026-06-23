@@ -7,7 +7,7 @@
 //   EDUCATION_INSTITUTION 教育 tab:G/S/F;institution_code 不再锁死,按 subject_property×education_type 计算
 //                         (公私大学 GUN/SUN、公私中小学 GSCH/SFSC),F 分校继承本部学校码(GSCH/SFSC)
 //
-// P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/uninorg 同源):
+// P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/unincorporated_org 同源):
 //   G → 锁死 0(非盈利,生成器硬规则)
 //   S → 可选 0/1,默认 1
 //   F → 个体经营/无限合伙为独立非法人;教育分校/公权下属非法人继承所属法人
@@ -178,7 +178,7 @@ const GOV_UNINORG_INSTITUTION_ONLY: ChoiceItem[] = [
 export const EDUCATION_UNIVERSITY_TYPE: EducationType = 'UNIVERSITY';
 
 /**
- * 教育入口提交前派生 institution_code(与后端 number/code.rs + subjects/uninorg 同源)。
+ * 教育入口提交前派生 institution_code(与后端 number/code.rs + subjects/unincorporated_org 同源)。
  * @param subjectProperty UI 导航属性 G(公立)/S(私立)/F(分校)
  * @param educationType   本部教育级别(大学走 GUN/SUN,中小初学走 GSCH/SFSC);分校忽略
  */
@@ -355,13 +355,13 @@ export function institutionChoicesFor(
   return [{ value: 'SFGT', label: '个体经营' }];
 }
 
-/** 非法人盈利属性附属于所属法人:公法人父恒 0,私法人父继承其 p1(与后端 uninorg 同源)。 */
+/** 非法人盈利属性附属于所属法人:公法人父恒 0,私法人父继承其 p1(与后端 unincorporated_org 同源)。 */
 export function inheritedP1(parentSubjectProperty: string, parentP1: string): string {
   return parentSubjectProperty === 'G' ? '0' : parentP1;
 }
 
 /**
- * P1 盈利属性统一按主体属性联动(三入口共用,与号码生成器/uninorg 同源):
+ * P1 盈利属性统一按主体属性联动(三入口共用,与号码生成器/unincorporated_org 同源):
  *   G → 锁死 0(非盈利);S → 可选 0/1 默认 1;
  *   F → 锁死,继承所属法人;未选父级前 value=undefined(表单必填挡提交)。
  */

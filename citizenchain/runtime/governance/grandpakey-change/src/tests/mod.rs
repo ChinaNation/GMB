@@ -303,7 +303,7 @@ fn last_proposal_id() -> u64 {
     votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
 }
 
-/// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
+/// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(统一入口)。
 fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
     frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<DispatchResult> {

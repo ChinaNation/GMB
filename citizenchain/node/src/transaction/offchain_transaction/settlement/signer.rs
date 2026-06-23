@@ -1,16 +1,16 @@
-//! 扫码支付 Step 2b-ii-β-1 新增:基于 `settlement::keystore::SigningKey` 的批次签名器。
+//! 基于 `settlement::keystore::SigningKey` 的批次签名器。
 //!
 //! 中文注释:
 //! - 本文件实现 `packer::BatchSigner` trait,把 batch 的签名消息转交给清算行
 //!   管理员的 sr25519 私钥。
 //! - `SigningKey` 沿用 `settlement/keystore.rs` 的密钥容器,
-//!   Step 2b-iv 删除旧省储行路径时再考虑是否统一)。持有 `Arc<RwLock<Option<..>>>`
+//!   持有 `Arc<RwLock<Option<..>>>`
 //!   是为了支持**热切换密钥**(节点运行中重新解锁后替换 inner)+ 未加载时 None
 //!   的情况下签名直接返回 Err,便于 packer 通过 `rollback` 路径回滚 pending。
 //! - 本模块**不依赖 substrate client / TransactionPool**,可独立编译 + 单测。
 //!
-//! 与 Step 2b-ii-β-2 的衔接:
-//! - β-2 的 `service.rs` 启动时解密密钥得到 `SigningKey`,用
+//! 与 submitter 的衔接:
+//! - `service.rs` 启动时解密密钥得到 `SigningKey`,用
 //!   `Arc::new(RwLock::new(Some(key)))` 包好传给 `KeystoreBatchSigner::new`,
 //!   再作为 `BatchSigner` 注入 `start_clearing_bank_components`。
 

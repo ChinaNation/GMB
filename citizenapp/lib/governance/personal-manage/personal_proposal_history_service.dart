@@ -93,7 +93,7 @@ class PersonalProposalHistoryService {
   ///
   /// 容错:链上失败仅回退 Isar;Isar 失败仅回退链上;两者都失败返回空列表。
   ///
-  /// 状态新鲜度策略(2026-05-03 修):
+  /// 状态新鲜度策略:
   /// 1. 链上 ActiveProposalsByInstitution 同步活跃提案到 Isar(防其他设备漏记)
   /// 2. **额外**:遍历 Isar 中本机已知 status='voting' 的 entity,挨个查链上
   ///    Proposals[id] 拿最新 status + tally。这步必须独立于 active 列表,
@@ -290,10 +290,10 @@ class PersonalProposalHistoryService {
             .findFirst();
       });
 
-      // action 决策(2026-05-09 修):
+      // action 决策:
       // 1) 本设备已发起过该提案 → 用 Isar 已存的 action(权威,与发起页面一致)
       // 2) 首次发现(其他设备发起 / 历史扫回) → 拉链上 ProposalData 真解码
-      //    MODULE_TAG + action_byte;不再默认 create
+      //    MODULE_TAG + action_byte
       // 3) 链上数据被 90 天清理或解码失败 → fallback create
       String action = existing?.action ?? PersonalProposalAction.create;
       if (existing == null) {

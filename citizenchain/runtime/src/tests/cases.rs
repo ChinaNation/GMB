@@ -1,7 +1,7 @@
 use super::*;
 
 // ============================================================================
-// 簇 1:Runtime 整体自检(原 lib.rs 末尾,4 个用例)
+// 簇 1:Runtime 整体自检(4 个用例)
 // ============================================================================
 
 #[test]
@@ -39,7 +39,7 @@ fn fee_payer_returns_none_for_transfer() {
     );
 }
 
-/// Phase 2 回归:7 个治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
+/// 7 个治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
 ///
 /// 背景:投票引擎达终态后通过 `InternalVoteResultCallback` tuple 广播到
 /// 全部业务 Executor,各 Executor 靠 `ProposalData` 前缀的 MODULE_TAG 互斥
@@ -85,7 +85,7 @@ fn runtime_version_and_block_types_are_sane() {
 }
 
 // ============================================================================
-// 簇 2:装配集成测试(原 configs/mod.rs::tests,18 个用例)
+// 簇 2:装配集成测试(18 个用例)
 // ============================================================================
 
 #[test]
@@ -319,9 +319,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
             .try_into()
             .expect("admins should fit");
-        // 中文注释：propose_create 单账户机构入口已于 2026-05-03 删除；
-        // propose_create_personal 已于 B 阶段拆分迁至 PersonalManage(2026-05-06)。
-        // 本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
+        // 中文注释：本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
         let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
             b"runtime-test-personal"
                 .to_vec()
@@ -1007,7 +1005,7 @@ fn runtime_cid_institution_verifier_admins_change_lookup() {
 }
 
 // ============================================================================
-// 簇 3:机构资金白名单允许矩阵(原 configs/mod.rs::asset_tests,4 个用例)
+// 簇 3:机构资金白名单允许矩阵(4 个用例)
 // ============================================================================
 
 #[test]

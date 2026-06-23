@@ -25,7 +25,7 @@ fn default_asset_allows_all_actions() {
         &account,
         InstitutionAssetAction::NrcSafetyFundTransfer,
     ));
-    // 扫码支付 Step 1 新增 4 个动作
+    //  4 个动作
     assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(
         &account,
         InstitutionAssetAction::L3DepositIn,

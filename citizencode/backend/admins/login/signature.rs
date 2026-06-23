@@ -54,13 +54,13 @@ pub(super) fn build_login_qr_system_signature(
     issued_at: i64,
     expires_at: i64,
 ) -> Result<(String, String), String> {
-    // ADR-008 Phase 23e:登录二维码的"系统签名"由 CID main signer(全局唯一)产出。
-    // signer 仍是 CID 系统签名密钥(CID_SIGNING_SEED_HEX 派生),与联邦注册局管理员/市注册局管理员公民钱包无关。
+    // 登录二维码的"系统签名"由 CID main signer(全局唯一)产出。
+    // signer 是 CID 系统签名密钥(CID_SIGNING_SEED_HEX 派生),与联邦注册局管理员/市注册局管理员公民钱包无关。
     let main_seed_hex = std::env::var("CID_SIGNING_SEED_HEX")
         .map_err(|_| "CID_SIGNING_SEED_HEX not set".to_string())?;
     let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
     let sys_pubkey = format!("0x{}", hex::encode(signer.public().0));
-    let _ = state; // state 不再持有 signing seed/pubkey,签名走 env + crypto helper
+    let _ = state; // 签名走 env + crypto helper,不取自 state
     let message = crate::core::qr::build_signature_message(
         crate::core::qr::QrKind::LoginChallenge,
         challenge,
@@ -68,7 +68,7 @@ pub(super) fn build_login_qr_system_signature(
         Some(expires_at),
         &sys_pubkey,
     );
-    let _ = issued_at; // 统一签名原文不再包含 issued_at
+    let _ = issued_at; // 统一签名原文不包含 issued_at
     let signature = signer.sign(message.as_bytes());
     Ok((sys_pubkey, format!("0x{}", hex::encode(signature.0))))
 }
@@ -145,7 +145,7 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
 }
 
 pub(crate) fn build_admin_name(
-    // 中文注释:参数保留以稳定调用签名;内置联邦注册局清单已迁链上,显示名不再按账号反查。
+    // 中文注释:参数保留以稳定调用签名;显示名不按账号反查。
     _admin_account: &str,
     registry_org_code: &RegistryOrgCode,
     scope_province_name: Option<&str>,
@@ -155,7 +155,7 @@ pub(crate) fn build_admin_name(
             return format!("{province}联邦注册局管理员");
         }
     }
-    // ADR-008 后只剩两角色。
+    // 只有两角色。
     match registry_org_code {
         RegistryOrgCode::CityRegistry => "市注册局管理员".to_string(),
         RegistryOrgCode::FederalRegistry => "联邦注册局管理员".to_string(),

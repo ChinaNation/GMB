@@ -171,7 +171,7 @@ export interface CreateInstitutionInput {
   cid_full_name?: string;
   /**
    * 所属法人 cid_number。仅需挂靠的非法人创建必传;个体经营/无限合伙是独立非法人,
-   * 不接受所属法人。规则单一源:后端 subjects/uninorg。
+   * 不接受所属法人。规则单一源:后端 subjects/unincorporated_org。
    */
   parent_cid_number?: string;
   private_type?: PrivateType;
@@ -220,7 +220,7 @@ export interface ParentInstitutionRow {
   city_name: string;
 }
 
-/** 所属法人搜索参数。预过滤规则与后端 subjects/uninorg 同源(三处同源缺一有绕过口)。 */
+/** 所属法人搜索参数。预过滤规则与后端 subjects/unincorporated_org 同源(三处同源缺一有绕过口)。 */
 export interface SearchParentsOptions {
   /** 非法人的机构代码:JY=教育分校,GT/GP=私权独立非法人,其它 F 由后端判定是否需挂靠 */
   fInstitution: string;

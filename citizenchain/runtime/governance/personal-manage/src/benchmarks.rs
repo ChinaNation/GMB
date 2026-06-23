@@ -1,9 +1,9 @@
 //! 个人多签管理 pallet benchmark 占位。
 //!
-//! D 阶段(2026-05-06)起,此处仅保留模块编译入口;实际 benchmark 用例待 follow-up:
+//! 此处仅保留模块编译入口;实际 benchmark 用例待 follow-up:
 //! - propose_create / propose_close / cleanup_rejected_proposal
 //!
-//! 当前 weights.rs 已改为保守非零权重,benchmark 补齐后再用实测值覆盖。
+//! weights.rs 当前为保守非零权重,benchmark 补齐后再用实测值覆盖。
 
 #![cfg(feature = "runtime-benchmarks")]
 

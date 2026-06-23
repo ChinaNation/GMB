@@ -2,14 +2,9 @@
 ///
 /// 钱包 UI 显示时查此表翻译，未命中则原样显示英文。
 ///
-/// Phase 3（2026-04-22）：
-/// - 所有管理员投票统一 action = `internal_vote`，业务 `vote_X` 标签全部删除。
-/// - 联合投票、公民投票、任意人触发的终态执行单独保留。
-///
-/// Phase 4（2026-05-02）：
-/// - 业务 pallet 的 `execute_xxx` / `cancel_failed_xxx` wrapper 全部删除，
-///   统一到 `retry_passed_proposal` / `cancel_passed_proposal`，对应 7 个旧
-///   action label 一并下线。
+/// - 所有管理员投票统一 action = `internal_vote`；联合投票、公民投票、
+///   任意人触发的终态执行单独保留。
+/// - 手动重试/取消统一走 `retry_passed_proposal` / `cancel_passed_proposal`。
 const Map<String, String> actionLabels = {
   'transfer': '转账',
 
@@ -25,9 +20,8 @@ const Map<String, String> actionLabels = {
   'propose_transfer': '发起转账提案',
   'propose_safety_fund_transfer': '安全基金转账提案',
   'propose_sweep_to_main': '手续费划转提案',
-  // 'propose_create': 已废弃 (2026-05-03),单账户机构创建入口已删除。
-  // B 阶段拆分(2026-05-06):个人多签独立 pallet PersonalManage(7),
-  // 'propose_create_personal' 仍为 decoder 输出 action 字符串,显式区分个人/机构提示文案。
+  // 个人多签为独立 pallet PersonalManage(7),
+  // 'propose_create_personal' 是 decoder 输出 action 字符串,显式区分个人/机构提示文案。
   'propose_create_personal': '创建个人多签',
   'propose_create_institution': '创建机构多签账户',
   'propose_close_institution': '注销机构多签提案',
@@ -39,8 +33,7 @@ const Map<String, String> actionLabels = {
   'propose_resolution_issuance': '决议发行提案',
 
   // 业务提案幂等入口
-  // Phase 4(2026-05-02): execute_xxx / cancel_failed_xxx 的 7 个旧 label
-  // 已删除,所有手动重试/取消统一显示为 retry_passed_proposal /
+  // 手动重试/取消统一显示为 retry_passed_proposal /
   // cancel_passed_proposal(在 votingengine 段已声明)。
   'cleanup_rejected_proposal': '清理被否决提案',
   'register_cid_institution': '登记 CID 机构信息',

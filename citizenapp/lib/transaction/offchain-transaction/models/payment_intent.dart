@@ -86,8 +86,7 @@ class NodePaymentIntent {
   /// 待签名哈希:`blake2_256(GMB || OP_SIGN_L3_PAY(0x15) || scaleEncode())`。
   ///
   /// 经全仓签名唯一原语 [signingMessage] 构造,逐字节对齐链端
-  /// `primitives::sign::signing_message(OP_SIGN_L3_PAY, SCALE(intent))`
-  /// (ADR-026,取代历史字符串域 b"GMB_L3_PAY_V1")。
+  /// `primitives::sign::signing_message(OP_SIGN_L3_PAY, SCALE(intent))`。
   Uint8List signingHash() =>
       signingMessage(opTag: kOpSignL3Pay, scalePayload: scaleEncode());
 

@@ -13,7 +13,6 @@ use votingengine::types::{code_bytes, is_registered_multisig_code, InstitutionCo
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
 
 // 测试用机构码:个人多签 / 私权法人,均属"注册多签动态账户"。
-// 取代旧的数字治理标签(语义不变,统一走 CID 机构码)。
 const PERSONAL_CODE: InstitutionCode = PMUL;
 const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
 
@@ -196,12 +195,11 @@ impl
     }
 }
 
-// 测试扩展:
-// 原 TestInternalAdminProvider 只读 CHINA_CB/CHINA_CH 硬编码 admin(非真实 sr25519 公钥,无法签名)。
-// 为支持 `internal_vote` 的可签名测试账户,新增 thread_local 覆盖层:
+// 测试扩展:thread_local 覆盖层提供可签名的测试账户(CHINA_CB/CHINA_CH 硬编码 admin
+// 非真实 sr25519 公钥,无法签名)。
 //   - EXTRA_ADMINS 按 (institution_code, institution AccountId) 注入 sr25519 派生 admin 集合。
 // NRC/PRC/PRB 的内部阈值是 votingengine 固定制度常量,测试必须注入足够管理员并投满该阈值。
-// 若某 (institution_code, institution) 在 thread_local 有注入,优先用;否则 fallback 到原硬编码逻辑。
+// 若某 (institution_code, institution) 在 thread_local 有注入,优先用;否则 fallback 到硬编码逻辑。
 thread_local! {
     static EXTRA_ADMINS: core::cell::RefCell<
         alloc::collections::BTreeMap<(InstitutionCode, AccountId32), alloc::vec::Vec<AccountId32>>,
@@ -356,7 +354,7 @@ impl votingengine::Config for Test {
     type CidEligibility = TestCidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
-    // Phase 2:挂上本模块 Executor,3 组业务提案通过后自动走 callback 执行。
+    // 挂上本模块 Executor,3 组业务提案通过后自动走 callback 执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = TestInternalAdminsLenProvider;

@@ -29,7 +29,7 @@ pub const STAGE_JOINT: u8 = 1;
 /// 由 CID 持有者按 >50% 严格多数投票。
 ///
 /// 注意:这是联合投票的第二阶段,与独立的 citizen-vote pallet(pallet_index=24)
-/// 是两个不同概念。citizen-vote pallet 用于公民选举/公投等多模式投票(Phase 3 接业务)。
+/// 是两个不同概念。citizen-vote pallet 用于公民选举/公投等多模式投票。
 pub const STAGE_REFERENDUM: u8 = 2;
 
 pub const STATUS_VOTING: u8 = 0;

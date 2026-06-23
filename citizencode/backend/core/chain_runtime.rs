@@ -609,8 +609,8 @@ fn parse_hex_hash32(raw: &str) -> Result<[u8; 32], String> {
 }
 
 fn sign_runtime_digest(_state: &AppState, digest: &[u8; 32]) -> Result<String, String> {
-    // ADR-008 Phase 23e:CID main signer 直接从环境变量 CID_SIGNING_SEED_HEX
-    // 派生(由 `crate::crypto::sr25519` helper 加载),AppState 不再持有 seed。
+    // CID main signer 直接从环境变量 CID_SIGNING_SEED_HEX
+    // 派生(由 `crate::crypto::sr25519` helper 加载),AppState 不持有 seed。
     // 由 build_vote_credential / build_population_snapshot_credential 调用(全国级签名)。
     let seed_hex = std::env::var("CID_SIGNING_SEED_HEX")
         .map_err(|_| "CID_SIGNING_SEED_HEX not set".to_string())?;

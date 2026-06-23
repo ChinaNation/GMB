@@ -14,9 +14,9 @@ use crate::BalanceOf;
 
 /// 校验发起人 free 余额覆盖 amount + fee + ED,返回 (reserve_total = amount + fee, fee)。
 ///
-/// 机构多签的资金模型(2026-05-03 整改):提案创建时 reserve(amount + fee),
+/// 机构多签的资金模型:提案创建时 reserve(amount + fee),
 /// 投票通过后 unreserve→划转→withdraw fee。本 helper 集中"金额合法性 + 余额够付"
-/// 的预检查;personal-manage 自持平行实现(已迁出本模块)。
+/// 的预检查;personal-manage 自持平行实现。
 pub(crate) fn ensure_proposer_can_afford<T: Config>(
     who: &T::AccountId,
     amount: BalanceOf<T>,

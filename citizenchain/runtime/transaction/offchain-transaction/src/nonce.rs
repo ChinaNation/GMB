@@ -1,10 +1,10 @@
-//! 扫码支付清算体系 Step 1 新增:L3 支付 nonce 辅助。
+//! L3 支付 nonce 辅助。
 //!
 //! 中文注释:
 //! - 每个 L3 账户有一个单调递增的 nonce,防止清算行或中间人重放已签名的意图。
 //! - 链上权威存储 `L3PaymentNonce`(在 lib.rs 定义)。
-//! - 本模块只提供"消费下一个 nonce"的辅助函数,Step 2 批次清算里调用。
-//! - Step 1 本身未暴露调用 nonce 的 extrinsic,但结构先行,避免 Step 2 返工。
+//! - 本模块只提供"消费下一个 nonce"的辅助函数,批次清算里调用。
+//! - 本模块仅提供辅助函数,不暴露调用 nonce 的 extrinsic。
 
 use crate::{Config, Error, L3PaymentNonce};
 

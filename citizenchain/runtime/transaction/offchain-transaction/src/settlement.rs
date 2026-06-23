@@ -14,9 +14,9 @@
 //!     5. 防重放(`ProcessedOffchainTx` 不命中)
 //! - 手续费**全部归收款方清算行的费用账户**,无省储行分成。
 //!
-//! Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**模型。
-//! - `submit_offchain_batch_v2` 的 `institution_main` 现在 = 收款方清算行主账户
-//! - 同一批次所有 item 的 `recipient_bank` 必须 == `institution_main`(原为 `payer_bank`)
+//! **收款方主导清算**模型。
+//! - `submit_offchain_batch_v2` 的 `institution_main` = 收款方清算行主账户
+//! - 同一批次所有 item 的 `recipient_bank` 必须 == `institution_main`
 //! - 提交者 = 收款方清算行的某个激活管理员
 //! - 链上 gas 由 `RuntimeFeePayerExtractor` 从 `fee_account_of(institution_main)` 扣
 //!
@@ -62,7 +62,7 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 
 /// 清算行批次上链的完整执行。
 ///
-/// Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**。
+/// **收款方主导清算**。
 ///
 /// [`submitter`] 提交该批次的清算行多签管理员(必须是 institution_main 即收款方机构的激活管理员)
 /// [`institution_main`] 批次归属的清算行主账户(= **收款方**清算行)

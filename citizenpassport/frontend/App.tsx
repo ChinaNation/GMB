@@ -9,9 +9,9 @@ import InstallPage from './initialize/InstallPage';
 import AdminLayout from './admins/AdminLayout';
 import AdminList from './admins/AdminList';
 import SystemSettings from './admins/SystemSettings';
-import ArchiveList from './dangan/ArchiveList';
-import ArchiveCreate from './dangan/ArchiveCreate';
-import ArchiveDetail from './dangan/ArchiveDetail';
+import ArchiveList from './archive/ArchiveList';
+import ArchiveCreate from './archive/ArchiveCreate';
+import ArchiveDetail from './archive/ArchiveDetail';
 
 function RootRedirect() {
   const { ready, user } = useAuth();

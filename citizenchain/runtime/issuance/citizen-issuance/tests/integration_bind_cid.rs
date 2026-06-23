@@ -132,7 +132,7 @@ impl cid_system::Config for Test {
     type CidVoteVerifier = TestCidVoteVerifier;
     /// 中文注释：集成测试核心——将 OnCidBound 接入真实的 CitizenIssuance。
     type OnCidBound = CitizenIssuance;
-    /// ADR-008 Step 2c:`unbind_cid` 由 Root 授权(集成测试不涉及解绑路径)。
+    /// `unbind_cid` 由 Root 授权(集成测试不涉及解绑路径)。
     type UnbindOrigin = EnsureRoot<u64>;
     type WeightInfo = ();
 }
@@ -184,7 +184,7 @@ fn make_credential(
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
-    // ADR-008 Step 2c:cid_system::GenesisConfig 已删,创世 storage 全空,
+    // cid_system::GenesisConfig 创世 storage 全空,
     // 链上 0 prior knowledge of CID,集成测试不再注入任何 CID 创世账户。
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()

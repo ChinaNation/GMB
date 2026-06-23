@@ -1,6 +1,6 @@
 // 清算行管理员密钥解密(unlock)流程。
 //
-// 与 governance/admins_change/activation.rs 中的"激活"语义一致——citizenwallet 冷钱包扫码签 challenge,
+// 与 governance/admins-change/activation.rs 中的"激活"语义一致——citizenwallet 冷钱包扫码签 challenge,
 // 节点本地验签——但本流程**仅在清算行 tab 用**,术语为"解密"以区别于 NRC/PRC/PRB
 // 的"激活"。区别:
 // - 激活(activation):写入 activated-admins.json 长期持久化
@@ -12,9 +12,6 @@
 //   1. citizenwallet 签 challenge → 节点 sr25519 验签 → 证明操作员持有该公钥的冷钱包
 //   2. 把 (pubkey, cid_number) 标记为内存内"授权可用",packer 攒批前 cross-check
 //      该入口存在才会启动签名(防误用启动密码加载的 SigningKey)
-//
-// Step 3(citizenwallet/citizenapp 完工后)再做完整的"per-admin 加密 seed 文件 +
-// challenge-derived AES key"模型;Step 2 先把 UI 与协议跑通即可。
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -34,7 +31,7 @@ use crate::transaction::offchain_transaction::types::{
 
 const PROTOCOL_VERSION: &str = "CITIZEN_QR_V1";
 // 解密 challenge payload 前缀 = GMB || OP_SIGN_DECRYPT(4B 二进制前缀，单一真源
-// primitives::sign，ADR-026 Phase 2 取代历史 b"GMB_DECRYPT_V1"(14B))。
+// primitives::sign)。
 /// challenge payload 长度:4 + 48 + 32 + 8 + 16 = 108 字节
 const CHALLENGE_TOTAL_LEN: usize = BINARY_PREFIX_LEN + 48 + 32 + 8 + 16;
 const DEFAULT_TTL_SECS: u64 = 90;
@@ -138,7 +135,7 @@ pub fn build_decrypt_admin_request(
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
     // display.fields 提供给 citizenwallet decoder 构造确认页(action=decrypt_admin)。
-    // Step 3 citizenwallet 端补对应 decoder 分支后,签名页文案为"解密管理员 - {cid_number}"。
+    // citizenwallet decoder 分支签名页文案为"解密管理员 - {cid_number}"。
     let display = serde_json::json!({
         "action": "decrypt_admin",
         "summary": format!("解密清算行管理员 - {cid_number}"),

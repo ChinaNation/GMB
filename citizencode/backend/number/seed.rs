@@ -1,14 +1,13 @@
 //! CID 号确定性种子 + 撞号重试的唯一真源。
 //!
 //! 中文注释(单源铁律):
-//! 三类 CID 的「种子约定 + 撞号重试」全部收敛在本文件,调用方一律调它,
-//! 不再各自拼种子/写重试循环。底层号码结构仍由 `generator::generate_cid_number`
-//! 单源生成;本文件只负责「喂什么 account_pubkey 种子」+「碰撞后怎么换种子重试」。
+//! 三类 CID 的「种子约定 + 撞号重试」全部收敛在本文件,调用方一律调它。
+//! 底层号码结构由 `generator::generate_cid_number` 单源生成;
+//! 本文件只负责「喂什么 account_pubkey 种子」+「碰撞后怎么换种子重试」。
 //!
-//! 三类种子约定(逐字节复刻原调用方,行为中性):
+//! 三类种子约定:
 //! - 公权机构(政府模板,创世确定性):`official_institution_cid`
-//!   种子 = `GOV-{scope}-{province}-{city}-{town}-{institution}`,**无重试**(创世确定性,
-//!   原 `gov/service.rs` 行为)。
+//!   种子 = `GOV-{scope}-{province}-{city}-{town}-{institution}`,**无重试**(创世确定性)。
 //! - 公民人(绑定兜底):`citizen_cid`
 //!   种子 = `wallet_pubkey`(`retry==0`)或 `wallet_pubkey#{retry}`,1000 次 DB 查重重试。
 //! - 机构动态注册:`dynamic_institution_cid`
@@ -38,10 +37,9 @@ pub enum SeedCidError<E> {
 
 /// 公权机构(政府模板)CID — 确定性种子,**无重试**。
 ///
-/// 中文注释:逐字节复刻原 `gov/service.rs::push_area_template_target` 的
-/// `account_seed = "GOV-{scope}-{province_code}-{city_code}-{town_code}-{institution_code}"`,
+/// 中文注释:`account_seed = "GOV-{scope}-{province_code}-{city_code}-{town_code}-{institution_code}"`,
 /// 创世幂等故不重试;碰撞概率由 (机构码,省,市,年) 桶 + 种子唯一性保证。
-/// `exists_fn` 形参保留(供未来守卫/审计),当前调用方传 `|_| Ok(false)` 即等价原行为。
+/// `exists_fn` 形参供守卫/审计,创世传 `|_| Ok(false)`。
 pub fn official_institution_cid<E>(
     scope: &str,
     province_code: &str,
@@ -62,18 +60,17 @@ pub fn official_institution_cid<E>(
         institution: institution_code,
     })
     .map_err(SeedCidError::Generate)?;
-    // 创世确定性:不重试。保留查重回调供守卫,碰撞即报错(原行为下永不触发)。
+    // 创世确定性:不重试。查重回调供守卫,碰撞即报错。
     if exists_fn(&cid).map_err(SeedCidError::Exists)? {
         return Err(SeedCidError::Exhausted);
     }
     Ok(cid)
 }
 
-/// 市公安局(CPOL)CID — 历史确定性种子 `PS-{province_code}-{city_code}`,创世无重试。
+/// 市公安局(CPOL)CID — 确定性种子 `PS-{province_code}-{city_code}`,创世无重试。
 ///
-/// 中文注释:逐字节复刻原 `gov/service.rs::generate_public_security_cid`:
-/// 种子 `PS-{省码}-{市码}`,机构码固定 `CPOL`,`p1="0"`。不得改成 GOV-CITY 模板种子,
-/// 否则平移既有公安局 CID。`exists_fn` 形参保留(供守卫),创世传 `|_| Ok(false)` 等价原行为。
+/// 中文注释:种子 `PS-{省码}-{市码}`,机构码固定 `CPOL`,`p1="0"`。不得改成 GOV-CITY 模板种子,
+/// 否则平移既有公安局 CID。`exists_fn` 形参供守卫,创世传 `|_| Ok(false)`。
 pub fn public_security_cid<E>(
     province_code: &str,
     city_code: &str,
@@ -98,8 +95,7 @@ pub fn public_security_cid<E>(
 
 /// 公民人(绑定兜底)CID — `wallet_pubkey` 种子 + 1000 次重试。
 ///
-/// 中文注释:逐字节复刻原 `citizens/binding.rs::generate_unique_citizen_cid`:
-/// `retry==0` 用裸 `wallet_pubkey`,否则 `wallet_pubkey#{retry}`;机构码固定 `CTZN`,
+/// 中文注释:`retry==0` 用裸 `wallet_pubkey`,否则 `wallet_pubkey#{retry}`;机构码固定 `CTZN`,
 /// `p1="1"`,`city_name="省辖市"`(市级段被 generator 固定为 000)。
 pub fn citizen_cid<E>(
     wallet_pubkey: &str,
@@ -138,7 +134,7 @@ mod tests {
         Ok(false)
     }
 
-    // 中文注释:逐字节复刻铁证 —— official 种子拼装与原 gov/service.rs 完全一致。
+    // 中文注释:official 种子拼装与内联拼装逐字节一致。
     #[test]
     fn official_seed_matches_inline_byte_for_byte() {
         let from_seed = official_institution_cid(
@@ -192,7 +188,7 @@ mod tests {
         assert_eq!(a, b);
     }
 
-    // 中文注释:公安局 PS-{省码}-{市码} 种子与原 gov/service.rs::generate_public_security_cid 逐字节一致。
+    // 中文注释:公安局 PS-{省码}-{市码} 种子与内联拼装逐字节一致。
     #[test]
     fn public_security_seed_matches_inline_byte_for_byte() {
         let from_seed =
@@ -208,7 +204,7 @@ mod tests {
         assert_eq!(from_seed, inline);
     }
 
-    // 中文注释:公民人 retry==0 用裸 wallet_pubkey,与原 binding.rs 一致。
+    // 中文注释:公民人 retry==0 用裸 wallet_pubkey。
     #[test]
     fn citizen_first_attempt_matches_inline() {
         let from_seed = citizen_cid("0xabc", "广东省", never_exists).expect("citizen cid");
@@ -223,7 +219,7 @@ mod tests {
         assert_eq!(from_seed, expected);
     }
 
-    // 中文注释:碰撞时切到 wallet_pubkey#1 种子(逐字节复刻)。
+    // 中文注释:碰撞时切到 wallet_pubkey#1 种子。
     #[test]
     fn citizen_retries_with_hash_suffix_on_collision() {
         let first = generate_cid_number(GenerateCidInput {
@@ -265,10 +261,8 @@ mod tests {
 
 /// 机构动态注册 CID — 随机 UUIDv4 种子 + 1000 次重试 + 格式校验。
 ///
-/// 中文注释:逐字节复刻原 `subjects/registration.rs` 的随机 UUID 循环:
-/// 每轮 `Uuid::new_v4()` 作 `account_pubkey`,生成后 `validate_cid_number_format`
-/// 归一化,再用 `exists_fn` 查重;返回**已校验归一化**的号(原行为是把校验后的
-/// `cid` 用于后续 DB 写入,故此处返回校验后的串)。
+/// 中文注释:每轮 `Uuid::new_v4()` 作 `account_pubkey`,生成后 `validate_cid_number_format`
+/// 归一化,再用 `exists_fn` 查重;返回**已校验归一化**的号(供后续 DB 写入)。
 pub fn dynamic_institution_cid<E>(
     province_name: &str,
     city_name: &str,

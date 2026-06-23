@@ -1,7 +1,5 @@
 // "添加清算行"页:输入 cid_number / 关键字 → debounce 自动搜 CID 候选 → 选中即进入下一步。
-//
-// 2026-05-01 重构:删除"查询"按钮(input debounce 已自动搜),回车也直接选第一个候选,
-// 不再走 onSelectKnownCid 走 cidNumber 字符串透传(链上判定改由 check-multisig 视图统一处理)。
+// 回车直接选第一个候选,cidNumber 字符串透传,链上判定由 check-multisig 视图统一处理。
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';

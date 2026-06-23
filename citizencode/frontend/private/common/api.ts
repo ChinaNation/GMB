@@ -123,7 +123,7 @@ export async function getInstitution(
   );
 }
 
-// 中文注释:所属法人搜索。后端按 subjects/uninorg 规则预过滤
+// 中文注释:所属法人搜索。后端按 subjects/unincorporated_org 规则预过滤
 // (分校→本市学校本部;其它 F→私法人全国 ∪ 公法人按层级地域),前端不再兜底过滤。
 export async function searchParentInstitutions(
   auth: AdminAuth,

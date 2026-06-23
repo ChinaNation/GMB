@@ -236,9 +236,9 @@ pub(crate) async fn generate_cpms_install_qr(
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    // 中文注释:安装码以机构自身 cid_number 为唯一键(写/读同键);按 cid 反查机构真源,
-    // 不再用 (province,city,institution) 三元组重解析(institution_code 如 ZF 是类别码,
-    // 同市可命中数十个机构,曾导致公安局页面生成的安装码错落到农业局名下)。
+    // 中文注释:安装码以机构自身 cid_number 为唯一键(写/读同键);按 cid 反查机构真源。
+    // 禁止用 (province,city,institution) 三元组重解析:institution_code 如 ZF 是类别码,
+    // 同市可命中数十个机构,会让安装码错落到同类别其他机构名下。
     let Some((
         province,
         city,

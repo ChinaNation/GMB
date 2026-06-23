@@ -176,8 +176,7 @@ class _InstitutionDuoqianClosePageState
               // 链端 call 名仍为 propose_close,QR action 为
               // propose_close_institution,fields 按 Registry =
               // (account, beneficiary)。"当前余额" 属辅助展示,
-              // 页面已独立显示,不塞 display.fields 避免对齐失败
-              // (2026-04-22 两色识别整改)。
+              // 页面已独立显示,不塞 display.fields 避免对齐失败。
               SignDisplayField(
                 key: 'account',
                 label: '机构多签账户',

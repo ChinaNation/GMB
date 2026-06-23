@@ -89,7 +89,7 @@ class _InstitutionManageDetailPageState
   Set<String> _pendingPubkeys = const {};
   String? _voteNotice;
   bool _voteNoticeIsError = false;
-  // ADR-018 R2:待投票确认期改用 finalized 头订阅驱动刷新,空闲链不再 20s 盲轮询。
+  // 待投票确认期用 finalized 头订阅驱动刷新。
   ChainEventSubscription? _pendingSub;
   StreamSubscription<ChainEvent>? _pendingEventSub;
 
@@ -459,8 +459,7 @@ class _InstitutionManageDetailPageState
       return;
     }
     if (_pendingSub != null) return;
-    // 待投票确认期:订阅 finalized 头,有新最终块才刷新,空闲链零查询;
-    // 不再每 20 秒盲查一次。
+    // 待投票确认期:订阅 finalized 头,有新最终块才刷新,空闲链零查询。
     final sub = ChainEventSubscription();
     if (!sub.connect()) {
       sub.disconnect();
@@ -555,7 +554,7 @@ class _InstitutionManageDetailPageState
             fields: [
               // internal_vote 链端 fields 按 Registry = (proposal_id, approve)。
               // _createInfo / _closeInfo 属辅助上下文,页面已独立展示,
-              // 不塞 display.fields 避免对齐失败(2026-04-22 两色识别整改)。
+              // 不塞 display.fields 避免对齐失败。
               SignDisplayField(
                   key: 'proposal_id',
                   label: '提案编号',
@@ -580,7 +579,7 @@ class _InstitutionManageDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      // Phase 3: 创建/关闭多签的投票都走 InternalVote::cast(22.0),
+      // 创建/关闭多签的投票都走 InternalVote::cast(22.0),
       // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
       debugPrint('[VoteDetail] 调 InternalVoteService.submit');
       final result = await InternalVoteService().submit(

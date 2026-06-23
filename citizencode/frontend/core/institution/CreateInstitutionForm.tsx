@@ -1,7 +1,7 @@
 // 中文注释:机构新增弹窗共享表单(私权/公权/教育三入口共用)。
 // 各入口只传入本模块 API 函数,不在公共组件里越过业务边界。
 //
-// 主体属性统一联动(与后端号码生成器/subjects/uninorg 同源):
+// 主体属性统一联动(与后端号码生成器/subjects/unincorporated_org 同源):
 //   G → 盈利属性锁死非盈利;公权入口建公权机构(ZF/LF/SF/JC)、教育入口建公立学校(JY),全称必填
 //   S → 私权类型规则锁定 T2/P1;教育私立学校全称必填
 //   F → 个体经营/无限合伙是独立非法人;分校等从属非法人必须选择所属法人,
@@ -333,7 +333,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const row = parentOptions.find((r) => r.cid_number === value);
     if (!row) return;
     setSelectedParent(row);
-    // 盈利属性附属于所属法人:选定父级即重算 p1(后端 uninorg 同规则复核)
+    // 盈利属性附属于所属法人:选定父级即重算 p1(后端 unincorporated_org 同规则复核)
     form.setFieldsValue({ p1: inheritedP1(row.subject_property, row.p1) });
     setLegalRepOptions([]);
   };

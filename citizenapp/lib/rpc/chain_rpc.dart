@@ -244,11 +244,8 @@ class ChainRpc {
     );
   }
 
-  // 2026-04-23 整改:`fetchBlockExtrinsicHashes` 已删除。
-  //
-  // 原实现包装 `getBlockExtrinsics`(smoldot `chainHead_v1_body`)逐块拉 body
-  // 并用 blake2_256 求每笔 extrinsic 哈希。因触发 substrate block-request
-  // 反滥用 ban 把轻节点打死,已整体下线。钱包交易流水改由区块事件监听写入。
+  // 钱包交易流水由区块事件监听写入,不逐块拉 body 求 extrinsic 哈希
+  // (逐块拉 body 会触发 substrate block-request 反滥用 ban 把轻节点打死)。
 
   /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
   Future<RuntimeMetadata> fetchMetadata() async {
@@ -267,17 +264,15 @@ class ChainRpc {
 
   /// 提交已签名的 extrinsic,返回交易哈希(32 字节)。
   ///
-  /// **设计**(2026-05-03 改为 submit-only + 后台监听):
+  /// **设计**(submit-only + 后台监听):
   /// - 主流程仅调原生 `submitExtrinsicHex`(底层走 `author_submitExtrinsic`),
   ///   拿到 txHash 立即返回,UI 永不卡住。
   /// - 后台 fire-and-forget 启一条 `author_submitAndWatchExtrinsic` 订阅,
-  ///   8 秒内观察到 invalid/dropped/usurped/future 仅打印日志,不再回灌 UI。
+  ///   8 秒内观察到 invalid/dropped/usurped/future 仅打印日志,不回灌 UI。
   ///
-  /// 历史:曾尝试在主流程内 watch + 1 秒 timeout(参见 git 2026-05-03 早些时候的提交),
-  /// 但 smoldot 通过 native binding 转发 broadcast stream 的首条 event 存在调度延迟,
-  /// 在 GMB 链 6 分钟出块的节奏下经常 1 秒内拿不到 txHash 导致 `completeError` 抛出,
-  /// UI 反而误判失败并继续转圈。最终回到 submit-only,放弃在客户端拦截 mempool reject,
-  /// reject 排查改走 polkadot.js apps + 终端日志。
+  /// 客户端不拦截 mempool reject(smoldot native binding 转发首条 event 有调度
+  /// 延迟,在 6 分钟出块节奏下经常拿不到 txHash 误判失败);reject 排查走
+  /// polkadot.js apps + 终端日志。
   Future<Uint8List> submitExtrinsic(
     Uint8List encoded, {
     TxPoolWatchCallback? onWatchEvent,
@@ -456,7 +451,7 @@ class ChainRpc {
 
   /// 把 TransactionStatus(JSON 形式)归三类:成功 / 失败 / 仍在等待。
   ///
-  /// 仅 [_watchTxRejectInBackground] 使用:主流程已不再依赖归类,只关心 failure 一种。
+  /// 仅 [_watchTxRejectInBackground] 使用:主流程只关心 failure 一种。
   _TxResult _classifyTxStatus(dynamic status) {
     if (status is String) {
       switch (status) {

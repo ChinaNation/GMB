@@ -15,7 +15,7 @@ class ImNodePairingBody implements QrBody {
   /// QR body 协议类型 tag(与 node `communication-node/mod.rs`
   /// IM_NODE_PAIRING_PROTO 一致)。
   ///
-  /// ADR-026 Phase 2:此处是**QR body 协议版本串**,既非 signingMessage 哈希签名
+  /// 此处是**QR body 协议版本串**,既非 signingMessage 哈希签名
   /// 域也非二进制前缀签名(节点配对 body 不签名),故不占 op_tag。值单源对齐
   /// primitives::sign::IM_NODE_PAIRING_PROTO,各端镜像本常量删本地副本。
   static const proto = kImNodePairingProto;

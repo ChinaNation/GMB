@@ -1,7 +1,6 @@
 //! 中文注释:管理员 Passkey、公民钱包确认和一次性安全授权模型。
 //!
-//! 这些结构只服务联邦注册局管理员/市注册局管理员安全动作,因此归属 `admins`,不再放在全局
-//! `models` 目录里。
+//! 这些结构只服务联邦注册局管理员/市注册局管理员安全动作,因此归属 `admins`。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

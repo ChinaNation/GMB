@@ -1,8 +1,8 @@
 //! GMB 机构账户地址派生(后端薄适配)。
 //!
-//! 账户派生唯一真源 = 链端 `primitives::account_derive`(ADR-024 Tier 1):op_tag、
+//! 账户派生唯一真源 = 链端 `primitives::account_derive`:op_tag、
 //! 5 个受限保留名、name→种类路由、payload 字段拼装、唯一派生入口 `AccountKind::derive`
-//! 全部收敛在那里。本模块**不再**本地重声明保留名或重写路由,仅做 `&str` → `&[u8]`
+//! 全部收敛在那里。本模块仅做 `&str` → `&[u8]`
 //! 适配 + hex 编码,用于:
 //!   - 创建账户时立即在本地算出 `account`,无需等激活上链
 //!   - 激活成功后做 receipt 地址 ↔ 本地派生值的一致性断言,抓链端路由 / domain 漂移

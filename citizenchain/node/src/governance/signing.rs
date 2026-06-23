@@ -56,9 +56,8 @@ pub(crate) fn format_amount(yuan: f64) -> String {
 
 /// 签名请求 body(节点桌面端 → 离线设备)。
 ///
-/// 注:历史上含 `spec_version: u32` 字段供冷钱包 decoder 锁布局,已随 strict
-/// 两色模式独家把关而删除(2026-05-07)。SCALE additional_signed 的 spec_version
-/// 仍在 payload_hex 内部 4 字节编码,链端验签直接拿这个,不依赖 envelope 字段。
+/// SCALE additional_signed 的 spec_version 在 payload_hex 内部 4 字节编码,
+/// 链端验签直接拿这个,不依赖 envelope 字段。
 #[derive(Debug, Serialize)]
 pub struct SignRequestBody {
     pub address: String,
@@ -131,9 +130,8 @@ pub struct VoteSubmitResult {
 
 /// 构建内部投票（`internal_vote`）签名请求。
 ///
-/// Phase 3(2026-04-22)「投票引擎统一入口整改」:业务 pallet 的 vote_X 已物理删除。
-/// 管理员一人一票统一走 `InternalVote::cast`(pallet=22, call=0,sub-pallet 拆分
-/// 2026-05-05),由投票引擎按 ProposalData 前缀自动分派到对应 `InternalVoteExecutor`。
+/// 管理员一人一票统一走 `InternalVote::cast`(pallet=22, call=0),
+/// 由投票引擎按 ProposalData 前缀自动分派到对应 `InternalVoteExecutor`。
 ///
 /// Call 编码: `[0x16][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 ///
@@ -161,7 +159,7 @@ pub fn build_vote_sign_request(
 
     // 构建 call data: [pallet=22][call=0][proposal_id: u64_le][approve: bool]
     let mut call_data = Vec::with_capacity(11);
-    call_data.push(22u8); // InternalVote sub-pallet index (sub-pallet split 2026-05-05)
+    call_data.push(22u8); // InternalVote sub-pallet index
     call_data.push(0u8); // cast call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
@@ -228,8 +226,8 @@ pub fn build_vote_sign_request(
 
 /// 构建 joint_vote 签名请求（联合投票内部投票阶段：pallet=23, call=0）。
 ///
-/// sub-pallet 拆分(2026-05-05):JointVote 独立成 pallet,`cast_admin` 在 23.0,
-/// `cast_referendum` 在 23.1(联合公投阶段需 ADR-008 step3 双层凭证,本函数不覆盖)。
+/// JointVote pallet:`cast_admin` 在 23.0,
+/// `cast_referendum` 在 23.1(联合公投阶段需双层凭证,本函数不覆盖)。
 ///
 /// cid_number 用于查找机构多签 AccountId32 参数。
 pub fn build_joint_vote_sign_request(
@@ -256,7 +254,7 @@ pub fn build_joint_vote_sign_request(
 
     // call data: [pallet=23][call=0][proposal_id:u64_le][institution_account:AccountId32][approve:bool]
     let mut call_data = Vec::with_capacity(1 + 1 + 8 + 32 + 1);
-    call_data.push(23u8); // JointVote sub-pallet index (sub-pallet split 2026-05-05)
+    call_data.push(23u8); // JointVote sub-pallet index
     call_data.push(0u8); // cast_admin call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&institution_account);
@@ -681,8 +679,7 @@ pub(crate) fn build_signing_payload(
                                              //   mortal   → block_hash(birth_block_number)
                                              // 当前固定 immortal,所以这里也填 genesis_hash(链上 frame_system::CheckEra
                                              // 在 immortal 分支会用 birth=0 取 block_hash(0),与 genesis_hash 一致)。
-                                             // 之前误填 fetch_latest_block 拿到的最新块 hash → 与链端重建 payload 不匹配
-                                             // → blake2_256 不同 → "Transaction has a bad signature"。
+                                             // 必须填 genesis_hash 而非最新块 hash,否则与链端重建 payload 不匹配 → bad signature。
     payload.extend_from_slice(genesis_hash); // CheckEra: birth block hash = genesis(immortal)
                                              // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
     payload.push(0x00u8); // CheckMetadataHash: Option::None

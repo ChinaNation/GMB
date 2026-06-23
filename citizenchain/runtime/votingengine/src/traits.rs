@@ -227,7 +227,7 @@ pub trait InternalVoteResultCallback {
     }
 }
 
-/// 默认空实现(runtime 在 Phase 2 业务模块改造前临时挂 `type X = ()`)。
+/// 默认空实现(未挂业务回调时使用 `type X = ()`)。
 impl InternalVoteResultCallback for () {
     fn on_internal_vote_finalized(
         _proposal_id: u64,
@@ -271,7 +271,7 @@ fn merge_cancel_decision(
 // 立即短路返回,后续成员不再调用——这与 `with_transaction` 内的
 // `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
 //
-// 注:Phase 2 预计注册 5 个业务模块(duoqian_transfer /
+// 注:注册 5 个业务模块(duoqian_transfer /
 // organization_manage / admins_change / resolution_destro /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {

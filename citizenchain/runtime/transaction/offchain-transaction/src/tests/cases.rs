@@ -95,7 +95,7 @@ fn switch_after_withdraw_all_works() {
         // 当前 fixture 只有一家清算行 bank_main;切到"同一家"会被 NewBankSameAsCurrent
         // 拒绝。这里先通过另一家 mock 来验证路径。
         // 简化:直接 withdraw 全部 → 再 switch 到同一家拒绝(= NewBankSameAsCurrent)。
-        // 真正的跨行切换需要 fixture 扩展,Step 3 再补。
+        // 真正的跨行切换需要 fixture 扩展。
         let (alice, _) = new_l3_user(&[1u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),

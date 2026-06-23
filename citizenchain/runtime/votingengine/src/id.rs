@@ -7,8 +7,7 @@
 //!   渲染层基于该表拼接 "2026-#000123" 类格式;展示格式想换季度制 / 字母分组
 //!   只动渲染层,主键和存储不动。
 //!
-//! 历史格式 `year * 1_000_000 + counter` 从一开始就不存在于本链:全新创世直接走
-//! 双层 ID 路径(主键单调 + ProposalDisplayId 同事务写入),无需任何回填迁移。
+//! 双层 ID 路径:主键单调 + ProposalDisplayId 同事务写入。
 
 use frame_support::traits::UnixTime;
 use sp_runtime::DispatchError;

@@ -18,7 +18,7 @@ import 'institution_manage_service.dart';
 
 /// 机构多签账户详情页。
 ///
-/// 只展示和处理 OrganizationManage 机构多签。个人多签详情已经迁移到
+/// 只展示和处理 OrganizationManage 机构多签。个人多签详情在
 /// `lib/personal-manage/personal_manage_account_info_page.dart`。
 class InstitutionAccountInfoPage extends StatefulWidget {
   const InstitutionAccountInfoPage({

@@ -26,7 +26,7 @@ pub const EDUCATION_TYPE_PRIMARY_SCHOOL: &str = "PRIMARY_SCHOOL";
 pub const EDUCATION_TYPE_SECONDARY_SCHOOL: &str = "SECONDARY_SCHOOL";
 pub const EDUCATION_TYPE_UNIVERSITY: &str = "UNIVERSITY";
 
-// 中文注释:基础教育级别(初学/小学/中学)。大学已拆为独立机构码(GUN/SUN),不再是 education_type 级别。
+// 中文注释:基础教育级别(初学/小学/中学)。大学是独立机构码(GUN/SUN),不属 education_type 级别。
 pub const EDUCATION_SCHOOL_TYPES: &[&str] = &[
     EDUCATION_TYPE_EARLY_SCHOOL,
     EDUCATION_TYPE_PRIMARY_SCHOOL,
@@ -402,7 +402,7 @@ pub struct ParentInstitutionRow {
     pub partnership_kind: Option<String>,
     pub category: InstitutionCategory,
     /// 盈利属性。非法人创建时前端按"盈利属性附属于所属法人"用它推导 F 的 p1
-    /// (公法人父级恒 0;私法人父级继承该值),后端 `uninorg::inherited_p1` 复核。
+    /// (公法人父级恒 0;私法人父级继承该值),后端 `unincorporated_org::inherited_p1` 复核。
     pub p1: String,
     pub province_name: String,
     pub city_name: String,

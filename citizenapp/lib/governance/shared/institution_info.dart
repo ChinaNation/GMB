@@ -1,9 +1,8 @@
 /// 跨模块共用：机构/多签账户的数据载体类型 + 身份编码工具。
 ///
 /// 中文注释：
-/// - 此文件由 `lib/institution/institution_data.dart` 拆分而来（2026-05-09 模块边界整改）。
 /// - 内置治理机构静态注册表（`kNationalCouncil`/`kProvincialCouncils`/`kProvincialBanks`）+
-///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 已迁至
+///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 在
 ///   `lib/organization-manage/institution_registry.dart`。
 /// - 治理主体统一为机构多签 AccountId；cid_number 只用于查找机构资料。
 library;
@@ -113,7 +112,7 @@ class InstitutionInfo {
   final String cidShortNameEn;
 
   /// 链上身份标识（与 Rust 常量 `cid_number` 完全一致）。
-  /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId，不再从 cid_number 派生主体。
+  /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId。
   final String cidNumber;
 
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。

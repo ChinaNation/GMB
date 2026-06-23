@@ -3,7 +3,7 @@
 // 只负责"后处理":从共享的 AdminAccounts 单次扫描结果(AdminAccountsScanService)
 // 里筛出个人多签(kind=Personal,且管理员含本地钱包),反查发起人 / 账户名后
 // upsert `PersonalAccountEntity`。扫描、节流、本地钱包读取统一收口在
-// `MultisigDiscoveryCoordinator`,本服务不再各自扫链。
+// `MultisigDiscoveryCoordinator`,本服务只做后处理。
 
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
@@ -64,7 +64,7 @@ class PersonalManageDiscoveryService {
       kind: AdminAccountStorageCodec.kindPersonal,
     );
 
-    // 批量反查发起人/账户名(PersonalAccounts 精确整键),取代循环内逐条(ADR-018 R2)。
+    // 批量反查发起人/账户名(PersonalAccounts 精确整键)。
     Map<String, ({String creatorAccountHex, String accountName})?> metas;
     try {
       metas = await _personalManage.fetchPersonalMetasBatch(

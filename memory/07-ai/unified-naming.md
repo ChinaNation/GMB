@@ -44,7 +44,7 @@
 | Rust crate 目录 | kebab-case | `organization-manage` |
 | Rust 模块 / 文件 | snake_case | `chain_duoqian_info.rs` |
 | Dart / TS 文件 | snake_case 或既有框架风格 | `account_manage_service.dart` |
-| 前端功能目录 | snake_case | `admins` |
+| 前端功能目录 | kebab-case | `organization-manage` |
 | Rust 类型 | PascalCase | `InstitutionAccountInfo` |
 | Dart / TS 类型 | PascalCase | `InstitutionAccountEntry` |
 | 函数 / 方法 | snake_case(Rust) / lowerCamelCase(Dart/TS) | `build_call_data` / `buildCallData` |
@@ -54,6 +54,10 @@
 | QR display field key | snake_case | `cid_full_name` |
 | 任务卡文件名 | 短日期 + 短 slug | `20260507-ai-unified-naming.md` |
 | 技术文档文件名 | SCREAMING_SNAKE_CASE | `BACKEND_LAYOUT.md` |
+
+Rust 模块目录必须与 Rust 模块名一致，统一使用 `snake_case`；不得用 `#[path = "..."]`
+把 `kebab-case` 目录映射成 Rust 模块。Cargo crate/package 目录例外，继续使用
+`kebab-case`。
 
 ## 4. 目录结构命名总表
 
@@ -119,8 +123,8 @@
 | IM OpenMLS Rust FFI | `gmb_im_mls_create_key_package_json` / `gmb_im_mls_two_party_smoke_json` / `gmb_im_mls_encrypt_json` / `gmb_im_mls_decrypt_json` | `citizenapp/rust/src/im_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
 | IM 消息流状态机 | `ImMessageFlow` | `citizenapp/lib/im/im_message_flow.dart` | 远程通信节点链路的发送、接收、pending 重放和 ack 编排 |
 | IM 运行态编排 | `ImRuntime` / `ImPairedNodeConfig` | `citizenapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、自己的通信节点端点配置和后续专用 P2P 收发同步 |
-| IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | `citizenapp/lib/qr/bodies/im_node_pairing_body.dart` / `citizenchain/node/src/settings/communication-node/mod.rs` | 公民在“我的 -> 设置 -> 设置通信节点”扫描桌面设置页二维码，保存或更换自己的电脑通信节点 |
-| 桌面通信节点功能设置 | `CommunicationNodeState` / `get_communication_node` / `set_communication_node_enabled` | `citizenchain/node/src/settings/communication-node/mod.rs` / `citizenchain/node/frontend/settings/communication-node/` | 区块链软件设置页独立 IM 能力开关，不属于归档/普通全节点模式选择 |
+| IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | `citizenapp/lib/qr/bodies/im_node_pairing_body.dart` / `citizenchain/node/src/settings/communication_node/mod.rs` | 公民在“我的 -> 设置 -> 设置通信节点”扫描桌面设置页二维码，保存或更换自己的电脑通信节点 |
+| 桌面通信节点功能设置 | `CommunicationNodeState` / `get_communication_node` / `set_communication_node_enabled` | `citizenchain/node/src/settings/communication_node/mod.rs` / `citizenchain/node/frontend/settings/communication-node/` | 区块链软件设置页独立 IM 能力开关，不属于归档/普通全节点模式选择 |
 | IM Isar 消息库 | `ImIsarStore` / `ImConversationEntity` / `ImRouteCacheEntity` / `ImMessageEntity` / `ImOutboundQueueEntity` / `ImPendingInboundEntity` | `citizenapp/lib/im/storage/im_isar_store.dart` / `citizenapp/lib/isar/wallet_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
 | IM 路由缓存记录 | `ImRouteRecord` | `citizenapp/lib/im/storage/im_isar_store.dart` | 公民端 IM 路由缓存模型，保存对方钱包聊天账户、IM 设备公钥、安全码和通信节点端点 |
 | IM 聊天页面 | `ImChatPage` | `citizenapp/lib/im/im_chat_page.dart` | 通讯录详情“消息”按钮和信息 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ImRuntime` 注入真实 P2P/MLS 发送和同步回调 |
@@ -168,14 +172,14 @@
 | 电子护照身份ID | `cid_number` | CID citizens / citizenapp myid | CID 生成并返回给用户展示的身份ID号码 |
 | 电子护照绑定状态 | `bind_status` | CID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
 | CPMS 编号工具 | `number` | `citizenpassport/backend/number/` | CPMS 后端档案号与护照号生成模块 |
-| CPMS 档案生命周期 | `lifecycle` | `citizenpassport/backend/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
-| CPMS 状态导出 | `export` | `citizenpassport/backend/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
+| CPMS 档案生命周期 | `lifecycle` | `citizenpassport/backend/archive/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
+| CPMS 状态导出 | `export` | `citizenpassport/backend/archive/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
 | CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/CID 离线 JSON 文件 | CPMS 给 CID 导入的年度状态与档案号绑定释放凭证 |
 | CPMS 前端鉴权 | `authz` | `citizenpassport/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
 | CPMS 前端初始化 | `initialize` | `citizenpassport/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
 | CPMS 前端登录 | `login` | `citizenpassport/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
 | CPMS 前端管理员 | `admins` | `citizenpassport/frontend/admins/` | CPMS 前端管理员页面、操作员管理和年度报告导出 |
-| CPMS 前端档案业务 | `dangan` | `citizenpassport/frontend/dangan/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
+| CPMS 前端档案业务 | `archive` | `citizenpassport/frontend/archive/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
 | CPMS 前端地址 | `address` | `citizenpassport/frontend/address/` | CPMS 前端镇和地址段查询 API 与类型 |
 | 镇下地址段 | `address_unit` | CID china / CPMS archives / CPMS frontend | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
 | 镇下地址段 ID | `address_unit_id` | CPMS archives / address_units | CPMS 档案选择的地址段稳定 ID |
@@ -424,7 +428,7 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizenchain/node/src/governance/organization-manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、CID 凭证、链上机构详情与创建签名请求 |
+| `citizenchain/node/src/governance/organization_manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、CID 凭证、链上机构详情与创建签名请求 |
 | `citizenchain/node/frontend/governance/organization-manage/` | 机构多签管理前端 | organization-manage | node 前端机构多签管理页面、Tauri API 和 DTO |
 
 ## 13. citizenchain runtime 目录命名登记
@@ -465,11 +469,11 @@
 |---|---|---|---|
 | `citizenchain/node/src/core/` | 核心 | core | 节点核心启动和共享能力 |
 | `citizenchain/node/src/desktop/` | 桌面端 | desktop | Tauri 桌面端命令和集成 |
-| `citizenchain/node/src/duoqian_transfer/` | 多签转账后端 | duoqian-transfer-node-backend | node 后端多签转账 Tauri 命令、AccountId 编码和签名提交 |
+| `citizenchain/node/src/transaction/duoqian_transfer/` | 多签转账后端 | duoqian-transfer-node-backend | node 后端多签转账 Tauri 命令、AccountId 编码和签名提交 |
 | `citizenchain/node/src/governance/` | 治理 | governance | 节点治理业务和签名构造 |
 | `citizenchain/node/src/home/` | 首页 | home | 桌面端首页后端能力 |
 | `citizenchain/node/src/mining/` | 挖矿 | mining | 挖矿业务能力 |
-| `citizenchain/node/src/offchain/` | 链下 | offchain | 链下业务、索引和外部服务对接 |
+| `citizenchain/node/src/transaction/offchain_transaction/` | 链下 | offchain | 链下业务、索引和外部服务对接 |
 | `citizenchain/node/src/other/` | 其他 | other | 未归入专门边界的节点能力 |
 | `citizenchain/node/src/settings/` | 设置 | settings | 节点设置和配置 |
 | `citizenchain/node/src/shared/` | 共享 | shared | 节点后端共享类型和工具 |
@@ -478,7 +482,7 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizenchain/node/frontend/duoqian-transfer/` | 多签转账前端 | duoqian-transfer-node-frontend | node 前端多签转账创建页、API 和类型 |
+| `citizenchain/node/frontend/transaction/duoqian-transfer/` | 多签转账前端 | duoqian-transfer-node-frontend | node 前端多签转账创建页、API 和类型 |
 | `citizenchain/node/frontend/governance/` | 治理前端 | governance-frontend | node 前端治理机构、提案列表和非多签转账治理页面 |
 
 ## 15. API 字段名登记

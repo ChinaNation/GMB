@@ -1,7 +1,6 @@
 //! 管理员安全动作:Passkey 与 CITIZEN_QR_V1/sign_request 公民钱包签名。
 //!
 //! 中文注释:管理员治理动作、业务安全授权和短期挑战全部使用结构化表。
-//! 本文件不保留旧内存聚合体,也不做旧格式兼容。
 
 use axum::{
     extract::{Path, State},
@@ -1030,7 +1029,7 @@ fn actor_is_initial_federal_registry(conn: &mut Client, ctx: &AdminAuthContext) 
         return false;
     }
     // 中文注释:内置(初始)联邦注册局管理员以 postgres built_in 标记判定;
-    // 内置管理员真源已迁至链上常量,CID 不再用本地清单反查省份。
+    // 内置管理员真源为链上常量,CID 不用本地清单反查省份。
     repo::get_admin_by_account_conn(conn, ctx.admin_account.as_str())
         .ok()
         .flatten()

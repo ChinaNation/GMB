@@ -8,11 +8,9 @@ import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_servic
 
 /// 投票引擎统一投票入口服务。
 ///
-/// Phase 3(2026-04-22)「投票引擎统一入口整改」在客户端的落地:
-///
 /// - 所有业务 pallet(admins_change / resolution_destro /
 ///   grandpakey_change / duoqian_manage / transaction 业务)的
-///   业务 pallet 不再提供独立投票入口,管理员一人一票一律走
+///   管理员一人一票一律走
 ///   `InternalVote::cast(proposal_id, approve)` 一条路径。
 /// - 业务 service(InstitutionManageService 等)
 ///   只负责发起提案(propose_X)；执行重试统一走 VotingEngine.retry_passed_proposal,

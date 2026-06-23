@@ -174,7 +174,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
     setParentSearching(true);
     try {
-      // 改挂与创建同源:后端按 subjects/uninorg 地域规则预过滤候选父级
+      // 改挂与创建同源:后端按 subjects/unincorporated_org 地域规则预过滤候选父级
       const rows = await searchParentInstitutions(auth, q, {
         fInstitution: inst.institution_code,
         province_name: inst.province_name,

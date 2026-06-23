@@ -33,7 +33,7 @@ pub struct SigningKey {
     /// sr25519 密钥对（含私钥）。
     pub pair: sr25519::Pair,
     /// 清算行管理员身份标识(CLI 启动时外部传入;字段名保留以避免 blast radius,
-    /// Step 3 清算行 UI 收敛时一并 rename 为 `admin_id`)。
+    /// 清算行 UI 收敛时可 rename 为 `admin_id`)。
     #[allow(dead_code)]
     pub cid_number: String,
 }
@@ -176,7 +176,7 @@ fn derive_key(password: &[u8], salt: &[u8]) -> [u8; KEY_LEN] {
     key
 }
 
-/// 中文注释：历史兼容加密封装（当前实现为 XOR + blake2 标签）。
+/// 中文注释：加密封装（当前实现为 XOR + blake2 标签）。
 #[allow(dead_code)]
 fn encrypt_aes256_gcm(
     key: &[u8; KEY_LEN],

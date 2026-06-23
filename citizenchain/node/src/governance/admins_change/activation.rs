@@ -8,8 +8,8 @@
 // 5. 后端验证签名、payload、链上账户仍一致后，写入本地激活记录；
 // 6. 管理员状态变为已激活，提案按钮解锁。
 //
-// 激活 payload 格式（非链上交易，二进制前缀域 ADR-026 Phase 2）：
-//   GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(1B = 0x18)  ← 4B 二进制前缀(取代旧 21B 字符串前缀)
+// 激活 payload 格式（非链上交易，二进制前缀域）：
+//   GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(1B = 0x18)  ← 4B 二进制前缀
 //   + account_id(32B) + institution_code(4B) + kind(1B) + pubkey(32B)
 //   + timestamp(8B) + nonce(16B) = 4 + 93 = 97 bytes
 // 冷钱包对整段 payload 直接 sr25519 签名，node 按上述偏移解析。
@@ -47,7 +47,7 @@ fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
 const ACTIVATED_ADMINS_FILE: &str = "activated-admin-accounts.json";
 
 // 管理员本地激活签名 payload 前缀 = GMB || OP_SIGN_ACTIVATE_ADMIN(4B 二进制前缀，
-// 单一真源 primitives::sign，取代历史 b"GMB_ACTIVATE_ADMIN_V1")。
+// 单一真源 primitives::sign)。
 // account_id(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
 const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = BINARY_PREFIX_LEN + 32 + 4 + 1 + 32 + 8 + 16;
 

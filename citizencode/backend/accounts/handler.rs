@@ -1,7 +1,7 @@
 //! 机构账户 HTTP handler。
 //!
 //! 中文注释:机构账户只读写 `accounts` 结构化表,机构存在性和作用域从
-//! `subjects` 表确认,不再经过旧分片缓存。
+//! `subjects` 表确认。
 
 use axum::{
     extract::{Path, State},

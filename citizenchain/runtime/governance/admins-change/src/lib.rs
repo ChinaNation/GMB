@@ -44,7 +44,7 @@ mod benchmarks;
 pub mod weights;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
-/// 中文注释：tag 带 schema 版本号；开发期不兼容旧管理员替换提案数据。
+/// 中文注释：tag 带 schema 版本号。
 pub const MODULE_TAG: &[u8] = b"adm-set-v1";
 
 #[derive(

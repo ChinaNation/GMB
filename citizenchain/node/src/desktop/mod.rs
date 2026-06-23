@@ -109,7 +109,7 @@ pub fn run_desktop() {
             crate::transaction::onchain_transaction::build_transfer_request,
             crate::transaction::onchain_transaction::submit_transfer,
             crate::transaction::onchain_transaction::submit_miner_transfer,
-            // ─── 清算行 offchain tab(ADR-007 Step 2 阶段 B) ───
+            // ─── 清算行 offchain tab ───
             governance::organization_manage::commands::search_eligible_clearing_banks,
             crate::transaction::offchain_transaction::commands::query_clearing_bank_node_info,
             crate::transaction::offchain_transaction::commands::query_local_peer_id,

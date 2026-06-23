@@ -1,14 +1,13 @@
-//! 扫码支付清算体系 Step 2 新增:清算行偿付能力自动保护。
+//! 清算行偿付能力自动保护。
 //!
 //! 中文注释:
 //! - 不变式:`L2 主账户链上 Balances 余额 >= BankTotalDeposits[L2]`
 //!   这个不变式保证清算行随时可兑付所有 L3 存款(全额准备金)。
 //! - 任何会让 `BankTotalDeposits` 增加的动作执行前,先校验偿付充足;
 //!   任何会让主账户余额减少的动作(手续费扣款 / 提现)同样校验。
-//! - **Step 2 的做法**:偿付校验嵌在 `settlement::execute_clearing_bank_batch`
+//! - 偿付校验嵌在 `settlement::execute_clearing_bank_batch`
 //!   和 `deposit::do_withdraw`/`do_deposit` 的路径上,不足时直接 Err
 //!   `SolvencyProtected`,链上**自动拒绝**,无需省储行手动干预。
-//! - Step 3 起加告警事件 + 省储行强制清退通道。
 
 use frame_support::{ensure, traits::Currency};
 use sp_runtime::traits::SaturatedConversion;
@@ -57,9 +56,9 @@ pub fn solvency_ratio_bp<T: Config>(bank_main: &T::AccountId) -> u32 {
     ratio.min(u32::MAX as u128) as u32
 }
 
-/// `_forward_compat`:仅占位,Step 3 扩展为"偿付不足告警事件 + 冻结流量"。
+/// `_forward_compat`:仅占位,后续扩展为"偿付不足告警事件 + 冻结流量"。
 #[allow(dead_code)]
 pub fn emit_warning_if_low<T: Config>(_bank_main: &T::AccountId) {
-    // Step 3 实现:ratio < 10000 触发 SolvencyWarning 事件
+    // ratio < 10000 触发 SolvencyWarning 事件
     // ratio < 5000 时主动冻结(本步不做)
 }

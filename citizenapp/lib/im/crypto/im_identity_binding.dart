@@ -42,7 +42,7 @@ class ImWalletBindingDraft {
 
   /// 构造稳定签名载荷。
   ///
-  /// ADR-026 Phase 2:IM 钱包绑定**不是**签名 op_tag,为 `|` 拼接 UTF-8 字符串
+  /// IM 钱包绑定**不是**签名 op_tag,为 `|` 拼接 UTF-8 字符串
   /// (与 node `im/binding.rs` 逐字节一致),非 signing_message 二进制形态。
   /// 域首段 [kImWalletBindingDomain] 单源对齐 primitives::sign::
   /// IM_WALLET_BINDING_DOMAIN,详见 im_binding_payload.dart。

@@ -1,15 +1,9 @@
 // 设置模块入口，聚合钱包地址、引导节点、投票节点、设备密码等子模块。
 pub(crate) mod address_utils;
-#[path = "bootnodes-address/mod.rs"]
 pub mod bootnodes_address;
-#[path = "communication-node/mod.rs"]
 pub mod communication_node;
 pub mod desktop_update;
-#[path = "device-password/mod.rs"]
 pub(crate) mod device_password;
-#[path = "fee-address/mod.rs"]
 pub mod fee_account;
-#[path = "grandpa-address/mod.rs"]
 pub mod grandpa_address;
-#[path = "node-mode/mod.rs"]
 pub mod node_mode;

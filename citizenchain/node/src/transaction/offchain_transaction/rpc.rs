@@ -1,11 +1,11 @@
-//! 清算行节点对 citizenapp 的 RPC 接口(Step 1 骨架)。
+//! 清算行节点对 citizenapp 的 RPC 接口。
 //!
 //! 中文注释:
-//! - Step 1 仅暴露**只读查询**:余额、下一个 nonce、待上链笔数。
-//! - Step 2 起启用 `offchain_submit_payment(intent, sig)`(扫码支付入口)
+//! - 暴露**只读查询**:余额、下一个 nonce、待上链笔数。
+//! - 启用 `offchain_submit_payment(intent, sig)`(扫码支付入口)
 //!   和 WebSocket 推送(`offchain_subscribe_notifications`)。
 //! - 本文件定义 **JSON-RPC trait 与纯 Rust 实现**,`citizenchain/node/src/core/rpc.rs`
-//!   在 Step 2 起委托到这里。
+//!   委托到这里。
 
 #![allow(dead_code)]
 
@@ -42,7 +42,7 @@ pub trait OffchainClearingRpc {
     #[method(name = "queryBalance")]
     fn query_balance(&self, user: AccountId32) -> RpcResult<u128>;
 
-    /// 查询 L3 下一个应使用的 `nonce`(Step 2 扫码支付前调用)。
+    /// 查询 L3 下一个应使用的 `nonce`。
     ///
     /// citizenapp 本地保管 nonce 的同时,每次签名前问一次以防错位。
     #[method(name = "queryNextNonce")]
@@ -52,7 +52,7 @@ pub trait OffchainClearingRpc {
     #[method(name = "queryPendingCount")]
     fn query_pending_count(&self) -> RpcResult<u64>;
 
-    // ─── Step 2b 新增:扫码支付提交入口 ───
+    // ─── 扫码支付提交入口 ───
 
     /// 扫码支付提交入口。citizenapp 本地对 `PaymentIntent` 做 SCALE 编码后
     /// 用 L3 sr25519 私钥签名,把 hex 形式的 intent 和 64 字节签名一起提交。
@@ -61,7 +61,7 @@ pub trait OffchainClearingRpc {
     /// - 反序列化 intent
     /// - 验证 L3 sr25519 签名
     /// - 校验绑定清算行 / 费率 / nonce / 可用余额
-    /// - 入账到本地 pending 列表(Step 2b-ii packer 再上链)
+    /// - 入账到本地 pending 列表
     /// - 返回 tx_id + 清算行 ACK 签名
     #[method(name = "submitPayment")]
     fn submit_payment(
@@ -70,7 +70,7 @@ pub trait OffchainClearingRpc {
         payer_sig_hex: String,
     ) -> RpcResult<SubmitPaymentResp>;
 
-    // ─── Step 2c-i 新增:citizenapp 扫码前置查询 ───
+    // ─── citizenapp 扫码前置查询 ───
 
     /// 查询 L3 当前绑定的清算行主账户(对应链上 `UserBank[user]`)。
     ///
@@ -358,10 +358,10 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     ))
 }
 
-/// 构造 L2 ACK 签名消息(ADR-026 唯一原语):
+/// 构造 L2 ACK 签名消息(唯一原语):
 /// `signing_message(OP_SIGN_L2_ACK, bank_main || SCALE(intent) || payer_sig || accepted_at_le)`
 /// = `blake2_256(GMB || OP_SIGN_L2_ACK || bank_main || SCALE(intent) || payer_sig || accepted_at_le)`。
-/// 历史本地字符串域 `b"GMB_L2_ACK_V1"` 已删(破坏式,字节变);citizenapp 验签镜像须同步。
+/// citizenapp 验签镜像须同步。
 fn l2_ack_signing_message(
     bank_main: &AccountId32,
     intent: &NodePaymentIntent,
@@ -454,7 +454,7 @@ fn encode_hex(bytes: &[u8]) -> String {
         .collect::<String>()
 }
 
-/// 通用错误构造器(Step 2 起 submit_payment 会用)。
+/// 通用错误构造器。
 pub(crate) fn rpc_err<T: Into<String>>(code: ErrorCode, msg: T) -> ErrorObjectOwned {
     ErrorObjectOwned::owned::<()>(code.code(), msg.into(), None)
 }
@@ -463,7 +463,7 @@ pub(crate) fn rpc_err<T: Into<String>>(code: ErrorCode, msg: T) -> ErrorObjectOw
 mod tests {
     // RPC impl 实测需要 `Arc<FullClient>`,单元测试构造 FullClient 的代价
     // 不值当;这里只验证:(a) storage key 布局与 runtime 哈希器(Blake2_128Concat)
-    // 一致;(b) hex 编解码 roundtrip。功能回归靠集成测试(Step 2b-iii-b 起
+    // 一致;(b) hex 编解码 roundtrip。功能回归靠集成测试(
     // 的 dev-chain smoke-test)覆盖。
 
     use super::*;

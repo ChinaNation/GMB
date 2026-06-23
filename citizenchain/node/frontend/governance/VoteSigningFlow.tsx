@@ -158,15 +158,13 @@ export function VoteSigningFlow({
 /**
  * 统一投票入口 call 编码:`[0x16][0x00][proposal_id:u64_le][approve:bool]` = 11 bytes。
  *
- * 所有业务 pallet 的 vote_X / finalize_X 已物理删除,管理员一人一票
- * 一律走 InternalVote::cast(pallet=22, call=0)(2026-05-05 sub-pallet 拆分,
- * 原 VotingEngine.internal_vote 迁出)。
+ * 管理员一人一票一律走 InternalVote::cast(pallet=22, call=0)。
  */
 function buildInternalVoteCallDataHex(proposalId: number, approve: boolean): string {
   const buf = new ArrayBuffer(11);
   const view = new DataView(buf);
   const arr = new Uint8Array(buf);
-  arr[0] = 22; arr[1] = 0; // InternalVote.cast (2026-05-05 sub-pallet 拆分,原 VotingEngine.internal_vote)
+  arr[0] = 22; arr[1] = 0; // InternalVote.cast
   view.setUint32(2, proposalId & 0xFFFFFFFF, true);
   view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
   arr[10] = approve ? 1 : 0;

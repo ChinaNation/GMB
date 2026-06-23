@@ -1,4 +1,4 @@
-//! 扫码支付清算体系 Step 1 新增:支付意图与签名数据结构。
+//! 支付意图与签名数据结构。
 //!
 //! 中文注释:
 //! - `PaymentIntent` 是 L3 用私钥签名的原始数据,citizenapp 本地签,链上验。
@@ -37,21 +37,19 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
 }
 
 impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumber> {
-    /// 生成签名消息哈希(ADR-026:唯一原语 `signing_message`)。
+    /// 生成签名消息哈希(唯一原语 `signing_message`)。
     ///
-    /// `message = blake2_256(GMB || OP_SIGN_L3_PAY || SCALE(intent))`。历史 13B 字符串域
-    /// `b"GMB_L3_PAY_V1"` 已折为 4B 域头 `GMB || 0x15`(破坏式,签名字节变),citizenapp 的
+    /// `message = blake2_256(GMB || OP_SIGN_L3_PAY || SCALE(intent))`。citizenapp 的
     /// Dart 镜像必须按同一原语拼接,靠金标向量逐字节对齐。
     pub fn signing_hash(&self) -> [u8; 32] {
         signing_message(OP_SIGN_L3_PAY, &self.encode())
     }
 }
 
-/// 生成清算行批次签名哈希(ADR-026:唯一原语 `signing_message`)。
+/// 生成清算行批次签名哈希(唯一原语 `signing_message`)。
 ///
 /// `message = blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || SCALE(institution_main)
-/// || batch_seq_le || SCALE(batch))`。历史 21B 字符串域 `b"GMB_OFFCHAIN_BATCH_V1"`
-/// 已折为 4B 域头(破坏式),scale_payload 内字段拼接顺序必须与 node 打包器逐字节一致。
+/// || batch_seq_le || SCALE(batch))`。scale_payload 内字段拼接顺序必须与 node 打包器逐字节一致。
 ///
 /// node 侧 `AccountId32.as_ref()` 与 SCALE 编码同为 32 字节,这里使用 `Encode`
 /// 是为了让 runtime 维持泛型边界。
@@ -69,7 +67,7 @@ pub fn batch_signing_hash<AccountId: Encode>(
 
 /// 扫码支付清算体系:批次上链的**单条 item 结构**(清算行体系)。
 ///
-/// `submit_offchain_batch_v2` extrinsic 使用本结构(旧省储行模型已物理删除)。
+/// `submit_offchain_batch_v2` extrinsic 使用本结构。
 ///
 /// 字段顺序必须与 citizenapp Dart 端的 SCALE 编码逐字段对齐。
 #[derive(
@@ -161,7 +159,7 @@ mod tests {
         assert_ne!(base.signing_hash(), changed.signing_hash());
     }
 
-    // ─── 扫码支付 Step 2c-ii-a golden vectors ────────────────────────────
+    // ─── golden vectors ────────────────────────────
     //
     // 目的:锁定 `PaymentIntent` 的 SCALE 编码布局 + signing_hash 算法,使
     // citizenapp `payment_intent.dart::NodePaymentIntent` 端的编码/哈希必须逐
@@ -173,8 +171,8 @@ mod tests {
     //   recipient_bank(32) || amount(u128 LE,16) || fee(u128 LE,16) ||
     //   nonce(u64 LE,8) || expires_at(u32 LE,4)
     //
-    // ADR-026:签名域已折为 4B 域头 `GMB(3B) || OP_SIGN_L3_PAY(0x15)` || encoded(204)
-    // → blake2_256 = 32 字节(原 13B 字符串域 `GMB_L3_PAY_V1` 已废,签名字节随之变更)。
+    // 签名域 = 4B 域头 `GMB(3B) || OP_SIGN_L3_PAY(0x15)` || encoded(204)
+    // → blake2_256 = 32 字节。
 
     /// 把 `&[u8]` 转 hex(无 `0x` 前缀,小写),测试断言格式。
     fn hex_lower(bytes: &[u8]) -> sp_std::vec::Vec<u8> {

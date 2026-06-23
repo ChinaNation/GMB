@@ -306,7 +306,7 @@ fn mark_proposal_passed_without_callback(proposal_id: u64) {
     );
 }
 
-/// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 后的统一入口)。
+/// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(统一入口)。
 ///
 /// 替代旧的业务模块专属投票入口——业务模块不再持有投票 call,
 /// 所有管理员通过投票引擎的公开 call 直接投票,通过后由 `InternalVoteExecutor` 回调

@@ -2,18 +2,14 @@
 
 //! # offchain-transaction · 清算行(L2)扫码支付清算
 //!
-//! ADR-006 "省储行退出清算" 之后的唯一链上清算实现。提供:
+//! 链上清算实现。提供:
 //!
-//! - L3 绑定 / 充值 / 提现 / 切换清算行(Step 1 · call_index 30-33)
-//! - 清算行批次上链 + settlement 执行(Step 2a · call_index 34)
-//! - L2 费率自治(Step 2a · call_index 40/41)
+//! - L3 绑定 / 充值 / 提现 / 切换清算行(call_index 30-33)
+//! - 清算行批次上链 + settlement 执行(call_index 34)
+//! - L2 费率自治(call_index 40/41)
 //! - L3 支付意图签名 / nonce 防重 / 偿付自动保护 / 多签账户登记等配套机制
 //!
-//! **Step 2b-iv-b 彻底清理完成**:原"省储行即时清算"模型(旧 call_index
-//! 0/1/2/9/10/11/14-20/23 + `RecipientClearingInstitution` / `InstitutionRateBp` /
-//! `QueuedBatches` 等 Storage + 相关 Events/Errors + 所有辅助函数)已从源码中
-//! 物理删除。全新创世口径:创世即终态布局,`STORAGE_VERSION` 恒为 v1,
-//! 不做 on_runtime_upgrade migration。
+//! 创世即终态布局,`STORAGE_VERSION` 恒为 v1,不做 on_runtime_upgrade migration。
 
 pub use pallet::*;
 
@@ -46,7 +42,7 @@ use scale_info::TypeInfo;
 use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
 use sp_io::crypto::sr25519_verify;
 
-/// Step 2(2026-04-27, ADR-007)新增:清算行节点声明信息。
+/// 清算行节点声明信息。
 ///
 /// 一家清算行机构(cid_number)在链上声明其对外服务的全节点身份 + RPC 接入点。
 /// 用于:
@@ -97,7 +93,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchSize: Get<u32>;
 
-        /// 清算行多签批次签名最大字节(BoundedVec 上限)。Step 2b 起严格校验。
+        /// 清算行多签批次签名最大字节(BoundedVec 上限)。
         #[pallet::constant]
         type MaxBatchSignatureLength: Get<u32>;
 
@@ -111,7 +107,7 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    /// 清算行多签批次签名(BoundedVec,Step 2b 接入阈值校验时启用完整校验)。
+    /// 清算行多签批次签名(BoundedVec)。
     pub type BatchSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxBatchSignatureLength>;
 
     #[pallet::pallet]
@@ -187,7 +183,7 @@ pub mod pallet {
     pub type ProcessedOffchainTx<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, [u8; 2], Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
-    /// 已处理链下 tx_id 的写入高度(用于过期窗口控制,Step 3 开启清理窗口)。
+    /// 已处理链下 tx_id 的写入高度(用于过期窗口控制)。
     #[pallet::storage]
     pub type ProcessedOffchainTxAt<T: Config> = StorageDoubleMap<
         _,
@@ -208,7 +204,7 @@ pub mod pallet {
     pub type LastClearingBatchSeq<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
 
-    /// Step 2(2026-04-27, ADR-007)新增:清算行节点声明 storage。
+    /// 清算行节点声明 storage。
     ///
     /// `cid_number` → 节点信息(peer_id / rpc_domain / rpc_port / 注册管理员)
     ///
@@ -225,7 +221,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// Step 2 新增:节点 PeerId 反向索引(`peer_id → cid_number`),
+    /// 节点 PeerId 反向索引(`peer_id → cid_number`),
     /// 防止同一 PeerId 被多个机构占用。
     #[pallet::storage]
     #[pallet::getter(fn node_peer_to_institution)]
@@ -292,7 +288,7 @@ pub mod pallet {
             item_count: u32,
             total_debit: u128,
         },
-        /// Step 2 新增:清算行节点声明完成,机构对外提供清算服务。
+        /// 清算行节点声明完成,机构对外提供清算服务。
         ClearingBankRegistered {
             cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
             peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
@@ -300,14 +296,14 @@ pub mod pallet {
             rpc_port: u16,
             registered_by: T::AccountId,
         },
-        /// Step 2 新增:清算行节点 RPC 端点更新(域名 / 端口变更,PeerId 不变)。
+        /// 清算行节点 RPC 端点更新(域名 / 端口变更,PeerId 不变)。
         ClearingBankEndpointUpdated {
             cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
             new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             new_port: u16,
             updated_by: T::AccountId,
         },
-        /// Step 2 新增:清算行节点声明注销,机构退出清算网络。
+        /// 清算行节点声明注销,机构退出清算网络。
         ClearingBankUnregistered {
             cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
             unregistered_by: T::AccountId,
@@ -388,7 +384,7 @@ pub mod pallet {
         /// L3 提交的 nonce 不等于 `链上 nonce + 1`(重放或不同步)。
         InvalidL3Nonce,
 
-        // ========== Step 2 清算行节点声明相关 ==========
+        // ========== 清算行节点声明相关 ==========
         /// 清算行节点 cid_number 字段不能为空。
         EmptyCidNumber,
         /// PeerId 字段不能为空。
@@ -409,7 +405,7 @@ pub mod pallet {
         ClearingBankNodeNotFound,
         /// PeerId 已被另一家机构占用(防 PeerId 冒名)。
         PeerIdAlreadyRegistered,
-        /// Step 2 第 6 重 bank_check:该机构未声明清算行节点(尚未加入清算网络)。
+        /// bank_check:该机构未声明清算行节点(尚未加入清算网络)。
         ClearingBankNotRegisteredAsNode,
     }
 
@@ -458,8 +454,8 @@ pub mod pallet {
 
         /// 清算行批次上链(清算行 L2 体系唯一上链路径)。
         ///
-        /// Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**模型。
-        /// - `institution_main` 现在 = **收款方清算行主账户**(原为付款方)
+        /// **收款方主导清算**模型。
+        /// - `institution_main` = **收款方清算行主账户**
         /// - 提交者 = 收款方清算行的某个激活管理员(已解密私钥,自动签)
         /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_main`
         ///   (`payer_bank` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
@@ -471,9 +467,9 @@ pub mod pallet {
         /// payer_bank 主账户 Currency,与谁提交批次无关。
         ///
         /// [`institution_main`] 批次归属的清算行主账户(= **收款方**清算行)
-        /// [`batch_seq`] 清算行内单调递增的批次序号(冗余审计字段,Step 2b 启用严格校验)
+        /// [`batch_seq`] 清算行内单调递增的批次序号(冗余审计字段)
         /// [`batch`] `OffchainBatchItemV2` 列表(每条带 L3 sr25519 签名 / nonce / 费率)
-        /// [`batch_signature`] 清算行多签批次级签名(Step 2b 启用阈值校验)
+        /// [`batch_signature`] 清算行多签批次级签名
         #[pallet::call_index(34)]
         #[pallet::weight(T::WeightInfo::submit_offchain_batch_v2(batch.len() as u32))]
         pub fn submit_offchain_batch_v2(
@@ -532,7 +528,7 @@ pub mod pallet {
             crate::fee_config::do_propose_l2_fee_rate::<T>(who, bank, new_rate_bp)
         }
 
-        /// 设置全局费率上限(Root Origin;Step 2b 起改为联合投票回调)。
+        /// 设置全局费率上限(Root Origin,联合投票回调)。
         #[pallet::call_index(41)]
         #[pallet::weight(T::WeightInfo::set_max_l2_fee_rate())]
         pub fn set_max_l2_fee_rate(origin: OriginFor<T>, new_max: u32) -> DispatchResult {
@@ -540,7 +536,7 @@ pub mod pallet {
             crate::fee_config::do_set_max_l2_fee_rate::<T>(new_max)
         }
 
-        /// Step 2(2026-04-27, ADR-007)新增:声明本节点为某清算行的清算节点。
+        /// 声明本节点为某清算行的清算节点。
         ///
         /// 校验链(任一失败立即拒绝):
         /// 1. origin 是签名账户
@@ -567,7 +563,7 @@ pub mod pallet {
             Self::do_register_clearing_bank(who, cid_number, peer_id, rpc_domain, rpc_port)
         }
 
-        /// Step 2 新增:更新清算行节点的 RPC 端点(域名 / 端口),PeerId 不变。
+        /// 更新清算行节点的 RPC 端点(域名 / 端口),PeerId 不变。
         ///
         /// 校验:
         /// 1. origin 是签名账户
@@ -588,7 +584,7 @@ pub mod pallet {
             Self::do_update_clearing_bank_endpoint(who, cid_number, new_domain, new_port)
         }
 
-        /// Step 2 新增:注销清算行节点声明,机构退出清算网络。
+        /// 注销清算行节点声明,机构退出清算网络。
         ///
         /// 校验:
         /// 1. origin 是签名账户
@@ -620,7 +616,7 @@ pub mod pallet {
         }
 
         /// 每块扫描激活到期的 `L2FeeRateProposed` 提案,搬到 `L2FeeRateBp`。
-        /// 清算行规模较小时成本低;若达万级,Step 3 可优化为 cursor/分批。
+        /// 清算行规模较小时成本低;若达万级,可优化为 cursor/分批。
         fn on_initialize(now: BlockNumberFor<T>) -> Weight {
             crate::fee_config::activate_pending_rates::<T>(now)
         }
@@ -670,7 +666,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         crate::bank_check::fee_account_of::<T>(bank_main)
     }
 
-    // ============= Step 2(2026-04-27, ADR-007)清算行节点声明实现 =============
+    // ============= 清算行节点声明实现 =============
 
     /// PeerId 字节串校验:必须以 "12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric。
     /// 与 [citizenchain/node/src/ui/network/network-overview/mod.rs::normalize_peer_id]

@@ -6,14 +6,13 @@
 //! 2. `let scope = scope::get_visible_scope(&ctx);`
 //! 3. `let filtered = scope::filter_by_scope(&rows, &scope);`
 //!
-//! 各角色范围(ADR-008 后):
+//! 各角色范围:
 //! - FederalRegistry  → 本省,所有市
 //! - CityRegistry    → 本市
 //!
 //! 详细规则见 `rules.rs` 的 `VisibleScope`。
 //!
-//! 2026-05-02 models/scope 边界整改后,本目录只保留权限范围规则。
-//! HTTP handler、CPMS 专用判断、pubkey 工具已归还对应业务模块。
+//! 本目录只保留权限范围规则;HTTP handler、CPMS 专用判断、pubkey 工具归属对应业务模块。
 
 #![allow(dead_code, unused_imports)]
 

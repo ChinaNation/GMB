@@ -38,7 +38,7 @@ class ImBindingPayload {
 
   /// 构造与 node 端一致的稳定签名载荷。
   ///
-  /// ADR-026 Phase 2:IM 钱包绑定**不是**签名 op_tag(既不经 signingMessage 做
+  /// IM 钱包绑定**不是**签名 op_tag(既不经 signingMessage 做
   /// hash,也不作二进制前缀签名)。载荷是 `|` 拼接的 UTF-8 canonical 字符串(钱包
   /// 对整段字符串签名),与 node `im/binding.rs::canonical_payload` 逐字节一致。
   /// 域首段 [kImWalletBindingDomain] 是单一权威源(对齐 primitives::sign::

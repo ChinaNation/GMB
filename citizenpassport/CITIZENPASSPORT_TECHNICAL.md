@@ -47,7 +47,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | address::china | `address/china.rs` | address 的源适配子模块：运行时用 rusqlite 只读开发库派生的 `china.sqlite` 行政区快照（安装包随附只读拷贝，路径走 `CPMS_CHINA_DB`），按安装码所属市窄查询镇和地址段 |
 | admins | `admins/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | number | `number/mod.rs` | 档案号与护照号生成 |
-| dangan | `dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、档案操作记录、年度状态导出、100 年硬删除 |
+| archive | `archive/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、档案操作记录、年度状态导出、100 年硬删除 |
 
 ## 2.1 前端模块结构
 | 模块 | 目录 | 说明 |
@@ -56,7 +56,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | initialize | `frontend/initialize/` | 安装初始化页面、API 和类型 |
 | login | `frontend/login/` | QR-only 登录页面和 API |
 | admins | `frontend/admins/` | 管理员系统设置、管理员管理、年度报告导出 |
-| dangan | `frontend/dangan/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
+| archive | `frontend/archive/` | 档案列表、创建、详情左右导航、编辑、资料库、操作记录、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇和地址段查询 API 和类型 |
 | qr | `frontend/qr/` | CITIZEN_QR_V1 解析和浏览器扫码工具 |
 | components | `frontend/components/` | 通用展示与输入组件，日期输入统一使用 `DateInput` |
@@ -154,7 +154,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 ## 5.3 档案列表分页与检索
 
-- 档案列表归属 `dangan` 模块，不归属操作员角色模块；`admins / operators` 只是访问权限。
+- 档案列表归属 `archive` 模块，不归属操作员角色模块；`admins / operators` 只是访问权限。
 - `GET /api/v1/archives` 使用游标分页，不接受 `page / page_size / q` 小表分页参数，也不接受 `archive_no / passport_no / name` 选择器式查询参数。
 - 默认每页 `50` 条，前端可选 `20 / 50 / 100`，后端最大限制 `100`。
 - 默认排序固定为 `created_at DESC, archive_id DESC`，cursor 由后端编码 `created_at / archive_id`，前端只透传。
@@ -167,7 +167,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 ## 5.4 公民资料库
 
-- 公民资料库后端主体在 `dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx` 的“资料库”左侧导航 tab。
+- 公民资料库后端主体在 `archive/materials.rs`，档案详情页入口在 `frontend/archive/ArchiveDetail.tsx` 的“资料库”左侧导航 tab。
 - 支持资料类型：照片、出生纸、复印件、视频和其他资料；后端按类型校验 MIME，单文件上限 100 MB。
 - 数据库 `archive_materials` 只保存元数据、哈希和本机存储文件名，不保存文件正文。
 - 开发默认文件正文保存在 `data/archive-materials/<archive_id>/`；正式离线安装包固定通过

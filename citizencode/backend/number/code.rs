@@ -16,7 +16,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 机构码所属行政层级(由机构码本身派生,取代旧分类列前缀判级)。
+/// 机构码所属行政层级(由机构码本身派生)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdminLevel {
     /// 国家级(26 个 A 组国家级单体)。
@@ -493,7 +493,7 @@ impl InstitutionCode {
         matches!(self, Self::Gsch | Self::Sfsc)
     }
 
-    /// 机构码所属行政层级(取代旧分类列前缀判级)。
+    /// 机构码所属行政层级。
     /// 仅 4 组公权机构码(国家 26 / 省 17 / 市 17 / 镇 10)有层级;
     /// 私权 / 教育 / 个人 / 非法人 / 个人多签返回 None。
     pub fn admin_level(self) -> Option<AdminLevel> {
@@ -577,7 +577,7 @@ impl InstitutionCode {
         }
     }
 
-    /// 是否市公安局(== CPOL)。取代旧分类列 == 'CITY_POLICE' 判定。
+    /// 是否市公安局(== CPOL)。
     pub fn is_city_police(self) -> bool {
         self == Self::Cpol
     }

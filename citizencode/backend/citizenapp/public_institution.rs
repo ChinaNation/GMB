@@ -4,7 +4,7 @@
 //! 本层只做:① 去鉴权 / 去 scope 锁(公民可查任意省/市);② 公开 DTO 白名单(丢弃
 //! 管理员/运营/PII 字段);③ custom_account_names 批量补。
 //!
-//! ### 量级与混合模式(2026-06-13 修订)
+//! ### 量级与混合模式
 //! 确定性目录生成到镇级,单省机构上万、全国数十万。客户端走「发布期完整数据包打底
 //! + 在线增量」混合:
 //! - **keyset 翻页**(`after_cid`,`WHERE cid_number > $after`):恒定快,避免 OFFSET
@@ -80,7 +80,7 @@ pub(crate) struct PublicInstitutionRow {
     pub p1: String,
     /// 行政区**唯一真源键**:省/市/镇 code(= subjects province_code/city_code/town_code)。
     /// 名字一律由客户端按 (province_code,city_code,town_code) 查行政区字典(china.sqlite 派生)得到,
-    /// **本接口不下发任何行政区名字**(ADR-021 单一真源:名字别处零独立副本)。
+    /// **本接口不下发任何行政区名字**(单一真源:名字别处零独立副本)。
     pub province_code: String,
     pub city_code: String,
     #[serde(default)]
@@ -101,7 +101,7 @@ pub(crate) struct PublicInstitutionRow {
 
 impl PublicInstitutionRow {
     /// 从目录查询行映射公开行(只取白名单列;custom_account_names 后续批量补)。
-    /// **按列名取**(非裸位置索引):SELECT 增删列不会错位/panic(ADR-021 H-2)。
+    /// **按列名取**(非裸位置索引):SELECT 增删列不会错位/panic。
     fn from_pg_row(row: &postgres::Row) -> Self {
         let account_count = row.get::<_, i64>("account_count").max(0) as usize;
         Self {

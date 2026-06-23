@@ -1,12 +1,12 @@
-//! 清算行节点"本地账面 ↔ 链上 `BankTotalDeposits` 主账对账"(Step 2b-iii-b 新增)。
+//! 清算行节点"本地账面 ↔ 链上 `BankTotalDeposits` 主账对账"。
 //!
 //! 中文注释:
-//! - 本模块是清算行节点的**保底监控**。如果 `settlement::listener`(Step 2b-iii-a)
+//! - 本模块是清算行节点的**保底监控**。如果 `settlement::listener`
 //!   因进程崩溃 / 滞后 / runtime 事件丢失等原因漏同步,本地 `ledger.accounts[*]
 //!   .confirmed` 之和会悄悄偏离链上 `BankTotalDeposits[my_bank]`。没有监控就
 //!   没人知道偏差存在,扫码支付会进入"余额虚增 / 虚减"的危险状态。
 //! - 本步**只做 log-only 主账对账**,不做自动修复 / 告警外推 / 逐用户 diff。
-//!   后续增强(Step 3+):
+//!   后续增强:
 //!     - Prometheus `clearing_bank_reserve_diff` metric
 //!     - 偏差超阈值 → 自动停新扫码支付
 //!     - `DepositBalance::iter_key_prefix(my_bank)` 逐户定位
@@ -23,7 +23,7 @@
 //! 所以节点侧只读 `BankTotalDeposits[my_bank]`(O(1) 单点 map 读)与本地
 //! `confirmed_sum_snapshot()` 比较,即可发现 listener 层面的漂移。
 
-#![allow(dead_code)] // Step 2b-iii-b 新增,暂对节点外部不暴露 API
+#![allow(dead_code)] // 暂对节点外部不暴露 API
 
 use codec::{Decode, Encode};
 use sc_client_api::StorageProvider;

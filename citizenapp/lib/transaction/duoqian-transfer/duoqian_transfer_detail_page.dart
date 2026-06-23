@@ -26,9 +26,8 @@ import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart
 /// 详情页展示/投票的三种提案类型。
 ///
 /// 决定：读哪个 storage map 与 QR 签名如何展示。
-/// Phase 3(2026-04-22)起,投票动作统一走 `InternalVote::cast`
-/// (9.0),不再按 kind 区分 call_index;`kind` 仅影响"创建提案"路径与
-/// 详情展示逻辑。
+/// 投票动作统一走 `InternalVote::cast`(9.0);`kind` 仅影响"创建提案"
+/// 路径与详情展示逻辑。
 enum DuoqianTransferKind {
   /// 机构转账提案（propose_transfer, pallet=19 call=0）。
   transfer,
@@ -118,7 +117,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
 
   /// QR 签名 action 字段。
   ///
-  /// Phase 3 起所有管理员投票统一走 `internal_vote`,冷钱包按 action
+  /// 所有管理员投票统一走 `internal_vote`,冷钱包按 action
   /// 识别并解码同一套 call 格式；业务类型仅通过 summary/fields 文案体现。
   String get _signAction => 'internal_vote';
 
@@ -140,7 +139,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   Set<String> _pendingPubkeys = const {};
   String? _voteNotice;
   bool _voteNoticeIsError = false;
-  // ADR-018 R2:待投票确认期改用 finalized 头订阅驱动刷新,空闲链不再 20s 盲轮询。
+  // 待投票确认期用 finalized 头订阅驱动刷新。
   ChainEventSubscription? _pendingSub;
   StreamSubscription<ChainEvent>? _pendingEventSub;
 
@@ -524,7 +523,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
     }
     if (_pendingSub != null) return;
     // 待投票确认期:订阅 finalized 头,有新最终块(即有新交易上链)才刷新,
-    // 空闲链零查询;不再每 20 秒盲查一次。
+    // 空闲链零查询。
     final sub = ChainEventSubscription();
     if (!sub.connect()) {
       sub.disconnect();
@@ -614,11 +613,10 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
             action: _signAction,
             summary: '$_kindLabel #${widget.proposalId} 投票：$voteText',
             fields: [
-              // Phase 3: 转账提案管理员投票统一走 internal_vote,
+              // 转账提案管理员投票统一走 internal_vote,
               // fields 按 Registry 恒为 (proposal_id, approve)。
               // 类型特有字段(收款账户/金额/备注/机构/划转金额/目标)属辅助展示,
-              // 页面已独立显示,不塞 display.fields 避免对齐失败
-              // (2026-04-22 两色识别整改)。
+              // 页面已独立显示,不塞 display.fields 避免对齐失败。
               SignDisplayField(
                   key: 'proposal_id',
                   label: '提案编号',
@@ -643,8 +641,8 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      // Phase 3: 所有管理员投票统一走 InternalVote::cast(22.0)。
-      // 业务 kind 仅用于 QR 展示的文案与 storage 读取,不再分派 call_index。
+      // 所有管理员投票统一走 InternalVote::cast(22.0)。
+      // 业务 kind 仅用于 QR 展示的文案与 storage 读取。
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
         approve: approve,

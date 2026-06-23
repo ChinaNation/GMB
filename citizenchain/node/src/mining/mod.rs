@@ -2,5 +2,4 @@
 pub mod dashboard;
 #[cfg(feature = "gpu-mining")]
 pub(crate) mod gpu_miner;
-#[path = "network-overview/mod.rs"]
 pub mod network_overview;

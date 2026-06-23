@@ -3,8 +3,7 @@
 //! 默认入口加载冻结主网 chainspec；`citizenchain-fresh` 仅供本机清链重新创世脚本
 //! 用最新 CI WASM 生成一次性 fresh raw chainspec,不会覆盖仓库中的冻结 JSON。
 //!
-//! 该 JSON 由主网在线权威节点 `export-chain-spec --raw` 一次性导出
-//! (导出时间 2026-05-06,源:nrcgch.crcfrcn.com)。
+//! 该 JSON 由主网在线权威节点 `export-chain-spec --raw` 导出(源:nrcgch.crcfrcn.com)。
 
 use sc_chain_spec::{ChainType, NoExtension, Properties};
 use sc_network::config::MultiaddrWithPeerId;

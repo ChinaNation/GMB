@@ -75,7 +75,7 @@ class OffchainClearingNodeRpc {
   /// [payerSigHex] 是 L3 sr25519 对
   /// `signing_message(OP_SIGN_L3_PAY=0x15, SCALE(intent))`
   /// = `blake2_256(GMB || 0x15 || SCALE(intent))` 的 64 字节签名 hex(含 `0x`
-  /// 前缀)(ADR-026,取代历史字符串域 "GMB_L3_PAY_V1")。
+  /// 前缀)。
   ///
   /// 返回 `(txId, l2AckSig, acceptedAt)`:
   /// - `txId`:本笔支付 tx_id hex(与 intent 中同)

@@ -1,4 +1,4 @@
-// 其他 tab 内容类型，对齐后端 src/other/other-tabs。
+// 其他 tab 内容类型，对齐后端 src/other/other_tabs。
 
 type OtherDocumentTabItem = {
   key: 'whitepaper';

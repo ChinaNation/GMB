@@ -402,11 +402,11 @@ pub fn new_full(
     mut config: Configuration,
     mining_threads: usize,
     gpu_device: Option<usize>,
-    // 扫码支付 Step 2b-ii-β-2-b 新增:清算行主账户 SS58(None=本节点不做清算行角色)
+    // 清算行主账户 SS58(None=本节点不做清算行角色)
     clearing_bank: Option<String>,
-    // 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain::settlement::keystore` 的密码
+    // 解锁 `offchain::settlement::keystore` 的密码
     clearing_bank_password: Option<String>,
-    // 扫码支付 Step 2b-iii-b 新增:offchain::settlement::reserve 对账周期(秒),None=默认 300,Some(0)=关闭
+    // offchain::settlement::reserve 对账周期(秒),None=默认 300,Some(0)=关闭
     clearing_reserve_monitor_interval_secs: Option<u64>,
 ) -> Result<TaskManager, ServiceError> {
     // 生成或加载 TLS 自签证书，注入到网络配置中。
@@ -562,7 +562,7 @@ pub fn new_full(
                 cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
                 gpu_hashrate_fn,
                 chain_spec: chain_spec.cloned_box(),
-                // 扫码支付 Step 2b-ii-β-2-b:清算行 RPC 命名空间(None 时跳过注入)
+                // 清算行 RPC 命名空间(None 时跳过注入)
                 offchain_clearing_rpc: clearing_rpc_impl.clone(),
             };
             crate::core::rpc::create_full(deps).map_err(Into::into)

@@ -48,8 +48,8 @@
 
 ## 调用方
 
-- `settings/grandpa-address/mod.rs`：GRANDPA 投票密钥管理
+- `settings/grandpa_address/mod.rs`：GRANDPA 投票密钥管理
 - `home/process/mod.rs`：节点启动时获取数据目录路径
 - `home/transaction/mod.rs`：从默认链 `powr` keystore 派生矿工热钱包展示地址，并经设备密码确认后走节点端签名转账
 - `mining/dashboard/mod.rs`：挖矿面板获取数据目录
-- `settings/fee-address/mod.rs`：手续费地址 keystore 操作
+- `settings/fee_account/mod.rs`：手续费地址 keystore 操作

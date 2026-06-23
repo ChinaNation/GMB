@@ -1,11 +1,11 @@
-//! 扫码支付清算体系 Step 2 新增:清算行费率自治。
+//! 清算行费率自治。
 //!
 //! 中文注释:
 //! - 每个清算行主账户对应一个 `L2FeeRateBp` 费率(单位 bp,范围 1~10)。
 //! - 清算行管理员可提案改费率,**延迟 7 天生效**(防突袭改价,给 L3 换行时间)。
 //! - 全局上限 `MaxL2FeeRateBp` 由联合投票调整(沿用 `votingengine`,
-//!   这里只定义 extrinsic 入口;具体联合投票执行回调的对接由 Step 2b 补)。
-//! - 在 `on_initialize` 每块扫描一次到期提案并激活(小成本,Step 3 可优化为 cursor)。
+//!   这里只定义 extrinsic 入口;具体联合投票执行回调另行对接)。
+//! - 在 `on_initialize` 每块扫描一次到期提案并激活(小成本,可优化为 cursor)。
 
 use frame_support::{ensure, pallet_prelude::*};
 use frame_system::pallet_prelude::*;
@@ -76,7 +76,7 @@ pub fn do_propose_l2_fee_rate<T: Config>(
 /// `on_initialize` 钩子激活到期提案:把 `L2FeeRateProposed` 里 `effective_at <= now`
 /// 的提案搬到 `L2FeeRateBp`,然后删除提案记录。
 ///
-/// 本步采用简单全表扫描(小规模清算行可接受,Step 3 优化为 cursor/batched)。
+/// 本步采用简单全表扫描(小规模清算行可接受,可优化为 cursor/batched)。
 /// 返回消耗的权重,供上层 on_initialize 累加。
 pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
     let db = T::DbWeight::get();
@@ -103,9 +103,9 @@ pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
     consumed
 }
 
-/// 全局上限治理:先写"由联合投票引擎执行"的入口,Step 2b 接回调。
+/// 全局上限治理:由联合投票引擎执行回调。
 ///
-/// Step 2a 本函数仅做校验,写入 `MaxL2FeeRateBp`。Step 2b 接入联合投票后改为
+/// 本函数做校验,写入 `MaxL2FeeRateBp`,联合投票回调后改为
 /// 只由投票引擎回调可达(把 extrinsic 改为免费的 `execute_*` 类)。
 pub fn do_set_max_l2_fee_rate<T: Config>(new_max: u32) -> DispatchResult {
     ensure!(

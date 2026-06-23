@@ -353,7 +353,7 @@ pub(crate) fn find_federal_registry_scope_conn(
     if let Some(row) = row {
         return Ok(Some(row.get(1)));
     }
-    // 中文注释:内置联邦注册局管理员真源已迁至链上常量,本地不再反查清单;
+    // 中文注释:内置联邦注册局管理员真源为链上常量,本地不反查清单;
     // 省份归属仅以 postgres federal_registry_scope 表为准,无行即 None。
     Ok(None)
 }
@@ -1022,7 +1022,7 @@ pub(crate) fn insert_deregistration_issued_conn(
 }
 
 /// 中文注释:commit 层签发成功后回填签名 + issuer(issuer 来自 env runtime_signing_context,
-/// 与签名同源,下发时直读不再查 env)。
+/// 与签名同源,下发时直读)。
 pub(crate) fn set_deregistration_credential_conn(
     conn: &mut Client,
     deregister_nonce: &str,

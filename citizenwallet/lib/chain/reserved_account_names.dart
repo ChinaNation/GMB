@@ -1,6 +1,6 @@
 /// 机构账户受限注册保留名（Dart 端单一权威源）。
 ///
-/// 取值逐字对齐链端 primitives::account_derive（ADR-024 唯一权威源）：
+/// 取值逐字对齐链端 primitives::account_derive（唯一权威源）：
 ///   RESERVED_NAME_MAIN  = "主账户"
 ///   RESERVED_NAME_FEE   = "费用账户"
 ///   RESERVED_NAME_STAKE = "永久质押"

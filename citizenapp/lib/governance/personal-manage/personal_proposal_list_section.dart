@@ -6,7 +6,7 @@
 // - 历史提案(REJECTED / EXECUTED / EXECUTION_FAILED):链上 90 天后清理,
 //   citizenapp 通过 Isar 永久保留。两者合并以 Isar 为准。
 //
-// **样式**(2026-05-03 bug 3 整改):每条提案是**独立方块 Card**(对齐治理机构详情页
+// **样式**:每条提案是**独立方块 Card**(对齐治理机构详情页
 // `_buildProposalCard:520`),带 statusColor 边框 + 36×36 状态图标 + 标题/子标题 +
 // 右侧状态徽章。Card 之间 8px 间距。
 

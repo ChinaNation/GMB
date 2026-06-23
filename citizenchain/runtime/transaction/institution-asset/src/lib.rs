@@ -31,14 +31,14 @@ pub enum InstitutionAssetAction {
     OffchainFeeSweepExecute,
     /// 国储会安全基金转账：从 `NRC_ANQUAN_ACCOUNT` 向指定收款地址转账。
     NrcSafetyFundTransfer,
-    // ========== 扫码支付 Step 1 新增:清算行(L2)体系动作 ==========
+    // ========== 清算行(L2)体系动作 ==========
     /// L3 用户向清算行主账户充值。source 为 L3 自持账户。
     L3DepositIn,
     /// 清算行主账户向 L3 自持账户提现。source 为清算行主账户。
     L3WithdrawOut,
-    /// 清算行主账户在扫码清算时扣款(Step 2 启用)。source 为清算行主账户。
+    /// 清算行主账户在扫码清算时扣款。source 为清算行主账户。
     L2ClearingDebit,
-    /// 清算行费用账户收手续费(Step 2 启用)。source 为清算行主账户(转出),
+    /// 清算行费用账户收手续费。source 为清算行主账户(转出),
     /// 接收方为清算行费用账户。
     L2FeeCollect,
 }

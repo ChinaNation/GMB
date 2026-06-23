@@ -178,8 +178,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
               // 链端 call 名仍为 propose_close,QR action 为
               // propose_close_personal,fields 按 Registry =
               // (account, beneficiary)。"当前余额" 属辅助展示,
-              // 页面已独立显示,不塞 display.fields 避免对齐失败
-              // (2026-04-22 两色识别整改)。
+              // 页面已独立显示,不塞 display.fields 避免对齐失败。
               SignDisplayField(
                   key: 'account', label: '个人多签账户', value: _accountSs58),
               SignDisplayField(
@@ -390,8 +389,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
                 ),
                 onPressed: () async {
                   // QrScanPage 在 transfer 模式下 pop 的是 QrScanTransferResult 对象
-                  // 而非 String;之前用 Navigator.push<String> 类型不匹配,Flutter
-                  // 框架 cast 失败 → push 的 future 拿到 null → 受益人栏不会被填。
+                  // 而非 String,故 push 泛型须用 QrScanTransferResult。
                   // 复用转账扫码结果解析写法，仅取收款地址。
                   final result = await Navigator.push<QrScanTransferResult>(
                     context,

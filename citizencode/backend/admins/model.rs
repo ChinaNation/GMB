@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-// 中文注释:两类注册局机构(ADR-008 后)
+// 中文注释:两类注册局机构
 //   - FederalRegistry → 联邦注册局机构的 admins(每省 N 人;内置初始管理员不可删除)
 //   - CityRegistry   → 市注册局机构的 admins(每市 N 人)
 // 序列化为 FEDERAL_REGISTRY / CITY_REGISTRY,数据库字段值同。

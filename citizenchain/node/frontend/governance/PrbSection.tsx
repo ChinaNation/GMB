@@ -1,8 +1,7 @@
 // 省储行顶级 Section：列表（orgType=2）→ 机构详情 两级导航。
-// 2026-04-24 重构：从原 GovernanceSection.tsx 的 PRB 分支拆分独立。
 // 与 PrcSection 同构；唯一差异是 orgTypeFilter=2。省储行同样支持手续费划转提案。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from './admins_change';
+import { AdminListPage, AdminSetChangePage } from './admins-change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';

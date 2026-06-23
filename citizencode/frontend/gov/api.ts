@@ -131,7 +131,7 @@ export async function uploadLegalRepresentativePhoto(
 }
 
 // 中文注释:所属法人搜索(公权入口 parentProperty=G → 本市市级/本省省级/国家级公法人)。
-// 后端按 subjects/uninorg 规则预过滤,前端不再兜底过滤。
+// 后端按 subjects/unincorporated_org 规则预过滤,前端不再兜底过滤。
 export async function searchParentInstitutions(
   auth: AdminAuth,
   q: string,

@@ -1,6 +1,6 @@
 // 清算行 tab 主入口。8 视图状态机驱动添加/管理流程。
 //
-// 重构(2026-05-01)后状态机:
+// 状态机:
 //   empty                        列表 + ＋添加清算行
 //   add-input-cid               输入 cid_number 自动 debounce 搜索 CID 候选(不再带"查询"按钮)
 //   check-multisig               链上查 Institutions[cid_number]
@@ -10,20 +10,15 @@
 //                                顶部按钮:未声明节点 → declare-node;已声明 → 内联展示节点信息
 //   other-accounts-list          子页:其他账户列表
 //   admin-list                   子页:管理员列表
-//   admin-set-change             子页:复用 governance/admins_change 更换管理员流程
+//   admin-set-change             子页:复用 governance/admins-change 更换管理员流程
 //   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
 //   wait-vote                    等待管理员投票通过(轮询 Institutions[cid_number].status === 'Active')
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
-//
-// 已下架(2026-05-01):
-//   - register-cid info 终态(CID 端没找到候选时改为内联红条)
-//   - propose-create info 终态("去 CID 后台"长说明,改为直接进 create-multisig-institution)
-//   - 老 detail 视图(只展示节点信息),并入 institution-detail 内联节点信息卡
 
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../../core/tauri';
-import { AdminSetChangePage } from '../../governance/admins_change';
-import { adminsChangeApi } from '../../governance/admins_change/api';
+import { AdminSetChangePage } from '../../governance/admins-change';
+import { adminsChangeApi } from '../../governance/admins-change/api';
 import { organizationManageApi } from '../../governance/organization-manage/api';
 import { ClearingBankAddPage } from '../../governance/organization-manage/add-candidate';
 import { ClearingBankInstitutionDetailPage } from '../../governance/organization-manage/institution-detail';
@@ -250,7 +245,6 @@ export function ClearingBankSection() {
 //
 // 中文注释:挂载时自愈本地脏数据 ——— 对每个 knownCid 条目调
 // fetchInstitutionDetail(cidNumber);链上 None 即从 localStorage 移除。
-// 这样旧版本(2026-05-01 之前)误存的"选候选即落条目"的孤儿卡能自动消失。
 //
 // 链查失败(网络/节点未运行)时**保留**条目(避免误删合法记录)。
 function EmptyView({

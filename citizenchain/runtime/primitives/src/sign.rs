@@ -1,8 +1,8 @@
-//! 全仓签名消息唯一原语 = sign.rs (ADR-026 Tier 1)
+//! 全仓签名消息唯一原语。
 //!
 //! 仓库一切「先拼域+op_tag+SCALE payload 再 blake2_256」的签名消息构造统一收敛到本
 //! 模块的唯一原语 [`signing_message`] + 一张 op_tag 注册表。其它任何 crate / 模块禁止
-//! 再本地重声明 `b"GMB_*_V1"` 字符串域,或重拼 `GMB || op_tag || payload`,一律调本模块。
+//! 本地声明 `b"GMB_*_V1"` 字符串域,或重拼 `GMB || op_tag || payload`,一律调本模块。
 //!
 //! 统一消息构造:
 //! ```text
@@ -11,24 +11,20 @@
 //! 其中 `GMB` = [`crate::core_const::GMB`],`scale_payload` 是调用方对业务字段做的
 //! SCALE 编码字节(`(field1, field2, ...).encode()`)。
 //!
-//! ## 两范式无缝归一(字节证明)
+//! ## 两范式归一(字节证明)
 //!
 //! SCALE 元组的编码 = 各元素编码的顺序拼接;`&[u8; 3]` 编码为 3 个裸字节(无长度前缀),
 //! `u8` 编码为 1 字节。故对任意字段元组:
 //! ```text
 //! (GMB, op_tag, f1, f2, ...).encode()  ==  GMB || op_tag || (f1, f2, ...).encode()
 //! ```
-//! 因此治理 5 个签名(`OP_SIGN_BIND..=OP_SIGN_DEREGISTER`,0x10-0x14)从历史写法
-//! `blake2_256((GMB, op_tag, fields).encode())` 改调
-//! `signing_message(op_tag, (fields).encode())` 后,**消息字节逐字节不变 → 签名不变**
-//! (回归铁证,见 `tests/sign_golden.rs`)。
-//!
-//! 而 7 个历史字符串域 `b"GMB_<NAME>_V1"` 折成 op_tag(0x15-0x1B)后,域前缀由
-//! 13 字节缩为 4 字节(`GMB || op_tag`),**消息字节会变**(破坏式,预期内,落创世前完成)。
+//! 因此治理 5 个签名(`OP_SIGN_BIND..=OP_SIGN_DEREGISTER`,0x10-0x14)调
+//! `signing_message(op_tag, (fields).encode())` 与直接 `blake2_256((GMB, op_tag, fields).encode())`
+//! **消息字节逐字节相等**(回归铁证,见 `tests/sign_golden.rs`)。
 //!
 //! ## 单源纪律
 //!
-//! 删全部本地 `b"GMB_*_V1"` 常量,全调本模块。Dart 侧(citizenapp / citizenwallet)
+//! 禁止本地声明 `b"GMB_*_V1"` 常量,全调本模块。Dart 侧(citizenapp / citizenwallet)
 //! 是本模块的手写镜像,无编译期保证;靠金标向量
 //! (`tests/fixtures/signing_domain_vectors.json`)逐字节断言对齐,防跨语言漂移。
 
@@ -38,18 +34,16 @@ use sp_std::vec::Vec;
 
 // ── 签名 payload op_tag 注册表 (0x10-0x1F),单一权威源 ──
 //
-// ## 两类签名域(ADR-026 Phase 2 抖中方案,2026-06-22)
+// ## 两类签名域
 //
-// 1. **哈希域**(0x10-0x19,经 [`signing_message`] = `blake2_256(GMB||op_tag||SCALE)`):
-//    - 0x10-0x14 治理/身份签名(从 core_const 迁来;改调原语后字节不变)。
-//    - 0x15-0x17 取代 `b"GMB_L3_PAY_V1"`/`b"GMB_OFFCHAIN_BATCH_V1"`/`b"GMB_L2_ACK_V1"`
-//      字符串域(改调原语后字节变,破坏式)。
+// 1. **哈希域**(0x10-0x17,经 [`signing_message`] = `blake2_256(GMB||op_tag||SCALE)`):
+//    - 0x10-0x14 治理/身份签名。
+//    - 0x15-0x17 L3 支付 / 链下批次结算 / L2 确认。
 //    只有这 8 个(0x10-0x17)经 `signing_message` 入 hash → 才进 [`SIGN_OP_TAGS`] + 金标遍历。
 //
 // 2. **二进制前缀域**(0x18/0x19,**不经 hash**,签**原始可解析字节**):
 //    冷钱包对整段 payload 直接 sr25519 签名,node 按字节偏移解析。op_tag 常量仅作
-//    payload **前 4 字节** `GMB(3B) || op_tag(1B)` 二进制前缀(取代历史
-//    `b"GMB_ACTIVATE_ADMIN_V1"`(21B)/`b"GMB_DECRYPT_V1"`(14B)长字符串前缀)。
+//    payload **前 4 字节** `GMB(3B) || op_tag(1B)` 二进制前缀。
 //    **不进 `SIGN_OP_TAGS`/金标 signing_message 遍历**(它们不走 `signing_message`),
 //    其字节布局金标见 node 侧 `activate_admin_payload.json` / `decrypt_challenge.json`。
 //
@@ -69,20 +63,20 @@ pub const OP_SIGN_INST: u8 = 0x13;
 /// CID 机构/账户注销凭证(注册局签发,链端 close 验签)。
 pub const OP_SIGN_DEREGISTER: u8 = 0x14;
 
-/// L3 支付(取代 `b"GMB_L3_PAY_V1"`)。
+/// L3 支付。
 pub const OP_SIGN_L3_PAY: u8 = 0x15;
-/// 链下批次结算(取代 `b"GMB_OFFCHAIN_BATCH_V1"`)。
+/// 链下批次结算。
 pub const OP_SIGN_OFFCHAIN_BATCH: u8 = 0x16;
-/// L2 确认(取代 `b"GMB_L2_ACK_V1"`)。
+/// L2 确认。
 pub const OP_SIGN_L2_ACK: u8 = 0x17;
 
-/// 管理员激活 **二进制前缀域**(取代 `b"GMB_ACTIVATE_ADMIN_V1"`)。
+/// 管理员激活 **二进制前缀域**。
 ///
 /// 非 hash 域:payload 前 4 字节为 `GMB || OP_SIGN_ACTIVATE_ADMIN`,其后接原始可解析字段
 /// (account_id/code/kind/pubkey/timestamp/nonce),冷钱包对整段 payload sr25519 签名。
 /// **不进 [`SIGN_OP_TAGS`]**(不走 `signing_message`)。
 pub const OP_SIGN_ACTIVATE_ADMIN: u8 = 0x18;
-/// 解密授权 **二进制前缀域**(取代 `b"GMB_DECRYPT_V1"`)。
+/// 解密授权 **二进制前缀域**。
 ///
 /// 非 hash 域:challenge payload 前 4 字节为 `GMB || OP_SIGN_DECRYPT`,其后接原始可解析
 /// 字段(cid_number/pubkey/timestamp/nonce),冷钱包对整段 payload sr25519 签名。
@@ -91,8 +85,7 @@ pub const OP_SIGN_DECRYPT: u8 = 0x19;
 
 /// 二进制前缀域(0x18/0x19)统一前缀长度:`GMB`(3B) + op_tag(1B) = 4 字节。
 ///
-/// 取代历史长字符串前缀。冷钱包/node/citizenapp/citizenwallet 四方逐字节一致,
-/// 所有偏移/长度常量以本值为基准。
+/// 冷钱包/node/citizenapp/citizenwallet 四方逐字节一致,所有偏移/长度常量以本值为基准。
 pub const BINARY_PREFIX_LEN: usize = 4;
 
 /// 构造二进制前缀域的 4 字节前缀 `GMB || op_tag`(0x18/0x19 用)。
@@ -142,16 +135,16 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 //   canonical 字符串签名,但域是字符串字面,不进 op_tag hash 命名空间)。
 // - [`IM_NODE_PAIRING_PROTO`] 是节点配对 QR body 的协议版本串,**不签名**。
 //
-// 历史上散落在 node `im::binding` + `settings::communication-node` + Dart 两端各自硬编码
-// `"GMB_IM_*_V1"`,本常量收口为单源,各端 import/镜像本值,删本地副本。
+// node `im::binding` + `settings::communication-node` + Dart 两端共用本常量为单源,
+// 各端 import/镜像本值,不得本地另写副本。
 
-/// IM 钱包绑定 canonical payload 的域首段(取代散落的 `"GMB_IM_WALLET_BINDING_V1"`)。
+/// IM 钱包绑定 canonical payload 的域首段。
 ///
 /// 钱包对 `DOMAIN|wallet_account|im_device_id|...|nonce` 管道分隔 UTF-8 字符串签名;
-/// 本值是该字符串的第一段,**保留原构造**(非 op_tag hash 域)。
+/// 本值是该字符串的第一段(非 op_tag hash 域)。
 pub const IM_WALLET_BINDING_DOMAIN: &str = "GMB_IM_WALLET_BINDING_V1";
 
-/// IM 节点配对 QR body 的协议版本串(取代散落的 `"GMB_IM_NODE_PAIRING_V1"`)。
+/// IM 节点配对 QR body 的协议版本串。
 ///
 /// 仅作配对 QR body 内 `proto` 字段值,**不参与任何签名**;本值是单一权威源。
 pub const IM_NODE_PAIRING_PROTO: &str = "GMB_IM_NODE_PAIRING_V1";

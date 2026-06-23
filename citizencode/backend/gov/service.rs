@@ -644,8 +644,8 @@ pub fn federal_registry_cid_number() -> Option<&'static str> {
 }
 
 /// 中文注释:联邦注册局(全国唯一)内置管理员公钥集,取自创世常量 china_zf.rs。
-/// 唯一真源是链上 admins-change::AdminAccounts;本取值器只服务 CID 侧的【重新创世后/
-/// 链不可达】止血播种(admins::seed),稳态由 chain_sync 从链投影接管,见 ADR-023。
+/// 唯一真源是链上 admins-change::AdminAccounts;本取值器只服务 CID 侧的【链不可达】
+/// 离线引导播种(admins::seed),稳态由 chain_sync 从链投影接管。
 /// 仅取「总统府联邦注册局」单条的 admins,不会混入其它联邦机构(安全局/情报局等)的管理员。
 pub(crate) fn federal_registry_admins() -> Option<&'static [[u8; 32]]> {
     china_zf_constants::CHINA_ZF
@@ -671,7 +671,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     };
     // 中文注释:5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
     // china_zf.rs CHINA_ZF(带 main/fee/admins),由 :375 的常量循环单一 push;
-    // 此处不再用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
+    // 此处不用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
     for (institution_code, cid_short_name, cid_full_name) in [
         (
             "NSN",
@@ -751,7 +751,7 @@ fn push_area_template_target(
 }
 
 /// 解析常量机构 CID,返回 (省码, 市码, 机构码, 盈利位)。
-/// 机构类别一律由机构码派生(主体属性 K1 已从号码删除,不再单独返回)。
+/// 机构类别一律由机构码派生,不单独返回。
 fn parse_cid_institution_parts(cid_number: &str) -> Option<(String, String, String, String)> {
     let parts = crate::number::parse_cid_number_parts(cid_number).ok()?;
     let province_code = parts.r5.get(0..2)?.to_string();

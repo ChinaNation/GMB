@@ -143,9 +143,9 @@ CID 前端提示统一由 `citizencode/frontend/utils/notice.ts` 管理。业务
 
 教育委员会学校机构统一归教育机构入口管理,机构类型使用教育委员会代码 `JY`,不在私权六类 Tab 中出现。
 
-非法人能力放在 `citizencode/backend/subjects/uninorg`,因为公权机构和私权机构都可能拥有从属非法人机构。
+非法人能力放在 `citizencode/backend/subjects/unincorporated_org`,因为公权机构和私权机构都可能拥有从属非法人机构。
 个体经营 `F+GT` 和无限合伙 `F+GP` 是独立非法人,不选择所属法人;其它从属非法人仍按
-`subjects/uninorg` 校验所属法人、地域和盈利属性继承。
+`subjects/unincorporated_org` 校验所属法人、地域和盈利属性继承。
 
 ## 公开接口
 

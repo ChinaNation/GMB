@@ -1,15 +1,12 @@
-//! 清算行本地 L3 存款缓存账本(Step 1 新增骨架)。
+//! 清算行本地 L3 存款缓存账本。
 //!
 //! 中文注释:
 //! - 权威账本在链上 `offchain_transaction::DepositBalance` /
 //!   `BankTotalDeposits`。本模块只是**缓存**,用于:
 //!     1. citizenapp 查询余额时的快速响应(避免每次落到链上 state 查询)
-//!     2. 扫码支付时本地验"可用余额 = confirmed - pending_debit"(Step 2 用)
+//!     2. 扫码支付时本地验"可用余额 = confirmed - pending_debit"
 //!     3. 从链上事件(`Deposited` / `Withdrawn` / `PaymentSettled`)增量同步
-//! - 加密持久化采用 blake2_256 XOR + HMAC 方式(节点启动密码派生 key),
-//!   后续考虑升级到 AES-256-GCM。
-//! - **Step 1 仅数据结构 + 基础读写**,`accept_payment` / `take_pending_for_batch`
-//!   等"扫码支付接受/批次提取"方法由 Step 2 实现。
+//! - 加密持久化采用 blake2_256 XOR + HMAC 方式(节点启动密码派生 key)。
 
 use codec::{Decode, Encode};
 use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
@@ -38,7 +35,7 @@ pub struct L3AccountState {
     pub pending_debit: u128,
     /// 本地已接受未上链的入账(扫码收方向)。
     pub pending_credit: u128,
-    /// 从链上 `L3PaymentNonce` 同步的 nonce(Step 2 启用重放防护)。
+    /// 从链上 `L3PaymentNonce` 同步的 nonce(重放防护)。
     pub cached_nonce: u64,
 }
 
@@ -49,7 +46,7 @@ impl L3AccountState {
     }
 }
 
-/// 一笔本地已接受但未上链的扫码支付(Step 2 起用)。
+/// 一笔本地已接受但未上链的扫码支付。
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct PendingPayment {
     pub tx_id: H256,
@@ -67,7 +64,7 @@ pub struct PendingPayment {
     pub accepted_at: u64,
 }
 
-/// L3 支付意图的**节点层镜像结构**(Step 2b 新增)。
+/// L3 支付意图的**节点层镜像结构**。
 ///
 /// 中文注释:
 /// - 字段顺序与 runtime 侧 `offchain_transaction::batch_item::PaymentIntent`
@@ -75,7 +72,7 @@ pub struct PendingPayment {
 ///   失败。
 /// - 之所以节点侧再定义一份,是为了不让 node/Cargo.toml 直接依赖 pallet crate
 ///   (避免循环与门禁耦合),也便于冷启动不同版本节点间兼容。
-/// - 签名消息生成规则(ADR-026 唯一原语):
+/// - 签名消息生成规则(唯一原语):
 ///   `signing_message(OP_SIGN_L3_PAY, SCALE(self))`
 ///   = `blake2_256(GMB || OP_SIGN_L3_PAY || SCALE(self))`。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
@@ -94,13 +91,9 @@ pub struct NodePaymentIntent {
 impl NodePaymentIntent {
     /// 生成签名消息哈希,与链上 runtime `PaymentIntent::signing_hash()` 严格一致。
     ///
-    /// ADR-026:统一收敛到 `primitives::sign::signing_message`,历史本地字符串域
-    /// `b"GMB_L3_PAY_V1"` 已删,域头折为 `GMB || OP_SIGN_L3_PAY`(破坏式,字节变)。
+    /// 统一收敛到 `primitives::sign::signing_message`,域头为 `GMB || OP_SIGN_L3_PAY`。
     pub fn signing_hash(&self) -> [u8; 32] {
-        primitives::sign::signing_message(
-            primitives::sign::OP_SIGN_L3_PAY,
-            &self.encode(),
-        )
+        primitives::sign::signing_message(primitives::sign::OP_SIGN_L3_PAY, &self.encode())
     }
 }
 
@@ -144,12 +137,12 @@ impl OffchainLedger {
         ledger.accounts.get(user).cloned().unwrap_or_default()
     }
 
-    /// 查可用余额(Step 2 扫码付款用)。
+    /// 查可用余额(扫码付款用)。
     pub fn available_balance(&self, user: &AccountId32) -> u128 {
         self.get_state(user).available()
     }
 
-    /// 查下一个应提交的 nonce(Step 2 起 citizenapp RPC 调用)。
+    /// 查下一个应提交的 nonce(citizenapp RPC 调用)。
     ///
     /// 中文注释:跨行收款方节点不会把付款方写入本地 `accounts`,因此这里必须把
     /// 已接受的 cross-bank pending 也纳入计算,避免连续两笔跨行支付都拿到同一个
@@ -179,7 +172,7 @@ impl OffchainLedger {
 
     /// 本地 `Σ accounts[*].confirmed`(分)。
     ///
-    /// 用于 Step 2b-iii-b `settlement::reserve` 与链上 `BankTotalDeposits[my_bank]`
+    /// 用于 `settlement::reserve` 与链上 `BankTotalDeposits[my_bank]`
     /// 主账对账。pending_debit / pending_credit 不计入:扫码支付在 pending 期间
     /// 链上 `DepositBalance` 和本地 `confirmed` 同时保持"未扣"状态,settlement
     /// 上链后由 listener 同步扣减,两边始终保持相等。
@@ -210,16 +203,12 @@ impl OffchainLedger {
 
     /// 同步 `PaymentSettled` 事件:把 pending 落地到 confirmed。
     ///
-    /// **Step 2b-iv-b / E 修复**:原实现对 payer / recipient **两侧**都无条件
-    /// 写,在跨行场景(my_bank == payer_bank != recipient_bank)下会给**不在
-    /// 本清算行**的 recipient 在本地 `accounts` 新建一个 ghost 账户(confirmed=amount),
-    /// 导致 `confirmed_sum_snapshot` 与链上 `BankTotalDeposits[my_bank]` 虚高。
-    ///
-    /// 修复:传入 `(payer_bank, recipient_bank)` 与**本清算行** `my_bank`,只对
-    /// 属于本行的一侧动账:
+    /// 传入 `(payer_bank, recipient_bank)` 与**本清算行** `my_bank`,只对
+    /// 属于本行的一侧动账(避免给不在本行的对手方新建 ghost 账户使
+    /// `confirmed_sum_snapshot` 与链上 `BankTotalDeposits[my_bank]` 虚高):
     /// - `payer_bank == my_bank`:扣 payer(pending_debit / confirmed)
     /// - `recipient_bank == my_bank`:加 recipient(pending_credit / confirmed)
-    /// - 两者皆同(同行):两侧都动,行为与旧实现一致
+    /// - 两者皆同(同行):两侧都动
     /// - 两者皆不同(跨行但 my_bank 是第三方清算行):`listener.handle` 不会
     ///   进来调用本方法(上游已过滤);兜底:不动任何账户
     ///
@@ -353,7 +342,7 @@ impl OffchainLedger {
         Ok(count)
     }
 
-    // ---------------- Step 2b 新增:扫码支付核心业务逻辑 ----------------
+    // ---------------- 扫码支付核心业务逻辑 ----------------
 
     /// 接收 citizenapp 通过 RPC 提交的签名支付意图,执行完整本地校验 + 入账。
     ///
@@ -366,12 +355,11 @@ impl OffchainLedger {
     /// 6. 成功 → `pending_debit += total`;`cached_nonce = intent.nonce`;
     ///    `pending.push(PendingPayment{..})`;返回 `(tx_id, l2_ack_sig)`。
     ///
-    /// [`current_block`] 本地已知最新区块高度。传 `None` 则跳过 `expires_at`
-    /// 校验(Step 2b-ii 接入 sc-client-api 后切为 `Some`)。
+    /// [`current_block`] 本地已知最新区块高度。传 `None` 则跳过 `expires_at` 校验。
     ///
     /// [`l2_ack_sig_provider`] 清算行对"我承认这笔意图"的 64 字节签名。
     /// [`accepted_at`] RPC 层生成 ACK 前确定的 UNIX 秒时间戳,本地 pending 与响应共用。
-    /// 中文注释：Step 2b RPC 接入完成前保留直接验签入账入口，当前生产路径走链上批次提交。
+    /// 中文注释：直接验签入账入口,当前生产路径走链上批次提交。
     #[allow(dead_code)]
     pub fn accept_payment(
         &self,
@@ -539,7 +527,7 @@ impl OffchainLedger {
         Ok(())
     }
 
-    /// 取出至多 `max_items` 笔 pending,用于 packer 组批次(Step 2b-ii 用)。
+    /// 取出至多 `max_items` 笔 pending,用于 packer 组批次。
     /// 按 `accepted_at` 升序,保证上链顺序可预测。
     pub fn take_pending_for_batch(&self, max_items: usize) -> Vec<PendingPayment> {
         let ledger = self.inner.read().unwrap_or_else(|e| e.into_inner());

@@ -30,7 +30,7 @@ use crate::subjects::service::{
     derive_category, resolve_legal_representative_scope_for_codes, validate_cid_full_name,
     validate_legal_representative_required,
 };
-use crate::subjects::uninorg;
+use crate::subjects::unincorporated_org;
 use crate::*;
 
 pub(crate) async fn create_institution(
@@ -116,7 +116,7 @@ async fn create_institution_inner(
     let institution_code = private_rule
         .map(|rule| rule.institution_code.to_string())
         .unwrap_or_else(|| input.institution.trim().to_string());
-    // 主体属性概念已删除:机构类别一律由机构码派生(K1 已从 cid 号删除)。
+    // 机构类别一律由机构码派生。
     let institution = crate::number::InstitutionCode::from_str(&institution_code);
     let p1 = private_rule
         .map(|rule| rule.p1.to_string())
@@ -286,13 +286,13 @@ async fn create_institution_inner(
         .filter(|v| !v.is_empty())
     {
         Some(raw) => {
-            if !uninorg::requires_parent(institution_code.as_str()) {
+            if !unincorporated_org::requires_parent(institution_code.as_str()) {
                 return api_error(StatusCode::BAD_REQUEST, 1001, "该主体类型不接受所属法人");
             }
             Some(raw.to_string())
         }
         None => {
-            if uninorg::requires_parent(institution_code.as_str()) {
+            if unincorporated_org::requires_parent(institution_code.as_str()) {
                 return api_error(
                     StatusCode::BAD_REQUEST,
                     1001,
@@ -313,21 +313,21 @@ async fn create_institution_inner(
         }) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在");
         };
-        if !uninorg::can_attach_to_parent(parent.institution_code.as_str()) {
+        if !unincorporated_org::can_attach_to_parent(parent.institution_code.as_str()) {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                uninorg::parent_subject_requirement_message(),
+                unincorporated_org::parent_subject_requirement_message(),
             );
         }
-        if let Some(msg) = uninorg::code_consistency_violation(
+        if let Some(msg) = unincorporated_org::code_consistency_violation(
             institution_code.as_str(),
             parent.institution_code.as_str(),
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        let rule = uninorg::parent_locality_rule(parent.institution_code.as_str());
-        if let Some(msg) = uninorg::locality_violation(
+        let rule = unincorporated_org::parent_locality_rule(parent.institution_code.as_str());
+        if let Some(msg) = unincorporated_org::locality_violation(
             rule,
             &parent.province_name,
             &parent.city_name,
@@ -337,7 +337,8 @@ async fn create_institution_inner(
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
         // 盈利属性附属于所属法人:前端推导值必须与父级一致,防客户端漂移
-        let expected_p1 = uninorg::inherited_p1(parent.institution_code.as_str(), &parent.p1);
+        let expected_p1 =
+            unincorporated_org::inherited_p1(parent.institution_code.as_str(), &parent.p1);
         if p1 != expected_p1 {
             return api_error(
                 StatusCode::BAD_REQUEST,

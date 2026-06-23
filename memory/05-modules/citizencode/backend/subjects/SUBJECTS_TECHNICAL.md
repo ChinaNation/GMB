@@ -45,7 +45,7 @@
 
 ## 非法人
 
-非法人机构能力统一放在 `citizencode/backend/subjects/uninorg/`。
+非法人机构能力统一放在 `citizencode/backend/subjects/unincorporated_org/`。
 
 - `F` 不具备独立法人资格。
 - `F+GT` 个体经营和 `F+GP` 无限合伙是独立非法人,不选择所属法人。
@@ -144,7 +144,7 @@ citizencode/backend/subjects/
 ├── service.rs
 ├── admin.rs
 ├── chain_duoqian_info.rs
-└── uninorg/
+└── unincorporated_org/
     └── mod.rs
 ```
 

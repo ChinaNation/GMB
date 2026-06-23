@@ -1,10 +1,10 @@
-//! 账户地址派生唯一真源 = account_derive.rs (ADR-024 Tier 1)
+//! 账户地址派生唯一真源。
 //!
 //! 把账户派生的 op_tag、5 个受限保留名、name→种类路由、每种 payload 字段拼装、
-//! 以及唯一派生入口全部收敛到本模块。其它任何 crate / 模块禁止再本地重声明或重拼
+//! 以及唯一派生入口全部收敛到本模块。其它任何 crate / 模块禁止本地声明或重拼
 //! `GMB || op_tag || ss58 || payload`，一律调本模块。
 //!
-//! 域分隔符 `GMB`(与签名共用)仍留在 `core_const`,本模块 import 使用。
+//! 域分隔符 `GMB`(与签名共用)留在 `core_const`,本模块 import 使用。
 //! 地址派生 preimage = GMB (3B) || op_tag (1B) || ss58 (2B little-endian) || payload。
 //! `address = BLAKE2-256(preimage)` → 32 字节 AccountId。
 //!
@@ -13,7 +13,7 @@
 //! (`tests/fixtures/account_derive_vectors.json`,CI 脚本 `tools/sync_account_derive_vectors.sh`)
 //! 逐字节断言对齐,防止跨语言漂移。新增 op_tag / 账户种类只改本模块 + 刷新金标。
 
-use crate::core_const::GMB; // 域共享(签名也用),留在 core_const
+use crate::core_const::GMB; // 域共享(签名也用)
 use sp_core::hashing::blake2_256;
 use sp_std::vec::Vec;
 
@@ -27,7 +27,7 @@ pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: cid_number
 pub const OP_AN: u8 = 0x03; // 安全基金 · input: cid_number
 pub const OP_HE: u8 = 0x04; // 两和基金 · input: cid_number
 pub const OP_PERSONAL: u8 = 0x05; // 个人多签账户 · input: creator_32 || account_name
-pub const OP_NAME: u8 = 0x06; // CID 机构自定义命名账户 · input: cid_number || account_name(原 OP_INSTITUTION,值不变)
+pub const OP_NAME: u8 = 0x06; // CID 机构自定义命名账户 · input: cid_number || account_name
 
 /// 机构账户受限注册保留名(单一权威源)。
 ///

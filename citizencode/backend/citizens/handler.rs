@@ -207,16 +207,18 @@ fn legal_representative_scope_from_create_context(
             }) else {
                 return Err(api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在"));
             };
-            if !crate::subjects::uninorg::can_attach_to_parent(parent.institution_code.as_str()) {
+            if !crate::subjects::unincorporated_org::can_attach_to_parent(
+                parent.institution_code.as_str(),
+            ) {
                 return Err(api_error(
                     StatusCode::BAD_REQUEST,
                     1001,
-                    crate::subjects::uninorg::parent_subject_requirement_message(),
+                    crate::subjects::unincorporated_org::parent_subject_requirement_message(),
                 ));
             }
             Some(parent)
         }
-        _ if crate::subjects::uninorg::requires_parent(institution) => {
+        _ if crate::subjects::unincorporated_org::requires_parent(institution) => {
             return Err(api_error(StatusCode::BAD_REQUEST, 1001, "请先选择所属法人"));
         }
         _ => None,

@@ -1,4 +1,4 @@
-// GMB 账户统一派生原语 —— 全 app 唯一入口(ADR-018 §九)。
+// GMB 账户统一派生原语 —— 全 app 唯一入口。
 //
 // 与 citizenchain `primitives::core_const` 单一权威源严格字节对齐:
 //   preimage = b"GMB"(3B) || op_tag(1B) || ss58.to_le_bytes()(2B) || payload

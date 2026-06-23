@@ -2,8 +2,8 @@
 //!
 //! 中文注释(铁律):
 //! 机构分类全链唯一真源是 CID 号里的**机构码**(backend `number/code.rs` 同一套 86 码)。
-//! 链上治理不再使用任何独立的 ORG_xx 数字标签;`org: u8` 已全部替换为本文件的
-//! `InstitutionCode`([u8; 4] 原始码字节)。所有"用哪种阈值 / 是不是个人多签 / 是不是
+//! 链上治理统一用本文件的 `InstitutionCode`([u8; 4] 原始码字节)作机构分类。
+//! 所有"用哪种阈值 / 是不是个人多签 / 是不是
 //! 机构账户"的治理策略都由本文件的纯函数从机构码派生,绝不另立第二套分类。
 //!
 //! ## 字节表示
@@ -137,7 +137,7 @@ pub fn is_private_legal_code(code: &InstitutionCode) -> bool {
 }
 
 /// 是否为机构账户机构码(公权/私权/非法人法人实体,经 organization-manage 注册多签)。
-/// 取代旧 ORG_PUP|ORG_OTH 判定:个人/个人多签不算机构账户;
+/// 个人/个人多签不算机构账户;
 /// 固定治理档(NRC/PRC/PRB)是 china 内建创世账户,走固定治理路径,也不算 organization-manage 机构账户。
 pub fn is_institution_code(code: &InstitutionCode) -> bool {
     !is_fixed_governance_code(code)
@@ -152,13 +152,12 @@ pub fn is_person_code(code: &InstitutionCode) -> bool {
 }
 
 /// 是否为注册多签动态阈值账户机构码(个人多签 或 机构账户)。
-/// 取代旧 `is_registered_multisig_org`:固定治理档不在内。
+/// 固定治理档不在内。
 pub fn is_registered_multisig_code(code: &InstitutionCode) -> bool {
     is_personal_code(code) || is_institution_code(code)
 }
 
 /// 是否为内部投票支持的治理机构码(固定治理档 或 注册多签账户)。
-/// 取代旧 `is_valid_org`。
 pub fn is_valid_governance_code(code: &InstitutionCode) -> bool {
     is_fixed_governance_code(code) || is_registered_multisig_code(code)
 }

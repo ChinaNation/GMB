@@ -1,13 +1,12 @@
 // 共享:`AdminsChange::AdminAccounts` 全表单次扫描(机构多签 + 个人多签共用)。
 //
-// 背景(ADR-018 §九):机构多签与个人多签发现都依赖同一张
-// `AdminsChange::AdminAccounts` 反向索引。历史上两个发现服务各自全表扫一遍,
-// 同一张表扫两次纯属浪费。本服务把"翻页 getKeysPaged + 批量 fetchStorageBatch
-// + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;各业务模块按 kind/institutionCode
-// 客户端过滤,不再各自扫链。
+// 机构多签与个人多签发现都依赖同一张
+// `AdminsChange::AdminAccounts` 反向索引。本服务把"翻页 getKeysPaged +
+// 批量 fetchStorageBatch + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;
+// 各业务模块按 kind/institutionCode 客户端过滤。
 //
 // 扫描走轻节点 smoldot 的**短前缀整表**(prefix = twox128(pallet) || twox128(storage),
-// 无嵌长 K1),ADR-018 §一确认轻节点可用。
+// 无嵌长 K1)。
 
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;

@@ -237,11 +237,6 @@ pub(crate) async fn health(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
-// 中文注释:历史 attestor_public_key endpoint(`GET /api/v1/attestor/public-key`)
-// 0 caller,2026-05-01 chain/ 重构一并下架。链端验证 CID 凭证用的公钥已经
-// 通过链上 CidSystem::CidMainAccount storage 维护(创世写入 + 链上 rotate
-// extrinsic 维护),不需要再走 HTTP pull。
-
 pub(crate) fn constant_time_eq(left: &str, right: &str) -> bool {
     let l = left.as_bytes();
     let r = right.as_bytes();
@@ -289,12 +284,8 @@ pub(crate) fn require_public_search_auth(
     Ok(())
 }
 
-// 中文注释:历史 require_chain_auth + 整套 chain HMAC 鉴权(x-chain-token /
-// x-chain-request-id / x-chain-nonce / x-chain-timestamp / x-chain-signature)
-// 与已下架的 /api/v1/chain/* + /api/v1/vote/verify dead routes 配套使用,
-// 2026-05-01 一并下架。chain pull 端点(duoqian_info / joint_vote /
-// citizen_vote)的安全模型是"返回签名凭证只对请求者 account_pubkey 有效",
-// 不需要请求侧 HMAC。
+// chain pull 端点(duoqian_info / joint_vote / citizen_vote)的安全模型是
+// "返回签名凭证只对请求者 account_pubkey 有效",不需要请求侧 HMAC。
 
 pub(crate) fn env_flag_enabled(key: &str) -> bool {
     std::env::var(key)

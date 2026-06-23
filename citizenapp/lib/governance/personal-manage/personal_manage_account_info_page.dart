@@ -691,7 +691,7 @@ class _PersonalManageAccountInfoPageState
                   ],
                   const Divider(height: 20),
                   _buildInfoRow('状态', statusLabel, valueColor: statusColor),
-                  // 管理员数量 / 通过阈值 已删除(bug 4):管理员列表卡片
+                  // 管理员数量 / 通过阈值不单列:管理员列表卡片
                   // subtitle 已显示这两项信息,避免重复。
                 ],
               ),
@@ -741,8 +741,8 @@ class _PersonalManageAccountInfoPageState
             ? '$adminsLen 人'
             : '$adminsLen 人 · 阈值 $threshold/$adminsLen';
 
-    // bug 2(2026-05-03):卡片高度对齐 institution_detail_page._buildAdminEntry,
-    // 用 InkWell + Padding(14,12) + Row(36×36 icon)替代 ListTile 减少视觉高度。
+    // 卡片高度对齐 institution_detail_page._buildAdminEntry,
+    // 用 InkWell + Padding(14,12) + Row(36×36 icon)而非 ListTile 减少视觉高度。
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,

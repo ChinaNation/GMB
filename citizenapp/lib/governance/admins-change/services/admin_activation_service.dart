@@ -77,9 +77,9 @@ class ActivationService {
 
   /// AccountId 级管理员激活 payload 4 字节二进制前缀 = GMB || 0x18。
   ///
-  /// ADR-026 Phase 2 二进制前缀域(抖中方案):此前缀**内嵌在被签 payload 字节里**
+  /// 二进制前缀域:此前缀**内嵌在被签 payload 字节里**
   /// (冷钱包对整段 payloadHex 直接 sr25519 签名,node 按字节偏移解析),不经
-  /// signingMessage 做 blake2 hash。取代历史 b"GMB_ACTIVATE_ADMIN_V1"(21B)。
+  /// signingMessage 做 blake2 hash。
   /// 四方逐字节锁步:node activation.rs(build/decode)、冷钱包
   /// payload_decoder.dart、本服务。前缀单源对齐 primitives::sign::
   /// binary_domain_prefix,金标见 test/signer/fixtures/

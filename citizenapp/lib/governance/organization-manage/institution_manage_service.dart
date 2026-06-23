@@ -26,14 +26,13 @@ class InstitutionInitialAccountInput {
 }
 
 // 业务目录 lib/organization-manage/ 只保留 OrganizationManage 机构多签入口；
-// 个人多签主业务已经迁移到 lib/personal-manage/。
+// 个人多签主业务在 lib/personal-manage/。
 
 /// 机构多签管理链上交互服务（对应 OrganizationManage pallet 17）。
 ///
 /// 负责 propose_create_institution / propose_close 等机构提案创建类
 /// extrinsic 的编码与提交,以及 CID 注册状态和机构多签账户 storage 查询。
 ///
-/// Phase 3(2026-04-22): 本 pallet 内部的管理员投票入口已从链端物理删除,
 /// 管理员投票一律走 `InternalVote::cast`(22.0),
 /// 通过 [InternalVoteService] 或业务 service 的 `submitInternalVote`
 /// 统一入口发送。
@@ -318,7 +317,7 @@ class InstitutionManageService {
     );
   }
 
-  // 投票动作已迁移到 `InternalVoteService`（Phase 3, pallet=9 call=0）。
+  // 投票动作走 `InternalVoteService`（pallet=9 call=0）。
 
   // ──── 链上查询 ────
 
@@ -592,7 +591,7 @@ class InstitutionManageService {
   /// OrganizationManage ACTION_CLOSE(2): account(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CloseDuoqianProposalInfo，解码失败返回 null。
-  /// PersonalManage 提案解码已经迁移到 `PersonalManageService`。
+  /// PersonalManage 提案解码在 `PersonalManageService`。
   static const _orgModuleTag = [
     0x6f,
     0x72,

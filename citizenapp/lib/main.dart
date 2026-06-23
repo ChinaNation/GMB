@@ -536,7 +536,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-/// 精致的 tab 切换组件（替代原 _PipeTabs）。
+/// 精致的 tab 切换组件。
 class _StyledTabs extends StatelessWidget {
   const _StyledTabs({
     required this.tabs,

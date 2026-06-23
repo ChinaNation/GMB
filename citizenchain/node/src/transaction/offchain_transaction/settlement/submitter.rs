@@ -1,4 +1,4 @@
-//! 扫码支付 Step 2b-ii-β-2-a 新增:接 substrate `TransactionPool` 的批次提交器。
+//! 接 substrate `TransactionPool` 的批次提交器。
 //!
 //! 中文注释:
 //! - 本文件实现 `packer::BatchSubmitter` trait,把组好的 batch 包进
@@ -10,8 +10,8 @@
 //!   管理员 sr25519 私钥既签 batch 内部的 `batch_signature`,也签 extrinsic 外
 //!   层的 `SignedPayload`。
 //!
-//! 本文件与 β-2-b 的衔接:
-//! - β-2-b 的 service.rs 负责传入具体 `Arc<FullClient>` + `Arc<TransactionPoolHandle>`
+//! 本文件与 service 的衔接:
+//! - service.rs 负责传入具体 `Arc<FullClient>` + `Arc<TransactionPoolHandle>`
 //!   + `Arc<RwLock<Option<SigningKey>>>`,构造 `PoolBatchSubmitter` 后作为
 //!   `Arc<dyn BatchSubmitter>` 注入 `start_clearing_bank_components`。
 
@@ -40,10 +40,10 @@ use crate::core::service::FullClient;
 /// 而不是 `runtime::Block`(带具体 UncheckedExtrinsic 版)。
 pub type TxPool = sc_transaction_pool::TransactionPoolHandle<runtime::opaque::Block, FullClient>;
 
-/// 扫码支付 Step 2b-ii-β-2-a 新增:真正走 `TransactionPool` 提交 extrinsic 的 submitter。
+/// 真正走 `TransactionPool` 提交 extrinsic 的 submitter。
 pub struct PoolBatchSubmitter {
     client: Arc<FullClient>,
-    /// substrate TransactionPool,β-2-b 起真实调 `submit_one` 提交 extrinsic。
+    /// substrate TransactionPool,调 `submit_one` 提交 extrinsic。
     pool: Arc<TxPool>,
     /// 同一把清算行管理员 sr25519 私钥:既是 batch 内部 `batch_signature` 的
     /// 签名者,也是 extrinsic 外层 `SignedPayload` 的签名者。

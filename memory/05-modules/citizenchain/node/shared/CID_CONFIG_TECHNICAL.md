@@ -51,5 +51,5 @@ CID_BASE_URL=http://新的-cid-服务地址:8899
 
 | 调用方 | 用途 |
 |---|---|
-| `governance/organization-manage/cid.rs` | 机构注册凭证、清算行候选查询 |
+| `governance/organization_manage/cid.rs` | 机构注册凭证、清算行候选查询 |
 | `offchain/cid.rs` | 清算行资格候选搜索 |

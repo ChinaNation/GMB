@@ -76,7 +76,7 @@ pub struct FullDeps<C, P> {
     pub gpu_hashrate_fn: Option<fn() -> f64>,
     /// Chain spec（用于 sync_state_genSyncSpec RPC，供轻节点获取 lightSyncState）。
     pub chain_spec: Box<dyn sc_chain_spec::ChainSpec + Send>,
-    /// 扫码支付 Step 2b-ii-β-2-b 新增:清算行节点的 RPC 命名空间实现。
+    /// 清算行节点的 RPC 命名空间实现。
     /// None 表示本节点未以清算行角色启动,跳过 `offchain_*` RPC 注入。
     pub offchain_clearing_rpc:
         Option<Arc<crate::transaction::offchain_transaction::rpc::OffchainClearingRpcImpl>>,
@@ -233,7 +233,7 @@ where
         offchain_clearing_rpc,
     } = deps;
 
-    // 扫码支付 Step 2b-ii-β-2-b:若清算行组件已启动,合并 offchain_* RPC 命名空间。
+    // 若清算行组件已启动,合并 offchain_* RPC 命名空间。
     if let Some(impl_) = offchain_clearing_rpc {
         use crate::transaction::offchain_transaction::rpc::OffchainClearingRpcServer;
         module

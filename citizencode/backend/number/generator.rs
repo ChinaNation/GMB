@@ -2,7 +2,7 @@
 //!
 //! 中文注释:
 //! 这是 cid 系统**唯一**的 CID 号生成入口(`generate_cid_number`)。业务模块的
-//! 「种子约定 + 撞号重试」统一经 `number::seed` 调本入口,不再各自直调:
+//! 「种子约定 + 撞号重试」统一经 `number::seed` 调本入口:
 //! - `subjects::registration`     经 `seed::dynamic_institution_cid`(随机 UUID + 重试)
 //! - `citizens::binding`          经 `seed::citizen_cid`(wallet_pubkey + 重试)
 //! - `gov::service`               经 `seed::official_institution_cid`(GOV 模板,确定性无重试)

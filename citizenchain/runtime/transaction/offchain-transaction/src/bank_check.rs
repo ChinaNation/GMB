@@ -1,4 +1,4 @@
-//! 扫码支付清算体系 Step 1 新增:清算行合法性判定。
+//! 清算行合法性判定。
 //!
 //! 中文注释:
 //! - 清算行(L2)= subject_property 为 S(私法人)或 F(非法人)的私权机构。
@@ -46,16 +46,16 @@ pub trait CidAccountQuery<AccountId> {
     /// 该地址对应的多签账户是否处于 Active 状态。
     fn is_active(addr: &AccountId) -> bool;
     /// `who` 是否是 `bank` 对应机构多签的管理员之一(经 InstitutionMultisigQuery 反查)。
-    /// Step 2 新增:清算行费率提案 / 关闭等治理动作需校验管理员身份。
+    /// 清算行费率提案 / 关闭等治理动作需校验管理员身份。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
-    /// Step 2(2026-05-02)调整:清算行资格白名单判定。
+    /// 清算行资格白名单判定。
     ///
     /// CID 系统在 eligible-search / registration-info 入口负责判断"私法人股份公司
     /// 或其下属非法人"资格;链上不再保存机构类型和所属法人元数据。
     ///
     /// 实现层只确认地址属于已注册且 Active 的 CID 机构账户,保持 bank_check 解耦。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
-    /// Step 2(2026-04-27, ADR-007)新增:节点是否已声明为清算行节点。
+    /// 节点是否已声明为清算行节点。
     ///
     /// 链上 `ClearingBankNodes` storage 由 cid_number 索引;此方法接受主账户
     /// 地址参数,内部由实现层反查 cid_number 后判定。
@@ -104,7 +104,7 @@ fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 
 /// 严格校验:某地址可作为"清算行主账户"被 L3 绑定。
 ///
-/// Step 2(2026-04-27, ADR-007)起 6 重校验,任一失败即拒绝:
+/// 6 重校验,任一失败即拒绝:
 /// 1. 在链上 `AccountRegisteredCid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
 /// 3. K1 ∈ {S, F}(字节级主体属性判定)
@@ -132,13 +132,13 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
         Error::<T>::ClearingBankNotActive
     );
 
-    // Step 2 第 5 重:资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)
+    // 第 5 重:资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)
     ensure!(
         T::CidAccountQuery::is_clearing_bank_eligible(addr),
         Error::<T>::NotEligibleForClearingBank
     );
 
-    // Step 2 第 6 重:必须已声明清算行节点
+    // 第 6 重:必须已声明清算行节点
     ensure!(
         T::CidAccountQuery::is_registered_clearing_node(addr),
         Error::<T>::ClearingBankNotRegisteredAsNode
@@ -147,7 +147,7 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
     Ok(())
 }
 
-/// 反查"清算行费用账户"地址(Step 2 起由 `settlement.rs` 使用)。
+/// 反查"清算行费用账户"地址(由 `settlement.rs` 使用)。
 ///
 /// 流程:
 /// 1. 由主账户反查得到 `cid_number`

@@ -11,7 +11,7 @@ CPMS 是离线系统，初始化阶段不要求外置验签公钥；档案码真
 - 使用 CID 安装码初始化：`POST /api/v1/install/initialize`
 - 初始管理员绑定：`POST /api/v1/install/admins/bind`
 - 生成 CPMS 本机 ARCHIVE 签发密钥：`qr_sign_keys.key_id = ARCHIVE`
-- 解密运行时需要的 `install_secret`，供 `dangan` 构造 `geo_seal`
+- 解密运行时需要的 `install_secret`，供 `archive` 构造 `geo_seal`
 
 ## 3. INSTALL 输入
 `install/initialize` 接收 `cid_init_qr_content`，内容支持 JSON 或 Base64(JSON)，载荷必须是：
@@ -58,4 +58,4 @@ cid-cpms-v1|install|{cid_number}|{province_name}|{city_name}|{install_secret_has
 - 初始化相关路由与本机安装材料读取集中在 `initialize`。
 - 登录认证在 `login`。
 - 权限校验在 `authz`。
-- 档案号、`geo_seal` 和 ARCHIVE 签名在 `dangan`。
+- 档案号、`geo_seal` 和 ARCHIVE 签名在 `archive`。

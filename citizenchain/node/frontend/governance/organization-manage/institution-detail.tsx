@@ -202,7 +202,7 @@ export function ClearingBankInstitutionDetailPage({
         </div>
       </div>
 
-      {/* 发起提案按钮组：管理员更换转入 admins_change，其它提案仍按后续模块接入。 */}
+      {/* 发起提案按钮组：管理员更换转入 admins-change，其它提案仍按后续模块接入。 */}
       <div className="institution-info-section">
         <h3>发起提案</h3>
         <div className="proposal-type-grid">

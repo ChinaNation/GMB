@@ -9,13 +9,13 @@
 代码目录：
 
 - `/Users/rhett/GMB/citizenchain/node/src/governance/admins_change/`：后端 Tauri 命令、管理员激活、链上 storage 解码、call data 构造、签名提交。
-- `/Users/rhett/GMB/citizenchain/node/frontend/governance/admins_change/`：桌面前端管理员列表、管理员集合编辑、签名二维码流程。
+- `/Users/rhett/GMB/citizenchain/node/frontend/governance/admins-change/`：桌面前端管理员列表、管理员集合编辑、签名二维码流程。
 
 边界：
 
 - 不属于 `governance/organization-manage`。机构管理只负责机构和机构账户的注册、注销、索引查询；其“换管理员”按钮只作为入口跳转到 `admins_change`。
 - 不在 `frontend/governance/` 根目录继续堆管理员更换页面；根目录只保留页面路由入口。
-- 管理员激活/已激活管理员查询的前端 API 只放在 `frontend/governance/admins_change/api.ts`，根 `governance/api.ts` 不再承载这些方法。
+- 管理员激活/已激活管理员查询的前端 API 只放在 `frontend/governance/admins-change/api.ts`，根 `governance/api.ts` 不再承载这些方法。
 - `storage_keys.rs` 只保留通用哈希与 AccountId 工具，`AdminsChange::AdminAccounts` 专用读取在 `admins_change/storage.rs`。
 
 ## 后端结构
@@ -69,7 +69,7 @@ GMB_ACTIVATE_SUBJECT_V1
 ## 前端结构
 
 ```text
-citizenchain/node/frontend/governance/admins_change/
+citizenchain/node/frontend/governance/admins-change/
 ├── index.ts
 ├── types.ts
 ├── api.ts

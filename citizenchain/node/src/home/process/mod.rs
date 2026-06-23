@@ -1,8 +1,8 @@
 //! 节点进程管理子模块：在进程内启动/停止 Substrate 节点。
 //!
-//! 替代旧的子进程模式——不再启动外部二进制，直接在 Tauri 进程内运行 Substrate 节点。
+//! 直接在 Tauri 进程内运行 Substrate 节点，不启动外部二进制。
 //!
-//! 2026-04-25 起：节点生命周期与 App 进程绑定。
+//! 节点生命周期与 App 进程绑定：
 //! - App 启动 → `start_node_blocking`（在 `desktop::run_desktop` 的 setup 后台线程中触发）
 //! - App 退出 → `cleanup_on_exit`（`RunEvent::Exit` 触发）
 //! - 关窗 = 最小化（在 `desktop::run_desktop` 的 `WindowEvent::CloseRequested` 拦截）
@@ -95,8 +95,6 @@ fn start_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         rpc::clear_genesis_hash_cache();
         thread::sleep(Duration::from_millis(250));
 
-        // 扫码支付 Step 2b-iv-a 清理:原"检测签名管理员 → 加载旧 offchain_ledger →
-        // 注入 set_offchain_config"的老省储行清算切入已删除(ADR-006 省储行退出清算)。
         // UI 模式下 `node_runner.rs` 传 `None,None,None` 到 `new_full`,不启动清算行
         // 组件,启动路径仅承担 PoW + GRANDPA 基础职能;生产清算行节点通过 CLI 的
         // `--clearing-bank` 启动。
@@ -166,11 +164,9 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         eprintln!("[审计] stop_node attempt 日志写入失败: {e}");
     }
     let result = (|| -> Result<NodeStatus, String> {
-        // 扫码支付 Step 2b-iv-a 清理:原老省储行清算的 "pending_count > 0 拒绝停止"
-        // 保护已删除。UI 模式暂不启动清算行组件(通过 CLI `--clearing-bank` 启动),
-        // 该保护对 UI 运行时一直是死代码;CLI 模式下的 graceful shutdown + pending
-        // 检查留给 Step 3 独立任务实现(需要把 OffchainComponents 挂到 task_manager
-        // 的 spawn_essential_handle 生命周期而非全局 static)。
+        // UI 模式不启动清算行组件(通过 CLI `--clearing-bank` 启动)。
+        // CLI 模式下的 graceful shutdown + pending 检查需要把 OffchainComponents 挂到
+        // task_manager 的 spawn_essential_handle 生命周期而非全局 static。
         let old_handle = {
             let app_state = app.state::<AppState>();
             let mut state = app_state

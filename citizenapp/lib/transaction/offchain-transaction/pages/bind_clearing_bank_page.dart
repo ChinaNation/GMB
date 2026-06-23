@@ -7,17 +7,14 @@ import 'package:citizenapp/rpc/cid_public.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 扫码支付清算体系 Step 1 新增:绑定**清算行**(L2)确认页。
+/// 绑定**清算行**(L2)确认页。
 ///
 /// 中文注释:
 /// - 清算行(L2)体系唯一绑定页。数据源:CID 搜索结果传入的 `ClearingBankInfo`;
 ///   链上调用 `bind_clearing_bank(bank_main_account)`(call_index 30)。
-///   原省储行绑定页 + `bind_clearing_institution` extrinsic 已在 Step 2b-iv-b
-///   随老 pallet 一起删除。
 /// - 绑定即开户,**无预存、无业务开户费**;链上仅产生付费调用 1 元/次。
 /// - 本步仅支持热钱包;冷钱包必须等绑定 payload 可独立展示和验证后再接入。
-/// - 2026-04-23:原来的清算行入口页 / 清算行列表页 / 收款码页已整体下线,本页目
-///   前无活跃入口,等「设置清算行」真实交互落地时再复用。
+/// - 本页目前无活跃入口,等「设置清算行」真实交互落地时再复用。
 class BindClearingBankPage extends StatefulWidget {
   const BindClearingBankPage({
     super.key,

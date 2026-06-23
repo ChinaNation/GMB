@@ -7,7 +7,7 @@
 //!     - `PaymentSettled { payer, recipient, amount, fee, ... }`
 //!       → `ledger.on_payment_settled`(packer 上链后,pending 正式清理)
 //!     - `BankBound / BankSwitched`(仅日志)
-//! - Step 2b-iii-a 起接入真实 `sc-client-api::BlockchainEvents` 订阅:
+//! - 接入真实 `sc-client-api::BlockchainEvents` 订阅:
 //!     - `run(client)`:订阅 `import_notification_stream`,每个新块读 `System::Events`
 //!       → SCALE 解码 `Vec<EventRecord<runtime::RuntimeEvent, H256>>`
 //!       → `convert_event` 过滤本 pallet 事件 → `handle` 分发到 ledger
@@ -30,7 +30,7 @@ use crate::core::service::FullClient;
 
 use super::super::ledger::OffchainLedger;
 
-/// 抽象的链上事件(Step 1 mock,Step 2 由 sc-client-api 解码得出)。
+/// 抽象的链上事件。
 #[derive(Clone, Debug)]
 pub enum OffchainChainEvent {
     /// `offchain_transaction::Event::Deposited`
@@ -45,7 +45,7 @@ pub enum OffchainChainEvent {
         bank: AccountId32,
         amount: u128,
     },
-    /// `offchain_transaction::Event::PaymentSettled`(Step 2 启用)
+    /// `offchain_transaction::Event::PaymentSettled`
     PaymentSettled {
         tx_id: H256,
         payer: AccountId32,
@@ -79,7 +79,7 @@ impl EventListener {
         Self { ledger, my_bank }
     }
 
-    /// 单条事件处理入口(Step 2 由订阅循环调用)。
+    /// 单条事件处理入口。
     pub fn handle(&self, ev: OffchainChainEvent) {
         match ev {
             OffchainChainEvent::Deposited { user, bank, amount } => {
@@ -103,7 +103,7 @@ impl EventListener {
             } => {
                 // 付款方 / 收款方任意一方在本清算行就要处理(跨行时只动其中一侧)。
                 // ledger.on_payment_settled 内部用 `my_bank` 过滤,避免跨行 ghost
-                // account(Step 2b-iv-b / E 修复)。
+                // account。
                 if payer_bank == self.my_bank || recipient_bank == self.my_bank {
                     self.ledger.on_payment_settled(
                         tx_id,

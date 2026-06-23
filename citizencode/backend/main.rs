@@ -299,7 +299,7 @@ fn institution_row_from_pg_row(
     let cpms_pubkey_bound: Option<bool> = row.get(26);
     // 中文注释:公安局列表唯一的"业务状态"单轴(前端只显示这一列):
     // 待生成安装码 → 待安装 → 待绑定身份码 → 可办理,外加 已禁用/已吊销 两个管理态。
-    // CPMS 站点状态/安装码状态是它的派生输入,不再单列展示。
+    // CPMS 站点状态/安装码状态是它的派生输入,不单列展示。
     let identity_service_status = if category == crate::number::InstitutionCategory::PublicSecurity
     {
         Some(
@@ -1257,8 +1257,8 @@ impl Db {
         })
     }
 
-    // 中文注释:删除全部旧格式 CID 号在各号承载表里的残留行。旧号判定唯一标准 =
-    // 过不了 `crate::number::validate_cid_number_format`(新版 4 段 + checksum)。
+    // 中文注释:删除所有不合规 CID 号在各号承载表里的行。判定唯一标准 =
+    // 过不了 `crate::number::validate_cid_number_format`。
     // dry_run 时在事务内删完即回滚,只回报计数,不改库。
     pub(crate) fn purge_legacy_cid_rows(&self, dry_run: bool) -> Result<PurgeReport, String> {
         // 中文注释:号承载表清单,无外键约束,删除顺序无关;主登记表 ids 放最后。
@@ -1353,9 +1353,9 @@ impl Db {
         })
     }
 
-    // 中文注释(ADR-021 §B5):扫出"孤儿机构"——subjects 中 town_code 非空、但该
-    // (province_code,city_code,town_code) 三元组在行政区划真源 china.sqlite 里已不存在(被删镇/
-    // 退役复用 code 下挂着的旧机构,如港澳旧机构 town_code 指向已退役的镇)。判定只走
+    // 中文注释:扫出"孤儿机构"——subjects 中 town_code 非空、但该
+    // (province_code,city_code,town_code) 三元组在行政区划真源 china.sqlite 里不存在
+    // (town_code 指向已退役的镇)。判定只走
     // 进程内内存树(crate::china::town_exists),不在 PG 里 join china 数据(PG 无 towns 表)。
     // 白名单:town_code 为空/NULL 的行(市级机构/储委会/部委合法态)永远不是孤儿,直接跳过。
     // 只读扫描,不改库;删除由调用方拿到 cid 列表后逐省级联删。
@@ -1943,7 +1943,7 @@ fn disable_core_dumps() {
 enum BackendCommand {
     Serve,
     EnsureGov,
-    /// 中文注释:从 china_zf 常量播种联邦注册局管理员(P0 止血 / 离线引导,见 ADR-023)。
+    /// 中文注释:从 china_zf 常量播种联邦注册局管理员(离线引导兜底)。
     SeedFederalAdmins,
     InitGov,
     CheckGov {
@@ -2388,8 +2388,8 @@ struct PurgeReport {
     dry_run: bool,
 }
 
-// 中文注释:清掉所有旧格式 CID 号(身份ID系统重构前入库的残留),再把能确定性
-// 自动重建的公权机构(含公安局)按新号重对账。PRIVATE 私权机构与公民属用户创建/
+// 中文注释:清掉所有不合规 CID 号,再把能确定性
+// 自动重建的公权机构(含公安局)重对账。PRIVATE 私权机构与公民属用户创建/
 // 钱包绑定,删后无法自动重建,需由用户重建/重绑。链端与 CitizenPassport host 不在本命令范围。
 fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
     let report = state
@@ -2456,7 +2456,7 @@ struct OrphanInstitution {
     institution_code: String,
 }
 
-// 中文注释(ADR-021 §B5):清理孤儿机构 CLI。
+// 中文注释:清理孤儿机构 CLI。
 // `purge-orphan-institutions [--dry-run|--apply] [--backup <path>]`,默认 dry-run。
 // 孤儿 = subjects.town_code 非空 + (province_code,city_code,town_code) 不在 china.sqlite 内存树。
 //   - dry-run:只打印孤儿清单(citizencode/town/town_code/category/institution_code/原因)+ 总数,
@@ -2652,7 +2652,7 @@ fn main() {
         return;
     }
     // 中文注释:普通公权/宪法机构目录是持久化数据,正常启动只读数据库,
-    // 不再于健康检查前执行全量生成和逐条 upsert;但必须确认运行库目录来自当前
+    // 不在健康检查前执行全量生成和逐条 upsert;但必须确认运行库目录来自当前
     // china.sqlite,否则行政区变更后旧公权机构会继续对外服务。
     ensure_gov_catalog_current_for_serve(&state)
         .unwrap_or_else(|e| panic!("cid gov directory guard failed: {e}"));
@@ -2787,7 +2787,6 @@ fn main() {
                 "/api/v1/admin/cpms-keys/:cid_number/revoke",
                 put(cpms::revoke_cpms_keys),
             )
-            // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。
             // 中文注释:机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institution/check-cid-full-name             — cid_full_name 查重
             // - POST /api/v1/institution/create                          — 公权/教育通用机构生成(不上链)
@@ -2930,9 +2929,7 @@ fn main() {
                 admins::login::require_admin_session_middleware,
             ));
 
-        // 中文注释:历史 chain_routes(/vote/verify、/chain/voters/count、/chain/binding/validate、
-        // /chain/reward/ack、/chain/reward/state、/attestor/public-key)0 caller,
-        // 2026-05-01 chain/ 重构一并下架。链端 pull 通道全部走 app_routes 命名空间。
+        // 链端 pull 通道全部走 app_routes 命名空间。
 
         let public_routes = Router::new()
             .route("/", get(root))
@@ -3035,10 +3032,8 @@ fn main() {
     });
 }
 
-// 中文注释:历史 ensure_chain_request_db / prepare_chain_request 与已下架的
-// /api/v1/chain/* + /api/v1/vote/verify dead routes 配套使用,2026-05-01 一并下架。
-// 链端 chain pull 端点(duoqian_info / joint_vote / citizen_vote)无 attestor
-// 鉴权需求,全局 rate limiter 已防滥用,凭证签名本身就是反伪造保护。
+// chain pull 端点(duoqian_info / joint_vote / citizen_vote)无 attestor 鉴权需求,
+// 全局 rate limiter 防滥用,凭证签名本身就是反伪造保护。
 
 fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Response {
     (

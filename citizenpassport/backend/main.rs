@@ -14,9 +14,9 @@ use tokio::sync::RwLock;
 
 mod address;
 mod admins;
+mod archive;
 mod authz;
 mod common;
-mod dangan;
 mod initialize;
 mod login;
 mod number;
@@ -58,7 +58,7 @@ async fn main() {
         .await
         .expect("sync installed city address failed");
     // 中文注释：启动时先执行一次到期档案硬删除；软删除未满 100 年的号码不会进入回收池。
-    dangan::run_due_archive_hard_delete(&db)
+    archive::run_due_archive_hard_delete(&db)
         .await
         .expect("run archive hard delete failed");
 
@@ -82,7 +82,7 @@ async fn main() {
         .merge(initialize::router())
         .merge(login::router())
         .merge(admins::router())
-        .merge(dangan::router())
+        .merge(archive::router())
         .merge(address::router())
         .with_state(state.clone())
         .fallback_service(serve_frontend)
@@ -111,7 +111,7 @@ async fn main() {
             let interval = tokio::time::Duration::from_secs(24 * 3600);
             loop {
                 tokio::time::sleep(interval).await;
-                if let Err(e) = dangan::run_due_archive_hard_delete(&db).await {
+                if let Err(e) = archive::run_due_archive_hard_delete(&db).await {
                     eprintln!("archive hard delete failed: {e}");
                 }
             }
@@ -188,7 +188,7 @@ async fn security_headers(req: Request<Body>, next: Next) -> Response {
 #[cfg(test)]
 mod tests {
     use super::{
-        dangan::{sign_archive_payload_with_secret, validate_citizen_status},
+        archive::{sign_archive_payload_with_secret, validate_citizen_status},
         number::archive_no_checksum,
     };
     use schnorrkel::{signing_context, ExpansionMode, MiniSecretKey, PublicKey, Signature};

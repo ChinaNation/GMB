@@ -7,7 +7,7 @@
 //!   unreserve 创建者资金 + 清空 Institutions / InstitutionAccounts /
 //!   CidRegisteredAccount / AccountRegisteredCid +
 //!   移除 admin account Pending。
-//! (B 阶段已删 Accounts mirror,无需清理该表)
+//! (无 Accounts mirror 表需清理)
 
 extern crate alloc;
 
@@ -100,8 +100,8 @@ pub(crate) fn execute_create_institution_with_finalizer<T: Config>(
         institution.status = InstitutionLifecycleStatus::Active;
         Ok(())
     })?;
-    // B 阶段后机构主账户状态唯一在 Institutions[cid_number].status 与
-    // InstitutionAccounts[(cid_number, "主账户")].status 双写;不再 mirror 到 Accounts。
+    // 机构主账户状态唯一在 Institutions[cid_number].status 与
+    // InstitutionAccounts[(cid_number, "主账户")].status 双写。
     Pallet::<T>::activate_admin_account(proposal_id, action.main_account.clone())?;
     PendingInstitutionCreate::<T>::remove(proposal_id);
 

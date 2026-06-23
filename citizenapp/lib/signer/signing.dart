@@ -1,4 +1,4 @@
-// GMB 全仓签名消息唯一原语 —— Dart 镜像(ADR-026 Tier 2)。
+// GMB 全仓签名消息唯一原语 —— Dart 镜像。
 //
 // canonical 真源 = citizenchain `primitives::sign::signing_message`:
 //   message = blake2_256( GMB(3B) || op_tag(1B) || scale_payload )
@@ -21,8 +21,8 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 
 // ── 签名 payload op_tag 注册表(0x10-0x1F),逐字节对齐 primitives::sign ──
 //
-// 0x10-0x14 治理/身份签名(改调原语前后字节不变)。
-// 0x15-0x1B 取代 7 个历史字符串域 b"GMB_*_V1"(改调原语后字节变,破坏式)。
+// 0x10-0x14 治理/身份签名。
+// 0x15-0x1B 业务签名段。
 
 /// 公民身份绑定(对齐 OP_SIGN_BIND)。
 const int kOpSignBind = 0x10;
@@ -39,28 +39,27 @@ const int kOpSignInst = 0x13;
 /// CID 机构/账户注销凭证(对齐 OP_SIGN_DEREGISTER)。
 const int kOpSignDeregister = 0x14;
 
-/// L3 支付(取代 b"GMB_L3_PAY_V1",对齐 OP_SIGN_L3_PAY)。
+/// L3 支付(对齐 OP_SIGN_L3_PAY)。
 const int kOpSignL3Pay = 0x15;
 
-/// 链下批次结算(取代 b"GMB_OFFCHAIN_BATCH_V1",对齐 OP_SIGN_OFFCHAIN_BATCH)。
+/// 链下批次结算(对齐 OP_SIGN_OFFCHAIN_BATCH)。
 const int kOpSignOffchainBatch = 0x16;
 
-/// L2 确认(取代 b"GMB_L2_ACK_V1",对齐 OP_SIGN_L2_ACK)。
+/// L2 确认(对齐 OP_SIGN_L2_ACK)。
 const int kOpSignL2Ack = 0x17;
 
-/// 管理员激活(取代 b"GMB_ACTIVATE_ADMIN_V1",对齐 OP_SIGN_ACTIVATE_ADMIN)。
+/// 管理员激活(对齐 OP_SIGN_ACTIVATE_ADMIN)。
 const int kOpSignActivateAdmin = 0x18;
 
-/// 解密授权(取代 b"GMB_DECRYPT_V1",对齐 OP_SIGN_DECRYPT)。
+/// 解密授权(对齐 OP_SIGN_DECRYPT)。
 const int kOpSignDecrypt = 0x19;
 
-// ── 二进制前缀域(0x18/0x19,ADR-026 Phase 2 抖中方案)──
+// ── 二进制前缀域(0x18/0x19)──
 //
 // ACTIVATE_ADMIN / DECRYPT 不经 signingMessage 做 blake2 hash:冷钱包对整段
 // 原始可解析 payload 直接 sr25519 签名,node 按字节偏移解析。其 op_tag
 // (kOpSignActivateAdmin/kOpSignDecrypt)仅作 payload **前 4 字节**
-// GMB(3B) || op_tag(1B) 二进制前缀(取代历史 b"GMB_ACTIVATE_ADMIN_V1"(21B)/
-// b"GMB_DECRYPT_V1"(14B) 长字符串前缀)。单源对齐 primitives::sign::
+// GMB(3B) || op_tag(1B) 二进制前缀。单源对齐 primitives::sign::
 // binary_domain_prefix / BINARY_PREFIX_LEN。金标布局见
 // test/signer/fixtures/binary_prefix_domain_vectors.json。
 
@@ -76,10 +75,10 @@ const int kBinaryPrefixLen = 4;
 // Dart 无法 import Rust,本值是 primitives::sign::IM_WALLET_BINDING_DOMAIN /
 // IM_NODE_PAIRING_PROTO 的镜像,各 IM 模块一律引用本常量,删本地副本。
 
-/// IM 钱包绑定 canonical payload 域首段(取代散落的 "GMB_IM_WALLET_BINDING_V1")。
+/// IM 钱包绑定 canonical payload 域首段。
 const String kImWalletBindingDomain = 'GMB_IM_WALLET_BINDING_V1';
 
-/// IM 节点配对 QR body 协议版本串(取代散落的 "GMB_IM_NODE_PAIRING_V1")。
+/// IM 节点配对 QR body 协议版本串。
 const String kImNodePairingProto = 'GMB_IM_NODE_PAIRING_V1';
 
 /// 签名域分隔符 GMB(3 字节 ASCII),单源对齐 core_const::GMB。

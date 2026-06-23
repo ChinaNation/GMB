@@ -189,7 +189,7 @@ class _InstitutionDuoqianCreatePageState
     );
     if (result == null || !mounted) return;
 
-    // 解析 CITIZEN_QR_V1 user_contact(user_duoqian 已于 2026-05-03 下线 → 多签发现走反向索引)
+    // 解析 CITIZEN_QR_V1 user_contact(多签发现走反向索引)
     try {
       final env = QrEnvelope.parse(result.trim());
       if (env.kind == QrKind.userContact) {

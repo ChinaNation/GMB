@@ -562,8 +562,6 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
 ///
 /// 常见提案(业务模块/升级/销毁/发行)1 次 RPC 即可命中;少量业务 detail
 /// 存在独立 pallet 存储,会多查 1~2 次,但这几类提案频率极低。
-/// 原"省储行费率提案"(`RateProposalActions`)已在 Step 2b-iv-b 随老省储行
-/// pallet Call 一起下线,此处不再枚举。
 fn resolve_proposal_action(
     proposal_id: u64,
     meta: &ProposalMeta,

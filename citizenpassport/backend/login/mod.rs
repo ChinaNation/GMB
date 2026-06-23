@@ -232,7 +232,7 @@ async fn auth_qr_complete(
     // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
     let admin = find_admin_by_pubkey(&state, req.admin_account.trim()).await?;
     if admin.user_group == "operators" {
-        crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
+        crate::archive::ensure_operator_annual_export_unlocked(&state).await?;
     }
     // 重建完整签名原文(包含签名者公钥),与 citizenwallet 端
     // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
@@ -401,7 +401,7 @@ async fn auth_qr_result(
             admin_display_name: row.get("admin_display_name"),
         };
         if user.user_group == "operators" {
-            crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
+            crate::archive::ensure_operator_annual_export_unlocked(&state).await?;
         }
         sqlx::query("DELETE FROM qr_login_results WHERE challenge_id = $1 AND session_id = $2")
             .bind(query.challenge_id.trim())

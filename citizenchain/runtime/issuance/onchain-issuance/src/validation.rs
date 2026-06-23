@@ -38,7 +38,7 @@ pub fn ensure_decimals_in_range(decimals: u8) -> Result<(), &'static str> {
 
 /// 校验资产 class 是否被第一期支持。
 ///
-/// 中文注释:Pegged 协议位预留,Phase 2 启用前一律 reject,避免锚定语义滑入。
+/// 中文注释:Pegged 协议位预留,当前一律 reject,避免锚定语义滑入。
 pub fn ensure_class_supported(class: &AssetClass) -> Result<(), &'static str> {
     match class {
         AssetClass::Plain => Ok(()),

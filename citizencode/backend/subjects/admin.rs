@@ -25,7 +25,7 @@ use crate::subjects::service::{
     resolve_legal_representative_scope_for_institution, validate_cid_full_name,
     validate_legal_representative_required,
 };
-use crate::subjects::uninorg;
+use crate::subjects::unincorporated_org;
 use crate::*;
 
 pub(crate) async fn check_cid_full_name(
@@ -260,7 +260,7 @@ pub(crate) async fn update_institution(
             .unwrap_or("")
             .trim()
             .to_string();
-        if !uninorg::requires_parent(existing.institution_code.as_str()) {
+        if !unincorporated_org::requires_parent(existing.institution_code.as_str()) {
             return api_error(StatusCode::BAD_REQUEST, 1001, "该主体类型不接受所属法人");
         }
         if raw.is_empty() {
@@ -275,23 +275,23 @@ pub(crate) async fn update_institution(
         }) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在");
         };
-        if !uninorg::can_attach_to_parent(target.institution_code.as_str()) {
+        if !unincorporated_org::can_attach_to_parent(target.institution_code.as_str()) {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                uninorg::parent_subject_requirement_message(),
+                unincorporated_org::parent_subject_requirement_message(),
             );
         }
-        // 中文注释:改挂与创建同源校验(subjects/uninorg 单一权威源):
+        // 中文注释:改挂与创建同源校验(subjects/unincorporated_org 单一权威源):
         // 代码一致性(分校⇔学校本部) + 地域规则 + 盈利属性继承,缺一处就有绕过口。
-        if let Some(msg) = uninorg::code_consistency_violation(
+        if let Some(msg) = unincorporated_org::code_consistency_violation(
             existing.institution_code.as_str(),
             target.institution_code.as_str(),
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        let rule = uninorg::parent_locality_rule(target.institution_code.as_str());
-        if let Some(msg) = uninorg::locality_violation(
+        let rule = unincorporated_org::parent_locality_rule(target.institution_code.as_str());
+        if let Some(msg) = unincorporated_org::locality_violation(
             rule,
             &target.province_name,
             &target.city_name,
@@ -300,7 +300,8 @@ pub(crate) async fn update_institution(
         ) {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        let expected_p1 = uninorg::inherited_p1(target.institution_code.as_str(), &target.p1);
+        let expected_p1 =
+            unincorporated_org::inherited_p1(target.institution_code.as_str(), &target.p1);
         if existing.p1 != expected_p1 {
             return api_error(
                 StatusCode::BAD_REQUEST,
@@ -390,14 +391,14 @@ pub(crate) async fn update_institution(
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct SearchParentsQuery {
     pub q: Option<String>,
-    /// 非法人的落位省/市,用于地域预过滤(规则同 subjects/uninorg::parent_locality_rule)。
+    /// 非法人的落位省/市,用于地域预过滤(规则同 subjects/unincorporated_org::parent_locality_rule)。
     pub province_name: Option<String>,
     pub city_name: Option<String>,
     /// 限定父级属性:S=仅私法人(私权入口) / G=仅公法人(公权入口);不传=两者(详情页改挂)。
     pub parent_property: Option<String>,
 }
 
-/// 所属法人搜索。SQL 预过滤与 `subjects/uninorg` 规则同源(注释互引):
+/// 所属法人搜索。SQL 预过滤与 `subjects/unincorporated_org` 规则同源(注释互引):
 /// - f_institution=JY → 仅本市法人教育机构(手动 JY 行,G/S);
 /// - 其它 → 私法人 S(非学校,全国) ∪ 公法人 G(非学校;手动行/市镇级同市、省级同省、国家级不限);
 /// - parent_property 进一步收窄到单边。
@@ -445,10 +446,10 @@ pub(crate) async fn search_parent_institutions(
         Some(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "parent_property 仅 S/G"),
     };
     let result = state.db.with_client(move |conn| {
-        // 中文注释:候选父级按非法人规则预过滤(与 uninorg::parent_locality_rule 同源)。
+        // 中文注释:候选父级按非法人规则预过滤(与 unincorporated_org::parent_locality_rule 同源)。
         // UNIN 是通用从属,可挂任意法人父级(私法人 S / 公法人 G)。地域规则:学校/大学父级 → 同市,
         // 非学校私法人 → 全国,非学校公法人 → 按机构码行政层级。$4 = parent_property 过滤(S/G)。
-        // 主体属性已删除:私法人由机构码集合判定,公法人由 category 判定,层级由 institution_code 集合判定。
+        // 私法人由机构码集合判定,公法人由 category 判定,层级由 institution_code 集合判定。
         let candidate_clause = "(
                   (s.institution_code IN ('GUN', 'SUN', 'GSCH', 'SFSC')
                    AND s.province_name = $2 AND s.city_name = $3

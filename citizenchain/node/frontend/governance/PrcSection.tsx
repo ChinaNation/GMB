@@ -1,7 +1,6 @@
 // 省储会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
-// 2026-04-24 重构：从原 GovernanceSection.tsx 的 PRC 分支拆分独立。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from './admins_change';
+import { AdminListPage, AdminSetChangePage } from './admins-change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';

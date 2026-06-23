@@ -1,4 +1,4 @@
-//! 扫码支付清算体系节点层(ADR-006)。
+//! 扫码支付清算体系节点层。
 //!
 //! 中文注释:
 //! - 本目录统一承载 node 层清算行功能,包括清算行管理命令、本地账本、
@@ -13,7 +13,7 @@
 //!     - `offchain-clearing-reserve-monitor`(主账对账)
 //!   不加 `--clearing-bank` 的节点仅跑 PoW + GRANDPA,跳过本目录所有启动。
 //!
-//! 模块边界(对照上层 ADR-006/ADR-007):
+//! 模块边界:
 //! - 本 mod 平铺文件:扫码支付收单与清算行节点声明 + RPC + 本地账本。
 //! - `settlement`:只管本清算行交易打包上链与结算 worker。
 
@@ -42,14 +42,14 @@ use self::settlement::packer::{
 };
 use self::settlement::reserve::ReserveMonitor;
 
-/// Step 2b 新增:清算行节点一次性启动时组装的组件集合。
+/// 清算行节点一次性启动时组装的组件集合。
 ///
 /// 中文注释:
 /// - `service.rs` 在检测到节点角色是"清算行"时调 `start_clearing_bank_components`
 ///   拿回本结构,并把 `rpc_impl` 注册到 JSON-RPC 命名空间,`packer` 交给后台
 ///   worker,`event_listener` 订阅链上事件。
-/// - Step 2b-i 本步仅完成 **组装 + 持久化恢复**;真正的 extrinsic 提交 / libp2p
-///   gossip / 链上事件订阅由 Step 2b-ii / 2b-iii 接入。
+/// - 完成 **组装 + 持久化恢复**;extrinsic 提交 / libp2p
+///   gossip / 链上事件订阅由 listener / submitter 接入。
 pub struct OffchainComponents {
     /// 本地 L3 账本句柄。当前 worker 通过 `packer` / `event_listener` / `rpc_impl`
     /// 间接持有它,字段保留给后续清算行运维状态查询使用。
@@ -57,7 +57,7 @@ pub struct OffchainComponents {
     pub ledger: Arc<OffchainLedger>,
     pub packer: Arc<OffchainPacker>,
     pub event_listener: Arc<EventListener>,
-    /// Step 2b-iii-b 新增:本地 `Σ confirmed` 与链上 `BankTotalDeposits`
+    /// 本地 `Σ confirmed` 与链上 `BankTotalDeposits`
     /// 主账对账 worker(`run` 需要调用方 spawn 到 `task_manager`)。
     pub reserve_monitor: Arc<ReserveMonitor>,
     pub rpc_impl: Arc<OffchainClearingRpcImpl>,
@@ -70,10 +70,10 @@ pub struct OffchainComponents {
 ///                的链上事件,以及 packer 批次 signing message 拼接。
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
 ///                (目前实现为 blake2b_256(password) XOR 流 + HMAC,见 `ledger.rs`)。
-/// [`signer`]     批次签名器。Step 2b-ii-α 传 `NoopBatchSigner`;Step 2b-ii-β
+/// [`signer`]     批次签名器。未接入时传 `NoopBatchSigner`;接入后
 ///                传真实 `KeystoreBatchSigner`(从 `offchain::settlement::keystore` 派生)。
-/// [`submitter`]  extrinsic 提交器。Step 2b-ii-α 传 `NoopBatchSubmitter`;Step
-///                2b-ii-β 传真实 `PoolBatchSubmitter`(拼 RuntimeCall + 调
+/// [`submitter`]  extrinsic 提交器。未接入时传 `NoopBatchSubmitter`;接入后
+///                传真实 `PoolBatchSubmitter`(拼 RuntimeCall + 调
 ///                `TransactionPool`)。
 ///
 /// 返回值:`Arc` 包裹的组件集合,调用方持有 ownership 决定生命周期。
@@ -169,7 +169,7 @@ mod tests {
     }
 }
 
-/// Step 2b-ii-α 默认启动器:signer / submitter 走 Noop 占位。
+/// 默认启动器:signer / submitter 走 Noop 占位。
 ///
 /// 测试或降级启动时调用此便捷版;上链提交与 `submit_payment` 的 L2 ACK 签名
 /// 都会 fail-fast,只读查询路径仍可用。

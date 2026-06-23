@@ -13,9 +13,6 @@
 //
 // 新增业务功能一律下沉到一级业务目录;链交互页面/接口放到所属模块的 chain_* 文件。
 // 详见 memory/05-modules/citizencode/frontend/FRONTEND_LAYOUT.md。
-//
-// 历史:任务卡 20260408-cid-frontend-app-tsx-split 把原 3431 行 App.tsx
-// 拆到当前规模,步 6 收官清理后的最终形态见此文件。
 // =============================================================================
 
 import { useEffect, useState } from 'react';

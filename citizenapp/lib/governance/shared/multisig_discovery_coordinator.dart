@@ -1,7 +1,7 @@
-// 多签发现统一编排(ADR-018 §九 L1)。
+// 多签发现统一编排。
 //
 // 单次扫描 `AdminsChange::AdminAccounts`,把结果分发给机构多签与个人多签两个
-// 后处理服务做过滤 / 落库。取代两个服务各自全表扫一遍(2 次 → 1 次)。
+// 后处理服务做过滤 / 落库。
 // 节流、本地钱包读取、扫描入口统一收口在本协调器,业务服务只做 processScanned。
 
 import 'package:flutter/foundation.dart';
@@ -58,8 +58,7 @@ class MultisigDiscoveryCoordinator {
   /// 30 分钟节流窗口(机构 + 个人共用一次扫描,故共用一个节流)。
   static const _throttleWindow = Duration(minutes: 30);
 
-  /// SharedPreferences key:最近一次成功扫描的 epochMs(统一口径,
-  /// 取代旧的 `duoqian_discovery_last_at_ms` / `personal_manage_discovery_last_at_ms`)。
+  /// SharedPreferences key:最近一次成功扫描的 epochMs(统一口径)。
   static const _prefsLastDiscoveryAt = 'multisig_discovery_last_at_ms';
 
   Future<DateTime?> lastDiscoveryAt() => _readLastDiscoveryAt();
