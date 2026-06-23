@@ -401,7 +401,7 @@ pub mod pallet {
         /// 无效机构
         InvalidInstitution,
         /// 机构类型与 institution_code 参数不匹配
-        InstitutionOrgMismatch,
+        InstitutionCodeMismatch,
         /// 管理员数量不符合固定人数约束
         InvalidAdminsLen,
         /// 非该机构管理员，无权限
@@ -419,7 +419,7 @@ pub mod pallet {
         /// 提案绑定机构与管理员更换动作不一致
         ProposalInstitutionMismatch,
         /// 提案绑定组织与管理员账户不一致
-        ProposalOrgMismatch,
+        ProposalCodeMismatch,
         /// 管理员账户已存在
         InstitutionAlreadyExists,
         /// 管理员账户状态不是 Pending
@@ -460,7 +460,7 @@ pub mod pallet {
             );
             ensure!(
                 current.institution_code == institution_code,
-                Error::<T>::InstitutionOrgMismatch
+                Error::<T>::InstitutionCodeMismatch
             );
 
             // 2) 校验发起人与目标管理员集合合法性。
@@ -646,7 +646,7 @@ pub mod pallet {
             );
             ensure!(
                 proposal.internal_code == Some(institution_code),
-                Error::<T>::ProposalOrgMismatch
+                Error::<T>::ProposalCodeMismatch
             );
             ensure!(
                 proposal.status == expected_status,
@@ -929,7 +929,7 @@ pub mod pallet {
             );
             ensure!(
                 proposal.internal_code == Some(account.institution_code),
-                Error::<T>::ProposalOrgMismatch
+                Error::<T>::ProposalCodeMismatch
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
                 account.institution_code,

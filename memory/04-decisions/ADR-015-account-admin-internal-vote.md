@@ -204,7 +204,7 @@ admins_len >= 3: threshold = ceil(admins_len / 2)
 
 - `personal-manage::propose_create` 已删除 `admins_len / threshold` 入参，创建 call 编码改为 `account_name + admins + amount`。
 - 个人账户管理员数量由 `admins.len()` 派生，链端限制 `2..=64`。
-- 普通阈值统一调用 `admins-change::derived_threshold` 派生：个人多签使用 `PersonalAccount + ORG_REN`，机构账户使用 `InstitutionAccount + ORG_PUP / ORG_OTH`，`注册机构归属关系` 不再作为管理员主体。
+- 普通阈值统一调用 `admins-change::derived_threshold` 派生：个人多签使用 `PersonalAccount + 个人多签码（is_personal_code，PMUL）`，机构账户使用 `InstitutionAccount + 机构账户码（is_institution_code）`，`注册机构归属关系` 不再作为管理员主体。（机构分类唯一真源 = CID 机构码 `institution_code`，见 [[ADR-025]]）
 - 创建提案内部投票阈值为拟定管理员全员数量；关闭提案仍为当前管理员全员数量。
 - `PersonalManage::PersonalAccounts` 不再镜像管理员列表、管理员数量和阈值，只保存 `creator / account_name / created_at / status`。
 - `CreateDuoqianAction` 不再保存管理员数量和阈值，但保存创建时 `fee` 快照。

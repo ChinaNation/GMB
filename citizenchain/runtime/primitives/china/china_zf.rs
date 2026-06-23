@@ -6,6 +6,8 @@ use hex_literal::hex;
 pub struct ChinaZf {
     pub cid_full_name: &'static str,
     pub cid_short_name: &'static str,
+    pub cid_full_name_en: &'static str,
+    pub cid_short_name_en: &'static str,
     pub cid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
@@ -16,6 +18,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国总统府",
         cid_short_name: "总统府",
+        cid_full_name_en: "Presidential Office of the Federal Republic of the China Nation",
+        cid_short_name_en: "Presidential Office",
         cid_number: "ZS001-PRS0W-803866330-2026",
         main_account: hex!("95f1f9e9a2009a9a89ffe30a579dcd63d4cd8f9bd403357e2d675b7a1cbab2a8"),
         fee_account: hex!("22406bcd3c6a65af2c4b95b37ec340c262b232b1287b71cdab9b4dc1fe384fe3"),
@@ -30,6 +34,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "总统府联邦安全局",
         cid_short_name: "联邦安全局",
+        cid_full_name_en: "Federal Security Bureau of the Presidential Office",
+        cid_short_name_en: "Federal Security Bureau",
         cid_number: "ZS001-FSC0W-434172688-2026",
         main_account: hex!("c966296ce98ad4671eb0e574a5c9cbddc44d0db0623bff6cfbe6e09128efa5de"),
         fee_account: hex!("c199079e2be80812e4fbe65819f820a0a33579991b4eaa5a0b52780d3cbccd9e"),
@@ -44,6 +50,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "总统府联邦情报局",
         cid_short_name: "联邦情报局",
+        cid_full_name_en: "Federal Intelligence Bureau of the Presidential Office",
+        cid_short_name_en: "Federal Intelligence Bureau",
         cid_number: "ZS001-FIB08-923936432-2026",
         main_account: hex!("f4eb51f78c87a1fb4e944e1cb39e0f55596778195931967a9f6fd877115a788d"),
         fee_account: hex!("5e5ba1c1553f626188d8039701736792ffa379430f703afc15fe5b9af66ac543"),
@@ -58,6 +66,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "总统府联邦特勤局",
         cid_short_name: "联邦特勤局",
+        cid_full_name_en: "Federal Secret Service Bureau of the Presidential Office",
+        cid_short_name_en: "Federal Secret Service Bureau",
         cid_number: "ZS001-FSS0T-178567109-2026",
         main_account: hex!("18c766c72a6a76eee5bc81e0daacf7a7172303f436988a62b35eaa0641db1821"),
         fee_account: hex!("0131bde9e04110aefd682d7247f63a3a55f1c5dd1b419297b7eb8aeaa93214fd"),
@@ -72,6 +82,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "总统府联邦人事局",
         cid_short_name: "联邦人事局",
+        cid_full_name_en: "Federal Personnel Bureau of the Presidential Office",
+        cid_short_name_en: "Federal Personnel Bureau",
         cid_number: "ZS001-FPR0Y-469455701-2026",
         main_account: hex!("e24a7d590289b74ea27443c8dc0e4140d063b6679e3bc3fb072574d7c0fb5199"),
         fee_account: hex!("980e4f68d5bc0f694a37cc0416dd1b676eb2660fea6ac58dca69a436b0cfabe9"),
@@ -86,6 +98,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "总统府联邦注册局",
         cid_short_name: "联邦注册局",
+        cid_full_name_en: "Federal Registry Bureau of the Presidential Office",
+        cid_short_name_en: "Federal Registry Bureau",
         cid_number: "ZS001-FRG07-249474503-2026",
         main_account: hex!("8e98cce3f822c4ada2afa753355dbcc406e4cfcedfd94617d441d5ca64e961e1"),
         fee_account: hex!("9552ac91ecfdbea927b4b4a0a59445b1503197cb1dded2cebf94500f506d337d"),
@@ -353,6 +367,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国外事交流部",
         cid_short_name: "外交部",
+        cid_full_name_en: "Ministry of Foreign Affairs and Exchange of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Foreign Affairs",
         cid_number: "ZS001-MFA0T-974986545-2026",
         main_account: hex!("749c2e581c0eb7aec7315c71a628f796aee15185a6d5d7f0d546d96904f12f5a"),
         fee_account: hex!("40a45a0ab278b0fb0e511f16cd434bc52f6d7a504a07ff6dc474f0d14cbb8be9"),
@@ -367,6 +383,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国国家防务部",
         cid_short_name: "国防部",
+        cid_full_name_en: "Ministry of National Defense of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of National Defense",
         cid_number: "ZS001-MDF0L-798223120-2026",
         main_account: hex!("fc2f5859cb09f916b1098c98f98666aa6b7e981537caedd5355d626c2d240d88"),
         fee_account: hex!("73406d75d1825dad09a6a1d6266601c51d3e30e950232d82bab35ccbd590bbec"),
@@ -381,6 +399,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国国土安全部",
         cid_short_name: "国安部",
+        cid_full_name_en: "Ministry of Homeland Security of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Homeland Security",
         cid_number: "ZS001-MHS0G-999724831-2026",
         main_account: hex!("bc0285a375b66bfd2abc1a031c4596601e650c87b1dbf1be43164138296b1a48"),
         fee_account: hex!("d5bd7e304da1564fb167dd48a9b43a75bc4ea776764ce4c49d181d6398f6669a"),
@@ -395,6 +415,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国公民生活保障部",
         cid_short_name: "民生部",
+        cid_full_name_en: "Ministry of Citizen Welfare of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Citizen Welfare",
         cid_number: "ZS001-MCW0D-975651211-2026",
         main_account: hex!("96426bd18bbf7b49bcd7066f9587a118707bca1bb87e580a6d764860cfd7d3c6"),
         fee_account: hex!("d2046a3bbaeb95ca1b46bbe6ad708ff0a33463d674003659c4030a1e03c4cbc9"),
@@ -409,6 +431,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国住房与城镇建设部",
         cid_short_name: "住建部",
+        cid_full_name_en: "Ministry of Housing and Urban Development of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Housing and Urban Development",
         cid_number: "ZS001-MHU05-337634138-2026",
         main_account: hex!("ffb88acddba6dc6b2729671eeaf7d91c775a79fa589e54c832f91152a8a3a1a1"),
         fee_account: hex!("997465f16022ce2d9137958731e501c4743614a3b770b9430b19c11a7b60e88c"),
@@ -423,6 +447,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国农业与农村发展部",
         cid_short_name: "农业部",
+        cid_full_name_en: "Ministry of Agriculture and Rural Development of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Agriculture",
         cid_number: "ZS001-MAG0K-934240310-2026",
         main_account: hex!("a2a48b6890bdc90b9d88a4b94027509901bc079eaa4cdc0ccedafbdbdcc7863a"),
         fee_account: hex!("be06b520b3cc68ee7a562bd3116da45b68e60733df5a60d90cd9ba084d851988"),
@@ -437,6 +463,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国商务与市场贸易部",
         cid_short_name: "商贸部",
+        cid_full_name_en: "Ministry of Commerce and Market Trade of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Commerce",
         cid_number: "ZS001-MCM0F-827406215-2026",
         main_account: hex!("773bec36191de5ad42f5b1ac3718dd0bd875c7b52326b3b0aa314f6bf28220da"),
         fee_account: hex!("60b9a926d0d9bd7e66313862a178ad95493050083d2a563cbff4d3c00f27d097"),
@@ -451,6 +479,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国财政与税务部",
         cid_short_name: "财税部",
+        cid_full_name_en: "Ministry of Finance and Taxation of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Finance and Taxation",
         cid_number: "ZS001-MFT0E-379453513-2026",
         main_account: hex!("90a0acb2a84b057a138d6efc4b604b1681eac454c86859a0263ec1a3f6e20f5e"),
         fee_account: hex!("29fae9aa7479ed3bb94fc3fd46eef82b4f007c24f265a0b927420950df005330"),
@@ -465,6 +495,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国能源与环保发展部",
         cid_short_name: "能源部",
+        cid_full_name_en: "Ministry of Energy and Environmental Development of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Energy",
         cid_number: "ZS001-MEN04-104369164-2026",
         main_account: hex!("0cdfb9a39672dd07455ebdba5589d3b345c1d62c2c5dd9d8d0a7bab8d71508c1"),
         fee_account: hex!("beb715080b3055942e49b7ac90ca870cd2bcab24287665eb4abf19cc8f76ae8f"),
@@ -479,6 +511,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国交通运输部",
         cid_short_name: "交通部",
+        cid_full_name_en: "Ministry of Transport of the Federal Republic of the China Nation",
+        cid_short_name_en: "Ministry of Transport",
         cid_number: "ZS001-MTR0Z-951285962-2026",
         main_account: hex!("c4459c4af25aae34b32cb1504311fafdc152832c3ca56c7566a11fa6fff4342a"),
         fee_account: hex!("b37c02cbb7b07707f5c06fb5e563a6d27a6c92e80496650331d3eb845d016b10"),
@@ -493,6 +527,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中枢省联邦政府",
         cid_short_name: "中枢省政府",
+        cid_full_name_en: "Zhongshu Provincial Federal Government",
+        cid_short_name_en: "Zhongshu Provincial Government",
         cid_number: "ZS001-PGV07-081693408-2026",
         main_account: hex!("b4127ad80886d2cd186dc0e6e89af12cdc78159459e126c5b407f5429af05eaa"),
         fee_account: hex!("181b794e35bec2c2c82975e004694d1b76490f9b09e1db7897350f8137e1e37e"),
@@ -507,6 +543,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "岭南省联邦政府",
         cid_short_name: "岭南省政府",
+        cid_full_name_en: "Lingnan Provincial Federal Government",
+        cid_short_name_en: "Lingnan Provincial Government",
         cid_number: "LN001-PGV0G-356428750-2026",
         main_account: hex!("95dbf756a23005d4332e656173a7d295594ce1c4062261d6319115f7f56a1ce4"),
         fee_account: hex!("19a46bc5dbfcabd4af61fd8fe690aaba664233a6708ad79b7d4c791ff2eabb82"),
@@ -521,6 +559,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "广东省联邦政府",
         cid_short_name: "广东省政府",
+        cid_full_name_en: "Guangdong Provincial Federal Government",
+        cid_short_name_en: "Guangdong Provincial Government",
         cid_number: "GD001-PGV09-445255296-2026",
         main_account: hex!("835f1a7459de406c6a1ae4fac422899a830030101c7742bdad75fdf69ce460b6"),
         fee_account: hex!("8b231b8373f45ef78c5cf42b805f3c3cd41cf4cf46b62d43ca1b20e3f8712dae"),
@@ -535,6 +575,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "广西省联邦政府",
         cid_short_name: "广西省政府",
+        cid_full_name_en: "Guangxi Provincial Federal Government",
+        cid_short_name_en: "Guangxi Provincial Government",
         cid_number: "GX001-PGV05-652220313-2026",
         main_account: hex!("fcf3338d1c3b0c5829431260dd1ca38ca597a3dcb440ef16b82904506c54a4b3"),
         fee_account: hex!("dd36559f4fa4ddb46882ee3fbc46e1fe7d8d2dd7a1a3435c4a21bfceeb359498"),
@@ -549,6 +591,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "福建省联邦政府",
         cid_short_name: "福建省政府",
+        cid_full_name_en: "Fujian Provincial Federal Government",
+        cid_short_name_en: "Fujian Provincial Government",
         cid_number: "FJ001-PGV00-397693743-2026",
         main_account: hex!("c8ad563d22d680c4a8c1ec744f88dbcd401a2caceecd96614c318e40fa39b36a"),
         fee_account: hex!("33b398fc57a5dc499a2cab78bd8e57f7891f3becca2b48efecb196d8a06d2bb3"),
@@ -563,6 +607,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "海南省联邦政府",
         cid_short_name: "海南省政府",
+        cid_full_name_en: "Hainan Provincial Federal Government",
+        cid_short_name_en: "Hainan Provincial Government",
         cid_number: "HN001-PGV04-956332645-2026",
         main_account: hex!("20bb452e383da47cf3e7c56df47d966b19e5c0cae814dae180083973368881f4"),
         fee_account: hex!("a433ca789eff16158ac8b1ae596f44e130cfe7e421ba78f4bc88ab27b8de0bc6"),
@@ -577,6 +623,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "云南省联邦政府",
         cid_short_name: "云南省政府",
+        cid_full_name_en: "Yunnan Provincial Federal Government",
+        cid_short_name_en: "Yunnan Provincial Government",
         cid_number: "YN001-PGV0C-796039232-2026",
         main_account: hex!("d446a3ed6ce4420d9ec36011315dcb4d4a63a8375d6e77fcf6f82c804b9b22de"),
         fee_account: hex!("4ec6517e874682ab4d9dd29c9c3cb66db1b52c185bbe49058f919768f7cef2b9"),
@@ -591,6 +639,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "贵州省联邦政府",
         cid_short_name: "贵州省政府",
+        cid_full_name_en: "Guizhou Provincial Federal Government",
+        cid_short_name_en: "Guizhou Provincial Government",
         cid_number: "GZ001-PGV0R-035840535-2026",
         main_account: hex!("8744aa1a738bed100bdbf14950c1f23e00c5105c350f9929ad38862c15588161"),
         fee_account: hex!("7daed906ce74061c2195926c83c21745264a1850f03291b9bb8f46619b45b9c1"),
@@ -605,6 +655,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "湖南省联邦政府",
         cid_short_name: "湖南省政府",
+        cid_full_name_en: "Hunan Provincial Federal Government",
+        cid_short_name_en: "Hunan Provincial Government",
         cid_number: "HU001-PGV0Q-838597871-2026",
         main_account: hex!("c2124f81883690b961b450511f26e891e524ab968841ac77649036dca6ddf9f4"),
         fee_account: hex!("04530a10e5254f35580af513c5c573c965946c01ec5484a546c405b0b00ab5b9"),
@@ -619,6 +671,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "江西省联邦政府",
         cid_short_name: "江西省政府",
+        cid_full_name_en: "Jiangxi Provincial Federal Government",
+        cid_short_name_en: "Jiangxi Provincial Government",
         cid_number: "JX001-PGV0P-875190094-2026",
         main_account: hex!("1b02d23dc0c88ebc090666b98a63f0ebeb667211edcf1319ef6472c92791f65f"),
         fee_account: hex!("36d1be47343d6a9e248d604c26c5579c797a16e9c99c63da9d7fe583c8966f13"),
@@ -633,6 +687,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "浙江省联邦政府",
         cid_short_name: "浙江省政府",
+        cid_full_name_en: "Zhejiang Provincial Federal Government",
+        cid_short_name_en: "Zhejiang Provincial Government",
         cid_number: "ZJ001-PGV08-354186067-2026",
         main_account: hex!("a0e659d7b7d359fde83254a9f732fc303414d79556a98464b2034d681253f5cd"),
         fee_account: hex!("d05cce674ade8932a23f9fb2ebc13907d720307734cedd1d0b837698e043e208"),
@@ -647,6 +703,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "江苏省联邦政府",
         cid_short_name: "江苏省政府",
+        cid_full_name_en: "Jiangsu Provincial Federal Government",
+        cid_short_name_en: "Jiangsu Provincial Government",
         cid_number: "JS001-PGV09-901042993-2026",
         main_account: hex!("154d419379184fc5e59da858ca5ec87b86b31ded2a0bdfaf366c4416005ed31c"),
         fee_account: hex!("9964d8c770de19af2da81fcb36c7881a294c0233afdea6d09454f231b5868284"),
@@ -661,6 +719,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "山东省联邦政府",
         cid_short_name: "山东省政府",
+        cid_full_name_en: "Shandong Provincial Federal Government",
+        cid_short_name_en: "Shandong Provincial Government",
         cid_number: "SD001-PGV03-201742394-2026",
         main_account: hex!("0d8a05260537bb456b2f61c1b4006432d0138c23f9e0bb595ee1cec209c446b3"),
         fee_account: hex!("5dad5bf5c65ddd3cb45d503f49085cf7ea511d0638c9872cfbf1fdbfdfe8c0f5"),
@@ -675,6 +735,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "山西省联邦政府",
         cid_short_name: "山西省政府",
+        cid_full_name_en: "Shanxi Provincial Federal Government",
+        cid_short_name_en: "Shanxi Provincial Government",
         cid_number: "SX001-PGV0Q-799181308-2026",
         main_account: hex!("5b6dd996c99e2648ff11c537334d9af98660df8af1b3fce4389156efc8c03b51"),
         fee_account: hex!("492d7c23297bc880d10b24ab3f395397a3cfe543331bab6e2a84cf0e5f9d0a87"),
@@ -689,6 +751,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "河南省联邦政府",
         cid_short_name: "河南省政府",
+        cid_full_name_en: "Henan Provincial Federal Government",
+        cid_short_name_en: "Henan Provincial Government",
         cid_number: "HE001-PGV0G-603553227-2026",
         main_account: hex!("d090bbe5841718a43f81101174bb80ee56ced183b11557a16ae41dae2ee11887"),
         fee_account: hex!("5982bcc84774021a34eaa7727c7f1324f781209a15ef1ec3a9247453924f935b"),
@@ -703,6 +767,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "河北省联邦政府",
         cid_short_name: "河北省政府",
+        cid_full_name_en: "Hebei Provincial Federal Government",
+        cid_short_name_en: "Hebei Provincial Government",
         cid_number: "HB001-PGV07-624935977-2026",
         main_account: hex!("bf406117eceb49dcec325cebd91074a5ce86aee86d315fe3a3e25e37868813ea"),
         fee_account: hex!("c6f07a12446c4b813fb5f72f730e07ed1908f71f7cda51a2faee1d3ec86a50a1"),
@@ -717,6 +783,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "湖北省联邦政府",
         cid_short_name: "湖北省政府",
+        cid_full_name_en: "Hubei Provincial Federal Government",
+        cid_short_name_en: "Hubei Provincial Government",
         cid_number: "HI001-PGV00-651859506-2026",
         main_account: hex!("3884cd5d3b56f424f84ac0f0f735e2820ac6bb9c70505204ab6d69e4d537a870"),
         fee_account: hex!("dc55cc192239f85c5a275dc0b1d6e003ef30912b7b4cfa3bc3e9b2226ce73fd2"),
@@ -731,6 +799,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "陕西省联邦政府",
         cid_short_name: "陕西省政府",
+        cid_full_name_en: "Shaanxi Provincial Federal Government",
+        cid_short_name_en: "Shaanxi Provincial Government",
         cid_number: "SI001-PGV0M-397931863-2026",
         main_account: hex!("77d7d107bcd5c7cc7831154d1eb1f3505ccf227ee7eb4bb4a4752823445ed367"),
         fee_account: hex!("04d2302be81d985ddbe1d5156ad29d4963ff095de419e600453ca08b991ae0c3"),
@@ -745,6 +815,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "重庆省联邦政府",
         cid_short_name: "重庆省政府",
+        cid_full_name_en: "Chongqing Provincial Federal Government",
+        cid_short_name_en: "Chongqing Provincial Government",
         cid_number: "CQ001-PGV05-082214989-2026",
         main_account: hex!("0309e808d56fc35bddd76a66bc32a1c2a75c312efad55453496314f5df1fd230"),
         fee_account: hex!("2ab001abc8cbff34b7aa29c14700ffc1704e7a56e17d2603a910f572e9ae4bb1"),
@@ -759,6 +831,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "四川省联邦政府",
         cid_short_name: "四川省政府",
+        cid_full_name_en: "Sichuan Provincial Federal Government",
+        cid_short_name_en: "Sichuan Provincial Government",
         cid_number: "SC001-PGV0Q-591818746-2026",
         main_account: hex!("a255b1ac32469f11f1f1b07b16e001281d101518f6cf5f3a64a9fee711ebde60"),
         fee_account: hex!("2b39a739dc0422d51319d5f41b03409281ed126ed6adb8bc7308044c1a8b6265"),
@@ -773,6 +847,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "甘肃省联邦政府",
         cid_short_name: "甘肃省政府",
+        cid_full_name_en: "Gansu Provincial Federal Government",
+        cid_short_name_en: "Gansu Provincial Government",
         cid_number: "GS001-PGV0I-451294921-2026",
         main_account: hex!("9c9765e0d8c9e52aeca8a1282ac4d0bd08b304a2a26df57652b3fd5ada1d5038"),
         fee_account: hex!("6e92b9e896cc02f31e7526eebd0d102081dafd483d9a3aa2e3cf1e0833953b8c"),
@@ -787,6 +863,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "北平省联邦政府",
         cid_short_name: "北平省政府",
+        cid_full_name_en: "Beiping Provincial Federal Government",
+        cid_short_name_en: "Beiping Provincial Government",
         cid_number: "BP001-PGV0M-797184567-2026",
         main_account: hex!("a398327accc42eebe08b5496e9fe0ac812d8ffad7fa3039b82f1cf7116a7e3a3"),
         fee_account: hex!("790e37d9946312d362d1b63f7d5c828c1223654857205117ca085211e37998a0"),
@@ -801,6 +879,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "海滨省联邦政府",
         cid_short_name: "海滨省政府",
+        cid_full_name_en: "Haibin Provincial Federal Government",
+        cid_short_name_en: "Haibin Provincial Government",
         cid_number: "HA001-PGV03-741580102-2026",
         main_account: hex!("95ee34fffc3883294eb1d584524bc9d26ca0ce8ef0074ab7833010ed827604b6"),
         fee_account: hex!("38fb2ba5a3c1034b92bed76e09b65156e212a3dc2dadb07979891d0c0df5a758"),
@@ -815,6 +895,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "松江省联邦政府",
         cid_short_name: "松江省政府",
+        cid_full_name_en: "Songjiang Provincial Federal Government",
+        cid_short_name_en: "Songjiang Provincial Government",
         cid_number: "SJ001-PGV0D-615179130-2026",
         main_account: hex!("205e8b2235380ea11aa76827dc669b7d207654af8f9d1c62205e916d2530e9db"),
         fee_account: hex!("9e847ecde125f9599895b34711cd41a66a230306cedecee24acc6c0eac000cc5"),
@@ -829,6 +911,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "龙江省联邦政府",
         cid_short_name: "龙江省政府",
+        cid_full_name_en: "Longjiang Provincial Federal Government",
+        cid_short_name_en: "Longjiang Provincial Government",
         cid_number: "LJ001-PGV0D-344601642-2026",
         main_account: hex!("285c34f5703e13c7e3a9e81bf7ad53e81bcdd0cd50063d2f1d8e7b306cdeaade"),
         fee_account: hex!("4721177f60f209a67b38f9b81f74d98ad327d75688d8e65c6d42b6c1db930604"),
@@ -843,6 +927,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "吉林省联邦政府",
         cid_short_name: "吉林省政府",
+        cid_full_name_en: "Jilin Provincial Federal Government",
+        cid_short_name_en: "Jilin Provincial Government",
         cid_number: "JL001-PGV02-765981760-2026",
         main_account: hex!("da044275489afcf8862f1a76d7415fe6201ce2892635eed5ed5ec164ff6484f2"),
         fee_account: hex!("9089e1f4d226c0e678ddd00571fbca6ef487f5da4644d764834f859d78882486"),
@@ -857,6 +943,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "辽宁省联邦政府",
         cid_short_name: "辽宁省政府",
+        cid_full_name_en: "Liaoning Provincial Federal Government",
+        cid_short_name_en: "Liaoning Provincial Government",
         cid_number: "LI001-PGV0U-018691827-2026",
         main_account: hex!("b1a283f3ebf07b45ed431fbdd9899873f75cfb5eeb37ba96e9fdd5a3aa142edc"),
         fee_account: hex!("98a240d78f5d9b9dd77c54b02f0cc5df45096f0b4cba8c6dc63e1df00d4ce1a3"),
@@ -871,6 +959,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "宁夏省联邦政府",
         cid_short_name: "宁夏省政府",
+        cid_full_name_en: "Ningxia Provincial Federal Government",
+        cid_short_name_en: "Ningxia Provincial Government",
         cid_number: "NX001-PGV0M-116184346-2026",
         main_account: hex!("45e50174065147ca6e276132825e541ea434b4d2e75cca92d4edd934bfc6e746"),
         fee_account: hex!("1178f48227ab4b2b3e17042477ef59535952fe6e2cdf80e215dd7f351c052293"),
@@ -885,6 +975,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "青海省联邦政府",
         cid_short_name: "青海省政府",
+        cid_full_name_en: "Qinghai Provincial Federal Government",
+        cid_short_name_en: "Qinghai Provincial Government",
         cid_number: "QH001-PGV0D-717381972-2026",
         main_account: hex!("65d7c033205f46397e7daf24f366b1c4c25f45f7db867393a50da206a5abd6e4"),
         fee_account: hex!("d0c85f99a4103a5d67597350658a8a883d742c4d6fe345e3515a77e45aa000c4"),
@@ -899,6 +991,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "安徽省联邦政府",
         cid_short_name: "安徽省政府",
+        cid_full_name_en: "Anhui Provincial Federal Government",
+        cid_short_name_en: "Anhui Provincial Government",
         cid_number: "AH001-PGV0I-066696632-2026",
         main_account: hex!("7b6db2d7dbf35a4647aecc79212d2c209619445f1107f38af9d4ee65b8ebb20c"),
         fee_account: hex!("a2a92e70cd0c2f523196a3b0ef352a02b4ced0989f4a89fdb2c44602890a10a2"),
@@ -913,6 +1007,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "台湾省联邦政府",
         cid_short_name: "台湾省政府",
+        cid_full_name_en: "Taiwan Provincial Federal Government",
+        cid_short_name_en: "Taiwan Provincial Government",
         cid_number: "TW001-PGV0M-598194662-2026",
         main_account: hex!("a1b3d1657ec79820cd90d077e3269e25fb6bf34ef297ad9a4ab1cad7c274dcee"),
         fee_account: hex!("f3f784acaac1d08172248a5aea9c02a84411defdd6919f68a6e69975278046bc"),
@@ -927,6 +1023,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "西藏省联邦政府",
         cid_short_name: "西藏省政府",
+        cid_full_name_en: "Xizang Provincial Federal Government",
+        cid_short_name_en: "Xizang Provincial Government",
         cid_number: "XZ001-PGV0C-906316975-2026",
         main_account: hex!("7e5dcf4319be7cf51bd3d8ce430b89f74f1c5b745938362b660f959c7714e918"),
         fee_account: hex!("60f2322f63c912e2556541f1f9cffdb94cfbdca6efe7ca7fcffcfee03f9cf7ca"),
@@ -941,6 +1039,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "新疆省联邦政府",
         cid_short_name: "新疆省政府",
+        cid_full_name_en: "Xinjiang Provincial Federal Government",
+        cid_short_name_en: "Xinjiang Provincial Government",
         cid_number: "XJ001-PGV05-006283044-2026",
         main_account: hex!("40cf6c9b2d2eb417943b08a862042928cd2841031e057e6567b7117431ae2fb4"),
         fee_account: hex!("b00ecf0d0527d1c2c20ea84a1ad0f4623fc2ff52cd5f1f8aacbee2277abb0ad5"),
@@ -955,6 +1055,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "西康省联邦政府",
         cid_short_name: "西康省政府",
+        cid_full_name_en: "Xikang Provincial Federal Government",
+        cid_short_name_en: "Xikang Provincial Government",
         cid_number: "XK001-PGV0K-229231951-2026",
         main_account: hex!("94d47fd88b234ddd7a39cfa9e163be45c0e52f118cd30b47cc031132f0ff6c24"),
         fee_account: hex!("17dbb7d8a6a9a3548680c285c61ac9e62af3e073eb03500705cecdd3a7108b2e"),
@@ -969,6 +1071,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "阿里省联邦政府",
         cid_short_name: "阿里省政府",
+        cid_full_name_en: "Ali Provincial Federal Government",
+        cid_short_name_en: "Ali Provincial Government",
         cid_number: "AL001-PGV0A-214163585-2026",
         main_account: hex!("22b05d9b1776a710504cc17d0a7f843ed038a230f0d5e6f1731db2ef063127d5"),
         fee_account: hex!("f52e74c960b14492579593804fe7c6dbd88ebd6a620201146365833f31efc304"),
@@ -983,6 +1087,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "葱岭省联邦政府",
         cid_short_name: "葱岭省政府",
+        cid_full_name_en: "Congling Provincial Federal Government",
+        cid_short_name_en: "Congling Provincial Government",
         cid_number: "CL001-PGV0B-113224876-2026",
         main_account: hex!("7a20b00c48b0ba7f7cec8c32d5f12d25516594d43a8c162209c137fe6b483699"),
         fee_account: hex!("726aa5cdd886952a9eaf1a6b2281e966c20889b152101d35113957d89aedd3d9"),
@@ -997,6 +1103,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "伊犁省联邦政府",
         cid_short_name: "伊犁省政府",
+        cid_full_name_en: "Yili Provincial Federal Government",
+        cid_short_name_en: "Yili Provincial Government",
         cid_number: "YL001-PGV0A-086374481-2026",
         main_account: hex!("7027ae151bdf7c98bd4177327e2e3a97137c68198a720e2378f8a53c8d25dbb6"),
         fee_account: hex!("6a0eb8c6785fbb3f994c472fbd4bcccb28170500da6848381a76fb1a84b5d79e"),
@@ -1011,6 +1119,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "河西省联邦政府",
         cid_short_name: "河西省政府",
+        cid_full_name_en: "Hexi Provincial Federal Government",
+        cid_short_name_en: "Hexi Provincial Government",
         cid_number: "HX001-PGV00-021054103-2026",
         main_account: hex!("d23a0e4ad78433450c655aeaa1171d831258efcf552592cda841a1269ad4be8d"),
         fee_account: hex!("750c03b603a1c2996463f2567e39d9182e1b663e8f06dad1bea84351323b0ee4"),
@@ -1025,6 +1135,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "昆仑省联邦政府",
         cid_short_name: "昆仑省政府",
+        cid_full_name_en: "Kunlun Provincial Federal Government",
+        cid_short_name_en: "Kunlun Provincial Government",
         cid_number: "KL001-PGV03-181159805-2026",
         main_account: hex!("c9dc0f8cb92d2fb19bed131eba063654bfe4c9bb6f2af0268ffddedf206e3b92"),
         fee_account: hex!("41eac5f95de545b88b930f9c33caf95c3b9c0867d4235dd6dfad72b9b119f2ec"),
@@ -1039,6 +1151,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "河套省联邦政府",
         cid_short_name: "河套省政府",
+        cid_full_name_en: "Hetao Provincial Federal Government",
+        cid_short_name_en: "Hetao Provincial Government",
         cid_number: "HT001-PGV0I-007141482-2026",
         main_account: hex!("4bb9ec18a9b7ba04e5a32cfea92b698ec68a722bd6bebda2916012258121e3f9"),
         fee_account: hex!("77a7e9f6a59f1b778ce7b34fd17d988edaa28c4cc4b00b6d07447d48a58e2acb"),
@@ -1053,6 +1167,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "热河省联邦政府",
         cid_short_name: "热河省政府",
+        cid_full_name_en: "Rehe Provincial Federal Government",
+        cid_short_name_en: "Rehe Provincial Government",
         cid_number: "RH001-PGV0T-142866733-2026",
         main_account: hex!("35287a935121bc06bea5fbe7f42364ae9e9f34f22ae402aedf322ade37c7073f"),
         fee_account: hex!("fd55e0cacf79a1b3d80b39f1b7d26b0811321069f953450233e672743ae4cce8"),
@@ -1067,6 +1183,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "兴安省联邦政府",
         cid_short_name: "兴安省政府",
+        cid_full_name_en: "Xingan Provincial Federal Government",
+        cid_short_name_en: "Xingan Provincial Government",
         cid_number: "XA001-PGV0L-507379370-2026",
         main_account: hex!("985f3a6babbee00b1d5f0f61406b02700cd76aa53746647c5b63eb7ce64c0bb3"),
         fee_account: hex!("b7a67c45b63837425e281f202cf244651cc507ca78bbec71c25ffec2f7e71924"),
@@ -1081,6 +1199,8 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "合江省联邦政府",
         cid_short_name: "合江省政府",
+        cid_full_name_en: "Hejiang Provincial Federal Government",
+        cid_short_name_en: "Hejiang Provincial Government",
         cid_number: "HJ001-PGV0U-984055150-2026",
         main_account: hex!("5b7cf82b629d90c36d0fc665dc0cedb7ce6eea9f83b9d000452a75e143acc054"),
         fee_account: hex!("ff25c0b87497e66e77d67ab887d12135c8af2ba64ffe980066ac43219be2267b"),

@@ -97,8 +97,8 @@ fn reverse_indexes_populated_after_register_proposal_data() {
             b"test-tag",
         );
 
-        // ProposalsByOrg
-        assert!(ProposalsByOrg::<Test>::contains_key(NRC, id));
+        // ProposalsByCode
+        assert!(ProposalsByCode::<Test>::contains_key(NRC, id));
         // ProposalsByInstitution
         assert!(ProposalsByInstitution::<Test>::contains_key(nrc_pid(), id));
         // ProposalsByYear
@@ -129,7 +129,7 @@ fn final_cleanup_removes_indexes_and_display_id() {
         votingengine::pallet::ProposalOwner::<Test>::remove(id);
 
         assert!(!ProposalDisplayId::<Test>::contains_key(id));
-        assert!(!ProposalsByOrg::<Test>::contains_key(NRC, id));
+        assert!(!ProposalsByCode::<Test>::contains_key(NRC, id));
         assert!(!ProposalsByInstitution::<Test>::contains_key(nrc_pid(), id));
         assert!(!ProposalsByYear::<Test>::contains_key(display.year, id));
         assert!(!ProposalsByOwner::<Test>::contains_key(owner, id));

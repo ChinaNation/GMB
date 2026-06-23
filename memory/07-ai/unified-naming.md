@@ -106,6 +106,7 @@
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | 统一命名文件 | `unified-naming.md` | `memory/07-ai/` | 管理目录、文件、字段等新命名 |
+| 机构命名规范 | `institution-naming.md` | `memory/07-ai/` | 管理机构具体中英文全称/简称；字段命名仍以本文件为总入口 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
 | GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/im/proto/im_envelope.proto` / `citizenapp/lib/im/` / `citizenchain/node/src/im/` | 公民 P2P IM 的 Protobuf 外层协议与通信节点接口契约 |
@@ -143,6 +144,8 @@
 | 主体身份号码 | `cid_number` | API / call data / storage key | CID 对外身份 ID 字段,所有主体统一使用该字段名 |
 | 机构全称 | `cid_full_name` | API / call data | 机构全称,可随机构法定名称变更 |
 | 机构简称 | `cid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
+| 机构英文全称 | `cid_full_name_en` | API / call data / runtime primitives | 机构英文全称,具体名称规范见 `memory/07-ai/institution-naming.md` |
+| 机构英文简称 | `cid_short_name_en` | API / call data / runtime primitives | 机构英文简称,具体名称规范见 `memory/07-ai/institution-naming.md` |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |
 | 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
 | 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |

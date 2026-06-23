@@ -42,9 +42,12 @@ pub fn validate_admin_set_change(
 fn validate_count(kind: u8, institution_code: &InstitutionCode, count: usize) -> Result<(), String> {
     match kind {
         0 => {
+            // 管理员人数单一真源 = primitives::count_const,桌面端不再硬编码。
+            use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
             let expected = match *institution_code {
-                NRC => 19,
-                PRC | PRB => 9,
+                NRC => NRC_ADMIN_COUNT as usize,
+                PRC => PRC_ADMIN_COUNT as usize,
+                PRB => PRB_ADMIN_COUNT as usize,
                 _ => return Err("内置治理机构机构码无效".to_string()),
             };
             if count != expected {

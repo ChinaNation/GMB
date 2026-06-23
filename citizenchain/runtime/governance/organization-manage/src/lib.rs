@@ -373,7 +373,7 @@ pub mod pallet {
         /// 管理员数量与列表长度不一致
         AdminsLenMismatch,
         /// 机构账户管理员机构码只能是公权/私权法人机构码
-        InvalidOrg,
+        InvalidInstitutionCode,
         /// 多签账户不存在
         AccountNotFound,
         /// 多签账户处于 pending 状态，不可操作
@@ -812,7 +812,7 @@ pub mod pallet {
         /// 从任意机构账户反查管理员更换机构码。
         ///
         /// 中文注释:机构账户必须使用公权/私权法人机构码；PMUL 只属于个人多签。
-        pub fn resolve_org_for_account(account: &T::AccountId) -> Option<InstitutionCode> {
+        pub fn resolve_institution_code_for_account(account: &T::AccountId) -> Option<InstitutionCode> {
             let registered = AccountRegisteredCid::<T>::get(account)?;
             Institutions::<T>::get(&registered.cid_number).map(|inst| inst.institution_code)
         }
@@ -846,7 +846,7 @@ pub mod pallet {
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
     fn lookup_org(addr: &T::AccountId) -> Option<InstitutionCode> {
-        pallet::Pallet::<T>::resolve_org_for_account(addr)
+        pallet::Pallet::<T>::resolve_institution_code_for_account(addr)
     }
 
     fn lookup_admin_config(

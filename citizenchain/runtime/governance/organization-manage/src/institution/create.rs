@@ -74,7 +74,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     Pallet::<T>::ensure_admin_config(&who, admins_len, &admins, threshold)?;
     ensure!(
         is_institution_code(&institution_code),
-        Error::<T>::InvalidOrg
+        Error::<T>::InvalidInstitutionCode
     );
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());

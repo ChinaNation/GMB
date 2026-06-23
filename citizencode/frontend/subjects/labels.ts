@@ -3,9 +3,9 @@
 //
 // 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
 //   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
-//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除储备体系自动目录代码)机构全称必填 / F(锁中国ZG)挂公法人
-//   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY);
-//                         G/S 学校必须选择教育机构类型,F+JY 分校保留原挂靠规则
+//   GOV_INSTITUTION       公权 tab:G(市级 CGOV/CLEG/CJUD/CSUP,排除储备体系/CEDU/CPOL/CREG 自动目录代码)机构全称必填 / F(锁非法人组织 UNIN)挂公法人
+//   EDUCATION_INSTITUTION 教育 tab:G/S/F;institution_code 不再锁死,按 subject_property×education_type 计算
+//                         (公私大学 GUN/SUN、公私中小学 GSCH/SFSC),F 分校继承本部学校码(GSCH/SFSC)
 //
 // P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/uninorg 同源):
 //   G → 锁死 0(非盈利,生成器硬规则)
@@ -45,22 +45,92 @@ export const SUBJECT_PROPERTY_LABEL: Record<string, string> = {
 
 // ── 机构代码中文映射 ──
 export const INSTITUTION_CODE_LABEL: Record<string, string> = {
-  ZF: '政府',
-  LF: '立法院',
-  SF: '司法院',
-  JC: '监察院',
-  JY: '公民教育委员会',
-  CB: '公民储备委员会',
-  CH: '公民储备委员会',
-  ZG: '中国',
-  TG: '他国',
-  GT: '个体经营',
-  GP: '无限合伙',
-  LP: '有限合伙',
-  GQ: '股权公司',
-  GF: '股份公司',
-  GY: '公益组织',
-  AS: '注册协会',
+  PRS: '总统府',
+  FSC: '联邦安全局',
+  FIB: '联邦情报局',
+  FSS: '联邦特勤局',
+  FPR: '联邦人事局',
+  FRG: '联邦注册局',
+  MFA: '外事交流部',
+  MDF: '国家防务部',
+  MHS: '国土安全部',
+  MCW: '公民生活保障部',
+  MHU: '住房与城镇建设部',
+  MAG: '农业与农村发展部',
+  MCM: '商务与市场贸易部',
+  MFT: '财政与税务部',
+  MEN: '能源与环保发展部',
+  MTR: '交通运输部',
+  NLG: '国家立法院',
+  NJD: '国家司法院',
+  NSP: '国家监察院',
+  FAC: '联邦廉政署',
+  FAU: '联邦审计署',
+  FIV: '联邦调查署',
+  NED: '国家公民教育委员会',
+  NRC: '国家公民储备委员会',
+  NSN: '国家参议会',
+  NRP: '国家众议会',
+  PGV: '省政府',
+  PLG: '省立法院',
+  PJD: '省司法院',
+  PSP: '省监察院',
+  PRC: '省储会',
+  PRB: '省储行',
+  PDF: '省防务厅',
+  PHS: '省国安厅',
+  PCW: '省民生厅',
+  PHU: '省住建厅',
+  PAG: '省农业厅',
+  PCM: '省商贸厅',
+  PFT: '省财税厅',
+  PEN: '省能源厅',
+  PTR: '省交通厅',
+  PSN: '省参议会',
+  PRP: '省众议会',
+  CGOV: '市政府',
+  CLEG: '市立法委',
+  CSUP: '市监察院',
+  CJUD: '市司法院',
+  CEDU: '市教委',
+  CSLF: '市自治委',
+  CDEF: '市国防局',
+  CHSC: '市国安局',
+  CCWF: '市民生局',
+  CHUD: '市住建局',
+  CAGR: '市农业局',
+  CCOM: '市商贸局',
+  CFIN: '市财税局',
+  CENR: '市能源局',
+  CTRN: '市交通局',
+  CREG: '市注册局',
+  CPOL: '市公安局',
+  TGOV: '镇政府',
+  TCWF: '镇民生科',
+  THUD: '镇住建科',
+  TAGR: '镇农业科',
+  TFIN: '镇财税科',
+  TDEF: '镇国防科',
+  THSC: '镇国安科',
+  TCOM: '镇商贸科',
+  TENR: '镇能源科',
+  TTRN: '镇交通科',
+  SFGT: '个体经营',
+  SFGP: '无限合伙',
+  SFLP: '有限合伙',
+  SFGQ: '股权公司',
+  SFGF: '股份公司',
+  SFGY: '公益组织',
+  SFAS: '注册协会',
+  GUN: '公立大学',
+  SUN: '私立大学',
+  GSCH: '公立学校',
+  SFSC: '私立学校',
+  CTZN: '公民人',
+  NATP: '自然人',
+  SMTP: '智能人',
+  UNIN: '非法人组织',
+  PMUL: '个人多签',
 };
 
 export const EDUCATION_TYPE_LABEL: Record<EducationType, string> = {
@@ -86,23 +156,47 @@ export const SCHOOL_EDUCATION_TYPES: EducationType[] = [
   'UNIVERSITY',
 ];
 
-// ── 手动公权机构可选代码:排除储备委员会/省储行(已确定性生成)和 JY(归教育 tab) ──
+// ── 手动公权机构可选代码:市级公权码(表单强制选市建市级机构);
+//    排除 CEDU(归教育 tab)、CPOL/CREG(确定性自动生成),以及国家/省级与储备体系码。 ──
 const GOV_MANUAL_INSTITUTIONS: ChoiceItem[] = [
-  { value: 'ZF', label: '政府' },
-  { value: 'LF', label: '立法院' },
-  { value: 'SF', label: '司法院' },
-  { value: 'JC', label: '监察院' },
+  { value: 'CGOV', label: '政府' },
+  { value: 'CLEG', label: '立法院' },
+  { value: 'CJUD', label: '司法院' },
+  { value: 'CSUP', label: '监察院' },
 ];
 
-// ── 公权下属非法人机构代码锁死中国(ZG),不开放他国 ──
+// ── 公权下属非法人锁死非法人组织(UNIN) ──
 const GOV_UNINORG_INSTITUTION_ONLY: ChoiceItem[] = [
-  { value: 'ZG', label: '中国' },
+  { value: 'UNIN', label: '非法人组织' },
 ];
 
-// ── 教育委员会(JY)锁死选项 ──
-const EDUCATION_INSTITUTION_ONLY: ChoiceItem[] = [
-  { value: 'JY', label: '教育委员会' },
-];
+// ── 教育机构码计算:institution_code 不是静态下拉,按 subject_property×education_type 派生 ──
+//   G + UNIVERSITY → GUN(公立大学)        S + UNIVERSITY → SUN(私立大学)
+//   G + 中小初学   → GSCH(公立学校)        S + 中小初学   → SFSC(私立学校)
+//   F(分校)       → UNIN(非法人组织):后端模型里分校是挂学校本部(GUN/SUN/GSCH/SFSC)的
+//                   非法人组织,只有 UNIN 触发 requires_parent;分校本身不带教育级别。
+export const EDUCATION_UNIVERSITY_TYPE: EducationType = 'UNIVERSITY';
+
+/**
+ * 教育入口提交前派生 institution_code(与后端 number/code.rs + subjects/uninorg 同源)。
+ * @param subjectProperty UI 导航属性 G(公立)/S(私立)/F(分校)
+ * @param educationType   本部教育级别(大学走 GUN/SUN,中小初学走 GSCH/SFSC);分校忽略
+ */
+export function computeEducationInstitutionCode(
+  subjectProperty: string,
+  educationType: EducationType | undefined,
+): string {
+  // 分校 = 非法人组织(UNIN)挂学校本部;UNIN 不带教育级别、由后端按父级判定地域。
+  if (subjectProperty === 'F') {
+    return 'UNIN';
+  }
+  const isPrivate = subjectProperty === 'S';
+  if (educationType === EDUCATION_UNIVERSITY_TYPE) {
+    return isPrivate ? 'SUN' : 'GUN';
+  }
+  // 初学/小学/中学
+  return isPrivate ? 'SFSC' : 'GSCH';
+}
 
 // ── P1 盈利属性选项(单一来源,锁死场景取单项) ──
 const P1_PROFIT: ChoiceItem = { value: '1', label: '盈利' };
@@ -135,7 +229,7 @@ export const PRIVATE_TYPE_RULES: Record<PrivateType, PrivateTypeRule> = {
   SOLE: {
     privateType: 'SOLE',
     subjectProperty: 'F',
-    institution: 'GT',
+    institution: 'SFGT',
     p1: '1',
     hasLegalPersonality: false,
   },
@@ -143,35 +237,35 @@ export const PRIVATE_TYPE_RULES: Record<PrivateType, PrivateTypeRule> = {
     privateType: 'PARTNERSHIP',
     partnershipKind: 'GENERAL',
     subjectProperty: 'F',
-    institution: 'GP',
+    institution: 'SFGP',
     p1: '1',
     hasLegalPersonality: false,
   },
   COMPANY: {
     privateType: 'COMPANY',
     subjectProperty: 'S',
-    institution: 'GQ',
+    institution: 'SFGQ',
     p1: '1',
     hasLegalPersonality: true,
   },
   CORPORATION: {
     privateType: 'CORPORATION',
     subjectProperty: 'S',
-    institution: 'GF',
+    institution: 'SFGF',
     p1: '1',
     hasLegalPersonality: true,
   },
   WELFARE: {
     privateType: 'WELFARE',
     subjectProperty: 'S',
-    institution: 'GY',
+    institution: 'SFGY',
     p1: '0',
     hasLegalPersonality: true,
   },
   ASSOCIATION: {
     privateType: 'ASSOCIATION',
     subjectProperty: 'S',
-    institution: 'AS',
+    institution: 'SFAS',
     p1: '0',
     hasLegalPersonality: true,
   },
@@ -187,7 +281,7 @@ export function privateRuleFor(
         privateType,
         partnershipKind,
         subjectProperty: 'S',
-        institution: 'LP',
+        institution: 'SFLP',
         p1: '1',
         hasLegalPersonality: true,
       };
@@ -211,35 +305,54 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
         modalTitle: '新增公权机构',
       };
     case 'EDUCATION_INSTITUTION':
-      // G=公立学校 / S=私立学校 / F=分校(挂本部),机构锁死教育委员会(JY)
+      // G=公立学校 / S=私立学校 / F=分校(挂本部);institution_code 由
+      // computeEducationInstitutionCode 按 subject_property×education_type 派生,非静态下拉。
       return {
         subjectPropertyChoices: [
           { value: 'G', label: '公法人' },
           { value: 'S', label: '私法人' },
           { value: 'F', label: '非法人' },
         ],
-        institutionChoices: EDUCATION_INSTITUTION_ONLY,
+        institutionChoices: institutionChoicesFor('EDUCATION_INSTITUTION', 'G'),
         modalTitle: '新增教育机构',
       };
     case 'PRIVATE_INSTITUTION':
       return {
         subjectPropertyChoices: [{ value: 'F', label: '非法人' }],
-        institutionChoices: [{ value: 'GT', label: '个体经营' }],
+        institutionChoices: [{ value: 'SFGT', label: '个体经营' }],
         modalTitle: '新增机构',
       };
   }
 }
 
-/** 机构代码选项随入口 + 主体属性联动(GOV 入口 G 建公权机构、F 建下属非法人锁中国)。 */
+/** 教育机构码中文标签(下拉占位/展示用)。 */
+export const EDUCATION_INSTITUTION_CODE_LABEL: Record<string, string> = {
+  GUN: '公立大学',
+  SUN: '私立大学',
+  GSCH: '公立学校',
+  SFSC: '私立学校',
+  UNIN: '分校(非法人组织)',
+};
+
+/**
+ * 机构代码选项随入口 + 主体属性联动:
+ *   GOV 入口 G 建市级公权机构、F 建下属非法人锁 UNIN;
+ *   EDUCATION 入口的机构码由 computeEducationInstitutionCode 派生(此处仅给出按
+ *   subject_property 的学校默认码占位,提交时按 education_type 复算并覆盖)。
+ */
 export function institutionChoicesFor(
   category: CreateFormCategory,
   subjectProperty: string,
 ): ChoiceItem[] {
-  if (category === 'EDUCATION_INSTITUTION') return EDUCATION_INSTITUTION_ONLY;
+  if (category === 'EDUCATION_INSTITUTION') {
+    // 占位默认走中小学码(GSCH/SFSC);真实值在提交时按 education_type/分校本部复算。
+    const code = computeEducationInstitutionCode(subjectProperty, undefined);
+    return [{ value: code, label: EDUCATION_INSTITUTION_CODE_LABEL[code] ?? code }];
+  }
   if (category === 'GOV_INSTITUTION') {
     return subjectProperty === 'G' ? GOV_MANUAL_INSTITUTIONS : GOV_UNINORG_INSTITUTION_ONLY;
   }
-  return [{ value: 'GT', label: '个体经营' }];
+  return [{ value: 'SFGT', label: '个体经营' }];
 }
 
 /** 非法人盈利属性附属于所属法人:公法人父恒 0,私法人父继承其 p1(与后端 uninorg 同源)。 */

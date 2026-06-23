@@ -126,7 +126,7 @@ pub mod pallet {
     #[pallet::error]
     pub enum Error<T> {
         InvalidInstitution,
-        InstitutionOrgMismatch,
+        InstitutionCodeMismatch,
         UnauthorizedAdmin,
         ZeroAmount,
         ProposalActionNotFound,
@@ -153,7 +153,7 @@ pub mod pallet {
                 account_org::<T>(institution.clone()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 actual_org == institution_code,
-                Error::<T>::InstitutionOrgMismatch
+                Error::<T>::InstitutionCodeMismatch
             );
             // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
             ensure!(

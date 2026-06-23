@@ -15,7 +15,7 @@ use votingengine::pallet::{
     CleanupQueue, CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
     PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups,
     PendingTerminalCleanups, ProposalDisplayId, ProposalExecutionRetryStates, Proposals,
-    ProposalsByExpiry, ProposalsByInstitution, ProposalsByOrg, ProposalsByOwner, ProposalsByYear,
+    ProposalsByExpiry, ProposalsByInstitution, ProposalsByCode, ProposalsByOwner, ProposalsByYear,
     YearProposalCounter,
 };
 use votingengine::types::{code_bytes, InstitutionCode, PMUL};

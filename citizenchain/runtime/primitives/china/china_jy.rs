@@ -6,6 +6,8 @@ use hex_literal::hex;
 pub struct ChinaJy {
     pub cid_full_name: &'static str,
     pub cid_short_name: &'static str,
+    pub cid_full_name_en: &'static str,
+    pub cid_short_name_en: &'static str,
     pub cid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
@@ -15,6 +17,9 @@ pub struct ChinaJy {
 pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
     cid_full_name: "中华民族联邦共和国国家公民教育委员会",
     cid_short_name: "国家教委会",
+    cid_full_name_en:
+        "National Citizen Education Committee of the Federal Republic of the China Nation",
+    cid_short_name_en: "National Education Committee",
     cid_number: "BP001-NED0H-689724263-2026",
     main_account: hex!("ef3cb775bde9e1500229740f86fb1b63f3b6aee54ee8ae42672aa9d03de7598c"),
     fee_account: hex!("fa8eaffbd677dd5c222e129692b6920391303527ef72a12061cbe0c28633506a"),

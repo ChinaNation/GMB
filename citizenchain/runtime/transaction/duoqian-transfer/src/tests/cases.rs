@@ -225,7 +225,7 @@ fn institution_account_rejects_personal_org() {
                 1_000,
                 BoundedVec::default(),
             ),
-            Error::<Test>::InstitutionOrgMismatch
+            Error::<Test>::InstitutionCodeMismatch
         );
     });
 }

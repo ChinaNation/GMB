@@ -39,9 +39,12 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
   final account = _hexEncode(accountIdBytes);
   if (adminAccountCode != null && adminAccountCode.isNotEmpty) {
     final cidFullName = '机构账户 ${account.substring(0, 8)}';
+    final cidFullNameEn = 'Institution Account ${account.substring(0, 8)}';
     return InstitutionInfo(
       cidFullName: cidFullName,
       cidShortName: cidFullName,
+      cidFullNameEn: cidFullNameEn,
+      cidShortNameEn: cidFullNameEn,
       cidNumber: registeredAccountIdentity(account),
       orgType: OrgType.account,
       account: account,
@@ -49,9 +52,12 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
     );
   }
   final cidFullName = '个人多签 ${account.substring(0, 8)}';
+  final cidFullNameEn = 'Personal Multisig ${account.substring(0, 8)}';
   return InstitutionInfo(
     cidFullName: cidFullName,
     cidShortName: cidFullName,
+    cidFullNameEn: cidFullNameEn,
+    cidShortNameEn: cidFullNameEn,
     cidNumber: 'personal-account:$account',
     orgType: OrgType.account,
     account: account,

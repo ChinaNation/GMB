@@ -4,7 +4,7 @@
 `resolution-destro` 的功能需求是：为国储会、各省储会、各省储行提供"机构自有资金销毁"治理流程，由机构内部管理员发起和投票，在提案通过后自动或手动执行链上销毁。
 
 模块必须满足以下要求：
-- 仅允许有效机构发起销毁提案，且 `org` 必须与 `institution` 的真实归属一致。
+- 仅允许有效机构发起销毁提案，且 `institution_code` 必须与 `institution` 的真实归属一致。
 - 仅允许目标机构自己的内部管理员发起提案和参与投票。
 - 销毁金额必须大于 0，且执行时必须保证机构账户保留最小余额 `ED`。
 - 提案投票通过后，系统应自动尝试执行销毁；若自动执行失败，提案保持 `STATUS_PASSED`，允许后续手动重试执行。
@@ -78,12 +78,12 @@ pub struct DestroyAction<Balance> {
 
 ## 4. 外部接口（Calls）
 ### 4.1 `propose_destroy`（call index = 0）
-入参：`org`, `institution`, `amount`
+入参：`institution_code`, `institution`, `amount`
 
 流程：
 1. `ensure_signed`。
 2. 校验 `amount > 0`。
-3. 校验机构有效且 `org` 匹配。
+3. 校验机构有效且 `institution_code` 匹配。
 4. 校验发起者是机构内部管理员。
 5. 将 `DestroyAction` 加 `MODULE_TAG` 编码。
 6. 通过 `create_internal_proposal_with_data` 创建内部提案，并在同一事务中写入 owner/data/meta（活跃提案限额由投票引擎统一检查）。
@@ -142,14 +142,14 @@ pub struct DestroyAction<Balance> {
 
 ## 7. 事件与错误
 事件：
-- `DestroyProposed { proposal_id, org, institution, proposer, amount }`
+- `DestroyProposed { proposal_id, institution_code, institution, proposer, amount }`
 - `DestroyVoteSubmitted { proposal_id, who, approve }`
 - `DestroyExecutionFailed { proposal_id }`
 - `DestroyExecuted { proposal_id, institution, amount }`
 
 错误：
 - `InvalidInstitution`：无效机构
-- `InstitutionOrgMismatch`：机构类型与 org 参数不匹配
+- `InstitutionCodeMismatch`：机构类型与 institution_code 参数不匹配
 - `UnauthorizedAdmin`：非该机构管理员
 - `ZeroAmount`：销毁金额为 0
 - `ProposalActionNotFound`：找不到提案动作数据

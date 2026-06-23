@@ -1,5 +1,7 @@
 # Voting Engine 技术文档
 
+> 机构分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
+
 最新更新：2026-05-11，内部投票阈值职责已全部收回到 `internal-vote`；业务模块只能选择提案语义并提交业务数据，不得传入“本次投票通过阈值”。
 
 ## 0. 功能需求
@@ -54,7 +56,7 @@
 - 自动超时结算必须受单块上限约束，避免 `on_initialize` 无界增长。
 - 联合投票终结时，投票引擎状态变更与业务模块回调必须保持原子一致。
 - 自动结算若遇到回调失败，必须保留重试索引，不能让提案卡在 `Voting` 且丢失后续处理入口。
-- 同一 `org + institution` 下，管理员集合变更提案与普通活跃提案互斥；普通提案之间默认允许并行。
+- 同一 `institution_code + institution` 下，管理员集合变更提案与普通活跃提案互斥；普通提案之间默认允许并行。
 - 所有清理入口必须能释放对应提案的计票状态与对象层存储，避免存储长期累积。
 
 ## 1. 模块定位
@@ -103,7 +105,7 @@ unknown → any
 any → unknown
 ```
 
-- `internal_org`、`internal_institution`：内部提案专用字段
+- `internal_institution_code`、`internal_institution`：内部提案专用字段
 - `start`、`end`：当前阶段起止区块
 - `citizen_eligible_total`：公民投票总分母
 
@@ -112,15 +114,15 @@ any → unknown
 - `YearProposalCounter`：当前年份内的提案计数器（`u32`），每年从 0 开始;**无上限**(实质 u32 容量 42.9 亿/年)
 - `NextProposalId`：主键计数器（`u64`）,下次 `allocate_proposal_id` 返回的值。**全局单调累加**,跨业务/跨年/跨机构唯一不重号
 - `ProposalDisplayId`：双层 ID 反查表(`u64 → ProposalDisplayMeta { year, seq_in_year }`)。展示号与主键解耦,客户端拼成 "2026000123" 风格
-- `ProposalsByOrg / ProposalsByInstitution / ProposalsByOwner / ProposalsByYear`：4 张反向索引(`StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, u64, ()>`),客户端按分类直接迭代,O(分类内规模)
+- `ProposalsByCode / ProposalsByInstitution / ProposalsByOwner / ProposalsByYear`：4 张反向索引(`StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, u64, ()>`，`ProposalsByCode` 的 K1 为 institution_code 机构码类型),客户端按分类直接迭代,O(分类内规模)
 - `Proposals`：提案主表
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
 - `AdminSnapshot`：提案创建时锁定的账户管理员名单。写入前拒绝空名单和重复管理员，确保“一管理员一票”语义不被快照数据破坏。
 - `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人账户/注册机构账户写入 `internal-vote` 保存的动态阈值；注册创建和注销关闭写入全员阈值。
-- `PendingDynamicThresholds`：注册多签创建提案通过前暂存的动态阈值，key 为 `(org, subject)`。
-- `ActiveDynamicThresholds`：注册多签激活后的动态阈值，key 为 `(org, subject)`。
+- `PendingDynamicThresholds`：注册多签创建提案通过前暂存的动态阈值，key 为 `(institution_code, subject)`。
+- `ActiveDynamicThresholds`：注册多签激活后的动态阈值，key 为 `(institution_code, subject)`。
 - `PendingAdminChangeThresholds`：管理员变更提案通过前暂存的新管理员数量和新动态阈值。
 - `InternalProposalRoles`：记录内部提案语义分类，用于终态时激活、删除或清理对应动态阈值。
 - `JointVotesByAdmin` / `JointInstitutionTallies`
@@ -137,14 +139,14 @@ any → unknown
 - `PendingTerminalCleanups`：执行失败终态通知业务模块失败后的待处理队列。提案可以进入 `STATUS_EXECUTION_FAILED`，但释放业务 pending 锁等终态清理通知会由后续 `on_initialize` 有界重试，不能被静默吞掉。
 - `CallbackExecutionScopes`：回调执行临时作用域，用于保护测试和回调路径的作用域校验；生产业务模块通过 callback 返回 `ProposalExecutionOutcome`。
 - `ActiveProposalsByInstitution`：每机构当前活跃提案 ID 列表，容量由 `MaxActiveProposals` 配置，生产 runtime 当前为 10。
-- `InternalProposalMutexes`：同一治理主体 `(org, institution)` 的内部提案互斥状态。
+- `InternalProposalMutexes`：同一治理主体 `(institution_code, institution)` 的内部提案互斥状态。
 - `ProposalMutexBindings`：`proposal_id` 持有的互斥锁反向绑定，用于终态、阶段切换和清理时释放；单提案 binding 上限由 `MaxInternalProposalMutexBindings` 配置，生产 runtime 当前为 256。
 
 ### 2.3 内部提案互斥
 互斥 key：
 
 ```text
-(org, institution)
+(institution_code, institution)
 ```
 
 互斥类型：
@@ -182,7 +184,7 @@ any → unknown
 5. 链上同步维护 `JointInstitutionTallies`：
    - `yes >= fixed_governance_threshold` 时，自动把该机构结果记为 `approved`
    - `yes + remaining_admins < fixed_governance_threshold` 时，自动把该机构结果记为 `rejected`
-   - 联合投票永远只覆盖国储会、省储会、省储行，不读取 ORG_REN 注册账户主体阈值，也不新增联合阈值快照。
+   - 联合投票永远只覆盖国储会、省储会、省储行，不读取个人多签码（`is_personal_code`）注册账户主体阈值，也不新增联合阈值快照。
 6. 机构结果形成后写入 `JointVotesByInstitution`，并按机构权重累计到 `JointTallies`。
 7. 联合全票通过则立即 `Passed`。
 8. 任一机构一旦自动形成 `rejected`，由于联合阶段要求全票通过，会立即进入 `STAGE_CITIZEN`，并释放管理员阶段互斥锁。
@@ -361,7 +363,7 @@ any → unknown
 
 - 联合投票只服务 NRC/PRC/PRB 三类治理机构，机构阈值来自 `NRC_INTERNAL_THRESHOLD`、`PRC_INTERNAL_THRESHOLD`、`PRB_INTERNAL_THRESHOLD` 固定常量。
 - NRC/PRC/PRB 的内部提案创建时也使用固定治理阈值写入 `InternalThresholdSnapshot`。
-- `ORG_REN` 只用于个人多签，`ORG_PUP / ORG_OTH` 用于机构账户；三类注册账户的普通业务动态阈值由 `internal-vote` 的 `PendingDynamicThresholds / ActiveDynamicThresholds` 保存。
+- 个人多签码（`is_personal_code`）只用于个人多签，机构账户码（`is_institution_code`）用于机构账户；三类注册账户的普通业务动态阈值由 `internal-vote` 的 `PendingDynamicThresholds / ActiveDynamicThresholds` 保存。
 - 注册创建和注销关闭是生命周期投票，必须写全员通过快照，不允许业务模块传本次投票阈值。
 - 一般内部投票读取固定阈值或 active 动态阈值；管理员变更投票读取当前 active 阈值，新动态阈值只在执行成功后更新 `ActiveDynamicThresholds`。
 - 动态阈值统一校验公式：`threshold * 2 > admins_len && threshold <= admins_len`，实现时必须转 `u64` 或使用安全乘法避免溢出。
@@ -397,7 +399,7 @@ any → unknown
 - 禁止用 `365.2425 天` 平均年长整除计算,会在元旦前后漂移到错误年份。
 - 单测覆盖真实元旦边界,尤其是 `2028-01-01 00:00:00 UTC`。
 
-**4 张反向索引同事务在 `register_proposal_data` 末尾写入**(`ProposalsByOrg / ByInstitution / ByOwner / ByYear`),清理路径 `cleanup_proposal_indexes` 同步释放。
+**4 张反向索引同事务在 `register_proposal_data` 末尾写入**(`ProposalsByCode / ByInstitution / ByOwner / ByYear`),清理路径 `cleanup_proposal_indexes` 同步释放。
 
 历史 v0 格式 `年份 × 1_000_000 + counter`(counter ≤ 999_999)已下线;`migrations::v1::MigrateToV1` 已实现待激活,spec_version 维持 0 等待用户拍板升级。
 

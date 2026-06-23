@@ -2,6 +2,14 @@
 
 ## 状态
 
+> **✅ 全栈代码完成并验证（2026-06-22）——仅剩用户部署重新创世。** 详见 [[ADR-025]]。
+> Phase 1（subject_property）+ Phase 2（org_code）+ Phase 3（链端 ORG_xx + china re-bake + 客户端线格式）全部落地。
+> 链端 `cargo test --workspace` ~695 测试 0 失败；node 174；冷钱包 81/81；热钱包 88+`analyze` 0；后端 76；前端 `tsc` 0。
+> **全产品旧分类残留 grep = 0**（链 ORG_xx/org:u8、后端 org_code、前端旧短码、Dart orgCode）。
+> 残留命名清理完成：`ProposalsByOrg`→`ProposalsByCode` + 4 error 名 `*Org*`→`*Code*`；阈值/票数/人数硬编码改派生 `primitives::count_const`；citizencode 建机构表单旧短码→新码（GOV `ZF/LF/SF/JC`→`CGOV/CLEG/CJUD/CSUP`、非法人→UNIN、教育按公私×级别→GUN/SUN/GSCH/SFSC、分校→UNIN、私权→SFxx）；`INSTITUTION_CODE_LABEL` 重建 86 新码→中文。
+> **剩**：① 重新创世（重生 `citizenchain.raw.json`+出 deb+重启 6 节点+重跑公权数据包/机构注册表生成器，**用户部署**，china/账户/代码就绪）② 提交（待授权）。
+> 工程脚本：`scripts/rebake_china_codes.py`（china cid_number 重烤，282 内建）+ `scripts/gmb.py --apply`（账户重派生）。
+
 **Phase 1 后端 完成 + 二轮整改（2026-06-22）。** `cargo check` 0 错误 0 警告,76 测试全过,**零旧码残留(单+双引号+注释+文档全清)**,26 文件,未提交未推送。
 
 二轮整改(用户 5 点):
@@ -13,7 +21,7 @@
 
 **subject_property(旧 K1)已彻底消除(三轮整改 2026-06-22)**:删 SubjectProperty 枚举 + DB 列(subjects/private 两表) + ~50 处 SQL/DTO/结构体/参数;全部由机构码派生(InstitutionCode 新增 is_person/is_public_legal/is_private_legal/is_unincorporated;classify(code,name);uninorg 函数改吃 institution_code)。SQL 过滤映射:`=G`→category IN(GOV/PUBLIC_SECURITY)、`IN(S,F)`→category=PRIVATE、`=F`→institution_code IN(SFGT/SFGP/UNIN)、`=S`→institution_code IN(私法人码)。已独立核验 INSERT 占位符/绑定数 + reader↔SELECT 列序对齐无错位。全 crate subject_property 残留=0。number/admin.rs subject_property_options 下拉也已删。**0 错误 0 警告,76 测试,29 文件,未提交。**
 
-**待续**:org_code 列(同类活,Phase 2)/ Phase 3 链端去 ORG_xx + china CID 重烤(重新创世)。
+**待续**:~~org_code 列(同类活,Phase 2)/ Phase 3 链端去 ORG_xx + china CID 重烤(重新创世)~~ → **已全部完成（见顶部状态横幅 + [[ADR-025]]）**。
 
 历史(基础阶段)已通过编译 + 70 单测:
 - ✅ `number/` 全模块重写：`institution_code.rs`(77 码 enum + 盈利策略 + 主体属性派生 + ALL) / `validator.rs`(双布局 index3 分流 + mod-36/10/26 校验 + 新 CidNumberParts) / `generator.rs`(删 K1、按码盈利、N9 去 K1、双布局) / `category.rs`(classify 改用 Cpol 码)
@@ -35,7 +43,7 @@
 - 🟠 `citizenapp/public_institution.rs:443(默认"ZF")/483(测试)`;`tests/integration/institution_tests.rs:48-59(私权码 GT.. → SFxx)`
 - ⏳ SFAS/SMTP 按实例选盈利属(注册 API 传 p1)——增强项
 
-**后续 Phase（未开始,部分须等链端）:** Phase 2 删 org_code 列 + 全消费方;Phase 3 链端去 ORG_xx + china_*.rs CID 重烤(重新创世) + 重跑公权数据包生成器;之后机构全称/简称统一。
+**后续 Phase（~~未开始~~ → 已完成 2026-06-22）:** ~~Phase 2 删 org_code 列 + 全消费方;Phase 3 链端去 ORG_xx + china_*.rs CID 重烤(重新创世) + 重跑公权数据包生成器~~ → 全部落地，见顶部状态横幅 + [[ADR-025]]。之后机构全称/简称统一为独立 follow-up（[[project_institution_name_single_source_2026_06_21]]）。
 
 ## 任务需求
 

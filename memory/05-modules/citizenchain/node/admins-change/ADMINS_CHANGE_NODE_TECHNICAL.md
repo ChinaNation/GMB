@@ -38,10 +38,10 @@ Tauri 命令：
 
 - `build_activate_admin_request`：验证链上管理员身份，构建本地激活签名请求。
 - `verify_activate_admin`：验证冷钱包激活签名并写入本地激活记录。
-- `get_activated_admins`：按 subject 读取已激活管理员，并与链上当前管理员集合交叉校验；个人多签和机构账户必须附带 `accountIdHex + expectedOrg`。
+- `get_activated_admins`：按 subject 读取已激活管理员，并与链上当前管理员集合交叉校验；个人多签和机构账户必须附带 `accountIdHex + expectedInstitutionCode`。
 - `deactivate_admin`：取消本地管理员激活。
-- `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `cidNumber + expectedOrg`；个人多签和机构账户必须用 `accountIdHex + expectedOrg`。
-- `build_admin_set_change_request`：校验当前管理员身份、主体 org 和新管理员集合，构建公民钱包签名请求。
+- `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `cidNumber + expectedInstitutionCode`；个人多签和机构账户必须用 `accountIdHex + expectedInstitutionCode`。
+- `build_admin_set_change_request`：校验当前管理员身份、主体 institution_code 和新管理员集合，构建公民钱包签名请求。
 - `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
 
 管理员激活 payload：
@@ -49,19 +49,19 @@ Tauri 命令：
 ```text
 GMB_ACTIVATE_SUBJECT_V1
 + account_id(48)
-+ org(u8)
++ institution_code([u8;4])
 + kind(u8)
 + pubkey(32)
 + timestamp(u64 LE)
 + nonce(16)
 ```
 
-激活 QR `display.action = activate_admin_account`，字段必须为 `org / subject / pubkey`，并与 citizenwallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / org / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
+激活 QR `display.action = activate_admin_account`，字段必须为 `institution_code / subject / pubkey`，并与 citizenwallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `accountIdHex / institutionCode / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
 
 链上 call data：
 
 ```text
-[pallet=12][call=0][org:u8][account_id:48][admins:Compact<Vec<AccountId32>>]
+[pallet=12][call=0][institution_code:[u8;4]][account_id:48][admins:Compact<Vec<AccountId32>>]
 ```
 
 其中 `pallet=12` 对应 runtime `AdminsChange`，`call=0` 对应 `propose_admin_set_change`。
@@ -93,8 +93,8 @@ citizenchain/node/frontend/governance/admins_change/
 
 主体引用：
 
-- `AdminAccountRef.cidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带 `org=0/1/2` 防止错主体。
-- `AdminAccountRef.accountIdHex`：用于个人多签和机构账户，必须带 `org=3/4/5`。缺少 `accountIdHex` 时后端直接拒绝动态主体管理员激活和管理员更换。
+- `AdminAccountRef.cidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带固定治理档机构码（`is_fixed_governance_code`）防止错主体。
+- `AdminAccountRef.accountIdHex`：用于个人多签和机构账户，必须带个人多签码（`is_personal_code`，PMUL）或机构账户码（`is_institution_code`）。缺少 `accountIdHex` 时后端直接拒绝动态主体管理员激活和管理员更换。
 - `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员激活、更换读取、校验、QR 和提交仍全部走 `governance/admins_change`。
 
 ## 校验规则
@@ -105,9 +105,9 @@ citizenchain/node/frontend/governance/admins_change/
 - 新集合不能与当前集合完全相同。
 - 内置治理机构固定人数：NRC 19，PRC 9，PRB 9。
 - `注册机构归属关系` 只用于机构归属、检索、展示和反查，不允许作为管理员更换主体。
-- 个人多签必须使用 `ORG_REN`，管理员数量：`2..=64`。
-- 机构账户必须使用 `ORG_PUP / ORG_OTH`，管理员数量：`2..=1989`。
-- 管理员激活 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`pubkey`。
-- 管理员更换 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`admins`；`subject/admins` 使用 `0x` 小写 hex。
+- 个人多签必须使用个人多签码（`is_personal_code`，PMUL），管理员数量：`2..=64`。
+- 机构账户必须使用机构账户码（`is_institution_code`），管理员数量：`2..=1989`。
+- 管理员激活 QR `display.fields` 必须与冷钱包解码保持一致：`institution_code`、`subject`、`pubkey`。
+- 管理员更换 QR `display.fields` 必须与冷钱包解码保持一致：`institution_code`、`subject`、`admins`；`subject/admins` 使用 `0x` 小写 hex。
 
 链端仍是最终裁判；桌面端校验只用于提前给出明确错误。

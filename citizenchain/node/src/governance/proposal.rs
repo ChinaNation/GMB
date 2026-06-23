@@ -982,13 +982,13 @@ fn fetch_proposal_ids_by_index(storage_name: &str, key1: &[u8]) -> Result<Vec<u6
     Ok(ids)
 }
 
-/// 反向索引:`ProposalsByOrg[institution_code]` → 该机构码下所有 proposal_id。
+/// 反向索引:`ProposalsByCode[institution_code]` → 该机构码下所有 proposal_id。
 ///
 /// 链上第一腿 key 已从 `org: u8`(1 字节)改为 `InstitutionCode`([u8;4]),
 /// `institution_code` 入参是 4 字符机构码字符串(如 "NRC"/"CGOV")。
 pub fn fetch_proposals_by_institution_code(institution_code: &str) -> Result<Vec<u64>, String> {
     let code = primitives::institution_code::code_bytes(institution_code.trim());
-    fetch_proposal_ids_by_index("ProposalsByOrg", &code)
+    fetch_proposal_ids_by_index("ProposalsByCode", &code)
 }
 
 /// 反向索引:`ProposalsByInstitution[account]` → 本机构多签账户所有 proposal_id。

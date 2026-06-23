@@ -43,7 +43,7 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 - `ids(cid_number, kind, province_code, city_code)`:全局身份 ID 索引。
 - `subjects`:主体公共展示字段,按省分区;机构行保存 `name/cid_full_name/cid_short_name`、行政区、业务状态、私权分类和法定代表人资料。
 - `citizens`:公民电子护照绑定字段,按省分区。
-- `gov`:公权机构扩展字段,按省分区;只保存 `institution_code/org_code` 等机构类型细分。
+- `gov`:公权机构扩展字段,按省分区;只保存 `institution_code` 等机构类型细分。
   `source='GENERATED'` 表示由行政区和模板确定性派生,可被对账命令更新或删除;
   `source='MANUAL'` 表示管理员手动创建,不得被行政区对账当作 obsolete 删除。
 - `private`:私权目标类型机构扩展字段,按省分区;分类字段为 `private_type/partnership_kind/has_legal_personality`。
@@ -130,7 +130,7 @@ CID 前端提示统一由 `citizencode/frontend/utils/notice.ts` 管理。业务
 - 政府、立法院、司法院、监察院、公民教育委员会、公民储备委员会等宪法机构目录。
 - 根据 `china` 行政区划变化执行目标范围对账。
 
-公权机构不保存上下级字段。国家/部/省/市/镇只作为目录分类和行政区范围参与生成、查询和对账。主体表 `subjects` 保存身份、名称、行政区和状态;`gov` 只保存 `institution_code/org_code` 等机构类型细分和自动/手工边界;初始化批次只记录在 `gov_manifest`,不得写入批次来源业务字段。
+公权机构不保存上下级字段。国家/部/省/市/镇只作为目录分类和行政区范围参与生成、查询和对账。主体表 `subjects` 保存身份、名称、行政区和状态;`gov` 只保存 `institution_code` 等机构类型细分和自动/手工边界;初始化批次只记录在 `gov_manifest`,不得写入批次来源业务字段。
 自动目录的同步边界以 `gov.source` 区分:确定性目录统一写 `GENERATED`,手工公权机构统一写
 `MANUAL`。行政区删除、改名或 code tombstone 只会清理 `GENERATED` 目录及其
 `subjects/gov/accounts/docs/ids/audit` 派生残留,不得误删手工机构。

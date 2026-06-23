@@ -4,6 +4,8 @@
 
 ## 1. 模块定位
 
+> 机构分类唯一真源 = CID 机构码（`institution_code`），见 [[ADR-025]]。
+
 `admins-change` 是链上内部投票管理员主体的统一真源。
 
 当前职责：
@@ -62,7 +64,7 @@ Subjects<AccountId, AdminAccount>
 
 `AdminAccount` 字段：
 
-- `org`：内部投票组织类型，含 `ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH`。
+- `institution_code`：CID 机构码（`[u8;4]`），分类经谓词派生：`is_fixed_governance_code`（NRC/PRC/PRB 固定治理档）、`is_personal_code`（PMUL 个人多签）、`is_institution_code`（公权/私权法人机构账户）。
 - `kind`：管理员主体类型。
 - `admins`：当前管理员完整列表。
 - `creator`：主体创建者。
@@ -98,18 +100,18 @@ validate_admin_set_for_subject(kind, org, admins)
 
 校验内容：
 
-- 主体类型与 `org` 匹配。
+- 主体类型与 `institution_code` 匹配。
 - 管理员列表不能重复。
 - `BuiltinInstitution` 必须等于固定人数：NRC 19、PRC 9、PRB 9。
-- `PersonalAccount` 必须使用 `ORG_REN`，管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
-- `InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，管理员数量必须在 `2..=MaxAdminsPerInstitution`。
+- `PersonalAccount` 必须使用个人多签码（`is_personal_code`，PMUL），管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
+- `InstitutionAccount` 必须使用机构账户码（`is_institution_code`：公权或私权法人机构码），管理员数量必须在 `2..=MaxAdminsPerInstitution`。
 - `注册机构归属关系` 不能作为管理员主体，写入和变更路径返回 `InvalidAdminAccountKind`。
 - 当前 runtime 配置：`MaxPersonalAccountAdmins = 64`，`MaxAdminsPerInstitution = 1989`。
 
 读侧防线：
 
-- `active_subject_*` 与 `pending_subject_*_for_snapshot` 查询在返回前同样校验主体类型与 `org` 是否匹配。
-- 升级前误写入的 `注册机构归属关系` 管理员主体，或 `InstitutionAccount + ORG_REN` 等旧脏数据，不再通过读 API 暴露给投票引擎和业务模块。
+- `active_subject_*` 与 `pending_subject_*_for_snapshot` 查询在返回前同样校验主体类型与 `institution_code` 是否匹配。
+- 升级前误写入的 `注册机构归属关系` 管理员主体，或 `InstitutionAccount + 个人多签码（is_personal_code）` 等旧脏数据，不再通过读 API 暴露给投票引擎和业务模块。
 
 ## 6. 生命周期
 
@@ -234,10 +236,10 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - 管理员集合未变化、重复管理员、无效主体等错误路径。
 - Pending 主体不会暴露给 Active 业务 API，但可通过 Pending 快照 API 读取。
 - Pending 主体清理不存在时返回 `InvalidInstitution`，非 Pending 状态返回 `SubjectNotPending`。
-- 激活、移除 Pending、关闭主体 3 类生命周期事件都包含 `org`。
+- 激活、移除 Pending、关闭主体 3 类生命周期事件都包含 `institution_code`。
 - 生命周期 trait 拒绝脱离 votingengine 提案上下文的激活/关闭调用。
 - 管理员集合变更提案与普通内部提案互斥。
 - 自动执行成功/失败都由投票引擎统一推进终态并释放互斥锁。
-- `InstitutionAccount` kind 独立单测覆盖最小 2 人、`ORG_PUP / ORG_OTH` 成功、`ORG_REN` 拒绝、`MaxAdminsPerInstitution` 上界。
+- `InstitutionAccount` kind 独立单测覆盖最小 2 人、机构账户码（`is_institution_code`）成功、个人多签码（`is_personal_code`）拒绝、`MaxAdminsPerInstitution` 上界。
 - `注册机构归属关系` 新写入路径拒绝。
-- 历史脏数据读侧拦截：`InstitutionAccount + ORG_REN`、`注册机构归属关系 + ORG_PUP` 不再通过 Active/Pending 业务 API 返回。
+- 历史脏数据读侧拦截：`InstitutionAccount + 个人多签码（is_personal_code）`、`注册机构归属关系 + 机构账户码（is_institution_code）` 不再通过 Active/Pending 业务 API 返回。

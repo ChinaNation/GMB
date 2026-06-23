@@ -2,13 +2,13 @@
 
 ## 状态
 
-**本地实现与验收完成(2026-06-22)。** 用户已允许直接修改 `citizenchain/runtime/`。本任务目标提升为全仓机构全称/简称硬统一:任何机构全称/简称只允许使用 `cid_full_name / cid_short_name` 这一组命名;Dart/TS 内部使用 `cidFullName / cidShortName`;不得再用旧展示列、旧全称列、旧简称列、旧登录简称字段或旧接口名承载机构全称/简称。生成物已同步修改生成器,不得只改输出文件。
+**1.1 本地实现与验收完成(2026-06-22)。** 用户已允许直接修改 `citizenchain/runtime/`。本任务目标提升为全仓机构名称硬统一:任何机构中文全称/中文简称/英文全称/英文简称只允许使用 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段;Dart/TS 内部使用 `cidFullName / cidShortName / cidFullNameEn / cidShortNameEn`;不得再用旧展示列、旧全称列、旧简称列、旧英文名列、旧登录简称字段或旧接口名承载机构名称。生成物已同步修改生成器,不得只改输出文件。
 
 ## 背景(reconcile 后开发库终态)
 
 PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **5 真 bug + 50,661 模板故意短==全 + 129 本就最短**。
 
-- 旧口径认为常量机构走 `official_name_pair(name)` 产出 `(full, short)` 已足够;用户最终确认此口径不够。`official_name_pair(name)` 是第二实现源,必须删除;常量机构必须直接携带 `cid_full_name / cid_short_name` 两字段。
+- 旧口径认为常量机构走字符串匹配函数产出 `(full, short)` 已足够;用户最终确认此口径不够。该字符串匹配函数是第二实现源,必须删除;常量机构必须直接携带名称字段。
 - **病根**:历史实现拿 china_*.rs 的中文全名当 match 键。china 改名 → arm 静默落默认臂 → 简称=全称。国储会、4 联邦局、129 省两院都是这一个病根。
 
 ## 已确认决策
@@ -56,7 +56,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - `china_*.rs` 不是 CID 运营展示名的数据库真源;它是内置重要机构全称/简称的 **runtime 保护锚**。
 - 内置机构全称/简称可以在 CID 系统中修改,但只在 CID 链下展示/运营数据中生效。
 - 要让区块链侧保护锚同步改变,必须修改 `china_*.rs` 的 `cid_full_name / cid_short_name`,从而触发 runtime 升级。
-- 全仓实现形态只能有一组字段:全称 `cid_full_name`,简称 `cid_short_name`。禁止再用旧展示列、旧全称列、旧简称列或旧登录简称字段承载机构全称/简称。
+- 全仓实现形态只能有一组字段:中文全称 `cid_full_name`,中文简称 `cid_short_name`,英文全称 `cid_full_name_en`,英文简称 `cid_short_name_en`。禁止再用旧展示列、旧全称列、旧简称列、旧英文名列或旧登录简称字段承载机构名称。
 
 **三条轴(各管各的)**:
 - **创世轴(改=重新创世)**:`cid_number` + 由它派生的全部账户(`derive_account(OP_x, ss58, cid_number)`):OP_MAIN/OP_FEE/OP_STAKE(永久质押)/OP_AN(安全基金)/OP_HE(两和基金)+ china_zb 落给它们的创世余额。**单根=cid_number**(改号→全部派生账户平移→余额错位),外加派生原语 `core_const.rs:40-46/89`。
@@ -69,10 +69,10 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 
 ## 设计(用户定稿,随 T3/T4 一并做)
 
-**① china_*.rs 结构体补 `cid_short_name` 字段**(紧贴 `cid_full_name` 下一行):built-in 全称+简称都成常量数据。`official_name_pair` 对 built-in 不再字符串匹配(直接读两字段)⇒ **匹配臂全删,国储会/4联邦局/省两院 bug 类根除**,简称也一起受保护。
+**① china_*.rs 结构体补完整名称字段**(紧贴 `cid_full_name` 之后):built-in 中文全称/中文简称/英文全称/英文简称都成常量数据。built-in 不再通过字符串匹配推导名称(直接读字段)⇒ **匹配臂全删,国储会/4联邦局/省两院 bug 类根除**,简称也一起受保护。
 
 **② 内置名摘要锚点(✅ 定稿就此方案,不做返回目录变体)**:
-- runtime 折叠所有 CHINA_*(全称+简称)字节 → `builtin_institution_full_short_digest() -> [u8;32]`,经 `runtime/src/apis.rs` 的 `BuiltinInstitutionFullShortApi` 暴露(单点引用即强制编译进 WASM)。
+- runtime 折叠所有 CHINA_*(中文全称+中文简称+英文全称+英文简称)字节 → `builtin_institution_name_digest() -> [u8;32]`,经 `runtime/src/apis.rs` 的 `BuiltinInstitutionNameApi` 暴露(单点引用即强制编译进 WASM)。
 - 改任一内置名 → 摘要变 → WASM blake2 变 → **活链必须 setCode**;统一覆盖 ZF/LF/SF/JC/JY/CB/CH,不再看碰巧哪个 pallet 引用哪数组。
 - 摘要是 const-eval 32 字节,名字字符串 eval 后被裁剪 → **名字不进链上状态、不触发重新创世(setCode 轴非创世轴)**,仍是链下数据。用户确认:此机制已足够保护重要机构名不被随意改。
 - (已否决:runtime API 直接返回目录的"链上可读"变体——不要,名字保持链下。)
@@ -80,24 +80,35 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 **③ 两层(✅ 定稿:只保护现有 china_*.rs 成员,不扩)**:
 - **Tier 1(内置,改链上承诺名要 setCode)= 凡在 china_*.rs 的常量机构**(总统府/10部委/5联邦局/两院+监察/教育/国储会/CB 省储会/CH 省储行/LF·SF·JC 省两院监察)。
 - **Tier 2(其他,全部 CID 系统自由改)= 后端模板区划机构(省厅/市局/镇政府)+ 用户注册**。**省厅不提升、不搬进 china_*.rs。**
-- **关键语义(用户最终确认)**:Tier 1 机构在 CID 系统**照样能改全称/简称,改了只在 CID 系统(链下)生效**;要让区块链侧也变,必须改 china_*.rs 常量 → runtime 升级。`china_*.rs` 是 runtime 保护锚,CID `subjects.cid_full_name/cid_short_name` 是链下运营展示数据。两者不是第二套命名,但全仓字段名和生成逻辑只能使用 `cid_full_name/cid_short_name`,不得出现旧展示列作为机构全称/简称别名。
+- **关键语义(用户最终确认)**:Tier 1 机构在 CID 系统**照样能改全称/简称,改了只在 CID 系统(链下)生效**;要让区块链侧也变,必须改 china_*.rs 常量 → runtime 升级。`china_*.rs` 是 runtime 保护锚,CID `subjects.cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en` 是链下运营展示数据。两者不是第二套命名,但全仓字段名和生成逻辑只能使用这四个字段,不得出现旧展示列作为机构名称别名。
 
 **subjects 旧展示缓存列清理**:当前旧展示缓存列只是机构展示/搜索缓存,写入值等于 `cid_short_name`,已形成第三命名源。目标态删除机构代码对该列的读写;搜索改查 `cid_number / cid_full_name / cid_short_name`;列表排序按 `cid_short_name, cid_full_name, cid_number`;启动期对既有 PostgreSQL 表执行删除旧展示缓存列的清残留 SQL。
 
-**reconcile/check-gov**:不得再比较或写入 `name`。Tier 1 名称保护锚由 `china_*.rs` 摘要约束;CID 运营展示名由 `subjects.cid_full_name/cid_short_name` 表达。若执行命令目标是“按保护锚重播内置目录”,则写入这两字段;不再通过 `official_name_pair` 另造名字。
+**reconcile/check-gov**:不得再比较或写入 `name`。Tier 1 名称保护锚由 `china_*.rs` 摘要约束;CID 运营展示名由 `subjects.cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en` 表达。若执行命令目标是“按保护锚重播内置目录”,则写入这四字段;不再通过字符串匹配另造名字。
 
 ## 落地结果
-1. **链端(citizenchain)**:china_*.rs 各结构体补 `cid_short_name` 字段并填值;加 `builtin_institution_full_short_digest()` + `BuiltinInstitutionFullShortApi` runtime API;`runtime/src/lib.rs` 升 `spec_version = 2`。
-2. **后端(Tier 1)**:删除 `official_name_pair` 字符串匹配第二实现,常量机构直接投影 `china_*.rs` 的 `cid_full_name/cid_short_name`。
+1. **链端(citizenchain)**:china_*.rs 各结构体补 `cid_short_name/cid_full_name_en/cid_short_name_en` 字段并填值;加 `builtin_institution_name_digest()` + `BuiltinInstitutionNameApi` runtime API;名称指纹覆盖七个具名常量文件共 282 个机构。
+2. **后端(Tier 1)**:删除字符串匹配第二实现,常量机构直接投影 `china_*.rs` 的四个名称字段。
 3. **后端(Tier 2)**:模板 `suffix` 按目标表改造,`GOV_TEMPLATE_VERSION` 已升级,目录 hash 能触发 strict 检查。
 4. **数据库结构**:启动期删除旧展示缓存列;搜索与排序只查 `cid_number / cid_full_name / cid_short_name`。
-5. **前端/移动端/冷钱包**:机构全称/简称统一为 `cidFullName/cidShortName`(JSON/API 仍为 `cid_full_name/cid_short_name`);生成器和生成物同步改造。
+5. **前端/移动端/冷钱包**:机构名称统一为 `cidFullName/cidShortName/cidFullNameEn/cidShortNameEn`(JSON/API 仍为 `cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en`);生成器和生成物同步改造。
 6. **查重接口名**:旧查重路径与旧前端函数已改为 `/api/v1/institution/check-cid-full-name` 与 `checkCidFullName`。
 
 ## 关键文件:行
 - `citizencode/backend/gov/service.rs` 常量投影 / 模板 PROVINCE:144-211 CITY:213-310 TOWN:312-343 / mismatch 比对
-- 链端常量:`citizenchain/runtime/primitives/china/china_{zf,lf,sf,jc,jy,cb,ch}.rs`(补 cid_short_name)/ `core_const.rs:40-46,89`(OP 派生)/ `runtime/src/apis.rs`(挂摘要 API)
+- 链端常量:`citizenchain/runtime/primitives/china/china_{zf,lf,sf,jc,jy,cb,ch}.rs`(补齐名称四字段)/ `core_const.rs:40-46,89`(OP 派生)/ `runtime/src/apis.rs`(挂名称摘要 API)
 - 省级常量全称待核对:`china_{lf,sf,jc}.rs`(省两院带不带「联邦」)
+
+## 1.1 验收记录(2026-06-22)
+- 常量库完整性脚本:通过,7 个具名常量文件共 282 个机构全部具备 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
+- 旧 runtime API/旧二字段命名扫描:通过,目标文件内未发现旧二字段 API 名称残留。
+- 第二套英文字段名扫描:通过,目标文件内未发现 `english_name` 等替代字段承载机构英文名。
+- `node scripts/generate_citizenapp_governance_registry.mjs`:通过,重新生成公民端和公民钱包 87 个治理机构。
+- `cargo test --manifest-path citizenchain/runtime/primitives/Cargo.toml builtin_institution -- --nocapture`:通过。
+- `cargo check --manifest-path citizenchain/runtime/Cargo.toml`:通过。
+- `flutter analyze` in `citizenapp`:通过。
+- `flutter test test/governance/admins-change/institution_admin_service_test.dart test/governance/governance_list_page_test.dart` in `citizenapp`:通过。
+- `flutter analyze` in `citizenwallet`:通过。
 
 ## 验收记录(2026-06-22)
 - `cargo test --manifest-path citizencode/backend/Cargo.toml`:通过 71 单元 + 5 integration。

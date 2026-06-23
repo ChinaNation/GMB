@@ -202,6 +202,8 @@ void main() {
     final personal = AdminAccountIdentity.fromInstitution(InstitutionInfo(
       cidFullName: '个人账户',
       cidShortName: '个人账户',
+      cidFullNameEn: 'Personal Account',
+      cidShortNameEn: 'Personal Account',
       cidNumber: 'personal-account:$personalAccount',
       orgType: OrgType.account,
       account: personalAccount,
@@ -215,6 +217,8 @@ void main() {
         AdminAccountIdentity.fromInstitution(InstitutionInfo(
       cidFullName: '机构账户',
       cidShortName: '机构账户',
+      cidFullNameEn: 'Institution Account',
+      cidShortNameEn: 'Institution Account',
       cidNumber: registeredAccountIdentity(accountAddress),
       orgType: OrgType.account,
       adminAccountCode: 'UNIN',
@@ -229,6 +233,8 @@ void main() {
         AdminAccountIdentity.fromInstitution(const InstitutionInfo(
       cidFullName: '省储行',
       cidShortName: '省储行',
+      cidFullNameEn: 'Provincial Reserve Bank',
+      cidShortNameEn: 'Provincial Reserve Bank',
       cidNumber: 'LN001-GCB05-944805165-2026',
       orgType: OrgType.prb,
       accounts: InstitutionAccounts(mainAccount: '66'),

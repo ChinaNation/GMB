@@ -43,7 +43,7 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 
 管理员和管理员数量不再存储或镜像在 `PersonalAccounts`。
 管理员唯一真源为 `admins-change::Subjects[account_id_from_account(personal_account)]`。
-普通动态阈值唯一真源为 `internal-vote::ActiveDynamicThresholds[(ORG_REN, subject)]`。
+普通动态阈值唯一真源为 `internal-vote::ActiveDynamicThresholds[(个人多签码 PMUL, subject)]`。
 旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalAccounts`。
 
 ## extrinsic

@@ -23,12 +23,12 @@
 | `china/mod.rs` | 机构常量模块声明 |
 | `china/china_ch.rs` | 43 个省储行（人口、质押、多签账户） |
 | `china/china_cb.rs` | 44 个储委会（1 国储会 + 43 省储会） |
-| `china/china_jc.rs` | 48 个联邦监察院 |
+| `china/china_jc.rs` | 47 个监察机构（国家监察院 + 3 联邦署 + 43 省级联邦监察院） |
 | `china/china_jy.rs` | 公民教育委员会 |
-| `china/china_lf.rs` | 45 个立法院 |
-| `china/china_sf.rs` | 45 个审计院 |
-| `china/china_zb.rs` | 277 个制度保留地址（防抢注） |
-| `china/china_zf.rs` | 55 个行政保留地址 |
+| `china/china_lf.rs` | 44 个立法院（国家立法院 + 43 省级联邦立法院） |
+| `china/china_sf.rs` | 44 个司法院（国家司法院 + 43 省级联邦司法院） |
+| `china/china_zb.rs` | 609 个制度保留地址（防抢注） |
+| `china/china_zf.rs` | 59 个政府机构（总统府 + 联邦局 + 部委 + 43 省级联邦政府） |
 
 ---
 
@@ -105,7 +105,10 @@
 ## 3. china/ 目录规则
 - 每个机构文件必须在 `china/mod.rs` 中显式声明，避免目录中存在未编译的残留文件。
 - 多签管理员字段统一命名 `admins`，不允许 `admins` 变体。
-- `china_zb.rs` 中的 277 个保留地址由 `organization-manage` 模块在转账时校验，防止抢注机构地址。
+- 内置机构名称统一使用 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
+- `builtin_institution_name_digest()` 覆盖全部内置机构名称四字段；修改任一名称字段都必须通过 runtime 升级生效。
+- 具体机构命名规范见 `memory/07-ai/institution-naming.md`。
+- `china_zb.rs` 中的 609 个保留地址由 `organization-manage` 模块在转账时校验，防止抢注机构地址。
 
 ---
 

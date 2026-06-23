@@ -153,7 +153,7 @@ fn institution_account_below_two_admins_rejected() {
 }
 
 #[test]
-fn institution_account_requires_org_pup_or_oth() {
+fn institution_account_requires_institution_code() {
     new_test_ext().execute_with(|| {
         let institution = pending_account_id();
         let admin_a = AccountId32::new([140u8; 32]);
@@ -872,7 +872,7 @@ fn org_mismatch_is_rejected() {
                 nrc_admin(1),
                 AccountId32::new([74u8; 32])
             ),
-            Error::<Test>::InstitutionOrgMismatch
+            Error::<Test>::InstitutionCodeMismatch
         );
     });
 }
@@ -1377,7 +1377,7 @@ fn pup_builtin_clears_admins_change_validation_for_set_change() {
             assert!(
                 !detail.contains("InvalidAdminAccountKind")
                     && !detail.contains("InvalidAdminsLen")
-                    && !detail.contains("InstitutionOrgMismatch"),
+                    && !detail.contains("InstitutionCodeMismatch"),
                 "admins-change 不应再拒绝 PUP 创世机构自治: {detail}"
             );
         }

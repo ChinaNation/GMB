@@ -14,6 +14,8 @@ InstitutionInfo _institution(
   return InstitutionInfo(
     cidFullName: cidShortName,
     cidShortName: cidShortName,
+    cidFullNameEn: 'Institution $cidNumber',
+    cidShortNameEn: 'Institution $cidNumber',
     cidNumber: cidNumber,
     orgType: orgType,
     account: hexSeed.toRadixString(16).padLeft(64, '0'),

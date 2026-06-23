@@ -20,16 +20,26 @@ use types::{GovernanceOverview, InstitutionBalanceUpdate, InstitutionDetail, Org
 use tauri::AppHandle;
 
 fn internal_threshold(org_type: OrgType) -> u32 {
+    // 阈值单一真源 = primitives::count_const，桌面端不再硬编码。
+    use primitives::count_const::{
+        NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD,
+    };
     match org_type {
-        OrgType::Nrc => 13,
-        OrgType::Prc | OrgType::Prb => 6,
+        OrgType::Nrc => NRC_INTERNAL_THRESHOLD,
+        OrgType::Prc => PRC_INTERNAL_THRESHOLD,
+        OrgType::Prb => PRB_INTERNAL_THRESHOLD,
     }
 }
 
 fn joint_vote_weight(org_type: OrgType) -> u32 {
+    // 联合投票票数单一真源 = primitives::count_const。
+    use primitives::count_const::{
+        NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
+    };
     match org_type {
-        OrgType::Nrc => 19,
-        OrgType::Prc | OrgType::Prb => 1,
+        OrgType::Nrc => NRC_JOINT_VOTE_WEIGHT,
+        OrgType::Prc => PRC_JOINT_VOTE_WEIGHT,
+        OrgType::Prb => PRB_JOINT_VOTE_WEIGHT,
     }
 }
 
@@ -378,7 +388,7 @@ pub async fn get_proposal_display(
         .map_err(|e| format!("proposal display task failed: {e}"))?
 }
 
-/// 反向索引:列出 `ProposalsByOrg[institutionCode]` 下所有 proposal_id。
+/// 反向索引:列出 `ProposalsByCode[institutionCode]` 下所有 proposal_id。
 #[tauri::command]
 pub async fn list_proposals_by_org(
     app: AppHandle,

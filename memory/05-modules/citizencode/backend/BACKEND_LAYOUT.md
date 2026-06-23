@@ -145,8 +145,8 @@ citizencode/backend/
     `province_code/city_code/town_code/省市镇/status/education_type/private_type/partnership_kind/has_legal_personality`
     等主体展示、范围和私权分类字段。
   - `citizens`:公民详情,保留精简命名。
-  - `gov`:公权机构详情,保存 `level/institution_code/org_code`；公安局只保留
-    `level=CITY AND org_code=CITY_POLICE` 的市公安局。
+  - `gov`:公权机构详情,保存 `level/institution_code`；公安局只保留
+    `level=CITY AND institution_code='CPOL'` 的市公安局。
   - `private`:私权机构详情,仅保存目标私权类型机构;字段以
     `private_type/partnership_kind/has_legal_personality` 表达分类,不得恢复旧分类列。
   - `accounts`:机构账户。所有机构默认有“主账户 / 费用账户”;省公民储备银行额外有“永久质押”;
@@ -160,7 +160,7 @@ citizencode/backend/
   scope 翻译成 `province_code / city_code` 后再交给 StoreHandle,不得用中文省市字段或内存全量过滤。
 - 公安局和公权机构确定性列表是只读查询:启动或显式 reconcile 负责生成/对账,GET 列表接口
   只按 `province_code / city_code` 读取目标表,不得在 GET 中执行 backfill、reconcile、写库或分片同步。
-  公权机构列表允许 `org_code` 精确过滤,用于市注册局等确定性细类列表一次性读取完整身份ID,
+  公权机构列表允许 `institution_code` 精确过滤,用于市注册局等确定性细类列表一次性读取完整身份ID,
 	  不得让前端先读取省级公权目录分页再自行过滤。确定性公权目录版本为 `gov-deterministic-v6`;
 	  内置机构全称/简称直接投影 `china_*.rs` 的 `cid_full_name/cid_short_name`,
 	  区划模板目录也必须同时写入这两列,不得恢复旧展示缓存列。

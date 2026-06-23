@@ -496,11 +496,13 @@ class _InstitutionAccountListPageState
           institution: const InstitutionInfo(
             cidFullName: '新建多签机构',
             cidShortName: '新建多签机构',
+            cidFullNameEn: 'New Multisig Institution',
+            cidShortNameEn: 'New Multisig Institution',
             cidNumber:
                 'institution-account:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.account,
             // 设计缺口: 新建机构时尚无 CID 码，占位用空字符串；实际 CID 码在创建完成后
-// 由 institution_manage_service 从链上读取并写入 Isar。
+            // 由 institution_manage_service 从链上读取并写入 Isar。
             adminAccountCode: '',
             account:
                 '0000000000000000000000000000000000000000000000000000000000000000',
@@ -524,6 +526,10 @@ class _InstitutionAccountListPageState
             institution: InstitutionInfo(
               cidFullName: item.displayLabel,
               cidShortName: item.displayLabel,
+              cidFullNameEn:
+                  'Personal Multisig ${item.account.substring(0, 8)}',
+              cidShortNameEn:
+                  'Personal Multisig ${item.account.substring(0, 8)}',
               cidNumber: 'personal-account:${item.account}',
               orgType: OrgType.account,
               account: item.account,
@@ -538,6 +544,10 @@ class _InstitutionAccountListPageState
             institution: InstitutionInfo(
               cidFullName: item.displayLabel,
               cidShortName: item.displayLabel,
+              cidFullNameEn:
+                  'Institution Account ${item.account.substring(0, 8)}',
+              cidShortNameEn:
+                  'Institution Account ${item.account.substring(0, 8)}',
               cidNumber: registeredAccountIdentity(item.account),
               orgType: OrgType.account,
               adminAccountCode: item.institution?.adminAccountCode,

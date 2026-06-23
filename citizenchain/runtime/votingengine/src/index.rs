@@ -1,7 +1,7 @@
 //! 反向索引(spec_version v1)。
 //!
 //! 链上 4 张反向索引让客户端按"分类"O(分类内规模)迭代提案,不用扫全表:
-//! - **`ProposalsByOrg[institution_code][id]`** — 按 CID 机构码(NRC / PRC / PRB / PMUL / 公权法人 / 私权法人)反查
+//! - **`ProposalsByCode[institution_code][id]`** — 按 CID 机构码(NRC / PRC / PRB / PMUL / 公权法人 / 私权法人)反查
 //! - **`ProposalsByInstitution[account][id]`** — 按多签账户反查
 //!   (如某省储行所有提案、某个多签账户所有提案)
 //! - **`ProposalsByOwner[module_tag][id]`** — 按业务模块 MODULE_TAG 反查
@@ -14,7 +14,7 @@
 use frame_support::pallet_prelude::BoundedVec;
 
 use crate::pallet::{
-    self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByOrg,
+    self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByCode,
     ProposalsByOwner, ProposalsByYear,
 };
 use crate::types::InstitutionCode;
@@ -32,7 +32,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         year: u16,
     ) {
         if let Some(institution_code) = institution_code {
-            ProposalsByOrg::<T>::insert(institution_code, proposal_id, ());
+            ProposalsByCode::<T>::insert(institution_code, proposal_id, ());
         }
         if let Some(inst) = institution {
             ProposalsByInstitution::<T>::insert(inst, proposal_id, ());
@@ -52,7 +52,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn cleanup_proposal_indexes(proposal_id: u64) {
         if let Some(proposal) = Proposals::<T>::get(proposal_id) {
             if let Some(institution_code) = proposal.internal_code {
-                ProposalsByOrg::<T>::remove(institution_code, proposal_id);
+                ProposalsByCode::<T>::remove(institution_code, proposal_id);
             }
             if let Some(inst) = proposal.internal_institution {
                 ProposalsByInstitution::<T>::remove(inst, proposal_id);

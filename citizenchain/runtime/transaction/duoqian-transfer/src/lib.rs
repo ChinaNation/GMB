@@ -269,7 +269,7 @@ pub mod pallet {
         /// 中文注释：机构不属于 NRC/PRC/PRB 且非注册多签机构。
         InvalidInstitution,
         /// 中文注释：调用者声明的机构码与机构实际机构码不一致。
-        InstitutionOrgMismatch,
+        InstitutionCodeMismatch,
         /// 中文注释：调用者不是该机构的管理员。
         UnauthorizedAdmin,
         /// 中文注释：机构资产保护检查未通过（如冻结期间禁止支出）。
@@ -330,7 +330,7 @@ pub mod pallet {
                 Self::resolve_institution_account(institution.clone())?;
             ensure!(
                 actual_org == institution_code,
-                Error::<T>::InstitutionOrgMismatch
+                Error::<T>::InstitutionCodeMismatch
             );
             ensure!(
                 Self::is_internal_admin(institution_code, institution.clone(), &who),

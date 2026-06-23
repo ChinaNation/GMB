@@ -343,7 +343,7 @@ fn execute_destroy_requires_snapshot_admin() {
 }
 
 #[test]
-fn institution_org_returns_none_for_invalid_institution() {
+fn institution_code_returns_none_for_invalid() {
     new_test_ext().execute_with(|| {
         assert_eq!(account_org::<Test>(AccountId32::new([0u8; 32])), None);
     });

@@ -25,6 +25,8 @@ import type {
 } from '../../subjects/api';
 import { searchLegalRepresentativeCitizens } from '../../citizens/api';
 import {
+  computeEducationInstitutionCode,
+  EDUCATION_INSTITUTION_CODE_LABEL,
   inheritedP1,
   institutionChoicesFor,
   locksForCategory,
@@ -134,6 +136,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const isGov = category === 'GOV_INSTITUTION';
   const isEducation = category === 'EDUCATION_INSTITUTION';
   const watchedPartnershipKind = Form.useWatch('partnership_kind', form) as PartnershipKind | undefined;
+  const watchedEducationType = Form.useWatch('education_type', form) as EducationType | undefined;
   const privateRule = isPrivate && privateType
     ? privateRuleFor(privateType, watchedPartnershipKind)
     : null;
@@ -155,8 +158,14 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     if (privateRule) {
       return [{ value: privateRule.institution, label: PRIVATE_TYPE_LABEL[privateRule.privateType] }];
     }
+    // 教育入口的机构码按 subject_property×education_type 派生(大学 GUN/SUN vs 中小初学 GSCH/SFSC,
+    // 分校 UNIN),保持可见的"机构"下拉与所选教育级别一致;提交时再以同一函数复算为准。
+    if (isEducation) {
+      const code = computeEducationInstitutionCode(currentSubjectProperty, watchedEducationType);
+      return [{ value: code, label: EDUCATION_INSTITUTION_CODE_LABEL[code] ?? code }];
+    }
     return institutionChoicesFor(category, currentSubjectProperty);
-  }, [category, currentSubjectProperty, privateRule]);
+  }, [category, currentSubjectProperty, privateRule, isEducation, watchedEducationType]);
   const p1Locks = useMemo(() => {
     if (privateRule) {
       return {
@@ -253,6 +262,14 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       p1: p1LocksForSubject(subject_property, null).value,
       parent_cid_number: undefined,
       cid_full_name: collectName ? (form.getFieldValue('cid_full_name') ?? '') : undefined,
+    });
+  };
+
+  // 教育级别变化(大学/中小初学)即重算机构码:G/S 在 GUN/SUN 与 GSCH/SFSC 间切换,
+  // 保持可见的"机构"下拉值与提交派生一致(分校 F 不显示本字段)。
+  const onEducationTypeChange = (educationType: EducationType) => {
+    form.setFieldsValue({
+      institution: computeEducationInstitutionCode(currentSubjectProperty, educationType),
     });
   };
 
@@ -450,6 +467,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         return;
       }
     }
+    // 教育入口的机构码不由下拉决定:按 subject_property×education_type 派生
+    //   本部 → GUN/SUN(大学)或 GSCH/SFSC(中小初学);分校(F)→ UNIN(挂学校本部)。
+    // 其余入口沿用表单 institution 值(私权由后端按 private_type 再覆盖)。
+    const institutionCode = isEducation
+      ? computeEducationInstitutionCode(values.subject_property.trim(), values.education_type)
+      : values.institution.trim();
     setSubmitting(true);
     try {
       const result = await createInstitution(auth, {
@@ -457,7 +480,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         p1: values.p1?.trim(),
         province_name: values.province_name.trim(),
         city_name: values.city_name.trim(),
-        institution: values.institution.trim(),
+        institution: institutionCode,
         education_type: showEducationType ? values.education_type : undefined,
         cid_full_name: collectNameInModal
           ? (values.cid_full_name ?? '').trim()
@@ -614,7 +637,10 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 name="education_type"
                 rules={[{ required: true, message: '请选择教育机构类型' }]}
               >
-                <Select options={SCHOOL_EDUCATION_TYPE_OPTIONS} />
+                <Select
+                  options={SCHOOL_EDUCATION_TYPE_OPTIONS}
+                  onChange={onEducationTypeChange}
+                />
               </Form.Item>
             </Col>
           )}

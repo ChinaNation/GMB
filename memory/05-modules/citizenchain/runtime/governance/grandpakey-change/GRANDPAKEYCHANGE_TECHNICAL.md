@@ -77,7 +77,7 @@ Runtime 配置位置：
 ## 5. 外部接口（Calls）
 ### 5.1 `propose_replace_grandpa_key`（index = 0）
 约束：
-- 仅 `ORG_NRC | ORG_PRC`
+- 仅机构码 `NRC | PRC`（`is_fixed_governance_code`）
 - 发起人必须是该机构内部管理员
 - `new_key` 不能为零值
 - `new_key` 必须是有效且非 weak/small-order 的 ed25519 公钥（`CompressedEdwardsY` + `is_small_order`）

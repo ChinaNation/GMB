@@ -180,7 +180,7 @@ pub mod pallet {
     /// VotingEngine 主 pallet on-chain storage 版本。
     ///
     /// 全新创世即 v1 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
-    /// ProposalsByOrg/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
+    /// ProposalsByCode/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
     pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::pallet]
@@ -384,7 +384,7 @@ pub mod pallet {
     /// 反向索引:institution_code → 该机构码下所有提案 ID。
     /// 客户端按"国储会/省储会/省储行/多签"分类查询时直接迭代该表,无需扫全表。
     #[pallet::storage]
-    pub type ProposalsByOrg<T: Config> =
+    pub type ProposalsByCode<T: Config> =
         StorageDoubleMap<_, Twox64Concat, InstitutionCode, Twox64Concat, u64, (), OptionQuery>;
 
     /// 反向索引:institution(48 字节 PalletId) → 该机构所有提案 ID。

@@ -34,11 +34,11 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 
 ### 1. 发起提案（propose_safety_fund_transfer，call_index=1）
 
-- **调用者**：国储会管理员（ORG_NRC admin）
+- **调用者**：国储会管理员（机构码 NRC，`is_fixed_governance_code`）
 - **参数**：beneficiary（收款地址）、amount（金额）、remark（备注）
 - **校验**：
   1. 金额大于零
-  2. 调用者是国储会管理员（通过 InternalAdminProvider::is_internal_admin 验证，org=ORG_NRC）
+  2. 调用者是国储会管理员（通过 InternalAdminProvider::is_internal_admin 验证，institution_code=NRC）
   3. InstitutionAsset::can_spend 检查安全基金账户支出权限（NrcSafetyFundTransfer）
   4. **余额预检**：`free_balance >= amount + fee + ED`，避免创建必定无法执行的提案
 - **手续费预算**：使用 `calculate_onchain_fee(amount)` 计算，即 `max(amount * 0.1%, 0.1 元)`

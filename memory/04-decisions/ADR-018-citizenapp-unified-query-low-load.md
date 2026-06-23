@@ -17,7 +17,7 @@
 |---|---|---|
 | **精确整键 `fetchStorage(完整key)`** | ✅ 正常(单 key Merkle 证明) | `ActiveProposalsByInstitution[account]`、`InternalVotesByAccount[pid,account]`、`System.Account[account]` 余额 |
 | **keysPaged 前缀扫描,前缀嵌长 K1(32B account / blake2+cid)** | ❌ 返回空(证明拉不全,静默空) | `ProposalsByInstitution[account]`、`CidRegisteredAccount[blake2(cid)+cid]` |
-| **keysPaged 短前缀(整表 / ≤2B K1)** | ✅ 正常 | `ProposalsByYear[year]`、`ProposalsByOrg[org]`、`AdminAccounts` 整表 |
+| **keysPaged 短前缀(整表 / ≤2B K1)** | ✅ 正常 | `ProposalsByYear[year]`、`ProposalsByCode[institution_code]`(机构码反向索引,见 [[ADR-025]])、`AdminAccounts` 整表 |
 
 **所以"功能性坏"只有长前缀 keysPaged 这一类(2 处);其余全是"能用但费节点"的负载问题。** 不需要改链端 storage 结构。
 
@@ -85,7 +85,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 ### D. R2 应改 — 共享缓存 / 去重
 | 位置 | 现状 | 改法 |
 |---|---|---|
-| 广场 `citizen/vote/vote_view.dart:156-158` | 3 次 `ProposalsByOrg` | 接 ProposalFeedCache,与机构详情共用 |
+| 广场 `citizen/vote/vote_view.dart:156-158` | 3 次 `ProposalsByCode`(机构码反向索引,见 [[ADR-025]]) | 接 ProposalFeedCache,与机构详情共用 |
 | `wallet/.../wallet_onchain_balance_card.dart:59` 单账户总额 | 单查无缓存 | 接 ChainReadCache |
 | `governance/.../institution_account_info_page.dart:150/254`、`personal_manage_account_info_page.dart:171/274` | 同地址多次单查 | 去重/缓存 |
 | 创建/关闭/转账前各页 `fetchFinalizedBalance` 单查 | 无缓存 | ChainReadCache |

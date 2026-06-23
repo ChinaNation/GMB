@@ -88,7 +88,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     let admin_account = Pallet::<T>::resolve_admin_account_for_account(&account)
         .ok_or(Error::<T>::AccountNotFound)?;
     let institution_code =
-        Pallet::<T>::resolve_org_for_account(&account).ok_or(Error::<T>::AccountNotFound)?;
+        Pallet::<T>::resolve_institution_code_for_account(&account).ok_or(Error::<T>::AccountNotFound)?;
 
     // ── 硬保护(纵深防御):创世初始机构 / 治理机构 永不可注销关闭 ──
     // 创世机构本就不在 organization-manage 注册(会先报 NotInstitutionAccount),

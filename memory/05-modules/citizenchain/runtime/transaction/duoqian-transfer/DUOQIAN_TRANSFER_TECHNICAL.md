@@ -1,5 +1,7 @@
 # DUOQIAN Transfer Pow 技术文档（机构多签名地址转账模块）
 
+> 机构分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
+
 ## 2026-04-30 · 统一投票引擎状态机改造
 
 本模块所有 3 组业务（transfer / safety_fund / sweep）已统一接入 `votingengine` 生命周期：
@@ -50,13 +52,13 @@
 
 - 本模块处理三类多签账户转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
-  - `personal-manage` 注册并处于 Active 状态的个人多签账户（`ORG_REN`）
-  - `organization-manage` 注册并处于 Active 状态的机构账户（`ORG_PUP / ORG_OTH`）
+  - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
+  - `organization-manage` 注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
 补充说明：
-- 只要某类内置机构被本模块的 `institution_org()` / 主账户解析逻辑正式识别，
+- 只要某类内置机构被本模块的 `institution_code()` / 主账户解析逻辑正式识别，
 - 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`，固定阈值或动态阈值已由投票引擎自身提供，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
@@ -64,7 +66,7 @@
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `cid` 主签名登记 + `ORG_PUP / ORG_OTH` 内部投票 |
+| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `cid` 主签名登记 + 机构账户码（`is_institution_code`）内部投票 |
 | `duoqian-transfer` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
@@ -107,7 +109,7 @@
 ```rust
 pub fn propose_transfer(
     origin: OriginFor<T>,
-    org: u8,                           // 机构类型：0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN
+    institution_code: [u8; 4],          // CID 机构码（NRC / PRC / PRB / PMUL / 机构账户码）
     institution: AccountId,   // 机构 pallet id [u8; 48]
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
@@ -124,7 +126,7 @@ pub fn propose_transfer(
    - 个人多签账户：能从 `PersonalAccount AccountId` 解码出账户，且对应 `PersonalManage::PersonalAccounts` 处于 Active；
    - 注册型机构账户：能从 `InstitutionAccount AccountId` 解码出账户，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active；
    - `0x02 注册机构归属关系` 只用于机构归属/检索，不能作为转账支出主体。
-4. `org` 必须与 `institution` 的实际机构类型匹配。
+4. `institution_code` 必须与 `institution` 的实际机构类型匹配。
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户（不允许自转账）。
@@ -135,7 +137,7 @@ pub fn propose_transfer(
 **执行逻辑：**
 
 1. 编码 `MODULE_TAG + TransferAction { institution, beneficiary, amount, remark, proposer }`。
-2. 调用 `InternalVoteEngine::create_internal_proposal_with_data(proposer, org, institution, MODULE_TAG, encoded)` 获取 `proposal_id`，并原子写入 owner/data/meta。
+2. 调用 `InternalVoteEngine::create_internal_proposal_with_data(proposer, institution_code, institution, MODULE_TAG, encoded)` 获取 `proposal_id`，并原子写入 owner/data/meta。
 3. 发出 `TransferProposed` 事件。
 
 ### 2.2 投票入口
@@ -192,7 +194,7 @@ pub enum Event<T: Config> {
     /// 转账提案已创建
     TransferProposed {
         proposal_id: u64,
-        org: u8,
+        institution_code: [u8; 4],
         institution: AccountId,
         proposer: T::AccountId,
         from: T::AccountId,                             // 转出资金账户
@@ -247,7 +249,7 @@ pub enum Event<T: Config> {
 #[pallet::error]
 pub enum Error<T> {
     InvalidInstitution,              // 机构不存在
-    InstitutionOrgMismatch,          // org 与机构类型不匹配
+    InstitutionCodeMismatch,         // institution_code 与机构类型不匹配
     UnauthorizedAdmin,               // 非该机构管理员(propose 阶段)
     ZeroAmount,                      // 金额为零
     AmountBelowExistentialDeposit,   // 金额低于 ED
@@ -425,7 +427,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。机构账户提案的实际 org 由 `InstitutionQuery::lookup_org(account)` 返回，必须是 `ORG_PUP / ORG_OTH`，传 `ORG_REN` 会被 `InstitutionOrgMismatch` 拒绝。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。机构账户提案的实际 institution_code 由 `InstitutionQuery::lookup_institution_code(account)` 返回，必须是机构账户码（`is_institution_code`），传个人多签码（`is_personal_code`）会被 `InstitutionCodeMismatch` 拒绝。
 
 ## 11. Weight 估算
 

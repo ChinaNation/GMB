@@ -79,7 +79,7 @@ cid_number: BoundedVec<u8>            = Compact(len) || bytes
 cid_full_name: BoundedVec<u8>   = Compact(len) || bytes
 accounts: BoundedVec<InstitutionInitialAccount>
                                     = Compact(N) || N × (account_name_compact || amount_u128_le)
-org: u8                       = ORG_PUP(4) 或 ORG_OTH(5)
+institution_code: [u8;4]    = 机构账户码（is_institution_code，公权或私权法人）
 admins_len: u32                    = u32 LE
 admins: BoundedVec<AccountId32>
                                     = Compact(N) || N × 32B

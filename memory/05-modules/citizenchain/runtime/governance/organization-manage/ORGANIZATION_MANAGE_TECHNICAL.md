@@ -5,7 +5,9 @@
 
 ## 1. 当前边界
 
-`organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎 `ORG_PUP / ORG_OTH` 的对接。
+> 机构分类唯一真源 = CID 机构码（`institution_code`），见 [[ADR-025]]。
+
+`organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎机构账户码（`is_institution_code`）的对接。
 
 管理员和管理员人数的长期真源是 `admins-change::Subjects`；动态阈值长期真源是 `internal-vote::ActiveDynamicThresholds`。本模块只负责机构归属、机构账户、资金和生命周期。
 
@@ -15,7 +17,7 @@ ADR-015 后，机构管理按账户级治理：
 - 一个机构可以下挂多个账户，每个可操作账户独立持有管理员集合。
 - 主账户不管理其他账户，每个账户只由自己的管理员管理。
 - 当前 `propose_create_institution` 创建的是机构主账户的管理员主体；主体由主账户派生为 `InstitutionAccount(0x05)`，不是 `注册机构归属关系(0x02)`。
-- `org` 必须是 `ORG_PUP` 或 `ORG_OTH`；`ORG_REN` 只属于个人多签。
+- `institution_code` 必须是机构账户码（`is_institution_code`：公权或私权法人机构码）；个人多签码（`is_personal_code`，PMUL）不属于本模块。
 - 省储行永久质押账户永远不可操作，不得进入本模块账户治理。
 - 注册机构账户管理员数量范围为 `2..=1989`。
 - 注册机构账户创建和关闭必须由该账户管理员全员投票通过。
@@ -48,7 +50,7 @@ ADR-015 后，机构管理按账户级治理：
 
 核心 storage：
 
-- `Institutions<cid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`org`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
+- `Institutions<cid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`institution_code`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
 - `InstitutionAccounts<(cid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
@@ -57,7 +59,7 @@ ADR-015 后，机构管理按账户级治理：
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按 `org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
+- 机构多签创建提案发起时，主账户会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按机构账户码（`is_institution_code`）通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签账户会通过 `admins-change::SubjectLifecycle` 写入 `PersonalAccount` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭成功后删除账户当前状态主体。
 - 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_account_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
@@ -73,7 +75,7 @@ propose_create_institution(
   cid_number,
   cid_full_name,
   accounts,
-  org,
+  institution_code,
   admins_len,
   admins,
   threshold,
@@ -91,7 +93,7 @@ propose_create_institution(
 
 - 创建的是机构，不是单个账户。
 - `accounts` 必须包含 `"主账户"` 和 `"费用账户"`。
-- `org` 只能是 `ORG_PUP(4)` 或 `ORG_OTH(5)`。
+- `institution_code` 只能是机构账户码（`is_institution_code`：公权或私权法人机构码，排除个人多签与固定治理档）。
 - 每个账户初始余额都必须 `>= MinCreateAmount`，当前配置语义为最低 1.11 元。
 - 账户名不得重复。
 - 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；动态阈值由用户输入，必须严格过半且不得超过管理员数量。
@@ -144,7 +146,7 @@ runtime 适配：
 - `RuntimeInternalAdminProvider / RuntimeInternalAdminsLenProvider` 统一读取 `admins-change`。
 - 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
-- `DuoqianCidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
+- `DuoqianCidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_institution_code_for_account` 读取机构账户码（`is_institution_code`）。
 - `DuoqianCidAccountQuery::is_active` 对 CID 机构账户读取 `InstitutionAccounts` 的激活状态。
 - `DuoqianCidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;CID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 CID 机构账户。
 

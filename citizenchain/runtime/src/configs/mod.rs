@@ -1262,7 +1262,7 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for DuoqianCid
             return false;
         };
         let Some(institution_code) =
-            organization_manage::Pallet::<Runtime>::resolve_org_for_account(bank)
+            organization_manage::Pallet::<Runtime>::resolve_institution_code_for_account(bank)
         else {
             return false;
         };

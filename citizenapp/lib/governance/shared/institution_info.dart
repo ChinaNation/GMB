@@ -89,6 +89,8 @@ class InstitutionInfo {
   const InstitutionInfo({
     required this.cidFullName,
     required this.cidShortName,
+    required this.cidFullNameEn,
+    required this.cidShortNameEn,
     required this.cidNumber,
     required this.orgType,
     this.accounts,
@@ -103,6 +105,12 @@ class InstitutionInfo {
 
   /// 机构简称,与后端/链端 `cid_short_name` 对齐。
   final String cidShortName;
+
+  /// 机构英文全称,与后端/链端 `cid_full_name_en` 对齐。
+  final String cidFullNameEn;
+
+  /// 机构英文简称,与后端/链端 `cid_short_name_en` 对齐。
+  final String cidShortNameEn;
 
   /// 链上身份标识（与 Rust 常量 `cid_number` 完全一致）。
   /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId，不再从 cid_number 派生主体。
@@ -168,6 +176,8 @@ class InstitutionInfo {
   InstitutionInfo copyWith({
     String? cidFullName,
     String? cidShortName,
+    String? cidFullNameEn,
+    String? cidShortNameEn,
     String? cidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
@@ -178,6 +188,8 @@ class InstitutionInfo {
     return InstitutionInfo(
       cidFullName: cidFullName ?? this.cidFullName,
       cidShortName: cidShortName ?? this.cidShortName,
+      cidFullNameEn: cidFullNameEn ?? this.cidFullNameEn,
+      cidShortNameEn: cidShortNameEn ?? this.cidShortNameEn,
       cidNumber: cidNumber ?? this.cidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,

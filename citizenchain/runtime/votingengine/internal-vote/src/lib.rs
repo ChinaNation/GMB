@@ -8,7 +8,7 @@
 //! 本 pallet 自有:
 //! - storage:`InternalVotesByAccount` / `InternalTallies` / `InternalThresholdSnapshot`
 //! - event:`InternalVoteCast`
-//! - error:`InvalidInternalOrg` / `MissingThresholdSnapshot` / `InvalidThresholdSnapshot`
+//! - error:`InvalidInternalCode` / `MissingThresholdSnapshot` / `InvalidThresholdSnapshot`
 //! - extrinsic:`cast(proposal_id, approve)`
 //! - 业务函数:`do_create_internal_proposal*` / `do_internal_vote` / `do_finalize_internal_timeout`
 //! - trait impl:`InternalVoteEngine`(供业务 pallet 创建提案)
@@ -171,7 +171,7 @@ pub mod pallet {
     #[pallet::error]
     pub enum Error<T> {
         /// 内部投票的机构类型不合法。
-        InvalidInternalOrg,
+        InvalidInternalCode,
         /// 内部投票阈值快照缺失。
         MissingThresholdSnapshot,
         /// 内部投票阈值与管理员快照人数不匹配。
@@ -310,7 +310,7 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, DispatchError> {
         ensure!(
             is_registered_multisig_code(&institution_code),
-            Error::<T>::InvalidInternalOrg
+            Error::<T>::InvalidInternalCode
         );
         ensure!(
             !admins.is_empty(),
@@ -410,7 +410,7 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, DispatchError> {
         ensure!(
             is_registered_multisig_code(&institution_code),
-            Error::<T>::InvalidInternalOrg
+            Error::<T>::InvalidInternalCode
         );
         Self::do_create_active_account_internal_proposal(
             who,
@@ -469,7 +469,7 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, DispatchError> {
         ensure!(
             is_valid_governance_code(&institution_code),
-            Error::<T>::InvalidInternalOrg
+            Error::<T>::InvalidInternalCode
         );
         ensure!(
             is_valid_internal_institution::<T>(institution_code, institution.clone()),
@@ -480,7 +480,7 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::NoPermission
         );
         let active_threshold = active_internal_threshold::<T>(institution_code, institution.clone())
-            .ok_or(Error::<T>::InvalidInternalOrg)?;
+            .ok_or(Error::<T>::InvalidInternalCode)?;
 
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
@@ -583,7 +583,7 @@ impl<T: Config> Pallet<T> {
         Ok(proposal_id)
     }
 
-    fn proposal_org_account(
+    fn proposal_code_account(
         proposal_id: u64,
     ) -> Result<(InstitutionCode, T::AccountId), DispatchError> {
         let proposal =
@@ -600,13 +600,13 @@ impl<T: Config> Pallet<T> {
     fn apply_executed_threshold_side_effect(proposal_id: u64) -> DispatchResult {
         match InternalProposalRoles::<T>::get(proposal_id) {
             Some(InternalProposalRole::LifecycleCreate) => {
-                let (institution_code, account) = Self::proposal_org_account(proposal_id)?;
+                let (institution_code, account) = Self::proposal_code_account(proposal_id)?;
                 let threshold = PendingDynamicThresholds::<T>::take(institution_code, account.clone())
                     .ok_or(Error::<T>::MissingDynamicThreshold)?;
                 ActiveDynamicThresholds::<T>::insert(institution_code, account, threshold);
             }
             Some(InternalProposalRole::LifecycleClose) => {
-                let (institution_code, account) = Self::proposal_org_account(proposal_id)?;
+                let (institution_code, account) = Self::proposal_code_account(proposal_id)?;
                 ActiveDynamicThresholds::<T>::remove(institution_code, account);
             }
             Some(InternalProposalRole::AdminChange) => {
@@ -630,7 +630,7 @@ impl<T: Config> Pallet<T> {
                 Some(InternalProposalRole::LifecycleCreate),
                 STATUS_REJECTED | STATUS_EXECUTION_FAILED,
             ) => {
-                let (institution_code, account) = Self::proposal_org_account(proposal_id)?;
+                let (institution_code, account) = Self::proposal_code_account(proposal_id)?;
                 PendingDynamicThresholds::<T>::remove(institution_code, account);
             }
             (
