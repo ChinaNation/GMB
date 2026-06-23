@@ -6,7 +6,7 @@ void main() {
   test('内置机构身份编码为 mainAccount AccountId', () {
     final mainAccount = 'aa' * 32;
     final id = institutionIdentityToAccountId(
-      'LN001-GCB05-944805165-2026',
+      'LN001-NRC0G-944805165-2026',
       mainAccount: mainAccount,
     );
 

@@ -67,7 +67,7 @@ class IsarAdminDivisionStore implements AdminDivisionStore {
         .divisionKeyEqualTo(key)
         .findFirst();
     // 未命中回退返回 code 本身(绝不崩、绝不空)。
-    return hit?.name ?? code;
+    return hit?.divisionName ?? code;
   }
 
   @override

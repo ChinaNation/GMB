@@ -184,6 +184,47 @@
 | CPMS 前端二维码 | `qr` | `citizenpassport/frontend/qr/` | CPMS 前端 CITIZEN_QR_V1 解析和浏览器扫码工具 |
 | CPMS 前端通用层 | `common` | `citizenpassport/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
 
+## 5.1 机构名称字段硬规则
+
+机构名称只允许以下字段承载:
+
+| 含义 | JSON / Rust / SQL | Dart / TypeScript | 使用边界 |
+|---|---|---|---|
+| 机构中文全称 | `cid_full_name` | `cidFullName` | API、数据库、链端解码、移动端/桌面端模型 |
+| 机构中文简称 | `cid_short_name` | `cidShortName` | 列表、标题左段、紧凑展示 |
+| 机构英文全称 | `cid_full_name_en` | `cidFullNameEn` | 内置重要机构、冷钱包/签名摘要 |
+| 机构英文简称 | `cid_short_name_en` | `cidShortNameEn` | 内置重要机构、紧凑英文展示 |
+
+禁止用 `name`、`display_name`、`displayName`、`institution_name`、`institutionName`、`org_name`、`orgName`、`subject_name`、`subjectName` 承载机构全称、简称或英文名。
+
+允许继续使用 `name` 的例外:
+
+- 行政区字典记录:`{ code, name }`。
+- 账户名称变量或链上 `name` 参数,但对外字段必须是 `account_name` / `accountName`。
+- 钱包名、联系人姓名、文件名和自然人姓名。
+- UI 局部派生展示变量可以使用 `title` / `label`,但不得作为 API、DTO、数据库或持久化字段承载机构名称。
+
+## 5.2 非机构姓名与展示字段硬规则
+
+非机构姓名和展示字段必须用具体业务语义命名,不得继续使用能承载任意对象名称的 `display_name` / `displayName` / `orgName`。
+
+| 含义 | JSON / SQL / Rust | Dart / TypeScript | 使用边界 |
+|---|---|---|---|
+| 注册局管理员姓名 | `admin_name` | `adminName` | CID 后端数据库、管理员 API、CID 前端表单和列表 |
+| 市注册局新增表单管理员姓名 | `city_registry_admin_name` | `cityRegistryAdminName` | CID 前端表单局部字段 |
+| 管理员账户选择标签 | `account_label` | `accountLabel` | App 本地管理员账户候选展示,不承载机构名称真源 |
+| 钱包候选标签 | `wallet_label` | `walletLabel` | node 前端钱包选择器展示,不承载机构名称真源 |
+| 权威节点标签 | `authority_node_label` | `authorityNodeLabel` | node 设置页 bootnode/GRANDPA 绑定展示,不是机构全称或简称 |
+| IM 路由显示名 | `route_display_name` | `routeDisplayName` | IM 路由缓存和 protobuf 路由记录,不是通讯录真源 |
+| 行政区省名称 | `province_name` | `provinceName` | CID 行政区 API、App 省份列表、生成物 manifest |
+| 行政区市名称 | `city_name` | `cityName` | CID 行政区 API、App/前端市级选择 |
+| App 行政区内部名称 | `division_name` | `divisionName` | App Isar 行政区缓存内部字段 |
+| App 省级展示名称 | `province_display_name` | `provinceDisplayName` | App 省级入口展示 |
+| 用户联系人姓名 | `contact_name` | `contactName` | `CITIZEN_QR_V1/user_contact` body |
+| 转账收款人姓名 | `recipient_name` | `recipientName` | `CITIZEN_QR_V1/user_transfer` body |
+
+遗留 `admin_display_name` 只允许出现在数据库启动迁移中,用途是把旧列一次性改名为 `admin_name`;目标表结构、API、前端和文档不得继续输出旧字段。
+
 ## 6. 新命名登记模板
 
 新增命名时，按这个模板登记：
@@ -447,6 +488,8 @@
 | CID 号码 | `cid_number` | API / call data / storage key | 机构或公民 CID 编号 |
 | 机构全称 | `cid_full_name` | API / call data / QR display | 机构全称,可随机构法定名称变更 |
 | 机构简称 | `cid_short_name` | API / call data / QR display | 机构简称,用于列表和紧凑展示 |
+| 机构英文全称 | `cid_full_name_en` | API / call data / QR display | 机构英文全称 |
+| 机构英文简称 | `cid_short_name_en` | API / call data / QR display | 机构英文简称 |
 | 账户名称列表 | `account_names` | CID registration-info API | 机构账户名数组 |
 | 账户名称 | `account_name` | API / call data / QR display | 单个机构或个人账户名 |
 | 私权机构类型 | `private_type` | CID API / subjects / private | 私权机构目标类型,取值 `SOLE/PARTNERSHIP/COMPANY/CORPORATION/WELFARE/ASSOCIATION` |
@@ -454,6 +497,14 @@
 | 法人资格 | `has_legal_personality` | CID API / subjects / private | 私权机构是否具有法人资格 |
 | 注册随机数 | `register_nonce` | credential / call data | CID 机构注册凭证随机数 |
 | 省名称 | `province_name` | API / call data / storage | 行政区省级名称 |
+| 市名称 | `city_name` | API / call data / storage | 行政区市级名称 |
+| 管理员姓名 | `admin_name` | CID admins / auth API / SQL | 注册局管理员真实姓名,不是显示名字段 |
+| 管理员账户标签 | `account_label` | App local cache / account selector | 本地展示标签,不作为机构名称真源 |
+| 钱包标签 | `wallet_label` | node frontend wallet selector | 钱包候选展示标签,不作为机构名称真源 |
+| 权威节点标签 | `authority_node_label` | node settings bootnode / GRANDPA | 节点身份或 GRANDPA 私钥匹配到的权威节点标签,不作为机构名称真源 |
+| IM 路由显示名 | `route_display_name` | IM protobuf / local cache | 通信路由列表展示,不作为联系人或机构名称真源 |
+| 联系人姓名 | `contact_name` | QR body | 用户联系方式二维码中的联系人姓名 |
+| 收款人姓名 | `recipient_name` | QR body | 用户转账二维码中的收款人姓名 |
 | 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
 | 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |
 | 签发管理员公钥 | `signer_pubkey` | credential / call data | 签发机构 `admins` 中实际签名管理员的公钥 |

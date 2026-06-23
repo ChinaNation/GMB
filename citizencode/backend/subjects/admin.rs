@@ -347,14 +347,14 @@ pub(crate) async fn update_institution(
                 StatusCode::BAD_REQUEST,
                 1001,
                 legal_rep_scope.legal_rep_error_message(),
-            )
+            );
         }
         Err(err) => {
             let message = format!("query legal representative failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     }
-    existing.legal_rep_name = Some(legal_rep.name);
+    existing.legal_rep_name = Some(legal_rep.legal_rep_name);
     existing.legal_rep_cid_number = Some(legal_rep.cid_number);
     existing.legal_rep_photo_path = Some(legal_rep.photo_path);
     existing.legal_rep_photo_name = Some(legal_rep.photo_name);

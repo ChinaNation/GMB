@@ -4,27 +4,27 @@ import 'package:citizenapp/qr/envelope.dart';
 class UserContactBody implements QrBody {
   const UserContactBody({
     required this.address,
-    required this.name,
+    required this.contactName,
   });
 
   final String address;
-  final String name;
+  final String contactName;
 
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
         'address': address,
-        'name': name,
+        'contact_name': contactName,
       };
 
   static UserContactBody fromJson(Map<String, dynamic> data) {
     final address = data['address'];
-    final name = data['name'];
+    final contactName = data['contact_name'];
     if (address is! String || address.isEmpty) {
       throw const FormatException('user_contact.address 必填');
     }
-    if (name is! String) {
-      throw const FormatException('user_contact.name 必填字符串');
+    if (contactName is! String) {
+      throw const FormatException('user_contact.contact_name 必填字符串');
     }
-    return UserContactBody(address: address, name: name);
+    return UserContactBody(address: address, contactName: contactName);
   }
 }

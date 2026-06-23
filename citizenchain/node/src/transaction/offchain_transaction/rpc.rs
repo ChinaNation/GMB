@@ -340,9 +340,6 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
     }
 }
 
-/// 清算行 ACK 签名域,供 citizenapp 验证"节点确实接受了该支付意图"。
-const L2_ACK_SIGNING_DOMAIN: &[u8] = b"GMB_L2_ACK_V1";
-
 /// 与 runtime `settlement::calc_fee` 保持一致:按万分比四舍五入,最低取 `primitives::fee_policy::OFFCHAIN_MIN_FEE`。
 fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     let numerator = transfer_amount
@@ -361,8 +358,10 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     ))
 }
 
-/// 构造 L2 ACK 签名消息:
-/// `blake2_256(DOMAIN || bank_main || SCALE(intent) || payer_sig || accepted_at_le)`。
+/// 构造 L2 ACK 签名消息(ADR-026 唯一原语):
+/// `signing_message(OP_SIGN_L2_ACK, bank_main || SCALE(intent) || payer_sig || accepted_at_le)`
+/// = `blake2_256(GMB || OP_SIGN_L2_ACK || bank_main || SCALE(intent) || payer_sig || accepted_at_le)`。
+/// 历史本地字符串域 `b"GMB_L2_ACK_V1"` 已删(破坏式,字节变);citizenapp 验签镜像须同步。
 fn l2_ack_signing_message(
     bank_main: &AccountId32,
     intent: &NodePaymentIntent,
@@ -370,14 +369,12 @@ fn l2_ack_signing_message(
     accepted_at: u64,
 ) -> [u8; 32] {
     let intent_bytes = intent.encode();
-    let mut data =
-        Vec::with_capacity(L2_ACK_SIGNING_DOMAIN.len() + 32 + intent_bytes.len() + 64 + 8);
-    data.extend_from_slice(L2_ACK_SIGNING_DOMAIN);
-    data.extend_from_slice(bank_main.as_ref());
-    data.extend_from_slice(&intent_bytes);
-    data.extend_from_slice(payer_sig);
-    data.extend_from_slice(&accepted_at.to_le_bytes());
-    sp_io::hashing::blake2_256(&data)
+    let mut scale_payload = Vec::with_capacity(32 + intent_bytes.len() + 64 + 8);
+    scale_payload.extend_from_slice(bank_main.as_ref());
+    scale_payload.extend_from_slice(&intent_bytes);
+    scale_payload.extend_from_slice(payer_sig);
+    scale_payload.extend_from_slice(&accepted_at.to_le_bytes());
+    primitives::sign::signing_message(primitives::sign::OP_SIGN_L2_ACK, &scale_payload)
 }
 
 /// 构造 `UserBank[user]` 的 storage key(`StorageMap<_, Blake2_128Concat, AccountId, AccountId, OptionQuery>`)。

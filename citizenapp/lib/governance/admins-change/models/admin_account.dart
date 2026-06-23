@@ -12,7 +12,7 @@ class AdminAccountIdentity {
   const AdminAccountIdentity({
     required this.type,
     required this.identityKey,
-    required this.displayName,
+    required this.accountLabel,
     required this.institutionCode,
     required this.kind,
     required this.accountHex,
@@ -23,7 +23,7 @@ class AdminAccountIdentity {
     if (personal != null) {
       return AdminAccountIdentity.personalAccount(
         accountHex: personal,
-        displayName: institution.cidShortName,
+        accountLabel: institution.cidShortName,
       );
     }
 
@@ -36,21 +36,21 @@ class AdminAccountIdentity {
       return AdminAccountIdentity.institutionAccount(
         accountHex: account,
         institutionCode: code,
-        displayName: institution.cidShortName,
+        accountLabel: institution.cidShortName,
       );
     }
 
     return AdminAccountIdentity.governanceInstitution(
       accountHex: institution.mainAccount,
       orgType: institution.orgType,
-      displayName: institution.cidShortName,
+      accountLabel: institution.cidShortName,
     );
   }
 
   factory AdminAccountIdentity.governanceInstitution({
     required String accountHex,
     required int orgType,
-    required String displayName,
+    required String accountLabel,
   }) {
     if (orgType < 0 || orgType > 2) {
       throw ArgumentError('治理机构 orgType 必须为 0/1/2 (NRC/PRC/PRB)');
@@ -65,7 +65,7 @@ class AdminAccountIdentity {
     return AdminAccountIdentity(
       type: AdminAccountIdentityType.governanceInstitution,
       identityKey: 'governance:$code:$account',
-      displayName: displayName,
+      accountLabel: accountLabel,
       institutionCode: code,
       kind: 0,
       accountHex: account,
@@ -74,14 +74,14 @@ class AdminAccountIdentity {
 
   factory AdminAccountIdentity.personalAccount({
     required String accountHex,
-    required String displayName,
+    required String accountLabel,
   }) {
     final account = AdminAccountIdCodec.normalizeHex(accountHex);
     AdminAccountIdCodec.fromAccountHex(account);
     return AdminAccountIdentity(
       type: AdminAccountIdentityType.personalAccount,
       identityKey: 'personal-account:$account',
-      displayName: displayName,
+      accountLabel: accountLabel,
       institutionCode: 'PMUL',
       kind: 1,
       accountHex: account,
@@ -91,7 +91,7 @@ class AdminAccountIdentity {
   factory AdminAccountIdentity.institutionAccount({
     required String accountHex,
     required String institutionCode,
-    required String displayName,
+    required String accountLabel,
   }) {
     if (!InstitutionCodeLabel.isInstitution(institutionCode)) {
       throw ArgumentError(
@@ -103,7 +103,7 @@ class AdminAccountIdentity {
     return AdminAccountIdentity(
       type: AdminAccountIdentityType.institutionAccount,
       identityKey: 'institution-account:$institutionCode:$account',
-      displayName: displayName,
+      accountLabel: accountLabel,
       institutionCode: institutionCode,
       kind: 2,
       accountHex: account,
@@ -112,7 +112,9 @@ class AdminAccountIdentity {
 
   final AdminAccountIdentityType type;
   final String identityKey;
-  final String displayName;
+
+  /// 管理员账户选择/提示用标签;不是机构全称或简称的第二字段。
+  final String accountLabel;
 
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;

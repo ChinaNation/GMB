@@ -80,10 +80,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _loadGroups() async {
     final isar = await WalletIsar.instance.db();
-    final groups = await isar.walletGroupEntitys
-        .where()
-        .sortBySortOrder()
-        .findAll();
+    final groups =
+        await isar.walletGroupEntitys.where().sortBySortOrder().findAll();
     if (!mounted) return;
     setState(() => _groups = groups);
   }
@@ -186,7 +184,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       expiresAt: null,
       body: UserContactBody(
         address: wallet.address,
-        name: wallet.walletName,
+        contactName: wallet.walletName,
       ),
     ).toRawJson();
     showDialog(
@@ -349,9 +347,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 _buildInfoTile('地址', wallet.address),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _buildInfoTile('公钥', '0x${wallet.pubkeyHex}'),
-                if (_groups
-                    .where((g) => g.name != '全部')
-                    .isNotEmpty) ...[
+                if (_groups.where((g) => g.name != '全部').isNotEmpty) ...[
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   _buildGroupSelector(),
                 ],

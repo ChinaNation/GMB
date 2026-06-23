@@ -31,7 +31,7 @@ export function SettingsSection({
   const [nodeKey, setNodeKey] = useState<BootnodeKey>({
     nodeKey: null,
     peerId: null,
-    cidFullName: null,
+    authorityNodeLabel: null,
   });
   const [chainStatus, setChainStatus] = useState<ChainStatus | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);

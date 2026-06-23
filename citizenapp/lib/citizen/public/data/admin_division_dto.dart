@@ -50,7 +50,7 @@ class AdminDivisionDto {
     required this.level,
     required this.provinceCode,
     required this.code,
-    required this.name,
+    required this.divisionName,
     this.cityCode = '',
     this.townCode = '',
   });
@@ -66,7 +66,7 @@ class AdminDivisionDto {
 
   /// 该层级自身 code。
   final String code;
-  final String name;
+  final String divisionName;
 
   /// 省记录:`{code,name}`。
   static AdminDivisionDto province(Map<String, dynamic> json) {
@@ -75,7 +75,7 @@ class AdminDivisionDto {
       level: AdminDivisionLevel.province,
       provinceCode: code,
       code: code,
-      name: json['name'] as String? ?? '',
+      divisionName: json['name'] as String? ?? '',
     );
   }
 
@@ -87,7 +87,7 @@ class AdminDivisionDto {
       provinceCode: provinceCode,
       cityCode: code,
       code: code,
-      name: json['name'] as String? ?? '',
+      divisionName: json['name'] as String? ?? '',
     );
   }
 
@@ -100,7 +100,7 @@ class AdminDivisionDto {
       cityCode: json['city_code'] as String? ?? '',
       townCode: code,
       code: code,
-      name: json['name'] as String? ?? '',
+      divisionName: json['name'] as String? ?? '',
     );
   }
 
@@ -122,6 +122,6 @@ class AdminDivisionDto {
     ..level = level
     ..code = code
     ..scopeKey = scopeKey
-    ..name = name
+    ..divisionName = divisionName
     ..dictVersion = dictVersion;
 }

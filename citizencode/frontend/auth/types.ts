@@ -7,7 +7,7 @@ export type TokenAdminAuth = {
   access_token: string;
   admin_account: string;
   registry_org_code: RegistryOrgCode;
-  admin_display_name?: string;
+  admin_name?: string;
   scope_province_name?: string | null;
   /** 仅 CityRegistry 有值:市注册局管理员所属的市。 */
   scope_city_name?: string | null;

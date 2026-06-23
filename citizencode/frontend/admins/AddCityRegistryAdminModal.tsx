@@ -80,9 +80,9 @@ export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalPr
         <Form
           form={addCityRegistryForm}
           layout="vertical"
-          onFinish={(values: { city_registry_display_name: string; city_registry_account: string; city_scope_city_name: string }) =>
+          onFinish={(values: { city_registry_admin_name: string; city_registry_account: string; city_scope_city_name: string }) =>
             onCreateCityRegistry({
-              city_registry_display_name: values.city_registry_display_name,
+              city_registry_admin_name: values.city_registry_admin_name,
               city_registry_account: values.city_registry_account,
               city_name: values.city_scope_city_name,
             })
@@ -90,7 +90,7 @@ export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalPr
         >
           <Form.Item
             label="姓名"
-            name="city_registry_display_name"
+            name="city_registry_admin_name"
             rules={[{ required: true, message: '请输入市注册局管理员姓名' }]}
           >
             <Input placeholder="请输入市注册局管理员姓名" />
@@ -117,10 +117,10 @@ export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalPr
               options={cityRegistryAdminCities
                 .filter((c) => c.code !== '000')
                 .map((c) => {
-                  const count = cityCityRegistryCount(c.name);
+                  const count = cityCityRegistryCount(c.city_name);
                   return {
-                    label: `${c.name} (${c.code}) ${count}/${MAX_CITY_REGISTRY_ADMINS_PER_CITY}`,
-                    value: c.name,
+                    label: `${c.city_name} (${c.code}) ${count}/${MAX_CITY_REGISTRY_ADMINS_PER_CITY}`,
+                    value: c.city_name,
                     disabled: count >= MAX_CITY_REGISTRY_ADMINS_PER_CITY,
                   };
                 })}

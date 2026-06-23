@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/signer/signing.dart';
 
 /// 扫码支付 Step 2c-i:**L3 扫码支付意图**(`NodePaymentIntent`)。
 ///
@@ -66,14 +66,6 @@ class NodePaymentIntent {
   final BigInt nonce;
   final int expiresAt;
 
-  /// 与链上 runtime `offchain_transaction::batch_item::L3_PAY_SIGNING_DOMAIN`
-  /// 逐字节一致的签名域前缀。改动必须同改 runtime,否则签名不通过。
-  static const List<int> signingDomain = [
-    0x47, 0x4D, 0x42, 0x5F, 0x4C, 0x33, 0x5F, 0x50, 0x41, 0x59, 0x5F, 0x56,
-    0x31,
-    // = "GMB_L3_PAY_V1"
-  ];
-
   /// SCALE 编码(定长 204 字节)。
   Uint8List scaleEncode() {
     final out = BytesBuilder(copy: false);
@@ -91,13 +83,13 @@ class NodePaymentIntent {
     return bytes;
   }
 
-  /// 待签名哈希:`blake2_256(signingDomain ++ scaleEncode())`。
-  Uint8List signingHash() {
-    final payload = BytesBuilder(copy: false);
-    payload.add(signingDomain);
-    payload.add(scaleEncode());
-    return Hasher.blake2b256.hash(payload.toBytes());
-  }
+  /// 待签名哈希:`blake2_256(GMB || OP_SIGN_L3_PAY(0x15) || scaleEncode())`。
+  ///
+  /// 经全仓签名唯一原语 [signingMessage] 构造,逐字节对齐链端
+  /// `primitives::sign::signing_message(OP_SIGN_L3_PAY, SCALE(intent))`
+  /// (ADR-026,取代历史字符串域 b"GMB_L3_PAY_V1")。
+  Uint8List signingHash() =>
+      signingMessage(opTag: kOpSignL3Pay, scalePayload: scaleEncode());
 
   /// 生成一个加密随机的 32 字节 `tx_id`,用作本笔支付的唯一标识 + 防重放键。
   ///

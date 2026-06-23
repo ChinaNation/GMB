@@ -26,15 +26,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::governance::signing::{
     pubkey_to_ss58, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
 };
+use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_DECRYPT};
 
 use crate::transaction::offchain_transaction::types::{
     DecryptAdminRequestResult, DecryptedAdminInfo,
 };
 
 const PROTOCOL_VERSION: &str = "CITIZEN_QR_V1";
-const DECRYPT_PREFIX: &[u8; 14] = b"GMB_DECRYPT_V1";
-/// challenge payload 长度:14 + 48 + 32 + 8 + 16 = 118 字节
-const CHALLENGE_TOTAL_LEN: usize = 14 + 48 + 32 + 8 + 16;
+// 解密 challenge payload 前缀 = GMB || OP_SIGN_DECRYPT(4B 二进制前缀，单一真源
+// primitives::sign，ADR-026 Phase 2 取代历史 b"GMB_DECRYPT_V1"(14B))。
+/// challenge payload 长度:4 + 48 + 32 + 8 + 16 = 108 字节
+const CHALLENGE_TOTAL_LEN: usize = BINARY_PREFIX_LEN + 48 + 32 + 8 + 16;
 const DEFAULT_TTL_SECS: u64 = 90;
 
 /// 当前正在内存中"已解密"的管理员表(节点重启清空)。
@@ -82,10 +84,10 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// 拼装 challenge payload:`PREFIX(14) || cid_number(48 padded) || pubkey(32) || ts_le(8) || nonce(16)`。
+/// 拼装 challenge payload:`GMB||OP_SIGN_DECRYPT(4) || cid_number(48 padded) || pubkey(32) || ts_le(8) || nonce(16)`。
 fn build_challenge_payload(pubkey_bytes: &[u8; 32], cid_number: &str, timestamp: u64) -> Vec<u8> {
     let mut out = Vec::with_capacity(CHALLENGE_TOTAL_LEN);
-    out.extend_from_slice(DECRYPT_PREFIX);
+    out.extend_from_slice(&binary_domain_prefix(OP_SIGN_DECRYPT));
 
     let id_bytes = cid_number.as_bytes();
     let mut id_buf = [0u8; 48];
@@ -353,16 +355,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn challenge_payload_layout_is_118_bytes() {
+    fn challenge_payload_layout_is_108_bytes() {
         let p = build_challenge_payload(&[0xAA; 32], "AH001-SCB0V-123456789-2026", 1234567890);
         assert_eq!(p.len(), CHALLENGE_TOTAL_LEN);
-        assert_eq!(&p[..14], DECRYPT_PREFIX);
+        assert_eq!(
+            p[..BINARY_PREFIX_LEN],
+            binary_domain_prefix(OP_SIGN_DECRYPT)
+        );
     }
 
     #[test]
     fn challenge_payload_pubkey_position() {
         let p = build_challenge_payload(&[0xCC; 32], "AH001-FCB0P-123456789-2026", 0);
-        assert_eq!(&p[14 + 48..14 + 48 + 32], &[0xCC; 32]);
+        assert_eq!(
+            &p[BINARY_PREFIX_LEN + 48..BINARY_PREFIX_LEN + 48 + 32],
+            &[0xCC; 32]
+        );
     }
 
     #[test]

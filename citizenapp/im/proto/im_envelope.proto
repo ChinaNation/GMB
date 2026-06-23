@@ -17,7 +17,7 @@ message ImNodeEndpoint {
 message ImRouteRecord {
   uint32 protocol_version = 1;
   string wallet_chat_account = 2;
-  string display_name = 3;
+  string route_display_name = 3;
   string im_device_id = 4;
   string im_device_pubkey_hex = 5;
   string safety_number = 6;

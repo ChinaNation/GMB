@@ -57,22 +57,52 @@ class PayloadDecoder {
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
   /// 返回 null 表示无法识别或解码失败 → strict 模式下 decodeFailed → 禁止签名。
+  // ADR-026 Phase 2 二进制前缀域(抖中方案,2026-06-22 落地):
+  //   ACTIVATE_ADMIN → 前 4 字节 GMB(3B) || 0x18
+  //   DECRYPT        → 前 4 字节 GMB(3B) || 0x19
+  // 这两个域签的是**原始可解析字节**:冷钱包对整段 payloadHex 直接 sr25519 签名,
+  // 本 decoder 仅读 4 字节前缀跳过 + 按偏移取字段展示。与
+  // primitives::sign::signing_message(blake2_256(GMB||op_tag||SCALE)) 的哈希域
+  // 结构不同(它们不进 SIGN_OP_TAGS,不走 signingMessage)。
+  //
+  // 四方逐字节锁步(node 构造 / node 验签解析 / 本 decoder 解码 / citizenapp 构造):
+  //   - citizenchain node: governance/admins_change/activation.rs(build/decode)、
+  //     transaction/.../settlement/admin_unlock.rs(build_challenge_payload)
+  //   - citizenapp: governance/admins-change/services/admin_activation_service.dart
+  // 金标布局: citizenchain/runtime/primitives/tests/fixtures/
+  //   binary_prefix_domain_vectors.json(本仓副本 test/signer/fixtures/)。
+  //
+  // 前缀 = core_const::GMB(0x47 0x4D 0x42)|| op_tag(1B)。单源对齐
+  // primitives::sign::binary_domain_prefix / BINARY_PREFIX_LEN。
+
+  /// 二进制前缀域 GMB 域分隔符(3 字节 ASCII),单源对齐 core_const::GMB。
+  static const _gmbPrefix = [0x47, 0x4D, 0x42]; // "GMB"
+
+  /// 二进制前缀域统一前缀长度 = GMB(3B) + op_tag(1B) = 4(对齐 BINARY_PREFIX_LEN)。
+  static const _binaryPrefixLen = 4;
+
+  /// ACTIVATE_ADMIN op_tag(对齐 OP_SIGN_ACTIVATE_ADMIN)。
+  static const _opSignActivateAdmin = 0x18;
+
+  /// DECRYPT op_tag(对齐 OP_SIGN_DECRYPT)。
+  static const _opSignDecrypt = 0x19;
+
+  /// ACTIVATE_ADMIN 4 字节二进制前缀 GMB || 0x18(取代旧 21B 字符串前缀)。
   static final _activateAdminPrefix = Uint8List.fromList(
-    'GMB_ACTIVATE_ADMIN_V1'.codeUnits,
+    [..._gmbPrefix, _opSignActivateAdmin],
   );
 
-  /// "GMB_DECRYPT_V1" 前缀（14 字节 ASCII）。
-  ///
-  /// 这是 `CITIZEN_QR_V1` 内部 payload 的业务签名域，不是二维码协议版本。
-  static const _decryptPrefix = [
-    0x47, 0x4D, 0x42, 0x5F, // GMB_
-    0x44, 0x45, 0x43, 0x52, // DECR
-    0x59, 0x50, 0x54, 0x5F, // YPT_
-    0x56, 0x31, // V1
-  ];
+  /// DECRYPT 4 字节二进制前缀 GMB || 0x19(取代旧 14B "GMB_DECRYPT_V1" 前缀)。
+  static final _decryptPrefix = Uint8List.fromList(
+    [..._gmbPrefix, _opSignDecrypt],
+  );
   static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
     'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
   );
+  // ADR-026 评估结论:'cid_admin_governance' 是 **QR 动作类型 tag**(JSON
+  // envelope 的 domain 字段值),不是 signing_message 的哈希签名域 —— 整段 JSON
+  // 字节由 sr25519 直接签名,payload_hash 仅为 sha256 展示指纹。故不并入
+  // op_tag 注册表,保留原值不正名为 GMB_*_V1。
   static const String _cidAdminActionDomain = 'cid_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {
@@ -91,17 +121,11 @@ class PayloadDecoder {
       if (_hasPrefix(raw, _cpmsArchiveDeletePrefix)) {
         return _decodeCpmsArchiveDelete(raw);
       }
-      if (raw.length == 118) {
-        bool isDecrypt = true;
-        for (var i = 0; i < _decryptPrefix.length; i++) {
-          if (raw[i] != _decryptPrefix[i]) {
-            isDecrypt = false;
-            break;
-          }
-        }
-        if (isDecrypt) {
-          return _decodeDecryptAdmin(raw);
-        }
+      // DECRYPT challenge = prefix(4) + cid_number(48) + pubkey(32)
+      //   + timestamp(8) + nonce(16) = 108 字节(对齐 node CHALLENGE_TOTAL_LEN)。
+      if (raw.length == _binaryPrefixLen + 48 + 32 + 8 + 16 &&
+          _hasPrefix(raw, _decryptPrefix)) {
+        return _decodeDecryptAdmin(raw);
       }
     } catch (_) {
       // 非 challenge payload，继续正常解码。
@@ -730,9 +754,9 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // 管理员激活（非链上交易）
-  // 格式：GMB_ACTIVATE_ADMIN_V1 + account_id(32B) + institution_code([u8;4]) + kind(u8)
-  //      + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B)
+  // 管理员激活（非链上交易，二进制前缀域 ADR-026 Phase 2）
+  // 格式：prefix(4B = GMB||0x18) + account_id(32B) + institution_code([u8;4])
+  //      + kind(u8) + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B) = 97B
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeActivateAdminAccount(Uint8List bytes) {
     final expectedLength =
@@ -770,14 +794,16 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // 清算行管理员解密（非链上交易）
-  // 格式：GMB_DECRYPT_V1(14B) + cid_number(48B, 右补零) + pubkey(32B)
-  //      + timestamp(8B, u64 LE) + nonce(16B)
+  // 清算行管理员解密（非链上交易，二进制前缀域 ADR-026 Phase 2）
+  // 格式：prefix(4B = GMB||0x19) + cid_number(48B, 右补零) + pubkey(32B)
+  //      + timestamp(8B, u64 LE) + nonce(16B) = 108B
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
-    if (bytes.length < 118) return null;
+    const totalLen = _binaryPrefixLen + 48 + 32 + 8 + 16;
+    if (bytes.length != totalLen) return null;
 
-    final idBytes = bytes.sublist(14, 62);
+    const idStart = _binaryPrefixLen;
+    final idBytes = bytes.sublist(idStart, idStart + 48);
     var endIndex = 48;
     while (endIndex > 0 && idBytes[endIndex - 1] == 0) {
       endIndex--;

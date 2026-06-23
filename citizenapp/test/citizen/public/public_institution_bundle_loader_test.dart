@@ -49,10 +49,10 @@ PublicInstitutionBundleLoader buildLoader({
   );
 }
 
-/// 新格式机构 manifest:provinces:[{name,ver}]。
+/// 新格式机构 manifest:provinces:[{province_name,manifest_version}]。
 String _instManifest({
   required String version,
-  required List<Map<String, String>> provinces, // [{name,ver}]
+  required List<Map<String, String>> provinces,
 }) =>
     jsonEncode({'version': version, 'provinces': provinces});
 
@@ -62,7 +62,7 @@ void main() {
       'assets/public_institutions/manifest.json': _instManifest(
         version: '1',
         provinces: const [
-          {'name': '中枢省', 'ver': 'cz-1'},
+          {'province_name': '中枢省', 'manifest_version': 'cz-1'},
         ],
       ),
       'assets/public_institutions/中枢省.json': jsonEncode({
@@ -100,7 +100,7 @@ void main() {
     expect(kv.provinceVersions, {'中枢省': 'cz-1'});
   });
 
-  test('全局 version 相等但省级 ver 变化 → 仍 reconcile 机构分片', () async {
+  test('全局 version 相等但省级 manifest_version 变化 → 仍 reconcile 机构分片', () async {
     final store = FakePublicInstitutionStore();
     await store.upsertInstitutions(
       [
@@ -122,7 +122,7 @@ void main() {
       'assets/public_institutions/manifest.json': _instManifest(
         version: '1',
         provinces: const [
-          {'name': '中枢省', 'ver': 'cz-new'},
+          {'province_name': '中枢省', 'manifest_version': 'cz-new'},
         ],
       ),
       'assets/public_institutions/中枢省.json': jsonEncode({
@@ -151,8 +151,8 @@ void main() {
   });
 
   test('reconcile:改名 + 删除 + 新增,没变的省不动', () async {
-    // 本地:中枢省[A 旧名, B 待删](ver=cz-1)、岭南省[X](ver=ln-1)。
-    // manifest:中枢省 ver 变(cz-1→cz-2),岭南省 ver 不变。
+    // 本地:中枢省[A 旧名, B 待删](manifest_version=cz-1)、岭南省[X](manifest_version=ln-1)。
+    // manifest:中枢省 manifest_version 变(cz-1→cz-2),岭南省 manifest_version 不变。
     final store = FakePublicInstitutionStore();
     await store.upsertInstitutions(
       [
@@ -190,8 +190,8 @@ void main() {
       'assets/public_institutions/manifest.json': _instManifest(
         version: 'v2',
         provinces: const [
-          {'name': '中枢省', 'ver': 'cz-2'}, // 变了
-          {'name': '岭南省', 'ver': 'ln-1'}, // 不变
+          {'province_name': '中枢省', 'manifest_version': 'cz-2'}, // 变了
+          {'province_name': '岭南省', 'manifest_version': 'ln-1'}, // 不变
         ],
       ),
       'assets/public_institutions/中枢省.json': jsonEncode({
@@ -250,12 +250,12 @@ void main() {
     final kv = FakeDataVersionKv()
       ..globalVersion = 'v1'
       ..provinceVersions = {'岭南省': 'ln-1'};
-    // 全局 version 变了(强制进入逐省比对),但岭南省 ver 没变 → 不 reconcile。
+    // 全局 version 变了(强制进入逐省比对),但岭南省 manifest_version 没变 → 不 reconcile。
     final bundle = _MapBundle({
       'assets/public_institutions/manifest.json': _instManifest(
         version: 'v2',
         provinces: const [
-          {'name': '岭南省', 'ver': 'ln-1'},
+          {'province_name': '岭南省', 'manifest_version': 'ln-1'},
         ],
       ),
     });

@@ -29,13 +29,13 @@ const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// 前端展示的 GRANDPA 私钥绑定状态。
 pub struct GrandpaKey {
     pub key: Option<String>,
-    pub cid_full_name: Option<String>,
+    pub authority_node_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredGrandpaMeta {
     #[serde(default)]
-    cid_full_name: Option<String>,
+    authority_node_label: Option<String>,
     #[serde(default)]
     pubkey_hex: Option<String>,
 }
@@ -55,8 +55,8 @@ struct GrandpaPersistedStateBackup {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InstitutionCatalogEntry {
-    pub name: String,
-    /// 机构角色：`guochuhui` | `shengchuhui` | `shengchuhang`
+    pub authority_node_label: String,
+    /// 权威节点角色：`guochuhui` | `shengchuhui` | `shengchuhang`
     #[serde(default)]
     pub role: String,
     pub peer_id: String,
@@ -68,7 +68,7 @@ pub(crate) struct InstitutionCatalogEntry {
 
 static INSTITUTION_CATALOG: OnceLock<Vec<InstitutionCatalogEntry>> = OnceLock::new();
 
-/// 获取机构清单（OnceLock 惰性初始化，编译期内嵌 JSON 只解析一次）。
+/// 获取权威节点清单（OnceLock 惰性初始化，编译期内嵌 JSON 只解析一次）。
 pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
     if let Some(catalog) = INSTITUTION_CATALOG.get() {
         return Ok(catalog.clone());
@@ -78,7 +78,7 @@ pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>,
     Ok(INSTITUTION_CATALOG.get().unwrap().clone())
 }
 
-// 机构清单既被 bootnode 模块用于 PeerId 映射，也被 GRANDPA 模块用于公钥匹配，
+// 权威节点清单既被 bootnode 模块用于 PeerId 映射，也被 GRANDPA 模块用于公钥匹配，
 // 加载时统一做 trim / 去重 / 格式校验，避免配置里的空格或脏数据影响运行时判断。
 fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
     let entries: Vec<InstitutionCatalogEntry> = serde_json::from_str(INSTITUTION_CATALOG_SRC)
@@ -87,20 +87,22 @@ fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
         return Err("institution-catalog.json 为空".to_string());
     }
 
-    let mut seen_names = HashSet::new();
+    let mut seen_authority_node_labels = HashSet::new();
     let mut seen_peer_ids = HashSet::new();
     let mut seen_grandpa = HashSet::new();
     let mut normalized_entries = Vec::with_capacity(entries.len());
     for (idx, entry) in entries.iter().enumerate() {
         let line = idx + 1;
-        let name = entry.name.trim();
-        if name.is_empty() {
+        let authority_node_label = entry.authority_node_label.trim();
+        if authority_node_label.is_empty() {
             return Err(format!(
-                "institution-catalog.json 第 {line} 项 name 不能为空"
+                "institution-catalog.json 第 {line} 项 authorityNodeLabel 不能为空"
             ));
         }
-        if !seen_names.insert(name.to_string()) {
-            return Err(format!("institution-catalog.json 机构名重复: {name}"));
+        if !seen_authority_node_labels.insert(authority_node_label.to_string()) {
+            return Err(format!(
+                "institution-catalog.json 权威节点标签重复: {authority_node_label}"
+            ));
         }
 
         let peer_id = entry.peer_id.trim();
@@ -130,7 +132,7 @@ fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
         }
 
         normalized_entries.push(InstitutionCatalogEntry {
-            name: name.to_string(),
+            authority_node_label: authority_node_label.to_string(),
             role: entry.role.clone(),
             peer_id: peer_id.to_string(),
             grandpa_pubkey_hex: grandpa.to_ascii_lowercase(),
@@ -159,11 +161,11 @@ fn load_grandpa_meta(app: &AppHandle) -> Result<Option<StoredGrandpaMeta>, Strin
 
 fn save_grandpa_meta(
     app: &AppHandle,
-    cid_full_name: Option<String>,
+    authority_node_label: Option<String>,
     pubkey_hex: Option<String>,
 ) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(&StoredGrandpaMeta {
-        cid_full_name,
+        authority_node_label,
         pubkey_hex,
     })
     .map_err(|e| format!("encode grandpa meta failed: {e}"))?;
@@ -222,7 +224,7 @@ fn restore_grandpa_persisted_state(
     backup: &GrandpaPersistedStateBackup,
 ) -> Result<(), String> {
     match &backup.meta {
-        Some(meta) => save_grandpa_meta(app, meta.cid_full_name.clone(), meta.pubkey_hex.clone())?,
+        Some(meta) => save_grandpa_meta(app, meta.authority_node_label.clone(), meta.pubkey_hex.clone())?,
         None => clear_grandpa_meta(app)?,
     }
 
@@ -261,10 +263,15 @@ fn has_grandpa_key_in_keystore(app: &AppHandle, pubkey_hex: &str) -> Result<bool
     ))
 }
 
-fn grandpa_institution_options() -> Result<Vec<(String, String)>, String> {
+fn grandpa_authority_node_options() -> Result<Vec<(String, String)>, String> {
     let out = load_institution_catalog()?
         .into_iter()
-        .map(|entry| (entry.name, entry.grandpa_pubkey_hex.to_ascii_lowercase()))
+        .map(|entry| {
+            (
+                entry.authority_node_label,
+                entry.grandpa_pubkey_hex.to_ascii_lowercase(),
+            )
+        })
         .collect::<Vec<(String, String)>>();
     if out.is_empty() {
         return Err("未配置 GRANDPA 权威公钥".to_string());
@@ -272,11 +279,11 @@ fn grandpa_institution_options() -> Result<Vec<(String, String)>, String> {
     Ok(out)
 }
 
-fn cid_full_name_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>, String> {
-    Ok(grandpa_institution_options()?
+fn authority_node_label_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>, String> {
+    Ok(grandpa_authority_node_options()?
         .into_iter()
         .find(|(_, key)| key.eq_ignore_ascii_case(pubkey_hex))
-        .map(|(name, _)| name))
+        .map(|(authority_node_label, _)| authority_node_label))
 }
 
 fn grandpa_pubkey_from_private_hex(key_hex: &str) -> Result<String, String> {
@@ -341,15 +348,15 @@ pub(crate) fn prepare_grandpa_for_start(app: &AppHandle) -> Result<bool, String>
     let Some(meta) = load_grandpa_meta(app)? else {
         return Ok(false);
     };
-    if meta.cid_full_name.is_none() {
+    if meta.authority_node_label.is_none() {
         return Ok(false);
     }
     let Some(pubkey) = meta.pubkey_hex.as_deref() else {
         return Ok(false);
     };
 
-    // 校验公钥仍在当前机构清单中，防止清单更新后误启动 validator。
-    if cid_full_name_by_grandpa_pubkey(pubkey)?.is_none() {
+    // 校验公钥仍在当前权威节点清单中，防止清单更新后误启动 validator。
+    if authority_node_label_by_grandpa_pubkey(pubkey)?.is_none() {
         return Err(format!(
             "已保存的投票公钥不在当前 GRANDPA 权威列表中（公钥: 0x{pubkey}）"
         ));
@@ -385,14 +392,14 @@ pub(crate) fn verify_grandpa_after_start(app: &AppHandle) -> Result<(), String> 
 #[tauri::command]
 pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
     let meta = load_grandpa_meta(&app)?;
-    let cid_full_name = meta.as_ref().and_then(|v| v.cid_full_name.clone());
-    if cid_full_name.is_none() {
+    let authority_node_label = meta.as_ref().and_then(|v| v.authority_node_label.clone());
+    if authority_node_label.is_none() {
         return Ok(GrandpaKey {
             key: None,
-            cid_full_name: None,
+            authority_node_label: None,
         });
     }
-    // 若 meta 记录了机构但 keystore 文件已不存在（如链数据被清除），
+    // 若 meta 记录了权威节点标签但 keystore 文件已不存在（如链数据被清除），
     // 自动清除过期 meta，返回空状态（等同全新安装）。
     if let Some(pubkey) = meta.as_ref().and_then(|v| v.pubkey_hex.as_deref()) {
         if !has_grandpa_key_in_keystore(&app, pubkey)? {
@@ -400,14 +407,14 @@ pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
             clear_grandpa_meta(&app)?;
             return Ok(GrandpaKey {
                 key: None,
-                cid_full_name: None,
+                authority_node_label: None,
             });
         }
     }
     Ok(GrandpaKey {
         // 私钥不回传给前端，避免二次暴露。
         key: None,
-        cid_full_name,
+        authority_node_label,
     })
 }
 
@@ -426,14 +433,14 @@ pub fn set_grandpa_key(
     let backup = snapshot_grandpa_persisted_state(&app)?;
     let normalized = normalize_grandpa_key(&key)?;
     let pubkey = grandpa_pubkey_from_private_hex(&normalized)?;
-    let cid_full_name = cid_full_name_by_grandpa_pubkey(&pubkey)?
-        .ok_or_else(|| format!("私钥与任何机构 GRANDPA 公钥不匹配（推导公钥: 0x{pubkey}）"))?;
+    let authority_node_label = authority_node_label_by_grandpa_pubkey(&pubkey)?
+        .ok_or_else(|| format!("私钥与任何权威节点 GRANDPA 公钥不匹配（推导公钥: 0x{pubkey}）"))?;
 
     let normalized = Zeroizing::new(normalized);
     let mut node_stopped_for_restart = false;
     let mut new_node_started = false;
     let apply_result = (|| -> Result<(), String> {
-        save_grandpa_meta(&app, Some(cid_full_name.clone()), Some(pubkey.clone()))?;
+        save_grandpa_meta(&app, Some(authority_node_label.clone()), Some(pubkey.clone()))?;
         write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
 
         // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
@@ -490,6 +497,6 @@ pub fn set_grandpa_key(
 
     Ok(GrandpaKey {
         key: None,
-        cid_full_name: Some(cid_full_name),
+        authority_node_label: Some(authority_node_label),
     })
 }

@@ -607,7 +607,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
               <Select
                 loading={citiesLoading}
                 disabled={lockedCityName !== null}
-                options={cities.map((c) => ({ label: c.name, value: c.name }))}
+                options={cities.map((c) => ({ label: c.city_name, value: c.city_name }))}
                 placeholder="请选择市"
                 onChange={() => {
                   // 中文注释:G 全称查重按市,所属法人搜索按落位省市;换市后两者都要重来。

@@ -288,7 +288,7 @@ pub(crate) async fn generate_cpms_install_qr(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 1004,
                 "generate install_secret failed",
-            )
+            );
         }
     };
     let install_secret_hash = install_secret_hash(install_secret.as_str());
@@ -314,7 +314,7 @@ pub(crate) async fn generate_cpms_install_qr(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 1004,
                 "serialize QR1 failed",
-            )
+            );
         }
     };
     let created_at = Utc::now();
@@ -472,7 +472,7 @@ pub(crate) async fn reissue_install_token(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 1004,
                 "generate install_secret failed",
-            )
+            );
         }
     };
     site.install_secret = install_secret;
@@ -509,7 +509,7 @@ pub(crate) async fn reissue_install_token(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 1004,
                 "serialize QR1 failed",
-            )
+            );
         }
     };
     if let Err(err) = state.db.upsert_cpms_site(&site) {
@@ -531,7 +531,7 @@ pub(crate) async fn reissue_install_token(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_display_name),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
     })
     .into_response()
 }
@@ -587,7 +587,7 @@ async fn update_cpms_site_token_status(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_display_name),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
     })
     .into_response()
 }
@@ -814,7 +814,7 @@ async fn update_cpms_site_status(
         CpmsSiteStatus::Disabled => AdminActionType::CpmsDisableKeys,
         CpmsSiteStatus::Revoked => AdminActionType::CpmsRevokeKeys,
         CpmsSiteStatus::Pending => {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid target status")
+            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid target status");
         }
     };
     let grant_payload = serde_json::json!({ "target": cid_number.clone(), "reason": reason_text });
@@ -867,7 +867,7 @@ async fn update_cpms_site_status(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_display_name),
+        data: cpms_site_keys_to_list_row_simple(&site, ctx.admin_name),
     })
     .into_response()
 }

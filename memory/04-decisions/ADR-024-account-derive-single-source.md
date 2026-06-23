@@ -110,9 +110,9 @@ pub fn is_registrable_custom_name(name: &[u8]) -> bool {
 
 fixture 格式 `account_derive_vectors.json`：
 ```json
-{ "ss58_format": 2027, "domain": "DUOQIAN",
+{ "ss58_format": 2027, "domain": "GMB",
   "vectors": [
-    {"kind":"InstitutionMain","cid_number":"LN001-GCB05-944805165-2026","address_hex":"..."},
+    {"kind":"InstitutionMain","cid_number":"LN001-NRC0G-944805165-2026","address_hex":"..."},
     {"kind":"InstitutionFee","cid_number":"...","address_hex":"..."},
     {"kind":"InstitutionNamed","cid_number":"...","account_name":"工资账户","address_hex":"..."},
     {"kind":"InstitutionStake","cid_number":"...","address_hex":"..."},

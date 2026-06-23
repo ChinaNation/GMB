@@ -144,7 +144,7 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
     Some(domain.to_string())
 }
 
-pub(crate) fn build_admin_display_name(
+pub(crate) fn build_admin_name(
     // 中文注释:参数保留以稳定调用签名;内置联邦注册局清单已迁链上,显示名不再按账号反查。
     _admin_account: &str,
     registry_org_code: &RegistryOrgCode,
@@ -162,16 +162,16 @@ pub(crate) fn build_admin_display_name(
     }
 }
 
-pub(super) fn build_admin_display_name_from_user(
+pub(super) fn build_admin_name_from_user(
     admin: &AdminUser,
     scope_province_name: Option<&str>,
 ) -> String {
-    // 二角色统一:优先使用 admin_display_name(真实姓名),空则 fallback 到角色默认名
-    let name = admin.admin_display_name.trim();
+    // 二角色统一:优先使用 admin_name(真实姓名),空则 fallback 到角色默认名
+    let name = admin.admin_name.trim();
     if !name.is_empty() {
         return name.to_string();
     }
-    build_admin_display_name(
+    build_admin_name(
         &admin.admin_account,
         &admin.registry_org_code,
         scope_province_name,

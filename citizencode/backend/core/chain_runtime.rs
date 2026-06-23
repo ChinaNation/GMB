@@ -3,9 +3,7 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::Encode;
-use primitives::core_const::{
-    GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE,
-};
+use primitives::core_const::{GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};

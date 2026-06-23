@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenapp/signer/signing.dart';
 import 'package:citizenapp/transaction/offchain-transaction/models/payment_intent.dart';
 
 /// 扫码支付 Step 2c-ii-a 新增:**跨端 golden vectors**。
@@ -12,8 +13,9 @@ import 'package:citizenapp/transaction/offchain-transaction/models/payment_inten
 ///
 /// **锁定的不变量**:
 /// - `NodePaymentIntent` 定长 204 字节 SCALE 布局
-/// - 签名域 `GMB_L3_PAY_V1`(13 字节 ASCII)与 runtime 常量逐字节一致
-/// - `signingHash()` = `blake2b_256(domain ++ scaleEncode())`
+/// - 签名经统一原语 `signingMessage(OP_SIGN_L3_PAY=0x15, ...)`(ADR-026,
+///   取代历史字符串域 `GMB_L3_PAY_V1`)
+/// - `signingHash()` = `blake2b_256(GMB(3B) || 0x15 || scaleEncode())`
 
 void main() {
   group('PaymentIntent golden vectors (cross-Rust)', () {
@@ -45,7 +47,7 @@ void main() {
       _assertHexEq(
         'fixture1 signing_hash',
         intent.signingHash(),
-        'f50eeb66b681e445ee6fcffa318288b915fdea9791eae1d094645d4eb5f7008f',
+        '19c26c228363e18a119c0a11323bf54a21f9285ce205918f1311f9fa283b63e3',
       );
     });
 
@@ -77,7 +79,7 @@ void main() {
       _assertHexEq(
         'fixture2 signing_hash',
         intent.signingHash(),
-        'd6f381b931ad0f2c7f7fba5d83bdd24892ccbd0e063d831ebc00d2e6d21c9bd8',
+        '5329809c9803906ae2141be93a3b1cd49bc89adb16a88ca9763fab864df30e90',
       );
     });
 
@@ -113,30 +115,29 @@ void main() {
       _assertHexEq(
         'fixture3 signing_hash',
         intent.signingHash(),
-        '8e99dbc826503544b240ed3e113f999bc3928048aa69989118f517309286a1b2',
+        'c7fac179287401a2e0f3cb03f60dbf202d7ec48967d8407cd8f96daddcd287bf',
       );
     });
 
-    test('signing domain bytes match Rust L3_PAY_SIGNING_DOMAIN', () {
-      expect(
-        NodePaymentIntent.signingDomain,
-        // "GMB_L3_PAY_V1" in ASCII
-        equals(const [
-          0x47,
-          0x4D,
-          0x42,
-          0x5F,
-          0x4C,
-          0x33,
-          0x5F,
-          0x50,
-          0x41,
-          0x59,
-          0x5F,
-          0x56,
-          0x31,
-        ]),
+    test('signingHash 经统一原语 signingMessage(OP_SIGN_L3_PAY)', () {
+      // 证明 signingHash() 与直调统一原语逐字节一致(域已从 GMB_L3_PAY_V1
+      // 折成 GMB(3B)||0x15,ADR-026)。
+      final intent = NodePaymentIntent(
+        txId: _filledBytes(32, 0x00),
+        payer: _filledBytes(32, 0x01),
+        payerBank: _filledBytes(32, 0x02),
+        recipient: _filledBytes(32, 0x03),
+        recipientBank: _filledBytes(32, 0x02),
+        amount: BigInt.from(10000),
+        fee: BigInt.from(5),
+        nonce: BigInt.from(1),
+        expiresAt: 100,
       );
+      final viaPrimitive = signingMessage(
+        opTag: kOpSignL3Pay,
+        scalePayload: intent.scaleEncode(),
+      );
+      expect(_hexLower(intent.signingHash()), _hexLower(viaPrimitive));
     });
 
     test('scaleEncode length is always 204 bytes', () {

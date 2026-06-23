@@ -11,7 +11,7 @@ void main() {
         walletAddress: '5F-test-address',
         walletPubkeyHex: 'abcd',
         walletIndex: 1,
-        cidNumber: 'LN001-GCB05-944805165-2026',
+        cidNumber: 'LN001-NRC0G-944805165-2026',
         identityStatus: 'NORMAL',
         validFrom: '2026-05-24',
         validUntil: '2036-05-23',
@@ -26,7 +26,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('身份ID'), findsOneWidget);
-    expect(find.text('LN001-GCB05-944805165-2026'), findsOneWidget);
+    expect(find.text('LN001-NRC0G-944805165-2026'), findsOneWidget);
     expect(find.text('投票账户'), findsOneWidget);
     expect(find.text('绑定账户'), findsNothing);
     expect(find.text('5F-test-address'), findsOneWidget);

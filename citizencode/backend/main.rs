@@ -43,7 +43,7 @@ pub(crate) use crate::core::http_security::*;
 pub(crate) use crate::core::response::*;
 pub(crate) use crate::core::{db::Db, secret::SensitiveSeed};
 pub(crate) use admins::login::{
-    build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
+    build_admin_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
     require_federal_registry,
 };
 pub(crate) use admins::model::*;
@@ -1589,7 +1589,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 				                                    COALESCE(ac.account_count, 0),
-				                                    a.admin_display_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
+				                                    a.admin_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
 				                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
 				                                    s.education_type,
 				                                    s.status
@@ -1715,7 +1715,7 @@ impl Db {
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
                                     s.parent_cid_number, s.created_by, s.created_at,
                                     COALESCE(ac.account_count, 0),
-                                    a.admin_display_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
+                                    a.admin_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
                                     COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
                                     s.education_type, s.status,
                                     NULL::text, NULL::text, NULL::boolean
@@ -1770,7 +1770,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_display_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
+			                                    a.admin_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
 			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
 			                                    s.education_type,
 			                                    s.status, cs.status, cs.install_token_status,
@@ -1835,7 +1835,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_display_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
+			                                    a.admin_name, a.registry_org_code, s.cid_full_name, s.cid_short_name,
 			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
 			                                    s.education_type,
 			                                    s.status, NULL::text, NULL::text, NULL::boolean

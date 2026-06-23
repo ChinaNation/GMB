@@ -146,7 +146,7 @@ class _QrScanPageState extends State<QrScanPage> {
             await _showUnrecognized();
           }
         case QrScanMode.contact:
-          // 扫码添加好友:接受 user_transfer(带 name)/ user_contact
+          // 扫码添加好友:接受 user_transfer(带 recipient_name)/ user_contact
           if (result.type == QrRouteType.userTransfer) {
             await _handleContactFromTransfer(result);
           } else if (result.type == QrRouteType.userContact) {
@@ -227,7 +227,7 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!mounted) return;
     try {
       final body = result.envelope!.body as UserTransferBody;
-      final name = body.name.trim();
+      final name = body.recipientName.trim();
       if (name.isEmpty) {
         await showDialog<void>(
           context: context,
@@ -279,7 +279,7 @@ class _QrScanPageState extends State<QrScanPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 用户码（兼容旧版）
+  // 用户码
   // ---------------------------------------------------------------------------
 
   Future<void> _handleContact(QrRouteResult result) async {
@@ -288,7 +288,7 @@ class _QrScanPageState extends State<QrScanPage> {
       final body = result.envelope!.body as UserContactBody;
       final addResult = await _contactService.addContact(
         address: body.address,
-        name: body.name,
+        name: body.contactName,
         selfAddress: widget.selfAddress,
       );
       if (!mounted) return;

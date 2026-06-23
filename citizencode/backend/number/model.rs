@@ -10,13 +10,13 @@ pub(crate) struct CidOptionItem {
 
 #[derive(Serialize)]
 pub(crate) struct CidProvinceItem {
-    pub(crate) name: String,
+    pub(crate) province_name: String,
     pub(crate) code: String,
 }
 
 #[derive(Serialize)]
 pub(crate) struct CidCityItem {
-    pub(crate) name: String,
+    pub(crate) city_name: String,
     pub(crate) code: String,
 }
 

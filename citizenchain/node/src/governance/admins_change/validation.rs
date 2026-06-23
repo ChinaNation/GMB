@@ -39,7 +39,11 @@ pub fn validate_admin_set_change(
     Ok(normalized)
 }
 
-fn validate_count(kind: u8, institution_code: &InstitutionCode, count: usize) -> Result<(), String> {
+fn validate_count(
+    kind: u8,
+    institution_code: &InstitutionCode,
+    count: usize,
+) -> Result<(), String> {
     match kind {
         0 => {
             // 管理员人数单一真源 = primitives::count_const,桌面端不再硬编码。
@@ -85,7 +89,11 @@ mod tests {
         format!("{seed:02x}").repeat(32)
     }
 
-    fn state(kind: u8, institution_code: InstitutionCode, admins: Vec<String>) -> AdminAccountState {
+    fn state(
+        kind: u8,
+        institution_code: InstitutionCode,
+        admins: Vec<String>,
+    ) -> AdminAccountState {
         AdminAccountState {
             account_hex: "11".repeat(32),
             cid_number: Some("TEST-CID".to_string()),

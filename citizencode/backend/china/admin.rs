@@ -74,7 +74,7 @@ pub(crate) async fn admin_china_cities(
         .cities
         .iter()
         .map(|c| CidCityItem {
-            name: c.name.to_string(),
+            city_name: c.name.to_string(),
             code: c.code.to_string(),
         })
         .collect();

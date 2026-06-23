@@ -1,3 +1,4 @@
+use primitives::sign::IM_WALLET_BINDING_DOMAIN;
 use serde::{Deserialize, Serialize};
 
 use super::endpoint::ImNodeEndpoint;
@@ -35,7 +36,7 @@ impl RegisterImDeviceRequest {
             .collect::<Vec<_>>()
             .join(",");
         [
-            "GMB_IM_WALLET_BINDING_V1",
+            IM_WALLET_BINDING_DOMAIN,
             self.wallet_account.as_str(),
             self.im_device_id.as_str(),
             self.im_device_pubkey.as_str(),

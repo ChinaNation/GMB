@@ -30,9 +30,12 @@ pub mod validator;
 pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_SUFFIX};
 pub use code::{AdminLevel, InstitutionCode};
 pub use generator::{generate_cid_number, GenerateCidInput};
-pub use seed::{citizen_cid, dynamic_institution_cid, official_institution_cid, SeedCidError};
 #[allow(unused_imports)]
 pub(crate) use model::*;
+pub use seed::{
+    citizen_cid, dynamic_institution_cid, official_institution_cid, public_security_cid,
+    SeedCidError,
+};
 pub use validator::{
     parse_cid_number_parts, validate_cid_number_format, CidNumberParts, CID_NUMBER_SEGMENT_COUNT,
     CID_NUMBER_SEGMENT_D4_LEN, CID_NUMBER_SEGMENT_K3P1C1_LEN, CID_NUMBER_SEGMENT_N9_LEN,

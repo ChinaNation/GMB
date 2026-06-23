@@ -145,7 +145,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
   const activeProvince = selectedFederalRegistry?.province_name ?? auth?.scope_province_name ?? null;
   const activeCity = selectedCity ?? (auth?.registry_org_code === 'CITY_REGISTRY' ? auth?.scope_city_name ?? null : null);
 
-  const [addCityRegistryForm] = Form.useForm<{ city_registry_account: string; city_registry_display_name: string; city_scope_city_name: string }>();
+  const [addCityRegistryForm] = Form.useForm<{ city_registry_account: string; city_registry_admin_name: string; city_scope_city_name: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState(false);
   const [adminActionCommitLoading, setAdminActionCommitLoading] = useState(false);
@@ -378,16 +378,16 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
 
   // ── 事件处理 ──
 
-  const onCreateCityRegistry = async (values: { city_registry_account: string; city_registry_display_name: string; city_name?: string }) => {
+  const onCreateCityRegistry = async (values: { city_registry_account: string; city_registry_admin_name: string; city_name?: string }) => {
     if (!auth) return;
     const inputAddr = values.city_registry_account?.trim();
-    const admin_display_name = values.city_registry_display_name?.trim();
+    const admin_name = values.city_registry_admin_name?.trim();
     const city = (values.city_name ?? '').trim();
     if (!inputAddr) {
       notice.error('请输入管理员账户');
       return;
     }
-    if (!admin_display_name) {
+    if (!admin_name) {
       notice.error('请输入管理员姓名');
       return;
     }
@@ -411,7 +411,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     try {
       const created = await runSecuredAction<CityRegistryAdminRow>('CREATE_CITY_REGISTRY', {
         admin_account,
-        admin_display_name,
+        admin_name,
         city_name: city,
       });
       notice.success('管理员新增成功');
@@ -432,7 +432,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
 
   const onUpdateCityRegistry = (row: CityRegistryAdminRow) => {
     if (!auth) return;
-    let nextName = row.admin_display_name;
+    let nextName = row.admin_name;
     const ss58Address = tryEncodeSs58(row.admin_account);
     notice.confirm({
       title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市注册局管理员</div>,
@@ -445,7 +445,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
           <div>
             <Typography.Text type="secondary">管理员姓名</Typography.Text>
             <Input
-              defaultValue={row.admin_display_name}
+              defaultValue={row.admin_name}
               placeholder="请输入管理员姓名"
               style={{ marginTop: 6 }}
               onChange={(event) => {
@@ -466,14 +466,14 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       okText: '确认修改',
       cancelText: '取消',
       onOk: async () => {
-        const admin_display_name = nextName.trim();
-        if (!admin_display_name) {
+        const admin_name = nextName.trim();
+        if (!admin_name) {
           notice.error('请输入管理员姓名');
-          throw new Error('admin_display_name is required');
+          throw new Error('admin_name is required');
         }
         setCityRegistryAdminsLoading(true);
         try {
-          await updateCityRegistryName(auth, row.id, admin_display_name);
+          await updateCityRegistryName(auth, row.id, admin_name);
           notice.success('市注册局管理员信息已更新');
           await refreshCityRegistryAdmins();
         } catch (err) {

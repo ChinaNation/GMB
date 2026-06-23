@@ -7,16 +7,16 @@ export type RewardWallet = {
 export type BootnodeKey = {
   nodeKey: string | null;
   peerId: string | null;
-  cidFullName: string | null;
+  authorityNodeLabel: string | null;
 };
 
 export type GrandpaKey = {
   key: string | null;
-  cidFullName: string | null;
+  authorityNodeLabel: string | null;
 };
 
 export type BootnodeOption = {
-  name: string;
+  authorityNodeLabel: string;
   peerId: string;
 };
 

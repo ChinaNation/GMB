@@ -70,7 +70,7 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
       const matches: AdminWalletMatch[] = aa.map(a => ({
         address: hexToSs58(a.pubkeyHex),
         pubkeyHex: a.pubkeyHex,
-        name: '',
+        walletLabel: '',
       }));
       setAdmins(matches);
       if (matches.length === 1) setSelectedAdmin(matches[0]);

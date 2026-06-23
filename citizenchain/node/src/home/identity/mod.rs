@@ -26,11 +26,13 @@ pub struct NodeIdentity {
     pub role: Option<String>,
 }
 
-// 角色由 bootnode 名称映射得出，未命中时统一按"全节点"展示。
+// 角色由 bootnode 权威节点标签映射得出，未命中时统一按"全节点"展示。
 fn role_from_peer_id(peer_id: Option<&str>) -> String {
     if let Some(pid) = peer_id {
-        if let Ok(Some(name)) = bootnodes_address::find_genesis_bootnode_name_by_peer_id(pid) {
-            return name;
+        if let Ok(Some(authority_node_label)) =
+            bootnodes_address::find_genesis_bootnode_label_by_peer_id(pid)
+        {
+            return authority_node_label;
         }
     }
     "全节点".to_string()

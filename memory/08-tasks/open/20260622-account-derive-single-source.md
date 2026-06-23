@@ -6,7 +6,7 @@
 
 ### Tier 3 + Q1 执行（2026-06-22，创世前最后代码准备）
 - **Tier 3 域 DUOQIAN→GMB 完成 + 验证**：`core_const::GMB`(b"GMB",&[u8;3]) + 全 Rust/Dart/gmb.py 引用锁步;签名域全在后端 chain_runtime(钱包零改);china 608 账户用 GMB 重派、两 golden + chain_runtime digest(fb420287→137304f0)重生。合并态：链端 org-manage29/personal23/primitives22/金标1 + 后端77 + citizenapp test/governance/shared 28 + analyze0，GMB 三角自洽(china字面==Rust金标==Dart派生)。
-- **Q1 部分完成（3/4）**：新建 `number/seed.rs`(official_institution_cid/citizen_cid/dynamic_institution_cid + exists_fn 回调倒置,6 单测),binding/registration/gov 模板三处已委托。**未完**：`gov/service.rs::generate_public_security_cid`(PS-{省}-{市},第 4 条种子)仍自拼——因 gov/service.rs 被并行线程持有,留待其提交后收敛。
+- **Q1 完成（4/4）**：`number/seed.rs` 持四构造器 official_institution_cid / citizen_cid / dynamic_institution_cid / **public_security_cid**(PS-{省码}-{市码} CPOL,第 4 条,2026-06-22 收尾)+ exists_fn 回调倒置;调用方 binding/registration/gov 模板/gov public_security 全委托。CID 输出逐字节不变(7 seed 单测含 public_security_seed_matches_inline_byte_for_byte 全过;gov `generate_cid_number` 残留=0;`PS-` 种子全仓仅 number/seed.rs 一处)。后端 77 测试全过。
 - **🔴 创世前 blocker（独立验证发现，T3/T4 漏）**：citizenapp 其它 test/asset 仍旧 CID+旧域(public_institution_detail_test 真红 / myid_page_test / common/institution_info_test / admins-change institution_admin_service_test / public_provinces.dart:40 注释);assets/chainspec.json 旧域存储键须 bake-chainspec.sh 重生。**创世前必清零。**
 
 ### 提交与合并态验证（2026-06-22）

@@ -240,8 +240,8 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
 
   const rows = useMemo(() => {
     return cities.map((city_item) => {
-      const registry = registryRows.find((row) => row.city_name === city_item.name) ?? null;
-      const adminCount = cityRegistryAdmins.filter((admin) => admin.city_name === city_item.name).length;
+      const registry = registryRows.find((row) => row.city_name === city_item.city_name) ?? null;
+      const adminCount = cityRegistryAdmins.filter((admin) => admin.city_name === city_item.city_name).length;
       return { city_item, registry, adminCount };
     });
   }, [cities, registryRows, cityRegistryAdmins]);
@@ -275,7 +275,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
       title: '所属行政区',
       width: 180,
       align: 'center',
-      render: (_v, row) => areaText(row.registry, province_name, row.city_item.name),
+      render: (_v, row) => areaText(row.registry, province_name, row.city_item.city_name),
     },
     {
       title: '管理员数',
@@ -301,7 +301,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
         dataSource={displayRows}
         pagination={false}
         onRow={(row) => ({
-          onClick: () => row.registry && onSelectCity(row.city_item.name),
+          onClick: () => row.registry && onSelectCity(row.city_item.city_name),
           style: row.registry ? { cursor: 'pointer' } : { color: '#94a3b8' },
         })}
         columns={columns}
@@ -371,7 +371,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
         }}
         columns={[
           { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (cityRegistryAdminListPage - 1) * 10 + index + 1 },
-          { title: '姓名', dataIndex: 'admin_display_name', align: 'center', width: 160 },
+          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
           { title: '账户', dataIndex: 'admin_account', align: 'center', render: (v: string) => tryEncodeSs58(v) },
           {
             title: '操作', width: 260, align: 'center' as const,

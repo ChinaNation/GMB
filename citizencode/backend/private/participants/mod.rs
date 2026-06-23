@@ -41,7 +41,7 @@ impl ParticipantRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ParticipantDraft {
     pub(crate) participant_role: ParticipantRole,
-    pub(crate) name: String,
+    pub(crate) participant_name: String,
     pub(crate) cid_number: Option<String>,
 }
 

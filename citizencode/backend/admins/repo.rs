@@ -38,7 +38,7 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     Ok(AdminUser {
         id: u64::try_from(id).unwrap_or(0),
         admin_account: row.get(1),
-        admin_display_name: row.get(2),
+        admin_name: row.get(2),
         registry_org_code: parse_registry_org_code(role_text.as_str())?,
         built_in: row.get(4),
         created_by: row.get(5),
@@ -54,7 +54,7 @@ pub(crate) fn list_federal_registry_admins_by_province_conn(
 ) -> Result<Vec<(AdminUser, String)>, String> {
     let rows = if let Some(province_name) = province_name {
         conn.query(
-            "SELECT a.admin_id, a.admin_account, a.admin_display_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name,
+            "SELECT a.admin_id, a.admin_account, a.admin_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name,
                     s.province_name
              FROM admins a
              JOIN federal_registry_scope s ON s.admin_id = a.admin_id
@@ -64,7 +64,7 @@ pub(crate) fn list_federal_registry_admins_by_province_conn(
         )
     } else {
         conn.query(
-            "SELECT a.admin_id, a.admin_account, a.admin_display_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name,
+            "SELECT a.admin_id, a.admin_account, a.admin_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name,
                     s.province_name
              FROM admins a
              JOIN federal_registry_scope s ON s.admin_id = a.admin_id
@@ -109,7 +109,7 @@ pub(crate) fn get_admin_by_id_and_registry_org_conn(
     let registry_org_code = registry_org_code_text(registry_org_code);
     let row = conn
         .query_opt(
-            "SELECT admin_id, admin_account, admin_display_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, admin_account, admin_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name
              FROM admins
              WHERE admin_id = $1 AND registry_org_code = $2",
             &[&id, &registry_org_code],
@@ -140,7 +140,7 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
             .map_err(|e| format!("count city registry admins by city failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT a.admin_id, a.admin_account, a.admin_display_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name
+                "SELECT a.admin_id, a.admin_account, a.admin_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name
                  FROM admins a
                  JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
                  JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
@@ -164,7 +164,7 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
             .map_err(|e| format!("count city registry admins by province failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT a.admin_id, a.admin_account, a.admin_display_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name
+                "SELECT a.admin_id, a.admin_account, a.admin_name, a.registry_org_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name
                  FROM admins a
                  JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
                  JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
@@ -210,7 +210,7 @@ pub(crate) fn list_city_registry_admins_by_creator_conn(
 ) -> Result<Vec<AdminUser>, String> {
     let rows = conn
         .query(
-            "SELECT admin_id, admin_account, admin_display_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, admin_account, admin_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name
              FROM admins
              WHERE registry_org_code = 'CITY_REGISTRY' AND lower(created_by) = lower($1)
              ORDER BY admin_id ASC",
@@ -234,7 +234,7 @@ pub(crate) fn get_admin_by_account_conn(
 ) -> Result<Option<AdminUser>, String> {
     let row = conn
         .query_opt(
-            "SELECT admin_id, admin_account, admin_display_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, admin_account, admin_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name
              FROM admins
              WHERE lower(admin_account) = lower($1)",
             &[&admin_account],
@@ -402,10 +402,10 @@ pub(crate) fn upsert_admin_conn(
         .map_err(|e| format!("upsert province failed: {e}"))?;
     }
     conn.execute(
-        "INSERT INTO admins(admin_id, admin_account, admin_display_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name)
+        "INSERT INTO admins(admin_id, admin_account, admin_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (admin_account) DO UPDATE SET
-            admin_display_name = EXCLUDED.admin_display_name,
+            admin_name = EXCLUDED.admin_name,
             registry_org_code = EXCLUDED.registry_org_code,
             built_in = EXCLUDED.built_in,
             created_by = EXCLUDED.created_by,
@@ -414,7 +414,7 @@ pub(crate) fn upsert_admin_conn(
         &[
             &(admin.id as i64),
             &admin.admin_account,
-            &admin.admin_display_name,
+            &admin.admin_name,
             &registry_org_code_text(&admin.registry_org_code),
             &admin.built_in,
             &admin.created_by,

@@ -1,3 +1,5 @@
+import 'package:citizenapp/signer/signing.dart' show kImWalletBindingDomain;
+
 /// 公民 IM 钱包账户绑定 payload。
 ///
 /// 钱包账户是用户可见聊天账户；IM 消息加密仍由独立设备密钥承担。
@@ -35,9 +37,15 @@ class ImBindingPayload {
   final String nonce;
 
   /// 构造与 node 端一致的稳定签名载荷。
+  ///
+  /// ADR-026 Phase 2:IM 钱包绑定**不是**签名 op_tag(既不经 signingMessage 做
+  /// hash,也不作二进制前缀签名)。载荷是 `|` 拼接的 UTF-8 canonical 字符串(钱包
+  /// 对整段字符串签名),与 node `im/binding.rs::canonical_payload` 逐字节一致。
+  /// 域首段 [kImWalletBindingDomain] 是单一权威源(对齐 primitives::sign::
+  /// IM_WALLET_BINDING_DOMAIN),保留原构造不改为二进制形态。
   String canonicalPayload() {
     return [
-      'GMB_IM_WALLET_BINDING_V1',
+      kImWalletBindingDomain,
       walletAccount,
       imDeviceId,
       imDevicePubkey,

@@ -12,7 +12,7 @@ import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upg
 import type { AdminWalletMatch } from './types';
 
 // 国储会 cidNumber（全链唯一，直接进入详情）。
-const NRC_CID_NUMBER = 'LN001-GCB05-944805165-2026';
+const NRC_CID_NUMBER = 'LN001-NRC0G-944805165-2026';
 
 type NrcView =
   | { page: 'detail' }
@@ -129,11 +129,11 @@ export function NrcSection() {
       onSelectProposal={(proposalId, adminWallets, sid) =>
         setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid })
       }
-      onCreateProposal={(_sid, orgType, name, mainAccount, aw) =>
-        setView({ page: 'create-proposal', orgType, cidFullName: name, mainAccount, adminWallets: aw })
+      onCreateProposal={(_sid, orgType, cidFullName, mainAccount, aw) =>
+        setView({ page: 'create-proposal', orgType, cidFullName, mainAccount, adminWallets: aw })
       }
-      onCreateAdminSetChange={(_sid, _orgType, name, aw) =>
-        setView({ page: 'admin-set-change', cidFullName: name, adminWallets: aw })
+      onCreateAdminSetChange={(_sid, _orgType, cidFullName, aw) =>
+        setView({ page: 'admin-set-change', cidFullName, adminWallets: aw })
       }
       onCreateProtocolUpgrade={(aw) =>
         setView({ page: 'protocol-upgrade', adminWallets: aw })
@@ -144,8 +144,8 @@ export function NrcSection() {
       onCreateSafetyFund={(aw) =>
         setView({ page: 'propose-safety-fund', adminWallets: aw })
       }
-      onCreateSweep={(_sid, name, aw) =>
-        setView({ page: 'propose-sweep', cidFullName: name, adminWallets: aw })
+      onCreateSweep={(_sid, cidFullName, aw) =>
+        setView({ page: 'propose-sweep', cidFullName, adminWallets: aw })
       }
     />
   );

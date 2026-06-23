@@ -8,7 +8,7 @@ export type AdminAuthCheck = {
   ok: boolean;
   admin_account: string;
   registry_org_code: 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
-  admin_display_name: string;
+  admin_name: string;
   scope_province_name?: string | null;
   scope_city_name?: string | null;
   passkey_bound: boolean;
@@ -18,7 +18,7 @@ export type AdminAuthCheck = {
 export type AdminIdentifyResult = {
   admin_account: string;
   registry_org_code: 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
-  admin_display_name: string;
+  admin_name: string;
   scope_province_name?: string | null;
   scope_city_name?: string | null;
   passkey_bound: boolean;

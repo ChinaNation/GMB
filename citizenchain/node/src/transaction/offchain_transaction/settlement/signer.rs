@@ -71,7 +71,8 @@ mod tests {
         let slot: Arc<RwLock<Option<SigningKey>>> = Arc::new(RwLock::new(Some(key)));
         let signer = KeystoreBatchSigner::new(slot);
 
-        let msg = b"GMB_OFFCHAIN_BATCH_V1|test|1|batch_bytes";
+        // 任意字节消息即可验证签/验回环(此处不构造真实批次签名域,见 packer::batch_signing_message)。
+        let msg = b"batch-signer-roundtrip-fixture";
         let sig_bytes = signer.sign_batch(msg).expect("sign ok");
 
         let sig = sr25519::Signature::from_raw(sig_bytes);

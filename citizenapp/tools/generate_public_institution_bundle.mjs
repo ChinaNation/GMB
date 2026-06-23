@@ -2,9 +2,9 @@
 // 公权机构目录数据包生成器(ADR-018 §九 混合模式 ①)。
 //
 // 发布期从 CID 公开接口**keyset 翻页**拉全量公权机构目录,写成 assets 数据包(基线):
-//   assets/public_institutions/manifest.json = { version, generated_at, provinces: [{name,ver}] }
+//   assets/public_institutions/manifest.json = { version, generated_at, provinces: [{province_name,manifest_version}] }
 //   assets/public_institutions/<省全名>.json  = { province_name, manifest_version, count, institutions: [...] }
-// App 启动后按省级 ver 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
+// App 启动后按省级 manifest_version 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
 //
 // 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_cid),
 // 否则 OFFSET 深翻 O(n²) 会非常慢。
@@ -100,8 +100,8 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   let total = 0;
-  // 省级版本表(增量同步用):[{ name, ver }],ver = 后端该省目录 manifest_version。
-  // 客户端逐省比对 ver,只重灌 ver 变了的省,没变的省连分片都不读。
+  // 省级版本表(增量同步用):[{ province_name, manifest_version }]。
+  // 客户端逐省比对 manifest_version,只重灌版本变了的省,没变的省连分片都不读。
   const provinceVersions = [];
   for (const province of provinces) {
     const t0 = Date.now();
@@ -110,7 +110,10 @@ async function main() {
       join(OUT_DIR, `${province}.json`),
       JSON.stringify(shard, null, 0),
     );
-    provinceVersions.push({ name: province, ver: shard.manifest_version });
+    provinceVersions.push({
+      province_name: province,
+      manifest_version: shard.manifest_version,
+    });
     total += shard.count;
     console.log(
       `  ${province}: ${shard.count} 机构 (mv=${shard.manifest_version}) ${((Date.now() - t0) / 1000).toFixed(1)}s`,

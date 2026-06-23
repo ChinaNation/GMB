@@ -244,7 +244,7 @@ class _PublicPageState extends State<PublicPage> {
   }
 
   Widget _buildCityList() {
-    final provinceDisplay = _selectedProvince?.displayName ?? _selected;
+    final provinceDisplay = _selectedProvince?.provinceDisplayName ?? _selected;
     if (_cities.isEmpty) {
       return _emptyHint(
         icon: _contentError != null
@@ -372,7 +372,7 @@ class _ProvinceRail extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: _railItem(
                     // 展示去"省";选中键用省 code。
-                    label: p.displayName,
+                    label: p.provinceDisplayName,
                     active: p.code == selectedCode,
                     onTap: () => onSelectProvince(p.code),
                   ),

@@ -77,12 +77,12 @@ export interface SignResponseBody {
 
 export interface UserContactBody {
   address: string;
-  name: string;
+  contactName: string;
 }
 
 export interface UserTransferBody {
   address: string;
-  name: string;
+  recipientName: string;
   amount: string;
   symbol: string;
   memo: string;
@@ -231,29 +231,29 @@ function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
 function parseUserContactBody(b: Record<string, unknown>): UserContactBody {
   return {
     address: requireString(b, 'address'),
-    name: requireString(b, 'name'),
+    contactName: requireString(b, 'contact_name'),
   };
 }
 
 function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
   const address = requireString(b, 'address');
-  const name = b['name'];
+  const recipientName = b['recipient_name'];
   const amount = b['amount'];
   const symbol = b['symbol'];
   const memo = b['memo'];
   const bank = b['bank'];
   if (
-    typeof name !== 'string' ||
+    typeof recipientName !== 'string' ||
     typeof amount !== 'string' ||
     typeof symbol !== 'string' ||
     typeof memo !== 'string' ||
     typeof bank !== 'string'
   ) {
     throw new QrParseError(
-      'user_transfer 的 name/amount/symbol/memo/bank 必须为字符串',
+      'user_transfer 的 recipient_name/amount/symbol/memo/bank 必须为字符串',
     );
   }
-  return { address, name, amount, symbol, memo, bank };
+  return { address, recipientName, amount, symbol, memo, bank };
 }
 
 /**

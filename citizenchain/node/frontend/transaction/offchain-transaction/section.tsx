@@ -118,7 +118,7 @@ export function ClearingBankSection() {
         adminWallets: activatedAdmins.map((admin) => ({
           address: hexToSs58(admin.pubkeyHex),
           pubkeyHex: admin.pubkeyHex,
-          name: '',
+          walletLabel: '',
         })),
       });
     } catch (e) {

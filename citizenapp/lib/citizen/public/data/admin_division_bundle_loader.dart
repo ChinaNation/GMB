@@ -240,7 +240,7 @@ class AdminDivisionBundleLoader {
         old.level == dto.level &&
         old.code == dto.code &&
         old.scopeKey == dto.scopeKey &&
-        old.name == dto.name;
+        old.divisionName == dto.divisionName;
   }
 }
 

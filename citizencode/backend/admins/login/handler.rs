@@ -19,7 +19,7 @@ use crate::*;
 use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::signature::{
-    build_admin_display_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
+    build_admin_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
     resolve_scope_city_name, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
@@ -50,7 +50,7 @@ pub(crate) async fn admin_auth_check(
             ok: true,
             admin_account: ctx.admin_account,
             registry_org_code: ctx.registry_org_code,
-            admin_display_name: ctx.admin_display_name,
+            admin_name: ctx.admin_name,
             scope_province_name: ctx.scope_province_name,
             scope_city_name: ctx.scope_city_name,
             passkey_bound: ctx.passkey_bound,
@@ -131,7 +131,7 @@ pub(crate) async fn admin_auth_identify(
         data: AdminIdentifyOutput {
             admin_account: admin.admin_account.clone(),
             registry_org_code: admin.registry_org_code.clone(),
-            admin_display_name: build_admin_display_name_from_user(&admin, province.as_deref()),
+            admin_name: build_admin_name_from_user(&admin, province.as_deref()),
             scope_province_name: province,
             scope_city_name,
             passkey_bound,
@@ -297,8 +297,7 @@ pub(crate) async fn admin_auth_verify(
             &admin.admin_account,
             &admin.registry_org_code,
         )?;
-        let admin_display_name =
-            build_admin_display_name_from_user(&admin, scope_province_name.as_deref());
+        let admin_name = build_admin_name_from_user(&admin, scope_province_name.as_deref());
         let scope_city_name = resolve_scope_city_name(&admin);
         let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_account)?;
         let cid_short_name = repo::resolve_home_cid_short_name_conn(
@@ -323,7 +322,7 @@ pub(crate) async fn admin_auth_verify(
             AdminIdentifyOutput {
                 admin_account: admin.admin_account,
                 registry_org_code: admin_registry_org_code,
-                admin_display_name,
+                admin_name,
                 scope_province_name,
                 scope_city_name,
                 passkey_bound,
@@ -335,30 +334,30 @@ pub(crate) async fn admin_auth_verify(
     let (access_token, expire_at, admin) = match result {
         Ok(v) => v,
         Err(err) if err == "http:not_found:challenge not found" => {
-            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found")
+            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
         }
         Err(err) if err == "http:conflict:challenge already consumed" => {
-            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed")
+            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed");
         }
         Err(err) if err == "http:gone:challenge expired" => {
-            return api_error(StatusCode::GONE, 1007, "challenge expired")
+            return api_error(StatusCode::GONE, 1007, "challenge expired");
         }
         Err(err) if err == "http:unprocessable:challenge context mismatch" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "challenge context mismatch",
-            )
+            );
         }
         Err(err) if err == "http:unprocessable:signature verify failed" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "signature verify failed",
-            )
+            );
         }
         Err(err) if err == "http:forbidden:admin not found" => {
-            return api_error(StatusCode::FORBIDDEN, 2002, "admin not found")
+            return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
         }
         Err(err) => {
             let message = format!("verify login failed: {err}");

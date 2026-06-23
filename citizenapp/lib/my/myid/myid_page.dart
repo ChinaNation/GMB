@@ -151,7 +151,7 @@ class _MyIdPageState extends State<MyIdPage> {
       id: null,
       issuedAt: null,
       expiresAt: null,
-      body: UserContactBody(address: address, name: '电子护照钱包'),
+      body: UserContactBody(address: address, contactName: '电子护照钱包'),
     ).toRawJson();
   }
 

@@ -77,7 +77,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
         {cities.map((c) => (
           <div
             key={c.code}
-            onClick={() => onPick(c.name)}
+            onClick={() => onPick(c.city_name)}
             style={CARD_STYLE}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLDivElement).style.background = 'rgba(13,148,136,0.22)';
@@ -88,7 +88,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
               (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{c.name}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{c.city_name}</div>
           </div>
         ))}
       </div>

@@ -19,7 +19,7 @@ use crate::*;
 
 use super::model::*;
 use super::signature::{
-    build_admin_display_name, build_admin_display_name_from_user, build_login_qr_system_signature,
+    build_admin_name, build_admin_name_from_user, build_login_qr_system_signature,
     extract_domain_from_origin, resolve_scope_city_name, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
@@ -234,33 +234,33 @@ pub(crate) async fn admin_auth_qr_complete(
     match result {
         Ok(()) => {}
         Err(err) if err == "http:not_found:challenge not found" => {
-            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found")
+            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
         }
         Err(err) if err == "http:conflict:challenge already consumed" => {
-            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed")
+            return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed");
         }
         Err(err) if err == "http:forbidden:challenge session mismatch" => {
-            return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch")
+            return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
         }
         Err(err) if err == "http:gone:challenge expired" => {
-            return api_error(StatusCode::GONE, 1007, "challenge expired")
+            return api_error(StatusCode::GONE, 1007, "challenge expired");
         }
         Err(err) if err == "http:forbidden:signer_pubkey must match admin_account" => {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
                 "signer_pubkey must match admin_account",
-            )
+            );
         }
         Err(err) if err == "http:unprocessable:signature verify failed" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "signature verify failed",
-            )
+            );
         }
         Err(err) if err == "http:forbidden:admin not found" => {
-            return api_error(StatusCode::FORBIDDEN, 2002, "admin not found")
+            return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
         }
         Err(err) => {
             let message = format!("complete qr login failed: {err}");
@@ -353,11 +353,11 @@ pub(crate) async fn admin_auth_qr_result(
                 admin: Some(AdminIdentifyOutput {
                     admin_account: result.admin_account.clone(),
                     registry_org_code: result.registry_org_code.clone(),
-                    admin_display_name: admin
+                    admin_name: admin
                         .as_ref()
-                        .map(|v| build_admin_display_name_from_user(v, province.as_deref()))
+                        .map(|v| build_admin_name_from_user(v, province.as_deref()))
                         .unwrap_or_else(|| {
-                            build_admin_display_name(
+                            build_admin_name(
                                 &result.admin_account,
                                 &result.registry_org_code,
                                 province.as_deref(),

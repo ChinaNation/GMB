@@ -38,16 +38,11 @@ pub const GMB: &[u8; 3] = b"GMB";
 
 /// CID 机构号(cid_number)链上/链下统一最大字节数（单一权威源）。
 ///
-/// 真实格式 `R5-K3P1C1-N9-D4` 定长 26 字节（如 `LN001-GCB05-944805165-2026`），
+/// 真实格式 `R5-K3P1C1-N9-D4` 定长 26 字节（如 `LN001-NRC0G-944805165-2026`），
 /// 取 32 留余量。链端 `MaxCidNumberLength`、CID 后端、各端测试一律 import 本常量，
 /// 禁止任何位置另写死长度值。
 pub const CID_NUMBER_MAX_BYTES: u32 = 32;
 
-// 签名 payload op_tag (0x10-0x1F)
-pub const OP_SIGN_BIND: u8 = 0x10; // 公民身份绑定
-pub const OP_SIGN_VOTE: u8 = 0x11; // 公民投票
-pub const OP_SIGN_POP: u8 = 0x12; // 人口快照
-pub const OP_SIGN_INST: u8 = 0x13; // CID 机构登记
-pub const OP_SIGN_DEREGISTER: u8 = 0x14; // CID 机构/账户注销凭证(注册局签发,链端 close 验签)
-                                         // 所有治理投票一律走 `InternalVote::cast` 公开 call,业务模块
-                                         // 新业务从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。
+// 签名 payload op_tag (0x10-0x1F) — 单一权威源已迁至 `crate::sign`(ADR-026)。
+// 此处 re-export,保持 `core_const::OP_SIGN_*` 历史调用路径不破。新增 op_tag 只改 `sign`。
+pub use crate::sign::{OP_SIGN_BIND, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};

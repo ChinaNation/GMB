@@ -12,7 +12,7 @@ use crate::admins::repo;
 use crate::*;
 
 use super::model::AdminAuthContext;
-use super::signature::build_admin_display_name;
+use super::signature::build_admin_name;
 
 pub(super) fn admin_auth(
     state: &AppState,
@@ -75,14 +75,14 @@ pub(super) fn admin_auth(
         } else {
             None
         };
-        let admin_display_name = if admin.admin_display_name.trim().is_empty() {
-            build_admin_display_name(
+        let admin_name = if admin.admin_name.trim().is_empty() {
+            build_admin_name(
                 &admin.admin_account,
                 &admin.registry_org_code,
                 scope_province_name.as_deref(),
             )
         } else {
-            admin.admin_display_name.clone()
+            admin.admin_name.clone()
         };
         let passkey_bound = repo::admin_has_active_passkey_conn(conn, &admin.admin_account)?;
         let cid_short_name = repo::resolve_home_cid_short_name_conn(
@@ -95,7 +95,7 @@ pub(super) fn admin_auth(
         Ok(AdminAuthContext {
             admin_account: admin.admin_account,
             registry_org_code: admin.registry_org_code,
-            admin_display_name,
+            admin_name,
             scope_province_name,
             scope_city_name,
             passkey_bound,

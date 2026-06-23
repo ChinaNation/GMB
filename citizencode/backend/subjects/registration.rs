@@ -244,7 +244,7 @@ async fn create_institution_inner(
                 StatusCode::BAD_REQUEST,
                 1001,
                 "institution is not a valid institution",
-            )
+            );
         }
     };
     if matches!(category, InstitutionCategory::PublicSecurity) {
@@ -381,7 +381,7 @@ async fn create_institution_inner(
                 StatusCode::BAD_REQUEST,
                 1001,
                 legal_rep_scope.legal_rep_error_message(),
-            )
+            );
         }
         Err(err) => {
             let message = format!("query legal representative failed: {err}");
@@ -423,17 +423,17 @@ async fn create_institution_inner(
     ) {
         Ok(v) => v,
         Err(crate::number::SeedCidError::Generate(msg)) => {
-            return api_error(StatusCode::BAD_REQUEST, 1001, msg)
+            return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
         Err(crate::number::SeedCidError::Validate(msg)) => {
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg);
         }
         Err(crate::number::SeedCidError::Exhausted) => {
             return api_error(
                 StatusCode::CONFLICT,
                 1005,
                 "institution cid_number collision retry exhausted",
-            )
+            );
         }
     };
     {
@@ -458,7 +458,7 @@ async fn create_institution_inner(
                 .map(|kind| kind.as_code().to_string()),
             has_legal_personality: private_rule.map(|rule| rule.has_legal_personality),
             parent_cid_number: parent_cid_number.clone(),
-            legal_rep_name: Some(legal_rep.name.clone()),
+            legal_rep_name: Some(legal_rep.legal_rep_name.clone()),
             legal_rep_cid_number: Some(legal_rep.cid_number.clone()),
             legal_rep_photo_path: Some(legal_rep.photo_path.clone()),
             legal_rep_photo_name: Some(legal_rep.photo_name.clone()),
@@ -569,14 +569,14 @@ async fn list_institutions_inner(
                 StatusCode::BAD_REQUEST,
                 1001,
                 "public security uses /api/v1/institutions/public-security",
-            )
+            );
         }
         _ => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
                 "institution category is required",
-            )
+            );
         }
     };
     let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
@@ -640,7 +640,7 @@ async fn list_institutions_inner(
     ) {
         Ok(v) => v,
         Err(e) if e == "invalid page cursor" => {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor")
+            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor");
         }
         Err(err) => {
             let message = format!("institution query failed: {err}");

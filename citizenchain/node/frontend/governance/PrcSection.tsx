@@ -105,17 +105,17 @@ export function PrcSection() {
         onSelectProposal={(proposalId, adminWallets, sid) =>
           setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid, originCidNumber: cidNumber })
         }
-        onCreateProposal={(sid, orgType, name, mainAccount, aw) =>
-          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName: name, mainAccount, adminWallets: aw })
+        onCreateProposal={(sid, orgType, cidFullName, mainAccount, aw) =>
+          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName, mainAccount, adminWallets: aw })
         }
-        onCreateAdminSetChange={(sid, orgType, name, aw) =>
-          setView({ page: 'admin-set-change', cidNumber: sid, orgType, cidFullName: name, adminWallets: aw })
+        onCreateAdminSetChange={(sid, orgType, cidFullName, aw) =>
+          setView({ page: 'admin-set-change', cidNumber: sid, orgType, cidFullName, adminWallets: aw })
         }
         onCreateProtocolUpgrade={(aw) =>
           setView({ page: 'protocol-upgrade', cidNumber, adminWallets: aw })
         }
-        onCreateSweep={(sid, name, aw) =>
-          setView({ page: 'propose-sweep', cidNumber: sid, cidFullName: name, adminWallets: aw })
+        onCreateSweep={(sid, cidFullName, aw) =>
+          setView({ page: 'propose-sweep', cidNumber: sid, cidFullName, adminWallets: aw })
         }
       />
     );

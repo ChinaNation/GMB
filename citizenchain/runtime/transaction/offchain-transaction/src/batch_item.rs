@@ -6,6 +6,7 @@
 //! - 批次单条 item 结构由本文件提供(清算行体系)。
 
 use codec::{Decode, Encode, MaxEncodedLen};
+use primitives::sign::{signing_message, OP_SIGN_L3_PAY, OP_SIGN_OFFCHAIN_BATCH};
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_std::vec::Vec;
@@ -35,40 +36,35 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
     pub expires_at: BlockNumber,
 }
 
-/// L3 签名域分隔符,与 citizenapp 保持**逐字节一致**。
-pub const L3_PAY_SIGNING_DOMAIN: &[u8] = b"GMB_L3_PAY_V1";
-
-/// 清算行批次级签名域分隔符,必须与 node/offchain/packer.rs 保持一致。
-pub const BATCH_SIGNING_DOMAIN: &[u8] = b"GMB_OFFCHAIN_BATCH_V1";
-
 impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumber> {
-    /// 生成签名消息哈希:`blake2_256(DOMAIN || SCALE(intent))`。
+    /// 生成签名消息哈希(ADR-026:唯一原语 `signing_message`)。
     ///
-    /// citizenapp 的 Dart 端必须用同样的拼接顺序,否则签名验证失败。
+    /// `message = blake2_256(GMB || OP_SIGN_L3_PAY || SCALE(intent))`。历史 13B 字符串域
+    /// `b"GMB_L3_PAY_V1"` 已折为 4B 域头 `GMB || 0x15`(破坏式,签名字节变),citizenapp 的
+    /// Dart 镜像必须按同一原语拼接,靠金标向量逐字节对齐。
     pub fn signing_hash(&self) -> [u8; 32] {
-        let mut data = Vec::new();
-        data.extend_from_slice(L3_PAY_SIGNING_DOMAIN);
-        data.extend_from_slice(&self.encode());
-        sp_io::hashing::blake2_256(&data)
+        signing_message(OP_SIGN_L3_PAY, &self.encode())
     }
 }
 
-/// 生成清算行批次签名哈希:
-/// `blake2_256(DOMAIN || SCALE(institution_main) || batch_seq_le || SCALE(batch))`。
+/// 生成清算行批次签名哈希(ADR-026:唯一原语 `signing_message`)。
+///
+/// `message = blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || SCALE(institution_main)
+/// || batch_seq_le || SCALE(batch))`。历史 21B 字符串域 `b"GMB_OFFCHAIN_BATCH_V1"`
+/// 已折为 4B 域头(破坏式),scale_payload 内字段拼接顺序必须与 node 打包器逐字节一致。
 ///
 /// node 侧 `AccountId32.as_ref()` 与 SCALE 编码同为 32 字节,这里使用 `Encode`
-/// 是为了让 runtime 维持泛型边界,同时锁定与节点打包器逐字节一致的消息格式。
+/// 是为了让 runtime 维持泛型边界。
 pub fn batch_signing_hash<AccountId: Encode>(
     institution_main: &AccountId,
     batch_seq: u64,
     batch_bytes: &[u8],
 ) -> [u8; 32] {
-    let mut data = Vec::new();
-    data.extend_from_slice(BATCH_SIGNING_DOMAIN);
-    data.extend_from_slice(&institution_main.encode());
-    data.extend_from_slice(&batch_seq.to_le_bytes());
-    data.extend_from_slice(batch_bytes);
-    sp_io::hashing::blake2_256(&data)
+    let mut scale_payload = Vec::new();
+    scale_payload.extend_from_slice(&institution_main.encode());
+    scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
+    scale_payload.extend_from_slice(batch_bytes);
+    signing_message(OP_SIGN_OFFCHAIN_BATCH, &scale_payload)
 }
 
 /// 扫码支付清算体系:批次上链的**单条 item 结构**(清算行体系)。
@@ -177,7 +173,8 @@ mod tests {
     //   recipient_bank(32) || amount(u128 LE,16) || fee(u128 LE,16) ||
     //   nonce(u64 LE,8) || expires_at(u32 LE,4)
     //
-    // 签名域 `GMB_L3_PAY_V1`(13 字节 ASCII) || encoded(204) → blake2_256 = 32 字节。
+    // ADR-026:签名域已折为 4B 域头 `GMB(3B) || OP_SIGN_L3_PAY(0x15)` || encoded(204)
+    // → blake2_256 = 32 字节(原 13B 字符串域 `GMB_L3_PAY_V1` 已废,签名字节随之变更)。
 
     /// 把 `&[u8]` 转 hex(无 `0x` 前缀,小写),测试断言格式。
     fn hex_lower(bytes: &[u8]) -> sp_std::vec::Vec<u8> {
@@ -230,7 +227,7 @@ mod tests {
         assert_hex_eq(
             "fixture1 signing_hash",
             &intent.signing_hash(),
-            "f50eeb66b681e445ee6fcffa318288b915fdea9791eae1d094645d4eb5f7008f",
+            "19c26c228363e18a119c0a11323bf54a21f9285ce205918f1311f9fa283b63e3",
         );
     }
 
@@ -267,7 +264,7 @@ ffffffff",
         assert_hex_eq(
             "fixture2 signing_hash",
             &intent.signing_hash(),
-            "d6f381b931ad0f2c7f7fba5d83bdd24892ccbd0e063d831ebc00d2e6d21c9bd8",
+            "5329809c9803906ae2141be93a3b1cd49bc89adb16a88ca9763fab864df30e90",
         );
     }
 
@@ -308,7 +305,7 @@ ffffffff",
         assert_hex_eq(
             "fixture3 signing_hash",
             &intent.signing_hash(),
-            "8e99dbc826503544b240ed3e113f999bc3928048aa69989118f517309286a1b2",
+            "c7fac179287401a2e0f3cb03f60dbf202d7ec48967d8407cd8f96daddcd287bf",
         );
     }
 }

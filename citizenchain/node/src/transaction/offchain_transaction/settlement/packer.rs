@@ -33,9 +33,6 @@ pub const PACK_TX_THRESHOLD: usize = 100_000;
 /// 打包触发阈值:距上次打包区块数(与链上 `PACK_BLOCK_THRESHOLD` 对齐)。
 pub const PACK_BLOCK_THRESHOLD: u64 = 10;
 
-/// 批次签名消息的域分隔符,必须与 runtime `batch_item.rs` 保持一致。
-pub const BATCH_SIGNING_DOMAIN: &[u8] = b"GMB_OFFCHAIN_BATCH_V1";
-
 // ---------------- 节点批次项(与 runtime 结构对齐) ----------------
 
 /// `NodeBatchItem`:节点层批次项,字节级对齐 runtime 端
@@ -84,8 +81,8 @@ impl From<PendingPayment> for NodeBatchItem {
 /// Step 2b-ii-α:`NoopBatchSigner` 占位;Step 2b-ii-β 接入 `settlement::keystore`
 /// 里存的清算行管理员私钥。
 pub trait BatchSigner: Send + Sync {
-    /// 对 `message = blake2_256(DOMAIN || institution || batch_seq || batch.encode())`
-    /// 做 sr25519 签名,返回 64 字节签名。
+    /// 对 `message = signing_message(OP_SIGN_OFFCHAIN_BATCH, institution || batch_seq || batch.encode())`
+    /// 做 sr25519 签名,返回 64 字节签名(见 `batch_signing_message`)。
     fn sign_batch(&self, message: &[u8]) -> Result<[u8; 64], String>;
 }
 
@@ -253,27 +250,26 @@ impl OffchainPacker {
 
 // ---------------- 纯函数工具 ----------------
 
-/// 构造清算行批次签名消息:
-/// `blake2_256(DOMAIN || institution || batch_seq_le_bytes || batch_bytes)`。
+/// 构造清算行批次签名消息(ADR-026 唯一原语):
+/// `signing_message(OP_SIGN_OFFCHAIN_BATCH, institution || batch_seq_le || batch_bytes)`
+/// = `blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || institution || batch_seq_le || batch_bytes)`。
 ///
-/// 链上 `submit_offchain_batch_v2` 会校验 batch_signature,必须与本函数产生的
-/// 消息**逐字节一致**。
+/// 链上 `submit_offchain_batch_v2` 会校验 batch_signature,必须与本函数产生的消息
+/// **逐字节一致**(runtime `batch_signing_hash` 用同一原语 + 同序 scale_payload)。
+/// `AccountId32::as_ref()` 与 runtime 侧 `institution_main.encode()` 同为 32 裸字节,字节对齐。
 pub fn batch_signing_message(
     institution_main: &AccountId32,
     batch_seq: u64,
     batch_bytes: &[u8],
 ) -> [u8; 32] {
-    let mut data = Vec::with_capacity(BATCH_SIGNING_DOMAIN.len() + 32 + 8 + batch_bytes.len());
-    data.extend_from_slice(BATCH_SIGNING_DOMAIN);
-    data.extend_from_slice(institution_main.as_ref());
-    data.extend_from_slice(&batch_seq.to_le_bytes());
-    data.extend_from_slice(batch_bytes);
-    blake2_256(&data)
-}
-
-/// 节点层 blake2b-256 包装,直接调用 substrate hashing 以贴合 runtime。
-fn blake2_256(data: &[u8]) -> [u8; 32] {
-    sp_io::hashing::blake2_256(data)
+    let mut scale_payload = Vec::with_capacity(32 + 8 + batch_bytes.len());
+    scale_payload.extend_from_slice(institution_main.as_ref());
+    scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
+    scale_payload.extend_from_slice(batch_bytes);
+    primitives::sign::signing_message(
+        primitives::sign::OP_SIGN_OFFCHAIN_BATCH,
+        &scale_payload,
+    )
 }
 
 // ---------------- 单元测试 ----------------

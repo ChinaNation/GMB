@@ -1038,7 +1038,8 @@ fn resolve_cid_full_name(institution_hex: Option<&str>) -> Option<String> {
     if bytes.len() != 32 {
         return None;
     }
-    super::registry::find_institution_by_main_account(&bytes).map(|item| item.name().to_string())
+    super::registry::find_institution_by_main_account(&bytes)
+        .map(|item| item.cid_full_name().to_string())
 }
 
 /// 列表卡片展示信息:一次解析,按动作变体生成 summary + votingengine status。

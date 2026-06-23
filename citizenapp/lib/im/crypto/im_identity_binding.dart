@@ -1,3 +1,5 @@
+import 'package:citizenapp/signer/signing.dart' show kImWalletBindingDomain;
+
 /// 钱包账户与 IM 设备身份的绑定草案。
 ///
 /// 产品层使用钱包账户作为聊天账户；但 IM 端到端加密必须使用独立设备密钥。
@@ -38,10 +40,15 @@ class ImWalletBindingDraft {
   /// 钱包账户对绑定载荷的签名；为空表示尚未完成钱包确认。
   final String? walletSignature;
 
-  /// 构造稳定签名载荷。真实签名编码登记到 GMB_IM_V1 后再固定为 Protobuf bytes。
+  /// 构造稳定签名载荷。
+  ///
+  /// ADR-026 Phase 2:IM 钱包绑定**不是**签名 op_tag,为 `|` 拼接 UTF-8 字符串
+  /// (与 node `im/binding.rs` 逐字节一致),非 signing_message 二进制形态。
+  /// 域首段 [kImWalletBindingDomain] 单源对齐 primitives::sign::
+  /// IM_WALLET_BINDING_DOMAIN,详见 im_binding_payload.dart。
   String canonicalPayload() {
     return [
-      'GMB_IM_WALLET_BINDING_V1',
+      kImWalletBindingDomain,
       walletAccount,
       imDeviceId,
       imDevicePubkey,

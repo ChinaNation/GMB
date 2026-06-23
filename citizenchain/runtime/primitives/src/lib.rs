@@ -14,3 +14,4 @@ pub mod genesis; // 创世常量
 pub mod institution_code; // 机构码链上表示 + 治理分类(全链机构分类唯一真源)
 pub mod multisig; // 多签治理跨 pallet 共用 trait + 类型
 pub mod pow_const; // 全节点铸块与发行常量
+pub mod sign; // 全仓签名消息唯一原语(signing_message + op_tag 注册表,ADR-026)

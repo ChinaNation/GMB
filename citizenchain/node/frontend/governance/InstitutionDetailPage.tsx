@@ -42,11 +42,11 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
   const PROPOSAL_PAGE_SIZE = 10;
   const isAdmin = activatedAdmins.length > 0;
 
-  // 将已激活管理员转换为 AdminWalletMatch 格式（兼容现有提案/投票组件）
+  // 将已激活管理员转换为 AdminWalletMatch 格式,账户标签不复用机构名称字段。
   const adminWallets: AdminWalletMatch[] = activatedAdmins.map(a => ({
     address: hexToSs58(a.pubkeyHex),
     pubkeyHex: a.pubkeyHex,
-    name: '',
+    walletLabel: '',
   }));
 
   useEffect(() => {
@@ -152,7 +152,10 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
       )}
 
       <div className="institution-title-row">
-        <h2>{detail.name}</h2>
+        <h2>{detail.cidFullName}</h2>
+        {detail.cidShortName && detail.cidShortName !== detail.cidFullName && (
+          <span className="institution-short-name">{detail.cidShortName}</span>
+        )}
         {isAdmin && (
           <span className="admin-badge">管理员</span>
         )}
@@ -261,20 +264,20 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             className="proposal-type-button"
             disabled={!isAdmin}
             onClick={() => isAdmin && onCreateProposal?.(
-              cidNumber, detail.orgType, detail.name, detail.mainAccount, adminWallets
+              cidNumber, detail.orgType, detail.cidFullName, detail.mainAccount, adminWallets
             )}
           >转账</button>
           <button
             className="proposal-type-button"
             disabled={!isAdmin}
-            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(cidNumber, detail.orgType, detail.name, adminWallets)}
+            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(cidNumber, detail.orgType, detail.cidFullName, adminWallets)}
           >换管理员</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button
               className="proposal-type-button"
               disabled={!isAdmin}
-              onClick={() => isAdmin && onCreateSweep?.(cidNumber, detail.name, adminWallets)}
+              onClick={() => isAdmin && onCreateSweep?.(cidNumber, detail.cidFullName, adminWallets)}
             >手续费划转</button>
           )}
           {detail.orgType === 0 && (

@@ -123,7 +123,7 @@ void main() {
     final identity = AdminAccountIdentity.institutionAccount(
       accountHex: address,
       institutionCode: 'UNIN',
-      displayName: '机构账户',
+      accountLabel: '机构账户',
     );
     final admins = await service.fetchAdmins(identity);
     final threshold = await service.fetchThreshold(identity);
@@ -155,7 +155,7 @@ void main() {
 
     final identity = AdminAccountIdentity.personalAccount(
       accountHex: address,
-      displayName: '个人多签',
+      accountLabel: '个人多签',
     );
     final admins = await service.fetchAdmins(identity);
     final threshold = await service.fetchThreshold(identity);
@@ -231,11 +231,11 @@ void main() {
 
     final governance =
         AdminAccountIdentity.fromInstitution(const InstitutionInfo(
-      cidFullName: '省储行',
-      cidShortName: '省储行',
-      cidFullNameEn: 'Provincial Reserve Bank',
-      cidShortNameEn: 'Provincial Reserve Bank',
-      cidNumber: 'LN001-GCB05-944805165-2026',
+      cidFullName: '中枢省公民储备银行',
+      cidShortName: '中枢省储行',
+      cidFullNameEn: 'Zhongshu Provincial Citizen Reserve Bank',
+      cidShortNameEn: 'Zhongshu Provincial Reserve Bank',
+      cidNumber: 'ZS001-PRB08-233384677-2026',
       orgType: OrgType.prb,
       accounts: InstitutionAccounts(mainAccount: '66'),
     ));
@@ -248,12 +248,12 @@ void main() {
       () async {
     final identity = AdminAccountIdentity.personalAccount(
       accountHex: '77' * 32,
-      displayName: '个人多签',
+      accountLabel: '个人多签',
     );
     final otherIdentity = AdminAccountIdentity.institutionAccount(
       accountHex: '88' * 32,
       institutionCode: 'UNIN',
-      displayName: '机构账户',
+      accountLabel: '机构账户',
     );
     final active = ActivatedAdmin(
       pubkeyHex: 'aa' * 32,

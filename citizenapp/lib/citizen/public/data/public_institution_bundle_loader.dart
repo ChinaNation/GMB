@@ -3,9 +3,9 @@
 // 中文注释:发布期生成的全量目录打进 assets;客户端无服务端,数据靠 assets 包
 // 分发。包版本变了就增量刷新——变的换、删的清、没变的不动,零旧数据残留
 // (只读派生数据,无用户数据)。数据包结构:
-//   assets/public_institutions/manifest.json = { version, provinces:[{name,ver}] }
+//   assets/public_institutions/manifest.json = { version, provinces:[{province_name,manifest_version}] }
 //   assets/public_institutions/<省名>.json    = { province_name, manifest_version, institutions:[...] }
-// provinces[].ver = 该省机构目录 manifest_version,内容一变即变。
+// provinces[].manifest_version = 该省机构目录版本,内容一变即变。
 
 import 'dart:convert';
 
@@ -50,7 +50,7 @@ class PublicInstitutionBundleLoader {
   /// 版本驱动增量 reconcile:包版本变了就增量刷新,变的换、删的清、没变的不动。
   ///
   /// 中文注释:先 reconcile 行政区字典(机构 join 字典名),再 reconcile 机构。
-  /// 机构同步只信省级 ver 表;全局 version 只作完成标记,不能短路省级检查。
+  /// 机构同步只信省级 manifest_version 表;全局 version 只作完成标记,不能短路省级检查。
   /// 变了的省读取 `<省名>.json` 分片后做行级 diff:只 upsert 变化行、只删 absent cid。
   /// manifest 缺省级版本表时视为无效数据包,直接拒绝写库。
   /// 返回机构部分是否发生写入。
@@ -75,9 +75,9 @@ class PublicInstitutionBundleLoader {
     final storedGlobal = await versionKv.readGlobalVersion();
     final hasData = await store.institutionCount() > 0;
 
-    // 全局 version 变了才重写省份规范顺序;省内内容仍以省级 ver 表决定是否读分片。
+    // 全局 version 变了才重写省份规范顺序;省内内容仍以省级 manifest_version 决定是否读分片。
     final provinceNames =
-        provinceVers.map((p) => p.name).toList(growable: false);
+        provinceVers.map((p) => p.provinceName).toList(growable: false);
     if (storedGlobal != globalVersion || !hasData) {
       await store.setProvinceOrder(provinceNames);
     }
@@ -87,14 +87,18 @@ class PublicInstitutionBundleLoader {
     var changed = false;
 
     for (final p in provinceVers) {
-      // 没变的省(ver 相同且本地有数据):不读分片、不碰库。
-      if (hasData && storedProvVers[p.name] == p.ver) continue;
+      // 没变的省(manifest_version 相同且本地有数据):不读分片、不碰库。
+      if (hasData && storedProvVers[p.provinceName] == p.manifestVersion) {
+        continue;
+      }
 
-      final provinceChanged =
-          await _reconcileProvince(p.name, fallbackVersion: globalVersion);
+      final provinceChanged = await _reconcileProvince(
+        p.provinceName,
+        fallbackVersion: globalVersion,
+      );
       changed = changed || provinceChanged;
 
-      nextProvVers[p.name] = p.ver;
+      nextProvVers[p.provinceName] = p.manifestVersion;
       await versionKv.writeProvinceVersions(nextProvVers);
     }
 
@@ -113,7 +117,7 @@ class PublicInstitutionBundleLoader {
     if (provinceVers.isEmpty) return false;
 
     final provinceNames =
-        provinceVers.map((p) => p.name).toList(growable: false);
+        provinceVers.map((p) => p.provinceName).toList(growable: false);
     final fallbackVersion = manifest['version'] as String? ?? '0';
 
     await store.setProvinceOrder(provinceNames);
@@ -124,9 +128,9 @@ class PublicInstitutionBundleLoader {
       changed = changed || provinceChanged;
     }
 
-    // 全量灌完落版本游标(供后续走增量),同步字典 ver。
+    // 全量灌完落版本游标(供后续走增量),同步字典 manifest_version。
     await versionKv.writeProvinceVersions(
-      {for (final p in provinceVers) p.name: p.ver},
+      {for (final p in provinceVers) p.provinceName: p.manifestVersion},
     );
     await versionKv.writeGlobalVersion(fallbackVersion);
 
@@ -202,16 +206,21 @@ class PublicInstitutionBundleLoader {
     }
   }
 
-  /// 解析当前 manifest `provinces:[{name,ver}]` → 有序列表。
+  /// 解析当前 manifest `provinces:[{province_name,manifest_version}]` → 有序列表。
   static List<_ProvinceVer> _parseProvinceVersions(Object? raw) {
     if (raw is! List) return const [];
     final out = <_ProvinceVer>[];
     for (final e in raw) {
       if (e is! Map) continue;
-      final name = e['name']?.toString();
-      final ver = e['ver']?.toString();
-      if (name != null && name.isNotEmpty && ver != null) {
-        out.add(_ProvinceVer(name: name, ver: ver));
+      final provinceName = e['province_name']?.toString();
+      final manifestVersion = e['manifest_version']?.toString();
+      if (provinceName != null &&
+          provinceName.isNotEmpty &&
+          manifestVersion != null) {
+        out.add(_ProvinceVer(
+          provinceName: provinceName,
+          manifestVersion: manifestVersion,
+        ));
       }
     }
     return out;
@@ -257,10 +266,13 @@ class PublicInstitutionBundleLoader {
   }
 }
 
-/// manifest 省级版本条目(内部用):省名 + 内容 ver。
+/// manifest 省级版本条目(内部用):省名 + 内容 manifestVersion。
 class _ProvinceVer {
-  const _ProvinceVer({required this.name, required this.ver});
+  const _ProvinceVer({
+    required this.provinceName,
+    required this.manifestVersion,
+  });
 
-  final String name;
-  final String ver;
+  final String provinceName;
+  final String manifestVersion;
 }

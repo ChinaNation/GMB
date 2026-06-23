@@ -49,7 +49,7 @@ pub(crate) struct QrLoginResultRecord {
 pub(crate) struct AdminAuthContext {
     pub(crate) admin_account: String,
     pub(crate) registry_org_code: RegistryOrgCode,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) scope_province_name: Option<String>,
     /// 仅 CityRegistry 有值：该市注册局管理员登记的市（用于列表按市过滤、生成时强制锁定）
     pub(crate) scope_city_name: Option<String>,
@@ -64,7 +64,7 @@ pub(crate) struct AdminAuthOutput {
     pub(crate) ok: bool,
     pub(crate) admin_account: String,
     pub(crate) registry_org_code: RegistryOrgCode,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
     pub(crate) passkey_bound: bool,
@@ -80,7 +80,7 @@ pub(crate) struct AdminIdentifyInput {
 pub(crate) struct AdminIdentifyOutput {
     pub(crate) admin_account: String,
     pub(crate) registry_org_code: RegistryOrgCode,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
     pub(crate) passkey_bound: bool,

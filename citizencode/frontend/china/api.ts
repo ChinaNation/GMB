@@ -9,12 +9,12 @@ export type CidOptionItem = {
 };
 
 export type CidProvinceItem = {
-  name: string;
+  province_name: string;
   code: string;
 };
 
 export type CidCityItem = {
-  name: string;
+  city_name: string;
   code: string;
 };
 

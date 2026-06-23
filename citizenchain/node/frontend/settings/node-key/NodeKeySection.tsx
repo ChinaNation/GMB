@@ -13,11 +13,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
   type PendingAction = 'bootnode' | 'grandpa' | null;
 
   const [input, setInput] = useState(nodeKey.nodeKey ?? '');
-  const [bootnodeInstitutionName, setBootnodeInstitutionName] = useState<string | null>(
-    nodeKey.cidFullName ?? null,
+  const [bootnodeAuthorityNodeLabel, setBootnodeAuthorityNodeLabel] = useState<string | null>(
+    nodeKey.authorityNodeLabel ?? null,
   );
   const [grandpaInput, setGrandpaInput] = useState('');
-  const [grandpaInstitutionName, setGrandpaInstitutionName] = useState<string | null>(null);
+  const [grandpaAuthorityNodeLabel, setGrandpaAuthorityNodeLabel] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -28,8 +28,8 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
 
   useEffect(() => {
     setInput(nodeKey.nodeKey ?? '');
-    setBootnodeInstitutionName(nodeKey.cidFullName ?? null);
-  }, [nodeKey.nodeKey, nodeKey.cidFullName]);
+    setBootnodeAuthorityNodeLabel(nodeKey.authorityNodeLabel ?? null);
+  }, [nodeKey.nodeKey, nodeKey.authorityNodeLabel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +38,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
       .then((k) => {
         if (cancelled) return;
         setGrandpaInput(k.key ?? '');
-        setGrandpaInstitutionName(k.cidFullName ?? null);
+        setGrandpaAuthorityNodeLabel(k.authorityNodeLabel ?? null);
       })
       .catch(() => undefined);
 
@@ -53,7 +53,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
         <h2>
           节点身份密钥
           <span className="grandpa-bind-state">
-            {bootnodeInstitutionName ?? '未绑定'}
+            {bootnodeAuthorityNodeLabel ?? '未绑定'}
           </span>
         </h2>
         <input
@@ -84,7 +84,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
         <h2>
           确定性投票节点
           <span className="grandpa-bind-state">
-            {grandpaInstitutionName ?? '未绑定'}
+            {grandpaAuthorityNodeLabel ?? '未绑定'}
           </span>
         </h2>
         <input
@@ -164,7 +164,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
                       const next = await api.setBootnodeKey(input.trim(), password);
                       onUpdated(next);
                       onApplied();
-                      setBootnodeInstitutionName(next.cidFullName ?? null);
+                      setBootnodeAuthorityNodeLabel(next.authorityNodeLabel ?? null);
                       setInput('');
                       setShowPasswordModal(false);
                       setPendingAction(null);
@@ -183,7 +183,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
                     try {
                       const next = await api.setGrandpaKey(grandpaInput.trim(), password);
                       setGrandpaInput('');
-                      setGrandpaInstitutionName(next.cidFullName ?? null);
+                      setGrandpaAuthorityNodeLabel(next.authorityNodeLabel ?? null);
                       setShowPasswordModal(false);
                       setPendingAction(null);
                       setGrandpaError(null);

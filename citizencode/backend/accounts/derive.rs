@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn reserved_policy_accounts_use_dedicated_tags() {
-        let cid = "LN001-GCB05-944805165-2026";
+        let cid = "LN001-NRC0G-944805165-2026";
         let stake = derive_account(cid, "永久质押").unwrap();
         let anquan = derive_account(cid, "安全基金").unwrap();
         let he = derive_account(cid, "两和基金").unwrap();

@@ -109,7 +109,7 @@ void main() {
       id: null,
       issuedAt: null,
       expiresAt: null,
-      body: UserContactBody(address: wallet.address, name: '我的钱包'),
+      body: UserContactBody(address: wallet.address, contactName: '我的钱包'),
     ).toRawJson();
     expect(raw.contains(QrProtocols.v1), isTrue,
         reason: 'payload should include CITIZEN_QR_V1 proto');

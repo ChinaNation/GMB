@@ -36,7 +36,7 @@ class FakeAdminDivisionStore implements AdminDivisionStore {
   ) async {
     if (code.isEmpty) return code;
     final key = _keyFor(level, scopeKey, code);
-    return byKey[key]?.name ?? code; // 未命中回退 code 本身。
+    return byKey[key]?.divisionName ?? code; // 未命中回退 code 本身。
   }
 
   @override

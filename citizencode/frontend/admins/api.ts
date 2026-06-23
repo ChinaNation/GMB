@@ -11,7 +11,7 @@ export type FederalRegistryAdminRow = {
   id: number;
   province_name: string;
   admin_account: string;
-  admin_display_name: string;
+  admin_name: string;
   built_in: boolean;
   created_at: string;
   /** 最近一次更新时间,null 表示从未更新。 */
@@ -28,11 +28,11 @@ export async function listFederalRegistryAdmins(auth: AdminAuth): Promise<Federa
 export async function updateFederalRegistryName(
   auth: AdminAuth,
   id: number,
-  adminDisplayName: string,
+  adminName: string,
 ): Promise<FederalRegistryAdminRow> {
   return request<FederalRegistryAdminRow>(`/api/v1/admin/federal-registry-admins/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json', ...adminHeaders(auth) },
-    body: JSON.stringify({ admin_display_name: adminDisplayName }),
+    body: JSON.stringify({ admin_name: adminName }),
   });
 }

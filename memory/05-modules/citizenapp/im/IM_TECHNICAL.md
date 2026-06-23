@@ -138,9 +138,9 @@ GMB_IM_WALLET_BINDING_V1
 ```text
 route_id
 wallet_chat_account
-display_name
+route_display_name
 im_device_id
-device_public_key_hex
+im_device_pubkey_hex
 safety_number
 node_peer_id
 node_multiaddr

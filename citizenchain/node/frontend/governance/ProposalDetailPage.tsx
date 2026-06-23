@@ -112,7 +112,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             const activated = await adminsChangeApi.getActivatedAdmins(sid, {
               cidNumber: sid,
             });
-            wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, name: '' }));
+            wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, walletLabel: '' }));
             setDetectedAdminWallets(wallets);
           }
           await fetchVoteStatuses(proposalId, inst.admins.map(a => a.pubkeyHex), sid);

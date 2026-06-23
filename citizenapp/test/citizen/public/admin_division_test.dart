@@ -82,7 +82,7 @@ void main() {
         provinceCode: 'LN',
         cityCode: '001',
         code: '001',
-        name: '广州市',
+        divisionName: '广州市',
       ));
       expect(await store.divisionName(AdminDivisionLevel.city, 'LN', '001'),
           '广州市');
@@ -99,7 +99,7 @@ void main() {
         provinceCode: 'LN',
         cityCode: '001',
         code: '001',
-        name: '广州市',
+        divisionName: '广州市',
       ))
       ..seed(const AdminDivisionDto(
         level: AdminDivisionLevel.town,
@@ -107,7 +107,7 @@ void main() {
         cityCode: '001',
         townCode: '005',
         code: '005',
-        name: '越秀镇',
+        divisionName: '越秀镇',
       ));
 
     test('有 town:省名·市名·镇名', () async {
@@ -208,14 +208,14 @@ void main() {
           level: AdminDivisionLevel.province,
           provinceCode: 'LN',
           code: 'LN',
-          name: '岭南省',
+          divisionName: '岭南省',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'LN',
           cityCode: '001',
           code: '001',
-          name: '旧广州市',
+          divisionName: '旧广州市',
         ));
       final kv = FakeDataVersionKv()
         ..globalVersion = 'v1'
@@ -253,21 +253,21 @@ void main() {
           level: AdminDivisionLevel.province,
           provinceCode: 'LN',
           code: 'LN',
-          name: '岭南省',
+          divisionName: '岭南省',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'LN',
           cityCode: '001',
           code: '001',
-          name: '广州市',
+          divisionName: '广州市',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'GZ',
           cityCode: '001',
           code: '001',
-          name: '南宁市',
+          divisionName: '南宁市',
         ));
       final kv = FakeDataVersionKv()
         ..globalVersion = 'v1'
@@ -308,21 +308,21 @@ void main() {
           level: AdminDivisionLevel.province,
           provinceCode: 'LN',
           code: 'LN',
-          name: '岭南省',
+          divisionName: '岭南省',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'LN',
           cityCode: '001',
           code: '001',
-          name: '旧广州市',
+          divisionName: '旧广州市',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'LN',
           cityCode: '002',
           code: '002',
-          name: '深圳市',
+          divisionName: '深圳市',
         ));
       final kv = FakeDataVersionKv()
         ..globalVersion = 'v1'
@@ -363,14 +363,14 @@ void main() {
           provinceCode: 'LN',
           cityCode: '001',
           code: '001',
-          name: '广州市',
+          divisionName: '广州市',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'LN',
           cityCode: '002',
           code: '002',
-          name: '将被删的市',
+          divisionName: '将被删的市',
         ));
       final kv = FakeDataVersionKv()
         ..globalVersion = 'v1'
@@ -405,7 +405,7 @@ void main() {
           provinceCode: 'LN',
           cityCode: '001',
           code: '001',
-          name: '广州市',
+          divisionName: '广州市',
         ));
       final kv = FakeDataVersionKv()
         ..globalVersion = 'v1'
@@ -453,14 +453,14 @@ void main() {
           provinceCode: 'LN',
           cityCode: '001',
           code: '001',
-          name: '旧广州市',
+          divisionName: '旧广州市',
         ))
         ..seed(const AdminDivisionDto(
           level: AdminDivisionLevel.city,
           provinceCode: 'LN',
           cityCode: '002',
           code: '002',
-          name: '旧残留市',
+          divisionName: '旧残留市',
         ));
       final loader = AdminDivisionBundleLoader(
         store: store,

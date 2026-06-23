@@ -31,7 +31,7 @@ export type UserVoteStatus = {
 export type AdminWalletMatch = {
   address: string;
   pubkeyHex: string;
-  name: string;
+  walletLabel: string;
 };
 
 // ── 管理员激活 ──
@@ -54,7 +54,10 @@ export type ActivateRequestResult = {
 // ── 机构 ──
 
 export type InstitutionListItem = {
-  name: string;
+  cidFullName: string;
+  cidShortName: string;
+  cidFullNameEn: string;
+  cidShortNameEn: string;
   cidNumber: string;
   orgType: number;
   orgTypeLabel: string;
@@ -74,7 +77,10 @@ export type AdminInfo = {
 };
 
 export type InstitutionDetail = {
-  name: string;
+  cidFullName: string;
+  cidShortName: string;
+  cidFullNameEn: string;
+  cidShortNameEn: string;
   cidNumber: string;
   orgType: number;
   orgTypeLabel: string;

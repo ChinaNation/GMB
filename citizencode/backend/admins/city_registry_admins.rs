@@ -124,11 +124,11 @@ pub(crate) fn city_registry_row_from_user_conn(
     Ok(CityRegistryAdminRow {
         id: city_registry.id,
         admin_account: city_registry.admin_account.clone(),
-        admin_display_name: city_registry.admin_display_name.clone(),
+        admin_name: city_registry.admin_name.clone(),
         registry_org_code: city_registry.registry_org_code.clone(),
         built_in: city_registry.built_in,
         created_by: city_registry.created_by.clone(),
-        created_by_name: creator_display_name_conn(conn, city_registry.created_by.as_str())?,
+        created_by_name: creator_admin_name_conn(conn, city_registry.created_by.as_str())?,
         created_at: city_registry.created_at,
         city_name: city_registry.city_name.clone(),
     })
@@ -143,7 +143,7 @@ pub(crate) fn count_city_registry_admins_in_city_conn(
     repo::count_city_registry_admins_by_city_conn(conn, province, city)
 }
 
-pub(crate) fn creator_display_name_conn(
+pub(crate) fn creator_admin_name_conn(
     conn: &mut Client,
     creator_account: &str,
 ) -> Result<String, String> {
@@ -159,7 +159,7 @@ pub(crate) fn creator_display_name_conn(
     } else {
         None
     };
-    Ok(build_admin_display_name(
+    Ok(build_admin_name(
         creator_account,
         &creator.registry_org_code,
         province.as_deref(),

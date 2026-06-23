@@ -57,7 +57,7 @@ void main() {
     final route = ImRouteRecord(
       protocolVersion: 1,
       walletChatAccount: 'bob-wallet',
-      displayName: 'Bob',
+      routeDisplayName: 'Bob',
       imDeviceId: 'bob-phone',
       imDevicePubkeyHex: 'aabbcc',
       safetyNumber: '12 34',

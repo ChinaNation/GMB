@@ -16,7 +16,8 @@ pub fn build_admin_set_change_sign_request(
     let pubkey_clean = account_id::normalize_pubkey_hex(pubkey_hex)?;
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let account_id = account_id::account_id_from_hex(&state.account_hex)?;
-    let call_data = build_admin_set_change_call_data(&state.institution_code, &account_id, &normalized)?;
+    let call_data =
+        build_admin_set_change_call_data(&state.institution_code, &account_id, &normalized)?;
     let summary = format!(
         "{} 管理员更换：{} 人 -> {} 人",
         state.kind_label,

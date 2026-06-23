@@ -23,7 +23,7 @@ pub(crate) struct AdminUser {
     pub(crate) id: u64,
     pub(crate) admin_account: String,
     #[serde(default)]
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) registry_org_code: RegistryOrgCode,
     /// 中文注释:初始联邦注册局管理员由代码内置,不可删除;代码以外新增管理员为 false。
     pub(crate) built_in: bool,
@@ -40,7 +40,7 @@ pub(crate) struct AdminUser {
 pub(crate) struct CityRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) admin_account: String,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) registry_org_code: RegistryOrgCode,
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
@@ -64,7 +64,7 @@ pub(crate) struct FederalRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) province_name: String,
     pub(crate) admin_account: String,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) built_in: bool,
     pub(crate) created_at: DateTime<Utc>,
     /// 最近一次更新时间，None 表示从未更新
@@ -75,7 +75,7 @@ pub(crate) struct FederalRegistryAdminRow {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CreateCityRegistryAdminInput {
     pub(crate) admin_account: String,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     /// CityRegistry 所属的市，必填，且必须属于 created_by 对应联邦注册局管理员的省份（不可为省辖市）
     pub(crate) city_name: String,
     /// 可选：指定该 city_registry 归属的联邦注册局管理员账户。

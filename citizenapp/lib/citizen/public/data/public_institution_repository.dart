@@ -87,7 +87,7 @@ class PublicInstitutionRepository {
       AdminDivisionLevel.city,
       scope,
     );
-    return {for (final d in divisions) d.code: d.name};
+    return {for (final d in divisions) d.code: d.divisionName};
   }
 
   /// (provinceCode, cityCode, townCode) → 「省名·市名[·镇名]」显示路径。

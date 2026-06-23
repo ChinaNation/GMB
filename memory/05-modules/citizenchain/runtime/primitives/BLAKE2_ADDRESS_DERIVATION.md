@@ -72,20 +72,20 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 ## 示例
 
-国储会 `cid_number = "LN001-GCB05-944805165-2026"`：
+国储会 `cid_number = "LN001-NRC0G-944805165-2026"`：
 
 ```
 // main_account
-preimage = b"DUOQIAN" || 0x00 || [0xEB, 0x07] || b"LN001-GCB05-944805165-2026"
+preimage = b"GMB" || 0x00 || [0xEB, 0x07] || b"LN001-NRC0G-944805165-2026"
 address  = BLAKE2-256(preimage)
 
 // fee_account
-preimage = b"DUOQIAN" || 0x01 || [0xEB, 0x07] || b"LN001-GCB05-944805165-2026"
+preimage = b"GMB" || 0x01 || [0xEB, 0x07] || b"LN001-NRC0G-944805165-2026"
 address  = BLAKE2-256(preimage)
 
 // NRC_ANQUAN_ACCOUNT
-preimage = b"DUOQIAN" || 0x03 || [0xEB, 0x07] || b"LN001-GCB05-944805165-2026"
-address  = 0x0521c1ef5fe34fab5353b6213a559c8ca1044cc1972977b648b84cc2d954e4f6
+preimage = b"GMB" || 0x03 || [0xEB, 0x07] || b"LN001-NRC0G-944805165-2026"
+address  = 0xd78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa
 ```
 
 中枢省储行（`citizens_number = 10_913_902`）：

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 重新创世专用:用 CI WASM 烘焙唯一权威创世 SSOT,并同步 wuminapp 轻节点 chainspec。
+# 重新创世专用:用 CI WASM 烘焙唯一权威创世 SSOT,并同步 CitizenApp 轻节点 chainspec。
 #
 # ⚠️ 上线后链冻结,绝不再跑此脚本;runtime 升级一律走链上 system.setCode。
 #    本脚本只在「预上线重新创世」时使用。
@@ -8,7 +8,7 @@
 #   1. 下载 CitizenChain WASM CI 的 citizenchain-wasm 产物(compact.compressed)
 #   2. WASM_FILE=<该 wasm> export-chain-spec --chain citizenchain-fresh --raw
 #   3. 断言 genesis :code blake2 == CI wasm + bootNodes=44 + 网络身份字段与现 SSOT 一致
-#   4. 写入 SSOT(citizenchain/node/chainspecs/citizenchain.raw.json)+ 同步 wuminapp 副本
+#   4. 写入 SSOT(citizenchain/node/chainspecs/citizenchain.raw.json)+ 同步 CitizenApp 副本
 #
 # 用法: ./bake-chainspec.sh [<CitizenChain-WASM-run-id>]   (缺省取最新成功 run)
 set -euo pipefail
@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHAIN_ROOT="$(dirname "$SCRIPT_DIR")"            # citizenchain/
 REPO_ROOT="$(dirname "$CHAIN_ROOT")"             # GMB/
 SSOT="$CHAIN_ROOT/node/chainspecs/citizenchain.raw.json"
-WUMINAPP="$REPO_ROOT/wuminapp/assets/chainspec.json"
+CITIZENAPP="$REPO_ROOT/citizenapp/assets/chainspec.json"
 RUN_ID="${1:-}"
 
 command -v gh >/dev/null || { echo "错误:需要 gh CLI 且已 gh auth login"; exit 1; }
@@ -63,10 +63,10 @@ print("    ✅ :code=CI wasm, bootNodes=44, 网络身份字段一致")
 PY
 
 cp "$TMPDIR/new.json" "$SSOT"
-cp "$TMPDIR/new.json" "$WUMINAPP"
+cp "$TMPDIR/new.json" "$CITIZENAPP"
 echo ">>> 已写入并同步:"
 echo "    SSOT     : $SSOT"
-echo "    wuminapp : $WUMINAPP"
+echo "    CitizenApp: $CITIZENAPP"
 echo ""
-echo "下一步:git add 两份 chainspec → 提交 → 推送(触发 CitizenChain 节点 CI + WuMinApp CI)。"
+echo "下一步:git add 两份 chainspec → 提交 → 推送(触发 CitizenChain 节点 CI + CitizenApp CI)。"
 echo "       服务器部署:scripts/fuwuqi.sh q <ip> ubuntu"

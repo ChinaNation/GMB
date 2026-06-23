@@ -85,10 +85,10 @@ pub(crate) fn resolve_created_by(
             crate::admins::model::RegistryOrgCode::FederalRegistry => "FEDERAL_REGISTRY",
             crate::admins::model::RegistryOrgCode::CityRegistry => "CITY_REGISTRY",
         };
-        let name_opt = if admin.admin_display_name.trim().is_empty() {
+        let name_opt = if admin.admin_name.trim().is_empty() {
             None
         } else {
-            Some(admin.admin_display_name)
+            Some(admin.admin_name)
         };
         Ok((name_opt, Some(role_str.to_string())))
     });

@@ -69,6 +69,33 @@ pub fn official_institution_cid<E>(
     Ok(cid)
 }
 
+/// 市公安局(CPOL)CID — 历史确定性种子 `PS-{province_code}-{city_code}`,创世无重试。
+///
+/// 中文注释:逐字节复刻原 `gov/service.rs::generate_public_security_cid`:
+/// 种子 `PS-{省码}-{市码}`,机构码固定 `CPOL`,`p1="0"`。不得改成 GOV-CITY 模板种子,
+/// 否则平移既有公安局 CID。`exists_fn` 形参保留(供守卫),创世传 `|_| Ok(false)` 等价原行为。
+pub fn public_security_cid<E>(
+    province_code: &str,
+    city_code: &str,
+    province_name: &str,
+    city_name: &str,
+    exists_fn: impl Fn(&str) -> Result<bool, E>,
+) -> Result<String, SeedCidError<E>> {
+    let account_seed = format!("PS-{province_code}-{city_code}");
+    let cid = generate_cid_number(GenerateCidInput {
+        account_pubkey: account_seed.as_str(),
+        p1: "0",
+        province_name,
+        city_name,
+        institution: "CPOL",
+    })
+    .map_err(SeedCidError::Generate)?;
+    if exists_fn(&cid).map_err(SeedCidError::Exists)? {
+        return Err(SeedCidError::Exhausted);
+    }
+    Ok(cid)
+}
+
 /// 公民人(绑定兜底)CID — `wallet_pubkey` 种子 + 1000 次重试。
 ///
 /// 中文注释:逐字节复刻原 `citizens/binding.rs::generate_unique_citizen_cid`:
@@ -115,7 +142,14 @@ mod tests {
     #[test]
     fn official_seed_matches_inline_byte_for_byte() {
         let from_seed = official_institution_cid(
-            "NATIONAL", "GD", "001", "", "CGOV", "广东省", "荔湾市", never_exists,
+            "NATIONAL",
+            "GD",
+            "001",
+            "",
+            "CGOV",
+            "广东省",
+            "荔湾市",
+            never_exists,
         )
         .expect("official cid");
         let inline_seed = "GOV-NATIONAL-GD-001--CGOV";
@@ -134,14 +168,44 @@ mod tests {
     #[test]
     fn official_is_deterministic() {
         let a = official_institution_cid(
-            "NATIONAL", "GD", "001", "", "CGOV", "广东省", "荔湾市", never_exists,
+            "NATIONAL",
+            "GD",
+            "001",
+            "",
+            "CGOV",
+            "广东省",
+            "荔湾市",
+            never_exists,
         )
         .unwrap();
         let b = official_institution_cid(
-            "NATIONAL", "GD", "001", "", "CGOV", "广东省", "荔湾市", never_exists,
+            "NATIONAL",
+            "GD",
+            "001",
+            "",
+            "CGOV",
+            "广东省",
+            "荔湾市",
+            never_exists,
         )
         .unwrap();
         assert_eq!(a, b);
+    }
+
+    // 中文注释:公安局 PS-{省码}-{市码} 种子与原 gov/service.rs::generate_public_security_cid 逐字节一致。
+    #[test]
+    fn public_security_seed_matches_inline_byte_for_byte() {
+        let from_seed =
+            public_security_cid("GD", "001", "广东省", "荔湾市", never_exists).expect("ps cid");
+        let inline = generate_cid_number(GenerateCidInput {
+            account_pubkey: "PS-GD-001",
+            p1: "0",
+            province_name: "广东省",
+            city_name: "荔湾市",
+            institution: "CPOL",
+        })
+        .unwrap();
+        assert_eq!(from_seed, inline);
     }
 
     // 中文注释:公民人 retry==0 用裸 wallet_pubkey,与原 binding.rs 一致。
@@ -179,10 +243,7 @@ mod tests {
         })
         .unwrap();
         // 第一号当作已存在,强制走 #1 重试。
-        let got = citizen_cid("0xdef", "广东省", |c| {
-            Ok::<bool, Infallible>(c == first)
-        })
-        .unwrap();
+        let got = citizen_cid("0xdef", "广东省", |c| Ok::<bool, Infallible>(c == first)).unwrap();
         assert_eq!(got, second_seed_expected);
     }
 
@@ -196,8 +257,8 @@ mod tests {
     // 中文注释:动态机构 —— 随机 UUID 种子,返回已校验归一化号且格式合法。
     #[test]
     fn dynamic_returns_validated_cid() {
-        let cid =
-            dynamic_institution_cid("广东省", "荔湾市", "CGOV", "0", never_exists).expect("dyn cid");
+        let cid = dynamic_institution_cid("广东省", "荔湾市", "CGOV", "0", never_exists)
+            .expect("dyn cid");
         assert!(crate::number::validate_cid_number_format(&cid).is_ok());
     }
 }

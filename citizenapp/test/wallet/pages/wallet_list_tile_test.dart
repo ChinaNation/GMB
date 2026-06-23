@@ -19,7 +19,7 @@ void main() {
 
     test('从当前钱包二维码 user_contact 提取地址', () {
       const raw =
-          '{"proto":"CITIZEN_QR_V1","kind":"user_contact","body":{"address":"$address","name":"测试钱包"}}';
+          '{"proto":"CITIZEN_QR_V1","kind":"user_contact","body":{"address":"$address","contact_name":"测试钱包"}}';
 
       expect(extractColdWalletImportAddress(raw), address);
     });

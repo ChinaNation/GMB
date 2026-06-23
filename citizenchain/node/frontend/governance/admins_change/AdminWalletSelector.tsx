@@ -21,11 +21,10 @@ export function AdminWalletSelector({ wallets, value, disabled, onChange }: Prop
         {wallets.length > 1 && <option value="">请选择…</option>}
         {wallets.map((wallet) => (
           <option key={wallet.pubkeyHex} value={wallet.pubkeyHex}>
-            {wallet.name || hexToSs58(wallet.pubkeyHex)}
+            {wallet.walletLabel || hexToSs58(wallet.pubkeyHex)}
           </option>
         ))}
       </select>
     </div>
   );
 }
-

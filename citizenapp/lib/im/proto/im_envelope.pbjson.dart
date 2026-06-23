@@ -58,7 +58,13 @@ const ImRouteRecord$json = {
       '5': 9,
       '10': 'walletChatAccount'
     },
-    {'1': 'display_name', '3': 3, '4': 1, '5': 9, '10': 'displayName'},
+    {
+      '1': 'route_display_name',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'routeDisplayName'
+    },
     {'1': 'im_device_id', '3': 4, '4': 1, '5': 9, '10': 'imDeviceId'},
     {
       '1': 'im_device_pubkey_hex',
@@ -84,13 +90,13 @@ const ImRouteRecord$json = {
 /// Descriptor for `ImRouteRecord`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List imRouteRecordDescriptor = $convert.base64Decode(
     'Cg1JbVJvdXRlUmVjb3JkEikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3Byb3RvY29sVmVyc2'
-    'lvbhIuChN3YWxsZXRfY2hhdF9hY2NvdW50GAIgASgJUhF3YWxsZXRDaGF0QWNjb3VudBIhCgxk'
-    'aXNwbGF5X25hbWUYAyABKAlSC2Rpc3BsYXlOYW1lEiAKDGltX2RldmljZV9pZBgEIAEoCVIKaW'
-    '1EZXZpY2VJZBIvChRpbV9kZXZpY2VfcHVia2V5X2hleBgFIAEoCVIRaW1EZXZpY2VQdWJrZXlI'
-    'ZXgSIwoNc2FmZXR5X251bWJlchgGIAEoCVIMc2FmZXR5TnVtYmVyEkAKDm5vZGVfZW5kcG9pbn'
-    'RzGAcgAygLMhkuZ21iLmltLnYxLkltTm9kZUVuZHBvaW50Ug1ub2RlRW5kcG9pbnRzEioKEWNy'
-    'ZWF0ZWRfYXRfbWlsbGlzGAggASgEUg9jcmVhdGVkQXRNaWxsaXMSKgoRZXhwaXJlc19hdF9taW'
-    'xsaXMYCSABKARSD2V4cGlyZXNBdE1pbGxpcw==');
+    'lvbhIuChN3YWxsZXRfY2hhdF9hY2NvdW50GAIgASgJUhF3YWxsZXRDaGF0QWNjb3VudBIsChJy'
+    'b3V0ZV9kaXNwbGF5X25hbWUYAyABKAlSEHJvdXRlRGlzcGxheU5hbWUSIAoMaW1fZGV2aWNlX2'
+    'lkGAQgASgJUgppbURldmljZUlkEi8KFGltX2RldmljZV9wdWJrZXlfaGV4GAUgASgJUhFpbURl'
+    'dmljZVB1YmtleUhleBIjCg1zYWZldHlfbnVtYmVyGAYgASgJUgxzYWZldHlOdW1iZXISQAoObm'
+    '9kZV9lbmRwb2ludHMYByADKAsyGS5nbWIuaW0udjEuSW1Ob2RlRW5kcG9pbnRSDW5vZGVFbmRw'
+    'b2ludHMSKgoRY3JlYXRlZF9hdF9taWxsaXMYCCABKARSD2NyZWF0ZWRBdE1pbGxpcxIqChFleH'
+    'BpcmVzX2F0X21pbGxpcxgJIAEoBFIPZXhwaXJlc0F0TWlsbGlz');
 
 @$core.Deprecated('Use imEnvelopeDescriptor instead')
 const ImEnvelope$json = {

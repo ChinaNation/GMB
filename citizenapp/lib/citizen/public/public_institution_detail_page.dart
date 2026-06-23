@@ -119,7 +119,7 @@ class _PublicInstitutionDetailPageState
     try {
       final admins = await _chainData.admins(
         mainAccountHex: mainHex,
-        displayName: inst.cidFullName,
+        cidFullName: inst.cidFullName,
       );
       if (mounted) setState(() => _admins = admins);
     } on Exception {

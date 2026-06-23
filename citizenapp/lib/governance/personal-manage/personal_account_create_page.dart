@@ -359,7 +359,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
       await WalletIsar.instance.writeTxn((isar) async {
         final entity = PersonalAccountEntity()
           ..account = addrHex
-          ..name = nameText
+          ..accountName = nameText
           ..creatorAddress = wallet.address
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
         await isar.personalAccountEntitys.put(entity);

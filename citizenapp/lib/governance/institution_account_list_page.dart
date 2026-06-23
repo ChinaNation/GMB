@@ -38,7 +38,7 @@ class _UnifiedItem {
     PersonalAccountEntity item, {
     required this.localStatus,
   })  : kind = _AccountKind.personal,
-        displayLabel = item.name,
+        displayLabel = item.accountName,
         account = item.account,
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,

@@ -33,7 +33,7 @@ pub(crate) struct AdminPasskeyCredential {
 pub(crate) struct AdminPasskeyRegistrationChallenge {
     pub(crate) registration_id: String,
     pub(crate) admin_account: String,
-    pub(crate) admin_display_name: String,
+    pub(crate) admin_name: String,
     pub(crate) label: String,
     /// 中文注释:公民钱包确认通过后才生成并保存 WebAuthn registration state。
     #[serde(default)]

@@ -38,8 +38,14 @@ pub struct AdminInfo {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {
-    /// 机构名称。
-    pub name: String,
+    /// 机构中文全称,字段唯一对齐 runtime/CID 的 `cid_full_name`。
+    pub cid_full_name: String,
+    /// 机构中文简称,字段唯一对齐 runtime/CID 的 `cid_short_name`。
+    pub cid_short_name: String,
+    /// 机构英文全称,字段唯一对齐 runtime/CID 的 `cid_full_name_en`。
+    pub cid_full_name_en: String,
+    /// 机构英文简称,字段唯一对齐 runtime/CID 的 `cid_short_name_en`。
+    pub cid_short_name_en: String,
     /// 链上身份标识。
     pub cid_number: String,
     /// 机构类型：0=NRC, 1=PRC, 2=PRB。
@@ -106,7 +112,14 @@ pub struct InstitutionBalanceUpdate {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionListItem {
-    pub name: String,
+    /// 机构中文全称,字段唯一对齐 runtime/CID 的 `cid_full_name`。
+    pub cid_full_name: String,
+    /// 机构中文简称,字段唯一对齐 runtime/CID 的 `cid_short_name`。
+    pub cid_short_name: String,
+    /// 机构英文全称,字段唯一对齐 runtime/CID 的 `cid_full_name_en`。
+    pub cid_full_name_en: String,
+    /// 机构英文简称,字段唯一对齐 runtime/CID 的 `cid_short_name_en`。
+    pub cid_short_name_en: String,
     pub cid_number: String,
     pub org_type: u8,
     pub org_type_label: String,

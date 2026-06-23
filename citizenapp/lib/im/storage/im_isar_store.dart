@@ -33,7 +33,7 @@ class ImStoredMessage {
 class ImRouteRecord {
   const ImRouteRecord({
     required this.walletChatAccount,
-    required this.displayName,
+    required this.routeDisplayName,
     required this.deviceId,
     required this.devicePublicKeyHex,
     required this.safetyNumber,
@@ -45,7 +45,7 @@ class ImRouteRecord {
   });
 
   final String walletChatAccount;
-  final String displayName;
+  final String routeDisplayName;
   final String deviceId;
   final String devicePublicKeyHex;
   final String safetyNumber;
@@ -96,7 +96,7 @@ class ImIsarStore {
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      rows.sort((a, b) => a.displayName.compareTo(b.displayName));
+      rows.sort((a, b) => a.routeDisplayName.compareTo(b.routeDisplayName));
       return rows.map(_routeFromEntity).toList(growable: false);
     });
   }
@@ -118,7 +118,7 @@ class ImIsarStore {
       entity
         ..routeId = route.routeId
         ..walletChatAccount = route.walletChatAccount
-        ..displayName = route.displayName
+        ..routeDisplayName = route.routeDisplayName
         ..deviceId = route.deviceId
         ..devicePublicKeyHex = route.devicePublicKeyHex
         ..safetyNumber = route.safetyNumber
@@ -385,7 +385,7 @@ ImStoredMessage _messageFromEntity(ImMessageEntity row) {
 ImRouteRecord _routeFromEntity(ImRouteCacheEntity row) {
   return ImRouteRecord(
     walletChatAccount: row.walletChatAccount,
-    displayName: row.displayName,
+    routeDisplayName: row.routeDisplayName,
     deviceId: row.deviceId,
     devicePublicKeyHex: row.devicePublicKeyHex,
     safetyNumber: row.safetyNumber,

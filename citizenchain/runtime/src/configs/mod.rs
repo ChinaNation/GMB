@@ -53,7 +53,7 @@ use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::sr25519;
 use sp_core::Void;
 #[cfg(not(feature = "runtime-benchmarks"))]
-use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
+use sp_io::crypto::sr25519_verify;
 #[allow(unused_imports)]
 use sp_runtime::traits::Hash as _;
 use sp_runtime::{traits::One, Perbill};
@@ -792,11 +792,10 @@ impl
             };
 
             // 中文注释：这里必须和 CID 端 `/registration-info` 的签名 payload 严格一致。
-            // payload：GMB + OP_SIGN_INST + genesis_hash + cid_number
-            // + cid_full_name + account_names[] + nonce + 签发机构 + 作用域。
+            // payload 字段(GMB + OP_SIGN_INST 域头由 signing_message 统一拼接):
+            // genesis_hash + cid_number + cid_full_name + account_names[] + nonce
+            // + 签发机构 + 作用域。ADR-026:改调原语后逐字节不变。
             let payload = (
-                primitives::core_const::GMB,
-                primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
                 cid_full_name.as_slice(),
@@ -808,7 +807,10 @@ impl
                 scope_province_name,
                 scope_city_name,
             );
-            let msg = blake2_256(&payload.encode());
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_INST,
+                &payload.encode(),
+            );
 
             sr25519_verify(&signature, &msg, &public)
         }
@@ -848,12 +850,11 @@ impl
             };
 
             // 中文注释:必须与 CID 端注销凭证签发 payload 严格一致。
-            // payload:GMB + OP_SIGN_DEREGISTER + genesis_hash + scope + cid_number
-            // + account_name + target_account + nonce + 签发机构 + 签发管理员公钥。
-            // scope 与 target_account 入签名,防换范围/换账户重放。
+            // payload 字段(GMB + OP_SIGN_DEREGISTER 域头由 signing_message 统一拼接):
+            // genesis_hash + scope + cid_number + account_name + target_account
+            // + nonce + 签发机构 + 签发管理员公钥。scope 与 target_account 入签名,
+            // 防换范围/换账户重放。ADR-026:改调原语后逐字节不变(deregistration golden)。
             let payload = (
-                primitives::core_const::GMB,
-                primitives::core_const::OP_SIGN_DEREGISTER,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 scope,
                 cid_number,
@@ -864,7 +865,10 @@ impl
                 issuer_main_account,
                 signer_pubkey,
             );
-            let msg = blake2_256(&payload.encode());
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_DEREGISTER,
+                &payload.encode(),
+            );
 
             sr25519_verify(&signature, &msg, &public)
         }
@@ -946,11 +950,10 @@ impl
                 return false;
             };
 
-            // payload:GMB + OP_SIGN_BIND + block_hash(0) + account + binding_id
-            //   + bind_nonce + 签发机构 + 作用域。
+            // payload 字段(GMB + OP_SIGN_BIND 域头由 signing_message 统一拼接):
+            //   block_hash(0) + account + binding_id + bind_nonce + 签发机构 + 作用域。
+            //   ADR-026:改调原语后逐字节不变。
             let payload = (
-                primitives::core_const::GMB,
-                primitives::core_const::OP_SIGN_BIND,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
                 credential.binding_id,
@@ -961,7 +964,10 @@ impl
                 credential.scope_province_name.as_slice(),
                 credential.scope_city_name.as_slice(),
             );
-            let msg = blake2_256(&payload.encode());
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_BIND,
+                &payload.encode(),
+            );
 
             sr25519_verify(&signature, &msg, &public)
         }
@@ -1014,11 +1020,10 @@ impl
                 return false;
             };
 
-            // payload:GMB + OP_SIGN_VOTE + block_hash(0) + account + binding_id
-            //   + proposal_id + nonce + 签发机构 + 作用域。
+            // payload 字段(GMB + OP_SIGN_VOTE 域头由 signing_message 统一拼接):
+            //   block_hash(0) + account + binding_id + proposal_id + nonce + 签发机构 + 作用域。
+            //   ADR-026:改调原语后逐字节不变。
             let payload = (
-                primitives::core_const::GMB,
-                primitives::core_const::OP_SIGN_VOTE,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
                 binding_id,
@@ -1030,7 +1035,10 @@ impl
                 scope_province_name,
                 scope_city_name,
             );
-            let msg = blake2_256(&payload.encode());
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_VOTE,
+                &payload.encode(),
+            );
 
             sr25519_verify(&signature, &msg, &public)
         }
@@ -1093,11 +1101,10 @@ impl
                 return false;
             };
 
-            // payload:GMB + OP_SIGN_POP + block_hash(0) + who + eligible_total
-            //   + nonce + 签发机构 + 作用域。
+            // payload 字段(GMB + OP_SIGN_POP 域头由 signing_message 统一拼接):
+            //   block_hash(0) + who + eligible_total + nonce + 签发机构 + 作用域。
+            //   ADR-026:改调原语后逐字节不变。
             let payload = (
-                primitives::core_const::GMB,
-                primitives::core_const::OP_SIGN_POP,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,
                 eligible_total,
@@ -1108,7 +1115,10 @@ impl
                 scope_province_name,
                 scope_city_name,
             );
-            let msg = blake2_256(&payload.encode());
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_POP,
+                &payload.encode(),
+            );
 
             sr25519_verify(&signature, &msg, &public)
         }

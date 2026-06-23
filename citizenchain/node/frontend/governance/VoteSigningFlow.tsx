@@ -103,7 +103,7 @@ export function VoteSigningFlow({
                 <label>选择管理员钱包</label>
                 <select value={selectedWallet?.pubkeyHex || ''} onChange={(e) => setSelectedWallet(adminWallets.find((w) => w.pubkeyHex === e.target.value) || null)}>
                   <option value="">请选择…</option>
-                  {adminWallets.map((w) => <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.name}</option>)}
+                  {adminWallets.map((w) => <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.walletLabel || w.address}</option>)}
                 </select>
               </div>
             )}

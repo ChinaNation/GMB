@@ -24,7 +24,7 @@ interface FederalRegistryAdminSubTabProps {
 }
 
 type AddFormValues = {
-  admin_display_name: string;
+  admin_name: string;
   admin_account: string;
 };
 
@@ -57,8 +57,8 @@ export function FederalRegistryAdminSubTab({
     && !sameHexAccount(row.admin_account, auth?.admin_account);
 
   const submitAdd = async (values: AddFormValues) => {
-    const adminDisplayName = values.admin_display_name.trim();
-    if (!adminDisplayName) {
+    const adminName = values.admin_name.trim();
+    if (!adminName) {
       notice.error('请输入联邦注册局管理员姓名');
       return;
     }
@@ -73,7 +73,7 @@ export function FederalRegistryAdminSubTab({
     try {
       await runSecuredAction<FederalRegistryAdminRow>('CREATE_FEDERAL_REGISTRY', {
         admin_account: adminAccount,
-        admin_display_name: adminDisplayName,
+        admin_name: adminName,
       });
       notice.success('联邦注册局管理员已新增');
       form.resetFields();
@@ -87,7 +87,7 @@ export function FederalRegistryAdminSubTab({
   };
 
   const editFederalRegistry = (row: FederalRegistryAdminRow) => {
-    let nextName = row.admin_display_name;
+    let nextName = row.admin_name;
     notice.confirm({
       title: <div style={{ textAlign: 'center', width: '100%' }}>编辑联邦注册局管理员</div>,
       icon: null,
@@ -98,7 +98,7 @@ export function FederalRegistryAdminSubTab({
           <div>
             <Typography.Text type="secondary">管理员姓名</Typography.Text>
             <Input
-              defaultValue={row.admin_display_name}
+              defaultValue={row.admin_name}
               placeholder="请输入管理员姓名"
               style={{ marginTop: 6 }}
               onChange={(event) => {
@@ -121,14 +121,14 @@ export function FederalRegistryAdminSubTab({
         </div>
       ),
       onOk: async () => {
-        const adminDisplayName = nextName.trim();
-        if (!adminDisplayName) {
+        const adminName = nextName.trim();
+        if (!adminName) {
           notice.error('请输入管理员姓名');
-          throw new Error('admin_display_name is required');
+          throw new Error('admin_name is required');
         }
         try {
           if (!auth) throw new Error('请先登录');
-          await updateFederalRegistryName(auth, row.id, adminDisplayName);
+          await updateFederalRegistryName(auth, row.id, adminName);
           notice.success('联邦注册局管理员已更新');
           await refreshFederalRegistryAdmins();
         } catch (error) {
@@ -210,7 +210,7 @@ export function FederalRegistryAdminSubTab({
         pagination={false}
         columns={[
           { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => index + 1 },
-          { title: '姓名', dataIndex: 'admin_display_name', align: 'center', width: 160 },
+          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
           { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
           {
             title: '操作',
@@ -260,7 +260,7 @@ export function FederalRegistryAdminSubTab({
         <Form form={form} layout="vertical" onFinish={submitAdd}>
           <Form.Item
             label="姓名"
-            name="admin_display_name"
+            name="admin_name"
             rules={[{ required: true, message: '请输入联邦注册局管理员姓名' }]}
           >
             <Input placeholder="请输入联邦注册局管理员姓名" />

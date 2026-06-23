@@ -14,9 +14,9 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 
 import 'public_nav_harness.dart';
 
-const _nrcCid = 'LN001-GCB05-944805165-2026';
+const _nrcCid = 'LN001-NRC0G-944805165-2026';
 const _nrcMainHex =
-    '39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d';
+    'b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153';
 
 class _FakeChainData implements PublicInstitutionChainData {
   _FakeChainData({this.adminList = const [], this.proposalList = const []});
@@ -30,7 +30,7 @@ class _FakeChainData implements PublicInstitutionChainData {
   @override
   Future<List<String>> admins({
     required String mainAccountHex,
-    required String displayName,
+    required String cidFullName,
   }) async =>
       adminList;
 

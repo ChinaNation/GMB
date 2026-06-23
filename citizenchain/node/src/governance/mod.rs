@@ -220,7 +220,10 @@ fn build_institution_detail_sync(
         };
 
     Ok(InstitutionDetail {
-        name: entry.name().to_string(),
+        cid_full_name: entry.cid_full_name().to_string(),
+        cid_short_name: entry.cid_short_name().to_string(),
+        cid_full_name_en: entry.cid_full_name_en().to_string(),
+        cid_short_name_en: entry.cid_short_name_en().to_string(),
         cid_number: cid_number.to_string(),
         org_type: org_type as u8,
         org_type_label: org_type.label().to_string(),

@@ -176,7 +176,7 @@ pub(crate) async fn start_passkey_registration(
         &AdminPasskeyRegistrationChallenge {
             registration_id: registration_id.clone(),
             admin_account: ctx.admin_account.clone(),
-            admin_display_name: ctx.admin_display_name.clone(),
+            admin_name: ctx.admin_name.clone(),
             label,
             webauthn_state: None,
             payload_text,
@@ -249,7 +249,7 @@ pub(crate) async fn confirm_passkey_registration(
             .start_passkey_registration(
                 user_uuid_for_account(ctx.admin_account.as_str()),
                 ctx.admin_account.as_str(),
-                ctx.admin_display_name.as_str(),
+                ctx.admin_name.as_str(),
                 Some(existing),
             )
             .map_err(|err| format!("start passkey registration failed: {err}"))?;
@@ -266,28 +266,28 @@ pub(crate) async fn confirm_passkey_registration(
                 StatusCode::NOT_FOUND,
                 1004,
                 "passkey registration not found",
-            )
+            );
         }
         Err(err) if err == "http:unprocessable:passkey registration expired" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "passkey registration expired",
-            )
+            );
         }
         Err(err) if err == "http:forbidden:passkey registration owner mismatch" => {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
                 "passkey registration owner mismatch",
-            )
+            );
         }
         Err(err) if err == "http:unprocessable:signature verify failed" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "signature verify failed",
-            )
+            );
         }
         Err(err) => {
             let message = format!("confirm passkey failed: {err}");
@@ -328,7 +328,7 @@ pub(crate) async fn complete_passkey_registration(
                 StatusCode::NOT_FOUND,
                 1004,
                 "passkey registration not found",
-            )
+            );
         }
         Err(err) => {
             let message = format!("query passkey challenge failed: {err}");
@@ -417,14 +417,14 @@ pub(crate) async fn complete_passkey_registration(
                 StatusCode::CONFLICT,
                 1005,
                 "passkey credential already exists",
-            )
+            );
         }
         Err(err) if err == "http:not_found:passkey registration not found" => {
             return api_error(
                 StatusCode::NOT_FOUND,
                 1004,
                 "passkey registration not found",
-            )
+            );
         }
         Err(err) => {
             let message = format!("complete passkey failed: {err}");

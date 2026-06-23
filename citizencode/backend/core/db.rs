@@ -129,7 +129,7 @@ impl Db {
              CREATE TABLE IF NOT EXISTS admins (
                 admin_id BIGINT PRIMARY KEY,
                 admin_account TEXT NOT NULL UNIQUE,
-                admin_display_name TEXT NOT NULL,
+                admin_name TEXT NOT NULL,
                 registry_org_code TEXT NOT NULL CHECK (registry_org_code IN ('FEDERAL_REGISTRY', 'CITY_REGISTRY')),
                 built_in BOOLEAN NOT NULL DEFAULT FALSE,
                 created_by TEXT NOT NULL DEFAULT 'SYSTEM',
@@ -137,12 +137,24 @@ impl Db {
                 updated_at TIMESTAMPTZ,
                 city_name TEXT NOT NULL DEFAULT ''
              );
+             DO $$
+             BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'admins' AND column_name = 'admin_display_name'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'admins' AND column_name = 'admin_name'
+                ) THEN
+                    ALTER TABLE admins RENAME COLUMN admin_display_name TO admin_name;
+                END IF;
+             END $$;
              UPDATE admins
-             SET admin_display_name = admin_account
-             WHERE admin_display_name IS NULL OR admin_display_name = '';
+             SET admin_name = admin_account
+             WHERE admin_name IS NULL OR admin_name = '';
              ALTER TABLE admins
                 ALTER COLUMN admin_account SET NOT NULL,
-                ALTER COLUMN admin_display_name SET NOT NULL,
+                ALTER COLUMN admin_name SET NOT NULL,
                 ALTER COLUMN registry_org_code SET NOT NULL,
                 DROP CONSTRAINT IF EXISTS admins_registry_org_code_check,
                 ADD CONSTRAINT admins_registry_org_code_check

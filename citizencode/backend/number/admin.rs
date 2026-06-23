@@ -18,7 +18,7 @@ pub(crate) async fn admin_number_meta(
         .iter()
         .filter(|p| scoped.as_deref().map(|v| v == p.name).unwrap_or(true))
         .map(|p| CidProvinceItem {
-            name: p.name.to_string(),
+            province_name: p.name.to_string(),
             code: p.code.to_string(),
         })
         .collect();

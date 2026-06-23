@@ -229,7 +229,7 @@ lib/
 - `AdminGroupCacheEntity`
   - `pubkeyHex, adminGroupName, updatedAt`
 - `ObservedAccountEntity`
-  - `accountId, orgName, publicKey, address, balance, source`
+  - `accountId, accountLabel, publicKey, address, balance, source`
 - `LoginReplayEntity`
   - `requestId, expiresAt`
 - `AppKvEntity`

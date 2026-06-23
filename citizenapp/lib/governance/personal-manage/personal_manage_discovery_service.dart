@@ -146,7 +146,7 @@ class PersonalManageDiscoveryService {
 
       final entity = PersonalAccountEntity()
         ..account = accountHex
-        ..name = name
+        ..accountName = name
         ..creatorAddress = creatorSs58
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true

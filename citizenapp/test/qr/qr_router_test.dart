@@ -39,7 +39,7 @@ void main() {
         'expires_at': 1600,
         'body': {
           'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-          'name': '张三',
+          'recipient_name': '张三',
           'amount': '100.50',
           'symbol': 'GMB',
           'memo': '房租',
@@ -56,7 +56,7 @@ void main() {
         'kind': 'user_contact',
         'body': {
           'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-          'name': '张三',
+          'contact_name': '张三',
         },
       });
       final result = router.route(raw);

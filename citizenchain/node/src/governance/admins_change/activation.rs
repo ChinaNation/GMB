@@ -8,10 +8,11 @@
 // 5. 后端验证签名、payload、链上账户仍一致后，写入本地激活记录；
 // 6. 管理员状态变为已激活，提案按钮解锁。
 //
-// 激活 payload 格式（非链上交易）：
-//   "GMB_ACTIVATE_ADMIN_V1"(23B)
+// 激活 payload 格式（非链上交易，二进制前缀域 ADR-026 Phase 2）：
+//   GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(1B = 0x18)  ← 4B 二进制前缀(取代旧 21B 字符串前缀)
 //   + account_id(32B) + institution_code(4B) + kind(1B) + pubkey(32B)
-//   + timestamp(8B) + nonce(16B) = 116 bytes
+//   + timestamp(8B) + nonce(16B) = 4 + 93 = 97 bytes
+// 冷钱包对整段 payload 直接 sr25519 签名，node 按上述偏移解析。
 
 use crate::home;
 use crate::settings::device_password;
@@ -29,11 +30,10 @@ use tauri::AppHandle;
 
 use crate::governance::admins_change::storage;
 use crate::governance::signing::{self, pubkey_to_ss58};
+use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN};
 
 use super::account_id;
-use super::types::{
-    institution_code_label, qr_institution_code_display_value, AdminAccountState,
-};
+use super::types::{institution_code_label, qr_institution_code_display_value, AdminAccountState};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
@@ -46,10 +46,10 @@ fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
 /// AccountId 级激活管理员存储文件名。旧文件不读取、不迁移。
 const ACTIVATED_ADMINS_FILE: &str = "activated-admin-accounts.json";
 
-/// 管理员本地激活签名 payload 前缀。
-const ACTIVATE_ADMIN_PREFIX: &[u8] = b"GMB_ACTIVATE_ADMIN_V1";
+// 管理员本地激活签名 payload 前缀 = GMB || OP_SIGN_ACTIVATE_ADMIN(4B 二进制前缀，
+// 单一真源 primitives::sign，取代历史 b"GMB_ACTIVATE_ADMIN_V1")。
 // account_id(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
-const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = ACTIVATE_ADMIN_PREFIX.len() + 32 + 4 + 1 + 32 + 8 + 16;
+const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = BINARY_PREFIX_LEN + 32 + 4 + 1 + 32 + 8 + 16;
 
 // ──── 数据结构 ────
 
@@ -237,7 +237,7 @@ fn build_activate_payload(
     timestamp: u64,
 ) -> Vec<u8> {
     let mut payload = Vec::with_capacity(ACTIVATE_ADMIN_PAYLOAD_LEN);
-    payload.extend_from_slice(ACTIVATE_ADMIN_PREFIX);
+    payload.extend_from_slice(&binary_domain_prefix(OP_SIGN_ACTIVATE_ADMIN));
     payload.extend_from_slice(account_id);
     // institution_code: [u8;4] 定长，4 个裸字节。
     payload.extend_from_slice(institution_code);
@@ -257,10 +257,11 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
             payload_bytes.len()
         ));
     }
-    if &payload_bytes[..ACTIVATE_ADMIN_PREFIX.len()] != ACTIVATE_ADMIN_PREFIX {
+    let expected_prefix = binary_domain_prefix(OP_SIGN_ACTIVATE_ADMIN);
+    if payload_bytes[..BINARY_PREFIX_LEN] != expected_prefix {
         return Err("激活 payload 前缀无效".to_string());
     }
-    let mut offset = ACTIVATE_ADMIN_PREFIX.len();
+    let mut offset = BINARY_PREFIX_LEN;
     let mut account_id = [0u8; 32];
     account_id.copy_from_slice(&payload_bytes[offset..offset + 32]);
     offset += 32;

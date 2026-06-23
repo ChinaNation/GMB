@@ -103,7 +103,7 @@ pub(crate) fn run_seed_federal_admins(state: &AppState) -> Result<(), String> {
                 // 中文注释:链上无昵称,这里给每名联邦注册局管理员写有意义的显示名
                 //「{省}联邦注册局管理员{席位}」,使所有视图(含机构信息 tab 的链上 admin 展示、
                 // 不过 catalog 通名回退的路径)都显示名字而非空/公钥哈希。
-                admin_display_name: format!("{province}联邦注册局管理员{seat}"),
+                admin_name: format!("{province}联邦注册局管理员{seat}"),
                 registry_org_code: RegistryOrgCode::FederalRegistry,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),

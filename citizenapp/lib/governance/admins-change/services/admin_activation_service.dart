@@ -10,6 +10,7 @@ import 'package:citizenapp/governance/admins-change/services/institution_admin_s
 import 'package:citizenapp/governance/shared/institution_code_label.dart';
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/signer/signing.dart';
 
 /// 管理员激活记录。
 class ActivatedAdmin {
@@ -74,10 +75,16 @@ class ActivationService {
   /// 只保存 AccountId 语义的当前激活记录。
   static const _storageKey = 'activated_admin_accounts_v1';
 
-  /// AccountId 级管理员激活 payload 前缀。
-  static final _activatePrefix = Uint8List.fromList(
-    'GMB_ACTIVATE_ADMIN_V1'.codeUnits,
-  );
+  /// AccountId 级管理员激活 payload 4 字节二进制前缀 = GMB || 0x18。
+  ///
+  /// ADR-026 Phase 2 二进制前缀域(抖中方案):此前缀**内嵌在被签 payload 字节里**
+  /// (冷钱包对整段 payloadHex 直接 sr25519 签名,node 按字节偏移解析),不经
+  /// signingMessage 做 blake2 hash。取代历史 b"GMB_ACTIVATE_ADMIN_V1"(21B)。
+  /// 四方逐字节锁步:node activation.rs(build/decode)、冷钱包
+  /// payload_decoder.dart、本服务。前缀单源对齐 primitives::sign::
+  /// binary_domain_prefix,金标见 test/signer/fixtures/
+  /// binary_prefix_domain_vectors.json。
+  static final _activatePrefix = binaryDomainPrefix(kOpSignActivateAdmin);
 
   // ---------------------------------------------------------------------------
   // 读取
@@ -257,9 +264,10 @@ class ActivationService {
 
   Uint8List _buildActivatePayload(
       AdminAccountIdentity identity, String pubkeyHex) {
-    // 格式：GMB_ACTIVATE_ADMIN_V1(21B) + account_id(32B) + institution_code([u8;4])
-    //      + kind(1B) + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B)
-    // 逐字镜像冷钱包 payload_decoder.dart::_decodeActivateAdminAccount 的期望格式。
+    // 格式：prefix(4B = GMB||0x18) + account_id(32B) + institution_code([u8;4])
+    //      + kind(1B) + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B) = 97B
+    // 逐字镜像冷钱包 payload_decoder.dart::_decodeActivateAdminAccount 与 node
+    // activation.rs::build_activate_payload 的期望格式。
     final accountId = AdminAccountIdCodec.fromHex(identity.accountHex);
     final pubkey = _hexToBytes(pubkeyHex);
     final codeBytes = Uint8List.fromList(

@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn rejects_legacy_format() {
         // 旧版号(含 K1 主体属性段)必须校验失败。
-        assert!(validate_cid_number_format("LN001-GCB05-944805165-2026").is_err());
+        assert!(validate_cid_number_format("LN001-NRC05-944805165-2026").is_err());
         assert!(validate_cid_number_format("GFR-AH001-ZF0X-898100720-2026").is_err());
     }
 

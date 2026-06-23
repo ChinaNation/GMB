@@ -31,8 +31,8 @@ void main() {
   // 链上 VotingEngine::ProposalData[0] 实抓字节(2026-06-11,创世 0x49d465…):
   // Compact(132) + "dq-xfer" + institution(32) + beneficiary(32)
   // + amount u128 LE(16) + remark Vec(Compact(12)+「转账测试」) + proposer(32)
-  const onchainProposalDataHex = '0x110264712d786665723993'
-      '6ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d'
+  const onchainProposalDataHex = '0x110264712d78666572b38e'
+      '86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153'
       '683bc22649494a1f018aba3effe507a0d25acab9b1b835e7407343f45981'
       '0c6380969800000000000000000000000000'
       '30e8bdace8b4a6e6b58be8af95'
@@ -49,7 +49,7 @@ void main() {
     expect(
       decoded!.institutionBytes,
       hexToBytes(
-          '39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d'),
+          'b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153'),
     );
     expect(decoded.amountFen, BigInt.from(10000000)); // 100,000.00 元
     expect(decoded.remark, '转账测试');

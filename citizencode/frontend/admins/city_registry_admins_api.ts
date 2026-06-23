@@ -7,7 +7,7 @@ import { adminHeaders, request } from '../utils/http';
 export type CityRegistryAdminRow = {
   id: number;
   admin_account: string;
-  admin_display_name: string;
+  admin_name: string;
   registry_org_code: 'CITY_REGISTRY';
   built_in: boolean;
   created_by: string;
@@ -27,11 +27,11 @@ export async function listCityRegistryAdmins(auth: AdminAuth): Promise<CityRegis
 export async function updateCityRegistryName(
   auth: AdminAuth,
   id: number,
-  adminDisplayName: string,
+  adminName: string,
 ): Promise<CityRegistryAdminRow> {
   return request<CityRegistryAdminRow>(`/api/v1/admin/city-registry-admins/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json', ...adminHeaders(auth) },
-    body: JSON.stringify({ admin_display_name: adminDisplayName }),
+    body: JSON.stringify({ admin_name: adminName }),
   });
 }

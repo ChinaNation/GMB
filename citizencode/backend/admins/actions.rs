@@ -115,27 +115,27 @@ struct CityRegistryIdPayload {
 struct UpdateCityRegistryActionPayload {
     id: u64,
     #[serde(default)]
-    admin_display_name: Option<String>,
+    admin_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CreateFederalRegistryActionPayload {
     admin_account: String,
-    admin_display_name: String,
+    admin_name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateFederalRegistryActionPayload {
     id: u64,
-    admin_display_name: String,
+    admin_name: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateAdminNameInput {
-    admin_display_name: String,
+    admin_name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -539,7 +539,7 @@ pub(crate) async fn update_city_registry_login_state(
     }
     let payload = UpdateCityRegistryActionPayload {
         id,
-        admin_display_name: Some(input.admin_display_name),
+        admin_name: Some(input.admin_name),
     };
     let result = state
         .db
@@ -572,7 +572,7 @@ pub(crate) async fn update_federal_registry_login_state(
     }
     let payload = UpdateFederalRegistryActionPayload {
         id,
-        admin_display_name: input.admin_display_name,
+        admin_name: input.admin_name,
     };
     let result = state
         .db
@@ -666,12 +666,12 @@ fn preview_action_conn(
         AdminActionType::CreateCityRegistry => {
             let input: CreateCityRegistryAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
-            let (admin_account, admin_display_name, city, created_by) =
+            let (admin_account, admin_name, city, created_by) =
                 validate_create_city_registry_conn(conn, ctx, &input)?;
             let after = json!({
                 "registry_org_code": "CITY_REGISTRY",
                 "admin_account": admin_account,
-                "admin_display_name": admin_display_name,
+                "admin_name": admin_name,
                 "city_name": city,
                 "created_by": created_by,
             });
@@ -710,13 +710,13 @@ fn preview_action_conn(
         AdminActionType::CreateFederalRegistry => {
             let input: CreateFederalRegistryActionPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            let (admin_account, admin_display_name, province) =
+            let (admin_account, admin_name, province) =
                 validate_create_federal_registry_conn(conn, ctx, &input)?;
             let after = json!({
                 "registry_org_code": "FEDERAL_REGISTRY",
                 "province_name": province,
                 "admin_account": admin_account.clone(),
-                "admin_display_name": admin_display_name,
+                "admin_name": admin_name,
                 "created_by": ctx.admin_account,
             });
             let after_hash = hash_serialized(&after);
@@ -815,7 +815,7 @@ fn validate_create_city_registry_conn(
     let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
         return Err("http:bad_request:admin_account format invalid".to_string());
     };
-    let admin_display_name = validate_admin_display_name(input.admin_display_name.as_str())?;
+    let admin_name = validate_admin_name(input.admin_name.as_str())?;
     let created_by = match input.created_by.as_deref().map(str::trim) {
         None | Some("") => ctx.admin_account.clone(),
         Some(raw) => {
@@ -845,7 +845,7 @@ fn validate_create_city_registry_conn(
     {
         return Err("http:conflict:city admin city limit reached".to_string());
     }
-    Ok((admin_account, admin_display_name, city, created_by))
+    Ok((admin_account, admin_name, city, created_by))
 }
 
 /// 中文注释:机构/账户注销校验。conn 级(查存+管辖+派生),不触签名(签名在 commit 层)。
@@ -916,13 +916,13 @@ fn validate_institution_deregister_conn(
     })
 }
 
-fn validate_admin_display_name(name: &str) -> Result<String, String> {
+fn validate_admin_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("http:bad_request:admin_display_name is required".to_string());
+        return Err("http:bad_request:admin_name is required".to_string());
     }
     if name.chars().count() > MAX_ADMIN_NAME_CHARS {
-        return Err("http:bad_request:admin_display_name too long".to_string());
+        return Err("http:bad_request:admin_name too long".to_string());
     }
     Ok(name.to_string())
 }
@@ -952,8 +952,8 @@ fn preview_update_city_registry_conn(
 ) -> Result<(CityRegistryAdminRow, CityRegistryAdminRow, String), String> {
     let mut city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
     let before = city_registry_row_from_user_conn(conn, &city_registry)?;
-    if let Some(next_name) = input.admin_display_name.as_deref() {
-        city_registry.admin_display_name = validate_admin_display_name(next_name)?;
+    if let Some(next_name) = input.admin_name.as_deref() {
+        city_registry.admin_name = validate_admin_name(next_name)?;
     }
     let after = city_registry_row_from_user_conn(conn, &city_registry)?;
     Ok((before, after, city_registry.admin_account))
@@ -971,7 +971,7 @@ fn validate_create_federal_registry_conn(
     let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
         return Err("http:bad_request:admin_account format invalid".to_string());
     };
-    let admin_display_name = validate_admin_display_name(input.admin_display_name.as_str())?;
+    let admin_name = validate_admin_name(input.admin_name.as_str())?;
     if let Some(existing) = repo::resolve_admin_account_key_conn(conn, admin_account.as_str())? {
         let registry_org_code = repo::get_admin_by_account_conn(conn, existing.as_str())?
             .map(|v| v.registry_org_code)
@@ -983,7 +983,7 @@ fn validate_create_federal_registry_conn(
     {
         return Err("http:conflict:federal admin province limit reached".to_string());
     }
-    Ok((admin_account, admin_display_name, province))
+    Ok((admin_account, admin_name, province))
 }
 
 fn count_federal_registry_admins_in_province_conn(
@@ -1046,7 +1046,7 @@ fn federal_registry_row_value(
         id: admin.id,
         province_name,
         admin_account: admin.admin_account.clone(),
-        admin_display_name: admin.admin_display_name.clone(),
+        admin_name: admin.admin_name.clone(),
         built_in: admin.built_in,
         created_at: admin.created_at,
         updated_at: admin.updated_at,
@@ -1166,13 +1166,13 @@ fn apply_create_city_registry_conn(
     ctx: &AdminAuthContext,
     input: &CreateCityRegistryAdminInput,
 ) -> Result<serde_json::Value, String> {
-    let (admin_account, admin_display_name, city, created_by) =
+    let (admin_account, admin_name, city, created_by) =
         validate_create_city_registry_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
         admin_account: admin_account.clone(),
-        admin_display_name,
+        admin_name,
         registry_org_code: RegistryOrgCode::CityRegistry,
         built_in: false,
         created_by,
@@ -1208,7 +1208,7 @@ fn apply_update_city_registry_conn(
 ) -> Result<serde_json::Value, String> {
     let (before, after, _) = preview_update_city_registry_conn(conn, ctx, input)?;
     let mut next = require_manageable_city_registry_conn(conn, ctx, input.id)?;
-    next.admin_display_name = after.admin_display_name;
+    next.admin_name = after.admin_name;
     next.updated_at = Some(Utc::now());
     repo::upsert_admin_conn(conn, &next, None)?;
     let _ = before;
@@ -1221,13 +1221,13 @@ fn apply_create_federal_registry_conn(
     ctx: &AdminAuthContext,
     input: &CreateFederalRegistryActionPayload,
 ) -> Result<serde_json::Value, String> {
-    let (admin_account, admin_display_name, province) =
+    let (admin_account, admin_name, province) =
         validate_create_federal_registry_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
         admin_account: admin_account.clone(),
-        admin_display_name,
+        admin_name,
         registry_org_code: RegistryOrgCode::FederalRegistry,
         built_in: false,
         created_by: ctx.admin_account.clone(),
@@ -1245,7 +1245,7 @@ fn apply_update_federal_registry_conn(
     input: &UpdateFederalRegistryActionPayload,
 ) -> Result<serde_json::Value, String> {
     let (mut admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
-    admin.admin_display_name = validate_admin_display_name(input.admin_display_name.as_str())?;
+    admin.admin_name = validate_admin_name(input.admin_name.as_str())?;
     admin.updated_at = Some(Utc::now());
     repo::upsert_admin_conn(conn, &admin, Some(province.as_str()))?;
     federal_registry_row_value(&admin, province)

@@ -38,7 +38,7 @@ abstract interface class PublicInstitutionChainData {
   /// 机构主账户管理员公钥列表(AdminsChange::AdminAccounts)。
   Future<List<String>> admins({
     required String mainAccountHex,
-    required String displayName,
+    required String cidFullName,
   });
 
   /// 该机构当年提案(按 institutionBytes==主账户 id 过滤年缓存)。
@@ -68,13 +68,13 @@ class LivePublicInstitutionChainData implements PublicInstitutionChainData {
   @override
   Future<List<String>> admins({
     required String mainAccountHex,
-    required String displayName,
+    required String cidFullName,
   }) {
     // 公权机构主账户走 institutionAccount institution_code。
     final identity = AdminAccountIdentity.institutionAccount(
       accountHex: mainAccountHex,
       institutionCode: 'CGOV',
-      displayName: displayName,
+      accountLabel: cidFullName,
     );
     return _adminService.fetchAdmins(identity);
   }

@@ -17,7 +17,7 @@ void main() {
     await store.upsertRouteRecord(
       const ImRouteRecord(
         walletChatAccount: 'bob-wallet',
-        displayName: 'Bob',
+        routeDisplayName: 'Bob',
         deviceId: 'bob-phone',
         devicePublicKeyHex: '0a0b',
         safetyNumber: '12 34',
@@ -29,13 +29,13 @@ void main() {
 
     final created = await store.getRouteRecord('bob-wallet');
     expect(created, isNotNull);
-    expect(created!.displayName, 'Bob');
+    expect(created!.routeDisplayName, 'Bob');
     expect(created.nodeMultiaddr, startsWith('/ip6/'));
 
     await store.upsertRouteRecord(
       ImRouteRecord(
         walletChatAccount: 'bob-wallet',
-        displayName: 'Bob New',
+        routeDisplayName: 'Bob New',
         deviceId: created.deviceId,
         devicePublicKeyHex: created.devicePublicKeyHex,
         safetyNumber: created.safetyNumber,
@@ -47,7 +47,7 @@ void main() {
 
     final routes = await store.readRouteRecords();
     expect(routes, hasLength(1));
-    expect(routes.single.displayName, 'Bob New');
+    expect(routes.single.routeDisplayName, 'Bob New');
     expect(routes.single.createdAtMillis, created.createdAtMillis);
     expect(
       routes.single.updatedAtMillis,

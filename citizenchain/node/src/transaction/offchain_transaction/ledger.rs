@@ -75,7 +75,9 @@ pub struct PendingPayment {
 ///   失败。
 /// - 之所以节点侧再定义一份,是为了不让 node/Cargo.toml 直接依赖 pallet crate
 ///   (避免循环与门禁耦合),也便于冷启动不同版本节点间兼容。
-/// - 签名消息生成规则:`blake2_256(b"GMB_L3_PAY_V1" || SCALE(self))`
+/// - 签名消息生成规则(ADR-026 唯一原语):
+///   `signing_message(OP_SIGN_L3_PAY, SCALE(self))`
+///   = `blake2_256(GMB || OP_SIGN_L3_PAY || SCALE(self))`。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct NodePaymentIntent {
     pub tx_id: H256,
@@ -89,16 +91,16 @@ pub struct NodePaymentIntent {
     pub expires_at: u32,
 }
 
-/// 与 runtime `L3_PAY_SIGNING_DOMAIN` 逐字节一致。
-pub const L3_PAY_SIGNING_DOMAIN: &[u8] = b"GMB_L3_PAY_V1";
-
 impl NodePaymentIntent {
     /// 生成签名消息哈希,与链上 runtime `PaymentIntent::signing_hash()` 严格一致。
+    ///
+    /// ADR-026:统一收敛到 `primitives::sign::signing_message`,历史本地字符串域
+    /// `b"GMB_L3_PAY_V1"` 已删,域头折为 `GMB || OP_SIGN_L3_PAY`(破坏式,字节变)。
     pub fn signing_hash(&self) -> [u8; 32] {
-        let mut data = Vec::new();
-        data.extend_from_slice(L3_PAY_SIGNING_DOMAIN);
-        data.extend_from_slice(&self.encode());
-        blake2_256(&data)
+        primitives::sign::signing_message(
+            primitives::sign::OP_SIGN_L3_PAY,
+            &self.encode(),
+        )
     }
 }
 

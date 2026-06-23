@@ -15,7 +15,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:
 /// - 职能:在钱包详情页第 2 张身份卡右侧 QR 小图标点击时弹出大二维码,
-///   内容 = `CITIZEN_QR_V1 kind=user_contact { address, name }`(固定码,
+///   内容 = `CITIZEN_QR_V1 kind=user_contact { address, contact_name }`(固定码,
 ///   envelope 顶层无 id / issued_at / expires_at)。
 /// - 三种扫码场景由扫码方自行处理(通讯录、扫码支付、地址栏),不生成多份 QR。
 /// - 新增地址后复制图标 + 关闭右侧下载图标(RepaintBoundary + SaverGallery)。
@@ -70,7 +70,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
   bool _isSaving = false;
 
   /// 构造 QR payload:顶层 envelope(CITIZEN_QR_V1 + kind=user_contact)
-  /// + body(address + name)。
+  /// + body(address + contact_name)。
   String get _qrPayload => QrEnvelope<UserContactBody>(
         kind: QrKind.userContact,
         id: null,
@@ -78,7 +78,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
         expiresAt: null,
         body: UserContactBody(
           address: widget.wallet.address,
-          name: widget.name,
+          contactName: widget.name,
         ),
       ).toRawJson();
 

@@ -69,7 +69,7 @@ class ObservedAccountEntity {
   @Index(unique: true, replace: true)
   late String accountId;
 
-  late String orgName;
+  late String accountLabel;
   late String publicKey;
   late String address;
   double? balance;
@@ -432,8 +432,8 @@ class PersonalAccountEntity {
   @Index(unique: true, replace: true)
   late String account;
 
-  /// 多签账户名称。
-  late String name;
+  /// 个人多签账户名称。
+  late String accountName;
 
   /// 创建人 SS58 地址。
   late String creatorAddress;
@@ -559,7 +559,7 @@ class AdminDivisionEntity {
   late String scopeKey;
 
   /// 行政区名字(来自 china.sqlite)。
-  late String name;
+  late String divisionName;
 
   /// 字典版本戳(来自 manifest version;排错/增量比对用)。
   String? dictVersion;
@@ -755,7 +755,8 @@ class ImRouteCacheEntity {
   @Index(unique: true, replace: true)
   late String walletChatAccount;
 
-  late String displayName;
+  /// IM 路由显示名，只用于联系人路由列表，不承载机构全称或简称。
+  late String routeDisplayName;
   late String deviceId;
   late String devicePublicKeyHex;
   late String safetyNumber;

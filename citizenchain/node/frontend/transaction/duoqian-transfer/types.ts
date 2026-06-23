@@ -1,7 +1,7 @@
 export type AdminWalletMatch = {
   address: string;
   pubkeyHex: string;
-  name: string;
+  walletLabel: string;
 };
 
 export type VoteSignRequestResult = {

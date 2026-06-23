@@ -94,7 +94,7 @@ Future<PublicInstitutionRepository> buildSeededRepo({
       provinceCode: parts[0],
       cityCode: parts.length > 1 ? parts[1] : '',
       code: parts.length > 1 ? parts[1] : '',
-      name: name,
+      divisionName: name,
     ));
   });
   // seed 镇名字典。
@@ -106,7 +106,7 @@ Future<PublicInstitutionRepository> buildSeededRepo({
       cityCode: parts.length > 1 ? parts[1] : '',
       townCode: parts.length > 2 ? parts[2] : '',
       code: parts.length > 2 ? parts[2] : '',
-      name: name,
+      divisionName: name,
     ));
   });
   if (subscriptions != null) {

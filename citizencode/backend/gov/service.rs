@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::china::{china_sqlite_hash, provinces};
-use crate::number::{generate_cid_number, GenerateCidInput, InstitutionCategory};
+use crate::number::InstitutionCategory;
 use crate::subjects::{
     service::{build_default_accounts_for_codes, default_account_names_for_codes},
     EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
@@ -526,16 +526,15 @@ fn generate_public_security_cid(
     city_name: &str,
     city_code: &str,
 ) -> Option<String> {
-    // 中文注释:公安局(CPOL)历史确定性种子是 `PS-{province}-{city}`,
-    // 不得改成 GOV-CITY 模板种子,否则会平移既有公安局 CID 号。
-    let account_seed = format!("PS-{province_code}-{city_code}");
-    generate_cid_number(GenerateCidInput {
-        account_pubkey: account_seed.as_str(),
-        p1: "0",
+    // 中文注释:公安局(CPOL)种子 `PS-{省码}-{市码}` + 创世无重试,收敛在 number::seed,本处只传参。
+    // exists_fn 恒返 false 等价原行为(创世幂等不查重)。
+    crate::number::public_security_cid::<std::convert::Infallible>(
+        province_code,
+        city_code,
         province_name,
         city_name,
-        institution: "CPOL",
-    })
+        |_| Ok(false),
+    )
     .ok()
 }
 

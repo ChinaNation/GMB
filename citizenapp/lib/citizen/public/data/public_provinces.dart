@@ -18,7 +18,7 @@ class PublicProvinceItem {
   const PublicProvinceItem({
     required this.code,
     required this.provinceFullName,
-    required this.displayName,
+    required this.provinceDisplayName,
   });
 
   /// 省 code(= 省储会 cidNumber 前 2 字符),与字典 provinces.json code 对齐。
@@ -28,7 +28,7 @@ class PublicProvinceItem {
   final String provinceFullName;
 
   /// 展示名:去掉末尾"省"字。
-  final String displayName;
+  final String provinceDisplayName;
 }
 
 String _provinceFullNameOf(String councilName) =>
@@ -52,7 +52,7 @@ List<PublicProvinceItem> publicProvinceItems() {
     return PublicProvinceItem(
       code: _codeOf(c.cidNumber),
       provinceFullName: provinceFullName,
-      displayName: _displayOf(provinceFullName),
+      provinceDisplayName: _displayOf(provinceFullName),
     );
   }).toList(growable: false);
 }
@@ -77,7 +77,7 @@ String provinceFullNameByCode(String code) {
 /// 省 code → 展示名(去"省");未知 code 回退 code 本身。
 String provinceDisplayNameByCode(String code) {
   for (final p in publicProvinceItems()) {
-    if (p.code == code) return p.displayName;
+    if (p.code == code) return p.provinceDisplayName;
   }
   return code;
 }

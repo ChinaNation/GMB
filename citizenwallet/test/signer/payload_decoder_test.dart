@@ -392,7 +392,8 @@ void main() {
         idBytes[i] = rawId[i];
       }
       final payload = Uint8List.fromList([
-        ...ascii.encode('GMB_DECRYPT_V1'),
+        // ADR-026 Phase 2 二进制前缀 GMB || 0x19(取代旧 14B "GMB_DECRYPT_V1")。
+        0x47, 0x4D, 0x42, 0x19,
         ...idBytes,
         ...List<int>.filled(32, 0xAA),
         1,
@@ -707,7 +708,8 @@ void main() {
       final account = List<int>.generate(32, (i) => 0x20 + i);
       final pubkey = List<int>.filled(32, 0xaa);
       final payload = Uint8List.fromList([
-        ...utf8.encode('GMB_ACTIVATE_ADMIN_V1'),
+        // ADR-026 Phase 2 二进制前缀 GMB || 0x18(取代旧 21B "GMB_ACTIVATE_ADMIN_V1")。
+        0x47, 0x4D, 0x42, 0x18,
         ...account,
         ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
         0x02, // kind = InstitutionAccount
@@ -1267,6 +1269,40 @@ void main() {
 
       // 尾部末尾多挂字节
       expect(PayloadDecoder.decode(hexOf([...good, 0x00])), isNull);
+    });
+  });
+
+  // ADR-026 Phase 2 二进制前缀域金标:冷钱包 decode() 必须能解析 node/citizenapp
+  // 用相同 4B 前缀(GMB||0x18 / GMB||0x19)构造的 payload。fixture 是 Rust 切片
+  // 导出的副本(canonical 真源 primitives/tests/fixtures),四方逐字节锁步。
+  group('二进制前缀域金标(node/citizenapp 构造 ↔ 冷钱包 decode 锁步)', () {
+    final file = File('test/signer/fixtures/binary_prefix_domain_vectors.json');
+    if (!file.existsSync()) {
+      test('二进制前缀域金标 fixture 尚未生成', () {
+        markTestSkipped('缺少 fixture —— 由 Rust 切片导出');
+      }, skip: '缺少 fixture');
+      return;
+    }
+    final root = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    final vectors = (root['vectors'] as List).cast<Map<String, dynamic>>();
+    final byName = {for (final v in vectors) v['name'] as String: v};
+
+    test('ACTIVATE_ADMIN fixture payload → decode 解出 activate_admin_account', () {
+      final v = byName['ACTIVATE_ADMIN']!;
+      final decoded = PayloadDecoder.decode('0x${v['payload_hex']}');
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'activate_admin_account');
+      // institution_code = "NRC"(fixture sample),kind=0 与 NRC 固定治理码匹配。
+      expect(decoded.fields['institution_code'], isNotEmpty);
+    });
+
+    test('DECRYPT fixture payload → decode 解出 decrypt_admin + cid_number', () {
+      final v = byName['DECRYPT']!;
+      final inputs = v['sample_inputs'] as Map<String, dynamic>;
+      final decoded = PayloadDecoder.decode('0x${v['payload_hex']}');
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'decrypt_admin');
+      expect(decoded.fields['cid_number'], inputs['cid_number']);
     });
   });
 }

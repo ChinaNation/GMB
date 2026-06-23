@@ -1,4 +1,5 @@
 use crate::{home, im::endpoint::ImNodeEndpoint, shared::security};
+use primitives::sign::IM_NODE_PAIRING_PROTO;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -12,7 +13,8 @@ use tauri::AppHandle;
 const COMMUNICATION_NODE_FILE_NAME: &str = "communication-node.json";
 const IM_NODE_PAIRING_QR_PROTO: &str = "CITIZEN_QR_V1";
 const IM_NODE_PAIRING_KIND: &str = "im_node_pairing";
-const IM_NODE_PAIRING_BODY_PROTO: &str = "GMB_IM_NODE_PAIRING_V1";
+// QR body 协议版本串单一真源 = primitives::sign::IM_NODE_PAIRING_PROTO（ADR-026 Phase 2）。
+const IM_NODE_PAIRING_BODY_PROTO: &str = IM_NODE_PAIRING_PROTO;
 const IM_P2P_PORT: u16 = 30333;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

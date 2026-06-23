@@ -34,10 +34,10 @@ pub(crate) async fn list_federal_registry_admins(
                     id: admin.id,
                     province_name: province.clone(),
                     admin_account: admin.admin_account,
-                    admin_display_name: if admin.admin_display_name.is_empty() {
+                    admin_name: if admin.admin_name.is_empty() {
                         format!("{province}联邦注册局管理员")
                     } else {
-                        admin.admin_display_name
+                        admin.admin_name
                     },
                     built_in: admin.built_in,
                     created_at: admin.created_at,

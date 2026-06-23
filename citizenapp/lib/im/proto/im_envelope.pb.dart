@@ -103,7 +103,7 @@ class ImRouteRecord extends $pb.GeneratedMessage {
   factory ImRouteRecord({
     $core.int? protocolVersion,
     $core.String? walletChatAccount,
-    $core.String? displayName,
+    $core.String? routeDisplayName,
     $core.String? imDeviceId,
     $core.String? imDevicePubkeyHex,
     $core.String? safetyNumber,
@@ -114,7 +114,7 @@ class ImRouteRecord extends $pb.GeneratedMessage {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
     if (walletChatAccount != null) result.walletChatAccount = walletChatAccount;
-    if (displayName != null) result.displayName = displayName;
+    if (routeDisplayName != null) result.routeDisplayName = routeDisplayName;
     if (imDeviceId != null) result.imDeviceId = imDeviceId;
     if (imDevicePubkeyHex != null) result.imDevicePubkeyHex = imDevicePubkeyHex;
     if (safetyNumber != null) result.safetyNumber = safetyNumber;
@@ -140,7 +140,7 @@ class ImRouteRecord extends $pb.GeneratedMessage {
     ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
         fieldType: $pb.PbFieldType.OU3)
     ..aOS(2, _omitFieldNames ? '' : 'walletChatAccount')
-    ..aOS(3, _omitFieldNames ? '' : 'displayName')
+    ..aOS(3, _omitFieldNames ? '' : 'routeDisplayName')
     ..aOS(4, _omitFieldNames ? '' : 'imDeviceId')
     ..aOS(5, _omitFieldNames ? '' : 'imDevicePubkeyHex')
     ..aOS(6, _omitFieldNames ? '' : 'safetyNumber')
@@ -192,13 +192,13 @@ class ImRouteRecord extends $pb.GeneratedMessage {
   void clearWalletChatAccount() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get displayName => $_getSZ(2);
+  $core.String get routeDisplayName => $_getSZ(2);
   @$pb.TagNumber(3)
-  set displayName($core.String value) => $_setString(2, value);
+  set routeDisplayName($core.String value) => $_setString(2, value);
   @$pb.TagNumber(3)
-  $core.bool hasDisplayName() => $_has(2);
+  $core.bool hasRouteDisplayName() => $_has(2);
   @$pb.TagNumber(3)
-  void clearDisplayName() => $_clearField(3);
+  void clearRouteDisplayName() => $_clearField(3);
 
   @$pb.TagNumber(4)
   $core.String get imDeviceId => $_getSZ(3);
