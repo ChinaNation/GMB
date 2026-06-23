@@ -555,7 +555,7 @@ class _GovernanceCard extends StatelessWidget {
                 Expanded(
                   // 中文注释：机构卡片不再显示名称左侧图标，只保留名称和右箭头。
                   child: Text(
-                    institution.name,
+                    institution.cidShortName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

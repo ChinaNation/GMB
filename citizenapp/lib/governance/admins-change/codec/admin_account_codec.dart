@@ -7,9 +7,12 @@ class AdminAccountCodec {
   AdminAccountCodec._();
 
   static AdminAccountState? decode(Uint8List accountId, Uint8List data) {
-    if (data.length < 2) return null;
+    if (data.length < 5) return null;
     var offset = 0;
-    final org = data[offset++];
+    final institutionCode = String.fromCharCodes(
+      data.sublist(offset, offset + 4).where((b) => b != 0),
+    );
+    offset += 4;
     final kind = data[offset++];
     final (count, countLen) = readCompactU32(data, offset);
     offset += countLen;
@@ -31,7 +34,7 @@ class AdminAccountCodec {
     final status = data[offset];
     return AdminAccountState(
       accountHex: AdminAccountIdCodec.hexEncode(accountId),
-      org: org,
+      institutionCode: institutionCode,
       kind: kind,
       admins: admins,
       // 中文注释：runtime 的 `AdminsChange::AdminAccounts` 已不再保存阈值；

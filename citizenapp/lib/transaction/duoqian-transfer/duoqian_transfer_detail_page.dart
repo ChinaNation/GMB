@@ -916,11 +916,11 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
     }
   }
 
-  /// 普通机构转账：机构名称 + 金额 + 收款地址 + 备注。
+  /// 普通机构转账：机构简称 + 金额 + 收款地址 + 备注。
   List<Widget> _buildTransferRows() {
     final info = _transferInfo;
     final rows = <Widget>[
-      _buildInfoRow('机构名称', widget.institution.name),
+      _buildInfoRow('机构简称', widget.institution.cidShortName),
     ];
     if (info != null) {
       rows
@@ -968,11 +968,11 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
     return rows;
   }
 
-  /// 手续费划转：机构名称 + 划转金额 + 目标（机构主账户），无备注、无收款地址。
+  /// 手续费划转：机构简称 + 划转金额 + 目标（机构主账户），无备注、无收款地址。
   List<Widget> _buildSweepRows() {
     final info = _sweepInfo;
     final rows = <Widget>[
-      _buildInfoRow('机构名称', widget.institution.name),
+      _buildInfoRow('机构简称', widget.institution.cidShortName),
     ];
     if (info != null) {
       rows

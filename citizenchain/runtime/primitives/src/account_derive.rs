@@ -68,13 +68,29 @@ pub fn is_forbidden_account_name(name: &[u8]) -> bool {
 /// - 个人多签 → `creator(32B) || account_name`
 #[derive(Clone, Copy, Debug)]
 pub enum AccountKind<'a> {
-    InstitutionMain { cid_number: &'a [u8] },
-    InstitutionFee { cid_number: &'a [u8] },
-    InstitutionStake { cid_number: &'a [u8] },
-    InstitutionAnquan { cid_number: &'a [u8] },
-    InstitutionHe { cid_number: &'a [u8] },
-    InstitutionNamed { cid_number: &'a [u8], account_name: &'a [u8] },
-    Personal { creator: &'a [u8; 32], account_name: &'a [u8] },
+    InstitutionMain {
+        cid_number: &'a [u8],
+    },
+    InstitutionFee {
+        cid_number: &'a [u8],
+    },
+    InstitutionStake {
+        cid_number: &'a [u8],
+    },
+    InstitutionAnquan {
+        cid_number: &'a [u8],
+    },
+    InstitutionHe {
+        cid_number: &'a [u8],
+    },
+    InstitutionNamed {
+        cid_number: &'a [u8],
+        account_name: &'a [u8],
+    },
+    Personal {
+        creator: &'a [u8; 32],
+        account_name: &'a [u8],
+    },
 }
 
 impl<'a> AccountKind<'a> {
@@ -99,13 +115,19 @@ impl<'a> AccountKind<'a> {
             | AccountKind::InstitutionStake { cid_number }
             | AccountKind::InstitutionAnquan { cid_number }
             | AccountKind::InstitutionHe { cid_number } => cid_number.to_vec(),
-            AccountKind::InstitutionNamed { cid_number, account_name } => {
+            AccountKind::InstitutionNamed {
+                cid_number,
+                account_name,
+            } => {
                 let mut payload = Vec::with_capacity(cid_number.len() + account_name.len());
                 payload.extend_from_slice(cid_number);
                 payload.extend_from_slice(account_name);
                 payload
             }
-            AccountKind::Personal { creator, account_name } => {
+            AccountKind::Personal {
+                creator,
+                account_name,
+            } => {
                 let mut payload = Vec::with_capacity(creator.len() + account_name.len());
                 payload.extend_from_slice(*creator);
                 payload.extend_from_slice(account_name);
@@ -158,7 +180,10 @@ pub fn institution_kind_by_name<'a>(
     if name == RESERVED_NAME_HE {
         return Some(AccountKind::InstitutionHe { cid_number });
     }
-    Some(AccountKind::InstitutionNamed { cid_number, account_name: name })
+    Some(AccountKind::InstitutionNamed {
+        cid_number,
+        account_name: name,
+    })
 }
 
 /// 注册策略(非派生):account_name 能否作为机构自定义命名账户注册。

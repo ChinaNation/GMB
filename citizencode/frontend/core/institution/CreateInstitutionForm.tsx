@@ -2,8 +2,8 @@
 // 各入口只传入本模块 API 函数,不在公共组件里越过业务边界。
 //
 // 主体属性统一联动(与后端号码生成器/subjects/uninorg 同源):
-//   G → 盈利属性锁死非盈利;公权入口建公权机构(ZF/LF/SF/JC)、教育入口建公立学校(JY),名称必填
-//   S → 私权类型规则锁定 T2/P1;教育私立学校名称必填
+//   G → 盈利属性锁死非盈利;公权入口建公权机构(ZF/LF/SF/JC)、教育入口建公立学校(JY),全称必填
+//   S → 私权类型规则锁定 T2/P1;教育私立学校全称必填
 //   F → 个体经营/无限合伙是独立非法人;分校等从属非法人必须选择所属法人,
 //       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级)
 
@@ -46,7 +46,7 @@ interface FormValues {
   education_type?: EducationType;
   private_type?: PrivateType;
   partnership_kind?: PartnershipKind;
-  /** 私权/教育机构/手动公权机构创建时必填名称。 */
+  /** 私权/教育机构/手动公权机构创建时必填全称。 */
   cid_full_name?: string;
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_cid_number?: string;
@@ -58,9 +58,9 @@ interface FormValues {
   legal_rep_photo_size?: number;
 }
 
-type CheckInstitutionName = (
+type CheckCidFullName = (
   auth: AdminAuth,
-  name: string,
+  cidFullName: string,
   subject_property?: string,
   city_name?: string,
 ) => Promise<{ exists: boolean }>;
@@ -88,7 +88,7 @@ export interface CreateInstitutionFormProps {
   open: boolean;
   lockedProvinceName: string | null;
   lockedCityName: string | null;
-  checkInstitutionName: CheckInstitutionName;
+  checkCidFullName: CheckCidFullName;
   createInstitution: CreateInstitution;
   uploadLegalRepresentativePhoto: UploadLegalRepresentativePhoto;
   searchParentInstitutions: SearchParentInstitutions;
@@ -103,7 +103,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   open,
   lockedProvinceName,
   lockedCityName,
-  checkInstitutionName,
+  checkCidFullName,
   createInstitution,
   uploadLegalRepresentativePhoto,
   searchParentInstitutions,
@@ -115,8 +115,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const [cities, setCities] = useState<CidCityItem[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [nameChecking, setNameChecking] = useState(false);
-  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [cidFullNameChecking, setCidFullNameChecking] = useState(false);
+  const [cidFullNameAvailable, setCidFullNameAvailable] = useState<boolean | null>(null);
   const [legalRepSearching, setLegalRepSearching] = useState(false);
   const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -141,9 +141,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const requiresParent = isF && !isPrivate;
   const showEducationType = isEducation && !isF;
 
-  // 中文注释:私权目标态创建阶段直接写入名称;教育学校和手动公权机构也在弹窗内查重。
+  // 中文注释:私权目标态创建阶段直接写入全称;教育学校和手动公权机构也在弹窗内查重。
   const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
-  const nameLabel = isEducation ? '学校名称' : '机构名称';
+  const nameLabel = isEducation ? '学校全称' : '机构全称';
 
   const subjectPropertyChoices = privateRule
     ? [{
@@ -184,7 +184,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const defaultRule = privateType ? privateRuleFor(privateType, defaultPartnershipKind) : null;
     const defaultSubjectProperty = defaultRule?.subjectProperty ?? locks.subjectPropertyChoices[0]?.value ?? '';
     setCurrentSubjectProperty(defaultSubjectProperty);
-    setNameAvailable(null);
+    setCidFullNameAvailable(null);
     resetParentState();
     const defaultInstitution = defaultRule?.institution ?? institutionChoicesFor(category, defaultSubjectProperty)[0]?.value;
     const defaultEducationType = category === 'EDUCATION_INSTITUTION' && defaultSubjectProperty !== 'F'
@@ -237,7 +237,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   const onSubjectPropertyChange = (subject_property: string) => {
     setCurrentSubjectProperty(subject_property);
-    setNameAvailable(null);
+    setCidFullNameAvailable(null);
     // 中文注释:切主体属性必须重置所属法人与 p1(F 的 p1 是父级继承值,残留会提交旧值)。
     resetParentState();
     setLegalRepOptions([]);
@@ -292,7 +292,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const triggerParentSearch = async () => {
     const q = (form.getFieldValue('parent_cid_number') ?? '').trim();
     if (!q) {
-      notice.warning('请先输入所属法人名称或身份ID关键字');
+      notice.warning('请先输入所属法人全称、简称或身份ID关键字');
       return;
     }
     const opts = parentSearchOptions();
@@ -329,15 +329,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
   };
 
-  // ── 名称查重 ─────────────────────────────────────────────
+  // ── 全称查重 ─────────────────────────────────────────────
 
-  const onCheckName = async () => {
-    const name = (form.getFieldValue('cid_full_name') ?? '').trim();
-    if (!name) {
+  const onCheckCidFullName = async () => {
+    const cidFullName = (form.getFieldValue('cid_full_name') ?? '').trim();
+    if (!cidFullName) {
       notice.warning(`请先输入${nameLabel}`);
       return;
     }
-    // 中文注释:G(公立学校/公权机构)查重是同市同名(后端 check-name G 分支要求 city_name),S/F 全国查重。
+    // 中文注释:G(公立学校/公权机构)查重是同市同 cid_full_name,S/F 全国查重。
     const isGovName = currentSubjectProperty === 'G';
     if (isGovName) {
       const city_name = (form.getFieldValue('city_name') ?? '').trim();
@@ -346,32 +346,32 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         return;
       }
     }
-    setNameChecking(true);
+    setCidFullNameChecking(true);
     try {
       const cityVal = isGovName ? (form.getFieldValue('city_name') ?? '').trim() : undefined;
-      const { exists } = await checkInstitutionName(
+      const { exists } = await checkCidFullName(
         auth,
-        name,
+        cidFullName,
         form.getFieldValue('subject_property'),
         cityVal,
       );
       if (exists) {
-        notice.error(isGovName ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用');
-        setNameAvailable(false);
+        notice.error(isGovName ? '该市已存在同全称机构，请更换全称' : '该机构全称已被使用');
+        setCidFullNameAvailable(false);
       } else {
-        notice.success('名称可用');
-        setNameAvailable(true);
+        notice.success('机构全称可用');
+        setCidFullNameAvailable(true);
       }
     } catch (err) {
       notice.error(err, '');
-      setNameAvailable(null);
+      setCidFullNameAvailable(null);
     } finally {
-      setNameChecking(false);
+      setCidFullNameChecking(false);
     }
   };
 
-  const onNameChange = () => {
-    if (nameAvailable !== null) setNameAvailable(null);
+  const onCidFullNameChange = () => {
+    if (cidFullNameAvailable !== null) setCidFullNameAvailable(null);
   };
 
   // ── 法定代表人 ───────────────────────────────────────────
@@ -439,8 +439,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   // ── 提交 ─────────────────────────────────────────────────
 
   const onSubmit = async (values: FormValues) => {
-    if (collectNameInModal && nameAvailable !== true) {
-      notice.warning('请先点击搜索图标检查名称是否可用');
+    if (collectNameInModal && cidFullNameAvailable !== true) {
+      notice.warning('请先点击搜索图标检查机构全称是否可用');
       return;
     }
     if (requiresParent) {
@@ -489,8 +489,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       if (raw.includes('本省') && raw.includes('未在线')) {
         notice.error('本省登录管理员未在线,请联系联邦注册局机构管理员登录后重试');
       } else if (raw.includes('已被使用') || raw.includes('同名机构')) {
-        notice.error('该市已存在同名机构，请更换名称');
-        setNameAvailable(false);
+        notice.error('该市已存在同全称机构，请更换全称');
+        setCidFullNameAvailable(false);
       } else {
         notice.error(err, '创建机构失败');
       }
@@ -501,7 +501,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   const subjectPropertyDisabled = isPrivate || subjectPropertyChoices.length === 1;
   const instDisabled = instChoices.length === 1;
-  const nameCheckPassed = !collectNameInModal || nameAvailable === true;
+  const cidFullNameCheckPassed = !collectNameInModal || cidFullNameAvailable === true;
 
   return (
     <Modal
@@ -520,9 +520,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           key="submit"
           type="primary"
           loading={submitting}
-          disabled={!nameCheckPassed}
+          disabled={!cidFullNameCheckPassed}
           style={
-            nameCheckPassed
+            cidFullNameCheckPassed
               ? { backgroundColor: '#52c41a', borderColor: '#52c41a' }
               : undefined
           }
@@ -587,9 +587,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 options={cities.map((c) => ({ label: c.name, value: c.name }))}
                 placeholder="请选择市"
                 onChange={() => {
-                  // 中文注释:G 名称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
-                  if (currentSubjectProperty === 'G' && nameAvailable !== null) {
-                    setNameAvailable(null);
+                  // 中文注释:G 全称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
+                  if (currentSubjectProperty === 'G' && cidFullNameAvailable !== null) {
+                    setCidFullNameAvailable(null);
                   }
                   if (isF && (selectedParent || parentOptions.length > 0)) {
                     resetParentState();
@@ -633,25 +633,25 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 <Input
                   placeholder={`请输入${nameLabel}`}
                   maxLength={30}
-                  onChange={onNameChange}
+                  onChange={onCidFullNameChange}
                   suffix={
                     <span
-                      style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
-                      onClick={nameChecking ? undefined : onCheckName}
+                      style={{ cursor: 'pointer', color: cidFullNameChecking ? '#999' : '#1890ff' }}
+                      onClick={cidFullNameChecking ? undefined : onCheckCidFullName}
                     >
-                      {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
+                      {cidFullNameChecking ? <Spin size="small" /> : <SearchOutlined />}
                     </span>
                   }
                 />
               </Form.Item>
-              {nameAvailable === true && (
+              {cidFullNameAvailable === true && (
                 <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
-                  名称可用
+                  机构全称可用
                 </div>
               )}
-              {nameAvailable === false && (
+              {cidFullNameAvailable === false && (
                 <div style={{ color: '#ff4d4f', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
-                  该名称已被占用，请更换
+                  该机构全称已被占用，请更换
                 </div>
               )}
             </Col>
@@ -674,7 +674,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 onChange={onParentInputChange}
               >
                 <Input
-                  placeholder="输入所属法人名称或身份ID后点击搜索"
+                  placeholder="输入所属法人全称、简称或身份ID后点击搜索"
                   suffix={
                     <span
                       style={{
@@ -779,7 +779,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
         {!collectNameInModal && (
           <div style={{ color: '#888', fontSize: 12, marginTop: -8 }}>
-            提示:本步骤仅生成身份ID。生成后请在详情页设置机构名称等信息。
+            提示:本步骤仅生成身份ID。生成后请在详情页设置机构全称等信息。
           </div>
         )}
       </Form>

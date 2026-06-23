@@ -46,6 +46,7 @@ void main() {
         const ClearingBankBindingSnapshot(
           cidNumber: 'GD001-SCB05-000000001-2026',
           cidFullName: '测试清算行',
+          cidShortName: '测试清算行',
           mainAccount: 'aa',
           feeAccount: 'bb',
           peerId: '12D3KooWTest',

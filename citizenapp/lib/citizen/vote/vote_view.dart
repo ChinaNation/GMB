@@ -21,7 +21,7 @@ import 'package:citizenapp/transaction/duoqian-transfer/duoqian_transfer_proposa
 ///
 /// **数据源(v1 双层 ID + 反向索引)**:
 /// - `ProposalsByOrg[NRC] ∪ ByOrg[PRC] ∪ ByOrg[PRB]` 取所有治理类提案 ID
-/// - **不再扫主键 + 客户端过滤**;ORG_REN 多签提案天然不进列表
+/// - **不再扫主键 + 客户端过滤**;个人多签提案天然不进列表
 ///
 /// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
 /// **新区块订阅**:周期性重 fetch 三 org id 列表,补差异。
@@ -42,10 +42,10 @@ class _VoteViewState extends State<VoteView> {
   static const int _pageSize = 10;
   static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
-  // 治理类 org 编码(与 votingengine::internal_vote::ORG_* 对齐)
-  static const int _orgNrc = 0;
-  static const int _orgPrc = 1;
-  static const int _orgPrb = 2;
+  // 治理类 institution_code 编码。
+  static const String _codeNrc = 'NRC';
+  static const String _codePrc = 'PRC';
+  static const String _codePrb = 'PRB';
 
   final DuoqianTransferProposalFeed _duoqianTransferFeed =
       DuoqianTransferProposalFeed();
@@ -157,7 +157,7 @@ class _VoteViewState extends State<VoteView> {
   /// 与机构详情共用同一份当前年提案缓存(全应用一次按年取)。
   Future<List<int>> _fetchAllGovernanceIds() async {
     return _duoqianTransferFeed
-        .fetchGovernanceProposalIds({_orgNrc, _orgPrc, _orgPrb});
+        .fetchGovernanceProposalIds({_codeNrc, _codePrc, _codePrb});
   }
 
   Future<void> _loadFirstPage({bool force = false}) async {
@@ -292,6 +292,7 @@ class _VoteViewState extends State<VoteView> {
     final contexts = await _contextResolver.resolveBatch(
       proposals.map((p) => p.meta.institutionBytes?.toList()).toList(),
       internalOrgList: proposals.map((p) => p.meta.internalOrg).toList(),
+      internalCodeList: proposals.map((p) => p.meta.internalCode).toList(),
     );
 
     // ADR-018 R2:一次性批量算出"哪些提案需要投票",替代过去每提案各发一次
@@ -660,6 +661,7 @@ class _VoteViewState extends State<VoteView> {
       final contexts = await _contextResolver.resolveBatch(
         [proposal.meta.institutionBytes?.toList()],
         internalOrgList: [proposal.meta.internalOrg],
+        internalCodeList: [proposal.meta.internalCode],
       );
       final proposalContext =
           contexts.isEmpty ? const ProposalContext() : contexts.first;
@@ -728,5 +730,5 @@ class _ProposalDisplayItem {
   int get status => summary.status;
   String get displayId => summary.displayId;
   String? get cidFullName =>
-      context?.institution?.name ?? summary.cidFullName;
+      context?.institution?.cidFullName ?? summary.cidFullName;
 }

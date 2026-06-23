@@ -87,7 +87,8 @@ class InstitutionAccounts {
 /// 单个机构或多签账户的结构化信息。
 class InstitutionInfo {
   const InstitutionInfo({
-    required this.name,
+    required this.cidFullName,
+    required this.cidShortName,
     required this.cidNumber,
     required this.orgType,
     this.accounts,
@@ -97,8 +98,11 @@ class InstitutionInfo {
   })  : assert(accounts != null || account != null),
         _singleMainAccount = account;
 
-  /// 显示名称。
-  final String name;
+  /// 机构全称,与后端/链端 `cid_full_name` 对齐。
+  final String cidFullName;
+
+  /// 机构简称,与后端/链端 `cid_short_name` 对齐。
+  final String cidShortName;
 
   /// 链上身份标识（与 Rust 常量 `cid_number` 完全一致）。
   /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId，不再从 cid_number 派生主体。
@@ -162,7 +166,8 @@ class InstitutionInfo {
   }
 
   InstitutionInfo copyWith({
-    String? name,
+    String? cidFullName,
+    String? cidShortName,
     String? cidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
@@ -171,7 +176,8 @@ class InstitutionInfo {
     int? internalThresholdOverride,
   }) {
     return InstitutionInfo(
-      name: name ?? this.name,
+      cidFullName: cidFullName ?? this.cidFullName,
+      cidShortName: cidShortName ?? this.cidShortName,
       cidNumber: cidNumber ?? this.cidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,

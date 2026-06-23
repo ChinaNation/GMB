@@ -27,6 +27,8 @@ pub(crate) struct AppInstitutionDetail {
     pub(crate) cid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cid_full_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) cid_short_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
     pub(crate) p1: String,
     pub(crate) province_name: String,
@@ -54,6 +56,7 @@ pub(crate) struct AppInstitutionSearchQuery {
 pub(crate) struct AppInstitutionSearchRow {
     pub(crate) cid_number: String,
     pub(crate) cid_full_name: Option<String>,
+    pub(crate) cid_short_name: Option<String>,
     pub(crate) category: crate::number::InstitutionCategory,
     pub(crate) province_name: String,
     pub(crate) city_name: String,
@@ -73,6 +76,7 @@ pub(crate) struct AppAccountEntry {
 pub(crate) struct AppInstitutionAccounts {
     pub(crate) cid_number: String,
     pub(crate) cid_full_name: String,
+    pub(crate) cid_short_name: String,
     pub(crate) accounts: Vec<AppAccountEntry>,
 }
 
@@ -93,6 +97,7 @@ pub(crate) struct AppInstitutionRegistrationCredential {
 pub(crate) struct AppInstitutionRegistrationInfo {
     pub(crate) cid_number: String,
     pub(crate) cid_full_name: String,
+    pub(crate) cid_short_name: String,
     pub(crate) account_names: Vec<String>,
     pub(crate) credential: AppInstitutionRegistrationCredential,
 }
@@ -119,16 +124,18 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT cid_number, name, category, province_name, city_name
+                "SELECT cid_number, cid_full_name, cid_short_name, category, province_name, city_name
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
                    AND status = 'ACTIVE'
                    AND (
                         $1::text IS NULL
                         OR cid_number ILIKE '%' || $1 || '%'
-                        OR COALESCE(name, '') ILIKE '%' || $1 || '%'
+                        OR COALESCE(cid_full_name, '') ILIKE '%' || $1 || '%'
+                        OR COALESCE(cid_short_name, '') ILIKE '%' || $1 || '%'
                    )
-                 ORDER BY province_name ASC, city_name ASC, cid_number ASC
+                 ORDER BY province_name ASC, city_name ASC, COALESCE(cid_short_name, '') ASC,
+                          COALESCE(cid_full_name, '') ASC, cid_number ASC
                  LIMIT $2",
                 &[&q, &limit],
             )
@@ -138,9 +145,10 @@ pub(crate) async fn app_search_institutions(
             .map(|row| AppInstitutionSearchRow {
                 cid_number: row.get(0),
                 cid_full_name: row.get(1),
-                category: parse_category(row.get::<_, String>(2).as_str()),
-                province_name: row.get(3),
-                city_name: row.get(4),
+                cid_short_name: row.get(2),
+                category: parse_category(row.get::<_, String>(3).as_str()),
+                province_name: row.get(4),
+                city_name: row.get(5),
             })
             .collect::<Vec<_>>())
     }) {
@@ -185,6 +193,7 @@ pub(crate) async fn app_get_institution(
         data: AppInstitutionDetail {
             cid_number: inst.cid_number,
             cid_full_name: inst.cid_full_name,
+            cid_short_name: inst.cid_short_name,
             category: inst.category,
             p1: inst.p1,
             province_name: inst.province_name,
@@ -264,6 +273,7 @@ pub(crate) async fn app_get_institution_registration_info(
         }
     }
     let cid_full_name = inst.cid_full_name.unwrap_or_default();
+    let cid_short_name = inst.cid_short_name.unwrap_or_default();
     let credential = match build_institution_registration_credential(
         &state,
         &cid_number,
@@ -290,6 +300,7 @@ pub(crate) async fn app_get_institution_registration_info(
         data: AppInstitutionRegistrationInfo {
             cid_number,
             cid_full_name,
+            cid_short_name,
             account_names,
             credential: AppInstitutionRegistrationCredential {
                 genesis_hash: credential.genesis_hash,
@@ -384,6 +395,7 @@ pub(crate) async fn app_list_accounts(
         data: AppInstitutionAccounts {
             cid_number,
             cid_full_name: inst.cid_full_name.unwrap_or_default(),
+            cid_short_name: inst.cid_short_name.unwrap_or_default(),
             accounts,
         },
     })

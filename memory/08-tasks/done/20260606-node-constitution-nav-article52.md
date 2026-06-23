@@ -18,7 +18,7 @@
 
 - 点击左侧目录中的章节、节和文章条目时，不再触发 WebView 白屏导航。
 - 公民宪法 HTML 仍只在 `sandbox="allow-scripts"` iframe 中运行，不增加 `allow-same-origin`。
-- 第五十二条英文与当前中文机构名称保持一致。
+- 第五十二条英文与当前中文机构全称/简称保持一致。
 - 技术文档说明 runtime 宪法 HTML 在 sandbox iframe 内必须用脚本滚动处理目录锚点。
 
 ## 风险与边界

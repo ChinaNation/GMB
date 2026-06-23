@@ -23,7 +23,7 @@ class AdminAccountIdentity {
     if (personal != null) {
       return AdminAccountIdentity.personalAccount(
         accountHex: personal,
-        displayName: institution.name,
+        displayName: institution.cidShortName,
       );
     }
 
@@ -36,14 +36,14 @@ class AdminAccountIdentity {
       return AdminAccountIdentity.institutionAccount(
         accountHex: account,
         institutionCode: code,
-        displayName: institution.name,
+        displayName: institution.cidShortName,
       );
     }
 
     return AdminAccountIdentity.governanceInstitution(
       accountHex: institution.mainAccount,
       orgType: institution.orgType,
-      displayName: institution.name,
+      displayName: institution.cidShortName,
     );
   }
 
@@ -125,8 +125,7 @@ class AdminAccountIdentity {
         AdminAccountIdentityType.institutionAccount => '机构账户',
       };
 
-  String get orgLabel =>
-      InstitutionCodeLabel.codeLabel(institutionCode);
+  String get orgLabel => InstitutionCodeLabel.codeLabel(institutionCode);
 }
 
 class AdminAccountState {
@@ -177,8 +176,7 @@ class AdminAccountState {
         _ => '未知账户',
       };
 
-  String get orgLabel =>
-      InstitutionCodeLabel.codeLabel(institutionCode);
+  String get orgLabel => InstitutionCodeLabel.codeLabel(institutionCode);
 
   String get statusLabel => switch (status) {
         0 => '待激活',

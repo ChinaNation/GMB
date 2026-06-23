@@ -369,7 +369,6 @@ impl Db {
              CREATE TABLE IF NOT EXISTS subjects (
                 cid_number TEXT NOT NULL,
                 kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
-                name TEXT,
                 cid_full_name TEXT,
                 cid_short_name TEXT,
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
@@ -554,6 +553,14 @@ impl Db {
             )
         })?;
 
+        conn.batch_execute("ALTER TABLE subjects DROP COLUMN IF EXISTS name;")
+            .map_err(|e| {
+                format!(
+                    "drop deprecated subjects legacy display column failed: {}",
+                    postgres_error_text(&e)
+                )
+            })?;
+
         Self::validate_target_subject_schema(conn)?;
 
         // 中文注释:教育委员会从公权目录迁入教育机构 tab 后,已生成的国家/市公民教育委员会
@@ -584,12 +591,10 @@ impl Db {
                 ON subjects (province_code, city_code, kind, status, cid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_town
                 ON subjects (province_code, city_code, town_code, kind, status, cid_number);
-             CREATE INDEX IF NOT EXISTS idx_subjects_name
-                ON subjects (province_code, city_code, name);
              CREATE INDEX IF NOT EXISTS idx_subjects_scope_created
                 ON subjects (category, province_name, city_name, created_at DESC, cid_number DESC);
              CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
-                ON subjects (category, province_name, city_name, cid_number, name);
+                ON subjects (category, province_name, city_name, cid_number, cid_full_name, cid_short_name);
              CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
                 ON subjects (province_code, legal_rep_cid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_education
@@ -681,6 +686,7 @@ impl Db {
     fn validate_target_subject_schema(conn: &mut postgres::Client) -> Result<(), String> {
         for column in [
             "cid_full_name",
+            "cid_short_name",
             "legal_rep_name",
             "legal_rep_cid_number",
             "legal_rep_photo_path",
@@ -694,6 +700,7 @@ impl Db {
         ] {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
+        Self::ensure_column_state(conn, "subjects", "name", false)?;
         for column in ["private_type", "partnership_kind", "has_legal_personality"] {
             Self::ensure_column_state(conn, "private", column, true)?;
         }

@@ -22,7 +22,7 @@ const int jointVotePassThreshold = 105;
 
 /// 通过 32 字节治理 AccountId 反查机构信息。
 InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
-    {int? adminAccountOrg}) {
+    {String? adminAccountCode}) {
   if (accountIdBytes.length != 32) return null;
   for (final inst in [
     ...kNationalCouncil,
@@ -37,17 +37,21 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
   }
 
   final account = _hexEncode(accountIdBytes);
-  if (adminAccountOrg == 4 || adminAccountOrg == 5) {
+  if (adminAccountCode != null && adminAccountCode.isNotEmpty) {
+    final cidFullName = '机构账户 ${account.substring(0, 8)}';
     return InstitutionInfo(
-      name: '机构账户 ${account.substring(0, 8)}',
+      cidFullName: cidFullName,
+      cidShortName: cidFullName,
       cidNumber: registeredAccountIdentity(account),
       orgType: OrgType.account,
       account: account,
-      adminAccountOrg: adminAccountOrg,
+      adminAccountCode: adminAccountCode,
     );
   }
+  final cidFullName = '个人多签 ${account.substring(0, 8)}';
   return InstitutionInfo(
-    name: '个人多签 ${account.substring(0, 8)}',
+    cidFullName: cidFullName,
+    cidShortName: cidFullName,
     cidNumber: 'personal-account:$account',
     orgType: OrgType.account,
     account: account,

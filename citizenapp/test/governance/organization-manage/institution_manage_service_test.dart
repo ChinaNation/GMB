@@ -8,6 +8,15 @@ void main() {
   String hexOf(List<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+  List<int> codeBytes(String code) {
+    final out = List<int>.filled(4, 0);
+    final raw = code.codeUnits;
+    for (var i = 0; i < out.length && i < raw.length; i++) {
+      out[i] = raw[i];
+    }
+    return out;
+  }
+
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
     return [(bytes.length << 2) & 0xff, ...bytes];
@@ -54,7 +63,7 @@ void main() {
             amountFen: BigInt.from(222),
           ),
         ],
-        org: 5,
+        institutionCode: 'UNIN',
         adminsLen: 2,
         admins: [admin1, admin2],
         threshold: 2,
@@ -77,7 +86,7 @@ void main() {
         ...u128Le(BigInt.from(111)),
         ...compactVec('费用账户'),
         ...u128Le(BigInt.from(222)),
-        5,
+        ...codeBytes('UNIN'),
         ...u32Le(2),
         (2 << 2) & 0xff,
         ...admin1,

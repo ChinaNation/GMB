@@ -1,5 +1,6 @@
 import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
+import 'package:citizenapp/governance/shared/institution_code_label.dart';
 
 class AdminSetValidationResult {
   const AdminSetValidationResult({
@@ -82,6 +83,9 @@ class AdminSetValidation {
     }
     if (kind == 2) {
       // 中文注释：机构账户 kind=2，institution_code 为注册机构码（非治理固定码）。
+      if (!InstitutionCodeLabel.isInstitution(code)) {
+        throw StateError('机构账户 institution_code 必须为注册机构码');
+      }
       if (count < 2 || count > 1989) {
         throw StateError('机构账户管理员数量必须在 2..=1989 之间');
       }

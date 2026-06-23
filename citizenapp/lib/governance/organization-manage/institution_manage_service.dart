@@ -161,7 +161,7 @@ class InstitutionManageService {
     required String scopeCityName,
   }) {
     final cidBytes = Uint8List.fromList(utf8.encode(cidNumber.trim()));
-    final institutionNameBytes =
+    final cidFullNameBytes =
         Uint8List.fromList(utf8.encode(cidFullName.trim()));
     final registerNonceBytes =
         Uint8List.fromList(utf8.encode(registerNonce.trim()));
@@ -187,7 +187,7 @@ class InstitutionManageService {
     if (cidBytes.isEmpty || cidBytes.length > 96) {
       throw ArgumentError('cid_number 长度需在 1..=96 字节');
     }
-    if (institutionNameBytes.isEmpty || institutionNameBytes.length > 128) {
+    if (cidFullNameBytes.isEmpty || cidFullNameBytes.length > 128) {
       throw ArgumentError('cid_full_name 长度需在 1..=128 字节');
     }
     if (accounts.isEmpty) {
@@ -221,7 +221,7 @@ class InstitutionManageService {
     _writeBoundedBytes(output, cidBytes);
 
     // cid_full_name: BoundedVec<u8>
-    _writeBoundedBytes(output, institutionNameBytes);
+    _writeBoundedBytes(output, cidFullNameBytes);
 
     // accounts: BoundedVec<InstitutionInitialAccount> = Compact<N> + N 项。
     output.write(CompactBigIntCodec.codec.encode(BigInt.from(accounts.length)));

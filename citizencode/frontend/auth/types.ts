@@ -13,8 +13,8 @@ export type TokenAdminAuth = {
   scope_city_name?: string | null;
   /** 当前管理员是否已绑定有效 Passkey。 */
   passkey_bound?: boolean;
-  /** 当前管理员所属机构的简称(取自 subjects.cid_short_name 单一真源);右上角徽标显示用。 */
-  institution_short_name?: string | null;
+  /** 当前管理员所属机构简称,字段名与 subjects.cid_short_name 保持唯一命名。 */
+  cid_short_name?: string | null;
 };
 
 export type AdminAuth = TokenAdminAuth;

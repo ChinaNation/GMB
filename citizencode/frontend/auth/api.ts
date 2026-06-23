@@ -12,7 +12,7 @@ export type AdminAuthCheck = {
   scope_province_name?: string | null;
   scope_city_name?: string | null;
   passkey_bound: boolean;
-  institution_short_name?: string | null;
+  cid_short_name?: string | null;
 };
 
 export type AdminIdentifyResult = {
@@ -22,7 +22,7 @@ export type AdminIdentifyResult = {
   scope_province_name?: string | null;
   scope_city_name?: string | null;
   passkey_bound: boolean;
-  institution_short_name?: string | null;
+  cid_short_name?: string | null;
 };
 
 export type AdminChallengeResult = {

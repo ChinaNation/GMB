@@ -668,7 +668,7 @@ class _PersonalManageAccountInfoPageState
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildInfoRow('名称', widget.institution.name),
+                  _buildInfoRow('账户简称', widget.institution.cidShortName),
                   const Divider(height: 20),
                   _buildInfoRow(
                     '多签账户',

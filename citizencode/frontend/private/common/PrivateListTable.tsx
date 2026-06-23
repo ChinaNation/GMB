@@ -1,4 +1,4 @@
-// 中文注释:私权机构列表。私权机构必须输入机构名称或 CID 精确搜索,避免跨省全量扫描。
+// 中文注释:私权机构列表。私权机构必须输入机构全称、简称或 CID 精确搜索,避免跨省全量扫描。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Space, Table, Tag } from 'antd';
@@ -102,12 +102,12 @@ export const PrivateListTable: React.FC<Props> = ({
       },
       { title: '身份ID', dataIndex: 'cid_number', width: 260, align: 'center' },
       {
-        title: '机构名称',
+        title: '机构全称',
         dataIndex: 'cid_full_name',
         width: 180,
         align: 'center',
         render: (v: string | null) =>
-          v ? v : <span style={{ color: '#999' }}>(未命名,待完善)</span>,
+          v ? v : <span style={{ color: '#999' }}>(未设置全称,待完善)</span>,
       },
       { title: '省/市', render: (_v, r) => `${r.province_name}/${r.city_name}`, width: 160, align: 'center' },
       {

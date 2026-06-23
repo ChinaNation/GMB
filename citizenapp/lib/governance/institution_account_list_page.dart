@@ -38,7 +38,7 @@ class _UnifiedItem {
     PersonalAccountEntity item, {
     required this.localStatus,
   })  : kind = _AccountKind.personal,
-        name = item.name,
+        displayLabel = item.name,
         account = item.account,
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,
@@ -50,7 +50,7 @@ class _UnifiedItem {
     InstitutionEntity item, {
     required this.localStatus,
   })  : kind = _AccountKind.institution,
-        name = item.name,
+        displayLabel = item.accountName,
         account = item.account,
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,
@@ -59,7 +59,7 @@ class _UnifiedItem {
         institution = item;
 
   final _AccountKind kind;
-  final String name;
+  final String displayLabel;
   final String account;
   final int addedAtMillis;
   final bool discoveredViaAdmin;
@@ -494,13 +494,14 @@ class _InstitutionAccountListPageState
       MaterialPageRoute(
         builder: (_) => InstitutionDuoqianCreatePage(
           institution: const InstitutionInfo(
-            name: '新建多签机构',
+            cidFullName: '新建多签机构',
+            cidShortName: '新建多签机构',
             cidNumber:
                 'institution-account:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.account,
             // 设计缺口: 新建机构时尚无 CID 码，占位用空字符串；实际 CID 码在创建完成后
 // 由 institution_manage_service 从链上读取并写入 Isar。
-adminAccountCode: '',
+            adminAccountCode: '',
             account:
                 '0000000000000000000000000000000000000000000000000000000000000000',
           ),
@@ -521,7 +522,8 @@ adminAccountCode: '',
       _AccountKind.personal => MaterialPageRoute(
           builder: (_) => PersonalManageAccountInfoPage(
             institution: InstitutionInfo(
-              name: item.name,
+              cidFullName: item.displayLabel,
+              cidShortName: item.displayLabel,
               cidNumber: 'personal-account:${item.account}',
               orgType: OrgType.account,
               account: item.account,
@@ -534,10 +536,11 @@ adminAccountCode: '',
       _AccountKind.institution => MaterialPageRoute(
           builder: (_) => InstitutionAccountInfoPage(
             institution: InstitutionInfo(
-              name: item.name,
+              cidFullName: item.displayLabel,
+              cidShortName: item.displayLabel,
               cidNumber: registeredAccountIdentity(item.account),
               orgType: OrgType.account,
-              adminAccountOrg: item.institution?.adminAccountOrg,
+              adminAccountCode: item.institution?.adminAccountCode,
               account: item.account,
             ),
             initialLocalStatus: item.localStatus,
@@ -748,7 +751,7 @@ adminAccountCode: '',
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            item.name,
+                            item.displayLabel,
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,

@@ -40,14 +40,14 @@ import { notice } from './utils/notice';
 const { Header, Content } = Layout;
 
 /** Header 右上角管理员身份与姓名,样式与 CPMS 管理端保持一致。 */
-function resolveHeaderAdminIdentity(auth: AdminAuth | null): { institutionShortName: string; adminDisplayName: string } {
-  if (!auth) return { institutionShortName: '', adminDisplayName: '' };
+function resolveHeaderAdminIdentity(auth: AdminAuth | null): { cidShortName: string; adminDisplayName: string } {
+  if (!auth) return { cidShortName: '', adminDisplayName: '' };
   const name = typeof auth.admin_display_name === 'string' ? auth.admin_display_name.trim() : '';
-  // 中文注释:左段显示所属机构简称,取自 auth.institution_short_name(= subjects.cid_short_name 单一真源),
+  // 中文注释:左段显示所属机构简称,取自 auth.cid_short_name(= subjects.cid_short_name 单一字段),
   // 不再由 registry_org_code 硬编码另造名字;空时(简称未加载)整段留空,不显示伪造名。
-  const institutionShortName =
-    typeof auth.institution_short_name === 'string' ? auth.institution_short_name.trim() : '';
-  return { institutionShortName, adminDisplayName: name || '暂未设置' };
+  const cidShortName =
+    typeof auth.cid_short_name === 'string' ? auth.cid_short_name.trim() : '';
+  return { cidShortName, adminDisplayName: name || '暂未设置' };
 }
 
 type ActiveView =
@@ -112,7 +112,7 @@ function AppInner() {
           scope_province_name: checked.scope_province_name ?? null,
           scope_city_name: checked.scope_city_name ?? null,
           passkey_bound: checked.passkey_bound,
-          institution_short_name: checked.institution_short_name ?? null,
+          cid_short_name: checked.cid_short_name ?? null,
         };
         setAuth(refreshedAuth);
         writeStoredAuth(refreshedAuth);
@@ -265,9 +265,9 @@ function AppInner() {
                 display: 'inline-flex', alignItems: 'center', gap: 8,
               }}
             >
-              {headerAdminIdentity.institutionShortName && (
+              {headerAdminIdentity.cidShortName && (
                 <>
-                  <span>{headerAdminIdentity.institutionShortName}</span>
+                  <span>{headerAdminIdentity.cidShortName}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
                 </>
               )}

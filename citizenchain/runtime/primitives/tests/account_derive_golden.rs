@@ -59,26 +59,26 @@ fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
     let creator_hex = v.get("creator_hex").and_then(|x| x.as_str());
 
     match kind {
-        "InstitutionMain" => {
-            AccountKind::InstitutionMain { cid_number: cid.expect("缺 cid_number").as_bytes() }
-                .derive(SS58_FORMAT)
+        "InstitutionMain" => AccountKind::InstitutionMain {
+            cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
-        "InstitutionFee" => {
-            AccountKind::InstitutionFee { cid_number: cid.expect("缺 cid_number").as_bytes() }
-                .derive(SS58_FORMAT)
+        .derive(SS58_FORMAT),
+        "InstitutionFee" => AccountKind::InstitutionFee {
+            cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
-        "InstitutionStake" => {
-            AccountKind::InstitutionStake { cid_number: cid.expect("缺 cid_number").as_bytes() }
-                .derive(SS58_FORMAT)
+        .derive(SS58_FORMAT),
+        "InstitutionStake" => AccountKind::InstitutionStake {
+            cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
-        "InstitutionAnquan" => {
-            AccountKind::InstitutionAnquan { cid_number: cid.expect("缺 cid_number").as_bytes() }
-                .derive(SS58_FORMAT)
+        .derive(SS58_FORMAT),
+        "InstitutionAnquan" => AccountKind::InstitutionAnquan {
+            cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
-        "InstitutionHe" => {
-            AccountKind::InstitutionHe { cid_number: cid.expect("缺 cid_number").as_bytes() }
-                .derive(SS58_FORMAT)
+        .derive(SS58_FORMAT),
+        "InstitutionHe" => AccountKind::InstitutionHe {
+            cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
+        .derive(SS58_FORMAT),
         "InstitutionNamed" => AccountKind::InstitutionNamed {
             cid_number: cid.expect("缺 cid_number").as_bytes(),
             account_name: name.expect("缺 account_name").as_bytes(),
@@ -113,15 +113,26 @@ fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
             .iter()
             .find(|c| c.cid_number == cid)
             .map(|c| c.main_account)
-            .or_else(|| CHINA_CH.iter().find(|c| c.cid_number == cid).map(|c| c.main_account)),
+            .or_else(|| {
+                CHINA_CH
+                    .iter()
+                    .find(|c| c.cid_number == cid)
+                    .map(|c| c.main_account)
+            }),
         "InstitutionFee" => CHINA_CB
             .iter()
             .find(|c| c.cid_number == cid)
             .map(|c| c.fee_account)
-            .or_else(|| CHINA_CH.iter().find(|c| c.cid_number == cid).map(|c| c.fee_account)),
-        "InstitutionStake" => {
-            CHINA_CH.iter().find(|c| c.cid_number == cid).map(|c| c.stake_account)
-        }
+            .or_else(|| {
+                CHINA_CH
+                    .iter()
+                    .find(|c| c.cid_number == cid)
+                    .map(|c| c.fee_account)
+            }),
+        "InstitutionStake" => CHINA_CH
+            .iter()
+            .find(|c| c.cid_number == cid)
+            .map(|c| c.stake_account),
         "InstitutionAnquan" => Some(NRC_ANQUAN_ACCOUNT),
         "InstitutionHe" => Some(NRC_HE_ACCOUNT),
         _ => None,
@@ -145,7 +156,10 @@ fn account_derive_golden_vectors() {
 
     let update = std::env::var(UPDATE_ENV).map(|v| v == "1").unwrap_or(false);
 
-    let vectors = fixture["vectors"].as_array().expect("vectors 必须是数组").clone();
+    let vectors = fixture["vectors"]
+        .as_array()
+        .expect("vectors 必须是数组")
+        .clone();
     assert!(!vectors.is_empty(), "fixture 至少需 1 条向量");
 
     let mut updated = Vec::with_capacity(vectors.len());

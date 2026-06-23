@@ -10728,35 +10728,35 @@ const InstitutionEntitySchema = CollectionSchema(
       name: r'account',
       type: IsarType.string,
     ),
-    r'addedAtMillis': PropertySchema(
+    r'accountName': PropertySchema(
       id: 1,
+      name: r'accountName',
+      type: IsarType.string,
+    ),
+    r'addedAtMillis': PropertySchema(
+      id: 2,
       name: r'addedAtMillis',
       type: IsarType.long,
     ),
-    r'adminAccountOrg': PropertySchema(
-      id: 2,
-      name: r'adminAccountOrg',
-      type: IsarType.long,
+    r'adminAccountCode': PropertySchema(
+      id: 3,
+      name: r'adminAccountCode',
+      type: IsarType.string,
     ),
     r'cidNumber': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'cidNumber',
       type: IsarType.string,
     ),
     r'discoveredViaAdmin': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'discoveredViaAdmin',
       type: IsarType.bool,
     ),
     r'matchedAdminPubkeys': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'matchedAdminPubkeys',
       type: IsarType.stringList,
-    ),
-    r'name': PropertySchema(
-      id: 6,
-      name: r'name',
-      type: IsarType.string,
     )
   },
   estimateSize: _institutionEntityEstimateSize,
@@ -10820,6 +10820,13 @@ int _institutionEntityEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.account.length * 3;
+  bytesCount += 3 + object.accountName.length * 3;
+  {
+    final value = object.adminAccountCode;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.cidNumber.length * 3;
   bytesCount += 3 + object.matchedAdminPubkeys.length * 3;
   {
@@ -10828,7 +10835,6 @@ int _institutionEntityEstimateSize(
       bytesCount += value.length * 3;
     }
   }
-  bytesCount += 3 + object.name.length * 3;
   return bytesCount;
 }
 
@@ -10839,12 +10845,12 @@ void _institutionEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.account);
-  writer.writeLong(offsets[1], object.addedAtMillis);
-  writer.writeLong(offsets[2], object.adminAccountOrg);
-  writer.writeString(offsets[3], object.cidNumber);
-  writer.writeBool(offsets[4], object.discoveredViaAdmin);
-  writer.writeStringList(offsets[5], object.matchedAdminPubkeys);
-  writer.writeString(offsets[6], object.name);
+  writer.writeString(offsets[1], object.accountName);
+  writer.writeLong(offsets[2], object.addedAtMillis);
+  writer.writeString(offsets[3], object.adminAccountCode);
+  writer.writeString(offsets[4], object.cidNumber);
+  writer.writeBool(offsets[5], object.discoveredViaAdmin);
+  writer.writeStringList(offsets[6], object.matchedAdminPubkeys);
 }
 
 InstitutionEntity _institutionEntityDeserialize(
@@ -10855,13 +10861,13 @@ InstitutionEntity _institutionEntityDeserialize(
 ) {
   final object = InstitutionEntity();
   object.account = reader.readString(offsets[0]);
-  object.addedAtMillis = reader.readLong(offsets[1]);
-  object.adminAccountOrg = reader.readLongOrNull(offsets[2]);
-  object.cidNumber = reader.readString(offsets[3]);
-  object.discoveredViaAdmin = reader.readBool(offsets[4]);
+  object.accountName = reader.readString(offsets[1]);
+  object.addedAtMillis = reader.readLong(offsets[2]);
+  object.adminAccountCode = reader.readStringOrNull(offsets[3]);
+  object.cidNumber = reader.readString(offsets[4]);
+  object.discoveredViaAdmin = reader.readBool(offsets[5]);
   object.id = id;
-  object.matchedAdminPubkeys = reader.readStringList(offsets[5]) ?? [];
-  object.name = reader.readString(offsets[6]);
+  object.matchedAdminPubkeys = reader.readStringList(offsets[6]) ?? [];
   return object;
 }
 
@@ -10875,17 +10881,17 @@ P _institutionEntityDeserializeProp<P>(
     case 0:
       return (reader.readString(offset)) as P;
     case 1:
-      return (reader.readLong(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 2:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
-      return (reader.readBool(offset)) as P;
-    case 5:
-      return (reader.readStringList(offset) ?? []) as P;
-    case 6:
       return (reader.readString(offset)) as P;
+    case 5:
+      return (reader.readBool(offset)) as P;
+    case 6:
+      return (reader.readStringList(offset) ?? []) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -11380,6 +11386,142 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'accountName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'accountName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'accountName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'accountName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'accountName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'accountName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'accountName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      accountNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'accountName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
       addedAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -11436,75 +11578,155 @@ extension InstitutionEntityQueryFilter
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      adminAccountOrgIsNull() {
+      adminAccountCodeIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'adminAccountOrg',
+        property: r'adminAccountCode',
       ));
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      adminAccountOrgIsNotNull() {
+      adminAccountCodeIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'adminAccountOrg',
+        property: r'adminAccountCode',
       ));
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      adminAccountOrgEqualTo(int? value) {
+      adminAccountCodeEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'adminAccountOrg',
+        property: r'adminAccountCode',
         value: value,
+        caseSensitive: caseSensitive,
       ));
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      adminAccountOrgGreaterThan(
-    int? value, {
+      adminAccountCodeGreaterThan(
+    String? value, {
     bool include = false,
+    bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'adminAccountOrg',
+        property: r'adminAccountCode',
         value: value,
+        caseSensitive: caseSensitive,
       ));
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      adminAccountOrgLessThan(
-    int? value, {
+      adminAccountCodeLessThan(
+    String? value, {
     bool include = false,
+    bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'adminAccountOrg',
+        property: r'adminAccountCode',
         value: value,
+        caseSensitive: caseSensitive,
       ));
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      adminAccountOrgBetween(
-    int? lower,
-    int? upper, {
+      adminAccountCodeBetween(
+    String? lower,
+    String? upper, {
     bool includeLower = true,
     bool includeUpper = true,
+    bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'adminAccountOrg',
+        property: r'adminAccountCode',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountCodeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'adminAccountCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountCodeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'adminAccountCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountCodeContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'adminAccountCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountCodeMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'adminAccountCode',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountCodeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'adminAccountCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
+      adminAccountCodeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'adminAccountCode',
+        value: '',
       ));
     });
   }
@@ -11937,142 +12159,6 @@ extension InstitutionEntityQueryFilter
       );
     });
   }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'name',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'name',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'name',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterFilterCondition>
-      nameIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'name',
-        value: '',
-      ));
-    });
-  }
 }
 
 extension InstitutionEntityQueryObject
@@ -12098,6 +12184,20 @@ extension InstitutionEntityQuerySortBy
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
+      sortByAccountName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
+      sortByAccountNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       sortByAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.asc);
@@ -12112,16 +12212,16 @@ extension InstitutionEntityQuerySortBy
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      sortByAdminAccountOrg() {
+      sortByAdminAccountCode() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminAccountOrg', Sort.asc);
+      return query.addSortBy(r'adminAccountCode', Sort.asc);
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      sortByAdminAccountOrgDesc() {
+      sortByAdminAccountCodeDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminAccountOrg', Sort.desc);
+      return query.addSortBy(r'adminAccountCode', Sort.desc);
     });
   }
 
@@ -12152,20 +12252,6 @@ extension InstitutionEntityQuerySortBy
       return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
     });
   }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      sortByName() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'name', Sort.asc);
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      sortByNameDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'name', Sort.desc);
-    });
-  }
 }
 
 extension InstitutionEntityQuerySortThenBy
@@ -12185,6 +12271,20 @@ extension InstitutionEntityQuerySortThenBy
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
+      thenByAccountName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
+      thenByAccountNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
       thenByAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.asc);
@@ -12199,16 +12299,16 @@ extension InstitutionEntityQuerySortThenBy
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      thenByAdminAccountOrg() {
+      thenByAdminAccountCode() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminAccountOrg', Sort.asc);
+      return query.addSortBy(r'adminAccountCode', Sort.asc);
     });
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      thenByAdminAccountOrgDesc() {
+      thenByAdminAccountCodeDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'adminAccountOrg', Sort.desc);
+      return query.addSortBy(r'adminAccountCode', Sort.desc);
     });
   }
 
@@ -12252,20 +12352,6 @@ extension InstitutionEntityQuerySortThenBy
       return query.addSortBy(r'id', Sort.desc);
     });
   }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      thenByName() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'name', Sort.asc);
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QAfterSortBy>
-      thenByNameDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'name', Sort.desc);
-    });
-  }
 }
 
 extension InstitutionEntityQueryWhereDistinct
@@ -12278,6 +12364,13 @@ extension InstitutionEntityQueryWhereDistinct
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
+      distinctByAccountName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'accountName', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
       distinctByAddedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'addedAtMillis');
@@ -12285,9 +12378,10 @@ extension InstitutionEntityQueryWhereDistinct
   }
 
   QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct>
-      distinctByAdminAccountOrg() {
+      distinctByAdminAccountCode({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'adminAccountOrg');
+      return query.addDistinctBy(r'adminAccountCode',
+          caseSensitive: caseSensitive);
     });
   }
 
@@ -12311,13 +12405,6 @@ extension InstitutionEntityQueryWhereDistinct
       return query.addDistinctBy(r'matchedAdminPubkeys');
     });
   }
-
-  QueryBuilder<InstitutionEntity, InstitutionEntity, QDistinct> distinctByName(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
-    });
-  }
 }
 
 extension InstitutionEntityQueryProperty
@@ -12334,6 +12421,13 @@ extension InstitutionEntityQueryProperty
     });
   }
 
+  QueryBuilder<InstitutionEntity, String, QQueryOperations>
+      accountNameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'accountName');
+    });
+  }
+
   QueryBuilder<InstitutionEntity, int, QQueryOperations>
       addedAtMillisProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -12341,10 +12435,10 @@ extension InstitutionEntityQueryProperty
     });
   }
 
-  QueryBuilder<InstitutionEntity, int?, QQueryOperations>
-      adminAccountOrgProperty() {
+  QueryBuilder<InstitutionEntity, String?, QQueryOperations>
+      adminAccountCodeProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'adminAccountOrg');
+      return query.addPropertyName(r'adminAccountCode');
     });
   }
 
@@ -12366,12 +12460,6 @@ extension InstitutionEntityQueryProperty
       matchedAdminPubkeysProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'matchedAdminPubkeys');
-    });
-  }
-
-  QueryBuilder<InstitutionEntity, String, QQueryOperations> nameProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'name');
     });
   }
 }

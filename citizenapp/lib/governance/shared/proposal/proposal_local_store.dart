@@ -198,6 +198,7 @@ class LocalProposalSummary {
     required this.iconKind,
     required this.updatedAtMillis,
     this.internalOrg,
+    this.internalCode,
     this.institutionBytesHex,
     this.displayYear,
     this.displaySeqInYear,
@@ -210,6 +211,7 @@ class LocalProposalSummary {
   final int stage;
   final int status;
   final int? internalOrg;
+  final String? internalCode;
   final String? institutionBytesHex;
   final int? displayYear;
   final int? displaySeqInYear;
@@ -236,6 +238,7 @@ class LocalProposalSummary {
         stage: stage,
         status: status,
         internalOrg: internalOrg,
+        internalCode: internalCode,
         institutionBytes: _hexToBytes(institutionBytesHex),
         displayMeta: displayMeta,
       );
@@ -321,11 +324,12 @@ class LocalProposalSummary {
       stage: meta.stage,
       status: meta.status,
       internalOrg: meta.internalOrg,
+      internalCode: meta.internalCode,
       institutionBytesHex: _bytesToHex(meta.institutionBytes),
       displayYear: meta.displayMeta?.year,
       displaySeqInYear: meta.displayMeta?.seqInYear,
       institutionCidNumber: institution?.cidNumber,
-      cidFullName: institution?.name,
+      cidFullName: institution?.cidFullName,
       title: title,
       subtitle: subtitle,
       listSubtitle: listSubtitle,
@@ -340,6 +344,7 @@ class LocalProposalSummary {
         'stage': stage,
         'status': status,
         'internal_org': internalOrg,
+        'internal_code': internalCode,
         'institution_bytes_hex': institutionBytesHex,
         'display_year': displayYear,
         'display_seq_in_year': displaySeqInYear,
@@ -383,6 +388,7 @@ class LocalProposalSummary {
         stage: stage,
         status: status,
         internalOrg: _toInt(decoded['internal_org']),
+        internalCode: _toNullableString(decoded['internal_code']),
         institutionBytesHex:
             _toNullableString(decoded['institution_bytes_hex']),
         displayYear: _toInt(decoded['display_year']),

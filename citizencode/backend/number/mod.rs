@@ -19,18 +19,15 @@
 
 pub(crate) mod admin;
 pub mod category;
-pub mod generator;
 pub mod code;
+pub mod generator;
 pub(crate) mod model;
 pub mod validator;
 
 // 中文注释:对外聚合导出,方便业务模块只写 `use crate::number::*`。
-pub use category::{
-    classify, InstitutionCategory,
-    PUBLIC_SECURITY_INSTITUTION_SUFFIX,
-};
-pub use generator::{generate_cid_number, GenerateCidInput};
+pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_SUFFIX};
 pub use code::{AdminLevel, InstitutionCode};
+pub use generator::{generate_cid_number, GenerateCidInput};
 #[allow(unused_imports)]
 pub(crate) use model::*;
 pub use validator::{

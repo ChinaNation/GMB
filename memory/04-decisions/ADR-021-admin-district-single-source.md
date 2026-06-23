@@ -119,7 +119,7 @@ citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就
 
 - **包内版本表**:两个 manifest 都带 `version`(全局,= `admin_division_version`)+ `provinces:[{code/name, ver}]`(省级内容版本)。行政区 `ver` = 该省市/镇分片内容 sha256;公权机构 `ver` = 该省目录 `manifest_version`。省内容(改名/删码/重排)一变 `ver` 即变。
 - **客户端 `ensureSynced()`**(`*_bundle_loader.dart`):
-  1. 先同步行政区字典,公权机构名称只允许从已对账的行政区 code 生成。
+  1. 先同步行政区字典,公权机构全称/简称只允许从已对账的行政区 code 生成。
   2. 全局 `version` 只作完成标记,不得短路省级检查;即使全局相等,也必须读取本地省级 `ver` 游标。
   3. 逐省比 `ver`,**只 reconcile `ver` 变了或本地缺游标的省**,没变的省连分片都不读。
   4. reconcile 单省(事务/分块内):按主键(行政区 `divisionKey` / 机构 `cidNumber`)做行级 diff,只 upsert 新增/字段变化的行,再删「包里已没有、本地还在」的废键。

@@ -22,7 +22,7 @@ class CidPublicApi {
   ///
   /// [provinceName] 省份名(如"广东省"),省略=全国。
   /// [cityName]     市名(配合 provinceName 使用)。
-  /// [keyword]  子串匹配 cid_number / cid_full_name。
+  /// [keyword]  子串匹配 cid_number / cid_full_name / cid_short_name。
   /// [page]     页码,从 1 起。
   /// [size]     每页条数,1~100。
   Future<ClearingBankSearchResult> searchClearingBanks({
@@ -75,6 +75,7 @@ class ClearingBankInfo {
   const ClearingBankInfo({
     required this.cidNumber,
     required this.cidFullName,
+    required this.cidShortName,
     required this.subjectProperty,
     required this.subType,
     required this.parentCidNumber,
@@ -89,8 +90,11 @@ class ClearingBankInfo {
   /// CID 编码,如 `GD001-SCB0T-123456789-2026`。
   final String cidNumber;
 
-  /// 机构中文名(两步式未命名时为空串)。
+  /// 机构全称(两步式未命名时为空串)。
   final String cidFullName;
+
+  /// 机构简称(两步式未命名时为空串)。
+  final String cidShortName;
 
   /// 主体属性:`S`(私法人)或 `F`(非法人)。
   final String subjectProperty;
@@ -112,10 +116,18 @@ class ClearingBankInfo {
   /// 费用账户链上地址。
   final String? feeAccount;
 
+  String get displayTitle {
+    final cidShort = cidShortName.trim();
+    if (cidShort.isNotEmpty) return cidShort;
+    final cidFull = cidFullName.trim();
+    return cidFull.isEmpty ? cidNumber : cidFull;
+  }
+
   factory ClearingBankInfo.fromJson(Map<String, dynamic> json) {
     return ClearingBankInfo(
       cidNumber: (json['cid_number'] as String?) ?? '',
       cidFullName: (json['cid_full_name'] as String?) ?? '',
+      cidShortName: (json['cid_short_name'] as String?) ?? '',
       subjectProperty: (json['subject_property'] as String?) ?? '',
       subType: json['sub_type'] as String?,
       parentCidNumber: json['parent_cid_number'] as String?,

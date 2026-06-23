@@ -405,7 +405,7 @@ message = blake2_256(SCALE.encode(payload))
 
 | 数据 | 来源 | 刷新方式 | 首屏策略 |
 | --- | --- | --- | --- |
-| 机构名称、类型、身份 ID | 本地静态注册表 | 随 App 版本更新 | 立即显示 |
+| 机构全称/简称、类型、身份 ID | 本地静态注册表 | 随 App 版本更新 | 立即显示 |
 | 主账户、费用账户、安全基金账户、永久质押账户 | 本地静态注册表 | 随 App 版本更新 | 立即显示 |
 | 治理机构内部门槛 | 本地制度常量 | 随 App 版本更新 | 立即显示 |
 | 管理员列表和管理员人数 | 链上 `AdminsChange::AdminAccounts` | 后台读取，30 秒内存短缓存，下拉刷新强制更新 | 显示“读取中/读取失败”副标题 |
@@ -541,7 +541,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 `InstitutionInfo.mainAccount`。治理机构不得再用其他字段表达主账户。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
-治理机构名称、身份 ID、制度账户和治理机构固定阈值由
+治理机构全称/简称、身份 ID、制度账户和治理机构固定阈值由
 `scripts/generate_citizenapp_governance_registry.mjs` 从 runtime primitives 生成到
 `lib/institution/governance_institution_registry.generated.dart` 并由
 `InstitutionInfo` 派生展示。管理员列表不写入静态注册表，必须动态读取链上
@@ -551,7 +551,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 国储会直接展示，单张卡片横跨整行显示到右侧边缘且高度与省储会/省储行卡片一致；省储会、省储行默认折叠，
 标题行最右侧用线性右箭头/下箭头展开后按静态注册表顺序展示。
 省储会分组标题图案使用 `assets/icons/government-line.svg`；省储行分组标题图案使用
-`assets/icons/bank.svg`；机构卡片内部不显示名称左侧图标，只显示机构名称和右箭头。
+`assets/icons/bank.svg`；机构卡片内部不显示全称/简称左侧图标，只显示机构简称和右箭头。
 用户长按省储会或省储行卡片拖拽时，只能在所属分组内排序；排序以
 `SharedPreferences` 保存 `cidNumber` 列表到本机，不写链、不跨设备同步。
 本页不得再按管理员机构优先做 `_sorted()` 自动排序；管理员身份只影响卡片高亮，
@@ -569,7 +569,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 ### 7.6 管理员列表页面
 
 管理员列表页面（`AdminListPage`）展示：
-- 机构名称与类型标签
+- 机构简称与类型标签
 - 管理员总数与通过阈值
 - 每位管理员的完整 SS58 地址（format 2027），当前用户标记"我"
 - 地址一键复制功能

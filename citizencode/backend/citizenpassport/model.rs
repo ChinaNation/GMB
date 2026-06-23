@@ -62,6 +62,8 @@ pub(crate) struct CpmsSiteKeys {
     #[serde(default)]
     pub(crate) cid_full_name: String,
     #[serde(default)]
+    pub(crate) cid_short_name: String,
+    #[serde(default)]
     pub(crate) qr1_payload: String,
     #[serde(default)]
     pub(crate) cpms_pubkey_hash: Option<String>,
@@ -114,6 +116,7 @@ pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) city_code: String,
     pub(crate) institution_code: String,
     pub(crate) cid_full_name: String,
+    pub(crate) cid_short_name: String,
     pub(crate) qr1_payload: String,
     pub(crate) cpms_pubkey_bound: bool,
     pub(crate) created_by: String,

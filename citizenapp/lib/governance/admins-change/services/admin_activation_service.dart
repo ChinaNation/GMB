@@ -53,27 +53,10 @@ class ActivatedAdmin {
         pubkeyHex: json['pubkeyHex'] as String,
         identityKey: json['identityKey'] as String,
         accountHex: json['accountHex'] as String,
-        // 向后兼容旧 'org' int 键：旧记录失效后不再激活，产生新记录时写新键
-        institutionCode: json['institution_code'] as String? ??
-            _orgIntToCode(json['org'] as int?),
+        institutionCode: json['institution_code'] as String,
         kind: json['kind'] as int,
         activatedAtMs: json['activatedAtMs'] as int,
       );
-
-  static String _orgIntToCode(int? org) {
-    switch (org) {
-      case 0:
-        return 'NRC';
-      case 1:
-        return 'PRC';
-      case 2:
-        return 'PRB';
-      case 3:
-        return 'PMUL';
-      default:
-        return '';
-    }
-  }
 }
 
 /// 管理员激活服务（QR 扫码签名激活模式）。
@@ -279,8 +262,8 @@ class ActivationService {
     // 逐字镜像冷钱包 payload_decoder.dart::_decodeActivateAdminAccount 的期望格式。
     final accountId = AdminAccountIdCodec.fromHex(identity.accountHex);
     final pubkey = _hexToBytes(pubkeyHex);
-    final codeBytes =
-        Uint8List.fromList(InstitutionCodeLabel.codeBytes(identity.institutionCode));
+    final codeBytes = Uint8List.fromList(
+        InstitutionCodeLabel.codeBytes(identity.institutionCode));
     final payload =
         Uint8List(_activatePrefix.length + 32 + 4 + 1 + 32 + 8 + 16);
     var offset = 0;

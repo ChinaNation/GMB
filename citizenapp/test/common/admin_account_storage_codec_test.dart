@@ -12,12 +12,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/governance/shared/admin_account_storage_codec.dart';
 
 void main() {
+  List<int> codeBytes(String code) {
+    final out = List<int>.filled(4, 0);
+    final raw = code.codeUnits;
+    for (var i = 0; i < out.length && i < raw.length; i++) {
+      out[i] = raw[i];
+    }
+    return out;
+  }
+
   group('tryDecode', () {
     test('成功解码 Builtin(0 admins)', () {
-      // org=0, kind=0, admins=Compact(0)=0x00, 后续字段忽略。
-      final bytes = Uint8List.fromList([0, 0, 0]);
+      // institution_code=NRC, kind=0, admins=Compact(0)=0x00, 后续字段忽略。
+      final bytes = Uint8List.fromList([
+        ...codeBytes('NRC'),
+        AdminAccountStorageCodec.kindBuiltin,
+        0,
+      ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
-      expect(r.org, 0);
+      expect(r.institutionCode, 'NRC');
       expect(r.kind, AdminAccountStorageCodec.kindBuiltin);
       expect(r.adminsHex, isEmpty);
     });
@@ -27,7 +40,7 @@ void main() {
       final a2 = List.filled(32, 0x22);
       final a3 = List.filled(32, 0x33);
       final bytes = Uint8List.fromList([
-        3,
+        ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x0C, // Compact(3): (3<<2) | 0 = 12
         ...a1,
@@ -43,14 +56,14 @@ void main() {
       final a1 = List.filled(32, 0x44);
       final a2 = List.filled(32, 0x55);
       final bytes = Uint8List.fromList([
-        4,
+        ...codeBytes('CGOV'),
         AdminAccountStorageCodec.kindInstitutionAccount,
         0x08, // Compact(2)
         ...a1,
         ...a2,
       ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
-      expect(r.org, 4);
+      expect(r.institutionCode, 'CGOV');
       expect(r.kind, AdminAccountStorageCodec.kindInstitutionAccount);
       expect(r.adminsHex, ['44' * 32, '55' * 32]);
     });
@@ -63,7 +76,7 @@ void main() {
 
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
-        0,
+        ...codeBytes('NRC'),
         AdminAccountStorageCodec.kindBuiltin,
         0x08, // 声明 2 个 admin 但只给 1 个的字节。
         ...List.filled(32, 0xCC),
@@ -75,7 +88,7 @@ void main() {
       const adminsLen = 64;
       final admins = List.generate(adminsLen, (_) => List.filled(32, 0xDD));
       final bytes = <int>[
-        0,
+        ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x01,
         0x01,

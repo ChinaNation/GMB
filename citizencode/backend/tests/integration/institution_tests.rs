@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-/// 机构名称查重:私权机构全国唯一,公权机构同城唯一。
+/// 机构全称查重:私权机构全国唯一,公权机构同城唯一。
 #[test]
 fn name_uniqueness_private_is_global() {
     // 私权机构:全国内不允许同名

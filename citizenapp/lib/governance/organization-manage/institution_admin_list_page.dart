@@ -133,7 +133,7 @@ class _AdminListPageState extends State<AdminListPage> {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            widget.institution.name,
+            widget.institution.cidShortName,
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,

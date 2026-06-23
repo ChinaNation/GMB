@@ -36,14 +36,12 @@ use votingengine::{
     ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
-pub use primitives::account_derive::{
-    AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN,
-};
 pub use institution::types::{
     CloseInstitutionAction, CreateInstitutionAccount, CreateInstitutionAction,
     InstitutionAccountInfo, InstitutionInfo, InstitutionInitialAccount, InstitutionLifecycleStatus,
     RegisteredInstitution,
 };
+pub use primitives::account_derive::{AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 
 pub(crate) type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -86,7 +84,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCidNumberLength: Get<u32>;
 
-        /// 机构名称最大字节长度。
+        /// 机构全称与机构账户名共用的最大字节长度。
         #[pallet::constant]
         type MaxAccountNameLength: Get<u32>;
 
@@ -414,7 +412,7 @@ pub mod pallet {
         TransferFailed,
         /// 管理员非本提案管理员
         UnauthorizedAdmin,
-        /// 机构名称为空
+        /// 机构账户名为空
         EmptyAccountName,
         /// 机构级创建缺少主账户
         MissingMainAccount,
@@ -667,8 +665,9 @@ pub mod pallet {
             // institution_kind_by_name 对非空名必返回 Some(空名已在上面拦截)。
             // 命中保留名 → Main/Fee;否则 → Named。质押/安全/两和已被 forbidden 拦下,
             // 故此处只可能得到 Main/Fee/Named 三种机构种类。
-            let kind = primitives::account_derive::institution_kind_by_name(cid_number, account_name)
-                .ok_or(Error::<T>::EmptyAccountName)?;
+            let kind =
+                primitives::account_derive::institution_kind_by_name(cid_number, account_name)
+                    .ok_or(Error::<T>::EmptyAccountName)?;
             let digest = kind.derive(T::SS58Prefix::get());
             let account = T::AccountId::decode(&mut &digest[..])
                 .map_err(|_| Error::<T>::DerivedAccountDecodeFailed)?;

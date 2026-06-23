@@ -205,12 +205,12 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
           display: SignDisplay(
             action: 'propose_sweep_to_main',
             summary:
-                '${widget.institution.name} 提案手续费划转 $amountFormatted GMB → 主账户',
+                '${widget.institution.cidShortName} 提案手续费划转 $amountFormatted GMB → 主账户',
             fields: [
               SignDisplayField(
                   key: 'institution',
                   label: '机构',
-                  value: widget.institution.name),
+                  value: widget.institution.cidShortName),
               SignDisplayField(
                   key: 'amount_yuan',
                   label: '金额',
@@ -532,7 +532,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            '${widget.institution.name}（手续费划转）',
+            '${widget.institution.cidShortName}（手续费划转）',
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,

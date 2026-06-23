@@ -263,7 +263,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.institution.name,
+                    widget.institution.cidShortName,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,

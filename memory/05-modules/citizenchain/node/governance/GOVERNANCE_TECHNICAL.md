@@ -10,7 +10,7 @@ governance/
 ├── runtime_upgrade/    # 协议升级：开发期直升、运行期协议升级业务签名与提交
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
 ├── proposal.rs         # 提案查询与解码：从链上 storage 读取并解析提案详情
-├── institution.rs      # 机构信息查询：管理员列表、机构名称
+├── institution.rs      # 机构信息查询：管理员列表、机构全称/简称
 ├── storage_keys.rs     # 链上存储 key 构造：twox_128 / blake2b_128 / double_map_key
 └── types.rs            # 共享类型定义
 ```
@@ -134,7 +134,7 @@ GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
 - 管理员列表读取委托到 `admins_change/storage.rs`
 - 内置机构管理员 account_id 使用 `0x01` Builtin kind tag，与 `core_const::account_id_from_cid_number` 字节级一致
 - 解码管理员 AccountId 列表
-- 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
+- 提供机构全称/简称查询（从 CHINA_CB / CHINA_CH 常量表）
 
 ## storage_keys.rs — 存储 key 构造
 

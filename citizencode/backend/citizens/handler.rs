@@ -207,9 +207,7 @@ fn legal_representative_scope_from_create_context(
             }) else {
                 return Err(api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在"));
             };
-            if !crate::subjects::uninorg::can_attach_to_parent(
-                parent.institution_code.as_str(),
-            ) {
+            if !crate::subjects::uninorg::can_attach_to_parent(parent.institution_code.as_str()) {
                 return Err(api_error(
                     StatusCode::BAD_REQUEST,
                     1001,

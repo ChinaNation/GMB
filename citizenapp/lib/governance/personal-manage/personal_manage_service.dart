@@ -232,7 +232,7 @@ class PersonalManageService {
     final admin = PersonalManageStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
     final threshold = await _fetchPersonalDynamicThreshold(
-      org: admin.org,
+      institutionCode: admin.institutionCode,
       accountId: accountId,
     );
     return AccountInfo(
@@ -311,7 +311,7 @@ class PersonalManageService {
       activeThresholdKeyByAccount[entry.key] =
           '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
-        org: entry.value.org,
+        institutionCode: entry.value.institutionCode,
         accountId: accountId,
       ))}';
     }
@@ -332,7 +332,7 @@ class PersonalManageService {
         pendingThresholdKeyByAccount[entry.key] =
             '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
           storageName: 'PendingDynamicThresholds',
-          org: admin.org,
+          institutionCode: admin.institutionCode,
           accountId: accountIdByAccount[entry.key]!,
         ))}';
       }
@@ -367,7 +367,7 @@ class PersonalManageService {
   }
 
   Future<int?> _fetchPersonalDynamicThreshold({
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) async {
     for (final storageName in const [
@@ -376,7 +376,7 @@ class PersonalManageService {
     ]) {
       final key = PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: storageName,
-        org: org,
+        institutionCode: institutionCode,
         accountId: accountId,
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');

@@ -648,7 +648,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            '${widget.institution.name}（安全基金）',
+            '${widget.institution.cidShortName}（安全基金）',
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,

@@ -39,7 +39,7 @@ impl InstitutionCategory {
 pub const PUBLIC_SECURITY_INSTITUTION_SUFFIX: &str = "公安局";
 
 /// 按机构码决定机构分类。规则优先级:公安局 > 公权机构 > 私权机构。
-/// `cid_full_name` 仅保留参数兼容,不参与判定(公安局已有专用码 Cpol)。
+/// `cid_full_name` 是统一分类入口参数,当前不参与判定(公安局已有专用码 Cpol)。
 ///
 /// 返回 None:机构码不是注册型机构(个人主体 CTZN/NATP/SMTP、个人多签 PMUL)。
 pub fn classify(code: InstitutionCode, _cid_full_name: &str) -> Option<InstitutionCategory> {

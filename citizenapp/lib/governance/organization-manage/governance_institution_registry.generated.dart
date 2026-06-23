@@ -1,23 +1,24 @@
 part of 'institution_registry.dart';
 
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
-// 中文注释：治理机构名称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminsChange::AdminAccounts。
+// 中文注释：治理机构全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminsChange::AdminAccounts。
 
 /// 国储会（1 个）。
 const List<InstitutionInfo> kNationalCouncil = [
   InstitutionInfo(
-    name: '中华民族联邦共和国国家公民储备委员会',
-    cidNumber: 'LN001-GCB05-944805165-2026',
+    cidFullName: '国家公民储备委员会',
+    cidShortName: '国储会',
+    cidNumber: 'LN001-NRC0G-944805165-2026',
     orgType: OrgType.nrc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '39936ebd8564c61f315662ff859d8fb5470ac3f1b4bfbf86746aff391d14db3d',
+          'e97b09bf079f00a243de874e1129ca04cca12de75bd0943b25519e8c1153b005',
       feeAccount:
-          '66d1de031e332facb67bd20ae428e187ae4bbf3caa0a1421bd0023c49fb228d3',
+          '34435d3c37634342f6b7044fe556c9be25dbe7cf237fe9a71c29e64ddf11e0ad',
       anquanAccount:
-          'c878e700bde52b5c9c2a94bcf5296c4f6a75ca61b8e920a4e53a01c6da433e52',
+          '24b62e1756a27dd00946f33507004ce7973be28b0728cb4dc786231c40348a92',
       heAccount:
-          'ce19b7f0df3e9ba6c88b02364aa97cd1994df25aaa86c36e790ee85eea009f76',
+          '37994b77b6ae316d1916e343a14e3d18c02ebe74686e4c2652202f55ae0e66fc',
     ),
   ),
 ];
@@ -25,476 +26,519 @@ const List<InstitutionInfo> kNationalCouncil = [
 /// 省储会（43 个）。
 const List<InstitutionInfo> kProvincialCouncils = [
   InstitutionInfo(
-    name: '中枢省公民储备委员会',
-    cidNumber: 'ZS001-GCB0R-016974075-2026',
+    cidFullName: '中枢省公民储备委员会',
+    cidShortName: '中枢省储会',
+    cidNumber: 'ZS001-PRC0E-016974075-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '1a2853434d5b7bb336670dab136b2479a029fdbbb447f49482f09be80660024a',
+          '26d09d54d2284662bb35c23591ba7ef970038a22a0d484c0a5835a9984432fdf',
       feeAccount:
-          '5bc1f22ef6e4147e61ac745f50e77f17656c0d6d789d600a1ffe014e5d44ab58',
+          'f38aaa5b3688ba54b9c916055403399b86a6f62e004a4eac2b18decff63647c4',
     ),
   ),
   InstitutionInfo(
-    name: '岭南省公民储备委员会',
-    cidNumber: 'LN001-GCB0I-773405642-2026',
+    cidFullName: '岭南省公民储备委员会',
+    cidShortName: '岭南省储会',
+    cidNumber: 'LN001-PRC05-773405642-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '9c30e747b1112ee82b8ad553ae19746328fcb7107d2ef67a4332e85071d0e197',
+          'b19e5915f588844fd7d4fce0fc9840b0237bd9ccf167a00eb591ed6d66c288d2',
       feeAccount:
-          '7ad835b5f7e6e72da144f5011c04b03a06cc0dec3bbf425300f5146acb09cf97',
+          'c73e7d5f50ead9e6986c077d0ee31b9b9c9177f1b1eb0707c21762c354167c1c',
     ),
   ),
   InstitutionInfo(
-    name: '广东省公民储备委员会',
-    cidNumber: 'GD001-GCB08-067440774-2026',
+    cidFullName: '广东省公民储备委员会',
+    cidShortName: '广东省储会',
+    cidNumber: 'GD001-PRC0V-067440774-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'e126c45b313e182a52a89dc9573fef09c34e08043ddeeaafe8524aa8132d0f2e',
+          'b1d8c292e8c9d80a8859cbc74e949fb915c30a52c69a99d2a29fefca9e8fc5dd',
       feeAccount:
-          '5a8629fe12292877a16be390b77a1224cca65d011f828c514a2d1fc30a404a34',
+          'e773f4ee2aa2fad4f85d6ca55fd11eab7fda40d1a6f36504dc9b6071288f84d2',
     ),
   ),
   InstitutionInfo(
-    name: '广西省公民储备委员会',
-    cidNumber: 'GX001-GCB0P-663454043-2026',
+    cidFullName: '广西省公民储备委员会',
+    cidShortName: '广西省储会',
+    cidNumber: 'GX001-PRC0C-663454043-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '3494bb8aa47bbf4c4f8a7a4e102267709fe191257a238821b5cec3081d2408e7',
+          '4b8cc2064fa68c762a68c9e065f318f8422d90fc7309815dfb44302d516a54a3',
       feeAccount:
-          '9f54f42e73c04c04fc5e8387c54e2a668f49fe1ceef0d6718933b1caa00de960',
+          '3033e01652e5f51c26f8c71dd787160a1150147e9339ae112b97e74b7ae7b49e',
     ),
   ),
   InstitutionInfo(
-    name: '福建省公民储备委员会',
-    cidNumber: 'FJ001-GCB0V-389570546-2026',
+    cidFullName: '福建省公民储备委员会',
+    cidShortName: '福建省储会',
+    cidNumber: 'FJ001-PRC0I-389570546-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'e2477f00c3529e3e703c9be2b659f68228ddacbbe7643f8772bb38c1ea7b1c43',
+          'bf8c477d995bf67c2851b9c64125cbf13830afc50021ca3ffaa0e619cd27f898',
       feeAccount:
-          '51d4ee733dd933dd920f3e14d9d71bb47e5218d68a7a312743945e6f01f2a5bb',
+          '856ebbe38cf48b0e6ee4ef0f6a9c83905740c2d67474fe155013e2a8baa3427d',
     ),
   ),
   InstitutionInfo(
-    name: '海南省公民储备委员会',
-    cidNumber: 'HN001-GCB05-545676096-2026',
+    cidFullName: '海南省公民储备委员会',
+    cidShortName: '海南省储会',
+    cidNumber: 'HN001-PRC0S-545676096-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'c988fa2303032471ce2303e53952ffd3d36d0e0fa3222e628c484f41eeb864dd',
+          '79097820f9ed276d615a503224a7b9b3fecebebb66f05b5b728851c180a0a3f1',
       feeAccount:
-          '2fd7d9549ea1214deb2c32ad9b06971eda967aa3f76969bdfab0bc076bb4ca3c',
+          'ac16123e738704125a27477cec635f9ba68cad7560d724a19d403d06e68701d3',
     ),
   ),
   InstitutionInfo(
-    name: '云南省公民储备委员会',
-    cidNumber: 'YN001-GCB09-145427171-2026',
+    cidFullName: '云南省公民储备委员会',
+    cidShortName: '云南省储会',
+    cidNumber: 'YN001-PRC0W-145427171-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '60888a2563a4ea470053b9da52377870011b1308d3947181eb4dd267b33abbec',
+          'd701c9230195b5c35ca329b62c9d3dfdd9924b2eb000ddfe67d8414ef821e0a6',
       feeAccount:
-          '73cc53484e1f1d2ee9008510c925c1eea7d8cdf86598b48c1b8ae98d28b3efdd',
+          'a3c43e0f6a2451e24f0adac98cec23a81a10a66f0f828aff4c29680b83c4ea84',
     ),
   ),
   InstitutionInfo(
-    name: '贵州省公民储备委员会',
-    cidNumber: 'GZ001-GCB0F-969970096-2026',
+    cidFullName: '贵州省公民储备委员会',
+    cidShortName: '贵州省储会',
+    cidNumber: 'GZ001-PRC02-969970096-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '28731a234ad27f5cca1ea23fa237278027341e6c305136262348c2566a96b243',
+          '7e818624c9f3c46f523612fcdb0c9459ce71191d29bac1a38cb9bcae3d8dbc84',
       feeAccount:
-          'c658f015dcb92160b14972e9eb4e031abfceaa4f63ed0bcf107ee72ec07be30a',
+          '91123be54e191aa2f900d55875c14dcaecbf3bdcb8e6cfbab80745df630b4d76',
     ),
   ),
   InstitutionInfo(
-    name: '湖南省公民储备委员会',
-    cidNumber: 'HU001-GCB02-400319700-2026',
+    cidFullName: '湖南省公民储备委员会',
+    cidShortName: '湖南省储会',
+    cidNumber: 'HU001-PRC0P-400319700-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '0fc718e73994724ad6d3106df5bf301234e12395999999571702c3243f3b71e1',
+          'fa74c11655fe1a950fd1064d9b342805d15b06ff379e36d2f1b5df0be0cb4a59',
       feeAccount:
-          '6e6d0810a422c696909b59e48c8684cddfe8fc4b8474611b5d6c9c95e75c8588',
+          'd0b4e10c273b2923776435f272a201ada40f5a3673967b459125478b0fd439df',
     ),
   ),
   InstitutionInfo(
-    name: '江西省公民储备委员会',
-    cidNumber: 'JX001-GCB0W-458681566-2026',
+    cidFullName: '江西省公民储备委员会',
+    cidShortName: '江西省储会',
+    cidNumber: 'JX001-PRC0J-458681566-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '329317ae1c34170c6bd84f7c82f63454b6771a8eefbb74678b47f50da21fe63b',
+          '3a31b63db36c21f8880889b7b9450a8db31d5e6ca689e4ef20d9c378bf8e9275',
       feeAccount:
-          'd0c01c8a5d044a14bf6bea0421f026e87d2c3baee93d47754f64d234d0d8d584',
+          '55729a5417725684fd8285aba320521c2fbeb82da421eccf2c8f7e8e6fea3793',
     ),
   ),
   InstitutionInfo(
-    name: '浙江省公民储备委员会',
-    cidNumber: 'ZJ001-GCB0L-471270801-2026',
+    cidFullName: '浙江省公民储备委员会',
+    cidShortName: '浙江省储会',
+    cidNumber: 'ZJ001-PRC08-471270801-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'd23c3717cf286427e8f64dfe2ab2fffc497b2c877fcceda7bdb428274a709069',
+          '1486ac02464ddd913bcbb93f93bafc8de69b79fd7fe9fc011c76332e415e07b5',
       feeAccount:
-          '60e899456f4ce442106861fe4bf25c05325ed3ccb89d4b4f638851546b3a5b97',
+          'a2a83bc042df7d02ed8c2431fceb0512c14c9066c2761aab88b5696fd377fda0',
     ),
   ),
   InstitutionInfo(
-    name: '江苏省公民储备委员会',
-    cidNumber: 'JS001-GCB01-358467174-2026',
+    cidFullName: '江苏省公民储备委员会',
+    cidShortName: '江苏省储会',
+    cidNumber: 'JS001-PRC0O-358467174-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'fb3e341388899cd56990744505f62a57eee830febe59845757d957cc2a824559',
+          '022757a4129d93d71270ab97a7bfe5b8adf8846bb4936d4fdaa05b029e088bd4',
       feeAccount:
-          '96050787ea606f1fec767fe7a128f544922fc25b42ba8088be27fe4094d50ae2',
+          '865edf8b99bfa40100273f2d32e52292546adb431a3f88e9e348b4ff9dc5bcb0',
     ),
   ),
   InstitutionInfo(
-    name: '山东省公民储备委员会',
-    cidNumber: 'SD001-GCB0K-027328848-2026',
+    cidFullName: '山东省公民储备委员会',
+    cidShortName: '山东省储会',
+    cidNumber: 'SD001-PRC07-027328848-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'cdf192f50b63c3c039c9fc52c5699b2faa9b54216c4f392a3f3cb72c70271bb5',
+          '3b4aa5d4c2d25ae694cd0ac18ba48f61c6c40d8a6433703aff5d40cddba08a38',
       feeAccount:
-          '11e10219d26dd19aaa99d7edf4d6067f06af6278edbdfbfb0e5c7fa9f375bb62',
+          'f0942f6f88e26921d964113dd42dbe14a86c0fdb82d2c37b0c63a0ba28b8abe8',
     ),
   ),
   InstitutionInfo(
-    name: '山西省公民储备委员会',
-    cidNumber: 'SX001-GCB01-104465679-2026',
+    cidFullName: '山西省公民储备委员会',
+    cidShortName: '山西省储会',
+    cidNumber: 'SX001-PRC0O-104465679-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'a19117c80c894af3b644384d9aab951ae7f3f4b2315a225cbe0741f4f4d8ff50',
+          'a6910ef8bd8297ec15f970a27e57f0b6e9c6ffb5d59f5bdb2b89e38e6aea5da4',
       feeAccount:
-          '23504f08462e75df40322cb9b3711637bcd8a5359e55bd90d6d577ec92001bcc',
+          '89811950cd3ee67a9f3738d4df2b0542a3976b4c7b093ffeb4ea869a2f59e02d',
     ),
   ),
   InstitutionInfo(
-    name: '河南省公民储备委员会',
-    cidNumber: 'HE001-GCB05-849245626-2026',
+    cidFullName: '河南省公民储备委员会',
+    cidShortName: '河南省储会',
+    cidNumber: 'HE001-PRC0S-849245626-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '1077dedeae824a1e7a74fa6bee267cf32ccfc6c36137603a4f1978e5bff3bcb4',
+          'd74ffd4b37c7aa43c24fe6f6ed63ebbdb846744164c755521044f138229d557e',
       feeAccount:
-          '787d12fac8c0bb711141c0fe5461c13148db0e5411f35a49756a030d399d51aa',
+          'a501821113e4036ca8468abb5f7a2aeee6e270ecfdd2bb5e0c4a939b102053a4',
     ),
   ),
   InstitutionInfo(
-    name: '河北省公民储备委员会',
-    cidNumber: 'HB001-GCB09-499533387-2026',
+    cidFullName: '河北省公民储备委员会',
+    cidShortName: '河北省储会',
+    cidNumber: 'HB001-PRC0W-499533387-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '895d3722a1ba33819bdb871869fb4607976b8457857757968836d454920dffcd',
+          '332cb4fe167ed56c4559acded147cebc9554571ed1b857df4ee88b7a2a2144c9',
       feeAccount:
-          '1dd3c397c680a5499cf1c45c1fb64420bd8da10d5a949e38c92d90bc092a95c8',
+          'd730f66b03d00047ad7edde249fb1e542860074cbe73cc5f928716e99136587b',
     ),
   ),
   InstitutionInfo(
-    name: '湖北省公民储备委员会',
-    cidNumber: 'HI001-GCB0Q-659443961-2026',
+    cidFullName: '湖北省公民储备委员会',
+    cidShortName: '湖北省储会',
+    cidNumber: 'HI001-PRC0D-659443961-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'af605b27f80119dbc413519086d499930baf44b0ad403e2f6a410372a24f8ad2',
+          'eb21e0f3088320c9ff2139ad1d635485afb7a72c3de745c8410dfc5d126b1fcd',
       feeAccount:
-          '1527a93825adb1c68d5745a27e85ac047e04b0800cdaeb2954eae37e3d34c8ec',
+          'c871114150b71c4902de7401ade1598c066f8a74d395edccb3289c755508f9d4',
     ),
   ),
   InstitutionInfo(
-    name: '陕西省公民储备委员会',
-    cidNumber: 'SI001-GCB06-711309909-2026',
+    cidFullName: '陕西省公民储备委员会',
+    cidShortName: '陕西省储会',
+    cidNumber: 'SI001-PRC0T-711309909-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '8710c1a5c5021fb374401b67ddaab7b3ced0e8c5dddd54dd3583d520d1e2e180',
+          '3632eb7489038a0d73c8ef884840a6b3ba8e7b3a90e4fad1412f7dcd38fdff5a',
       feeAccount:
-          'bc1a93347c9099e82afce1e0baf71cf4d69f1ba70d4bbc9557ab9fb730a495b5',
+          '563522fe4c097f94260854021d9c187b01da73662d4bb17d507eb77ab0352482',
     ),
   ),
   InstitutionInfo(
-    name: '重庆省公民储备委员会',
-    cidNumber: 'CQ001-GCB0J-478472058-2026',
+    cidFullName: '重庆省公民储备委员会',
+    cidShortName: '重庆省储会',
+    cidNumber: 'CQ001-PRC06-478472058-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '5dadca1cf98697186d3cd2afafcf9652245d8639d297fbd642e42f73d6135e17',
+          'ea5376d58108e950f0164b18d020fdc688cf56e79d3e79f4ab8719c55cc8d1e8',
       feeAccount:
-          '8417860a0364f3e5038fa108d884d55210c7071315c242f277be4f7ece051c4f',
+          'c96e1ebb718aa02cd7eb0fecb76d6efa79142aa708768e3816b66781524031f9',
     ),
   ),
   InstitutionInfo(
-    name: '四川省公民储备委员会',
-    cidNumber: 'SC001-GCB0B-935659021-2026',
+    cidFullName: '四川省公民储备委员会',
+    cidShortName: '四川省储会',
+    cidNumber: 'SC001-PRC0Y-935659021-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'b9b062b16f40ba8769d0fb2271b4e6430ed3a66b1cf9f4453f1985196c481c18',
+          '9abb47bf5f889cb54c9dd14e6dc02d5ae1a607d8125f1878e574cfa90969f4ff',
       feeAccount:
-          'cbf48b589d4ceca43d90b1c1d8c3551931a3a6ab809f948aa19f9a0589edd8e6',
+          'a78062f28462cbda4510c617faacaa3d5bbe4e32a6138a968a60beca9181b5d6',
     ),
   ),
   InstitutionInfo(
-    name: '甘肃省公民储备委员会',
-    cidNumber: 'GS001-GCB0Y-679051155-2026',
+    cidFullName: '甘肃省公民储备委员会',
+    cidShortName: '甘肃省储会',
+    cidNumber: 'GS001-PRC0L-679051155-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '5482543d25b68467851621d8b4b33a947d924f4fa347415ce2c0ab61e8b079d8',
+          'a311932c50ca748f0fd24b65cd4f1dec3b3b115659ad07f33aa7b9d86f55ee10',
       feeAccount:
-          'c050ddd4e1f5e2cf4e366152f8d91df845901aeba3dbea50a4cadaa37998c275',
+          '98c5afc5dd5a0e9d1306e3669554153a94a2136c15888892ba6ea542a4bb2d9b',
     ),
   ),
   InstitutionInfo(
-    name: '北平省公民储备委员会',
-    cidNumber: 'BP001-GCB04-189323546-2026',
+    cidFullName: '北平省公民储备委员会',
+    cidShortName: '北平省储会',
+    cidNumber: 'BP001-PRC0R-189323546-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'b318c753c28a570cbd81df49850592c30801afc48cafe41bb625d6e3a723cfdd',
+          '52b778d81a6cad379b2179992d35ac972fd8623759e8d69a931154fbccd674a2',
       feeAccount:
-          'bc300e1f3a839b1645da45a9804ed8fccbf7399720fb1d1fd7fc5eef0c2496b2',
+          'c99c4f381c37e986d623e36d2f8d33788e2d3de1e361ac062092b58d5d9f7013',
     ),
   ),
   InstitutionInfo(
-    name: '海滨省公民储备委员会',
-    cidNumber: 'HA001-GCB0B-214178517-2026',
+    cidFullName: '海滨省公民储备委员会',
+    cidShortName: '海滨省储会',
+    cidNumber: 'HA001-PRC0Y-214178517-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '52fb0396a94447838aca50f8b539ed2a38997b337a7ec3981d2442ce009ff855',
+          '8fd51d6d81d0bdd8bbedac4122823a57e4c953cc707c996b9cd7f32f72be43fc',
       feeAccount:
-          'a98bffa5a69ff4a280f4035678972b2fd3e757c8884d419343f8dec60963d671',
+          'f167b19cda5bc7698902cf565a846c40b65e959e9ab1caa7975dbaa0a6f68ef2',
     ),
   ),
   InstitutionInfo(
-    name: '松江省公民储备委员会',
-    cidNumber: 'SJ001-GCB0M-044490898-2026',
+    cidFullName: '松江省公民储备委员会',
+    cidShortName: '松江省储会',
+    cidNumber: 'SJ001-PRC09-044490898-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'f6dc51119d922808f58200ac090d412b2991db2885616efd3a04c4fe755d3216',
+          '515f2e19341b916e15b651efde76c1ee7b99f0fd2322bb3a06edfefcc0f4e8ef',
       feeAccount:
-          'a1408b8701b3ee02cf097d2ff27b6cd2d21bdb64dda21229bd9e7a33b004be36',
+          'c5490cdb2919509dae64a7e5372c7aaacb4b27822c66c71f31a81ccac0adefa3',
     ),
   ),
   InstitutionInfo(
-    name: '龙江省公民储备委员会',
-    cidNumber: 'LJ001-GCB0L-279890045-2026',
+    cidFullName: '龙江省公民储备委员会',
+    cidShortName: '龙江省储会',
+    cidNumber: 'LJ001-PRC08-279890045-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'c03742e08fc5f1dac94997fec3fce2eeaf1b445a606768ec90c2392410cce813',
+          '440f31d90586ba47e23fd4ac3f888ef5c83b87dfe08cdad113fdf07915abc985',
       feeAccount:
-          '622afe058889e3e176fb4b36860ef9cd6114cde638da7a38ba7f079f59779565',
+          '94ca5265a83623176d279115974b708973d7d6429b8cf80be1c7fc5b53e8de00',
     ),
   ),
   InstitutionInfo(
-    name: '吉林省公民储备委员会',
-    cidNumber: 'JL001-GCB0I-850461124-2026',
+    cidFullName: '吉林省公民储备委员会',
+    cidShortName: '吉林省储会',
+    cidNumber: 'JL001-PRC05-850461124-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '29d7801c4d7bc1ef9bc7d7f8a9cfc9beb0c17f987ff38cc8b9e7d1bf5efe6449',
+          '10e7420d12ef291bb599bd32dc78d9684d839ff17384ed81f52c753606d2a28e',
       feeAccount:
-          '3739247dbc14c4ee98a745c0a2057b82c100398f73dd0e484a4a69b517ddebf7',
+          '9a9c0219ae2dde6b0334f78a22351d293df2bdb87b8d7ddaae0085303618a2eb',
     ),
   ),
   InstitutionInfo(
-    name: '辽宁省公民储备委员会',
-    cidNumber: 'LI001-GCB06-978545133-2026',
+    cidFullName: '辽宁省公民储备委员会',
+    cidShortName: '辽宁省储会',
+    cidNumber: 'LI001-PRC0T-978545133-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '37c142883a379b8d56d47218408189e5c0b484370ff60243f777893d09a09efd',
+          '37f3817972e1abcce557e32a9c0b1c19afcae2e9baa3d8bf4aacf214b400c980',
       feeAccount:
-          '74696b21f7cb01605901fe98e4565f13eba7e8dec791defdbbda1ecaf0a99622',
+          'bb0f6e2e864d31682419575981cafb39883748262ac4b35d93f49fcca5675b84',
     ),
   ),
   InstitutionInfo(
-    name: '宁夏省公民储备委员会',
-    cidNumber: 'NX001-GCB0W-389752794-2026',
+    cidFullName: '宁夏省公民储备委员会',
+    cidShortName: '宁夏省储会',
+    cidNumber: 'NX001-PRC0J-389752794-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '5b0cef9dee73d5055921ab0f078a250ebc3bd7e2c44fa432cf53f9ffe22c285e',
+          'bf2fc01d64a26e95844f5572a06d66a86076db40d7cb0dedeb2d8bb32e3a197b',
       feeAccount:
-          '4087d6ddcb2edaf6f5f1992864f344f4a8602c816d9e212b535e80389e287b57',
+          'c35312ece6c32f759156e4518149dc16430971fb050f15f5347984a572b8b72f',
     ),
   ),
   InstitutionInfo(
-    name: '青海省公民储备委员会',
-    cidNumber: 'QH001-GCB0P-882026762-2026',
+    cidFullName: '青海省公民储备委员会',
+    cidShortName: '青海省储会',
+    cidNumber: 'QH001-PRC0C-882026762-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'ca0ffc8e3ec26cd679b1aa9f904f4342ab0793f87ad3b10de8326409d0517315',
+          'a50d1007599d8a21693dcd074a26998ea0f2e40e4d99f1187abd9e1ac36b8c68',
       feeAccount:
-          '6a52994daf82140cddbfcd965255c8f45ba75f258eef45741ac05695faebea01',
+          '1a520b9c4a52d65528d9cd12dbad23101b76dcfbe45d9e834573213a012d2c88',
     ),
   ),
   InstitutionInfo(
-    name: '安徽省公民储备委员会',
-    cidNumber: 'AH001-GCB0D-589856828-2026',
+    cidFullName: '安徽省公民储备委员会',
+    cidShortName: '安徽省储会',
+    cidNumber: 'AH001-PRC00-589856828-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'acecd778d6cfb5f2c53926cf7e56c61096b329509dd38ddd361ba2b5c12c6798',
+          '64684bedb642195fb12d1b34e5519ed343e33dac934e7fb0a52c01b38139771c',
       feeAccount:
-          '03057c7f4e95fe220dfecc53f3246ed2f880969bfaf7af8500b04d76eff2bd0e',
+          '6ff371ae229dc712a1b0bcf2a1b4e20103f8e9bb72b28f89c069b3116ea23541',
     ),
   ),
   InstitutionInfo(
-    name: '台湾省公民储备委员会',
-    cidNumber: 'TW001-GCB0K-265218823-2026',
+    cidFullName: '台湾省公民储备委员会',
+    cidShortName: '台湾省储会',
+    cidNumber: 'TW001-PRC07-265218823-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'eee2b2aff955485bda54faca13ab4ddb870c6a1110e27aea86f282de5f984553',
+          'a06e5338b4b24a93d6a4b39b8eb8ff48c105e76eefedf65515c564b0c83b9456',
       feeAccount:
-          '21784ee42ec77f61c144f85dc76a6eb9cf5dc12e29144ff08ff9f1df3d602ad5',
+          '0b32fe2697cecce360eea5b5da2518af8c4090d791faa74c4bd92399a6239d26',
     ),
   ),
   InstitutionInfo(
-    name: '西藏省公民储备委员会',
-    cidNumber: 'XZ001-GCB0F-435616961-2026',
+    cidFullName: '西藏省公民储备委员会',
+    cidShortName: '西藏省储会',
+    cidNumber: 'XZ001-PRC02-435616961-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '9ecdeb733773a8a94e3ea429969154c64809786eb46259bbec28ecf221be7693',
+          'bd1bffac79a29f9b60f75e9b540ad77e99ac4d7a75e88e2efa5ed9903fc8c5df',
       feeAccount:
-          '4b6f895705f3339398f4ef2e94689f1db5bfb4a1440e2d81f9f7514003bb21fd',
+          'b99b6ca8055b1f96c3cc6a3d69e9cba26b565290b638170ea5f4060e2bc515d3',
     ),
   ),
   InstitutionInfo(
-    name: '新疆省公民储备委员会',
-    cidNumber: 'XJ001-GCB0F-671044381-2026',
+    cidFullName: '新疆省公民储备委员会',
+    cidShortName: '新疆省储会',
+    cidNumber: 'XJ001-PRC02-671044381-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'f20190cd9836cf8c17e50f39fb4723c50e99891dab252c4a54c54970115308c4',
+          '641352be82f3e5aa0e20ad6c2ef2031be08952a49443b7ad3b6253ae2fc50256',
       feeAccount:
-          'd5bad25c3e5e71064bd284797eb14c55ee1716db3a6bdc4ecc3475d6de71371b',
+          'b8b2398a8fa33560660fc32f8ed9efd4a18f3bb2f4adea3ca925af8e34edbc46',
     ),
   ),
   InstitutionInfo(
-    name: '西康省公民储备委员会',
-    cidNumber: 'XK001-GCB02-695945392-2026',
+    cidFullName: '西康省公民储备委员会',
+    cidShortName: '西康省储会',
+    cidNumber: 'XK001-PRC0P-695945392-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'dc28bbd6b0cd88d1581cc0cc9d48fa7a11cb93f903b55da23b5ce2f73c2f2770',
+          '30a8934b142898221901f1427d2ce5641f999f49d205856247b84b9de99ccaa8',
       feeAccount:
-          '0a9b0cacc6ed47d4810cdcdc42a1fc460834c35f60ae4393a9ca97b5c82fdee0',
+          'adac69e2efc0df73832edb17fcb5bc5a9e4c70fef792ef8dcdd2016dd85cc734',
     ),
   ),
   InstitutionInfo(
-    name: '阿里省公民储备委员会',
-    cidNumber: 'AL001-GCB0Q-487847725-2026',
+    cidFullName: '阿里省公民储备委员会',
+    cidShortName: '阿里省储会',
+    cidNumber: 'AL001-PRC0D-487847725-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'b853d97d7507b7eb35be86f4ed8d2ad4d9e0e472865a361c0d8d6f84ca02de23',
+          'cb09539b0ffe54bb3c6f23c2b0bc73973dfd5a4dc540dafa739f21f7d4db2fb5',
       feeAccount:
-          '62c7a82421b6e734ca5531eb8246276229bb02bcef98f406da303139847ecba8',
+          'e5b04cea0258e77835c3ff571393261725cf7c44e49f7c02ec1f727661fbd26f',
     ),
   ),
   InstitutionInfo(
-    name: '葱岭省公民储备委员会',
-    cidNumber: 'CL001-GCB0W-771698743-2026',
+    cidFullName: '葱岭省公民储备委员会',
+    cidShortName: '葱岭省储会',
+    cidNumber: 'CL001-PRC0J-771698743-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'dc8477ea88ff303d553e7d546cb179a590ad64a4f39c5dd55ff6b351fa66af0e',
+          'ccd6e383073dd63480b2f2934d2f094e84a8725d0241fe4d510d8c7bf63e1467',
       feeAccount:
-          '9e4543c79af9d748b246cbcb2218d7eb65fd0cc0d4c61325da17349431ab62b7',
+          '38d21944472e77fe0136fdc1399e12e88b6f015e41d0c7eb480585cf9d50359e',
     ),
   ),
   InstitutionInfo(
-    name: '伊犁省公民储备委员会',
-    cidNumber: 'YL001-GCB0C-293160581-2026',
+    cidFullName: '伊犁省公民储备委员会',
+    cidShortName: '伊犁省储会',
+    cidNumber: 'YL001-PRC0Q-293160581-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '8c4aed1db017d5dcdbaf42aa58e0d349d2688f3093198d55ee0ea6de7b377853',
+          'c245039fa1a1f5849fb8a0daa514e99858a2c80419c83fa0056b5c0a281ea234',
       feeAccount:
-          'f902eee902d2857d32004b45ceca638d43dc06da055900001ea9d27ee67fc1cd',
+          'dc663f25f95ee97fa18b1ca3b57ab9aaa8e771a34c19429cfdc4f590304871f9',
     ),
   ),
   InstitutionInfo(
-    name: '河西省公民储备委员会',
-    cidNumber: 'HX001-GCB0Q-475713213-2026',
+    cidFullName: '河西省公民储备委员会',
+    cidShortName: '河西省储会',
+    cidNumber: 'HX001-PRC0D-475713213-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '01d6e4602f4a959b4615c69355dacf9855a0bfe3f83fdc833c2b29c181b8a3ac',
+          '75bf0a42e5a1b5a0ba4ec5bd162cefe3df3ef2b0b46afa06a7d4e1d9072bc278',
       feeAccount:
-          'b6feeb6f734dbbc5348f35d9928942f11e2136924000380d365d4910677db349',
+          '36373c60b3be38bd2b9409976c85ea8231480f648f088e99dc7b1aa01857a928',
     ),
   ),
   InstitutionInfo(
-    name: '昆仑省公民储备委员会',
-    cidNumber: 'KL001-GCB01-091969119-2026',
+    cidFullName: '昆仑省公民储备委员会',
+    cidShortName: '昆仑省储会',
+    cidNumber: 'KL001-PRC0O-091969119-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '898c07c20f4a5a63d04ec7978800520fefd8c1128a0bd05e1b2248e8a605630b',
+          '4f81995eed779cc1a74e50e4cc1bde47b319d14b8929f90113bbac715ab86900',
       feeAccount:
-          'de3e80497ff74120a15c51e9c20662f5fcc16376fa52e7b2213acf7adda34746',
+          '96cdfa942d22f0e5b5003cd71c6f78a10a190236e63ae539af3fe7e0f3c40ab4',
     ),
   ),
   InstitutionInfo(
-    name: '河套省公民储备委员会',
-    cidNumber: 'HT001-GCB0D-481172908-2026',
+    cidFullName: '河套省公民储备委员会',
+    cidShortName: '河套省储会',
+    cidNumber: 'HT001-PRC00-481172908-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'ab06c990c8adc427db3ee78c6e66c0a4c3677dc4deef5d3456c118e66d2c7048',
+          '3d69f0ef94d5fbc6be4d644e4232e30ccc98744b95a5512816fce98079356904',
       feeAccount:
-          '6b53378f00158813218465eb2000841934d4fe233df624cefba5dca4470e3dcc',
+          'b5d40b55fb67180b171f50909e0518673449afa8dfe906fdfee13eb46c9587ce',
     ),
   ),
   InstitutionInfo(
-    name: '热河省公民储备委员会',
-    cidNumber: 'RH001-GCB0S-697831866-2026',
+    cidFullName: '热河省公民储备委员会',
+    cidShortName: '热河省储会',
+    cidNumber: 'RH001-PRC0F-697831866-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '3fdf0f790bf1d1dd64cd19b3eda163bc2deb89587fd96d4cb4d9f4ff2a15a54c',
+          '4a66873273f160a0c5140b698848549bdfb0ad8b457c6e296f213df6abb34850',
       feeAccount:
-          '4d4d52d030353a3901cdf38f59c7fcd0172fe510955fe5af963b95c6c95fd841',
+          '2627e52b7e6fd4e8f38b2c062f61598d7dadf067371eec919c0523b3c2de7dd7',
     ),
   ),
   InstitutionInfo(
-    name: '兴安省公民储备委员会',
-    cidNumber: 'XA001-GCB0U-384161601-2026',
+    cidFullName: '兴安省公民储备委员会',
+    cidShortName: '兴安省储会',
+    cidNumber: 'XA001-PRC0H-384161601-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          '7a160d892cc77d03c4ea89ab53f953b7de101443ba2288b284d4273979fa95f8',
+          '3972b00978cb3b98fa95406ea657e3191e6f975c40b47156c9bbaca856e7d4c3',
       feeAccount:
-          'baa48e7a6228b3b9caa2e6418d0cc6409457088c361c49d0e92f8a7bc7841e64',
+          'ddaccca95b4300af85384f8beb2d5c3e91f2a83469eacf74cdca8081bfd432ee',
     ),
   ),
   InstitutionInfo(
-    name: '合江省公民储备委员会',
-    cidNumber: 'HJ001-GCB08-963948997-2026',
+    cidFullName: '合江省公民储备委员会',
+    cidShortName: '合江省储会',
+    cidNumber: 'HJ001-PRC0V-963948997-2026',
     orgType: OrgType.prc,
     accounts: InstitutionAccounts(
       mainAccount:
-          'f0b6a54689d5c9c32977130b1b47db66c4b56728a84108dba5f6ae05317ad51d',
+          '2a217cc580f1072581e4155324769dcab7beecbf95cf968ea54730c2e0a302c6',
       feeAccount:
-          '0b87b228498811433d50bf7abd723a18bef47d9c9879033eb1365a02cbb1005c',
+          '7123ed2a52eeb9ad5d0ff109b1ad2b6ee0f8e636bf789807e631186ad115247d',
     ),
   ),
 ];
@@ -502,562 +546,605 @@ const List<InstitutionInfo> kProvincialCouncils = [
 /// 省储行（43 个）。
 const List<InstitutionInfo> kProvincialBanks = [
   InstitutionInfo(
-    name: '中枢省公民储备银行',
-    cidNumber: 'ZS001-SCH1E-233384677-2026',
+    cidFullName: '中枢省公民储备银行',
+    cidShortName: '中枢省储行',
+    cidNumber: 'ZS001-PRB08-233384677-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'f8849691c497ed6c294ad61a2c29e8ace130e0ddcc5b0b7287a5a96c4870ed50',
+          'd596f0bdfb799af5e0b0aae1ebfc80357477eed0d83543c596377c5f235f4e51',
       feeAccount:
-          '50a039748269d7687aa48e4c73ffe9d116232d8e2ffe272af95b18496bbabd80',
+          '6f71263082e7a191df3e4a7a60785b3fc29ae53a72610a00e23a0786a3c99c2a',
       stakeAccount:
-          'e9a0f626c640cadb967e798a29f4fc1d3f8f72a02e1595c930ee7a6e7a0eb128',
+          'b43cfd7ef89206908fcf0e215e588c3757c2633cad0958d98dd438ef0ce07e92',
     ),
   ),
   InstitutionInfo(
-    name: '岭南省公民储备银行',
-    cidNumber: 'LN001-SCH1Q-703127075-2026',
+    cidFullName: '岭南省公民储备银行',
+    cidShortName: '岭南省储行',
+    cidNumber: 'LN001-PRB0K-703127075-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '97050936abfe52a30359bdd3286c17c6df4bd2b5b3786e914a7b11c0db224e21',
+          'b43425e8d0ca5ade4f483c08a6bcc63bbc4843535c6c31f467973ac761dc2958',
       feeAccount:
-          '49091bc468cfd85f2ebe053f8fd6efc75df07ae9e3c4a3088d75c476297fb617',
+          '35edaf95caf0906847e8cea0b4edadfb9b0de533c3a3ac88d5fdecffc3fb7ec3',
       stakeAccount:
-          '4bbc302666d71b426478d140445e0f963f5a86a8a25daef58783111aa0836e2e',
+          'f7c4d58ce71cda36e033fae776223186dfc7ae4637030961bd2f6a632a2c9701',
     ),
   ),
   InstitutionInfo(
-    name: '广东省公民储备银行',
-    cidNumber: 'GD001-SCH1Z-239565809-2026',
+    cidFullName: '广东省公民储备银行',
+    cidShortName: '广东省储行',
+    cidNumber: 'GD001-PRB0T-239565809-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'd9bb0b5768bdc207ed788b4038100b3c167ac83ee1aaadde5769c1fda4488095',
+          '1ea03625ab717b62b933c78647910347703d009ec3bdb45fce070c50cac25a8e',
       feeAccount:
-          '0844e9170e6f7d1c4b3991ab685f5ca73db2af09fc5c55702ff91b799f0c598e',
+          '975f9fe25143661147bad8ca476a8a7fa0139c2ffbfa071c6dc8462d49b7bc80',
       stakeAccount:
-          '1ade5c85b38807b457c54c035268b01c09565209f938ae97ef8bbf610f5cbf39',
+          'aa05a44ba302a84210cd0b67ba88517e8faa37a6945f5913fe726e851bbdd86d',
     ),
   ),
   InstitutionInfo(
-    name: '广西省公民储备银行',
-    cidNumber: 'GX001-SCH17-025559630-2026',
+    cidFullName: '广西省公民储备银行',
+    cidShortName: '广西省储行',
+    cidNumber: 'GX001-PRB01-025559630-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'b1ce2f090c528533874528f3f8ed68b5762c930004b776dabb7a03d2bd69a4f0',
+          'ac12eec509065b84ce2dcf73a0f53f297e0a90c1e9bbcfc68695b646650d28e1',
       feeAccount:
-          '168f3228f9a7d1129d21ffcb8c2e64b67ec7366ce949fdcf861d70a297487379',
+          'bff888d5935f7b2dc37064f890a0ff70d79d06919d1befdef74a20a659bac6de',
       stakeAccount:
-          'd6f6b4e574c14875755d1f3a66bf4f68b54e9f2b137effd35ab00bb49ce77883',
+          'd69b05dcf85a97a3f13fe5be6fe5c0445d1241f54d19f54e58c89bc1c7da3dad',
     ),
   ),
   InstitutionInfo(
-    name: '福建省公民储备银行',
-    cidNumber: 'FJ001-SCH11-504679612-2026',
+    cidFullName: '福建省公民储备银行',
+    cidShortName: '福建省储行',
+    cidNumber: 'FJ001-PRB0V-504679612-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'a996934060a63311c2a9235888e36368d1db19ea9e085a36e32385eacc849e80',
+          'cadf197b8da1664c76c9510c770a3dcd9e93efd9b2d0f551ad99b37307843e5f',
       feeAccount:
-          '3d44f89c16d2fdcececfc361a32a1a20c2e62bd6e81b9e60569095e057ab5cd2',
+          '4950f8b99b36ae61b5cc4623868cfd8c506217c069620e5e101dd4f12ef777df',
       stakeAccount:
-          '188422119d3139d5946fec0bb656b38243833fe5fd68a443145e642064d237b8',
+          'acf054e3ab6b4c0f000af1e0c6dd9212492bd8b145227cbf5509cfadc85e5495',
     ),
   ),
   InstitutionInfo(
-    name: '海南省公民储备银行',
-    cidNumber: 'HN001-SCH1V-723623074-2026',
+    cidFullName: '海南省公民储备银行',
+    cidShortName: '海南省储行',
+    cidNumber: 'HN001-PRB0P-723623074-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'cfd4fc4cfab6b1aed99296e8e6e2036548a2b8a1f61d21a1381b18eeaccb5a81',
+          'dcd362d994821148bdbdf19202a3dfb8d03ad009e9b489c6f90aab7633d5ed79',
       feeAccount:
-          '9059bc2f7cd45fa20e31a65283dfe41c2df30f6de9f08c264e87dd14af02010c',
+          'c2abbd24f1f766437ef92671c28c14c404c16ee476d18498d5f21f10b81bc2c9',
       stakeAccount:
-          'caac495aa3ec6441978337ad4769ed0a4daee8ebf216d50c94313572e321a775',
+          '8eadcc71b7b374554c7d3274d1b7319d383553b33992492db8ae2ead3be5bb10',
     ),
   ),
   InstitutionInfo(
-    name: '云南省公民储备银行',
-    cidNumber: 'YN001-SCH1E-692525950-2026',
+    cidFullName: '云南省公民储备银行',
+    cidShortName: '云南省储行',
+    cidNumber: 'YN001-PRB08-692525950-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '9b5e69c3934c1f334b04cf0b6f13aad477b12b16c0f7e801ba01d21651ce8d60',
+          '959f12cfc94503e51c29a3b9c28df8391c3bb75f6bdf96984b4c3190d54b9abc',
       feeAccount:
-          '544413ba1a80de93f2452206bcb0a32fc827cadbe6bbdab026b677d1b9a6a648',
+          'a946fef0347da6e98913c96ff8b2d509ff5cd0650165b5209f3d0250db956a74',
       stakeAccount:
-          'a3ee7ee59ccc65ca3fa3345c5c569d165cac5fde1f374bd8e57f83f63a5887b2',
+          '143e2343f8ce35e8764833a81882353d4ad8f17ea5fa39e6f5d94081b7cece93',
     ),
   ),
   InstitutionInfo(
-    name: '贵州省公民储备银行',
-    cidNumber: 'GZ001-SCH16-490015860-2026',
+    cidFullName: '贵州省公民储备银行',
+    cidShortName: '贵州省储行',
+    cidNumber: 'GZ001-PRB00-490015860-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '7684b573df3b772a35eb455e618b6a21c6d7b5e5a54af70ab7c8480a920d9a6e',
+          'ead0df65ce9714644ba1ff34d85d3e8fc2c9f5009bd70229c067afb23b78ccb2',
       feeAccount:
-          'a4f88bb6e978e06c3499e4030fc859b76941e45956828d8ec1dbe9510ef09afb',
+          'f109494a140a92e8aea15aa84be3823bd0ac8ef12144af52bdb1d53ddcb63481',
       stakeAccount:
-          'c74e7ae830cde13f3af2b7d7893c455117a18656d635b5c93c81ead24fc43b72',
+          '2a6b48b8fdb832d1cfc4f84db11951932e28eee024ff4d21f16df285dc717fe8',
     ),
   ),
   InstitutionInfo(
-    name: '湖南省公民储备银行',
-    cidNumber: 'HU001-SCH1L-084835673-2026',
+    cidFullName: '湖南省公民储备银行',
+    cidShortName: '湖南省储行',
+    cidNumber: 'HU001-PRB0F-084835673-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'c2747ca4ceec3f51d95cffeb5db3091d76e0dcc2f1757370c33a3f488b16373c',
+          '497bee06c2b354a834f895844d761f9a913e1d6da5d4d45005e5c798cc025582',
       feeAccount:
-          '75b1d9ffa61559df9cad189e8b8b25a1ce261f9154025caacabe72765ec9779a',
+          '544276f73276868fc9b62f20f0a0a908346927dd83abcbec2c176f0da3e81e41',
       stakeAccount:
-          'fab5a4e811ee8f217ad70f9f4ea07b1f7f829089ce2d7493c9518d44db516982',
+          'f21baf39f86f0a9d574e0c57ccbe41e89b34d9e435981529c2c0ab8b1b5108c2',
     ),
   ),
   InstitutionInfo(
-    name: '江西省公民储备银行',
-    cidNumber: 'JX001-SCH1F-243765987-2026',
+    cidFullName: '江西省公民储备银行',
+    cidShortName: '江西省储行',
+    cidNumber: 'JX001-PRB09-243765987-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'b4874ab93df83815c1d4a48c722978afbf644d1433428c397b911e639f022a07',
+          '707a0eda0aa3b9c4c2bd3da0e32d2ca03087371729e600b41f81d5c354deea2a',
       feeAccount:
-          '65ea7bc5635e5516d56acf71fd9a185798db1f94af9c65a90080e3e6b48ffe6b',
+          'f3816f72585c1d78b8a9f969b391779a84d4ace250532b1f06f7cf072bbb55d6',
       stakeAccount:
-          '07f3a9c32b72c6945d943bb5c36cc1a85162ea881d3093754b51b129de6683d1',
+          'd011d2dbbab723ea01c4b66ce0077f08003cb619ffbfe1cfbf7326bcd32eb849',
     ),
   ),
   InstitutionInfo(
-    name: '浙江省公民储备银行',
-    cidNumber: 'ZJ001-SCH1X-296232973-2026',
+    cidFullName: '浙江省公民储备银行',
+    cidShortName: '浙江省储行',
+    cidNumber: 'ZJ001-PRB0R-296232973-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '73a64e68988972eca2b41f6d85e0d95c5474e4ac76b0feaf0d223333b2f0e37c',
+          'cc792d64f59954256013e56704edeeac07c61f152411b24eff5d0feae26a378a',
       feeAccount:
-          '359fc9148334b7ad122edd18b98ec604f36f74c9a91d15d1d90092577bb78ff1',
+          '54e8e7e5b8a5040b75b24d9727bfa66fe05892dedf7f3b359240e94867135666',
       stakeAccount:
-          'e33930cac9a853965370b56d2b6f8c90170d5bba196cdf20fc9e8621a0ce7c45',
+          'c55ee028f582fa3b6bcdc7a0a0c4c19846312598e327453b68ef26d74f44c8d6',
     ),
   ),
   InstitutionInfo(
-    name: '江苏省公民储备银行',
-    cidNumber: 'JS001-SCH17-890774605-2026',
+    cidFullName: '江苏省公民储备银行',
+    cidShortName: '江苏省储行',
+    cidNumber: 'JS001-PRB01-890774605-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '55b92434254f11ae30587a85f24a194ba389dd0aea844205780341bcca51de61',
+          '8b85832e3dd7d081c2212bc9f47a98d071a7d52757b611d0a8097ed5f8cbc030',
       feeAccount:
-          'a8fde60007174359f3eec91e786ac619387f475e9aee71b3ef9d21435dcfcfcc',
+          '0fdac38f6cbc78b6f08d8bc3572e9225aae4fc826895a40485d733227892b48b',
       stakeAccount:
-          '85d4f2e7689f292718ff91dbacd162c2f70886a66a17ca52a75044379186b0b1',
+          '3da67736cd97c33102914c8d9d6dfd5ebf1949b82e83606c9c7c13f4c14b4779',
     ),
   ),
   InstitutionInfo(
-    name: '山东省公民储备银行',
-    cidNumber: 'SD001-SCH1M-114256751-2026',
+    cidFullName: '山东省公民储备银行',
+    cidShortName: '山东省储行',
+    cidNumber: 'SD001-PRB0G-114256751-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '36fc82123bbc9313a2dd68a0ef7c1966a2f7cef51f6d3f9753032b5bc36dfd8f',
+          '9ad4231360fc3fbb0b66870a729c87a0b6736f1210d129f13e6c523904b73648',
       feeAccount:
-          'c8df44a3c673c6561d44962c90af0aa29ed2b9506d9e830e5c71cb27fd056c5a',
+          '354907ea36964a345e8c83a26fb7db0836bc4e40a86fce03474fa50ba147750a',
       stakeAccount:
-          'a236b79ce5d79230d3d9c96fb23ba32291db1fe4be0b6eacbe27bf6af3337d36',
+          '7e0a6b1fee9c9b99a6cd37eac6a697800d40982ba55c0efc4a32d69d31986557',
     ),
   ),
   InstitutionInfo(
-    name: '山西省公民储备银行',
-    cidNumber: 'SX001-SCH1Q-520132196-2026',
+    cidFullName: '山西省公民储备银行',
+    cidShortName: '山西省储行',
+    cidNumber: 'SX001-PRB0K-520132196-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'd2401d4463ce83397a4d6ac6a6049c5911065932fa27ff7a834fdca5093977f4',
+          '9dc27af87541e84fd0fd4f7a6a33929f18c81521c652e68097b17c2fefe382d9',
       feeAccount:
-          '959fc2049e0dc049ffbf6cf43f9407bee22f33d78b78da5eefd14c4821b27958',
+          '8eeabdeaca341513e7f2948603326861d1a719a6ab2bf8cd013e4698d76d1196',
       stakeAccount:
-          '3d5f78b7afcb17aa13874971dd782470948fc09da4f1b19c804a27fbf1cfb552',
+          '5f078dea08e5a72161a20e65222cd5ebd5464ffb27daee4f6165ccb486e5c393',
     ),
   ),
   InstitutionInfo(
-    name: '河南省公民储备银行',
-    cidNumber: 'HE001-SCH19-158889343-2026',
+    cidFullName: '河南省公民储备银行',
+    cidShortName: '河南省储行',
+    cidNumber: 'HE001-PRB03-158889343-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '36544450f6ed4aed9f97ec064a9dbbd706382fa1223fdb6187cd66bf12e60b7b',
+          'af6daa62333b5314c0433d826b899d50ac8887f4ed1a3211599232ba0dbb2017',
       feeAccount:
-          'e8a0b874febb29f50e88a529f4f0589f9a5980bd9881d0566e6539a99315a768',
+          'ec39b561a192bdc1d96e569408d805c3cebec2a6728f1d8dd5e2814739f59b61',
       stakeAccount:
-          '64bf92a71f9e0afd0b531f1e7d8e2fd5e0ac5885b8c87b838b22644bff931455',
+          'f3bc751c654ab2f16b3815e61a4bb191ddc20fff6a639f3b27901a4ff12e953a',
     ),
   ),
   InstitutionInfo(
-    name: '河北省公民储备银行',
-    cidNumber: 'HB001-SCH15-484022741-2026',
+    cidFullName: '河北省公民储备银行',
+    cidShortName: '河北省储行',
+    cidNumber: 'HB001-PRB0Z-484022741-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '7dbf135536581411a7f25ec9a46f3e17d0b138ae55797cbe4eb40c9475e9aeaf',
+          'e4a0ee503ec962b51f3b8fd25dc546c57bda0485fac532e05589cac7059d23ff',
       feeAccount:
-          'bf40d7f470591c4d12a3c28d384016b479b567207917ca34da378cb65d31aa49',
+          '8fb11b8dcabc23f843737275546b55bb299808ee8bef6839d282d5ae5a606aba',
       stakeAccount:
-          '2f856da0e1057e14adaa20a91e26404baea9cc7ff02556f2303b9f2c41bced38',
+          '5adf87cc2e0fc54e6bba0679c20f22b2bf0e37b2923fcf040508d648d968e333',
     ),
   ),
   InstitutionInfo(
-    name: '湖北省公民储备银行',
-    cidNumber: 'HI001-SCH11-514948302-2026',
+    cidFullName: '湖北省公民储备银行',
+    cidShortName: '湖北省储行',
+    cidNumber: 'HI001-PRB0V-514948302-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '24e51c132e6213dc8538289903f66d1fd1dab3c26355372af8ef74b99a2fc0db',
+          '43e53e6189c46484a565ed518ca1353848dbc487034a891647dc74ec274c5457',
       feeAccount:
-          'e86174e5b5fbb0d84aef0387e945b1f4a9560bf88395112904b889b85bae8c64',
+          'cc727a248cc3c6a46dc227a79091530a34c730d1ef562cab11667ef7e5d031dd',
       stakeAccount:
-          '7a8c88589966ebfbcedd4f068a9913808525bfefc146c33cc0de93b7482da444',
+          '9c94380f23b1796ba47b534847a342874e5fb2567b2d775d03c40a54b0c26147',
     ),
   ),
   InstitutionInfo(
-    name: '陕西省公民储备银行',
-    cidNumber: 'SI001-SCH1T-245618374-2026',
+    cidFullName: '陕西省公民储备银行',
+    cidShortName: '陕西省储行',
+    cidNumber: 'SI001-PRB0N-245618374-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'a96a8b6edc42fd7db69441df4433b78552cae03e660191026b8dc59d38aae275',
+          '2e36b35236e5d4fb7b33fe9bb6942d39cf1ddd3eae9127cbb923749b81b906b9',
       feeAccount:
-          'd02b42a9954267e18113243ff6974188479a6da1c78f6bf11114dfae4aebaea0',
+          '5ade99aa8398f95e963b9eabbfd800bdd5cfdbf67e62be508af90f50bdbdc7c0',
       stakeAccount:
-          'a191af21765f937ab0b2f590e0c7176e1d574e33148c325ad9cf08582b6a6c34',
+          '306341d085a49e2ca799f53d130d8eabf0441673d9d3176b1070373740c053ab',
     ),
   ),
   InstitutionInfo(
-    name: '重庆省公民储备银行',
-    cidNumber: 'CQ001-SCH1I-694162045-2026',
+    cidFullName: '重庆省公民储备银行',
+    cidShortName: '重庆省储行',
+    cidNumber: 'CQ001-PRB0C-694162045-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'df51f1214bf79685dad2b0950d61bdbbea31c4f00787eaf968733f3adc0a02ab',
+          '525a38c2ac3ae8a368cfe72116ef8994fa7ba28bbfb551c7754e6df1e67b9ae3',
       feeAccount:
-          '8cd711c0ec96975dfbac9c7a1c40b6d2c9d45e4597f2c8b23528b4c139e0ae22',
+          'dee2cad3716b68e724ff24c02d62d222ed0a1ca76aa2e22774ad473db30652b2',
       stakeAccount:
-          'bf9c07f46e3200597b502eb79b54b121d5dbf409d82a4442de2c9dc9656fd2c7',
+          '07f26d1ba26ae71afe6f2e34c36cfff48c9b58641f5bdd386b561cb5481e119d',
     ),
   ),
   InstitutionInfo(
-    name: '四川省公民储备银行',
-    cidNumber: 'SC001-SCH1W-764253139-2026',
+    cidFullName: '四川省公民储备银行',
+    cidShortName: '四川省储行',
+    cidNumber: 'SC001-PRB0Q-764253139-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '8dd554c6b1751227e1d6311e9e6dc5b2e542e8b21b1aa1f51a43b0d0f27e67ac',
+          'b6c2766ecb62eef4bc39aa8965dbdc642ca069af72d00466334c8fe111b1bbc0',
       feeAccount:
-          'c80c0d9ae4fa2c87909dedd8b525df90d1f0ab47337a828cd04fd05e93125bcb',
+          '4fa37a9da649627776f898d42a3b06689215f40861c7a110d1b747729b4f1cbf',
       stakeAccount:
-          'a3612a88b871c57dce8cc1f4bc2958e76b3089845e2e2b9d8554d7f57f33ad31',
+          '34557516eb459576cc5ac279745f9b76663909d8dfbd82d4c98c910c80406c3c',
     ),
   ),
   InstitutionInfo(
-    name: '甘肃省公民储备银行',
-    cidNumber: 'GS001-SCH1E-005784877-2026',
+    cidFullName: '甘肃省公民储备银行',
+    cidShortName: '甘肃省储行',
+    cidNumber: 'GS001-PRB08-005784877-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '1c368b84eb015714752e01c816ea1c07bca95dc6747323326f0d1383abd3b623',
+          '802f9eab320d0d2cd9f94aa7ab8ea8904f68cbf85b2c47e49560d1c63cc3115c',
       feeAccount:
-          '7df2c91adb9d56b64a2ce51acf6dcd4183edac75049a18bef591eb1311baab3c',
+          '353e7af1334691742cd1f37af2ef7cdb81c0a93ead4e562c2fe38425fca4b99c',
       stakeAccount:
-          '42f5a1038c056f34b0906cf87c50237321d1f2eaace2b6f2973136c61b8d6016',
+          'd888b224bd45ffcb5b622e126e20ec0f813e65a913f60bd280bc670386de7d2d',
     ),
   ),
   InstitutionInfo(
-    name: '北平省公民储备银行',
-    cidNumber: 'BP001-SCH1W-434307982-2026',
+    cidFullName: '北平省公民储备银行',
+    cidShortName: '北平省储行',
+    cidNumber: 'BP001-PRB0Q-434307982-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '9e93a45e5a8a3cb59222b93a44e04e0929df47635be2bd44a5bf09cd5fac4f1b',
+          'ec4326f895c157b1a12e0dcf919be7297a72a135197b39d877fb66720f0399d8',
       feeAccount:
-          '7f6cb359b8abb77b7f30ae34bac21d4ceabff90d8673d0b9dd6e5bbb4fba3a2e',
+          'f5c91376eb21901b97397512df25f5382e882cda861d332bb18194965f26b386',
       stakeAccount:
-          '38a16891215c7a75ca47092d8717da4920c626c8d059f462c3fcb31ecf6ac355',
+          'e5e0b667b3e93c01403a1c7ac55f8f5e739514a49f40d0722508e99139b6491a',
     ),
   ),
   InstitutionInfo(
-    name: '海滨省公民储备银行',
-    cidNumber: 'HA001-SCH1E-969179618-2026',
+    cidFullName: '海滨省公民储备银行',
+    cidShortName: '海滨省储行',
+    cidNumber: 'HA001-PRB08-969179618-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'af305d6bd94d08f4536d0a573077804ee0704c25e085c8f47fef9a862f19b848',
+          '6b475b0a5b087f0c9c9eb06a99b456b57703884e2e7ef7b446e41d4e55625c78',
       feeAccount:
-          '28f8e719d05979fe4fef68e8e34fbbe5939290de197aa1a39bd78a328e4cfcff',
+          '57ee79b3098e51316bdba23d03c2248728e6c57412805d77301ba18d1f986f04',
       stakeAccount:
-          '20aa094f7a2fe90bbf5a96ff23fad1b1dc5ba71a392daae726d00fba627c8677',
+          '0d6e02844616a73508da71bfe716e0ab9a4d2bcd605bb32b60cfb64148a1f244',
     ),
   ),
   InstitutionInfo(
-    name: '松江省公民储备银行',
-    cidNumber: 'SJ001-SCH19-644104544-2026',
+    cidFullName: '松江省公民储备银行',
+    cidShortName: '松江省储行',
+    cidNumber: 'SJ001-PRB03-644104544-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'fe7e52efbd4a81c0c1d18c231e3a9321a132a5da7406d44034bf6bb1a8627870',
+          '34f9ffc323303decc0af7c974310c143d076409fc6a78fad147a90fe3f5da761',
       feeAccount:
-          '87cb6eb6612ede3e8ae56d9e74086b09cda263d0389fe3ad653c9ebc2f0e3a78',
+          '929b57e34eadb5dae91b2da9905de7427e5641fceeb7ee411af3a1f0bf1df949',
       stakeAccount:
-          '0742f1db10c6bd856c39ec9903b994d47ab07f7486eec3be9c3ed1651e10499f',
+          'ac0975acdf9979c1a34808493ec9928fab13d06408c4d35e80b0de60945c8763',
     ),
   ),
   InstitutionInfo(
-    name: '龙江省公民储备银行',
-    cidNumber: 'LJ001-SCH1Z-280510636-2026',
+    cidFullName: '龙江省公民储备银行',
+    cidShortName: '龙江省储行',
+    cidNumber: 'LJ001-PRB0T-280510636-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '069aaa597bdb2d2d682ee7c44615e035dee75f1df0fb9eb098f3571c2d045bd8',
+          'a59b83df90281e1f8a347a863877122b8da36c2ee9e40ad66362b7238fa27caa',
       feeAccount:
-          '08d796def30e246b6fac0d245e76746e3a4167cb638b0badb6fc915be65f1f87',
+          '96e5d1f75ab62be1017c118543f9707668a56bd0372fd6ed5b0ce9ddb1bdc688',
       stakeAccount:
-          '70e230d35264a726988b762c5ad26b72d4f95cda0fa7a0491b4d5df38b0b1224',
+          '2c57eb655e64bf3cd698375d5f207e7a0b0e5a5b54242b8ef32b588d1ad3a718',
     ),
   ),
   InstitutionInfo(
-    name: '吉林省公民储备银行',
-    cidNumber: 'JL001-SCH1D-129935340-2026',
+    cidFullName: '吉林省公民储备银行',
+    cidShortName: '吉林省储行',
+    cidNumber: 'JL001-PRB07-129935340-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'dd3c7135c61368556911362f5c57da40c7772d71e027f2b1fcd499a7e18082f0',
+          'eea80d6d9f000b1e10158e3ebdbce3e4a4ac6edc86307003c13d81588e4bcda5',
       feeAccount:
-          '274ffb6b95feeeff5683a54014b7d2e9926fd09f359cc401ca8dbd7b20fe25c5',
+          '704f407c2932118b70addab892d5f17e11e381a6daedb436d5686dea64bffda3',
       stakeAccount:
-          'c7b82022aa1a5e210e6c63b51c77390e85e4607bf606a6130475849b06c5e56b',
+          '8602c912f127ddcf1818b026ed01460df1549d78fc2c6632113d9a44a2092706',
     ),
   ),
   InstitutionInfo(
-    name: '辽宁省公民储备银行',
-    cidNumber: 'LI001-SCH1P-249814963-2026',
+    cidFullName: '辽宁省公民储备银行',
+    cidShortName: '辽宁省储行',
+    cidNumber: 'LI001-PRB0J-249814963-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '2304d0242072d00d9b116224c4f09549e9be59e411b78c601542b606a16b3289',
+          '075fa9b4a0d8e567d70eab10bc50ed47d6b24d97b7c55ad7f9081be836e57e82',
       feeAccount:
-          '3b468ce35bd63c997d91efcef179ba9dce5dc7506e89b839ebbbeca0e33e714b',
+          'd425f90230501f1db635ca5505ef4f3cee3cd751b06efbfd88496826a589f0d1',
       stakeAccount:
-          'fcf5eb3cd66e5bb48748e0556583ece6c2ed851fc093844725f90a6ba845428a',
+          '5c81e551b0840897b226f61fa4d36e88fa0aaaeb5957056be9deff612eb91800',
     ),
   ),
   InstitutionInfo(
-    name: '宁夏省公民储备银行',
-    cidNumber: 'NX001-SCH1L-292327153-2026',
+    cidFullName: '宁夏省公民储备银行',
+    cidShortName: '宁夏省储行',
+    cidNumber: 'NX001-PRB0F-292327153-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '782864a3277c09bc2135d7529c34f7eb88f5d14b5d446db0cc12f68710803038',
+          'c8a805234ac76921c09c347a0700e1c64ec0e221cba0a37cc65e7604da27858a',
       feeAccount:
-          '6d656f51e9070406c7041caebcda93a8b87c80280764b282c98617e495898d4c',
+          '3e30c95641b6cf9410d00e39af5e32a6a9e9795ad8a0e891bab007a3451cfbea',
       stakeAccount:
-          '2881243de1f9ebe6e7021586efca46de4793eaf03d562d409c62c1c801adf5d8',
+          'adb3c2462f349d146d12594c1b71155b401f059ba0a96c8216decca0eb301da6',
     ),
   ),
   InstitutionInfo(
-    name: '青海省公民储备银行',
-    cidNumber: 'QH001-SCH11-075657014-2026',
+    cidFullName: '青海省公民储备银行',
+    cidShortName: '青海省储行',
+    cidNumber: 'QH001-PRB0V-075657014-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '608a1e04f7de9de454cb9d49641aa999eb644999d0c75ae17d8514bf16e1b1d6',
+          '0324a2d6e3672b5dc00b61271680e315f51a7b03ca4869b185b5edac48f0440c',
       feeAccount:
-          '425565245d2298adb3789d9f207478cf3747b339eea6f031ea4fb3a8d001be68',
+          '45e7f97a07796c2133ce96b54fd5579eb5b7ef9af750c3461d23e9b346d38495',
       stakeAccount:
-          '7537eb5c0fb1d9b84a8a10329cbc919c5f31f787cab11da3efb24a6cd922620f',
+          '4775b2a94fccb4a46d806d5165bb2c5d7346bba4da3689753492694f64686a84',
     ),
   ),
   InstitutionInfo(
-    name: '安徽省公民储备银行',
-    cidNumber: 'AH001-SCH1S-388477914-2026',
+    cidFullName: '安徽省公民储备银行',
+    cidShortName: '安徽省储行',
+    cidNumber: 'AH001-PRB0M-388477914-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '2030c382c5bad0fb3a6159e2a92b9502550951e1d62129c740087e6d50292ef0',
+          '2f0255af996f4cc7c40687a60cb7a06de1f6922f2c6b2321f27d3f41c8555f40',
       feeAccount:
-          '2131af1bca9075de2cecd8015bcb8a542b4a12ea71af7d9023680dd1985cf898',
+          'ffd0aecab04b1bff21ee86038caddc0b0af6a5901b1954d3683da140de0432a8',
       stakeAccount:
-          '751e2ef0028880714823262de9a56f11fd89538ad903b939f9268065d8362ce3',
+          'd6c4886dd6751c7ae2182ee0565d5a3b43750904dbf2309be396245dba79549e',
     ),
   ),
   InstitutionInfo(
-    name: '台湾省公民储备银行',
-    cidNumber: 'TW001-SCH1Y-266238196-2026',
+    cidFullName: '台湾省公民储备银行',
+    cidShortName: '台湾省储行',
+    cidNumber: 'TW001-PRB0S-266238196-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'bc95ab3ca2c658b5269d73bcd3e68a95ed4e41af7133947353d3681d1f84b72b',
+          '1f7f0e7babee820420ab765dabc6c1e098bb63894812b60cb6a51c11c1279a34',
       feeAccount:
-          '85986826cb86e8e221bbb3114fe7faebccd4fad983aeeda32d8d2614abd0a585',
+          '46637aa4e6d9fb11ec53f07c2cd7ccd068e2bb28eecb00e8af0f9bcb3597b8af',
       stakeAccount:
-          'c54c7fff799abcf4cf493500d815ce883ce9497b330a387295fcc8faa60b9ff4',
+          'd1579d8699f7ff50260bb4760409cad73a94ccdbd4009697f8229990adb85958',
     ),
   ),
   InstitutionInfo(
-    name: '西藏省公民储备银行',
-    cidNumber: 'XZ001-SCH1C-210788637-2026',
+    cidFullName: '西藏省公民储备银行',
+    cidShortName: '西藏省储行',
+    cidNumber: 'XZ001-PRB06-210788637-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '9fb5edba282ba9cee81a8faa7e018f0ab173c52690b44509c65d7a8a0e6a427a',
+          '684bc4280b514bc0cad53e57d8f3658aeca21b90c499402e94d7a29ba612df51',
       feeAccount:
-          'b847299b4a6018e765093801c73cbb4cff342f43aa54f4d3ac5002eecf3aed86',
+          'bd7f7f1d9b15e4712b0282ab6e782c208cc22384f05b4e7777432f6765ad70f1',
       stakeAccount:
-          '50915414c7f0235c23c051473a46f065762d5523b872f5db555eb5e57f78e502',
+          'a9095af00d6de39fbfce292b5ea3401c918b215f87aef636036b9974b06e9d2a',
     ),
   ),
   InstitutionInfo(
-    name: '新疆省公民储备银行',
-    cidNumber: 'XJ001-SCH11-233325633-2026',
+    cidFullName: '新疆省公民储备银行',
+    cidShortName: '新疆省储行',
+    cidNumber: 'XJ001-PRB0V-233325633-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'a64f282dd3c24df09a6512cdd72fcd448b480a8f59dc460960a253839ca9332f',
+          'b8e3769f585536aaf8894cee61ca62166af304f95e95489d71ff843b62e84c5d',
       feeAccount:
-          '6721c2a98f87c3a2f084bf5533c980e38c1bb65dc378a6a767f1470c14ba672e',
+          'd12b8d9bb958ebe724241b319405b1d58b3ffa18211a2e3780ed124e87d52a57',
       stakeAccount:
-          'c35ac7e9d5b737e87d3a44ab6d2bef0f58b2b19788cdc61deb0434571d7a88cf',
+          '3686027822290ec5fa11c78ecaac941e465859a8e4220cab48cbabb77c478c69',
     ),
   ),
   InstitutionInfo(
-    name: '西康省公民储备银行',
-    cidNumber: 'XK001-SCH1W-300401625-2026',
+    cidFullName: '西康省公民储备银行',
+    cidShortName: '西康省储行',
+    cidNumber: 'XK001-PRB0Q-300401625-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '99fa20a38fa94a3ce1830d49a7090a32069cd9b8688da9349633259e3f941ffa',
+          '53a65be534139ba72d1e70224397fe850c72b7d6c3132b43c33b79dee41a6f58',
       feeAccount:
-          'a86a7d1adf7d73770c2c9832a72f1112f49988e8fb7d94315ed9488e8e754cc7',
+          'e146dc5ec4b6f7ae9ab727413420a56a2cbf66d2ca5b42de8e497535a4ebee30',
       stakeAccount:
-          'd6cfa334492abfa002ab62131ad758e87724e5e7655defa70163140abce0f842',
+          '8c984de177ccc400468e33ed2bcec0d96682f3e42cc7473a727700fd52351de0',
     ),
   ),
   InstitutionInfo(
-    name: '阿里省公民储备银行',
-    cidNumber: 'AL001-SCH1Y-527686065-2026',
+    cidFullName: '阿里省公民储备银行',
+    cidShortName: '阿里省储行',
+    cidNumber: 'AL001-PRB0S-527686065-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '68efded8ffe41856a1336773b22b57b70c22ea55b4754fa63de0b8f098a7cff0',
+          'de5d0a88082f96ac4a635881937c78c535ec6e4d421a5df5a42c2c5305f38fc6',
       feeAccount:
-          'a2d83c5492bc011d3a5f2f7c322139e7156c3b9ec90853b76dc97ed6b784e8af',
+          '7a1fe349b145beac2c5f9a49cdbc5f64e973c08483d5305e74faa35a48b2fa95',
       stakeAccount:
-          'd47bb6901f37f8852572a1e58c9395e9e5ecc9aaed6ae4709554c1fb3460949d',
+          'a4cad3c5a0b2787aef19c89389fe47d3940a90066489785b0853bb98c1745a8d',
     ),
   ),
   InstitutionInfo(
-    name: '葱岭省公民储备银行',
-    cidNumber: 'CL001-SCH1W-951267669-2026',
+    cidFullName: '葱岭省公民储备银行',
+    cidShortName: '葱岭省储行',
+    cidNumber: 'CL001-PRB0Q-951267669-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'fc926117c924b15e85973d40a5c62f4989325c8e6000a217a5424bdaf4a50c02',
+          '4d1f0b595642be7ba90398ad06940e933bb43fd309cb8426c69ded81eb54a796',
       feeAccount:
-          '9b73e74d4b4bdf7b90b9314a522484e0eeabafd17613d0184423468101b52e2b',
+          '1bfb2d8da0f56339340003755d1671beeca0252e2fd18fa65f9c898037e7cb70',
       stakeAccount:
-          '92f93b885902c91363a7d787c0e613ac58d0eec92f1a82039c6535c6d9e53bd9',
+          '354756b6fc07d59f36c1fd3efbecec86eb3db2ec07fab6051af00b3395bd5e8e',
     ),
   ),
   InstitutionInfo(
-    name: '伊犁省公民储备银行',
-    cidNumber: 'YL001-SCH1P-142800261-2026',
+    cidFullName: '伊犁省公民储备银行',
+    cidShortName: '伊犁省储行',
+    cidNumber: 'YL001-PRB0A-142800261-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '609a8667015b22b75828f145ec046bf4d1c143c3e90eab68195b878c3c26d039',
+          'f621bf0f107d2501ba66c1d7df8b845330f7cd6584934e2981b5677d243fb2d7',
       feeAccount:
-          '79b669bf3c303abc0127adbb80d69c8a37c31194b7a607fced835cb785787c91',
+          '73a1328ff9ffb8dc8fccb912cc5e16677ed84b6b3fc51d2989aa2835926296e1',
       stakeAccount:
-          '127d29f2b209d58be16921d6c2e2a36cbc3aed46d0e54b28d5788c8fb9ceebe2',
+          'a8e35aeb25d0d293cca0ced98986896bbac8b2531912dac5d8c00cbdabe38c8a',
     ),
   ),
   InstitutionInfo(
-    name: '河西省公民储备银行',
-    cidNumber: 'HX001-SCH1L-215310265-2026',
+    cidFullName: '河西省公民储备银行',
+    cidShortName: '河西省储行',
+    cidNumber: 'HX001-PRB0F-215310265-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '59fe2f5bfcae83abf98853f063db01e3efceae46dee32e14b8aa9d9c74fef8de',
+          'cbc4c87576decd1eb50fd6310af6b8b4825d9553580f526a785d95698c6f0f45',
       feeAccount:
-          '176e20195e7074351855893f304a38b4a70c83d9987b64c6cc7d5bb55a4609b8',
+          '07cb607ec40886f34d00c70fc94f23ff4f3bb75e940cf1e290f25de6adc0fe9d',
       stakeAccount:
-          'df06db195678afb328e33e013c832986e649e147c5cb622a5911409331fa1f97',
+          'fe12d17cd39a4a36899cf8c9b3288f4753b8323abd742201a626b974a260dd3c',
     ),
   ),
   InstitutionInfo(
-    name: '昆仑省公民储备银行',
-    cidNumber: 'KL001-SCH1E-682838027-2026',
+    cidFullName: '昆仑省公民储备银行',
+    cidShortName: '昆仑省储行',
+    cidNumber: 'KL001-PRB08-682838027-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '5216828b35be36f538a7ff0e69a8346a7b635d1ae34229e6206b2c76a5f35455',
+          '9dd41c065f299d5c057187e9c63a6efe759be99135c7d9d3d0295a06ed200508',
       feeAccount:
-          'aedd82e0b7cd96fee49bb306a267f9c61d4bcbbb996c452888a4c0a7d5622b04',
+          'c6c49b0bed029580d810082966b578cf4c988fc9f936a19a7b6b51fc396a64cb',
       stakeAccount:
-          'fe13ea29e17c914af06753cd357c1bf4b6de431c5aa8df35c49a2bf54c83733f',
+          'c7f850dc201c252d02fcb6cb5df5fee1ebd0a6533b4dbf9700fe64285ab28324',
     ),
   ),
   InstitutionInfo(
-    name: '河套省公民储备银行',
-    cidNumber: 'HT001-SCH1R-210616196-2026',
+    cidFullName: '河套省公民储备银行',
+    cidShortName: '河套省储行',
+    cidNumber: 'HT001-PRB0L-210616196-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '6445e4baab20cdbf9389fc8fdfe1a86fc30c22c80207078f7353f1e8acfc1418',
+          '6bec3644a6636968f6a1680e398e787bb857f366879ae8e664282d6f4a89a5f2',
       feeAccount:
-          'fde86223c1945616182ce78304cba4c00c99799a990b528c4e1c6350a31dd908',
+          'e0d5ba0a16e3569ab9b44241cf85e47ce80f5b31fb39ae4641b00a61d8f387cd',
       stakeAccount:
-          '411833c18dec2a0de42936c834c5f0ee79c3c756dbe0a329af54e03f4a18c212',
+          '0c05da2c289fae6c5694b6e9c439fc8e7ea9a2d21a58c0c7262e67527351bbd4',
     ),
   ),
   InstitutionInfo(
-    name: '热河省公民储备银行',
-    cidNumber: 'RH001-SCH1I-380830938-2026',
+    cidFullName: '热河省公民储备银行',
+    cidShortName: '热河省储行',
+    cidNumber: 'RH001-PRB0C-380830938-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '4c41c13662e52d3393eed706c5d714cfb2b3dc7851c01a6dc2cbb56990129a80',
+          '751b054a53dfa53770ed0a06e9e51d9e8b77e09be8c19ec4864dca46b92a0828',
       feeAccount:
-          '014f9eb856f901b635680c53cb7d266ca67a98db8bf89ea27244e9fc7809d25d',
+          'b62e186d54f7c04007633524bd2be96ad04165d9ae67e51968613929e86c975f',
       stakeAccount:
-          '092e70ab0742be7c478381d2b055e3d653d27b3329890eadd154cd6a7aed2853',
+          '34efc01b44ff46e4d100d9f714cc563b497b9617302efb8575df3484363d7f09',
     ),
   ),
   InstitutionInfo(
-    name: '兴安省公民储备银行',
-    cidNumber: 'XA001-SCH1W-928028839-2026',
+    cidFullName: '兴安省公民储备银行',
+    cidShortName: '兴安省储行',
+    cidNumber: 'XA001-PRB0Q-928028839-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          '9781163b146fd7ba10720bc3a7b3505f44b1368824282c237b3a1cfffb548977',
+          'df24be9645bd4ff2a87d5bda8dc42718e9a52634658863bdd21582642ad29579',
       feeAccount:
-          '88f4861da2db2982a187efc88eb7288a7c5cd57eeb98128ce3852bd81929f4bf',
+          '371d773fd5c6030232410693004122069fe0567ff6ba4771c9990f2fe6550d97',
       stakeAccount:
-          '740fbb1ff1f1cf77d27ee50836983d82aa6079746b8d32786548e6c295ab9cd3',
+          'd742b21ecb0c8636c6bad0df482045204d62975e120b54b1b00dda98f0dde7ce',
     ),
   ),
   InstitutionInfo(
-    name: '合江省公民储备银行',
-    cidNumber: 'HJ001-SCH1O-089279108-2026',
+    cidFullName: '合江省公民储备银行',
+    cidShortName: '合江省储行',
+    cidNumber: 'HJ001-PRB0I-089279108-2026',
     orgType: OrgType.prb,
     accounts: InstitutionAccounts(
       mainAccount:
-          'b8486f8e93b974617597e1e681c4b39cfc329702bcd2b93ff7419656766a35f3',
+          'b51ed3b63cff1cad9d4cef6dda4ce231b78425baab3a443d06e151cfabaec49d',
       feeAccount:
-          '6ade1894079bad5408e421eee261b21b4d507801aecae0ff9d02203ff0572997',
+          'c5cd54ad6cee8f3b230fefb2505b9c55c6951d2df22b08093c40db5b191bace3',
       stakeAccount:
-          'aba2fc9d4b85dd51f9adafe5a71e9114481673d52fb59c0a4c5f5f6dddee559c',
+          '6e72020687933242d0633720688e7afee5da3bcd948312dbedb888e0749dc148',
     ),
   ),
 ];

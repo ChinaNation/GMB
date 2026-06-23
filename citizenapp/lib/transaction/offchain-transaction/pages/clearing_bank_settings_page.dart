@@ -160,9 +160,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
     }
     return ListTile(
       leading: const Icon(Icons.account_balance),
-      title: Text(current.cidFullName.isEmpty
-          ? current.cidNumber
-          : current.cidFullName),
+      title: Text(current.displayTitle),
       subtitle: Text('${current.cidNumber}\n${current.wssUrl}'),
       isThreeLine: true,
       trailing: TextButton(
@@ -206,7 +204,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   Widget _candidateTile(ClearingBankCandidate item) {
     final info = item.info;
     final endpoint = item.endpoint;
-    final name = info.cidFullName.isEmpty ? '(未命名机构)' : info.cidFullName;
+    final title = info.displayTitle.isEmpty ? '(未设置全称)' : info.displayTitle;
     final current = _current;
     final isCurrent = current?.cidNumber == info.cidNumber;
     final buttonText = isCurrent ? '已绑定' : (current == null ? '绑定' : '切换');
@@ -216,7 +214,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
         item.canBind ? Icons.verified_outlined : Icons.block,
         color: item.canBind ? Colors.green : AppTheme.textTertiary,
       ),
-      title: Text(name),
+      title: Text(title),
       subtitle: Text(
         '${info.cidNumber}\n'
         '${endpoint == null ? '未查询到链上节点声明' : endpoint.wssUrl}',

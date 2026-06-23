@@ -373,7 +373,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
             auth.passkey_bound === false && adminListSection ? 'admins' : undefined
           }
           backAction={onBack ? { label: backLabel ?? '返回列表', onClick: onBack } : undefined}
-          title={inst.cid_full_name ?? inst.cid_short_name ?? '(未命名机构)'}
+          title={inst.cid_full_name ?? inst.cid_short_name ?? '(未设置全称)'}
           subtitle={`身份ID：${inst.cid_number}`}
           status={
             <Tag color={inst.status === 'ACTIVE' ? 'green' : 'red'}>

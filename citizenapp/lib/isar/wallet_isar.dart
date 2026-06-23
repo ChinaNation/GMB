@@ -509,11 +509,11 @@ class InstitutionEntity {
   /// CID 标识（UTF-8 字符串）。
   late String cidNumber;
 
-  /// 机构账户管理员更换 org：4=公权机构账户，5=其他机构账户。
-  int? adminAccountOrg;
+  /// 机构账户管理员更换 institution_code：如 CGOV/SFGQ/UNIN。
+  String? adminAccountCode;
 
-  /// 机构名称（链上升级前暂用 cidNumber 代替）。
-  late String name;
+  /// 本地机构多签账户显示名,不是机构全称/简称;后者只允许使用 cidFullName/cidShortName。
+  late String accountName;
 
   /// 添加时间戳（毫秒），用于排序。
   @Index()

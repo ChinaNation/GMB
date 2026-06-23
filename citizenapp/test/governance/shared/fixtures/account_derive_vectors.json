@@ -1,51 +1,51 @@
 {
   "_comment": "ADR-024 账户派生金标向量 (canonical, Rust 权威源). 行为中性基线: domain=DUOQIAN, ss58_format=2027. china_* 来源的 Main/Fee/Stake/Anquan/He address_hex 必须与 china_*.rs 字面值逐字节一致(创世账户烘焙器 scripts/gmb.py 用 DUOQIAN+OP_* 派生的真值,原名 duoqian.py). InstitutionNamed / Personal 的 address_hex 由 Rust 导出测试(ACCOUNT_DERIVE_UPDATE=1)用 account_derive 计算后回填,勿手算. 重生方式: tools/sync_account_derive_vectors.sh.",
-  "ss58_format": 2027,
   "domain": "DUOQIAN",
+  "ss58_format": 2027,
   "vectors": [
     {
+      "address_hex": "e97b09bf079f00a243de874e1129ca04cca12de75bd0943b25519e8c1153b005",
+      "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionMain",
-      "source": "china_cb NRC 国家公民储备委员会",
-      "cid_number": "LN001-NRC0G-944805165-2026",
-      "address_hex": "e97b09bf079f00a243de874e1129ca04cca12de75bd0943b25519e8c1153b005"
+      "source": "china_cb NRC 国家公民储备委员会"
     },
     {
+      "address_hex": "34435d3c37634342f6b7044fe556c9be25dbe7cf237fe9a71c29e64ddf11e0ad",
+      "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionFee",
-      "source": "china_cb NRC 国家公民储备委员会",
-      "cid_number": "LN001-NRC0G-944805165-2026",
-      "address_hex": "34435d3c37634342f6b7044fe556c9be25dbe7cf237fe9a71c29e64ddf11e0ad"
+      "source": "china_cb NRC 国家公民储备委员会"
     },
     {
+      "address_hex": "24b62e1756a27dd00946f33507004ce7973be28b0728cb4dc786231c40348a92",
+      "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionAnquan",
-      "source": "china_cb NRC_ANQUAN_ACCOUNT 安全基金",
-      "cid_number": "LN001-NRC0G-944805165-2026",
-      "address_hex": "24b62e1756a27dd00946f33507004ce7973be28b0728cb4dc786231c40348a92"
+      "source": "china_cb NRC_ANQUAN_ACCOUNT 安全基金"
     },
     {
+      "address_hex": "37994b77b6ae316d1916e343a14e3d18c02ebe74686e4c2652202f55ae0e66fc",
+      "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionHe",
-      "source": "china_cb NRC_HE_ACCOUNT 两和基金",
-      "cid_number": "LN001-NRC0G-944805165-2026",
-      "address_hex": "37994b77b6ae316d1916e343a14e3d18c02ebe74686e4c2652202f55ae0e66fc"
+      "source": "china_cb NRC_HE_ACCOUNT 两和基金"
     },
     {
-      "kind": "InstitutionStake",
-      "source": "china_ch[0] stake_account 中枢省公民储备银行 永久质押",
+      "address_hex": "b43cfd7ef89206908fcf0e215e588c3757c2633cad0958d98dd438ef0ce07e92",
       "cid_number": "ZS001-PRB08-233384677-2026",
-      "address_hex": "b43cfd7ef89206908fcf0e215e588c3757c2633cad0958d98dd438ef0ce07e92"
+      "kind": "InstitutionStake",
+      "source": "china_ch[0] stake_account 中枢省公民储备银行 永久质押"
     },
     {
-      "kind": "InstitutionNamed",
-      "source": "self-authored: NRC cid + 自定义命名账户(address 由 Rust 回填)",
-      "cid_number": "LN001-NRC0G-944805165-2026",
       "account_name": "工资账户",
-      "address_hex": ""
+      "address_hex": "9682a349b1b987cd7d5d658b1a39d6020975f4c8a4ce9d34037e5f786991b144",
+      "cid_number": "LN001-NRC0G-944805165-2026",
+      "kind": "InstitutionNamed",
+      "source": "self-authored: NRC cid + 自定义命名账户(address 由 Rust 回填)"
     },
     {
-      "kind": "Personal",
-      "source": "self-authored: 个人多签 creator+name(address 由 Rust 回填)",
-      "creator_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
       "account_name": "我的多签",
-      "address_hex": ""
+      "address_hex": "8c5db9a265e39a1003e568b097688cac94a3bd42d790dfd1d0d5db47fb079d38",
+      "creator_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "kind": "Personal",
+      "source": "self-authored: 个人多签 creator+name(address 由 Rust 回填)"
     }
   ]
 }

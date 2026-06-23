@@ -355,25 +355,60 @@ pub fn gov_manifest_key(scope: &OfficialReconcileScope, kind: GovTargetKind) -> 
 fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
     let mut targets = Vec::new();
     for item in china_zf_constants::CHINA_ZF.iter() {
-        push_constant_target(&mut targets, item.cid_full_name, item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     for item in china_lf_constants::CHINA_LF.iter() {
-        push_constant_target(&mut targets, item.cid_full_name, item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     for item in china_sf_constants::CHINA_SF.iter() {
-        push_constant_target(&mut targets, item.cid_full_name, item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     for item in china_jc_constants::CHINA_JC.iter() {
-        push_constant_target(&mut targets, item.cid_full_name, item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     for item in china_jy_constants::CHINA_JY.iter() {
-        push_constant_target(&mut targets, "国家教育委员会", item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     for item in china_cb_constants::CHINA_CB.iter() {
-        push_constant_target(&mut targets, item.cid_full_name, item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     for item in china_ch_constants::CHINA_CH.iter() {
-        push_constant_target(&mut targets, item.cid_full_name, item.cid_number);
+        push_constant_target(
+            &mut targets,
+            item.cid_full_name,
+            item.cid_short_name,
+            item.cid_number,
+        );
     }
     push_extra_national_targets(&mut targets);
     for province in provinces().iter() {
@@ -493,7 +528,8 @@ fn target_in_scope(target: &OfficialInstitutionTarget, scope: &OfficialReconcile
 
 fn push_constant_target(
     targets: &mut Vec<OfficialInstitutionTarget>,
-    name: &'static str,
+    cid_full_name: &'static str,
+    cid_short_name: &'static str,
     cid_number: &'static str,
 ) {
     let Some((province_code, city_code, institution_code, p1)) =
@@ -504,13 +540,12 @@ fn push_constant_target(
     let Some((province, city)) = province_city_by_codes(&province_code, &city_code) else {
         return;
     };
-    let (cid_full_name, cid_short_name) = official_name_pair(name);
     let education_type = (institution_code == "NED")
         .then(|| EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE.to_string());
     targets.push(OfficialInstitutionTarget {
         cid_number: cid_number.to_string(),
-        cid_full_name,
-        cid_short_name,
+        cid_full_name: cid_full_name.to_string(),
+        cid_short_name: cid_short_name.to_string(),
         category: InstitutionCategory::GovInstitution,
         p1,
         province_name: province.to_string(),
@@ -529,7 +564,7 @@ fn push_constant_target(
 pub fn federal_registry_cid_number() -> Option<&'static str> {
     china_zf_constants::CHINA_ZF
         .iter()
-        .find(|item| item.cid_full_name == "总统府联邦注册局")
+        .find(|item| cid_institution_code_is(item.cid_number, "FRG"))
         .map(|item| item.cid_number)
 }
 
@@ -540,86 +575,8 @@ pub fn federal_registry_cid_number() -> Option<&'static str> {
 pub(crate) fn federal_registry_admins() -> Option<&'static [[u8; 32]]> {
     china_zf_constants::CHINA_ZF
         .iter()
-        .find(|item| item.cid_full_name == "总统府联邦注册局")
+        .find(|item| cid_institution_code_is(item.cid_number, "FRG"))
         .map(|item| item.admins)
-}
-
-fn official_name_pair(name: &str) -> (String, String) {
-    const COUNTRY: &str = "中华民族联邦共和国";
-    match name {
-        "总统府" | "中华民族联邦共和国总统府" => {
-            (format!("{COUNTRY}总统府"), "总统府".to_string())
-        }
-        "外交部" | "中华民族联邦共和国外事交流部" => {
-            (format!("{COUNTRY}外事交流部"), "外交部".to_string())
-        }
-        "国防部" | "中华民族联邦共和国国家防务部" => {
-            (format!("{COUNTRY}国家防务部"), "国防部".to_string())
-        }
-        "国安部" | "中华民族联邦共和国国土安全部" => {
-            (format!("{COUNTRY}国土安全部"), "国安部".to_string())
-        }
-        "民生部" | "中华民族联邦共和国公民生活保障部" => {
-            (format!("{COUNTRY}公民生活保障部"), "民生部".to_string())
-        }
-        "住建部" | "中华民族联邦共和国住房与城镇建设部" => {
-            (format!("{COUNTRY}住房与城镇建设部"), "住建部".to_string())
-        }
-        "农业部" | "中华民族联邦共和国农业与农村发展部" => {
-            (format!("{COUNTRY}农业与农村发展部"), "农业部".to_string())
-        }
-        "商贸部" | "中华民族联邦共和国商务与市场贸易部" => {
-            (format!("{COUNTRY}商务与市场贸易部"), "商贸部".to_string())
-        }
-        "财税部" | "中华民族联邦共和国财政与税务部" => {
-            (format!("{COUNTRY}财政与税务部"), "财税部".to_string())
-        }
-        "能源部" | "中华民族联邦共和国能源与环保发展部" => {
-            (format!("{COUNTRY}能源与环保发展部"), "能源部".to_string())
-        }
-        "交通部" | "中华民族联邦共和国交通运输部" => {
-            (format!("{COUNTRY}交通运输部"), "交通部".to_string())
-        }
-        "国家立法院" | "中华民族联邦共和国国家立法院" => {
-            (format!("{COUNTRY}国家立法院"), "国家立法院".to_string())
-        }
-        "国家司法院" | "中华民族联邦共和国国家司法院" => {
-            (format!("{COUNTRY}国家司法院"), "国家司法院".to_string())
-        }
-        "国家监察院" | "中华民族联邦共和国国家监察院" => {
-            (format!("{COUNTRY}国家监察院"), "国家监察院".to_string())
-        }
-        "国家教育委员会" | "中华民族联邦共和国公民教育委员会" => {
-            (format!("{COUNTRY}公民教育委员会"), "国教委会".to_string())
-        }
-        "国家公民储备委员会" => ("国家公民储备委员会".to_string(), "国储会".to_string()),
-        "联邦廉政署" | "国家监察院联邦廉政署" => (
-            format!("{COUNTRY}国家监察院联邦廉政署"),
-            "联邦廉政署".to_string(),
-        ),
-        "联邦审计署" | "国家监察院联邦审计署" => (
-            format!("{COUNTRY}国家监察院联邦审计署"),
-            "联邦审计署".to_string(),
-        ),
-        "联邦调查署" | "国家监察院联邦调查署" => (
-            format!("{COUNTRY}国家监察院联邦调查署"),
-            "联邦调查署".to_string(),
-        ),
-        // 中文注释:总统府联邦注册局简称=联邦注册局(全称保留)。缺此臂会落默认 _ => (name,name),
-        // 致 cid_short_name==cid_full_name,前端只能另造"联邦注册局"第二源。此处是唯一真源。
-        // 兄弟 4 局(安全/情报/特勤/人事)同样缺简称,因无 CID 登录管理员且简称值未定,留 follow-up。
-        "总统府联邦注册局" => ("总统府联邦注册局".to_string(), "联邦注册局".to_string()),
-        _ if name.ends_with("省联邦政府") => {
-            (name.to_string(), name.replace("省联邦政府", "省政府"))
-        }
-        _ if name.ends_with("省公民储备委员会") => {
-            (name.to_string(), name.replace("省公民储备委员会", "省储会"))
-        }
-        _ if name.ends_with("省公民储备银行") => {
-            (name.to_string(), name.replace("省公民储备银行", "省储行"))
-        }
-        _ => (name.to_string(), name.to_string()),
-    }
 }
 
 fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
@@ -740,6 +697,12 @@ fn parse_cid_institution_parts(cid_number: &str) -> Option<(String, String, Stri
     let city_code = parts.r5.get(2..5)?.to_string();
     let p1 = if parts.profit { "1" } else { "0" }.to_string();
     Some((province_code, city_code, parts.code, p1))
+}
+
+fn cid_institution_code_is(cid_number: &str, expected: &str) -> bool {
+    parse_cid_institution_parts(cid_number)
+        .map(|(_, _, institution_code, _)| institution_code == expected)
+        .unwrap_or(false)
 }
 
 fn province_city_by_codes(
@@ -995,7 +958,6 @@ fn auto_rows_in_scope(
             String,
             String,
             String,
-            String,
         ),
     >,
     String,
@@ -1013,7 +975,7 @@ fn auto_rows_in_scope(
     db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT s.cid_number, COALESCE(s.name, ''), COALESCE(s.cid_full_name, ''),
+                "SELECT s.cid_number, COALESCE(s.cid_full_name, ''),
                         COALESCE(s.cid_short_name, ''), s.category, s.province_name, s.city_name,
                         COALESCE(s.town_name, ''), s.province_code, s.city_code,
                         COALESCE(s.town_code, ''), s.institution_code,
@@ -1045,7 +1007,6 @@ fn auto_rows_in_scope(
                     row.get(9),
                     row.get(10),
                     row.get(11),
-                    row.get(12),
                 ),
             );
         }
@@ -1108,7 +1069,6 @@ pub fn check_gov_catalog_db(
     for target in &targets {
         match active_rows.get(&target.cid_number) {
             Some((
-                name,
                 cid_full_name,
                 cid_short_name,
                 category,
@@ -1121,8 +1081,7 @@ pub fn check_gov_catalog_db(
                 institution_code,
                 education_type,
             )) => {
-                if name != &target.cid_short_name
-                    || cid_full_name != &target.cid_full_name
+                if cid_full_name != &target.cid_full_name
                     || cid_short_name != &target.cid_short_name
                     || category != category_text(target.category)
                     || province != &target.province_name
@@ -1432,15 +1391,11 @@ fn bulk_write_target_chunk(
         .iter()
         .map(target_town_code)
         .collect::<Vec<Option<String>>>();
-    let names = targets
-        .iter()
-        .map(|target| target.cid_short_name.clone())
-        .collect::<Vec<_>>();
-    let cid_names = targets
+    let cid_full_names = targets
         .iter()
         .map(|target| target.cid_full_name.clone())
         .collect::<Vec<_>>();
-    let short_names = targets
+    let cid_short_names = targets
         .iter()
         .map(|target| target.cid_short_name.clone())
         .collect::<Vec<_>>();
@@ -1518,30 +1473,29 @@ fn bulk_write_target_chunk(
 
     tx.execute(
         "INSERT INTO subjects (
-            cid_number, kind, name, cid_full_name, cid_short_name,
+            cid_number, kind, cid_full_name, cid_short_name,
             status, category, p1, province_name, city_name, town_name,
             province_code, city_code, town_code, institution_code,
             education_type, private_type, partnership_kind, has_legal_personality,
             parent_cid_number, created_by, created_at, updated_at
          )
          SELECT
-            cid_number, 'PUBLIC', name, cid_full_name, cid_short_name,
+            cid_number, 'PUBLIC', cid_full_name, cid_short_name,
             'ACTIVE', category, p1, province_name, city_name, town_name,
             province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
-            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $15, now(), now()
+            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $14, now(), now()
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
             $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
-            $11::text[], $12::text[], $13::text[], $14::text[]
+            $11::text[], $12::text[], $13::text[]
          ) AS u(
-            cid_number, name, cid_full_name, cid_short_name, category,
+            cid_number, cid_full_name, cid_short_name, category,
             p1, province_name, city_name, town_name,
             institution_code, province_code, city_code, town_code,
             education_type
          )
          ON CONFLICT (province_code, cid_number) DO UPDATE SET
             kind = EXCLUDED.kind,
-            name = EXCLUDED.name,
             cid_full_name = EXCLUDED.cid_full_name,
             cid_short_name = EXCLUDED.cid_short_name,
             status = EXCLUDED.status,
@@ -1563,9 +1517,8 @@ fn bulk_write_target_chunk(
             updated_at = now()",
         &[
             &cids,
-            &names,
-            &cid_names,
-            &short_names,
+            &cid_full_names,
+            &cid_short_names,
             &categories,
             &p1_values,
             &province_names,

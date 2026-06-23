@@ -58,7 +58,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
   city: '市',
   institution: '机构',
-  cid_full_name: '机构名称',
+  cid_full_name: '机构全称',
   old_cid_full_name: '原机构全称',
   new_cid_full_name: '新机构全称',
   subject_property: '主体属性',

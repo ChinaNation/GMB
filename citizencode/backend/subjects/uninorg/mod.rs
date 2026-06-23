@@ -136,13 +136,13 @@ mod tests {
         // 监管本体(公民教育委员会 CEDU)是市级公权机构,不是学校
         assert_eq!(parent_locality_rule("CEDU"), ParentLocalityRule::SameCity);
         // 省级机构码 → 同省
-        assert_eq!(parent_locality_rule("PGV"), ParentLocalityRule::SameProvince);
+        assert_eq!(
+            parent_locality_rule("PGV"),
+            ParentLocalityRule::SameProvince
+        );
         // 国家级机构码 → 全国
         for code in ["NLG", "MFA", "FRG"] {
-            assert_eq!(
-                parent_locality_rule(code),
-                ParentLocalityRule::Nationwide
-            );
+            assert_eq!(parent_locality_rule(code), ParentLocalityRule::Nationwide);
         }
     }
 

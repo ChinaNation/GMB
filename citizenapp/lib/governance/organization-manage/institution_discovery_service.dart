@@ -60,9 +60,6 @@ class InstitutionDiscoveryService {
 
   final InstitutionManageService _manage;
 
-  /// 机构多签 org 白名单:PUP(4) / OTH(5)。
-  static const _institutionOrgWhitelist = {4, 5};
-
   /// 处理一次共享扫描结果:筛出我的机构多签 → 批量反查 CID → upsert Isar + 孤儿校验。
   Future<DiscoveryStats> processScanned(
     AdminAccountsScanResult scan, {
@@ -74,7 +71,6 @@ class InstitutionDiscoveryService {
       scan,
       myPubkeysHex: myPubkeys,
       kind: AdminAccountStorageCodec.kindInstitutionAccount,
-      orgWhitelist: _institutionOrgWhitelist,
     );
 
     // 批量反查 CID 归属(AccountRegisteredCid 精确整键),取代循环内逐条(ADR-018 R2)。
@@ -107,9 +103,9 @@ class InstitutionDiscoveryService {
       scannedDuoqianAddrs.add(acc.addrHex);
       final added = await _upsertInstitution(
         accountHex: acc.addrHex,
-        name: ref.accountNameText,
+        accountName: ref.accountNameText,
         cidNumberUtf8: ref.cidNumberText,
-        adminAccountOrg: acc.org,
+        adminAccountCode: acc.institutionCode,
         matchedAdmins:
             acc.adminsHex.where(myPubkeys.contains).toList(growable: false),
       );
@@ -131,9 +127,9 @@ class InstitutionDiscoveryService {
 
   Future<bool> _upsertInstitution({
     required String accountHex,
-    required String name,
+    required String accountName,
     required String cidNumberUtf8,
-    required int? adminAccountOrg,
+    required String? adminAccountCode,
     required List<String> matchedAdmins,
   }) async {
     return WalletIsar.instance.writeTxn((isar) async {
@@ -144,7 +140,7 @@ class InstitutionDiscoveryService {
 
       if (exists != null) {
         if (!exists.discoveredViaAdmin) return false;
-        exists.adminAccountOrg = adminAccountOrg;
+        exists.adminAccountCode = adminAccountCode;
         exists.matchedAdminPubkeys = matchedAdmins;
         await isar.institutionEntitys.put(exists);
         return false;
@@ -153,8 +149,8 @@ class InstitutionDiscoveryService {
       final entity = InstitutionEntity()
         ..account = accountHex
         ..cidNumber = cidNumberUtf8
-        ..adminAccountOrg = adminAccountOrg
-        ..name = name
+        ..adminAccountCode = adminAccountCode
+        ..accountName = accountName
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true
         ..matchedAdminPubkeys = matchedAdmins;

@@ -36,31 +36,30 @@ pub(crate) async fn check_cid_full_name(
     if let Err(resp) = require_admin_any(&state, &headers) {
         return resp;
     }
-    let name = params.name.trim().to_string();
-    if name.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "name is required");
+    let cid_full_name = params.cid_full_name.trim().to_string();
+    if cid_full_name.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "cid_full_name is required");
     }
-    // 机构类别由机构码派生(主体属性已删除):公法人(公权机构)走"同市同名"查重。
+    // 中文注释:公法人/公权机构走"同市同全称"查重;私权机构仍全国查重。
     let is_public_legal = params
-        .institution
+        .subject_property
         .as_deref()
         .map(str::trim)
-        .and_then(crate::number::InstitutionCode::from_str)
-        .map_or(false, |c| c.is_public_legal());
+        .map_or(false, |value| value == "G");
     let city = params.city_name.as_deref().unwrap_or("").trim().to_string();
     let exists = if is_public_legal {
         if city.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "公权机构查重需要 city 参数");
         }
-        let name = name.clone();
+        let cid_full_name = cid_full_name.clone();
         match state.db.with_client(move |conn| {
             let row = conn
                 .query_one(
                     "SELECT EXISTS (
-                        SELECT 1 FROM subjects
-                        WHERE kind = 'PUBLIC' AND name = $1 AND city_name = $2
-                     )",
-                    &[&name, &city],
+	                        SELECT 1 FROM subjects
+	                        WHERE kind = 'PUBLIC' AND cid_full_name = $1 AND city_name = $2
+	                     )",
+                    &[&cid_full_name, &city],
                 )
                 .map_err(|e| format!("query city name conflict failed: {e}"))?;
             Ok(row.get(0))
@@ -72,7 +71,10 @@ pub(crate) async fn check_cid_full_name(
             }
         }
     } else {
-        match state.db.cid_full_name_exists(&name, None, None, None) {
+        match state
+            .db
+            .cid_full_name_exists(&cid_full_name, None, None, None)
+        {
             Ok(v) => v,
             Err(err) => {
                 let message = format!("query institution name failed: {err}");
@@ -90,9 +92,9 @@ pub(crate) async fn check_cid_full_name(
 
 #[derive(Debug, serde::Deserialize)]
 pub struct CheckNameQuery {
-    pub name: String,
-    /// 机构码:公法人机构走"同市同名"查重。
-    pub institution: Option<String>,
+    pub cid_full_name: String,
+    /// 主体属性:G 公法人机构走"同市同全称"查重。
+    pub subject_property: Option<String>,
     pub city_name: Option<String>,
 }
 
@@ -247,7 +249,7 @@ pub(crate) async fn update_institution(
             }
         };
         if conflict {
-            return api_error(StatusCode::CONFLICT, 1007, "该机构名称已被使用");
+            return api_error(StatusCode::CONFLICT, 1007, "该机构全称已被使用");
         }
         existing.cid_full_name = Some(new_name);
     }
@@ -477,16 +479,17 @@ pub(crate) async fn search_parent_institutions(
                       ))
              )";
         let sql = format!(
-            "SELECT s.cid_number, s.name, s.private_type, s.partnership_kind, s.category,
+            "SELECT s.cid_number, s.cid_full_name, s.private_type, s.partnership_kind, s.category,
                     s.p1, s.province_name, s.city_name, COALESCE(s.town_name, '')
              FROM subjects s
              WHERE s.kind IN ('PUBLIC', 'PRIVATE')
                AND s.status = 'ACTIVE'
-               AND s.name IS NOT NULL
+               AND COALESCE(s.cid_full_name, '') <> ''
                AND {candidate_clause}
                AND (lower(s.cid_number) LIKE '%' || $1 || '%'
-                    OR lower(s.name) LIKE '%' || $1 || '%')
-             ORDER BY s.name ASC, s.cid_number ASC
+                    OR lower(COALESCE(s.cid_full_name, '')) LIKE '%' || $1 || '%'
+                    OR lower(COALESCE(s.cid_short_name, '')) LIKE '%' || $1 || '%')
+             ORDER BY COALESCE(s.cid_short_name, '') ASC, COALESCE(s.cid_full_name, '') ASC, s.cid_number ASC
              LIMIT 20"
         );
         let rows = conn

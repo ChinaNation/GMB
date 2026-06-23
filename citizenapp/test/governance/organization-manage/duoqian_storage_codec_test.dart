@@ -5,6 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/governance/organization-manage/duoqian_storage_codec.dart';
 
 void main() {
+  List<int> codeBytes(String code) {
+    final out = List<int>.filled(4, 0);
+    final raw = code.codeUnits;
+    for (var i = 0; i < out.length && i < raw.length; i++) {
+      out[i] = raw[i];
+    }
+    return out;
+  }
+
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
     return [(bytes.length << 2) & 0xff, ...bytes];
@@ -50,7 +59,7 @@ void main() {
       final admin1 = List<int>.filled(32, 0xaa);
       final admin2 = List<int>.filled(32, 0xbb);
       final data = Uint8List.fromList([
-        5,
+        ...codeBytes('UNIN'),
         3,
         (2 << 2) & 0xff,
         ...admin1,
@@ -62,7 +71,7 @@ void main() {
       ]);
 
       final decoded = DuoqianStorageCodec.decodeAdminAccount(data)!;
-      expect(decoded.org, 5);
+      expect(decoded.institutionCode, 'UNIN');
       expect(decoded.adminsLen, 2);
       expect(decoded.threshold, isNull);
       expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
@@ -73,9 +82,9 @@ void main() {
       final admin2 = List<int>.filled(32, 0x22);
       final institution = Uint8List.fromList([
         ...compactVec('安徽省储行'),
+        ...codeBytes('UNIN'),
         ...List<int>.filled(32, 0xa1),
         ...List<int>.filled(32, 0xa2),
-        5,
         ...u32Le(2),
         ...u32Le(2),
         (2 << 2) & 0xff,
@@ -98,6 +107,7 @@ void main() {
           DuoqianStorageCodec.decodeInstitutionInfo(institution)!;
       final accountDecoded =
           DuoqianStorageCodec.decodeInstitutionAccount(account)!;
+      expect(institutionDecoded.institutionCode, 'UNIN');
       expect(institutionDecoded.adminsLen, 2);
       expect(institutionDecoded.threshold, 2);
       expect(institutionDecoded.admins, ['11' * 32, '22' * 32]);

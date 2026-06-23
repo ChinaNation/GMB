@@ -36,17 +36,17 @@ export type {
   UpdateInstitutionInput,
 } from '../../subjects/api';
 
-export async function checkInstitutionName(
+export async function checkCidFullName(
   auth: AdminAuth,
-  name: string,
+  cidFullName: string,
   subject_property?: string,
   cityName?: string,
 ): Promise<{ exists: boolean }> {
-  const params = new URLSearchParams({ name });
+  const params = new URLSearchParams({ cid_full_name: cidFullName });
   if (subject_property) params.set('subject_property', subject_property);
   if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
-    `/api/v1/institution/check-name?${params.toString()}`,
+    `/api/v1/institution/check-cid-full-name?${params.toString()}`,
     auth,
   );
 }

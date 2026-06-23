@@ -65,7 +65,7 @@ export const PrivateTypePage: React.FC<PrivateTypePageProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <Input
             value={searchInput}
-            placeholder="请输入机构名称、身份ID"
+            placeholder="请输入机构全称、简称或身份ID"
             allowClear
             style={{ width: 360, maxWidth: '42vw' }}
             onChange={(e) => {

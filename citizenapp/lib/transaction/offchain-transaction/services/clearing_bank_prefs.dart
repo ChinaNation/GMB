@@ -12,6 +12,7 @@ class ClearingBankBindingSnapshot {
   const ClearingBankBindingSnapshot({
     required this.cidNumber,
     required this.cidFullName,
+    required this.cidShortName,
     required this.mainAccount,
     required this.feeAccount,
     required this.peerId,
@@ -23,6 +24,7 @@ class ClearingBankBindingSnapshot {
 
   final String cidNumber;
   final String cidFullName;
+  final String cidShortName;
   final String mainAccount;
   final String? feeAccount;
   final String peerId;
@@ -37,9 +39,17 @@ class ClearingBankBindingSnapshot {
     return '$scheme://$rpcDomain:$rpcPort';
   }
 
+  String get displayTitle {
+    final cidShort = cidShortName.trim();
+    if (cidShort.isNotEmpty) return cidShort;
+    final cidFull = cidFullName.trim();
+    return cidFull.isEmpty ? cidNumber : cidFull;
+  }
+
   Map<String, dynamic> toJson() => {
         'cid_number': cidNumber,
         'cid_full_name': cidFullName,
+        'cid_short_name': cidShortName,
         'main_account': mainAccount,
         'fee_account': feeAccount,
         'peer_id': peerId,
@@ -53,6 +63,7 @@ class ClearingBankBindingSnapshot {
     return ClearingBankBindingSnapshot(
       cidNumber: (json['cid_number'] as String?) ?? '',
       cidFullName: (json['cid_full_name'] as String?) ?? '',
+      cidShortName: (json['cid_short_name'] as String?) ?? '',
       mainAccount: (json['main_account'] as String?) ?? '',
       feeAccount: json['fee_account'] as String?,
       peerId: (json['peer_id'] as String?) ?? '',
@@ -111,10 +122,9 @@ class ClearingBankPrefs {
     }
   }
 
-  /// 只写入 `cid_number` 的旧便捷入口不再作为业务真源使用。
+  /// 只写入 `cid_number` 的轻量入口不作为业务真源使用。
   ///
-  /// 这里保留给少量测试和过渡调用,会写入一个不可用于支付的最小快照;真实绑定
-  /// 页面必须调用 [saveSnapshot]。
+  /// 该入口写入一个不可用于支付的最小快照；真实绑定页面必须调用 [saveSnapshot]。
   static Future<void> save(int walletIndex, String cidNumber) async {
     final trimmed = cidNumber.trim();
     if (trimmed.isEmpty) {
@@ -126,6 +136,7 @@ class ClearingBankPrefs {
         ClearingBankBindingSnapshot(
           cidNumber: trimmed,
           cidFullName: '',
+          cidShortName: '',
           mainAccount: '',
           feeAccount: null,
           peerId: '',

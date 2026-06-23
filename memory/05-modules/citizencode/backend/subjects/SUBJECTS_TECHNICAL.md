@@ -11,7 +11,7 @@
 
 ## 定位
 
-`citizencode/backend/subjects/` 承接法人和非法人主体的共享模型、主体详情、名称检查、
+`citizencode/backend/subjects/` 承接法人和非法人主体的共享模型、主体详情、全称检查、
 链端公开查询和目标分区表结构。它不是“机构业务总目录”;公权机构业务归 `gov/`,
 私权机构业务归 `private/`,账户归 `accounts/`,资料库归 `docs/`。
 
@@ -71,7 +71,7 @@
 规则:
 
 - 国家/市公民教育委员会从公权目录移出;教育机构市详情空搜索只直接显示本市市公民教育委员会,国家公民教育委员会不得跨市铺开。
-- `G+JY`/`S+JY` 是法人教育机构;`F+JY` 是挂靠法人教育机构的非法人教育分支,按名称或身份ID精确搜索后显示。
+- `G+JY`/`S+JY` 是法人教育机构;`F+JY` 是挂靠法人教育机构的非法人教育分支,按 `cid_full_name/cid_short_name` 或身份ID精确搜索后显示。
 - G/S/F 教育机构创建统一按管理员省市 scope 控制:联邦注册局机构管理员可在本省任意市创建,市注册局机构管理员只能在本市创建。
 - 学校内部部门不写入 `subjects`,不生成 `cid_number`,不创建账户,不参与法定代表人校验。
 
@@ -105,8 +105,8 @@
 - 市级自动机构对账匹配键只在内存中用于保持原 `cid_number` 不变,不得落库为第二身份。
 - 自动目录写入 `gov.source='GENERATED'`;手动公权机构写入 `MANUAL`。行政区对账清理
   obsolete 时只允许删除 `GENERATED` 派生行及其账户、资料、索引和审计残留,不得删除手工公权机构。
-- 确定性公权目录简称必须写入规范短名,例如住建部、国储会、省储会、省储行;
-  不得把全称重复写入 `cid_short_name`。
+- 确定性公权目录必须同时写入 `cid_full_name/cid_short_name`;
+  内置机构直接投影 `china_*.rs`,区划模板目录按模板生成两列,不得恢复旧展示缓存列。
 
 ## 默认账户
 
@@ -122,7 +122,7 @@
 
 | 内部模块 | 职责 |
 |---|---|
-| `subjects::admin` | 主体详情、名称检查、链状态同步入口 |
+| `subjects::admin` | 主体详情、全称检查、链状态同步入口 |
 | `subjects::registration` | 公权/教育通用机构注册和列表内核;私权六类模块只调用其私权专用内核 |
 | `gov::handler` | 公安局和公权机构确定性列表 |
 | `private::sole` / `private::partnership` / `private::company` / `private::corporation` / `private::welfare` / `private::association` | 六类私权机构创建、校验和精确查询 |

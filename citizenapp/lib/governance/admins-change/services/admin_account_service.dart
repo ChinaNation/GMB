@@ -338,9 +338,7 @@ class _PersistedAdminAccount {
       final stateRaw = decoded['state'];
       if (stateRaw is! Map<String, dynamic>) return null;
       final accountHex = stateRaw['account_id_hex']?.toString();
-      // 向后兼容: 旧缓存有 'org':int，新缓存写 'institution_code':String
-      final institutionCode = stateRaw['institution_code']?.toString() ??
-          _orgIntToCode(_toInt(stateRaw['org']));
+      final institutionCode = stateRaw['institution_code']?.toString();
       final kind = _toInt(stateRaw['kind']);
       final threshold = _toInt(stateRaw['threshold']);
       final createdAt = _toInt(stateRaw['created_at']);
@@ -348,6 +346,7 @@ class _PersistedAdminAccount {
       final status = _toInt(stateRaw['status']);
       final updatedAtMillis = _toInt(decoded['updated_at_millis']);
       if (accountHex == null ||
+          institutionCode == null ||
           kind == null ||
           threshold == null ||
           createdAt == null ||

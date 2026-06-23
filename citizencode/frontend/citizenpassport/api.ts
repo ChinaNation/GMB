@@ -24,6 +24,7 @@ export type CpmsSiteRow = {
   city_code?: string;
   institution_code?: string;
   cid_full_name?: string;
+  cid_short_name?: string;
   qr1_payload?: string;
   cpms_pubkey_bound?: boolean;
   created_by: string;

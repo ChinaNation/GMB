@@ -364,7 +364,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
     if (personal != null) {
       return '个人多签 ${_shortHex(personal)}';
     }
-    return widget.institution.name;
+    return widget.institution.cidShortName;
   }
 
   String _shortHex(String hex) {
@@ -753,7 +753,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            widget.institution.name,
+            widget.institution.cidShortName,
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,

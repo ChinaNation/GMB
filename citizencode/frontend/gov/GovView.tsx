@@ -159,7 +159,7 @@ export const GovView: React.FC<Props> = ({ auth, category, cidMeta, resetToken =
         <div style={{ flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0 }}>
           <Input
             value={searchInput}
-            placeholder="请输入机构名称、身份ID"
+            placeholder="请输入机构全称、简称或身份ID"
             allowClear
             style={{ flex: '1 1 auto', maxWidth: 360, minWidth: 0 }}
             onChange={(e) => {

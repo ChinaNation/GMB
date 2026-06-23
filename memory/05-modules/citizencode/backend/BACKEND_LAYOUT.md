@@ -140,8 +140,9 @@ citizencode/backend/
   `admins/province_admins.rs`。
 - 关系型目标表从初始化阶段即按 `province_code` 创建省级分区,不得写成“数据量变大后再分区”:
   - `ids`:全局 `cid_number` 唯一约束表,不是第二身份键。
-  - `subjects`:统一身份主体索引,`kind=CITIZEN/PUBLIC/PRIVATE`;保存
-    `name/cid_full_name/cid_short_name/province_code/city_code/town_code/省市镇/status/education_type/private_type/partnership_kind/has_legal_personality`
+  - `subjects`:统一身份主体索引,`kind=CITIZEN/PUBLIC/PRIVATE`;机构全称/简称列只允许
+    `cid_full_name/cid_short_name`,旧展示缓存列已废除并在启动期清理;同时保存
+    `province_code/city_code/town_code/省市镇/status/education_type/private_type/partnership_kind/has_legal_personality`
     等主体展示、范围和私权分类字段。
   - `citizens`:公民详情,保留精简命名。
   - `gov`:公权机构详情,保存 `level/institution_code/org_code`；公安局只保留
@@ -160,8 +161,9 @@ citizencode/backend/
 - 公安局和公权机构确定性列表是只读查询:启动或显式 reconcile 负责生成/对账,GET 列表接口
   只按 `province_code / city_code` 读取目标表,不得在 GET 中执行 backfill、reconcile、写库或分片同步。
   公权机构列表允许 `org_code` 精确过滤,用于市注册局等确定性细类列表一次性读取完整身份ID,
-  不得让前端先读取省级公权目录分页再自行过滤。确定性公权目录版本为 `gov-deterministic-v6`,
-  简称由 `gov/service.rs` 在入库前归一,不得把常量全名直接写入 `cid_short_name`。
+	  不得让前端先读取省级公权目录分页再自行过滤。确定性公权目录版本为 `gov-deterministic-v6`;
+	  内置机构全称/简称直接投影 `china_*.rs` 的 `cid_full_name/cid_short_name`,
+	  区划模板目录也必须同时写入这两列,不得恢复旧展示缓存列。
 - 国家/市公民教育委员会仍由 `gov/service.rs` 确定性生成和对账,但必须写入
   `subjects.education_type=NATIONAL_CITIZEN_EDU_COMMITTEE/CITY_CITIZEN_EDU_COMMITTEE`,
   并从公权机构浏览目录排除,由教育机构 tab 直接展示。

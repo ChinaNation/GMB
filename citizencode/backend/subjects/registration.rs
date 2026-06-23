@@ -125,11 +125,7 @@ async fn create_institution_inner(
         .map(|rule| rule.p1.to_string())
         .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string());
     if institution.is_none() || institution_code.is_empty() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "institution is required",
-        );
+        return api_error(StatusCode::BAD_REQUEST, 1001, "institution is required");
     }
     // 私权机构 = 私法人或非法人(由机构码判定)。
     let is_private = institution
@@ -151,7 +147,11 @@ async fn create_institution_inner(
         .map(str::to_string);
     let education_type = if requires_education_level {
         let Some(value) = education_type else {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "必须选择教育级别(初学/小学/中学)");
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "必须选择教育级别(初学/小学/中学)",
+            );
         };
         if !is_education_school_type(value.as_str()) {
             return api_error(
@@ -171,7 +171,11 @@ async fn create_institution_inner(
         }
         None
     };
-    if private_rule.is_none() && is_private && !is_education_institution && institution_code != "UNIN" {
+    if private_rule.is_none()
+        && is_private
+        && !is_education_institution
+        && institution_code != "UNIN"
+    {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -183,7 +187,7 @@ async fn create_institution_inner(
             Ok(v) => Some(v),
             Err(e) => return service_error_to_response(e),
         },
-        _ => return api_error(StatusCode::BAD_REQUEST, 1001, "学校名称/机构名称不能为空"),
+        _ => return api_error(StatusCode::BAD_REQUEST, 1001, "学校全称/机构全称不能为空"),
     };
     let province = match scope.locked_province_name.clone() {
         Some(locked) => {
@@ -235,10 +239,8 @@ async fn create_institution_inner(
     if city.chars().count() > MAX_CITY_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
     }
-    let category = match derive_category(
-        &institution_code,
-        cid_full_name.as_deref().unwrap_or(""),
-    ) {
+    let category = match derive_category(&institution_code, cid_full_name.as_deref().unwrap_or(""))
+    {
         Some(v) => v,
         None => {
             return api_error(
@@ -389,16 +391,19 @@ async fn create_institution_inner(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     }
-    if let Some(ref name) = cid_full_name {
-        let conflict = match state.db.cid_full_name_exists(name, None, None, None) {
+    if let Some(ref cid_full_name_value) = cid_full_name {
+        let conflict = match state
+            .db
+            .cid_full_name_exists(cid_full_name_value, None, None, None)
+        {
             Ok(v) => v,
             Err(err) => {
-                let message = format!("query institution name failed: {err}");
+                let message = format!("query cid_full_name failed: {err}");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
         };
         if conflict {
-            return api_error(StatusCode::CONFLICT, 1007, "该机构名称已被使用");
+            return api_error(StatusCode::CONFLICT, 1007, "该机构全称已被使用");
         }
     }
     for _ in 0..1000u32 {

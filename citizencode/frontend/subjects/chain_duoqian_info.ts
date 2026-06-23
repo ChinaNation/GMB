@@ -10,6 +10,7 @@ type ApiEnvelope<T> = {
 export interface InstitutionInfoDetail {
   cid_number: string;
   cid_full_name?: string | null;
+  cid_short_name?: string | null;
   category: string;
   subject_property: string;
   p1: string;
@@ -42,6 +43,8 @@ export interface InstitutionRegistrationInfo {
   cid_number: string;
   /** 中文注释:链端注册业务字段 2/3。 */
   cid_full_name: string;
+  /** 中文注释:链端注册展示字段,不参与链端验签。 */
+  cid_short_name: string;
   /** 中文注释:链端注册业务字段 3/3,顺序必须原样交给链端验签。 */
   account_names: string[];
   /** 中文注释:只用于链端验签与防重放,不属于业务注册字段。 */

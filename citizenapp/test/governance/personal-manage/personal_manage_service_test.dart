@@ -35,6 +35,15 @@ void main() {
   String hexOf(List<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+  List<int> codeBytes(String code) {
+    final out = List<int>.filled(4, 0);
+    final raw = code.codeUnits;
+    for (var i = 0; i < out.length && i < raw.length; i++) {
+      out[i] = raw[i];
+    }
+    return out;
+  }
+
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
     return [(bytes.length << 2) & 0xff, ...bytes];
@@ -87,7 +96,7 @@ void main() {
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
-      3, // ORG_REN
+      ...codeBytes('PMUL'),
       1, // AdminAccountKind::PersonalAccount
       (2 << 2) & 0xff,
       ...admin1,
@@ -180,7 +189,7 @@ void main() {
       final thresholdKey =
           '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
         storageName: 'ActiveDynamicThresholds',
-        org: 3,
+        institutionCode: 'PMUL',
         accountId: PersonalManageStorageCodec.accountIdFromAccountHex(address),
       ))}';
       rpc.responses[personalKey] = personalAccountBytes();
@@ -214,7 +223,7 @@ void main() {
       String thresholdKey(String address, String storageName) =>
           '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
             storageName: storageName,
-            org: 3,
+            institutionCode: 'PMUL',
             accountId: PersonalManageStorageCodec.accountIdFromAccountHex(
               address,
             ),

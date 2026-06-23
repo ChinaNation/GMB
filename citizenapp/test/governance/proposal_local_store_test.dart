@@ -42,7 +42,7 @@ void main() {
     expect(page, hasLength(1));
     expect(page.single.proposalId, 12);
     expect(page.single.displayId, '2026000003');
-    expect(page.single.cidFullName, nationalCouncil.name);
+    expect(page.single.cidFullName, nationalCouncil.cidFullName);
     expect(await ProposalLocalStore.instance.isGlobalIndexFresh(), isTrue);
   });
 

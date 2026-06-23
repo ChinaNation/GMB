@@ -328,18 +328,92 @@ impl InstitutionCode {
 
     /// 全部 86 个机构码(用于 from_str 反查、前端枚举、生成器白名单)。
     pub const ALL: [InstitutionCode; 86] = [
-        Self::Prs, Self::Fsc, Self::Fib, Self::Fss, Self::Fpr, Self::Frg, Self::Mfa, Self::Mdf,
-        Self::Mhs, Self::Mcw, Self::Mhu, Self::Mag, Self::Mcm, Self::Mft, Self::Men, Self::Mtr,
-        Self::Nlg, Self::Njd, Self::Nsp, Self::Fac, Self::Fau, Self::Fiv, Self::Ned, Self::Nrc,
-        Self::Nsn, Self::Nrp, Self::Pgv, Self::Plg, Self::Pjd, Self::Psp, Self::Prc, Self::Prb,
-        Self::Pdf, Self::Phs, Self::Pcw, Self::Phu, Self::Pag, Self::Pcm, Self::Pft, Self::Pen,
-        Self::Ptr, Self::Psn, Self::Prp, Self::Cgov, Self::Cleg, Self::Csup, Self::Cjud, Self::Cedu,
-        Self::Cslf, Self::Cdef, Self::Chsc, Self::Ccwf, Self::Chud, Self::Cagr, Self::Ccom,
-        Self::Cfin, Self::Cenr, Self::Ctrn, Self::Creg, Self::Cpol, Self::Tgov, Self::Tcwf,
-        Self::Thud, Self::Tagr, Self::Tfin, Self::Tdef, Self::Thsc, Self::Tcom, Self::Tenr,
-        Self::Ttrn, Self::Sfgt, Self::Sfgp, Self::Sflp, Self::Sfgq,
-        Self::Sfgf, Self::Sfgy, Self::Sfas, Self::Gun, Self::Sun, Self::Gsch, Self::Sfsc,
-        Self::Ctzn, Self::Natp, Self::Smtp, Self::Unin, Self::Pmul,
+        Self::Prs,
+        Self::Fsc,
+        Self::Fib,
+        Self::Fss,
+        Self::Fpr,
+        Self::Frg,
+        Self::Mfa,
+        Self::Mdf,
+        Self::Mhs,
+        Self::Mcw,
+        Self::Mhu,
+        Self::Mag,
+        Self::Mcm,
+        Self::Mft,
+        Self::Men,
+        Self::Mtr,
+        Self::Nlg,
+        Self::Njd,
+        Self::Nsp,
+        Self::Fac,
+        Self::Fau,
+        Self::Fiv,
+        Self::Ned,
+        Self::Nrc,
+        Self::Nsn,
+        Self::Nrp,
+        Self::Pgv,
+        Self::Plg,
+        Self::Pjd,
+        Self::Psp,
+        Self::Prc,
+        Self::Prb,
+        Self::Pdf,
+        Self::Phs,
+        Self::Pcw,
+        Self::Phu,
+        Self::Pag,
+        Self::Pcm,
+        Self::Pft,
+        Self::Pen,
+        Self::Ptr,
+        Self::Psn,
+        Self::Prp,
+        Self::Cgov,
+        Self::Cleg,
+        Self::Csup,
+        Self::Cjud,
+        Self::Cedu,
+        Self::Cslf,
+        Self::Cdef,
+        Self::Chsc,
+        Self::Ccwf,
+        Self::Chud,
+        Self::Cagr,
+        Self::Ccom,
+        Self::Cfin,
+        Self::Cenr,
+        Self::Ctrn,
+        Self::Creg,
+        Self::Cpol,
+        Self::Tgov,
+        Self::Tcwf,
+        Self::Thud,
+        Self::Tagr,
+        Self::Tfin,
+        Self::Tdef,
+        Self::Thsc,
+        Self::Tcom,
+        Self::Tenr,
+        Self::Ttrn,
+        Self::Sfgt,
+        Self::Sfgp,
+        Self::Sflp,
+        Self::Sfgq,
+        Self::Sfgf,
+        Self::Sfgy,
+        Self::Sfas,
+        Self::Gun,
+        Self::Sun,
+        Self::Gsch,
+        Self::Sfsc,
+        Self::Ctzn,
+        Self::Natp,
+        Self::Smtp,
+        Self::Unin,
+        Self::Pmul,
     ];
 
     /// 从字符串解析:接受机构码(如 "NRC")或中文类型标签(如 "国家公民储备委员会")。
@@ -364,7 +438,12 @@ impl InstitutionCode {
     pub fn profit_policy(self) -> ProfitPolicy {
         match self {
             // 私权经营体 + 公民人/自然人:固定盈利
-            Self::Sfgt | Self::Sfgp | Self::Sflp | Self::Sfgq | Self::Sfgf | Self::Ctzn
+            Self::Sfgt
+            | Self::Sfgp
+            | Self::Sflp
+            | Self::Sfgq
+            | Self::Sfgf
+            | Self::Ctzn
             | Self::Natp => ProfitPolicy::Profit,
             // 公益组织:固定非盈利
             Self::Sfgy => ProfitPolicy::NonProfit,
@@ -420,21 +499,79 @@ impl InstitutionCode {
     pub fn admin_level(self) -> Option<AdminLevel> {
         match self {
             // A 国家级单体(26)
-            Self::Prs | Self::Fsc | Self::Fib | Self::Fss | Self::Fpr | Self::Frg | Self::Mfa
-            | Self::Mdf | Self::Mhs | Self::Mcw | Self::Mhu | Self::Mag | Self::Mcm | Self::Mft
-            | Self::Men | Self::Mtr | Self::Nlg | Self::Njd | Self::Nsp | Self::Fac | Self::Fau
-            | Self::Fiv | Self::Ned | Self::Nrc | Self::Nsn | Self::Nrp => Some(AdminLevel::National),
+            Self::Prs
+            | Self::Fsc
+            | Self::Fib
+            | Self::Fss
+            | Self::Fpr
+            | Self::Frg
+            | Self::Mfa
+            | Self::Mdf
+            | Self::Mhs
+            | Self::Mcw
+            | Self::Mhu
+            | Self::Mag
+            | Self::Mcm
+            | Self::Mft
+            | Self::Men
+            | Self::Mtr
+            | Self::Nlg
+            | Self::Njd
+            | Self::Nsp
+            | Self::Fac
+            | Self::Fau
+            | Self::Fiv
+            | Self::Ned
+            | Self::Nrc
+            | Self::Nsn
+            | Self::Nrp => Some(AdminLevel::National),
             // B 省级类型(17)
-            Self::Pgv | Self::Plg | Self::Pjd | Self::Psp | Self::Prc | Self::Prb | Self::Pdf
-            | Self::Phs | Self::Pcw | Self::Phu | Self::Pag | Self::Pcm | Self::Pft | Self::Pen
-            | Self::Ptr | Self::Psn | Self::Prp => Some(AdminLevel::Province),
+            Self::Pgv
+            | Self::Plg
+            | Self::Pjd
+            | Self::Psp
+            | Self::Prc
+            | Self::Prb
+            | Self::Pdf
+            | Self::Phs
+            | Self::Pcw
+            | Self::Phu
+            | Self::Pag
+            | Self::Pcm
+            | Self::Pft
+            | Self::Pen
+            | Self::Ptr
+            | Self::Psn
+            | Self::Prp => Some(AdminLevel::Province),
             // C 市级类型(17)
-            Self::Cgov | Self::Cleg | Self::Csup | Self::Cjud | Self::Cedu | Self::Cslf
-            | Self::Cdef | Self::Chsc | Self::Ccwf | Self::Chud | Self::Cagr | Self::Ccom
-            | Self::Cfin | Self::Cenr | Self::Ctrn | Self::Creg | Self::Cpol => Some(AdminLevel::City),
+            Self::Cgov
+            | Self::Cleg
+            | Self::Csup
+            | Self::Cjud
+            | Self::Cedu
+            | Self::Cslf
+            | Self::Cdef
+            | Self::Chsc
+            | Self::Ccwf
+            | Self::Chud
+            | Self::Cagr
+            | Self::Ccom
+            | Self::Cfin
+            | Self::Cenr
+            | Self::Ctrn
+            | Self::Creg
+            | Self::Cpol => Some(AdminLevel::City),
             // D 镇级类型(10)
-            Self::Tgov | Self::Tcwf | Self::Thud | Self::Tagr | Self::Tfin | Self::Tdef
-            | Self::Thsc | Self::Tcom | Self::Tenr | Self::Ttrn => Some(AdminLevel::Town),
+            Self::Tgov
+            | Self::Tcwf
+            | Self::Thud
+            | Self::Tagr
+            | Self::Tfin
+            | Self::Tdef
+            | Self::Thsc
+            | Self::Tcom
+            | Self::Tenr
+            | Self::Ttrn => Some(AdminLevel::Town),
             // 其余(私权 / 教育 / 个人 / 非法人 / 个人多签)无行政层级
             _ => None,
         }
@@ -454,10 +591,7 @@ mod tests {
     fn all_codes_are_three_or_four_ascii_upper() {
         for code in InstitutionCode::ALL {
             let c = code.as_code();
-            assert!(
-                c.len() == 3 || c.len() == 4,
-                "{c} must be 3 or 4 chars",
-            );
+            assert!(c.len() == 3 || c.len() == 4, "{c} must be 3 or 4 chars",);
             assert!(
                 c.chars().all(|ch| ch.is_ascii_uppercase()),
                 "{c} must be ascii uppercase",
@@ -469,7 +603,11 @@ mod tests {
     fn codes_are_unique() {
         let mut seen = std::collections::HashSet::new();
         for code in InstitutionCode::ALL {
-            assert!(seen.insert(code.as_code()), "duplicate code {}", code.as_code());
+            assert!(
+                seen.insert(code.as_code()),
+                "duplicate code {}",
+                code.as_code()
+            );
         }
         assert_eq!(seen.len(), 86);
     }
@@ -480,14 +618,22 @@ mod tests {
         for code in InstitutionCode::ALL {
             if code.code_len() == 4 {
                 let ch = code.as_code().as_bytes()[3] as char;
-                assert!(ch.is_ascii_uppercase(), "{} index3 must be letter", code.as_code());
+                assert!(
+                    ch.is_ascii_uppercase(),
+                    "{} index3 must be letter",
+                    code.as_code()
+                );
             }
         }
     }
 
     #[test]
     fn national_and_province_are_three_char_nonprofit() {
-        for code in [InstitutionCode::Prs, InstitutionCode::Nrc, InstitutionCode::Prc] {
+        for code in [
+            InstitutionCode::Prs,
+            InstitutionCode::Nrc,
+            InstitutionCode::Prc,
+        ] {
             assert!(code.is_three_char());
             assert_eq!(code.profit_policy(), ProfitPolicy::NonProfit);
         }
@@ -500,17 +646,32 @@ mod tests {
             InstitutionCode::from_str("国家公民储备委员会"),
             Some(InstitutionCode::Nrc)
         );
-        assert_eq!(InstitutionCode::from_str("SFGQ"), Some(InstitutionCode::Sfgq));
+        assert_eq!(
+            InstitutionCode::from_str("SFGQ"),
+            Some(InstitutionCode::Sfgq)
+        );
         assert_eq!(InstitutionCode::from_str("xyz"), None);
     }
 
     #[test]
     fn profit_policy_and_category_spot_check() {
         assert_eq!(InstitutionCode::Sfgq.profit_policy(), ProfitPolicy::Profit);
-        assert_eq!(InstitutionCode::Sfgy.profit_policy(), ProfitPolicy::NonProfit);
-        assert_eq!(InstitutionCode::Sfas.profit_policy(), ProfitPolicy::Variable);
-        assert_eq!(InstitutionCode::Smtp.profit_policy(), ProfitPolicy::Variable);
-        assert_eq!(InstitutionCode::Unin.profit_policy(), ProfitPolicy::InheritParent);
+        assert_eq!(
+            InstitutionCode::Sfgy.profit_policy(),
+            ProfitPolicy::NonProfit
+        );
+        assert_eq!(
+            InstitutionCode::Sfas.profit_policy(),
+            ProfitPolicy::Variable
+        );
+        assert_eq!(
+            InstitutionCode::Smtp.profit_policy(),
+            ProfitPolicy::Variable
+        );
+        assert_eq!(
+            InstitutionCode::Unin.profit_policy(),
+            ProfitPolicy::InheritParent
+        );
 
         assert!(InstitutionCode::Sfgt.is_unincorporated());
         assert!(InstitutionCode::Sfgq.is_private_legal());

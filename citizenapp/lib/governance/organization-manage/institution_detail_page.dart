@@ -331,7 +331,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(
-          widget.institution.name,
+          widget.institution.cidShortName,
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
@@ -393,6 +393,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildAccountInfoTile(
+              icon: Icons.account_balance_outlined,
+              label: '全称',
+              value: inst.cidFullName,
+            ),
+            const Divider(height: 18),
+            _buildAccountInfoTile(
+              icon: Icons.label_outline,
+              label: '简称',
+              value: inst.cidShortName,
+            ),
+            const Divider(height: 18),
             _buildAccountInfoTile(
               icon: Icons.badge_outlined,
               label: '身份ID',

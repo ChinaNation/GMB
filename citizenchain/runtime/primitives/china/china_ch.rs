@@ -7,6 +7,7 @@ use hex_literal::hex;
 /// 单个省储行常量结构。
 pub struct ChinaCh {
     pub cid_full_name: &'static str,
+    pub cid_short_name: &'static str,
     pub cid_number: &'static str,
     pub citizens_number: u64,
     pub stake_amount: u128,
@@ -20,6 +21,7 @@ pub struct ChinaCh {
 pub const CHINA_CH: &[ChinaCh] = &[
     ChinaCh {
         cid_full_name: "中枢省公民储备银行",
+        cid_short_name: "中枢省储行",
         cid_number: "ZS001-PRB08-233384677-2026",
         citizens_number: 10_913_902,
         stake_amount: 10_913_902_0000,
@@ -40,6 +42,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "岭南省公民储备银行",
+        cid_short_name: "岭南省储行",
         cid_number: "LN001-PRB0K-703127075-2026",
         citizens_number: 28_157_064,
         stake_amount: 28_157_064_0000,
@@ -60,6 +63,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "广东省公民储备银行",
+        cid_short_name: "广东省储行",
         cid_number: "GD001-PRB0T-239565809-2026",
         citizens_number: 106_012_864,
         stake_amount: 106_012_864_0000,
@@ -80,6 +84,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "广西省公民储备银行",
+        cid_short_name: "广西省储行",
         cid_number: "GX001-PRB01-025559630-2026",
         citizens_number: 50_126_804,
         stake_amount: 50_126_804_0000,
@@ -100,6 +105,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "福建省公民储备银行",
+        cid_short_name: "福建省储行",
         cid_number: "FJ001-PRB0V-504679612-2026",
         citizens_number: 41_540_086,
         stake_amount: 41_540_086_0000,
@@ -120,6 +126,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "海南省公民储备银行",
+        cid_short_name: "海南省储行",
         cid_number: "HN001-PRB0P-723623074-2026",
         citizens_number: 10_081_232,
         stake_amount: 10_081_232_0000,
@@ -140,6 +147,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "云南省公民储备银行",
+        cid_short_name: "云南省储行",
         cid_number: "YN001-PRB08-692525950-2026",
         citizens_number: 46_821_766,
         stake_amount: 46_821_766_0000,
@@ -160,6 +168,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "贵州省公民储备银行",
+        cid_short_name: "贵州省储行",
         cid_number: "GZ001-PRB00-490015860-2026",
         citizens_number: 38_562_148,
         stake_amount: 38_562_148_0000,
@@ -180,6 +189,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "湖南省公民储备银行",
+        cid_short_name: "湖南省储行",
         cid_number: "HU001-PRB0F-084835673-2026",
         citizens_number: 66_444_864,
         stake_amount: 66_444_864_0000,
@@ -200,6 +210,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "江西省公民储备银行",
+        cid_short_name: "江西省储行",
         cid_number: "JX001-PRB09-243765987-2026",
         citizens_number: 45_188_635,
         stake_amount: 45_188_635_0000,
@@ -220,6 +231,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "浙江省公民储备银行",
+        cid_short_name: "浙江省储行",
         cid_number: "ZJ001-PRB0R-296232973-2026",
         citizens_number: 64_567_588,
         stake_amount: 64_567_588_0000,
@@ -240,6 +252,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "江苏省公民储备银行",
+        cid_short_name: "江苏省储行",
         cid_number: "JS001-PRB01-890774605-2026",
         citizens_number: 84_748_016,
         stake_amount: 84_748_016_0000,
@@ -260,6 +273,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "山东省公民储备银行",
+        cid_short_name: "山东省储行",
         cid_number: "SD001-PRB0G-114256751-2026",
         citizens_number: 101_527_453,
         stake_amount: 101_527_453_0000,
@@ -280,6 +294,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "山西省公民储备银行",
+        cid_short_name: "山西省储行",
         cid_number: "SX001-PRB0K-520132196-2026",
         citizens_number: 34_915_616,
         stake_amount: 34_915_616_0000,
@@ -300,6 +315,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "河南省公民储备银行",
+        cid_short_name: "河南省储行",
         cid_number: "HE001-PRB03-158889343-2026",
         citizens_number: 99_365_519,
         stake_amount: 99_365_519_0000,
@@ -320,6 +336,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "河北省公民储备银行",
+        cid_short_name: "河北省储行",
         cid_number: "HB001-PRB0Z-484022741-2026",
         citizens_number: 56_282_021,
         stake_amount: 56_282_021_0000,
@@ -340,6 +357,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "湖北省公民储备银行",
+        cid_short_name: "湖北省储行",
         cid_number: "HI001-PRB0V-514948302-2026",
         citizens_number: 54_543_553,
         stake_amount: 54_543_553_0000,
@@ -360,6 +378,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "陕西省公民储备银行",
+        cid_short_name: "陕西省储行",
         cid_number: "SI001-PRB0N-245618374-2026",
         citizens_number: 33_824_101,
         stake_amount: 33_824_101_0000,
@@ -380,6 +399,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "重庆省公民储备银行",
+        cid_short_name: "重庆省储行",
         cid_number: "CQ001-PRB0C-694162045-2026",
         citizens_number: 32_054_159,
         stake_amount: 32_054_159_0000,
@@ -400,6 +420,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "四川省公民储备银行",
+        cid_short_name: "四川省储行",
         cid_number: "SC001-PRB0Q-764253139-2026",
         citizens_number: 80_310_245,
         stake_amount: 80_310_245_0000,
@@ -420,6 +441,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "甘肃省公民储备银行",
+        cid_short_name: "甘肃省储行",
         cid_number: "GS001-PRB08-005784877-2026",
         citizens_number: 20_617_465,
         stake_amount: 20_617_465_0000,
@@ -440,6 +462,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "北平省公民储备银行",
+        cid_short_name: "北平省储行",
         cid_number: "BP001-PRB0Q-434307982-2026",
         citizens_number: 21_893_095,
         stake_amount: 21_893_095_0000,
@@ -460,6 +483,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "海滨省公民储备银行",
+        cid_short_name: "海滨省储行",
         cid_number: "HA001-PRB08-969179618-2026",
         citizens_number: 24_720_871,
         stake_amount: 24_720_871_0000,
@@ -480,6 +504,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "松江省公民储备银行",
+        cid_short_name: "松江省储行",
         cid_number: "SJ001-PRB03-644104544-2026",
         citizens_number: 24_870_895,
         stake_amount: 24_870_895_0000,
@@ -500,6 +525,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "龙江省公民储备银行",
+        cid_short_name: "龙江省储行",
         cid_number: "LJ001-PRB0T-280510636-2026",
         citizens_number: 22_780_354,
         stake_amount: 22_780_354_0000,
@@ -520,6 +546,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "吉林省公民储备银行",
+        cid_short_name: "吉林省储行",
         cid_number: "JL001-PRB07-129935340-2026",
         citizens_number: 24_073_453,
         stake_amount: 24_073_453_0000,
@@ -540,6 +567,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "辽宁省公民储备银行",
+        cid_short_name: "辽宁省储行",
         cid_number: "LI001-PRB0J-249814963-2026",
         citizens_number: 42_591_407,
         stake_amount: 42_591_407_0000,
@@ -560,6 +588,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "宁夏省公民储备银行",
+        cid_short_name: "宁夏省储行",
         cid_number: "NX001-PRB0F-292327153-2026",
         citizens_number: 7_202_654,
         stake_amount: 7_202_654_0000,
@@ -580,6 +609,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "青海省公民储备银行",
+        cid_short_name: "青海省储行",
         cid_number: "QH001-PRB0V-075657014-2026",
         citizens_number: 5_030_542,
         stake_amount: 5_030_542_0000,
@@ -600,6 +630,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "安徽省公民储备银行",
+        cid_short_name: "安徽省储行",
         cid_number: "AH001-PRB0M-388477914-2026",
         citizens_number: 61_027_171,
         stake_amount: 61_027_171_0000,
@@ -620,6 +651,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "台湾省公民储备银行",
+        cid_short_name: "台湾省储行",
         cid_number: "TW001-PRB0S-266238196-2026",
         citizens_number: 23_561_236,
         stake_amount: 23_561_236_0000,
@@ -640,6 +672,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "西藏省公民储备银行",
+        cid_short_name: "西藏省储行",
         cid_number: "XZ001-PRB06-210788637-2026",
         citizens_number: 2_763_853,
         stake_amount: 2_763_853_0000,
@@ -660,6 +693,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "新疆省公民储备银行",
+        cid_short_name: "新疆省储行",
         cid_number: "XJ001-PRB0V-233325633-2026",
         citizens_number: 9_880_442,
         stake_amount: 9_880_442_0000,
@@ -680,6 +714,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "西康省公民储备银行",
+        cid_short_name: "西康省储行",
         cid_number: "XK001-PRB0Q-300401625-2026",
         citizens_number: 4_513_098,
         stake_amount: 4_513_098_0000,
@@ -700,6 +735,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "阿里省公民储备银行",
+        cid_short_name: "阿里省储行",
         cid_number: "AL001-PRB0S-527686065-2026",
         citizens_number: 2_627_999,
         stake_amount: 2_627_999_0000,
@@ -720,6 +756,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "葱岭省公民储备银行",
+        cid_short_name: "葱岭省储行",
         cid_number: "CL001-PRB0Q-951267669-2026",
         citizens_number: 7_833_021,
         stake_amount: 7_833_021_0000,
@@ -740,6 +777,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "伊犁省公民储备银行",
+        cid_short_name: "伊犁省储行",
         cid_number: "YL001-PRB0A-142800261-2026",
         citizens_number: 5_634_164,
         stake_amount: 5_634_164_0000,
@@ -760,6 +798,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "河西省公民储备银行",
+        cid_short_name: "河西省储行",
         cid_number: "HX001-PRB0F-215310265-2026",
         citizens_number: 4_664_727,
         stake_amount: 4_664_727_0000,
@@ -780,6 +819,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "昆仑省公民储备银行",
+        cid_short_name: "昆仑省储行",
         cid_number: "KL001-PRB08-682838027-2026",
         citizens_number: 893_415,
         stake_amount: 893_415_0000,
@@ -800,6 +840,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "河套省公民储备银行",
+        cid_short_name: "河套省储行",
         cid_number: "HT001-PRB0L-210616196-2026",
         citizens_number: 12_110_780,
         stake_amount: 12_110_780_0000,
@@ -820,6 +861,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "热河省公民储备银行",
+        cid_short_name: "热河省储行",
         cid_number: "RH001-PRB0C-380830938-2026",
         citizens_number: 15_489_562,
         stake_amount: 15_489_562_0000,
@@ -840,6 +882,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "兴安省公民储备银行",
+        cid_short_name: "兴安省储行",
         cid_number: "XA001-PRB0Q-928028839-2026",
         citizens_number: 3_991_080,
         stake_amount: 3_991_080_0000,
@@ -860,6 +903,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         cid_full_name: "合江省公民储备银行",
+        cid_short_name: "合江省储行",
         cid_number: "HJ001-PRB0I-089279108-2026",
         citizens_number: 8_738_458,
         stake_amount: 8_738_458_0000,

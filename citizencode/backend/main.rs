@@ -426,12 +426,12 @@ fn offset_page_from_window<T: Serialize>(
 impl Db {
     pub(crate) fn cid_full_name_exists(
         &self,
-        name: &str,
+        cid_full_name: &str,
         province_code: Option<&str>,
         city_code: Option<&str>,
         exclude_cid_number: Option<&str>,
     ) -> Result<bool, String> {
-        let name = name.trim().to_string();
+        let cid_full_name = cid_full_name.trim().to_string();
         let province_code = province_code.map(str::to_string);
         let city_code = city_code.map(str::to_string);
         let exclude_cid_number = exclude_cid_number.map(str::to_string);
@@ -441,14 +441,19 @@ impl Db {
                     "SELECT EXISTS (
                         SELECT 1 FROM subjects
                         WHERE kind IN ('PUBLIC', 'PRIVATE')
-                          AND name = $1
+                          AND cid_full_name = $1
                           AND ($2::text IS NULL OR province_code = $2)
                           AND ($3::text IS NULL OR city_code = $3)
                           AND ($4::text IS NULL OR cid_number <> $4)
                      )",
-                    &[&name, &province_code, &city_code, &exclude_cid_number],
+                    &[
+                        &cid_full_name,
+                        &province_code,
+                        &city_code,
+                        &exclude_cid_number,
+                    ],
                 )
-                .map_err(|e| format!("query institution name conflict failed: {e}"))?;
+                .map_err(|e| format!("query cid_full_name conflict failed: {e}"))?;
             Ok(row.get(0))
         })
     }
@@ -483,7 +488,7 @@ impl Db {
         {
             let row = conn
                 .query_opt(
-                    "SELECT s.cid_number, s.name, s.category,
+                    "SELECT s.cid_number, s.cid_full_name, s.category,
                             s.p1, s.province_name,
                             s.city_name, s.province_code, s.city_code, s.institution_code,
                             s.private_type, s.partnership_kind, s.has_legal_personality,
@@ -667,8 +672,8 @@ impl Db {
         )?;
         conn.execute(
             "INSERT INTO subjects (
-                cid_number, kind, name, province_code, city_code, status, created_at, updated_at
-             ) VALUES ($1, 'CITIZEN', NULL, $2, $3, $4, $5, now())
+                cid_number, kind, province_code, city_code, status, created_at, updated_at
+             ) VALUES ($1, 'CITIZEN', $2, $3, $4, $5, now())
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 city_code = EXCLUDED.city_code,
                 status = EXCLUDED.status,
@@ -1002,7 +1007,7 @@ impl Db {
             .and_then(|v| i64::try_from(v).ok());
         conn.execute(
             "INSERT INTO subjects (
-			                cid_number, kind, name, cid_full_name, cid_short_name,
+			                cid_number, kind, cid_full_name, cid_short_name,
 			                status, category, p1, province_name, city_name, town_name,
 			                province_code, city_code, town_code, institution_code,
 			                education_type, private_type, partnership_kind, has_legal_personality,
@@ -1010,13 +1015,12 @@ impl Db {
 			                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
 			                legal_rep_photo_size, created_by, created_at, updated_at
 			             ) VALUES (
-			                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-			                $12, $13, $14, $15, $16, $17, $18, $19, $20,
-			                $21, $22, $23, $24, $25, $26, $27, $28, now()
+			                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			                $11, $12, $13, $14, $15, $16, $17, $18, $19,
+			                $20, $21, $22, $23, $24, $25, $26, $27, now()
 		             )
-		             ON CONFLICT (province_code, cid_number) DO UPDATE SET
-		                kind = EXCLUDED.kind,
-	                name = EXCLUDED.name,
+			             ON CONFLICT (province_code, cid_number) DO UPDATE SET
+			                kind = EXCLUDED.kind,
 	                cid_full_name = EXCLUDED.cid_full_name,
 	                cid_short_name = EXCLUDED.cid_short_name,
 			                status = EXCLUDED.status,
@@ -1045,7 +1049,6 @@ impl Db {
             &[
                 &inst.cid_number,
                 &kind,
-                &inst.cid_short_name,
                 &inst.cid_full_name,
                 &inst.cid_short_name,
                 &status,
@@ -1580,7 +1583,7 @@ impl Db {
             // 非法人按父级属性分流到公权/私权),无注入面;par 是子句依赖的父级别名,
             // 父级允许跨省(私法人全国),故只按 cid_number 关联不限定 province_code。
             let sql = format!(
-		                    "SELECT s.cid_number, s.name, s.category,
+		                    "SELECT s.cid_number, s.cid_full_name, s.category,
 			                                    s.p1, s.province_name,
 			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
@@ -1608,7 +1611,8 @@ impl Db {
 	                               AND ($2::text IS NULL OR s.city_code = $2)
 	                               AND (
 	                                    s.cid_number = $3
-	                                    OR lower(COALESCE(s.name, '')) = lower($3)
+	                                    OR lower(COALESCE(s.cid_full_name, '')) = lower($3)
+	                                    OR lower(COALESCE(s.cid_short_name, '')) = lower($3)
 	                               )
 	                               AND (
 	                                    $4::timestamptz IS NULL
@@ -1705,7 +1709,7 @@ impl Db {
             // 国家公民教育委员会不跨市铺开,学校和 F+JY 分支机构仍走精确搜索。
             let rows = conn
                 .query(
-                    "SELECT s.cid_number, s.name, s.category,
+                    "SELECT s.cid_number, s.cid_full_name, s.category,
                                     s.p1, s.province_name,
                                     s.city_name, s.province_code, s.city_code, s.institution_code,
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
@@ -1760,7 +1764,7 @@ impl Db {
                 i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
             let rows = conn
                 .query(
-		                    "SELECT s.cid_number, s.name, s.category,
+		                    "SELECT s.cid_number, s.cid_full_name, s.category,
 			                                    s.p1, s.province_name,
 			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
@@ -1825,7 +1829,7 @@ impl Db {
             // 父级只按 cid_number 关联(cid 全局唯一,父级不限定本省分区)。
             let rows = conn
                 .query(
-                    "SELECT s.cid_number, s.name, s.category,
+                    "SELECT s.cid_number, s.cid_full_name, s.category,
 			                                    s.p1, s.province_name,
 			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
@@ -1866,7 +1870,8 @@ impl Db {
 	                               AND (
 	                                    $3::text = ''
 	                                    OR lower(s.cid_number) LIKE '%' || $3 || '%'
-	                                    OR lower(COALESCE(s.name, '')) LIKE '%' || $3 || '%'
+	                                    OR lower(COALESCE(s.cid_full_name, '')) LIKE '%' || $3 || '%'
+	                                    OR lower(COALESCE(s.cid_short_name, '')) LIKE '%' || $3 || '%'
 	                               )
 	                             ORDER BY
 		                                s.city_code ASC NULLS LAST,
@@ -1878,7 +1883,8 @@ impl Db {
                                         WHEN s.institution_code IN ('NRC','PRC','PRB') THEN 4
                                         ELSE 0
                                     END ASC,
-	                                COALESCE(s.name, '') ASC,
+	                                COALESCE(s.cid_short_name, '') ASC,
+	                                COALESCE(s.cid_full_name, '') ASC,
 	                                s.cid_number ASC
 	                             LIMIT $4 OFFSET $5",
                     &[&province_code, &city_code, &keyword, &limit, &offset_i64, &institution_code_filter],
@@ -2783,7 +2789,7 @@ fn main() {
             )
             // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。
             // 中文注释:机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
-            // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
+            // - GET  /api/v1/institution/check-cid-full-name             — cid_full_name 查重
             // - POST /api/v1/institution/create                          — 公权/教育通用机构生成(不上链)
             // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
             // - POST /api/v1/institution/:cid_number/account/create         — 只登记账户名称,不上链
@@ -2793,7 +2799,7 @@ fn main() {
             // - GET  /api/v1/institution/:cid_number/accounts               — 账户列表
             // - DELETE /api/v1/institution/:cid_number/account/:account_name — 删除未上链/已注销新增账户
             .route(
-                "/api/v1/institution/check-name",
+                "/api/v1/institution/check-cid-full-name",
                 get(subjects::admin::check_cid_full_name),
             )
             // F 详情页"所属法人"搜索(全国范围 S/G 模糊匹配)

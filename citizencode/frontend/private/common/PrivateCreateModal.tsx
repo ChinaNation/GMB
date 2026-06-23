@@ -7,7 +7,7 @@ import type { AdminAuth } from '../../auth/types';
 import { CreateInstitutionForm } from '../../core/institution/CreateInstitutionForm';
 import type { CreateInstitutionInput, CreateInstitutionOutput, PrivateType } from '../../subjects/api';
 import {
-  checkInstitutionName,
+  checkCidFullName,
   searchParentInstitutions,
   uploadLegalRepresentativePhoto,
 } from './api';
@@ -28,7 +28,7 @@ export const PrivateCreateModal: React.FC<Props> = (props) => (
     {...props}
     category="PRIVATE_INSTITUTION"
     privateType={props.privateType}
-    checkInstitutionName={checkInstitutionName}
+    checkCidFullName={checkCidFullName}
     createInstitution={props.createInstitution}
     uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
     searchParentInstitutions={searchParentInstitutions}

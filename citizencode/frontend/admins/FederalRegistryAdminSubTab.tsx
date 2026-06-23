@@ -19,8 +19,8 @@ interface FederalRegistryAdminSubTabProps {
   federalRegistryAdminsLoading: boolean;
   refreshFederalRegistryAdmins: () => Promise<FederalRegistryAdminRow[]>;
   runSecuredAction: <T = unknown>(actionType: AdminActionType, payload: unknown) => Promise<T>;
-  /** 机构简称(= 该机构 cid_short_name 单一真源,如「联邦注册局」);标题左段显示用。 */
-  federalRegistryShortName?: string | null;
+  /** 该机构 cid_short_name 单一字段,如「联邦注册局」;标题左段显示用。 */
+  federalRegistryCidShortName?: string | null;
 }
 
 type AddFormValues = {
@@ -34,7 +34,7 @@ export function FederalRegistryAdminSubTab({
   federalRegistryAdminsLoading,
   refreshFederalRegistryAdmins,
   runSecuredAction,
-  federalRegistryShortName,
+  federalRegistryCidShortName,
 }: FederalRegistryAdminSubTabProps) {
   const { auth } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
@@ -180,7 +180,7 @@ export function FederalRegistryAdminSubTab({
         title={
           <Space size={6} align="center">
             {/* 中文注释:左段显示机构简称(cid_short_name 单一真源),不再硬编码「联邦注册局管理员列表」。 */}
-            <span>{federalRegistryShortName || '联邦注册局'}</span>
+            <span>{federalRegistryCidShortName || '联邦注册局'}</span>
             <span style={{ lineHeight: 1, color: 'rgba(15,23,42,0.45)' }}>·</span>
             <span>{selectedFederalRegistry.province_name}</span>
           </Space>

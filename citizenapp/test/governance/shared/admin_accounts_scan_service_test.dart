@@ -1,6 +1,6 @@
 // AdminAccountsScanService.filterMine 纯函数单测(ADR-018 §九)。
 //
-// filterMine 是机构/个人多签共用的"按 kind + org 白名单 + 本地钱包"分流逻辑,
+// filterMine 是机构/个人多签共用的"按 kind + institution_code 白名单 + 本地钱包"分流逻辑,
 // 纯函数无链依赖。链上扫描路径(getKeysPaged + fetchStorageBatch)受 smoldot
 // 真链依赖,留给端到端校核覆盖。
 
@@ -22,13 +22,13 @@ void main() {
 
   ScannedAdminAccount acc({
     required String addr,
-    required int org,
+    required String institutionCode,
     required int kind,
     required List<String> admins,
   }) =>
       ScannedAdminAccount(
         addrHex: addr,
-        org: org,
+        institutionCode: institutionCode,
         kind: kind,
         adminsHex: admins,
       );
@@ -38,13 +38,13 @@ void main() {
       final scan = resultOf([
         acc(
           addr: '01',
-          org: 4,
+          institutionCode: 'CGOV',
           kind: AdminAccountStorageCodec.kindInstitutionAccount,
           admins: [myWallet],
         ),
         acc(
           addr: '02',
-          org: 3,
+          institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
           admins: [myWallet],
         ),
@@ -54,7 +54,7 @@ void main() {
         scan,
         myPubkeysHex: {myWallet},
         kind: AdminAccountStorageCodec.kindInstitutionAccount,
-        orgWhitelist: const {4, 5},
+        codeWhitelist: const {'CGOV', 'UNIN'},
       );
       expect(institutions.map((e) => e.addrHex), ['01']);
 
@@ -66,43 +66,55 @@ void main() {
       expect(personals.map((e) => e.addrHex), ['02']);
     });
 
-    test('org 白名单:不在 {PUP,OTH} 的机构账户被排除', () {
+    test('institution_code 白名单:不在注册机构码集合的机构账户被排除', () {
       final scan = resultOf([
-        acc(addr: '01', org: 4, kind: 2, admins: [myWallet]),
-        acc(addr: '02', org: 1, kind: 2, admins: [myWallet]), // org=PRC,排除
+        acc(addr: '01', institutionCode: 'CGOV', kind: 2, admins: [myWallet]),
+        acc(addr: '02', institutionCode: 'PRC', kind: 2, admins: [myWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet},
         kind: 2,
-        orgWhitelist: const {4, 5},
+        codeWhitelist: const {'CGOV', 'UNIN'},
       );
       expect(result.map((e) => e.addrHex), ['01']);
     });
 
     test('钱包匹配:管理员不含本地钱包的账户被排除', () {
       final scan = resultOf([
-        acc(addr: '01', org: 4, kind: 2, admins: [myWallet, otherWallet]),
-        acc(addr: '02', org: 5, kind: 2, admins: [otherWallet]),
+        acc(
+            addr: '01',
+            institutionCode: 'CGOV',
+            kind: 2,
+            admins: [myWallet, otherWallet]),
+        acc(
+            addr: '02',
+            institutionCode: 'UNIN',
+            kind: 2,
+            admins: [otherWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet},
         kind: 2,
-        orgWhitelist: const {4, 5},
+        codeWhitelist: const {'CGOV', 'UNIN'},
       );
       expect(result.map((e) => e.addrHex), ['01']);
     });
 
     test('多钱包:命中任一本地钱包即保留', () {
       final scan = resultOf([
-        acc(addr: '01', org: 4, kind: 2, admins: [secondWallet]),
+        acc(
+            addr: '01',
+            institutionCode: 'CGOV',
+            kind: 2,
+            admins: [secondWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet, secondWallet},
         kind: 2,
-        orgWhitelist: const {4, 5},
+        codeWhitelist: const {'CGOV', 'UNIN'},
       );
       expect(result.map((e) => e.addrHex), ['01']);
     });
@@ -112,7 +124,7 @@ void main() {
         AdminAccountsScanResult.empty,
         myPubkeysHex: {myWallet},
         kind: 2,
-        orgWhitelist: const {4, 5},
+        codeWhitelist: const {'CGOV', 'UNIN'},
       );
       expect(result, isEmpty);
     });

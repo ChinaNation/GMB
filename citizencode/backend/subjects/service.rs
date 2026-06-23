@@ -205,8 +205,8 @@ impl ServiceError {
 }
 
 /// 校验机构全称格式。
-pub fn validate_cid_full_name(name: &str) -> Result<String, ServiceError> {
-    let trimmed = name.trim();
+pub fn validate_cid_full_name(cid_full_name: &str) -> Result<String, ServiceError> {
+    let trimmed = cid_full_name.trim();
     if trimmed.is_empty() {
         return Err(ServiceError::BadInput("cid_full_name is required"));
     }
@@ -307,10 +307,7 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
 ///
 /// 主体属性由机构码派生(K1 已从号码删除)。机构码不识别或不属于任何机构分类(个人/个人多签)
 /// 返回 None,调用方应当直接拒绝请求。
-pub fn derive_category(
-    institution_code: &str,
-    cid_full_name: &str,
-) -> Option<InstitutionCategory> {
+pub fn derive_category(institution_code: &str, cid_full_name: &str) -> Option<InstitutionCategory> {
     let code = InstitutionCode::from_str(institution_code)?;
     classify(code, cid_full_name)
 }

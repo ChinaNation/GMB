@@ -3,7 +3,7 @@
 //
 // 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
 //   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
-//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除储备体系自动目录代码)机构名称必填 / F(锁中国ZG)挂公法人
+//   GOV_INSTITUTION       公权 tab:G(ZF/LF/SF/JC,排除储备体系自动目录代码)机构全称必填 / F(锁中国ZG)挂公法人
 //   EDUCATION_INSTITUTION 教育 tab:G/S/F + 机构锁死教育委员会(JY);
 //                         G/S 学校必须选择教育机构类型,F+JY 分校保留原挂靠规则
 //

@@ -84,7 +84,7 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
           federalRegistryAdminsLoading={federalRegistryAdminsLoading}
           refreshFederalRegistryAdmins={state.refreshFederalRegistryAdmins}
           runSecuredAction={state.runSecuredAction}
-          federalRegistryShortName={federalRegistryDetail.institution.cid_short_name}
+          federalRegistryCidShortName={federalRegistryDetail.institution.cid_short_name}
         />
       ) : null}
     />

@@ -150,12 +150,12 @@ export const EducationListTable: React.FC<Props> = ({
       },
       { title: '身份ID', dataIndex: 'cid_number', width: 260, align: 'center' },
       {
-        title: '机构名称',
+        title: '机构全称',
         dataIndex: 'cid_full_name',
         width: 180,
         align: 'center',
         render: (v: string | null) =>
-          v ? v : <span style={{ color: '#999' }}>(未命名,待完善)</span>,
+          v ? v : <span style={{ color: '#999' }}>(未设置全称,待完善)</span>,
       },
       {
         title: '教育分类',

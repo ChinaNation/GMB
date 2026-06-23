@@ -495,7 +495,9 @@ class _InstitutionAccountInfoPageState
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildInfoRow('名称', widget.institution.name),
+                  _buildInfoRow('全称', widget.institution.cidFullName),
+                  const Divider(height: 20),
+                  _buildInfoRow('简称', widget.institution.cidShortName),
                   const Divider(height: 20),
                   _buildInfoRow(
                     'CID ID',

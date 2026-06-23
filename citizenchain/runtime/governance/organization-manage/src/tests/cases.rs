@@ -1,10 +1,10 @@
 use super::*;
+use crate::institution::types::InstitutionLifecycleStatus;
+use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
 use primitives::account_derive::{
     AccountKind, RESERVED_NAME_ANQUAN, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN,
     RESERVED_NAME_STAKE,
 };
-use crate::institution::types::InstitutionLifecycleStatus;
-use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED};
 
 const SEED_BALANCE: Balance = 100_000;
@@ -57,12 +57,10 @@ fn register_cid_institution_with_valid_signature_succeeds() {
             &account_name(RESERVED_NAME_FEE),
         ));
         // 反向索引也写入
-        let main_addr = OrganizationManage::derive_registered_account(
-            cid.as_slice(),
-            RESERVED_NAME_MAIN,
-        )
-        .expect("derive main")
-        .0;
+        let main_addr =
+            OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+                .expect("derive main")
+                .0;
         assert!(pallet::AccountRegisteredCid::<Test>::contains_key(
             &main_addr
         ));
@@ -308,12 +306,14 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             InstitutionLifecycleStatus::Active,
         );
         // 主账户和费用账户都被划账
-        let main = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
-            .unwrap()
-            .0;
-        let fee_acc = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
-            .unwrap()
-            .0;
+        let main =
+            OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+                .unwrap()
+                .0;
+        let fee_acc =
+            OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
+                .unwrap()
+                .0;
         assert_eq!(Balances::free_balance(&main), ACCT_AMOUNT);
         assert_eq!(Balances::free_balance(&fee_acc), ACCT_AMOUNT);
         assert_eq!(Balances::reserved_balance(&c), 0);
@@ -869,9 +869,10 @@ fn close_non_main_account_only_removes_that_account() {
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
         let fee_name = account_name(RESERVED_NAME_FEE);
-        let fee_acc = OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
-            .unwrap()
-            .0;
+        let fee_acc =
+            OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_FEE)
+                .unwrap()
+                .0;
 
         // 机构管理员(admin0)注销【非主】费用账户:role=Fee → scope=account。
         // 授权靠 resolve 统一解析到机构主账户的管理员集(子账户无独立管理员)。

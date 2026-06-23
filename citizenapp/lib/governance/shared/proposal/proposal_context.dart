@@ -109,6 +109,7 @@ class ProposalContextResolver {
   Future<ProposalContext> resolve({
     List<int>? institutionBytes,
     int? internalOrg,
+    String? internalCode,
     InstitutionInfo? knownInstitution,
   }) async {
     final wallets = await _getWallets();
@@ -119,7 +120,7 @@ class ProposalContextResolver {
 
     if (institution == null && institutionBytes != null) {
       institution = findInstitutionByAccountId(institutionBytes,
-          adminAccountOrg: internalOrg);
+          adminAccountCode: internalCode);
     }
 
     // 2. 如果仍然没有机构（如联合投票 institutionBytes 反查失败），
@@ -187,21 +188,23 @@ class ProposalContextResolver {
   /// 返回 Map<提案索引, ProposalContext>，与传入列表一一对应。
   Future<List<ProposalContext>> resolveBatch(
       List<List<int>?> institutionBytesList,
-      {List<int?>? internalOrgList}) async {
+      {List<int?>? internalOrgList,
+      List<String?>? internalCodeList}) async {
     final wallets = await _getWallets();
     final coldWallets = wallets.where((w) => w.isColdWallet).toList();
     final results = <ProposalContext>[];
 
     for (var i = 0; i < institutionBytesList.length; i++) {
       final institutionBytes = institutionBytesList[i];
-      final internalOrg = internalOrgList != null && i < internalOrgList.length
-          ? internalOrgList[i]
-          : null;
+      final internalCode =
+          internalCodeList != null && i < internalCodeList.length
+              ? internalCodeList[i]
+              : null;
       InstitutionInfo? institution;
 
       if (institutionBytes != null) {
         institution = findInstitutionByAccountId(institutionBytes,
-            adminAccountOrg: internalOrg);
+            adminAccountCode: internalCode);
       }
 
       if (institution == null && coldWallets.isNotEmpty) {

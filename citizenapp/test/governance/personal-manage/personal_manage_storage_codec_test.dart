@@ -5,6 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/governance/personal-manage/personal_manage_storage_codec.dart';
 
 void main() {
+  List<int> codeBytes(String code) {
+    final out = List<int>.filled(4, 0);
+    final raw = code.codeUnits;
+    for (var i = 0; i < out.length && i < raw.length; i++) {
+      out[i] = raw[i];
+    }
+    return out;
+  }
+
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
     return [(bytes.length << 2) & 0xff, ...bytes];
@@ -45,7 +54,7 @@ void main() {
       final admin1 = List<int>.filled(32, 0xaa);
       final admin2 = List<int>.filled(32, 0xbb);
       final data = Uint8List.fromList([
-        3,
+        ...codeBytes('PMUL'),
         2,
         (2 << 2) & 0xff,
         ...admin1,
@@ -58,7 +67,7 @@ void main() {
 
       final decoded = PersonalManageStorageCodec.decodeAdminAccount(data)!;
 
-      expect(decoded.org, 3);
+      expect(decoded.institutionCode, 'PMUL');
       expect(decoded.adminsLen, 2);
       expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
     });

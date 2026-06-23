@@ -14,7 +14,7 @@
 第 1 步只确认备案推链字段:
 
 - `cid_number`:机构 CID 号。
-- `cid_full_name`:机构名称。
+- `cid_full_name`:机构全称。
 - `account_name`:机构账户名称。
 
 ## 明确不做

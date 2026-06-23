@@ -146,19 +146,32 @@ impl Db {
         })
     }
 
-    /// 按机构自身 cid_number 反查机构真源(subjects 主键含 cid_number,全局唯一)。
-    /// 返回 (province_name, city_name, province_code, city_code, institution_code, cid_full_name, category)。
+    /// 按机构自身 cid_number 反查机构全称/简称(subjects 主键含 cid_number,全局唯一)。
+    /// 返回 (province_name, city_name, province_code, city_code, institution_code, cid_full_name, cid_short_name, category)。
     fn find_cpms_target_institution_by_cid(
         &self,
         cid_number: &str,
-    ) -> Result<Option<(String, String, String, String, String, String, String)>, String> {
+    ) -> Result<
+        Option<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        )>,
+        String,
+    > {
         let cid_number = cid_number.trim().to_string();
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
                     "SELECT COALESCE(province_name, ''), COALESCE(city_name, ''),
                             COALESCE(province_code, ''), COALESCE(city_code, ''),
-                            COALESCE(institution_code, ''), COALESCE(name, ''),
+                            COALESCE(institution_code, ''), COALESCE(cid_full_name, ''),
+                            COALESCE(cid_short_name, ''),
                             COALESCE(category, '')
                      FROM subjects
                      WHERE kind = 'PUBLIC'
@@ -177,6 +190,7 @@ impl Db {
                     row.get(4),
                     row.get(5),
                     row.get(6),
+                    row.get(7),
                 )
             }))
         })
@@ -225,18 +239,26 @@ pub(crate) async fn generate_cpms_install_qr(
     // 中文注释:安装码以机构自身 cid_number 为唯一键(写/读同键);按 cid 反查机构真源,
     // 不再用 (province,city,institution) 三元组重解析(institution_code 如 ZF 是类别码,
     // 同市可命中数十个机构,曾导致公安局页面生成的安装码错落到农业局名下)。
-    let Some((province, city, province_code, city_code, institution_code, cid_full_name, category)) =
-        (match state.db.find_cpms_target_institution_by_cid(&cid_number) {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::error!(error = %err, "query cpms target institution by cid failed");
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "institution query failed",
-                );
-            }
-        })
+    let Some((
+        province,
+        city,
+        province_code,
+        city_code,
+        institution_code,
+        cid_full_name,
+        cid_short_name,
+        category,
+    )) = (match state.db.find_cpms_target_institution_by_cid(&cid_number) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "query cpms target institution by cid failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "institution query failed",
+            );
+        }
+    })
     else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
@@ -310,6 +332,7 @@ pub(crate) async fn generate_cpms_install_qr(
         city_code,
         institution_code,
         cid_full_name,
+        cid_short_name,
         qr1_payload: qr1_payload.clone(),
         cpms_pubkey_hash: None,
         created_by: ctx.admin_account.clone(),
@@ -889,6 +912,7 @@ fn cpms_site_keys_to_list_row_simple(
         city_code: site.city_code.clone(),
         institution_code: site.institution_code.clone(),
         cid_full_name: site.cid_full_name.clone(),
+        cid_short_name: site.cid_short_name.clone(),
         qr1_payload: site.qr1_payload.clone(),
         cpms_pubkey_bound: site.cpms_pubkey_hash.is_some(),
         created_by: site.created_by.clone(),

@@ -17,7 +17,7 @@ const String _kCouncilSuffix = '公民储备委员会';
 class PublicProvinceItem {
   const PublicProvinceItem({
     required this.code,
-    required this.fullName,
+    required this.provinceFullName,
     required this.displayName,
   });
 
@@ -25,49 +25,51 @@ class PublicProvinceItem {
   final String code;
 
   /// 规范全名(含"省"),与 china.sqlite 省名逐字对齐。
-  final String fullName;
+  final String provinceFullName;
 
   /// 展示名:去掉末尾"省"字。
   final String displayName;
 }
 
-String _fullNameOf(String councilName) => councilName.endsWith(_kCouncilSuffix)
-    ? councilName.substring(0, councilName.length - _kCouncilSuffix.length)
-    : councilName;
+String _provinceFullNameOf(String councilName) =>
+    councilName.endsWith(_kCouncilSuffix)
+        ? councilName.substring(0, councilName.length - _kCouncilSuffix.length)
+        : councilName;
 
 String _codeOf(String cidNumber) {
   // 省储会 cidNumber 形如 `ZS001-GCB0R-...`,前 2 字符为省 code。
   return cidNumber.length >= 2 ? cidNumber.substring(0, 2) : cidNumber;
 }
 
-String _displayOf(String fullName) => fullName.endsWith('省')
-    ? fullName.substring(0, fullName.length - 1)
-    : fullName;
+String _displayOf(String provinceFullName) => provinceFullName.endsWith('省')
+    ? provinceFullName.substring(0, provinceFullName.length - 1)
+    : provinceFullName;
 
 /// 公权机构左栏的 43 个省份导航条目(code + 全名 + 展示名,来自链上省储会常量)。
 List<PublicProvinceItem> publicProvinceItems() {
   return kProvincialCouncils.map((c) {
-    final fullName = _fullNameOf(c.name);
+    final provinceFullName = _provinceFullNameOf(c.cidFullName);
     return PublicProvinceItem(
       code: _codeOf(c.cidNumber),
-      fullName: fullName,
-      displayName: _displayOf(fullName),
+      provinceFullName: provinceFullName,
+      displayName: _displayOf(provinceFullName),
     );
   }).toList(growable: false);
 }
 
 /// 公权机构左栏的 43 个省份规范**全名**(含"省")。
-List<String> publicProvinceNames() =>
-    publicProvinceItems().map((p) => p.fullName).toList(growable: false);
+List<String> publicProvinceNames() => publicProvinceItems()
+    .map((p) => p.provinceFullName)
+    .toList(growable: false);
 
 /// 链上省名集合(去"省"前的全名);单测用作「链上==字典」守卫断言。
 Set<String> publicProvinceNamesSet() =>
-    publicProvinceItems().map((p) => p.fullName).toSet();
+    publicProvinceItems().map((p) => p.provinceFullName).toSet();
 
 /// 省 code → 全名(含"省");未知 code 回退 code 本身(绝不崩)。
 String provinceFullNameByCode(String code) {
   for (final p in publicProvinceItems()) {
-    if (p.code == code) return p.fullName;
+    if (p.code == code) return p.provinceFullName;
   }
   return code;
 }

@@ -335,7 +335,7 @@ pub(crate) async fn admin_auth_qr_result(
             }
         };
         let scope_city_name = admin.as_ref().and_then(resolve_scope_city_name);
-        let institution_short_name = repo::resolve_home_institution_short_name(
+        let cid_short_name = repo::resolve_home_cid_short_name(
             &state.db,
             &result.registry_org_code,
             province.as_deref(),
@@ -366,7 +366,7 @@ pub(crate) async fn admin_auth_qr_result(
                     scope_province_name: province,
                     scope_city_name,
                     passkey_bound,
-                    institution_short_name,
+                    cid_short_name,
                 }),
             },
         })

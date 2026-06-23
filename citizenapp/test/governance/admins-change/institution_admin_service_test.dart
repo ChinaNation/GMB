@@ -38,6 +38,15 @@ void main() {
   String hexOf(List<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+  List<int> codeBytes(String code) {
+    final out = List<int>.filled(4, 0);
+    final raw = code.codeUnits;
+    for (var i = 0; i < out.length && i < raw.length; i++) {
+      out[i] = raw[i];
+    }
+    return out;
+  }
+
   List<int> u32Le(int value) => [
         value & 0xff,
         (value >> 8) & 0xff,
@@ -46,12 +55,12 @@ void main() {
       ];
 
   Uint8List adminAccountBytes({
-    required int org,
+    required String institutionCode,
     required int kind,
     required List<int> admin,
   }) {
     return Uint8List.fromList([
-      org,
+      ...codeBytes(institutionCode),
       kind,
       (1 << 2) & 0xff,
       ...admin,
@@ -72,17 +81,19 @@ void main() {
 
   String dynamicThresholdKey({
     required String storageName,
-    required int org,
+    required String institutionCode,
     required Uint8List accountId,
   }) {
     final palletHash = Hasher.twoxx128.hashString('InternalVote');
     final storageHash = Hasher.twoxx128.hashString(storageName);
-    final orgKey = blake2128Concat(Uint8List.fromList([org]));
+    final codeKey = blake2128Concat(Uint8List.fromList(
+      codeBytes(institutionCode),
+    ));
     final accountKey = blake2128Concat(accountId);
     final bytes = <int>[
       ...palletHash,
       ...storageHash,
-      ...orgKey,
+      ...codeKey,
       ...accountKey,
     ];
     return '0x${hexOf(bytes)}';
@@ -99,11 +110,11 @@ void main() {
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
-      org: 5,
+      institutionCode: 'UNIN',
       accountId: accountId,
     );
     rpc.responses[accountKey] = adminAccountBytes(
-      org: 5,
+      institutionCode: 'UNIN',
       kind: 2,
       admin: List<int>.filled(32, 0xaa),
     );
@@ -111,7 +122,7 @@ void main() {
 
     final identity = AdminAccountIdentity.institutionAccount(
       accountHex: address,
-      org: 5,
+      institutionCode: 'UNIN',
       displayName: '机构账户',
     );
     final admins = await service.fetchAdmins(identity);
@@ -132,11 +143,11 @@ void main() {
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
-      org: 3,
+      institutionCode: 'PMUL',
       accountId: accountId,
     );
     rpc.responses[accountKey] = adminAccountBytes(
-      org: 3,
+      institutionCode: 'PMUL',
       kind: 1,
       admin: List<int>.filled(32, 0xbb),
     );
@@ -162,11 +173,11 @@ void main() {
         '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(accountId))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
-      org: 3,
+      institutionCode: 'PMUL',
       accountId: accountId,
     );
     rpc.responses[accountKey] = adminAccountBytes(
-      org: 3,
+      institutionCode: 'PMUL',
       kind: 1,
       admin: List<int>.filled(32, 0xdd),
     );
@@ -189,38 +200,41 @@ void main() {
   test('institution info resolves to explicit admins-change identity', () {
     final personalAccount = '44' * 32;
     final personal = AdminAccountIdentity.fromInstitution(InstitutionInfo(
-      name: '个人账户',
+      cidFullName: '个人账户',
+      cidShortName: '个人账户',
       cidNumber: 'personal-account:$personalAccount',
       orgType: OrgType.account,
       account: personalAccount,
     ));
     expect(personal.type, AdminAccountIdentityType.personalAccount);
-    expect(personal.org, 3);
+    expect(personal.institutionCode, 'PMUL');
     expect(personal.kind, 1);
 
     final accountAddress = '55' * 32;
     final institutionAccount =
         AdminAccountIdentity.fromInstitution(InstitutionInfo(
-      name: '机构账户',
+      cidFullName: '机构账户',
+      cidShortName: '机构账户',
       cidNumber: registeredAccountIdentity(accountAddress),
       orgType: OrgType.account,
-      adminAccountOrg: 5,
+      adminAccountCode: 'UNIN',
       account: accountAddress,
     ));
     expect(
         institutionAccount.type, AdminAccountIdentityType.institutionAccount);
-    expect(institutionAccount.org, 5);
+    expect(institutionAccount.institutionCode, 'UNIN');
     expect(institutionAccount.kind, 2);
 
     final governance =
         AdminAccountIdentity.fromInstitution(const InstitutionInfo(
-      name: '省储行',
+      cidFullName: '省储行',
+      cidShortName: '省储行',
       cidNumber: 'LN001-GCB05-944805165-2026',
       orgType: OrgType.prb,
       accounts: InstitutionAccounts(mainAccount: '66'),
     ));
     expect(governance.type, AdminAccountIdentityType.governanceInstitution);
-    expect(governance.org, OrgType.prb);
+    expect(governance.institutionCode, 'PRB');
     expect(governance.kind, 0);
   });
 
@@ -232,14 +246,14 @@ void main() {
     );
     final otherIdentity = AdminAccountIdentity.institutionAccount(
       accountHex: '88' * 32,
-      org: 5,
+      institutionCode: 'UNIN',
       displayName: '机构账户',
     );
     final active = ActivatedAdmin(
       pubkeyHex: 'aa' * 32,
       identityKey: identity.identityKey,
       accountHex: identity.accountHex,
-      org: identity.org,
+      institutionCode: identity.institutionCode,
       kind: identity.kind,
       activatedAtMs: 1,
     );
@@ -247,7 +261,7 @@ void main() {
       pubkeyHex: 'bb' * 32,
       identityKey: identity.identityKey,
       accountHex: identity.accountHex,
-      org: identity.org,
+      institutionCode: identity.institutionCode,
       kind: identity.kind,
       activatedAtMs: 2,
     );
@@ -255,7 +269,7 @@ void main() {
       pubkeyHex: 'cc' * 32,
       identityKey: otherIdentity.identityKey,
       accountHex: otherIdentity.accountHex,
-      org: otherIdentity.org,
+      institutionCode: otherIdentity.institutionCode,
       kind: otherIdentity.kind,
       activatedAtMs: 3,
     );

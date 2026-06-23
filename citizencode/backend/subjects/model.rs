@@ -226,7 +226,7 @@ pub struct CreateInstitutionInput {
     /// 教育机构业务分类。仅 `institution=JY` 的教育入口使用,不参与 CID 号生成。
     #[serde(default)]
     pub education_type: Option<String>,
-    /// 机构名称。目标态私权、公权和教育新增都应在创建阶段写入名称。
+    /// 机构全称。私权、公权和教育新增都应在创建阶段写入 cid_full_name。
     pub cid_full_name: Option<String>,
     /// 所属法人身份ID。仅需要挂靠的非法人(F)使用;个体经营和无限合伙是独立非法人,
     /// 不接受所属法人。

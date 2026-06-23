@@ -22,8 +22,7 @@
 
 - `cid_number`：身份 ID，不可变。
 - `kind`：`PUBLIC / PRIVATE / CITIZEN`。
-- `name`：列表展示名，默认用简称。
-- `full_name`：全称。
+- `cid_full_name`：机构全称。
 - `cid_short_name`：简称。
 - `province_code`：省代码。
 - `city_code`：市代码，可空。
@@ -46,7 +45,7 @@
 公权机构列表只显示简要信息：
 
 - 身份 ID。
-- 机构名称：只显示 `name`，默认等于简称。
+- 机构简称：只显示 `cid_short_name`，不得恢复旧展示缓存列。
 - 行政区。
 - 机构类型。
 - 状态。
@@ -164,7 +163,7 @@ AND town_code = $3
 - `citizencode/backend/subjects`：全称、简称、镇字段和状态对外模型收口，删除机构上下级字段残留，涉及代码。
 - `citizencode/backend/core`：表字段、索引、分区和旧字段残留清理，涉及代码。
 - `citizencode/backend/citizenpassport`：不重构核心业务，只适配联邦注册局机构管理员权限语义和公安局安装码状态读取，涉及代码。
-- `citizencode/frontend/gov`：公权机构列表只显示一个机构名称，公安局 tab 单独展示 CPMS/身份码状态，详情显示全称和简称，涉及代码。
+- `citizencode/frontend/gov`：公权机构列表只显示一个机构简称，公安局 tab 单独展示 CPMS/身份码状态，详情显示全称和简称，涉及代码。
 - `citizencode/frontend/admins`：文案改为联邦注册局机构管理员列表、市注册局机构管理员列表，涉及代码。
 - `citizencode/frontend/china`：增加镇行政区缓存，涉及代码。
 - `memory/01-architecture/citizencode`：更新 CID 架构、权限、数据模型、初始化和展示规则，涉及文档。
@@ -197,9 +196,9 @@ AND town_code = $3
 - 公安局 tab 只显示市公安局。
 - CPMS 安装码签发只允许联邦注册局机构管理员。
 - 市注册局机构管理员名称不被改写。
-- 公权机构列表只显示一个机构名称。
+- 公权机构列表只显示一个机构简称。
 - 详情页显示全称和简称。
-- `subjects` 对外模型包含 `name/full_name/cid_short_name/town_code/town/status`。
+- `subjects` 对外模型包含 `cid_full_name/cid_short_name/town_code/town/status`。
 - `gov` 对外模型只包含 `institution_code/org_code` 等机构类型字段，不再包含旧上下级字段。
 - 公安局列表包含 CPMS 状态、安装码状态和身份码业务状态。
 - 前端用户可见旧省域管理员文案统一改为“联邦注册局机构管理员”，市注册局机构管理员不改名。

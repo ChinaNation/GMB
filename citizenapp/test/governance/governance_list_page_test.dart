@@ -6,13 +6,14 @@ import 'package:citizenapp/governance/governance_list_page.dart';
 import 'package:citizenapp/governance/shared/institution_info.dart';
 
 InstitutionInfo _institution(
-  String name,
+  String cidShortName,
   String cidNumber,
   int orgType,
   int hexSeed,
 ) {
   return InstitutionInfo(
-    name: name,
+    cidFullName: cidShortName,
+    cidShortName: cidShortName,
     cidNumber: cidNumber,
     orgType: orgType,
     account: hexSeed.toRadixString(16).padLeft(64, '0'),

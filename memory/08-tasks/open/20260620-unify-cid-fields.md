@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-- 全仓库统一机构名称字段:`cid_full_name` 表示机构全称,`cid_short_name` 表示机构简称。
+- 全仓库统一机构全称/简称字段:`cid_full_name` 表示机构全称,`cid_short_name` 表示机构简称。
 - 全仓库统一机构账户字段:`main_account`、`fee_account`、`stake_account`、`account` 等,不再使用 `*_address` 表达机构账户。
 - 行政区名称字段统一为 `province_name`、`city_name`、`town_name`;代码字段保留 `province_code`、`city_code`、`town_code`。
 - 治理主体统一表达永久 `cid_number`、永久 `main_account` 和可变 `cid_full_name/cid_short_name`;链上治理账户参数使用 `governance_account`。
@@ -26,7 +26,7 @@
 
 ## 执行规则
 
-- 验收时以旧机构名称字段、旧机构账户字段、旧行政区名称字段、旧管理员字段和旧角色为扫描对象；目标协议只允许 `cid_full_name`、`cid_short_name`、`*_account`、`province_name`、`city_name`、`town_name`、`admins`、`operators`、`signer_pubkey`。
+- 验收时以旧机构全称/简称字段、旧机构账户字段、旧行政区名称字段、旧管理员字段和旧角色为扫描对象；目标协议只允许 `cid_full_name`、`cid_short_name`、`*_account`、`province_name`、`city_name`、`town_name`、`admins`、`operators`、`signer_pubkey`。
 - 不新增兼容分支、旧字段别名、过渡格式或迁移适配。
 - 涉及 `citizenchain/runtime/**` 的管理员/凭证统一修改已经单独列出路径和原因,并已获得用户二次确认。
 - 改代码后必须同步文档、完善必要中文注释并清理残留。

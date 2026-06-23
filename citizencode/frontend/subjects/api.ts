@@ -38,7 +38,7 @@ export interface Institution {
   cid_number: string;
   /** 详情页展示全称;列表不得与简称同时展示。 */
   cid_full_name?: string | null;
-  /** 详情页展示简称;公权目录默认用简称作为 cid_full_name。 */
+  /** 详情页展示简称;机构简称只来自 cid_short_name。 */
   cid_short_name?: string | null;
   /** 主体业务状态,只允许 ACTIVE / REVOKED。 */
   status: 'ACTIVE' | 'REVOKED';
@@ -163,7 +163,7 @@ export interface CreateInstitutionInput {
   /** 教育机构业务分类。仅 G/S 学校创建时提交;F+JY 分校不使用。 */
   education_type?: EducationType;
   /**
-   * 机构名称。
+   * 机构全称。
    * - 私权机构创建时必填,由对应私权类型 tab 锁定身份编码
    * - 法人教育机构(G/S+JY)和手动公权机构(G):**必传**,同步做查重
    * - 自动公权机构/公安局:不走手动创建接口
@@ -186,7 +186,7 @@ export interface CreateInstitutionInput {
 
 export interface CreateInstitutionOutput {
   cid_number: string;
-  /** 创建成功后的机构名称。 */
+  /** 创建成功后的机构全称。 */
   cid_full_name: string | null;
   category: InstitutionCategory;
 }
@@ -245,7 +245,7 @@ export interface ListInstitutionsQuery {
   category?: InstitutionCategory;
   province_name?: string;
   city_name?: string;
-  /** 精确搜索关键字:匹配机构名称或 CID;空=返回空页 */
+  /** 精确搜索关键字:匹配 cid_number / cid_full_name / cid_short_name;空=返回空页 */
   q?: string;
   private_type?: PrivateType;
   cursor?: string | null;

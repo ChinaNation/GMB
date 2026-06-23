@@ -32,7 +32,7 @@ use crate::scope::get_visible_scope;
 use crate::subjects::model::InstitutionListRow;
 use crate::*;
 
-// ─── 0. 机构名称查重(私权=全国唯一,公权=同城唯一) ──────────────
+// ─── 0. 机构全称查重(私权=全国唯一,公权=同城唯一) ──────────────
 
 fn manifest_version_for_scope(
     state: &AppState,

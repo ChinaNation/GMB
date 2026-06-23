@@ -3,7 +3,7 @@
 // 机构信息 tab:
 //   一整块 Card(标题 = 机构信息,编辑/取消/保存按钮在 Card extra 右上角):
 //     ┌ 左 Col:CID 信息(只读)──────────────┐  ┌ 右 Col:机构信息 ──────────────┐
-//     │ 身份ID / 省 / 市 / 盈利属性 / 机构(均纯中文) │  │ 机构名称 + 搜索查重图标       │
+//     │ 身份ID / 省 / 市 / 盈利属性 / 机构(均纯中文) │  │ 机构全称 + 搜索查重图标       │
 //     │ 创建时间 / 创建用户                  │  │ 私权类型/法人资格只读展示     │
 //     │                                      │  │ 所属法人 AutoComplete(需挂靠 F)│
 //     └──────────────────────────────────────┘  └───────────────────────────────┘
@@ -11,7 +11,7 @@
 // 右板块交互:
 //   默认态 = 只读 Descriptions 展示,右上角显示"编辑"按钮
 //   编辑态 = Form 可操作,右上角切换为"取消" + "保存"
-//   机构名称右侧搜索图标:输入后点击查重;重名则禁止保存;名称未改动视为已通过
+//   机构全称右侧搜索图标:输入后点击查重;重名则禁止保存;全称未改动视为已通过
 //   需挂靠的非法人所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
 //
 // 账户列表(AccountList)展示后端按机构类型生成的默认账户与自定义账户,
@@ -44,7 +44,7 @@ import {
   PRIVATE_TYPE_LABEL,
 } from '../subjects/labels';
 import {
-  checkInstitutionName,
+  checkCidFullName,
   searchParentInstitutions,
   updateInstitution,
   uploadLegalRepresentativePhoto,
@@ -112,11 +112,11 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const [form] = Form.useForm<InfoFormValues>();
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // ── 机构名称查重状态 ──
+  // ── 机构全称查重状态 ──
   // null = 未查 / 未改名(视为 ok);true = 查重通过;false = 已占用
-  const [nameChecking, setNameChecking] = useState(false);
-  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
-  const [currentName, setCurrentName] = useState<string>(inst.cid_full_name ?? '');
+  const [cidFullNameChecking, setCidFullNameChecking] = useState(false);
+  const [cidFullNameAvailable, setCidFullNameAvailable] = useState<boolean | null>(null);
+  const [currentCidFullName, setCurrentCidFullName] = useState<string>(inst.cid_full_name ?? '');
   const [legalRepSearching, setLegalRepSearching] = useState(false);
   const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -124,7 +124,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
 
   const isF = inst.subject_property === 'F';
   const requiresParent = isF && !['GT', 'GP'].includes(inst.institution_code);
-  // 完善判断:名称必填;仅需挂靠的非法人要求 parent_cid_number;私权类型由创建时编码确定。
+  // 完善判断:全称必填;仅需挂靠的非法人要求 parent_cid_number;私权类型由创建时编码确定。
   const needsCompletion =
     !inst.cid_full_name ||
     (requiresParent && !inst.parent_cid_number) ||
@@ -135,16 +135,16 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   // ── 需挂靠非法人所属法人搜索 ──
   const [parentSearchOpts, setParentSearchOpts] = useState<ParentInstitutionRow[]>([]);
   const [parentSearching, setParentSearching] = useState(false);
-  // 当前选中的法人(用于展示已选项名称;首次进入若 inst.parent_cid_number 有值,也要一次性拿到显示名)
+  // 当前选中的法人(用于展示已选项全称;首次进入若 inst.parent_cid_number 有值,也要一次性拿到显示名)
   const [selectedParent, setSelectedParent] = useState<ParentInstitutionRow | null>(null);
 
-  // detail 变更 → 需挂靠的非法人若有 parent_cid_number,则拉一次展示名称。
+  // detail 变更 → 需挂靠的非法人若有 parent_cid_number,则拉一次展示全称。
   useEffect(() => {
     if (!requiresParent || !inst.parent_cid_number) {
       setSelectedParent(null);
       return;
     }
-    // 用 cid_number 自身作为查询词反查名称(传机构自身落位省市,既有挂靠必然满足地域规则)
+    // 用 cid_number 自身作为查询词反查 full/short(传机构自身落位省市,既有挂靠必然满足地域规则)
     let cancelled = false;
     searchParentInstitutions(auth, inst.parent_cid_number, {
       fInstitution: inst.institution_code,
@@ -168,7 +168,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const onParentSearch = async (value: string) => {
     const q = value.trim();
     if (!q) {
-      notice.warning('请先输入 CID 或机构名称');
+      notice.warning('请先输入 CID、机构全称或机构简称');
       setParentSearchOpts([]);
       return;
     }
@@ -201,8 +201,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   // detail 重新加载(保存成功后 onReload)→ 重置编辑态
   useEffect(() => {
     setEditing(false);
-    setNameAvailable(null);
-    setCurrentName(inst.cid_full_name ?? '');
+    setCidFullNameAvailable(null);
+    setCurrentCidFullName(inst.cid_full_name ?? '');
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
@@ -226,7 +226,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
 
   const onClickEdit = () => {
     setEditing(true);
-    setNameAvailable(null);
+    setCidFullNameAvailable(null);
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
@@ -238,12 +238,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
     setPhotoName(inst.legal_rep_photo_name ?? '');
-    setCurrentName(inst.cid_full_name ?? '');
+    setCurrentCidFullName(inst.cid_full_name ?? '');
   };
 
   const onClickCancel = () => {
     setEditing(false);
-    setNameAvailable(null);
+    setCidFullNameAvailable(null);
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
@@ -255,48 +255,48 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
     });
     setPhotoName(inst.legal_rep_photo_name ?? '');
-    setCurrentName(inst.cid_full_name ?? '');
+    setCurrentCidFullName(inst.cid_full_name ?? '');
   };
 
-  const onNameInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onCidFullNameInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
-    setCurrentName(v);
-    // 名称改动 → 需要重新查重
-    if (nameAvailable !== null) setNameAvailable(null);
+    setCurrentCidFullName(v);
+    // 全称改动 → 需要重新查重。
+    if (cidFullNameAvailable !== null) setCidFullNameAvailable(null);
   };
 
-  const isNameUnchanged = () => {
-    return currentName.trim() === (inst.cid_full_name ?? '').trim();
+  const isCidFullNameUnchanged = () => {
+    return currentCidFullName.trim() === (inst.cid_full_name ?? '').trim();
   };
 
-  const onCheckName = async () => {
-    const name = currentName.trim();
-    if (!name) {
-      notice.warning('请先输入机构名称');
+  const onCheckCidFullName = async () => {
+    const cidFullName = currentCidFullName.trim();
+    if (!cidFullName) {
+      notice.warning('请先输入机构全称');
       return;
     }
-    if (isNameUnchanged()) {
+    if (isCidFullNameUnchanged()) {
       // 与原名一致,直接视为可用
-      setNameAvailable(true);
+      setCidFullNameAvailable(true);
       return;
     }
-    setNameChecking(true);
+    setCidFullNameChecking(true);
     try {
-      // 私权机构全国唯一查重(不传 subject_property/city 即走全国范围;后端会排除自身名不在此函数,
-      // 所以必须在名称改动时才调用;未改名的场景已在 isNameUnchanged 提前返回)
-      const { exists } = await checkInstitutionName(auth, name);
+      // 私权机构全国唯一查重(不传 subject_property/city 即走全国范围;后端会排除自身全称不在此函数,
+      // 所以必须在全称改动时才调用;未改名的场景已在 isCidFullNameUnchanged 提前返回)
+      const { exists } = await checkCidFullName(auth, cidFullName);
       if (exists) {
-        notice.error('该机构名称已被使用,请更换名称');
-        setNameAvailable(false);
+        notice.error('该机构全称已被使用,请更换全称');
+        setCidFullNameAvailable(false);
       } else {
-        notice.success('名称可用');
-        setNameAvailable(true);
+        notice.success('机构全称可用');
+        setCidFullNameAvailable(true);
       }
     } catch (err) {
       notice.error(err, '');
-      setNameAvailable(null);
+      setCidFullNameAvailable(null);
     } finally {
-      setNameChecking(false);
+      setCidFullNameChecking(false);
     }
   };
 
@@ -361,9 +361,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   };
 
   const onSaveInfo = async (values: InfoFormValues) => {
-    const name = values.cid_full_name.trim();
-    if (!name) {
-      notice.error('机构名称不能为空');
+    const cidFullName = values.cid_full_name.trim();
+    if (!cidFullName) {
+      notice.error('机构全称不能为空');
       return;
     }
     if (requiresParent && !values.parent_cid_number) {
@@ -376,15 +376,15 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.error('请完整填写法定代表人姓名、身份ID和证件照');
       return;
     }
-    // 名称变了必须查重通过才能保存
-    if (!isNameUnchanged() && nameAvailable !== true) {
-      notice.warning('请点击搜索图标检查名称是否可用');
+    // 机构全称变了必须查重通过才能保存。
+    if (!isCidFullNameUnchanged() && cidFullNameAvailable !== true) {
+      notice.warning('请点击搜索图标检查机构全称是否可用');
       return;
     }
     setSavingInfo(true);
     try {
       await updateInstitution(auth, inst.cid_number, {
-        cid_full_name: name,
+        cid_full_name: cidFullName,
         parent_cid_number: requiresParent ? values.parent_cid_number : undefined,
         legal_rep_name: legalRepName,
         legal_rep_cid_number: legalRepCid,
@@ -399,8 +399,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     } catch (err) {
       const raw = err instanceof Error ? err.message : '保存失败';
       if (raw.includes('已被使用') || raw.includes('同名机构')) {
-        notice.error('该机构名称已被使用,请更换名称');
-        setNameAvailable(false);
+        notice.error('该机构全称已被使用,请更换全称');
+        setCidFullNameAvailable(false);
       } else {
         notice.error(err, '保存失败');
       }
@@ -409,7 +409,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
   };
 
-  const titleText = inst.cid_full_name || '(未命名机构)';
+  const titleText = inst.cid_full_name || '(未设置全称)';
   const createdByLabel = (() => {
     const roleLabel = detail.created_by_role
       ? CREATED_BY_ROLE_LABEL[detail.created_by_role] ?? detail.created_by_role
@@ -434,7 +434,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   })();
 
   // 保存按钮可用判断
-  const saveEnabled = isNameUnchanged() || nameAvailable === true;
+  const saveEnabled = isCidFullNameUnchanged() || cidFullNameAvailable === true;
 
   // 右板块右上角按钮组
   const rightExtra = canWrite ? (
@@ -499,7 +499,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               <Alert
                 type="warning"
                 showIcon
-                message="请先完善机构名称和法定代表人资料,才能新建账户"
+                message="请先完善机构全称和法定代表人资料,才能新建账户"
                 style={{ marginBottom: 12 }}
               />
             )}
@@ -521,36 +521,36 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   }}
                 >
                   <Form.Item
-                    label="机构名称"
+                    label="机构全称"
                     name="cid_full_name"
                     rules={[
-                      { required: true, message: '请输入机构名称' },
+	                      { required: true, message: '请输入机构全称' },
                       { max: 30, message: '最多 30 个字' },
                     ]}
                     extra={
-                      isNameUnchanged()
-                        ? '未修改名称,无需查重'
-                        : nameAvailable === true
-                          ? '名称可用'
-                          : nameAvailable === false
-                            ? '该名称已被占用,请更换'
+                      isCidFullNameUnchanged()
+                        ? '未修改机构全称,无需查重'
+                        : cidFullNameAvailable === true
+                          ? '机构全称可用'
+                          : cidFullNameAvailable === false
+                            ? '该机构全称已被占用,请更换'
                             : '修改后点击右侧搜索图标检查是否重名'
                     }
                   >
                     <Input
-                      placeholder="请输入机构名称(最多 30 字)"
+	                      placeholder="请输入机构全称(最多 30 字)"
                       maxLength={30}
-                      onChange={onNameInputChange}
+                      onChange={onCidFullNameInputChange}
                       suffix={
                         <span
                           style={{
-                            cursor: nameChecking ? 'default' : 'pointer',
-                            color: nameChecking ? '#999' : '#1890ff',
+                            cursor: cidFullNameChecking ? 'default' : 'pointer',
+                            color: cidFullNameChecking ? '#999' : '#1890ff',
                           }}
-                          onClick={nameChecking ? undefined : onCheckName}
-                          title="检查名称是否重名"
+                          onClick={cidFullNameChecking ? undefined : onCheckCidFullName}
+	                          title="检查机构全称是否重名"
                         >
-                          {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
+                          {cidFullNameChecking ? <Spin size="small" /> : <SearchOutlined />}
                         </span>
                       }
                     />
@@ -560,7 +560,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                       label="所属法人"
                       name="parent_cid_number"
                       rules={[{ required: true, message: '请选择所属法人机构' }]}
-                      extra="输入 CID 或机构名称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(S)或公法人(G)"
+	                      extra="输入 CID、机构全称或机构简称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(S)或公法人(G)"
                     >
                       <AutoComplete
                         // 不提供 onSearch → 用户输入时不自动请求,仅点搜索图标触发
@@ -585,7 +585,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                         }}
                       >
                         <Input
-                          placeholder="输入 CID 或机构名称后点击右侧搜索图标"
+	                          placeholder="输入 CID、机构全称或机构简称后点击右侧搜索图标"
                           suffix={
                             <span
                               style={{
@@ -671,7 +671,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               ) : (
                 // 只读展示
                 <Descriptions column={1} size="small">
-                  <Descriptions.Item label="机构名称">
+	                  <Descriptions.Item label="机构全称">
                     {inst.cid_full_name || (
                       <span style={{ color: '#999' }}>(未命名)</span>
                     )}
@@ -748,7 +748,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
             <Button
               type="primary"
               disabled={needsCompletion}
-              title={needsCompletion ? '请先完善机构名称和法定代表人资料' : undefined}
+	              title={needsCompletion ? '请先完善机构全称和法定代表人资料' : undefined}
               onClick={() => setCreateAccountOpen(true)}
             >
               + 新建账户

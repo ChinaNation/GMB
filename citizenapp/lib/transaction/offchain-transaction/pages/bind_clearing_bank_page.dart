@@ -42,7 +42,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
   @override
   Widget build(BuildContext context) {
     final b = widget.bank;
-    final name = b.cidFullName.isEmpty ? '(未命名机构)' : b.cidFullName;
+    final title = b.displayTitle.isEmpty ? '(未设置全称)' : b.displayTitle;
     return Scaffold(
       appBar: AppBar(title: Text(widget.switchMode ? '切换清算行' : '绑定清算行')),
       body: ListView(
@@ -50,7 +50,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
         children: [
           ListTile(
             title: const Text('清算行'),
-            subtitle: Text(name),
+            subtitle: Text(title),
           ),
           ListTile(
             title: const Text('所在地'),
@@ -152,6 +152,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ClearingBankBindingSnapshot(
             cidNumber: widget.bank.cidNumber,
             cidFullName: widget.bank.cidFullName,
+            cidShortName: widget.bank.cidShortName,
             mainAccount: _normalizeHex(widget.bank.mainAccount ?? ''),
             feeAccount: widget.bank.feeAccount == null
                 ? null

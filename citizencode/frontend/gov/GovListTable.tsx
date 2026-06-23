@@ -196,10 +196,10 @@ export const GovListTable: React.FC<Props> = ({
       },
       { title: '身份ID', dataIndex: 'cid_number', width: 260, align: 'center' },
       {
-        title: '机构名称',
+        title: '机构全称',
         width: 180,
         align: 'center',
-        render: (_v, row) => nameText(row) || <span style={{ color: '#999' }}>(未命名)</span>,
+        render: (_v, row) => nameText(row) || <span style={{ color: '#999' }}>(未设置全称)</span>,
       },
       { title: '行政区', width: 180, align: 'center', render: (_v, row) => areaText(row) },
       {

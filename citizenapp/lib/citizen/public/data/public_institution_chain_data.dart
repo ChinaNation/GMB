@@ -70,10 +70,10 @@ class LivePublicInstitutionChainData implements PublicInstitutionChainData {
     required String mainAccountHex,
     required String displayName,
   }) {
-    // 公权机构主账户走 institutionAccount org=4(公权机构账户)。
+    // 公权机构主账户走 institutionAccount institution_code。
     final identity = AdminAccountIdentity.institutionAccount(
       accountHex: mainAccountHex,
-      org: 4,
+      institutionCode: 'CGOV',
       displayName: displayName,
     );
     return _adminService.fetchAdmins(identity);

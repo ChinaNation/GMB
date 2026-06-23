@@ -43,8 +43,6 @@ class InstitutionDuoqianCreatePage extends StatefulWidget {
       _InstitutionDuoqianCreatePageState();
 }
 
-const int _defaultInstitutionOrg = 5;
-
 class _InstitutionDuoqianCreatePageState
     extends State<InstitutionDuoqianCreatePage> {
   final _cidNumberController = TextEditingController();
@@ -61,7 +59,8 @@ class _InstitutionDuoqianCreatePageState
   String? _chainProgressError;
 
   // ── 机构账户列表（从 CID 后端查询） ──
-  String? _institutionName; // 查到的机构名称
+  String? _institutionCidFullName; // 查到的机构全称
+  String? _institutionCidShortName; // 查到的机构简称
   List<InstitutionAccountEntry> _accounts = []; // 机构下所有账户
 
   // 管理员列表（公钥 hex，不含 0x）
@@ -110,7 +109,7 @@ class _InstitutionDuoqianCreatePageState
 
   // ──── CID 查询（通过 CID 后端 API） ────
 
-  /// 输入 CID ID 后点击"查询"：从 CID 后端获取机构名称 + 账户列表。
+  /// 输入 CID ID 后点击"查询"：从 CID 后端获取机构全称/简称 + 账户列表。
   Future<void> _checkCidRegistration() async {
     final cidText = _cidNumberController.text.trim();
     if (cidText.isEmpty) {
@@ -127,7 +126,8 @@ class _InstitutionDuoqianCreatePageState
     setState(() {
       _checkingCid = true;
       _cidError = null;
-      _institutionName = null;
+      _institutionCidFullName = null;
+      _institutionCidShortName = null;
       _accounts = [];
     });
     _disposeAccountAmountControllers();
@@ -144,7 +144,8 @@ class _InstitutionDuoqianCreatePageState
       } else {
         _replaceAccountAmountControllers(resp.accounts);
         setState(() {
-          _institutionName = resp.cidFullName;
+          _institutionCidFullName = resp.cidFullName;
+          _institutionCidShortName = resp.cidShortName;
           _accounts = resp.accounts;
           _checkingCid = false;
         });
@@ -421,8 +422,12 @@ class _InstitutionDuoqianCreatePageState
                   value: registrationInfo.cidNumber),
               SignDisplayField(
                   key: 'cid_full_name',
-                  label: '机构名称',
+                  label: '机构全称',
                   value: registrationInfo.cidFullName),
+              SignDisplayField(
+                  key: 'cid_short_name',
+                  label: '机构简称',
+                  value: registrationInfo.cidShortName),
               const SignDisplayField(
                   key: 'org', label: '管理员组织类型', value: '其他机构账户'),
               SignDisplayField(
@@ -487,7 +492,7 @@ class _InstitutionDuoqianCreatePageState
         cidNumber: registrationInfo.cidNumber,
         cidFullName: registrationInfo.cidFullName,
         accounts: accounts,
-        org: _defaultInstitutionOrg,
+        institutionCode: registrationInfo.institutionCode,
         adminsLen: _admins.length,
         admins: adminsBytes,
         threshold: threshold,
@@ -509,9 +514,9 @@ class _InstitutionDuoqianCreatePageState
         final entity = InstitutionEntity()
           ..account = result.mainAccountHex
           ..cidNumber = registrationInfo.cidNumber
-          ..adminAccountOrg = _defaultInstitutionOrg
-          ..name = accounts.isEmpty
-              ? registrationInfo.cidFullName
+          ..adminAccountCode = registrationInfo.institutionCode
+          ..accountName = accounts.isEmpty
+              ? registrationInfo.cidShortName
               : accounts.first.accountName
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
           ..discoveredViaAdmin = false
@@ -652,8 +657,8 @@ class _InstitutionDuoqianCreatePageState
               ),
             ],
           ),
-          // 机构信息 + 初始账户资金
-          if (_institutionName != null) ...[
+          // 机构全称/简称 + 初始账户资金
+          if (_institutionCidFullName != null) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(10),
@@ -664,7 +669,7 @@ class _InstitutionDuoqianCreatePageState
                     color: AppTheme.primaryDark.withValues(alpha: 0.2)),
               ),
               child: Text(
-                '机构名称：$_institutionName',
+                '机构全称：$_institutionCidFullName\n机构简称：${_institutionCidShortName ?? ''}',
                 style:
                     const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
               ),

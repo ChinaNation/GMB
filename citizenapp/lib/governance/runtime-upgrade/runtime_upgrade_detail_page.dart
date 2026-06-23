@@ -746,7 +746,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             ),
             if (widget.institution != null) ...[
               const Divider(height: 20),
-              _buildInfoRow('当前机构', widget.institution!.name),
+              _buildInfoRow('当前机构简称', widget.institution!.cidShortName),
             ],
             if (info != null) ...[
               const Divider(height: 20),
@@ -945,7 +945,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               ),
             ),
             const SizedBox(height: 12),
-            _buildInfoRow('机构名称', institution.name),
+            _buildInfoRow('机构简称', institution.cidShortName),
             const Divider(height: 20),
             _buildInfoRow('投票状态', _institutionVoteLabel()),
             const Divider(height: 20),

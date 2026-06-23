@@ -5,7 +5,7 @@ import React from 'react';
 import type { AdminAuth } from '../auth/types';
 import { CreateInstitutionForm } from '../core/institution/CreateInstitutionForm';
 import {
-  checkInstitutionName,
+  checkCidFullName,
   createInstitution,
   searchParentInstitutions,
   uploadLegalRepresentativePhoto,
@@ -25,7 +25,7 @@ export const EducationCreateModal: React.FC<Props> = (props) => (
   <CreateInstitutionForm
     {...props}
     category="EDUCATION_INSTITUTION"
-    checkInstitutionName={checkInstitutionName}
+    checkCidFullName={checkCidFullName}
     createInstitution={createInstitution}
     uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
     searchParentInstitutions={searchParentInstitutions}

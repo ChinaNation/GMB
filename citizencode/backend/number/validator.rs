@@ -309,7 +309,14 @@ mod tests {
         let parts: Vec<&str> = code.split('-').collect();
         let seg2 = parts[1];
         let bad_checksum = if seg2.ends_with('0') { '1' } else { '0' };
-        let tampered = format!("{}-{}{}-{}-{}", parts[0], &seg2[..4], bad_checksum, parts[2], parts[3]);
+        let tampered = format!(
+            "{}-{}{}-{}-{}",
+            parts[0],
+            &seg2[..4],
+            bad_checksum,
+            parts[2],
+            parts[3]
+        );
         let _ = chars; // silence
         assert!(validate_cid_number_format(&tampered).is_err());
     }

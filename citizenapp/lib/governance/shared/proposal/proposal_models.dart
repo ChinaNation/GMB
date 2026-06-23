@@ -25,6 +25,7 @@ class ProposalMeta {
     required this.stage,
     required this.status,
     this.internalOrg,
+    this.internalCode,
     this.institutionBytes,
     this.displayMeta,
   });
@@ -34,6 +35,7 @@ class ProposalMeta {
   final int stage; // 0=internal, 1=joint, 2=citizen
   final int status; // 0=voting, 1=passed, 2=rejected
   final int? internalOrg;
+  final String? internalCode;
   final Uint8List? institutionBytes;
 
   /// 展示号(双层 ID:主键 `proposalId` 单调,展示号年份+序号通过 `ProposalDisplayId` 反查)。

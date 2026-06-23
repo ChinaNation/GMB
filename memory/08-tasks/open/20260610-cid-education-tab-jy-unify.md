@@ -30,10 +30,10 @@
 - [x] main.rs list_institutions_exact：签名 `Option<&str>` → 枚举，SQL 用 format! 拼静态子句，参数 $1..$5 整体前移（accounts 子查询 $2/$3 → $1/$2）
 
 ### 前端（citizencode/frontend）
-- [x] subjects/labels.ts：删 G_NONPROFIT_GOV；PRIVATE_INSTITUTIONS 删 JY（剩 ZG/TG）；新增 `CreateFormCategory`（PRIVATE/EDUCATION 双值，locksForCategory 收窄入参并删 PUBLIC_SECURITY/GOV_INSTITUTION 死 case）+ `educationP1Locks` 联动函数；删 InstitutionFieldLocks.lockedInstitutionName（恒 null 死字段）
+- [x] subjects/labels.ts：删 G_NONPROFIT_GOV；PRIVATE_INSTITUTIONS 删 JY（剩 ZG/TG）；新增 `CreateFormCategory`（PRIVATE/EDUCATION 双值，locksForCategory 收窄入参并删 PUBLIC_SECURITY/GOV_INSTITUTION 死 case）+ `educationP1Locks` 联动函数；删 InstitutionFieldLocks.lockedCidFullName（恒 null 死字段）
 - [x] core/institution/CreateInstitutionForm.tsx：删 isPublicGov/isPublicSecurity 全部分支；EDUCATION 模式（G/S/F、机构锁 JY、学校名称必填查重、F 渲染「上级法人属性」+上级=S 时「上级盈利属性」，切主体属性/切上级属性/切上级盈利三条路径都 setFieldsValue({p1}) 重算）；G 查重带 city（后端 G 分支同市查重），S/F 全国
 - [x] education/ 新模块：api.ts（listEducationInstitutions=category=EDUCATION_INSTITUTION + 创建三件套复制 private）/ EducationCreateModal / EducationListTable（去清算行列、加主体属性列含盈利标注）/ EducationView（精确搜索形态，详情复用 gov/GovDetailPage 调度：S/F→PrivateDetailLayout 可编辑、G→只读；创建成功跳详情）
-- [x] 删 gov/GovCreateModal.tsx；GovView 删新增按钮/createOpen/createLabel；gov/api.ts 删 checkInstitutionName/createInstitution/uploadLegalRepresentativePhoto 及 grant 相关 import
+- [x] 删 gov/GovCreateModal.tsx；GovView 删新增按钮/createOpen/createLabel；gov/api.ts 删 checkCidFullName/createInstitution/uploadLegalRepresentativePhoto 及 grant 相关 import
 - [x] private/PrivateCreateModal 写死 category="PRIVATE_INSTITUTION" 删透传；PrivateView 同步简化
 - [x] App.tsx：education tab 插 private 与 gov 之间 + routedView 分支（387 行 ≤400）；AuthContext 加 canViewEducation（联邦注册局机构管理员/市注册局机构管理员）
 - [x] tsconfig.json include 加 education

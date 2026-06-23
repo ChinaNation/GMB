@@ -284,11 +284,11 @@ pub(crate) fn province_scope_for_registry_org_conn(
     }
 }
 
-/// 中文注释:解析当前管理员所属机构的简称(cid_short_name 单一真源)。
+/// 中文注释:解析当前管理员所属机构的 cid_short_name 单一字段。
 /// 联邦注册局管理员 → institution_code='FRG' 的全局唯一机构(总统府联邦注册局,简称=联邦注册局);
 /// 市注册局管理员   → institution_code='CREG' AND province_name AND city_name 的本市机构(如 合肥市注册局)。
 /// 无对应行返回 None(前端按空处理,绝不另造名字)。
-pub(crate) fn resolve_home_institution_short_name_conn(
+pub(crate) fn resolve_home_cid_short_name_conn(
     conn: &mut Client,
     registry_org_code: &RegistryOrgCode,
     scope_province_name: Option<&str>,
@@ -318,7 +318,7 @@ pub(crate) fn resolve_home_institution_short_name_conn(
     Ok(row.and_then(|r| r.get::<usize, Option<String>>(0)))
 }
 
-pub(crate) fn resolve_home_institution_short_name(
+pub(crate) fn resolve_home_cid_short_name(
     db: &Db,
     registry_org_code: &RegistryOrgCode,
     scope_province_name: Option<&str>,
@@ -328,7 +328,7 @@ pub(crate) fn resolve_home_institution_short_name(
     let province = scope_province_name.map(str::to_string);
     let city = scope_city_name.map(str::to_string);
     db.with_client(move |conn| {
-        resolve_home_institution_short_name_conn(
+        resolve_home_cid_short_name_conn(
             conn,
             &registry_org_code,
             province.as_deref(),

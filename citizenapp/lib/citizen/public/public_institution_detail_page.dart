@@ -356,9 +356,6 @@ class _PublicInstitutionDetailPageState
   // ──── ④ 管理员入口(治理同款 36px Card → 管理员列表)────
 
   Widget _adminsEntry(PublicInstitutionEntity inst) {
-    final name = inst.cidShortName?.isNotEmpty == true
-        ? inst.cidShortName!
-        : inst.cidFullName;
     return _entryCard(
       icon: Icons.people_outline,
       title: '管理员',
@@ -366,7 +363,6 @@ class _PublicInstitutionDetailPageState
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PublicInstitutionAdminListPage(
-            cidFullName: name,
             admins: _admins,
           ),
         ),

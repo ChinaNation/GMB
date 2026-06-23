@@ -117,12 +117,16 @@ class InstitutionRegistrationInfoResponse {
   const InstitutionRegistrationInfoResponse({
     required this.cidNumber,
     required this.cidFullName,
+    required this.cidShortName,
+    required this.institutionCode,
     required this.accountNames,
     required this.credential,
   });
 
   final String cidNumber;
   final String cidFullName;
+  final String cidShortName;
+  final String institutionCode;
   final List<String> accountNames;
   final InstitutionRegistrationCredential credential;
 }
@@ -299,7 +303,7 @@ class ApiClient {
   /// 查询机构下所有多签账户。
   ///
   /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/accounts`，
-  /// 返回机构名称 + 账户列表（account_name / account / chain_status）。
+  /// 返回机构全称/简称 + 账户列表（account_name / account / chain_status）。
   Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
       String cidNumber) async {
     final trimmed = cidNumber.trim();
@@ -361,6 +365,7 @@ class ApiClient {
     return InstitutionAccountsResponse(
       cidNumber: (data['cid_number']?.toString() ?? trimmed).trim(),
       cidFullName: (data['cid_full_name']?.toString() ?? '').trim(),
+      cidShortName: (data['cid_short_name']?.toString() ?? '').trim(),
       accounts: accounts,
     );
   }
@@ -427,6 +432,8 @@ class ApiClient {
     }
 
     final cidFullName = (data['cid_full_name']?.toString() ?? '').trim();
+    final cidShortName = (data['cid_short_name']?.toString() ?? '').trim();
+    final institutionCode = (data['institution_code']?.toString() ?? '').trim();
     final registerNonce =
         (credentialMap['register_nonce']?.toString() ?? '').trim();
     final issuerCidNumber =
@@ -442,6 +449,12 @@ class ApiClient {
     final signature = (credentialMap['signature']?.toString() ?? '').trim();
     if (cidFullName.isEmpty) {
       throw Exception('机构注册凭证 cid_full_name 为空');
+    }
+    if (cidShortName.isEmpty) {
+      throw Exception('机构注册凭证 cid_short_name 为空');
+    }
+    if (institutionCode.isEmpty) {
+      throw Exception('机构注册凭证 institution_code 为空');
     }
     if (registerNonce.isEmpty) {
       throw Exception('机构注册凭证 register_nonce 为空');
@@ -477,6 +490,8 @@ class ApiClient {
     return InstitutionRegistrationInfoResponse(
       cidNumber: (data['cid_number']?.toString() ?? trimmed).trim(),
       cidFullName: cidFullName,
+      cidShortName: cidShortName,
+      institutionCode: institutionCode,
       accountNames: accountNames,
       credential: InstitutionRegistrationCredential(
         genesisHash: (credentialMap['genesis_hash']?.toString() ?? '').trim(),
@@ -639,10 +654,12 @@ class InstitutionAccountsResponse {
   const InstitutionAccountsResponse({
     required this.cidNumber,
     required this.cidFullName,
+    required this.cidShortName,
     required this.accounts,
   });
 
   final String cidNumber;
   final String cidFullName;
+  final String cidShortName;
   final List<InstitutionAccountEntry> accounts;
 }

@@ -298,6 +298,12 @@ impl_runtime_apis! {
         }
     }
 
+    impl primitives::china::BuiltinInstitutionFullShortApi<Block> for Runtime {
+        fn builtin_institution_full_short_digest() -> [u8; 32] {
+            primitives::china::builtin_institution_full_short_digest()
+        }
+    }
+
     impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
         fn build_state(config: Vec<u8>) -> sp_genesis_builder::Result {
             build_state::<RuntimeGenesisConfig>(config)
