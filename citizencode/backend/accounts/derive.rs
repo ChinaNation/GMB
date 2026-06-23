@@ -1,4 +1,4 @@
-//! DUOQIAN 机构账户地址派生(后端薄适配)。
+//! GMB 机构账户地址派生(后端薄适配)。
 //!
 //! 账户派生唯一真源 = 链端 `primitives::account_derive`(ADR-024 Tier 1):op_tag、
 //! 5 个受限保留名、name→种类路由、payload 字段拼装、唯一派生入口 `AccountKind::derive`
@@ -7,7 +7,7 @@
 //!   - 创建账户时立即在本地算出 `account`,无需等激活上链
 //!   - 激活成功后做 receipt 地址 ↔ 本地派生值的一致性断言,抓链端路由 / domain 漂移
 //!
-//! ## DUOQIAN 协议(定义见 `primitives::account_derive`)
+//! ## GMB 协议(定义见 `primitives::account_derive`)
 //!
 //! | op_tag | 账户类型            | account_name              | preimage 是否含 account_name |
 //! |--------|---------------------|---------------------------|------------------------------|
@@ -19,7 +19,7 @@
 //! | 0x06   | 用户自定义其他账户  | 用户输入的任意非空字符串 | 是                           |
 //!
 //! ```text
-//! preimage = b"DUOQIAN"                      // 7 字节 domain
+//! preimage = b"GMB"                          // 3 字节 domain
 //!         || op_tag                          // 1 字节 (0x00 / 0x01 / 0x02 / 0x03 / 0x04 / 0x06)
 //!         || ss58.to_le_bytes()              // 2 字节 (2027 LE = [0xEB, 0x07])
 //!         || cid_number.as_bytes()          // 变长

@@ -893,7 +893,7 @@ fn runtime_cid_institution_verifier_admins_change_lookup() {
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let payload = (
-                primitives::core_const::DUOQIAN,
+                primitives::core_const::GMB,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,

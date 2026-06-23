@@ -1,7 +1,7 @@
-// DUOQIAN 账户统一派生原语 —— 全 app 唯一入口(ADR-018 §九)。
+// GMB 账户统一派生原语 —— 全 app 唯一入口(ADR-018 §九)。
 //
 // 与 citizenchain `primitives::core_const` 单一权威源严格字节对齐:
-//   preimage = b"DUOQIAN"(7B) || op_tag(1B) || ss58.to_le_bytes()(2B) || payload
+//   preimage = b"GMB"(3B) || op_tag(1B) || ss58.to_le_bytes()(2B) || payload
 //   address  = blake2b_256(preimage)            // 32 字节 account id
 // op_tag 与 payload(见各常量注释)逐一对齐 core_const.rs;任何模块禁止
 // 自行拼接 preimage,一律调用本文件。
@@ -42,9 +42,9 @@ const int kOpPersonal = 0x05;
 /// CID 机构自定义命名账户 · payload = cid_number || account_name。
 const int kOpName = 0x06;
 
-const String _domain = 'DUOQIAN';
+const String _domain = 'GMB';
 
-/// 派生 DUOQIAN account id(32 字节)。底层唯一实现,上层全部经此。
+/// 派生 GMB account id(32 字节)。底层唯一实现,上层全部经此。
 Uint8List deriveAccountId({
   required int opTag,
   required List<int> payload,

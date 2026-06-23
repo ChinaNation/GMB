@@ -25,17 +25,16 @@ pub const ENABLE_DUST_CLEANUP: bool = true; // 是否允许 Dust 回收（必须
 pub const ALLOW_LOCAL_ADDRESS_GENERATION: bool = true; // 是否允许无限地址本地生成（链下）
 
 /// 4. 统一签名/派生域铁律（Unified Signature & Derivation Domain）
-/// 全仓库地址派生（BLAKE2-256）+ 签名 payload（sr25519）统一使用 `DUOQIAN` 前缀，后接 1 字节 `op_tag` 做子命名空间。
-/// 地址派生 preimage = DUOQIAN (7B) || op_tag (1B) || ss58 (2B little-endian) || payload_bytes。
+/// 全仓库地址派生（BLAKE2-256）+ 签名 payload（sr25519）统一使用 `GMB` 前缀，后接 1 字节 `op_tag` 做子命名空间。
+/// 地址派生 preimage = GMB (3B) || op_tag (1B) || ss58 (2B little-endian) || payload_bytes。
 /// 地址派生：`address = BLAKE2-256(preimage)` → 32 字节 AccountId。
-/// 签名 payload：`message = BLAKE2-256(SCALE.encode(tuple("DUOQIAN", ..., payload_fields)))`。
+/// 签名 payload：`message = BLAKE2-256(SCALE.encode(tuple("GMB", ..., payload_fields)))`。
 ///
 /// 注意：账户地址派生的 op_tag、5 保留名、name→种类路由、payload 拼装与唯一派生入口
 /// (`AccountKind::derive`) 已迁出至单一真源 `account_derive`(ADR-024 Tier 1)；
-/// 本文件账户派生相关只剩两项:① 域分隔符 `DUOQIAN`(地址派生 + 签名共用,故留此),
+/// 本文件账户派生相关只剩两项:① 域分隔符 `GMB`(地址派生 + 签名共用,故留此),
 /// ② 签名 payload op_tag(`OP_SIGN_*`,0x10-0x1F,非账户派生)。
-/// `DUOQIAN→GMB` 改名属 Tier 3,随 T3/T4 末尾创世,本批不动。
-pub const DUOQIAN: &[u8; 7] = b"DUOQIAN";
+pub const GMB: &[u8; 3] = b"GMB";
 
 /// CID 机构号(cid_number)链上/链下统一最大字节数（单一权威源）。
 ///

@@ -13,7 +13,7 @@
 //! CI 守卫脚本 `tools/sync_account_derive_vectors.sh` 跑 update + git diff --exit-code。
 
 use primitives::account_derive::AccountKind;
-use primitives::core_const::{DUOQIAN, SS58_FORMAT};
+use primitives::core_const::{GMB, SS58_FORMAT};
 
 const FIXTURE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -150,8 +150,8 @@ fn account_derive_golden_vectors() {
     );
     assert_eq!(
         fixture["domain"].as_str(),
-        Some(core::str::from_utf8(DUOQIAN).unwrap()),
-        "fixture domain 与链端 DUOQIAN 不一致(Tier 3 改 GMB 时须同步刷新 fixture)"
+        Some(core::str::from_utf8(GMB).unwrap()),
+        "fixture domain 与链端 GMB 不一致(域字节变更须同步刷新 fixture)"
     );
 
     let update = std::env::var(UPDATE_ENV).map(|v| v == "1").unwrap_or(false);

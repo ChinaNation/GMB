@@ -97,53 +97,130 @@
 
 ### 4.5 省名英文
 
-| 中文省名 | ProvinceBase | 独立英文名 |
-|---|---|---|
-| 中枢省 | Zhongshu | Zhongshu Province |
-| 岭南省 | Lingnan | Lingnan Province |
-| 广东省 | Guangdong | Guangdong Province |
-| 广西省 | Guangxi | Guangxi Province |
-| 福建省 | Fujian | Fujian Province |
-| 海南省 | Hainan | Hainan Province |
-| 云南省 | Yunnan | Yunnan Province |
-| 贵州省 | Guizhou | Guizhou Province |
-| 湖南省 | Hunan | Hunan Province |
-| 江西省 | Jiangxi | Jiangxi Province |
-| 浙江省 | Zhejiang | Zhejiang Province |
-| 江苏省 | Jiangsu | Jiangsu Province |
-| 山东省 | Shandong | Shandong Province |
-| 山西省 | Shanxi | Shanxi Province |
-| 河南省 | Henan | Henan Province |
-| 河北省 | Hebei | Hebei Province |
-| 湖北省 | Hubei | Hubei Province |
-| 陕西省 | Shaanxi | Shaanxi Province |
-| 重庆省 | Chongqing | Chongqing Province |
-| 四川省 | Sichuan | Sichuan Province |
-| 甘肃省 | Gansu | Gansu Province |
-| 北平省 | Beiping | Beiping Province |
-| 海滨省 | Haibin | Haibin Province |
-| 松江省 | Songjiang | Songjiang Province |
-| 龙江省 | Longjiang | Longjiang Province |
-| 吉林省 | Jilin | Jilin Province |
-| 辽宁省 | Liaoning | Liaoning Province |
-| 宁夏省 | Ningxia | Ningxia Province |
-| 青海省 | Qinghai | Qinghai Province |
-| 安徽省 | Anhui | Anhui Province |
-| 台湾省 | Taiwan | Taiwan Province |
-| 西藏省 | Xizang | Xizang Province |
-| 新疆省 | Xinjiang | Xinjiang Province |
-| 西康省 | Xikang | Xikang Province |
-| 阿里省 | Ali | Ali Province |
-| 葱岭省 | Congling | Congling Province |
-| 伊犁省 | Yili | Yili Province |
-| 河西省 | Hexi | Hexi Province |
-| 昆仑省 | Kunlun | Kunlun Province |
-| 河套省 | Hetao | Hetao Province |
-| 热河省 | Rehe | Rehe Province |
-| 兴安省 | Xingan | Xingan Province |
-| 合江省 | Hejiang | Hejiang Province |
+| 省代码 | 中文省名 | ProvinceBase | 独立英文名 |
+|---|---|---|---|
+| ZS | 中枢省 | Zhongshu | Zhongshu Province |
+| LN | 岭南省 | Lingnan | Lingnan Province |
+| GD | 广东省 | Guangdong | Guangdong Province |
+| GX | 广西省 | Guangxi | Guangxi Province |
+| FJ | 福建省 | Fujian | Fujian Province |
+| HN | 海南省 | Hainan | Hainan Province |
+| YN | 云南省 | Yunnan | Yunnan Province |
+| GZ | 贵州省 | Guizhou | Guizhou Province |
+| HU | 湖南省 | Hunan | Hunan Province |
+| JX | 江西省 | Jiangxi | Jiangxi Province |
+| ZJ | 浙江省 | Zhejiang | Zhejiang Province |
+| JS | 江苏省 | Jiangsu | Jiangsu Province |
+| SD | 山东省 | Shandong | Shandong Province |
+| SX | 山西省 | Shanxi | Shanxi Province |
+| HE | 河南省 | Henan | Henan Province |
+| HB | 河北省 | Hebei | Hebei Province |
+| HI | 湖北省 | Hubei | Hubei Province |
+| SI | 陕西省 | Shaanxi | Shaanxi Province |
+| CQ | 重庆省 | Chongqing | Chongqing Province |
+| SC | 四川省 | Sichuan | Sichuan Province |
+| GS | 甘肃省 | Gansu | Gansu Province |
+| BP | 北平省 | Beiping | Beiping Province |
+| HA | 海滨省 | Haibin | Haibin Province |
+| SJ | 松江省 | Songjiang | Songjiang Province |
+| LJ | 龙江省 | Longjiang | Longjiang Province |
+| JL | 吉林省 | Jilin | Jilin Province |
+| LI | 辽宁省 | Liaoning | Liaoning Province |
+| NX | 宁夏省 | Ningxia | Ningxia Province |
+| QH | 青海省 | Qinghai | Qinghai Province |
+| AH | 安徽省 | Anhui | Anhui Province |
+| TW | 台湾省 | Taiwan | Taiwan Province |
+| XZ | 西藏省 | Xizang | Xizang Province |
+| XJ | 新疆省 | Xinjiang | Xinjiang Province |
+| XK | 西康省 | Xikang | Xikang Province |
+| AL | 阿里省 | Ali | Ali Province |
+| CL | 葱岭省 | Congling | Congling Province |
+| YL | 伊犁省 | Yili | Yili Province |
+| HX | 河西省 | Hexi | Hexi Province |
+| KL | 昆仑省 | Kunlun | Kunlun Province |
+| HT | 河套省 | Hetao | Hetao Province |
+| RH | 热河省 | Rehe | Rehe Province |
+| XA | 兴安省 | Xingan | Xingan Province |
+| HJ | 合江省 | Hejiang | Hejiang Province |
 
-## 5. 生成物边界
+## 5. 非常量机构模板
+
+本节只登记非常量机构的命名规范和行政区代码规则。非常量机构的英文名暂时不进入
+CID 数据库、API、前端字段或生成物；需要英文展示时从本节规则取用。
+
+行政区代码字段含义：
+
+| 字段 | 含义 | 来源 |
+|---|---|---|
+| `province_code` | 所属省代码 | `citizencode/backend/china/china.sqlite` 的 `provinces.code` |
+| `city_code` | 所属市代码 | `citizencode/backend/china/china.sqlite` 的 `cities.code` |
+| `town_code` | 所属镇代码 | `citizencode/backend/china/china.sqlite` 的 `towns.code`；非镇级机构为空 |
+
+### 5.1 国家级非常量机构
+
+| 机构码 | province_code | city_code | town_code | 中文全称 | 中文简称 | 英文全称规范 | 英文简称规范 |
+|---|---|---|---|---|---|---|---|
+| NSN | ZS | 001 | 空 | 中华民族联邦共和国国家立法院参议员议政会 | 国家参议会 | National Senate Deliberative Council of the National Legislative Yuan of the Federal Republic of the China Nation | National Senate |
+| NRP | ZS | 001 | 空 | 中华民族联邦共和国国家立法院众议员议政会 | 国家众议会 | National House of Representatives Deliberative Council of the National Legislative Yuan of the Federal Republic of the China Nation | National House of Representatives |
+
+### 5.2 省级非常量机构
+
+省级非常量机构使用 `{province_code}` 和省本级锚定 `{city_code}`，当前锚定市代码为 `001`；
+`town_code` 为空。中文名以 `{省名}` 拼接，英文名以 `{ProvinceBase}` 拼接。
+
+| 机构码 | province_code | city_code | town_code | 中文全称模式 | 中文简称模式 | 英文全称规范 | 英文简称规范 |
+|---|---|---|---|---|---|---|---|
+| PDF | `{province_code}` | `001` | 空 | `{省名}国家防务厅` | `{省名}国防厅` | `{ProvinceBase} Provincial Department of National Defense` | `{ProvinceBase} Defense Department` |
+| PHS | `{province_code}` | `001` | 空 | `{省名}国土安全厅` | `{省名}国安厅` | `{ProvinceBase} Provincial Department of Homeland Security` | `{ProvinceBase} Homeland Security Department` |
+| PCW | `{province_code}` | `001` | 空 | `{省名}公民生活保障厅` | `{省名}民生厅` | `{ProvinceBase} Provincial Department of Citizen Welfare` | `{ProvinceBase} Citizen Welfare Department` |
+| PHU | `{province_code}` | `001` | 空 | `{省名}住房与城镇建设厅` | `{省名}住建厅` | `{ProvinceBase} Provincial Department of Housing and Urban Development` | `{ProvinceBase} Housing Department` |
+| PAG | `{province_code}` | `001` | 空 | `{省名}农业与农村发展厅` | `{省名}农业厅` | `{ProvinceBase} Provincial Department of Agriculture and Rural Development` | `{ProvinceBase} Agriculture Department` |
+| PCM | `{province_code}` | `001` | 空 | `{省名}商务与市场贸易厅` | `{省名}商贸厅` | `{ProvinceBase} Provincial Department of Commerce and Market Trade` | `{ProvinceBase} Commerce Department` |
+| PFT | `{province_code}` | `001` | 空 | `{省名}财政与税务厅` | `{省名}财税厅` | `{ProvinceBase} Provincial Department of Finance and Taxation` | `{ProvinceBase} Finance and Taxation Department` |
+| PEN | `{province_code}` | `001` | 空 | `{省名}能源与环保发展厅` | `{省名}能源厅` | `{ProvinceBase} Provincial Department of Energy and Environmental Development` | `{ProvinceBase} Energy Department` |
+| PTR | `{province_code}` | `001` | 空 | `{省名}交通运输厅` | `{省名}交通厅` | `{ProvinceBase} Provincial Department of Transport` | `{ProvinceBase} Transport Department` |
+| PSN | `{province_code}` | `001` | 空 | `{省名}参议员议政会` | `{省名}参议会` | `{ProvinceBase} Provincial Senate Deliberative Council` | `{ProvinceBase} Provincial Senate` |
+| PRP | `{province_code}` | `001` | 空 | `{省名}众议员议政会` | `{省名}众议会` | `{ProvinceBase} Provincial House of Representatives Deliberative Council` | `{ProvinceBase} Provincial House of Representatives` |
+
+### 5.3 市级非常量机构
+
+市级非常量机构使用 `{province_code}` 和 `{city_code}`，`town_code` 为空。
+中文名以 `{市名}` 拼接，英文名以 `{CityBase}` 拼接。
+
+| 机构码 | province_code | city_code | town_code | 中文全称模式 | 中文简称模式 | 英文全称规范 | 英文简称规范 |
+|---|---|---|---|---|---|---|---|
+| CGOV | `{province_code}` | `{city_code}` | 空 | `{市名}自治政府` | `{市名}政府` | `{CityBase} Municipal Autonomous Government` | `{CityBase} Municipal Government` |
+| CLEG | `{province_code}` | `{city_code}` | 空 | `{市名}公民立法委员会` | `{市名}立法会` | `{CityBase} Municipal Citizen Legislative Committee` | `{CityBase} Municipal Legislative Committee` |
+| CSUP | `{province_code}` | `{city_code}` | 空 | `{市名}监察院` | `{市名}监察院` | `{CityBase} Municipal Control Yuan` | `{CityBase} Municipal Control Yuan` |
+| CJUD | `{province_code}` | `{city_code}` | 空 | `{市名}司法院` | `{市名}司法院` | `{CityBase} Municipal Judicial Yuan` | `{CityBase} Municipal Judicial Yuan` |
+| CEDU | `{province_code}` | `{city_code}` | 空 | `{市名}公民教育委员会` | `{市名}教委会` | `{CityBase} Municipal Citizen Education Committee` | `{CityBase} Municipal Education Committee` |
+| CSLF | `{province_code}` | `{city_code}` | 空 | `{市名}公民自治委员会` | `{市名}自治会` | `{CityBase} Municipal Citizen Self-Governance Committee` | `{CityBase} Municipal Self-Governance Committee` |
+| CDEF | `{province_code}` | `{city_code}` | 空 | `{市名}国家防务局` | `{市名}国防局` | `{CityBase} Municipal Bureau of National Defense` | `{CityBase} Defense Bureau` |
+| CHSC | `{province_code}` | `{city_code}` | 空 | `{市名}国土安全局` | `{市名}国安局` | `{CityBase} Municipal Bureau of Homeland Security` | `{CityBase} Homeland Security Bureau` |
+| CCWF | `{province_code}` | `{city_code}` | 空 | `{市名}公民生活保障局` | `{市名}民生局` | `{CityBase} Municipal Bureau of Citizen Welfare` | `{CityBase} Citizen Welfare Bureau` |
+| CHUD | `{province_code}` | `{city_code}` | 空 | `{市名}住房与城镇建设局` | `{市名}住建局` | `{CityBase} Municipal Bureau of Housing and Urban Development` | `{CityBase} Housing Bureau` |
+| CAGR | `{province_code}` | `{city_code}` | 空 | `{市名}农业与农村发展局` | `{市名}农业局` | `{CityBase} Municipal Bureau of Agriculture and Rural Development` | `{CityBase} Agriculture Bureau` |
+| CCOM | `{province_code}` | `{city_code}` | 空 | `{市名}商务与市场贸易局` | `{市名}商贸局` | `{CityBase} Municipal Bureau of Commerce and Market Trade` | `{CityBase} Commerce Bureau` |
+| CFIN | `{province_code}` | `{city_code}` | 空 | `{市名}财政与税务局` | `{市名}财税局` | `{CityBase} Municipal Bureau of Finance and Taxation` | `{CityBase} Finance and Taxation Bureau` |
+| CENR | `{province_code}` | `{city_code}` | 空 | `{市名}能源与环保发展局` | `{市名}能源局` | `{CityBase} Municipal Bureau of Energy and Environmental Development` | `{CityBase} Energy Bureau` |
+| CTRN | `{province_code}` | `{city_code}` | 空 | `{市名}交通运输局` | `{市名}交通局` | `{CityBase} Municipal Bureau of Transport` | `{CityBase} Transport Bureau` |
+| CREG | `{province_code}` | `{city_code}` | 空 | `{市名}身份注册局` | `{市名}注册局` | `{CityBase} Municipal Identity Registry Bureau` | `{CityBase} Registry Bureau` |
+| CPOL | `{province_code}` | `{city_code}` | 空 | `{市名}公民安全局` | `{市名}公安局` | `{CityBase} Municipal Bureau of Citizen Security` | `{CityBase} Public Security Bureau` |
+
+### 5.4 镇级非常量机构
+
+镇级非常量机构使用 `{province_code}`、`{city_code}` 和 `{town_code}`。
+中文名以 `{镇名}` 拼接，英文名以 `{TownBase}` 拼接。
+
+| 机构码 | province_code | city_code | town_code | 中文全称模式 | 中文简称模式 | 英文全称规范 | 英文简称规范 |
+|---|---|---|---|---|---|---|---|
+| TGOV | `{province_code}` | `{city_code}` | `{town_code}` | `{镇名}自治政府` | `{镇名}政府` | `{TownBase} Town Autonomous Government` | `{TownBase} Town Government` |
+| TCWF | `{province_code}` | `{city_code}` | `{town_code}` | `{镇名}公民生活保障科` | `{镇名}民生科` | `{TownBase} Town Citizen Welfare Section` | `{TownBase} Welfare Section` |
+| THUD | `{province_code}` | `{city_code}` | `{town_code}` | `{镇名}住房与城镇建设科` | `{镇名}住建科` | `{TownBase} Town Housing and Urban Development Section` | `{TownBase} Housing Section` |
+| TAGR | `{province_code}` | `{city_code}` | `{town_code}` | `{镇名}农业与农村发展科` | `{镇名}农业科` | `{TownBase} Town Agriculture and Rural Development Section` | `{TownBase} Agriculture Section` |
+| TFIN | `{province_code}` | `{city_code}` | `{town_code}` | `{镇名}财政与税务科` | `{镇名}财税科` | `{TownBase} Town Finance and Taxation Section` | `{TownBase} Finance and Taxation Section` |
+
+## 6. 生成物边界
 
 - `scripts/generate_citizenapp_governance_registry.mjs` 只能从 `china_cb.rs` / `china_ch.rs`
   读取四字段并生成公民端和公民钱包的治理机构注册表。

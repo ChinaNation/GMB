@@ -1,10 +1,12 @@
 //! CID 号生成器
 //!
 //! 中文注释:
-//! 这是 cid 系统**唯一**的 CID 号生成入口(`generate_cid_number`),供所有业务模块调用:
-//! - `subjects::registration`     法人/非法人主体 CID 生成
-//! - `citizens::binding`          公民绑定兜底 CID 生成
-//! - `gov::service`               公权机构(政府模板)CID 生成
+//! 这是 cid 系统**唯一**的 CID 号生成入口(`generate_cid_number`)。业务模块的
+//! 「种子约定 + 撞号重试」统一经 `number::seed` 调本入口,不再各自直调:
+//! - `subjects::registration`     经 `seed::dynamic_institution_cid`(随机 UUID + 重试)
+//! - `citizens::binding`          经 `seed::citizen_cid`(wallet_pubkey + 重试)
+//! - `gov::service`               经 `seed::official_institution_cid`(GOV 模板,确定性无重试)
+//!   (`gov::service::generate_public_security_cid` 的 CPOL `PS-` 种子另属一类,仍直调本入口)
 //!
 //! 生成的 CID 号结构见 `number/validator.rs` 顶部注释。
 //! 主体属性(K1)已从号码删除,由机构码自带语义;盈利属性由机构码 `profit_policy()` 决定,

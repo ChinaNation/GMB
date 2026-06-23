@@ -2,21 +2,18 @@
 //!
 //! 把账户派生的 op_tag、5 个受限保留名、name→种类路由、每种 payload 字段拼装、
 //! 以及唯一派生入口全部收敛到本模块。其它任何 crate / 模块禁止再本地重声明或重拼
-//! `DUOQIAN || op_tag || ss58 || payload`，一律调本模块。
+//! `GMB || op_tag || ss58 || payload`，一律调本模块。
 //!
-//! 域分隔符 `DUOQIAN`(与签名共用)仍留在 `core_const`,本模块 import 使用。
-//! 地址派生 preimage = DUOQIAN (7B) || op_tag (1B) || ss58 (2B little-endian) || payload。
+//! 域分隔符 `GMB`(与签名共用)仍留在 `core_const`,本模块 import 使用。
+//! 地址派生 preimage = GMB (3B) || op_tag (1B) || ss58 (2B little-endian) || payload。
 //! `address = BLAKE2-256(preimage)` → 32 字节 AccountId。
 //!
 //! Dart 侧(citizenapp `account_derivation.dart` + 两份 `reserved_account_names.dart`)
 //! 是本模块的手写镜像,无编译期保证;靠金标向量
 //! (`tests/fixtures/account_derive_vectors.json`,CI 脚本 `tools/sync_account_derive_vectors.sh`)
 //! 逐字节断言对齐,防止跨语言漂移。新增 op_tag / 账户种类只改本模块 + 刷新金标。
-//!
-//! 改名 `DUOQIAN→GMB`(域字节变更,会改地址)+ `OP_INSTITUTION→OP_NAME` 的字节值
-//! 属 ADR-024 Tier 3,与 T3/T4 末尾创世一起做,本批不动(`OP_NAME` 名已改、值仍 0x06)。
 
-use crate::core_const::DUOQIAN; // 域共享(签名也用),留在 core_const
+use crate::core_const::GMB; // 域共享(签名也用),留在 core_const
 use sp_core::hashing::blake2_256;
 use sp_std::vec::Vec;
 
@@ -146,14 +143,14 @@ impl<'a> AccountKind<'a> {
 
     /// 账户地址唯一派生入口。
     ///
-    /// preimage = DUOQIAN (7B) || op_tag (1B) || ss58 (2B little-endian) || payload。
+    /// preimage = GMB (3B) || op_tag (1B) || ss58 (2B little-endian) || payload。
     /// `address = BLAKE2-256(preimage)`。任何账户(主/费/质押/安全/两和/个人多签/
     /// 机构自定义)都必须经本入口派生,禁止在其它模块重拼 preimage。
     pub fn derive(&self, ss58: u16) -> [u8; 32] {
         let ss58_le = ss58.to_le_bytes();
         let payload = self.payload();
-        let mut preimage = Vec::with_capacity(DUOQIAN.len() + 1 + ss58_le.len() + payload.len());
-        preimage.extend_from_slice(DUOQIAN);
+        let mut preimage = Vec::with_capacity(GMB.len() + 1 + ss58_le.len() + payload.len());
+        preimage.extend_from_slice(GMB);
         preimage.push(self.op_tag());
         preimage.extend_from_slice(&ss58_le);
         preimage.extend_from_slice(&payload);

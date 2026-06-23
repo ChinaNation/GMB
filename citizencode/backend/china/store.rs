@@ -14,6 +14,7 @@ use super::model::{CityCode, ProvinceCode, TownCode};
 const CHINA_DB_DEV_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/china/china.sqlite");
 
 static CHINA_DB_PATH: OnceLock<PathBuf> = OnceLock::new();
+static CHINA_SQLITE_HASH_CACHE: OnceLock<String> = OnceLock::new();
 static PROVINCE_CACHE: OnceLock<&'static [ProvinceCode]> = OnceLock::new();
 
 fn leak_text(value: String) -> &'static str {
@@ -53,9 +54,16 @@ fn open_china_db() -> Connection {
 /// 中文注释:该哈希只用于部署期确定性目录完整性校验。运行时只读打开数据库,
 /// 不会因为哈希变化自动写库或发布新版本。
 pub fn china_sqlite_hash() -> Result<String, String> {
+    // 中文注释:china_db_path 本身已在进程内固定,部署期完整性哈希也随之缓存,
+    // 避免 gov changed-only 逐省检查时重复读取并哈希同一个只读 SQLite 文件。
+    if let Some(hash) = CHINA_SQLITE_HASH_CACHE.get() {
+        return Ok(hash.clone());
+    }
     let bytes = fs::read(china_db_path()).map_err(|e| format!("read china sqlite failed: {e}"))?;
     let digest = Sha256::digest(bytes);
-    Ok(hex::encode(digest))
+    let hash = hex::encode(digest);
+    let _ = CHINA_SQLITE_HASH_CACHE.set(hash.clone());
+    Ok(CHINA_SQLITE_HASH_CACHE.get().cloned().unwrap_or(hash))
 }
 
 fn load_provinces() -> &'static [ProvinceCode] {

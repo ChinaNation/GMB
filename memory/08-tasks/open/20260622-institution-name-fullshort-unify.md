@@ -4,6 +4,8 @@
 
 **1.1 本地实现与验收完成(2026-06-22)。** 用户已允许直接修改 `citizenchain/runtime/`。本任务目标提升为全仓机构名称硬统一:任何机构中文全称/中文简称/英文全称/英文简称只允许使用 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段;Dart/TS 内部使用 `cidFullName / cidShortName / cidFullNameEn / cidShortNameEn`;不得再用旧展示列、旧全称列、旧简称列、旧英文名列、旧登录简称字段或旧接口名承载机构名称。生成物已同步修改生成器,不得只改输出文件。
 
+**1.2 本地实现与真实库验收完成(2026-06-23)。** 非常量机构只在命名规范文件登记英文规则,不把英文名扩入 CID 数据库/API/前端字段。非常量机构中文全称/简称模板已统一,规范文件已补每类机构的 `province_code / city_code / town_code` 行政区代码规则。白皮书和公民宪法仅完成扫描,按用户要求等待二次确认后再修改。
+
 ## 背景(reconcile 后开发库终态)
 
 PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **5 真 bug + 50,661 模板故意短==全 + 129 本就最短**。
@@ -109,6 +111,21 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - `flutter analyze` in `citizenapp`:通过。
 - `flutter test test/governance/admins-change/institution_admin_service_test.dart test/governance/governance_list_page_test.dart` in `citizenapp`:通过。
 - `flutter analyze` in `citizenwallet`:通过。
+
+## 1.2 验收记录(2026-06-23)
+
+- 命名规范文件 `memory/07-ai/institution-naming.md`:已补非常量机构 NSN/NRP、PDF/PHS/PCW/PHU/PAG/PCM/PFT/PEN/PTR/PSN/PRP、CGOV/CLEG/CSUP/CJUD/CEDU/CSLF/CDEF/CHSC/CCWF/CHUD/CAGR/CCOM/CFIN/CENR/CTRN/CREG/CPOL、TGOV/TCWF/THUD/TAGR/TFIN 的中文全称、中文简称、英文全称规范、英文简称规范和行政区代码字段。
+- 省代码表校验:通过,`memory/07-ai/institution-naming.md` 43 个省代码与 `citizencode/backend/china/china.sqlite` 的 `provinces.code` 全量一致。
+- 后端模板:已统一 `PSN/PRP/CGOV/CEDU/TGOV` 的简称模板,`GOV_TEMPLATE_VERSION` 升级为 `gov-deterministic-v7`。
+- 对账性能修正:省/市 scope 在目标生成阶段生效,`china.sqlite` 哈希改为进程内缓存,避免 `reconcile-gov --changed-only` 逐省重复全量生成和重复哈希。
+- 残留修正:公安局 `CPOL` 保留历史 `PS-{province}-{city}` 确定性种子,避免平移既有公安局 CID 号;清理旧 helper 作用域残留后用当前源码重新编译通过。
+- `cargo check --manifest-path citizencode/backend/Cargo.toml`:通过。
+- `cargo test --manifest-path citizencode/backend/Cargo.toml gov -- --nocapture`:通过,5 个 gov 相关测试通过。
+- 真实库 `reconcile-gov --changed-only`:通过,`scopes=33 inserted=0 updated=174947 account_inserted=349927 removed=0`。
+- 真实库 `check-gov --strict`:通过,`ok=true manifest_current=true target_count=245016 active_count=245016 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
+- 真实库 SQL 抽样: `PSN/PRP/CGOV/CEDU/TGOV` 的 `cid_full_name = cid_short_name` 均为 0;旧简称尾缀 `参议员议政会/众议员议政会/自治政府/公民教育委员会` 均为 0。
+- 本地 CID HTTP 运行态验证:临时启动 `127.0.0.1:8901`,`/api/v1/app/institutions/search` 返回 `瑶海市公民教育委员会 / 瑶海市教委会`、`明光路镇自治政府 / 明光路镇政府`;`/api/v1/app/public-institutions` 返回 `province_code=AH city_code=001` 与 `CEDU` 的新简称。验证后已关闭临时服务。
+- 白皮书 `docs/《白皮书》.md` 与公民宪法 `citizenchain/runtime/primitives/src/CitizenConstitution.html`:仅扫描待统一项,未修改;需用户二次确认后执行。
 
 ## 验收记录(2026-06-22)
 - `cargo test --manifest-path citizencode/backend/Cargo.toml`:通过 71 单元 + 5 integration。

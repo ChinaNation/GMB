@@ -1,5 +1,5 @@
 //! 国储会 + 43 个初始省储会常量=china_cb.rs
-//! 费用账户地址（DUOQIAN + OP_FEE + ss58 小端 + cid_number → BLAKE2-256）。
+//! 费用账户地址（GMB + OP_FEE + ss58 小端 + cid_number → BLAKE2-256）。
 
 use hex_literal::hex;
 
@@ -16,14 +16,14 @@ pub struct ChinaCb {
     pub admins: &'static [[u8; 32]],
 }
 
-/// 国储会安全基金账户地址（DUOQIAN + OP_AN + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
+/// 国储会安全基金账户地址（GMB + OP_AN + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
 pub const NRC_ANQUAN_ACCOUNT: [u8; 32] =
-    hex!("24b62e1756a27dd00946f33507004ce7973be28b0728cb4dc786231c40348a92");
+    hex!("d78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa");
 
-/// 国储会两和基金账户地址（DUOQIAN + OP_HE + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
+/// 国储会两和基金账户地址（GMB + OP_HE + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
 /// 两和基金 = 历史和解与和平建国基金，创世一次性发行 195,818,501,966.00 元，国储会内部投票管理。
 pub const NRC_HE_ACCOUNT: [u8; 32] =
-    hex!("37994b77b6ae316d1916e343a14e3d18c02ebe74686e4c2652202f55ae0e66fc");
+    hex!("4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53");
 
 /// 所有国储会+省储会数组
 pub const CHINA_CB: &[ChinaCb] = &[
@@ -33,8 +33,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "National Citizen Reserve Committee",
         cid_short_name_en: "National Reserve Committee",
         cid_number: "LN001-NRC0G-944805165-2026",
-        main_account: hex!("e97b09bf079f00a243de874e1129ca04cca12de75bd0943b25519e8c1153b005"),
-        fee_account: hex!("34435d3c37634342f6b7044fe556c9be25dbe7cf237fe9a71c29e64ddf11e0ad"),
+        main_account: hex!("b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153"),
+        fee_account: hex!("7c0c099ee4df10c5bd3f618ddf132b6d15390fa27d2c1369f70aeb6b5f3907e5"),
         grandpa_key: hex!("3719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b5"),
         admins: &[
             hex!("6832b6f09d231e1ddf34be1a81f68eb958da88be370f999e2d98f3407cb72d05"),
@@ -64,8 +64,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Zhongshu Provincial Citizen Reserve Committee",
         cid_short_name_en: "Zhongshu Provincial Reserve Committee",
         cid_number: "ZS001-PRC0E-016974075-2026",
-        main_account: hex!("26d09d54d2284662bb35c23591ba7ef970038a22a0d484c0a5835a9984432fdf"),
-        fee_account: hex!("f38aaa5b3688ba54b9c916055403399b86a6f62e004a4eac2b18decff63647c4"),
+        main_account: hex!("65c057a38041753f31f1d891f4d1ce79326291cb4d340a125dd7dc33710783dd"),
+        fee_account: hex!("54bad80b12cedbf7a1569fb96d18d90c4793949a356eb16c6304841af81001dd"),
         grandpa_key: hex!("14803cd63d5ad6c76e0141f730f18f2c4a30ecfaa3631681e490cb5e25ca0958"),
         admins: &[
             hex!("36e64c89c71651e470b897c0014d9c64edfdc5a27d70acd80020d1cb1cdfc614"),
@@ -85,8 +85,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Lingnan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Lingnan Provincial Reserve Committee",
         cid_number: "LN001-PRC05-773405642-2026",
-        main_account: hex!("b19e5915f588844fd7d4fce0fc9840b0237bd9ccf167a00eb591ed6d66c288d2"),
-        fee_account: hex!("c73e7d5f50ead9e6986c077d0ee31b9b9c9177f1b1eb0707c21762c354167c1c"),
+        main_account: hex!("eabaa8213fc5431b9496ca5986b640ff327ce3cee0200877263ff338829380c0"),
+        fee_account: hex!("d9ef67d0e814fa3a927b9e6a0ebb7dbf6c15d669fc3067600adcab0016ea1cdb"),
         grandpa_key: hex!("8d9de5d1b44d39f9567b76a5348d68a497d06b73215d5e89bfdf4f6a6b2f36aa"),
         admins: &[
             hex!("c24043655f86afe9e38f811eb9a5ccd3fadb0c01461ba5c50c4650c91e1cbd6c"),
@@ -106,8 +106,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Guangdong Provincial Citizen Reserve Committee",
         cid_short_name_en: "Guangdong Provincial Reserve Committee",
         cid_number: "GD001-PRC0V-067440774-2026",
-        main_account: hex!("b1d8c292e8c9d80a8859cbc74e949fb915c30a52c69a99d2a29fefca9e8fc5dd"),
-        fee_account: hex!("e773f4ee2aa2fad4f85d6ca55fd11eab7fda40d1a6f36504dc9b6071288f84d2"),
+        main_account: hex!("28cc977b04b6d883084cb7569297c081759cccbffa6b9f85752989a3c137d220"),
+        fee_account: hex!("9d19ff83985b2bd8d30b2845d9d4c7ab90083f98cfe127a0e2297cb30cbc0085"),
         grandpa_key: hex!("febdaa3b1c416bffc6ba1e13f799b5295c4644a0d695fe6da7bff3cf6754a903"),
         admins: &[
             hex!("9ef3f954efcadd7019c09d1648f9f00db94d31773281a764493a602107fab653"),
@@ -127,8 +127,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Guangxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Guangxi Provincial Reserve Committee",
         cid_number: "GX001-PRC0C-663454043-2026",
-        main_account: hex!("4b8cc2064fa68c762a68c9e065f318f8422d90fc7309815dfb44302d516a54a3"),
-        fee_account: hex!("3033e01652e5f51c26f8c71dd787160a1150147e9339ae112b97e74b7ae7b49e"),
+        main_account: hex!("cc9cf90ab2016f3a261b362cd2d29f795c2e8edf96bd8a62bc3b099e24ee8939"),
+        fee_account: hex!("f6d5db67d791d8a7f2b35d00cf2e1f72ce1277d18bcb1addf04c8e97a9bb452b"),
         grandpa_key: hex!("669d64a0c7c7ba5be629580d8898f9003105b13d18372392cd85562b2782b233"),
         admins: &[
             hex!("2ccc2bcf757337b58afcc51a0bf97d49884e7e6d43f3adfe812299f6a1374820"),
@@ -148,8 +148,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Fujian Provincial Citizen Reserve Committee",
         cid_short_name_en: "Fujian Provincial Reserve Committee",
         cid_number: "FJ001-PRC0I-389570546-2026",
-        main_account: hex!("bf8c477d995bf67c2851b9c64125cbf13830afc50021ca3ffaa0e619cd27f898"),
-        fee_account: hex!("856ebbe38cf48b0e6ee4ef0f6a9c83905740c2d67474fe155013e2a8baa3427d"),
+        main_account: hex!("39c82e31525167083bbb1a0476378e41df59ccb7687a3770dd95a9c3b971fc4d"),
+        fee_account: hex!("1431de61e3e80e5c7830d475cb6587cb7dde89c050c90aa1b40672a8e39b0c36"),
         grandpa_key: hex!("8860948348df8b4efe240829671408476643dbf8d2e07d0bca8f3ea6271c5c51"),
         admins: &[
             hex!("4ab76c9f6d49a57b1e869265716911f08195f5a744cbf4d103a336b7c38bbb4e"),
@@ -169,8 +169,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hainan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hainan Provincial Reserve Committee",
         cid_number: "HN001-PRC0S-545676096-2026",
-        main_account: hex!("79097820f9ed276d615a503224a7b9b3fecebebb66f05b5b728851c180a0a3f1"),
-        fee_account: hex!("ac16123e738704125a27477cec635f9ba68cad7560d724a19d403d06e68701d3"),
+        main_account: hex!("0f1bd1f235b0943805a17013e664ac435d8f47862280a18c3cb532299e236887"),
+        fee_account: hex!("cd5f16df4e71f6bf5cf9080d0576730f8f3a17f7a7e4a291214f6ad3ac656941"),
         grandpa_key: hex!("2d6cfe57d3212c066260cb568645ed0d442a632b24031930b97ca3242111e021"),
         admins: &[
             hex!("f433269884a6d155667b13eccddf666f0d47cb319f2db7028d13243d3a98cd04"),
@@ -190,8 +190,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Yunnan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Yunnan Provincial Reserve Committee",
         cid_number: "YN001-PRC0W-145427171-2026",
-        main_account: hex!("d701c9230195b5c35ca329b62c9d3dfdd9924b2eb000ddfe67d8414ef821e0a6"),
-        fee_account: hex!("a3c43e0f6a2451e24f0adac98cec23a81a10a66f0f828aff4c29680b83c4ea84"),
+        main_account: hex!("209b4aca30dbe12799159187306172ac624585a7f2a59eea4580c8f9701687bc"),
+        fee_account: hex!("96b5f59842dffd1ca7f27cf004cbaff3be5afd02cf1935fe52670d0c858f0d57"),
         grandpa_key: hex!("26498679676d181b1346964f5815b94bf766bd284d529ce8e5625547af1fbab3"),
         admins: &[
             hex!("b8fc3fa57be8aa1fc4a520aa1d5432a947845b77a08fe169f4f7a03511eb526c"),
@@ -211,8 +211,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Guizhou Provincial Citizen Reserve Committee",
         cid_short_name_en: "Guizhou Provincial Reserve Committee",
         cid_number: "GZ001-PRC02-969970096-2026",
-        main_account: hex!("7e818624c9f3c46f523612fcdb0c9459ce71191d29bac1a38cb9bcae3d8dbc84"),
-        fee_account: hex!("91123be54e191aa2f900d55875c14dcaecbf3bdcb8e6cfbab80745df630b4d76"),
+        main_account: hex!("cb89f5f626b4f9064075cb31c540c02424150f37c23d9b965e83e97596047915"),
+        fee_account: hex!("c25d8cf44c827852777ee62f5ea0ecccb539b2cac04628c2277aa0ab17101002"),
         grandpa_key: hex!("1c03da677a1ae2e9b4907dc72016ea65adc3d20711f93b8e96f2aa75468072c0"),
         admins: &[
             hex!("e0fb43daac7243a64e90b95250e4ffac3d47549c72b53b086785c902365ed148"),
@@ -232,8 +232,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hunan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hunan Provincial Reserve Committee",
         cid_number: "HU001-PRC0P-400319700-2026",
-        main_account: hex!("fa74c11655fe1a950fd1064d9b342805d15b06ff379e36d2f1b5df0be0cb4a59"),
-        fee_account: hex!("d0b4e10c273b2923776435f272a201ada40f5a3673967b459125478b0fd439df"),
+        main_account: hex!("36068adc23dbd140a9ddadf3da1e6d4ac11e543613b54a2783d74551d043163a"),
+        fee_account: hex!("0de24adffa51d31085f41f30c96ef92aa979181e6abd22ea53567a26048e4d40"),
         grandpa_key: hex!("4b9547092662fba8d70658eee8c999c5f5044b2574054a3ce62b2ed19b5645d1"),
         admins: &[
             hex!("7ca56451d3543ee5740951272dcb89e40891ed4f0fad3a4bb097de86705e847c"),
@@ -253,8 +253,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Jiangxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Jiangxi Provincial Reserve Committee",
         cid_number: "JX001-PRC0J-458681566-2026",
-        main_account: hex!("3a31b63db36c21f8880889b7b9450a8db31d5e6ca689e4ef20d9c378bf8e9275"),
-        fee_account: hex!("55729a5417725684fd8285aba320521c2fbeb82da421eccf2c8f7e8e6fea3793"),
+        main_account: hex!("0bcda61fd2ae9471520a29eb5fed6740cc35a775ce966094e110509d2084bc33"),
+        fee_account: hex!("26ce33ca747e1e51d102c1c70708a6e73b9ab57d1edfa2889e923eff06575592"),
         grandpa_key: hex!("782c1fc618af8c3e1eb225f1b068eb35dfc54e3db2c8067a0ddb55308d62a3d4"),
         admins: &[
             hex!("443e0e4a4a215622010f4410f77d5f154721c1a10e9f951591e0481023447322"),
@@ -274,8 +274,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Zhejiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Zhejiang Provincial Reserve Committee",
         cid_number: "ZJ001-PRC08-471270801-2026",
-        main_account: hex!("1486ac02464ddd913bcbb93f93bafc8de69b79fd7fe9fc011c76332e415e07b5"),
-        fee_account: hex!("a2a83bc042df7d02ed8c2431fceb0512c14c9066c2761aab88b5696fd377fda0"),
+        main_account: hex!("51b0c01287085ea84a21f1e3b5eecf3c013c9381ee168ca33aff2d8546326a83"),
+        fee_account: hex!("b8eb8e8b5df07eb15c9bb5f7b0bb371683ef263646f8a5cd4f6637ee38b4fea3"),
         grandpa_key: hex!("a2a7643951e81f6189834bd5c70ee27eddd402ac7c4ef749f40955042b4bb43e"),
         admins: &[
             hex!("962634d0a5d6f037d3571742d5166ceb496249667b4b767ca9f468e23d03ed24"),
@@ -295,8 +295,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Jiangsu Provincial Citizen Reserve Committee",
         cid_short_name_en: "Jiangsu Provincial Reserve Committee",
         cid_number: "JS001-PRC0O-358467174-2026",
-        main_account: hex!("022757a4129d93d71270ab97a7bfe5b8adf8846bb4936d4fdaa05b029e088bd4"),
-        fee_account: hex!("865edf8b99bfa40100273f2d32e52292546adb431a3f88e9e348b4ff9dc5bcb0"),
+        main_account: hex!("00b73850de0f0b89a8d182a8d00dfdf5e255b2a7ef03f34399e6c5c85c2f0b5a"),
+        fee_account: hex!("1de52f16c1be56a716209b1e3f6c79deeb00652b4afe16d0cb24725b9b274b4d"),
         grandpa_key: hex!("a3819330ccac67a93f09679f81e919e5cc2eedf7166e69a62d402be6ec39de2a"),
         admins: &[
             hex!("beab132b103ef629f7e4015df7510180cee2e61b034cd0e91f888201828ce34f"),
@@ -316,8 +316,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Shandong Provincial Citizen Reserve Committee",
         cid_short_name_en: "Shandong Provincial Reserve Committee",
         cid_number: "SD001-PRC07-027328848-2026",
-        main_account: hex!("3b4aa5d4c2d25ae694cd0ac18ba48f61c6c40d8a6433703aff5d40cddba08a38"),
-        fee_account: hex!("f0942f6f88e26921d964113dd42dbe14a86c0fdb82d2c37b0c63a0ba28b8abe8"),
+        main_account: hex!("c5300b9510f68294315db7121b03792ffbf0ea29602bbb89a83b25089aa1c71a"),
+        fee_account: hex!("b83a2219f9b5ca85685cfb7392ecda03ac443592d73d6d56241f719baf3b561f"),
         grandpa_key: hex!("ecbfcf8a0c4e9954f0d8ea71d85b91ad0142b5c5821a74fab99a041be4192948"),
         admins: &[
             hex!("34917d22a17b566faf9af6787385a689b1f64e8acd1da183132dd28b0dc85c7c"),
@@ -337,8 +337,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Shanxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Shanxi Provincial Reserve Committee",
         cid_number: "SX001-PRC0O-104465679-2026",
-        main_account: hex!("a6910ef8bd8297ec15f970a27e57f0b6e9c6ffb5d59f5bdb2b89e38e6aea5da4"),
-        fee_account: hex!("89811950cd3ee67a9f3738d4df2b0542a3976b4c7b093ffeb4ea869a2f59e02d"),
+        main_account: hex!("a8d0ffd86a860a00315937c7400d2e14180d46377c9ccabd78dbc884027db80c"),
+        fee_account: hex!("b30c88f3752ed770d120acc2481f0357f9b4bb052058fea819cdd3eff36e5526"),
         grandpa_key: hex!("63e4ac90760504c650773312df9c4ce2faec662c544aeec9c6fcad41654a78c8"),
         admins: &[
             hex!("0420f71558255ad2eb00e00aeb82e4c31e4d0618f71e7fd2480ae5b7acebc071"),
@@ -358,8 +358,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Henan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Henan Provincial Reserve Committee",
         cid_number: "HE001-PRC0S-849245626-2026",
-        main_account: hex!("d74ffd4b37c7aa43c24fe6f6ed63ebbdb846744164c755521044f138229d557e"),
-        fee_account: hex!("a501821113e4036ca8468abb5f7a2aeee6e270ecfdd2bb5e0c4a939b102053a4"),
+        main_account: hex!("a4b2276375e4c2fe44cb920f5173bf225a82ae35f80378305e434d8859e1e387"),
+        fee_account: hex!("0df1ae8648f0617c96f42a108803622a319ce3e150efecc50c8e5d57d560e22a"),
         grandpa_key: hex!("e9227e239d61c3ba1463ac0b2206cecf35ebe73a48c7a702a76aeac20327c653"),
         admins: &[
             hex!("ce08dab991bd8b5cd37bc7a11d360ca5b5157bc021606088901d6ff685971a24"),
@@ -379,8 +379,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hebei Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hebei Provincial Reserve Committee",
         cid_number: "HB001-PRC0W-499533387-2026",
-        main_account: hex!("332cb4fe167ed56c4559acded147cebc9554571ed1b857df4ee88b7a2a2144c9"),
-        fee_account: hex!("d730f66b03d00047ad7edde249fb1e542860074cbe73cc5f928716e99136587b"),
+        main_account: hex!("831e79e20fe67bca7c2e5bbd3f26586814b080287049f8fd7bc656a379ce972e"),
+        fee_account: hex!("be5e60c9c96cdc7e65a570172a7f2a9467e0b85e2790fdc411af12c89d71aebf"),
         grandpa_key: hex!("7ce0745ab3270b66570b4b2fa7ef0ea2fd4df5065488c05282cd8ed8c938c199"),
         admins: &[
             hex!("4e3df6bdac65b48ea340a09463d64bd071aede8b7837bb951c20836c6925693c"),
@@ -400,8 +400,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hubei Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hubei Provincial Reserve Committee",
         cid_number: "HI001-PRC0D-659443961-2026",
-        main_account: hex!("eb21e0f3088320c9ff2139ad1d635485afb7a72c3de745c8410dfc5d126b1fcd"),
-        fee_account: hex!("c871114150b71c4902de7401ade1598c066f8a74d395edccb3289c755508f9d4"),
+        main_account: hex!("a4b1711a1bf598dd7952a9c44bb7e321fac66b50e3fc618eef6b9b10f82499ea"),
+        fee_account: hex!("7ff4742a43efa3fd02d94006d4ce838c7eb380a10423eee040b84531603b9614"),
         grandpa_key: hex!("b10a24b974dabe5f008973007ea3fb67c4af2c7ae77b71f01e0249ac366daab8"),
         admins: &[
             hex!("0ccde5b418f9fc572d28afa64d3a4b474d4590438e1edcea4031959d6f01a946"),
@@ -421,8 +421,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Shaanxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Shaanxi Provincial Reserve Committee",
         cid_number: "SI001-PRC0T-711309909-2026",
-        main_account: hex!("3632eb7489038a0d73c8ef884840a6b3ba8e7b3a90e4fad1412f7dcd38fdff5a"),
-        fee_account: hex!("563522fe4c097f94260854021d9c187b01da73662d4bb17d507eb77ab0352482"),
+        main_account: hex!("d38bb19ed5a279325ba65271d177c67271b2374c46b12fe36ccb369533f0a62e"),
+        fee_account: hex!("00d09d3a723fb14c435ff3c474fbe333ca247efea81b84f765f45558c950063c"),
         grandpa_key: hex!("14cd5c8e07f738cc3719b4e66c33d81fa3a4baf6f6e50ae1d48d4e2ffb8e47b2"),
         admins: &[
             hex!("5c652aa8012ce7fba7665b6836116651cdc290e1c4ce17b926944351389af75e"),
@@ -442,8 +442,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Chongqing Provincial Citizen Reserve Committee",
         cid_short_name_en: "Chongqing Provincial Reserve Committee",
         cid_number: "CQ001-PRC06-478472058-2026",
-        main_account: hex!("ea5376d58108e950f0164b18d020fdc688cf56e79d3e79f4ab8719c55cc8d1e8"),
-        fee_account: hex!("c96e1ebb718aa02cd7eb0fecb76d6efa79142aa708768e3816b66781524031f9"),
+        main_account: hex!("19dfc75f5e87bffc9ab3010841798eb7a00164630379cafc3aa96ed70f4140d7"),
+        fee_account: hex!("9c1a3f35ec63f61cc350e431895c307c3c4b251abffc511d5524916816963e72"),
         grandpa_key: hex!("599aa6bb3cf9d48d99599de3c5948308e32dbb427f49346cdab95fe82863b747"),
         admins: &[
             hex!("2ef4db13e343f5395c9dda46c323d7ffb592d96f4af55d06f9088a54c7c2ae48"),
@@ -463,8 +463,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Sichuan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Sichuan Provincial Reserve Committee",
         cid_number: "SC001-PRC0Y-935659021-2026",
-        main_account: hex!("9abb47bf5f889cb54c9dd14e6dc02d5ae1a607d8125f1878e574cfa90969f4ff"),
-        fee_account: hex!("a78062f28462cbda4510c617faacaa3d5bbe4e32a6138a968a60beca9181b5d6"),
+        main_account: hex!("8ba74cb8ee744c79d97e2a3f989fb2c5812dccbc596b881a7a8adfd4b44fd235"),
+        fee_account: hex!("0267991ba2e7345703c28470cf721522ca1f38fe83e6452303efaa137517c71e"),
         grandpa_key: hex!("26daeb08619448a235d712daa63bf81b97710f684801d22c847624e070e4f600"),
         admins: &[
             hex!("16212ee287e95f381f1e85e036af61c79e361411b9fb8b7f0ab9b7dcf4347230"),
@@ -484,8 +484,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Gansu Provincial Citizen Reserve Committee",
         cid_short_name_en: "Gansu Provincial Reserve Committee",
         cid_number: "GS001-PRC0L-679051155-2026",
-        main_account: hex!("a311932c50ca748f0fd24b65cd4f1dec3b3b115659ad07f33aa7b9d86f55ee10"),
-        fee_account: hex!("98c5afc5dd5a0e9d1306e3669554153a94a2136c15888892ba6ea542a4bb2d9b"),
+        main_account: hex!("9f99c515ce0c9a4bb7a62f3c86e0de70961d28546218d6150418470ccf5af672"),
+        fee_account: hex!("49e3f7a807f2ff0cababe59d1c31279e4c50687b81485c025b78550f00ff83b4"),
         grandpa_key: hex!("fa9e7becc8a5984cf15c50ca83e3918adc79521281e2d75ebfcccb7d3e5be8f3"),
         admins: &[
             hex!("869bb482411a81f4e3b6264cb0ee292b684c003446dc434164d987bdb831c30b"),
@@ -505,8 +505,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Beiping Provincial Citizen Reserve Committee",
         cid_short_name_en: "Beiping Provincial Reserve Committee",
         cid_number: "BP001-PRC0R-189323546-2026",
-        main_account: hex!("52b778d81a6cad379b2179992d35ac972fd8623759e8d69a931154fbccd674a2"),
-        fee_account: hex!("c99c4f381c37e986d623e36d2f8d33788e2d3de1e361ac062092b58d5d9f7013"),
+        main_account: hex!("c56011ce29bf37ead2a4fa84b4387506745221b4756a960b1c08f35b117bbb6e"),
+        fee_account: hex!("f43653d988585331dbe53e654c0b12e00ba67561f858945e99f27fbfb5c961a3"),
         grandpa_key: hex!("e0dfc5bde6f32d6d41648006c69f6489dea06c37259c57b716ff025fa4fa31af"),
         admins: &[
             hex!("721b9533444e208d357ee90bfcf0e2eee6f27e0f90df6c4a5e17e3d5a5105233"),
@@ -526,8 +526,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Haibin Provincial Citizen Reserve Committee",
         cid_short_name_en: "Haibin Provincial Reserve Committee",
         cid_number: "HA001-PRC0Y-214178517-2026",
-        main_account: hex!("8fd51d6d81d0bdd8bbedac4122823a57e4c953cc707c996b9cd7f32f72be43fc"),
-        fee_account: hex!("f167b19cda5bc7698902cf565a846c40b65e959e9ab1caa7975dbaa0a6f68ef2"),
+        main_account: hex!("bf03d6c18cc1727780c1c09c5f76c290528a1f2b7ca4901f75b553c29e743ec0"),
+        fee_account: hex!("4e78cc42842740c058a589b75ad9c5710d4026524371eb786514f50f50d45339"),
         grandpa_key: hex!("015829c6f8588903ecbf17207b5fad6d5e766f7512325b13850b43ddd2886305"),
         admins: &[
             hex!("aae591c8f6a4ab4dd02a9c6e07685da23b2e678df559e0444bc84b1897a58478"),
@@ -547,8 +547,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Songjiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Songjiang Provincial Reserve Committee",
         cid_number: "SJ001-PRC09-044490898-2026",
-        main_account: hex!("515f2e19341b916e15b651efde76c1ee7b99f0fd2322bb3a06edfefcc0f4e8ef"),
-        fee_account: hex!("c5490cdb2919509dae64a7e5372c7aaacb4b27822c66c71f31a81ccac0adefa3"),
+        main_account: hex!("b93798c43667a0d297da05e05490369758a82dbf3d748f99f1a5321fb1724663"),
+        fee_account: hex!("679104bd5edef4032d11cab381c94ac9ad89df4f365e8d309a965b30daba368d"),
         grandpa_key: hex!("1527123566372a8082a2d1b62f2dbd00ae3c56f2f71b51b8228178400774c3f3"),
         admins: &[
             hex!("f209b25849cf6a8b4067b853c969def73a60bb29cd11804b1a121ba98508653b"),
@@ -568,8 +568,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Longjiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Longjiang Provincial Reserve Committee",
         cid_number: "LJ001-PRC08-279890045-2026",
-        main_account: hex!("440f31d90586ba47e23fd4ac3f888ef5c83b87dfe08cdad113fdf07915abc985"),
-        fee_account: hex!("94ca5265a83623176d279115974b708973d7d6429b8cf80be1c7fc5b53e8de00"),
+        main_account: hex!("607b16ae5b5ae4ac5feedb59b63603e17ef75f92500049fcbd62f4939939c711"),
+        fee_account: hex!("849442bed3bc17e958af1612cb560d4594755324df3e56b81245bf65f4076558"),
         grandpa_key: hex!("db5d32816bddb7a0e1d0d17d3863923eb32f76eed87604d0d410a74900195b87"),
         admins: &[
             hex!("da4c7a7d4d3a2bf0ad33d0fce6f0a48aceb60a29f3de3d1fbce7034d4e04c620"),
@@ -589,8 +589,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Jilin Provincial Citizen Reserve Committee",
         cid_short_name_en: "Jilin Provincial Reserve Committee",
         cid_number: "JL001-PRC05-850461124-2026",
-        main_account: hex!("10e7420d12ef291bb599bd32dc78d9684d839ff17384ed81f52c753606d2a28e"),
-        fee_account: hex!("9a9c0219ae2dde6b0334f78a22351d293df2bdb87b8d7ddaae0085303618a2eb"),
+        main_account: hex!("097d5df07098d2a4f56f2608a79d5112292ab0afb32ccbf5cedd6fbe2c3b970c"),
+        fee_account: hex!("91822638bcd0a5028d470bac69c8d7a9f3a10d995b291b79ef2febac76ce81a6"),
         grandpa_key: hex!("9ffdedc39ab82f7766022a3b53149ffb0f2611567961c0570880adab1a01af88"),
         admins: &[
             hex!("f4845565b8c154dcbfd80c9ce7519058afe55f143433b06fa0d537ad7360cd1a"),
@@ -610,8 +610,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Liaoning Provincial Citizen Reserve Committee",
         cid_short_name_en: "Liaoning Provincial Reserve Committee",
         cid_number: "LI001-PRC0T-978545133-2026",
-        main_account: hex!("37f3817972e1abcce557e32a9c0b1c19afcae2e9baa3d8bf4aacf214b400c980"),
-        fee_account: hex!("bb0f6e2e864d31682419575981cafb39883748262ac4b35d93f49fcca5675b84"),
+        main_account: hex!("35492f6d685491158c3eb212e91989b8bdb2a53c560c66ca2e14abd970c89a5e"),
+        fee_account: hex!("e9e22ea860eef168eaa319245d40fa255d5a3a722ae34823e66590d0bdc92684"),
         grandpa_key: hex!("8133cf439c9142737b34655c48658135d7f946c9d60615a80ed14bad4fec1141"),
         admins: &[
             hex!("5ce10023b13c3820b38b2eaa2b25f38d423c8ebff8fa9987da6043d2301bb41f"),
@@ -631,8 +631,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Ningxia Provincial Citizen Reserve Committee",
         cid_short_name_en: "Ningxia Provincial Reserve Committee",
         cid_number: "NX001-PRC0J-389752794-2026",
-        main_account: hex!("bf2fc01d64a26e95844f5572a06d66a86076db40d7cb0dedeb2d8bb32e3a197b"),
-        fee_account: hex!("c35312ece6c32f759156e4518149dc16430971fb050f15f5347984a572b8b72f"),
+        main_account: hex!("4fa384cc8b9b0852eb0a0e57aba444d047ce3b73fe1545f4617e9248b8fdf075"),
+        fee_account: hex!("a4095a3a388044d7a6ff154d4bcfb35cec384eefe8382d9e1d59710f1b16b347"),
         grandpa_key: hex!("94a7d8f2f0b613dbb1509cc31ffa832188af9f547a0ce25ffe4be56a1cb10e07"),
         admins: &[
             hex!("04379eb91f117b2783a9c768025eb37f77107f4b8a8642bf0beb96be544ea34b"),
@@ -652,8 +652,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Qinghai Provincial Citizen Reserve Committee",
         cid_short_name_en: "Qinghai Provincial Reserve Committee",
         cid_number: "QH001-PRC0C-882026762-2026",
-        main_account: hex!("a50d1007599d8a21693dcd074a26998ea0f2e40e4d99f1187abd9e1ac36b8c68"),
-        fee_account: hex!("1a520b9c4a52d65528d9cd12dbad23101b76dcfbe45d9e834573213a012d2c88"),
+        main_account: hex!("097fc5639a9ae0a26e59437934d876f6c6310b22d8a0d8b7dd5bc8088bbd30b5"),
+        fee_account: hex!("972fd76274a5aa2a5781ebc1f78996b89716f2a43806469641888cc8bab628fb"),
         grandpa_key: hex!("6c5ee4dd2a7b9f82a2f04e9eb3bf5ba970adce79cffa662d2dc84adc4ce42492"),
         admins: &[
             hex!("1cb7f16cda56e42c93f76460247a84de444a6f24164442c782e5e96535011778"),
@@ -673,8 +673,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Anhui Provincial Citizen Reserve Committee",
         cid_short_name_en: "Anhui Provincial Reserve Committee",
         cid_number: "AH001-PRC00-589856828-2026",
-        main_account: hex!("64684bedb642195fb12d1b34e5519ed343e33dac934e7fb0a52c01b38139771c"),
-        fee_account: hex!("6ff371ae229dc712a1b0bcf2a1b4e20103f8e9bb72b28f89c069b3116ea23541"),
+        main_account: hex!("41d57600ee0d0d95a6c60a2e5899dc224df000448f841e06004cc4a820ddb2ac"),
+        fee_account: hex!("6ed62e6ed8d66b93ce7de191b31d46a4645314830ec254498c9d8e72d03a8b17"),
         grandpa_key: hex!("903f1fcba7a60aeca0221c0fe9dad52b28437775732360a318bc07326638dd39"),
         admins: &[
             hex!("92a4067c099c83db7853da7e8dc923ee6aceb09bd30feb547f3ed77a4e3bd74f"),
@@ -694,8 +694,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Taiwan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Taiwan Provincial Reserve Committee",
         cid_number: "TW001-PRC07-265218823-2026",
-        main_account: hex!("a06e5338b4b24a93d6a4b39b8eb8ff48c105e76eefedf65515c564b0c83b9456"),
-        fee_account: hex!("0b32fe2697cecce360eea5b5da2518af8c4090d791faa74c4bd92399a6239d26"),
+        main_account: hex!("d51c44903eeddd0de9d8ab6e2aac3ec490f08fc6210c4d899e6e30a4346b0567"),
+        fee_account: hex!("ee3adae7d737c734a0c167fdd553d085451f5391cafeb2baed289f11be422076"),
         grandpa_key: hex!("2f0fcd64f31a318077484148bdf3db0d95de25860764985214356dc3371d598e"),
         admins: &[
             hex!("14dd7aa11f3c8d7745ac0bce6d160701ebe1f382a3b9f503e258ca34c5730835"),
@@ -715,8 +715,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Xizang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xizang Provincial Reserve Committee",
         cid_number: "XZ001-PRC02-435616961-2026",
-        main_account: hex!("bd1bffac79a29f9b60f75e9b540ad77e99ac4d7a75e88e2efa5ed9903fc8c5df"),
-        fee_account: hex!("b99b6ca8055b1f96c3cc6a3d69e9cba26b565290b638170ea5f4060e2bc515d3"),
+        main_account: hex!("e30fdd8e8a7d40d75d1dd6546062863ce50f55d2e6610910403cbfa40d2fec94"),
+        fee_account: hex!("7e57913cbe8fb3f5e7731a041c72a62caf210124823dd368323f0c2927070fae"),
         grandpa_key: hex!("eaf447ce1635e7165e9588b6d2864ddf31e2a33ccff69f7a46d69ee2317b4a52"),
         admins: &[
             hex!("6c3b884d685780ebd05603dd24d467033316b1ccc91dd9b85714978de4c7c632"),
@@ -736,8 +736,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Xinjiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xinjiang Provincial Reserve Committee",
         cid_number: "XJ001-PRC02-671044381-2026",
-        main_account: hex!("641352be82f3e5aa0e20ad6c2ef2031be08952a49443b7ad3b6253ae2fc50256"),
-        fee_account: hex!("b8b2398a8fa33560660fc32f8ed9efd4a18f3bb2f4adea3ca925af8e34edbc46"),
+        main_account: hex!("d067dffc462f314b7aa31757aa9b155d7ed125b04e5fd666df5f2cccff5f25dc"),
+        fee_account: hex!("603fd39b08aa180ce23131902b6617937c1e0458f2ddd8d9fede9b91f9d5c955"),
         grandpa_key: hex!("004de5bc4fa8fe5cdce4c1cb00ddce6db55ce5926b8189741cb3cd43d8155f99"),
         admins: &[
             hex!("d0a03917c1501fd6e37bfa574a9f9c7415af43982e44d8bd2f2262a7241c9366"),
@@ -757,8 +757,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Xikang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xikang Provincial Reserve Committee",
         cid_number: "XK001-PRC0P-695945392-2026",
-        main_account: hex!("30a8934b142898221901f1427d2ce5641f999f49d205856247b84b9de99ccaa8"),
-        fee_account: hex!("adac69e2efc0df73832edb17fcb5bc5a9e4c70fef792ef8dcdd2016dd85cc734"),
+        main_account: hex!("b9901372d3ce3b2d5bcaded7025396913f6ea91858db81404b132d3bd0beb654"),
+        fee_account: hex!("937e6a8d5e08e283141ea99c3ee4864922fc153ed1d60a6c959a9139abba32ad"),
         grandpa_key: hex!("ad9ea30f1f967672f8d1b7aabbd8443d860dd2af2e9c9fd9b6a0358fe1690d20"),
         admins: &[
             hex!("0881de91b1a1ab4c57b89be8f7e630af9aada874fdb8acfd45f5975db173d467"),
@@ -778,8 +778,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Ali Provincial Citizen Reserve Committee",
         cid_short_name_en: "Ali Provincial Reserve Committee",
         cid_number: "AL001-PRC0D-487847725-2026",
-        main_account: hex!("cb09539b0ffe54bb3c6f23c2b0bc73973dfd5a4dc540dafa739f21f7d4db2fb5"),
-        fee_account: hex!("e5b04cea0258e77835c3ff571393261725cf7c44e49f7c02ec1f727661fbd26f"),
+        main_account: hex!("2665082bb00acb14948e02b12a0d41e27af67618397d0026d8a0b4f1b4c10213"),
+        fee_account: hex!("9179901438d3fa33d76f7fe8578c054754954eeba2a8257df37db761265a129c"),
         grandpa_key: hex!("e1dfa8bc752665d0becd9287b28415ced4193371f7cde21e244a8f5b6a1a1a48"),
         admins: &[
             hex!("e8e3c20ca22c65654c68335a7a140287c6df906e971065485794a839aa4c766c"),
@@ -799,8 +799,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Congling Provincial Citizen Reserve Committee",
         cid_short_name_en: "Congling Provincial Reserve Committee",
         cid_number: "CL001-PRC0J-771698743-2026",
-        main_account: hex!("ccd6e383073dd63480b2f2934d2f094e84a8725d0241fe4d510d8c7bf63e1467"),
-        fee_account: hex!("38d21944472e77fe0136fdc1399e12e88b6f015e41d0c7eb480585cf9d50359e"),
+        main_account: hex!("f0fe0e639228e644e52550ef9ab7d5df73935397950a5382eaa916f921312b15"),
+        fee_account: hex!("45939c77d7c4a02b91777a7d5577d3934a12ac8803f66cbc2ebd4dcb83147a5a"),
         grandpa_key: hex!("ad5fa47ad61097e5dbe077066f34e3cdba31ca0194c184fe556a2f62c4c18172"),
         admins: &[
             hex!("a87c4b41c8d1494e2e05fb30f7c263b393c8f77701952f6a18e8561238749571"),
@@ -820,8 +820,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Yili Provincial Citizen Reserve Committee",
         cid_short_name_en: "Yili Provincial Reserve Committee",
         cid_number: "YL001-PRC0Q-293160581-2026",
-        main_account: hex!("c245039fa1a1f5849fb8a0daa514e99858a2c80419c83fa0056b5c0a281ea234"),
-        fee_account: hex!("dc663f25f95ee97fa18b1ca3b57ab9aaa8e771a34c19429cfdc4f590304871f9"),
+        main_account: hex!("532d8ab5e781a0acb73c87269affdb673ff82c3bb1fa36a4d08d2a0339fe5001"),
+        fee_account: hex!("19e8cac822cc520209a1f02789732c4320eb55e319bb9ef1852d0ff3bd0306ad"),
         grandpa_key: hex!("ae47a89d45e0649ac98aa832eb7d6ae10d6111b30cf64eb118c428c24a00081d"),
         admins: &[
             hex!("24acc05f6487a97c7ffc6a319cc532cca81e05f26935e56f3867bd54ddf57274"),
@@ -841,8 +841,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hexi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hexi Provincial Reserve Committee",
         cid_number: "HX001-PRC0D-475713213-2026",
-        main_account: hex!("75bf0a42e5a1b5a0ba4ec5bd162cefe3df3ef2b0b46afa06a7d4e1d9072bc278"),
-        fee_account: hex!("36373c60b3be38bd2b9409976c85ea8231480f648f088e99dc7b1aa01857a928"),
+        main_account: hex!("44d4b86c61e838f3a26321d177acb45053ad885bedf1499c2ee14e1491e3c735"),
+        fee_account: hex!("a31f30cbb854362a6de74a6e67b2602caa019e71cb661715edd348a2e30078a3"),
         grandpa_key: hex!("82842c89fe9ce2eca5df47ad92d787e255c0b0dd3ec18947b801077b57743520"),
         admins: &[
             hex!("fa350c6790bdce5f2f39b8ff4dc7994200e6e7b79a77ab0e7707190472e61d07"),
@@ -862,8 +862,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Kunlun Provincial Citizen Reserve Committee",
         cid_short_name_en: "Kunlun Provincial Reserve Committee",
         cid_number: "KL001-PRC0O-091969119-2026",
-        main_account: hex!("4f81995eed779cc1a74e50e4cc1bde47b319d14b8929f90113bbac715ab86900"),
-        fee_account: hex!("96cdfa942d22f0e5b5003cd71c6f78a10a190236e63ae539af3fe7e0f3c40ab4"),
+        main_account: hex!("79530e3f1342f793fc471f066e56e39f56cbf2a0ab995065e21d9817d718c50e"),
+        fee_account: hex!("c97a3d8e211609b7aa55c7f75c9e1d44c161287c69609840f3b7f296bd82d8b4"),
         grandpa_key: hex!("4684cd4740972bca1df018cce973771df605cf404c3762c1976f52f9700db391"),
         admins: &[
             hex!("32320497967509f7db42bd389f6087e30235557abc0cc1c29142446f5d8b9b3f"),
@@ -883,8 +883,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hetao Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hetao Provincial Reserve Committee",
         cid_number: "HT001-PRC00-481172908-2026",
-        main_account: hex!("3d69f0ef94d5fbc6be4d644e4232e30ccc98744b95a5512816fce98079356904"),
-        fee_account: hex!("b5d40b55fb67180b171f50909e0518673449afa8dfe906fdfee13eb46c9587ce"),
+        main_account: hex!("e4d2cc7938458fb0e4e76e46aea04f217034eb3353e50b5c3d92278c4c98a943"),
+        fee_account: hex!("eb4cbfe90cbc0ec9f46b5a77c697e0462bde29b546d65b17e0e6fff2541c20c2"),
         grandpa_key: hex!("87f64d53701b846b019341f356e738a87d6c20b244bf2e2d89351717b385a8f3"),
         admins: &[
             hex!("1a3356518d94c59d2a2f182955d5d05806cfe80c927042e6f6928555bf4f657c"),
@@ -904,8 +904,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Rehe Provincial Citizen Reserve Committee",
         cid_short_name_en: "Rehe Provincial Reserve Committee",
         cid_number: "RH001-PRC0F-697831866-2026",
-        main_account: hex!("4a66873273f160a0c5140b698848549bdfb0ad8b457c6e296f213df6abb34850"),
-        fee_account: hex!("2627e52b7e6fd4e8f38b2c062f61598d7dadf067371eec919c0523b3c2de7dd7"),
+        main_account: hex!("b016aaf327e094d714b9478f34caaeef329c9300b2c33028885df864e6a9e6ac"),
+        fee_account: hex!("a68904edd0892ddb585b31bdb13711f9919f1e1bdb8a2b243ed8462295ff0787"),
         grandpa_key: hex!("e7ef1b4ae92e95e9c8b3fb5856e86ea77f596e82c75af20802d61106ca26a25d"),
         admins: &[
             hex!("045a9f06c01d50bd09ab61a58e35889263df42399069754ed316504f151c3f74"),
@@ -925,8 +925,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Xingan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xingan Provincial Reserve Committee",
         cid_number: "XA001-PRC0H-384161601-2026",
-        main_account: hex!("3972b00978cb3b98fa95406ea657e3191e6f975c40b47156c9bbaca856e7d4c3"),
-        fee_account: hex!("ddaccca95b4300af85384f8beb2d5c3e91f2a83469eacf74cdca8081bfd432ee"),
+        main_account: hex!("249c53e455d02582f64fee07d2e785958ee40652a87ea97fc443a976553b306c"),
+        fee_account: hex!("38b95239084a4d72f46899781fb9fa619e901e39e1f3d225fd37c3165d4a9409"),
         grandpa_key: hex!("0bde5599cdd158c196a45025689be5166a0e4e0ef9e932523040debed85f8b59"),
         admins: &[
             hex!("f8fe916bd56ee3af0267fcd5ab1de6f09e2efe4efd8c2bb3cc4d90b91a50211c"),
@@ -946,8 +946,8 @@ pub const CHINA_CB: &[ChinaCb] = &[
         cid_full_name_en: "Hejiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hejiang Provincial Reserve Committee",
         cid_number: "HJ001-PRC0V-963948997-2026",
-        main_account: hex!("2a217cc580f1072581e4155324769dcab7beecbf95cf968ea54730c2e0a302c6"),
-        fee_account: hex!("7123ed2a52eeb9ad5d0ff109b1ad2b6ee0f8e636bf789807e631186ad115247d"),
+        main_account: hex!("f91218a2c829417c1853b45d96604cafb0b6f5ad588f9c8d69a456f8ddd5e165"),
+        fee_account: hex!("13695b601d837128635740439d81e8ffb955abd2edde9efc34b870d5745f1f64"),
         grandpa_key: hex!("a69514c16012e39f3bc49941afa58871aeb46bbfb7825bd296133bad9cd0db9a"),
         admins: &[
             hex!("e2df7a8927683de5554e541d4e1d028fb159cf42d5663cdef310f16a177f2369"),

@@ -4,7 +4,7 @@ use blake2::{
 };
 use parity_scale_codec::Encode;
 use primitives::core_const::{
-    DUOQIAN, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE,
+    GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE,
 };
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
@@ -14,7 +14,7 @@ use subxt::{OnlineClient, PolkadotConfig};
 use crate::admins::login::parse_sr25519_pubkey_bytes;
 use crate::*;
 
-// 中文注释：本文件所有 DUOQIAN + OP_SIGN_* 均直接来自
+// 中文注释：本文件所有 GMB + OP_SIGN_* 均直接来自
 // `primitives::core_const`。SCALE 编码下：
 //   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
 //   u8                   →  1 字节
@@ -144,7 +144,7 @@ pub(crate) fn build_vote_credential(
     let binding_id = blake2_256(binding_seed.as_bytes());
     let signing_ctx = runtime_signing_context(None, None)?;
     let payload = (
-        DUOQIAN,
+        GMB,
         OP_SIGN_VOTE,
         genesis_hash,
         who,
@@ -188,7 +188,7 @@ pub(crate) fn build_population_snapshot_credential(
     let genesis_hash = resolve_chain_genesis_hash()?;
     let signing_ctx = runtime_signing_context(None, None)?;
     let payload = (
-        DUOQIAN,
+        GMB,
         OP_SIGN_POP,
         genesis_hash,
         who,
@@ -246,7 +246,7 @@ pub(crate) fn build_institution_registration_credential(
         .map(|name| name.trim().as_bytes().to_vec())
         .collect::<Vec<_>>();
     let payload = (
-        DUOQIAN,
+        GMB,
         OP_SIGN_INST,
         genesis_hash,
         cid_number.trim().as_bytes(),
@@ -293,7 +293,7 @@ fn deregistration_payload_digest(
     signer_pubkey: &[u8; 32],
 ) -> [u8; 32] {
     let payload = (
-        DUOQIAN,
+        GMB,
         OP_SIGN_DEREGISTER,
         genesis_hash,
         scope,
@@ -689,12 +689,12 @@ mod tests {
             &issuer_main,
             &signer,
         );
-        // golden 值:DUOQIAN/OP_SIGN_DEREGISTER + 上述固定输入的 SCALE 编码 blake2_256。
+        // golden 值:GMB/OP_SIGN_DEREGISTER + 上述固定输入的 SCALE 编码 blake2_256。
         // 已逐字段核对链端 verify_institution_deregistration 的 tuple 类型/顺序一致
         // (AccountId32=[u8;32]、H256=[u8;32] 均 32 字节无前缀;cid/account_name/nonce/issuer &[u8] 均 Compact 前缀)。
         assert_eq!(
             hex::encode(digest),
-            "fb4202876f62f2b27b27e35912e0a0bbc4524e4ee8cd8fe70eb876dfc1e284b7",
+            "137304f0e5207c3ddd6116eef9e1f42660bec15831b3f4c6b30a2c99bee814a1",
             "注销凭证 payload 字节编码漂移(与链端口径不一致)"
         );
     }

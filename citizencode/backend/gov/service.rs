@@ -37,7 +37,7 @@ mod china_sf_constants;
 #[path = "../../../citizenchain/runtime/primitives/china/china_zf.rs"]
 mod china_zf_constants;
 
-pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v6";
+pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v7";
 pub const MIN_DEFAULT_ACCOUNT_COUNT: i64 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -186,12 +186,12 @@ const PROVINCE_DEPARTMENT_TEMPLATES: &[OfficialOrgTemplate] = &[
     },
     OfficialOrgTemplate {
         institution_code: "PSN",
-        suffix: "参议员议政会",
+        suffix: "参议会",
         full_suffix: "参议员议政会",
     },
     OfficialOrgTemplate {
         institution_code: "PRP",
-        suffix: "众议员议政会",
+        suffix: "众议会",
         full_suffix: "众议员议政会",
     },
 ];
@@ -199,7 +199,7 @@ const PROVINCE_DEPARTMENT_TEMPLATES: &[OfficialOrgTemplate] = &[
 const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
     OfficialOrgTemplate {
         institution_code: "CGOV",
-        suffix: "自治政府",
+        suffix: "政府",
         full_suffix: "自治政府",
     },
     OfficialOrgTemplate {
@@ -219,7 +219,7 @@ const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
     },
     OfficialOrgTemplate {
         institution_code: "CEDU",
-        suffix: "公民教育委员会",
+        suffix: "教委会",
         full_suffix: "公民教育委员会",
     },
     OfficialOrgTemplate {
@@ -282,7 +282,7 @@ const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
 const TOWN_TEMPLATES: &[OfficialOrgTemplate] = &[
     OfficialOrgTemplate {
         institution_code: "TGOV",
-        suffix: "自治政府",
+        suffix: "政府",
         full_suffix: "自治政府",
     },
     OfficialOrgTemplate {
@@ -352,7 +352,7 @@ pub fn gov_manifest_key(scope: &OfficialReconcileScope, kind: GovTargetKind) -> 
     scoped_manifest_key(scope, kind)
 }
 
-fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
+fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialInstitutionTarget> {
     let mut targets = Vec::new();
     for item in china_zf_constants::CHINA_ZF.iter() {
         push_constant_target(
@@ -411,13 +411,20 @@ fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
         );
     }
     push_extra_national_targets(&mut targets);
-    for province in provinces().iter() {
+    // 中文注释:省/市对账只生成命中 scope 的行政区目标,避免 changed-only
+    // 逐省检查时重复计算全国镇级 CID。
+    for province in provinces()
+        .iter()
+        .filter(|province| province_matches_scope(province, scope))
+    {
         let province_home_city = province
             .cities
             .iter()
             .find(|city| city.code == "001")
             .or_else(|| province.cities.first());
-        if let Some(home_city) = province_home_city {
+        if let Some(home_city) =
+            province_home_city.filter(|city| home_city_matches_scope(city, scope))
+        {
             for template in PROVINCE_DEPARTMENT_TEMPLATES {
                 push_area_template_target(
                     &mut targets,
@@ -433,7 +440,12 @@ fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
                 );
             }
         }
-        for city in province.cities.iter().filter(|city| city.code != "000") {
+        for city in province
+            .cities
+            .iter()
+            .filter(|city| city.code != "000")
+            .filter(|city| city_matches_scope(city, scope))
+        {
             for template in CITY_TEMPLATES {
                 push_area_template_target(
                     &mut targets,
@@ -466,16 +478,24 @@ fn official_institution_targets() -> Vec<OfficialInstitutionTarget> {
             }
         }
     }
+    targets.retain(|target| target_in_scope(target, scope));
     targets
 }
 
-fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
+fn public_security_targets(scope: &OfficialReconcileScope) -> Vec<OfficialInstitutionTarget> {
     let mut targets = Vec::new();
-    for province in provinces().iter() {
-        for city in province.cities.iter().filter(|city| city.code != "000") {
-            let seed = format!("PS-{}-{}", province.code, city.code);
+    for province in provinces()
+        .iter()
+        .filter(|province| province_matches_scope(province, scope))
+    {
+        for city in province
+            .cities
+            .iter()
+            .filter(|city| city.code != "000")
+            .filter(|city| city_matches_scope(city, scope))
+        {
             let Some(cid_number) =
-                generate_official_template_cid(&seed, province.name, city.name, "CPOL")
+                generate_public_security_cid(province.name, province.code, city.name, city.code)
             else {
                 continue;
             };
@@ -496,18 +516,74 @@ fn public_security_targets() -> Vec<OfficialInstitutionTarget> {
             });
         }
     }
+    targets.retain(|target| target_in_scope(target, scope));
     targets
 }
 
-fn build_raw_targets(kind: GovTargetKind) -> Vec<OfficialInstitutionTarget> {
+fn generate_public_security_cid(
+    province_name: &str,
+    province_code: &str,
+    city_name: &str,
+    city_code: &str,
+) -> Option<String> {
+    // 中文注释:公安局(CPOL)历史确定性种子是 `PS-{province}-{city}`,
+    // 不得改成 GOV-CITY 模板种子,否则会平移既有公安局 CID 号。
+    let account_seed = format!("PS-{province_code}-{city_code}");
+    generate_cid_number(GenerateCidInput {
+        account_pubkey: account_seed.as_str(),
+        p1: "0",
+        province_name,
+        city_name,
+        institution: "CPOL",
+    })
+    .ok()
+}
+
+fn build_raw_targets(
+    scope: &OfficialReconcileScope,
+    kind: GovTargetKind,
+) -> Vec<OfficialInstitutionTarget> {
     let mut targets = Vec::new();
     if matches!(kind, GovTargetKind::All | GovTargetKind::Official) {
-        targets.extend(official_institution_targets());
+        targets.extend(official_institution_targets(scope));
     }
     if matches!(kind, GovTargetKind::All | GovTargetKind::PublicSecurity) {
-        targets.extend(public_security_targets());
+        targets.extend(public_security_targets(scope));
     }
     targets
+}
+
+fn province_matches_scope(
+    province: &crate::china::model::ProvinceCode,
+    scope: &OfficialReconcileScope,
+) -> bool {
+    match scope {
+        OfficialReconcileScope::All => true,
+        OfficialReconcileScope::Province { province_code }
+        | OfficialReconcileScope::City { province_code, .. } => {
+            province.code.eq_ignore_ascii_case(province_code)
+        }
+    }
+}
+
+fn city_matches_scope(
+    city: &crate::china::model::CityCode,
+    scope: &OfficialReconcileScope,
+) -> bool {
+    match scope {
+        OfficialReconcileScope::All | OfficialReconcileScope::Province { .. } => true,
+        OfficialReconcileScope::City { city_code, .. } => city.code.eq_ignore_ascii_case(city_code),
+    }
+}
+
+fn home_city_matches_scope(
+    city: &crate::china::model::CityCode,
+    scope: &OfficialReconcileScope,
+) -> bool {
+    match scope {
+        OfficialReconcileScope::All | OfficialReconcileScope::Province { .. } => true,
+        OfficialReconcileScope::City { city_code, .. } => city.code.eq_ignore_ascii_case(city_code),
+    }
 }
 
 fn target_in_scope(target: &OfficialInstitutionTarget, scope: &OfficialReconcileScope) -> bool {
@@ -643,15 +719,17 @@ fn push_area_template_target(
 ) {
     let cid_short_name = format!("{display_area_name}{}", template.suffix);
     let cid_full_name = format!("{display_area_name}{}", template.full_suffix);
-    let account_seed = format!(
-        "GOV-{seed_scope}-{province_code}-{city_code}-{town_code}-{}",
-        template.institution_code
-    );
-    let Some(cid_number) = generate_official_template_cid(
-        &account_seed,
+    // 中文注释:种子约定 + (创世)无重试 收敛在 number::seed,本处只传参。
+    // 创世幂等故不查重,exists_fn 恒返 false 等价原行为。
+    let Ok(cid_number) = crate::number::official_institution_cid::<std::convert::Infallible>(
+        seed_scope,
+        province_code,
+        city_code,
+        town_code,
+        template.institution_code,
         province_name,
         city_name,
-        template.institution_code,
+        |_| Ok(false),
     ) else {
         return;
     };
@@ -671,22 +749,6 @@ fn push_area_template_target(
         education_type: (template.institution_code == "CEDU")
             .then(|| EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE.to_string()),
     });
-}
-
-fn generate_official_template_cid(
-    account_seed: &str,
-    province_name: &str,
-    city_name: &str,
-    institution_code: &str,
-) -> Option<String> {
-    generate_cid_number(GenerateCidInput {
-        account_pubkey: account_seed,
-        p1: "0",
-        province_name,
-        city_name,
-        institution: institution_code,
-    })
-    .ok()
 }
 
 /// 解析常量机构 CID,返回 (省码, 市码, 机构码, 盈利位)。
@@ -732,10 +794,7 @@ fn resolve_targets(
     scope: &OfficialReconcileScope,
     kind: GovTargetKind,
 ) -> Result<Vec<OfficialInstitutionTarget>, String> {
-    let mut targets = build_raw_targets(kind)
-        .into_iter()
-        .filter(|target| target_in_scope(target, scope))
-        .collect::<Vec<_>>();
+    let mut targets = build_raw_targets(scope, kind);
     targets.sort_by(|a, b| {
         (
             a.province_code.as_str(),

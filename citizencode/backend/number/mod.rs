@@ -14,6 +14,7 @@
 //! - [`code`]             — 机构类型代码枚举(全仓库机构代码唯一真源,81 码)
 //! - [`validator`]        — CID 号格式校验
 //! - [`generator`]        — CID 号生成
+//! - [`seed`]             — CID 确定性种子 + 撞号重试(三类调用方唯一真源)
 //! - [`model`]            — 身份 ID 编码元信息 DTO
 //! - [`admin`]            — 身份 ID 编码元信息接口
 
@@ -22,12 +23,14 @@ pub mod category;
 pub mod code;
 pub mod generator;
 pub(crate) mod model;
+pub mod seed;
 pub mod validator;
 
 // 中文注释:对外聚合导出,方便业务模块只写 `use crate::number::*`。
 pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_SUFFIX};
 pub use code::{AdminLevel, InstitutionCode};
 pub use generator::{generate_cid_number, GenerateCidInput};
+pub use seed::{citizen_cid, dynamic_institution_cid, official_institution_cid, SeedCidError};
 #[allow(unused_imports)]
 pub(crate) use model::*;
 pub use validator::{

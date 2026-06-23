@@ -792,10 +792,10 @@ impl
             };
 
             // 中文注释：这里必须和 CID 端 `/registration-info` 的签名 payload 严格一致。
-            // payload：DUOQIAN + OP_SIGN_INST + genesis_hash + cid_number
+            // payload：GMB + OP_SIGN_INST + genesis_hash + cid_number
             // + cid_full_name + account_names[] + nonce + 签发机构 + 作用域。
             let payload = (
-                primitives::core_const::DUOQIAN,
+                primitives::core_const::GMB,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
@@ -848,11 +848,11 @@ impl
             };
 
             // 中文注释:必须与 CID 端注销凭证签发 payload 严格一致。
-            // payload:DUOQIAN + OP_SIGN_DEREGISTER + genesis_hash + scope + cid_number
+            // payload:GMB + OP_SIGN_DEREGISTER + genesis_hash + scope + cid_number
             // + account_name + target_account + nonce + 签发机构 + 签发管理员公钥。
             // scope 与 target_account 入签名,防换范围/换账户重放。
             let payload = (
-                primitives::core_const::DUOQIAN,
+                primitives::core_const::GMB,
                 primitives::core_const::OP_SIGN_DEREGISTER,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 scope,
@@ -946,10 +946,10 @@ impl
                 return false;
             };
 
-            // payload:DUOQIAN + OP_SIGN_BIND + block_hash(0) + account + binding_id
+            // payload:GMB + OP_SIGN_BIND + block_hash(0) + account + binding_id
             //   + bind_nonce + 签发机构 + 作用域。
             let payload = (
-                primitives::core_const::DUOQIAN,
+                primitives::core_const::GMB,
                 primitives::core_const::OP_SIGN_BIND,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
@@ -1014,10 +1014,10 @@ impl
                 return false;
             };
 
-            // payload:DUOQIAN + OP_SIGN_VOTE + block_hash(0) + account + binding_id
+            // payload:GMB + OP_SIGN_VOTE + block_hash(0) + account + binding_id
             //   + proposal_id + nonce + 签发机构 + 作用域。
             let payload = (
-                primitives::core_const::DUOQIAN,
+                primitives::core_const::GMB,
                 primitives::core_const::OP_SIGN_VOTE,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
@@ -1093,10 +1093,10 @@ impl
                 return false;
             };
 
-            // payload:DUOQIAN + OP_SIGN_POP + block_hash(0) + who + eligible_total
+            // payload:GMB + OP_SIGN_POP + block_hash(0) + who + eligible_total
             //   + nonce + 签发机构 + 作用域。
             let payload = (
-                primitives::core_const::DUOQIAN,
+                primitives::core_const::GMB,
                 primitives::core_const::OP_SIGN_POP,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,

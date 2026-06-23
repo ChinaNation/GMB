@@ -10,15 +10,12 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use uuid::Uuid;
 
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
 use crate::china::{city_code_by_name, province_code_by_name};
-use crate::number::{
-    generate_cid_number, validate_cid_number_format, GenerateCidInput, InstitutionCategory,
-};
+use crate::number::InstitutionCategory;
 use crate::private::common::resolve_private_type_rule;
 use crate::scope::get_visible_scope;
 use crate::subjects::http::{
@@ -406,31 +403,40 @@ async fn create_institution_inner(
             return api_error(StatusCode::CONFLICT, 1007, "该机构全称已被使用");
         }
     }
-    for _ in 0..1000u32 {
-        let random_account = Uuid::new_v4().to_string();
-        let cid = match generate_cid_number(GenerateCidInput {
-            account_pubkey: random_account.as_str(),
-            p1: p1.as_str(),
-            province_name: province.as_str(),
-            city_name: city.as_str(),
-            institution: institution_code.as_str(),
-        }) {
-            Ok(v) => v,
-            Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
-        };
-        let cid = match validate_cid_number_format(cid.as_str()) {
-            Ok(v) => v,
-            Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
-        };
-        if state
-            .db
-            .get_institution_with_accounts(&cid)
-            .ok()
-            .flatten()
-            .is_some()
-        {
-            continue;
+    // 中文注释:随机 UUID 种子 + 1000 次撞号重试 + 格式校验 收敛在 number::seed,
+    // 本处只传参 + DB 查重回调(原行为:DB 错误 .ok().flatten() 视为不存在,逐字节保留)。
+    let cid = match crate::number::dynamic_institution_cid(
+        province.as_str(),
+        city.as_str(),
+        institution_code.as_str(),
+        p1.as_str(),
+        |candidate| {
+            Ok::<bool, std::convert::Infallible>(
+                state
+                    .db
+                    .get_institution_with_accounts(candidate)
+                    .ok()
+                    .flatten()
+                    .is_some(),
+            )
+        },
+    ) {
+        Ok(v) => v,
+        Err(crate::number::SeedCidError::Generate(msg)) => {
+            return api_error(StatusCode::BAD_REQUEST, 1001, msg)
         }
+        Err(crate::number::SeedCidError::Validate(msg)) => {
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)
+        }
+        Err(crate::number::SeedCidError::Exhausted) => {
+            return api_error(
+                StatusCode::CONFLICT,
+                1005,
+                "institution cid_number collision retry exhausted",
+            )
+        }
+    };
+    {
         let inst = Institution {
             cid_number: cid.clone(),
             cid_full_name: cid_full_name.clone(),
@@ -484,7 +490,7 @@ async fn create_institution_inner(
                 "parent_cid_number": parent_cid_number.clone(),
             }),
         );
-        return Json(ApiResponse {
+        Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
             data: CreateInstitutionOutput {
@@ -493,13 +499,8 @@ async fn create_institution_inner(
                 category,
             },
         })
-        .into_response();
+        .into_response()
     }
-    api_error(
-        StatusCode::CONFLICT,
-        1005,
-        "institution cid_number collision retry exhausted",
-    )
 }
 
 fn category_text_for_audit(category: InstitutionCategory) -> &'static str {

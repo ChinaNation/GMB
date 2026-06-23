@@ -820,36 +820,28 @@ fn generate_unique_citizen_cid(
     province_name: &str,
     wallet_pubkey: &str,
 ) -> Result<String, axum::response::Response> {
-    for retry in 0..1000u32 {
-        let attempt_pubkey = if retry == 0 {
-            wallet_pubkey.to_string()
-        } else {
-            format!("{}#{retry}", wallet_pubkey)
-        };
-        let candidate = match crate::number::generate_cid_number(crate::number::GenerateCidInput {
-            account_pubkey: attempt_pubkey.as_str(),
-            // 公民人:新版个人主体码 CTZN(固定盈利,p1 被忽略,市级段固定 000)。
-            p1: "1",
-            province_name,
-            city_name: "省辖市",
-            institution: "CTZN",
-        }) {
-            Ok(v) => v,
-            Err(msg) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)),
-        };
-        let exists = state.db.cid_exists(&candidate).map_err(|err| {
-            tracing::error!(error = %err, "query cid exists failed");
-            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cid query failed")
-        })?;
-        if !exists {
-            return Ok(candidate);
+    // 中文注释:种子约定(wallet_pubkey[+#retry])+ 1000 次撞号重试 收敛在 number::seed,
+    // 本处只传 wallet_pubkey + DB 查重回调。
+    crate::number::citizen_cid(wallet_pubkey, province_name, |candidate| {
+        state.db.cid_exists(candidate)
+    })
+    .map_err(|err| match err {
+        crate::number::SeedCidError::Generate(msg) => {
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)
         }
-    }
-    Err(api_error(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        1099,
-        "CID 桶饱和(N/10⁹>99.9%),协议需扩容",
-    ))
+        crate::number::SeedCidError::Validate(msg) => {
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg)
+        }
+        crate::number::SeedCidError::Exists(db_err) => {
+            tracing::error!(error = %db_err, "query cid exists failed");
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "cid query failed")
+        }
+        crate::number::SeedCidError::Exhausted => api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1099,
+            "CID 桶饱和(N/10⁹>99.9%),协议需扩容",
+        ),
+    })
 }
 
 /// 验证公民电子护照绑定签名（sr25519，substrate context）。

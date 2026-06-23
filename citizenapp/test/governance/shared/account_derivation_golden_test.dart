@@ -4,8 +4,7 @@
 // citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json
 // 的副本),逐条断言 Dart 镜像派生 == address_hex,防止 Dart 与链端漂移。
 //
-// 行为中性铁律:fixture 用当前 DUOQIAN 域生成,本测试证明 Dart 派生地址
-// 逐字节一致;Tier 3(域改 GMB)才允许 fixture 改变。
+// fixture 用 GMB 域生成,本测试证明 Dart 派生地址与链端逐字节一致。
 //
 // fixture 缺席时(Rust 切片尚未落地)skip,不阻塞纯 Dart 测试。
 
@@ -34,8 +33,8 @@ void main() {
 
   group('账户派生金标向量(链端 ↔ Dart 逐字节对齐)', () {
     test('fixture 域常量与本端 _domain 一致', () {
-      // 行为中性证明:Tier 1/2 期间 fixture 仍是 DUOQIAN。
-      expect(root['domain'], 'DUOQIAN');
+      // 域已改名 GMB(ADR-024 Tier 3),fixture 与 _domain 同步为 GMB。
+      expect(root['domain'], 'GMB');
       expect(ss58, kGmbSs58Prefix);
     });
 

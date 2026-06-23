@@ -92,7 +92,7 @@ fn build_bind_credential(
     let issuer_main_account = test_issuer_main_account();
     let scope_city_name = test_scope_city_name();
     let payload = (
-        primitives::core_const::DUOQIAN,
+        primitives::core_const::GMB,
         primitives::core_const::OP_SIGN_BIND,
         frame_system::Pallet::<Runtime>::block_hash(0),
         account,
@@ -136,7 +136,7 @@ fn build_vote_signature(
     let issuer_main_account = test_issuer_main_account();
     let scope_city_name = test_scope_city_name();
     let payload = (
-        primitives::core_const::DUOQIAN,
+        primitives::core_const::GMB,
         primitives::core_const::OP_SIGN_VOTE,
         frame_system::Pallet::<Runtime>::block_hash(0),
         account,
@@ -170,7 +170,7 @@ fn build_pop_signature(
     let issuer_main_account = test_issuer_main_account();
     let scope_city_name = test_scope_city_name();
     let payload = (
-        primitives::core_const::DUOQIAN,
+        primitives::core_const::GMB,
         primitives::core_const::OP_SIGN_POP,
         frame_system::Pallet::<Runtime>::block_hash(0),
         who,
