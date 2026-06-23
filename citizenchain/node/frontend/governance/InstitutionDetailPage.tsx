@@ -54,7 +54,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
     api.getInstitutionDetail(cidNumber)
       .then(async (d) => {
         const aa = await adminsChangeApi
-          .getActivatedAdmins(cidNumber, { cidNumber, org: d.orgType })
+          .getActivatedAdmins(cidNumber, { cidNumber })
           .catch(() => [] as ActivatedAdmin[]);
         setDetail(d);
         setActivatedAdmins(aa);

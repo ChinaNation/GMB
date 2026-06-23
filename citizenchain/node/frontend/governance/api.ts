@@ -32,8 +32,8 @@ export const governanceApi = {
   // 双层 ID + 反向索引(spec_version v1)
   getProposalDisplay: (proposalId: number) =>
     invoke<ProposalDisplayMeta | null>('get_proposal_display', { proposalId }),
-  listProposalsByOrg: (org: number) =>
-    invoke<number[]>('list_proposals_by_org', { org }),
+  listProposalsByInstitutionCode: (institutionCode: string) =>
+    invoke<number[]>('list_proposals_by_institution_code', { institutionCode }),
   listProposalsByInstitution: (cidNumber: string) =>
     invoke<number[]>('list_proposals_by_institution', { cidNumber }),
   listProposalsByOwner: (moduleTagScaleHex: string) =>

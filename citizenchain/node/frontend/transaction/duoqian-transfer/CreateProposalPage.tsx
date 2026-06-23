@@ -10,7 +10,7 @@ import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   cidNumber: string;
-  orgType: number;
+  institutionCode: string;
   cidFullName: string;
   mainAccount: string;
   adminWallets: AdminWalletMatch[];
@@ -21,7 +21,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function CreateDuoqianTransferPage({
-  cidNumber, orgType, cidFullName, mainAccount, adminWallets, onBack, onSuccess,
+  cidNumber, institutionCode, cidFullName, mainAccount, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
@@ -83,7 +83,7 @@ export function CreateDuoqianTransferPage({
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildDuoqianTransferRequest(
-        selectedWallet!.pubkeyHex, cidNumber, orgType,
+        selectedWallet!.pubkeyHex, cidNumber, institutionCode,
         beneficiary.trim(), amount, remark,
       );
 
@@ -112,7 +112,7 @@ export function CreateDuoqianTransferPage({
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitDuoqianTransfer(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        cidNumber, orgType, ben, amt, rmk,
+        cidNumber, institutionCode, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -121,7 +121,7 @@ export function CreateDuoqianTransferPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [cidNumber, orgType]);
+  }, [cidNumber, institutionCode]);
 
   return (
     <div className="governance-section">

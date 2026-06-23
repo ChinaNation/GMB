@@ -1,6 +1,6 @@
 # ADR-024 账户地址派生统一为唯一真源
 
-- 状态：Tier 1/2 + `gmb.py` 改名 已实现（2026-06-22，行为中性，地址逐字节零变化已金标验证）；Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后
+- 状态：Tier 1/2 + `gmb.py` 改名 已实现并提交于 HEAD `4ab8efe6 "统一机构命名"`（2026-06-22，与并行 T3/T4 同提交混合）；合并态全量验证通过（链端 `cargo check --workspace` + 派生 22 测试 + 金标 1；后端 71；citizenapp Dart 28 + 跨语言金标逐字节对齐）；行为中性、地址逐字节零变化已证。Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后
 - 关联：[[ADR-021]] 单源思想；任务卡 `20260622-account-derive-single-source.md`；并入 `20260622-cid-classification-unify-t3t4` 末尾创世
 - 取代：原 `20260622-derive-domain-rename-gmb-op-name`（改名收为本 ADR Tier 3）
 

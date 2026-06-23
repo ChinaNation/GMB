@@ -29,7 +29,7 @@ export function PrbSection() {
     return (
       <AdminListPage
         cidNumber={view.cidNumber}
-        accountRef={{ cidNumber: view.cidNumber, org: view.orgType }}
+        accountRef={{ cidNumber: view.cidNumber }}
         onBack={() => backToDetail(view.cidNumber)}
       />
     );
@@ -50,7 +50,7 @@ export function PrbSection() {
     return (
       <CreateDuoqianTransferPage
         cidNumber={view.cidNumber}
-        orgType={view.orgType}
+        institutionCode="PRB"
         cidFullName={view.cidFullName}
         mainAccount={view.mainAccount}
         adminWallets={view.adminWallets}
@@ -63,7 +63,7 @@ export function PrbSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        accountRef={{ cidNumber: view.cidNumber, org: view.orgType }}
+        accountRef={{ cidNumber: view.cidNumber }}
         cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.cidNumber)}

@@ -38,11 +38,19 @@ pub const OP_NAME: u8 = 0x06; // CID 机构自定义命名账户 · input: cid_n
 ///   `OP_MAIN`/`OP_FEE`,不得作为自定义命名账户。
 /// - `永久质押` / `安全基金` / `两和基金`:制度专属账户,普通 CID 机构禁止注册,
 ///   account_name 命中即拒绝(`ReservedAccountName`)。
-pub const RESERVED_NAME_MAIN: &[u8] = "主账户".as_bytes();
-pub const RESERVED_NAME_FEE: &[u8] = "费用账户".as_bytes();
-pub const RESERVED_NAME_STAKE: &[u8] = "永久质押".as_bytes();
-pub const RESERVED_NAME_ANQUAN: &[u8] = "安全基金".as_bytes();
-pub const RESERVED_NAME_HE: &[u8] = "两和基金".as_bytes();
+/// 5 个保留名的 UTF-8 字符串原始字面(全仓**唯一**字面源)。链端按 `&[u8]` 比对、
+/// 后端 build_default_accounts 等按 `&str` 取用,一律 import 这里,禁止任何位置另写字面。
+pub const RESERVED_NAME_MAIN_STR: &str = "主账户";
+pub const RESERVED_NAME_FEE_STR: &str = "费用账户";
+pub const RESERVED_NAME_STAKE_STR: &str = "永久质押";
+pub const RESERVED_NAME_ANQUAN_STR: &str = "安全基金";
+pub const RESERVED_NAME_HE_STR: &str = "两和基金";
+
+pub const RESERVED_NAME_MAIN: &[u8] = RESERVED_NAME_MAIN_STR.as_bytes();
+pub const RESERVED_NAME_FEE: &[u8] = RESERVED_NAME_FEE_STR.as_bytes();
+pub const RESERVED_NAME_STAKE: &[u8] = RESERVED_NAME_STAKE_STR.as_bytes();
+pub const RESERVED_NAME_ANQUAN: &[u8] = RESERVED_NAME_ANQUAN_STR.as_bytes();
+pub const RESERVED_NAME_HE: &[u8] = RESERVED_NAME_HE_STR.as_bytes();
 
 /// 全部 5 个受限保留名,供各端遍历校验。
 pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 5] = [

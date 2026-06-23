@@ -61,7 +61,6 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
           ? adminsChangeApi.getActivatedAdmins(cidNumber, {
               cidNumber,
               accountHex: detail.adminAccountHex,
-              org: detail.org,
             })
           : [] as ActivatedAdmin[])
         .catch(() => [] as ActivatedAdmin[]),

@@ -18,7 +18,12 @@ import { saveKnownCid } from '../../transaction/offchain-transaction/section';
 import { organizationManageApi } from './api';
 import type { InitialAccountInputDto, InstitutionRegistrationInfoResp } from './types';
 
-const CLEARING_BANK_ADMIN_ORG = 5;
+// 机构码从机构自身 cidNumber 派生(单一真源:CID seg2 = 码+盈利位+校验,数字位→3字符码/字母位→4字符码)。
+const institutionCodeFromCid = (cid: string): string => {
+  const seg2 = cid.split('-')[1] ?? '';
+  if (seg2.length < 4) return '';
+  return /[0-9]/.test(seg2[3]) ? seg2.slice(0, 3) : seg2.slice(0, 4);
+};
 
 type AdminWalletProfile = {
   address: string;
@@ -179,7 +184,7 @@ export function CreateMultisigInstitutionPage({
         cidNumber,
         cidFullName,
         accounts: accountInputs,
-        org: CLEARING_BANK_ADMIN_ORG,
+        institutionCode: institutionCodeFromCid(cidNumber),
         admins,
         threshold,
         registerNonce: cidCredential.register_nonce,

@@ -48,7 +48,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [cidNumber, accountRef.cidNumber, accountRef.accountHex, accountRef.org]);
+  }, [cidNumber, accountRef.cidNumber, accountRef.accountHex]);
 
   // 激活倒计时
   useEffect(() => {
@@ -74,7 +74,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
       setActivateError(sanitizeError(e));
       setActivateStep('error');
     }
-  }, [cidNumber, accountRef.cidNumber, accountRef.accountHex, accountRef.org]);
+  }, [cidNumber, accountRef.cidNumber, accountRef.accountHex]);
 
   const handleActivateScan = useCallback(async (responseJson: string) => {
     if (!activateRequest) return;

@@ -60,7 +60,7 @@ export function AdminSetChangePage({
       })
       .catch((e) => setFormError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [accountRef.cidNumber, accountRef.accountHex, accountRef.org]);
+  }, [accountRef.cidNumber, accountRef.accountHex]);
 
   const buildRequest = async () => {
     if (!account || !selectedWallet) return;

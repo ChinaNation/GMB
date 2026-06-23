@@ -12,11 +12,13 @@ use crate::subjects::model::{Institution, InstitutionAccount};
 use crate::subjects::MultisigChainStatus;
 use primitives::account_derive::is_forbidden_account_name;
 
-pub const ACCOUNT_NAME_MAIN: &str = "主账户";
-pub const ACCOUNT_NAME_FEE: &str = "费用账户";
-pub const ACCOUNT_NAME_STAKE: &str = "永久质押";
-pub const ACCOUNT_NAME_ANQUAN: &str = "安全基金";
-pub const ACCOUNT_NAME_HE: &str = "两和基金";
+// 保留名字面单源 = primitives::account_derive::RESERVED_NAME_*_STR(链端唯一字面)。
+// 本处仅以业务别名 re-export,禁止再写 "主账户" 等字面(原第二份 copy 已清,ADR-024 follow-up)。
+pub const ACCOUNT_NAME_MAIN: &str = primitives::account_derive::RESERVED_NAME_MAIN_STR;
+pub const ACCOUNT_NAME_FEE: &str = primitives::account_derive::RESERVED_NAME_FEE_STR;
+pub const ACCOUNT_NAME_STAKE: &str = primitives::account_derive::RESERVED_NAME_STAKE_STR;
+pub const ACCOUNT_NAME_ANQUAN: &str = primitives::account_derive::RESERVED_NAME_ANQUAN_STR;
+pub const ACCOUNT_NAME_HE: &str = primitives::account_derive::RESERVED_NAME_HE_STR;
 
 pub const COMMON_DEFAULT_ACCOUNT_NAMES: &[&str] = &[ACCOUNT_NAME_MAIN, ACCOUNT_NAME_FEE];
 pub const PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES: &[&str] =

@@ -34,7 +34,7 @@ export function NrcSection() {
     return (
       <AdminListPage
         cidNumber={NRC_CID_NUMBER}
-        accountRef={{ cidNumber: NRC_CID_NUMBER, org: 0 }}
+        accountRef={{ cidNumber: NRC_CID_NUMBER, institutionCode: 'NRC' }}
         onBack={backToDetail}
       />
     );
@@ -54,7 +54,7 @@ export function NrcSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        accountRef={{ cidNumber: NRC_CID_NUMBER, org: 0 }}
+        accountRef={{ cidNumber: NRC_CID_NUMBER, institutionCode: 'NRC' }}
         cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
@@ -67,7 +67,7 @@ export function NrcSection() {
     return (
       <CreateDuoqianTransferPage
         cidNumber={NRC_CID_NUMBER}
-        orgType={view.orgType}
+        institutionCode="NRC"
         cidFullName={view.cidFullName}
         mainAccount={view.mainAccount}
         adminWallets={view.adminWallets}

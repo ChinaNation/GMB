@@ -73,7 +73,6 @@ export type ClearingBankView =
       cidNumber: string;
       cidFullName: string;
       adminAccountHex: string;
-      org: number;
       adminWallets: AdminWalletMatch[];
     }
   | { kind: 'create-multisig-institution'; cidNumber: string }

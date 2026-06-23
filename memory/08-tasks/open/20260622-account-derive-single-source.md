@@ -2,7 +2,17 @@
 
 ## 状态
 
-**Tier 1/2 + `gmb.py` 改名 已实现（2026-06-22，行为中性，地址逐字节零变化已金标验证）。** 取代原 `20260622-derive-domain-rename-gmb-op-name.md`（改名并入本卡 Tier 3）。Tier 1/2 行为中性（地址不变，本不需创世）；**Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后**（缺最终态 cid_number，本卡内不能独立闭环）。详见 ADR-024「实施记录」节。
+**Tier 1/2 + `gmb.py` 改名 已实现并提交（2026-06-22，行为中性，地址逐字节零变化已金标验证）。** 取代原 `20260622-derive-domain-rename-gmb-op-name.md`（改名并入本卡 Tier 3）。Tier 1/2 行为中性（地址不变，本不需创世）；**Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后**（缺最终态 cid_number，本卡内不能独立闭环）。详见 ADR-024「实施记录」节。
+
+### 提交与合并态验证（2026-06-22）
+- **已提交**：随并行 T3/T4 线程一并落入 HEAD `4ab8efe6 "统一机构命名"`（本线程执行期间，T3/T4 把整个脏树连同本卡 ADR-024 改动一起提交；ADR-024 标记完好：account_derive.rs / core_const 删 OP_MAIN / org-manage derive_registered_account / 后端委托 全部在 HEAD）。**该提交混合了两条线程**，非纯 ADR-024。
+- **合并态全量验证通过**（HEAD 上独立复跑，非子代理自报）：
+  - 链端 `cargo check --workspace`（含 node 全 crate）通过 → 无任何 crate 仍引用已删的 `core_const::{OP_MAIN,derive_account,is_forbidden}`。
+  - 链端账户派生测试 22 passed（含 `china_cb/ch/other_main_fee_accounts_match_derive_primitive` = china **新码** 字面值 == `account_derive::derive(cid)` 逐字节）+ `account_derive_golden` 1 passed（7 向量）。
+  - 后端 citizencode 71 passed（含 T3/T4 merged 的 number 全套）。
+  - citizenapp Dart 28 passed + analyze 0 issues，`account_derivation_golden_test` 真跑（不再 skip），Dart 派生 == Rust 金标 7 向量逐字节一致 → **跨语言单源对齐成立**。
+- **gmb.py**：scripts/ 在 .gitignore（既定私密区），改名仅文件系统（duoqian.py 已删、gmb.py 在），不入 git。
+- ~~遗留 follow-up：service.rs 第二份保留名字面~~ **已修(2026-06-22)**：`account_derive` 新增 `RESERVED_NAME_*_STR`(&str，全仓唯一字面源)，`&[u8]` 由 `.as_bytes()` 派生；`subjects/service.rs` 的 `ACCOUNT_NAME_*` 改为引用 `_STR`，删字面 copy。保留名字面全仓仅 `account_derive` 一处。验证：primitives 金标 1 passed + 后端 71 passed，行为中性。
 
 **决策 B（2026-06-22 用户拍板）：** china CID 重烤（=T3/T4 Phase 3，含 federal 常量种子约定）**留 T3/T4 线程**，本线程不吸收。本线程现在做范围 = **Tier 1 + Tier 2 + `duoqian.py→gmb.py` 改名**（regex 读取路径 op_tag 改到 `account_derive.rs`，域 GMB 留 Tier 3）；待 T3/T4 出新码 CID，本线程再 Tier 3 + 跑 `gmb.py` 账户重生 + 一次创世。
 

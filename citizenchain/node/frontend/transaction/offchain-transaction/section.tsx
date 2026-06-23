@@ -107,7 +107,6 @@ export function ClearingBankSection() {
     const accountRef = {
       cidNumber: detail.cidNumber,
       accountHex: detail.adminAccountHex,
-      org: detail.org,
     };
     try {
       const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.cidNumber, accountRef);
@@ -116,7 +115,6 @@ export function ClearingBankSection() {
         cidNumber: detail.cidNumber,
         cidFullName: detail.cidFullName,
         adminAccountHex: detail.adminAccountHex,
-        org: detail.org,
         adminWallets: activatedAdmins.map((admin) => ({
           address: hexToSs58(admin.pubkeyHex),
           pubkeyHex: admin.pubkeyHex,
@@ -188,7 +186,6 @@ export function ClearingBankSection() {
           accountRef={{
             cidNumber: view.cidNumber,
             accountHex: view.adminAccountHex,
-            org: view.org,
           }}
           cidFullName={view.cidFullName}
           adminWallets={view.adminWallets}

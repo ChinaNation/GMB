@@ -13,7 +13,7 @@ import type {
 const accountRefParams = (accountRef: AdminAccountRef) => ({
   cidNumber: accountRef.cidNumber ?? null,
   accountHex: accountRef.accountHex ?? null,
-  expectedOrg: accountRef.org ?? null,
+  expectedInstitutionCode: accountRef.institutionCode ?? null,
 });
 
 export const adminsChangeApi = {
@@ -24,7 +24,7 @@ export const adminsChangeApi = {
       pubkeyHex,
       cidNumber,
       accountHex: accountRef?.accountHex ?? null,
-      expectedOrg: accountRef?.org ?? null,
+      expectedInstitutionCode: accountRef?.institutionCode ?? null,
     }),
   verifyActivateAdmin: (
     requestId: string,
@@ -44,14 +44,14 @@ export const adminsChangeApi = {
     invoke<ActivatedAdmin[]>('get_activated_admins', {
       cidNumber,
       accountHex: accountRef?.accountHex ?? null,
-      expectedOrg: accountRef?.org ?? null,
+      expectedInstitutionCode: accountRef?.institutionCode ?? null,
     }),
   deactivateAdmin: (pubkeyHex: string, cidNumber: string, accountRef: AdminAccountRef, unlockPassword: string) =>
     invoke<void>('deactivate_admin', {
       pubkeyHex,
       cidNumber,
       accountHex: accountRef.accountHex ?? null,
-      expectedOrg: accountRef.org ?? null,
+      expectedInstitutionCode: accountRef.institutionCode ?? null,
       unlockPassword,
     }),
   hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),

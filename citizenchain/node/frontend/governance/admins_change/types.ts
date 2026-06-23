@@ -17,8 +17,8 @@ export type {
 export type AdminAccountState = {
   accountHex: string;
   cidNumber: string | null;
-  org: number;
-  orgLabel: string;
+  institutionCode: number[];
+  institutionCodeLabel: string;
   kind: number;
   kindLabel: string;
   admins: string[];
@@ -32,5 +32,5 @@ export type AdminAccountState = {
 export type AdminAccountRef = {
   cidNumber?: string | null;
   accountHex?: string | null;
-  org?: number | null;
+  institutionCode?: string | null;
 };

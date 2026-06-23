@@ -34,7 +34,7 @@ export const organizationManageApi = {
     cidNumber: string;
     cidFullName: string;
     accounts: InitialAccountInputDto[];
-    org: number;
+    institutionCode: string;
     admins: string[];
     threshold: number;
     registerNonce: string;
@@ -50,7 +50,7 @@ export const organizationManageApi = {
       cidNumber: params.cidNumber,
       cidFullName: params.cidFullName,
       accounts: params.accounts,
-      org: params.org,
+      institutionCode: params.institutionCode,
       admins: params.admins,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
@@ -69,7 +69,7 @@ export const organizationManageApi = {
     cidNumber: string;
     cidFullName: string;
     accounts: InitialAccountInputDto[];
-    org: number;
+    institutionCode: string;
     admins: string[];
     threshold: number;
     registerNonce: string;
@@ -90,7 +90,7 @@ export const organizationManageApi = {
       cidNumber: params.cidNumber,
       cidFullName: params.cidFullName,
       accounts: params.accounts,
-      org: params.org,
+      institutionCode: params.institutionCode,
       admins: params.admins,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
