@@ -36,6 +36,12 @@ pub const VOTING_DURATION_BLOCKS: u32 = BLOCKS_PER_DAY as u32 * VOTING_DURATION_
 pub const RESOLUTION_ISSUANCE_MAX_REASON_LEN: u32 = 1024; // 决议发行理由最大长度
 pub const RESOLUTION_ISSUANCE_MAX_ALLOCATIONS: u32 = PRC_COUNT; // 决议发行单次最大分配条目数（与省储会数量一致）
 
+/// 六、立法院模块常量(ADR-027)
+/// 宪法不可修改条款清单(公民宪法第十九条)。
+/// 中文注释:tier=宪法 的法律,任何立法修改提案命中以下条号一律硬拒,永不可修改。
+/// 单一真源,立法院模块 legislation-yuan 与未来客户端校验都引用此常量。
+pub const IMMUTABLE_CONSTITUTION_ARTICLES: [u32; 8] = [1, 2, 3, 17, 19, 23, 33, 41];
+
 #[cfg(test)]
 mod tests {
     use super::*;

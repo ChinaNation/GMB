@@ -109,6 +109,9 @@ impl votingengine::Config for Test {
     type InternalCleanup = InternalVote;
     type JointFinalizer = JointVote;
     type JointCleanup = JointVote;
+    type LegislationVoteResultCallback = ();
+    type LegislationFinalizer = ();
+    type LegislationCleanup = ();
 }
 
 impl crate::Config for Test {

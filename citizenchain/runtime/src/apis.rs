@@ -41,8 +41,9 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, Executive, GenesisPallet, Grandpa, InherentDataExt, Nonce,
-    PowDifficulty, Runtime, RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment, VERSION,
+    AccountId, Balance, Block, Executive, GenesisPallet, Grandpa, InherentDataExt, LegislationYuan,
+    Nonce, PowDifficulty, Runtime, RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment,
+    VERSION,
 };
 
 impl_runtime_apis! {
@@ -295,6 +296,26 @@ impl_runtime_apis! {
             sp_io::hashing::blake2_256(
                 primitives::genesis::CITIZEN_CONSTITUTION_HTML.as_bytes(),
             )
+        }
+    }
+
+    impl primitives::genesis::LegislationApi<Block> for Runtime {
+        fn list_laws(tier: u8, scope_code: u32) -> Vec<u64> {
+            let tier = match tier {
+                0 => legislation_yuan::Tier::Constitution,
+                1 => legislation_yuan::Tier::National,
+                2 => legislation_yuan::Tier::Provincial,
+                _ => legislation_yuan::Tier::Municipal,
+            };
+            LegislationYuan::list_laws(tier, scope_code)
+        }
+
+        fn law(law_id: u64) -> Option<Vec<u8>> {
+            LegislationYuan::get_law(law_id).map(|l| codec::Encode::encode(&l))
+        }
+
+        fn law_version(law_id: u64, version: u32) -> Option<Vec<u8>> {
+            LegislationYuan::get_law_version(law_id, version).map(|v| codec::Encode::encode(&v))
         }
     }
 

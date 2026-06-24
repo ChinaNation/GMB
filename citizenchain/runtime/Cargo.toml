@@ -75,9 +75,11 @@ votingengine = { path = "votingengine", default-features = false }
 internal-vote = { path = "votingengine/internal-vote", default-features = false }
 joint-vote = { path = "votingengine/joint-vote", default-features = false }
 citizen-vote = { path = "votingengine/citizen-vote", default-features = false }
+legislation-vote = { path = "votingengine/legislation-vote", default-features = false }
 admins-change = { path = "governance/admins-change", default-features = false }
 grandpakey-change = { path = "governance/grandpakey-change", default-features = false }
 runtime-upgrade = { path = "governance/runtime-upgrade", default-features = false }
+legislation-yuan = { path = "governance/legislation-yuan", default-features = false }
 resolution-destro = { path = "governance/resolution-destro", default-features = false }
 multisig-transfer = { path = "transaction/multisig-transfer", default-features = false }
 institution-asset = { path = "transaction/institution-asset", default-features = false }
@@ -116,9 +118,11 @@ std = [
 	"internal-vote/std",
 	"joint-vote/std",
 	"citizen-vote/std",
+	"legislation-vote/std",
 	"admins-change/std",
 	"grandpakey-change/std",
 	"runtime-upgrade/std",
+	"legislation-yuan/std",
 	"resolution-destro/std",
 	"multisig-transfer/std",
 	"institution-asset/std",

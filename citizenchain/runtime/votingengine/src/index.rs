@@ -14,7 +14,7 @@
 use frame_support::pallet_prelude::BoundedVec;
 
 use crate::pallet::{
-    self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByCode,
+    self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByCode, ProposalsByInstitution,
     ProposalsByOwner, ProposalsByYear,
 };
 use crate::types::InstitutionCode;

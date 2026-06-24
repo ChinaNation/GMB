@@ -51,6 +51,44 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
     }
 }
 
+/// 立法事项(立法/修法/废法)接入立法投票时,统一由投票引擎 legislation-vote 创建提案并返回真实提案 ID。
+///
+/// 中文注释(ADR-027):业务壳 legislation-yuan 只传"立法语义"——发起机构、机构码、表决类型、
+/// 法律载荷;表决规则(参与率/赞成率/反对率上限)、两院顺序、强制公投、计票与通过判定全部归属
+/// 投票引擎 legislation-vote sub-pallet,业务壳不得自行处理。
+/// runtime 装配为真实 `LegislationVote`;未实装语境(如其它 pallet 的测试 mock)装 `()` 返回 NotConfigured。
+pub trait LegislationVoteEngine<AccountId> {
+    /// 创建立法投票提案。
+    /// - `houses`:院序列 `[(机构码, 机构账户), ...]`,发起院在前、终审院在后。
+    ///   单院(市立法会)= 1 项;两院(国家/省立法院)= `[众议会, 参议会]`;教委会模式 = `[教委会, 参议会]`。
+    ///   发起人 `who` 必须是 `houses[0]`(发起院)的现任议员/委员(admin)。
+    /// - `vote_type`:表决类型 u8(常规 0 / 重要 1 / 二审 2 / 特别 3),用 u8 保持引擎与业务枚举解耦。
+    ///   特别案(3)内部全过后强制进入公投阶段(发起前须由 `who` 准备人口快照)。
+    /// - `data`:MODULE_TAG 前缀 + 提案摘要(law_id/tier/version/content_hash)。
+    /// - `object_data`:法律全文大对象(整部条文 SCALE),供通过回调读回写入新版本。
+    fn create_legislation_proposal(
+        who: AccountId,
+        houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
+        vote_type: u8,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+        object_data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError>;
+}
+
+impl<AccountId> LegislationVoteEngine<AccountId> for () {
+    fn create_legislation_proposal(
+        _who: AccountId,
+        _houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
+        _vote_type: u8,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+        _object_data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("LegislationVoteEngineNotConfigured"))
+    }
+}
+
 /// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
 ///
 /// 中文注释：业务模块只能选择“提案语义”，不能传入“本次投票通过阈值”。
@@ -115,12 +153,18 @@ pub trait InternalVoteEngine<AccountId> {
     }
 
     /// 读取已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
-    fn active_dynamic_threshold(_institution_code: InstitutionCode, _institution: AccountId) -> Option<u32> {
+    fn active_dynamic_threshold(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+    ) -> Option<u32> {
         None
     }
 
     /// 读取 pending 或 active 动态阈值。注册回调在激活前发事件时使用。
-    fn configured_dynamic_threshold(_institution_code: InstitutionCode, _institution: AccountId) -> Option<u32> {
+    fn configured_dynamic_threshold(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+    ) -> Option<u32> {
         None
     }
 }
@@ -536,15 +580,26 @@ impl<
 /// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
 /// drift，会被视为权限错误并回滚提案创建。
 pub trait InternalAdminProvider<AccountId> {
-    fn is_internal_admin(institution_code: InstitutionCode, institution: AccountId, who: &AccountId) -> bool;
+    fn is_internal_admin(
+        institution_code: InstitutionCode,
+        institution: AccountId,
+        who: &AccountId,
+    ) -> bool;
 
     /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
-    fn get_admin_list(_institution_code: InstitutionCode, _institution: AccountId) -> Option<sp_std::vec::Vec<AccountId>> {
+    fn get_admin_list(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+    ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 
     /// 查询 Pending 账户管理员权限。仅供创建/激活该账户的投票入口使用。
-    fn is_pending_internal_admin(_institution_code: InstitutionCode, _institution: AccountId, _who: &AccountId) -> bool {
+    fn is_pending_internal_admin(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+        _who: &AccountId,
+    ) -> bool {
         false
     }
 
@@ -558,7 +613,11 @@ pub trait InternalAdminProvider<AccountId> {
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
-    fn is_internal_admin(_institution_code: InstitutionCode, _institution: AccountId, _who: &AccountId) -> bool {
+    fn is_internal_admin(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+        _who: &AccountId,
+    ) -> bool {
         false
     }
 }
@@ -707,6 +766,101 @@ impl JointCleanupHandler for () {
         (0, false)
     }
     fn cleanup_joint_terminal(_proposal_id: u64) {}
+}
+
+// ──────────────────────────────────────────────────────────────────
+// 立法投票(legislation-vote)mode trait(ADR-027)
+// 核心 votingengine 按 PROPOSAL_KIND_LEGISLATION / STAGE_LEG_* 分发到这些 trait。
+// 三个投票 sub-pallet(internal/joint/citizen)逻辑零改动。
+// ──────────────────────────────────────────────────────────────────
+
+/// 立法投票超时结算入口。legislation-vote sub-pallet 实现。
+/// 两阶段:内部表决(STAGE_LEG_HOUSE,单院一段/两院顺序两段)+ 强制公投(STAGE_LEG_REFERENDUM)。
+pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
+    fn finalize_legislation_house_timeout(
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+
+    fn finalize_legislation_referendum_timeout(
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+}
+
+impl<BlockNumber, AccountId> LegislationProposalFinalizer<BlockNumber, AccountId> for () {
+    fn finalize_legislation_house_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other(
+            "LegislationProposalFinalizerNotConfigured",
+        ))
+    }
+
+    fn finalize_legislation_referendum_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other(
+            "LegislationProposalFinalizerNotConfigured",
+        ))
+    }
+}
+
+/// 立法投票 mode 的 chunked cleanup 入口。
+/// legislation-vote 自有账本(LegHouseVotesByAdmin / LegReferendumVotesByBindingId /
+/// LegHouseTally / LegReferendumTally / LegMeta 等)住在 sub-pallet,核心通过本 trait 派发清理。
+pub trait LegislationCleanupHandler {
+    fn cleanup_legislation_house_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_legislation_referendum_votes_chunk(
+        proposal_id: u64,
+        limit: u32,
+    ) -> CleanupChunkResult;
+
+    /// 终态清理:删 LegMeta + LegHouseTally + LegReferendumTally 等小 storage(单步)。
+    fn cleanup_legislation_terminal(proposal_id: u64);
+}
+
+impl LegislationCleanupHandler for () {
+    fn cleanup_legislation_house_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_legislation_referendum_votes_chunk(
+        _proposal_id: u64,
+        _limit: u32,
+    ) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_legislation_terminal(_proposal_id: u64) {}
+}
+
+/// 立法投票终态业务回调(对称于 `JointVoteResultCallback`)。
+/// 核心在立法提案进入 PASSED/REJECTED/EXECUTION_FAILED 时按 kind 广播到业务壳 legislation-yuan。
+pub trait LegislationVoteResultCallback {
+    fn on_legislation_vote_finalized(
+        vote_proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError>;
+
+    fn can_cancel_passed_proposal(
+        _proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        Ok(ProposalCancelDecision::Ignored)
+    }
+
+    fn on_execution_failed_terminal(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
+}
+
+impl LegislationVoteResultCallback for () {
+    fn on_legislation_vote_finalized(
+        _vote_proposal_id: u64,
+        _approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        Ok(ProposalExecutionOutcome::Ignored)
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────

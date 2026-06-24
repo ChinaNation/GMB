@@ -31,6 +31,19 @@ sp_api::decl_runtime_apis! {
         /// 返回当前链上 runtime 内置公民宪法 HTML 的 blake2_256 摘要。
         fn citizen_constitution_blake2_256() -> [u8; 32];
     }
+
+    // 六、立法院模块 Runtime API(ADR-027):供客户端(CitizenApp)浏览链上法律。
+    // 返回 SCALE 编码字节,客户端按镜像类型解码;避免跨 API 边界暴露泛型法律结构。
+    pub trait LegislationApi {
+        /// 列出某层级(tier:宪法0/国1/省2/市3)+ 行政区 scope_code 下的法律 ID。
+        fn list_laws(tier: u8, scope_code: u32) -> Vec<u64>;
+
+        /// 读取法律主体(SCALE 编码 `Law`),不存在返回 None。
+        fn law(law_id: u64) -> Option<Vec<u8>>;
+
+        /// 读取法律指定版本(SCALE 编码 `LawVersion`),不存在返回 None。
+        fn law_version(law_id: u64, version: u32) -> Option<Vec<u8>>;
+    }
 }
 
 #[cfg(test)]

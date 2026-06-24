@@ -62,9 +62,10 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Address, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance,
-    GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, Runtime, RuntimeCall,
-    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
-    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan, Nonce,
+    PalletInfo, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
+    RuntimeOrigin, RuntimeTask, System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION,
+    VERSION,
 };
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::{ResolutionIssuance, RuntimeUpgrade};
@@ -430,6 +431,9 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             RuntimeCall::AdminsChange(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::RuntimeUpgrade(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::GrandpaKeyChange(_) => FeeChargeKind::VoteFlat,
+            // 立法院模块 propose_enact_law / propose_amend_law / propose_repeal_law 是治理提案交易,
+            // 固定按投票统一价 1 元/次(ADR-027),与其它治理 pallet 的 propose_X 一致。
+            RuntimeCall::LegislationYuan(_) => FeeChargeKind::VoteFlat,
             // 中文注释：多签转账 propose_X 只是创建治理提案，交易本身固定收 1 元；
             // 真正转账执行时，multisig-transfer 内部再按转出金额 × 0.1% 收链上交易费。
             RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
@@ -475,6 +479,9 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             //   InternalVote::cast / JointVote::cast_admin / JointVote::cast_referendum
             RuntimeCall::InternalVote(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::JointVote(_) => FeeChargeKind::VoteFlat,
+            // 立法投票 3 个 extrinsic(prepare_population_snapshot / cast_house_vote /
+            // cast_referendum_vote)按投票统一价 1 元/次(ADR-027)。
+            RuntimeCall::LegislationVote(_) => FeeChargeKind::VoteFlat,
             // OnchainIssuance 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
             // 全部按 VOTE_FLAT_FEE = 1 元/次,与 GMB 其他业务 pallet 的 propose_X 一致。
             // 1000 GMB 创建费走 onchain_issuance::fee::reserve_creation_deposit 内部 reserve(propose_issue 内部完成),
@@ -1451,6 +1458,31 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
     }
 }
 
+parameter_types! {
+    // 立法院模块边界常量(ADR-027,第1步)
+    pub const LegislationMaxTitleLen: u32 = 256;
+    pub const LegislationMaxTextLen: u32 = 4096;
+    pub const LegislationMaxItemsPerClause: u32 = 50;
+    pub const LegislationMaxClausesPerArticle: u32 = 50;
+    pub const LegislationMaxArticlesPerLaw: u32 = 500;
+    pub const LegislationMaxLawsPerScope: u32 = 1000;
+    pub const LegislationMaxActivationsPerBlock: u32 = 100;
+}
+
+impl legislation_yuan::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    // 立法投票引擎接真实 legislation-vote sub-pallet(ADR-027 第2步),投票端到端流程打通。
+    type LegislationVoteEngine = LegislationVote;
+    type MaxTitleLen = LegislationMaxTitleLen;
+    type MaxTextLen = LegislationMaxTextLen;
+    type MaxItemsPerClause = LegislationMaxItemsPerClause;
+    type MaxClausesPerArticle = LegislationMaxClausesPerArticle;
+    type MaxArticlesPerLaw = LegislationMaxArticlesPerLaw;
+    type MaxLawsPerScope = LegislationMaxLawsPerScope;
+    type MaxActivationsPerBlock = LegislationMaxActivationsPerBlock;
+    type WeightInfo = ();
+}
+
 pub struct RuntimeJointVoteResultCallback;
 
 impl votingengine::JointVoteResultCallback for RuntimeJointVoteResultCallback {
@@ -1532,6 +1564,10 @@ impl votingengine::Config for Runtime {
     type InternalCleanup = InternalVote;
     type JointFinalizer = JointVote;
     type JointCleanup = JointVote;
+    // 立法投票(ADR-027):终态回调接业务壳 legislation-yuan;超时结算/清理接 legislation-vote。
+    type LegislationVoteResultCallback = LegislationYuan;
+    type LegislationFinalizer = LegislationVote;
+    type LegislationCleanup = LegislationVote;
 }
 
 // Sub-pallet Config 注入。共用基础设施 votingengine::Config 已 impl 完;
@@ -1548,6 +1584,11 @@ impl joint_vote::Config for Runtime {
 
 impl citizen_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+}
+
+impl legislation_vote::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
 }
 
 impl pow_difficulty::Config for Runtime {

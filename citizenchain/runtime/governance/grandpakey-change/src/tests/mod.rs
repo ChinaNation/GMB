@@ -198,6 +198,9 @@ impl votingengine::Config for Test {
     type InternalCleanup = InternalVote;
     type JointFinalizer = ();
     type JointCleanup = ();
+    type LegislationVoteResultCallback = ();
+    type LegislationFinalizer = ();
+    type LegislationCleanup = ();
 }
 
 impl internal_vote::Config for Test {

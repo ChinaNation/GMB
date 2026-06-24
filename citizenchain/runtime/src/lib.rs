@@ -381,6 +381,16 @@ mod runtime {
     // 业务调用一律经由 OnchainIssuance::propose_* → InternalVote/JointVote callback → 内部 root 调用。
     #[runtime::pallet_index(26)]
     pub type Assets = pallet_assets;
+
+    // 立法院模块:法律结构化上链 + 修法走立法投票(ADR-027)。业务壳,只承载法律数据与提案入口;
+    // 表决/计票/公投归属 legislation-vote sub-pallet。
+    #[runtime::pallet_index(27)]
+    pub type LegislationYuan = legislation_yuan;
+
+    // 立法投票 sub-pallet:立法机构专属投票(单院/两院/特别案强制公投,ADR-027)。
+    // 投票引擎「头等模式」PROPOSAL_KIND_LEGISLATION,共享核心共享基础,只本地存计票账本。
+    #[runtime::pallet_index(28)]
+    pub type LegislationVote = legislation_vote;
 }
 
 #[cfg(test)]

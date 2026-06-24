@@ -39,7 +39,7 @@ fn fee_payer_returns_none_for_transfer() {
     );
 }
 
-/// 7 个治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
+/// 治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
 ///
 /// 背景:投票引擎达终态后通过 `InternalVoteResultCallback` tuple 广播到
 /// 全部业务 Executor,各 Executor 靠 `ProposalData` 前缀的 MODULE_TAG 互斥
@@ -48,7 +48,7 @@ fn fee_payer_returns_none_for_transfer() {
 #[test]
 fn governance_module_tags_are_globally_unique() {
     use std::collections::HashSet;
-    let tags: [(&str, &[u8]); 8] = [
+    let tags: [(&str, &[u8]); 9] = [
         ("admins_change", admins_change::MODULE_TAG),
         ("grandpakey_change", grandpakey_change::MODULE_TAG),
         ("resolution_destro", resolution_destro::MODULE_TAG),
@@ -57,6 +57,7 @@ fn governance_module_tags_are_globally_unique() {
         ("organization_manage", organization_manage::MODULE_TAG),
         ("personal_manage", personal_manage::MODULE_TAG),
         ("multisig_transfer", multisig_transfer::MODULE_TAG),
+        ("legislation_yuan", legislation_yuan::MODULE_TAG),
     ];
     let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();
     assert_eq!(

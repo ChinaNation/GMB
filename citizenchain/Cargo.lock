@@ -1603,6 +1603,8 @@ dependencies = [
  "institution-asset",
  "internal-vote",
  "joint-vote",
+ "legislation-vote",
+ "legislation-yuan",
  "multisig-transfer",
  "offchain-transaction",
  "onchain-issuance",
@@ -5944,6 +5946,36 @@ name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
+
+[[package]]
+name = "legislation-vote"
+version = "1.0.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "internal-vote",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "votingengine",
+]
+
+[[package]]
+name = "legislation-yuan"
+version = "1.0.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "internal-vote",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "votingengine",
+]
 
 [[package]]
 name = "libappindicator"

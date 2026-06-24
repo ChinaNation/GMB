@@ -9,10 +9,12 @@ members = [
     "runtime/governance/grandpakey-change",         # 治理-GRANDPA 密钥治理模块 pallet
     "runtime/governance/resolution-destro",   # 治理-决议销毁模块 pallet
     "runtime/governance/runtime-upgrade",    # 治理-协议升级模块 pallet
+    "runtime/governance/legislation-yuan",   # 治理-立法院模块 pallet(法律结构化上链,ADR-027)
     "runtime/votingengine",    # 投票引擎核心(共用基础设施:Proposals/反向索引/状态机/快照/锁/清理)
     "runtime/votingengine/internal-vote",  # 内部投票 pallet(管理员一人一票)
     "runtime/votingengine/joint-vote",     # 联合投票 pallet(管理员多签 + 全民兜底)
     "runtime/votingengine/citizen-vote",   # 公民投票 pallet(多模式选举/公投,Phase 3)
+    "runtime/votingengine/legislation-vote",  # 立法投票 pallet(立法机构专属:单院/两院/特别案公投,ADR-027)
 
     "runtime/issuance/citizen-issuance", # 发行-公民发行模块 pallet
     "runtime/issuance/fullnode-issuance",        # 发行-全节点发行模块 pallet

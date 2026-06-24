@@ -172,6 +172,20 @@ pub mod pallet {
 
         /// 联合投票 mode chunked cleanup 派发,由 joint-vote pallet 实现。
         type JointCleanup: crate::traits::JointCleanupHandler;
+
+        /// 立法投票终态业务回调(ADR-027),由 legislation-yuan 业务壳实现。
+        /// 核心在 PROPOSAL_KIND_LEGISLATION 提案达终态时按 kind 广播。第1步装 `()`。
+        type LegislationVoteResultCallback: LegislationVoteResultCallback;
+
+        /// 立法投票 mode 超时结算回调,覆盖内部表决(STAGE_LEG_HOUSE)与强制公投(STAGE_LEG_REFERENDUM),
+        /// 由 legislation-vote pallet 实现。未实装时装 `()`。
+        type LegislationFinalizer: crate::traits::LegislationProposalFinalizer<
+            BlockNumberFor<Self>,
+            Self::AccountId,
+        >;
+
+        /// 立法投票 mode chunked cleanup 派发,由 legislation-vote pallet 实现。未实装时装 `()`。
+        type LegislationCleanup: crate::traits::LegislationCleanupHandler;
     }
 
     use crate::weights::WeightInfo;
@@ -613,6 +627,22 @@ pub mod pallet {
                         &proposal, proposal_id
                     )?;
                 }
+                STAGE_LEG_HOUSE => {
+                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                        BlockNumberFor<T>,
+                        T::AccountId,
+                    >>::finalize_legislation_house_timeout(
+                        &proposal, proposal_id
+                    )?;
+                }
+                STAGE_LEG_REFERENDUM => {
+                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                        BlockNumberFor<T>,
+                        T::AccountId,
+                    >>::finalize_legislation_referendum_timeout(
+                        &proposal, proposal_id
+                    )?;
+                }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
             }
 
@@ -732,6 +762,22 @@ pub mod pallet {
                             BlockNumberFor<T>,
                             T::AccountId,
                         >>::finalize_jointreferendum_timeout(
+                            &proposal, proposal_id
+                        )
+                    }
+                    STAGE_LEG_HOUSE => {
+                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                            BlockNumberFor<T>,
+                            T::AccountId,
+                        >>::finalize_legislation_house_timeout(
+                            &proposal, proposal_id
+                        )
+                    }
+                    STAGE_LEG_REFERENDUM => {
+                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                            BlockNumberFor<T>,
+                            T::AccountId,
+                        >>::finalize_legislation_referendum_timeout(
                             &proposal, proposal_id
                         )
                     }
@@ -933,6 +979,12 @@ pub mod pallet {
                 PROPOSAL_KIND_JOINT => {
                     T::JointVoteResultCallback::on_joint_vote_finalized(proposal_id, approved)
                 }
+                PROPOSAL_KIND_LEGISLATION => {
+                    T::LegislationVoteResultCallback::on_legislation_vote_finalized(
+                        proposal_id,
+                        approved,
+                    )
+                }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }
         }
@@ -944,6 +996,9 @@ pub mod pallet {
                 }
                 PROPOSAL_KIND_JOINT => {
                     T::JointVoteResultCallback::can_cancel_passed_proposal(proposal_id)
+                }
+                PROPOSAL_KIND_LEGISLATION => {
+                    T::LegislationVoteResultCallback::can_cancel_passed_proposal(proposal_id)
                 }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }?;
@@ -961,6 +1016,9 @@ pub mod pallet {
                 }
                 PROPOSAL_KIND_JOINT => {
                     T::JointVoteResultCallback::on_execution_failed_terminal(proposal_id)
+                }
+                PROPOSAL_KIND_LEGISLATION => {
+                    T::LegislationVoteResultCallback::on_execution_failed_terminal(proposal_id)
                 }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }
@@ -1552,6 +1610,32 @@ pub mod pallet {
                     let next = if result.has_remaining {
                         Some(PendingCleanupStage::VoteCredentials)
                     } else {
+                        Some(PendingCleanupStage::LegislationHouseVotes)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::LegislationHouseVotes => {
+                    let (removed, has_remaining) =
+                        <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_house_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
+                        Some(PendingCleanupStage::LegislationHouseVotes)
+                    } else {
+                        Some(PendingCleanupStage::LegislationReferendumVotes)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::LegislationReferendumVotes => {
+                    let (removed, has_remaining) =
+                        <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_referendum_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
+                        Some(PendingCleanupStage::LegislationReferendumVotes)
+                    } else {
                         Some(PendingCleanupStage::ProposalObject)
                     };
                     (next, weight)
@@ -1575,6 +1659,9 @@ pub mod pallet {
                         proposal_id,
                     );
                     <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_terminal(
+                        proposal_id,
+                    );
+                    <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_terminal(
                         proposal_id,
                     );
                     ProposalData::<T>::remove(proposal_id);
