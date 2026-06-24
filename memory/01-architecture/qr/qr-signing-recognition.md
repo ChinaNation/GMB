@@ -1,6 +1,6 @@
 # QR_V1 扫码签名两色识别方案
 
-- 更新日期:2026-06-22
+- 更新日期:2026-06-23
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:CitizenWallet / CitizenApp 扫描 QR 后的识别、展示、签名放行和签名响应验签规则
 - 依赖:
@@ -38,10 +38,11 @@
 
 签名字节:
 
-1. 链交易 payload 长度 ≤256B:签 payload 原文。
-2. 链交易 payload 长度 >256B:签 `blake2_256(payload)`。
-3. 非链文本/二进制 payload:签原文。
-4. Runtime hash-only:签 32B hash 原文。
+1. 链交易 payload 必须来自生成方的当前 runtime `SignedPayload` SCALE 字节。
+2. 链交易 payload 长度 ≤256B:签 payload 原文。
+3. 链交易 payload 长度 >256B:签 `blake2_256(payload)`。
+4. 非链文本/二进制 payload:签原文。
+5. Runtime hash-only:签同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes 原文。
 
 ## 3. k=2 签名响应校验
 
@@ -53,9 +54,12 @@
 4. `e` 未过期
 5. `b.u == session.expected_pubkey`
 6. `b.s` 解码为 64 字节
-7. 按 session 的 `a + payload` 计算签名字节后 sr25519 验签通过
+7. 生成方用本地 session 重新计算 payload hash,必须等于 session.expected_payload_hash
+8. 按 session 的 `a + payload` 计算签名字节后 sr25519 验签通过
 
 签名响应中不得出现 payload、payload hash、签名时间、摘要字段。若出现旧字段,解析器应报错。
+
+citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 runtime `TxExtension`、`SignedPayload`、`UncheckedExtrinsic` 类型构造交易。任何手写拼接 SCALE 字节的实现都属于第二真源,会导致扫码端绿签但链端 `BadProof`。
 
 ## 4. 登录签名
 
@@ -99,7 +103,8 @@
 5. `a` 与 payload 解码出的动作不一致。
 6. payload 无法解码。
 7. 链 payload >256B 却签原文而不是 `blake2_256(payload)`。
-8. 签名响应签名校验失败。
+8. 生成方重算的 session payload hash 与请求保存值不一致。
+9. 签名响应签名校验失败。
 
 ## 8. 已拒绝方案
 

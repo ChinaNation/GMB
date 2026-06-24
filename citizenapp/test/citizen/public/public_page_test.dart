@@ -2,6 +2,8 @@
 //
 // ADR-021:机构只存 code(中枢省=ZS,链上常量派生);省名走链上常量、市名走字典。
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/public/public_page.dart';
@@ -11,6 +13,35 @@ import 'public_nav_harness.dart';
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
+  testWidgets('字典延迟就绪:先回退 code,ensureSynced 完成后回刷成市名(时序回归)',
+      (tester) async {
+    // 回归 20260623 时序 bug:首装字典(4.2 万条)还在灌库时市名回退 code(001),
+    // 同步完成后 _syncThenRefresh 须清脏缓存按就绪字典重 join,否则永远停在 001。
+    final gate = Completer<void>();
+    final repo = await buildLateDictRepo(
+      provinceOrder: const ['ZS'],
+      institutions: [seedDto('A', provinceCode: 'ZS', cityCode: '001')],
+      lateCityNames: const {'ZS|001': '中央'},
+      gate: gate.future,
+    );
+    await tester.pumpWidget(_wrap(
+      PublicPage(repository: repo, walletPubkeyProvider: () async => null),
+    ));
+    await tester.pumpAndSettle();
+
+    // 字典未就绪(gate 未开):进省看市,市名回退 code,且这种脏列表不入缓存。
+    await tester.tap(find.text('中枢'));
+    await tester.pumpAndSettle();
+    expect(find.text('001'), findsOneWidget);
+    expect(find.text('中央'), findsNothing);
+
+    // 字典灌完(gate 打开)→ _syncThenRefresh 清脏缓存重 join → 显示市名。
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('中央'), findsOneWidget);
+    expect(find.text('001'), findsNothing);
+  });
+
   testWidgets('顶部显示"公权机构"标题 + 左栏 关注 + 规范省份(对称治理)', (tester) async {
     final repo = await buildSeededRepo(
       provinceOrder: const ['ZS'],

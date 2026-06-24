@@ -1,6 +1,6 @@
 # node 管理员更换模块技术文档
 
-最新更新：2026-05-10。
+最新更新：2026-06-23。
 
 ## 模块定位
 
@@ -42,7 +42,7 @@ Tauri 命令：
 - `deactivate_admin`：取消本地管理员激活。
 - `get_admin_account_state`：按 `AdminAccountRef` 读取管理员主体。内置治理机构可用 `cidNumber + expectedInstitutionCode`；个人多签和机构账户必须用 `accountIdHex + expectedInstitutionCode`。
 - `build_admin_set_change_request`：校验当前管理员身份、主体 institution_code 和新管理员集合，构建公民钱包签名请求。
-- `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包签名响应并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
+- `submit_admin_set_change`：复用签名时 nonce 和本地 session payload hash，验证冷钱包签名响应并提交 extrinsic；提交前再次按同一 `AdminAccountRef` 读取主体。
 
 管理员激活 payload：
 
@@ -56,7 +56,9 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 + nonce(16)
 ```
 
-激活 QR 使用 QR_V1 `a=5 activate_admin_account`，扫码端解码展示字段必须为 `institution_code / subject / pubkey`，并与 CitizenWallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-accounts.json`，只按 `accountHex / institutionCode / kind / pubkeyHex` 归档；旧文件不读取、不迁移。
+激活 QR 使用 QR_V1 `a=5 activate_admin_account`，扫码端解码展示字段必须为 `institution_code / subject / pubkey`，并与 CitizenWallet 公民钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-accounts.json`，只按 `accountHex / institutionCode / kind / pubkeyHex` 归档；旧 `org` 文件不读取、不迁移，检测到旧格式直接清空并要求重新激活。
+
+链交易冷签统一复用 `governance/signing.rs`：后端用当前 runtime `TxExtension + SignedPayload + UncheckedExtrinsic` 类型构造 payload 和 signed extrinsic；签名响应提交前必须校验 `QR_V1/k=2` 结构、过期时间、session payload hash、公钥和 sr25519 签名。禁止在 admins-change 内手写交易签名字节。
 
 链上 call data：
 

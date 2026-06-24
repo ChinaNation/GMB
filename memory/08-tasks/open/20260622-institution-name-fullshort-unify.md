@@ -136,7 +136,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - `flutter analyze` in `citizenwallet`:通过。
 - `cargo test --manifest-path citizenchain/runtime/primitives/Cargo.toml builtin_institution -- --nocapture`:通过。
 - `cargo check --manifest-path citizenchain/runtime/Cargo.toml`:通过。
-- `tools/sync_account_derive_vectors.sh --write`:通过,同步 Rust/citizenapp golden。
+- `scripts/sync_account_derive_vectors.sh --write`:通过,同步 Rust/citizenapp golden。
 - 真实库 `reconcile-gov --changed-only`:通过,`scopes=43 inserted=245016 updated=0 account_inserted=490077 removed=245016`。
 - 真实库 `check-gov --strict`:通过,`ok=true manifest_current=true target_count=245016 active_count=245016 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
 - 临时启动当前 CID 后端 `127.0.0.1:8898`:健康检查 200;`/api/v1/app/institutions/search` 与 `/api/v1/app/public-institutions` 返回 `cid_full_name/cid_short_name`。

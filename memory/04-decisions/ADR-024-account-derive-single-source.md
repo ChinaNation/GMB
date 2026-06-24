@@ -120,7 +120,7 @@ fixture 格式 `account_derive_vectors.json`：
   ] }
 ```
 - канon 路径 `citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json`；Dart 副本 `citizenapp/test/governance/shared/fixtures/`。
-- Rust 测试：`ACCOUNT_DERIVE_UPDATE=1` 时写文件，否则读取断言。Dart 测试读副本断言。CI：脚本 `tools/sync_account_derive_vectors.sh` 重生 + `git diff --exit-code` 两份。
+- Rust 测试：`ACCOUNT_DERIVE_UPDATE=1` 时写文件，否则读取断言。Dart 测试读副本断言。本机守卫脚本 `scripts/sync_account_derive_vectors.sh` 重生 + `git diff --exit-code` 两份。
 - **行为中性回归证明**：用当前 `GMB` 域生成 fixture，PR-1/2/3 后断言地址不变；账户重生阶段才允许 fixture 改变。
 
 ### 后续账户重生（gated 在 T3/T4 末尾创世）
@@ -180,7 +180,7 @@ fixture 格式 `account_derive_vectors.json`：
 
 **Dart 单源**：`citizenapp/lib/governance/shared/account_derivation.dart`(op_tag + 路由)+ `account_derivation` 调用方 + `reserved_account_names.dart`(citizenapp + citizenwallet 各一,只共享保留名)；citizenapp `isForbidden` 漂移已修(3 名 + 不 trim,对齐链端)。
 
-**金标**：canonical `citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json` + Dart 副本 `citizenapp/test/governance/shared/fixtures/`，导出测试 `tests/account_derive_golden.rs`，CI 守卫 `tools/sync_account_derive_vectors.sh`。`domain=GMB`/`ss58=2027` 基线，行为中性铁证 = `china_*.rs` 字面常量(NRC main/fee、SAFETYFUND、HE)与 fixture 逐字节一致。
+**金标**：canonical `citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json` + Dart 副本 `citizenapp/test/governance/shared/fixtures/`，导出测试 `tests/account_derive_golden.rs`，本机守卫 `scripts/sync_account_derive_vectors.sh`。`domain=GMB`/`ss58=2027` 基线，行为中性铁证 = `china_*.rs` 字面常量(NRC main/fee、SAFETYFUND、HE)与 fixture 逐字节一致。
 
 **脚本**：`scripts/gmb.py` 的 op_tag 读取路径改到 `account_derive.rs`，域读取 `core_const::GMB`。
 

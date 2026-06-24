@@ -137,7 +137,7 @@
 - 链端调用方：`organization-manage`（删 `address.rs`/`InstitutionAccountRole`）、`personal-manage/lib.rs`、`primitives/china/mod.rs`
 - 后端调用方：`citizencode/backend/accounts/derive.rs`（委托新源）、`subjects/service.rs`
 - Dart 单源：`citizenapp/lib/governance/shared/account_derivation.dart` + `reserved_account_names.dart`（citizenapp + citizenwallet，修 isForbidden 漂移=3 名不 trim）
-- 金标：`citizenchain/runtime/primitives/tests/account_derive_golden.rs` + 两份 `account_derive_vectors.json` + `tools/sync_account_derive_vectors.sh`
+- 金标：`citizenchain/runtime/primitives/tests/account_derive_golden.rs` + 两份 `account_derive_vectors.json` + `scripts/sync_account_derive_vectors.sh`
 - 改名：`scripts/duoqian.py → scripts/gmb.py`
 - 收尾(本切片)：`number/generator.rs` 头注释调用方列表修正(registration/binding/gov)、`account_derive.rs`/`core_const.rs` 注释完善、两份 fixture `_comment` 的 `duoqian.py→gmb.py`、本卡 + ADR-024 状态更新
 

@@ -133,3 +133,11 @@ citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就
 2. 不得恢复 CID 行政区管理 tab 或 `/api/v1/app/admin-divisions/*`。
 3. 不得在 citizenapp/CPMS 内维护第二套行政区名字。
 4. 任何重复洪江旧壳、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。
+
+## 实现坑（2026-06-23 修复）
+
+字典 join = 「后台灌库 + UI 实时查字典」异步模型,两个时序约束必须守(违反→市名永久显示 code 兜底,如公权机构页每省市卡片显示 001/002):
+
+1. **`ensureSynced()` 不能 `unawaited` 发射后不管**:首装灌 4.2 万条进 Isar(秒级~十几秒),期间 `cityNameMap` 查空 → 市名回退 code。须在同步**完成后回刷当前视图**(`public_page._syncThenRefresh`:await 完成 → 清缓存 → 重 join)。
+2. **字典未就绪的兜底 code 不得入缓存**:`dictReady = cities.any((c) => c.name != c.code)` 为假时不写市列表缓存,否则脏 `001` 缓存住、同步完成也不自愈。
+3. 排错铁律:citizenapp(离线 assets+Isar) 与 citizencode(实时 API+localStorage) 同症状但**两套独立通路**,改一个不修另一个;`unawaited` 吞掉的同步失败静默无声,定位须真 assets+真 Isar 端到端复现。详见 [[feedback-unawaited-bg-sync-needs-completion-refresh]]。

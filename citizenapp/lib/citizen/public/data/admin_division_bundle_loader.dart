@@ -12,7 +12,7 @@
 
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show FlutterError;
+import 'package:flutter/foundation.dart' show FlutterError, debugPrint;
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 import 'package:citizenapp/isar/wallet_isar.dart';
 
@@ -69,6 +69,9 @@ class AdminDivisionBundleLoader {
       final code = entry.key;
       final ver = entry.value;
       // 没变的省(ver 相同且本地有数据):不读分片、不碰库。
+      // 注意:省 ver 只反映 assets 内容,不反映本地 schema 是否完整。schema 升级
+      // 导致的旧数据残留(如 divisionName 后加)走 WalletIsar.ensureMigrated 清表
+      // 触发 hasData=false 全量重灌,不靠这里的 ver 判定(见 schemaVersion<8)。
       if (hasData && storedProvVers[code] == ver) continue;
 
       final provinceChanged =

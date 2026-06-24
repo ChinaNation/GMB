@@ -7,11 +7,19 @@
 // 4. 后端按本地 session 校验 request id/pubkey → 构建 signed extrinsic → 提交到链
 
 use crate::shared::rpc;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use citizenchain as runtime;
+use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use sp_core::crypto::Pair;
+use sp_runtime::{MultiSigner, generic::Era, traits::IdentifyAccount};
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub(crate) const PROTOCOL_VERSION: &str = "QR_V1";
 pub(crate) const DEFAULT_TTL_SECS: u64 = 90;
@@ -19,9 +27,27 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
+/// 冷签交易统一使用 immortal era，前端保留的 sign_block_number 固定回传 0。
+pub(crate) const IMMORTAL_SIGN_BLOCK_NUMBER: u64 = 0;
 
 pub(crate) const QR_KIND_SIGN_REQUEST: u8 = primitives::sign::QR_KIND_SIGN_REQUEST;
 pub(crate) const QR_KIND_SIGN_RESPONSE: u8 = primitives::sign::QR_KIND_SIGN_RESPONSE;
+
+#[derive(Debug, Clone)]
+struct ChainSignSession {
+    expected_pubkey_hex: String,
+    call_data_hex: String,
+    payload_hash_hex: String,
+    signing_payload_hash_hex: String,
+    nonce: u32,
+    expires_at: u64,
+}
+
+static CHAIN_SIGN_SESSIONS: OnceLock<Mutex<HashMap<String, ChainSignSession>>> = OnceLock::new();
+
+fn chain_sign_sessions() -> &'static Mutex<HashMap<String, ChainSignSession>> {
+    CHAIN_SIGN_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub(crate) fn chain_action_code(call_data: &[u8]) -> Result<u16, String> {
     if call_data.len() < 2 {
@@ -78,6 +104,68 @@ fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
     bytes
         .try_into()
         .map_err(|_| "机构 AccountId 必须为 32 字节".to_string())
+}
+
+fn remember_chain_sign_session(
+    request_id: String,
+    session: ChainSignSession,
+) -> Result<(), String> {
+    let mut sessions = chain_sign_sessions()
+        .lock()
+        .map_err(|_| "链交易签名 session 状态异常".to_string())?;
+    let now = now_secs()?;
+    sessions.retain(|_, item| item.expires_at >= now);
+    sessions.insert(request_id, session);
+    Ok(())
+}
+
+pub(crate) fn remember_chain_sign_request_session(
+    request_id: &str,
+    expected_pubkey_hex: &str,
+    call_data: &[u8],
+    payload_hash_hex: &str,
+    signing_payload_hash_hex: &str,
+    nonce: u32,
+    expires_at: u64,
+) -> Result<(), String> {
+    remember_chain_sign_session(
+        request_id.to_string(),
+        ChainSignSession {
+            expected_pubkey_hex: expected_pubkey_hex
+                .strip_prefix("0x")
+                .unwrap_or(expected_pubkey_hex)
+                .to_ascii_lowercase(),
+            call_data_hex: hex::encode(call_data),
+            payload_hash_hex: normalize_hash_hex(payload_hash_hex, "payload_hash")?,
+            signing_payload_hash_hex: normalize_hash_hex(
+                signing_payload_hash_hex,
+                "signing_payload_hash",
+            )?,
+            nonce,
+            expires_at,
+        },
+    )
+}
+
+fn take_chain_sign_session(request_id: &str) -> Result<ChainSignSession, String> {
+    let mut sessions = chain_sign_sessions()
+        .lock()
+        .map_err(|_| "链交易签名 session 状态异常".to_string())?;
+    sessions
+        .remove(request_id)
+        .ok_or_else(|| "未找到本地签名 session，请重新生成二维码".to_string())
+}
+
+fn normalize_hash_hex(value: &str, field: &str) -> Result<String, String> {
+    let clean = value
+        .trim()
+        .strip_prefix("0x")
+        .unwrap_or(value.trim())
+        .to_ascii_lowercase();
+    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("{field} 必须是 32 字节 hex"));
+    }
+    Ok(clean)
 }
 
 /// 金额格式化：带千分位逗号，保留 2 位小数。
@@ -139,6 +227,7 @@ pub struct QrSignRequest {
 
 /// QR_V1/k=2 签名响应 body(离线设备 → 节点桌面端)。
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 pub struct SignResponseBody {
     #[serde(rename = "u", deserialize_with = "deserialize_b64_pubkey")]
@@ -149,6 +238,7 @@ pub struct SignResponseBody {
 
 /// QR_V1/k=2 sign_response envelope。
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 pub struct QrSignResponse {
     #[serde(rename = "p")]
@@ -177,7 +267,7 @@ pub struct VoteSignRequestResult {
     pub expected_payload_hash: String,
     /// 签名时使用的 nonce（提交时必须复用）。
     pub sign_nonce: u32,
-    /// 签名时使用的区块号（提交时必须复用以计算相同 era）。
+    /// 冷签交易统一使用 immortal era；该字段保留给前端会话，固定为 0。
     pub sign_block_number: u64,
 }
 
@@ -216,7 +306,6 @@ pub fn build_vote_sign_request(
     // 获取链上参数
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
     // 构建 call data: [pallet=22][call=0][proposal_id: u64_le][approve: bool]
@@ -226,29 +315,26 @@ pub fn build_vote_sign_request(
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
-    // 构建 signing payload
-    let payload = build_signing_payload(
-        &call_data,
-        &genesis_hash,
-        &block_hash,
-        block_number,
-        nonce,
-        spec_version,
-        tx_version,
-    );
+    // 中文注释：链交易签名材料只能由 runtime 类型构造，避免 node 冷签与热钱包
+    // 交易路径在 TxExtension 或 additional_signed 字节上分叉。
+    let (payload, signing_bytes) =
+        build_runtime_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
 
     // 计算 payload hash
     let payload_hash = sha256_hash(&payload);
+    let payload_hash_hex = hex::encode(payload_hash);
+    let signing_payload_hash_hex = hex::encode(sha256_hash(&signing_bytes));
 
     // 生成请求 ID
     let request_id = generate_request_id("vote");
 
     let now = now_secs()?;
+    let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        expires_at: now + DEFAULT_TTL_SECS,
+        expires_at,
         body: SignRequestBody {
             action: chain_action_code(&call_data)?,
             sig_alg: 1,
@@ -259,14 +345,25 @@ pub fn build_vote_sign_request(
 
     let request_json =
         serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    remember_chain_sign_session(
+        request_id.clone(),
+        ChainSignSession {
+            expected_pubkey_hex: pubkey_clean.clone(),
+            call_data_hex: hex::encode(&call_data),
+            payload_hash_hex: payload_hash_hex.clone(),
+            signing_payload_hash_hex,
+            nonce,
+            expires_at,
+        },
+    )?;
 
     Ok(VoteSignRequestResult {
         request_json,
         call_data_hex: hex::encode(&call_data),
         request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        expected_payload_hash: format!("0x{}", payload_hash_hex),
         sign_nonce: nonce,
-        sign_block_number: block_number,
+        sign_block_number: IMMORTAL_SIGN_BLOCK_NUMBER,
     })
 }
 
@@ -295,7 +392,6 @@ pub fn build_joint_vote_sign_request(
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
     // call data: [pallet=23][call=0][proposal_id:u64_le][institution_account:AccountId32][approve:bool]
@@ -306,24 +402,20 @@ pub fn build_joint_vote_sign_request(
     call_data.extend_from_slice(&institution_account);
     call_data.push(if approve { 1u8 } else { 0u8 });
 
-    let payload = build_signing_payload(
-        &call_data,
-        &genesis_hash,
-        &block_hash,
-        block_number,
-        nonce,
-        spec_version,
-        tx_version,
-    );
+    let (payload, signing_bytes) =
+        build_runtime_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
     let payload_hash = sha256_hash(&payload);
+    let payload_hash_hex = hex::encode(payload_hash);
+    let signing_payload_hash_hex = hex::encode(sha256_hash(&signing_bytes));
     let request_id = generate_request_id("jvote");
 
     let now = now_secs()?;
+    let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        expires_at: now + DEFAULT_TTL_SECS,
+        expires_at,
         body: SignRequestBody {
             action: chain_action_code(&call_data)?,
             sig_alg: 1,
@@ -334,14 +426,25 @@ pub fn build_joint_vote_sign_request(
 
     let request_json =
         serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    remember_chain_sign_session(
+        request_id.clone(),
+        ChainSignSession {
+            expected_pubkey_hex: pubkey_clean.clone(),
+            call_data_hex: hex::encode(&call_data),
+            payload_hash_hex: payload_hash_hex.clone(),
+            signing_payload_hash_hex,
+            nonce,
+            expires_at,
+        },
+    )?;
 
     Ok(VoteSignRequestResult {
         request_json,
         call_data_hex: hex::encode(&call_data),
         request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        expected_payload_hash: format!("0x{}", payload_hash_hex),
         sign_nonce: nonce,
-        sign_block_number: block_number,
+        sign_block_number: IMMORTAL_SIGN_BLOCK_NUMBER,
     })
 }
 
@@ -406,10 +509,17 @@ pub fn verify_and_submit(
             response.kind
         ));
     }
-
     // 验证请求 ID 匹配
     if response.id != request_id {
         return Err("请求 ID 不匹配,可能扫描了其他交易的签名".to_string());
+    }
+    let session = take_chain_sign_session(request_id)?;
+    let now = now_secs()?;
+    if session.expires_at < now {
+        return Err("签名 session 已过期，请重新生成二维码".to_string());
+    }
+    if response.expires_at != session.expires_at {
+        return Err("签名响应过期时间与本地 session 不匹配".to_string());
     }
 
     // 验证公钥匹配
@@ -417,6 +527,9 @@ pub fn verify_and_submit(
         .strip_prefix("0x")
         .unwrap_or(expected_pubkey_hex)
         .to_ascii_lowercase();
+    if session.expected_pubkey_hex != expected_pubkey {
+        return Err("提交参数公钥与本地签名 session 不匹配".to_string());
+    }
     let response_pubkey = response
         .body
         .pubkey
@@ -427,11 +540,19 @@ pub fn verify_and_submit(
         return Err("公钥不匹配".to_string());
     }
 
-    // 中文注释：QR_V1 的 k=2 响应只包含 u/s。
-    // expected_payload_hash 只用于生成方本地 session 绑定,
-    // 防止前端把其它请求的签名响应提交到当前请求。
-    if expected_payload_hash.trim().is_empty() {
-        return Err("本地签名 session 缺少 payload hash".to_string());
+    let expected_payload_hash_clean =
+        normalize_hash_hex(expected_payload_hash, "expected_payload_hash")?;
+    if expected_payload_hash_clean != session.payload_hash_hex
+        && expected_payload_hash_clean != session.signing_payload_hash_hex
+    {
+        return Err("提交参数 payload hash 与本地签名 session 不匹配".to_string());
+    }
+    if session.nonce != sign_nonce {
+        return Err("提交参数 nonce 与本地签名 session 不匹配".to_string());
+    }
+    let call_data_hex = hex::encode(call_data);
+    if session.call_data_hex != call_data_hex {
+        return Err("提交参数 call_data 与本地签名 session 不匹配".to_string());
     }
 
     // 提取签名
@@ -453,44 +574,47 @@ pub fn verify_and_submit(
         .strip_prefix("0x")
         .unwrap_or(&expected_pubkey);
     let pubkey_bytes = hex::decode(pubkey_hex_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let public = sp_core::sr25519::Public::from_raw(
+        <[u8; 32]>::try_from(pubkey_bytes.as_slice()).map_err(|_| "公钥长度必须为 32 字节")?,
+    );
+    let signature = sp_core::sr25519::Signature::from_raw(
+        <[u8; 64]>::try_from(signature_bytes.as_slice()).map_err(|_| "签名长度必须为 64 字节")?,
+    );
 
-    // 使用签名时保存的 nonce 和 block_number，必须与签名载荷一致
-    eprintln!("[签名提交] sign_nonce={sign_nonce}, sign_block_number={sign_block_number}");
-    // immortal era(单字节 0x00):PoW 链块速变化大 + 冷钱包签名流程数分钟,
-    // mortal era=64 块经常导致 "ancient birth block",改 immortal 永不过期。
-    // 防重放靠 nonce(链上一次性消费)。规则:feedback_cid_pow_chain_recipe.md
-    let era_bytes = vec![0x00u8];
-    eprintln!("[签名提交] era_bytes: {:?}", era_bytes);
-    let nonce_compact = encode_compact_u32(sign_nonce);
-    let tip_compact = encode_compact_u32(0);
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let material = build_runtime_signing_material(
+        call_data,
+        &genesis_hash,
+        sign_nonce,
+        spec_version,
+        tx_version,
+    )?;
+    let payload_hash = hex::encode(sha256_hash(&material.payload));
+    let signing_payload_hash = hex::encode(sha256_hash(&material.signing_bytes));
+    if session.payload_hash_hex != payload_hash
+        || session.signing_payload_hash_hex != signing_payload_hash
+    {
+        return Err(format!(
+            "本地签名 session payload hash 不匹配：expected={}, runtime_payload={}, signing_payload={}",
+            session.payload_hash_hex, payload_hash, signing_payload_hash
+        ));
+    }
 
-    let mut extrinsic_body = Vec::new();
-    // 版本字节：v4 legacy signed format = 0x84 (bit7=signed, bits0-6=version4)
-    // polkadart 0.7.1 使用此格式，citizenchain runtime 同时支持 v4 和 v5
-    extrinsic_body.push(0x84u8);
-    // MultiAddress::Id = 0x00 + 32-byte account
-    extrinsic_body.push(0x00u8);
-    extrinsic_body.extend_from_slice(&pubkey_bytes);
-    // SignatureType::Sr25519 = 0x01
-    extrinsic_body.push(0x01u8);
-    extrinsic_body.extend_from_slice(&signature_bytes);
-    // extensions_signed（与 signing payload 中的 extensions_signed 完全相同）
-    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
-    // + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0)
-    extrinsic_body.extend_from_slice(&era_bytes); // CheckEra
-    extrinsic_body.extend_from_slice(&nonce_compact); // CheckNonce
-                                                      // CheckWeight(0)
-    extrinsic_body.extend_from_slice(&tip_compact); // ChargeTransactionPayment
-    extrinsic_body.push(0x00u8); // CheckMetadataHash: mode=Disabled
-                                 // WeightReclaim(0)
-                                 // call data
-    extrinsic_body.extend_from_slice(call_data);
+    if !sp_core::sr25519::Pair::verify(&signature, &material.signing_bytes, &public) {
+        return Err("sr25519 本地验签失败，拒绝提交到链".to_string());
+    }
 
-    // Length-prefixed extrinsic
-    let len_prefix = encode_compact_u32(extrinsic_body.len() as u32);
-    let mut full_extrinsic = Vec::with_capacity(len_prefix.len() + extrinsic_body.len());
-    full_extrinsic.extend_from_slice(&len_prefix);
-    full_extrinsic.extend_from_slice(&extrinsic_body);
+    let _ = sign_block_number; // immortal era 不再使用区块号，字段只保留给前端会话结构。
+    eprintln!("[签名提交] sign_nonce={sign_nonce}, era=immortal, runtime_typed=true");
+    let account = MultiSigner::from(public).into_account();
+    let extrinsic = runtime::UncheckedExtrinsic::new_signed(
+        material.call,
+        sp_runtime::MultiAddress::Id(account),
+        runtime::Signature::Sr25519(signature),
+        material.tx_ext,
+    );
+    let full_extrinsic = extrinsic.encode();
 
     // 先 dry-run 验证，避免提交错误交易导致链卡住
     let extrinsic_hex = format!("0x{}", hex::encode(&full_extrinsic));
@@ -653,69 +777,93 @@ pub(crate) fn fetch_runtime_version() -> Result<(u32, u32), String> {
     Ok((spec as u32, tx as u32))
 }
 
-/// 构建 signing payload，严格按 citizenchain 的 TxExtension 顺序编码。
-///
-/// 签名载荷 = call_data + extensions_signed + extensions_implicit
-///
-/// extensions_signed（放在 extrinsic body 中、也是 signing payload 的一部分）:
-///   AuthorizeCall: 0B, CheckNonZeroSender: 0B, CheckNonStakeSender: 0B,
-///   CheckSpecVersion: 0B, CheckTxVersion: 0B, CheckGenesis: 0B,
-///   CheckEra: 2B (mortal era), CheckNonce: compact(nonce), CheckWeight: 0B,
-///   ChargeTransactionPayment: compact(tip), CheckMetadataHash: 1B (mode=0), WeightReclaim: 0B
-///
-/// extensions_implicit（仅在 signing payload 中追加）:
-///   AuthorizeCall: 0B, CheckNonZeroSender: 0B, CheckNonStakeSender: 0B,
-///   CheckSpecVersion: 4B (u32_le), CheckTxVersion: 4B (u32_le), CheckGenesis: 32B,
-///   CheckEra: 32B (block_hash), CheckNonce: 0B, CheckWeight: 0B,
-///   ChargeTransactionPayment: 0B, CheckMetadataHash: 1B (Option::None=0x00), WeightReclaim: 0B
-pub(crate) fn build_signing_payload(
+struct RuntimeSigningMaterial {
+    call: runtime::RuntimeCall,
+    tx_ext: runtime::TxExtension,
+    /// QR 中承载的完整 SignedPayload SCALE 字节。
+    payload: Vec<u8>,
+    /// sr25519 实际签名字节；当 payload 超过 256B 时由 Substrate 自动改签 blake2_256。
+    signing_bytes: Vec<u8>,
+}
+
+fn decode_runtime_call(call_data: &[u8]) -> Result<runtime::RuntimeCall, String> {
+    let mut input = call_data;
+    let call = runtime::RuntimeCall::decode(&mut input)
+        .map_err(|e| format!("call_data 不是当前 runtime 可解码调用: {e}"))?;
+    if !input.is_empty() {
+        return Err(format!("call_data 存在 {} 字节尾随数据", input.len()));
+    }
+    Ok(call)
+}
+
+fn build_tx_extension(nonce: u32) -> runtime::TxExtension {
+    (
+        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
+        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
+        runtime::CheckNonStakeSender,
+        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
+        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
+        frame_system::CheckGenesis::<runtime::Runtime>::new(),
+        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
+        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
+        frame_system::CheckWeight::<runtime::Runtime>::new(),
+        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
+        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
+        frame_system::WeightReclaim::<runtime::Runtime>::new(),
+    )
+}
+
+fn build_runtime_signing_material(
     call_data: &[u8],
     genesis_hash: &[u8; 32],
-    block_hash: &[u8; 32],
-    block_number: u64,
     nonce: u32,
     spec_version: u32,
     tx_version: u32,
-) -> Vec<u8> {
-    // immortal era(单字节 0x00):必须与 verify_and_submit 路径完全一致,
-    // 否则签名 payload 与最终 extrinsic body 的 era 字节不匹配,链上签名校验失败。
-    // 使用 immortal 的原因见 verify_and_submit 中同款注释。
-    let _ = block_number; // immortal 不需要 block_number,保留参数兼容签名
-    let _ = block_hash; // immortal 不需要 birth block hash,保留参数兼容签名
-    let era_bytes = vec![0x00u8];
-    let nonce_compact = encode_compact_u32(nonce);
-    let tip_compact = encode_compact_u32(0);
+) -> Result<RuntimeSigningMaterial, String> {
+    let call = decode_runtime_call(call_data)?;
+    let tx_ext = build_tx_extension(nonce);
+    let genesis_hash = sp_core::H256::from_slice(genesis_hash);
+    let raw_payload = runtime::SignedPayload::from_raw(
+        call.clone(),
+        tx_ext.clone(),
+        (
+            (),
+            (),
+            (),
+            spec_version,
+            tx_version,
+            genesis_hash,
+            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash。
+            (),
+            (),
+            (),
+            None,
+            (),
+        ),
+    );
 
-    let mut payload = Vec::new();
-    // call data
-    payload.extend_from_slice(call_data);
-    // extensions_signed（与 extrinsic body 中的扩展字节相同）
-    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
-    // + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0)
-    payload.extend_from_slice(&era_bytes); // CheckEra: 1 byte 0x00 (immortal)
-    payload.extend_from_slice(&nonce_compact); // CheckNonce: compact nonce
-                                               // CheckWeight(0)
-    payload.extend_from_slice(&tip_compact); // ChargeTransactionPayment: compact tip
-    payload.push(0x00u8); // CheckMetadataHash: mode=Disabled
-                          // WeightReclaim(0)
+    Ok(RuntimeSigningMaterial {
+        call,
+        tx_ext,
+        payload: raw_payload.encode(),
+        signing_bytes: raw_payload.using_encoded(|payload| payload.to_vec()),
+    })
+}
 
-    // extensions_implicit（additional signed data）
-    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
-    payload.extend_from_slice(&spec_version.to_le_bytes()); // CheckSpecVersion: u32
-    payload.extend_from_slice(&tx_version.to_le_bytes()); // CheckTxVersion: u32
-    payload.extend_from_slice(genesis_hash); // CheckGenesis: H256
-                                             // CheckEra::additional_signed:
-                                             //   immortal → block_hash(0) = genesis_hash
-                                             //   mortal   → block_hash(birth_block_number)
-                                             // 当前固定 immortal,所以这里也填 genesis_hash(链上 frame_system::CheckEra
-                                             // 在 immortal 分支会用 birth=0 取 block_hash(0),与 genesis_hash 一致)。
-                                             // 必须填 genesis_hash 而非最新块 hash,否则与链端重建 payload 不匹配 → bad signature。
-    payload.extend_from_slice(genesis_hash); // CheckEra: birth block hash = genesis(immortal)
-                                             // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
-    payload.push(0x00u8); // CheckMetadataHash: Option::None
-                          // WeightReclaim(0)
-
-    payload
+/// 构建链交易冷签 payload。
+///
+/// 第一个返回值是 QR_V1 `b.d` 中的完整 runtime SignedPayload；第二个返回值是
+/// sr25519 实际签名输入，完全复用 Substrate `SignedPayload::using_encoded` 规则。
+pub(crate) fn build_runtime_signing_payloads(
+    call_data: &[u8],
+    genesis_hash: &[u8; 32],
+    nonce: u32,
+    spec_version: u32,
+    tx_version: u32,
+) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let material =
+        build_runtime_signing_material(call_data, genesis_hash, nonce, spec_version, tx_version)?;
+    Ok((material.payload, material.signing_bytes))
 }
 
 pub(crate) fn fetch_genesis_hash() -> Result<[u8; 32], String> {
@@ -725,22 +873,6 @@ pub(crate) fn fetch_genesis_hash() -> Result<[u8; 32], String> {
     )?;
     let hash_str = result.as_str().ok_or("genesis hash 格式无效")?;
     decode_hash32(hash_str)
-}
-
-pub(crate) fn fetch_latest_block() -> Result<([u8; 32], u64), String> {
-    let header = rpc_post("chain_getHeader", Value::Array(vec![]))?;
-    let hash_result = rpc_post("chain_getBlockHash", Value::Array(vec![]))?;
-
-    let block_hash = decode_hash32(hash_result.as_str().ok_or("最新区块哈希格式无效")?)?;
-
-    let number_hex = header
-        .get("number")
-        .and_then(|v| v.as_str())
-        .ok_or("缺少区块号")?;
-    let number = u64::from_str_radix(number_hex.strip_prefix("0x").unwrap_or(number_hex), 16)
-        .map_err(|e| format!("区块号解析失败: {e}"))?;
-
-    Ok((block_hash, number))
 }
 
 pub(crate) fn fetch_nonce(pubkey_hex: &str) -> Result<u32, String> {
@@ -864,27 +996,22 @@ pub fn build_sign_request_from_call_data(
 ) -> Result<VoteSignRequestResult, String> {
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(pubkey_hex)?;
 
-    let payload = build_signing_payload(
-        call_data,
-        &genesis_hash,
-        &block_hash,
-        block_number,
-        nonce,
-        spec_version,
-        tx_version,
-    );
+    let (payload, signing_bytes) =
+        build_runtime_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
     let payload_hash = sha256_hash(&payload);
+    let payload_hash_hex = hex::encode(payload_hash);
+    let signing_payload_hash_hex = hex::encode(sha256_hash(&signing_bytes));
     let request_id = generate_request_id("chain");
 
     let now = now_secs()?;
+    let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        expires_at: now + DEFAULT_TTL_SECS,
+        expires_at,
         body: SignRequestBody {
             action: chain_action_code(call_data)?,
             sig_alg: 1,
@@ -895,14 +1022,28 @@ pub fn build_sign_request_from_call_data(
 
     let request_json =
         serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    remember_chain_sign_session(
+        request_id.clone(),
+        ChainSignSession {
+            expected_pubkey_hex: pubkey_hex
+                .strip_prefix("0x")
+                .unwrap_or(pubkey_hex)
+                .to_ascii_lowercase(),
+            call_data_hex: hex::encode(call_data),
+            payload_hash_hex: payload_hash_hex.clone(),
+            signing_payload_hash_hex,
+            nonce,
+            expires_at,
+        },
+    )?;
 
     Ok(VoteSignRequestResult {
         request_json,
         call_data_hex: hex::encode(call_data),
         request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(payload_hash)),
+        expected_payload_hash: format!("0x{}", payload_hash_hex),
         sign_nonce: nonce,
-        sign_block_number: block_number,
+        sign_block_number: IMMORTAL_SIGN_BLOCK_NUMBER,
     })
 }
 

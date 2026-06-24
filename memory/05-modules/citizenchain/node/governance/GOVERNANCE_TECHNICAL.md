@@ -77,10 +77,11 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 
 ### 存储
 
-- 文件：`{app_data}/activated-admin-subjects.json`
-- 格式：JSON 数组，每条记录包含 `pubkey_hex / account_id_hex / org / kind / activated_at_ms / signature_hex / payload_hash_hex`
+- 文件：`{app_data}/activated-admin-accounts.json`
+- 格式：`{"activations":[...]}`，每条记录包含 `pubkey_hex / account_hex / institution_code / kind / activated_at_ms / signature_hex / payload_hash_hex`
 - 安全：文件权限限制（通过 security::write_text_atomic_restricted）
-- 失效：每次 `get_activated_admins` 调用时与链上管理员主体的 `org/kind/admins/status` 交叉校验
+- 失效：每次 `get_activated_admins` 调用时与链上管理员主体的 `institution_code/kind/admins/status` 交叉校验
+- 旧 `org` 本地记录不迁移、不读取；检测到旧格式时清空文件，用户按当前 `institution_code` 重新扫码激活。
 
 ### 省储行验证者
 
@@ -106,7 +107,8 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 
 ### 安全设计
 - nonce 有 90 秒 TTL，防止重放
-- payload 包含 genesis_hash 做链域隔离（链上交易）
+- 链交易 payload 由当前 runtime `SignedPayload::from_raw` 构造，包含 `spec_version/transaction_version/genesis_hash/immortal era` 做链域隔离
+- 签名响应提交前先校验 QR 过期时间、本地 session payload hash、sr25519 签名，再用 runtime `UncheckedExtrinsic::new_signed` 构造交易并 dry-run
 - 签名验证使用 sr25519（与链上一致）
 
 ## proposal.rs — 提案查询

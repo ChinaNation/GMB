@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-06-22
+- 更新日期:2026-06-23
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -47,7 +47,7 @@ a = (pallet_index << 8) | call_index
 | `0x0c00` | `AdminsChange.propose_admin_set_change` | `propose_admin_set_change` | `institution_code`, `account`, `admins` | citizenchain node / CitizenApp |
 | `0x0d00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
-| `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `org`, `amount_yuan` | CitizenApp |
+| `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
 | `0x1000` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
 | `0x1101` | `OrganizationManage.propose_close` | `propose_close_institution` | `account`, `beneficiary` | CitizenApp |
 | `0x1104` | `OrganizationManage.cleanup_rejected_proposal` | `cleanup_rejected_proposal` | `proposal_id` | CitizenApp |
@@ -69,6 +69,8 @@ a = (pallet_index << 8) | call_index
 1. `b.a` 定位业务动作。
 2. `b.d` 解码出的 payload 字段。
 3. 本地 action label / field label 注册表。
+
+上表“payload 展示字段”是内部解码键，不是 UI 文案。扫码确认页必须把字段名映射成中文标签，例如 `institution_code` 显示为“机构类型”、`amount_yuan` 显示为“金额”、`proposal_id` 显示为“提案编号”、`approve` 显示为“投票意见”。
 
 必须展示给用户核对的内容:
 

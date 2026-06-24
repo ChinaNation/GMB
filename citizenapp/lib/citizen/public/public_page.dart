@@ -77,7 +77,10 @@ class _PublicPageState extends State<PublicPage> {
 
   Future<void> _bootstrap() async {
     // 后台版本驱动增量同步数据包 + 行政区字典(包版本变了就增量刷新,非阻塞)。
-    unawaited(_repo.ensureSynced());
+    // 关键:同步是后台任务,但**完成后必须回刷当前视图**——首装时 4.2 万条行政区
+    // 字典还在灌 Isar,市名会暂时回退 code(001),字典就绪后须清脏缓存重新 join,
+    // 否则永远停在 001(根因见任务卡 20260623-citizenapp-public-city-001-timing-fix)。
+    unawaited(_syncThenRefresh());
     final pubkey = await _resolvePubkey();
     if (!mounted) return;
     setState(() {
@@ -86,6 +89,25 @@ class _PublicPageState extends State<PublicPage> {
       _provinces = publicProvinceItems();
     });
     await _selectGroup(_kFollowGroup);
+  }
+
+  /// 后台增量同步数据包 + 行政区字典,**完成后回刷当前视图**。
+  ///
+  /// 中文注释:`ensureSynced` 首装要把 4.2 万条行政区字典灌进 Isar(秒级~十几秒),
+  /// 期间 `cityNameMap` 查到的是空字典 → 市名回退 code。等灌完后丢弃「字典未就绪时
+  /// join 的脏市名缓存」,按当前选中(关注/某省)用就绪字典重新 join,消除持续显示 001。
+  Future<void> _syncThenRefresh() async {
+    try {
+      await _repo.ensureSynced();
+    } on Object catch (e, st) {
+      // [DIAG-admindiv] 临时诊断:抓被静默吞掉的同步异常(真机失败极可能藏这)。
+      debugPrint('[DIAG-admindiv] _syncThenRefresh ensureSynced ERROR: $e\n$st');
+      return;
+    }
+    if (!mounted) return;
+    debugPrint('[DIAG-admindiv] _syncThenRefresh done → reload selected=$_selected');
+    _cityCache.clear(); // 关键:清掉灌库未完成时缓存的脏市名(001)。
+    await _selectGroup(_selected);
   }
 
   Future<void> _selectGroup(String group) async {
@@ -126,7 +148,10 @@ class _PublicPageState extends State<PublicPage> {
     if (cached == null) {
       final localCities = await _loadCityVms(group);
       if (!mounted || _selected != group) return;
-      _cityCache[group] = localCities;
+      // 加固:字典就绪(至少一个市 join 到非 code 的真名)才写缓存;首装字典未灌完时
+      // 市名全回退 code,这种脏列表不入缓存,等 _syncThenRefresh 灌完后重 join。
+      final dictReady = localCities.any((c) => c.name != c.code);
+      if (dictReady) _cityCache[group] = localCities;
       setState(() {
         _cities = localCities;
         _contentLoading = false;
@@ -141,6 +166,10 @@ class _PublicPageState extends State<PublicPage> {
     if (codes.isEmpty) return const [];
     // 一次取全省市名映射,避免逐市查字典的 N+1(ADR-018 R2)。
     final nameMap = await _repo.cityNameMap(provinceCode);
+    // [DIAG-admindiv] 临时诊断:看真机 listCities 与字典 cityNameMap 各返回多少。
+    debugPrint('[DIAG-admindiv] _loadCityVms($provinceCode): '
+        'codes=${codes.length} nameMap=${nameMap.length} '
+        'sample=${codes.isNotEmpty ? '${codes.first}->${nameMap[codes.first]}' : '-'}');
     return codes.map((code) {
       // 字典名缺失(null)或为空串都回退 code,绝不渲染留白(ADR-021 字典 join)。
       final joined = nameMap[code];
@@ -157,7 +186,9 @@ class _PublicPageState extends State<PublicPage> {
     try {
       await _repo.refreshProvince(provinceFullNameByCode(provinceCode));
       final cities = await _loadCityVms(provinceCode);
-      _cityCache[provinceCode] = cities; // 回写缓存:下次进入既快又新。
+      // 加固同 _selectGroup:字典就绪才回写缓存,避免缓存住字典未就绪时的脏 code。
+      final dictReady = cities.any((c) => c.name != c.code);
+      if (dictReady) _cityCache[provinceCode] = cities;
       if (!mounted || _selected != provinceCode) return;
       setState(() => _cities = cities);
     } on Exception {

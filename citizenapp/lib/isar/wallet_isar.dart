@@ -1158,7 +1158,7 @@ class WalletIsarMigration {
   static const String _kSchemaVersion = 'wallet.data.schema.version';
 
   /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 7;
+  static const int currentSchemaVersion = 8;
 
   static Future<void> ensureMigrated(Isar isar) async {
     await _ensureSettingsRow(isar);
@@ -1187,6 +1187,17 @@ class WalletIsarMigration {
         // join。公权目录是只读派生数据(无用户数据),旧 name-keyed 行直接清空,
         // 首启从 assets 数据包(已带 code)全量重灌;字典表同步清空待 bundle 重灌。
         await isar.publicInstitutionEntitys.clear();
+        await isar.adminDivisionEntitys.clear();
+      }
+      if (version < 8) {
+        // 中文注释（2026-06-23 修复公权机构市卡片显示 001）：`AdminDivisionEntity`
+        // 的 `divisionName`(市名)字段在 bf187d53「统一命名修复」才加入,该提交之前的
+        // build 灌进 Isar 的字典 divisionName 为空 → cityNameMap 查到空名 → 市名回退
+        // code(001)。而省版本游标(storedProvVers)判定"内容没变"会跳过重灌
+        // (ensureSynced reconciled=0),旧空名永久残留,覆盖安装不清 Isar 也救不了。
+        // 强制清空字典表:ensureSynced 见 divisionCount=0(hasData=false)即全量重灌带
+        // 市名的新数据。与 [[feedback-dto-field-rename-bump-cache-version]] 同根
+        // (改数据结构必 bump 强制刷新版本)。bundle 自身的省级 ver 增量仍照常工作。
         await isar.adminDivisionEntitys.clear();
       }
       // 中文注释：schema version 以 key 为唯一真源；重复迁移时必须原地更新，

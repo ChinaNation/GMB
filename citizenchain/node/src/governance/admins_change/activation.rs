@@ -18,22 +18,24 @@ use crate::home;
 use crate::settings::device_password;
 use crate::shared::security;
 use primitives::code::{
-    code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code, InstitutionCode,
+    InstitutionCode, code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code,
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs,
     io::ErrorKind,
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
 
 use crate::governance::admins_change::storage;
 use crate::governance::signing;
-use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN};
+use primitives::sign::{BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN, binary_domain_prefix};
 
 use super::account_id;
-use super::types::{institution_code_label, AdminAccountState};
+use super::types::{AdminAccountState, institution_code_label};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
@@ -50,6 +52,21 @@ const ACTIVATED_ADMINS_FILE: &str = "activated-admin-accounts.json";
 // 单一真源 primitives::sign)。
 // account_id(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
 const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = BINARY_PREFIX_LEN + 32 + 4 + 1 + 32 + 8 + 16;
+
+#[derive(Debug, Clone)]
+struct ActivationSignSession {
+    pubkey_hex: String,
+    payload_hash_hex: String,
+    payload_hex: String,
+    expires_at: u64,
+}
+
+static ACTIVATION_SIGN_SESSIONS: OnceLock<Mutex<HashMap<String, ActivationSignSession>>> =
+    OnceLock::new();
+
+fn activation_sign_sessions() -> &'static Mutex<HashMap<String, ActivationSignSession>> {
+    ACTIVATION_SIGN_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 // ──── 数据结构 ────
 
@@ -71,6 +88,7 @@ pub struct ActivatedAdmin {
 
 /// 本地存储的激活凭证。
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StoredActivation {
     /// 管理员公钥 hex（不含 0x，小写）。
     pubkey_hex: String,
@@ -98,6 +116,7 @@ struct ActivationPayload {
 
 /// 存储文件根结构。
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StoredActivations {
     #[serde(default)]
     activations: Vec<StoredActivation>,
@@ -130,9 +149,67 @@ fn load_activations(app: &AppHandle) -> Result<Vec<StoredActivation>, String> {
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(format!("读取激活记录文件失败: {e}")),
     };
-    let stored: StoredActivations =
-        serde_json::from_str(&raw).map_err(|e| format!("解析激活记录文件失败: {e}"))?;
-    Ok(stored.activations)
+    match serde_json::from_str::<StoredActivations>(&raw) {
+        Ok(stored) => Ok(stored.activations),
+        Err(e) if is_stale_activation_schema(&raw, &e.to_string()) => {
+            // 中文注释：旧版本地文件使用 org:u8。该字段已废弃，不能在本地做
+            // 兼容映射；直接清空文件，要求用户按当前 institution_code 重新激活。
+            if let Err(log_err) = security::append_audit_log(
+                app,
+                "activated_admins_schema_reset",
+                &format!("reset stale file: {e}"),
+            ) {
+                eprintln!("[审计] activated_admins_schema_reset 日志写入失败: {log_err}");
+            }
+            eprintln!(
+                "[管理员激活] 检测到旧激活记录格式，已清空并要求重新激活: {} ({e})",
+                security::sanitize_path(&path)
+            );
+            save_activations(app, &[]).map_err(|write_err| {
+                format!("解析激活记录文件失败: {e}; 清理旧激活记录失败: {write_err}")
+            })?;
+            Ok(Vec::new())
+        }
+        Err(e) => Err(format!("解析激活记录文件失败: {e}")),
+    }
+}
+
+fn is_stale_activation_schema(raw: &str, parse_error: &str) -> bool {
+    raw.contains("\"org\"") || parse_error.contains("missing field `institution_code`")
+}
+
+fn normalize_hash_hex(value: &str, field: &str) -> Result<String, String> {
+    let clean = value
+        .trim()
+        .strip_prefix("0x")
+        .unwrap_or(value.trim())
+        .to_ascii_lowercase();
+    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("{field} 必须是 32 字节 hex"));
+    }
+    Ok(clean)
+}
+
+fn remember_activation_session(
+    request_id: String,
+    session: ActivationSignSession,
+) -> Result<(), String> {
+    let mut sessions = activation_sign_sessions()
+        .lock()
+        .map_err(|_| "管理员激活签名 session 状态异常".to_string())?;
+    let now = now_secs();
+    sessions.retain(|_, item| item.expires_at >= now);
+    sessions.insert(request_id, session);
+    Ok(())
+}
+
+fn take_activation_session(request_id: &str) -> Result<ActivationSignSession, String> {
+    let mut sessions = activation_sign_sessions()
+        .lock()
+        .map_err(|_| "管理员激活签名 session 状态异常".to_string())?;
+    sessions
+        .remove(request_id)
+        .ok_or_else(|| "未找到管理员激活签名 session，请重新生成二维码".to_string())
 }
 
 fn save_activations(app: &AppHandle, activations: &[StoredActivation]) -> Result<(), String> {
@@ -355,11 +432,12 @@ pub async fn build_activate_admin_request(
     let request_id = signing::generate_request_id_public("activate-admin-account");
 
     let now = now_secs();
+    let expires_at = now + signing::DEFAULT_TTL_SECS;
     let request = signing::QrSignRequest {
         proto: signing::PROTOCOL_VERSION.to_string(),
         kind: signing::QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
-        expires_at: now + 90,
+        expires_at,
         body: signing::SignRequestBody {
             action: primitives::sign::QR_ACTION_ACTIVATE_ADMIN,
             sig_alg: 1,
@@ -370,6 +448,18 @@ pub async fn build_activate_admin_request(
 
     let request_json =
         serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    remember_activation_session(
+        request_id.clone(),
+        ActivationSignSession {
+            pubkey_hex: pubkey_clean,
+            payload_hash_hex: normalize_hash_hex(&payload_hash_hex, "payload_hash")?,
+            payload_hex: payload_hex
+                .strip_prefix("0x")
+                .unwrap_or(&payload_hex)
+                .to_ascii_lowercase(),
+            expires_at,
+        },
+    )?;
 
     Ok(ActivateRequestResult {
         request_json,
@@ -414,8 +504,21 @@ pub async fn verify_activate_admin(
             response.kind
         ));
     }
+    if response.expires_at < now_secs() {
+        return Err("签名响应已过期，请重新生成激活二维码".to_string());
+    }
     if response.id != request_id {
         return Err("请求 ID 不匹配".to_string());
+    }
+    let session = take_activation_session(&request_id)?;
+    if session.expires_at < now_secs() {
+        return Err("管理员激活签名 session 已过期，请重新生成二维码".to_string());
+    }
+    if response.expires_at != session.expires_at {
+        return Err("签名响应过期时间与本地激活 session 不匹配".to_string());
+    }
+    if session.pubkey_hex != pubkey_clean {
+        return Err("提交参数公钥与本地激活 session 不匹配".to_string());
     }
 
     let response_pubkey = response
@@ -432,12 +535,23 @@ pub async fn verify_activate_admin(
         .strip_prefix("0x")
         .unwrap_or(&expected_payload_hash)
         .to_ascii_lowercase();
-    if expected_hash.is_empty() {
-        return Err("本地签名 session 缺少 payload hash".to_string());
+    let expected_hash = normalize_hash_hex(&expected_hash, "expected_payload_hash")?;
+    if expected_hash != session.payload_hash_hex {
+        return Err("提交参数 payload hash 与本地激活 session 不匹配".to_string());
     }
 
     let payload_clean = payload_hex.strip_prefix("0x").unwrap_or(&payload_hex);
+    if payload_clean.to_ascii_lowercase() != session.payload_hex {
+        return Err("提交参数 payload 与本地激活 session 不匹配".to_string());
+    }
     let payload_bytes = hex::decode(payload_clean).map_err(|e| format!("payload 解码失败: {e}"))?;
+    let actual_hash = hex::encode(signing::sha256_hash_public(&payload_bytes));
+    if actual_hash != session.payload_hash_hex {
+        return Err(format!(
+            "激活 payload hash 与本地 session 不匹配：expected={}, actual={actual_hash}",
+            session.payload_hash_hex
+        ));
+    }
     let decoded = decode_activate_payload(&payload_bytes)?;
     if decoded.pubkey_hex != pubkey_clean {
         return Err("激活 payload 中的管理员公钥与签名公钥不一致".to_string());
@@ -536,7 +650,7 @@ pub async fn verify_activate_admin(
 ///
 /// 每次调用时与链上当前管理员列表交叉校验：
 /// - 链上已移除的管理员 → 自动删除本地激活记录；
-/// - org/kind 已变化或账户已关闭 → 不再返回本地激活记录；
+/// - institution_code/kind 已变化或账户已关闭 → 不再返回本地激活记录；
 /// - 返回仍有效的已激活管理员。
 #[tauri::command]
 pub async fn get_activated_admins(

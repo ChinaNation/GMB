@@ -1,7 +1,7 @@
 # QR_V1 统一二维码协议规范
 
 - 版本:`QR_V1`
-- 更新日期:2026-06-22
+- 更新日期:2026-06-23
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
 - 例外:CPMS 安装/档案业务码 `CID_CPMS_V1 / INSTALL / ARCHIVE` 不是签名扫码协议,不并入本文件
@@ -79,10 +79,12 @@
 
 | 场景 | `a` 规则 | 签名字节 |
 |---|---|---|
-| 普通链交易 | `a = (pallet_index << 8) | call_index` | payload 长度 ≤256B 签原文,>256B 签 `blake2_256(payload)` |
+| 普通链交易 | `a = (pallet_index << 8) | call_index` | `d` 必须是生成方用当前 runtime 类型构造的 `SignedPayload` SCALE 字节;长度 ≤256B 签原文,>256B 签 `blake2_256(payload)` |
 | 登录 / CID / CPMS 文本载荷 | `a = 1..4` | 签 payload 原文 |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
-| Runtime 升级哈希签名 | `a = 7` 或 RuntimeUpgrade 链 action | `d` 必须是 32B hash,签该 32B |
+| Runtime 升级哈希签名 | `a = 7` 或 RuntimeUpgrade 链 action | `d` 必须是同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes,签该 32B |
+
+链交易生成方不得手写拼接 `call_data/era/nonce/tip/additional_signed` 或 signed extrinsic。citizenchain node、CitizenApp 热钱包和其它链交易生成方必须统一使用当前 runtime 类型构造 `TxExtension`、`SignedPayload` 和 `UncheckedExtrinsic`，再把 `SignedPayload` 的 SCALE 字节放入 `b.d`。
 
 ## 5. k=2 sign_response
 
@@ -111,7 +113,8 @@
 3. `i == 本地请求 id`
 4. `e` 未过期
 5. `b.u == 本地 expected pubkey`
-6. 按本地 session 的 `a + payload` 计算签名字节后验证 `b.s`
+6. 按本地 session 重新计算 payload hash,必须等于生成请求时保存的 `expected_payload_hash`
+7. 按本地 session 的 `a + payload` 计算签名字节后验证 `b.s`
 
 ## 6. k=3 user_contact
 
