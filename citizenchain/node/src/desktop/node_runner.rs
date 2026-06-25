@@ -8,14 +8,36 @@
 //! 实现办法：握有 shutdown oneshot + JoinHandle，Drop 时先发信号再 join。
 
 use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use tokio::sync::oneshot;
+
+const NODE_RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
+
+struct NodeThreadAliveGuard(Arc<AtomicBool>);
+
+impl Drop for NodeThreadAliveGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
 
 /// 节点运行句柄。drop 时会通知后台线程退出并 join。
 pub struct NodeHandle {
     shutdown_tx: Option<oneshot::Sender<()>>,
     thread: Option<JoinHandle<()>>,
+    alive: Arc<AtomicBool>,
+}
+
+impl NodeHandle {
+    /// 返回后台 Substrate 线程是否仍存活，用于把异常退出同步到首页状态。
+    pub fn is_alive(&self) -> bool {
+        self.alive.load(Ordering::Acquire)
+    }
 }
 
 impl Drop for NodeHandle {
@@ -27,8 +49,11 @@ impl Drop for NodeHandle {
         // join 线程，等待 task_manager + tokio runtime 完整 drop，
         // 确保 Substrate Backend 释放 RocksDB LOCK 后再返回。
         if let Some(handle) = self.thread.take() {
-            let _ = handle.join();
+            if let Err(err) = handle.join() {
+                eprintln!("[节点] Substrate 后台线程退出异常: {err:?}");
+            }
         }
+        self.alive.store(false, Ordering::Release);
     }
 }
 
@@ -78,12 +103,16 @@ pub fn start_node_in_process(
 
     let (error_tx, error_rx) = std::sync::mpsc::channel::<String>();
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let alive = Arc::new(AtomicBool::new(true));
+    let thread_alive = Arc::clone(&alive);
 
     let thread = std::thread::Builder::new()
         .name("substrate-node".into())
         .spawn(move || {
             use clap::Parser;
             use sc_cli::CliConfiguration;
+
+            let _alive_guard = NodeThreadAliveGuard(thread_alive);
 
             // 设置 SS58 地址前缀。
             let _ = sp_core::crypto::set_default_ss58_version(
@@ -153,7 +182,7 @@ pub fn start_node_in_process(
                 }
             });
             // 等待 tokio runtime 内残余任务退出（包括 Backend flush）。
-            tokio_runtime.shutdown_timeout(Duration::from_secs(10));
+            tokio_runtime.shutdown_timeout(NODE_RUNTIME_SHUTDOWN_TIMEOUT);
         })
         .map_err(|e| format!("启动节点线程失败: {e}"))?;
 
@@ -161,11 +190,15 @@ pub fn start_node_in_process(
     std::thread::sleep(Duration::from_secs(5));
 
     match error_rx.try_recv() {
-        Ok(err) => Err(err),
+        Ok(err) => {
+            let _ = thread.join();
+            Err(err)
+        }
         Err(std::sync::mpsc::TryRecvError::Empty)
         | Err(std::sync::mpsc::TryRecvError::Disconnected) => Ok(NodeHandle {
             shutdown_tx: Some(shutdown_tx),
             thread: Some(thread),
+            alive,
         }),
     }
 }

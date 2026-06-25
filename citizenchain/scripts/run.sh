@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 不清库，继续启动节点
+# 正常启动:不清库,用【冻结 SSOT】(node/chainspecs/citizenchain.raw.json)续跑现有链。
+# 要清链并用当前源码现造创世,改用 clean-run.sh。
 set -euo pipefail
 
 cleanup() {

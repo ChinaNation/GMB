@@ -5,18 +5,17 @@
 ```
 home/
 ├── mod.rs              # 重新导出所有子模块的 pub 接口
-├── process/mod.rs      # 进程生命周期管理（启动、停止、检测、二进制校验）
+├── process/mod.rs      # 进程生命周期管理（自动启动、手动启停、退出清理）
 ├── rpc/mod.rs          # 节点 RPC 调用（链状态、指纹验证、genesis hash）
 ├── identity/mod.rs     # 节点身份管理（名称、PeerId、运行状态）
-├── sync_guard.rs       # 本机同步守护（检测 P2P 已连但 sync peer 表为空的脱钩状态）
-├── transaction/mod.rs  # 首页交易、冷钱包、矿工热钱包与转账提交
-└── HOME_TECHNICAL.md   # 本文档
+└── sync_guard.rs       # 本机同步守护（检测 P2P 已连但 sync peer 表为空的脱钩状态）
 ```
 
 前端首页结构与后端保持一致：
-- `node/frontend/home/home-node/`：节点状态与身份展示，包含本功能 `api.ts` 与 `types.ts`
-- `node/frontend/home/transaction/`：公民钱包列表、矿工热钱包展示、转账签名与提交面板，包含本功能 `api.ts` 与 `types.ts`
-- 前端交易扫码依赖 `node/frontend/shared/qr/`，不再从治理目录复用 QR 组件
+- `node/frontend/home/HomeNodeSection.tsx`：首页左侧节点状态、手动启停按钮、链状态、节点身份、发行总额与永久质押展示。
+- `node/frontend/home/api.ts` 与 `types.ts`：首页节点面板专用 Tauri API 与类型。
+- `node/frontend/home/components/`：链状态、节点身份和发行/质押展示子组件。
+- `node/frontend/transaction/onchain-transaction/`：首页右侧交易面板，承载公民钱包、矿工热钱包、转账签名与提交。
 
 ## Cargo.toml 构建依赖
 
@@ -61,24 +60,32 @@ WASM CI 版本规则：
 | 用户操作 | 节点行为 | 触发机制 |
 |----------|----------|----------|
 | 打开 App | 自动启动节点 | `desktop::run_desktop` setup 后台线程 spawn `start_node_blocking` |
+| 首页状态区点击“关闭” | App 继续运行，停止节点 | `home::process::stop_node` → `stop_node_sync` |
+| 首页状态区点击“启动” | App 继续运行，手动启动节点 | `home::process::start_node` → `start_node_if_stopped_sync`；若自动启动已完成则直接返回当前运行状态 |
 | 设置页点击“更新” | 先停止节点，再安装更新并重启 App | `prepare_desktop_update` 调用 `stop_node_blocking`，随后 Tauri updater 执行 `downloadAndInstall` + `relaunch` |
 | 关窗（红 X / Cmd+Q / 菜单 Quit / 系统关闭） | 退出 App + 停止节点 | Tauri 默认行为 → `RunEvent::Exit` → `cleanup_on_exit`（不拦截 `CloseRequested`） |
 | macOS 黄色横线 | 窗口最小化，节点继续运行 | macOS 系统原生 minimize，不触发 `CloseRequested`，无需拦截 |
 
 Linux 端备注：UI 模式只用于桌面打包（.deb），服务器场景走 CLI `--clearing-bank` 不进 Tauri。
 
-**已删除**（2026-04-25）：
-- `start_node` / `stop_node` Tauri command（前端不再有启停按钮和密码输入框）
-- `verify_start_unlock_password` / `unlock_password` 形参链路（启停不再校验设备密码；密码校验只保留在 `set_grandpa_key` / `set_bootnode_key` / `set_reward_wallet` 等显式高权操作内）
-- 前端 `HomeNodeSection` 启动/停止 modal 和相关 state、`api.startNode` / `api.stopNode`、`disabled` prop 全链路（启停按钮删后该 prop 失去触发源）
+当前手动启停入口（2026-06-25 起）：
+- `start_node` / `stop_node` Tauri command 只供首页状态区按钮调用，不恢复旧密码框、不要求设备开机密码。
+- `start_node` 是幂等手动启动：如果 App 打开后的自动启动已经完成，命令直接返回当前运行状态，不重复重启节点。
+- `stop_node` 只停止进程内节点，App 继续运行；同步守护在节点停止状态只等待，不会主动拉起手动关闭的节点。
+
+仍保持删除的旧链路：
+- `verify_start_unlock_password` / `unlock_password` 形参链路（启停不校验设备密码；密码校验只保留在 `set_grandpa_key` / `set_bootnode_key` / `set_reward_wallet` 等显式高权操作内）
+- 首页密码输入框和旧的禁用 prop 链路；当前只保留状态文字右侧的单个“启动/关闭”按钮，点击后先弹二次确认。
 
 核心职责：
 - **进程内运行**：节点不再以子进程 sidecar 方式启动，由 `node_runner::start_node_in_process` 在 Tauri 进程内的后台线程跑 Substrate 服务（`task_manager.future().await`）
-- **生命周期绑定**：句柄 `NodeHandle` 持有 `oneshot::Sender<()>` 和 `JoinHandle<()>`，drop 时发 shutdown 信号 → `tokio::select!` 让 `task_manager.future()` 与 shutdown 任一退出 → 显式 `drop(task_manager)` 释放 Backend → `tokio_runtime.shutdown_timeout(10s)` → `JoinHandle::join()`，**确保 RocksDB LOCK 真正释放**（修复了之前 drop `JoinHandle` 不停线程导致的 `lock hold by current process` bug）
+- **生命周期绑定**：句柄 `NodeHandle` 持有 `oneshot::Sender<()>`、`JoinHandle<()>` 和后台线程活跃标记，drop 时发 shutdown 信号 → `tokio::select!` 让 `task_manager.future()` 与 shutdown 任一退出 → 显式 `drop(task_manager)` 释放 Backend → `tokio_runtime.shutdown_timeout(30s)` → `JoinHandle::join()`，尽量等待 RocksDB LOCK 释放；启动失败线程会先 join 后返回错误，避免失败路径留下悬空线程。
 - **保存即重启**：`set_grandpa_key` / `set_bootnode_key` 仍可在节点运行中调用 `stop_node_blocking` → `start_node_blocking` 让新私钥即时生效，依赖上述真停机制
 - **更新前停节点**：设置页“更新”按钮触发 `settings::desktop_update::prepare_desktop_update`，只执行停止节点，不重新启动；安装完成后由 Tauri updater 重启整个 App
+- **手动启停**：首页按钮位于“状态: 运行中/已停止”右侧，点击后先弹二次确认；确认后通过 `homeNodeApi.startNode` / `homeNodeApi.stopNode` 调用 Tauri command；按钮执行中禁用，停止态清空链状态展示，不把预期中的 RPC 不可用误报为首页错误
 - **串行化**：`NODE_LIFECYCLE_LOCK` 互斥锁保证同一时刻只允许一个启停操作
-- **状态可见**：`current_status` 单纯读 `state.node_handle.is_some()`，前端通过 `get_node_status` 每 3s 轮询自然刷新；启停期间为避免阻塞 `get_node_status`，`take` handle 后立即释放 state 锁再 drop
+- **状态可见**：`RuntimeState.node_state` 区分 `starting/running/stopping/restarting/failed/lock_held/exited/stopped`；`current_status` 会检查 `NodeHandle::is_alive()`，线程异常退出时取出旧 handle 并返回 `exited`，启动遇到同进程 RocksDB LOCK 时返回 `lock_held`，前端据此显示“数据库锁未释放”而不是普通“已停止”。
+- **锁占用处理**：启动路径对 RocksDB 同进程 LOCK 错误只做有限重试；仍失败时保留 `lock_held` 状态并提示完全退出软件后重新打开，避免按钮反复触发无效启动。
 
 RPC 暴露说明：
 - `node_runner` 启动参数固定 `--rpc-methods Unsafe --rpc-cors all`，仅监听本机 `--rpc-port`
@@ -91,7 +98,7 @@ RPC 暴露说明：
 设计边界：
 - 只访问本机 `127.0.0.1` RPC，不定时请求公网参考节点，也不依赖引导节点可用性。
 - 不用区块高度是否增长作为故障条件。CitizenChain 在无交易时不会持续空出块，按高度停滞判定会把正常无交易网络误判成故障。
-- 不清链、不删除数据库、不切换 `ws/wss`，恢复动作只是在进程内受控重启当前 Substrate 服务。
+- 不清链、不删除数据库、不切换 `ws/wss`，也不在 Tauri 进程内自动重启当前 Substrate 服务。原因是 Substrate/RocksDB 释放滞后时，同进程自动重启会触发 `lock hold by current process` 并把节点带入“RPC 已停、DB 锁仍在”的半死状态。
 
 触发条件必须同时满足并持续多次采样：
 - `system_health.shouldHavePeers == true`
@@ -102,16 +109,18 @@ RPC 暴露说明：
 
 上述条件刻画的是“raw network 已经连上，sync service 没有把连接纳入 block sync peer 表”的脱钩状态；它不会因为公网没交易、区块高度不增长而触发。
 
-恢复流程：
+降级流程：
 1. 守护线程在 App 启动后常驻，节点刚启动时先等待启动宽限期。
-2. 命中脱钩条件达到阈值后，先通过 `author_pendingExtrinsics` 抓取本机交易池待处理 extrinsics。
-3. 调用 `process::restart_node_for_sync_guard`，复用原节点生命周期锁和 `start_node_sync` 路径停止旧服务并启动新服务。
-4. 重启后按数量和总字节数限额调用 `author_submitExtrinsic` 重提交 pending extrinsics；已经入块、过期或重复的交易失败只写日志，不阻断节点恢复。
-5. 10 分钟窗口内最多自动重启 2 次，超过后进入 `degraded` 状态，避免反复重启风暴。
+2. 命中脱钩条件达到阈值后进入 `degraded` 状态，并写入 `sync_guard/degraded` 审计日志。
+3. 守护线程保持运行，后续采样恢复正常时回到 `healthy`；不再调用节点生命周期重启入口。
+4. 10 分钟窗口内只保留降级事件计数，避免重复审计刷屏。
+
+手动停止边界：
+- 当 `current_status` 显示节点未运行时，守护线程只进入 `waiting_node` 状态并记录 `node is not running`，不会主动拉起手动关闭的节点。
 
 诊断入口：
 - Tauri command：`home::sync_guard::get_sync_guard_status`
-- 审计动作：`sync_guard`，状态包括 `restart_attempt`、`restart_success`、`restart_failed`、`degraded`
+- 审计动作：`sync_guard`，状态保留 `degraded`
 
 ## rpc/mod.rs
 

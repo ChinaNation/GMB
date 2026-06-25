@@ -20,7 +20,7 @@ use std::sync::Mutex;
 
 /// 启动 Tauri 桌面应用。
 ///
-/// Substrate 节点在 setup 阶段后台线程自动启动；用户无启停按钮、无密码框。
+/// Substrate 节点在 setup 阶段后台线程自动启动；首页仍提供手动启停按钮。
 pub fn run_desktop() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -29,6 +29,8 @@ pub fn run_desktop() {
         .manage(AppState(Mutex::new(RuntimeState::default())))
         .invoke_handler(tauri::generate_handler![
             home::identity::get_node_status,
+            home::process::start_node,
+            home::process::stop_node,
             home::sync_guard::get_sync_guard_status,
             settings::desktop_update::prepare_desktop_update,
             settings::node_mode::get_node_mode,

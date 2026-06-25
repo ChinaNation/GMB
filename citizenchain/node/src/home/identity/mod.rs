@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::AppHandle;
 
-use super::process::AppState;
+use super::process::{AppState, NodeLifecycleState};
 use super::rpc::rpc_post;
 use tauri::Manager;
 
@@ -39,23 +39,49 @@ fn role_from_peer_id(peer_id: Option<&str>) -> String {
 }
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
-    let managed_running = {
+    let stale_handle = {
+        let app_state = app.state::<AppState>();
+        let mut state = app_state
+            .0
+            .lock()
+            .map_err(|_| "acquire process state failed".to_string())?;
+        let stale = state
+            .node_handle
+            .as_ref()
+            .map(|handle| !handle.is_alive())
+            .unwrap_or(false);
+        if stale {
+            state.node_state = NodeLifecycleState::Exited;
+            state.last_error = Some("node thread exited unexpectedly".to_string());
+            state.node_handle.take()
+        } else {
+            if state.node_handle.is_some() {
+                state.node_state = NodeLifecycleState::Running;
+                state.last_error = None;
+            }
+            None
+        }
+    };
+    // 中文注释：异常退出的线程句柄在释放 state 锁后 drop，避免状态查询阻塞其它命令。
+    drop(stale_handle);
+
+    let (managed_running, state_label) = {
         let app_state = app.state::<AppState>();
         let state = app_state
             .0
             .lock()
             .map_err(|_| "acquire process state failed".to_string())?;
-        state.node_handle.is_some()
+        let running = state
+            .node_handle
+            .as_ref()
+            .map(|handle| handle.is_alive())
+            .unwrap_or(false);
+        (running, state.node_state.as_str().to_string())
     };
     let managed_pid: Option<u32> = None;
     Ok(NodeStatus {
         running: managed_running,
-        state: if managed_running {
-            "running"
-        } else {
-            "stopped"
-        }
-        .to_string(),
+        state: state_label,
         pid: managed_pid,
     })
 }

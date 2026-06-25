@@ -1,7 +1,7 @@
 import { invoke } from '../../core/tauri';
 import type { ColdWallet, TransferSignRequestResult, TransferSubmitResult, WalletStore } from './types';
 
-// 首页交易面板专用 Tauri API，对齐后端 src/home/transaction。
+// 首页交易面板专用 Tauri API，对齐后端 src/transaction/onchain_transaction。
 export const transactionApi = {
   getWallets: () => invoke<WalletStore>('get_wallets'),
   addWallet: (name: string, address: string) =>

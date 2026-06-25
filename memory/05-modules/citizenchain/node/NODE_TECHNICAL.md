@@ -226,14 +226,14 @@
 
 ## 10. 桌面同步守护边界
 
-2026-05-17 起，桌面端新增本机同步守护 `src/home/sync_guard.rs`，用于恢复“底层 P2P 已连接、交易能广播，但 block sync peer 表为空，本机区块不同步”的进程内脱钩状态。
+2026-05-17 起，桌面端新增本机同步守护 `src/home/sync_guard.rs`，用于检测“底层 P2P 已连接、交易能广播，但 block sync peer 表为空，本机区块不同步”的进程内脱钩状态。
 
 守护边界：
 - 只采样本机 `127.0.0.1` RPC，不常规请求公网参考节点，不把引导节点当成持续依赖。
 - 不以区块高度增长作为重启条件。当前出块策略会在交易池为空时跳过挖矿，网络无交易时高度停滞是正常状态。
-- 不清链、不删除数据库、不改 `ws/wss`，只通过节点生命周期锁受控重启进程内 Substrate 服务。
-- 重启前抓取本机 pending extrinsics，重启后按限额重提交；已入块、过期或重复交易的失败只记日志。
-- 10 分钟窗口内最多自动重启 2 次，超过后进入降级状态，避免自动重启风暴。
+- 不清链、不删除数据库、不改 `ws/wss`，也不自动重启进程内 Substrate 服务；Substrate/RocksDB 释放滞后时，同进程自动重启会触发 `lock hold by current process` 并让节点进入锁占用状态。
+- 命中脱钩条件达到阈值后进入 `degraded` 状态并写审计日志；采样恢复正常后回到 `healthy`。
+- 节点生命周期由 `src/home/process/mod.rs` 显式维护 `starting/running/stopping/restarting/failed/lock_held/exited/stopped`，首页会把同进程 DB 锁占用展示为“数据库锁未释放”。
 
 准确触发条件以 `home/HOME_TECHNICAL.md` 为准，核心是 `system_health.peers == 0`、`system_peers == []`，同时 `system_unstable_networkState.connectedPeers` 仍存在带版本和 ping 的已识别 peer。
 
@@ -249,7 +249,8 @@
 | `src/core/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
 | `src/core/cli.rs` | 83 | CLI 参数定义 |
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
-| `src/desktop/mod.rs` | 148 | 桌面端 Tauri 入口、插件与命令注册 |
+| `src/desktop/mod.rs` | 161 | 桌面端 Tauri 入口、插件与命令注册 |
+| `src/home/process/mod.rs` | 405 | 首页节点生命周期管理，含打开 App 自动启动、首页手动启停、设置保存即重启、锁占用状态和退出清理 |
 | `src/settings/desktop_update.rs` | 15 | 设置页点击更新前的节点停止准备命令 |
 | `src/settings/node-mode/mod.rs` | 230 | 设置页全节点模式后端，当前只允许归档全节点，普通全节点由后端拒绝选择；旧 `communication` 本地值读取时清理回归档 |
 | `src/settings/communication-node/mod.rs` | 265 | 设置页通信节点功能后端，独立读写 `<app_data>/communication-node.json`，生成 IPv4/IPv6 固定配对二维码，不返回 RPC URL |
@@ -258,9 +259,11 @@
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
 | `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，只展示归档/普通两种链数据模式，并将普通全节点置灰禁用 |
 | `frontend/settings/communication-node/CommunicationNodeSection.tsx` | 126 | 设置页通信节点功能面板，独立开关、状态标签、PeerId/multiaddr 摘要和公民扫码配对二维码 |
-| `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
-| `src/home/sync_guard.rs` | 531 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并受控重启 |
-| `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |
+| `src/desktop/node_runner.rs` | 204 | 桌面端进程内节点启动器，含后台线程活跃标记和失败线程 join |
+| `src/home/sync_guard.rs` | 421 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并进入降级状态 |
+| `src/transaction/onchain_transaction/mod.rs` | 508 | 首页交易后端，包含钱包列表、矿工热钱包、余额查询、转账签名请求与提交 |
+| `frontend/home/HomeNodeSection.tsx` | 236 | 首页左侧节点状态、状态文字右侧手动启停按钮、二次确认弹窗、锁占用状态提示、链状态、节点身份与发行/质押展示 |
+| `frontend/transaction/onchain-transaction/TransactionPanel.tsx` | 105 | 首页右侧链上交易面板 |
 | `src/main.rs` | 70 | CLI / 桌面入口分发,release 走 windows subsystem 不弹控制台 |
 | `vendor/` | ~13,854 | sc-consensus-grandpa v0.40.0（GPL-3.0） |
 | `libp2p-websocket/` | 6 files | 本地覆盖 crates.io `libp2p-websocket`，用于 WSS TLS 客户端配置扩展 |
@@ -269,7 +272,7 @@
 - 节点核心能力统一在 `src/core/`，避免根层散落 CLI、service、RPC、chain spec 等基础文件。
 - 桌面壳入口统一在 `src/desktop/`，只负责 Tauri 启动、命令注册和进程内节点运行器。
 - 挖矿页后端统一在 `src/mining/`，包含收益看板、资源监控、网络概览、出块记录与 GPU 挖矿。
-- 首页交易能力统一在 `src/home/transaction/`，与前端 `node/frontend/home/transaction/` 保持一致。
+- 首页左侧节点状态能力统一在 `src/home/` 与 `frontend/home/`；首页右侧链上交易能力统一在 `src/transaction/onchain_transaction/` 与 `frontend/transaction/onchain-transaction/`。
 - 跨功能复用能力统一在 `src/shared/`，例如 RPC 客户端、keystore、安全路径与 CID 服务地址配置。
 
 前端目录收敛约定：

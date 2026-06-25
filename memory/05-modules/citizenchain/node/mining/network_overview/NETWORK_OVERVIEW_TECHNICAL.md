@@ -43,7 +43,7 @@
 
 - 创世引导节点列表：`settings/bootnodes_address`。
 - 实时在线节点：`system_peers`。
-- 本机节点状态：`home/home-node::current_status` + `system_localPeerId`。
+- 本机节点状态：`src/home/identity::current_status` + `system_localPeerId`。
 
 ## 5. 核心规则
 
@@ -94,6 +94,6 @@
 
 ## 9. 依赖关系
 
-- 依赖 `home/process` 的 `current_status` 获取本机运行状态。
+- 依赖 `home/identity` 的 `current_status` 获取本机运行状态；该状态会识别 `lock_held` 和 `exited`，网络总览只在 `running=true` 时计入本机节点。
 - 依赖 `settings/bootnodes_address` 的创世节点元数据。
 - 依赖 `shared/rpc::verify_genesis_hash` 进行 genesis hash 校验。

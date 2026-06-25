@@ -1,7 +1,8 @@
 //! 本机同步守护：检测底层 P2P 已连接但 block sync peer 表为空的脱钩状态。
 //!
 //! 守护器只访问本机 `127.0.0.1` RPC，不定时请求公网参考节点，也不把区块高度
-//! 是否增长作为故障条件，避免无交易出块暂停时误重启。
+//! 是否增长作为故障条件。检测到脱钩后只进入降级状态，不做进程内自动重启，
+//! 避免 Substrate/RocksDB 释放滞后时把本机节点带入同进程 LOCK 占用状态。
 
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_LARGE, rpc, security};
 use serde::Serialize;
@@ -14,15 +15,12 @@ use std::{
 };
 use tauri::AppHandle;
 
-use super::{identity::current_status, process};
+use super::identity::current_status;
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const STARTUP_GRACE: Duration = Duration::from_secs(120);
 const REQUIRED_SUSPECT_SAMPLES: u32 = 6;
-const RESTART_WINDOW: Duration = Duration::from_secs(10 * 60);
-const MAX_RESTARTS_IN_WINDOW: usize = 2;
-const MAX_PENDING_EXTRINSICS: usize = 128;
-const MAX_PENDING_EXTRINSICS_BYTES: usize = 4 * 1024 * 1024;
+const DEGRADED_AUDIT_WINDOW: Duration = Duration::from_secs(10 * 60);
 
 static GUARD_RUNTIME: OnceLock<Mutex<Option<SyncGuardRuntime>>> = OnceLock::new();
 static GUARD_STATUS: OnceLock<Mutex<SyncGuardStatus>> = OnceLock::new();
@@ -39,7 +37,7 @@ pub struct SyncGuardStatus {
     pub running: bool,
     pub state: String,
     pub consecutive_suspects: u32,
-    pub restart_count_in_window: usize,
+    pub degraded_count_in_window: usize,
     pub degraded: bool,
     pub last_reason: Option<String>,
     pub last_updated_unix_secs: Option<u64>,
@@ -51,7 +49,7 @@ impl Default for SyncGuardStatus {
             running: false,
             state: "stopped".to_string(),
             consecutive_suspects: 0,
-            restart_count_in_window: 0,
+            degraded_count_in_window: 0,
             degraded: false,
             last_reason: None,
             last_updated_unix_secs: None,
@@ -175,61 +173,12 @@ fn sample_reason(sample: &LocalSyncSample) -> String {
     )
 }
 
-fn capture_pending_extrinsics() -> Vec<String> {
-    let Ok(value) = rpc_post_local("author_pendingExtrinsics", Value::Array(vec![])) else {
-        return Vec::new();
-    };
-    filter_pending_extrinsics(&value)
-}
-
-fn filter_pending_extrinsics(value: &Value) -> Vec<String> {
-    let Some(items) = value.as_array() else {
-        return Vec::new();
-    };
-
-    let mut total_bytes = 0usize;
-    let mut extrinsics = Vec::new();
-    for item in items.iter().take(MAX_PENDING_EXTRINSICS) {
-        let Some(raw) = item.as_str() else {
-            continue;
-        };
-        if !raw.starts_with("0x") {
-            continue;
-        }
-        let bytes = raw.len();
-        if total_bytes.saturating_add(bytes) > MAX_PENDING_EXTRINSICS_BYTES {
+fn prune_degraded_window(events: &mut VecDeque<Instant>, now: Instant) {
+    while let Some(front) = events.front() {
+        if now.duration_since(*front) <= DEGRADED_AUDIT_WINDOW {
             break;
         }
-        total_bytes = total_bytes.saturating_add(bytes);
-        extrinsics.push(raw.to_string());
-    }
-    extrinsics
-}
-
-fn resubmit_pending_extrinsics(extrinsics: &[String]) -> (usize, usize) {
-    let mut submitted = 0usize;
-    let mut failed = 0usize;
-    for extrinsic in extrinsics {
-        match rpc_post_local(
-            "author_submitExtrinsic",
-            Value::Array(vec![Value::String(extrinsic.clone())]),
-        ) {
-            Ok(_) => submitted = submitted.saturating_add(1),
-            Err(err) => {
-                failed = failed.saturating_add(1);
-                eprintln!("[sync_guard] 重提交 pending extrinsic 失败: {err}");
-            }
-        }
-    }
-    (submitted, failed)
-}
-
-fn prune_restart_window(restarts: &mut VecDeque<Instant>, now: Instant) {
-    while let Some(front) = restarts.front() {
-        if now.duration_since(*front) <= RESTART_WINDOW {
-            break;
-        }
-        restarts.pop_front();
+        events.pop_front();
     }
 }
 
@@ -242,7 +191,7 @@ fn append_guard_audit(app: &AppHandle, status: &str) {
 fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
     let mut first_running_seen: Option<Instant> = None;
     let mut consecutive_suspects = 0u32;
-    let mut restart_times: VecDeque<Instant> = VecDeque::new();
+    let mut degraded_times: VecDeque<Instant> = VecDeque::new();
     let mut degraded = false;
 
     loop {
@@ -267,7 +216,7 @@ fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
                 status.state = "waiting_node".to_string();
                 status.consecutive_suspects = 0;
                 status.degraded = false;
-                status.restart_count_in_window = restart_times.len();
+                status.degraded_count_in_window = degraded_times.len();
                 status.last_reason = Some("node is not running".to_string());
             });
             continue;
@@ -280,17 +229,14 @@ fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
                 status.state = "warming_up".to_string();
                 status.consecutive_suspects = 0;
                 status.degraded = degraded;
-                status.restart_count_in_window = restart_times.len();
+                status.degraded_count_in_window = degraded_times.len();
                 status.last_reason = Some("node startup grace window".to_string());
             });
             continue;
         }
 
         let now = Instant::now();
-        prune_restart_window(&mut restart_times, now);
-        if degraded && restart_times.len() < MAX_RESTARTS_IN_WINDOW {
-            degraded = false;
-        }
+        prune_degraded_window(&mut degraded_times, now);
 
         let sample = match sample_local_sync() {
             Ok(sample) => sample,
@@ -301,7 +247,7 @@ fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
                     status.state = "sample_failed".to_string();
                     status.consecutive_suspects = 0;
                     status.degraded = degraded;
-                    status.restart_count_in_window = restart_times.len();
+                    status.degraded_count_in_window = degraded_times.len();
                     status.last_reason = Some(err);
                 });
                 continue;
@@ -311,12 +257,13 @@ fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
         let reason = sample_reason(&sample);
         if !is_sync_network_detached(&sample) {
             consecutive_suspects = 0;
+            degraded = false;
             update_status(|status| {
                 status.running = true;
                 status.state = "healthy".to_string();
                 status.consecutive_suspects = 0;
                 status.degraded = degraded;
-                status.restart_count_in_window = restart_times.len();
+                status.degraded_count_in_window = degraded_times.len();
                 status.last_reason = Some(reason.clone());
             });
             continue;
@@ -328,7 +275,7 @@ fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
             status.state = "suspect".to_string();
             status.consecutive_suspects = consecutive_suspects;
             status.degraded = degraded;
-            status.restart_count_in_window = restart_times.len();
+            status.degraded_count_in_window = degraded_times.len();
             status.last_reason = Some(reason.clone());
         });
 
@@ -336,69 +283,21 @@ fn guard_loop(app: AppHandle, stop_rx: mpsc::Receiver<()>) {
             continue;
         }
 
-        if restart_times.len() >= MAX_RESTARTS_IN_WINDOW {
-            if !degraded {
-                append_guard_audit(&app, "degraded");
-            }
-            degraded = true;
-            update_status(|status| {
-                status.running = true;
-                status.state = "degraded".to_string();
-                status.consecutive_suspects = consecutive_suspects;
-                status.restart_count_in_window = restart_times.len();
-                status.degraded = true;
-                status.last_reason = Some("restart limit reached".to_string());
-            });
-            continue;
+        if !degraded {
+            append_guard_audit(&app, "degraded");
+            degraded_times.push_back(now);
         }
-
-        append_guard_audit(&app, "restart_attempt");
+        degraded = true;
         update_status(|status| {
             status.running = true;
-            status.state = "restarting".to_string();
+            status.state = "degraded".to_string();
             status.consecutive_suspects = consecutive_suspects;
-            status.restart_count_in_window = restart_times.len();
-            status.degraded = false;
-            status.last_reason = Some(reason.clone());
+            status.degraded_count_in_window = degraded_times.len();
+            status.degraded = true;
+            status.last_reason = Some(format!(
+                "{reason}; auto restart disabled to avoid RocksDB lock reuse"
+            ));
         });
-
-        // 中文注释：重启会清掉节点内存交易池，先抓取本机 pending extrinsics；
-        // 重启后再按限额重提，已入块或已过期的交易失败只记日志，不阻断节点恢复。
-        let pending = capture_pending_extrinsics();
-        match process::restart_node_for_sync_guard(app.clone()) {
-            Ok(_) => {
-                let (submitted, failed) = resubmit_pending_extrinsics(&pending);
-                restart_times.push_back(now);
-                consecutive_suspects = 0;
-                first_running_seen = Some(Instant::now());
-                append_guard_audit(&app, "restart_success");
-                update_status(|status| {
-                    status.running = true;
-                    status.state = "restarted".to_string();
-                    status.consecutive_suspects = 0;
-                    status.restart_count_in_window = restart_times.len();
-                    status.degraded = false;
-                    status.last_reason = Some(format!(
-                        "pending={}, resubmitted={}, failed={}",
-                        pending.len(),
-                        submitted,
-                        failed
-                    ));
-                });
-            }
-            Err(err) => {
-                restart_times.push_back(now);
-                append_guard_audit(&app, "restart_failed");
-                update_status(|status| {
-                    status.running = true;
-                    status.state = "restart_failed".to_string();
-                    status.consecutive_suspects = consecutive_suspects;
-                    status.restart_count_in_window = restart_times.len();
-                    status.degraded = false;
-                    status.last_reason = Some(err);
-                });
-            }
-        }
     }
 }
 
@@ -472,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn does_not_restart_when_raw_network_is_disconnected() {
+    fn does_not_degrade_when_raw_network_is_disconnected() {
         let sample = LocalSyncSample {
             raw_connected_peers: 0,
             raw_identified_peers: 0,
@@ -482,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn does_not_restart_when_sync_peers_exist() {
+    fn does_not_degrade_when_sync_peers_exist() {
         let sample = LocalSyncSample {
             health_peers: 1,
             system_peers: 1,
@@ -492,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn does_not_restart_while_major_syncing() {
+    fn does_not_degrade_while_major_syncing() {
         let sample = LocalSyncSample {
             is_syncing: true,
             ..suspect_sample()
@@ -501,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn does_not_restart_without_identified_raw_peer() {
+    fn does_not_degrade_without_identified_raw_peer() {
         let sample = LocalSyncSample {
             raw_identified_peers: 0,
             ..suspect_sample()
@@ -510,22 +409,13 @@ mod tests {
     }
 
     #[test]
-    fn pending_extrinsics_filter_keeps_hex_items_with_limits() {
-        let value = serde_json::json!(["0x1234", "bad", 123, "0xabcd"]);
-        assert_eq!(
-            filter_pending_extrinsics(&value),
-            vec!["0x1234".to_string(), "0xabcd".to_string()]
-        );
-    }
-
-    #[test]
-    fn restart_window_prunes_old_entries() {
+    fn degraded_window_prunes_old_entries() {
         let now = Instant::now();
-        let mut restarts = VecDeque::from([
-            now - RESTART_WINDOW - Duration::from_secs(1),
+        let mut events = VecDeque::from([
+            now - DEGRADED_AUDIT_WINDOW - Duration::from_secs(1),
             now - Duration::from_secs(1),
         ]);
-        prune_restart_window(&mut restarts, now);
-        assert_eq!(restarts.len(), 1);
+        prune_degraded_window(&mut events, now);
+        assert_eq!(events.len(), 1);
     }
 }
