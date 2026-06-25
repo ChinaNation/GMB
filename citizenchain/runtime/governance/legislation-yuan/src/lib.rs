@@ -751,6 +751,60 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 最终写入层复校验:回调载荷来自投票引擎,这里在任何 storage 写入前再次校验
+        /// 宪法唯一性、不可废止、不可修改条款与 Pending 单飞规则,防未来内部入口绕过 `propose_*`。
+        fn ensure_write_law_version_allowed(
+            summary: &LawProposalSummary<T>,
+            chapters: &ChaptersOf<T>,
+        ) -> DispatchResult {
+            match summary.action {
+                LawAction::Enact => {
+                    ensure!(
+                        summary.tier != Tier::Constitution,
+                        Error::<T>::CannotEnactConstitution
+                    );
+                    ensure!(!summary.title.is_empty(), Error::<T>::EmptyTitle);
+                    ensure!(!chapters.is_empty(), Error::<T>::EmptyChapters);
+                    ensure!(!summary.houses.is_empty(), Error::<T>::EmptyHouses);
+                    Self::ensure_tier_vote_type(summary.tier, summary.vote_type)?;
+                }
+                LawAction::Amend => {
+                    ensure!(!summary.title.is_empty(), Error::<T>::EmptyTitle);
+                    ensure!(!chapters.is_empty(), Error::<T>::EmptyChapters);
+                    let law = Laws::<T>::get(summary.law_id).ok_or(Error::<T>::LawNotFound)?;
+                    ensure!(
+                        law.status != LawStatus::Repealed,
+                        Error::<T>::LawAlreadyRepealed
+                    );
+                    ensure!(
+                        law.status != LawStatus::Pending,
+                        Error::<T>::AmendmentAlreadyPending
+                    );
+                    Self::ensure_tier_vote_type(law.tier, summary.vote_type)?;
+                    if law.tier == Tier::Constitution {
+                        Self::ensure_immutable_preserved(
+                            summary.law_id,
+                            law.current_version,
+                            chapters,
+                        )?;
+                    }
+                }
+                LawAction::Repeal => {
+                    let law = Laws::<T>::get(summary.law_id).ok_or(Error::<T>::LawNotFound)?;
+                    ensure!(
+                        law.status != LawStatus::Repealed,
+                        Error::<T>::LawAlreadyRepealed
+                    );
+                    ensure!(
+                        law.tier != Tier::Constitution,
+                        Error::<T>::CannotRepealConstitution
+                    );
+                    Self::ensure_tier_vote_type(law.tier, summary.vote_type)?;
+                }
+            }
+            Ok(())
+        }
+
         /// 投票通过/否决回调的内部写入逻辑(由 legislation-vote 投票终态经核心回调触发)。
         pub fn apply_legislation_vote_result(
             proposal_id: u64,
@@ -797,6 +851,7 @@ pub mod pallet {
             chapters: ChaptersOf<T>,
             now: BlockNumberFor<T>,
         ) -> DispatchResult {
+            Self::ensure_write_law_version_allowed(&summary, &chapters)?;
             match summary.action {
                 LawAction::Enact => {
                     let law_id = NextLawId::<T>::mutate(|n| {

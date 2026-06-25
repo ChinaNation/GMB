@@ -10,7 +10,7 @@
 
 ### 痛点
 
-- 公民宪法目前是 `citizenchain/runtime/primitives/src/CitizenConstitution.html`(约 933KB),通过 `include_str!` 编进 WASM,只能由 runtime API `citizen_constitution_html()` 只读读取。改一个字 = 重新编译 WASM + setCode 升级,负担极重。
+- 迁移前,公民宪法是 `citizenchain/runtime/primitives/src/CitizenConstitution.html`(约 933KB),通过 `include_str!` 编进 WASM,只能由 runtime API `citizen_constitution_html()` 只读读取。改一个字 = 重新编译 WASM + setCode 升级,负担极重;当前目标态已迁为 `legislation-yuan` 链上法律 + 节点 RAW 读。
 - 除宪法外还有大量普通法律(如「市长选举法」),不可能逐条写进 runtime 代码。
 - 需求:法律以结构化数据上链,可按宪法流程修改,公民在 CitizenApp 上可查看、可投票修改。
 
@@ -185,8 +185,8 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
   改这 8 条的唯一路径 = 改创世(新创世哈希=新链)+ 改节点二进制(硬分叉),即「只能重新创世」。
 
 威胁覆盖:普通 amend→L1 拒;setCode 删 L1 / migration 直写存储 / 改清单常量 / 改 `current_version` 指向篡改版本 /
-改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`detect_violation` 自身执行/取数出错时放行内层(决定论下内层一致处理),
-只在**确认篡改**时拒块,避免守卫 bug 误停全链。**待用户多节点真机 QA**:构造恶意改第一条的块,验证全网 orphan。
+改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`detect_violation` 自身执行/取数出错时也 fail-closed 拒块,
+不保留未经校验的导入路径。**待用户多节点真机 QA**:构造恶意改第一条的块,验证全网 orphan。
 
 #### 6.2 加固五项(2026-06-24,卡 `20260624-constitution-immutable-guard`,review 发现的绕过面)
 
@@ -202,12 +202,12 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
   (Pending 回退前一版),`source="legislation-raw"`。
 - **H4 禁止新立第二部宪法**(堵"立法入口造第二部宪法"):`propose_enact_law` 拒 `tier==Constitution`(`CannotEnactConstitution`),宪法只能创世存在。
 - **二次 review 修正三项(P2/P2-P3/P3)**:
-  - **P2 fail-closed**:`detect_violation` 自身失败(无法读父状态/执行/取变更)→ 改为 `KnownBad` 拒块(原 fail-open 放行改为安全优先);
+  - **P2 fail-closed**:`detect_violation` 自身失败(无法读父状态/执行/取变更)→ 改为 `KnownBad` 拒块(由旧放行口径改为安全优先);
     宪法读/解码/比对本就 fail-closed。
   - **P2/P3 setCode 强制全检**:快路径放行条件加"且未升级 runtime"——delta 含 `:code` 即强制走全量不变式校验。
   - **P3 至多一个待生效修订**:`propose_amend_law` 拒 `status==Pending`(`AmendmentAlreadyPending`),使 `current_version-1=现行生效版`
     恒成立、激活不被新版本顶掉(原"连续多个待生效修订"会让 `effective_version` 推断错 + 激活 stranding)。
-- 验收:node 17 单测 + legislation-yuan 19 单测(含禁宪法/判别值/拒重叠 Pending)+ no_std + fmt 全过。
+- 验收:node 21 单测 + legislation-yuan 23 单测(含禁宪法/判别值/拒重叠 Pending/写入层复校验/warp 预校验纯函数)+ no_std + fmt 全过。
   **待 QA**:H2 warp 多节点真机(提交前抽取 `ImportedState` 的实测,实现风险最高项)+ 双执行 PoW 性能。
 
 ### 7. 宪法迁移(并入本模块)—— 已完成(2026-06-24,卡 `20260624-constitution-migration.md`)
@@ -215,7 +215,7 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 - 宪法纳入本模块,作为 `tier = 宪法` 的最高层级法律,实现「宪法可按条修改(走特别案/重要案)」。
 - 已落地:933KB HTML 经一次性解析器(`citizenchain/scripts/parse_constitution.py`,直出 SCALE)迁成结构化 `章>节>条>款 + 中英双语`,产物 `legislation-yuan/src/constitution.scale`(219KB,7章/28节/140条/129款),创世注入为 `law_id=0 tier=宪法 version=1 status=Effective`。
 - 唯一真源 = 链上立法院模块。`CitizenConstitution.html` 的 `include_str!`、`citizen_constitution_html()`/`CitizenConstitutionApi` 与 HTML 文件本身已按禁止兼容硬规则全删(代码零残留)。
-- 节点桌面端「公民宪法」tab **保持原样式**:`constitution_getDocument` RPC 改读 `LegislationApi`(`law(0)`→当前版本→`law_version`),`node/src/core/constitution.rs` 据链上结构化法律 + 抽出的原 CSS 外壳(单文件 `constitution_shell.html`,含 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 两占位标记,渲染时替换)重建完整 HTML,前端 iframe 零改动 → 样式与迁移前逐字一致。节点端宪法能力(渲染 + 下述守卫)统一收口此单文件。
+- 节点桌面端「公民宪法」tab **保持原样式**:`constitution_getDocument` RPC 直接 RAW 读 `LegislationYuan::Laws[0]` 与当前生效版 `LawVersions[0][v]`(不走可升级 runtime API),`node/src/core/constitution.rs` 据链上结构化法律 + 抽出的原 CSS 外壳(单文件 `constitution_shell.html`,含 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 两占位标记,渲染时替换)重建完整 HTML,前端 iframe 零改动 → 样式与迁移前逐字一致。节点端宪法能力(渲染 + 下述守卫)统一收口此单文件。
 
 ### 8. 上链时机
 

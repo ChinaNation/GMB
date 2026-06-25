@@ -221,13 +221,38 @@ fn propose_enact_empty_title_and_articles_rejected() {
 
 // 预置一部宪法(article 1 与 17 固定),供修法/废法校验测试。
 fn seed_constitution() {
-    let summary = enact_summary(Tier::Constitution, 0, VoteType::Special, b"constitution");
-    assert_ok!(Lib::write_law_version(
-        1,
-        summary,
-        chapters_of(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]),
-        1,
-    ));
+    let law_id = 0u64;
+    let version = 1u32;
+    let chapters = chapters_of(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]);
+    LawVersions::<Test>::insert(
+        law_id,
+        version,
+        LawVersion::<Test> {
+            law_id,
+            version,
+            title: title(b"constitution"),
+            title_en: None,
+            chapters,
+            content_hash: [0u8; 32],
+            vote_type: VoteType::Special,
+            proposal_id: 1,
+            published_at: 1,
+            effective_at: 1,
+        },
+    );
+    Laws::<Test>::insert(
+        law_id,
+        Law::<Test> {
+            law_id,
+            tier: Tier::Constitution,
+            scope_code: 0,
+            houses: houses(),
+            current_version: version,
+            status: LawStatus::Effective,
+        },
+    );
+    let _ = LawsByScope::<Test>::try_mutate(Tier::Constitution, 0, |v| v.try_push(law_id));
+    NextLawId::<Test>::put(1);
 }
 
 #[test]
@@ -270,6 +295,74 @@ fn rejects_amend_while_pending() {
             ),
             Error::<Test>::AmendmentAlreadyPending
         );
+    });
+}
+
+#[test]
+fn write_rejects_enact_constitution_directly() {
+    // 最终写入层也拒绝新立第二部宪法,不能只依赖 propose_enact_law 入口。
+    new_test_ext().execute_with(|| {
+        let summary = enact_summary(Tier::Constitution, 0, VoteType::Special, b"constitution");
+        assert_noop!(
+            Lib::write_law_version(9, summary, one_chapter(), 1),
+            Error::<Test>::CannotEnactConstitution
+        );
+        assert_eq!(NextLawId::<Test>::get(), 0, "拒绝前不得消耗 law_id");
+    });
+}
+
+#[test]
+fn write_rejects_amend_constitution_immutable_article_directly() {
+    // forged/异常回调直接写入 Amend 时,仍必须执行不可修改条款复校验。
+    new_test_ext().execute_with(|| {
+        seed_constitution();
+        let mut summary =
+            enact_summary(Tier::Constitution, 0, VoteType::Special, b"constitution-v2");
+        summary.action = LawAction::Amend;
+        summary.law_id = 0;
+        assert_noop!(
+            Lib::write_law_version(
+                10,
+                summary,
+                chapters_of(vec![article(1, b"CHANGED"), article(17, b"yuan-17")]),
+                1,
+            ),
+            Error::<Test>::ImmutableArticleViolation
+        );
+    });
+}
+
+#[test]
+fn write_rejects_amend_while_pending_directly() {
+    // Pending 单飞规则在写入层复查,防多个待生效版本破坏 current_version-1 推导。
+    new_test_ext().execute_with(|| {
+        let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Important, b"law");
+        summary.effective_at = 100;
+        assert_ok!(Lib::write_law_version(7, summary, one_chapter(), 1));
+
+        let mut amend = enact_summary(Tier::Municipal, 1001, VoteType::Important, b"law-v2");
+        amend.action = LawAction::Amend;
+        amend.law_id = 0;
+        assert_noop!(
+            Lib::write_law_version(8, amend, one_chapter(), 1),
+            Error::<Test>::AmendmentAlreadyPending
+        );
+    });
+}
+
+#[test]
+fn write_rejects_repeal_constitution_directly() {
+    // 最终写入层也拒绝废止宪法,不能只依赖 propose_repeal_law 入口。
+    new_test_ext().execute_with(|| {
+        seed_constitution();
+        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Special, b"");
+        summary.action = LawAction::Repeal;
+        summary.law_id = 0;
+        assert_noop!(
+            Lib::write_law_version(11, summary, ChaptersOf::<Test>::default(), 1),
+            Error::<Test>::CannotRepealConstitution
+        );
+        assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Effective);
     });
 }
 

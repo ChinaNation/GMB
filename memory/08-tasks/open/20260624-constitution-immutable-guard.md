@@ -31,11 +31,11 @@
   `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 渲染时 `replace`);`rpc.rs` 改引 `crate::core::constitution`;旧渲染文件删,零残留。
 - `ConstitutionGuard::new` 装配时从 block#0 状态 RAW 派生不可修改条款基准(条号→规范 SCALE 字节)。
 - `detect_violation`:对携带 body 的非状态同步块,用 runtime API 在**父状态**只读执行(`execute_block(block.into())`,
-  LazyBlock)取 `into_storage_changes`;仅当变更触及立法院模块前缀(`twox128("LegislationYuan")`)才走慢路径;
+  LazyBlock)取 `into_storage_changes`;当变更触及立法院模块前缀(`twox128("LegislationYuan")`)或 `:code` runtime 升级时走慢路径;
   据「变更 ∪ 父状态」RAW 重建 `Laws[0]`→`current_version`→`LawVersions[0][v]`→比对基准;命中违规返回 `true`。
 - key 推导硬编码 `Blake2_128Concat`(`Laws: u64`、`LawVersions: u64+u32`),**不读链上 metadata**。
 - `import_block`:`Ok(true)`→`ImportResult::KnownBad`(内层不调用,块不入库不成最佳);`Ok(false)`→委派内层正常导入
-  (只读执行不改提交路径);`Err`(守卫自身执行/取数失败)→放行内层(决定论下内层一致处理,避免守卫 bug 误停全链)。
+  (只读执行不改提交路径);`Err`(守卫自身执行/取数失败)→fail-closed 拒块。
 - `service.rs` 两处装配:`new_partial` 网络导入队列 + `new_full` 本地挖矿 worker —— 诚实节点既不接受也不产出违规块。
 
 ## 威胁覆盖
@@ -65,11 +65,12 @@
 
 - **H1**(node `core/constitution.rs`):`check_immutable_articles` 补 `Laws[0]` 元数据(`tier==Constitution`/`scope==0`/`status!=Repealed`/`houses==创世`)+ `LawsByScope[宪法][0]==[0]` 唯一性;`MLawHead` 补解 `status`;判别常量 `TIER_CONSTITUTION=0`/`LAW_STATUS_{PENDING=0,REPEALED=2}`,由 legislation-yuan `enum_discriminants_match_node_guard` 钉死。**status 不钉 Effective**(放行修宪 Pending 窗口)。
 - **H2**(二次 review 修正 P1):`import_block` 对 `with_state()`(warp)块改为**提交前** `verify_imported_state` —— 从 `params.state_action` 的 `ImportedState` 抽立法院前缀键、调 inner **之前**校验,违规/无法抽取 `KnownBad`(不落库)。原"内层导入后校验"无效:vendored GRANDPA `import.rs:500` 在 inner 内即 `block.finalized=true` 落库,post-import 拒块不能回滚 finalized 态。
-- **二次 review 又修三项**:P2 `detect_violation` 自身失败改 **fail-closed**(`KnownBad`,原放行内层);P2/P3 快路径加"delta 含 `:code`(runtime 升级)即强制全检";P3 runtime `propose_amend_law` 拒 `status==Pending`(`AmendmentAlreadyPending`),保证至多一个待生效版本→`current_version-1` 推断生效版恒正确 + 激活不 stranding。
-- **H3**:`rpc.rs::constitution_getDocument` 改 `StorageProvider` RAW 读(不走 runtime API,删 `LegislationApi` bound)+ `effective_version_of_law`(Pending 回退前一版),`source="legislation-raw"`。删死函数 `current_version_of_law`。
+- **二次 review 又修三项**:P2 `detect_violation` 自身失败改 **fail-closed**(`KnownBad`,由旧放行口径改为拒块);P2/P3 快路径加"delta 含 `:code`(runtime 升级)即强制全检";P3 runtime `propose_amend_law` 拒 `status==Pending`(`AmendmentAlreadyPending`),保证至多一个待生效版本→`current_version-1` 推断生效版恒正确 + 激活不 stranding。
+- **H3**:`rpc.rs::constitution_getDocument` 改 `StorageProvider` RAW 读(不走 runtime API,删 `LegislationApi` bound)+ `effective_version_of_law`(Pending 回退前一版),`source="legislation-raw"`。旧的只读当前版本 helper 已删除。
 - **H4**(runtime `legislation-yuan`):`propose_enact_law` 拒 `tier==Constitution`(新 `Error::CannotEnactConstitution`)。
-- **fail-open**:保留(决定论兜底),文档化;宪法读/解码/比对本就 fail-closed。
-- 验收:node 17 + legislation-yuan 18 单测全过 + no_std + fmt。待 QA:H2 warp 多节点(实现风险最高)。
+- **H5**(最终复查修正):`write_law_version` 最终写入层补 commit-time 复校验,直接写入也会拒绝新立宪法、废宪法、Pending 重叠修法和不可修改条款变动。
+- **fail-closed**:普通块守卫自身失败、warp 状态无法提交前抽取、宪法读/解码/比对失败均拒块/拒导入;不保留旧放行兼容口径。
+- 验收:node 21 + legislation-yuan 23 单测全过 + no_std + fmt。待 QA:H2 warp 多节点真机 + 双执行 PoW 性能。
 
 ## 不做(边界)
 

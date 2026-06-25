@@ -20,7 +20,7 @@
 - 将前端展示项抽象为结构化数据，避免在前端硬编码多个来源。
 - 白皮书正文只允许来自仓库根目录 `docs/《白皮书》.md`。
 - 公民宪法正文唯一真源 = 链上立法院模块（`legislation-yuan`，`law_id=0`、`tier=宪法`，
-  ADR-027）；节点通过 `LegislationApi` 读取当前生效版本的结构化法律（章>节>条>款 + 中英双语），
+  ADR-027）；节点通过 RAW storage 读取当前生效版本的结构化法律（章>节>条>款 + 中英双语），
   在 `node/src/core/constitution.rs` 据原 CSS 外壳重建 HTML；修改宪法走立法投票上链，不再发 runtime 升级改 HTML。
   （`core/constitution.rs` 统一承载节点端宪法两件事:渲染 + 不可修改条款 L2 共识守卫,见 ADR-027 §6.1。）
 

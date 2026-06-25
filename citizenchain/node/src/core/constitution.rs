@@ -18,7 +18,8 @@ use codec::{Decode, Encode};
 use sc_client_api::backend::{Backend as _, TrieCacheContext};
 use sc_client_api::StorageProvider;
 use sc_consensus::{
-    BlockCheckParams, BlockImport, BlockImportParams, ImportResult, StateAction, StorageChanges,
+    BlockCheckParams, BlockImport, BlockImportParams, ImportResult, ImportedState, StateAction,
+    StorageChanges,
 };
 use sp_api::{ApiExt, Core, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
@@ -467,6 +468,47 @@ where
     Ok(())
 }
 
+/// 是否必须跑完整宪法不变式校验。普通块只要触及立法院存储或 `:code` runtime 升级,
+/// 就不能走快路径;其余块按归纳假设跳过。
+fn needs_full_invariant_check(delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>) -> bool {
+    let prefix = storage_key::pallet_prefix();
+    delta.keys().any(|k| k.starts_with(&prefix))
+        || delta.contains_key(sp_storage::well_known_keys::CODE)
+}
+
+/// 从 warp/状态导入的完整下载态中抽出立法院模块键,在提交前执行同一套宪法不变式校验。
+fn check_imported_state_key_values<'a, I>(
+    pairs: I,
+    reference: &ImmutableReference,
+) -> Result<(), String>
+where
+    I: IntoIterator<Item = &'a (Vec<u8>, Vec<u8>)>,
+{
+    let prefix = storage_key::pallet_prefix();
+    let mut map: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+    for (key, value) in pairs {
+        if key.starts_with(&prefix) {
+            map.insert(key.clone(), value.clone());
+        }
+    }
+    check_immutable_articles(|key| map.get(key).cloned(), reference).map_err(|e| format!("{e:?}"))
+}
+
+/// 从 warp/状态导入的完整下载态中抽出立法院模块键,在提交前执行同一套宪法不变式校验。
+fn check_imported_state_immutable(
+    imported: &ImportedState<Block>,
+    reference: &ImmutableReference,
+) -> Result<(), String> {
+    check_imported_state_key_values(
+        imported
+            .state
+            .0
+            .iter()
+            .flat_map(|level| level.key_values.iter()),
+        reference,
+    )
+}
+
 /// 区块导入守卫:包住内层 `BlockImport`(PoW),在区块进入规范链之前校验不可修改条款。
 ///
 /// 判定路径:对携带 body 的普通区块,先用 runtime API 在**父状态**上只读执行该区块得到后置存储变更,
@@ -526,22 +568,11 @@ impl<I> ConstitutionGuard<I> {
             // warp 状态形态非预期 → 无法 pre-commit 校验、post-commit 又不可回滚 → 拒绝。
             _ => return Err("warp 状态非 ApplyChanges(Import) 形态,拒绝(无法提交前校验)".into()),
         };
-        // 只挑立法院模块前缀键(宪法相关全在此),避免拷贝整份 warp 全态。
-        let prefix = storage_key::pallet_prefix();
-        let mut map: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        for level in &imported.state.0 {
-            for (key, value) in &level.key_values {
-                if key.starts_with(&prefix) {
-                    map.insert(key.clone(), value.clone());
-                }
-            }
-        }
-        check_immutable_articles(|key| map.get(key).cloned(), &self.reference)
-            .map_err(|e| format!("{e:?}"))
+        check_imported_state_immutable(imported, &self.reference)
     }
 
     /// 计算普通(执行型)区块后置状态是否违反宪法不变式。warp/状态导入块不走此路径(见 `import_block`)。
-    /// `Ok(true)` = 确认违规(拒块);`Ok(false)` = 合规;`Err` = 无法判定(放行内层,见模块注释)。
+    /// `Ok(true)` = 确认违规(拒块);`Ok(false)` = 合规;`Err` = 无法判定(`import_block` fail-closed 拒块)。
     fn detect_violation(&self, params: &BlockImportParams<Block>) -> Result<bool, String> {
         let body = match &params.body {
             Some(b) => b.clone(),
@@ -565,12 +596,9 @@ impl<I> ConstitutionGuard<I> {
 
         // 快路径:本块既未动立法院模块存储、也未升级 runtime(`:code`)→ 归纳不可修改条款不变,合规。
         // runtime 升级(setCode)是高危块:即便 delta 未触立法院前缀也强制走全量不变式校验(P2/P3)。
-        let prefix = storage_key::pallet_prefix();
         let delta: BTreeMap<Vec<u8>, Option<Vec<u8>>> =
             changes.main_storage_changes.into_iter().collect();
-        let touched_legislation = delta.keys().any(|k| k.starts_with(&prefix));
-        let runtime_upgraded = delta.contains_key(sp_storage::well_known_keys::CODE);
-        if !touched_legislation && !runtime_upgraded {
+        if !needs_full_invariant_check(&delta) {
             return Ok(false);
         }
 
@@ -782,6 +810,59 @@ mod tests {
         );
         assert!(storage_key::law(0).starts_with(&storage_key::pallet_prefix()));
         assert!(storage_key::law_version(0, 1).starts_with(&storage_key::pallet_prefix()));
+    }
+
+    #[test]
+    fn full_check_required_for_legislation_or_runtime_code_delta() {
+        let mut delta = BTreeMap::new();
+        delta.insert(b"OtherPalletKey".to_vec(), Some(vec![1]));
+        assert!(!needs_full_invariant_check(&delta));
+
+        let mut legislation_key = storage_key::pallet_prefix().to_vec();
+        legislation_key.extend_from_slice(b"SomeStorage");
+        delta.insert(legislation_key, Some(vec![2]));
+        assert!(needs_full_invariant_check(&delta));
+
+        let mut runtime_delta = BTreeMap::new();
+        runtime_delta.insert(sp_storage::well_known_keys::CODE.to_vec(), Some(vec![3]));
+        assert!(needs_full_invariant_check(&runtime_delta));
+    }
+
+    #[test]
+    fn imported_state_precheck_passes_valid_state() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let entries = valid_current_state(2, amended_articles(immutable_intact));
+        assert_eq!(
+            check_imported_state_key_values(entries.iter(), &reference),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn imported_state_precheck_rejects_mutated_immutable_article() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let articles = amended_articles(|n| {
+            if n == 1 {
+                "第一条被 warp 态篡改".to_string()
+            } else {
+                immutable_intact(n)
+            }
+        });
+        let entries = valid_current_state(2, articles);
+        assert_eq!(
+            check_imported_state_key_values(entries.iter(), &reference),
+            Err("ImmutableArticleMutated(1)".to_string())
+        );
+    }
+
+    #[test]
+    fn imported_state_precheck_rejects_missing_constitution_keys() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let entries: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+        assert_eq!(
+            check_imported_state_key_values(entries.iter(), &reference),
+            Err("ConstitutionLawMissing".to_string())
+        );
     }
 
     #[test]

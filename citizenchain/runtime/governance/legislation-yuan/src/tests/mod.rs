@@ -290,7 +290,9 @@ pub fn enact_summary(
     }
 }
 
-pub use crate::pallet::{LawVersions, Laws, NextLawId, PendingActivation};
+pub use crate::pallet::{
+    Law, LawVersion, LawVersions, Laws, LawsByScope, NextLawId, PendingActivation,
+};
 pub type Lib = crate::pallet::Pallet<Test>;
 
 mod cases;

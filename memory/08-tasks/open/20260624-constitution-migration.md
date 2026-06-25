@@ -49,10 +49,10 @@ Clause(款): number, text, text_en                           // 可空
 - #[pallet::genesis_config] + genesis_build:law_id=0,tier=宪法,houses=[国家立法院],status=Effective,从 include_bytes 解码写 Laws/LawVersions/LawsByScope。
 - configs 配 GenesisConfig;node chain_spec 纳入 → 重新创世。
 
-## Phase 4 — runtime API + 节点公民宪法 tab(re-point,现样式)
+## Phase 4 — 节点公民宪法 tab(re-point,现样式)
 
-- LegislationApi.law_version 透传嵌套结构。
-- node/src/core/rpc.rs(constitution_getDocument)+ other_tabs + frontend RuntimeConstitutionViewer 改读 LegislationApi tier=宪法 法律,章>节>条 下拉 + 条款中英,样式同现状。
+- legislation-yuan 保留法律查询能力;公民宪法展示最终收口为节点 `constitution_getDocument` RAW 读 `Laws[0]` 与当前生效版 `LawVersions[0][v]`,不走可升级 runtime API。
+- node/src/core/rpc.rs(constitution_getDocument)+ other_tabs + frontend RuntimeConstitutionViewer 展示 `tier=宪法` 的链上法律,章>节>条 + 条款中英,样式同现状。
 
 ## Phase 5 — 清理(禁止兼容 + tools 铁律)
 
@@ -82,8 +82,8 @@ Clause(款): number, text, text_en                           // 可空
 - [x] **Phase 3 创世注入(2026-06-24 完成)**:legislation-yuan `#[pallet::genesis_config]`(constitution_houses,默认 [国家立法院]=china_lf CHINA_LF[0] + NLG 码)+ `genesis_build`(从 CONSTITUTION_SCALE 解码,写 law_id=0 tier=宪法 status=Effective version=1 title=公民宪法/Citizen Constitution);runtime 自动纳入 RuntimeGenesisConfig(default 即注入)。验证:`genesis_seeds_constitution_as_law_zero` 创世后宪法=law_id=0 tier=宪法 7章140条 houses=[国家立法院];legislation-yuan 16测 + runtime cargo check(std+no_std)全绿。
 - [x] **Phase 4 节点 tab re-point(2026-06-24 完成,现样式)**:节点据链上结构化宪法重建 HTML,复用原 CSS 外壳,前端 iframe **零改动**,样式与迁移前一致。
   - 抽原 HTML 表现外壳为节点资源:`node/src/other/other_tabs/constitution_shell.html`(1-521 行:head/style/封面/目录标题,止于 `<div class="toc-list">`,624KB 主要为封面国徽 base64)+ `constitution_shell_suffix.html`(`</main>`+置顶脚本+`</body></html>`)。
-  - 新建 `node/src/other/other_tabs/constitution_render.rs`:`MLawHead`/`MLawVersionHead`/`MChapter/Section/Article/Clause` 镜像(字段序与链端逐字段核对一致,SCALE 顺序解码到 chapters/current_version 即停,尾部字段不镜像);`current_version_of_law` 解当前版本号;`render_constitution_html` 据 章>节>条>款 重建 TOC(`toc-item toc-level-{1,2,3}` + 锚点 `#chapter-N/#chapter-N-section-M/#article-K`)+ 正文(`chapter-block/section-block/article-block` + `cn/en heading/body` 类,与原标记逐字一致)+ HTML 转义。
-  - `node/src/core/rpc.rs`:API bound `CitizenConstitutionApi`→`LegislationApi`;`constitution_getDocument` 改为 `law(0)`→解 `current_version`→`law_version(0, v)`→重建 HTML→按内容算 blake2_256,`source` 改 `"legislation"`(读最新生效版,修宪后自动跟随)。
+  - 新建 `node/src/other/other_tabs/constitution_render.rs`:`MLawHead`/`MLawVersionHead`/`MChapter/Section/Article/Clause` 镜像(字段序与链端逐字段核对一致,SCALE 顺序解码到 chapters/current_version 即停,尾部字段不镜像);版本号 helper 后续已由 RAW 生效版本推导替换;`render_constitution_html` 据 章>节>条>款 重建 TOC(`toc-item toc-level-{1,2,3}` + 锚点 `#chapter-N/#chapter-N-section-M/#article-K`)+ 正文(`chapter-block/section-block/article-block` + `cn/en heading/body` 类,与原标记逐字一致)+ HTML 转义。
+  - `node/src/core/rpc.rs`:先从旧 `CitizenConstitutionApi` 迁到结构化宪法读取;后续守卫卡已进一步改为 RAW 读 `Laws[0]`→解当前生效版本→`LawVersions[0][v]`→重建 HTML→按内容算 blake2_256,`source` 改 `"legislation-raw"`(不信任可升级 runtime API)。
   - 前端 `RuntimeConstitutionViewer.tsx`/`api.ts`/`types.ts` 与 `other_tabs/mod.rs` **不改**(响应形状 `{html,blake2_256,source}` 不变,`source: string` 非字面量)。
   - 验收:`cargo check -p node` 绿;`constitution_render` 2 单测过(锚点/双语/款/哑尾忽略);fmt 干净。
 - [x] **Phase 5 清理(2026-06-24 完成)**:删 `genesis.rs` `CITIZEN_CONSTITUTION_HTML` 常量 + `CitizenConstitutionApi` decl、`apis.rs` 对应 impl、**`CitizenConstitution.html` 文件**(git rm,933KB);`decl_runtime_apis!` 仅留 `LegislationApi`。残留扫描:`CitizenConstitutionApi`/`citizen_constitution_html`/`citizen_constitution_blake2_256`/`CITIZEN_CONSTITUTION_HTML` **代码零残留**(仅描述性注释保留);`constitution_getDocument` RPC 名保留(现由结构化宪法支撑)。验收:primitives no_std + runtime/node std 编译绿;legislation-yuan 16 + node 2 + primitives 24 测试全过。
@@ -91,4 +91,4 @@ Clause(款): number, text, text_en                           // 可空
   - tools 收口:本卡解析器自始置于 `citizenchain/scripts/`(从未建 tools/),无需迁移;其余系统遗留 tools/(whitepaper、citizenapp bundle)不在本卡边界,不动。
   - 文档同步:`README.md`、`memory/07-ai/unified-naming.md`、`OTHER_TABS_TECHNICAL.md` 公民宪法真源指向改为链上立法院模块。
   - **待用户跑**:重新创世后真机 QA —— 节点桌面端宪法 tab 现样式显示(章>节>条 + 中英)、blake2 随内容、CitizenApp 浏览(双客户端卡另线程)。
-- **后续(2026-06-24,新卡 `20260624-constitution-immutable-guard`)**:Phase 4 的节点渲染(原 `other_tabs/constitution_render.rs` + 外壳)已**统一迁入 `node/src/core/constitution.rs`**,与新增的「不可修改条款 L2 共识守卫」共用镜像/外壳;`rpc.rs` 改引 `crate::core::constitution`,旧渲染文件删、零残留。外壳 prefix/suffix 两文件**并为单文件** `core/constitution_shell.html`(两占位标记 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 渲染时替换,整页结构一处维护)。不可修改条款真不可变性见该卡与 ADR-027 §6.1。
+- **后续(2026-06-24,新卡 `20260624-constitution-immutable-guard`)**:Phase 4 的节点渲染(原 `other_tabs/constitution_render.rs` + 外壳)已**统一迁入 `node/src/core/constitution.rs`**,与新增的「不可修改条款 L2 共识守卫」共用镜像/外壳;`rpc.rs` 改引 `crate::core::constitution` 并 RAW 读链上存储,旧渲染文件删、零残留。外壳 prefix/suffix 两文件**并为单文件** `core/constitution_shell.html`(两占位标记 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 渲染时替换,整页结构一处维护)。不可修改条款真不可变性见该卡与 ADR-027 §6.1。

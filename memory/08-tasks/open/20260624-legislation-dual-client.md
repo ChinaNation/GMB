@@ -9,6 +9,7 @@
 
 ## 已拍板(2026-06-24)
 
+- **与 ADR-028 整合(2026-06-24)**:本卡 CitizenApp 部分(一、)= ADR-028 五子 tab 的「立法 tab 内容 + 统一详情页立法机构提案入口」,**依赖 ADR-028 P1 统一机构层/详情页先落地**,对应整合计划 P3(读法律)/P4(发起)/P5(投票),见 `20260624-citizen-tab-5section-ui.md`。不另起独立立法界面,法律浏览即立法 tab,发起/投票即统一详情页提案入口/列表。CitizenWallet 部分(二、)独立并行(整合计划 P6)。
 - 本卡范围:**读 + 投票 + 发起 一次做齐**。
 - CitizenApp 读法律走 **runtime API `LegislationApi`**(`list_laws(tier,scope)→[law_id]` / `law(id)→SCALE(Law)` / `law_version(id,ver)→SCALE(LawVersion)`),客户端镜像 Dart 类型解码。
 - 立法 propose/cast 均为标准 extrinsic,**无需新 op_tag**;特别案公投的 CID 凭证 + 人口快照复用 joint 公投既有机制。
