@@ -12,7 +12,7 @@
 
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show FlutterError, debugPrint;
+import 'package:flutter/foundation.dart' show FlutterError;
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 import 'package:citizenapp/isar/wallet_isar.dart';
 

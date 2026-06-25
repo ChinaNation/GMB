@@ -36,6 +36,23 @@ abstract interface class PublicInstitutionStore {
   /// 按 cid_number 取单个机构。
   Future<PublicInstitutionEntity?> getByCid(String cidNumber);
 
+  /// 按机构码集合取全部机构(跨省扁平;institutionCode 索引 anyOf 查,非全表扫)。
+  ///
+  /// 中文注释(ADR-028 P2):五子 tab 的治理/立法等机构视图按 institution_code
+  /// 过滤统一目录的入口。
+  Future<List<PublicInstitutionEntity>> listByInstitutionCodes(
+    Set<String> institutionCodes,
+  );
+
+  /// 某省内按机构码集合取机构(provinceCode 索引 + institutionCode anyOf)。
+  ///
+  /// 中文注释(ADR-028 P3):立法 tab 省导航选某省后,取该省 省立法院/省议会 +
+  /// 全部市的市立法会。
+  Future<List<PublicInstitutionEntity>> listByProvinceAndCodes(
+    String provinceCode,
+    Set<String> institutionCodes,
+  );
+
   /// 某省(省 code)全部机构实体(按 provinceCode 索引查)。
   ///
   /// 中文注释(增量 reconcile 用):供 loader 逐条比对同 cid 内容,只 upsert 真正

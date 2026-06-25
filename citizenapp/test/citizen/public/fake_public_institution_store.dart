@@ -68,6 +68,27 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
+  Future<List<PublicInstitutionEntity>> listByInstitutionCodes(
+    Set<String> institutionCodes,
+  ) async =>
+      byId.values
+          .where((e) => institutionCodes.contains(e.institutionCode))
+          .map(_entity)
+          .toList(growable: false);
+
+  @override
+  Future<List<PublicInstitutionEntity>> listByProvinceAndCodes(
+    String provinceCode,
+    Set<String> institutionCodes,
+  ) async =>
+      byId.values
+          .where((e) =>
+              e.provinceCode == provinceCode &&
+              institutionCodes.contains(e.institutionCode))
+          .map(_entity)
+          .toList(growable: false);
+
+  @override
   Future<List<PublicInstitutionEntity>> institutionsOfProvince(
     String provinceCode,
   ) async =>

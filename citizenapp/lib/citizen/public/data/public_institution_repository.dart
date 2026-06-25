@@ -59,6 +59,19 @@ class PublicInstitutionRepository {
   Future<PublicInstitutionEntity?> getByCid(String cidNumber) =>
       store.getByCid(cidNumber);
 
+  /// 按机构码集合取全部机构(治理/立法 tab 过滤入口,ADR-028 P2)。
+  Future<List<PublicInstitutionEntity>> listByInstitutionCodes(
+    Set<String> institutionCodes,
+  ) =>
+      store.listByInstitutionCodes(institutionCodes);
+
+  /// 某省内按机构码集合取机构(立法 tab 省导航,ADR-028 P3)。
+  Future<List<PublicInstitutionEntity>> listByProvinceAndCodes(
+    String provinceCode,
+    Set<String> institutionCodes,
+  ) =>
+      store.listByProvinceAndCodes(provinceCode, institutionCodes);
+
   // ── 行政区字典 join(ADR-021;UI 显示名唯一来自字典/链上常量省名)──
 
   /// 某市 code → 市名(查字典;未命中回退 code 本身,绝不崩)。

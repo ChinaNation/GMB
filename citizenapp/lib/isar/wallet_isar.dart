@@ -595,6 +595,8 @@ class PublicInstitutionEntity {
   String townCode = '';
 
   /// 机构类型机构码(CID 单一真源,如 PRS/PGV/CGOV/CREG 等)。
+  /// 索引:五子 tab(治理/立法)按机构码过滤目录(ADR-028 P2);Isar 打开自动建索引。
+  @Index()
   late String institutionCode;
 
   String? parentCidNumber;

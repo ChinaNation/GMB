@@ -133,6 +133,37 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
+  Future<List<PublicInstitutionEntity>> listByInstitutionCodes(
+    Set<String> institutionCodes,
+  ) async {
+    if (institutionCodes.isEmpty) return const [];
+    final isar = await _db();
+    // institutionCode 已建索引(ADR-028 P2);anyOf 走索引匹配,非全表扫。
+    return isar.publicInstitutionEntitys
+        .filter()
+        .anyOf(institutionCodes,
+            (q, code) => q.institutionCodeEqualTo(code))
+        .findAll();
+  }
+
+  @override
+  Future<List<PublicInstitutionEntity>> listByProvinceAndCodes(
+    String provinceCode,
+    Set<String> institutionCodes,
+  ) async {
+    if (institutionCodes.isEmpty) return const [];
+    final isar = await _db();
+    // provinceCode + institutionCode 均有索引;省内按码 anyOf,高效(ADR-028 P3)。
+    return isar.publicInstitutionEntitys
+        .filter()
+        .provinceCodeEqualTo(provinceCode)
+        .and()
+        .anyOf(institutionCodes,
+            (q, code) => q.institutionCodeEqualTo(code))
+        .findAll();
+  }
+
+  @override
   Future<List<PublicInstitutionEntity>> institutionsOfProvince(
     String provinceCode,
   ) async {

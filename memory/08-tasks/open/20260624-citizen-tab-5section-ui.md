@@ -124,3 +124,70 @@ citizenapp/lib/citizen/
 设计要点:① 统一实体身份来自目录,`mainAccount` 普通机构走 `deriveInstitutionMainAccountId`,NRC/PRC/PRB 走 china 固定账户(小覆盖表,行为保持),`orgType` 由 institutionCode 派生;② 目录已含 NRC/PRC/PRB(NRC×1/PRC×43/PRB×43 已 seed)→ 治理身份不再依赖静态注册表;③ 链态读服务统一"按主账户读 admins/提案/余额",公权治理同路径;④ 统一详情页按锁定规格,P1 提案入口仅搭结构(治理保留现有发起/投票,公权保持占位,能力门控留 P4/P6)。
 
 验收(行为保持,真实运行态):公权/治理两 tab 改造前后行为一致;`flutter analyze` 0 + widget/单测过 + 真实 smoldot/真机验证;Grep 确认旧两套 + 静态注册表零残留。改完即更新文档/注释/清残留(死规则)。
+
+### P1 执行进度(2026-06-24)
+
+P1 = 两套并行子系统(公权 BFF/Isar 只读 + 治理静态注册表全能力)的行为保持合并(~2000 行,含两个 1000+ 行详情页),按可编译增量推进、每步保 app 可用。
+
+- [x] **增量 1:统一读基座(additive,`dart analyze` 0)** —— 新建 `lib/citizen/institution/`:
+  - `institution.dart`:统一机构实体(合并 PublicInstitutionEntity+InstitutionInfo;orgType/isFixedGovernance/isUnincorporated/displayName 由机构码派生;mainAccountId 固定治理档用 china 固定 hex、其余本地派生)。
+  - `institution_classification.dart`:立法/治理 tab 机构码过滤(建在 InstitutionCodeLabel 单一源上,不复制码表)。
+  - `institution_chain_state.dart`:统一链态读(余额/管理员/提案);**修复 'CGOV' 硬编码 bug**(按真实机构码路由 governanceInstitution / institutionAccount)。
+- [x] **增量 2:统一仓库门面 + 统一账户页(additive,`dart analyze` 0)**:
+  - `institution_repository.dart`:包装 `PublicInstitutionRepository`,目录产出 `Institution`;为 NRC/PRC/PRB 从静态注册表附 china 固定账户(注册表降级为「固定账户来源」一职)。
+  - `institution_accounts.dart`:统一账户行(固定治理档用 baked 主/费/安全基金/两和/永久质押;普通机构派生 主/费/自定义)。
+  - `institution_accounts_page.dart`:统一「全部账户」页(替代公权/治理两套账户页)。
+- [x] **增量 3:统一详情页(`institution_detail_page.dart`,`dart analyze` 0)**。治理详情页无内联发起 UI(发起/投票/管理员/激活全在外置可复用页),故统一详情页 = 公共壳 + 按机构类型 dispatch:
+  - 公共壳:AppBar(简称+右上关注)、信息卡(全称/身份ID/主账户/余额/法代/所属地 + 非法人「所属上级法人全称」)、账户入口→统一账户页、提案入口、管理员入口、提案列表。法代/所属地用统一模型 + `repo.institutionAreaPath`(治理机构也在目录,无 `CidDirectoryLookup` 分支)。
+  - 治理(isFixedGovernance):从注册表取 `InstitutionInfo` + port `_loadGovernanceAdminsAndRole`(`ProposalContextResolver`/`ActivationService`/冷钱包匹配)。提案入口→`GovernanceProposalsPage`;管理员→`AdminListPage`(含激活);提案列表→`fetchInstitutionVisibleProposals` + 可点 `_openProposalDetail`(三类详情页全复用)。
+  - 公权:提案入口=占位 snackbar;管理员→只读 `PublicInstitutionAdminListPage`;提案列表→`chainState.proposals` 只读。
+  - 鲁棒性:目录未同步时治理机构回退静态注册表(`Institution.fromGovernanceInfo`),治理 tab 不丢机构。
+- [x] **增量 4:公权 / 治理两 tab 切到统一详情(行为保持,全 `lib` analyze 0)**:`PublicPage._openDetail`、`CityInstitutionListPage` tile、`GovernanceListPage` 卡片 三处导航全部改指统一 `InstitutionDetailPage(cidNumber, repository)`。
+- [x] **增量 5:删 6 个孤儿文件 + 迁移测试(`dart analyze lib test` 仅剩 1 条无关既有 warning;`flutter test test/citizen` 43 passed)**:
+  - 删 `public_institution_detail_page` / `public_institution_accounts_page` / `data/public_institution_chain_data` / `data/public_institution_accounts` + 治理 `organization-manage/institution_detail_page` / `organization-manage/institution_accounts_page`。
+  - 保留被复用页:`GovernanceProposalsPage` / `AdminListPage` / proposal-detail 页 / `public_institution_admin_list_page`(公权只读管理员)。
+  - 测试迁移:`test/citizen/public/public_institution_detail_test` → `test/citizen/institution/institution_detail_test`(改用统一页 + `InstitutionChainState` fake,4 用例全过)。
+  - 残留扫描零(仅注释级历史说明已清)。
+- [ ] **待续(真机验收)**:本机/真机端到端验证公权浏览 + 治理 NRC/PRC/PRB 发起/投票全流程(代码层 `analyze`+`test` 已绿;按真实验收硬规则需真机跑)。
+- [ ] **后续 P2 收尾**:`public/data` 物理归并到 `institution/data/`(P1 暂以门面 `InstitutionRepository(directory:)` 包装,行为等价);治理 tab 列表改用统一目录过滤替代 `GovernanceListPage` 静态注册表(随五子 tab 一并做)。
+
+### P1 完成小结(2026-06-24)
+
+统一机构层 8 文件(`lib/citizen/institution/`):`institution` / `institution_classification` / `institution_chain_state` / `institution_repository` / `institution_accounts` / `institution_accounts_page` / `institution_detail_page`(+ 迁移测试)。公权与治理两套并行详情/账户实现合并为一套,两 tab 切换、删 6 孤儿、修 `'CGOV'` 硬编码 bug。`dart analyze lib test` 仅 1 条无关既有 warning;`flutter test test/citizen` 43 passed。**剩真机端到端验收 + P2 物理归并/治理列表统一。**
+
+### P2 完成小结(2026-06-24)
+
+公民 tab 3 子 tab → **5 子 tab(广场/立法/选举/治理/公权)**,治理视图改用统一目录按机构码过滤,删 `GovernanceListPage` 静态注册表「列表」承载。
+
+- **基础设施**:`PublicInstitutionEntity.institutionCode` 加 `@Index()`(build_runner 重生 `wallet_isar.g.dart`,Isar 自动建索引);`listByInstitutionCodes(Set<String>)` 贯穿 store 接口/Isar 实现/fake/`PublicInstitutionRepository`/`InstitutionRepository.listByCodes`(anyOf 走索引非全扫)。`ensureSynced` 已确认一次性同步全 43 省,by-code 数据完整。
+- **治理视图**:`citizen/governance/governance_tab.dart`(port 自 GovernanceListPage)——`repo.listByCodes({NRC,PRC,PRB})` 按 orgType 分三组,**保留拖拽排序(SharedPreferences)+ 折叠 + 国储会横跨 + 管理员高亮**;详情走统一 `InstitutionDetailPage`。
+- **5-tab 壳**:`citizen_tab_page.dart` 3→5(广场=VoteView 现状默认;立法/选举=占位 `citizen/{legislation,election}/`;治理=GovernanceTab;公权=PublicPage)。
+- **清理**:删 `lib/governance/governance_list_page.dart` + 迁移其测试到 `test/citizen/governance/governance_tab_test.dart`(注入 seeded fake 仓库,7 用例含拖拽全过);顺手清 `admin_division_bundle_loader.dart` 既有 `debugPrint` 无用 show warning。`institution_registry` 仅保留「固定账户/反查」角色,「列表」角色已除。
+- **验收**:`dart analyze lib test` 0 issues;`flutter test test/citizen` **50 passed**。**剩真机端到端验收 + 立法(P3)/广场(P7)/选举(P8) 真内容。**
+
+### 后续(P3 起)
+立法 tab 真内容(法律浏览 + 立法机构,接 LegislationApi)= P3;广场订阅+地区 = P7;选举活动视图 = P8。公权 `public_provinces.dart` 对治理注册表的省名耦合、`public/data`→`institution/data` 物理归并 = 后续 cleanup。
+
+### P3-1 法律浏览(拆步:1=法律浏览含宪法 / 2=立法基础)
+
+**立法 tab 最终布局(用户拍板 2026-06-24)**:固定顶部 5 卡(公民宪法整行长卡 + [国家立法院 NLG | 国家教委会 NED] + [国家众议会 NRP | 国家参议会 NSN])+「省市立法机构」标签;滚动 body = 公权式省竖导航(去关注组)+ 选中省的 省立法院/省众议会/省参议会 + 该省全部市的市立法会。机构卡 → 统一详情页;详情页加「**法律原文**」入口(仅立法机构 NLG/NRP/NSN/PLG/PRP/PSN/CLEG/NED)→ `list_laws(tier,scope)`。宪法(law_id=0)= 顶部卡直达条款项阅读器。块号→日期接 `target_block_time_ms`。
+
+**P3-1 执行进度(2026-06-24)**:
+- [x] **读底座(`dart analyze` 0;codec 金标向量 5 用例全过)**:
+  - `lib/legislation/data/law_models.dart`:Dart 镜像类型(LawTier/LawStatus/Law/LawVersion/Chapter>Section>Article>Clause/LawHouse/ImmutableManifest)。
+  - `lib/legislation/data/legislation_codec.dart`:SCALE 镜像解码**单一源**(游标式 reader:u8/u32/u64/compact/option/vec/[u8;N]/utf8;`decodeLaw/decodeLawVersion/decodeImmutableManifest/decodeLawIds/decodeOptionBytes`)。`test/legislation/legislation_codec_test.dart` 手工金标向量(章>节>条>款 嵌套 + 不可修改 manifest + 块号)验证逐字段对齐链端。
+  - `lib/rpc/runtime_api.dart`:通用 `state_call` 封装(钉 finalized 块,非立法专属)。
+  - `lib/legislation/data/legislation_api.dart`:`listLaws/law/lawVersion`(state_call)+ `immutableManifest`(twox128 StorageValue)。
+- [x] **块号→日期 + 会话内缓存**:`block_clock.dart`(`target_block_time_ms` 缓存 + `date(b)=now+(b-current)*interval`);`legislation_api.dart` 加会话内内存缓存(law/version/manifest,宪法 219KB 不重拉)。Isar 跨会话持久缓存 deferred(ADR-018 R3 后续)。
+- [x] **UI**:`law_reader_page.dart`(章折叠 + 条号锚点 + 不可修改徽章 + 中/EN 双语切 + 生效日期)+ `law_list_page.dart`(机构法律列表)。
+- [x] **立法 tab 布局**:`citizen/legislation/legislation_tab.dart` 占位→真(固定 5 卡:宪法整行 + NLG/NED + NRP/NSN +「省市立法机构」;省导航 body 去关注组,右侧 PLG/PRP/PSN + 该省全部市 CLEG);新增 store `listByProvinceAndCodes(province, codes)` 贯穿接口/Isar/fake/repo/facade。
+- [x] **详情页「法律原文」入口**(仅立法机构 NLG/NRP/NSN/PLG/PRP/PSN/CLEG/NED,tier/scope 派生)。
+- [x] **文档/注释/残留**:中文注释齐备;P2 占位 `_TabPlaceholder` 已被真 LegislationTab 覆盖,零残留。
+
+### P3-1 完成小结(2026-06-24)
+
+法律浏览(含宪法 law_id=0)落地。新增 `lib/legislation/`(底座 + 阅读器 + 列表)+ `lib/rpc/runtime_api.dart`(通用 state_call)+ `lib/citizen/legislation/legislation_tab.dart`(真布局)+ 详情页「法律原文」入口 + `listByProvinceAndCodes` 省内查询。**codec 是最高风险点,5 用例手工金标向量(章>节>条>款 嵌套 + 不可修改 manifest + 块号)全过,逐字段对齐链端**。`dart analyze lib test` 0;`flutter test test/legislation test/citizen` **55 passed**。
+
+**已知缺口(诚实标注)**:① 省/市级法律 `scope_code` ↔ 行政区 code 映射未核验(省码为字母 → 当前回退 0;待链端有非宪法法律后核验;现仅宪法 law_id=0 经顶部卡直达,「法律原文」入口对其余机构显空)。② Isar 跨会话持久缓存未做(仅会话内内存缓存)。③ 真机端到端验收待跑(代码层 analyze+test 已绿)。
+
+**P3-2(立法基础)/ P4-P5(发起/投票)** 见整合分步表。

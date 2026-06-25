@@ -1,41 +1,38 @@
-// 卡C 详情页:账户派生 + 五段版式(机构信息/机构账户入口/提案发起/管理员入口/提案列表)
-// + 订阅切换。余额只在「全部账户页」展示,不在详情页。
+// 统一机构详情页(ADR-028)widget 测试 —— 公权路径(信息卡/账户/提案占位/管理员/
+// 提案列表/订阅)+ 统一账户行派生。替代旧 public_institution_detail_test。
 
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/citizen/public/data/public_institution_accounts.dart';
-import 'package:citizenapp/citizen/public/data/public_institution_chain_data.dart';
+
+import 'package:citizenapp/citizen/institution/institution.dart';
+import 'package:citizenapp/citizen/institution/institution_accounts.dart';
+import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
+import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
+import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
-import 'package:citizenapp/citizen/public/public_institution_detail_page.dart';
 import 'package:citizenapp/governance/shared/account_derivation.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 
-import 'public_nav_harness.dart';
+import '../public/public_nav_harness.dart';
 
-const _nrcCid = 'LN001-NRC0G-944805165-2026';
-const _nrcMainHex =
-    'b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153';
+const _cid = 'LN001-CREG0-944805165-2026';
 
-class _FakeChainData implements PublicInstitutionChainData {
-  _FakeChainData({this.adminList = const [], this.proposalList = const []});
+class _FakeChainState implements InstitutionChainState {
+  _FakeChainState({this.adminList = const [], this.proposalList = const []});
   final List<String> adminList;
-  final List<PublicProposalSummary> proposalList;
+  final List<InstitutionProposalSummary> proposalList;
 
   @override
   Future<Map<String, double>> balances(List<String> pubkeyHexes) async =>
       {for (final h in pubkeyHexes) h: 12.5};
 
   @override
-  Future<List<String>> admins({
-    required String mainAccountHex,
-    required String cidFullName,
-  }) async =>
-      adminList;
+  Future<List<String>> admins(Institution institution) async => adminList;
 
   @override
-  Future<List<PublicProposalSummary>> proposals(
+  Future<List<InstitutionProposalSummary>> proposals(
     Uint8List mainAccountId,
   ) async =>
       proposalList;
@@ -43,11 +40,11 @@ class _FakeChainData implements PublicInstitutionChainData {
 
 PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
       <String, dynamic>{
-        'cid_number': _nrcCid,
-        'cid_full_name': '国家公民储备委员会',
+        'cid_number': _cid,
+        'cid_full_name': '辽宁省身份注册局',
         'province_code': 'LN',
         'city_code': '001',
-        'institution_code': 'ZF',
+        'institution_code': 'CREG',
         'account_count': 4,
         'custom_account_names': ['业务专户'],
       },
@@ -56,22 +53,21 @@ PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
 void main() {
-  group('deriveAccountRows', () {
-    test('主/费/自定义三行,地址与链上派生吻合', () {
-      final rows = deriveAccountRows(_entity());
+  group('institutionAccountRows(公权派生)', () {
+    test('主/费/自定义三行,地址与卡0 派生吻合', () {
+      final rows = institutionAccountRows(Institution.fromPublicEntity(_entity()));
       expect(rows.map((r) => r.label), ['主账户', '费用账户', '业务专户']);
-      expect(rows.first.accountHex, _nrcMainHex);
-      // 自定义地址 = 卡0 派生
+      expect(rows.first.accountHex,
+          hexFromAccountId(deriveInstitutionMainAccountId(_cid)));
       expect(
         rows.last.accountHex,
-        hexFromAccountId(deriveInstitutionCustomAccountId(_nrcCid, '业务专户')),
+        hexFromAccountId(deriveInstitutionCustomAccountId(_cid, '业务专户')),
       );
     });
   });
 
-  testWidgets('详情页五段:名称/ID/法定代表人/机构账户/提案发起/管理员入口/提案列表', (tester) async {
-    // 机构信息卡现为 5 行(身份ID/主账户/主账户余额/法定代表人/所属地),整页较高;
-    // 放大视口让懒加载 ListView 一次性渲染到底部提案列表,免滚动断言。
+  testWidgets('详情页:全称/ID/主账户/余额/法代/所属地 + 账户/提案占位/管理员/提案列表',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 3200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -79,13 +75,12 @@ void main() {
     final repo = await buildSeededRepo(
       provinceOrder: const ['GD'],
       institutions: [
-        // 复用 harness seedDto 不便带 custom,这里直接用 entity 的 dto。
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'cid_number': _nrcCid,
-          'cid_full_name': '国家公民储备委员会',
+          'cid_number': _cid,
+          'cid_full_name': '辽宁省身份注册局',
           'province_code': 'GD',
           'city_code': '001',
-          'institution_code': 'ZF',
+          'institution_code': 'CREG',
           'account_count': 4,
           'legal_rep_name': '王法人',
           'custom_account_names': ['业务专户'],
@@ -93,68 +88,70 @@ void main() {
       ],
       cityNames: const {'GD|001': '中央'},
     );
-    final chain = _FakeChainData(
+    final chain = _FakeChainState(
       adminList: const ['0xadminpubkey001'],
-      proposalList: const [PublicProposalSummary(idLabel: '提案 #7', status: 1)],
+      proposalList: const [
+        InstitutionProposalSummary(proposalId: 7, idLabel: '提案 #7', status: 1),
+      ],
     );
-    await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
-      cidNumber: _nrcCid,
-      repository: repo,
-      chainData: chain,
+    await tester.pumpWidget(_wrap(InstitutionDetailPage(
+      cidNumber: _cid,
+      repository: InstitutionRepository(directory: repo),
+      chainState: chain,
       walletPubkeyProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 
-    expect(find.text('国家公民储备委员会'), findsWidgets);
-    expect(find.text(_nrcCid), findsOneWidget);
-    // ① 机构信息:主账户 + 主账户余额 + 法定代表人 + 所属地(图标 tile + 分隔线)。
+    expect(find.text('辽宁省身份注册局'), findsWidgets); // AppBar 简称回退全称 + 全称行
+    expect(find.text(_cid), findsOneWidget);
+    expect(find.text('全称'), findsOneWidget);
     expect(find.text('主账户'), findsOneWidget);
     expect(find.text('主账户余额'), findsOneWidget);
-    expect(find.text('12.50 元'), findsOneWidget); // fake 主账户余额
+    expect(find.text('12.50 元'), findsOneWidget);
     expect(find.text('法定代表人'), findsOneWidget);
     expect(find.text('王法人'), findsOneWidget);
     expect(find.text('所属地'), findsOneWidget);
-    // 所属地必须显示完整省名(广东省,不是广东);不得套 provinceDisplayName 去"省"。
     expect(find.text('广东省 · 中央'), findsOneWidget);
-    // ② 机构账户入口(治理同款 标题+副标题):主+费+1自定义。
+    // 机构账户入口:主+费+1自定义=3。
     expect(find.text('机构账户'), findsOneWidget);
     expect(find.text('共 3 个账户'), findsOneWidget);
-    // ③ 提案发起入口(治理同款 hero,占位)。
+    // 提案入口(公权占位)。
     expect(find.text('发起提案'), findsOneWidget);
-    // ④ 管理员入口(治理同款 标题+副标题):条数在副标题,地址在列表页。
+    // 管理员入口。
     expect(find.text('管理员'), findsOneWidget);
     expect(find.text('共 1 位管理员'), findsOneWidget);
-    // ⑤ 提案列表。
+    // 提案列表。
     expect(find.text('提案列表'), findsOneWidget);
     expect(find.text('提案 #7'), findsOneWidget);
   });
 
-  testWidgets('管理员入口点击进入管理员列表页', (tester) async {
+  testWidgets('管理员入口点击进入只读管理员列表页', (tester) async {
     final repo = await buildSeededRepo(
       provinceOrder: const ['LN'],
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'cid_number': _nrcCid,
-          'cid_full_name': '国家公民储备委员会',
+          'cid_number': _cid,
+          'cid_full_name': '辽宁省身份注册局',
           'province_code': 'LN',
           'city_code': '001',
-          'institution_code': 'ZF',
+          'institution_code': 'CREG',
           'account_count': 2,
         }),
       ],
       cityNames: const {'LN|001': '中央'},
     );
-    await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
-      cidNumber: _nrcCid,
-      repository: repo,
-      chainData: _FakeChainData(adminList: const ['0xadminpubkey001']),
+    await tester.pumpWidget(_wrap(InstitutionDetailPage(
+      cidNumber: _cid,
+      repository: InstitutionRepository(directory: repo),
+      chainState: _FakeChainState(adminList: const ['0xadminpubkey001']),
       walletPubkeyProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('管理员'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('管理员'));
     await tester.pumpAndSettle();
-    // 管理员列表页:非法 hex 兜底原样展示,地址可见。
     expect(find.text('管理员列表'), findsOneWidget);
     expect(find.text('0xadminpubkey001'), findsOneWidget);
   });
@@ -164,31 +161,31 @@ void main() {
       provinceOrder: const ['LN'],
       institutions: [
         PublicInstitutionDto.fromJson(<String, dynamic>{
-          'cid_number': _nrcCid,
-          'cid_full_name': '国家公民储备委员会',
+          'cid_number': _cid,
+          'cid_full_name': '辽宁省身份注册局',
           'province_code': 'LN',
           'city_code': '001',
-          'institution_code': 'ZF',
+          'institution_code': 'CREG',
           'account_count': 2,
         }),
       ],
       cityNames: const {'LN|001': '中央'},
     );
-    await tester.pumpWidget(_wrap(PublicInstitutionDetailPage(
-      cidNumber: _nrcCid,
-      repository: repo,
-      chainData: _FakeChainData(),
+    await tester.pumpWidget(_wrap(InstitutionDetailPage(
+      cidNumber: _cid,
+      repository: InstitutionRepository(directory: repo),
+      chainState: _FakeChainState(),
       walletPubkeyProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 
-    expect(await repo.isSubscribed('aa', _nrcCid), isFalse);
+    expect(await repo.isSubscribed('aa', _cid), isFalse);
     await tester.tap(find.byIcon(Icons.bookmark_border));
     await tester.pumpAndSettle();
-    expect(await repo.isSubscribed('aa', _nrcCid), isTrue);
+    expect(await repo.isSubscribed('aa', _cid), isTrue);
 
     await tester.tap(find.byIcon(Icons.bookmark));
     await tester.pumpAndSettle();
-    expect(await repo.isSubscribed('aa', _nrcCid), isFalse);
+    expect(await repo.isSubscribed('aa', _cid), isFalse);
   });
 }

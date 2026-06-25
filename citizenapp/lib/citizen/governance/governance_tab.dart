@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:citizenapp/governance/shared/institution_info.dart';
-import 'package:citizenapp/governance/organization-manage/institution_detail_page.dart';
+import 'package:citizenapp/citizen/institution/institution.dart';
+import 'package:citizenapp/citizen/institution/institution_classification.dart';
+import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
+import 'package:citizenapp/citizen/institution/institution_repository.dart';
+import 'package:citizenapp/governance/shared/institution_info.dart' show OrgType;
 import 'package:citizenapp/governance/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/page_transitions.dart';
@@ -20,14 +23,14 @@ const String _governanceProvincialCouncilIconAsset =
 const String _governanceProvincialBankIconAsset = 'assets/icons/bank.svg';
 
 @visibleForTesting
-List<InstitutionInfo> applyGovernanceInstitutionOrder(
-  List<InstitutionInfo> source,
+List<Institution> applyGovernanceInstitutionOrder(
+  List<Institution> source,
   List<String>? savedOrder,
 ) {
-  final byId = <String, InstitutionInfo>{
+  final byId = <String, Institution>{
     for (final institution in source) institution.cidNumber: institution,
   };
-  final ordered = <InstitutionInfo>[];
+  final ordered = <Institution>[];
   final used = <String>{};
 
   if (savedOrder != null) {
@@ -49,8 +52,8 @@ List<InstitutionInfo> applyGovernanceInstitutionOrder(
 }
 
 @visibleForTesting
-List<InstitutionInfo> reorderGovernanceInstitutions(
-  List<InstitutionInfo> source,
+List<Institution> reorderGovernanceInstitutions(
+  List<Institution> source,
   int fromIndex,
   int toIndex,
 ) {
@@ -59,9 +62,9 @@ List<InstitutionInfo> reorderGovernanceInstitutions(
       toIndex < 0 ||
       toIndex >= source.length ||
       fromIndex == toIndex) {
-    return List<InstitutionInfo>.of(source);
+    return List<Institution>.of(source);
   }
-  final next = List<InstitutionInfo>.of(source);
+  final next = List<Institution>.of(source);
   final item = next.removeAt(fromIndex);
   next.insert(toIndex.clamp(0, next.length), item);
   return next;
@@ -83,67 +86,65 @@ class _GovernanceDragData {
   final int index;
 }
 
-/// 治理 tab 二级页：展示治理类机构（国储会/省储会/省储行）分类与详情入口。
+/// 治理 tab 视图(ADR-028 P2)：从统一目录按机构码过滤治理类机构(国储会/省储会/
+/// 省储行),分类展示 + 拖拽排序;详情入口走统一机构详情页。替代旧 GovernanceListPage
+/// 静态烘焙注册表「列表」承载。
 ///
 /// 提案发起与投票事件仍由机构详情页承接。
-class GovernanceListPage extends StatefulWidget {
-  const GovernanceListPage({
-    super.key,
-    required this.nationalCouncil,
-    required this.provincialCouncils,
-    required this.provincialBanks,
-  });
+class GovernanceTab extends StatefulWidget {
+  const GovernanceTab({super.key, this.repository});
 
-  final List<InstitutionInfo> nationalCouncil;
-  final List<InstitutionInfo> provincialCouncils;
-  final List<InstitutionInfo> provincialBanks;
+  /// 统一机构仓库门面(测试注入;默认 [InstitutionRepository])。
+  final InstitutionRepository? repository;
 
   @override
-  State<GovernanceListPage> createState() => _GovernanceListPageState();
+  State<GovernanceTab> createState() => _GovernanceTabState();
 }
 
-class _GovernanceListPageState extends State<GovernanceListPage> {
-  late List<InstitutionInfo> _provincialCouncils;
-  late List<InstitutionInfo> _provincialBanks;
+class _GovernanceTabState extends State<GovernanceTab> {
+  late final InstitutionRepository _repo =
+      widget.repository ?? InstitutionRepository();
+
+  /// 治理 tab 机构码集合(=固定治理档)。
+  static const Set<String> _governanceCodes = kGovernanceCodes;
+
+  List<Institution> _national = const [];
+  List<Institution> _provincialCouncils = const [];
+  List<Institution> _provincialBanks = const [];
+  bool _loading = true;
   bool _provincialCouncilsExpanded = false;
   bool _provincialBanksExpanded = false;
 
   @override
   void initState() {
     super.initState();
-    _resetInstitutionLists();
-    unawaited(_loadLocalInstitutionOrder());
+    unawaited(_loadInstitutions());
   }
 
-  @override
-  void didUpdateWidget(covariant GovernanceListPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.provincialCouncils != widget.provincialCouncils ||
-        oldWidget.provincialBanks != widget.provincialBanks) {
-      _resetInstitutionLists();
-      unawaited(_loadLocalInstitutionOrder());
-    }
-  }
-
-  void _resetInstitutionLists() {
-    _provincialCouncils = List<InstitutionInfo>.of(widget.provincialCouncils);
-    _provincialBanks = List<InstitutionInfo>.of(widget.provincialBanks);
-  }
-
-  Future<void> _loadLocalInstitutionOrder() async {
+  /// 从统一目录按机构码取治理机构,按 orgType 分三组,再叠加本机保存的拖拽顺序。
+  Future<void> _loadInstitutions() async {
+    final all = await _repo.listByCodes(_governanceCodes);
+    final national =
+        all.where((i) => i.orgType == OrgType.nrc).toList(growable: false);
+    final councilsRaw =
+        all.where((i) => i.orgType == OrgType.prc).toList(growable: false);
+    final banksRaw =
+        all.where((i) => i.orgType == OrgType.prb).toList(growable: false);
     final prefs = await SharedPreferences.getInstance();
     final councils = applyGovernanceInstitutionOrder(
-      widget.provincialCouncils,
+      councilsRaw,
       prefs.getStringList(governanceProvincialCouncilOrderPrefsKey),
     );
     final banks = applyGovernanceInstitutionOrder(
-      widget.provincialBanks,
+      banksRaw,
       prefs.getStringList(governanceProvincialBankOrderPrefsKey),
     );
     if (!mounted) return;
     setState(() {
+      _national = national;
       _provincialCouncils = councils;
       _provincialBanks = banks;
+      _loading = false;
     });
   }
 
@@ -161,7 +162,7 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
     };
     if (prefsKey == null) return;
 
-    late final List<InstitutionInfo> next;
+    late final List<Institution> next;
     setState(() {
       if (sectionKind == _GovernanceSectionKind.provincialCouncil) {
         next = reorderGovernanceInstitutions(
@@ -196,6 +197,9 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
@@ -213,7 +217,7 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
           title: '国储会',
           icon: Icons.account_balance,
           badgeColor: AppTheme.primaryDark,
-          institutions: widget.nationalCouncil,
+          institutions: _national,
           onReturnFromDetail: () => setState(() {}),
         ),
         _GovernanceSection(
@@ -283,7 +287,7 @@ class _GovernanceSection extends StatelessWidget {
   final IconData icon;
   final String? iconAsset;
   final Color badgeColor;
-  final List<InstitutionInfo> institutions;
+  final List<Institution> institutions;
   final bool collapsible;
   final bool expanded;
   final VoidCallback? onToggleExpanded;
@@ -444,7 +448,7 @@ class _GovernanceReorderableCard extends StatelessWidget {
 
   final _GovernanceSectionKind sectionKind;
   final int index;
-  final InstitutionInfo institution;
+  final Institution institution;
   final IconData icon;
   final Color badgeColor;
   final bool isAdmin;
@@ -517,7 +521,7 @@ class _GovernanceCard extends StatelessWidget {
     this.onReturnFromDetail,
   });
 
-  final InstitutionInfo institution;
+  final Institution institution;
   final IconData icon;
   final Color badgeColor;
   final bool isAdmin;
@@ -527,7 +531,6 @@ class _GovernanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = isAdmin ? AppTheme.success : badgeColor;
     final card = Container(
       decoration: AppTheme.cardDecoration(selected: isAdmin),
       child: Material(
@@ -538,9 +541,8 @@ class _GovernanceCard extends StatelessWidget {
                   await Navigator.of(context).push(
                     FadeSlideRoute(
                       page: InstitutionDetailPage(
-                        institution: institution,
-                        icon: icon,
-                        badgeColor: effectiveColor,
+                        cidNumber: institution.cidNumber,
+                        repository: InstitutionRepository(),
                       ),
                     ),
                   );
@@ -555,7 +557,7 @@ class _GovernanceCard extends StatelessWidget {
                 Expanded(
                   // 中文注释：机构卡片不再显示名称左侧图标，只保留名称和右箭头。
                   child: Text(
-                    institution.cidShortName,
+                    institution.displayName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

@@ -14236,6 +14236,19 @@ const PublicInstitutionEntitySchema = CollectionSchema(
           caseSensitive: true,
         )
       ],
+    ),
+    r'institutionCode': IndexSchema(
+      id: 4992077277898828048,
+      name: r'institutionCode',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'institutionCode',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
     )
   },
   links: {},
@@ -14666,6 +14679,51 @@ extension PublicInstitutionEntityQueryWhere on QueryBuilder<
               indexName: r'cityCode',
               lower: [],
               upper: [cityCode],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> institutionCodeEqualTo(String institutionCode) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'institutionCode',
+        value: [institutionCode],
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionEntity, PublicInstitutionEntity,
+      QAfterWhereClause> institutionCodeNotEqualTo(String institutionCode) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'institutionCode',
+              lower: [],
+              upper: [institutionCode],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'institutionCode',
+              lower: [institutionCode],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'institutionCode',
+              lower: [institutionCode],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'institutionCode',
+              lower: [],
+              upper: [institutionCode],
               includeUpper: false,
             ));
       }

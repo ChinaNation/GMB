@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'package:citizenapp/governance/governance_list_page.dart';
-import 'package:citizenapp/governance/organization-manage/institution_registry.dart';
+import 'package:citizenapp/citizen/election/election_tab.dart';
+import 'package:citizenapp/citizen/governance/governance_tab.dart';
+import 'package:citizenapp/citizen/legislation/legislation_tab.dart';
 import 'package:citizenapp/citizen/public/public_page.dart';
-import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/citizen/vote/vote_view.dart';
+import 'package:citizenapp/ui/app_theme.dart';
 
 /// 底部“公民”Tab 的总入口。
 ///
@@ -19,8 +20,8 @@ class CitizenTabPage extends StatefulWidget {
 }
 
 class _CitizenTabPageState extends State<CitizenTabPage> {
-  int _selectedTab = 1;
-  static const List<String> _tabs = ['公权', '广场', '治理'];
+  int _selectedTab = 0;
+  static const List<String> _tabs = ['广场', '立法', '选举', '治理', '公权'];
 
   @override
   Widget build(BuildContext context) {
@@ -44,22 +45,19 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
   }
 
   Widget _buildTabContent() {
-    assert(kProvincialCouncils.length == 43);
-    assert(kProvincialBanks.length == 43);
-
     switch (_selectedTab) {
-      case 0:
-        return const PublicPage();
-      case 1:
+      case 0: // 广场:订阅/本地区/我是管理员 机构动态(P7 改造;现为全局提案流)
         return VoteView(
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
-      case 2:
-        return const GovernanceListPage(
-          nationalCouncil: kNationalCouncil,
-          provincialCouncils: kProvincialCouncils,
-          provincialBanks: kProvincialBanks,
-        );
+      case 1: // 立法(P3 接法律浏览)
+        return const LegislationTab();
+      case 2: // 选举(P8 接选举活动视图)
+        return const ElectionTab();
+      case 3: // 治理:国储会/省储会/省储行(统一目录按机构码过滤)
+        return const GovernanceTab();
+      case 4: // 公权:全部机构地理浏览
+        return const PublicPage();
       default:
         return const SizedBox.shrink();
     }

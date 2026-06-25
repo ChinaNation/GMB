@@ -1,29 +1,32 @@
 import 'package:flutter/material.dart';
 
-import 'package:citizenapp/citizen/public/data/public_institution_accounts.dart';
-import 'package:citizenapp/citizen/public/data/public_institution_chain_data.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/citizen/institution/institution.dart';
+import 'package:citizenapp/citizen/institution/institution_accounts.dart';
+import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 机构全部账户页(ADR-018 §九 卡C):主 + 费 + 自定义,余额批量。
-class PublicInstitutionAccountsPage extends StatefulWidget {
-  const PublicInstitutionAccountsPage({
+/// 统一机构「全部账户」页(ADR-028 决策 2)——替代公权/治理两套账户页。
+///
+/// 中文注释:账户行由 [institutionAccountRows] 统一构造(固定治理档用 china 固定
+/// 账户、普通机构本地派生);余额经统一链态服务批量补(ADR-018 R2 精确整键批量)。
+class InstitutionAccountsPage extends StatefulWidget {
+  const InstitutionAccountsPage({
     super.key,
     required this.institution,
-    required this.chainData,
+    required this.chainState,
   });
 
-  final PublicInstitutionEntity institution;
-  final PublicInstitutionChainData chainData;
+  final Institution institution;
+  final InstitutionChainState chainState;
 
   @override
-  State<PublicInstitutionAccountsPage> createState() =>
-      _PublicInstitutionAccountsPageState();
+  State<InstitutionAccountsPage> createState() =>
+      _InstitutionAccountsPageState();
 }
 
-class _PublicInstitutionAccountsPageState
-    extends State<PublicInstitutionAccountsPage> {
-  late List<PublicAccountRow> _rows = deriveAccountRows(widget.institution);
+class _InstitutionAccountsPageState extends State<InstitutionAccountsPage> {
+  late List<InstitutionAccountRow> _rows =
+      institutionAccountRows(widget.institution);
   bool _balanceLoading = true;
 
   @override
@@ -34,7 +37,7 @@ class _PublicInstitutionAccountsPageState
 
   Future<void> _loadBalances() async {
     try {
-      final balances = await widget.chainData
+      final balances = await widget.chainState
           .balances(_rows.map((r) => r.accountHex).toList());
       if (!mounted) return;
       setState(() {
@@ -75,7 +78,7 @@ class _PublicInstitutionAccountsPageState
 class _AccountCard extends StatelessWidget {
   const _AccountCard({required this.row, required this.balanceLoading});
 
-  final PublicAccountRow row;
+  final InstitutionAccountRow row;
   final bool balanceLoading;
 
   @override

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
+import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
-import 'package:citizenapp/citizen/public/public_institution_detail_page.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
@@ -103,9 +104,9 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
               color: AppTheme.textTertiary, size: 20),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => PublicInstitutionDetailPage(
+              builder: (_) => InstitutionDetailPage(
                 cidNumber: inst.cidNumber,
-                repository: widget.repository,
+                repository: InstitutionRepository(directory: widget.repository),
               ),
             ),
           ),

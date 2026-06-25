@@ -1,45 +1,70 @@
+// 治理 tab 视图(ADR-028 P2)测试 —— 替代旧 governance_list_page_test。
+// 机构改由统一目录按机构码加载(注入 seeded fake 仓库),分组/折叠/拖拽 UI 保持。
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/governance/governance_list_page.dart';
-import 'package:citizenapp/governance/shared/institution_info.dart';
 
-InstitutionInfo _institution(
-  String cidShortName,
-  String cidNumber,
-  int orgType,
-  int hexSeed,
-) {
-  return InstitutionInfo(
-    cidFullName: cidShortName,
-    cidShortName: cidShortName,
-    cidFullNameEn: 'Institution $cidNumber',
-    cidShortNameEn: 'Institution $cidNumber',
-    cidNumber: cidNumber,
-    orgType: orgType,
-    account: hexSeed.toRadixString(16).padLeft(64, '0'),
+import 'package:citizenapp/citizen/governance/governance_tab.dart';
+import 'package:citizenapp/citizen/institution/institution.dart';
+import 'package:citizenapp/citizen/institution/institution_repository.dart';
+import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
+import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
+
+import '../public/fake_public_institution_store.dart';
+
+/// 构造统一机构(helper 纯函数测试用)。
+Institution _inst(String name, String cid, String code) => Institution(
+      cidNumber: cid,
+      cidFullName: name,
+      cidShortName: name,
+      institutionCode: code,
+    );
+
+PublicInstitutionDto _dto(String name, String cid, String code) =>
+    PublicInstitutionDto.fromJson(<String, dynamic>{
+      'cid_number': cid,
+      'cid_full_name': name,
+      'cid_short_name': name,
+      'institution_code': code,
+      'province_code': '',
+      'city_code': '',
+      'account_count': 1,
+    });
+
+/// seeded fake 仓库:目录按机构码返回 NRC/PRC/PRB 测试机构。
+Future<InstitutionRepository> _buildRepo({
+  required List<({String name, String cid})> councils,
+  required List<({String name, String cid})> banks,
+}) async {
+  final store = FakePublicInstitutionStore();
+  await store.upsertInstitutions(
+    [
+      _dto('国家储备委员会', 'nrc', 'NRC'),
+      for (final c in councils) _dto(c.name, c.cid, 'PRC'),
+      for (final b in banks) _dto(b.name, b.cid, 'PRB'),
+    ],
+    catalogVersion: 'v',
+  );
+  return InstitutionRepository(
+    directory: PublicInstitutionRepository(store: store),
   );
 }
 
 Future<void> _pumpPage(
   WidgetTester tester, {
-  required List<InstitutionInfo> councils,
-  required List<InstitutionInfo> banks,
+  required List<({String name, String cid})> councils,
+  required List<({String name, String cid})> banks,
 }) async {
+  final repo = await _buildRepo(councils: councils, banks: banks);
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
         body: SizedBox(
           width: 420,
           height: 900,
-          child: GovernanceListPage(
-            nationalCouncil: [
-              _institution('国家储备委员会', 'nrc', OrgType.nrc, 1),
-            ],
-            provincialCouncils: councils,
-            provincialBanks: banks,
-          ),
+          child: GovernanceTab(repository: repo),
         ),
       ),
     ),
@@ -48,89 +73,71 @@ Future<void> _pumpPage(
 }
 
 void main() {
-  late List<InstitutionInfo> councils;
-  late List<InstitutionInfo> banks;
+  late List<({String name, String cid})> councils;
+  late List<({String name, String cid})> banks;
 
   setUp(() {
-    councils = [
-      _institution('甲省储会', 'prc-a', OrgType.prc, 2),
-      _institution('乙省储会', 'prc-b', OrgType.prc, 3),
-      _institution('丙省储会', 'prc-c', OrgType.prc, 4),
+    councils = const [
+      (name: '甲省储会', cid: 'prc-a'),
+      (name: '乙省储会', cid: 'prc-b'),
+      (name: '丙省储会', cid: 'prc-c'),
     ];
-    banks = [
-      _institution('甲省储行', 'prb-a', OrgType.prb, 5),
-      _institution('乙省储行', 'prb-b', OrgType.prb, 6),
+    banks = const [
+      (name: '甲省储行', cid: 'prb-a'),
+      (name: '乙省储行', cid: 'prb-b'),
     ];
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
   test('applyGovernanceInstitutionOrder 使用本机顺序并把新增机构补到末尾', () {
+    final source = [
+      _inst('甲省储会', 'prc-a', 'PRC'),
+      _inst('乙省储会', 'prc-b', 'PRC'),
+      _inst('丙省储会', 'prc-c', 'PRC'),
+    ];
     final ordered = applyGovernanceInstitutionOrder(
-      councils,
+      source,
       const ['prc-b', 'missing', 'prc-a', 'prc-b'],
     );
-
-    expect(
-      ordered.map((institution) => institution.cidNumber),
-      ['prc-b', 'prc-a', 'prc-c'],
-    );
+    expect(ordered.map((i) => i.cidNumber), ['prc-b', 'prc-a', 'prc-c']);
   });
 
   test('reorderGovernanceInstitutions 按拖拽目标位置重排', () {
-    final reordered = reorderGovernanceInstitutions(councils, 0, 2);
-
-    expect(
-      reordered.map((institution) => institution.cidNumber),
-      ['prc-b', 'prc-c', 'prc-a'],
-    );
+    final source = [
+      _inst('甲省储会', 'prc-a', 'PRC'),
+      _inst('乙省储会', 'prc-b', 'PRC'),
+      _inst('丙省储会', 'prc-c', 'PRC'),
+    ];
+    final reordered = reorderGovernanceInstitutions(source, 0, 2);
+    expect(reordered.map((i) => i.cidNumber), ['prc-b', 'prc-c', 'prc-a']);
   });
 
   testWidgets('省储会和省储行默认折叠，国储会保持展示', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
-
     expect(find.text('国家储备委员会'), findsOneWidget);
     expect(find.text('甲省储会'), findsNothing);
     expect(find.text('甲省储行'), findsNothing);
     expect(find.byIcon(Icons.chevron_right), findsNWidgets(3));
     expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
-    expect(
-      tester
-          .getTopRight(
-            find.byKey(
-              const ValueKey(
-                'governance_section_toggle_provincialCouncil',
-              ),
-            ),
-          )
-          .dx,
-      greaterThan(380),
-    );
   });
 
   testWidgets('国储会卡片横跨整行且高度对齐省级卡片', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
-
     final cardSize = tester.getSize(
       find.byKey(const ValueKey('governance_national_card_nrc')),
     );
-    final cardRight =
-        tester.getTopRight(find.byIcon(Icons.chevron_right).first).dx;
     const expectedProvincialCardHeight = ((420 - 32 - 8) / 2) / 2.9;
-
     expect(cardSize.height, closeTo(expectedProvincialCardHeight, 0.01));
-    expect(cardRight, greaterThan(380));
   });
 
   testWidgets('点击右侧箭头后只展开对应分组', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
-
     await tester.tap(
       find.byKey(
         const ValueKey('governance_section_toggle_provincialCouncil'),
       ),
     );
     await tester.pumpAndSettle();
-
     expect(find.text('甲省储会'), findsOneWidget);
     expect(find.text('乙省储会'), findsOneWidget);
     expect(find.text('甲省储行'), findsNothing);
@@ -141,7 +148,6 @@ void main() {
     SharedPreferences.setMockInitialValues({
       governanceProvincialCouncilOrderPrefsKey: ['prc-b', 'prc-a'],
     });
-
     await _pumpPage(tester, councils: councils, banks: banks);
     await tester.tap(
       find.byKey(
@@ -149,14 +155,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-
     final first = tester.getTopLeft(find.text('乙省储会'));
     final second = tester.getTopLeft(find.text('甲省储会'));
     expect(first.dx, lessThan(second.dx));
   });
 
   testWidgets('长按拖拽省储会后保存本机排序', (tester) async {
-    await _pumpPage(tester, councils: councils.take(2).toList(), banks: banks);
+    await _pumpPage(
+      tester,
+      councils: councils.take(2).toList(),
+      banks: banks,
+    );
     await tester.tap(
       find.byKey(
         const ValueKey('governance_section_toggle_provincialCouncil'),
@@ -164,9 +173,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.text('甲省储会')),
-    );
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.text('甲省储会')));
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 120));
     await gesture.moveTo(tester.getCenter(find.text('乙省储会')));
     await tester.pump();

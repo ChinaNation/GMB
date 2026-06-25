@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
+import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/city_institution_list_page.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
-import 'package:citizenapp/citizen/public/public_institution_detail_page.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -44,6 +45,10 @@ class _CityVm {
 class _PublicPageState extends State<PublicPage> {
   late final PublicInstitutionRepository _repo =
       widget.repository ?? PublicInstitutionRepository();
+
+  /// 统一详情页入口仓库门面(包装目录仓库;ADR-028 决策 2)。
+  late final InstitutionRepository _institutionRepo =
+      InstitutionRepository(directory: _repo);
 
   List<PublicProvinceItem> _provinces = const [];
 
@@ -326,9 +331,9 @@ class _PublicPageState extends State<PublicPage> {
   void _openDetail(String cidNumber) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PublicInstitutionDetailPage(
+        builder: (_) => InstitutionDetailPage(
           cidNumber: cidNumber,
-          repository: _repo,
+          repository: _institutionRepo,
         ),
       ),
     );
