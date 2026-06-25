@@ -23,8 +23,12 @@ pub(crate) async fn admin_list_citizens(
     let scope_province_code = auth_ctx
         .scope_province_name
         .as_deref()
-        .and_then(|name| crate::china::provinces().iter().find(|p| p.name == name))
-        .map(|p| p.code.to_string());
+        .and_then(|name| {
+            crate::china::provinces()
+                .iter()
+                .find(|p| p.province_name == name)
+        })
+        .map(|p| p.province_code.to_string());
     let scope_city_code = auth_ctx
         .scope_city_name
         .as_deref()
@@ -35,11 +39,11 @@ pub(crate) async fn admin_list_citizens(
                 .and_then(|province_name| {
                     crate::china::provinces()
                         .iter()
-                        .find(|p| p.name == province_name)
-                        .and_then(|p| p.cities.iter().find(|c| c.name == city_name))
+                        .find(|p| p.province_name == province_name)
+                        .and_then(|p| p.cities.iter().find(|c| c.city_name == city_name))
                 })
         })
-        .map(|c| c.code.to_string());
+        .map(|c| c.city_code.to_string());
 
     let keyword = query.keyword.unwrap_or_default();
     let page_size = query.page_size.or(query.limit).unwrap_or(50).clamp(1, 100);

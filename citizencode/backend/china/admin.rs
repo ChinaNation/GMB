@@ -67,17 +67,20 @@ pub(crate) async fn admin_china_cities(
     if let Err(resp) = ensure_province_scope(&admin_ctx, &province_name) {
         return resp;
     }
-    let Some(p) = provinces().iter().find(|p| p.name == province_name) else {
+    let Some(p) = provinces()
+        .iter()
+        .find(|p| p.province_name == province_name)
+    else {
         return api_error(StatusCode::NOT_FOUND, 1004, "province not found");
     };
     let mut rows: Vec<CidCityItem> = p
         .cities
         .iter()
         .map(|c| CidCityItem {
-            city_name: c.name.to_string(),
-            code: c.code.to_string(),
+            city_name: c.city_name.to_string(),
+            city_code: c.city_code.to_string(),
         })
         .collect();
-    rows.sort_by(|a, b| a.code.cmp(&b.code));
+    rows.sort_by(|a, b| a.city_code.cmp(&b.city_code));
     ok(rows)
 }

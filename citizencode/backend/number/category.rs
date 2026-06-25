@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::number::code::InstitutionCode;
+use crate::number::code::{self, InstitutionCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -24,8 +24,8 @@ pub enum InstitutionCategory {
 }
 
 impl InstitutionCategory {
-    /// 中文显示标签。
-    pub fn label_zh(self) -> &'static str {
+    /// 机构分类中文名称。
+    pub fn category_name_zh(self) -> &'static str {
         match self {
             Self::PublicSecurity => "公安局",
             Self::GovInstitution => "公权机构",
@@ -42,13 +42,13 @@ pub const PUBLIC_SECURITY_INSTITUTION_SUFFIX: &str = "公安局";
 ///
 /// 返回 None:机构码不是注册型机构(个人主体 CTZN/NATP/SMTP、个人多签 PMUL)。
 pub fn classify(code: InstitutionCode, _cid_full_name: &str) -> Option<InstitutionCategory> {
-    if code.is_person() || code == InstitutionCode::Pmul {
+    if code::is_person(&code) || code == code::PMUL {
         return None;
     }
-    if code == InstitutionCode::Cpol {
+    if code::is_city_police(&code) {
         return Some(InstitutionCategory::PublicSecurity);
     }
-    if code.is_public_legal() {
+    if code::is_public_legal(&code) {
         Some(InstitutionCategory::GovInstitution)
     } else {
         // 私法人 / 非法人
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn public_security_by_dedicated_code() {
         assert_eq!(
-            classify(InstitutionCode::Cpol, "广州市公安局"),
+            classify(*b"CPOL", "广州市公安局"),
             Some(InstitutionCategory::PublicSecurity)
         );
     }
@@ -71,11 +71,11 @@ mod tests {
     #[test]
     fn gov_institution_is_not_public_security() {
         assert_eq!(
-            classify(InstitutionCode::Cgov, "某某市政府"),
+            classify(*b"CGOV", "某某市政府"),
             Some(InstitutionCategory::GovInstitution)
         );
         assert_eq!(
-            classify(InstitutionCode::Plg, "某省立法院"),
+            classify(*b"PLG\0", "某省立法院"),
             Some(InstitutionCategory::GovInstitution)
         );
     }
@@ -83,20 +83,20 @@ mod tests {
     #[test]
     fn private_institution_for_private_and_unincorporated() {
         assert_eq!(
-            classify(InstitutionCode::Sfgq, "某股权公司"),
+            classify(*b"SFGQ", "某股权公司"),
             Some(InstitutionCategory::PrivateInstitution)
         );
         assert_eq!(
-            classify(InstitutionCode::Unin, "某非法人组织"),
+            classify(*b"UNIN", "某非法人组织"),
             Some(InstitutionCategory::PrivateInstitution)
         );
     }
 
     #[test]
     fn person_types_return_none() {
-        assert_eq!(classify(InstitutionCode::Ctzn, "任意"), None);
-        assert_eq!(classify(InstitutionCode::Natp, "任意"), None);
-        assert_eq!(classify(InstitutionCode::Smtp, "任意"), None);
-        assert_eq!(classify(InstitutionCode::Pmul, "任意"), None);
+        assert_eq!(classify(*b"CTZN", "任意"), None);
+        assert_eq!(classify(*b"NATP", "任意"), None);
+        assert_eq!(classify(*b"SMTP", "任意"), None);
+        assert_eq!(classify(code::PMUL, "任意"), None);
     }
 }

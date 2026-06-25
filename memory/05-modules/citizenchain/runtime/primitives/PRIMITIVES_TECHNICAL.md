@@ -15,6 +15,7 @@
 |------|------|
 | `src/lib.rs` | 模块声明入口 |
 | `src/core_const.rs` | 货币基础参数、利率模型、安全参数、统一签名/派生域 |
+| `src/code.rs` | 国家码、省级行政区码、CID 机构码及其谓词的全仓唯一常量真源 |
 | `src/fee_policy.rs` | **费率规则常量单一权威源**：链上/链下/投票统一价 + 三方分账比例 |
 | `src/pow_const.rs` | PoW 难度、全节点发行、区块时间参数 |
 | `src/citizen_const.rs` | 公民认证发行常量 |
@@ -112,7 +113,19 @@
 
 ---
 
-## 4. 区块计数口径说明
+## 4. code.rs 代码常量规则
+
+- `src/code.rs` 是国家码、省级行政区码和 CID 机构码的全仓唯一真源。
+- 国家码使用 `CountryCode = [u8; 2]`,当前 `COUNTRY_CN = CN`,并携带 `country_full_name / country_short_name`。
+- 省级行政区码使用 `ProvinceCode = [u8; 2]`,当前 43 省来自 `citizencode/backend/china/china.sqlite` 的抽离结果;CID 后端加载 `china.sqlite` 时必须断言 SQLite 省表与 `PROVINCE_CODE_INFOS` 一致。
+- 市、镇和地址段代码不进入 runtime primitives;它们继续由 CID `china.sqlite` 按省管理。
+- 机构码使用 `InstitutionCode = [u8; 4]`,3 字符码右补 `0`;全部 92 个机构码在 `INSTITUTION_CODE_INFOS` 中维护,分组只用 A-I 注释表达,不得增加第二套 group/kind/admin_level 数据字段。
+- 机构码对应中文名统一使用 `cid_short_name`;不得恢复旧标签字段或第二份标签表。
+- `citizencode/backend/number/code.rs` 只能 re-export / wrap `primitives::code`,不得手写第二份机构码数组。
+
+---
+
+## 5. 区块计数口径说明
 | 常量 | 值 | 来源 | 用途 |
 |------|-----|------|------|
 | SECONDS_PER_BLOCK | 360 | 运行期 6 分钟出块 | 派生基础 |
@@ -126,7 +139,7 @@
 
 ---
 
-## 5. 测试覆盖
+## 6. 测试覆盖
 执行命令：
 - `cargo test -p primitives`
 
@@ -142,3 +155,4 @@
 - **`fee_policy::offchain_rate_bounds_consistent`** — 链下费率上下限合法
 - **`fee_policy::min_fees_positive`** — 最低费用 > 0,防零费用攻击
 - **`fee_policy::onchain_rate_positive`** — 链上费率 > 0,防零费率绕过
+- **`code::tests::*`** — 国家/省/机构码格式、唯一性、分类谓词和 CID 号机构码解析一致性

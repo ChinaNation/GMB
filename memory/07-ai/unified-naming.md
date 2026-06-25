@@ -35,6 +35,9 @@
 9. 跨端同一字段必须同名，除非有明确语言风格差异并在本文件登记。
 10. 不允许为规避冲突随意加 `new`、`old`、`v2`、`temp`、`fix`、`final`。
 11. 需要中英文名称的地方，中文名用于说明和 UI，英文名用于目录、代码、字段和接口。
+12. 同一个业务语义字段在全仓库必须使用同一个命名。Rust、Dart、TypeScript、SQL、JSON、文档和生成物不得为同一含义另造局部别名；语言风格差异只允许 snake_case ↔ lowerCamelCase，并必须登记在本文件。
+13. 禁止用 `name`、`label`、`display_name`、`type`、`status`、`code` 等泛化字段承载已经有明确业务语义的数据。确需局部 UI 变量时只能作为临时展示变量，不得进入 API、DTO、数据库、storage、协议、常量表或持久化模型。
+14. 不确定两个字段是否同义时，必须先全仓搜索既有命名和文档登记，再向用户确认；不得自行创造新字段名。
 
 ## 3. 命名风格
 
@@ -208,10 +211,14 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 允许继续使用 `name` 的例外:
 
-- 行政区字典记录:`{ code, name }`。
 - 账户名称变量或链上 `name` 参数,但对外字段必须是 `account_name` / `accountName`。
 - 钱包名、文件名和自然人姓名；联系人姓名必须使用 `contact_name` / `contactName`。
 - UI 局部派生展示变量可以使用 `title` / `label`,但不得作为 API、DTO、数据库或持久化字段承载机构名称。
+
+行政区字典记录不得再使用裸 `name` / `code` 承载对外或持久化字段;必须按层级使用
+`country_name` / `country_code`、`province_name` / `province_code`、
+`city_name` / `city_code`、`town_name` / `town_code`。泛行政区缓存或通用列表才允许使用
+`division_name` / `division_code`,且必须同时携带层级字段。
 
 ## 5.2 非机构姓名与展示字段硬规则
 

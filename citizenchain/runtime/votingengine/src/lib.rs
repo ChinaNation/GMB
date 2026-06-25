@@ -643,6 +643,22 @@ pub mod pallet {
                         &proposal, proposal_id
                     )?;
                 }
+                STAGE_LEG_SIGN => {
+                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                        BlockNumberFor<T>,
+                        T::AccountId,
+                    >>::finalize_legislation_sign_timeout(
+                        &proposal, proposal_id
+                    )?;
+                }
+                STAGE_LEG_OVERRIDE => {
+                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                        BlockNumberFor<T>,
+                        T::AccountId,
+                    >>::finalize_legislation_override_timeout(
+                        &proposal, proposal_id
+                    )?;
+                }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
             }
 
@@ -778,6 +794,22 @@ pub mod pallet {
                             BlockNumberFor<T>,
                             T::AccountId,
                         >>::finalize_legislation_referendum_timeout(
+                            &proposal, proposal_id
+                        )
+                    }
+                    STAGE_LEG_SIGN => {
+                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                            BlockNumberFor<T>,
+                            T::AccountId,
+                        >>::finalize_legislation_sign_timeout(
+                            &proposal, proposal_id
+                        )
+                    }
+                    STAGE_LEG_OVERRIDE => {
+                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
+                            BlockNumberFor<T>,
+                            T::AccountId,
+                        >>::finalize_legislation_override_timeout(
                             &proposal, proposal_id
                         )
                     }

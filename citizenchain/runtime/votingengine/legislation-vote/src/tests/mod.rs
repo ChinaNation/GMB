@@ -70,6 +70,24 @@ pub fn member(idx: u8) -> AccountId32 {
     AccountId32::new([idx; 32])
 }
 
+// 签署机构(ADR-027 修订):行政机构(总统府/省政府/市政府)+ 立法院(两院级,供院长)。
+pub const EXEC_CODE: InstitutionCode = *b"CGOV"; // 行政机构(市政府式)
+pub const LEG_CODE: InstitutionCode = *b"NLG\0"; // 立法院
+pub fn exec_body() -> AccountId32 {
+    AccountId32::new([80u8; 32])
+}
+/// 行政首长(市长/省长/总统)= 行政机构法定代表人。
+pub fn exec_rep() -> AccountId32 {
+    AccountId32::new([81u8; 32])
+}
+pub fn leg_body() -> AccountId32 {
+    AccountId32::new([70u8; 32])
+}
+/// 立法院院长 = 立法院法定代表人。
+pub fn leg_rep() -> AccountId32 {
+    AccountId32::new([71u8; 32])
+}
+
 pub struct TestCidEligibility;
 pub struct TestPopulationSnapshotVerifier;
 pub struct TestInternalAdminProvider;
@@ -138,6 +156,23 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             Some((1u8..=10).map(member).collect())
         } else if institution == house2() {
             Some((11u8..=20).map(member).collect())
+        } else {
+            None
+        }
+    }
+    /// 法定代表人:众议长=house1[member 1] / 参议长=house2[member 11] / 院长=leg_rep / 行政首长=exec_rep。
+    fn legal_representative(
+        _institution_code: InstitutionCode,
+        institution: AccountId32,
+    ) -> Option<AccountId32> {
+        if institution == house1() {
+            Some(member(1))
+        } else if institution == house2() {
+            Some(member(11))
+        } else if institution == leg_body() {
+            Some(leg_rep())
+        } else if institution == exec_body() {
+            Some(exec_rep())
         } else {
             None
         }
@@ -230,8 +265,20 @@ pub fn create(
     houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
     vote_type: u8,
 ) -> u64 {
-    let pid =
-        Lib::do_create_legislation_proposal(proposer, houses, vote_type).expect("proposal created");
+    // 单院(市)=无 legislature;两院(国/省)=携带立法院。行政签署机构恒携带。
+    let legislature = if houses.len() >= 2 {
+        Some((LEG_CODE, leg_body()))
+    } else {
+        None
+    };
+    let pid = Lib::do_create_legislation_proposal(
+        proposer,
+        houses,
+        vote_type,
+        (EXEC_CODE, exec_body()),
+        legislature,
+    )
+    .expect("proposal created");
     let now = System::block_number();
     votingengine::Pallet::<Test>::register_proposal_data(
         pid,
@@ -274,6 +321,41 @@ pub fn cast(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchRe
             }
         },
     )
+}
+
+/// 行政签署(事务内)。
+pub fn exec_sign(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
+    frame_support::storage::with_transaction(
+        || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
+            match Lib::do_executive_sign(who, pid, approve) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+            }
+        },
+    )
+}
+
+/// 三人会签(事务内)。
+pub fn override_sign(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
+    frame_support::storage::with_transaction(
+        || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
+            match Lib::do_override_sign(who, pid, approve) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+            }
+        },
+    )
+}
+
+/// 推进到提案 end 之后并触发到期结算(用于签署/会签超时测试)。
+pub fn run_to_expiry(pid: u64) {
+    use frame_support::traits::Hooks;
+    let end = votingengine::pallet::Proposals::<Test>::get(pid)
+        .expect("proposal exists")
+        .end;
+    // 到期桶挂在 end+1;推进到 end+1 并触发 on_initialize 自动结算。
+    System::set_block_number(end + 1);
+    votingengine::Pallet::<Test>::on_initialize(end + 1);
 }
 
 mod cases;

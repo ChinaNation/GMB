@@ -228,7 +228,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setCitiesLoading(true);
     loadCachedCidCities(auth, lockedProvinceName)
       .then((rows) => {
-        if (!cancelled) setCities(rows.filter((c) => c.code !== '000'));
+        if (!cancelled) setCities(rows.filter((c) => c.city_code !== '000'));
       })
       .catch((err) => {
         if (!cancelled) {

@@ -440,7 +440,7 @@ fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialI
         let province_home_city = province
             .cities
             .iter()
-            .find(|city| city.code == "001")
+            .find(|city| city.city_code == "001")
             .or_else(|| province.cities.first());
         if let Some(home_city) =
             province_home_city.filter(|city| home_city_matches_scope(city, scope))
@@ -448,13 +448,13 @@ fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialI
             for template in PROVINCE_DEPARTMENT_TEMPLATES {
                 push_area_template_target(
                     &mut targets,
-                    province.name,
-                    province.code,
-                    home_city.name,
-                    home_city.code,
+                    province.province_name,
+                    province.province_code,
+                    home_city.city_name,
+                    home_city.city_code,
                     "",
                     "",
-                    province.name,
+                    province.province_name,
                     template,
                     "PROVINCE",
                 );
@@ -463,19 +463,19 @@ fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialI
         for city in province
             .cities
             .iter()
-            .filter(|city| city.code != "000")
+            .filter(|city| city.city_code != "000")
             .filter(|city| city_matches_scope(city, scope))
         {
             for template in CITY_TEMPLATES {
                 push_area_template_target(
                     &mut targets,
-                    province.name,
-                    province.code,
-                    city.name,
-                    city.code,
+                    province.province_name,
+                    province.province_code,
+                    city.city_name,
+                    city.city_code,
                     "",
                     "",
-                    city.name,
+                    city.city_name,
                     template,
                     "CITY",
                 );
@@ -484,13 +484,13 @@ fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialI
                 for template in TOWN_TEMPLATES {
                     push_area_template_target(
                         &mut targets,
-                        province.name,
-                        province.code,
-                        city.name,
-                        city.code,
-                        town.name,
-                        town.code,
-                        town.name,
+                        province.province_name,
+                        province.province_code,
+                        city.city_name,
+                        city.city_code,
+                        town.town_name,
+                        town.town_code,
+                        town.town_name,
                         template,
                         "TOWN",
                     );
@@ -511,25 +511,28 @@ fn public_security_targets(scope: &OfficialReconcileScope) -> Vec<OfficialInstit
         for city in province
             .cities
             .iter()
-            .filter(|city| city.code != "000")
+            .filter(|city| city.city_code != "000")
             .filter(|city| city_matches_scope(city, scope))
         {
-            let Some(cid_number) =
-                generate_public_security_cid(province.name, province.code, city.name, city.code)
-            else {
+            let Some(cid_number) = generate_public_security_cid(
+                province.province_name,
+                province.province_code,
+                city.city_name,
+                city.city_code,
+            ) else {
                 continue;
             };
             targets.push(OfficialInstitutionTarget {
                 cid_number,
-                cid_full_name: format!("{}公民安全局", city.name),
-                cid_short_name: format!("{}公安局", city.name),
+                cid_full_name: format!("{}公民安全局", city.city_name),
+                cid_short_name: format!("{}公安局", city.city_name),
                 category: InstitutionCategory::PublicSecurity,
                 p1: "0".to_string(),
-                province_name: province.name.to_string(),
-                city_name: city.name.to_string(),
+                province_name: province.province_name.to_string(),
+                city_name: city.city_name.to_string(),
                 town_name: String::new(),
-                province_code: province.code.to_string(),
-                city_code: city.code.to_string(),
+                province_code: province.province_code.to_string(),
+                city_code: city.city_code.to_string(),
                 town_code: String::new(),
                 institution_code: "CPOL".to_string(),
                 education_type: None,
@@ -573,35 +576,39 @@ fn build_raw_targets(
 }
 
 fn province_matches_scope(
-    province: &crate::china::model::ProvinceCode,
+    province: &crate::china::model::ProvinceDivision,
     scope: &OfficialReconcileScope,
 ) -> bool {
     match scope {
         OfficialReconcileScope::All => true,
         OfficialReconcileScope::Province { province_code }
         | OfficialReconcileScope::City { province_code, .. } => {
-            province.code.eq_ignore_ascii_case(province_code)
+            province.province_code.eq_ignore_ascii_case(province_code)
         }
     }
 }
 
 fn city_matches_scope(
-    city: &crate::china::model::CityCode,
+    city: &crate::china::model::CityDivision,
     scope: &OfficialReconcileScope,
 ) -> bool {
     match scope {
         OfficialReconcileScope::All | OfficialReconcileScope::Province { .. } => true,
-        OfficialReconcileScope::City { city_code, .. } => city.code.eq_ignore_ascii_case(city_code),
+        OfficialReconcileScope::City { city_code, .. } => {
+            city.city_code.eq_ignore_ascii_case(city_code)
+        }
     }
 }
 
 fn home_city_matches_scope(
-    city: &crate::china::model::CityCode,
+    city: &crate::china::model::CityDivision,
     scope: &OfficialReconcileScope,
 ) -> bool {
     match scope {
         OfficialReconcileScope::All | OfficialReconcileScope::Province { .. } => true,
-        OfficialReconcileScope::City { city_code, .. } => city.code.eq_ignore_ascii_case(city_code),
+        OfficialReconcileScope::City { city_code, .. } => {
+            city.city_code.eq_ignore_ascii_case(city_code)
+        }
     }
 }
 
@@ -677,14 +684,14 @@ pub(crate) fn federal_registry_admins() -> Option<&'static [[u8; 32]]> {
 fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     let Some(province) = provinces()
         .iter()
-        .find(|province| province.name == "中枢省")
+        .find(|province| province.province_name == "中枢省")
     else {
         return;
     };
     let Some(city) = province
         .cities
         .iter()
-        .find(|city| city.code == "001")
+        .find(|city| city.city_code == "001")
         .or_else(|| province.cities.first())
     else {
         return;
@@ -711,10 +718,10 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
         };
         push_area_template_target(
             targets,
-            province.name,
-            province.code,
-            city.name,
-            city.code,
+            province.province_name,
+            province.province_code,
+            city.city_name,
+            city.city_code,
             "",
             "",
             "",
@@ -777,7 +784,7 @@ fn parse_cid_institution_parts(cid_number: &str) -> Option<(String, String, Stri
     let province_code = parts.r5.get(0..2)?.to_string();
     let city_code = parts.r5.get(2..5)?.to_string();
     let p1 = if parts.profit { "1" } else { "0" }.to_string();
-    Some((province_code, city_code, parts.code, p1))
+    Some((province_code, city_code, parts.institution_code_text, p1))
 }
 
 fn cid_institution_code_is(cid_number: &str, expected: &str) -> bool {
@@ -792,12 +799,12 @@ fn province_city_by_codes(
 ) -> Option<(&'static str, &'static str)> {
     let province = provinces()
         .iter()
-        .find(|p| p.code.eq_ignore_ascii_case(province_code))?;
+        .find(|p| p.province_code.eq_ignore_ascii_case(province_code))?;
     let city = province
         .cities
         .iter()
-        .find(|c| c.code.eq_ignore_ascii_case(city_code))?;
-    Some((province.name, city.name))
+        .find(|c| c.city_code.eq_ignore_ascii_case(city_code))?;
+    Some((province.province_name, city.city_name))
 }
 
 fn category_text(category: InstitutionCategory) -> &'static str {
@@ -1241,7 +1248,7 @@ pub fn reconcile_changed_gov_catalog_db(
     let mut reports = Vec::new();
     for province in provinces() {
         let scope = OfficialReconcileScope::Province {
-            province_code: province.code.to_string(),
+            province_code: province.province_code.to_string(),
         };
         let check = check_gov_catalog_db(db, scope.clone(), GovTargetKind::All)?;
         if check.ok && check.manifest_catalog_hash.is_none() {
@@ -1286,14 +1293,17 @@ pub fn reconcile_public_security_for_province_db(
     province_name: &str,
     actor: &str,
 ) -> Result<ReconcileReport, String> {
-    let Some(province) = provinces().iter().find(|item| item.name == province_name) else {
+    let Some(province) = provinces()
+        .iter()
+        .find(|item| item.province_name == province_name)
+    else {
         return Err(format!("unknown province: {province_name}"));
     };
     let report = reconcile_gov_catalog_db(
         db,
         actor,
         OfficialReconcileScope::Province {
-            province_code: province.code.to_string(),
+            province_code: province.province_code.to_string(),
         },
         GovTargetKind::PublicSecurity,
     )?;

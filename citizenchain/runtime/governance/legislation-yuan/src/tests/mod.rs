@@ -269,6 +269,20 @@ pub fn houses() -> HousesOf<Test> {
     BoundedVec::try_from(vec![(OWNER_CODE, owner_body())]).expect("houses within bound")
 }
 
+// 签署机构(ADR-027 修订):行政机构(法定代表人=签署人)。
+pub const EXEC_CODE: InstitutionCode = *b"CGOV";
+pub fn exec_body() -> AccountId32 {
+    AccountId32::new([80u8; 32])
+}
+/// 提案机构 =(OWNER_CODE, owner_body());legislator() 是其管理员。
+pub fn proposer_body() -> (InstitutionCode, AccountId32) {
+    (OWNER_CODE, owner_body())
+}
+/// 行政签署机构 =(EXEC_CODE, exec_body())。
+pub fn executive() -> (InstitutionCode, AccountId32) {
+    (EXEC_CODE, exec_body())
+}
+
 /// 直接构造一个 Enact 提案摘要(用于直调 write_law_version 预置法律)。
 pub fn enact_summary(
     tier: Tier,

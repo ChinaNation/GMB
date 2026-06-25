@@ -77,6 +77,7 @@
 - 代码必须补中文注释
 - 产品命名硬规则：公民（在线/热钱包）= 英文名 `CitizenApp`、模块 id/目录 `citizenapp`、中文名“公民”；公民钱包（离线/冷钱包）= 英文名 `CitizenWallet`、模块 id/目录 `citizenwallet`、中文名“公民钱包”。任何历史旧名及非目标中英文产品名一律废弃，不得在代码、文档、命名、注释中生成；改名进度见任务卡 `20260620-product-rename-citizenapp-citizenwallet`
 - 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；CID 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支；CPMS 本地非机构操作人员统一为 `operators`。
+- 全仓字段同名硬规则：同一个业务语义字段在全仓库必须使用同一个命名；不得在 Rust、Dart、TypeScript、SQL、JSON、文档或生成物中为同一含义另造 `name`、`label`、`display_name`、`type`、`status` 等泛化别名。字段名必须尽量精简但直接表达业务语义；例如行政区名称必须按层级使用 `country_name`、`province_name`、`city_name`、`town_name`，泛行政区才允许使用 `division_name`；国家名称使用 `country_full_name` / `country_short_name`；机构实体名称和机构码对应中文名统一使用 `cid_full_name` / `cid_short_name`。不确定是否同义时必须先全仓搜索并向用户确认，不得自行命名。
 - runtime 二次确认硬规则：任何涉及 `citizenchain/runtime/` 的修改，无论是业务逻辑、常量、权重、runtime primitives、注释、格式化、生成物还是仅由格式化工具造成的无逻辑 diff，都必须在执行前单独向用户说明完整路径、预计改动内容和原因，并得到用户明确的第二次确认；没有二次确认时，禁止读写工具、格式化命令或批量命令产生 runtime diff。
 - 代码更新后必须更新文档
 - 代码更新后必须清理残留
@@ -161,11 +162,12 @@ citizenapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/0
 - **R3 外部后端(CID/HTTP)缓存**:health/catalog/机构注册证/电子护照状态等读取加 Isar + TTL 缓存。
 - **豁免**:交易提交管线(nonce/dry-run/submit/runtime-version/genesis/提交用 best 块)+ UI 倒计时 Timer。
 
-## 死规则:行政区唯一真源 + code 不可变不复用(ADR-021)
+## 死规则:行政区/机构代码唯一真源 + code 不可变不复用(ADR-021)
 
-- **唯一真源**:行政区(省/市/镇/村/路)只有一个入口 = `citizencode/backend/china/`。开发库 `citizencode/backend/china/china.sqlite` 是唯一权威源；生产 `CID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套行政区名字**。
-- **发布消费**:行政区变更必须修改开发库并递增 `metadata.admin_division_version`；CID、citizenapp、CPMS 发布包都从开发库派生本地只读快照。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
+- **常量唯一真源**:国家码、省级行政区码和 CID 机构码只允许维护在 `citizenchain/runtime/primitives/src/code.rs`。国家用 `CountryCode=CN`;省用 `ProvinceCode` 两位大写字母;机构用 `InstitutionCode` 三/四位大写字母。CID `number/` 只引用 primitives,不得恢复第二份机构码表或省码表。
+- **行政区运行数据唯一真源**:市、镇和地址段只有一个入口 = `citizencode/backend/china/`。开发库 `citizencode/backend/china/china.sqlite` 是市镇地址段权威源；生产 `CID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套市镇地址段名字**。SQLite 省表必须与 primitives `PROVINCE_CODE_INFOS` 一致,加载时断言。
+- **发布消费**:市镇地址段变更必须修改开发库并递增 `metadata.admin_division_version`;CID、citizenapp、CPMS 发布包都从开发库派生本地只读快照。国家码、省码、机构码变更属于 runtime primitives 变更,必须走 runtime 二次确认。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
 - **目录红线**:不得恢复 `citizencode/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `citizencode/backend/china/`。
-- **code 不可变、不复用**:省 code 固定且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `name` 不改 `code`;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
-- **校验**:`china/store.rs::load_provinces` 加载即断言省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizencode/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
-- **红线**:行政区开发库变更不直接修改 `citizenchain/runtime/`。`/primitives/china/` 的行政区和保护机构常量需要变更时,必须走 runtime 升级二次确认。
+- **code 不可变、不复用**:省 code 固定在 primitives 且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `province_name/city_name/town_name` 不改 code;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
+- **校验**:`china/store.rs::load_provinces` 加载即断言 SQLite 省表与 primitives 一致、省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizencode/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
+- **红线**:市镇地址段开发库变更不直接修改 `citizenchain/runtime/`。国家码、省级行政区码、机构码和 `/primitives/china/` 保护机构常量需要变更时,必须走 runtime 升级二次确认。

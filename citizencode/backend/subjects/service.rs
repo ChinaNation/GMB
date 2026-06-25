@@ -5,9 +5,8 @@
 
 #![allow(dead_code)]
 
-use crate::number::{
-    classify, validate_cid_number_format, AdminLevel, InstitutionCategory, InstitutionCode,
-};
+use crate::number::code;
+use crate::number::{classify, validate_cid_number_format, AdminLevel, InstitutionCategory};
 use crate::subjects::model::{Institution, InstitutionAccount};
 use crate::subjects::MultisigChainStatus;
 use primitives::account_derive::is_forbidden_account_name;
@@ -111,7 +110,7 @@ fn public_org_scope(
     province_code: &str,
     city_code: &str,
 ) -> LegalRepresentativeCitizenScope {
-    match InstitutionCode::from_str(institution_code).and_then(|c| c.admin_level()) {
+    match code::from_str(institution_code).and_then(|c| code::admin_level(&c)) {
         Some(AdminLevel::National) => LegalRepresentativeCitizenScope::Nationwide,
         Some(AdminLevel::Province) => LegalRepresentativeCitizenScope::Province {
             province_code: province_code.trim().to_string(),
@@ -130,17 +129,17 @@ pub fn resolve_legal_representative_scope_for_codes(
     city_code: &str,
     parent: Option<&Institution>,
 ) -> LegalRepresentativeCitizenScope {
-    let code = crate::number::InstitutionCode::from_str(institution_code);
-    let is_public_legal = code.map_or(false, |c| c.is_public_legal());
-    let is_unincorporated = code.map_or(false, |c| c.is_unincorporated());
+    let parsed_institution_code = code::from_str(institution_code);
+    let is_public_legal = parsed_institution_code.map_or(false, |c| code::is_public_legal(&c));
+    let is_unincorporated = parsed_institution_code.map_or(false, |c| code::is_unincorporated(&c));
     if is_public_legal {
         return public_org_scope(institution_code, province_code, city_code);
     }
 
     let parent_is_public_legal_person = parent
         .map(|parent| {
-            crate::number::InstitutionCode::from_str(parent.institution_code.as_str())
-                .map_or(false, |c| c.is_public_legal())
+            code::from_str(parent.institution_code.as_str())
+                .map_or(false, |c| code::is_public_legal(&c))
         })
         .unwrap_or(false);
     if is_unincorporated && parent_is_public_legal_person {
@@ -312,8 +311,8 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
 /// 主体属性由机构码派生(K1 已从号码删除)。机构码不识别或不属于任何机构分类(个人/个人多签)
 /// 返回 None,调用方应当直接拒绝请求。
 pub fn derive_category(institution_code: &str, cid_full_name: &str) -> Option<InstitutionCategory> {
-    let code = InstitutionCode::from_str(institution_code)?;
-    classify(code, cid_full_name)
+    let institution_code = code::from_str(institution_code)?;
+    classify(institution_code, cid_full_name)
 }
 
 /// 按机构类型构造默认未上链账户。

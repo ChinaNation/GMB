@@ -107,6 +107,7 @@
 - 代码必须补中文注释
 - 产品命名硬规则：公民（在线/热钱包）= 英文名 `CitizenApp`、模块 id/目录 `citizenapp`、中文名“公民”；公民钱包（离线/冷钱包）= 英文名 `CitizenWallet`、模块 id/目录 `citizenwallet`、中文名“公民钱包”。任何历史旧名及非目标中英文产品名一律废弃，不得在代码、文档、命名、注释中生成；改名进度见任务卡 `20260620-product-rename-citizenapp-citizenwallet`
 - 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；CID 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支；CPMS 本地非机构操作人员统一为 `operators`。
+- 全仓字段同名硬规则：同一个业务语义字段在全仓库必须使用同一个命名；不得在 Rust、Dart、TypeScript、SQL、JSON、文档或生成物中为同一含义另造 `name`、`label`、`display_name`、`type`、`status` 等泛化别名。字段名必须尽量简短但直接表达业务语义；例如行政区名称必须按层级使用 `country_name`、`province_name`、`city_name`、`town_name`，泛行政区才允许使用 `division_name`；国家名称使用 `country_full_name` / `country_short_name`；机构实体名称和机构码对应中文名统一使用 `cid_full_name` / `cid_short_name`。不确定是否同义时必须先全仓搜索并向用户确认，不得自行命名。
 - runtime 二次确认硬规则：任何涉及 `citizenchain/runtime/` 的修改，无论是业务逻辑、常量、权重、runtime primitives、注释、格式化、生成物还是仅由格式化工具造成的无逻辑 diff，都必须在执行前单独向用户说明完整路径、预计改动内容和原因，并得到用户明确的第二次确认；没有二次确认时，禁止读写工具、格式化命令或批量命令产生 runtime diff。
 - 禁止兼容硬规则：除非用户在当前任务中明确要求兼容，否则任何设计、实现、修复、数据处理、文档更新都不得保留旧流程、旧格式、旧数据、旧命名、旧目录、旧注释、旧文案、旧交易载荷、旧接口分支、过渡兼容、双轨兼容或影子旧流程
 - 彻底改造硬规则：所有问题必须按目标状态一次性彻底改造；发现旧代码、旧注释、旧文档、旧配置、旧数据、旧目录、旧测试、旧任务描述或旧 UI 文案残留时，必须在同一任务内清理，不能以“后续再处理”作为完成口径

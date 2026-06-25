@@ -116,3 +116,25 @@
 - citizenapp 两个个人账户页面文件同步改为 `personal_account_create_page.dart` / `personal_account_close_page.dart`,并同步 import、技术文档和历史任务卡路径。
 - 中文账户文案中的旧地址式口径同步收敛为“账户/多签账户/主账户”,保留钱包、收付款、网络地址等真实地址语义。
 - 验证:`cargo fmt --manifest-path citizenchain/runtime/Cargo.toml` 相关包通过;`cargo test -p admins-change` 41/41、`-p personal-manage` 23/23、`-p organization-manage` 26/26、`-p duoqian-transfer` 23/23、`-p internal-vote` 87/87 通过;`cargo check --manifest-path citizenchain/Cargo.toml -p citizenchain` 通过;node 侧用临时 `TAURI_CONFIG` 指向已有资源目录完成 `cargo check --manifest-path citizenchain/node/Cargo.toml`;`flutter analyze` 通过;citizenapp 相关账户测试串行通过;账户旧命名和中文旧地址文案残留扫描 0 命中;`git diff --check` 通过。
+
+## 补记:国家/省/机构代码唯一真源收口(2026-06-25,用户确认 runtime 后)
+
+- `citizenchain/runtime/primitives/src/code.rs` 已作为国家码、省级行政区码和 CID 机构码的全仓唯一常量真源:
+  - 国家码 `CountryCode=CN`,携带 `country_full_name / country_short_name`。
+  - 省级行政区码 `ProvinceCode` 共 43 个,来自当前 `china.sqlite` 省表抽离结果。
+  - 机构码 `InstitutionCode` 共 92 个,`INSTITUTION_CODE_INFOS` 同时保存 `institution_code_text / cid_short_name`,A-I 分组仅用注释表达,不另设分组字段。
+- `citizencode/backend/number/code.rs` 已改为 primitives 薄封装;CID `number/` 继续负责 CID 号生成、解析、校验,不删除、不迁移、不恢复第二份码表。
+- `citizencode/backend/china/store.rs` 读取市镇数据前会校验 SQLite 省表与 primitives 省表数量、顺序、省码、省名完全一致;市、镇、地址段继续由 `china.sqlite` 管理。
+- 行政区/机构字段命名已同步:
+  - 国家:`country_full_name / country_short_name`
+  - 省、市、镇:`province_name / city_name / town_name`
+  - 泛行政区:`division_name`
+  - 机构实体全称/简称:`cid_full_name / cid_short_name`
+  - 管理端编码元信息接口:`institution_code / cid_short_name / province_code / city_code`
+- 已清理旧文档口径:早期任务卡和 ADR 中的旧机构码文件、旧标签字段、旧 86/90 码阶段记录均同步为当前 `code.rs` 92 码唯一真源口径。
+- 验证:
+  - `cargo test --manifest-path citizenchain/runtime/primitives/Cargo.toml code::tests --lib` 通过。
+  - `cargo check --manifest-path citizencode/backend/Cargo.toml` 通过。
+  - `cargo test --manifest-path citizencode/backend/Cargo.toml` 通过。
+  - `npm run build`(`citizencode/frontend`) 通过,仅保留 Vite 大 chunk 警告。
+  - 真实运行态:本地启动 CID 后端,`/api/v1/health` 返回 UP;临时本地 session 调用 `/api/v1/admin/number/meta` 返回 `institution_code/cid_short_name` 和 `province_name/province_code`;调用 `/api/v1/admin/china/cities` 返回 `city_name/city_code`;验收后已删除临时 session。

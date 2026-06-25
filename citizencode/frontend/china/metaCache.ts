@@ -6,8 +6,8 @@ import type { AdminAuth } from '../auth/types';
 import type { InstitutionDetail, InstitutionListRow } from '../subjects/api';
 import { getCidMeta, listCidCities, type CidCityItem, type CidMetaResult } from './api';
 
-const CID_META_CACHE_VERSION = 'cid-meta-v2';
-const CID_CITY_CACHE_VERSION = 'cid-cities-v3';
+const CID_META_CACHE_VERSION = 'cid-meta-v3';
+const CID_CITY_CACHE_VERSION = 'cid-cities-v4';
 const PUBLIC_SECURITY_CACHE_VERSION = 'public-security-v1';
 const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v1';
 const EDUCATION_COMMITTEE_CACHE_VERSION = 'education-committees-v1';
@@ -71,13 +71,17 @@ export async function loadCachedCidMeta(auth: AdminAuth): Promise<CidMetaResult>
   return next;
 }
 
-// 中文注释:防御字段漂移——缓存里只要存在 city_name 缺失的项就判脏,弃缓存回源。
-// 背景:后端 cities 字段曾从 name 改为 city_name 而缓存版本未 bump,旧结构缓存(city_name
-// 全空)静默残留 → 市卡片显示 code、市注册局列表 join 失败。形状校验让缓存对结构漂移自愈。
+// 中文注释:防御字段漂移——缓存里只要存在 city_name/city_code 缺失的项就判脏,弃缓存回源。
+// 背景:后端 cities 字段曾从 name/code 改为 city_name/city_code 而缓存版本未 bump,
+// 旧结构缓存静默残留会导致市卡片与注册局列表 join 失败。形状校验让缓存对结构漂移自愈。
 function citiesCacheUsable(rows: CidCityItem[] | null): rows is CidCityItem[] {
   return (
     Array.isArray(rows)
-    && rows.every((c) => typeof c.city_name === 'string' && c.city_name.length > 0)
+    && rows.every((c) =>
+      typeof c.city_name === 'string'
+      && c.city_name.length > 0
+      && typeof c.city_code === 'string'
+      && c.city_code.length > 0)
   );
 }
 

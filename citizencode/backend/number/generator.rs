@@ -16,7 +16,7 @@ use blake2::{digest::consts::U32, Blake2b, Digest};
 use chrono::Utc;
 
 use crate::china::{city_code_by_name, province_code_by_name};
-use crate::number::code::{InstitutionCode, ProfitPolicy};
+use crate::number::code::{self, ProfitPolicy};
 use crate::number::validator::{checksum_char_m1, checksum_char_mod36};
 
 type Blake2b256 = Blake2b<U32>;
@@ -58,21 +58,21 @@ pub fn generate_cid_number(input: GenerateCidInput<'_>) -> Result<String, &'stat
         return Err("account_pubkey, province_name, city_name, institution are required");
     }
 
-    let code = InstitutionCode::from_str(input.institution)
+    let institution_code = code::from_str(input.institution)
         .ok_or("institution must be a registered CID institution code")?;
-    if code == InstitutionCode::Pmul {
+    if institution_code == code::PMUL {
         return Err("personal multisig (PMUL) has no cid number");
     }
 
     // 盈利属性由机构码策略决定;可变/继承策略读取入参。
-    let profit = match code.profit_policy() {
+    let profit = match code::profit_policy(&institution_code) {
         ProfitPolicy::NonProfit => false,
         ProfitPolicy::Profit => true,
         ProfitPolicy::Variable | ProfitPolicy::InheritParent => resolve_profit(input.p1)?,
     };
 
     // 公民人/自然人/智能人的公开编码只精确到省,市级段统一固定为 000。
-    let person_level = code.is_person();
+    let person_level = code::is_person(&institution_code);
 
     let d = Utc::now().format("%Y").to_string();
     let province_code = province_code_by_name(input.province_name)
@@ -91,7 +91,7 @@ pub fn generate_cid_number(input: GenerateCidInput<'_>) -> Result<String, &'stat
         input.city_name
     };
 
-    let code_str = code.as_code();
+    let code_str = code::as_code(&institution_code);
     let r5 = format!("{province_code}{city_code}");
     // 同 (机构码, 省, 市, year) 4 元组共享 10 亿 n9 桶,调用方 1000 次重试逃逸碰撞。
     let n9 = format!(
@@ -103,7 +103,7 @@ pub fn generate_cid_number(input: GenerateCidInput<'_>) -> Result<String, &'stat
             % 1_000_000_000
     );
 
-    if code.is_three_char() {
+    if code::is_three_char(&institution_code) {
         // A 布局:码(3) + 盈利位(0/1,按盈利策略) + 校验(mod-36)。
         // 国家/省部/公立大学非盈利→0;私立大学(SUN)可变,按实例 0/1。
         let profit_char = if profit { "1" } else { "0" };

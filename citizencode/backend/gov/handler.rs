@@ -398,7 +398,7 @@ pub(crate) async fn reconcile_public_security(
             let target_provinces: Vec<String> = if scope.provinces.is_empty() {
                 crate::china::provinces()
                     .iter()
-                    .map(|p| p.name.to_string())
+                    .map(|p| p.province_name.to_string())
                     .collect()
             } else {
                 scope.provinces.clone()

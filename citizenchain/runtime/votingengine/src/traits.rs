@@ -62,14 +62,19 @@ pub trait LegislationVoteEngine<AccountId> {
     /// - `houses`:院序列 `[(机构码, 机构账户), ...]`,发起院在前、终审院在后。
     ///   单院(市立法会)= 1 项;两院(国家/省立法院)= `[众议会, 参议会]`;教委会模式 = `[教委会, 参议会]`。
     ///   发起人 `who` 必须是 `houses[0]`(发起院)的现任议员/委员(admin)。
-    /// - `vote_type`:表决类型 u8(常规 0 / 重要 1 / 二审 2 / 特别 3),用 u8 保持引擎与业务枚举解耦。
-    ///   特别案(3)内部全过后强制进入公投阶段(发起前须由 `who` 准备人口快照)。
+    /// - `vote_type`:表决类型 u8(常规 0 / 常规教育 1 / 重要 2 / 重要教育 3 / 特别 4,ADR-027 修订),
+    ///   用 u8 保持引擎与业务枚举解耦。特别案(4)内部全过后强制进入公投阶段(发起前须由 `who` 准备人口快照),
+    ///   公投通过即生效不签署;非特别案内部全过后进入行政签署阶段(`executive` 机构法定代表人签署)。
+    /// - `executive`:行政签署机构 `(机构码, 机构账户)`——市政府(市)/省政府(省)/总统府(国);其法定代表人=市长/省长/总统。
+    /// - `legislature`:两院级的立法院机构 `(机构码, 机构账户)`(国家/省立法院,其法定代表人=院长,供三人会签);单院(市)= `None`。
     /// - `data`:MODULE_TAG 前缀 + 提案摘要(law_id/tier/version/content_hash)。
     /// - `object_data`:法律全文大对象(整部条文 SCALE),供通过回调读回写入新版本。
     fn create_legislation_proposal(
         who: AccountId,
         houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
         vote_type: u8,
+        executive: (InstitutionCode, AccountId),
+        legislature: Option<(InstitutionCode, AccountId)>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
         object_data: sp_std::vec::Vec<u8>,
@@ -81,6 +86,8 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
         _who: AccountId,
         _houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
         _vote_type: u8,
+        _executive: (InstitutionCode, AccountId),
+        _legislature: Option<(InstitutionCode, AccountId)>,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
         _object_data: sp_std::vec::Vec<u8>,
@@ -784,7 +791,8 @@ impl JointCleanupHandler for () {
 // ──────────────────────────────────────────────────────────────────
 
 /// 立法投票超时结算入口。legislation-vote sub-pallet 实现。
-/// 两阶段:内部表决(STAGE_LEG_HOUSE,单院一段/两院顺序两段)+ 强制公投(STAGE_LEG_REFERENDUM)。
+/// 四阶段(ADR-027 修订 2026-06-25):内部表决(STAGE_LEG_HOUSE,单院一段/两院顺序两段)
+/// + 强制公投(STAGE_LEG_REFERENDUM)+ 行政签署(STAGE_LEG_SIGN)+ 三人会签(STAGE_LEG_OVERRIDE)。
 pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
     fn finalize_legislation_house_timeout(
         proposal: &crate::Proposal<BlockNumber, AccountId>,
@@ -795,6 +803,22 @@ pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
         proposal: &crate::Proposal<BlockNumber, AccountId>,
         proposal_id: u64,
     ) -> DispatchResult;
+
+    /// 行政签署阶段超时:市级(无 legislature)= 视为通过(PASSED);省/国级 = 退回三人会签。
+    fn finalize_legislation_sign_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Ok(())
+    }
+
+    /// 三人会签阶段超时:法案否决(REJECTED)。
+    fn finalize_legislation_override_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Ok(())
+    }
 }
 
 impl<BlockNumber, AccountId> LegislationProposalFinalizer<BlockNumber, AccountId> for () {

@@ -7,7 +7,8 @@ use votingengine::types::{
     LEG_VOTE_MAJOR, LEG_VOTE_MAJOR_EDU, LEG_VOTE_REGULAR, LEG_VOTE_REGULAR_EDU, LEG_VOTE_SPECIAL,
 };
 use votingengine::{
-    STAGE_LEG_HOUSE, STAGE_LEG_REFERENDUM, STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING,
+    STAGE_LEG_HOUSE, STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM, STAGE_LEG_SIGN, STATUS_EXECUTED,
+    STATUS_REJECTED, STATUS_VOTING,
 };
 
 // ───────────────── 阈值纯函数(宪法第四十四/四十五条精确端点,5 类删二审)─────────────────
@@ -19,14 +20,29 @@ fn house_final_passed_thresholds() {
     assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 5, 3)); // 5/8=62.5%但 casted=8 不>8
     assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 5, 4)); // 5/9=55%<60%
                                                                           // 常规教育案:阈值同常规案。
-    assert!(legislation_house_final_passed(LEG_VOTE_REGULAR_EDU, 10, 6, 3));
-    assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR_EDU, 10, 5, 4));
+    assert!(legislation_house_final_passed(
+        LEG_VOTE_REGULAR_EDU,
+        10,
+        6,
+        3
+    ));
+    assert!(!legislation_house_final_passed(
+        LEG_VOTE_REGULAR_EDU,
+        10,
+        5,
+        4
+    ));
     // 重要案:>90% 参与 且 ≥70% 赞成。
     assert!(legislation_house_final_passed(LEG_VOTE_MAJOR, 10, 7, 3)); // casted=10>9, 7/10≥70%
     assert!(!legislation_house_final_passed(LEG_VOTE_MAJOR, 10, 8, 1)); // casted=9 不>9
-                                                                       // 重要教育案:阈值同重要案。
+                                                                        // 重要教育案:阈值同重要案。
     assert!(legislation_house_final_passed(LEG_VOTE_MAJOR_EDU, 10, 7, 3));
-    assert!(!legislation_house_final_passed(LEG_VOTE_MAJOR_EDU, 10, 8, 1));
+    assert!(!legislation_house_final_passed(
+        LEG_VOTE_MAJOR_EDU,
+        10,
+        8,
+        1
+    ));
     // 特别案内部:全员 且 ≥70% 赞成。
     assert!(legislation_house_final_passed(LEG_VOTE_SPECIAL, 10, 7, 3)); // 全员10,7赞成
     assert!(!legislation_house_final_passed(LEG_VOTE_SPECIAL, 10, 6, 4)); // 6<70%
@@ -59,17 +75,69 @@ fn referendum_threshold() {
 // ───────────────── 单院投票 ─────────────────
 
 #[test]
-fn single_house_regular_passes_on_full_participation() {
+fn single_house_regular_passes_then_mayor_signs() {
     new_test_ext().execute_with(|| {
         let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
-        // 10 名议员全投:7 赞成 3 反对 → 通过。
+        // 10 名议员全投:7 赞成 3 反对 → 院通过 → 进入行政签署阶段(市级)。
         for i in 1u8..=7 {
             assert_ok!(cast(member(i), pid, true));
         }
         for i in 8u8..=10 {
             assert_ok!(cast(member(i), pid, false));
         }
+        assert_eq!(stage(pid), STAGE_LEG_SIGN);
+        assert_eq!(status(pid), STATUS_VOTING);
+        // 市长(行政机构法定代表人)签署 → 生效。
+        assert_ok!(exec_sign(exec_rep(), pid, true));
         assert_eq!(status(pid), STATUS_EXECUTED);
+    });
+}
+
+#[test]
+fn single_house_mayor_veto_rejects_without_rescue() {
+    new_test_ext().execute_with(|| {
+        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        for i in 1u8..=7 {
+            assert_ok!(cast(member(i), pid, true));
+        }
+        for i in 8u8..=10 {
+            assert_ok!(cast(member(i), pid, false));
+        }
+        assert_eq!(stage(pid), STAGE_LEG_SIGN);
+        // 市长否决 → 市级无救济 → 否决。
+        assert_ok!(exec_sign(exec_rep(), pid, false));
+        assert_eq!(status(pid), STATUS_REJECTED);
+    });
+}
+
+#[test]
+fn single_house_sign_timeout_passes() {
+    new_test_ext().execute_with(|| {
+        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        for i in 1u8..=7 {
+            assert_ok!(cast(member(i), pid, true));
+        }
+        for i in 8u8..=10 {
+            assert_ok!(cast(member(i), pid, false));
+        }
+        assert_eq!(stage(pid), STAGE_LEG_SIGN);
+        // 市级:市长 30 天未表态 → 超时视为通过。
+        run_to_expiry(pid);
+        assert_eq!(status(pid), STATUS_EXECUTED);
+    });
+}
+
+#[test]
+fn executive_sign_rejected_for_non_representative() {
+    new_test_ext().execute_with(|| {
+        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        for i in 1u8..=10 {
+            assert_ok!(cast(member(i), pid, i <= 7));
+        }
+        assert_eq!(stage(pid), STAGE_LEG_SIGN);
+        // 非法定代表人签署被拒。
+        assert!(exec_sign(member(2), pid, true).is_err());
+        assert_eq!(status(pid), STATUS_VOTING);
     });
 }
 
@@ -110,40 +178,108 @@ fn non_member_cannot_vote() {
 }
 
 #[test]
-fn non_legislator_cannot_create() {
+fn create_no_longer_authorizes_proposer_at_vote_layer() {
     new_test_ext().execute_with(|| {
-        // member(50) 不是任何院议员。
-        assert_noop!(
-            Lib::do_create_legislation_proposal(member(50), single_house(), LEG_VOTE_REGULAR),
-            crate::pallet::Error::<Test>::NotLegislator
-        );
+        // ADR-027 修订:发起人资格由 legislation-yuan 对 proposer_body 校验,提案方与表决院解耦;
+        // legislation-vote 层不再卡 who(市级 市自治会/市教委会 委员可提案,不属表决院 houses[0])。
+        let pid = create(member(50), single_house(), LEG_VOTE_REGULAR);
+        assert_eq!(stage(pid), STAGE_LEG_HOUSE);
     });
 }
 
-// ───────────────── 两院顺序 ─────────────────
+// ───────────────── 两院顺序 + 签署 + 三人会签 ─────────────────
+
+/// 两院全过后推进至行政签署阶段(辅助):返回处于 STAGE_LEG_SIGN 的提案。
+fn two_houses_passed_to_sign() -> u64 {
+    let pid = create(member(1), two_houses(), LEG_VOTE_MAJOR);
+    for i in 1u8..=8 {
+        assert_ok!(cast(member(i), pid, true));
+    }
+    for i in 9u8..=10 {
+        assert_ok!(cast(member(i), pid, false));
+    }
+    assert_eq!(stage(pid), STAGE_LEG_HOUSE);
+    assert_eq!(LegMeta::<Test>::get(pid).unwrap().current_house, 1);
+    for i in 11u8..=18 {
+        assert_ok!(cast(member(i), pid, true));
+    }
+    for i in 19u8..=20 {
+        assert_ok!(cast(member(i), pid, false));
+    }
+    // 两院通过(重要案无公投)→ 行政签署阶段(省/国级)。
+    assert_eq!(stage(pid), STAGE_LEG_SIGN);
+    assert_eq!(status(pid), STATUS_VOTING);
+    pid
+}
 
 #[test]
-fn two_houses_advance_then_pass() {
+fn two_houses_pass_then_governor_signs() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), two_houses(), LEG_VOTE_MAJOR);
-        // 第一院(众议会式,议员 1..=10):8 赞成 2 反对 → 通过,推进至第二院。
-        for i in 1u8..=8 {
-            assert_ok!(cast(member(i), pid, true));
-        }
-        for i in 9u8..=10 {
-            assert_ok!(cast(member(i), pid, false));
-        }
-        // 仍在内部表决阶段,当前院推进到 1。
-        assert_eq!(stage(pid), STAGE_LEG_HOUSE);
-        assert_eq!(LegMeta::<Test>::get(pid).unwrap().current_house, 1);
-        // 第二院(参议会式,议员 11..=20):8 赞成 2 反对 → 通过 → 整体 PASSED(重要案无公投)。
-        for i in 11u8..=18 {
-            assert_ok!(cast(member(i), pid, true));
-        }
-        for i in 19u8..=20 {
-            assert_ok!(cast(member(i), pid, false));
-        }
+        let pid = two_houses_passed_to_sign();
+        assert_ok!(exec_sign(exec_rep(), pid, true));
         assert_eq!(status(pid), STATUS_EXECUTED);
+    });
+}
+
+#[test]
+fn two_houses_exec_veto_then_three_sign_passes() {
+    new_test_ext().execute_with(|| {
+        let pid = two_houses_passed_to_sign();
+        // 省长/总统否决 → 退回三人会签。
+        assert_ok!(exec_sign(exec_rep(), pid, false));
+        assert_eq!(stage(pid), STAGE_LEG_OVERRIDE);
+        // 三人:院长(leg_rep)+ 众议长(member 1)+ 参议长(member 11) 全签 → 生效。
+        assert_ok!(override_sign(leg_rep(), pid, true));
+        assert_ok!(override_sign(member(1), pid, true));
+        assert_eq!(status(pid), STATUS_VOTING);
+        assert_ok!(override_sign(member(11), pid, true));
+        assert_eq!(status(pid), STATUS_EXECUTED);
+    });
+}
+
+#[test]
+fn two_houses_override_one_veto_rejects() {
+    new_test_ext().execute_with(|| {
+        let pid = two_houses_passed_to_sign();
+        assert_ok!(exec_sign(exec_rep(), pid, false));
+        assert_eq!(stage(pid), STAGE_LEG_OVERRIDE);
+        assert_ok!(override_sign(leg_rep(), pid, true));
+        // 任一否决即否决。
+        assert_ok!(override_sign(member(1), pid, false));
+        assert_eq!(status(pid), STATUS_REJECTED);
+    });
+}
+
+#[test]
+fn two_houses_sign_timeout_goes_to_override() {
+    new_test_ext().execute_with(|| {
+        let pid = two_houses_passed_to_sign();
+        // 省/国级:行政首长 30 天未表态 → 退回三人会签。
+        run_to_expiry(pid);
+        assert_eq!(stage(pid), STAGE_LEG_OVERRIDE);
+        assert_eq!(status(pid), STATUS_VOTING);
+    });
+}
+
+#[test]
+fn two_houses_override_timeout_rejects() {
+    new_test_ext().execute_with(|| {
+        let pid = two_houses_passed_to_sign();
+        assert_ok!(exec_sign(exec_rep(), pid, false));
+        assert_eq!(stage(pid), STAGE_LEG_OVERRIDE);
+        // 三人会签 30 天未完成 → 否决。
+        run_to_expiry(pid);
+        assert_eq!(status(pid), STATUS_REJECTED);
+    });
+}
+
+#[test]
+fn override_sign_rejected_for_non_signer() {
+    new_test_ext().execute_with(|| {
+        let pid = two_houses_passed_to_sign();
+        assert_ok!(exec_sign(exec_rep(), pid, false));
+        // member(5) 不是院长/参议长/众议长。
+        assert!(override_sign(member(5), pid, true).is_err());
     });
 }
 

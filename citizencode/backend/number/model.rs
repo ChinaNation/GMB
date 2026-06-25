@@ -3,26 +3,26 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
-pub(crate) struct CidOptionItem {
-    pub(crate) label: &'static str,
-    pub(crate) value: &'static str,
+pub(crate) struct CidInstitutionCodeItem {
+    pub(crate) institution_code: &'static str,
+    pub(crate) cid_short_name: &'static str,
 }
 
 #[derive(Serialize)]
 pub(crate) struct CidProvinceItem {
     pub(crate) province_name: String,
-    pub(crate) code: String,
+    pub(crate) province_code: String,
 }
 
 #[derive(Serialize)]
 pub(crate) struct CidCityItem {
     pub(crate) city_name: String,
-    pub(crate) code: String,
+    pub(crate) city_code: String,
 }
 
 #[derive(Serialize)]
 pub(crate) struct AdminCidMetaOutput {
-    pub(crate) institution_options: Vec<CidOptionItem>,
+    pub(crate) institution_options: Vec<CidInstitutionCodeItem>,
     pub(crate) provinces: Vec<CidProvinceItem>,
     pub(crate) scoped_province_name: Option<String>,
 }

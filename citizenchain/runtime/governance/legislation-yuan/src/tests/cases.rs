@@ -123,6 +123,9 @@ fn propose_enact_by_legislator_reaches_engine_notconfigured() {
                 Tier::Municipal,
                 1001,
                 houses(),
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Regular,
                 title(b"law"),
                 None,
@@ -143,6 +146,9 @@ fn propose_enact_by_non_legislator_rejected() {
                 Tier::Municipal,
                 1001,
                 houses(),
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Regular,
                 title(b"law"),
                 None,
@@ -164,6 +170,9 @@ fn propose_enact_constitution_rejected() {
                 Tier::Constitution,
                 0,
                 houses(),
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Special,
                 title(b"second constitution"),
                 None,
@@ -194,6 +203,9 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 Tier::Municipal,
                 1001,
                 houses(),
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Regular,
                 title(b""),
                 None,
@@ -208,6 +220,9 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 Tier::Municipal,
                 1001,
                 houses(),
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Regular,
                 title(b"law"),
                 None,
@@ -264,6 +279,9 @@ fn amend_constitution_immutable_article_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
@@ -287,6 +305,9 @@ fn rejects_amend_while_pending() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Major,
                 title(b"law-v2"),
                 None,
@@ -375,6 +396,9 @@ fn amend_constitution_preserving_immutable_reaches_engine() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
@@ -398,6 +422,9 @@ fn amend_constitution_with_regular_vote_type_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Regular, // 宪法修改不允许常规案
                 title(b"constitution-v2"),
                 None,
@@ -414,7 +441,14 @@ fn repeal_constitution_rejected() {
     new_test_ext().execute_with(|| {
         seed_constitution();
         assert_noop!(
-            Lib::propose_repeal_law(RuntimeOrigin::signed(legislator()), 0, VoteType::Special),
+            Lib::propose_repeal_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                proposer_body(),
+                executive(),
+                None,
+                VoteType::Special
+            ),
             Error::<Test>::CannotRepealConstitution
         );
     });
@@ -427,6 +461,9 @@ fn amend_nonexistent_law_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 404,
+                proposer_body(),
+                executive(),
+                None,
                 VoteType::Regular,
                 title(b"x"),
                 None,

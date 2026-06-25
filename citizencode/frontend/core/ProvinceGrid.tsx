@@ -30,7 +30,7 @@ export const ProvinceGrid: React.FC<Props> = ({ provinces, onPick }) => {
     >
       {provinces.map((p) => (
         <div
-          key={p.code}
+          key={p.province_code}
           onClick={() => onPick(p.province_name)}
           style={CARD_STYLE}
           onMouseEnter={(e) => {

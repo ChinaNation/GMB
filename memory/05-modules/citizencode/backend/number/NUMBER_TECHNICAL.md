@@ -1,28 +1,35 @@
 # number/ — 身份 ID 编码协议
 
-- 最后更新:2026-06-14
+- 最后更新:2026-06-25
 - 任务卡:
   - `memory/08-tasks/done/20260603-cid-remove-institutions-china-sqlite.md`
   - `memory/08-tasks/done/20260604-cid-core-number-store-refactor.md`
   - `memory/08-tasks/open/20260607-cid-number-protocol.md`
   - `memory/08-tasks/done/20260612-181650-重构-cid-私权机构架构-保留身份id格式-私权机构按个体经营-合伙企业-股权公司-股份公司-公益组织-注册协.md`
   - `memory/08-tasks/open/20260614-cid-education-classification.md`
+  - `memory/08-tasks/open/20260620-unify-cid-fields.md`
 
 ## 定位
 
 - 路径:`citizencode/backend/number/`
-- 职责:提供 CID 编码协议的主体属性、机构码、分类、生成和格式校验。
-- 非职责:不维护行政区划静态表,不保存省、市、镇和地址段数据。
+- 职责:提供 CID 号生成、解析、格式校验和按机构码派生的分类封装。
+- 非职责:不维护国家码、省级行政区码、机构码第二真源;不保存市、镇和地址段数据。
 
-行政区划唯一真源在 `citizencode/backend/china/`。`number::generator`
-只在生成号码时调用 `crate::china::{province_code_by_name, city_code_by_name}`。
+国家码、省级行政区码、机构码的唯一常量真源在
+`citizenchain/runtime/primitives/src/code.rs`。`number/code.rs` 只做薄封装并继续服务
+CID 号生成、解析和校验;不得恢复第二份机构码枚举、第二份 `ALL` 码表或
+`label/value/name/code` 泛化字段。
+
+市、镇和地址段数据仍由 `citizencode/backend/china/china.sqlite` 管理。`number::generator`
+生成号码时通过 `crate::china::{province_code_by_name, city_code_by_name}` 取 R5 段;其中
+`province_code_by_name` 最终引用 runtime primitives 的 `ProvinceCodeInfo`。
 
 ## 模块结构
 
 ```text
 citizencode/backend/number/
 ├── mod.rs
-├── institution_code.rs
+├── code.rs
 ├── category.rs
 ├── generator.rs
 ├── validator.rs
@@ -30,8 +37,8 @@ citizencode/backend/number/
 └── admin.rs
 ```
 
-- `institution_code.rs`:机构类型枚举。
-- `category.rs`:主体属性枚举、机构分类枚举与分类函数。
+- `code.rs`:引用 runtime primitives 的国家/省/机构代码常量和机构码谓词,不保存第二份码表。
+- `category.rs`:机构分类枚举与分类函数,分类一律由机构码派生。
 - `generator.rs`:CID 号码生成入口 `generate_cid_number`。
 - `validator.rs`:CID 号码格式校验、校验位计算与协议字段拆分。
 - `model.rs`:管理端编码元信息 DTO。
@@ -39,47 +46,44 @@ citizencode/backend/number/
 
 ## 生成规则摘要
 
-- 编码段:`R5-K3P1C1-N9-D4`
-- `R5`:省码 + 市码;省市代码来自 `china` 模块。
-- `K3`:主体属性 `K1` + 机构类型 `T2`。
-- `K1`:主体属性,取值为 `M/Z/N/G/S/F`。
-- `P1`:盈利属性,取值为 `0/1`。
-- `C1`:校验位,继续使用原校验算法,载荷为 `R5 + K3 + P1 + N9 + D4`。
+- 编码段:`R5-SEG2-N9-D4`。
+- `R5`:省码 + 市码;省码来自 primitives `ProvinceCodeInfo`,市码来自 `china.sqlite`。
+- `SEG2`:恒 5 字符,按机构码长度分两种布局。
+- 3 字符码布局:`机构码(3)+盈利位(1)+校验位(1,mod-36)`。
+- 4 字符码布局:`机构码(4)+M1(1)`,M1 为盈利属性和校验位合一;数字表示盈利,字母表示非盈利。
 - `N9`:稳定散列序列。
 - `D4`:年份。
 - 示例:`LN001-NRC0G-944805165-2026`。
 
 规则:
 
-- `M / Z / N` 使用省级占位市码 `000`。
-- `G / S / F` 使用真实市码。
-- `G` 机构码允许 `ZF/LF/SF/JC/JY/CB`。
-- `S` 允许私权法人 `LP/GQ/GF/GY/AS` 和私法人教育机构 `JY`。
-- `F` 允许独立非法人私权机构 `GT/GP`、教育分校 `JY` 和现有公权附属非法人 `ZG`;
-  是否需要所属法人由 `subjects/unincorporated_org` 校验。
+- 国家/省级机构码和大学类机构使用 3 字符布局;市镇、公私权、个人和个人多签类机构码使用 4 字符布局。
+- 机构码自身决定公法人、私法人、非法人、个人主体、教育机构、行政层级和盈利策略。
+- `ProfitPolicy::NonProfit` 必须生成非盈利位;`ProfitPolicy::Profit` 必须生成盈利位;
+  `ProfitPolicy::Variable` 由创建实例传入 `p1`;`ProfitPolicy::InheritParent` 继承父级法人盈利属性。
 - 教育阶段、国家/市公民教育委员会分类由 `subjects.education_type` 表达,不进入
-  `GenerateCidInput`,也不得改变 `G/S/F + JY` 的 CID 生成语义。
-- `ZG/TG` 不再用于私权机构分类;它们保留给人类主体来源分类,其中 `ZG` 仍承担既有公权附属
-  非法人代码,不得在私权新增入口暴露。
+  `GenerateCidInput`,也不得改变机构码本身的 CID 生成语义。
 
 私权目标类型映射:
 
 | 类型 | 机构码 | 主体属性 |
 |---|---|---|
-| 个体经营 | `GT` | `F` |
-| 无限合伙 | `GP` | `F` |
-| 有限合伙 | `LP` | `S` |
-| 股权公司 | `GQ` | `S` |
-| 股份公司 | `GF` | `S` |
-| 公益组织 | `GY` | `S` |
-| 注册协会 | `AS` | `S` |
+| 个体经营 | `SFGT` | 非法人 |
+| 无限合伙 | `SFGP` | 非法人 |
+| 有限合伙 | `SFLP` | 私法人 |
+| 股权公司 | `SFGQ` | 私法人 |
+| 股份公司 | `SFGF` | 私法人 |
+| 公益组织 | `SFGY` | 私法人 |
+| 注册协会 | `SFAS` | 私法人 |
 
 ## 引用规则
 
 - 编码协议统一通过 `crate::number::*` 引用。
-- 行政区划统一通过 `crate::china::*` 引用。
+- 机构码分类、盈利策略、行政层级统一通过 `crate::number::code::*` 引用,其内部必须引用
+  `primitives::code`。
+- 行政区划运行数据统一通过 `crate::china::*` 引用;省级代码不得在 `china` 或 `number` 内手写第二份。
 - 不得恢复 `citizencode/backend/cid_number/`、`citizencode/backend/citizencode/`、`province.rs`、
-  `cities.rs` 或 `city_codes/*.rs`。
+  `cities.rs`、`city_codes/*.rs` 或 `number/code.rs`。
 
 ## 验收口径
 
@@ -89,5 +93,6 @@ test ! -d citizencode/backend/cid_number
 test -d citizencode/backend/number
 test -d citizencode/backend/china
 rg "历史主体属性字段|历史身份字段别名" citizencode/backend memory/05-modules/citizencode
+rg "第二份机构码表|第二份省码表" citizencode/backend/number memory/05-modules/citizencode
 cd citizencode/backend && cargo check
 ```

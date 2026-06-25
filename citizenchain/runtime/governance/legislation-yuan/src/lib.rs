@@ -451,6 +451,8 @@ pub mod pallet {
         EmptyHouses,
         /// 发起人不是该立法机构的现任议员/委员(admins)
         NotLegislator,
+        /// 提案机构/表决类型/院结构/签署机构 不符合宪法路由(第44/45条)
+        RoutingMismatch,
         /// 宪法修改的表决类型不合法(只能特别案或重要案)
         InvalidVoteTypeForConstitution,
         /// 命中宪法不可修改条款(第 1/2/3/17/19/23/33/41 条)
@@ -495,11 +497,15 @@ pub mod pallet {
         /// 立法(新法):立法机构议员/委员发起,走立法投票。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_enact_law())]
+        #[allow(clippy::too_many_arguments)]
         pub fn propose_enact_law(
             origin: OriginFor<T>,
             tier: Tier,
             scope_code: u32,
             houses: HousesOf<T>,
+            proposer_body: (InstitutionCode, T::AccountId),
+            executive: (InstitutionCode, T::AccountId),
+            legislature: Option<(InstitutionCode, T::AccountId)>,
             vote_type: VoteType,
             title: TitleOf<T>,
             title_en: Option<TitleOf<T>>,
@@ -514,8 +520,9 @@ pub mod pallet {
             );
             ensure!(!title.is_empty(), Error::<T>::EmptyTitle);
             ensure!(!chapters.is_empty(), Error::<T>::EmptyChapters);
-            Self::ensure_legislator(&houses, &who)?;
+            Self::ensure_legislator(&proposer_body, &who)?;
             Self::ensure_tier_vote_type(tier, vote_type)?;
+            Self::ensure_routing(tier, &proposer_body, &houses, vote_type, &legislature)?;
 
             let summary = LawProposalSummary::<T> {
                 action: LawAction::Enact,
@@ -529,8 +536,15 @@ pub mod pallet {
                 content_hash: Self::hash_chapters(&chapters),
                 effective_at,
             };
-            let proposal_id =
-                Self::dispatch_to_engine(&who, &houses, vote_type, &summary, &chapters)?;
+            let proposal_id = Self::dispatch_to_engine(
+                &who,
+                &houses,
+                vote_type,
+                executive,
+                legislature,
+                &summary,
+                &chapters,
+            )?;
             Self::deposit_event(Event::<T>::LawProposalCreated {
                 proposal_id,
                 action: LawAction::Enact,
@@ -543,9 +557,13 @@ pub mod pallet {
         /// 修法:针对既有法律提交新版本(整部全文快照),走立法投票。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_amend_law())]
+        #[allow(clippy::too_many_arguments)]
         pub fn propose_amend_law(
             origin: OriginFor<T>,
             law_id: u64,
+            proposer_body: (InstitutionCode, T::AccountId),
+            executive: (InstitutionCode, T::AccountId),
+            legislature: Option<(InstitutionCode, T::AccountId)>,
             vote_type: VoteType,
             title: TitleOf<T>,
             title_en: Option<TitleOf<T>>,
@@ -566,8 +584,15 @@ pub mod pallet {
                 law.status != LawStatus::Pending,
                 Error::<T>::AmendmentAlreadyPending
             );
-            Self::ensure_legislator(&law.houses, &who)?;
+            Self::ensure_legislator(&proposer_body, &who)?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;
+            Self::ensure_routing(
+                law.tier,
+                &proposer_body,
+                &law.houses,
+                vote_type,
+                &legislature,
+            )?;
             if law.tier == Tier::Constitution {
                 Self::ensure_immutable_preserved(law_id, law.current_version, &chapters)?;
             }
@@ -584,8 +609,15 @@ pub mod pallet {
                 content_hash: Self::hash_chapters(&chapters),
                 effective_at,
             };
-            let proposal_id =
-                Self::dispatch_to_engine(&who, &law.houses, vote_type, &summary, &chapters)?;
+            let proposal_id = Self::dispatch_to_engine(
+                &who,
+                &law.houses,
+                vote_type,
+                executive,
+                legislature,
+                &summary,
+                &chapters,
+            )?;
             Self::deposit_event(Event::<T>::LawProposalCreated {
                 proposal_id,
                 action: LawAction::Amend,
@@ -601,6 +633,9 @@ pub mod pallet {
         pub fn propose_repeal_law(
             origin: OriginFor<T>,
             law_id: u64,
+            proposer_body: (InstitutionCode, T::AccountId),
+            executive: (InstitutionCode, T::AccountId),
+            legislature: Option<(InstitutionCode, T::AccountId)>,
             vote_type: VoteType,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -613,8 +648,15 @@ pub mod pallet {
                 law.tier != Tier::Constitution,
                 Error::<T>::CannotRepealConstitution
             );
-            Self::ensure_legislator(&law.houses, &who)?;
+            Self::ensure_legislator(&proposer_body, &who)?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;
+            Self::ensure_routing(
+                law.tier,
+                &proposer_body,
+                &law.houses,
+                vote_type,
+                &legislature,
+            )?;
 
             let summary = LawProposalSummary::<T> {
                 action: LawAction::Repeal,
@@ -629,8 +671,15 @@ pub mod pallet {
                 effective_at: Default::default(),
             };
             let empty: ChaptersOf<T> = Default::default();
-            let proposal_id =
-                Self::dispatch_to_engine(&who, &law.houses, vote_type, &summary, &empty)?;
+            let proposal_id = Self::dispatch_to_engine(
+                &who,
+                &law.houses,
+                vote_type,
+                executive,
+                legislature,
+                &summary,
+                &empty,
+            )?;
             Self::deposit_event(Event::<T>::LawProposalCreated {
                 proposal_id,
                 action: LawAction::Repeal,
@@ -643,9 +692,14 @@ pub mod pallet {
 
     // ──────────────── 内部 helper:校验 / 编排 / 执行器 / 查询 ────────────────
     impl<T: Config> Pallet<T> {
-        /// 校验院序列非空,且发起人是发起院(houses[0])的现任管理员(议员/委员)。
-        fn ensure_legislator(houses: &HousesOf<T>, who: &T::AccountId) -> DispatchResult {
-            let (code, body) = houses.first().ok_or(Error::<T>::EmptyHouses)?;
+        /// 校验发起人是提案机构(proposer_body)的现任管理员(议员/委员)。
+        /// ADR-027 修订:提案方与表决院解耦——市级 市自治会/市教委会 委员可提案,
+        /// 但表决院恒为 houses[0]=市立法会,故 auth 校验对 proposer_body 而非 houses[0]。
+        fn ensure_legislator(
+            proposer_body: &(InstitutionCode, T::AccountId),
+            who: &T::AccountId,
+        ) -> DispatchResult {
+            let (code, body) = proposer_body;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     *code,
@@ -654,6 +708,57 @@ pub mod pallet {
                 ),
                 Error::<T>::NotLegislator
             );
+            Ok(())
+        }
+
+        /// 教委会机构码(国家教委会 NED / 市教委会 CEDU);教育类提案的唯一合法提案方。
+        fn is_education_committee(code: InstitutionCode) -> bool {
+            code == *b"NED\0" || code == *b"CEDU"
+        }
+
+        /// 路由校验(ADR-027 修订,宪法第44/45条):提案机构 ⟺ 表决类型 ⟺ 院结构 ⟺ 签署机构。
+        /// - 教育类(常规教育/重要教育)⟺ 提案机构是教委会(NED/CEDU);非教育类禁教委会、教委会禁非教育。
+        /// - tier ⟺ houses 数:市级单院(1);国家/省/宪法两院(2)。legislature 仅两院携带。
+        /// - 两院级:提案机构 = 发起院 houses[0](众议会/教委会本会先表决)。
+        /// - 特别案禁教育类(宪法第44条四款)。
+        fn ensure_routing(
+            tier: Tier,
+            proposer_body: &(InstitutionCode, T::AccountId),
+            houses: &HousesOf<T>,
+            vote_type: VoteType,
+            legislature: &Option<(InstitutionCode, T::AccountId)>,
+        ) -> DispatchResult {
+            let proposer_code = proposer_body.0;
+            // ① 教育类 ⟺ 教委会提案。
+            ensure!(
+                vote_type.is_education() == Self::is_education_committee(proposer_code),
+                Error::<T>::RoutingMismatch
+            );
+            // ② 特别案不适用于教育类(已被①覆盖:教委会不可选 Special,因 Special 非教育)。
+            //    显式再挡:教委会(教育提案方)不可发起特别案。
+            ensure!(
+                !(Self::is_education_committee(proposer_code) && vote_type == VoteType::Special),
+                Error::<T>::RoutingMismatch
+            );
+            // ③ 院结构 + legislature 携带(由实际院数推导)。
+            let first = houses.first().ok_or(Error::<T>::EmptyHouses)?;
+            let single_house = houses.len() == 1;
+            if single_house {
+                ensure!(legislature.is_none(), Error::<T>::RoutingMismatch);
+            } else {
+                ensure!(houses.len() == 2, Error::<T>::RoutingMismatch);
+                ensure!(legislature.is_some(), Error::<T>::RoutingMismatch);
+                // 两院级:提案机构 = 发起院 houses[0](众议会/教委会本会先表决)。
+                ensure!(proposer_code == first.0, Error::<T>::RoutingMismatch);
+            }
+            // ④ tier ⟺ 院数:市级单院、国家/省两院;宪法院数由创世固定,豁免结构校验。
+            match tier {
+                Tier::Municipal => ensure!(single_house, Error::<T>::RoutingMismatch),
+                Tier::National | Tier::Provincial => {
+                    ensure!(!single_house, Error::<T>::RoutingMismatch)
+                }
+                Tier::Constitution => {}
+            }
             Ok(())
         }
 
@@ -701,10 +806,13 @@ pub mod pallet {
 
         /// 编码载荷并调立法投票引擎建提案,返回真实提案 ID。
         /// 院序列(houses)由提案携带,发起人资格与各院表决全部归属立法投票引擎。
+        #[allow(clippy::too_many_arguments)]
         fn dispatch_to_engine(
             who: &T::AccountId,
             houses: &HousesOf<T>,
             vote_type: VoteType,
+            executive: (InstitutionCode, T::AccountId),
+            legislature: Option<(InstitutionCode, T::AccountId)>,
             summary: &LawProposalSummary<T>,
             chapters: &ChaptersOf<T>,
         ) -> Result<u64, DispatchError> {
@@ -715,6 +823,8 @@ pub mod pallet {
                 who.clone(),
                 houses.clone().into_inner(),
                 vote_type.as_u8(),
+                executive,
+                legislature,
                 MODULE_TAG,
                 data,
                 object,

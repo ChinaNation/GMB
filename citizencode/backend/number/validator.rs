@@ -18,7 +18,7 @@
 //! 主体属性(K1)已从号码删除,机构类别一律由机构码自身语义派生。
 //! cid_number 字节上限唯一权威源 = `primitives::core_const::CID_NUMBER_MAX_BYTES`。
 
-use crate::number::code::{InstitutionCode, ProfitPolicy};
+use crate::number::code::{self, InstitutionCode, ProfitPolicy};
 use primitives::core_const::CID_NUMBER_MAX_BYTES;
 
 const CHECKSUM_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -36,7 +36,7 @@ pub struct CidNumberParts {
     /// 机构码(全仓库机构分类唯一真源)。
     pub institution: InstitutionCode,
     /// 机构码原文(3 或 4 字符)。
-    pub code: String,
+    pub institution_code_text: String,
     /// 盈利属性(3 字符布局恒 false;4 字符布局由 M1 数字/字母解出)。
     pub profit: bool,
     /// 校验位(3 字符布局 = mod-36 字符;4 字符布局 = M1)。
@@ -128,14 +128,13 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
     let seg2_bytes = seg2.as_bytes();
     let index3 = seg2_bytes[3] as char;
 
-    let (institution, code, profit, checksum) = if index3.is_ascii_digit() {
+    let (institution, institution_code_text, profit, checksum) = if index3.is_ascii_digit() {
         // A 布局:3 字符码 + 盈利位 + 校验。
         let code = &seg2[0..3];
         let profit_char = &seg2[3..4];
         let checksum = seg2_bytes[4] as char;
-        let institution =
-            InstitutionCode::from_str(code).ok_or("cid_number institution code invalid")?;
-        if !institution.is_three_char() {
+        let institution = code::from_str(code).ok_or("cid_number institution code invalid")?;
+        if !code::is_three_char(&institution) {
             return Err("cid_number 3-char layout code mismatch");
         }
         // 盈利位 0/1,须与机构码盈利策略一致(国家/省部/公立大学非盈利=0;私立大学可变)。
@@ -144,7 +143,7 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
             "1" => true,
             _ => return Err("cid_number 3-char layout profit must be 0/1"),
         };
-        match institution.profit_policy() {
+        match code::profit_policy(&institution) {
             ProfitPolicy::NonProfit if profit => {
                 return Err("cid_number profit conflicts with code policy")
             }
@@ -165,14 +164,13 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
         // B 布局:4 字符码 + M1。
         let code = &seg2[0..4];
         let m1 = seg2_bytes[4] as char;
-        let institution =
-            InstitutionCode::from_str(code).ok_or("cid_number institution code invalid")?;
-        if institution.is_three_char() {
+        let institution = code::from_str(code).ok_or("cid_number institution code invalid")?;
+        if code::is_three_char(&institution) {
             return Err("cid_number 4-char layout code mismatch");
         }
         let profit = m1.is_ascii_digit();
         // M1 解出的盈利属性必须与机构码盈利策略一致。
-        match institution.profit_policy() {
+        match code::profit_policy(&institution) {
             ProfitPolicy::NonProfit if profit => {
                 return Err("cid_number profit conflicts with code policy")
             }
@@ -191,7 +189,7 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
     Ok(CidNumberParts {
         r5: segments[0].to_string(),
         institution,
-        code,
+        institution_code_text,
         profit,
         checksum,
         n9: segments[2].to_string(),
@@ -220,8 +218,8 @@ mod tests {
         // 国储会:3 字符码 NRC,非盈利,盈利位 0。
         let code = gen("NRC", "0", "广东省", "荔湾市");
         let parts = parse_cid_number_parts(&code).expect("must parse");
-        assert_eq!(parts.institution, InstitutionCode::Nrc);
-        assert_eq!(parts.code, "NRC");
+        assert_eq!(parts.institution, code::NRC);
+        assert_eq!(parts.institution_code_text, "NRC");
         assert!(!parts.profit);
         assert!(validate_cid_number_format(&code).is_ok());
     }
@@ -231,7 +229,7 @@ mod tests {
         // 股权公司:4 字符码 SFGQ,固定盈利 → M1 数字。
         let code = gen("SFGQ", "1", "广东省", "荔湾市");
         let parts = parse_cid_number_parts(&code).expect("must parse");
-        assert_eq!(parts.institution, InstitutionCode::Sfgq);
+        assert_eq!(parts.institution, *b"SFGQ");
         assert!(parts.profit);
         assert!(parts.checksum.is_ascii_digit());
     }
@@ -241,17 +239,17 @@ mod tests {
         // 市政府:4 字符码 CGOV,非盈利 → M1 字母。
         let code = gen("CGOV", "0", "广东省", "荔湾市");
         let parts = parse_cid_number_parts(&code).expect("must parse");
-        assert_eq!(parts.institution, InstitutionCode::Cgov);
+        assert_eq!(parts.institution, *b"CGOV");
         assert!(!parts.profit);
         assert!(parts.checksum.is_ascii_uppercase());
     }
 
     #[test]
     fn all_codes_roundtrip_generate_parse() {
-        // 遍历全部 81 码(除不发号的 PMUL):生成→解析必须还原同一机构码且格式校验通过。
+        // 遍历全部 92 码(除不发号的 PMUL):生成→解析必须还原同一机构码且格式校验通过。
         // 确定性覆盖三/四字符两种布局、盈利数字/字母 M1、3 字符盈利位与各档校验。
-        for code in InstitutionCode::ALL {
-            if code == InstitutionCode::Pmul {
+        for institution_code in code::ALL {
+            if institution_code == code::PMUL {
                 continue;
             }
             let number = generate_cid_number(GenerateCidInput {
@@ -260,16 +258,19 @@ mod tests {
                 p1: "1",
                 province_name: "广东省",
                 city_name: "荔湾市",
-                institution: code.as_code(),
+                institution: code::as_code(&institution_code),
             })
-            .unwrap_or_else(|e| panic!("{} should generate: {e}", code.as_code()));
-            let parts = parse_cid_number_parts(&number)
-                .unwrap_or_else(|e| panic!("{} should parse: {e}", code.as_code()));
+            .unwrap_or_else(|e| {
+                panic!("{} should generate: {e}", code::as_code(&institution_code))
+            });
+            let parts = parse_cid_number_parts(&number).unwrap_or_else(|e| {
+                panic!("{} should parse: {e}", code::as_code(&institution_code))
+            });
             assert_eq!(
                 parts.institution,
-                code,
+                institution_code,
                 "roundtrip code mismatch for {}",
-                code.as_code()
+                code::as_code(&institution_code)
             );
             assert!(validate_cid_number_format(&number).is_ok());
         }

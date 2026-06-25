@@ -115,11 +115,11 @@ export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalPr
               loading={cityRegistryAdminCitiesLoading}
               disabled={selectedCity !== null}
               options={cityRegistryAdminCities
-                .filter((c) => c.code !== '000')
+                .filter((c) => c.city_code !== '000')
                 .map((c) => {
                   const count = cityCityRegistryCount(c.city_name);
                   return {
-                    label: `${c.city_name} (${c.code}) ${count}/${MAX_CITY_REGISTRY_ADMINS_PER_CITY}`,
+                    label: `${c.city_name} (${c.city_code}) ${count}/${MAX_CITY_REGISTRY_ADMINS_PER_CITY}`,
                     value: c.city_name,
                     disabled: count >= MAX_CITY_REGISTRY_ADMINS_PER_CITY,
                   };

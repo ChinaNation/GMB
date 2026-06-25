@@ -17,7 +17,8 @@ CID 后端源码直接以 `citizencode/backend/` 为根目录展开,不恢复 `b
 4. 校验关键目标字段存在、废弃字段不存在。
 5. 创建当前目标索引。
 6. 为 `subjects/citizens/gov/private/accounts/docs/audit` 创建按省分区。
-7. 读取随包只读行政区 SQLite，为 `subjects/citizens/gov/private/accounts/docs/audit` 创建当前 43 个省级分区。
+7. 读取随包只读行政区 SQLite,先校验 SQLite 省表与 runtime primitives `PROVINCE_CODE_INFOS`
+   完全一致,再为 `subjects/citizens/gov/private/accounts/docs/audit` 创建当前 43 个省级分区。
 8. 初始化内置 43 个联邦注册局机构管理员。
 9. 启动交易索引 worker。
 
@@ -32,16 +33,19 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 它检查 `gov_manifest` 与当前目录 hash,已初始化且完整则跳过;缺失、不完整或目录版本变化时
 写入确定性公权机构和公安局。页面列表接口只能读取持久化结果,不得触发全量补数据。
 
-行政区开发库权威源是 `citizencode/backend/china/china.sqlite`。正式部署时 `CID_CHINA_DB` 固定为
-`/opt/citizencode/china/china.sqlite`,后端只读打开。行政区变更只能修改开发库并重新发布安装包,
-不得在 CID 运行中改库或恢复行政区管理 tab。
+国家码、省级行政区码和 CID 机构码的常量唯一真源是
+`citizenchain/runtime/primitives/src/code.rs`;CID 后端只通过 `primitives::code` 和
+`crate::number::code` 引用,不得在 `number/` 或 `china/` 手写第二份码表。市、镇和地址段开发库
+权威源是 `citizencode/backend/china/china.sqlite`。正式部署时 `CID_CHINA_DB` 固定为
+`/opt/citizencode/china/china.sqlite`,后端只读打开。市镇地址段变更只能修改开发库并重新发布
+安装包,不得在 CID 运行中改库或恢复行政区管理 tab。
 
 ## 数据表
 
 ### 主体身份
 
 - `ids(cid_number, kind, province_code, city_code)`:全局身份 ID 索引。
-- `subjects`:主体公共展示字段,按省分区;机构行保存 `name/cid_full_name/cid_short_name`、行政区、业务状态、私权分类和法定代表人资料。
+- `subjects`:主体公共展示字段,按省分区;机构行保存 `cid_full_name/cid_short_name`、行政区、业务状态、私权分类和法定代表人资料。
 - `citizens`:公民电子护照绑定字段,按省分区。
 - `gov`:公权机构扩展字段,按省分区;只保存 `institution_code` 等机构类型细分。
   `source='GENERATED'` 表示由行政区和模板确定性派生,可被对账命令更新或删除;

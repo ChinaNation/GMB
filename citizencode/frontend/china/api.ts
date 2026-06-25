@@ -1,26 +1,25 @@
-// 中文注释:CID 元数据 API。这里承接省份、城市、SubjectProperty/机构类型等跨页面选择项。
+// 中文注释:CID 元数据 API。这里承接省份、城市、机构码等跨页面选择项。
 
 import { adminHeaders, request } from '../utils/http';
 import type { AdminAuth } from '../auth/types';
 
-export type CidOptionItem = {
-  label: string;
-  value: string;
+export type CidInstitutionCodeItem = {
+  institution_code: string;
+  cid_short_name: string;
 };
 
 export type CidProvinceItem = {
   province_name: string;
-  code: string;
+  province_code: string;
 };
 
 export type CidCityItem = {
   city_name: string;
-  code: string;
+  city_code: string;
 };
 
 export type CidMetaResult = {
-  subject_property_options: CidOptionItem[];
-  institution_options: CidOptionItem[];
+  institution_options: CidInstitutionCodeItem[];
   provinces: CidProvinceItem[];
   scoped_province_name?: string | null;
 };

@@ -15,6 +15,7 @@ use crate::admins::actions::require_admin_security_grant;
 use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
 use crate::china::{city_code_by_name, province_code_by_name};
+use crate::number::code;
 use crate::number::InstitutionCategory;
 use crate::private::common::resolve_private_type_rule;
 use crate::scope::get_visible_scope;
@@ -117,7 +118,7 @@ async fn create_institution_inner(
         .map(|rule| rule.institution_code.to_string())
         .unwrap_or_else(|| input.institution.trim().to_string());
     // 机构类别一律由机构码派生。
-    let institution = crate::number::InstitutionCode::from_str(&institution_code);
+    let institution = code::from_str(&institution_code);
     let p1 = private_rule
         .map(|rule| rule.p1.to_string())
         .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string());
@@ -126,15 +127,15 @@ async fn create_institution_inner(
     }
     // 私权机构 = 私法人或非法人(由机构码判定)。
     let is_private = institution
-        .map(|c| c.is_private_legal() || c.is_unincorporated())
+        .map(|c| code::is_private_legal(&c) || code::is_unincorporated(&c))
         .unwrap_or(false);
     // 教育机构(公私大学/学校)走通用路径、免 private_type;基础教育学校(GSCH/SFSC,初/小/中)
     // 需要 education_type 级别,大学(GUN/SUN)不需要。
     let is_education_institution = institution
-        .map(|c| c.is_education_institution())
+        .map(|c| code::is_education_institution(&c))
         .unwrap_or(false);
     let requires_education_level = institution
-        .map(|c| c.requires_education_level())
+        .map(|c| code::requires_education_level(&c))
         .unwrap_or(false);
     let education_type = input
         .education_type
@@ -258,7 +259,9 @@ async fn create_institution_inner(
     // 联邦注册局管理员 → 国家/省/部级(3 字符码);市注册局管理员 → 市/镇级(4 字符码)。
     // 公权教育机构(大学/学校)走教育流程,不受此限。
     if matches!(category, InstitutionCategory::GovInstitution) && !is_education_institution {
-        let needs_federal = institution.map(|c| c.is_three_char()).unwrap_or(false);
+        let needs_federal = institution
+            .map(|c| code::is_three_char(&c))
+            .unwrap_or(false);
         let is_federal_admin = scope.locked_city_name.is_none();
         if needs_federal && !is_federal_admin {
             return api_error(

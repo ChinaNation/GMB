@@ -133,7 +133,7 @@ export function CityRegistryView({ state }: RegistryViewProps) {
         <CityRegistryListTable
           auth={auth}
           province_name={effectiveProvince ?? ''}
-          cities={cityRegistryAdminCities.filter((c) => c.code !== '000')}
+          cities={cityRegistryAdminCities.filter((c) => c.city_code !== '000')}
           citiesLoading={cityRegistryAdminCitiesLoading || (!selectedFederalRegistry && cityRegistryAdminCities.length === 0)}
           cityRegistryAdmins={cityRegistryAdminsForProvince}
           cityRegistryAdminsLoading={cityRegistryAdminsLoading}
@@ -296,7 +296,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
   return (
     <div>
       <Table<(typeof rows)[number]>
-        rowKey={(row) => row.city_item.code}
+        rowKey={(row) => row.city_item.city_code}
         loading={citiesLoading || registryLoading || cityRegistryAdminsLoading}
         dataSource={displayRows}
         pagination={false}

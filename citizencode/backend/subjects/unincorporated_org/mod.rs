@@ -11,7 +11,7 @@
 //! - 地域规则:见 [`parent_locality_rule`](父级是学校/大学 → 分校同市);
 //! - 盈利属性继承:见 [`inherited_p1`]。
 
-use crate::number::{AdminLevel, InstitutionCode};
+use crate::number::{code, AdminLevel};
 
 pub(crate) fn requires_parent(institution_code: &str) -> bool {
     // 个体经营(SFGT)/无限合伙(SFGP)是独立非法人;只有非法人组织(UNIN)必须挂靠法人父级。
@@ -20,8 +20,9 @@ pub(crate) fn requires_parent(institution_code: &str) -> bool {
 
 pub(crate) fn can_attach_to_parent(parent_institution_code: &str) -> bool {
     // 父级是公法人或私法人才可作所属法人。
-    InstitutionCode::from_str(parent_institution_code)
-        .map_or(false, |c| c.is_public_legal() || c.is_private_legal())
+    code::from_str(parent_institution_code).map_or(false, |c| {
+        code::is_public_legal(&c) || code::is_private_legal(&c)
+    })
 }
 
 pub(crate) fn parent_subject_requirement_message() -> &'static str {
@@ -57,11 +58,11 @@ pub(crate) fn parent_locality_rule(parent_institution_code: &str) -> ParentLocal
     if parent_is_education_school(parent_institution_code) {
         return ParentLocalityRule::SameCity;
     }
-    if InstitutionCode::from_str(parent_institution_code).map_or(false, |c| c.is_private_legal()) {
+    if code::from_str(parent_institution_code).map_or(false, |c| code::is_private_legal(&c)) {
         return ParentLocalityRule::Nationwide;
     }
     // 公法人(G)按机构码行政层级判级
-    match InstitutionCode::from_str(parent_institution_code).and_then(|c| c.admin_level()) {
+    match code::from_str(parent_institution_code).and_then(|c| code::admin_level(&c)) {
         Some(AdminLevel::National) => ParentLocalityRule::Nationwide,
         Some(AdminLevel::Province) => ParentLocalityRule::SameProvince,
         // 市级、镇级及一切无层级公权机构 → 同市
@@ -107,7 +108,7 @@ pub(crate) fn code_consistency_violation(
 
 /// 非法人盈利属性附属于所属法人:公法人父级恒非盈利(0),私法人父级继承其 p1。
 pub(crate) fn inherited_p1(parent_institution_code: &str, parent_p1: &str) -> String {
-    if InstitutionCode::from_str(parent_institution_code).map_or(false, |c| c.is_public_legal()) {
+    if code::from_str(parent_institution_code).map_or(false, |c| code::is_public_legal(&c)) {
         "0".to_string()
     } else {
         parent_p1.to_string()

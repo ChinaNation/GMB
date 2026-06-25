@@ -14,7 +14,7 @@
 > 5. **法定代表人**=机构首脑且为 admin 之一,即各级签署人(总统/省长/市长/院长/参议长/众议长);链上需新增字段。
 > 6. **命名统一**(全工程):市公民立法委员会/市立法会、国家公民教育委员会/国家教委会、市公民教育委员会/市教委会、市公民自治委员会/市自治会、镇公民自治委员会/镇自治会;宪法全称首次出现用全称、其后简称。
 > 7. **条号更正**:四种表决的宪法出处是**第44/45条**(非旧引用的"第18条");修订后为五类。
-> **进度**:A 宪法修订+重生 scale 已完成验证(legislation-yuan 23/23);B 链端(VoteType/阈值/签署会签状态机/法定代表人/提案解耦)+ C 命名 + D 双客户端 + E 收尾 待续。
+> **进度**:**A 宪法修订+重生 scale 已完成**(legislation-yuan 23/23);**B 链端已全部完成**——B1 VoteType 5类/阈值、B2 签署+会签状态机(STAGE_LEG_SIGN/OVERRIDE + executive_sign/override_sign + 30天超时 + 提案携带 executive/legislature)、B3 法定代表人(admins-change LegalRepresentatives + getter/setter)、B4 提案方↔表决院解耦 + ensure_routing(教育类⟺NED/CEDU)+ runtime 装配;验证:整 runtime cargo check 绿 + legislation-vote 20 + legislation-yuan 23 + 回归(votingengine/internal-vote 87/admins-change/grandpakey 17/multisig/organization)全过零回归。**C 命名 + D 双客户端 + E 收尾 待续**。
 
 ## 背景
 

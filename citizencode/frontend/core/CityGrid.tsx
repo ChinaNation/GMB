@@ -1,6 +1,6 @@
 // 中文注释:某省的 N 市卡片网格 — 共享组件。
 // 按省读取确定性城市清单,优先命中本地缓存;点击某市回调外部。
-// 过滤掉 code="000" 的"本省统一"占位。
+// 过滤掉 city_code="000" 的"本省统一"占位。
 
 import React, { useEffect, useState } from 'react';
 import type { AdminAuth } from '../auth/types';
@@ -27,7 +27,7 @@ const CARD_STYLE: React.CSSProperties = {
 export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
   const cachedCities = readCachedCidCities(province_name);
   const [cities, setCities] = useState<CidCityItem[]>(
-    () => cachedCities?.filter((c) => c.code !== '000') ?? [],
+    () => cachedCities?.filter((c) => c.city_code !== '000') ?? [],
   );
   const [loading, setLoading] = useState(!cachedCities);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
     let cancelled = false;
     const cachedRows = readCachedCidCities(province_name);
     if (cachedRows) {
-      setCities(cachedRows.filter((c) => c.code !== '000'));
+      setCities(cachedRows.filter((c) => c.city_code !== '000'));
       setLoading(false);
     } else {
       setCities([]);
@@ -46,7 +46,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
     loadCachedCidCities(auth, province_name)
       .then((rows) => {
         if (cancelled) return;
-        setCities(rows.filter((c) => c.code !== '000'));
+        setCities(rows.filter((c) => c.city_code !== '000'));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -76,7 +76,7 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
       >
         {cities.map((c) => (
           <div
-            key={c.code}
+            key={c.city_code}
             onClick={() => onPick(c.city_name)}
             style={CARD_STYLE}
             onMouseEnter={(e) => {
@@ -88,8 +88,10 @@ export const CityGrid: React.FC<Props> = ({ auth, province_name, onPick }) => {
               (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
             }}
           >
-            {/* 市名为空(字典/缓存未同步)时回退 code,绝不渲染空白细卡 */}
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{c.city_name || c.code}</div>
+            {/* 市名为空(字典/缓存未同步)时回退 city_code,绝不渲染空白细卡 */}
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>
+              {c.city_name || c.city_code}
+            </div>
           </div>
         ))}
       </div>
