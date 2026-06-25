@@ -75,12 +75,10 @@ const PUBLIC_LEGAL_CODES: &[InstitutionCode] = &[
     *b"PRS\0", *b"FSC\0", *b"FIB\0", *b"FSS\0", *b"FPR\0", *b"FRG\0", *b"MFA\0", *b"MDF\0",
     *b"MHS\0", *b"MCW\0", *b"MHU\0", *b"MAG\0", *b"MCM\0", *b"MFT\0", *b"MEN\0", *b"MTR\0",
     *b"NLG\0", *b"NJD\0", *b"NSP\0", *b"FAC\0", *b"FAU\0", *b"FIV\0", *b"NED\0", *b"NRC\0",
-    *b"NSN\0", *b"NRP\0", 
-    // B 省级类型(17)
+    *b"NSN\0", *b"NRP\0", // B 省级类型(17)
     *b"PGV\0", *b"PLG\0", *b"PJD\0", *b"PSP\0", *b"PRC\0", *b"PRB\0", *b"PDF\0", *b"PHS\0",
     *b"PCW\0", *b"PHU\0", *b"PAG\0", *b"PCM\0", *b"PFT\0", *b"PEN\0", *b"PTR\0", *b"PSN\0",
-    *b"PRP\0", 
-    // C 市级类型(17)
+    *b"PRP\0", // C 市级类型(17)
     *b"CGOV", *b"CLEG", *b"CSUP", *b"CJUD", *b"CEDU", *b"CSLF", *b"CDEF", *b"CHSC", *b"CCWF",
     *b"CHUD", *b"CAGR", *b"CCOM", *b"CFIN", *b"CENR", *b"CTRN", *b"CREG", *b"CPOL",
     // D 镇级类型(14)
@@ -108,26 +106,21 @@ pub const ALL_CODES: [InstitutionCode; 92] = [
     *b"PRS\0", *b"FSC\0", *b"FIB\0", *b"FSS\0", *b"FPR\0", *b"FRG\0", *b"MFA\0", *b"MDF\0",
     *b"MHS\0", *b"MCW\0", *b"MHU\0", *b"MAG\0", *b"MCM\0", *b"MFT\0", *b"MEN\0", *b"MTR\0",
     *b"NLG\0", *b"NJD\0", *b"NSP\0", *b"FAC\0", *b"FAU\0", *b"FIV\0", *b"NED\0", *b"NRC\0",
-    *b"NSN\0", *b"NRP\0",
-    // B 省级类型(17,3 位)
+    *b"NSN\0", *b"NRP\0", // B 省级类型(17,3 位)
     *b"PGV\0", *b"PLG\0", *b"PJD\0", *b"PSP\0", *b"PRC\0", *b"PRB\0", *b"PDF\0", *b"PHS\0",
     *b"PCW\0", *b"PHU\0", *b"PAG\0", *b"PCM\0", *b"PFT\0", *b"PEN\0", *b"PTR\0", *b"PSN\0",
-    *b"PRP\0",
-    // C 市级类型(17,4 位)
+    *b"PRP\0", // C 市级类型(17,4 位)
     *b"CGOV", *b"CLEG", *b"CSUP", *b"CJUD", *b"CEDU", *b"CSLF", *b"CDEF", *b"CHSC", *b"CCWF",
     *b"CHUD", *b"CAGR", *b"CCOM", *b"CFIN", *b"CENR", *b"CTRN", *b"CREG", *b"CPOL",
     // D 镇级类型(14,4 位)
     *b"TGOV", *b"TCWF", *b"THUD", *b"TAGR", *b"TFIN", *b"TDEF", *b"THSC", *b"TCOM", *b"TENR",
-    *b"TTRN", *b"TPOL", *b"TSLF", *b"TSUP", *b"TJUD",
-    // E 私权机构(7,4 位)
+    *b"TTRN", *b"TPOL", *b"TSLF", *b"TSUP", *b"TJUD", // E 私权机构(7,4 位)
     *b"SFGT", *b"SFGP", *b"SFLP", *b"SFGQ", *b"SFGF", *b"SFGY", *b"SFAS",
     // F 教育学校(6:公私教大学 GUN/SUN/JUN=3 位 / 公私教中小初学 GSCH/SFSC/JSCH=4 位)
     *b"GUN\0", *b"SUN\0", *b"JUN\0", *b"GSCH", *b"SFSC", *b"JSCH",
     // G 个人主体(3,4 位)
-    *b"CTZN", *b"NATP", *b"SMTP",
-    // H 非法人组织(1,4 位)
-    *b"UNIN",
-    // I 个人多签(1,4 位,不发号)
+    *b"CTZN", *b"NATP", *b"SMTP", // H 非法人组织(1,4 位)
+    *b"UNIN", // I 个人多签(1,4 位,不发号)
     *b"PMUL",
 ];
 

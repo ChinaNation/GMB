@@ -56,7 +56,7 @@ pub(crate) type FullClient = sc_service::TFullClient<
     RuntimeApi,
     sc_executor::WasmExecutor<sp_io::SubstrateHostFunctions>,
 >;
-type FullBackend = sc_service::TFullBackend<Block>;
+pub(crate) type FullBackend = sc_service::TFullBackend<Block>;
 type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 
 pub type Service = sc_service::PartialComponents<
@@ -374,8 +374,17 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
         },
     );
 
+    // 不可修改条款守卫(ADR-027 §7):在 PoW 导入之前逐块校验宪法第 1/2/3/17/19/23/33/41 条
+    // 与创世逐字一致,违者拒块。执法在 runtime 之外,setCode/migration 改不动。
+    let guarded_import = crate::core::constitution::ConstitutionGuard::new(
+        pow_block_import,
+        client.clone(),
+        backend.clone(),
+    )
+    .map_err(ServiceError::Other)?;
+
     let import_queue = sc_consensus_pow::import_queue(
-        Box::new(pow_block_import),
+        Box::new(guarded_import),
         Some(Box::new(grandpa_block_import.clone())),
         algorithm,
         &task_manager.spawn_essential_handle(),
@@ -576,7 +585,7 @@ pub fn new_full(
         task_manager: &mut task_manager,
         transaction_pool: transaction_pool.clone(),
         rpc_builder: rpc_extensions_builder,
-        backend,
+        backend: backend.clone(),
         system_rpc_tx,
         tx_handler_controller,
         sync_service: sync_service.clone(),
@@ -637,8 +646,17 @@ pub fn new_full(
         let pr = pool_ready.clone();
         move || pr() > 0
     };
+    // 本地挖矿出块同样过宪法守卫:即便链上 runtime 被恶意升级,诚实矿工也绝不出
+    // 改动不可修改条款的块(ADR-027 §7)。
+    let guarded_mining_import = crate::core::constitution::ConstitutionGuard::new(
+        pow_block_import,
+        client.clone(),
+        backend.clone(),
+    )
+    .map_err(ServiceError::Other)?;
+
     let (worker, worker_task) = sc_consensus_pow::start_mining_worker(
-        Box::new(pow_block_import),
+        Box::new(guarded_mining_import),
         client.clone(),
         select_chain,
         algorithm,

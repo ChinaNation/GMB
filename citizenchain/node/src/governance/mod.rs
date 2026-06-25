@@ -157,8 +157,12 @@ fn collect_institution_balances(
                 .expect("国储会安全基金账户 AccountId必须存在");
             balances.nrc_fee_balance_fen =
                 load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
-            balances.safety_fund_balance_fen =
-                load_balance_at_block(&safety_fund_account, block_hash, "安全基金账户余额", warnings);
+            balances.safety_fund_balance_fen = load_balance_at_block(
+                &safety_fund_account,
+                block_hash,
+                "安全基金账户余额",
+                warnings,
+            );
         }
         InstitutionRef::Prc(_) => {
             let fee_account = entry.fee_account_hex();

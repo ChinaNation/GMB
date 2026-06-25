@@ -1461,10 +1461,11 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
 parameter_types! {
     // 立法院模块边界常量(ADR-027,第1步)
     pub const LegislationMaxTitleLen: u32 = 256;
-    pub const LegislationMaxTextLen: u32 = 4096;
-    pub const LegislationMaxItemsPerClause: u32 = 50;
+    pub const LegislationMaxTextLen: u32 = 8192; // 条/款正文(宪法部分条较长)
     pub const LegislationMaxClausesPerArticle: u32 = 50;
-    pub const LegislationMaxArticlesPerLaw: u32 = 500;
+    pub const LegislationMaxArticlesPerSection: u32 = 200;
+    pub const LegislationMaxSectionsPerChapter: u32 = 50;
+    pub const LegislationMaxChaptersPerLaw: u32 = 50;
     pub const LegislationMaxLawsPerScope: u32 = 1000;
     pub const LegislationMaxActivationsPerBlock: u32 = 100;
 }
@@ -1475,9 +1476,10 @@ impl legislation_yuan::Config for Runtime {
     type LegislationVoteEngine = LegislationVote;
     type MaxTitleLen = LegislationMaxTitleLen;
     type MaxTextLen = LegislationMaxTextLen;
-    type MaxItemsPerClause = LegislationMaxItemsPerClause;
     type MaxClausesPerArticle = LegislationMaxClausesPerArticle;
-    type MaxArticlesPerLaw = LegislationMaxArticlesPerLaw;
+    type MaxArticlesPerSection = LegislationMaxArticlesPerSection;
+    type MaxSectionsPerChapter = LegislationMaxSectionsPerChapter;
+    type MaxChaptersPerLaw = LegislationMaxChaptersPerLaw;
     type MaxLawsPerScope = LegislationMaxLawsPerScope;
     type MaxActivationsPerBlock = LegislationMaxActivationsPerBlock;
     type WeightInfo = ();

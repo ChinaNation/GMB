@@ -103,7 +103,7 @@ fn load_fixture() -> serde_json::Value {
 /// china_*.rs 字面常量索引(cid_number, kind) → address_hex。
 /// 行为中性基线的第二道防线:这些值不仅要 == account_derive,还要 == china_*.rs 源码字面值。
 fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
-    use primitives::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT, NRC_HE_ACCOUNT};
+    use primitives::china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT, SAFETY_FUND_ACCOUNT};
     use primitives::china::china_ch::CHINA_CH;
 
     match kind {

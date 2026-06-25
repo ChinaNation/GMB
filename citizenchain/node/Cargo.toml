@@ -70,6 +70,7 @@ sp-keyring = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 sp-storage = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true, default-features = true }
+async-trait = { workspace = true }
 
 # frame and pallets
 frame-metadata-hash-extension = { workspace = true, default-features = true }

@@ -1,8 +1,6 @@
 use std::collections::BTreeSet;
 
-use primitives::code::{
-    is_institution_code, is_personal_code, InstitutionCode, NRC, PRB, PRC,
-};
+use primitives::code::{is_institution_code, is_personal_code, InstitutionCode, NRC, PRB, PRC};
 
 use super::call_data::normalize_admins;
 use super::types::AdminAccountState;

@@ -20,7 +20,7 @@ fn enact_writes_law_and_schedules_future_activation() {
             b"\xe5\xb8\x82\xe9\x95\xbf\xe9\x80\x89\xe4\xb8\xbe\xe6\xb3\x95",
         );
         summary.effective_at = 100; // 未来生效
-        let arts = articles(vec![article(1, b"a"), article(2, b"b")]);
+        let arts = chapters_of(vec![article(1, b"a"), article(2, b"b")]);
 
         assert_ok!(Lib::write_law_version(7, summary, arts, 1));
 
@@ -50,7 +50,7 @@ fn enact_with_past_effective_is_immediately_effective() {
         assert_ok!(Lib::write_law_version(
             1,
             summary,
-            articles(vec![article(1, b"a")]),
+            chapters_of(vec![article(1, b"a")]),
             1
         ));
         assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Effective);
@@ -64,7 +64,7 @@ fn amend_bumps_version_and_resets_pending() {
         assert_ok!(Lib::write_law_version(
             1,
             s0,
-            articles(vec![article(1, b"a")]),
+            chapters_of(vec![article(1, b"a")]),
             1
         ));
 
@@ -75,7 +75,7 @@ fn amend_bumps_version_and_resets_pending() {
         assert_ok!(Lib::write_law_version(
             2,
             s1,
-            articles(vec![article(1, b"a2")]),
+            chapters_of(vec![article(1, b"a2")]),
             1
         ));
 
@@ -94,14 +94,14 @@ fn repeal_sets_status_repealed() {
         assert_ok!(Lib::write_law_version(
             1,
             s0,
-            articles(vec![article(1, b"a")]),
+            chapters_of(vec![article(1, b"a")]),
             1
         ));
 
         let mut sr = enact_summary(Tier::National, 0, VoteType::Regular, b"");
         sr.action = LawAction::Repeal;
         sr.law_id = 0;
-        assert_ok!(Lib::write_law_version(2, sr, articles(vec![]), 1));
+        assert_ok!(Lib::write_law_version(2, sr, chapters_of(vec![]), 1));
 
         assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Repealed);
     });
@@ -109,9 +109,8 @@ fn repeal_sets_status_repealed() {
 
 // ───────────────── 提案入口校验 ─────────────────
 
-fn one_article() -> frame_support::BoundedVec<crate::pallet::Article<Test>, super::MaxArticlesPerLaw>
-{
-    articles(vec![article(1, b"content")])
+fn one_chapter() -> crate::pallet::ChaptersOf<Test> {
+    chapters_of(vec![article(1, b"content")])
 }
 
 #[test]
@@ -127,7 +126,7 @@ fn propose_enact_by_legislator_reaches_engine_notconfigured() {
                 VoteType::Regular,
                 title(b"law"),
                 None,
-                one_article(),
+                one_chapter(),
                 100,
             ),
             Error::<Test>::VoteEngineCreateFailed
@@ -147,12 +146,43 @@ fn propose_enact_by_non_legislator_rejected() {
                 VoteType::Regular,
                 title(b"law"),
                 None,
-                one_article(),
+                one_chapter(),
                 100,
             ),
             Error::<Test>::NotLegislator
         );
     });
+}
+
+#[test]
+fn propose_enact_constitution_rejected() {
+    // 立法入口不得新立第二部宪法(ADR-027 §6.1):tier=Constitution 直接拒。
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            Lib::propose_enact_law(
+                RuntimeOrigin::signed(legislator()),
+                Tier::Constitution,
+                0,
+                houses(),
+                VoteType::Special,
+                title(b"second constitution"),
+                None,
+                one_chapter(),
+                100,
+            ),
+            Error::<Test>::CannotEnactConstitution
+        );
+    });
+}
+
+#[test]
+fn enum_discriminants_match_node_guard() {
+    // 钉死 SCALE 变体索引,防节点守卫(core/constitution.rs)硬编码常量漂移。
+    use codec::Encode;
+    assert_eq!(Tier::Constitution.encode(), vec![0u8]);
+    assert_eq!(LawStatus::Pending.encode(), vec![0u8]);
+    assert_eq!(LawStatus::Effective.encode(), vec![1u8]);
+    assert_eq!(LawStatus::Repealed.encode(), vec![2u8]);
 }
 
 #[test]
@@ -167,7 +197,7 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 VoteType::Regular,
                 title(b""),
                 None,
-                one_article(),
+                one_chapter(),
                 100,
             ),
             Error::<Test>::EmptyTitle
@@ -181,10 +211,10 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 VoteType::Regular,
                 title(b"law"),
                 None,
-                articles(vec![]),
+                crate::pallet::ChaptersOf::<Test>::default(),
                 100,
             ),
-            Error::<Test>::EmptyArticles
+            Error::<Test>::EmptyChapters
         );
     });
 }
@@ -195,7 +225,7 @@ fn seed_constitution() {
     assert_ok!(Lib::write_law_version(
         1,
         summary,
-        articles(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]),
+        chapters_of(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]),
         1,
     ));
 }
@@ -212,7 +242,7 @@ fn amend_constitution_immutable_article_rejected() {
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
-                articles(vec![article(1, b"CHANGED"), article(17, b"yuan-17")]),
+                chapters_of(vec![article(1, b"CHANGED"), article(17, b"yuan-17")]),
                 200,
             ),
             Error::<Test>::ImmutableArticleViolation
@@ -232,7 +262,7 @@ fn amend_constitution_preserving_immutable_reaches_engine() {
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
-                articles(vec![
+                chapters_of(vec![
                     article(1, b"yuan-1"),
                     article(17, b"yuan-17"),
                     article(99, b"new")
@@ -255,7 +285,7 @@ fn amend_constitution_with_regular_vote_type_rejected() {
                 VoteType::Regular, // 宪法修改不允许常规案
                 title(b"constitution-v2"),
                 None,
-                articles(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]),
+                chapters_of(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]),
                 200,
             ),
             Error::<Test>::InvalidVoteTypeForConstitution
@@ -284,10 +314,101 @@ fn amend_nonexistent_law_rejected() {
                 VoteType::Regular,
                 title(b"x"),
                 None,
-                one_article(),
+                one_chapter(),
                 100,
             ),
             Error::<Test>::LawNotFound
         );
+    });
+}
+
+// ───────────────── 宪法 constitution.scale 解码与结构校验 ─────────────────
+
+#[test]
+fn constitution_scale_decodes_and_is_well_formed() {
+    use codec::Decode;
+    let bytes = include_bytes!("../constitution.scale");
+    let chapters = crate::pallet::ChaptersOf::<Test>::decode(&mut &bytes[..])
+        .expect("constitution.scale 解码为 ChaptersOf");
+    assert_eq!(chapters.len(), 7, "7 章");
+    let articles: Vec<_> = chapters
+        .iter()
+        .flat_map(|c| c.sections.iter())
+        .flat_map(|s| s.articles.iter())
+        .collect();
+    assert_eq!(articles.len(), 140, "140 条");
+    // 条号连续 1..=140
+    let mut nums: Vec<u32> = articles.iter().map(|a| a.number).collect();
+    nums.sort();
+    assert_eq!(nums, (1u32..=140).collect::<Vec<_>>(), "条号连续 1..140");
+    // body 必填 + 中英双语
+    for a in &articles {
+        assert!(!a.body.is_empty(), "条 {} body 非空", a.number);
+        assert!(a.body_en.is_some(), "条 {} 英文", a.number);
+        assert!(a.title_en.is_some(), "条 {} 标题英文", a.number);
+    }
+    // 不可修改条款齐全(第 1/2/3/17/19/23/33/41 条)
+    for n in primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES {
+        assert!(
+            articles.iter().any(|a| a.number == n),
+            "不可修改条款 {n} 存在"
+        );
+    }
+}
+
+#[test]
+fn genesis_seeds_constitution_as_law_zero() {
+    use sp_runtime::BuildStorage;
+    let mut storage = frame_system::GenesisConfig::<Test>::default()
+        .build_storage()
+        .expect("system genesis");
+    crate::pallet::GenesisConfig::<Test>::default()
+        .assimilate_storage(&mut storage)
+        .expect("legislation-yuan genesis assimilate");
+    let mut ext = sp_io::TestExternalities::new(storage);
+    ext.execute_with(|| {
+        // 宪法被注入为 law_id=0,tier=宪法,生效中。
+        let law = Laws::<Test>::get(0).expect("宪法注入为 law 0");
+        assert_eq!(law.tier, Tier::Constitution);
+        assert_eq!(law.status, LawStatus::Effective);
+        assert_eq!(law.current_version, 1);
+        // 院序列 = [国家立法院]。
+        assert_eq!(law.houses.len(), 1);
+        let lv = LawVersions::<Test>::get(0, 1).expect("宪法版本 1");
+        assert_eq!(lv.chapters.len(), 7, "7 章");
+        let articles: usize = lv
+            .chapters
+            .iter()
+            .flat_map(|c| c.sections.iter())
+            .map(|s| s.articles.len())
+            .sum();
+        assert_eq!(articles, 140, "140 条");
+        assert_eq!(Lib::list_laws(Tier::Constitution, 0), vec![0]);
+
+        // 不可修改条款 manifest 已冻结:清单 = 单源常量,逐条摘要 = 实际条文(L3 创世锚)。
+        use codec::Encode as _;
+        let manifest = ConstitutionImmutableManifest::<Test>::get().expect("manifest 创世写入");
+        assert_eq!(
+            manifest.article_numbers.to_vec(),
+            primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES.to_vec(),
+            "manifest 清单 = 不可修改条款单源"
+        );
+        for (i, &n) in primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES
+            .iter()
+            .enumerate()
+        {
+            let article = lv
+                .chapters
+                .iter()
+                .flat_map(|c| c.sections.iter())
+                .flat_map(|s| s.articles.iter())
+                .find(|a| a.number == n)
+                .expect("不可修改条款存在于创世");
+            assert_eq!(
+                manifest.article_hashes[i],
+                sp_io::hashing::blake2_256(&article.encode()),
+                "manifest 摘要应与对应条文一致"
+            );
+        }
     });
 }

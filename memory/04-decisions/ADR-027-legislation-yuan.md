@@ -4,7 +4,7 @@
 
 立法院模块:法律结构化上链 + 修法一律走投票引擎 + 严格按公民宪法表决模型落地。
 
-状态:草案(待 review)。本 ADR 只定方向与边界,不含实现;落地按后续任务卡逐张进行。
+状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(citizen-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。
 
 ## 背景
 
@@ -74,24 +74,26 @@
 
 法律分层 `tier`:`宪法 / 国家 / 省 / 市`(宪法为最高层级,见第 7 节迁移)。
 
-沿用宪法自身的「条 / 款 / 项」结构,链上 SCALE 编码:
+**所有法律统一「章(Chapter)>节(Section)>条(Article)>款(Clause)」结构**(章节条做目录、条款做正文;用户 2026-06-24 拍板),链上 SCALE 编码:
 
 ```text
 Law {
   law_id,
   tier,                 // 宪法/国家/省/市
   scope_code,           // 行政区 code,0 = 全国;省/市用 china.sqlite code(遵守 ADR-021 单源)
-  owner_body,           // 立法机构(CID institution)
+  houses,               // 立法机构院结构,提案携带(单院 1 项 / 两院 [众,参])
   current_version,
   status,
 }
 
 LawVersion {
   law_id, version,
-  title,                                // 双语可选:title_cn 必填 / title_en 可选
-  articles: BoundedVec<Article>,        // 第 N 条
-    Article  { no, title?, clauses: BoundedVec<Clause> }
-    Clause   { no, text, items: BoundedVec<Item> }   // 第 N 款 / 第 N 项
+  title, title_en?,                      // 宪法双语;普通法律可单语(_en 可选)
+  chapters: BoundedVec<Chapter>,         // 所有法律必有目录
+    Chapter { number, title, title_en?, sections: BoundedVec<Section> }
+    Section { number, title, title_en?, articles: BoundedVec<Article> }
+    Article { number, title, title_en?, body, body_en?, clauses: BoundedVec<Clause> }  // body 必填(正文不能空)
+    Clause  { number, text, text_en? }   // 款,可空(不是所有条都有款)
   content_hash,          // blake2_256(规范化 SCALE);完整性 + 公投/签名绑定
   vote_type,             // 通过本版本所用的表决类型(常规/重要/二审/特别)
   proposal_id,           // 投票引擎提案 ID(可回溯)
@@ -100,10 +102,11 @@ LawVersion {
 }
 ```
 
-- 体积:结构化条文比 HTML 小一个量级;每条/每部设 `BoundedVec` 与字节上限。
+- 必填约束:章/节/条恒在(所有法律都有目录),条 `body` 必填(空正文的条无意义),款可空。
+- 体积:结构化条文比 HTML 小一个量级;每层设 `BoundedVec` 与字节上限。
 - 双语:宪法中英双语,普通法律可只中文 → `_en` 字段可选,不强制双语。
-- 修改粒度:提案针对「(law_id, 第 N 条)」做增 / 改 / 删,version+1,diff 干净。
-- 客户端:CitizenApp 直接渲染「条/款/项」列表,无需解析 HTML。
+- 修改粒度:提案针对「(law_id, 第 N 条)」做增 / 改 / 删(`find_article` 遍历 章>节>条 按 number),version+1,diff 干净。
+- 客户端:CitizenApp 渲染「章>节>条>款」目录+正文;节点桌面端据结构化法律重建 HTML(复用原宪法 CSS 外壳,样式不变),无需解析/内置 HTML。
 
 状态机:
 
@@ -159,15 +162,53 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 ### 6. 修宪特别约束(第十九条)
 
 - 第一章总则核心条款修改 → 国家立法院特别案(= 必须公民投票)。
-- 不可修改条款硬清单:第 1、2、3、17、19、23、33、41 条 → 代码层硬拒任何修改提案。
+- 不可修改条款硬清单:第 1、2、3、17、19、23、33、41 条(单源 `primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES`)。
 - 其它章节修改 → 国家立法院重要案。
 
-### 7. 宪法迁移(并入本模块)
+#### 6.1 不可修改条款「真不可修改」三层守卫 —— 已落地(2026-06-24)
+
+要求:这 8 条「改代码、改 runtime 升级都改不动,改了只能重新创世」。纯 runtime 校验可被一次 setCode 解除,
+故把关必须搬出可升级的 runtime,放到节点共识层并锚定创世。三层纵深:
+
+- **L1 运行时提案守卫(`legislation-yuan::ensure_immutable_preserved`)**:`propose_amend_law` 时逐条逐字比对,
+  碰这 8 条即 `ImmutableArticleViolation`。第一线、报错干净,但可被 runtime 升级绕过 → 不是最终保证。
+- **L2 节点共识守卫(`node/src/core/constitution.rs::ConstitutionGuard`,最终保证)**:包住 PoW `BlockImport`,
+  对携带 body 的区块在父状态上**只读执行**得到后置存储变更,若变更触及立法院模块存储,则据「变更 ∪ 父状态」
+  RAW 重建宪法相关键(`Laws[0]`/`LawVersions[0][v]`,硬编码 `Blake2_128Concat` key,**不读链上 metadata**),
+  逐条比对**创世(block#0)基准**;命中违规 → `Ok(ImportResult::KnownBad)`(内层永不调用,块不入库、不成最佳块)。
+  装配在 `service.rs` 两处导入(网络导入队列 + 本地挖矿),故诚实节点既不接受也不产出违规块。
+- **L3 创世锚 + 二进制锚 + 链上 manifest**(均已落地):内容基准从 block#0 状态派生(创世哈希为之背书,改它=换链);
+  不可修改条款**清单**为 `primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES` 常量、**编译进节点二进制**(链上 WASM 改不到节点副本)。
+  另:`legislation-yuan` 新增**只读 storage** `ConstitutionImmutableManifest`(清单 + 逐条 blake2_256 摘要),仅 `genesis_build` 写、无 setter;
+  `genesis_build` 同时**逐条强断言**不可修改条款存在(缺即 panic,烤不出非法创世)。节点 `ConstitutionGuard::new` 启动期从 block#0
+  **交叉校验**:创世 manifest 清单 == 二进制清单,且逐条摘要 == 创世条文摘要;任一不符 → **节点拒绝启动**(把"清单"从单锚二进制升级为双锚 + 启动一致性闸)。
+  改这 8 条的唯一路径 = 改创世(新创世哈希=新链)+ 改节点二进制(硬分叉),即「只能重新创世」。
+
+威胁覆盖:普通 amend→L1 拒;setCode 删 L1 / migration 直写存储 / 改清单常量 / 改 `current_version` 指向篡改版本 /
+改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`detect_violation` 自身执行/取数出错时放行内层(决定论下内层一致处理),
+只在**确认篡改**时拒块,避免守卫 bug 误停全链。**待用户多节点真机 QA**:构造恶意改第一条的块,验证全网 orphan。
+
+#### 6.2 加固五项(2026-06-24,卡 `20260624-constitution-immutable-guard`,review 发现的绕过面)
+
+- **H1 守卫补 Law 元数据 + 唯一性**(堵"只校验条文字节"):`check_immutable_articles` 除 8 条条文外,断言 `Laws[0]`
+  `tier==Constitution`、`scope==0`、`status!=Repealed`(**不钉 Effective**,放行合法修宪 Pending 窗口)、`houses==创世`,
+  并断言 `LawsByScope[宪法][0]==[0]`(挡 migration 新立第二部宪法 / 隐藏 law_id=0)。判别值由 `enum_discriminants_match_node_guard` 测试钉死。
+- **H2 warp/状态导入校验**(堵"warp 落到篡改态"):`import_block` 对 `with_state()` 块不再无条件放行,改为内层导入后
+  `verify_committed_state` RAW 读导入态全套 H1 校验,违规 `KnownBad`(warp 目标被否)。
+- **H3 RPC 改 RAW 读 + 取生效版本**(堵"展示信任可升级 API" + "提前显示 Pending 版"):`constitution_getDocument` 直接
+  `StorageProvider` RAW 读 `Laws[0]`/`LawVersions[0][v]`(不走 runtime API),版本取 `effective_version_of_law`
+  (Pending 回退前一版),`source="legislation-raw"`。
+- **H4 禁止新立第二部宪法**(堵"立法入口造第二部宪法"):`propose_enact_law` 拒 `tier==Constitution`(`CannotEnactConstitution`),宪法只能创世存在。
+- **fail-open 处置**:保留"守卫机器自身故障放行内层"(决定论兜底,避免误停全链),仅在**确认篡改**拒;宪法读取/解码/比对失败本就 fail-closed。
+- 验收:node 17 单测(含元数据/houses/唯一性/Pending 放行/生效版本)+ legislation-yuan 18 单测(含禁宪法/判别值)+ no_std + fmt 全过。
+  **待 QA**:H2 warp 多节点真机(实现风险最高项)+ 双执行 PoW 性能。
+
+### 7. 宪法迁移(并入本模块)—— 已完成(2026-06-24,卡 `20260624-constitution-migration.md`)
 
 - 宪法纳入本模块,作为 `tier = 宪法` 的最高层级法律,实现「宪法可按条修改(走特别案/重要案)」。
-- 工程:933KB HTML(含样式/目录/中英)解析迁移成结构化条文(中英双语)。
-- 因工程量大,作为独立收尾任务卡,排在 pallet + 投票引擎跑通之后。
-- 迁移完成后,`CitizenConstitution.html` 的 include_str! 与 `citizen_constitution_html()` API 按禁止兼容硬规则一并清理(改读链上法律)。
+- 已落地:933KB HTML 经一次性解析器(`citizenchain/scripts/parse_constitution.py`,直出 SCALE)迁成结构化 `章>节>条>款 + 中英双语`,产物 `legislation-yuan/src/constitution.scale`(219KB,7章/28节/140条/129款),创世注入为 `law_id=0 tier=宪法 version=1 status=Effective`。
+- 唯一真源 = 链上立法院模块。`CitizenConstitution.html` 的 `include_str!`、`citizen_constitution_html()`/`CitizenConstitutionApi` 与 HTML 文件本身已按禁止兼容硬规则全删(代码零残留)。
+- 节点桌面端「公民宪法」tab **保持原样式**:`constitution_getDocument` RPC 改读 `LegislationApi`(`law(0)`→当前版本→`law_version`),`node/src/core/constitution.rs` 据链上结构化法律 + 抽出的原 CSS 外壳(单文件 `constitution_shell.html`,含 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 两占位标记,渲染时替换)重建完整 HTML,前端 iframe 零改动 → 样式与迁移前逐字一致。节点端宪法能力(渲染 + 下述守卫)统一收口此单文件。
 
 ### 8. 上链时机
 

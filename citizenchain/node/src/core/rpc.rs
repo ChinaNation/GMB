@@ -13,7 +13,6 @@ use std::{
 use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
 use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
-use primitives::genesis::CitizenConstitutionApi as _;
 use sc_client_api::StorageProvider;
 use sc_transaction_pool_api::{TransactionPool, TransactionSource};
 use sp_api::Core as CoreApi;
@@ -216,7 +215,6 @@ where
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
     C::Api: BlockBuilder<Block>,
     C::Api: CoreApi<Block>,
-    C::Api: primitives::genesis::CitizenConstitutionApi<Block>,
     P: TransactionPool<Block = Block> + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
@@ -248,42 +246,54 @@ where
     module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
     module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
-    // 公民宪法 RPC：从当前链上 runtime 读取 HTML 真源。
-    // 该内容编入 runtime WASM，修改后必须通过 runtime 升级生效。
+    // 公民宪法 RPC：直接 RAW 读链上立法院模块存储(law_id=0,tier=宪法)的**当前生效版本**,
+    // 据 章>节>条>款 + 中英双语重建为 HTML(复用原 CSS 外壳,样式与迁移前一致)。
+    // 故意不走 runtime API —— API 属可升级 runtime,恶意升级可伪造返回;RAW 读的正是 L2 守卫
+    // 所保护的存储。读"生效版本"而非 current_version,避免提前展示修宪待生效版(ADR-027 §6.1)。
     {
         let client = client.clone();
+        use crate::core::constitution::{self, CONSTITUTION_LAW_ID};
         module.register_method("constitution_getDocument", move |_params, _, _| {
             use jsonrpsee::types::error::ErrorObject;
+            use sp_storage::StorageKey;
 
             let best_hash = client.info().best_hash;
-            let html_bytes = client
-                .runtime_api()
-                .citizen_constitution_html(best_hash)
-                .map_err(|e| {
-                    ErrorObject::owned(-1, format!("读取 runtime 公民宪法失败: {e}"), None::<()>)
+            let raw =
+                |key: Vec<u8>| -> Result<Option<Vec<u8>>, jsonrpsee::types::ErrorObjectOwned> {
+                    client
+                        .storage(best_hash, &StorageKey(key))
+                        .map(|opt| opt.map(|d| d.0))
+                        .map_err(|e| {
+                            ErrorObject::owned(-1, format!("读取链上宪法存储失败: {e}"), None::<()>)
+                        })
+                };
+
+            // 1. RAW 读 Law(0),解出当前**生效中**版本号(Pending 时回退到前一版)。
+            let law_bytes =
+                raw(constitution::storage_key::law(CONSTITUTION_LAW_ID))?.ok_or_else(|| {
+                    ErrorObject::owned(-1, "链上宪法 Law 不存在(law_id=0)", None::<()>)
                 })?;
-            let blake2_256 = client
-                .runtime_api()
-                .citizen_constitution_blake2_256(best_hash)
-                .map_err(|e| {
-                    ErrorObject::owned(
-                        -1,
-                        format!("读取 runtime 公民宪法摘要失败: {e}"),
-                        None::<()>,
-                    )
-                })?;
-            let html = String::from_utf8(html_bytes).map_err(|e| {
-                ErrorObject::owned(
-                    -1,
-                    format!("runtime 公民宪法不是有效 UTF-8: {e}"),
-                    None::<()>,
-                )
+            let version = constitution::effective_version_of_law(&law_bytes)
+                .map_err(|e| ErrorObject::owned(-1, e, None::<()>))?;
+
+            // 2. RAW 读该版本 LawVersion 字节。
+            let version_bytes = raw(constitution::storage_key::law_version(
+                CONSTITUTION_LAW_ID,
+                version,
+            ))?
+            .ok_or_else(|| {
+                ErrorObject::owned(-1, format!("链上宪法版本不存在(v{version})"), None::<()>)
             })?;
+
+            // 3. 重建 HTML 并按内容计算摘要。
+            let html = constitution::render_constitution_html(&version_bytes)
+                .map_err(|e| ErrorObject::owned(-1, e, None::<()>))?;
+            let digest = sp_core::blake2_256(html.as_bytes());
 
             Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({
                 "html": html,
-                "blake2_256": format!("0x{}", hex::encode(blake2_256)),
-                "source": "runtime",
+                "blake2_256": format!("0x{}", hex::encode(digest)),
+                "source": "legislation-raw",
             }))
         })?;
     }

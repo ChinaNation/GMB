@@ -8,7 +8,7 @@
 //! LegislationVoteEngine 装 `()`,InternalAdminProvider 用 TestInternalAdminProvider。
 
 use super::*;
-use crate::pallet::{Article, Clause, HousesOf, LawProposalSummary};
+use crate::pallet::{Article, Chapter, ChaptersOf, HousesOf, LawProposalSummary, Section};
 use frame_support::{
     derive_impl, parameter_types,
     traits::{ConstU32, ConstU64},
@@ -194,23 +194,25 @@ impl internal_vote::Config for Test {
 
 parameter_types! {
     pub const MaxTitleLen: u32 = 256;
-    pub const MaxTextLen: u32 = 4096;
-    pub const MaxItemsPerClause: u32 = 50;
+    pub const MaxTextLen: u32 = 8192;
     pub const MaxClausesPerArticle: u32 = 50;
-    pub const MaxArticlesPerLaw: u32 = 500;
+    pub const MaxArticlesPerSection: u32 = 200;
+    pub const MaxSectionsPerChapter: u32 = 50;
+    pub const MaxChaptersPerLaw: u32 = 50;
     pub const MaxLawsPerScope: u32 = 1000;
     pub const MaxActivationsPerBlock: u32 = 100;
 }
 
 impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    // 第1步:立法投票引擎装配为 ()(NotConfigured)。
+    // 立法投票引擎单测装配为 ()(NotConfigured);端到端见 legislation-vote 测试。
     type LegislationVoteEngine = ();
     type MaxTitleLen = MaxTitleLen;
     type MaxTextLen = MaxTextLen;
-    type MaxItemsPerClause = MaxItemsPerClause;
     type MaxClausesPerArticle = MaxClausesPerArticle;
-    type MaxArticlesPerLaw = MaxArticlesPerLaw;
+    type MaxArticlesPerSection = MaxArticlesPerSection;
+    type MaxSectionsPerChapter = MaxSectionsPerChapter;
+    type MaxChaptersPerLaw = MaxChaptersPerLaw;
     type MaxLawsPerScope = MaxLawsPerScope;
     type MaxActivationsPerBlock = MaxActivationsPerBlock;
     type WeightInfo = ();
@@ -227,24 +229,35 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
-// ───────── 测试数据构造 helper ─────────
-/// 构造一条只含一款的条文。
-pub fn article(number: u32, text: &[u8]) -> Article<Test> {
-    let clause = Clause::<Test> {
-        number: 1,
-        text: BoundedVec::try_from(text.to_vec()).expect("text within bound"),
-        items: BoundedVec::default(),
-    };
+// ───────── 测试数据构造 helper(章>节>条>款)─────────
+/// 构造一条无款条文(body = 正文)。
+pub fn article(number: u32, body: &[u8]) -> Article<Test> {
     Article::<Test> {
         number,
         title: BoundedVec::try_from(format!("第{number}条").into_bytes())
             .expect("title within bound"),
-        clauses: BoundedVec::try_from(vec![clause]).expect("clauses within bound"),
+        title_en: None,
+        body: BoundedVec::try_from(body.to_vec()).expect("body within bound"),
+        body_en: None,
+        clauses: BoundedVec::default(),
     }
 }
 
-pub fn articles(list: Vec<Article<Test>>) -> BoundedVec<Article<Test>, MaxArticlesPerLaw> {
-    BoundedVec::try_from(list).expect("articles within bound")
+/// 把若干条包成「1 章 1 节」的法律全文(测试用)。
+pub fn chapters_of(articles: Vec<Article<Test>>) -> ChaptersOf<Test> {
+    let section = Section::<Test> {
+        number: 1,
+        title: title("第一节".as_bytes()),
+        title_en: None,
+        articles: BoundedVec::try_from(articles).expect("articles within bound"),
+    };
+    let chapter = Chapter::<Test> {
+        number: 1,
+        title: title("第一章".as_bytes()),
+        title_en: None,
+        sections: BoundedVec::try_from(vec![section]).expect("sections within bound"),
+    };
+    BoundedVec::try_from(vec![chapter]).expect("chapters within bound")
 }
 
 pub fn title(s: &[u8]) -> BoundedVec<u8, MaxTitleLen> {

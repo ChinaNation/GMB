@@ -52,8 +52,8 @@ pub fn normalize_admins(admins: &[String]) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use primitives::count_const::NRC_INTERNAL_THRESHOLD;
     use primitives::code::{code_bytes, NRC};
+    use primitives::count_const::NRC_INTERNAL_THRESHOLD;
 
     #[test]
     fn builds_admin_set_change_call_prefix() {

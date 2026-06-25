@@ -41,7 +41,9 @@ impl SubstrateCli for Cli {
         Ok(match id {
             // 中文注释：Substrate CLI 的 benchmark 默认传入 dev/local/staging 等内置别名。
             // CitizenChain 不维护独立临时 dev genesis,这些别名统一落到冻结 chainspec。
-            "" | "citizenchain" | "dev" | "local" | "staging" => Box::new(chain_spec::chain_config()?),
+            "" | "citizenchain" | "dev" | "local" | "staging" => {
+                Box::new(chain_spec::chain_config()?)
+            }
             // 中文注释：仅供本机 clean-run 重新创世时导出 fresh raw chainspec 使用。
             "citizenchain-fresh" => Box::new(chain_spec::fresh_genesis_config()?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(

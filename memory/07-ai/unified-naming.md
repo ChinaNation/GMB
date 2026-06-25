@@ -107,7 +107,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/node/src/im/` | 通信节点 IM | node-im | 通信节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
 | `website/` | 官网 | website | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
-| `citizenchain/runtime/primitives/src/CitizenConstitution.html` | 公民宪法真源 | citizen-constitution-source | 公民宪法 HTML 唯一真源，编入 runtime WASM，修改后必须通过 runtime 升级生效 |
+| `citizenchain/runtime/governance/legislation-yuan/` | 立法院模块 | legislation-yuan | 公民宪法唯一真源（`law_id=0`、`tier=宪法`，创世注入 `constitution.scale` + 立法投票修订）；所有法律统一章>节>条>款，展示端从链上结构化法律重建 HTML（ADR-027） |
 | `scripts/` | 脚本 | scripts | 仓库级脚本工具、生成器和自动化脚本 |
 
 ## 5. 当前核心命名登记

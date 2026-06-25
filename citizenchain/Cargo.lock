@@ -7412,6 +7412,7 @@ name = "node"
 version = "1.0.0"
 dependencies = [
  "async-channel 1.9.0",
+ "async-trait",
  "base64 0.22.1",
  "blake2b_simd",
  "bs58",

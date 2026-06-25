@@ -17,23 +17,11 @@ pub const HE_FUND_ISSUANCE: u128 = 19_581_850_196_600; // 195,818,501,966.00 元
 
 use sp_std::vec::Vec;
 
-/// 四、公民宪法 HTML 真源
-///
-/// `CitizenConstitution.html` 被编入 WASM；修改该 HTML 后必须发布 runtime 升级。
-pub const CITIZEN_CONSTITUTION_HTML: &str = include_str!("CitizenConstitution.html");
-
-// 五、公民宪法 Runtime API：runtime 暴露内置宪法 HTML 正文与其 blake2_256 摘要。
+// 四、立法院模块 Runtime API(ADR-027):供客户端(CitizenApp / 节点桌面端)浏览链上法律。
+//    宪法已迁入 legislation-yuan(law_id=0,tier=宪法),原内置宪法 HTML 真源与 API 已删,
+//    展示端统一从链上结构化法律重建;返回 SCALE 编码字节,客户端按镜像类型解码,
+//    避免跨 API 边界暴露泛型法律结构。
 sp_api::decl_runtime_apis! {
-    pub trait CitizenConstitutionApi {
-        /// 返回当前链上 runtime 内置的公民宪法 HTML。
-        fn citizen_constitution_html() -> Vec<u8>;
-
-        /// 返回当前链上 runtime 内置公民宪法 HTML 的 blake2_256 摘要。
-        fn citizen_constitution_blake2_256() -> [u8; 32];
-    }
-
-    // 六、立法院模块 Runtime API(ADR-027):供客户端(CitizenApp)浏览链上法律。
-    // 返回 SCALE 编码字节,客户端按镜像类型解码;避免跨 API 边界暴露泛型法律结构。
     pub trait LegislationApi {
         /// 列出某层级(tier:宪法0/国1/省2/市3)+ 行政区 scope_code 下的法律 ID。
         fn list_laws(tier: u8, scope_code: u32) -> Vec<u64>;

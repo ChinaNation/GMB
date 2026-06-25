@@ -18,7 +18,7 @@ use crate::home;
 use crate::settings::device_password;
 use crate::shared::security;
 use primitives::code::{
-    InstitutionCode, code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code,
+    code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code, InstitutionCode,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -32,10 +32,10 @@ use tauri::AppHandle;
 
 use crate::governance::admins_change::storage;
 use crate::governance::signing;
-use primitives::sign::{BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN, binary_domain_prefix};
+use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN};
 
 use super::account_id;
-use super::types::{AdminAccountState, institution_code_label};
+use super::types::{institution_code_label, AdminAccountState};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {

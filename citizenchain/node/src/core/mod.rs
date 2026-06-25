@@ -6,6 +6,7 @@ pub(crate) mod benchmarking;
 pub(crate) mod chain_spec;
 pub(crate) mod cli;
 pub(crate) mod command;
+pub(crate) mod constitution;
 pub(crate) mod rpc;
 pub(crate) mod service;
 pub(crate) mod tls_cert;

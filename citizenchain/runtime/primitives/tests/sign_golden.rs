@@ -44,7 +44,9 @@ fn hex_decode(s: &str) -> Vec<u8> {
 }
 
 fn parse_op_tag(v: &serde_json::Value) -> u8 {
-    let raw = v["op_tag"].as_str().expect("向量缺少 op_tag(应为 0xNN hex 串)");
+    let raw = v["op_tag"]
+        .as_str()
+        .expect("向量缺少 op_tag(应为 0xNN hex 串)");
     let stripped = raw.strip_prefix("0x").unwrap_or(raw);
     u8::from_str_radix(stripped, 16).unwrap_or_else(|_| panic!("非法 op_tag: {raw}"))
 }
@@ -83,7 +85,11 @@ fn sign_golden_vectors() {
     let mut updated = Vec::with_capacity(vectors.len());
     for v in &vectors {
         let op_tag = parse_op_tag(v);
-        let payload = hex_decode(v["scale_payload_hex"].as_str().expect("缺 scale_payload_hex"));
+        let payload = hex_decode(
+            v["scale_payload_hex"]
+                .as_str()
+                .expect("缺 scale_payload_hex"),
+        );
         let computed = signing_message(op_tag, &payload);
         let computed_hex = hex_encode(&computed);
 

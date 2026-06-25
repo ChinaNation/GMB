@@ -285,20 +285,6 @@ impl_runtime_apis! {
         }
     }
 
-    impl primitives::genesis::CitizenConstitutionApi<Block> for Runtime {
-        fn citizen_constitution_html() -> Vec<u8> {
-            primitives::genesis::CITIZEN_CONSTITUTION_HTML
-                .as_bytes()
-                .to_vec()
-        }
-
-        fn citizen_constitution_blake2_256() -> [u8; 32] {
-            sp_io::hashing::blake2_256(
-                primitives::genesis::CITIZEN_CONSTITUTION_HTML.as_bytes(),
-            )
-        }
-    }
-
     impl primitives::genesis::LegislationApi<Block> for Runtime {
         fn list_laws(tier: u8, scope_code: u32) -> Vec<u64> {
             let tier = match tier {
