@@ -251,6 +251,29 @@ fn amend_constitution_immutable_article_rejected() {
 }
 
 #[test]
+fn rejects_amend_while_pending() {
+    // 待生效(Pending)期间不得再次修订(P3:保证至多一个待生效版本)。
+    new_test_ext().execute_with(|| {
+        let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Important, b"law");
+        summary.effective_at = 100; // 未来生效 → 写入后 status=Pending
+        assert_ok!(Lib::write_law_version(7, summary, one_chapter(), 1));
+        assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Pending);
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                VoteType::Important,
+                title(b"law-v2"),
+                None,
+                one_chapter(),
+                200,
+            ),
+            Error::<Test>::AmendmentAlreadyPending
+        );
+    });
+}
+
+#[test]
 fn amend_constitution_preserving_immutable_reaches_engine() {
     new_test_ext().execute_with(|| {
         seed_constitution();

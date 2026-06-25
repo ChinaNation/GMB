@@ -459,6 +459,8 @@ pub mod pallet {
         CannotRepealConstitution,
         /// 宪法唯一真源 = 创世 law_id=0,不可经立法入口新立第二部宪法
         CannotEnactConstitution,
+        /// 该法律已有未生效(Pending)修订,生效前不得再次提交修订
+        AmendmentAlreadyPending,
         /// 法律不存在
         LawNotFound,
         /// 法律版本不存在
@@ -557,6 +559,12 @@ pub mod pallet {
             ensure!(
                 law.status != LawStatus::Repealed,
                 Error::<T>::LawAlreadyRepealed
+            );
+            // 至多一个待生效修订:有未生效版本时不得再修(P3)。保证 current_version 始终
+            // 至多领先生效版本一版,使「current_version-1 = 现行生效版」恒成立、激活不被新版本顶掉。
+            ensure!(
+                law.status != LawStatus::Pending,
+                Error::<T>::AmendmentAlreadyPending
             );
             Self::ensure_legislator(&law.houses, &who)?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;

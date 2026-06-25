@@ -17,7 +17,9 @@ use std::sync::Arc;
 use codec::{Decode, Encode};
 use sc_client_api::backend::{Backend as _, TrieCacheContext};
 use sc_client_api::StorageProvider;
-use sc_consensus::{BlockCheckParams, BlockImport, BlockImportParams, ImportResult};
+use sc_consensus::{
+    BlockCheckParams, BlockImport, BlockImportParams, ImportResult, StateAction, StorageChanges,
+};
 use sp_api::{ApiExt, Core, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
 use sp_consensus::Error as ConsensusError;
@@ -514,17 +516,28 @@ impl<I> ConstitutionGuard<I> {
         })
     }
 
-    /// 校验某已提交区块状态(`hash`)的宪法全部不变式 —— 供 warp/状态导入块用。
-    /// `Ok(())` = 合规;`Err` = 违规(拒块)。直接 RAW 读该状态,不走 runtime API。
-    fn verify_committed_state(&self, hash: <Block as BlockT>::Hash) -> Result<(), String> {
-        let read = |key: &[u8]| -> Option<Vec<u8>> {
-            self.client
-                .storage(hash, &StorageKey(key.to_vec()))
-                .ok()
-                .flatten()
-                .map(|data| data.0)
+    /// **提交前**校验 warp/状态导入块携带的下载态宪法不变式(P1:vendored GRANDPA 在 `inner.import_block`
+    /// 内即把状态置 finalized 落库,post-import 拒块无法回滚,故必须在调用 inner **之前**校验)。
+    /// 从 `params.state_action` 的 `ImportedState` 抽出立法院模块前缀键(仅几 KB),据此跑全套不变式。
+    /// `Ok(())` = 合规(可提交);`Err` = 违规或无法抽取(拒绝,fail-closed —— 不调用 inner,什么都不落库)。
+    fn verify_imported_state(&self, params: &BlockImportParams<Block>) -> Result<(), String> {
+        let imported = match &params.state_action {
+            StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
+            // warp 状态形态非预期 → 无法 pre-commit 校验、post-commit 又不可回滚 → 拒绝。
+            _ => return Err("warp 状态非 ApplyChanges(Import) 形态,拒绝(无法提交前校验)".into()),
         };
-        check_immutable_articles(read, &self.reference).map_err(|e| format!("{e:?}"))
+        // 只挑立法院模块前缀键(宪法相关全在此),避免拷贝整份 warp 全态。
+        let prefix = storage_key::pallet_prefix();
+        let mut map: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+        for level in &imported.state.0 {
+            for (key, value) in &level.key_values {
+                if key.starts_with(&prefix) {
+                    map.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        check_immutable_articles(|key| map.get(key).cloned(), &self.reference)
+            .map_err(|e| format!("{e:?}"))
     }
 
     /// 计算普通(执行型)区块后置状态是否违反宪法不变式。warp/状态导入块不走此路径(见 `import_block`)。
@@ -550,11 +563,14 @@ impl<I> ConstitutionGuard<I> {
             .into_storage_changes(&parent_state, parent_hash)
             .map_err(|e| format!("提取存储变更失败:{e}"))?;
 
-        // 快路径:本块是否动过立法院模块存储?未动则(归纳)不可修改条款不变,合规。
+        // 快路径:本块既未动立法院模块存储、也未升级 runtime(`:code`)→ 归纳不可修改条款不变,合规。
+        // runtime 升级(setCode)是高危块:即便 delta 未触立法院前缀也强制走全量不变式校验(P2/P3)。
         let prefix = storage_key::pallet_prefix();
         let delta: BTreeMap<Vec<u8>, Option<Vec<u8>>> =
             changes.main_storage_changes.into_iter().collect();
-        if !delta.keys().any(|k| k.starts_with(&prefix)) {
+        let touched_legislation = delta.keys().any(|k| k.starts_with(&prefix));
+        let runtime_upgraded = delta.contains_key(sp_storage::well_known_keys::CODE);
+        if !touched_legislation && !runtime_upgraded {
             return Ok(false);
         }
 
@@ -605,18 +621,16 @@ where
         &self,
         params: BlockImportParams<Block>,
     ) -> Result<ImportResult, Self::Error> {
-        // warp/状态同步块:不经执行,直接导入下载来的状态 → 先让内层导入,再校验导入后的
-        // 宪法不变式(防新节点 warp 到已篡改不可修改条款的状态)。违规则拒(KnownBad),
-        // warp 目标被否,节点换 peer / 落回全量同步。
+        // warp/状态同步块:vendored GRANDPA 在 inner 内即把状态置 finalized 落库,无法事后回滚,
+        // 故必须**提交前**校验下载态的宪法不变式(P1)。违规/无法抽取 → KnownBad(不调用 inner,什么都不落库)。
         if params.with_state() {
-            let post_hash = params.post_hash();
-            let result = self.inner.import_block(params).await?;
-            return match self.verify_committed_state(post_hash) {
-                Ok(()) => Ok(result),
+            return match self.verify_imported_state(&params) {
+                Ok(()) => self.inner.import_block(params).await,
                 Err(reason) => {
                     log::error!(
                         target: "constitution-guard",
-                        "拒绝 warp/状态导入 ({post_hash:?}):宪法不变式被破坏 —— {reason}",
+                        "拒绝 warp/状态导入 ({:?}):宪法不变式校验未通过 —— {reason}",
+                        params.post_hash(),
                     );
                     Ok(ImportResult::KnownBad)
                 }
@@ -627,11 +641,16 @@ where
         match self.detect_violation(&params) {
             Ok(true) => Ok(ImportResult::KnownBad),
             Ok(false) => self.inner.import_block(params).await,
-            // 守卫自身执行/取数出错不等于「确认违规」:同一 STF 决定论下内层会一致处理,
-            // 故放行内层而非据自身故障拒块(避免守卫 bug 误停全链);异常已记日志待排查。
+            // P2 fail-closed:守卫自身执行/取数失败(无法读父状态/无法执行/无法取变更)→ 拒块,
+            // 不放行未经校验的块。代价是守卫机器 bug 可能误停链,但对「不可修改条款永不可破坏」
+            // 这是刻意的安全优先取舍;宪法读取/解码/比对失败本就在 detect_violation 内 fail-closed。
             Err(why) => {
-                log::warn!(target: "constitution-guard", "守卫判定未完成,放行内层:{why}");
-                self.inner.import_block(params).await
+                log::error!(
+                    target: "constitution-guard",
+                    "守卫判定失败,fail-closed 拒块 ({:?}):{why}",
+                    params.post_hash(),
+                );
+                Ok(ImportResult::KnownBad)
             }
         }
     }

@@ -193,15 +193,22 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 - **H1 守卫补 Law 元数据 + 唯一性**(堵"只校验条文字节"):`check_immutable_articles` 除 8 条条文外,断言 `Laws[0]`
   `tier==Constitution`、`scope==0`、`status!=Repealed`(**不钉 Effective**,放行合法修宪 Pending 窗口)、`houses==创世`,
   并断言 `LawsByScope[宪法][0]==[0]`(挡 migration 新立第二部宪法 / 隐藏 law_id=0)。判别值由 `enum_discriminants_match_node_guard` 测试钉死。
-- **H2 warp/状态导入校验**(堵"warp 落到篡改态"):`import_block` 对 `with_state()` 块不再无条件放行,改为内层导入后
-  `verify_committed_state` RAW 读导入态全套 H1 校验,违规 `KnownBad`(warp 目标被否)。
+- **H2 warp/状态导入校验**(堵"warp 落到篡改态"):`import_block` 对 `with_state()` 块**提交前**校验。
+  ⚠️ **二次 review 修正(P1)**:vendored GRANDPA 在 `inner.import_block` 内即把状态置 finalized 落库,**post-import `KnownBad` 无法回滚**;
+  故改为 `verify_imported_state` 从 `params.state_action` 的 `ImportedState` 抽立法院前缀键、**调用 inner 之前**跑全套校验,
+  违规/无法抽取 → `KnownBad`(不调用 inner,什么都不落库)。
 - **H3 RPC 改 RAW 读 + 取生效版本**(堵"展示信任可升级 API" + "提前显示 Pending 版"):`constitution_getDocument` 直接
   `StorageProvider` RAW 读 `Laws[0]`/`LawVersions[0][v]`(不走 runtime API),版本取 `effective_version_of_law`
   (Pending 回退前一版),`source="legislation-raw"`。
 - **H4 禁止新立第二部宪法**(堵"立法入口造第二部宪法"):`propose_enact_law` 拒 `tier==Constitution`(`CannotEnactConstitution`),宪法只能创世存在。
-- **fail-open 处置**:保留"守卫机器自身故障放行内层"(决定论兜底,避免误停全链),仅在**确认篡改**拒;宪法读取/解码/比对失败本就 fail-closed。
-- 验收:node 17 单测(含元数据/houses/唯一性/Pending 放行/生效版本)+ legislation-yuan 18 单测(含禁宪法/判别值)+ no_std + fmt 全过。
-  **待 QA**:H2 warp 多节点真机(实现风险最高项)+ 双执行 PoW 性能。
+- **二次 review 修正三项(P2/P2-P3/P3)**:
+  - **P2 fail-closed**:`detect_violation` 自身失败(无法读父状态/执行/取变更)→ 改为 `KnownBad` 拒块(原 fail-open 放行改为安全优先);
+    宪法读/解码/比对本就 fail-closed。
+  - **P2/P3 setCode 强制全检**:快路径放行条件加"且未升级 runtime"——delta 含 `:code` 即强制走全量不变式校验。
+  - **P3 至多一个待生效修订**:`propose_amend_law` 拒 `status==Pending`(`AmendmentAlreadyPending`),使 `current_version-1=现行生效版`
+    恒成立、激活不被新版本顶掉(原"连续多个待生效修订"会让 `effective_version` 推断错 + 激活 stranding)。
+- 验收:node 17 单测 + legislation-yuan 19 单测(含禁宪法/判别值/拒重叠 Pending)+ no_std + fmt 全过。
+  **待 QA**:H2 warp 多节点真机(提交前抽取 `ImportedState` 的实测,实现风险最高项)+ 双执行 PoW 性能。
 
 ### 7. 宪法迁移(并入本模块)—— 已完成(2026-06-24,卡 `20260624-constitution-migration.md`)
 

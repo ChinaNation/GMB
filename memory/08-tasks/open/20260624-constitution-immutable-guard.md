@@ -64,7 +64,8 @@
 用户 review 出 5 个绕过面,合并一轮加固(决策:H2 校验导入态保 warp、#5 仅展示端、H1 连 houses 钉):
 
 - **H1**(node `core/constitution.rs`):`check_immutable_articles` 补 `Laws[0]` 元数据(`tier==Constitution`/`scope==0`/`status!=Repealed`/`houses==创世`)+ `LawsByScope[宪法][0]==[0]` 唯一性;`MLawHead` 补解 `status`;判别常量 `TIER_CONSTITUTION=0`/`LAW_STATUS_{PENDING=0,REPEALED=2}`,由 legislation-yuan `enum_discriminants_match_node_guard` 钉死。**status 不钉 Effective**(放行修宪 Pending 窗口)。
-- **H2**:`import_block` 对 `with_state()`(warp)块改为"内层导入后 `verify_committed_state` RAW 校验",违规 `KnownBad`。
+- **H2**(二次 review 修正 P1):`import_block` 对 `with_state()`(warp)块改为**提交前** `verify_imported_state` —— 从 `params.state_action` 的 `ImportedState` 抽立法院前缀键、调 inner **之前**校验,违规/无法抽取 `KnownBad`(不落库)。原"内层导入后校验"无效:vendored GRANDPA `import.rs:500` 在 inner 内即 `block.finalized=true` 落库,post-import 拒块不能回滚 finalized 态。
+- **二次 review 又修三项**:P2 `detect_violation` 自身失败改 **fail-closed**(`KnownBad`,原放行内层);P2/P3 快路径加"delta 含 `:code`(runtime 升级)即强制全检";P3 runtime `propose_amend_law` 拒 `status==Pending`(`AmendmentAlreadyPending`),保证至多一个待生效版本→`current_version-1` 推断生效版恒正确 + 激活不 stranding。
 - **H3**:`rpc.rs::constitution_getDocument` 改 `StorageProvider` RAW 读(不走 runtime API,删 `LegislationApi` bound)+ `effective_version_of_law`(Pending 回退前一版),`source="legislation-raw"`。删死函数 `current_version_of_law`。
 - **H4**(runtime `legislation-yuan`):`propose_enact_law` 拒 `tier==Constitution`(新 `Error::CannotEnactConstitution`)。
 - **fail-open**:保留(决定论兜底),文档化;宪法读/解码/比对本就 fail-closed。
