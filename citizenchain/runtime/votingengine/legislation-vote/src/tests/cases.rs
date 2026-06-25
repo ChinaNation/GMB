@@ -4,13 +4,13 @@ use super::*;
 use frame_support::{assert_noop, assert_ok, BoundedVec};
 use votingengine::types::{
     legislation_house_decided, legislation_house_final_passed, legislation_referendum_final_passed,
-    LEG_VOTE_IMPORTANT, LEG_VOTE_REGULAR, LEG_VOTE_SECOND_READING, LEG_VOTE_SPECIAL,
+    LEG_VOTE_MAJOR, LEG_VOTE_MAJOR_EDU, LEG_VOTE_REGULAR, LEG_VOTE_REGULAR_EDU, LEG_VOTE_SPECIAL,
 };
 use votingengine::{
     STAGE_LEG_HOUSE, STAGE_LEG_REFERENDUM, STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING,
 };
 
-// ───────────────── 阈值纯函数(宪法第十八条精确端点)─────────────────
+// ───────────────── 阈值纯函数(宪法第四十四/四十五条精确端点,5 类删二审)─────────────────
 
 #[test]
 fn house_final_passed_thresholds() {
@@ -18,34 +18,16 @@ fn house_final_passed_thresholds() {
     assert!(legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 6, 3)); // casted=9>8, 6/9≥60%
     assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 5, 3)); // 5/8=62.5%但 casted=8 不>8
     assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 5, 4)); // 5/9=55%<60%
-                                                                          // 重要案:>90% 参与 且 ≥70% 赞成。
-    assert!(legislation_house_final_passed(LEG_VOTE_IMPORTANT, 10, 7, 3)); // casted=10>9, 7/10≥70%
-    assert!(!legislation_house_final_passed(
-        LEG_VOTE_IMPORTANT,
-        10,
-        8,
-        1
-    )); // casted=9 不>9
-        // 二审:全员参与 且 ≥50% 赞成 且 反对<20%。
-    assert!(legislation_house_final_passed(
-        LEG_VOTE_SECOND_READING,
-        10,
-        9,
-        1
-    )); // 全员10,9赞成,1反对<2
-    assert!(!legislation_house_final_passed(
-        LEG_VOTE_SECOND_READING,
-        10,
-        8,
-        1
-    )); // casted=9≠10,未全员
-    assert!(!legislation_house_final_passed(
-        LEG_VOTE_SECOND_READING,
-        10,
-        8,
-        2
-    )); // 反对2不<20%
-        // 特别案内部:全员 且 ≥70% 赞成。
+                                                                          // 常规教育案:阈值同常规案。
+    assert!(legislation_house_final_passed(LEG_VOTE_REGULAR_EDU, 10, 6, 3));
+    assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR_EDU, 10, 5, 4));
+    // 重要案:>90% 参与 且 ≥70% 赞成。
+    assert!(legislation_house_final_passed(LEG_VOTE_MAJOR, 10, 7, 3)); // casted=10>9, 7/10≥70%
+    assert!(!legislation_house_final_passed(LEG_VOTE_MAJOR, 10, 8, 1)); // casted=9 不>9
+                                                                       // 重要教育案:阈值同重要案。
+    assert!(legislation_house_final_passed(LEG_VOTE_MAJOR_EDU, 10, 7, 3));
+    assert!(!legislation_house_final_passed(LEG_VOTE_MAJOR_EDU, 10, 8, 1));
+    // 特别案内部:全员 且 ≥70% 赞成。
     assert!(legislation_house_final_passed(LEG_VOTE_SPECIAL, 10, 7, 3)); // 全员10,7赞成
     assert!(!legislation_house_final_passed(LEG_VOTE_SPECIAL, 10, 6, 4)); // 6<70%
 }
@@ -143,7 +125,7 @@ fn non_legislator_cannot_create() {
 #[test]
 fn two_houses_advance_then_pass() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), two_houses(), LEG_VOTE_IMPORTANT);
+        let pid = create(member(1), two_houses(), LEG_VOTE_MAJOR);
         // 第一院(众议会式,议员 1..=10):8 赞成 2 反对 → 通过,推进至第二院。
         for i in 1u8..=8 {
             assert_ok!(cast(member(i), pid, true));

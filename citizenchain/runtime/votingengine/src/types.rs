@@ -40,6 +40,13 @@ pub const STAGE_LEG_HOUSE: u8 = 10;
 /// 立法投票强制公投阶段(legislation-vote,特别案/核心修宪):内部全过后强制进入。
 /// 与联合投票 `STAGE_REFERENDUM` 区分,阈值为宪法 ≥70% 参与 + ≥70% 赞成。
 pub const STAGE_LEG_REFERENDUM: u8 = 11;
+/// 立法投票行政签署阶段(legislation-vote,ADR-027 修订 2026-06-25,宪法第44/45/73/79条):
+/// 非特别案内部全过后,由机构法定代表人签署——市长(市)/省长(省)/总统(国)。
+/// 市级单院无救济;省/国家级否决或超时进入 `STAGE_LEG_OVERRIDE`。特别案不经此阶段。
+pub const STAGE_LEG_SIGN: u8 = 12;
+/// 立法投票三人会签救济阶段(省/国家级):立法院院长 + 参议长 + 众议长共同签署。
+/// 三人全签同意 → 生效;任一否决或会签超时 → 否决。
+pub const STAGE_LEG_OVERRIDE: u8 = 13;
 
 pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;
@@ -50,17 +57,20 @@ pub const STATUS_EXECUTED: u8 = 3;
 pub const STATUS_EXECUTION_FAILED: u8 = 4;
 
 // ──────────────────────────────────────────────────────────────────
-// 立法表决阈值(公民宪法第十八条,ADR-027)。全整数运算,按宪法精确取端点。
-// 投票引擎侧用 u8 表决类型解耦,值与 legislation-yuan::VoteType::as_u8 对齐。
+// 立法表决阈值(公民宪法第四十四/四十五条,ADR-027 修订 2026-06-25)。全整数运算,按宪法精确取端点。
+// 5 类提案:常规/常规教育/重要/重要教育/特别(删常规案二审,方案B)。教育变体阈值同非教育同级,
+// 仅提案机构与表决院路由不同。投票引擎侧用 u8 表决类型解耦,值与 legislation-yuan::VoteType::as_u8 对齐。
 // ──────────────────────────────────────────────────────────────────
 /// 常规案(>80% 参与,≥60% 赞成)
 pub const LEG_VOTE_REGULAR: u8 = 0;
+/// 常规教育案(教委会;阈值同常规案)
+pub const LEG_VOTE_REGULAR_EDU: u8 = 1;
 /// 重要案(>90% 参与,≥70% 赞成)
-pub const LEG_VOTE_IMPORTANT: u8 = 1;
-/// 常规案二审(全员参与,≥50% 赞成且反对<20%)
-pub const LEG_VOTE_SECOND_READING: u8 = 2;
+pub const LEG_VOTE_MAJOR: u8 = 2;
+/// 重要教育案(教委会;阈值同重要案)
+pub const LEG_VOTE_MAJOR_EDU: u8 = 3;
 /// 特别案(全员参与,≥70% 赞成 + 强制公投)
-pub const LEG_VOTE_SPECIAL: u8 = 3;
+pub const LEG_VOTE_SPECIAL: u8 = 4;
 
 /// 单部法律最多院数(单院 1 / 两院 2 / 留余量)。立法投票与立法院模块共享此上限(单一真源)。
 pub const MAX_LEGISLATION_HOUSES: u32 = 4;
@@ -72,20 +82,15 @@ pub fn legislation_house_final_passed(vote_type: u8, total: u32, yes: u32, no: u
     if total == 0 || casted == 0 {
         return false;
     }
-    let (total, yes, no, casted) = (
-        u64::from(total),
-        u64::from(yes),
-        u64::from(no),
-        u64::from(casted),
-    );
+    let (total, yes, casted) = (u64::from(total), u64::from(yes), u64::from(casted));
     match vote_type {
-        // 常规案:>80% 参与 且 ≥60% 赞成(参与者基数)
-        LEG_VOTE_REGULAR => casted * 100 > total * 80 && yes * 100 >= casted * 60,
-        // 重要案:>90% 参与 且 ≥70% 赞成
-        LEG_VOTE_IMPORTANT => casted * 100 > total * 90 && yes * 100 >= casted * 70,
-        // 二审:全员参与 且 ≥50% 赞成 且 反对<20%(均按 total 基数)
-        LEG_VOTE_SECOND_READING => {
-            casted == total && yes * 100 >= total * 50 && no * 100 < total * 20
+        // 常规案/常规教育案:>80% 参与 且 ≥60% 赞成(参与者基数)
+        LEG_VOTE_REGULAR | LEG_VOTE_REGULAR_EDU => {
+            casted * 100 > total * 80 && yes * 100 >= casted * 60
+        }
+        // 重要案/重要教育案:>90% 参与 且 ≥70% 赞成
+        LEG_VOTE_MAJOR | LEG_VOTE_MAJOR_EDU => {
+            casted * 100 > total * 90 && yes * 100 >= casted * 70
         }
         // 特别案内部:全员参与 且 ≥70% 赞成
         LEG_VOTE_SPECIAL => casted == total && yes * 100 >= total * 70,
@@ -108,10 +113,12 @@ pub fn legislation_house_decided(vote_type: u8, total: u32, yes: u32, no: u32) -
     let (total_u, no_u) = (u64::from(total), u64::from(no));
     // 反对票上限:超过即赞成永不可能达标(即使剩余全投赞成)。
     let reject_locked = match vote_type {
-        LEG_VOTE_REGULAR => no_u * 100 > total_u * 40, // 需赞成≥60%参与 → 反对≤40%
-        LEG_VOTE_IMPORTANT => no_u * 100 > total_u * 30, // 反对≤30%
-        LEG_VOTE_SECOND_READING => no_u * 100 >= total_u * 20, // 反对<20%
-        LEG_VOTE_SPECIAL => no_u * 100 > total_u * 30, // 赞成需≥70%(全员)→ 反对≤30%
+        // 常规系:需赞成≥60%参与 → 反对>40% 即锁死
+        LEG_VOTE_REGULAR | LEG_VOTE_REGULAR_EDU => no_u * 100 > total_u * 40,
+        // 重要系:需赞成≥70%参与 → 反对>30% 即锁死
+        LEG_VOTE_MAJOR | LEG_VOTE_MAJOR_EDU => no_u * 100 > total_u * 30,
+        // 特别案:赞成需≥70%(全员)→ 反对>30% 即锁死
+        LEG_VOTE_SPECIAL => no_u * 100 > total_u * 30,
         _ => true,
     };
     if reject_locked {

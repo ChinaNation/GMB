@@ -16,7 +16,7 @@ fn enact_writes_law_and_schedules_future_activation() {
         let mut summary = enact_summary(
             Tier::Municipal,
             1001,
-            VoteType::Important,
+            VoteType::Major,
             b"\xe5\xb8\x82\xe9\x95\xbf\xe9\x80\x89\xe4\xb8\xbe\xe6\xb3\x95",
         );
         summary.effective_at = 100; // 未来生效
@@ -279,7 +279,7 @@ fn amend_constitution_immutable_article_rejected() {
 fn rejects_amend_while_pending() {
     // 待生效(Pending)期间不得再次修订(P3:保证至多一个待生效版本)。
     new_test_ext().execute_with(|| {
-        let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Important, b"law");
+        let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law");
         summary.effective_at = 100; // 未来生效 → 写入后 status=Pending
         assert_ok!(Lib::write_law_version(7, summary, one_chapter(), 1));
         assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Pending);
@@ -287,7 +287,7 @@ fn rejects_amend_while_pending() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                VoteType::Important,
+                VoteType::Major,
                 title(b"law-v2"),
                 None,
                 one_chapter(),
@@ -336,11 +336,11 @@ fn write_rejects_amend_constitution_immutable_article_directly() {
 fn write_rejects_amend_while_pending_directly() {
     // Pending 单飞规则在写入层复查,防多个待生效版本破坏 current_version-1 推导。
     new_test_ext().execute_with(|| {
-        let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Important, b"law");
+        let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law");
         summary.effective_at = 100;
         assert_ok!(Lib::write_law_version(7, summary, one_chapter(), 1));
 
-        let mut amend = enact_summary(Tier::Municipal, 1001, VoteType::Important, b"law-v2");
+        let mut amend = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law-v2");
         amend.action = LawAction::Amend;
         amend.law_id = 0;
         assert_noop!(

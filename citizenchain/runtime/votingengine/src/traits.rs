@@ -603,6 +603,15 @@ pub trait InternalAdminProvider<AccountId> {
         false
     }
 
+    /// 获取机构法定代表人(机构首脑,必为该机构 admins 之一;ADR-027 立法签署人)。
+    /// 默认 None(个人账户/无代表人语境);机构由 admins-change 提供并保证 ∈ admins。
+    fn legal_representative(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+    ) -> Option<AccountId> {
+        None
+    }
+
     /// 获取 Pending 账户管理员列表。仅供创建/激活该账户时锁定快照。
     fn get_pending_admin_list(
         _institution_code: InstitutionCode,

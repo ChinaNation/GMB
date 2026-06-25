@@ -57,7 +57,9 @@ pub enum LawStatus {
     Repealed,
 }
 
-/// 表决类型(公民宪法第十八条)。映射为投票引擎接口的 `u8`,保持引擎与业务枚举解耦。
+/// 表决类型(公民宪法第四十四/四十五条,ADR-027 修订 2026-06-25:5 类,删常规案二审)。
+/// 映射为投票引擎接口的 `u8`,保持引擎与业务枚举解耦。教育变体阈值同非教育同级,
+/// 仅提案机构(教委会)与表决院路由不同。
 #[derive(
     Encode,
     Decode,
@@ -73,23 +75,32 @@ pub enum LawStatus {
 pub enum VoteType {
     /// 常规案(>80% 参与,≥60% 赞成)
     Regular,
+    /// 常规教育案(教委会起草;阈值同常规案)
+    RegularEducation,
     /// 重要案(>90% 参与,≥70% 赞成)
-    Important,
-    /// 常规案二审(全员参与,≥50% 赞成且反对<20%)
-    SecondReading,
-    /// 特别案(全员 ≥70% 赞成 + 强制公民投票),含核心修宪
+    Major,
+    /// 重要教育案(教委会起草;阈值同重要案)
+    MajorEducation,
+    /// 特别案(全员 ≥70% 赞成 + 强制公民投票),含核心修宪;教育类不适用
     Special,
 }
 
 impl VoteType {
-    /// 转为投票引擎接口使用的 u8(常规 0 / 重要 1 / 二审 2 / 特别 3)。
+    /// 转为投票引擎接口使用的 u8,值与 `votingengine::types::LEG_VOTE_*` 对齐
+    /// (常规 0 / 常规教育 1 / 重要 2 / 重要教育 3 / 特别 4)。
     pub fn as_u8(&self) -> u8 {
         match self {
             VoteType::Regular => 0,
-            VoteType::Important => 1,
-            VoteType::SecondReading => 2,
-            VoteType::Special => 3,
+            VoteType::RegularEducation => 1,
+            VoteType::Major => 2,
+            VoteType::MajorEducation => 3,
+            VoteType::Special => 4,
         }
+    }
+
+    /// 是否教育类(教委会起草、走教委会→参议会 / 市教委会→市立法会 路由)。
+    pub fn is_education(&self) -> bool {
+        matches!(self, VoteType::RegularEducation | VoteType::MajorEducation)
     }
 }
 

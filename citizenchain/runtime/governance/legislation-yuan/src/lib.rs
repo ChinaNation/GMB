@@ -657,11 +657,11 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 宪法修改只能走特别案或重要案(宪法第十九条)。
+        /// 宪法修改只能走特别案或重要案(宪法第十九条);教育变体不适用于宪法。
         fn ensure_tier_vote_type(tier: Tier, vt: VoteType) -> DispatchResult {
             if tier == Tier::Constitution {
                 ensure!(
-                    matches!(vt, VoteType::Special | VoteType::Important),
+                    matches!(vt, VoteType::Special | VoteType::Major),
                     Error::<T>::InvalidVoteTypeForConstitution
                 );
             }

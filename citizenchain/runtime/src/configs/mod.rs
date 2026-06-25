@@ -1649,6 +1649,13 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
             institution,
         )
     }
+
+    fn legal_representative(
+        institution_code: votingengine::types::InstitutionCode,
+        institution: AccountId,
+    ) -> Option<AccountId> {
+        admins_change::Pallet::<Runtime>::legal_representative(institution_code, institution)
+    }
 }
 
 pub struct RuntimeInternalAdminsLenProvider;
