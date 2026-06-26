@@ -38,6 +38,16 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
+  List<int> u64Le(int value) {
+    final out = List<int>.filled(8, 0);
+    var tmp = value;
+    for (var i = 0; i < 8; i++) {
+      out[i] = tmp & 0xff;
+      tmp >>= 8;
+    }
+    return out;
+  }
+
   List<int> compactU32(int value) {
     if (value < 64) return [value << 2];
     if (value < 16384) {
@@ -1279,6 +1289,231 @@ void main() {
 
       // 尾部末尾多挂字节
       expect(PayloadDecoder.decode(hexOf([...good, 0x00])), isNull);
+    });
+  });
+
+  // 立法院 LegislationYuan(27) + 立法投票 LegislationVote(28),布局逐字段对齐
+  // citizenchain runtime + citizenapp legislation_codec。夹具必须带签名扩展尾。
+  group('立法 pallet 解码(LegislationYuan 27 / LegislationVote 28)', () {
+    // 机构码 [u8;4] 右补 0。
+    List<int> code4(String code) {
+      final raw = utf8.encode(code);
+      final out = List<int>.filled(4, 0);
+      for (var i = 0; i < 4 && i < raw.length; i++) {
+        out[i] = raw[i];
+      }
+      return out;
+    }
+
+    final acct = List<int>.generate(32, (i) => (i + 1) & 0xff);
+
+    // (InstitutionCode, AccountId32) 平铺 36 字节。
+    List<int> body(String code) => [...code4(code), ...acct];
+
+    // 一章一节一条无款的最小章节树。
+    List<int> minimalChapters() => [
+          ...compactU32(1), // 1 章
+          ...u32Le(1), // Chapter.number
+          ...compactVec('总则'), // Chapter.title
+          0x00, // Chapter.title_en None
+          ...compactU32(1), // 1 节
+          ...u32Le(1), // Section.number
+          ...compactVec('第一节'), // Section.title
+          0x00, // Section.title_en None
+          ...compactU32(1), // 1 条
+          ...u32Le(1), // Article.number
+          ...compactVec('第一条'), // Article.title
+          0x00, // Article.title_en None
+          ...compactVec('正文内容'), // Article.body
+          0x00, // Article.body_en None
+          ...compactU32(0), // 0 款
+        ];
+
+    test('decodes propose_enact_law (27.0)', () {
+      final callData = [
+        27, 0,
+        1, // tier = National(1)
+        ...u32Le(110000), // scope_code
+        ...compactU32(2), // houses 2 项
+        ...body('NLG'),
+        ...body('NLG'),
+        ...body('PRS'), // proposer_body
+        ...body('PRS'), // executive
+        0x00, // legislature None
+        2, // vote_type = Major(2)
+        ...compactVec('教育法'), // title
+        0x00, // title_en None
+        ...minimalChapters(),
+        ...u32Le(5000), // effective_at
+      ];
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_enact_law');
+      expect(decoded.fields['title'], '教育法');
+      expect(decoded.fields['tier'], '国家级');
+      expect(decoded.fields['vote_type'], '重要案');
+      expect(decoded.fields['chapter_count'], '1');
+      expect(decoded.fields['article_count'], '1');
+      expect(decoded.fields['effective_at'], '5000');
+    });
+
+    test('rejects propose_enact_law with tier=Constitution(0)', () {
+      final callData = [
+        27, 0,
+        0, // tier = Constitution(0) → 立法入口禁止新立宪法
+        ...u32Le(0),
+        ...compactU32(1),
+        ...body('NLG'),
+        ...body('PRS'),
+        ...body('PRS'),
+        0x00,
+        0,
+        ...compactVec('宪法'),
+        0x00,
+        ...minimalChapters(),
+        ...u32Le(1),
+      ];
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(callData))), isNull);
+    });
+
+    test('rejects propose_enact_law with out-of-range vote_type', () {
+      final callData = [
+        27, 0,
+        1,
+        ...u32Le(0),
+        ...compactU32(1),
+        ...body('NLG'),
+        ...body('PRS'),
+        ...body('PRS'),
+        0x00,
+        9, // 非法 vote_type
+        ...compactVec('法'),
+        0x00,
+        ...minimalChapters(),
+        ...u32Le(1),
+      ];
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(callData))), isNull);
+    });
+
+    test('decodes propose_amend_law (27.1)', () {
+      final callData = [
+        27, 1,
+        ...u64Le(42), // law_id
+        ...body('PLG'),
+        ...body('PGV'),
+        0x01, ...body('PLG'), // legislature Some
+        4, // vote_type = Special(4)
+        ...compactVec('修订版'),
+        0x00,
+        ...minimalChapters(),
+        ...u32Le(7777),
+      ];
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_amend_law');
+      expect(decoded.fields['law_id'], '42');
+      expect(decoded.fields['title'], '修订版');
+      expect(decoded.fields['vote_type'], '特别案（强制公投）');
+      expect(decoded.fields['effective_at'], '7777');
+    });
+
+    test('decodes propose_repeal_law (27.2)', () {
+      final callData = [
+        27, 2,
+        ...u64Le(7), // law_id
+        ...body('CLEG'),
+        ...body('CGOV'),
+        0x00, // legislature None
+        0, // vote_type = Regular(0)
+      ];
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_repeal_law');
+      expect(decoded.fields['law_id'], '7');
+      expect(decoded.fields['vote_type'], '常规案');
+    });
+
+    test('decodes prepare_population_snapshot (28.0)', () {
+      final issuerAccount = List<int>.generate(32, (i) => (i + 5) & 0xff);
+      final signerPubkey = List<int>.generate(32, (i) => (i + 9) & 0xff);
+      final callData = [
+        28, 0,
+        ...u64Le(123456), // eligible_total
+        ...compactVec('nonce-x'), // snapshot_nonce
+        ...compactVec('sig-y'), // signature
+        ...compactVec('NLG0000001'), // issuer_cid_number
+        ...issuerAccount,
+        ...signerPubkey,
+        ...compactVec('某省'), // scope_province_name
+        ...compactVec('某市'), // scope_city_name
+      ];
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'prepare_legislation_snapshot');
+      expect(decoded.fields['eligible_total'], '123456');
+      expect(decoded.fields['issuer_cid_number'], 'NLG0000001');
+      expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerAccount));
+      expect(decoded.fields['signer_pubkey'], ss58FromBytes(signerPubkey));
+      expect(decoded.fields['scope_province_name'], '某省');
+      expect(decoded.fields['scope_city_name'], '某市');
+    });
+
+    test('decodes cast_house_vote (28.1)', () {
+      final callData = [28, 1, ...u64Le(99), 0x01];
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'cast_house_vote');
+      expect(decoded.fields['proposal_id'], '99');
+      expect(decoded.fields['approve'], 'true');
+    });
+
+    test('decodes cast_referendum_vote (28.2)', () {
+      final bindingId = List<int>.generate(32, (i) => (i + 2) & 0xff);
+      final issuerAccount = List<int>.generate(32, (i) => (i + 5) & 0xff);
+      final signerPubkey = List<int>.generate(32, (i) => (i + 9) & 0xff);
+      final callData = [
+        28, 2,
+        ...u64Le(55), // proposal_id
+        ...bindingId, // binding_id [u8;32]
+        ...compactVec('nonce-z'), // nonce
+        ...compactVec('sig-w'), // signature
+        ...compactVec('CID12345'), // issuer_cid_number
+        ...issuerAccount,
+        ...signerPubkey,
+        ...compactVec('粤'), // scope_province_name
+        ...compactVec('深圳'), // scope_city_name
+        0x00, // approve = false
+      ];
+      final decoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'cast_referendum_vote');
+      expect(decoded.fields['proposal_id'], '55');
+      expect(decoded.fields['approve'], 'false');
+      expect(decoded.fields['issuer_cid_number'], 'CID12345');
+      expect(decoded.fields['scope_city_name'], '深圳');
+    });
+
+    test('decodes executive_sign (28.3) / override_sign (28.4) / guard_vote (28.5)',
+        () {
+      final exec = PayloadDecoder.decode(
+          hexOf(withSigningTail([28, 3, ...u64Le(1), 0x01])));
+      expect(exec?.action, 'executive_sign');
+      final override = PayloadDecoder.decode(
+          hexOf(withSigningTail([28, 4, ...u64Le(2), 0x00])));
+      expect(override?.action, 'override_sign');
+      final guard = PayloadDecoder.decode(
+          hexOf(withSigningTail([28, 5, ...u64Le(3), 0x01])));
+      expect(guard?.action, 'guard_vote');
+    });
+
+    test('rejects 裸 call_data 无签名尾(立法投票)', () {
+      expect(PayloadDecoder.decode(hexOf([28, 1, ...u64Le(1), 0x01])), isNull);
     });
   });
 

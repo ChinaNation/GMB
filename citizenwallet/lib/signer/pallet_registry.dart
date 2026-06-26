@@ -132,6 +132,24 @@ class PalletRegistry {
   static const int proposeMonitorForceTransferCall = 13;
   static const int proposeMonitorForceCloseCall = 14;
 
+  // ---- LegislationYuan (27) · 立法院(立法/修法/废法发起)----
+  // 法律结构化上链(章>节>条>款),发起类提案 QR 由节点端生成,冷钱包仅解码核对。
+  // 投票/签署统一走 LegislationVote(28),本 pallet 仅承载 3 条 propose_X。
+  static const int legislationYuanPallet = 27;
+  static const int proposeEnactLawCall = 0;
+  static const int proposeAmendLawCall = 1;
+  static const int proposeRepealLawCall = 2;
+
+  // ---- LegislationVote (28) · 立法专属投票引擎 ----
+  // 四种表决:院内表决 / 行政签署 / 三人会签 / 护宪终审 / 特别案公投 / 准备人口快照。
+  static const int legislationVotePallet = 28;
+  static const int prepareLegislationSnapshotCall = 0;
+  static const int castHouseVoteCall = 1;
+  static const int castLegislationReferendumCall = 2;
+  static const int executiveSignCall = 3;
+  static const int overrideSignCall = 4;
+  static const int guardVoteCall = 5;
+
   // ---- OffchainTransaction (21) · 清算行 L2 体系 ----
   static const int offchainTransactionPallet = 21;
   static const int bindClearingBankCall = 30;

@@ -335,6 +335,60 @@ class PayloadDecoder {
         return null;
       }
 
+      // ── LegislationYuan(27) · 立法/修法/废法发起 ──
+      // 发起类 QR 由节点端生成(法律全文 SCALE 入 payload),冷钱包逐字段解码核对。
+      if (palletIndex == PalletRegistry.legislationYuanPallet) {
+        if (callIndex == PalletRegistry.proposeEnactLawCall) {
+          return _decodeProposeEnactLaw(bytes);
+        }
+        if (callIndex == PalletRegistry.proposeAmendLawCall) {
+          return _decodeProposeAmendLaw(bytes);
+        }
+        if (callIndex == PalletRegistry.proposeRepealLawCall) {
+          return _decodeProposeRepealLaw(bytes);
+        }
+      }
+
+      // ── LegislationVote(28) · 立法专属投票引擎 ──
+      // 院内表决/行政签署/三人会签/护宪终审走 proposal_id+approve;
+      // 特别案公投走 CID 持有者凭证;准备人口快照走签发机构 admins 凭证。
+      if (palletIndex == PalletRegistry.legislationVotePallet) {
+        if (callIndex == PalletRegistry.prepareLegislationSnapshotCall) {
+          return _decodePrepareLegislationSnapshot(bytes);
+        }
+        if (callIndex == PalletRegistry.castHouseVoteCall) {
+          return _decodeProposalApprove(
+            bytes,
+            action: 'cast_house_vote',
+            summaryTemplate: '院内表决 立法提案 #{id}：{vote}',
+          );
+        }
+        if (callIndex == PalletRegistry.castLegislationReferendumCall) {
+          return _decodeCastLegislationReferendum(bytes);
+        }
+        if (callIndex == PalletRegistry.executiveSignCall) {
+          return _decodeProposalApprove(
+            bytes,
+            action: 'executive_sign',
+            summaryTemplate: '行政签署 立法提案 #{id}：{vote}',
+          );
+        }
+        if (callIndex == PalletRegistry.overrideSignCall) {
+          return _decodeProposalApprove(
+            bytes,
+            action: 'override_sign',
+            summaryTemplate: '三人会签 立法提案 #{id}：{vote}',
+          );
+        }
+        if (callIndex == PalletRegistry.guardVoteCall) {
+          return _decodeProposalApprove(
+            bytes,
+            action: 'guard_vote',
+            summaryTemplate: '护宪终审 立法提案 #{id}：{vote}',
+          );
+        }
+      }
+
       return null;
     } catch (_) {
       return null;
@@ -1336,6 +1390,570 @@ class PayloadDecoder {
       fields: {
         'institution': institutionLabel,
         'new_key': '0x$keyHex',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationYuan(27) 立法全文章节(章>节>条>款)SCALE 跳读 + 摘要统计。
+  //
+  // 布局逐字段对齐 legislation-yuan(ADR-027):
+  //   ChaptersOf = Compact(count) + 每个 Chapter
+  //   Chapter  = number:u32_le + title:BoundedVec<u8> + title_en:Option<BoundedVec<u8>>
+  //            + sections:Compact(count)+Section[]
+  //   Section  = number:u32_le + title + title_en + articles:Compact(count)+Article[]
+  //   Article  = number:u32_le + title + title_en + body:BoundedVec<u8>
+  //            + body_en:Option<BoundedVec<u8>> + clauses:Compact(count)+Clause[]
+  //   Clause   = number:u32_le + text:BoundedVec<u8> + text_en:Option<BoundedVec<u8>>
+  //
+  // 与 citizenapp lib/legislation/data/legislation_codec.dart 同源字段序。
+  // propose 解码只需「章数 / 条数」摘要,不逐条展开正文(QR 已是节点端构造的全文)。
+  // ---------------------------------------------------------------------------
+
+  /// 跳过一个 BoundedVec<u8>(Compact 前缀 + 字节),返回新 offset;失败返回 -1。
+  static int _skipBoundedBytes(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return -1;
+    final (len, lenSize) = _decodeCompactU32(bytes, offset);
+    if (lenSize == 0) return -1;
+    offset += lenSize + len;
+    if (offset > bytes.length) return -1;
+    return offset;
+  }
+
+  /// 跳过 Option<BoundedVec<u8>>(1 tag 字节 + Some 时载荷),返回新 offset;失败返回 -1。
+  static int _skipOptionBoundedBytes(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return -1;
+    final tag = bytes[offset];
+    offset += 1;
+    if (tag == 0) return offset; // None
+    if (tag != 1) return -1; // 非法 Option tag → 红色拒签
+    return _skipBoundedBytes(bytes, offset);
+  }
+
+  /// 立法全文章节摘要(章数/条数)。返回 (新 offset, 章数, 条数);失败 offset = -1。
+  static (int, int, int) _scanChapters(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return (-1, 0, 0);
+    final (chapterCount, chapterCountSize) = _decodeCompactU32(bytes, offset);
+    if (chapterCountSize == 0) return (-1, 0, 0);
+    offset += chapterCountSize;
+    var articleTotal = 0;
+
+    for (var c = 0; c < chapterCount; c++) {
+      // Chapter.number: u32
+      if (offset + 4 > bytes.length) return (-1, 0, 0);
+      offset += 4;
+      // Chapter.title + title_en
+      offset = _skipBoundedBytes(bytes, offset);
+      if (offset < 0) return (-1, 0, 0);
+      offset = _skipOptionBoundedBytes(bytes, offset);
+      if (offset < 0) return (-1, 0, 0);
+      // sections
+      final (sectionCount, sectionCountSize) = _decodeCompactU32(bytes, offset);
+      if (sectionCountSize == 0) return (-1, 0, 0);
+      offset += sectionCountSize;
+
+      for (var s = 0; s < sectionCount; s++) {
+        if (offset + 4 > bytes.length) return (-1, 0, 0);
+        offset += 4; // Section.number
+        offset = _skipBoundedBytes(bytes, offset);
+        if (offset < 0) return (-1, 0, 0);
+        offset = _skipOptionBoundedBytes(bytes, offset);
+        if (offset < 0) return (-1, 0, 0);
+        final (articleCount, articleCountSize) =
+            _decodeCompactU32(bytes, offset);
+        if (articleCountSize == 0) return (-1, 0, 0);
+        offset += articleCountSize;
+
+        for (var a = 0; a < articleCount; a++) {
+          if (offset + 4 > bytes.length) return (-1, 0, 0);
+          offset += 4; // Article.number
+          offset = _skipBoundedBytes(bytes, offset); // title
+          if (offset < 0) return (-1, 0, 0);
+          offset = _skipOptionBoundedBytes(bytes, offset); // title_en
+          if (offset < 0) return (-1, 0, 0);
+          offset = _skipBoundedBytes(bytes, offset); // body
+          if (offset < 0) return (-1, 0, 0);
+          offset = _skipOptionBoundedBytes(bytes, offset); // body_en
+          if (offset < 0) return (-1, 0, 0);
+          final (clauseCount, clauseCountSize) =
+              _decodeCompactU32(bytes, offset);
+          if (clauseCountSize == 0) return (-1, 0, 0);
+          offset += clauseCountSize;
+
+          for (var k = 0; k < clauseCount; k++) {
+            if (offset + 4 > bytes.length) return (-1, 0, 0);
+            offset += 4; // Clause.number
+            offset = _skipBoundedBytes(bytes, offset); // text
+            if (offset < 0) return (-1, 0, 0);
+            offset = _skipOptionBoundedBytes(bytes, offset); // text_en
+            if (offset < 0) return (-1, 0, 0);
+          }
+          articleTotal += 1;
+        }
+      }
+    }
+    return (offset, chapterCount, articleTotal);
+  }
+
+  /// 院序列 HousesOf = Compact(count) + count×(InstitutionCode[u8;4] + AccountId32)。
+  /// 返回 (新 offset, 机构码标签列表);失败 offset = -1。
+  static (int, List<String>) _scanHouses(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return (-1, const []);
+    final (count, countSize) = _decodeCompactU32(bytes, offset);
+    if (countSize == 0) return (-1, const []);
+    offset += countSize;
+    final labels = <String>[];
+    for (var i = 0; i < count; i++) {
+      if (offset + 4 + 32 > bytes.length) return (-1, const []);
+      final code =
+          InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+      labels.add(InstitutionCode.codeLabel(code));
+      offset += 4 + 32; // 机构码 + 机构账户
+    }
+    return (offset, labels);
+  }
+
+  /// (InstitutionCode[u8;4], AccountId32) 平铺 36 字节 → 机构码标签。
+  /// 返回 (新 offset, 标签);失败 offset = -1。
+  static (int, String) _scanBody(Uint8List bytes, int offset) {
+    if (offset + 36 > bytes.length) return (-1, '');
+    final code =
+        InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    return (offset + 36, InstitutionCode.codeLabel(code));
+  }
+
+  /// Option<(InstitutionCode, AccountId32)>:1 tag 字节 + Some 时 36 字节。
+  /// 返回 (新 offset, 标签或 null);失败 offset = -1。
+  static (int, String?) _scanOptionBody(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return (-1, null);
+    final tag = bytes[offset];
+    offset += 1;
+    if (tag == 0) return (offset, null);
+    if (tag != 1) return (-1, null);
+    final (next, label) = _scanBody(bytes, offset);
+    if (next < 0) return (-1, null);
+    return (next, label);
+  }
+
+  /// 表决类型 5 类(对齐 legislation-yuan VoteType 枚举索引)。
+  static String? _voteTypeLabel(int index) {
+    switch (index) {
+      case 0:
+        return '常规案';
+      case 1:
+        return '常规教育案';
+      case 2:
+        return '重要案';
+      case 3:
+        return '重要教育案';
+      case 4:
+        return '特别案（强制公投）';
+      default:
+        return null; // 越界枚举 → 红色拒签
+    }
+  }
+
+  /// 法律层级 4 类(对齐 legislation-yuan Tier 枚举索引)。
+  static String? _tierLabel(int index) {
+    switch (index) {
+      case 0:
+        return '宪法';
+      case 1:
+        return '国家级';
+      case 2:
+        return '省级';
+      case 3:
+        return '市级';
+      default:
+        return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationYuan(27) / propose_enact_law(0)
+  // SCALE: [27][0][tier:u8][scope_code:u32_le][houses][proposer_body:36]
+  //        [executive:36][legislature:Option<36>][vote_type:u8]
+  //        [title:BoundedVec][title_en:Option<BoundedVec>][chapters][effective_at:u32_le]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeEnactLaw(Uint8List bytes) {
+    if (bytes.length < 3) return null;
+    var offset = 2;
+
+    // tier: u8 枚举(立法入口禁止新立宪法,tier=0 视为非法 payload)。
+    if (offset >= bytes.length) return null;
+    final tierIndex = bytes[offset++];
+    final tierLabel = _tierLabel(tierIndex);
+    if (tierLabel == null || tierIndex == 0) return null;
+
+    // scope_code: u32 LE
+    if (offset + 4 > bytes.length) return null;
+    final scopeCode = _readU32Le(bytes, offset);
+    offset += 4;
+
+    // houses
+    final (afterHouses, houseLabels) = _scanHouses(bytes, offset);
+    if (afterHouses < 0) return null;
+    offset = afterHouses;
+
+    // proposer_body / executive / legislature
+    final (afterProposer, _) = _scanBody(bytes, offset);
+    if (afterProposer < 0) return null;
+    offset = afterProposer;
+    final (afterExecutive, _) = _scanBody(bytes, offset);
+    if (afterExecutive < 0) return null;
+    offset = afterExecutive;
+    final (afterLegislature, _) = _scanOptionBody(bytes, offset);
+    if (afterLegislature < 0) return null;
+    offset = afterLegislature;
+
+    // vote_type: u8 枚举
+    if (offset >= bytes.length) return null;
+    final voteTypeIndex = bytes[offset++];
+    final voteTypeLabel = _voteTypeLabel(voteTypeIndex);
+    if (voteTypeLabel == null) return null;
+
+    // title: BoundedVec<u8>
+    final (titleLen, titleLenSize) = _decodeCompactU32(bytes, offset);
+    if (titleLenSize == 0) return null;
+    offset += titleLenSize;
+    if (offset + titleLen > bytes.length) return null;
+    final title =
+        utf8.decode(bytes.sublist(offset, offset + titleLen), allowMalformed: true);
+    offset += titleLen;
+
+    // title_en: Option<BoundedVec<u8>>
+    offset = _skipOptionBoundedBytes(bytes, offset);
+    if (offset < 0) return null;
+
+    // chapters 摘要
+    final (afterChapters, chapterCount, articleTotal) =
+        _scanChapters(bytes, offset);
+    if (afterChapters < 0) return null;
+    offset = afterChapters;
+
+    // effective_at: u32 LE
+    if (offset + 4 > bytes.length) return null;
+    final effectiveAt = _readU32Le(bytes, offset);
+    offset += 4;
+
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+
+    return DecodedPayload(
+      action: 'propose_enact_law',
+      summary:
+          '发起立法「$title」（$tierLabel·$voteTypeLabel，$chapterCount 章 $articleTotal 条，第 $effectiveAt 块生效）',
+      fields: {
+        'title': title,
+        'tier': tierLabel,
+        'vote_type': voteTypeLabel,
+        'scope_code': scopeCode.toString(),
+        'houses': houseLabels.join('、'),
+        'chapter_count': chapterCount.toString(),
+        'article_count': articleTotal.toString(),
+        'effective_at': effectiveAt.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationYuan(27) / propose_amend_law(1)
+  // SCALE: [27][1][law_id:u64_le][proposer_body:36][executive:36]
+  //        [legislature:Option<36>][vote_type:u8][title:BoundedVec]
+  //        [title_en:Option<BoundedVec>][chapters][effective_at:u32_le]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeAmendLaw(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    var offset = 2;
+
+    final lawId = _readU64Le(bytes, offset);
+    offset += 8;
+
+    final (afterProposer, _) = _scanBody(bytes, offset);
+    if (afterProposer < 0) return null;
+    offset = afterProposer;
+    final (afterExecutive, _) = _scanBody(bytes, offset);
+    if (afterExecutive < 0) return null;
+    offset = afterExecutive;
+    final (afterLegislature, _) = _scanOptionBody(bytes, offset);
+    if (afterLegislature < 0) return null;
+    offset = afterLegislature;
+
+    if (offset >= bytes.length) return null;
+    final voteTypeIndex = bytes[offset++];
+    final voteTypeLabel = _voteTypeLabel(voteTypeIndex);
+    if (voteTypeLabel == null) return null;
+
+    final (titleLen, titleLenSize) = _decodeCompactU32(bytes, offset);
+    if (titleLenSize == 0) return null;
+    offset += titleLenSize;
+    if (offset + titleLen > bytes.length) return null;
+    final title =
+        utf8.decode(bytes.sublist(offset, offset + titleLen), allowMalformed: true);
+    offset += titleLen;
+
+    offset = _skipOptionBoundedBytes(bytes, offset);
+    if (offset < 0) return null;
+
+    final (afterChapters, chapterCount, articleTotal) =
+        _scanChapters(bytes, offset);
+    if (afterChapters < 0) return null;
+    offset = afterChapters;
+
+    if (offset + 4 > bytes.length) return null;
+    final effectiveAt = _readU32Le(bytes, offset);
+    offset += 4;
+
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+
+    return DecodedPayload(
+      action: 'propose_amend_law',
+      summary:
+          '发起修法「$title」（法律 #$lawId·$voteTypeLabel，$chapterCount 章 $articleTotal 条，第 $effectiveAt 块生效）',
+      fields: {
+        'law_id': lawId.toString(),
+        'title': title,
+        'vote_type': voteTypeLabel,
+        'chapter_count': chapterCount.toString(),
+        'article_count': articleTotal.toString(),
+        'effective_at': effectiveAt.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationYuan(27) / propose_repeal_law(2)
+  // SCALE: [27][2][law_id:u64_le][proposer_body:36][executive:36]
+  //        [legislature:Option<36>][vote_type:u8]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeRepealLaw(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    var offset = 2;
+
+    final lawId = _readU64Le(bytes, offset);
+    offset += 8;
+
+    final (afterProposer, _) = _scanBody(bytes, offset);
+    if (afterProposer < 0) return null;
+    offset = afterProposer;
+    final (afterExecutive, _) = _scanBody(bytes, offset);
+    if (afterExecutive < 0) return null;
+    offset = afterExecutive;
+    final (afterLegislature, _) = _scanOptionBody(bytes, offset);
+    if (afterLegislature < 0) return null;
+    offset = afterLegislature;
+
+    if (offset >= bytes.length) return null;
+    final voteTypeIndex = bytes[offset++];
+    final voteTypeLabel = _voteTypeLabel(voteTypeIndex);
+    if (voteTypeLabel == null) return null;
+
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+
+    return DecodedPayload(
+      action: 'propose_repeal_law',
+      summary: '发起废法 法律 #$lawId（$voteTypeLabel）',
+      fields: {
+        'law_id': lawId.toString(),
+        'vote_type': voteTypeLabel,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationVote(28) 通用:proposal_id:u64_le + approve:bool。
+  // 院内表决(1)/行政签署(3)/三人会签(4)/护宪终审(5) 同形。
+  // SCALE: [28][call][proposal_id:u64_le][approve:bool]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposalApprove(
+    Uint8List bytes, {
+    required String action,
+    required String summaryTemplate,
+  }) {
+    // call_data: 2 + 8 + 1 = 11
+    if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    final approve = bytes[10] != 0;
+    final voteText = approve ? '赞成' : '反对';
+    return DecodedPayload(
+      action: action,
+      summary: summaryTemplate
+          .replaceAll('{id}', proposalId.toString())
+          .replaceAll('{vote}', voteText),
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'approve': approve.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationVote(28) / prepare_population_snapshot(0)
+  // SCALE: [28][0][eligible_total:u64_le][snapshot_nonce:BoundedVec]
+  //        [signature:BoundedVec][issuer_cid_number:BoundedVec]
+  //        [issuer_main_account:32][signer_pubkey:32]
+  //        [scope_province_name:BoundedVec][scope_city_name:BoundedVec]
+  //
+  // 签发身份必须进 payload,链端按 issuer_main_account 读 admins-change
+  // AdminAccounts.admins 真源确认 signer_pubkey(与联合公投快照同构)。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodePrepareLegislationSnapshot(Uint8List bytes) {
+    // 最小:2 + 8(total) + 1(nonce) + 1(sig) + 1(issuer)
+    //      + 32(issuer account) + 32(signer) + 1(province) + 1(city) = 79
+    if (bytes.length < 79) return null;
+    var offset = 2;
+
+    final eligibleTotal = _readU64Le(bytes, offset);
+    offset += 8;
+
+    // snapshot_nonce / signature — 跳过
+    offset = _skipBoundedBytes(bytes, offset);
+    if (offset < 0) return null;
+    offset = _skipBoundedBytes(bytes, offset);
+    if (offset < 0) return null;
+
+    // issuer_cid_number: BoundedVec<u8>
+    final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
+    if (issuerLenSize == 0) return null;
+    offset += issuerLenSize;
+    if (offset + issuerLen > bytes.length) return null;
+    final issuerCidNumber = utf8.decode(
+      bytes.sublist(offset, offset + issuerLen),
+      allowMalformed: true,
+    );
+    offset += issuerLen;
+
+    // issuer_main_account: AccountId32
+    if (offset + 32 > bytes.length) return null;
+    final issuerMainAccount = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    // signer_pubkey: [u8;32]
+    if (offset + 32 > bytes.length) return null;
+    final signerPubkey = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    // scope_province_name: BoundedVec<u8>
+    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
+    if (provinceLenSize == 0) return null;
+    offset += provinceLenSize;
+    if (offset + provinceLen > bytes.length) return null;
+    final scopeProvinceName = utf8.decode(
+      bytes.sublist(offset, offset + provinceLen),
+      allowMalformed: true,
+    );
+    offset += provinceLen;
+
+    // scope_city_name: BoundedVec<u8>
+    final (cityLen, cityLenSize) = _decodeCompactU32(bytes, offset);
+    if (cityLenSize == 0) return null;
+    offset += cityLenSize;
+    if (offset + cityLen > bytes.length) return null;
+    final scopeCityName = utf8.decode(
+      bytes.sublist(offset, offset + cityLen),
+      allowMalformed: true,
+    );
+    offset += cityLen;
+
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+
+    return DecodedPayload(
+      action: 'prepare_legislation_snapshot',
+      summary: '准备立法人口快照（$eligibleTotal 名合格选民）',
+      fields: {
+        'eligible_total': eligibleTotal.toString(),
+        'issuer_cid_number': issuerCidNumber,
+        'issuer_main_account': _bytesToSs58(issuerMainAccount),
+        'signer_pubkey': _bytesToSs58(signerPubkey),
+        'scope_province_name': scopeProvinceName,
+        'scope_city_name': scopeCityName,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LegislationVote(28) / cast_referendum_vote(2)
+  // SCALE: [28][2][proposal_id:u64_le][binding_id:32][nonce:BoundedVec]
+  //        [signature:BoundedVec][issuer_cid_number:BoundedVec]
+  //        [issuer_main_account:32][signer_pubkey:32]
+  //        [scope_province_name:BoundedVec][scope_city_name:BoundedVec][approve:bool]
+  //
+  // 特别案强制公民投票:CID 持有者凭证,与 JointVote::cast_referendum 同构。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeCastLegislationReferendum(Uint8List bytes) {
+    // 最小:2 + 8 + 32 + 1(nonce) + 1(sig) + 1(issuer)
+    //      + 32(issuer account) + 32(signer) + 1(province) + 1(city)
+    //      + 1(approve) = 112
+    if (bytes.length < 112) return null;
+
+    final proposalId = _readU64Le(bytes, 2);
+    var offset = 2 + 8 + 32; // 跳过 pallet+call, proposal_id, binding_id
+
+    // nonce / signature — 跳过
+    offset = _skipBoundedBytes(bytes, offset);
+    if (offset < 0) return null;
+    offset = _skipBoundedBytes(bytes, offset);
+    if (offset < 0) return null;
+
+    // issuer_cid_number: BoundedVec<u8>
+    final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
+    if (issuerLenSize == 0) return null;
+    offset += issuerLenSize;
+    if (offset + issuerLen > bytes.length) return null;
+    final issuerCidNumber = utf8.decode(
+      bytes.sublist(offset, offset + issuerLen),
+      allowMalformed: true,
+    );
+    offset += issuerLen;
+
+    // issuer_main_account: AccountId32
+    if (offset + 32 > bytes.length) return null;
+    final issuerMainAccount = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    // signer_pubkey: [u8;32]
+    if (offset + 32 > bytes.length) return null;
+    final signerPubkey = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    // scope_province_name: BoundedVec<u8>
+    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
+    if (provinceLenSize == 0) return null;
+    offset += provinceLenSize;
+    if (offset + provinceLen > bytes.length) return null;
+    final scopeProvinceName = utf8.decode(
+      bytes.sublist(offset, offset + provinceLen),
+      allowMalformed: true,
+    );
+    offset += provinceLen;
+
+    // scope_city_name: BoundedVec<u8>
+    final (cityLen, cityLenSize) = _decodeCompactU32(bytes, offset);
+    if (cityLenSize == 0) return null;
+    offset += cityLenSize;
+    if (offset + cityLen > bytes.length) return null;
+    final scopeCityName = utf8.decode(
+      bytes.sublist(offset, offset + cityLen),
+      allowMalformed: true,
+    );
+    offset += cityLen;
+
+    // approve: bool
+    if (offset >= bytes.length) return null;
+    final approve = bytes[offset] != 0;
+    if (!_hasValidSigningTail(bytes, offset + 1)) return null;
+    final voteText = approve ? '赞成' : '反对';
+
+    return DecodedPayload(
+      action: 'cast_referendum_vote',
+      summary: '特别案公投 立法提案 #$proposalId：$voteText',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'approve': approve.toString(),
+        'issuer_cid_number': issuerCidNumber,
+        'issuer_main_account': _bytesToSs58(issuerMainAccount),
+        'signer_pubkey': _bytesToSs58(signerPubkey),
+        'scope_province_name': scopeProvinceName,
+        'scope_city_name': scopeCityName,
       },
     );
   }

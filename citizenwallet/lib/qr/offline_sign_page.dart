@@ -404,6 +404,16 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       'new_port' => '新节点端口',
       'new_key' => '新密钥',
       'expires_at' => '过期时间',
+      'title' => '法律标题',
+      'tier' => '法律层级',
+      'vote_type' => '表决类型',
+      'scope_code' => '行政区代码',
+      'houses' => '表决院',
+      'chapter_count' => '章数',
+      'article_count' => '条数',
+      'effective_at' => '生效区块',
+      'law_id' => '法律编号',
+      'eligible_total' => '合格选民数',
       _ => '未知字段',
     };
   }

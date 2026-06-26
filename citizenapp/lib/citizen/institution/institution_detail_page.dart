@@ -8,6 +8,7 @@ import 'package:citizenapp/citizen/institution/institution_accounts_page.dart';
 import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/public_institution_admin_list_page.dart';
+import 'package:citizenapp/governance/legislation-yuan/legislation_intro_page.dart';
 import 'package:citizenapp/legislation/data/law_models.dart';
 import 'package:citizenapp/legislation/law_list_page.dart';
 import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
@@ -323,10 +324,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _accountsEntry(inst),
         const SizedBox(height: 12),
         _proposalEntry(),
-        // 法律原文(仅立法机构):该机构 tier/scope 的全部法律(ADR-028 P3-1)。
+        // 法律原文 + 发起立法(仅立法机构):查看该机构全部法律 + 类B 发起说明。
         if (_lawTarget(inst) != null) ...[
           const SizedBox(height: 12),
           _lawOriginalEntry(inst),
+          const SizedBox(height: 12),
+          _legislationProposeEntry(),
         ],
         const SizedBox(height: 12),
         _adminsEntry(),
@@ -468,6 +471,20 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             scopeCode: target.scope,
             title: '${inst.displayName} · 法律原文',
           ),
+        ),
+      ),
+    );
+  }
+
+  // 发起立法(仅立法机构,类B):立法/修法/废法在电脑节点端发起,本端只说明 + 投票。
+  Widget _legislationProposeEntry() {
+    return _entryCard(
+      icon: Icons.gavel_outlined,
+      title: '发起立法',
+      subtitle: '立法 / 修法 / 废法在电脑节点端发起',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const LegislationIntroPage(),
         ),
       ),
     );

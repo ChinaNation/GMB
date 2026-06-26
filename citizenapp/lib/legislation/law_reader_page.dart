@@ -39,6 +39,9 @@ class _LawReaderPageState extends State<LawReaderPage> {
   bool _showEn = false;
   final Set<int> _expanded = {};
 
+  /// 当前查看的版本号(默认=当前生效版本;版本史可切到历史版本)。
+  int _selectedVersion = 0;
+
   bool get _isConstitution => _law?.tier == LawTier.constitution;
 
   @override
@@ -71,6 +74,7 @@ class _LawReaderPageState extends State<LawReaderPage> {
       setState(() {
         _law = law;
         _version = version;
+        _selectedVersion = law.currentVersion;
         _manifest = manifest;
         _effectiveDate = effDate;
         // 默认展开第一章,长法律不至于一片空白。
@@ -84,6 +88,37 @@ class _LawReaderPageState extends State<LawReaderPage> {
         setState(() {
           _loading = false;
           _error = '法律读取失败，请检查网络后重试';
+        });
+      }
+    }
+  }
+
+  /// 切换到历史版本(版本史)。重新拉取该版本正文并重置展开态。
+  Future<void> _changeVersion(int version) async {
+    final law = _law;
+    if (law == null || version == _selectedVersion) return;
+    setState(() => _loading = true);
+    try {
+      final v = await _api.lawVersion(law.lawId, version);
+      final effDate = v == null
+          ? null
+          : BlockClock.formatDate(await _clock.dateOf(v.effectiveAt));
+      if (!mounted) return;
+      setState(() {
+        _version = v;
+        _selectedVersion = version;
+        _effectiveDate = effDate;
+        _expanded
+          ..clear()
+          ..addAll(
+              v != null && v.chapters.isNotEmpty ? [v.chapters.first.number] : const []);
+        _loading = false;
+      });
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '版本读取失败，请检查网络后重试';
         });
       }
     }
@@ -171,10 +206,60 @@ class _LawReaderPageState extends State<LawReaderPage> {
                     fontWeight: FontWeight.w600,
                     color: statusColor)),
           ),
+          // 表决类型徽章(创世宪法 proposalId=0 不显示)。
+          if (v.proposalId != 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(v.voteTypeEnum.label,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primary)),
+            ),
+          ],
           const SizedBox(width: 10),
-          Text(dateLabel,
-              style: const TextStyle(
-                  fontSize: 12.5, color: AppTheme.textSecondary)),
+          Expanded(
+            child: Text(dateLabel,
+                style: const TextStyle(
+                    fontSize: 12.5, color: AppTheme.textSecondary)),
+          ),
+          // 版本史:多版本时可切换查看历史版本。
+          if (law.currentVersion > 1) _versionMenu(law),
+        ],
+      ),
+    );
+  }
+
+  Widget _versionMenu(Law law) {
+    return PopupMenuButton<int>(
+      tooltip: '版本历史',
+      onSelected: _changeVersion,
+      itemBuilder: (_) => [
+        for (var ver = law.currentVersion; ver >= 1; ver--)
+          PopupMenuItem<int>(
+            value: ver,
+            child: Text(
+              ver == law.currentVersion ? 'v$ver(当前)' : 'v$ver',
+              style: TextStyle(
+                fontWeight: ver == _selectedVersion
+                    ? FontWeight.w700
+                    : FontWeight.w400,
+              ),
+            ),
+          ),
+      ],
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.history, size: 16, color: AppTheme.textSecondary),
+          SizedBox(width: 2),
+          Text('版本史',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
         ],
       ),
     );

@@ -1,8 +1,8 @@
 // 立法法律 Dart 镜像类型(ADR-027 / ADR-028 P3)——与链端 legislation-yuan
 // SCALE 布局逐字段对齐。解码见 [legislation_codec.dart](单一源)。
 //
-// 中文注释:法律层级 = 章 > 节 > 条 > 款 > 项。宪法(law_id=0,tier=宪法)双语
-// (`*En` 全填),普通法律单语(`*En` 为 null)。
+// 中文注释:法律层级 = 章 > 节 > 条 > 款(「项」已删,见宪法迁移卡)。宪法
+// (law_id=0,tier=宪法)双语(`*En` 全填),普通法律单语(`*En` 为 null)。
 
 /// 法律层级(链端 Tier,1 字节枚举索引)。
 enum LawTier {
@@ -47,7 +47,39 @@ enum LawStatus {
       };
 }
 
-/// 款下的「项」。
+/// 表决类型(链端 VoteType,1 字节枚举索引;ADR-027 修订 2026-06-25:5 类,删二审)。
+///
+/// 教育属性编进 vote_type(常规教育/重要教育),不另设内容分类字段。阈值:
+/// 常规/常规教育 `>80%参与,≥60%赞成`;重要/重要教育 `>90%,≥70%`;
+/// 特别 `全员,≥70%+强制公投(全国/省/市≥70%/≥70%)`。
+enum VoteType {
+  regular, // 0 常规案
+  regularEducation, // 1 常规教育案
+  major, // 2 重要案
+  majorEducation, // 3 重要教育案
+  special; // 4 特别案
+
+  static VoteType fromIndex(int i) => switch (i) {
+        0 => VoteType.regular,
+        1 => VoteType.regularEducation,
+        2 => VoteType.major,
+        3 => VoteType.majorEducation,
+        _ => VoteType.special,
+      };
+
+  bool get isEducation =>
+      this == VoteType.regularEducation || this == VoteType.majorEducation;
+
+  String get label => switch (this) {
+        VoteType.regular => '常规案',
+        VoteType.regularEducation => '常规教育案',
+        VoteType.major => '重要案',
+        VoteType.majorEducation => '重要教育案',
+        VoteType.special => '特别案',
+      };
+}
+
+/// 条下的「款」。
 class LawClause {
   const LawClause({required this.number, required this.text, this.textEn});
   final int number;
@@ -152,6 +184,9 @@ class LawVersion {
   final String contentHash;
   final int voteType;
 
+  /// 通过本版本所用的表决类型(5 类枚举)。
+  VoteType get voteTypeEnum => VoteType.fromIndex(voteType);
+
   /// 创世宪法为 0。
   final int proposalId;
 
@@ -167,7 +202,7 @@ class ImmutableManifest {
     required this.articleHashes,
   });
 
-  /// 不可修改的条号集合(链端固定 [1,2,3,17,19,23,33,41])。
+  /// 不可修改的条号集合(链端固定 [1,2,3,17,19,24,34,42],ADR-027 重排后基准)。
   final List<int> articleNumbers;
 
   /// 与 [articleNumbers] 平行的条文 blake2_256 hex 数组。

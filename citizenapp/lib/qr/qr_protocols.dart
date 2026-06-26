@@ -80,6 +80,16 @@ class QrActions {
   static const int internalVote = 0x1600;
   static const int jointVote = 0x1700;
   static const int castReferendum = 0x1701;
+  // 立法(LegislationYuan=27=0x1b 发起类节点端;LegislationVote=28=0x1c 投票/签署类)。
+  static const int legislationEnact = 0x1b00;
+  static const int legislationAmend = 0x1b01;
+  static const int legislationRepeal = 0x1b02;
+  static const int legislationPrepareSnapshot = 0x1c00;
+  static const int legislationHouseVote = 0x1c01;
+  static const int legislationReferendum = 0x1c02;
+  static const int legislationExecutiveSign = 0x1c03;
+  static const int legislationOverrideSign = 0x1c04;
+  static const int legislationGuardVote = 0x1c05;
 
   /// 链交易动作统一按 `(pallet_index << 8) | call_index` 生成。
   static int chain(int palletIndex, int callIndex) =>
@@ -125,6 +135,15 @@ class QrActions {
         'internal_vote' => internalVote,
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
+        'propose_enact_law' => legislationEnact,
+        'propose_amend_law' => legislationAmend,
+        'propose_repeal_law' => legislationRepeal,
+        'prepare_population_snapshot' => legislationPrepareSnapshot,
+        'cast_house_vote' => legislationHouseVote,
+        'cast_referendum_vote' => legislationReferendum,
+        'executive_sign' => legislationExecutiveSign,
+        'override_sign' => legislationOverrideSign,
+        'guard_vote' => legislationGuardVote,
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
         'citizen_bind' => citizenBind,

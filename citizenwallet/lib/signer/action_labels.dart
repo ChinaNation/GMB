@@ -38,6 +38,19 @@ const Map<String, String> actionLabels = {
   'cleanup_rejected_proposal': '清理被否决提案',
   'register_cid_institution': '登记 CID 机构信息',
 
+  // 立法院（pallet=27）· 立法/修法/废法发起
+  'propose_enact_law': '发起立法',
+  'propose_amend_law': '发起修法',
+  'propose_repeal_law': '发起废法',
+
+  // 立法投票（pallet=28）· 立法专属投票引擎
+  'prepare_legislation_snapshot': '准备人口快照',
+  'cast_house_vote': '院内表决',
+  'cast_referendum_vote': '特别案公投',
+  'executive_sign': '行政签署',
+  'override_sign': '三人会签',
+  'guard_vote': '护宪终审',
+
   // 协议升级
   'propose_runtime_upgrade': '协议升级提案',
   'developer_direct_upgrade': '开发期协议直升',
