@@ -12,10 +12,10 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show listEquals;
 
 import 'package:citizenapp/citizen/institution/institution.dart';
-import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
-import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
+import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_proposal_adapter.dart';
 
 /// 机构提案摘要(详情页提案列表用)。
 class InstitutionProposalSummary {

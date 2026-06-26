@@ -9,8 +9,8 @@
 import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/institution/institution.dart';
-import 'package:citizenapp/governance/shared/account_derivation.dart';
-import 'package:citizenapp/governance/shared/reserved_account_names.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/shared/reserved_account_names.dart';
 
 /// 单个机构账户行(标签 + hex + SS58 + 可选余额)。
 class InstitutionAccountRow {

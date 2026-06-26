@@ -9,7 +9,7 @@
 //   (非机构子集,见 ADR-028 决策 5/7),不在本文件。
 // - 公权 = 全集(超集),不需过滤——任何已知机构都属于公权。
 
-import 'package:citizenapp/governance/shared/institution_code_label.dart';
+import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 机构所属的子 tab 业务分组(仅机构视图三类;公权为全集不单列)。
 enum InstitutionTabGroup {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/shared/proposal/proposal_detail_local_store.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_detail_local_store.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
 

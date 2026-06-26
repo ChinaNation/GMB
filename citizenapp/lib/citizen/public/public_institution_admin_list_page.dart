@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:citizenapp/governance/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 公权机构管理员列表页(只读)。

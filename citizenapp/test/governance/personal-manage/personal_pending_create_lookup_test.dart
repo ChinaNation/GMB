@@ -8,8 +8,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/governance/personal-manage/personal_pending_create_lookup.dart';
-import 'package:citizenapp/governance/personal-manage/personal_proposal_history_service.dart';
+import 'package:citizenapp/transaction/personal-manage/personal_pending_create_lookup.dart';
+import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

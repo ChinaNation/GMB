@@ -12,7 +12,7 @@ import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
-import 'package:citizenapp/governance/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 
 import '../public/public_nav_harness.dart';

@@ -4,7 +4,7 @@ import 'package:citizenapp/citizen/election/election_tab.dart';
 import 'package:citizenapp/citizen/governance/governance_tab.dart';
 import 'package:citizenapp/citizen/legislation/legislation_tab.dart';
 import 'package:citizenapp/citizen/public/public_page.dart';
-import 'package:citizenapp/citizen/vote/vote_view.dart';
+import 'package:citizenapp/citizen/8964/vote_view.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 底部“公民”Tab 的总入口。

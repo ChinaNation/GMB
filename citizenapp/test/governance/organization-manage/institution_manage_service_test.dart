@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/organization-manage/institution_manage_service.dart';
+import 'package:citizenapp/transaction/organization-manage/institution_manage_service.dart';
 
 void main() {
   String hexOf(List<int> bytes) =>

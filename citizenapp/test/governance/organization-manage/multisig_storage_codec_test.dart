@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/organization-manage/multisig_storage_codec.dart';
+import 'package:citizenapp/transaction/organization-manage/multisig_storage_codec.dart';
 
 void main() {
   List<int> codeBytes(String code) {

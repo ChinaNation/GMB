@@ -5,8 +5,8 @@
 // 真链依赖,留给端到端校核覆盖。
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/shared/admin_account_storage_codec.dart';
-import 'package:citizenapp/governance/shared/admin_accounts_scan_service.dart';
+import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
+import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 
 void main() {
   final myWallet = 'aa' * 32; // 64 hex

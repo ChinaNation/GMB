@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:citizenapp/citizen/citizen_tab_page.dart';
-import 'package:citizenapp/governance/institution_account_list_page.dart';
+import 'package:citizenapp/citizen/shared/institution_account_list_page.dart';
 import 'package:citizenapp/im/im_runtime.dart';
 import 'package:citizenapp/im/im_tab_page.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';

@@ -13,7 +13,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 const _fixturePath =
     'test/governance/shared/fixtures/account_derive_vectors.json';

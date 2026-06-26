@@ -4,7 +4,7 @@ import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
-import 'package:citizenapp/legislation/law_reader_page.dart';
+import 'package:citizenapp/citizen/legislation/law_reader_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 立法 tab 视图(ADR-028 P3-1)。

@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/admins-change/codec/admin_set_change_call_codec.dart';
-import 'package:citizenapp/governance/admins-change/codec/admin_account_codec.dart';
-import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
-import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
-import 'package:citizenapp/governance/admins-change/services/admin_set_validation.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_set_change_call_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/admin_set_validation.dart';
 
 void main() {
   List<int> codeBytes(String code) {

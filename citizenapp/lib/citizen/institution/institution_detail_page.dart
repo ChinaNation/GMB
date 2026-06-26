@@ -8,22 +8,21 @@ import 'package:citizenapp/citizen/institution/institution_accounts_page.dart';
 import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/public_institution_admin_list_page.dart';
-import 'package:citizenapp/governance/legislation-yuan/legislation_intro_page.dart';
-import 'package:citizenapp/legislation/data/law_models.dart';
-import 'package:citizenapp/legislation/law_list_page.dart';
-import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
-import 'package:citizenapp/governance/admins-change/services/admin_activation_service.dart';
-import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
-import 'package:citizenapp/governance/governance_proposals_page.dart';
-import 'package:citizenapp/governance/institution_manage_detail_page.dart';
-import 'package:citizenapp/governance/organization-manage/institution_admin_list_page.dart';
-import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
-import 'package:citizenapp/governance/shared/account_derivation.dart';
-import 'package:citizenapp/governance/shared/institution_info.dart';
-import 'package:citizenapp/governance/shared/proposal/proposal_context.dart';
-import 'package:citizenapp/governance/shared/proposal/proposal_local_store.dart';
-import 'package:citizenapp/governance/shared/proposal/proposal_models.dart';
-import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
+import 'package:citizenapp/citizen/legislation/data/law_models.dart';
+import 'package:citizenapp/citizen/legislation/law_list_page.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/citizen/proposal/proposal_entry_page.dart';
+import 'package:citizenapp/citizen/shared/institution_manage_detail_page.dart';
+import 'package:citizenapp/transaction/organization-manage/institution_admin_list_page.dart';
+import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_detail_page.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_proposal_adapter.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -32,7 +31,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:公共壳(信息卡/账户/管理员/提案列表/关注)对全部机构统一;按机构类型
 /// dispatch 重型流:
-/// - 固定治理档(NRC/PRC/PRB):提案入口→`GovernanceProposalsPage`、管理员→`AdminListPage`
+/// - 固定治理档(NRC/PRC/PRB):提案入口→`ProposalEntryPage`、管理员→`AdminListPage`
 ///   (含激活)、提案列表可点→`_openProposalDetail`;治理流全部复用现成可复用页,不重写。
 /// - 其余公权机构:提案入口=占位(待 CID 管理员来源对接)、管理员=只读列表、提案列表只读。
 class InstitutionDetailPage extends StatefulWidget {
@@ -102,8 +101,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   // 公权路径专用(只读提案摘要)。
   List<InstitutionProposalSummary> _publicProposals = const [];
 
-  AdminAccountIdentity? get _accountIdentity =>
-      _govInfo == null ? null : AdminAccountIdentity.fromInstitution(_govInfo!);
+  AdminAccountIdentity? get _accountIdentity {
+    final info = _govInfo;
+    if (info == null) return null;
+    try {
+      return AdminAccountIdentity.fromInstitution(info);
+    } on ArgumentError {
+      // 非治理且非注册账户身份暂无法解析 → 优雅降级(提案入口仍开,但需激活后才能发起)。
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -125,7 +132,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       setState(() => _loading = false);
       return;
     }
-    final govInfo = widget.repository.governanceInfo(inst.cidNumber);
+    // 全公权机构统一开提案入口:治理三类用静态档(含安全基金等专户),其余从机构派生
+    // 主/费账户构造 InstitutionInfo(机构已按权限分号,入口不再门控)。
+    final govInfo = widget.repository.governanceInfo(inst.cidNumber) ??
+        _infoFromInstitution(inst);
     final subscribed = pubkey == null
         ? false
         : await widget.repository.isSubscribed(pubkey, inst.cidNumber);
@@ -141,6 +151,24 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       _loading = false;
     });
     unawaited(_loadDynamics());
+  }
+
+  /// 为非治理公权机构从 Institution 派生 InstitutionInfo(主/费账户 + 机构码),
+  /// 供提案入口与 admins-change 复用。治理三类(NRC/PRC/PRB)走静态 governanceInfo。
+  InstitutionInfo _infoFromInstitution(Institution inst) {
+    final rows = institutionAccountRows(inst);
+    final main = rows.isNotEmpty ? rows.first.accountHex : '';
+    final fee = rows.length > 1 ? rows[1].accountHex : null;
+    return InstitutionInfo(
+      cidFullName: inst.cidFullName,
+      cidShortName: inst.displayName,
+      cidFullNameEn: inst.cidFullName, // 普通公权机构暂无英文名,中文兜底
+      cidShortNameEn: inst.displayName,
+      cidNumber: inst.cidNumber,
+      orgType: inst.orgType,
+      accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
+      adminAccountCode: inst.institutionCode,
+    );
   }
 
   Future<void> _loadDynamics({bool force = false}) async {
@@ -324,12 +352,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _accountsEntry(inst),
         const SizedBox(height: 12),
         _proposalEntry(),
-        // 法律原文 + 发起立法(仅立法机构):查看该机构全部法律 + 类B 发起说明。
+        // 法律原文(仅立法机构):查看该机构全部法律。发起立法=类B,归口提案入口
+        // (proposal_entry_page,按 registry 立法机构→发起立法),不在详情页另设入口。
         if (_lawTarget(inst) != null) ...[
           const SizedBox(height: 12),
           _lawOriginalEntry(inst),
-          const SizedBox(height: 12),
-          _legislationProposeEntry(),
         ],
         const SizedBox(height: 12),
         _adminsEntry(),
@@ -476,27 +503,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  // 发起立法(仅立法机构,类B):立法/修法/废法在电脑节点端发起,本端只说明 + 投票。
-  Widget _legislationProposeEntry() {
-    return _entryCard(
-      icon: Icons.gavel_outlined,
-      title: '发起立法',
-      subtitle: '立法 / 修法 / 废法在电脑节点端发起',
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const LegislationIntroPage(),
-        ),
-      ),
-    );
-  }
-
   Future<void> _openProposalTypes() async {
     final govInfo = _govInfo;
     if (govInfo == null) return;
     await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => GovernanceProposalsPage(
+        builder: (_) => ProposalEntryPage(
           institution: govInfo,
+          institutionCode: _inst?.institutionCode ?? '',
           icon: Icons.account_balance,
           badgeColor: AppTheme.primary,
           adminWallets: _adminWallets,

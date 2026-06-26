@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/governance/runtime-upgrade/runtime_upgrade_service.dart';
+import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_service.dart';
 
 void main() {
   Uint8List compactLength(int length) {

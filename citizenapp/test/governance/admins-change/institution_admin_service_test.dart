@@ -4,12 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/governance/shared/institution_info.dart';
-import 'package:citizenapp/governance/admins-change/codec/account_id_codec.dart';
-import 'package:citizenapp/governance/admins-change/models/admin_account.dart';
-import 'package:citizenapp/governance/admins-change/services/admin_activation_service.dart';
-import 'package:citizenapp/governance/admins-change/services/admin_account_service.dart';
-import 'package:citizenapp/governance/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/admin_account_service.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class FakeChainRpc extends ChainRpc {

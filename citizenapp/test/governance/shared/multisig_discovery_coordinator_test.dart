@@ -8,7 +8,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/governance/shared/multisig_discovery_coordinator.dart';
+import 'package:citizenapp/citizen/shared/multisig_discovery_coordinator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

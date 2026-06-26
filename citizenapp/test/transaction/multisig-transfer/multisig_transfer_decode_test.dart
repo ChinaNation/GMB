@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
+import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_service.dart';
 
 /// 批量解码路径（_decodeProposalData）布局回归。
 ///
