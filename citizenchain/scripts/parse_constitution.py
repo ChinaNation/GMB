@@ -2,9 +2,9 @@
 """公民宪法 HTML → 立法院模块 SCALE 字节(ADR-027 宪法迁移,一次性迁移工具)。
 
 【状态】迁移已完成。产物 `constitution.scale` 已入库并随创世注入立法院模块(law_id=0);
-宪法唯一真源自此 = 链上立法院模块,修订走立法投票上链。输入 HTML(`CitizenConstitution.html`)
-已按「单一真源」原则删除 —— 若需重新生成 scale(仅限创世前修订种子),先从 git 历史
-恢复该 HTML 再运行本脚本。本脚本保留作为迁移溯源与可复算依据。
+创世宪法种子以 `CitizenConstitution.html` 维护中英双语原文,由本脚本复算为
+`constitution.scale`;链上生效后的宪法修订仍必须走立法投票上链。本脚本保留作为
+迁移溯源与创世种子复算依据。
 
 逻辑:读块状 HTML(chapter-block / section-block / article-block,article 内含
 article-paragraph),解析为 章>节>条>款 + 中英双语,SCALE 编码为 `Vec<Chapter>`

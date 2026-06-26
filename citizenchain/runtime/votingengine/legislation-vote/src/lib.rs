@@ -91,7 +91,7 @@ pub mod pallet {
         pub current_house: u32,
         /// 是否需要强制公投(= 特别案)
         pub referendum_required: bool,
-        /// 行政签署机构(总统府/省政府/市政府);其法定代表人=总统/省长/市长。非特别案末段签署。
+        /// 行政签署机构(总统府/省联邦政府/市政府);其法定代表人=总统/省长/市长。非特别案末段签署。
         pub executive: (InstitutionCode, T::AccountId),
         /// 两院级的立法院机构(国家/省立法院);其法定代表人=院长,供三人会签。单院(市)=None。
         pub legislature: Option<(InstitutionCode, T::AccountId)>,

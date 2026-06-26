@@ -70,7 +70,7 @@ pub fn member(idx: u8) -> AccountId32 {
     AccountId32::new([idx; 32])
 }
 
-// 签署机构(ADR-027 修订):行政机构(总统府/省政府/市政府)+ 立法院(两院级,供院长)。
+// 签署机构(ADR-027 修订):行政机构(总统府/省联邦政府/市政府)+ 立法院(两院级,供院长)。
 pub const EXEC_CODE: InstitutionCode = *b"CGOV"; // 行政机构(市政府式)
 pub const LEG_CODE: InstitutionCode = *b"NLG\0"; // 立法院
 pub fn exec_body() -> AccountId32 {
