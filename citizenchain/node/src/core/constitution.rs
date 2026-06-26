@@ -5,7 +5,7 @@
 //!
 //! 1. **渲染**(展示):从链上结构化宪法(章>节>条>款 + 中英双语)重建《公民宪法》HTML,
 //!    复用原 CSS 外壳,供桌面端「公民宪法」tab 显示(`constitution_getDocument` RPC)。
-//! 2. **不可修改条款守卫**(L2 共识层):宪法第 1/2/3/17/19/23/33/41 条为「不可修改条款」,
+//! 2. **不可修改条款守卫**(L2 共识层):宪法第 1/2/3/17/19/24/34/42 条为「不可修改条款」,
 //!    本守卫在区块导入时逐块校验这些条文与**创世(block#0)逐字一致**,违者拒块。
 //!    执法逻辑在 runtime 之外的节点二进制里,清单(`primitives::IMMUTABLE_CONSTITUTION_ARTICLES`)
 //!    编译进二进制 —— 故 setCode / migration / 改清单常量都改不动这些条文;唯一修改路径 =
@@ -538,7 +538,7 @@ impl<I> ConstitutionGuard<I> {
                 .flatten()
                 .map(|data| data.0)
         })
-        .map_err(|e| format!("宪法守卫:创世不可修改条款基准派生失败:{e:?}"))?;
+        .map_err(|e| format!("护宪守卫:创世不可修改条款基准派生失败:{e:?}"))?;
 
         // L3 启动交叉校验:创世 manifest ↔ 二进制清单 ↔ 创世条文三者一致,否则拒绝启动。
         let manifest_bytes = client
@@ -546,9 +546,9 @@ impl<I> ConstitutionGuard<I> {
             .ok()
             .flatten()
             .map(|data| data.0)
-            .ok_or_else(|| "宪法守卫:创世缺不可修改条款 manifest".to_string())?;
+            .ok_or_else(|| "护宪守卫:创世缺不可修改条款 manifest".to_string())?;
         verify_manifest(&manifest_bytes, &reference)
-            .map_err(|e| format!("宪法守卫:启动交叉校验失败:{e}"))?;
+            .map_err(|e| format!("护宪守卫:启动交叉校验失败:{e}"))?;
 
         Ok(Self {
             inner,

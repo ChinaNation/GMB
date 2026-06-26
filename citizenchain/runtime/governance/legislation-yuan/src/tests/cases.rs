@@ -489,11 +489,11 @@ fn constitution_scale_decodes_and_is_well_formed() {
         .flat_map(|c| c.sections.iter())
         .flat_map(|s| s.articles.iter())
         .collect();
-    assert_eq!(articles.len(), 140, "140 条");
-    // 条号连续 1..=140
+    assert_eq!(articles.len(), 141, "141 条");
+    // 条号连续 1..=141
     let mut nums: Vec<u32> = articles.iter().map(|a| a.number).collect();
     nums.sort();
-    assert_eq!(nums, (1u32..=140).collect::<Vec<_>>(), "条号连续 1..140");
+    assert_eq!(nums, (1u32..=141).collect::<Vec<_>>(), "条号连续 1..141");
     // body 必填 + 中英双语
     for a in &articles {
         assert!(!a.body.is_empty(), "条 {} body 非空", a.number);
@@ -535,7 +535,7 @@ fn genesis_seeds_constitution_as_law_zero() {
             .flat_map(|c| c.sections.iter())
             .map(|s| s.articles.len())
             .sum();
-        assert_eq!(articles, 140, "140 条");
+        assert_eq!(articles, 141, "141 条");
         assert_eq!(Lib::list_laws(Tier::Constitution, 0), vec![0]);
 
         // 不可修改条款 manifest 已冻结:清单 = 单源常量,逐条摘要 = 实际条文(L3 创世锚)。

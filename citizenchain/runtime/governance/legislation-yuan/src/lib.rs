@@ -819,12 +819,15 @@ pub mod pallet {
             let mut data = sp_runtime::sp_std::vec::Vec::from(MODULE_TAG);
             data.extend_from_slice(&summary.encode());
             let object = chapters.encode();
+            // 修宪(tier=宪法)走护宪大法官终审(宪法第21条)。
+            let needs_guard = summary.tier == Tier::Constitution;
             let proposal_id = T::LegislationVoteEngine::create_legislation_proposal(
                 who.clone(),
                 houses.clone().into_inner(),
                 vote_type.as_u8(),
                 executive,
                 legislature,
+                needs_guard,
                 MODULE_TAG,
                 data,
                 object,

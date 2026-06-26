@@ -177,6 +177,10 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             None
         }
     }
+    /// 护宪大法官 7 人 = 账户 [101..=107](测试注入;生产按职务过滤 NJD admins)。
+    fn constitution_guard_members() -> sp_runtime::sp_std::vec::Vec<AccountId32> {
+        (101u8..=107).map(member).collect()
+    }
 }
 
 pub struct TestTimeProvider;
@@ -265,6 +269,24 @@ pub fn create(
     houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
     vote_type: u8,
 ) -> u64 {
+    create_inner(proposer, houses, vote_type, false)
+}
+
+/// 修宪提案(needs_guard=true):现有流程通过后进护宪大法官终审。
+pub fn create_guard(
+    proposer: AccountId32,
+    houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    vote_type: u8,
+) -> u64 {
+    create_inner(proposer, houses, vote_type, true)
+}
+
+fn create_inner(
+    proposer: AccountId32,
+    houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    vote_type: u8,
+    needs_guard: bool,
+) -> u64 {
     // 单院(市)=无 legislature;两院(国/省)=携带立法院。行政签署机构恒携带。
     let legislature = if houses.len() >= 2 {
         Some((LEG_CODE, leg_body()))
@@ -277,6 +299,7 @@ pub fn create(
         vote_type,
         (EXEC_CODE, exec_body()),
         legislature,
+        needs_guard,
     )
     .expect("proposal created");
     let now = System::block_number();
@@ -340,6 +363,18 @@ pub fn override_sign(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::D
     frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
             match Lib::do_override_sign(who, pid, approve) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+            }
+        },
+    )
+}
+
+/// 护宪大法官终审表决(事务内)。
+pub fn guard_vote(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
+    frame_support::storage::with_transaction(
+        || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
+            match Lib::do_guard_vote(who, pid, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }

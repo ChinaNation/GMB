@@ -646,7 +646,7 @@ pub fn new_full(
         let pr = pool_ready.clone();
         move || pr() > 0
     };
-    // 本地挖矿出块同样过宪法守卫:即便链上 runtime 被恶意升级,诚实矿工也绝不出
+    // 本地挖矿出块同样过护宪守卫:即便链上 runtime 被恶意升级,诚实矿工也绝不出
     // 改动不可修改条款的块(ADR-027 §7)。
     let guarded_mining_import = crate::core::constitution::ConstitutionGuard::new(
         pow_block_import,

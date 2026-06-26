@@ -7,8 +7,8 @@ use votingengine::types::{
     LEG_VOTE_MAJOR, LEG_VOTE_MAJOR_EDU, LEG_VOTE_REGULAR, LEG_VOTE_REGULAR_EDU, LEG_VOTE_SPECIAL,
 };
 use votingengine::{
-    STAGE_LEG_HOUSE, STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM, STAGE_LEG_SIGN, STATUS_EXECUTED,
-    STATUS_REJECTED, STATUS_VOTING,
+    STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_HOUSE, STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM,
+    STAGE_LEG_SIGN, STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 // ───────────────── 阈值纯函数(宪法第四十四/四十五条精确端点,5 类删二审)─────────────────
@@ -375,4 +375,89 @@ fn finalize_referendum(pid: u64) {
         },
     )
     .expect("finalize ok");
+}
+
+// ───────────────── 护宪大法官终审(仅修宪,宪法第21条)─────────────────
+
+/// 修宪重要案(单院)推进到护宪大法官终审阶段(辅助)。
+fn constitution_amend_to_guard() -> u64 {
+    let pid = create_guard(member(1), single_house(), LEG_VOTE_MAJOR);
+    // 重要案:>90% 参与 + ≥70% 赞成 → 全员 10 投,8 赞成 2 反对 → 院通过 → 行政签署。
+    for i in 1u8..=8 {
+        assert_ok!(cast(member(i), pid, true));
+    }
+    for i in 9u8..=10 {
+        assert_ok!(cast(member(i), pid, false));
+    }
+    assert_eq!(stage(pid), STAGE_LEG_SIGN);
+    // 总统签署 → 修宪转护宪大法官终审(而非直接生效)。
+    assert_ok!(exec_sign(exec_rep(), pid, true));
+    assert_eq!(stage(pid), STAGE_LEG_CONSTITUTION_GUARD);
+    assert_eq!(status(pid), STATUS_VOTING);
+    pid
+}
+
+#[test]
+fn constitution_amend_passes_on_guard_majority() {
+    new_test_ext().execute_with(|| {
+        let pid = constitution_amend_to_guard();
+        // 7 护宪大法官,4 赞成 = >半数 → 生效。
+        assert_ok!(guard_vote(member(101), pid, true));
+        assert_ok!(guard_vote(member(102), pid, true));
+        assert_ok!(guard_vote(member(103), pid, true));
+        assert_eq!(status(pid), STATUS_VOTING);
+        assert_ok!(guard_vote(member(104), pid, true));
+        assert_eq!(status(pid), STATUS_EXECUTED);
+    });
+}
+
+#[test]
+fn constitution_amend_rejected_on_guard_majority_against() {
+    new_test_ext().execute_with(|| {
+        let pid = constitution_amend_to_guard();
+        assert_ok!(guard_vote(member(101), pid, false));
+        assert_ok!(guard_vote(member(102), pid, false));
+        assert_ok!(guard_vote(member(103), pid, false));
+        assert_eq!(status(pid), STATUS_VOTING);
+        // 4 否决 → 半数赞成已不可能 → 否决。
+        assert_ok!(guard_vote(member(104), pid, false));
+        assert_eq!(status(pid), STATUS_REJECTED);
+    });
+}
+
+#[test]
+fn constitution_amend_guard_timeout_rejects() {
+    new_test_ext().execute_with(|| {
+        let pid = constitution_amend_to_guard();
+        // 护宪大法官 30 天未达多数 → 超时否决。
+        run_to_expiry(pid);
+        assert_eq!(status(pid), STATUS_REJECTED);
+    });
+}
+
+#[test]
+fn non_guard_cannot_guard_vote() {
+    new_test_ext().execute_with(|| {
+        let pid = constitution_amend_to_guard();
+        // member(5) 不是护宪大法官。
+        assert!(guard_vote(member(5), pid, true).is_err());
+        assert_eq!(status(pid), STATUS_VOTING);
+    });
+}
+
+#[test]
+fn non_amend_skips_guard() {
+    new_test_ext().execute_with(|| {
+        // 非修宪(needs_guard=false)单院重要案:院通过→签署→直接生效,不进护宪阶段。
+        let pid = create(member(1), single_house(), LEG_VOTE_MAJOR);
+        for i in 1u8..=8 {
+            assert_ok!(cast(member(i), pid, true));
+        }
+        for i in 9u8..=10 {
+            assert_ok!(cast(member(i), pid, false));
+        }
+        assert_eq!(stage(pid), STAGE_LEG_SIGN);
+        assert_ok!(exec_sign(exec_rep(), pid, true));
+        assert_eq!(status(pid), STATUS_EXECUTED);
+    });
 }

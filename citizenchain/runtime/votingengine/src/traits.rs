@@ -69,12 +69,14 @@ pub trait LegislationVoteEngine<AccountId> {
     /// - `legislature`:两院级的立法院机构 `(机构码, 机构账户)`(国家/省立法院,其法定代表人=院长,供三人会签);单院(市)= `None`。
     /// - `data`:MODULE_TAG 前缀 + 提案摘要(law_id/tier/version/content_hash)。
     /// - `object_data`:法律全文大对象(整部条文 SCALE),供通过回调读回写入新版本。
+    #[allow(clippy::too_many_arguments)]
     fn create_legislation_proposal(
         who: AccountId,
         houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
         vote_type: u8,
         executive: (InstitutionCode, AccountId),
         legislature: Option<(InstitutionCode, AccountId)>,
+        needs_guard: bool,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
         object_data: sp_std::vec::Vec<u8>,
@@ -88,6 +90,7 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
         _vote_type: u8,
         _executive: (InstitutionCode, AccountId),
         _legislature: Option<(InstitutionCode, AccountId)>,
+        _needs_guard: bool,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
         _object_data: sp_std::vec::Vec<u8>,
@@ -619,6 +622,13 @@ pub trait InternalAdminProvider<AccountId> {
         None
     }
 
+    /// 获取护宪大法官成员集(ADR-027 修订:修宪最终否决,宪法第21条)。
+    /// 护宪大法官归口国家司法院,今后按管理员「职务」字段过滤 NJD admins 取这 7 人;
+    /// 字段扩展前默认空(生产解析待管理员字段扩展)。修宪护宪表决按本集合 >半数 判定。
+    fn constitution_guard_members() -> sp_std::vec::Vec<AccountId> {
+        sp_std::vec::Vec::new()
+    }
+
     /// 获取 Pending 账户管理员列表。仅供创建/激活该账户时锁定快照。
     fn get_pending_admin_list(
         _institution_code: InstitutionCode,
@@ -814,6 +824,14 @@ pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
 
     /// 三人会签阶段超时:法案否决(REJECTED)。
     fn finalize_legislation_override_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Ok(())
+    }
+
+    /// 护宪大法官终审阶段超时(仅修宪):未获多数通过 → 法案否决(REJECTED)。
+    fn finalize_legislation_guard_timeout(
         _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,
     ) -> DispatchResult {

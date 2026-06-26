@@ -72,6 +72,26 @@ B2/B3 实现要点:
 - 签署状态机:非特别案内部全过 → `STAGE_LEG_SIGN`(executive 机构法定代表人签署,30天)。市级:签署=EXECUTED / 否决=REJECTED / 30天超时=EXECUTED(通过)。省国级:签署=EXECUTED / 否决或30天超时 → `STAGE_LEG_OVERRIDE`(立法院+参议会+众议会三法定代表人,30天):三签同意=EXECUTED / 任一否决或超时=REJECTED。特别案:公投通过即 EXECUTED,不进签署。
 - 新 extrinsic:`executive_sign(proposal_id, approve)`、`override_sign(proposal_id, approve)`;新本地账本记签署进度;30天超时走 on_initialize/finalize。
 - 提案携带签署机构:扩展 `LegislationVoteEngine::create_legislation_proposal` 签名 + `legislation-yuan` Law/summary 加 executive/legislature 字段。
-- [ ] C 命名统一
-- [ ] D 双客户端
-- [ ] E 收尾(ADR/任免二审占位/文档注释清理)
+- [x] **C 命名统一 + 官员任免二审删除(2026-06-25 完成,与任免二审专案合批改宪法+重生 scale)**:
+  - **官员任免删二审(19 条 52/54/56/58/63/65/87/88/92/96/98/99/101/104/107/111/114/133/135)**:方案A仅驳回重试(13条)删二审一轮、模式B升级句(5条 54/56/58/63/65)「三次常规案二审驳回→三次常规案驳回」、第52条特殊单独处理(升级句改三次常规案);中英文同步。**全宪法 0 处二审/second-review(方案B 彻底删完成:法案7条 Phase A + 任免19条 本轮)**。
+  - **命名首现严格审计(全机构)**:扫 26 机构对,修 3 处短在前违规(art45 市自治会→市公民自治委员会、art16 镇自治会→镇公民自治委员会、art117 校教委会→学校公民教育委员会),仅替换最早简称那一处、定义句不动;参议会等定义结构产物非违规正确跳过;不碰 8 冻结条款。全工程 5 名写法已一致(零代码改动)。
+  - 重生 `constitution.scale` 217626 字节(7章28节140条132款)。**验证(独立复核)**:二审 0/0、不可修改 8 条逐字节 vs 原始版一致、140 条连续、任免改写通顺、命名修复生效、legislation-yuan 23 测试全过。原文件备份 /tmp。**改后 scale 须重新创世/setCode 生效**。
+- [~] **F 护宪大法官修宪最终否决(2026-06-25 进行中,宪法第21条)**:
+  - **宪法 HTML 已改**(子代理执行+6验证):新增**第二十一条**(护宪大法官对修宪享最终否决权:重要案总统签署后/特别案公投后→护宪大法官多数通过生效,未达多数或30天超时否决)、**旧21~140顺延为22~141(共141条)**、**第19条引用 23/33/41→24/34/42**(冻结条款,创世前重定基准,用户拍板)。
+  - **链端护宪状态机已落地验证**:votingengine `STAGE_LEG_CONSTITUTION_GUARD=14` + `InternalAdminProvider::constitution_guard_members()`默认空(additive)+ finalizer/dispatch 加 guard 臂;legislation-vote `needs_guard`字段 + `LegGuardSigns`存储 + `advance_to_guard`/`finalize_or_guard`(4成功终态点 exec签/会签/签署超时/公投 经此分流)+ `do_guard_vote`(>半数赞成生效/多数否决否决)+ `do_finalize_guard_timeout`(超时否决)+ `guard_vote`extrinsic(idx5);legislation-yuan `dispatch_to_engine` 算 `needs_guard=tier==宪法` 透传。验证:legislation-vote **25**(+5护宪)+ legislation-yuan **23** 全过。
+  - **护宪守卫改名**:node 宪法守卫→**护宪守卫**(4处字符串)。
+  - **成员解析**:护宪大法官归口国家司法院,生产按"职务字段过滤NJD admins"取7人,**待管理员字段扩展(姓名/账户/CID/职务)**;现 runtime 用 trait 默认空(生产护宪表决待字段扩展),测试 mock 注 7 人。
+  - **推迟到"宪法改完统一重生 scale"那批**:重生 constitution.scale、不可修改常量 [23,33,41]→[24,34,42]、legislation-yuan 测试 140→141、节点守卫硬编码条号 1/2/3/17/19/23/33/41→…24/34/42、constitution.rs 模块doc条号。**现 HTML(141)与 scale(140)有意分叉**,待统一重生。
+- [ ] **D 双客户端**(独立卡,待开):
+  - CitizenApp:法律列表/详情/版本史(LegislationApi)+ 发起 立/修/废法(governance/legislation-yuan,带 proposer_body/executive/legislature/vote_type 5类/needs_guard)+ 院内投票(cast_house_vote)+ 行政签署(executive_sign)+ 三人会签(override_sign)+ **护宪终审(guard_vote)** + 特别案公投(cast_referendum_vote/prepare_population_snapshot)。
+  - CitizenWallet:pallet 27/28 注册 + 9 个 call decoder(propose_enact/amend/repeal + cast_house_vote/executive_sign/override_sign/guard_vote/cast_referendum_vote/prepare_population_snapshot)+ 动作标签 + 两色拒签;签署类按 ADR-026 新 op_tag。
+- [ ] **E 收尾**(独立卡,待开):
+  - **管理员字段扩展**:admins 从「账户/SS58」扩为「姓名 + 账户 + CID号 + 职务」;护宪成员解析=职务过滤 NJD admins 取 7 人(填 `constitution_guard_members` 生产实现);可按职务划分权责(如 NJD 20 admins 中 7 名护宪大法官)。
+  - **[x] 统一重生 scale 批(2026-06-25 完成并验证)**:
+    - **章节整体重排已落地**:新序「一总则/二政府/**三教委会/四储委会/五立法院/六司法院/七监察院**」(子代理执行+6验证);教委会72-86/储委会87-97/立法院98-113/司法院114-124/监察院125-141;**不可修改 8 条全在第一章总则不移动,仍 1/2/3/17/19/24/34/42 逐字节不变、第19条引用24/34/42不变(guard-safe)**。
+    - **第20条第二款已改(方案甲)**:删「不隶属于任何机构」。
+    - **scale 重生 219064 字节**(独立解码验证:7章141条,不可修改8条内容@24/34/42正确);**不可修改常量 [23,33,41]→[24,34,42]**(count_const.rs,节点守卫单源propagate);legislation-yuan **测试140→141**;节点守卫模块doc条号→24/34/42。验证:legislation-yuan **23**+primitives **27**+独立scale解码全过。
+    - **命名首现严格审计(2026-06-25,全机构逐字复核完成,结论=已全部合规零改动)**:**关键教训**——首次审计用 `简称 in 文本` 判定,因**简称是全称的子串**(如"国家立法院"⊂"中华民族联邦共和国国家立法院")产生大量假阳性"违规";子串感知(mask 全称后再找裸简称)+ 枚举例外(第8条一府两会三院结构定义段"X由…组成/分为…/隶属于…" + 第22条职位列表 均保留简称)复核后:全部 20 机构的全称都已在各自**首个非枚举独立句**首现,**宪法零改动即合规**。省立法院/省司法院/省监察院 在第8条"隶属于"句的简称按枚举例外保留(用户裁定)。**铁律:机构名首现合规检查必须 mask 全称后查裸简称,否则子串误判。**
+    - **储委会节标题改简称(2026-06-25)**:第四章(储委会)第二/三/四节目录由全称改简称——国家公民储备委员会→**国储会**、省公民储备委员会→**省储会**、省公民储备银行→**省储行**(与第一节「储委会联合会议」一致);中英+TOC+节标题同步,正文全称保留;不在第一章故不可修改条款不受影响;scale 重生 **218995 字节**;legislation-yuan 23 测试过。
+  - 全链端到端真机 QA(重新创世后)。
+  - 小残留:立法代码注释「省政府」对齐宪法「省联邦政府」。

@@ -47,6 +47,10 @@ pub const STAGE_LEG_SIGN: u8 = 12;
 /// 立法投票三人会签救济阶段(省/国家级):立法院院长 + 参议长 + 众议长共同签署。
 /// 三人全签同意 → 生效;任一否决或会签超时 → 否决。
 pub const STAGE_LEG_OVERRIDE: u8 = 13;
+/// 立法投票护宪大法官终审阶段(ADR-027 修订 2026-06-25,宪法第21条):**仅修宪(tier=宪法)**。
+/// 修宪在现有流程(重要案 总统签署后 / 特别案 公投后)通过后,最后进入护宪大法官表决:
+/// 多数通过(>半数)→ 生效;未获多数或 30 天超时 → 否决(护宪大法官握最终否决权)。
+pub const STAGE_LEG_CONSTITUTION_GUARD: u8 = 14;
 
 pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;

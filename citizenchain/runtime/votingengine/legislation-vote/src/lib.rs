@@ -41,8 +41,9 @@ use votingengine::{
         legislation_referendum_final_passed, InstitutionCode, LEG_VOTE_SPECIAL,
     },
     CidEligibility, InternalAdminProvider, InternalProposalMutexKind, PopulationSnapshotVerifier,
-    Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_HOUSE, STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM,
-    STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
+    Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_HOUSE,
+    STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM, STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED,
+    STATUS_VOTING,
 };
 
 /// 法律全文大对象类型标记(写入 votingengine `ProposalObject`),与 legislation-yuan 对齐。
@@ -50,6 +51,9 @@ pub const PROPOSAL_OBJECT_KIND_LAW_TEXT: u8 = 2;
 
 /// 单部法律最多院数,单一真源在 `votingengine::types::MAX_LEGISLATION_HOUSES`。
 pub const MAX_HOUSES: u32 = votingengine::types::MAX_LEGISLATION_HOUSES;
+
+/// 护宪大法官最多人数(宪法第20条定 7 人,留余量供荣誉/扩展)。
+pub const MAX_GUARD_MEMBERS: u32 = 16;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -91,6 +95,8 @@ pub mod pallet {
         pub executive: (InstitutionCode, T::AccountId),
         /// 两院级的立法院机构(国家/省立法院);其法定代表人=院长,供三人会签。单院(市)=None。
         pub legislature: Option<(InstitutionCode, T::AccountId)>,
+        /// 是否修宪(tier=宪法):为真时,现有流程通过后最后进护宪大法官终审(宪法第21条)。
+        pub needs_guard: bool,
     }
 
     /// 已准备的人口快照(特别案公投分母),对标 joint-vote。
@@ -165,6 +171,17 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// 护宪大法官终审记录(仅修宪 STAGE_LEG_CONSTITUTION_GUARD):proposal_id → [(护宪大法官, 是否赞成)]。
+    /// 去重 + >半数赞成判通过。成员集来自 `InternalAdminProvider::constitution_guard_members`。
+    #[pallet::storage]
+    pub type LegGuardSigns<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        BoundedVec<(T::AccountId, bool), ConstU32<MAX_GUARD_MEMBERS>>,
+        ValueQuery,
+    >;
+
     /// 人口快照 nonce 永久去重(防重放)。
     #[pallet::storage]
     pub type UsedSnapshotNonce<T: Config> =
@@ -230,6 +247,14 @@ pub mod pallet {
             who: T::AccountId,
             approve: bool,
         },
+        /// 修宪通过现有流程,推进至护宪大法官终审阶段。
+        LegislationAdvancedToGuard { proposal_id: u64 },
+        /// 护宪大法官其一已表决(修宪终审)。
+        LegislationGuardVoted {
+            proposal_id: u64,
+            who: T::AccountId,
+            approve: bool,
+        },
     }
 
     #[pallet::error]
@@ -260,6 +285,10 @@ pub mod pallet {
         NotOverrideSigner,
         /// 该身份已在本提案会签过
         AlreadySigned,
+        /// 签署人不是护宪大法官
+        NotConstitutionGuard,
+        /// 护宪大法官成员集为空(职务字段未配置)
+        GuardMembersEmpty,
     }
 
     #[pallet::call]
@@ -363,6 +392,14 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             Self::do_override_sign(who, proposal_id, approve)
         }
+
+        /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,>半数赞成→生效。
+        #[pallet::call_index(5)]
+        #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
+        pub fn guard_vote(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_guard_vote(who, proposal_id, approve)
+        }
     }
 }
 
@@ -444,12 +481,14 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 创建立法提案:锁定发起院管理员快照,建核心提案进入第一院内部表决。
+    #[allow(clippy::too_many_arguments)]
     pub fn do_create_legislation_proposal(
         who: T::AccountId,
         houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, T::AccountId)>,
         vote_type: u8,
         executive: (InstitutionCode, T::AccountId),
         legislature: Option<(InstitutionCode, T::AccountId)>,
+        needs_guard: bool,
     ) -> Result<u64, DispatchError> {
         ensure!(!houses.is_empty(), Error::<T>::InvalidHouses);
         ensure!(vote_type <= LEG_VOTE_SPECIAL, Error::<T>::InvalidVoteType);
@@ -527,6 +566,7 @@ impl<T: Config> Pallet<T> {
                     referendum_required,
                     executive,
                     legislature,
+                    needs_guard,
                 },
             );
             Proposals::<T>::insert(id, proposal);
@@ -788,7 +828,7 @@ impl<T: Config> Pallet<T> {
             approve,
         });
         if approve {
-            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
+            Self::finalize_or_guard(proposal_id, meta.needs_guard)
         } else if meta.legislature.is_some() {
             // 省/国家级:否决 → 退回三人会签救济。
             Self::advance_to_override(proposal_id)
@@ -853,9 +893,9 @@ impl<T: Config> Pallet<T> {
             .map_err(|_| Error::<T>::AlreadySigned)?;
         let approvals = signs.iter().filter(|(_, a)| *a).count();
         pallet::LegOverrideSigns::<T>::insert(proposal_id, signs);
-        // 三人(院长+参议长+众议长)全批准 → 生效。
+        // 三人(院长+参议长+众议长)全批准 → 生效(修宪则转护宪终审)。
         if approvals >= 3 {
-            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
+            Self::finalize_or_guard(proposal_id, meta.needs_guard)
         } else {
             Ok(())
         }
@@ -878,7 +918,7 @@ impl<T: Config> Pallet<T> {
         if meta.legislature.is_some() {
             Self::advance_to_override(proposal_id)
         } else {
-            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
+            Self::finalize_or_guard(proposal_id, meta.needs_guard)
         }
     }
 
@@ -889,6 +929,86 @@ impl<T: Config> Pallet<T> {
     ) -> DispatchResult {
         ensure!(
             proposal.stage == STAGE_LEG_OVERRIDE,
+            votingengine::Error::<T>::InvalidProposalStage
+        );
+        ensure!(
+            proposal.status == STATUS_VOTING,
+            votingengine::Error::<T>::ProposalAlreadyFinalized
+        );
+        <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
+    }
+
+    /// 成功终态统一出口:修宪(needs_guard)→ 进护宪大法官终审;否则直接 PASSED。
+    fn finalize_or_guard(proposal_id: u64, needs_guard: bool) -> DispatchResult {
+        if needs_guard {
+            Self::advance_to_guard(proposal_id)
+        } else {
+            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
+        }
+    }
+
+    /// 修宪现有流程通过 → 进入护宪大法官终审阶段(宪法第21条)。
+    fn advance_to_guard(proposal_id: u64) -> DispatchResult {
+        pallet::LegGuardSigns::<T>::remove(proposal_id);
+        Self::transition_stage(proposal_id, STAGE_LEG_CONSTITUTION_GUARD)?;
+        Self::deposit_event(pallet::Event::<T>::LegislationAdvancedToGuard { proposal_id });
+        Ok(())
+    }
+
+    /// 护宪大法官终审表决(仅修宪):一人一票,>半数赞成→生效;多数否决(无法达半数)→否决。
+    pub fn do_guard_vote(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
+        let proposal =
+            Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
+        ensure!(
+            proposal.status == STATUS_VOTING,
+            Error::<T>::NotInExpectedStage
+        );
+        ensure!(
+            proposal.stage == STAGE_LEG_CONSTITUTION_GUARD,
+            Error::<T>::NotInExpectedStage
+        );
+        let members =
+            <T as votingengine::Config>::InternalAdminProvider::constitution_guard_members();
+        ensure!(!members.is_empty(), Error::<T>::GuardMembersEmpty);
+        ensure!(
+            members.iter().any(|m| m == &who),
+            Error::<T>::NotConstitutionGuard
+        );
+        let mut signs = pallet::LegGuardSigns::<T>::get(proposal_id);
+        ensure!(
+            !signs.iter().any(|(s, _)| s == &who),
+            Error::<T>::AlreadySigned
+        );
+        Self::deposit_event(pallet::Event::<T>::LegislationGuardVoted {
+            proposal_id,
+            who: who.clone(),
+            approve,
+        });
+        signs
+            .try_push((who, approve))
+            .map_err(|_| Error::<T>::AlreadySigned)?;
+        let total = members.len();
+        let yes = signs.iter().filter(|(_, a)| *a).count();
+        let no = signs.iter().filter(|(_, a)| !*a).count();
+        pallet::LegGuardSigns::<T>::insert(proposal_id, signs);
+        if yes * 2 > total {
+            // >半数赞成 → 生效。
+            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
+        } else if no * 2 >= total {
+            // 否决票已使半数赞成不可能 → 否决。
+            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 护宪大法官终审超时:未获多数通过 → 否决。
+    pub fn do_finalize_guard_timeout(
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
+        proposal_id: u64,
+    ) -> DispatchResult {
+        ensure!(
+            proposal.stage == STAGE_LEG_CONSTITUTION_GUARD,
             votingengine::Error::<T>::InvalidProposalStage
         );
         ensure!(
@@ -1017,16 +1137,15 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::VoteNotExpired
         );
         let tally = pallet::LegReferendumTally::<T>::get(proposal_id);
-        let status = if legislation_referendum_final_passed(
-            proposal.citizen_eligible_total,
-            tally.yes,
-            tally.no,
-        ) {
-            STATUS_PASSED
+        if legislation_referendum_final_passed(proposal.citizen_eligible_total, tally.yes, tally.no)
+        {
+            // 公投通过:修宪(特别案)转护宪大法官终审,否则直接生效。
+            let meta =
+                pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+            Self::finalize_or_guard(proposal_id, meta.needs_guard)
         } else {
-            STATUS_REJECTED
-        };
-        <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, status)
+            <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
+        }
     }
 }
 
@@ -1041,6 +1160,7 @@ impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> 
         vote_type: u8,
         executive: (InstitutionCode, T::AccountId),
         legislature: Option<(InstitutionCode, T::AccountId)>,
+        needs_guard: bool,
         module_tag: &[u8],
         data: sp_runtime::sp_std::vec::Vec<u8>,
         object_data: sp_runtime::sp_std::vec::Vec<u8>,
@@ -1057,6 +1177,7 @@ impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> 
                 vote_type,
                 executive,
                 legislature,
+                needs_guard,
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -1121,6 +1242,13 @@ impl<T: Config>
     ) -> DispatchResult {
         Self::do_finalize_override_timeout(proposal, proposal_id)
     }
+
+    fn finalize_legislation_guard_timeout(
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
+        proposal_id: u64,
+    ) -> DispatchResult {
+        Self::do_finalize_guard_timeout(proposal, proposal_id)
+    }
 }
 
 impl<T: Config> votingengine::traits::LegislationCleanupHandler for Pallet<T> {
@@ -1146,5 +1274,6 @@ impl<T: Config> votingengine::traits::LegislationCleanupHandler for Pallet<T> {
         pallet::LegHouseTally::<T>::remove(proposal_id);
         pallet::LegReferendumTally::<T>::remove(proposal_id);
         pallet::LegOverrideSigns::<T>::remove(proposal_id);
+        pallet::LegGuardSigns::<T>::remove(proposal_id);
     }
 }
