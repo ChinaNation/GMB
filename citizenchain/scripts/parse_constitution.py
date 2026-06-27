@@ -26,7 +26,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HTML = os.path.join(HERE, "../runtime/primitives/src/CitizenConstitution.html")
-OUT = os.path.join(HERE, "../runtime/governance/legislation-yuan/src/constitution.scale")
+OUT = os.path.join(HERE, "../runtime/public/legislation-yuan/src/constitution.scale")
 
 # ───────── 中文数字 → int(章号/款号用;条号走 EN 阿拉伯)─────────
 _ZH = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
