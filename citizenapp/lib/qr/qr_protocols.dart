@@ -46,7 +46,6 @@ class QrActions {
   static const int login = 1;
   static const int citizenBind = 2;
   static const int cidAdmin = 3;
-  static const int cpmsArchiveDelete = 4;
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
   static const int runtimeUpgradeHash = 7;
@@ -55,11 +54,14 @@ class QrActions {
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;
   static const int personalCleanupRejected = 0x0702;
+  static const int personalAdminSetChange = 0x0703;
   static const int resolutionIssuance = 0x0800;
   static const int finalizeProposal = 0x0903;
   static const int retryPassedProposal = 0x0904;
   static const int cancelPassedProposal = 0x0905;
-  static const int adminsChange = 0x0c00;
+  static const int genesisAdmins = 0x0c00;
+  static const int publicAdmins = 0x1d00;
+  static const int privateAdmins = 0x1e00;
   static const int proposeRuntimeUpgrade = 0x0d00;
   static const int developerDirectUpgrade = 0x0d02;
   static const int resolutionDestroy = 0x0e00;
@@ -114,7 +116,10 @@ class QrActions {
         'finalize_proposal' => finalizeProposal,
         'retry_passed_proposal' => retryPassedProposal,
         'cancel_passed_proposal' => cancelPassedProposal,
-        'propose_admin_set_change' => adminsChange,
+        'propose_personal_admin_set_change' => personalAdminSetChange,
+        'propose_genesis_admin_set_change' => genesisAdmins,
+        'propose_public_admin_set_change' => publicAdmins,
+        'propose_private_admin_set_change' => privateAdmins,
         'propose_runtime_upgrade' => proposeRuntimeUpgrade,
         'developer_direct_upgrade' => developerDirectUpgrade,
         'propose_destroy' => resolutionDestroy,
@@ -147,7 +152,6 @@ class QrActions {
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
         'citizen_bind' => citizenBind,
-        'archive_delete' => cpmsArchiveDelete,
         'cid_admin_action' => cidAdmin,
         _ => 0,
       };

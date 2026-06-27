@@ -107,6 +107,7 @@ void main() {
     final accountId = AdminAccountIdCodec.fromAccountHex(address);
     final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
       accountId,
+      institutionCode: 'UNIN',
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
@@ -140,6 +141,7 @@ void main() {
     final accountId = AdminAccountIdCodec.fromAccountHex(address);
     final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
       accountId,
+      institutionCode: 'PMUL',
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
@@ -148,7 +150,7 @@ void main() {
     );
     rpc.responses[accountKey] = adminAccountBytes(
       institutionCode: 'PMUL',
-      kind: 1,
+      kind: 3,
       admin: List<int>.filled(32, 0xbb),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
@@ -169,8 +171,10 @@ void main() {
     final rpc = FakeChainRpc();
     final service = AdminAccountService(chainRpc: rpc);
     final accountId = AdminAccountIdCodec.fromAccountHex('33' * 32);
-    final accountKey =
-        '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(accountId))}';
+    final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
+      accountId,
+      institutionCode: 'PMUL',
+    ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
       institutionCode: 'PMUL',
@@ -178,17 +182,17 @@ void main() {
     );
     rpc.responses[accountKey] = adminAccountBytes(
       institutionCode: 'PMUL',
-      kind: 1,
+      kind: 3,
       admin: List<int>.filled(32, 0xdd),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-    await service.fetchByAccountId(accountId);
-    await service.fetchByAccountId(accountId);
+    await service.fetchByAccountId(accountId, institutionCode: 'PMUL');
+    await service.fetchByAccountId(accountId, institutionCode: 'PMUL');
     expect(rpc.requestedKeys, [accountKey, thresholdKey]);
 
     service.clearAccountCache(AdminAccountIdCodec.hexEncode(accountId));
-    await service.fetchByAccountId(accountId);
+    await service.fetchByAccountId(accountId, institutionCode: 'PMUL');
     expect(rpc.requestedKeys, [
       accountKey,
       thresholdKey,
@@ -210,7 +214,7 @@ void main() {
     ));
     expect(personal.type, AdminAccountIdentityType.personalAccount);
     expect(personal.institutionCode, 'PMUL');
-    expect(personal.kind, 1);
+    expect(personal.kind, 3);
 
     final accountAddress = '55' * 32;
     final institutionAccount =

@@ -818,21 +818,25 @@ class ChainRpc {
 
   static String _describeRuntimeModuleError(int moduleIndex, int errorIndex) {
     final moduleName = switch (moduleIndex) {
-      7 => 'PersonalManage',
-      12 => 'AdminsChange',
+      7 => 'PersonalAdmins',
+      12 => 'GenesisAdmins',
       17 => 'OrganizationManage',
+      29 => 'PublicAdmins',
+      30 => 'PrivateAdmins',
       _ => 'Module($moduleIndex)',
     };
     final errorName = switch (moduleIndex) {
       7 => _personalManageErrorName(errorIndex),
-      12 => _adminsChangeErrorName(errorIndex),
+      12 => _adminSetChangeErrorName(errorIndex),
       17 => _organizationManageErrorName(errorIndex),
+      29 || 30 => _adminSetChangeErrorName(errorIndex),
       _ => null,
     };
     final hint = switch (moduleIndex) {
       7 => _personalManageErrorHint(errorIndex),
-      12 => _adminsChangeErrorHint(errorIndex),
+      12 => _adminSetChangeErrorHint(errorIndex),
       17 => _organizationManageErrorHint(errorIndex),
+      29 || 30 => _adminSetChangeErrorHint(errorIndex),
       _ => null,
     };
     final code = errorName == null
@@ -852,7 +856,10 @@ class ChainRpc {
         7 => 'CloseBalanceBelowMinimum',
         8 => 'PermissionDenied',
         9 => 'InvalidAdminsLen',
+        11 => 'PersonalNotFound',
+        12 => 'PersonalNotActive',
         16 => 'ReservedBalanceRemaining',
+        18 => 'ProposalActionNotFound',
         20 => 'EmptyPersonalName',
         21 => 'PersonalAlreadyExists',
         22 => 'CloseAlreadyPending',
@@ -860,6 +867,7 @@ class ChainRpc {
         26 => 'FeeWithdrawFailed',
         27 => 'CloseTransferBelowED',
         28 => 'NotPersonalAccount',
+        29 => 'AdminSetUnchanged',
         _ => null,
       };
 
@@ -869,17 +877,21 @@ class ChainRpc {
         6 => '初始资金低于链上最低创建金额',
         8 => '发起人不是该多签账户管理员',
         9 => '管理员数量不符合链上规则',
+        11 => '个人多签账户不存在',
+        12 => '个人多签账户不是激活状态',
         16 => '账户仍有保留余额，不能注销',
+        18 => '提案业务数据不存在或不属于个人多签模块',
         20 => '账户名称不能为空',
         21 => '个人多签账户当前已存在',
         22 => '该账户已有注销提案正在进行',
         24 => '创建资金锁定失败，通常是可用余额不足',
         26 => '链上手续费扣除失败',
         27 => '注销转出金额低于链上最小存活余额',
+        29 => '新管理员集合与当前管理员集合没有变化',
         _ => null,
       };
 
-  static String? _adminsChangeErrorName(int index) => switch (index) {
+  static String? _adminSetChangeErrorName(int index) => switch (index) {
         0 => 'InvalidInstitution',
         1 => 'InstitutionOrgMismatch',
         2 => 'InvalidAdminsLen',
@@ -897,7 +909,7 @@ class ChainRpc {
         _ => null,
       };
 
-  static String? _adminsChangeErrorHint(int index) => switch (index) {
+  static String? _adminSetChangeErrorHint(int index) => switch (index) {
         11 => '管理员主体当前状态已存在；如果是已注销账户，说明链上当前状态还没有完成清理',
         12 => '管理员主体不是待激活状态',
         13 => '管理员主体不是激活状态',

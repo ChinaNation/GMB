@@ -7,28 +7,28 @@ import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 import 'personal_manage_models.dart';
 import 'personal_manage_storage_codec.dart';
 
-/// PersonalManage 链上交互服务。
+/// PersonalAdmins 链上交互服务。
 ///
-/// 只负责个人多签的创建、关闭、查询和 PersonalManage ProposalData 解码；
+/// 只负责个人多签的创建、关闭、查询和 PersonalAdmins ProposalData 解码；
 /// 机构多签继续由 `organization-manage/` 下的 OrganizationManage 服务处理。
 class PersonalManageService {
   PersonalManageService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
-  /// PersonalManage pallet index(runtime pallet_index=7)。
+  /// PersonalAdmins pallet index(runtime pallet_index=7)。
   static const _palletIndex = 7;
 
-  /// PersonalManage::propose_create call_index=0。
+  /// PersonalAdmins::propose_create call_index=0。
   static const _proposeCreateCallIndex = 0;
 
-  /// PersonalManage::propose_close call_index=1。
+  /// PersonalAdmins::propose_close call_index=1。
   static const _proposeCloseCallIndex = 1;
 
-  /// PersonalManage 个人账户创建成功事件 event_index=0。
+  /// PersonalAdmins 个人账户创建成功事件 event_index=0。
   static const _personalAccountProposedEventIndex = 0;
 
-  /// PersonalManage ProposalData action。
+  /// PersonalAdmins ProposalData action。
   static const actionCreate = 0;
   static const actionClose = 1;
 
@@ -43,7 +43,7 @@ class PersonalManageService {
     0x74
   ]; // "per-mgmt"
 
-  /// 提交 PersonalManage::propose_create extrinsic（个人多签，无需 CID）。
+  /// 提交 PersonalAdmins::propose_create extrinsic（个人多签，无需 CID）。
   Future<
       ({
         String txHash,
@@ -146,7 +146,7 @@ class PersonalManageService {
     return output.toBytes();
   }
 
-  /// 提交 PersonalManage::propose_close extrinsic。
+  /// 提交 PersonalAdmins::propose_close extrinsic。
   Future<({String txHash, int usedNonce})> submitProposeClosePersonal({
     required String account,
     required String beneficiaryAddress,
@@ -386,7 +386,7 @@ class PersonalManageService {
     return null;
   }
 
-  /// 从 ProposalData 解码 PersonalManage 创建或关闭提案。
+  /// 从 ProposalData 解码 PersonalAdmins 创建或关闭提案。
   Object? decodePersonalProposalData(int proposalId, Uint8List raw) {
     try {
       var offset = 0;
@@ -495,7 +495,7 @@ class PersonalManageService {
     );
     if (found == null) {
       throw StateError(
-        '交易已入块，但未确认 PersonalManage 个人账户创建成功事件，也未检测到链上失败事件，请检查当前区块事件',
+        '交易已入块，但未确认 PersonalAdmins 个人账户创建成功事件，也未检测到链上失败事件，请检查当前区块事件',
       );
     }
     return found;
@@ -608,7 +608,7 @@ class PersonalManageService {
   }) async {
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
-      logLabel: 'PersonalManage',
+      logLabel: 'PersonalAdmins',
     ).signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,
@@ -626,7 +626,7 @@ class PersonalManageService {
   }) async {
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
-      logLabel: 'PersonalManage',
+      logLabel: 'PersonalAdmins',
     ).signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,

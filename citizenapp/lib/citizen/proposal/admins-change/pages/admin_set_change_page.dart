@@ -232,6 +232,12 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
         admins: _admins,
         newThreshold: newThreshold,
       );
+      final callData = _changeService.buildCallData(
+        account: account,
+        proposerPubkeyHex: wallet.pubkeyHex,
+        admins: validated.admins,
+        newThreshold: validated.threshold,
+      );
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();
@@ -247,7 +253,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
           requestId: QrSigner.generateRequestId(prefix: 'admin-change-'),
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${AdminAccountIdCodec.hexEncode(payload)}',
-          action: QrActions.adminsChange,
+          action: QrActions.chain(callData[0], callData[1]),
         );
         final response = await Navigator.of(context).push(
           MaterialPageRoute(

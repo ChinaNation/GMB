@@ -85,8 +85,7 @@ class MyIdService {
 
   /// 选择电子护照使用的钱包。
   ///
-  /// 中文注释：CPMS 阶段只需要扫描钱包地址;真正的钱包签名与已绑定确认
-  /// 统一放到 CID 绑定阶段,所以这里不联网注册、不写 bound。
+  /// 中文注释：这里仅选择本机电子护照钱包,不联网注册、不写 bound。
   Future<MyIdState> selectWallet({
     required String walletAddress,
     required String walletPubkeyHex,

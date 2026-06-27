@@ -1,9 +1,9 @@
 // AdminAccountStorageCodec golden test:固定字节 -> 固定解码结果。
 //
-// 覆盖链上 `AdminsChange::AdminAccounts` 的最小解码路径：
-// - Builtin (kind=0)
-// - Personal (kind=1)
-// - InstitutionAccount (kind=2)
+// 覆盖链上四类管理员 pallet `AdminAccounts` 的最小解码路径：
+// - Genesis (kind=0)
+// - Personal (kind=3)
+// - PublicInstitution (kind=1)
 // - storage key 末 32B AccountId 提取
 
 import 'dart:typed_data';
@@ -22,16 +22,16 @@ void main() {
   }
 
   group('tryDecode', () {
-    test('成功解码 Builtin(0 admins)', () {
+    test('成功解码 Genesis(0 admins)', () {
       // institution_code=NRC, kind=0, admins=Compact(0)=0x00, 后续字段忽略。
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
-        AdminAccountStorageCodec.kindBuiltin,
+        AdminAccountStorageCodec.kindGenesis,
         0,
       ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
       expect(r.institutionCode, 'NRC');
-      expect(r.kind, AdminAccountStorageCodec.kindBuiltin);
+      expect(r.kind, AdminAccountStorageCodec.kindGenesis);
       expect(r.adminsHex, isEmpty);
     });
 
@@ -52,19 +52,19 @@ void main() {
       expect(r.adminsHex, ['11' * 32, '22' * 32, '33' * 32]);
     });
 
-    test('成功解码 InstitutionAccount 含 2 个 admin', () {
+    test('成功解码 PublicInstitution 含 2 个 admin', () {
       final a1 = List.filled(32, 0x44);
       final a2 = List.filled(32, 0x55);
       final bytes = Uint8List.fromList([
         ...codeBytes('CGOV'),
-        AdminAccountStorageCodec.kindInstitutionAccount,
+        AdminAccountStorageCodec.kindPublicInstitution,
         0x08, // Compact(2)
         ...a1,
         ...a2,
       ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
       expect(r.institutionCode, 'CGOV');
-      expect(r.kind, AdminAccountStorageCodec.kindInstitutionAccount);
+      expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
       expect(r.adminsHex, ['44' * 32, '55' * 32]);
     });
 
@@ -77,7 +77,7 @@ void main() {
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
-        AdminAccountStorageCodec.kindBuiltin,
+        AdminAccountStorageCodec.kindGenesis,
         0x08, // 声明 2 个 admin 但只给 1 个的字节。
         ...List.filled(32, 0xCC),
       ]);

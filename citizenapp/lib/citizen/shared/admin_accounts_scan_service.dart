@@ -1,7 +1,7 @@
-// 共享:`AdminsChange::AdminAccounts` 全表单次扫描(机构多签 + 个人多签共用)。
+// 共享:分类管理员模块 `AdminAccounts` 全表扫描(机构多签 + 个人多签共用)。
 //
 // 机构多签与个人多签发现都依赖同一张
-// `AdminsChange::AdminAccounts` 反向索引。本服务把"翻页 getKeysPaged +
+// `AdminAccounts` 反向索引。本服务把"翻页 getKeysPaged +
 // 批量 fetchStorageBatch + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;
 // 各业务模块按 kind/institutionCode 客户端过滤。
 //
@@ -30,7 +30,7 @@ class ScannedAdminAccount {
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
 
-  /// 管理员账户类型(0=Builtin,1=Personal,2=InstitutionAccount)。
+  /// 管理员账户类型(0=Genesis,1=Public,2=Private,3=Personal)。
   final int kind;
 
   /// 管理员公钥小写 hex 列表(无 0x,32B = 64 hex)。
@@ -62,7 +62,7 @@ class AdminAccountsScanResult {
   );
 }
 
-/// `AdminsChange::AdminAccounts` 单次全表扫描服务(机构/个人多签共用)。
+/// 分类管理员模块 `AdminAccounts` 单次全表扫描服务(机构/个人多签共用)。
 class AdminAccountsScanService {
   AdminAccountsScanService({ChainRpc? chainRpc})
       : _rpc = chainRpc ?? ChainRpc();
@@ -81,29 +81,30 @@ class AdminAccountsScanService {
   Future<AdminAccountsScanResult> scanAll({
     void Function(int scanned, int? total, int decoded)? onProgress,
   }) async {
-    final prefixHex = _adminAccountsPrefixHex();
     final allKeys = <String>[];
-    String? startKey;
     var partialFailure = false;
 
-    while (true) {
-      List<String> page;
-      try {
-        page = await SmoldotClientManager.instance.getKeysPagedFinalized(
-          prefixHex,
-          count: _pageSize,
-          startKey: startKey,
-        );
-      } catch (e) {
-        debugPrint('[AdminAccountsScan] getKeysPaged 失败: $e');
-        partialFailure = true;
-        break;
+    for (final prefixHex in _adminAccountsPrefixHexList()) {
+      String? startKey;
+      while (true) {
+        List<String> page;
+        try {
+          page = await SmoldotClientManager.instance.getKeysPagedFinalized(
+            prefixHex,
+            count: _pageSize,
+            startKey: startKey,
+          );
+        } catch (e) {
+          debugPrint('[AdminAccountsScan] getKeysPaged 失败: $e');
+          partialFailure = true;
+          break;
+        }
+        if (page.isEmpty) break;
+        allKeys.addAll(page);
+        onProgress?.call(allKeys.length, null, 0);
+        if (page.length < _pageSize) break;
+        startKey = page.last;
       }
-      if (page.isEmpty) break;
-      allKeys.addAll(page);
-      onProgress?.call(allKeys.length, null, 0);
-      if (page.length < _pageSize) break;
-      startKey = page.last;
     }
 
     final accounts = <ScannedAdminAccount>[];
@@ -154,13 +155,15 @@ class AdminAccountsScanService {
   static List<ScannedAdminAccount> filterMine(
     AdminAccountsScanResult scan, {
     required Set<String> myPubkeysHex,
-    required int kind,
+    int? kind,
+    Set<int>? kinds,
     Set<String>? codeWhitelist,
   }) {
+    final acceptedKinds = kinds ?? (kind == null ? const <int>{} : {kind});
     return scan.accounts
         .where(
           (a) =>
-              a.kind == kind &&
+              acceptedKinds.contains(a.kind) &&
               (codeWhitelist == null ||
                   codeWhitelist.contains(a.institutionCode)) &&
               a.adminsHex.any(myPubkeysHex.contains),
@@ -168,9 +171,18 @@ class AdminAccountsScanService {
         .toList(growable: false);
   }
 
-  /// `AdminsChange::AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
-  String _adminAccountsPrefixHex() {
-    final palletHash = Hasher.twoxx128.hashString('AdminsChange');
+  /// 分类管理员模块 `AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
+  List<String> _adminAccountsPrefixHexList() {
+    return const [
+      'GenesisAdmins',
+      'PersonalAdmins',
+      'PublicAdmins',
+      'PrivateAdmins'
+    ].map(_adminAccountsPrefixHex).toList(growable: false);
+  }
+
+  String _adminAccountsPrefixHex(String palletName) {
+    final palletHash = Hasher.twoxx128.hashString(palletName);
     final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
     final prefix = Uint8List(palletHash.length + storageHash.length);
     prefix.setAll(0, palletHash);

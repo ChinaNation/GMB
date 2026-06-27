@@ -6,8 +6,8 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 个人多签账户生命周期快照。
 ///
-/// `PersonalManage::PersonalAccounts` 只保存个人账户生命周期元数据；
-/// 管理员真源在 `AdminsChange::AdminAccounts`，动态阈值真源在 `InternalVote`。
+/// `PersonalAdmins::PersonalAccounts` 只保存个人账户生命周期元数据；
+/// 管理员真源在 `PersonalAdmins::AdminAccounts`，动态阈值真源在 `InternalVote`。
 class PersonalManageAccountSnapshot {
   const PersonalManageAccountSnapshot({
     required this.creatorHex,
@@ -35,13 +35,13 @@ class PersonalManageAdminSnapshot {
   final List<String> admins;
 }
 
-/// PersonalManage 专属 storage codec。
+/// PersonalAdmins 专属 storage codec。
 class PersonalManageStorageCodec {
   PersonalManageStorageCodec._();
 
   static Uint8List personalAccountsKey(String personalAccountHex) {
     return storageMapKey(
-      'PersonalManage',
+      'PersonalAdmins',
       'PersonalAccounts',
       hexDecode(personalAccountHex),
     );
@@ -56,7 +56,7 @@ class PersonalManageStorageCodec {
   }
 
   static Uint8List adminAccountKey(Uint8List accountId) {
-    return storageMapKey('AdminsChange', 'AdminAccounts', accountId);
+    return storageMapKey('PersonalAdmins', 'AdminAccounts', accountId);
   }
 
   static Uint8List dynamicThresholdKey({
@@ -110,7 +110,7 @@ class PersonalManageStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    // 中文注释：AdminsChange::AdminAccounts 已不保存 threshold；
+    // 中文注释：PersonalAdmins::AdminAccounts 不保存 threshold；
     // 后续字段是 creator/created_at/updated_at/status，阈值必须另查 InternalVote。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return PersonalManageAdminSnapshot(

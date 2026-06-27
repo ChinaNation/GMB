@@ -69,26 +69,40 @@ class AdminSetValidation {
       final expected = switch (code) {
         'NRC' => 19,
         'PRC' || 'PRB' => 9,
-        _ => throw StateError('内置治理机构 institution_code 无效: $code'),
+        'FRG' => null,
+        _ => throw StateError('创世管理员 institution_code 无效: $code'),
       };
-      if (count != expected) throw StateError('内置治理机构管理员数量必须保持 $expected 人');
+      if (expected != null && count != expected) {
+        throw StateError('创世治理机构管理员数量必须保持 $expected 人');
+      }
+      if (expected == null && (count < 1 || count > 1989)) {
+        throw StateError('联邦注册局管理员数量必须在 1..=1989 之间');
+      }
       return;
     }
     if (kind == 1) {
+      if (!InstitutionCodeLabel.isPublicAdminCode(code)) {
+        throw StateError('公权机构管理员更换必须使用非创世公权机构码');
+      }
+      if (count < 2 || count > 1989) {
+        throw StateError('公权机构管理员数量必须在 2..=1989 之间');
+      }
+      return;
+    }
+    if (kind == 2) {
+      if (!InstitutionCodeLabel.isPrivateAdminCode(code)) {
+        throw StateError('私权机构管理员更换必须使用私权或非法人机构码');
+      }
+      if (count < 2 || count > 1989) {
+        throw StateError('私权机构管理员数量必须在 2..=1989 之间');
+      }
+      return;
+    }
+    if (kind == 3) {
       if (code != 'PMUL') {
         throw StateError('个人多签管理员更换必须使用 PMUL');
       }
       if (count < 2 || count > 64) throw StateError('个人多签管理员数量必须在 2..=64 之间');
-      return;
-    }
-    if (kind == 2) {
-      // 中文注释：机构账户 kind=2，institution_code 为注册机构码（非治理固定码）。
-      if (!InstitutionCodeLabel.isInstitution(code)) {
-        throw StateError('机构账户 institution_code 必须为注册机构码');
-      }
-      if (count < 2 || count > 1989) {
-        throw StateError('机构账户管理员数量必须在 2..=1989 之间');
-      }
       return;
     }
     throw StateError('未知管理员账户类型');
@@ -101,14 +115,15 @@ class AdminSetValidation {
     int threshold,
   ) {
     if (kind == 0) {
-      final expected = fixedGovernanceThreshold(code) ??
-          (throw StateError('内置治理机构 institution_code 无效: $code'));
-      if (threshold != expected) {
-        throw StateError('内置治理机构固定阈值必须为 $expected');
+      final expected = fixedGovernanceThreshold(code);
+      if (expected != null) {
+        if (threshold != expected) {
+          throw StateError('创世治理机构固定阈值必须为 $expected');
+        }
+        return;
       }
-      return;
     }
-    if (kind == 1 || kind == 2) {
+    if (kind == 0 || kind == 1 || kind == 2 || kind == 3) {
       // 中文注释：动态账户阈值只按 runtime 投票引擎公式做端上前置校验；
       // 真正保存和生效仍由 internal-vote 负责。
       if (threshold <= 0 || threshold > count || threshold * 2 <= count) {

@@ -45,7 +45,7 @@ abstract interface class InstitutionChainState {
   /// 批量余额(hex→元);精确整键 + ChainReadCache。
   Future<Map<String, double>> balances(List<String> pubkeyHexes);
 
-  /// 机构主账户管理员公钥列表(AdminsChange::AdminAccounts)。
+  /// 机构主账户管理员公钥列表(按机构码读取 Genesis/Public/Private Admins)。
   Future<List<String>> admins(Institution institution);
 
   /// 该机构当年提案(按 institutionBytes==主账户 id 过滤当年缓存)。

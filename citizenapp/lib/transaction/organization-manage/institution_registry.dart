@@ -5,7 +5,7 @@
 ///   `institutionIdentityToAccountId` / `registeredAccountIdentity` 等在
 ///   `lib/governance/shared/institution_info.dart`。
 /// - 静态注册表仅包含国储会/省储会/省储行三类内置治理机构，机构账户与个人多签
-///   不在此表中（动态从链上读取 `AdminsChange::AdminAccounts`）。
+///   不在此表中（动态从对应管理员 pallet 读取 `AdminAccounts`）。
 library;
 
 import 'package:citizenapp/citizen/shared/institution_info.dart';

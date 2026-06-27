@@ -57,7 +57,7 @@ enum InstitutionStatus {
 /// 多签账户链上信息。
 ///
 /// 机构状态来自 `OrganizationManage::InstitutionAccounts`，
-/// 管理员来自 `AdminsChange::AdminAccounts`，动态阈值来自 `InternalVote`。
+/// 管理员来自对应机构管理员 pallet 的 `AdminAccounts`，动态阈值来自 `InternalVote`。
 class InstitutionAccountInfo {
   const InstitutionAccountInfo({
     required this.adminsLen,

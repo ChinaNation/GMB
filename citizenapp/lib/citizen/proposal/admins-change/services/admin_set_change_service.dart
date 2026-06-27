@@ -50,7 +50,7 @@ class AdminSetChangeService {
     );
     final result = await SignedExtrinsicBuilder(
       chainRpc: _rpc,
-      logLabel: 'AdminsChange',
+      logLabel: 'AdminSetChange',
     ).signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,

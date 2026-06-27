@@ -1,6 +1,6 @@
 // 多签发现统一编排。
 //
-// 单次扫描 `AdminsChange::AdminAccounts`,把结果分发给机构多签与个人多签两个
+// 单次扫描四类管理员 pallet 的 `AdminAccounts`,把结果分发给机构多签与个人多签两个
 // 后处理服务做过滤 / 落库。
 // 节流、本地钱包读取、扫描入口统一收口在本协调器,业务服务只做 processScanned。
 

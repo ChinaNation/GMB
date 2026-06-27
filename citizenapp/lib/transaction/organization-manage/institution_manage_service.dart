@@ -373,8 +373,8 @@ class InstitutionManageService {
 
   /// 查询机构多签账户信息。
   ///
-  /// 注册机构账户走 `AccountRegisteredCid -> InstitutionAccounts`
-  /// + `AdminsChange::AdminAccounts`。
+  /// 注册机构账户走 `AccountRegisteredCid -> Institutions/InstitutionAccounts`
+  /// + 分类管理员模块 `AdminAccounts`。
   Future<InstitutionAccountInfo?> fetchAccount(String accountHex) async {
     return _fetchInstitutionAccount(accountHex);
   }
@@ -421,6 +421,7 @@ class InstitutionManageService {
     }
 
     final accountKeyByAccount = <String, String>{};
+    final institutionKeyByAccount = <String, String>{};
     final adminKeyByAccount = <String, String>{};
     final accountIdByAccount = <String, Uint8List>{};
     final secondRoundKeys = <String>[];
@@ -433,14 +434,14 @@ class InstitutionManageService {
         entry.value.cidNumber,
         entry.value.accountName,
       ))}';
-      final adminKey =
-          '0x${_hexEncode(MultisigStorageCodec.adminAccountKey(accountId))}';
+      final institutionKey =
+          '0x${_hexEncode(MultisigStorageCodec.institutionKey(entry.value.cidNumber))}';
       accountIdByAccount[entry.key] = accountId;
       accountKeyByAccount[entry.key] = accountKey;
-      adminKeyByAccount[entry.key] = adminKey;
+      institutionKeyByAccount[entry.key] = institutionKey;
       secondRoundKeys
         ..add(accountKey)
-        ..add(adminKey);
+        ..add(institutionKey);
     }
 
     final secondRoundValues = await _rpc.fetchStorageBatchChunked(
@@ -448,21 +449,53 @@ class InstitutionManageService {
       chunkSize: chunkSize,
     );
     final accountByAccount = <String, InstitutionAccountSnapshot>{};
-    final adminByAccount = <String, AdminSnapshot>{};
+    final institutionByAccount = <String, AdminSnapshot>{};
     for (final address in refByAddress.keys) {
       final accountData = secondRoundValues[accountKeyByAccount[address]];
-      final adminData = secondRoundValues[adminKeyByAccount[address]];
-      if (accountData == null || adminData == null) {
+      final institutionData =
+          secondRoundValues[institutionKeyByAccount[address]];
+      if (accountData == null || institutionData == null) {
         result[address] = null;
         continue;
       }
-      final account = MultisigStorageCodec.decodeInstitutionAccount(accountData);
-      final admin = MultisigStorageCodec.decodeAdminAccount(adminData);
-      if (account == null || admin == null) {
+      final account =
+          MultisigStorageCodec.decodeInstitutionAccount(accountData);
+      final institution =
+          MultisigStorageCodec.decodeInstitutionInfo(institutionData);
+      if (account == null || institution == null) {
         result[address] = null;
         continue;
       }
       accountByAccount[address] = account;
+      institutionByAccount[address] = institution;
+    }
+
+    final adminRoundKeys = <String>[];
+    for (final entry in institutionByAccount.entries) {
+      final adminKey = '0x${_hexEncode(MultisigStorageCodec.adminAccountKey(
+        institutionCode: entry.value.institutionCode,
+        accountId: accountIdByAccount[entry.key]!,
+      ))}';
+      adminKeyByAccount[entry.key] = adminKey;
+      adminRoundKeys.add(adminKey);
+    }
+
+    final adminValues = await _rpc.fetchStorageBatchChunked(
+      adminRoundKeys,
+      chunkSize: chunkSize,
+    );
+    final adminByAccount = <String, AdminSnapshot>{};
+    for (final address in institutionByAccount.keys) {
+      final adminData = adminValues[adminKeyByAccount[address]];
+      if (adminData == null) {
+        result[address] = null;
+        continue;
+      }
+      final admin = MultisigStorageCodec.decodeAdminAccount(adminData);
+      if (admin == null) {
+        result[address] = null;
+        continue;
+      }
       adminByAccount[address] = admin;
     }
 
@@ -545,10 +578,20 @@ class InstitutionManageService {
     if (accountData == null) return null;
     final account = MultisigStorageCodec.decodeInstitutionAccount(accountData);
     if (account == null) return null;
+    final institutionKey = MultisigStorageCodec.institutionKey(ref.cidNumber);
+    final institutionData =
+        await _rpc.fetchStorage('0x${_hexEncode(institutionKey)}');
+    if (institutionData == null) return null;
+    final institution =
+        MultisigStorageCodec.decodeInstitutionInfo(institutionData);
+    if (institution == null) return null;
     final accountId = MultisigStorageCodec.accountIdFromAccountHex(
       accountHex,
     );
-    final adminKey = MultisigStorageCodec.adminAccountKey(accountId);
+    final adminKey = MultisigStorageCodec.adminAccountKey(
+      institutionCode: institution.institutionCode,
+      accountId: accountId,
+    );
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
     if (adminData == null) return null;
     final admin = MultisigStorageCodec.decodeAdminAccount(adminData);
@@ -625,7 +668,8 @@ class InstitutionManageService {
     }
   }
 
-  CloseMultisigProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
+  CloseMultisigProposalInfo? _decodeCloseAction(
+      int proposalId, Uint8List data) {
     // account(32) + beneficiary(32) + proposer(32)
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;

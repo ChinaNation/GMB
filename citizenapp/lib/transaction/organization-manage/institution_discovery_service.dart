@@ -70,7 +70,10 @@ class InstitutionDiscoveryService {
     final mine = AdminAccountsScanService.filterMine(
       scan,
       myPubkeysHex: myPubkeys,
-      kind: AdminAccountStorageCodec.kindInstitutionAccount,
+      kinds: const {
+        AdminAccountStorageCodec.kindPublicInstitution,
+        AdminAccountStorageCodec.kindPrivateInstitution,
+      },
     );
 
     // 批量反查 CID 归属(AccountRegisteredCid 精确整键)。

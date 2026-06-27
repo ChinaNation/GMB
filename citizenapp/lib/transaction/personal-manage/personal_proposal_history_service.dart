@@ -323,8 +323,8 @@ class PersonalProposalHistoryService {
   /// `MODULE_TAG` + `action_byte`(1B) + 业务参数。
   ///
   /// 个人多签提案能命中的映射:
-  /// - per-mgmt + 0 → create (PersonalManage::propose_create)
-  /// - per-mgmt + 1 → close  (PersonalManage::propose_close)
+  /// - per-mgmt + 0 → create (PersonalAdmins::propose_create)
+  /// - per-mgmt + 1 → close  (PersonalAdmins::propose_close)
   /// - multisig-transfer + 0 → transfer (MultisigTransfer::propose_transfer)
   /// 个人多签不会触发 safety_fund/sweep,无需识别。
   String? _decodeActionFromProposalData(Uint8List raw) {

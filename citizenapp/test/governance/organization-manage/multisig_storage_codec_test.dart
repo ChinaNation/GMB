@@ -82,9 +82,9 @@ void main() {
       final admin2 = List<int>.filled(32, 0x22);
       final institution = Uint8List.fromList([
         ...compactVec('安徽省储行'),
-        ...codeBytes('UNIN'),
         ...List<int>.filled(32, 0xa1),
         ...List<int>.filled(32, 0xa2),
+        ...codeBytes('UNIN'),
         ...u32Le(2),
         ...u32Le(2),
         (2 << 2) & 0xff,

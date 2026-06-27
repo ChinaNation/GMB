@@ -631,7 +631,7 @@ class MultisigTransferService {
           continue;
         }
 
-        // 内部投票提案：先按 PersonalManage 解码，再按 OrganizationManage 解码，
+        // 内部投票提案：先按 PersonalAdmins 解码，再按 OrganizationManage 解码，
         // 失败后才尝试普通多签转账提案。
         final personalDetail =
             personalManageService.decodePersonalProposalData(id, raw);
@@ -1110,7 +1110,8 @@ class MultisigTransferService {
     output.pushByte(_proposeCallIndex);
 
     // institution_code: [u8;4]
-    output.write(Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
+    output.write(
+        Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
 
     // institution: AccountId32
     output.write(

@@ -58,8 +58,15 @@ class MultisigStorageCodec {
     return account;
   }
 
-  static Uint8List adminAccountKey(Uint8List accountId) {
-    return storageMapKey('AdminsChange', 'AdminAccounts', accountId);
+  static Uint8List adminAccountKey({
+    required String institutionCode,
+    required Uint8List accountId,
+  }) {
+    return storageMapKey(
+      InstitutionCodeLabel.adminAccountsPalletName(institutionCode),
+      'AdminAccounts',
+      accountId,
+    );
   }
 
   static Uint8List dynamicThresholdKey({
@@ -173,7 +180,7 @@ class MultisigStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    // 中文注释：AdminsChange::AdminAccounts 后续字段是 creator/时间/status，
+    // 中文注释：分类管理员模块的 AdminAccounts 后续字段是 creator/时间/status，
     // 动态阈值不在这里保存，必须按 institution_code + account 从 InternalVote 查询。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return AdminSnapshot(
@@ -190,14 +197,15 @@ class MultisigStorageCodec {
     final name = readBoundedBytes(data, offset);
     if (name == null) return null;
     offset = name.nextOffset;
-    // institution_code:[u8;4] + main_account(32) + fee_account(32) + admins_len(u32) + threshold(u32)
-    if (offset + 4 + 32 + 32 + 4 + 4 > data.length) return null;
+    // 中文注释：必须和 runtime 的 InstitutionInfo 字段顺序保持一致：
+    // cid_full_name -> main_account -> fee_account -> institution_code。
+    if (offset + 32 + 32 + 4 + 4 + 4 > data.length) return null;
+    offset += 32; // main_account
+    offset += 32; // fee_account
     final code = InstitutionCodeLabel.codeToString(
       data.sublist(offset, offset + 4),
     );
     offset += 4;
-    offset += 32; // main_account
-    offset += 32; // fee_account
     final adminsLen = readU32Le(data, offset);
     offset += 4;
     final threshold = readU32Le(data, offset);

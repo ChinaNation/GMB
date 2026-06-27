@@ -5,7 +5,7 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// k = 1 签名请求。
 ///
-/// CitizenApp、CID、CPMS、节点桌面端都只生成这一种请求流向;具体业务场景由
+/// CitizenApp、CID、节点桌面端都只生成这一种请求流向;具体业务场景由
 /// `action`(`a`) 区分,扫码端展示内容必须由 `action + payload` 本地解码得出。
 class SignRequestBody implements QrBody {
   const SignRequestBody({

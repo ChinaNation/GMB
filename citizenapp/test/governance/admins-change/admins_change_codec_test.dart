@@ -24,10 +24,13 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
-  group('admins_change codec', () {
-    test('builds AdminsChange::AdminAccounts storage key', () {
+  group('admins codec', () {
+    test('builds classified AdminAccounts storage key', () {
       final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
-      final key = AdminAccountIdCodec.adminAccountStorageKey(accountId);
+      final key = AdminAccountIdCodec.adminAccountStorageKey(
+        accountId,
+        institutionCode: 'NRC',
+      );
 
       expect(accountId.length, 32);
       expect(key.length, 16 + 16 + 16 + 32);
@@ -63,20 +66,31 @@ void main() {
         newThreshold: 13,
       );
 
-      expect(call[0], AdminSetChangeCallCodec.palletIndex);
-      expect(call[1], AdminSetChangeCallCodec.proposeAdminSetChangeCallIndex);
+      expect(call[0], AdminSetChangeCallCodec.palletIndexForCode('NRC'));
+      expect(call[1], AdminSetChangeCallCodec.callIndexForCode('NRC'));
       expect(call.sublist(2, 6), codeBytes('NRC'));
       expect(call.sublist(6, 38), List<int>.filled(32, 0x11));
       expect(call[38], 0x08);
       expect(call.sublist(call.length - 4), u32Le(13));
       expect(call.length, 2 + 4 + 32 + 1 + 64 + 4);
+
+      final personalCall = AdminSetChangeCallCodec.build(
+        institutionCode: 'PMUL',
+        accountId: accountId,
+        admins: ['22' * 32, '33' * 32],
+        newThreshold: 2,
+      );
+      expect(
+          personalCall[0], AdminSetChangeCallCodec.palletIndexForCode('PMUL'));
+      expect(personalCall[1], AdminSetChangeCallCodec.callIndexForCode('PMUL'));
+      expect(personalCall.sublist(2, 6), codeBytes('PMUL'));
     });
 
     test('validates proposer and changed admin set', () {
       final account = AdminAccountState(
         accountHex: '11' * 32,
         institutionCode: 'PMUL',
-        kind: 1,
+        kind: 3,
         admins: ['aa' * 32, 'bb' * 32],
         threshold: 2,
         creatorHex: 'aa' * 32,
@@ -124,7 +138,7 @@ void main() {
 
       expect(
         () => AdminSetValidation.validate(
-          account: account(institutionCode: 'CGOV', kind: 1),
+          account: account(institutionCode: 'CGOV', kind: 3),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -142,7 +156,7 @@ void main() {
       );
       expect(
         () => AdminSetValidation.validate(
-          account: account(institutionCode: 'PMUL', kind: 3),
+          account: account(institutionCode: 'UNIN', kind: 1),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -151,7 +165,25 @@ void main() {
       );
       expect(
         AdminSetValidation.validate(
+          account: account(institutionCode: 'CGOV', kind: 1),
+          proposerPubkeyHex: 'aa' * 32,
+          admins: ['aa' * 32, 'cc' * 32],
+          newThreshold: 2,
+        ).admins,
+        ['aa' * 32, 'cc' * 32],
+      );
+      expect(
+        AdminSetValidation.validate(
           account: account(institutionCode: 'UNIN', kind: 2),
+          proposerPubkeyHex: 'aa' * 32,
+          admins: ['aa' * 32, 'cc' * 32],
+          newThreshold: 2,
+        ).admins,
+        ['aa' * 32, 'cc' * 32],
+      );
+      expect(
+        AdminSetValidation.validate(
+          account: account(institutionCode: 'PMUL', kind: 3),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,

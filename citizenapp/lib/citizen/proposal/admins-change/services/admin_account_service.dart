@@ -31,10 +31,16 @@ class AdminAccountService {
 
   Future<AdminAccountState?> fetchByIdentity(
       AdminAccountIdentity identity) async {
-    return fetchByAccountId(AdminAccountIdCodec.fromHex(identity.accountHex));
+    return fetchByAccountId(
+      AdminAccountIdCodec.fromHex(identity.accountHex),
+      institutionCode: identity.institutionCode,
+    );
   }
 
-  Future<AdminAccountState?> fetchByAccountId(Uint8List accountId) async {
+  Future<AdminAccountState?> fetchByAccountId(
+    Uint8List accountId, {
+    String? institutionCode,
+  }) async {
     final accountKey = AdminAccountIdCodec.hexEncode(accountId);
     final cached = _cache[accountKey];
     if (cached != null && cached.isFresh(_cacheTtl)) return cached.state;
@@ -52,6 +58,7 @@ class AdminAccountService {
       accountId,
       accountKey,
       generation,
+      institutionCode: institutionCode,
       fallback: persisted?.state,
     );
     _inFlight[accountKey] = future;
@@ -66,14 +73,35 @@ class AdminAccountService {
     Uint8List accountId,
     String accountKey,
     int generation, {
+    String? institutionCode,
     AdminAccountState? fallback,
   }) async {
     try {
-      final key = AdminAccountIdCodec.adminAccountStorageKey(accountId);
-      final data =
-          await _rpc.fetchStorage('0x${AdminAccountIdCodec.hexEncode(key)}');
-      if (data == null) return null;
-      final decoded = AdminAccountCodec.decode(accountId, data);
+      AdminAccountState? decoded;
+      if (institutionCode != null) {
+        final key = AdminAccountIdCodec.adminAccountStorageKey(
+          accountId,
+          institutionCode: institutionCode,
+        );
+        final data =
+            await _rpc.fetchStorage('0x${AdminAccountIdCodec.hexEncode(key)}');
+        decoded =
+            data == null ? null : AdminAccountCodec.decode(accountId, data);
+      } else {
+        final keys = AdminAccountIdCodec.adminAccountStorageKeys(accountId);
+        final keyHexList = keys
+            .map((key) => '0x${AdminAccountIdCodec.hexEncode(key)}')
+            .toList(growable: false);
+        final values = await _rpc.fetchStorageBatch(keyHexList);
+        for (final keyHex in keyHexList) {
+          final data = values[keyHex];
+          if (data == null) continue;
+          if (decoded != null) {
+            throw StateError('同一账户在多个管理员模块中存在，链上状态不一致');
+          }
+          decoded = AdminAccountCodec.decode(accountId, data);
+        }
+      }
       final threshold =
           decoded == null ? null : await _resolveThreshold(decoded, accountId);
       final state = decoded?.copyWith(threshold: threshold ?? 0);

@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-/// PersonalManage 创建个人多签提案详情（从链上 ProposalData 解码）。
+/// PersonalAdmins 创建个人多签提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CREATE=0 之后）：
 ///   account: AccountId32(32) + proposer: AccountId32(32)
@@ -52,7 +52,7 @@ class CreateMultisigProposalInfo {
   }
 }
 
-/// PersonalManage 关闭个人多签提案详情（从链上 ProposalData 解码）。
+/// PersonalAdmins 关闭个人多签提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CLOSE=1 之后）：
 ///   account: AccountId32(32) + beneficiary: AccountId32(32)
@@ -107,8 +107,7 @@ enum MultisigStatus {
 
 /// 个人多签账户链上信息。
 ///
-/// 个人状态来自 `PersonalManage::PersonalAccounts`，
-/// 管理员来自 `AdminsChange::AdminAccounts`，动态阈值来自 `InternalVote`。
+/// 个人状态和管理员来自 `PersonalAdmins`，动态阈值来自 `InternalVote`。
 class AccountInfo {
   const AccountInfo({
     required this.adminsLen,

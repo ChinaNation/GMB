@@ -7,8 +7,12 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 class AdminSetChangeCallCodec {
   AdminSetChangeCallCodec._();
 
-  static const int palletIndex = 12;
+  static const int genesisAdminsPalletIndex = 12;
+  static const int personalAdminsPalletIndex = 7;
+  static const int publicAdminsPalletIndex = 29;
+  static const int privateAdminsPalletIndex = 30;
   static const int proposeAdminSetChangeCallIndex = 0;
+  static const int proposePersonalAdminSetChangeCallIndex = 3;
 
   static Uint8List build({
     required String institutionCode,
@@ -23,13 +27,13 @@ class AdminSetChangeCallCodec {
       throw ArgumentError('newThreshold 必须大于 0');
     }
     final output = ByteOutput();
-    output.pushByte(palletIndex);
-    output.pushByte(proposeAdminSetChangeCallIndex);
+    output.pushByte(palletIndexForCode(institutionCode));
+    output.pushByte(callIndexForCode(institutionCode));
     // institution_code: [u8;4]
-    output.write(Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
+    output.write(
+        Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
     output.write(accountId);
-    output
-        .write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
     for (final admin in admins) {
       final bytes = AdminAccountIdCodec.hexDecode(admin);
       if (bytes.length != 32) {
@@ -42,5 +46,25 @@ class AdminSetChangeCallCodec {
         .setUint32(0, newThreshold, Endian.little);
     output.write(thresholdBytes);
     return output.toBytes();
+  }
+
+  static int palletIndexForCode(String institutionCode) {
+    final palletName =
+        InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
+    return switch (palletName) {
+      'GenesisAdmins' => genesisAdminsPalletIndex,
+      'PersonalAdmins' => personalAdminsPalletIndex,
+      'PublicAdmins' => publicAdminsPalletIndex,
+      'PrivateAdmins' => privateAdminsPalletIndex,
+      _ => throw ArgumentError('该机构码没有管理员更换 call: $institutionCode'),
+    };
+  }
+
+  static int callIndexForCode(String institutionCode) {
+    final palletName =
+        InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
+    return palletName == 'PersonalAdmins'
+        ? proposePersonalAdminSetChangeCallIndex
+        : proposeAdminSetChangeCallIndex;
   }
 }

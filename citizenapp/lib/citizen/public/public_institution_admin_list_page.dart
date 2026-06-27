@@ -16,7 +16,7 @@ class PublicInstitutionAdminListPage extends StatelessWidget {
     required this.admins,
   });
 
-  /// 管理员公钥列表(hex,可能带 0x);来自链上 AdminsChange::AdminAccounts。
+  /// 管理员公钥列表(hex,可能带 0x);来自链上 PublicAdmins::AdminAccounts。
   final List<String> admins;
 
   @override

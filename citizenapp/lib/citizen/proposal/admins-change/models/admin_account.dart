@@ -83,7 +83,7 @@ class AdminAccountIdentity {
       identityKey: 'personal-account:$account',
       accountLabel: accountLabel,
       institutionCode: 'PMUL',
-      kind: 1,
+      kind: InstitutionCodeLabel.adminAccountKind('PMUL'),
       accountHex: account,
     );
   }
@@ -105,7 +105,7 @@ class AdminAccountIdentity {
       identityKey: 'institution-account:$institutionCode:$account',
       accountLabel: accountLabel,
       institutionCode: institutionCode,
-      kind: 2,
+      kind: InstitutionCodeLabel.adminAccountKind(institutionCode),
       accountHex: account,
     );
   }

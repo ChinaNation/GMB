@@ -122,6 +122,10 @@ class InstitutionCodeLabel {
   /// 是否为私权法人机构码。
   static bool isPrivateLegal(String code) => _privateLegalCodes.contains(code);
 
+  /// 是否为非法人机构码。
+  static bool isUnincorporated(String code) =>
+      _unincorporatedCodes.contains(code);
+
   /// 是否为机构账户机构码(公权/私权/非法人法人实体，经 organization-manage 注册多签)。
   ///
   /// 个人/个人多签不算机构账户；
@@ -137,6 +141,39 @@ class InstitutionCodeLabel {
   /// 固定治理档不在内。镜像链端 `is_registered_multisig_code`。
   static bool isRegisteredMultisig(String code) {
     return isPersonal(code) || isInstitution(code);
+  }
+
+  /// 是否归 GenesisAdmins 管理。
+  static bool isGenesisAdminCode(String code) {
+    return isFixedGovernance(code) || code == 'FRG';
+  }
+
+  /// 是否归 PublicAdmins 管理。
+  static bool isPublicAdminCode(String code) {
+    return isPublicLegal(code) && !isGenesisAdminCode(code);
+  }
+
+  /// 是否归 PrivateAdmins 管理。
+  static bool isPrivateAdminCode(String code) {
+    return isPrivateLegal(code) || isUnincorporated(code);
+  }
+
+  /// AdminAccountKind 链上枚举值：0 创世 / 1 公权 / 2 私权 / 3 个人。
+  static int adminAccountKind(String code) {
+    if (isGenesisAdminCode(code)) return 0;
+    if (isPublicAdminCode(code)) return 1;
+    if (isPrivateAdminCode(code)) return 2;
+    if (isPersonal(code)) return 3;
+    throw ArgumentError('无法按机构码选择管理员类型: $code');
+  }
+
+  /// `AdminAccounts` 所属 runtime pallet 名。
+  static String adminAccountsPalletName(String code) {
+    if (isGenesisAdminCode(code)) return 'GenesisAdmins';
+    if (isPublicAdminCode(code)) return 'PublicAdmins';
+    if (isPrivateAdminCode(code)) return 'PrivateAdmins';
+    if (isPersonal(code)) return 'PersonalAdmins';
+    throw ArgumentError('无法按机构码选择管理员模块: $code');
   }
 
   /// 机构码人机展示标签：固定治理档/个人多签特化为中文名，其余返回码字符串本身。

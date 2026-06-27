@@ -458,8 +458,8 @@ class _PersonalManageAccountInfoPageState
   /// 链上侧:个人多签 propose_create 的 threshold = 全员通过,任意一票反对都让
   /// `tally.yes + remaining < threshold` 立即满足,提案直接进入 STATUS_REJECTED。
   /// `cleanup_pending_personal_create` 自动执行:unreserve 创建者锁仓 + 删
-  /// `PersonalManage::PersonalAccounts` /
-  /// `PendingPersonalCreate` / `admins-change::AdminAccounts`。其他管理员设备的反向索引下次扫不到该
+  /// `PersonalAdmins::PersonalAccounts` /
+  /// `PendingPersonalCreate` / `PersonalAdmins::AdminAccounts`。其他管理员设备的反向索引下次扫不到该
   /// AccountId,自动清理孤立 Isar entity。
   ///
   /// 仅个人 Pending 路径调用；Active 走 propose_close。
@@ -565,7 +565,7 @@ class _PersonalManageAccountInfoPageState
         elevation: 0,
         scrolledUnderElevation: 0.5,
         // 个人多签菜单:
-        // - Active  → 关闭个人多签，走 PersonalManage::propose_close，不显示删除图标。
+        // - Active  → 关闭个人多签，走 PersonalAdmins::propose_close，不显示删除图标。
         // - Pending → 撤销创建，走 InternalVote approve=false 早期否决。
         actions: [
           if (_shouldShowMenu())

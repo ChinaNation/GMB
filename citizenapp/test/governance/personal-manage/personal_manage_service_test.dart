@@ -264,23 +264,23 @@ void main() {
       ]);
     });
 
-    test('describes in-block PersonalManage dispatch failure', () {
+    test('describes in-block PersonalAdmins dispatch failure', () {
       final failure =
           ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(7, 5));
 
       expect(failure, isNotNull);
       expect(
-          failure!.description, contains('PersonalManage.InsufficientAmount'));
+          failure!.description, contains('PersonalAdmins.InsufficientAmount'));
       expect(failure.description, contains('余额不足'));
     });
 
-    test('describes stale AdminsChange account failure', () {
+    test('describes stale GenesisAdmins account failure', () {
       final failure =
           ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(12, 11));
 
       expect(failure, isNotNull);
       expect(failure!.description,
-          contains('AdminsChange.InstitutionAlreadyExists'));
+          contains('GenesisAdmins.InstitutionAlreadyExists'));
       expect(failure.description, contains('当前状态'));
     });
   });

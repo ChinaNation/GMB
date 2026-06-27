@@ -83,6 +83,20 @@ void main() {
     ]);
   }
 
+  Uint8List institutionInfoBytes() {
+    return Uint8List.fromList([
+      ...compactVec('测试机构'),
+      ...List<int>.filled(32, 0x31), // main_account
+      ...List<int>.filled(32, 0x32), // fee_account
+      ...codeBytes('UNIN'),
+      ...u32Le(2),
+      ...u32Le(2),
+      (2 << 2) & 0xff,
+      ...List<int>.filled(32, 0xaa),
+      ...List<int>.filled(32, 0xbb),
+    ]);
+  }
+
   test('fetchAccount reads registered institution current storages', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionManageService(chainRpc: rpc);
@@ -97,8 +111,11 @@ void main() {
       cidNumber,
       accountName,
     ))}';
+    final institutionKey =
+        '0x${hexOf(MultisigStorageCodec.institutionKey(cidNumber))}';
     final adminKey = '0x${hexOf(MultisigStorageCodec.adminAccountKey(
-      MultisigStorageCodec.accountIdFromAccountHex(address),
+      institutionCode: 'UNIN',
+      accountId: MultisigStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final thresholdKey = '0x${hexOf(MultisigStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
@@ -115,6 +132,7 @@ void main() {
       admin1: List<int>.filled(32, 0xaa),
       admin2: List<int>.filled(32, 0xbb),
     );
+    rpc.responses[institutionKey] = institutionInfoBytes();
     rpc.responses[accountKey] = Uint8List.fromList([
       ...List<int>.filled(32, 0xd1),
       ...u128Le(BigInt.from(111)),
@@ -131,7 +149,10 @@ void main() {
     expect(info.threshold, 2);
     expect(info.admins, ['aa' * 32, 'bb' * 32]);
     expect(info.status, InstitutionStatus.active);
-    expect(rpc.requestedKeys, [refKey, accountKey, adminKey, thresholdKey]);
+    expect(
+      rpc.requestedKeys,
+      [refKey, accountKey, institutionKey, adminKey, thresholdKey],
+    );
   });
 
   test('fetchAccountsBatch reads institution accounts in staged batches',
@@ -149,8 +170,11 @@ void main() {
       cidNumber,
       accountName,
     ))}';
+    final institutionKey =
+        '0x${hexOf(MultisigStorageCodec.institutionKey(cidNumber))}';
     final adminKey = '0x${hexOf(MultisigStorageCodec.adminAccountKey(
-      MultisigStorageCodec.accountIdFromAccountHex(address),
+      institutionCode: 'UNIN',
+      accountId: MultisigStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final activeThresholdKey =
         '0x${hexOf(MultisigStorageCodec.dynamicThresholdKey(
@@ -169,6 +193,7 @@ void main() {
       admin1: List<int>.filled(32, 0xaa),
       admin2: List<int>.filled(32, 0xbb),
     );
+    rpc.responses[institutionKey] = institutionInfoBytes();
     rpc.responses[accountKey] = Uint8List.fromList([
       ...List<int>.filled(32, 0xd1),
       ...u128Le(BigInt.from(111)),
@@ -185,6 +210,8 @@ void main() {
     expect(infos[address]!.admins, ['aa' * 32, 'bb' * 32]);
     expect(infos[address]!.status, InstitutionStatus.active);
     expect(
-        rpc.requestedKeys, [refKey, accountKey, adminKey, activeThresholdKey]);
+      rpc.requestedKeys,
+      [refKey, accountKey, institutionKey, adminKey, activeThresholdKey],
+    );
   });
 }
