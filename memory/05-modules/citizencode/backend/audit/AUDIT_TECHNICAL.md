@@ -3,7 +3,6 @@
 - 最后更新:2026-06-13
 - 任务卡:
   - `memory/08-tasks/done/20260502-cid-models-scope边界整改.md`
-  - `memory/08-tasks/done/20260525-cid-cpms-store.md`
   - `memory/08-tasks/done/20260604-cid-core-number-store-refactor.md`
   - `memory/08-tasks/open/20260613-cid-institution-list-audit-accounts.md`
 
@@ -20,8 +19,7 @@
 - 审计日志查询是后台独立能力,不属于 `scope` 权限范围规则。
 - 审计数据结构 `AuditLogEntry` 归 `audit.rs`;审计写入统一走 `core/runtime_ops.rs`
   的 `append_audit_log`,持久化目标为 `audit` 表。
-- 机构详情操作记录覆盖机构创建、详情编辑、账户创建/删除、资料上传/下载/删除和
-  CPMS 安装码吊销。新增机构相关写操作时,必须同步写入带 `target_cid` 的审计记录。
+- 机构详情操作记录覆盖机构创建、详情编辑、账户创建/删除、资料上传/下载/删除。新增机构相关写操作时,必须同步写入带 `target_cid` 的审计记录。
 - 新增审计写入 helper 如跨模块复用,优先放 `core` 或专门 audit 模块,不得塞进 `scope`。
 
 ## 3. 目录规则

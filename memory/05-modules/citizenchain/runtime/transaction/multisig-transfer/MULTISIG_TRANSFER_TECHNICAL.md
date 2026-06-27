@@ -28,9 +28,9 @@
 
 - `propose_transfer` 的 `institution: AccountId` 不再把 `0x02 注册机构归属关系` 当作可支出主体；`0x02` 只保留给机构归属与检索。
 - 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
-- 个人多签使用 `PersonalAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `personal-manage::PersonalMultisigQuery` 校验。
+- 个人多签使用 `PersonalAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `personal-admins::PersonalMultisigQuery` 校验。
 - 注册机构具体账户使用 `InstitutionAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都以 `admins-change::Subjects[AccountId]` 为真源，内部投票仍是一人一票一笔链上交易。
+- 两类注册账户的管理员、阈值和人数都以 `RuntimeAdminAccountQuery` 为读入口；生产 runtime 按机构码路由到 `public-admins`、`private-admins` 或 `personal-admins`，内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -45,14 +45,14 @@
 - 管理员个人账户不承担任何费用。
 - 覆盖三类来源：
   - 创世预置的治理机构 `main_account`（NRC / PRC / PRB）
-  - `personal-manage` 注册并激活的个人多签账户（`PersonalAccount AccountId`）
+  - `personal-admins` 注册并激活的个人多签账户（`PersonalAccount AccountId`）
   - `organization-manage` 注册并激活的机构具体账户（`InstitutionAccount AccountId`）
 
 ### 0.2 功能边界
 
 - 本模块处理三类多签账户转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
-  - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
+  - `personal-admins` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
   - `organization-manage` 注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
@@ -93,8 +93,8 @@
 资金账户有三种来源：
 
 - 治理机构：`main_account` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过主账户解析逻辑查找。
-- 个人多签账户：`AccountId32` 使用 `AdminAccountKind::PersonalAccount` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalManage::PersonalAccounts` 校验 Active。
-- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
+- 个人多签账户：`AccountId32` 使用 `AdminAccountKind::PersonalMultisig` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalAdmins::PersonalAccounts` 校验 Active。
+- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PrivateInstitution` 或 `AdminAccountKind::PublicInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
 
@@ -123,11 +123,11 @@ pub fn propose_transfer(
 2. `amount > 0`。
 3. `institution` 必须是有效机构：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 个人多签账户：能从 `PersonalAccount AccountId` 解码出账户，且对应 `PersonalManage::PersonalAccounts` 处于 Active；
+   - 个人多签账户：能从 `PersonalAccount AccountId` 解码出账户，且对应 `PersonalAdmins::PersonalAccounts` 处于 Active；
    - 注册型机构账户：能从 `InstitutionAccount AccountId` 解码出账户，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active；
    - `0x02 注册机构归属关系` 只用于机构归属/检索，不能作为转账支出主体。
 4. `institution_code` 必须与 `institution` 的实际机构类型匹配。
-5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
+5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终委托 `RuntimeAdminAccountQuery`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_account`、安全基金账户、费用账户等保留地址）。
@@ -416,8 +416,8 @@ pub trait Config:
         <<Self as organization_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
-    /// 个人多签账户状态查询，由 personal-manage 实现。
-    type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
+    /// 个人多签账户状态查询，由 personal-admins 实现。
+    type PersonalQuery: personal_admins::traits::PersonalMultisigQuery<Self::AccountId>;
 
     /// 注册机构账户状态查询，由 organization-manage 实现。
     type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<Self::AccountId>;
@@ -465,7 +465,7 @@ impl multisig_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
-    type PersonalQuery = PersonalManage;
+    type PersonalQuery = PersonalAdmins;
     type InstitutionQuery = OrganizationManage;
     type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
 }

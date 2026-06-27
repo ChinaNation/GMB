@@ -18,4 +18,4 @@
 
 - 更新 `memory/07-ai/` 对应规则
 - 更新必要的任务卡
-- 运行 `bash memory/scripts/check-startup-acceptance.sh --ci`
+- 运行 `bash scripts/check-startup-acceptance.sh --ci`

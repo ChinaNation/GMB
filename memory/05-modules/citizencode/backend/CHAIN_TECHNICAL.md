@@ -3,7 +3,6 @@
 - 最后更新:2026-06-12
 - 任务卡:
   - `memory/08-tasks/open/20260502-cid-chain目录归并功能模块.md`
-  - `memory/08-tasks/done/20260502-cid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-cid-institutions粗粒度整合.md`
   - `memory/08-tasks/open/20260530-cid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260604-cid-core-number-store-refactor.md`
@@ -14,7 +13,7 @@
 CID 后端独立 chain 业务目录已废止。CID 后端不再维护独立 chain 业务目录。
 
 任一功能模块如需和区块链交互,必须在所属功能模块目录中新增 `chain_*.rs`
-文件。普通业务 CRUD、页面展示、管理员 Passkey/签名挑战、CPMS 系统注册
+文件。普通业务 CRUD、页面展示、管理员 Passkey/签名挑战、注册局公民录入
 协议,不得放进 `chain_` 文件。
 
 ## 1. 当前代码归属
@@ -32,8 +31,6 @@ CID 后端独立 chain 业务目录已废止。CID 后端不再维护独立 chai
 WebAuthn 辅助,
 不使用云端联邦注册局机构管理员 signer。
 
-CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理归
-`citizencode/backend/citizenpassport/handler.rs`,不属于联邦注册局机构管理员链交互。
 
 ## 2. 目录铁律
 

@@ -3,12 +3,10 @@
 - 最后更新:2026-06-14
 - 任务卡:
   - `memory/08-tasks/done/20260502-citizencode-backend-src平移根目录.md`
-  - `memory/08-tasks/done/20260502-cid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-cid-institutions粗粒度整合.md`
   - `memory/08-tasks/done/20260502-cid-models-scope边界整改.md`
   - `memory/08-tasks/done/20260502-cid-cleanup残留整改.md`
   - `memory/08-tasks/done/20260502-cid-sheng-backup-admin-ui.md`
-  - `memory/08-tasks/done/20260525-cid-cpms-store.md`
   - `memory/08-tasks/open/20260530-cid-admins-module-unify.md`
   - `memory/08-tasks/open/20260530-cid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-cid-admin-permission-step2.md`
@@ -46,10 +44,9 @@ citizencode/backend/
 ├── admins/                    # 注册局机构 admins 治理、安全动作、Passkey 与登录认证
 │   └── login/                 # 管理员登录、扫码登录、鉴权守卫、签名校验
 ├── audit.rs                   # 审计日志查询 handler
-├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
+├── citizens/                  # 公民身份模型、查询、直接录入、绑定状态、投票凭证
 ├── core/                      # 跨业务底层工具,含 HTTP 响应、HTTP 安全、运行期工具、chain_*、QR 协议
 │   └── qr/                    # QR_V1 协议辅助和统一 sign_request 构造
-├── citizenpassport/                      # CPMS 安装授权、ARCHIVE 验真、档案导入、站点状态治理
 ├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
 ├── china/                     # 中国行政区划 SQLite 真源和省市查询接口
 ├── docs/                      # 机构资料库入口
@@ -80,21 +77,19 @@ citizencode/backend/
 - 禁止恢复独立 chain 业务目录。
 - 后端新增功能模块直接放 `citizencode/backend/<功能名>/`。
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
-- CPMS 系统管理归 `citizencode/backend/citizenpassport/`,不得放入管理员目录。
 - 后端不再维护分散的省级/市级管理员双目录;
   联邦注册局机构 admins、市注册局机构 admins 和管理员治理写入口统一归 `admins/`。
 - 公权机构前后端目录统一命名为 `gov`;后端不得再另建 `public` 或 `registry_admins`。
 - 私权机构归 `private`,其下按 `common/sole/partnership/company/corporation/welfare/association/participants`
   拆分私权类型与参与人关系;公民继续使用 `citizens`;智能人功能当前不上线,不得预建智能人目录或表。
-- 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `citizenpassport/model.rs`,编码元信息 DTO 归
-  `number/model.rs`,不得恢复或塞回 `models/`。
+- 公民 DTO 归 `citizens/model.rs`,编码元信息 DTO 归 `number/model.rs`,不得恢复或塞回 `models/`。
 - HTTP 响应包装归 `core/response.rs`;Store 聚合体归 `store/model.rs`;
   注册局机构 admins 列表 DTO 归 `admins/model.rs`;管理员 Passkey 和安全挑战模型归
   `admins/security_model.rs`;审计日志行模型归 `audit.rs`。
 - 行政区划唯一真源归 `china/`;不得恢复 `citizencode/`、`province.rs`、`cities.rs`
   或 `city_codes/*.rs` 静态表。
 - 非法人机构能力归 `subjects/unincorporated_org/`;不得放在单侧 `gov/` 或 `private/`。
-- `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或公钥工具。
+- `scope/` 只放权限范围规则,不得放 HTTP handler 或公钥工具。
 - 管理端操作权限类型只允许 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,统一登记在
   `admins/operation_auth.rs`;未登记或类型不匹配的操作必须拒绝。
 - 新增、删除注册局机构管理员不得在列表查询 handler 暴露写入口;
@@ -120,8 +115,6 @@ citizencode/backend/
 - 通用 `QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
   已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
   `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
-- CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归联邦注册局机构 admins;
-  市注册局机构 admins 不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `citizencode/backend/core/chain_*`。
 - 非源码目录 `tests/`、`target/` 不参与业务模块平铺;后端源码根下不得恢复空的
   `db/` 或 `scripts/` 目录。
@@ -129,8 +122,7 @@ citizencode/backend/
 ## Store 边界
 
 - 当前持久化按模块快照表拆分:
-  - `store_citizens`:公民记录、绑定 challenge、状态扫码短期池、投票缓存。
-  - `store_cpms`:CPMS 安装授权和授权状态。
+  - `store_citizens`:公民记录、绑定运行态和投票缓存。
   - `store_subjects`:机构、账户、机构资料文档。
   - `store_ops`:登录 challenge/session、扫码登录结果、审计、链幂等、回调任务、指标。
     同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
@@ -153,7 +145,7 @@ citizencode/backend/
     国储会额外有“安全基金 / 两和基金”。这些制度账户均为默认账户,不可按普通自定义账户删除。
   - `docs`:机构资料库。
   - `audit`:目标审计分区表。机构详情操作记录按 `target_cid` 精确读取,写入点覆盖机构创建、
-    详情编辑、账户创建/删除、资料上传/下载/删除和 CPMS 安装授权状态。
+    详情编辑、账户创建/删除、资料上传/下载/删除和公民护照直接录入。
 - `CN` 与 43 个省代码的分区在启动建表时一次性创建。
 - 机构主写入只进入 `subjects / gov / private / accounts / docs` 目标表;
   私权机构精确搜索从 `subjects + accounts + admins` 查询,且 handler 必须先把登录
@@ -201,7 +193,7 @@ curl -sS -i http://127.0.0.1:8899/api/v1/institutions/federal-registry -H "autho
 ## 错误码边界
 
 CID 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员
-登录态无效;公民绑定 challenge 过期、账户不匹配、签名失败、ARCHIVE 验真失败等业务错误
+登录态无效;公民绑定 challenge 过期、账户不匹配、签名失败等业务错误
 不得返回 `401`。完整规则见 `memory/05-modules/citizencode/ERROR_CODES.md`。
 管理员新增入口必须以规范化 `admin_account` 做全局唯一校验；重复账号按已有注册局机构返回
 `CID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY` 或 `CID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY`。

@@ -37,7 +37,7 @@
 
 - `CLAUDE.md`
 - `.github/pull_request_template.md`
-- `.github/scripts/check-ai-guardrails.sh`
+- `scripts/check-ai-guardrails.sh`
 - `.github/workflows/ai-guardrails.yml`
 - `.github/workflows/claude-pr-review.yml`
 - `.github/workflows/claude-on-comment.yml`

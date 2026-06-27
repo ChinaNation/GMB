@@ -24,7 +24,7 @@ GMB 的 AI 编程系统优先解决以下问题：
 
 - 你在 Codex 或 Claude 聊天窗口直接输入中文任务需求
 - AI 先做需求分析
-- 当前主聊天入口根据模块边界按需分配给 `Blockchain Agent / CID Agent / CPMS Agent / Mobile Agent`
+- 当前主聊天入口根据模块边界按需分配给 `Blockchain Agent / CID Agent / Mobile Agent`
 - 分析完成后再进入任务创建和开发
 
 ## 3. 系统结构
@@ -36,7 +36,7 @@ Codex / Claude（聊天入口）
         ↓
 当前主聊天入口（需求分析 + 总调度）
         ↓
-Architect / Blockchain / CID / CPMS / Mobile 工作线程
+Architect / Blockchain / CID / Mobile 工作线程
         ↓
 memory/（项目目标、边界、ADR、规则、任务模板）
         ↓
@@ -62,7 +62,6 @@ GitHub PR / Actions
 - `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `cid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
-- `cpms`：Rust + Axum + SQLx + PostgreSQL；`frontend/` 当前仅为预留目录
 - `citizenapp`：Flutter + Dart + Isar
 
 ## 5. 第一阶段建设内容
@@ -87,7 +86,7 @@ GitHub PR / Actions
 - `.github/workflows/ai-guardrails.yml`
 - `.github/workflows/claude-pr-review.yml`
 - `.github/workflows/claude-on-comment.yml`
-- `.github/scripts/check-ai-guardrails.sh`
+- `scripts/check-ai-guardrails.sh`
 - `memory/07-ai/github-activation.md`
 - `memory/07-ai/daily-operations.md`
 - `memory/07-ai/context-loading-order.md`
@@ -109,15 +108,15 @@ GitHub PR / Actions
 - `memory/04-decisions/ADR-TEMPLATE.md`
 - `memory/06-quality/bug-template.md`
 - `memory/06-quality/change-log-template.md`
-- `memory/scripts/module-router.sh`
-- `memory/scripts/analyze-requirement.sh`
-- `memory/scripts/check-startup-acceptance.sh`
-- `memory/scripts/architect-entry.sh`
-- `memory/scripts/new-task.sh`
-- `memory/scripts/start-task.sh`
-- `memory/scripts/load-context.sh`
-- `memory/scripts/complete-task.sh`
-- `memory/scripts/index-tasks.sh`
+- `scripts/module-router.sh`
+- `scripts/analyze-requirement.sh`
+- `scripts/check-startup-acceptance.sh`
+- `scripts/architect-entry.sh`
+- `scripts/new-task.sh`
+- `scripts/start-task.sh`
+- `scripts/load-context.sh`
+- `scripts/complete-task.sh`
+- `scripts/index-tasks.sh`
 
 仓库根目录保留的 `AGENTS.md`、`CODEX.md`、`CLAUDE.md` 只是指向 `memory/` 的入口别名，不是第二份内容。
 

@@ -84,9 +84,9 @@ pub struct OffchainBatchItemV2<AccountId, BlockNumber> {
 
 ### 2.5 `bank_check::CidAccountQuery::is_admin_of`
 
-trait 新增方法,`()` 默认返回 false。runtime 侧 `MultisigCidAccountQuery` 先通过 `organization_manage::Pallet::resolve_admin_account_for_account` 找到机构或个人多签对应的管理员主体，再委托 `admins_change::Pallet::is_subject_admin` 校验。
+trait 新增方法,`()` 默认返回 false。runtime 侧 `MultisigCidAccountQuery` 先通过 `organization_manage::Pallet::resolve_admin_account_for_account` 找到机构或个人多签对应的管理员根账户，再委托 `RuntimeAdminAccountQuery` 校验。
 
-2026-04-29 补齐：清算行管理员真源不再由业务账户表镜像保存，所有内部投票和清算权限统一读取 `admins-change::Subjects`。
+2026-06-26 补齐：清算行管理员真源不再由业务账户表镜像保存，所有内部投票和清算权限统一读取 `admins` 分类模块。
 
 ## 3. lib.rs 扩展
 

@@ -14,13 +14,13 @@
 推荐入口：
 
 ```bash
-bash memory/scripts/analyze-requirement.sh --requirement "任务需求"
+bash scripts/analyze-requirement.sh --requirement "任务需求"
 ```
 
 ### 1.3 分析确认后继续执行
 
 ```bash
-bash memory/scripts/architect-entry.sh --requirement "任务需求" --execute
+bash scripts/architect-entry.sh --requirement "任务需求" --execute
 ```
 
 说明：
@@ -38,7 +38,7 @@ cat memory/07-ai/pre-submit-checklist.md
 ### 1.5 新线程验收
 
 ```bash
-bash memory/scripts/check-startup-acceptance.sh
+bash scripts/check-startup-acceptance.sh
 ```
 
 ## 2. 一句话用法

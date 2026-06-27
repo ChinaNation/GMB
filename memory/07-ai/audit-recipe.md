@@ -4,7 +4,7 @@
 
 ## 背景
 
-仓库审计常涉及多产品(citizenchain / citizenwallet / citizenapp / cid / cpms)+ 大量历史叙述(ADR / 阶段记录 / OBSOLETE 标记)。把审计完全外包给 Explore subagent **会出大问题**:
+仓库审计常涉及多产品(citizenchain / citizenwallet / citizenapp / cid)+ 大量历史叙述(ADR / 阶段记录 / OBSOLETE 标记)。把审计完全外包给 Explore subagent **会出大问题**:
 
 - subagent prompt 里的"背景叙述"是经过我简化的二手信息
 - subagent 据此做模式匹配,把所有命中"OLD 名"/"已废弃"字眼的位置全部标 [DEAD]

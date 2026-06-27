@@ -60,12 +60,12 @@ GitHub 自动运行：
 
 ### 3.2 本地 AI 任务入口
 
-- `bash memory/scripts/analyze-requirement.sh --requirement "任务需求"`
-- `bash memory/scripts/architect-entry.sh --requirement "任务需求" --execute`
-- `bash memory/scripts/start-task.sh --requirement "任务需求"`
-- `bash memory/scripts/new-task.sh --module "citizencode/backend" --requirement "任务需求"`
-- `bash memory/scripts/load-context.sh citizenchain/runtime`
-- `bash memory/scripts/complete-task.sh memory/08-tasks/open/<task>.md "完成摘要"`
+- `bash scripts/analyze-requirement.sh --requirement "任务需求"`
+- `bash scripts/architect-entry.sh --requirement "任务需求" --execute`
+- `bash scripts/start-task.sh --requirement "任务需求"`
+- `bash scripts/new-task.sh --module "citizencode/backend" --requirement "任务需求"`
+- `bash scripts/load-context.sh citizenchain/runtime`
+- `bash scripts/complete-task.sh memory/08-tasks/open/<task>.md "完成摘要"`
 
 ### 3.3 给 Claude 的常用 PR 评论
 
@@ -74,7 +74,7 @@ GitHub 自动运行：
 ```
 
 ```text
-@claude 请重点检查这个 PR 是否突破了 CPMS、CID、CitizenChain、CitizenApp 的边界。
+@claude 请重点检查这个 PR 是否突破了 CID、CitizenChain、CitizenApp 的边界。
 ```
 
 ## 4. 遇到问题时的判断顺序

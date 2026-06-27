@@ -3,7 +3,6 @@
 - 最后更新:2026-06-04
 - 任务卡:
   - `memory/08-tasks/done/20260410-cid-store-shard-by-province.md`
-  - `memory/08-tasks/done/20260525-cid-cpms-store.md`
   - `memory/08-tasks/done/20260604-cid-core-number-store-refactor.md`
 
 ## 定位
@@ -33,7 +32,6 @@ citizencode/backend/store/
 - `Store` 是进程内短锁聚合体,不是一张数据库大表。
 - PostgreSQL 持久化按模块快照表和目标行表拆分:
   - `store_citizens`
-  - `store_cpms`
   - `store_subjects`
   - `store_ops`
   - `ids / subjects / citizens / gov / private / accounts / docs / audit`

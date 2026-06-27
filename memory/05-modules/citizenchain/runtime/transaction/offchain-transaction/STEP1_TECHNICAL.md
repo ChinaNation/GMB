@@ -64,7 +64,7 @@ pub trait CidAccountQuery<AccountId> {
 - `AccountRegisteredCid` → `account_info`
 - `CidRegisteredAccount` → `find_account`
 - `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
-- `admins-change` 主体表 → `is_admin_of`
+- `RuntimeAdminAccountQuery` 管理员查询门面 → `is_admin_of`
 - `ClearingBankNodes` → `is_registered_clearing_node`
 
 **好处**:

@@ -5,11 +5,9 @@
   - `memory/08-tasks/done/20260502-cid-multisig-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-cid-联邦注册局机构管理员相关前后端与-runtime-目录结构.md`
   - `memory/08-tasks/open/20260502-cid-chain目录归并功能模块.md`
-  - `memory/08-tasks/done/20260502-cid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-cid-frontend-api归并功能模块.md`
   - `memory/08-tasks/done/20260502-cid-sheng-tabs.md`
   - `memory/08-tasks/done/20260502-cid-sheng-backup-admin-ui.md`
-  - `memory/08-tasks/done/20260525-cid-cpms-archive-simplify.md`
   - `memory/08-tasks/done/20260525-cid-bind-upload-qr.md`
   - `memory/08-tasks/done/20260525-cid-bind-sign-request-citizenwallet-scan.md`
   - `memory/08-tasks/done/20260525-cid-bind-copy-myid-scan-square.md`
@@ -44,11 +42,10 @@ citizencode/frontend/
 ├── accounts/                  # 机构账户组件
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── china/                     # 行政区只读元数据 API 和确定性列表缓存
-├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
+├── citizens/                  # 公民首页、新增公民弹窗、citizens/api.ts
 ├── core/                      # 跨业务复用组件,含 QR_V1 签名面板/弹窗、QR 协议、机构共享表单和详情导航布局
 │   └── institution/           # 私权/教育共用机构新增表单,不承载业务 API
 │   └── qr/                    # QR_V1 前端解析器
-├── citizenpassport/                      # CPMS 系统管理组件和 citizenpassport/api.ts
 ├── docs/                      # 机构资料库前端出口
 ├── education/                 # 教育机构页面入口,统一管理 JY 教育委员会、法人学校和 F+JY 分支机构
 ├── gov/                       # 公权机构页面入口、机构操作记录共享组件,前后端统一使用 gov 命名
@@ -85,8 +82,7 @@ citizencode/frontend/
   身份主体公共出口放 `subjects/`;账户和资料库出口分别放 `accounts/`、`docs/`。
 - 不得恢复 `institutions/` 前端目录;公权 UI 归 `gov/`,私权 UI 归 `private/`,教育 UI 归
   `education/`,账户和资料库分别归 `accounts/`、`docs/`。`subjects/` 不再承载机构聚合页面组件。
-- CPMS 系统管理接口放 `citizenpassport/api.ts`;CPMS 组件放 `citizenpassport/`。
-- 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
+- 公民电子护照直接录入、查询和绑定状态接口放 `citizens/api.ts`。
 - 联邦注册局机构管理员/市注册局机构管理员本地后台接口统一放 `admins/`;联邦注册局机构管理员目录接口放 `admins/api.ts`,
   市注册局机构管理员列表接口放 `admins/city_registry_admins_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - `core/CitizenSignaturePanel.tsx` 与 `core/CitizenSignatureModal.tsx` 是统一签名 UI;
@@ -101,10 +97,10 @@ citizencode/frontend/
   状态徽标、左侧图标 tab 和右侧连接式内容区都由共享布局统一承载,不得在业务详情页另行实现 tab UI。
   从列表进入详情时左侧第一个入口显示“返回列表”,市注册局机构管理员直达详情时不显示返回入口。详情 tab 固定按
   “机构信息 / 管理员列表 / 账户列表 / 资料库 / 操作记录”组织,其中没有管理员数据的机构不得显示
-  “管理员列表”tab。共享导航的“返回列表”图标与 CPMS 公民详情左侧导航保持一致。
+  “管理员列表”tab。
 - `gov/OperationRecords.tsx` 是机构操作记录唯一共享组件。所有机构详情页都必须展示“操作记录”tab,
   不得把审计日志表格重新内嵌回某个业务详情页组件。组件必须按 `target_cid` 精确读取该机构审计,
-  操作范围覆盖机构创建、详情编辑、账户创建/删除、资料上传/下载/删除和 CPMS 安装授权状态。
+  操作范围覆盖机构创建、详情编辑、账户创建/删除、资料上传/下载/删除和公民护照直接录入。
 - `core/modalStack.ts` 是 CID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 公民钱包签名弹窗固定在最高安全层。
 - `core/qr/citizenQr.ts` 是前端 QR_V1 envelope 解析唯一入口;不得恢复独立
@@ -125,29 +121,19 @@ citizencode/frontend/
 - Passkey 更新流程固定为 `start -> confirm -> complete`:先扫描公民钱包签名请求并确认当前管理员,
   再调用浏览器 WebAuthn 创建凭据,最后提交后端落库;不得恢复先注册浏览器凭据再公民钱包确认的流程。
 
-## 公民绑定弹窗 UI 口径
+## 公民录入 UI 口径
 
-- `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 CitizenApp `sign_request`、扫描 CitizenApp `sign_response`、提交 CID 绑定。
-- 扫码框提示统一为“点击扫描档案码”；签名响应页提示为“点击扫描签名响应”。
-- 进入签名二维码展示步骤后，弹窗标题切换为“CitizenApp 签名”；进入签名响应扫描页后，弹窗标题切换为“扫描签名响应”。
-- 绑定签名响应的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
-  不得给公民绑定挑战额外添加 `bind-` 前缀,否则 CID 后端会查不到 challenge。
-- “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用
-  `utils/cameraScanner.ts` 的 `BarcodeDetector` 解析图片,解析出的二维码原文继续走同一条档案码绑定流程,
-  不把图片文件上传到后端。
-- “上传二维码”按钮保持纯文字按钮;同一按钮组内的“开启扫码”没有图标,上传入口也不得额外增加图标。
+- `citizens/CitizenCreateModal.tsx` 是注册局直接新增公民入口,提交 `POST /api/v1/admin/citizens`。
 - `citizens/CitizensView.tsx` 公民列表中 `cid_number` 列标题显示为“身份ID”,不改变底层字段名。
 - `citizens/CitizensView.tsx` 公民列表中 `wallet_address` 列标题显示为“投票账户”；列表状态列显示“投票状态”，由 `citizen_status + voting_eligible` 计算。
-- `citizens/CitizensView.tsx` 登录后不得自动加载公民全量列表；管理员输入投票账户、档案号或身份ID后，前端调用服务端精确查询并使用 `next_cursor` 翻页。
-- 公民详情只展示“身份ID / 档案号 / 投票账户 / 绑定状态 / 选举权利 / 公民状态 / 有效期”，不得接收或展示签发地市归属。
-- 公民身份列表右上角提供“导入年度报告”按钮，开放给所有已登录管理员；搜索框右侧内置搜索图标,
+- `citizens/CitizensView.tsx` 登录后不得自动加载公民全量列表；管理员输入投票账户或身份ID后，前端调用服务端精确查询并使用 `next_cursor` 翻页。
+- 公民详情只展示“身份ID / 投票账户 / 绑定状态 / 选举权利 / 公民状态 / 有效期”，不得接收或展示旧档案字段。
+- 公民身份列表搜索框右侧内置搜索图标,
   点击图标或回车触发查询,不得再保留独立“查询”按钮；有写权限时搜索框右侧显示“新增公民”按钮。
-- 更换绑定弹窗的当前记录摘要只展示“档案号 / 身份ID / 投票账户”；签名请求摘要使用“选举权利 / 公民状态 / 投票账户”。
-- 绑定弹窗生成签名挑战时只提交 `mode / archive_code_payload / citizen_id`；钱包字段只能来自 CPMS `ARCHIVE` 档案码。
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增公民”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
-- `china/metaCache.ts` 是 CID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公安局确定性展示列表、公权机构确定性展示列表、教育机构市详情直显的确定性市公民教育委员会列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
+- `china/metaCache.ts` 是 CID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公权机构确定性展示列表、教育机构市详情直显的确定性市公民教育委员会列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
 - `core/CityGrid.tsx`、市注册局城市表格和机构新增弹窗读取市清单时必须走 `loadCachedCidCities`；市注册局城市表格和通用城市网格在已有缓存时必须先同步读取 `readCachedCidCities` 直接显示，不得先闪出“暂无城市数据”。市注册局城市表格读取身份ID时必须调用公权机构列表的 `institution_code='CREG'` 后端精确过滤,不得省级拉取前 300 条后前端过滤。机构类 Tab 读取省份元数据时必须走 `loadCachedCidMeta`。
 - `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`education/EducationListTable.tsx` 分两路读取:市详情空搜索直接显示本市确定性市公民教育委员会,有本地缓存时先显示缓存再后台刷新,有搜索词时按名称或身份ID精确查询法人学校和 F+JY 分支机构。`gov/GovListTable.tsx` 承载公安局确定性列表和公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
 - 公权机构 tab 手动新增两能力(市公安局页面无新增入口):G 公法人=新公权机构
@@ -232,7 +218,6 @@ citizencode/frontend/
 | `subjects/chain_multisig_info.ts` | `subjects/chain_multisig_info.rs` | 机构查询、注册信息凭证、账户列表 |
 
 联邦注册局机构管理员/市注册局机构管理员治理 Passkey/签名挑战不列入链交互表。
-CPMS 系统管理也不列入链交互表,归 `citizenpassport/`。
 
 ### `subjects/chain_multisig_info.ts` 边界
 
@@ -240,8 +225,8 @@ CPMS 系统管理也不列入链交互表,归 `citizenpassport/`。
   `frontend/accounts/`、`frontend/docs/`。
 - 不再提供“备案”按钮、备案弹窗或备案状态组件。
 - CID 前端不展示清算行相关状态;清算行属于链上组织治理概念,不属于 CID 身份设计。
-- 市公安局 Tab(标签固定"市公安局")不显示搜索框，不复用普通机构精确搜索；首次进入调用 `/api/v1/institutions/public-security`，成功后按管理员账户、角色、省市范围写入 `cid:public-security:public-security-v1:*` 本地缓存，再次进入优先展示缓存。公安局列表前端固定每页 20 条，显示“共 X 页 / 第 Y 页”“共 N 条”“上一页”“下一页”，不得展示手动刷新按钮，本地翻页不得触发后端 cursor 请求。公安局表格列固定为“序号 / 身份ID / 公安局名称 / 所属行政区 / 业务状态”，表头和数据居中对齐，序号按当前公安局排序跨页连续编号。“业务状态”是唯一状态列(后端由 CPMS 站点+安装码+公钥绑定派生单轴):待生成安装码 → 待安装 → 待绑定身份码 → 可办理,外加 已禁用/已吊销;不得再分列展示 CPMS 状态/安装码状态等派生输入。
-- 公民身份列表搜索框只允许输入档案号、身份ID、投票账户地址或投票账户公钥；CID 前端不得出现“按姓名检索公民”的文案。
+- 市公安局折叠为普通公权机构,不再提供独立公安局 tab、独立缓存或独立业务状态轴。
+- 公民身份列表搜索框只允许输入身份ID、投票账户地址或投票账户公钥；CID 前端不得出现“按姓名检索公民”的文案。
 - 当前封装公开查询:
   - `getInstitutionInfo(cidNumber)`:机构展示详情。
   - `getInstitutionRegistrationInfo(cidNumber)`:链端注册信息凭证。
@@ -262,7 +247,6 @@ CPMS 系统管理也不列入链交互表,归 `citizenpassport/`。
   "china",
   "citizens",
   "core",
-  "cpms",
   "docs",
   "education",
   "gov",

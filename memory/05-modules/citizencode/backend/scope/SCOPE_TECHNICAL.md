@@ -36,9 +36,6 @@ citizencode/backend/citizens/handler.rs
 citizencode/backend/audit.rs
   # 审计日志查询
 
-citizencode/backend/citizenpassport/scope.rs
-  # CPMS 站点省域判断
-
 citizencode/backend/crypto/pubkey.rs
   # sr25519 pubkey 规范化与比较
 ```
@@ -63,4 +60,4 @@ let filtered = scope::filter_by_scope(&rows, &scope);
 
 - 禁止在 `scope` 中新增 HTTP handler。
 - 禁止把具体业务模块的专用判断放入 `scope`。
-- 禁止在 `scope` 目录恢复查询、审计、CPMS 专用判断或 pubkey 工具文件。
+- 禁止在 `scope` 目录恢复查询、审计、业务专用判断或 pubkey 工具文件。

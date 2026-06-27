@@ -6,7 +6,7 @@
 - 对外输入统一为任务需求，不要求手工拆标题和目标
 - 当前主聊天入口是默认总调度器
 - 首轮默认先做需求分析，再决定是否进入执行
-- 进入执行阶段后，当前主聊天入口必须根据任务所属模块，按需调度 `Blockchain Agent`、`CID Agent`、`CPMS Agent`、`Mobile Agent`
+- 进入执行阶段后，当前主聊天入口必须根据任务所属模块，按需调度 `Blockchain Agent`、`CID Agent`、`Mobile Agent`
 - 用户不需要手工指定分配给哪个 Agent，模块识别、任务拆分和调度由当前主聊天入口负责
 
 ## 2. Agent 角色
@@ -16,7 +16,6 @@
 - `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `cid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
-- `cpms`：Rust + Axum + SQLx + PostgreSQL 后端，React + TypeScript + Vite 前端
 - `citizenapp`：Flutter + Dart + Isar
 
 ### Architect Agent
@@ -40,11 +39,6 @@
 - 由当前主聊天入口在任务涉及 `cid` 时按需调度
 - 负责 `cid` 后端、前端、数据库与文档
 
-### CPMS Agent
-
-- 由当前主聊天入口在任务涉及 `cpms` 时按需调度
-- 负责 `cpms` 后端、前端、数据库与文档
-
 ### Mobile Agent
 
 - 由当前主聊天入口在任务涉及 `citizenapp` 时按需调度
@@ -63,6 +57,12 @@
 
 ## 3. 强制规则
 
+> ### 最高优先级·两条硬性死规则（每次开工前默念，违反即返工）
+>
+> **死规则一·所有更改必须彻底，绝不保留兼容。** 链尚未运行、仍在开发期——禁止再就「是否需要 migration / 是否要重新创世 / 是否保留旧方案过渡 / spec_version 是否 bump」反复询问用户。默认答案永远是：直接按目标态一次性彻底改造、需要时直接重新创世、不留任何兼容/过渡/双轨/影子流程。发现旧代码、旧命名、旧目录、旧注释、旧文档、旧测试、旧 UI 文案、旧交易载荷、旧接口分支、旧生成物残留，必须在同一任务内全部清理，不允许有任何残留，不允许以「后续再处理」当作完成口径。
+>
+> **死规则二·所有目录、文件、字段命名必须全仓库统一且尽量精简。** 同一业务语义在 Rust / Dart / TypeScript / SQL / JSON / 文档 / 生成物中必须使用同一个名字，禁止另造 `name`/`label`/`display_name`/`type`/`status` 等泛化别名。命名要短、要直接表达语义；不确定是否同义时先全仓搜索 + 向用户确认，绝不擅自新建。
+
 - 逻辑不清必须先沟通
 - 真实开发任务必须先创建任务卡；包含 `检查为什么报错` 的只读报错诊断请求例外，只输出检查结果
 - 未获得用户明确允许时，任何 AI 线程不得新建任何目录或文件；这条规则覆盖代码文件、文档文件、任务卡、测试文件、配置文件、生成物和临时文件。需要新建目录或文件时，必须先在回复中列出完整路径、用途和原因，等用户明确同意后才能创建
@@ -76,7 +76,7 @@
 - 每次输出技术方案都必须包含“预计修改目录”清单；清单中每个目录必须附中文注释，说明该目录的修改用途、边界和是否涉及代码、文档或残留清理
 - 代码必须补中文注释
 - 产品命名硬规则：公民（在线/热钱包）= 英文名 `CitizenApp`、模块 id/目录 `citizenapp`、中文名“公民”；公民钱包（离线/冷钱包）= 英文名 `CitizenWallet`、模块 id/目录 `citizenwallet`、中文名“公民钱包”。任何历史旧名及非目标中英文产品名一律废弃，不得在代码、文档、命名、注释中生成；改名进度见任务卡 `20260620-product-rename-citizenapp-citizenwallet`
-- 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；CID 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支；CPMS 本地非机构操作人员统一为 `operators`。
+- 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；CID 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支。
 - 全仓字段同名硬规则：同一个业务语义字段在全仓库必须使用同一个命名；不得在 Rust、Dart、TypeScript、SQL、JSON、文档或生成物中为同一含义另造 `name`、`label`、`display_name`、`type`、`status` 等泛化别名。字段名必须尽量精简但直接表达业务语义；例如行政区名称必须按层级使用 `country_name`、`province_name`、`city_name`、`town_name`，泛行政区才允许使用 `division_name`；国家名称使用 `country_full_name` / `country_short_name`；机构实体名称和机构码对应中文名统一使用 `cid_full_name` / `cid_short_name`。不确定是否同义时必须先全仓搜索并向用户确认，不得自行命名。
 - runtime 二次确认硬规则：任何涉及 `citizenchain/runtime/` 的修改，无论是业务逻辑、常量、权重、runtime primitives、注释、格式化、生成物还是仅由格式化工具造成的无逻辑 diff，都必须在执行前单独向用户说明完整路径、预计改动内容和原因，并得到用户明确的第二次确认；没有二次确认时，禁止读写工具、格式化命令或批量命令产生 runtime diff。
 - 代码更新后必须更新文档
@@ -139,12 +139,12 @@
 - 目录级 CI 路由：`memory/07-ai/ci-path-routing.md`
 - 启动协议验收：`memory/07-ai/startup-acceptance.md`
 - 审计任务铁律：`memory/07-ai/audit-recipe.md`(subagent 输出仅作 leads,正式报告每条必须回原文核验)
-- 需求分析入口：`bash memory/scripts/analyze-requirement.sh --requirement "..."`
-- 启动协议检查：`bash memory/scripts/check-startup-acceptance.sh`
-- 执行入口：`bash memory/scripts/architect-entry.sh --requirement "..." --execute`
-- 新建任务卡：`bash memory/scripts/new-task.sh --module "<模块>" --requirement "..."`
-- 装载模块上下文：`bash memory/scripts/load-context.sh <模块>`
-- 归档任务卡：`bash memory/scripts/complete-task.sh memory/08-tasks/open/<任务卡>.md "完成摘要"`
+- 需求分析入口：`bash scripts/analyze-requirement.sh --requirement "..."`
+- 启动协议检查：`bash scripts/check-startup-acceptance.sh`
+- 执行入口：`bash scripts/architect-entry.sh --requirement "..." --execute`
+- 新建任务卡：`bash scripts/new-task.sh --module "<模块>" --requirement "..."`
+- 装载模块上下文：`bash scripts/load-context.sh <模块>`
+- 归档任务卡：`bash scripts/complete-task.sh memory/08-tasks/open/<任务卡>.md "完成摘要"`
 
 ## 死规则:禁止排查 DNS 解析
 
@@ -166,7 +166,7 @@ citizenapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/0
 
 - **常量唯一真源**:国家码、省级行政区码和 CID 机构码只允许维护在 `citizenchain/runtime/primitives/src/code.rs`。国家用 `CountryCode=CN`;省用 `ProvinceCode` 两位大写字母;机构用 `InstitutionCode` 三/四位大写字母。CID `number/` 只引用 primitives,不得恢复第二份机构码表或省码表。
 - **行政区运行数据唯一真源**:市、镇和地址段只有一个入口 = `citizencode/backend/china/`。开发库 `citizencode/backend/china/china.sqlite` 是市镇地址段权威源；生产 `CID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套市镇地址段名字**。SQLite 省表必须与 primitives `PROVINCE_CODE_INFOS` 一致,加载时断言。
-- **发布消费**:市镇地址段变更必须修改开发库并递增 `metadata.admin_division_version`;CID、citizenapp、CPMS 发布包都从开发库派生本地只读快照。国家码、省码、机构码变更属于 runtime primitives 变更,必须走 runtime 二次确认。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
+- **发布消费**:市镇地址段变更必须修改开发库并递增 `metadata.admin_division_version`;CID 与 citizenapp 发布包都从开发库派生本地只读快照。国家码、省码、机构码变更属于 runtime primitives 变更,必须走 runtime 二次确认。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
 - **目录红线**:不得恢复 `citizencode/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `citizencode/backend/china/`。
 - **code 不可变、不复用**:省 code 固定在 primitives 且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `province_name/city_name/town_name` 不改 code;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
 - **校验**:`china/store.rs::load_provinces` 加载即断言 SQLite 省表与 primitives 一致、省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizencode/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。

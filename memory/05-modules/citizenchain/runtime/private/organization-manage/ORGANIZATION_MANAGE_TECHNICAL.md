@@ -1,7 +1,7 @@
 # GMB_TECHNICAL
 
 模块：`organization-manage`  
-最新更新：2026-05-17，动态阈值由用户输入并交 `internal-vote` 保存；机构账户关闭成功后清空资金并删除账户当前状态索引。
+最新更新：2026-06-26，管理员模块拆分后，机构管理员按机构码路由到 `public-admins` / `private-admins`；动态阈值由用户输入并交 `internal-vote` 保存；机构账户关闭成功后清空资金并删除账户当前状态索引。
 
 ## 1. 当前边界
 
@@ -9,7 +9,7 @@
 
 `organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎机构账户码（`is_institution_code`）的对接。
 
-管理员和管理员人数的长期真源是 `admins-change::Subjects`；动态阈值长期真源是 `internal-vote::ActiveDynamicThresholds`。本模块只负责机构归属、机构账户、资金和生命周期。
+管理员和管理员人数的长期真源是 `RuntimeAdminAccountQuery`，生产 runtime 按机构码路由到 `public-admins` 或 `private-admins`；动态阈值长期真源是 `internal-vote::ActiveDynamicThresholds`。本模块只负责机构归属、机构账户、资金和生命周期。
 
 ADR-015 后，机构管理按账户级治理：
 
@@ -25,13 +25,11 @@ ADR-015 后，机构管理按账户级治理：
 
 ## 2. 目录结构
 
-- `src/address.rs`：`GMB` 地址角色语义，包含主账户、费用账户、自定义账户的角色定义。
 - `src/institution/`：机构多签业务分区。
 - `src/institution/types.rs`：机构级 storage/action 类型。
-- `src/personal/`：个人多签业务分区。
 - `src/lib.rs`：FRAME pallet 宏、storage、extrinsic、投票回调。
 
-由于 FRAME pallet 宏对 storage/call 定义位置有约束，storage/call 定义保留在 `lib.rs`，业务类型按机构多签和个人多签分目录维护。
+由于 FRAME pallet 宏对 storage/call 定义位置有约束，storage/call 定义保留在 `lib.rs`，业务类型按机构多签分目录维护。
 
 ## 3. 地址规则
 
@@ -55,12 +53,11 @@ ADR-015 后，机构管理按账户级治理：
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
 - `CidRegisteredAccount` / `AccountRegisteredCid`：继续作为链上账户索引。
-- 个人多签账户不在本模块保存，当前真源为 `personal-manage::PersonalAccounts`。
+- 个人多签账户不在本模块保存，当前真源为 `personal-admins::PersonalAccounts`。
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按机构账户码（`is_institution_code`）通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
-- 个人多签创建提案发起时，个人多签账户会通过 `admins-change::SubjectLifecycle` 写入 `PersonalAccount` 类型的 `Pending` 主体。
+- 机构多签创建提案发起时，主账户会转换为 `InstitutionAccount(0x05)` 的 `AccountId`，并按机构账户码（`is_institution_code`）通过 `AdminAccountLifecycle` 路由到 `public-admins` 或 `private-admins` 写入 `Pending` 管理员集合。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭成功后删除账户当前状态主体。
 - 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_account_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
 - 关闭多签必须走 `InternalVoteEngine::create_lifecycle_internal_proposal_with_data`，由投票引擎按 Active 管理员快照写全员关闭投票阈值。
@@ -100,7 +97,7 @@ propose_create_institution(
 - 创建者必须在管理员列表中。
 - CID 登记 nonce 必须未使用，签名必须通过 `CidInstitutionVerifier`。
 - `CidInstitutionVerifier` 的注册业务字段只覆盖 `cid_number / cid_full_name / account_names[]`。
-- `issuer_main_account + signer_pubkey` 用于在 `admins-change::AdminAccounts` 中确认签发机构管理员,`scope_province_name / scope_city_name` 只表示业务作用域。
+- `issuer_main_account + signer_pubkey` 用于通过 `RuntimeAdminAccountQuery` 确认签发机构管理员；`scope_province_name / scope_city_name` 只表示业务作用域。
 - `subject_property / sub_type / parent_cid_number` 只属于 CID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
@@ -111,7 +108,7 @@ propose_create_institution(
 - 投票通过执行时，先 unreserve，再扣手续费，再把各账户初始余额划入对应机构账户。
 - 投票拒绝时释放 reserve 并清理 pending 索引；自动执行暂时失败时保留 pending 数据供重试；进入 `STATUS_EXECUTION_FAILED` 终态时由 votingengine 的终态回调释放 reserve 并清理 pending 索引。
 - 机构账户关闭执行时，先扣链上手续费，再把 `free_balance - fee` 转入用户提供的收款地址；执行阶段再次拒绝 reserved 余额，保证账户能被清空。
-- 机构账户关闭成功后删除 `InstitutionAccounts[(cid, account_name)]`、`CidRegisteredAccount[(cid, account_name)]`、`AccountRegisteredCid[address]` 和 `admins-change::Subjects[subject]` 当前状态。历史事件和历史提案不删除。
+- 机构账户关闭成功后删除 `InstitutionAccounts[(cid, account_name)]`、`CidRegisteredAccount[(cid, account_name)]`、`AccountRegisteredCid[address]`，并通过 `AdminAccountLifecycle` 关闭对应 `public-admins` 或 `private-admins` 当前管理员集合。历史事件和历史提案不删除。
 
 ## 6. 投票回调
 
@@ -123,7 +120,7 @@ propose_create_institution(
 
 - `approved = true`：调用 `execute_create_institution`，激活 `Institutions`、`InstitutionAccounts`、主账户生命周期记录和管理员主体。
 - `approved = false`：调用 `cleanup_pending_institution_create`，释放创建者 reserve，删除机构 pending storage、CID 地址索引和管理员主体。
-- 管理员主体的激活、拒绝清理、执行失败终态清理和关闭都必须带 `proposal_id` 调用 `admins-change::SubjectLifecycle`，由 admins-change 校验提案 owner、状态和 callback 作用域。
+- 管理员主体的激活、拒绝清理、执行失败终态清理和关闭都必须带 `proposal_id` 调用 `AdminAccountLifecycle`，由 `public-admins` / `private-admins` 校验提案 owner、状态和 callback 作用域。
 
 执行成功事件：
 
@@ -143,8 +140,8 @@ propose_create_institution(
 
 runtime 适配：
 
-- `RuntimeInternalAdminProvider / RuntimeInternalAdminsLenProvider` 统一读取 `admins-change`。
-- 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
+- `RuntimeInternalAdminProvider / RuntimeInternalAdminsLenProvider` 统一委托 `RuntimeAdminAccountQuery`。
+- 普通业务路径读取 `RuntimeAdminAccountQuery` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
 - 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
 - `MultisigCidAccountQuery::is_admin_of` 通过 `resolve_admin_account_for_account` 映射到账户级管理员主体，并通过 `resolve_institution_code_for_account` 读取机构账户码（`is_institution_code`）。
 - `MultisigCidAccountQuery::is_active` 对 CID 机构账户读取 `InstitutionAccounts` 的激活状态。
@@ -165,12 +162,12 @@ runtime 适配：
 
 关联验证：
 
-- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：44 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p public-admins --no-run`、`-p private-admins --no-run`：通过。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：24 passed。
 
 ## 9. 变更记录
 
 - 2026-05-02:机构注册协议对齐 CID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `subject_property/sub_type/parent_cid_number`,签名业务字段收口为 `cid_number / cid_full_name / account_names[]`。
-- 2026-05-02:创建 Pending 多签主体改为 votingengine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。
+- 2026-06-26:机构管理员生命周期从单体管理员模块拆分为 `public-admins` / `private-admins`，本模块只通过 `AdminAccountLifecycle` 写入和清理管理员集合。
 - 2026-05-17:机构账户关闭成功后删除账户正向/反向索引和管理员主体当前状态；已转出的余额不继承到重新注册的新当前状态。

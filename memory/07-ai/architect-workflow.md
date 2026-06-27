@@ -28,5 +28,5 @@ Architect Agent 不直接替代业务 Agent 写所有代码，它的职责是把
 
 ## 3. 推荐入口
 
-- `bash memory/scripts/analyze-requirement.sh --requirement "..."`
-- `bash memory/scripts/architect-entry.sh --requirement "..." --execute`
+- `bash scripts/analyze-requirement.sh --requirement "..."`
+- `bash scripts/architect-entry.sh --requirement "..." --execute`
