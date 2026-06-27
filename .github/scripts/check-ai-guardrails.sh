@@ -24,11 +24,11 @@ if [[ "${#changed_files[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-bash memory/scripts/check-startup-acceptance.sh --ci
+bash scripts/check-startup-acceptance.sh --ci
 
 doc_regex='^(memory/|docs/|README\.md$|GMB_TECHNICAL\.md$|CLAUDE\.md$|\.github/pull_request_template\.md$|.*_TECHNICAL\.md$)'
-code_regex='^(\.github/workflows/|\.github/scripts/|citizenchain/|citizencode/|citizenpassport/|citizenapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
-scan_regex='^(\.github/scripts/|citizenchain/|citizencode/|citizenpassport/|citizenapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
+code_regex='^(\.github/workflows/|scripts/|citizenchain/|citizencode/|citizenpassport/|citizenapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
+scan_regex='^(scripts/|citizenchain/|citizencode/|citizenpassport/|citizenapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
 task_card_regex='^memory/08-tasks/(open|done)/[^/]+\.md$'
 todo_word="TO""DO"
 fixme_word="FIX""ME"
@@ -74,7 +74,7 @@ module_doc_requirement_for_file() {
   local file="$1"
 
   case "$file" in
-    .github/workflows/*|.github/scripts/*)
+    .github/workflows/*|scripts/check-ai-guardrails.sh|scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/check-startup-acceptance.sh|scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
       printf '%s' "memory/07-ai/"
       ;;
     citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
@@ -110,7 +110,7 @@ has_matching_module_doc_update() {
   fi
 
   case "$file" in
-    .github/workflows/*|.github/scripts/*)
+    .github/workflows/*|scripts/check-ai-guardrails.sh|scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/check-startup-acceptance.sh|scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
       has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
       ;;
     citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
@@ -190,7 +190,14 @@ is_protected_ai_path() {
       ;;
     memory/00-vision/*|memory/01-architecture/*|memory/03-security/*|\
     memory/04-decisions/*|memory/05-modules/*|memory/06-quality/*|memory/07-ai/*|\
-    memory/scripts/*|memory/08-tasks/templates/*)
+    memory/08-tasks/templates/*)
+      return 0
+      ;;
+    # 中文注释:AI 工作流脚本已统一收敛到根 scripts/(原 memory/scripts/),逐个保护,避免误伤同目录通用工具脚本。
+    scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/check-startup-acceptance.sh|\
+    scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|\
+    scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh|\
+    scripts/check-ai-guardrails.sh)
       return 0
       ;;
     *)
@@ -204,7 +211,7 @@ should_skip_residual_scan() {
 
   case "$file" in
     # 中文注释：门禁脚本自身包含残留关键字匹配规则，不能把规则文本再视为命中结果。
-    .github/scripts/check-ai-guardrails.sh)
+    scripts/check-ai-guardrails.sh)
       return 0
       ;;
     # 中文注释：Flutter 生成目录里的 CMake 文件带默认模板注释，属于框架产物，不应拦截 PR。

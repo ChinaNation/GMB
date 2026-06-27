@@ -24,6 +24,7 @@ citizenchain/node/frontend/dist/
 # Local/generated backup files
 *.spec*-backup
 citizenpassport/.citizenpassport_key
+docs/citizenpassport/.citizenpassport_key
 
 # OS / Editor junk
 .DS_Store
@@ -64,3 +65,6 @@ citizenpassport/.citizenpassport_key
 citizenapp/android/key.properties
 citizenapp/android/app/*.jks
 citizenapp/android/app/*.keystore
+
+# 注册局前端构建产物
+citizenchain/registry/frontend/dist/
